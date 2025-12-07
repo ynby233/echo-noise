@@ -177,12 +177,15 @@ type SiteConfig struct {
 	// 扩展组件开关
 	CalendarEnabled bool `gorm:"default:true"`
 	TimeEnabled     bool `gorm:"default:true"`
-	HitokotoEnabled bool `gorm:"default:true"`
-	// 系统欢迎组件（左栏头像卡片专用，脱离用户资料）
-	WelcomeAvatarURL   string `gorm:"type:varchar(255)"`
-	WelcomeName        string `gorm:"type:varchar(100)"`
-	WelcomeDescription string `gorm:"type:varchar(255)"`
-	WelcomeUseAdmin    bool   `gorm:"default:true"`
+    HitokotoEnabled bool `gorm:"default:true"`
+    // 社交链接组件
+    SocialLinksEnabled bool   `gorm:"default:true"`
+    SocialLinks        string `gorm:"type:text"`
+    // 系统欢迎组件（左栏头像卡片专用，脱离用户资料）
+    WelcomeAvatarURL   string `gorm:"type:varchar(255)"`
+    WelcomeName        string `gorm:"type:varchar(100)"`
+    WelcomeDescription string `gorm:"type:varchar(255)"`
+    WelcomeUseAdmin    bool   `gorm:"default:true"`
 	// 广告位配置（左侧）
 	LeftAdEnabled     bool   `gorm:"default:true"`
 	LeftAds           string `gorm:"type:text"`

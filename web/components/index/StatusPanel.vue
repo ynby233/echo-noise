@@ -52,6 +52,14 @@
               <UIcon name="i-heroicons-swatch" class="w-5 h-5 text-indigo-300" />
               <span class="text-sm text-center">默认主题</span>
             </button>
+            <button class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('site-social-links', $event)">
+              <UIcon name="i-heroicons-link" class="w-5 h-5 text-indigo-300" />
+              <span class="text-sm text-center">社交链接</span>
+            </button>
+            <button class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('friend-links', $event)">
+              <UIcon name="i-heroicons-users" class="w-5 h-5 text-indigo-300" />
+              <span class="text-sm text-center">友情链接</span>
+            </button>
             <button class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('site-configs', $event)">
               <UIcon name="i-heroicons-cog-6-tooth" class="w-5 h-5 text-indigo-300" />
               <span class="text-sm text-center">站点信息</span>
@@ -756,6 +764,11 @@
                         <span>社交链接配置</span>
                       </div>
                       <div class="flex items-center gap-3">
+                        <div class="flex items-center gap-2">
+                          <span class="text-sm" :class="theme.mutedText">启用</span>
+                          <USwitch v-model="frontendConfig.socialLinksEnabled" />
+                          <UButton size="xs" :icon="frontendConfig.socialLinksEnabled ? 'i-heroicons-power' : 'i-heroicons-no-symbol'" color="green" variant="soft" class="shadow" @click="saveConfigItem('socialLinksEnabled')">保存开关</UButton>
+                        </div>
                         <UButton size="sm" @click="editItem.socialLinks = !editItem.socialLinks" :color="editItem.socialLinks ? 'gray' : 'green'" :variant="editItem.socialLinks ? 'soft' : 'solid'" class="shadow">{{ editItem.socialLinks ? '取消' : '编辑' }}</UButton>
                         <UButton color="green" class="shadow" @click="saveSocialLinks">保存</UButton>
                       </div>
@@ -1896,7 +1909,7 @@ const avatarSrc = computed(() => {
   return pick(userAvatar) || (username ? dice(String(username)) : '') || '/favicon-32x32.png'
 })
 
-const setActive = async (name: 'system' | 'user' | 'site' | 'notify' | 'attachments' | 'db' | 'site-register' | 'site-pwa' | 'site-github-card' | 'site-github-login' | 'site-announcement' | 'site-music' | 'site-default-theme' | 'site-configs' | 'comments' | 'email', evt?: MouseEvent) => {
+const setActive = async (name: 'system' | 'user' | 'site' | 'notify' | 'attachments' | 'db' | 'site-register' | 'site-pwa' | 'site-github-card' | 'site-github-login' | 'site-announcement' | 'site-music' | 'site-default-theme' | 'site-social-links' | 'friend-links' | 'site-configs' | 'comments' | 'email', evt?: MouseEvent) => {
   await nextTick()
   const el = document.getElementById(`${name}-section`)
   if (!el) return
@@ -3214,11 +3227,12 @@ const defaultConfig = {
     ,musicCssCdnURL: 'https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.css'
     ,musicJsCdnURL: 'https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.js'
   ,socialLinks: [
-      { name: 'GitHub', url: 'https://github.com/rcy1314', icon: 'i-mdi-github' },
+      { name: 'TG', url: 'https://tg.noisework.cn', icon: 'i-mdi-near-me' },
       { name: 'X', url: 'https://x.com/liangwenhao3', icon: 'i-mdi-twitter' },
       { name: '主页', url: 'https://www.noisework.cn/', icon: 'i-mdi-home' },
       { name: '博客', url: 'https://www.noiseblogs.top/', icon: 'i-mdi-notebook' }
   ]
+  ,socialLinksEnabled: true
   ,friendLinks: [
     { title: 'NoiseWork', link: 'https://www.noisework.cn/', icon: 'i-mdi-home', description: '个人主页与作品集合' },
     { title: 'NoiseBlogs', link: 'https://www.noiseblogs.top/', icon: 'i-mdi-notebook', description: '技术随笔与学习记录' },
@@ -3258,7 +3272,7 @@ const fetchConfig = async () => {
             const settings = data.data.frontendSettings;
             
             // 遍历配置项进行更新（布尔型键需强制转换）
-            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'commentEnabled', 'commentEmailEnabled', 'commentLoginRequired', 'githubOAuthEnabled', 'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'friendLinkEmailEnabled']
+            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'commentEnabled', 'commentEmailEnabled', 'commentLoginRequired', 'githubOAuthEnabled', 'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'friendLinkEmailEnabled', 'socialLinksEnabled']
             Object.keys(frontendConfig).forEach(key => {
                 if (key === 'backgrounds') {
                     const serverBackgrounds = settings[key];
@@ -3267,7 +3281,7 @@ const fetchConfig = async () => {
                     }
                 } else if (key === 'socialLinks') {
                     const arr = settings[key];
-                    if (Array.isArray(arr)) {
+                    if (Array.isArray(arr) && arr.length > 0) {
                         frontendConfig[key] = [...arr];
                     } else {
                         frontendConfig[key] = [...(defaultConfig.socialLinks || [])];
@@ -3389,7 +3403,6 @@ const saveConfigItem = async (key: string) => {
         
         const data = await response.json();
         if (data.code === 1) {
-            editItem[key] = false;
             // 重新获取配置
             await fetchConfig();
             // 广告模块专用提示

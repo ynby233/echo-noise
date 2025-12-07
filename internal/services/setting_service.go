@@ -76,6 +76,26 @@ func GetFrontendConfig() (map[string]interface{}, error) {
 		})
 	}
 
+	// 读取社交链接（JSON 字符串）
+	var socialLinksRaw []map[string]interface{}
+	if strings.TrimSpace(config.SocialLinks) != "" {
+		_ = json.Unmarshal([]byte(config.SocialLinks), &socialLinksRaw)
+	}
+	normalizedSocialLinks := make([]map[string]string, 0, len(socialLinksRaw))
+	for _, m := range socialLinksRaw {
+		name := strings.TrimSpace(fmt.Sprintf("%v", m["name"]))
+		url := strings.TrimSpace(fmt.Sprintf("%v", m["url"]))
+		icon := strings.TrimSpace(fmt.Sprintf("%v", m["icon"]))
+		if url == "" {
+			continue
+		}
+		normalizedSocialLinks = append(normalizedSocialLinks, map[string]string{
+			"name": name,
+			"url":  url,
+			"icon": icon,
+		})
+	}
+
 	configMap := map[string]interface{}{
 		"allowRegistration": allowReg,
 		"dbType":            dbType,
@@ -152,6 +172,9 @@ func GetFrontendConfig() (map[string]interface{}, error) {
 			"leftAdsIntervalMs":      config.LeftAdsIntervalMs,
 			"friendLinks":            normalizedLinks,
 			"friendLinkEmailEnabled": config.FriendLinkEmailEnabled,
+			// 社交链接
+			"socialLinksEnabled": config.SocialLinksEnabled,
+			"socialLinks":        normalizedSocialLinks,
 		},
 		"storageEnabled": config.StorageEnabled,
 		"storageConfig": map[string]interface{}{
@@ -352,6 +375,44 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	} else if arr2, ok := frontendSettings["leftAds"].([]map[string]string); ok {
 		bs, _ := json.Marshal(arr2)
 		config.LeftAds = string(bs)
+	}
+
+	// 社交链接（首页左栏）
+	if arr, ok := frontendSettings["socialLinks"].([]interface{}); ok {
+		list := make([]map[string]string, 0, len(arr))
+		for _, it := range arr {
+			m, ok := it.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			name := strings.TrimSpace(fmt.Sprintf("%v", m["name"]))
+			url := strings.TrimSpace(fmt.Sprintf("%v", m["url"]))
+			icon := strings.TrimSpace(fmt.Sprintf("%v", m["icon"]))
+			if url == "" {
+				continue
+			}
+			list = append(list, map[string]string{"name": name, "url": url, "icon": icon})
+		}
+		bs, _ := json.Marshal(list)
+		config.SocialLinks = string(bs)
+	} else if arr2, ok := frontendSettings["socialLinks"].([]map[string]interface{}); ok {
+		list := make([]map[string]string, 0, len(arr2))
+		for _, m := range arr2 {
+			name := strings.TrimSpace(fmt.Sprintf("%v", m["name"]))
+			url := strings.TrimSpace(fmt.Sprintf("%v", m["url"]))
+			icon := strings.TrimSpace(fmt.Sprintf("%v", m["icon"]))
+			if url == "" {
+				continue
+			}
+			list = append(list, map[string]string{"name": name, "url": url, "icon": icon})
+		}
+		bs, _ := json.Marshal(list)
+		config.SocialLinks = string(bs)
+	}
+	if vb, ok := frontendSettings["socialLinksEnabled"].(bool); ok {
+		config.SocialLinksEnabled = vb
+	} else if vs, ok := frontendSettings["socialLinksEnabled"].(string); ok {
+		config.SocialLinksEnabled = (vs == "true")
 	}
 
 	// 友链列表（管理员直接配置）
@@ -833,6 +894,14 @@ func getDefaultConfig() map[string]interface{} {
 				{"imageURL": "https://picsum.photos/seed/ad-3/640/640", "linkURL": "https://github.com", "description": "开源项目，欢迎 Star"},
 			},
 			"leftAdsIntervalMs": 4000,
+			// 社交链接默认
+			"socialLinksEnabled": true,
+			"socialLinks": []map[string]string{
+				{"name": "GitHub", "url": "https://github.com/rcy1314", "icon": "i-mdi-github"},
+				{"name": "X", "url": "https://x.com/liangwenhao3", "icon": "i-mdi-twitter"},
+				{"name": "主页", "url": "https://www.noisework.cn/", "icon": "i-mdi-home"},
+				{"name": "博客", "url": "https://www.noiseblogs.top/", "icon": "i-mdi-notebook"},
+			},
 		},
 		"storageEnabled": false,
 		"storageConfig": map[string]interface{}{

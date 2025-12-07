@@ -51,7 +51,7 @@
           </div>
         </UCard>
         <UCard class="sidebar-card no-padding-card mt-2" :class="sidebarThemeCard">
-          <div class="social-list">
+          <div class="social-list" v-if="frontendConfig.socialLinksEnabled && (frontendConfig.socialLinks || []).length > 0">
             <a v-for="item in (frontendConfig.socialLinks || [])" :key="item.url || item.name" class="social-item" :href="item.url" target="_blank" rel="noopener noreferrer" :data-label="item.name || item.url">
               <template v-if="item.imageURL">
                 <img :src="item.imageURL" alt="icon" class="social-icon-img" />
@@ -1169,7 +1169,7 @@ const headerImageStyle = computed(() => ({
     musicCssCdnURL: '',
     musicJsCdnURL: '',
   socialLinks: [
-      { name: 'GitHub', url: 'https://github.com/rcy1314', icon: 'i-mdi-github' },
+      { name: 'TG', url: 'https://tg.noisework.cn', icon: 'i-mdi-near-me' },
       { name: 'X', url: 'https://x.com/liangwenhao3', icon: 'i-mdi-twitter' },
       { name: '主页', url: 'https://www.noisework.cn/', icon: 'i-mdi-home' },
       { name: '博客', url: 'https://www.noiseblogs.top/', icon: 'i-mdi-notebook' }
@@ -1178,6 +1178,7 @@ const headerImageStyle = computed(() => ({
     { title: 'NoiseWork', link: 'https://www.noisework.cn/', icon: 'i-mdi-home', description: '个人主页与作品集合' },
     { title: 'NoiseBlogs', link: 'https://www.noiseblogs.top/', icon: 'i-mdi-notebook', description: '技术随笔与学习记录' }
   ],
+  socialLinksEnabled: true,
     calendarEnabled: true,
     timeEnabled: true,
     // 左栏广告（完全后端驱动，无前端默认）
@@ -1193,13 +1194,14 @@ const fetchConfig = async () => {
         const res = await getRequest<any>('frontend/config', undefined, { credentials: 'include' })
         if (res && res.code === 1 && res.data && res.data.frontendSettings) {
             const settings = res.data.frontendSettings
-            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'commentEnabled', 'commentEmailEnabled', 'commentLoginRequired', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'calendarEnabled', 'timeEnabled', 'leftAdEnabled', 'welcomeUseAdmin']
+            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'commentEnabled', 'commentEmailEnabled', 'commentLoginRequired', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'calendarEnabled', 'timeEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'socialLinksEnabled']
             Object.keys(frontendConfig.value).forEach(key => {
                 if (settings[key] !== null && settings[key] !== undefined) {
                     if (key === 'backgrounds' && Array.isArray(settings[key])) {
                         frontendConfig.value.backgrounds = [...settings[key]]
                     } else if (key === 'socialLinks' && Array.isArray(settings[key])) {
-                        frontendConfig.value.socialLinks = [...settings[key]]
+                        const arr = settings[key]
+                        frontendConfig.value.socialLinks = (arr.length > 0) ? [...arr] : [...defaultConfig.socialLinks]
                     } else if (key === 'leftAds' && Array.isArray(settings[key])) {
                         frontendConfig.value.leftAds = [...settings[key]]
                     } else if (key === 'friendLinks') {
@@ -1978,8 +1980,6 @@ html, body {
   z-index: 1;
   pointer-events: auto;
   cursor: default;
-  overflow-anchor: none;
-  scrollbar-gutter: stable both-edges;
 }
 
 .moments-header {
@@ -2139,8 +2139,6 @@ html.dark .search-card { background: rgba(36,43,50,0.95); color: #fff; border: 1
     z-index: 1;
     pointer-events: auto;
     padding: 0.25rem; /* 收紧移动端外层边距，提升内容占比 */
-    overflow-anchor: none;
-    scrollbar-gutter: stable both-edges;
   }
   
   .background-container {
@@ -2234,11 +2232,6 @@ white-space: nowrap;  /* 防止换行 */
 }
 
 .message-list-container { cursor: default; }
-
-/* 禁用滚动锚定，防止分页更新时视口抖动 */
-.message-list-container {
-  overflow-anchor: none;
-}
 
 .loading {
   position: fixed;
@@ -2418,10 +2411,10 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
   opacity: 0.8;
 }
 .social-list { display:flex; flex-wrap:wrap; gap:10px; padding:0; justify-content:center; align-items:center; }
-.social-item { position:relative; display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:8px; }
+.social-item { position:relative; display:inline-flex; align-items:center; justify-content:center; width: clamp(28px, 6vw, 36px); height: clamp(28px, 6vw, 36px); border-radius:8px; }
 .social-item { color: inherit; text-decoration: none; }
 .social-item:hover { transform: scale(1.06); transition: transform .12s ease; }
-.social-icon-img { width:28px; height:28px; border-radius:6px; object-fit:cover; display:inline-block; }
+.social-icon-img { width: clamp(24px, 5.2vw, 32px); height: clamp(24px, 5.2vw, 32px); border-radius:6px; object-fit:cover; display:inline-block; }
 .social-item::after { content: attr(data-label); position:absolute; bottom:calc(100% + 2px); left:50%; transform: translateX(-50%); white-space:nowrap; padding:4px 8px; font-size:12px; border-radius:6px; pointer-events:none; opacity:0; transition: opacity .12s ease; }
 :global(html.dark) .social-item::after { background: rgba(36,43,50,0.95); color:#fff; border:1px solid rgba(255,255,255,0.1); }
 :global(html:not(.dark)) .social-item::after { background:#fff; color:#111; border:1px solid rgba(0,0,0,0.08); }
