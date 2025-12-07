@@ -1980,6 +1980,10 @@ html, body {
   z-index: 1;
   pointer-events: auto;
   cursor: default;
+  overscroll-behavior: none;
+  overscroll-behavior-y: none;
+  overflow-anchor: none;
+  scrollbar-gutter: stable;
 }
 
 .moments-header {
@@ -2498,7 +2502,7 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
   .recommend-image-box { box-shadow: 0 1px 2px rgba(255,255,255,0.06); }
   .recommend-image-box:hover { box-shadow: 0 8px 22px rgba(255,255,255,0.12); }
 }
-.scroll-list { height: 64px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 2px 2px; scroll-behavior: smooth; }
+.scroll-list { height: 64px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 2px 2px; }
 .recent-inline-img { display:inline-block; width:18px; height:18px; object-fit:cover; border-radius:4px; vertical-align:middle; margin: -2px 2px 0 2px; }
 .ad-wrap { position: relative; aspect-ratio: var(--ad-aspect, 1 / 1); }
 .ad-image { width: 100%; height: 100%; object-fit: contain; transition: filter .12s ease, transform .12s ease; }
