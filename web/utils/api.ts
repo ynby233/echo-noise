@@ -2,6 +2,18 @@ import type { Response } from "~/types/models";
 import { useUserStore } from "~/store/user";
 import { useToast } from "#imports";
 
+const FIRST_LOAD_SUPPRESS_MS = 6000
+let initialSuppressUntil = 0
+if (typeof window !== 'undefined') {
+  const now = Date.now()
+  initialSuppressUntil = now + FIRST_LOAD_SUPPRESS_MS
+}
+const shouldSuppressToast = (options?: { silent?: boolean }) => {
+  if (options && (options as any).silent) return true
+  if (typeof window === 'undefined') return false
+  return Date.now() < initialSuppressUntil
+}
+
 export const postRequest = async <T>(url: string, body: object | FormData, options?: { credentials?: RequestCredentials; silent?: boolean; signal?: AbortSignal }) => {
     const BASE_API = useRuntimeConfig().public.baseApi || '/api';
     const userStore = useUserStore();
@@ -29,7 +41,7 @@ export const postRequest = async <T>(url: string, body: object | FormData, optio
         return response;
     } catch (error) {
         const toast = useToast();
-        if (!options || !(options as any).silent) {
+        if (!shouldSuppressToast(options)) {
             toast.add({ title: '请求失败', description: '网络异常或服务器不可用', color: 'red', timeout: 2000 });
         }
         return { code: 0, msg: '网络异常', data: null } as any as Response<T>;
@@ -66,7 +78,7 @@ export const getRequest = async <T>(url: string, params?: any, options?: { crede
             return { code: 0, msg } as any as Response<T>;
         }
         const toast = useToast();
-        if (!options || !(options as any).silent) {
+        if (!shouldSuppressToast(options)) {
             toast.add({ title: '请求失败', description: '网络异常或服务器不可用', color: 'red', timeout: 2000 });
         }
         return { code: 0, msg: '网络异常', data: null } as any as Response<T>;
@@ -109,7 +121,7 @@ export const putRequest = async <T>(url: string, body: object, options?: { crede
         return response;
     } catch (error) {
         const toast = useToast();
-        if (!options || !(options as any).silent) {
+        if (!shouldSuppressToast(options)) {
             toast.add({ title: '请求失败', description: '网络异常或服务器不可用', color: 'red', timeout: 2000 });
         }
         return { code: 0, msg: '网络异常', data: null } as any as Response<T>;
