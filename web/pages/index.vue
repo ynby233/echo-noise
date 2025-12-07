@@ -337,6 +337,7 @@
       <div
         v-if="frontendConfig.musicEnabled"
         class="netease-mini-player"
+        :class="frontendConfig.musicDefaultMinimized ? 'minimized' : ''"
         :data-playlist-id="frontendConfig.musicPlaylistId || ''"
         :data-song-id="frontendConfig.musicSongId || ''"
         :data-position="frontendConfig.musicPosition || 'bottom-left'"
@@ -345,6 +346,7 @@
         :data-default-minimized="frontendConfig.musicDefaultMinimized ? 'true' : 'false'"
         :data-embed="frontendConfig.musicEmbed ? 'true' : 'false'"
         :data-autoplay="frontendConfig.musicAutoplay ? 'true' : 'false'"
+        :data-instant="frontendConfig.musicDefaultMinimized ? 'true' : null"
       />
       </UContainer>
   <Notification />
@@ -897,10 +899,44 @@ const frontendConfig = ref({
 })
 
 const initNMP = async () => {
-  await nextTick()
-  const nmp = (window as any).NeteaseMiniPlayer
-  if (nmp && typeof nmp.init === 'function') {
-    nmp.init()
+  try {
+    await nextTick()
+  const NMP = (window as any).NeteaseMiniPlayer
+  const el = document.querySelector('.netease-mini-player') as any
+  if (NMP && el) {
+    const cfg = (frontendConfig as any).value || (frontendConfig as any)
+    if (cfg.musicDefaultMinimized) { try { el.classList.add('minimized'); el.setAttribute('data-instant', 'true') } catch {} }
+    const inst = typeof NMP.initPlayer === 'function' ? NMP.initPlayer(el) : (el._neteasePlayer || null)
+      // 确保已初始化（库在脚本加载后会自动 init），此处兜底再调用一次
+      if (!inst && typeof NMP.init === 'function') {
+        NMP.init()
+      }
+    const player = typeof NMP.initPlayer === 'function' ? NMP.initPlayer(el) : (el._neteasePlayer || null)
+    if (player) {
+      const playlistId = String(cfg.musicPlaylistId || '').trim()
+      const songId = String(cfg.musicSongId || '').trim()
+      if (playlistId) {
+        try { player.loadPlaylist?.(playlistId) } catch {}
+      } else if (songId) {
+        try { player.loadSingleSong?.(songId) } catch {}
+      }
+      const theme = String(cfg.musicTheme || 'auto').trim()
+      try { player.setTheme?.(theme) } catch {}
+      if (cfg.musicAutoplay) {
+        try { await player.play?.() } catch {}
+      }
+      if (cfg.musicDefaultMinimized) {
+        try {
+          const enableTransitions = () => { try { el.removeAttribute('data-instant') } catch {} }
+          el.addEventListener('pointerdown', enableTransitions, { once: true, capture: true })
+        } catch {}
+      }
+    }
+  } else {
+      console.error('NeteaseMiniPlayer not available or element missing')
+    }
+  } catch (error) {
+    console.error('Failed to initialize NeteaseMiniPlayer:', error)
   }
 }
 
@@ -917,53 +953,59 @@ const probeURL = async (url: string, ms = 1500): Promise<boolean> => {
 
 const loadNMPAssets = async (): Promise<boolean> => {
   if (typeof window === 'undefined') return false
-  // 如果已经存在并且全局对象可用，直接返回
   if ((window as any).NeteaseMiniPlayer) return true
   const head = document.head
   const body = document.body
-  // 样式按需注入（本地资源，避免外链失败）
   const cssId = 'nmp-css'
+  const jsId = 'nmp-js'
+  // CSS 加载（多CDN回退）
   if (!document.getElementById(cssId)) {
+    const cfgCss = String(((frontendConfig as any).value?.musicCssCdnURL ?? (frontendConfig as any).musicCssCdnURL) || '').trim()
+    const cssCandidates = [
+      cfgCss,
+      'https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.css',
+      'https://cdn.jsdelivr.net/gh/ImBHCN/NeteaseMiniPlayer@v2/netease-mini-player-v2.css',
+      'https://unpkg.com/netease-mini-player@2.0.4/dist/netease-mini-player-v2.css'
+    ].filter(Boolean)
     const link = document.createElement('link')
     link.id = cssId
-    link.rel = 'preload'
-    link.as = 'style'
-    const cssCdn = (frontendConfig.value as any).musicCssCdnURL || ''
-    const localCss = '/NeteaseMiniPlayer/netease-mini-player-v2.css'
-    const cdn = (cssCdn && cssCdn.trim() !== '') ? cssCdn.trim() : ''
-    const useCdn = cdn ? await probeURL(cdn, 1500) : false
-    link.href = useCdn ? cdn : localCss
-    link.onload = () => { try { link.rel = 'stylesheet' } catch {} }
-    link.onerror = () => { link.rel = 'stylesheet'; link.href = localCss }
+    link.rel = 'stylesheet'
+    let cssIndex = 0
+    const tryNextCss = () => {
+      if (cssIndex >= cssCandidates.length) return
+      link.href = cssCandidates[cssIndex++]
+    }
+    link.onerror = () => { tryNextCss() }
+    tryNextCss()
     head.appendChild(link)
   }
-  // 脚本按需注入
-  const scriptId = 'nmp-js'
-  if (!document.getElementById(scriptId)) {
+  // JS 加载（多CDN回退）
+  if (!document.getElementById(jsId)) {
     return await new Promise<boolean>((resolve) => {
+      const cfgJs = String(((frontendConfig as any).value?.musicJsCdnURL ?? (frontendConfig as any).musicJsCdnURL) || '').trim()
+      const jsCandidates = [
+        cfgJs,
+        'https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.js',
+        'https://cdn.jsdelivr.net/gh/ImBHCN/NeteaseMiniPlayer@v2/netease-mini-player-v2.js',
+        'https://unpkg.com/netease-mini-player@2.0.4/dist/netease-mini-player-v2.js'
+      ].filter(Boolean)
       const script = document.createElement('script')
-      script.id = scriptId
-      const jsCdn = (frontendConfig.value as any).musicJsCdnURL || ''
-      const localJs = '/NeteaseMiniPlayer/netease-mini-player-v2.js'
-      const cdn = (jsCdn && jsCdn.trim() !== '') ? jsCdn.trim() : ''
-      const pickCdn = async () => (cdn ? await probeURL(cdn, 1500) : false)
-      // 先设置本地，探测成功后替换为 CDN（避免卡顿）
-      script.src = localJs
+      script.id = jsId
       script.type = 'text/javascript'
       script.async = true
       script.defer = true
-      script.crossOrigin = 'anonymous'
-      script.onload = () => resolve(!!(window as any).NeteaseMiniPlayer)
-      script.onerror = () => {
-        resolve(false)
-      }
-      body.appendChild(script)
-      // 并行探测 CDN，如可用则切换到 CDN（下次缓存更快）
-      pickCdn().then((ok) => {
-        if (ok) {
-          try { script.src = cdn } catch {}
+      let jsIndex = 0
+      const tryNextJs = () => {
+        if (jsIndex >= jsCandidates.length) {
+          resolve(false)
+          return
         }
-      }).catch(() => {})
+        script.src = jsCandidates[jsIndex++]
+      }
+      script.onload = () => resolve(!!(window as any).NeteaseMiniPlayer)
+      script.onerror = () => { tryNextJs() }
+      tryNextJs()
+      body.appendChild(script)
     })
   }
   return !!(window as any).NeteaseMiniPlayer
@@ -1024,6 +1066,21 @@ watch(() => frontendConfig.value.musicEnabled, async (enabled) => {
   if (enabled) {
     const ok = await loadNMPAssets()
     if (ok) await initNMP()
+  }
+}, { immediate: true })
+
+watch(() => [
+  frontendConfig.value.musicPlaylistId,
+  frontendConfig.value.musicSongId,
+  frontendConfig.value.musicPosition,
+  frontendConfig.value.musicTheme,
+  frontendConfig.value.musicLyric,
+  frontendConfig.value.musicDefaultMinimized,
+  frontendConfig.value.musicEmbed,
+  frontendConfig.value.musicAutoplay
+], async () => {
+  if (frontendConfig.value.musicEnabled) {
+    await initNMP()
   }
 })
 
@@ -2449,6 +2506,23 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
 .ad-overlay-box { max-width: 90%; max-height: 70%; overflow-y: auto; padding: 8px 10px; border-radius: 10px; font-size: 14px; line-height: 1.5; word-break: break-word; overflow-wrap: anywhere; }
 :global(html.dark) .ad-overlay-box { background: rgba(36,43,50,0.90); color:#f59e0b !important; border:1px solid rgba(255,255,255,0.12); box-shadow: 0 6px 18px rgba(0,0,0,0.28); }
 :global(html.dark) .ad-overlay-box a { color:#f59e0b !important; text-decoration:none; }
+
+/* 播放器：贴边与层级优化 */
+.netease-mini-player[data-position="bottom-left"] { left: 8px !important; }
+.netease-mini-player[data-position="bottom-right"] { right: 8px !important; }
+.netease-mini-player[data-position="top-left"] { left: 8px !important; }
+.netease-mini-player[data-position="top-right"] { right: 8px !important; }
+.netease-mini-player.minimized[data-position="bottom-left"] { left: 8px !important; bottom: 12px !important; }
+.netease-mini-player.minimized[data-position="bottom-right"] { right: 8px !important; bottom: 12px !important; }
+.netease-mini-player.minimized[data-position="top-left"] { left: 8px !important; top: 12px !important; }
+.netease-mini-player.minimized[data-position="top-right"] { right: 8px !important; top: 12px !important; }
+
+@media (max-width: 1024px) {
+  .netease-mini-player[data-position="bottom-left"],
+  .netease-mini-player[data-position="bottom-right"],
+  .netease-mini-player[data-position="top-left"],
+  .netease-mini-player[data-position="top-right"] { z-index: 2001 !important; }
+}
 :global(html:not(.dark)) .ad-overlay-box { background:#ffffff; color:#f59e0b !important; border:1px solid rgba(0,0,0,0.08); box-shadow: 0 6px 18px rgba(0,0,0,0.12); }
 :global(html:not(.dark)) .ad-overlay-box a { color:#f59e0b !important; text-decoration:none; }
 .ad-wrap:hover .ad-overlay { opacity:1; }
@@ -2477,3 +2551,8 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
     }
   })
 /* 移除未使用的 header-inner 样式 */
+.netease-mini-player.minimized[data-instant="true"] { transition: none !important; }
+.netease-mini-player.minimized[data-instant="true"] .album-cover-container,
+.netease-mini-player.minimized[data-instant="true"] .album-cover,
+.netease-mini-player.minimized[data-instant="true"] .vinyl-overlay,
+.netease-mini-player.minimized[data-instant="true"] .vinyl-center { transition: none !important; }
