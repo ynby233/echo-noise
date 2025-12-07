@@ -41,7 +41,7 @@
               <div class="opacity-70">笔记数</div>
             </div>
             <div>
-              <div class="font-semibold">{{ (tags?.length || 0) }}</div>
+              <div class="font-semibold">{{ tagsCount }}</div>
               <div class="opacity-70">标签</div>
             </div>
             <div>
@@ -904,6 +904,17 @@ const initNMP = async () => {
   }
 }
 
+const probeURL = async (url: string, ms = 1500): Promise<boolean> => {
+  try {
+    if (!url || typeof window === 'undefined') return false
+    const ctrl = new AbortController()
+    const to = setTimeout(() => ctrl.abort(), ms)
+    const res = await fetch(url, { method: 'HEAD', cache: 'no-cache', signal: ctrl.signal })
+    clearTimeout(to)
+    return !!res && res.ok
+  } catch { return false }
+}
+
 const loadNMPAssets = async (): Promise<boolean> => {
   if (typeof window === 'undefined') return false
   // 如果已经存在并且全局对象可用，直接返回
@@ -915,11 +926,15 @@ const loadNMPAssets = async (): Promise<boolean> => {
   if (!document.getElementById(cssId)) {
     const link = document.createElement('link')
     link.id = cssId
-    link.rel = 'stylesheet'
+    link.rel = 'preload'
+    link.as = 'style'
     const cssCdn = (frontendConfig.value as any).musicCssCdnURL || ''
     const localCss = '/NeteaseMiniPlayer/netease-mini-player-v2.css'
-    link.href = (cssCdn && cssCdn.trim() !== '') ? cssCdn.trim() : localCss
-    link.onerror = () => { link.href = localCss }
+    const cdn = (cssCdn && cssCdn.trim() !== '') ? cssCdn.trim() : ''
+    const useCdn = cdn ? await probeURL(cdn, 1500) : false
+    link.href = useCdn ? cdn : localCss
+    link.onload = () => { try { link.rel = 'stylesheet' } catch {} }
+    link.onerror = () => { link.rel = 'stylesheet'; link.href = localCss }
     head.appendChild(link)
   }
   // 脚本按需注入
@@ -930,19 +945,25 @@ const loadNMPAssets = async (): Promise<boolean> => {
       script.id = scriptId
       const jsCdn = (frontendConfig.value as any).musicJsCdnURL || ''
       const localJs = '/NeteaseMiniPlayer/netease-mini-player-v2.js'
-      script.src = (jsCdn && jsCdn.trim() !== '') ? jsCdn.trim() : localJs
+      const cdn = (jsCdn && jsCdn.trim() !== '') ? jsCdn.trim() : ''
+      const pickCdn = async () => (cdn ? await probeURL(cdn, 1500) : false)
+      // 先设置本地，探测成功后替换为 CDN（避免卡顿）
+      script.src = localJs
+      script.type = 'text/javascript'
+      script.async = true
       script.defer = true
+      script.crossOrigin = 'anonymous'
       script.onload = () => resolve(!!(window as any).NeteaseMiniPlayer)
       script.onerror = () => {
-        if (script.src !== localJs) {
-          script.src = localJs
-          script.onload = () => resolve(!!(window as any).NeteaseMiniPlayer)
-          script.onerror = () => resolve(false)
-          return
-        }
         resolve(false)
       }
       body.appendChild(script)
+      // 并行探测 CDN，如可用则切换到 CDN（下次缓存更快）
+      pickCdn().then((ok) => {
+        if (ok) {
+          try { script.src = cdn } catch {}
+        }
+      }).catch(() => {})
     })
   }
   return !!(window as any).NeteaseMiniPlayer
@@ -1155,11 +1176,9 @@ const fetchConfig = async () => {
             const randomIndex = Math.floor(Math.random() * frontendConfig.value.backgrounds.length)
             currentImage.value = frontendConfig.value.backgrounds[randomIndex]
         }
-        isLoaded.value = true
     } catch (error) {
         console.error('获取配置失败:', error)
         frontendConfig.value = { ...defaultConfig }
-        isLoaded.value = true
     }
 }
 
@@ -1427,7 +1446,16 @@ const fetchStatus = async () => {
 }
 const popularTags = computed(() => {
   const arr = Array.isArray(tags.value) ? [...tags.value] : []
-  return arr.sort((a: any, b: any) => (b.count || 0) - (a.count || 0)).slice(0, 8)
+  const excluded = ['留言', 'guestbook']
+  return arr
+    .filter((t: any) => !excluded.includes(String(t?.name || '').toLowerCase()))
+    .sort((a: any, b: any) => (b.count || 0) - (a.count || 0))
+    .slice(0, 8)
+})
+const tagsCount = computed(() => {
+  const arr = Array.isArray(tags.value) ? [...tags.value] : []
+  const excluded = ['留言', 'guestbook']
+  return arr.filter((t: any) => !excluded.includes(String(t?.name || '').toLowerCase())).length
 })
 const recommendedImages = computed(() => images.value.slice(0, 60))
 const imageSrc = (img: any) => {
@@ -1729,7 +1757,11 @@ onMounted(async () => {
     // 关键内容优先加载
     await fetchConfig()
     if (frontendConfig.value.musicEnabled) {
+      await loadNMPAssets()
       await initNMP()
+      // 首次交互时重试初始化，提升移动端就绪度
+      const onceInit = () => { try { initNMP() } catch {} }
+      window.addEventListener('pointerdown', onceInit, { once: true })
     }
     
     // 非关键内容延迟加载
@@ -2162,7 +2194,7 @@ white-space: nowrap;  /* 防止换行 */
 
 .loading-text {
   font-size: 16px;
-  color: #fff; /* 更改文字颜色 */
+  color: #fff;
   text-shadow: none;
 }
 

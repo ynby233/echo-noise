@@ -15,6 +15,8 @@ export const useMessageStore = defineStore("messageStore", () => {
   const tags = ref<any[]>([]);  // 添加标签状态
   const images = ref<any[]>([]); // 添加图片状态
   const notifyConfig = ref<any>(null); // 添加推送配置状态
+  let pageController: AbortController | null = null
+  const prefetchCache = ref<Record<number, PageQueryResult>>({})
 
   // 重置状态
   const reset = () => {
@@ -88,8 +90,12 @@ const getMessages = async (query: PageQuery) => {
   loading.value = true;
 
   try {
+    try { pageController?.abort() } catch {}
+    pageController = new AbortController()
     const response = await postRequest<PageQueryResult>("messages/page", query, {
-      credentials: 'include'
+      credentials: 'include',
+      silent: true,
+      signal: pageController.signal
     });
     
     if (!response) {
@@ -133,6 +139,32 @@ const getMessages = async (query: PageQuery) => {
     loading.value = false;
   }
 };
+
+// 预取指定页（不修改当前列表，仅缓存）
+const prefetchPage = async (pageNum: number) => {
+  if (prefetchCache.value[pageNum]) return prefetchCache.value[pageNum]
+  try {
+    const controller = new AbortController()
+    const resp = await postRequest<PageQueryResult>("messages/page", { page: pageNum, pageSize: pageSize.value }, {
+      credentials: 'include',
+      silent: true,
+      signal: controller.signal
+    })
+    if (resp && resp.code === 1) {
+      prefetchCache.value[pageNum] = resp.data
+      return resp.data
+    }
+    return null as any
+  } catch { return null as any }
+}
+
+// 读取并应用缓存页（命中则避免网络请求）
+const applyPrefetchedOrLoad = async (targetPage: number) => {
+  const cached = prefetchCache.value[targetPage]
+  if (cached && Array.isArray(cached.items)) return cached
+  const res = await getMessages({ page: targetPage, pageSize: pageSize.value })
+  return res as any
+}
 
   // 删除笔记
   const deleteMessage = async (id: number) => {

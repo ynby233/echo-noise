@@ -2,7 +2,7 @@ import type { Response } from "~/types/models";
 import { useUserStore } from "~/store/user";
 import { useToast } from "#imports";
 
-export const postRequest = async <T>(url: string, body: object | FormData, options?: { credentials?: RequestCredentials }) => {
+export const postRequest = async <T>(url: string, body: object | FormData, options?: { credentials?: RequestCredentials; silent?: boolean; signal?: AbortSignal }) => {
     const BASE_API = useRuntimeConfig().public.baseApi || '/api';
     const userStore = useUserStore();
     const token = userStore.token || "null";
@@ -22,18 +22,21 @@ export const postRequest = async <T>(url: string, body: object | FormData, optio
             body: isFormData ? body : JSON.stringify(body),
             credentials: options?.credentials,
             timeout: 8000,
-            retry: 0
+            retry: 0,
+            signal: options?.signal
         });
 
         return response;
     } catch (error) {
         const toast = useToast();
-        toast.add({ title: '请求失败', description: '网络异常或服务器不可用', color: 'red', timeout: 2000 });
+        if (!options || !(options as any).silent) {
+            toast.add({ title: '请求失败', description: '网络异常或服务器不可用', color: 'red', timeout: 2000 });
+        }
         return { code: 0, msg: '网络异常', data: null } as any as Response<T>;
     }
 };
 
-export const getRequest = async <T>(url: string, params?: any, options?: { credentials?: RequestCredentials }) => {
+export const getRequest = async <T>(url: string, params?: any, options?: { credentials?: RequestCredentials; silent?: boolean; signal?: AbortSignal }) => {
     const BASE_API = useRuntimeConfig().public.baseApi || '/api';
     const userStore = useUserStore();
     const token = userStore.token || "null";
@@ -50,7 +53,8 @@ export const getRequest = async <T>(url: string, params?: any, options?: { crede
             },
             credentials: options?.credentials,
             timeout: 8000,
-            retry: 0
+            retry: 0,
+            signal: options?.signal
         });
 
         return response;
@@ -62,12 +66,14 @@ export const getRequest = async <T>(url: string, params?: any, options?: { crede
             return { code: 0, msg } as any as Response<T>;
         }
         const toast = useToast();
-        toast.add({ title: '请求失败', description: '网络异常或服务器不可用', color: 'red', timeout: 2000 });
+        if (!options || !(options as any).silent) {
+            toast.add({ title: '请求失败', description: '网络异常或服务器不可用', color: 'red', timeout: 2000 });
+        }
         return { code: 0, msg: '网络异常', data: null } as any as Response<T>;
     }
 };
 
-export const putRequest = async <T>(url: string, body: object, options?: { credentials?: RequestCredentials }) => {
+export const putRequest = async <T>(url: string, body: object, options?: { credentials?: RequestCredentials; silent?: boolean; signal?: AbortSignal }) => {
     const BASE_API = useRuntimeConfig().public.baseApi || '/api';
     const toast = useToast();
     const userStore = useUserStore();
@@ -83,29 +89,34 @@ export const putRequest = async <T>(url: string, body: object, options?: { crede
             body: JSON.stringify(body),
             credentials: options?.credentials,
             timeout: 8000,
-            retry: 0
+            retry: 0,
+            signal: options?.signal
         });
 
         if (response.code !== 1) {
-            toast.add({
-                title: "请求失败",
-                description: response.msg,
-                icon: "i-fluent-error-circle-16-filled",
-                color: "red",
-                timeout: 2000,
-            });
+            if (!options || !(options as any).silent) {
+                toast.add({
+                    title: "请求失败",
+                    description: response.msg,
+                    icon: "i-fluent-error-circle-16-filled",
+                    color: "red",
+                    timeout: 2000,
+                });
+            }
             return null;
         }
 
         return response;
     } catch (error) {
         const toast = useToast();
-        toast.add({ title: '请求失败', description: '网络异常或服务器不可用', color: 'red', timeout: 2000 });
+        if (!options || !(options as any).silent) {
+            toast.add({ title: '请求失败', description: '网络异常或服务器不可用', color: 'red', timeout: 2000 });
+        }
         return { code: 0, msg: '网络异常', data: null } as any as Response<T>;
     }
 };
 
-export const deleteRequest = async <T>(url: string, params?: any, options?: { credentials?: RequestCredentials }) => {
+export const deleteRequest = async <T>(url: string, params?: any, options?: { credentials?: RequestCredentials; silent?: boolean; signal?: AbortSignal }) => {
     const BASE_API = useRuntimeConfig().public.baseApi || '/api';
     const userStore = useUserStore();
     const token = userStore.token || "null";
@@ -118,7 +129,8 @@ export const deleteRequest = async <T>(url: string, params?: any, options?: { cr
             headers: {
                 'Authorization': `Bearer ${token}`,
             },
-            credentials: options?.credentials
+            credentials: options?.credentials,
+            signal: options?.signal
         });
 
         return response;

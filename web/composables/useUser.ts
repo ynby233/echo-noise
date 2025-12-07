@@ -8,7 +8,7 @@ export const useUser = () => {
 
     // 添加状态检查函数
     const checkLoginStatus = async () => {
-        const status = await userStore.getStatus();
+        const status = await userStore.getStatus(true);
         if (status) {
             userStore.setUserStatus(status);
         }

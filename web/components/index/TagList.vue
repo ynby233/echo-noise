@@ -48,14 +48,22 @@ const filteredTags = computed(() => {
   const invalidChars = /[/?=&]/;
   const isMediaLink = /^(song|video|playlist)\?id=\d+$/;
   const cache = new Map();
+  const isGuestbookTag = (name: string) => {
+    const n = String(name || '').trim().toLowerCase();
+    return n === '留言' || n === 'guestbook';
+  };
   
   return props.tags.reduce((acc, tag) => {
-    // 使用缓存避免重复计算
     if (cache.has(tag.name)) {
       return acc;
     }
-    
-    if (!invalidChars.test(tag.name) && !isMediaLink.test(tag.name)) {
+    const name = String(tag?.name || '');
+    if (
+      name &&
+      !invalidChars.test(name) &&
+      !isMediaLink.test(name) &&
+      !isGuestbookTag(name)
+    ) {
       cache.set(tag.name, true);
       acc.push(tag);
     }

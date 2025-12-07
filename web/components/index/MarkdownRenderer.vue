@@ -157,6 +157,34 @@ const applyImageGrid = () => {
 };
 
 
+const applyImageLoadingPlaceholders = () => {
+  if (!previewElement.value) return;
+  const imgs = Array.from(previewElement.value.querySelectorAll('img')) as HTMLImageElement[];
+  imgs.forEach((img) => {
+    const container = (img.closest('.image-grid-item') || img.parentElement || previewElement.value) as HTMLElement;
+    const needPlaceholder = !img.complete || !(img.naturalWidth && img.naturalHeight);
+    if (!needPlaceholder) return;
+    const ph = document.createElement('div');
+    ph.className = 'image-loading-placeholder';
+    ph.textContent = '图片正在加载中，请稍后';
+    const ref = img.closest('.image-grid-item') ? (img.closest('.image-grid-item') as HTMLElement).firstChild : img;
+    container.insertBefore(ph, ref as Node);
+    img.style.opacity = '0';
+    const onLoad = () => {
+      img.style.opacity = '1';
+      ph.remove();
+    };
+    const onError = () => {
+      ph.textContent = '图片加载失败';
+      ph.classList.add('image-loading-error');
+      img.style.display = 'none';
+    };
+    img.addEventListener('load', onLoad, { once: true });
+    img.addEventListener('error', onError, { once: true });
+  });
+};
+
+
 // 修改正则，避免匹配 Markdown 图片链接
 // 1. 匹配 markdown 普通链接（非图片）
 const GITHUB_MD_LINK_REG = /(?<!!)\[([^\]]+)\]\((https:\/\/github\.com\/([\w-]+)\/([\w.-]+)(?:\/[^\s)]*)?)\)/g;
@@ -259,28 +287,14 @@ const renderMarkdown = async (markdown: string) => {
       finalContent = withLinks.replace(/<a /g, '<a target="_blank" ');
     }
 
-  // 使用处理后的内容
-  const currentTheme = contentTheme && contentTheme.value === 'dark' ? 'dark' : 'light'
-  const hljsStyle = currentTheme === 'dark' ? 'github-dark' : 'github'
-  try {
-    Vditor.preview(previewElement.value, finalContent, {
-      mode: 'light',
+    const currentTheme = contentTheme && contentTheme.value === 'dark' ? 'dark' : 'light'
+    const hljsStyle = currentTheme === 'dark' ? 'github-dark' : 'github'
+    Vditor.preview(previewElement.value!, finalContent, {
       lang: 'zh_CN',
-      theme: {
-        current: currentTheme
-      },
-      hljs: {
-        style: hljsStyle,
-        lineNumber: true,
-        enable: true
-      },
-      markdown: {
-        // 允许安全的 HTML 渲染，避免视频标签被移除
-        sanitize: false
-      },
-
+      theme: { current: currentTheme },
+      hljs: { style: hljsStyle, lineNumber: true, enable: true },
+      markdown: { sanitize: false },
       after: () => {
-        // 确保所有链接都有 target="_blank"
         const links = previewElement.value?.querySelectorAll('a');
         links?.forEach(link => {
           if (!link.hasAttribute('target')) {
@@ -291,7 +305,6 @@ const renderMarkdown = async (markdown: string) => {
         applyThemeClass();
         applyImageGrid();
         initializeZoom();
-        // 将指向视频文件的链接替换为视频标签（处理被链接化的场景）
         const anchors = previewElement.value?.querySelectorAll('a[href]') || [] as any;
         anchors.forEach((a: HTMLAnchorElement) => {
           const href = a.getAttribute('href') || ''
@@ -304,26 +317,23 @@ const renderMarkdown = async (markdown: string) => {
             v.style.height = 'auto'
             a.replaceWith(v)
           }
-        })
-        console.log('Rendering complete.');
+        });
+        applyImageLoadingPlaceholders();
         emit('rendered');
         const proc = (window as any).processNMPv2Shortcodes
         if (proc && previewElement.value) {
           proc(previewElement.value)
         }
-        
-        // 绑定标签点击事件
         const tags = previewElement.value?.querySelectorAll('.clickable-tag');
         tags?.forEach(tag => {
           tag.addEventListener('click', (e) => {
             e.preventDefault();
-            const tagText = tag.textContent?.substring(1); // 去掉#号
+            const tagText = tag.textContent?.substring(1);
             if (tagText) {
               emit('tagClick', tagText);
             }
           });
         });
-        // 渲染 GitHub 卡片（仅当开关开启）
         if (props.enableGithubCard) {
           const githubCards = previewElement.value?.querySelectorAll('.github-card');
           githubCards?.forEach(card => {
@@ -337,14 +347,6 @@ const renderMarkdown = async (markdown: string) => {
         }
       }
     });
-  } catch (e) {
-    try {
-      previewElement.value.innerHTML = Vditor.md2html(finalContent);
-      applyThemeClass();
-    } catch (_) {
-      previewElement.value.innerHTML = finalContent;
-    }
-  }
   } catch (error) {
     console.error("Error rendering markdown:", error);
     previewElement.value.innerHTML = '';
@@ -487,6 +489,24 @@ watch(() => contentTheme && contentTheme.value, () => {
   height: auto;
   display: block;
   margin: 0.4em auto;
+}
+
+.image-loading-placeholder {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 0.875rem;
+  color: #6b7280;
+  background-color: rgba(0,0,0,0.05);
+}
+.theme-dark .image-loading-placeholder {
+  color: #cbd5e1;
+  background-color: rgba(255,255,255,0.08);
+}
+.image-loading-error {
+  color: #ef4444;
 }
 
 .markdown-preview :deep(video),

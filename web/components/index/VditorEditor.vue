@@ -18,7 +18,7 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(["update:modelValue"]);
+const emit = defineEmits(["update:modelValue", "ready"]);
 
 const editorContainer = ref<HTMLElement>();
 let vditorInstance: Vditor | null = null;
@@ -26,6 +26,7 @@ let toolbarEl: HTMLElement | null = null;
 let placeholderEl: HTMLElement | null = null;
 let mutationObserver: MutationObserver | null = null;
 let fixedCleanup: (() => void) | null = null;
+const isReady = ref(false);
 
 const editorOptions: IOptions = {
   mode: "ir",
@@ -102,6 +103,8 @@ onMounted(async () => {
     after: () => {
       vditorInstance?.setValue(props.modelValue);
       vditorInstance?.setTheme(props.theme === 'dark' ? 'dark' : 'classic');
+      isReady.value = true;
+      emit("ready");
     },
   }
   vditorInstance = new Vditor(editorContainer.value, opts);

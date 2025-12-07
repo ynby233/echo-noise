@@ -91,19 +91,22 @@ export const useUserStore = defineStore("userStore", () => {
     }
 
     // 获取状态
-    const getStatus = async () => {
+    const getStatus = async (silentToast: boolean = false) => {
         const response = await getRequest<Status>("status", undefined, {
-            credentials: 'include'
+            credentials: 'include',
+            silent: silentToast
         });
         if (!response || response.code !== 1) {
             console.log("获取系统信息失败");
-            toast.add({
-                title: "获取系统信息失败",
-                description: response?.msg,
-                icon: "i-fluent-error-circle-16-filled",
-                color: "red",
-                timeout: 2000,
-            });
+            if (!silentToast) {
+                toast.add({
+                    title: "获取系统信息失败",
+                    description: response?.msg,
+                    icon: "i-fluent-error-circle-16-filled",
+                    color: "red",
+                    timeout: 2000,
+                });
+            }
             return false;
         }
 
@@ -117,7 +120,8 @@ export const useUserStore = defineStore("userStore", () => {
     // 获取当前登录用户信息
     const getUser = async (showToast: boolean = false) => {
         const response = await getRequest<User>("user", undefined, {
-            credentials: 'include'
+            credentials: 'include',
+            silent: !showToast
         });
         if (!response || response.code !== 1) {
             if (showToast) {

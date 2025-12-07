@@ -2,8 +2,14 @@
   <div class="min-h-screen flex flex-col">
     <!-- 空状态显示 -->
     <div v-if="!displayMessages.length" class="text-center text-gray-500 py-8">
-      <UIcon name="i-heroicons-inbox" class="w-12 h-12 mx-auto mb-4" />
-      <p>暂无消息内容</p>
+      <div v-if="isPageLoading">
+        <UIcon name="i-heroicons-arrow-path" class="w-12 h-12 mx-auto mb-4 animate-spin" />
+        <p>加载中...</p>
+      </div>
+      <div v-else>
+        <UIcon name="i-heroicons-inbox" class="w-12 h-12 mx-auto mb-4" />
+        <p>暂无消息内容</p>
+      </div>
     </div>
     
     <div :class="outerContainerClass">
@@ -31,15 +37,17 @@
     <p>未找到相关内容</p>
   </div>
         <!-- 消息列表内容 -->
-        <div v-for="msg in displayMessages" :key="msg.id" class="w-full h-auto overflow-hidden flex flex-col justify-between">
+        <div v-for="(msg, idx) in displayMessages" :key="msg.id" class="w-full h-auto overflow-hidden flex flex-col justify-between">
 
           <div class="p-0">
-            <div :class="['content-container', innerContainerClass, listThemeClass]" v-if="msg.image_url || msg.content" :data-msg-id="msg.id">
+            <div :class="['content-container', innerContainerClass, listThemeClass]" :data-msg-id="msg.id">
               <div class="flex items-center gap-2 mb-2 author-row">
                 <img :src="authorAvatar(msg)" alt="avatar" class="avatar-img w-8 h-8 rounded-full object-cover" @error="authorAvatarOnError($event, msg.username || '匿名')" />
                 <div class="min-w-0">
                   <div class="text-sm font-semibold leading-tight">{{ msg.username || siteConfig.username || '匿名' }}</div>
-                  <div class="text-xs opacity-70">{{ formatDate(msg.created_at) }}</div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs opacity-70">{{ formatDate(msg.created_at) }}</span>
+                  </div>
                 </div>
                 <div class="ml-auto flex items-center gap-2 text-xs opacity-80">
                   <UIcon v-if="msg.private" name="i-mdi-lock-outline" class="w-4 h-4" />
@@ -54,13 +62,14 @@
                   alt="Image" 
                   class="message-image-box"
                   loading="lazy"
-                  :fetchpriority="index < 3 ? 'high' : 'low'"
+                  :fetchpriority="idx < 3 ? 'high' : 'low'"
+                  decoding="async"
                 />
               </a>
               <!-- 分隔线 -->
               <div v-if="msg.image_url && msg.content" class="border-t border-gray-600 my-4"></div>
               <!-- 文本内容区域 -->
-              <div class="overflow-y-hidden relative" :class="[{ 'max-h-[700px]': !isExpanded[msg.id] && !hasGrid[msg.id] }, listThemeTextClass]">
+              <div class="overflow-y-hidden relative" :class="[{ 'max-h-[700px]': !isExpanded[msg.id] && !hasGrid[msg.id] }, listThemeTextClass]" :style="contentStyle(idx)">
                 <MarkdownRenderer :content="msg.content" :enableGithubCard="siteConfig?.enableGithubCard === true" @tagClick="handleTagClick" @rendered="checkContentHeight" link-target="_blank"/>
                 <div v-if="shouldShowExpandButton[msg.id] && !isExpanded[msg.id]"
     :class="['absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t backdrop-blur-md pointer-events-none content-fade-mask', gradientClass]" style="z-index:20"></div>
@@ -85,7 +94,12 @@
                   <UIcon name="i-mdi-comment-outline" style="font-size: 20px; line-height: 1;" />
                   <span class="ml-1 text-xs opacity-80">{{ commentCountMap[msg.id] || 0 }}</span>
                 </button>
-                <div class="flex-1"></div>
+                <div class="flex-1 flex items-center justify-center">
+                  <span v-if="isContentEmpty(msg)" class="text-xs text-orange-400 inline-flex items-center relative z-30">
+                    <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin mr-1" />
+                    加载内容中...
+                  </span>
+                </div>
                 <div class="toolbox-anchor">
                   <UButton size="xs" color="gray" variant="ghost" :ui="{ base: 'rounded-full' }" class="tool-open-btn" @click="toggleToolbox(msg.id)" title="展开工具">
                     <UIcon name="i-heroicons-ellipsis-horizontal" style="font-size: 16px; line-height: 1;" />
@@ -111,6 +125,8 @@
           </div>
         </div>
       </div>
+      <!-- 预取下一页哨兵 -->
+      <div v-if="!isSearchMode" ref="prefetchSentinel" style="height:1px"></div>
       <!-- 分页控制区域 -->
       <div v-if="!isSearchMode" class="flex justify-center items-center space-x-4 w-full my-4 flex-wrap md:flex-nowrap">
   <div class="flex justify-center items-center space-x-4 w-full md:w-auto">
@@ -191,9 +207,8 @@
         />
         <div class="border-t border-gray-200 my-2 pt-2">
           <div class="text-sm text-gray-500 mb-2">预览：</div>
-          <!-- 修改预览区域样式 -->
-          <div class="p-4 rounded-lg overflow-auto max-h-[300px] bg-[rgba(36,43,50,0.95)]">
-            <div class="text-white">
+          <div class="p-4 rounded-lg overflow-auto max-h-[300px]" :class="modalPreviewBoxClass">
+            <div :class="modalPreviewTextClass">
               <MarkdownRenderer :content="editingContent" :enableGithubCard="siteConfig?.enableGithubCard === true" />
             </div>
           </div>
@@ -213,7 +228,7 @@
   </UModal>
 </template>
 
-<script setup lang="ts">
+  <script setup lang="ts">
 import { useMessageStore } from "~/store/message";
 import { useUserStore } from "~/store/user";
 import MarkdownRenderer from "~/components/index/MarkdownRenderer.vue";
@@ -222,6 +237,8 @@ const contentTheme = inject('contentTheme', ref<string>(typeof window !== 'undef
 const listThemeClass = computed(() => contentTheme.value === 'dark' ? 'bg-[rgba(36,43,50,0.95)] text-white' : 'bg-white text-black')
 const listThemeTextClass = computed(() => contentTheme.value === 'dark' ? 'text-white' : 'text-black')
 const gradientClass = computed(() => contentTheme.value === 'dark' ? 'from-[rgba(36,43,50,1)] via-[rgba(36,43,50,0.8)] to-transparent' : 'from-[rgba(255,255,255,1)] via-[rgba(255,255,255,0.8)] to-transparent')
+const modalPreviewBoxClass = computed(() => contentTheme.value === 'dark' ? 'bg-[rgba(36,43,50,0.95)]' : 'bg-white')
+const modalPreviewTextClass = computed(() => contentTheme.value === 'dark' ? 'text-white' : 'text-black')
 // 作者头像：登录用户的头像优先；否则使用站点头像或首字母头像
 const authorAvatar = (msg: any) => {
   const uname = String(((useUserStore().user as any)?.username || '')).trim()
@@ -246,6 +263,10 @@ const expandBtnClass = computed(() => contentTheme.value === 'dark'
 const pagerBtnClass = computed(() => contentTheme.value === 'dark'
   ? 'bg-[rgba(36,43,50,0.75)] text-white hover:text-white hover:bg-[rgba(36,43,50,0.85)] active:bg-[rgba(36,43,50,0.9)] focus:bg-[rgba(36,43,50,0.85)] border border-white/70'
   : 'bg-[rgba(24,28,32,0.6)] text-white hover:text-white hover:bg-[rgba(24,28,32,0.7)] active:bg-[rgba(24,28,32,0.75)] focus:bg-[rgba(24,28,32,0.7)] border border-white/70')
+
+const contentStyle = (index: number) => {
+  return index < 5 ? '' : 'content-visibility:auto;contain-intrinsic-size:700px';
+}
 
 // 内容工具栏折叠与样式
 const openToolboxId = ref<number | null>(null)
@@ -272,6 +293,79 @@ const toolboxClass = computed(() => contentTheme.value === 'dark' ? 'toolbox-dar
 const likesMap = ref<Record<number, number>>({})
 const likedMap = ref<Record<number, boolean>>({})
 const commentCountMap = ref<Record<number, number>>({})
+const fetchedCommentIds = ref<Record<number, boolean>>({})
+const pendingCommentIds = ref<number[]>([])
+let activeCommentBatch = false
+const batchSize = 20
+let io: IntersectionObserver | null = null
+const fetchCommentCountsBatch = async (ids: number[]) => {
+  if (!ids.length) return
+  try {
+    const resp = await fetch(`${BASE_API}/messages/comments/counts`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ ids })
+    })
+    if (!resp.ok) return
+    const js = await resp.json()
+    const arr = Array.isArray(js?.data) ? js.data : []
+    arr.forEach((row: any) => {
+      const id = Number(row?.id || 0)
+      const count = Number(row?.count || 0)
+      if (!id) return
+      commentCountMap.value[id] = count
+      fetchedCommentIds.value[id] = true
+      if (isBuiltin.value && count > 0) expandedCommentsMap.value[id] = true
+    })
+  } catch {}
+}
+const runCommentQueue = () => {
+  if (activeCommentBatch) return
+  if (!pendingCommentIds.value.length) return
+  const uniq: number[] = []
+  const seen = new Set<number>()
+  while (uniq.length < batchSize && pendingCommentIds.value.length) {
+    const id = pendingCommentIds.value.shift() as number
+    if (seen.has(id)) continue
+    seen.add(id)
+    if (!fetchedCommentIds.value[id]) uniq.push(id)
+  }
+  if (!uniq.length) return
+  activeCommentBatch = true
+  fetchCommentCountsBatch(uniq).finally(() => { activeCommentBatch = false; runCommentQueue() })
+}
+const scheduleCommentFetch = (id: number) => {
+  if (fetchedCommentIds.value[id]) return
+  pendingCommentIds.value.push(id)
+  runCommentQueue()
+}
+const observeContainers = () => {
+  if (!io) return
+  const nodes = document.querySelectorAll('.content-container')
+  nodes.forEach((node) => {
+    const idAttr = (node as HTMLElement).getAttribute('data-msg-id') || '0'
+    const id = Number(idAttr)
+    const m = getMessageById(id)
+    if (id && m && !isGuestbookMessage(m)) io!.observe(node)
+  })
+}
+onMounted(() => {
+  try {
+    io = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          const el = entry.target as HTMLElement
+          const id = Number(el.getAttribute('data-msg-id') || '0')
+          if (id) scheduleCommentFetch(id)
+          io && io.unobserve(el)
+        }
+      })
+    }, { rootMargin: '256px 0px' })
+    observeContainers()
+  } catch {}
+})
+onBeforeUnmount(() => { try { io && io.disconnect() } catch {} })
 const like = async (id: number) => {
   try {
     const resp = await fetch(`${BASE_API}/messages/${id}/like/toggle`, { method: 'POST', credentials: 'include', headers: { 'Accept': 'application/json' } })
@@ -404,9 +498,15 @@ const fetchGuestbookId = async () => {
     }
   } catch {}
 }
-const getMessageById = (id: number) => (message.messages || []).find((m: any) => m.id === id)
-const userStore = useUserStore();
-const isLogin = computed(() => userStore.isLogin);
+  const getMessageById = (id: number) => (message.messages || []).find((m: any) => m.id === id)
+  const userStore = useUserStore();
+  const isLogin = computed(() => userStore.isLogin);
+  const isContentEmpty = (m: any) => {
+    const img = String(m?.image_url || '').trim()
+    const c0 = String(m?.content || '')
+    const c = c0.replace(/\s|&nbsp;|\u00A0/gi, '').trim()
+    return img === '' && c.length === 0
+  }
 const openInNewTab = (url: string) => {
   window.open(url, '_blank', 'noopener,noreferrer');
 };
@@ -428,8 +528,8 @@ const handleTagClick = async (tag: string) => {
       isSearchMode.value = true;
       searchResults.value = data.data;
       await nextTick();
-      checkContentHeight();
-      initFancybox();
+      deferMeasure();
+      deferInitFancybox();
     } else {
       throw new Error(data.msg || '获取标签内容失败');
     }
@@ -456,8 +556,8 @@ const resetList = async () => {
   });
   
   await nextTick();
-  checkContentHeight();
-  initFancybox();
+  deferMeasure();
+  deferInitFancybox();
 };
 
 const deleteMsg = async (id: number) => {
@@ -507,37 +607,55 @@ const initFancybox = () => {
       },
     };
 
-    // 只为远程图片添加灯箱，且每张图片只包裹一次
     const mdImages = document.querySelectorAll(".markdown-preview img");
     mdImages.forEach((img) => {
       const src = img.getAttribute("src") || "";
-      const isRemote = /^https?:\/\//i.test(src);
+      if (img.closest('.image-grid-item')) return;
       const parent = img.parentElement;
-      // 如果已经被包裹且包裹正确，跳过
-      if (parent && parent.tagName === "A" && parent.hasAttribute("data-fancybox")) {
-        // 如果不是远程图片，移除包裹
-        if (!isRemote) {
-          parent.replaceWith(img);
+      if (parent && parent.tagName === "A") {
+        parent.setAttribute("data-fancybox", "uploaded-image");
+        const href = parent.getAttribute('href') || '';
+        const isImageHref = /\.(png|jpe?g|gif|webp|bmp|svg)(\?.*)?$/i.test(href) || href.startsWith('data:') || href.startsWith('blob:');
+        if (!href || href === '#' || href.startsWith('javascript:') || !isImageHref) {
+          parent.setAttribute('href', src);
         }
-        return;
-      }
-      // 只包裹远程图片
-      if (isRemote) {
+      } else {
         const wrapper = document.createElement("a");
         wrapper.href = src;
         wrapper.setAttribute("data-fancybox", "uploaded-image");
         wrapper.style.display = "block";
         img.parentNode.insertBefore(wrapper, img);
         wrapper.appendChild(img);
-      } else if (parent && parent.tagName === "A" && parent.hasAttribute("data-fancybox")) {
-        // 非远程图片且被包裹，移除包裹
-        parent.replaceWith(img);
       }
     });
 
     window.Fancybox.bind("[data-fancybox]", fancyboxOptions);
   }
 };
+
+let fancyboxScheduled = false
+const deferInitFancybox = () => {
+  if (fancyboxScheduled) return
+  fancyboxScheduled = true
+  const run = () => { try { initFancybox() } finally { fancyboxScheduled = false } }
+  try {
+    const w: any = window
+    if (w && typeof w.requestIdleCallback === 'function') w.requestIdleCallback(run)
+    else setTimeout(run, 0)
+  } catch { setTimeout(run, 0) }
+}
+
+let measureScheduled = false
+const deferMeasure = () => {
+  if (measureScheduled) return
+  measureScheduled = true
+  const run = () => { try { checkContentHeight() } finally { measureScheduled = false } }
+  try {
+    const w: any = window
+    if (w && typeof w.requestIdleCallback === 'function') w.requestIdleCallback(run)
+    else requestAnimationFrame(run)
+  } catch { setTimeout(run, 0) }
+}
 
 const toggleComment = async (msgId: number) => {
   const m = getMessageById(msgId)
@@ -695,6 +813,13 @@ const checkContentHeight = () => {
         `.content-container[data-msg-id="${msg.id}"] .overflow-y-hidden`
       );
       if (!contentEl) return;
+      const el = contentEl as HTMLElement;
+      const prevCV = (el.style as any).contentVisibility;
+      const prevCIS = (el.style as any).containIntrinsicSize;
+      try {
+        if (prevCV) (el.style as any).contentVisibility = 'visible';
+        if (prevCIS) (el.style as any).containIntrinsicSize = '';
+      } catch {}
       const hasImageGrid = !!document.querySelector(`.content-container[data-msg-id="${msg.id}"] .image-grid`);
       hasGrid.value[msg.id] = hasImageGrid;
       if (hasImageGrid) {
@@ -702,7 +827,8 @@ const checkContentHeight = () => {
         isExpanded.value[msg.id] = true;
         return;
       }
-      if (contentEl.scrollHeight > 700) {
+      const fullHeight = (contentEl as HTMLElement).scrollHeight;
+      if (fullHeight > 700) {
         shouldShowExpandButton.value[msg.id] = true;
         if (isExpanded.value[msg.id] === undefined) {
           isExpanded.value[msg.id] = false;
@@ -710,7 +836,22 @@ const checkContentHeight = () => {
       } else {
         shouldShowExpandButton.value[msg.id] = false;
       }
+      try {
+        if (prevCV) (el.style as any).contentVisibility = prevCV;
+        if (prevCIS) (el.style as any).containIntrinsicSize = prevCIS;
+      } catch {}
+
+      const imgs = Array.from(el.querySelectorAll('img')) as HTMLImageElement[];
+      imgs.forEach((img) => {
+        const flag = (img as any).__measureAttached;
+        if (!flag) {
+          (img as any).__measureAttached = true;
+          img.addEventListener('load', () => deferMeasure());
+          img.addEventListener('error', () => deferMeasure());
+        }
+      });
     });
+    deferInitFancybox();
   });
 };
 
@@ -721,10 +862,8 @@ watch(() => message.messages, () => {
     return;
   }
   nextTick(() => {
-    requestAnimationFrame(() => {
-      checkContentHeight();
-      initFancybox();
-    });
+    deferMeasure();
+    deferInitFancybox();
   });
 }, { deep: true });
 // 添加路由相关
@@ -748,6 +887,7 @@ const loadWalineAssets = async () => {
 }
 onMounted(async () => {
   try {
+    isPageLoading.value = true
     await checkApi()
     await fetchGuestbookId()
     // 获取路由中的消息ID
@@ -810,8 +950,8 @@ onMounted(async () => {
 
     // 初始化视图
     await nextTick();
-    checkContentHeight();
-    initFancybox();
+    deferMeasure();
+    deferInitFancybox();
 
     // 默认仅展开已有评论的消息
     try {
@@ -844,6 +984,8 @@ onMounted(async () => {
         timeout: 2000
       });
     }
+  } finally {
+    isPageLoading.value = false
   }
 });
 
@@ -971,10 +1113,7 @@ const loadNextPage = async () => {
     const sc = document.querySelector('.content-wrapper') as HTMLElement | null;
     const prevY = sc ? sc.scrollTop : window.scrollY;
     const targetPage = message.page + 1;
-    const result = await message.getMessages({
-      page: targetPage,
-      pageSize: 15,
-    });
+    const result = await (message as any).applyPrefetchedOrLoad(targetPage);
     if (result && Array.isArray(result.items)) {
       const nonPinned = result.items.filter((m: any) => !m.pinned && !isGuestbookMessage(m));
       message.messages = [...pinnedTopItems.value, ...nonPinned];
@@ -1023,20 +1162,8 @@ watch(
         const unique = pins.filter((m: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.id === m.id) === i);
         pinnedTopItems.value = unique;
       }
-      try {
-        const list = (message.messages || []).filter((m: any) => !isGuestbookMessage(m));
-        const tasks = list.map(async (m: any) => {
-          try {
-            const resp = await fetch(`${BASE_API}/messages/${m.id}/comments`, { credentials: 'include', headers: { 'Accept': 'application/json' } });
-            if (resp.ok) {
-              const js = await resp.json();
-              const count = Array.isArray(js.data) ? js.data.length : 0;
-              commentCountMap.value[m.id] = count;
-            }
-          } catch {}
-        });
-        await Promise.allSettled(tasks);
-      } catch {}
+      await nextTick();
+      observeContainers();
       await nextTick();
       checkContentHeight();
       initFancybox();
@@ -1499,7 +1626,7 @@ const handleSearchResult = async (results: any) => {
     
     await nextTick();
     checkContentHeight();
-    initFancybox();
+    deferInitFancybox();
     
   } catch (error: any) {
     console.error('处理搜索结果时出错:', error);
@@ -1525,19 +1652,20 @@ const resetSearch = () => {
   // 重置后更新UI
   nextTick(() => {
     checkContentHeight();
-    initFancybox();
+    deferInitFancybox();
   });
 };
 
 // 修改displayMessages计算属性以支持搜索模式
 const displayMessages = computed(() => {
   if (isSearchMode.value && Array.isArray(searchResults.value)) {
-    return (searchResults.value || []).filter((m: any) => !isGuestbookMessage(m));
+    return (searchResults.value || []);
   }
   const base = (message.messages || []).filter((m: any) => !isGuestbookMessage(m));
-  if (!pinnedTopItems.value.length) return base;
-  const rest = base.filter((m: any) => !pinnedTopItems.value.some((p: any) => p.id === m.id));
-  return [...pinnedTopItems.value, ...rest];
+  const pinned = (pinnedTopItems.value || []).filter((m: any) => !isGuestbookMessage(m));
+  if (!pinned.length) return base;
+  const rest = base.filter((m: any) => !pinned.some((p: any) => p.id === m.id));
+  return [...pinned, ...rest];
 });
 
 // 添加事件监听
@@ -1587,6 +1715,26 @@ const footerConfig = computed(() => ({
   pageFooterHTML: props.siteConfig.pageFooterHTML,
   walineServerURL: props.siteConfig.walineServerURL
 }));
+
+// 下一页预取（靠近底部时触发）
+const prefetchSentinel = ref<HTMLElement | null>(null)
+let prefetchObservedPage = 0
+onMounted(() => {
+  try {
+    const io2 = new IntersectionObserver((entries) => {
+      entries.forEach(async (entry) => {
+        if (!entry.isIntersecting) return
+        if (isSearchMode.value) return
+        const nextPage = (message.page || 1) + 1
+        if (!message.hasMore) return
+        if (prefetchObservedPage === nextPage) return
+        prefetchObservedPage = nextPage
+        await (message as any).prefetchPage(nextPage)
+      })
+    }, { rootMargin: '512px 0px' })
+    if (prefetchSentinel.value) io2.observe(prefetchSentinel.value)
+  } catch {}
+})
 
 </script>
 

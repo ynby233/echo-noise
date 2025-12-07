@@ -696,6 +696,37 @@ func GetComments(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": comments})
 }
 
+// 批量获取评论数量
+func GetCommentCounts(c *gin.Context) {
+	var req struct {
+		IDs []uint `json:"ids"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || len(req.IDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "请求参数错误"})
+		return
+	}
+	db, _ := database.GetDB()
+	type row struct {
+		MessageID uint  `gorm:"column:message_id"`
+		Cnt       int64 `gorm:"column:cnt"`
+	}
+	var rows []row
+	if err := db.Model(&models.Comment{}).
+		Select("message_id, COUNT(*) as cnt").
+		Where("message_id IN ?", req.IDs).
+		Group("message_id").
+		Find(&rows).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取评论数量失败"})
+		return
+	}
+	// 组装为 id->count 的数组结构
+	result := make([]gin.H, 0, len(rows))
+	for _, r := range rows {
+		result = append(result, gin.H{"id": r.MessageID, "count": r.Cnt})
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": result})
+}
+
 // GetGuestbookMessageID 获取或创建用于留言板的独立消息ID
 func GetGuestbookMessageID(c *gin.Context) {
 	db, _ := database.GetDB()

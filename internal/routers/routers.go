@@ -159,6 +159,7 @@ func SetupRouter() *gin.Engine {
 
 	// 评论系统（内置）公共路由
 	api.GET("/messages/:id/comments", controllers.GetComments)
+	api.POST("/messages/comments/counts", controllers.GetCommentCounts)
 	api.POST("/messages/:id/comments", controllers.PostComment)
 	// 管理员评论列表（提供公共路径，附加会话中间件以注入用户上下文）
 	api.GET("/comments", middleware.SessionAuthMiddleware(), controllers.ListComments)

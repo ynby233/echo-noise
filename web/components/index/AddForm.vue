@@ -2,7 +2,7 @@
   <div :class="containerClass">
 
     <div class="editor-box">
-      <VditorEditor ref="vditorEditor" v-model="MessageContent" :theme="contentTheme" />
+      <VditorEditor ref="vditorEditor" v-model="MessageContent" :theme="contentTheme" @ready="onEditorReady" />
       <div class="editor-toolbar">
         <div class="toolbar-left">
           <input
@@ -38,7 +38,10 @@
           </button>          
         </div>
         <div class="toolbar-right">
-          
+          <span v-if="isEditorLoading" class="text-xs text-orange-400 flex items-center" style="margin-right: auto">
+            <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin mr-1" />
+            加载中...
+          </span>
           <button class="tb-btn" @click="clearForm" title="清空"><UIcon name="i-fluent-broom-16-regular" class="w-5 h-5" /></button>
           <button class="tb-btn primary" @click="addMessage" title="发布"><UIcon name="i-fluent-add-12-filled" class="w-5 h-5" /></button>
         </div>
@@ -82,6 +85,8 @@ import { useMessageStore } from '~/store/message'
 import { useNotifyStore } from '~/store/notify'
 import VideoUpload from './VideoUpload.vue'
 import ImageHostingUploader from '~/components/widgets/ImageHostingUploader.vue'
+const isEditorLoading = ref(true)
+const onEditorReady = () => { isEditorLoading.value = false }
 const showImageUploader = ref(false)
 const imageUploaderPosition = ref({ x: 400, y: 320 }) // 可根据实际调整
 // 处理图床上传成功，插入编辑器
