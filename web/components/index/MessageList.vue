@@ -1113,7 +1113,10 @@ const loadNextPage = async () => {
     const sc = document.querySelector('.content-wrapper') as HTMLElement | null;
     const prevY = sc ? sc.scrollTop : window.scrollY;
     const targetPage = message.page + 1;
-    const result = await (message as any).applyPrefetchedOrLoad(targetPage);
+    const result = await message.getMessages({
+      page: targetPage,
+      pageSize: 15,
+    });
     if (result && Array.isArray(result.items)) {
       const nonPinned = result.items.filter((m: any) => !m.pinned && !isGuestbookMessage(m));
       message.messages = [...pinnedTopItems.value, ...nonPinned];
@@ -1729,7 +1732,10 @@ onMounted(() => {
         if (!message.hasMore) return
         if (prefetchObservedPage === nextPage) return
         prefetchObservedPage = nextPage
-        await (message as any).prefetchPage(nextPage)
+        const anyMsg = message as any
+        if (anyMsg && typeof anyMsg.prefetchPage === 'function') {
+          await anyMsg.prefetchPage(nextPage)
+        }
       })
     }, { rootMargin: '512px 0px' })
     if (prefetchSentinel.value) io2.observe(prefetchSentinel.value)
