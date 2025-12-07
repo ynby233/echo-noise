@@ -412,7 +412,7 @@ const jumpToPage = async () => {
     
     targetPage.value = '';
     await nextTick();
-    if (sc) sc.scrollTo({ top: prevY, behavior: 'instant' }); else window.scrollTo({ top: prevY, behavior: 'instant' });
+    if (sc) sc.scrollTo({ top: prevY, behavior: 'auto' }); else window.scrollTo({ top: prevY, behavior: 'auto' });
   } catch (error) {
     console.error('跳转页面失败:', error);
     useToast().add({
@@ -709,9 +709,12 @@ const toggleComment = async (msgId: number) => {
 };
 
 const handleCancel = (msgId: number, payload?: { empty?: boolean }) => {
+  const m = getMessageById(msgId)
+  if (isGuestbookMessage(m)) return
   if (payload && payload.empty === true) {
-    toggleComment(msgId); // 与点击评论图标行为一致（当前显示则关闭）
-    return;
+    expandedCommentsMap.value[msgId] = false
+    activeCommentId.value = null
+    return
   }
   if (activeCommentId.value === msgId) activeCommentId.value = null
   commentRefreshKey.value[msgId] = (commentRefreshKey.value[msgId] || 0) + 1
@@ -820,13 +823,22 @@ const checkContentHeight = () => {
         if (prevCV) (el.style as any).contentVisibility = 'visible';
         if (prevCIS) (el.style as any).containIntrinsicSize = '';
       } catch {}
-      const hasImageGrid = !!document.querySelector(`.content-container[data-msg-id="${msg.id}"] .image-grid`);
-      hasGrid.value[msg.id] = hasImageGrid;
-      if (hasImageGrid) {
-        shouldShowExpandButton.value[msg.id] = false;
-        isExpanded.value[msg.id] = true;
-        return;
-      }
+  const hasImageGrid = !!document.querySelector(`.content-container[data-msg-id="${msg.id}"] .image-grid`);
+  hasGrid.value[msg.id] = hasImageGrid;
+  if (hasImageGrid) {
+    shouldShowExpandButton.value[msg.id] = false;
+    const container = document.querySelector(`.content-container[data-msg-id="${msg.id}"]`) as HTMLElement | null;
+    const nearViewport = (() => {
+      if (!container) return false;
+      const rect = container.getBoundingClientRect();
+      const margin = 256;
+      return rect.top < (window.innerHeight + margin) && rect.bottom > -margin;
+    })();
+    if (nearViewport) {
+      isExpanded.value[msg.id] = true;
+    }
+    return;
+  }
       const fullHeight = (contentEl as HTMLElement).scrollHeight;
       if (fullHeight > 700) {
         shouldShowExpandButton.value[msg.id] = true;
@@ -918,7 +930,7 @@ onMounted(async () => {
         await nextTick();
         const targetElement = document.querySelector(`.content-container[data-msg-id="${messageId}"]`);
         if (targetElement) {
-          targetElement.scrollIntoView({ behavior: 'instant', block: 'start' });
+          targetElement.scrollIntoView({ behavior: 'auto', block: 'start' });
         }
       } else {
         throw new Error('消息不存在');
@@ -1052,7 +1064,7 @@ watch(() => route.hash, async (newHash) => {
       const targetElement = document.querySelector(`.content-container[data-msg-id="${messageId}"]`);
       if (targetElement) {
         targetElement.scrollIntoView({ 
-          behavior: 'instant',
+          behavior: 'auto',
           block: 'start'
         });
       }
@@ -1094,7 +1106,7 @@ const loadPreviousPage = async () => {
       message.page = targetPage;
     }
     await nextTick();
-    if (sc) sc.scrollTo({ top: prevY, behavior: 'instant' }); else window.scrollTo({ top: prevY, behavior: 'instant' });
+    if (sc) sc.scrollTo({ top: prevY, behavior: 'auto' }); else window.scrollTo({ top: prevY, behavior: 'auto' });
   } catch (error) {
     useToast().add({
       title: '加载失败',
@@ -1130,7 +1142,7 @@ const loadNextPage = async () => {
       message.page = targetPage;
     }
     await nextTick();
-    if (sc) sc.scrollTo({ top: prevY, behavior: 'instant' }); else window.scrollTo({ top: prevY, behavior: 'instant' });
+    if (sc) sc.scrollTo({ top: prevY, behavior: 'auto' }); else window.scrollTo({ top: prevY, behavior: 'auto' });
   } catch (error) {
     useToast().add({
       title: '加载失败',
@@ -1700,7 +1712,11 @@ const onCommentCountUpdated = (e: any) => {
     const d = e?.detail || {}
     const id = Number(d?.messageId || 0)
     const cnt = Number(d?.count || 0)
-    if (id) commentCountMap.value[id] = cnt
+    if (!id) return
+    commentCountMap.value[id] = cnt
+    if (cnt === 0 && activeCommentId.value !== id) {
+      expandedCommentsMap.value[id] = false
+    }
   } catch {}
 }
 onMounted(() => { try { window.addEventListener('comment-count-updated', onCommentCountUpdated) } catch {} })

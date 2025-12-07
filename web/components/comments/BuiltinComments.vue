@@ -454,6 +454,7 @@ const doDelete = async () => {
       comments.value = comments.value.filter(c => c.id !== deleteId.value)
       useToast().add({ title: '已删除', color: 'green' })
       scrollToMessage()
+      try { window.dispatchEvent(new CustomEvent('comment-count-updated', { detail: { messageId: props.messageId, count: comments.value.length } })) } catch {}
     } else {
       useToast().add({ title: '删除失败', description: res?.msg, color: 'red' })
     }

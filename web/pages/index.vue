@@ -1978,6 +1978,8 @@ html, body {
   z-index: 1;
   pointer-events: auto;
   cursor: default;
+  overflow-anchor: none;
+  scrollbar-gutter: stable both-edges;
 }
 
 .moments-header {
@@ -2137,6 +2139,8 @@ html.dark .search-card { background: rgba(36,43,50,0.95); color: #fff; border: 1
     z-index: 1;
     pointer-events: auto;
     padding: 0.25rem; /* 收紧移动端外层边距，提升内容占比 */
+    overflow-anchor: none;
+    scrollbar-gutter: stable both-edges;
   }
   
   .background-container {
@@ -2230,6 +2234,11 @@ white-space: nowrap;  /* 防止换行 */
 }
 
 .message-list-container { cursor: default; }
+
+/* 禁用滚动锚定，防止分页更新时视口抖动 */
+.message-list-container {
+  overflow-anchor: none;
+}
 
 .loading {
   position: fixed;
