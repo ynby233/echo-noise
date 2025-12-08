@@ -68,12 +68,13 @@
               <!-- 图片内容（支持放大预览 + 悬停效果） -->
               <a v-if="msg.image_url" :href="`${BASE_API}${msg.image_url}`" :data-fancybox="`message-image-${msg.id}`" class="block">
                 <img 
-                  :src="`${BASE_API}${msg.image_url}`" 
+                  :src="optimizeImage(`${BASE_API}${msg.image_url}`)" 
                   alt="Image" 
                   class="message-image-box"
                   loading="lazy"
                   :fetchpriority="idx < 3 ? 'high' : 'low'"
                   decoding="async"
+                  sizes="(max-width: 640px) 100vw, 800px"
                 />
               </a>
               <!-- 分隔线 -->
@@ -105,12 +106,12 @@
               <div class="border-t border-gray-300 dark:border-gray-700 my-3"></div>
               <div class="message-socialbar">
                 <button class="social-item" @click="like(msg.id)" :title="'点赞'">
-                  <UIcon :name="(likedMap[msg.id] ? 'i-mdi-heart' : 'i-mdi-heart-outline')" style="font-size: 20px; line-height: 1;" :class="[likedMap[msg.id] ? 'text-red-500' : '']" />
-                  <span class="ml-1 text-xs opacity-80">{{ likesMap[msg.id] ?? (msg.like_count || 0) }}</span>
+                  <UIcon :name="(likedMap[msg.id] ? 'i-mdi-heart' : 'i-mdi-heart-outline')" :style="{ fontSize: (isMobile ? '26px' : '24px'), lineHeight: 1 }" :class="[likedMap[msg.id] ? 'text-red-500' : '']" />
+                  <span class="ml-1 text-sm opacity-80">{{ likesMap[msg.id] ?? (msg.like_count || 0) }}</span>
                 </button>
                 <button v-if="!isGuestbookMessage(msg)" class="social-item" @click="toggleComment(msg.id)" :title="'评论'">
-                  <UIcon name="i-mdi-comment-outline" style="font-size: 20px; line-height: 1;" />
-                  <span class="ml-1 text-xs opacity-80">{{ commentCountMap[msg.id] || 0 }}</span>
+                  <UIcon name="i-mdi-comment-outline" :style="{ fontSize: (isMobile ? '26px' : '24px'), lineHeight: 1 }" />
+                  <span class="ml-1 text-sm opacity-80">{{ commentCountMap[msg.id] || 0 }}</span>
                 </button>
                 <div class="flex-1 flex items-center justify-center">
                   <span v-if="isContentEmpty(msg)" class="text-xs text-orange-400 inline-flex items-center relative z-30">

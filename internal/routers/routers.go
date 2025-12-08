@@ -277,9 +277,12 @@ func SetupRouter() *gin.Engine {
 		c.Next()
 		// 对指纹化静态资源启用长缓存
 		if strings.HasPrefix(p, "/_nuxt/") || strings.HasPrefix(p, "/assets/") ||
-			strings.HasPrefix(p, "/favicon") || strings.HasPrefix(p, "/android-chrome") ||
-			p == "/sw.js" {
+			strings.HasPrefix(p, "/favicon") || strings.HasPrefix(p, "/android-chrome") {
 			c.Header("Cache-Control", "public, max-age=31536000, immutable")
+		}
+		if p == "/sw.js" {
+			// Service Worker 需避免长缓存，确保更新及时生效
+			c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
 		}
 	})
 

@@ -1467,8 +1467,8 @@ docker buildx create --use --name mybuilder
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final \
-  --build-arg VERSION=v2.3.1 \
-  -t noise233/echo-noise:v2.3.1 \
+  --build-arg VERSION=v2.3.2 \
+  -t noise233/echo-noise:v2.3.2 \
   -t noise233/echo-noise:latest \
   --push --no-cache .
 ```
@@ -1491,8 +1491,8 @@ docker buildx build --platform linux/amd64,linux/arm64 --target final --build-ar
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final-mcp \
-  --build-arg VERSION=v2.3.1 \
-  -t noise233/echo-noise:v2.3.1-mcp \
+  --build-arg VERSION=v2.3.2 \
+  -t noise233/echo-noise:v2.3.2-mcp \
   -t noise233/echo-noise:latest-mcp \
   --push --no-cache .
 ```
@@ -1503,9 +1503,9 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64 \
   --target final \
-  --build-arg VERSION=v2.3.1 \
+  --build-arg VERSION=v2.3.2 \
   --build-arg USE_UPX=1 \
-  -t noise233/echo-noise:v2.3.1-amd64 \
+  -t noise233/echo-noise:v2.3.2-amd64 \
   -t noise233/echo-noise:latest-amd64 \
   --push --no-cache .
 ```
@@ -1799,7 +1799,7 @@ exports.actions = [{
 - [x] 后台增加音乐板块配置并集成到前端
 - [x] 内置评论系统并可选远程评论系统
 - [x] 增加点赞组件（接入SMTP反馈）
-- [ ] 增加用户头像预览卡片
+- [x] 增加用户头像预览卡片
 - [ ] 增加通知系统（新的用户评论可显示通知）
 - [ ] 后台增加数据库一键切换为云端数据库
 - [ ] 增加在线聊天组件
