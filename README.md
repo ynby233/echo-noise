@@ -1485,6 +1485,19 @@ docker buildx build --platform linux/amd64,linux/arm64 --target final --build-ar
 docker buildx build --platform linux/amd64,linux/arm64 --target final --build-arg USE_UPX=1 -t noise233/echo-noise:latest --push --no-cache .
 ```
 
+关闭 UPX 压缩
+
+```
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  --target final \
+  --build-arg VERSION=v2.3.2 \
+  --build-arg USE_UPX=0 \
+  -t noise233/echo-noise:v2.3.2 \
+  -t noise233/echo-noise:latest \
+  --push --no-cache .
+```
+
 包含MCP镜像：
 
 ```

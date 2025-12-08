@@ -6,7 +6,7 @@ WORKDIR /app/web
 
 # 复制前端依赖文件并安装依赖
 COPY ./web/package.json ./web/package-lock.json* ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --prefer-offline --no-audit
 
 # 更新 Browserslist 数据，避免 caniuse-lite 过期警告
 RUN npx --yes update-browserslist-db@latest
@@ -24,14 +24,13 @@ FROM public.ecr.aws/docker/library/golang:1.24.1-alpine AS backend-build
 # 设置环境变量
 ENV CGO_ENABLED=0
 ENV GOPROXY=https://goproxy.cn,direct
+ENV GO111MODULE=on
+ENV GOSUMDB=off
 
 # 设置工作目录
 WORKDIR /app
 
-# 安装构建依赖
-RUN apk add --no-cache build-base
-
-# 复制 Go 模块文件并下载依赖
+# 复制 Go 模块文件并下载依赖（使用 vendor 模式加速）
 COPY ./go.mod ./go.sum ./
 RUN go mod download
 
@@ -41,20 +40,19 @@ COPY ./internal ./internal
 COPY ./pkg ./pkg
 COPY ./config ./config
 
-# 整理依赖，生成完整 go.sum（修复禁用 CGO 后构建缺少依赖的问题）
-RUN go mod tidy
+# 编译 Go 应用（使用缓存优化）
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go build -trimpath -ldflags "-s -w -buildid=" -o /app/noise ./cmd/server/main.go
 
 # 创建必要的目录并设置权限
 RUN mkdir -p /app/data /app/public && chmod -R 755 /app/data
-
-# 编译 Go 应用
-RUN go build -trimpath -ldflags "-s -w -buildid=" -o /app/noise ./cmd/server/main.go
 
 # MCP 构建阶段（打包为单文件，避免在最终镜像中保留 node_modules）
 FROM public.ecr.aws/docker/library/node:20-alpine AS mcp-build
 WORKDIR /app/mcp
 COPY ./mcp/package.json ./
-RUN npm install --omit=dev
+RUN npm install --omit=dev --prefer-offline --no-audit
 COPY ./mcp/server.js ./server.js
 RUN npx --yes esbuild@0.23.0 server.js \
     --bundle \
@@ -110,13 +108,11 @@ RUN set -eux; \
     fi
 
 
-# 安装运行时所需的工具
+# 安装运行时所需的工具（合并RUN命令减少层数）
 RUN apk update && \
     apk add --no-cache ca-certificates && \
-    rm -rf /var/cache/apk/*
-
-# 创建数据和图片目录
-RUN mkdir -p /app/data/images && \
+    rm -rf /var/cache/apk/* && \
+    mkdir -p /app/data/images && \
     chmod -R 755 /app/data
 
 # 内置 SQLite 数据库（初始数据），以便首次启动有内容
