@@ -3,17 +3,25 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      # 默认仅包含后端 + 前端静态，体积更小
+      # 使用主Dockerfile，构建final目标（不含MCP）
       target: final
     container_name: Ech0-Noise
     env_file:
       - .env
     volumes:
       - ./data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock  # 允许容器管理宿主机Docker
     environment:
       - LOG_LEVEL=info
       - DB_TYPE=sqlite
       - DB_PATH=/app/data/noise.db
+      # Docker更新相关环境变量
+      - UPDATE_IMAGE=noise233/echo-noise:latest
+      - CONTAINER_NAME=Ech0-Noise
+      - DATA_DIR=/app/data
+      - HTTP_PORT=1314
+      # 标识当前环境为Docker Compose
+      - DOCKER_ENVIRONMENT=compose
       # 如启用外部数据库，取消注释并配置
       #- DB_TYPE=postgres
       #- DB_HOST=postgres

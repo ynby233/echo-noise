@@ -1732,18 +1732,37 @@ func UpdateVersion(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.OK[string](out, "桌面端已更新"))
 		return
 	}
-	if err := run(2*time.Minute, "docker pull "+image); err != nil {
-		c.JSON(http.StatusOK, dto.Fail[string]("拉取镜像失败: "+err.Error()))
-		return
+	// 检测是否在Docker Compose环境中运行
+	isComposeMode := false
+	if os.Getenv("DOCKER_ENVIRONMENT") == "compose" {
+		isComposeMode = true
 	}
-	_ = run(30*time.Second, "docker ps -a --filter name=^"+name+"$ --format '{{.ID}}' | xargs -r docker stop")
-	_ = run(30*time.Second, "docker ps -a --filter name=^"+name+"$ --format '{{.ID}}' | xargs -r docker rm")
-	runCmd := "docker run -d --name " + name + " -p " + hostPort + ":1314 -v '" + dataDir + ":/app/data' --restart unless-stopped " + image
-	if err := run(2*time.Minute, runCmd); err != nil {
-		c.JSON(http.StatusOK, dto.Fail[string]("启动新容器失败: "+err.Error()))
-		return
+
+	if isComposeMode {
+		// Docker Compose模式更新流程
+		if err := run(2*time.Minute, "docker compose pull "+image); err != nil {
+			c.JSON(http.StatusOK, dto.Fail[string]("拉取镜像失败: "+err.Error()))
+			return
+		}
+		if err := run(2*time.Minute, "docker compose up -d --force-recreate"); err != nil {
+			c.JSON(http.StatusOK, dto.Fail[string]("重启服务失败: "+err.Error()))
+			return
+		}
+	} else {
+		// 标准Docker模式更新流程
+		if err := run(2*time.Minute, "docker pull "+image); err != nil {
+			c.JSON(http.StatusOK, dto.Fail[string]("拉取镜像失败: "+err.Error()))
+			return
+		}
+		_ = run(30*time.Second, "docker ps -a --filter name=^"+name+"$ --format '{{.ID}}' | xargs -r docker stop")
+		_ = run(30*time.Second, "docker ps -a --filter name=^"+name+"$ --format '{{.ID}}' | xargs -r docker rm")
+		runCmd := "docker run -d --name " + name + " -p " + hostPort + ":1314 -v '" + dataDir + ":/app/data' --restart unless-stopped " + image
+		if err := run(2*time.Minute, runCmd); err != nil {
+			c.JSON(http.StatusOK, dto.Fail[string]("启动新容器失败: "+err.Error()))
+			return
+		}
+		_ = run(30*time.Second, "docker image prune -f || true")
 	}
-	_ = run(30*time.Second, "docker image prune -f || true")
 
 	out := logs.String()
 	if len(out) > 4000 {

@@ -79,6 +79,9 @@ WORKDIR /app
 COPY --from=backend-build /app/config /app/config
 COPY --from=backend-build /app/noise /app/noise
 
+# 复制docker-compose.yml文件到容器中，用于Docker更新
+COPY ./docker-compose.yml /app/docker-compose.yml
+
 # 从前端构建阶段复制静态文件
 COPY --from=frontend-build /app/public /app/public
 
