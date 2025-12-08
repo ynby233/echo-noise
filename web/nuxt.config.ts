@@ -6,8 +6,8 @@ export default defineNuxtConfig({
         { rel: 'stylesheet', href: 'https://unpkg.com/@waline/client@v3/dist/waline.css' },
         { rel: 'stylesheet', href: 'https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0/dist/fancybox/fancybox.css' },
         { rel: 'icon', href: '/favicon.svg' },
-        { rel: 'apple-touch-icon', href: '/favicon.svg' },
-        { rel: 'manifest', href: '/manifest.webmanifest' },
+        { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
+        { rel: 'manifest', href: '/manifest.json' },
       ],
       script: [
         { src: 'https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js', body: true },
@@ -50,12 +50,14 @@ export default defineNuxtConfig({
     }
   },
   plugins: [
-    '~/plugins/fetch.ts'
+    '~/plugins/fetch.ts',
+    '~/plugins/pwa.client'
   ],
   modules: [
     '@nuxt/ui',
     '@nuxtjs/tailwindcss',
     '@pinia/nuxt',
+    
   ],
   css: [
     '@/assets/fonts/result.css',
@@ -100,4 +102,5 @@ export default defineNuxtConfig({
     host: '0.0.0.0'
   },
   ssr: false,
+  
 })

@@ -485,7 +485,7 @@
                     </div>
                     <div>
                       <label :class="[theme.mutedText, 'text-sm mb-1 block']">PWA 图标</label>
-                      <UInput v-model="frontendConfig.pwaIconURL" :placeholder="'/favicon.ico'" />
+                      <UInput v-model="frontendConfig.pwaIconURL" :placeholder="'/favicon.svg'" />
                     </div>
                     <div class="md:col-span-2">
                       <label :class="[theme.mutedText, 'text-sm mb-1 block']">PWA 描述</label>
@@ -3629,7 +3629,17 @@ const savePWAConfig = async () => {
             if ('serviceWorker' in navigator) {
                 const regs = await navigator.serviceWorker.getRegistrations()
                 if (frontendConfig.pwaEnabled) {
-                    await navigator.serviceWorker.register('/sw.js')
+                    try {
+                        const resp = await fetch('/sw.js', { credentials: 'omit' })
+                        const ct = String(resp.headers.get('content-type') || '')
+                        if (resp.ok && ct.includes('javascript')) {
+                            await navigator.serviceWorker.register('/sw.js')
+                        } else {
+                            useToast().add({ title: '提示', description: 'SW 文件不可用，已跳过注册', color: 'orange' })
+                        }
+                    } catch (e: any) {
+                        useToast().add({ title: '提示', description: 'SW 注册失败，可能因非安全上下文', color: 'orange' })
+                    }
                 } else {
                     for (const r of regs) await r.unregister()
                     const keys = await caches.keys()

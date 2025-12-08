@@ -1505,7 +1505,7 @@ const updateTitle = () => {
       { key: 'shortcut-icon-32', rel: 'shortcut icon', type: 'image/png', href: '/favicon-32x32.png', sizes: '32x32' },
       { key: 'icon-fallback', rel: 'icon', href: icon },
       ...(frontendConfig.value.pwaEnabled ? [
-        { key: 'manifest', rel: 'manifest', href: '/manifest.webmanifest' },
+        { key: 'manifest', rel: 'manifest', href: '/manifest.json' },
         { key: 'apple-touch', rel: 'apple-touch-icon', href: pwaIcon, sizes: '180x180' },
         { key: 'pwa-192', rel: 'icon', href: pwaIcon, sizes: '192x192' },
         { key: 'pwa-512', rel: 'icon', href: (pwaIcon.toLowerCase().endsWith('.png') ? pwaIcon : '/android-chrome-512x512.png'), sizes: '512x512' }

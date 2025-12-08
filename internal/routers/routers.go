@@ -99,7 +99,7 @@ func SetupRouter() *gin.Engine {
 	r.GET("/rss", controllers.GenerateRSS)                                               // 保持原有的 RSS 订阅链接
 	api.POST("/rss/refresh", middleware.SessionAuthMiddleware(), controllers.RefreshRSS) // 添加刷新 RSS 的路由
 
-	// PWA Manifest 路由
+	// PWA Manifest 路由（仅提供标准 webmanifest 路径）
 	r.GET("/manifest.webmanifest", controllers.GetWebManifest)
 
 	// 公共路由
@@ -254,11 +254,11 @@ func SetupRouter() *gin.Engine {
 	})
 
 	// 先映射关键静态文件，避免被 SPA Fallback 覆盖
-	r.StaticFile("/favicon.ico", "./public/favicon.ico")
-	r.StaticFile("/favicon-32x32.png", "./public/favicon-32x32.png")
-	r.StaticFile("/android-chrome-192x192.png", "./public/android-chrome-192x192.png")
-	r.StaticFile("/favicon.svg", "./public/favicon.svg")
-	// manifest 与 SW 使用控制器路由，避免重复注册
+	// Service Worker 文件路由 - 必须注册以支持 PWA
+	r.StaticFile("/sw.js", "./public/sw.js")
+	// manifest 路由（提供 API 版本以避免静态中间件干扰）
+	r.GET("/manifest.webmanifest", controllers.GetWebManifest)
+	r.GET("/api/manifest", controllers.GetWebManifest)
 
 	// 使用静态中间件托管根目录，支持 SPA Fallback
 	r.Use(static.Serve("/", static.LocalFile("./public", true)))
@@ -266,12 +266,19 @@ func SetupRouter() *gin.Engine {
 	r.Static("/_nuxt", "./public/_nuxt")
 	r.Static("/assets", "./public/assets")
 
-	// 对指纹化静态资源启用长缓存，避免入口 no-cache 影响性能
+	// 静态文件与 Manifest 头部处理
 	r.Use(func(c *gin.Context) {
-		c.Next()
 		p := c.Request.URL.Path
+		// 先设置 manifest 的 MIME，静态中间件将复用已有头部
+		if p == "/manifest.webmanifest" {
+			c.Header("Content-Type", "application/manifest+json; charset=utf-8")
+			c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+		}
+		c.Next()
+		// 对指纹化静态资源启用长缓存
 		if strings.HasPrefix(p, "/_nuxt/") || strings.HasPrefix(p, "/assets/") ||
-			strings.HasPrefix(p, "/favicon") || strings.HasPrefix(p, "/android-chrome") {
+			strings.HasPrefix(p, "/favicon") || strings.HasPrefix(p, "/android-chrome") ||
+			p == "/sw.js" {
 			c.Header("Cache-Control", "public, max-age=31536000, immutable")
 		}
 	})

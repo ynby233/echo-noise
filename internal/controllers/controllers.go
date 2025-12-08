@@ -1088,8 +1088,8 @@ func GetWebManifest(c *gin.Context) {
 	}
 	title := "说说笔记"
 	description := ""
-	// 站点图标（浏览器 favicon）与 PWA 图标分离，优先使用后台设置（使用标准 PNG 32x32）
-	siteIcon := "/favicon-32x32.png"
+	// 站点默认图标使用 SVG
+	siteIcon := "/favicon.svg"
 
 	if pwaEnabled {
 		if v, ok := fs["pwaTitle"].(string); ok && v != "" {
@@ -1113,25 +1113,34 @@ func GetWebManifest(c *gin.Context) {
 		siteIcon = v
 	}
 
-	// PWA 图标选择：优先 pwaIconURL；否则当站点图标为 PNG 时复用；否则回退到默认 192 PNG
-	pwaIcon := "/android-chrome-192x192.png"
+	// PWA 图标选择：优先 pwaIconURL；否则回退到 SVG
+	pwaIcon := "/favicon.svg"
 	if v, ok := fs["pwaIconURL"].(string); ok && v != "" {
 		pwaIcon = v
-	} else if strings.HasSuffix(strings.ToLower(siteIcon), ".png") {
-		pwaIcon = siteIcon
 	}
 
 	// favicon 类型
 	icon := siteIcon
-	iconType := "image/x-icon"
-	if strings.HasSuffix(strings.ToLower(icon), ".png") {
+	iconLower := strings.ToLower(icon)
+	iconType := "image/svg+xml"
+	if strings.HasSuffix(iconLower, ".png") {
 		iconType = "image/png"
 	}
 
-	// 计算 PWA 图标 sizes
-	pwa192Sizes := "192x192"
-	if !strings.HasSuffix(strings.ToLower(pwaIcon), "192x192.png") {
-		pwa192Sizes = "any"
+	// 计算 PWA 图标 sizes 与类型
+	pwaLower := strings.ToLower(pwaIcon)
+	pwaType := func() string {
+		if strings.HasSuffix(pwaLower, ".png") {
+			return "image/png"
+		}
+		if strings.HasSuffix(pwaLower, ".svg") {
+			return "image/svg+xml"
+		}
+		return "image/png"
+	}()
+	pwaSize := "any"
+	if m := regexp.MustCompile(`(\d+)x(\d+)`).FindStringSubmatch(pwaLower); len(m) == 3 {
+		pwaSize = m[1] + "x" + m[2]
 	}
 	manifest := map[string]interface{}{
 		"name":             title,
@@ -1143,15 +1152,15 @@ func GetWebManifest(c *gin.Context) {
 		"theme_color":      "#000000",
 		"icons": []map[string]string{
 			{"src": icon, "sizes": "any", "type": iconType},
-			{"src": pwaIcon, "sizes": pwa192Sizes, "type": "image/png", "purpose": "any maskable"},
+			{"src": pwaIcon, "sizes": pwaSize, "type": pwaType, "purpose": "any maskable"},
 			{"src": func() string {
-				if strings.HasSuffix(strings.ToLower(pwaIcon), ".png") {
+				if strings.Contains(pwaLower, "512x512") && strings.HasSuffix(pwaLower, ".png") {
 					return pwaIcon
 				}
 				return "/android-chrome-512x512.png"
 			}(), "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
 			{"src": func() string {
-				if strings.HasSuffix(strings.ToLower(pwaIcon), ".png") {
+				if strings.Contains(pwaLower, "180x180") && strings.HasSuffix(pwaLower, ".png") {
 					return pwaIcon
 				}
 				return "/apple-touch-icon.png"
@@ -1159,11 +1168,11 @@ func GetWebManifest(c *gin.Context) {
 		},
 	}
 
-	c.Header("Content-Type", "application/manifest+json; charset=utf-8")
 	c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
 	c.Header("Pragma", "no-cache")
 	c.Header("Expires", "0")
-	c.JSON(http.StatusOK, manifest)
+	b, _ := json.Marshal(manifest)
+	c.Data(http.StatusOK, "application/manifest+json; charset=utf-8", b)
 }
 
 func UpdateMessage(c *gin.Context) {

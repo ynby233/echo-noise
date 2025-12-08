@@ -16,9 +16,7 @@ export default defineNuxtPlugin(() => {
           { name: 'theme-color', content: '#000000' }
         ],
         link: [
-          { rel: 'icon', href: icon },
-          { rel: 'apple-touch-icon', href: icon },
-          { rel: 'manifest', href: '/manifest.webmanifest' }
+          { rel: 'manifest', href: '/manifest.json' }
         ]
       })
     } else {
@@ -31,7 +29,13 @@ export default defineNuxtPlugin(() => {
     // 同步 Service Worker 状态
     if ('serviceWorker' in navigator) {
       if (enabled) {
-        navigator.serviceWorker.register('/sw.js')
+        try {
+          navigator.serviceWorker.getRegistrations().then(async regs => {
+            if (!regs || regs.length === 0) {
+              await navigator.serviceWorker.register('/sw.js')
+            }
+          })
+        } catch {}
       } else {
         navigator.serviceWorker.getRegistrations().then(async regs => {
           for (const r of regs) await r.unregister()
@@ -65,8 +69,9 @@ export default defineNuxtPlugin(() => {
     } catch {}
   }
 
-  // 初次加载
-  window.addEventListener('load', loadAndApply)
+  loadAndApply()
+  // 移除 load 事件，避免初始化阶段重复执行导致闪动
+  
   // 监听后台面板触发的配置更新事件
   window.addEventListener('frontend-config-updated', loadAndApply)
 })
