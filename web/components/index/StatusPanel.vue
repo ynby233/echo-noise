@@ -6,7 +6,7 @@
         <div class="px-4 py-4 border-b border-slate-700/40 flex flex-col items-center gap-2">
           <img :src="avatarSrc" class="w-14 h-14 rounded-full ring-2 ring-indigo-400/60 shadow-lg object-cover" alt="avatar" />
           <div class="w-full text-center">
-            <div class="font-semibold truncate">{{ userStore.user?.username || '未登录' }}</div>
+            <div class="font-semibold truncate">{{ displayUsername }}</div>
             <div class="text-xs" :class="theme.mutedText">总笔记 {{ userStore?.status?.total_messages || 0 }}</div>
           </div>
         </div>
@@ -89,11 +89,16 @@
             <UIcon name="i-heroicons-circle-stack" class="w-5 h-5 text-indigo-300" />
             <span class="text-sm text-center">数据库管理</span>
           </button>
+          <button v-if="isAdmin" class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('version', $event)">
+            <UIcon name="i-heroicons-arrow-path" class="w-5 h-5 text-indigo-300" />
+            <span class="text-sm text-center">版本与更新</span>
+          </button>
         </nav>
         <div class="px-4 py-3 border-t border-slate-700/40">
           <div class="text-xs text-slate-400">当前版本: {{ versionInfo.currentVersion || '最新' }}</div>
           <div class="mt-2 flex items-center gap-2">
             <UButton size="xs" color="indigo" variant="soft" :loading="versionInfo.checking" class="shadow-md" @click="checkVersion">{{ versionInfo.checking ? '检测中...' : '检查版本发布时间' }}</UButton>
+            <UButton v-if="isAdmin" size="xs" color="orange" variant="solid" class="shadow-md" :loading="updatingVersion" @click="updateVersion">更新升级</UButton>
           </div>
           <div v-if="versionInfo.hasUpdate" class="mt-2 text-orange-400 flex items-center gap-2">
             <UIcon name="i-heroicons-arrow-up-circle" class="w-4 h-4" />
@@ -1295,6 +1300,34 @@
                     <UButton color="blue" variant="solid" :disabled="!storageEnabled || !storageConfig.publicBaseURL" @click="restoreFromConfiguredCloud">按配置恢复</UButton>
                   </div>
                 </div>
+                <div id="version-section" v-if="isAdmin" class="rounded-lg p-3" :class="theme.subtleBg">
+                  <div class="font-semibold mb-2 flex items-center gap-2" :class="theme.text">
+                    <UIcon name="i-heroicons-information-circle" class="w-5 h-5 text-indigo-300" />
+                    <span>版本与更新</span>
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <div class="text-sm" :class="theme.mutedText">当前版本</div>
+                      <UBadge color="primary" variant="soft" class="mt-1">{{ versionInfo.currentVersion || '最新' }}</UBadge>
+                    </div>
+                    <div>
+                      <div class="text-sm" :class="theme.mutedText">最新发布时间</div>
+                      <div class="mt-1" :class="theme.text">{{ versionInfo.latestVersion || '—' }}</div>
+                    </div>
+                  </div>
+                  <div class="mt-3 space-y-3">
+                    <div class="flex items-center gap-2">
+                      <UButton :loading="versionInfo.checking" color="indigo" variant="soft" class="shadow" @click="checkVersion">{{ versionInfo.checking ? '检测中...' : '检查更新' }}</UButton>
+                      <UButton v-if="isAdmin" :loading="updatingVersion" color="orange" variant="solid" class="shadow" @click="updateVersion">更新升级</UButton>
+                      <UButton v-if="isAdmin && runtimeInfo.staticSyncAvailable" :loading="syncingStatic" color="blue" variant="soft" class="shadow" @click="syncStatic">同步静态资源</UButton>
+                    </div>
+                    <div v-if="updatingVersion" class="space-y-2">
+                      <UProgress :value="upgradeProgress" color="orange" />
+                      <div class="text-xs" :class="theme.mutedText">{{ upgradeStatus }}</div>
+                    </div>
+                    <div v-if="upgradeSuccess" class="text-sm text-green-400">升级成功，将进入重启，请稍后</div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1896,25 +1929,47 @@ const panelTheme = ref<'dark' | 'midnight' | 'slate' | 'light'>(
 )
 const baseApi = useRuntimeConfig().public.baseApi || '/api'
 const localPreview = ref('')
+const userMessagesCount = ref(0)
+const adminProfile = ref<any>(null)
+const displayUsername = computed(() => {
+  const u: any = userStore.user
+  const name = String(u?.username || u?.Username || '').trim()
+  if (name) return name
+  const sname = String((userStore.status as any)?.username || '').trim()
+  return sname || 'admin'
+})
 const avatarSrc = computed(() => {
   if (localPreview.value) return localPreview.value
-  const userAvatar = String(((userStore.user as any)?.avatar_url || (userStore.user as any)?.AvatarURL || '')).trim()
-  const username = (userStore.user as any)?.username || (userStore.user as any)?.Username || ''
+  const u: any = userStore.user
+  const userAvatar = String((u?.avatar_url || u?.AvatarURL || '')).trim()
+  const adminAvatar = String((adminProfile.value?.avatar_url || '')).trim()
+  const rawName = String((u?.username || u?.Username || '')).trim()
+  const seed = rawName || String((adminProfile.value?.username || (userStore.status as any)?.username || 'admin'))
   const pick = (s: string) => {
     if (!s) return ''
     if (/^https?:\/\//i.test(s)) return s
     return `${baseApi}${s}`
   }
-  const dice = (seed: string, size = 100) => seed ? `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seed)}&backgroundType=gradient&radius=50&scale=100&size=${size}` : ''
-  return pick(userAvatar) || (username ? dice(String(username)) : '') || '/favicon-32x32.png'
+  const dice = (seed: string, size = 100) => seed ? `https://api.dicebear.com/7.x/initials/png?seed=${encodeURIComponent(seed)}&backgroundType=gradient&radius=50&scale=100&size=${size}` : ''
+  return pick(userAvatar) || pick(adminAvatar) || dice(seed) || '/favicon-32x32.png'
 })
 
-const setActive = async (name: 'system' | 'user' | 'site' | 'notify' | 'attachments' | 'db' | 'site-register' | 'site-pwa' | 'site-github-card' | 'site-github-login' | 'site-announcement' | 'site-music' | 'site-default-theme' | 'site-social-links' | 'friend-links' | 'site-configs' | 'comments' | 'email', evt?: MouseEvent) => {
+const setActive = async (name: 'system' | 'user' | 'site' | 'notify' | 'attachments' | 'db' | 'version' | 'site-register' | 'site-pwa' | 'site-github-card' | 'site-github-login' | 'site-announcement' | 'site-music' | 'site-default-theme' | 'site-social-links' | 'friend-links' | 'site-configs' | 'comments' | 'email', evt?: MouseEvent) => {
   await nextTick()
-  const el = document.getElementById(`${name}-section`)
+  const id = `${name}-section`
+  const el = document.getElementById(id)
   if (!el) return
-  el.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' })
-  if (window.innerWidth < 768) sidebarOpen.value = false
+  try {
+    ;(el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' })
+    try {
+      if (typeof window !== 'undefined') {
+        const url = new URL(window.location.href)
+        url.hash = id
+        window.history.replaceState({}, document.title, url.toString())
+      }
+    } catch {}
+  } catch {}
+  if (typeof window !== 'undefined' && window.innerWidth < 768) sidebarOpen.value = false
 }
 
 onMounted(() => {
@@ -1931,6 +1986,36 @@ onMounted(() => {
     }
   } catch {}
 })
+
+const loadAdminProfile = async () => {
+  try {
+    const sname = String((userStore.status as any)?.username || '').trim()
+    if (!sname) { adminProfile.value = null; return }
+    const resp = await fetch(`/api/users/profile?username=${encodeURIComponent(sname)}`, { credentials: 'include', headers: { 'Accept': 'application/json' } })
+    const js = await resp.json().catch(() => null)
+    adminProfile.value = js?.data || null
+  } catch { adminProfile.value = null }
+}
+
+const loadUserMessagesCount = async () => {
+  try {
+    const u: any = userStore.user
+    if (u) {
+      const id = u.id || u.ID || u.user_id || u.userid
+      const qs = id ? `id=${encodeURIComponent(String(id))}` : `username=${encodeURIComponent(String(u.username || u.Username || ''))}`
+      const resp = await fetch(`/api/users/profile?${qs}`, { credentials: 'include', headers: { 'Accept': 'application/json' } })
+      const js = await resp.json().catch(() => null)
+      userMessagesCount.value = Number(js?.data?.total_messages || 0)
+      return
+    }
+    await loadAdminProfile()
+    userMessagesCount.value = Number((adminProfile.value?.total_messages ?? (userStore.status as any)?.total_messages) || 0)
+  } catch { userMessagesCount.value = 0 }
+}
+
+watch(() => userStore.user, () => { loadUserMessagesCount() })
+watch(() => userStore.status, () => { loadUserMessagesCount() })
+onMounted(() => { loadUserMessagesCount() })
 
 watch(() => panelTheme.value, (val) => {
   try {
@@ -2515,6 +2600,9 @@ const checkVersion = async () => {
                     description: `最新版本发布于 ${versionInfo.latestVersion}`,
                     color: 'orange'
                 });
+                if (userStore.isLogin) {
+                  try { await updateVersion() } catch {}
+                }
             } else {
                 useToast().add({
                     title: '已是最新版本',
@@ -2548,6 +2636,86 @@ const fetchVersion = async () => {
 }
 
 onMounted(fetchVersion)
+onMounted(async () => {
+  try {
+    const r = await fetch('/api/version/runtime', { credentials: 'include' })
+    const j = await r.json().catch(() => ({}))
+    if (r.ok && j && j.code === 1 && j.data) {
+      runtimeInfo.isContainer = !!j.data.isContainer
+      runtimeInfo.staticSyncAvailable = !runtimeInfo.isContainer
+    }
+  } catch {}
+})
+const updatingVersion = ref(false)
+const upgradeProgress = ref(0)
+const upgradeStatus = ref('')
+const upgradeSuccess = ref(false)
+const updateVersion = async () => {
+  try {
+    if (!userStore.isLogin) throw new Error('请先登录')
+    updatingVersion.value = true
+    upgradeSuccess.value = false
+    upgradeProgress.value = 5
+    upgradeStatus.value = '连接升级通道...'
+
+    const es = new EventSource('/api/version/update/stream')
+    es.onmessage = async (evt: MessageEvent) => {
+      let payload: any = {}
+      try { payload = JSON.parse(evt.data) } catch {}
+      const t = payload?.type
+      const msg = String(payload?.message || '')
+      if (t === 'progress') {
+        if (typeof payload.progress === 'number') upgradeProgress.value = Math.max(upgradeProgress.value, payload.progress)
+        if (msg) upgradeStatus.value = msg
+      } else if (t === 'log') {
+        if (msg) upgradeStatus.value = msg
+      } else if (t === 'info') {
+        if (/已是最新版/.test(msg)) {
+          es.close()
+          throw new Error('已是最新版，无需升级')
+        }
+        if (msg) upgradeStatus.value = msg
+      } else if (t === 'error') {
+        es.close()
+        throw new Error(msg || '升级失败')
+      } else if (t === 'success') {
+        upgradeProgress.value = 100
+        upgradeSuccess.value = true
+        upgradeStatus.value = msg || '升级完成'
+      } else if (t === 'done') {
+        es.close()
+        await checkVersion()
+        setTimeout(() => { location.reload() }, 1500)
+      }
+    }
+    es.onerror = async () => {
+      es.close()
+      upgradeStatus.value = '流式连接失败，切回普通升级...'
+      const res = await fetch('/api/version/update', { method: 'POST', credentials: 'include' })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data && data.code === 1) {
+        useToast().add({ title: data.msg || '更新成功', color: 'green' })
+        upgradeProgress.value = 100
+        upgradeSuccess.value = true
+        await checkVersion()
+        setTimeout(() => { location.reload() }, 1500)
+      } else {
+        throw new Error(data?.msg || '升级失败')
+      }
+    }
+  } catch (e: any) {
+    useToast().add({ title: '更新失败', description: e.message, color: 'red' })
+  } finally {
+    setTimeout(() => { upgradingCleanup() }, 4000)
+  }
+}
+
+
+const upgradingCleanup = () => {
+  updatingVersion.value = false
+  upgradeStatus.value = ''
+  upgradeProgress.value = 0
+}
 // 重新生成 Token
 // 修改 regenerateToken 函数
 const regenerateToken = async () => {
@@ -2642,7 +2810,8 @@ const handleLogout = async () => {
 // 状态变量
 const isLogin = computed(() => userStore?.isLogin ?? false)
 const isAdmin = computed(() => {
-    return userStore.user?.is_admin ?? false
+    const u: any = userStore.user
+    return !!(userStore.isLogin && u && (u.is_admin || u.IsAdmin))
 })
 const authmode = ref(true)
 const showLoginModal = ref(false)
@@ -4020,9 +4189,7 @@ const onDropFiles = (e: DragEvent) => {
 // 监听器
 watch(() => userStore.isLogin, (newVal) => {
     if (!newVal) {
-        userStore.getStatus()
-        userStore.getUser()
-        userStore.$reset()
+        userStore.clearUserStatus()
     }
 })
 
@@ -4329,6 +4496,26 @@ const startAboutResize = (e: MouseEvent) => {
   document.addEventListener('mousemove', onMove)
   document.addEventListener('mouseup', onUp)
 }
+const syncingStatic = ref(false)
+const syncStatic = async () => {
+  try {
+    if (!userStore.isLogin) throw new Error('请先登录')
+    syncingStatic.value = true
+    const res = await fetch('/api/version/static-sync', { method: 'POST', credentials: 'include' })
+    const data = await res.json().catch(() => ({}))
+    if (res.ok && data && data.code === 1) {
+      useToast().add({ title: data.msg || '静态资源已同步', color: 'green' })
+      setTimeout(() => { location.reload() }, 800)
+    } else {
+      throw new Error(data.msg || '静态资源同步失败')
+    }
+  } catch (e: any) {
+    useToast().add({ title: '同步失败', description: e.message, color: 'red' })
+  } finally {
+    syncingStatic.value = false
+  }
+}
+const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 </script>
 
 <style scoped>

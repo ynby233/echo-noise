@@ -35,6 +35,18 @@
 
 ## 2025更新状态
 
+- 后台增加版本更新模块，以docker容器为主，检测到新版本号并点击升级后，自动完成升级
+
+- 后台增加同步静态资源功能，方便本地运行及前后端运行时一键更新页面
+
+- 增加内容区作者头像鼠标悬停弹出卡片效果，包含用户个性签名及笔记数量
+
+- 增加欢迎卡片为非管理员登录用户显示“探索者”徽标
+
+- 优化首页登录状态检测，防止点击后台时界面显示已登录状态
+
+- 优化内容列表渲染细节，切换主题色无感知渲染
+
 - 增加友链提交审核功能，后台可查看并支持邮件回复
 
 - 增强私密功能，工具栏增加私密图标，可随时切换私密或公开状态
@@ -1432,6 +1444,14 @@ curl -N -X POST http://localhost:1315/mcp/tool/搜索 -H 'Content-Type: applicat
 
 如果你需要构建自己的镜像发布-示例：
 
+\# 清理Docker构建缓存 
+
+```
+docker builder prune -f 
+
+docker system prune -f
+```
+
 删除现有的 `mybuilder` 实例，然后重新创建一个新的实例（如没有现有实例可忽略）
 
 ```
@@ -1447,8 +1467,8 @@ docker buildx create --use --name mybuilder
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final \
-  --build-arg VERSION=v2.2.1 \
-  -t noise233/echo-noise:v2.2.1 \
+  --build-arg VERSION=v2.3.1 \
+  -t noise233/echo-noise:v2.3.1 \
   -t noise233/echo-noise:latest \
   --push --no-cache .
 ```
@@ -1471,8 +1491,8 @@ docker buildx build --platform linux/amd64,linux/arm64 --target final --build-ar
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final-mcp \
-  --build-arg VERSION=v2.2.1 \
-  -t noise233/echo-noise:v2.2.1-mcp \
+  --build-arg VERSION=v2.3.1 \
+  -t noise233/echo-noise:v2.3.1-mcp \
   -t noise233/echo-noise:latest-mcp \
   --push --no-cache .
 ```
@@ -1483,9 +1503,9 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64 \
   --target final \
-  --build-arg VERSION=v2.2.1 \
+  --build-arg VERSION=v2.3.1 \
   --build-arg USE_UPX=1 \
-  -t noise233/echo-noise:v2.2.1-amd64 \
+  -t noise233/echo-noise:v2.3.1-amd64 \
   -t noise233/echo-noise:latest-amd64 \
   --push --no-cache .
 ```
@@ -1779,6 +1799,7 @@ exports.actions = [{
 - [x] 后台增加音乐板块配置并集成到前端
 - [x] 内置评论系统并可选远程评论系统
 - [x] 增加点赞组件（接入SMTP反馈）
+- [ ] 增加用户头像预览卡片
 - [ ] 增加通知系统（新的用户评论可显示通知）
 - [ ] 后台增加数据库一键切换为云端数据库
 - [ ] 增加在线聊天组件
@@ -1791,6 +1812,7 @@ exports.actions = [{
 - [x] SQL数据库文件支持一键接入R2或S3实现备份和恢复
 - [x] 登录注册优化
 - [x] 后台界面的ui优化定制
+- [ ] docker环境下的一键升级功能
 - [ ] 前端可定制化主题
 - [ ] 数据库备份优化
 - [ ] 其它组件的添加

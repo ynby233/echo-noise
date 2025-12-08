@@ -2,15 +2,17 @@ import type { Response } from "~/types/models";
 import { useUserStore } from "~/store/user";
 import { useToast } from "#imports";
 
-const FIRST_LOAD_SUPPRESS_MS = 6000
+const FIRST_LOAD_SUPPRESS_MS = 8000
 let initialSuppressUntil = 0
 if (typeof window !== 'undefined') {
   const now = Date.now()
   initialSuppressUntil = now + FIRST_LOAD_SUPPRESS_MS
 }
+const isMobileDevice = () => (typeof window !== 'undefined') && window.matchMedia('(max-width: 1024px)').matches
 const shouldSuppressToast = (options?: { silent?: boolean }) => {
   if (options && (options as any).silent) return true
   if (typeof window === 'undefined') return false
+  if (isMobileDevice()) return true
   return Date.now() < initialSuppressUntil
 }
 

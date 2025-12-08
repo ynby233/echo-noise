@@ -1,12 +1,15 @@
 package controllers
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -311,6 +314,53 @@ func GetStatus(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, dto.OK(status, models.GetStatusSuccessMessage))
+}
+
+func GetUserProfile(c *gin.Context) {
+	username := strings.TrimSpace(c.Query("username"))
+	idStr := strings.TrimSpace(c.Query("id"))
+	var user *models.User
+	var err error
+	if username != "" {
+		user, err = services.GetUserByUsername(username)
+		if err != nil || user == nil {
+			c.JSON(http.StatusOK, dto.Fail[string](models.UserNotFoundMessage))
+			return
+		}
+	} else if idStr != "" {
+		uid, parseErr := strconv.ParseUint(idStr, 10, 64)
+		if parseErr != nil {
+			c.JSON(http.StatusOK, dto.Fail[string](models.InvalidIDMessage))
+			return
+		}
+		user, err = services.GetUserByID(uint(uid))
+		if err != nil || user == nil {
+			c.JSON(http.StatusOK, dto.Fail[string](models.UserNotFoundMessage))
+			return
+		}
+	} else {
+		c.JSON(http.StatusOK, dto.Fail[string](models.InvalidRequestBodyMessage))
+		return
+	}
+	var total int64
+	if err := database.DB.Model(&models.Message{}).
+		Where("user_id = ?", user.ID).
+		Where("private = ?", false).
+		Where("content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ?",
+			"%#guestbook%", "%#留言%", "%留言板%",
+			"%#友链%", "%友情链接%",
+			"%#关于%", "%关于本站%").
+		Count(&total).Error; err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string](models.GetAllMessagesFailMessage))
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK(map[string]interface{}{
+		"id":             user.ID,
+		"username":       user.Username,
+		"avatar_url":     strings.TrimSpace(user.AvatarURL),
+		"description":    strings.TrimSpace(user.Description),
+		"total_messages": int(total),
+	}, "获取用户资料成功"))
 }
 
 func DeleteMessage(c *gin.Context) {
@@ -1591,6 +1641,250 @@ func GetVersion(c *gin.Context) {
 	})
 }
 
+func UpdateVersion(c *gin.Context) {
+	_, err := checkAdmin(c)
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
+		return
+	}
+
+	hasUpdate, _, _, chkErr := computeUpgradeInfo()
+	if chkErr != nil {
+		c.JSON(http.StatusOK, dto.Fail[string]("版本检测失败: "+chkErr.Error()))
+		return
+	}
+	if !hasUpdate {
+		c.JSON(http.StatusOK, dto.Fail[string]("已是最新版，无需升级"))
+		return
+	}
+
+	var logs bytes.Buffer
+	run := func(timeout time.Duration, cmdStr string) error {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "bash", "-lc", cmdStr)
+		cmd.Env = os.Environ()
+		cmd.Stdout = &logs
+		cmd.Stderr = &logs
+		return cmd.Run()
+	}
+
+	image := strings.TrimSpace(os.Getenv("UPDATE_IMAGE"))
+	if image == "" {
+		image = "noise233/echo-noise:latest"
+	}
+	name := strings.TrimSpace(os.Getenv("CONTAINER_NAME"))
+	if name == "" {
+		name = strings.TrimSpace(os.Getenv("ECH0_CONTAINER_NAME"))
+	}
+	if name == "" {
+		name = "Ech0-Noise"
+	}
+	hostPort := strings.TrimSpace(os.Getenv("HTTP_PORT"))
+	if hostPort == "" {
+		hostPort = "1314"
+	}
+	wd, _ := os.Getwd()
+	dataDir := strings.TrimSpace(os.Getenv("DATA_DIR"))
+	if dataDir == "" {
+		candidates := []string{"/opt/data", filepath.Join(wd, "data"), "/data"}
+		for _, d := range candidates {
+			if info, err := os.Stat(d); err == nil && info.IsDir() {
+				dataDir = d
+				break
+			}
+		}
+		if dataDir == "" {
+			dataDir = filepath.Join(wd, "data")
+			_ = os.MkdirAll(dataDir, 0755)
+		}
+	}
+
+	if err := run(10*time.Second, "docker --version"); err != nil {
+		custom := strings.TrimSpace(os.Getenv("DESKTOP_UPDATE_CMD"))
+		if custom == "" {
+			c.JSON(http.StatusOK, dto.Fail[string]("Docker 未就绪: "+err.Error()))
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "bash", "-lc", custom)
+		cmd.Env = os.Environ()
+		cmd.Stdout = &logs
+		cmd.Stderr = &logs
+		if err := cmd.Run(); err != nil {
+			c.JSON(http.StatusOK, dto.Fail[string]("桌面端更新失败: "+err.Error()))
+			return
+		}
+		out := logs.String()
+		if len(out) > 4000 {
+			out = out[len(out)-4000:]
+		}
+		c.JSON(http.StatusOK, dto.OK[string](out, "桌面端已更新"))
+		return
+	}
+	if err := run(2*time.Minute, "docker pull "+image); err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string]("拉取镜像失败: "+err.Error()))
+		return
+	}
+	_ = run(30*time.Second, "docker ps -a --filter name=^"+name+"$ --format '{{.ID}}' | xargs -r docker stop")
+	_ = run(30*time.Second, "docker ps -a --filter name=^"+name+"$ --format '{{.ID}}' | xargs -r docker rm")
+	runCmd := "docker run -d --name " + name + " -p " + hostPort + ":1314 -v '" + dataDir + ":/app/data' --restart unless-stopped " + image
+	if err := run(2*time.Minute, runCmd); err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string]("启动新容器失败: "+err.Error()))
+		return
+	}
+	_ = run(30*time.Second, "docker image prune -f || true")
+
+	out := logs.String()
+	if len(out) > 4000 {
+		out = out[len(out)-4000:]
+	}
+	c.JSON(http.StatusOK, dto.OK[string](out, "容器已升级并重启（数据已保留）"))
+}
+
+func UpdateVersionStream(c *gin.Context) {
+	if _, err := checkAdmin(c); err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
+		return
+	}
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		c.JSON(http.StatusOK, dto.Fail[string]("当前服务器不支持流式输出"))
+		return
+	}
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+
+	write := func(m map[string]any) {
+		b, _ := json.Marshal(m)
+		_, _ = c.Writer.Write([]byte("data: " + string(b) + "\n\n"))
+		flusher.Flush()
+	}
+
+	write(map[string]any{"type": "info", "message": "开始升级流程"})
+	hasUpdate, latestTime, curTag, chkErr := computeUpgradeInfo()
+	if chkErr != nil {
+		write(map[string]any{"type": "error", "message": "版本检测失败: " + chkErr.Error()})
+		return
+	}
+	write(map[string]any{"type": "info", "message": fmt.Sprintf("当前版本 %s，最新发布时间 %s", curTag, latestTime)})
+	if !hasUpdate {
+		write(map[string]any{"type": "info", "message": "已是最新版，无需升级"})
+		write(map[string]any{"type": "done", "message": "no-upgrade"})
+		return
+	}
+
+	var step = func(progress int, msg string) {
+		write(map[string]any{"type": "progress", "progress": progress, "message": msg})
+	}
+
+	runStreaming := func(timeout time.Duration, label, cmdStr string) error {
+		step(0, "执行: "+label)
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "bash", "-lc", cmdStr)
+		stdout, _ := cmd.StdoutPipe()
+		stderr, _ := cmd.StderrPipe()
+		if err := cmd.Start(); err != nil {
+			return err
+		}
+
+		done := make(chan struct{}, 2)
+		go func() {
+			defer func() { done <- struct{}{} }()
+			scanner := bufio.NewScanner(stdout)
+			for scanner.Scan() {
+				line := scanner.Text()
+				write(map[string]any{"type": "log", "message": fmt.Sprintf("[%s] %s", label, line)})
+			}
+		}()
+		go func() {
+			defer func() { done <- struct{}{} }()
+			scanner := bufio.NewScanner(stderr)
+			for scanner.Scan() {
+				line := scanner.Text()
+				write(map[string]any{"type": "log", "message": fmt.Sprintf("[%s] %s", label, line)})
+			}
+		}()
+		err := cmd.Wait()
+		<-done
+		<-done
+		return err
+	}
+
+	image := strings.TrimSpace(os.Getenv("UPDATE_IMAGE"))
+	if image == "" {
+		image = "noise233/echo-noise:latest"
+	}
+	name := strings.TrimSpace(os.Getenv("CONTAINER_NAME"))
+	if name == "" {
+		name = strings.TrimSpace(os.Getenv("ECH0_CONTAINER_NAME"))
+	}
+	if name == "" {
+		name = "Ech0-Noise"
+	}
+	hostPort := strings.TrimSpace(os.Getenv("HTTP_PORT"))
+	if hostPort == "" {
+		hostPort = "1314"
+	}
+	wd, _ := os.Getwd()
+	dataDir := strings.TrimSpace(os.Getenv("DATA_DIR"))
+	if dataDir == "" {
+		candidates := []string{"/opt/data", filepath.Join(wd, "data"), "/data"}
+		for _, d := range candidates {
+			if info, err := os.Stat(d); err == nil && info.IsDir() {
+				dataDir = d
+				break
+			}
+		}
+		if dataDir == "" {
+			dataDir = filepath.Join(wd, "data")
+			_ = os.MkdirAll(dataDir, 0755)
+		}
+	}
+
+	if err := runStreaming(10*time.Second, "docker", "docker --version"); err != nil {
+		if custom := strings.TrimSpace(os.Getenv("DESKTOP_UPDATE_CMD")); custom != "" {
+			step(20, "桌面端更新执行...")
+			if err2 := runStreaming(5*time.Minute, "desktop", custom); err2 != nil {
+				write(map[string]any{"type": "error", "message": "桌面端更新失败: " + err2.Error()})
+				return
+			}
+			write(map[string]any{"type": "success", "message": "桌面端已更新"})
+			write(map[string]any{"type": "done", "message": "desktop-updated"})
+			return
+		}
+		write(map[string]any{"type": "error", "message": "Docker 未就绪: " + err.Error()})
+		return
+	}
+	step(25, "拉取镜像...")
+	if err := runStreaming(3*time.Minute, "pull", "docker pull "+image); err != nil {
+		write(map[string]any{"type": "error", "message": "拉取镜像失败: " + err.Error()})
+		return
+	}
+	step(45, "停止旧容器...")
+	_ = runStreaming(30*time.Second, "stop", "docker ps -a --filter name=^"+name+"$ --format '{{.ID}}' | xargs -r docker stop")
+	step(55, "移除旧容器...")
+	_ = runStreaming(30*time.Second, "rm", "docker ps -a --filter name=^"+name+"$ --format '{{.ID}}' | xargs -r docker rm")
+	step(75, "启动新容器...")
+	runCmd := "docker run -d --name " + name + " -p " + hostPort + ":1314 -v '" + dataDir + ":/app/data' --restart unless-stopped " + image
+	if err := runStreaming(2*time.Minute, "run", runCmd); err != nil {
+		write(map[string]any{"type": "error", "message": "启动新容器失败: " + err.Error()})
+		return
+	}
+	step(90, "清理旧镜像...")
+	_ = runStreaming(30*time.Second, "prune", "docker image prune -f || true")
+
+	write(map[string]any{"type": "success", "message": "容器已升级并重启（数据已保留）"})
+	step(100, "完成")
+	write(map[string]any{"type": "done", "message": "ok"})
+}
+
+// 版本升级逻辑仅通过容器镜像更新，保留数据卷；非容器桌面端由 DESKTOP_UPDATE_CMD 处理
+
 // GetNotifyConfig 获取推送配置
 func GetNotifyConfig(c *gin.Context) {
 	_, err := checkAdmin(c)
@@ -2574,4 +2868,208 @@ func AdminResetPassword(c *gin.Context) {
 }
 func sendTelegramErrorNotify(c *gin.Context, err error) {
 	log.Printf("Telegram 推送失败: %v", err)
+}
+func computeUpgradeInfo() (bool, string, string, error) {
+	client := &http.Client{Timeout: 5 * time.Second}
+	type tagInfo struct{ Name, LastUpdated string }
+	latest := tagInfo{}
+	get := func(url string, v any) error {
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		req = req.WithContext(ctx)
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		return json.NewDecoder(resp.Body).Decode(v)
+	}
+	type result struct {
+		ok   bool
+		info tagInfo
+	}
+	ch := make(chan result, 3)
+	go func() {
+		var v struct {
+			Name, LastUpdated string `json:"name" json:"last_updated"`
+		}
+		if get("https://hub.docker.com/v2/repositories/noise233/echo-noise/tags/latest", &v) == nil && strings.TrimSpace(v.LastUpdated) != "" {
+			ch <- result{true, tagInfo{v.Name, v.LastUpdated}}
+			return
+		}
+		ch <- result{false, tagInfo{}}
+	}()
+	go func() {
+		var v struct {
+			Results []struct {
+				Name, LastUpdated string `json:"name" json:"last_updated"`
+			} `json:"results"`
+		}
+		if get("https://hub.docker.com/v2/repositories/noise233/echo-noise/tags?page_size=1&ordering=last_updated", &v) == nil && len(v.Results) > 0 && strings.TrimSpace(v.Results[0].LastUpdated) != "" {
+			r := v.Results[0]
+			ch <- result{true, tagInfo{r.Name, r.LastUpdated}}
+			return
+		}
+		ch <- result{false, tagInfo{}}
+	}()
+	go func() {
+		var v struct {
+			TagName, PublishedAt string `json:"tag_name" json:"published_at"`
+		}
+		if get("https://api.github.com/repos/noise233/echo-noise/releases/latest", &v) == nil && strings.TrimSpace(v.PublishedAt) != "" {
+			ch <- result{true, tagInfo{v.TagName, v.PublishedAt}}
+			return
+		}
+		ch <- result{false, tagInfo{}}
+	}()
+	for i := 0; i < 3; i++ {
+		r := <-ch
+		if r.ok {
+			latest = r.info
+			break
+		}
+	}
+	if strings.TrimSpace(latest.LastUpdated) == "" {
+		cur := strings.TrimSpace(os.Getenv("ECHO_NOISE_VERSION"))
+		if cur == "" {
+			cur = strings.TrimSpace(os.Getenv("APP_VERSION"))
+		}
+		if cur == "" {
+			cur = strings.TrimSpace(os.Getenv("IMAGE_TAG"))
+		}
+		if cur == "" {
+			cur = "latest"
+		}
+		return false, time.Now().Format(time.RFC3339), cur, nil
+	}
+	cur := strings.TrimSpace(os.Getenv("ECHO_NOISE_VERSION"))
+	if cur == "" {
+		cur = strings.TrimSpace(os.Getenv("APP_VERSION"))
+	}
+	if cur == "" {
+		cur = strings.TrimSpace(os.Getenv("IMAGE_TAG"))
+	}
+	if cur == "" {
+		cur = "latest"
+	}
+	var curUpdated string
+	if strings.ToLower(cur) == "latest" {
+		curUpdated = strings.TrimSpace(latest.LastUpdated)
+	} else {
+		if resp, err := client.Get("https://hub.docker.com/v2/repositories/noise233/echo-noise/tags/" + cur); err == nil {
+			defer resp.Body.Close()
+			var curTag struct {
+				Name, LastUpdated string `json:"name" json:"last_updated"`
+			}
+			if json.NewDecoder(resp.Body).Decode(&curTag) == nil {
+				curUpdated = strings.TrimSpace(curTag.LastUpdated)
+			}
+		}
+		if strings.TrimSpace(curUpdated) == "" {
+			if resp, err := client.Get("https://api.github.com/repos/noise233/echo-noise/releases/tags/" + cur); err == nil {
+				defer resp.Body.Close()
+				var rel struct {
+					PublishedAt string `json:"published_at"`
+				}
+				if json.NewDecoder(resp.Body).Decode(&rel) == nil {
+					curUpdated = strings.TrimSpace(rel.PublishedAt)
+				}
+			}
+		}
+	}
+	latestTime, err := time.Parse(time.RFC3339, latest.LastUpdated)
+	if err != nil {
+		return false, "", cur, err
+	}
+	var hasUpdate bool
+	if curUpdated != "" {
+		curTime, err := time.Parse(time.RFC3339, curUpdated)
+		if err != nil {
+			return false, "", cur, err
+		}
+		hasUpdate = latestTime.After(curTime)
+	} else {
+		hasUpdate = true
+	}
+	return hasUpdate, latest.LastUpdated, cur, nil
+}
+func SyncStatic(c *gin.Context) {
+	if _, err := checkAdmin(c); err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
+		return
+	}
+	wd, _ := os.Getwd()
+	webDir := filepath.Join(wd, "web")
+	outDir := filepath.Join(webDir, ".output", "public")
+	{
+		var stderr bytes.Buffer
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "bash", "-lc", "cd web && npm run generate")
+		cmd.Env = os.Environ()
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			msg := strings.TrimSpace(stderr.String())
+			if msg == "" {
+				msg = err.Error()
+			}
+			c.JSON(http.StatusOK, dto.Fail[string]("前端构建失败: "+msg))
+			return
+		}
+	}
+	pubDir := filepath.Join(wd, "public")
+	_ = os.RemoveAll(pubDir)
+	_ = os.MkdirAll(pubDir, 0755)
+	if _, err := exec.LookPath("rsync"); err == nil {
+		var stderr bytes.Buffer
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "bash", "-lc", "rsync -a --delete '"+outDir+"/' '"+pubDir+"/'")
+		cmd.Env = os.Environ()
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			msg := strings.TrimSpace(stderr.String())
+			if msg == "" {
+				msg = err.Error()
+			}
+			c.JSON(http.StatusOK, dto.Fail[string]("静态资源同步失败: "+msg))
+			return
+		}
+	} else {
+		if err := copyDir(outDir, pubDir); err != nil {
+			c.JSON(http.StatusOK, dto.Fail[string]("静态资源同步失败: "+err.Error()))
+			return
+		}
+	}
+	c.JSON(http.StatusOK, dto.OK[any](gin.H{"public": pubDir}, "静态资源已同步"))
+}
+
+func GetRuntimeEnv(c *gin.Context) {
+	isContainer := func() bool {
+		if _, err := os.Stat("/.dockerenv"); err == nil {
+			return true
+		}
+		b, _ := os.ReadFile("/proc/1/cgroup")
+		s := strings.ToLower(string(b))
+		if strings.Contains(s, "docker") || strings.Contains(s, "containerd") || strings.Contains(s, "kubepods") {
+			return true
+		}
+		return false
+	}()
+	wd, _ := os.Getwd()
+	outDir := filepath.Join(wd, "web", ".output", "public")
+	pubDir := filepath.Join(wd, "public")
+	c.JSON(http.StatusOK, gin.H{
+		"code": 1,
+		"data": gin.H{
+			"isContainer":         isContainer,
+			"staticSyncAvailable": !isContainer,
+			"outDir":              outDir,
+			"publicDir":           pubDir,
+		},
+	})
 }

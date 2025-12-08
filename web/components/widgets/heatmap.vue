@@ -163,12 +163,11 @@ const getBackgroundColor = (day: { count: number; level: number }) => {
     const firstDate = new Date(Math.min(...dates));
     const lastDate = new Date(Math.max(...dates));
     
-    // 确保显示完整的一年
+    // 从最早发布的月份起始开始，右侧对齐到最新日期所在周的结束，确保近期日期完整可见
     const startDate = new Date(firstDate);
-    startDate.setDate(1); // 从月初开始
-    const endDate = new Date(startDate);
-    endDate.setMonth(startDate.getMonth() + 11); // 确保显示12个月
-    endDate.setDate(endDate.getDate() + (6 - endDate.getDay())); // 确保最后一周完整
+    startDate.setDate(1);
+    const endDate = new Date(lastDate);
+    endDate.setDate(endDate.getDate() + (6 - endDate.getDay()));
     
     // 创建日期映射
     const dateMap = new Map();
@@ -181,27 +180,22 @@ const getBackgroundColor = (day: { count: number; level: number }) => {
     // 生成日历网格
     const calendar = [];
     
-    // 确保从周日开始
+    // 从周日开始填充
     let currentDate = new Date(startDate);
     currentDate.setDate(currentDate.getDate() - currentDate.getDay());
     
-    // 生成完整的网格数据
     while (currentDate <= endDate) {
       const weekData = [];
-      
       for (let day = 0; day < 7; day++) {
         const dateStr = formatDate(currentDate);
         const count = dateMap.get(dateStr) || 0;
-        
         weekData.push({
           date: dateStr,
           count: count,
           level: count ? Math.min(Math.ceil(count / 2), 5) : 0
         });
-        
         currentDate.setDate(currentDate.getDate() + 1);
       }
-      
       calendar.push(weekData);
     }
     

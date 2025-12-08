@@ -1,5 +1,5 @@
 <template>
-  <div class="background-container" :style="backgroundStyle">
+  <div class="background-container" :style="backgroundStyle" :class="backgroundClass">
     <div class="loading" v-if="!isLoaded">
       <div class="rainbow-spinner"></div>
       <div class="loading-text">加载中...</div>
@@ -18,6 +18,9 @@
             <div class="profile-name text-center">{{ profileName }}</div>
             <div v-if="isAdmin" class="mt-1">
               <span class="px-1.5 py-0.5 rounded bg-orange-500 text-white text-[10px]">管理员</span>
+            </div>
+            <div v-else class="mt-1">
+              <span class="px-1.5 py-0.5 rounded bg-indigo-500 text-white text-[10px]">探索者</span>
             </div>
             <div class="profile-desc">{{ profileDesc }}</div>
             <div v-if="!isOnline" class="auth-actions">
@@ -76,7 +79,7 @@
             <template v-if="leftAds.length > 0">
               <div class="relative">
                 <a :href="(currentAd.linkURL || '#')" target="_blank" rel="noopener noreferrer" class="block ad-wrap group rounded-lg overflow-hidden" :style="{ '--ad-bg': `url(${imgSrc(currentAd.imageURL)})` }">
-                  <img :src="imgSrc(currentAd.imageURL)" alt="ad" class="ad-image w-full object-cover transition duration-200 rounded-lg" />
+                <img :src="imgSrc(currentAd.imageURL)" alt="ad" class="ad-image w-full object-cover transition duration-200 rounded-lg" loading="lazy" decoding="async" />
                   <div class="ad-overlay">
                     <div class="ad-overlay-box transition-colors duration-200" :class="[isDark ? '' : 'group-hover:text-orange-500']">{{ (currentAd.description || '').trim() || '广告' }}</div>
                   </div>
@@ -154,7 +157,7 @@
           </div>
           <div v-if="activeTab==='links'" class="links-page">
             <UCard class="search-card mb-3" :ui="{ body: 'p-3 md:p-4' }">
-              <div class="card-title text-center" :class="isDark ? 'text-white' : 'text-black'">{{ frontendConfig.linksTitle || '友情链接' }}</div>
+              <div class="card-title text-center text-black dark:text-white">{{ frontendConfig.linksTitle || '友情链接' }}</div>
               <div v-if="(frontendConfig.linksDescription || '').trim() !== ''" class="section-subtitle">{{ frontendConfig.linksDescription }}</div>
               <div v-if="friendLinksList.length > 0" class="mx-auto w-full max-w-3xl px-4 sm:px-6 mt-3 mb-3">
                 <div class="link-grid">
@@ -175,8 +178,8 @@
                 </div>
               </div>
               <div v-if="(frontendConfig.linksApplyTitle || '').trim() !== '' || (frontendConfig.linksApplyText || '').trim() !== ''" class="mt-2">
-                <div class="text-sm font-medium text-center mb-1" :class="isDark ? 'text-white' : 'text-black'">{{ (frontendConfig.linksApplyTitle || '申请友链须知') }}</div>
-                <div class="apply-text text-center" :class="isDark ? 'text-white/80' : 'text-black/70'">{{ (frontendConfig.linksApplyText || '').trim() }}</div>
+                <div class="text-sm font-medium text-center mb-1 text-black dark:text-white">{{ (frontendConfig.linksApplyTitle || '申请友链须知') }}</div>
+                <div class="apply-text text-center text-black/70 dark:text-white/80">{{ (frontendConfig.linksApplyText || '').trim() }}</div>
               </div>
               <div class="mt-4 mx-auto w-full max-w-2xl px-4 sm:px-6">
                 <div class="text-center text-xs opacity-70 mb-2">提交后需管理员审核</div>
@@ -195,7 +198,7 @@
           </div>
           <div v-else-if="activeTab==='comment'" class="comment-page">
             <UCard class="search-card mb-3" :ui="{ body: 'p-5' }">
-              <div class="card-title text-center mb-3" :class="isDark ? 'text-white' : 'text-black'">{{ frontendConfig.commentPageTitle || '留言' }}</div>
+              <div class="card-title text-center mb-3 text-black dark:text-white">{{ frontendConfig.commentPageTitle || '留言' }}</div>
               <div v-if="(frontendConfig.commentPageDescription || '').trim() !== ''" class="section-subtitle">{{ frontendConfig.commentPageDescription }}</div>
               <div class="max-w-3xl mx-auto">
                 <BuiltinComments v-if="guestbookMessageId" :message-id="guestbookMessageId" :site-config="frontendConfig" :show-input="true" />
@@ -205,7 +208,7 @@
           </div>
           <div v-else-if="activeTab==='about'" class="about-page">
             <UCard class="search-card mb-3" :ui="{ body: 'p-6' }">
-              <div class="card-title text-center" :class="isDark ? 'text-white' : 'text-black'">{{ frontendConfig.aboutPageTitle || '关于本站' }}</div>
+              <div class="card-title text-center text-black dark:text-white">{{ frontendConfig.aboutPageTitle || '关于本站' }}</div>
               <div v-if="(frontendConfig.aboutPageDescription || '').trim() !== ''" class="section-subtitle">{{ frontendConfig.aboutPageDescription }}</div>
               <div class="mx-auto w-full max-w-3xl px-4 sm:px-6">
                 <MarkdownRenderer :content="(frontendConfig.aboutMarkdown || '').trim() || defaultConfig.aboutMarkdown" />
@@ -313,7 +316,7 @@
           <template v-if="leftAds.length > 0">
             <div class="relative">
               <a :href="(currentAd.linkURL || '#')" target="_blank" rel="noopener noreferrer" class="block ad-wrap" :style="{ '--ad-bg': `url(${imgSrc(currentAd.imageURL)})` }">
-                <img :src="imgSrc(currentAd.imageURL)" alt="ad" class="ad-image w-full rounded-md object-cover transition duration-200" />
+                <img :src="imgSrc(currentAd.imageURL)" alt="ad" class="ad-image w-full rounded-md object-cover transition duration-200" loading="lazy" decoding="async" />
                 <div class="ad-overlay">
                   <div class="ad-overlay-box">{{ (currentAd.description || '').trim() || '广告' }}</div>
                 </div>
@@ -654,17 +657,10 @@ onMounted(() => { loadGuestbookTarget() })
 
 
 const userStore = useUserStore()
-const isOnline = computed(() => !!userStore.isLogin)
-const defaultAdmin = computed(() => {
-  const list = ((status.value as any)?.users || ( (status.value as any)?.Users ) || []) as any[]
-  const admin = Array.isArray(list) ? list.find((it: any) => !!(it?.is_admin ?? it?.IsAdmin)) : null
-  return admin || (Array.isArray(list) ? list[0] : null) || null
-})
+const isOnline = computed(() => !!(userStore.user))
 const isAdmin = computed(() => {
   const u = userStore.user as any
-  if (u) return !!(u?.is_admin || u?.IsAdmin)
-  const a = defaultAdmin.value as any
-  return !!(a && (a?.is_admin || a?.IsAdmin))
+  return !!(userStore.isLogin && u && (u.is_admin || u.IsAdmin))
 })
 const profileName = computed(() => {
   const u = userStore.user as any
@@ -715,7 +711,7 @@ watch(() => contentTheme.value, (val) => {
   if (typeof window !== 'undefined') {
     document.documentElement.classList.toggle('dark', val === 'dark')
   }
-}, { immediate: true })
+}, { immediate: true, flush: 'sync' })
 
 const toggleThemeGlobal = () => {
   contentTheme.value = contentTheme.value === 'dark' ? 'light' : 'dark'
@@ -915,13 +911,39 @@ const initNMP = async () => {
     if (player) {
       const playlistId = String(cfg.musicPlaylistId || '').trim()
       const songId = String(cfg.musicSongId || '').trim()
-      if (playlistId) {
-        try { player.loadPlaylist?.(playlistId) } catch {}
-      } else if (songId) {
-        try { player.loadSingleSong?.(songId) } catch {}
+      const MAX_ATTEMPTS = 4
+      let attempts = 0
+      const attemptLoad = () => {
+        attempts++
+        try {
+          if (playlistId) {
+            player.loadPlaylist?.(playlistId)
+          } else if (songId) {
+            player.loadSingleSong?.(songId)
+          }
+        } catch {}
       }
+      attemptLoad()
+      try {
+        const obs = new MutationObserver(() => {
+          const txt = (el.textContent || '').toLowerCase()
+          if ((/加载失败/.test(txt) || /请稍候/.test(txt)) && attempts < MAX_ATTEMPTS) {
+            setTimeout(attemptLoad, 1200)
+          }
+        })
+        obs.observe(el, { childList: true, subtree: true, characterData: true })
+        setTimeout(() => { try { obs.disconnect() } catch {} }, 300000)
+      } catch {}
       const theme = String(cfg.musicTheme || 'auto').trim()
-      try { player.setTheme?.(theme) } catch {}
+      try {
+        const isDark = document.documentElement.classList.contains('dark')
+        player.setTheme?.(isDark ? 'dark' : (theme === 'auto' ? 'light' : theme))
+        const observer = new MutationObserver(() => {
+          const nowDark = document.documentElement.classList.contains('dark')
+          try { player.setTheme?.(nowDark ? 'dark' : 'light') } catch {}
+        })
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+      } catch {}
       if (cfg.musicAutoplay) {
         try { await player.play?.() } catch {}
       }
@@ -931,6 +953,27 @@ const initNMP = async () => {
           el.addEventListener('pointerdown', enableTransitions, { once: true, capture: true })
         } catch {}
       }
+      // 降级封面为低成本占位并优化加载属性
+      try {
+        const placeholder = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D%22http%3A//www.w3.org/2000/svg%22 width%3D%22120%22 height%3D%22120%22 viewBox%3D%220 0 120 120%22%3E%3Cdefs%3E%3ClinearGradient id%3D%22g%22 x1%3D%220%25%22 y1%3D%220%25%22 x2%3D%22100%25%22 y2%3D%22100%25%22%3E%3Cstop offset%3D%220%25%22 stop-color%3D%22%23242b32%22/%3E%3Cstop offset%3D%22100%25%22 stop-color%3D%22%23394850%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width%3D%22120%22 height%3D%22120%22 fill%3D%22url(%23g)%22/%3E%3C/svg%3E'
+        const patchImg = (img) => {
+          if (!img) return
+          try { img.loading = 'lazy' } catch {}
+          try { img.decoding = 'async' } catch {}
+          try { img.referrerPolicy = 'no-referrer' } catch {}
+          try { img.crossOrigin = 'anonymous' } catch {}
+          img.addEventListener('error', () => { try { img.src = placeholder } catch {} }, { once: true })
+        }
+        const bindAll = () => {
+          const imgs = el.querySelectorAll('img')
+          imgs.forEach(patchImg)
+        }
+        bindAll()
+        const mo = new MutationObserver(() => bindAll())
+        mo.observe(el, { childList: true, subtree: true })
+        setTimeout(() => { try { mo.disconnect() } catch {} }, 180000)
+      } catch {}
+      // 移除兜底，严格依赖 NeteaseMiniPlayer 自身加载
     }
   } else {
       console.error('NeteaseMiniPlayer not available or element missing')
@@ -945,7 +988,13 @@ const probeURL = async (url: string, ms = 1500): Promise<boolean> => {
     if (!url || typeof window === 'undefined') return false
     const ctrl = new AbortController()
     const to = setTimeout(() => ctrl.abort(), ms)
-    const res = await fetch(url, { method: 'HEAD', cache: 'no-cache', signal: ctrl.signal })
+    let res: Response
+    try {
+      res = await fetch(url, { method: 'HEAD', cache: 'no-cache', signal: ctrl.signal })
+    } catch {
+      // 某些 CDN 不允许 HEAD，改用 GET（不读取主体）
+      res = await fetch(url, { method: 'GET', cache: 'no-cache', signal: ctrl.signal })
+    }
     clearTimeout(to)
     return !!res && res.ok
   } catch { return false }
@@ -967,49 +1016,54 @@ const loadNMPAssets = async (): Promise<boolean> => {
       'https://cdn.jsdelivr.net/gh/ImBHCN/NeteaseMiniPlayer@v2/netease-mini-player-v2.css',
       'https://unpkg.com/netease-mini-player@2.0.4/dist/netease-mini-player-v2.css'
     ].filter(Boolean)
-    const link = document.createElement('link')
-    link.id = cssId
-    link.rel = 'stylesheet'
-    let cssIndex = 0
-    const tryNextCss = () => {
-      if (cssIndex >= cssCandidates.length) return
-      link.href = cssCandidates[cssIndex++]
+    let pick = ''
+    try {
+      const results = await Promise.all(cssCandidates.map(u => probeURL(u, 2000)))
+      const idx = results.findIndex(v => v)
+      pick = idx >= 0 ? cssCandidates[idx] : (cssCandidates[0] || '')
+    } catch { pick = cssCandidates[0] || '' }
+    if (pick) {
+      const link = document.createElement('link')
+      link.id = cssId
+      link.rel = 'stylesheet'
+      link.href = pick
+      head.appendChild(link)
     }
-    link.onerror = () => { tryNextCss() }
-    tryNextCss()
-    head.appendChild(link)
   }
   // JS 加载（多CDN回退）
   if (!document.getElementById(jsId)) {
-    return await new Promise<boolean>((resolve) => {
-      const cfgJs = String(((frontendConfig as any).value?.musicJsCdnURL ?? (frontendConfig as any).musicJsCdnURL) || '').trim()
-      const jsCandidates = [
-        cfgJs,
-        'https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.js',
-        'https://cdn.jsdelivr.net/gh/ImBHCN/NeteaseMiniPlayer@v2/netease-mini-player-v2.js',
-        'https://unpkg.com/netease-mini-player@2.0.4/dist/netease-mini-player-v2.js'
-      ].filter(Boolean)
+    const cfgJs = String(((frontendConfig as any).value?.musicJsCdnURL ?? (frontendConfig as any).musicJsCdnURL) || '').trim()
+    const jsCandidates = [
+      cfgJs,
+      'https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.js',
+      'https://cdn.jsdelivr.net/gh/ImBHCN/NeteaseMiniPlayer@v2/netease-mini-player-v2.js',
+      'https://unpkg.com/netease-mini-player@2.0.4/dist/netease-mini-player-v2.js'
+    ].filter(Boolean)
+    let pickJs = ''
+    try {
+      const results = await Promise.all(jsCandidates.map(u => probeURL(u, 2000)))
+      const idx = results.findIndex(v => v)
+      pickJs = idx >= 0 ? jsCandidates[idx] : (jsCandidates[0] || '')
+    } catch { pickJs = jsCandidates[0] || '' }
+    if (!pickJs) return false
+    await new Promise<void>((resolve) => {
       const script = document.createElement('script')
       script.id = jsId
       script.type = 'text/javascript'
       script.async = true
       script.defer = true
-      let jsIndex = 0
-      const tryNextJs = () => {
-        if (jsIndex >= jsCandidates.length) {
-          resolve(false)
-          return
-        }
-        script.src = jsCandidates[jsIndex++]
-      }
-      script.onload = () => resolve(!!(window as any).NeteaseMiniPlayer)
-      script.onerror = () => { tryNextJs() }
-      tryNextJs()
+      script.crossOrigin = 'anonymous'
+      script.referrerPolicy = 'no-referrer'
+      script.onload = () => resolve()
+      script.onerror = () => resolve()
+      script.src = pickJs
       body.appendChild(script)
     })
   }
   return !!(window as any).NeteaseMiniPlayer
 }
+
+// 移除 meting 兜底依赖，避免显示“请求失败”造成误导
 
 const fetchWithTimeout = async (url: string, ms = 2500): Promise<Response> => {
   const ctrl = new AbortController()
@@ -1064,8 +1118,8 @@ const loadHitokoto = async () => {
 
 watch(() => frontendConfig.value.musicEnabled, async (enabled) => {
   if (enabled) {
-    const ok = await loadNMPAssets()
-    if (ok) await initNMP()
+    await loadNMPAssets()
+    await initNMP()
   }
 }, { immediate: true })
 
@@ -1089,8 +1143,10 @@ watch(() => frontendConfig.value.hitokotoEnabled, async (enabled) => {
 }, { immediate: true })
 
 const backgroundStyle = computed(() => ({
-    '--bg-image': `url(${currentImage.value || frontendConfig.value.backgrounds[0]})`
+    '--bg-image': `url(${currentImage.value || frontendConfig.value.backgrounds[0]})`,
+    '--bg-image-next': nextImage.value ? `url(${nextImage.value})` : 'none'
 }))
+const backgroundClass = computed(() => (isCrossfading.value ? 'bg-crossfade-active' : ''))
 // 添加 headerImageStyle 计算属性
 const headerImageStyle = computed(() => ({
     'background-image': `url(${currentImage.value || frontendConfig.value.backgrounds[0]})`,
@@ -1370,6 +1426,8 @@ const hitokotoText = ref(HITOKOTO_FALLBACKS[0])
 const currentImage = ref('')
 const isLoaded = ref(false)
 const imageLoading = ref(false)
+const nextImage = ref('')
+const isCrossfading = ref(false)
 // 添加图片预加载函数
 const preloadImages = async (images: string[]) => {
   const loadImage = (src: string) => {
@@ -1395,33 +1453,26 @@ onUnmounted(() => {
 const changeBackground = async () => {
   if (imageLoading.value) return
   imageLoading.value = true
-  
-  const newIndex = Math.floor(Math.random() * frontendConfig.value.backgrounds.length)
-  const newImage = frontendConfig.value.backgrounds[newIndex]
-  
-  if (newImage === currentImage.value) {
-    imageLoading.value = false
-    return
-  }
 
-  // 使用更小的缩略图
-  const thumbnailImage = `${newImage}?imageView2/2/w/10/blur/1/q/10`
-  currentImage.value = thumbnailImage
+  const list = frontendConfig.value.backgrounds || []
+  if (!list.length) { imageLoading.value = false; return }
+  const newIndex = Math.floor(Math.random() * list.length)
+  const newImage = list[newIndex]
+  if (!newImage || newImage === currentImage.value) { imageLoading.value = false; return }
 
-  // 使用 requestAnimationFrame 优化渲染
-  requestAnimationFrame(() => {
-    const img = new Image()
-    img.src = newImage
-    img.onload = () => {
-      requestAnimationFrame(() => {
-        currentImage.value = newImage
-        imageLoading.value = false
-      })
-    }
-    img.onerror = () => {
+  const img = new Image()
+  img.src = newImage
+  img.onload = () => {
+    nextImage.value = newImage
+    isCrossfading.value = true
+    setTimeout(() => {
+      currentImage.value = newImage
+      isCrossfading.value = false
+      nextImage.value = ''
       imageLoading.value = false
-    }
-  })
+    }, 260)
+  }
+  img.onerror = () => { imageLoading.value = false }
 }
 // 定义页面元数据
 definePageMeta({
@@ -1970,6 +2021,42 @@ html, body {
   z-index: -1;
 }
 
+.background-container::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: var(--bg-image-next);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  filter: blur(8px);
+  z-index: -1;
+  opacity: 0;
+  transition: opacity .25s ease;
+}
+.bg-crossfade-active.background-container::after { opacity: 1; }
+
+.background-container::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: var(--bg-image-next);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  filter: blur(8px);
+  z-index: -1;
+  opacity: 0;
+  transition: opacity .25s ease;
+}
+.background-container.bg-crossfade-active::after { opacity: 1; }
+
 .content-wrapper {
   position: absolute;
   top: 0;
@@ -1998,7 +2085,7 @@ html, body {
   background-position: center;
   border-radius: 18px;
   overflow: hidden;
-  transition: background-image 0.3s ease;
+  transition: none;
   will-change: background-image;
   transform: translateZ(0);
   margin-top: 0;
@@ -2358,6 +2445,16 @@ white-space: nowrap;  /* 防止换行 */
   padding: 8px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.06);
 }
+:global(html.dark) .left-col,
+:global(html.dark) .center-col,
+:global(html.dark) .right-col {
+  background: rgba(36,43,50,0.95);
+  color: #ffffff;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 8px;
+  box-shadow: 0 2px 10px rgba(255,255,255,0.06);
+}
 :global(html:not(.dark)) .layout-container.grid-3 { gap: 18px; }
 /* 统一浅色模式下所有卡片底色为纯白 */
 :global(html:not(.dark)) :where(.u-card, .u-card-body, .u-card__body, .u-card-header, .u-card__header) { background-color: #ffffff !important; }
@@ -2414,6 +2511,27 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
   font-size: 0.875rem;
   opacity: 0.8;
 }
+
+/* 确保白天模式下文本颜色是黑色的 */
+:global(html:not(.dark)) .profile-name {
+  color: #111827 !important;
+}
+:global(html:not(.dark)) .profile-desc {
+  color: #374151 !important;
+}
+
+/* 确保白天模式下时钟颜色是黑色的 */
+:global(html:not(.dark)) .clock-display {
+  color: #111827 !important;
+}
+:global(html:not(.dark)) .clock-date {
+  color: #6b7280 !important;
+}
+
+/* 确保白天模式下一言文本颜色是黑色的 */
+:global(html:not(.dark)) .hitokoto-text {
+  color: #111827 !important;
+}
 .social-list { display:flex; flex-wrap:wrap; gap:10px; padding:0; justify-content:center; align-items:center; }
 .social-item { position:relative; display:inline-flex; align-items:center; justify-content:center; width: clamp(28px, 6vw, 36px); height: clamp(28px, 6vw, 36px); border-radius:8px; }
 .social-item { color: inherit; text-decoration: none; }
@@ -2421,7 +2539,11 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
 .social-icon-img { width: clamp(24px, 5.2vw, 32px); height: clamp(24px, 5.2vw, 32px); border-radius:6px; object-fit:cover; display:inline-block; }
 .social-item::after { content: attr(data-label); position:absolute; bottom:calc(100% + 2px); left:50%; transform: translateX(-50%); white-space:nowrap; padding:4px 8px; font-size:12px; border-radius:6px; pointer-events:none; opacity:0; transition: opacity .12s ease; }
 :global(html.dark) .social-item::after { background: rgba(36,43,50,0.95); color:#fff; border:1px solid rgba(255,255,255,0.1); }
-:global(html:not(.dark)) .social-item::after { background:#fff; color:#111; border:1px solid rgba(0,0,0,0.08); }
+:global(html:not(.dark)) .social-item::after { 
+  background:#fff !important; 
+  color:#111 !important; 
+  border:1px solid rgba(0,0,0,0.08) !important; 
+}
 .social-item:hover::after { opacity:1; }
 .sidebar-title {
   font-weight: 600;
@@ -2437,7 +2559,12 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
 .link-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; justify-items: center; }
 .link-card { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 8px; text-decoration: none; transition: background-color .16s ease, border-color .16s ease, transform .12s ease; }
 .link-card { width: 100%; max-width: 220px; }
-.link-card-light { background: #fff; color: #111827; border: 1px solid rgba(0,0,0,0.08); box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+.link-card-light { 
+  background: #fff !important; 
+  color: #111827 !important; 
+  border: 1px solid rgba(0,0,0,0.08) !important; 
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06) !important; 
+}
 .link-card-dark { background: rgba(36,43,50,0.85); color: #fff; border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 1px 2px rgba(255,255,255,0.06); }
 .link-card:hover { background-color: rgba(0,0,0,0.02); transform: translateY(-1px); }
 .link-card-dark:hover { background-color: rgba(255,255,255,0.08); }
@@ -2447,16 +2574,36 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
 .link-avatar-img { width: 100%; height: 100%; object-fit: cover; border-radius: 9999px; display: block; }
 .link-content { flex: 1; min-width: 0; }
 .link-title { font-weight: 600; font-size: 13px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 确保白天模式下链接卡片文本颜色是黑色的 */
+:global(html:not(.dark)) .link-title {
+  color: #111827 !important;
+}
 .link-sub { display: none; }
 
 .about-header { display: flex; align-items: center; gap: 14px; border-radius: 0; padding: 14px; }
-.about-header-light { background: #fff; border: 1px solid rgba(0,0,0,0.08); box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+.about-header-light { 
+  background: #fff !important; 
+  border: 1px solid rgba(0,0,0,0.08) !important; 
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06) !important; 
+}
 .about-header-dark { background: rgba(36,43,50,0.85); border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 1px 2px rgba(255,255,255,0.06); }
 .about-avatar { width: 72px; height: 72px; border-radius: 0; object-fit: cover; }
 .about-info { display: flex; flex-direction: column; gap: 4px; }
 .about-title { font-size: 20px; font-weight: 700; }
 .about-sub { font-size: 13px; opacity: 0.75; }
 .about-desc { font-size: 14px; opacity: 0.9; }
+
+/* 确保白天模式下关于页面文本颜色是黑色的 */
+:global(html:not(.dark)) .about-title {
+  color: #111827 !important;
+}
+:global(html:not(.dark)) .about-sub {
+  color: #6b7280 !important;
+}
+:global(html:not(.dark)) .about-desc {
+  color: #374151 !important;
+}
 
 @media screen and (max-width: 1024px) {
   .layout-container.grid-3 {
@@ -2501,6 +2648,31 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
 @media (prefers-color-scheme: dark) {
   .recommend-image-box { box-shadow: 0 1px 2px rgba(255,255,255,0.06); }
   .recommend-image-box:hover { box-shadow: 0 8px 22px rgba(255,255,255,0.12); }
+}
+
+/* 确保白天模式下链接文本为蓝色 */
+:global(html:not(.dark)) .profile-name {
+  color: #111827 !important;
+}
+:global(html:not(.dark)) .profile-desc {
+  color: #4b5563 !important;
+  opacity: 0.8 !important;
+}
+:global(html:not(.dark)) .clock-display {
+  color: #111827 !important;
+}
+:global(html:not(.dark)) .clock-date {
+  color: #4b5563 !important;
+  opacity: 0.8 !important;
+}
+:global(html:not(.dark)) .hitokoto-text {
+  color: #111827 !important;
+}
+:global(html:not(.dark)) .hitokoto-text a {
+  color: #0366d6 !important;
+}
+:global(html:not(.dark)) .social-list a {
+  color: #111827 !important;
 }
 .scroll-list { height: 64px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 2px 2px; }
 .recent-inline-img { display:inline-block; width:18px; height:18px; object-fit:cover; border-radius:4px; vertical-align:middle; margin: -2px 2px 0 2px; }
@@ -2562,3 +2734,13 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
 .netease-mini-player.minimized[data-instant="true"] .album-cover,
 .netease-mini-player.minimized[data-instant="true"] .vinyl-overlay,
 .netease-mini-player.minimized[data-instant="true"] .vinyl-center { transition: none !important; }
+:global(html.dark) .center-col,
+:global(html:not(.dark)) .center-col { transition: none !important; }
+:global(html.dark) .center-col :where(.u-card, .u-card-body, .u-card__body, .u-card-header, .u-card__header),
+:global(html:not(.dark)) .center-col :where(.u-card, .u-card-body, .u-card__body, .u-card-header, .u-card__header) {
+  transition: none !important;
+}
+:global(html.dark) .center-col :deep(.message-list-container),
+:global(html:not(.dark)) .center-col :deep(.message-list-container) { transition: none !important; }
+:global(html.dark) .center-col :deep(.content-container),
+:global(html:not(.dark)) .center-col :deep(.content-container) { transition: none !important; }

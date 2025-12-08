@@ -42,7 +42,17 @@
           <div class="p-0">
             <div :class="['content-container', innerContainerClass, listThemeClass]" :data-msg-id="msg.id">
               <div class="flex items-center gap-2 mb-2 author-row">
-                <img :src="authorAvatar(msg)" alt="avatar" class="avatar-img w-8 h-8 rounded-full object-cover" @error="authorAvatarOnError($event, msg.username || '匿名')" />
+                <img :src="authorAvatar(msg)" alt="avatar" class="avatar-img w-9 h-9 rounded-full object-cover" @error="authorAvatarOnError($event, msg.username || '匿名')" @mouseenter="showAuthorCard($event, msg)" @mouseleave="hideAuthorCard" @click="toggleAuthorCard($event, msg)" />
+                <div v-if="openAuthorId === msg.id" class="noise-author-card bg-white text-black dark:bg-[#242b32] dark:text-white" :style="openAuthorStyle">
+                  <div class="noise-author-card-header">
+                    <img :src="authorProfileAvatar(msg)" class="avatar-img w-10 h-10 rounded-full object-cover" />
+                    <div class="font-semibold leading-tight text-[14px]">{{ msg.username }}</div>
+                  </div>
+                  <div class="noise-author-card-body">
+                    <div class="noise-author-card-sign"><span :class="['noise-author-card-scroll', { 'center': !authorSignShouldScroll(msg) }]">{{ authorProfileDesc(msg) }}</span></div>
+                    <div class="author-card-muted text-[12px] whitespace-nowrap">笔记 {{ authorProfileCount(msg) }}</div>
+                  </div>
+                </div>
                 <div class="min-w-0">
                   <div class="text-sm font-semibold leading-tight">{{ msg.username || siteConfig.username || '匿名' }}</div>
                   <div class="flex items-center gap-2">
@@ -72,18 +82,26 @@
               <div class="overflow-y-hidden relative" :class="[{ 'max-h-[700px]': !isExpanded[msg.id] && !hasGrid[msg.id] }, listThemeTextClass]" :style="contentStyle(idx)">
                 <MarkdownRenderer :content="msg.content" :enableGithubCard="siteConfig?.enableGithubCard === true" @tagClick="handleTagClick" @rendered="checkContentHeight" link-target="_blank"/>
                 <div v-if="shouldShowExpandButton[msg.id] && !isExpanded[msg.id]"
-    :class="['absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t backdrop-blur-md pointer-events-none content-fade-mask', gradientClass]" style="z-index:20"></div>
+    :class="['absolute bottom-0 left-0 right-0 h-14 bg-gradient-to-t backdrop-blur-sm pointer-events-none content-fade-mask', gradientClass]" style="z-index:20"></div>
               </div>
-              <button
-                v-if="shouldShowExpandButton[msg.id]"
-                class="expand-toggle-btn absolute bottom-0 left-1/2 -translate-x-1/2 px-4 py-1.5 text-sm inline-flex items-center gap-1 z-30"
-                :class="expandBtnClass"
-                @click="toggleExpand(msg.id)"
-                aria-label="toggle-expand"
+              
+              <!-- 展开按钮 - 放在分割线上方 -->
+              <div v-if="shouldShowExpandButton[msg.id]"
+                :class="['relative left-0 right-0 flex justify-center z-30', isExpanded[msg.id] ? 'mb-1' : '-mt-2 mb-1']"
               >
-                {{ isExpanded[msg.id] ? '收起全文' : '展开全文' }}
-                <UIcon :name="isExpanded[msg.id] ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="w-4 h-4" />
-              </button>
+                <div 
+                  class="expand-button-container px-4 py-1.5 rounded-full backdrop-blur-sm"
+                >
+                  <button
+                    class="expand-toggle-btn text-sm inline-flex items-center justify-center gap-1"
+                    @click="toggleExpand(msg.id)"
+                    aria-label="toggle-expand"
+                  >
+                    {{ isExpanded[msg.id] ? '收起全文' : '展开全文' }}
+                    <UIcon :name="isExpanded[msg.id] ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="w-4 h-4 flex-shrink-0" />
+                  </button>
+                </div>
+              </div>
               <div class="border-t border-gray-300 dark:border-gray-700 my-3"></div>
               <div class="message-socialbar">
                 <button class="social-item" @click="like(msg.id)" :title="'点赞'">
@@ -104,16 +122,16 @@
                   <UButton size="xs" color="gray" variant="ghost" :ui="{ base: 'rounded-full' }" class="tool-open-btn" @click="toggleToolbox(msg.id)" title="展开工具">
                     <UIcon name="i-heroicons-ellipsis-horizontal" style="font-size: 16px; line-height: 1;" />
                   </UButton>
-                  <div class="message-toolbox overlay" :class="toolboxClass" v-show="openToolboxId === msg.id">
+                  <div class="message-toolbox overlay" v-show="openToolboxId === msg.id">
                     <div class="tool-icons">
-                      <div v-if="canEdit(msg)" class="tool-icon" @click="togglePrivate(msg)" :title="msg.private ? '设为公开' : '设为私密'"><UIcon :name="msg.private ? 'i-mdi-lock-outline' : 'i-mdi-lock-open-outline'" /></div>
-                      <div v-else-if="msg.private" class="tool-icon"><UIcon name="i-mdi-lock-outline" /></div>
-                      <div v-if="canPin(msg)" class="tool-icon" @click="togglePin(msg)" :title="msg.pinned ? '取消置顶' : '置顶内容'"><UIcon :name="msg.pinned ? 'i-mdi-pin' : 'i-mdi-pin-outline'" /></div>
-                      <div v-if="isLogin" class="tool-icon" @click="editMessage(msg)" title="编辑"><UIcon name="i-mdi-pencil-outline" /></div>
-                      <div class="tool-icon" @click="copyContent(msg.content)" title="复制"><UIcon name="i-mdi-content-copy" /></div>
-                      <div class="tool-icon" @click="downloadAsImage(msg.id)" title="下载卡片"><UIcon name="i-mdi-image-outline" /></div>
-                      <div v-if="isLogin" class="tool-icon" @click="deleteMsg(msg.id)" title="删除"><UIcon name="i-mdi-trash-can-outline" /></div>
-                    </div>
+                      <div v-if="canEdit(msg)" class="tool-icon" :data-label="(msg.private ? '设为公开' : '设为私密')" @click="togglePrivate(msg)"><UIcon :name="msg.private ? 'i-mdi-lock-outline' : 'i-mdi-lock-open-outline'" /></div>
+                      <div v-else-if="msg.private" class="tool-icon" data-label="私密"><UIcon name="i-mdi-lock-outline" /></div>
+                      <div v-if="canPin(msg)" class="tool-icon" :data-label="(msg.pinned ? '取消置顶' : '置顶内容')" @click="togglePin(msg)"><UIcon :name="msg.pinned ? 'i-mdi-pin' : 'i-mdi-pin-outline'" /></div>
+                      <div v-if="isLogin" class="tool-icon" data-label="编辑" @click="editMessage(msg)"><UIcon name="i-mdi-pencil-outline" /></div>
+                      <div class="tool-icon" data-label="复制" @click="copyContent(msg.content)"><UIcon name="i-mdi-content-copy" /></div>
+                      <div class="tool-icon" data-label="下载卡片" @click="downloadAsImage(msg.id)"><UIcon name="i-mdi-image-outline" /></div>
+                      <div v-if="isLogin" class="tool-icon" data-label="删除" @click="deleteMsg(msg.id)"><UIcon name="i-mdi-trash-can-outline" /></div>
+                  </div>
                   </div>
                 </div>
               </div>
@@ -135,7 +153,7 @@
       color="gray" 
       variant="ghost" 
       size="xs" 
-      :class="['rounded-full px-4 py-1.5 shadow-lg hover:shadow-xl transition-all duration-300 backdrop-blur-sm', pagerBtnClass]"
+      class="rounded-full px-4 py-1.5 shadow-lg hover:shadow-xl transition-all duration-300 backdrop-blur-sm pager-btn"
       @click="loadPreviousPage"
       :disabled="isPageLoading"
     >
@@ -148,7 +166,7 @@
       color="gray" 
       variant="ghost" 
       size="xs" 
-      :class="['rounded-full px-4 py-1.5 shadow-lg hover:shadow-xl transition-all duration-300 backdrop-blur-sm', pagerBtnClass]"
+      class="rounded-full px-4 py-1.5 shadow-lg hover:shadow-xl transition-all duration-300 backdrop-blur-sm pager-btn"
       @click="loadNextPage"
       :disabled="isPageLoading"
     >
@@ -207,8 +225,8 @@
         />
         <div class="border-t border-gray-200 my-2 pt-2">
           <div class="text-sm text-gray-500 mb-2">预览：</div>
-          <div class="p-4 rounded-lg overflow-auto max-h-[300px]" :class="modalPreviewBoxClass">
-            <div :class="modalPreviewTextClass">
+          <div class="p-4 rounded-lg overflow-auto max-h-[300px] bg-white dark:bg-[rgba(36,43,50,0.95)]">
+            <div class="text-black dark:text-white">
               <MarkdownRenderer :content="editingContent" :enableGithubCard="siteConfig?.enableGithubCard === true" />
             </div>
           </div>
@@ -233,22 +251,18 @@ import { useMessageStore } from "~/store/message";
 import { useUserStore } from "~/store/user";
 import MarkdownRenderer from "~/components/index/MarkdownRenderer.vue";
 import BuiltinComments from '../comments/BuiltinComments.vue'
-const contentTheme = inject('contentTheme', ref<string>(typeof window !== 'undefined' ? (localStorage.getItem('contentTheme') || 'dark') : 'dark'))
-const listThemeClass = computed(() => contentTheme.value === 'dark' ? 'bg-[rgba(36,43,50,0.95)] text-white' : 'bg-white text-black')
-const listThemeTextClass = computed(() => contentTheme.value === 'dark' ? 'text-white' : 'text-black')
-const gradientClass = computed(() => contentTheme.value === 'dark' ? 'from-[rgba(36,43,50,1)] via-[rgba(36,43,50,0.8)] to-transparent' : 'from-[rgba(255,255,255,1)] via-[rgba(255,255,255,0.8)] to-transparent')
-const modalPreviewBoxClass = computed(() => contentTheme.value === 'dark' ? 'bg-[rgba(36,43,50,0.95)]' : 'bg-white')
-const modalPreviewTextClass = computed(() => contentTheme.value === 'dark' ? 'text-white' : 'text-black')
 // 作者头像：登录用户的头像优先；否则使用站点头像或首字母头像
 const authorAvatar = (msg: any) => {
-  const uname = String(((useUserStore().user as any)?.username || '')).trim()
-  const uav = String((((useUserStore().user as any)?.avatar_url || (useUserStore().user as any)?.AvatarURL) || '')).trim()
   const siteAvatar = String(((props.siteConfig as any)?.avatarURL || '')).trim()
   const pick = (s: string) => {
     if (!s) return ''
     if (/^https?:\/\//i.test(s)) return s
     return `${BASE_API}${s}`
   }
+  const msgAvatar = String((msg?.avatar_url || (msg as any)?.AvatarURL || '')).trim()
+  if (msgAvatar) return pick(msgAvatar)
+  const uname = String(((useUserStore().user as any)?.username || '')).trim()
+  const uav = String((((useUserStore().user as any)?.avatar_url || (useUserStore().user as any)?.AvatarURL) || '')).trim()
   if (uname && String(msg?.username || '').trim() === uname && uav) return pick(uav)
   return pick(siteAvatar) || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(String(msg?.username || '匿名'))}&backgroundType=gradient&radius=50&scale=100&size=64`
 }
@@ -257,12 +271,7 @@ const authorAvatarOnError = (e: Event, seed: string) => {
   const fallback = `https://i.pravatar.cc/64?u=${encodeURIComponent(seed || '')}`
   if (img) img.src = fallback
 }
-const expandBtnClass = computed(() => contentTheme.value === 'dark'
-  ? 'bg-[rgba(36,43,50,0.95)] text-white hover:text-white border-none shadow-sm rounded-full'
-  : 'bg-white text-black hover:text-black border border-gray-300 shadow-sm rounded-full')
-const pagerBtnClass = computed(() => contentTheme.value === 'dark'
-  ? 'bg-[rgba(36,43,50,0.75)] text-white hover:text-white hover:bg-[rgba(36,43,50,0.85)] active:bg-[rgba(36,43,50,0.9)] focus:bg-[rgba(36,43,50,0.85)] border border-white/70'
-  : 'bg-[rgba(24,28,32,0.6)] text-white hover:text-white hover:bg-[rgba(24,28,32,0.7)] active:bg-[rgba(24,28,32,0.75)] focus:bg-[rgba(24,28,32,0.7)] border border-white/70')
+// 主题切换改为纯 CSS（html.dark）控制，避免组件重渲染导致媒体刷新
 
 const contentStyle = (index: number) => {
   return index < 5 ? '' : 'content-visibility:auto;contain-intrinsic-size:700px';
@@ -287,7 +296,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener('click', closeToolboxIfOutside, true)
 })
-const toolboxClass = computed(() => contentTheme.value === 'dark' ? 'toolbox-dark' : 'toolbox-light')
+// 工具箱主题同样由 CSS 控制
 
 // 点赞与评论计数
 const likesMap = ref<Record<number, number>>({})
@@ -340,6 +349,7 @@ const scheduleCommentFetch = (id: number) => {
   pendingCommentIds.value.push(id)
   runCommentQueue()
 }
+const isMobile = (typeof window !== 'undefined') && window.matchMedia('(max-width: 1024px)').matches
 const observeContainers = () => {
   if (!io) return
   const nodes = document.querySelectorAll('.content-container')
@@ -352,6 +362,7 @@ const observeContainers = () => {
 }
 onMounted(() => {
   try {
+    if (isMobile) return
     io = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
@@ -437,8 +448,13 @@ const props = defineProps({
     default: false
   }
 });
-const outerContainerClass = computed(() => props.wide ? 'flex-grow w-full px-1 sm:px-2' : 'flex-grow mx-auto w-full sm:max-w-4xl px-1 sm:px-2')
+const outerContainerClass = computed(() => props.wide ? 'flex-grow w-full px-1 sm:px-2' : 'flex-grow w-full px-1 sm:px-2')
 const innerContainerClass = computed(() => props.wide ? '' : 'mx-auto sm:max-w-4xl')
+// 独立的内容主题（与页面主题解耦）
+const contentTheme = inject('contentTheme', ref<string>(typeof window !== 'undefined' ? (localStorage.getItem('contentTheme') || 'dark') : 'dark'))
+const listThemeClass = computed(() => contentTheme.value === 'dark' ? 'bg-[rgba(36,43,50,0.95)] text-white' : 'bg-white text-black')
+const listThemeTextClass = computed(() => contentTheme.value === 'dark' ? 'text-white' : 'text-black')
+const gradientClass = computed(() => contentTheme.value === 'dark' ? 'from-[rgba(36,43,50,1)] via-[rgba(36,43,50,0.8)] to-transparent' : 'from-[rgba(255,255,255,1)] via-[rgba(255,255,255,0.8)] to-transparent')
 const useWaline = computed(() => {
   return false
 })
@@ -459,6 +475,74 @@ watch(() => props.targetMessageId, async (newId) => {
 }, { immediate: true });
 
 const BASE_API = useRuntimeConfig().public.baseApi || '/api';
+const authorProfiles = ref<Record<string, any>>({})
+const openAuthorId = ref<number | null>(null)
+const openAuthorStyle = ref<Record<string, string>>({})
+let authorHoverTimer: any = null
+let authorLeaveTimer: any = null
+const fetchAuthorProfile = async (uname: string) => {
+  const key = String(uname || '').trim()
+  if (!key || authorProfiles.value[key]) return
+  try {
+    const resp = await fetch(`${BASE_API}/users/profile?username=${encodeURIComponent(key)}`, { credentials: 'include', headers: { 'Accept': 'application/json' } })
+    if (!resp.ok) return
+    const js = await resp.json()
+    const d = js?.data || {}
+    if (d && d.username) authorProfiles.value[key] = d
+  } catch {}
+}
+const showAuthorCard = async (ev: MouseEvent, msg: any) => {
+  clearTimeout(authorLeaveTimer)
+  authorHoverTimer = setTimeout(async () => {
+    openAuthorId.value = msg.id
+    try {
+      const target = ev.target as HTMLElement
+      const rect = target.getBoundingClientRect()
+      const top = Math.max(8, rect.top - 32)
+      const left = rect.left + rect.width + 8
+      openAuthorStyle.value = { position: 'fixed', top: `${top}px`, left: `${left}px`, zIndex: '2147483647' }
+    } catch {}
+    await fetchAuthorProfile(String(msg?.username || ''))
+  }, 120)
+}
+const hideAuthorCard = () => {
+  clearTimeout(authorHoverTimer)
+  authorLeaveTimer = setTimeout(() => { openAuthorId.value = null }, 120)
+}
+const toggleAuthorCard = async (ev: MouseEvent, msg: any) => {
+  if (openAuthorId.value === msg.id) { openAuthorId.value = null; return }
+  openAuthorId.value = msg.id
+  try {
+    const target = ev.target as HTMLElement
+    const rect = target.getBoundingClientRect()
+    const top = Math.max(8, rect.top - 32)
+    const left = rect.left + rect.width + 8
+    openAuthorStyle.value = { position: 'fixed', top: `${top}px`, left: `${left}px`, zIndex: '2147483647' }
+  } catch {}
+  await fetchAuthorProfile(String(msg?.username || ''))
+}
+const authorSignShouldScroll = (msg: any) => {
+  const t = String(authorProfileDesc(msg) || '').trim()
+  return t.length > 12
+}
+const authorProfileAvatar = (msg: any) => {
+  const uname = String(msg?.username || '').trim()
+  const d = authorProfiles.value[uname]
+  const url = String((d && d.avatar_url) || '')
+  if (!url) return authorAvatar(msg)
+  if (/^https?:\/\//i.test(url)) return url
+  return `${BASE_API}${url}`
+}
+const authorProfileDesc = (msg: any) => {
+  const uname = String(msg?.username || '').trim()
+  const d = authorProfiles.value[uname]
+  return String((d && d.description) || '') || '—'
+}
+const authorProfileCount = (msg: any) => {
+  const uname = String(msg?.username || '').trim()
+  const d = authorProfiles.value[uname]
+  return Number((d && d.total_messages) || 0)
+}
 const apiReachable = ref(true)
 const checkApi = async () => {
   try {
@@ -893,7 +977,7 @@ onMounted(async () => {
     // 获取路由中的消息ID
     const messageId = route.hash.split('/messages/').pop();
     
-    await loadWalineAssets()
+    loadWalineAssets().catch(() => {})
 
     // 根据是否有消息ID来决定加载方式
     if (messageId) {
@@ -993,42 +1077,46 @@ onMounted(async () => {
 watch(() => route.hash, async (newHash) => {
   const messageId = newHash.split('/messages/').pop();
   
-  // 如果没有消息ID且不是从消息详情页返回，则加载列表
-  if (!messageId) {
-    if (!route.hash.includes('/messages/')) {
-      const response = await fetch(`${BASE_API}/messages/page`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ page: 1, pageSize: 15 })
-      });
-      if (response.ok) {
-        const data = await response.json();
-        if (data.code === 1 && data.data) {
-          const items = (data.data.items || []).filter((m: any) => !isGuestbookMessage(m));
-          message.messages = items;
-          const totalRaw = data.data.total || 0;
-          const adjustedTotal = totalRaw - (guestbookId.value ? 1 : 0);
-          message.total = Math.max(0, adjustedTotal);
-          const lastPage = Math.max(1, Math.ceil((message.total || 0) / 15));
-          message.page = 1;
-          message.hasMore = message.page < lastPage;
-          expandedCommentsMap.value = {};
-          try {
-            const tasks = (message.messages || []).filter((m: any) => !isGuestbookMessage(m)).map(async (m: any) => {
-              try {
-                const resp = await fetch(`${BASE_API}/messages/${m.id}/comments`, { credentials: 'include', headers: { 'Accept': 'application/json' } });
-                if (resp.ok) {
-                  const js = await resp.json();
-                  const count = Array.isArray(js.data) ? js.data.length : 0;
-                  commentCountMap.value[m.id] = count;
-                  if (isBuiltin.value && count > 0) expandedCommentsMap.value[m.id] = true;
-                }
-              } catch {}
-            });
-            await Promise.allSettled(tasks);
-          } catch {}
-        }
+  // 如果没有消息ID且不是从消息详情页返回，则保持当前状态，不重新加载
+  if (!messageId && !route.hash.includes('/messages/')) {
+    // 如果当前已有消息，不做任何操作，保持滚动位置
+    if (message.messages && message.messages.length > 0) {
+      return;
+    }
+    
+    // 只有在首次加载且没有消息时才加载第一页
+    const response = await fetch(`${BASE_API}/messages/page`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ page: 1, pageSize: 15 })
+    });
+    if (response.ok) {
+      const data = await response.json();
+      if (data.code === 1 && data.data) {
+        const items = (data.data.items || []).filter((m: any) => !isGuestbookMessage(m));
+        message.messages = items;
+        const totalRaw = data.data.total || 0;
+        const adjustedTotal = totalRaw - (guestbookId.value ? 1 : 0);
+        message.total = Math.max(0, adjustedTotal);
+        const lastPage = Math.max(1, Math.ceil((message.total || 0) / 15));
+        message.page = 1;
+        message.hasMore = message.page < lastPage;
+        expandedCommentsMap.value = {};
+        try {
+          const tasks = (message.messages || []).filter((m: any) => !isGuestbookMessage(m)).map(async (m: any) => {
+            try {
+              const resp = await fetch(`${BASE_API}/messages/${m.id}/comments`, { credentials: 'include', headers: { 'Accept': 'application/json' } });
+              if (resp.ok) {
+                const js = await resp.json();
+                const count = Array.isArray(js.data) ? js.data.length : 0;
+                commentCountMap.value[m.id] = count;
+                if (isBuiltin.value && count > 0) expandedCommentsMap.value[m.id] = true;
+              }
+            } catch {}
+          });
+          await Promise.allSettled(tasks);
+        } catch {}
       }
     }
     return;
@@ -1709,8 +1797,28 @@ onBeforeUnmount(() => { try { window.removeEventListener('comment-count-updated'
 const optimizeImage = (url: string) => {
   if (!url) return url;
   // 添加图片压缩参数
-  return `${url}?imageView2/2/w/800/q/85`;
+  return `${url}?imageView2/2/w/800/q/75&format=webp`;
 }
+
+// 添加图片预加载缓存
+const imageCache = new Map<string, HTMLImageElement>();
+
+const preloadImage = (src: string): Promise<HTMLImageElement> => {
+  return new Promise((resolve, reject) => {
+    if (imageCache.has(src)) {
+      resolve(imageCache.get(src)!);
+      return;
+    }
+
+    const img = new Image();
+    img.onload = () => {
+      imageCache.set(src, img);
+      resolve(img);
+    };
+    img.onerror = reject;
+    img.src = src;
+  });
+};
 // 确保在模板中使用正确的配置数据
 const footerConfig = computed(() => ({
   cardFooterTitle: props.siteConfig.cardFooterTitle,
@@ -1749,7 +1857,7 @@ onMounted(() => {
 .content-container {
   padding: 12px;
   border-radius: 12px;
-  transition: all 0.3s ease;
+  transition: none;
   margin: 4px 0 1.2rem 0;
   width: 100%;
   box-sizing: border-box;
@@ -1783,6 +1891,10 @@ onMounted(() => {
   border-radius: 12px;
   box-shadow: none;  /* 移除阴影 */
   transform: translate3d(0, 0, 0);  /* 启用硬件加速 */
+  /* 优化图片加载性能 */
+  content-visibility: auto;
+  contain-intrinsic-size: 150px auto;
+  will-change: transform;
 }
 /* 简化过渡动画 */
 .overflow-y-hidden {
@@ -1812,6 +1924,9 @@ onMounted(() => {
   }
   .content-container img:not(.avatar-img) {
     min-height: 100px;
+    /* 移动端图片渲染优化 */
+    content-visibility: auto;
+    contain-intrinsic-size: 100px auto;
   }
   .message-actions > div {
     transition: none;
@@ -1828,33 +1943,135 @@ onMounted(() => {
   border-radius: inherit;
 }
 
-.content-container.text-black { background: #fff; }
+:global(html:not(.dark)) .content-container { background: #fff; }
 .content-container .bg-gradient-to-t { pointer-events: none; }
 
 /* 内容区工具栏（融合/可折叠） */
 .message-toolbox { 
   margin-top: 10px; 
-  border-radius: 12px; 
+  border-radius: 16px; 
 }
 .content-fade-mask { 
   -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,1) 60%, rgba(0,0,0,0) 100%); 
   mask-image: linear-gradient(to top, rgba(0,0,0,1) 60%, rgba(0,0,0,0) 100%); 
 }
 .toolbox-anchor { position: relative; display: inline-block; }
-.message-toolbox.overlay { position:absolute; right:0; bottom:calc(100% + 8px); z-index:100; }
-.tool-icons { 
-  display: flex; 
-  align-items: center; 
-  gap: 6px; 
-  padding: 4px 6px; 
+.message-toolbox.overlay { 
+  position:absolute; 
+  right:0; 
+  bottom:calc(100% + 8px); 
+  z-index:100; 
+  padding: 6px 10px; 
+  border-radius: 12px; 
+  backdrop-filter: saturate(1.2) blur(6px) !important; 
 }
+.tool-icons { display: flex; align-items: center; gap: 8px; padding: 6px 8px; }
 .tool-icon { 
-  width: 20px; height: 20px; display:flex; align-items:center; justify-content:center; cursor:pointer; opacity:0.85; font-size:16px; line-height:1;
+  width: 28px; 
+  height: 28px; 
+  display:flex; 
+  align-items:center; 
+  justify-content:center; 
+  cursor:pointer; 
+  opacity:0.95; 
+  font-size:18px; 
+  line-height:1; 
+  border-radius: 9999px; 
+  position: relative; 
+  transition: all 0.2s ease;
 }
-.tool-icon:hover { opacity: 1; transform: scale(1.06); transition: transform .12s ease; }
+
+:global(html:not(.dark)) .tool-icon { 
+  background: #ffffff; 
+  color: #111827; 
+  border: 1px solid rgba(0,0,0,0.12); 
+  box-shadow: 0 1px 6px rgba(0,0,0,0.08); 
+}
+:global(html.dark) .tool-icon { 
+  background: rgba(36,43,50,0.95); 
+  color: #ffffff; 
+  border: 1px solid rgba(255,255,255,0.12); 
+  box-shadow: 0 1px 6px rgba(255,255,255,0.06); 
+}
+
+.tool-icon:hover { 
+  opacity: 1; 
+  transform: translate3d(0,0,0) scale(1.06); 
+  transition: transform .12s ease, box-shadow .12s ease; 
+}
+
+:global(html:not(.dark)) .tool-icon:hover { 
+  box-shadow: 0 6px 18px rgba(0,0,0,0.20); 
+}
+:global(html.dark) .tool-icon:hover { 
+  box-shadow: 0 8px 22px rgba(255,255,255,0.12); 
+}
+
+.tool-icon > * { color: currentColor; }
+.tool-icon::after { content: attr(data-label); position: absolute; left: 50%; top: calc(100% + 6px); transform: translateX(-50%); white-space: nowrap; font-size: 12px; padding: 2px 8px; border-radius: 9999px; opacity: 0; transition: opacity .12s ease; pointer-events: none; }
+:global(html:not(.dark)) .tool-icon::after { background: #ffffff; color: #111827; border: 1px solid rgba(0,0,0,0.12); box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+:global(html.dark) .tool-icon::after { background: rgba(36,43,50,0.95); color: #ffffff; border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 2px 8px rgba(255,255,255,0.06); }
+.tool-icon:hover::after { opacity: 1; }
 .toolbox-dark { background: rgba(36,43,50,0.95); border: 1px solid rgba(255,255,255,0.1); }
 .toolbox-light { background: #fff; border: 1px solid rgba(0,0,0,0.08); }
-.author-row { line-height: 1.1; }
+
+/* 直接按文档主题类切换工具箱背景，避免组件因响应式类变更重渲染 */
+:global(html.dark) .message-toolbox.overlay { 
+  background: rgb(36,43,50) !important; 
+  border: 1px solid rgba(148,163,184,0.50) !important; 
+  box-shadow: 0 8px 22px rgba(255,255,255,0.12) !important; 
+  backdrop-filter: blur(8px) !important;
+}
+:global(html:not(.dark)) .message-toolbox.overlay { 
+  background: rgb(255,255,255) !important; 
+  border: 1px solid rgba(100,116,139,0.40) !important; 
+  box-shadow: 0 8px 22px rgba(0,0,0,0.15) !important; 
+  backdrop-filter: blur(8px) !important;
+}
+
+/* 参考图的边缘描边效果（双层细描边） */
+.message-toolbox.overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+:global(html.dark) .message-toolbox.overlay::before {
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.15) !important;
+}
+:global(html:not(.dark)) .message-toolbox.overlay::before {
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15) !important;
+}
+
+.message-toolbox.overlay::after {
+  content: '';
+  position: absolute;
+  left: -28px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 1px;
+  pointer-events: none;
+  border-radius: 1px;
+}
+:global(html.dark) .message-toolbox.overlay::after { background-color: rgba(148,163,184,0.50) !important; }
+:global(html:not(.dark)) .message-toolbox.overlay::after { background-color: rgba(100,116,139,0.40) !important; }
+
+.message-toolbox.overlay::after {
+  content: '';
+  position: absolute;
+  left: -28px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 1px;
+  pointer-events: none;
+  border-radius: 1px;
+}
+:global(html.dark) .message-toolbox.overlay::after { background-color: rgba(148,163,184,0.50) !important; }
+:global(html:not(.dark)) .message-toolbox.overlay::after { background-color: rgba(100,116,139,0.40) !important; }
+.author-row { line-height: 1.1; position: relative; }
 .message-socialbar { display:flex; align-items:center; gap:12px; padding:0; margin-top:6px; }
 .social-item { display:flex; align-items:center; gap:6px; opacity:.85; cursor:pointer; }
 .social-item:hover { opacity:1; }
@@ -1864,35 +2081,76 @@ onMounted(() => {
   .message-socialbar { gap:10px; padding:0; }
 }
 
-/* 添加展开/折叠按钮样式（按主题自适应） */
+.tool-open-btn { border: none; background: transparent; box-shadow: none; padding: 0; }
+
+/* 添加展开/折叠按钮容器样式 */
 .expand-toggle-btn {
-  border-radius: 20px;
-  position: relative;
-  z-index: 9999;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 4px 8px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
-/* 暗黑模式按钮样式 */
+/* 按钮容器样式 - 用于提供背景和轮廓 */
+.expand-toggle-btn:hover {
+  transform: scale(1.02);
+}
+
+/* 按钮容器样式 - 用于提供背景和轮廓 */
+.expand-toggle-btn:hover {
+  transform: scale(1.02);
+}
+
+/* 暗黑模式按钮容器样式 */
 :global(html.dark) .expand-toggle-btn {
-  background: rgba(36, 43, 50, 0.95);
-  border: 1px solid rgba(251, 146, 60, 0.3);
   color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 :global(html.dark) .expand-toggle-btn:hover {
-  background: rgba(46, 53, 60, 0.95);
-  border-color: rgba(251, 146, 60, 0.5);
-  cursor: pointer;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
-/* 白天模式按钮样式 */
+/* 白天模式按钮容器样式 */
 :global(html:not(.dark)) .expand-toggle-btn {
-  background: #fff;
-  border: 1px solid rgba(251, 146, 60, 0.4);
-  color: #111;
+  color: #111827;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
 }
 :global(html:not(.dark)) .expand-toggle-btn:hover {
-  background: #fff;
-  border-color: rgba(251, 146, 60, 0.6);
-  cursor: pointer;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* 暗黑模式按钮容器（父元素）样式 */
+:global(html.dark) .expand-button-container {
+  background: rgba(36, 43, 50, 0.9) !important;
+  border: 1px solid rgba(251, 146, 60, 0.5) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+  backdrop-filter: blur(4px) !important;
+}
+:global(html.dark) .expand-button-container:hover {
+  background: rgba(46, 53, 60, 0.95) !important;
+  border-color: rgba(251, 146, 60, 0.7) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* 白天模式按钮容器（父元素）样式 */
+:global(html:not(.dark)) .expand-button-container {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(251, 146, 60, 0.5) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+  backdrop-filter: blur(4px) !important;
+}
+:global(html:not(.dark)) .expand-button-container:hover {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: rgba(251, 146, 60, 0.7) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
 }
 
 /* 确保内容区域的层级正确 */
@@ -2136,38 +2394,194 @@ onMounted(() => {
 }
 
 /* 轻模式覆盖 Markdown 颜色 */
-.content-container.text-black :deep(.markdown-preview h1),
-.content-container.text-black :deep(.markdown-preview h2),
-.content-container.text-black :deep(.markdown-preview h3),
-.content-container.text-black :deep(.markdown-preview h4),
-.content-container.text-black :deep(.markdown-preview h5),
-.content-container.text-black :deep(.markdown-preview h6) {
+:global(html:not(.dark)) .content-container :deep(.markdown-preview h1),
+:global(html:not(.dark)) .content-container :deep(.markdown-preview h2),
+:global(html:not(.dark)) .content-container :deep(.markdown-preview h3),
+:global(html:not(.dark)) .content-container :deep(.markdown-preview h4),
+:global(html:not(.dark)) .content-container :deep(.markdown-preview h5),
+:global(html:not(.dark)) .content-container :deep(.markdown-preview h6) {
   color: #111 !important;
 }
+:global(html:not(.dark)) .content-container :deep(.markdown-preview) { color: #111 !important; }
+:global(html.dark) .content-container :deep(.markdown-preview) { color: #fff !important; }
+:global(html:not(.dark)) .content-container :deep(.markdown-preview *:not(pre):not(code)) {
+  color: #111 !important;
+  opacity: 1 !important;
+}
+/* 彻底取消白天模式灰度，所有元素不透明 */
+:global(html:not(.dark)) .content-container :deep(.markdown-preview *) { opacity: 1 !important; }
+:global(html:not(.dark)) .content-container :deep(.markdown-preview p),
+:global(html:not(.dark)) .content-container :deep(.markdown-preview li),
+:global(html:not(.dark)) .content-container :deep(.markdown-preview span),
+:global(html:not(.dark)) .content-container :deep(.markdown-preview em),
+:global(html:not(.dark)) .content-container :deep(.markdown-preview strong),
+:global(html:not(.dark)) .content-container :deep(.markdown-preview blockquote),
+:global(html:not(.dark)) .content-container :deep(.markdown-preview code) { opacity: 1 !important; }
 
-.content-container.text-black :deep(.markdown-preview p),
-.content-container.text-black :deep(.markdown-preview li),
-.content-container.text-black :deep(.markdown-preview span:not(.clickable-tag)) {
-  color: #333 !important;
+/* 确保所有模式下链接颜色都是蓝色 */
+:global(html:not(.dark)) .content-container :deep(.markdown-preview a),
+:global(html.dark) .content-container :deep(.markdown-preview a),
+.content-container :deep(.markdown-preview a) { 
+  color: #0366d6 !important; 
+  text-decoration: none !important; 
+  background-color: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  border: none !important;
+  text-shadow: none !important;
+  opacity: 1 !important;
+  font-weight: 500 !important;
+}
+:global(html:not(.dark)) .content-container :deep(.markdown-preview a:hover),
+:global(html.dark) .content-container :deep(.markdown-preview a:hover),
+.content-container :deep(.markdown-preview a:hover) { 
+  color: #1d4ed8 !important; 
+  text-decoration: underline !important; 
 }
 
-/* 白天模式下链接颜色与悬停颜色 */
-.content-container.text-black :deep(.markdown-preview a) {
-  color: #0366d6 !important;
-  text-decoration: none;
+/* 内容容器内的 GitHub 卡片主题（确保随页面切换） */
+:global(html.dark) .content-container :deep(.github-card) { 
+  border: 1px solid #30363d !important; 
+  background: #161b22 !important; 
+  color: #c9d1d9 !important; 
 }
-.content-container.text-black :deep(.markdown-preview a:hover) {
-  color: #1d4ed8 !important;
-  text-decoration: underline;
+:global(html:not(.dark)) .content-container :deep(.github-card) { 
+  border: 1px solid #e5e7eb !important; 
+  background: #ffffff !important; 
+  color: #111827 !important; 
+}
+:global(html.dark) .content-container :deep(.github-card-title) { color: #58a6ff !important; }
+:global(html:not(.dark)) .content-container :deep(.github-card-title) { color: #0366d6 !important; }
+:global(html.dark) .content-container :deep(.github-card-desc) { color: #8b949e !important; }
+:global(html:not(.dark)) .content-container :deep(.github-card-desc) { color: #6b7280 !important; }
+:global(html.dark) .content-container :deep(.github-card-footer) { color: #8b949e !important; }
+:global(html:not(.dark)) .content-container :deep(.github-card-footer) { color: #6b7280 !important; }
+:global(html.dark) .content-container :deep(.github-card-footer span) { 
+  background: rgba(0,0,0,0.35) !important; 
+  color: #c9d1d9 !important; 
+}
+:global(html:not(.dark)) .content-container :deep(.github-card-footer span) { 
+  background: rgba(255,255,255,0.65) !important; 
+  color: #111827 !important; 
 }
 
-.content-container.text-black :deep(pre) {
+/* 内容容器内的 APlayer 主题适配（亮/暗模式） */
+:global(html:not(.dark)) .content-container :deep(.aplayer) {
+  background: #ffffff !important;
+  color: #111111 !important;
+  border: 1px solid #e5e7eb !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
+}
+:global(html:not(.dark)) .content-container :deep(.aplayer .aplayer-title),
+:global(html:not(.dark)) .content-container :deep(.aplayer .aplayer-author),
+:global(html:not(.dark)) .content-container :deep(.aplayer .aplayer-lrc p) { color: #1f2937 !important; }
+:global(html:not(.dark)) .content-container :deep(.aplayer .aplayer-bar-wrap .aplayer-bar) { background-color: #e5e7eb !important; }
+:global(html:not(.dark)) .content-container :deep(.aplayer .aplayer-played) { background-color: #3b82f6 !important; }
+:global(html:not(.dark)) .content-container :deep(.aplayer .aplayer-loaded) { background-color: #9ca3af !important; }
+:global(html:not(.dark)) .content-container :deep(.aplayer .aplayer-info) { color: #111827 !important; }
+:global(html:not(.dark)) .content-container :deep(.aplayer .aplayer-icon),
+:global(html:not(.dark)) .content-container :deep(.aplayer .aplayer-list-index) { color: #374151 !important; }
+
+:global(html.dark) .content-container :deep(.aplayer) {
+  background: #242b32 !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  box-shadow: 0 4px 12px rgba(255,255,255,0.08) !important;
+}
+:global(html.dark) .content-container :deep(.aplayer .aplayer-title),
+:global(html.dark) .content-container :deep(.aplayer .aplayer-author),
+:global(html.dark) .content-container :deep(.aplayer .aplayer-lrc p) { color: #ffffff !important; }
+:global(html.dark) .content-container :deep(.aplayer .aplayer-bar-wrap .aplayer-bar) { background-color: #30363d !important; }
+:global(html.dark) .content-container :deep(.aplayer .aplayer-played) { background-color: #60a5fa !important; }
+:global(html.dark) .content-container :deep(.aplayer .aplayer-loaded) { background-color: #64748b !important; }
+:global(html.dark) .content-container :deep(.aplayer .aplayer-info) { color: #e5e7eb !important; }
+:global(html.dark) .content-container :deep(.aplayer .aplayer-icon),
+:global(html.dark) .content-container :deep(.aplayer .aplayer-list-index) { color: #e5e7eb !important; }
+
+:global(html:not(.dark)) .content-container :deep(pre) {
   background-color: #f5f5f5 !important;
   border: 1px solid #e5e7eb !important;
   color: #1f2937 !important;
 }
 
-.content-container.text-black :deep(.hljs) {
+:global(html:not(.dark)) .content-container :deep(.hljs) {
   color: #1f2937 !important;
 }
+
+/* 视频和音频播放器的主题适配 */
+:global(html:not(.dark)) .content-container :deep(video) {
+  background-color: #ffffff !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 8px !important;
+}
+
+:global(html:not(.dark)) .content-container :deep(audio) {
+  background-color: #ffffff !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 8px !important;
+}
+
+:global(html.dark) .content-container :deep(video) {
+  background-color: #242b32 !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  border-radius: 8px !important;
+}
+
+:global(html.dark) .content-container :deep(audio) {
+  background-color: #242b32 !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  border-radius: 8px !important;
+}
+
+/* iframe 嵌入内容的主题适配 */
+:global(html:not(.dark)) .content-container :deep(iframe) {
+  border: 1px solid #e5e7eb !important;
+  border-radius: 8px !important;
+}
+
+:global(html.dark) .content-container :deep(iframe) {
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  border-radius: 8px !important;
+}
+
+/* 作者悬停卡片 */
+.noise-author-card { position: absolute; top: -28px; left: 36px; z-index: 2147483647; border-radius: 12px; padding: 10px 12px; min-width: 300px; box-shadow: 0 8px 24px rgba(0,0,0,0.25); border: 1px solid rgba(0,0,0,0.08); transform: translate3d(0,0,0); isolation: isolate; backdrop-filter: none; -webkit-backdrop-filter: none; overflow: visible; }
+.noise-author-card::after { content: ''; position: absolute; left: -10px; top: 27px; width: 0; height: 0; border-top: 10px solid transparent; border-bottom: 10px solid transparent; z-index: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.25)); }
+:global(html.dark) .noise-author-card { background: #242b32 !important; }
+:global(html.dark) .noise-author-card::after { border-right: 8px solid #242b32; }
+:global(html:not(.dark)) .noise-author-card::after { border-right: 8px solid #ffffff; }
+.noise-author-card-header { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; pointer-events: auto; }
+.noise-author-card-body { display: flex; gap: 10px; align-items: center; justify-content: flex-end; }
+.noise-author-card-sign { overflow: hidden; font-size: 12px; line-height: 16px; white-space: nowrap; flex: 1; text-align: center; }
+.noise-author-card-scroll { display: inline-block; white-space: nowrap; will-change: transform; animation: author-sign-scroll 12s linear infinite; }
+.noise-author-card-scroll.center { animation: none; }
+.author-card-muted { color: #7a7f85 }
+@keyframes author-sign-scroll { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+.author-card-muted { color: #7a7f85 }
+@media (max-width: 640px) { .noise-author-card { position: fixed; left: 12px; right: 12px; top: auto; bottom: auto; min-width: auto; z-index: 2147483647; } .noise-author-card::after { display: none; } }
 </style>
+/* 分页按钮主题通过 CSS 切换，避免 JS 驱动的类计算 */
+:global(html.dark) .pager-btn { 
+  background: rgba(36,43,50,0.9) !important; 
+  color: #fff !important; 
+  border: 1px solid rgba(251,146,60,0.4) !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
+  backdrop-filter: blur(4px) !important;
+}
+:global(html.dark) .pager-btn:hover { 
+  background: rgba(46,53,60,0.95) !important; 
+  border-color: rgba(251,146,60,0.6) !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2) !important;
+}
+:global(html:not(.dark)) .pager-btn { 
+  background: rgba(255,255,255,0.9) !important; 
+  color: #111827 !important; 
+  border: 1px solid rgba(251,146,60,0.4) !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+  backdrop-filter: blur(4px) !important;
+}
+:global(html:not(.dark)) .pager-btn:hover { 
+  background: rgba(255,255,255,0.95) !important; 
+  border-color: rgba(251,146,60,0.6) !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+}

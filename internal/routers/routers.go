@@ -109,6 +109,7 @@ func SetupRouter() *gin.Engine {
 	api.POST("/login", controllers.Login)
 	api.POST("/register", controllers.Register)
 	api.GET("/status", controllers.GetStatus)
+	api.GET("/users/profile", controllers.GetUserProfile)
 	api.GET("/captcha", controllers.GetCaptcha)
 	// api.GET("/config", controllers.GetFrontendConfig)
 	api.GET("/messages", controllers.GetMessages)
@@ -119,6 +120,8 @@ func SetupRouter() *gin.Engine {
 	api.GET("/messages/search", controllers.SearchMessages)        // 新增搜索消息路由
 	api.GET("/version/check", controllers.CheckVersion)            // 添加版本检查路由
 	api.GET("/version", controllers.GetVersion)                    // 当前运行版本（镜像标签/环境变量）
+	api.GET("/version/runtime", controllers.GetRuntimeEnv)
+	// 版本更新（管理员）将在下方统一 authRoutes 组中注册
 	// GitHub OAuth
 	api.GET("/oauth/github/login", controllers.GithubLogin)
 	r.GET("/oauth/github/callback", controllers.GithubCallback)
@@ -137,6 +140,11 @@ func SetupRouter() *gin.Engine {
 	// 需要鉴权的路由
 	authRoutes := api.Group("")
 	authRoutes.Use(middleware.SessionAuthMiddleware())
+	// 版本更新（管理员）
+	authRoutes.POST("/version/update", controllers.UpdateVersion)
+	authRoutes.GET("/version/update/stream", controllers.UpdateVersionStream)
+	authRoutes.POST("/version/static-sync", controllers.SyncStatic)
+	// 静态资源同步已移除，版本升级统一走容器镜像
 
 	// 添加 token 认证的路由组
 	tokenAuth := api.Group("/token")
@@ -239,6 +247,9 @@ func SetupRouter() *gin.Engine {
 
 	// 显式 /status 返回 SPA 入口，避免目录重定向影响
 	r.GET("/status", func(c *gin.Context) {
+		c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+		c.Header("Pragma", "no-cache")
+		c.Header("Expires", "0")
 		c.File("./public/index.html")
 	})
 
@@ -255,12 +266,26 @@ func SetupRouter() *gin.Engine {
 	r.Static("/_nuxt", "./public/_nuxt")
 	r.Static("/assets", "./public/assets")
 
+	// 对指纹化静态资源启用长缓存，避免入口 no-cache 影响性能
+	r.Use(func(c *gin.Context) {
+		c.Next()
+		p := c.Request.URL.Path
+		if strings.HasPrefix(p, "/_nuxt/") || strings.HasPrefix(p, "/assets/") ||
+			strings.HasPrefix(p, "/favicon") || strings.HasPrefix(p, "/android-chrome") {
+			c.Header("Cache-Control", "public, max-age=31536000, immutable")
+		}
+	})
+
 	r.NoRoute(func(c *gin.Context) {
 		path := c.Request.URL.Path
 		if strings.HasPrefix(path, "/m/") ||
 			strings.HasPrefix(path, "/messages/") ||
 			path == "/" ||
 			!strings.HasPrefix(path, "/api") {
+			// 禁止入口页缓存，确保最新静态资源被加载
+			c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+			c.Header("Pragma", "no-cache")
+			c.Header("Expires", "0")
 			c.File("./public/index.html")
 		} else {
 			c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "接口不存在"})

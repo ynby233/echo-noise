@@ -41,7 +41,12 @@ const contentTheme = inject('contentTheme') as any
 
 const applyThemeClass = () => {
   if (!previewElement.value) return
-  const isDark = contentTheme && contentTheme.value === 'dark'
+  let isDark = false
+  if (contentTheme && typeof (contentTheme as any).value !== 'undefined') {
+    isDark = (contentTheme as any).value === 'dark'
+  } else {
+    isDark = document.documentElement.classList.contains('dark')
+  }
   previewElement.value.classList.toggle('theme-dark', !!isDark)
   previewElement.value.classList.toggle('theme-light', !isDark)
 }
@@ -223,29 +228,95 @@ const processMediaLinks = (content: string): string => {
     .replace(YOUKU_REG, "<div class='video-wrapper'><iframe src='https://player.youku.com/embed/$1' frameborder=0 'allowfullscreen'></iframe></div>");
 };
 const fetchGitHubRepoInfo = async (owner: string, repo: string, cardId: string) => {
-  try {
-    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
-    if (!res.ok) return;
-    const data = await res.json();
+  const card = document.getElementById(cardId);
+  if (!card) return;
+  
+  // 立即显示加载中状态
+  card.innerHTML = `
+    <div class="github-card-header">
+      <div class="github-card-avatar placeholder-avatar"></div>
+      <div>
+        <div class="github-card-title placeholder-text">${owner}/${repo}</div>
+        <div class="github-card-desc placeholder-text">加载中...</div>
+      </div>
+    </div>
+    <div class="github-card-footer">
+      <span class="placeholder-text">⭐ 加载中...</span>
+      <span class="placeholder-text">🍴 加载中...</span>
+      <span class="placeholder-text">🛠️ 加载中...</span>
+    </div>
+  `;
+  
+  // 设置超时处理
+  const timeoutId = setTimeout(() => {
+    // 超时后显示错误信息
     const card = document.getElementById(cardId);
     if (card) {
       card.innerHTML = `
         <div class="github-card-header">
-          <img src="${data.owner.avatar_url}" class="github-card-avatar" />
+          <div class="github-card-avatar error-avatar">⚠️</div>
           <div>
-            <a href="${data.html_url}" target="_blank" class="github-card-title">${data.full_name}</a>
-            <div class="github-card-desc">${data.description || ''}</div>
+            <div class="github-card-title">${owner}/${repo}</div>
+            <div class="github-card-desc">网络连接超时</div>
           </div>
         </div>
         <div class="github-card-footer">
-          <span>⭐ ${data.stargazers_count}</span>
-          <span>🍴 ${data.forks_count}</span>
-          <span>🛠️ ${data.language || ''}</span>
+          <span>⭐ 无法获取</span>
+          <span>🍴 无法获取</span>
+          <span>🛠️ 无法获取</span>
         </div>
       `;
+      card.classList.add('github-card-error');
+    }
+  }, 8000); // 8秒超时
+  
+  try {
+    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
+    clearTimeout(timeoutId);
+    
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    const data = await res.json();
+    
+    // 再次检查卡片是否仍然存在
+    const updatedCard = document.getElementById(cardId);
+    if (updatedCard) {
+      updatedCard.innerHTML = `
+        <div class="github-card-header">
+          <img src="${data.owner.avatar_url}" class="github-card-avatar" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'; this.parentElement.classList.add('avatar-fallback');"/>
+          <div class="avatar-fallback" style="display:none; width:48px; height:48px; border-radius:50%; background:#0366d6; color:white; font-size:18px; font-weight:bold; align-items:center; justify-content:center;">${owner.charAt(0).toUpperCase()}</div>
+          <div>
+            <a href="${data.html_url}" target="_blank" class="github-card-title">${data.full_name}</a>
+            <div class="github-card-desc">${data.description || '无描述'}</div>
+          </div>
+        </div>
+        <div class="github-card-footer">
+          <span>⭐ ${data.stargazers_count || 0}</span>
+          <span>🍴 ${data.forks_count || 0}</span>
+          <span>🛠️ ${data.language || '未知'}</span>
+        </div>
+      `;
+      updatedCard.classList.add('github-card-loaded');
     }
   } catch (e) {
-    // 忽略错误
+    clearTimeout(timeoutId);
+    const errorCard = document.getElementById(cardId);
+    if (errorCard) {
+      errorCard.innerHTML = `
+        <div class="github-card-header">
+          <div class="github-card-avatar error-avatar">❌</div>
+          <div>
+            <div class="github-card-title">${owner}/${repo}</div>
+            <div class="github-card-desc">无法加载仓库信息</div>
+          </div>
+        </div>
+        <div class="github-card-footer">
+          <span>⭐ 无法获取</span>
+          <span>🍴 无法获取</span>
+          <span>🛠️ 无法获取</span>
+        </div>
+      `;
+      errorCard.classList.add('github-card-error');
+    }
   }
 };
 const renderMarkdown = async (markdown: string) => {
@@ -287,7 +358,7 @@ const renderMarkdown = async (markdown: string) => {
       finalContent = withLinks.replace(/<a /g, '<a target="_blank" ');
     }
 
-    const currentTheme = contentTheme && contentTheme.value === 'dark' ? 'dark' : 'light'
+    const currentTheme = (contentTheme && (contentTheme as any).value) ? ((contentTheme as any).value === 'dark' ? 'dark' : 'light') : (document.documentElement.classList.contains('dark') ? 'dark' : 'light')
     const hljsStyle = currentTheme === 'dark' ? 'github-dark' : 'github'
     Vditor.preview(previewElement.value!, finalContent, {
       lang: 'zh_CN',
@@ -369,6 +440,10 @@ onMounted(() => {
     console.error('MetingJS or APlayer is not loaded properly');
   }
   applyThemeClass();
+  try {
+    const observer = new MutationObserver(() => applyThemeClass())
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+  } catch {}
 });
 
 
@@ -380,9 +455,85 @@ onBeforeUnmount(() => {
 });
 
 watch(() => contentTheme && contentTheme.value, () => {
+  // 只应用主题类，不重新渲染内容，避免重新加载
   applyThemeClass();
-  renderMarkdown(props.content);
+  
+  // 只更新嵌入组件的主题，不重新渲染整个 markdown
+  // 更新 GitHub 卡片主题
+  const githubCards = previewElement.value?.querySelectorAll('.github-card');
+  if (githubCards) {
+    githubCards.forEach(card => {
+      const isDark = contentTheme && contentTheme.value === 'dark';
+      if (isDark) {
+        card.classList.add('theme-dark');
+        card.classList.remove('theme-light');
+      } else {
+        card.classList.add('theme-light');
+        card.classList.remove('theme-dark');
+      }
+    });
+  }
+  
+  // 更新播放器主题
+  const aplayers = previewElement.value?.querySelectorAll('.aplayer');
+  if (aplayers) {
+    aplayers.forEach(player => {
+      const isDark = contentTheme && contentTheme.value === 'dark';
+      if (isDark) {
+        player.classList.add('theme-dark');
+        player.classList.remove('theme-light');
+      } else {
+        player.classList.add('theme-light');
+        player.classList.remove('theme-dark');
+      }
+    });
+  }
+  
+  // 更新视频和音频元素主题
+  const videos = previewElement.value?.querySelectorAll('video');
+  const audios = previewElement.value?.querySelectorAll('audio');
+  if (videos) {
+    videos.forEach(video => {
+      const isDark = contentTheme && contentTheme.value === 'dark';
+      if (isDark) {
+        video.style.backgroundColor = '#242b32';
+        video.style.border = '1px solid rgba(255,255,255,0.10)';
+      } else {
+        video.style.backgroundColor = '#ffffff';
+        video.style.border = '1px solid #e5e7eb';
+      }
+    });
+  }
+  if (audios) {
+    audios.forEach(audio => {
+      const isDark = contentTheme && contentTheme.value === 'dark';
+      if (isDark) {
+        audio.style.backgroundColor = '#242b32';
+        audio.style.border = '1px solid rgba(255,255,255,0.10)';
+      } else {
+        audio.style.backgroundColor = '#ffffff';
+        audio.style.border = '1px solid #e5e7eb';
+      }
+    });
+  }
+  
+  // 更新 iframe 元素主题
+  const iframes = previewElement.value?.querySelectorAll('iframe');
+  if (iframes) {
+    iframes.forEach(iframe => {
+      const isDark = contentTheme && contentTheme.value === 'dark';
+      if (isDark) {
+        iframe.style.border = '1px solid rgba(255,255,255,0.10)';
+      } else {
+        iframe.style.border = '1px solid #e5e7eb';
+      }
+    });
+  }
 });
+
+watch(() => props.enableGithubCard, () => {
+  renderMarkdown(props.content)
+})
 </script>
 
 <style>
@@ -593,16 +744,50 @@ watch(() => contentTheme && contentTheme.value, () => {
   background-color: rgba(0, 0, 0, 0.05);
 }
 
-.markdown-preview :deep(a) {
-  color: #0366d6;
-  text-decoration: none;
+.markdown-preview :deep(a) { 
+  color: #0366d6 !important; 
+  text-decoration: none !important; 
+  background-color: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  border: none !important;
+  text-shadow: none !important;
 }
-
-.markdown-preview :deep(a:hover) {
-  text-decoration: underline;
+.markdown-preview :deep(a:hover) { 
+  text-decoration: underline !important; 
+  color: #1d4ed8 !important;
 }
-.theme-light.markdown-preview :deep(a:hover) {
-  color: #0366d6;
+.theme-light.markdown-preview :deep(a),
+.theme-dark.markdown-preview :deep(a) { 
+  color: #0366d6 !important;
+  background-color: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  border: none !important;
+  text-shadow: none !important;
+}
+.builtin-comments .markdown-preview.theme-light a { 
+  color: #0366d6 !important; 
+  text-decoration: none !important;
+  background-color: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  border: none !important;
+  text-shadow: none !important;
+}
+.builtin-comments .markdown-preview.theme-dark a { 
+  color: #0366d6 !important; 
+  text-decoration: none !important;
+  background-color: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  border: none !important;
+  text-shadow: none !important;
+}
+.builtin-comments .markdown-preview.theme-light a:hover,
+.builtin-comments .markdown-preview.theme-dark a:hover { 
+  text-decoration: underline !important;
+  color: #1d4ed8 !important;
 }
 
 .markdown-preview :deep(table) {
@@ -636,19 +821,71 @@ watch(() => contentTheme && contentTheme.value, () => {
   margin-right: auto;
 }
 
-.aplayer {
-  box-shadow: 0 0 10px rgba(0,0,0,0.1);
-  border-radius: 4px;
-  margin: 0.5em 0 !important;
+.aplayer { box-shadow: 0 0 10px rgba(0,0,0,0.1); border-radius: 4px; margin: 0.5em 0 !important; }
+.theme-dark .aplayer { 
+  background: rgba(22,27,34,0.85) !important; 
+  color: #c9d1d9 !important; 
+  border: 1px solid rgba(255,255,255,0.1) !important;
 }
-.theme-dark .aplayer {
-  background: rgba(22,27,34,0.85);
-  color: #c9d1d9;
+.theme-light .aplayer { 
+  background: rgba(255,255,255,0.95) !important; 
+  color: #111827 !important; 
+  border: 1px solid #e5e7eb !important; 
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
 }
-.theme-light .aplayer {
-  background: rgba(255,255,255,0.85);
-  color: #111827;
-  border: 1px solid #e5e7eb;
+.theme-light .aplayer .aplayer-title,
+.theme-light .aplayer .aplayer-author,
+.theme-light .aplayer .aplayer-lrc p { color: #1f2937 !important; }
+.theme-light .aplayer .aplayer-bar-wrap .aplayer-bar { background-color: #e5e7eb !important; }
+.theme-light .aplayer .aplayer-played { background-color: #3b82f6 !important; }
+.theme-light .aplayer .aplayer-loaded { background-color: #9ca3af !important; }
+.theme-light .aplayer .aplayer-info { color: #111827 !important; }
+.theme-light .aplayer .aplayer-icon,
+.theme-light .aplayer .aplayer-list-index { color: #374151 !important; }
+.theme-dark .aplayer .aplayer-title,
+.theme-dark .aplayer .aplayer-author,
+.theme-dark .aplayer .aplayer-lrc p { color: #ffffff !important; }
+.theme-dark .aplayer .aplayer-bar-wrap .aplayer-bar { background-color: #30363d !important; }
+.theme-dark .aplayer .aplayer-played { background-color: #60a5fa !important; }
+.theme-dark .aplayer .aplayer-loaded { background-color: #64748b !important; }
+.theme-dark .aplayer .aplayer-info { color: #e5e7eb !important; }
+.theme-dark .aplayer .aplayer-icon,
+.theme-dark .aplayer .aplayer-list-index { color: #e5e7eb !important; }
+
+/* 视频和音频播放器的主题适配 */
+.theme-light video {
+  background-color: #ffffff !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 8px !important;
+}
+
+.theme-light audio {
+  background-color: #ffffff !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 8px !important;
+}
+
+.theme-dark video {
+  background-color: #242b32 !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  border-radius: 8px !important;
+}
+
+.theme-dark audio {
+  background-color: #242b32 !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  border-radius: 8px !important;
+}
+
+/* iframe 嵌入内容的主题适配 */
+.theme-light iframe {
+  border: 1px solid #e5e7eb !important;
+  border-radius: 8px !important;
+}
+
+.theme-dark iframe {
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  border-radius: 8px !important;
 }
 /* 添加 medium-zoom 相关样式 */
 .medium-zoom-overlay {
@@ -675,14 +912,14 @@ watch(() => contentTheme && contentTheme.value, () => {
   overflow: hidden;
 }
 .theme-dark .github-card {
-  border: 1px solid #30363d;
-  background: #161b22;
-  color: #c9d1d9;
+  border: 1px solid #30363d !important;
+  background: #161b22 !important;
+  color: #c9d1d9 !important;
 }
 .theme-light .github-card {
-  border: 1px solid #e5e7eb;
-  background: #ffffff;
-  color: #111827;
+  border: 1px solid #e5e7eb !important;
+  background: #ffffff !important;
+  color: #111827 !important;
 }
 .github-card-header {
   display: flex;
@@ -714,8 +951,8 @@ watch(() => contentTheme && contentTheme.value, () => {
   white-space: pre-line;
   overflow-wrap: anywhere;
 }
-.theme-dark .github-card-title { color: #58a6ff; }
-.theme-light .github-card-title { color: #0366d6; }
+.theme-dark .github-card-title { color: #58a6ff !important; }
+.theme-light .github-card-title { color: #0366d6 !important; }
 .github-card-desc {
   margin-top: 4px;
   font-size: 14px;
@@ -723,8 +960,8 @@ watch(() => contentTheme && contentTheme.value, () => {
   white-space: pre-line;
   overflow-wrap: anywhere;
 }
-.theme-dark .github-card-desc { color: #8b949e; }
-.theme-light .github-card-desc { color: #6b7280; }
+.theme-dark .github-card-desc { color: #8b949e !important; }
+.theme-light .github-card-desc { color: #6b7280 !important; }
 .github-card-footer {
   margin-top: 12px;
   display: flex;
@@ -732,23 +969,23 @@ watch(() => contentTheme && contentTheme.value, () => {
   font-size: 13px;
   flex-wrap: wrap;
 }
-.theme-dark .github-card-footer { color: #8b949e; }
-.theme-light .github-card-footer { color: #6b7280; }
+.theme-dark .github-card-footer { color: #8b949e !important; }
+.theme-light .github-card-footer { color: #6b7280 !important; }
 
 .github-card-footer span {
   padding: 2px 6px;
   border-radius: 4px;
 }
 .theme-dark .github-card-footer span { 
-  background: rgba(0,0,0,0.35);
-  color: #c9d1d9;
-  text-shadow: -1px -1px 0 rgba(0,0,0,0.6), 1px -1px 0 rgba(0,0,0,0.6), -1px 1px 0 rgba(0,0,0,0.6), 1px 1px 0 rgba(0,0,0,0.6);
+  background: rgba(0,0,0,0.35) !important;
+  color: #c9d1d9 !important;
+  text-shadow: -1px -1px 0 rgba(0,0,0,0.6), 1px -1px 0 rgba(0,0,0,0.6), -1px 1px 0 rgba(0,0,0,0.6), 1px 1px 0 rgba(0,0,0,0.6) !important;
 }
 .theme-light .github-card-footer span { 
-  background: rgba(255,255,255,0.65);
-  color: #111827;
-  border: 1px solid rgba(0,0,0,0.1);
-  text-shadow: -1px -1px 0 rgba(255,255,255,0.7), 1px -1px 0 rgba(255,255,255,0.7), -1px 1px 0 rgba(255,255,255,0.7), 1px 1px 0 rgba(255,255,255,0.7);
+  background: rgba(255,255,255,0.65) !important;
+  color: #111827 !important;
+  border: 1px solid rgba(0,0,0,0.1) !important;
+  text-shadow: -1px -1px 0 rgba(255,255,255,0.7), 1px -1px 0 rgba(255,255,255,0.7), -1px 1px 0 rgba(255,255,255,0.7), 1px 1px 0 rgba(255,255,255,0.7) !important;
 }
 
 .theme-dark.markdown-preview :deep(p) {
@@ -796,25 +1033,90 @@ watch(() => contentTheme && contentTheme.value, () => {
   .image-grid-item img:hover { box-shadow: 0 8px 22px rgba(255,255,255,0.12); }
 }
 
-.theme-dark.markdown-preview :deep(a) {
-  background-color: rgba(0,0,0,0.35);
-  padding: 0 3px;
-  border-radius: 4px;
-  text-shadow: -1px -1px 0 rgba(0,0,0,0.6), 1px -1px 0 rgba(0,0,0,0.6), -1px 1px 0 rgba(0,0,0,0.6), 1px 1px 0 rgba(0,0,0,0.6);
+.theme-dark.markdown-preview :deep(a),
+.theme-light.markdown-preview :deep(a),
+:global(html.dark) .markdown-preview :deep(a),
+:global(html:not(.dark)) .markdown-preview :deep(a),
+.markdown-preview :deep(a) {
+  background-color: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  border: none !important;
+  text-shadow: none !important;
+  color: #0366d6 !important;
 }
 
-.theme-light.markdown-preview :deep(a) {
-  background-color: transparent;
-  padding: 0;
-  border-radius: 0;
-  border: none;
-  text-shadow: none;
+.theme-dark.markdown-preview :deep(a:hover),
+.theme-light.markdown-preview :deep(a:hover),
+:global(html.dark) .markdown-preview :deep(a:hover),
+:global(html:not(.dark)) .markdown-preview :deep(a:hover),
+.markdown-preview :deep(a:hover) {
+  color: #1d4ed8 !important;
+  text-decoration: underline !important;
 }
 .github-card-loading {
   font-style: italic;
 }
 .theme-dark .github-card-loading { color: #8b949e; }
 .theme-light .github-card-loading { color: #6b7280; }
+
+/* 占位符和错误状态样式 */
+.placeholder-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f0f0f0, #e0e0e0);
+  animation: pulse 1.5s infinite;
+}
+.theme-dark .placeholder-avatar {
+  background: linear-gradient(135deg, #30363d, #262c36);
+}
+
+.placeholder-text {
+  animation: pulse 1.5s infinite;
+  border-radius: 4px;
+  height: 16px;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: loading-shimmer 1.5s infinite;
+}
+.theme-dark .placeholder-text {
+  background: linear-gradient(90deg, #30363d 25%, #262c36 50%, #30363d 75%);
+  background-size: 200% 100%;
+}
+
+.error-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-color: #ff6b6b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: white;
+}
+
+.github-card-error {
+  opacity: 0.8;
+  border: 2px dashed #ff6b6b;
+}
+
+.github-card-loaded {
+  opacity: 1;
+}
+
+/* 加载动画 */
+@keyframes pulse {
+  0% { opacity: 0.8; }
+  50% { opacity: 1; }
+  100% { opacity: 0.8; }
+}
+
+@keyframes loading-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
 @media (max-width: 520px) {
   .github-card {
     padding: 10px;

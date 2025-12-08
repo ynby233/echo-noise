@@ -168,30 +168,8 @@ export const useUserStore = defineStore("userStore", () => {
 
     const checkLoginStatus = async () => {
         try {
-            // 先尝试获取用户信息
-            const userResult = await getUser();
-            if (userResult) {
-                return true;
-            }
-    
-            // 如果获取用户信息失败，尝试获取状态
-            const userStatus = await getStatus();
-            const list = (userStatus as any)?.users || (userStatus as any)?.Users
-            if (userStatus && Array.isArray(list)) {
-                const currentUser = list.find((u: any) => (u.user_id ?? u.ID) === (user.value as any)?.userid)
-                if (currentUser) {
-                    user.value = {
-                        userid: currentUser.user_id ?? currentUser.ID,
-                        username: currentUser.username ?? currentUser.Username,
-                        is_admin: currentUser.is_admin ?? currentUser.IsAdmin,
-                        total_messages: (userStatus as any).total_messages ?? 0
-                    } as any
-                    isLogin.value = true
-                    return true
-                }
-            }
-    
-            // 如果都失败了，清除状态
+            const ok = await getUser();
+            if (ok) return true;
             clearUserStatus();
             return false;
         } catch (error) {
@@ -214,5 +192,9 @@ export const useUserStore = defineStore("userStore", () => {
         setUserStatus,
         clearUserStatus,
         checkLoginStatus
+    }
+}, {
+    persist: {
+        paths: ["user", "isLogin", "token"],
     }
 })
