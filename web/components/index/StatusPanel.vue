@@ -2605,9 +2605,7 @@ const checkVersion = async () => {
                     description: `最新版本发布于 ${versionInfo.latestVersion}`,
                     color: 'orange'
                 });
-                if (userStore.isLogin) {
-                  try { await updateVersion() } catch {}
-                }
+                // 仅提示有新版本，不自动触发升级；升级通过“更新升级”按钮单独执行
             } else {
                 useToast().add({
                     title: '已是最新版本',

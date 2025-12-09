@@ -1738,30 +1738,50 @@ func UpdateVersion(c *gin.Context) {
 		isComposeMode = true
 	}
 
+	dockerHost := strings.TrimSpace(os.Getenv("DOCKER_HOST"))
+	dockerCmd := "docker"
+	if dockerHost != "" {
+		dockerCmd = "docker -H '" + dockerHost + "'"
+	}
+	if dockerHost == "" {
+		if _, err := os.Stat("/var/run/docker.sock"); err != nil {
+			c.JSON(http.StatusOK, dto.Fail[string]("Docker 未就绪: 缺少 /var/run/docker.sock"))
+			return
+		}
+	}
+
 	if isComposeMode {
-		// Docker Compose模式更新流程
-		if err := run(2*time.Minute, "docker compose pull "+image); err != nil {
+		composeCmd := "docker compose"
+		if err := run(10*time.Second, composeCmd+" version"); err != nil {
+			if err2 := run(10*time.Second, "docker-compose --version"); err2 == nil {
+				composeCmd = "docker-compose"
+			} else {
+				c.JSON(http.StatusOK, dto.Fail[string]("Docker Compose 未就绪: "+err.Error()))
+				return
+			}
+		}
+		if err := run(2*time.Minute, composeCmd+" pull"); err != nil {
 			c.JSON(http.StatusOK, dto.Fail[string]("拉取镜像失败: "+err.Error()))
 			return
 		}
-		if err := run(2*time.Minute, "docker compose up -d --force-recreate"); err != nil {
+		if err := run(2*time.Minute, composeCmd+" up -d --force-recreate"); err != nil {
 			c.JSON(http.StatusOK, dto.Fail[string]("重启服务失败: "+err.Error()))
 			return
 		}
 	} else {
 		// 标准Docker模式更新流程
-		if err := run(2*time.Minute, "docker pull "+image); err != nil {
+		if err := run(2*time.Minute, dockerCmd+" pull "+image); err != nil {
 			c.JSON(http.StatusOK, dto.Fail[string]("拉取镜像失败: "+err.Error()))
 			return
 		}
-		_ = run(30*time.Second, "docker ps -a --filter name=^"+name+"$ --format '{{.ID}}' | xargs -r docker stop")
-		_ = run(30*time.Second, "docker ps -a --filter name=^"+name+"$ --format '{{.ID}}' | xargs -r docker rm")
-		runCmd := "docker run -d --name " + name + " -p " + hostPort + ":1314 -v '" + dataDir + ":/app/data' --restart unless-stopped " + image
+		_ = run(30*time.Second, dockerCmd+" ps -a --filter name=^"+name+"$ --format '{{.ID}}' | xargs -r "+dockerCmd+" stop")
+		_ = run(30*time.Second, dockerCmd+" ps -a --filter name=^"+name+"$ --format '{{.ID}}' | xargs -r "+dockerCmd+" rm")
+		runCmd := dockerCmd + " run -d --name " + name + " -p " + hostPort + ":1314 -v '" + dataDir + ":/app/data' --restart unless-stopped " + image
 		if err := run(2*time.Minute, runCmd); err != nil {
 			c.JSON(http.StatusOK, dto.Fail[string]("启动新容器失败: "+err.Error()))
 			return
 		}
-		_ = run(30*time.Second, "docker image prune -f || true")
+		_ = run(30*time.Second, dockerCmd+" image prune -f || true")
 	}
 
 	out := logs.String()
@@ -1874,6 +1894,11 @@ func UpdateVersionStream(c *gin.Context) {
 		}
 	}
 
+	isComposeMode := false
+	if os.Getenv("DOCKER_ENVIRONMENT") == "compose" {
+		isComposeMode = true
+	}
+
 	if err := runStreaming(10*time.Second, "docker", "docker --version"); err != nil {
 		if custom := strings.TrimSpace(os.Getenv("DESKTOP_UPDATE_CMD")); custom != "" {
 			step(20, "桌面端更新执行...")
@@ -1888,23 +1913,60 @@ func UpdateVersionStream(c *gin.Context) {
 		write(map[string]any{"type": "error", "message": "Docker 未就绪: " + err.Error()})
 		return
 	}
+	dockerHost := strings.TrimSpace(os.Getenv("DOCKER_HOST"))
+	dockerCmd := "docker"
+	if dockerHost != "" {
+		dockerCmd = "docker -H '" + dockerHost + "'"
+	}
+	if dockerHost == "" {
+		if _, err := os.Stat("/var/run/docker.sock"); err != nil {
+			write(map[string]any{"type": "error", "message": "Docker 未就绪: 缺少 /var/run/docker.sock"})
+			return
+		}
+	}
+
+	if isComposeMode {
+		composeCmd := "docker compose"
+		if err := runStreaming(10*time.Second, "compose", composeCmd+" version"); err != nil {
+			if err2 := runStreaming(10*time.Second, "compose", "docker-compose --version"); err2 == nil {
+				composeCmd = "docker-compose"
+			} else {
+				write(map[string]any{"type": "error", "message": "Docker Compose 未就绪: " + err.Error()})
+				return
+			}
+		}
+		step(30, "拉取镜像...")
+		if err := runStreaming(3*time.Minute, "compose", composeCmd+" pull"); err != nil {
+			write(map[string]any{"type": "error", "message": "拉取镜像失败: " + err.Error()})
+			return
+		}
+		step(70, "重启服务...")
+		if err := runStreaming(2*time.Minute, "compose", composeCmd+" up -d --force-recreate"); err != nil {
+			write(map[string]any{"type": "error", "message": "重启服务失败: " + err.Error()})
+			return
+		}
+		write(map[string]any{"type": "success", "message": "容器已升级并重启（数据已保留）"})
+		step(100, "完成")
+		write(map[string]any{"type": "done", "message": "ok"})
+		return
+	}
 	step(25, "拉取镜像...")
-	if err := runStreaming(3*time.Minute, "pull", "docker pull "+image); err != nil {
+	if err := runStreaming(3*time.Minute, "pull", dockerCmd+" pull "+image); err != nil {
 		write(map[string]any{"type": "error", "message": "拉取镜像失败: " + err.Error()})
 		return
 	}
 	step(45, "停止旧容器...")
-	_ = runStreaming(30*time.Second, "stop", "docker ps -a --filter name=^"+name+"$ --format '{{.ID}}' | xargs -r docker stop")
+	_ = runStreaming(30*time.Second, "stop", dockerCmd+" ps -a --filter name=^"+name+"$ --format '{{.ID}}' | xargs -r "+dockerCmd+" stop")
 	step(55, "移除旧容器...")
-	_ = runStreaming(30*time.Second, "rm", "docker ps -a --filter name=^"+name+"$ --format '{{.ID}}' | xargs -r docker rm")
+	_ = runStreaming(30*time.Second, "rm", dockerCmd+" ps -a --filter name=^"+name+"$ --format '{{.ID}}' | xargs -r "+dockerCmd+" rm")
 	step(75, "启动新容器...")
-	runCmd := "docker run -d --name " + name + " -p " + hostPort + ":1314 -v '" + dataDir + ":/app/data' --restart unless-stopped " + image
+	runCmd := dockerCmd + " run -d --name " + name + " -p " + hostPort + ":1314 -v '" + dataDir + ":/app/data' --restart unless-stopped " + image
 	if err := runStreaming(2*time.Minute, "run", runCmd); err != nil {
 		write(map[string]any{"type": "error", "message": "启动新容器失败: " + err.Error()})
 		return
 	}
 	step(90, "清理旧镜像...")
-	_ = runStreaming(30*time.Second, "prune", "docker image prune -f || true")
+	_ = runStreaming(30*time.Second, "prune", dockerCmd+" image prune -f || true")
 
 	write(map[string]any{"type": "success", "message": "容器已升级并重启（数据已保留）"})
 	step(100, "完成")

@@ -220,6 +220,21 @@ docker run -d \
 noise233/echo-noise:latest
 ```
 
+--可选（支持 UI 内一键升级）
+
+```
+docker run -d \
+  --name Ech0-Noise \
+  --platform linux/amd64 \
+  --restart unless-stopped \
+  -p 1314:1314 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e CONTAINER_NAME=Ech0-Noise \
+  -e UPDATE_IMAGE=noise233/echo-noise:latest \
+  -e HTTP_PORT=1314 \
+  noise233/echo-noise:latest
+```
+
 有原数据库文件挂载时默认：
 
 ```
@@ -231,8 +246,36 @@ docker run -d \
 noise233/echo-noise:latest
 ```
 
-> 使用 -v /opt/data:/app/data \ 可挂载你原有的数据，请确保/opt/data文件夹中包含原数据库文件，如有图片请一起放在data文件夹下images 文件夹中，如果没有原数据库文件还使用该命令，进入页面会无任何可用数据显示 使用 --platform linux/amd64 命令可选择不同架构运行部署
+--可选（支持 UI 内一键升级）
+
+```
+docker run -d \
+  --name Ech0-Noise \
+  --platform linux/amd64 \
+  --restart unless-stopped \
+  -v /opt/data:/app/data \
+  -p 1314:1314 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e CONTAINER_NAME=Ech0-Noise \
+  -e UPDATE_IMAGE=noise233/echo-noise:latest \
+  -e HTTP_PORT=1314 \
+  noise233/echo-noise:latest
+```
+
+> 说明：
 >
+> -v /var/run/docker.sock:/var/run/docker.sock ，确保容器内可访问宿主机 Docker 守护进程，从而让“更新升级”按钮能拉镜像、停旧容器、起新容器。
+>
+> 可选但推荐： --restart unless-stopped 提升容器自恢复；不影响升级是否成功。
+>
+> 环境变量：
+> - CONTAINER_NAME 默认即 Ech0-Noise ，用于定位旧容器；
+> - UPDATE_IMAGE 指定升级目标镜像；
+> - HTTP_PORT 指定容器内服务端口映射到宿主机。
+>
+> - 时区可选： -e TZ=Asia/Shanghai
+> - 使用 -v /opt/data:/app/data \ 可挂载你原有的数据，请确保/opt/data文件夹中包含原数据库文件，如有图片请一起放在data文件夹下images 文件夹中，如果没有原数据库文件还使用该命令，进入页面会无任何可用数据显示 
+> - 使用 --platform linux/amd64 命令可选择不同架构运行部署
 
 ------
 
@@ -266,13 +309,13 @@ docker run -d \
 
 ## 🎉已发布Docker镜像版本
 
-- 稳定双架构镜像版：latest 镜像  同时支持linux/amd64,linux/arm64，拉取时会系统会自动选择 
+- 稳定双架构镜像版：latest 标签镜像  同时支持linux/amd64,linux/arm64，拉取时会系统会自动选择 
 
 
-- 带MCP双架构镜像版：latest-mcp 镜像  同时支持linux/amd64,linux/arm64 
+- 带MCP双架构镜像版：latest-mcp 标签镜像  同时支持linux/amd64,linux/arm64 
 
 
-- 精简单架构镜像版：last 镜像  支持linux/amd64
+- 精简单架构镜像版：last 标签镜像  仅支持linux/amd64
 
 
 ### docker-componse构建部署
@@ -1522,7 +1565,7 @@ docker buildx build \
   --build-arg VERSION=v2.3.3 \
   --build-arg USE_UPX=1 \
   -t noise233/echo-noise:v2.3.3-amd64 \
-  -t noise233/echo-noise:latest-amd64 \
+  -t noise233/echo-noise:last-amd64 \
   --push --no-cache .
 ```
 
