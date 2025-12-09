@@ -498,6 +498,10 @@ func HandleBackupSyncNow(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "云存储未启用"})
 		return
 	}
+	if strings.ToLower(cfg.StorageSyncRole) == "secondary" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "云同步角色为备节点，禁止上传"})
+		return
+	}
 	if err := syncmanager.SyncNow(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "同步失败: " + err.Error()})
 		return
@@ -786,17 +790,32 @@ func restoreSQLite(tempDir string) error {
 		_ = os.MkdirAll(filepath.Dir(dbPath), 0755)
 	}
 
-	possibleFiles := []string{
-		filepath.Join(tempDir, "database.db"),
-		filepath.Join(tempDir, "noise.db"),
-		filepath.Join(tempDir, "backup.db"),
-	}
+	// 支持递归查找，兼容不同压缩结构
+	fileCandidates := []string{"database.db", "noise.db", "backup.db", "sqlite.db", "db.sqlite", "database.sqlite"}
 	var backupFile string
-	for _, file := range possibleFiles {
-		if _, err := os.Stat(file); err == nil {
-			backupFile = file
+	// 先尝试顶层
+	for _, name := range fileCandidates {
+		p := filepath.Join(tempDir, name)
+		if info, err := os.Stat(p); err == nil && !info.IsDir() {
+			backupFile = p
 			break
 		}
+	}
+	// 若顶层未找到则递归搜索
+	if backupFile == "" {
+		_ = filepath.Walk(tempDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info == nil || info.IsDir() {
+				return nil
+			}
+			base := strings.ToLower(filepath.Base(path))
+			// 仅匹配可能的 sqlite 文件名或 .db/.sqlite 扩展
+			if base == "database.db" || base == "noise.db" || base == "backup.db" ||
+				strings.HasSuffix(base, ".db") || strings.HasSuffix(base, ".sqlite") {
+				backupFile = path
+				return io.EOF // 终止遍历
+			}
+			return nil
+		})
 	}
 	if backupFile == "" {
 		return fmt.Errorf("找不到有效的 SQLite 备份文件")

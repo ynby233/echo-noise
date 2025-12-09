@@ -1263,20 +1263,25 @@
                       <div class="md:col-span-2 flex flex-wrap items-center gap-4">
                         <div class="flex items-center gap-2">
                           <span class="text-sm" :class="theme.mutedText">自动同步至云端</span>
-                          <USwitch v-model="storageAutoSyncEnabled" :disabled="!(storageEnabled && storageConfig.provider && storageConfig.endpoint && storageConfig.bucket && storageConfig.accessKey && storageConfig.secretKey)" />
+                          <USwitch v-model="storageAutoSyncEnabled" />
                         </div>
                         <div class="flex items-center gap-2">
                           <span class="text-sm" :class="theme.mutedText">模式</span>
-                          <USelect v-model="storageSyncMode" :options="[{label:'即时',value:'instant'},{label:'定时',value:'scheduled'}]" :disabled="!storageAutoSyncEnabled || !(storageEnabled && storageConfig.provider && storageConfig.endpoint && storageConfig.bucket && storageConfig.accessKey && storageConfig.secretKey)" />
+                          <USelect v-model="storageSyncMode" :options="[{label:'即时',value:'instant'},{label:'定时',value:'scheduled'}]" />
+                        </div>
+                        <div class="flex items-center gap-2">
+                          <span class="text-sm" :class="theme.mutedText">同步角色</span>
+                          <USelect v-model="storageConfig.syncRole" :options="[{label:'主节点（执行上传）',value:'primary'},{label:'备节点（不上传）',value:'secondary'}]" />
                         </div>
                         <div class="flex items-center gap-2" v-if="storageSyncMode==='scheduled'">
                           <span class="text-sm" :class="theme.mutedText">间隔(分钟)</span>
-                          <UInput v-model.number="storageSyncIntervalMinute" type="number" min="1" class="w-24" :disabled="!storageAutoSyncEnabled || !(storageEnabled && storageConfig.provider && storageConfig.endpoint && storageConfig.bucket && storageConfig.accessKey && storageConfig.secretKey)" />
+                          <UInput v-model.number="storageSyncIntervalMinute" type="number" min="1" class="w-24" />
                         </div>
                         <div class="flex items-center gap-3 ml-auto">
                           <span class="text-sm" :class="theme.mutedText">上次同步</span>
                           <span class="text-sm" :class="theme.text">{{ lastCloudSyncText || '—' }}</span>
-                          <UButton color="primary" :disabled="!storageAutoSyncEnabled || !(storageEnabled && storageConfig.provider && storageConfig.endpoint && storageConfig.bucket && storageConfig.accessKey && storageConfig.secretKey)" @click="syncNow">立即同步</UButton>
+                          <UButton color="primary" :disabled="storageConfig.syncRole==='secondary' || !storageEnabled" @click="syncNow">立即同步</UButton>
+                          <UButton color="green" class="shadow" @click="saveStorageConfig">保存同步设置</UButton>
                         </div>
                       </div>
                       <div>
@@ -1295,8 +1300,8 @@
                       </div>
                     </div>
                   <div class="flex justify-end gap-2 mt-2">
-                    <UButton color="primary" @click="uploadCloudBackup">上传备份到云</UButton>
-                    <UButton color="warning" @click="restoreCloudBackup">从云恢复备份</UButton>
+                    <UButton color="primary" variant="solid" @click="uploadCloudBackup">上传备份到云</UButton>
+                    <UButton color="orange" variant="solid" @click="restoreCloudBackup">从云恢复备份</UButton>
                     <UButton color="blue" variant="solid" :disabled="!storageEnabled || !storageConfig.publicBaseURL" @click="restoreFromConfiguredCloud">按配置恢复</UButton>
                   </div>
                 </div>
@@ -4333,7 +4338,8 @@ const storageConfig = reactive({
   accessKey: '',
   secretKey: '',
   usePathStyle: true,
-  publicBaseURL: ''
+  publicBaseURL: '',
+  syncRole: 'primary'
 })
 const storageAutoSyncEnabled = ref(false)
 const storageSyncMode = ref<'instant'|'scheduled'>('instant')
@@ -4358,6 +4364,7 @@ const loadStorageConfig = async () => {
       storageConfig.secretKey = sc.secretKey || ''
       storageConfig.usePathStyle = !!sc.usePathStyle
       storageConfig.publicBaseURL = sc.publicBaseURL || ''
+      storageConfig.syncRole = sc.syncRole || 'primary'
       storageAutoSyncEnabled.value = !!sc.autoSyncEnabled
       storageSyncMode.value = (sc.syncMode || 'instant')
       storageSyncIntervalMinute.value = Number(sc.syncIntervalMinute || 15)
@@ -4367,9 +4374,15 @@ const loadStorageConfig = async () => {
 }
 const saveStorageConfig = async () => {
   try {
+    const ep = (storageConfig.endpoint || '').trim()
+    let normalized = ep
+    try {
+      const u = new URL(ep)
+      normalized = `${u.protocol}//${u.host}`.replace(/\/$/, '')
+    } catch {}
     const payload: any = {
       storageEnabled: storageEnabled.value,
-      storageConfig: { ...storageConfig, autoSyncEnabled: storageAutoSyncEnabled.value, syncMode: storageSyncMode.value, syncIntervalMinute: storageSyncIntervalMinute.value }
+      storageConfig: { ...storageConfig, endpoint: normalized, autoSyncEnabled: storageAutoSyncEnabled.value, syncMode: storageSyncMode.value, syncIntervalMinute: storageSyncIntervalMinute.value }
     }
     const res = await fetch('/api/settings', { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     const data = await res.json()
@@ -4401,15 +4414,26 @@ const syncNow = async () => {
 watch(() => storageConfig.provider, (pv) => {
   if (pv === 'r2') {
     storageConfig.usePathStyle = true
-    if (!storageConfig.region) storageConfig.region = 'auto'
+    storageConfig.region = 'auto'
   } else if (pv === 's3') {
     if (storageConfig.usePathStyle === undefined) storageConfig.usePathStyle = false
   }
 })
+// 已移除自动保存定时器
+// 取消自动保存，改为显式按钮保存，避免数据库锁冲突
 const uploadCloudBackup = async () => {
   try {
-    const url = uploadURL.value.trim()
-    if (!url) throw new Error('请填写预签名上传URL')
+    let url = uploadURL.value.trim()
+    if (!url) {
+      await generateUploadPresign()
+      url = uploadURL.value.trim()
+      if (!url) throw new Error('请先生成上传预签名URL')
+    }
+    const u = new URL(url)
+    const qs = u.search || ''
+    if (!(/X-Amz-Signature/i.test(qs) || /X-Amz-Credential/i.test(qs))) {
+      throw new Error('上传URL不是预签名链接，请点击“生成”获取')
+    }
     const res = await postRequest<any>('backup/storage/upload', { uploadURL: url }, { credentials: 'include' })
     if (res?.code === 1) {
       useToast().add({ title: '云备份上传成功', color: 'green' })
@@ -4422,11 +4446,18 @@ const uploadCloudBackup = async () => {
 }
 const restoreCloudBackup = async () => {
   try {
-    const url = downloadURL.value.trim()
-    if (!url) throw new Error('请填写预签名下载URL')
+    let url = downloadURL.value.trim()
+    if (!url) {
+      await generateDownloadPresign()
+      url = downloadURL.value.trim()
+      if (!url) throw new Error('请先生成下载预签名URL')
+    }
     const res = await postRequest<any>('backup/storage/restore', { downloadURL: url }, { credentials: 'include' })
     if (res?.code === 1) {
       useToast().add({ title: '云备份恢复成功', color: 'green' })
+      if ((res as any)?.shouldRefresh || (res as any)?.data?.shouldRefresh) {
+        setTimeout(() => { window.location.assign('/') }, 600)
+      }
     } else {
       throw new Error(res?.msg || '恢复失败')
     }
@@ -4464,10 +4495,18 @@ const restoreFromConfiguredCloud = async () => {
   try {
     const base = (storageConfig.publicBaseURL || '').trim()
     if (!base) throw new Error('请先在配置中填写公共访问前缀')
-    const url = (base.endsWith('/') ? base : base + '/') + 'backup.zip'
+    let baseURL = base
+    if (!/\/$/.test(baseURL)) baseURL += '/'
+    const bucket = String(storageConfig.bucket || '').trim()
+    const needsBucket = bucket && !new RegExp(`/${bucket}/?$`).test(base)
+    const finalBase = needsBucket ? (baseURL + bucket + '/') : baseURL
+    const url = finalBase + 'backup.zip'
     const res = await postRequest<any>('backup/storage/restore', { downloadURL: url }, { credentials: 'include' })
     if (res?.code === 1) {
       useToast().add({ title: '云备份恢复成功', color: 'green' })
+      if ((res as any)?.shouldRefresh || (res as any)?.data?.shouldRefresh) {
+        setTimeout(() => { window.location.assign('/') }, 600)
+      }
     } else {
       throw new Error(res?.msg || '恢复失败')
     }

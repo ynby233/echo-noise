@@ -42,11 +42,14 @@ export const postRequest = async <T>(url: string, body: object | FormData, optio
 
         return response;
     } catch (error) {
+        const e: any = error;
+        const status = e?.response?.status || e?.status;
+        const serverMsg = e?.response?._data?.msg || e?.response?.statusText || '网络异常';
         const toast = useToast();
         if (!shouldSuppressToast(options)) {
-            toast.add({ title: '请求失败', description: '网络异常或服务器不可用', color: 'red', timeout: 2000 });
+            toast.add({ title: '请求失败', description: serverMsg || '网络异常或服务器不可用', color: 'red', timeout: 2000 });
         }
-        return { code: 0, msg: '网络异常', data: null } as any as Response<T>;
+        return { code: 0, msg: serverMsg, data: null } as any as Response<T>;
     }
 };
 

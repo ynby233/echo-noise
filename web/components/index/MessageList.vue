@@ -78,7 +78,7 @@
                 />
               </a>
               <!-- 分隔线 -->
-              <div v-if="msg.image_url && msg.content" class="border-t border-gray-600 my-4"></div>
+              <div v-if="msg.image_url && msg.content" class="border-t border-gray-600 my-2"></div>
               <!-- 文本内容区域 -->
               <div class="overflow-y-hidden relative" :class="[{ 'max-h-[700px]': !isExpanded[msg.id] && !hasGrid[msg.id] }, listThemeTextClass]" :style="contentStyle(idx)">
                 <MarkdownRenderer :content="msg.content" :enableGithubCard="siteConfig?.enableGithubCard === true" @tagClick="handleTagClick" @rendered="checkContentHeight" link-target="_blank"/>
@@ -106,11 +106,11 @@
               <div class="border-t border-gray-300 dark:border-gray-700 my-3"></div>
               <div class="message-socialbar">
                 <button class="social-item" @click="like(msg.id)" :title="'点赞'">
-                  <UIcon :name="(likedMap[msg.id] ? 'i-mdi-heart' : 'i-mdi-heart-outline')" :style="{ fontSize: (isMobile ? '26px' : '24px'), lineHeight: 1 }" :class="[likedMap[msg.id] ? 'text-red-500' : '']" />
+                  <UIcon :name="(likedMap[msg.id] ? 'i-mdi-heart' : 'i-mdi-heart-outline')" :style="{ fontSize: (isMobile ? '28px' : '24px'), lineHeight: 1 }" :class="[likedMap[msg.id] ? 'text-red-500' : '']" />
                   <span class="ml-1 text-sm opacity-80">{{ likesMap[msg.id] ?? (msg.like_count || 0) }}</span>
                 </button>
                 <button v-if="!isGuestbookMessage(msg)" class="social-item" @click="toggleComment(msg.id)" :title="'评论'">
-                  <UIcon name="i-mdi-comment-outline" :style="{ fontSize: (isMobile ? '26px' : '24px'), lineHeight: 1 }" />
+                  <UIcon name="i-mdi-comment-outline" :style="{ fontSize: (isMobile ? '28px' : '24px'), lineHeight: 1 }" />
                   <span class="ml-1 text-sm opacity-80">{{ commentCountMap[msg.id] || 0 }}</span>
                 </button>
                 <div class="flex-1 flex items-center justify-center">
@@ -152,9 +152,9 @@
     <UButton 
       v-if="message.page > 1"
       color="gray" 
-      variant="ghost" 
+      variant="solid" 
       size="xs" 
-      class="rounded-full px-4 py-1.5 shadow-lg hover:shadow-xl transition-all duration-300 backdrop-blur-sm pager-btn"
+      class="rounded-full px-4 py-1.5 shadow-lg hover:shadow-xl transition-all duration-300 pager-btn"
       @click="loadPreviousPage"
       :disabled="isPageLoading"
     >
@@ -165,9 +165,9 @@
     <UButton 
       v-if="message.hasMore"
       color="gray" 
-      variant="ghost" 
+      variant="solid" 
       size="xs" 
-      class="rounded-full px-4 py-1.5 shadow-lg hover:shadow-xl transition-all duration-300 backdrop-blur-sm pager-btn"
+      class="rounded-full px-4 py-1.5 shadow-lg hover:shadow-xl transition-all duration-300 pager-btn"
       @click="loadNextPage"
       :disabled="isPageLoading"
     >
@@ -2383,6 +2383,26 @@ onMounted(() => {
   .mt-3 {
     margin-top: 0.75rem;
   }
+}
+
+/* 翻页按钮背景不透明（亮/暗） */
+:global(html:not(.dark)) .pager-btn { background: #ffffff !important; border: 1px solid rgba(0,0,0,0.08) !important; color: #111827 !important; }
+:global(html:not(.dark)) .pager-btn:hover { background: #ffffff !important; }
+:global(html.dark) .pager-btn { background: rgb(36,43,50) !important; border: 1px solid rgba(255,255,255,0.12) !important; color: #ffffff !important; }
+:global(html.dark) .pager-btn:hover { background: rgb(46,53,60) !important; }
+
+/* 缩小媒体与文本上下间距 */
+.message-image-box { display:block; margin:6px 0 !important; }
+:global(.content-container) :deep(video),
+:global(.content-container) :deep(audio),
+:global(.content-container) :deep(iframe) { margin:6px 0 !important; }
+:global(.content-container) :deep(.markdown-preview p) { margin-top: 8px !important; margin-bottom: 8px !important; }
+
+/* 手机端社交按钮尺寸与对齐优化 */
+@media (max-width: 640px) {
+  .message-socialbar { gap:12px; }
+  .social-item { min-height: 32px; }
+  .social-item .ml-1 { font-size: 13px !important; }
 }
 /* 添加高亮动画样式 */
 @keyframes highlight {

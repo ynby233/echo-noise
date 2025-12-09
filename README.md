@@ -25,7 +25,7 @@
 
 ## 简单上手
 
-[安装部署](#安装部署)🏷️  [开发](#开发)🏷️  [API指南](#API指南)🏷️  [MCP接入](#MCP接入)🏷️  [扩展组件](#扩展组件)🏷️ 
+[安装部署](#安装部署)🏷️  [开发](#开发)🏷️  [API指南](#API指南)🏷️  [MCP接入](#MCP接入)🏷️  [扩展组件](#扩展组件)🏷️ [云存储使用说明](docs/r2-s3.md) 🏷️
 
 [TOC]
 
@@ -34,6 +34,8 @@
 
 
 ## 2025更新状态
+
+- 修复R2/S3云存储接入逻辑，优化首页显示效果，优化GitHub卡片UI与图标
 
 - 后台增加版本更新模块，以docker容器为主，检测到新版本号并点击升级后，自动完成升级
 
@@ -1467,8 +1469,8 @@ docker buildx create --use --name mybuilder
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final \
-  --build-arg VERSION=v2.3.2 \
-  -t noise233/echo-noise:v2.3.2 \
+  --build-arg VERSION=v2.3.3 \
+  -t noise233/echo-noise:v2.3.3 \
   -t noise233/echo-noise:latest \
   --push --no-cache .
 ```
@@ -1491,9 +1493,9 @@ docker buildx build --platform linux/amd64,linux/arm64 --target final --build-ar
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final \
-  --build-arg VERSION=v2.3.2 \
+  --build-arg VERSION=v2.3.3 \
   --build-arg USE_UPX=0 \
-  -t noise233/echo-noise:v2.3.2 \
+  -t noise233/echo-noise:v2.3.3 \
   -t noise233/echo-noise:latest \
   --push --no-cache .
 ```
@@ -1504,7 +1506,8 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final-mcp \
-  --build-arg VERSION=v2.3.2 \
+  --build-arg VERSION=v2.3.3 \
+  --build-arg GOPROXY=https://goproxy.cn,https://goproxy.io,direct \
   -t noise233/echo-noise:v2.3.2-mcp \
   -t noise233/echo-noise:latest-mcp \
   --push --no-cache .
@@ -1516,9 +1519,9 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64 \
   --target final \
-  --build-arg VERSION=v2.3.2 \
+  --build-arg VERSION=v2.3.3 \
   --build-arg USE_UPX=1 \
-  -t noise233/echo-noise:v2.3.2-amd64 \
+  -t noise233/echo-noise:v2.3.3-amd64 \
   -t noise233/echo-noise:latest-amd64 \
   --push --no-cache .
 ```
@@ -1572,6 +1575,12 @@ podman manifest push --all docker.io/noise233/echo-noise:latest docker://docker.
   - ```
     docker login
     ```
+
+## 云存储接入使用说明
+
+[云存储接入（R2/S3）使用说明](docs/r2-s3.md)
+
+![1765295342559](https://s2.loli.net/2025/12/09/hj7pRrgdUM4tzVe.png)
 
 # Memos数据库迁移示例
 

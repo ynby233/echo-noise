@@ -17,6 +17,7 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(MINIMAL_CACHE).then(cache => {
       return cache.addAll(CRITICAL_ASSETS).catch(err => {
+        console.log('Cache install failed:', err)
         // 即使缓存失败也不影响页面加载
         return Promise.resolve()
       })

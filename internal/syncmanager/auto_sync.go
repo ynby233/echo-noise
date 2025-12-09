@@ -29,7 +29,8 @@ func Configure(cfg models.SiteConfig) {
         close(scheduledStop)
         scheduledStop = nil
     }
-    if cfg.StorageEnabled && cfg.StorageAutoSyncEnabled && cfg.StorageSyncMode == "scheduled" && cfg.StorageSyncIntervalMinute > 0 {
+    // 仅主节点执行自动同步
+    if cfg.StorageEnabled && (cfg.StorageSyncRole == "" || cfg.StorageSyncRole == "primary") && cfg.StorageAutoSyncEnabled && cfg.StorageSyncMode == "scheduled" && cfg.StorageSyncIntervalMinute > 0 {
         scheduledStop = make(chan struct{})
         interval := time.Duration(cfg.StorageSyncIntervalMinute) * time.Minute
         go func(stop <-chan struct{}) {
@@ -51,7 +52,8 @@ func Configure(cfg models.SiteConfig) {
 func Trigger() {
     mu.Lock()
     defer mu.Unlock()
-    if !(configured.StorageEnabled && configured.StorageAutoSyncEnabled && configured.StorageSyncMode == "instant") {
+    // 仅主节点在即时模式下触发
+    if !(configured.StorageEnabled && (configured.StorageSyncRole == "" || configured.StorageSyncRole == "primary") && configured.StorageAutoSyncEnabled && configured.StorageSyncMode == "instant") {
         return
     }
     if debounceTimer != nil {
@@ -65,6 +67,7 @@ func SyncNow() error {
     cfg := configured
     mu.Unlock()
     if !cfg.StorageEnabled { return nil }
+    if cfg.StorageSyncRole == "secondary" { return nil }
 
     // 构建临时备份文件
     tmpDir := os.TempDir()
@@ -131,4 +134,3 @@ func addDirToZip(zw *zip.Writer, dir, prefix string) error {
         return addFileToZip(zw, path, zipName)
     })
 }
-

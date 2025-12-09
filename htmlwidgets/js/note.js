@@ -593,26 +593,96 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // 新增：异步拉取GitHub仓库信息并填充卡片
 function fetchGitHubRepoInfo(owner, repo, cardId) {
-    fetch(`https://api.github.com/repos/${owner}/${repo}`)
-        .then(res => res.ok ? res.json() : null)
-        .then(data => {
-            if (!data) return;
-            const card = document.getElementById(cardId);
-            if (card) {
-                card.innerHTML = `
-                    <div class="github-card-header">
-                        <img src="${data.owner.avatar_url}" class="github-card-avatar" />
-                        <div>
-                            <a href="${data.html_url}" target="_blank" class="github-card-title">${data.full_name}</a>
-                            <div class="github-card-desc">${data.description || ''}</div>
-                        </div>
-                    </div>
-                    <div class="github-card-footer">
-                        <span>⭐ ${data.stargazers_count}</span>
-                        <span>🍴 ${data.forks_count}</span>
-                        <span>🛠️ ${data.language || ''}</span>
-                    </div>
-                `;
-            }
-        });
+    const card = document.getElementById(cardId);
+    if (!card) return;
+
+    const svgStar = '<svg class="gh-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 .25l2.317 4.7 5.183.754-3.75 3.654.885 5.167L8 12.347l-4.635 2.178.885-5.167-3.75-3.654 5.183-.754L8 .25z"></path></svg>';
+    const svgFork = '<svg class="gh-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="4" cy="3" r="1.5" fill="currentColor"></circle><circle cx="12" cy="3" r="1.5" fill="currentColor"></circle><circle cx="8" cy="13" r="1.5" fill="currentColor"></circle><path d="M4 4.5v2a4 4 0 004 4h0a4 4 0 004-4v-2" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>';
+    const svgLang = '<svg class="gh-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M5 5 L2 8 L5 11" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M11 5 L14 8 L11 11" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M7 12 L9 4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>';
+    const svgMark = '<svg class="gh-badge" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 005.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 012 0c1.53-1.03 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8 8 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>';
+
+    const skeleton = () => {
+        card.innerHTML = `
+          <div class="github-card-header">
+            <div class="gh-avatar-slot"><div class="github-card-avatar"></div>${svgMark}</div>
+            <div>
+              <a href="https://github.com/${owner}/${repo}" target="_blank" class="github-card-title">${owner}/${repo}</a>
+            </div>
+        </div>
+        `;
+      };
+      skeleton();
+
+      const cacheKey = `gh_repo_cache_${owner}_${repo}`;
+      const ttlMs = 6 * 60 * 60 * 1000; // 6h
+      try {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          const obj = JSON.parse(cached);
+          if (obj && obj.ts && Date.now() - obj.ts < ttlMs && obj.data) {
+            const d = obj.data;
+            card.innerHTML = `
+              <div class="github-card-header">
+                <div class="gh-avatar-slot">
+                  <img src="${d.owner.avatar_url}" class="github-card-avatar" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"/>
+                  <div class="avatar-fallback" style="display:none;">${owner.charAt(0).toUpperCase()}</div>
+                  ${svgMark}
+                </div>
+                <div>
+                  <a href="https://github.com/${owner}/${repo}" target="_blank" class="github-card-title">${d.full_name || owner + '/' + repo}</a>
+                </div>
+              </div>
+            `;
+            return;
+          }
+        }
+      } catch {}
+
+      const tryFetch = async (url, timeoutMs = 6000) => {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), timeoutMs);
+        try {
+          const r = await fetch(url, { signal: ctrl.signal });
+          if (!r.ok) throw new Error(String(r.status));
+          const j = await r.json();
+          return j;
+        } finally { clearTimeout(t); }
+      };
+
+      (async () => {
+        let data = null;
+        try {
+          data = await tryFetch(`https://api.github.com/repos/${owner}/${repo}`);
+        } catch {
+          try {
+            data = await tryFetch(`https://ghproxy.com/https://api.github.com/repos/${owner}/${repo}`);
+          } catch {}
+        }
+
+        if (data) {
+          try { localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data })); } catch {}
+          card.innerHTML = `
+            <div class="github-card-header">
+              <div class="gh-avatar-slot">
+                <img src="${data.owner && data.owner.avatar_url || ''}" class="github-card-avatar" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"/>
+                <div class="avatar-fallback" style="display:none;">${owner.charAt(0).toUpperCase()}</div>
+                ${svgMark}
+              </div>
+              <div>
+                <a href="${data.html_url || `https://github.com/${owner}/${repo}`}" target="_blank" class="github-card-title">${data.full_name || owner + '/' + repo}</a>
+              </div>
+            </div>
+          `;
+          return;
+        }
+
+        card.innerHTML = `
+          <div class="github-card-header">
+            <div class="gh-avatar-slot"><div class="avatar-fallback" style="display:flex;">${owner.charAt(0).toUpperCase()}</div>${svgMark}</div>
+            <div>
+              <a href="https://github.com/${owner}/${repo}" target="_blank" class="github-card-title">${owner}/${repo}</a>
+            </div>
+          </div>
+        `;
+      })();
 }

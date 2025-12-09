@@ -144,6 +144,8 @@ type SiteConfig struct {
 	StorageSecretKey     string `gorm:"type:varchar(191)"`
 	StorageUsePathStyle  bool   `gorm:"default:true"`
 	StoragePublicBaseURL string `gorm:"type:varchar(191)"`
+	// 云同步角色：primary(主节点，执行上传) / secondary(备节点，不上传)
+	StorageSyncRole string `gorm:"type:varchar(20)"`
 	// 云存储自动同步
 	StorageAutoSyncEnabled    bool       `gorm:"default:false"`
 	StorageSyncMode           string     `gorm:"type:varchar(20)"` // instant 或 scheduled

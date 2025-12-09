@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -178,14 +179,20 @@ func GetFrontendConfig() (map[string]interface{}, error) {
 		},
 		"storageEnabled": config.StorageEnabled,
 		"storageConfig": map[string]interface{}{
-			"provider":        choose(config.StorageProvider, ""),
-			"endpoint":        choose(config.StorageEndpoint, ""),
-			"region":          choose(config.StorageRegion, ""),
-			"bucket":          choose(config.StorageBucket, ""),
-			"accessKey":       choose(config.StorageAccessKey, ""),
-			"secretKey":       choose(config.StorageSecretKey, ""),
-			"usePathStyle":    config.StorageUsePathStyle,
-			"publicBaseURL":   choose(config.StoragePublicBaseURL, ""),
+			"provider":      choose(config.StorageProvider, ""),
+			"endpoint":      choose(config.StorageEndpoint, ""),
+			"region":        choose(config.StorageRegion, ""),
+			"bucket":        choose(config.StorageBucket, ""),
+			"accessKey":     choose(config.StorageAccessKey, ""),
+			"secretKey":     choose(config.StorageSecretKey, ""),
+			"usePathStyle":  config.StorageUsePathStyle,
+			"publicBaseURL": choose(config.StoragePublicBaseURL, ""),
+			"syncRole": func() string {
+				if config.StorageSyncRole == "" {
+					return "primary"
+				}
+				return config.StorageSyncRole
+			}(),
 			"autoSyncEnabled": config.StorageAutoSyncEnabled,
 			"syncMode":        choose(config.StorageSyncMode, "instant"),
 			"syncIntervalMinute": func() int {
@@ -657,10 +664,20 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 			config.StorageProvider = pv
 		}
 		if v, ok := sc["endpoint"].(string); ok {
+			v = strings.TrimSpace(v)
+			if v != "" {
+				if u, err := url.Parse(v); err == nil {
+					v = strings.TrimRight(u.Scheme+"://"+u.Host, "/")
+				}
+			}
 			config.StorageEndpoint = v
 		}
 		if v, ok := sc["region"].(string); ok {
-			config.StorageRegion = v
+			if config.StorageProvider == "r2" {
+				config.StorageRegion = "auto"
+			} else {
+				config.StorageRegion = v
+			}
 		}
 		if v, ok := sc["bucket"].(string); ok {
 			config.StorageBucket = v
@@ -676,6 +693,11 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 		}
 		if v, ok := sc["publicBaseURL"].(string); ok {
 			config.StoragePublicBaseURL = v
+		}
+		if v, ok := sc["syncRole"].(string); ok {
+			if v == "primary" || v == "secondary" {
+				config.StorageSyncRole = v
+			}
 		}
 		if vb, ok := sc["autoSyncEnabled"].(bool); ok {
 			config.StorageAutoSyncEnabled = vb
@@ -905,14 +927,18 @@ func getDefaultConfig() map[string]interface{} {
 		},
 		"storageEnabled": false,
 		"storageConfig": map[string]interface{}{
-			"provider":      "",
-			"endpoint":      "",
-			"region":        "",
-			"bucket":        "",
-			"accessKey":     "",
-			"secretKey":     "",
-			"usePathStyle":  true,
-			"publicBaseURL": "",
+			"provider":           "",
+			"endpoint":           "",
+			"region":             "",
+			"bucket":             "",
+			"accessKey":          "",
+			"secretKey":          "",
+			"usePathStyle":       true,
+			"publicBaseURL":      "",
+			"syncRole":           "primary",
+			"autoSyncEnabled":    false,
+			"syncMode":           "instant",
+			"syncIntervalMinute": 15,
 		},
 	}
 }
