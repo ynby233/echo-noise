@@ -2591,13 +2591,7 @@ const checkVersion = async () => {
         if (data.code === 1) {
             const { hasUpdate, lastUpdateTime } = data.data;
             versionInfo.hasUpdate = hasUpdate;
-            versionInfo.latestVersion = new Date(lastUpdateTime).toLocaleString('zh-CN', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
+            versionInfo.latestVersion = formatShanghai(lastUpdateTime || '');
 
             if (hasUpdate) {
                 useToast().add({
@@ -2709,7 +2703,7 @@ const updateVersion = async () => {
   } catch (e: any) {
     useToast().add({ title: '更新失败', description: e.message, color: 'red' })
   } finally {
-    setTimeout(() => { upgradingCleanup() }, 4000)
+    setTimeout(() => { upgradingCleanup() }, 6000)
   }
 }
 
@@ -3780,10 +3774,8 @@ const expandedCommentsMap = ref<Record<number, boolean>>({})
 const uiCommentSystem = ref('builtin')
 const formatDate = (v: any) => {
   try {
-    const d = new Date(v)
-    if (isNaN(d.getTime())) return String(v)
-    const pad = (n: number) => n.toString().padStart(2, '0')
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+    if (!v) return ''
+    return formatShanghai(String(v))
   } catch {
     return String(v)
   }
@@ -4345,6 +4337,38 @@ const storageSyncIntervalMinute = ref(15)
 const lastCloudSyncText = ref('')
 const uploadURL = ref('')
 const downloadURL = ref('')
+const cloudSyncPollId = ref<number | null>(null)
+const refreshLastSyncOnly = async () => {
+  try {
+    const res = await fetch('/api/frontend/config', { credentials: 'include' })
+    const data = await res.json()
+    if (data?.code === 1) {
+      const sc = data.data.storageConfig || {}
+      lastCloudSyncText.value = formatShanghai(sc.lastSyncTime || '')
+    }
+  } catch {}
+}
+const startCloudPolling = () => {
+  if (typeof window === 'undefined') return
+  if (cloudSyncPollId.value) return
+  cloudSyncPollId.value = window.setInterval(refreshLastSyncOnly, 60000)
+}
+const stopCloudPolling = () => {
+  if (cloudSyncPollId.value) {
+    clearInterval(cloudSyncPollId.value)
+    cloudSyncPollId.value = null
+  }
+}
+const formatShanghai = (s: string) => {
+  try {
+    if (!s) return ''
+    const d = new Date(s)
+    if (isNaN(d.getTime())) return s.replace('T',' ').replace('Z','')
+    const parts = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Shanghai' }).formatToParts(d)
+    const get = (t: string) => parts.find(p => p.type === t)?.value || ''
+    return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`
+  } catch { return s.replace('T',' ').replace('Z','') }
+}
 const loadStorageConfig = async () => {
   try {
     const res = await fetch('/api/frontend/config', { credentials: 'include' })
@@ -4366,10 +4390,18 @@ const loadStorageConfig = async () => {
       storageAutoSyncEnabled.value = !!sc.autoSyncEnabled
       storageSyncMode.value = (sc.syncMode || 'instant')
       storageSyncIntervalMinute.value = Number(sc.syncIntervalMinute || 15)
-      lastCloudSyncText.value = (sc.lastSyncTime || '').replace('T',' ').replace('Z','')
+      lastCloudSyncText.value = formatShanghai(sc.lastSyncTime || '')
     }
   } catch {}
 }
+onMounted(() => {
+  if (storageEnabled.value && storageAutoSyncEnabled.value && storageConfig.syncRole !== 'secondary') startCloudPolling()
+})
+onUnmounted(() => { stopCloudPolling() })
+watch([storageEnabled, storageAutoSyncEnabled, () => storageConfig.syncRole], ([enabled, auto, role]) => {
+  if (enabled && auto && role !== 'secondary') startCloudPolling()
+  else stopCloudPolling()
+})
 const saveStorageConfig = async () => {
   try {
     const ep = (storageConfig.endpoint || '').trim()

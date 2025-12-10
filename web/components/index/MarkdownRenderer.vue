@@ -26,6 +26,8 @@ declare global {
     MetingJSElement: any;
   }
 }
+let __gh_gid = 0
+const ghInFlight: Record<string, Promise<any>> = {}
 const props = defineProps({
   content: {
     type: String,
@@ -200,13 +202,13 @@ const processMediaLinks = (content: string): string => {
   // GitHub 卡片解析（可开关）
   if (props.enableGithubCard) {
     content = content.replace(GITHUB_MD_LINK_REG, (match, text, url, owner, repo) => {
-      const cardId = `github-card-${owner}-${repo}`;
+      const cardId = `github-card-${owner}-${repo}-${++__gh_gid}`;
       return `<div class="github-card" id="${cardId}" data-owner="${owner}" data-repo="${repo}">
         <div class="github-card-loading">Loading GitHub Repo...</div>
       </div>`;
     });
     content = content.replace(GITHUB_BARE_LINK_REG, (match, owner, repo) => {
-      const cardId = `github-card-${owner}-${repo}`;
+      const cardId = `github-card-${owner}-${repo}-${++__gh_gid}`;
       return `<div class="github-card" id="${cardId}" data-owner="${owner}" data-repo="${repo}">
         <div class="github-card-loading">Loading GitHub Repo...</div>
       </div>`;
@@ -262,7 +264,7 @@ const fetchGitHubRepoInfo = async (owner: string, repo: string, cardId: string) 
         card.innerHTML = `
           <div class="github-card-header">
             <div class="gh-avatar-slot">
-              <img src="${d.owner.avatar_url}" class="github-card-avatar" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"/>
+              <img src="${d.owner.avatar_url}" class="github-card-avatar" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"/>
               <div class="avatar-fallback" style="display:none;">${owner.charAt(0).toUpperCase()}</div>
               ${svgMark}
             </div>
@@ -288,14 +290,23 @@ const fetchGitHubRepoInfo = async (owner: string, repo: string, cardId: string) 
     } finally { clearTimeout(t) }
   }
 
+  const k = `${owner}/${repo}`
   let data: any = null
-  try {
-    data = await tryFetch(`https://api.github.com/repos/${owner}/${repo}`)
-  } catch {
-    try {
-      data = await tryFetch(`https://ghproxy.com/https://api.github.com/repos/${owner}/${repo}`)
-    } catch {}
+  if (!ghInFlight[k]) {
+    ghInFlight[k] = (async () => {
+      try {
+        const r1 = await tryFetch(`https://api.github.com/repos/${owner}/${repo}`)
+        return r1
+      } catch {
+        try {
+          const r2 = await tryFetch(`https://ghproxy.com/https://api.github.com/repos/${owner}/${repo}`)
+          return r2
+        } catch {}
+      }
+      return null
+    })()
   }
+  data = await ghInFlight[k]
 
   if (data) {
     try {
@@ -304,7 +315,7 @@ const fetchGitHubRepoInfo = async (owner: string, repo: string, cardId: string) 
     card.innerHTML = `
       <div class="github-card-header">
         <div class="gh-avatar-slot">
-          <img src="${data.owner?.avatar_url || ''}" class="github-card-avatar" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"/>
+          <img src="${data.owner?.avatar_url || ''}" class="github-card-avatar" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"/>
           <div class="avatar-fallback" style="display:none;">${owner.charAt(0).toUpperCase()}</div>
           ${svgMark}
         </div>
@@ -592,7 +603,7 @@ watch(() => props.enableGithubCard, () => {
 .builtin-comments .markdown-preview.theme-dark a:hover { text-decoration: underline; }
 
 .markdown-preview p {
-  margin: 0.5em 0;
+  margin: 6px 0 !important;
   line-height: 1.6;
 }
 .clickable-tag {
@@ -650,7 +661,23 @@ watch(() => props.enableGithubCard, () => {
   max-width: 100%;
   height: auto;
   display: block;
-  margin: 0.4em auto;
+  margin: 6px auto !important;
+}
+.markdown-preview :deep(p > img),
+.markdown-preview :deep(p > a > img) {
+  margin-top: 6px !important;
+  margin-bottom: 6px !important;
+}
+.markdown-preview :deep(.image-grid img) {
+  margin: 0 !important;
+}
+
+/* GitHub 卡片背景与内容卡片一致（继承父背景，无边框） */
+.markdown-preview :deep(.github-card),
+.markdown-preview :deep(.github-card-header),
+.markdown-preview :deep(.github-card-loading) {
+  background-color: transparent !important;
+  border: none !important;
 }
 
 .image-loading-placeholder {
@@ -923,14 +950,14 @@ watch(() => props.enableGithubCard, () => {
   overflow: hidden;
 }
 .theme-dark .github-card {
-  border: 1px solid #30363d !important;
-  background: #161b22 !important;
-  color: #c9d1d9 !important;
+  border: none !important;
+  background: transparent !important;
+  color: inherit !important;
 }
 .theme-light .github-card {
-  border: 1px solid #e5e7eb !important;
-  background: #ffffff !important;
-  color: #111827 !important;
+  border: none !important;
+  background: transparent !important;
+  color: inherit !important;
 }
 .github-card-header { display: grid; grid-template-columns: 44px 1fr; column-gap: 10px; align-items: center; }
 .gh-avatar-slot { position: relative; width: 40px; height: 40px; }
@@ -978,15 +1005,16 @@ watch(() => props.enableGithubCard, () => {
 .github-card-footer .gh-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 6px; }
 .gh-icon { width: 14px; height: 14px; display: inline-block; }
 .theme-dark .github-card-footer span { 
-  background: rgba(0,0,0,0.35) !important;
-  color: #c9d1d9 !important;
-  text-shadow: -1px -1px 0 rgba(0,0,0,0.6), 1px -1px 0 rgba(0,0,0,0.6), -1px 1px 0 rgba(0,0,0,0.6), 1px 1px 0 rgba(0,0,0,0.6) !important;
+  background: transparent !important;
+  color: inherit !important;
+  border: none !important;
+  text-shadow: none !important;
 }
 .theme-light .github-card-footer span { 
-  background: rgba(255,255,255,0.65) !important;
-  color: #111827 !important;
-  border: 1px solid rgba(0,0,0,0.1) !important;
-  text-shadow: -1px -1px 0 rgba(255,255,255,0.7), 1px -1px 0 rgba(255,255,255,0.7), -1px 1px 0 rgba(255,255,255,0.7), 1px 1px 0 rgba(255,255,255,0.7) !important;
+  background: transparent !important;
+  color: inherit !important;
+  border: none !important;
+  text-shadow: none !important;
 }
 
 .theme-dark.markdown-preview :deep(p) {

@@ -18,6 +18,7 @@ import (
     "github.com/lin-snow/ech0/internal/models"
     "github.com/lin-snow/ech0/internal/repository"
     "github.com/lin-snow/ech0/internal/routers"
+    "github.com/lin-snow/ech0/internal/syncmanager"
 )
 
 func init() {
@@ -53,6 +54,18 @@ func main() {
     if err := database.InitDB(); err != nil {
         log.Fatalf(models.DatabaseInitErrorMessage+": %v", err)
     }
+
+    // 读取站点配置并应用到自动同步管理器（确保定时/即时模式在启动后即生效）
+    func() {
+        db := models.GetDB()
+        if db == nil {
+            return
+        }
+        var cfg models.SiteConfig
+        if err := db.Table("site_configs").First(&cfg).Error; err == nil {
+            syncmanager.Configure(cfg)
+        }
+    }()
 
     // 设置Gin模式
     ginMode := config.Config.Server.Mode

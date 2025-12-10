@@ -300,7 +300,7 @@ document.addEventListener('DOMContentLoaded', function() {
         .replace(GITHUB_REPO_REG, (match, owner, repo) => {
             const cardId = `github-card-${owner}-${repo}-${Math.random().toString(36).slice(2, 8)}`;
             setTimeout(() => fetchGitHubRepoInfo(owner, repo, cardId), 0);
-            return `<div class="github-card" id="${cardId}" data-owner="${owner}" data-repo="${repo}">
+            return `<div class="github-card" id="${cardId}" data-owner="${owner}" data-repo="${repo}" style="background: transparent;">
                 <div class="github-card-loading">Loading GitHub Repo...</div>
             </div>`;
         });
@@ -592,6 +592,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // 新增：异步拉取GitHub仓库信息并填充卡片
+const __ghInFlight = {}
 function fetchGitHubRepoInfo(owner, repo, cardId) {
     const card = document.getElementById(cardId);
     if (!card) return;
@@ -650,21 +651,29 @@ function fetchGitHubRepoInfo(owner, repo, cardId) {
       };
 
       (async () => {
-        let data = null;
-        try {
-          data = await tryFetch(`https://api.github.com/repos/${owner}/${repo}`);
-        } catch {
-          try {
-            data = await tryFetch(`https://ghproxy.com/https://api.github.com/repos/${owner}/${repo}`);
-          } catch {}
+        const k = owner + '/' + repo
+        if (!__ghInFlight[k]) {
+          __ghInFlight[k] = (async () => {
+            try {
+              const r1 = await tryFetch(`https://api.github.com/repos/${owner}/${repo}`)
+              return r1
+            } catch {
+              try {
+                const r2 = await tryFetch(`https://ghproxy.com/https://api.github.com/repos/${owner}/${repo}`)
+                return r2
+              } catch {}
+            }
+            return null
+          })()
         }
+        const data = await __ghInFlight[k]
 
         if (data) {
           try { localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data })); } catch {}
           card.innerHTML = `
             <div class="github-card-header">
               <div class="gh-avatar-slot">
-                <img src="${data.owner && data.owner.avatar_url || ''}" class="github-card-avatar" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"/>
+                <img src="${(data.owner && data.owner.avatar_url) || ''}" class="github-card-avatar" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"/>
                 <div class="avatar-fallback" style="display:none;">${owner.charAt(0).toUpperCase()}</div>
                 ${svgMark}
               </div>
@@ -672,8 +681,8 @@ function fetchGitHubRepoInfo(owner, repo, cardId) {
                 <a href="${data.html_url || `https://github.com/${owner}/${repo}`}" target="_blank" class="github-card-title">${data.full_name || owner + '/' + repo}</a>
               </div>
             </div>
-          `;
-          return;
+          `
+          return
         }
 
         card.innerHTML = `
@@ -683,6 +692,6 @@ function fetchGitHubRepoInfo(owner, repo, cardId) {
               <a href="https://github.com/${owner}/${repo}" target="_blank" class="github-card-title">${owner}/${repo}</a>
             </div>
           </div>
-        `;
-      })();
+        `
+      })()
 }

@@ -220,7 +220,9 @@ docker run -d \
 noise233/echo-noise:latest
 ```
 
---可选（支持 UI 内一键升级）
+------
+
+--可选（确保 UI 内一键升级）
 
 ```
 docker run -d \
@@ -235,6 +237,12 @@ docker run -d \
   noise233/echo-noise:latest
 ```
 
+手动执行升级
+- ```
+  docker pull noise233/echo-noise:latest
+  docker stop Ech0-Noise && docker rm Ech0-Noise
+  ```
+
 有原数据库文件挂载时默认：
 
 ```
@@ -246,7 +254,7 @@ docker run -d \
 noise233/echo-noise:latest
 ```
 
---可选（支持 UI 内一键升级）
+--可选（确保 UI 内一键升级）
 
 ```
 docker run -d \
@@ -258,6 +266,7 @@ docker run -d \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -e CONTAINER_NAME=Ech0-Noise \
   -e UPDATE_IMAGE=noise233/echo-noise:latest \
+  -e TZ=Asia/Shanghai
   -e HTTP_PORT=1314 \
   noise233/echo-noise:latest
 ```
@@ -306,6 +315,8 @@ docker run -d \
   -v /opt/data:/app/data \
   noise233/echo-noise:latest-mcp
 ```
+
+------
 
 ## 🎉已发布Docker镜像版本
 
@@ -1512,8 +1523,8 @@ docker buildx create --use --name mybuilder
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final \
-  --build-arg VERSION=v2.3.3 \
-  -t noise233/echo-noise:v2.3.3 \
+  --build-arg VERSION=v2.3.4 \
+  -t noise233/echo-noise:v2.3.4 \
   -t noise233/echo-noise:latest \
   --push --no-cache .
 ```
@@ -1536,9 +1547,9 @@ docker buildx build --platform linux/amd64,linux/arm64 --target final --build-ar
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final \
-  --build-arg VERSION=v2.3.3 \
+  --build-arg VERSION=v2.3.4 \
   --build-arg USE_UPX=0 \
-  -t noise233/echo-noise:v2.3.3 \
+  -t noise233/echo-noise:v2.3.4 \
   -t noise233/echo-noise:latest \
   --push --no-cache .
 ```
@@ -1549,9 +1560,9 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final-mcp \
-  --build-arg VERSION=v2.3.3 \
+  --build-arg VERSION=v2.3.4 \
   --build-arg GOPROXY=https://goproxy.cn,https://goproxy.io,direct \
-  -t noise233/echo-noise:v2.3.2-mcp \
+  -t noise233/echo-noise:v2.3.4-mcp \
   -t noise233/echo-noise:latest-mcp \
   --push --no-cache .
 ```
@@ -1562,9 +1573,9 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64 \
   --target final \
-  --build-arg VERSION=v2.3.3 \
+  --build-arg VERSION=v2.3.4 \
   --build-arg USE_UPX=1 \
-  -t noise233/echo-noise:v2.3.3-amd64 \
+  -t noise233/echo-noise:v2.3.4-amd64 \
   -t noise233/echo-noise:last-amd64 \
   --push --no-cache .
 ```
@@ -1877,7 +1888,7 @@ exports.actions = [{
 - [x] SQL数据库文件支持一键接入R2或S3实现备份和恢复
 - [x] 登录注册优化
 - [x] 后台界面的ui优化定制
-- [ ] docker环境下的一键升级功能
+- [x] docker环境下的一键升级功能
 - [ ] 前端可定制化主题
 - [ ] 数据库备份优化
 - [ ] 其它组件的添加

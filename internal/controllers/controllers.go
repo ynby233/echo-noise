@@ -1642,6 +1642,27 @@ func GetVersion(c *gin.Context) {
 	if v == "" {
 		v = "latest"
 	}
+	if strings.ToLower(v) == "latest" {
+		client := &http.Client{Timeout: 5 * time.Second}
+		var resp struct {
+			Results []struct {
+				Name        string `json:"name"`
+				LastUpdated string `json:"last_updated"`
+			} `json:"results"`
+		}
+		req, err := http.NewRequest("GET", "https://hub.docker.com/v2/repositories/noise233/echo-noise/tags?page_size=1&ordering=last_updated", nil)
+		if err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			req = req.WithContext(ctx)
+			if r, e := client.Do(req); e == nil {
+				defer r.Body.Close()
+				if json.NewDecoder(r.Body).Decode(&resp) == nil && len(resp.Results) > 0 && strings.TrimSpace(resp.Results[0].Name) != "" {
+					v = strings.TrimSpace(resp.Results[0].Name)
+				}
+			}
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"code": 1,
 		"data": gin.H{
@@ -1668,10 +1689,17 @@ func UpdateVersion(c *gin.Context) {
 	}
 
 	var logs bytes.Buffer
+	shellArgs := func() (string, []string) {
+		if _, err := exec.LookPath("bash"); err == nil {
+			return "bash", []string{"-lc"}
+		}
+		return "sh", []string{"-c"}
+	}
 	run := func(timeout time.Duration, cmdStr string) error {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "bash", "-lc", cmdStr)
+		prog, args := shellArgs()
+		cmd := exec.CommandContext(ctx, prog, append(args, cmdStr)...)
 		cmd.Env = os.Environ()
 		cmd.Stdout = &logs
 		cmd.Stderr = &logs
@@ -1829,11 +1857,18 @@ func UpdateVersionStream(c *gin.Context) {
 		write(map[string]any{"type": "progress", "progress": progress, "message": msg})
 	}
 
+	shellArgs := func() (string, []string) {
+		if _, err := exec.LookPath("bash"); err == nil {
+			return "bash", []string{"-lc"}
+		}
+		return "sh", []string{"-c"}
+	}
 	runStreaming := func(timeout time.Duration, label, cmdStr string) error {
 		step(0, "执行: "+label)
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "bash", "-lc", cmdStr)
+		prog, args := shellArgs()
+		cmd := exec.CommandContext(ctx, prog, append(args, cmdStr)...)
 		stdout, _ := cmd.StdoutPipe()
 		stderr, _ := cmd.StderrPipe()
 		if err := cmd.Start(); err != nil {
