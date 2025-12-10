@@ -266,7 +266,7 @@ docker run -d \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -e CONTAINER_NAME=Ech0-Noise \
   -e UPDATE_IMAGE=noise233/echo-noise:latest \
-  -e TZ=Asia/Shanghai
+  -e TZ=Asia/Shanghai \
   -e HTTP_PORT=1314 \
   noise233/echo-noise:latest
 ```
