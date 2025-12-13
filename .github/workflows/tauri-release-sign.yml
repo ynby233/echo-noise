@@ -32,6 +32,7 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Set app version from input tag
+        shell: bash
         env:
           TAG_NAME: ${{ inputs.tag_name }}
         run: |
