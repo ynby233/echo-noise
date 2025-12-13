@@ -23,11 +23,19 @@ jobs:
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
+      - name: Check desktop directory exists
+        id: chkdesk
+        run: |
+          if [ -d "desktop/tauri" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Set app version from input tag
         env:
           TAG_NAME: ${{ inputs.tag_name }}
         run: |
-          node -e "const fs=require('fs'),p=require('path');const tag=process.env.TAG_NAME||'';const ver=tag.replace(/^v/i,'').replace(/^V/i,'');const conf=p.join('desktop','tauri','src-tauri','tauri.conf.json');const pkg=p.join('desktop','tauri','package.json');let c=JSON.parse(fs.readFileSync(conf,'utf8'));c.version=ver;fs.writeFileSync(conf,JSON.stringify(c,null,2));let j=JSON.parse(fs.readFileSync(pkg,'utf8'));j.version=tag;fs.writeFileSync(pkg,JSON.stringify(j,null,2));console.log('Version set',{tag,ver});"
+          node -e "const fs=require('fs'),p=require('path');const tag=process.env.TAG_NAME||'';const ver=tag.replace(/^v/i,'').replace(/^V/i,'');const dir=p.join('desktop','tauri');const sdir=p.join(dir,'src-tauri');const conf=p.join(sdir,'tauri.conf.json');const pkg=p.join(dir,'package.json');fs.mkdirSync(sdir,{recursive:true});if(!fs.existsSync(pkg)){fs.writeFileSync(pkg,JSON.stringify({name:'saynote-tauri',version:tag||'V0.0.0',private:true,scripts:{},devDependencies:{}},null,2))}if(!fs.existsSync(conf)){fs.writeFileSync(conf,JSON.stringify({$schema:'https://schema.tauri.app/config/2',productName:'说说笔记',version:ver||'0.0.0',identifier:'cn.noisework.saynote',build:{frontendDist:'../dist'}},null,2))}let c=JSON.parse(fs.readFileSync(conf,'utf8'));c.version=ver;fs.writeFileSync(conf,JSON.stringify(c,null,2));let j=JSON.parse(fs.readFileSync(pkg,'utf8'));j.version=tag||('V'+(c.version||'0.0.0'));fs.writeFileSync(pkg,JSON.stringify(j,null,2));console.log('Version set',{tag,ver});"
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -44,18 +52,22 @@ jobs:
           toolchain: stable
           override: true
       - name: Build web and copy resources
+        if: steps.chkdesk.outputs.exists == 'true'
         run: |
           cd desktop/tauri
           npm ci
           npm run build:web
       - name: Ensure SQLite file exists
+        if: steps.chkdesk.outputs.exists == 'true'
         run: |
           mkdir -p data
           : > data/noise.db
       - name: Build sidecar
+        if: steps.chkdesk.outputs.exists == 'true'
         run: |
           bash desktop/tauri/build-sidecar.sh
       - name: Install Tauri deps
+        if: steps.chkdesk.outputs.exists == 'true'
         run: |
           cd desktop/tauri
           npm ci
@@ -103,9 +115,35 @@ jobs:
             "ready=false" >> $env:GITHUB_OUTPUT
           }
       - name: Build app (tauri)
+        if: steps.chkdesk.outputs.exists == 'true'
         run: |
           cd desktop/tauri
           npm run tauri:build
+      - name: Upload Release (desktop real)
+        if: steps.chkdesk.outputs.exists == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: ${{ inputs.draft }}
+          tag_name: ${{ inputs.tag_name }}
+          files: |
+            desktop/tauri/src-tauri/target/**/release/bundle/**/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload Release (desktop placeholder)
+        if: steps.chkdesk.outputs.exists != 'true'
+        run: |
+          echo "placeholder desktop build (signed workflow) for ${{ matrix.os }} at tag ${{ inputs.tag_name }}" > "$RUNNER_TEMP/placeholder-desktop-${{ matrix.os }}.txt"
+        shell: bash
+      - name: Upload placeholder file (desktop)
+        if: steps.chkdesk.outputs.exists != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: ${{ inputs.draft }}
+          tag_name: ${{ inputs.tag_name }}
+          files: |
+            ${{ runner.temp }}/placeholder-desktop-${{ matrix.os }}.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Sign mac app & notarize
         if: matrix.os == 'macos-latest' && steps.mac_codesign.outputs.ready == 'true'
         env:
@@ -147,6 +185,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Check mobile directory exists
+        id: chk
+        run: |
+          if [ -d "mobile" ] && [ -f "mobile/package.json" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Bootstrap mobile skeleton if missing
+        id: bootstrap
+        env:
+          EXISTS: ${{ steps.chk.outputs.exists }}
+        run: |
+          if [ "$EXISTS" != "true" ]; then
+            mkdir -p mobile
+            node -e "const fs=require('fs');const pkg={name:'saynote-mobile',version:'0.1.0',private:true,scripts:{'build:web':'cd ../web && npm install && npm run generate','sync':'npx cap sync android','open':'npx cap open android','build:apk':'npm run build:web && npx cap sync android && cd android && ./gradlew assembleRelease'},devDependencies:{'@capacitor/cli':'^6.2.0','typescript':'^5.6.3'},dependencies:{'@capacitor/core':'^6.2.0','@capacitor/android':'^6.2.0'}};fs.writeFileSync('mobile/package.json',JSON.stringify(pkg,null,2));"
+            echo "MOBILE_READY=true" >> "$GITHUB_ENV"
+            echo "created=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "MOBILE_READY=true" >> "$GITHUB_ENV"
+            echo "created=false" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -156,23 +216,30 @@ jobs:
           java-version: '17'
       - uses: android-actions/setup-android@v3
       - name: Build Nuxt static
+        if: env.MOBILE_READY == 'true'
         run: |
           cd web
           npm ci
           npm run generate
       - name: Ensure SQLite file exists
+        if: env.MOBILE_READY == 'true'
         run: |
           mkdir -p data
           : > data/noise.db
       - name: Build Capacitor APK
+        if: env.MOBILE_READY == 'true'
         run: |
           cd mobile
           npm ci
+          if [ ! -f "capacitor.config.ts" ] && [ ! -f "capacitor.config.json" ]; then
+            npx cap init saynote-mobile cn.noisework.saynote --web-dir ../web/.output/public
+          fi
           npx cap add android || true
           npx cap sync android
           cd android
           ./gradlew assembleRelease
       - name: Sign APK
+        if: env.MOBILE_READY == 'true' && env.ANDROID_KEYSTORE_BASE64 != ''
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -183,11 +250,27 @@ jobs:
           export APK_PATH=$(ls mobile/android/app/build/outputs/apk/release/*.apk | head -n1)
           $ANDROID_HOME/build-tools/*/apksigner sign --ks keystore.jks --ks-key-alias "$ANDROID_KEY_ALIAS" --ks-pass pass:"$ANDROID_KEYSTORE_PASSWORD" --key-pass pass:"$ANDROID_KEY_ALIAS_PASSWORD" "$APK_PATH"
       - name: Upload Release (apk)
+        if: env.MOBILE_READY == 'true'
         uses: softprops/action-gh-release@v2
         with:
           draft: ${{ inputs.draft }}
           tag_name: ${{ inputs.tag_name }}
           files: |
             mobile/android/app/build/outputs/apk/release/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload Release (apk placeholder)
+        if: env.MOBILE_READY != 'true'
+        run: |
+          echo "placeholder android apk at tag ${{ inputs.tag_name }}" > "$RUNNER_TEMP/placeholder-android.txt"
+        shell: bash
+      - name: Upload placeholder file (apk)
+        if: env.MOBILE_READY != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: ${{ inputs.draft }}
+          tag_name: ${{ inputs.tag_name }}
+          files: |
+            ${{ runner.temp }}/placeholder-android.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

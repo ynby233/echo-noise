@@ -20,11 +20,19 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
+      - name: Check desktop directory exists
+        id: chkdesk
+        run: |
+          if [ -d "desktop/tauri" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Set app version from input tag
         env:
           TAG_NAME: ${{ inputs.tag_name }}
         run: |
-          node -e "const fs=require('fs'),p=require('path');const tag=process.env.TAG_NAME||'';const ver=tag.replace(/^v/i,'').replace(/^V/i,'');const conf=p.join('desktop','tauri','src-tauri','tauri.conf.json');const pkg=p.join('desktop','tauri','package.json');let c=JSON.parse(fs.readFileSync(conf,'utf8'));c.version=ver;fs.writeFileSync(conf,JSON.stringify(c,null,2));let j=JSON.parse(fs.readFileSync(pkg,'utf8'));j.version=tag;fs.writeFileSync(pkg,JSON.stringify(j,null,2));console.log('Version set',{tag,ver});"
+          node -e "const fs=require('fs'),p=require('path');const tag=process.env.TAG_NAME||'';const ver=tag.replace(/^v/i,'').replace(/^V/i,'');const dir=p.join('desktop','tauri');const sdir=p.join(dir,'src-tauri');const conf=p.join(sdir,'tauri.conf.json');const pkg=p.join(dir,'package.json');fs.mkdirSync(sdir,{recursive:true});if(!fs.existsSync(pkg)){fs.writeFileSync(pkg,JSON.stringify({name:'saynote-tauri',version:tag||'V0.0.0',private:true,scripts:{},devDependencies:{}},null,2))}if(!fs.existsSync(conf)){fs.writeFileSync(conf,JSON.stringify({$schema:'https://schema.tauri.app/config/2',productName:'说说笔记',version:ver||'0.0.0',identifier:'cn.noisework.saynote',build:{frontendDist:'../dist'}},null,2))}let c=JSON.parse(fs.readFileSync(conf,'utf8'));c.version=ver;fs.writeFileSync(conf,JSON.stringify(c,null,2));let j=JSON.parse(fs.readFileSync(pkg,'utf8'));j.version=tag||('V'+(c.version||'0.0.0'));fs.writeFileSync(pkg,JSON.stringify(j,null,2));console.log('Version set',{tag,ver});"
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -36,27 +44,47 @@ jobs:
         with:
           go-version: '1.24'
       - name: Ensure SQLite file exists
+        if: steps.chkdesk.outputs.exists == 'true'
         run: |
           mkdir -p data
           : > data/noise.db
       - name: Build web and copy resources
+        if: steps.chkdesk.outputs.exists == 'true'
         run: |
           cd desktop/tauri
           npm ci
           npm run build:web
       - name: Build sidecar
+        if: steps.chkdesk.outputs.exists == 'true'
         run: |
           bash desktop/tauri/build-sidecar.sh
       - name: Build Tauri app
+        if: steps.chkdesk.outputs.exists == 'true'
         run: |
           cd desktop/tauri
           npm run tauri:build
-      - name: Upload artifacts
+      - name: Upload artifacts (desktop real)
+        if: steps.chkdesk.outputs.exists == 'true'
         uses: softprops/action-gh-release@v2
         with:
           draft: ${{ inputs.draft }}
           tag_name: ${{ inputs.tag_name }}
           files: |
             desktop/tauri/src-tauri/target/**/release/bundle/**/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload artifacts (desktop placeholder)
+        if: steps.chkdesk.outputs.exists != 'true'
+        run: |
+          echo "placeholder desktop build for ${{ matrix.platform }} at tag ${{ inputs.tag_name }}" > "$RUNNER_TEMP/placeholder-desktop-${{ matrix.platform }}.txt"
+        shell: bash
+      - name: Upload placeholder file
+        if: steps.chkdesk.outputs.exists != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: ${{ inputs.draft }}
+          tag_name: ${{ inputs.tag_name }}
+          files: |
+            ${{ runner.temp }}/placeholder-desktop-${{ matrix.platform }}.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
