@@ -21,6 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check desktop directory exists
+        shell: bash
         id: chkdesk
         run: |
           if [ -d "desktop/tauri" ]; then
@@ -45,21 +46,25 @@ jobs:
         with:
           go-version: '1.24'
       - name: Ensure SQLite file exists
+        shell: bash
         if: steps.chkdesk.outputs.exists == 'true'
         run: |
           mkdir -p data
           : > data/noise.db
       - name: Build web and copy resources
+        shell: bash
         if: steps.chkdesk.outputs.exists == 'true'
         run: |
           cd desktop/tauri
           npm ci
           npm run build:web
       - name: Build sidecar
+        shell: bash
         if: steps.chkdesk.outputs.exists == 'true'
         run: |
           bash desktop/tauri/build-sidecar.sh
       - name: Build Tauri app
+        shell: bash
         if: steps.chkdesk.outputs.exists == 'true'
         run: |
           cd desktop/tauri

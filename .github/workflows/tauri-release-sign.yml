@@ -24,6 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check desktop directory exists
+        shell: bash
         id: chkdesk
         run: |
           if [ -d "desktop/tauri" ]; then
@@ -53,21 +54,25 @@ jobs:
           toolchain: stable
           override: true
       - name: Build web and copy resources
+        shell: bash
         if: steps.chkdesk.outputs.exists == 'true'
         run: |
           cd desktop/tauri
           npm ci
           npm run build:web
       - name: Ensure SQLite file exists
+        shell: bash
         if: steps.chkdesk.outputs.exists == 'true'
         run: |
           mkdir -p data
           : > data/noise.db
       - name: Build sidecar
+        shell: bash
         if: steps.chkdesk.outputs.exists == 'true'
         run: |
           bash desktop/tauri/build-sidecar.sh
       - name: Install Tauri deps
+        shell: bash
         if: steps.chkdesk.outputs.exists == 'true'
         run: |
           cd desktop/tauri
@@ -116,6 +121,7 @@ jobs:
             "ready=false" >> $env:GITHUB_OUTPUT
           }
       - name: Build app (tauri)
+        shell: bash
         if: steps.chkdesk.outputs.exists == 'true'
         run: |
           cd desktop/tauri
@@ -146,6 +152,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Sign mac app & notarize
+        shell: bash
         if: matrix.os == 'macos-latest' && steps.mac_codesign.outputs.ready == 'true'
         env:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
