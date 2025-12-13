@@ -1,0 +1,193 @@
+name: tauri-build-release-signed
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release tag (e.g., V2.3.5)'
+        required: true
+        type: string
+      draft:
+        description: 'Create draft release'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  build-matrix:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set app version from input tag
+        env:
+          TAG_NAME: ${{ inputs.tag_name }}
+        run: |
+          node -e "const fs=require('fs'),p=require('path');const tag=process.env.TAG_NAME||'';const ver=tag.replace(/^v/i,'').replace(/^V/i,'');const conf=p.join('desktop','tauri','src-tauri','tauri.conf.json');const pkg=p.join('desktop','tauri','package.json');let c=JSON.parse(fs.readFileSync(conf,'utf8'));c.version=ver;fs.writeFileSync(conf,JSON.stringify(c,null,2));let j=JSON.parse(fs.readFileSync(pkg,'utf8'));j.version=tag;fs.writeFileSync(pkg,JSON.stringify(j,null,2));console.log('Version set',{tag,ver});"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Install Linux dependencies (skip on non-linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-0 libayatana-appindicator3-1 librsvg2-dev patchelf
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Build web and copy resources
+        run: |
+          cd desktop/tauri
+          npm ci
+          npm run build:web
+      - name: Ensure SQLite file exists
+        run: |
+          mkdir -p data
+          : > data/noise.db
+      - name: Build sidecar
+        run: |
+          bash desktop/tauri/build-sidecar.sh
+      - name: Install Tauri deps
+        run: |
+          cd desktop/tauri
+          npm ci
+      - name: mac codesign setup
+        id: mac_codesign
+        if: matrix.os == 'macos-latest'
+        env:
+          MAC_CERT_BASE64: ${{ secrets.MAC_CERT_BASE64 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          SIGNING_IDENTITY: ${{ secrets.MAC_SIGNING_IDENTITY }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          if [ -n "$MAC_CERT_BASE64" ]; then
+            echo "$MAC_CERT_BASE64" | base64 --decode > signing.p12
+            security create-keychain -p "$MAC_CERT_PASSWORD" build.keychain
+            security import signing.p12 -k build.keychain -P "$MAC_CERT_PASSWORD" -A
+            security list-keychains -s build.keychain
+            security unlock-keychain -p "$MAC_CERT_PASSWORD" build.keychain
+            export MAC_SIGNING_IDENTITY="$SIGNING_IDENTITY"
+          fi
+          if [ -n "$APPLE_API_KEY_BASE64" ]; then
+            echo "$APPLE_API_KEY_BASE64" | base64 --decode > AuthKey.p8
+          fi
+          if [ -n "$MAC_CERT_BASE64" ] || [ -n "$APPLE_API_KEY_BASE64" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: windows codesign setup
+        id: windows_setup
+        if: matrix.os == 'windows-latest'
+        shell: powershell
+        env:
+          WIN_CERT_PFX_BASE64: ${{ secrets.WIN_CERT_PFX_BASE64 }}
+          WIN_CERT_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
+        run: |
+          if ($env:WIN_CERT_PFX_BASE64) {
+            $certPath = "$env:RUNNER_TEMP/win-codesign.pfx"
+            [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WIN_CERT_PFX_BASE64))
+            "WIN_CERT_PFX_PATH=$certPath" >> $env:GITHUB_ENV
+            "ready=true" >> $env:GITHUB_OUTPUT
+          } else {
+            "ready=false" >> $env:GITHUB_OUTPUT
+          }
+      - name: Build app (tauri)
+        run: |
+          cd desktop/tauri
+          npm run tauri:build
+      - name: Sign mac app & notarize
+        if: matrix.os == 'macos-latest' && steps.mac_codesign.outputs.ready == 'true'
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          find src-tauri/target/**/release/bundle/dmg -name '*.dmg' -print
+          # Notarize using notarytool if API key is available (placeholder)
+          if [ -f AuthKey.p8 ]; then
+            echo "Notarization step configured via APPLE_API_KEY_ID/APPLE_API_ISSUER_ID"
+          fi
+      - name: Sign windows exe (signtool)
+        if: matrix.os == 'windows-latest' && steps.windows_setup.outputs.ready == 'true'
+        shell: powershell
+        env:
+          WIN_CERT_PFX_PATH: ${{ env.WIN_CERT_PFX_PATH }}
+          WIN_CERT_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
+        run: |
+          $signtool = "$Env:ProgramFiles/Windows Kits/10/bin/x64/signtool.exe"
+          Get-ChildItem -Recurse "desktop/tauri/src-tauri/target" -Filter *.exe | ForEach-Object { & $signtool sign /f $env:WIN_CERT_PFX_PATH /p $env:WIN_CERT_PASSWORD /tr http://timestamp.digicert.com /td SHA256 /fd SHA256 $_.FullName }
+      - name: Zip windows bundle
+        if: matrix.os == 'windows-latest'
+        shell: powershell
+        run: |
+          $out = "$Env:RUNNER_TEMP\saynote-tauri-windows.zip"
+          Compress-Archive -Path (Get-ChildItem -Recurse "desktop/tauri/src-tauri/target/*/release/bundle/**") -DestinationPath $out
+          echo "::set-output name=zip_path::$out"
+      - name: Upload Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: ${{ inputs.draft }}
+          tag_name: ${{ inputs.tag_name }}
+          files: |
+            desktop/tauri/src-tauri/target/**/release/bundle/**/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Build Nuxt static
+        run: |
+          cd web
+          npm ci
+          npm run generate
+      - name: Ensure SQLite file exists
+        run: |
+          mkdir -p data
+          : > data/noise.db
+      - name: Build Capacitor APK
+        run: |
+          cd mobile
+          npm ci
+          npx cap add android || true
+          npx cap sync android
+          cd android
+          ./gradlew assembleRelease
+      - name: Sign APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_ALIAS_PASSWORD: ${{ secrets.ANDROID_KEY_ALIAS_PASSWORD }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > keystore.jks
+          export APK_PATH=$(ls mobile/android/app/build/outputs/apk/release/*.apk | head -n1)
+          $ANDROID_HOME/build-tools/*/apksigner sign --ks keystore.jks --ks-key-alias "$ANDROID_KEY_ALIAS" --ks-pass pass:"$ANDROID_KEYSTORE_PASSWORD" --key-pass pass:"$ANDROID_KEY_ALIAS_PASSWORD" "$APK_PATH"
+      - name: Upload Release (apk)
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: ${{ inputs.draft }}
+          tag_name: ${{ inputs.tag_name }}
+          files: |
+            mobile/android/app/build/outputs/apk/release/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

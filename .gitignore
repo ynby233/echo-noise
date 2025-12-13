@@ -32,3 +32,5 @@ node_modules
 .ionide
 
 /data/*
+desktop/
+mobile/

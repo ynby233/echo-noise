@@ -4,9 +4,11 @@ import (
 	"archive/zip"
 	"bytes"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,30 +26,85 @@ var (
 
 func Configure(cfg models.SiteConfig) {
 	mu.Lock()
+	// 兼容旧数据：若云存储配置完整但未显式开启自动同步，则按“默认开启”
+	effectiveAuto := cfg.StorageAutoSyncEnabled
+	if !effectiveAuto && cfg.StorageEnabled &&
+		strings.TrimSpace(cfg.StorageProvider) != "" &&
+		strings.TrimSpace(cfg.StorageEndpoint) != "" &&
+		strings.TrimSpace(cfg.StorageBucket) != "" &&
+		strings.TrimSpace(cfg.StorageAccessKey) != "" &&
+		strings.TrimSpace(cfg.StorageSecretKey) != "" {
+		effectiveAuto = true
+		log.Printf("检测到旧配置且云存储完整，默认开启自动同步")
+	}
+	cfg.StorageAutoSyncEnabled = effectiveAuto
 	configured = cfg
 	if scheduledStop != nil {
 		close(scheduledStop)
 		scheduledStop = nil
 	}
-	// 仅主节点执行自动同步
+	instantEnabled := cfg.StorageEnabled && (cfg.StorageSyncRole == "" || cfg.StorageSyncRole == "primary") && cfg.StorageAutoSyncEnabled && cfg.StorageSyncMode == "instant"
 	if cfg.StorageEnabled && (cfg.StorageSyncRole == "" || cfg.StorageSyncRole == "primary") && cfg.StorageAutoSyncEnabled && cfg.StorageSyncMode == "scheduled" && cfg.StorageSyncIntervalMinute > 0 {
 		scheduledStop = make(chan struct{})
 		interval := time.Duration(cfg.StorageSyncIntervalMinute) * time.Minute
 		go func(stop <-chan struct{}) {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("云端自动同步任务崩溃: %v", r)
+				}
+			}()
 			ticker := time.NewTicker(interval)
 			defer ticker.Stop()
-			_ = SyncNow()
+			log.Printf("云端自动同步任务已启动，间隔: %v", interval)
+			if err := SyncNow(); err != nil {
+				log.Printf("云端自动同步执行失败: %v", err)
+			} else {
+				log.Printf("云端自动同步执行成功")
+			}
 			for {
 				select {
 				case <-ticker.C:
-					_ = SyncNow()
+					if err := SyncNow(); err != nil {
+						log.Printf("云端自动同步执行失败: %v", err)
+					} else {
+						log.Printf("云端自动同步执行成功")
+					}
 				case <-stop:
+					log.Printf("云端自动同步任务已停止")
 					return
 				}
 			}
 		}(scheduledStop)
+	} else {
+		if instantEnabled {
+			log.Printf("云端即时同步已启用，等待触发")
+		} else {
+			log.Printf(
+				"云端自动同步未启动: enabled=%v role=%s auto=%v mode=%s interval=%d",
+				cfg.StorageEnabled,
+				cfg.StorageSyncRole,
+				cfg.StorageAutoSyncEnabled,
+				cfg.StorageSyncMode,
+				cfg.StorageSyncIntervalMinute,
+			)
+		}
 	}
 	mu.Unlock()
+	if instantEnabled {
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("云端即时同步崩溃: %v", r)
+				}
+			}()
+			log.Printf("云端即时同步已启用，立即执行一次同步")
+			if err := SyncNow(); err != nil {
+				log.Printf("云端即时同步执行失败: %v", err)
+			} else {
+				log.Printf("云端即时同步执行成功")
+			}
+		}()
+	}
 }
 
 func Trigger() {
@@ -60,7 +117,19 @@ func Trigger() {
 	if debounceTimer != nil {
 		debounceTimer.Stop()
 	}
-	debounceTimer = time.AfterFunc(15*time.Second, func() { _ = SyncNow() })
+	log.Printf("云端即时同步触发（防抖 15s）")
+	debounceTimer = time.AfterFunc(15*time.Second, func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("云端即时同步崩溃: %v", r)
+			}
+		}()
+		if err := SyncNow(); err != nil {
+			log.Printf("云端即时同步执行失败: %v", err)
+		} else {
+			log.Printf("云端即时同步执行成功")
+		}
+	})
 }
 
 func SyncNow() error {

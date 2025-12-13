@@ -1472,40 +1472,12 @@ const downloadAsImage = async (msgId: number) => {
         overflow: visible;
         max-height: none !important;
         height: auto !important;
-        padding: 4px 12px;
         line-height: 1.6;
-        margin-top: 0;
-        margin-bottom: 0;
-        white-space: pre-wrap;
         background: ${bgColor};
         border-radius: 12px;
         font-size: 14px;
         color: ${textColor};
       `;
-    }
-
-    const directChildren = Array.from(contentClone.children);
-    const topImage = directChildren.find((el) => el.tagName === 'IMG') as HTMLImageElement | undefined;
-    if (topImage) {
-      topImage.style.margin = '1px 0';
-      topImage.style.display = 'block';
-    }
-    contentClone.querySelectorAll('img').forEach((img) => {
-      (img as HTMLImageElement).style.margin = '1px 0';
-      (img as HTMLImageElement).style.display = 'block';
-    });
-    const separatorEl = contentClone.querySelector('.border-t') as HTMLElement | null;
-    if (separatorEl) {
-      separatorEl.style.margin = '1px 0';
-    }
-    const md = contentClone.querySelector('.markdown-preview') as HTMLElement | null;
-    if (md) {
-      md.style.marginTop = '1px';
-      const firstChild = md.firstElementChild as HTMLElement | null;
-      if (firstChild) firstChild.style.marginTop = '1px';
-      md.querySelectorAll('p, h1, h2, h3, h4, h5, h6').forEach((el) => {
-        (el as HTMLElement).style.marginTop = (el as HTMLElement).style.marginTop || '2px';
-      });
     }
 
     // 处理媒体元素
@@ -1576,26 +1548,42 @@ await processImages();
 
     tempContainer.appendChild(contentClone);
 
-    // 添加 footer
+    const parseRgb = (s: string) => {
+      try {
+        if (s.startsWith('#')) {
+          const h = s.replace('#', '');
+          const r = parseInt(h.length === 3 ? h[0] + h[0] : h.slice(0, 2), 16);
+          const g = parseInt(h.length === 3 ? h[1] + h[1] : h.slice(2, 4), 16);
+          const b = parseInt(h.length === 3 ? h[2] + h[2] : h.slice(4, 6), 16);
+          return [r, g, b];
+        }
+        const m = s.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+        if (m) return [parseInt(m[1]), parseInt(m[2]), parseInt(m[3])];
+      } catch {}
+      return [255, 255, 255];
+    };
+    const [r, g, b] = parseRgb(bgColor);
+    const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const linkColor = luma > 180 ? '#6b7280' : 'rgba(255,255,255,0.6)';
     const footer = document.createElement('div');
-  footer.style.cssText = `
-    margin-top: 12px;
-    padding-top: 12px;
-    text-align: center;
-    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-    background: transparent;
-  `;
-  footer.innerHTML = `
-    <div style="color: #fb923c; font-size: 13px; margin-bottom: 4px; font-weight: 500;">
-      ${props.siteConfig.cardFooterTitle}
-    </div>
-    <a href="https://note.noisework.cn" 
-       target="_blank" 
-       rel="noopener noreferrer" 
-       style="color: rgba(255,255,255,0.5); text-decoration: none;">
-      ${props.siteConfig.cardFooterSubtitle}
-    </a>
-  `;
+    footer.style.cssText = `
+      margin-top: 12px;
+      padding-top: 12px;
+      text-align: center;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      background: transparent;
+    `;
+    footer.innerHTML = `
+      <div style="color: #fb923c; font-size: 13px; margin-bottom: 4px; font-weight: 500;">
+        ${props.siteConfig.cardFooterTitle}
+      </div>
+      <a href="https://note.noisework.cn" 
+         target="_blank" 
+         rel="noopener noreferrer" 
+         style="color: ${linkColor}; text-decoration: none;">
+        ${props.siteConfig.cardFooterSubtitle}
+      </a>
+    `;
     tempContainer.appendChild(footer);
 
     // 生成图片
@@ -1616,7 +1604,6 @@ await processImages();
             overflow: visible !important;
             max-height: none !important;
             height: auto !important;
-            padding: 0;
             min-height: ${contentArea?.scrollHeight || 0}px;
             background: ${bgColor};
             border-radius: 12px;
@@ -2396,7 +2383,6 @@ onMounted(() => {
 :global(.content-container) :deep(video),
 :global(.content-container) :deep(audio),
 :global(.content-container) :deep(iframe) { margin:6px 0 !important; }
-:global(.content-container) :deep(.markdown-preview p) { margin-top: 8px !important; margin-bottom: 8px !important; }
 
 /* 手机端社交按钮尺寸与对齐优化 */
 @media (max-width: 640px) {

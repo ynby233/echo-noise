@@ -113,7 +113,7 @@
             <span class="font-semibold">系统管理面板</span>
           </div>
           <div class="flex items-center gap-2">
-            <UButton variant="soft" :color="panelTheme === 'light' ? 'gray' : 'white'" class="shadow" @click="$router.push('/')">返回首页</UButton>
+            <UButton :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelTheme === 'light' ? 'gray' : (panelTheme === 'midnight' ? 'blue' : (panelTheme === 'slate' ? 'indigo' : 'gray'))" class="shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90" @click="$router.push('/')">返回首页</UButton>
             <UButton v-if="isLogin" icon="i-heroicons-power" color="red" variant="solid" @click="handleLogout">退出登录</UButton>
           </div>
         </div>
@@ -1263,7 +1263,7 @@
                       <div class="md:col-span-2 flex flex-wrap items-center gap-4">
                         <div class="flex items-center gap-2">
                           <span class="text-sm" :class="theme.mutedText">自动同步至云端</span>
-                          <USwitch v-model="storageAutoSyncEnabled" />
+                          <USwitch v-model="storageAutoSyncEnabled" @update:model-value="onAutoSyncToggle" />
                         </div>
                         <div class="flex items-center gap-2">
                           <span class="text-sm" :class="theme.mutedText">模式</span>
@@ -1343,7 +1343,7 @@
       <div v-show="showBottomBar" class="flex fixed bottom-0 left-0 right-0 md:left-72 z-50 border-t px-3 py-3 justify-between items-center backdrop-blur-md shadow-xl" :class="[theme.bottomBg, theme.border]">
         <UButton
           icon="i-heroicons-arrow-left"
-          :color="panelTheme === 'light' ? 'gray' : (panelTheme === 'midnight' ? 'blue' : (panelTheme === 'slate' ? 'slate' : 'gray'))"
+          :color="panelTheme === 'light' ? 'gray' : (panelTheme === 'midnight' ? 'blue' : (panelTheme === 'slate' ? 'indigo' : 'gray'))"
           :variant="panelTheme === 'light' ? 'soft' : 'solid'"
           @click="$router.push('/')"
           class="shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90"
@@ -4359,6 +4359,8 @@ const stopCloudPolling = () => {
     cloudSyncPollId.value = null
   }
 }
+const userTouchedAuto = ref(false)
+const onAutoSyncToggle = () => { userTouchedAuto.value = true }
 const formatShanghai = (s: string) => {
   try {
     if (!s) return ''
@@ -4410,9 +4412,13 @@ const saveStorageConfig = async () => {
       const u = new URL(ep)
       normalized = `${u.protocol}//${u.host}`.replace(/\/$/, '')
     } catch {}
+    const scPayload: any = { ...storageConfig, endpoint: normalized, syncMode: storageSyncMode.value, syncIntervalMinute: storageSyncIntervalMinute.value }
+    if (userTouchedAuto.value) {
+      scPayload.autoSyncEnabled = storageAutoSyncEnabled.value
+    }
     const payload: any = {
       storageEnabled: storageEnabled.value,
-      storageConfig: { ...storageConfig, endpoint: normalized, autoSyncEnabled: storageAutoSyncEnabled.value, syncMode: storageSyncMode.value, syncIntervalMinute: storageSyncIntervalMinute.value }
+      storageConfig: scPayload
     }
     const res = await fetch('/api/settings', { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     const data = await res.json()

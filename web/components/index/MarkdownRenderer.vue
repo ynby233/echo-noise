@@ -940,9 +940,10 @@ watch(() => props.enableGithubCard, () => {
 }
 .github-card {
   border-radius: 8px;
-  margin: 1em 0;
+  margin: 0.8em auto 0.4em;
   padding: 16px;
   width: 100%;
+  max-width: 800px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
   font-size: 15px;
   box-sizing: border-box;
@@ -959,7 +960,7 @@ watch(() => props.enableGithubCard, () => {
   background: transparent !important;
   color: inherit !important;
 }
-.github-card-header { display: grid; grid-template-columns: 44px 1fr; column-gap: 10px; align-items: center; }
+.github-card-header { display: grid; grid-template-columns: 44px max-content; column-gap: 10px; align-items: center; justify-content: start; }
 .gh-avatar-slot { position: relative; width: 40px; height: 40px; }
 .github-card-avatar { width: 40px; height: 40px; border-radius: 10px; object-fit: cover; background: #222; }
 .avatar-fallback { width: 40px; height: 40px; border-radius: 10px; background: #0366d6; color: #ffffff; display: none; align-items: center; justify-content: center; font-size: 15px; font-weight: 600; }

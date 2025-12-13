@@ -718,6 +718,17 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 				config.StorageSyncIntervalMinute = n
 			}
 		}
+		// 若未显式传入 autoSyncEnabled，则在云存储配置完整且启用时自动开启
+		if _, exists := sc["autoSyncEnabled"]; !exists {
+			if config.StorageEnabled &&
+				config.StorageProvider != "" &&
+				config.StorageEndpoint != "" &&
+				config.StorageBucket != "" &&
+				config.StorageAccessKey != "" &&
+				config.StorageSecretKey != "" {
+				config.StorageAutoSyncEnabled = true
+			}
+		}
 	}
 
 	if config.StorageProvider == "r2" {
@@ -792,11 +803,6 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 		return fmt.Errorf("更新配置失败: %v", err)
 	}
 
-	// 同步配置到自动同步管理器
-	// 注意：仅在服务进程内触发，不影响数据库事务
-	// 读取最新配置并传入管理器
-	db.Table("site_configs").First(&config)
-	// 调用同步管理器进行配置
 	syncmanager.Configure(config)
 
 	if config.StorageEnabled {

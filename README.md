@@ -35,6 +35,8 @@
 
 ## 2025更新状态
 
+- 修复自动数据同步上传云端的逻辑，保存为即时模式是默认上传一次，兼容旧数据启动
+
 - 修复R2/S3云存储接入逻辑，优化首页显示效果，优化GitHub卡片UI与图标
 
 - 后台增加版本更新模块，以docker容器为主，检测到新版本号并点击升级后，自动完成升级
@@ -220,23 +222,6 @@ docker run -d \
 noise233/echo-noise:latest
 ```
 
-------
-
---可选（确保 UI 内一键升级）
-
-```
-docker run -d \
-  --name Ech0-Noise \
-  --platform linux/amd64 \
-  --restart unless-stopped \
-  -p 1314:1314 \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  -e CONTAINER_NAME=Ech0-Noise \
-  -e UPDATE_IMAGE=noise233/echo-noise:latest \
-  -e HTTP_PORT=1314 \
-  noise233/echo-noise:latest
-```
-
 手动执行升级
 - ```
   docker pull noise233/echo-noise:latest
@@ -251,10 +236,11 @@ docker run -d \
   --platform linux/amd64 \
   -v /opt/data:/app/data \
   -p 1314:1314 \
+  -e TZ=Asia/Shanghai \
 noise233/echo-noise:latest
 ```
 
---可选（确保 UI 内一键升级）
+--可选
 
 ```
 docker run -d \
@@ -1523,8 +1509,8 @@ docker buildx create --use --name mybuilder
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final \
-  --build-arg VERSION=v2.3.4 \
-  -t noise233/echo-noise:v2.3.4 \
+  --build-arg VERSION=v2.3.5 \
+  -t noise233/echo-noise:v2.3.5 \
   -t noise233/echo-noise:latest \
   --push --no-cache .
 ```
@@ -1547,9 +1533,9 @@ docker buildx build --platform linux/amd64,linux/arm64 --target final --build-ar
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final \
-  --build-arg VERSION=v2.3.4 \
+  --build-arg VERSION=v2.3.5 \
   --build-arg USE_UPX=0 \
-  -t noise233/echo-noise:v2.3.4 \
+  -t noise233/echo-noise:v2.3.5 \
   -t noise233/echo-noise:latest \
   --push --no-cache .
 ```
@@ -1560,9 +1546,9 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final-mcp \
-  --build-arg VERSION=v2.3.4 \
-  --build-arg GOPROXY=https://goproxy.cn,https://goproxy.io,direct \
-  -t noise233/echo-noise:v2.3.4-mcp \
+  --build-arg VERSION=v2.3.5 \
+  --build-arg USE_UPX=1 \
+  -t noise233/echo-noise:v2.3.5-mcp \
   -t noise233/echo-noise:latest-mcp \
   --push --no-cache .
 ```
@@ -1573,9 +1559,9 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64 \
   --target final \
-  --build-arg VERSION=v2.3.4 \
+  --build-arg VERSION=v2.3.5 \
   --build-arg USE_UPX=1 \
-  -t noise233/echo-noise:v2.3.4-amd64 \
+  -t noise233/echo-noise:v2.3.5-amd64 \
   -t noise233/echo-noise:last-amd64 \
   --push --no-cache .
 ```

@@ -23,6 +23,10 @@ node_modules/
 dist/
 build/
 
+# 忽略桌面端与移动端工程（不参与镜像构建）
+desktop/
+mobile/
+
 # 忽略测试文件
 test/
 tests/
