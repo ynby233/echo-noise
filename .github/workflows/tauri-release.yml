@@ -41,41 +41,7 @@ jobs:
       - name: Bootstrap Tauri Rust skeleton if missing
         shell: bash
         run: |
-          mkdir -p desktop/tauri/src-tauri/src
-          if [ ! -f desktop/tauri/src-tauri/Cargo.toml ]; then
-            cat > desktop/tauri/src-tauri/Cargo.toml <<'EOF'
-            [package]
-            name = "saynote-tauri"
-            version = "0.0.0"
-            edition = "2021"
-            
-            [dependencies]
-            tauri = { version = "2", features = [] }
-            serde = { version = "1", features = ["derive"] }
-            serde_json = "1"
-            
-            [build-dependencies]
-            tauri-build = { version = "2", features = [] }
-            
-            [features]
-            default = ["custom-protocol"]
-            custom-protocol = ["tauri/custom-protocol"]
-            
-            [profile.release]
-            panic = "abort"
-            codegen-units = 1
-            lto = true
-            EOF
-          fi
-          if [ ! -f desktop/tauri/src-tauri/src/main.rs ]; then
-            cat > desktop/tauri/src-tauri/src/main.rs <<'RS'
-            fn main() {
-              tauri::Builder::default()
-                .run(tauri::generate_context!())
-                .expect("error while running tauri application");
-            }
-            RS
-          fi
+          node -e "const fs=require('fs');fs.mkdirSync('desktop/tauri/src-tauri/src',{recursive:true});if(!fs.existsSync('desktop/tauri/src-tauri/Cargo.toml')){const cargo=['[package]','name = \"saynote-tauri\"','version = \"0.0.0\"','edition = \"2021\"','',[\"[dependencies]\"],'tauri = { version = \"2\", features = [] }','serde = { version = \"1\", features = [\"derive\"] }','serde_json = \"1\"','',[\"[build-dependencies]\"],'tauri-build = { version = \"2\", features = [] }','',[\"[features]\"],'default = [\"custom-protocol\"]','custom-protocol = [\"tauri/custom-protocol\"]','',[\"[profile.release]\"],'panic = \"abort\"','codegen-units = 1','lto = true',''].join('\\n');fs.writeFileSync('desktop/tauri/src-tauri/Cargo.toml',cargo)}if(!fs.existsSync('desktop/tauri/src-tauri/src/main.rs')){const main=['fn main() {','  tauri::Builder::default()','    .run(tauri::generate_context!())','    .expect(\"error while running tauri application\");','}',''].join('\\n');fs.writeFileSync('desktop/tauri/src-tauri/src/main.rs',main)}"
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
