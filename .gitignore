@@ -36,7 +36,8 @@ node_modules
 desktop/tauri/dist/
 desktop/tauri/src-tauri/target/
 desktop/tauri/src-tauri/public/
-desktop/tauri/src-tauri/icons/
+desktop/tauri/src-tauri/icons/*
+!desktop/tauri/src-tauri/icons/icon.ico
 desktop/tauri/src-tauri/bin/
 desktop/tauri/src-tauri/data/
 desktop/tauri/src-tauri/config/
