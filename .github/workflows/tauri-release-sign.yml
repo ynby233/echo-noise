@@ -39,7 +39,7 @@ jobs:
         env:
           TAG_NAME: ${{ inputs.tag_name }}
         run: |
-          node -e "const fs=require('fs'),p=require('path');const tag=process.env.TAG_NAME||'';const ver=tag.replace(/^v/i,'').replace(/^V/i,'');const dir=p.join('desktop','tauri');const sdir=p.join(dir,'src-tauri');const conf=p.join(sdir,'tauri.conf.json');const pkg=p.join(dir,'package.json');fs.mkdirSync(sdir,{recursive:true});const basePkg={name:'saynote-tauri',version:tag||'V0.0.0',private:true};fs.writeFileSync(pkg,JSON.stringify(basePkg,null,2));const cfg={'$schema':'https://schema.tauri.app/config/2',productName:'说说笔记',version:ver||'0.0.0',identifier:'cn.noisework.saynote',build:{frontendDist:'../dist'},app:{windows:[{title:'说说笔记',width:1280,height:800}]},bundle:{active:true,targets:'all',resources:['public','data/noise.db','config']}};fs.writeFileSync(conf,JSON.stringify(cfg,null,2));console.log('Version set',{tag,ver});"
+          node -e "const fs=require('fs'),p=require('path');const tag=process.env.TAG_NAME||'';const ver=tag.replace(/^v/i,'').replace(/^V/i,'');const dir=p.join('desktop','tauri');const sdir=p.join(dir,'src-tauri');const conf=p.join(sdir,'tauri.conf.json');const pkg=p.join(dir,'package.json');fs.mkdirSync(sdir,{recursive:true});const basePkg={name:'saynote-tauri',version:tag||'V0.0.0',private:true};fs.writeFileSync(pkg,JSON.stringify(basePkg,null,2));const cfg={productName:'说说笔记',version:ver||'0.0.0',identifier:'cn.noisework.saynote',build:{frontendDist:'../dist'},app:{windows:[{title:'说说笔记',width:1280,height:800}]}};fs.writeFileSync(conf,JSON.stringify(cfg,null,2));console.log('Version set',{tag,ver});"
           echo "DESKTOP_READY=true" >> "$GITHUB_ENV"
       - uses: actions/setup-node@v4
         with:
