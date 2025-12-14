@@ -38,6 +38,44 @@ jobs:
         run: |
           node -e "const fs=require('fs'),p=require('path');const tag=process.env.TAG_NAME||'';const ver=tag.replace(/^v/i,'').replace(/^V/i,'');const dir=p.join('desktop','tauri');const sdir=p.join(dir,'src-tauri');const conf=p.join(sdir,'tauri.conf.json');const pkg=p.join(dir,'package.json');fs.mkdirSync(sdir,{recursive:true});const basePkg={name:'saynote-tauri',version:tag||'V0.0.0',private:true};fs.writeFileSync(pkg,JSON.stringify(basePkg,null,2));const cfg={productName:'说说笔记',version:ver||'0.0.0',identifier:'cn.noisework.saynote',build:{frontendDist:'../dist'},app:{windows:[{title:'说说笔记',width:1280,height:800}]}};fs.writeFileSync(conf,JSON.stringify(cfg,null,2));console.log('Version set',{tag,ver});"
           echo "DESKTOP_READY=true" >> "$GITHUB_ENV"
+      - name: Bootstrap Tauri Rust skeleton if missing
+        shell: bash
+        run: |
+          mkdir -p desktop/tauri/src-tauri/src
+          if [ ! -f desktop/tauri/src-tauri/Cargo.toml ]; then
+            cat > desktop/tauri/src-tauri/Cargo.toml <<'EOF'
+            [package]
+            name = "saynote-tauri"
+            version = "0.0.0"
+            edition = "2021"
+            
+            [dependencies]
+            tauri = { version = "2", features = [] }
+            serde = { version = "1", features = ["derive"] }
+            serde_json = "1"
+            
+            [build-dependencies]
+            tauri-build = { version = "2", features = [] }
+            
+            [features]
+            default = ["custom-protocol"]
+            custom-protocol = ["tauri/custom-protocol"]
+            
+            [profile.release]
+            panic = "abort"
+            codegen-units = 1
+            lto = true
+            EOF
+          fi
+          if [ ! -f desktop/tauri/src-tauri/src/main.rs ]; then
+            cat > desktop/tauri/src-tauri/src/main.rs <<'RS'
+            fn main() {
+              tauri::Builder::default()
+                .run(tauri::generate_context!())
+                .expect("error while running tauri application");
+            }
+            RS
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
