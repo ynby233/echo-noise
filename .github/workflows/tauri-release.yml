@@ -80,8 +80,8 @@ jobs:
         if: env.DESKTOP_READY == 'true'
         run: |
           cd desktop/tauri
-          npm install sharp
-          node -e "const fs=require('fs'),p=require('path'),sharp=require('sharp');const src=p.join('..','web','public','favicon.svg');const out=p.join('src-tauri','icons');fs.mkdirSync(out,{recursive:true});const sizes=[128,256,512];sizes.forEach(s=>{const outFile=p.join(out,`icon-${s}.png`);if(fs.existsSync(src)){sharp(src).resize(s,s).png().toFile(outFile).catch(console.error)}else{sharp({create:{width:s,height:s,channels:4,background:{r:0,g:0,b:0,alpha:0}}}).png().toFile(outFile).catch(console.error)}});const iconPng=p.join(out,'icon.png');if(!fs.existsSync(iconPng)){const s=256;if(fs.existsSync(src)){sharp(src).resize(s,s).png().toFile(iconPng).catch(console.error)}else{sharp({create:{width:s,height:s,channels:4,background:{r:0,g:0,b:0,alpha:0}}}).png().toFile(iconPng).catch(console.error)}}" 
+          npm install
+          node scripts/gen-icons.mjs
       - name: Build sidecar
         shell: bash
         if: env.DESKTOP_READY == 'true'
