@@ -101,7 +101,11 @@ jobs:
           draft: ${{ inputs.draft }}
           tag_name: ${{ inputs.tag_name }}
           files: |
-            desktop/tauri/src-tauri/target/**/release/bundle/**/**/*
+            desktop/tauri/src-tauri/target/**/release/bundle/**/**/*.dmg
+            desktop/tauri/src-tauri/target/**/release/bundle/**/**/*.zip
+            desktop/tauri/src-tauri/target/**/release/bundle/**/**/*.msi
+            desktop/tauri/src-tauri/target/**/release/bundle/**/**/*.exe
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload artifacts (desktop placeholder)
