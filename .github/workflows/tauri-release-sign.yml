@@ -11,11 +11,26 @@ on:
         required: false
         type: boolean
         default: true
+  push:
+    tags:
+      - '*'
 permissions:
   contents: write
 
 jobs:
+  create_release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create or update draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: ${{ inputs.draft }}
+          tag_name: ${{ inputs.tag_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build-matrix:
+    needs: create_release
     strategy:
       matrix:
         os: [macos-latest, windows-latest]
@@ -37,9 +52,11 @@ jobs:
       - name: Set app version from input tag
         shell: bash
         env:
-          TAG_NAME: ${{ inputs.tag_name }}
+          INPUT_TAG: ${{ inputs.tag_name }}
+          REF_TAG: ${{ github.ref_name }}
+          SIGNING_IDENTITY: ${{ secrets.MAC_SIGNING_IDENTITY }}
         run: |
-          node -e "const fs=require('fs'),p=require('path');const tag=process.env.TAG_NAME||'';const ver=tag.replace(/^v/i,'').replace(/^V/i,'');const sdir=p.join('desktop','tauri','src-tauri');const conf=p.join(sdir,'tauri.conf.json');fs.mkdirSync(sdir,{recursive:true});let obj;if(fs.existsSync(conf)){try{obj=JSON.parse(fs.readFileSync(conf,'utf8'))}catch(e){obj=null}}if(!obj){obj={\"$schema\":\"https://schema.tauri.app/config/2\",productName:'说说笔记',version:ver||'0.0.0',identifier:'cn.noisework.saynote',build:{devUrl:'http://localhost:1314',frontendDist:'../dist'},app:{windows:[{title:'说说笔记',width:1280,height:800}]},bundle:{active:true,targets:['dmg','nsis'],icon:['icons/icon.ico','icons/icon-128.png','icons/icon-256.png','icons/icon-512.png'],resources:['icons/favicon.svg','public','data/noise.db','config'],externalBin:['bin/server'],windows:{nsis:{}},macOS:{hardenedRuntime:false,minimumSystemVersion:'10.13',signingIdentity:null}},plugins:{updater:{active:false}}}};obj.version=ver||obj.version||'0.0.0';if(!obj.build)obj.build={};obj.build.frontendDist=obj.build.frontendDist||'../dist';fs.writeFileSync(conf,JSON.stringify(obj,null,2));console.log('Version set',{tag,ver,conf});"
+          node -e "const fs=require('fs'),p=require('path');const tag=(process.env.INPUT_TAG||process.env.REF_TAG||'');const ver=tag.replace(/^v/i,'').replace(/^V/i,'');const id=process.env.SIGNING_IDENTITY||null;const sdir=p.join('desktop','tauri','src-tauri');const conf=p.join(sdir,'tauri.conf.json');fs.mkdirSync(sdir,{recursive:true});let obj;if(fs.existsSync(conf)){try{obj=JSON.parse(fs.readFileSync(conf,'utf8'))}catch(e){obj=null}}if(!obj){obj={\"$schema\":\"https://schema.tauri.app/config/2\",productName:'说说笔记',version:ver||'0.0.0',identifier:'cn.noisework.saynote',build:{devUrl:'http://localhost:1314',frontendDist:'../dist'},app:{windows:[{title:'说说笔记',width:1280,height:800}]},bundle:{active:true,targets:['dmg','nsis'],icon:['icons/icon.ico','icons/icon-128.png','icons/icon-256.png','icons/icon-512.png'],resources:['icons/favicon.svg','public','data/noise.db','config'],externalBin:['bin/server'],windows:{nsis:{}},macOS:{hardenedRuntime:!!id,minimumSystemVersion:'10.13',signingIdentity:id}},plugins:{updater:{active:false}}}};obj.version=ver||obj.version||'0.0.0';obj.bundle=obj.bundle||{};obj.bundle.macOS=obj.bundle.macOS||{};obj.bundle.macOS.signingIdentity=id;obj.bundle.macOS.hardenedRuntime=!!id;if(!obj.build)obj.build={};obj.build.frontendDist=obj.build.frontendDist||'../dist';fs.writeFileSync(conf,JSON.stringify(obj,null,2));console.log('Version set',{tag,ver,conf,id});"
           echo "DESKTOP_READY=true" >> "$GITHUB_ENV"
       - name: Bootstrap Tauri Rust skeleton if missing
         shell: bash
