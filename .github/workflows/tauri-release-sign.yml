@@ -90,12 +90,15 @@ jobs:
         if: env.DESKTOP_READY == 'true'
         run: |
           ls -la desktop/tauri/src-tauri/icons || true
-          for f in icon-128.png icon-256.png icon-512.png icon.png icon.ico; do
-            if [ ! -f "desktop/tauri/src-tauri/icons/$f" ]; then
-              echo "missing $f, creating placeholder"
-              node -e "const fs=require('fs'),p=require('path');fs.mkdirSync('desktop/tauri/src-tauri/icons',{recursive:true});fs.writeFileSync(p.join('desktop/tauri/src-tauri/icons','$f'),'')"
-            fi
+          need=false
+          for f in icon-128.png icon-256.png icon-512.png icon.png; do
+            [ -f "desktop/tauri/src-tauri/icons/$f" ] || need=true
           done
+          if [ "$need" = "true" ] || [ ! -f "desktop/tauri/src-tauri/icons/icon.ico" ]; then
+            echo "regenerating icons..."
+            cd desktop/tauri
+            node scripts/gen-icons.mjs
+          fi
       - name: Ensure SQLite file exists
         shell: bash
         if: env.DESKTOP_READY == 'true'
@@ -162,16 +165,43 @@ jobs:
         run: |
           cd desktop/tauri
           npx @tauri-apps/cli@latest build --verbose
-      - name: Upload Release (desktop real)
-        if: env.DESKTOP_READY == 'true'
+      - name: Upload DMG (macos)
+        if: env.DESKTOP_READY == 'true' && matrix.os == 'macos-latest'
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ inputs.tag_name }}
-          file: |
-            desktop/tauri/src-tauri/target/**/release/bundle/**/**/*
-            ${{ steps.zip.outputs.zip_path }}
+          file: desktop/tauri/src-tauri/target/**/release/bundle/dmg/*.dmg
           file_glob: true
+          overwrite: true
+          draft: ${{ inputs.draft }}
+      - name: Upload Windows EXE
+        if: env.DESKTOP_READY == 'true' && matrix.os == 'windows-latest'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ inputs.tag_name }}
+          file: desktop/tauri/src-tauri/target/**/release/bundle/**/**/*.exe
+          file_glob: true
+          overwrite: true
+          draft: ${{ inputs.draft }}
+      - name: Upload Windows MSI
+        if: env.DESKTOP_READY == 'true' && matrix.os == 'windows-latest'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ inputs.tag_name }}
+          file: desktop/tauri/src-tauri/target/**/release/bundle/**/**/*.msi
+          file_glob: true
+          overwrite: true
+          draft: ${{ inputs.draft }}
+      - name: Upload Windows ZIP bundle
+        if: env.DESKTOP_READY == 'true' && matrix.os == 'windows-latest' && steps.zip.outputs.zip_path != ''
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ inputs.tag_name }}
+          file: ${{ steps.zip.outputs.zip_path }}
           overwrite: true
           draft: ${{ inputs.draft }}
       - name: Upload Release (desktop placeholder)
