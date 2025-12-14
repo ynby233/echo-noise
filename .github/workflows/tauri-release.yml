@@ -59,7 +59,7 @@ jobs:
         if: env.DESKTOP_READY == 'true'
         run: |
           cd desktop/tauri
-          npm ci
+          npm install
           npm run build:web
       - name: Build sidecar
         shell: bash

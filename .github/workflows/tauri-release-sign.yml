@@ -61,7 +61,7 @@ jobs:
         if: env.DESKTOP_READY == 'true'
         run: |
           cd desktop/tauri
-          npm ci
+          npm install
           npm run build:web
       - name: Ensure SQLite file exists
         shell: bash
@@ -79,7 +79,7 @@ jobs:
         if: env.DESKTOP_READY == 'true'
         run: |
           cd desktop/tauri
-          npm ci
+          npm install
       - name: mac codesign setup
         id: mac_codesign
         if: matrix.os == 'macos-latest'
@@ -181,7 +181,7 @@ jobs:
         run: |
           $out = "$Env:RUNNER_TEMP\saynote-tauri-windows.zip"
           Compress-Archive -Path (Get-ChildItem -Recurse "desktop/tauri/src-tauri/target/*/release/bundle/**") -DestinationPath $out
-          echo "::set-output name=zip_path::$out"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "zip_path=$out"
       - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
@@ -230,7 +230,7 @@ jobs:
         if: env.MOBILE_READY == 'true'
         run: |
           cd web
-          npm ci
+          npm install
           npm run generate
       - name: Ensure SQLite file exists
         if: env.MOBILE_READY == 'true'
@@ -241,7 +241,7 @@ jobs:
         if: env.MOBILE_READY == 'true'
         run: |
           cd mobile
-          npm ci
+          npm install
           if [ ! -f "capacitor.config.ts" ] && [ ! -f "capacitor.config.json" ]; then
             npx cap init saynote-mobile cn.noisework.saynote --web-dir ../web/.output/public
           fi
