@@ -81,6 +81,7 @@ jobs:
         run: |
           cd desktop/tauri
           npm install
+          npm install png-to-ico --no-save
           node scripts/gen-icons.mjs
       - name: Build sidecar
         shell: bash

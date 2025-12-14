@@ -21,7 +21,7 @@ fn wait_ready(url: &str, timeout_ms: u64) -> bool {
 
 #[tauri::command]
 fn start_server(app: tauri::AppHandle) {
-  let resolver = app.path();
+  let _resolver = app.path();
   let data_dir = app.path().app_data_dir().unwrap_or(app.path().resource_dir().unwrap());
   let db_path = data_dir.join("noise.db");
   let res_db = app.path().resource_dir().map(|p| p.join("data").join("noise.db")).unwrap();
