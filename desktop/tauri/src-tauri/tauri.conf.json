@@ -18,7 +18,7 @@
   },
   "bundle": {
     "active": true,
-    "icon": ["icons/icon-128.png", "icons/icon-256.png", "icons/icon-512.png"],
+    "icon": ["icons/icon.ico", "icons/icon-128.png", "icons/icon-256.png", "icons/icon-512.png"],
     "resources": ["icons/favicon.svg", "public", "data/noise.db", "config"],
     "externalBin": ["bin/server"],
     "windows": {
