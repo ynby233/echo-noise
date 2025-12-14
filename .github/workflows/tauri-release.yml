@@ -129,16 +129,6 @@ jobs:
           file_glob: true
           overwrite: true
           draft: ${{ inputs.draft }}
-      - name: Upload Windows MSI
-        if: env.DESKTOP_READY == 'true' && matrix.platform == 'windows-latest'
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ inputs.tag_name }}
-          file: desktop/tauri/src-tauri/target/**/release/bundle/**/**/*.msi
-          file_glob: true
-          overwrite: true
-          draft: ${{ inputs.draft }}
       - name: Upload artifacts (desktop placeholder)
         if: env.DESKTOP_READY != 'true'
         run: |
