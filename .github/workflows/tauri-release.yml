@@ -125,7 +125,7 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ inputs.tag_name }}
-          file: desktop/tauri/src-tauri/target/**/release/bundle/**/**/*.exe
+          file: desktop/tauri/src-tauri/target/**/release/bundle/nsis/*.exe
           file_glob: true
           overwrite: true
           draft: ${{ inputs.draft }}
