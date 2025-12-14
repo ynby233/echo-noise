@@ -32,5 +32,12 @@ node_modules
 .ionide
 
 /data/*
-desktop/
+# 仅忽略桌面端构建与复制产物，保留配置与源码
+desktop/tauri/dist/
+desktop/tauri/src-tauri/target/
+desktop/tauri/src-tauri/public/
+desktop/tauri/src-tauri/icons/
+desktop/tauri/src-tauri/bin/
+desktop/tauri/src-tauri/data/
+desktop/tauri/src-tauri/config/
 mobile/

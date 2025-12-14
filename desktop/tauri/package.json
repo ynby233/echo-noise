@@ -1,0 +1,14 @@
+{
+  "name": "saynote-tauri",
+  "version": "V2.3.4",
+  "private": true,
+  "scripts": {
+    "build:web": "cd ../../web && npm install && npm run generate && mkdir -p ../desktop/tauri/src-tauri/public ../desktop/tauri/dist ../desktop/tauri/src-tauri/icons ../desktop/tauri/src-tauri/data ../desktop/tauri/src-tauri/config && rsync -a --delete .output/public/ ../desktop/tauri/src-tauri/public/ && rsync -a --delete .output/public/ ../desktop/tauri/dist/ && cp public/favicon.svg ../desktop/tauri/src-tauri/icons/favicon.svg && [ -f ../data/noise.db ] || (mkdir -p ../data && : > ../data/noise.db) && cp ../data/noise.db ../desktop/tauri/src-tauri/data/noise.db && rsync -a ../config/ ../desktop/tauri/src-tauri/config/",
+    "tauri:build": "npm run build:web && node scripts/gen-icons.mjs && npx @tauri-apps/cli@latest build",
+    "tauri:dev": "npx @tauri-apps/cli@latest dev"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
+    "sharp": "^0.33.4"
+  }
+}
