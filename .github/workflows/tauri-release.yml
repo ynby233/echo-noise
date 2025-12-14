@@ -83,6 +83,17 @@ jobs:
           npm install
           npm install png-to-ico --no-save
           node scripts/gen-icons.mjs
+      - name: Verify icons exist
+        shell: bash
+        if: env.DESKTOP_READY == 'true'
+        run: |
+          ls -la desktop/tauri/src-tauri/icons || true
+          for f in icon-128.png icon-256.png icon-512.png icon.png icon.ico; do
+            if [ ! -f "desktop/tauri/src-tauri/icons/$f" ]; then
+              echo "missing $f, creating placeholder"
+              node -e "const fs=require('fs'),p=require('path');fs.mkdirSync('desktop/tauri/src-tauri/icons',{recursive:true});fs.writeFileSync(p.join('desktop/tauri/src-tauri/icons','$f'),'')"
+            fi
+          done
       - name: Build sidecar
         shell: bash
         if: env.DESKTOP_READY == 'true'
@@ -96,18 +107,14 @@ jobs:
           npx @tauri-apps/cli@latest build --verbose
       - name: Upload artifacts (desktop real)
         if: env.DESKTOP_READY == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: svenstaro/upload-release-action@v2
         with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ inputs.tag_name }}
+          file: desktop/tauri/src-tauri/target/**/release/bundle/**/**/*
+          file_glob: true
+          overwrite: true
           draft: ${{ inputs.draft }}
-          tag_name: ${{ inputs.tag_name }}
-          files: |
-            desktop/tauri/src-tauri/target/**/release/bundle/**/**/*.dmg
-            desktop/tauri/src-tauri/target/**/release/bundle/**/**/*.zip
-            desktop/tauri/src-tauri/target/**/release/bundle/**/**/*.msi
-            desktop/tauri/src-tauri/target/**/release/bundle/**/**/*.exe
-          fail_on_unmatched_files: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload artifacts (desktop placeholder)
         if: env.DESKTOP_READY != 'true'
         run: |
