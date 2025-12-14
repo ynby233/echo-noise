@@ -36,7 +36,7 @@ jobs:
         env:
           TAG_NAME: ${{ inputs.tag_name }}
         run: |
-          node -e "const fs=require('fs'),p=require('path');const tag=process.env.TAG_NAME||'';const ver=tag.replace(/^v/i,'').replace(/^V/i,'');const dir=p.join('desktop','tauri');const sdir=p.join(dir,'src-tauri');const conf=p.join(sdir,'tauri.conf.json');const pkg=p.join(dir,'package.json');fs.mkdirSync(sdir,{recursive:true});const basePkg={name:'saynote-tauri',version:tag||'V0.0.0',private:true};fs.writeFileSync(pkg,JSON.stringify(basePkg,null,2));const cfg={productName:'说说笔记',version:ver||'0.0.0',identifier:'cn.noisework.saynote',build:{frontendDist:'../dist'},app:{windows:[{title:'说说笔记',width:1280,height:800}]},bundle:{active:true,targets:'all',resources:['public','data/noise.db','config']}};fs.writeFileSync(conf,JSON.stringify(cfg,null,2));console.log('Version set',{tag,ver});"
+          node -e "const fs=require('fs'),p=require('path');const tag=process.env.TAG_NAME||'';const ver=tag.replace(/^v/i,'').replace(/^V/i,'');const sdir=p.join('desktop','tauri','src-tauri');const conf=p.join(sdir,'tauri.conf.json');fs.mkdirSync(sdir,{recursive:true});let obj;if(fs.existsSync(conf)){try{obj=JSON.parse(fs.readFileSync(conf,'utf8'))}catch(e){obj=null}}if(!obj){obj={\"$schema\":\"https://schema.tauri.app/config/2\",productName:'说说笔记',version:ver||'0.0.0',identifier:'cn.noisework.saynote',build:{devUrl:'http://localhost:1314',frontendDist:'../dist'},app:{windows:[{title:'说说笔记',width:1280,height:800}]},bundle:{active:true,targets:'all',icon:['icons/icon-128.png','icons/icon-256.png','icons/icon-512.png'],resources:['icons/favicon.svg','public','data/noise.db','config'],externalBin:['bin/server'],createUpdaterArtifacts:false,windows:{nsis:{languages:['en_US','zh_CN']},signCommand:{cmd:'powershell',args:['-NoProfile','-ExecutionPolicy','Bypass','-Command','$signtool = \"$Env:ProgramFiles/Windows Kits/10/bin/x64/signtool.exe\"; & $signtool sign /f $env:WIN_CERT_PFX_PATH /p $env:WIN_CERT_PASSWORD /tr http://timestamp.digicert.com /td SHA256 /fd SHA256 \"%1\"']}},macOS:{hardenedRuntime:false,minimumSystemVersion:'10.13',signingIdentity:null}},plugins:{updater:{active:false}}}};obj.version=ver||obj.version||'0.0.0';if(!obj.build)obj.build={};obj.build.frontendDist=obj.build.frontendDist||'../dist';fs.writeFileSync(conf,JSON.stringify(obj,null,2));console.log('Version set',{tag,ver,conf});"
           echo "DESKTOP_READY=true" >> "$GITHUB_ENV"
       - name: Bootstrap Tauri Rust skeleton if missing
         shell: bash
@@ -75,6 +75,13 @@ jobs:
           [ -f data/noise.db ] || (mkdir -p data && : > data/noise.db)
           cp data/noise.db desktop/tauri/src-tauri/data/noise.db
           [ -d config ] && cp -r config/. desktop/tauri/src-tauri/config/ || true
+      - name: Generate PNG icons
+        shell: bash
+        if: env.DESKTOP_READY == 'true'
+        run: |
+          cd desktop/tauri
+          npm install sharp
+          node -e "const fs=require('fs'),p=require('path'),sharp=require('sharp');const src=p.join('..','web','public','favicon.svg');const out=p.join('src-tauri','icons');fs.mkdirSync(out,{recursive:true});const sizes=[128,256,512];sizes.forEach(s=>{const outFile=p.join(out,`icon-${s}.png`);if(fs.existsSync(src)){sharp(src).resize(s,s).png().toFile(outFile).catch(console.error)}else{sharp({create:{width:s,height:s,channels:4,background:{r:0,g:0,b:0,alpha:0}}}).png().toFile(outFile).catch(console.error)}});const iconPng=p.join(out,'icon.png');if(!fs.existsSync(iconPng)){const s=256;if(fs.existsSync(src)){sharp(src).resize(s,s).png().toFile(iconPng).catch(console.error)}else{sharp({create:{width:s,height:s,channels:4,background:{r:0,g:0,b:0,alpha:0}}}).png().toFile(iconPng).catch(console.error)}}" 
       - name: Build sidecar
         shell: bash
         if: env.DESKTOP_READY == 'true'
