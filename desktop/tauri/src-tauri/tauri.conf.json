@@ -23,9 +23,7 @@
     "resources": ["icons/favicon.svg", "public", "data/noise.db", "config"],
     "externalBin": ["bin/server"],
     "windows": {
-      "nsis": {
-        "languages": ["en_US", "zh_CN"]
-      }
+      "nsis": {}
     },
     "macOS": {
       "hardenedRuntime": false,
