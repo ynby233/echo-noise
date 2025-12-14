@@ -60,9 +60,19 @@ jobs:
         shell: bash
         if: env.DESKTOP_READY == 'true'
         run: |
-          cd desktop/tauri
+          cd web
           npm install
-          npm run build:web
+          npm run generate
+          cd ..
+          mkdir -p desktop/tauri/src-tauri/public desktop/tauri/dist desktop/tauri/src-tauri/icons desktop/tauri/src-tauri/data desktop/tauri/src-tauri/config
+          rm -rf desktop/tauri/src-tauri/public/* || true
+          rm -rf desktop/tauri/dist/* || true
+          cp -r web/.output/public/. desktop/tauri/src-tauri/public/
+          cp -r web/.output/public/. desktop/tauri/dist/
+          cp web/public/favicon.svg desktop/tauri/src-tauri/icons/favicon.svg || true
+          [ -f data/noise.db ] || (mkdir -p data && : > data/noise.db)
+          cp data/noise.db desktop/tauri/src-tauri/data/noise.db
+          [ -d config ] && cp -r config/. desktop/tauri/src-tauri/config/ || true
       - name: Ensure SQLite file exists
         shell: bash
         if: env.DESKTOP_READY == 'true'
@@ -128,7 +138,7 @@ jobs:
         if: env.DESKTOP_READY == 'true'
         run: |
           cd desktop/tauri
-          npm run tauri:build
+          npx @tauri-apps/cli@latest build
       - name: Upload Release (desktop real)
         if: env.DESKTOP_READY == 'true'
         uses: softprops/action-gh-release@v2
