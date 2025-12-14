@@ -30,12 +30,33 @@ await Promise.all([128, 256, 512].map(gen))
 // default icon.png used by tauri codegen
 await sharp(join(outDir, 'icon-512.png')).ensureAlpha().png({ compressionLevel: 9 }).toFile(join(outDir, 'icon.png'))
 // generate Windows .ico
-try {
+{
   const require = createRequire(import.meta.url)
-  const pngToIco = require('png-to-ico')
-  const icoBuf = await pngToIco([join(outDir, 'icon-128.png'), join(outDir, 'icon-256.png')])
-  writeFileSync(join(outDir, 'icon.ico'), icoBuf)
-  console.log('icons generated in', outDir, 'with icon.ico')
-} catch (e) {
-  console.warn('icon.ico generation skipped:', e?.message || e)
+  const icoPath = join(outDir, 'icon.ico')
+  let ok = false
+  try {
+    const pngToIco = require('png-to-ico')
+    const icoBuf = await pngToIco([join(outDir, 'icon-128.png'), join(outDir, 'icon-256.png')])
+    writeFileSync(icoPath, icoBuf)
+    ok = true
+    console.log('icons generated in', outDir, 'with icon.ico (png-to-ico)')
+  } catch (e) {
+    console.warn('png-to-ico failed:', e?.message || e)
+  }
+  if (!ok) {
+    try {
+      const toIco = require('to-ico')
+      const fs = await import('node:fs')
+      const buf256 = fs.readFileSync(join(outDir, 'icon-256.png'))
+      const icoBuf = await toIco([buf256])
+      writeFileSync(icoPath, icoBuf)
+      ok = true
+      console.log('icons generated in', outDir, 'with icon.ico (to-ico)')
+    } catch (e2) {
+      console.warn('to-ico failed:', e2?.message || e2)
+    }
+  }
+  if (!ok) {
+    console.warn('icon.ico generation failed; Windows build may error')
+  }
 }

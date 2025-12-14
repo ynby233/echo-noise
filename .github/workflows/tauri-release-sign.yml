@@ -84,6 +84,7 @@ jobs:
           cd desktop/tauri
           npm install
           npm install png-to-ico --no-save
+          npm install to-ico --no-save
           node scripts/gen-icons.mjs
       - name: Verify icons exist
         shell: bash
