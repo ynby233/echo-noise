@@ -285,7 +285,6 @@ docker run -d \
   -p 1315:1315 \
   -e NOTE_HOST=http://localhost:1314 \
   -e NOTE_HTTP_PORT=1315 \
-  -v /opt/data:/app/data \
   noise233/echo-noise:latest-mcp
 ```
 
@@ -299,7 +298,6 @@ docker run -d \
   -p 1314:1314 \
   -e NOTE_HOST=http://localhost:1314 \
   -e NOTE_HTTP_PORT=0 \
-  -v /opt/data:/app/data \
   noise233/echo-noise:latest-mcp
 ```
 
