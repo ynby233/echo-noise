@@ -75,5 +75,5 @@ if [ -f "$MAIN_ACT" ]; then
 fi
 BUILD_GRADLE="mobile/android/app/build.gradle"
 if [ -f "$BUILD_GRADLE" ]; then
-  perl -0777 -pe 'if(!/implementation files\(\\'\''libs\/backend\.aar\\'\''\)/){s/dependencies\s*\{(\s*)/dependencies{$1    implementation files('\''libs\/backend.aar'')\n/s}' -i "$BUILD_GRADLE"
+  perl -0777 -pe 'if(!/libs\/backend\.aar/){s/dependencies\s*\{(\s*)/dependencies{$1    implementation files("libs\/backend.aar")\n/s}' -i "$BUILD_GRADLE"
 fi
