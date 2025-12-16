@@ -205,39 +205,26 @@ jobs:
           npx @tauri-apps/cli@latest build --verbose
       - name: Upload DMG (macos)
         if: env.DESKTOP_READY == 'true' && matrix.os == 'macos-latest'
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ env.RELEASE_TAG }}
-          file: desktop/tauri/src-tauri/target/**/release/bundle/dmg/*.dmg
-          file_glob: true
-          overwrite: true
-          draft: ${{ env.DRAFT_RELEASE }}
-      - name: Upload Windows EXE
-        if: env.DESKTOP_READY == 'true' && matrix.os == 'windows-latest'
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ env.RELEASE_TAG }}
-          file: desktop/tauri/src-tauri/target/**/release/bundle/nsis/*.exe
-          file_glob: true
-          overwrite: true
-          draft: ${{ env.DRAFT_RELEASE }}
-      - name: Upload Release (desktop placeholder)
-        if: env.DESKTOP_READY != 'true'
-        run: |
-          echo "placeholder desktop build (signed workflow) for ${{ matrix.os }} at tag ${{ inputs.tag_name }}" > "$RUNNER_TEMP/placeholder-desktop-${{ matrix.os }}.txt"
         shell: bash
-      - name: Upload placeholder file (desktop)
-        if: env.DESKTOP_READY != 'true'
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: ${{ env.DRAFT_RELEASE }}
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: |
-            ${{ runner.temp }}/placeholder-desktop-${{ matrix.os }}.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ env.RELEASE_TAG }} desktop/tauri/src-tauri/target/**/release/bundle/dmg/*.dmg --clobber
+      - name: Upload Windows EXE
+        if: env.DESKTOP_READY == 'true' && matrix.os == 'windows-latest'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ env.RELEASE_TAG }} desktop/tauri/src-tauri/target/**/release/bundle/nsis/*.exe --clobber
+      - name: Upload Release (desktop placeholder)
+        if: env.DESKTOP_READY != 'true'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "placeholder desktop build (signed workflow) for ${{ matrix.os }} at tag ${{ inputs.tag_name }}" > "$RUNNER_TEMP/placeholder-desktop-${{ matrix.os }}.txt"
+          gh release upload ${{ env.RELEASE_TAG }} "$RUNNER_TEMP/placeholder-desktop-${{ matrix.os }}.txt" --clobber
       - name: Sign mac app & notarize
         shell: bash
         if: matrix.os == 'macos-latest' && steps.mac_codesign.outputs.ready == 'true'
@@ -411,26 +398,15 @@ jobs:
           "$APKSIGNER" verify --verbose "$FINAL_APK"
       - name: Upload Release (apk)
         if: env.MOBILE_READY == 'true'
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: ${{ env.DRAFT_RELEASE }}
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: |
-            ${{ env.FINAL_APK }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ env.RELEASE_TAG }} ${{ env.FINAL_APK }} --clobber
       - name: Upload Release (apk placeholder)
         if: env.MOBILE_READY != 'true'
-        run: |
-          echo "placeholder android apk at tag ${{ inputs.tag_name }}" > "$RUNNER_TEMP/placeholder-android.txt"
         shell: bash
-      - name: Upload placeholder file (apk)
-        if: env.MOBILE_READY != 'true'
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: ${{ env.DRAFT_RELEASE }}
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: |
-            ${{ runner.temp }}/placeholder-android.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "placeholder android apk at tag ${{ inputs.tag_name }}" > "$RUNNER_TEMP/placeholder-android.txt"
+          gh release upload ${{ env.RELEASE_TAG }} "$RUNNER_TEMP/placeholder-android.txt" --clobber
