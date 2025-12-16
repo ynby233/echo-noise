@@ -124,24 +124,20 @@ jobs:
           npx @tauri-apps/cli@latest build --verbose
       - name: Upload DMG (macos)
         if: env.DESKTOP_READY == 'true' && matrix.platform == 'macos-latest'
-        uses: svenstaro/upload-release-action@v2
+        uses: softprops/action-gh-release@v2
         with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ env.RELEASE_TAG }}
-          file: desktop/tauri/src-tauri/target/**/release/bundle/dmg/*.dmg
-          file_glob: true
-          overwrite: true
           draft: ${{ env.DRAFT_RELEASE }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: |
+            desktop/tauri/src-tauri/target/**/release/bundle/dmg/*.dmg
       - name: Upload Windows EXE
         if: env.DESKTOP_READY == 'true' && matrix.platform == 'windows-latest'
-        uses: svenstaro/upload-release-action@v2
+        uses: softprops/action-gh-release@v2
         with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ env.RELEASE_TAG }}
-          file: desktop/tauri/src-tauri/target/**/release/bundle/nsis/*.exe
-          file_glob: true
-          overwrite: true
           draft: ${{ env.DRAFT_RELEASE }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: |
+            desktop/tauri/src-tauri/target/**/release/bundle/nsis/*.exe
       - name: Upload artifacts (desktop placeholder)
         if: env.DESKTOP_READY != 'true'
         run: |

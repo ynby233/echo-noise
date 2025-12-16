@@ -292,6 +292,16 @@ jobs:
           echo "BT_DIR=$BT_DIR" >> "$GITHUB_ENV"
           echo "APKSIGNER=$BT_DIR/apksigner" >> "$GITHUB_ENV"
           echo "ZIPALIGN=$BT_DIR/zipalign" >> "$GITHUB_ENV"
+      - name: Parse version for Android
+        if: env.MOBILE_READY == 'true'
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag_name }}
+          REF_TAG: ${{ github.ref_name }}
+        run: |
+          RAW="${INPUT_TAG:-$REF_TAG}"
+          VER=$(echo "$RAW" | sed -E 's/^[vV]//')
+          echo "APP_VERSION_NAME=$VER" >> "$GITHUB_ENV"
       - name: Build Nuxt static
         if: env.MOBILE_READY == 'true'
         run: |
@@ -315,21 +325,32 @@ jobs:
           if [ -f "android/app/src/main/res/values/strings.xml" ]; then
             node -e "const fs=require('fs'),p='android/app/src/main/res/values/strings.xml';let s=fs.readFileSync(p,'utf8');s=s.replace(/<string name=\\\"app_name\\\">[\\s\\S]*?<\\/string>/,'<string name=\\\"app_name\\\">说说笔记</string>');fs.writeFileSync(p,s)"
           fi
+          if [ -f "android/app/build.gradle" ]; then
+            node -e "const fs=require('fs'),p='android/app/build.gradle';let s=fs.readFileSync(p,'utf8');const ver=process.env.APP_VERSION_NAME||'0.0.0';s=s.replace(/versionName\\s+\"[^\"]*\"/,'versionName \""+ver+"\"');fs.writeFileSync(p,s)"
+          fi
           npm install --no-save @capacitor/assets
           npx @capacitor/assets generate --android --iconSource ../web/public/android-chrome-512x512.png --splashSource ../web/public/apple-touch-icon.png || true
           mkdir -p android/app/src/main/assets/data android/app/src/main/assets/config android/app/src/main/assets/public/data android/app/src/main/assets/public/config
-          cp ../data/noise.db android/app/src/main/assets/data/noise.db
-          cp ../data/noise.db android/app/src/main/assets/public/data/noise.db
+          SRC_DB="../data/noise.db"
+          [ -f ../noise/data/noise.db ] && SRC_DB="../noise/data/noise.db"
+          [ -f "$SRC_DB" ] || (echo "WARN: $SRC_DB not found, creating empty DB"; mkdir -p ../data; : > ../data/noise.db; SRC_DB="../data/noise.db")
+          cp "$SRC_DB" android/app/src/main/assets/data/noise.db
+          cp "$SRC_DB" android/app/src/main/assets/public/data/noise.db
           [ -d ../config ] && cp -r ../config/. android/app/src/main/assets/config/ || true
           [ -d ../config ] && cp -r ../config/. android/app/src/main/assets/public/config/ || true
           npx cap sync android
           [ -f "android/app/src/main/assets/public/index.html" ] || (echo "ERROR: web assets missing after sync" && find android/app/src/main/assets -maxdepth 2 -type f | sed -n '1,100p' && exit 1)
           cd android
           ./gradlew assembleRelease
+          APK_CANDIDATE=$(ls app/build/outputs/apk/release/app-release.apk 2>/dev/null || true)
+          if [ -z "$APK_CANDIDATE" ]; then
+            APK_CANDIDATE=$(ls app/build/outputs/apk/release/*.apk | grep -v unsigned | head -n1)
+          fi
+          echo "APK_PATH=$APK_CANDIDATE" >> "$GITHUB_ENV"
       - name: Zipalign APK
         if: env.MOBILE_READY == 'true'
         run: |
-          export APK_PATH=$(ls mobile/android/app/build/outputs/apk/release/*.apk | head -n1)
+          export APK_PATH="${APK_PATH:-$(ls mobile/android/app/build/outputs/apk/release/*.apk | grep -v unsigned | head -n1)}"
           export ALIGNED_APK="${APK_PATH%.apk}-aligned.apk"
           "$ZIPALIGN" -p -f 4 "$APK_PATH" "$ALIGNED_APK"
           mv "$ALIGNED_APK" "$APK_PATH"
@@ -343,24 +364,30 @@ jobs:
           ANDROID_KEYSTORE_TYPE: ${{ secrets.ANDROID_KEYSTORE_TYPE }}
         run: |
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > keystore.jks
-          export APK_PATH=$(ls mobile/android/app/build/outputs/apk/release/*.apk | head -n1)
+          export APK_PATH="${APK_PATH:-$(ls mobile/android/app/build/outputs/apk/release/*.apk | grep -v unsigned | head -n1)}"
           KS_TYPE_ARG=""
           if [ -n "$ANDROID_KEYSTORE_TYPE" ]; then
             KS_TYPE_ARG="--ks-type $ANDROID_KEYSTORE_TYPE"
           fi
           "$APKSIGNER" sign $KS_TYPE_ARG --ks keystore.jks --ks-key-alias "$ANDROID_KEY_ALIAS" --ks-pass pass:"$ANDROID_KEYSTORE_PASSWORD" --key-pass pass:"$ANDROID_KEY_ALIAS_PASSWORD" "$APK_PATH"
+          NEW_NAME="$(dirname "$APK_PATH")/saynote-${APP_VERSION_NAME:-0.0.0}.apk"
+          cp "$APK_PATH" "$NEW_NAME"
+          echo "FINAL_APK=$NEW_NAME" >> "$GITHUB_ENV"
       - name: Fallback sign APK (ephemeral keystore)
         if: env.MOBILE_READY == 'true' && env.ANDROID_KEYSTORE_BASE64 == ''
         run: |
-          export APK_PATH=$(ls mobile/android/app/build/outputs/apk/release/*.apk | head -n1)
+          export APK_PATH="${APK_PATH:-$(ls mobile/android/app/build/outputs/apk/release/*.apk | grep -v unsigned | head -n1)}"
           keytool -genkeypair -keystore temp-release.jks -storepass android -alias temp -keypass android -dname "CN=CI Noise,O=Noise,C=CN" -keyalg RSA -keysize 2048 -validity 36500
           "$APKSIGNER" sign --ks temp-release.jks --ks-key-alias temp --ks-pass pass:android --key-pass pass:android "$APK_PATH"
           "$APKSIGNER" verify --verbose "$APK_PATH"
+          NEW_NAME="$(dirname "$APK_PATH")/saynote-${APP_VERSION_NAME:-0.0.0}.apk"
+          cp "$APK_PATH" "$NEW_NAME"
+          echo "FINAL_APK=$NEW_NAME" >> "$GITHUB_ENV"
       - name: Verify APK signature
         if: env.MOBILE_READY == 'true'
         run: |
-          export APK_PATH=$(ls mobile/android/app/build/outputs/apk/release/*.apk | head -n1)
-          "$APKSIGNER" verify --verbose "$APK_PATH"
+          export FINAL_APK="${FINAL_APK:-$(ls mobile/android/app/build/outputs/apk/release/saynote-*.apk | head -n1)}"
+          "$APKSIGNER" verify --verbose "$FINAL_APK"
       - name: Upload Release (apk)
         if: env.MOBILE_READY == 'true'
         uses: softprops/action-gh-release@v2
@@ -368,7 +395,7 @@ jobs:
           draft: ${{ env.DRAFT_RELEASE }}
           tag_name: ${{ env.RELEASE_TAG }}
           files: |
-            mobile/android/app/build/outputs/apk/release/*.apk
+            ${{ env.FINAL_APK }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload Release (apk placeholder)
