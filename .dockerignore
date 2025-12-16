@@ -15,6 +15,9 @@ Dockerfile*
 *.log
 logs/
 
+# 忽略本地 Android keystore 目录
+.private-android-keystore/
+
 # 忽略构建缓存和临时文件
 node_modules/
 .nuxt/
@@ -36,6 +39,14 @@ tests/
 # 忽略IDE文件
 .vscode/
 .idea/
+desktop/tauri/src-tauri/target/
+desktop/tauri/dist/
+desktop/tauri/src-tauri/gen/
+desktop/tauri/src-tauri/public/
+mobile/android/build/
+mobile/android/app/build/
+mobile/android/.gradle/
+mobile/android/.idea/
 *.swp
 *.swo
 

@@ -42,3 +42,4 @@ desktop/tauri/src-tauri/bin/
 desktop/tauri/src-tauri/data/
 desktop/tauri/src-tauri/config/
 mobile/
+.private-android-keystore/

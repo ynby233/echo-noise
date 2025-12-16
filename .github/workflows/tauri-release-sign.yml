@@ -321,21 +321,26 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_ALIAS_PASSWORD: ${{ secrets.ANDROID_KEY_ALIAS_PASSWORD }}
+          ANDROID_KEYSTORE_TYPE: ${{ secrets.ANDROID_KEYSTORE_TYPE }}
         run: |
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > keystore.jks
           export APK_PATH=$(ls mobile/android/app/build/outputs/apk/release/*.apk | head -n1)
-          "$APKSIGNER" sign --ks keystore.jks --ks-key-alias "$ANDROID_KEY_ALIAS" --ks-pass pass:"$ANDROID_KEYSTORE_PASSWORD" --key-pass pass:"$ANDROID_KEY_ALIAS_PASSWORD" "$APK_PATH"
-      - name: Verify APK signature
-        if: env.MOBILE_READY == 'true'
-        run: |
-          export APK_PATH=$(ls mobile/android/app/build/outputs/apk/release/*.apk | head -n1)
-          "$APKSIGNER" verify --verbose "$APK_PATH"
+          KS_TYPE_ARG=""
+          if [ -n "$ANDROID_KEYSTORE_TYPE" ]; then
+            KS_TYPE_ARG="--ks-type $ANDROID_KEYSTORE_TYPE"
+          fi
+          "$APKSIGNER" sign $KS_TYPE_ARG --ks keystore.jks --ks-key-alias "$ANDROID_KEY_ALIAS" --ks-pass pass:"$ANDROID_KEYSTORE_PASSWORD" --key-pass pass:"$ANDROID_KEY_ALIAS_PASSWORD" "$APK_PATH"
       - name: Fallback sign APK (ephemeral keystore)
         if: env.MOBILE_READY == 'true' && env.ANDROID_KEYSTORE_BASE64 == ''
         run: |
           export APK_PATH=$(ls mobile/android/app/build/outputs/apk/release/*.apk | head -n1)
           keytool -genkeypair -keystore temp-release.jks -storepass android -alias temp -keypass android -dname "CN=CI Noise,O=Noise,C=CN" -keyalg RSA -keysize 2048 -validity 36500
           "$APKSIGNER" sign --ks temp-release.jks --ks-key-alias temp --ks-pass pass:android --key-pass pass:android "$APK_PATH"
+          "$APKSIGNER" verify --verbose "$APK_PATH"
+      - name: Verify APK signature
+        if: env.MOBILE_READY == 'true'
+        run: |
+          export APK_PATH=$(ls mobile/android/app/build/outputs/apk/release/*.apk | head -n1)
           "$APKSIGNER" verify --verbose "$APK_PATH"
       - name: Upload Release (apk)
         if: env.MOBILE_READY == 'true'
