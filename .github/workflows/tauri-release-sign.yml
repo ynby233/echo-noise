@@ -357,7 +357,74 @@ jobs:
           if [ -f "android/app/src/main/AndroidManifest.xml" ]; then
             node -e "const fs=require('fs'),p='android/app/src/main/AndroidManifest.xml';let s=fs.readFileSync(p,'utf8');if(!s.includes('android:usesCleartextTraffic')){s=s.replace('<application','<application android:usesCleartextTraffic=\"true\"');fs.writeFileSync(p,s);console.log('Enabled Cleartext Traffic');}"
           fi
-
+          
+          # Inject MainActivity.java to start Go backend
+          mkdir -p android/app/src/main/java/cn/noisework/saynote
+          cat <<EOF > android/app/src/main/java/cn/noisework/saynote/MainActivity.java
+          package cn.noisework.saynote;
+          
+          import android.os.Bundle;
+          import com.getcapacitor.BridgeActivity;
+          import cn.noisework.saynote.go.mobilebackend.Mobilebackend;
+          import java.io.File;
+          import java.io.FileOutputStream;
+          import java.io.InputStream;
+          import java.io.OutputStream;
+          import android.util.Log;
+          
+          public class MainActivity extends BridgeActivity {
+              @Override
+              public void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  
+                  try {
+                      String filesDir = getFilesDir().getAbsolutePath();
+                      Log.d("SayNote", "Initializing Go backend in: " + filesDir);
+                      
+                      // Copy assets
+                      copyAssets("data");
+                      copyAssets("config");
+                      
+                      // Start Go backend
+                      Mobilebackend.start(filesDir);
+                      Log.d("SayNote", "Go backend started");
+                  } catch (Exception e) {
+                      Log.e("SayNote", "Failed to start backend", e);
+                  }
+              }
+          
+              private void copyAssets(String path) {
+                  try {
+                      String[] list = getAssets().list(path);
+                      if (list.length > 0) {
+                          // It's a directory
+                          File dir = new File(getFilesDir(), path);
+                          if (!dir.exists()) dir.mkdir();
+                          for (String file : list) {
+                              copyAssets(path + "/" + file);
+                          }
+                      } else {
+                          // It's a file
+                          File outFile = new File(getFilesDir(), path);
+                          if (outFile.exists()) return; // Don't overwrite to preserve user data
+                          
+                          InputStream in = getAssets().open(path);
+                          OutputStream out = new FileOutputStream(outFile);
+                          byte[] buffer = new byte[1024];
+                          int read;
+                          while ((read = in.read(buffer)) != -1) {
+                              out.write(buffer, 0, read);
+                          }
+                          in.close();
+                          out.close();
+                      }
+                  } catch (Exception e) {
+                      Log.e("SayNote", "Failed to copy asset: " + path, e);
+                  }
+              }
+          }
+          EOF
+ 
           bash ../packaging/android/setup_backend.sh
           
           # Prepare Assets
@@ -390,8 +457,8 @@ jobs:
           
           [ -f "android/app/src/main/assets/public/index.html" ] || (echo "ERROR: web assets missing after sync" && find android/app/src/main/assets -maxdepth 2 -type f | sed -n '1,100p' && exit 1)
           
-          echo "Debug: Checking asset size..."
-          du -sh android/app/src/main/assets || true
+          echo "Debug: Checking asset size details..."
+          du -ah android/app/src/main/assets | sort -rh | head -n 20 || true
           
           cd android
           chmod +x gradlew
