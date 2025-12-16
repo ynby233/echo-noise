@@ -7,7 +7,7 @@ go install golang.org/x/mobile/cmd/gobind@latest
 export PATH="$HOME/go/bin:$PATH"
 go get golang.org/x/mobile/bind
 mkdir -p mobile/android/app/libs
-gomobile bind -target=android -androidapi 24 -javapkg=cn.noisework.saynote.go -o mobile/android/app/libs/backend.aar ./mobilebackend
+gomobile bind -target=android -androidapi 21 -javapkg=cn.noisework.saynote.go -o mobile/android/app/libs/backend.aar ./mobilebackend
   ls -la mobile/android/app/libs
   
   # Dynamically detect the Go Backend class name from the AAR
