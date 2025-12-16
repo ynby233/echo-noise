@@ -101,8 +101,24 @@ if [ -f "$MAIN_ACT" ]; then
 fi
 BUILD_GRADLE="mobile/android/app/build.gradle"
 if [ -f "$BUILD_GRADLE" ]; then
-  # Use fileTree to automatically include all AARs in libs, which is more robust
-  perl -0777 -pe 'if(!/fileTree.*libs/){s/dependencies\s*\{(\s*)/dependencies{$1    implementation fileTree(dir: "libs", include: ["*.aar"])\n/s}' -i "$BUILD_GRADLE"
+  # 1. Inject flatDir repository for local libs
+  perl -0777 -pe '
+    unless (/flatDir/) {
+      s/android\s*\{/repositories {\n        flatDir {\n            dirs "libs"\n        }\n    }\n\n    android {/
+    }
+  ' -i "$BUILD_GRADLE"
+
+  # 2. Inject AAR dependency (replacing fileTree if present, or adding new)
+  # Remove fileTree if we added it before to avoid duplicates/conflicts
+  perl -0777 -pe 's/implementation fileTree.*libs.*//g' -i "$BUILD_GRADLE"
+  
+  # Add specific implementation(name: "backend", ext: "aar")
+  perl -0777 -pe '
+    unless (/name:.*backend/) {
+      s/dependencies\s*\{/dependencies {\n    implementation(name: "backend", ext: "aar")\n/
+    }
+  ' -i "$BUILD_GRADLE"
+
   # Print build.gradle to verify injection in CI logs
   echo "Modified build.gradle content:"
   cat "$BUILD_GRADLE"
