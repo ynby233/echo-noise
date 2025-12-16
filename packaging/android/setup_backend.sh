@@ -8,7 +8,14 @@ export PATH="$HOME/go/bin:$PATH"
 go get golang.org/x/mobile/bind
 mkdir -p mobile/android/app/libs
 gomobile bind -target=android -androidapi 24 -javapkg=cn.noisework.saynote.go -o mobile/android/app/libs/backend.aar ./mobilebackend
-ls -la mobile/android/app/libs
+  ls -la mobile/android/app/libs
+  
+  # Debug: Check AAR content
+  echo "Checking AAR content..."
+  unzip -p mobile/android/app/libs/backend.aar classes.jar > mobile/android/app/libs/classes.jar
+  jar tf mobile/android/app/libs/classes.jar | grep "cn/noisework/saynote/go" || echo "WARNING: No matching classes found in AAR"
+  rm mobile/android/app/libs/classes.jar
+
   PKG_DIR="mobile/android/app/src/main/java/cn/noisework/saynote"
   mkdir -p "$PKG_DIR"
   cat > "$PKG_DIR/ServerStarter.java" << 'EOF'
@@ -20,7 +27,7 @@ import java.io.File;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.FileOutputStream;
-import cn.noisework.saynote.go.backend.Backend;
+import cn.noisework.saynote.go.mobilebackend.Mobilebackend;
 public class ServerStarter {
   private static boolean started=false;
   public static void start(Activity activity){
@@ -34,7 +41,7 @@ public class ServerStarter {
     copyAssetDir(ctx.getAssets(),"config",configDir);
     copyAssetFile(ctx.getAssets(),"data/noise.db",new File(dataDir,"noise.db"));
     try {
-        Backend.start(filesDir.getAbsolutePath());
+        Mobilebackend.start(filesDir.getAbsolutePath());
     } catch (Exception e) {
         e.printStackTrace();
     }
