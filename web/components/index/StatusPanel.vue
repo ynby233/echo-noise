@@ -4,7 +4,7 @@
       <div class="min-h-screen w-full">
         <aside class="w-72 h-screen overflow-y-auto backdrop-blur-md flex flex-col fixed left-0 top-0 z-40 transition-transform duration-300 md:transition-none border-r" :class="[{ 'translate-x-0': sidebarOpen, '-translate-x-full md:translate-x-0': !sidebarOpen }, theme.sidebarBg, theme.border, theme.sidebarText]">
         <div class="px-4 py-4 border-b border-slate-700/40 flex flex-col items-center gap-2">
-          <img :src="avatarSrc" class="w-14 h-14 rounded-full ring-2 ring-indigo-400/60 shadow-lg object-cover" alt="avatar" />
+          <img :src="avatarSrc" class="w-14 h-14 rounded-full ring-2 ring-indigo-400/60 shadow-lg object-cover" alt="avatar" @error="onAvatarImgError" />
           <div class="w-full text-center">
             <div class="font-semibold truncate">{{ displayUsername }}</div>
             <div class="text-xs" :class="theme.mutedText">总笔记 {{ userStore?.status?.total_messages || 0 }}</div>
@@ -19,7 +19,7 @@
             <UIcon name="i-heroicons-user-circle" class="w-5 h-5 text-indigo-300" />
             <span class="text-sm text-center">用户信息</span>
           </button>
-          <button class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('site', $event)">
+          <button v-if="isAdmin" class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('site', $event)">
             <UIcon name="i-heroicons-wrench-screwdriver" class="w-5 h-5 text-indigo-300" />
             <span class="text-sm text-center">网站配置</span>
           </button>
@@ -283,17 +283,17 @@
                     <span :class="theme.mutedText">头像</span>
                     <div class="flex items-center gap-2">
                       <UButton size="sm" @click.stop="chooseAvatar" color="indigo" variant="soft" class="shadow">上传头像</UButton>
-                      <UButton size="sm" :loading="avatarUploading" @click.stop="useInitialsAvatar" color="orange" variant="soft" class="shadow">使用首字母头像</UButton>
+                      <UButton size="sm" :loading="avatarUploadingGravatar" @click.stop="useInitialsAvatar" color="orange" variant="soft" class="shadow">使用 Gravatar 默认头像</UButton>
                     </div>
                   </div>
                     <div class="flex items-center gap-3">
-                      <img :src="avatarSrc" class="w-10 h-10 rounded-full object-cover" alt="avatar" />
+                      <img :src="avatarSrc" class="w-10 h-10 rounded-full object-cover" alt="avatar" @error="onAvatarImgError" />
                     </div>
                     <p class="text-xs mt-1" :class="theme.mutedText">选择图片后自动进入裁剪，裁剪完成即可保存并预览</p>
                     <input ref="avatarInput" type="file" accept="image/*" class="hidden" @change="onAvatarFileChange" />
                     <div class="flex items-center gap-2 w-full mt-2">
                       <UInput v-model="avatarLink" placeholder="头像链接（http或/api开头）" class="flex-1" />
-                      <UButton size="sm" :loading="avatarUploading" @click.stop="saveAvatarLink" color="primary" variant="solid" class="shadow">保存链接</UButton>
+                      <UButton size="sm" :loading="avatarUploadingLink" @click.stop="saveAvatarLink" color="primary" variant="solid" class="shadow">保存链接</UButton>
                     </div>
                     <UModal v-model="cropperOpen">
                       <div class="p-4">
@@ -306,7 +306,7 @@
                         <div class="mt-3 flex items-center gap-3">
                           <span :class="theme.mutedText">缩放</span>
                           <input type="range" min="0.5" max="3" step="0.01" v-model.number="cropScale" />
-                          <UButton :loading="avatarUploading" color="green" @click="performCropAndUpload">裁剪并保存</UButton>
+                          <UButton :loading="avatarUploadingFile" color="green" @click="performCropAndUpload">裁剪并保存</UButton>
                           <UButton color="indigo" variant="soft" @click="closeCropper">取消</UButton>
                         </div>
                       </div>
@@ -324,7 +324,7 @@
                       </div>
                       <div v-else>
                         <div :class="[theme.subtleBg, theme.border, 'rounded-md p-3 border']">
-                          <p :class="[theme.text, 'break-words']">{{ (userStore.user as any)?.description || '执迷不悟' }}</p>
+                          <p :class="[theme.text, 'break-words']">{{ userStore.user?.description || '执迷不悟' }}</p>
                         </div>
                       </div>
                     </div>
@@ -422,7 +422,7 @@
             </div>
           </div>
 
-          <div id="site-section" class="col-span-12">
+          <div id="site-section" v-if="isAdmin" class="col-span-12">
           <div class="rounded-xl border shadow-xl" :class="[theme.cardBg, theme.border]">
             <div class="flex items-center justify-between px-4 py-3">
               <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -881,7 +881,7 @@
           </div>
           
           
-          <div id="comments-section" class="col-span-12">
+          <div id="comments-section" class="col-span-12" v-if="isAdmin">
             <div :class="[theme.cardBg, theme.border, cardCls]">
               <div class="flex items-center justify-between px-4 py-3">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -906,7 +906,7 @@
                 </div>
               </div>
                 <div class="px-4 pb-4">
-                <CommentsSettings v-model:config="frontendConfig" :theme="theme" @comment-system-changed="uiCommentSystem = $event" />
+                <CommentsSettings :config="frontendConfig" :theme="theme" @update:config="(next) => Object.assign(frontendConfig, next)" @comment-system-changed="uiCommentSystem = $event" />
                 <div v-if="isAdmin && frontendConfig.commentEnabled && String(uiCommentSystem || frontendConfig.commentSystem).toLowerCase() === 'builtin'" class="mt-4 rounded-lg p-3" :class="theme.subtleBg">
                   <div class="flex items-center gap-2 mb-2">
                     <UInput v-model="commentSearch" placeholder="搜索评论内容/昵称/邮箱/网址" class="flex-1" />
@@ -1130,7 +1130,7 @@
                 </div>
               </div>
               <div class="px-4 pb-4">
-                <NotifyPanel v-model:config="notifyConfig" :immediate="true" :subtleBg="theme.subtleBg" :text="theme.text" :mutedText="theme.mutedText" :disabled="!frontendConfig.notifyEnabled" />
+                <NotifyPanel :config="notifyConfig" @update:config="(next) => Object.assign(notifyConfig, next)" :immediate="true" :subtleBg="theme.subtleBg" :text="theme.text" :mutedText="theme.mutedText" :disabled="!frontendConfig.notifyEnabled" />
               </div>
             </div>
           </div>
@@ -1917,6 +1917,17 @@ import NotifyPanel from './NotifyPanel.vue'
 import CommentsSettings from '~/components/admin/CommentsSettings.vue'
 import AttachmentManager from '~/components/admin/AttachmentManager.vue'
 import { getRequest, putRequest, postRequest, deleteRequest } from '~/utils/api'
+import { useRuntimeConfig, useHead, useRouter } from '#imports'
+const formatShanghai = (s: string) => {
+  try {
+    if (!s) return ''
+    const d = new Date(s)
+    if (isNaN(d.getTime())) return s.replace('T', ' ').replace('Z', '')
+    const parts = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Shanghai' }).formatToParts(d)
+    const get = (t: string) => parts.find(p => p.type === t)?.value || ''
+    return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`
+  } catch { return s.replace('T', ' ').replace('Z', '') }
+}
  
 const cardCls = 'rounded-2xl border shadow-2xl'
 
@@ -1936,6 +1947,19 @@ const baseApi = useRuntimeConfig().public.baseApi || '/api'
 const localPreview = ref('')
 const userMessagesCount = ref(0)
 const adminProfile = ref<any>(null)
+const hex32 = (s: string) => {
+  let h1 = 0x811c9dc5, h2 = 0x811c9dc5
+  const t = String(s || '')
+  for (let i = 0; i < t.length; i++) {
+    const c = t.charCodeAt(i)
+    h1 = (h1 ^ c) + ((h1 << 1) + (h1 << 4) + (h1 << 7) + (h1 << 8) + (h1 << 24))
+    h2 = (h2 ^ (c * 13)) + ((h2 << 1) + (h2 << 4) + (h2 << 7) + (h2 << 8) + (h2 << 24))
+    h1 >>>= 0
+    h2 >>>= 0
+  }
+  const toHex = (v: number) => ('00000000' + (v >>> 0).toString(16)).slice(-8)
+  return (toHex(h1) + toHex(h2) + toHex(h1 ^ h2) + toHex((h1 + h2) >>> 0)).slice(0, 32)
+}
 const displayUsername = computed(() => {
   const u: any = userStore.user
   const name = String(u?.username || u?.Username || '').trim()
@@ -1953,13 +1977,21 @@ const avatarSrc = computed(() => {
   const pick = (s: string) => {
     if (!s) return ''
     if (/^https?:\/\//i.test(s)) return s
-    return `${baseApi}${s}`
+    const base = (baseApi || '').replace(/\/$/, '')
+    const path = String(s || '')
+    if (path.startsWith('/')) return path
+    return `${base}/${path.replace(/^\//, '')}`
   }
-  const dice = (seed: string, size = 100) => seed ? `https://api.dicebear.com/7.x/initials/png?seed=${encodeURIComponent(seed)}&backgroundType=gradient&radius=50&scale=100&size=${size}` : ''
-  return pick(userAvatar) || pick(adminAvatar) || dice(seed) || '/favicon-32x32.png'
+  const gravatar = (seed: string, size = 100) => {
+    const email = String(((userStore.user as any)?.email || '')).trim().toLowerCase()
+    const s = email ? email : ''
+    const hash = s ? hex32(s) : '00000000000000000000000000000000'
+    return `https://cravatar.cn/avatar/${hash}?d=retro&s=${size}`
+  }
+  return pick(userAvatar) || pick(adminAvatar) || gravatar(seed, 100)
 })
 
-const setActive = async (name: 'system' | 'user' | 'site' | 'notify' | 'attachments' | 'db' | 'version' | 'site-register' | 'site-pwa' | 'site-github-card' | 'site-github-login' | 'site-announcement' | 'site-music' | 'site-default-theme' | 'site-social-links' | 'friend-links' | 'site-configs' | 'comments' | 'email', evt?: MouseEvent) => {
+const setActive = async (name: 'system' | 'user' | 'site' | 'notify' | 'attachments' | 'db' | 'version' | 'site-register' | 'site-pwa' | 'site-github-card' | 'site-github-login' | 'site-announcement' | 'site-music' | 'site-default-theme' | 'site-social-links' | 'friend-links' | 'site-configs' | 'comments' | 'email' | 'admin-users', evt?: MouseEvent) => {
   await nextTick()
   const id = `${name}-section`
   const el = document.getElementById(id)
@@ -2804,6 +2836,10 @@ const handleLogout = async () => {
         router.push('/')
     }
 }
+const onAvatarImgError = (e: Event) => {
+  const img = e.target as HTMLImageElement
+  if (img) img.src = 'https://cravatar.cn/avatar/00000000000000000000000000000000?d=retro&s=64'
+}
 // 状态变量
 const isLogin = computed(() => userStore?.isLogin ?? false)
 const isAdmin = computed(() => {
@@ -2818,6 +2854,9 @@ const bgFileInput = ref<HTMLInputElement | null>(null)
 const siteAvatarInput = ref<HTMLInputElement | null>(null)
 const avatarFile = ref<File | null>(null)
 const avatarUploading = ref(false)
+const avatarUploadingGravatar = ref(false)
+const avatarUploadingLink = ref(false)
+const avatarUploadingFile = ref(false)
 const avatarLink = ref('')
 const cropperOpen = ref(false)
 const cropImageUrl = ref('')
@@ -3056,7 +3095,7 @@ const uploadAvatarRaw = async (file: File | null) => {
       useToast().add({ title: '错误', description: '请先选择头像图片', color: 'red' })
       return
     }
-    avatarUploading.value = true
+    avatarUploadingFile.value = true
     const fd = new FormData()
     fd.append('image', file)
     const resp = await fetch('/api/images/upload', { method: 'POST', body: fd, credentials: 'include' })
@@ -3077,7 +3116,7 @@ const uploadAvatarRaw = async (file: File | null) => {
   } catch (e: any) {
     useToast().add({ title: '错误', description: e.message || '操作失败', color: 'red' })
   } finally {
-    avatarUploading.value = false
+    avatarUploadingFile.value = false
   }
 }
 
@@ -3086,7 +3125,7 @@ const saveAvatarLink = async () => {
     const u = String(avatarLink.value || '').trim()
     if (!u) throw new Error('请填写头像链接')
     if (!/^https?:\/\//i.test(u) && !u.startsWith('/api')) throw new Error('链接需以 http 或 /api 开头')
-    avatarUploading.value = true
+    avatarUploadingLink.value = true
     localPreview.value = u.startsWith('http') ? u : `${baseApi}${u}`
     const res = await putRequest<any>('user/update', { avatar_url: u }, { credentials: 'include' })
     if (!res || res.code !== 1) throw new Error(res?.msg || '保存失败')
@@ -3095,7 +3134,7 @@ const saveAvatarLink = async () => {
   } catch (e: any) {
     useToast().add({ title: '错误', description: e.message || '操作失败', color: 'red' })
   } finally {
-    avatarUploading.value = false
+    avatarUploadingLink.value = false
   }
 }
 
@@ -3134,7 +3173,7 @@ const endDrag = () => {
 const performCropAndUpload = async () => {
   try {
     if (!cropImageUrl.value) return
-    avatarUploading.value = true
+    avatarUploadingFile.value = true
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
       const image = new Image()
       image.crossOrigin = 'anonymous'
@@ -3166,7 +3205,7 @@ const performCropAndUpload = async () => {
   } catch (e: any) {
     useToast().add({ title: '错误', description: e.message || '裁剪失败', color: 'red' })
   } finally {
-    avatarUploading.value = false
+    avatarUploadingFile.value = false
   }
 }
 const closeCropper = () => {
@@ -3179,20 +3218,22 @@ const useInitialsAvatar = async () => {
   try {
     const name = String((userStore.user as any)?.username || (userStore.user as any)?.Username || '').trim()
     if (!name) throw new Error('请先设置用户名')
-    const dice = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}&backgroundType=gradient&radius=50&scale=100&size=100`
-    avatarUploading.value = true
-    const res = await putRequest<any>('user/update', { avatar_url: dice }, { credentials: 'include' })
+    const email = String((userStore.user as any)?.email || '').trim().toLowerCase()
+    const hash = email ? hex32(email.toLowerCase()) : '00000000000000000000000000000000'
+    const grav = `https://cravatar.cn/avatar/${hash}?d=retro&s=100`
+    avatarUploadingGravatar.value = true
+    const res = await putRequest<any>('user/update', { avatar_url: grav }, { credentials: 'include' })
     if (!res || res.code !== 1) throw new Error(res?.msg || '保存失败')
     await userStore.getUser()
     // 清理任何手动输入或本地预览，确保生效
     localPreview.value = ''
     avatarLink.value = ''
     if (avatarInput.value) avatarInput.value.value = ''
-    useToast().add({ title: '成功', description: '已切换为首字母头像', color: 'green' })
+    useToast().add({ title: '成功', description: '已切换为 Gravatar 默认头像', color: 'green' })
   } catch (e: any) {
     useToast().add({ title: '错误', description: e?.message || '操作失败', color: 'red' })
   } finally {
-    avatarUploading.value = false
+    avatarUploadingGravatar.value = false
   }
 }
 
@@ -4026,13 +4067,29 @@ watch(musicCdnPreset, (v) => {
 
 const saveGithubOAuthConfig = async () => {
   try {
-    await saveConfigItem('githubOAuthEnabled')
-    await saveConfigItem('githubClientId')
-    await saveConfigItem('githubClientSecret')
-    await saveConfigItem('githubCallbackURL')
-    useToast().add({ title: '成功', description: 'GitHub 登录配置已保存', color: 'green' })
+    const payload = {
+      frontendSettings: {
+        githubOAuthEnabled: !!(frontendConfig as any).githubOAuthEnabled,
+        githubClientId: String((frontendConfig as any).githubClientId || ''),
+        githubClientSecret: String((frontendConfig as any).githubClientSecret || ''),
+        githubCallbackURL: String((frontendConfig as any).githubCallbackURL || '')
+      }
+    }
+    const response = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    })
+    const data = await response.json()
+    if (response.ok && data.code === 1) {
+      await fetchConfig()
+      useToast().add({ title: '保存成功', description: 'GitHub 登录配置已保存', color: 'green' })
+    } else {
+      throw new Error(data.msg || '保存失败')
+    }
   } catch (error: any) {
-    useToast().add({ title: '错误', description: error?.message || '保存失败', color: 'red' })
+    useToast().add({ title: '保存失败', description: error?.message || '保存失败', color: 'red' })
   }
 }
 
@@ -4132,13 +4189,6 @@ onMounted(() => {
         if (key && value !== undefined) {
             ;(frontendConfig as any)[key] = value;
         }
-        try {
-          const html = document.documentElement
-          const wantDark = panelTheme.value !== 'light'
-          const hasDark = html.classList.contains('dark')
-          if (wantDark && !hasDark) html.classList.add('dark')
-          else if (!wantDark && hasDark) html.classList.remove('dark')
-        } catch {}
     });
 });
 // ... existing code ...
@@ -4361,16 +4411,6 @@ const stopCloudPolling = () => {
 }
 const userTouchedAuto = ref(false)
 const onAutoSyncToggle = () => { userTouchedAuto.value = true }
-const formatShanghai = (s: string) => {
-  try {
-    if (!s) return ''
-    const d = new Date(s)
-    if (isNaN(d.getTime())) return s.replace('T',' ').replace('Z','')
-    const parts = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Shanghai' }).formatToParts(d)
-    const get = (t: string) => parts.find(p => p.type === t)?.value || ''
-    return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`
-  } catch { return s.replace('T',' ').replace('Z','') }
-}
 const loadStorageConfig = async () => {
   try {
     const res = await fetch('/api/frontend/config', { credentials: 'include' })

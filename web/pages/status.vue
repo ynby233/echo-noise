@@ -1,12 +1,11 @@
 <template>
-  <StatusPanel />
-  <Notification />
+  <ClientOnly>
+    <StatusPanelLazy />
+    <Notification />
+  </ClientOnly>
 </template>
-
 <script setup lang="ts">
-definePageMeta({ middleware: ['auth'] })
-import StatusPanel from '@/components/index/StatusPanel.vue'
-import Notification from '~/components/widgets/Notification.vue'
-
-
+import { defineAsyncComponent } from 'vue'
+import Notification from '../components/widgets/Notification.vue'
+const StatusPanelLazy = defineAsyncComponent(() => import('../components/index/StatusPanel.vue'))
 </script>

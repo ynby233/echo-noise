@@ -28,7 +28,7 @@
             <UButton :loading="submitting" :disabled="remaining<=0 || submitting" type="submit" color="primary">{{ remaining>0 ? '注册' : '验证码已过期' }}</UButton>
           </div>
         </UForm>
-        <div class="mt-2">
+        <div class="mt-2" v-if="githubEnabled">
           <UButton class="w-full h-10 px-3 gap-2 justify-center font-medium bg-[#24292f] hover:bg-[#1f2328] text-white ring-1 ring-black/20" @click="loginWithGithub">
             <UIcon name="i-mdi-github" class="w-5 h-5" />
             <span>GitHub 一键注册/登录</span>
@@ -44,6 +44,7 @@
 definePageMeta({ layout: false })
 import { useUserStore } from '~/store/user'
 import { useToast } from '#imports'
+import { useRouter, useRuntimeConfig } from '#imports'
 const user = useUserStore()
 const toast = useToast()
 const router = useRouter()
@@ -55,6 +56,7 @@ const captchaSrc = ref('')
 const captchaExpiresAt = ref<number | null>(null)
 const remaining = ref(0)
 let timer: any = null
+const githubEnabled = ref(false)
 
 const refreshCaptcha = async () => {
   try {
@@ -111,6 +113,7 @@ onMounted(() => {
       const res = await fetch(`${baseApi}/frontend/config`, { credentials: 'include' })
       const data = await res.json()
       const allowed = !!data?.data?.allowRegistration
+      githubEnabled.value = !!data?.data?.frontendSettings?.githubOAuthEnabled
       if (!allowed) {
         useToast().add({ title: '提示', description: '站点已关闭用户注册', color: 'orange' })
         useRouter().push('/auth/login')

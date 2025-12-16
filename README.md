@@ -36,6 +36,12 @@
 
 ## 2025更新状态
 
+- 修复github一键登录选项开启后前台页不显示及定位后台页错误的问题
+
+- 修复作者头像和管理员头像冲突问题，首页作者头像增加后端查询
+
+- 修复普通用户登录后台可见管理员权限的系统模块问题，默认非管理员不可见
+
 - 修复自动数据同步上传云端的逻辑，保存为即时模式是默认上传一次，兼容旧数据启动
 
 - 修复R2/S3云存储接入逻辑，优化首页显示效果，优化GitHub卡片UI与图标
@@ -1255,7 +1261,7 @@ curl -X POST http://localhost:8080/api/notify/send \
 
 ## MCP接入
 
-完整的 MCP 操作说明已迁移至单独文档：
+不运行带有mcp镜像包的版本一样可以连接分开使用，完整的 MCP 操作说明已迁移至单独文档：
 
 [MCP 操作说明（mcp/README.md）](mcp/README.md)
 
@@ -1508,8 +1514,8 @@ docker buildx create --use --name mybuilder
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final \
-  --build-arg VERSION=v2.3.5 \
-  -t noise233/echo-noise:v2.3.5 \
+  --build-arg VERSION=v2.3.6 \
+  -t noise233/echo-noise:v2.3.6 \
   -t noise233/echo-noise:latest \
   --push --no-cache .
 ```
@@ -1532,9 +1538,9 @@ docker buildx build --platform linux/amd64,linux/arm64 --target final --build-ar
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final \
-  --build-arg VERSION=v2.3.5 \
+  --build-arg VERSION=v2.3.6 \
   --build-arg USE_UPX=0 \
-  -t noise233/echo-noise:v2.3.5 \
+  -t noise233/echo-noise:v2.3.6 \
   -t noise233/echo-noise:latest \
   --push --no-cache .
 ```
@@ -1545,9 +1551,9 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final-mcp \
-  --build-arg VERSION=v2.3.5 \
+  --build-arg VERSION=v2.3.6 \
   --build-arg USE_UPX=1 \
-  -t noise233/echo-noise:v2.3.5-mcp \
+  -t noise233/echo-noise:v2.3.6-mcp \
   -t noise233/echo-noise:latest-mcp \
   --push --no-cache .
 ```
@@ -1558,9 +1564,9 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64 \
   --target final \
-  --build-arg VERSION=v2.3.5 \
+  --build-arg VERSION=v2.3.6 \
   --build-arg USE_UPX=1 \
-  -t noise233/echo-noise:v2.3.5-amd64 \
+  -t noise233/echo-noise:v2.3.6-amd64 \
   -t noise233/echo-noise:last-amd64 \
   --push --no-cache .
 ```

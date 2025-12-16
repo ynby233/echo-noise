@@ -41,7 +41,7 @@
 
           <div class="p-0">
             <div :class="['content-container', innerContainerClass, listThemeClass]" :data-msg-id="msg.id">
-              <div class="flex items-center gap-2 mb-2 author-row">
+              <div class="flex items-center gap-2 mb-1 author-row">
                 <img :src="authorAvatar(msg)" alt="avatar" class="avatar-img w-9 h-9 rounded-full object-cover" @error="authorAvatarOnError($event, msg.username || '匿名')" @mouseenter="showAuthorCard($event, msg)" @mouseleave="hideAuthorCard" @click="toggleAuthorCard($event, msg)" />
                 <div v-if="openAuthorId === msg.id" class="noise-author-card bg-white text-black dark:bg-[#242b32] dark:text-white" :style="openAuthorStyle">
                   <div class="noise-author-card-header">
@@ -247,29 +247,43 @@
   </UModal>
 </template>
 
-  <script setup lang="ts">
+<script setup lang="ts">
 import { useMessageStore } from "~/store/message";
 import { useUserStore } from "~/store/user";
 import MarkdownRenderer from "~/components/index/MarkdownRenderer.vue";
 import BuiltinComments from '../comments/BuiltinComments.vue'
-// 作者头像：登录用户的头像优先；否则使用站点头像或首字母头像
+import { useRuntimeConfig } from '#imports'
+import { useToast } from '#ui/composables/useToast'
+const resolveMediaUrl = (s: string) => {
+  if (!s) return ''
+  if (/^https?:\/\//i.test(s)) return s
+  const base = (BASE_API || '').replace(/\/$/, '')
+  const path = String(s || '')
+  if (path.startsWith('/api/')) return path
+  if (path.startsWith('/images/')) return `${base}${path}`
+  if (path.startsWith('/video/')) return path
+  if (path.startsWith('/')) return path
+  return `${base}/${path.replace(/^\//, '')}`
+}
 const authorAvatar = (msg: any) => {
-  const siteAvatar = String(((props.siteConfig as any)?.avatarURL || '')).trim()
-  const pick = (s: string) => {
-    if (!s) return ''
-    if (/^https?:\/\//i.test(s)) return s
-    return `${BASE_API}${s}`
-  }
   const msgAvatar = String((msg?.avatar_url || (msg as any)?.AvatarURL || '')).trim()
-  if (msgAvatar) return pick(msgAvatar)
+  if (msgAvatar) return resolveMediaUrl(msgAvatar)
+  const unameMsg = String(msg?.username || '').trim()
+  const prof = authorProfiles.value[unameMsg]
+  const profAvatar = String((prof && prof.avatar_url) || '').trim()
+  if (profAvatar) return resolveMediaUrl(profAvatar)
+  if (prof && (prof.is_admin || prof.IsAdmin)) {
+    const adminFallback = String(((props.siteConfig as any)?.avatarURL || '')).trim()
+    if (adminFallback) return resolveMediaUrl(adminFallback)
+  }
   const uname = String(((useUserStore().user as any)?.username || '')).trim()
   const uav = String((((useUserStore().user as any)?.avatar_url || (useUserStore().user as any)?.AvatarURL) || '')).trim()
-  if (uname && String(msg?.username || '').trim() === uname && uav) return pick(uav)
-  return pick(siteAvatar) || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(String(msg?.username || '匿名'))}&backgroundType=gradient&radius=50&scale=100&size=64`
+  if (uname && String(msg?.username || '').trim() === uname && uav) return resolveMediaUrl(uav)
+  return `https://www.gravatar.com/avatar/00000000000000000000000000000000?d=retro&s=64`
 }
 const authorAvatarOnError = (e: Event, seed: string) => {
   const img = e.target as HTMLImageElement
-  const fallback = `https://i.pravatar.cc/64?u=${encodeURIComponent(seed || '')}`
+  const fallback = `https://www.gravatar.com/avatar/00000000000000000000000000000000?d=retro&s=64`
   if (img) img.src = fallback
 }
 // 主题切换改为纯 CSS（html.dark）控制，避免组件重渲染导致媒体刷新
@@ -531,8 +545,7 @@ const authorProfileAvatar = (msg: any) => {
   const d = authorProfiles.value[uname]
   const url = String((d && d.avatar_url) || '')
   if (!url) return authorAvatar(msg)
-  if (/^https?:\/\//i.test(url)) return url
-  return `${BASE_API}${url}`
+  return resolveMediaUrl(url)
 }
 const authorProfileDesc = (msg: any) => {
   const uname = String(msg?.username || '').trim()
@@ -555,6 +568,12 @@ const checkApi = async () => {
 }
 const { deleteMessage } = useMessage();
 const message = useMessageStore();
+
+const prefetchAuthorProfilesForList = () => {
+  const names = Array.from(new Set((message.messages || []).map((m: any) => String(m?.username || '').trim()).filter((n) => !!n)))
+  names.forEach((n) => fetchAuthorProfile(n))
+}
+watch(() => message.messages, () => { prefetchAuthorProfilesForList() }, { deep: false, immediate: true })
 
 const activeCommentId = ref<number | null>(null);
 const commentRefreshKey = ref<Record<number, number>>({});
@@ -1843,7 +1862,7 @@ onMounted(() => {
 <style scoped>
 /* 修改内容卡片样式 */
 .content-container {
-  padding: 12px;
+  padding: 10px;
   border-radius: 12px;
   transition: none;
   margin: 4px 0 1.2rem 0;
@@ -1898,8 +1917,8 @@ onMounted(() => {
 /* 添加移动端适配 */
 @media screen and (max-width: 1024px) {
   .content-container {
-    margin: 4px 0 1.0rem 0;
-    padding: 8px;
+    margin: 4px 0 0.85rem 0;
+    padding: 6px;
     box-shadow: none;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;

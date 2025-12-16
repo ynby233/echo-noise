@@ -2712,6 +2712,7 @@ func GithubCallback(c *gin.Context) {
 	}
 	// 查找或创建用户
 	user, _ := services.GetUserByUsername(gh.Login)
+	isNew := false
 	if user == nil {
 		// 检查是否允许注册
 		var setting models.Setting
@@ -2732,6 +2733,7 @@ func GithubCallback(c *gin.Context) {
 			return
 		}
 		user = &newUser
+		isNew = true
 	}
 	// 自动识别并绑定 GitHub 邮箱
 	emailReq, _ := http.NewRequest("GET", "https://api.github.com/user/emails", nil)
@@ -2776,8 +2778,12 @@ func GithubCallback(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.Fail[any]("Session 保存失败"))
 		return
 	}
-	// 跳转到后台
-	c.Redirect(http.StatusFound, "/#/status")
+	// 跳转
+	if isNew {
+		c.Redirect(http.StatusFound, "/")
+	} else {
+		c.Redirect(http.StatusFound, "/status")
+	}
 }
 
 func BindEmail(c *gin.Context) {

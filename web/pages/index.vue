@@ -670,13 +670,52 @@ const profileName = computed(() => {
   return wname || '匿名'
 })
 const fallbackAvatarURL = 'https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png'
+const adminWelcome = ref<any>(null)
+
+const hex32 = (s: string) => {
+  let h1 = 0x811c9dc5, h2 = 0x811c9dc5
+  const t = String(s || '')
+  for (let i = 0; i < t.length; i++) {
+    const c = t.charCodeAt(i)
+    h1 = (h1 ^ c) + ((h1 << 1) + (h1 << 4) + (h1 << 7) + (h1 << 8) + (h1 << 24))
+    h2 = (h2 ^ (c * 13)) + ((h2 << 1) + (h2 << 4) + (h2 << 7) + (h2 << 8) + (h2 << 24))
+    h1 >>>= 0
+    h2 >>>= 0
+  }
+  const toHex = (v: number) => ('00000000' + (v >>> 0).toString(16)).slice(-8)
+  return (toHex(h1) + toHex(h2) + toHex(h1 ^ h2) + toHex((h1 + h2) >>> 0)).slice(0, 32)
+}
+const gravatarFromUser = (size = 72) => {
+  const u = userStore.user as any
+  const email = String(u?.email || u?.Email || '').trim().toLowerCase()
+  const name = String(u?.username || u?.Username || '').trim().toLowerCase()
+  const seed = email || name
+  const hash = seed ? hex32(seed) : '00000000000000000000000000000000'
+  return `https://www.gravatar.com/avatar/${hash}?d=retro&s=${size}`
+}
 const profileAvatar = computed(() => {
   const u = userStore.user as any
   const raw = String(u?.avatar_url || u?.AvatarURL || '').trim()
   const base = useRuntimeConfig().public.baseApi || '/api'
-  if (raw) return raw.startsWith('http') ? raw : `${base}${raw}`
+  const pick = (s: string) => {
+    if (!s) return ''
+    const b = (base || '').replace(/\/$/, '')
+    if (/^https?:\/\//i.test(s)) return s
+    if (s.startsWith('/images/')) return `${b}${s}`
+    if (s.startsWith('/')) return s
+    return `${b}/${s.replace(/^\//, '')}`
+  }
+  if (raw) {
+    return pick(raw)
+  }
+  if (isOnline.value) {
+    return gravatarFromUser(72)
+  }
+  const useAdmin = !!((frontendConfig.value as any)?.welcomeUseAdmin)
+  const araw = String((adminWelcome.value?.avatar_url || '')).trim()
+  if (useAdmin && araw) return pick(araw)
   const wraw = String((frontendConfig.value as any)?.welcomeAvatarURL || '').trim()
-  if (wraw) return wraw.startsWith('http') ? wraw : `${base}${wraw}`
+  if (wraw) return pick(wraw)
   return fallbackAvatarURL
 })
 const handleAvatarError = (e: Event) => {
@@ -687,6 +726,12 @@ const profileDesc = computed(() => {
   const u = userStore.user as any
   const d = String(u?.description || '').trim()
   if (d) return d
+  if (isOnline.value) {
+    return ''
+  }
+  const useAdmin = !!((frontendConfig.value as any)?.welcomeUseAdmin)
+  const ad = String((adminWelcome.value?.description || '')).trim()
+  if (useAdmin && ad) return ad
   const wd = String((frontendConfig.value as any)?.welcomeDescription || '').trim()
   return wd || '执迷不悟'
 })
@@ -1276,6 +1321,7 @@ const fetchConfig = async () => {
                     }
                 }
             })
+            githubEnabled.value = !!settings.githubOAuthEnabled
             const defaultTheme = (settings.defaultContentTheme || 'light').trim()
             if (typeof window !== 'undefined' && !localStorage.getItem('contentTheme')) {
               contentTheme.value = defaultTheme === 'light' ? 'light' : 'dark'
@@ -1554,6 +1600,19 @@ const fetchStatus = async () => {
     if (r && r.code === 1) status.value = r.data
   } catch {}
 }
+const loadAdminWelcome = async () => {
+  try {
+    const useAdmin = !!((frontendConfig.value as any)?.welcomeUseAdmin)
+    const logged = !!(userStore.user)
+    const sname = String((status.value as any)?.username || '').trim()
+    if (logged || !useAdmin || !sname) { adminWelcome.value = null; return }
+    const resp = await fetch(`/api/users/profile?username=${encodeURIComponent(sname)}`, { credentials: 'include', headers: { 'Accept': 'application/json' } })
+    const js = await resp.json().catch(() => null)
+    adminWelcome.value = js?.data || null
+  } catch { adminWelcome.value = null }
+}
+watch(() => [userStore.user, status.value, (frontendConfig.value as any)?.welcomeUseAdmin], () => { loadAdminWelcome() }, { deep: false })
+onMounted(() => { loadAdminWelcome() })
 const popularTags = computed(() => {
   const arr = Array.isArray(tags.value) ? [...tags.value] : []
   const excluded = ['留言', 'guestbook']
