@@ -5,6 +5,7 @@ cd "$ROOT"
 go install golang.org/x/mobile/cmd/gomobile@latest
 go install golang.org/x/mobile/cmd/gobind@latest
 export PATH="$HOME/go/bin:$PATH"
+go get golang.org/x/mobile/bind
 mkdir -p mobile/android/app/libs
 gomobile bind -target=android -androidapi 24 -o mobile/android/app/libs/backend.aar ./internal/mobilebackend
 PKG_DIR="mobile/android/app/src/main/java/cn/noisework/saynote"
