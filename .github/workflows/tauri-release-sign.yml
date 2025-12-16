@@ -290,7 +290,7 @@ jobs:
         run: |
           if [ "$EXISTS" != "true" ]; then
             mkdir -p mobile
-            node -e "const fs=require('fs');const pkg={name:'saynote-mobile',version:'0.1.0',private:true,scripts:{'build:web':'cd ../web && npm install && npm run generate','sync':'npx cap sync android','open':'npx cap open android','build:apk':'npm run build:web && npx cap sync android && cd android && ./gradlew assembleRelease'},devDependencies:{'@capacitor/cli':'^6.2.0','typescript':'^5.6.3'},dependencies:{'@capacitor/core':'^6.2.0','@capacitor/android':'^6.2.0'}};fs.writeFileSync('mobile/package.json',JSON.stringify(pkg,null,2));"
+            node -e "const fs=require('fs');const pkg={name:'saynote-mobile',version:'0.1.0',private:true,scripts:{'build:web':'cd ../web && npm install && npm run generate','sync':'npx cap sync android','open':'npx cap open android','build:apk':'npm run build:web && npx cap sync android && cd android && ./gradlew assembleRelease'},devDependencies:{'@capacitor/cli':'^6.2.0','@capacitor/assets':'^3.0.5','typescript':'^5.6.3'},dependencies:{'@capacitor/core':'^6.2.0','@capacitor/android':'^6.2.0'}};fs.writeFileSync('mobile/package.json',JSON.stringify(pkg,null,2));"
             echo "MOBILE_READY=true" >> "$GITHUB_ENV"
             echo "created=true" >> "$GITHUB_OUTPUT"
           else
@@ -327,6 +327,8 @@ jobs:
           echo "APP_VERSION_NAME=$VER" >> "$GITHUB_ENV"
       - name: Build Nuxt static
         if: env.MOBILE_READY == 'true'
+        env:
+          NUXT_PUBLIC_BASE_API: 'http://localhost:1314/api'
         run: |
           cd web
           npm install
@@ -345,25 +347,48 @@ jobs:
             npx cap init 说说笔记 cn.noisework.saynote --web-dir ../web/.output/public
           fi
           npx cap add android || true
+          
+          # Inject App Name strings.xml
           if [ -f "android/app/src/main/res/values/strings.xml" ]; then
             node -e "const fs=require('fs'),p='android/app/src/main/res/values/strings.xml';let s=fs.readFileSync(p,'utf8');s=s.replace(/<string name=\\\"app_name\\\">[\\s\\S]*?<\\/string>/,'<string name=\\\"app_name\\\">说说笔记</string>');fs.writeFileSync(p,s)"
           fi
-          if [ -f "android/app/build.gradle" ]; then
-            node -e "const fs=require('fs'),p='android/app/build.gradle';let s=fs.readFileSync(p,'utf8');const ver=process.env.APP_VERSION_NAME||'0.0.0';s=s.replace(/versionName\s+\"[^\"]*\"/,'versionName \""+ver+"\"');s=s.replace(/minSdkVersion\s+\d+/,'minSdkVersion 24');fs.writeFileSync(p,s)"
+          
+          # Inject Cleartext Traffic in AndroidManifest.xml
+          if [ -f "android/app/src/main/AndroidManifest.xml" ]; then
+            node -e "const fs=require('fs'),p='android/app/src/main/AndroidManifest.xml';let s=fs.readFileSync(p,'utf8');if(!s.includes('android:usesCleartextTraffic')){s=s.replace('<application','<application android:usesCleartextTraffic=\"true\"');fs.writeFileSync(p,s);console.log('Enabled Cleartext Traffic');}"
           fi
+
           bash ../packaging/android/setup_backend.sh
-          npm install --no-save @capacitor/assets
-          npx @capacitor/assets generate --android --iconSource ../web/public/android-chrome-512x512.png --splashSource ../web/public/apple-touch-icon.png || true
-          mkdir -p android/app/src/main/assets/data android/app/src/main/assets/config android/app/src/main/assets/public/data android/app/src/main/assets/public/config
+          
+          # Prepare Assets
+          mkdir -p android/app/src/main/assets/data android/app/src/main/assets/config
           SRC_DB="../data/noise.db"
           [ -f ../noise/data/noise.db ] && SRC_DB="../noise/data/noise.db"
           [ -f "$SRC_DB" ] || (echo "WARN: $SRC_DB not found, creating empty DB"; mkdir -p ../data; : > ../data/noise.db; SRC_DB="../data/noise.db")
           cp "$SRC_DB" android/app/src/main/assets/data/noise.db
-          cp "$SRC_DB" android/app/src/main/assets/public/data/noise.db
           [ -d ../config ] && cp -r ../config/. android/app/src/main/assets/config/ || true
-          [ -d ../config ] && cp -r ../config/. android/app/src/main/assets/public/config/ || true
+          
+          # Sync Web Assets
           npx cap sync android
+          
+          # Remove redundant files from web assets to save space
+          rm -rf android/app/src/main/assets/public/data || true
+          rm -rf android/app/src/main/assets/public/config || true
+          
+          # Generate Icons (Must run after sync/add to ensure paths exist)
+          npm install --save-dev @capacitor/assets
+          npx @capacitor/assets generate --android --iconSource ../web/public/android-chrome-512x512.png --splashSource ../web/public/apple-touch-icon.png
+          
+          # Update build.gradle with Version and MinSDK (Run last to ensure persistence)
+          if [ -f "android/app/build.gradle" ]; then
+            node -e "const fs=require('fs'),p='android/app/build.gradle';let s=fs.readFileSync(p,'utf8');const ver=process.env.APP_VERSION_NAME||'0.0.0';s=s.replace(/versionName\s+\"[^\"]*\"/,'versionName \""+ver+"\"');s=s.replace(/minSdkVersion\s+\d+/,'minSdkVersion 24');const [maj,min,pat]=ver.split('.').map(n=>parseInt(n)||0);const code=maj*10000+min*100+pat;s=s.replace(/versionCode\s+\d+/,'versionCode '+code);fs.writeFileSync(p,s);console.log('Updated build.gradle version to '+ver+' ('+code+')');"
+          fi
+          
           [ -f "android/app/src/main/assets/public/index.html" ] || (echo "ERROR: web assets missing after sync" && find android/app/src/main/assets -maxdepth 2 -type f | sed -n '1,100p' && exit 1)
+          
+          echo "Debug: Checking asset size..."
+          du -sh android/app/src/main/assets || true
+          
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease
