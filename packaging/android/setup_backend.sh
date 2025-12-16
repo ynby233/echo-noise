@@ -31,7 +31,7 @@ public class ServerStarter {
     dataDir.mkdirs();
     copyAssetDir(ctx.getAssets(),"config",configDir);
     copyAssetFile(ctx.getAssets(),"data/noise.db",new File(dataDir,"noise.db"));
-    Backend.Start(filesDir.getAbsolutePath());
+    Backend.start(filesDir.getAbsolutePath());
     started=true;
   }
   private static void copyAssetDir(AssetManager am,String assetDir,File outDir){
