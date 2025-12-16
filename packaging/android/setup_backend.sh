@@ -7,7 +7,7 @@ go install golang.org/x/mobile/cmd/gobind@latest
 export PATH="$HOME/go/bin:$PATH"
 go get golang.org/x/mobile/bind
 mkdir -p mobile/android/app/libs
-gomobile bind -target=android -androidapi 24 -o mobile/android/app/libs/backend.aar ./mobilebackend
+gomobile bind -target=android -androidapi 24 -javapkg=cn.noisework.saynote.go -o mobile/android/app/libs/backend.aar ./mobilebackend
 PKG_DIR="mobile/android/app/src/main/java/cn/noisework/saynote"
 mkdir -p "$PKG_DIR"
 cat > "$PKG_DIR/ServerStarter.java" << 'EOF'
@@ -19,7 +19,7 @@ import java.io.File;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.FileOutputStream;
-import backend.Backend;
+import cn.noisework.saynote.go.Backend;
 public class ServerStarter {
   private static boolean started=false;
   public static void start(Activity activity){
