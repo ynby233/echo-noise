@@ -10,15 +10,27 @@ mkdir -p mobile/android/app/libs
 gomobile bind -target=android -androidapi 24 -javapkg=cn.noisework.saynote.go -o mobile/android/app/libs/backend.aar ./mobilebackend
   ls -la mobile/android/app/libs
   
-  # Debug: Check AAR content
-  echo "Checking AAR content..."
+  # Dynamically detect the Go Backend class name from the AAR
+  echo "Detecting Go Backend class..."
   unzip -p mobile/android/app/libs/backend.aar classes.jar > mobile/android/app/libs/classes.jar
-  jar tf mobile/android/app/libs/classes.jar | grep "cn/noisework/saynote/go" || echo "WARNING: No matching classes found in AAR"
+  # Find class file that ends with "Mobilebackend.class" (from package name) or "Backend.class" (fallback)
+  CLASS_PATH=$(jar tf mobile/android/app/libs/classes.jar | grep -E "Mobilebackend.class|Backend.class" | head -n 1)
+  
+  if [ -z "$CLASS_PATH" ]; then
+    echo "ERROR: Could not find Go Backend class in AAR. Listing all classes:"
+    jar tf mobile/android/app/libs/classes.jar
+    exit 1
+  fi
+  
+  FULL_CLASS_NAME=$(echo "$CLASS_PATH" | sed 's/\.class$//' | sed 's/\//./g')
+  echo "Detected Go Backend class: $FULL_CLASS_NAME"
   rm mobile/android/app/libs/classes.jar
 
   PKG_DIR="mobile/android/app/src/main/java/cn/noisework/saynote"
   mkdir -p "$PKG_DIR"
-  cat > "$PKG_DIR/ServerStarter.java" << 'EOF'
+  
+  # Generate ServerStarter.java with dynamic import
+  cat > "$PKG_DIR/ServerStarter.java" << EOF
 package cn.noisework.saynote;
 import android.app.Activity;
 import android.content.Context;
@@ -27,7 +39,8 @@ import java.io.File;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.FileOutputStream;
-import cn.noisework.saynote.go.mobilebackend.Mobilebackend;
+import ${FULL_CLASS_NAME};
+
 public class ServerStarter {
   private static boolean started=false;
   public static void start(Activity activity){
@@ -41,12 +54,17 @@ public class ServerStarter {
     copyAssetDir(ctx.getAssets(),"config",configDir);
     copyAssetFile(ctx.getAssets(),"data/noise.db",new File(dataDir,"noise.db"));
     try {
-        Mobilebackend.start(filesDir.getAbsolutePath());
+        // Extract simple class name for the call
+        ${FULL_CLASS_NAME##*.}.start(filesDir.getAbsolutePath());
     } catch (Exception e) {
         e.printStackTrace();
     }
     started=true;
   }
+EOF
+
+  # Append helper methods to ServerStarter.java (using cat >> to avoid heredoc nesting complexity)
+  cat >> "$PKG_DIR/ServerStarter.java" << 'EOF'
   private static void copyAssetDir(AssetManager am,String assetDir,File outDir){
     try{
       String[] list=am.list(assetDir);
