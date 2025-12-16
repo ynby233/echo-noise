@@ -16,6 +16,9 @@ on:
       - '*'
 permissions:
   contents: write
+env:
+  RELEASE_TAG: ${{ inputs.tag_name != '' && inputs.tag_name || github.ref_name }}
+  DRAFT_RELEASE: true
 
 jobs:
   create_release:
@@ -25,8 +28,8 @@ jobs:
       - name: Create or update draft release
         uses: softprops/action-gh-release@v2
         with:
-          draft: ${{ inputs.draft }}
-          tag_name: ${{ inputs.tag_name }}
+          draft: ${{ env.DRAFT_RELEASE }}
+          tag_name: ${{ env.RELEASE_TAG }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build-matrix:
@@ -188,21 +191,21 @@ jobs:
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ inputs.tag_name }}
+          tag: ${{ env.RELEASE_TAG }}
           file: desktop/tauri/src-tauri/target/**/release/bundle/dmg/*.dmg
           file_glob: true
           overwrite: true
-          draft: ${{ inputs.draft }}
+          draft: ${{ env.DRAFT_RELEASE }}
       - name: Upload Windows EXE
         if: env.DESKTOP_READY == 'true' && matrix.os == 'windows-latest'
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ inputs.tag_name }}
+          tag: ${{ env.RELEASE_TAG }}
           file: desktop/tauri/src-tauri/target/**/release/bundle/nsis/*.exe
           file_glob: true
           overwrite: true
-          draft: ${{ inputs.draft }}
+          draft: ${{ env.DRAFT_RELEASE }}
       - name: Upload Release (desktop placeholder)
         if: env.DESKTOP_READY != 'true'
         run: |
@@ -212,8 +215,8 @@ jobs:
         if: env.DESKTOP_READY != 'true'
         uses: softprops/action-gh-release@v2
         with:
-          draft: ${{ inputs.draft }}
-          tag_name: ${{ inputs.tag_name }}
+          draft: ${{ env.DRAFT_RELEASE }}
+          tag_name: ${{ env.RELEASE_TAG }}
           files: |
             ${{ runner.temp }}/placeholder-desktop-${{ matrix.os }}.txt
         env:
@@ -297,6 +300,14 @@ jobs:
           npx cap sync android
           cd android
           ./gradlew assembleRelease
+      - name: Zipalign APK
+        if: env.MOBILE_READY == 'true'
+        run: |
+          export APK_PATH=$(ls mobile/android/app/build/outputs/apk/release/*.apk | head -n1)
+          export ZIPALIGN_BIN=$(ls -d "$ANDROID_HOME"/build-tools/*/zipalign | tail -n1)
+          export ALIGNED_APK="${APK_PATH%.apk}-aligned.apk"
+          "$ZIPALIGN_BIN" -p -f 4 "$APK_PATH" "$ALIGNED_APK"
+          mv "$ALIGNED_APK" "$APK_PATH"
       - name: Sign APK
         if: env.MOBILE_READY == 'true' && env.ANDROID_KEYSTORE_BASE64 != ''
         env:
@@ -308,12 +319,24 @@ jobs:
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > keystore.jks
           export APK_PATH=$(ls mobile/android/app/build/outputs/apk/release/*.apk | head -n1)
           $ANDROID_HOME/build-tools/*/apksigner sign --ks keystore.jks --ks-key-alias "$ANDROID_KEY_ALIAS" --ks-pass pass:"$ANDROID_KEYSTORE_PASSWORD" --key-pass pass:"$ANDROID_KEY_ALIAS_PASSWORD" "$APK_PATH"
+      - name: Verify APK signature
+        if: env.MOBILE_READY == 'true'
+        run: |
+          export APK_PATH=$(ls mobile/android/app/build/outputs/apk/release/*.apk | head -n1)
+          $ANDROID_HOME/build-tools/*/apksigner verify --verbose "$APK_PATH"
+      - name: Fallback sign APK (ephemeral keystore)
+        if: env.MOBILE_READY == 'true' && env.ANDROID_KEYSTORE_BASE64 == ''
+        run: |
+          export APK_PATH=$(ls mobile/android/app/build/outputs/apk/release/*.apk | head -n1)
+          keytool -genkeypair -keystore temp-release.jks -storepass android -alias temp -keypass android -dname "CN=CI Noise,O=Noise,C=CN" -keyalg RSA -keysize 2048 -validity 36500
+          $ANDROID_HOME/build-tools/*/apksigner sign --ks temp-release.jks --ks-key-alias temp --ks-pass pass:android --key-pass pass:android "$APK_PATH"
+          $ANDROID_HOME/build-tools/*/apksigner verify --verbose "$APK_PATH"
       - name: Upload Release (apk)
         if: env.MOBILE_READY == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          draft: ${{ inputs.draft }}
-          tag_name: ${{ inputs.tag_name }}
+          draft: ${{ env.DRAFT_RELEASE }}
+          tag_name: ${{ env.RELEASE_TAG }}
           files: |
             mobile/android/app/build/outputs/apk/release/*.apk
         env:
@@ -327,8 +350,8 @@ jobs:
         if: env.MOBILE_READY != 'true'
         uses: softprops/action-gh-release@v2
         with:
-          draft: ${{ inputs.draft }}
-          tag_name: ${{ inputs.tag_name }}
+          draft: ${{ env.DRAFT_RELEASE }}
+          tag_name: ${{ env.RELEASE_TAG }}
           files: |
             ${{ runner.temp }}/placeholder-android.txt
         env:

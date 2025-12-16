@@ -16,6 +16,9 @@ on:
       - '*'
 permissions:
   contents: write
+env:
+  RELEASE_TAG: ${{ inputs.tag_name != '' && inputs.tag_name || github.ref_name }}
+  DRAFT_RELEASE: true
 
 jobs:
   create_release:
@@ -25,8 +28,8 @@ jobs:
       - name: Create or update draft release
         uses: softprops/action-gh-release@v2
         with:
-          draft: ${{ inputs.draft }}
-          tag_name: ${{ inputs.tag_name }}
+          draft: ${{ env.DRAFT_RELEASE }}
+          tag_name: ${{ env.RELEASE_TAG }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   tauri:
@@ -131,21 +134,21 @@ jobs:
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ inputs.tag_name }}
+          tag: ${{ env.RELEASE_TAG }}
           file: desktop/tauri/src-tauri/target/**/release/bundle/dmg/*.dmg
           file_glob: true
           overwrite: true
-          draft: ${{ inputs.draft }}
+          draft: ${{ env.DRAFT_RELEASE }}
       - name: Upload Windows EXE
         if: env.DESKTOP_READY == 'true' && matrix.platform == 'windows-latest'
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ inputs.tag_name }}
+          tag: ${{ env.RELEASE_TAG }}
           file: desktop/tauri/src-tauri/target/**/release/bundle/nsis/*.exe
           file_glob: true
           overwrite: true
-          draft: ${{ inputs.draft }}
+          draft: ${{ env.DRAFT_RELEASE }}
       - name: Upload artifacts (desktop placeholder)
         if: env.DESKTOP_READY != 'true'
         run: |
@@ -155,8 +158,8 @@ jobs:
         if: env.DESKTOP_READY != 'true'
         uses: softprops/action-gh-release@v2
         with:
-          draft: ${{ inputs.draft }}
-          tag_name: ${{ inputs.tag_name }}
+          draft: ${{ env.DRAFT_RELEASE }}
+          tag_name: ${{ env.RELEASE_TAG }}
           files: |
             ${{ runner.temp }}/placeholder-desktop-${{ matrix.platform }}.txt
         env:
