@@ -18,25 +18,19 @@ env:
   DRAFT_RELEASE: true
 
 jobs:
-  create_release:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Create or update draft release
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: ${{ env.DRAFT_RELEASE }}
-          tag_name: ${{ env.RELEASE_TAG }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   tauri:
-    needs: create_release
     strategy:
       matrix:
         platform: [macos-latest, windows-latest]
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
+      - name: Normalize release tag
+        shell: bash
+        run: |
+          RAW="${{ inputs.tag_name != '' && inputs.tag_name || github.ref_name }}"
+          VER=$(echo "$RAW" | sed -E 's/^[vV]//')
+          echo "RELEASE_TAG=V$VER" >> "$GITHUB_ENV"
       - name: Check desktop directory exists
         shell: bash
         id: chkdesk
@@ -89,8 +83,10 @@ jobs:
           cp -r web/.output/public/. desktop/tauri/src-tauri/public/
           cp -r web/.output/public/. desktop/tauri/dist/
           cp web/public/favicon.svg desktop/tauri/src-tauri/icons/favicon.svg || true
-          [ -f data/noise.db ] || (mkdir -p data && : > data/noise.db)
-          cp data/noise.db desktop/tauri/src-tauri/data/noise.db
+          SRC_DB="data/noise.db"
+          [ -f noise/data/noise.db ] && SRC_DB="noise/data/noise.db"
+          [ -f "$SRC_DB" ] || (mkdir -p data && : > data/noise.db && SRC_DB="data/noise.db")
+          cp "$SRC_DB" desktop/tauri/src-tauri/data/noise.db
           [ -d config ] && cp -r config/. desktop/tauri/src-tauri/config/ || true
       - name: Generate PNG icons
         shell: bash

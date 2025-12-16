@@ -25,6 +25,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Normalize release tag
+        shell: bash
+        run: |
+          RAW="${{ inputs.tag_name != '' && inputs.tag_name || github.ref_name }}"
+          VER=$(echo "$RAW" | sed -E 's/^[vV]//')
+          echo "RELEASE_TAG=V$VER" >> "$GITHUB_ENV"
       - name: Create or update draft release
         uses: softprops/action-gh-release@v2
         with:
@@ -94,8 +100,10 @@ jobs:
           cp -r web/.output/public/. desktop/tauri/src-tauri/public/
           cp -r web/.output/public/. desktop/tauri/dist/
           cp web/public/favicon.svg desktop/tauri/src-tauri/icons/favicon.svg || true
-          [ -f data/noise.db ] || (mkdir -p data && : > data/noise.db)
-          cp data/noise.db desktop/tauri/src-tauri/data/noise.db
+          SRC_DB="data/noise.db"
+          [ -f noise/data/noise.db ] && SRC_DB="noise/data/noise.db"
+          [ -f "$SRC_DB" ] || (mkdir -p data && : > data/noise.db && SRC_DB="data/noise.db")
+          cp "$SRC_DB" desktop/tauri/src-tauri/data/noise.db
           [ -d config ] && cp -r config/. desktop/tauri/src-tauri/config/ || true
       - name: Generate PNG icons
         shell: bash
@@ -308,7 +316,12 @@ jobs:
             node -e "const fs=require('fs'),p='android/app/src/main/res/values/strings.xml';let s=fs.readFileSync(p,'utf8');s=s.replace(/<string name=\\\"app_name\\\">[\\s\\S]*?<\\/string>/,'<string name=\\\"app_name\\\">说说笔记</string>');fs.writeFileSync(p,s)"
           fi
           npm install --no-save @capacitor/assets
-          npx @capacitor/assets generate --android --iconSource ../web/public/favicon.svg --splashSource ../web/public/favicon.svg || true
+          npx @capacitor/assets generate --android --iconSource ../web/public/android-chrome-512x512.png --splashSource ../web/public/apple-touch-icon.png || true
+          mkdir -p android/app/src/main/assets/data android/app/src/main/assets/config android/app/src/main/assets/public/data android/app/src/main/assets/public/config
+          cp ../data/noise.db android/app/src/main/assets/data/noise.db
+          cp ../data/noise.db android/app/src/main/assets/public/data/noise.db
+          [ -d ../config ] && cp -r ../config/. android/app/src/main/assets/config/ || true
+          [ -d ../config ] && cp -r ../config/. android/app/src/main/assets/public/config/ || true
           npx cap sync android
           [ -f "android/app/src/main/assets/public/index.html" ] || (echo "ERROR: web assets missing after sync" && find android/app/src/main/assets -maxdepth 2 -type f | sed -n '1,100p' && exit 1)
           cd android
