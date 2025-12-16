@@ -332,7 +332,7 @@ jobs:
             node -e "const fs=require('fs'),p='android/app/src/main/res/values/strings.xml';let s=fs.readFileSync(p,'utf8');s=s.replace(/<string name=\\\"app_name\\\">[\\s\\S]*?<\\/string>/,'<string name=\\\"app_name\\\">说说笔记</string>');fs.writeFileSync(p,s)"
           fi
           if [ -f "android/app/build.gradle" ]; then
-            node -e "const fs=require('fs'),p='android/app/build.gradle';let s=fs.readFileSync(p,'utf8');const ver=process.env.APP_VERSION_NAME||'0.0.0';s=s.replace(/versionName\s+\"[^\"]*\"/,'versionName \""+ver+"\"');fs.writeFileSync(p,s)"
+            node -e "const fs=require('fs'),p='android/app/build.gradle';let s=fs.readFileSync(p,'utf8');const ver=process.env.APP_VERSION_NAME||'0.0.0';s=s.replace(/versionName\s+\"[^\"]*\"/,'versionName \""+ver+"\"');s=s.replace(/minSdkVersion\s+\d+/,'minSdkVersion 24');fs.writeFileSync(p,s)"
           fi
           bash ../packaging/android/setup_backend.sh
           npm install --no-save @capacitor/assets
@@ -350,17 +350,32 @@ jobs:
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease
-          APK_CANDIDATE=$(ls app/build/outputs/apk/release/app-release.apk 2>/dev/null || true)
-          if [ -z "$APK_CANDIDATE" ]; then
-            APK_CANDIDATE=$(ls app/build/outputs/apk/release/*.apk | grep -v unsigned | head -n1)
+          # Capture relative path from mobile/android
+          APK_REL=$(find app/build/outputs/apk/release -name "*.apk" | head -n1)
+          if [ -n "$APK_REL" ]; then
+            # Construct root-relative path
+            echo "APK_PATH=mobile/android/$APK_REL" >> "$GITHUB_ENV"
+          else
+             echo "ERROR: APK not found in mobile/android/app/build/outputs/apk/release"
+             exit 1
           fi
-          echo "APK_PATH=$APK_CANDIDATE" >> "$GITHUB_ENV"
       - name: Zipalign APK
         if: env.MOBILE_READY == 'true'
         run: |
-          export APK_PATH="${APK_PATH:-$(ls mobile/android/app/build/outputs/apk/release/*.apk | grep -v unsigned | head -n1)}"
-          export ALIGNED_APK="${APK_PATH%.apk}-aligned.apk"
-          "$ZIPALIGN" -p -f 4 "$APK_PATH" "$ALIGNED_APK"
+          # Verify APK_PATH exists
+          if [ ! -f "$APK_PATH" ]; then
+            echo "APK_PATH from env '$APK_PATH' not found. searching..."
+            APK_PATH=$(find mobile/android/app/build/outputs/apk/release -name "*.apk" | head -n1)
+          fi
+          
+          if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
+            echo "ERROR: No valid APK found for alignment."
+            exit 1
+          fi
+          
+          echo "Aligning APK: $APK_PATH"
+          ALIGNED_APK="${APK_PATH%.apk}-aligned.apk"
+          "$ZIPALIGN" -f -p 4 "$APK_PATH" "$ALIGNED_APK"
           mv "$ALIGNED_APK" "$APK_PATH"
       - name: Sign APK
         if: env.MOBILE_READY == 'true' && env.ANDROID_KEYSTORE_BASE64 != ''
@@ -372,7 +387,25 @@ jobs:
           ANDROID_KEYSTORE_TYPE: ${{ secrets.ANDROID_KEYSTORE_TYPE }}
         run: |
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > keystore.jks
-          export APK_PATH="${APK_PATH:-$(ls mobile/android/app/build/outputs/apk/release/*.apk | grep -v unsigned | head -n1)}"
+          
+          # Verify APK_PATH or find it (allow any apk if zipalign overwrote it)
+          if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
+            echo "APK_PATH from env '$APK_PATH' missing or invalid. Searching..."
+            APK_PATH=$(find mobile/android/app/build/outputs/apk/release -name "*.apk" | head -n1)
+          fi
+          
+          if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
+             echo "ERROR: No valid APK found for signing."
+             exit 1
+          fi
+          
+          echo "Signing APK: $APK_PATH"
+          echo "Using APKSIGNER: $APKSIGNER"
+          if [ ! -x "$APKSIGNER" ]; then
+             echo "WARN: APKSIGNER not executable or not found at $APKSIGNER"
+             ls -l "$APKSIGNER" || true
+          fi
+          
           KS_TYPE_ARG=""
           if [ -n "$ANDROID_KEYSTORE_TYPE" ]; then
             KS_TYPE_ARG="--ks-type $ANDROID_KEYSTORE_TYPE"
