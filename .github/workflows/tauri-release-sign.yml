@@ -83,6 +83,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.24'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
       - name: Install Linux dependencies (skip on non-linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -338,8 +341,9 @@ jobs:
             node -e "const fs=require('fs'),p='android/app/src/main/res/values/strings.xml';let s=fs.readFileSync(p,'utf8');s=s.replace(/<string name=\\\"app_name\\\">[\\s\\S]*?<\\/string>/,'<string name=\\\"app_name\\\">说说笔记</string>');fs.writeFileSync(p,s)"
           fi
           if [ -f "android/app/build.gradle" ]; then
-            node -e "const fs=require('fs'),p='android/app/build.gradle';let s=fs.readFileSync(p,'utf8');const ver=process.env.APP_VERSION_NAME||'0.0.0';s=s.replace(/versionName\\s+\"[^\"]*\"/,'versionName \""+ver+"\"');fs.writeFileSync(p,s)"
+            node -e "const fs=require('fs'),p='android/app/build.gradle';let s=fs.readFileSync(p,'utf8');const ver=process.env.APP_VERSION_NAME||'0.0.0';s=s.replace(/versionName\\s+\\\"[^\\\"]*\\\"/,'versionName \\\"'+ver+'\\\"');fs.writeFileSync(p,s)"
           fi
+          bash ../../packaging/android/setup_backend.sh
           npm install --no-save @capacitor/assets
           npx @capacitor/assets generate --android --iconSource ../web/public/android-chrome-512x512.png --splashSource ../web/public/apple-touch-icon.png || true
           mkdir -p android/app/src/main/assets/data android/app/src/main/assets/config android/app/src/main/assets/public/data android/app/src/main/assets/public/config
