@@ -75,5 +75,9 @@ if [ -f "$MAIN_ACT" ]; then
 fi
 BUILD_GRADLE="mobile/android/app/build.gradle"
 if [ -f "$BUILD_GRADLE" ]; then
-  perl -0777 -pe 'if(!/libs\/backend\.aar/){s/dependencies\s*\{(\s*)/dependencies{$1    implementation files("libs\/backend.aar")\n/s}' -i "$BUILD_GRADLE"
+  # Use fileTree to automatically include all AARs in libs, which is more robust
+  perl -0777 -pe 'if(!/fileTree.*libs/){s/dependencies\s*\{(\s*)/dependencies{$1    implementation fileTree(dir: "libs", include: ["*.aar"])\n/s}' -i "$BUILD_GRADLE"
+  # Print build.gradle to verify injection in CI logs
+  echo "Modified build.gradle content:"
+  cat "$BUILD_GRADLE"
 fi
