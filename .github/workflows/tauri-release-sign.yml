@@ -360,6 +360,7 @@ jobs:
           npx cap sync android
           [ -f "android/app/src/main/assets/public/index.html" ] || (echo "ERROR: web assets missing after sync" && find android/app/src/main/assets -maxdepth 2 -type f | sed -n '1,100p' && exit 1)
           cd android
+          chmod +x gradlew
           ./gradlew assembleRelease
           APK_CANDIDATE=$(ls app/build/outputs/apk/release/app-release.apk 2>/dev/null || true)
           if [ -z "$APK_CANDIDATE" ]; then

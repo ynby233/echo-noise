@@ -3,10 +3,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 go install golang.org/x/mobile/cmd/gomobile@latest
-"$HOME/go/bin/gomobile" init
-"$HOME/go/bin/gomobile" bind -target=android ./internal/mobilebackend
 mkdir -p mobile/android/app/libs
-mv mobilebackend.aar mobile/android/app/libs/backend.aar
+"$HOME/go/bin/gomobile" bind -target=android -androidapi 24 -o mobile/android/app/libs/backend.aar ./internal/mobilebackend
 PKG_DIR="mobile/android/app/src/main/java/cn/noisework/saynote"
 mkdir -p "$PKG_DIR"
 cat > "$PKG_DIR/ServerStarter.java" << 'EOF'
@@ -31,7 +29,11 @@ public class ServerStarter {
     dataDir.mkdirs();
     copyAssetDir(ctx.getAssets(),"config",configDir);
     copyAssetFile(ctx.getAssets(),"data/noise.db",new File(dataDir,"noise.db"));
-    Backend.start(filesDir.getAbsolutePath());
+    try {
+        Backend.start(filesDir.getAbsolutePath());
+    } catch (Exception e) {
+        e.printStackTrace();
+    }
     started=true;
   }
   private static void copyAssetDir(AssetManager am,String assetDir,File outDir){
