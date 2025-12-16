@@ -3,8 +3,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 go install golang.org/x/mobile/cmd/gomobile@latest
+go install golang.org/x/mobile/cmd/gobind@latest
+export PATH="$HOME/go/bin:$PATH"
 mkdir -p mobile/android/app/libs
-"$HOME/go/bin/gomobile" bind -target=android -androidapi 24 -o mobile/android/app/libs/backend.aar ./internal/mobilebackend
+gomobile bind -target=android -androidapi 24 -o mobile/android/app/libs/backend.aar ./internal/mobilebackend
 PKG_DIR="mobile/android/app/src/main/java/cn/noisework/saynote"
 mkdir -p "$PKG_DIR"
 cat > "$PKG_DIR/ServerStarter.java" << 'EOF'
