@@ -301,10 +301,16 @@ jobs:
           cd mobile
           npm install
           if [ ! -f "capacitor.config.ts" ] && [ ! -f "capacitor.config.json" ]; then
-            npx cap init saynote-mobile cn.noisework.saynote --web-dir ../web/.output/public
+            npx cap init 说说笔记 cn.noisework.saynote --web-dir ../web/.output/public
           fi
           npx cap add android || true
+          if [ -f "android/app/src/main/res/values/strings.xml" ]; then
+            node -e "const fs=require('fs'),p='android/app/src/main/res/values/strings.xml';let s=fs.readFileSync(p,'utf8');s=s.replace(/<string name=\\\"app_name\\\">[\\s\\S]*?<\\/string>/,'<string name=\\\"app_name\\\">说说笔记</string>');fs.writeFileSync(p,s)"
+          fi
+          npm install --no-save @capacitor/assets
+          npx @capacitor/assets generate --android --iconSource ../web/public/favicon.svg --splashSource ../web/public/favicon.svg || true
           npx cap sync android
+          [ -f "android/app/src/main/assets/public/index.html" ] || (echo "ERROR: web assets missing after sync" && find android/app/src/main/assets -maxdepth 2 -type f | sed -n '1,100p' && exit 1)
           cd android
           ./gradlew assembleRelease
       - name: Zipalign APK
