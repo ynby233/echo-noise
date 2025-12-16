@@ -377,7 +377,11 @@ jobs:
           
           # Generate Icons (Must run after sync/add to ensure paths exist)
           npm install --save-dev @capacitor/assets
-          npx @capacitor/assets generate --android --iconSource ../web/public/android-chrome-512x512.png --splashSource ../web/public/apple-touch-icon.png
+          mkdir -p assets
+          cp ../web/public/android-chrome-512x512.png assets/icon.png
+          cp ../web/public/apple-touch-icon.png assets/splash.png
+          cp ../web/public/apple-touch-icon.png assets/splash-dark.png
+          npx @capacitor/assets generate --android
           
           # Update build.gradle with Version and MinSDK (Run last to ensure persistence)
           if [ -f "android/app/build.gradle" ]; then
