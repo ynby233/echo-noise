@@ -27,6 +27,8 @@ func Start(workDir string) error {
 		_ = os.Chdir(workDir)
 	}
 	ensureDirs()
+	// 标记为移动端嵌入式后端：用于在 SeedDefaultData 等逻辑中做移动端专属兼容，避免影响 Docker/桌面端
+	os.Setenv("NOISE_MOBILE", "1")
 	os.Setenv("DB_TYPE", "sqlite")
 	if os.Getenv("DB_PATH") == "" {
 		os.Setenv("DB_PATH", filepath.Join("data", "noise.db"))
@@ -60,8 +62,8 @@ func Start(workDir string) error {
 	srv = &http.Server{
 		Addr:         config.Config.Server.Host + ":" + config.Config.Server.Port,
 		Handler:      r,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  10 * time.Minute,
+		WriteTimeout: 10 * time.Minute,
 		IdleTimeout:  60 * time.Second,
 	}
 	go func() { _ = srv.ListenAndServe() }()

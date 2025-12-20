@@ -448,7 +448,13 @@ func listCloudAttachments(siteCfg models.SiteConfig, keep func(name string) bool
 			if !keep(name) {
 				continue
 			}
-			urlPath := origin + "/" + escapeObjectKeyForURL(cleanKey)
+			// 兼容历史对象：PublicBaseURL 可能带有 path 前缀（如 /note），但对象 key 未必包含该前缀。
+			// 如果 key 不带 prefix，则在生成展示 URL 时补齐 prefix；但 Key 字段仍返回真实对象 key（用于删除）。
+			keyForURL := cleanKey
+			if prefix != "" && !strings.HasPrefix(cleanKey, prefix+"/") {
+				keyForURL = prefix + "/" + cleanKey
+			}
+			urlPath := origin + "/" + escapeObjectKeyForURL(keyForURL)
 			modAt := time.Time{}
 			if obj.LastModified != nil {
 				modAt = *obj.LastModified

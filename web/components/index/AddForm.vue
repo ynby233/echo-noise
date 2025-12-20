@@ -298,11 +298,11 @@ const addImage = async (event: Event) => {
     });
     return;
   }
-  const maxSize = 5 * 1024 * 1024; // 5MB
+  const maxSize = 50 * 1024 * 1024; // 50MB
   if (file.size > maxSize) {
     toast.add({
       title: '错误',
-      description: '图片大小不能超过 5MB',
+      description: '图片大小不能超过 50MB',
       color: 'red',
       timeout: 2000
     });

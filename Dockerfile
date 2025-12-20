@@ -6,7 +6,10 @@ WORKDIR /app/web
 
 # 复制前端依赖文件并安装依赖
 COPY ./web/package.json ./web/package-lock.json* ./
-RUN npm ci --omit=dev --prefer-offline --no-audit
+ARG NPM_REGISTRY=https://registry.npmjs.org/
+RUN --mount=type=cache,target=/root/.npm \
+    npm config set registry "$NPM_REGISTRY" && \
+    npm ci --omit=dev --prefer-offline --no-audit --no-fund
 
 # 更新 Browserslist 数据，避免 caniuse-lite 过期警告
 RUN npx --yes update-browserslist-db@latest
@@ -52,7 +55,10 @@ RUN mkdir -p /app/data /app/public && chmod -R 755 /app/data
 FROM public.ecr.aws/docker/library/node:20-alpine AS mcp-build
 WORKDIR /app/mcp
 COPY ./mcp/package.json ./
-RUN npm install --omit=dev --prefer-offline --no-audit
+ARG NPM_REGISTRY=https://registry.npmjs.org/
+RUN --mount=type=cache,target=/root/.npm \
+    npm config set registry "$NPM_REGISTRY" && \
+    npm install --omit=dev --prefer-offline --no-audit --no-fund
 COPY ./mcp/server.js ./server.js
 RUN npx --yes esbuild@0.23.0 server.js \
     --bundle \

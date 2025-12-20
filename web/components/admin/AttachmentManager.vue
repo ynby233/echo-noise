@@ -110,6 +110,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useToast } from '#imports'
+import { useUserStore } from '~/store/user'
 
 const props = defineProps<{ theme?: Record<string, string>, isCloud?: boolean }>()
 
@@ -126,6 +127,12 @@ const imagesVisible = ref(4)
 const videosVisible = ref(4)
 
 const baseApi = useRuntimeConfig().public.baseApi || '/api'
+const userStore = useUserStore()
+const authHeaders = computed(() => {
+  const t = String((userStore as any)?.token || '').trim()
+  if (!t || t === 'null') return {}
+  return { Authorization: `Bearer ${t}` }
+})
 
 const fullURL = (u: string) => {
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
@@ -162,14 +169,14 @@ const sortNewestFirst = (arr: any[]) => {
 }
 
 const fetchImages = async () => {
-  const resp = await fetch(`${baseApi}/attachments/images`, { credentials: 'include' })
+  const resp = await fetch(`${baseApi}/attachments/images`, { credentials: 'include', headers: authHeaders.value as any })
   const js = await resp.json().catch(() => null)
   const arr = (js && js.code === 1 && Array.isArray(js.data)) ? js.data : []
   images.value = sortNewestFirst(arr).filter((it: any) => /\.(png|jpe?g|gif|webp)$/i.test(String(it.name || '')))
   imagesVisible.value = 4
 }
 const fetchVideos = async () => {
-  const resp = await fetch(`${baseApi}/attachments/video`, { credentials: 'include' })
+  const resp = await fetch(`${baseApi}/attachments/video`, { credentials: 'include', headers: authHeaders.value as any })
   const js = await resp.json().catch(() => null)
   const arr = (js && js.code === 1 && Array.isArray(js.data)) ? js.data : []
   videos.value = sortNewestFirst(arr).filter((it: any) => /\.(mp4|webm|mov|avi)$/i.test(String(it.name || '')))
@@ -196,7 +203,7 @@ const doDelete = async () => {
     deleting.value = true
     const key = deleteItem.value.key || deleteItem.value.name
     const url = `${baseApi}/attachments/${deleteType.value === 'image' ? 'images' : 'video'}/${encodeURIComponent(key)}`
-    const resp = await fetch(url, { method: 'DELETE', credentials: 'include' })
+    const resp = await fetch(url, { method: 'DELETE', credentials: 'include', headers: authHeaders.value as any })
     const js = await resp.json().catch(() => null)
     if (!resp.ok || !js || js.code !== 1) throw new Error(js?.msg || '删除失败')
     useToast().add({ title: '已删除', color: 'green' })

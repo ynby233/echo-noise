@@ -2,6 +2,8 @@ package services
 
 import (
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/lin-snow/ech0/internal/database"
@@ -104,20 +106,23 @@ func SeedDefaultData() error {
 	}
 
 	// 2. 初始化默认系统用户 (如果不存在)
-	if err := db.Model(&models.User{}).Count(&count).Error; err == nil && count == 0 {
-		hashed, _ := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
-		sysUser := models.User{
-			Username:      "admin",
-			Password:      string(hashed),
-			IsAdmin:       true,
-			Token:         models.GenerateToken(32),
-			Description:   "欢迎访问",
-			AvatarURL:     "https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png",
-			Email:         "",
-			EmailVerified: true,
-		}
-		if err := db.Create(&sysUser).Error; err != nil {
-			return fmt.Errorf("初始化系统默认用户失败: %v", err)
+	// 移动端嵌入式后端：不创建默认 admin 用户，确保“首次注册用户”成为管理员（不影响 Docker/桌面端默认账号逻辑）
+	if strings.TrimSpace(os.Getenv("NOISE_MOBILE")) != "1" {
+		if err := db.Model(&models.User{}).Count(&count).Error; err == nil && count == 0 {
+			hashed, _ := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
+			sysUser := models.User{
+				Username:      "admin",
+				Password:      string(hashed),
+				IsAdmin:       true,
+				Token:         models.GenerateToken(32),
+				Description:   "欢迎访问",
+				AvatarURL:     "https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png",
+				Email:         "",
+				EmailVerified: true,
+			}
+			if err := db.Create(&sysUser).Error; err != nil {
+				return fmt.Errorf("初始化系统默认用户失败: %v", err)
+			}
 		}
 	}
 

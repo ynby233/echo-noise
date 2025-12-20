@@ -17,7 +17,8 @@ import (
 
 func SetupRouter() *gin.Engine {
 	r := gin.Default()
-	r.MaxMultipartMemory = 256 << 20
+	// 支持大文件上传（视频压缩/直传云端可能超过 200MB）
+	r.MaxMultipartMemory = 1024 << 20
 
 	// 使用 pkg 中的 session 初始化
 	pkg.InitSession(r)

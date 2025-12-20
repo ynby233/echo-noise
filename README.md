@@ -1527,8 +1527,8 @@ docker buildx create --use --name mybuilder
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final-ffmpeg \
-  --build-arg VERSION=v2.4.1 \
-  -t noise233/echo-noise:v2.4.1 \
+  --build-arg VERSION=v2.4.2 \
+  -t noise233/echo-noise:v2.4.2 \
   -t noise233/echo-noise:latest \
   --push --no-cache .
 ```
@@ -1551,9 +1551,9 @@ docker buildx build --platform linux/amd64,linux/arm64 --target final-ffmpeg --b
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final-ffmpeg \
-  --build-arg VERSION=v2.4.1 \
+  --build-arg VERSION=v2.4.2 \
   --build-arg USE_UPX=0 \
-  -t noise233/echo-noise:v2.4.1 \
+  -t noise233/echo-noise:v2.4.2 \
   -t noise233/echo-noise:latest \
   --push --no-cache .
 ```
@@ -1564,9 +1564,9 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final-mcp \
-  --build-arg VERSION=v2.4.1 \
+  --build-arg VERSION=v2.4.2 \
   --build-arg USE_UPX=1 \
-  -t noise233/echo-noise:v2.4.1-mcp \
+  -t noise233/echo-noise:v2.4.2-mcp \
   -t noise233/echo-noise:latest-mcp \
   --push --no-cache .
 ```
@@ -1577,10 +1577,10 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64 \
   --target final \
-  --build-arg VERSION=v2.4.1 \
+  --build-arg VERSION=v2.4.2 \
   --build-arg INSTALL_FFMPEG=0 \
   --build-arg USE_UPX=1 \
-  -t noise233/echo-noise:v2.4.1-amd64 \
+  -t noise233/echo-noise:v2.4.2-amd64 \
   -t noise233/echo-noise:last-amd64 \
   --push --no-cache .
 ```

@@ -102,7 +102,11 @@ func CompressImageWithFFmpeg(inputData []byte, ext string) ([]byte, error) {
 		// ffmpeg 处理 PNG 压缩效果可能不如 pngquant，但这里只用 ffmpeg
 		args = append(args, "-q:v", "15")
 	} else if ext == ".webp" {
-		args = append(args, "-q:v", "50") // WebP 质量 (0-100)
+		args = append(args,
+			"-c:v", "libwebp",
+			"-q:v", "35",
+			"-compression_level", "6",
+		)
 	}
 
 	args = append(args, tmpOutput)

@@ -287,8 +287,9 @@ func UploadVideo(c *gin.Context, allowedExtensions []string, siteConfig *models.
 	}
 
 	// 检查文件大小（200MB）
-	if file.Size > 200*1024*1024 {
-		return "", errors.New("视频大小不能超过200MB")
+	// 允许更大的视频上传（默认 1GiB）。如需进一步调整，可在后续引入配置项。
+	if file.Size > 1024*1024*1024 {
+		return "", errors.New("视频大小不能超过1024MB")
 	}
 
 	// 读取文件内容
@@ -334,7 +335,9 @@ func UploadVideo(c *gin.Context, allowedExtensions []string, siteConfig *models.
 			ext = filepath.Ext(compressedPath)
 			contentType = "video/mp4"
 		} else {
-			fmt.Printf("视频压缩失败: %v\n", err)
+			if err != nil {
+				fmt.Printf("视频压缩失败: %v\n", err)
+			}
 		}
 	}
 	for _, p := range cleanupPaths {

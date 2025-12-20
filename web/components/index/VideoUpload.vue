@@ -37,9 +37,9 @@ const handleVideoChange = async (event: Event) => {
     return
   }
 
-  const maxSize = 200 * 1024 * 1024 // 200MB
+  const maxSize = 1024 * 1024 * 1024 // 1024MB
   if (file.size > maxSize) {
-    toast.add({ title: '错误', description: '视频不能超过200MB', color: 'red' })
+    toast.add({ title: '错误', description: '视频不能超过1024MB', color: 'red' })
     return
   }
 
@@ -50,7 +50,8 @@ const handleVideoChange = async (event: Event) => {
   const xhr = new XMLHttpRequest()
   xhr.open('POST', `${BASE_API}/video/upload`, true)
   xhr.withCredentials = true
-  xhr.timeout = 10 * 60 * 1000
+  // 服务端可能包含压缩流程，耗时不可预测；避免前端超时导致“显示失败但实际已上传成功”的误判
+  xhr.timeout = 0
   const token = userStore.token || ''
   if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
   emit('upload-progress', 1)
@@ -89,7 +90,7 @@ const handleVideoChange = async (event: Event) => {
   }
 
   xhr.ontimeout = () => {
-    toast.add({ title: '错误', description: '视频上传超时', color: 'red' })
+    toast.add({ title: '提示', description: '上传耗时较长，可能仍在后台压缩处理中。请稍后在附件管理中确认是否已上传成功。', color: 'yellow' })
     setTimeout(() => emit('upload-progress', 0), 400)
     if (videoInput.value) videoInput.value.value = ''
   }
