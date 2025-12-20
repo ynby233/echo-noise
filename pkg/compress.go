@@ -118,6 +118,11 @@ func CompressImageWithFFmpeg(inputData []byte, ext string) ([]byte, error) {
 		return nil, err
 	}
 
+	// 如果压缩后体积没有变小（甚至更大），直接返回原始数据，避免“压缩几乎无效果”的体验
+	if len(compressedData) >= len(inputData) {
+		return inputData, nil
+	}
+
 	return compressedData, nil
 }
 
@@ -132,18 +137,33 @@ func CompressVideoWithFFmpeg(inputPath string) (string, error) {
 	tmpOutput := filepath.Join(os.TempDir(), "compressed-"+uuid.New().String()+outputExt)
 
 	// 构建 FFmpeg 命令
-	// -crf 28: 压缩质量 (18-28 是合理范围)
-	// -preset fast: 编码速度
+	// -vf scale: 对超大视频进行降分辨率以获得更明显的压缩收益
+	// -crf 30: 更激进的压缩（文件更小）
+	// -preset medium: 比 fast 更小，但 CPU 消耗更高
+	// -b:a 96k: 音频更小
+	// -pix_fmt yuv420p: 兼容性更好
 	// -movflags +faststart: 优化 Web 播放（元数据移到文件头）
 	cmd := exec.Command(ffmpegBinaryPath, "-y", "-i", inputPath,
-		"-vcodec", "libx264", "-crf", "28", "-preset", "fast",
-		"-acodec", "aac", "-b:a", "128k",
+		"-vf", "scale='min(1280,iw)':-2",
+		"-vcodec", "libx264", "-crf", "30", "-preset", "medium",
+		"-pix_fmt", "yuv420p",
+		"-acodec", "aac", "-b:a", "96k",
 		"-movflags", "+faststart",
 		tmpOutput)
 
 	if output, err := cmd.CombinedOutput(); err != nil {
 		os.Remove(tmpOutput) // 清理失败的输出
 		return "", fmt.Errorf("ffmpeg error: %v, output: %s", err, string(output))
+	}
+
+	// 如果压缩后体积没有变小（甚至更大），放弃压缩结果
+	inStat, inErr := os.Stat(inputPath)
+	outStat, outErr := os.Stat(tmpOutput)
+	if inErr == nil && outErr == nil {
+		if outStat.Size() >= inStat.Size() {
+			os.Remove(tmpOutput)
+			return "", nil
+		}
 	}
 
 	return tmpOutput, nil
