@@ -60,6 +60,42 @@ RUN npx --yes esbuild@0.23.0 server.js \
     --format=esm \
     --outfile=server.bundle.mjs
 
+# FFmpeg 构建阶段（尽量静态链接，减少运行时依赖体积）
+FROM public.ecr.aws/docker/library/alpine:3.21 AS ffmpeg-build
+ARG FFMPEG_VERSION=7.1
+RUN set -eux; \
+    apk add --no-cache \
+      build-base \
+      yasm \
+      nasm \
+      pkgconf \
+      x264-dev \
+      wget \
+      xz \
+      tar; \
+    mkdir -p /tmp/ffmpeg-src; \
+    wget -O /tmp/ffmpeg-src/ffmpeg.tar.xz "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz"; \
+    tar -xf /tmp/ffmpeg-src/ffmpeg.tar.xz -C /tmp/ffmpeg-src --strip-components=1; \
+    cd /tmp/ffmpeg-src; \
+    ./configure \
+      --prefix=/opt/ffmpeg \
+      --bindir=/opt/ffmpeg/bin \
+      --disable-debug \
+      --disable-doc \
+      --disable-ffplay \
+      --disable-ffprobe \
+      --disable-network \
+      --disable-autodetect \
+      --disable-shared \
+      --enable-static \
+      --enable-gpl \
+      --enable-libx264 \
+      --extra-cflags="-Os"; \
+    make -j"$(getconf _NPROCESSORS_ONLN)"; \
+    make install; \
+    strip /opt/ffmpeg/bin/ffmpeg; \
+    /opt/ffmpeg/bin/ffmpeg -version
+
 # 运行时阶段
 FROM public.ecr.aws/docker/library/alpine:3.21 AS final
 
@@ -67,6 +103,7 @@ FROM public.ecr.aws/docker/library/alpine:3.21 AS final
 ARG USE_UPX=1
 # 可选：是否安装 ffmpeg（1=启用，0=禁用）。默认启用以保持原有功能
 ARG INSTALL_FFMPEG=1
+ARG FFMPEG_MODE=custom
 # 镜像版本（用于在运行时展示），构建时可通过 --build-arg VERSION=xxx 传入
 ARG VERSION=latest
 ENV APP_VERSION=$VERSION
@@ -84,9 +121,6 @@ COPY ./docker-compose.yml /app/docker-compose.yml
 
 # 从前端构建阶段复制静态文件
 COPY --from=frontend-build /app/public /app/public
-
-# 复制 MCP 打包后的单文件（不包含 node_modules，减小镜像体积）
- 
 
 # 按需裁剪静态字体：保留仅在 CSS 中引用的 woff2
 RUN set -eux; \
@@ -109,14 +143,23 @@ RUN set -eux; \
       find /app/public -type f -name '.DS_Store' -delete; \
     fi
 
-
-# 安装运行时所需的工具（合并RUN命令减少层数）
-RUN apk update && \
-    apk add --no-cache ca-certificates && \
-    if [ "$INSTALL_FFMPEG" = "1" ]; then apk add --no-cache ffmpeg; fi && \
-    rm -rf /usr/share/man /usr/share/doc /usr/share/licenses /usr/share/locale && \
-    rm -rf /var/cache/apk/* && \
-    mkdir -p /app/data/images && \
+COPY --from=ffmpeg-build /opt/ffmpeg/bin/ffmpeg /usr/local/bin/ffmpeg
+RUN set -eux; \
+    apk add --no-cache ca-certificates x264-libs; \
+    if [ "$INSTALL_FFMPEG" = "1" ]; then \
+      if [ "$FFMPEG_MODE" = "apk" ]; then \
+        apk add --no-cache ffmpeg; \
+        rm -f /usr/local/bin/ffmpeg; \
+      else \
+        chmod +x /usr/local/bin/ffmpeg; \
+        /usr/local/bin/ffmpeg -version >/dev/null; \
+      fi; \
+    else \
+      rm -f /usr/local/bin/ffmpeg; \
+    fi; \
+    rm -rf /usr/share/man /usr/share/doc /usr/share/licenses /usr/share/locale; \
+    rm -rf /var/cache/apk/*; \
+    mkdir -p /app/data/images; \
     chmod -R 755 /app/data
 
 # 如果需要内置 SQLite 数据库（初始数据）

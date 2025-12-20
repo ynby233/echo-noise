@@ -2272,7 +2272,7 @@ const saveAdminTheme = async () => {
     }
   } catch {}
   try {
-    const resConfig = await fetch('/api/frontend/config', { credentials: 'include' })
+    const resConfig = await fetch(`${baseApi}/frontend/config`, { credentials: 'include' })
     const dataConfig = await resConfig.json()
     let payload: any = {}
     if (dataConfig.code === 1) {
@@ -2280,7 +2280,7 @@ const saveAdminTheme = async () => {
     } else {
       payload = { adminTheme: panelTheme.value }
     }
-    const res = await fetch('/api/settings', {
+    const res = await fetch(`${baseApi}/settings`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -2296,7 +2296,7 @@ const saveAdminTheme = async () => {
 // 页面加载时获取配置
 const fetchRegisterConfig = async () => {
     try {
-        const res = await fetch('/api/frontend/config', { credentials: 'include' });
+        const res = await fetch(`${baseApi}/frontend/config`, { credentials: 'include' });
         const data = await res.json();
         if (data.code === 1 && typeof data.data.allowRegistration === 'boolean') {
             registerEnabled.value = data.data.allowRegistration;
@@ -2311,7 +2311,7 @@ onMounted(fetchRegisterConfig);
 const saveRegisterConfig = async () => {
     try {
         // 先获取完整配置
-        const resConfig = await fetch('/api/frontend/config', { credentials: 'include' });
+        const resConfig = await fetch(`${baseApi}/frontend/config`, { credentials: 'include' });
         const dataConfig = await resConfig.json();
         let payload = {};
         if (dataConfig.code === 1) {
@@ -2324,7 +2324,7 @@ const saveRegisterConfig = async () => {
             payload = { allowRegistration: registerEnabled.value };
         }
 
-        const res = await fetch('/api/settings', {
+        const res = await fetch(`${baseApi}/settings`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',

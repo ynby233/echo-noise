@@ -39,13 +39,19 @@ func Register(userdto dto.RegisterDto) error {
 
 	db, err := database.GetDB()
 	if err == nil {
-		var nonSystemAdminCount int64
-		_ = db.Model(&models.User{}).Where("username <> ? AND is_admin = ?", "system_default", true).Count(&nonSystemAdminCount).Error
-
-		var nonSystemCount int64
-		_ = db.Model(&models.User{}).Where("username <> ?", "system_default").Count(&nonSystemCount).Error
-		if nonSystemAdminCount == 0 && nonSystemCount == 0 {
+		var adminCount int64
+		_ = db.Model(&models.User{}).Where("is_admin = ?", true).Count(&adminCount).Error
+		if adminCount == 0 {
 			newuser.IsAdmin = true
+		} else {
+			var nonSystemAdminCount int64
+			_ = db.Model(&models.User{}).Where("username <> ? AND is_admin = ?", "system_default", true).Count(&nonSystemAdminCount).Error
+
+			var nonSystemCount int64
+			_ = db.Model(&models.User{}).Where("username <> ?", "system_default").Count(&nonSystemCount).Error
+			if nonSystemAdminCount == 0 && nonSystemCount == 0 {
+				newuser.IsAdmin = true
+			}
 		}
 	} else {
 		users, err := repository.GetAllUsers()

@@ -2,6 +2,7 @@ package mobilebackend
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"github.com/lin-snow/ech0/config"
 	"github.com/lin-snow/ech0/internal/database"
 	"github.com/lin-snow/ech0/internal/routers"
+	"github.com/lin-snow/ech0/internal/services"
 )
 
 var srv *http.Server
@@ -42,6 +44,9 @@ func Start(workDir string) error {
 	}
 	if err := database.InitDB(); err != nil {
 		return err
+	}
+	if err := services.SeedDefaultData(); err != nil {
+		fmt.Fprintf(os.Stderr, "SeedDefaultData warn: %v\n", err)
 	}
 	mode := config.Config.Server.Mode
 	if mode == "debug" {

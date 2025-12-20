@@ -1571,7 +1571,7 @@ docker buildx build \
   --push --no-cache .
 ```
 
-精简主镜像单架构amd64（不带 MCP且不包含 ffmpeg）：
+精简主镜像单架构 amd64（不带 MCP 且不包含 ffmpeg）：
 
 ```
 docker buildx build \
@@ -1580,8 +1580,8 @@ docker buildx build \
   --build-arg VERSION=v2.4.1 \
   --build-arg INSTALL_FFMPEG=0 \
   --build-arg USE_UPX=1 \
-  -t noise233/echo-noise:v2.4.1-amd64 \
-  -t noise233/echo-noise:last-amd64 \
+  -t noise233/echo-noise:v2.4.1-slim \
+  -t noise233/echo-noise:slim \
   --push --no-cache .
 ```
 
