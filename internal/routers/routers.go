@@ -9,10 +9,10 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
-	"github.com/lin-snow/ech0/config"
-	"github.com/lin-snow/ech0/internal/controllers"
-	"github.com/lin-snow/ech0/internal/middleware"
-	"github.com/lin-snow/ech0/pkg"
+	"github.com/rcy1314/echo-noise/config"
+	"github.com/rcy1314/echo-noise/internal/controllers"
+	"github.com/rcy1314/echo-noise/internal/middleware"
+	"github.com/rcy1314/echo-noise/pkg"
 )
 
 func SetupRouter() *gin.Engine {

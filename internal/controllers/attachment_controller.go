@@ -15,9 +15,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gin-gonic/gin"
-	"github.com/lin-snow/ech0/config"
-	"github.com/lin-snow/ech0/internal/database"
-	"github.com/lin-snow/ech0/internal/models"
+	"github.com/rcy1314/echo-noise/config"
+	"github.com/rcy1314/echo-noise/internal/database"
+	"github.com/rcy1314/echo-noise/internal/models"
 )
 
 type AttachmentInfo struct {

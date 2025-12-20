@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lin-snow/ech0/internal/database"
-	"github.com/lin-snow/ech0/internal/models"
-	"github.com/lin-snow/ech0/internal/storage"
+	"github.com/rcy1314/echo-noise/internal/database"
+	"github.com/rcy1314/echo-noise/internal/models"
+	"github.com/rcy1314/echo-noise/internal/storage"
 )
 
 var (

@@ -5,9 +5,9 @@ import (
     "time"
     "strconv"  // 添加 strconv 包
     "github.com/gin-gonic/gin"
-    "github.com/lin-snow/ech0/internal/models"
-    "github.com/lin-snow/ech0/internal/database"
-    "github.com/lin-snow/ech0/internal/services"  // 添加 services 包
+    "github.com/rcy1314/echo-noise/internal/models"
+    "github.com/rcy1314/echo-noise/internal/database"
+    "github.com/rcy1314/echo-noise/internal/services"  // 添加 services 包
     "regexp"
 )
 // GetMessagesByTag 获取指定标签的消息

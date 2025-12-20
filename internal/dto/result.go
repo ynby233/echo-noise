@@ -1,6 +1,6 @@
 package dto
 
-import "github.com/lin-snow/ech0/internal/models"
+import "github.com/rcy1314/echo-noise/internal/models"
 
 type Result[T any] struct {
 	Code    int    `json:"code"`

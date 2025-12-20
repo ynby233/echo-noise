@@ -5,9 +5,9 @@ import (
     "strings"
     "github.com/gin-contrib/sessions"
     "github.com/gin-gonic/gin"
-    "github.com/lin-snow/ech0/internal/dto"
-    "github.com/lin-snow/ech0/internal/models"
-    "github.com/lin-snow/ech0/internal/database"
+    "github.com/rcy1314/echo-noise/internal/dto"
+    "github.com/rcy1314/echo-noise/internal/models"
+    "github.com/rcy1314/echo-noise/internal/database"
 )
 
 func SessionAuthMiddleware() gin.HandlerFunc {

@@ -1,7 +1,7 @@
 package dto
 
 import (
-	"github.com/lin-snow/ech0/internal/models"
+	"github.com/rcy1314/echo-noise/internal/models"
 )
 
 type PageQueryDto struct {

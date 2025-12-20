@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lin-snow/ech0/internal/database"
-	"github.com/lin-snow/ech0/internal/models"
+	"github.com/rcy1314/echo-noise/internal/database"
+	"github.com/rcy1314/echo-noise/internal/models"
 	"golang.org/x/crypto/bcrypt"
 )
 

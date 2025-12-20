@@ -1,4 +1,4 @@
-module github.com/lin-snow/ech0
+module github.com/rcy1314/echo-noise
 
 go 1.24.1
 

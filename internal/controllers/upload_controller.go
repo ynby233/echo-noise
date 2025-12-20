@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lin-snow/ech0/internal/services"
+	"github.com/rcy1314/echo-noise/internal/services"
 )
 
 // UploadImage 控制器，调用 service 上传图片

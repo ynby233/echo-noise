@@ -2,8 +2,8 @@ package services
 
 import (
     "fmt"
-    "github.com/lin-snow/ech0/internal/models"
-    "github.com/lin-snow/ech0/internal/repository"
+    "github.com/rcy1314/echo-noise/internal/models"
+    "github.com/rcy1314/echo-noise/internal/repository"
 )
 
 func GetUserToken(userID uint) (string, error) {

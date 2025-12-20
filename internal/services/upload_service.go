@@ -2,11 +2,11 @@ package services
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/lin-snow/ech0/config"
-	"github.com/lin-snow/ech0/internal/database"
-	"github.com/lin-snow/ech0/internal/dto"
-	"github.com/lin-snow/ech0/internal/models"
-	"github.com/lin-snow/ech0/pkg"
+	"github.com/rcy1314/echo-noise/config"
+	"github.com/rcy1314/echo-noise/internal/database"
+	"github.com/rcy1314/echo-noise/internal/dto"
+	"github.com/rcy1314/echo-noise/internal/models"
+	"github.com/rcy1314/echo-noise/pkg"
 )
 
 // UploadImage 上传图片

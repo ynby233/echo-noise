@@ -7,11 +7,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/feeds"
-	"github.com/lin-snow/ech0/internal/database"
-	"github.com/lin-snow/ech0/internal/dto"
-	"github.com/lin-snow/ech0/internal/models"
-	"github.com/lin-snow/ech0/internal/repository"
-	"github.com/lin-snow/ech0/pkg"
+	"github.com/rcy1314/echo-noise/internal/database"
+	"github.com/rcy1314/echo-noise/internal/dto"
+	"github.com/rcy1314/echo-noise/internal/models"
+	"github.com/rcy1314/echo-noise/internal/repository"
+	"github.com/rcy1314/echo-noise/pkg"
 )
 
 // GetAllMessages 封装业务逻辑，获取所有笔记

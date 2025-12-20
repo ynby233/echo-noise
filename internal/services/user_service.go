@@ -6,11 +6,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/lin-snow/ech0/internal/database"
-	"github.com/lin-snow/ech0/internal/dto"
-	"github.com/lin-snow/ech0/internal/models"
-	"github.com/lin-snow/ech0/internal/repository"
-	"github.com/lin-snow/ech0/pkg"
+	"github.com/rcy1314/echo-noise/internal/database"
+	"github.com/rcy1314/echo-noise/internal/dto"
+	"github.com/rcy1314/echo-noise/internal/models"
+	"github.com/rcy1314/echo-noise/internal/repository"
+	"github.com/rcy1314/echo-noise/pkg"
 	"golang.org/x/crypto/bcrypt"
 )
 

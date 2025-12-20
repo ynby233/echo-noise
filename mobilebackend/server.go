@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lin-snow/ech0/config"
-	"github.com/lin-snow/ech0/internal/database"
-	"github.com/lin-snow/ech0/internal/routers"
-	"github.com/lin-snow/ech0/internal/services"
+	"github.com/rcy1314/echo-noise/config"
+	"github.com/rcy1314/echo-noise/internal/database"
+	"github.com/rcy1314/echo-noise/internal/routers"
+	"github.com/rcy1314/echo-noise/internal/services"
 )
 
 var srv *http.Server

@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
-	"github.com/lin-snow/ech0/config"
-	"github.com/lin-snow/ech0/internal/models"
+	"github.com/rcy1314/echo-noise/config"
+	"github.com/rcy1314/echo-noise/internal/models"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"

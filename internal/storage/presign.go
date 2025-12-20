@@ -10,7 +10,7 @@ import (
 	awscfg "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/lin-snow/ech0/internal/models"
+	"github.com/rcy1314/echo-noise/internal/models"
 )
 
 func splitPublicBaseURL(raw string) (string, string) {
