@@ -21,7 +21,7 @@
     "targets": ["dmg", "nsis"],
     "icon": ["icons/icon.ico", "icons/icon-128.png", "icons/icon-256.png", "icons/icon-512.png"],
     "resources": ["icons/favicon.svg", "public", "data/noise.db", "config"],
-    "externalBin": ["bin/server"],
+    "externalBin": ["bin/server", "bin/ffmpeg"],
     "windows": {
       "nsis": {}
     },

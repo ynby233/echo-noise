@@ -229,6 +229,17 @@ defineExpose({
       vditorInstance.insertValue(val);
       emit("update:modelValue", vditorInstance.getValue());
     }
+  },
+  getValue: (): string => {
+    return vditorInstance ? vditorInstance.getValue() : ''
+  },
+  setValue: (val: string) => {
+    if (vditorInstance) {
+      vditorInstance.setValue(val)
+      emit("update:modelValue", vditorInstance.getValue())
+    } else {
+      emit("update:modelValue", val || '')
+    }
   }
 });
 
@@ -336,7 +347,23 @@ watch(() => props.theme, (newTheme) => {
 }
 
 .vditor-reset {
-  color: #e9ecef !important;
+  color: #111827 !important;
+}
+
+.vditor-reset table {
+  border-collapse: collapse;
+}
+
+.vditor-reset table th,
+.vditor-reset table td {
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  background: rgba(255, 255, 255, 0.95);
+  color: #111827;
+}
+
+.vditor-reset table th {
+  background: rgba(248, 250, 252, 0.98);
+  font-weight: 600;
 }
 
 html.dark .vditor-container { background-color: rgba(36, 43, 50, 0.95); border: 1px solid rgba(255, 255, 255, 0.08); }
@@ -353,6 +380,21 @@ html.dark .vditor-ir pre.vditor-reset {
 
 html.dark .vditor-toolbar {
   color: #ffffff !important;
+}
+
+html.dark .vditor-reset {
+  color: #e9ecef !important;
+}
+
+html.dark .vditor-reset table th,
+html.dark .vditor-reset table td {
+  border: 1px solid rgba(226, 232, 240, 0.22);
+  background: rgba(36, 43, 50, 0.72);
+  color: rgba(226, 232, 240, 0.96);
+}
+
+html.dark .vditor-reset table th {
+  background: rgba(36, 43, 50, 0.88);
 }
 
 html.dark .vditor-hint {

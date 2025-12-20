@@ -15,17 +15,11 @@
             placeholder="选择图片"
           />
           <!-- 视频上传按钮 -->
-          <VideoUpload
+  <VideoUpload
     @video-uploaded="handleVideoUploaded"
     @before-upload="checkVideoLogin"
     @upload-progress="handleVideoUploadProgress"
   />
-  <div v-if="videoUploadProgress > 0 && videoUploadProgress < 100" class="w-full mt-2">
-    <div class="bg-gray-700 rounded h-2">
-      <div class="bg-blue-500 h-2 rounded" :style="{ width: videoUploadProgress + '%' }"></div>
-    </div>
-    <div class="text-xs text-gray-300 mt-1 text-right">{{ videoUploadProgress }}%</div>
-  </div>
           <button class="tb-btn" @click="triggerFileInput" title="插入图片"><UIcon name="i-fluent-image-20-regular" class="w-5 h-5" /></button>
            <!-- 新增图床上传按钮 -->
            <button class="tb-btn" @click="showImageUploader = true" title="图床上传"><UIcon name="i-mdi-cloud-upload-outline" class="w-5 h-5" /></button>
@@ -45,12 +39,21 @@
           <button class="tb-btn" @click="clearForm" title="清空"><UIcon name="i-fluent-broom-16-regular" class="w-5 h-5" /></button>
           <button class="tb-btn primary" @click="addMessage" title="发布"><UIcon name="i-fluent-add-12-filled" class="w-5 h-5" /></button>
         </div>
+        <div v-if="activeUploadPercent > 0 && activeUploadPercent < 100" class="upload-progress">
+          <div class="upload-progress-track">
+            <div
+              class="upload-progress-fill"
+              :class="activeUploadKind"
+              :style="{ width: activeUploadPercent + '%' }"
+            />
+          </div>
+          <div class="upload-progress-text">{{ activeUploadLabel }} {{ activeUploadPercent }}%</div>
+        </div>
       </div>
     </div>
-  </div>
 
   <!-- 内容预览区域 - 仅在有内容时显示 -->
-  <div v-if="MessageContentHtml" class="mx-auto sm:max-w-2xl mt-4 preview-card">
+  <div v-if="MessageContentHtml" class="mx-auto w-full sm:max-w-4xl mt-4 preview-card">
     <div :class="[previewProseClass, 'max-w-none editor-preview']">
       <div v-html="MessageContentHtml"></div>
     </div>
@@ -67,32 +70,43 @@
   @upload-success="handleImageHostingSuccess"
   @update:position="handlePositionUpdate"
 />
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, inject, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, inject, onMounted, onBeforeUnmount, watch, defineAsyncComponent, nextTick } from 'vue'
 import type { MessageToSave } from "~/types/models";
-import { UButton } from "#components";
 import { useMessage } from "~/composables/useMessage";
 import { useUserStore } from '~/store/user'
 import { Fancybox } from '@fancyapps/ui'
 import '@fancyapps/ui/dist/fancybox/fancybox.css'
 import Vditor from 'vditor'
 import 'vditor/dist/index.css'
-import VditorEditor from './VditorEditor.vue'
+const VditorEditor = defineAsyncComponent(() => import('./VditorEditor.vue'))
 import SearchMode from './Searchmode.vue'
 import { useMessageStore } from '~/store/message'
 import { useNotifyStore } from '~/store/notify'
 import VideoUpload from './VideoUpload.vue'
 import ImageHostingUploader from '~/components/widgets/ImageHostingUploader.vue'
+const props = defineProps<{ wide?: boolean }>()
+const containerClass = computed(() => (props.wide ? 'w-full max-w-none' : 'mx-auto w-full sm:max-w-4xl'))
 const isEditorLoading = ref(true)
-const onEditorReady = () => { isEditorLoading.value = false }
+const onEditorReady = async () => {
+  isEditorLoading.value = false
+  await nextTick()
+  try {
+    const root = vditorEditor.value?.getRootElement?.() as HTMLElement | null
+    if (root) root.addEventListener('focusin', scrollEditorIntoViewForMobile)
+  } catch {}
+}
 const showImageUploader = ref(false)
 const imageUploaderPosition = ref({ x: 400, y: 320 }) // 可根据实际调整
 // 处理图床上传成功，插入编辑器
 const handleImageHostingSuccess = (markdown: string) => {
   if (vditorEditor.value?.insertValue) {
     vditorEditor.value.insertValue(markdown)
+    focusEditor()
+    syncContentFromEditor()
   }
   showImageUploader.value = false
 }
@@ -103,46 +117,22 @@ const videoUploadProgress = ref(0); // 新增进度变量
 const handleVideoUploadProgress = (percent: number) => {
   videoUploadProgress.value = percent;
 };
+const imageUploadProgress = ref(0)
+const activeUploadPercent = computed(() => {
+  if (videoUploadProgress.value > 0 && videoUploadProgress.value < 100) return videoUploadProgress.value
+  if (imageUploadProgress.value > 0 && imageUploadProgress.value < 100) return imageUploadProgress.value
+  return 0
+})
+const activeUploadKind = computed(() => {
+  if (videoUploadProgress.value > 0 && videoUploadProgress.value < 100) return 'video'
+  if (imageUploadProgress.value > 0 && imageUploadProgress.value < 100) return 'image'
+  return ''
+})
+const activeUploadLabel = computed(() => (activeUploadKind.value === 'video' ? '视频' : '图片'))
 const showSearchModal = ref(false);
 const emit = defineEmits(['search-result','video-uploaded', 'before-upload', 'upload-progress']);
 const handleSearchResult = (result: any) => {
   emit('search-result', result);
-};
-const uploadVideo = (file: File) => {
-  const formData = new FormData();
-  formData.append('video', file);
-
-  const xhr = new XMLHttpRequest();
-  xhr.open('POST', `${BASE_API}/video/upload`, true);
-  xhr.withCredentials = true;
-
-  xhr.upload.onprogress = (event) => {
-    if (event.lengthComputable) {
-      const percent = Math.round((event.loaded / event.total) * 100);
-      emit('upload-progress', percent);
-    }
-  };
-
-  xhr.onload = () => {
-    if (xhr.status === 200) {
-      const res = JSON.parse(xhr.responseText);
-      if (res.code === 1 && res.data) {
-        emit('video-uploaded', res.data);
-      } else {
-        // 错误处理
-      }
-    } else {
-      // 错误处理
-    }
-    emit('upload-progress', 0); // 上传结束后重置
-  };
-
-  xhr.onerror = () => {
-    // 错误处理
-    emit('upload-progress', 0);
-  };
-
-  xhr.send(formData);
 };
 const toast = useToast()
 const BASE_API = useRuntimeConfig().public.baseApi || '/api';
@@ -171,6 +161,77 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const vditorEditor = ref<any>(null); // 需要支持 insertValue
 // 预览跟随内容自动显示，无需手动开关
 
+const DRAFT_KEY = 'addform_draft_v1'
+let draftSaveTimer: any = null
+let previewRenderTimer: any = null
+
+const focusEditor = async () => {
+  try {
+    await nextTick()
+    vditorEditor.value?.focus?.()
+  } catch {}
+}
+
+const scrollEditorIntoViewForMobile = async () => {
+  try {
+    const isMobile = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 520px)').matches
+    if (!isMobile) return
+    await nextTick()
+    const root = vditorEditor.value?.getRootElement?.() as HTMLElement | null
+    const target = root || (document.querySelector('.editor-box') as HTMLElement | null)
+    if (!target) return
+    setTimeout(() => {
+      try { target.scrollIntoView({ block: 'start', behavior: 'smooth' }) } catch {}
+    }, 220)
+  } catch {}
+}
+
+const saveDraft = () => {
+  try {
+    const content = (MessageContent.value || '').trim()
+    if (!content) {
+      localStorage.removeItem(DRAFT_KEY)
+      return
+    }
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({ content: MessageContent.value || '', private: !!Private.value, notify: !!enableNotify.value, savedAt: Date.now() })
+    )
+  } catch {}
+}
+
+const scheduleDraftSave = () => {
+  if (draftSaveTimer) clearTimeout(draftSaveTimer)
+  draftSaveTimer = setTimeout(() => saveDraft(), 800)
+}
+
+const clearDraft = () => {
+  try { localStorage.removeItem(DRAFT_KEY) } catch {}
+}
+
+const normalizeCloudObjectURL = (u: string): string => {
+  const raw = String(u || '')
+  if (!/^https?:\/\//.test(raw)) return raw
+  try {
+    const parsed = new URL(raw)
+    const parts = parsed.pathname.split('/').filter(Boolean)
+    if (parts[0] === 'note') {
+      parsed.pathname = '/' + parts.slice(1).join('/')
+      return parsed.toString()
+    }
+    return raw
+  } catch {
+    return raw.replace('/note/', '/')
+  }
+}
+
+const syncContentFromEditor = () => {
+  try {
+    const val = vditorEditor.value?.getValue?.()
+    if (typeof val === 'string') MessageContent.value = val
+  } catch {}
+}
+
 const privateIcon = computed(() => (Private.value ? 'i-mdi-eye-off-outline' : 'i-mdi-eye-outline'));
 const previewProseClass = computed(() => contentTheme.value === 'dark' ? 'prose prose-invert' : 'prose')
 
@@ -181,6 +242,7 @@ const clearForm = () => {
   Username.value = "";
   MessageContent.value = "";
   MessageContentHtml.value = "";
+  clearDraft()
   
   if (vditorEditor.value) {
     vditorEditor.value.clear();
@@ -250,38 +312,62 @@ const addImage = async (event: Event) => {
   try {
     const formData = new FormData();
     formData.append('image', file);
+    imageUploadProgress.value = 1
+    const data = await new Promise<any>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', `${BASE_API}/images/upload`, true)
+      xhr.withCredentials = true
+      const token = userStore.token || ''
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+      xhr.upload.onprogress = (e) => {
+        if (!e.lengthComputable) return
+        const percent = Math.round((e.loaded / e.total) * 100)
+        imageUploadProgress.value = Math.max(1, Math.min(99, percent))
+      }
+      xhr.onload = () => {
+        try {
+          const js = JSON.parse(xhr.responseText || '{}')
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(js)
+          } else {
+            reject(new Error(js?.msg || '图片上传失败'))
+          }
+        } catch (e: any) {
+          reject(new Error(e?.message || '图片上传失败'))
+        }
+      }
+      xhr.onerror = () => reject(new Error('图片上传失败'))
+      xhr.send(formData)
+    })
 
-    const response = await fetch(`${BASE_API}/images/upload`, {
-      method: 'POST',
-      body: formData,
-      credentials: 'include'
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.msg || '图片上传失败');
-    }
-
-    const data = await response.json();
-    if (data.code === 1 && data.data) {
+    if (data?.code === 1 && data?.data) {
       if (vditorEditor.value?.insertValue) {
         const origin = typeof window !== 'undefined' ? window.location.origin : ''
         const base = String(BASE_API || '/api')
         const ret = String(data.data || '')
         let full = ''
         if (ret.startsWith('http')) {
-          full = ret
+          full = normalizeCloudObjectURL(ret)
         } else {
           const path = ret.startsWith('/') ? ret : `/${ret}`
           if (/^https?:\/\//.test(base)) {
             full = `${base}${path}`
           } else {
-            full = `${origin}${base}${path}`
+            const cleanBase = base.replace(/\/$/, '')
+            if (path.startsWith(cleanBase)) {
+              full = `${origin}${path}`
+            } else {
+              full = `${origin}${cleanBase}${path}`
+            }
           }
         }
         const imageMarkdown = `\n![](${full})\n`
         vditorEditor.value.insertValue(imageMarkdown)
+        syncContentFromEditor()
+        focusEditor()
       }
+      imageUploadProgress.value = 100
+      setTimeout(() => { imageUploadProgress.value = 0 }, 400)
       toast.add({
         title: '成功',
         description: '图片上传成功',
@@ -289,7 +375,7 @@ const addImage = async (event: Event) => {
         timeout: 2000
       });
     } else {
-      throw new Error(data.msg || '图片上传失败');
+      throw new Error(data?.msg || '图片上传失败');
     }
   } catch (error: any) {
     console.error('上传错误:', error);
@@ -303,6 +389,9 @@ const addImage = async (event: Event) => {
     if (fileInput.value) {
       fileInput.value.value = '';
     }
+    if (imageUploadProgress.value !== 0) {
+      setTimeout(() => { imageUploadProgress.value = 0 }, 800)
+    }
   }
 };
 
@@ -310,7 +399,9 @@ const handleVideoUploaded = (videoUrl: string) => {
   const raw = String(videoUrl || '')
   const baseApi = useRuntimeConfig().public.baseApi || '/api'
   let full = raw
-  if (!/^https?:\/\//.test(raw)) {
+  if (/^https?:\/\//.test(raw)) {
+    full = normalizeCloudObjectURL(raw)
+  } else {
     const path = raw.startsWith('/') ? raw : `/${raw}`
     if (/^https?:\/\//.test(String(baseApi))) {
       const base = String(baseApi).replace(/\/api$/, '')
@@ -323,6 +414,8 @@ const handleVideoUploaded = (videoUrl: string) => {
   const videoTag = `<video width="100%" height="100%" src="${full}" controls loop></video>\n`
   if (vditorEditor.value?.insertValue) {
     vditorEditor.value.insertValue(videoTag)
+    syncContentFromEditor()
+    focusEditor()
   }
 };
 
@@ -409,27 +502,31 @@ const applyImageGridHTML = (html: string) => {
 };
 
 watch(MessageContent, (val) => {
-  const raw = Vditor.md2html(normalizeInlineImageLinks(val || ""));
-  MessageContentHtml.value = applyImageGridHTML(raw);
-  nextTick(() => {
-    const roots = document.querySelectorAll('.editor-preview');
-    roots.forEach((root) => {
-      root.querySelectorAll('.image-grid-item img').forEach((imgEl) => {
-        const img = imgEl as HTMLImageElement;
-        const parent = img.parentElement as HTMLElement;
-        const setAR = () => {
-          const w = img.naturalWidth;
-          const h = img.naturalHeight;
-          parent.classList.remove('ar-169','ar-34','ar-11');
-          if (w > h) parent.classList.add('ar-169');
-          else if (h > w) parent.classList.add('ar-34');
-          else parent.classList.add('ar-11');
-        };
-        if (img.complete && img.naturalWidth && img.naturalHeight) setAR();
-        else img.addEventListener('load', setAR, { once: true });
+  scheduleDraftSave()
+  if (previewRenderTimer) clearTimeout(previewRenderTimer)
+  previewRenderTimer = setTimeout(() => {
+    const raw = Vditor.md2html(normalizeInlineImageLinks(val || ""));
+    MessageContentHtml.value = applyImageGridHTML(raw);
+    nextTick(() => {
+      const roots = document.querySelectorAll('.editor-preview');
+      roots.forEach((root) => {
+        root.querySelectorAll('.image-grid-item img').forEach((imgEl) => {
+          const img = imgEl as HTMLImageElement;
+          const parent = img.parentElement as HTMLElement;
+          const setAR = () => {
+            const w = img.naturalWidth;
+            const h = img.naturalHeight;
+            parent.classList.remove('ar-169', 'ar-34', 'ar-11');
+            if (w > h) parent.classList.add('ar-169');
+            else if (h > w) parent.classList.add('ar-34');
+            else parent.classList.add('ar-11');
+          };
+          if (img.complete && img.naturalWidth && img.naturalHeight) setAR();
+          else img.addEventListener('load', setAR, { once: true });
+        });
       });
     });
-  });
+  }, 220)
 });
 
 watch(() => userStore.isLogin, (newLoginState) => {
@@ -448,6 +545,29 @@ onMounted(async () => {
   }
   Private.value = localStorage.getItem('postPrivate') === 'true'
   contentTheme.value = localStorage.getItem('contentTheme') || contentTheme.value
+
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY)
+    if (raw) {
+      const draft = JSON.parse(raw)
+      const draftContent = String(draft?.content || '')
+      if (draftContent.trim().length > 0 && MessageContent.value.trim().length === 0) {
+        MessageContent.value = draftContent
+        if (typeof draft?.private === 'boolean') Private.value = draft.private
+        if (typeof draft?.notify === 'boolean') enableNotify.value = draft.notify
+        vditorEditor.value?.setValue?.(draftContent)
+        toast.add({ title: '草稿已恢复', description: '已自动恢复上次未发布内容', color: 'green', timeout: 2000 })
+      }
+    }
+  } catch {}
+
+  const onBeforeUnload = (e: BeforeUnloadEvent) => {
+    if ((MessageContent.value || '').trim().length === 0) return
+    e.preventDefault()
+    e.returnValue = ''
+  }
+  window.addEventListener('beforeunload', onBeforeUnload)
+  onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload))
 });
 
 onBeforeUnmount(() => {
@@ -480,6 +600,7 @@ const checkVideoLogin = (e: Event) => {
 
 const addMessage = async () => {
   if (!checkLogin()) return;
+  syncContentFromEditor()
 
   if (!MessageContent.value.trim()) {
     toast.add({
@@ -502,6 +623,7 @@ const addMessage = async () => {
     const response = await save(message);
     if (response) {
       clearForm();
+      clearDraft()
     }
   } catch (error: any) {
     console.error('发布错误:', error);
@@ -532,6 +654,14 @@ html.dark .tb-sep { background: rgba(255,255,255,0.12); }
 html.dark .preview-card { background: rgba(36,43,50,0.6); border: 1px solid rgba(255,255,255,0.12); color:#fff; }
 .editor-toolbar :deep(.u-button) { border:none !important; box-shadow:none !important; background: transparent !important; color:#374151 !important; }
 html.dark .editor-toolbar :deep(.u-button) { border:none !important; box-shadow:none !important; background: rgba(255,255,255,0.06) !important; color:#cbd5e1 !important; }
+.upload-progress { flex-basis: 100%; order: 10; display: flex; align-items: center; gap: 10px; pointer-events: none; padding: 0 4px; margin-top: 6px; }
+.upload-progress-track { flex: 1; height: 4px; border-radius: 999px; background: rgba(0,0,0,0.12); overflow: hidden; }
+.upload-progress-fill { height: 100%; border-radius: 999px; }
+.upload-progress-fill.image { background: linear-gradient(90deg, rgba(167,139,250,1), rgba(244,114,182,1)); }
+.upload-progress-fill.video { background: linear-gradient(90deg, rgba(96,165,250,1), rgba(52,211,153,1)); }
+.upload-progress-text { font-size: 12px; line-height: 1; color: rgba(17,24,39,0.6); min-width: 76px; text-align: right; }
+html.dark .upload-progress-track { background: rgba(255,255,255,0.14); }
+html.dark .upload-progress-text { color: rgba(226,232,240,0.72); }
 .editor-preview p { margin: 0.5rem 0; }
 .editor-preview img { margin: 0.4rem 0; }
 .image-grid {
@@ -564,22 +694,3 @@ html.dark .editor-toolbar :deep(.u-button) { border:none !important; box-shadow:
   margin: 0;
 }
 </style>
-
-const applyFormat = (type: string) => {
-  const ins = (val: string) => vditorEditor.value?.insertValue && vditorEditor.value.insertValue(val)
-  switch (type) {
-    case 'bold': ins('**加粗**'); break
-    case 'italic': ins('*斜体*'); break
-    case 'strike': ins('~~删除线~~'); break
-    case 'inlineCode': ins('`code`'); break
-    case 'codeBlock': ins('\n```\n// code\n```\n'); break
-    case 'quote': ins('\n> 引用\n'); break
-    case 'ul': ins('\n* 列表项\n'); break
-    case 'ol': ins('\n1. 列表项\n'); break
-    case 'task': ins('\n- [ ] 待办\n'); break
-    case 'hr': ins('\n---\n'); break
-    case 'link': ins('[链接文本](https://)'); break
-  }
-}
-const props = defineProps<{ wide?: boolean }>()
-const containerClass = computed(() => (props.wide ? 'w-full max-w-none' : 'mx-auto sm:max-w-2xl'))

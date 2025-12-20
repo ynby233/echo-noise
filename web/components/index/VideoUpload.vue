@@ -16,11 +16,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useToast } from '#imports'
+import { useUserStore } from '~/store/user'
 
 const emit = defineEmits(['video-uploaded', 'upload-progress'])
 const videoInput = ref<HTMLInputElement | null>(null)
 const toast = useToast()
 const BASE_API = useRuntimeConfig().public.baseApi || '/api'
+const userStore = useUserStore()
 
 const triggerVideoInput = () => {
   videoInput.value?.click()
@@ -48,12 +50,15 @@ const handleVideoChange = async (event: Event) => {
   const xhr = new XMLHttpRequest()
   xhr.open('POST', `${BASE_API}/video/upload`, true)
   xhr.withCredentials = true
+  xhr.timeout = 10 * 60 * 1000
+  const token = userStore.token || ''
+  if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+  emit('upload-progress', 1)
 
   xhr.upload.onprogress = (event) => {
-    if (event.lengthComputable) {
-      const percent = Math.round((event.loaded / event.total) * 100)
-      emit('upload-progress', percent)
-    }
+    if (!event.lengthComputable) return
+    const percent = Math.round((event.loaded / event.total) * 100)
+    emit('upload-progress', Math.max(1, Math.min(99, percent)))
   }
 
   xhr.onload = () => {
@@ -62,6 +67,7 @@ const handleVideoChange = async (event: Event) => {
         const data = JSON.parse(xhr.responseText)
         if (data.code === 1 && data.data) {
           emit('video-uploaded', data.data)
+          emit('upload-progress', 100)
           toast.add({ title: '成功', description: '视频上传成功', color: 'green' })
         } else {
           throw new Error(data.msg || '视频上传失败')
@@ -72,13 +78,24 @@ const handleVideoChange = async (event: Event) => {
     } else {
       toast.add({ title: '错误', description: '视频上传失败', color: 'red' })
     }
-    emit('upload-progress', 0) // 上传结束后重置
+    setTimeout(() => emit('upload-progress', 0), 400)
     if (videoInput.value) videoInput.value.value = ''
   }
 
   xhr.onerror = () => {
     toast.add({ title: '错误', description: '视频上传失败', color: 'red' })
-    emit('upload-progress', 0)
+    setTimeout(() => emit('upload-progress', 0), 400)
+    if (videoInput.value) videoInput.value.value = ''
+  }
+
+  xhr.ontimeout = () => {
+    toast.add({ title: '错误', description: '视频上传超时', color: 'red' })
+    setTimeout(() => emit('upload-progress', 0), 400)
+    if (videoInput.value) videoInput.value.value = ''
+  }
+
+  xhr.onloadend = () => {
+    setTimeout(() => emit('upload-progress', 0), 400)
     if (videoInput.value) videoInput.value.value = ''
   }
 

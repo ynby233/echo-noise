@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -20,7 +21,6 @@ import (
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/lin-snow/ech0/internal/database"
 	"github.com/lin-snow/ech0/internal/dto"
 	"github.com/lin-snow/ech0/internal/models"
@@ -29,6 +29,50 @@ import (
 	"github.com/lin-snow/ech0/internal/syncmanager"
 	"github.com/lin-snow/ech0/pkg"
 )
+
+type captchaItem struct {
+	Code string
+	Exp  int64
+}
+
+var captchaStore = struct {
+	sync.Mutex
+	m map[string]captchaItem
+}{m: map[string]captchaItem{}}
+
+func newCaptchaID() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return fmt.Sprintf("%x", b)
+}
+
+func setCaptcha(id, code string, exp int64) {
+	captchaStore.Lock()
+	defer captchaStore.Unlock()
+	captchaStore.m[id] = captchaItem{Code: code, Exp: exp}
+}
+
+func getCaptcha(id string) (captchaItem, bool) {
+	captchaStore.Lock()
+	defer captchaStore.Unlock()
+	it, ok := captchaStore.m[id]
+	if !ok {
+		return captchaItem{}, false
+	}
+	if it.Exp > 0 && time.Now().Unix() > it.Exp {
+		delete(captchaStore.m, id)
+		return captchaItem{}, false
+	}
+	return it, true
+}
+
+func deleteCaptcha(id string) {
+	captchaStore.Lock()
+	defer captchaStore.Unlock()
+	delete(captchaStore.m, id)
+}
 
 func checkUser(c *gin.Context) (*models.User, error) {
 	userID, exists := c.Get("user_id") // 修改 userid 为 user_id
@@ -99,21 +143,36 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	session := sessions.Default(c)
-	sc := session.Get("captcha_code")
-	se := session.Get("captcha_exp")
-	if sc == nil || se == nil {
-		c.JSON(http.StatusOK, dto.Fail[string]("验证码已过期"))
-		return
-	}
-	exp, ok := se.(int64)
-	if !ok || time.Now().Unix() > exp {
-		c.JSON(http.StatusOK, dto.Fail[string]("验证码已过期"))
-		return
-	}
-	if strings.ToLower(user.Captcha) != strings.ToLower(fmt.Sprintf("%v", sc)) {
-		c.JSON(http.StatusOK, dto.Fail[string]("验证码不正确"))
-		return
+	// 优先使用 captcha_id（适配移动端/不依赖 Cookie 的场景）
+	if strings.TrimSpace(user.CaptchaId) != "" {
+		it, ok := getCaptcha(strings.TrimSpace(user.CaptchaId))
+		if !ok {
+			c.JSON(http.StatusOK, dto.Fail[string]("验证码已过期"))
+			return
+		}
+		if strings.ToLower(strings.TrimSpace(user.Captcha)) != strings.ToLower(strings.TrimSpace(it.Code)) {
+			c.JSON(http.StatusOK, dto.Fail[string]("验证码不正确"))
+			return
+		}
+		deleteCaptcha(strings.TrimSpace(user.CaptchaId))
+	} else {
+		// 兼容旧逻辑：使用 Session Cookie 存储验证码
+		session := sessions.Default(c)
+		sc := session.Get("captcha_code")
+		se := session.Get("captcha_exp")
+		if sc == nil || se == nil {
+			c.JSON(http.StatusOK, dto.Fail[string]("验证码已过期"))
+			return
+		}
+		exp, ok := se.(int64)
+		if !ok || time.Now().Unix() > exp {
+			c.JSON(http.StatusOK, dto.Fail[string]("验证码已过期"))
+			return
+		}
+		if strings.ToLower(user.Captcha) != strings.ToLower(fmt.Sprintf("%v", sc)) {
+			c.JSON(http.StatusOK, dto.Fail[string]("验证码不正确"))
+			return
+		}
 	}
 
 	if err := services.Register(user); err != nil {
@@ -131,13 +190,21 @@ func GetCaptcha(c *gin.Context) {
 		b[i] = letters[int(time.Now().UnixNano()+int64(i))%len(letters)]
 	}
 	code := string(b)
+	capID := newCaptchaID()
+	exp := time.Now().Add(2*time.Minute).Unix()
+	setCaptcha(capID, code, exp)
+
+	svg := fmt.Sprintf("<svg xmlns='http://www.w3.org/2000/svg' width='96' height='40'><rect width='100%%' height='100%%' fill='#0f172a'/><text x='50%%' y='50%%' dominant-baseline='middle' text-anchor='middle' font-family='monospace' font-size='20' fill='#ffffff'>%s</text></svg>", code)
+	// 新增：json=1 返回 captcha_id + svg（不依赖 cookie，适配移动端）
+	if strings.TrimSpace(c.Query("json")) == "1" {
+		c.JSON(http.StatusOK, dto.OK(gin.H{"captcha_id": capID, "svg": svg, "expires_in": 120}, "ok"))
+		return
+	}
 
 	session := sessions.Default(c)
 	session.Set("captcha_code", code)
-	session.Set("captcha_exp", time.Now().Add(2*time.Minute).Unix())
+	session.Set("captcha_exp", exp)
 	session.Save()
-
-	svg := fmt.Sprintf("<svg xmlns='http://www.w3.org/2000/svg' width='96' height='40'><rect width='100%%' height='100%%' fill='#0f172a'/><text x='50%%' y='50%%' dominant-baseline='middle' text-anchor='middle' font-family='monospace' font-size='20' fill='#ffffff'>%s</text></svg>", code)
 	c.Data(http.StatusOK, "image/svg+xml", []byte(svg))
 }
 
@@ -576,6 +643,13 @@ func UpdateSetting(c *gin.Context) {
 	}
 	if setting.StorageConfig != nil {
 		settingMap["storageConfig"] = setting.StorageConfig
+	}
+
+	if setting.AttachmentStorageEnabled != nil {
+		settingMap["attachmentStorageEnabled"] = *setting.AttachmentStorageEnabled
+	}
+	if setting.AttachmentStorageConfig != nil {
+		settingMap["attachmentStorageConfig"] = setting.AttachmentStorageConfig
 	}
 
 	if err := services.UpdateFrontendSetting(0, settingMap); err != nil {
@@ -2100,26 +2174,13 @@ func SaveNotifyConfig(c *gin.Context) {
 		}
 	}
 
-	// 打印调试信息（临时添加）
-	fmt.Printf("保存前的Twitter配置: Enabled=%v, Key=%s, Secret=%s\n",
-		config.TwitterEnabled,
-		config.TwitterApiKey,
-		config.TwitterApiSecret)
-	fmt.Printf("保存前的CustomHttp配置: Enabled=%v, Url=%s\n",
-		config.CustomHttpEnabled,
-		config.CustomHttpUrl)
-
 	if err := models.SaveNotifyConfig(config); err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string]("保存配置失败: "+err.Error()))
 		return
 	}
 
-	// 获取保存后的配置（调试用）
 	savedConfig := models.GetNotifyConfig()
-	fmt.Printf("保存后的Twitter配置: Enabled=%v\n", savedConfig.TwitterEnabled)
-	fmt.Printf("保存后的CustomHttp配置: Enabled=%v\n", savedConfig.CustomHttpEnabled)
-
-	c.JSON(http.StatusOK, dto.OK[any](nil, "配置已更新"))
+	c.JSON(http.StatusOK, dto.OK(savedConfig, "配置已更新"))
 }
 
 // TestNotify 测试推送
@@ -2392,34 +2453,20 @@ func PostMessage(c *gin.Context) {
 
 // 上传视频
 func UploadVideo(c *gin.Context) {
-	file, err := c.FormFile("video")
+	// 获取站点配置
+	db, _ := database.GetDB()
+	var siteConfig models.SiteConfig
+	if err := db.First(&siteConfig).Error; err != nil {
+		// 如果获取配置失败，使用空配置（默认本地存储）
+		siteConfig = models.SiteConfig{}
+	}
+
+	// 支持的视频 MIME 类型
+	allowedMimeTypes := []string{"video/mp4", "video/webm", "video/quicktime", "video/x-msvideo"}
+
+	videoURL, err := pkg.UploadVideo(c, allowedMimeTypes, &siteConfig)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "未选择视频文件"})
-		return
-	}
-
-	// 检查文件类型和大小
-	allowedExts := map[string]bool{".mp4": true, ".webm": true, ".mov": true, ".avi": true}
-	ext := strings.ToLower(filepath.Ext(file.Filename)) // 兼容大小写
-	if !allowedExts[ext] {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "仅支持 mp4/webm/mov/avi 格式"})
-		return
-	}
-	if file.Size > 200*1024*1024 {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "视频不能超过200MB"})
-		return
-	}
-
-	// 保存到 data/video 目录
-	saveDir := "./data/video"
-	if err := os.MkdirAll(saveDir, 0755); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "无法创建目录"})
-		return
-	}
-	newName := uuid.New().String() + ext
-	savePath := filepath.Join(saveDir, newName)
-	if err := c.SaveUploadedFile(file, savePath); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "保存失败"})
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": err.Error()})
 		return
 	}
 
@@ -2427,8 +2474,24 @@ func UploadVideo(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"code": 1,
 		"msg":  "上传成功",
-		"data": "/video/" + newName,
+		"data": videoURL,
 	})
+}
+
+// ResetDefaultData 重置/初始化默认数据
+func ResetDefaultData(c *gin.Context) {
+	_, err := checkAdmin(c)
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
+		return
+	}
+
+	if err := services.SeedDefaultData(); err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string]("重置失败: "+err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.OK[any](nil, "重置成功"))
 }
 func SendNotify(c *gin.Context) {
 	var request struct {
@@ -2456,16 +2519,26 @@ func SendNotify(c *gin.Context) {
 	}
 
 	// 并发处理所有启用的推送渠道
+	type notifyResult struct {
+		Success bool   `json:"success"`
+		Error   string `json:"error,omitempty"`
+	}
+	results := map[string]notifyResult{}
+	var mu sync.Mutex
 	var wg sync.WaitGroup
-	errorChan := make(chan error, 6) // 增加通道容量
 
 	// Telegram
 	if config.TelegramEnabled {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := models.SendTelegram(request.Content, request.Images); err != nil {
-				errorChan <- fmt.Errorf("Telegram: %v", err)
+			err := models.SendTelegram(request.Content, request.Images)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				results["telegram"] = notifyResult{Success: false, Error: err.Error()}
+			} else {
+				results["telegram"] = notifyResult{Success: true}
 			}
 		}()
 	}
@@ -2475,8 +2548,13 @@ func SendNotify(c *gin.Context) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := models.SendWework(request.Content, request.Images); err != nil {
-				errorChan <- fmt.Errorf("企业微信: %v", err)
+			err := models.SendWework(request.Content, request.Images)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				results["wework"] = notifyResult{Success: false, Error: err.Error()}
+			} else {
+				results["wework"] = notifyResult{Success: true}
 			}
 		}()
 	}
@@ -2486,8 +2564,13 @@ func SendNotify(c *gin.Context) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := models.SendFeishu(request.Content); err != nil {
-				errorChan <- fmt.Errorf("飞书: %v", err)
+			err := models.SendFeishu(request.Content)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				results["feishu"] = notifyResult{Success: false, Error: err.Error()}
+			} else {
+				results["feishu"] = notifyResult{Success: true}
 			}
 		}()
 	}
@@ -2497,8 +2580,13 @@ func SendNotify(c *gin.Context) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := models.SendWebhook(request.Content); err != nil {
-				errorChan <- fmt.Errorf("Webhook: %v", err)
+			err := models.SendWebhook(request.Content)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				results["webhook"] = notifyResult{Success: false, Error: err.Error()}
+			} else {
+				results["webhook"] = notifyResult{Success: true}
 			}
 		}()
 	}
@@ -2512,8 +2600,13 @@ func SendNotify(c *gin.Context) {
 			if len([]rune(tweet)) > 280 {
 				tweet = string([]rune(tweet)[:280]) + "...(内容截断)"
 			}
-			if err := models.SendTwitter(tweet); err != nil {
-				errorChan <- fmt.Errorf("Twitter: %v", err)
+			err := models.SendTwitter(tweet)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				results["twitter"] = notifyResult{Success: false, Error: err.Error()}
+			} else {
+				results["twitter"] = notifyResult{Success: true}
 			}
 		}()
 	}
@@ -2523,34 +2616,32 @@ func SendNotify(c *gin.Context) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := models.SendCustomHttp(request.Content); err != nil {
-				errorChan <- fmt.Errorf("CustomHttp: %v", err)
+			err := models.SendCustomHttp(request.Content)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				results["customHttp"] = notifyResult{Success: false, Error: err.Error()}
+			} else {
+				results["customHttp"] = notifyResult{Success: true}
 			}
 		}()
 	}
 
 	// 等待所有推送完成
 	wg.Wait()
-	close(errorChan)
 
-	// 收集错误
-	var errors []string
-	for err := range errorChan {
-		errors = append(errors, err.Error())
+	anyFail := false
+	for _, r := range results {
+		if !r.Success {
+			anyFail = true
+			break
+		}
 	}
-
-	if len(errors) > 0 {
-		c.JSON(http.StatusOK, gin.H{
-			"code": 0,
-			"msg":  fmt.Sprintf("部分推送失败: %s", strings.Join(errors, "; ")),
-		})
+	if anyFail {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "部分推送失败", "data": results})
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"code": 1,
-		"msg":  "推送成功",
-	})
+	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "推送成功", "data": results})
 }
 func EmailTest(c *gin.Context) {
 	_, err := checkAdmin(c)

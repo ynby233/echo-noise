@@ -17,6 +17,7 @@ import (
 
 func SetupRouter() *gin.Engine {
 	r := gin.Default()
+	r.MaxMultipartMemory = 256 << 20
 
 	// 使用 pkg 中的 session 初始化
 	pkg.InitSession(r)
@@ -78,6 +79,8 @@ func SetupRouter() *gin.Engine {
 		"/data/images",
 		"/app/data/images",
 	}, "./data/images")
+
+	// 确定视频目录，优先查找存在的目录
 	vidDir := pickDir([]string{
 		"./data/video",
 		filepath.Join(wd, "data/video"),
@@ -85,7 +88,15 @@ func SetupRouter() *gin.Engine {
 		"/data/video",
 		"/app/data/video",
 	}, "./data/video")
+
+	// 确保目录存在（如果都找不到，就用默认的 ./data/video 并创建）
+	if _, err := os.Stat(vidDir); os.IsNotExist(err) {
+		os.MkdirAll(vidDir, 0755)
+	}
+
 	r.Static("/api/images", imgDir)
+	// 同时支持 /api/video 和 /video，兼容旧版路径和 API 规范
+	r.Static("/api/video", vidDir)
 	r.Static("/video", vidDir)
 	// 常用静态文件已在上方映射
 
@@ -98,8 +109,6 @@ func SetupRouter() *gin.Engine {
 	// RSS 路由
 	r.GET("/rss", controllers.GenerateRSS)                                               // 保持原有的 RSS 订阅链接
 	api.POST("/rss/refresh", middleware.SessionAuthMiddleware(), controllers.RefreshRSS) // 添加刷新 RSS 的路由
-
-
 
 	// 公共路由
 	api.GET("", controllers.GetStatus)
@@ -201,6 +210,12 @@ func SetupRouter() *gin.Engine {
 		backup.POST("/storage/sync-now", controllers.HandleBackupSyncNow)
 	}
 
+	// 系统设置相关路由
+	settings := authRoutes.Group("/settings")
+	{
+		settings.POST("/reset-defaults", controllers.ResetDefaultData)
+	}
+
 	// 图片上传路由
 	authRoutes.POST("/images/upload", controllers.UploadImage) // 上传图片
 	// 新增：视频上传路由（改为单数 video）
@@ -213,10 +228,8 @@ func SetupRouter() *gin.Engine {
 		attachments.GET("/images/", controllers.ListImageAttachments)
 		attachments.GET("/video", controllers.ListVideoAttachments)
 		attachments.GET("/video/", controllers.ListVideoAttachments)
-		attachments.DELETE("/images/:name", middleware.AdminAuthMiddleware(), controllers.DeleteImageAttachment)
-		attachments.DELETE("/images/:name/", middleware.AdminAuthMiddleware(), controllers.DeleteImageAttachment)
-		attachments.DELETE("/video/:name", middleware.AdminAuthMiddleware(), controllers.DeleteVideoAttachment)
-		attachments.DELETE("/video/:name/", middleware.AdminAuthMiddleware(), controllers.DeleteVideoAttachment)
+		attachments.DELETE("/images/*name", middleware.AdminAuthMiddleware(), controllers.DeleteImageAttachment)
+		attachments.DELETE("/video/*name", middleware.AdminAuthMiddleware(), controllers.DeleteVideoAttachment)
 	}
 
 	// 用户相关路由
@@ -256,6 +269,7 @@ func SetupRouter() *gin.Engine {
 	// Service Worker 文件路由 - 必须注册以支持 PWA
 	r.StaticFile("/sw.js", "./public/sw.js")
 	// manifest 路由（提供 API 版本以避免静态中间件干扰）
+	r.GET("/manifest.json", controllers.GetWebManifest)
 	r.GET("/manifest.webmanifest", controllers.GetWebManifest)
 	r.GET("/api/manifest", controllers.GetWebManifest)
 
@@ -269,7 +283,7 @@ func SetupRouter() *gin.Engine {
 	r.Use(func(c *gin.Context) {
 		p := c.Request.URL.Path
 		// 先设置 manifest 的 MIME，静态中间件将复用已有头部
-		if p == "/manifest.webmanifest" {
+		if p == "/manifest.webmanifest" || p == "/manifest.json" {
 			c.Header("Content-Type", "application/manifest+json; charset=utf-8")
 			c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
 		}

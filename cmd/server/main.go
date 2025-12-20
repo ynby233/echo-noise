@@ -18,6 +18,7 @@ import (
 	"github.com/lin-snow/ech0/internal/models"
 	"github.com/lin-snow/ech0/internal/repository"
 	"github.com/lin-snow/ech0/internal/routers"
+	"github.com/lin-snow/ech0/internal/services"
 	"github.com/lin-snow/ech0/internal/syncmanager"
 )
 
@@ -55,6 +56,11 @@ func main() {
 		log.Fatalf(models.DatabaseInitErrorMessage+": %v", err)
 	}
 
+	// 初始化默认数据
+	if err := services.SeedDefaultData(); err != nil {
+		log.Printf("初始化默认数据警告: %v", err)
+	}
+
 	// 读取站点配置并应用到自动同步管理器（确保定时/即时模式在启动后即生效）
 	func() {
 		db := models.GetDB()
@@ -84,8 +90,8 @@ func main() {
 	srv := &http.Server{
 		Addr:         config.Config.Server.Host + ":" + config.Config.Server.Port,
 		Handler:      r,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  10 * time.Minute,
+		WriteTimeout: 10 * time.Minute,
 		IdleTimeout:  60 * time.Second,
 	}
 

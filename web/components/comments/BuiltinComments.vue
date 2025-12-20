@@ -3,7 +3,7 @@
   <div class="waline-wrapper px-2 py-2 rounded-lg" :class="[themeBg]">
       <div class="text-sm mb-2" :class="themeText">评论 ({{ comments.length }})</div>
       <div v-if="sortedRootComments.length" class="comments-list">
-        <div v-for="(c, idx) in visibleRootComments" :key="c.id" class="comment-item" :class="rootCardClass">
+        <div v-for="c in visibleRootComments" :key="c.id" class="comment-item" :class="rootCardClass">
           <img class="comment-avatar avatar-img" :src="commentAvatar(c)" alt="avatar" :data-mail="c.mail || ''" @error="avatarOnError($event, c.nick || '')" />
           <div class="comment-body">
             <div class="comment-header" :class="themeText">
@@ -624,11 +624,11 @@ const sortedRootComments = computed(() => {
   const roots = Array.isArray(rootComments.value) ? rootComments.value : []
   return roots.slice().sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 })
-const visibleCount = ref(3)
+const visibleCount = ref(2)
 const visibleRootComments = computed(() => sortedRootComments.value.slice(0, visibleCount.value))
 const hasMore = computed(() => sortedRootComments.value.length > visibleCount.value)
-const loadMore = () => { visibleCount.value += 3 }
-watch(() => props.messageId, () => { visibleCount.value = 3 })
+const loadMore = () => { visibleCount.value += 2 }
+watch(() => props.messageId, () => { visibleCount.value = 2 })
 
 const visibleChildrenCount = ref<Record<number, number>>({})
 const visibleChildren = (rootId: number) => {

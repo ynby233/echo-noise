@@ -144,6 +144,21 @@ type SiteConfig struct {
 	StorageSecretKey     string `gorm:"type:varchar(191)"`
 	StorageUsePathStyle  bool   `gorm:"default:true"`
 	StoragePublicBaseURL string `gorm:"type:varchar(191)"`
+
+	// 附件存储专用配置
+	AttachmentStorageEnabled       bool   `gorm:"default:false"`
+	AttachmentStorageProvider      string `gorm:"type:varchar(20)"` // s3 或 r2
+	AttachmentStorageEndpoint      string `gorm:"type:varchar(191)"`
+	AttachmentStorageRegion        string `gorm:"type:varchar(100)"`
+	AttachmentStorageBucket        string `gorm:"type:varchar(191)"`
+	AttachmentStorageAccessKey     string `gorm:"type:varchar(191)"`
+	AttachmentStorageSecretKey     string `gorm:"type:varchar(191)"`
+	AttachmentStorageUsePathStyle  bool   `gorm:"default:true"`
+	AttachmentStoragePublicBaseURL string `gorm:"type:varchar(191)"`
+
+	// 附件压缩配置
+	EnableCompression bool `gorm:"default:false"`
+
 	// 云同步角色：primary(主节点，执行上传) / secondary(备节点，不上传)
 	StorageSyncRole string `gorm:"type:varchar(20)"`
 	// 云存储自动同步
@@ -179,15 +194,15 @@ type SiteConfig struct {
 	// 扩展组件开关
 	CalendarEnabled bool `gorm:"default:true"`
 	TimeEnabled     bool `gorm:"default:true"`
-    HitokotoEnabled bool `gorm:"default:true"`
-    // 社交链接组件
-    SocialLinksEnabled bool   `gorm:"default:true"`
-    SocialLinks        string `gorm:"type:text"`
-    // 系统欢迎组件（左栏头像卡片专用，脱离用户资料）
-    WelcomeAvatarURL   string `gorm:"type:varchar(255)"`
-    WelcomeName        string `gorm:"type:varchar(100)"`
-    WelcomeDescription string `gorm:"type:varchar(255)"`
-    WelcomeUseAdmin    bool   `gorm:"default:true"`
+	HitokotoEnabled bool `gorm:"default:true"`
+	// 社交链接组件
+	SocialLinksEnabled bool   `gorm:"default:true"`
+	SocialLinks        string `gorm:"type:text"`
+	// 系统欢迎组件（左栏头像卡片专用，脱离用户资料）
+	WelcomeAvatarURL   string `gorm:"type:varchar(255)"`
+	WelcomeName        string `gorm:"type:varchar(100)"`
+	WelcomeDescription string `gorm:"type:varchar(255)"`
+	WelcomeUseAdmin    bool   `gorm:"default:true"`
 	// 广告位配置（左侧）
 	LeftAdEnabled     bool   `gorm:"default:true"`
 	LeftAds           string `gorm:"type:text"`

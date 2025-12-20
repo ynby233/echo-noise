@@ -36,6 +36,8 @@ export interface UserToLogin {
 export interface UserToRegister {
     username: string;
     password: string;
+    captcha: string;
+    captcha_id?: string;
 }
 
 // User

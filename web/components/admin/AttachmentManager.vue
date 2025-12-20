@@ -4,6 +4,7 @@
       <div class="font-semibold flex items-center gap-2" :class="theme?.text">
         <UIcon name="i-heroicons-paper-clip" class="w-5 h-5 text-indigo-300" />
         <span>附件管理</span>
+        <UBadge :color="isCloud ? 'green' : 'gray'" size="xs" variant="soft">{{ isCloud ? '云端' : '本地' }}</UBadge>
       </div>
       <div class="flex items-center gap-2">
         <UButton :loading="loading" color="gray" variant="soft" class="shadow" @click="refresh">刷新</UButton>
@@ -110,7 +111,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useToast } from '#imports'
 
-const props = defineProps<{ theme?: Record<string, string> }>()
+const props = defineProps<{ theme?: Record<string, string>, isCloud?: boolean }>()
 
 const activeTab = ref<'images'|'videos'>('images')
 const images = ref<any[]>([])
@@ -147,18 +148,31 @@ const formatDate = (s: string | Date) => {
 const isExpanded = (item: any) => !!expanded.value[item.name]
 const toggleExpand = (item: any) => { expanded.value[item.name] = !expanded.value[item.name] }
 
+const toTime = (it: any) => {
+  const raw = it?.modified_at ?? it?.modifiedAt ?? it?.updated_at ?? it?.updatedAt ?? it?.created_at ?? it?.createdAt
+  const t = raw ? new Date(raw).getTime() : 0
+  return Number.isFinite(t) ? t : 0
+}
+const sortNewestFirst = (arr: any[]) => {
+  return [...arr].sort((a, b) => {
+    const diff = toTime(b) - toTime(a)
+    if (diff !== 0) return diff
+    return String(b?.name || '').localeCompare(String(a?.name || ''))
+  })
+}
+
 const fetchImages = async () => {
   const resp = await fetch(`${baseApi}/attachments/images`, { credentials: 'include' })
   const js = await resp.json().catch(() => null)
   const arr = (js && js.code === 1 && Array.isArray(js.data)) ? js.data : []
-  images.value = arr.filter((it: any) => /\.(png|jpe?g|gif|webp)$/i.test(String(it.name || '')))
+  images.value = sortNewestFirst(arr).filter((it: any) => /\.(png|jpe?g|gif|webp)$/i.test(String(it.name || '')))
   imagesVisible.value = 4
 }
 const fetchVideos = async () => {
   const resp = await fetch(`${baseApi}/attachments/video`, { credentials: 'include' })
   const js = await resp.json().catch(() => null)
   const arr = (js && js.code === 1 && Array.isArray(js.data)) ? js.data : []
-  videos.value = arr.filter((it: any) => /\.(mp4|webm|mov|avi)$/i.test(String(it.name || '')))
+  videos.value = sortNewestFirst(arr).filter((it: any) => /\.(mp4|webm|mov|avi)$/i.test(String(it.name || '')))
   videosVisible.value = 4
 }
 const refresh = async () => {
@@ -180,7 +194,8 @@ const doDelete = async () => {
   if (!deleteItem.value) return
   try {
     deleting.value = true
-    const url = `${baseApi}/attachments/${deleteType.value === 'image' ? 'images' : 'video'}/${encodeURIComponent(deleteItem.value.name)}`
+    const key = deleteItem.value.key || deleteItem.value.name
+    const url = `${baseApi}/attachments/${deleteType.value === 'image' ? 'images' : 'video'}/${encodeURIComponent(key)}`
     const resp = await fetch(url, { method: 'DELETE', credentials: 'include' })
     const js = await resp.json().catch(() => null)
     if (!resp.ok || !js || js.code !== 1) throw new Error(js?.msg || '删除失败')

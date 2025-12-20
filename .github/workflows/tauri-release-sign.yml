@@ -18,7 +18,7 @@ permissions:
   contents: write
 env:
   RELEASE_TAG: ${{ inputs.tag_name != '' && inputs.tag_name || github.ref_name }}
-  DRAFT_RELEASE: true
+  DRAFT_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || true }}
 
 jobs:
   create_release:
@@ -71,7 +71,7 @@ jobs:
           REF_TAG: ${{ github.ref_name }}
           SIGNING_IDENTITY: ${{ secrets.MAC_SIGNING_IDENTITY }}
         run: |
-          node -e "const fs=require('fs'),p=require('path');const tag=(process.env.INPUT_TAG||process.env.REF_TAG||'');const ver=tag.replace(/^v/i,'').replace(/^V/i,'');const id=process.env.SIGNING_IDENTITY||null;const sdir=p.join('desktop','tauri','src-tauri');const conf=p.join(sdir,'tauri.conf.json');fs.mkdirSync(sdir,{recursive:true});let obj;if(fs.existsSync(conf)){try{obj=JSON.parse(fs.readFileSync(conf,'utf8'))}catch(e){obj=null}}if(!obj){obj={\"$schema\":\"https://schema.tauri.app/config/2\",productName:'说说笔记',version:ver||'0.0.0',identifier:'cn.noisework.saynote',build:{devUrl:'http://localhost:1314',frontendDist:'../dist'},app:{windows:[{title:'说说笔记',width:1280,height:800}]},bundle:{active:true,targets:['dmg','nsis'],icon:['icons/icon.ico','icons/icon-128.png','icons/icon-256.png','icons/icon-512.png'],resources:['icons/favicon.svg','public','data/noise.db','config'],externalBin:['bin/server'],windows:{nsis:{}},macOS:{hardenedRuntime:!!id,minimumSystemVersion:'10.13',signingIdentity:id}},plugins:{updater:{active:false}}}};obj.version=ver||obj.version||'0.0.0';obj.bundle=obj.bundle||{};obj.bundle.macOS=obj.bundle.macOS||{};obj.bundle.macOS.signingIdentity=id;obj.bundle.macOS.hardenedRuntime=!!id;if(!obj.build)obj.build={};obj.build.frontendDist=obj.build.frontendDist||'../dist';fs.writeFileSync(conf,JSON.stringify(obj,null,2));console.log('Version set',{tag,ver,conf,id});"
+          node -e "const fs=require('fs'),p=require('path');const tag=(process.env.INPUT_TAG||process.env.REF_TAG||'');const ver=tag.replace(/^v/i,'').replace(/^V/i,'');const id=process.env.SIGNING_IDENTITY||null;const sdir=p.join('desktop','tauri','src-tauri');const conf=p.join(sdir,'tauri.conf.json');fs.mkdirSync(sdir,{recursive:true});let obj;if(fs.existsSync(conf)){try{obj=JSON.parse(fs.readFileSync(conf,'utf8'))}catch(e){obj=null}}if(!obj){obj={\"$schema\":\"https://schema.tauri.app/config/2\",productName:'说说笔记',version:ver||'0.0.0',identifier:'cn.noisework.saynote',build:{devUrl:'http://localhost:1314',frontendDist:'../dist'},app:{windows:[{title:'说说笔记',width:1280,height:800}]},bundle:{active:true,targets:['dmg','nsis'],icon:['icons/icon.ico','icons/icon-128.png','icons/icon-256.png','icons/icon-512.png'],resources:['icons/favicon.svg','public','data/noise.db','config'],externalBin:['bin/server','bin/ffmpeg'],windows:{nsis:{}},macOS:{hardenedRuntime:!!id,minimumSystemVersion:'10.13',signingIdentity:id}},plugins:{updater:{active:false}}}};obj.version=ver||obj.version||'0.0.0';obj.bundle=obj.bundle||{};obj.bundle.externalBin=Array.from(new Set([...(obj.bundle.externalBin||[]), 'bin/server','bin/ffmpeg']));obj.bundle.macOS=obj.bundle.macOS||{};obj.bundle.macOS.signingIdentity=id;obj.bundle.macOS.hardenedRuntime=!!id;if(!obj.build)obj.build={};obj.build.frontendDist=obj.build.frontendDist||'../dist';fs.writeFileSync(conf,JSON.stringify(obj,null,2));console.log('Version set',{tag,ver,conf,id});"
           echo "DESKTOP_READY=true" >> "$GITHUB_ENV"
       - name: Bootstrap Tauri Rust skeleton if missing
         shell: bash
@@ -82,15 +82,18 @@ jobs:
           node-version: '22'
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.24'
-      - name: Install Linux dependencies (skip on non-linux)
-        if: matrix.os == 'ubuntu-latest'
+          go-version: '1.22.x'
+      - name: Install FFmpeg (macos)
+        if: matrix.os == 'macos-latest'
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-0 libayatana-appindicator3-1 librsvg2-dev patchelf
+          brew update
+          brew install ffmpeg
+      - name: Install FFmpeg (windows)
+        if: matrix.os == 'windows-latest'
+        shell: powershell
+        run: |
+          choco install ffmpeg -y --no-progress
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
@@ -220,20 +223,19 @@ jobs:
           gh release upload ${{ env.RELEASE_TAG }} "$DMG_PATH" --clobber
       - name: Upload Windows EXE
         if: env.DESKTOP_READY == 'true' && matrix.os == 'windows-latest'
-        shell: bash
+        shell: powershell
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "Searching for NSIS EXE..."
-          # Look for .exe in nsis folder
-          EXE_PATH=$(find desktop/tauri/src-tauri/target -name "*.exe" | grep "/nsis/" | head -n 1)
-          if [ -z "$EXE_PATH" ]; then
-             echo "ERROR: NSIS EXE not found. Listing target directory for debug:"
-             find desktop/tauri/src-tauri/target -maxdepth 5 -name "*.exe" || true
-             exit 1
-          fi
-          echo "Found EXE: $EXE_PATH"
-          gh release upload ${{ env.RELEASE_TAG }} "$EXE_PATH" --clobber
+          Write-Host "Searching for NSIS EXE..."
+          $exe = Get-ChildItem -Path "desktop/tauri/src-tauri/target" -Recurse -Filter "*.exe" | Where-Object { $_.FullName -match "nsis" } | Select-Object -First 1
+          if (-not $exe) {
+            Write-Host "ERROR: NSIS EXE not found. Listing target directory for debug:"
+            Get-ChildItem -Path "desktop/tauri/src-tauri/target" -Recurse -Filter "*.exe" | Select-Object -First 50 | ForEach-Object { Write-Host $_.FullName }
+            exit 1
+          }
+          Write-Host ("Found EXE: " + $exe.FullName)
+          gh release upload $env:RELEASE_TAG $exe.FullName --clobber
       - name: Upload Release (desktop placeholder)
         if: env.DESKTOP_READY != 'true'
         shell: bash
@@ -302,7 +304,7 @@ jobs:
           node-version: '22'
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.22.x'
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
@@ -328,7 +330,7 @@ jobs:
       - name: Build Nuxt static
         if: env.MOBILE_READY == 'true'
         env:
-          NUXT_PUBLIC_BASE_API: 'http://localhost:1314/api'
+          NUXT_PUBLIC_BASE_API: 'http://127.0.0.1:1314/api'
         run: |
           cd web
           npm install

@@ -1,1 +1,0 @@
-import{ao as s,$ as c,ap as n,aq as u}from"./C-7GRyVC.js";const l=s(async i=>{let e,a;const r=c().public.baseApi||"/api";try{const t=([e,a]=n(()=>$fetch(`${r}/user`,{credentials:"include"})),e=await e,a(),e);if((t==null?void 0:t.code)===1)return}catch{}return u({path:"/",query:{login:"1",redirect:i.fullPath}})});export{l as default};

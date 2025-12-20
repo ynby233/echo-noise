@@ -16,6 +16,10 @@ upload:
     - "image/gif"
     - "image/webp"
     - "image/jpg"
+    - "video/mp4"
+    - "video/webm"
+    - "video/quicktime"
+    - "video/x-msvideo"
 
 auth:
   jwt:

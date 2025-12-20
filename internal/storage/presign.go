@@ -13,6 +13,47 @@ import (
 	"github.com/lin-snow/ech0/internal/models"
 )
 
+func splitPublicBaseURL(raw string) (string, string) {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return "", ""
+	}
+	s = strings.TrimRight(s, "/")
+	if strings.HasPrefix(s, "//") {
+		s = "https:" + s
+	}
+	parseStr := s
+	if !strings.Contains(parseStr, "://") {
+		parseStr = "https://" + strings.TrimLeft(parseStr, "/")
+	}
+	u, err := url.Parse(parseStr)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return s, ""
+	}
+	origin := strings.TrimRight(u.Scheme+"://"+u.Host, "/")
+	prefix := strings.Trim(u.Path, "/")
+	return origin, prefix
+}
+
+func prefixedKey(site models.SiteConfig, key string) string {
+	_, prefix := splitPublicBaseURL(site.StoragePublicBaseURL)
+	clean := strings.TrimLeft(strings.TrimSpace(key), "/")
+	if clean == "" {
+		return ""
+	}
+	if prefix == "" {
+		return clean
+	}
+	if strings.HasPrefix(clean, prefix+"/") {
+		return clean
+	}
+	return prefix + "/" + clean
+}
+
+func ResolveObjectKey(site models.SiteConfig, key string) string {
+	return prefixedKey(site, key)
+}
+
 func getAWSConfigFromSite(cfg models.SiteConfig) (aws.Config, error) {
 	cr := aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(cfg.StorageAccessKey, cfg.StorageSecretKey, ""))
 	region := cfg.StorageRegion
@@ -63,6 +104,7 @@ func PresignUpload(site models.SiteConfig, bucket, key string, expires time.Dura
 	if err != nil {
 		return "", err
 	}
+	key = prefixedKey(site, key)
 	presigner := s3.NewPresignClient(cli, func(po *s3.PresignOptions) {
 		po.Expires = expires
 	})
@@ -83,6 +125,7 @@ func PresignDownload(site models.SiteConfig, bucket, key string, expires time.Du
 	if err != nil {
 		return "", err
 	}
+	key = prefixedKey(site, key)
 	presigner := s3.NewPresignClient(cli, func(po *s3.PresignOptions) {
 		po.Expires = expires
 	})

@@ -22,9 +22,11 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, nextTick, inject } from 'vue'
 
-const rawData = ref([])
-const calendarData = ref([])
-const calendarContainer = ref(null)
+interface HeatItem { date: string; count: number }
+interface CalendarDay { date: string; count: number; level: number }
+const rawData = ref<HeatItem[]>([])
+const calendarData = ref<CalendarDay[][]>([])
+const calendarContainer = ref<HTMLElement | null>(null)
 const tooltip = ref({ visible: false, text: '', x: 0, y: 0 })
 
 // 主题注入与样式类
@@ -36,7 +38,7 @@ const mutedTextClass = computed(() => (isDark.value ? 'text-white/70' : 'text-bl
   const monthLabels = computed(() => {
   if (!rawData.value.length) return Array(12).fill('').map((_, i) => `${i + 1}月`);
   
-  const dates = rawData.value.map(item => new Date(item.date));
+  const dates = rawData.value.map(item => new Date(item.date).getTime());
   const firstDate = new Date(Math.min(...dates));
   
   const labels = [];
@@ -132,7 +134,7 @@ const getBackgroundColor = (day: { count: number; level: number }) => {
     startDate.setMonth(today.getMonth() - 11) // 从11个月前开始
     startDate.setDate(1) // 从月初开始
     
-    const testData = []
+    const testData: HeatItem[] = []
     let currentDate = new Date(startDate)
     
     while (currentDate <= today) {
@@ -154,14 +156,48 @@ const getBackgroundColor = (day: { count: number; level: number }) => {
     const day = String(date.getDate()).padStart(2, '0')
     return `${year}-${month}-${day}`
   }
+  const parseDate = (s: string) => {
+    const [y, m, d] = s.split('-').map(n => parseInt(n))
+    const dt = new Date(y, (m || 1) - 1, d || 1)
+    return dt
+  }
+  const requiredColumns = () => {
+    const w = calendarContainer.value?.clientWidth || 0
+    const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 1024px)').matches
+    const daySize = isMobile ? 8 : 12
+    const gap = 3
+    if (!w) return 0
+    return Math.max(0, Math.floor((w + gap) / (daySize + gap)))
+  }
+  const ensureFillColumns = (calendar: CalendarDay[][], dateMap: Map<string, number>) => {
+    const need = requiredColumns()
+    if (!need) return
+    if (calendar.length >= need) return
+    let deficit = need - calendar.length
+    while (deficit > 0) {
+      const firstWeek = calendar[0]
+      const firstDateStr = firstWeek?.[0]?.date
+      const start = firstDateStr ? parseDate(firstDateStr) : new Date()
+      start.setDate(start.getDate() - 7)
+      const weekData: CalendarDay[] = []
+      for (let day = 0; day < 7; day++) {
+        const ds = formatDate(start)
+        const count = dateMap.get(ds) || 0
+        weekData.push({ date: ds, count, level: count ? Math.min(Math.ceil(count / 2), 5) : 0 })
+        start.setDate(start.getDate() + 1)
+      }
+      calendar.unshift(weekData)
+      deficit--
+    }
+  }
   
   const generateCalendarData = () => {
     if (!rawData.value.length) return;
     
     // 获取最早和最新的日期
-    const dates = rawData.value.map(item => new Date(item.date));
-    const firstDate = new Date(Math.min(...dates));
-    const lastDate = new Date(Math.max(...dates));
+    const times = rawData.value.map(item => new Date(item.date).getTime());
+    const firstDate = new Date(Math.min(...times));
+    const lastDate = new Date(Math.max(...times));
     
     // 从最早发布的月份起始开始，右侧对齐到最新日期所在周的结束，确保近期日期完整可见
     const startDate = new Date(firstDate);
@@ -170,7 +206,7 @@ const getBackgroundColor = (day: { count: number; level: number }) => {
     endDate.setDate(endDate.getDate() + (6 - endDate.getDay()));
     
     // 创建日期映射
-    const dateMap = new Map();
+    const dateMap = new Map<string, number>();
     rawData.value.forEach(item => {
       if (item && item.date && item.count !== undefined) {
         dateMap.set(item.date, item.count);
@@ -178,14 +214,14 @@ const getBackgroundColor = (day: { count: number; level: number }) => {
     });
     
     // 生成日历网格
-    const calendar = [];
+    const calendar: CalendarDay[][] = [];
     
     // 从周日开始填充
     let currentDate = new Date(startDate);
     currentDate.setDate(currentDate.getDate() - currentDate.getDay());
     
     while (currentDate <= endDate) {
-      const weekData = [];
+      const weekData: CalendarDay[] = [];
       for (let day = 0; day < 7; day++) {
         const dateStr = formatDate(currentDate);
         const count = dateMap.get(dateStr) || 0;
@@ -198,7 +234,7 @@ const getBackgroundColor = (day: { count: number; level: number }) => {
       }
       calendar.push(weekData);
     }
-    
+    ensureFillColumns(calendar, dateMap)
     calendarData.value = calendar;
   }
   
@@ -211,18 +247,19 @@ const getBackgroundColor = (day: { count: number; level: number }) => {
     endDate.setMonth(startDate.getMonth() + 11)
     endDate.setDate(endDate.getDate() + (6 - endDate.getDay()))
 
-    const calendar = []
+    const calendar: CalendarDay[][] = []
     let currentDate = new Date(startDate)
     currentDate.setDate(currentDate.getDate() - currentDate.getDay())
 
     while (currentDate <= endDate) {
-      const weekData = []
+      const weekData: CalendarDay[] = []
       for (let day = 0; day < 7; day++) {
         weekData.push({ date: formatDate(currentDate), count: 0, level: 0 })
         currentDate.setDate(currentDate.getDate() + 1)
       }
       calendar.push(weekData)
     }
+    ensureFillColumns(calendar, new Map<string, number>())
     calendarData.value = calendar
   }
 

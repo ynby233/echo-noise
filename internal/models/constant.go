@@ -6,6 +6,7 @@ const (
     GetAllMessagesSuccess        = "获取信息成功"
     GetMessageByIDSuccess        = "获取信息成功"
     PostMessageSuccess           = "发布信息成功"
+	CreateMessageSuccessMessage  = "发布信息成功"
 	CreateSuccessMessage         = "创建成功"
 	QuerySuccessMessage          = "查询成功"
 	DeleteSuccessMessage         = "删除成功"

@@ -416,9 +416,7 @@ func HandleBackupPresignUpload(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "请求参数错误"})
 		return
 	}
-	if req.ObjectKey == "" {
-		req.ObjectKey = "backup.zip"
-	}
+	req.ObjectKey = "backup.zip"
 	if req.ContentType == "" {
 		req.ContentType = "application/zip"
 	}
@@ -441,7 +439,8 @@ func HandleBackupPresignUpload(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "生成预签名上传URL失败: " + err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"url": url}})
+	finalKey := storage.ResolveObjectKey(cfg, req.ObjectKey)
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"url": url, "objectKey": finalKey}})
 }
 
 func HandleBackupPresignDownload(c *gin.Context) {
@@ -457,9 +456,7 @@ func HandleBackupPresignDownload(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "请求参数错误"})
 		return
 	}
-	if req.ObjectKey == "" {
-		req.ObjectKey = "backup.zip"
-	}
+	req.ObjectKey = "backup.zip"
 	if req.ExpiresSeconds <= 0 {
 		req.ExpiresSeconds = 3600
 	}
@@ -479,7 +476,8 @@ func HandleBackupPresignDownload(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "生成预签名下载URL失败: " + err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"url": url}})
+	finalKey := storage.ResolveObjectKey(cfg, req.ObjectKey)
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"url": url, "objectKey": finalKey}})
 }
 
 // 立即执行云端同步（备份到 R2/S3）

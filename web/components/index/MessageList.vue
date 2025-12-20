@@ -1,5 +1,6 @@
 <template>
-  <div class="min-h-screen flex flex-col">
+  <div>
+    <div class="min-h-screen flex flex-col">
     <!-- 空状态显示 -->
     <div v-if="!displayMessages.length" class="text-center text-gray-500 py-8">
       <div v-if="isPageLoading">
@@ -66,12 +67,13 @@
               </div>
               
               <!-- 图片内容（支持放大预览 + 悬停效果） -->
-              <a v-if="msg.image_url" :href="`${BASE_API}${msg.image_url}`" :data-fancybox="`message-image-${msg.id}`" class="block">
+              <a v-if="msg.image_url" :href="resolveMediaUrl(msg.image_url)" :data-fancybox="`message-image-${msg.id}`" :class="['message-image-wrap', messageImageAR[msg.id] || '']">
                 <img 
-                  :src="optimizeImage(`${BASE_API}${msg.image_url}`)" 
+                  :src="optimizeImage(resolveMediaUrl(msg.image_url))" 
                   alt="Image" 
                   class="message-image-box"
                   loading="lazy"
+                  @load="onMessageImageLoad(msg.id, $event)"
                   :fetchpriority="idx < 3 ? 'high' : 'low'"
                   decoding="async"
                   sizes="(max-width: 640px) 100vw, 800px"
@@ -106,12 +108,16 @@
               <div class="border-t border-gray-300 dark:border-gray-700 my-3"></div>
               <div class="message-socialbar">
                 <button class="social-item" @click="like(msg.id)" :title="'点赞'">
-                  <UIcon :name="(likedMap[msg.id] ? 'i-mdi-heart' : 'i-mdi-heart-outline')" :style="{ fontSize: (isMobile ? '28px' : '24px'), lineHeight: 1 }" :class="[likedMap[msg.id] ? 'text-red-500' : '']" />
-                  <span class="ml-1 text-sm opacity-80">{{ likesMap[msg.id] ?? (msg.like_count || 0) }}</span>
+                  <UIcon
+                    :name="(likedMap[msg.id] ? 'i-mdi-heart' : 'i-mdi-heart-outline')"
+                    class="social-icon"
+                    :class="[likedMap[msg.id] ? 'text-red-500' : '']"
+                  />
+                  <span :class="['opacity-80', isMobile ? 'text-xs' : 'text-sm']">{{ likesMap[msg.id] ?? (msg.like_count || 0) }}</span>
                 </button>
                 <button v-if="!isGuestbookMessage(msg)" class="social-item" @click="toggleComment(msg.id)" :title="'评论'">
-                  <UIcon name="i-mdi-comment-outline" :style="{ fontSize: (isMobile ? '28px' : '24px'), lineHeight: 1 }" />
-                  <span class="ml-1 text-sm opacity-80">{{ commentCountMap[msg.id] || 0 }}</span>
+                  <UIcon name="i-mdi-comment-outline" class="social-icon" />
+                  <span :class="['opacity-80', isMobile ? 'text-xs' : 'text-sm']">{{ commentCountMap[msg.id] || 0 }}</span>
                 </button>
                 <div class="flex-1 flex items-center justify-center">
                   <span v-if="isContentEmpty(msg)" class="text-xs text-orange-400 inline-flex items-center relative z-30">
@@ -245,6 +251,7 @@
       </template>
     </UCard>
   </UModal>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -254,16 +261,38 @@ import MarkdownRenderer from "~/components/index/MarkdownRenderer.vue";
 import BuiltinComments from '../comments/BuiltinComments.vue'
 import { useRuntimeConfig } from '#imports'
 import { useToast } from '#ui/composables/useToast'
+const config = useRuntimeConfig()
+const BASE_API = config.public.baseApi || '/api'
+
 const resolveMediaUrl = (s: string) => {
   if (!s) return ''
   if (/^https?:\/\//i.test(s)) return s
+  
   const base = (BASE_API || '').replace(/\/$/, '')
   const path = String(s || '')
-  if (path.startsWith('/api/')) return path
-  if (path.startsWith('/images/')) return `${base}${path}`
-  if (path.startsWith('/video/')) return path
-  if (path.startsWith('/')) return path
-  return `${base}/${path.replace(/^\//, '')}`
+  const p = path.startsWith('/') ? path : `/${path}`
+
+  // 特殊处理: 如果路径以 /api/ 开头且 base 以 /api 结尾，避免重复
+  if (p.startsWith('/api/') && base.endsWith('/api')) {
+    return `${base.substring(0, base.length - 4)}${p}`
+  }
+  
+  // 如果路径以 /images/ 或 /video/ 开头，且 base 包含 /api，可能需要注意
+  // 但通常 /images/ 是相对于 /api 的? 不，gin router 是 /api/images
+  
+  return `${base}${p}`
+}
+
+const messageImageAR = ref<Record<number, string>>({})
+const onMessageImageLoad = (id: number, e: Event) => {
+  const img = e.target as HTMLImageElement | null
+  if (!img) return
+  const w = Number(img.naturalWidth || 0)
+  const h = Number(img.naturalHeight || 0)
+  if (!w || !h) return
+  if (h > w) messageImageAR.value[id] = 'ar-11'
+  else if (w > h) messageImageAR.value[id] = 'ar-169'
+  else messageImageAR.value[id] = 'ar-11'
 }
 const authorAvatar = (msg: any) => {
   const msgAvatar = String((msg?.avatar_url || (msg as any)?.AvatarURL || '')).trim()
@@ -489,7 +518,6 @@ watch(() => props.targetMessageId, async (newId) => {
   }
 }, { immediate: true });
 
-const BASE_API = useRuntimeConfig().public.baseApi || '/api';
 const authorProfiles = ref<Record<string, any>>({})
 const openAuthorId = ref<number | null>(null)
 const openAuthorStyle = ref<Record<string, string>>({})
@@ -1441,15 +1469,18 @@ const downloadAsImage = async (msgId: number) => {
     // 2. 创建临时容器
     const tempContainer = document.createElement('div');
    tempContainer.style.cssText = `
-  padding: 16px;
+  padding: 0;
   background: transparent;
-  border-radius: 12px;
+  border-radius: 16px;
   width: ${hasImage ? '640px' : '480px'};
   position: absolute;
   left: -9999px;
   top: 0;
   z-index: -1;
   overflow: visible;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
   min-height: fit-content;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
   border: none;
@@ -1463,9 +1494,42 @@ const downloadAsImage = async (msgId: number) => {
       ? parentStyles.backgroundColor
       : '#ffffff';
     const textColor = parentStyles.color || '#333';
+
+    tempContainer.style.background = bgColor;
     
     // 移除所有控制元素和限制
     contentClone.querySelectorAll('.text-center.mt-2, .bg-gradient-to-t, .expand-toggle-btn, .message-socialbar, .message-toolbox, .toolbox-anchor, .tool-open-btn, .builtin-comments, [id^="comment-container-"], [id^="waline-"]').forEach(el => el.remove());
+    contentClone.querySelectorAll('hr').forEach(el => el.remove());
+    contentClone.querySelectorAll('.content-fade-mask, .content-fade, .content-mask, .fade-mask, .fade-overlay').forEach(el => el.remove());
+    contentClone.querySelectorAll('.author-row .text-xs.opacity-70').forEach(el => el.remove());
+    // 导出卡片：作者区垂直居中（不改变左右布局），并避免“时间行”容器占位导致作者名下沉
+    const authorRow = contentClone.querySelector('.author-row') as HTMLElement | null
+    if (authorRow) {
+      authorRow.style.alignItems = 'center'
+      authorRow.style.marginBottom = '4px'
+    }
+    // 时间行是一个空的 flex 容器（时间被移除后仍可能占位），导出时直接隐藏
+    contentClone.querySelectorAll<HTMLElement>('.author-row .min-w-0 > .flex.items-center.gap-2').forEach((el) => {
+      el.style.display = 'none'
+    })
+    const authorInfo = contentClone.querySelector('.author-row .min-w-0') as HTMLElement | null
+    if (authorInfo) {
+      authorInfo.style.display = 'flex'
+      authorInfo.style.flexDirection = 'column'
+      authorInfo.style.justifyContent = 'center'
+    }
+    const authorName = contentClone.querySelector('.author-row .min-w-0 > .text-sm') as HTMLElement | null
+    if (authorName) {
+      authorName.style.lineHeight = '1.15'
+      authorName.style.transform = 'translateY(-6px)'
+    }
+    contentClone.querySelectorAll<HTMLElement>('.border-t').forEach((el) => {
+      el.style.marginTop = '8px'
+      el.style.marginBottom = '8px'
+      el.style.borderTopWidth = '1px'
+      el.style.borderTopStyle = 'solid'
+      el.style.borderTopColor = 'rgba(148,163,184,0.35)'
+    })
     // 删除置顶图标及其包裹容器
     contentClone.querySelectorAll('.i-mdi-pin, .i-mdi-pin-outline').forEach(el => {
       const parent = el.parentElement;
@@ -1477,10 +1541,11 @@ const downloadAsImage = async (msgId: number) => {
     contentClone.style.cssText = `
       max-height: none;
       overflow: visible;
-      padding: 0;
+      padding: 16px 18px 6px;
       margin: 0;
       background: ${bgColor};
-      border-radius: 12px;
+      border-radius: 0;
+      box-sizing: border-box;
     `;
     
     // 处理内容区域
@@ -1493,11 +1558,29 @@ const downloadAsImage = async (msgId: number) => {
         height: auto !important;
         line-height: 1.6;
         background: ${bgColor};
-        border-radius: 12px;
+        border-radius: 0;
         font-size: 14px;
         color: ${textColor};
+        -webkit-mask-image: none !important;
+        mask-image: none !important;
+        position: relative;
+        z-index: 2;
       `;
     }
+
+    // 确保正文区域在最上层（避免被任何残留遮罩/伪元素覆盖）
+    const markdown = contentClone.querySelector('.markdown-preview') as HTMLElement | null
+    if (markdown) {
+      markdown.style.position = 'relative'
+      markdown.style.zIndex = '2'
+    }
+
+    contentClone.querySelectorAll<HTMLElement>('*').forEach((n) => {
+      try {
+        (n.style as any).webkitMaskImage = 'none'
+        ;(n.style as any).maskImage = 'none'
+      } catch {}
+    })
 
     // 处理媒体元素
     const mediaElements = contentClone.querySelectorAll('video, audio, iframe');
@@ -1584,26 +1667,119 @@ await processImages();
     const [r, g, b] = parseRgb(bgColor);
     const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
     const linkColor = luma > 180 ? '#6b7280' : 'rgba(255,255,255,0.6)';
+    const isDarkBg = luma <= 180;
+    const messageURL = `${window.location.origin}/#msg-${msgId}`;
     const footer = document.createElement('div');
     footer.style.cssText = `
-      margin-top: 12px;
-      padding-top: 12px;
-      text-align: center;
+      padding: 6px 18px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      text-align: left;
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-      background: transparent;
+      background: ${bgColor};
+      box-sizing: border-box;
     `;
-    footer.innerHTML = `
-      <div style="color: #fb923c; font-size: 13px; margin-bottom: 4px; font-weight: 500;">
+    const footerLeft = document.createElement('div');
+    footerLeft.style.cssText = `
+      min-width: 0;
+      flex: 1 1 auto;
+    `;
+    footerLeft.innerHTML = `
+      <div style="color: #fb923c; font-size: 13px; margin-bottom: 6px; font-weight: 600; line-height: 1.1;">
         ${props.siteConfig.cardFooterTitle}
       </div>
-      <a href="https://note.noisework.cn" 
-         target="_blank" 
-         rel="noopener noreferrer" 
-         style="color: ${linkColor}; text-decoration: none;">
+      <div style="color: ${linkColor}; font-size: 12px; line-height: 1.35; word-break: break-word;">
         ${props.siteConfig.cardFooterSubtitle}
-      </a>
+      </div>
     `;
+
+    const footerRight = document.createElement('div');
+    footerRight.style.cssText = `
+      flex: 0 0 auto;
+      width: 84px;
+      height: 84px;
+      border-radius: 12px;
+      padding: 6px;
+      box-sizing: border-box;
+      background: ${isDarkBg ? 'rgba(255,255,255,0.08)' : 'rgba(17,24,39,0.04)'};
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    `;
+    const qrCanvas = document.createElement('canvas');
+    qrCanvas.width = 72;
+    qrCanvas.height = 72;
+    footerRight.appendChild(qrCanvas);
+
+    footer.appendChild(footerLeft);
+    footer.appendChild(footerRight);
     tempContainer.appendChild(footer);
+
+    const ensureQRCode = async () => {
+      const w = window as any
+      if (w.QRCode?.toCanvas || w.QRCode?.toDataURL || w.qrcode?.toCanvas || w.qrcode?.toDataURL) return
+      await new Promise<void>((resolve, reject) => {
+        const existing = document.querySelector('script[data-qrcode="1"]') as HTMLScriptElement | null
+        if (existing) {
+          if ((w.QRCode?.toCanvas || w.QRCode?.toDataURL || w.qrcode?.toCanvas || w.qrcode?.toDataURL)) resolve()
+          else existing.addEventListener('load', () => resolve(), { once: true })
+          return
+        }
+        const s = document.createElement('script')
+        s.src = 'https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js'
+        s.async = true
+        s.setAttribute('data-qrcode', '1')
+        s.onload = () => resolve()
+        s.onerror = () => reject(new Error('qrcode script load failed'))
+        document.head.appendChild(s)
+      })
+    }
+
+    // 生成二维码（脚本可能还未加载完成，运行时兜底加载）
+    try {
+      await ensureQRCode()
+      const QR = (window as any).QRCode || (window as any).qrcode;
+      if (QR?.toCanvas) {
+        await QR.toCanvas(qrCanvas, messageURL, {
+          width: 72,
+          margin: 1,
+          color: {
+            dark: '#111827',
+            light: '#ffffff'
+          }
+        })
+      } else if (QR?.toDataURL) {
+        const dataUrl = await QR.toDataURL(messageURL, {
+          width: 72,
+          margin: 1,
+          color: {
+            dark: '#111827',
+            light: '#ffffff'
+          }
+        })
+        const img = document.createElement('img')
+        img.src = dataUrl
+        img.style.width = '72px'
+        img.style.height = '72px'
+        img.style.display = 'block'
+        footerRight.replaceChild(img, qrCanvas)
+      } else {
+        throw new Error('qrcode api missing')
+      }
+    } catch {
+      clearTimeout(timeout)
+      document.body.removeChild(tempContainer)
+      isExpanded.value[msgId] = originalExpanded
+      useToast().add({
+        title: '二维码生成失败',
+        description: '请稍后重试（二维码脚本未加载或网络异常）',
+        color: 'red',
+        timeout: 2500
+      })
+      return
+    }
 
     // 生成图片
     await nextTick();
@@ -1627,6 +1803,33 @@ await processImages();
             background: ${bgColor};
             border-radius: 12px;
           `;
+        }
+
+        clonedDoc.querySelectorAll('.bg-gradient-to-t, .content-fade-mask, .content-fade, .content-mask, .fade-mask, .fade-overlay').forEach(el => el.remove());
+        clonedDoc.querySelectorAll('hr').forEach(el => el.remove());
+        clonedDoc.querySelectorAll<HTMLElement>('.border-t').forEach((el) => {
+          el.style.marginTop = '8px'
+          el.style.marginBottom = '8px'
+          el.style.borderTopWidth = '1px'
+          el.style.borderTopStyle = 'solid'
+          el.style.borderTopColor = 'rgba(148,163,184,0.35)'
+        })
+        const ca = clonedDoc.querySelector('.overflow-y-hidden') as HTMLElement | null
+        if (ca) {
+          ca.style.overflow = 'visible'
+          ca.style.maxHeight = 'none'
+          ca.style.height = 'auto'
+          ca.style.position = 'relative'
+          ca.style.zIndex = '2'
+          try {
+            ;(ca.style as any).webkitMaskImage = 'none'
+            ;(ca.style as any).maskImage = 'none'
+          } catch {}
+        }
+        const mp = clonedDoc.querySelector('.markdown-preview') as HTMLElement | null
+        if (mp) {
+          mp.style.position = 'relative'
+          mp.style.zIndex = '2'
         }
       }
     });
@@ -1877,8 +2080,23 @@ onMounted(() => {
   height: auto;
   border-radius: 12px;
   display: block;
+  object-fit: contain;
   transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
   box-shadow: 0 1px 2px rgba(0,0,0,0.10);
+}
+.message-image-wrap {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 12px;
+  background: rgba(0,0,0,0.04);
+}
+.message-image-wrap.ar-11 { aspect-ratio: 1 / 1; }
+.message-image-wrap.ar-169 { aspect-ratio: 16 / 9; }
+.message-image-wrap.ar-11 .message-image-box,
+.message-image-wrap.ar-169 .message-image-box { height: 100%; }
+:global(html.dark) .message-image-wrap {
+  background: rgba(255,255,255,0.06);
 }
 .message-image-box:hover {
   transform: translate3d(0,0,0) scale(1.02);
@@ -1970,7 +2188,11 @@ onMounted(() => {
   z-index:100; 
   padding: 6px 10px; 
   border-radius: 12px; 
-  backdrop-filter: saturate(1.2) blur(6px) !important; 
+  background: var(--toolbox-bg) !important;
+  color: var(--toolbox-fg) !important;
+  opacity: 1 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 .tool-icons { display: flex; align-items: center; gap: 8px; padding: 6px 8px; }
 .tool-icon { 
@@ -1980,7 +2202,7 @@ onMounted(() => {
   align-items:center; 
   justify-content:center; 
   cursor:pointer; 
-  opacity:0.95; 
+  opacity:1; 
   font-size:18px; 
   line-height:1; 
   border-radius: 9999px; 
@@ -1995,7 +2217,7 @@ onMounted(() => {
   box-shadow: 0 1px 6px rgba(0,0,0,0.08); 
 }
 :global(html.dark) .tool-icon { 
-  background: rgba(36,43,50,0.95); 
+  background: rgb(36,43,50); 
   color: #ffffff; 
   border: 1px solid rgba(255,255,255,0.12); 
   box-shadow: 0 1px 6px rgba(255,255,255,0.06); 
@@ -2022,18 +2244,34 @@ onMounted(() => {
 .toolbox-dark { background: rgba(36,43,50,0.95); border: 1px solid rgba(255,255,255,0.1); }
 .toolbox-light { background: #fff; border: 1px solid rgba(0,0,0,0.08); }
 
-/* 直接按文档主题类切换工具箱背景，避免组件因响应式类变更重渲染 */
-:global(html.dark) .message-toolbox.overlay { 
-  background: rgb(36,43,50) !important; 
-  border: 1px solid rgba(148,163,184,0.50) !important; 
-  box-shadow: 0 8px 22px rgba(255,255,255,0.12) !important; 
-  backdrop-filter: blur(8px) !important;
+/* 工具栏主题色（变量在全局定义，避免 scoped 优先级问题） */
+:global(html) {
+  --toolbox-bg: #ffffff;
+  --toolbox-fg: #111827;
+  --toolbox-border: rgba(100,116,139,0.40);
+  --toolbox-shadow: 0 8px 22px rgba(0,0,0,0.15);
 }
-:global(html:not(.dark)) .message-toolbox.overlay { 
-  background: rgb(255,255,255) !important; 
-  border: 1px solid rgba(100,116,139,0.40) !important; 
-  box-shadow: 0 8px 22px rgba(0,0,0,0.15) !important; 
-  backdrop-filter: blur(8px) !important;
+:global(html.dark),
+:global(body.dark),
+:global(.dark) {
+  --toolbox-bg: rgb(36,43,50);
+  --toolbox-fg: #ffffff;
+  --toolbox-border: rgba(148,163,184,0.50);
+  --toolbox-shadow: 0 8px 22px rgba(255,255,255,0.12);
+}
+
+.message-toolbox.overlay {
+  border: 1px solid var(--toolbox-border) !important;
+  box-shadow: var(--toolbox-shadow) !important;
+}
+
+.message-toolbox.overlay .tool-icons {
+  background: var(--toolbox-bg) !important;
+  color: var(--toolbox-fg) !important;
+}
+
+.message-toolbox.overlay .tool-icon {
+  color: inherit;
 }
 
 /* 参考图的边缘描边效果（双层细描边） */
@@ -2085,7 +2323,47 @@ onMounted(() => {
 @media (max-width: 640px) {
   .tool-icons { gap:10px; padding:6px 8px; }
   .tool-icon { width:22px; height:22px; font-size:18px; }
+  .tool-icon :deep(svg) { width: 19px !important; height: 19px !important; }
+  .tool-icon :deep(.iconify) {
+    width: 19px !important;
+    height: 19px !important;
+    font-size: 19px !important;
+    --iconify-width: 1em !important;
+    --iconify-height: 1em !important;
+  }
   .message-socialbar { gap:10px; padding:0; }
+  .social-item { gap: 6px; }
+  .message-socialbar :deep(.social-icon) {
+    width: 19px !important;
+    height: 19px !important;
+    font-size: 19px !important;
+    line-height: 1 !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+  }
+  .message-socialbar :deep(.iconify) {
+    width: 19px !important;
+    height: 19px !important;
+    font-size: 19px !important;
+    line-height: 1 !important;
+    min-width: 19px !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+    flex: 0 0 auto;
+    --iconify-width: 1em !important;
+    --iconify-height: 1em !important;
+  }
+  .message-socialbar :deep(.social-icon svg) {
+    width: 19px !important;
+    height: 19px !important;
+  }
+  .message-socialbar :deep(svg) {
+    width: 19px !important;
+    height: 19px !important;
+  }
 }
 
 .tool-open-btn { border: none; background: transparent; box-shadow: none; padding: 0; }

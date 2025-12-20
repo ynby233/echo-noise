@@ -4,17 +4,35 @@
 
 <script setup lang="ts">
 import { onMounted, ref, watch, onBeforeUnmount, inject } from 'vue';
+import { useRuntimeConfig } from '#imports';
 import Vditor from 'vditor';
 
 // 定义正则表达式
-const BILIBILI_REG = /https:\/\/www\.bilibili\.com\/video\/(BV[\w]+)\/?$/;
-const YOUTUBE_REG = /https:\/\/(?:www\.)?youtube\.com\/watch\?v=([\w-]+)|https:\/\/youtu\.be\/([\w-]+)/;
-const NETEASE_MUSIC_REG = /https:\/\/music\.163\.com(?:\/#)?\/song\?id=(\d+)/;
-const QQMUSIC_REG = /https:\/\/y\.qq\.com\/n\/yqq\/song(\w+)\.html/;
-const QQVIDEO_REG = /https:\/\/v\.qq\.com\/x\/cover\/\w+\/(\w+)\.html/;
-const SPOTIFY_REG = /https:\/\/open\.spotify\.com\/(track|album|playlist)\/([a-zA-Z0-9]+)/;
-const YOUKU_REG = /https:\/\/v\.youku\.com\/v_show\/id_([a-zA-Z0-9]+)\.html/;
+const BILIBILI_REG = /https:\/\/www\.bilibili\.com\/video\/(BV[\w]+)\/?/g;
+const YOUTUBE_REG = /https:\/\/(?:www\.)?youtube\.com\/watch\?v=([\w-]+)|https:\/\/youtu\.be\/([\w-]+)/g;
+const NETEASE_MUSIC_REG = /https:\/\/music\.163\.com(?:\/#)?\/song\?id=(\d+)/g;
+const QQMUSIC_REG = /https:\/\/y\.qq\.com\/n\/yqq\/song(\w+)\.html/g;
+const QQVIDEO_REG = /https:\/\/v\.qq\.com\/x\/cover\/\w+\/(\w+)\.html/g;
+const SPOTIFY_REG = /https:\/\/open\.spotify\.com\/(track|album|playlist)\/([a-zA-Z0-9]+)/g;
+const YOUKU_REG = /https:\/\/v\.youku\.com\/v_show\/id_([a-zA-Z0-9]+)\.html/g;
+// @ts-ignore
 const emit = defineEmits(['tagClick', 'rendered'])
+const config = useRuntimeConfig();
+const BASE_API = config.public.baseApi || '/api';
+
+const resolveImageUrl = (path: string) => {
+  if (!path) return '';
+  if (/^https?:\/\//.test(path)) return path;
+  
+  const base = String(BASE_API).replace(/\/$/, '');
+  const p = path.startsWith('/') ? path : `/${path}`;
+  
+  if (p.startsWith('/api/') && base.endsWith('/api')) {
+      return `${base.substring(0, base.length - 4)}${p}`;
+  }
+  return `${base}${p}`;
+}
+
 const previewElement = ref<HTMLDivElement | null>(null);
 let zoom: any = null;
 // 添加 window 类型声明
@@ -28,6 +46,7 @@ declare global {
 }
 let __gh_gid = 0
 const ghInFlight: Record<string, Promise<any>> = {}
+// @ts-ignore
 const props = defineProps({
   content: {
     type: String,
@@ -73,93 +92,280 @@ const initializeZoom = () => {
 
 const applyImageGrid = () => {
   if (!previewElement.value) return;
-  const isPureImageParagraph = (p: Element) => {
-    let ok = true;
-    const children = Array.from(p.childNodes);
-    if (children.length === 0) return false;
-    for (const node of children) {
-      if (node.nodeType === Node.ELEMENT_NODE) {
-        const el = node as Element;
-        const tag = el.tagName.toLowerCase();
-        if (tag === 'img') continue;
-        if (tag === 'a' && el.childElementCount === 1 && el.querySelector('img')) continue;
-        if (tag === 'br') { ok = false; break; }
-        ok = false; break;
-      } else if (node.nodeType === Node.TEXT_NODE) {
-        if ((node.textContent || '').trim() !== '') { ok = false; break; }
-      }
-    }
-    return ok;
+  
+  const isMediaNode = (node: any): boolean => {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
+    const el = node as Element;
+    const tag = el.tagName.toLowerCase();
+    return tag === 'img' || 
+           tag === 'video' || 
+           el.classList.contains('video-wrapper') || 
+           (tag === 'a' && el.querySelector('img') !== null);
   };
 
-  const paras = Array.from(previewElement.value.querySelectorAll('p'));
-  const runs: Element[][] = [];
-  let current: Element[] = [];
-  for (const p of paras) {
-    if (isPureImageParagraph(p)) {
-      const last = current[current.length - 1];
-      if (!last || last.nextElementSibling === p) {
-        current.push(p);
-      } else {
-        if (current.length >= 2) runs.push(current);
-        current = [p];
-      }
-    } else {
-      if (current.length >= 2) runs.push(current);
-      current = [];
-    }
-  }
-  if (current.length >= 2) runs.push(current);
-
-  for (const run of runs) {
-    const grid = document.createElement('div');
-    const count = run.length;
-    const cols = count === 2 || count === 4 ? 2 : Math.min(3, count);
-    grid.className = `image-grid cols-${cols}`;
-    const group = `grid-${Math.random().toString(36).slice(2)}`;
-    for (const p of run) {
-      const img = p.querySelector('img') as HTMLImageElement | null;
-      const a = p.querySelector('a') as HTMLAnchorElement | null;
-      if (!img && !a) continue;
-      const item = document.createElement('div');
-      item.className = 'image-grid-item';
-      let anchor: HTMLAnchorElement;
-      if (a && a.querySelector('img')) {
-        anchor = a;
-        anchor.setAttribute('data-fancybox', group);
-        if (!anchor.getAttribute('href') && a.querySelector('img')) {
-          const innerImg = a.querySelector('img') as HTMLImageElement;
-          anchor.setAttribute('href', innerImg.src);
+  const isPureMediaParagraph = (p: Element) => {
+    const children = Array.from(p.childNodes);
+    if (children.length === 0) return false;
+    let hasMedia = false;
+    for (const child of children) {
+      const node = child as Node;
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        if (isMediaNode(node)) {
+          hasMedia = true;
+          continue;
         }
-      } else if (img) {
-        anchor = document.createElement('a');
-        anchor.setAttribute('href', img.src);
-        anchor.setAttribute('data-fancybox', group);
-        anchor.appendChild(img);
-      } else {
-        continue;
+        if ((node as Element).tagName.toLowerCase() === 'br') continue;
+        return false; 
+      } else if (node.nodeType === Node.TEXT_NODE) {
+        if ((node.textContent || '').trim() !== '') return false;
       }
-      item.appendChild(anchor);
-      grid.appendChild(item);
     }
-    grid.querySelectorAll('img').forEach((imgEl) => {
-      const img = imgEl as HTMLImageElement;
-      const item = img.closest('.image-grid-item') as HTMLElement;
-      const setAR = () => {
-        const w = img.naturalWidth;
-        const h = img.naturalHeight;
-        if (!item) return;
-        item.classList.remove('ar-169','ar-34','ar-11');
-        if (w > h) item.classList.add('ar-169');
-        else if (h > w) item.classList.add('ar-34');
-        else item.classList.add('ar-11');
-      };
-      if (img.complete && img.naturalWidth && img.naturalHeight) setAR();
-      else img.addEventListener('load', setAR, { once: true });
-    });
-    const first = run[0];
-    first.replaceWith(grid);
-    for (let i = 1; i < run.length; i++) run[i].remove();
+    return hasMedia;
+  };
+
+  const areAdjacent = (a: Element, b: Element) => {
+     let next = a.nextSibling;
+     while (next && next !== b) {
+       if (next.nodeType === Node.ELEMENT_NODE) return false; 
+       if (next.nodeType === Node.TEXT_NODE) {
+         if ((next.textContent || '').trim() !== '') return false; 
+       }
+       next = next.nextSibling;
+     }
+     return next === b;
+  };
+
+  // 1. Identify Candidates
+  const allCandidates = Array.from(previewElement.value.querySelectorAll('p, video, .video-wrapper')) as HTMLElement[];
+  const blocks: HTMLElement[] = [];
+  
+  for (const el of allCandidates) {
+     const tag = el.tagName.toLowerCase();
+     if (tag === 'p') {
+       if (isPureMediaParagraph(el)) blocks.push(el);
+     } else {
+       const parent = el.parentElement;
+       if (parent && parent.tagName.toLowerCase() === 'p' && isPureMediaParagraph(parent)) continue;
+       if (tag === 'video' && parent && parent.classList.contains('video-wrapper')) continue;
+       blocks.push(el);
+     }
+  }
+
+  // 2. Group by Parent
+  const blocksByParent = new Map<HTMLElement, HTMLElement[]>();
+  for (const block of blocks) {
+     const parent = block.parentElement;
+     if (!parent) continue;
+     if (!blocksByParent.has(parent)) blocksByParent.set(parent, []);
+     blocksByParent.get(parent)!.push(block);
+  }
+
+  // 3. Process Runs
+  for (const [parent, children] of blocksByParent) {
+     const runs: HTMLElement[][] = [];
+     let current: HTMLElement[] = [];
+     for (const block of children) {
+        if (current.length === 0) {
+           current.push(block);
+        } else {
+           const last = current[current.length - 1];
+           if (areAdjacent(last, block)) {
+              current.push(block);
+           } else {
+              runs.push(current);
+              current = [block];
+           }
+        }
+     }
+     if (current.length > 0) runs.push(current);
+
+     for (const run of runs) {
+        const mediaItems: { node: HTMLElement }[] = [];
+        for (const block of run) {
+           if (block.tagName.toLowerCase() === 'p') {
+              block.childNodes.forEach((node) => {
+                 if (isMediaNode(node)) mediaItems.push({ node: node as HTMLElement });
+              });
+           } else {
+              mediaItems.push({ node: block });
+           }
+        }
+
+        if (mediaItems.length < 2) {
+          if (mediaItems.length === 1) {
+            const firstBlock = run[0]
+            const only = mediaItems[0]?.node
+            if (firstBlock?.parentNode && only) {
+              const wrapper = document.createElement('div')
+              wrapper.className = 'single-media'
+              firstBlock.parentNode.insertBefore(wrapper, firstBlock)
+              wrapper.appendChild(only)
+
+              if (firstBlock.tagName.toLowerCase() === 'p') firstBlock.remove()
+
+              const applyPortrait = (w: number, h: number) => {
+                if (w > 0 && h > 0 && h > w) {
+                  wrapper.classList.add('ar-11')
+                  const tagName = (only as Element).tagName.toLowerCase()
+                  if (tagName === 'img') {
+                    const img = only as HTMLImageElement
+                    img.style.width = '100%'
+                    img.style.height = '100%'
+                    img.style.objectFit = 'contain'
+                  } else if (tagName === 'video') {
+                    const vid = only as HTMLVideoElement
+                    vid.style.width = '100%'
+                    vid.style.height = '100%'
+                    vid.style.objectFit = 'contain'
+                  } else if (tagName === 'a') {
+                    const img = (only as HTMLAnchorElement).querySelector('img') as HTMLImageElement | null
+                    if (img) {
+                      img.style.width = '100%'
+                      img.style.height = '100%'
+                      img.style.objectFit = 'contain'
+                    }
+                  }
+                }
+              }
+
+              const tagName = (only as Element).tagName.toLowerCase()
+              if (tagName === 'img') {
+                const img = only as HTMLImageElement
+                if (img.complete && img.naturalWidth && img.naturalHeight) applyPortrait(img.naturalWidth, img.naturalHeight)
+                else img.addEventListener('load', () => applyPortrait(img.naturalWidth, img.naturalHeight), { once: true })
+              } else if (tagName === 'a') {
+                const img = (only as HTMLAnchorElement).querySelector('img') as HTMLImageElement | null
+                if (img) {
+                  if (img.complete && img.naturalWidth && img.naturalHeight) applyPortrait(img.naturalWidth, img.naturalHeight)
+                  else img.addEventListener('load', () => applyPortrait(img.naturalWidth, img.naturalHeight), { once: true })
+                }
+              } else if (tagName === 'video') {
+                const vid = only as HTMLVideoElement
+                const runCheck = () => applyPortrait(vid.videoWidth, vid.videoHeight)
+                if (vid.readyState >= 1 && vid.videoWidth && vid.videoHeight) runCheck()
+                else vid.addEventListener('loadedmetadata', runCheck, { once: true })
+              }
+            }
+          }
+          continue
+        }
+
+        const grid = document.createElement('div');
+        const count = mediaItems.length;
+        const cols = count === 2 || count === 4 ? 2 : Math.min(3, count);
+        grid.className = `image-grid cols-${cols}`;
+        const group = `grid-${Math.random().toString(36).slice(2)}`;
+
+        const firstBlock = run[0];
+        if (firstBlock.parentNode) firstBlock.parentNode.insertBefore(grid, firstBlock);
+
+        for (const { node } of mediaItems) {
+           const item = document.createElement('div');
+           item.className = 'image-grid-item';
+           
+           const tagName = (node as Element).tagName.toLowerCase();
+           if (tagName === 'video') {
+               const vid = node as HTMLVideoElement;
+               vid.style.width = '100%';
+               vid.style.height = '100%';
+               vid.style.objectFit = 'cover';
+               item.appendChild(vid);
+            } else if ((node as Element).classList.contains('video-wrapper')) {
+               const wrapper = node as HTMLElement;
+               wrapper.style.width = '100%';
+               wrapper.style.height = '100%';
+               item.appendChild(wrapper);
+            } else if (tagName === 'a') {
+               const a = node as HTMLAnchorElement;
+               a.setAttribute('data-fancybox', group);
+               const img = a.querySelector('img');
+               if (img && !a.getAttribute('href')) a.setAttribute('href', img.src);
+               item.appendChild(a);
+            } else if (tagName === 'img') {
+               const img = node as HTMLImageElement;
+               const a = document.createElement('a');
+               a.setAttribute('href', img.src);
+               a.setAttribute('data-fancybox', group);
+               a.appendChild(img);
+               item.appendChild(a);
+            }
+            grid.appendChild(item);
+         }
+ 
+         for (const block of run) {
+            if (block.tagName.toLowerCase() === 'p') block.remove();
+         }
+ 
+         const updateGridUniformity = () => {
+           const items = Array.from(grid.querySelectorAll('.image-grid-item')) as HTMLElement[];
+           let landscapeCount = 0;
+           let portraitCount = 0;
+           let squareCount = 0;
+
+           items.forEach(item => {
+             const img = item.querySelector('img');
+             const vid = item.querySelector('video');
+             const wrapper = item.querySelector('.video-wrapper');
+             
+             if (wrapper) {
+               landscapeCount++;
+             } else if (img) {
+               if (img.complete && img.naturalWidth) {
+                 const r = img.naturalWidth / img.naturalHeight;
+                 if (Math.abs(r - 1) < 0.15) squareCount++; // 宽松判定方形
+                 else if (r > 1) landscapeCount++;
+                 else portraitCount++;
+               }
+             } else if (vid) {
+               if (vid.readyState >= 1) {
+                 const r = vid.videoWidth / vid.videoHeight;
+                 if (Math.abs(r - 1) < 0.15) squareCount++;
+                 else if (r > 1) landscapeCount++;
+                 else portraitCount++;
+               }
+             }
+           });
+
+           let targetClass = 'ar-11'; 
+           const typesPresent = [landscapeCount > 0, portraitCount > 0, squareCount > 0].filter(Boolean).length;
+           
+           if (typesPresent > 1) {
+             targetClass = 'ar-11'; // 混合类型强制方形，确保对齐
+           } else if (landscapeCount > 0) {
+             targetClass = 'ar-169';
+           } else if (portraitCount > 0) {
+             targetClass = 'ar-34';
+           } else if (squareCount > 0) {
+             targetClass = 'ar-11';
+           } else {
+             targetClass = 'ar-169'; // 默认
+           }
+           
+           items.forEach(item => {
+             item.classList.remove('ar-169', 'ar-34', 'ar-11');
+             item.classList.add(targetClass);
+           });
+         };
+
+         grid.querySelectorAll('img').forEach((imgEl) => {
+           const img = imgEl as HTMLImageElement;
+           if (img.complete) updateGridUniformity();
+           else img.addEventListener('load', updateGridUniformity);
+         });
+ 
+         grid.querySelectorAll('video').forEach((vidEl) => {
+           const vid = vidEl as HTMLVideoElement;
+           if (vid.readyState >= 1) updateGridUniformity();
+           else vid.addEventListener('loadedmetadata', updateGridUniformity);
+         });
+
+         grid.querySelectorAll('.video-wrapper').forEach(() => {
+           updateGridUniformity();
+         });
+         
+         // 初始执行一次
+         updateGridUniformity();
+     }
   }
 };
 
@@ -215,9 +421,10 @@ const processMediaLinks = (content: string): string => {
     });
   }
   // 将裸视频文件链接替换为内联视频标签（先于链接化处理）
-  const VIDEO_FILE_REG = /(?<!["'\(])\bhttps?:\/\/[^\s<]+\.(mp4|webm|mov|avi)(\?[^\s<\)]*)?\b/g;
+  // 仅匹配前导为空白字符或行首的 URL，避免匹配 HTML 属性中的 URL（如 src="http..."）
+  const VIDEO_FILE_REG = /(?<=^|\s)((?:https?:\/\/|\/api\/video\/|\/video\/)[^\s<"']+\.(?:mp4|webm|mov|avi)(?:\?[^\s<"']*)?)/g;
   content = content.replace(VIDEO_FILE_REG, (m) => {
-    const src = m;
+    const src = resolveImageUrl(m);
     return `<video src="${src}" controls preload="metadata" style="width:100%;height:auto"></video>`;
   });
   return content
@@ -351,13 +558,7 @@ const renderMarkdown = async (markdown: string) => {
     }
 
     // 先处理媒体链接
-    let normalizedContent = '';
-    try {
-      normalizedContent = normalizeInlineImageLinks(markdown ?? '');
-    } catch {
-      normalizedContent = markdown ?? '';
-    }
-    const processedContent = processMediaLinks(normalizedContent);
+    const processedContent = processMediaLinks(markdown ?? '');
 
     // 将裸露的 URL 转为可点击链接（新标签页打开）
     const linkifyBareUrls = (text: string): string => {
@@ -383,11 +584,19 @@ const renderMarkdown = async (markdown: string) => {
     const currentTheme = (contentTheme && (contentTheme as any).value) ? ((contentTheme as any).value === 'dark' ? 'dark' : 'light') : (document.documentElement.classList.contains('dark') ? 'dark' : 'light')
     const hljsStyle = currentTheme === 'dark' ? 'github-dark' : 'github'
     Vditor.preview(previewElement.value!, finalContent, {
+      mode: currentTheme as any,
       lang: 'zh_CN',
       theme: { current: currentTheme },
       hljs: { style: hljsStyle, lineNumber: true, enable: true },
       markdown: { sanitize: false },
       after: () => {
+        const images = previewElement.value?.querySelectorAll('img');
+        images?.forEach(img => {
+           const src = img.getAttribute('src');
+           if (src && !/^https?:\/\//.test(src)) {
+               img.src = resolveImageUrl(src);
+           }
+        });
         const links = previewElement.value?.querySelectorAll('a');
         links?.forEach(link => {
           if (!link.hasAttribute('target')) {
@@ -396,14 +605,12 @@ const renderMarkdown = async (markdown: string) => {
           }
         });
         applyThemeClass();
-        applyImageGrid();
-        initializeZoom();
         const anchors = previewElement.value?.querySelectorAll('a[href]') || [] as any;
         anchors.forEach((a: HTMLAnchorElement) => {
           const href = a.getAttribute('href') || ''
           if (/\.(mp4|webm|mov|avi)(\?.*)?$/i.test(href)) {
             const v = document.createElement('video')
-            v.setAttribute('src', href)
+            v.setAttribute('src', resolveImageUrl(href))
             v.setAttribute('controls', 'true')
             v.setAttribute('preload', 'metadata')
             v.style.width = '100%'
@@ -411,6 +618,25 @@ const renderMarkdown = async (markdown: string) => {
             a.replaceWith(v)
           }
         });
+        
+        // Explicitly handle existing video tags (e.g. from raw HTML or markdown)
+        const existingVideos = previewElement.value?.querySelectorAll('video');
+        existingVideos?.forEach((v: HTMLVideoElement) => {
+            const src = v.getAttribute('src');
+            if (src && !/^https?:\/\//.test(src)) {
+                v.setAttribute('src', resolveImageUrl(src));
+            }
+            if (!v.hasAttribute('controls')) {
+                v.setAttribute('controls', 'true');
+            }
+            // Ensure proper sizing to prevent collapse (fixes height="100%" issue)
+            v.style.width = '100%';
+            v.style.height = 'auto';
+            v.style.maxWidth = '100%';
+        });
+
+        applyImageGrid();
+        initializeZoom();
         applyImageLoadingPlaceholders();
         emit('rendered');
         const proc = (window as any).processNMPv2Shortcodes
@@ -938,6 +1164,65 @@ watch(() => props.enableGithubCard, () => {
 .medium-zoom-image--opened {
   z-index: 1000;
 }
+/* 图像宫格布局样式 */
+.image-grid {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  margin: 0.5em 0;
+}
+.image-grid.cols-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+.image-grid.cols-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+.image-grid-item {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 4px;
+}
+.image-grid-item img,
+.image-grid-item video,
+.image-grid-item .video-wrapper,
+.image-grid-item iframe,
+.image-grid-item a {
+  width: 100%;
+  height: 100% !important;
+  object-fit: cover;
+  display: block;
+}
+
+/* 宫格内视频容器覆盖默认样式 */
+.image-grid-item .video-wrapper {
+  padding-bottom: 0 !important;
+  height: 100% !important;
+}
+
+/* 宽高比自适应类 */
+.ar-169 { aspect-ratio: 16/9; }
+.ar-34 { aspect-ratio: 3/4; }
+.ar-11 { aspect-ratio: 1/1; }
+
+.single-media {
+  width: 100%;
+  margin: 0.5em 0;
+}
+.single-media.ar-11 {
+  overflow: hidden;
+  border-radius: 12px;
+}
+.single-media.ar-11 img,
+.single-media.ar-11 video,
+.single-media.ar-11 a,
+.single-media.ar-11 .video-wrapper,
+.single-media.ar-11 iframe {
+  width: 100%;
+  height: 100% !important;
+  display: block;
+}
+
 .github-card {
   border-radius: 8px;
   margin: 0.8em auto 0.4em;
@@ -1066,7 +1351,70 @@ watch(() => props.enableGithubCard, () => {
 .theme-dark.markdown-preview :deep(a),
 .theme-light.markdown-preview :deep(a),
 :global(html.dark) .markdown-preview :deep(a),
-:global(html:not(.dark)) .markdown-preview :deep(a),
+:global(html:not(.dark)) .markdown-preview :deep(a) {
+  color: #0366d6 !important;
+}
+
+/* Image Grid Layout Styles */
+.image-grid {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  margin: 0.5em 0;
+}
+
+.image-grid.cols-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.image-grid.cols-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.image-grid-item {
+  position: relative;
+  width: 100%;
+  height: 0;
+  padding-bottom: 100%; /* Default square */
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.image-grid-item.ar-169 {
+  padding-bottom: 56.25%; /* 16:9 */
+}
+
+.image-grid-item.ar-34 {
+  padding-bottom: 133.33%; /* 3:4 */
+}
+
+.image-grid-item.ar-11 {
+  padding-bottom: 100%; /* 1:1 */
+}
+
+.image-grid-item > * {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+}
+
+/* Fix for video-wrapper inside grid */
+.image-grid-item .video-wrapper {
+  padding-bottom: 0 !important;
+  height: 100% !important;
+  margin: 0 !important;
+}
+
+.image-grid-item .video-wrapper iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
 .markdown-preview :deep(a) {
   background-color: transparent !important;
   padding: 0 !important;

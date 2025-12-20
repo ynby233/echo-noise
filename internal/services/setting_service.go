@@ -15,6 +15,7 @@ import (
 	"github.com/lin-snow/ech0/internal/database"
 	"github.com/lin-snow/ech0/internal/models"
 	"github.com/lin-snow/ech0/internal/syncmanager"
+	"github.com/lin-snow/ech0/pkg"
 )
 
 // GetFrontendConfig 获取前端配置
@@ -60,6 +61,23 @@ func GetFrontendConfig() (map[string]interface{}, error) {
 			"description": desc,
 		})
 	}
+	if len(normalizedAds) == 0 {
+		if defFrontend, ok := getDefaultConfig()["frontendSettings"].(map[string]interface{}); ok {
+			if defAds, ok := defFrontend["leftAds"].([]map[string]string); ok {
+				normalizedAds = append(normalizedAds, defAds...)
+			} else if defAds2, ok := defFrontend["leftAds"].([]map[string]interface{}); ok {
+				for _, m := range defAds2 {
+					img := strings.TrimSpace(fmt.Sprintf("%v", pickAny(m, "imageURL", "ImageURL")))
+					if img == "" {
+						continue
+					}
+					link := strings.TrimSpace(fmt.Sprintf("%v", pickAny(m, "linkURL", "LinkURL")))
+					desc := strings.TrimSpace(fmt.Sprintf("%v", pickAny(m, "description", "Description")))
+					normalizedAds = append(normalizedAds, map[string]string{"imageURL": img, "linkURL": link, "description": desc})
+				}
+			}
+		}
+	}
 
 	var friendLinks []models.FriendLink
 	_ = db.Order("created_at DESC").Find(&friendLinks).Error
@@ -75,6 +93,24 @@ func GetFrontendConfig() (map[string]interface{}, error) {
 			"icon":        strings.TrimSpace(fl.Icon),
 			"description": strings.TrimSpace(fl.Description),
 		})
+	}
+	if len(normalizedLinks) == 0 {
+		if defFrontend, ok := getDefaultConfig()["frontendSettings"].(map[string]interface{}); ok {
+			if defLinks, ok := defFrontend["friendLinks"].([]map[string]string); ok {
+				normalizedLinks = append(normalizedLinks, defLinks...)
+			} else if defLinks2, ok := defFrontend["friendLinks"].([]map[string]interface{}); ok {
+				for _, m := range defLinks2 {
+					title := strings.TrimSpace(fmt.Sprintf("%v", pickAny(m, "title", "Title")))
+					link := strings.TrimSpace(fmt.Sprintf("%v", pickAny(m, "link", "Link")))
+					icon := strings.TrimSpace(fmt.Sprintf("%v", pickAny(m, "icon", "Icon")))
+					desc := strings.TrimSpace(fmt.Sprintf("%v", pickAny(m, "description", "Description")))
+					if link == "" {
+						continue
+					}
+					normalizedLinks = append(normalizedLinks, map[string]string{"title": title, "link": link, "icon": icon, "description": desc})
+				}
+			}
+		}
 	}
 
 	// 读取社交链接（JSON 字符串）
@@ -95,6 +131,34 @@ func GetFrontendConfig() (map[string]interface{}, error) {
 			"url":  url,
 			"icon": icon,
 		})
+	}
+	if len(normalizedSocialLinks) == 0 {
+		if defFrontend, ok := getDefaultConfig()["frontendSettings"].(map[string]interface{}); ok {
+			if defLinks, ok := defFrontend["socialLinks"].([]map[string]string); ok {
+				normalizedSocialLinks = append(normalizedSocialLinks, defLinks...)
+			} else if defLinks2, ok := defFrontend["socialLinks"].([]map[string]interface{}); ok {
+				for _, m := range defLinks2 {
+					name := strings.TrimSpace(fmt.Sprintf("%v", m["name"]))
+					url := strings.TrimSpace(fmt.Sprintf("%v", m["url"]))
+					icon := strings.TrimSpace(fmt.Sprintf("%v", m["icon"]))
+					if url == "" {
+						continue
+					}
+					normalizedSocialLinks = append(normalizedSocialLinks, map[string]string{"name": name, "url": url, "icon": icon})
+				}
+			}
+		}
+	}
+
+	leftAdsInterval := config.LeftAdsIntervalMs
+	if leftAdsInterval <= 0 {
+		if defFrontend, ok := getDefaultConfig()["frontendSettings"].(map[string]interface{}); ok {
+			if v, ok := defFrontend["leftAdsIntervalMs"].(int); ok {
+				leftAdsInterval = v
+			} else if v2, ok := defFrontend["leftAdsIntervalMs"].(float64); ok {
+				leftAdsInterval = int(v2)
+			}
+		}
 	}
 
 	configMap := map[string]interface{}{
@@ -170,7 +234,7 @@ func GetFrontendConfig() (map[string]interface{}, error) {
 
 			"leftAdEnabled":          config.LeftAdEnabled,
 			"leftAds":                normalizedAds,
-			"leftAdsIntervalMs":      config.LeftAdsIntervalMs,
+			"leftAdsIntervalMs":      leftAdsInterval,
 			"friendLinks":            normalizedLinks,
 			"friendLinkEmailEnabled": config.FriendLinkEmailEnabled,
 			// 社交链接
@@ -207,6 +271,19 @@ func GetFrontendConfig() (map[string]interface{}, error) {
 				}
 				return ""
 			}(),
+		},
+		"attachmentStorageEnabled": config.AttachmentStorageEnabled,
+		"attachmentStorageConfig": map[string]interface{}{
+			"provider":          choose(config.AttachmentStorageProvider, ""),
+			"endpoint":          choose(config.AttachmentStorageEndpoint, ""),
+			"region":            choose(config.AttachmentStorageRegion, ""),
+			"bucket":            choose(config.AttachmentStorageBucket, ""),
+			"accessKey":         choose(config.AttachmentStorageAccessKey, ""),
+			"secretKey":         choose(config.AttachmentStorageSecretKey, ""),
+			"usePathStyle":      config.AttachmentStorageUsePathStyle,
+			"publicBaseURL":     choose(config.AttachmentStoragePublicBaseURL, ""),
+			"enableCompression": config.EnableCompression,
+			"ffmpegInstalled":   pkg.CheckFFmpegInstalled(),
 		},
 		"smtpEnabled":    config.SmtpEnabled,
 		"smtpDriver":     config.SmtpDriver,
@@ -734,13 +811,56 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	if config.StorageProvider == "r2" {
 		config.StorageUsePathStyle = true
 	}
-	if config.StorageEnabled {
-		if config.StorageProvider == "" || config.StorageEndpoint == "" || config.StorageBucket == "" || config.StorageAccessKey == "" || config.StorageSecretKey == "" {
-			tx.Rollback()
-			return fmt.Errorf("云存储配置不完整")
+
+	// 附件存储设置
+	if v, ok := settingMap["attachmentStorageEnabled"].(bool); ok {
+		config.AttachmentStorageEnabled = v
+	}
+	if sc, ok := settingMap["attachmentStorageConfig"].(map[string]interface{}); ok {
+		if pv, ok := sc["provider"].(string); ok {
+			config.AttachmentStorageProvider = pv
+		}
+		if v, ok := sc["endpoint"].(string); ok {
+			v = strings.TrimSpace(v)
+			if v != "" {
+				if u, err := url.Parse(v); err == nil {
+					v = strings.TrimRight(u.Scheme+"://"+u.Host, "/")
+				}
+			}
+			config.AttachmentStorageEndpoint = v
+		}
+		if v, ok := sc["region"].(string); ok {
+			if config.AttachmentStorageProvider == "r2" {
+				config.AttachmentStorageRegion = "auto"
+			} else {
+				config.AttachmentStorageRegion = v
+			}
+		}
+		if v, ok := sc["bucket"].(string); ok {
+			config.AttachmentStorageBucket = v
+		}
+		if v, ok := sc["accessKey"].(string); ok {
+			config.AttachmentStorageAccessKey = v
+		}
+		if v, ok := sc["secretKey"].(string); ok {
+			config.AttachmentStorageSecretKey = v
+		}
+		if v, ok := sc["usePathStyle"].(bool); ok {
+			config.AttachmentStorageUsePathStyle = v
+		}
+		if v, ok := sc["publicBaseURL"].(string); ok {
+			config.AttachmentStoragePublicBaseURL = v
+		}
+		if v, ok := sc["enableCompression"].(bool); ok {
+			config.EnableCompression = v
 		}
 	}
 
+	if config.AttachmentStorageProvider == "r2" {
+		config.AttachmentStorageUsePathStyle = true
+	}
+
+	// 邮件设置
 	if v, ok := settingMap["smtpEnabled"].(bool); ok {
 		config.SmtpEnabled = v
 	}
@@ -875,8 +995,12 @@ func getDefaultConfig() map[string]interface{} {
 			"walineServerURL":  "请前往waline官网https://waline.js.org查看部署配置",
 			"enableGithubCard": false,
 			// 页面文案与关于页内容
-			"linksTitle":             "友情链接",
-			"linksDescription":       "推荐站点和朋友们的主页",
+			"linksTitle":       "友情链接",
+			"linksDescription": "推荐站点和朋友们的主页",
+			"friendLinks": []map[string]string{
+				{"title": "NoiseWork", "link": "https://www.noisework.cn/", "icon": "i-mdi-home", "description": "个人主页与作品集合"},
+				{"title": "NoiseBlogs", "link": "https://www.noiseblogs.top/", "icon": "i-mdi-notebook", "description": "技术随笔与学习记录"},
+			},
 			"commentPageTitle":       "留言",
 			"commentPageDescription": "欢迎留下你的看法",
 			"aboutPageTitle":         "关于本站",
@@ -945,6 +1069,18 @@ func getDefaultConfig() map[string]interface{} {
 			"autoSyncEnabled":    false,
 			"syncMode":           "instant",
 			"syncIntervalMinute": 15,
+		},
+		"attachmentStorageEnabled": false,
+		"attachmentStorageConfig": map[string]interface{}{
+			"provider":          "",
+			"endpoint":          "",
+			"region":            "",
+			"bucket":            "",
+			"accessKey":         "",
+			"secretKey":         "",
+			"usePathStyle":      true,
+			"publicBaseURL":     "",
+			"enableCompression": false,
 		},
 	}
 }

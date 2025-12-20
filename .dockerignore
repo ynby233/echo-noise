@@ -25,6 +25,12 @@ node_modules/
 .cache/
 dist/
 build/
+noise/
+packaging/
+scripts/
+chromeExpand/
+.private-android-keystore/
+.venv/
 
 # 忽略桌面端与移动端工程（不参与镜像构建）
 desktop/
@@ -47,6 +53,7 @@ mobile/android/build/
 mobile/android/app/build/
 mobile/android/.gradle/
 mobile/android/.idea/
+mobilebackend/
 *.swp
 *.swo
 

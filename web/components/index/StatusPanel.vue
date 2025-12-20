@@ -85,6 +85,14 @@
             <UIcon name="i-heroicons-paper-clip" class="w-5 h-5 text-indigo-300" />
             <span class="text-sm text-center">附件管理</span>
           </button>
+          <button v-if="isAdmin" class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('attachment-storage', $event)">
+            <UIcon name="i-heroicons-cloud" class="w-5 h-5 text-indigo-300" />
+            <span class="text-sm text-center">附件存储</span>
+          </button>
+          <button v-if="isAdmin" class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('storage', $event)">
+            <UIcon name="i-heroicons-cloud" class="w-5 h-5 text-indigo-300" />
+            <span class="text-sm text-center">存储方案</span>
+          </button>
           <button v-if="isAdmin" class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('db', $event)">
             <UIcon name="i-heroicons-circle-stack" class="w-5 h-5 text-indigo-300" />
             <span class="text-sm text-center">数据库管理</span>
@@ -134,109 +142,13 @@
                     <div class="flex items-center"><URadio v-model="panelTheme" value="light" class="mr-2" /><span :class="panelTheme === 'light' ? theme.text : 'text-slate-400'">明亮</span></div>
                   </div>
                 </div>
-                
+
                 <div class="flex items-center gap-2">
                   <UButton size="sm" color="green" class="shadow" @click="saveAdminTheme">保存</UButton>
                 </div>
               </div>
             </div>
           </div>
-
-          <div id="ads-section" class="col-span-12" v-if="false">
-            <div :class="[theme.cardBg, theme.border, cardCls]">
-              <div class="flex items-center justify-between px-4 py-3">
-                <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                  <UIcon name="i-heroicons-megaphone" class="w-5 h-5" />
-                  <span>左侧广告模块</span>
-                </div>
-                <div class="flex items-center gap-3">
-                  <span class="text-sm" :class="theme.mutedText">状态</span>
-                  <span :class="[frontendConfig.leftAdEnabled ? 'text-green-400' : 'text-red-400', 'text-sm']">{{ frontendConfig.leftAdEnabled ? '已启用' : '未启用' }}</span>
-                  <UToggle v-model="frontendConfig.leftAdEnabled" />
-                  <UButton color="green" @click="saveConfig" class="shadow">保存</UButton>
-                </div>
-              </div>
-              <div class="px-4 pb-4">
-                <div class="rounded-lg p-4 grid grid-cols-1 md:grid-cols-2 gap-3" :class="theme.subtleBg">
-                  <div class="md:col-span-2">
-                    <div class="text-sm mb-2" :class="theme.text">海报图片 URL</div>
-                    <UInput v-model="frontendConfig.leftAdImageURL" placeholder="支持 http/https 或以 /api 开头的站内路径" />
-                  </div>
-                  <div>
-                    <div class="text-sm mb-2" :class="theme.text">跳转链接</div>
-                    <UInput v-model="frontendConfig.leftAdLinkURL" placeholder="http/https 链接" />
-                  </div>
-                  <div>
-                    <div class="text-sm mb-2" :class="theme.text">描述文本</div>
-                    <UTextarea v-model="frontendConfig.leftAdDescription" placeholder="可选" />
-                  </div>
-                  <div class="md:col-span-2 mt-4">
-                    <div class="text-sm font-semibold mb-2" :class="theme.text">多广告（自动轮播）</div>
-                    <div class="text-xs mb-2" :class="theme.mutedText">若同时配置单条与多条，优先显示多条</div>
-                    <div class="space-y-2">
-                      <div v-for="(ad, i) in frontendConfig.leftAds" :key="i" class="rounded-md border p-3" :class="theme.border">
-                        <div class="flex items-center justify-between mb-2">
-                          <div class="text-sm" :class="theme.text">广告 #{{ i + 1 }}</div>
-                          <div class="flex items-center gap-2">
-                            <UButton size="xs" color="red" variant="soft" @click="frontendConfig.leftAds.splice(i, 1)">删除</UButton>
-                          </div>
-                        </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <UInput v-model="ad.imageURL" placeholder="海报图片 URL" />
-                          <UInput v-model="ad.linkURL" placeholder="跳转链接" />
-                          <UTextarea v-model="ad.description" placeholder="描述文本（可选）" class="md:col-span-2" />
-                        </div>
-                      </div>
-                        <div class="flex items-center justify-between">
-                          <UButton size="sm" color="indigo" variant="soft" class="shadow" @click="frontendConfig.leftAds.push({ imageURL: '', linkURL: '', description: '' })">新增广告</UButton>
-                          <UButton size="sm" color="indigo" variant="soft" class="shadow" @click="resetAdsConfig">重置为默认</UButton>
-                          <div class="flex items-center gap-2">
-                            <span class="text-sm" :class="theme.mutedText">轮播间隔(ms)</span>
-                            <UInput v-model.number="frontendConfig.leftAdsIntervalMs" type="number" class="w-28" />
-                          </div>
-                        </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div id="social-links-section" class="col-span-12" v-if="false">
-            <div :class="[theme.cardBg, theme.border, cardCls]">
-              <div class="flex items-center justify-between px-4 py-3">
-                <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                  <UIcon name="i-heroicons-link" class="w-5 h-5" />
-                  <span>社交链接配置</span>
-                </div>
-                <div class="flex items-center gap-3">
-                  <UButton size="sm" @click="editItem.socialLinks = !editItem.socialLinks" :color="editItem.socialLinks ? 'gray' : 'green'" :variant="editItem.socialLinks ? 'soft' : 'solid'" class="shadow">{{ editItem.socialLinks ? '取消' : '编辑' }}</UButton>
-                  <UButton color="green" class="shadow" @click="saveSocialLinks">保存</UButton>
-                </div>
-              </div>
-              <div class="px-4 pb-4">
-                <div class="rounded-lg p-4" :class="theme.subtleBg">
-                  <div v-if="editItem.socialLinks" class="space-y-2">
-                    <div v-for="(item, i) in frontendConfig.socialLinks" :key="i" class="rounded-md border p-3" :class="theme.border">
-                      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <UInput v-model="item.name" placeholder="名称" />
-                        <UInput v-model="item.url" placeholder="链接 URL" />
-                        <UInput v-model="item.icon" placeholder="图标名称(可选)" />
-                      </div>
-                      <div class="flex justify-end mt-2">
-                        <UButton size="xs" color="red" variant="soft" @click="removeSocialLink(i)">删除</UButton>
-                      </div>
-                    </div>
-                    <div class="flex items-center justify-between">
-                      <UButton size="sm" color="indigo" variant="soft" class="shadow" @click="addSocialLink">新增链接</UButton>
-                    </div>
-                  </div>
-                  <div v-else class="text-sm" :class="theme.mutedText">共有 {{ (frontendConfig.socialLinks || []).length }} 条社交链接</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <div id="system-section" class="col-span-12">
             <div class="rounded-xl border shadow-xl" :class="[theme.cardBg, theme.border]">
               <div class="px-4 py-3 flex flex-wrap items-center gap-6">
@@ -317,14 +229,14 @@
                         <UButton size="sm" @click="editUserInfo.description = !editUserInfo.description" :color="editUserInfo.description ? 'gray' : 'green'" :variant="editUserInfo.description ? 'soft' : 'solid'" class="shadow">{{ editUserInfo.description ? '取消' : '编辑' }}</UButton>
                       </div>
                       <div v-if="editUserInfo.description">
-                        <UTextarea v-model="userForm.description" placeholder="一句话介绍自己" class="w-full mb-2" />
+                        <UTextarea v-model="userForm.description" placeholder="欢迎访问" class="w-full mb-2" />
                         <div class="flex justify-end gap-2">
                           <UButton @click="updateDescription" color="primary" class="shadow">保存</UButton>
                         </div>
                       </div>
                       <div v-else>
                         <div :class="[theme.subtleBg, theme.border, 'rounded-md p-3 border']">
-                          <p :class="[theme.text, 'break-words']">{{ userStore.user?.description || '执迷不悟' }}</p>
+                          <p :class="[theme.text, 'break-words']">{{ userStore.user?.description || '欢迎访问' }}</p>
                         </div>
                       </div>
                     </div>
@@ -493,9 +405,9 @@
   </div>
   </div>
                 </div>
-                <div id="site-github-card-section" class="flex items-center rounded-lg p-3 justify-between" :class="theme.subtleBg">
+                <div id="site-github-card-section" class="flex flex-col sm:flex-row items-start sm:items-center rounded-lg p-3 justify-between gap-3 sm:gap-0" :class="theme.subtleBg">
                   <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-mdi-github" class="w-4 h-4" /> <span>GitHub 链接卡片解析</span></div>
-                  <div class="flex items-center gap-4">
+                  <div class="flex flex-wrap items-center gap-4">
                     <div class="flex items-center">
                       <URadio v-model="githubCardEnabled" :value="true" class="mr-2" />
                       <span :class="githubCardEnabled ? theme.text : 'text-slate-400'">开启</span>
@@ -507,9 +419,9 @@
                     <UButton color="green" @click="saveGithubCardConfig" class="shadow">保存</UButton>
                   </div>
                 </div>
-                <div id="site-announcement-section" class="flex items-center rounded-lg p-3 justify-between" :class="theme.subtleBg">
+                <div id="site-announcement-section" class="flex flex-col sm:flex-row items-start sm:items-center rounded-lg p-3 justify-between gap-3 sm:gap-0" :class="theme.subtleBg">
                   <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-megaphone" class="w-4 h-4" /> <span>公告栏开关</span></div>
-                  <div class="flex items-center gap-4">
+                  <div class="flex flex-wrap items-center gap-4">
                     <UToggle v-model="frontendConfig.announcementEnabled" />
                     <UButton color="green" @click="saveConfigItem('announcementEnabled')" class="shadow">保存</UButton>
                   </div>
@@ -600,9 +512,9 @@
                     </div>
                   </div>
                 </div>
-                <div id="site-default-theme-section" class="flex items-center rounded-lg p-3 justify-between" :class="theme.subtleBg">
+                <div id="site-default-theme-section" class="flex flex-col sm:flex-row items-start sm:items-center rounded-lg p-3 justify-between gap-3 sm:gap-0" :class="theme.subtleBg">
                   <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-swatch" class="w-4 h-4" /> <span>默认主题色</span></div>
-                  <div class="flex items-center gap-4">
+                  <div class="flex flex-wrap items-center gap-4">
                     <div class="flex items-center">
                       <URadio v-model="frontendConfig.defaultContentTheme" value="dark" class="mr-2" />
                       <span :class="frontendConfig.defaultContentTheme === 'dark' ? theme.text : 'text-slate-400'">暗黑</span>
@@ -618,10 +530,10 @@
                 <div v-for="(label, key) in configLabels" :key="key" class="rounded-lg p-3" :class="theme.subtleBg">
                     <div class="flex justify-between items-center mb-2">
                       <span :class="theme.mutedText">{{ label }}</span>
-                      <UButton size="sm" @click="editItem[key] = !editItem[key]" :color="editItem[key] ? 'gray' : 'green'" :variant="editItem[key] ? 'soft' : 'solid'" class="shadow">{{ editItem[key] ? '取消' : '编辑' }}</UButton>
+                      <UButton size="sm" @click="editItem[String(key)] = !editItem[String(key)]" :color="editItem[String(key)] ? 'gray' : 'green'" :variant="editItem[String(key)] ? 'soft' : 'solid'" class="shadow">{{ editItem[String(key)] ? '取消' : '编辑' }}</UButton>
                     </div>
-                    <div v-if="editItem[key]">
-                      <template v-if="key === '背景图片' || key === 'backgrounds'">
+                    <div v-if="editItem[String(key)]">
+                      <template v-if="String(key) === 'backgrounds'">
                         <div class="space-y-3">
                           <div v-for="(bg, index) in frontendConfig.backgrounds" :key="index" class="flex items-center gap-3">
                             <img :src="bg || '/favicon.ico'" class="w-14 h-14 rounded object-cover border" :class="theme.border" @click="previewImage(bg)" />
@@ -645,7 +557,7 @@
                           </div>
                         </div>
                       </template>
-                      <template v-else-if="key === 'avatarURL'">
+                      <template v-else-if="String(key) === 'avatarURL'">
                         <div class="space-y-2">
                           <div class="flex items-center gap-3">
                             <img :src="frontendConfig.avatarURL" class="w-12 h-12 rounded-full object-cover" alt="site-avatar" />
@@ -655,24 +567,24 @@
                           <UInput v-model="frontendConfig.avatarURL" placeholder="输入图片URL" class="w-full" />
                         </div>
                       </template>
-                      <template v-else-if="key === 'subtitleText' || key === 'linksDescription' || key === 'commentPageDescription' || key === 'aboutPageDescription' || key === 'aboutMarkdown'">
-                        <UTextarea v-model="frontendConfig[key]" :placeholder="`输入${label}`" class="w-full mb-2" />
+                      <template v-else-if="String(key) === 'subtitleText' || String(key) === 'linksDescription' || String(key) === 'commentPageDescription' || String(key) === 'aboutPageDescription' || String(key) === 'aboutMarkdown'">
+                        <UTextarea v-model="frontendConfig[String(key)]" :placeholder="`输入${label}`" class="w-full mb-2" />
                       </template>
                       <template v-else>
-                        <UInput v-model="frontendConfig[key]" :placeholder="`输入${label}`" class="w-full mb-2" />
+                        <UInput v-model="frontendConfig[String(key)]" :placeholder="`输入${label}`" class="w-full mb-2" />
                       </template>
                       <div class="flex justify-end gap-2">
-                        <UButton @click="resetConfigItem(key)" variant="ghost" color="indigo">重置</UButton>
-                        <UButton @click="saveConfigItem(key)" color="primary" class="shadow">保存</UButton>
+                        <UButton @click="resetConfigItem(String(key))" variant="ghost" color="indigo">重置</UButton>
+                        <UButton @click="saveConfigItem(String(key))" color="primary" class="shadow">保存</UButton>
                       </div>
                     </div>
                     <div v-else>
-                      <template v-if="key === 'backgrounds'">
+                      <template v-if="String(key) === 'backgrounds'">
                         <div class="grid grid-cols-3 gap-2">
                           <img v-for="(bg, index) in frontendConfig.backgrounds" :key="index" :src="bg" class="w-full h-24 object-cover rounded cursor-pointer border" :class="theme.border" @click="previewImage(bg)" />
                         </div>
                       </template>
-                      <template v-else-if="key === 'avatarURL'">
+                      <template v-else-if="String(key) === 'avatarURL'">
                         <div class="flex items-center gap-3">
                           <img :src="frontendConfig.avatarURL" class="w-12 h-12 rounded-full object-cover" alt="site-avatar" />
                           <span :class="theme.mutedText">站点头像预览</span>
@@ -680,7 +592,7 @@
                       </template>
                       <template v-else>
                         <div :class="[theme.subtleBg, theme.border, 'rounded-md p-3 border']">
-                          <p :class="[theme.text, 'break-words']">{{ frontendConfig[key] }}</p>
+                          <p :class="[theme.text, 'break-words']">{{ frontendConfig[String(key)] }}</p>
                         </div>
                       </template>
                     </div>
@@ -692,12 +604,12 @@
                 </div>
                 <div id="site-ads-section" class="col-span-12">
                   <div :class="[theme.cardBg, theme.border, cardCls]">
-                    <div class="flex items-center justify-between px-4 py-3">
+                    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                       <div class="font-semibold flex items-center gap-2" :class="theme.text">
                         <UIcon name="i-heroicons-megaphone" class="w-5 h-5" />
                         <span>左侧广告模块</span>
                       </div>
-                      <div class="flex items-center gap-3">
+                      <div class="flex flex-wrap items-center gap-3">
                         <span class="text-sm" :class="theme.mutedText">状态</span>
                         <span :class="[frontendConfig.leftAdEnabled ? 'text-green-400' : 'text-red-400', 'text-sm']">{{ frontendConfig.leftAdEnabled ? '已启用' : '未启用' }}</span>
                         <UToggle v-model="frontendConfig.leftAdEnabled" />
@@ -744,12 +656,12 @@
                 </div>
                 <div id="hitokoto-section" class="col-span-12">
                   <div :class="[theme.cardBg, theme.border, cardCls]">
-                    <div class="flex items-center justify-between px-4 py-3">
+                    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                       <div class="font-semibold flex items-center gap-2" :class="theme.text">
                         <UIcon name="i-heroicons-sparkles" class="w-5 h-5" />
                         <span>随机一言（Hitokoto）</span>
                       </div>
-                      <div class="flex items-center gap-3">
+                      <div class="flex flex-wrap items-center gap-3">
                         <UToggle v-model="frontendConfig.hitokotoEnabled" />
                         <UButton color="green" @click="saveConfigItem('hitokotoEnabled')" class="shadow">保存</UButton>
                       </div>
@@ -771,8 +683,7 @@
                       <div class="flex items-center gap-3">
                         <div class="flex items-center gap-2">
                           <span class="text-sm" :class="theme.mutedText">启用</span>
-                          <USwitch v-model="frontendConfig.socialLinksEnabled" />
-                          <UButton size="xs" :icon="frontendConfig.socialLinksEnabled ? 'i-heroicons-power' : 'i-heroicons-no-symbol'" color="green" variant="soft" class="shadow" @click="saveConfigItem('socialLinksEnabled')">保存开关</UButton>
+                          <UToggle v-model="frontendConfig.socialLinksEnabled" />
                         </div>
                         <UButton size="sm" @click="editItem.socialLinks = !editItem.socialLinks" :color="editItem.socialLinks ? 'gray' : 'green'" :variant="editItem.socialLinks ? 'soft' : 'solid'" class="shadow">{{ editItem.socialLinks ? '取消' : '编辑' }}</UButton>
                         <UButton color="green" class="shadow" @click="saveSocialLinks">保存</UButton>
@@ -802,14 +713,15 @@
                 </div>
                 <div id="friend-links-section" class="col-span-12 mt-4">
                   <div :class="[theme.cardBg, theme.border, cardCls]">
-                    <div class="flex items-center justify-between px-4 py-3">
+                    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                       <div class="font-semibold flex items-center gap-2" :class="theme.text">
                         <UIcon name="i-heroicons-link" class="w-5 h-5" />
                         <span>友链配置</span>
                       </div>
-                      <div class="flex items-center gap-3">
+                      <div class="flex flex-wrap items-center gap-3 w-full sm:w-auto">
                         <UButton size="sm" color="indigo" variant="soft" class="shadow" @click="frontendConfig.friendLinks.push({ title: '', link: '', icon: '', description: '' })">新增友链</UButton>
-                        <UButton color="primary" class="shadow" @click="saveConfigItem('friendLinks')">保存</UButton>
+                        <UButton size="sm" color="indigo" variant="soft" class="shadow" @click="resetFriendLinksConfig">重置为默认</UButton>
+                        <UButton color="primary" class="shadow" @click="saveFriendLinksConfig">保存</UButton>
                       </div>
                     </div>
                 <div class="px-4 pb-4">
@@ -817,14 +729,14 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <UInput v-model="frontendConfig.linksApplyTitle" placeholder="友链申请标题，如 申请友链须知" />
                       <UTextarea v-model="frontendConfig.linksApplyText" placeholder="填写申请说明与格式" class="md:col-span-2" />
-                      <div class="flex items-center gap-2">
+                      <div class="flex flex-wrap items-center gap-2">
                         <span class="text-sm" :class="theme.mutedText">审核结果邮件通知</span>
                         <UToggle v-model="frontendConfig.friendLinkEmailEnabled" />
                         <UButton size="xs" color="green" variant="soft" @click="saveConfigItem('friendLinkEmailEnabled')">保存开关</UButton>
                       </div>
                     </div>
                     <div class="flex justify-end gap-2 mt-2">
-                      <UButton color="primary" variant="soft" @click="saveConfigItem('linksApplyTitle'); saveConfigItem('linksApplyText')">保存说明</UButton>
+                      <UButton color="primary" variant="soft" @click="saveFriendLinksConfig">保存说明</UButton>
                     </div>
                   </div>
                   <div class="rounded-lg p-4 space-y-3" :class="theme.subtleBg">
@@ -850,13 +762,13 @@
           <!-- 友链申请审核管理（管理员） -->
           <div v-if="isAdmin" id="friend-links-audit" class="col-span-12 mt-4">
             <div :class="[theme.cardBg, theme.border, cardCls]">
-              <div class="flex items-center justify-between px-4 py-3">
+              <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
                   <UIcon name="i-heroicons-check-badge" class="w-5 h-5" />
                   <span>友链申请审核</span>
                 </div>
-                <div class="flex items-center gap-2">
-                  <UInput v-model="friendLinkSearch" placeholder="搜索标题或网址" class="w-64" />
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+                  <UInput v-model="friendLinkSearch" placeholder="搜索标题或网址" class="w-full sm:w-64" />
                   <UButton color="primary" variant="soft" @click="loadFriendLinkApplications">刷新</UButton>
                 </div>
               </div>
@@ -883,50 +795,52 @@
           
           <div id="comments-section" class="col-span-12" v-if="isAdmin">
             <div :class="[theme.cardBg, theme.border, cardCls]">
-              <div class="flex items-center justify-between px-4 py-3">
+              <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-4 sm:gap-0">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
                   <UIcon name="i-heroicons-chat-bubble-left-right" class="w-5 h-5" />
                   <span class="whitespace-nowrap">评论系统</span>
                 </div>
-                <div class="flex flex-wrap items-center gap-x-4 gap-y-2 justify-end">
-                  <div class="flex items-center gap-2 w-full sm:w-auto">
-                    <span class="text-sm" :class="theme.mutedText">状态</span>
-                    <span :class="[frontendConfig.commentEnabled ? 'text-green-400' : 'text-red-400', 'text-sm']">{{ frontendConfig.commentEnabled ? '已启用' : '未启用' }}</span>
-                    <UToggle v-model="frontendConfig.commentEnabled" class="shrink-0" />
+                  <div class="flex flex-wrap items-center gap-x-2 gap-y-2 justify-start sm:justify-end w-full sm:w-auto">
+                    <div class="flex items-center gap-2 w-auto">
+                      <span class="text-xs sm:text-sm whitespace-nowrap" :class="theme.mutedText">状态</span>
+                      <span :class="[frontendConfig.commentEnabled ? 'text-green-400' : 'text-red-400', 'text-xs sm:text-sm', 'whitespace-nowrap']">{{ frontendConfig.commentEnabled ? '已启用' : '未启用' }}</span>
+                      <UToggle v-model="frontendConfig.commentEnabled" class="shrink-0" />
+                    </div>
+                    <div class="flex items-center gap-2 w-auto">
+                      <span class="text-xs sm:text-sm whitespace-nowrap" :class="theme.mutedText">邮件通知</span>
+                      <UToggle v-model="frontendConfig.commentEmailEnabled" :disabled="!frontendConfig.commentEnabled" class="shrink-0" />
+                    </div>
+                    <div class="flex items-center gap-2 w-auto">
+                      <span class="text-xs sm:text-sm whitespace-nowrap" :class="theme.mutedText">仅登录</span>
+                      <UToggle v-model="frontendConfig.commentLoginRequired" :disabled="!frontendConfig.commentEnabled" class="shrink-0" />
+                    </div>
+                    <UButton color="green" size="xs" @click="saveCommentConfig" class="shadow w-auto">保存</UButton>
                   </div>
-                  <div class="flex items-center gap-2 w-full sm:w-auto">
-                    <span class="text-sm" :class="theme.mutedText">邮件通知</span>
-                    <UToggle v-model="frontendConfig.commentEmailEnabled" :disabled="!frontendConfig.commentEnabled" class="shrink-0" />
-                  </div>
-                  <div class="flex items-center gap-2 w-full sm:w-auto">
-                    <span class="text-sm" :class="theme.mutedText">仅登录后评论</span>
-                    <UToggle v-model="frontendConfig.commentLoginRequired" :disabled="!frontendConfig.commentEnabled" class="shrink-0" />
-                  </div>
-                  <UButton color="green" @click="saveCommentConfig" class="shadow w-full sm:w-auto">保存</UButton>
-                </div>
               </div>
                 <div class="px-4 pb-4">
-                <CommentsSettings :config="frontendConfig" :theme="theme" @update:config="(next) => Object.assign(frontendConfig, next)" @comment-system-changed="uiCommentSystem = $event" />
+                <CommentsSettings :config="frontendConfig" :theme="theme" @update:config="updateCommentsConfig" @comment-system-changed="uiCommentSystem = $event" />
                 <div v-if="isAdmin && frontendConfig.commentEnabled && String(uiCommentSystem || frontendConfig.commentSystem).toLowerCase() === 'builtin'" class="mt-4 rounded-lg p-3" :class="theme.subtleBg">
-                  <div class="flex items-center gap-2 mb-2">
+                  <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-2">
                     <UInput v-model="commentSearch" placeholder="搜索评论内容/昵称/邮箱/网址" class="flex-1" />
-                    <UButton color="primary" variant="soft" @click="loadAdminComments">搜索</UButton>
-                    <UButton variant="soft" :color="showAdminComments ? 'gray' : 'indigo'" @click="toggleAdminComments">{{ showAdminComments ? '折叠' : '展开' }}</UButton>
+                    <div class="flex items-center gap-2">
+                      <UButton color="primary" variant="soft" @click="loadAdminComments" class="flex-1 sm:flex-none">搜索</UButton>
+                      <UButton variant="soft" :color="showAdminComments ? 'gray' : 'indigo'" @click="toggleAdminComments" class="flex-1 sm:flex-none">{{ showAdminComments ? '折叠' : '展开' }}</UButton>
+                    </div>
                   </div>
                   <div v-if="showAdminComments" class="space-y-2">
                     <div v-for="c in adminComments" :key="c.id" class="rounded border px-3 py-2" :class="theme.border">
                       <div class="flex items-center justify-between gap-2">
-                        <div class="text-sm truncate" :class="theme.text">#{{ c.id }} · {{ c.nick || '匿名' }} · {{ formatDate(c.created_at) }}</div>
+                        <div class="text-xs sm:text-sm truncate" :class="theme.text">#{{ c.id }} · {{ c.nick || '匿名' }} · {{ formatDate(c.created_at) }}</div>
                         <UButton size="xs" variant="ghost" :color="isCommentExpanded(c) ? 'gray' : 'primary'" @click="toggleCommentExpanded(c)">{{ isCommentExpanded(c) ? '收起' : '展开' }}</UButton>
                       </div>
-                      <div class="mt-1 text-sm truncate" :class="theme.text">{{ c.content }}</div>
-                      <div v-if="isCommentExpanded(c)" class="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+                      <div class="mt-1 text-xs sm:text-sm truncate" :class="theme.text">{{ c.content }}</div>
+                      <div v-if="isCommentExpanded(c)" class="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs sm:text-sm">
                         <div><span :class="theme.mutedText">消息ID</span>：<span :class="theme.text">{{ c.message_id }}</span></div>
                         <div><span :class="theme.mutedText">父评论ID</span>：<span :class="theme.text">{{ c.parent_id || 0 }}</span></div>
                         <div><span :class="theme.mutedText">邮箱</span>：<span :class="theme.text">{{ c.mail || '-' }}</span></div>
                         <div class="md:col-span-3"><span :class="theme.mutedText">网址</span>：<a v-if="c.link" :href="c.link" target="_blank" rel="noopener" class="underline">{{ c.link }}</a><span v-else :class="theme.text">-</span></div>
                         <div class="md:col-span-3 flex gap-2">
-                          <UButton color="red" variant="soft" @click="openAdminDeleteConfirm(c)">删除该评论</UButton>
+                          <UButton color="red" size="xs" variant="soft" @click="openAdminDeleteConfirm(c)">删除该评论</UButton>
                         </div>
                       </div>
                     </div>
@@ -972,12 +886,12 @@
 
           <div id="email-section" v-if="isAdmin" class="col-span-12">
             <div :class="[theme.cardBg, theme.border, cardCls]">
-              <div class="flex items-center justify-between px-4 py-3">
+              <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
                   <UIcon name="i-heroicons-envelope" class="w-5 h-5" />
                   <span>邮件设置（SMTP）</span>
                 </div>
-                <div class="flex items-center gap-3">
+                <div class="flex items-center gap-3 w-full sm:w-auto">
                   <UToggle v-model="smtp.enabled" />
                   <UButton color="green" @click="saveSmtp" class="shadow">保存</UButton>
                 </div>
@@ -1017,9 +931,9 @@
                       <UInput v-model="smtp.pass" :type="showSmtpPass ? 'text' : 'password'" placeholder="邮箱或应用专用密码" />
                     </div>
                   </div>
-                  <div class="flex items-center justify-between mt-2" :class="theme.mutedText">
-                    <span class="text-xs">使用上述设置发送测试邮件到：{{ smtp.from || smtp.user || '请先填写地址' }}</span>
-                    <UButton :disabled="!(smtp.from || smtp.user)" :loading="testingSmtp" color="primary" @click="testSmtp">发送测试邮件</UButton>
+                  <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mt-2 gap-2" :class="theme.mutedText">
+                    <span class="text-xs break-all">使用上述设置发送测试邮件到：{{ smtp.from || smtp.user || '请先填写地址' }}</span>
+                    <UButton :disabled="!(smtp.from || smtp.user)" :loading="testingSmtp" color="primary" @click="testSmtp" class="w-full sm:w-auto">发送测试邮件</UButton>
                   </div>
                   <div class="flex justify-end gap-2 mt-3">
                     <UButton variant="soft" color="indigo" @click="loadSmtp">刷新</UButton>
@@ -1032,32 +946,40 @@
 
           <div id="admin-users-section" v-if="isAdmin" class="col-span-12">
             <div :class="[theme.cardBg, theme.border, cardCls]">
-              <div class="flex items-center justify-between px-4 py-3">
+              <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
                   <UIcon name="i-heroicons-shield-check" class="w-5 h-5" />
                   <span>用户管理</span>
                 </div>
+                <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+                   <UButton color="gray" variant="soft" @click="showAdminResetModal=true" class="w-full sm:w-auto">重置管理员密码</UButton>
+                </div>
               </div>
               <div class="px-4 pb-4">
                 <div class="rounded-lg p-3 mb-3" :class="theme.subtleBg">
-                  <div class="flex items-center gap-2">
+                  <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                     <UInput v-model="userSearch" placeholder="搜索用户名或ID" class="flex-1" />
-                    <UButton color="primary" variant="soft" @click="refreshUsers">搜索</UButton>
-                    <UButton variant="soft" color="indigo" @click="refreshUsers">刷新</UButton>
-                    <UButton variant="soft" :color="showUsers ? 'gray' : 'indigo'" @click="showUsers=!showUsers">{{ showUsers ? '折叠' : '展开' }}</UButton>
+                    <div class="flex items-center gap-2 justify-end">
+                        <UButton color="primary" variant="soft" @click="refreshUsers">搜索</UButton>
+                        <UButton variant="soft" color="indigo" @click="refreshUsers">刷新</UButton>
+                        <UButton variant="soft" :color="showUsers ? 'gray' : 'indigo'" @click="showUsers=!showUsers">{{ showUsers ? '折叠' : '展开' }}</UButton>
+                    </div>
                   </div>
                 </div>
                 <div v-if="showUsers" class="rounded-lg p-3" :class="theme.subtleBg">
                   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                     <div v-for="u in filteredUsers" :key="(u.id ?? u.ID)" class="rounded border px-3 py-2" :class="theme.border">
-                      <div class="flex items-center justify-between gap-2 min-w-0">
-                        <UBadge color="indigo" variant="soft">#{{ u.id ?? u.ID }}</UBadge>
-                        <span class="truncate" :class="theme.text">{{ u.username ?? u.Username }}</span>
-                        <UBadge :color="(u.is_admin ?? u.IsAdmin) ? 'primary' : 'gray'" variant="subtle">{{ (u.is_admin ?? u.IsAdmin) ? '管理员' : '普通' }}</UBadge>
-                        <div class="flex-1"></div>
-                        <UButton size="xs" variant="ghost" :color="isExpanded(u) ? 'gray' : 'primary'" @click="toggleExpanded(u)">{{ isExpanded(u) ? '收起' : '展开' }}</UButton>
+                      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 min-w-0">
+                        <div class="flex items-center gap-2 truncate">
+                            <UBadge color="indigo" variant="soft">#{{ u.id ?? u.ID }}</UBadge>
+                            <span class="truncate" :class="theme.text">{{ u.username ?? u.Username }}</span>
+                            <UBadge :color="(u.is_admin ?? u.IsAdmin) ? 'primary' : 'gray'" variant="subtle">{{ (u.is_admin ?? u.IsAdmin) ? '管理员' : '普通' }}</UBadge>
+                        </div>
+                        <div class="flex justify-end">
+                             <UButton size="xs" variant="ghost" :color="isExpanded(u) ? 'gray' : 'primary'" @click="toggleExpanded(u)">{{ isExpanded(u) ? '收起' : '展开' }}</UButton>
+                        </div>
                       </div>
-                      <div class="mt-2 flex items-center gap-2">
+                      <div class="mt-2 flex items-center gap-2 flex-wrap">
                         <UButton :color="(u.is_admin ?? u.IsAdmin) ? 'orange' : 'green'" :variant="(u.is_admin ?? u.IsAdmin) ? 'soft' : 'solid'" class="shadow" @click="confirmToggleAdmin(u)">{{ (u.is_admin ?? u.IsAdmin) ? '取消管理员' : '设为管理员' }}</UButton>
                         <UButton color="red" variant="soft" class="shadow" @click="confirmDeleteUser(u)">删除</UButton>
                       </div>
@@ -1120,17 +1042,14 @@
                 <div class="flex items-center gap-3">
                   <span class="text-sm" :class="theme.mutedText">状态</span>
                   <span :class="[frontendConfig.notifyEnabled ? 'text-green-400' : 'text-red-400', 'text-sm']">{{ frontendConfig.notifyEnabled ? '已启用' : '未启用' }}</span>
-                  <USwitch v-model="frontendConfig.notifyEnabled" color="primary" size="lg" />
-                  <div class="flex items-center gap-2">
-                    <URadio v-model="frontendConfig.notifyEnabled" :value="true" />
-                    <span :class="frontendConfig.notifyEnabled ? theme.text : 'text-gray-400'">开启</span>
-                    <URadio v-model="frontendConfig.notifyEnabled" :value="false" />
-                    <span :class="!frontendConfig.notifyEnabled ? theme.text : 'text-gray-400'">关闭</span>
-                  </div>
+                  <UToggle v-model="frontendConfig.notifyEnabled" />
                 </div>
               </div>
               <div class="px-4 pb-4">
-                <NotifyPanel :config="notifyConfig" @update:config="(next) => Object.assign(notifyConfig, next)" :immediate="true" :subtleBg="theme.subtleBg" :text="theme.text" :mutedText="theme.mutedText" :disabled="!frontendConfig.notifyEnabled" />
+                <div v-if="frontendConfig.notifyEnabled">
+                  <NotifyPanel :config="notifyConfig" @update:config="updateNotifyConfig" :immediate="true" :subtleBg="theme.subtleBg" :text="theme.text" :mutedText="theme.mutedText" :disabled="!frontendConfig.notifyEnabled" />
+                </div>
+                <div v-else class="py-4 text-sm" :class="theme.mutedText">未启用推送，开启后可配置推送渠道参数</div>
               </div>
             </div>
           </div>
@@ -1146,14 +1065,7 @@
                 <div class="flex items-center gap-3">
                   <span class="text-sm" :class="theme.mutedText">状态</span>
                   <span :class="[frontendConfig.githubOAuthEnabled ? 'text-green-400' : 'text-red-400', 'text-sm']">{{ frontendConfig.githubOAuthEnabled ? '已启用' : '未启用' }}</span>
-                  <USwitch v-model="frontendConfig.githubOAuthEnabled" color="primary" size="lg" />
                   <UToggle v-model="frontendConfig.githubOAuthEnabled" />
-                  <div class="flex items-center gap-2">
-                    <URadio v-model="frontendConfig.githubOAuthEnabled" :value="true" />
-                    <span :class="frontendConfig.githubOAuthEnabled ? theme.text : 'text-gray-400'">开启</span>
-                    <URadio v-model="frontendConfig.githubOAuthEnabled" :value="false" />
-                    <span :class="!frontendConfig.githubOAuthEnabled ? theme.text : 'text-gray-400'">关闭</span>
-                  </div>
                 </div>
               </div>
               <div class="px-4 pb-4 space-y-3">
@@ -1183,84 +1095,177 @@
 
           <div id="attachments-section" v-if="isAdmin" class="col-span-12">
             <div class="rounded-xl border shadow-xl" :class="[theme.cardBg, theme.border]">
-              <AttachmentManager :theme="theme" />
+              <AttachmentManager :theme="theme" :is-cloud="attachmentStorageEnabled" />
             </div>
           </div>
 
-          <div id="db-section" v-if="isAdmin" class="col-span-12">
+          <div id="attachment-storage-section" v-if="isAdmin" class="col-span-12">
             <div class="rounded-xl border shadow-xl" :class="[theme.cardBg, theme.border]">
-              <div class="flex items-center justify-between px-4 py-3">
-                <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                  <UIcon name="i-heroicons-circle-stack" class="w-5 h-5 text-indigo-300" />
-                  <span>本地数据库管理配置</span>
-                  <span class="ml-2 text-xs px-2 py-1 rounded" :class="theme.subtleBg">当前 DB：{{ dbTypeLabel }}</span>
-                </div>
-                <div class="flex gap-2 flex-wrap justify-end items-center">
-                  <UButton color="primary" icon="i-heroicons-arrow-down-tray" :disabled="dbType !== 'sqlite'" @click="downloadBackup">下载本地备份</UButton>
-                  <UButton color="warning" variant="soft" icon="i-heroicons-arrow-up-tray" :disabled="dbType !== 'sqlite'" @click="triggerDatabaseUpload">恢复本地数据库</UButton>
-                  <input type="file" ref="databaseFileInput" accept=".zip" class="hidden" @change="handleDatabaseUpload" />
+              <div class="px-4 py-3 font-semibold flex items-center gap-2" :class="theme.text">
+                <UIcon name="i-heroicons-cloud" class="w-5 h-5 text-indigo-300" />
+                <span>附件存储方案配置</span>
+              </div>
+              <div class="px-4 pb-4">
+                <div class="rounded-lg p-3" :class="theme.subtleBg">
+                  <div class="font-semibold mb-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2" :class="theme.text">
+                    <span>附件存储选择（本地 / R2 / S3）</span>
+                    <div class="flex flex-wrap items-center gap-3">
+                      <span class="text-sm" :class="theme.mutedText">当前模式</span>
+                      <span :class="[attachmentStorageEnabled ? 'text-green-400' : 'text-indigo-400', 'text-sm']">{{ attachmentStorageEnabled ? '云端存储' : '本地存储' }}</span>
+                      <div class="flex items-center gap-2">
+                      <URadio v-model="attachmentStorageEnabled" :value="true" />
+                      <span :class="attachmentStorageEnabled ? theme.text : 'text-gray-400'">云端</span>
+                      <URadio v-model="attachmentStorageEnabled" :value="false" />
+                      <span :class="!attachmentStorageEnabled ? theme.text : 'text-gray-400'">本地</span>
+                    </div>
+                    </div>
+                  </div>
+
+                  <div class="font-semibold mb-2 mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2" :class="theme.text">
+                    <span>附件压缩处理（自动压缩图片/视频）</span>
+                    <div class="flex flex-wrap items-center gap-3">
+                      <span class="text-sm" :class="theme.mutedText">状态</span>
+                      <span :class="[attachmentStorageConfig.enableCompression ? 'text-green-400' : 'text-indigo-400', 'text-sm']">{{ attachmentStorageConfig.enableCompression ? '已开启' : '未开启' }}</span>
+                      <!-- 显式开关按钮 -->
+                      <div class="flex items-center rounded-lg border border-slate-600 p-0.5 bg-slate-800/50">
+                        <button @click="toggleCompression(true)" :class="['px-3 py-1 text-xs rounded-md transition-colors', attachmentStorageConfig.enableCompression ? 'bg-green-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-700']">开启</button>
+                        <button @click="toggleCompression(false)" :class="['px-3 py-1 text-xs rounded-md transition-colors', !attachmentStorageConfig.enableCompression ? 'bg-slate-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-700']">关闭</button>
+                      </div>
+                      <span class="text-xs px-1.5 py-0.5 rounded border ml-1" :class="attachmentStorageConfig.ffmpegInstalled ? 'border-green-500/30 text-green-500' : 'border-red-500/30 text-red-500'">
+                        {{ attachmentStorageConfig.ffmpegInstalled ? 'FFmpeg已就绪' : '未检测到FFmpeg' }}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div v-if="!attachmentStorageEnabled" class="p-4 text-center rounded-lg border border-dashed" :class="theme.border">
+                    <div class="text-sm" :class="theme.text">当前使用本地存储</div>
+                    <div class="text-xs mt-1" :class="theme.mutedText">图片/视频附件保存在服务器目录</div>
+                    <div class="flex justify-center gap-2 mt-3">
+                      <UButton variant="soft" color="indigo" @click="loadAttachmentStorageConfig">刷新</UButton>
+                      <UButton color="green" @click="saveAttachmentStorageConfig">保存配置</UButton>
+                    </div>
+                  </div>
+
+                  <div v-else class="space-y-3">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label class="text-sm mb-1 block" :class="theme.mutedText">提供方</label>
+                        <USelect v-model="attachmentStorageConfig.provider" :options="[{label:'S3',value:'s3'},{label:'R2',value:'r2'}]" />
+                      </div>
+                      <div>
+                        <label class="text-sm mb-1 block" :class="theme.mutedText">Endpoint</label>
+                        <UInput v-model="attachmentStorageConfig.endpoint" placeholder="https://..." />
+                      </div>
+                      <div>
+                        <label class="text-sm mb-1 block" :class="theme.mutedText">Region</label>
+                        <UInput v-model="attachmentStorageConfig.region" placeholder="auto 或区域名" />
+                      </div>
+                      <div>
+                        <label class="text-sm mb-1 block" :class="theme.mutedText">Bucket</label>
+                        <UInput v-model="attachmentStorageConfig.bucket" placeholder="bucket 名称" />
+                      </div>
+                      <div>
+                        <label class="text-sm mb-1 block" :class="theme.mutedText">Access Key</label>
+                        <UInput v-model="attachmentStorageConfig.accessKey" />
+                      </div>
+                      <div>
+                        <label class="text-sm mb-1 block" :class="theme.mutedText">Secret Key</label>
+                        <UInput v-model="attachmentStorageConfig.secretKey" type="password" />
+                      </div>
+                      <div class="flex items-center gap-2" v-if="attachmentStorageConfig.provider === 's3'">
+                        <span class="text-sm" :class="theme.mutedText">使用路径风格地址</span>
+                        <UToggle v-model="attachmentStorageConfig.usePathStyle" />
+                      </div>
+                      <div class="md:col-span-2">
+                        <label class="text-sm mb-1 block" :class="theme.mutedText">公共访问前缀</label>
+                        <UInput v-model="attachmentStorageConfig.publicBaseURL" placeholder="https://bucket.example.com/" />
+                      </div>
+                    </div>
+                    
+                    <div class="flex justify-end gap-2 mt-2">
+                      <UButton variant="soft" color="indigo" @click="loadAttachmentStorageConfig">刷新</UButton>
+                      <UButton color="green" @click="saveAttachmentStorageConfig">保存配置</UButton>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div class="px-4 pb-4 space-y-4">
-                <div class="text-yellow-400 text-sm rounded p-2" :class="theme.subtleBg">🔔：仅针对 SQLite 本地数据库；{{ dbType !== 'sqlite' ? '当前为云/外部数据库，请在服务端操作' : '可在此下载与恢复本地备份' }}</div>
-                <input type="file" ref="databaseFileInput" accept=".zip" class="hidden" @change="handleDatabaseUpload" />
+            </div>
+          </div>
 
+          <div id="storage-section" v-if="isAdmin" class="col-span-12">
+            <div class="rounded-xl border shadow-xl" :class="[theme.cardBg, theme.border]">
+              <div class="px-4 py-3 font-semibold flex items-center gap-2" :class="theme.text">
+                <UIcon name="i-heroicons-cloud" class="w-5 h-5 text-indigo-300" />
+                <span>数据库存储方案配置</span>
+              </div>
+              <div class="px-4 pb-4">
                 <div class="rounded-lg p-3" :class="theme.subtleBg">
-                  <div class="font-semibold mb-2 flex items-center justify-between" :class="theme.text">
-                    <span>云存储接入（R2/S3）</span>
-                    <div class="flex items-center gap-3">
-                      <span class="text-sm" :class="theme.mutedText">状态</span>
-                      <span :class="[storageEnabled ? 'text-green-400' : 'text-red-400', 'text-sm']">{{ storageEnabled ? '已启用' : '未启用' }}</span>
-                      <USwitch v-model="storageEnabled" />
+                  <div class="font-semibold mb-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2" :class="theme.text">
+                    <span>数据存储方案选择（本地 / R2 / S3）</span>
+                    <div class="flex flex-wrap items-center gap-3">
+                      <span class="text-xs sm:text-sm" :class="theme.mutedText">当前模式</span>
+                      <span :class="[storageEnabled ? 'text-green-400' : 'text-indigo-400', 'text-xs sm:text-sm']">{{ storageEnabled ? '云端存储' : '本地存储' }}</span>
                       <div class="flex items-center gap-2">
                         <URadio v-model="storageEnabled" :value="true" />
-                        <span :class="storageEnabled ? theme.text : 'text-gray-400'">开启</span>
+                        <span :class="storageEnabled ? theme.text : 'text-gray-400'">云端</span>
                         <URadio v-model="storageEnabled" :value="false" />
-                        <span :class="!storageEnabled ? theme.text : 'text-gray-400'">关闭</span>
+                        <span :class="!storageEnabled ? theme.text : 'text-gray-400'">本地</span>
                       </div>
                     </div>
                   </div>
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  
+                  <div v-if="!storageEnabled" class="p-4 text-center rounded-lg border border-dashed" :class="theme.border">
+                    <div class="text-xs sm:text-sm" :class="theme.text">当前使用本地存储</div>
+                    <div class="text-xs mt-1" :class="theme.mutedText">附件将保存在服务器 upload 目录下</div>
+                    <div class="flex justify-center gap-2 mt-3">
+                      <UButton variant="soft" color="indigo" @click="loadStorageConfig">刷新</UButton>
+                      <UButton color="green" @click="saveStorageConfig">保存配置</UButton>
+                    </div>
+                  </div>
+
+                  <div v-else class="space-y-3">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">提供方</label>
+                        <USelect v-model="storageConfig.provider" :options="[{label:'S3',value:'s3'},{label:'R2',value:'r2'}]" />
+                      </div>
+                      <div>
+                        <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">Endpoint</label>
+                        <UInput v-model="storageConfig.endpoint" placeholder="https://..." />
+                      </div>
+                      <div>
+                        <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">Region</label>
+                        <UInput v-model="storageConfig.region" placeholder="auto 或区域名" />
+                      </div>
+                      <div>
+                        <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">Bucket</label>
+                        <UInput v-model="storageConfig.bucket" placeholder="bucket 名称" />
+                      </div>
+                      <div>
+                        <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">Access Key</label>
+                        <UInput v-model="storageConfig.accessKey" />
+                      </div>
+                      <div>
+                        <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">Secret Key</label>
+                        <UInput v-model="storageConfig.secretKey" type="password" />
+                      </div>
+                      <div class="flex items-center gap-2" v-if="storageConfig.provider === 's3'">
+                        <span class="text-xs sm:text-sm" :class="theme.mutedText">使用路径风格地址</span>
+                        <USwitch v-model="storageConfig.usePathStyle" />
+                      </div>
+                      <div class="md:col-span-2">
+                        <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">公共访问前缀</label>
+                        <UInput v-model="storageConfig.publicBaseURL" placeholder="https://bucket.example.com/" />
+                      </div>
+                    </div>
                     
-                    <div>
-                      <label class="text-sm mb-1 block" :class="theme.mutedText">提供方</label>
-                      <USelect v-model="storageConfig.provider" :options="[{label:'S3',value:'s3'},{label:'R2',value:'r2'}]" :disabled="!storageEnabled" />
+                    <div class="flex justify-end gap-2 mt-2">
+                      <UButton variant="soft" color="indigo" @click="loadStorageConfig">刷新</UButton>
+                      <UButton color="green" @click="saveStorageConfig">保存配置</UButton>
                     </div>
-                    <div>
-                      <label class="text-sm mb-1 block" :class="theme.mutedText">Endpoint</label>
-                      <UInput v-model="storageConfig.endpoint" placeholder="https://..." :disabled="!storageEnabled" />
-                    </div>
-                    <div>
-                      <label class="text-sm mb-1 block" :class="theme.mutedText">Region</label>
-                      <UInput v-model="storageConfig.region" placeholder="auto 或区域名" :disabled="!storageEnabled" />
-                    </div>
-                    <div>
-                      <label class="text-sm mb-1 block" :class="theme.mutedText">Bucket</label>
-                      <UInput v-model="storageConfig.bucket" placeholder="bucket 名称" :disabled="!storageEnabled" />
-                    </div>
-                    <div>
-                      <label class="text-sm mb-1 block" :class="theme.mutedText">Access Key</label>
-                      <UInput v-model="storageConfig.accessKey" :disabled="!storageEnabled" />
-                    </div>
-                    <div>
-                      <label class="text-sm mb-1 block" :class="theme.mutedText">Secret Key</label>
-                      <UInput v-model="storageConfig.secretKey" type="password" :disabled="!storageEnabled" />
-                    </div>
-                    <div class="flex items-center gap-2" v-if="storageConfig.provider === 's3'">
-                      <span class="text-sm" :class="theme.mutedText">使用路径风格地址</span>
-                      <USwitch v-model="storageConfig.usePathStyle" :disabled="!storageEnabled" />
-                    </div>
-                    <div class="md:col-span-2">
-                      <label class="text-sm mb-1 block" :class="theme.mutedText">公共访问前缀</label>
-                      <UInput v-model="storageConfig.publicBaseURL" placeholder="https://bucket.example.com/" :disabled="!storageEnabled" />
-                    </div>
-                  </div>
-                  <div class="flex justify-end gap-2 mt-2">
-                    <UButton variant="soft" color="indigo" @click="loadStorageConfig">刷新</UButton>
-                    <UButton color="green" @click="saveStorageConfig">保存</UButton>
-                  </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                      <div class="md:col-span-2 flex flex-wrap items-center gap-4">
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 border-t pt-3" :class="theme.border">
+                      <div class="md:col-span-2 flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-4">
                         <div class="flex items-center gap-2">
                           <span class="text-sm" :class="theme.mutedText">自动同步至云端</span>
                           <USwitch v-model="storageAutoSyncEnabled" @update:model-value="onAutoSyncToggle" />
@@ -1299,9 +1304,36 @@
                         </div>
                       </div>
                     </div>
-                  <div class="flex justify-end gap-2 mt-2">
-                    <UButton color="primary" variant="solid" @click="uploadCloudBackup">上传备份到云</UButton>
-                    <UButton color="orange" variant="solid" @click="restoreCloudBackup">从云恢复备份</UButton>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="db-section" v-if="isAdmin" class="col-span-12">
+            <div class="rounded-xl border shadow-xl" :class="[theme.cardBg, theme.border]">
+              <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-4 py-3">
+                <div class="font-semibold flex items-center gap-2" :class="theme.text">
+                  <UIcon name="i-heroicons-circle-stack" class="w-5 h-5 text-indigo-300" />
+                  <span>本地数据库管理配置</span>
+                  <span class="ml-2 text-xs px-2 py-1 rounded" :class="theme.subtleBg">当前 DB：{{ dbTypeLabel }}</span>
+                </div>
+                <div class="flex gap-2 flex-wrap justify-start sm:justify-end items-center w-full sm:w-auto">
+                  <UButton color="primary" icon="i-heroicons-arrow-down-tray" :disabled="dbType !== 'sqlite'" @click="downloadBackup">下载本地备份</UButton>
+                  <UButton color="warning" variant="soft" icon="i-heroicons-arrow-up-tray" :disabled="dbType !== 'sqlite'" @click="triggerDatabaseUpload">恢复本地数据库</UButton>
+                  <input type="file" ref="databaseFileInput" accept=".zip" class="hidden" @change="handleDatabaseUpload" />
+                </div>
+              </div>
+              <div class="px-4 pb-4 space-y-4">
+                <div class="text-yellow-400 text-sm rounded p-2" :class="theme.subtleBg">🔔：仅针对 SQLite 本地数据库；{{ dbType !== 'sqlite' ? '当前为云/外部数据库，请在服务端操作' : '可在此下载与恢复本地备份' }}</div>
+                <input type="file" ref="databaseFileInput" accept=".zip" class="hidden" @change="handleDatabaseUpload" />
+
+                <div class="rounded-lg p-3" :class="theme.subtleBg">
+                   <div class="font-semibold mb-2" :class="theme.text">云端备份与恢复</div>
+                   <div class="text-xs mb-3" :class="theme.mutedText">请在上方的“存储方案”中配置云端连接信息</div>
+                   <div class="flex justify-end gap-2">
+                    <UButton color="primary" variant="solid" @click="uploadCloudBackup" :disabled="!storageEnabled">上传备份到云</UButton>
+                    <UButton color="orange" variant="solid" @click="restoreCloudBackup" :disabled="!storageEnabled">从云恢复备份</UButton>
                     <UButton color="blue" variant="solid" :disabled="!storageEnabled || !storageConfig.publicBaseURL" @click="restoreFromConfiguredCloud">按配置恢复</UButton>
                   </div>
                 </div>
@@ -1748,7 +1780,7 @@
                             </div>
                             
                             <div v-if="editItem[key]">
-                        <template v-if="key === 'backgrounds'">
+                        <template v-if="String(key) === 'backgrounds'">
                             <div class="space-y-3">
                                 <div v-for="(bg, index) in frontendConfig.backgrounds"
                                      :key="index"
@@ -1774,7 +1806,7 @@
                                 </div>
                             </div>
                         </template>
-                                <template v-else-if="key === 'aboutMarkdown'">
+                                <template v-else-if="String(key) === 'aboutMarkdown'">
                                     <div class="resizable-wrapper" ref="aboutMdWrap">
                                         <UTextarea
                                             v-model="frontendConfig[key]"
@@ -1785,7 +1817,7 @@
                                         <div class="textarea-resize-handle" @mousedown="startAboutResize" title="拖拽调整高度"></div>
                                     </div>
                                 </template>
-                                <template v-else-if="key === 'subtitleText' || key === 'linksDescription' || key === 'commentPageDescription' || key === 'aboutPageDescription'">
+                                <template v-else-if="['subtitleText', 'linksDescription', 'commentPageDescription', 'aboutPageDescription'].includes(String(key))">
                                     <UTextarea
                                         v-model="frontendConfig[key]"
                                         :placeholder="`输入${label}`"
@@ -1809,7 +1841,7 @@
                                 </div>
                             </div>
                             <div v-else>
-                        <template v-if="key === 'backgrounds'">
+                        <template v-if="String(key) === 'backgrounds'">
                             <div class="grid grid-cols-3 gap-2">
                                 <img v-for="(bg, index) in frontendConfig.backgrounds"
                                      :key="index"
@@ -1991,7 +2023,10 @@ const avatarSrc = computed(() => {
   return pick(userAvatar) || pick(adminAvatar) || gravatar(seed, 100)
 })
 
-const setActive = async (name: 'system' | 'user' | 'site' | 'notify' | 'attachments' | 'db' | 'version' | 'site-register' | 'site-pwa' | 'site-github-card' | 'site-github-login' | 'site-announcement' | 'site-music' | 'site-default-theme' | 'site-social-links' | 'friend-links' | 'site-configs' | 'comments' | 'email' | 'admin-users', evt?: MouseEvent) => {
+const setActive = async (name: 'system' | 'user' | 'site' | 'notify' | 'attachments' | 'attachment-storage' | 'db' | 'version' | 'site-register' | 'site-pwa' | 'site-github-card' | 'site-github-login' | 'site-announcement' | 'site-music' | 'site-default-theme' | 'site-social-links' | 'friend-links' | 'site-configs' | 'comments' | 'email' | 'admin-users', evt?: MouseEvent) => {
+  if (name === 'attachment-storage') {
+    loadAttachmentStorageConfig()
+  }
   await nextTick()
   const id = `${name}-section`
   const el = document.getElementById(id)
@@ -2054,7 +2089,7 @@ watch(() => userStore.user, () => { loadUserMessagesCount() })
 watch(() => userStore.status, () => { loadUserMessagesCount() })
 onMounted(() => { loadUserMessagesCount() })
 
-watch(() => panelTheme.value, (val) => {
+watch(() => panelTheme.value, (val: string) => {
   try {
     const html = document.documentElement
     const wantDark = val !== 'light'
@@ -2253,7 +2288,7 @@ const saveAdminTheme = async () => {
     })
     const data = await res.json()
     if (data.code === 1) {
-      useToast().add({ title: res?.msg || '已保存', color: 'green' })
+      useToast().add({ title: data?.msg || '已保存', color: 'green' })
     }
   } catch {}
 }
@@ -2266,7 +2301,7 @@ const fetchRegisterConfig = async () => {
         if (data.code === 1 && typeof data.data.allowRegistration === 'boolean') {
             registerEnabled.value = data.data.allowRegistration;
         }
-    } catch (e) {
+    } catch (e: any) {
         useToast().add({ title: '获取注册配置失败', color: 'red' });
     }
 };
@@ -2301,7 +2336,7 @@ const saveRegisterConfig = async () => {
         } else {
             throw new Error(data.msg || '保存失败');
         }
-    } catch (e) {
+    } catch (e: any) {
         useToast().add({ title: '保存失败', color: 'red' });
     }
 };
@@ -2330,6 +2365,14 @@ let notifyConfig = reactive({
     feishuSecret: ''
 })
 
+const updateNotifyConfig = (next: any) => {
+  Object.assign(notifyConfig, next || {})
+}
+
+const updateCommentsConfig = (next: any) => {
+  Object.assign(frontendConfig as any, next || {})
+}
+
 // 获取推送配置
 const fetchNotifyConfig = async () => {
     try {
@@ -2340,7 +2383,7 @@ const fetchNotifyConfig = async () => {
         if (data.code === 1) {
             Object.assign(notifyConfig, data.data)
         }
-    } catch (error) {
+    } catch (error: any) {
         console.error('获取推送配置失败:', error)
     }
 }
@@ -2435,7 +2478,7 @@ const addAdmin = () => {
   newAdmin.value = ''
 }
 const removeAdmin = (name: string) => {
-  adminUsers.value = adminUsers.value.filter(n => n !== name)
+  adminUsers.value = adminUsers.value.filter((n: string) => n !== name)
 }
 const saveAdmins = async () => {
   try {
@@ -2642,7 +2685,7 @@ const checkVersion = async () => {
         } else {
             throw new Error(data.msg || '检查更新失败');
         }
-    } catch (error) {
+    } catch (error: any) {
         console.error('检查版本更新失败:', error);
         useToast().add({
             title: '检查更新失败',
@@ -2808,7 +2851,7 @@ const copyToken = async () => {
             description: 'Token 已复制到剪贴板',
             color: 'green'
         })
-    } catch (error) {
+    } catch (error: any) {
         useToast().add({
             title: '错误',
             description: '复制失败',
@@ -2830,7 +2873,7 @@ const handleLogout = async () => {
         userStore.clearUserStatus()
         useToast().add({ title: '成功', description: '已退出登录', color: 'green' })
         router.push('/')
-    } catch (error) {
+    } catch (error: any) {
         userStore.clearUserStatus()
         useToast().add({ title: '成功', description: '已退出登录', color: 'green' })
         router.push('/')
@@ -2883,6 +2926,11 @@ const editUserInfo = reactive({
     emailBind: false,
     emailChange: false
 })
+watch(() => editUserInfo.description, (v: boolean) => {
+    if (!v) return
+    const current = String((userStore.user as any)?.description || '').trim()
+    userForm.description = current || '欢迎访问'
+})
 const awaitingNewEmailVerify = ref(false)
 const showToken = ref(false)
 const regeneratingToken = ref(false)
@@ -2931,7 +2979,7 @@ const updateUsername = async () => {
         } else {
             throw new Error(res?.msg)
         }
-    } catch (error) {
+    } catch (error: any) {
         useToast().add({
             title: '错误',
             description: error.message || '更新失败',
@@ -2985,7 +3033,7 @@ const updatePassword = async () => {
         } else {
             throw new Error(res?.msg)
         }
-    } catch (error) {
+    } catch (error: any) {
         useToast().add({
             title: '错误',
             description: error.message || '更新失败',
@@ -3138,7 +3186,7 @@ const saveAvatarLink = async () => {
   }
 }
 
-watch(avatarLink, (val) => {
+watch(avatarLink, (val: any) => {
   const u = String(val || '').trim()
   if (!u) { localPreview.value = ''; return }
   if (/^https?:\/\//i.test(u)) localPreview.value = u
@@ -3239,7 +3287,7 @@ const useInitialsAvatar = async () => {
 
 
 // 配置相关
-const configLabels = {
+const configLabels: Record<string, string> = {
     siteTitle: '站点标题',
     subtitleText: '欢迎语',
     backgrounds: '背景图片',
@@ -3257,7 +3305,79 @@ const configLabels = {
     aboutMarkdown: '关于页面 Markdown 内容',
 }
 
-const frontendConfig = reactive({
+interface FrontendConfig {
+    siteTitle: string;
+    subtitleText: string;
+    avatarURL: string;
+    username: string;
+    description: string;
+    backgrounds: string[];
+    cardFooterTitle: string;
+    cardFooterLink: string;
+    pageFooterHTML: string;
+    rssTitle: string;
+    rssDescription: string;
+    rssAuthorName: string;
+    rssFaviconURL: string;
+    hitokotoEnabled: boolean;
+    friendLinks: Array<{ title: string; link: string; icon?: string; description?: string }>;
+    linksTitle: string;
+    linksDescription: string;
+    linksApplyTitle: string;
+    linksApplyText: string;
+    friendLinkEmailEnabled: boolean;
+    commentPageTitle: string;
+    commentPageDescription: string;
+    aboutPageTitle: string;
+    aboutPageDescription: string;
+    aboutMarkdown: string;
+    walineServerURL: string;
+    commentEnabled: boolean;
+    commentSystem: string;
+    commentEmailEnabled: boolean;
+    commentLoginRequired: boolean;
+    githubOAuthEnabled: boolean;
+    githubClientId: string;
+    githubClientSecret: string;
+    githubCallbackURL: string;
+    notifyEnabled: boolean;
+    enableGithubCard: boolean;
+    pwaEnabled: boolean;
+    pwaTitle: string;
+    pwaDescription: string;
+    pwaIconURL: string;
+    defaultContentTheme: string;
+    announcementText: string;
+    announcementEnabled: boolean;
+    musicEnabled: boolean;
+    musicPlaylistId: string;
+    musicSongId: string;
+    musicPosition: string;
+    musicTheme: string;
+    musicLyric: boolean;
+    musicAutoplay: boolean;
+    musicDefaultMinimized: boolean;
+    musicEmbed: boolean;
+    musicCssCdnURL: string;
+    musicJsCdnURL: string;
+    socialLinks: Array<{ name?: string; url: string; icon?: string }>;
+    socialLinksEnabled: boolean;
+    calendarEnabled: boolean;
+    timeEnabled: boolean;
+    leftAdEnabled: boolean;
+    leftAdImageURL: string;
+    leftAdLinkURL: string;
+    leftAdDescription: string;
+    leftAds: Array<{ imageURL: string, linkURL: string, description: string }>;
+    leftAdsIntervalMs: number;
+    welcomeAvatarURL: string;
+    welcomeName: string;
+    welcomeDescription: string;
+    welcomeUseAdmin: boolean;
+    [key: string]: any;
+}
+
+const frontendConfig = reactive<FrontendConfig>({
     siteTitle: '',
     subtitleText: '',
     welcomeName: '',
@@ -3273,11 +3393,14 @@ const frontendConfig = reactive({
     rssAuthorName: '',
     rssFaviconURL: '',
     hitokotoEnabled: true,
-  friendLinks: [] as Array<{ title: string; link: string; icon?: string; description?: string }>,
-    linksTitle: '',
-    linksDescription: '',
-    linksApplyTitle: '',
-    linksApplyText: '',
+  friendLinks: [
+    { title: 'NoiseWork', link: 'https://www.noisework.cn/', icon: 'i-mdi-home', description: '个人主页与作品集合' },
+    { title: 'NoiseBlogs', link: 'https://www.noiseblogs.top/', icon: 'i-mdi-notebook', description: '技术随笔与学习记录' },
+  ] as Array<{ title: string; link: string; icon?: string; description?: string }>,
+    linksTitle: '友情链接',
+    linksDescription: '推荐站点和朋友们的主页',
+    linksApplyTitle: '申请友链须知',
+    linksApplyText: '请提供站点名称、网址、图标（可选）、简介与有效邮箱。提交后需管理员审核，审核通过后展示。',
     friendLinkEmailEnabled: false,
     commentPageTitle: '',
     commentPageDescription: '',
@@ -3316,6 +3439,7 @@ const frontendConfig = reactive({
     musicCssCdnURL: '',
     musicJsCdnURL: '',
     socialLinks: [] as Array<{ name?: string; url: string; icon?: string }>,
+    socialLinksEnabled: true,
     calendarEnabled: true,
     timeEnabled: true,
     leftAdEnabled: true,
@@ -3344,7 +3468,7 @@ const authForm = reactive<UserToLogin | UserToRegister>({
     password: ''
 })
 
-const editItem = reactive({
+const editItem = reactive<Record<string, boolean>>({
     siteTitle: false,
     subtitleText: false,
     backgrounds: false,
@@ -3366,7 +3490,7 @@ const editItem = reactive({
 })
 
 // 更新默认配置
-const defaultConfig = {
+const defaultConfig: Record<string, any> = {
     siteTitle: '说说笔记',
     subtitleText: '欢迎访问，点击头像可更换封面背景！',
     avatarURL: '',
@@ -3398,74 +3522,166 @@ const defaultConfig = {
     rssAuthorName: 'Noise',
     rssFaviconURL: '/favicon.ico',
     hitokotoEnabled: true,
+    commentEnabled: true,
+    commentSystem: 'builtin',
+    commentEmailEnabled: false,
+    commentLoginRequired: false,
+    enableGithubCard: false,
+    pwaEnabled: true,
+    announcementEnabled: true,
+    musicEnabled: false,
+    musicPlaylistId: '2141128031',
+    musicSongId: '',
+    musicPosition: 'bottom-left',
+    musicTheme: 'auto',
+    musicLyric: true,
+    musicAutoplay: false,
+    musicDefaultMinimized: true,
+    musicEmbed: false,
+    musicCssCdnURL: '',
+    musicJsCdnURL: '',
+    githubOAuthEnabled: false,
+    notifyEnabled: false,
+    calendarEnabled: true,
+    timeEnabled: true,
     linksTitle: '友情链接',
     linksDescription: '推荐站点和朋友们的主页',
     linksApplyTitle: '申请友链须知',
     linksApplyText: '请提供站点名称、网址、图标（可选）、简介与有效邮箱。提交后需管理员审核，审核通过后展示。',
     friendLinkEmailEnabled: false,
+    friendLinks: [
+      { title: 'NoiseWork', link: 'https://www.noisework.cn/', icon: 'i-mdi-home', description: '个人主页与作品集合' },
+      { title: 'NoiseBlogs', link: 'https://www.noiseblogs.top/', icon: 'i-mdi-notebook', description: '技术随笔与学习记录' },
+    ],
     commentPageTitle: '留言',
     commentPageDescription: '欢迎留下你的看法',
     aboutPageTitle: '关于本站',
     aboutPageDescription: '这里是站点的介绍与说明',
     aboutMarkdown: '# 关于我\n\n这里是一个默认的个人简介示例：\n\n- 喜欢记录与分享\n- 热爱开源与学习\n- 持续打磨产品体验\n\n欢迎通过友链或留言与我交流！',
     walineServerURL: '请前往waline官网https://waline.js.org查看部署配置',
-    githubOAuthEnabled: false,
-    githubClientId: '',
-    githubClientSecret: '',
     
-    githubCallbackURL: '',
-    // PWA 设置默认值（为空时回退到站点设置）
-    pwaEnabled: true,
-    pwaTitle: '',
-    pwaDescription: '',
-    pwaIconURL: ''
-    ,defaultContentTheme: 'light'
-    ,announcementText: '欢迎访问我的说说笔记！'
-  ,announcementEnabled: true
-  ,musicEnabled: false
-    ,musicPlaylistId: '2141128031'
-    ,musicSongId: ''
-    ,musicPosition: 'bottom-left'
-    ,musicTheme: 'auto'
-    ,musicLyric: true
-    ,musicAutoplay: false
-    ,musicDefaultMinimized: true
-    ,musicEmbed: false
-    ,musicCssCdnURL: 'https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.css'
-    ,musicJsCdnURL: 'https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.js'
-  ,socialLinks: [
+    // 广告位默认数据
+    leftAdEnabled: true,
+    leftAdImageURL: 'https://picsum.photos/seed/single-ad/640/640',
+    leftAdLinkURL: 'https://note.noisework.cn',
+    leftAdDescription: '示例广告（单条配置）',
+    leftAds: [
+      { imageURL: 'https://picsum.photos/seed/ad-1/640/640', linkURL: 'https://note.noisework.cn', description: '写作与记录，开启灵感之旅' },
+      { imageURL: 'https://picsum.photos/seed/ad-2/640/640', linkURL: 'https://noisework.cn', description: '探索新主题与小工具' },
+      { imageURL: 'https://picsum.photos/seed/ad-3/640/640', linkURL: 'https://github.com', description: '开源项目，欢迎 Star' },
+    ],
+    leftAdsIntervalMs: 4000,
+
+    // 社交链接默认数据
+    socialLinksEnabled: true,
+    socialLinks: [
       { name: 'TG', url: 'https://tg.noisework.cn', icon: 'i-mdi-near-me' },
       { name: 'X', url: 'https://x.com/liangwenhao3', icon: 'i-mdi-twitter' },
       { name: '主页', url: 'https://www.noisework.cn/', icon: 'i-mdi-home' },
       { name: '博客', url: 'https://www.noiseblogs.top/', icon: 'i-mdi-notebook' }
-  ]
-  ,socialLinksEnabled: true
-  ,friendLinks: [
-    { title: 'NoiseWork', link: 'https://www.noisework.cn/', icon: 'i-mdi-home', description: '个人主页与作品集合' },
-    { title: 'NoiseBlogs', link: 'https://www.noiseblogs.top/', icon: 'i-mdi-notebook', description: '技术随笔与学习记录' },
-  ]
-    ,calendarEnabled: true
-    ,timeEnabled: true
-    ,leftAdEnabled: true
-    ,leftAds: [
-      { imageURL: 'https://picsum.photos/seed/ad-1/640/640', linkURL: 'https://note.noisework.cn', description: '写作与记录，开启灵感之旅' },
-      { imageURL: 'https://picsum.photos/seed/ad-2/640/640', linkURL: 'https://noisework.cn', description: '探索新主题与小工具' },
-      { imageURL: 'https://picsum.photos/seed/ad-3/640/640', linkURL: 'https://github.com', description: '开源项目，欢迎 Star' }
     ]
-    ,leftAdsIntervalMs: 4000
 }
+
+const addSocialLink = () => {
+  frontendConfig.socialLinks.push({ name: '', url: '', icon: '' })
+}
+const removeSocialLink = (index: number) => {
+  frontendConfig.socialLinks.splice(index, 1)
+}
+const saveSocialLinks = async () => {
+  try {
+    const cleaned = Array.isArray(frontendConfig.socialLinks)
+      ? frontendConfig.socialLinks
+          .map((x: any) => ({
+            name: String(x?.name || '').trim(),
+            url: String(x?.url || '').trim(),
+            icon: String(x?.icon || '').trim(),
+          }))
+          .filter((x: any) => x.url !== '')
+      : []
+
+    const payload = {
+      frontendSettings: {
+        socialLinksEnabled: !!frontendConfig.socialLinksEnabled,
+        socialLinks: cleaned
+      }
+    }
+    const res = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    })
+    const data = await res.json()
+    if (data.code === 1) {
+      await fetchConfig()
+      window.dispatchEvent(new Event('frontend-config-updated'))
+      useToast().add({ title: '保存成功', description: '社交链接配置已保存', color: 'green' })
+    } else {
+      throw new Error(data.msg || '保存失败')
+    }
+  } catch (e: any) {
+    useToast().add({ title: '保存失败', description: e.message, color: 'red' })
+  }
+}
+
+const saveFriendLinksConfig = async () => {
+  try {
+    const cleaned = Array.isArray((frontendConfig as any).friendLinks)
+      ? (frontendConfig as any).friendLinks
+          .map((x: any) => ({
+            title: String(x?.title || '').trim(),
+            link: String(x?.link || '').trim(),
+            icon: String(x?.icon || '').trim(),
+            description: String(x?.description || '').trim(),
+          }))
+          .filter((x: any) => x.link !== '')
+      : []
+
+    ;(frontendConfig as any).friendLinks = cleaned
+
+    const payload = {
+      frontendSettings: {
+        linksTitle: String((frontendConfig as any).linksTitle || '').trim(),
+        linksDescription: String((frontendConfig as any).linksDescription || '').trim(),
+        linksApplyTitle: String((frontendConfig as any).linksApplyTitle || '').trim(),
+        linksApplyText: String((frontendConfig as any).linksApplyText || '').trim(),
+        friendLinkEmailEnabled: !!(frontendConfig as any).friendLinkEmailEnabled,
+        friendLinks: cleaned,
+      }
+    }
+
+    const res = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    })
+    const data = await res.json()
+    if (data.code === 1) {
+      await fetchConfig()
+      window.dispatchEvent(new Event('frontend-config-updated'))
+      useToast().add({ title: '成功', description: '友链配置已保存', color: 'green' })
+    } else {
+      throw new Error(data.msg || '保存失败')
+    }
+  } catch (e: any) {
+    useToast().add({ title: '失败', description: e.message || '保存失败', color: 'red' })
+  }
+}
+
 // 添加单个配置项保存方法
 
 // 添加单个配置项重置方法
 const resetConfigItem = (key: string) => {
-    frontendConfig[key] = defaultConfig[key]
+    ;(frontendConfig as any)[key] = (defaultConfig as any)[key]
     editItem[key] = false
 }
 // 修改 fetchConfig 方法// ... existing code ...
 
 const fetchConfig = async () => {
   try {
-      const response = await fetch('/api/frontend/config', {
+      const response = await fetch(`/api/frontend/config?t=${new Date().getTime()}`, {
           credentials: 'include',
           headers: {
               'Cache-Control': 'no-cache',
@@ -3508,10 +3724,10 @@ const fetchConfig = async () => {
                         frontendConfig[key] = [...(defaultConfig.friendLinks || [])];
                     }
                 } else if (booleanKeys.includes(key)) {
-                    const v = settings[key] ?? defaultConfig[key]
-                    ;(frontendConfig as any)[key] = (v === true || v === 'true')
+                    const v = settings[key] ?? (defaultConfig as any)[key]
+                    ;(frontendConfig as any)[key] = (v === true || v === 'true' || v === 1 || v === '1')
                 } else {
-                    const v = settings[key] ?? defaultConfig[key]
+                    const v = settings[key] ?? (defaultConfig as any)[key]
                     ;(frontendConfig as any)[key] = typeof v === 'string' ? v.trim() : v
                 }
             });
@@ -3519,8 +3735,22 @@ const fetchConfig = async () => {
             // 独立处理布尔型未包含在 frontendConfig 键中的字段
             if (settings.enableGithubCard !== undefined) {
                 const v = settings.enableGithubCard
-                // @ts-ignore 动态添加字段
-                frontendConfig.enableGithubCard = (v === true || v === 'true')
+                ;(frontendConfig as any).enableGithubCard = (v === true || v === 'true' || v === 1 || v === '1')
+            }
+
+            if (data.data?.attachmentStorageConfig) {
+                const sc = data.data.attachmentStorageConfig
+                attachmentStorageConfig.provider = sc.provider || ''
+                attachmentStorageConfig.endpoint = sc.endpoint || ''
+                attachmentStorageConfig.region = sc.region || ''
+                attachmentStorageConfig.bucket = sc.bucket || ''
+                attachmentStorageConfig.accessKey = sc.accessKey || ''
+                attachmentStorageConfig.secretKey = sc.secretKey || ''
+                attachmentStorageConfig.usePathStyle = !!sc.usePathStyle
+                attachmentStorageConfig.publicBaseURL = sc.publicBaseURL || ''
+                attachmentStorageConfig.enableCompression = !!sc.enableCompression
+                attachmentStorageConfig.ffmpegInstalled = !!sc.ffmpegInstalled
+                attachmentStorageEnabled.value = !!data.data.attachmentStorageEnabled
             }
 
             // 自动应用到页面 Head（标题、描述、图标）
@@ -3569,15 +3799,15 @@ const fetchConfig = async () => {
               musicCdnPreset.value = 'custom'
             }
         }
-    } catch (error) {
-        console.error('获取配置失败:', error);
-    }
+        } catch (error: any) {
+            console.error('获取配置失败:', error);
+        }
 };
 const saveConfigItem = async (key: string) => {
     try {
         // 特殊处理背景图片数组
         if (key === 'backgrounds') {
-            const validBackgrounds = frontendConfig.backgrounds.filter(url => url && url.trim() !== '');
+            const validBackgrounds = frontendConfig.backgrounds.filter((url: string) => url && url.trim() !== '');
             frontendConfig.backgrounds = validBackgrounds;
         }
         // 特殊处理广告位数组：过滤空条目并裁剪字段
@@ -3586,12 +3816,27 @@ const saveConfigItem = async (key: string) => {
                 imageURL: String(ad?.imageURL || '').trim(),
                 linkURL: String(ad?.linkURL || '').trim(),
                 description: String(ad?.description || '').trim()
-            })).filter(ad => ad.imageURL !== '');
+            })).filter((ad: any) => ad.imageURL !== '');
             frontendConfig.leftAds = cleaned;
+        }
+        if (key === 'friendLinks') {
+            const cleaned = Array.isArray((frontendConfig as any).friendLinks)
+              ? (frontendConfig as any).friendLinks
+                  .map((x: any) => ({
+                    title: String(x?.title || '').trim(),
+                    link: String(x?.link || '').trim(),
+                    icon: String(x?.icon || '').trim(),
+                    description: String(x?.description || '').trim(),
+                  }))
+                  .filter((x: any) => x.link !== '')
+              : []
+            ;(frontendConfig as any).friendLinks = cleaned
         }
 
         const settingsToSave = {
-            frontendSettings: frontendConfig  // 直接发送整个配置对象
+            frontendSettings: {
+                [key]: (frontendConfig as any)[key]
+            }
         };
 
         const response = await fetch('/api/settings', {
@@ -3646,6 +3891,92 @@ const saveConfigItem = async (key: string) => {
         });
     }
 };
+
+const saveConfig = async () => {
+  try {
+    const cleanedBackgrounds = Array.isArray(frontendConfig.backgrounds)
+      ? frontendConfig.backgrounds.filter((url: string) => String(url || '').trim() !== '').map((url: string) => String(url || '').trim())
+      : []
+
+    const cleanedLeftAds = Array.isArray((frontendConfig as any).leftAds)
+      ? (frontendConfig as any).leftAds
+          .map((ad: any) => ({
+            imageURL: String(ad?.imageURL || '').trim(),
+            linkURL: String(ad?.linkURL || '').trim(),
+            description: String(ad?.description || '').trim(),
+          }))
+          .filter((ad: any) => ad.imageURL !== '')
+      : []
+
+    const cleanedSocialLinks = Array.isArray((frontendConfig as any).socialLinks)
+      ? (frontendConfig as any).socialLinks
+          .map((x: any) => ({
+            name: String(x?.name || '').trim(),
+            url: String(x?.url || '').trim(),
+            icon: String(x?.icon || '').trim(),
+          }))
+          .filter((x: any) => x.url !== '')
+      : []
+
+    const cleanedFriendLinks = Array.isArray((frontendConfig as any).friendLinks)
+      ? (frontendConfig as any).friendLinks
+          .map((x: any) => ({
+            title: String(x?.title || '').trim(),
+            link: String(x?.link || '').trim(),
+            icon: String(x?.icon || '').trim(),
+            description: String(x?.description || '').trim(),
+          }))
+          .filter((x: any) => x.link !== '')
+      : (frontendConfig as any).friendLinks
+
+    const payload = {
+      frontendSettings: {
+        ...(frontendConfig as any),
+        backgrounds: cleanedBackgrounds,
+        leftAds: cleanedLeftAds,
+        socialLinks: cleanedSocialLinks,
+        friendLinks: cleanedFriendLinks,
+        leftAdsIntervalMs: Number((frontendConfig as any).leftAdsIntervalMs || 0) || Number((defaultConfig as any).leftAdsIntervalMs || 4000),
+        leftAdEnabled: !!(frontendConfig as any).leftAdEnabled,
+        socialLinksEnabled: !!(frontendConfig as any).socialLinksEnabled,
+        calendarEnabled: !!(frontendConfig as any).calendarEnabled,
+        timeEnabled: !!(frontendConfig as any).timeEnabled,
+        hitokotoEnabled: !!(frontendConfig as any).hitokotoEnabled,
+        announcementEnabled: !!(frontendConfig as any).announcementEnabled,
+        pwaEnabled: !!(frontendConfig as any).pwaEnabled,
+        enableGithubCard: !!(frontendConfig as any).enableGithubCard,
+        commentEnabled: !!(frontendConfig as any).commentEnabled,
+        commentEmailEnabled: !!(frontendConfig as any).commentEmailEnabled,
+        commentLoginRequired: !!(frontendConfig as any).commentLoginRequired,
+        musicEnabled: !!(frontendConfig as any).musicEnabled,
+        musicLyric: !!(frontendConfig as any).musicLyric,
+        musicAutoplay: !!(frontendConfig as any).musicAutoplay,
+        musicDefaultMinimized: !!(frontendConfig as any).musicDefaultMinimized,
+        musicEmbed: !!(frontendConfig as any).musicEmbed,
+        githubOAuthEnabled: !!(frontendConfig as any).githubOAuthEnabled,
+        welcomeUseAdmin: !!(frontendConfig as any).welcomeUseAdmin,
+        friendLinkEmailEnabled: !!(frontendConfig as any).friendLinkEmailEnabled,
+      },
+    }
+
+    const response = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload),
+    })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok || data?.code !== 1) {
+      throw new Error(data?.msg || '保存失败')
+    }
+
+    await fetchConfig()
+    window.dispatchEvent(new Event('frontend-config-updated'))
+    useToast().add({ title: '成功', description: '配置已保存', color: 'green' })
+  } catch (error: any) {
+    useToast().add({ title: '失败', description: error?.message || '保存失败', color: 'red' })
+  }
+}
 
 const savePWAConfig = async () => {
     try {
@@ -3737,7 +4068,8 @@ const handleSiteAvatarUpload = async (event: Event) => {
         const resp = await fetch('/api/images/upload', { method: 'POST', credentials: 'include', body: formData })
         const js = await resp.json().catch(() => ({}))
         if (!resp.ok || js.code !== 1 || !js.data) throw new Error(js?.msg || '上传失败')
-        const imageUrl = String(js.data || '').startsWith('http') ? js.data : `/api${js.data}`
+        const raw = String(js.data || '')
+        const imageUrl = raw.startsWith('http') ? raw : (raw.startsWith('/api') ? raw : `/api${raw}`)
         ;(frontendConfig as any).avatarURL = imageUrl
         await saveConfigItem('avatarURL')
         useToast().add({ title: '成功', description: '站点头像已更新', color: 'green' })
@@ -3788,23 +4120,7 @@ watch(() => frontendConfig.commentLoginRequired, async () => {
   } catch {}
 })
 
-const addSocialLink = () => {
-  frontendConfig.socialLinks.push({ name: '', url: '', icon: '' })
-}
 
-const removeSocialLink = (index: number) => {
-  frontendConfig.socialLinks.splice(index, 1)
-}
-
-const saveSocialLinks = async () => {
-  try {
-    await saveConfigItem('socialLinks')
-    window.dispatchEvent(new Event('frontend-config-updated'))
-    useToast().add({ title: '成功', description: '社交链接已更新', color: 'green' })
-  } catch (e: any) {
-    useToast().add({ title: '错误', description: e?.message || '保存失败', color: 'red' })
-  }
-}
 
 const commentSearch = ref('')
 const showAdminComments = ref(false)
@@ -3918,13 +4234,13 @@ const doAdminDelete = async () => {
   resetAdminDeleteConfirm()
 }
 
-watch(() => String((frontendConfig as any).commentSystem || '').toLowerCase(), (sys) => {
+watch(() => String((frontendConfig as any).commentSystem || '').toLowerCase(), (sys: string) => {
   uiCommentSystem.value = sys
   if (sys !== 'builtin') {
     showAdminComments.value = false
   }
 })
-watch(() => !!(frontendConfig as any).commentEnabled, (enabled) => {
+watch(() => !!(frontendConfig as any).commentEnabled, (enabled: boolean) => {
   if (!enabled) {
     showAdminComments.value = false
   }
@@ -4015,6 +4331,9 @@ const resetMusicConfig = () => {
 
 const resetAdsConfig = () => {
   ;(frontendConfig as any).leftAdEnabled = true
+  ;(frontendConfig as any).leftAdImageURL = 'https://picsum.photos/seed/single-ad/640/640'
+  ;(frontendConfig as any).leftAdLinkURL = 'https://note.noisework.cn'
+  ;(frontendConfig as any).leftAdDescription = '示例广告（单条配置）'
   const def = (defaultConfig as any)
   const arr = Array.isArray(def.leftAds) ? def.leftAds : []
   ;(frontendConfig as any).leftAds = arr.map((x: any) => ({
@@ -4023,6 +4342,21 @@ const resetAdsConfig = () => {
     description: String(x?.description || '')
   }))
   ;(frontendConfig as any).leftAdsIntervalMs = Number(def.leftAdsIntervalMs || 4000)
+}
+
+const resetFriendLinksConfig = () => {
+  const def = (defaultConfig as any)
+  ;(frontendConfig as any).linksTitle = String(def.linksTitle || '').trim()
+  ;(frontendConfig as any).linksDescription = String(def.linksDescription || '').trim()
+  ;(frontendConfig as any).linksApplyTitle = String(def.linksApplyTitle || '').trim()
+  ;(frontendConfig as any).linksApplyText = String(def.linksApplyText || '').trim()
+  const arr = Array.isArray(def.friendLinks) ? def.friendLinks : []
+  ;(frontendConfig as any).friendLinks = arr.map((x: any) => ({
+    title: String(x?.title || '').trim(),
+    link: String(x?.link || '').trim(),
+    icon: String(x?.icon || '').trim(),
+    description: String(x?.description || '').trim(),
+  }))
 }
 
 const toggleMusic = async (enabled: boolean) => {
@@ -4051,7 +4385,7 @@ const musicEmbedMode = computed({
 
 const musicCdnPreset = ref('hypcvgm')
 const applyMusicCdnAssets = () => {}
-watch(musicCdnPreset, (v) => {
+watch(musicCdnPreset, (v: string) => {
   if (v === 'hypcvgm') {
     ;(frontendConfig as any).musicCssCdnURL = 'https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.css'
     ;(frontendConfig as any).musicJsCdnURL = 'https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.js'
@@ -4242,7 +4576,7 @@ const onDropFiles = (e: DragEvent) => {
 }
 
 // 监听器
-watch(() => userStore.isLogin, (newVal) => {
+watch(() => userStore.isLogin, (newVal: boolean) => {
     if (!newVal) {
         userStore.clearUserStatus()
     }
@@ -4277,7 +4611,7 @@ onMounted(async () => {
                 userToken.value = data.data.token;
             }
         }
-    } catch (error) {
+    } catch (error: any) {
         console.error('初始化失败:', error);
         useToast().add({
             title: '系统提示',
@@ -4315,7 +4649,7 @@ const downloadBackup = async () => {
         a.click()
         window.URL.revokeObjectURL(url)
         document.body.removeChild(a)
-    } catch (error) {
+    } catch (error: any) {
         useToast().add({
             title: '错误',
             description: error.message || '备份下载失败',
@@ -4357,7 +4691,7 @@ const handleDatabaseUpload = async (event: Event) => {
         } else {
             throw new Error(data.msg)
         }
-    } catch (error) {
+    } catch (error: any) {
         useToast().add({
             title: '错误',
             description: error.message || '数据库恢复失败',
@@ -4440,7 +4774,7 @@ onMounted(() => {
   if (storageEnabled.value && storageAutoSyncEnabled.value && storageConfig.syncRole !== 'secondary') startCloudPolling()
 })
 onUnmounted(() => { stopCloudPolling() })
-watch([storageEnabled, storageAutoSyncEnabled, () => storageConfig.syncRole], ([enabled, auto, role]) => {
+watch([storageEnabled, storageAutoSyncEnabled, () => storageConfig.syncRole], ([enabled, auto, role]: [boolean, boolean, string]) => {
   if (enabled && auto && role !== 'secondary') startCloudPolling()
   else stopCloudPolling()
 })
@@ -4463,7 +4797,7 @@ const saveStorageConfig = async () => {
     const res = await fetch('/api/settings', { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     const data = await res.json()
     if (data?.code === 1) {
-      useToast().add({ title: '已保存云存储配置', color: 'green' })
+      useToast().add({ title: '已保存数据库存储配置', color: 'green' })
     } else {
       throw new Error(data?.msg || '保存失败')
     }
@@ -4487,12 +4821,91 @@ const syncNow = async () => {
   }
 }
 
-watch(() => storageConfig.provider, (pv) => {
+watch(() => storageConfig.provider, (pv: string) => {
   if (pv === 'r2') {
     storageConfig.usePathStyle = true
     storageConfig.region = 'auto'
   } else if (pv === 's3') {
     if (storageConfig.usePathStyle === undefined) storageConfig.usePathStyle = false
+  }
+})
+const attachmentStorageEnabled = ref(false)
+const attachmentStorageConfig = reactive({
+  provider: '',
+  endpoint: '',
+  region: '',
+  bucket: '',
+  accessKey: '',
+  secretKey: '',
+  usePathStyle: true,
+  publicBaseURL: '',
+  enableCompression: false,
+  ffmpegInstalled: false
+})
+const toggleCompression = (val: boolean) => {
+  if (val && !attachmentStorageConfig.ffmpegInstalled) {
+    useToast().add({ title: '无法开启', description: '未检测到 FFmpeg，无法开启压缩功能', color: 'red' })
+    return
+  }
+  attachmentStorageConfig.enableCompression = val
+  saveAttachmentStorageConfig()
+}
+const loadAttachmentStorageConfig = async () => {
+  try {
+    const res = await fetch(`/api/frontend/config?t=${new Date().getTime()}`, {
+      credentials: 'include',
+      headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+    })
+    const data = await res.json()
+    if (data?.code === 1) {
+      attachmentStorageEnabled.value = !!data.data.attachmentStorageEnabled
+      const sc = data.data.attachmentStorageConfig || {}
+      attachmentStorageConfig.provider = sc.provider || ''
+      attachmentStorageConfig.endpoint = sc.endpoint || ''
+      attachmentStorageConfig.region = sc.region || ''
+      attachmentStorageConfig.bucket = sc.bucket || ''
+      attachmentStorageConfig.accessKey = sc.accessKey || ''
+      attachmentStorageConfig.secretKey = sc.secretKey || ''
+      attachmentStorageConfig.usePathStyle = !!sc.usePathStyle
+      attachmentStorageConfig.publicBaseURL = sc.publicBaseURL || ''
+      attachmentStorageConfig.enableCompression = !!sc.enableCompression
+      attachmentStorageConfig.ffmpegInstalled = !!sc.ffmpegInstalled
+    }
+  } catch {}
+}
+const saveAttachmentStorageConfig = async () => {
+  try {
+    if (attachmentStorageConfig.enableCompression && !attachmentStorageConfig.ffmpegInstalled) {
+      throw new Error('未检测到 FFmpeg，无法开启压缩功能')
+    }
+    const ep = (attachmentStorageConfig.endpoint || '').trim()
+    let normalized = ep
+    try {
+      const u = new URL(ep)
+      normalized = `${u.protocol}//${u.host}`.replace(/\/$/, '')
+    } catch {}
+    const scPayload: any = { ...attachmentStorageConfig, endpoint: normalized }
+    const payload: any = {
+      attachmentStorageEnabled: attachmentStorageEnabled.value,
+      attachmentStorageConfig: scPayload
+    }
+    const res = await fetch('/api/settings', { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    const data = await res.json()
+    if (data?.code === 1) {
+      useToast().add({ title: '已保存附件存储配置', description: attachmentStorageConfig.enableCompression ? '附件压缩已开启' : '附件压缩已关闭', color: 'green' })
+    } else {
+      throw new Error(data?.msg || '保存失败')
+    }
+  } catch (e: any) {
+    useToast().add({ title: '保存失败', description: e.message, color: 'red' })
+  }
+}
+watch(() => attachmentStorageConfig.provider, (pv: string) => {
+  if (pv === 'r2') {
+    attachmentStorageConfig.usePathStyle = true
+    attachmentStorageConfig.region = 'auto'
+  } else if (pv === 's3') {
+    if (attachmentStorageConfig.usePathStyle === undefined) attachmentStorageConfig.usePathStyle = false
   }
 })
 // 已移除自动保存定时器

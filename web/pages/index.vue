@@ -53,8 +53,8 @@
             </div>
           </div>
         </UCard>
-        <UCard class="sidebar-card no-padding-card mt-2" :class="sidebarThemeCard">
-          <div class="social-list" v-if="frontendConfig.socialLinksEnabled && (frontendConfig.socialLinks || []).length > 0">
+        <UCard v-if="frontendConfig.socialLinksEnabled === true && (frontendConfig.socialLinks || []).length > 0" class="sidebar-card no-padding-card mt-2" :class="sidebarThemeCard">
+          <div class="social-list" v-if="frontendConfig.socialLinksEnabled === true">
             <a v-for="item in (frontendConfig.socialLinks || [])" :key="item.url || item.name" class="social-item" :href="item.url" target="_blank" rel="noopener noreferrer" :data-label="item.name || item.url">
               <template v-if="item.imageURL">
                 <img :src="item.imageURL" alt="icon" class="social-icon-img" />
@@ -67,8 +67,8 @@
         </UCard>
         <UCard v-if="frontendConfig.timeEnabled" class="sidebar-card no-padding-card mt-2" :class="sidebarThemeCard">
           <div class="p-0 text-center clock-card">
-            <div class="clock-display">{{ formatTime(currentTime as any) }}</div>
-            <div class="clock-date">{{ formatDate(currentTime as any) }}</div>
+            <div class="clock-display">{{ formatTime(currentTime) }}</div>
+            <div class="clock-date">{{ formatDate(currentTime) }}</div>
           </div>
         </UCard>
         
@@ -159,7 +159,7 @@
             <UCard class="search-card mb-3" :ui="{ body: 'p-3 md:p-4' }">
               <div class="card-title text-center text-black dark:text-white">{{ frontendConfig.linksTitle || '友情链接' }}</div>
               <div v-if="(frontendConfig.linksDescription || '').trim() !== ''" class="section-subtitle">{{ frontendConfig.linksDescription }}</div>
-              <div v-if="friendLinksList.length > 0" class="mx-auto w-full max-w-3xl px-4 sm:px-6 mt-3 mb-3">
+              <div v-if="friendLinksList.length > 0" class="mx-auto w-full max-w-6xl px-4 sm:px-6 mt-3 mb-3">
                 <div class="link-grid">
                   <a v-for="fl in friendLinksList" :key="fl.link || fl.title" :href="fl.link" target="_blank" rel="noopener noreferrer" class="link-card" :class="isDark ? 'link-card-dark' : 'link-card-light'">
                     <div :class="['link-avatar', isDark ? 'link-avatar-dark' : 'link-avatar-light']">
@@ -172,7 +172,7 @@
                     </div>
                     <div class="link-content">
                       <div class="link-title">{{ fl.title }}</div>
-                      <div v-if="fl.description" class="text-xs opacity-75">{{ fl.description }}</div>
+                      <div v-if="fl.description" class="link-desc text-xs opacity-75">{{ fl.description }}</div>
                     </div>
                   </a>
                 </div>
@@ -217,7 +217,7 @@
           </div>
           <template v-else>
             <AddForm @search-result="handleSearchResult" :hide-header-tools="layoutState==='three'" :wide="layoutState==='two'" />
-            <div class="mx-auto w-full sm:max-w-4xl mt-3">
+            <div :class="layoutState==='two' ? 'w-full max-w-none mt-3' : 'mx-auto w-full sm:max-w-4xl mt-3'">
               <TagList 
                 v-if="tags && tags.length > 0"
                 :tags="tags"
@@ -510,12 +510,13 @@ const showSearchModal = ref(false)
 const showAuthModal = ref(false)
 const authMode = ref<'login'|'register'>('login')
 const loginForm = reactive({ username: '', password: '' })
-const registerForm = reactive({ username: '', password: '', captcha: '' })
+const registerForm = reactive({ username: '', password: '', captcha: '', captcha_id: '' })
 const showLoginPassword = ref(false)
 const showRegisterPassword = ref(false)
 const loginSubmitting = ref(false)
 const registerSubmitting = ref(false)
 const captchaSrc = ref('')
+const captchaId = ref('')
 const remaining = ref(0)
 let captchaExpiresAt: number | null = null
 let captchaTimer: any = null
@@ -527,9 +528,16 @@ const smtpEnabled = ref(true)
 const githubEnabled = ref(false)
 const refreshCaptcha = async () => {
   try {
-    captchaSrc.value = `${baseApi}/captcha?ts=${Date.now()}`
-    captchaExpiresAt = Date.now() + 120000
-    remaining.value = 120
+    const res = await fetch(`${baseApi}/captcha?json=1&ts=${Date.now()}`, { credentials: 'include' })
+    const data = await res.json().catch(() => ({}))
+    const svg = String(data?.data?.svg || '')
+    const id = String(data?.data?.captcha_id || '')
+    if (!svg || !id || data?.code !== 1) throw new Error(data?.msg || '获取验证码失败')
+    captchaId.value = id
+    registerForm.captcha_id = id
+    captchaSrc.value = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+    captchaExpiresAt = Date.now() + (Number(data?.data?.expires_in || 120) * 1000)
+    remaining.value = Math.max(1, Number(data?.data?.expires_in || 120))
     if (captchaTimer) clearInterval(captchaTimer)
     captchaTimer = setInterval(() => {
       const r = Math.max(0, Math.ceil(((captchaExpiresAt || Date.now()) - Date.now()) / 1000))
@@ -579,7 +587,8 @@ const onRegisterSubmit = async () => {
       throw new Error('请完整填写用户名、密码与验证码')
     }
     if ((captchaExpiresAt || 0) < Date.now()) { throw new Error('验证码已过期，请刷新后再提交') }
-    const res = await fetch(`${baseApi}/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(registerForm) })
+    const payload = { username: registerForm.username, password: registerForm.password, captcha: registerForm.captcha, captcha_id: registerForm.captcha_id || captchaId.value }
+    const res = await fetch(`${baseApi}/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload) })
     const data = await res.json().catch(() => ({}))
     if (!res.ok || data.code !== 1) throw new Error(data?.msg || '注册失败')
     useToast().add({ title: '注册成功', color: 'green' })
@@ -1284,7 +1293,11 @@ const headerImageStyle = computed(() => ({
     timeEnabled: true,
     // 左栏广告（完全后端驱动，无前端默认）
     leftAdEnabled: true,
-    leftAds: [],
+    leftAds: [
+      { imageURL: `https://picsum.photos/seed/${Math.random().toString(36).slice(2)}/640/640`, linkURL: 'https://note.noisework.cn', description: '写作与记录，开启灵感之旅' },
+      { imageURL: `https://picsum.photos/seed/${Math.random().toString(36).slice(2)}/640/640`, linkURL: 'https://noisework.cn', description: '探索新主题与小工具' },
+      { imageURL: `https://picsum.photos/seed/${Math.random().toString(36).slice(2)}/640/640`, linkURL: 'https://github.com', description: '开源项目，欢迎 Star' }
+    ],
     leftAdsIntervalMs: 4000
   };
 
@@ -1312,14 +1325,14 @@ const fetchConfig = async () => {
                         } else {
                             frontendConfig.value.friendLinks = [...defaultConfig.friendLinks]
                         }
-                    } else if (booleanKeys.includes(key)) {
-                        const v = settings[key]
-                        frontendConfig.value[key] = (v === true || v === 'true')
-                    } else {
-                        const v = settings[key]
-                        frontendConfig.value[key] = typeof v === 'string' ? v.trim() : v
-                    }
-                }
+                            } else if (booleanKeys.includes(key)) {
+                                const v = settings[key]
+                                frontendConfig.value[key] = (v === true || v === 'true' || v === 1 || v === '1')
+                            } else {
+                                const v = settings[key]
+                                frontendConfig.value[key] = typeof v === 'string' ? v.trim() : v
+                            }
+                        }
             })
             githubEnabled.value = !!settings.githubOAuthEnabled
             const defaultTheme = (settings.defaultContentTheme || 'light').trim()
@@ -1633,11 +1646,26 @@ const imageSrc = (img: any) => {
   return url?.startsWith('http') ? url : `${base}${url}`
 }
 
-const leftAds = computed(() => (
-  Array.isArray((frontendConfig.value as any).leftAds)
-    ? (frontendConfig.value as any).leftAds.filter((ad: any) => String(ad?.imageURL || '').trim() !== '')
-    : []
-))
+const leftAds = computed(() => {
+  const arr = Array.isArray((frontendConfig.value as any).leftAds) ? (frontendConfig.value as any).leftAds : []
+  const cleaned = arr
+    .map((ad: any) => ({
+      imageURL: String(ad?.imageURL || '').trim(),
+      linkURL: String(ad?.linkURL || '').trim(),
+      description: String(ad?.description || '').trim(),
+    }))
+    .filter((ad: any) => ad.imageURL !== '')
+
+  if (cleaned.length > 0) return cleaned
+
+  const singleImageURL = String((frontendConfig.value as any).leftAdImageURL || '').trim()
+  if (!singleImageURL) return []
+  return [{
+    imageURL: singleImageURL,
+    linkURL: String((frontendConfig.value as any).leftAdLinkURL || '').trim(),
+    description: String((frontendConfig.value as any).leftAdDescription || '').trim(),
+  }]
+})
 const imgSrc = (raw: string) => {
   const base = useRuntimeConfig().public.baseApi || '/api'
   const s = String(raw || '').trim()
@@ -2615,9 +2643,13 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
 .section-subtitle { text-align: center; font-size: 13px; opacity: 0.75; margin-top: -6px; margin-bottom: 12px; }
 .section-title-light { color: #111827; }
 .section-title-dark { color: #fff; }
-.link-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; justify-items: center; }
-.link-card { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 8px; text-decoration: none; transition: background-color .16s ease, border-color .16s ease, transform .12s ease; }
-.link-card { width: 100%; max-width: 220px; }
+.link-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (min-width: 768px) {
+  .link-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+.link-grid { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.link-card { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px; text-decoration: none; transition: background-color .16s ease, border-color .16s ease, transform .12s ease; }
+.link-card { width: 100%; }
 .link-card-light { 
   background: #fff !important; 
   color: #111827 !important; 
@@ -2627,12 +2659,13 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
 .link-card-dark { background: rgba(36,43,50,0.85); color: #fff; border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 1px 2px rgba(255,255,255,0.06); }
 .link-card:hover { background-color: rgba(0,0,0,0.02); transform: translateY(-1px); }
 .link-card-dark:hover { background-color: rgba(255,255,255,0.08); }
-.link-avatar { width: 36px; height: 36px; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; }
+.link-avatar { width: 32px; height: 32px; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; }
 .link-avatar-light { background: #eef2ff; color: #4f46e5; border: 1px solid rgba(0,0,0,0.06); }
 .link-avatar-dark { background: rgba(255,255,255,0.12); color: #c7d2fe; border: 1px solid rgba(255,255,255,0.16); }
 .link-avatar-img { width: 100%; height: 100%; object-fit: cover; border-radius: 9999px; display: block; }
 .link-content { flex: 1; min-width: 0; }
 .link-title { font-weight: 600; font-size: 13px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.link-desc { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* 确保白天模式下链接卡片文本颜色是黑色的 */
 :global(html:not(.dark)) .link-title {

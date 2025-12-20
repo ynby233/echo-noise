@@ -1,27 +1,29 @@
 package models
 
 import (
-    "bytes"
-    "crypto/hmac"
-    "crypto/sha256"
-    "crypto/tls"
-    "encoding/base64"
-    "encoding/json"
-    "errors"
-    "fmt"
-    "html"
-    "io"
-    "log"
-    "mime/multipart"
-    "net/http"
-    "net/smtp"
-    "regexp"
-    "strings"
-    "time"
+	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"crypto/tls"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"html"
+	"io"
+	"log"
+	"mime/multipart"
+	"net/http"
+	"net/smtp"
+	"regexp"
+	"strings"
+	"time"
 
-    "github.com/dghubble/oauth1"
-    "gorm.io/gorm"
+	"github.com/dghubble/oauth1"
+	"gorm.io/gorm"
 )
+
+var notifyHTTPClient = &http.Client{Timeout: 20 * time.Second}
 
 type NotifyConfig struct {
 	gorm.Model
@@ -69,69 +71,9 @@ func SaveNotifyConfig(config NotifyConfig) error {
 	result := db.First(&existingConfig)
 	if result.Error != nil {
 		if result.Error == gorm.ErrRecordNotFound {
-			// 创建新配置时，如果配置了对应渠道，则自动启用
-			if config.WebhookURL != "" {
-				config.WebhookEnabled = true
-			}
-			if config.TelegramToken != "" && config.TelegramChatID != "" {
-				config.TelegramEnabled = true
-			}
-			if config.WeworkKey != "" {
-				config.WeworkEnabled = true
-			}
-			if config.FeishuWebhook != "" {
-				config.FeishuEnabled = true
-			}
-			// 新增：自动启用 Twitter
-			if config.TwitterApiKey != "" && config.TwitterApiSecret != "" &&
-				config.TwitterAccessToken != "" && config.TwitterAccessTokenSecret != "" {
-				config.TwitterEnabled = true
-			}
-			// 新增：自动启用自定义HTTP
-			if config.CustomHttpUrl != "" {
-				config.CustomHttpEnabled = true
-			}
 			return db.Create(&config).Error
 		}
 		return result.Error
-	}
-
-	// 更新现有配置时，如果配置了对应渠道，则自动启用
-	if config.WebhookURL != "" {
-		config.WebhookEnabled = true
-	}
-	if config.TelegramToken != "" && config.TelegramChatID != "" {
-		config.TelegramEnabled = true
-	}
-	if config.WeworkKey != "" {
-		config.WeworkEnabled = true
-	}
-	if config.FeishuWebhook != "" {
-		config.FeishuEnabled = true
-	}
-	// 新增：自动启用 Twitter
-	// 修改自动启用逻辑
-	if config.TwitterApiKey != "" && config.TwitterApiSecret != "" &&
-		config.TwitterAccessToken != "" && config.TwitterAccessTokenSecret != "" {
-		config.TwitterEnabled = true
-	} else {
-		// 明确设置为false
-		config.TwitterEnabled = false
-		config.TwitterApiKey = ""
-		config.TwitterApiSecret = ""
-		config.TwitterAccessToken = ""
-		config.TwitterAccessTokenSecret = ""
-	}
-
-	if config.CustomHttpUrl != "" {
-		config.CustomHttpEnabled = true
-	} else {
-		// 明确设置为false
-		config.CustomHttpEnabled = false
-		config.CustomHttpUrl = ""
-		config.CustomHttpMethod = "POST"
-		config.CustomHttpHeaders = ""
-		config.CustomHttpBody = ""
 	}
 
 	// 更新所有字段
@@ -215,20 +157,20 @@ func SendWebhook(message string) error {
 	}
 	jsonData, _ := json.Marshal(payload)
 
-	resp, err := http.Post(config.WebhookURL, "application/json", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest(http.MethodPost, config.WebhookURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("webhook请求创建失败: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := notifyHTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("webhook请求错误: %v", err)
 	}
 	defer resp.Body.Close()
 
-	// 读取响应内容
-	var response map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return fmt.Errorf("webhook响应解析失败: %v", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("webhook请求失败: %d, %v", resp.StatusCode, response)
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("webhook请求失败: %d, %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	return nil
@@ -263,7 +205,12 @@ func SendTelegram(content string, images []string) error {
 	}
 
 	jsonData, _ := json.Marshal(payload)
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("telegram请求创建失败: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := notifyHTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("telegram请求错误: %v", err)
 	}
@@ -273,8 +220,8 @@ func SendTelegram(content string, images []string) error {
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		return fmt.Errorf("telegram响应解析失败: %v", err)
 	}
-
-	if !response["ok"].(bool) {
+	ok, _ := response["ok"].(bool)
+	if !ok {
 		return fmt.Errorf("telegram发送失败: %v", response["description"])
 	}
 
@@ -309,7 +256,12 @@ func SendWework(content string, images []string) error {
 	}
 
 	jsonData, _ := json.Marshal(payload)
-	resp, err := http.Post(config.WeworkKey, "application/json", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest(http.MethodPost, config.WeworkKey, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("企业微信请求创建失败: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := notifyHTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("企业微信请求错误: %v", err)
 	}
@@ -319,8 +271,8 @@ func SendWework(content string, images []string) error {
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		return fmt.Errorf("企业微信响应解析失败: %v", err)
 	}
-
-	if response["errcode"].(float64) != 0 {
+	errCode, _ := response["errcode"].(float64)
+	if errCode != 0 {
 		return fmt.Errorf("企业微信发送失败: %v", response["errmsg"])
 	}
 
@@ -351,7 +303,6 @@ func SendFeishu(message string) error {
 	}
 
 	jsonData, _ := json.Marshal(payload)
-	client := &http.Client{}
 	req, err := http.NewRequest("POST", config.FeishuWebhook, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("飞书请求创建失败: %v", err)
@@ -366,7 +317,7 @@ func SendFeishu(message string) error {
 		req.Header.Set("X-Lark-Request-Timestamp", fmt.Sprintf("%d", timestamp))
 	}
 
-	resp, err := client.Do(req)
+	resp, err := notifyHTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("飞书请求错误: %v", err)
 	}
@@ -524,7 +475,12 @@ func SendTelegramWithFormat(content string, images []string, parseHTML bool) err
 		return err
 	}
 
-	resp, err := http.Post(apiUrl, "application/json", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest(http.MethodPost, apiUrl, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := notifyHTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -547,7 +503,12 @@ func SendTelegramWithFormat(content string, images []string, parseHTML bool) err
 			return err
 		}
 
-		resp, err = http.Post(photoUrl, "application/json", bytes.NewBuffer(jsonData))
+		req2, err2 := http.NewRequest(http.MethodPost, photoUrl, bytes.NewBuffer(jsonData))
+		if err2 != nil {
+			return err2
+		}
+		req2.Header.Set("Content-Type", "application/json")
+		resp, err = notifyHTTPClient.Do(req2)
 		if err != nil {
 			return err
 		}
@@ -601,7 +562,11 @@ func SendTelegramPhotoWithCaption(photoURL string, caption string) error {
 		// 尝试下载图片
 		var imgResp *http.Response
 		if strings.HasPrefix(photoURL, "http") {
-			imgResp, err = http.Get(photoURL)
+			imgReq, err2 := http.NewRequest(http.MethodGet, photoURL, nil)
+			if err2 != nil {
+				return fmt.Errorf("创建下载图片请求失败: %v", err2)
+			}
+			imgResp, err = notifyHTTPClient.Do(imgReq)
 		} else {
 			// 如果是相对路径，尝试从本地文件系统读取
 			return fmt.Errorf("无法处理相对路径图片: %s", photoURL)
@@ -637,8 +602,7 @@ func SendTelegramPhotoWithCaption(photoURL string, caption string) error {
 		}
 		req.Header.Set("Content-Type", writer.FormDataContentType())
 
-		client := &http.Client{}
-		resp, err = client.Do(req)
+		resp, err = notifyHTTPClient.Do(req)
 	} else {
 		// 对于公网可访问的URL，直接使用URL
 		// 构建请求体
@@ -655,7 +619,12 @@ func SendTelegramPhotoWithCaption(photoURL string, caption string) error {
 		}
 
 		// 发送请求
-		resp, err = http.Post(apiURL, "application/json", bytes.NewBuffer(jsonData))
+		req, err := http.NewRequest(http.MethodPost, apiURL, bytes.NewBuffer(jsonData))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, err = notifyHTTPClient.Do(req)
 	}
 
 	if err != nil {
@@ -707,8 +676,12 @@ func SendTelegramVideoWithCaption(videoURL string, caption string) error {
 		if err != nil {
 			return err
 		}
-
-		resp, err := http.Post(messageURL, "application/json", bytes.NewBuffer(jsonData))
+		req, err := http.NewRequest(http.MethodPost, messageURL, bytes.NewBuffer(jsonData))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := notifyHTTPClient.Do(req)
 		if err != nil {
 			return err
 		}
@@ -738,7 +711,12 @@ func SendTelegramVideoWithCaption(videoURL string, caption string) error {
 	}
 
 	// 发送请求
-	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest(http.MethodPost, apiURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := notifyHTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -818,6 +796,7 @@ func sendTwitterV1(message string) error {
 	oauthConfig := oauth1.NewConfig(config.TwitterApiKey, config.TwitterApiSecret)
 	token := oauth1.NewToken(config.TwitterAccessToken, config.TwitterAccessTokenSecret)
 	httpClient := oauth1.NewClient(oauth1.NoContext, oauthConfig, token)
+	httpClient.Timeout = 20 * time.Second
 
 	apiUrl := "https://api.twitter.com/1.1/statuses/update.json"
 	params := map[string]string{"status": message}
@@ -855,6 +834,7 @@ func sendTwitterV2(message string) error {
 	oauthConfig := oauth1.NewConfig(config.TwitterApiKey, config.TwitterApiSecret)
 	token := oauth1.NewToken(config.TwitterAccessToken, config.TwitterAccessTokenSecret)
 	httpClient := oauth1.NewClient(oauth1.NoContext, oauthConfig, token)
+	httpClient.Timeout = 20 * time.Second
 
 	apiUrl := "https://api.twitter.com/2/tweets"
 	payload := map[string]interface{}{
@@ -913,313 +893,470 @@ func SendCustomHttp(message string) error {
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := notifyHTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("自定义HTTP发送失败: %v", resp.Status)
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("自定义HTTP发送失败: %v, %s", resp.Status, string(body))
 	}
 	return nil
 }
 
 func UpdateNotifyConfig(db *gorm.DB, config *NotifyConfig) error {
-    // 只存在一条记录，无需主键ID
-    return db.Model(&NotifyConfig{}).Updates(config).Error
+	// 只存在一条记录，无需主键ID
+	return db.Model(&NotifyConfig{}).Updates(config).Error
 }
 
 func SendEmail(to string, subject string, body string) error {
-    db := GetDB()
-    var cfg SiteConfig
-    if err := db.Table("site_configs").First(&cfg).Error; err != nil {
-        return err
-    }
-    if !cfg.SmtpEnabled {
-        return fmt.Errorf("邮件未启用")
-    }
-    host := strings.TrimSpace(cfg.SmtpHost)
-    port := cfg.SmtpPort
-    user := strings.TrimSpace(cfg.SmtpUser)
-    pass := cfg.SmtpPass
-    from := strings.TrimSpace(cfg.SmtpFrom)
-    enc := strings.ToLower(strings.TrimSpace(cfg.SmtpEncryption))
-    if from == "" {
-        from = user
-    }
-    addr := fmt.Sprintf("%s:%d", host, port)
-    headers := make(map[string]string)
-    headers["From"] = from
-    headers["To"] = to
-    headers["Subject"] = subject
-    headers["MIME-Version"] = "1.0"
-    headers["Content-Type"] = "text/plain; charset=utf-8"
-    var msg strings.Builder
-    for k, v := range headers {
-        msg.WriteString(k)
-        msg.WriteString(": ")
-        msg.WriteString(v)
-        msg.WriteString("\r\n")
-    }
-    msg.WriteString("\r\n")
-    msg.WriteString(body)
-    auth := smtp.PlainAuth("", user, pass, host)
-    if enc == "ssl" {
-        tlsConfig := &tls.Config{ServerName: host}
-        conn, err := tls.Dial("tcp", addr, tlsConfig)
-        if err != nil {
-            return err
-        }
-        c, err := smtp.NewClient(conn, host)
-        if err != nil {
-            return err
-        }
-        if err := c.Auth(auth); err != nil {
-            c.Close()
-            return err
-        }
-        if err := c.Mail(from); err != nil {
-            c.Close()
-            return err
-        }
-        if err := c.Rcpt(to); err != nil {
-            c.Close()
-            return err
-        }
-        wc, err := c.Data()
-        if err != nil {
-            c.Close()
-            return err
-        }
-        if _, err := wc.Write([]byte(msg.String())); err != nil {
-            wc.Close()
-            c.Close()
-            return err
-        }
-        wc.Close()
-        c.Quit()
-        return nil
-    }
-    c, err := smtp.Dial(addr)
-    if err != nil {
-        return err
-    }
-    if enc == "tls" || cfg.SmtpTLS {
-        tlsConfig := &tls.Config{ServerName: host}
-        if err := c.StartTLS(tlsConfig); err != nil {
-            c.Close()
-            return err
-        }
-    }
-    if err := c.Auth(auth); err != nil {
-        c.Close()
-        return err
-    }
-    if err := c.Mail(from); err != nil {
-        c.Close()
-        return err
-    }
-    if err := c.Rcpt(to); err != nil {
-        c.Close()
-        return err
-    }
-    wc, err := c.Data()
-    if err != nil {
-        c.Close()
-        return err
-    }
-    if _, err := wc.Write([]byte(msg.String())); err != nil {
-        wc.Close()
-        c.Close()
-        return err
-    }
-    wc.Close()
-    c.Quit()
-    return nil
+	db := GetDB()
+	var cfg SiteConfig
+	if err := db.Table("site_configs").First(&cfg).Error; err != nil {
+		return err
+	}
+	if !cfg.SmtpEnabled {
+		return fmt.Errorf("邮件未启用")
+	}
+	host := strings.TrimSpace(cfg.SmtpHost)
+	port := cfg.SmtpPort
+	user := strings.TrimSpace(cfg.SmtpUser)
+	pass := cfg.SmtpPass
+	from := strings.TrimSpace(cfg.SmtpFrom)
+	enc := strings.ToLower(strings.TrimSpace(cfg.SmtpEncryption))
+	if from == "" {
+		from = user
+	}
+	addr := fmt.Sprintf("%s:%d", host, port)
+	headers := make(map[string]string)
+	headers["From"] = from
+	headers["To"] = to
+	headers["Subject"] = subject
+	headers["MIME-Version"] = "1.0"
+	headers["Content-Type"] = "text/plain; charset=utf-8"
+	var msg strings.Builder
+	for k, v := range headers {
+		msg.WriteString(k)
+		msg.WriteString(": ")
+		msg.WriteString(v)
+		msg.WriteString("\r\n")
+	}
+	msg.WriteString("\r\n")
+	msg.WriteString(body)
+	auth := smtp.PlainAuth("", user, pass, host)
+	if enc == "ssl" {
+		tlsConfig := &tls.Config{ServerName: host}
+		conn, err := tls.Dial("tcp", addr, tlsConfig)
+		if err != nil {
+			return err
+		}
+		c, err := smtp.NewClient(conn, host)
+		if err != nil {
+			return err
+		}
+		if err := c.Auth(auth); err != nil {
+			c.Close()
+			return err
+		}
+		if err := c.Mail(from); err != nil {
+			c.Close()
+			return err
+		}
+		if err := c.Rcpt(to); err != nil {
+			c.Close()
+			return err
+		}
+		wc, err := c.Data()
+		if err != nil {
+			c.Close()
+			return err
+		}
+		if _, err := wc.Write([]byte(msg.String())); err != nil {
+			wc.Close()
+			c.Close()
+			return err
+		}
+		wc.Close()
+		c.Quit()
+		return nil
+	}
+	c, err := smtp.Dial(addr)
+	if err != nil {
+		return err
+	}
+	if enc == "tls" || cfg.SmtpTLS {
+		tlsConfig := &tls.Config{ServerName: host}
+		if err := c.StartTLS(tlsConfig); err != nil {
+			c.Close()
+			return err
+		}
+	}
+	if err := c.Auth(auth); err != nil {
+		c.Close()
+		return err
+	}
+	if err := c.Mail(from); err != nil {
+		c.Close()
+		return err
+	}
+	if err := c.Rcpt(to); err != nil {
+		c.Close()
+		return err
+	}
+	wc, err := c.Data()
+	if err != nil {
+		c.Close()
+		return err
+	}
+	if _, err := wc.Write([]byte(msg.String())); err != nil {
+		wc.Close()
+		c.Close()
+		return err
+	}
+	wc.Close()
+	c.Quit()
+	return nil
 }
 
 func SendEmailWithFrom(to string, subject string, body string, fromName string) error {
-    db := GetDB()
-    var cfg SiteConfig
-    if err := db.Table("site_configs").First(&cfg).Error; err != nil {
-        return err
-    }
-    if !cfg.SmtpEnabled {
-        return fmt.Errorf("邮件未启用")
-    }
-    host := strings.TrimSpace(cfg.SmtpHost)
-    port := cfg.SmtpPort
-    user := strings.TrimSpace(cfg.SmtpUser)
-    pass := cfg.SmtpPass
-    from := strings.TrimSpace(cfg.SmtpFrom)
-    enc := strings.ToLower(strings.TrimSpace(cfg.SmtpEncryption))
-    if from == "" { from = user }
-    addr := fmt.Sprintf("%s:%d", host, port)
-    headers := make(map[string]string)
-    if strings.TrimSpace(fromName) != "" {
-        headers["From"] = fmt.Sprintf("%s <%s>", fromName, from)
-    } else {
-        headers["From"] = from
-    }
-    headers["To"] = to
-    headers["Subject"] = subject
-    headers["MIME-Version"] = "1.0"
-    headers["Content-Type"] = "text/plain; charset=utf-8"
-    var msg strings.Builder
-    for k, v := range headers {
-        msg.WriteString(k)
-        msg.WriteString(": ")
-        msg.WriteString(v)
-        msg.WriteString("\r\n")
-    }
-    msg.WriteString("\r\n")
-    msg.WriteString(body)
-    auth := smtp.PlainAuth("", user, pass, host)
-    if enc == "ssl" {
-        tlsConfig := &tls.Config{ServerName: host}
-        conn, err := tls.Dial("tcp", addr, tlsConfig)
-        if err != nil { return err }
-        c, err := smtp.NewClient(conn, host)
-        if err != nil { return err }
-        if err := c.Auth(auth); err != nil { c.Close(); return err }
-        if err := c.Mail(from); err != nil { c.Close(); return err }
-        if err := c.Rcpt(to); err != nil { c.Close(); return err }
-        wc, err := c.Data(); if err != nil { c.Close(); return err }
-        if _, err := wc.Write([]byte(msg.String())); err != nil { wc.Close(); c.Close(); return err }
-        wc.Close(); c.Quit(); return nil
-    }
-    c, err := smtp.Dial(addr); if err != nil { return err }
-    if enc == "tls" || cfg.SmtpTLS { tlsConfig := &tls.Config{ServerName: host}; if err := c.StartTLS(tlsConfig); err != nil { c.Close(); return err } }
-    if err := c.Auth(auth); err != nil { c.Close(); return err }
-    if err := c.Mail(from); err != nil { c.Close(); return err }
-    if err := c.Rcpt(to); err != nil { c.Close(); return err }
-    wc, err := c.Data(); if err != nil { c.Close(); return err }
-    if _, err := wc.Write([]byte(msg.String())); err != nil { wc.Close(); c.Close(); return err }
-    wc.Close(); c.Quit(); return nil
+	db := GetDB()
+	var cfg SiteConfig
+	if err := db.Table("site_configs").First(&cfg).Error; err != nil {
+		return err
+	}
+	if !cfg.SmtpEnabled {
+		return fmt.Errorf("邮件未启用")
+	}
+	host := strings.TrimSpace(cfg.SmtpHost)
+	port := cfg.SmtpPort
+	user := strings.TrimSpace(cfg.SmtpUser)
+	pass := cfg.SmtpPass
+	from := strings.TrimSpace(cfg.SmtpFrom)
+	enc := strings.ToLower(strings.TrimSpace(cfg.SmtpEncryption))
+	if from == "" {
+		from = user
+	}
+	addr := fmt.Sprintf("%s:%d", host, port)
+	headers := make(map[string]string)
+	if strings.TrimSpace(fromName) != "" {
+		headers["From"] = fmt.Sprintf("%s <%s>", fromName, from)
+	} else {
+		headers["From"] = from
+	}
+	headers["To"] = to
+	headers["Subject"] = subject
+	headers["MIME-Version"] = "1.0"
+	headers["Content-Type"] = "text/plain; charset=utf-8"
+	var msg strings.Builder
+	for k, v := range headers {
+		msg.WriteString(k)
+		msg.WriteString(": ")
+		msg.WriteString(v)
+		msg.WriteString("\r\n")
+	}
+	msg.WriteString("\r\n")
+	msg.WriteString(body)
+	auth := smtp.PlainAuth("", user, pass, host)
+	if enc == "ssl" {
+		tlsConfig := &tls.Config{ServerName: host}
+		conn, err := tls.Dial("tcp", addr, tlsConfig)
+		if err != nil {
+			return err
+		}
+		c, err := smtp.NewClient(conn, host)
+		if err != nil {
+			return err
+		}
+		if err := c.Auth(auth); err != nil {
+			c.Close()
+			return err
+		}
+		if err := c.Mail(from); err != nil {
+			c.Close()
+			return err
+		}
+		if err := c.Rcpt(to); err != nil {
+			c.Close()
+			return err
+		}
+		wc, err := c.Data()
+		if err != nil {
+			c.Close()
+			return err
+		}
+		if _, err := wc.Write([]byte(msg.String())); err != nil {
+			wc.Close()
+			c.Close()
+			return err
+		}
+		wc.Close()
+		c.Quit()
+		return nil
+	}
+	c, err := smtp.Dial(addr)
+	if err != nil {
+		return err
+	}
+	if enc == "tls" || cfg.SmtpTLS {
+		tlsConfig := &tls.Config{ServerName: host}
+		if err := c.StartTLS(tlsConfig); err != nil {
+			c.Close()
+			return err
+		}
+	}
+	if err := c.Auth(auth); err != nil {
+		c.Close()
+		return err
+	}
+	if err := c.Mail(from); err != nil {
+		c.Close()
+		return err
+	}
+	if err := c.Rcpt(to); err != nil {
+		c.Close()
+		return err
+	}
+	wc, err := c.Data()
+	if err != nil {
+		c.Close()
+		return err
+	}
+	if _, err := wc.Write([]byte(msg.String())); err != nil {
+		wc.Close()
+		c.Close()
+		return err
+	}
+	wc.Close()
+	c.Quit()
+	return nil
 }
 
 func SendTestEmail(to string) error {
-    subject := "Ech0-Noise 邮件发送测试"
-    body := "这是一封测试邮件，用于验证SMTP配置是否正确。"
-    return SendEmail(to, subject, body)
+	subject := "Ech0-Noise 邮件发送测试"
+	body := "这是一封测试邮件，用于验证SMTP配置是否正确。"
+	return SendEmail(to, subject, body)
 }
 func SendEmailHTML(to string, subject string, htmlBody string) error {
-    db := GetDB()
-    var cfg SiteConfig
-    if err := db.Table("site_configs").First(&cfg).Error; err != nil {
-        return err
-    }
-    if !cfg.SmtpEnabled {
-        return fmt.Errorf("邮件未启用")
-    }
-    host := strings.TrimSpace(cfg.SmtpHost)
-    port := cfg.SmtpPort
-    user := strings.TrimSpace(cfg.SmtpUser)
-    pass := cfg.SmtpPass
-    from := strings.TrimSpace(cfg.SmtpFrom)
-    enc := strings.ToLower(strings.TrimSpace(cfg.SmtpEncryption))
-    if from == "" {
-        from = user
-    }
-    addr := fmt.Sprintf("%s:%d", host, port)
-    headers := map[string]string{
-        "From":         from,
-        "To":           to,
-        "Subject":      subject,
-        "MIME-Version": "1.0",
-        "Content-Type": "text/html; charset=utf-8",
-    }
-    var msg strings.Builder
-    for k, v := range headers {
-        msg.WriteString(k)
-        msg.WriteString(": ")
-        msg.WriteString(v)
-        msg.WriteString("\r\n")
-    }
-    msg.WriteString("\r\n")
-    msg.WriteString(htmlBody)
-    auth := smtp.PlainAuth("", user, pass, host)
-    if enc == "ssl" {
-        tlsConfig := &tls.Config{ServerName: host}
-        conn, err := tls.Dial("tcp", addr, tlsConfig)
-        if err != nil { return err }
-        c, err := smtp.NewClient(conn, host)
-        if err != nil { return err }
-        if err := c.Auth(auth); err != nil { c.Close(); return err }
-        if err := c.Mail(from); err != nil { c.Close(); return err }
-        if err := c.Rcpt(to); err != nil { c.Close(); return err }
-        wc, err := c.Data(); if err != nil { c.Close(); return err }
-        if _, err := wc.Write([]byte(msg.String())); err != nil { wc.Close(); c.Close(); return err }
-        wc.Close(); c.Quit(); return nil
-    }
-    c, err := smtp.Dial(addr); if err != nil { return err }
-    if enc == "tls" || cfg.SmtpTLS { tlsConfig := &tls.Config{ServerName: host}; if err := c.StartTLS(tlsConfig); err != nil { c.Close(); return err } }
-    if err := c.Auth(auth); err != nil { c.Close(); return err }
-    if err := c.Mail(from); err != nil { c.Close(); return err }
-    if err := c.Rcpt(to); err != nil { c.Close(); return err }
-    wc, err := c.Data(); if err != nil { c.Close(); return err }
-    if _, err := wc.Write([]byte(msg.String())); err != nil { wc.Close(); c.Close(); return err }
-    wc.Close(); c.Quit(); return nil
+	db := GetDB()
+	var cfg SiteConfig
+	if err := db.Table("site_configs").First(&cfg).Error; err != nil {
+		return err
+	}
+	if !cfg.SmtpEnabled {
+		return fmt.Errorf("邮件未启用")
+	}
+	host := strings.TrimSpace(cfg.SmtpHost)
+	port := cfg.SmtpPort
+	user := strings.TrimSpace(cfg.SmtpUser)
+	pass := cfg.SmtpPass
+	from := strings.TrimSpace(cfg.SmtpFrom)
+	enc := strings.ToLower(strings.TrimSpace(cfg.SmtpEncryption))
+	if from == "" {
+		from = user
+	}
+	addr := fmt.Sprintf("%s:%d", host, port)
+	headers := map[string]string{
+		"From":         from,
+		"To":           to,
+		"Subject":      subject,
+		"MIME-Version": "1.0",
+		"Content-Type": "text/html; charset=utf-8",
+	}
+	var msg strings.Builder
+	for k, v := range headers {
+		msg.WriteString(k)
+		msg.WriteString(": ")
+		msg.WriteString(v)
+		msg.WriteString("\r\n")
+	}
+	msg.WriteString("\r\n")
+	msg.WriteString(htmlBody)
+	auth := smtp.PlainAuth("", user, pass, host)
+	if enc == "ssl" {
+		tlsConfig := &tls.Config{ServerName: host}
+		conn, err := tls.Dial("tcp", addr, tlsConfig)
+		if err != nil {
+			return err
+		}
+		c, err := smtp.NewClient(conn, host)
+		if err != nil {
+			return err
+		}
+		if err := c.Auth(auth); err != nil {
+			c.Close()
+			return err
+		}
+		if err := c.Mail(from); err != nil {
+			c.Close()
+			return err
+		}
+		if err := c.Rcpt(to); err != nil {
+			c.Close()
+			return err
+		}
+		wc, err := c.Data()
+		if err != nil {
+			c.Close()
+			return err
+		}
+		if _, err := wc.Write([]byte(msg.String())); err != nil {
+			wc.Close()
+			c.Close()
+			return err
+		}
+		wc.Close()
+		c.Quit()
+		return nil
+	}
+	c, err := smtp.Dial(addr)
+	if err != nil {
+		return err
+	}
+	if enc == "tls" || cfg.SmtpTLS {
+		tlsConfig := &tls.Config{ServerName: host}
+		if err := c.StartTLS(tlsConfig); err != nil {
+			c.Close()
+			return err
+		}
+	}
+	if err := c.Auth(auth); err != nil {
+		c.Close()
+		return err
+	}
+	if err := c.Mail(from); err != nil {
+		c.Close()
+		return err
+	}
+	if err := c.Rcpt(to); err != nil {
+		c.Close()
+		return err
+	}
+	wc, err := c.Data()
+	if err != nil {
+		c.Close()
+		return err
+	}
+	if _, err := wc.Write([]byte(msg.String())); err != nil {
+		wc.Close()
+		c.Close()
+		return err
+	}
+	wc.Close()
+	c.Quit()
+	return nil
 }
 
 func SendEmailHTMLWithFrom(to string, subject string, htmlBody string, fromName string) error {
-    db := GetDB()
-    var cfg SiteConfig
-    if err := db.Table("site_configs").First(&cfg).Error; err != nil {
-        return err
-    }
-    if !cfg.SmtpEnabled {
-        return fmt.Errorf("邮件未启用")
-    }
-    host := strings.TrimSpace(cfg.SmtpHost)
-    port := cfg.SmtpPort
-    user := strings.TrimSpace(cfg.SmtpUser)
-    pass := cfg.SmtpPass
-    from := strings.TrimSpace(cfg.SmtpFrom)
-    enc := strings.ToLower(strings.TrimSpace(cfg.SmtpEncryption))
-    if from == "" { from = user }
-    addr := fmt.Sprintf("%s:%d", host, port)
-    headers := map[string]string{
-        "To":           to,
-        "Subject":      subject,
-        "MIME-Version": "1.0",
-        "Content-Type": "text/html; charset=utf-8",
-    }
-    if strings.TrimSpace(fromName) != "" {
-        headers["From"] = fmt.Sprintf("%s <%s>", fromName, from)
-    } else {
-        headers["From"] = from
-    }
-    var msg strings.Builder
-    for k, v := range headers {
-        msg.WriteString(k)
-        msg.WriteString(": ")
-        msg.WriteString(v)
-        msg.WriteString("\r\n")
-    }
-    msg.WriteString("\r\n")
-    msg.WriteString(htmlBody)
-    auth := smtp.PlainAuth("", user, pass, host)
-    if enc == "ssl" {
-        tlsConfig := &tls.Config{ServerName: host}
-        conn, err := tls.Dial("tcp", addr, tlsConfig)
-        if err != nil { return err }
-        c, err := smtp.NewClient(conn, host)
-        if err != nil { return err }
-        if err := c.Auth(auth); err != nil { c.Close(); return err }
-        if err := c.Mail(from); err != nil { c.Close(); return err }
-        if err := c.Rcpt(to); err != nil { c.Close(); return err }
-        wc, err := c.Data(); if err != nil { c.Close(); return err }
-        if _, err := wc.Write([]byte(msg.String())); err != nil { wc.Close(); c.Close(); return err }
-        wc.Close(); c.Quit(); return nil
-    }
-    c, err := smtp.Dial(addr); if err != nil { return err }
-    if enc == "tls" || cfg.SmtpTLS { tlsConfig := &tls.Config{ServerName: host}; if err := c.StartTLS(tlsConfig); err != nil { c.Close(); return err } }
-    if err := c.Auth(auth); err != nil { c.Close(); return err }
-    if err := c.Mail(from); err != nil { c.Close(); return err }
-    if err := c.Rcpt(to); err != nil { c.Close(); return err }
-    wc, err := c.Data(); if err != nil { c.Close(); return err }
-    if _, err := wc.Write([]byte(msg.String())); err != nil { wc.Close(); c.Close(); return err }
-    wc.Close(); c.Quit(); return nil
+	db := GetDB()
+	var cfg SiteConfig
+	if err := db.Table("site_configs").First(&cfg).Error; err != nil {
+		return err
+	}
+	if !cfg.SmtpEnabled {
+		return fmt.Errorf("邮件未启用")
+	}
+	host := strings.TrimSpace(cfg.SmtpHost)
+	port := cfg.SmtpPort
+	user := strings.TrimSpace(cfg.SmtpUser)
+	pass := cfg.SmtpPass
+	from := strings.TrimSpace(cfg.SmtpFrom)
+	enc := strings.ToLower(strings.TrimSpace(cfg.SmtpEncryption))
+	if from == "" {
+		from = user
+	}
+	addr := fmt.Sprintf("%s:%d", host, port)
+	headers := map[string]string{
+		"To":           to,
+		"Subject":      subject,
+		"MIME-Version": "1.0",
+		"Content-Type": "text/html; charset=utf-8",
+	}
+	if strings.TrimSpace(fromName) != "" {
+		headers["From"] = fmt.Sprintf("%s <%s>", fromName, from)
+	} else {
+		headers["From"] = from
+	}
+	var msg strings.Builder
+	for k, v := range headers {
+		msg.WriteString(k)
+		msg.WriteString(": ")
+		msg.WriteString(v)
+		msg.WriteString("\r\n")
+	}
+	msg.WriteString("\r\n")
+	msg.WriteString(htmlBody)
+	auth := smtp.PlainAuth("", user, pass, host)
+	if enc == "ssl" {
+		tlsConfig := &tls.Config{ServerName: host}
+		conn, err := tls.Dial("tcp", addr, tlsConfig)
+		if err != nil {
+			return err
+		}
+		c, err := smtp.NewClient(conn, host)
+		if err != nil {
+			return err
+		}
+		if err := c.Auth(auth); err != nil {
+			c.Close()
+			return err
+		}
+		if err := c.Mail(from); err != nil {
+			c.Close()
+			return err
+		}
+		if err := c.Rcpt(to); err != nil {
+			c.Close()
+			return err
+		}
+		wc, err := c.Data()
+		if err != nil {
+			c.Close()
+			return err
+		}
+		if _, err := wc.Write([]byte(msg.String())); err != nil {
+			wc.Close()
+			c.Close()
+			return err
+		}
+		wc.Close()
+		c.Quit()
+		return nil
+	}
+	c, err := smtp.Dial(addr)
+	if err != nil {
+		return err
+	}
+	if enc == "tls" || cfg.SmtpTLS {
+		tlsConfig := &tls.Config{ServerName: host}
+		if err := c.StartTLS(tlsConfig); err != nil {
+			c.Close()
+			return err
+		}
+	}
+	if err := c.Auth(auth); err != nil {
+		c.Close()
+		return err
+	}
+	if err := c.Mail(from); err != nil {
+		c.Close()
+		return err
+	}
+	if err := c.Rcpt(to); err != nil {
+		c.Close()
+		return err
+	}
+	wc, err := c.Data()
+	if err != nil {
+		c.Close()
+		return err
+	}
+	if _, err := wc.Write([]byte(msg.String())); err != nil {
+		wc.Close()
+		c.Close()
+		return err
+	}
+	wc.Close()
+	c.Quit()
+	return nil
 }

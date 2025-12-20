@@ -2,6 +2,10 @@
     <div class="rounded-lg p-4 mb-6">
         <div class="flex justify-between items-center mb-4">
             <h2 class="text-xl font-semibold" :class="text">推送渠道配置</h2>
+            <div class="flex gap-2">
+                <UButton color="gray" variant="soft" @click="resetAll">恢复默认</UButton>
+                <UButton color="primary" @click="saveAll">保存配置</UButton>
+            </div>
         </div>
 
         <!-- 配置列表 -->
@@ -11,30 +15,20 @@
                 <div class="flex justify-between items-center mb-2">
                     <span :class="mutedText">Webhook推送</span>
                     <div class="flex items-center gap-2">
-                        <USwitch v-model="localConfig.webhookEnabled" />
-                        <UButton
-                            size="sm"
-                            @click="editItem.webhook = !editItem.webhook"
-                            :color="editItem.webhook ? 'gray' : 'primary'"
-                            variant="soft"
-                        >
-                            {{ editItem.webhook ? '取消' : '编辑' }}
-                        </UButton>
+                        <span class="text-sm" :class="localConfig.webhookEnabled ? 'text-green-500' : 'text-gray-500'">
+                            {{ localConfig.webhookEnabled ? '已启用' : '已禁用' }}
+                        </span>
+                        <UToggle
+                            :model-value="localConfig.webhookEnabled"
+                            @update:model-value="localConfig.webhookEnabled = !!$event"
+                        />
                     </div>
                 </div>
-                <div v-if="editItem.webhook" class="space-y-2">
+                <div class="space-y-2 mt-2">
                     <UInput
                         v-model="localConfig.webhookURL"
                         placeholder="Webhook URL"
                     />
-                    <div class="flex justify-end gap-2">
-                        <UButton @click="resetConfigItem('webhook')" variant="ghost" color="gray">
-                            重置
-                        </UButton>
-                        <UButton @click="saveConfigItem('webhook')" color="primary">
-                            保存
-                        </UButton>
-                    </div>
                 </div>
             </div>
 
@@ -43,18 +37,16 @@
                 <div class="flex justify-between items-center mb-2">
                     <span :class="mutedText">Telegram推送</span>
                     <div class="flex items-center gap-2">
-                        <USwitch v-model="localConfig.telegramEnabled" />
-                        <UButton
-                            size="sm"
-                            @click="editItem.telegram = !editItem.telegram"
-                            :color="editItem.telegram ? 'gray' : 'primary'"
-                            variant="soft"
-                        >
-                            {{ editItem.telegram ? '取消' : '编辑' }}
-                        </UButton>
+                        <span class="text-sm" :class="localConfig.telegramEnabled ? 'text-green-500' : 'text-gray-500'">
+                            {{ localConfig.telegramEnabled ? '已启用' : '已禁用' }}
+                        </span>
+                        <UToggle
+                            :model-value="localConfig.telegramEnabled"
+                            @update:model-value="localConfig.telegramEnabled = !!$event"
+                        />
                     </div>
                 </div>
-                <div v-if="editItem.telegram" class="space-y-2">
+                <div class="space-y-2 mt-2">
                     <UInput
                         v-model="localConfig.telegramToken"
                         placeholder="Bot Token"
@@ -63,14 +55,6 @@
                         v-model="localConfig.telegramChatID"
                         placeholder="Chat ID"
                     />
-                    <div class="flex justify-end gap-2">
-                        <UButton @click="resetConfigItem('telegram')" variant="ghost" color="gray">
-                            重置
-                        </UButton>
-                        <UButton @click="saveConfigItem('telegram')" color="primary">
-                            保存
-                        </UButton>
-                    </div>
                 </div>
             </div>
 
@@ -79,30 +63,20 @@
                 <div class="flex justify-between items-center mb-2">
                     <span :class="mutedText">企业微信推送</span>
                     <div class="flex items-center gap-2">
-                        <USwitch v-model="localConfig.weworkEnabled" />
-                        <UButton
-                            size="sm"
-                            @click="editItem.wework = !editItem.wework"
-                            :color="editItem.wework ? 'gray' : 'primary'"
-                            variant="soft"
-                        >
-                            {{ editItem.wework ? '取消' : '编辑' }}
-                        </UButton>
+                        <span class="text-sm" :class="localConfig.weworkEnabled ? 'text-green-500' : 'text-gray-500'">
+                            {{ localConfig.weworkEnabled ? '已启用' : '已禁用' }}
+                        </span>
+                        <UToggle
+                            :model-value="localConfig.weworkEnabled"
+                            @update:model-value="localConfig.weworkEnabled = !!$event"
+                        />
                     </div>
                 </div>
-                <div v-if="editItem.wework" class="space-y-2">
+                <div class="space-y-2 mt-2">
                     <UInput
                         v-model="localConfig.weworkKey"
                         placeholder="WebHook Key"
                     />
-                    <div class="flex justify-end gap-2">
-                        <UButton @click="resetConfigItem('wework')" variant="ghost" color="gray">
-                            重置
-                        </UButton>
-                        <UButton @click="saveConfigItem('wework')" color="primary">
-                            保存
-                        </UButton>
-                    </div>
                 </div>
             </div>
 
@@ -111,18 +85,16 @@
                 <div class="flex justify-between items-center mb-2">
                     <span :class="mutedText">飞书推送</span>
                     <div class="flex items-center gap-2">
-                        <USwitch v-model="localConfig.feishuEnabled" />
-                        <UButton
-                            size="sm"
-                            @click="editItem.feishu = !editItem.feishu"
-                            :color="editItem.feishu ? 'gray' : 'primary'"
-                            variant="soft"
-                        >
-                            {{ editItem.feishu ? '取消' : '编辑' }}
-                        </UButton>
+                        <span class="text-sm" :class="localConfig.feishuEnabled ? 'text-green-500' : 'text-gray-500'">
+                            {{ localConfig.feishuEnabled ? '已启用' : '已禁用' }}
+                        </span>
+                        <UToggle
+                            :model-value="localConfig.feishuEnabled"
+                            @update:model-value="localConfig.feishuEnabled = !!$event"
+                        />
                     </div>
                 </div>
-                <div v-if="editItem.feishu" class="space-y-2">
+                <div class="space-y-2 mt-2">
                     <UInput
                         v-model="localConfig.feishuWebhook"
                         placeholder="WebHook URL"
@@ -132,41 +104,28 @@
                         placeholder="签名密钥"
                         type="password"
                     />
-                    <div class="flex justify-end gap-2">
-                        <UButton @click="resetConfigItem('feishu')" variant="ghost" color="gray">
-                            重置
-                        </UButton>
-                        <UButton @click="saveConfigItem('feishu')" color="primary">
-                            保存
-                        </UButton>
-                    </div>
                 </div>
-            </div> <!-- 这里补上飞书配置块的闭合 -->
+            </div>
+
             <!-- Twitter配置 -->
             <div class="rounded p-3" :class="subtleBg">
                 <div class="flex justify-between items-center mb-2">
                     <span :class="mutedText">Twitter推送</span>
                     <div class="flex items-center gap-2">
-                        <USwitch v-model="localConfig.twitterEnabled" />
-                        <UButton
-                            size="sm"
-                            @click="editItem.twitter = !editItem.twitter"
-                            :color="editItem.twitter ? 'gray' : 'primary'"
-                            variant="soft"
-                        >
-                            {{ editItem.twitter ? '取消' : '编辑' }}
-                        </UButton>
+                        <span class="text-sm" :class="localConfig.twitterEnabled ? 'text-green-500' : 'text-gray-500'">
+                            {{ localConfig.twitterEnabled ? '已启用' : '已禁用' }}
+                        </span>
+                        <UToggle
+                            :model-value="localConfig.twitterEnabled"
+                            @update:model-value="localConfig.twitterEnabled = !!$event"
+                        />
                     </div>
                 </div>
-                <div v-if="editItem.twitter" class="space-y-2">
+                <div class="space-y-2 mt-2">
                     <UInput v-model="localConfig.twitterApiKey" placeholder="API Key" />
                     <UInput v-model="localConfig.twitterApiSecret" placeholder="API Secret" />
                     <UInput v-model="localConfig.twitterAccessToken" placeholder="Access Token" />
                     <UInput v-model="localConfig.twitterAccessTokenSecret" placeholder="Access Token Secret" />
-                    <div class="flex justify-end gap-2">
-                        <UButton @click="resetConfigItem('twitter')" variant="ghost" color="gray">重置</UButton>
-                        <UButton @click="saveConfigItem('twitter')" color="primary">保存</UButton>
-                    </div>
                 </div>
             </div>
 
@@ -175,54 +134,47 @@
                 <div class="flex justify-between items-center mb-2">
                     <span :class="mutedText">自定义HTTP推送</span>
                     <div class="flex items-center gap-2">
-                        <USwitch v-model="localConfig.customHttpEnabled" />
-                        <UButton
-                            size="sm"
-                            @click="editItem.customHttp = !editItem.customHttp"
-                            :color="editItem.customHttp ? 'gray' : 'primary'"
-                            variant="soft"
-                        >
-                            {{ editItem.customHttp ? '取消' : '编辑' }}
-                        </UButton>
+                        <span class="text-sm" :class="localConfig.customHttpEnabled ? 'text-green-500' : 'text-gray-500'">
+                            {{ localConfig.customHttpEnabled ? '已启用' : '已禁用' }}
+                        </span>
+                        <UToggle
+                            :model-value="localConfig.customHttpEnabled"
+                            @update:model-value="localConfig.customHttpEnabled = !!$event"
+                        />
                     </div>
                 </div>
-                <div v-if="editItem.customHttp" class="space-y-2">
+                <div class="space-y-2 mt-2">
                     <UInput v-model="localConfig.customHttpUrl" placeholder="请求URL" />
                     <USelect v-model="localConfig.customHttpMethod" :options="['POST', 'PUT', 'PATCH']" />
                     <UTextarea v-model="localConfig.customHttpHeaders" placeholder="请求Headers（JSON格式）" />
                     <UTextarea v-model="localConfig.customHttpBody" placeholder='请求Body模板（如：{"content":"{{content}}"})' />
-                    <div class="flex justify-end gap-2">
-                        <UButton @click="resetConfigItem('customHttp')" variant="ghost" color="gray">重置</UButton>
-                        <UButton @click="saveConfigItem('customHttp')" color="primary">保存</UButton>
-                    </div>
                 </div>
             </div>
         </div>
 
         <!-- 测试按钮区域 -->
         <div class="mt-4 flex flex-wrap gap-2" :class="props.disabled ? 'opacity-60 pointer-events-none' : ''">
-    <UButton
-        v-for="type in notifyTypes"
-        :key="type"
-        @click="testNotify(type)"
-        class="flex-grow sm:flex-grow-0"
-        variant="solid"
-        :disabled="props.disabled"
-    >
-        测试{{ getNotifyTypeName(type) }}
-    </UButton>
-</div>
+            <UButton
+                v-for="type in notifyTypes"
+                :key="type"
+                @click="testNotify(type)"
+                class="flex-grow sm:flex-grow-0"
+                variant="solid"
+                :disabled="props.disabled"
+            >
+                测试{{ getNotifyTypeName(type) }}
+            </UButton>
+        </div>
     </div>
 </template>
 
 <script setup lang="ts">
 import { useToast } from '#ui/composables/useToast'
+import { useRuntimeConfig } from '#imports'
 import { ref, reactive, watch, onMounted, computed } from 'vue'
 
-// 添加 emit 定义
 const emit = defineEmits(['save'])
 
-// 添加 props 定义
 const props = defineProps<{
     config: NotifyConfig;
     immediate?: boolean;
@@ -232,7 +184,6 @@ const props = defineProps<{
     disabled?: boolean;
 }>();
 
-// 添加类型定义
 interface NotifyConfig {
     webhookEnabled: boolean;
     webhookURL: string;
@@ -279,20 +230,34 @@ const localConfig = reactive<NotifyConfig>({
     customHttpBody: '{"content":"{{content}}"}'
 })
 
-const editItem = reactive({
-    webhook: false,
-    telegram: false,
-    wework: false,
-    feishu: false,
-    // 新增
-    twitter: false,
-    customHttp: false
-})
+// 默认配置（用于重置）
+const defaultConfig: NotifyConfig = {
+    webhookEnabled: false,
+    webhookURL: 'WebhookURL',
+    telegramEnabled: false,
+    telegramToken: 'bot_token',
+    telegramChatID: 'chat_id',
+    weworkEnabled: false,
+    weworkKey: 'WebhookURL',
+    feishuEnabled: false,
+    feishuWebhook: 'FeishuWebhook',
+    feishuSecret: 'secret',
+    twitterEnabled: false,
+    twitterApiKey: 'twitter_api_key',
+    twitterApiSecret: 'twitter_api_secret',
+    twitterAccessToken: 'twitter_access_token',
+    twitterAccessTokenSecret: 'twitter_access_token_secret',
+    customHttpEnabled: false,
+    customHttpUrl: 'https://example.com/notify',
+    customHttpMethod: 'POST',
+    customHttpHeaders: '{"Authorization":"Bearer token"}',
+    customHttpBody: '{"content":"{{content}}"}'
+}
 
-const notifyTypes = ['webhook', 'telegram', 'wework', 'feishu', 'twitter', 'customHttp']
+const notifyTypes: string[] = ['webhook', 'telegram', 'wework', 'feishu', 'twitter', 'customHttp']
 
-const getNotifyTypeName = (type) => {
-    const names = {
+const getNotifyTypeName = (type: string) => {
+    const names: Record<string, string> = {
         webhook: 'Webhook',
         telegram: 'Telegram',
         wework: '企业微信',
@@ -303,114 +268,13 @@ const getNotifyTypeName = (type) => {
     return names[type] || type
 }
 
-// 重置配置项
-const resetConfigItem = (type: string) => {
-    const prefix = type.toLowerCase()
-    Object.keys(localConfig).forEach(key => {
-        if (key.toLowerCase().startsWith(prefix)) {
-            localConfig[key] = props.config[key]
-        }
-    })
-    editItem[type] = false
+const resetAll = () => {
+    Object.assign(localConfig, defaultConfig)
+    useToast().add({ title: '已恢复默认值', description: '请点击保存以应用更改', color: 'indigo' })
 }
 
-// 修改保存配置项方法
-// 在 script setup 部分添加配置验证函数
-// 确保 isConfigValid 函数正确验证配置
-const isConfigValid = (type: string) => {
-    const config = localConfig;
-    switch(type) {
-        case 'webhook':
-            return config.webhookEnabled && !!config.webhookURL?.trim();
-        case 'telegram':
-            return config.telegramEnabled && 
-                   !!config.telegramToken?.trim() && 
-                   !!config.telegramChatID?.trim();
-        case 'wework':
-            return config.weworkEnabled && !!config.weworkKey?.trim();
-        case 'feishu':
-            return config.feishuEnabled && !!config.feishuWebhook?.trim();
-        case 'twitter':
-            return config.twitterEnabled &&
-                   !!config.twitterApiKey?.trim() &&
-                   !!config.twitterApiSecret?.trim() &&
-                   !!config.twitterAccessToken?.trim() &&
-                   !!config.twitterAccessTokenSecret?.trim();
-        case 'customHttp':
-            return config.customHttpEnabled && !!config.customHttpUrl?.trim();
-        default:
-            return false;
-    }
-}
-
-// 修改 saveConfigItem 方法中的调试日志
-const saveConfigItem = async (type: string) => {
+const saveAll = async () => {
     try {
-        // 根据类型设置启用状态
-        switch(type) {
-            case 'webhook':
-                if (localConfig.webhookEnabled && !localConfig.webhookURL) {
-                    throw new Error('Webhook URL不能为空');
-                }
-                break;
-            case 'telegram':
-                if (localConfig.telegramEnabled && (!localConfig.telegramToken || !localConfig.telegramChatID)) {
-                    throw new Error('Telegram配置不完整');
-                }
-                break;
-            case 'wework':
-                if (localConfig.weworkEnabled && !localConfig.weworkKey) {
-                    throw new Error('企业微信Key不能为空');
-                }
-                break;
-            case 'feishu':
-                if (localConfig.feishuEnabled && !localConfig.feishuWebhook) {
-                    throw new Error('飞书Webhook不能为空');
-                }
-                break;
-            case 'twitter':
-                if (localConfig.twitterEnabled && (
-                    !localConfig.twitterApiKey ||
-                    !localConfig.twitterApiSecret ||
-                    !localConfig.twitterAccessToken ||
-                    !localConfig.twitterAccessTokenSecret
-                )) {
-                    throw new Error('Twitter配置不完整');
-                }
-                break;
-            case 'customHttp':
-                if (localConfig.customHttpEnabled && !localConfig.customHttpUrl) {
-                    throw new Error('自定义HTTP URL不能为空');
-                }
-                break;
-        }
-
-        // 修复：补全所有推送渠道的配置字段
-        const configData = {
-            webhookEnabled: localConfig.webhookEnabled,
-            webhookURL: localConfig.webhookURL,
-            telegramEnabled: localConfig.telegramEnabled,
-            telegramToken: localConfig.telegramToken,
-            telegramChatID: localConfig.telegramChatID,
-            weworkEnabled: localConfig.weworkEnabled,
-            weworkKey: localConfig.weworkKey,
-            feishuEnabled: localConfig.feishuEnabled,
-            feishuWebhook: localConfig.feishuWebhook,
-            feishuSecret: localConfig.feishuSecret,
-            // 新增 Twitter 配置字段
-            twitterEnabled: localConfig.twitterEnabled,
-            twitterApiKey: localConfig.twitterApiKey,
-            twitterApiSecret: localConfig.twitterApiSecret,
-            twitterAccessToken: localConfig.twitterAccessToken,
-            twitterAccessTokenSecret: localConfig.twitterAccessTokenSecret,
-            // 新增自定义HTTP配置字段
-            customHttpEnabled: localConfig.customHttpEnabled,
-            customHttpUrl: localConfig.customHttpUrl,
-            customHttpMethod: localConfig.customHttpMethod,
-            customHttpHeaders: localConfig.customHttpHeaders,
-            customHttpBody: localConfig.customHttpBody
-        };
-
         const baseApi = useRuntimeConfig().public.baseApi || '/api'
         const response = await fetch(`${baseApi}/notify/config`, {
             method: 'PUT',
@@ -418,35 +282,32 @@ const saveConfigItem = async (type: string) => {
                 'Content-Type': 'application/json'
             },
             credentials: 'include',
-            body: JSON.stringify(configData)
+            body: JSON.stringify(localConfig)
         });
         
         const data = await response.json();
         if (data.code === 1) {
-            editItem[type] = false;
-            
-            // 强制更新所有配置字段，确保启用状态同步
+             // 强制更新所有配置字段
             if (data.data) {
-                Object.keys(data.data).forEach(key => {
-                    // 修复：所有 xxxEnabled 字段都强制转为布尔值
+                Object.keys(localConfig).forEach((key: string) => {
+                    if ((data.data as any)[key] === undefined) return
                     if (key.endsWith('Enabled')) {
-                        localConfig[key] = !!data.data[key] && data.data[key] !== 'false';
+                        (localConfig as any)[key] = !!(data.data as any)[key] && (data.data as any)[key] !== 'false'
                     } else {
-                        localConfig[key] = data.data[key] || '';
+                        (localConfig as any)[key] = (data.data as any)[key] || ''
                     }
-                });
+                })
             }
-            
             emit('save', {...localConfig});
             useToast().add({
                 title: '成功',
-                description: `${getNotifyTypeName(type)}配置已保存`,
+                description: '推送配置已保存',
                 color: 'green'
             });
         } else {
             throw new Error(data.msg || '保存失败');
         }
-    } catch (error) {
+    } catch (error: any) {
         console.error('保存配置失败:', error);
         useToast().add({
             title: '错误',
@@ -454,15 +315,13 @@ const saveConfigItem = async (type: string) => {
             color: 'red'
         });
     }
-};
+}
 
-// 修改测试推送方法
 const testNotify = async (type: string) => {
     try {
-        // 检查对应类型的配置是否启用和有效
-        if (!isConfigValid(type)) {
-            throw new Error(`请先完成并启用${getNotifyTypeName(type)}配置`);
-        }
+        // 简单验证
+        if (type === 'webhook' && localConfig.webhookEnabled && !localConfig.webhookURL) throw new Error('Webhook URL不能为空');
+        // 其他验证可按需添加
 
         const response = await fetch('/api/notify/test', {
             method: 'POST',
@@ -483,7 +342,7 @@ const testNotify = async (type: string) => {
         } else {
             throw new Error(data.msg || '测试失败');
         }
-    } catch (error) {
+    } catch (error: any) {
         console.error('测试失败:', error);
         useToast().add({
             title: '错误',
@@ -493,24 +352,20 @@ const testNotify = async (type: string) => {
     }
 };
 
-
-// 初始化配置
 watch(() => props.config, (newConfig) => {
     if (newConfig) {
-        Object.keys(localConfig).forEach(key => {
-            if (newConfig[key] !== undefined) {
-                // 修复：所有 xxxEnabled 字段都强制转为布尔值
+        Object.keys(localConfig).forEach((key: string) => {
+            if ((newConfig as any)[key] !== undefined) {
                 if (key.endsWith('Enabled')) {
-                    localConfig[key] = !!newConfig[key] && newConfig[key] !== 'false';
+                    (localConfig as any)[key] = !!(newConfig as any)[key] && (newConfig as any)[key] !== 'false';
                 } else {
-                    localConfig[key] = newConfig[key];
+                    (localConfig as any)[key] = (newConfig as any)[key];
                 }
             }
         });
     }
 }, { deep: true, immediate: true });
 
-// 添加页面加载时获取配置的逻辑
 onMounted(async () => {
     try {
         const response = await fetch('/api/notify/config', {
@@ -523,25 +378,20 @@ onMounted(async () => {
         const data = await response.json();
         if (data.code === 1 && data.data) {
             const config = data.data;
-            Object.keys(config).forEach(key => {
-                // 修复：所有 xxxEnabled 字段都强制转为布尔值
+            Object.keys(localConfig).forEach((key: string) => {
+                if ((config as any)[key] === undefined) return
                 if (key.endsWith('Enabled')) {
-                    localConfig[key] = !!config[key] && config[key] !== 'false';
+                    (localConfig as any)[key] = !!(config as any)[key] && (config as any)[key] !== 'false'
                 } else {
-                    localConfig[key] = config[key] || '';
+                    (localConfig as any)[key] = (config as any)[key] || ''
                 }
-            });
-            console.log('加载的配置:', localConfig);
+            })
         }
-    } catch (error) {
+    } catch (error: any) {
         console.error('获取配置失败:', error);
-        useToast().add({
-            title: '错误',
-            description: '获取推送配置失败',
-            color: 'red'
-        });
     }
 });
+
 const subtleBg = computed(() => props.subtleBg || 'bg-gray-800')
 const text = computed(() => props.text || 'text-white')
 const mutedText = computed(() => props.mutedText || 'text-gray-300')

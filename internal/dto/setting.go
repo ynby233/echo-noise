@@ -15,4 +15,6 @@ type SettingDto struct {
 	SmtpTLS           *bool                  `json:"smtpTLS"`
 	StorageEnabled    *bool                  `json:"storageEnabled"`
 	StorageConfig     map[string]interface{} `json:"storageConfig"`
+	AttachmentStorageEnabled *bool                  `json:"attachmentStorageEnabled"`
+	AttachmentStorageConfig  map[string]interface{} `json:"attachmentStorageConfig"`
 }

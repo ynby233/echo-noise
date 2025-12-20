@@ -50,9 +50,10 @@ const toast = useToast()
 const router = useRouter()
 const baseApi = useRuntimeConfig().public.baseApi || '/api'
 
-const form = reactive({ username: '', password: '', captcha: '' })
+const form = reactive({ username: '', password: '', captcha: '', captcha_id: '' })
 const submitting = ref(false)
 const captchaSrc = ref('')
+const captchaId = ref('')
 const captchaExpiresAt = ref<number | null>(null)
 const remaining = ref(0)
 let timer: any = null
@@ -60,9 +61,16 @@ const githubEnabled = ref(false)
 
 const refreshCaptcha = async () => {
   try {
-    captchaSrc.value = `${baseApi}/captcha?ts=${Date.now()}`
-    captchaExpiresAt.value = Date.now() + 120000
-    remaining.value = 120
+    const res = await fetch(`${baseApi}/captcha?json=1&ts=${Date.now()}`, { credentials: 'include' })
+    const data = await res.json().catch(() => ({}))
+    const svg = String(data?.data?.svg || '')
+    const id = String(data?.data?.captcha_id || '')
+    if (!svg || !id || data?.code !== 1) throw new Error(data?.msg || '获取验证码失败')
+    captchaId.value = id
+    form.captcha_id = id
+    captchaSrc.value = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+    captchaExpiresAt.value = Date.now() + (Number(data?.data?.expires_in || 120) * 1000)
+    remaining.value = Math.max(1, Number(data?.data?.expires_in || 120))
     if (timer) clearInterval(timer)
     timer = setInterval(() => {
       const r = Math.max(0, Math.ceil(((captchaExpiresAt.value || Date.now()) - Date.now()) / 1000))
@@ -87,7 +95,7 @@ const onSubmit = async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ username: form.username, password: form.password, captcha: form.captcha })
+      body: JSON.stringify({ username: form.username, password: form.password, captcha: form.captcha, captcha_id: form.captcha_id || captchaId.value })
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok || data.code !== 1) throw new Error(data?.msg || '注册失败')

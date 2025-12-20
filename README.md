@@ -36,6 +36,16 @@
 
 ## 2025更新状态
 
+- 优化内容底部图标显示、优化下载为内容图片的卡片样式，优化首页加载速度
+
+- 增加ffmpeg包内置，会大幅度增加镜像包大小，但支持媒体附件压缩
+
+- 调整首次运行程序时，不再依赖特定数据库文件，会自动生成文件
+
+- 增加附件上传可选本地或云端存储，云端支持R2/S3，附件管理可直接管理云端上传的图片
+
+- 增强所有视频媒体的显示逻辑为兼容宫格图显示，包含了嵌入式的视频
+
 - 修复github一键登录选项开启后前台页不显示及定位后台页错误的问题
 
 - 修复作者头像和管理员头像冲突问题，首页作者头像增加后端查询
@@ -311,13 +321,13 @@ docker run -d \
 
 ## 🎉已发布Docker镜像版本
 
-- 稳定双架构镜像版：latest 标签镜像  同时支持linux/amd64,linux/arm64，拉取时会系统会自动选择 
+- 稳定双架构镜像版：latest 标签镜像  同时支持linux/amd64,linux/arm64，拉取时会系统会自动选择 默认带ffmpeg
 
 
-- 带MCP双架构镜像版：latest-mcp 标签镜像  同时支持linux/amd64,linux/arm64 
+- 带MCP双架构镜像版：latest-mcp 标签镜像  同时支持linux/amd64,linux/arm64 默认带ffmpeg
 
 
-- 精简单架构镜像版：last 标签镜像  仅支持linux/amd64
+- 精简单架构镜像版：last-amd64 标签镜像  仅支持linux/amd64默认不带ffmpeg
 
 
 ### docker-componse构建部署
@@ -338,12 +348,15 @@ docker compose build --no-cache my-app && docker compose up -d
 
 #### 镜像构建目标说明
 
-- `final`（不带 MCP，轻量）：仅包含后端与前端静态资源，无 Node.js 运行时。
-  - 手动构建示例：`docker build -t ech0-noise:nomcp .`
-- `final-mcp`（带 MCP）：安装 `nodejs`，复制 `mcp/server.bundle.mjs`，容器内同时启动 MCP 与后端。
+- `final`（不带 MCP）：仅包含后端与前端静态资源，无 Node.js 运行时。
+  - 默认包含 `ffmpeg`（用于视频处理/压缩）。
+  - 手动构建示例：`docker build --target final -t ech0-noise:nomcp .`
+- `final-ffmpeg`（不带 MCP，显式标记“带 ffmpeg”）：与 `final` 内容一致，仅用于构建命令中更直观地表达“该镜像需要 ffmpeg”。
+  - 手动构建示例：`docker build --target final-ffmpeg -t ech0-noise:nomcp .`
+- `final-mcp`（带 MCP）：基于 `final`（因此也包含 `ffmpeg`），安装 `nodejs`，复制 `mcp/server.bundle.mjs`，容器内同时启动 MCP 与后端。
   - 手动构建示例：`docker build --target final-mcp -t ech0-noise:mcp .`
-- 本仓库的 `docker-compose.yml` 已默认使用 `final-mcp`：
-  - 如需不带 MCP，请删除或修改 `build.target: final-mcp` 为 `final`。
+- 本仓库的 `docker-compose.yml` 默认使用 `final`（不含 MCP），并单独启动 `mcp` 服务（见 docker-compose.yml）。
+  - 如需将 MCP 合并到同容器，请将 `my-app.build.target` 改为 `final-mcp`。
 
 ## 无服务器平台+postgres免费数据库部署
 
@@ -1508,14 +1521,14 @@ docker buildx create --use --name mybuilder
 
 然后发布
 
-常规主镜像（不含 MCP）
+常规主镜像（不含 MCP且包含ffmpeg）
 
 ```
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  --target final \
-  --build-arg VERSION=v2.3.6 \
-  -t noise233/echo-noise:v2.3.6 \
+  --target final-ffmpeg \
+  --build-arg VERSION=v2.4.1 \
+  -t noise233/echo-noise:v2.4.1 \
   -t noise233/echo-noise:latest \
   --push --no-cache .
 ```
@@ -1523,13 +1536,13 @@ docker buildx build \
 同时推送版本时间标签与 latest ：
 
 ```
-docker buildx build --platform linux/amd64,linux/arm64 --target final --build-arg VERSION=2025.12.04 -t noise233/echo-noise:2025.12.04 -t noise233/echo-noise:latest --push --no-cache .
+docker buildx build --platform linux/amd64,linux/arm64 --target final-ffmpeg --build-arg VERSION=2025.12.04 -t noise233/echo-noise:2025.12.04 -t noise233/echo-noise:latest --push --no-cache .
 ```
 
 开启 UPX 压缩以确保镜像更小（不含 MCP）：
 
 ```
-docker buildx build --platform linux/amd64,linux/arm64 --target final --build-arg USE_UPX=1 -t noise233/echo-noise:latest --push --no-cache .
+docker buildx build --platform linux/amd64,linux/arm64 --target final-ffmpeg --build-arg USE_UPX=1 -t noise233/echo-noise:latest --push --no-cache .
 ```
 
 关闭 UPX 压缩
@@ -1537,36 +1550,37 @@ docker buildx build --platform linux/amd64,linux/arm64 --target final --build-ar
 ```
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  --target final \
-  --build-arg VERSION=v2.3.6 \
+  --target final-ffmpeg \
+  --build-arg VERSION=v2.4.1 \
   --build-arg USE_UPX=0 \
-  -t noise233/echo-noise:v2.3.6 \
+  -t noise233/echo-noise:v2.4.1 \
   -t noise233/echo-noise:latest \
   --push --no-cache .
 ```
 
-包含MCP镜像：
+包含MCP镜像且包含ffmpeg：
 
 ```
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final-mcp \
-  --build-arg VERSION=v2.3.6 \
+  --build-arg VERSION=v2.4.1 \
   --build-arg USE_UPX=1 \
-  -t noise233/echo-noise:v2.3.6-mcp \
+  -t noise233/echo-noise:v2.4.1-mcp \
   -t noise233/echo-noise:latest-mcp \
   --push --no-cache .
 ```
 
-精简主镜像单架构amd64（不带 MCP）：
+精简主镜像单架构amd64（不带 MCP且不包含 ffmpeg）：
 
 ```
 docker buildx build \
   --platform linux/amd64 \
   --target final \
-  --build-arg VERSION=v2.3.6 \
+  --build-arg VERSION=v2.4.1 \
+  --build-arg INSTALL_FFMPEG=0 \
   --build-arg USE_UPX=1 \
-  -t noise233/echo-noise:v2.3.6-amd64 \
+  -t noise233/echo-noise:v2.4.1-amd64 \
   -t noise233/echo-noise:last-amd64 \
   --push --no-cache .
 ```
@@ -1587,14 +1601,14 @@ podman manifest push --all docker.io/noise233/echo-noise:latest docker://docker.
 
 - 增量构建与缓存推送（适合频繁迭代）：
   - ```
-    docker buildx build --builder multi --platform linux/amd64,linux/arm64 --target final --pull --build-arg VERSION=$(date +%Y.%m.%d) -t noise233/echo-noise:$(date +%Y.%m.%d) -t noise233/echo-noise:latest --cache-from=type=registry,ref=noise233/echo-noise:buildcache --cache-to=type=registry,ref=noise233/echo-noise:buildcache,mode=max --provenance=false --sbom=false --push --progress=plain .
+    docker buildx build --builder multi --platform linux/amd64,linux/arm64 --target final-ffmpeg --pull --build-arg VERSION=$(date +%Y.%m.%d) -t noise233/echo-noise:$(date +%Y.%m.%d) -t noise233/echo-noise:latest --cache-from=type=registry,ref=noise233/echo-noise:buildcache --cache-to=type=registry,ref=noise233/echo-noise:buildcache,mode=max --provenance=false --sbom=false --push --progress=plain .
     ```
   
     
   
 - 固化版本（手动设定版本，不用日期）：
   - ```
-    docker buildx build --builder multi --platform linux/amd64,linux/arm64 --target final --pull --build-arg VERSION=2025.12.04 -t noise233/echo-noise:2025.12.04 -t noise233/echo-noise:latest --cache-from=type=registry,ref=noise233/echo-noise:buildcache --cache-to=type=registry,ref=noise233/echo-noise:buildcache,mode=max --provenance=false --sbom=false --push --progress=plain .
+    docker buildx build --builder multi --platform linux/amd64,linux/arm64 --target final-ffmpeg --pull --build-arg VERSION=2025.12.04 -t noise233/echo-noise:2025.12.04 -t noise233/echo-noise:latest --cache-from=type=registry,ref=noise233/echo-noise:buildcache --cache-to=type=registry,ref=noise233/echo-noise:buildcache,mode=max --provenance=false --sbom=false --push --progress=plain .
     ```
   
 - --pull ：确保基础镜像最新，减少后续推送差异。
@@ -1878,7 +1892,7 @@ exports.actions = [{
 - [x] 前端可定制化主题
 - [x] 数据库备份优化
 - [ ] 增加RSS阅读组件（后台控制）
-- [ ] 媒体附件增加分离式存储，提供云端和本地两种方式
+- [x] 媒体附件增加分离式存储，提供云端和本地两种方式
 - [ ] 增加通知系统（新的用户评论可显示通知）
 - [ ] 后台增加数据库一键切换为云端数据库
 - [ ] 增加在线聊天组件

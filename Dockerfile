@@ -65,6 +65,8 @@ FROM public.ecr.aws/docker/library/alpine:3.21 AS final
 
 # 可选：是否使用 UPX 压缩二进制（1=启用，0=禁用）
 ARG USE_UPX=1
+# 可选：是否安装 ffmpeg（1=启用，0=禁用）。默认启用以保持原有功能
+ARG INSTALL_FFMPEG=1
 # 镜像版本（用于在运行时展示），构建时可通过 --build-arg VERSION=xxx 传入
 ARG VERSION=latest
 ENV APP_VERSION=$VERSION
@@ -111,17 +113,20 @@ RUN set -eux; \
 # 安装运行时所需的工具（合并RUN命令减少层数）
 RUN apk update && \
     apk add --no-cache ca-certificates && \
+    if [ "$INSTALL_FFMPEG" = "1" ]; then apk add --no-cache ffmpeg; fi && \
+    rm -rf /usr/share/man /usr/share/doc /usr/share/licenses /usr/share/locale && \
     rm -rf /var/cache/apk/* && \
     mkdir -p /app/data/images && \
     chmod -R 755 /app/data
 
-# 内置 SQLite 数据库（初始数据），以便首次启动有内容
-COPY ./data/noise.db /app/data/
+# 如果需要内置 SQLite 数据库（初始数据）
+# COPY ./data/noise.db /app/data/
 
 # 可选：使用 UPX 压缩二进制以减小体积（默认启用，影响极小）
 RUN if [ "$USE_UPX" = "1" ]; then \
       apk add --no-cache upx; \
       upx --best --lzma -q /app/noise || true; \
+      apk del --no-cache upx || true; \
     fi
 
 # 暴露应用端口
@@ -130,6 +135,10 @@ EXPOSE 1315
 
 # 启动后端与 MCP（MCP 后台运行，Go 服务为主进程）
 CMD ["/app/noise"]
+
+# 显式的“带 ffmpeg 的最终镜像”目标（当前 final 默认已包含 ffmpeg）。
+# 仅用于构建命令中明确表达用途：docker build --target final-ffmpeg ...
+FROM final AS final-ffmpeg
 
 FROM final AS final-mcp
 RUN apk update && \
