@@ -180,6 +180,7 @@ func GetFrontendConfig() (map[string]interface{}, error) {
 			"rssFaviconURL":    config.RSSFaviconURL,
 			"walineServerURL":  config.WalineServerURL,
 			"enableGithubCard": config.EnableGithubCard,
+			"notifyEnabled":    config.NotifyEnabled,
 			// 页面文案与关于页内容
 			"linksTitle":             choose(config.LinksTitle, getDefaultConfig()["frontendSettings"].(map[string]interface{})["linksTitle"].(string)),
 			"linksDescription":       choose(config.LinksDescription, getDefaultConfig()["frontendSettings"].(map[string]interface{})["linksDescription"].(string)),
@@ -415,6 +416,17 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 			config.CommentEnabled = true
 		} else if vs == "false" {
 			config.CommentEnabled = false
+		}
+	}
+
+	// 推送模块总开关（允许开启但所有渠道都未启用）
+	if vb, ok := frontendSettings["notifyEnabled"].(bool); ok {
+		config.NotifyEnabled = vb
+	} else if vs, ok := frontendSettings["notifyEnabled"].(string); ok {
+		if strings.EqualFold(strings.TrimSpace(vs), "true") {
+			config.NotifyEnabled = true
+		} else if strings.EqualFold(strings.TrimSpace(vs), "false") {
+			config.NotifyEnabled = false
 		}
 	}
 
@@ -975,6 +987,7 @@ func getDefaultConfig() map[string]interface{} {
 			"avatarURL":    "https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png",
 			"username":     "Noise",
 			"description":  "执迷不悟",
+			"notifyEnabled": false,
 			"backgrounds": []string{
 				"https://s2.loli.net/2025/03/27/KJ1trnU2ksbFEYM.jpg",
 				"https://s2.loli.net/2025/03/27/MZqaLczCvwjSmW7.jpg",

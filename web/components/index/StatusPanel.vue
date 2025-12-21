@@ -1,6 +1,6 @@
 <template>
  
-   <div class="fixed inset-0 w-full h-full overflow-x-hidden overflow-y-auto" :class="theme.pageBg">
+   <div class="fixed inset-0 w-full h-full overflow-x-hidden overflow-y-auto" :class="[theme.pageBg, panelTheme !== 'light' ? 'dark' : '']">
       <div class="min-h-screen w-full">
         <aside class="w-72 h-screen overflow-y-auto backdrop-blur-md flex flex-col fixed left-0 top-0 z-40 transition-transform duration-300 md:transition-none border-r" :class="[{ 'translate-x-0': sidebarOpen, '-translate-x-full md:translate-x-0': !sidebarOpen }, theme.sidebarBg, theme.border, theme.sidebarText]">
         <div class="px-4 py-4 border-b border-slate-700/40 flex flex-col items-center gap-2">
@@ -1043,11 +1043,12 @@
                   <span class="text-sm" :class="theme.mutedText">状态</span>
                   <span :class="[frontendConfig.notifyEnabled ? 'text-green-400' : 'text-red-400', 'text-sm']">{{ frontendConfig.notifyEnabled ? '已启用' : '未启用' }}</span>
                   <UToggle v-model="frontendConfig.notifyEnabled" />
+                  <UButton size="xs" color="green" variant="soft" class="shadow" @click="saveConfigItem('notifyEnabled')">保存</UButton>
                 </div>
               </div>
               <div class="px-4 pb-4">
                 <div v-if="frontendConfig.notifyEnabled">
-                  <NotifyPanel :config="notifyConfig" @update:config="updateNotifyConfig" :immediate="true" :subtleBg="theme.subtleBg" :text="theme.text" :mutedText="theme.mutedText" :disabled="!frontendConfig.notifyEnabled" />
+                  <NotifyPanel :config="notifyConfig" @save="updateNotifyConfig" :immediate="true" :subtleBg="theme.subtleBg" :text="theme.text" :mutedText="theme.mutedText" :disabled="!frontendConfig.notifyEnabled" />
                 </div>
                 <div v-else class="py-4 text-sm" :class="theme.mutedText">未启用推送，开启后可配置推送渠道参数</div>
               </div>
@@ -1110,8 +1111,8 @@
                   <div class="font-semibold mb-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2" :class="theme.text">
                     <span>附件存储选择（本地 / R2 / S3）</span>
                     <div class="flex flex-wrap items-center gap-3">
-                      <span class="text-sm" :class="theme.mutedText">当前模式</span>
-                      <span :class="[attachmentStorageEnabled ? 'text-green-400' : 'text-indigo-400', 'text-sm']">{{ attachmentStorageEnabled ? '云端存储' : '本地存储' }}</span>
+                      <span class="text-xs sm:text-sm" :class="theme.mutedText">当前模式</span>
+                      <span :class="[attachmentStorageEnabled ? 'text-green-400' : 'text-indigo-400', 'text-xs sm:text-sm']">{{ attachmentStorageEnabled ? '云端存储' : '本地存储' }}</span>
                       <div class="flex items-center gap-2">
                       <URadio v-model="attachmentStorageEnabled" :value="true" />
                       <span :class="attachmentStorageEnabled ? theme.text : 'text-gray-400'">云端</span>
@@ -1124,8 +1125,8 @@
                   <div class="font-semibold mb-2 mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2" :class="theme.text">
                     <span>附件压缩处理（自动压缩图片/视频）</span>
                     <div class="flex flex-wrap items-center gap-3">
-                      <span class="text-sm" :class="theme.mutedText">状态</span>
-                      <span :class="[attachmentStorageConfig.enableCompression ? 'text-green-400' : 'text-indigo-400', 'text-sm']">{{ attachmentStorageConfig.enableCompression ? '已开启' : '未开启' }}</span>
+                      <span class="text-xs sm:text-sm" :class="theme.mutedText">状态</span>
+                      <span :class="[attachmentStorageConfig.enableCompression ? 'text-green-400' : 'text-indigo-400', 'text-xs sm:text-sm']">{{ attachmentStorageConfig.enableCompression ? '已开启' : '未开启' }}</span>
                       <!-- 显式开关按钮 -->
                       <div class="flex items-center rounded-lg border border-slate-600 p-0.5 bg-slate-800/50">
                         <button @click="toggleCompression(true)" :class="['px-3 py-1 text-xs rounded-md transition-colors', attachmentStorageConfig.enableCompression ? 'bg-green-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-700']">开启</button>
@@ -1138,7 +1139,7 @@
                   </div>
                   
                   <div v-if="!attachmentStorageEnabled" class="p-4 text-center rounded-lg border border-dashed" :class="theme.border">
-                    <div class="text-sm" :class="theme.text">当前使用本地存储</div>
+                    <div class="text-xs sm:text-sm" :class="theme.text">当前使用本地存储</div>
                     <div class="text-xs mt-1" :class="theme.mutedText">图片/视频附件保存在服务器目录</div>
                     <div class="flex justify-center gap-2 mt-3">
                       <UButton variant="soft" color="indigo" @click="loadAttachmentStorageConfig">刷新</UButton>
@@ -1149,35 +1150,35 @@
                   <div v-else class="space-y-3">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div>
-                        <label class="text-sm mb-1 block" :class="theme.mutedText">提供方</label>
+                        <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">提供方</label>
                         <USelect v-model="attachmentStorageConfig.provider" :options="[{label:'S3',value:'s3'},{label:'R2',value:'r2'}]" />
                       </div>
                       <div>
-                        <label class="text-sm mb-1 block" :class="theme.mutedText">Endpoint</label>
+                        <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">Endpoint</label>
                         <UInput v-model="attachmentStorageConfig.endpoint" placeholder="https://..." />
                       </div>
                       <div>
-                        <label class="text-sm mb-1 block" :class="theme.mutedText">Region</label>
+                        <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">Region</label>
                         <UInput v-model="attachmentStorageConfig.region" placeholder="auto 或区域名" />
                       </div>
                       <div>
-                        <label class="text-sm mb-1 block" :class="theme.mutedText">Bucket</label>
+                        <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">Bucket</label>
                         <UInput v-model="attachmentStorageConfig.bucket" placeholder="bucket 名称" />
                       </div>
                       <div>
-                        <label class="text-sm mb-1 block" :class="theme.mutedText">Access Key</label>
+                        <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">Access Key</label>
                         <UInput v-model="attachmentStorageConfig.accessKey" />
                       </div>
                       <div>
-                        <label class="text-sm mb-1 block" :class="theme.mutedText">Secret Key</label>
+                        <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">Secret Key</label>
                         <UInput v-model="attachmentStorageConfig.secretKey" type="password" />
                       </div>
                       <div class="flex items-center gap-2" v-if="attachmentStorageConfig.provider === 's3'">
-                        <span class="text-sm" :class="theme.mutedText">使用路径风格地址</span>
+                        <span class="text-xs sm:text-sm" :class="theme.mutedText">使用路径风格地址</span>
                         <UToggle v-model="attachmentStorageConfig.usePathStyle" />
                       </div>
                       <div class="md:col-span-2">
-                        <label class="text-sm mb-1 block" :class="theme.mutedText">公共访问前缀</label>
+                        <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">公共访问前缀</label>
                         <UInput v-model="attachmentStorageConfig.publicBaseURL" placeholder="https://bucket.example.com/" />
                       </div>
                     </div>
@@ -1939,7 +1940,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, nextTick } from 'vue'
 import type { UserToLogin, UserToRegister } from '~/types/models'
 import { useUser } from '~/composables/useUser'
 import { useUserStore } from '~/store/user'
@@ -2047,16 +2048,6 @@ const setActive = async (name: 'system' | 'user' | 'site' | 'notify' | 'attachme
 onMounted(() => {
   loadStorageConfig()
   sidebarOpen.value = window.innerWidth >= 768
-  try {
-    const html = document.documentElement
-    const wantDark = panelTheme.value !== 'light'
-    const hasDark = html.classList.contains('dark')
-    if (wantDark && !hasDark) {
-      html.classList.add('dark')
-    } else if (!wantDark && hasDark) {
-      html.classList.remove('dark')
-    }
-  } catch {}
 })
 
 const loadAdminProfile = async () => {
@@ -2090,16 +2081,7 @@ watch(() => userStore.status, () => { loadUserMessagesCount() })
 onMounted(() => { loadUserMessagesCount() })
 
 watch(() => panelTheme.value, (val: string) => {
-  try {
-    const html = document.documentElement
-    const wantDark = val !== 'light'
-    const hasDark = html.classList.contains('dark')
-    if (wantDark && !hasDark) {
-      html.classList.add('dark')
-    } else if (!wantDark && hasDark) {
-      html.classList.remove('dark')
-    }
-  } catch {}
+  try { localStorage.setItem('adminTheme', String(val)) } catch {}
 })
 
 const showBottomBar = ref(typeof window !== 'undefined' ? window.innerWidth >= 768 : true)
@@ -2362,7 +2344,17 @@ let notifyConfig = reactive({
     weworkKey: '',
     feishuEnabled: false,
     feishuWebhook: '',
-    feishuSecret: ''
+    feishuSecret: '',
+    twitterEnabled: false,
+    twitterApiKey: '',
+    twitterApiSecret: '',
+    twitterAccessToken: '',
+    twitterAccessTokenSecret: '',
+    customHttpEnabled: false,
+    customHttpUrl: '',
+    customHttpMethod: 'POST',
+    customHttpHeaders: '',
+    customHttpBody: '{"content":"{{content}}"}'
 })
 
 const updateNotifyConfig = (next: any) => {
@@ -2387,6 +2379,16 @@ const fetchNotifyConfig = async () => {
         console.error('获取推送配置失败:', error)
     }
 }
+
+ onMounted(fetchNotifyConfig)
+
+ watch(
+   () => !!(frontendConfig as any).notifyEnabled,
+   async (next, prev) => {
+     if (next === prev) return
+     await saveConfigItem('notifyEnabled')
+   }
+ )
 const smtp = reactive({ enabled: false, driver: 'smtp', host: '', port: '', user: '', pass: '', from: '', tls: false, encryption: 'tls' })
 const showSmtpPass = ref(false)
 const loadSmtp = async () => {
@@ -3835,7 +3837,7 @@ const saveConfigItem = async (key: string) => {
 
         const settingsToSave = {
             frontendSettings: {
-                [key]: (frontendConfig as any)[key]
+                [key]: key === 'notifyEnabled' ? !!(frontendConfig as any)[key] : (frontendConfig as any)[key]
             }
         };
 

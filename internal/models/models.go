@@ -110,6 +110,8 @@ type SiteConfig struct {
 	RSSFaviconURL    string `gorm:"type:varchar(191)"`
 	WalineServerURL  string `gorm:"type:varchar(191)"`
 	EnableGithubCard bool   `gorm:"default:false"`
+	// 推送模块总开关（与具体推送渠道配置解耦）
+	NotifyEnabled bool `gorm:"default:false"`
 	// PWA 配置
 	PwaEnabled     bool   `gorm:"default:true"`
 	PwaTitle       string `gorm:"type:varchar(100)"`
