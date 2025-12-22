@@ -2251,7 +2251,7 @@ func PostMessage(c *gin.Context) {
 		Private  bool   `json:"private"`
 		ImageURL string `json:"image_url"`
 		VideoURL string `json:"video_url"` // 新增视频字段
-		Notify   bool   `json:"notify"`
+		Notify   *bool  `json:"notify"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string]("内容不能为空"))
@@ -2279,7 +2279,25 @@ func PostMessage(c *gin.Context) {
 	}
 
 	// 处理推送逻辑
-	if request.Notify {
+	// 后台推送总开关：SiteConfig.NotifyEnabled
+	var siteCfg models.SiteConfig
+	_ = database.DB.Table("site_configs").First(&siteCfg).Error
+
+	// 推送策略：
+	// - session（编辑器/后台页面会话）发布：保持原有语义，只有显式 notify=true 才推送
+	shouldNotify := false
+	if siteCfg.NotifyEnabled {
+		via, _ := c.Get("auth_via")
+		viaStr, _ := via.(string)
+		if viaStr == "token" {
+			shouldNotify = true
+		} else {
+			// session 或未标记：保持原逻辑，必须显式 notify=true
+			shouldNotify = (request.Notify != nil && *request.Notify)
+		}
+	}
+
+	if shouldNotify {
 		notifyConfig := models.GetNotifyConfig()
 		if notifyConfig != nil {
 			// 提取内容中的第一张图片链接

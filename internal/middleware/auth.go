@@ -33,6 +33,7 @@ func SessionAuthMiddleware() gin.HandlerFunc {
                         ctx.Set("user_id", user.ID)
                         ctx.Set("username", user.Username)
                         ctx.Set("is_admin", user.IsAdmin)
+                        ctx.Set("auth_via", "token")
                         ctx.Next()
                         return
                     }
@@ -71,6 +72,7 @@ func SessionAuthMiddleware() gin.HandlerFunc {
         ctx.Set("user_id", userID.(uint))
         ctx.Set("username", session.Get("username"))
         ctx.Set("is_admin", session.Get("is_admin"))
+        ctx.Set("auth_via", "session")
         ctx.Next()
     }
 }
@@ -133,6 +135,7 @@ func TokenAuthMiddleware() gin.HandlerFunc {
         c.Set("user_id", user.ID)
         c.Set("username", user.Username)
         c.Set("is_admin", user.IsAdmin)
+        c.Set("auth_via", "token")
         c.Next()
     }
 }
