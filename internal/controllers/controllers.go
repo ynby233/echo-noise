@@ -2285,6 +2285,7 @@ func PostMessage(c *gin.Context) {
 
 	// 推送策略：
 	// - session（编辑器/后台页面会话）发布：保持原有语义，只有显式 notify=true 才推送
+	// - token（API/扩展/MCP）发布：当后台推送总开关开启时自动推送（忽略客户端 notify 字段）
 	shouldNotify := false
 	if siteCfg.NotifyEnabled {
 		via, _ := c.Get("auth_via")
