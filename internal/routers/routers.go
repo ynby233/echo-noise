@@ -19,6 +19,25 @@ func SetupRouter() *gin.Engine {
 	r := gin.Default()
 	// 支持大文件上传（视频压缩/直传云端可能超过 200MB）
 	r.MaxMultipartMemory = 1024 << 20
+	basePath := normalizeProxyPrefix(os.Getenv("BASE_PATH"))
+	r.Use(func(c *gin.Context) {
+		prefix := basePath
+		if h := normalizeProxyPrefix(c.GetHeader("X-Forwarded-Prefix")); h != "" {
+			prefix = h
+		}
+		if newPath, ok := stripProxyPrefix(c.Request.URL.Path, prefix); ok {
+			c.Request.URL.Path = newPath
+			c.Request.URL.RawPath = newPath
+			if c.Request.RequestURI != "" {
+				if q := c.Request.URL.RawQuery; q != "" {
+					c.Request.RequestURI = newPath + "?" + q
+				} else {
+					c.Request.RequestURI = newPath
+				}
+			}
+		}
+		c.Next()
+	})
 
 	// 安全防护：拦截敏感路径扫描（不影响正常 API/静态资源/MCP）
 	r.Use(middleware.SecurityMiddleware())
@@ -348,4 +367,40 @@ func pickDir(candidates []string, fallback string) string {
 		}
 	}
 	return fallback
+}
+
+func normalizeProxyPrefix(v string) string {
+	v = strings.TrimSpace(v)
+	if i := strings.Index(v, ","); i >= 0 {
+		v = strings.TrimSpace(v[:i])
+	}
+	if v == "" || v == "/" {
+		return ""
+	}
+	if !strings.HasPrefix(v, "/") {
+		v = "/" + v
+	}
+	v = strings.TrimRight(v, "/")
+	if v == "" || v == "/" {
+		return ""
+	}
+	return v
+}
+
+func stripProxyPrefix(path, prefix string) (string, bool) {
+	if prefix == "" || path == "" {
+		return path, false
+	}
+	if path == prefix {
+		return "/", true
+	}
+	mark := prefix + "/"
+	if strings.HasPrefix(path, mark) {
+		trimmed := strings.TrimPrefix(path, prefix)
+		if trimmed == "" {
+			return "/", true
+		}
+		return trimmed, true
+	}
+	return path, false
 }
