@@ -1434,9 +1434,39 @@ const saveEditedMessage = async () => {
   }
 };
 const downloadAsImage = async (msgId: number) => {
+  let tempContainer: HTMLDivElement | null = null
+  let originalExpanded = false
+  let expandedTouched = false
   try {
+    const timeoutMs = 20000
+    const deadline = Date.now() + timeoutMs
+    const timeoutError = new Error('CARD_GENERATE_TIMEOUT')
+    const runWithDeadline = async <T>(factory: () => Promise<T>): Promise<T> => {
+      const remain = deadline - Date.now()
+      if (remain <= 0) throw timeoutError
+      let timer: ReturnType<typeof setTimeout> | null = null
+      try {
+        return await Promise.race([
+          factory(),
+          new Promise<T>((_, reject) => {
+            timer = setTimeout(() => reject(timeoutError), remain)
+          })
+        ])
+      } finally {
+        if (timer) clearTimeout(timer)
+      }
+    }
+
     const element = document.querySelector(`.content-container[data-msg-id="${msgId}"]`);
-    if (!element) return;
+    if (!element) {
+      useToast().add({
+        title: '下载失败',
+        description: '未找到可导出的内容',
+        color: 'red',
+        timeout: 2000
+      });
+      return;
+    }
 
     // 检查内容类型
     const hasText = element.querySelector('.markdown-preview')?.textContent?.trim();
@@ -1454,23 +1484,14 @@ const downloadAsImage = async (msgId: number) => {
       return;
     }
 
-    // 设置超时检测
-    const timeout = setTimeout(() => {
-      useToast().add({
-        title: '生成超时',
-        description: '卡片生成时间过长，请稍后重试',
-        color: 'red',
-        timeout: 3000
-      });
-    }, 10000);
-
     // 1. 临时展开内容
-    const originalExpanded = isExpanded.value[msgId];
+    originalExpanded = isExpanded.value[msgId];
     isExpanded.value[msgId] = true;
+    expandedTouched = true
     await nextTick();
 
     // 2. 创建临时容器
-    const tempContainer = document.createElement('div');
+    tempContainer = document.createElement('div');
    tempContainer.style.cssText = `
   padding: 0;
   background: transparent;
@@ -1505,27 +1526,7 @@ const downloadAsImage = async (msgId: number) => {
     contentClone.querySelectorAll('hr').forEach(el => el.remove());
     contentClone.querySelectorAll('.content-fade-mask, .content-fade, .content-mask, .fade-mask, .fade-overlay').forEach(el => el.remove());
     contentClone.querySelectorAll('.author-row .text-xs.opacity-70').forEach(el => el.remove());
-    // 导出卡片：作者区垂直居中（不改变左右布局），并避免“时间行”容器占位导致作者名下沉
-    const authorRow = contentClone.querySelector('.author-row') as HTMLElement | null
-    if (authorRow) {
-      authorRow.style.alignItems = 'center'
-      authorRow.style.marginBottom = '4px'
-    }
-    // 时间行是一个空的 flex 容器（时间被移除后仍可能占位），导出时直接隐藏
-    contentClone.querySelectorAll<HTMLElement>('.author-row .min-w-0 > .flex.items-center.gap-2').forEach((el) => {
-      el.style.display = 'none'
-    })
-    const authorInfo = contentClone.querySelector('.author-row .min-w-0') as HTMLElement | null
-    if (authorInfo) {
-      authorInfo.style.display = 'flex'
-      authorInfo.style.flexDirection = 'column'
-      authorInfo.style.justifyContent = 'center'
-    }
-    const authorName = contentClone.querySelector('.author-row .min-w-0 > .text-sm') as HTMLElement | null
-    if (authorName) {
-      authorName.style.lineHeight = '1.15'
-      authorName.style.transform = 'translateY(-6px)'
-    }
+    contentClone.querySelectorAll('.author-row').forEach(el => el.remove())
     contentClone.querySelectorAll<HTMLElement>('.border-t').forEach((el) => {
       el.style.marginTop = '8px'
       el.style.marginBottom = '8px'
@@ -1615,41 +1616,54 @@ const downloadAsImage = async (msgId: number) => {
   const images = contentClone.querySelectorAll('img');
   await Promise.all(Array.from(images).map(async (img) => {
     return new Promise<void>((resolve) => {
+      const rawSrc = img.getAttribute('src') || '';
+      const lazySrc = img.getAttribute('data-src') || img.getAttribute('data-original') || '';
+      if (!rawSrc && lazySrc) img.setAttribute('src', lazySrc);
       const originalSrc = img.src;
       img.crossOrigin = 'anonymous';
-      
-      // 处理图片路径并添加 credentials
+      const fail = () => {
+        console.error('图片加载失败:', originalSrc);
+        if (img.src !== originalSrc) {
+          img.src = originalSrc
+          let done = false
+          const finish = () => {
+            if (done) return
+            done = true
+            resolve()
+          }
+          img.onload = finish
+          img.onerror = finish
+          setTimeout(finish, 1200)
+          return
+        }
+        resolve()
+      };
       if (originalSrc.startsWith('/')) {
         img.src = `${BASE_API}${originalSrc}`;
-        // 为图片请求添加 credentials
         fetch(img.src, { credentials: 'include' })
-          .then(response => response.blob())
+          .then(response => {
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.blob();
+          })
           .then(blob => {
             img.src = URL.createObjectURL(blob);
             resolve();
           })
-          .catch(() => {
-            console.error('图片加载失败:', originalSrc);
-            img.parentElement?.removeChild(img);
-            resolve();
-          });
+          .catch(fail);
       } else {
         if (img.complete) {
-          resolve();
+          if (img.naturalWidth > 0) resolve();
+          else fail();
         } else {
           img.onload = () => resolve();
-          img.onerror = () => {
-            console.error('图片加载失败:', originalSrc);
-            img.parentElement?.removeChild(img);
-            resolve();
-          };
+          img.onerror = () => fail();
         }
       }
     });
   }));
 };
 
-await processImages();
+await runWithDeadline(() => processImages());
 
     tempContainer.appendChild(contentClone);
 
@@ -1742,26 +1756,26 @@ await processImages();
 
     // 生成二维码（脚本可能还未加载完成，运行时兜底加载）
     try {
-      await ensureQRCode()
+      await runWithDeadline(() => ensureQRCode())
       const QR = (window as any).QRCode || (window as any).qrcode;
       if (QR?.toCanvas) {
-        await QR.toCanvas(qrCanvas, messageURL, {
+        await runWithDeadline(() => QR.toCanvas(qrCanvas, messageURL, {
           width: 72,
           margin: 1,
           color: {
             dark: '#111827',
             light: '#ffffff'
           }
-        })
+        }))
       } else if (QR?.toDataURL) {
-        const dataUrl = await QR.toDataURL(messageURL, {
+        const dataUrl = await runWithDeadline(() => QR.toDataURL(messageURL, {
           width: 72,
           margin: 1,
           color: {
             dark: '#111827',
             light: '#ffffff'
           }
-        })
+        }))
         const img = document.createElement('img')
         img.src = dataUrl
         img.style.width = '72px'
@@ -1772,21 +1786,12 @@ await processImages();
         throw new Error('qrcode api missing')
       }
     } catch {
-      clearTimeout(timeout)
-      document.body.removeChild(tempContainer)
-      isExpanded.value[msgId] = originalExpanded
-      useToast().add({
-        title: '二维码生成失败',
-        description: '请稍后重试（二维码脚本未加载或网络异常）',
-        color: 'red',
-        timeout: 2500
-      })
-      return
+      throw new Error('CARD_QR_FAILED')
     }
 
     // 生成图片
     await nextTick();
-    const canvas = await html2canvas(tempContainer, {
+    const canvas = await runWithDeadline(() => html2canvas(tempContainer, {
       backgroundColor: bgColor,
       scale: 2,
       useCORS: true,
@@ -1835,34 +1840,48 @@ await processImages();
           mp.style.zIndex = '2'
         }
       }
-    });
-
-    // 清除超时检测
-    clearTimeout(timeout);
+    }));
     // 下载图片
     const link = document.createElement('a');
     link.download = `message-${msgId}.png`;
     link.href = canvas.toDataURL('image/png');
     link.click();
 
-    // 清理临时元素
-    document.body.removeChild(tempContainer);
-    
-    // 恢复原始展开状态
-    isExpanded.value[msgId] = originalExpanded;
-
     useToast().add({
       title: '下载成功',
       color: 'green',
       timeout: 2000
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('下载失败:', error);
-    useToast().add({
-      title: '下载失败',
-      color: 'red',
-      timeout: 2000
-    });
+    if (error?.message === 'CARD_GENERATE_TIMEOUT') {
+      useToast().add({
+        title: '生成超时',
+        description: '卡片生成时间过长，请稍后重试',
+        color: 'red',
+        timeout: 3000
+      });
+    } else if (error?.message === 'CARD_QR_FAILED') {
+      useToast().add({
+        title: '二维码生成失败',
+        description: '请稍后重试（二维码脚本未加载或网络异常）',
+        color: 'red',
+        timeout: 2500
+      });
+    } else {
+      useToast().add({
+        title: '下载失败',
+        color: 'red',
+        timeout: 2000
+      });
+    }
+  } finally {
+    if (tempContainer && tempContainer.parentNode) {
+      tempContainer.parentNode.removeChild(tempContainer)
+    }
+    if (expandedTouched) {
+      isExpanded.value[msgId] = originalExpanded
+    }
   }
 };
 
