@@ -454,7 +454,7 @@ jobs:
           
           # Update build.gradle with Version and MinSDK (Run last to ensure persistence)
           if [ -f "android/app/build.gradle" ]; then
-            node -e "const fs=require('fs'),p='android/app/build.gradle';let s=fs.readFileSync(p,'utf8');const ver=process.env.APP_VERSION_NAME||'0.0.0';s=s.replace(/versionName\s+\"[^\"]*\"/,'versionName \""+ver+"\"');s=s.replace(/minSdkVersion\s+\d+/,'minSdkVersion 24');const [maj,min,pat]=ver.split('.').map(n=>parseInt(n)||0);const code=maj*10000+min*100+pat;s=s.replace(/versionCode\s+\d+/,'versionCode '+code);fs.writeFileSync(p,s);console.log('Updated build.gradle version to '+ver+' ('+code+')');"
+            node -e "const fs=require('fs'),p='android/app/build.gradle';let s=fs.readFileSync(p,'utf8');const raw=(process.env.APP_VERSION_NAME||'').trim().replace(/^[vV]/,'');const ver=(raw.match(/^(\\d+)\\.(\\d+)\\.(\\d+)/)?raw:'0.0.1');const m=ver.match(/^(\\d+)\\.(\\d+)\\.(\\d+)/);const maj=m?Number(m[1]):0,min=m?Number(m[2]):0,pat=m?Number(m[3]):1;const rawCode=maj*10000+min*100+pat;const code=Number.isFinite(rawCode)&&rawCode>0?Math.floor(rawCode):1;s=s.replace(/versionName\\s+\"[^\"]*\"/,'versionName \"'+ver+'\"');s=s.replace(/minSdkVersion\\s+\\d+/,'minSdkVersion 24');s=s.replace(/versionCode\\s+\\S+/,'versionCode '+code);fs.writeFileSync(p,s);console.log('Updated build.gradle version to '+ver+' ('+code+')');"
           fi
           
           [ -f "android/app/src/main/assets/public/index.html" ] || (echo "ERROR: web assets missing after sync" && find android/app/src/main/assets -maxdepth 2 -type f | sed -n '1,100p' && exit 1)
