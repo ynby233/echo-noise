@@ -2584,12 +2584,12 @@ html, body {
   bottom: 18px;
   transform: translateX(-50%);
   display: flex;
-  gap: 6px;
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  padding: 0;
-  border-radius: 0;
+  gap: 2px;
+  background: rgba(2, 6, 23, 0.56);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 8px 18px rgba(2, 6, 23, 0.28);
+  padding: 4px;
+  border-radius: 9999px;
   flex-wrap: nowrap;
   overflow-x: auto;
   overflow-y: hidden;
@@ -2609,53 +2609,54 @@ html.dark .search-card { background: var(--home-surface-dark); color: #fff; bord
   line-height: 1;
   padding: 10px 14px;
   border-radius: 9999px;
-  color: #f8fafc;
-  background: rgba(15, 23, 42, 0.56);
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  opacity: 1;
-  transition: transform .16s ease, background-color .16s ease, opacity .16s ease, color .16s ease, box-shadow .16s ease;
+  color: rgba(248, 250, 252, 0.84);
+  background: transparent;
+  border: none;
+  transition: none;
   white-space: nowrap;
   flex-shrink: 0;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  text-shadow: none;
+  box-shadow: none;
+  -webkit-tap-highlight-color: transparent;
 }
 .hero-tab.active {
-  opacity: 1;
   color: #ffffff;
-  background: rgba(15, 23, 42, 0.9);
-  border-color: rgba(255, 255, 255, 0.45);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24), 0 2px 10px rgba(15, 23, 42, 0.42);
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: none;
 }
 .hero-tab:hover {
-  transform: none;
-  opacity: 1;
-  background: rgba(15, 23, 42, 0.56);
+  background: transparent;
+}
+.hero-tab.active:hover {
+  background: rgba(255, 255, 255, 0.18);
 }
 .hero-tab-icon {
   width: 15px;
   height: 15px;
-  opacity: 1;
+}
+.hero-tab span,
+.hero-tab-icon {
+  transition: none !important;
 }
 :global(html.dark) .hero-tabs {
-  background: transparent;
-  border-color: transparent;
+  background: rgba(2, 6, 23, 0.58);
+  border-color: rgba(255, 255, 255, 0.14);
 }
 :global(html:not(.dark)) .hero-tabs {
-  background: transparent;
-  border-color: transparent;
+  background: rgba(2, 6, 23, 0.54);
+  border-color: rgba(255, 255, 255, 0.14);
 }
 :global(html:not(.dark)) .hero-tab {
-  color: #f8fafc;
-  background: rgba(15, 23, 42, 0.6);
-  border-color: rgba(255, 255, 255, 0.24);
+  color: rgba(248, 250, 252, 0.84);
+  background: transparent;
 }
 :global(html:not(.dark)) .hero-tab.active {
   color: #ffffff;
-  background: rgba(15, 23, 42, 0.9);
-  border-color: rgba(255, 255, 255, 0.44);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 2px 10px rgba(15, 23, 42, 0.36);
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: none;
 }
 @media (max-width: 480px) {
-  .hero-tabs { gap: 6px; padding: 8px 9px; }
+  .hero-tabs { gap: 2px; padding: 4px; }
   .hero-tab { font-size: 0.82rem; padding: 8px 11px; gap: 3px; }
   .hero-tab-icon { width: 13px; height: 13px; }
 }
