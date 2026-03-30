@@ -676,8 +676,7 @@ const switchToRegister = async () => {
 const switchToLogin = () => { authMode.value = 'login' }
 const closeAuthModal = () => {
   showAuthModal.value = false
-  // 移除 ?login=1，避免关闭后再次自动弹出
-  const { login, ...rest } = route.query as any
+  const { login, mode, ...rest } = route.query as any
   router.replace({ path: route.path, query: rest })
 }
 const onLoginSubmit = async () => {
@@ -735,11 +734,15 @@ onUnmounted(() => {
 })
 
 watch(() => route.query.login, (v) => {
-  if (v) { authMode.value = 'login'; showAuthModal.value = true }
+  if (v) {
+    const mode = String(route.query.mode || 'login')
+    authMode.value = mode === 'register' ? 'register' : 'login'
+    showAuthModal.value = true
+  }
 }, { immediate: true })
 watch(showAuthModal, (v) => {
   if (!v && route.query.login) {
-    const { login, ...rest } = route.query as any
+    const { login, mode, ...rest } = route.query as any
     router.replace({ path: route.path, query: rest })
   }
 })

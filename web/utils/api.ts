@@ -4,6 +4,7 @@ import { useToast } from "#imports";
 
 const FIRST_LOAD_SUPPRESS_MS = 8000
 let initialSuppressUntil = 0
+let authGuideRedirecting = false
 if (typeof window !== 'undefined') {
   const now = Date.now()
   initialSuppressUntil = now + FIRST_LOAD_SUPPRESS_MS
@@ -16,6 +17,15 @@ const shouldSuppressToast = (options?: { silent?: boolean }) => {
   return Date.now() < initialSuppressUntil
 }
 
+const redirectToAuthGuide = () => {
+    if (typeof window === 'undefined') return
+    if (authGuideRedirecting) return
+    if (window.location.pathname === '/auth/guide') return
+    authGuideRedirecting = true
+    const redirect = encodeURIComponent(window.location.pathname + window.location.search)
+    window.location.href = `/auth/guide?reason=expired&redirect=${redirect}`
+}
+
 const handleAuthExpired = (msg?: string, options?: { silent?: boolean }) => {
     const userStore = useUserStore();
     const wasLoggedIn = !!userStore.isLogin || !!userStore.token
@@ -25,6 +35,7 @@ const handleAuthExpired = (msg?: string, options?: { silent?: boolean }) => {
     if (!shouldSuppressToast(options)) {
         toast.add({ title: '登录已过期', description: msg || '请重新登录', color: 'red', timeout: 2000 });
     }
+    redirectToAuthGuide()
 }
 
 const isAuthExpiredMsg = (msg?: string) => {

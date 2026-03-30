@@ -1498,8 +1498,8 @@
           </UButton>
         </div>
         <div v-else class="flex gap-2">
-          <UButton color="primary" @click="showLoginModal = true; authmode = true">登录</UButton>
-          <UButton color="secondary" @click="showLoginModal = true; authmode = false">注册</UButton>
+          <UButton color="primary" @click="$router.push({ path: '/', query: { login: '1', mode: 'login', redirect: '/status' } })">登录</UButton>
+          <UButton color="secondary" @click="$router.push({ path: '/', query: { login: '1', mode: 'register', redirect: '/status' } })">注册</UButton>
         </div>
       </div>
       <div v-if="false">

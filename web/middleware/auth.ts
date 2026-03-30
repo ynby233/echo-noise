@@ -1,7 +1,7 @@
 import { useUserStore } from '~/store/user'
 
 export default defineNuxtRouteMiddleware(async (to) => {
-  const publicPaths = ['/', '/auth/login', '/auth/register']
+  const publicPaths = ['/', '/auth/login', '/auth/register', '/auth/guide']
   if (publicPaths.includes(to.path)) return
 
   const baseApi = useRuntimeConfig().public.baseApi || '/api'
@@ -15,5 +15,5 @@ export default defineNuxtRouteMiddleware(async (to) => {
     userStore.clearUserStatus()
   } catch {}
 
-  return navigateTo({ path: '/', query: { login: '1', redirect: to.fullPath } })
+  return navigateTo({ path: '/auth/guide', query: { reason: 'entry', redirect: to.fullPath } })
 })
