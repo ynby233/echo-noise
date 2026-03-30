@@ -161,6 +161,8 @@ func GetFrontendConfig() (map[string]interface{}, error) {
 		}
 	}
 
+	effectiveSyncConfirmed := config.StorageSyncConfirmed && syncmanager.IsStorageSyncConfirmedLocal()
+
 	configMap := map[string]interface{}{
 		"allowRegistration": allowReg,
 		"dbType":            dbType,
@@ -259,6 +261,8 @@ func GetFrontendConfig() (map[string]interface{}, error) {
 				return config.StorageSyncRole
 			}(),
 			"autoSyncEnabled": config.StorageAutoSyncEnabled,
+			"syncConfirmed":  effectiveSyncConfirmed,
+			"needsConfirm":   config.StorageEnabled && !effectiveSyncConfirmed,
 			"syncMode":        choose(config.StorageSyncMode, "instant"),
 			"syncIntervalMinute": func() int {
 				if config.StorageSyncIntervalMinute > 0 {
@@ -817,6 +821,17 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 				config.StorageSecretKey != "" {
 				config.StorageAutoSyncEnabled = true
 			}
+		}
+
+		// 若用户在后台明确保存了云存储参数（配置完整），则认为已人工确认同步
+		// 这样“首次确认”仅针对旧数据库中已存在云端参数但未确认的情况。
+		if config.StorageEnabled &&
+			strings.TrimSpace(config.StorageProvider) != "" &&
+			strings.TrimSpace(config.StorageEndpoint) != "" &&
+			strings.TrimSpace(config.StorageBucket) != "" &&
+			strings.TrimSpace(config.StorageAccessKey) != "" &&
+			strings.TrimSpace(config.StorageSecretKey) != "" {
+			// no-op: confirmation must be explicit via /api/backup/storage/sync-confirm
 		}
 	}
 

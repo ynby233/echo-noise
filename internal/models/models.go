@@ -168,6 +168,10 @@ type SiteConfig struct {
 	StorageSyncMode           string     `gorm:"type:varchar(20)"` // instant 或 scheduled
 	StorageSyncIntervalMinute int        `gorm:"default:15"`
 	StorageLastSyncTime       *time.Time `json:"storageLastSyncTime"`
+	StorageSyncConfirmed      bool       `gorm:"default:false"`
+	StorageSyncConfirmInstanceID string  `gorm:"type:varchar(191)"`
+	StorageLastRemoteETag     string     `gorm:"type:varchar(191)"`
+	StorageLastRemoteModified *time.Time
 	// 音乐播放器配置（NeteaseMiniPlayer）
 	MusicEnabled          bool   `gorm:"default:false"`
 	MusicPlaylistId       string `gorm:"type:varchar(50)"`

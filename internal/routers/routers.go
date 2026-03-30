@@ -208,6 +208,7 @@ func SetupRouter() *gin.Engine {
 		backup.POST("/storage/restore", controllers.HandleBackupRestoreFromURL)
 		backup.POST("/storage/presign/upload", controllers.HandleBackupPresignUpload)
 		backup.POST("/storage/presign/download", controllers.HandleBackupPresignDownload)
+		backup.POST("/storage/sync-confirm", controllers.HandleBackupSyncConfirm)
 		backup.POST("/storage/sync-now", controllers.HandleBackupSyncNow)
 	}
 

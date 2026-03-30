@@ -1267,27 +1267,35 @@
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 border-t pt-3" :class="theme.border">
                       <div class="md:col-span-2 flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-4">
+                        <div v-if="storageNeedsConfirm" class="w-full rounded border p-3" :class="[theme.subtleBg, theme.border]">
+                          <div class="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
+                            <div class="text-sm" :class="theme.text">检测到旧数据中已存在云同步配置，首次运行需确认是否启用云同步。</div>
+                            <div class="flex gap-2">
+                              <UButton color="amber" variant="soft" @click="confirmCloudSync">确认同步</UButton>
+                            </div>
+                          </div>
+                        </div>
                         <div class="flex items-center gap-2">
                           <span class="text-sm" :class="theme.mutedText">自动同步至云端</span>
-                          <USwitch v-model="storageAutoSyncEnabled" @update:model-value="onAutoSyncToggle" />
+                          <USwitch v-model="storageAutoSyncEnabled" :disabled="storageNeedsConfirm" @update:model-value="onAutoSyncToggle" />
                         </div>
                         <div class="flex items-center gap-2">
                           <span class="text-sm" :class="theme.mutedText">模式</span>
-                          <USelect v-model="storageSyncMode" :options="[{label:'即时',value:'instant'},{label:'定时',value:'scheduled'}]" />
+                          <USelect v-model="storageSyncMode" :disabled="storageNeedsConfirm" :options="[{label:'即时',value:'instant'},{label:'定时',value:'scheduled'}]" />
                         </div>
                         <div class="flex items-center gap-2">
                           <span class="text-sm" :class="theme.mutedText">同步角色</span>
-                          <USelect v-model="storageConfig.syncRole" :options="[{label:'主节点（执行上传）',value:'primary'},{label:'备节点（不上传）',value:'secondary'}]" />
+                          <USelect v-model="storageConfig.syncRole" :disabled="storageNeedsConfirm" :options="[{label:'主节点（执行上传）',value:'primary'},{label:'备节点（不上传）',value:'secondary'}]" />
                         </div>
                         <div class="flex items-center gap-2" v-if="storageSyncMode==='scheduled'">
                           <span class="text-sm" :class="theme.mutedText">间隔(分钟)</span>
-                          <UInput v-model.number="storageSyncIntervalMinute" type="number" min="1" class="w-24" />
+                          <UInput v-model.number="storageSyncIntervalMinute" :disabled="storageNeedsConfirm" type="number" min="1" class="w-24" />
                         </div>
                         <div class="flex items-center gap-3 ml-auto">
                           <span class="text-sm" :class="theme.mutedText">上次同步</span>
                           <span class="text-sm" :class="theme.text">{{ lastCloudSyncText || '—' }}</span>
-                          <UButton color="primary" :disabled="storageConfig.syncRole==='secondary' || !storageEnabled" @click="syncNow">立即同步</UButton>
-                          <UButton color="green" class="shadow" @click="saveStorageConfig">保存同步设置</UButton>
+                          <UButton color="primary" :disabled="storageNeedsConfirm || storageConfig.syncRole==='secondary' || !storageEnabled" @click="syncNow">立即同步</UButton>
+                          <UButton color="green" class="shadow" :disabled="storageNeedsConfirm" @click="saveStorageConfig">保存同步设置</UButton>
                         </div>
                       </div>
                       <div>
@@ -1976,6 +1984,7 @@ const sidebarOpen = ref(false)
 const panelTheme = ref<'dark' | 'midnight' | 'slate' | 'light'>(
   (typeof window !== 'undefined' && (localStorage.getItem('adminTheme') as any)) || 'dark'
 )
+const prevRootDark = ref<boolean | null>(null)
 const baseApi = useRuntimeConfig().public.baseApi || '/api'
 const localPreview = ref('')
 const userMessagesCount = ref(0)
@@ -2050,6 +2059,33 @@ onMounted(() => {
   sidebarOpen.value = window.innerWidth >= 768
 })
 
+const syncRootDarkForAdmin = () => {
+  if (typeof window === 'undefined') return
+  try {
+    const html = document.documentElement
+    const wantDark = panelTheme.value !== 'light'
+    html.classList.toggle('dark', wantDark)
+  } catch {}
+}
+
+onMounted(() => {
+  if (typeof window === 'undefined') return
+  try {
+    prevRootDark.value = document.documentElement.classList.contains('dark')
+  } catch {
+    prevRootDark.value = null
+  }
+  syncRootDarkForAdmin()
+})
+
+onUnmounted(() => {
+  if (typeof window === 'undefined') return
+  if (prevRootDark.value === null) return
+  try {
+    document.documentElement.classList.toggle('dark', !!prevRootDark.value)
+  } catch {}
+})
+
 const loadAdminProfile = async () => {
   try {
     const sname = String((userStore.status as any)?.username || '').trim()
@@ -2082,6 +2118,7 @@ onMounted(() => { loadUserMessagesCount() })
 
 watch(() => panelTheme.value, (val: string) => {
   try { localStorage.setItem('adminTheme', String(val)) } catch {}
+  syncRootDarkForAdmin()
 })
 
 const showBottomBar = ref(typeof window !== 'undefined' ? window.innerWidth >= 768 : true)
@@ -2243,16 +2280,6 @@ const auditFriendLink = async (app: any, approve: boolean, feedback: string) => 
 
 const saveAdminTheme = async () => {
   localStorage.setItem('adminTheme', panelTheme.value)
-  try {
-    const html = document.documentElement
-    const wantDark = panelTheme.value !== 'light'
-    const hasDark = html.classList.contains('dark')
-    if (wantDark && !hasDark) {
-      html.classList.add('dark')
-    } else if (!wantDark && hasDark) {
-      html.classList.remove('dark')
-    }
-  } catch {}
   try {
     const resConfig = await fetch(`${baseApi}/frontend/config`, { credentials: 'include' })
     const dataConfig = await resConfig.json()
@@ -4721,6 +4748,7 @@ const storageAutoSyncEnabled = ref(false)
 const storageSyncMode = ref<'instant'|'scheduled'>('instant')
 const storageSyncIntervalMinute = ref(15)
 const lastCloudSyncText = ref('')
+const storageNeedsConfirm = ref(false)
 const uploadURL = ref('')
 const downloadURL = ref('')
 const cloudSyncPollId = ref<number | null>(null)
@@ -4769,8 +4797,24 @@ const loadStorageConfig = async () => {
       storageSyncMode.value = (sc.syncMode || 'instant')
       storageSyncIntervalMinute.value = Number(sc.syncIntervalMinute || 15)
       lastCloudSyncText.value = formatShanghai(sc.lastSyncTime || '')
+      storageNeedsConfirm.value = !!sc.needsConfirm
     }
   } catch {}
+}
+
+const confirmCloudSync = async () => {
+  try {
+    const res = await fetch('/api/backup/storage/sync-confirm', { method: 'POST', credentials: 'include' })
+    const data = await res.json()
+    if (data?.code === 1) {
+      useToast().add({ title: '已确认', color: 'green' })
+      await loadStorageConfig()
+    } else {
+      throw new Error(data?.msg || '确认失败')
+    }
+  } catch (e: any) {
+    useToast().add({ title: '确认失败', description: e.message, color: 'red' })
+  }
 }
 onMounted(() => {
   if (storageEnabled.value && storageAutoSyncEnabled.value && storageConfig.syncRole !== 'secondary') startCloudPolling()

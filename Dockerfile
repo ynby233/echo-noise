@@ -1,5 +1,8 @@
 # 构建阶段：前端
-FROM public.ecr.aws/docker/library/node:22.14.0-alpine AS frontend-build
+# 注意：前端产物是静态文件，与 CPU 架构无关。
+# multi-arch 构建时如果在 TARGETPLATFORM（例如 linux/arm64）上执行 npm，会触发 QEMU 模拟导致极慢。
+# 因此固定在 BUILDPLATFORM 上构建前端。
+FROM --platform=$BUILDPLATFORM public.ecr.aws/docker/library/node:22.14.0-alpine AS frontend-build
 
 # 设置工作目录
 WORKDIR /app/web
@@ -48,7 +51,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 RUN mkdir -p /app/data /app/public && chmod -R 755 /app/data
 
 # MCP 构建阶段（打包为单文件，避免在最终镜像中保留 node_modules）
-FROM public.ecr.aws/docker/library/node:20-alpine AS mcp-build
+# MCP 产物为 JS bundle，与 CPU 架构无关，同样固定在 BUILDPLATFORM 上构建。
+FROM --platform=$BUILDPLATFORM public.ecr.aws/docker/library/node:20-alpine AS mcp-build
 WORKDIR /app/mcp
 COPY ./mcp/package.json ./
 RUN --mount=type=cache,target=/root/.npm \
@@ -61,6 +65,8 @@ RUN npx --yes esbuild@0.23.0 server.js \
     --outfile=server.bundle.mjs
 
 # FFmpeg 构建阶段（尽量静态链接，减少运行时依赖体积）
+# 注意：源码编译非常耗时，且 multi-arch 下会被重复构建。
+# 默认 final 镜像将改为通过 apk 安装 ffmpeg；如需自编译版本，请使用 --target final-ffmpeg。
 FROM public.ecr.aws/docker/library/alpine:3.21 AS ffmpeg-build
 ARG FFMPEG_VERSION=7.1
 RUN set -eux; \
@@ -103,6 +109,8 @@ FROM public.ecr.aws/docker/library/alpine:3.21 AS final
 ARG USE_UPX=1
 # 可选：是否安装 ffmpeg（1=启用，0=禁用）。默认启用以保持原有功能
 ARG INSTALL_FFMPEG=1
+# 默认使用精简自编译 ffmpeg（二进制文件 + 少量依赖）以降低镜像体积。
+# 如需更快构建可使用 --build-arg FFMPEG_MODE=apk
 ARG FFMPEG_MODE=custom
 # 镜像版本（用于在运行时展示），构建时可通过 --build-arg VERSION=xxx 传入
 ARG VERSION=latest
@@ -179,8 +187,8 @@ EXPOSE 1315
 # 启动后端与 MCP（MCP 后台运行，Go 服务为主进程）
 CMD ["/app/noise"]
 
-# 显式的“带 ffmpeg 的最终镜像”目标（当前 final 默认已包含 ffmpeg）。
-# 仅用于构建命令中明确表达用途：docker build --target final-ffmpeg ...
+# 显式的“带自编译 ffmpeg 的最终镜像”目标。
+# 用法：docker build --target final-ffmpeg ...
 FROM final AS final-ffmpeg
 
 FROM final AS final-mcp

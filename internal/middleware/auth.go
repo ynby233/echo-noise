@@ -96,7 +96,7 @@ func TokenAuthMiddleware() gin.HandlerFunc {
     return func(c *gin.Context) {
         auth := c.GetHeader("Authorization")
         if auth == "" {
-            c.JSON(http.StatusOK, dto.Fail[any]("未提供认证信息"))
+            c.JSON(http.StatusUnauthorized, dto.Fail[any]("未提供认证信息"))
             c.Abort()
             return
         }
@@ -111,7 +111,7 @@ func TokenAuthMiddleware() gin.HandlerFunc {
 
         db, err := database.GetDB()
         if err != nil {
-            c.JSON(http.StatusOK, dto.Fail[any]("系统错误"))
+            c.JSON(http.StatusUnauthorized, dto.Fail[any]("系统错误"))
             c.Abort()
             return
         }
@@ -119,14 +119,14 @@ func TokenAuthMiddleware() gin.HandlerFunc {
         // 查询用户
         var user models.User
         if err := db.Where("token = ?", token).First(&user).Error; err != nil {
-            c.JSON(http.StatusOK, dto.Fail[any]("无效的token"))
+            c.JSON(http.StatusUnauthorized, dto.Fail[any]("无效的token"))
             c.Abort()
             return
         }
 
         // 检查 token 是否为空
         if user.Token == "" {
-            c.JSON(http.StatusOK, dto.Fail[any]("token已失效"))
+            c.JSON(http.StatusUnauthorized, dto.Fail[any]("token已失效"))
             c.Abort()
             return
         }

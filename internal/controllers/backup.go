@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-contrib/sessions"
 	"github.com/rcy1314/echo-noise/config"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
@@ -500,11 +500,51 @@ func HandleBackupSyncNow(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "云同步角色为备节点，禁止上传"})
 		return
 	}
+	confirmed := cfg.StorageSyncConfirmed && syncmanager.IsStorageSyncConfirmedLocal()
+	if !confirmed {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "检测到程序首次启用云同步/未确认，需先在后台确认是否同步"})
+		return
+	}
 	if err := syncmanager.SyncNow(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "同步失败: " + err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "已同步到云端"})
+}
+
+// 确认云同步（首次启用/首次启动门禁）
+func HandleBackupSyncConfirm(c *gin.Context) {
+	if !isAdmin(c) {
+		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "需要管理员权限"})
+		return
+	}
+	db, _ := database.GetDB()
+	var cfg models.SiteConfig
+	if err := db.Table("site_configs").First(&cfg).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "读取站点配置失败"})
+		return
+	}
+	if !cfg.StorageEnabled {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "云存储未启用"})
+		return
+	}
+	confirmed := cfg.StorageSyncConfirmed && syncmanager.IsStorageSyncConfirmedLocal()
+	if confirmed {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "已确认"})
+		return
+	}
+
+	if err := syncmanager.SetStorageSyncConfirmedLocal(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "确认失败: " + err.Error()})
+		return
+	}
+	if err := db.Table("site_configs").Where("id = ?", cfg.ID).Update("storage_sync_confirmed", true).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "确认失败: " + err.Error()})
+		return
+	}
+	cfg.StorageSyncConfirmed = true
+	syncmanager.Configure(cfg)
+	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "已确认，可开始同步"})
 }
 func backupPostgres(tempDir string) error {
 	dumpFile := filepath.Join(tempDir, "database.sql")

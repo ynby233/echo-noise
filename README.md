@@ -38,6 +38,10 @@
 
 ## 2025更新状态
 
+- 调整云端同步数据首次运行时的逻辑，增加了数据新旧对比及后台确认选项，只有确认后才能开启数据同步
+
+- 修复登录状态失效时仍显示已登录状态的bug
+
 - 优化内容底部图标显示、优化下载为内容图片的卡片样式，优化首页加载速度
 
 - 增加ffmpeg包内置，会增加镜像包大小，但支持媒体附件压缩
@@ -235,10 +239,17 @@
 
 ```
 docker run -d \
-  --name Ech0-Noise \
-  --platform linux/amd64 \
-  -p 1314:1314 \
-noise233/echo-noise:latest
+  --name studio-noise \
+  -p 1566:1566 \
+  -v /opt/noisevip:/data \
+  -e TZ=Asia/Shanghai \
+  noise233/studio-noise:latest
+
+docker buildx build \
+--platform linux/amd64 \
+-t noise233/studio-noise:v1.0 \
+-t noise233/studio-noise:latest \
+--push --no-cache .
 ```
 
 手动执行升级
@@ -253,7 +264,7 @@ noise233/echo-noise:latest
 docker run -d \
   --name Ech0-Noise \
   --platform linux/amd64 \
-  -v /opt/data:/app/data \
+  -v /opt/noisevip:/app/data \
   -p 1314:1314 \
   -e TZ=Asia/Shanghai \
 noise233/echo-noise:latest
@@ -1528,12 +1539,41 @@ docker buildx create --use --name mybuilder
 ```
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  --target final-ffmpeg \
-  --build-arg VERSION=v2.4.3 \
-  -t noise233/echo-noise:v2.4.3 \
+  --target final \
+  --build-arg VERSION=v2.4.5 \
+  -t noise233/echo-noise:v2.4.5 \
   -t noise233/echo-noise:latest \
   --push --no-cache .
 ```
+
+包含MCP镜像且包含ffmpeg：
+
+```
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  --target final-mcp \
+  --build-arg VERSION=v2.4.5 \
+  -t noise233/echo-noise:v2.4.5-mcp \
+  -t noise233/echo-noise:latest-mcp \
+  --push --no-cache .
+```
+
+精简主镜像单架构 amd64（不带 MCP 且不包含 ffmpeg）：
+
+```
+docker buildx build \
+  --platform linux/amd64 \
+  --target final \
+  --build-arg VERSION=v2.4.5 \
+  --build-arg INSTALL_FFMPEG=0 \
+  -t noise233/echo-noise:v2.4.5-amd64 \
+  -t noise233/echo-noise:last-amd64 \
+  --push --no-cache .
+```
+
+- 容器内 APP_VERSION=v2.0 ，后台版本接口会显示 v2.0
+  
+  同时把同一构建产物推成 v2.0 与 latest 两个标签，方便用户使用 :latest 拉到 v2.0
 
 同时推送版本时间标签与 latest ：
 
@@ -1553,43 +1593,12 @@ docker buildx build --platform linux/amd64,linux/arm64 --target final-ffmpeg --b
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final-ffmpeg \
-  --build-arg VERSION=v2.4.3 \
+  --build-arg VERSION=v2.4.5 \
   --build-arg USE_UPX=0 \
-  -t noise233/echo-noise:v2.4.3 \
+  -t noise233/echo-noise:v2.4.5 \
   -t noise233/echo-noise:latest \
   --push --no-cache .
 ```
-
-包含MCP镜像且包含ffmpeg：
-
-```
-docker buildx build \
-  --platform linux/amd64,linux/arm64 \
-  --target final-mcp \
-  --build-arg VERSION=v2.4.3 \
-  --build-arg USE_UPX=1 \
-  -t noise233/echo-noise:v2.4.3-mcp \
-  -t noise233/echo-noise:latest-mcp \
-  --push --no-cache .
-```
-
-精简主镜像单架构 amd64（不带 MCP 且不包含 ffmpeg）：
-
-```
-docker buildx build \
-  --platform linux/amd64 \
-  --target final \
-  --build-arg VERSION=v2.4.3 \
-  --build-arg INSTALL_FFMPEG=0 \
-  --build-arg USE_UPX=1 \
-  -t noise233/echo-noise:v2.4.3-amd64 \
-  -t noise233/echo-noise:last-amd64 \
-  --push --no-cache .
-```
-
-- 容器内 APP_VERSION=v2.0 ，后台版本接口会显示 v2.0
-  
-  同时把同一构建产物推成 v2.0 与 latest 两个标签，方便用户使用 :latest 拉到 v2.0
 
 Podman（替代Docker）
 

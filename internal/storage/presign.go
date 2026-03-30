@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 	awscfg "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go"
 	"github.com/rcy1314/echo-noise/internal/models"
 )
 
@@ -118,6 +120,40 @@ func PresignUpload(site models.SiteConfig, bucket, key string, expires time.Dura
 		return "", err
 	}
 	return req.URL, nil
+}
+
+type ObjectMeta struct {
+	ETag         string
+	LastModified *time.Time
+}
+
+func HeadObject(site models.SiteConfig, bucket, key string) (*ObjectMeta, error) {
+	cli, err := getS3Client(site)
+	if err != nil {
+		return nil, err
+	}
+	key = prefixedKey(site, key)
+	out, err := cli.HeadObject(context.Background(), &s3.HeadObjectInput{Bucket: &bucket, Key: &key})
+	if err != nil {
+		var apiErr smithy.APIError
+		if ok := errors.As(err, &apiErr); ok {
+			code := strings.ToLower(strings.TrimSpace(apiErr.ErrorCode()))
+			// S3/R2 对不存在对象的错误码可能不同，统一当作“无对象”处理
+			if code == "notfound" || code == "nosuchkey" || code == "notfoundexception" {
+				return nil, nil
+			}
+		}
+		return nil, err
+	}
+	meta := &ObjectMeta{}
+	if out.ETag != nil {
+		meta.ETag = strings.Trim(*out.ETag, "\"")
+	}
+	if out.LastModified != nil {
+		t := *out.LastModified
+		meta.LastModified = &t
+	}
+	return meta, nil
 }
 
 func PresignDownload(site models.SiteConfig, bucket, key string, expires time.Duration) (string, error) {

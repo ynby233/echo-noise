@@ -1,7 +1,13 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"log"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
 
 	"github.com/spf13/viper"
 )
@@ -38,6 +44,11 @@ type AppConfig struct {
 
 var Config AppConfig
 
+var (
+	instanceIDOnce sync.Once
+	instanceID     string
+)
+
 func LoadConfig() error {
 	viper.SetConfigFile("config/config.yaml")
 	viper.SetConfigType("yaml")
@@ -55,4 +66,33 @@ func LoadConfig() error {
 	}
 
 	return nil
+}
+
+func GetInstanceID() string {
+	instanceIDOnce.Do(func() {
+		if v := strings.TrimSpace(os.Getenv("DEPLOYMENT_INSTANCE_ID")); v != "" {
+			instanceID = v
+			return
+		}
+
+		path := filepath.Join("data", "instance_id")
+		if b, err := os.ReadFile(path); err == nil {
+			if v := strings.TrimSpace(string(b)); v != "" {
+				instanceID = v
+				return
+			}
+		}
+
+		buf := make([]byte, 16)
+		if _, err := rand.Read(buf); err != nil {
+			log.Printf("生成实例ID失败: %v", err)
+			instanceID = "unknown"
+			return
+		}
+		instanceID = hex.EncodeToString(buf)
+
+		_ = os.MkdirAll(filepath.Dir(path), 0755)
+		_ = os.WriteFile(path, []byte(instanceID), 0644)
+	})
+	return instanceID
 }

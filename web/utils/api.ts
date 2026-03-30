@@ -16,6 +16,38 @@ const shouldSuppressToast = (options?: { silent?: boolean }) => {
   return Date.now() < initialSuppressUntil
 }
 
+const handleAuthExpired = (msg?: string, options?: { silent?: boolean }) => {
+    const userStore = useUserStore();
+    const wasLoggedIn = !!userStore.isLogin || !!userStore.token
+    if (!wasLoggedIn) return
+    userStore.clearUserStatus();
+    const toast = useToast();
+    if (!shouldSuppressToast(options)) {
+        toast.add({ title: '登录已过期', description: msg || '请重新登录', color: 'red', timeout: 2000 });
+    }
+}
+
+const isAuthExpiredMsg = (msg?: string) => {
+    const m = (msg || '').toLowerCase()
+    if (!m) return false
+    return m.includes('未登录') ||
+        m.includes('登录已过期') ||
+        m.includes('无效的token') ||
+        m.includes('无效token') ||
+        m.includes('token已失效') ||
+        m.includes('未提供认证信息') ||
+        m.includes('认证格式错误')
+}
+
+const handleAuthExpiredFromResponse = (res: any, options?: { silent?: boolean }) => {
+    const code = (res as any)?.code
+    if (code === 1) return
+    const msg = (res as any)?.msg
+    if (isAuthExpiredMsg(msg)) {
+        handleAuthExpired(msg, options)
+    }
+}
+
 export const postRequest = async <T>(url: string, body: object | FormData, options?: { credentials?: RequestCredentials; silent?: boolean; signal?: AbortSignal }) => {
     const BASE_API = useRuntimeConfig().public.baseApi || '/api';
     const userStore = useUserStore();
@@ -23,12 +55,10 @@ export const postRequest = async <T>(url: string, body: object | FormData, optio
 
     try {
         const isFormData = body instanceof FormData;
-        const headers = isFormData 
-        ? { 'Authorization': `Bearer ${token}` }
-        : { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          };
+        const headers: Record<string, string> = {
+            'Authorization': `Bearer ${token}`,
+            ...(!isFormData ? { 'Content-Type': 'application/json' } : {})
+        };
 
         const response: Response<T> = await $fetch(`${BASE_API}/${url}`, {
             method: 'POST',
@@ -39,12 +69,16 @@ export const postRequest = async <T>(url: string, body: object | FormData, optio
             retry: 0,
             signal: options?.signal
         });
-
+        handleAuthExpiredFromResponse(response as any, options)
         return response;
     } catch (error) {
         const e: any = error;
         const status = e?.response?.status || e?.status;
         const serverMsg = e?.response?._data?.msg || e?.response?.statusText || '网络异常';
+        if (status === 401 || status === 403) {
+            handleAuthExpired(serverMsg, options);
+            return { code: 0, msg: serverMsg, data: null } as any as Response<T>;
+        }
         const toast = useToast();
         if (!shouldSuppressToast(options)) {
             toast.add({ title: '请求失败', description: serverMsg || '网络异常或服务器不可用', color: 'red', timeout: 2000 });
@@ -73,13 +107,14 @@ export const getRequest = async <T>(url: string, params?: any, options?: { crede
             retry: 0,
             signal: options?.signal
         });
-
+        handleAuthExpiredFromResponse(response as any, options)
         return response;
     } catch (error) {
         const e: any = error;
         const status = e?.response?.status || e?.status;
-        if (status === 401) {
+        if (status === 401 || status === 403) {
             const msg = e?.response?._data?.msg || e?.response?.statusText || '未登录或登录已过期';
+            handleAuthExpired(msg, options);
             return { code: 0, msg } as any as Response<T>;
         }
         const toast = useToast();
@@ -110,6 +145,8 @@ export const putRequest = async <T>(url: string, body: object, options?: { crede
             signal: options?.signal
         });
 
+        handleAuthExpiredFromResponse(response as any, options)
+
         if (response.code !== 1) {
             if (!options || !(options as any).silent) {
                 toast.add({
@@ -125,6 +162,13 @@ export const putRequest = async <T>(url: string, body: object, options?: { crede
 
         return response;
     } catch (error) {
+        const e: any = error;
+        const status = e?.response?.status || e?.status;
+        const serverMsg = e?.response?._data?.msg || e?.response?.statusText || '网络异常';
+        if (status === 401 || status === 403) {
+            handleAuthExpired(serverMsg, options);
+            return { code: 0, msg: serverMsg, data: null } as any as Response<T>;
+        }
         const toast = useToast();
         if (!shouldSuppressToast(options)) {
             toast.add({ title: '请求失败', description: '网络异常或服务器不可用', color: 'red', timeout: 2000 });
@@ -149,9 +193,16 @@ export const deleteRequest = async <T>(url: string, params?: any, options?: { cr
             credentials: options?.credentials,
             signal: options?.signal
         });
-
+        handleAuthExpiredFromResponse(response as any, options)
         return response;
     } catch (error) {
+        const e: any = error;
+        const status = e?.response?.status || e?.status;
+        const serverMsg = e?.response?._data?.msg || e?.response?.statusText || '网络异常';
+        if (status === 401 || status === 403) {
+            handleAuthExpired(serverMsg, options);
+            return { code: 0, msg: serverMsg, data: null } as any as Response<T>;
+        }
         console.error('请求失败:', error);
         throw error;
     }

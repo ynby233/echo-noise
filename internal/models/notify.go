@@ -2,9 +2,9 @@ package models
 
 import (
 	"bytes"
+	"crypto/tls"
 	"crypto/hmac"
 	"crypto/sha256"
-	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -24,6 +24,40 @@ import (
 )
 
 var notifyHTTPClient = &http.Client{Timeout: 20 * time.Second}
+
+var (
+	telegramBoldRegex = regexp.MustCompile(`\*\*([^\n*][^\n]*?)\*\*`)
+)
+
+func telegramMarkdownToHTML(input string) string {
+	// Escape first to avoid Telegram HTML entity parsing issues and injection
+	out := html.EscapeString(input)
+	out = strings.ReplaceAll(out, "\r\n", "\n")
+
+	lines := strings.Split(out, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") {
+			title := strings.TrimSpace(strings.TrimLeft(trimmed, "#"))
+			if title != "" {
+				lines[i] = "<b>" + title + "</b>"
+				continue
+			}
+		}
+
+		// Convert markdown list bullets: "* xxx" -> "• xxx"
+		leftTrim := strings.TrimLeft(line, " \t")
+		if strings.HasPrefix(leftTrim, "* ") {
+			indent := line[:len(line)-len(leftTrim)]
+			lines[i] = indent + "• " + strings.TrimPrefix(leftTrim, "* ")
+		}
+	}
+	out = strings.Join(lines, "\n")
+
+	// Convert **bold** after escaping
+	out = telegramBoldRegex.ReplaceAllString(out, "<b>$1</b>")
+	return out
+}
 
 type NotifyConfig struct {
 	gorm.Model
@@ -184,8 +218,7 @@ func SendTelegram(content string, images []string) error {
 		return nil
 	}
 
-	// 处理 Markdown 内容
-	messageText := content
+	messageText := telegramMarkdownToHTML(content)
 
 	// 如果有图片，添加到消息末尾
 	if len(images) > 0 {
@@ -553,11 +586,8 @@ func SendTelegramPhotoWithCaption(photoURL string, caption string) error {
 		// 添加chat_id字段
 		_ = writer.WriteField("chat_id", config.TelegramChatID)
 
-		// 添加caption字段
-		_ = writer.WriteField("caption", caption)
-
-		// 添加parse_mode字段
-		_ = writer.WriteField("parse_mode", "Markdown")
+		_ = writer.WriteField("caption", telegramMarkdownToHTML(caption))
+		_ = writer.WriteField("parse_mode", "HTML")
 
 		// 尝试下载图片
 		var imgResp *http.Response
@@ -609,8 +639,8 @@ func SendTelegramPhotoWithCaption(photoURL string, caption string) error {
 		data := map[string]interface{}{
 			"chat_id":    config.TelegramChatID,
 			"photo":      photoURL,
-			"caption":    caption,
-			"parse_mode": "Markdown",
+			"caption":    telegramMarkdownToHTML(caption),
+			"parse_mode": "HTML",
 		}
 
 		jsonData, err := json.Marshal(data)
@@ -668,8 +698,8 @@ func SendTelegramVideoWithCaption(videoURL string, caption string) error {
 		messageURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", config.TelegramToken)
 		messageData := map[string]interface{}{
 			"chat_id":    config.TelegramChatID,
-			"text":       messageText,
-			"parse_mode": "Markdown",
+			"text":       telegramMarkdownToHTML(messageText),
+			"parse_mode": "HTML",
 		}
 
 		jsonData, err := json.Marshal(messageData)
@@ -701,8 +731,8 @@ func SendTelegramVideoWithCaption(videoURL string, caption string) error {
 	data := map[string]interface{}{
 		"chat_id":    config.TelegramChatID,
 		"video":      videoURL,
-		"caption":    caption,
-		"parse_mode": "Markdown",
+		"caption":    telegramMarkdownToHTML(caption),
+		"parse_mode": "HTML",
 	}
 
 	jsonData, err := json.Marshal(data)
@@ -743,8 +773,8 @@ func SendTelegramMessage(message string) error {
 	// 构建请求体
 	data := map[string]interface{}{
 		"chat_id":    config.TelegramChatID,
-		"text":       message,
-		"parse_mode": "Markdown",
+		"text":       telegramMarkdownToHTML(message),
+		"parse_mode": "HTML",
 	}
 
 	jsonData, err := json.Marshal(data)
