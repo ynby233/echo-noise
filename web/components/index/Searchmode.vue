@@ -10,11 +10,10 @@
       </template>
       <div class="space-y-4">
         <div class="relative">
-          <UIcon name="i-heroicons-magnifying-glass" class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 opacity-70" />
           <UInput
             v-model="searchQuery"
             placeholder="请输入关键词"
-            class="w-full pl-10"
+            class="w-full"
             :ui="{ base: 'rounded-xl' }"
             @keyup.enter="handleSearch"
             autofocus
@@ -123,5 +122,5 @@ defineExpose({
 
 <style scoped>
 .search-card { background: #ffffff; color: #111827; border: 1px solid #e5e7eb; border-radius: 16px; }
-html.dark .search-card { background: rgba(36,43,50,0.95); color: #fff; border: 1px solid rgba(255,255,255,0.08); }
+html.dark .search-card { background: var(--home-surface-dark-elevated); color: #fff; border: 1px solid var(--home-border-dark); }
 </style>

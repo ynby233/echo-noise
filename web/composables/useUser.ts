@@ -6,6 +6,8 @@ export const useUser = () => {
     const toast = useToast()
     const router = useRouter()
 
+    let loginCheckInterval: number | undefined
+
     // 添加状态检查函数
     const checkLoginStatus = async () => {
         const status = await userStore.getStatus(true);
@@ -64,6 +66,16 @@ export const useUser = () => {
     // 初始化时检查登录状态
     onMounted(async () => {
         await checkLoginStatus();
+
+        loginCheckInterval = window.setInterval(async () => {
+            try {
+                await checkLoginStatus();
+            } catch {}
+        }, 60 * 1000);
+    })
+
+    onBeforeUnmount(() => {
+        if (loginCheckInterval) window.clearInterval(loginCheckInterval)
     })
 
     return {

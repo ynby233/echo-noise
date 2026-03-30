@@ -14,14 +14,14 @@ func MigrateDB(db *gorm.DB) error {
 	case "postgres":
 		err = db.Set("gorm:table_options", "").
 			Set("gorm:varchar_size", 255).
-			AutoMigrate(&User{}, &Message{}, &Comment{}, &Setting{}, &SiteConfig{}, &NotifyConfig{}, &MessageLike{}, &FriendLink{}, &FriendLinkApply{})
+			AutoMigrate(&User{}, &Message{}, &Comment{}, &Setting{}, &SiteConfig{}, &NotifyConfig{}, &MessageLike{}, &FriendLink{}, &FriendLinkApply{}, &SecurityAttackLog{}, &SecurityIPBan{}, &SecurityConfig{})
 	case "mysql":
 		err = db.Set("gorm:table_options", "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci").
 			Set("gorm:varchar_size", 191).
-			AutoMigrate(&User{}, &Message{}, &Comment{}, &Setting{}, &SiteConfig{}, &NotifyConfig{}, &MessageLike{}, &FriendLink{}, &FriendLinkApply{})
+			AutoMigrate(&User{}, &Message{}, &Comment{}, &Setting{}, &SiteConfig{}, &NotifyConfig{}, &MessageLike{}, &FriendLink{}, &FriendLinkApply{}, &SecurityAttackLog{}, &SecurityIPBan{}, &SecurityConfig{})
 	default: // sqlite
 		err = db.Set("gorm:varchar_size", 255).
-			AutoMigrate(&User{}, &Message{}, &Comment{}, &Setting{}, &SiteConfig{}, &NotifyConfig{}, &MessageLike{}, &FriendLink{}, &FriendLinkApply{})
+			AutoMigrate(&User{}, &Message{}, &Comment{}, &Setting{}, &SiteConfig{}, &NotifyConfig{}, &MessageLike{}, &FriendLink{}, &FriendLinkApply{}, &SecurityAttackLog{}, &SecurityIPBan{}, &SecurityConfig{})
 	}
 
 	if err != nil {

@@ -38,10 +38,16 @@ func telegramMarkdownToHTML(input string) string {
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "#") {
-			title := strings.TrimSpace(strings.TrimLeft(trimmed, "#"))
-			if title != "" {
-				lines[i] = "<b>" + title + "</b>"
-				continue
+			j := 0
+			for j < len(trimmed) && trimmed[j] == '#' {
+				j++
+			}
+			if j > 0 && j < len(trimmed) && trimmed[j] == ' ' {
+				title := strings.TrimSpace(trimmed[j:])
+				if title != "" {
+					lines[i] = "<b>" + title + "</b>"
+					continue
+				}
 			}
 		}
 

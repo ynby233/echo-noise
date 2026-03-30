@@ -20,6 +20,9 @@ func SetupRouter() *gin.Engine {
 	// 支持大文件上传（视频压缩/直传云端可能超过 200MB）
 	r.MaxMultipartMemory = 1024 << 20
 
+	// 安全防护：拦截敏感路径扫描（不影响正常 API/静态资源/MCP）
+	r.Use(middleware.SecurityMiddleware())
+
 	// 使用 pkg 中的 session 初始化
 	pkg.InitSession(r)
 	// 配置 CORS
@@ -145,6 +148,7 @@ func SetupRouter() *gin.Engine {
 	api.GET("/guestbook/message", controllers.GetGuestbookMessageID)     // 获取留言板消息ID
 	// 友链申请（公开）
 	api.POST("/friend-links/apply", controllers.SubmitFriendLinkApply)
+	api.GET("/douyin/resolve", controllers.ResolveDouyinShortURL)
 
 	// 需要鉴权的路由
 	authRoutes := api.Group("")
@@ -218,6 +222,18 @@ func SetupRouter() *gin.Engine {
 		settings.POST("/reset-defaults", controllers.ResetDefaultData)
 	}
 
+	// 安全记录（管理员）
+	security := authRoutes.Group("/security")
+	{
+		security.GET("/attacks", middleware.AdminAuthMiddleware(), controllers.GetAttackRecords)
+		security.DELETE("/attacks", middleware.AdminAuthMiddleware(), controllers.ClearAttackRecords)
+		security.GET("/bans", middleware.AdminAuthMiddleware(), controllers.GetIPBans)
+		security.POST("/bans", middleware.AdminAuthMiddleware(), controllers.AddIPBan)
+		security.DELETE("/bans", middleware.AdminAuthMiddleware(), controllers.RemoveIPBan)
+		security.GET("/config", middleware.AdminAuthMiddleware(), controllers.GetSecurityConfig)
+		security.PUT("/config", middleware.AdminAuthMiddleware(), controllers.UpdateSecurityConfig)
+	}
+
 	// 图片上传路由
 	authRoutes.POST("/images/upload", controllers.UploadImage) // 上传图片
 	// 新增：视频上传路由（改为单数 video）
@@ -257,6 +273,8 @@ func SetupRouter() *gin.Engine {
 	authRoutes.PUT("/settings", controllers.UpdateSetting)
 	// 友链申请管理（管理员）
 	authRoutes.GET("/friend-links/apply", controllers.ListFriendLinkApplications)
+	authRoutes.DELETE("/friend-links/apply", controllers.ClearFriendLinkApplications)
+	authRoutes.DELETE("/friend-links/apply/:id", controllers.DeleteFriendLinkApplication)
 	authRoutes.PUT("/friend-links/:id/audit", controllers.AuditFriendLink)
 
 	// 显式 /status 返回 SPA 入口，避免目录重定向影响

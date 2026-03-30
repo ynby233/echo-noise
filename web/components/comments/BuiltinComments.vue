@@ -61,14 +61,14 @@
         </div>
       <div v-if="!sortedRootComments.length" class="text-xs mb-4" :class="themeMuted">暂无评论</div>
 
-      <div v-if="(props.showInput || !!replyTo) && enabled && siteConfig?.commentEmailEnabled && canComment" class="text-xs mb-2" :class="themeMuted">新评论或回复会发送通知邮件</div>
-      <div v-if="(props.showInput || !!replyTo) && enabled && canComment" class="space-y-3 mt-3 md:mt-4">
+      <div v-if="(props.showInput || !!replyTo) && enabled && siteConfig?.commentEmailEnabled && canComment" class="text-xs mb-3 mt-1" :class="themeMuted">新评论或回复会发送通知邮件</div>
+      <div v-if="(props.showInput || !!replyTo) && enabled && canComment" class="space-y-4 mt-4 md:mt-5">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <input v-model="nick" placeholder="昵称" :class="inputNickClass" @input="onNickInput" />
           <input v-model="mail" placeholder="邮箱" :class="inputMailClass" />
           <input v-model="link" placeholder="网址（可选）" :class="inputLinkClass" />
         </div>
-        <div class="flex flex-wrap items-center gap-2 mb-2">
+        <div class="flex flex-wrap items-center gap-2 mb-3">
           <button class="text-xs px-2 py-1 rounded border" :class="themeBorder" @click="applyFormat('bold')">加粗</button>
           <button class="text-xs px-2 py-1 rounded border" :class="themeBorder" @click="applyFormat('italic')">斜体</button>
           <button class="text-xs px-2 py-1 rounded border" :class="themeBorder" @click="applyFormat('link')">链接</button>
@@ -94,8 +94,8 @@
           </div>
         </div>
       </div>
-      <div v-else-if="props.showInput && !enabled" class="text-xs text-center mt-4 mb-2" :class="themeMuted">评论功能未开启</div>
-      <div v-else-if="props.showInput && enabled && !canComment" class="text-xs text-center mt-4 mb-2" :class="themeMuted">请登录后评论</div>
+      <div v-else-if="props.showInput && !enabled" class="text-xs text-center mt-5 mb-3" :class="themeMuted">评论功能未开启</div>
+      <div v-else-if="props.showInput && enabled && !canComment" class="text-xs text-center mt-5 mb-3" :class="themeMuted">请登录后评论</div>
       
   </div>
 

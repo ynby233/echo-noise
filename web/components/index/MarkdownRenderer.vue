@@ -15,6 +15,9 @@ const QQMUSIC_REG = /https:\/\/y\.qq\.com\/n\/yqq\/song(\w+)\.html/g;
 const QQVIDEO_REG = /https:\/\/v\.qq\.com\/x\/cover\/\w+\/(\w+)\.html/g;
 const SPOTIFY_REG = /https:\/\/open\.spotify\.com\/(track|album|playlist)\/([a-zA-Z0-9]+)/g;
 const YOUKU_REG = /https:\/\/v\.youku\.com\/v_show\/id_([a-zA-Z0-9]+)\.html/g;
+const DOUYIN_REG = /https:\/\/www\.douyin\.com\/video\/(\d+)\/?/g;
+const DOUYIN_SHORTCODE_REG = /\[VideoID=([a-zA-Z0-9]+)\]/g;
+const DOUYIN_SHORT_REG = /^https?:\/\/(?:v\.douyin\.com|(?:www\.)?iesdouyin\.com)\/[^\s]+$/i;
 // @ts-ignore
 const emit = defineEmits(['tagClick', 'rendered'])
 const config = useRuntimeConfig();
@@ -404,6 +407,25 @@ const GITHUB_MD_LINK_REG = /(?<!!)\[([^\]]+)\]\((https:\/\/github\.com\/([\w-]+)
 // 2. 匹配裸仓库链接（非图片）
 const GITHUB_BARE_LINK_REG = /(?<!["'\(])\bhttps:\/\/github\.com\/([\w-]+)\/([\w.-]+)(?:\/[^\s<\)]*)?\b/g;
 
+const buildYouTubeEmbedHtml = (videoId: string) => {
+  const watchUrl = `https://www.youtube.com/watch?v=${videoId}`
+  const thumbPrimary = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+  const thumbFallback = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+  return `<div class='video-block youtube-video-block'><div class='video-wrapper youtube-video-wrapper'><iframe src='https://www.youtube.com/embed/${videoId}' title='YouTube video player' frameborder='0' allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture' allowfullscreen></iframe></div><div class='video-fallback-card'><img class='video-fallback-thumb' src='${thumbPrimary}' data-fallback-src='${thumbFallback}' alt='YouTube preview' loading='lazy' referrerpolicy='no-referrer' onerror="const f=this.getAttribute('data-fallback-src'); if (f && this.src!==f){this.src=f}else{this.style.display='none'}" /><div class='video-fallback-content'><div class='video-fallback-title'>YouTube 受限网络兜底预览</div><a class='video-fallback-link' href='${watchUrl}' target='_blank' rel='noopener noreferrer'>打开原链接</a></div></div></div>`
+}
+const replaceNodeWithHtml = (node: HTMLElement, html: string) => {
+  const holder = document.createElement('div')
+  holder.innerHTML = html
+  const next = holder.firstElementChild as HTMLElement | null
+  if (!next) return
+  const parent = node.parentElement
+  if (parent && parent.tagName.toLowerCase() === 'p' && parent.childNodes.length === 1) {
+    parent.replaceWith(next)
+    return
+  }
+  node.replaceWith(next)
+}
+
 const processMediaLinks = (content: string): string => {
   // GitHub 卡片解析（可开关）
   if (props.enableGithubCard) {
@@ -427,14 +449,21 @@ const processMediaLinks = (content: string): string => {
     const src = resolveImageUrl(m);
     return `<video src="${src}" controls preload="metadata" style="width:100%;height:auto"></video>`;
   });
-  return content
+  content = content
     .replace(BILIBILI_REG, "<div class='video-wrapper'><iframe src='https://www.bilibili.com/blackboard/html5mobileplayer.html?bvid=$1&as_wide=1&high_quality=1&danmaku=0' scrolling='no' border='0' frameborder='no' framespacing='0' allowfullscreen='true' style='position:absolute;height:100%;width:100%'></iframe></div>")
-    .replace(YOUTUBE_REG, "<div class='video-wrapper'><iframe src='https://www.youtube.com/embed/$1$2' title='YouTube video player' frameborder='0' allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture' allowfullscreen></iframe></div>")
     .replace(NETEASE_MUSIC_REG, "<div class='music-wrapper'><meting-js auto='https://music.163.com/#/song?id=$1'></meting-js></div>")
     .replace(QQMUSIC_REG, "<meting-js auto='https://y.qq.com/n/yqq/song$1.html'></meting-js>")
     .replace(QQVIDEO_REG, "<div class='video-wrapper'><iframe src='//v.qq.com/iframe/player.html?vid=$1' allowFullScreen='true' frameborder='no'></iframe></div>")
     .replace(SPOTIFY_REG, "<div class='spotify-wrapper'><iframe style='border-radius:12px' src='https://open.spotify.com/embed/$1/$2?utm_source=generator&theme=0' width='100%' frameBorder='0' allowfullscreen='' allow='autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture' loading='lazy'></iframe></div>")
-    .replace(YOUKU_REG, "<div class='video-wrapper'><iframe src='https://player.youku.com/embed/$1' frameborder=0 'allowfullscreen'></iframe></div>");
+    .replace(YOUKU_REG, "<div class='video-wrapper'><iframe src='https://player.youku.com/embed/$1' frameborder=0 'allowfullscreen'></iframe></div>")
+    .replace(DOUYIN_REG, "<div class='video-wrapper douyin-video-wrapper'><iframe src='https://open.douyin.com/player/video?vid=$1&autoplay=0' frameborder='0' scrolling='no' allow='autoplay; encrypted-media' allowfullscreen='true' referrerpolicy='unsafe-url'></iframe></div>")
+    .replace(DOUYIN_SHORTCODE_REG, "<div class='video-wrapper douyin-video-wrapper'><iframe src='https://open.douyin.com/player/video?vid=$1&autoplay=0' frameborder='0' scrolling='no' allow='autoplay; encrypted-media' allowfullscreen='true' referrerpolicy='unsafe-url'></iframe></div>");
+  content = content.replace(YOUTUBE_REG, (_m, id1, id2) => {
+    const videoId = String(id1 || id2 || '').trim()
+    if (!videoId) return _m
+    return buildYouTubeEmbedHtml(videoId)
+  })
+  return content
 };
 const fetchGitHubRepoInfo = async (owner: string, repo: string, cardId: string) => {
   const card = document.getElementById(cardId);
@@ -548,6 +577,48 @@ const fetchGitHubRepoInfo = async (owner: string, repo: string, cardId: string) 
   `
   card.classList.add('github-card-error')
 };
+const buildDouyinEmbedHtml = (videoId: string) => `<div class='video-wrapper douyin-video-wrapper'><iframe src='https://open.douyin.com/player/video?vid=${videoId}&autoplay=0' frameborder='0' scrolling='no' allow='autoplay; encrypted-media' allowfullscreen='true' referrerpolicy='unsafe-url'></iframe></div>`
+const buildDouyinFallbackHtml = (link: string) => `<div class='video-fallback-card douyin-fallback-card'><div class='video-fallback-content'><div class='video-fallback-title'>抖音短链解析失败</div><a class='video-fallback-link' href='${link}' target='_blank' rel='noopener noreferrer'>打开原链接</a></div></div>`
+const resolveDouyinShortToVideoId = async (link: string): Promise<string> => {
+  try {
+    const endpoint = `${String(BASE_API).replace(/\/$/, '')}/douyin/resolve?url=${encodeURIComponent(link)}`
+    const res = await fetch(endpoint, { method: 'GET', credentials: 'omit' })
+    const data = await res.json().catch(() => ({} as any))
+    if (data?.code === 1) {
+      return String(data?.data?.video_id || '').trim()
+    }
+    return ''
+  } catch {
+    return ''
+  }
+}
+const enhanceDouyinShortLinks = async () => {
+  if (!previewElement.value) return
+  const anchors = Array.from(previewElement.value.querySelectorAll('a[href]')) as HTMLAnchorElement[]
+  const targets = anchors.filter((a) => {
+    const href = String(a.getAttribute('href') || '').trim()
+    if (!DOUYIN_SHORT_REG.test(href)) return false
+    if ((a as any).__dyResolved) return false
+    return true
+  })
+  if (!targets.length) return
+  const cache = new Map<string, string>()
+  for (const a of targets) {
+    const href = String(a.getAttribute('href') || '').trim()
+    if (!href) continue
+    let vid = cache.get(href) || ''
+    if (!vid) {
+      vid = await resolveDouyinShortToVideoId(href)
+      cache.set(href, vid)
+    }
+    ;(a as any).__dyResolved = true
+    if (!vid) {
+      replaceNodeWithHtml(a, buildDouyinFallbackHtml(href))
+      continue
+    }
+    replaceNodeWithHtml(a, buildDouyinEmbedHtml(vid))
+  }
+}
 const renderMarkdown = async (markdown: string) => {
   if (!previewElement.value) return;
 
@@ -589,7 +660,7 @@ const renderMarkdown = async (markdown: string) => {
       theme: { current: currentTheme },
       hljs: { style: hljsStyle, lineNumber: true, enable: true },
       markdown: { sanitize: false },
-      after: () => {
+      after: async () => {
         const images = previewElement.value?.querySelectorAll('img');
         images?.forEach(img => {
            const src = img.getAttribute('src');
@@ -618,6 +689,7 @@ const renderMarkdown = async (markdown: string) => {
             a.replaceWith(v)
           }
         });
+        await enhanceDouyinShortLinks()
         
         // Explicitly handle existing video tags (e.g. from raw HTML or markdown)
         const existingVideos = previewElement.value?.querySelectorAll('video');
@@ -744,7 +816,7 @@ watch(() => contentTheme && contentTheme.value, () => {
     videos.forEach(video => {
       const isDark = contentTheme && contentTheme.value === 'dark';
       if (isDark) {
-        video.style.backgroundColor = '#242b32';
+        video.style.backgroundColor = '#202a36';
         video.style.border = '1px solid rgba(255,255,255,0.10)';
       } else {
         video.style.backgroundColor = '#ffffff';
@@ -756,7 +828,7 @@ watch(() => contentTheme && contentTheme.value, () => {
     audios.forEach(audio => {
       const isDark = contentTheme && contentTheme.value === 'dark';
       if (isDark) {
-        audio.style.backgroundColor = '#242b32';
+        audio.style.backgroundColor = '#202a36';
         audio.style.border = '1px solid rgba(255,255,255,0.10)';
       } else {
         audio.style.backgroundColor = '#ffffff';
@@ -866,6 +938,88 @@ watch(() => props.enableGithubCard, () => {
   left: 0;
   width: 100%;
   height: 100%;
+}
+.video-block {
+  margin: 0.4em 0;
+}
+.video-fallback-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(148, 163, 184, 0.08);
+}
+.video-fallback-thumb {
+  width: 160px;
+  min-width: 160px;
+  height: 90px;
+  object-fit: cover;
+  border-radius: 10px;
+}
+.video-fallback-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.video-fallback-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+.video-fallback-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(59, 130, 246, 0.45);
+  color: #2563eb;
+  font-size: 12px;
+}
+.theme-dark .video-fallback-card {
+  border-color: rgba(148, 163, 184, 0.4);
+  background: rgba(51, 65, 85, 0.45);
+}
+.theme-dark .video-fallback-link {
+  color: #93c5fd;
+  border-color: rgba(147, 197, 253, 0.5);
+}
+.douyin-fallback-card {
+  margin-top: 4px;
+}
+.douyin-video-wrapper {
+  width: min(100%, 340px);
+  margin-left: auto;
+  margin-right: auto;
+  padding-bottom: 0;
+  aspect-ratio: 9 / 16;
+  min-height: 280px;
+  max-height: min(64vh, 560px);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+}
+.douyin-video-wrapper iframe {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #000;
+}
+.douyin-video-wrapper.douyin-landscape {
+  width: min(100%, 620px);
+  aspect-ratio: 16 / 9;
+  min-height: 220px;
+  max-height: min(52vh, 380px);
+}
+@media (max-width: 768px) {
+  .douyin-video-wrapper {
+    width: min(100%, 320px);
+    min-height: 240px;
+    max-height: 58vh;
+  }
 }
 
 .music-wrapper {
@@ -1130,13 +1284,13 @@ watch(() => props.enableGithubCard, () => {
 }
 
 .theme-dark video {
-  background-color: #242b32 !important;
+  background-color: #202a36 !important;
   border: 1px solid rgba(255,255,255,0.10) !important;
   border-radius: 8px !important;
 }
 
 .theme-dark audio {
-  background-color: #242b32 !important;
+  background-color: #202a36 !important;
   border: 1px solid rgba(255,255,255,0.10) !important;
   border-radius: 8px !important;
 }

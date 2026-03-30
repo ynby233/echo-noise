@@ -12,6 +12,7 @@
         color="gray" 
         variant="ghost" 
         size="xs" 
+        class="ih-close-btn"
         @click="$emit('close')" 
       />
     </div>
@@ -633,6 +634,17 @@ onMounted(() => {
 <style scoped>
 .fixed {
   position: fixed !important;
+}
+
+.ih-close-btn {
+  color: #f8fafc !important;
+  background: rgba(255, 255, 255, 0.14) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+}
+
+.ih-close-btn:hover {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.24) !important;
 }
 
 @media (max-width: 768px) {

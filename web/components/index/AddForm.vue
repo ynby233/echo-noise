@@ -646,12 +646,12 @@ const addMessage = async () => {
 .tb-btn.primary { background: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color: #fff; }
 .tb-sep { width:1px; height:24px; background: rgba(0,0,0,0.12); margin: 0 2px; }
 .preview-card { backdrop-filter: blur(8px); background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 8px; color:#111827; }
-html.dark .editor-box { background: rgba(36,43,50,0.95); border: 1px solid rgba(255,255,255,0.08); color:#fff; }
-html.dark .editor-toolbar { background: rgba(36,43,50,0.6); backdrop-filter: saturate(1.1) blur(6px); }
+html.dark .editor-box { background: var(--home-surface-dark, #202a36); border: 1px solid rgba(255,255,255,0.16); color:#fff; }
+html.dark .editor-toolbar { background: rgba(39, 50, 66, 0.68); backdrop-filter: saturate(1.1) blur(6px); }
 html.dark .tb-btn { background: rgba(255,255,255,0.06); color:#cbd5e1; border:none; }
 html.dark .tb-btn:hover { background: rgba(255,255,255,0.12); }
 html.dark .tb-sep { background: rgba(255,255,255,0.12); }
-html.dark .preview-card { background: rgba(36,43,50,0.6); border: 1px solid rgba(255,255,255,0.12); color:#fff; }
+html.dark .preview-card { background: rgba(39, 50, 66, 0.68); border: 1px solid rgba(255,255,255,0.18); color:#fff; }
 .editor-toolbar :deep(.u-button) { border:none !important; box-shadow:none !important; background: transparent !important; color:#374151 !important; }
 html.dark .editor-toolbar :deep(.u-button) { border:none !important; box-shadow:none !important; background: rgba(255,255,255,0.06) !important; color:#cbd5e1 !important; }
 .upload-progress { flex-basis: 100%; order: 10; display: flex; align-items: center; gap: 10px; pointer-events: none; padding: 0 4px; margin-top: 6px; }

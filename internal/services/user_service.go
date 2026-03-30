@@ -14,6 +14,55 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+func isHexMD5String(s string) bool {
+	if len(s) != 32 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F') {
+			return false
+		}
+	}
+	return true
+}
+
+func passwordMatchesStored(stored string, input string) bool {
+	pw := strings.TrimSpace(stored)
+	plain := input
+	plainTrim := strings.TrimSpace(input)
+	md5Plain := pkg.MD5Encrypt(plain)
+	md5Trim := pkg.MD5Encrypt(plainTrim)
+	isBcrypt := strings.HasPrefix(pw, "$2a$") || strings.HasPrefix(pw, "$2b$") || strings.HasPrefix(pw, "$2y$")
+	if isBcrypt {
+		if bcrypt.CompareHashAndPassword([]byte(pw), []byte(plain)) == nil {
+			return true
+		}
+		if plainTrim != plain && bcrypt.CompareHashAndPassword([]byte(pw), []byte(plainTrim)) == nil {
+			return true
+		}
+		if bcrypt.CompareHashAndPassword([]byte(pw), []byte(md5Plain)) == nil {
+			return true
+		}
+		if bcrypt.CompareHashAndPassword([]byte(pw), []byte(strings.ToUpper(md5Plain))) == nil {
+			return true
+		}
+		if plainTrim != plain {
+			if bcrypt.CompareHashAndPassword([]byte(pw), []byte(md5Trim)) == nil {
+				return true
+			}
+			if bcrypt.CompareHashAndPassword([]byte(pw), []byte(strings.ToUpper(md5Trim))) == nil {
+				return true
+			}
+		}
+		return false
+	}
+	if isHexMD5String(pw) {
+		return strings.EqualFold(pw, md5Plain) || strings.EqualFold(pw, md5Trim)
+	}
+	return pw == plain || pw == plainTrim
+}
+
 func Register(userdto dto.RegisterDto) error {
 	if userdto.Username == "" || userdto.Password == "" {
 		return errors.New(models.UsernameOrPasswordCannotBeEmptyMessage)
@@ -315,17 +364,18 @@ func ChangePassword(user *models.User, userdto dto.UserInfoDto) error {
 		return errors.New("用户信息不能为空")
 	}
 
-	if userdto.Password == "" {
+	newPassword := strings.TrimSpace(userdto.Password)
+	if newPassword == "" {
 		return errors.New(models.PasswordCannotBeEmptyMessage)
 	}
 
 	// 如果新密码与旧密码一致，则拒绝
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(userdto.Password)); err == nil {
+	if passwordMatchesStored(user.Password, newPassword) {
 		return errors.New(models.PasswordCannotBeSameAsBeforeMessage)
 	}
 
 	// 使用 bcrypt 更新密码
-	hashed := models.HashPassword(userdto.Password)
+	hashed := models.HashPassword(newPassword)
 	if hashed == "" {
 		return fmt.Errorf("密码加密失败")
 	}

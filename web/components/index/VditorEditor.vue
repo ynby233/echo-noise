@@ -366,9 +366,9 @@ watch(() => props.theme, (newTheme) => {
   font-weight: 600;
 }
 
-html.dark .vditor-container { background-color: rgba(36, 43, 50, 0.95); border: 1px solid rgba(255, 255, 255, 0.08); }
+html.dark .vditor-container { background-color: #202a36; border: 1px solid rgba(255, 255, 255, 0.16); }
 
-html.dark .vditor-toolbar { background-color: rgba(36, 43, 50, 0.6) !important; border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important; }
+html.dark .vditor-toolbar { background-color: rgba(39, 50, 66, 0.68) !important; border-bottom: 1px solid rgba(255, 255, 255, 0.16) !important; }
 
 html.dark .vditor-toolbar__item:hover {
   background-color: rgba(255, 255, 255, 0.06);
@@ -389,16 +389,14 @@ html.dark .vditor-reset {
 html.dark .vditor-reset table th,
 html.dark .vditor-reset table td {
   border: 1px solid rgba(226, 232, 240, 0.22);
-  background: rgba(36, 43, 50, 0.72);
+  background: rgba(39, 50, 66, 0.76);
   color: rgba(226, 232, 240, 0.96);
 }
 
-html.dark .vditor-reset table th {
-  background: rgba(36, 43, 50, 0.88);
-}
+html.dark .vditor-reset table th { background: rgba(47, 59, 76, 0.88); }
 
 html.dark .vditor-hint {
-  background: rgba(36, 43, 50, 0.95);
+  background: #202a36;
   color: #ffffff;
   border-color: rgba(255, 255, 255, 0.1);
 }
@@ -406,12 +404,12 @@ html.dark .vditor-tooltip, html.dark .vditor-tip {
   color: #ffffff;
 }
 
-html.dark .vditor-preview { background-color: rgba(36, 43, 50, 0.6) !important; }
+html.dark .vditor-preview { background-color: rgba(39, 50, 66, 0.68) !important; }
 
 /* 全屏模式主题自适应 */
-html.dark .vditor--fullscreen { background: rgba(36,43,50,0.95) !important; }
+html.dark .vditor--fullscreen { background: #202a36 !important; }
 html:not(.dark) .vditor--fullscreen { background: #ffffff !important; }
-html.dark .vditor--fullscreen .vditor-toolbar { background: rgba(36,43,50,0.6) !important; }
+html.dark .vditor--fullscreen .vditor-toolbar { background: rgba(39, 50, 66, 0.68) !important; }
 html:not(.dark) .vditor--fullscreen .vditor-toolbar { background: #f8f9fa !important; }
 .vditor--fullscreen .vditor-ir pre.vditor-reset { font-size: 16px; line-height: 1.9; }
 

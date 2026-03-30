@@ -1,108 +1,51 @@
 <template>
  
-   <div class="fixed inset-0 w-full h-full overflow-x-hidden overflow-y-auto" :class="[theme.pageBg, panelTheme !== 'light' ? 'dark' : '']">
-      <div class="min-h-screen w-full">
-        <aside class="w-72 h-screen overflow-y-auto backdrop-blur-md flex flex-col fixed left-0 top-0 z-40 transition-transform duration-300 md:transition-none border-r" :class="[{ 'translate-x-0': sidebarOpen, '-translate-x-full md:translate-x-0': !sidebarOpen }, theme.sidebarBg, theme.border, theme.sidebarText]">
-        <div class="px-4 py-4 border-b border-slate-700/40 flex flex-col items-center gap-2">
+  <div class="admin-root fixed inset-0 w-full h-full overflow-x-hidden overflow-y-auto" :class="adminRootClass">
+      <div v-if="isLoading" class="admin-loading-wrap">
+        <div class="admin-loading-spinner" />
+      </div>
+      <div class="admin-dashboard-shell min-h-screen w-full">
+        <aside class="admin-sidebar-surface h-screen overflow-y-auto backdrop-blur-md flex flex-col fixed left-0 top-0 z-40 transition-transform duration-300 md:transition-[width] border-r" :class="adminSidebarClass">
+        <div class="px-4 py-4 border-b flex flex-col items-center gap-2" :class="theme.border">
+          <div class="w-full hidden md:flex justify-end">
+            <button class="admin-sidebar-toggle-btn" :class="headerBtnCls" :title="desktopSidebarToggleText" :aria-label="desktopSidebarToggleText" @click="sidebarCollapsed = !sidebarCollapsed">
+              <UIcon :name="desktopSidebarToggleIcon" class="w-4 h-4" />
+            </button>
+          </div>
           <img :src="avatarSrc" class="w-14 h-14 rounded-full ring-2 ring-indigo-400/60 shadow-lg object-cover" alt="avatar" @error="onAvatarImgError" />
-          <div class="w-full text-center">
-            <div class="font-semibold truncate">{{ displayUsername }}</div>
+          <div class="w-full text-center transition-all duration-200" :class="sidebarCollapsed ? 'max-h-0 opacity-0 pointer-events-none' : 'max-h-20 opacity-100'">
+            <div class="font-semibold text-base truncate">{{ displayUsername }}</div>
             <div class="text-xs" :class="theme.mutedText">总笔记 {{ userStore?.status?.total_messages || 0 }}</div>
           </div>
         </div>
         <nav class="flex-1 overflow-y-auto px-2 py-3 space-y-2">
-          <button class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('system', $event)">
-            <UIcon name="i-heroicons-cpu-chip" class="w-5 h-5 text-indigo-300" />
-            <span class="text-sm text-center">系统信息</span>
-          </button>
-          <button class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('user', $event)">
-            <UIcon name="i-heroicons-user-circle" class="w-5 h-5 text-indigo-300" />
-            <span class="text-sm text-center">用户信息</span>
-          </button>
-          <button v-if="isAdmin" class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('site', $event)">
-            <UIcon name="i-heroicons-wrench-screwdriver" class="w-5 h-5 text-indigo-300" />
-            <span class="text-sm text-center">网站配置</span>
-          </button>
-          <div v-if="isAdmin" class="space-y-2">
-            <button class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('site-register', $event)">
-              <UIcon name="i-heroicons-user-plus" class="w-5 h-5 text-indigo-300" />
-              <span class="text-sm text-center">注册开关</span>
+          <div v-for="group in adminNavGroups" :key="group.key" class="admin-nav-group">
+            <button class="admin-nav-group-btn" :class="[navGroupOpen[group.key] ? 'admin-nav-group-btn-open' : '', sidebarCollapsed ? 'justify-center' : '']" @click="toggleNavGroup(group.key)">
+              <span class="flex items-center gap-2">
+                <UIcon :name="group.icon" class="w-5 h-5" />
+                <span v-show="!sidebarCollapsed" class="text-sm font-semibold tracking-wide">{{ group.label }}</span>
+              </span>
+              <UIcon v-show="!sidebarCollapsed" :name="navGroupOpen[group.key] ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="w-4 h-4" />
             </button>
-            <button class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('site-pwa', $event)">
-              <UIcon name="i-heroicons-rocket-launch" class="w-5 h-5 text-indigo-300" />
-              <span class="text-sm text-center">PWA 模式</span>
-            </button>
-            <button class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('site-github-card', $event)">
-              <UIcon name="i-mdi-github" class="w-5 h-5 text-indigo-300" />
-              <span class="text-sm text-center">GitHub 卡片</span>
-            </button>
-            <button class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('site-github-login', $event)">
-              <UIcon name="i-mdi-github" class="w-5 h-5 text-indigo-300" />
-              <span class="text-sm text-center">GitHub 登录</span>
-            </button>
-            <button class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('site-announcement', $event)">
-              <UIcon name="i-heroicons-megaphone" class="w-5 h-5 text-indigo-300" />
-              <span class="text-sm text-center">公告栏</span>
-            </button>
-            <button class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('site-music', $event)">
-              <UIcon name="i-heroicons-musical-note" class="w-5 h-5 text-indigo-300" />
-              <span class="text-sm text-center">音乐配置</span>
-            </button>
-            <button class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('site-default-theme', $event)">
-              <UIcon name="i-heroicons-swatch" class="w-5 h-5 text-indigo-300" />
-              <span class="text-sm text-center">默认主题</span>
-            </button>
-            <button class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('site-social-links', $event)">
-              <UIcon name="i-heroicons-link" class="w-5 h-5 text-indigo-300" />
-              <span class="text-sm text-center">社交链接</span>
-            </button>
-            <button class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('friend-links', $event)">
-              <UIcon name="i-heroicons-users" class="w-5 h-5 text-indigo-300" />
-              <span class="text-sm text-center">友情链接</span>
-            </button>
-            <button class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('site-configs', $event)">
-              <UIcon name="i-heroicons-cog-6-tooth" class="w-5 h-5 text-indigo-300" />
-              <span class="text-sm text-center">站点信息</span>
-            </button>
-            <button class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('comments', $event)">
-              <UIcon name="i-heroicons-chat-bubble-left-right" class="w-5 h-5 text-indigo-300" />
-              <span class="text-sm text-center">评论系统</span>
-            </button>
-            <button class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('email', $event)">
-              <UIcon name="i-heroicons-envelope" class="w-5 h-5 text-indigo-300" />
-              <span class="text-sm text-center">邮件设置</span>
-            </button>
-            <button class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('admin-users', $event)">
-              <UIcon name="i-heroicons-shield-check" class="w-5 h-5 text-indigo-300" />
-              <span class="text-sm text-center">管理员用户</span>
-            </button>
+            <transition name="admin-nav-collapse">
+              <div v-if="navGroupOpen[group.key] && !sidebarCollapsed" class="mt-2 space-y-1">
+              <button
+                v-for="item in group.items"
+                :key="item.key"
+                class="admin-nav-item"
+                :class="[activeSection === item.key ? 'admin-nav-item-active' : '']"
+                @click="setActive(item.key, $event)"
+              >
+                <span class="flex items-center gap-2">
+                  <UIcon :name="item.icon" class="w-4 h-4" />
+                  <span class="text-sm">{{ item.label }}</span>
+                </span>
+              </button>
+              </div>
+            </transition>
           </div>
-          <button v-if="isAdmin" class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('notify', $event)">
-            <UIcon name="i-heroicons-bell-alert" class="w-5 h-5 text-indigo-300" />
-            <span class="text-sm text-center">推送配置</span>
-          </button>
-          <button v-if="isAdmin" class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('attachments', $event)">
-            <UIcon name="i-heroicons-paper-clip" class="w-5 h-5 text-indigo-300" />
-            <span class="text-sm text-center">附件管理</span>
-          </button>
-          <button v-if="isAdmin" class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('attachment-storage', $event)">
-            <UIcon name="i-heroicons-cloud" class="w-5 h-5 text-indigo-300" />
-            <span class="text-sm text-center">附件存储</span>
-          </button>
-          <button v-if="isAdmin" class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('storage', $event)">
-            <UIcon name="i-heroicons-cloud" class="w-5 h-5 text-indigo-300" />
-            <span class="text-sm text-center">存储方案</span>
-          </button>
-          <button v-if="isAdmin" class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('db', $event)">
-            <UIcon name="i-heroicons-circle-stack" class="w-5 h-5 text-indigo-300" />
-            <span class="text-sm text-center">数据库管理</span>
-          </button>
-          <button v-if="isAdmin" class="w-full flex justify-center items-center gap-2 px-3 py-2 rounded-lg transition shadow" :class="[theme.navBtnBg, theme.navBtnHoverBg]" @click="setActive('version', $event)">
-            <UIcon name="i-heroicons-arrow-path" class="w-5 h-5 text-indigo-300" />
-            <span class="text-sm text-center">版本与更新</span>
-          </button>
         </nav>
-        <div class="px-4 py-3 border-t border-slate-700/40">
+        <div class="px-4 py-3 border-t" :class="theme.border">
           <div class="text-xs text-slate-400">当前版本: {{ versionInfo.currentVersion || '最新' }}</div>
           <div class="mt-2 flex items-center gap-2">
             <UButton size="xs" color="indigo" variant="soft" :loading="versionInfo.checking" class="shadow-md" @click="checkVersion">{{ versionInfo.checking ? '检测中...' : '检查版本发布时间' }}</UButton>
@@ -114,32 +57,55 @@
           </div>
         </div>
       </aside>
-        <main ref="adminMain" class="w-full min-h-screen md:pl-72 overflow-y-auto" :class="theme.text">
-        <div class="md:hidden flex items-center justify-between px-4 border-b rounded-b-2xl transition-all duration-200" :class="[theme.headerBg, theme.border, theme.text, headerCompact ? 'py-2' : 'py-3']">
-          <div class="flex items-center gap-2">
+        <main ref="adminMain" class="admin-main-surface w-full min-h-screen overflow-y-auto transition-[padding] duration-200" :class="adminMainClass">
+        <div class="md:hidden flex items-center justify-between gap-2 px-4 border-b rounded-b-2xl transition-all duration-200" :class="mobileHeaderClass">
+          <div class="flex items-center gap-2 min-w-0">
             <button class="rounded-lg shadow" :class="[headerBtnCls, headerCompact ? 'p-1.5' : 'p-2']" @click="sidebarOpen = !sidebarOpen"><UIcon name="i-heroicons-bars-3" class="w-5 h-5" /></button>
-            <span class="font-semibold">系统管理面板</span>
+            <span class="font-semibold truncate">系统管理面板</span>
           </div>
-          <div class="flex items-center gap-2">
-            <UButton :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelTheme === 'light' ? 'gray' : (panelTheme === 'midnight' ? 'blue' : (panelTheme === 'slate' ? 'indigo' : 'gray'))" class="shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90" @click="$router.push('/')">返回首页</UButton>
+          <div class="flex items-center gap-2 shrink-0">
+            <UButton icon="i-heroicons-home" :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelTheme === 'light' ? 'gray' : (panelTheme === 'midnight' ? 'blue' : (panelTheme === 'slate' ? 'indigo' : 'gray'))" class="sm:hidden shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90" @click="$router.push('/')" />
+            <UButton :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelTheme === 'light' ? 'gray' : (panelTheme === 'midnight' ? 'blue' : (panelTheme === 'slate' ? 'indigo' : 'gray'))" class="hidden sm:inline-flex shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90" @click="$router.push('/')">返回首页</UButton>
             <UButton v-if="isLogin" icon="i-heroicons-power" color="red" variant="solid" @click="handleLogout">退出登录</UButton>
           </div>
         </div>
-        <div v-if="sidebarOpen" class="fixed inset-0 bg-black/40 md:hidden" @click="sidebarOpen=false"></div>
-        <div class="flex-1 px-4 pb-24 flex flex-col w-full space-y-4">
+        <div v-if="sidebarOpen" class="fixed inset-0 z-30 bg-slate-950/45 backdrop-blur-[1px] md:hidden" @click="sidebarOpen=false"></div>
+        <div class="hidden md:flex admin-topbar-surface items-center justify-between gap-3 px-5 py-4 border-b sticky top-0 z-30" :class="desktopTopbarClass">
+          <div class="min-w-0 flex items-center">
+            <button class="admin-desktop-toggle-btn" :class="headerBtnCls" :title="desktopSidebarToggleText" :aria-label="desktopSidebarToggleText" @click="sidebarCollapsed = !sidebarCollapsed">
+              <UIcon :name="desktopSidebarToggleIcon" class="w-5 h-5 shrink-0" />
+              <span class="admin-desktop-toggle-text">{{ desktopSidebarToggleText }}</span>
+            </button>
+            <div class="mx-4 h-8 w-px opacity-70" :class="theme.border"></div>
+            <div class="min-w-0">
+              <h1 class="text-xl font-semibold leading-tight truncate">系统管理面板</h1>
+            <p class="text-xs mt-1" :class="theme.mutedText">统一管理站点配置、内容能力与安全设置</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <UButton :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelTheme === 'light' ? 'gray' : (panelTheme === 'midnight' ? 'blue' : (panelTheme === 'slate' ? 'indigo' : 'gray'))" class="shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90" @click="$router.push('/')">返回首页</UButton>
+            <UButton v-if="isLogin" icon="i-heroicons-power" color="red" variant="solid" class="shadow" @click="handleLogout">退出登录</UButton>
+          </div>
+        </div>
+        <div class="admin-form-shell flex-1 px-4 pb-24 pt-4 md:pt-6 flex flex-col w-full space-y-4">
           <div class="col-span-12">
-            <h1 class="text-2xl md:text-3xl font-bold text-center" :class="theme.text">系统管理面板</h1>
+            <h1 class="text-xl md:text-2xl font-bold text-left md:hidden" :class="theme.text">系统管理面板</h1>
           </div>
           <div class="col-span-12">
-            <div :class="[theme.cardBg, theme.border, cardCls]">
+            <div :class="adminPanelCardClass">
               <div class="px-4 py-3 flex items-center justify-between">
                 <div class="flex items-center gap-4">
                   <span :class="theme.text">配色</span>
-                  <div class="flex items-center gap-3">
-                    <div class="flex items-center"><URadio v-model="panelTheme" value="dark" class="mr-2" /><span :class="panelTheme === 'dark' ? theme.text : 'text-slate-400'">暗黑</span></div>
-                    <div class="flex items-center"><URadio v-model="panelTheme" value="midnight" class="mr-2" /><span :class="panelTheme === 'midnight' ? theme.text : 'text-slate-400'">深蓝</span></div>
-                    <div class="flex items-center"><URadio v-model="panelTheme" value="slate" class="mr-2" /><span :class="panelTheme === 'slate' ? theme.text : 'text-slate-400'">石板</span></div>
-                    <div class="flex items-center"><URadio v-model="panelTheme" value="light" class="mr-2" /><span :class="panelTheme === 'light' ? theme.text : 'text-slate-400'">明亮</span></div>
+                  <div class="flex items-center gap-2">
+                    <button
+                      v-for="opt in panelThemeOptions"
+                      :key="opt.value"
+                      type="button"
+                      class="theme-dot-btn"
+                      :class="[panelTheme === opt.value ? 'theme-dot-btn-active' : '']"
+                      :style="{ background: opt.value === 'dark' ? '#111827' : (opt.value === 'midnight' ? '#1e1b4b' : (opt.value === 'slate' ? '#334155' : '#e2e8f0')) }"
+                      @click="panelTheme = opt.value"
+                    />
                   </div>
                 </div>
 
@@ -150,7 +116,7 @@
             </div>
           </div>
           <div id="system-section" class="col-span-12">
-            <div class="rounded-xl border shadow-xl" :class="[theme.cardBg, theme.border]">
+            <div :class="adminShellCardClass">
               <div class="px-4 py-3 flex flex-wrap items-center gap-6">
                 <div>
                   <span :class="theme.text">系统管理员</span>
@@ -171,15 +137,15 @@
           
 
           <div id="user-section" class="col-span-12" v-if="isLogin">
-            <div class="rounded-xl border shadow-xl" :class="[theme.cardBg, theme.border]">
-              <div class="flex items-center justify-between px-4 py-3" :class="theme.text">
+            <div :class="adminShellCardClass">
+              <div :class="adminSectionHeaderClass">
                 <div class="font-semibold">用户信息配置</div>
               </div>
               <div class="px-4 pb-4 grid grid-cols-1 md:grid-cols-3 gap-y-2 md:gap-x-4">
                 <div class="rounded-lg p-3 h-full" :class="theme.subtleBg">
                   <div class="flex justify-between items-center mb-2">
                     <span :class="theme.mutedText">用户名</span>
-                    <UButton size="sm" @click="editUserInfo.username = !editUserInfo.username" :color="editUserInfo.username ? 'gray' : 'green'" :variant="editUserInfo.username ? 'soft' : 'solid'" class="shadow">{{ editUserInfo.username ? '取消' : '编辑' }}</UButton>
+                    <UButton size="sm" @click="editUserInfo.username = !editUserInfo.username" :color="editUserInfo.username ? 'gray' : 'green'" :variant="editUserInfo.username ? 'soft' : 'solid'" class="shadow">{{ editUserInfo.username ? '取消' : '修改' }}</UButton>
                   </div>
                   <div v-if="editUserInfo.username">
                     <UInput v-model="userForm.username" placeholder="新用户名" class="w-full mb-2" />
@@ -226,7 +192,7 @@
                     <div class="mt-3">
                       <div class="flex justify-between items-center mb-2">
                         <span :class="theme.mutedText">个性签名</span>
-                        <UButton size="sm" @click="editUserInfo.description = !editUserInfo.description" :color="editUserInfo.description ? 'gray' : 'green'" :variant="editUserInfo.description ? 'soft' : 'solid'" class="shadow">{{ editUserInfo.description ? '取消' : '编辑' }}</UButton>
+                        <UButton size="sm" @click="editUserInfo.description = !editUserInfo.description" :color="editUserInfo.description ? 'gray' : 'green'" :variant="editUserInfo.description ? 'soft' : 'solid'" class="shadow">{{ editUserInfo.description ? '取消' : '修改' }}</UButton>
                       </div>
                       <div v-if="editUserInfo.description">
                         <UTextarea v-model="userForm.description" placeholder="欢迎访问" class="w-full mb-2" />
@@ -271,7 +237,7 @@
                 <div class="border-t mt-4 pt-3" :class="theme.border">
                   <div class="flex justify-between items-center mb-2">
                     <span :class="theme.mutedText">修改密码</span>
-                    <UButton size="sm" @click="editUserInfo.password = !editUserInfo.password" :color="editUserInfo.password ? 'gray' : 'green'" :variant="editUserInfo.password ? 'soft' : 'solid'" class="shadow">{{ editUserInfo.password ? '取消' : '编辑' }}</UButton>
+                    <UButton size="sm" @click="editUserInfo.password = !editUserInfo.password" :color="editUserInfo.password ? 'gray' : 'green'" :variant="editUserInfo.password ? 'soft' : 'solid'" class="shadow">{{ editUserInfo.password ? '取消' : '修改' }}</UButton>
                   </div>
                   <div v-if="editUserInfo.password">
                     <div class="w-full mb-2 flex items-center gap-2">
@@ -295,7 +261,7 @@
                 <div class="border-t mt-4 pt-3" :class="theme.border">
                   <div class="flex justify-between items-center mb-2">
                     <span :class="theme.mutedText">绑定邮箱</span>
-                    <UButton size="sm" @click="editUserInfo.emailBind = !editUserInfo.emailBind" :color="editUserInfo.emailBind ? 'gray' : 'green'" :variant="editUserInfo.emailBind ? 'soft' : 'solid'" class="shadow">{{ editUserInfo.emailBind ? '取消' : '编辑' }}</UButton>
+                    <UButton size="sm" @click="editUserInfo.emailBind = !editUserInfo.emailBind" :color="editUserInfo.emailBind ? 'gray' : 'green'" :variant="editUserInfo.emailBind ? 'soft' : 'solid'" class="shadow">{{ editUserInfo.emailBind ? '取消' : '修改' }}</UButton>
                   </div>
                   <div v-if="editUserInfo.emailBind">
                     <div class="w-full mb-2 flex items-center gap-2">
@@ -311,7 +277,7 @@
                 <div class="border-t mt-4 pt-3" :class="theme.border">
                   <div class="flex justify-between items-center mb-2">
                     <span :class="theme.mutedText">更换邮箱</span>
-                    <UButton size="sm" @click="editUserInfo.emailChange = !editUserInfo.emailChange" :color="editUserInfo.emailChange ? 'gray' : 'green'" :variant="editUserInfo.emailChange ? 'soft' : 'solid'" class="shadow">{{ editUserInfo.emailChange ? '取消' : '编辑' }}</UButton>
+                    <UButton size="sm" @click="editUserInfo.emailChange = !editUserInfo.emailChange" :color="editUserInfo.emailChange ? 'gray' : 'green'" :variant="editUserInfo.emailChange ? 'soft' : 'solid'" class="shadow">{{ editUserInfo.emailChange ? '取消' : '修改' }}</UButton>
                   </div>
                   <div v-if="editUserInfo.emailChange">
                     <div class="w-full mb-2 flex items-center gap-2">
@@ -335,15 +301,15 @@
           </div>
 
           <div id="site-section" v-if="isAdmin" class="col-span-12">
-          <div class="rounded-xl border shadow-xl" :class="[theme.cardBg, theme.border]">
-            <div class="flex items-center justify-between px-4 py-3">
+          <div :class="adminShellCardClass">
+            <div :class="adminSectionHeaderClass">
               <div class="font-semibold flex items-center gap-2" :class="theme.text">
                 <UIcon name="i-heroicons-cog-6-tooth" class="w-5 h-5" />
                 <span>网站配置</span>
               </div>
             </div>
             <div class="px-4 pb-4 space-y-4">
-              <div class="rounded-lg p-3" :class="theme.subtleBg">
+              <div :class="adminSubtleCardClass">
                 <div class="flex justify-between items-center mb-3">
                   <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-hand-thumb-up" class="w-4 h-4" /><span>系统欢迎组件</span></div>
                   <div class="flex items-center gap-2">
@@ -371,16 +337,9 @@
               <div id="site-register-section" class="flex items-center rounded-lg p-3 justify-between" :class="theme.subtleBg">
                 <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-user-plus" class="w-4 h-4" /> <span>新用户注册</span></div>
                 <div class="flex items-center gap-4">
-                  <div class="flex items-center">
-                    <URadio v-model="registerEnabled" :value="true" class="mr-2" />
-                      <span :class="registerEnabled ? theme.text : 'text-slate-400'">允许</span>
-                    </div>
-                    <div class="flex items-center">
-                      <URadio v-model="registerEnabled" :value="false" class="mr-2" />
-                      <span :class="!registerEnabled ? theme.text : 'text-slate-400'">不允许</span>
-                    </div>
-                    <UButton color="green" @click="saveRegisterConfig" class="shadow">保存</UButton>
-                  </div>
+                  <UToggle v-model="registerEnabled" />
+                  <UButton color="green" @click="saveRegisterConfig" class="shadow">保存</UButton>
+                </div>
                 </div>
                 <div id="site-pwa-section" class="rounded-lg p-4" :class="theme.subtleBg">
                   <div class="flex justify-between items-center mb-3">
@@ -408,14 +367,7 @@
                 <div id="site-github-card-section" class="flex flex-col sm:flex-row items-start sm:items-center rounded-lg p-3 justify-between gap-3 sm:gap-0" :class="theme.subtleBg">
                   <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-mdi-github" class="w-4 h-4" /> <span>GitHub 链接卡片解析</span></div>
                   <div class="flex flex-wrap items-center gap-4">
-                    <div class="flex items-center">
-                      <URadio v-model="githubCardEnabled" :value="true" class="mr-2" />
-                      <span :class="githubCardEnabled ? theme.text : 'text-slate-400'">开启</span>
-                    </div>
-                    <div class="flex items-center">
-                      <URadio v-model="githubCardEnabled" :value="false" class="mr-2" />
-                      <span :class="!githubCardEnabled ? theme.text : 'text-slate-400'">关闭</span>
-                    </div>
+                    <UToggle v-model="githubCardEnabled" />
                     <UButton color="green" @click="saveGithubCardConfig" class="shadow">保存</UButton>
                   </div>
                 </div>
@@ -434,15 +386,14 @@
                   </div>
                 </div>
                 <div id="site-music-section" class="col-span-12 mt-4">
-                  <div :class="[theme.cardBg, theme.border, cardCls]">
-                    <div class="flex items-center justify-between px-4 py-3">
+                  <div :class="adminPanelCardClass">
+                    <div :class="adminSectionHeaderClass">
                       <div class="font-semibold flex items-center gap-2" :class="theme.text">
                         <UIcon name="i-heroicons-musical-note" class="w-5 h-5" />
                         <span>音乐配置</span>
                       </div>
                       <div class="flex items-center gap-3">
                         <UToggle v-model="frontendConfig.musicEnabled" />
-                        <UButton color="green" @click="saveMusicConfig" class="shadow">保存</UButton>
                       </div>
                     </div>
                     <div class="px-4 pb-4">
@@ -467,7 +418,7 @@
                           </div>
                           <div>
                             <label class="text-sm mb-1 block" :class="theme.mutedText">主题</label>
-                            <USelect v-model="frontendConfig.musicTheme" :options="[{label:'自动',value:'auto'},{label:'深色',value:'dark'},{label:'浅色',value:'light'}]" />
+                            <USelect v-model="frontendConfig.musicTheme" :options="musicThemeOptions" />
                           </div>
                           <div>
                             <label class="text-sm mb-1 block" :class="theme.mutedText">CDN 源</label>
@@ -488,15 +439,19 @@
                           </div>
                           <div>
                             <label class="text-sm mb-1 block" :class="theme.mutedText">显示歌词</label>
-                            <USelect v-model="frontendConfig.musicLyric" :options="[{label:'是',value:true},{label:'否',value:false}]" />
+                            <UToggle v-model="frontendConfig.musicLyric" />
                           </div>
                           <div>
                             <label class="text-sm mb-1 block" :class="theme.mutedText">自动播放</label>
-                            <USelect v-model="frontendConfig.musicAutoplay" :options="[{label:'是',value:true},{label:'否',value:false}]" />
+                            <UToggle v-model="frontendConfig.musicAutoplay" />
                           </div>
                           <div>
                             <label class="text-sm mb-1 block" :class="theme.mutedText">默认最小化</label>
-                            <USelect v-model="frontendConfig.musicDefaultMinimized" :options="[{label:'是',value:true},{label:'否',value:false}]" />
+                            <UToggle v-model="frontendConfig.musicDefaultMinimized" />
+                          </div>
+                          <div>
+                            <label class="text-sm mb-1 block" :class="theme.mutedText">手机端隐藏播放器</label>
+                            <UToggle v-model="frontendConfig.musicHideOnMobile" />
                           </div>
                           <div class="flex items-center gap-2 md:col-span-2">
                             <span class="text-sm" :class="theme.mutedText">展示模式</span>
@@ -512,32 +467,38 @@
                     </div>
                   </div>
                 </div>
-                <div id="site-default-theme-section" class="flex flex-col sm:flex-row items-start sm:items-center rounded-lg p-3 justify-between gap-3 sm:gap-0" :class="theme.subtleBg">
-                  <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-swatch" class="w-4 h-4" /> <span>默认主题色</span></div>
-                  <div class="flex flex-wrap items-center gap-4">
-                    <div class="flex items-center">
-                      <URadio v-model="frontendConfig.defaultContentTheme" value="dark" class="mr-2" />
-                      <span :class="frontendConfig.defaultContentTheme === 'dark' ? theme.text : 'text-slate-400'">暗黑</span>
+                <div id="site-default-theme-section" class="rounded-lg p-3 space-y-3" :class="theme.subtleBg">
+                  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-swatch" class="w-4 h-4" /> <span>默认主题色</span></div>
+                    <div class="flex flex-wrap items-center gap-4">
+                      <USelect v-model="frontendConfig.defaultContentTheme" :options="[{label:'暗黑',value:'dark'},{label:'白天',value:'light'}]" class="w-36" />
+                      <UButton color="green" @click="saveConfigItem('defaultContentTheme')" class="shadow">保存主题</UButton>
                     </div>
-                    <div class="flex items-center">
-                      <URadio v-model="frontendConfig.defaultContentTheme" value="light" class="mr-2" />
-                      <span :class="frontendConfig.defaultContentTheme === 'light' ? theme.text : 'text-slate-400'">白天</span>
+                  </div>
+                  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-view-columns" class="w-4 h-4" /> <span>首页默认布局</span></div>
+                    <div class="flex flex-wrap items-center gap-3">
+                      <USelect v-model="frontendConfig.homeLayoutDefault" :options="[{label:'三栏',value:'three'},{label:'两栏',value:'two'},{label:'单栏',value:'single'}]" class="w-36" />
+                      <UButton color="green" @click="saveConfigItem('homeLayoutDefault')" class="shadow">保存布局</UButton>
                     </div>
-                    <UButton color="green" @click="saveConfigItem('defaultContentTheme')" class="shadow">保存</UButton>
                   </div>
                 </div>
                 <div id="site-configs-section" class="space-y-4">
-                <div v-for="(label, key) in configLabels" :key="key" class="rounded-lg p-3" :class="theme.subtleBg">
+                <div v-for="(label, key) in configLabels" :key="key" :class="adminSubtleCardClass">
                     <div class="flex justify-between items-center mb-2">
                       <span :class="theme.mutedText">{{ label }}</span>
-                      <UButton size="sm" @click="editItem[String(key)] = !editItem[String(key)]" :color="editItem[String(key)] ? 'gray' : 'green'" :variant="editItem[String(key)] ? 'soft' : 'solid'" class="shadow">{{ editItem[String(key)] ? '取消' : '编辑' }}</UButton>
+                      <div v-if="isSwitchConfigKey(String(key))" class="flex items-center gap-2">
+                        <UToggle v-model="frontendConfig[String(key)]" />
+                        <UButton size="sm" color="green" class="shadow" @click="saveConfigItem(String(key))">保存</UButton>
+                      </div>
+                      <UButton v-else size="sm" @click="editItem[String(key)] = !editItem[String(key)]" :color="editItem[String(key)] ? 'gray' : 'green'" :variant="editItem[String(key)] ? 'soft' : 'solid'" class="shadow">{{ editItem[String(key)] ? '取消' : '修改' }}</UButton>
                     </div>
-                    <div v-if="editItem[String(key)]">
+                    <div v-if="!isSwitchConfigKey(String(key)) && editItem[String(key)]">
                       <template v-if="String(key) === 'backgrounds'">
                         <div class="space-y-3">
                           <div v-for="(bg, index) in frontendConfig.backgrounds" :key="index" class="flex items-center gap-3">
                             <img :src="bg || '/favicon.ico'" class="w-14 h-14 rounded object-cover border" :class="theme.border" @click="previewImage(bg)" />
-                            <UInput v-model="frontendConfig.backgrounds[index]" placeholder="输入图片URL" class="flex-1" />
+                            <UInput v-model="frontendConfig.backgrounds[index]" placeholder="输入头部图URL" class="flex-1" />
                             <div class="flex items-center gap-2">
                               <UButton size="xs" variant="soft" icon="i-heroicons-arrow-up" @click="moveBackgroundUp(index)">上移</UButton>
                               <UButton size="xs" variant="soft" icon="i-heroicons-arrow-down" @click="moveBackgroundDown(index)">下移</UButton>
@@ -578,7 +539,7 @@
                         <UButton @click="saveConfigItem(String(key))" color="primary" class="shadow">保存</UButton>
                       </div>
                     </div>
-                    <div v-else>
+                    <div v-else-if="!isSwitchConfigKey(String(key))">
                       <template v-if="String(key) === 'backgrounds'">
                         <div class="grid grid-cols-3 gap-2">
                           <img v-for="(bg, index) in frontendConfig.backgrounds" :key="index" :src="bg" class="w-full h-24 object-cover rounded cursor-pointer border" :class="theme.border" @click="previewImage(bg)" />
@@ -603,7 +564,7 @@
                   <UButton @click="saveConfig" color="primary" class="shadow">保存所有更改</UButton>
                 </div>
                 <div id="site-ads-section" class="col-span-12">
-                  <div :class="[theme.cardBg, theme.border, cardCls]">
+                  <div :class="adminPanelCardClass">
                     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                       <div class="font-semibold flex items-center gap-2" :class="theme.text">
                         <UIcon name="i-heroicons-megaphone" class="w-5 h-5" />
@@ -655,7 +616,7 @@
                   </div>
                 </div>
                 <div id="hitokoto-section" class="col-span-12">
-                  <div :class="[theme.cardBg, theme.border, cardCls]">
+                  <div :class="adminPanelCardClass">
                     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                       <div class="font-semibold flex items-center gap-2" :class="theme.text">
                         <UIcon name="i-heroicons-sparkles" class="w-5 h-5" />
@@ -673,9 +634,41 @@
                     </div>
                   </div>
                 </div>
+                <div id="life-countdown-section" class="col-span-12">
+                  <div :class="adminPanelCardClass">
+                    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
+                      <div class="font-semibold flex items-center gap-2" :class="theme.text">
+                        <UIcon name="i-heroicons-heart" class="w-5 h-5" />
+                        <span>人生倒计时组件</span>
+                      </div>
+                      <div class="flex flex-wrap items-center gap-3">
+                        <UToggle v-model="frontendConfig.lifeCountdownEnabled" />
+                        <UButton color="green" @click="saveConfigItem('lifeCountdownEnabled')" class="shadow">保存开关</UButton>
+                      </div>
+                    </div>
+                    <div class="px-4 pb-4">
+                      <div class="rounded-lg p-4 space-y-3" :class="theme.subtleBg">
+                        <div class="text-sm" :class="theme.mutedText">开启后在首页左侧展示人生进度与剩余天数卡片</div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <div class="text-xs mb-1" :class="theme.mutedText">生日</div>
+                            <UInput v-model="frontendConfig.lifeCountdownBirthDate" type="date" />
+                          </div>
+                          <div>
+                            <div class="text-xs mb-1" :class="theme.mutedText">预期寿命（年）</div>
+                            <UInput v-model.number="frontendConfig.lifeExpectancyYears" type="number" min="1" max="150" />
+                          </div>
+                        </div>
+                        <div class="flex justify-end">
+                          <UButton color="primary" class="shadow" @click="saveLifeCountdownConfig">保存配置</UButton>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
                 <div id="site-social-links-section" class="col-span-12">
-                  <div :class="[theme.cardBg, theme.border, cardCls]">
-                    <div class="flex items-center justify-between px-4 py-3">
+                  <div :class="adminPanelCardClass">
+                    <div :class="adminSectionHeaderClass">
                       <div class="font-semibold flex items-center gap-2" :class="theme.text">
                         <UIcon name="i-heroicons-link" class="w-5 h-5" />
                         <span>社交链接配置</span>
@@ -685,7 +678,7 @@
                           <span class="text-sm" :class="theme.mutedText">启用</span>
                           <UToggle v-model="frontendConfig.socialLinksEnabled" />
                         </div>
-                        <UButton size="sm" @click="editItem.socialLinks = !editItem.socialLinks" :color="editItem.socialLinks ? 'gray' : 'green'" :variant="editItem.socialLinks ? 'soft' : 'solid'" class="shadow">{{ editItem.socialLinks ? '取消' : '编辑' }}</UButton>
+                        <UButton size="sm" @click="editItem.socialLinks = !editItem.socialLinks" :color="editItem.socialLinks ? 'gray' : 'green'" :variant="editItem.socialLinks ? 'soft' : 'solid'" class="shadow">{{ editItem.socialLinks ? '取消' : '修改' }}</UButton>
                         <UButton color="green" class="shadow" @click="saveSocialLinks">保存</UButton>
                       </div>
                     </div>
@@ -712,7 +705,7 @@
                   </div>
                 </div>
                 <div id="friend-links-section" class="col-span-12 mt-4">
-                  <div :class="[theme.cardBg, theme.border, cardCls]">
+                  <div :class="adminPanelCardClass">
                     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                       <div class="font-semibold flex items-center gap-2" :class="theme.text">
                         <UIcon name="i-heroicons-link" class="w-5 h-5" />
@@ -761,7 +754,7 @@
           </div>
           <!-- 友链申请审核管理（管理员） -->
           <div v-if="isAdmin" id="friend-links-audit" class="col-span-12 mt-4">
-            <div :class="[theme.cardBg, theme.border, cardCls]">
+            <div :class="adminPanelCardClass">
               <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
                   <UIcon name="i-heroicons-check-badge" class="w-5 h-5" />
@@ -769,6 +762,7 @@
                 </div>
                 <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                   <UInput v-model="friendLinkSearch" placeholder="搜索标题或网址" class="w-full sm:w-64" />
+                  <UButton color="red" variant="soft" :loading="friendLinkOperating" @click="clearFriendLinkApplications">清空记录</UButton>
                   <UButton color="primary" variant="soft" @click="loadFriendLinkApplications">刷新</UButton>
                 </div>
               </div>
@@ -779,6 +773,7 @@
                     <div class="flex items-center justify-between gap-2">
                       <div class="text-sm truncate" :class="theme.text">#{{ app.id }} · {{ app.title || app.link }} · {{ formatDate(app.created_at) }} · <span class="px-2 py-0.5 rounded text-xs" :class="statusClass(app.status)">{{ app.status }}</span></div>
                       <div class="flex items-center gap-2">
+                        <UButton size="xs" color="gray" variant="soft" :loading="friendLinkOperating" @click="deleteFriendLinkApplication(app)">删除记录</UButton>
                         <UButton size="xs" color="green" variant="soft" @click="openApprove(app)">通过</UButton>
                         <UButton size="xs" color="red" variant="soft" @click="openReject(app)">拒绝</UButton>
                       </div>
@@ -794,7 +789,7 @@
           
           
           <div id="comments-section" class="col-span-12" v-if="isAdmin">
-            <div :class="[theme.cardBg, theme.border, cardCls]">
+            <div :class="adminPanelCardClass">
               <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-4 sm:gap-0">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
                   <UIcon name="i-heroicons-chat-bubble-left-right" class="w-5 h-5" />
@@ -885,7 +880,7 @@
       <div class="mx-4 my-2 border-t" :class="theme.border"></div>
 
           <div id="email-section" v-if="isAdmin" class="col-span-12">
-            <div :class="[theme.cardBg, theme.border, cardCls]">
+            <div :class="adminPanelCardClass">
               <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
                   <UIcon name="i-heroicons-envelope" class="w-5 h-5" />
@@ -945,7 +940,7 @@
           </div>
 
           <div id="admin-users-section" v-if="isAdmin" class="col-span-12">
-            <div :class="[theme.cardBg, theme.border, cardCls]">
+            <div :class="adminPanelCardClass">
               <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
                   <UIcon name="i-heroicons-shield-check" class="w-5 h-5" />
@@ -966,7 +961,7 @@
                     </div>
                   </div>
                 </div>
-                <div v-if="showUsers" class="rounded-lg p-3" :class="theme.subtleBg">
+                <div v-if="showUsers" :class="adminSubtleCardClass">
                   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                     <div v-for="u in filteredUsers" :key="(u.id ?? u.ID)" class="rounded border px-3 py-2" :class="theme.border">
                       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 min-w-0">
@@ -1033,8 +1028,8 @@
           </UModal>
 
           <div id="notify-section" v-if="isAdmin" class="col-span-12">
-            <div class="rounded-xl border shadow-xl" :class="[theme.cardBg, theme.border]">
-              <div class="flex items-center justify-between px-4 py-3">
+            <div :class="adminShellCardClass">
+              <div :class="adminSectionHeaderClass">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
                   <UIcon name="i-heroicons-bell-alert" class="w-5 h-5" />
                   <span>推送配置</span>
@@ -1057,8 +1052,8 @@
           
 
           <div id="site-github-login-section" v-if="isAdmin" class="col-span-12">
-            <div class="rounded-xl border shadow-xl" :class="[theme.cardBg, theme.border]">
-              <div class="flex items-center justify-between px-4 py-3">
+            <div :class="adminShellCardClass">
+              <div :class="adminSectionHeaderClass">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
                   <UIcon name="i-mdi-github" class="w-5 h-5" />
                   <span>GitHub 登录</span>
@@ -1095,30 +1090,25 @@
           </div>
 
           <div id="attachments-section" v-if="isAdmin" class="col-span-12">
-            <div class="rounded-xl border shadow-xl" :class="[theme.cardBg, theme.border]">
+            <div :class="adminShellCardClass">
               <AttachmentManager :theme="theme" :is-cloud="attachmentStorageEnabled" />
             </div>
           </div>
 
           <div id="attachment-storage-section" v-if="isAdmin" class="col-span-12">
-            <div class="rounded-xl border shadow-xl" :class="[theme.cardBg, theme.border]">
+            <div :class="adminShellCardClass">
               <div class="px-4 py-3 font-semibold flex items-center gap-2" :class="theme.text">
                 <UIcon name="i-heroicons-cloud" class="w-5 h-5 text-indigo-300" />
                 <span>附件存储方案配置</span>
               </div>
               <div class="px-4 pb-4">
-                <div class="rounded-lg p-3" :class="theme.subtleBg">
+                <div :class="adminSubtleCardClass">
                   <div class="font-semibold mb-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2" :class="theme.text">
                     <span>附件存储选择（本地 / R2 / S3）</span>
                     <div class="flex flex-wrap items-center gap-3">
                       <span class="text-xs sm:text-sm" :class="theme.mutedText">当前模式</span>
                       <span :class="[attachmentStorageEnabled ? 'text-green-400' : 'text-indigo-400', 'text-xs sm:text-sm']">{{ attachmentStorageEnabled ? '云端存储' : '本地存储' }}</span>
-                      <div class="flex items-center gap-2">
-                      <URadio v-model="attachmentStorageEnabled" :value="true" />
-                      <span :class="attachmentStorageEnabled ? theme.text : 'text-gray-400'">云端</span>
-                      <URadio v-model="attachmentStorageEnabled" :value="false" />
-                      <span :class="!attachmentStorageEnabled ? theme.text : 'text-gray-400'">本地</span>
-                    </div>
+                      <UToggle v-model="attachmentStorageEnabled" />
                     </div>
                   </div>
 
@@ -1128,10 +1118,7 @@
                       <span class="text-xs sm:text-sm" :class="theme.mutedText">状态</span>
                       <span :class="[attachmentStorageConfig.enableCompression ? 'text-green-400' : 'text-indigo-400', 'text-xs sm:text-sm']">{{ attachmentStorageConfig.enableCompression ? '已开启' : '未开启' }}</span>
                       <!-- 显式开关按钮 -->
-                      <div class="flex items-center rounded-lg border border-slate-600 p-0.5 bg-slate-800/50">
-                        <button @click="toggleCompression(true)" :class="['px-3 py-1 text-xs rounded-md transition-colors', attachmentStorageConfig.enableCompression ? 'bg-green-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-700']">开启</button>
-                        <button @click="toggleCompression(false)" :class="['px-3 py-1 text-xs rounded-md transition-colors', !attachmentStorageConfig.enableCompression ? 'bg-slate-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-700']">关闭</button>
-                      </div>
+                      <UToggle v-model="attachmentStorageConfig.enableCompression" @update:model-value="(v) => toggleCompression(!!v)" />
                       <span class="text-xs px-1.5 py-0.5 rounded border ml-1" :class="attachmentStorageConfig.ffmpegInstalled ? 'border-green-500/30 text-green-500' : 'border-red-500/30 text-red-500'">
                         {{ attachmentStorageConfig.ffmpegInstalled ? 'FFmpeg已就绪' : '未检测到FFmpeg' }}
                       </span>
@@ -1194,24 +1181,19 @@
           </div>
 
           <div id="storage-section" v-if="isAdmin" class="col-span-12">
-            <div class="rounded-xl border shadow-xl" :class="[theme.cardBg, theme.border]">
+            <div :class="adminShellCardClass">
               <div class="px-4 py-3 font-semibold flex items-center gap-2" :class="theme.text">
                 <UIcon name="i-heroicons-cloud" class="w-5 h-5 text-indigo-300" />
                 <span>数据库存储方案配置</span>
               </div>
               <div class="px-4 pb-4">
-                <div class="rounded-lg p-3" :class="theme.subtleBg">
+                <div :class="adminSubtleCardClass">
                   <div class="font-semibold mb-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2" :class="theme.text">
                     <span>数据存储方案选择（本地 / R2 / S3）</span>
                     <div class="flex flex-wrap items-center gap-3">
                       <span class="text-xs sm:text-sm" :class="theme.mutedText">当前模式</span>
                       <span :class="[storageEnabled ? 'text-green-400' : 'text-indigo-400', 'text-xs sm:text-sm']">{{ storageEnabled ? '云端存储' : '本地存储' }}</span>
-                      <div class="flex items-center gap-2">
-                        <URadio v-model="storageEnabled" :value="true" />
-                        <span :class="storageEnabled ? theme.text : 'text-gray-400'">云端</span>
-                        <URadio v-model="storageEnabled" :value="false" />
-                        <span :class="!storageEnabled ? theme.text : 'text-gray-400'">本地</span>
-                      </div>
+                      <UToggle v-model="storageEnabled" />
                     </div>
                   </div>
                   
@@ -1320,7 +1302,7 @@
           </div>
 
           <div id="db-section" v-if="isAdmin" class="col-span-12">
-            <div class="rounded-xl border shadow-xl" :class="[theme.cardBg, theme.border]">
+            <div :class="adminShellCardClass">
               <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-4 py-3">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
                   <UIcon name="i-heroicons-circle-stack" class="w-5 h-5 text-indigo-300" />
@@ -1337,7 +1319,7 @@
                 <div class="text-yellow-400 text-sm rounded p-2" :class="theme.subtleBg">🔔：仅针对 SQLite 本地数据库；{{ dbType !== 'sqlite' ? '当前为云/外部数据库，请在服务端操作' : '可在此下载与恢复本地备份' }}</div>
                 <input type="file" ref="databaseFileInput" accept=".zip" class="hidden" @change="handleDatabaseUpload" />
 
-                <div class="rounded-lg p-3" :class="theme.subtleBg">
+                <div :class="adminSubtleCardClass">
                    <div class="font-semibold mb-2" :class="theme.text">云端备份与恢复</div>
                    <div class="text-xs mb-3" :class="theme.mutedText">请在上方的“存储方案”中配置云端连接信息</div>
                    <div class="flex justify-end gap-2">
@@ -1346,7 +1328,7 @@
                     <UButton color="blue" variant="solid" :disabled="!storageEnabled || !storageConfig.publicBaseURL" @click="restoreFromConfiguredCloud">按配置恢复</UButton>
                   </div>
                 </div>
-                <div id="version-section" v-if="isAdmin" class="rounded-lg p-3" :class="theme.subtleBg">
+                <div id="version-section" v-if="isAdmin" :class="adminSubtleCardClass">
                   <div class="font-semibold mb-2 flex items-center gap-2" :class="theme.text">
                     <UIcon name="i-heroicons-information-circle" class="w-5 h-5 text-indigo-300" />
                     <span>版本与更新</span>
@@ -1378,8 +1360,121 @@
             </div>
           </div>
 
+          <div id="security-section" v-if="isAdmin" class="col-span-12">
+            <div :class="adminShellCardClass">
+              <div :class="adminSectionHeaderClass">
+                <div class="font-semibold flex items-center gap-2" :class="theme.text">
+                  <UIcon name="i-heroicons-shield-exclamation" class="w-5 h-5" />
+                  <span>安全防护</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <UButton size="sm" color="indigo" variant="soft" class="shadow" @click="refreshSecurity">刷新</UButton>
+                  <UButton size="sm" color="red" variant="soft" class="shadow" @click="clearAttackLogs">清空攻击记录</UButton>
+                </div>
+              </div>
+              <div class="px-4 pb-4 space-y-4">
+                <div :class="adminSubtleCardClass">
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="font-semibold" :class="theme.text">自动封禁策略</div>
+                    <div class="flex items-center gap-2">
+                      <UButton size="sm" color="green" class="shadow" @click="saveSecurityConfig">保存策略</UButton>
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div class="flex items-center justify-between md:col-span-1">
+                      <span :class="theme.mutedText">启用自动封禁</span>
+                      <UToggle v-model="securityConfig.autoBanEnabled" />
+                    </div>
+                    <div>
+                      <label class="text-xs" :class="theme.mutedText">统计窗口（秒）</label>
+                      <UInput v-model.number="securityConfig.autoBanWindowSeconds" type="number" />
+                    </div>
+                    <div>
+                      <label class="text-xs" :class="theme.mutedText">触发次数（窗口内）</label>
+                      <UInput v-model.number="securityConfig.autoBanThreshold" type="number" />
+                    </div>
+                    <div>
+                      <label class="text-xs" :class="theme.mutedText">封禁时长（分钟，0=永久）</label>
+                      <UInput v-model.number="securityConfig.autoBanMinutes" type="number" />
+                    </div>
+                  </div>
+                  <div class="text-xs mt-2" :class="theme.mutedText">仅对敏感路径扫描命中进行计数；达到阈值后将自动写入封禁列表并立即生效</div>
+                </div>
+
+                <div :class="adminSubtleCardClass">
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="font-semibold" :class="theme.text">攻击记录（最近 {{ attackLogs.length }} 条）</div>
+                  </div>
+                  <div class="overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                      <thead>
+                        <tr :class="theme.mutedText">
+                          <th class="text-left py-2 pr-4">时间</th>
+                          <th class="text-left py-2 pr-4">IP</th>
+                          <th class="text-left py-2 pr-4">方法</th>
+                          <th class="text-left py-2 pr-4">路径</th>
+                          <th class="text-left py-2">操作</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="row in attackLogs" :key="row.id" class="border-t" :class="theme.border">
+                          <td class="py-2 pr-4" :class="theme.mutedText">{{ formatShanghai(row.created_at || row.CreatedAt || '') }}</td>
+                          <td class="py-2 pr-4 font-mono" :class="theme.text">{{ row.ip || row.IP }}</td>
+                          <td class="py-2 pr-4" :class="theme.mutedText">{{ row.method || row.Method }}</td>
+                          <td class="py-2 pr-4 break-all" :class="theme.text">{{ row.path || row.Path }}</td>
+                          <td class="py-2">
+                            <UButton size="xs" color="orange" variant="soft" class="shadow" @click="banIP(row.ip || row.IP)">封禁</UButton>
+                          </td>
+                        </tr>
+                        <tr v-if="!attackLogs.length">
+                          <td colspan="5" class="py-3" :class="theme.mutedText">暂无记录</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div :class="adminSubtleCardClass">
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="font-semibold" :class="theme.text">封禁 IP</div>
+                    <div class="flex items-center gap-2">
+                      <UInput v-model="banForm.ip" placeholder="IP" class="w-40" />
+                      <UInput v-model.number="banForm.minutes" type="number" placeholder="分钟(0=永久)" class="w-36" />
+                      <UInput v-model="banForm.reason" placeholder="原因(可选)" class="w-56" />
+                      <UButton size="sm" color="orange" class="shadow" @click="submitBan">封禁</UButton>
+                    </div>
+                  </div>
+                  <div class="overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                      <thead>
+                        <tr :class="theme.mutedText">
+                          <th class="text-left py-2 pr-4">IP</th>
+                          <th class="text-left py-2 pr-4">原因</th>
+                          <th class="text-left py-2 pr-4">到期</th>
+                          <th class="text-left py-2">操作</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="b in ipBans" :key="b.id" class="border-t" :class="theme.border">
+                          <td class="py-2 pr-4 font-mono" :class="theme.text">{{ b.ip || b.IP }}</td>
+                          <td class="py-2 pr-4" :class="theme.mutedText">{{ b.reason || b.Reason || '-' }}</td>
+                          <td class="py-2 pr-4" :class="theme.mutedText">{{ b.until || b.Until ? formatShanghai(b.until || b.Until) : '永久' }}</td>
+                          <td class="py-2">
+                            <UButton size="xs" color="green" variant="soft" class="shadow" @click="unbanIP(b.ip || b.IP)">解封</UButton>
+                          </td>
+                        </tr>
+                        <tr v-if="!ipBans.length">
+                          <td colspan="4" class="py-3" :class="theme.mutedText">暂无封禁</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
-        
       </main>
       <div v-show="showBottomBar" class="flex fixed bottom-0 left-0 right-0 md:left-72 z-50 border-t px-3 py-3 justify-between items-center backdrop-blur-md shadow-xl" :class="[theme.bottomBg, theme.border]">
         <UButton
@@ -1436,7 +1531,7 @@
                             </div>
                         </div>
                     </div>
-                    <div id="section-status" class="rounded-lg p-4 mb-6" :class="theme.cardBg">
+                    <div v-if="false" id="section-status" class="rounded-lg p-4 mb-6" :class="theme.cardBg">
                         <h2 class="text-xl font-semibold text-white mb-4">系统状态</h2>
                         <div class="grid gap-4">
                             <div class="flex justify-between items-center">
@@ -1459,7 +1554,7 @@
                 
                   <!-- 用户信息配置面板 -->
  
-                <div v-if="isLogin" class="rounded-lg p-4 mb-6" :class="theme.cardBg">
+                <div v-if="false && isLogin" class="rounded-lg p-4 mb-6" :class="theme.cardBg">
                     <h2 class="text-xl font-semibold mb-4" :class="theme.text">用户信息配置</h2>
  
                 <div id="section-user" v-if="isLogin" class="rounded-lg p-4 mb-6" :class="theme.cardBg">
@@ -1476,7 +1571,7 @@
                                     :color="editUserInfo.username ? 'gray' : 'green'"
                                     :variant="editUserInfo.username ? 'soft' : 'solid'"
                                 >
-                                    {{ editUserInfo.username ? '取消' : '编辑' }}
+                                    {{ editUserInfo.username ? '取消' : '修改' }}
                                 </UButton>
                             </div>
                             <div v-if="editUserInfo.username">
@@ -1538,7 +1633,7 @@
                                     :color="editUserInfo.password ? 'gray' : 'green'"
                                     :variant="editUserInfo.password ? 'soft' : 'solid'"
                                 >
-                                    {{ editUserInfo.password ? '取消' : '编辑' }}
+                                    {{ editUserInfo.password ? '取消' : '修改' }}
                                 </UButton>
                             </div>
                             <div v-if="editUserInfo.password">
@@ -1567,7 +1662,7 @@
                     </div>
                 </div>
                 <!-- 网站配置区域 -->
-                <div id="section-site" v-if="isAdmin" class="rounded-lg p-4 mb-6" :class="theme.cardBg">
+                <div id="section-site" v-if="false && isAdmin" class="rounded-lg p-4 mb-6" :class="theme.cardBg">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-xl font-semibold" :class="theme.text">网站配置</h2>
                     </div>
@@ -1773,29 +1868,34 @@
                     <div class="text-xs mt-2" :class="theme.mutedText">保存后首页自动刷新显示播放器；歌单与单曲任选其一</div>
                   </div>
 
-                    <!-- 配置展示/编辑表单 -->
+                    <!-- 配置展示/修改表单 -->
                     <div class="space-y-4">
                         <div v-for="(label, key) in configLabels" :key="key" class="rounded p-3" :class="theme.subtleBg">
                             <div class="flex justify-between items-center mb-2">
                                 <span :class="theme.mutedText">{{ label }}</span>
+                                <div v-if="isSwitchConfigKey(String(key))" class="flex items-center gap-2">
+                                  <UToggle v-model="frontendConfig[String(key)]" />
+                                  <UButton size="sm" color="green" class="shadow" @click="saveConfigItem(String(key))">保存</UButton>
+                                </div>
                                 <UButton
+                                    v-else
                                     size="sm"
                                     @click="editItem[key] = !editItem[key]"
                                     :color="editItem[key] ? 'gray' : 'green'"
                                     :variant="editItem[key] ? 'soft' : 'solid'"
                                 >
-                                    {{ editItem[key] ? '取消' : '编辑' }}
+                                    {{ editItem[key] ? '取消' : '修改' }}
                                 </UButton>
                             </div>
                             
-                            <div v-if="editItem[key]">
+                            <div v-if="!isSwitchConfigKey(String(key)) && editItem[key]">
                         <template v-if="String(key) === 'backgrounds'">
                             <div class="space-y-3">
                                 <div v-for="(bg, index) in frontendConfig.backgrounds"
                                      :key="index"
                                      class="flex items-center gap-3">
                                     <img :src="bg || '/favicon.ico'" class="w-14 h-14 rounded object-cover border" :class="theme.border" @click="previewImage(bg)" />
-                                    <UInput v-model="frontendConfig.backgrounds[index]" placeholder="输入图片URL" class="flex-1" />
+                                    <UInput v-model="frontendConfig.backgrounds[index]" placeholder="输入头部图URL" class="flex-1" />
                                     <div class="flex items-center gap-2">
                                       <UButton size="xs" variant="soft" icon="i-heroicons-arrow-up" @click="moveBackgroundUp(index)">上移</UButton>
                                       <UButton size="xs" variant="soft" icon="i-heroicons-arrow-down" @click="moveBackgroundDown(index)">下移</UButton>
@@ -1849,7 +1949,7 @@
                                     </UButton>
                                 </div>
                             </div>
-                            <div v-else>
+                            <div v-else-if="!isSwitchConfigKey(String(key))">
                         <template v-if="String(key) === 'backgrounds'">
                             <div class="grid grid-cols-3 gap-2">
                                 <img v-for="(bg, index) in frontendConfig.backgrounds"
@@ -1877,6 +1977,7 @@
                         保存所有更改
                     </UButton>
                 </div>
+
  
                 
                 
@@ -1948,7 +2049,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import type { UserToLogin, UserToRegister } from '~/types/models'
 import { useUser } from '~/composables/useUser'
 import { useUserStore } from '~/store/user'
@@ -1971,6 +2072,115 @@ const formatShanghai = (s: string) => {
 }
  
 const cardCls = 'rounded-2xl border shadow-2xl'
+type AdminSectionKey =
+  'system' | 'user' | 'site' | 'notify' | 'attachments' | 'attachment-storage' | 'db' | 'version' | 'security' |
+  'site-register' | 'site-pwa' | 'site-github-card' | 'site-github-login' | 'site-announcement' | 'site-music' |
+  'site-default-theme' | 'site-social-links' | 'friend-links' | 'site-configs' | 'comments' | 'email' | 'admin-users' |
+  'storage'
+const activeSection = ref<AdminSectionKey>('system')
+const adminNavGroups = computed(() => {
+  const groups = [
+    {
+      key: 'overview',
+      label: '概览',
+      icon: 'i-heroicons-home',
+      items: [
+        { key: 'system', label: '系统信息', icon: 'i-heroicons-cpu-chip' },
+        { key: 'user', label: '用户信息', icon: 'i-heroicons-user-circle' }
+      ] as Array<{ key: AdminSectionKey, label: string, icon: string }>
+    },
+    {
+      key: 'site-display',
+      label: '站点与展示',
+      icon: 'i-heroicons-wrench-screwdriver',
+      items: [
+        { key: 'site', label: '网站配置', icon: 'i-heroicons-wrench-screwdriver' },
+        { key: 'site-configs', label: '站点信息', icon: 'i-heroicons-cog-6-tooth' },
+        { key: 'site-default-theme', label: '主题与布局', icon: 'i-heroicons-swatch' },
+        { key: 'site-register', label: '注册开关', icon: 'i-heroicons-user-plus' },
+        { key: 'site-pwa', label: 'PWA 模式', icon: 'i-heroicons-rocket-launch' },
+        { key: 'site-announcement', label: '公告栏', icon: 'i-heroicons-megaphone' },
+        { key: 'site-social-links', label: '社交链接', icon: 'i-heroicons-link' }
+      ] as Array<{ key: AdminSectionKey, label: string, icon: string }>
+    },
+    {
+      key: 'content-interaction',
+      label: '内容与互动',
+      icon: 'i-heroicons-puzzle-piece',
+      items: [
+        { key: 'friend-links', label: '友情链接', icon: 'i-heroicons-users' },
+        { key: 'comments', label: '评论系统', icon: 'i-heroicons-chat-bubble-left-right' },
+        { key: 'site-github-card', label: 'GitHub 卡片', icon: 'i-mdi-github' },
+        { key: 'site-github-login', label: 'GitHub 登录', icon: 'i-mdi-github' },
+        { key: 'site-music', label: '音乐配置', icon: 'i-heroicons-musical-note' },
+        { key: 'notify', label: '推送配置', icon: 'i-heroicons-bell-alert' },
+        { key: 'email', label: '邮件设置', icon: 'i-heroicons-envelope' },
+      ] as Array<{ key: AdminSectionKey, label: string, icon: string }>
+    },
+    {
+      key: 'account-security',
+      label: '账号与安全',
+      icon: 'i-heroicons-shield-check',
+      items: [
+        { key: 'admin-users', label: '用户管理', icon: 'i-heroicons-user-group' },
+        { key: 'security', label: '安全防护', icon: 'i-heroicons-shield-exclamation' }
+      ] as Array<{ key: AdminSectionKey, label: string, icon: string }>
+    },
+    {
+      key: 'storage-maintain',
+      label: '存储与维护',
+      icon: 'i-heroicons-circle-stack',
+      items: [
+        { key: 'attachments', label: '附件管理', icon: 'i-heroicons-paper-clip' },
+        { key: 'attachment-storage', label: '附件存储', icon: 'i-heroicons-cloud-arrow-up' },
+        { key: 'storage', label: '存储方案', icon: 'i-heroicons-cloud' },
+        { key: 'db', label: '数据库管理', icon: 'i-heroicons-circle-stack' },
+        { key: 'version', label: '版本与更新', icon: 'i-heroicons-arrow-path' }
+      ] as Array<{ key: AdminSectionKey, label: string, icon: string }>
+    }
+  ]
+  if (isAdmin.value) return groups
+  return groups.filter((g) => g.key === 'overview')
+})
+const navGroupStorageKey = 'adminNavGroupOpen'
+const resolveSavedNavGroup = () => {
+  if (typeof window === 'undefined') return 'overview'
+  try {
+    const raw = String(localStorage.getItem(navGroupStorageKey) || '').trim()
+    if (!raw) return 'overview'
+    return ['overview', 'site-display', 'content-interaction', 'account-security', 'storage-maintain'].includes(raw) ? raw : 'overview'
+  } catch {
+    return 'overview'
+  }
+}
+const savedNavGroup = resolveSavedNavGroup()
+const navGroupOpen = reactive<Record<string, boolean>>({
+  overview: savedNavGroup === 'overview',
+  'site-display': savedNavGroup === 'site-display',
+  'content-interaction': savedNavGroup === 'content-interaction',
+  'account-security': savedNavGroup === 'account-security',
+  'storage-maintain': savedNavGroup === 'storage-maintain'
+})
+const sectionGroupMap = computed(() => {
+  const map: Record<string, string> = {}
+  for (const group of adminNavGroups.value) {
+    for (const item of group.items) map[item.key] = group.key
+  }
+  return map
+})
+const openOnlyGroup = (groupKey: string) => {
+  Object.keys(navGroupOpen).forEach((key) => { navGroupOpen[key] = key === groupKey })
+  if (typeof window !== 'undefined') {
+    try { localStorage.setItem(navGroupStorageKey, groupKey) } catch {}
+  }
+}
+const toggleNavGroup = (groupKey: string) => {
+  openOnlyGroup(groupKey)
+}
+watch(() => activeSection.value, (section) => {
+  const groupKey = sectionGroupMap.value[section]
+  if (groupKey) openOnlyGroup(groupKey)
+})
 
 const scrollTo = (id: string) => {
     const el = document.getElementById(id)
@@ -1981,6 +2191,27 @@ const scrollTo = (id: string) => {
 // 新用户注册开关相关
 const registerEnabled = ref(true);
 const sidebarOpen = ref(false)
+const sidebarCollapsed = ref(
+  typeof window !== 'undefined' ? localStorage.getItem('adminSidebarCollapsed') === '1' : false
+)
+const desktopSidebarToggleIcon = computed(() => (sidebarCollapsed.value ? 'i-mdi-chevron-double-right' : 'i-mdi-chevron-double-left'))
+const desktopSidebarToggleText = computed(() => (sidebarCollapsed.value ? '展开导航' : '收起导航'))
+const syncSidebarViewport = () => {
+  if (typeof window === 'undefined') return
+  if (window.innerWidth >= 768) {
+    document.body.style.overflow = ''
+    sidebarOpen.value = true
+  }
+}
+watch(sidebarOpen, (open) => {
+  if (typeof window === 'undefined') return
+  if (window.innerWidth >= 768) return
+  document.body.style.overflow = open ? 'hidden' : ''
+})
+watch(sidebarCollapsed, (v) => {
+  if (typeof window === 'undefined') return
+  localStorage.setItem('adminSidebarCollapsed', v ? '1' : '0')
+})
 const panelTheme = ref<'dark' | 'midnight' | 'slate' | 'light'>(
   (typeof window !== 'undefined' && (localStorage.getItem('adminTheme') as any)) || 'dark'
 )
@@ -2033,7 +2264,10 @@ const avatarSrc = computed(() => {
   return pick(userAvatar) || pick(adminAvatar) || gravatar(seed, 100)
 })
 
-const setActive = async (name: 'system' | 'user' | 'site' | 'notify' | 'attachments' | 'attachment-storage' | 'db' | 'version' | 'site-register' | 'site-pwa' | 'site-github-card' | 'site-github-login' | 'site-announcement' | 'site-music' | 'site-default-theme' | 'site-social-links' | 'friend-links' | 'site-configs' | 'comments' | 'email' | 'admin-users', evt?: MouseEvent) => {
+const setActive = async (name: AdminSectionKey, evt?: MouseEvent) => {
+  activeSection.value = name
+  const groupKey = sectionGroupMap.value[name]
+  if (groupKey) openOnlyGroup(groupKey)
   if (name === 'attachment-storage') {
     loadAttachmentStorageConfig()
   }
@@ -2057,6 +2291,7 @@ const setActive = async (name: 'system' | 'user' | 'site' | 'notify' | 'attachme
 onMounted(() => {
   loadStorageConfig()
   sidebarOpen.value = window.innerWidth >= 768
+  window.addEventListener('resize', syncSidebarViewport, { passive: true })
 })
 
 const syncRootDarkForAdmin = () => {
@@ -2076,6 +2311,11 @@ onMounted(() => {
     prevRootDark.value = null
   }
   syncRootDarkForAdmin()
+})
+
+onUnmounted(() => {
+  if (typeof window !== 'undefined') document.body.style.overflow = ''
+  if (typeof window !== 'undefined') window.removeEventListener('resize', syncSidebarViewport)
 })
 
 onUnmounted(() => {
@@ -2123,8 +2363,7 @@ watch(() => panelTheme.value, (val: string) => {
 
 const showBottomBar = ref(typeof window !== 'undefined' ? window.innerWidth >= 768 : true)
 const updateBottomBarVisibility = () => {
-  if (typeof window === 'undefined') return
-  showBottomBar.value = window.innerWidth >= 768
+  showBottomBar.value = true
 }
 onMounted(() => {
   updateBottomBarVisibility()
@@ -2138,11 +2377,36 @@ const headerCompact = ref(false)
 const adminMain = ref<HTMLElement | null>(null)
 const headerBtnCls = computed(() => panelTheme.value === 'light' ? 'bg-gray-100 hover:bg-gray-200 text-slate-900' : 'bg-slate-800/70 hover:bg-slate-700/70 text-white')
 let adminScrollHandler: any = null
+const syncActiveByScroll = () => {
+  const main = adminMain.value
+  if (!main) return
+  const topThreshold = 140
+  let candidate: AdminSectionKey | null = null
+  let minPositive = Number.POSITIVE_INFINITY
+  const keys = Object.keys(sectionGroupMap.value) as AdminSectionKey[]
+  for (const key of keys) {
+    const el = document.getElementById(`${key}-section`) as HTMLElement | null
+    if (!el) continue
+    const top = el.getBoundingClientRect().top - main.getBoundingClientRect().top
+    if (top <= topThreshold) candidate = key
+    const abs = Math.abs(top - topThreshold)
+    if (abs < minPositive) minPositive = abs
+    if (!candidate && abs === minPositive) candidate = key
+  }
+  if (!candidate || candidate === activeSection.value) return
+  activeSection.value = candidate
+  const groupKey = sectionGroupMap.value[candidate]
+  if (groupKey) openOnlyGroup(groupKey)
+}
 onMounted(() => {
   const el = adminMain.value
   if (!el) return
-  adminScrollHandler = () => { headerCompact.value = el.scrollTop > 8 }
+  adminScrollHandler = () => {
+    headerCompact.value = el.scrollTop > 8
+    syncActiveByScroll()
+  }
   el.addEventListener('scroll', adminScrollHandler)
+  syncActiveByScroll()
 })
 onUnmounted(() => {
   const el = adminMain.value
@@ -2152,66 +2416,66 @@ onUnmounted(() => {
 const theme = computed(() => {
   if (panelTheme.value === 'light') {
     return {
-      sidebarBg: 'bg-white/90',
-      headerBg: 'bg-white',
-      bottomBg: 'bg-white',
-      cardBg: 'bg-white',
-      subtleBg: 'bg-white',
-      border: 'border-gray-300',
-      text: 'text-slate-900',
+      sidebarBg: 'bg-slate-100/95',
+      headerBg: 'bg-white/95',
+      bottomBg: 'bg-white/95',
+      cardBg: 'bg-white/95',
+      subtleBg: 'bg-slate-50',
+      border: 'border-slate-200',
+      text: 'text-slate-800',
       sidebarText: 'text-slate-900',
-      mutedText: 'text-slate-700',
-      pageBg: 'bg-gray-50',
-      navBtnBg: 'bg-gray-100',
-      navBtnHoverBg: 'hover:bg-gray-200'
+      mutedText: 'text-slate-600',
+      pageBg: 'bg-slate-100',
+      navBtnBg: 'bg-white',
+      navBtnHoverBg: 'hover:bg-slate-100'
     }
   }
   if (panelTheme.value === 'dark') {
     return {
-      sidebarBg: 'bg-gray-950/80',
-      headerBg: 'bg-gray-950/70',
-      bottomBg: 'bg-gray-950/70',
-      cardBg: 'bg-gray-900/70',
-      subtleBg: 'bg-gray-900/50',
-      border: 'border-gray-800/60',
+      sidebarBg: 'bg-[#0a0f1a]/95',
+      headerBg: 'bg-[#0c1422]/95',
+      bottomBg: 'bg-[#0c1422]/95',
+      cardBg: 'bg-[#0f1728]/92',
+      subtleBg: 'bg-[#131d33]',
+      border: 'border-[#22314f]',
       text: 'text-white',
       sidebarText: 'text-white',
-      mutedText: 'text-gray-300',
-      pageBg: 'bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-800',
-      navBtnBg: 'bg-slate-800/70',
-      navBtnHoverBg: 'hover:bg-slate-700/70'
+      mutedText: 'text-slate-300',
+      pageBg: 'bg-[#090f1d]',
+      navBtnBg: 'bg-[#131d31]',
+      navBtnHoverBg: 'hover:bg-[#1a2741]'
     }
   }
   if (panelTheme.value === 'midnight') {
     return {
-      sidebarBg: 'bg-indigo-950/60',
-      headerBg: 'bg-indigo-950/50',
-      bottomBg: 'bg-indigo-950/50',
-      cardBg: 'bg-indigo-900/40',
-      subtleBg: 'bg-indigo-950/30',
-      border: 'border-indigo-800/40',
+      sidebarBg: 'bg-[#0a1022]/95',
+      headerBg: 'bg-[#121a33]/95',
+      bottomBg: 'bg-[#121a33]/95',
+      cardBg: 'bg-[#182347]/88',
+      subtleBg: 'bg-[#1a274e]',
+      border: 'border-[#2a3f76]',
       text: 'text-white',
       sidebarText: 'text-white',
       mutedText: 'text-indigo-200',
-      pageBg: 'bg-gradient-to-br from-indigo-950 via-indigo-900 to-slate-900',
-      navBtnBg: 'bg-indigo-950/40',
-      navBtnHoverBg: 'hover:bg-indigo-900/40'
+      pageBg: 'bg-[#0b1124]',
+      navBtnBg: 'bg-[#1a2a56]',
+      navBtnHoverBg: 'hover:bg-[#22376f]'
     }
   }
   if (panelTheme.value === 'slate') {
     return {
-      sidebarBg: 'bg-slate-900/70',
-      headerBg: 'bg-slate-900/60',
-      bottomBg: 'bg-slate-900/60',
-      cardBg: 'bg-slate-800/70',
-      subtleBg: 'bg-slate-900/40',
-      border: 'border-slate-700/40',
+      sidebarBg: 'bg-[#1b2433]/95',
+      headerBg: 'bg-[#1f2a3b]/95',
+      bottomBg: 'bg-[#1f2a3b]/95',
+      cardBg: 'bg-[#253145]/88',
+      subtleBg: 'bg-[#2a384f]',
+      border: 'border-[#3a4d6c]',
       text: 'text-white',
       sidebarText: 'text-white',
       mutedText: 'text-slate-200',
-      pageBg: 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900',
-      navBtnBg: 'bg-slate-800/70',
-      navBtnHoverBg: 'hover:bg-slate-700/70'
+      pageBg: 'bg-[#182234]',
+      navBtnBg: 'bg-[#2a374d]',
+      navBtnHoverBg: 'hover:bg-[#33445f]'
     }
   }
   return {
@@ -2229,10 +2493,60 @@ const theme = computed(() => {
     navBtnHoverBg: 'hover:bg-slate-700/70'
   }
 })
+const adminRootClass = computed(() => ([
+  theme.value.pageBg,
+  panelTheme.value !== 'light' ? 'dark admin-theme-dark' : 'admin-theme-light'
+]))
+const adminSidebarClass = computed(() => ([
+  {
+    'translate-x-0': sidebarOpen.value,
+    '-translate-x-full md:translate-x-0': !sidebarOpen.value,
+    'md:w-20': sidebarCollapsed.value,
+    'md:w-72': !sidebarCollapsed.value
+  },
+  theme.value.sidebarBg,
+  theme.value.border,
+  theme.value.sidebarText
+]))
+const adminMainClass = computed(() => ([
+  theme.value.text,
+  sidebarCollapsed.value ? 'md:pl-20' : 'md:pl-72'
+]))
+const mobileHeaderClass = computed(() => ([
+  theme.value.headerBg,
+  theme.value.border,
+  theme.value.text,
+  headerCompact.value ? 'py-2' : 'py-3'
+]))
+const desktopTopbarClass = computed(() => ([
+  theme.value.headerBg,
+  theme.value.border,
+  theme.value.text
+]))
+const adminPanelCardClass = computed(() => ([
+  theme.value.cardBg,
+  theme.value.border,
+  cardCls,
+  'backdrop-blur-sm transition-colors duration-200'
+]))
+const adminShellCardClass = computed(() => ([
+  'rounded-xl border shadow-xl',
+  theme.value.cardBg,
+  theme.value.border
+]))
+const adminSectionHeaderClass = computed(() => ([
+  'flex items-center justify-between px-4 py-3',
+  theme.value.text
+]))
+const adminSubtleCardClass = computed(() => ([
+  'rounded-lg p-3 backdrop-blur-sm transition-colors duration-200',
+  theme.value.subtleBg
+]))
 
 // 友链申请审核数据与方法
 const friendLinkApps = ref<any[]>([])
 const friendLinkSearch = ref('')
+const friendLinkOperating = ref(false)
 const statusClass = (s: string) => {
   const v = String(s || '').toLowerCase()
   if (v === 'approved') return 'bg-green-500/20 text-green-400'
@@ -2274,6 +2588,45 @@ const auditFriendLink = async (app: any, approve: boolean, feedback: string) => 
     }
   } catch (e: any) {
     useToast().add({ title: '操作失败', description: e.message || '请稍后重试', color: 'red' })
+  }
+}
+const deleteFriendLinkApplication = async (app: any) => {
+  if (!app?.id) return
+  if (!window.confirm(`确认删除申请记录 #${app.id} 吗？`)) return
+  friendLinkOperating.value = true
+  try {
+    const res: any = await deleteRequest<any>(`friend-links/apply/${app.id}`, undefined, { credentials: 'include' })
+    if (res && res.code === 1) {
+      useToast().add({ title: '删除成功', color: 'green' })
+      await loadFriendLinkApplications()
+    } else {
+      throw new Error(res?.msg || '删除失败')
+    }
+  } catch (e: any) {
+    useToast().add({ title: '删除失败', description: e.message || '请稍后重试', color: 'red' })
+  } finally {
+    friendLinkOperating.value = false
+  }
+}
+const clearFriendLinkApplications = async () => {
+  if (!friendLinkApps.value.length) {
+    useToast().add({ title: '暂无记录可清空', color: 'orange' })
+    return
+  }
+  if (!window.confirm('确认清空全部友链申请记录吗？此操作不可恢复。')) return
+  friendLinkOperating.value = true
+  try {
+    const res: any = await deleteRequest<any>('friend-links/apply', undefined, { credentials: 'include' })
+    if (res && res.code === 1) {
+      useToast().add({ title: '已清空', color: 'green' })
+      friendLinkApps.value = []
+    } else {
+      throw new Error(res?.msg || '清空失败')
+    }
+  } catch (e: any) {
+    useToast().add({ title: '清空失败', description: e.message || '请稍后重试', color: 'red' })
+  } finally {
+    friendLinkOperating.value = false
   }
 }
 
@@ -2354,6 +2707,115 @@ const userStore = useUserStore()
 const { login, register, logout } = useUser()
 const router = useRouter()
 const userToken = ref('')
+
+const attackLogs = ref<any[]>([])
+const ipBans = ref<any[]>([])
+const banForm = reactive({ ip: '', minutes: 0 as any, reason: '' })
+const securityConfig = reactive({ autoBanEnabled: false, autoBanWindowSeconds: 600 as any, autoBanThreshold: 10 as any, autoBanMinutes: 60 as any })
+
+const refreshSecurity = async () => {
+  try {
+    const res1: any = await getRequest<any>('security/attacks', { limit: 200 }, { credentials: 'include', silent: true })
+    if (res1 && res1.code === 1) attackLogs.value = Array.isArray(res1.data) ? res1.data : []
+    const res2: any = await getRequest<any>('security/bans', undefined, { credentials: 'include', silent: true })
+    if (res2 && res2.code === 1) ipBans.value = Array.isArray(res2.data) ? res2.data : []
+
+		const res3: any = await getRequest<any>('security/config', undefined, { credentials: 'include', silent: true })
+		if (res3 && res3.code === 1 && res3.data) {
+			securityConfig.autoBanEnabled = !!res3.data.autoBanEnabled
+			securityConfig.autoBanWindowSeconds = res3.data.autoBanWindowSeconds ?? 600
+			securityConfig.autoBanThreshold = res3.data.autoBanThreshold ?? 10
+			securityConfig.autoBanMinutes = res3.data.autoBanMinutes ?? 60
+		}
+  } catch {}
+}
+
+const saveSecurityConfig = async () => {
+  try {
+    const payload = {
+      autoBanEnabled: !!securityConfig.autoBanEnabled,
+      autoBanWindowSeconds: Number(securityConfig.autoBanWindowSeconds || 0),
+      autoBanThreshold: Number(securityConfig.autoBanThreshold || 0),
+      autoBanMinutes: Number(securityConfig.autoBanMinutes || 0)
+    }
+    const res: any = await putRequest<any>('security/config', payload, { credentials: 'include' })
+    if (res && res.code === 1) {
+      useToast().add({ title: res?.msg || '已保存', color: 'green' })
+      await refreshSecurity()
+    } else {
+      throw new Error(res?.msg || '保存失败')
+    }
+  } catch (e: any) {
+    useToast().add({ title: '保存失败', description: e.message, color: 'red' })
+  }
+}
+
+onMounted(async () => {
+  if (isAdmin.value) {
+    await refreshSecurity()
+  }
+})
+
+watch(() => isAdmin.value, async (v) => {
+  if (v) await refreshSecurity()
+})
+
+const clearAttackLogs = async () => {
+  try {
+    if (!window.confirm('确定清空所有攻击记录吗？')) return
+    const res: any = await deleteRequest<any>('security/attacks', undefined, { credentials: 'include' })
+    if (res && res.code === 1) {
+      useToast().add({ title: '已清空', color: 'green' })
+      await refreshSecurity()
+    } else {
+      throw new Error(res?.msg || '清空失败')
+    }
+  } catch (e: any) {
+    useToast().add({ title: '操作失败', description: e.message, color: 'red' })
+  }
+}
+
+const submitBan = async () => {
+  try {
+    const ip = (banForm.ip || '').trim()
+    if (!ip) throw new Error('请输入IP')
+    const minutes = Number(banForm.minutes || 0) || 0
+    const reason = (banForm.reason || '').trim()
+    const res: any = await postRequest<any>('security/bans', { ip, minutes, reason }, { credentials: 'include' })
+    if (res && res.code === 1) {
+      useToast().add({ title: '已封禁', color: 'green' })
+      banForm.ip = ''
+      banForm.minutes = 0
+      banForm.reason = ''
+      await refreshSecurity()
+    } else {
+      throw new Error(res?.msg || '封禁失败')
+    }
+  } catch (e: any) {
+    useToast().add({ title: '封禁失败', description: e.message, color: 'red' })
+  }
+}
+
+const banIP = async (ip: string) => {
+  banForm.ip = String(ip || '').trim()
+  await submitBan()
+}
+
+const unbanIP = async (ip: string) => {
+  try {
+    const v = String(ip || '').trim()
+    if (!v) return
+    const res: any = await deleteRequest<any>('security/bans', { ip: v }, { credentials: 'include' })
+    if (res && res.code === 1) {
+      useToast().add({ title: '已解封', color: 'green' })
+      await refreshSecurity()
+    } else {
+      throw new Error(res?.msg || '解封失败')
+    }
+  } catch (e: any) {
+    useToast().add({ title: '解封失败', description: e.message, color: 'red' })
+  }
+}
 const versionInfo = reactive({
     checking: false,
     hasUpdate: false,
@@ -2566,9 +3028,23 @@ const refreshUsers = async () => {
   await userStore.getStatus()
 }
 const showUsers = ref(false)
-const expandedUsers = ref<Record<string, boolean>>({})
+const expandedUsersStorageKey = 'adminExpandedUsers'
+const readExpandedUsers = () => {
+  if (typeof window === 'undefined') return {}
+  try {
+    const v = JSON.parse(localStorage.getItem(expandedUsersStorageKey) || '{}')
+    return (v && typeof v === 'object') ? v : {}
+  } catch {
+    return {}
+  }
+}
+const expandedUsers = ref<Record<string, boolean>>(readExpandedUsers())
 const isExpanded = (u: any) => !!expandedUsers.value[String(u.id ?? u.ID)]
 const toggleExpanded = (u: any) => { const k = String(u.id ?? u.ID); expandedUsers.value[k] = !expandedUsers.value[k] }
+watch(expandedUsers, (v) => {
+  if (typeof window === 'undefined') return
+  try { localStorage.setItem(expandedUsersStorageKey, JSON.stringify(v || {})) } catch {}
+}, { deep: true })
 const resetForm = reactive<{ password: Record<string, string> }>({ password: {} })
 const showResetPassword = ref(false)
 const canReset = (u: any) => {
@@ -3319,7 +3795,7 @@ const useInitialsAvatar = async () => {
 const configLabels: Record<string, string> = {
     siteTitle: '站点标题',
     subtitleText: '欢迎语',
-    backgrounds: '背景图片',
+    backgrounds: '头部图',
     cardFooterTitle: '卡片页脚标题',
     cardFooterLink: '卡片页脚链接',
     pageFooterHTML: '页面底部HTML',
@@ -3327,12 +3803,23 @@ const configLabels: Record<string, string> = {
     rssDescription: 'RSS 描述',
     rssAuthorName: 'RSS 作者',
     rssFaviconURL: 'RSS 图标链接',
+    lifeCountdownEnabled: '人生倒计时开关',
+    lifeCountdownBirthDate: '人生倒计时生日',
+    lifeExpectancyYears: '人生倒计时预期寿命',
     commentPageTitle: '留言页面标题',
     commentPageDescription: '留言页面说明',
     aboutPageTitle: '关于页面标题',
     aboutPageDescription: '关于页面说明',
     aboutMarkdown: '关于页面 Markdown 内容',
 }
+const switchConfigKeySet = new Set([
+  'enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled',
+  'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile',
+  'commentEnabled', 'commentEmailEnabled', 'commentLoginRequired', 'githubOAuthEnabled',
+  'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled',
+  'leftAdEnabled', 'welcomeUseAdmin', 'friendLinkEmailEnabled', 'socialLinksEnabled'
+])
+const isSwitchConfigKey = (key: string) => switchConfigKeySet.has(String(key))
 
 interface FrontendConfig {
     siteTitle: string;
@@ -3375,6 +3862,7 @@ interface FrontendConfig {
     pwaTitle: string;
     pwaDescription: string;
     pwaIconURL: string;
+    homeLayoutDefault: string;
     defaultContentTheme: string;
     announcementText: string;
     announcementEnabled: boolean;
@@ -3387,12 +3875,16 @@ interface FrontendConfig {
     musicAutoplay: boolean;
     musicDefaultMinimized: boolean;
     musicEmbed: boolean;
+    musicHideOnMobile: boolean;
     musicCssCdnURL: string;
     musicJsCdnURL: string;
     socialLinks: Array<{ name?: string; url: string; icon?: string }>;
     socialLinksEnabled: boolean;
     calendarEnabled: boolean;
     timeEnabled: boolean;
+    lifeCountdownEnabled: boolean;
+    lifeCountdownBirthDate: string;
+    lifeExpectancyYears: number;
     leftAdEnabled: boolean;
     leftAdImageURL: string;
     leftAdLinkURL: string;
@@ -3409,6 +3901,9 @@ interface FrontendConfig {
 const frontendConfig = reactive<FrontendConfig>({
     siteTitle: '',
     subtitleText: '',
+    avatarURL: '',
+    username: '',
+    description: '',
     welcomeName: '',
     welcomeAvatarURL: '',
     welcomeDescription: '',
@@ -3452,6 +3947,7 @@ const frontendConfig = reactive<FrontendConfig>({
     pwaTitle: '',
     pwaDescription: '',
     pwaIconURL: '',
+    homeLayoutDefault: 'three',
     defaultContentTheme: 'light',
     announcementText: '',
     announcementEnabled: true,
@@ -3465,12 +3961,16 @@ const frontendConfig = reactive<FrontendConfig>({
     musicAutoplay: false,
     musicDefaultMinimized: true,
     musicEmbed: false,
+    musicHideOnMobile: true,
     musicCssCdnURL: '',
     musicJsCdnURL: '',
     socialLinks: [] as Array<{ name?: string; url: string; icon?: string }>,
     socialLinksEnabled: true,
     calendarEnabled: true,
     timeEnabled: true,
+    lifeCountdownEnabled: false,
+    lifeCountdownBirthDate: '',
+    lifeExpectancyYears: 80,
     leftAdEnabled: true,
     leftAdImageURL: 'https://picsum.photos/seed/single-ad/640/640',
     leftAdLinkURL: 'https://note.noisework.cn',
@@ -3557,6 +4057,7 @@ const defaultConfig: Record<string, any> = {
     commentLoginRequired: false,
     enableGithubCard: false,
     pwaEnabled: true,
+    homeLayoutDefault: 'three',
     announcementEnabled: true,
     musicEnabled: false,
     musicPlaylistId: '2141128031',
@@ -3567,12 +4068,16 @@ const defaultConfig: Record<string, any> = {
     musicAutoplay: false,
     musicDefaultMinimized: true,
     musicEmbed: false,
+    musicHideOnMobile: true,
     musicCssCdnURL: '',
     musicJsCdnURL: '',
     githubOAuthEnabled: false,
     notifyEnabled: false,
     calendarEnabled: true,
     timeEnabled: true,
+    lifeCountdownEnabled: false,
+    lifeCountdownBirthDate: '',
+    lifeExpectancyYears: 80,
     linksTitle: '友情链接',
     linksDescription: '推荐站点和朋友们的主页',
     linksApplyTitle: '申请友链须知',
@@ -3724,7 +4229,7 @@ const fetchConfig = async () => {
             const settings = data.data.frontendSettings;
             
             // 遍历配置项进行更新（布尔型键需强制转换）
-            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'commentEnabled', 'commentEmailEnabled', 'commentLoginRequired', 'githubOAuthEnabled', 'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'friendLinkEmailEnabled', 'socialLinksEnabled']
+            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile', 'commentEnabled', 'commentEmailEnabled', 'commentLoginRequired', 'githubOAuthEnabled', 'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'friendLinkEmailEnabled', 'socialLinksEnabled']
             Object.keys(frontendConfig).forEach(key => {
                 if (key === 'backgrounds') {
                     const serverBackgrounds = settings[key];
@@ -3920,6 +4425,17 @@ const saveConfigItem = async (key: string) => {
         });
     }
 };
+const saveLifeCountdownConfig = async () => {
+  try {
+    ;(frontendConfig as any).lifeCountdownBirthDate = String((frontendConfig as any).lifeCountdownBirthDate || '').trim()
+    ;(frontendConfig as any).lifeExpectancyYears = Math.min(150, Math.max(1, Number((frontendConfig as any).lifeExpectancyYears || 80) || 80))
+    await saveConfig()
+    await fetchConfig()
+    useToast().add({ title: '成功', description: '人生倒计时配置已保存', color: 'green' })
+  } catch (error: any) {
+    useToast().add({ title: '失败', description: error?.message || '保存失败', color: 'red' })
+  }
+}
 
 const saveConfig = async () => {
   try {
@@ -3970,6 +4486,9 @@ const saveConfig = async () => {
         socialLinksEnabled: !!(frontendConfig as any).socialLinksEnabled,
         calendarEnabled: !!(frontendConfig as any).calendarEnabled,
         timeEnabled: !!(frontendConfig as any).timeEnabled,
+        lifeCountdownEnabled: !!(frontendConfig as any).lifeCountdownEnabled,
+        lifeCountdownBirthDate: String((frontendConfig as any).lifeCountdownBirthDate || '').trim(),
+        lifeExpectancyYears: Math.min(150, Math.max(1, Number((frontendConfig as any).lifeExpectancyYears || 80) || 80)),
         hitokotoEnabled: !!(frontendConfig as any).hitokotoEnabled,
         announcementEnabled: !!(frontendConfig as any).announcementEnabled,
         pwaEnabled: !!(frontendConfig as any).pwaEnabled,
@@ -3982,6 +4501,7 @@ const saveConfig = async () => {
         musicAutoplay: !!(frontendConfig as any).musicAutoplay,
         musicDefaultMinimized: !!(frontendConfig as any).musicDefaultMinimized,
         musicEmbed: !!(frontendConfig as any).musicEmbed,
+        musicHideOnMobile: !!(frontendConfig as any).musicHideOnMobile,
         githubOAuthEnabled: !!(frontendConfig as any).githubOAuthEnabled,
         welcomeUseAdmin: !!(frontendConfig as any).welcomeUseAdmin,
         friendLinkEmailEnabled: !!(frontendConfig as any).friendLinkEmailEnabled,
@@ -4156,7 +4676,17 @@ const showAdminComments = ref(false)
 const adminComments = ref<any[]>([])
 const adminCommentsPage = ref(1)
 const adminCommentsHasMore = ref(false)
-const expandedCommentsMap = ref<Record<number, boolean>>({})
+const expandedCommentsStorageKey = 'adminExpandedComments'
+const readExpandedComments = () => {
+  if (typeof window === 'undefined') return {}
+  try {
+    const v = JSON.parse(localStorage.getItem(expandedCommentsStorageKey) || '{}')
+    return (v && typeof v === 'object') ? v : {}
+  } catch {
+    return {}
+  }
+}
+const expandedCommentsMap = ref<Record<number, boolean>>(readExpandedComments())
 const uiCommentSystem = ref('builtin')
 const formatDate = (v: any) => {
   try {
@@ -4176,6 +4706,10 @@ const isCommentExpanded = (c: any) => {
 const toggleCommentExpanded = (c: any) => {
   expandedCommentsMap.value[c.id] = !expandedCommentsMap.value[c.id]
 }
+watch(expandedCommentsMap, (v) => {
+  if (typeof window === 'undefined') return
+  try { localStorage.setItem(expandedCommentsStorageKey, JSON.stringify(v || {})) } catch {}
+}, { deep: true })
 const loadAdminComments = async () => {
   try {
     showAdminComments.value = true
@@ -4320,6 +4854,7 @@ const saveMusicConfig = async () => {
         musicAutoplay: !!frontendConfig.musicAutoplay,
         musicDefaultMinimized: !!frontendConfig.musicDefaultMinimized,
         musicEmbed: !!frontendConfig.musicEmbed,
+        musicHideOnMobile: !!frontendConfig.musicHideOnMobile,
         musicCssCdnURL: String(frontendConfig.musicCssCdnURL || ''),
         musicJsCdnURL: String(frontendConfig.musicJsCdnURL || '')
       }
@@ -4354,6 +4889,7 @@ const resetMusicConfig = () => {
   ;(frontendConfig as any).musicAutoplay = defaultConfig.musicAutoplay
   ;(frontendConfig as any).musicDefaultMinimized = defaultConfig.musicDefaultMinimized
   ;(frontendConfig as any).musicEmbed = defaultConfig.musicEmbed
+  ;(frontendConfig as any).musicHideOnMobile = defaultConfig.musicHideOnMobile
   ;(frontendConfig as any).musicCssCdnURL = defaultConfig.musicCssCdnURL
   ;(frontendConfig as any).musicJsCdnURL = defaultConfig.musicJsCdnURL
 }
@@ -4396,6 +4932,7 @@ const toggleMusic = async (enabled: boolean) => {
     }
     ;(frontendConfig as any).musicPosition = 'bottom-left'
     ;(frontendConfig as any).musicDefaultMinimized = true
+    ;(frontendConfig as any).musicHideOnMobile = true
     ;(frontendConfig as any).musicAutoplay = false
     ;(frontendConfig as any).musicTheme = 'auto'
     if (!String((frontendConfig as any).musicCssCdnURL || '').trim()) {
@@ -4413,7 +4950,21 @@ const musicEmbedMode = computed({
 })
 
 const musicCdnPreset = ref('hypcvgm')
-const applyMusicCdnAssets = () => {}
+const NMP_CDN_CSS_KEY = 'nmp_cdn_css_v1'
+const NMP_CDN_JS_KEY = 'nmp_cdn_js_v1'
+const applyMusicCdnAssets = () => {
+  if (typeof window === 'undefined') return
+  const css = String((frontendConfig as any).musicCssCdnURL || '').trim()
+  const js = String((frontendConfig as any).musicJsCdnURL || '').trim()
+  try {
+    if (css) localStorage.setItem(NMP_CDN_CSS_KEY, css)
+    else localStorage.removeItem(NMP_CDN_CSS_KEY)
+  } catch {}
+  try {
+    if (js) localStorage.setItem(NMP_CDN_JS_KEY, js)
+    else localStorage.removeItem(NMP_CDN_JS_KEY)
+  } catch {}
+}
 watch(musicCdnPreset, (v: string) => {
   if (v === 'hypcvgm') {
     ;(frontendConfig as any).musicCssCdnURL = 'https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.css'
@@ -4422,8 +4973,8 @@ watch(musicCdnPreset, (v: string) => {
     ;(frontendConfig as any).musicCssCdnURL = 'https://cdn.jsdelivr.net/gh/ImBHCN/NeteaseMiniPlayer@v2/netease-mini-player-v2.css'
     ;(frontendConfig as any).musicJsCdnURL = 'https://cdn.jsdelivr.net/gh/ImBHCN/NeteaseMiniPlayer@v2/netease-mini-player-v2.js'
   } else if (v === 'unpkg') {
-    ;(frontendConfig as any).musicCssCdnURL = 'https://unpkg.com/netease-mini-player/dist/netease-mini-player-v2.css'
-    ;(frontendConfig as any).musicJsCdnURL = 'https://unpkg.com/netease-mini-player/dist/netease-mini-player-v2.js'
+    ;(frontendConfig as any).musicCssCdnURL = 'https://unpkg.com/netease-mini-player@2.0.4/dist/netease-mini-player-v2.css'
+    ;(frontendConfig as any).musicJsCdnURL = 'https://unpkg.com/netease-mini-player@2.0.4/dist/netease-mini-player-v2.js'
   }
   applyMusicCdnAssets()
 })
@@ -4546,14 +5097,20 @@ const handleFileUpload = async (event: Event) => {
 }
 
 // 添加配置更新监听器
+const onFrontendConfigUpdated = (event: any) => {
+  const detail = event?.detail || {}
+  const key = detail?.key
+  const value = detail?.value
+  if (key && value !== undefined) {
+    ;(frontendConfig as any)[key] = value
+  }
+}
 onMounted(() => {
-    window.addEventListener('frontend-config-updated', (event: any) => {
-        const { key, value } = event.detail;
-        if (key && value !== undefined) {
-            ;(frontendConfig as any)[key] = value;
-        }
-    });
-});
+  window.addEventListener('frontend-config-updated', onFrontendConfigUpdated)
+})
+onUnmounted(() => {
+  window.removeEventListener('frontend-config-updated', onFrontendConfigUpdated)
+})
 // ... existing code ...
 const resetConfig = () => {
     fetchConfig()
@@ -5056,10 +5613,16 @@ const positionOptions = [
   { label: '左下', value: 'bottom-left' },
   { label: '右下', value: 'bottom-right' },
 ]
-const themeOptions = [
+const musicThemeOptions = [
   { label: '自动', value: 'auto' },
   { label: '浅色', value: 'light' },
   { label: '深色', value: 'dark' },
+]
+const panelThemeOptions: Array<{ label: string, value: 'dark' | 'midnight' | 'slate' | 'light' }> = [
+  { label: '暗黑', value: 'dark' },
+  { label: '深蓝', value: 'midnight' },
+  { label: '石板', value: 'slate' },
+  { label: '明亮', value: 'light' },
 ]
 const aboutMdWrap = ref<HTMLElement | null>(null)
 const startAboutResize = (e: MouseEvent) => {
@@ -5103,12 +5666,117 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 </script>
 
 <style scoped>
+.admin-root {
+  --admin-radius: 16px;
+  --admin-shadow: 0 10px 30px rgba(15, 23, 42, 0.2);
+  background: radial-gradient(1200px 600px at 18% -12%, rgba(56, 189, 248, 0.1), transparent 55%),
+              radial-gradient(900px 500px at 84% 4%, rgba(99, 102, 241, 0.06), transparent 60%),
+              #0b1020;
+}
+.admin-root.admin-theme-light {
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+}
+.admin-dashboard-shell {
+  background-image: repeating-linear-gradient(-28deg, rgba(148, 163, 184, 0.025) 0 8px, transparent 8px 22px);
+}
+.admin-root.admin-theme-light .admin-dashboard-shell {
+  background-image: repeating-linear-gradient(-28deg, rgba(148, 163, 184, 0.05) 0 7px, transparent 7px 20px);
+}
+.admin-sidebar-surface {
+  background: linear-gradient(180deg, rgba(12, 18, 30, 0.96), rgba(8, 13, 23, 0.96));
+  box-shadow: 12px 0 28px rgba(2, 6, 23, 0.56);
+}
+.admin-root.admin-theme-light .admin-sidebar-surface {
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+  box-shadow: 10px 0 24px rgba(15, 23, 42, 0.12);
+}
+.admin-main-surface {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.2), rgba(2, 6, 23, 0.12));
+}
+.admin-root.admin-theme-light .admin-main-surface {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(248, 250, 252, 0.92));
+}
+.admin-topbar-surface {
+  backdrop-filter: blur(8px);
+  box-shadow: 0 6px 22px rgba(15, 23, 42, 0.12);
+}
+.admin-desktop-toggle-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  width: auto;
+  min-width: 52px;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.24);
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+.admin-desktop-toggle-text {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+.admin-sidebar-toggle-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform .15s ease, opacity .15s ease;
+}
+.admin-sidebar-toggle-btn:hover {
+  transform: translateY(-1px);
+}
+.admin-desktop-toggle-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.42), 0 8px 18px rgba(2, 6, 23, 0.24);
+}
+.admin-form-shell {
+  width: 100%;
+  max-width: 1460px;
+  margin: 0 auto;
+}
+.admin-form-shell > .col-span-12 > div {
+  border-radius: var(--admin-radius);
+  box-shadow: var(--admin-shadow);
+}
+.admin-loading-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 6, 23, 0.7);
+  backdrop-filter: blur(3px);
+}
+.admin-loading-spinner {
+  width: 64px;
+  height: 64px;
+  border-radius: 999px;
+  border: 6px solid rgba(255, 255, 255, 0.14);
+  border-top-color: rgba(255, 255, 255, 0.95);
+  border-right-color: rgba(255, 255, 255, 0.7);
+  animation: adminSpin .86s linear infinite;
+}
+@keyframes adminSpin {
+  to { transform: rotate(360deg); }
+}
 .hidden {
     display: none;
 }
 .resizable-textarea :deep(textarea) {
     resize: vertical !important;
     min-height: 180px;
+}
+.resizable-wrapper :deep(textarea) {
+  resize: vertical !important;
+  overflow: auto !important;
 }
 .resizable-wrapper { position: relative; }
 .textarea-resize-handle {
@@ -5120,4 +5788,150 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 }
 html.dark .textarea-resize-handle { background: rgba(255,255,255,0.16); }
 .textarea-resize-handle:hover { background: rgba(251,146,60,0.6); }
+.admin-nav-group {
+  border-radius: 14px;
+  padding: 2px;
+}
+.admin-nav-group-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-radius: 10px;
+  padding: 10px 12px;
+  transition: all .18s ease;
+  font-weight: 600;
+  font-size: 14px;
+  color: #d1dae8;
+}
+.admin-nav-group-btn-open {
+  background: rgba(148, 163, 184, 0.16);
+}
+.admin-nav-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  border-radius: 10px;
+  padding: 8px 12px 8px 16px;
+  transition: all .18s ease;
+  font-weight: 500;
+  font-size: 13px;
+  color: rgba(226, 232, 240, 0.88);
+}
+.admin-nav-collapse-enter-active,
+.admin-nav-collapse-leave-active {
+  transition: opacity .18s ease, transform .18s ease;
+}
+.admin-nav-collapse-enter-from,
+.admin-nav-collapse-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+.admin-nav-item-active {
+  background: rgba(148, 163, 184, 0.24);
+  transform: translateX(2px);
+  color: #ffffff;
+}
+.admin-root.admin-theme-light .admin-nav-group-btn {
+  color: #334155;
+}
+.admin-root.admin-theme-light .admin-nav-item {
+  color: #475569;
+}
+.admin-root.admin-theme-light .admin-nav-item-active {
+  background: rgba(148, 163, 184, 0.28);
+  color: #0f172a;
+}
+.theme-dot-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 2px solid rgba(148, 163, 184, 0.45);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.2);
+  transition: transform .16s ease, border-color .16s ease;
+}
+.theme-dot-btn:hover {
+  transform: translateY(-1px) scale(1.05);
+}
+.theme-dot-btn-active {
+  border-color: #f8fafc;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.42);
+}
+:deep(.u-toggle) {
+  transform: scale(1.06);
+}
+:deep(.u-toggle [role="switch"]),
+:deep([role="switch"]) {
+  border-radius: 999px !important;
+}
+.admin-form-shell :deep(.u-form-group),
+.admin-form-shell :deep(.u-input),
+.admin-form-shell :deep(.u-select),
+.admin-form-shell :deep(.u-textarea) {
+  width: 100%;
+}
+.admin-root :deep(.u-input),
+.admin-root :deep(.u-select),
+.admin-root :deep(.u-textarea),
+.admin-root :deep(.u-card),
+.admin-root :deep(.u-card-body),
+.admin-root :deep(.u-card__body) {
+  color: inherit;
+}
+.admin-form-shell :deep(input),
+.admin-form-shell :deep(textarea),
+.admin-form-shell :deep(select) {
+  border-radius: 14px !important;
+  min-height: 42px;
+}
+.admin-form-shell :deep(input),
+.admin-form-shell :deep(textarea),
+.admin-form-shell :deep(select) {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+.admin-form-shell :deep(input:focus),
+.admin-form-shell :deep(textarea:focus),
+.admin-form-shell :deep(select:focus) {
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25) !important;
+  border-color: rgba(99, 102, 241, 0.65) !important;
+}
+.admin-root.dark .admin-form-shell :deep(input),
+.admin-root.dark .admin-form-shell :deep(textarea),
+.admin-root.dark .admin-form-shell :deep(select) {
+  background: rgba(15, 23, 42, 0.52) !important;
+  border-color: rgba(71, 85, 105, 0.7) !important;
+  color: #f8fafc !important;
+}
+.admin-root :deep(.u-button) {
+  border-radius: 12px !important;
+}
+.admin-form-shell :deep(textarea) {
+  min-height: 120px;
+}
+@media (max-width: 768px) {
+  .admin-topbar-surface {
+    display: none;
+  }
+  .admin-nav-group-btn {
+    padding: 10px 12px;
+  }
+  .admin-loading-spinner {
+    width: 52px;
+    height: 52px;
+    border-width: 5px;
+  }
+  .admin-nav-item {
+    padding: 9px 12px 9px 14px;
+  }
+  .admin-form-shell {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+    padding-bottom: 110px !important;
+  }
+}
 </style>

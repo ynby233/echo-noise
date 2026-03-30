@@ -41,11 +41,11 @@ const layoutIconProp = computed(() => props.layoutIcon || 'i-mdi-view-grid')
 .tool-btn { display:flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:10px; transition: all .18s ease; box-sizing: border-box; flex-shrink: 0; aspect-ratio: 1 / 1; }
 .tool-btn { position: relative; }
 .btn-label { position: absolute; right: calc(100% + 8px); top: 50%; transform: translateY(-50%) translateX(-6px); opacity: 0; pointer-events: none; white-space: nowrap; display: inline-block; padding: 6px 8px; font-size: 12px; border-radius: 8px; transition: opacity .08s ease, transform .08s ease; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.2)); box-sizing: border-box; }
-.btn-dark .btn-label { background: rgba(36,43,50,0.9); color: #fff; border: 1px solid rgba(255,255,255,0.18); }
+.btn-dark .btn-label { background: #1f2630; color: #fff; border: 1px solid rgba(255,255,255,0.16); }
 .btn-light .btn-label { background: rgba(255,255,255,0.95); color: #111827; border: 1px solid rgba(0,0,0,0.14); }
 .tool-btn:hover .btn-label { opacity: 1; transform: translateY(-50%) translateX(0); }
-.tool-btn.btn-dark { background: rgba(36,43,50,0.85); color:#ffffff; border: 1px solid rgba(255,255,255,0.20); box-shadow: 0 6px 16px rgba(0,0,0,0.35); backdrop-filter: blur(6px); }
-.tool-btn.btn-dark:hover { transform: translate3d(0,0,0) scale(1.06); background: rgba(36,43,50,0.95); border-color: rgba(255,255,255,0.28); }
+.tool-btn.btn-dark { background: #202a36; color:#ffffff; border: 1px solid rgba(255,255,255,0.18); box-shadow: 0 8px 20px rgba(0,0,0,0.38); backdrop-filter: blur(6px); }
+.tool-btn.btn-dark:hover { transform: translate3d(0,0,0) scale(1.06); background: #273242; border-color: rgba(255,255,255,0.24); }
 .tool-btn.btn-light { background: rgba(255,255,255,0.92); color:#1f2937; border: 1px solid rgba(0,0,0,0.18); box-shadow: 0 2px 8px rgba(0,0,0,.12); }
 .tool-btn.btn-light:hover { transform: translate3d(0,0,0) scale(1.06); background: #ffffff; border-color: rgba(0,0,0,0.24); box-shadow: 0 4px 12px rgba(0,0,0,.18); }
 .tool-btn.btn-light:hover { transform: translate3d(0,0,0) scale(1.06); background: rgba(255,255,255,0.70); }

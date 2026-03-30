@@ -366,7 +366,7 @@ const getBackgroundColor = (day: { count: number; level: number }) => {
     box-shadow: 0 4px 12px rgba(0,0,0,0.12);
   }
   .heatmap-tooltip-dark {
-    background: rgba(36,43,50,0.92);
+    background: rgba(12, 17, 23, 0.92);
     color: #ffffff;
     border: 1px solid rgba(255,255,255,0.20);
     box-shadow: 0 6px 16px rgba(0,0,0,0.35);

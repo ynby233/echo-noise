@@ -1,6 +1,6 @@
 <template>
   <div class="background-container" :style="backgroundStyle" :class="backgroundClass">
-    <div class="loading" v-if="!isLoaded">
+    <div class="page-loading-mask" v-if="!isLoaded">
       <div class="rainbow-spinner"></div>
       <div class="loading-text">加载中...</div>
     </div>
@@ -69,6 +69,24 @@
           <div class="p-0 text-center clock-card">
             <div class="clock-display">{{ formatTime(currentTime) }}</div>
             <div class="clock-date">{{ formatDate(currentTime) }}</div>
+          </div>
+        </UCard>
+        <UCard v-if="frontendConfig.lifeCountdownEnabled" class="sidebar-card mt-2 life-countdown-card" :class="sidebarThemeCard">
+          <div class="life-countdown-wrap">
+            <div v-if="lifeCountdown.valid" class="space-y-2">
+              <div class="life-countdown-main">
+                <span class="life-countdown-percent">{{ lifeCountdown.percent }}%</span>
+                <span class="life-countdown-age">已走过 {{ lifeCountdown.ageYears }} 岁</span>
+              </div>
+              <div class="life-progress-track">
+                <div class="life-progress-fill" :style="{ width: `${lifeCountdown.percent}%` }"></div>
+              </div>
+              <div class="life-countdown-meta">
+                <span>已过 {{ lifeCountdown.livedDays.toLocaleString() }} 天</span>
+                <span>剩余 {{ lifeCountdown.remainDays.toLocaleString() }} 天</span>
+              </div>
+            </div>
+            <div v-else class="life-countdown-empty">请在后台扩展组件中设置生日与寿命</div>
           </div>
         </UCard>
         
@@ -151,7 +169,10 @@
               <h1 class="header-title">{{ (frontendConfig.siteTitle || '说说笔记') }}</h1>
               <div class="header-subtitle" ref="subtitleEl"></div>
               <div class="hero-tabs">
-                <button v-for="t in centerTabs" :key="t.key" :class="['hero-tab', activeTab===t.key ? 'active' : '']" @click="activeTab=t.key">{{ t.name }}</button>
+                <button v-for="t in centerTabs" :key="t.key" :class="['hero-tab', activeTab===t.key ? 'active' : '']" @click="activeTab=t.key">
+                  <UIcon :name="t.icon" class="hero-tab-icon" />
+                  <span>{{ t.name }}</span>
+                </button>
               </div>
             </div>
           </div>
@@ -177,12 +198,12 @@
                   </a>
                 </div>
               </div>
-              <div v-if="(frontendConfig.linksApplyTitle || '').trim() !== '' || (frontendConfig.linksApplyText || '').trim() !== ''" class="mt-2">
-                <div class="text-sm font-medium text-center mb-1 text-black dark:text-white">{{ (frontendConfig.linksApplyTitle || '申请友链须知') }}</div>
+              <div v-if="(frontendConfig.linksApplyTitle || '').trim() !== '' || (frontendConfig.linksApplyText || '').trim() !== ''" class="links-apply-copy">
+                <div class="text-sm font-medium text-center mb-2 text-black dark:text-white">{{ (frontendConfig.linksApplyTitle || '申请友链须知') }}</div>
                 <div class="apply-text text-center text-black/70 dark:text-white/80">{{ (frontendConfig.linksApplyText || '').trim() }}</div>
               </div>
-              <div class="mt-4 mx-auto w-full max-w-2xl px-4 sm:px-6">
-                <div class="text-center text-xs opacity-70 mb-2">提交后需管理员审核</div>
+              <div class="links-apply-form mt-5 mx-auto w-full max-w-2xl px-4 sm:px-6">
+                <div class="text-center text-xs opacity-70 mb-3">提交后需管理员审核</div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <UInput v-model="linkApply.title" placeholder="站点名称（可选）" />
                   <UInput v-model="linkApply.link" placeholder="网址（必填，如 https://example.com）" />
@@ -190,17 +211,17 @@
                   <UInput v-model="linkApply.email" placeholder="邮箱（用于通知，可选）" />
                   <UTextarea v-model="linkApply.description" :rows="2" placeholder="简介（可选）" class="sm:col-span-2" />
                 </div>
-                <div class="flex justify-center mt-2">
+                <div class="flex justify-center mt-3">
                   <UButton :loading="applying" color="primary" @click="submitFriendLinkApply">提交申请</UButton>
                 </div>
               </div>
             </UCard>
           </div>
           <div v-else-if="activeTab==='comment'" class="comment-page">
-            <UCard class="search-card mb-3" :ui="{ body: 'p-5' }">
-              <div class="card-title text-center mb-3 text-black dark:text-white">{{ frontendConfig.commentPageTitle || '留言' }}</div>
-              <div v-if="(frontendConfig.commentPageDescription || '').trim() !== ''" class="section-subtitle">{{ frontendConfig.commentPageDescription }}</div>
-              <div class="max-w-3xl mx-auto">
+            <UCard class="search-card mb-3" :ui="{ body: 'p-5 md:p-6' }">
+              <div class="card-title text-center mb-4 text-black dark:text-white">{{ frontendConfig.commentPageTitle || '留言' }}</div>
+              <div v-if="(frontendConfig.commentPageDescription || '').trim() !== ''" class="section-subtitle comment-subtitle">{{ frontendConfig.commentPageDescription }}</div>
+              <div class="max-w-3xl mx-auto comment-board-wrap">
                 <BuiltinComments v-if="guestbookMessageId" :message-id="guestbookMessageId" :site-config="frontendConfig" :show-input="true" />
                 <div v-else class="text-sm opacity-70">正在准备留言板...</div>
               </div>
@@ -231,6 +252,7 @@
             :site-config="frontendConfig"
             :target-message-id="targetMessageId" 
             :wide="layoutState==='two'"
+            :page-ready="isLoaded"
           />
           </template>
           <div class="page-footer" v-html="(frontendConfig.pageFooterHTML || defaultConfig.pageFooterHTML)"></div>
@@ -337,20 +359,9 @@
       />
     </div>
       <!-- 音乐播放器容器（浮动或嵌入） -->
-      <div
-        v-if="frontendConfig.musicEnabled"
-        class="netease-mini-player"
-        :class="frontendConfig.musicDefaultMinimized ? 'minimized' : ''"
-        :data-playlist-id="frontendConfig.musicPlaylistId || ''"
-        :data-song-id="frontendConfig.musicSongId || ''"
-        :data-position="frontendConfig.musicPosition || 'bottom-left'"
-        :data-theme="frontendConfig.musicTheme || 'auto'"
-        :data-lyric="frontendConfig.musicLyric ? 'true' : 'false'"
-        :data-default-minimized="frontendConfig.musicDefaultMinimized ? 'true' : 'false'"
-        :data-embed="frontendConfig.musicEmbed ? 'true' : 'false'"
-        :data-autoplay="frontendConfig.musicAutoplay ? 'true' : 'false'"
-        :data-instant="frontendConfig.musicDefaultMinimized ? 'true' : null"
-      />
+      <div v-if="shouldShowMusicPlayer" class="music-player-wrapper">
+        <div class="netease-mini-player"></div>
+      </div>
       </UContainer>
   <Notification />
   <!-- 添加搜索模态框组件 -->
@@ -381,10 +392,28 @@
           <UForm @submit.prevent="onLoginSubmit">
             <div class="space-y-3">
               <UInput v-model="loginForm.username" placeholder="用户名或邮箱" />
-              <UInput v-model="loginForm.password" :type="showLoginPassword ? 'text' : 'password'" placeholder="密码" autocomplete="current-password" autocorrect="off" autocapitalize="off" spellcheck="false">
+              <UInput
+                ref="loginPasswordInput"
+                v-model="loginForm.password"
+                :type="showLoginPassword ? 'text' : 'password'"
+                placeholder="密码"
+                autocomplete="current-password"
+                autocorrect="off"
+                autocapitalize="off"
+                spellcheck="false"
+                @focus="syncLoginPasswordInput"
+                @input="syncLoginPasswordInput"
+              >
                 <template #trailing>
-                  <UButton icon="i-heroicons-eye" v-if="!showLoginPassword" variant="ghost" color="gray" @click="showLoginPassword = true" :ui="{ rounded: 'rounded-full' }" />
-                  <UButton icon="i-heroicons-eye-slash" v-else variant="ghost" color="gray" @click="showLoginPassword = false" :ui="{ rounded: 'rounded-full' }" />
+                  <UButton
+                    :icon="showLoginPassword ? 'i-heroicons-eye-slash' : 'i-heroicons-eye'"
+                    variant="ghost"
+                    color="gray"
+                    type="button"
+                    @mousedown.prevent
+                    @click.stop="toggleLoginPasswordVisibility"
+                    :ui="{ rounded: 'rounded-full' }"
+                  />
                 </template>
               </UInput>
               <UButton class="w-full" :loading="loginSubmitting" :disabled="loginSubmitting" type="submit" color="primary">登录</UButton>
@@ -407,10 +436,28 @@
           <UForm @submit.prevent="onRegisterSubmit">
             <div class="space-y-3">
               <UInput v-model="registerForm.username" placeholder="用户名" />
-              <UInput v-model="registerForm.password" :type="showRegisterPassword ? 'text' : 'password'" placeholder="密码" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false">
+              <UInput
+                ref="registerPasswordInput"
+                v-model="registerForm.password"
+                :type="showRegisterPassword ? 'text' : 'password'"
+                placeholder="密码"
+                autocomplete="new-password"
+                autocorrect="off"
+                autocapitalize="off"
+                spellcheck="false"
+                @focus="syncRegisterPasswordInput"
+                @input="syncRegisterPasswordInput"
+              >
                 <template #trailing>
-                  <UButton icon="i-heroicons-eye" v-if="!showRegisterPassword" variant="ghost" color="gray" @click="showRegisterPassword = true" :ui="{ rounded: 'rounded-full' }" />
-                  <UButton icon="i-heroicons-eye-slash" v-else variant="ghost" color="gray" @click="showRegisterPassword = false" :ui="{ rounded: 'rounded-full' }" />
+                  <UButton
+                    :icon="showRegisterPassword ? 'i-heroicons-eye-slash' : 'i-heroicons-eye'"
+                    variant="ghost"
+                    color="gray"
+                    type="button"
+                    @mousedown.prevent
+                    @click.stop="toggleRegisterPasswordVisibility"
+                    :ui="{ rounded: 'rounded-full' }"
+                  />
                 </template>
               </UInput>
               <div class="flex items-center gap-2">
@@ -450,8 +497,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, inject, provide, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { useRoute } from '#imports'
+import { ref, computed, inject, provide, onMounted, onUnmounted, watch, nextTick, reactive } from 'vue'
+import { useRouter, useRoute, useRuntimeConfig } from '#imports'
 import AddForm from '@/components/index/AddForm.vue'
 import MessageList from '@/components/index/MessageList.vue'
 import Notification from '~/components/widgets/Notification.vue';
@@ -468,12 +515,17 @@ import { useUserStore } from '~/store/user'
 const router = useRouter()
 const route = useRoute()
 const baseApi = useRuntimeConfig().public.baseApi || '/api'
+const normalizeLayoutMode = (raw: any): 'three' | 'two' | 'single' => {
+  const val = String(raw || '').trim()
+  return (val === 'three' || val === 'two' || val === 'single') ? val : 'three'
+}
+let desktopLayoutDefault: 'three' | 'two' | 'single' = 'three'
 const initialLayout = ((): 'three' | 'two' | 'single' => {
   if (typeof window === 'undefined') return 'three'
   const isMobileInit = window.matchMedia('(max-width: 1024px)').matches
   const saved = localStorage.getItem(isMobileInit ? 'homeLayoutMobile' : 'homeLayoutDesktop') as any
-  if (saved) return saved as any
-  return isMobileInit ? 'single' : 'three'
+  if (saved) return normalizeLayoutMode(saved)
+  return isMobileInit ? 'single' : desktopLayoutDefault
 })()
 const layoutState = ref<'three' | 'two' | 'single'>(initialLayout)
 const mq = typeof window !== 'undefined' ? window.matchMedia('(max-width: 1024px)') : null
@@ -483,6 +535,22 @@ const cycleLayout = () => {
   layoutState.value = layoutState.value === 'three' ? 'two' : (layoutState.value === 'two' ? 'single' : 'three')
   if (typeof window !== 'undefined') localStorage.setItem('homeLayoutDesktop', layoutState.value)
 }
+const handleLayoutMediaChange = (e: MediaQueryListEvent) => {
+  isMobile.value = e.matches
+  if (isMobile.value) {
+    layoutState.value = 'single'
+    localStorage.setItem('homeLayoutMobile', 'single')
+    return
+  }
+  const saved = localStorage.getItem('homeLayoutDesktop') as any
+  layoutState.value = normalizeLayoutMode(saved || desktopLayoutDefault)
+}
+onMounted(() => {
+  mq?.addEventListener?.('change', handleLayoutMediaChange)
+})
+onUnmounted(() => {
+  mq?.removeEventListener?.('change', handleLayoutMediaChange)
+})
 const gridModeClass = computed(() => (layoutState.value === 'three' ? 'grid-3' : (layoutState.value === 'two' ? 'grid-2' : 'grid-1')))
 const layoutIcon = computed(() => (layoutState.value === 'three' ? 'i-mdi-view-grid' : (layoutState.value === 'two' ? 'i-mdi-view-column' : 'i-mdi-view-stream')))
 const centerContainerClass = computed(() => (
@@ -495,10 +563,10 @@ const centerContainerClass = computed(() => (
 const toggleHeatmapCard = () => { showHeatmap.value = !showHeatmap.value }
 // 主题预设。统一由 ThemePresetSwitcher 控制 documentElement 类，不在容器上附加主题类
   const centerTabs = [
-    { key: 'latest', name: '最新' },
-    { key: 'links', name: '友链' },
-    { key: 'comment', name: '留言' },
-    { key: 'about', name: '关于' }
+    { key: 'latest', name: '最新', icon: 'i-heroicons-sparkles' },
+    { key: 'links', name: '友链', icon: 'i-heroicons-link' },
+    { key: 'comment', name: '留言', icon: 'i-heroicons-chat-bubble-left-right' },
+    { key: 'about', name: '关于', icon: 'i-heroicons-information-circle' }
   ]
   const activeTab = ref('latest')
 
@@ -513,6 +581,51 @@ const loginForm = reactive({ username: '', password: '' })
 const registerForm = reactive({ username: '', password: '', captcha: '', captcha_id: '' })
 const showLoginPassword = ref(false)
 const showRegisterPassword = ref(false)
+const loginPasswordInput = ref<any>(null)
+const registerPasswordInput = ref<any>(null)
+const getPasswordInputEl = (instance: any): HTMLInputElement | null => {
+  const root = instance?.$el || instance
+  if (!root) return null
+  if (root instanceof HTMLInputElement) return root
+  return root.querySelector?.('input') || null
+}
+const syncLoginPasswordInput = () => {
+  nextTick(() => {
+    const el = getPasswordInputEl(loginPasswordInput.value)
+    if (!el) return
+    const type = showLoginPassword.value ? 'text' : 'password'
+    if (el.type !== type) el.type = type
+  })
+}
+const syncRegisterPasswordInput = () => {
+  nextTick(() => {
+    const el = getPasswordInputEl(registerPasswordInput.value)
+    if (!el) return
+    const type = showRegisterPassword.value ? 'text' : 'password'
+    if (el.type !== type) el.type = type
+  })
+}
+const toggleLoginPasswordVisibility = () => {
+  showLoginPassword.value = !showLoginPassword.value
+  syncLoginPasswordInput()
+}
+const toggleRegisterPasswordVisibility = () => {
+  showRegisterPassword.value = !showRegisterPassword.value
+  syncRegisterPasswordInput()
+}
+watch(showLoginPassword, () => syncLoginPasswordInput())
+watch(showRegisterPassword, () => syncRegisterPasswordInput())
+watch(() => loginForm.password, () => { if (showLoginPassword.value) syncLoginPasswordInput() })
+watch(() => registerForm.password, () => { if (showRegisterPassword.value) syncRegisterPasswordInput() })
+watch(showAuthModal, (visible) => {
+  if (!visible) return
+  syncLoginPasswordInput()
+  syncRegisterPasswordInput()
+})
+watch(authMode, () => {
+  syncLoginPasswordInput()
+  syncRegisterPasswordInput()
+})
 const loginSubmitting = ref(false)
 const registerSubmitting = ref(false)
 const captchaSrc = ref('')
@@ -524,6 +637,7 @@ const showForgot = ref(false)
 const forgot = reactive({ account: '' })
 const forgotCooldown = ref(0)
 let forgotTimer: any = null
+let recentTicker: any = null
 const smtpEnabled = ref(true)
 const githubEnabled = ref(false)
 const refreshCaptcha = async () => {
@@ -600,7 +714,9 @@ const onRegisterSubmit = async () => {
 }
 const openAdmin = async () => {
   const ok = await useUserStore().checkLoginStatus()
-  if (ok) router.push('/status')
+  if (ok) {
+    router.push('/status')
+  }
   else {
     authMode.value = 'login';
     showAuthModal.value = true;
@@ -612,7 +728,11 @@ const openAdmin = async () => {
     } catch {}
   }
 }
-onUnmounted(() => { if (captchaTimer) clearInterval(captchaTimer) })
+onUnmounted(() => {
+  if (captchaTimer) clearInterval(captchaTimer)
+  if (forgotTimer) clearInterval(forgotTimer)
+  if (recentTicker) clearInterval(recentTicker)
+})
 
 watch(() => route.query.login, (v) => {
   if (v) { authMode.value = 'login'; showAuthModal.value = true }
@@ -694,6 +814,15 @@ const hex32 = (s: string) => {
   const toHex = (v: number) => ('00000000' + (v >>> 0).toString(16)).slice(-8)
   return (toHex(h1) + toHex(h2) + toHex(h1 ^ h2) + toHex((h1 + h2) >>> 0)).slice(0, 32)
 }
+const seedAvatar = (seed: string, size = 72) => {
+  const normalized = String(seed || '').trim() || 'noise'
+  const hash = hex32(normalized)
+  const bg = `#${hash.slice(0, 6)}`
+  const fg = `#${hash.slice(6, 12)}`
+  const text = (normalized.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '').slice(0, 2) || 'N').toUpperCase()
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 72 72"><rect width="72" height="72" rx="36" fill="${bg}"/><circle cx="36" cy="36" r="34" fill="none" stroke="${fg}" stroke-opacity="0.35" stroke-width="2"/><text x="50%" y="53%" dominant-baseline="middle" text-anchor="middle" fill="#ffffff" font-size="30" font-family="Arial, PingFang SC, Microsoft YaHei" font-weight="700">${text}</text></svg>`
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+}
 const gravatarFromUser = (size = 72) => {
   const u = userStore.user as any
   const email = String(u?.email || u?.Email || '').trim().toLowerCase()
@@ -727,9 +856,19 @@ const profileAvatar = computed(() => {
   if (wraw) return pick(wraw)
   return fallbackAvatarURL
 })
+const profileAvatarFallback = computed(() => {
+  if (isOnline.value) return seedAvatar(profileName.value || 'user', 72)
+  const useAdmin = !!((frontendConfig.value as any)?.welcomeUseAdmin)
+  const araw = String((adminWelcome.value?.avatar_url || '')).trim()
+  if (useAdmin && araw) return araw
+  const wraw = String((frontendConfig.value as any)?.welcomeAvatarURL || '').trim()
+  if (wraw) return wraw
+  return fallbackAvatarURL
+})
 const handleAvatarError = (e: Event) => {
   const img = e.target as HTMLImageElement
-  if (img && img.src !== fallbackAvatarURL) img.src = fallbackAvatarURL
+  const next = profileAvatarFallback.value || fallbackAvatarURL
+  if (img && img.src !== next) img.src = next
 }
 const profileDesc = computed(() => {
   const u = userStore.user as any
@@ -855,12 +994,12 @@ const handleScrollClick = () => {
 const isDark = computed(() => contentTheme.value === 'dark')
 const sidebarThemeCard = computed(() => (
   isDark.value
-    ? 'bg-[rgba(36,43,50,0.95)] text-white border border-white/20'
+    ? 'bg-[#1f2630] text-white border border-white/15'
     : 'bg-white text-black border border-black/10'
 ))
 const scrollButtonClass = computed(() => (
   isDark.value
-    ? 'scroll-button bg-[rgba(36,43,50,0.85)] hover:bg-[rgba(36,43,50,0.95)] text-white shadow-[0_6px_16px_rgba(0,0,0,0.35)]'
+    ? 'scroll-button bg-[#202a36] hover:bg-[#263243] text-white shadow-[0_8px_20px_rgba(0,0,0,0.4)]'
     : 'scroll-button bg-white/95 hover:bg-white text-gray-700 ring-1 ring-gray-200 shadow-[0_4px_12px_rgba(0,0,0,0.12)]'
 ))
 const iconClass = computed(() => (isDark.value ? 'text-white w-6 h-6' : 'text-gray-600 w-6 h-6'))
@@ -913,6 +1052,7 @@ const frontendConfig = ref({
     pwaTitle: '',
     pwaDescription: '',
     pwaIconURL: '',
+    homeLayoutDefault: 'three',
     announcementText: '',
     announcementEnabled: true,
     hitokotoEnabled: true,
@@ -931,6 +1071,7 @@ const frontendConfig = ref({
     musicAutoplay: false,
     musicDefaultMinimized: true,
     musicEmbed: false,
+    musicHideOnMobile: true,
     musicCssCdnURL: '',
     musicJsCdnURL: '',
     calendarEnabled: true,
@@ -947,160 +1088,258 @@ const frontendConfig = ref({
     ],
   leftAdsIntervalMs: 4000
 })
+const musicConfigLoaded = ref(false)
+const resolveMusicSource = (cfg: any) => {
+  const playlistId = String(cfg?.musicPlaylistId || '').trim()
+  const songId = playlistId ? '' : String(cfg?.musicSongId || '').trim()
+  return {
+    playlistId,
+    songId,
+    hasSource: !!playlistId || !!songId
+  }
+}
+const normalizeMusicTheme = (raw: string) => {
+  const value = String(raw || 'auto').trim()
+  return ['auto', 'light', 'dark'].includes(value) ? value : 'auto'
+}
+const shouldShowMusicPlayer = computed(() => {
+  const cfg: any = frontendConfig.value || {}
+  const source = resolveMusicSource(cfg)
+  return musicConfigLoaded.value && !!cfg.musicEnabled && source.hasSource && !(!!cfg.musicHideOnMobile && isMobile.value)
+})
 
-const initNMP = async () => {
-  try {
-    await nextTick()
-  const NMP = (window as any).NeteaseMiniPlayer
+const NMP_STATE_KEY = 'nmp_state_v1'
+const NMP_CDN_CSS_KEY = 'nmp_cdn_css_v1'
+const NMP_CDN_JS_KEY = 'nmp_cdn_js_v1'
+const NMP_LOCAL_CSS = '/assets/netease-mini-player/netease-mini-player-v2.css'
+const NMP_LOCAL_JS = '/assets/netease-mini-player/netease-mini-player-v2.js'
+const NMP_POSITIONS = ['bottom-left', 'bottom-right', 'top-left', 'top-right'] as const
+const runIdle = (cb: () => void) => {
+  if (typeof window === 'undefined') return
+  const idle = (window as any).requestIdleCallback
+  if (typeof idle === 'function') idle(cb)
+  else setTimeout(cb, 1)
+}
+let nmpThemeObserver: MutationObserver | null = null
+let nmpStateObserver: MutationObserver | null = null
+let nmpInitPromise: Promise<void> | null = null
+let nmpAssetsPromise: Promise<boolean> | null = null
+const nmpDisabled = ref(false)
+let nmpFailureCount = 0
+let nmpEnsureQueued = false
+const clearNmpRuntime = () => {
+  try { nmpThemeObserver?.disconnect() } catch {}
+  try { nmpStateObserver?.disconnect() } catch {}
+  nmpThemeObserver = null
+  nmpStateObserver = null
+  if (typeof document === 'undefined') return
   const el = document.querySelector('.netease-mini-player') as any
-  if (NMP && el) {
-    const cfg = (frontendConfig as any).value || (frontendConfig as any)
-    if (cfg.musicDefaultMinimized) { try { el.classList.add('minimized'); el.setAttribute('data-instant', 'true') } catch {} }
-    const inst = typeof NMP.initPlayer === 'function' ? NMP.initPlayer(el) : (el._neteasePlayer || null)
-      // 确保已初始化（库在脚本加载后会自动 init），此处兜底再调用一次
-      if (!inst && typeof NMP.init === 'function') {
+  if (!el) return
+  try { el.removeAttribute('data-autoplay-tried') } catch {}
+  try { el.removeAttribute('data-source-key') } catch {}
+  try { delete el._neteasePlayer } catch {}
+  try { el.innerHTML = '' } catch {}
+}
+const readNmpState = () => {
+  if (typeof window === 'undefined') return {}
+  try {
+    return JSON.parse(localStorage.getItem(NMP_STATE_KEY) || '{}') || {}
+  } catch {
+    return {}
+  }
+}
+const writeNmpState = (nextState: Record<string, any>) => {
+  if (typeof window === 'undefined') return
+  try {
+    const prev = readNmpState()
+    localStorage.setItem(NMP_STATE_KEY, JSON.stringify({ ...prev, ...nextState }))
+  } catch {}
+}
+const normalizeNmpPosition = (raw: string) => {
+  const val = String(raw || '').trim()
+  return (NMP_POSITIONS as readonly string[]).includes(val) ? val : 'bottom-left'
+}
+const applyNmpEdge = (el: any, position: string, minimized: boolean) => {
+  if (!el) return
+  const pos = normalizeNmpPosition(position)
+  if (el.getAttribute('data-position') !== pos) {
+    el.setAttribute('data-position', pos)
+  }
+  if (!minimized) return
+  if (pos.includes('left')) {
+    el.style.left = '0'
+    el.style.right = 'auto'
+  } else {
+    el.style.right = '0'
+    el.style.left = 'auto'
+  }
+  if (pos.includes('top')) {
+    el.style.top = '12px'
+    el.style.bottom = 'auto'
+  } else {
+    el.style.bottom = '12px'
+    el.style.top = 'auto'
+  }
+}
+const isNmpMinimized = (el: any) => !!el && (el.classList.contains('minimized') || !!el.querySelector('.minimized'))
+const syncNmpState = (el: any, cfg: any) => {
+  if (!el) return
+  const saved = readNmpState()
+  const position = normalizeNmpPosition(saved.position || cfg.musicPosition || 'bottom-left')
+  const minimized = typeof saved.minimized === 'boolean' ? saved.minimized : !!cfg.musicDefaultMinimized
+  el.classList.toggle('minimized', minimized)
+  if (minimized) el.setAttribute('data-instant', 'true')
+  applyNmpEdge(el, position, minimized)
+  writeNmpState({ minimized, position })
+}
+const observeNmpState = (el: any) => {
+  try { nmpStateObserver?.disconnect() } catch {}
+  nmpStateObserver = new MutationObserver(() => {
+    const minimized = isNmpMinimized(el)
+    const position = normalizeNmpPosition(el.getAttribute('data-position') || 'bottom-left')
+    if (minimized) applyNmpEdge(el, position, true)
+    writeNmpState({ minimized, position })
+  })
+  nmpStateObserver.observe(el, { attributes: true, attributeFilter: ['class', 'data-position'] })
+}
+const syncNmpAttributes = (el: any, cfg: any) => {
+  if (!el) return
+  const source = resolveMusicSource(cfg)
+  el.classList.toggle('minimized', !!cfg.musicDefaultMinimized)
+  el.setAttribute('data-playlist-id', source.playlistId)
+  el.setAttribute('data-song-id', source.songId)
+  el.setAttribute('data-position', normalizeNmpPosition(cfg.musicPosition || 'bottom-left'))
+  el.setAttribute('data-theme', normalizeMusicTheme(cfg.musicTheme))
+  el.setAttribute('data-lyric', cfg.musicLyric ? 'true' : 'false')
+  el.setAttribute('data-default-minimized', cfg.musicDefaultMinimized ? 'true' : 'false')
+  el.setAttribute('data-embed', cfg.musicEmbed ? 'true' : 'false')
+  el.setAttribute('data-autoplay', cfg.musicAutoplay ? 'true' : 'false')
+  if (cfg.musicDefaultMinimized) el.setAttribute('data-instant', 'true')
+  else el.removeAttribute('data-instant')
+}
+const initNMP = async () => {
+  if (nmpInitPromise) return nmpInitPromise
+  nmpInitPromise = (async () => {
+    try {
+      await nextTick()
+      const NMP = (window as any).NeteaseMiniPlayer
+      const el = document.querySelector('.netease-mini-player') as any
+      if (!NMP || !el) return
+      const cfg = (frontendConfig as any).value || (frontendConfig as any)
+      const source = resolveMusicSource(cfg)
+      if (!source.hasSource) {
+        clearNmpRuntime()
+        return
+      }
+      syncNmpAttributes(el, cfg)
+      syncNmpState(el, cfg)
+      let player = el.neteasePlayer || el._neteasePlayer || null
+      if (!player && typeof NMP.initPlayer === 'function') player = NMP.initPlayer(el)
+      if (!player && typeof NMP.init === 'function') {
         NMP.init()
+        await nextTick()
+        player = el.neteasePlayer || el._neteasePlayer || (typeof NMP.initPlayer === 'function' ? NMP.initPlayer(el) : null)
       }
-    const player = typeof NMP.initPlayer === 'function' ? NMP.initPlayer(el) : (el._neteasePlayer || null)
-    if (player) {
-      const playlistId = String(cfg.musicPlaylistId || '').trim()
-      const songId = String(cfg.musicSongId || '').trim()
-      const MAX_ATTEMPTS = 4
-      let attempts = 0
-      const attemptLoad = () => {
-        attempts++
-        try {
-          if (playlistId) {
-            player.loadPlaylist?.(playlistId)
-          } else if (songId) {
-            player.loadSingleSong?.(songId)
-          }
-        } catch {}
+      if (!player) return
+      observeNmpState(el)
+      const sourceKey = `${source.playlistId}|${source.songId}`
+      if (el.getAttribute('data-source-key') !== sourceKey) {
+        el.setAttribute('data-source-key', sourceKey)
+        if (source.playlistId) player.loadPlaylist?.(source.playlistId)
+        else if (source.songId) player.loadSingleSong?.(source.songId)
       }
-      attemptLoad()
-      try {
-        const obs = new MutationObserver(() => {
-          const txt = (el.textContent || '').toLowerCase()
-          if ((/加载失败/.test(txt) || /请稍候/.test(txt)) && attempts < MAX_ATTEMPTS) {
-            setTimeout(attemptLoad, 1200)
-          }
-        })
-        obs.observe(el, { childList: true, subtree: true, characterData: true })
-        setTimeout(() => { try { obs.disconnect() } catch {} }, 300000)
-      } catch {}
-      const theme = String(cfg.musicTheme || 'auto').trim()
-      try {
-        const isDark = document.documentElement.classList.contains('dark')
-        player.setTheme?.(isDark ? 'dark' : (theme === 'auto' ? 'light' : theme))
-        const observer = new MutationObserver(() => {
-          const nowDark = document.documentElement.classList.contains('dark')
-          try { player.setTheme?.(nowDark ? 'dark' : 'light') } catch {}
-        })
-        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
-      } catch {}
-      if (cfg.musicAutoplay) {
+      const isDarkNow = document.documentElement.classList.contains('dark')
+      const theme = normalizeMusicTheme(cfg.musicTheme)
+      player.setTheme?.(theme === 'auto' ? (isDarkNow ? 'dark' : 'light') : theme)
+      try { nmpThemeObserver?.disconnect() } catch {}
+      nmpThemeObserver = new MutationObserver(() => {
+        const nowDark = document.documentElement.classList.contains('dark')
+        const nextTheme = normalizeMusicTheme(((frontendConfig as any).value?.musicTheme ?? cfg.musicTheme) || 'auto')
+        try { player.setTheme?.(nextTheme === 'auto' ? (nowDark ? 'dark' : 'light') : nextTheme) } catch {}
+      })
+      nmpThemeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+      if (cfg.musicAutoplay && !el.getAttribute('data-autoplay-tried')) {
+        el.setAttribute('data-autoplay-tried', 'true')
         try { await player.play?.() } catch {}
       }
       if (cfg.musicDefaultMinimized) {
-        try {
-          const enableTransitions = () => { try { el.removeAttribute('data-instant') } catch {} }
-          el.addEventListener('pointerdown', enableTransitions, { once: true, capture: true })
-        } catch {}
+        const enableTransitions = () => { try { el.removeAttribute('data-instant') } catch {} }
+        el.addEventListener('pointerdown', enableTransitions, { once: true, capture: true })
       }
-      // 降级封面为低成本占位并优化加载属性
-      try {
-        const placeholder = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D%22http%3A//www.w3.org/2000/svg%22 width%3D%22120%22 height%3D%22120%22 viewBox%3D%220 0 120 120%22%3E%3Cdefs%3E%3ClinearGradient id%3D%22g%22 x1%3D%220%25%22 y1%3D%220%25%22 x2%3D%22100%25%22 y2%3D%22100%25%22%3E%3Cstop offset%3D%220%25%22 stop-color%3D%22%23242b32%22/%3E%3Cstop offset%3D%22100%25%22 stop-color%3D%22%23394850%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width%3D%22120%22 height%3D%22120%22 fill%3D%22url(%23g)%22/%3E%3C/svg%3E'
-        const patchImg = (img) => {
-          if (!img) return
-          try { img.loading = 'lazy' } catch {}
-          try { img.decoding = 'async' } catch {}
-          try { img.referrerPolicy = 'no-referrer' } catch {}
-          try { img.crossOrigin = 'anonymous' } catch {}
-          img.addEventListener('error', () => { try { img.src = placeholder } catch {} }, { once: true })
-        }
-        const bindAll = () => {
-          const imgs = el.querySelectorAll('img')
-          imgs.forEach(patchImg)
-        }
-        bindAll()
-        const mo = new MutationObserver(() => bindAll())
-        mo.observe(el, { childList: true, subtree: true })
-        setTimeout(() => { try { mo.disconnect() } catch {} }, 180000)
-      } catch {}
-      // 移除兜底，严格依赖 NeteaseMiniPlayer 自身加载
+    } catch (error) {
+      console.error('Failed to initialize NeteaseMiniPlayer:', error)
+    } finally {
+      nmpInitPromise = null
     }
-  } else {
-      console.error('NeteaseMiniPlayer not available or element missing')
-    }
-  } catch (error) {
-    console.error('Failed to initialize NeteaseMiniPlayer:', error)
-  }
+  })()
+  return nmpInitPromise
 }
+const dedupeStrings = (items: string[]) => Array.from(new Set(items.map(item => String(item || '').trim()).filter(Boolean)))
 
-const probeURL = async (url: string, ms = 1500): Promise<boolean> => {
+const readNmpCdn = (storageKey: string) => {
+  if (typeof window === 'undefined') return ''
+  try { return String(localStorage.getItem(storageKey) || '').trim() } catch { return '' }
+}
+const writeNmpCdn = (storageKey: string, url: string) => {
+  if (typeof window === 'undefined') return
   try {
-    if (!url || typeof window === 'undefined') return false
-    const ctrl = new AbortController()
-    const to = setTimeout(() => ctrl.abort(), ms)
-    let res: Response
-    try {
-      res = await fetch(url, { method: 'HEAD', cache: 'no-cache', signal: ctrl.signal })
-    } catch {
-      // 某些 CDN 不允许 HEAD，改用 GET（不读取主体）
-      res = await fetch(url, { method: 'GET', cache: 'no-cache', signal: ctrl.signal })
-    }
-    clearTimeout(to)
-    return !!res && res.ok
-  } catch { return false }
+    if (url) localStorage.setItem(storageKey, url)
+    else localStorage.removeItem(storageKey)
+  } catch {}
 }
-
-const loadNMPAssets = async (): Promise<boolean> => {
-  if (typeof window === 'undefined') return false
-  if ((window as any).NeteaseMiniPlayer) return true
-  const head = document.head
-  const body = document.body
-  const cssId = 'nmp-css'
-  const jsId = 'nmp-js'
-  // CSS 加载（多CDN回退）
-  if (!document.getElementById(cssId)) {
-    const cfgCss = String(((frontendConfig as any).value?.musicCssCdnURL ?? (frontendConfig as any).musicCssCdnURL) || '').trim()
-    const cssCandidates = [
-      cfgCss,
-      'https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.css',
-      'https://cdn.jsdelivr.net/gh/ImBHCN/NeteaseMiniPlayer@v2/netease-mini-player-v2.css',
-      'https://unpkg.com/netease-mini-player@2.0.4/dist/netease-mini-player-v2.css'
-    ].filter(Boolean)
-    let pick = ''
-    try {
-      const results = await Promise.all(cssCandidates.map(u => probeURL(u, 2000)))
-      const idx = results.findIndex(v => v)
-      pick = idx >= 0 ? cssCandidates[idx] : (cssCandidates[0] || '')
-    } catch { pick = cssCandidates[0] || '' }
-    if (pick) {
-      const link = document.createElement('link')
-      link.id = cssId
-      link.rel = 'stylesheet'
-      link.href = pick
-      head.appendChild(link)
-    }
+const normalizeNmpAssetUrl = (kind: 'css' | 'js', raw: string) => {
+  const url = String(raw || '').trim()
+  if (!url) return kind === 'css' ? NMP_LOCAL_CSS : NMP_LOCAL_JS
+  const knownRemote = [
+    'https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.css',
+    'https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.js',
+    'https://cdn.jsdelivr.net/gh/ImBHCN/NeteaseMiniPlayer@v2/netease-mini-player-v2.css',
+    'https://cdn.jsdelivr.net/gh/ImBHCN/NeteaseMiniPlayer@v2/netease-mini-player-v2.js',
+    'https://unpkg.com/netease-mini-player@2.0.4/dist/netease-mini-player-v2.css',
+    'https://unpkg.com/netease-mini-player@2.0.4/dist/netease-mini-player-v2.js'
+  ]
+  if (knownRemote.includes(url)) return kind === 'css' ? NMP_LOCAL_CSS : NMP_LOCAL_JS
+  return url
+}
+const orderNmpCandidates = (storageKey: string, candidates: string[]) => {
+  const list = dedupeStrings(candidates)
+  const cached = readNmpCdn(storageKey)
+  return dedupeStrings([list[0], cached, ...list.slice(1)])
+}
+const waitForNmpGlobal = async (ms = 400) => {
+  const started = Date.now()
+  while (Date.now() - started < ms) {
+    if ((window as any).NeteaseMiniPlayer) return true
+    await new Promise(resolve => setTimeout(resolve, 40))
   }
-  // JS 加载（多CDN回退）
-  if (!document.getElementById(jsId)) {
-    const cfgJs = String(((frontendConfig as any).value?.musicJsCdnURL ?? (frontendConfig as any).musicJsCdnURL) || '').trim()
-    const jsCandidates = [
-      cfgJs,
-      'https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.js',
-      'https://cdn.jsdelivr.net/gh/ImBHCN/NeteaseMiniPlayer@v2/netease-mini-player-v2.js',
-      'https://unpkg.com/netease-mini-player@2.0.4/dist/netease-mini-player-v2.js'
-    ].filter(Boolean)
-    let pickJs = ''
-    try {
-      const results = await Promise.all(jsCandidates.map(u => probeURL(u, 2000)))
-      const idx = results.findIndex(v => v)
-      pickJs = idx >= 0 ? jsCandidates[idx] : (jsCandidates[0] || '')
-    } catch { pickJs = jsCandidates[0] || '' }
-    if (!pickJs) return false
-    await new Promise<void>((resolve) => {
+  return !!(window as any).NeteaseMiniPlayer
+}
+const loadNmpStylesheet = async (cssId: string, candidates: string[]) => {
+  if (typeof document === 'undefined') return false
+  const ordered = orderNmpCandidates(NMP_CDN_CSS_KEY, candidates)
+  if (ordered.length === 0) return false
+  const existing = document.getElementById(cssId) as HTMLLinkElement | null
+  if (existing) return true
+  const href = ordered[0]
+  const link = document.createElement('link')
+  link.id = cssId
+  link.rel = 'stylesheet'
+  link.href = href
+  document.head.appendChild(link)
+  writeNmpCdn(NMP_CDN_CSS_KEY, href)
+  return true
+}
+const loadNmpScript = async (jsId: string, candidates: string[]) => {
+  if (typeof document === 'undefined') return false
+  const existing = document.getElementById(jsId) as HTMLScriptElement | null
+  if (existing) {
+    const ready = await waitForNmpGlobal(1200)
+    if (ready) return true
+    existing.remove()
+  }
+  const ordered = orderNmpCandidates(NMP_CDN_JS_KEY, candidates)
+  for (const src of ordered) {
+    const loaded = await new Promise<boolean>((resolve) => {
       const script = document.createElement('script')
       script.id = jsId
       script.type = 'text/javascript'
@@ -1108,13 +1347,94 @@ const loadNMPAssets = async (): Promise<boolean> => {
       script.defer = true
       script.crossOrigin = 'anonymous'
       script.referrerPolicy = 'no-referrer'
-      script.onload = () => resolve()
-      script.onerror = () => resolve()
-      script.src = pickJs
-      body.appendChild(script)
+      const timer = setTimeout(() => resolve(false), 4000)
+      script.onload = () => {
+        clearTimeout(timer)
+        resolve(true)
+      }
+      script.onerror = () => {
+        clearTimeout(timer)
+        resolve(false)
+      }
+      script.src = src
+      document.body.appendChild(script)
     })
+    if (loaded && await waitForNmpGlobal(800)) {
+      writeNmpCdn(NMP_CDN_JS_KEY, src)
+      return true
+    }
+    document.getElementById(jsId)?.remove()
   }
-  return !!(window as any).NeteaseMiniPlayer
+  return false
+}
+
+const loadNMPAssets = async (): Promise<boolean> => {
+  try {
+    if (typeof window === 'undefined') return false
+    if ((window as any).NeteaseMiniPlayer) return true
+    const head = document.head
+    const body = document.body
+    const cssId = 'nmp-css'
+    const jsId = 'nmp-js'
+    if (!document.getElementById(cssId)) {
+      const cfgCss = normalizeNmpAssetUrl('css', String(((frontendConfig as any).value?.musicCssCdnURL ?? (frontendConfig as any).musicCssCdnURL) || '').trim())
+      const cssCandidates = dedupeStrings([
+        cfgCss,
+        NMP_LOCAL_CSS,
+        'https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.css',
+        'https://cdn.jsdelivr.net/gh/ImBHCN/NeteaseMiniPlayer@v2/netease-mini-player-v2.css',
+        'https://unpkg.com/netease-mini-player@2.0.4/dist/netease-mini-player-v2.css'
+      ])
+      await loadNmpStylesheet(cssId, cssCandidates)
+    }
+    if (!document.getElementById(jsId)) {
+      const cfgJs = normalizeNmpAssetUrl('js', String(((frontendConfig as any).value?.musicJsCdnURL ?? (frontendConfig as any).musicJsCdnURL) || '').trim())
+      const jsCandidates = dedupeStrings([
+        cfgJs,
+        NMP_LOCAL_JS,
+        'https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.js',
+        'https://cdn.jsdelivr.net/gh/ImBHCN/NeteaseMiniPlayer@v2/netease-mini-player-v2.js',
+        'https://unpkg.com/netease-mini-player@2.0.4/dist/netease-mini-player-v2.js'
+      ])
+      await loadNmpScript(jsId, jsCandidates)
+    }
+    return !!(window as any).NeteaseMiniPlayer
+  } catch {
+    return false
+  }
+}
+const ensureNMPReady = async () => {
+  try {
+    if (!shouldShowMusicPlayer.value || nmpDisabled.value) return false
+    if (!nmpAssetsPromise) {
+      nmpAssetsPromise = loadNMPAssets().then(res => {
+        nmpAssetsPromise = null
+        return res
+      }).catch(() => {
+        nmpAssetsPromise = null
+        return false
+      })
+    }
+    const loaded = await nmpAssetsPromise
+    if (!loaded) {
+      nmpFailureCount += 1
+      return false
+    }
+    await initNMP()
+    nmpFailureCount = 0
+    return true
+  } catch {
+    nmpFailureCount += 1
+    return false
+  }
+}
+const queueEnsureNMPReady = () => {
+  if (nmpEnsureQueued || nmpDisabled.value) return
+  nmpEnsureQueued = true
+  Promise.resolve()
+    .then(() => ensureNMPReady())
+    .then(() => { nmpEnsureQueued = false })
+    .catch(() => { nmpEnsureQueued = false })
 }
 
 // 移除 meting 兜底依赖，避免显示“请求失败”造成误导
@@ -1170,10 +1490,11 @@ const loadHitokoto = async () => {
   if (!txt) hitokotoText.value = '身为冒险者，如果安静的老死在床上，那简直就是耻辱！'
 }
 
-watch(() => frontendConfig.value.musicEnabled, async (enabled) => {
+watch(shouldShowMusicPlayer, async (enabled) => {
   if (enabled) {
-    await loadNMPAssets()
-    await initNMP()
+    queueEnsureNMPReady()
+  } else {
+    clearNmpRuntime()
   }
 }, { immediate: true })
 
@@ -1187,9 +1508,25 @@ watch(() => [
   frontendConfig.value.musicEmbed,
   frontendConfig.value.musicAutoplay
 ], async () => {
-  if (frontendConfig.value.musicEnabled) {
-    await initNMP()
+  nmpDisabled.value = false
+  nmpFailureCount = 0
+  if (shouldShowMusicPlayer.value) {
+    queueEnsureNMPReady()
+  } else {
+    clearNmpRuntime()
   }
+})
+const onMusicVisibilityChange = async () => {
+  if (document.visibilityState !== 'visible') return
+  if (!shouldShowMusicPlayer.value) return
+  queueEnsureNMPReady()
+}
+onMounted(() => {
+  document.addEventListener('visibilitychange', onMusicVisibilityChange)
+})
+onUnmounted(() => {
+  document.removeEventListener('visibilitychange', onMusicVisibilityChange)
+  clearNmpRuntime()
 })
 
 watch(() => frontendConfig.value.hitokotoEnabled, async (enabled) => {
@@ -1258,6 +1595,7 @@ const headerImageStyle = computed(() => ({
     pwaTitle: '',
     pwaDescription: '',
     pwaIconURL: '',
+    homeLayoutDefault: 'three',
     announcementText: '欢迎访问我的说说笔记！',
     announcementEnabled: true,
     hitokotoEnabled: true,
@@ -1276,6 +1614,7 @@ const headerImageStyle = computed(() => ({
     musicAutoplay: false,
     musicDefaultMinimized: true,
     musicEmbed: false,
+    musicHideOnMobile: true,
     musicCssCdnURL: '',
     musicJsCdnURL: '',
   socialLinks: [
@@ -1291,6 +1630,9 @@ const headerImageStyle = computed(() => ({
   socialLinksEnabled: true,
     calendarEnabled: true,
     timeEnabled: true,
+    lifeCountdownEnabled: false,
+    lifeCountdownBirthDate: '',
+    lifeExpectancyYears: 80,
     // 左栏广告（完全后端驱动，无前端默认）
     leftAdEnabled: true,
     leftAds: [
@@ -1304,37 +1646,43 @@ const headerImageStyle = computed(() => ({
 // 修改 fetchConfig 方法
 const fetchConfig = async () => {
     try {
-        frontendConfig.value = { ...defaultConfig };
+        const nextConfig: any = { ...defaultConfig };
         const res = await getRequest<any>('frontend/config', undefined, { credentials: 'include' })
         if (res && res.code === 1 && res.data && res.data.frontendSettings) {
             const settings = res.data.frontendSettings
-            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'commentEnabled', 'commentEmailEnabled', 'commentLoginRequired', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'calendarEnabled', 'timeEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'socialLinksEnabled']
-            Object.keys(frontendConfig.value).forEach(key => {
+            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'commentEnabled', 'commentEmailEnabled', 'commentLoginRequired', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'socialLinksEnabled']
+            Object.keys(nextConfig).forEach(key => {
                 if (settings[key] !== null && settings[key] !== undefined) {
                     if (key === 'backgrounds' && Array.isArray(settings[key])) {
-                        frontendConfig.value.backgrounds = [...settings[key]]
+                        nextConfig.backgrounds = [...settings[key]]
                     } else if (key === 'socialLinks' && Array.isArray(settings[key])) {
                         const arr = settings[key]
-                        frontendConfig.value.socialLinks = (arr.length > 0) ? [...arr] : [...defaultConfig.socialLinks]
+                        nextConfig.socialLinks = (arr.length > 0) ? [...arr] : [...defaultConfig.socialLinks]
                     } else if (key === 'leftAds' && Array.isArray(settings[key])) {
-                        frontendConfig.value.leftAds = [...settings[key]]
+                        nextConfig.leftAds = [...settings[key]]
                     } else if (key === 'friendLinks') {
                         const arr = settings[key]
                         if (Array.isArray(arr) && arr.length > 0) {
-                            frontendConfig.value.friendLinks = [...arr]
+                            nextConfig.friendLinks = [...arr]
                         } else {
-                            frontendConfig.value.friendLinks = [...defaultConfig.friendLinks]
+                            nextConfig.friendLinks = [...defaultConfig.friendLinks]
                         }
                             } else if (booleanKeys.includes(key)) {
                                 const v = settings[key]
-                                frontendConfig.value[key] = (v === true || v === 'true' || v === 1 || v === '1')
+                                nextConfig[key] = (v === true || v === 'true' || v === 1 || v === '1')
                             } else {
                                 const v = settings[key]
-                                frontendConfig.value[key] = typeof v === 'string' ? v.trim() : v
+                                nextConfig[key] = typeof v === 'string' ? v.trim() : v
                             }
                         }
             })
             githubEnabled.value = !!settings.githubOAuthEnabled
+            const serverLayout = normalizeLayoutMode(settings.homeLayoutDefault)
+            nextConfig.homeLayoutDefault = serverLayout
+            desktopLayoutDefault = serverLayout
+            if (typeof window !== 'undefined' && !isMobile.value && !localStorage.getItem('homeLayoutDesktop')) {
+              layoutState.value = serverLayout
+            }
             const defaultTheme = (settings.defaultContentTheme || 'light').trim()
             if (typeof window !== 'undefined' && !localStorage.getItem('contentTheme')) {
               contentTheme.value = defaultTheme === 'light' ? 'light' : 'dark'
@@ -1343,9 +1691,14 @@ const fetchConfig = async () => {
               document.documentElement.className = contentTheme.value === 'dark' ? 'dark' : ''
             }
         }
-        if (!frontendConfig.value.backgrounds?.length) {
-            frontendConfig.value.backgrounds = [...defaultConfig.backgrounds]
+        if (!nextConfig.backgrounds?.length) {
+            nextConfig.backgrounds = [...defaultConfig.backgrounds]
         }
+        nextConfig.musicTheme = normalizeMusicTheme(nextConfig.musicTheme)
+        const source = resolveMusicSource(nextConfig)
+        nextConfig.musicPlaylistId = source.playlistId
+        nextConfig.musicSongId = source.songId
+        frontendConfig.value = nextConfig
         if (frontendConfig.value.backgrounds.length > 0) {
             const randomIndex = Math.floor(Math.random() * frontendConfig.value.backgrounds.length)
             currentImage.value = frontendConfig.value.backgrounds[randomIndex]
@@ -1353,6 +1706,8 @@ const fetchConfig = async () => {
     } catch (error) {
         console.error('获取配置失败:', error)
         frontendConfig.value = { ...defaultConfig }
+    } finally {
+        musicConfigLoaded.value = true
     }
 }
 
@@ -1499,7 +1854,14 @@ const preloadImages = async (images: string[]) => {
   }
   
   // 并行预加载所有图片
-  await Promise.all(images.map(src => loadImage(src)))
+  const firstBatch = images.slice(0, 6)
+  await Promise.all(firstBatch.map(src => loadImage(src)))
+  const restBatch = images.slice(6, 24)
+  if (restBatch.length > 0) {
+    runIdle(() => {
+      restBatch.forEach((src) => { loadImage(src) })
+    })
+  }
 }
 // 添加配置更新事件监听
 // 移除重复绑定的 frontend-config-updated 监听，避免多次拉取导致卡顿
@@ -1851,7 +2213,7 @@ const loadRecentComments = async () => {
 }
 onMounted(async () => {
   await loadRecentComments()
-  setInterval(() => { recentIndex.value = (recentIndex.value + 1) % Math.max(1, recentComments.value.length) }, 3000)
+  recentTicker = setInterval(() => { recentIndex.value = (recentIndex.value + 1) % Math.max(1, recentComments.value.length) }, 3000)
 })
 
 // 绑定 Fancybox 以支持推荐图集预览
@@ -1859,16 +2221,13 @@ onMounted(() => {
   try { (window as any).Fancybox?.bind?.('[data-fancybox]', {}) } catch {}
 })
 
-const recentItemClass = computed(() => (isDark.value ? 'bg-[rgba(36,43,50,0.75)] text-white' : 'bg-slate-100 text-slate-800'))
+const recentItemClass = computed(() => (isDark.value ? 'bg-[#273242] text-white' : 'bg-slate-100 text-slate-800'))
 const recentTextClass = computed(() => (isDark.value ? 'text-white' : 'text-slate-800'))
 
 // 监听前端配置更新事件，保存后主动刷新配置
 onMounted(() => {
   const handler = () => fetchConfig()
   window.addEventListener('frontend-config-updated', handler)
-  // 初始拉取
-  fetchConfig()
-  fetchTags()
   fetchImages()
   fetchStatus()
   onUnmounted(() => window.removeEventListener('frontend-config-updated', handler))
@@ -1947,22 +2306,23 @@ onMounted(async () => {
   try {
     // 确保在任何异步操作之前设置加载状态
     isLoaded.value = false;
+    const hardTimeout = setTimeout(() => {
+      if (!isLoaded.value) isLoaded.value = true
+    }, 4500)
 
-    // 使用 requestIdleCallback 延迟加载非关键组件
-    window.requestIdleCallback = window.requestIdleCallback || ((cb) => setTimeout(cb, 1))
-    
     // 关键内容优先加载
-    await fetchConfig()
-    if (frontendConfig.value.musicEnabled) {
-      await loadNMPAssets()
-      await initNMP()
-      // 首次交互时重试初始化，提升移动端就绪度
-      const onceInit = () => { try { initNMP() } catch {} }
+    await Promise.race([
+      fetchConfig(),
+      new Promise<void>((resolve) => setTimeout(() => resolve(), 2500))
+    ])
+    if (shouldShowMusicPlayer.value) {
+      runIdle(() => { queueEnsureNMPReady() })
+      const onceInit = () => { queueEnsureNMPReady() }
       window.addEventListener('pointerdown', onceInit, { once: true })
     }
     
     // 非关键内容延迟加载
-    requestIdleCallback(async () => {
+    runIdle(async () => {
       await fetchTags()
       await preloadImages(frontendConfig.value.backgrounds)
     })
@@ -1978,7 +2338,7 @@ onMounted(async () => {
       currentImage.value = lowQualityImage
 
       // 后台预加载其他图片
-      requestIdleCallback(async () => {
+      runIdle(async () => {
         await preloadImages(frontendConfig.value.backgrounds)
       })
       
@@ -1999,23 +2359,16 @@ onMounted(async () => {
       setTimeout(() => {
         if (!isLoaded.value) isLoaded.value = true
       }, 2000)
+    } else {
+      isLoaded.value = true
     }
+    clearTimeout(hardTimeout)
     
     // 启动打字效果
     const typeInterval = startTypeEffect()
     onUnmounted(() => {
       if (typeInterval) {
         clearInterval(typeInterval)
-      }
-    })
-
-    // 添加事件监听
-    window.addEventListener('frontend-config-updated', async (event: CustomEvent) => {
-      await fetchConfig()
-      if (frontendConfig.value.backgrounds?.length > 0) {
-        const randomIndex = Math.floor(Math.random() * frontendConfig.value.backgrounds.length)
-        const newImage = frontendConfig.value.backgrounds[randomIndex]
-        currentImage.value = newImage
       }
     })
 
@@ -2046,9 +2399,49 @@ const formatDate = (d: Date) => {
   const wk = ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()]
   return `${y}-${m}-${day} ${wk}`
 }
+const lifeCountdown = computed(() => {
+  const enabled = !!(frontendConfig.value as any).lifeCountdownEnabled
+  const birth = String((frontendConfig.value as any).lifeCountdownBirthDate || '').trim()
+  const years = Math.max(1, Math.min(150, Number((frontendConfig.value as any).lifeExpectancyYears || 80) || 80))
+  if (!enabled || !birth) {
+    return { valid: false, percent: 0, livedDays: 0, remainDays: 0, ageYears: 0 }
+  }
+  const start = new Date(`${birth}T00:00:00`)
+  if (Number.isNaN(start.getTime())) {
+    return { valid: false, percent: 0, livedDays: 0, remainDays: 0, ageYears: 0 }
+  }
+  const now = currentTime.value
+  const oneDay = 24 * 60 * 60 * 1000
+  const livedMs = Math.max(0, now.getTime() - start.getTime())
+  const totalDays = Math.max(1, Math.floor(years * 365.2425))
+  const livedDays = Math.max(0, Math.floor(livedMs / oneDay))
+  const remainDays = Math.max(0, totalDays - livedDays)
+  const percent = Math.max(0, Math.min(100, Math.round((livedDays / totalDays) * 10000) / 100))
+  const ageYears = Math.max(0, Math.floor(livedDays / 365.2425))
+  return { valid: true, percent, livedDays, remainDays, ageYears }
+})
 </script>
 
 <style>
+:root {
+  --home-surface-light: #ffffff;
+  --home-surface-dark: #202a36;
+  --home-surface-dark-elevated: #273242;
+  --home-surface-dark-hover: #2f3b4c;
+  --home-border-light: rgba(0,0,0,0.08);
+  --home-border-dark: rgba(255,255,255,0.16);
+  --home-border-dark-soft: rgba(255,255,255,0.2);
+  --home-border-dark-strong: rgba(255,255,255,0.24);
+  --home-shadow-light: 0 2px 10px rgba(0,0,0,0.06);
+  --home-shadow-dark: 0 8px 22px rgba(0,0,0,0.32);
+  --home-shadow-float-light: 0 6px 18px rgba(0,0,0,0.12);
+  --home-shadow-float-dark: 0 12px 26px rgba(0,0,0,0.4);
+  --home-text-light: #111827;
+  --home-text-dark: #ffffff;
+  --home-accent-warn: #f59e0b;
+  --home-radius-card: 12px;
+  --home-radius-panel: 16px;
+}
 html, body {
   margin: 0;
   padding: 0;
@@ -2090,7 +2483,7 @@ html, body {
   bottom: 0;
   overflow: hidden;
   z-index: 0;
-  background-color: black;
+  background-color: #000000;
 }
 
 .background-container::before {
@@ -2105,6 +2498,8 @@ html, body {
   background-position: center;
   background-attachment: fixed; /* 确保背景固定 */
   filter: blur(8px);
+  transform: scale(1.08);
+  opacity: 0.92;
   z-index: -1;
 }
 
@@ -2120,29 +2515,12 @@ html, body {
   background-position: center;
   background-attachment: fixed;
   filter: blur(8px);
+  transform: scale(1.08);
   z-index: -1;
   opacity: 0;
   transition: opacity .25s ease;
 }
 .bg-crossfade-active.background-container::after { opacity: 1; }
-
-.background-container::after {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-image: var(--bg-image-next);
-  background-size: cover;
-  background-position: center;
-  background-attachment: fixed;
-  filter: blur(8px);
-  z-index: -1;
-  opacity: 0;
-  transition: opacity .25s ease;
-}
-.background-container.bg-crossfade-active::after { opacity: 1; }
 
 .content-wrapper {
   position: absolute;
@@ -2176,10 +2554,10 @@ html, body {
   will-change: background-image;
   transform: translateZ(0);
   margin-top: 0;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  box-shadow: 0 14px 34px rgba(15,23,42,0.24);
 }
 
-:global(html.dark) .header-image { box-shadow: 0 10px 28px rgba(0,0,0,0.35); }
+:global(html.dark) .header-image { box-shadow: 0 16px 36px rgba(0,0,0,0.42); }
 
 
 .header-title {
@@ -2201,11 +2579,12 @@ html, body {
   bottom: 18px;
   transform: translateX(-50%);
   display: flex;
-  gap: 8px;
-  background: rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(6px);
-  padding: 6px 8px;
-  border-radius: 9999px;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  border-radius: 0;
   flex-wrap: nowrap;
   overflow-x: auto;
   overflow-y: hidden;
@@ -2213,25 +2592,67 @@ html, body {
   white-space: nowrap;
 }
 /* 统一弹窗底色样式与搜索弹窗一致 */
-.search-card { background: #ffffff; color: #111827; border: 1px solid #e5e7eb; border-radius: 16px; }
-html.dark .search-card { background: rgba(36,43,50,0.95); color: #fff; border: 1px solid rgba(255,255,255,0.08); }
+.search-card { background: var(--home-surface-light); color: #111827; border: 1px solid #e5e7eb; border-radius: var(--home-radius-panel); }
+html.dark .search-card { background: var(--home-surface-dark); color: #fff; border: 1px solid var(--home-border-dark); }
 .hero-tab {
-  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 0.92rem;
+  font-weight: 700;
   line-height: 1;
-  padding: 8px 12px;
+  padding: 10px 14px;
   border-radius: 9999px;
-  color: #fff;
-  opacity: 0.8;
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.56);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  opacity: 1;
+  transition: transform .16s ease, background-color .16s ease, opacity .16s ease, color .16s ease, box-shadow .16s ease;
   white-space: nowrap;
   flex-shrink: 0;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 .hero-tab.active {
   opacity: 1;
-  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  background: rgba(15, 23, 42, 0.9);
+  border-color: rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24), 0 2px 10px rgba(15, 23, 42, 0.42);
+}
+.hero-tab:hover {
+  transform: translateY(-1px);
+  opacity: 1;
+  background: rgba(15, 23, 42, 0.72);
+}
+.hero-tab-icon {
+  width: 15px;
+  height: 15px;
+  opacity: 1;
+}
+:global(html.dark) .hero-tabs {
+  background: transparent;
+  border-color: transparent;
+}
+:global(html:not(.dark)) .hero-tabs {
+  background: transparent;
+  border-color: transparent;
+}
+:global(html:not(.dark)) .hero-tab {
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.6);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+:global(html:not(.dark)) .hero-tab.active {
+  color: #ffffff;
+  background: rgba(15, 23, 42, 0.9);
+  border-color: rgba(255, 255, 255, 0.44);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 2px 10px rgba(15, 23, 42, 0.36);
 }
 @media (max-width: 480px) {
-  .hero-tabs { gap: 6px; padding: 6px 8px; }
-  .hero-tab { font-size: 0.8rem; padding: 8px 12px; }
+  .hero-tabs { gap: 6px; padding: 8px 9px; }
+  .hero-tab { font-size: 0.82rem; padding: 8px 11px; gap: 3px; }
+  .hero-tab-icon { width: 13px; height: 13px; }
 }
 .hero-tabs::-webkit-scrollbar { display: none; }
 .theme-default { --accent: #ff8c3a }
@@ -2242,6 +2663,15 @@ html.dark .search-card { background: rgba(36,43,50,0.95); color: #fff; border: 1
 .clock-card { padding: 0 }
 .clock-display { font-weight: 700; font-size: 1.8rem; letter-spacing: 2px }
 .clock-date { margin-top: 6px; font-size: 0.85rem; opacity: 0.7 }
+.life-countdown-card { overflow: hidden; }
+.life-countdown-wrap { display: flex; flex-direction: column; gap: 8px; }
+.life-countdown-main { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.life-countdown-percent { font-size: 1.25rem; font-weight: 700; line-height: 1; }
+.life-countdown-age { font-size: 12px; opacity: 0.78; }
+.life-progress-track { width: 100%; height: 8px; border-radius: 999px; overflow: hidden; background: rgba(148,163,184,0.28); }
+.life-progress-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #22d3ee 0%, #6366f1 100%); transition: width .4s ease; }
+.life-countdown-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; opacity: 0.8; }
+.life-countdown-empty { font-size: 12px; opacity: 0.72; }
 .calendar-card :deep(.u-calendar) { width: 100% }
 .calendar-card :deep(.u-calendar) {
   width: 100%;
@@ -2301,7 +2731,7 @@ html.dark .search-card { background: rgba(36,43,50,0.95); color: #fff; border: 1
     padding-left: 0.5rem; padding-right: 0.5rem; /* 移动端左右保持对称内边距 */
   }
   .background-container::before {
-    filter: blur(4px); /* 减少模糊度提升性能 */
+    filter: blur(4px);
     background-attachment: scroll; /* 移动端使用普通滚动 */
     transform: scale(1.08);
   }
@@ -2397,7 +2827,6 @@ white-space: nowrap;  /* 防止换行 */
   opacity: 0.95;
 }
 .u-container {
-  backdrop-filter: blur(4px);
   border-radius: 8px;
   margin: 0 auto;
   max-width: 1440px;
@@ -2411,7 +2840,7 @@ white-space: nowrap;  /* 防止换行 */
 
 .message-list-container { cursor: default; }
 
-.loading {
+.page-loading-mask {
   position: fixed;
   top: 0;
   left: 0;
@@ -2423,7 +2852,7 @@ white-space: nowrap;  /* 防止换行 */
   align-items: center;
   background: rgba(0, 0, 0, 0.7); /* 更改背景色 */
   backdrop-filter: blur(8px);
-  z-index: 1000;
+  z-index: 9999;
   gap: 15px;
   opacity: 1;
   transition: opacity 0.3s ease;
@@ -2433,6 +2862,11 @@ white-space: nowrap;  /* 防止换行 */
   font-size: 16px;
   color: #fff;
   text-shadow: none;
+}
+
+:global(input[type="password"]::-ms-reveal),
+:global(input[type="password"]::-ms-clear) {
+  display: none;
 }
 
 .rainbow-spinner {
@@ -2517,36 +2951,39 @@ white-space: nowrap;  /* 防止换行 */
 .left-col, .right-col { position: sticky; top: 0; align-self: start; height: fit-content; }
 .center-col { min-width: 0; box-sizing: border-box; }
 .sidebar-card {
-  border-radius: 10px;
-  background: #ffffff;
-  color: #111827;
+  border-radius: var(--home-radius-card);
+  background: var(--home-surface-light);
+  color: var(--home-text-light);
   border: 1px solid #e5e7eb;
 }
 /* 三栏容器在浅色模式统一白色背景（不影响深色与背景图层） */
 :global(html:not(.dark)) .left-col,
 :global(html:not(.dark)) .center-col,
 :global(html:not(.dark)) .right-col {
-  background: #ffffff;
-  border: 1px solid rgba(0,0,0,0.08);
-  border-radius: 16px;
+  background: var(--home-surface-light);
+  border: 1px solid var(--home-border-light);
+  border-radius: var(--home-radius-panel);
   padding: 8px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+  box-shadow: var(--home-shadow-light);
 }
 :global(html.dark) .left-col,
 :global(html.dark) .center-col,
 :global(html.dark) .right-col {
-  background: rgba(36,43,50,0.95);
-  color: #ffffff;
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 16px;
+  background: var(--home-surface-dark-elevated);
+  color: var(--home-text-dark);
+  border: 1px solid var(--home-border-dark);
+  border-radius: var(--home-radius-panel);
   padding: 8px;
-  box-shadow: 0 2px 10px rgba(255,255,255,0.06);
+  box-shadow: var(--home-shadow-dark);
+}
+:global(html.dark) .center-col {
+  background: var(--home-surface-dark);
 }
 :global(html:not(.dark)) .layout-container.grid-3 { gap: 18px; }
 /* 统一浅色模式下所有卡片底色为纯白 */
-:global(html:not(.dark)) :where(.u-card, .u-card-body, .u-card__body, .u-card-header, .u-card__header) { background-color: #ffffff !important; }
-:global(html:not(.dark)) :where(.bg-gray-50, .bg-gray-100, .bg-gray-200, .bg-gray-300, .bg-slate-50, .bg-slate-100, .bg-slate-200) { background-color: #ffffff !important; }
-:global(html:not(.dark)) :where(.border-gray-200, .border-gray-300, .border-slate-200) { border-color: rgba(0,0,0,0.08) !important; }
+:global(html:not(.dark)) :where(.u-card, .u-card-body, .u-card__body, .u-card-header, .u-card__header) { background-color: var(--home-surface-light) !important; }
+:global(html:not(.dark)) :where(.bg-gray-50, .bg-gray-100, .bg-gray-200, .bg-gray-300, .bg-slate-50, .bg-slate-100, .bg-slate-200) { background-color: var(--home-surface-light) !important; }
+:global(html:not(.dark)) :where(.border-gray-200, .border-gray-300, .border-slate-200) { border-color: var(--home-border-light) !important; }
 /* 去除指定卡片内部默认留白，使内容铺满容器 */
 .no-padding-card :deep(.u-card-body),
 .no-padding-card :deep(.u-card__body) { padding: 0 !important; }
@@ -2557,10 +2994,10 @@ white-space: nowrap;  /* 防止换行 */
 .sidebar-card :deep(.u-card__body) { padding: 0 !important; }
 .sidebar-card :deep(.u-card-header),
 .sidebar-card :deep(.u-card__header) { padding: 6px 8px !important; }
-html.dark .sidebar-card { background: rgba(36,43,50,0.95); color: #fff; border: 1px solid rgba(255,255,255,0.08); }
-html.dark .sidebar-card :where(.bg-white,.bg-gray-50,.bg-gray-100,.bg-gray-700,.bg-gray-800,.bg-gray-900) { background-color: rgba(36,43,50,0.95) !important; }
-html.dark .sidebar-card :where(.text-black,.text-gray-900,.text-gray-800) { color: #fff !important; }
-html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border-gray-600,.border-gray-700) { border-color: rgba(255,255,255,0.08) !important; }
+html.dark .sidebar-card { background: var(--home-surface-dark); color: var(--home-text-dark); border: 1px solid var(--home-border-dark); }
+html.dark .sidebar-card :where(.bg-white,.bg-gray-50,.bg-gray-100,.bg-gray-700,.bg-gray-800,.bg-gray-900) { background-color: var(--home-surface-dark) !important; }
+html.dark .sidebar-card :where(.text-black,.text-gray-900,.text-gray-800) { color: var(--home-text-dark) !important; }
+html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border-gray-600,.border-gray-700) { border-color: var(--home-border-dark) !important; }
 .profile-card {
   display: flex;
   flex-direction: column;
@@ -2625,7 +3062,7 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
 .social-item:hover { transform: scale(1.06); transition: transform .12s ease; }
 .social-icon-img { width: clamp(24px, 5.2vw, 32px); height: clamp(24px, 5.2vw, 32px); border-radius:6px; object-fit:cover; display:inline-block; }
 .social-item::after { content: attr(data-label); position:absolute; bottom:calc(100% + 2px); left:50%; transform: translateX(-50%); white-space:nowrap; padding:4px 8px; font-size:12px; border-radius:6px; pointer-events:none; opacity:0; transition: opacity .12s ease; }
-:global(html.dark) .social-item::after { background: rgba(36,43,50,0.95); color:#fff; border:1px solid rgba(255,255,255,0.1); }
+:global(html.dark) .social-item::after { background: var(--home-surface-dark); color: var(--home-text-dark); border: 1px solid var(--home-border-dark-soft); }
 :global(html:not(.dark)) .social-item::after { 
   background:#fff !important; 
   color:#111 !important; 
@@ -2640,7 +3077,12 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
 .links-page { padding-bottom: 120px; }
 .links-page .section-title { font-weight: 600; font-size: 14px; margin-bottom: 12px; padding: 0; border-radius: 0; display: inline-flex; align-items: center; gap: 6px; }
 .card-title { font-weight: 700; font-size: 18px; margin-bottom: 14px; padding: 0; border-radius: 0; display: block; }
-.section-subtitle { text-align: center; font-size: 13px; opacity: 0.75; margin-top: -6px; margin-bottom: 12px; }
+.section-subtitle { text-align: center; font-size: 13px; opacity: 0.8; margin-top: 2px; margin-bottom: 16px; line-height: 1.7; }
+.links-apply-copy { margin-top: 16px; margin-bottom: 6px; }
+.links-apply-form { padding-top: 8px; }
+.apply-text { white-space: pre-wrap; line-height: 1.85; }
+.comment-subtitle { margin-bottom: 20px; }
+.comment-board-wrap { margin-top: 10px; margin-bottom: 8px; }
 .section-title-light { color: #111827; }
 .section-title-dark { color: #fff; }
 .link-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -2656,9 +3098,9 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
   border: 1px solid rgba(0,0,0,0.08) !important; 
   box-shadow: 0 1px 2px rgba(0,0,0,0.06) !important; 
 }
-.link-card-dark { background: rgba(36,43,50,0.85); color: #fff; border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 1px 2px rgba(255,255,255,0.06); }
+.link-card-dark { background: var(--home-surface-dark-elevated); color: var(--home-text-dark); border: 1px solid var(--home-border-dark-strong); box-shadow: var(--home-shadow-dark); }
 .link-card:hover { background-color: rgba(0,0,0,0.02); transform: translateY(-1px); }
-.link-card-dark:hover { background-color: rgba(255,255,255,0.08); }
+.link-card-dark:hover { background-color: var(--home-surface-dark-hover); }
 .link-avatar { width: 32px; height: 32px; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; }
 .link-avatar-light { background: #eef2ff; color: #4f46e5; border: 1px solid rgba(0,0,0,0.06); }
 .link-avatar-dark { background: rgba(255,255,255,0.12); color: #c7d2fe; border: 1px solid rgba(255,255,255,0.16); }
@@ -2679,7 +3121,7 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
   border: 1px solid rgba(0,0,0,0.08) !important; 
   box-shadow: 0 1px 2px rgba(0,0,0,0.06) !important; 
 }
-.about-header-dark { background: rgba(36,43,50,0.85); border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 1px 2px rgba(255,255,255,0.06); }
+.about-header-dark { background: var(--home-surface-dark-elevated); border: 1px solid var(--home-border-dark-strong); box-shadow: var(--home-shadow-dark); }
 .about-avatar { width: 72px; height: 72px; border-radius: 0; object-fit: cover; }
 .about-info { display: flex; flex-direction: column; gap: 4px; }
 .about-title { font-size: 20px; font-weight: 700; }
@@ -2742,30 +3184,6 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
   .recommend-image-box:hover { box-shadow: 0 8px 22px rgba(255,255,255,0.12); }
 }
 
-/* 确保白天模式下链接文本为蓝色 */
-:global(html:not(.dark)) .profile-name {
-  color: #111827 !important;
-}
-:global(html:not(.dark)) .profile-desc {
-  color: #4b5563 !important;
-  opacity: 0.8 !important;
-}
-:global(html:not(.dark)) .clock-display {
-  color: #111827 !important;
-}
-:global(html:not(.dark)) .clock-date {
-  color: #4b5563 !important;
-  opacity: 0.8 !important;
-}
-:global(html:not(.dark)) .hitokoto-text {
-  color: #111827 !important;
-}
-:global(html:not(.dark)) .hitokoto-text a {
-  color: #0366d6 !important;
-}
-:global(html:not(.dark)) .social-list a {
-  color: #111827 !important;
-}
 .scroll-list { height: 64px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 2px 2px; }
 .recent-inline-img { display:inline-block; width:18px; height:18px; object-fit:cover; border-radius:4px; vertical-align:middle; margin: -2px 2px 0 2px; }
 .ad-wrap { position: relative; aspect-ratio: var(--ad-aspect, 1 / 1); }
@@ -2774,18 +3192,25 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
 .ad-wrap > .ad-image { position: relative; z-index: 1; }
 .ad-overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; opacity:0; transition: opacity .12s ease; pointer-events:none; z-index: 2; }
 .ad-overlay-box { max-width: 90%; max-height: 70%; overflow-y: auto; padding: 8px 10px; border-radius: 10px; font-size: 14px; line-height: 1.5; word-break: break-word; overflow-wrap: anywhere; }
-:global(html.dark) .ad-overlay-box { background: rgba(36,43,50,0.90); color:#f59e0b !important; border:1px solid rgba(255,255,255,0.12); box-shadow: 0 6px 18px rgba(0,0,0,0.28); }
-:global(html.dark) .ad-overlay-box a { color:#f59e0b !important; text-decoration:none; }
+:global(html.dark) .ad-overlay-box { background: var(--home-surface-dark); color: var(--home-accent-warn) !important; border: 1px solid var(--home-border-dark-soft); box-shadow: var(--home-shadow-float-dark); }
+:global(html.dark) .ad-overlay-box a { color: var(--home-accent-warn) !important; text-decoration:none; }
 
 /* 播放器：贴边与层级优化 */
 .netease-mini-player[data-position="bottom-left"] { left: 8px !important; }
 .netease-mini-player[data-position="bottom-right"] { right: 8px !important; }
 .netease-mini-player[data-position="top-left"] { left: 8px !important; }
 .netease-mini-player[data-position="top-right"] { right: 8px !important; }
-.netease-mini-player.minimized[data-position="bottom-left"] { left: 8px !important; bottom: 12px !important; }
-.netease-mini-player.minimized[data-position="bottom-right"] { right: 8px !important; bottom: 12px !important; }
-.netease-mini-player.minimized[data-position="top-left"] { left: 8px !important; top: 12px !important; }
-.netease-mini-player.minimized[data-position="top-right"] { right: 8px !important; top: 12px !important; }
+.netease-mini-player.minimized[data-position="bottom-left"] { left: 0 !important; bottom: 12px !important; }
+.netease-mini-player.minimized[data-position="bottom-right"] { right: 0 !important; bottom: 12px !important; }
+.netease-mini-player.minimized[data-position="top-left"] { left: 0 !important; top: 12px !important; }
+.netease-mini-player.minimized[data-position="top-right"] { right: 0 !important; top: 12px !important; }
+
+/* 音乐播放器暗黑模式颜色统一 */
+:global(html.dark) .netease-mini-player {
+  --primary-bg: var(--home-surface-dark) !important;
+  --secondary-bg: var(--home-surface-dark-elevated) !important;
+  --bg-color: var(--home-surface-dark) !important;
+}
 
 @media (max-width: 1024px) {
   .netease-mini-player[data-position="bottom-left"],
@@ -2793,8 +3218,8 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
   .netease-mini-player[data-position="top-left"],
   .netease-mini-player[data-position="top-right"] { z-index: 2001 !important; }
 }
-:global(html:not(.dark)) .ad-overlay-box { background:#ffffff; color:#f59e0b !important; border:1px solid rgba(0,0,0,0.08); box-shadow: 0 6px 18px rgba(0,0,0,0.12); }
-:global(html:not(.dark)) .ad-overlay-box a { color:#f59e0b !important; text-decoration:none; }
+:global(html:not(.dark)) .ad-overlay-box { background: var(--home-surface-light); color: var(--home-accent-warn) !important; border: 1px solid var(--home-border-light); box-shadow: var(--home-shadow-float-light); }
+:global(html:not(.dark)) .ad-overlay-box a { color: var(--home-accent-warn) !important; text-decoration:none; }
 .ad-wrap:hover .ad-overlay { opacity:1; }
 .ad-wrap:hover .ad-image { filter: contrast(0.95) brightness(0.9); }
 .scroll-images { height: 240px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-right: 2px; }
@@ -2809,23 +3234,6 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
 @media screen and (max-width: 768px) { .center-col { padding-left: 2%; padding-right: 2%; } }
 @media screen and (max-width: 480px) { .center-col { padding-left: 3%; padding-right: 3%; } }
 .page-footer { text-align: center; font-size: 12px; padding: 12px 0; }
-</style>
-  mq?.addEventListener?.('change', (e: MediaQueryListEvent) => {
-    isMobile.value = e.matches
-    if (isMobile.value) {
-      layoutState.value = 'single'
-      localStorage.setItem('homeLayoutMobile', 'single')
-    } else {
-      const saved = localStorage.getItem('homeLayoutDesktop') as any
-      layoutState.value = (saved as any) || 'three'
-    }
-  })
-/* 移除未使用的 header-inner 样式 */
-.netease-mini-player.minimized[data-instant="true"] { transition: none !important; }
-.netease-mini-player.minimized[data-instant="true"] .album-cover-container,
-.netease-mini-player.minimized[data-instant="true"] .album-cover,
-.netease-mini-player.minimized[data-instant="true"] .vinyl-overlay,
-.netease-mini-player.minimized[data-instant="true"] .vinyl-center { transition: none !important; }
 :global(html.dark) .center-col,
 :global(html:not(.dark)) .center-col { transition: none !important; }
 :global(html.dark) .center-col :where(.u-card, .u-card-body, .u-card__body, .u-card-header, .u-card__header),
@@ -2836,3 +3244,9 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
 :global(html:not(.dark)) .center-col :deep(.message-list-container) { transition: none !important; }
 :global(html.dark) .center-col :deep(.content-container),
 :global(html:not(.dark)) .center-col :deep(.content-container) { transition: none !important; }
+.netease-mini-player.minimized[data-instant="true"] { transition: none !important; }
+.netease-mini-player.minimized[data-instant="true"] .album-cover-container,
+.netease-mini-player.minimized[data-instant="true"] .album-cover,
+.netease-mini-player.minimized[data-instant="true"] .vinyl-overlay,
+.netease-mini-player.minimized[data-instant="true"] .vinyl-center { transition: none !important; }
+</style>

@@ -109,6 +109,4 @@ export default defineNuxtConfig({
     port: 1314,
     host: '0.0.0.0'
   },
-  ssr: false,
-  
 })

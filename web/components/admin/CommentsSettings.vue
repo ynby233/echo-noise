@@ -155,5 +155,5 @@ const previewAdminHTML = computed(() => {
 
 <style scoped>
 .email-preview { background: #ffffff; color: #111827; border: 1px solid #e5e7eb; }
-html.dark .email-preview { background: rgba(36,43,50,0.95); color: #fff; border: 1px solid rgba(255,255,255,0.08); }
+html.dark .email-preview { background: #0c1117; color: #fff; border: 1px solid rgba(255,255,255,0.08); }
 </style>

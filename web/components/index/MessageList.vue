@@ -2,9 +2,8 @@
   <div>
     <div class="min-h-screen flex flex-col">
     <!-- 空状态显示 -->
-    <div v-if="!displayMessages.length" class="text-center text-gray-500 py-8">
+    <div v-if="props.pageReady && !displayMessages.length" class="text-center text-gray-500 py-8">
       <div v-if="isPageLoading">
-        <UIcon name="i-heroicons-arrow-path" class="w-12 h-12 mx-auto mb-4 animate-spin" />
         <p>加载中...</p>
       </div>
       <div v-else>
@@ -44,7 +43,7 @@
             <div :class="['content-container', innerContainerClass, listThemeClass]" :data-msg-id="msg.id">
               <div class="flex items-center gap-2 mb-1 author-row">
                 <img :src="authorAvatar(msg)" alt="avatar" class="avatar-img w-9 h-9 rounded-full object-cover" @error="authorAvatarOnError($event, msg.username || '匿名')" @mouseenter="showAuthorCard($event, msg)" @mouseleave="hideAuthorCard" @click="toggleAuthorCard($event, msg)" />
-                <div v-if="openAuthorId === msg.id" class="noise-author-card bg-white text-black dark:bg-[#242b32] dark:text-white" :style="openAuthorStyle">
+                <div v-if="openAuthorId === msg.id" class="noise-author-card bg-white text-black dark:bg-[var(--home-surface-dark-elevated)] dark:text-white" :style="openAuthorStyle">
                   <div class="noise-author-card-header">
                     <img :src="authorProfileAvatar(msg)" class="avatar-img w-10 h-10 rounded-full object-cover" />
                     <div class="font-semibold leading-tight text-[14px]">{{ msg.username }}</div>
@@ -153,7 +152,7 @@
       <!-- 预取下一页哨兵 -->
       <div v-if="!isSearchMode" ref="prefetchSentinel" style="height:1px"></div>
       <!-- 分页控制区域 -->
-      <div v-if="!isSearchMode" class="flex justify-center items-center space-x-4 w-full my-4 flex-wrap md:flex-nowrap">
+      <div v-if="!isSearchMode" class="pager-shell flex justify-center items-center space-x-4 w-full my-4 flex-wrap md:flex-nowrap">
   <div class="flex justify-center items-center space-x-4 w-full md:w-auto">
     <UButton 
       v-if="message.page > 1"
@@ -164,7 +163,7 @@
       @click="loadPreviousPage"
       :disabled="isPageLoading"
     >
-      <UIcon name="i-heroicons-arrow-left" class="mr-1 w-4 h-4" /> 
+      <span class="pager-icon-wrap"><UIcon name="i-heroicons-arrow-left" class="w-4 h-4 pager-icon" /></span>
       上一页
     </UButton>
 
@@ -178,7 +177,7 @@
       :disabled="isPageLoading"
     >
       下一页
-      <UIcon name="i-heroicons-arrow-right" class="ml-1 w-4 h-4" />
+      <span class="pager-icon-wrap"><UIcon name="i-heroicons-arrow-right" class="w-4 h-4 pager-icon" /></span>
     </UButton>
     <span v-if="isPageLoading" class="ml-2 text-orange-400">加载中...</span>
   </div>
@@ -199,7 +198,7 @@
       size="xs" 
       color="gray"
       variant="ghost"
-      class="text-gray-400 hover:text-orange-500 text-sm"  
+      class="text-gray-400 hover:text-orange-500 text-sm pager-jump-btn"  
       @click="jumpToPage"
     >
       跳转
@@ -232,7 +231,7 @@
         />
         <div class="border-t border-gray-200 my-2 pt-2">
           <div class="text-sm text-gray-500 mb-2">预览：</div>
-          <div class="p-4 rounded-lg overflow-auto max-h-[300px] bg-white dark:bg-[rgba(36,43,50,0.95)]">
+          <div class="p-4 rounded-lg overflow-auto max-h-[300px] bg-white dark:bg-[var(--home-surface-dark-elevated)]">
             <div class="text-black dark:text-white">
               <MarkdownRenderer :content="editingContent" :enableGithubCard="siteConfig?.enableGithubCard === true" />
             </div>
@@ -490,15 +489,19 @@ const props = defineProps({
   wide: {
     type: Boolean,
     default: false
+  },
+  pageReady: {
+    type: Boolean,
+    default: true
   }
 });
 const outerContainerClass = computed(() => props.wide ? 'flex-grow w-full px-1 sm:px-2' : 'flex-grow w-full px-1 sm:px-2')
 const innerContainerClass = computed(() => props.wide ? '' : 'mx-auto sm:max-w-4xl')
 // 独立的内容主题（与页面主题解耦）
 const contentTheme = inject('contentTheme', ref<string>(typeof window !== 'undefined' ? (localStorage.getItem('contentTheme') || 'dark') : 'dark'))
-const listThemeClass = computed(() => contentTheme.value === 'dark' ? 'bg-[rgba(36,43,50,0.95)] text-white' : 'bg-white text-black')
+const listThemeClass = computed(() => contentTheme.value === 'dark' ? 'bg-[var(--home-surface-dark)] text-white' : 'bg-white text-black')
 const listThemeTextClass = computed(() => contentTheme.value === 'dark' ? 'text-white' : 'text-black')
-const gradientClass = computed(() => contentTheme.value === 'dark' ? 'from-[rgba(36,43,50,1)] via-[rgba(36,43,50,0.8)] to-transparent' : 'from-[rgba(255,255,255,1)] via-[rgba(255,255,255,0.8)] to-transparent')
+const gradientClass = computed(() => contentTheme.value === 'dark' ? 'from-[var(--home-surface-dark)] via-[rgba(32,42,54,0.82)] to-transparent' : 'from-[rgba(255,255,255,1)] via-[rgba(255,255,255,0.8)] to-transparent')
 const useWaline = computed(() => {
   return false
 })
@@ -2217,7 +2220,7 @@ onMounted(() => {
   box-shadow: 0 1px 6px rgba(0,0,0,0.08); 
 }
 :global(html.dark) .tool-icon { 
-  background: rgb(36,43,50); 
+  background: var(--home-surface-dark-elevated); 
   color: #ffffff; 
   border: 1px solid rgba(255,255,255,0.12); 
   box-shadow: 0 1px 6px rgba(255,255,255,0.06); 
@@ -2239,9 +2242,9 @@ onMounted(() => {
 .tool-icon > * { color: currentColor; }
 .tool-icon::after { content: attr(data-label); position: absolute; left: 50%; top: calc(100% + 6px); transform: translateX(-50%); white-space: nowrap; font-size: 12px; padding: 2px 8px; border-radius: 9999px; opacity: 0; transition: opacity .12s ease; pointer-events: none; }
 :global(html:not(.dark)) .tool-icon::after { background: #ffffff; color: #111827; border: 1px solid rgba(0,0,0,0.12); box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-:global(html.dark) .tool-icon::after { background: rgba(36,43,50,0.95); color: #ffffff; border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 2px 8px rgba(255,255,255,0.06); }
+:global(html.dark) .tool-icon::after { background: var(--home-surface-dark-elevated); color: #ffffff; border: 1px solid rgba(255,255,255,0.16); box-shadow: 0 2px 8px rgba(255,255,255,0.06); }
 .tool-icon:hover::after { opacity: 1; }
-.toolbox-dark { background: rgba(36,43,50,0.95); border: 1px solid rgba(255,255,255,0.1); }
+.toolbox-dark { background: var(--home-surface-dark-elevated); border: 1px solid rgba(255,255,255,0.16); }
 .toolbox-light { background: #fff; border: 1px solid rgba(0,0,0,0.08); }
 
 /* 工具栏主题色（变量在全局定义，避免 scoped 优先级问题） */
@@ -2254,7 +2257,7 @@ onMounted(() => {
 :global(html.dark),
 :global(body.dark),
 :global(.dark) {
-  --toolbox-bg: rgb(36,43,50);
+  --toolbox-bg: var(--home-surface-dark-elevated);
   --toolbox-fg: #ffffff;
   --toolbox-border: rgba(148,163,184,0.50);
   --toolbox-shadow: 0 8px 22px rgba(255,255,255,0.12);
@@ -2414,14 +2417,14 @@ onMounted(() => {
 
 /* 暗黑模式按钮容器（父元素）样式 */
 :global(html.dark) .expand-button-container {
-  background: rgba(36, 43, 50, 0.9) !important;
-  border: 1px solid rgba(251, 146, 60, 0.5) !important;
+  background: rgba(39, 50, 66, 0.92) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
   backdrop-filter: blur(4px) !important;
 }
 :global(html.dark) .expand-button-container:hover {
-  background: rgba(46, 53, 60, 0.95) !important;
-  border-color: rgba(251, 146, 60, 0.7) !important;
+  background: rgba(47, 59, 76, 0.96) !important;
+  border-color: rgba(255, 255, 255, 0.24) !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
 }
 
@@ -2462,18 +2465,18 @@ onMounted(() => {
 /* 评论区样式（按主题自适应） */
 /* 暗黑模式 */
 :global(html.dark) :deep(.wl-comment) {
-  background: rgba(36, 43, 50, 0.95) !important;
+  background: var(--home-surface-dark) !important;
   border-radius: 8px;
   padding: 8px !important;
   margin-bottom: 6px !important;
 }
 :global(html.dark) :deep(.wl-input) {
   color: #ffffff !important;
-  background-color: rgba(36, 43, 50, 0.95) !important;
+  background-color: var(--home-surface-dark) !important;
   border-color: rgba(251, 146, 60, 0.3) !important;
 }
 :global(html.dark) :deep(.wl-input::placeholder) { color: rgba(255, 255, 255, 0.5) !important; }
-:global(html.dark) :deep(.wl-editor) { background: rgba(36, 43, 50, 0.95) !important; color: #fff !important; }
+:global(html.dark) :deep(.wl-editor) { background: var(--home-surface-dark) !important; color: #fff !important; }
 :global(html.dark) :deep(.wl-editor textarea) { 
   color: #ffffff !important;
   caret-color: #ffffff !important;
@@ -2490,7 +2493,7 @@ onMounted(() => {
 :global(html.dark) :deep(.wl-action) { color: #fff !important; }
 :global(html.dark) :deep(.wl-header) { border-bottom: 1px solid rgba(14, 14, 14, 0.2) !important; }
 :global(html.dark) :deep(.wl-card),
-:global(html.dark) :deep(.wl-panel) { background: rgba(36, 43, 50, 0.95) !important; border: 1px solid rgba(14, 14, 14, 0.2) !important; }
+:global(html.dark) :deep(.wl-panel) { background: var(--home-surface-dark) !important; border: 1px solid rgba(14, 14, 14, 0.2) !important; }
 
 /* 白天模式 */
 :global(html:not(.dark)) :deep(.wl-comment) {
@@ -2669,12 +2672,6 @@ onMounted(() => {
   }
 }
 
-/* 翻页按钮背景不透明（亮/暗） */
-:global(html:not(.dark)) .pager-btn { background: #ffffff !important; border: 1px solid rgba(0,0,0,0.08) !important; color: #111827 !important; }
-:global(html:not(.dark)) .pager-btn:hover { background: #ffffff !important; }
-:global(html.dark) .pager-btn { background: rgb(36,43,50) !important; border: 1px solid rgba(255,255,255,0.12) !important; color: #ffffff !important; }
-:global(html.dark) .pager-btn:hover { background: rgb(46,53,60) !important; }
-
 /* 缩小媒体与文本上下间距 */
 .message-image-box { display:block; margin:6px 0 !important; }
 :global(.content-container) :deep(video),
@@ -2690,7 +2687,7 @@ onMounted(() => {
 /* 添加高亮动画样式 */
 @keyframes highlight {
   0% { background: rgba(251, 146, 60, 0.3); }
-  100% { background: rgba(36, 43, 50, 0.95); }
+  100% { background: var(--home-surface-dark); }
 }
 
 .highlight-message {
@@ -2787,7 +2784,7 @@ onMounted(() => {
 :global(html:not(.dark)) .content-container :deep(.aplayer .aplayer-list-index) { color: #374151 !important; }
 
 :global(html.dark) .content-container :deep(.aplayer) {
-  background: #242b32 !important;
+  background: var(--home-surface-dark) !important;
   color: #ffffff !important;
   border: 1px solid rgba(255,255,255,0.10) !important;
   box-shadow: 0 4px 12px rgba(255,255,255,0.08) !important;
@@ -2826,13 +2823,13 @@ onMounted(() => {
 }
 
 :global(html.dark) .content-container :deep(video) {
-  background-color: #242b32 !important;
+  background-color: var(--home-surface-dark) !important;
   border: 1px solid rgba(255,255,255,0.10) !important;
   border-radius: 8px !important;
 }
 
 :global(html.dark) .content-container :deep(audio) {
-  background-color: #242b32 !important;
+  background-color: var(--home-surface-dark) !important;
   border: 1px solid rgba(255,255,255,0.10) !important;
   border-radius: 8px !important;
 }
@@ -2851,8 +2848,8 @@ onMounted(() => {
 /* 作者悬停卡片 */
 .noise-author-card { position: absolute; top: -28px; left: 36px; z-index: 2147483647; border-radius: 12px; padding: 10px 12px; min-width: 300px; box-shadow: 0 8px 24px rgba(0,0,0,0.25); border: 1px solid rgba(0,0,0,0.08); transform: translate3d(0,0,0); isolation: isolate; backdrop-filter: none; -webkit-backdrop-filter: none; overflow: visible; }
 .noise-author-card::after { content: ''; position: absolute; left: -10px; top: 27px; width: 0; height: 0; border-top: 10px solid transparent; border-bottom: 10px solid transparent; z-index: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.25)); }
-:global(html.dark) .noise-author-card { background: #242b32 !important; }
-:global(html.dark) .noise-author-card::after { border-right: 8px solid #242b32; }
+:global(html.dark) .noise-author-card { background: var(--home-surface-dark-elevated) !important; border-color: rgba(255,255,255,0.14); box-shadow: 0 10px 24px rgba(0,0,0,0.38); }
+:global(html.dark) .noise-author-card::after { border-right: 8px solid var(--home-surface-dark-elevated); }
 :global(html:not(.dark)) .noise-author-card::after { border-right: 8px solid #ffffff; }
 .noise-author-card-header { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; pointer-events: auto; }
 .noise-author-card-body { display: flex; gap: 10px; align-items: center; justify-content: flex-end; }
@@ -2863,29 +2860,70 @@ onMounted(() => {
 @keyframes author-sign-scroll { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
 .author-card-muted { color: #7a7f85 }
 @media (max-width: 640px) { .noise-author-card { position: fixed; left: 12px; right: 12px; top: auto; bottom: auto; min-width: auto; z-index: 2147483647; } .noise-author-card::after { display: none; } }
+.pager-shell {
+  padding: 10px 14px;
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+}
+.pager-icon-wrap {
+  width: 1.45rem;
+  height: 1.45rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.pager-icon {
+  line-height: 1;
+}
+.pager-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.pager-jump-btn {
+  border-radius: 999px;
+  padding: 0.35rem 0.8rem;
+}
+:global(html.dark) .pager-shell {
+  background: rgba(18, 24, 34, 0.56) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3) !important;
+}
+:global(html.dark) .pager-btn {
+  background: rgba(39, 50, 66, 0.58) !important;
+  color: #f8fafc !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+}
+:global(html.dark) .pager-btn:hover {
+  background: rgba(50, 62, 82, 0.72) !important;
+}
+:global(html.dark) .pager-icon-wrap {
+  background: rgba(255, 255, 255, 0.14) !important;
+}
+:global(html.dark) .pager-jump-btn {
+  background: rgba(39, 50, 66, 0.45) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+}
+:global(html:not(.dark)) .pager-shell {
+  background: rgba(255, 255, 255, 0.52) !important;
+  border: 1px solid rgba(15, 23, 42, 0.1) !important;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12) !important;
+}
+:global(html:not(.dark)) .pager-btn {
+  background: rgba(255, 255, 255, 0.64) !important;
+  color: #0f172a !important;
+  border: 1px solid rgba(15, 23, 42, 0.16) !important;
+}
+:global(html:not(.dark)) .pager-btn:hover {
+  background: rgba(255, 255, 255, 0.8) !important;
+}
+:global(html:not(.dark)) .pager-icon-wrap {
+  background: rgba(15, 23, 42, 0.1) !important;
+}
+:global(html:not(.dark)) .pager-jump-btn {
+  background: rgba(255, 255, 255, 0.58) !important;
+  border: 1px solid rgba(15, 23, 42, 0.16) !important;
+}
 </style>
-/* 分页按钮主题通过 CSS 切换，避免 JS 驱动的类计算 */
-:global(html.dark) .pager-btn { 
-  background: rgba(36,43,50,0.9) !important; 
-  color: #fff !important; 
-  border: 1px solid rgba(251,146,60,0.4) !important;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
-  backdrop-filter: blur(4px) !important;
-}
-:global(html.dark) .pager-btn:hover { 
-  background: rgba(46,53,60,0.95) !important; 
-  border-color: rgba(251,146,60,0.6) !important;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2) !important;
-}
-:global(html:not(.dark)) .pager-btn { 
-  background: rgba(255,255,255,0.9) !important; 
-  color: #111827 !important; 
-  border: 1px solid rgba(251,146,60,0.4) !important;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
-  backdrop-filter: blur(4px) !important;
-}
-:global(html:not(.dark)) .pager-btn:hover { 
-  background: rgba(255,255,255,0.95) !important; 
-  border-color: rgba(251,146,60,0.6) !important;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
-}

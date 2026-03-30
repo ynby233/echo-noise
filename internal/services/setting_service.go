@@ -210,6 +210,7 @@ func GetFrontendConfig() (map[string]interface{}, error) {
 			"pwaIconURL":     choose(config.PwaIconURL, config.RSSFaviconURL),
 			// 默认内容主题
 			"defaultContentTheme": choose(config.ContentThemeDefault, "dark"),
+			"homeLayoutDefault":   choose(config.HomeLayoutDefault, "three"),
 			// 公告栏
 			"announcementText":    choose(config.AnnouncementText, "欢迎访问我的说说笔记！"),
 			"announcementEnabled": config.AnnouncementEnabled,
@@ -223,6 +224,7 @@ func GetFrontendConfig() (map[string]interface{}, error) {
 			"musicAutoplay":         config.MusicAutoplay,
 			"musicDefaultMinimized": config.MusicDefaultMinimized,
 			"musicEmbed":            config.MusicEmbed,
+			"musicHideOnMobile":     config.MusicHideOnMobile,
 			"musicCssCdnURL":        choose(config.MusicCssCdnURL, ""),
 			"musicJsCdnURL":         choose(config.MusicJsCdnURL, ""),
 			// 评论系统
@@ -231,9 +233,17 @@ func GetFrontendConfig() (map[string]interface{}, error) {
 			"commentEmailEnabled":  config.CommentEmailEnabled,
 			"commentLoginRequired": config.CommentLoginRequired,
 			// 扩展组件开关
-			"calendarEnabled": config.CalendarEnabled,
-			"timeEnabled":     config.TimeEnabled,
-			"hitokotoEnabled": config.HitokotoEnabled,
+			"calendarEnabled":        config.CalendarEnabled,
+			"timeEnabled":            config.TimeEnabled,
+			"hitokotoEnabled":        config.HitokotoEnabled,
+			"lifeCountdownEnabled":   config.LifeCountdownEnabled,
+			"lifeCountdownBirthDate": choose(config.LifeCountdownBirthDate, ""),
+			"lifeExpectancyYears": func() int {
+				if config.LifeExpectancyYears > 0 {
+					return config.LifeExpectancyYears
+				}
+				return 80
+			}(),
 
 			"leftAdEnabled":          config.LeftAdEnabled,
 			"leftAds":                normalizedAds,
@@ -261,8 +271,8 @@ func GetFrontendConfig() (map[string]interface{}, error) {
 				return config.StorageSyncRole
 			}(),
 			"autoSyncEnabled": config.StorageAutoSyncEnabled,
-			"syncConfirmed":  effectiveSyncConfirmed,
-			"needsConfirm":   config.StorageEnabled && !effectiveSyncConfirmed,
+			"syncConfirmed":   effectiveSyncConfirmed,
+			"needsConfirm":    config.StorageEnabled && !effectiveSyncConfirmed,
 			"syncMode":        choose(config.StorageSyncMode, "instant"),
 			"syncIntervalMinute": func() int {
 				if config.StorageSyncIntervalMinute > 0 {
@@ -411,6 +421,26 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 		config.HitokotoEnabled = vb
 	} else if vs, ok := frontendSettings["hitokotoEnabled"].(string); ok {
 		config.HitokotoEnabled = (vs == "true")
+	}
+	if vb, ok := frontendSettings["lifeCountdownEnabled"].(bool); ok {
+		config.LifeCountdownEnabled = vb
+	} else if vs, ok := frontendSettings["lifeCountdownEnabled"].(string); ok {
+		config.LifeCountdownEnabled = (vs == "true")
+	}
+	if v, ok := frontendSettings["lifeCountdownBirthDate"].(string); ok {
+		config.LifeCountdownBirthDate = strings.TrimSpace(v)
+	}
+	if vi, ok := frontendSettings["lifeExpectancyYears"].(float64); ok {
+		config.LifeExpectancyYears = int(vi)
+	} else if vi2, ok := frontendSettings["lifeExpectancyYears"].(int); ok {
+		config.LifeExpectancyYears = vi2
+	} else if vs, ok := frontendSettings["lifeExpectancyYears"].(string); ok {
+		if n, err := strconv.Atoi(strings.TrimSpace(vs)); err == nil {
+			config.LifeExpectancyYears = n
+		}
+	}
+	if config.LifeExpectancyYears <= 0 {
+		config.LifeExpectancyYears = 80
 	}
 	// 评论系统设置
 	if vb, ok := frontendSettings["commentEnabled"].(bool); ok {
@@ -620,6 +650,11 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	} else if vs, ok := frontendSettings["musicEmbed"].(string); ok {
 		config.MusicEmbed = (vs == "true")
 	}
+	if vb, ok := frontendSettings["musicHideOnMobile"].(bool); ok {
+		config.MusicHideOnMobile = vb
+	} else if vs, ok := frontendSettings["musicHideOnMobile"].(string); ok {
+		config.MusicHideOnMobile = (vs == "true")
+	}
 	if v, ok := frontendSettings["musicCssCdnURL"].(string); ok {
 		config.MusicCssCdnURL = v
 	}
@@ -702,6 +737,11 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	if v, ok := frontendSettings["defaultContentTheme"].(string); ok {
 		if v == "dark" || v == "light" {
 			config.ContentThemeDefault = v
+		}
+	}
+	if v, ok := frontendSettings["homeLayoutDefault"].(string); ok {
+		if v == "three" || v == "two" || v == "single" {
+			config.HomeLayoutDefault = v
 		}
 	}
 
@@ -997,11 +1037,11 @@ func getDefaultConfig() map[string]interface{} {
 	return map[string]interface{}{
 		"allowRegistration": true,
 		"frontendSettings": map[string]interface{}{
-			"siteTitle":    "Noise的说说笔记",
-			"subtitleText": "欢迎访问，点击头像可更换封面背景！",
-			"avatarURL":    "https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png",
-			"username":     "Noise",
-			"description":  "执迷不悟",
+			"siteTitle":     "Noise的说说笔记",
+			"subtitleText":  "欢迎访问，点击头像可更换封面背景！",
+			"avatarURL":     "https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png",
+			"username":      "Noise",
+			"description":   "执迷不悟",
 			"notifyEnabled": false,
 			"backgrounds": []string{
 				"https://s2.loli.net/2025/03/27/KJ1trnU2ksbFEYM.jpg",
@@ -1035,37 +1075,42 @@ func getDefaultConfig() map[string]interface{} {
 			"aboutPageDescription":   "这里是站点的介绍与说明",
 			"aboutMarkdown":          "# 关于我\n\n这里是一个默认的个人简介示例：\n\n- 喜欢记录与分享\n- 热爱开源与学习\n- 持续打磨产品体验\n\n欢迎通过友链或留言与我交流！",
 			// 系统欢迎组件默认参数
-			"welcomeAvatarURL":      "https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png",
-			"welcomeName":           "Noise",
-			"welcomeDescription":    "执迷不悟",
-			"welcomeUseAdmin":       true,
-			"githubOAuthEnabled":    false,
-			"githubClientId":        "",
-			"githubClientSecret":    "",
-			"githubCallbackURL":     "",
-			"pwaEnabled":            true,
-			"pwaTitle":              "",
-			"pwaDescription":        "",
-			"pwaIconURL":            "",
-			"defaultContentTheme":   "light",
-			"announcementText":      "欢迎访问我的说说笔记！",
-			"announcementEnabled":   true,
-			"musicEnabled":          false,
-			"musicPlaylistId":       "",
-			"musicSongId":           "",
-			"musicPosition":         "bottom-left",
-			"musicTheme":            "auto",
-			"musicLyric":            true,
-			"musicAutoplay":         false,
-			"musicDefaultMinimized": true,
-			"musicEmbed":            false,
-			"musicCssCdnURL":        "",
-			"musicJsCdnURL":         "",
-			"commentEnabled":        true,
-			"commentSystem":         "builtin",
-			"commentEmailEnabled":   false,
-			"commentLoginRequired":  false,
-			"hitokotoEnabled":       true,
+			"welcomeAvatarURL":       "https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png",
+			"welcomeName":            "Noise",
+			"welcomeDescription":     "执迷不悟",
+			"welcomeUseAdmin":        true,
+			"githubOAuthEnabled":     false,
+			"githubClientId":         "",
+			"githubClientSecret":     "",
+			"githubCallbackURL":      "",
+			"pwaEnabled":             true,
+			"pwaTitle":               "",
+			"pwaDescription":         "",
+			"pwaIconURL":             "",
+			"defaultContentTheme":    "light",
+			"homeLayoutDefault":      "three",
+			"announcementText":       "欢迎访问我的说说笔记！",
+			"announcementEnabled":    true,
+			"musicEnabled":           false,
+			"musicPlaylistId":        "",
+			"musicSongId":            "",
+			"musicPosition":          "bottom-left",
+			"musicTheme":             "auto",
+			"musicLyric":             true,
+			"musicAutoplay":          false,
+			"musicDefaultMinimized":  true,
+			"musicEmbed":             false,
+			"musicHideOnMobile":      true,
+			"musicCssCdnURL":         "",
+			"musicJsCdnURL":          "",
+			"commentEnabled":         true,
+			"commentSystem":          "builtin",
+			"commentEmailEnabled":    false,
+			"commentLoginRequired":   false,
+			"hitokotoEnabled":        true,
+			"lifeCountdownEnabled":   false,
+			"lifeCountdownBirthDate": "",
+			"lifeExpectancyYears":    80,
 			// 广告默认参数（多广告位）
 			"leftAdEnabled": true,
 			"leftAds": []map[string]string{

@@ -28,7 +28,7 @@
 
 ## 简单上手
 
-[安装部署](#安装部署)🏷️  [开发](#开发)🏷️  [API指南](#API指南)🏷️  [MCP接入](#MCP接入)🏷️  [扩展组件](#扩展组件)🏷️ [云存储使用说明](docs/r2-s3.md) 🏷️
+[安装部署](#安装部署)🏷️  [开发](#开发)🏷️  [API指南](#API指南)🏷️  [MCP接入](#MCP接入)🏷️  [扩展组件](#扩展组件)🏷️ [云存储使用说明](docs/r2-s3.md) 🏷️ [🟢安全防护](#🟢安全防护)
 
 [TOC]
 
@@ -36,7 +36,32 @@
 <summary><h2>✅ 更新状况【点击查看】</h2></summary>
 
 
+## 2026更新状态
+
+- 增加对抖音视频的解析渲染，直接复制链接也可
+- 重构后台页ui及调整分类布局
+- 增加默认布局的持久化设置
+- 复音乐播放器载入后台页回到前台时被初始化的问题
+- 对YouTube视频的渲染加一版“受限网络友好兜底”，封面失败时自动显示 YouTube 缩略图
+- 增加人生倒计时组件（ui 优化）
+
+
+
 ## 2025更新状态
+
+- 调整修复 token 24h 过期后前端未自动退出（401/403 统一处理、状态清理、路由保护）
+
+- 定位并修复 Telegram 推送与 RSS 输出开头 `#` 丢失
+
+- 增强安全性，服务端（Gin）加一个**全局安全中间件**，专门拦截“核心文件/敏感路径扫描”同时新增两个**管理员 API**用于查看/清空这些记录,容量上限：**500 条**，超过会丢弃最早记录（避免被刷爆导致内存增长）。
+
+- **查看攻击记录**
+
+  - `GET /api/security/attacks`
+
+- **清空攻击记录**
+
+  - `DELETE /api/security/attacks`
 
 - 调整云端同步数据首次运行时的逻辑，增加了数据新旧对比及后台确认选项，只有确认后才能开启数据同步
 
@@ -239,17 +264,10 @@
 
 ```
 docker run -d \
-  --name studio-noise \
-  -p 1566:1566 \
-  -v /opt/noisevip:/data \
-  -e TZ=Asia/Shanghai \
-  noise233/studio-noise:latest
-
-docker buildx build \
---platform linux/amd64 \
--t noise233/studio-noise:v1.0 \
--t noise233/studio-noise:latest \
---push --no-cache .
+  --name Ech0-Noise \
+  --platform linux/amd64 \
+  -p 1314:1314 \
+noise233/echo-noise:latest
 ```
 
 手动执行升级
@@ -264,7 +282,7 @@ docker buildx build \
 docker run -d \
   --name Ech0-Noise \
   --platform linux/amd64 \
-  -v /opt/noisevip:/app/data \
+  -v /opt/data:/app/data \
   -p 1314:1314 \
   -e TZ=Asia/Shanghai \
 noise233/echo-noise:latest
@@ -1540,10 +1558,10 @@ docker buildx create --use --name mybuilder
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final \
-  --build-arg VERSION=v2.4.5 \
-  -t noise233/echo-noise:v2.4.5 \
+  --build-arg VERSION=v2.4.6 \
+  -t noise233/echo-noise:v2.4.6 \
   -t noise233/echo-noise:latest \
-  --push --no-cache .
+  --push .
 ```
 
 包含MCP镜像且包含ffmpeg：
@@ -1552,10 +1570,10 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final-mcp \
-  --build-arg VERSION=v2.4.5 \
-  -t noise233/echo-noise:v2.4.5-mcp \
+  --build-arg VERSION=v2.4.6 \
+  -t noise233/echo-noise:v2.4.6-mcp \
   -t noise233/echo-noise:latest-mcp \
-  --push --no-cache .
+  --push .
 ```
 
 精简主镜像单架构 amd64（不带 MCP 且不包含 ffmpeg）：
@@ -1564,11 +1582,11 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64 \
   --target final \
-  --build-arg VERSION=v2.4.5 \
+  --build-arg VERSION=v2.4.6 \
   --build-arg INSTALL_FFMPEG=0 \
-  -t noise233/echo-noise:v2.4.5-amd64 \
+  -t noise233/echo-noise:v2.4.6-amd64 \
   -t noise233/echo-noise:last-amd64 \
-  --push --no-cache .
+  --push .
 ```
 
 - 容器内 APP_VERSION=v2.0 ，后台版本接口会显示 v2.0
@@ -1846,6 +1864,72 @@ exports.actions = [{
 
 </details>
 
+## 🟢安全防护
+
+- 服务端（Gin）加入一个**全局安全中间件**，专门拦截“核心文件/敏感路径扫描”同时新增两个**管理员 API**用于查看/清空这些记录,容量上限：**500 条**，超过会丢弃最早记录（避免被刷爆导致内存增长）。
+
+- **查看攻击记录**
+  - `GET /api/security/attacks`
+- **清空攻击记录**
+  - `DELETE /api/security/attacks`
+
+后台页“安全防护”里的**攻击 IP 记录**，是在后端 SecurityMiddleware() 满足下面条件时写入 SecurityAttackLog
+
+### 什么时候会记录
+
+### 1) 访问路径被判定为“敏感扫描”（命中规则）
+
+请求的 `URL.Path` 只要命中 
+
+isSuspiciousPath() 里的任意一条规则，就会：
+
+- 直接返回 `403`
+- **写一条攻击记录**（IP/Method/Path/UA）
+
+命中规则包括（举例）：
+
+- **敏感文件/目录**：`/.env`、`/.git`、`/.svn`、`/.hg`、`/.DS_Store`
+- **源码/配置目录**：`/internal`、`/config`、`/cmd`、`/pkg`、`/scripts`、`/vendor`、`/node_modules`
+- **容器/Go 依赖文件**：`/docker-compose.yml`、`/Dockerfile`、`/go.mod`、`/go.sum`
+- **常见 Web 扫描入口**：`/wp-admin`、`/wp-login.php`、`/xmlrpc.php`
+- **脚本后缀**：以 `.php/.asp/.aspx/.jsp` 结尾或带查询参数
+- **探测/文档接口**：`/actuator`、`/swagger`、`/swagger-ui`、`/v2/api-docs`
+
+### 2) 不在“白名单前缀”里（避免误伤正常功能）
+
+下面这些前缀会被快速放行，不会被当成扫描、也就不会记录：
+
+- `/api`
+- `/_nuxt/`
+- `/assets/`
+- `/favicon`、`/manifest*`、`/sw.js`
+- `/rss`、`/m/`、`/video/`、`/api/images`、`/api/video`
+
+### 什么时候不会记录
+
+- **IP 已被封禁**：请求一开始就被 
+
+  isBannedIP()
+
+   拦截并 
+
+  ```
+  403
+  ```
+
+  不会写攻击记录，因为它直接返回了
+
+  
+
+- **数据库未初始化**：`models.GetDB() == nil` 时不会落库记录（仍会 `403`）。
+
+- **访问的是正常页面/API/静态资源**：不命中敏感扫描规则就不会记录。
+
+#### 和“自动封禁策略”的关系
+
+- **记录攻击**：只要命中敏感扫描规则就会记录（和自动封禁开关无关）。
+- **自动封禁**：在记录后会按你配置的阈值计数，达到阈值再把 IP 写入封禁表。
+
 ## 问题🙋
 
 数据库可以直接迁移吗
@@ -1902,8 +1986,10 @@ exports.actions = [{
 - [x] docker环境下的一键升级功能
 - [x] 前端可定制化主题
 - [x] 数据库备份优化
-- [ ] 增加RSS阅读组件（后台控制）
+- [ ] 增加RSS阅读组件（前端展示，后台控制）
 - [x] 媒体附件增加分离式存储，提供云端和本地两种方式
+- [ ] 增加人生倒计时组件（ui 优化）
+- [ ] 增加
 - [ ] 增加通知系统（新的用户评论可显示通知）
 - [ ] 后台增加数据库一键切换为云端数据库
 - [ ] 增加在线聊天组件

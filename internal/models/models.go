@@ -119,6 +119,7 @@ type SiteConfig struct {
 	PwaIconURL     string `gorm:"type:varchar(191)"`
 	// 主题默认模式: dark 或 light
 	ContentThemeDefault string `gorm:"type:varchar(10)"`
+	HomeLayoutDefault   string `gorm:"type:varchar(10)"`
 	AnnouncementText    string `gorm:"type:varchar(191)"`
 	AnnouncementEnabled bool   `gorm:"default:true"`
 	Version             int    `json:"version"`
@@ -164,14 +165,14 @@ type SiteConfig struct {
 	// 云同步角色：primary(主节点，执行上传) / secondary(备节点，不上传)
 	StorageSyncRole string `gorm:"type:varchar(20)"`
 	// 云存储自动同步
-	StorageAutoSyncEnabled    bool       `gorm:"default:false"`
-	StorageSyncMode           string     `gorm:"type:varchar(20)"` // instant 或 scheduled
-	StorageSyncIntervalMinute int        `gorm:"default:15"`
-	StorageLastSyncTime       *time.Time `json:"storageLastSyncTime"`
-	StorageSyncConfirmed      bool       `gorm:"default:false"`
-	StorageSyncConfirmInstanceID string  `gorm:"type:varchar(191)"`
-	StorageLastRemoteETag     string     `gorm:"type:varchar(191)"`
-	StorageLastRemoteModified *time.Time
+	StorageAutoSyncEnabled       bool       `gorm:"default:false"`
+	StorageSyncMode              string     `gorm:"type:varchar(20)"` // instant 或 scheduled
+	StorageSyncIntervalMinute    int        `gorm:"default:15"`
+	StorageLastSyncTime          *time.Time `json:"storageLastSyncTime"`
+	StorageSyncConfirmed         bool       `gorm:"default:false"`
+	StorageSyncConfirmInstanceID string     `gorm:"type:varchar(191)"`
+	StorageLastRemoteETag        string     `gorm:"type:varchar(191)"`
+	StorageLastRemoteModified    *time.Time
 	// 音乐播放器配置（NeteaseMiniPlayer）
 	MusicEnabled          bool   `gorm:"default:false"`
 	MusicPlaylistId       string `gorm:"type:varchar(50)"`
@@ -182,6 +183,7 @@ type SiteConfig struct {
 	MusicAutoplay         bool   `gorm:"default:false"`
 	MusicDefaultMinimized bool   `gorm:"default:true"`
 	MusicEmbed            bool   `gorm:"default:false"`
+	MusicHideOnMobile     bool   `gorm:"default:true"`
 	MusicCssCdnURL        string `gorm:"type:varchar(255)"`
 	MusicJsCdnURL         string `gorm:"type:varchar(255)"`
 	// 评论系统配置
@@ -198,9 +200,12 @@ type SiteConfig struct {
 	CommentEmailReplyTemplateHTML string `gorm:"type:text"`
 	CommentEmailAdminTemplateHTML string `gorm:"type:text"`
 	// 扩展组件开关
-	CalendarEnabled bool `gorm:"default:true"`
-	TimeEnabled     bool `gorm:"default:true"`
-	HitokotoEnabled bool `gorm:"default:true"`
+	CalendarEnabled        bool   `gorm:"default:true"`
+	TimeEnabled            bool   `gorm:"default:true"`
+	HitokotoEnabled        bool   `gorm:"default:true"`
+	LifeCountdownEnabled   bool   `gorm:"default:false"`
+	LifeCountdownBirthDate string `gorm:"type:varchar(20)"`
+	LifeExpectancyYears    int    `gorm:"default:80"`
 	// 社交链接组件
 	SocialLinksEnabled bool   `gorm:"default:true"`
 	SocialLinks        string `gorm:"type:text"`

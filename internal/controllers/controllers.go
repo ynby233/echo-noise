@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -191,7 +192,7 @@ func GetCaptcha(c *gin.Context) {
 	}
 	code := string(b)
 	capID := newCaptchaID()
-	exp := time.Now().Add(2*time.Minute).Unix()
+	exp := time.Now().Add(2 * time.Minute).Unix()
 	setCaptcha(capID, code, exp)
 
 	svg := fmt.Sprintf("<svg xmlns='http://www.w3.org/2000/svg' width='96' height='40'><rect width='100%%' height='100%%' fill='#0f172a'/><text x='50%%' y='50%%' dominant-baseline='middle' text-anchor='middle' font-family='monospace' font-size='20' fill='#ffffff'>%s</text></svg>", code)
@@ -718,6 +719,53 @@ func SubmitFriendLinkApply(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.OK(apply, "已提交，待审核"))
 }
 
+func ResolveDouyinShortURL(c *gin.Context) {
+	raw := strings.TrimSpace(c.Query("url"))
+	if raw == "" {
+		c.JSON(http.StatusOK, dto.Fail[string]("url 不能为空"))
+		return
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		c.JSON(http.StatusOK, dto.Fail[string]("url 格式错误"))
+		return
+	}
+	host := strings.ToLower(strings.TrimSpace(u.Host))
+	if !strings.Contains(host, "douyin.com") && !strings.Contains(host, "iesdouyin.com") {
+		c.JSON(http.StatusOK, dto.Fail[string]("仅支持抖音链接"))
+		return
+	}
+	client := &http.Client{Timeout: 8 * time.Second}
+	req, _ := http.NewRequest(http.MethodGet, raw, nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+	resp, err := client.Do(req)
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string]("短链解析失败"))
+		return
+	}
+	defer resp.Body.Close()
+	finalURL := ""
+	if resp.Request != nil && resp.Request.URL != nil {
+		finalURL = resp.Request.URL.String()
+	}
+	target := finalURL
+	if target == "" {
+		target = raw
+	}
+	rePath := regexp.MustCompile(`/video/(\d+)`)
+	if m := rePath.FindStringSubmatch(target); len(m) > 1 {
+		c.JSON(http.StatusOK, dto.OK(gin.H{"video_id": m[1], "resolved_url": target}, "解析成功"))
+		return
+	}
+	if pu, e := url.Parse(target); e == nil {
+		if vid := strings.TrimSpace(pu.Query().Get("modal_id")); vid != "" {
+			c.JSON(http.StatusOK, dto.OK(gin.H{"video_id": vid, "resolved_url": target}, "解析成功"))
+			return
+		}
+	}
+	c.JSON(http.StatusOK, dto.Fail[string]("未提取到视频ID"))
+}
+
 // ListFriendLinkApplications 管理员查看友链申请列表
 func ListFriendLinkApplications(c *gin.Context) {
 	_, err := checkAdmin(c)
@@ -737,6 +785,42 @@ func ListFriendLinkApplications(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, dto.OK(list, models.QuerySuccessMessage))
+}
+
+// DeleteFriendLinkApplication 管理员删除单条友链申请记录
+func DeleteFriendLinkApplication(c *gin.Context) {
+	_, err := checkAdmin(c)
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
+		return
+	}
+	idStr := c.Param("id")
+	id64, e := strconv.ParseUint(idStr, 10, 64)
+	if e != nil || id64 == 0 {
+		c.JSON(http.StatusOK, dto.Fail[string](models.InvalidIDMessage))
+		return
+	}
+	db, _ := database.GetDB()
+	if err := db.Delete(&models.FriendLinkApply{}, uint(id64)).Error; err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string](models.DatabaseErrorMessage))
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK[any](nil, "记录已删除"))
+}
+
+// ClearFriendLinkApplications 管理员清空友链申请记录
+func ClearFriendLinkApplications(c *gin.Context) {
+	_, err := checkAdmin(c)
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
+		return
+	}
+	db, _ := database.GetDB()
+	if err := db.Where("1 = 1").Delete(&models.FriendLinkApply{}).Error; err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string](models.DatabaseErrorMessage))
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK[any](nil, "申请记录已清空"))
 }
 
 // AuditFriendLink 审核友链（通过/拒绝）

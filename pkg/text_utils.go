@@ -27,7 +27,19 @@ func GetFirstLine(text string) string {
 
     // 清理第一行的 Markdown 标记
     title := strings.TrimSpace(lines[0])
-    title = strings.TrimLeft(title, "#- ")
+
+    if strings.HasPrefix(title, "#") {
+        j := 0
+        for j < len(title) && title[j] == '#' {
+            j++
+        }
+        if j > 0 && j < len(title) && title[j] == ' ' {
+            title = strings.TrimSpace(title[j:])
+        }
+    }
+    if strings.HasPrefix(title, "- ") {
+        title = strings.TrimSpace(strings.TrimPrefix(title, "- "))
+    }
     
     // 如果第一行太长，截断它
     if utf8.RuneCountInString(title) > 50 {
