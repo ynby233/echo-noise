@@ -27,6 +27,22 @@
         >
           GitHub
         </UButton>
+        <UButton
+          :color="selectedHost === 'lskypro' ? 'blue' : 'gray'"
+          variant="solid"
+          size="sm"
+          @click="selectedHost = 'lskypro'"
+        >
+          兰空图床
+        </UButton>
+        <UButton
+          :color="selectedHost === 'custom' ? 'blue' : 'gray'"
+          variant="solid"
+          size="sm"
+          @click="selectedHost = 'custom'"
+        >
+          自定义
+        </UButton>
       </div>
       
       <!-- GitHub 配置 -->
@@ -61,6 +77,47 @@
           v-if="enableCDN"
           v-model="cdnDomain" 
           placeholder="输入CDN域名 (如: jsd.cdn.noisework.cn)" 
+          size="sm"
+        />
+      </div>
+      <div v-if="selectedHost === 'lskypro'" class="space-y-2 mb-3">
+        <UInput
+          v-model="lskyApiUrl"
+          placeholder="兰空上传接口 (如: https://img.example.com/api/v1/upload)"
+          size="sm"
+        />
+        <UInput
+          v-model="lskyToken"
+          placeholder="兰空 Token"
+          size="sm"
+          type="password"
+        />
+      </div>
+      <div v-if="selectedHost === 'custom'" class="space-y-2 mb-3">
+        <UInput
+          v-model="customApiUrl"
+          placeholder="自定义上传接口 URL"
+          size="sm"
+        />
+        <USelect
+          v-model="customMethod"
+          :options="customMethodOptions"
+          size="sm"
+        />
+        <UInput
+          v-model="customFileField"
+          placeholder="文件字段名 (默认: file)"
+          size="sm"
+        />
+        <UInput
+          v-model="customUrlPath"
+          placeholder="返回图片URL路径 (默认: data.url)"
+          size="sm"
+        />
+        <UTextarea
+          v-model="customHeaders"
+          :rows="3"
+          placeholder='请求头 JSON (可选，例如 {"Authorization":"Bearer xxx"})'
           size="sm"
         />
       </div>
@@ -262,11 +319,11 @@ const stopDrag = () => {
   document.removeEventListener('touchend', stopDrag);
 };
 
-const emit = defineEmits(['close', 'upload-success']);
+const emit = defineEmits(['close', 'upload-success', 'update:position']);
 const toast = useToast();
 
 // 状态变量
-const selectedHost = ref('smms');
+const selectedHost = ref('github');
 const fileInput = ref<HTMLInputElement | null>(null);
 const isDragging = ref(false);
 const isUploading = ref(false);
@@ -287,6 +344,14 @@ const cdnDomain = ref('');     // 默认没有CDN域名
 const smmsToken = ref('');
 
 const freeimageToken = ref('');
+const lskyApiUrl = ref('');
+const lskyToken = ref('');
+const customApiUrl = ref('');
+const customMethod = ref('POST');
+const customHeaders = ref('{}');
+const customFileField = ref('file');
+const customUrlPath = ref('data.url');
+const customMethodOptions = ['POST', 'PUT', 'PATCH'];
 
 // 触发文件选择
 const triggerFileInput = () => {
@@ -398,6 +463,12 @@ const startUpload = async () => {
       case 'github':
         await uploadToGitHub(selectedFile.value);
         break;
+      case 'lskypro':
+        await uploadToLskyPro(selectedFile.value);
+        break;
+      case 'custom':
+        await uploadToCustom(selectedFile.value);
+        break;
       default:
         throw new Error('未知的图床类型');
     }
@@ -490,6 +561,97 @@ const readFileAsBase64 = (file: File): Promise<string> => {
   });
 };
 
+const getValueByPath = (obj: any, path: string): any => {
+  if (!path) return undefined;
+  return path.split('.').reduce((acc: any, key: string) => {
+    if (acc === undefined || acc === null) return undefined;
+    return acc[key];
+  }, obj);
+};
+
+const uploadToLskyPro = async (file: File) => {
+  if (!lskyApiUrl.value || !lskyToken.value) {
+    throw new Error('请先配置兰空图床接口和Token');
+  }
+  const endpoint = lskyApiUrl.value.trim();
+  const formData = new FormData();
+  formData.append('file', file);
+  uploadProgress.value = 30;
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${lskyToken.value.trim()}`
+    },
+    body: formData
+  });
+  uploadProgress.value = 70;
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.message || `兰空上传失败: ${response.status}`);
+  }
+  const url = data?.data?.url || data?.data?.links?.url || data?.url;
+  if (!url || typeof url !== 'string') {
+    throw new Error('兰空返回结果缺少图片地址');
+  }
+  uploadedUrl.value = url;
+  uploadProgress.value = 100;
+  isUploading.value = false;
+  toast.add({
+    title: '成功',
+    description: '图片已上传到兰空图床',
+    color: 'green',
+    timeout: 2000
+  });
+};
+
+const uploadToCustom = async (file: File) => {
+  if (!customApiUrl.value.trim()) {
+    throw new Error('请先配置自定义上传接口');
+  }
+  let parsedHeaders: Record<string, string> = {};
+  if (customHeaders.value.trim()) {
+    try {
+      const temp = JSON.parse(customHeaders.value);
+      if (temp && typeof temp === 'object') {
+        parsedHeaders = temp;
+      }
+    } catch {
+      throw new Error('自定义请求头不是合法JSON');
+    }
+  }
+  const headers: Record<string, string> = {};
+  Object.entries(parsedHeaders).forEach(([k, v]) => {
+    if (k.toLowerCase() !== 'content-type') headers[k] = String(v);
+  });
+  const formData = new FormData();
+  formData.append((customFileField.value || 'file').trim() || 'file', file);
+  uploadProgress.value = 30;
+  const response = await fetch(customApiUrl.value.trim(), {
+    method: (customMethod.value || 'POST').toUpperCase(),
+    headers,
+    body: formData
+  });
+  uploadProgress.value = 70;
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.message || `自定义图床上传失败: ${response.status}`);
+  }
+  const urlPath = (customUrlPath.value || 'data.url').trim();
+  const url = getValueByPath(data, urlPath);
+  if (!url || typeof url !== 'string') {
+    throw new Error('未从自定义图床返回中解析到图片地址');
+  }
+  uploadedUrl.value = url;
+  uploadProgress.value = 100;
+  isUploading.value = false;
+  toast.add({
+    title: '成功',
+    description: '图片已上传到自定义图床',
+    color: 'green',
+    timeout: 2000
+  });
+};
+
 
 
 const uploadToFreeImage = async (file: File) => {
@@ -505,7 +667,7 @@ const uploadToFreeImage = async (file: File) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 延长超时时间
     
-    const response = await fetchWithProxy('https://freeimage.host/api/1/upload', {
+    const response = await fetch('https://freeimage.host/api/1/upload', {
       method: 'POST',
       body: formData,
       signal: controller.signal,
@@ -563,6 +725,17 @@ const saveConfig = () => {
       },
       freeimage: {
         token: freeimageToken.value
+      },
+      lskypro: {
+        apiUrl: lskyApiUrl.value,
+        token: lskyToken.value
+      },
+      custom: {
+        apiUrl: customApiUrl.value,
+        method: customMethod.value,
+        headers: customHeaders.value,
+        fileField: customFileField.value,
+        urlPath: customUrlPath.value
       }
     };
     
@@ -591,7 +764,7 @@ const loadConfig = () => {
   if (configStr) {
     try {
       const config = JSON.parse(configStr);
-      selectedHost.value = config.selectedHost || 'smms';
+      selectedHost.value = config.selectedHost || 'github';
       
       if (config.github) {
         githubToken.value = config.github.token || '';
@@ -605,12 +778,20 @@ const loadConfig = () => {
       if (config.smms) {
         smmsToken.value = config.smms.token || '';
       }
-      if (config.imgtp) {
-    imgtpToken.value = config.imgtp.token || '';
-  }
-  if (config.freeimage) {
-    freeimageToken.value = config.freeimage.token || '';
-  }
+      if (config.freeimage) {
+        freeimageToken.value = config.freeimage.token || '';
+      }
+      if (config.lskypro) {
+        lskyApiUrl.value = config.lskypro.apiUrl || '';
+        lskyToken.value = config.lskypro.token || '';
+      }
+      if (config.custom) {
+        customApiUrl.value = config.custom.apiUrl || '';
+        customMethod.value = config.custom.method || 'POST';
+        customHeaders.value = config.custom.headers || '{}';
+        customFileField.value = config.custom.fileField || 'file';
+        customUrlPath.value = config.custom.urlPath || 'data.url';
+      }
     } catch (error) {
       console.error('加载配置失败:', error);
     }
@@ -618,7 +799,7 @@ const loadConfig = () => {
 };
 
 // 监听配置变化并自动保存
-watch([selectedHost, githubToken, githubRepo, githubBranch, githubPath, smmsToken], 
+watch([selectedHost, githubToken, githubRepo, githubBranch, githubPath, enableCDN, cdnDomain, smmsToken, freeimageToken, lskyApiUrl, lskyToken, customApiUrl, customMethod, customHeaders, customFileField, customUrlPath], 
   () => {
     saveConfig();
   },
