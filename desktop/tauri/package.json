@@ -10,5 +10,9 @@
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0",
     "sharp": "^0.33.4"
+  },
+  "dependencies": {
+    "png-to-ico": "^3.0.1",
+    "to-ico": "^1.1.5"
   }
 }
