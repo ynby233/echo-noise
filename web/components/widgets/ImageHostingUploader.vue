@@ -123,7 +123,17 @@
       </div>
       
       <!-- 保存配置按钮 - 移到这里，让它在任何配置下都显示 -->
-      <div class="flex justify-end mt-2 mb-3">
+      <div class="flex justify-end gap-2 mt-2 mb-3">
+        <UButton
+          color="amber"
+          variant="soft"
+          size="sm"
+          icon="i-heroicons-signal"
+          :loading="isTestingConnection"
+          @click="testConnection"
+        >
+          测试连接
+        </UButton>
         <UButton 
           color="green" 
           variant="solid" 
@@ -352,6 +362,7 @@ const customHeaders = ref('{}');
 const customFileField = ref('file');
 const customUrlPath = ref('data.url');
 const customMethodOptions = ['POST', 'PUT', 'PATCH'];
+const isTestingConnection = ref(false);
 
 // 触发文件选择
 const triggerFileInput = () => {
@@ -650,6 +661,105 @@ const uploadToCustom = async (file: File) => {
     color: 'green',
     timeout: 2000
   });
+};
+
+const parseCustomHeaders = (): Record<string, string> => {
+  let parsedHeaders: Record<string, string> = {};
+  if (customHeaders.value.trim()) {
+    try {
+      const temp = JSON.parse(customHeaders.value);
+      if (temp && typeof temp === 'object') {
+        parsedHeaders = temp;
+      }
+    } catch {
+      throw new Error('自定义请求头不是合法JSON');
+    }
+  }
+  const headers: Record<string, string> = {};
+  Object.entries(parsedHeaders).forEach(([k, v]) => {
+    if (k.toLowerCase() !== 'content-type') headers[k] = String(v);
+  });
+  return headers;
+};
+
+const testConnection = async () => {
+  if (isTestingConnection.value) return;
+  isTestingConnection.value = true;
+  errorMessage.value = '';
+  try {
+    if (selectedHost.value === 'github') {
+      if (!githubToken.value.trim() || !githubRepo.value.trim()) {
+        throw new Error('请先填写 GitHub Token 和仓库名');
+      }
+      const userResp = await fetch('https://api.github.com/user', {
+        headers: {
+          Authorization: `token ${githubToken.value.trim()}`,
+          Accept: 'application/vnd.github+json'
+        }
+      });
+      if (!userResp.ok) {
+        throw new Error(`GitHub Token 验证失败: ${userResp.status}`);
+      }
+      const repoResp = await fetch(`https://api.github.com/repos/${githubRepo.value.trim()}`, {
+        headers: {
+          Authorization: `token ${githubToken.value.trim()}`,
+          Accept: 'application/vnd.github+json'
+        }
+      });
+      if (!repoResp.ok) {
+        throw new Error(`GitHub 仓库访问失败: ${repoResp.status}`);
+      }
+      toast.add({ title: '成功', description: 'GitHub 连接正常', color: 'green', timeout: 2200 });
+      return;
+    }
+
+    if (selectedHost.value === 'lskypro') {
+      if (!lskyApiUrl.value.trim() || !lskyToken.value.trim()) {
+        throw new Error('请先填写兰空接口和Token');
+      }
+      const fd = new FormData();
+      const resp = await fetch(lskyApiUrl.value.trim(), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${lskyToken.value.trim()}`
+        },
+        body: fd
+      });
+      if (resp.status === 401 || resp.status === 403) {
+        throw new Error('兰空 Token 无效或无权限');
+      }
+      if (resp.status >= 500) {
+        throw new Error(`兰空服务异常: ${resp.status}`);
+      }
+      toast.add({ title: '成功', description: '兰空图床接口可访问', color: 'green', timeout: 2200 });
+      return;
+    }
+
+    if (selectedHost.value === 'custom') {
+      if (!customApiUrl.value.trim()) {
+        throw new Error('请先填写自定义上传接口 URL');
+      }
+      const headers = parseCustomHeaders();
+      const fd = new FormData();
+      const resp = await fetch(customApiUrl.value.trim(), {
+        method: (customMethod.value || 'POST').toUpperCase(),
+        headers,
+        body: fd
+      });
+      if (resp.status >= 500) {
+        throw new Error(`自定义图床服务异常: ${resp.status}`);
+      }
+      toast.add({ title: '成功', description: '自定义图床接口可访问', color: 'green', timeout: 2200 });
+      return;
+    }
+
+    throw new Error('当前图床类型暂不支持测试');
+  } catch (error: any) {
+    errorMessage.value = error.message || '连接测试失败';
+    toast.add({ title: '失败', description: errorMessage.value, color: 'red', timeout: 2600 });
+  } finally {
+    isTestingConnection.value = false;
+  }
 };
 
 
