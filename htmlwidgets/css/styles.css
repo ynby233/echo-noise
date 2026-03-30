@@ -114,7 +114,7 @@ body::-webkit-scrollbar {
 }
 
 .notecard:hover {
-    transform: translateY(-2px);
+    transform: none;
 }
 
 .notecard-title {
