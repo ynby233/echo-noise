@@ -695,11 +695,24 @@
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div>
                             <div class="text-xs mb-1" :class="theme.mutedText">生日</div>
-                            <UInput v-model="frontendConfig.lifeCountdownBirthDate" type="date" />
+                            <input
+                              v-model="frontendConfig.lifeCountdownBirthDate"
+                              type="date"
+                              class="w-full rounded-md border px-3 py-2 text-sm bg-white dark:bg-slate-900"
+                              :class="[theme.border, theme.text]"
+                              inputmode="none"
+                              @click="openLifeBirthdayPicker"
+                              @focus="openLifeBirthdayPicker"
+                              @keydown="blockDateTyping"
+                              @paste.prevent
+                              @drop.prevent
+                            />
+                            <div class="text-xs mt-1" :class="theme.mutedText">格式：YYYY-MM-DD（仅可通过日历选择）</div>
                           </div>
                           <div>
                             <div class="text-xs mb-1" :class="theme.mutedText">预期寿命（年）</div>
-                            <UInput v-model.number="frontendConfig.lifeExpectancyYears" type="number" min="1" max="150" />
+                            <UInput v-model.number="frontendConfig.lifeExpectancyYears" type="number" min="1" max="150" placeholder="请输入 1-150 之间的整数" />
+                            <div class="text-xs mt-1" :class="theme.mutedText">格式：1-150 的整数，不填则不会保存</div>
                           </div>
                         </div>
                         <div class="flex justify-end">
@@ -1750,6 +1763,17 @@ const scrollTo = (id: string) => {
     const el = document.getElementById(id)
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
+const openLifeBirthdayPicker = (evt: Event) => {
+  const target = evt.target as HTMLInputElement | null
+  if (!target) return
+  try {
+    target.showPicker?.()
+  } catch {}
+}
+const blockDateTyping = (evt: KeyboardEvent) => {
+  if (evt.key === 'Tab') return
+  evt.preventDefault()
+}
  
 
 // 新用户注册开关相关
@@ -1792,8 +1816,12 @@ const toCount = (v: any) => {
 }
 const dashboardLifePercent = computed(() => {
   const birth = String((frontendConfig as any).lifeCountdownBirthDate || '').trim()
-  const expectYears = Math.min(150, Math.max(1, Number((frontendConfig as any).lifeExpectancyYears || 80) || 80))
+  const expectYearsRaw = Number((frontendConfig as any).lifeExpectancyYears)
+  const expectYears = Number.isFinite(expectYearsRaw) && expectYearsRaw > 0
+    ? Math.min(150, Math.max(1, Math.floor(expectYearsRaw)))
+    : 0
   if (!birth) return 0
+  if (expectYears <= 0) return 0
   const birthDate = new Date(`${birth}T00:00:00`)
   if (Number.isNaN(birthDate.getTime())) return 0
   const expectDate = new Date(birthDate)
@@ -1894,7 +1922,16 @@ const setActive = async (name: AdminSectionKey, evt?: MouseEvent) => {
   const el = document.getElementById(id)
   if (!el) return
   try {
-    ;(el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' })
+    const main = adminMain.value
+    if (main) {
+      const mainTop = main.getBoundingClientRect().top
+      const elTop = (el as HTMLElement).getBoundingClientRect().top
+      const fixedOffset = 16
+      const nextTop = Math.max(0, main.scrollTop + (elTop - mainTop) - fixedOffset)
+      main.scrollTo({ top: nextTop, behavior: 'smooth' })
+    } else {
+      ;(el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' })
+    }
     try {
       if (typeof window !== 'undefined') {
         const url = new URL(window.location.href)
@@ -3456,8 +3493,8 @@ const configFieldHints: Record<string, string> = {
   rssDescription: 'RSS 订阅说明文字。',
   rssAuthorName: 'RSS 输出作者名称。',
   rssFaviconURL: 'RSS 图标地址，建议使用 1:1 图片。',
-  lifeCountdownBirthDate: '请按生日真实日期填写。',
-  lifeExpectancyYears: '用于计算人生进度百分比。',
+  lifeCountdownBirthDate: '格式 YYYY-MM-DD，仅可通过日历选择。',
+  lifeExpectancyYears: '格式 1-150 的整数，不设置时不会自动填充值。',
   commentPageTitle: '留言页大标题。',
   commentPageDescription: '留言页顶部描述文字。',
   aboutPageTitle: '关于页标题。',
@@ -3544,7 +3581,7 @@ interface FrontendConfig {
     timeEnabled: boolean;
     lifeCountdownEnabled: boolean;
     lifeCountdownBirthDate: string;
-    lifeExpectancyYears: number;
+    lifeExpectancyYears: number | '';
     leftAdEnabled: boolean;
     leftAdImageURL: string;
     leftAdLinkURL: string;
@@ -3630,7 +3667,7 @@ const frontendConfig = reactive<FrontendConfig>({
     timeEnabled: true,
     lifeCountdownEnabled: false,
     lifeCountdownBirthDate: '',
-    lifeExpectancyYears: 80,
+    lifeExpectancyYears: '',
     leftAdEnabled: true,
     leftAdImageURL: 'https://picsum.photos/seed/single-ad/640/640',
     leftAdLinkURL: 'https://note.noisework.cn',
@@ -3737,7 +3774,7 @@ const defaultConfig: Record<string, any> = {
     timeEnabled: true,
     lifeCountdownEnabled: false,
     lifeCountdownBirthDate: '',
-    lifeExpectancyYears: 80,
+    lifeExpectancyYears: '',
     linksTitle: '友情链接',
     linksDescription: '推荐站点和朋友们的主页',
     linksApplyTitle: '申请友链须知',
@@ -4039,7 +4076,7 @@ const saveConfigItem = async (key: string) => {
 
         const settingsToSave = {
             frontendSettings: {
-                [key]: key === 'notifyEnabled' ? !!(frontendConfig as any)[key] : (frontendConfig as any)[key]
+                [key]: isSwitchConfigKey(key) ? !!(frontendConfig as any)[key] : (frontendConfig as any)[key]
             }
         };
 
@@ -4061,6 +4098,7 @@ const saveConfigItem = async (key: string) => {
         if (data.code === 1) {
             // 重新获取配置
             await fetchConfig();
+            window.dispatchEvent(new Event('frontend-config-updated'))
             // 广告模块专用提示
             if (key === 'leftAds' || key === 'leftAdEnabled') {
                 useToast().add({ title: '成功', description: '广告模块更新成功', color: 'green' })
@@ -4097,12 +4135,25 @@ const saveConfigItem = async (key: string) => {
 };
 const saveLifeCountdownConfig = async () => {
   try {
-    ;(frontendConfig as any).lifeCountdownBirthDate = String((frontendConfig as any).lifeCountdownBirthDate || '').trim()
-    ;(frontendConfig as any).lifeExpectancyYears = Math.min(150, Math.max(1, Number((frontendConfig as any).lifeExpectancyYears || 80) || 80))
+    const rawBirth = String((frontendConfig as any).lifeCountdownBirthDate || '').trim()
+    const normalizedBirth = rawBirth ? new Date(`${rawBirth}T00:00:00`) : null
+    const birthDate = rawBirth && normalizedBirth && !Number.isNaN(normalizedBirth.getTime())
+      ? `${normalizedBirth.getFullYear()}-${String(normalizedBirth.getMonth() + 1).padStart(2, '0')}-${String(normalizedBirth.getDate()).padStart(2, '0')}`
+      : ''
+    if (rawBirth && !birthDate) {
+      throw new Error('生日格式无效，请重新选择日期')
+    }
+    ;(frontendConfig as any).lifeCountdownBirthDate = birthDate
+    const expectYearsRaw = Number((frontendConfig as any).lifeExpectancyYears)
+    if (!Number.isFinite(expectYearsRaw) || expectYearsRaw <= 0) {
+      throw new Error('请填写预期寿命，格式为 1-150 的整数')
+    }
+    const expectYears = Math.min(150, Math.max(1, Math.floor(expectYearsRaw)))
+    ;(frontendConfig as any).lifeExpectancyYears = expectYears
     await saveConfigFields({
       lifeCountdownEnabled: !!(frontendConfig as any).lifeCountdownEnabled,
-      lifeCountdownBirthDate: String((frontendConfig as any).lifeCountdownBirthDate || '').trim(),
-      lifeExpectancyYears: Math.min(150, Math.max(1, Number((frontendConfig as any).lifeExpectancyYears || 80) || 80))
+      lifeCountdownBirthDate: birthDate,
+      lifeExpectancyYears: expectYears
     })
     await fetchConfig()
     window.dispatchEvent(new Event('frontend-config-updated'))
@@ -4114,6 +4165,10 @@ const saveLifeCountdownConfig = async () => {
 
 const saveConfig = async () => {
   try {
+    const lifeExpectancyRaw = Number((frontendConfig as any).lifeExpectancyYears)
+    const normalizedLifeExpectancyYears = Number.isFinite(lifeExpectancyRaw) && lifeExpectancyRaw > 0
+      ? Math.min(150, Math.max(1, Math.floor(lifeExpectancyRaw)))
+      : ''
     const cleanedBackgrounds = Array.isArray(frontendConfig.backgrounds)
       ? frontendConfig.backgrounds.filter((url: string) => String(url || '').trim() !== '').map((url: string) => String(url || '').trim())
       : []
@@ -4163,7 +4218,7 @@ const saveConfig = async () => {
         timeEnabled: !!(frontendConfig as any).timeEnabled,
         lifeCountdownEnabled: !!(frontendConfig as any).lifeCountdownEnabled,
         lifeCountdownBirthDate: String((frontendConfig as any).lifeCountdownBirthDate || '').trim(),
-        lifeExpectancyYears: Math.min(150, Math.max(1, Number((frontendConfig as any).lifeExpectancyYears || 80) || 80)),
+        lifeExpectancyYears: normalizedLifeExpectancyYears,
         hitokotoEnabled: !!(frontendConfig as any).hitokotoEnabled,
         announcementEnabled: !!(frontendConfig as any).announcementEnabled,
         pwaEnabled: !!(frontendConfig as any).pwaEnabled,

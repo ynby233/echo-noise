@@ -205,7 +205,7 @@ type SiteConfig struct {
 	HitokotoEnabled        bool   `gorm:"default:true"`
 	LifeCountdownEnabled   bool   `gorm:"default:false"`
 	LifeCountdownBirthDate string `gorm:"type:varchar(20)"`
-	LifeExpectancyYears    int    `gorm:"default:80"`
+	LifeExpectancyYears    int    `gorm:"default:0"`
 	// 社交链接组件
 	SocialLinksEnabled bool   `gorm:"default:true"`
 	SocialLinks        string `gorm:"type:text"`

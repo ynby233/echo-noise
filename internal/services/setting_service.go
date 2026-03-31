@@ -242,7 +242,7 @@ func GetFrontendConfig() (map[string]interface{}, error) {
 				if config.LifeExpectancyYears > 0 {
 					return config.LifeExpectancyYears
 				}
-				return 80
+				return 0
 			}(),
 
 			"leftAdEnabled":          config.LeftAdEnabled,
@@ -439,8 +439,8 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 			config.LifeExpectancyYears = n
 		}
 	}
-	if config.LifeExpectancyYears <= 0 {
-		config.LifeExpectancyYears = 80
+	if config.LifeExpectancyYears < 0 {
+		config.LifeExpectancyYears = 0
 	}
 	// 评论系统设置
 	if vb, ok := frontendSettings["commentEnabled"].(bool); ok {

@@ -1635,7 +1635,7 @@ const headerImageStyle = computed(() => ({
     timeEnabled: true,
     lifeCountdownEnabled: false,
     lifeCountdownBirthDate: '',
-    lifeExpectancyYears: 80,
+    lifeExpectancyYears: '',
     // 左栏广告（完全后端驱动，无前端默认）
     leftAdEnabled: true,
     leftAds: [
@@ -2405,8 +2405,9 @@ const formatDate = (d: Date) => {
 const lifeCountdown = computed(() => {
   const enabled = !!(frontendConfig.value as any).lifeCountdownEnabled
   const birth = String((frontendConfig.value as any).lifeCountdownBirthDate || '').trim()
-  const years = Math.max(1, Math.min(150, Number((frontendConfig.value as any).lifeExpectancyYears || 80) || 80))
-  if (!enabled || !birth) {
+  const yearsRaw = Number((frontendConfig.value as any).lifeExpectancyYears)
+  const years = Number.isFinite(yearsRaw) && yearsRaw > 0 ? Math.max(1, Math.min(150, Math.floor(yearsRaw))) : 0
+  if (!enabled || !birth || years <= 0) {
     return { valid: false, percent: 0, livedDays: 0, remainDays: 0, ageYears: 0 }
   }
   const start = new Date(`${birth}T00:00:00`)
