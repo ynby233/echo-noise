@@ -580,17 +580,95 @@ const getValueByPath = (obj: any, path: string): any => {
   }, obj);
 };
 
+const parseLskyApiUrl = (rawApiUrl: string): URL => {
+  try {
+    return new URL(rawApiUrl.trim());
+  } catch {
+    throw new Error('兰空接口地址格式无效，请填写完整 URL');
+  }
+};
+
+const buildLskyProfileUrl = (rawApiUrl: string): string => {
+  const parsed = parseLskyApiUrl(rawApiUrl);
+  const pathname = parsed.pathname.replace(/\/+$/, '');
+  let profilePath = pathname;
+  if (/\/api\/v1\/upload$/i.test(pathname)) {
+    profilePath = pathname.replace(/\/upload$/i, '/profile');
+  } else if (/\/upload$/i.test(pathname)) {
+    profilePath = pathname.replace(/\/upload$/i, '/profile');
+  } else if (/\/api\/v1$/i.test(pathname)) {
+    profilePath = `${pathname}/profile`;
+  } else if (/\/api$/i.test(pathname)) {
+    profilePath = `${pathname}/v1/profile`;
+  } else {
+    profilePath = `${pathname}/profile`;
+  }
+  parsed.pathname = profilePath;
+  parsed.search = '';
+  parsed.hash = '';
+  return parsed.toString();
+};
+
+const buildLskyUploadUrl = (rawApiUrl: string): string => {
+  const parsed = parseLskyApiUrl(rawApiUrl);
+  const pathname = parsed.pathname.replace(/\/+$/, '');
+  let uploadPath = pathname;
+  if (/\/api\/v1\/profile$/i.test(pathname)) {
+    uploadPath = pathname.replace(/\/profile$/i, '/upload');
+  } else if (/\/profile$/i.test(pathname)) {
+    uploadPath = pathname.replace(/\/profile$/i, '/upload');
+  } else if (/\/api\/v1$/i.test(pathname)) {
+    uploadPath = `${pathname}/upload`;
+  } else if (/\/api$/i.test(pathname)) {
+    uploadPath = `${pathname}/v1/upload`;
+  } else if (!/\/upload$/i.test(pathname)) {
+    uploadPath = `${pathname}/upload`;
+  }
+  parsed.pathname = uploadPath;
+  parsed.search = '';
+  parsed.hash = '';
+  return parsed.toString();
+};
+
+const validateLskyToken = async (apiUrl: string, token: string) => {
+  const profileUrl = buildLskyProfileUrl(apiUrl);
+  const resp = await fetch(profileUrl, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token.trim()}`
+    }
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    if (resp.status === 401 || resp.status === 403) {
+      throw new Error('兰空 Token 无效或无权限');
+    }
+    if (resp.status === 404) {
+      throw new Error('兰空接口地址无效，请确认填写的是 /api/v1/upload');
+    }
+    if (resp.status === 405) {
+      throw new Error('兰空接口方法不允许，请检查 HTTP/HTTPS 协议与反向代理配置');
+    }
+    throw new Error(data?.message || `兰空连接失败: ${resp.status}`);
+  }
+  if (data && typeof data === 'object' && 'status' in data && data.status === false) {
+    throw new Error(data?.message || '兰空 Token 验证失败');
+  }
+};
+
 const uploadToLskyPro = async (file: File) => {
   if (!lskyApiUrl.value || !lskyToken.value) {
     throw new Error('请先配置兰空图床接口和Token');
   }
-  const endpoint = lskyApiUrl.value.trim();
+  const endpoint = buildLskyUploadUrl(lskyApiUrl.value.trim());
   const formData = new FormData();
   formData.append('file', file);
   uploadProgress.value = 30;
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
+      Accept: 'application/json',
       Authorization: `Bearer ${lskyToken.value.trim()}`
     },
     body: formData
@@ -717,21 +795,8 @@ const testConnection = async () => {
       if (!lskyApiUrl.value.trim() || !lskyToken.value.trim()) {
         throw new Error('请先填写兰空接口和Token');
       }
-      const fd = new FormData();
-      const resp = await fetch(lskyApiUrl.value.trim(), {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${lskyToken.value.trim()}`
-        },
-        body: fd
-      });
-      if (resp.status === 401 || resp.status === 403) {
-        throw new Error('兰空 Token 无效或无权限');
-      }
-      if (resp.status >= 500) {
-        throw new Error(`兰空服务异常: ${resp.status}`);
-      }
-      toast.add({ title: '成功', description: '兰空图床接口可访问', color: 'green', timeout: 2200 });
+      await validateLskyToken(lskyApiUrl.value.trim(), lskyToken.value.trim());
+      toast.add({ title: '成功', description: '兰空 Token 验证通过，图床接口可用', color: 'green', timeout: 2200 });
       return;
     }
 

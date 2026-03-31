@@ -158,6 +158,26 @@
                     <div class="admin-dashboard-panel-title" :class="theme.mutedText"><UIcon name="i-heroicons-calendar-days" class="w-4 h-4" />日历时间</div>
                     <div class="admin-dashboard-time" :class="theme.text">{{ dashboardNowText }}</div>
                     <div class="admin-dashboard-date" :class="theme.mutedText">{{ dashboardDateText }}</div>
+                    <div class="admin-calendar-shell">
+                      <div class="admin-calendar-title" :class="theme.text">{{ dashboardCalendarMonthText }}</div>
+                      <div class="admin-calendar-weekdays">
+                        <div v-for="weekday in dashboardWeekdays" :key="weekday" class="admin-calendar-weekday" :class="theme.mutedText">{{ weekday }}</div>
+                      </div>
+                      <div class="admin-calendar-grid">
+                        <div
+                          v-for="cell in dashboardCalendarCells"
+                          :key="cell.key"
+                          class="admin-calendar-cell"
+                          :class="[
+                            cell.isCurrentMonth ? theme.text : theme.mutedText,
+                            cell.isToday ? 'admin-calendar-cell-today' : '',
+                            !cell.isCurrentMonth ? 'admin-calendar-cell-out' : ''
+                          ]"
+                        >
+                          {{ cell.day }}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -699,7 +719,7 @@
                               v-model="frontendConfig.lifeCountdownBirthDate"
                               type="date"
                               class="w-full rounded-md border px-3 py-2 text-sm bg-white dark:bg-slate-900"
-                              :class="[theme.border, theme.text]"
+                              :class="[theme.border, theme.text, isLifeBirthdayInvalid ? 'border-red-500 text-red-400 focus:border-red-500 focus:ring-red-500' : '']"
                               inputmode="none"
                               @click="openLifeBirthdayPicker"
                               @focus="openLifeBirthdayPicker"
@@ -707,7 +727,7 @@
                               @paste.prevent
                               @drop.prevent
                             />
-                            <div class="text-xs mt-1" :class="theme.mutedText">格式：YYYY-MM-DD（仅可通过日历选择）</div>
+                            <div class="text-xs mt-1" :class="isLifeBirthdayInvalid ? 'text-red-400' : theme.mutedText">格式：YYYY-MM-DD</div>
                           </div>
                           <div>
                             <div class="text-xs mb-1" :class="theme.mutedText">预期寿命（年）</div>
@@ -715,6 +735,36 @@
                             <div class="text-xs mt-1" :class="theme.mutedText">格式：1-150 的整数，不填则不会保存</div>
                           </div>
                         </div>
+                        <div v-if="lifePreview" class="life-preview-shell">
+                          <div class="life-preview-grid">
+                            <div class="life-preview-card" :class="theme.subtleBg">
+                              <div class="life-preview-label" :class="theme.mutedText">当前年龄</div>
+                              <div class="life-preview-value" :class="theme.text">{{ lifePreview.ageYears }} 岁</div>
+                            </div>
+                            <div class="life-preview-card" :class="theme.subtleBg">
+                              <div class="life-preview-label" :class="theme.mutedText">已走过天数</div>
+                              <div class="life-preview-value" :class="theme.text">{{ lifePreview.elapsedDays.toLocaleString('zh-CN') }}</div>
+                            </div>
+                            <div class="life-preview-card" :class="theme.subtleBg">
+                              <div class="life-preview-label" :class="theme.mutedText">剩余天数</div>
+                              <div class="life-preview-value" :class="theme.text">{{ lifePreview.remainingDays.toLocaleString('zh-CN') }}</div>
+                            </div>
+                            <div class="life-preview-card" :class="theme.subtleBg">
+                              <div class="life-preview-label" :class="theme.mutedText">预期日期</div>
+                              <div class="life-preview-value" :class="theme.text">{{ lifePreview.endDateText }}</div>
+                            </div>
+                          </div>
+                          <div class="life-preview-progress-wrap">
+                            <div class="flex items-center justify-between text-xs" :class="theme.mutedText">
+                              <span>人生进度可视化</span>
+                              <span>{{ lifePreview.percent }}%</span>
+                            </div>
+                            <div class="life-preview-track">
+                              <div class="life-preview-fill" :style="{ width: `${lifePreview.percent}%` }" />
+                            </div>
+                          </div>
+                        </div>
+                        <div v-else class="text-xs" :class="theme.mutedText">选择生日并填写预期寿命后，将显示可视化预览。</div>
                         <div class="flex justify-end">
                           <UButton color="primary" class="shadow" @click="saveLifeCountdownConfig">保存配置</UButton>
                         </div>
@@ -1645,7 +1695,8 @@ const cardCls = 'rounded-2xl border shadow-2xl'
 type AdminSectionKey =
   'dashboard' | 'system' | 'user' | 'site' | 'notify' | 'attachments' | 'attachment-storage' | 'db' | 'version' | 'security' |
   'site-register' | 'site-pwa' | 'site-github-card' | 'site-github-login' | 'site-announcement' | 'site-music' |
-  'site-default-theme' | 'site-social-links' | 'friend-links' | 'site-configs' | 'comments' | 'email' | 'admin-users' |
+  'site-default-theme' | 'site-social-links' | 'site-ads' | 'hitokoto' | 'life-countdown' |
+  'friend-links' | 'site-configs' | 'comments' | 'email' | 'admin-users' |
   'storage'
 const activeSection = ref<AdminSectionKey>('dashboard')
 const adminNavGroups = computed(() => {
@@ -1671,6 +1722,9 @@ const adminNavGroups = computed(() => {
         { key: 'site-register', label: '注册开关', icon: 'i-heroicons-user-plus' },
         { key: 'site-pwa', label: 'PWA 模式', icon: 'i-heroicons-rocket-launch' },
         { key: 'site-announcement', label: '公告栏', icon: 'i-heroicons-megaphone' },
+        { key: 'site-ads', label: '左侧广告', icon: 'i-heroicons-photo' },
+        { key: 'hitokoto', label: '随机一言', icon: 'i-heroicons-sparkles' },
+        { key: 'life-countdown', label: '人生倒计时', icon: 'i-heroicons-heart' },
         { key: 'site-social-links', label: '社交链接', icon: 'i-heroicons-link' }
       ] as Array<{ key: AdminSectionKey, label: string, icon: string }>
     },
@@ -1740,7 +1794,7 @@ const sectionGroupMap = computed(() => {
   return map
 })
 const normalizeSection = (key: AdminSectionKey): AdminSectionKey => {
-  if (['site-register', 'site-pwa', 'site-github-card', 'site-announcement', 'site-music', 'site-default-theme', 'site-social-links', 'site-configs', 'friend-links'].includes(key)) return 'site'
+  if (['site-register', 'site-pwa', 'site-github-card', 'site-announcement', 'site-music', 'site-default-theme', 'site-social-links', 'site-configs', 'site-ads', 'hitokoto', 'life-countdown', 'friend-links'].includes(key)) return 'site'
   if (key === 'version') return 'db'
   return key
 }
@@ -1774,6 +1828,22 @@ const blockDateTyping = (evt: KeyboardEvent) => {
   if (evt.key === 'Tab') return
   evt.preventDefault()
 }
+const normalizeLifeBirthday = (raw: string) => {
+  const text = String(raw || '').trim()
+  if (!text) return ''
+  const d = new Date(`${text}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return ''
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const normalized = `${y}-${m}-${day}`
+  return normalized === text ? normalized : ''
+}
+const isLifeBirthdayInvalid = computed(() => {
+  const raw = String((frontendConfig as any).lifeCountdownBirthDate || '').trim()
+  if (!raw) return false
+  return !normalizeLifeBirthday(raw)
+})
  
 
 // 新用户注册开关相关
@@ -1864,6 +1934,79 @@ const dashboardDateText = computed(() => new Intl.DateTimeFormat('zh-CN', {
   weekday: 'long',
   timeZone: 'Asia/Shanghai'
 }).format(dashboardNow.value))
+const dashboardWeekdays = ['一', '二', '三', '四', '五', '六', '日']
+const dashboardCalendarMonthText = computed(() => new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric',
+  month: 'long',
+  timeZone: 'Asia/Shanghai'
+}).format(dashboardNow.value))
+const dashboardCalendarCells = computed(() => {
+  const now = dashboardNow.value
+  const year = now.getFullYear()
+  const month = now.getMonth()
+  const firstDay = new Date(year, month, 1)
+  const startOffset = (firstDay.getDay() + 6) % 7
+  const monthDays = new Date(year, month + 1, 0).getDate()
+  const prevMonthDays = new Date(year, month, 0).getDate()
+  const cells: Array<{ key: string; day: number; isCurrentMonth: boolean; isToday: boolean }> = []
+  for (let i = 0; i < 42; i++) {
+    const dayIndex = i - startOffset + 1
+    let day = dayIndex
+    let dateYear = year
+    let dateMonth = month
+    let isCurrentMonth = true
+    if (dayIndex <= 0) {
+      day = prevMonthDays + dayIndex
+      dateMonth = month - 1
+      if (dateMonth < 0) {
+        dateMonth = 11
+        dateYear -= 1
+      }
+      isCurrentMonth = false
+    } else if (dayIndex > monthDays) {
+      day = dayIndex - monthDays
+      dateMonth = month + 1
+      if (dateMonth > 11) {
+        dateMonth = 0
+        dateYear += 1
+      }
+      isCurrentMonth = false
+    }
+    const isToday = dateYear === now.getFullYear() && dateMonth === now.getMonth() && day === now.getDate()
+    cells.push({
+      key: `${dateYear}-${dateMonth + 1}-${day}-${i}`,
+      day,
+      isCurrentMonth,
+      isToday
+    })
+  }
+  return cells
+})
+const lifePreview = computed(() => {
+  const birthRaw = String((frontendConfig as any).lifeCountdownBirthDate || '').trim()
+  const birth = normalizeLifeBirthday(birthRaw)
+  const yearsRaw = Number((frontendConfig as any).lifeExpectancyYears)
+  if (!birth || !Number.isFinite(yearsRaw) || yearsRaw <= 0) return null
+  const expectancyYears = Math.min(150, Math.max(1, Math.floor(yearsRaw)))
+  const birthDate = new Date(`${birth}T00:00:00`)
+  if (Number.isNaN(birthDate.getTime())) return null
+  const endDate = new Date(birthDate)
+  endDate.setFullYear(endDate.getFullYear() + expectancyYears)
+  const totalMs = endDate.getTime() - birthDate.getTime()
+  if (totalMs <= 0) return null
+  const elapsedMs = Math.max(0, dashboardNow.value.getTime() - birthDate.getTime())
+  const elapsedDays = Math.floor(elapsedMs / 86400000)
+  const totalDays = Math.max(1, Math.floor(totalMs / 86400000))
+  const remainingDays = Math.max(0, totalDays - elapsedDays)
+  const percent = Math.min(100, Math.max(0, Math.round((elapsedMs / totalMs) * 100)))
+  return {
+    elapsedDays,
+    remainingDays,
+    percent,
+    ageYears: (elapsedDays / 365.2425).toFixed(1),
+    endDateText: new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(endDate)
+  }
+})
 const hex32 = (s: string) => {
   let h1 = 0x811c9dc5, h2 = 0x811c9dc5
   const t = String(s || '')
@@ -3473,9 +3616,6 @@ const configLabels: Record<string, string> = {
     rssDescription: 'RSS 描述',
     rssAuthorName: 'RSS 作者',
     rssFaviconURL: 'RSS 图标链接',
-    lifeCountdownEnabled: '人生倒计时开关',
-    lifeCountdownBirthDate: '人生倒计时生日',
-    lifeExpectancyYears: '人生倒计时预期寿命',
     commentPageTitle: '留言页面标题',
     commentPageDescription: '留言页面说明',
     aboutPageTitle: '关于页面标题',
@@ -3493,8 +3633,6 @@ const configFieldHints: Record<string, string> = {
   rssDescription: 'RSS 订阅说明文字。',
   rssAuthorName: 'RSS 输出作者名称。',
   rssFaviconURL: 'RSS 图标地址，建议使用 1:1 图片。',
-  lifeCountdownBirthDate: '格式 YYYY-MM-DD，仅可通过日历选择。',
-  lifeExpectancyYears: '格式 1-150 的整数，不设置时不会自动填充值。',
   commentPageTitle: '留言页大标题。',
   commentPageDescription: '留言页顶部描述文字。',
   aboutPageTitle: '关于页标题。',
@@ -4136,10 +4274,7 @@ const saveConfigItem = async (key: string) => {
 const saveLifeCountdownConfig = async () => {
   try {
     const rawBirth = String((frontendConfig as any).lifeCountdownBirthDate || '').trim()
-    const normalizedBirth = rawBirth ? new Date(`${rawBirth}T00:00:00`) : null
-    const birthDate = rawBirth && normalizedBirth && !Number.isNaN(normalizedBirth.getTime())
-      ? `${normalizedBirth.getFullYear()}-${String(normalizedBirth.getMonth() + 1).padStart(2, '0')}-${String(normalizedBirth.getDate()).padStart(2, '0')}`
-      : ''
+    const birthDate = normalizeLifeBirthday(rawBirth)
     if (rawBirth && !birthDate) {
       throw new Error('生日格式无效，请重新选择日期')
     }
@@ -5521,6 +5656,92 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   margin-top: 6px;
   font-size: 13px;
 }
+.admin-calendar-shell {
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(148, 163, 184, 0.08);
+}
+.admin-calendar-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.admin-calendar-weekdays,
+.admin-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+.admin-calendar-weekday {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+}
+.admin-calendar-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  min-height: 28px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.14);
+}
+.admin-calendar-cell-out {
+  opacity: 0.45;
+}
+.admin-calendar-cell-today {
+  border-color: rgba(56, 189, 248, 0.75);
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.3), rgba(99, 102, 241, 0.26));
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.28);
+}
+.life-preview-shell {
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 12px;
+  background: rgba(148, 163, 184, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.life-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 8px;
+}
+.life-preview-card {
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 10px;
+}
+.life-preview-label {
+  font-size: 12px;
+}
+.life-preview-value {
+  margin-top: 4px;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.life-preview-progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.life-preview-track {
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(148, 163, 184, 0.2);
+}
+.life-preview-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #34d399, #22d3ee, #6366f1);
+}
 .admin-setting-stack {
   display: flex;
   flex-direction: column;
@@ -5780,6 +6001,9 @@ html.dark .textarea-resize-handle { background: rgba(255,255,255,0.16); }
 }
 @media (min-width: 768px) {
   .admin-dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .life-preview-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
