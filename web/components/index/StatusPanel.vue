@@ -20,15 +20,13 @@
         </div>
         <nav class="flex-1 overflow-y-auto px-2 py-3 space-y-2">
           <div v-for="group in adminNavGroups" :key="group.key" class="admin-nav-group">
-            <button class="admin-nav-group-btn" :class="[navGroupOpen[group.key] ? 'admin-nav-group-btn-open' : '', sidebarCollapsed ? 'justify-center' : '']" @click="toggleNavGroup(group.key)">
+            <div class="admin-nav-group-btn admin-nav-group-btn-open" :class="[sidebarCollapsed ? 'justify-center' : '']">
               <span class="flex items-center gap-2">
                 <UIcon :name="group.icon" class="w-5 h-5" />
                 <span v-show="!sidebarCollapsed" class="text-sm font-semibold tracking-wide">{{ group.label }}</span>
               </span>
-              <UIcon v-show="!sidebarCollapsed" :name="navGroupOpen[group.key] ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="w-4 h-4" />
-            </button>
-            <transition name="admin-nav-collapse">
-              <div v-if="navGroupOpen[group.key] && !sidebarCollapsed" class="mt-2 space-y-1">
+            </div>
+            <div v-if="!sidebarCollapsed" class="mt-2 space-y-1">
               <button
                 v-for="item in group.items"
                 :key="item.key"
@@ -41,8 +39,7 @@
                   <span class="text-sm">{{ item.label }}</span>
                 </span>
               </button>
-              </div>
-            </transition>
+            </div>
           </div>
         </nav>
         <div class="px-4 py-3 border-t" :class="theme.border">
@@ -57,7 +54,7 @@
           </div>
         </div>
       </aside>
-        <main ref="adminMain" class="admin-main-surface w-full min-h-screen overflow-y-auto transition-[padding] duration-200" :class="adminMainClass">
+        <main ref="adminMain" class="admin-main-surface w-full h-screen overflow-y-auto transition-[padding] duration-200" :class="adminMainClass">
         <div class="md:hidden flex items-center justify-between gap-2 px-4 border-b rounded-b-2xl transition-all duration-200" :class="mobileHeaderClass">
           <div class="flex items-center gap-2 min-w-0">
             <button class="rounded-lg shadow" :class="[headerBtnCls, headerCompact ? 'p-1.5' : 'p-2']" @click="sidebarOpen = !sidebarOpen"><UIcon name="i-heroicons-bars-3" class="w-5 h-5" /></button>
@@ -87,7 +84,7 @@
             <UButton v-if="isLogin" icon="i-heroicons-power" color="red" variant="solid" class="shadow" @click="handleLogout">退出登录</UButton>
           </div>
         </div>
-        <div class="admin-form-shell flex-1 px-4 pb-24 pt-4 md:pt-6 flex flex-col w-full space-y-4">
+        <div class="admin-form-shell px-4 pb-16 pt-3 md:pt-4 md:pb-20 w-full space-y-4">
           <div class="col-span-12">
             <h1 class="text-xl md:text-2xl font-bold text-left md:hidden" :class="theme.text">系统管理面板</h1>
           </div>
@@ -111,6 +108,57 @@
 
                 <div class="flex items-center gap-2">
                   <UButton size="sm" color="green" class="shadow" @click="saveAdminTheme">保存</UButton>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div id="dashboard-section" class="col-span-12">
+            <div :class="adminShellCardClass">
+              <div :class="adminSectionHeaderClass">
+                <div class="font-semibold flex items-center gap-2" :class="theme.text">
+                  <UIcon name="i-heroicons-squares-2x2" class="w-5 h-5" />
+                  <span>仪表盘</span>
+                </div>
+              </div>
+              <div class="px-4 pb-4 space-y-4">
+                <div class="admin-dashboard-grid">
+                  <div class="admin-dashboard-stat" :class="theme.subtleBg">
+                    <div class="admin-dashboard-stat-title" :class="theme.mutedText"><UIcon name="i-heroicons-document-text" class="w-4 h-4" />内容总数</div>
+                    <div class="admin-dashboard-stat-value" :class="theme.text">{{ dashboardStats.messageCount }}</div>
+                  </div>
+                  <div class="admin-dashboard-stat" :class="theme.subtleBg">
+                    <div class="admin-dashboard-stat-title" :class="theme.mutedText"><UIcon name="i-heroicons-user-group" class="w-4 h-4" />用户总数</div>
+                    <div class="admin-dashboard-stat-value" :class="theme.text">{{ dashboardStats.userCount }}</div>
+                  </div>
+                  <div class="admin-dashboard-stat" :class="theme.subtleBg">
+                    <div class="admin-dashboard-stat-title" :class="theme.mutedText"><UIcon name="i-heroicons-chat-bubble-left-right" class="w-4 h-4" />评论总数</div>
+                    <div class="admin-dashboard-stat-value" :class="theme.text">{{ dashboardStats.commentCount }}</div>
+                  </div>
+                  <div class="admin-dashboard-stat" :class="theme.subtleBg">
+                    <div class="admin-dashboard-stat-title" :class="theme.mutedText"><UIcon name="i-heroicons-heart" class="w-4 h-4" />人生进度</div>
+                    <div class="admin-dashboard-stat-value" :class="theme.text">{{ dashboardStats.lifePercent }}%</div>
+                  </div>
+                </div>
+                <div class="admin-dashboard-grid">
+                  <div class="admin-dashboard-panel" :class="theme.subtleBg">
+                    <div class="admin-dashboard-panel-title" :class="theme.mutedText"><UIcon name="i-heroicons-chart-bar-square" class="w-4 h-4" />运行统计</div>
+                    <div class="space-y-3">
+                      <div v-for="bar in dashboardBars" :key="bar.label" class="space-y-1">
+                        <div class="flex items-center justify-between text-xs" :class="theme.mutedText">
+                          <span>{{ bar.label }}</span>
+                          <span>{{ bar.percent }}%</span>
+                        </div>
+                        <div class="admin-dashboard-track">
+                          <div class="admin-dashboard-fill" :style="{ width: `${bar.percent}%` }" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="admin-dashboard-panel" :class="theme.subtleBg">
+                    <div class="admin-dashboard-panel-title" :class="theme.mutedText"><UIcon name="i-heroicons-calendar-days" class="w-4 h-4" />日历时间</div>
+                    <div class="admin-dashboard-time" :class="theme.text">{{ dashboardNowText }}</div>
+                    <div class="admin-dashboard-date" :class="theme.mutedText">{{ dashboardDateText }}</div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -141,74 +189,73 @@
               <div :class="adminSectionHeaderClass">
                 <div class="font-semibold">用户信息配置</div>
               </div>
-              <div class="px-4 pb-4 grid grid-cols-1 md:grid-cols-3 gap-y-2 md:gap-x-4">
-                <div class="rounded-lg p-3 h-full" :class="theme.subtleBg">
-                  <div class="flex justify-between items-center mb-2">
-                    <span :class="theme.mutedText">用户名</span>
-                    <UButton size="sm" @click="editUserInfo.username = !editUserInfo.username" :color="editUserInfo.username ? 'gray' : 'green'" :variant="editUserInfo.username ? 'soft' : 'solid'" class="shadow">{{ editUserInfo.username ? '取消' : '修改' }}</UButton>
+              <div class="px-4 pb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="rounded-lg p-4 h-full md:col-span-1" :class="theme.subtleBg">
+                  <div class="admin-setting-stack">
+                    <div class="admin-setting-block">
+                      <div class="admin-setting-heading">
+                        <div>
+                          <div class="admin-setting-title" :class="theme.text">用户名</div>
+                          <p class="admin-setting-desc" :class="theme.mutedText">登录名与后台展示名保持一致，修改后立即生效。</p>
+                        </div>
+                        <UBadge color="primary" variant="soft" class="text-xs px-2 py-1 rounded-md !text-slate-800 dark:!text-slate-200">{{ userStore.user?.username || '未设置' }}</UBadge>
+                      </div>
+                      <UInput v-model="userForm.username" :placeholder="userStore.user?.username || '输入用户名'" class="w-full" />
+                      <div class="flex justify-end">
+                        <UButton @click="updateUsername" color="primary" class="shadow">保存用户名</UButton>
+                      </div>
+                    </div>
+
+                    <div class="admin-setting-block">
+                      <div class="admin-setting-heading">
+                        <div>
+                          <div class="admin-setting-title" :class="theme.text">头像</div>
+                          <p class="admin-setting-desc" :class="theme.mutedText">上传图片会自动进入裁剪流程，也可以直接填写远程链接。</p>
+                        </div>
+                        <img :src="avatarSrc" class="w-12 h-12 rounded-full object-cover ring-2 ring-indigo-400/20" alt="avatar" @error="onAvatarImgError" />
+                      </div>
+                      <div class="flex flex-wrap items-center gap-2">
+                        <UButton size="sm" @click.stop="chooseAvatar" color="indigo" variant="soft" class="shadow">上传头像</UButton>
+                        <UButton size="sm" :loading="avatarUploadingGravatar" @click.stop="useInitialsAvatar" color="orange" variant="soft" class="shadow">使用 Gravatar 默认头像</UButton>
+                      </div>
+                      <input ref="avatarInput" type="file" accept="image/*" class="hidden" @change="onAvatarFileChange" />
+                      <div class="flex flex-col md:flex-row items-stretch gap-2 w-full">
+                        <UInput v-model="avatarLink" placeholder="头像链接（http 或 /api 开头）" class="flex-1" />
+                        <UButton size="sm" :loading="avatarUploadingLink" @click.stop="saveAvatarLink" color="primary" variant="solid" class="shadow">保存链接</UButton>
+                      </div>
+                      <UModal v-model="cropperOpen">
+                        <div class="p-4">
+                          <div :class="theme.mutedText" class="mb-2">裁剪头像（拖动图片调整位置，滑块调整缩放）</div>
+                          <div class="mx-auto" style="width:240px;height:240px;border-radius:9999px;overflow:hidden;position:relative;background:#111">
+                            <img v-if="cropImageUrl" :src="cropImageUrl" alt="to-crop"
+                                 :style="{ position: 'absolute', left: '50%', top: '50%', transform: `translate(-50%, -50%) translate(${cropX}px, ${cropY}px) scale(${cropScale})`, userSelect: 'none' }"
+                                 @mousedown="startDrag" @touchstart="startDrag" />
+                          </div>
+                          <div class="mt-3 flex items-center gap-3">
+                            <span :class="theme.mutedText">缩放</span>
+                            <input type="range" min="0.5" max="3" step="0.01" v-model.number="cropScale" />
+                            <UButton :loading="avatarUploadingFile" color="green" @click="performCropAndUpload">裁剪并保存</UButton>
+                            <UButton color="indigo" variant="soft" @click="closeCropper">取消</UButton>
+                          </div>
+                        </div>
+                      </UModal>
+                    </div>
+
+                    <div class="admin-setting-block">
+                      <div class="admin-setting-heading">
+                        <div>
+                          <div class="admin-setting-title" :class="theme.text">个性签名</div>
+                          <p class="admin-setting-desc" :class="theme.mutedText">展示在个人信息区域，支持多行文本。</p>
+                        </div>
+                      </div>
+                      <UTextarea v-model="userForm.description" :placeholder="userStore.user?.description || '欢迎访问'" class="w-full" />
+                      <div class="flex justify-end">
+                        <UButton @click="updateDescription" color="primary" class="shadow">保存签名</UButton>
+                      </div>
+                    </div>
                   </div>
-                  <div v-if="editUserInfo.username">
-                    <UInput v-model="userForm.username" placeholder="新用户名" class="w-full mb-2" />
-                    <div class="flex justify-end gap-2">
-                      <UButton @click="updateUsername" color="primary" class="shadow">保存</UButton>
-                    </div>
-                  </div>
-                    <div v-else>
-                      <UBadge color="primary" variant="soft" class="ml-0 text-xs px-2 py-1 rounded-md !text-slate-800 dark:!text-slate-200">{{ userStore.user?.username }}</UBadge>
-                    </div>
-                  <div class="mt-3">
-                  <div class="flex justify-between items-center mb-2">
-                    <span :class="theme.mutedText">头像</span>
-                    <div class="flex items-center gap-2">
-                      <UButton size="sm" @click.stop="chooseAvatar" color="indigo" variant="soft" class="shadow">上传头像</UButton>
-                      <UButton size="sm" :loading="avatarUploadingGravatar" @click.stop="useInitialsAvatar" color="orange" variant="soft" class="shadow">使用 Gravatar 默认头像</UButton>
-                    </div>
-                  </div>
-                    <div class="flex items-center gap-3">
-                      <img :src="avatarSrc" class="w-10 h-10 rounded-full object-cover" alt="avatar" @error="onAvatarImgError" />
-                    </div>
-                    <p class="text-xs mt-1" :class="theme.mutedText">选择图片后自动进入裁剪，裁剪完成即可保存并预览</p>
-                    <input ref="avatarInput" type="file" accept="image/*" class="hidden" @change="onAvatarFileChange" />
-                    <div class="flex items-center gap-2 w-full mt-2">
-                      <UInput v-model="avatarLink" placeholder="头像链接（http或/api开头）" class="flex-1" />
-                      <UButton size="sm" :loading="avatarUploadingLink" @click.stop="saveAvatarLink" color="primary" variant="solid" class="shadow">保存链接</UButton>
-                    </div>
-                    <UModal v-model="cropperOpen">
-                      <div class="p-4">
-                        <div :class="theme.mutedText" class="mb-2">裁剪头像（拖动图片调整位置，滑块调整缩放）</div>
-                        <div class="mx-auto" style="width:240px;height:240px;border-radius:9999px;overflow:hidden;position:relative;background:#111">
-                          <img v-if="cropImageUrl" :src="cropImageUrl" alt="to-crop" 
-                               :style="{ position: 'absolute', left: '50%', top: '50%', transform: `translate(-50%, -50%) translate(${cropX}px, ${cropY}px) scale(${cropScale})`, userSelect: 'none' }"
-                               @mousedown="startDrag" @touchstart="startDrag" />
-                        </div>
-                        <div class="mt-3 flex items-center gap-3">
-                          <span :class="theme.mutedText">缩放</span>
-                          <input type="range" min="0.5" max="3" step="0.01" v-model.number="cropScale" />
-                          <UButton :loading="avatarUploadingFile" color="green" @click="performCropAndUpload">裁剪并保存</UButton>
-                          <UButton color="indigo" variant="soft" @click="closeCropper">取消</UButton>
-                        </div>
-                      </div>
-                    </UModal>
-                    <div class="mt-3">
-                      <div class="flex justify-between items-center mb-2">
-                        <span :class="theme.mutedText">个性签名</span>
-                        <UButton size="sm" @click="editUserInfo.description = !editUserInfo.description" :color="editUserInfo.description ? 'gray' : 'green'" :variant="editUserInfo.description ? 'soft' : 'solid'" class="shadow">{{ editUserInfo.description ? '取消' : '修改' }}</UButton>
-                      </div>
-                      <div v-if="editUserInfo.description">
-                        <UTextarea v-model="userForm.description" placeholder="欢迎访问" class="w-full mb-2" />
-                        <div class="flex justify-end gap-2">
-                          <UButton @click="updateDescription" color="primary" class="shadow">保存</UButton>
-                        </div>
-                      </div>
-                      <div v-else>
-                        <div :class="[theme.subtleBg, theme.border, 'rounded-md p-3 border']">
-                          <p :class="[theme.text, 'break-words']">{{ userStore.user?.description || '欢迎访问' }}</p>
-                        </div>
-                      </div>
-                    </div>
                 </div>
-              </div>
-              <div class="rounded-lg p-3 md:col-span-2" :class="theme.subtleBg">
+                <div class="rounded-lg p-4 md:col-span-2" :class="theme.subtleBg">
                 <div class="flex justify-between items-center mb-2">
                   <div class="flex items-center gap-2">
                     <span :class="theme.mutedText">API Token</span>
@@ -234,63 +281,71 @@
                   </span>
                   <span v-else class="inline-flex items-center px-2 py-0.5 rounded-md text-amber-400 border border-amber-400/40">未绑定邮箱，请先绑定邮箱</span>
                 </div>
-                <div class="border-t mt-4 pt-3" :class="theme.border">
-                  <div class="flex justify-between items-center mb-2">
-                    <span :class="theme.mutedText">修改密码</span>
-                    <UButton size="sm" @click="editUserInfo.password = !editUserInfo.password" :color="editUserInfo.password ? 'gray' : 'green'" :variant="editUserInfo.password ? 'soft' : 'solid'" class="shadow">{{ editUserInfo.password ? '取消' : '修改' }}</UButton>
-                  </div>
-                  <div v-if="editUserInfo.password">
-                    <div class="w-full mb-2 flex items-center gap-2">
-                      <UInput v-model="userForm.oldPassword" :type="showOldPassword ? 'text' : 'password'" placeholder="当前密码" class="flex-1" />
-                      <UButton :icon="showOldPassword ? 'i-heroicons-eye-slash' : 'i-heroicons-eye'" color="indigo" variant="ghost" @click="showOldPassword = !showOldPassword" />
+                <div class="border-t mt-4 pt-4" :class="theme.border">
+                  <div class="admin-setting-stack">
+                    <div class="admin-setting-block">
+                      <div class="admin-setting-heading">
+                        <div>
+                          <div class="admin-setting-title" :class="theme.text">密码设置</div>
+                          <p class="admin-setting-desc" :class="theme.mutedText">输入当前密码后即可修改新密码，强度需达到中及以上。</p>
+                        </div>
+                        <UBadge :color="passwordStrengthColor" variant="soft">{{ passwordStrengthLabel }}</UBadge>
+                      </div>
+                      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div class="w-full flex items-center gap-2">
+                          <UInput v-model="userForm.oldPassword" :type="showOldPassword ? 'text' : 'password'" placeholder="当前密码" class="flex-1" />
+                          <UButton :icon="showOldPassword ? 'i-heroicons-eye-slash' : 'i-heroicons-eye'" color="indigo" variant="ghost" @click="showOldPassword = !showOldPassword" />
+                        </div>
+                        <div class="w-full flex items-center gap-2">
+                          <UInput v-model="userForm.newPassword" :type="showNewPassword ? 'text' : 'password'" placeholder="新密码" class="flex-1" />
+                          <UButton :icon="showNewPassword ? 'i-heroicons-eye-slash' : 'i-heroicons-eye'" color="indigo" variant="ghost" @click="showNewPassword = !showNewPassword" />
+                        </div>
+                        <div class="w-full flex items-center gap-2">
+                          <UInput v-model="userForm.confirmPassword" :type="showConfirmPassword ? 'text' : 'password'" placeholder="确认新密码" class="flex-1" />
+                          <UButton :icon="showConfirmPassword ? 'i-heroicons-eye-slash' : 'i-heroicons-eye'" color="indigo" variant="ghost" @click="showConfirmPassword = !showConfirmPassword" />
+                        </div>
+                      </div>
+                      <div class="flex justify-end">
+                        <UButton @click="updatePassword" :disabled="!canSavePassword" color="primary" class="shadow">保存密码</UButton>
+                      </div>
                     </div>
-                    <div class="w-full mb-2 flex items-center gap-2">
-                      <UInput v-model="userForm.newPassword" :type="showNewPassword ? 'text' : 'password'" placeholder="新密码" class="flex-1" />
-                      <UBadge :color="passwordStrengthColor" variant="soft">{{ passwordStrengthLabel }}</UBadge>
-                      <UButton :icon="showNewPassword ? 'i-heroicons-eye-slash' : 'i-heroicons-eye'" color="indigo" variant="ghost" @click="showNewPassword = !showNewPassword" />
+
+                    <div v-if="!userStore.user?.email" class="admin-setting-block">
+                      <div class="admin-setting-heading">
+                        <div>
+                          <div class="admin-setting-title" :class="theme.text">绑定邮箱</div>
+                          <p class="admin-setting-desc" :class="theme.mutedText">绑定后可用于找回密码和接收系统通知。</p>
+                        </div>
+                      </div>
+                      <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-3">
+                        <UInput v-model="userForm.email" type="email" placeholder="输入邮箱" class="flex-1" />
+                        <UButton color="indigo" variant="soft" @click="sendBindEmailCode">发送验证码</UButton>
+                      </div>
+                      <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-3">
+                        <UInput v-model="userForm.emailCode" placeholder="验证码" class="flex-1" />
+                        <UButton color="primary" class="shadow" @click="verifyBindEmail">立即绑定</UButton>
+                      </div>
                     </div>
-                    <div class="w-full mb-2 flex items-center gap-2">
-                      <UInput v-model="userForm.confirmPassword" :type="showConfirmPassword ? 'text' : 'password'" placeholder="确认新密码" class="flex-1" />
-                      <UButton :icon="showConfirmPassword ? 'i-heroicons-eye-slash' : 'i-heroicons-eye'" color="indigo" variant="ghost" @click="showConfirmPassword = !showConfirmPassword" />
-                    </div>
-                    <div class="flex justify-end gap-2">
-                      <UButton @click="updatePassword" :disabled="!canSavePassword" color="primary" class="shadow">保存</UButton>
-                    </div>
-                  </div>
-                </div>
-                <div class="border-t mt-4 pt-3" :class="theme.border">
-                  <div class="flex justify-between items-center mb-2">
-                    <span :class="theme.mutedText">绑定邮箱</span>
-                    <UButton size="sm" @click="editUserInfo.emailBind = !editUserInfo.emailBind" :color="editUserInfo.emailBind ? 'gray' : 'green'" :variant="editUserInfo.emailBind ? 'soft' : 'solid'" class="shadow">{{ editUserInfo.emailBind ? '取消' : '修改' }}</UButton>
-                  </div>
-                  <div v-if="editUserInfo.emailBind">
-                    <div class="w-full mb-2 flex items-center gap-2">
-                      <UInput v-model="userForm.email" type="email" placeholder="输入邮箱" class="flex-1" />
-                      <UButton color="indigo" variant="soft" @click="sendBindEmailCode">发送验证码</UButton>
-                    </div>
-                    <div class="w-full mb-2 flex items-center gap-2">
-                      <UInput v-model="userForm.emailCode" placeholder="验证码" class="flex-1" />
-                      <UButton color="primary" class="shadow" @click="verifyBindEmail">绑定</UButton>
-                    </div>
-                  </div>
-                </div>
-                <div class="border-t mt-4 pt-3" :class="theme.border">
-                  <div class="flex justify-between items-center mb-2">
-                    <span :class="theme.mutedText">更换邮箱</span>
-                    <UButton size="sm" @click="editUserInfo.emailChange = !editUserInfo.emailChange" :color="editUserInfo.emailChange ? 'gray' : 'green'" :variant="editUserInfo.emailChange ? 'soft' : 'solid'" class="shadow">{{ editUserInfo.emailChange ? '取消' : '修改' }}</UButton>
-                  </div>
-                  <div v-if="editUserInfo.emailChange">
-                    <div class="w-full mb-2 flex items-center gap-2">
-                      <UButton color="indigo" variant="soft" @click="sendChangeEmailCode">向当前邮箱发送验证码</UButton>
-                      <UInput v-model="userForm.changeCode" placeholder="收到的验证码" class="flex-1" />
-                    </div>
-                    <div class="w-full mb-2 flex items-center gap-2">
-                      <UInput v-model="userForm.newEmail" type="email" placeholder="新的邮箱" class="flex-1" />
-                      <UButton color="primary" class="shadow" @click="changeEmail">更换</UButton>
-                    </div>
-                    <div v-if="awaitingNewEmailVerify" class="w-full mb-2 flex items-center gap-2">
-                      <UInput v-model="userForm.emailCode" placeholder="新邮箱验证码" class="flex-1" />
-                      <UButton color="primary" class="shadow" @click="confirmChangeEmail">确认更换</UButton>
+
+                    <div v-else class="admin-setting-block">
+                      <div class="admin-setting-heading">
+                        <div>
+                          <div class="admin-setting-title" :class="theme.text">更换邮箱</div>
+                          <p class="admin-setting-desc" :class="theme.mutedText">先校验当前邮箱，再填写新的邮箱地址完成更换。</p>
+                        </div>
+                      </div>
+                      <div class="grid grid-cols-1 md:grid-cols-[auto_minmax(0,1fr)] gap-3">
+                        <UButton color="indigo" variant="soft" @click="sendChangeEmailCode">向当前邮箱发送验证码</UButton>
+                        <UInput v-model="userForm.changeCode" placeholder="收到的验证码" class="flex-1" />
+                      </div>
+                      <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-3">
+                        <UInput v-model="userForm.newEmail" type="email" placeholder="新的邮箱" class="flex-1" />
+                        <UButton color="primary" class="shadow" @click="changeEmail">提交更换</UButton>
+                      </div>
+                      <div v-if="awaitingNewEmailVerify" class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-3">
+                        <UInput v-model="userForm.emailCode" placeholder="新邮箱验证码" class="flex-1" />
+                        <UButton color="primary" class="shadow" @click="confirmChangeEmail">确认更换</UButton>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -385,6 +440,7 @@
                     <UButton color="primary" class="shadow" @click="saveConfigItem('announcementText')">保存公告文本</UButton>
                   </div>
                 </div>
+                <div id="site-music-legacy-section" class="hidden" />
                 <div id="site-music-section" class="col-span-12 mt-4">
                   <div :class="adminPanelCardClass">
                     <div :class="adminSectionHeaderClass">
@@ -485,29 +541,34 @@
                 </div>
                 <div id="site-configs-section" class="space-y-4">
                 <div v-for="(label, key) in configLabels" :key="key" :class="adminSubtleCardClass">
-                    <div class="flex justify-between items-center mb-2">
-                      <span :class="theme.mutedText">{{ label }}</span>
+                    <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-3">
+                      <div class="space-y-1">
+                        <div class="font-semibold" :class="theme.text">{{ label }}</div>
+                        <p class="text-xs" :class="theme.mutedText">{{ configFieldHints[String(key)] || '修改后可直接保存，不再需要先点“设置”展开。' }}</p>
+                      </div>
                       <div v-if="isSwitchConfigKey(String(key))" class="flex items-center gap-2">
                         <UToggle v-model="frontendConfig[String(key)]" />
                         <UButton size="sm" color="green" class="shadow" @click="saveConfigItem(String(key))">保存</UButton>
                       </div>
-                      <UButton v-else size="sm" @click="editItem[String(key)] = !editItem[String(key)]" :color="editItem[String(key)] ? 'gray' : 'green'" :variant="editItem[String(key)] ? 'soft' : 'solid'" class="shadow">{{ editItem[String(key)] ? '取消' : '修改' }}</UButton>
+                      <span v-else class="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-slate-200/70 text-slate-600 dark:bg-slate-700/70 dark:text-slate-200">
+                        {{ getConfigSummary(String(key)) }}
+                      </span>
                     </div>
-                    <div v-if="!isSwitchConfigKey(String(key)) && editItem[String(key)]">
+                    <div v-if="!isSwitchConfigKey(String(key))" class="space-y-3">
                       <template v-if="String(key) === 'backgrounds'">
                         <div class="space-y-3">
-                          <div v-for="(bg, index) in frontendConfig.backgrounds" :key="index" class="flex items-center gap-3">
-                            <img :src="bg || '/favicon.ico'" class="w-14 h-14 rounded object-cover border" :class="theme.border" @click="previewImage(bg)" />
-                            <UInput v-model="frontendConfig.backgrounds[index]" placeholder="输入头部图URL" class="flex-1" />
-                            <div class="flex items-center gap-2">
+                          <div v-for="(bg, index) in frontendConfig.backgrounds" :key="index" class="admin-array-row">
+                            <img :src="bg || '/favicon.ico'" class="w-16 h-16 rounded-xl object-cover border" :class="theme.border" @click="previewImage(bg)" />
+                            <UInput v-model="frontendConfig.backgrounds[index]" placeholder="输入头部图 URL" class="flex-1" />
+                            <div class="flex flex-wrap items-center gap-2">
                               <UButton size="xs" variant="soft" icon="i-heroicons-arrow-up" @click="moveBackgroundUp(index)">上移</UButton>
                               <UButton size="xs" variant="soft" icon="i-heroicons-arrow-down" @click="moveBackgroundDown(index)">下移</UButton>
                               <UButton size="xs" variant="soft" icon="i-heroicons-eye" @click="previewImage(bg)">预览</UButton>
                               <UButton size="xs" color="red" variant="soft" icon="i-heroicons-trash" @click="removeBackground(index)">删除</UButton>
                             </div>
                           </div>
-                          <div class="rounded border-2 border-dashed p-4 text-center" :class="theme.border" @dragover.prevent @drop.prevent="onDropFiles">
-                            <div class="flex items-center justify-center gap-3">
+                          <div class="rounded-xl border-2 border-dashed p-4 text-center" :class="theme.border" @dragover.prevent @drop.prevent="onDropFiles">
+                            <div class="flex flex-wrap items-center justify-center gap-3">
                               <UButton @click="addBackground" icon="i-heroicons-plus" variant="ghost">添加链接</UButton>
                               <UButton @click="triggerFileInput" icon="i-heroicons-cloud-arrow-up" variant="ghost">上传图片</UButton>
                             </div>
@@ -519,13 +580,13 @@
                         </div>
                       </template>
                       <template v-else-if="String(key) === 'avatarURL'">
-                        <div class="space-y-2">
+                        <div class="space-y-3">
                           <div class="flex items-center gap-3">
                             <img :src="frontendConfig.avatarURL" class="w-12 h-12 rounded-full object-cover" alt="site-avatar" />
                             <UButton size="sm" color="indigo" variant="soft" @click="siteAvatarInput?.click()">上传图片</UButton>
                             <input ref="siteAvatarInput" type="file" accept="image/*" class="hidden" @change="handleSiteAvatarUpload" />
                           </div>
-                          <UInput v-model="frontendConfig.avatarURL" placeholder="输入图片URL" class="w-full" />
+                          <UInput v-model="frontendConfig.avatarURL" placeholder="输入图片 URL" class="w-full" />
                         </div>
                       </template>
                       <template v-else-if="String(key) === 'subtitleText' || String(key) === 'linksDescription' || String(key) === 'commentPageDescription' || String(key) === 'aboutPageDescription' || String(key) === 'aboutMarkdown'">
@@ -538,24 +599,6 @@
                         <UButton @click="resetConfigItem(String(key))" variant="ghost" color="indigo">重置</UButton>
                         <UButton @click="saveConfigItem(String(key))" color="primary" class="shadow">保存</UButton>
                       </div>
-                    </div>
-                    <div v-else-if="!isSwitchConfigKey(String(key))">
-                      <template v-if="String(key) === 'backgrounds'">
-                        <div class="grid grid-cols-3 gap-2">
-                          <img v-for="(bg, index) in frontendConfig.backgrounds" :key="index" :src="bg" class="w-full h-24 object-cover rounded cursor-pointer border" :class="theme.border" @click="previewImage(bg)" />
-                        </div>
-                      </template>
-                      <template v-else-if="String(key) === 'avatarURL'">
-                        <div class="flex items-center gap-3">
-                          <img :src="frontendConfig.avatarURL" class="w-12 h-12 rounded-full object-cover" alt="site-avatar" />
-                          <span :class="theme.mutedText">站点头像预览</span>
-                        </div>
-                      </template>
-                      <template v-else>
-                        <div :class="[theme.subtleBg, theme.border, 'rounded-md p-3 border']">
-                          <p :class="[theme.text, 'break-words']">{{ frontendConfig[String(key)] }}</p>
-                        </div>
-                      </template>
                     </div>
                   </div>
                 </div>
@@ -678,28 +721,31 @@
                           <span class="text-sm" :class="theme.mutedText">启用</span>
                           <UToggle v-model="frontendConfig.socialLinksEnabled" />
                         </div>
-                        <UButton size="sm" @click="editItem.socialLinks = !editItem.socialLinks" :color="editItem.socialLinks ? 'gray' : 'green'" :variant="editItem.socialLinks ? 'soft' : 'solid'" class="shadow">{{ editItem.socialLinks ? '取消' : '修改' }}</UButton>
+                        <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-slate-200/70 text-slate-600 dark:bg-slate-700/70 dark:text-slate-200">
+                          {{ (frontendConfig.socialLinks || []).length }} 条链接
+                        </span>
                         <UButton color="green" class="shadow" @click="saveSocialLinks">保存</UButton>
                       </div>
                     </div>
                     <div class="px-4 pb-4">
-                      <div class="rounded-lg p-4" :class="theme.subtleBg">
-                        <div v-if="editItem.socialLinks" class="space-y-2">
-                          <div v-for="(item, i) in frontendConfig.socialLinks" :key="i" class="rounded-md border p-3" :class="theme.border">
+                      <div class="rounded-lg p-4 space-y-3" :class="theme.subtleBg">
+                        <div class="text-sm" :class="theme.mutedText">社交链接列表始终展开，新增或编辑后可直接保存。</div>
+                        <div v-if="frontendConfig.socialLinks?.length" class="space-y-2">
+                          <div v-for="(item, i) in frontendConfig.socialLinks" :key="i" class="rounded-xl border p-3" :class="theme.border">
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                               <UInput v-model="item.name" placeholder="名称" />
                               <UInput v-model="item.url" placeholder="链接 URL" />
-                              <UInput v-model="item.icon" placeholder="图标名称(可选)" />
+                              <UInput v-model="item.icon" placeholder="图标名称（可选）" />
                             </div>
                             <div class="flex justify-end mt-2">
                               <UButton size="xs" color="red" variant="soft" @click="removeSocialLink(i)">删除</UButton>
                             </div>
                           </div>
-                          <div class="flex items-center justify-between">
-                            <UButton size="sm" color="indigo" variant="soft" class="shadow" @click="addSocialLink">新增链接</UButton>
-                          </div>
                         </div>
-                        <div v-else class="text-sm" :class="theme.mutedText">共有 {{ (frontendConfig.socialLinks || []).length }} 条社交链接</div>
+                        <div v-else class="text-sm" :class="theme.mutedText">暂无社交链接，点击下方按钮立即新增。</div>
+                        <div class="flex items-center justify-between">
+                          <UButton size="sm" color="indigo" variant="soft" class="shadow" @click="addSocialLink">新增链接</UButton>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1476,7 +1522,7 @@
 
         </div>
       </main>
-      <div v-show="showBottomBar" class="flex fixed bottom-0 left-0 right-0 md:left-72 z-50 border-t px-3 py-3 justify-between items-center backdrop-blur-md shadow-xl" :class="[theme.bottomBg, theme.border]">
+      <div v-show="showBottomBar" class="flex fixed bottom-0 left-0 right-0 z-50 border-t px-3 py-3 justify-between items-center backdrop-blur-md shadow-xl transition-[left] duration-200" :class="[theme.bottomBg, theme.border, bottomBarClass]">
         <UButton
           icon="i-heroicons-arrow-left"
           :color="panelTheme === 'light' ? 'gray' : (panelTheme === 'midnight' ? 'blue' : (panelTheme === 'slate' ? 'indigo' : 'gray'))"
@@ -1502,495 +1548,6 @@
           <UButton color="secondary" @click="$router.push({ path: '/', query: { login: '1', mode: 'register', redirect: '/status' } })">注册</UButton>
         </div>
       </div>
-      <div v-if="false">
-            
-                    <div id="section-version" class="mb-6">
-                        <div class="text-center mb-6 flex items-center justify-center gap-2">
-                            <span class="text-gray-300">当前版本: {{ versionInfo.currentVersion || '最新' }}</span>
-                            <UButton
-                                size="xs"
-                                color="indigo"
-                                variant="ghost"
-                                :loading="versionInfo.checking"
-                                @click="checkVersion"
-                            >
-                                {{ versionInfo.checking ? '检测中...' : '检查版本发布时间' }}
-                            </UButton>
-                        </div>
-                        <div v-if="versionInfo.hasUpdate" class="text-center mb-6">
-                            <div class="flex items-center justify-center gap-2 text-orange-400">
-                                <UIcon name="i-heroicons-arrow-up-circle" class="w-5 h-5" />
-                                <span>发现版本最近更新（于 {{ versionInfo.latestVersion }}）</span>
-                                <a 
-                                    href="https://hub.docker.com/r/noise233/echo-noise/tags" 
-                                    target="_blank"
-                                    class="text-blue-400 hover:text-blue-300 ml-2"
-                                >
-                                    查看详情
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                    <div v-if="false" id="section-status" class="rounded-lg p-4 mb-6" :class="theme.cardBg">
-                        <h2 class="text-xl font-semibold text-white mb-4">系统状态</h2>
-                        <div class="grid gap-4">
-                            <div class="flex justify-between items-center">
-                                <span class="text-gray-300">系统管理员</span>
-                                <span class="text-white font-medium">{{ userStore?.status?.username }}</span>
-                            </div>
-                            <div class="flex justify-between items-center">
-                                <span class="text-gray-300">当前用户</span>
-                                <span class="text-white font-medium">
-                                    {{ isLogin ? userStore.user?.username : "未登录" }}
-                                </span>
-                            </div>
-                            <div class="flex justify-between items-center">
-                                <span class="text-gray-300">笔记总数</span>
-                                <span class="text-white font-medium">{{ userStore?.status?.total_messages }} 条</span>
-                            </div>
-                        </div>
-                    </div>
-                <!-- 添加版本信息和检测按钮 -->
-                
-                  <!-- 用户信息配置面板 -->
- 
-                <div v-if="false && isLogin" class="rounded-lg p-4 mb-6" :class="theme.cardBg">
-                    <h2 class="text-xl font-semibold mb-4" :class="theme.text">用户信息配置</h2>
- 
-                <div id="section-user" v-if="isLogin" class="rounded-lg p-4 mb-6" :class="theme.cardBg">
-                    <h2 class="text-xl font-semibold text-white mb-4">用户信息配置</h2>
- 
-                    <div class="space-y-4">
-                        <!-- 用户名修改 -->
-                        <div class="rounded p-3" :class="theme.subtleBg">
-                            <div class="flex justify-between items-center mb-2">
-                                <span class="text-gray-300">用户名</span>
-                                <UButton
-                                    size="sm"
-                                    @click="editUserInfo.username = !editUserInfo.username"
-                                    :color="editUserInfo.username ? 'gray' : 'green'"
-                                    :variant="editUserInfo.username ? 'soft' : 'solid'"
-                                >
-                                    {{ editUserInfo.username ? '取消' : '修改' }}
-                                </UButton>
-                            </div>
-                            <div v-if="editUserInfo.username">
-                                <UInput
-                                    v-model="userForm.username"
-                                    placeholder="新用户名"
-                                    class="w-full mb-2"
-                                />
-                                <div class="flex justify-end gap-2">
-                                    <UButton @click="updateUsername" color="primary">
-                                        保存
-                                    </UButton>
-                                </div>
-                            </div>
-                            <div v-else>
-                                <p :class="theme.text">{{ userStore.user?.username }}</p>
-                            </div>
-                        </div>
-                         <!-- 在用户信息配置面板中添加 -->
-<div class="rounded p-3" :class="theme.subtleBg">
-    <div class="flex justify-between items-center mb-2">
-        <span class="text-gray-300">API Token</span>
-        <UButton
-            size="sm"
-            @click="regenerateToken"
-            color="primary"
-            variant="soft"
-        >
-            重新生成
-        </UButton>
-    </div>
-    <div v-if="userToken" class="mb-2">
-        <div class="flex items-center gap-2">
-            <UInput
-                v-model="userToken"
-                readonly
-                class="font-mono text-sm"
-            />
-            <UButton
-                icon="i-heroicons-clipboard"
-                color="indigo"
-                variant="ghost"
-                @click="copyToken"
-            />
-        </div>
-        <p class="text-xs text-gray-400 mt-1">请妥善保管此 Token，它用于 API 访问认证</p>
-    </div>
-    <div v-else>
-        <p class="text-gray-400">暂无 Token</p>
-    </div>
-</div>
-                        <!-- 密码修改 -->
-                        <div class="rounded p-3 mt-4" :class="theme.subtleBg">
-                            <div class="flex justify-between items-center mb-2">
-                                <span class="text-gray-300">修改密码</span>
-                                <UButton
-                                    size="sm"
-                                    @click="editUserInfo.password = !editUserInfo.password"
-                                    :color="editUserInfo.password ? 'gray' : 'green'"
-                                    :variant="editUserInfo.password ? 'soft' : 'solid'"
-                                >
-                                    {{ editUserInfo.password ? '取消' : '修改' }}
-                                </UButton>
-                            </div>
-                            <div v-if="editUserInfo.password">
-                                <UInput
-                                    v-model="userForm.oldPassword"
-                                    type="password"
-                                    placeholder="当前密码"
-                                    class="w-full mb-2"
-                                />
-                                <UInput
-                                    v-model="userForm.newPassword"
-                                    type="password"
-                                    placeholder="新密码"
-                                    class="w-full mb-2"
-                                />
-                                <div class="flex justify-end gap-2">
-                                    <UButton @click="updatePassword" color="primary">
-                                        保存
-                                    </UButton>
-                                </div>
-                            </div>
-                        </div>
-
-                        
-
-                    </div>
-                </div>
-                <!-- 网站配置区域 -->
-                <div id="section-site" v-if="false && isAdmin" class="rounded-lg p-4 mb-6" :class="theme.cardBg">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-xl font-semibold" :class="theme.text">网站配置</h2>
-                    </div>
-                    <!-- 系统欢迎组件（左栏头像卡片） -->
-                    <div class="rounded p-4 mb-4" :class="theme.subtleBg">
-                        <div class="flex justify-between items-center mb-3">
-                            <span :class="theme.text">系统欢迎组件</span>
-                            <div class="flex items-center gap-2">
-                                <UButton size="sm" color="indigo" variant="soft" @click="applyWelcomeAdmin">使用管理员头像信息</UButton>
-                                <UButton size="sm" color="primary" class="shadow" @click="saveConfigItem('welcome')">保存</UButton>
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div>
-                                <label :class="[theme.mutedText, 'text-sm mb-1 block']">显示名称</label>
-                                <UInput v-model="frontendConfig.welcomeName" placeholder="如 Noise 或站点名" />
-                            </div>
-                            <div>
-                                <label :class="[theme.mutedText, 'text-sm mb-1 block']">头像URL</label>
-                                <UInput v-model="frontendConfig.welcomeAvatarURL" placeholder="http/https 或以 /api 开头的站内路径" />
-                            </div>
-                            <div class="md:col-span-2">
-                                <label :class="[theme.mutedText, 'text-sm mb-1 block']">简介文案</label>
-                                <UTextarea v-model="frontendConfig.welcomeDescription" placeholder="一句话欢迎语或个人签名" />
-                            </div>
-                        </div>
-                        <div class="text-xs mt-2" :class="theme.mutedText">未登录时展示该组件；登录后显示当前用户的头像与签名</div>
-                    </div>
-                    <!-- 新用户注册开关 -->
-                    <div class="flex items-center rounded p-3 mb-4 justify-between" :class="theme.subtleBg">
-                        <span :class="theme.text">新用户注册</span>
-                        <div class="flex items-center gap-4">
-                            <div class="flex items-center">
-                                <URadio v-model="registerEnabled" :value="true" class="mr-2" />
-                                <span :class="registerEnabled ? theme.text : 'text-gray-400'">允许</span>
-                            </div>
-                            <div class="flex items-center">
-                                <URadio v-model="registerEnabled" :value="false" class="mr-2" />
-                                <span :class="!registerEnabled ? theme.text : 'text-gray-400'">不允许</span>
-                            </div>
-                            <UButton color="green" @click="saveRegisterConfig">保存</UButton>
-                        </div>
-                    </div>
-
-                    <!-- PWA 配置区域 -->
-                    <div class="rounded p-4 mb-4" :class="theme.subtleBg">
-                        <div class="flex justify-between items-center mb-3">
-                            <span :class="theme.text">PWA 模式</span>
-                        <div class="flex items-center gap-4">
-                                <UToggle v-model="frontendConfig.pwaEnabled" />
-                                <UButton color="green" @click="savePWAConfig">保存</UButton>
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div>
-                                <label :class="[theme.mutedText, 'text-sm mb-1 block']">PWA 标题</label>
-                                <UInput v-model="frontendConfig.pwaTitle" :placeholder="frontendConfig.siteTitle || '说说笔记'" />
-                            </div>
-                            <div>
-                                <label :class="[theme.mutedText, 'text-sm mb-1 block']">PWA 图标</label>
-                                <UInput v-model="frontendConfig.pwaIconURL" :placeholder="'/favicon.ico'" />
-                            </div>
-                            <div class="md:col-span-2">
-                                <label :class="[theme.mutedText, 'text-sm mb-1 block']">PWA 描述</label>
-                      <UTextarea v-model="frontendConfig.pwaDescription" :placeholder="frontendConfig.description || ''" />
-                    </div>
-                  </div>
-                </div>
-                    </div>
-
-                <!-- GitHub 链接卡片解析（独立设置） -->
-                <div class="flex items-center rounded p-3 mb-4 justify-between" :class="theme.subtleBg">
-                    <span :class="theme.text">GitHub 链接卡片解析</span>
-                    <div class="flex items-center gap-4">
-                        <div class="flex items-center">
-                            <URadio v-model="githubCardEnabled" :value="true" class="mr-2" />
-                            <span :class="githubCardEnabled ? theme.text : 'text-gray-400'">开启</span>
-                        </div>
-                        <div class="flex items-center">
-                            <URadio v-model="githubCardEnabled" :value="false" class="mr-2" />
-                            <span :class="!githubCardEnabled ? theme.text : 'text-gray-400'">关闭</span>
-                        </div>
-                        <UButton color="green" @click="saveGithubCardConfig">保存</UButton>
-                    </div>
-                </div>
-
-                    <!-- 公告栏开关（独立设置） -->
-                    <div class="flex items-center rounded p-3 mb-4 justify-between" :class="theme.subtleBg">
-                        <span :class="theme.text">公告栏开关</span>
-                        <div class="flex items-center gap-4">
-                            <UToggle v-model="frontendConfig.announcementEnabled" />
-                            <UButton color="green" @click="saveConfigItem('announcementEnabled')">保存</UButton>
-                        </div>
-                    </div>
-
-                <!-- 默认主题色设置 -->
-                <div class="flex items-center rounded p-3 mb-4 justify-between" :class="theme.subtleBg">
-                    <span :class="theme.text">默认主题色</span>
-                    <div class="flex items-center gap-4">
-                        <div class="flex items-center">
-                            <URadio v-model="frontendConfig.defaultContentTheme" value="dark" class="mr-2" />
-                            <span :class="frontendConfig.defaultContentTheme === 'dark' ? theme.text : 'text-gray-400'">暗黑</span>
-                        </div>
-                        <div class="flex items-center">
-                            <URadio v-model="frontendConfig.defaultContentTheme" value="light" class="mr-2" />
-                            <span :class="frontendConfig.defaultContentTheme === 'light' ? theme.text : 'text-gray-400'">白天</span>
-                        </div>
-                        <UButton color="green" @click="saveConfigItem('defaultContentTheme')">保存</UButton>
-                    </div>
-                </div>
-
-                <!-- 音乐配置 -->
-                <div v-if="false" id="site-music-legacy-section" class="rounded p-4 mb-4" :class="[theme.cardBg]">
-                  <div class="flex justify-between items-center mb-3">
-                    <span :class="theme.text">音乐播放器</span>
-                    <div class="flex items-center gap-2">
-                      <UButton :color="frontendConfig.musicEnabled ? 'gray' : 'green'" variant="soft" @click="toggleMusic(true)">开启</UButton>
-                      <UButton color="red" variant="soft" @click="toggleMusic(false)">关闭</UButton>
-                      <UToggle v-model="frontendConfig.musicEnabled" />
-                      <UButton color="green" @click="saveMusicConfig">保存</UButton>
-                      <UButton variant="soft" color="indigo" @click="resetMusicConfig">重置</UButton>
-                    </div>
-                  </div>
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                    <div>
-                      <label :class="[theme.mutedText, 'text-sm mb-1 block']">CDN 源</label>
-                      <USelect v-model="musicCdnPreset" :options="[
-                        {label:'官方 CDN',value:'hypcvgm'},
-                        {label:'jsDelivr',value:'jsdelivr'},
-                        {label:'unpkg',value:'unpkg'},
-                        {label:'自定义',value:'custom'}
-                      ]" />
-                    </div>
-                    <div v-if="musicCdnPreset==='custom'">
-                      <label :class="[theme.mutedText, 'text-sm mb-1 block']">JS CDN 地址</label>
-                      <UInput v-model="frontendConfig.musicJsCdnURL" placeholder="https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.js" />
-                    </div>
-                    <div v-if="musicCdnPreset==='custom'">
-                      <label :class="[theme.mutedText, 'text-sm mb-1 block']">CSS CDN 地址</label>
-                      <UInput v-model="frontendConfig.musicCssCdnURL" placeholder="https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.css" />
-                    </div>
-                  </div>
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div>
-                        <label :class="[theme.mutedText, 'text-sm mb-1 block']">歌单 ID</label>
-                        <UInput v-model="frontendConfig.musicPlaylistId" :disabled="(frontendConfig.musicSongId || '').trim() !== ''" placeholder="如 14273792576" />
-                      </div>
-                      <div>
-                        <label :class="[theme.mutedText, 'text-sm mb-1 block']">单曲 ID</label>
-                        <UInput v-model="frontendConfig.musicSongId" :disabled="(frontendConfig.musicPlaylistId || '').trim() !== ''" placeholder="可选，优先歌单" />
-                      </div>
-                      <div>
-                        <label :class="[theme.mutedText, 'text-sm mb-1 block']">显示位置</label>
-                        <USelect v-model="frontendConfig.musicPosition" :disabled="musicEmbedMode==='embed'" :options="[
-                          {label:'左下角',value:'bottom-left'},
-                          {label:'右下角',value:'bottom-right'},
-                          {label:'左上角',value:'top-left'},
-                          {label:'右上角',value:'top-right'}
-                        ]" />
-                      </div>
-                      <div>
-                        <label :class="[theme.mutedText, 'text-sm mb-1 block']">主题风格</label>
-                        <USelect v-model="frontendConfig.musicTheme" :options="[
-                          {label:'自动',value:'auto'},
-                          {label:'浅色',value:'light'},
-                          {label:'深色',value:'dark'}
-                        ]" />
-                      </div>
-                      <div>
-                        <label :class="[theme.mutedText, 'text-sm mb-1 block']">CDN 源</label>
-                        <USelect v-model="musicCdnPreset" :options="[
-                          {label:'官方 CDN',value:'hypcvgm'},
-                          {label:'jsDelivr',value:'jsdelivr'},
-                          {label:'unpkg',value:'unpkg'},
-                          {label:'自定义',value:'custom'}
-                        ]" />
-                      </div>
-                      <div class="flex items-center gap-3">
-                        <span class="text-sm" :class="theme.mutedText">显示歌词</span>
-                        <USwitch v-model="frontendConfig.musicLyric" />
-                      </div>
-                      <div class="flex items-center gap-3">
-                        <span class="text-sm" :class="theme.mutedText">自动播放</span>
-                        <USwitch v-model="frontendConfig.musicAutoplay" />
-                      </div>
-                      <div class="flex items-center gap-3">
-                        <span class="text-sm" :class="theme.mutedText">默认最小化</span>
-                        <USwitch v-model="frontendConfig.musicDefaultMinimized" />
-                      </div>
-                      <div class="flex items-center gap-3">
-                        <span class="text-sm" :class="theme.mutedText">展示模式</span>
-                        <USelect v-model="musicEmbedMode" :options="[{label:'嵌入',value:'embed'},{label:'浮动',value:'float'}]" />
-                      </div>
-                      <div v-if="musicCdnPreset==='custom'">
-                        <label :class="[theme.mutedText, 'text-sm mb-1 block']">CSS CDN 地址</label>
-                        <UInput v-model="frontendConfig.musicCssCdnURL" placeholder="https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.css" />
-                      </div>
-                      <div v-if="musicCdnPreset==='custom'">
-                        <label :class="[theme.mutedText, 'text-sm mb-1 block']">JS CDN 地址</label>
-                        <UInput v-model="frontendConfig.musicJsCdnURL" placeholder="https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.js" />
-                      </div>
-                    </div>
-                    <div class="text-xs mt-2" :class="theme.mutedText">保存后首页自动刷新显示播放器；歌单与单曲任选其一</div>
-                  </div>
-
-                    <!-- 配置展示/修改表单 -->
-                    <div class="space-y-4">
-                        <div v-for="(label, key) in configLabels" :key="key" class="rounded p-3" :class="theme.subtleBg">
-                            <div class="flex justify-between items-center mb-2">
-                                <span :class="theme.mutedText">{{ label }}</span>
-                                <div v-if="isSwitchConfigKey(String(key))" class="flex items-center gap-2">
-                                  <UToggle v-model="frontendConfig[String(key)]" />
-                                  <UButton size="sm" color="green" class="shadow" @click="saveConfigItem(String(key))">保存</UButton>
-                                </div>
-                                <UButton
-                                    v-else
-                                    size="sm"
-                                    @click="editItem[key] = !editItem[key]"
-                                    :color="editItem[key] ? 'gray' : 'green'"
-                                    :variant="editItem[key] ? 'soft' : 'solid'"
-                                >
-                                    {{ editItem[key] ? '取消' : '修改' }}
-                                </UButton>
-                            </div>
-                            
-                            <div v-if="!isSwitchConfigKey(String(key)) && editItem[key]">
-                        <template v-if="String(key) === 'backgrounds'">
-                            <div class="space-y-3">
-                                <div v-for="(bg, index) in frontendConfig.backgrounds"
-                                     :key="index"
-                                     class="flex items-center gap-3">
-                                    <img :src="bg || '/favicon.ico'" class="w-14 h-14 rounded object-cover border" :class="theme.border" @click="previewImage(bg)" />
-                                    <UInput v-model="frontendConfig.backgrounds[index]" placeholder="输入头部图URL" class="flex-1" />
-                                    <div class="flex items-center gap-2">
-                                      <UButton size="xs" variant="soft" icon="i-heroicons-arrow-up" @click="moveBackgroundUp(index)">上移</UButton>
-                                      <UButton size="xs" variant="soft" icon="i-heroicons-arrow-down" @click="moveBackgroundDown(index)">下移</UButton>
-                                      <UButton size="xs" variant="soft" icon="i-heroicons-eye" @click="previewImage(bg)">预览</UButton>
-                                      <UButton size="xs" color="red" variant="soft" icon="i-heroicons-trash" @click="removeBackground(index)">删除</UButton>
-                                    </div>
-                                </div>
-                                <div class="rounded border-2 border-dashed p-4 text-center" :class="theme.border" @dragover.prevent @drop.prevent="onDropFiles">
-                                  <div class="flex items-center justify-center gap-3">
-                                    <UButton @click="addBackground" icon="i-heroicons-plus" variant="ghost">添加链接</UButton>
-                                    <UButton @click="triggerFileInput" icon="i-heroicons-cloud-arrow-up" variant="ghost">上传图片</UButton>
-                                  </div>
-                                  <div v-if="isUploading" class="mt-3">
-                                    <div class="text-xs" :class="theme.mutedText">{{ uploadingFileName }}</div>
-                                    <UProgress :value="uploadProgress" class="mt-1" />
-                                  </div>
-                                </div>
-                            </div>
-                        </template>
-                                <template v-else-if="String(key) === 'aboutMarkdown'">
-                                    <div class="resizable-wrapper" ref="aboutMdWrap">
-                                        <UTextarea
-                                            v-model="frontendConfig[key]"
-                                            :placeholder="`输入${label}`"
-                                            class="w-full mb-1 resizable-textarea"
-                                            :rows="12"
-                                        />
-                                        <div class="textarea-resize-handle" @mousedown="startAboutResize" title="拖拽调整高度"></div>
-                                    </div>
-                                </template>
-                                <template v-else-if="['subtitleText', 'linksDescription', 'commentPageDescription', 'aboutPageDescription'].includes(String(key))">
-                                    <UTextarea
-                                        v-model="frontendConfig[key]"
-                                        :placeholder="`输入${label}`"
-                                        class="w-full mb-2"
-                                    />
-                                </template>
-                                <template v-else>
-                                    <UInput
-                                        v-model="frontendConfig[key]"
-                                        :placeholder="`输入${label}`"
-                                        class="w-full mb-2"
-                                    />
-                                </template>
-                                <div class="flex justify-end gap-2">
-                                    <UButton @click="resetConfigItem(key)" variant="ghost" color="indigo">
-                                        重置
-                                    </UButton>
-                                    <UButton @click="saveConfigItem(key)" color="primary">
-                                        保存
-                                    </UButton>
-                                </div>
-                            </div>
-                            <div v-else-if="!isSwitchConfigKey(String(key))">
-                        <template v-if="String(key) === 'backgrounds'">
-                            <div class="grid grid-cols-3 gap-2">
-                                <img v-for="(bg, index) in frontendConfig.backgrounds"
-                                     :key="index"
-                                     :src="bg"
-                                     class="w-full h-24 object-cover rounded cursor-pointer border"
-                                     :class="theme.border"
-                                     @click="previewImage(bg)" />
-                            </div>
-                        </template>
-                        <template v-else>
-                        <p :class="[theme.text, 'break-words']">{{ frontendConfig[key] }}</p>
-                        </template>
-                    </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 保存按钮 -->
-                <div v-if="editMode" class="flex justify-end gap-2 mb-6">
-                    <UButton @click="resetConfig" variant="ghost" color="indigo">
-                        重置
-                    </UButton>
-                    <UButton @click="saveConfig" color="primary">
-                        保存所有更改
-                    </UButton>
-                </div>
-
- 
-                
-                
-<!-- 底部操作栏 -->
-                
-            </div>
- 
-
-            
- 
-        
-        
-
       </div>
     <!-- 登录模态框 -->
     <UModal v-model="showLoginModal">
@@ -2073,11 +1630,11 @@ const formatShanghai = (s: string) => {
  
 const cardCls = 'rounded-2xl border shadow-2xl'
 type AdminSectionKey =
-  'system' | 'user' | 'site' | 'notify' | 'attachments' | 'attachment-storage' | 'db' | 'version' | 'security' |
+  'dashboard' | 'system' | 'user' | 'site' | 'notify' | 'attachments' | 'attachment-storage' | 'db' | 'version' | 'security' |
   'site-register' | 'site-pwa' | 'site-github-card' | 'site-github-login' | 'site-announcement' | 'site-music' |
   'site-default-theme' | 'site-social-links' | 'friend-links' | 'site-configs' | 'comments' | 'email' | 'admin-users' |
   'storage'
-const activeSection = ref<AdminSectionKey>('system')
+const activeSection = ref<AdminSectionKey>('dashboard')
 const adminNavGroups = computed(() => {
   const groups = [
     {
@@ -2085,6 +1642,7 @@ const adminNavGroups = computed(() => {
       label: '概览',
       icon: 'i-heroicons-home',
       items: [
+        { key: 'dashboard', label: '仪表盘', icon: 'i-heroicons-squares-2x2' },
         { key: 'system', label: '系统信息', icon: 'i-heroicons-cpu-chip' },
         { key: 'user', label: '用户信息', icon: 'i-heroicons-user-circle' }
       ] as Array<{ key: AdminSectionKey, label: string, icon: string }>
@@ -2155,11 +1713,11 @@ const resolveSavedNavGroup = () => {
 }
 const savedNavGroup = resolveSavedNavGroup()
 const navGroupOpen = reactive<Record<string, boolean>>({
-  overview: savedNavGroup === 'overview',
-  'site-display': savedNavGroup === 'site-display',
-  'content-interaction': savedNavGroup === 'content-interaction',
-  'account-security': savedNavGroup === 'account-security',
-  'storage-maintain': savedNavGroup === 'storage-maintain'
+  overview: true,
+  'site-display': true,
+  'content-interaction': true,
+  'account-security': true,
+  'storage-maintain': true
 })
 const sectionGroupMap = computed(() => {
   const map: Record<string, string> = {}
@@ -2168,8 +1726,14 @@ const sectionGroupMap = computed(() => {
   }
   return map
 })
+const normalizeSection = (key: AdminSectionKey): AdminSectionKey => {
+  if (['site-register', 'site-pwa', 'site-github-card', 'site-announcement', 'site-music', 'site-default-theme', 'site-social-links', 'site-configs', 'friend-links'].includes(key)) return 'site'
+  if (key === 'version') return 'db'
+  return key
+}
+const isSectionVisible = (key: AdminSectionKey) => normalizeSection(activeSection.value) === normalizeSection(key)
 const openOnlyGroup = (groupKey: string) => {
-  Object.keys(navGroupOpen).forEach((key) => { navGroupOpen[key] = key === groupKey })
+  Object.keys(navGroupOpen).forEach((key) => { navGroupOpen[key] = true })
   if (typeof window !== 'undefined') {
     try { localStorage.setItem(navGroupStorageKey, groupKey) } catch {}
   }
@@ -2213,13 +1777,65 @@ watch(sidebarCollapsed, (v) => {
   localStorage.setItem('adminSidebarCollapsed', v ? '1' : '0')
 })
 const panelTheme = ref<'dark' | 'midnight' | 'slate' | 'light'>(
-  (typeof window !== 'undefined' && (localStorage.getItem('adminTheme') as any)) || 'dark'
+  (typeof window !== 'undefined' && (localStorage.getItem('adminTheme') as any)) || 'light'
 )
 const prevRootDark = ref<boolean | null>(null)
 const baseApi = useRuntimeConfig().public.baseApi || '/api'
 const localPreview = ref('')
 const userMessagesCount = ref(0)
 const adminProfile = ref<any>(null)
+const dashboardNow = ref(new Date())
+let dashboardTimer: any = null
+const toCount = (v: any) => {
+  const n = Number(v)
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0
+}
+const dashboardLifePercent = computed(() => {
+  const birth = String((frontendConfig as any).lifeCountdownBirthDate || '').trim()
+  const expectYears = Math.min(150, Math.max(1, Number((frontendConfig as any).lifeExpectancyYears || 80) || 80))
+  if (!birth) return 0
+  const birthDate = new Date(`${birth}T00:00:00`)
+  if (Number.isNaN(birthDate.getTime())) return 0
+  const expectDate = new Date(birthDate)
+  expectDate.setFullYear(expectDate.getFullYear() + expectYears)
+  const total = expectDate.getTime() - birthDate.getTime()
+  if (total <= 0) return 0
+  const elapsed = dashboardNow.value.getTime() - birthDate.getTime()
+  const ratio = Math.min(1, Math.max(0, elapsed / total))
+  return Math.round(ratio * 100)
+})
+const dashboardStats = computed(() => {
+  const status: any = userStore?.status || {}
+  return {
+    messageCount: toCount(status.total_messages ?? status.totalMessages ?? userMessagesCount.value),
+    userCount: toCount(status.total_users ?? status.totalUsers ?? status.users_count),
+    commentCount: toCount(status.total_comments ?? status.totalComments ?? status.comments_count),
+    lifePercent: dashboardLifePercent.value,
+  }
+})
+const dashboardBars = computed(() => {
+  const messageBase = Math.max(20, dashboardStats.value.messageCount, dashboardStats.value.commentCount)
+  const userBase = Math.max(5, dashboardStats.value.userCount)
+  return [
+    { label: '内容活跃度', percent: Math.min(100, Math.round((dashboardStats.value.messageCount / messageBase) * 100)) },
+    { label: '评论活跃度', percent: Math.min(100, Math.round((dashboardStats.value.commentCount / messageBase) * 100)) },
+    { label: '用户活跃度', percent: Math.min(100, Math.round((dashboardStats.value.userCount / userBase) * 100)) },
+    { label: '人生进度', percent: dashboardStats.value.lifePercent },
+  ]
+})
+const dashboardNowText = computed(() => new Intl.DateTimeFormat('zh-CN', {
+  hour12: false,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit'
+}).format(dashboardNow.value))
+const dashboardDateText = computed(() => new Intl.DateTimeFormat('zh-CN', {
+  weekday: 'long',
+  timeZone: 'Asia/Shanghai'
+}).format(dashboardNow.value))
 const hex32 = (s: string) => {
   let h1 = 0x811c9dc5, h2 = 0x811c9dc5
   const t = String(s || '')
@@ -2272,7 +1888,9 @@ const setActive = async (name: AdminSectionKey, evt?: MouseEvent) => {
     loadAttachmentStorageConfig()
   }
   await nextTick()
-  const id = `${name}-section`
+  const exactId = `${name}-section`
+  const normalizedId = `${normalizeSection(name)}-section`
+  const id = document.getElementById(exactId) ? exactId : normalizedId
   const el = document.getElementById(id)
   if (!el) return
   try {
@@ -2292,6 +1910,9 @@ onMounted(() => {
   loadStorageConfig()
   sidebarOpen.value = window.innerWidth >= 768
   window.addEventListener('resize', syncSidebarViewport, { passive: true })
+  dashboardTimer = window.setInterval(() => {
+    dashboardNow.value = new Date()
+  }, 1000)
 })
 
 const syncRootDarkForAdmin = () => {
@@ -2316,6 +1937,10 @@ onMounted(() => {
 onUnmounted(() => {
   if (typeof window !== 'undefined') document.body.style.overflow = ''
   if (typeof window !== 'undefined') window.removeEventListener('resize', syncSidebarViewport)
+  if (dashboardTimer) {
+    clearInterval(dashboardTimer)
+    dashboardTimer = null
+  }
 })
 
 onUnmounted(() => {
@@ -2330,7 +1955,7 @@ const loadAdminProfile = async () => {
   try {
     const sname = String((userStore.status as any)?.username || '').trim()
     if (!sname) { adminProfile.value = null; return }
-    const resp = await fetch(`/api/users/profile?username=${encodeURIComponent(sname)}`, { credentials: 'include', headers: { 'Accept': 'application/json' } })
+    const resp = await fetch(`${baseApi}/users/profile?username=${encodeURIComponent(sname)}`, { credentials: 'include', headers: { 'Accept': 'application/json' } })
     const js = await resp.json().catch(() => null)
     adminProfile.value = js?.data || null
   } catch { adminProfile.value = null }
@@ -2342,7 +1967,7 @@ const loadUserMessagesCount = async () => {
     if (u) {
       const id = u.id || u.ID || u.user_id || u.userid
       const qs = id ? `id=${encodeURIComponent(String(id))}` : `username=${encodeURIComponent(String(u.username || u.Username || ''))}`
-      const resp = await fetch(`/api/users/profile?${qs}`, { credentials: 'include', headers: { 'Accept': 'application/json' } })
+      const resp = await fetch(`${baseApi}/users/profile?${qs}`, { credentials: 'include', headers: { 'Accept': 'application/json' } })
       const js = await resp.json().catch(() => null)
       userMessagesCount.value = Number(js?.data?.total_messages || 0)
       return
@@ -2387,6 +2012,7 @@ const syncActiveByScroll = () => {
   for (const key of keys) {
     const el = document.getElementById(`${key}-section`) as HTMLElement | null
     if (!el) continue
+    if (el.offsetParent === null) continue
     const top = el.getBoundingClientRect().top - main.getBoundingClientRect().top
     if (top <= topThreshold) candidate = key
     const abs = Math.abs(top - topThreshold)
@@ -2511,6 +2137,9 @@ const adminSidebarClass = computed(() => ([
 const adminMainClass = computed(() => ([
   theme.value.text,
   sidebarCollapsed.value ? 'md:pl-20' : 'md:pl-72'
+]))
+const bottomBarClass = computed(() => ([
+  sidebarCollapsed.value ? 'md:left-20' : 'md:left-72'
 ]))
 const mobileHeaderClass = computed(() => ([
   theme.value.headerBg,
@@ -3294,7 +2923,6 @@ const upgradingCleanup = () => {
   upgradeProgress.value = 0
 }
 // 重新生成 Token
-// 修改 regenerateToken 函数
 const regenerateToken = async () => {
     if (!userStore.isLogin) {
         useToast().add({
@@ -3431,6 +3059,11 @@ const editUserInfo = reactive({
     emailBind: false,
     emailChange: false
 })
+watch(() => userStore.user, (user) => {
+    if (!user) return
+    if (!String(userForm.username || '').trim()) userForm.username = String((user as any)?.username || '')
+    if (!String(userForm.description || '').trim()) userForm.description = String((user as any)?.description || '欢迎访问')
+}, { immediate: true, deep: true })
 watch(() => editUserInfo.description, (v: boolean) => {
     if (!v) return
     const current = String((userStore.user as any)?.description || '').trim()
@@ -3812,6 +3445,25 @@ const configLabels: Record<string, string> = {
     aboutPageDescription: '关于页面说明',
     aboutMarkdown: '关于页面 Markdown 内容',
 }
+const configFieldHints: Record<string, string> = {
+  siteTitle: '站点首页与浏览器标题展示名称。',
+  subtitleText: '显示在首页主标题下方，建议控制在两行内。',
+  backgrounds: '支持多张头图，按顺序轮播或展示。',
+  cardFooterTitle: '首页底部卡片标题文案。',
+  cardFooterLink: '点击页脚标题后的跳转地址。',
+  pageFooterHTML: '页脚自定义 HTML 内容，适合备案或额外说明。',
+  rssTitle: 'RSS 订阅标题。',
+  rssDescription: 'RSS 订阅说明文字。',
+  rssAuthorName: 'RSS 输出作者名称。',
+  rssFaviconURL: 'RSS 图标地址，建议使用 1:1 图片。',
+  lifeCountdownBirthDate: '请按生日真实日期填写。',
+  lifeExpectancyYears: '用于计算人生进度百分比。',
+  commentPageTitle: '留言页大标题。',
+  commentPageDescription: '留言页顶部描述文字。',
+  aboutPageTitle: '关于页标题。',
+  aboutPageDescription: '关于页简介说明。',
+  aboutMarkdown: '关于页正文内容，支持 Markdown。'
+}
 const switchConfigKeySet = new Set([
   'enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled',
   'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile',
@@ -3820,6 +3472,14 @@ const switchConfigKeySet = new Set([
   'leftAdEnabled', 'welcomeUseAdmin', 'friendLinkEmailEnabled', 'socialLinksEnabled'
 ])
 const isSwitchConfigKey = (key: string) => switchConfigKeySet.has(String(key))
+const getConfigSummary = (key: string) => {
+  const value = (frontendConfig as any)[key]
+  if (key === 'backgrounds') return `${Array.isArray(value) ? value.length : 0} 张图片`
+  if (key === 'avatarURL') return value ? '已设置头像' : '未设置头像'
+  if (Array.isArray(value)) return `${value.length} 项`
+  const text = String(value ?? '').trim()
+  return text ? '已填写' : '待填写'
+}
 
 interface FrontendConfig {
     siteTitle: string;
@@ -4140,7 +3800,7 @@ const saveSocialLinks = async () => {
         socialLinks: cleaned
       }
     }
-    const res = await fetch('/api/settings', {
+    const res = await fetch(`${baseApi}/settings`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -4185,7 +3845,7 @@ const saveFriendLinksConfig = async () => {
       }
     }
 
-    const res = await fetch('/api/settings', {
+    const res = await fetch(`${baseApi}/settings`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -4211,11 +3871,9 @@ const resetConfigItem = (key: string) => {
     ;(frontendConfig as any)[key] = (defaultConfig as any)[key]
     editItem[key] = false
 }
-// 修改 fetchConfig 方法// ... existing code ...
-
 const fetchConfig = async () => {
   try {
-      const response = await fetch(`/api/frontend/config?t=${new Date().getTime()}`, {
+      const response = await fetch(`${baseApi}/frontend/config?t=${new Date().getTime()}`, {
           credentials: 'include',
           headers: {
               'Cache-Control': 'no-cache',
@@ -4337,6 +3995,18 @@ const fetchConfig = async () => {
             console.error('获取配置失败:', error);
         }
 };
+const saveConfigFields = async (fields: Record<string, any>) => {
+    const response = await fetch(`${baseApi}/settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ frontendSettings: fields })
+    })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok || data?.code !== 1) {
+      throw new Error(data?.msg || '保存失败')
+    }
+}
 const saveConfigItem = async (key: string) => {
     try {
         // 特殊处理背景图片数组
@@ -4373,7 +4043,7 @@ const saveConfigItem = async (key: string) => {
             }
         };
 
-        const response = await fetch('/api/settings', {
+        const response = await fetch(`${baseApi}/settings`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
@@ -4429,8 +4099,13 @@ const saveLifeCountdownConfig = async () => {
   try {
     ;(frontendConfig as any).lifeCountdownBirthDate = String((frontendConfig as any).lifeCountdownBirthDate || '').trim()
     ;(frontendConfig as any).lifeExpectancyYears = Math.min(150, Math.max(1, Number((frontendConfig as any).lifeExpectancyYears || 80) || 80))
-    await saveConfig()
+    await saveConfigFields({
+      lifeCountdownEnabled: !!(frontendConfig as any).lifeCountdownEnabled,
+      lifeCountdownBirthDate: String((frontendConfig as any).lifeCountdownBirthDate || '').trim(),
+      lifeExpectancyYears: Math.min(150, Math.max(1, Number((frontendConfig as any).lifeExpectancyYears || 80) || 80))
+    })
     await fetchConfig()
+    window.dispatchEvent(new Event('frontend-config-updated'))
     useToast().add({ title: '成功', description: '人生倒计时配置已保存', color: 'green' })
   } catch (error: any) {
     useToast().add({ title: '失败', description: error?.message || '保存失败', color: 'red' })
@@ -4508,7 +4183,7 @@ const saveConfig = async () => {
       },
     }
 
-    const response = await fetch('/api/settings', {
+    const response = await fetch(`${baseApi}/settings`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -4532,7 +4207,7 @@ const savePWAConfig = async () => {
         const settingsToSave = {
             frontendSettings: frontendConfig
         }
-        const response = await fetch('/api/settings', {
+        const response = await fetch(`${baseApi}/settings`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -4639,7 +4314,7 @@ const saveCommentConfig = async () => {
         commentLoginRequired: !!frontendConfig.commentLoginRequired
       }
     }
-    const response = await fetch('/api/settings', {
+    const response = await fetch(`${baseApi}/settings`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -4817,7 +4492,7 @@ const saveGithubCardConfig = async () => {
                 enableGithubCard: !!githubCardEnabled.value
             }
         }
-        const response = await fetch('/api/settings', {
+        const response = await fetch(`${baseApi}/settings`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -4859,7 +4534,7 @@ const saveMusicConfig = async () => {
         musicJsCdnURL: String(frontendConfig.musicJsCdnURL || '')
       }
     }
-    const response = await fetch('/api/settings', {
+    const response = await fetch(`${baseApi}/settings`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -4989,7 +4664,7 @@ const saveGithubOAuthConfig = async () => {
         githubCallbackURL: String((frontendConfig as any).githubCallbackURL || '')
       }
     }
-    const response = await fetch('/api/settings', {
+    const response = await fetch(`${baseApi}/settings`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -5311,7 +4986,7 @@ const downloadURL = ref('')
 const cloudSyncPollId = ref<number | null>(null)
 const refreshLastSyncOnly = async () => {
   try {
-    const res = await fetch('/api/frontend/config', { credentials: 'include' })
+    const res = await fetch(`${baseApi}/frontend/config`, { credentials: 'include' })
     const data = await res.json()
     if (data?.code === 1) {
       const sc = data.data.storageConfig || {}
@@ -5334,7 +5009,7 @@ const userTouchedAuto = ref(false)
 const onAutoSyncToggle = () => { userTouchedAuto.value = true }
 const loadStorageConfig = async () => {
   try {
-    const res = await fetch('/api/frontend/config', { credentials: 'include' })
+    const res = await fetch(`${baseApi}/frontend/config`, { credentials: 'include' })
     const data = await res.json()
     if (data?.code === 1) {
       const dt = (data.data.dbType || 'sqlite').toLowerCase()
@@ -5397,7 +5072,7 @@ const saveStorageConfig = async () => {
       storageEnabled: storageEnabled.value,
       storageConfig: scPayload
     }
-    const res = await fetch('/api/settings', { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    const res = await fetch(`${baseApi}/settings`, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     const data = await res.json()
     if (data?.code === 1) {
       useToast().add({ title: '已保存数据库存储配置', color: 'green' })
@@ -5455,7 +5130,7 @@ const toggleCompression = (val: boolean) => {
 }
 const loadAttachmentStorageConfig = async () => {
   try {
-    const res = await fetch(`/api/frontend/config?t=${new Date().getTime()}`, {
+    const res = await fetch(`${baseApi}/frontend/config?t=${new Date().getTime()}`, {
       credentials: 'include',
       headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
     })
@@ -5492,7 +5167,7 @@ const saveAttachmentStorageConfig = async () => {
       attachmentStorageEnabled: attachmentStorageEnabled.value,
       attachmentStorageConfig: scPayload
     }
-    const res = await fetch('/api/settings', { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    const res = await fetch(`${baseApi}/settings`, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     const data = await res.json()
     if (data?.code === 1) {
       useToast().add({ title: '已保存附件存储配置', description: attachmentStorageConfig.enableCompression ? '附件压缩已开启' : '附件压缩已关闭', color: 'green' })
@@ -5668,19 +5343,19 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 <style scoped>
 .admin-root {
   --admin-radius: 16px;
-  --admin-shadow: 0 10px 30px rgba(15, 23, 42, 0.2);
+  --admin-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
   background: radial-gradient(1200px 600px at 18% -12%, rgba(56, 189, 248, 0.1), transparent 55%),
               radial-gradient(900px 500px at 84% 4%, rgba(99, 102, 241, 0.06), transparent 60%),
               #0b1020;
 }
 .admin-root.admin-theme-light {
-  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
 }
 .admin-dashboard-shell {
   background-image: repeating-linear-gradient(-28deg, rgba(148, 163, 184, 0.025) 0 8px, transparent 8px 22px);
 }
 .admin-root.admin-theme-light .admin-dashboard-shell {
-  background-image: repeating-linear-gradient(-28deg, rgba(148, 163, 184, 0.05) 0 7px, transparent 7px 20px);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(241, 245, 249, 0.92));
 }
 .admin-sidebar-surface {
   background: linear-gradient(180deg, rgba(12, 18, 30, 0.96), rgba(8, 13, 23, 0.96));
@@ -5688,13 +5363,13 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 }
 .admin-root.admin-theme-light .admin-sidebar-surface {
   background: linear-gradient(180deg, #ffffff, #f8fafc);
-  box-shadow: 10px 0 24px rgba(15, 23, 42, 0.12);
+  box-shadow: 10px 0 30px rgba(15, 23, 42, 0.08);
 }
 .admin-main-surface {
   background: linear-gradient(180deg, rgba(15, 23, 42, 0.2), rgba(2, 6, 23, 0.12));
 }
 .admin-root.admin-theme-light .admin-main-surface {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(248, 250, 252, 0.92));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(248, 250, 252, 0.9));
 }
 .admin-topbar-surface {
   backdrop-filter: blur(8px);
@@ -5738,8 +5413,104 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 }
 .admin-form-shell {
   width: 100%;
-  max-width: 1460px;
+  max-width: 1320px;
   margin: 0 auto;
+}
+.admin-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 12px;
+}
+.admin-dashboard-stat,
+.admin-dashboard-panel {
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  padding: 12px;
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.admin-dashboard-stat:hover,
+.admin-dashboard-panel:hover {
+  transform: translateY(-1px);
+  border-color: rgba(99, 102, 241, 0.35);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.18);
+}
+.admin-dashboard-stat-title,
+.admin-dashboard-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+.admin-dashboard-stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.admin-dashboard-track {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.2);
+  overflow: hidden;
+}
+.admin-dashboard-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #38bdf8, #6366f1);
+}
+.admin-dashboard-time {
+  font-size: 24px;
+  font-weight: 700;
+}
+.admin-dashboard-date {
+  margin-top: 6px;
+  font-size: 13px;
+}
+.admin-setting-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.admin-setting-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(255, 255, 255, 0.72);
+}
+.admin-root.dark .admin-setting-block {
+  background: rgba(15, 23, 42, 0.42);
+}
+.admin-setting-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.admin-setting-title {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.admin-setting-desc {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.admin-array-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(255, 255, 255, 0.62);
+}
+.admin-root.dark .admin-array-row {
+  background: rgba(15, 23, 42, 0.38);
 }
 .admin-form-shell > .col-span-12 > div {
   border-radius: var(--admin-radius);
@@ -5821,6 +5592,9 @@ html.dark .textarea-resize-handle { background: rgba(255,255,255,0.16); }
   font-size: 13px;
   color: rgba(226, 232, 240, 0.88);
 }
+.admin-nav-item:hover {
+  background: rgba(148, 163, 184, 0.14);
+}
 .admin-nav-collapse-enter-active,
 .admin-nav-collapse-leave-active {
   transition: opacity .18s ease, transform .18s ease;
@@ -5837,13 +5611,18 @@ html.dark .textarea-resize-handle { background: rgba(255,255,255,0.16); }
 }
 .admin-root.admin-theme-light .admin-nav-group-btn {
   color: #334155;
+  background: rgba(241, 245, 249, 0.9);
 }
 .admin-root.admin-theme-light .admin-nav-item {
   color: #475569;
 }
+.admin-root.admin-theme-light .admin-nav-item:hover {
+  background: rgba(148, 163, 184, 0.2);
+}
 .admin-root.admin-theme-light .admin-nav-item-active {
-  background: rgba(148, 163, 184, 0.28);
-  color: #0f172a;
+  background: #111827;
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
 }
 .theme-dot-btn {
   width: 22px;
@@ -5913,6 +5692,13 @@ html.dark .textarea-resize-handle { background: rgba(255,255,255,0.16); }
 .admin-form-shell :deep(textarea) {
   min-height: 120px;
 }
+@media (max-width: 767px) {
+  .admin-setting-heading,
+  .admin-array-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
 @media (max-width: 768px) {
   .admin-topbar-surface {
     display: none;
@@ -5931,7 +5717,23 @@ html.dark .textarea-resize-handle { background: rgba(255,255,255,0.16); }
   .admin-form-shell {
     padding-left: 10px !important;
     padding-right: 10px !important;
-    padding-bottom: 110px !important;
+    padding-bottom: calc(86px + env(safe-area-inset-bottom)) !important;
+  }
+  .admin-dashboard-stat-value {
+    font-size: 24px;
+  }
+}
+@media (min-width: 768px) {
+  .admin-dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1024px) {
+  .admin-dashboard-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .admin-dashboard-grid + .admin-dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>
