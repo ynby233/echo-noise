@@ -7,7 +7,7 @@
       <div class="admin-dashboard-shell min-h-screen w-full">
         <aside class="admin-sidebar-surface h-screen overflow-y-auto backdrop-blur-md flex flex-col fixed left-0 top-0 z-40 transition-transform duration-300 md:transition-[width] border-r" :class="adminSidebarClass">
         <div class="px-4 py-4 border-b flex flex-col items-center gap-2" :class="theme.border">
-          <div class="w-full hidden md:flex justify-end">
+          <div class="w-full admin-desktop-flex justify-end">
             <button class="admin-sidebar-toggle-btn" :class="headerBtnCls" :title="desktopSidebarToggleText" :aria-label="desktopSidebarToggleText" @click="sidebarCollapsed = !sidebarCollapsed">
               <UIcon :name="desktopSidebarToggleIcon" class="w-4 h-4" />
             </button>
@@ -63,13 +63,13 @@
           </div>
           <div class="flex items-center gap-1.5 shrink-0">
             <UButton icon="i-heroicons-home" size="xs" :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelTheme === 'light' ? 'gray' : (panelTheme === 'midnight' ? 'blue' : (panelTheme === 'slate' ? 'indigo' : 'gray'))" class="shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90 sm:hidden" @click="$router.push('/')" />
-            <UButton :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelTheme === 'light' ? 'gray' : (panelTheme === 'midnight' ? 'blue' : (panelTheme === 'slate' ? 'indigo' : 'gray'))" size="xs" class="hidden sm:inline-flex shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90" @click="$router.push('/')">返回首页</UButton>
+            <UButton :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelTheme === 'light' ? 'gray' : (panelTheme === 'midnight' ? 'blue' : (panelTheme === 'slate' ? 'indigo' : 'gray'))" size="xs" class="admin-sm-inline-flex shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90" @click="$router.push('/')">返回首页</UButton>
             <UButton v-if="isLogin" icon="i-heroicons-power" color="red" variant="solid" size="xs" class="sm:hidden" @click="handleLogout" />
-            <UButton v-if="isLogin" icon="i-heroicons-power" color="red" variant="solid" size="xs" class="hidden sm:inline-flex" @click="handleLogout">退出登录</UButton>
+            <UButton v-if="isLogin" icon="i-heroicons-power" color="red" variant="solid" size="xs" class="admin-sm-inline-flex" @click="handleLogout">退出登录</UButton>
           </div>
         </div>
         <div v-if="sidebarOpen" class="fixed inset-0 z-30 bg-slate-950/45 backdrop-blur-[1px] md:hidden" @click="sidebarOpen=false"></div>
-        <div class="hidden md:flex admin-topbar-surface items-center justify-between gap-3 px-5 py-4 border-b sticky top-0 z-30" :class="desktopTopbarClass">
+        <div class="admin-desktop-flex admin-topbar-surface items-center justify-between gap-3 px-5 py-4 border-b sticky top-0 z-30" :class="desktopTopbarClass">
           <div class="min-w-0 flex items-center">
             <button class="admin-desktop-toggle-btn" :class="headerBtnCls" :title="desktopSidebarToggleText" :aria-label="desktopSidebarToggleText" @click="sidebarCollapsed = !sidebarCollapsed">
               <UIcon :name="desktopSidebarToggleIcon" class="w-5 h-5 shrink-0" />
@@ -1552,7 +1552,7 @@
                     </div>
                     <div v-if="!attackLogs.length" class="rounded-xl border p-4 text-sm text-center" :class="[theme.border, theme.mutedText]">暂无记录</div>
                   </div>
-                  <div class="hidden overflow-x-auto md:block">
+                  <div class="admin-desktop-block overflow-x-auto">
                     <table class="min-w-full text-sm">
                       <thead>
                         <tr :class="theme.mutedText">
@@ -1613,7 +1613,7 @@
                     </div>
                     <div v-if="!ipBans.length" class="rounded-xl border p-4 text-sm text-center" :class="[theme.border, theme.mutedText]">暂无封禁</div>
                   </div>
-                  <div class="hidden overflow-x-auto md:block">
+                  <div class="admin-desktop-block overflow-x-auto">
                     <table class="min-w-full text-sm">
                       <thead>
                         <tr :class="theme.mutedText">
@@ -1645,7 +1645,7 @@
 
         </div>
       </main>
-      <div v-if="showBottomBar" class="hidden md:flex fixed bottom-0 left-0 right-0 z-50 border-t px-3 py-3 justify-between items-center backdrop-blur-md shadow-xl transition-[left] duration-200" :class="[theme.bottomBg, theme.border, bottomBarClass]">
+      <div v-if="showBottomBar" class="admin-desktop-flex fixed bottom-0 left-0 right-0 z-50 border-t px-3 py-3 justify-between items-center backdrop-blur-md shadow-xl transition-[left] duration-200" :class="[theme.bottomBg, theme.border, bottomBarClass]">
         <UButton
           icon="i-heroicons-arrow-left"
           :color="panelTheme === 'light' ? 'gray' : (panelTheme === 'midnight' ? 'blue' : (panelTheme === 'slate' ? 'indigo' : 'gray'))"
@@ -5992,6 +5992,24 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 }
 .hidden {
     display: none;
+}
+.admin-desktop-flex,
+.admin-desktop-block,
+.admin-sm-inline-flex {
+  display: none;
+}
+@media (min-width: 640px) {
+  .admin-sm-inline-flex {
+    display: inline-flex !important;
+  }
+}
+@media (min-width: 768px) {
+  .admin-desktop-flex {
+    display: flex !important;
+  }
+  .admin-desktop-block {
+    display: block !important;
+  }
 }
 .resizable-textarea :deep(textarea) {
     resize: vertical !important;
