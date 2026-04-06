@@ -18,7 +18,7 @@
             <div class="text-xs" :class="theme.mutedText">总笔记 {{ userStore?.status?.total_messages || 0 }}</div>
           </div>
         </div>
-        <nav class="flex-1 overflow-y-auto px-2 py-3 space-y-2">
+        <nav ref="sidebarNavRef" class="flex-1 overflow-y-auto px-2 py-3 space-y-2">
           <div v-for="group in adminNavGroups" :key="group.key" class="admin-nav-group">
             <div class="admin-nav-group-btn admin-nav-group-btn-open" :class="[sidebarCollapsed ? 'justify-center' : '']">
               <span class="flex items-center gap-2">
@@ -32,6 +32,7 @@
                 :key="item.key"
                 class="admin-nav-item"
                 :class="[activeSection === item.key ? 'admin-nav-item-active' : '']"
+                :data-nav-key="item.key"
                 @click="setActive(item.key, $event)"
               >
                 <span class="flex items-center gap-2">
@@ -55,15 +56,16 @@
         </div>
       </aside>
         <main ref="adminMain" class="admin-main-surface w-full h-screen overflow-y-auto transition-[padding] duration-200" :class="adminMainClass">
-        <div class="md:hidden flex items-center justify-between gap-2 px-4 border-b rounded-b-2xl transition-all duration-200" :class="mobileHeaderClass">
-          <div class="flex items-center gap-2 min-w-0">
+        <div class="md:hidden flex items-center justify-between gap-2 px-3 border-b rounded-b-2xl transition-all duration-200" :class="mobileHeaderClass">
+          <div class="flex items-center gap-2 min-w-0 flex-1">
             <button class="rounded-lg shadow" :class="[headerBtnCls, headerCompact ? 'p-1.5' : 'p-2']" @click="sidebarOpen = !sidebarOpen"><UIcon name="i-heroicons-bars-3" class="w-5 h-5" /></button>
             <span class="font-semibold truncate">系统管理面板</span>
           </div>
-          <div class="flex items-center gap-2 shrink-0">
-            <UButton icon="i-heroicons-home" :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelTheme === 'light' ? 'gray' : (panelTheme === 'midnight' ? 'blue' : (panelTheme === 'slate' ? 'indigo' : 'gray'))" class="sm:hidden shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90" @click="$router.push('/')" />
-            <UButton :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelTheme === 'light' ? 'gray' : (panelTheme === 'midnight' ? 'blue' : (panelTheme === 'slate' ? 'indigo' : 'gray'))" class="hidden sm:inline-flex shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90" @click="$router.push('/')">返回首页</UButton>
-            <UButton v-if="isLogin" icon="i-heroicons-power" color="red" variant="solid" @click="handleLogout">退出登录</UButton>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <UButton icon="i-heroicons-home" size="xs" :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelTheme === 'light' ? 'gray' : (panelTheme === 'midnight' ? 'blue' : (panelTheme === 'slate' ? 'indigo' : 'gray'))" class="shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90 sm:hidden" @click="$router.push('/')" />
+            <UButton :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelTheme === 'light' ? 'gray' : (panelTheme === 'midnight' ? 'blue' : (panelTheme === 'slate' ? 'indigo' : 'gray'))" size="xs" class="hidden sm:inline-flex shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90" @click="$router.push('/')">返回首页</UButton>
+            <UButton v-if="isLogin" icon="i-heroicons-power" color="red" variant="solid" size="xs" class="sm:hidden" @click="handleLogout" />
+            <UButton v-if="isLogin" icon="i-heroicons-power" color="red" variant="solid" size="xs" class="hidden sm:inline-flex" @click="handleLogout">退出登录</UButton>
           </div>
         </div>
         <div v-if="sidebarOpen" class="fixed inset-0 z-30 bg-slate-950/45 backdrop-blur-[1px] md:hidden" @click="sidebarOpen=false"></div>
@@ -139,7 +141,7 @@
                     <div class="admin-dashboard-stat-value" :class="theme.text">{{ dashboardStats.lifePercent }}%</div>
                   </div>
                 </div>
-                <div class="admin-dashboard-grid">
+                <div class="admin-dashboard-grid admin-dashboard-panels-grid">
                   <div class="admin-dashboard-panel" :class="theme.subtleBg">
                     <div class="admin-dashboard-panel-title" :class="theme.mutedText"><UIcon name="i-heroicons-chart-bar-square" class="w-4 h-4" />运行统计</div>
                     <div class="space-y-3">
@@ -151,6 +153,13 @@
                         <div class="admin-dashboard-track">
                           <div class="admin-dashboard-fill" :style="{ width: `${bar.percent}%` }" />
                         </div>
+                      </div>
+                    </div>
+                    <div class="admin-dashboard-mini-grid">
+                      <div v-for="item in dashboardOverviewCards" :key="item.label" class="admin-dashboard-mini-card">
+                        <div class="admin-dashboard-mini-label" :class="theme.mutedText">{{ item.label }}</div>
+                        <div class="admin-dashboard-mini-value" :class="theme.text">{{ item.value }}</div>
+                        <div class="admin-dashboard-mini-desc" :class="theme.mutedText">{{ item.desc }}</div>
                       </div>
                     </div>
                   </div>
@@ -185,18 +194,19 @@
           </div>
           <div id="system-section" class="col-span-12">
             <div :class="adminShellCardClass">
-              <div class="px-4 py-3 flex flex-wrap items-center gap-6">
-                <div>
-                  <span :class="theme.text">系统管理员</span>
-                  <span class="inline-flex items-center font-medium rounded-md px-2 py-1 gap-1 ml-2 text-sm bg-primary-50 dark:bg-primary-400 dark:bg-opacity-10 text-slate-800 dark:text-slate-200">{{ userStore?.status?.username }}</span>
+              <div :class="adminSectionHeaderClass">
+                <div class="font-semibold flex items-center gap-2" :class="theme.text">
+                  <UIcon name="i-heroicons-cpu-chip" class="w-5 h-5" />
+                  <span>系统信息</span>
                 </div>
-                <div>
-                  <span :class="theme.text">当前用户</span>
-                  <span class="inline-flex items-center font-medium rounded-md px-2 py-1 gap-1 ml-2 text-sm bg-primary-50 dark:bg-primary-400 dark:bg-opacity-10 text-slate-800 dark:text-slate-200">{{ isLogin ? (userStore.user?.username || '未登录') : '未登录' }}</span>
-                </div>
-                <div>
-                  <span :class="theme.text">笔记总数</span>
-                  <span class="inline-flex items-center font-medium rounded-md px-2 py-1 gap-1 ml-2 text-sm bg-primary-50 dark:bg-primary-400 dark:bg-opacity-10 text-slate-800 dark:text-slate-200">{{ userStore?.status?.total_messages }} 条</span>
+              </div>
+              <div class="px-4 pb-4">
+                <div class="admin-system-summary-grid">
+                  <div v-for="item in systemSummaryItems" :key="item.label" class="admin-system-summary-card" :class="theme.subtleBg">
+                    <div class="admin-system-summary-label" :class="theme.mutedText">{{ item.label }}</div>
+                    <div class="admin-system-summary-value" :class="theme.text">{{ item.value }}</div>
+                    <div class="admin-system-summary-desc" :class="theme.mutedText">{{ item.desc }}</div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1476,14 +1486,14 @@
                   <UIcon name="i-heroicons-shield-exclamation" class="w-5 h-5" />
                   <span>安全防护</span>
                 </div>
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2">
                   <UButton size="sm" color="indigo" variant="soft" class="shadow" @click="refreshSecurity">刷新</UButton>
                   <UButton size="sm" color="red" variant="soft" class="shadow" @click="clearAttackLogs">清空攻击记录</UButton>
                 </div>
               </div>
               <div class="px-4 pb-4 space-y-4">
                 <div :class="adminSubtleCardClass">
-                  <div class="flex items-center justify-between mb-2">
+                  <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
                     <div class="font-semibold" :class="theme.text">自动封禁策略</div>
                     <div class="flex items-center gap-2">
                       <UButton size="sm" color="green" class="shadow" @click="saveSecurityConfig">保存策略</UButton>
@@ -1514,7 +1524,35 @@
                   <div class="flex items-center justify-between mb-2">
                     <div class="font-semibold" :class="theme.text">攻击记录（最近 {{ attackLogs.length }} 条）</div>
                   </div>
-                  <div class="overflow-x-auto">
+                  <div class="space-y-3 md:hidden">
+                    <div v-for="row in attackLogs" :key="`attack-mobile-${row.id}`" class="rounded-xl border p-3 space-y-2" :class="[theme.border, theme.cardBg]">
+                      <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                          <div class="text-xs" :class="theme.mutedText">时间</div>
+                          <div class="text-sm break-words" :class="theme.text">{{ formatShanghai(row.created_at || row.CreatedAt || '') }}</div>
+                        </div>
+                        <UButton size="xs" color="orange" variant="soft" class="shadow shrink-0" @click="banIP(row.ip || row.IP)">封禁</UButton>
+                      </div>
+                      <div class="grid grid-cols-1 gap-2 text-sm">
+                        <div>
+                          <div class="text-xs" :class="theme.mutedText">IP</div>
+                          <div class="font-mono break-all" :class="theme.text">{{ row.ip || row.IP }}</div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <div class="text-xs" :class="theme.mutedText">方法</div>
+                            <div :class="theme.text">{{ row.method || row.Method }}</div>
+                          </div>
+                          <div>
+                            <div class="text-xs" :class="theme.mutedText">路径</div>
+                            <div class="break-all" :class="theme.text">{{ row.path || row.Path }}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div v-if="!attackLogs.length" class="rounded-xl border p-4 text-sm text-center" :class="[theme.border, theme.mutedText]">暂无记录</div>
+                  </div>
+                  <div class="hidden overflow-x-auto md:block">
                     <table class="min-w-full text-sm">
                       <thead>
                         <tr :class="theme.mutedText">
@@ -1544,16 +1582,38 @@
                 </div>
 
                 <div :class="adminSubtleCardClass">
-                  <div class="flex items-center justify-between mb-2">
+                  <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
                     <div class="font-semibold" :class="theme.text">封禁 IP</div>
-                    <div class="flex items-center gap-2">
-                      <UInput v-model="banForm.ip" placeholder="IP" class="w-40" />
-                      <UInput v-model.number="banForm.minutes" type="number" placeholder="分钟(0=永久)" class="w-36" />
-                      <UInput v-model="banForm.reason" placeholder="原因(可选)" class="w-56" />
-                      <UButton size="sm" color="orange" class="shadow" @click="submitBan">封禁</UButton>
+                    <div class="flex flex-wrap items-stretch md:items-center gap-2 w-full md:w-auto">
+                      <UInput v-model="banForm.ip" placeholder="IP" class="w-full sm:w-40" />
+                      <UInput v-model.number="banForm.minutes" type="number" placeholder="分钟(0=永久)" class="w-full sm:w-36" />
+                      <UInput v-model="banForm.reason" placeholder="原因(可选)" class="w-full sm:min-w-[12rem] sm:flex-1 md:w-56" />
+                      <UButton size="sm" color="orange" class="shadow w-full sm:w-auto sm:shrink-0 justify-center" @click="submitBan">封禁</UButton>
                     </div>
                   </div>
-                  <div class="overflow-x-auto">
+                  <div class="space-y-3 md:hidden">
+                    <div v-for="b in ipBans" :key="`ban-mobile-${b.id}`" class="rounded-xl border p-3 space-y-2" :class="[theme.border, theme.cardBg]">
+                      <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                          <div class="text-xs" :class="theme.mutedText">IP</div>
+                          <div class="font-mono break-all" :class="theme.text">{{ b.ip || b.IP }}</div>
+                        </div>
+                        <UButton size="xs" color="green" variant="soft" class="shadow shrink-0" @click="unbanIP(b.ip || b.IP)">解封</UButton>
+                      </div>
+                      <div class="grid grid-cols-1 gap-2 text-sm">
+                        <div>
+                          <div class="text-xs" :class="theme.mutedText">原因</div>
+                          <div class="break-words" :class="theme.text">{{ b.reason || b.Reason || '-' }}</div>
+                        </div>
+                        <div>
+                          <div class="text-xs" :class="theme.mutedText">到期</div>
+                          <div :class="theme.text">{{ b.until || b.Until ? formatShanghai(b.until || b.Until) : '永久' }}</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div v-if="!ipBans.length" class="rounded-xl border p-4 text-sm text-center" :class="[theme.border, theme.mutedText]">暂无封禁</div>
+                  </div>
+                  <div class="hidden overflow-x-auto md:block">
                     <table class="min-w-full text-sm">
                       <thead>
                         <tr :class="theme.mutedText">
@@ -1585,7 +1645,7 @@
 
         </div>
       </main>
-      <div v-show="showBottomBar" class="flex fixed bottom-0 left-0 right-0 z-50 border-t px-3 py-3 justify-between items-center backdrop-blur-md shadow-xl transition-[left] duration-200" :class="[theme.bottomBg, theme.border, bottomBarClass]">
+      <div v-if="showBottomBar" class="hidden md:flex fixed bottom-0 left-0 right-0 z-50 border-t px-3 py-3 justify-between items-center backdrop-blur-md shadow-xl transition-[left] duration-200" :class="[theme.bottomBg, theme.border, bottomBarClass]">
         <UButton
           icon="i-heroicons-arrow-left"
           :color="panelTheme === 'light' ? 'gray' : (panelTheme === 'midnight' ? 'blue' : (panelTheme === 'slate' ? 'indigo' : 'gray'))"
@@ -1921,6 +1981,52 @@ const dashboardBars = computed(() => {
     { label: '人生进度', percent: dashboardStats.value.lifePercent },
   ]
 })
+const dashboardOverviewCards = computed(() => {
+  const loginName = isLogin.value ? (userStore.user?.username || '已登录') : '未登录'
+  return [
+    {
+      label: '系统信息',
+      value: versionInfo.currentVersion || '最新',
+      desc: versionInfo.hasUpdate && versionInfo.latestVersion ? `发现更新 ${versionInfo.latestVersion}` : '当前版本状态'
+    },
+    {
+      label: '当前用户',
+      value: loginName,
+      desc: isAdmin.value ? '管理员权限已启用' : '普通账户视图'
+    },
+    {
+      label: '存储方案',
+      value: storageEnabled.value ? '云端' : '本地',
+      desc: storageEnabled.value ? '已接入对象存储' : '使用本地磁盘'
+    },
+    {
+      label: '功能开关',
+      value: `${[
+        frontendConfig.pwaEnabled,
+        frontendConfig.commentEnabled,
+        registerEnabled.value,
+        frontendConfig.notifyEnabled
+      ].filter(Boolean).length}/4`,
+      desc: 'PWA / 评论 / 注册 / 通知'
+    }
+  ]
+})
+const systemSummaryItems = computed(() => {
+  const adminName = userStore?.status?.username || '未设置'
+  const loginName = isLogin.value ? (userStore.user?.username || '已登录') : '未登录'
+  const totalMessages = `${dashboardStats.value.messageCount} 条`
+  const versionText = versionInfo.currentVersion || '最新'
+  const registerText = registerEnabled.value ? '开放注册' : '关闭注册'
+  const securityText = securityConfig.autoBanEnabled ? '自动封禁中' : '手动防护'
+  return [
+    { label: '系统管理员', value: adminName, desc: '后台默认管理账号' },
+    { label: '当前用户', value: loginName, desc: isAdmin.value ? '拥有管理员权限' : '普通账户视图' },
+    { label: '笔记总数', value: totalMessages, desc: '当前站点内容规模' },
+    { label: '系统版本', value: versionText, desc: versionInfo.hasUpdate && versionInfo.latestVersion ? `可更新到 ${versionInfo.latestVersion}` : '当前版本状态正常' },
+    { label: '注册状态', value: registerText, desc: registerEnabled.value ? '允许新用户创建账户' : '仅限已有账户登录' },
+    { label: '安全策略', value: securityText, desc: securityConfig.autoBanEnabled ? `阈值 ${securityConfig.autoBanThreshold} 次` : '可在下方安全面板配置' }
+  ]
+})
 const dashboardNowText = computed(() => new Intl.DateTimeFormat('zh-CN', {
   hour12: false,
   year: 'numeric',
@@ -2052,6 +2158,7 @@ const avatarSrc = computed(() => {
 })
 
 const setActive = async (name: AdminSectionKey, evt?: MouseEvent) => {
+  navSyncLockedUntil = Date.now() + 700
   activeSection.value = name
   const groupKey = sectionGroupMap.value[name]
   if (groupKey) openOnlyGroup(groupKey)
@@ -2166,9 +2273,10 @@ watch(() => panelTheme.value, (val: string) => {
   syncRootDarkForAdmin()
 })
 
-const showBottomBar = ref(typeof window !== 'undefined' ? window.innerWidth >= 768 : true)
+const showBottomBar = ref(typeof window !== 'undefined' ? window.innerWidth >= 768 : false)
 const updateBottomBarVisibility = () => {
-  showBottomBar.value = true
+  if (typeof window === 'undefined') return
+  showBottomBar.value = window.innerWidth >= 768
 }
 onMounted(() => {
   updateBottomBarVisibility()
@@ -2180,11 +2288,20 @@ onUnmounted(() => {
 
 const headerCompact = ref(false)
 const adminMain = ref<HTMLElement | null>(null)
+const sidebarNavRef = ref<HTMLElement | null>(null)
 const headerBtnCls = computed(() => panelTheme.value === 'light' ? 'bg-gray-100 hover:bg-gray-200 text-slate-900' : 'bg-slate-800/70 hover:bg-slate-700/70 text-white')
 let adminScrollHandler: any = null
+let navSyncLockedUntil = 0
+const syncSidebarActiveItem = () => {
+  const nav = sidebarNavRef.value
+  if (!nav) return
+  const target = nav.querySelector(`[data-nav-key="${activeSection.value}"]`) as HTMLElement | null
+  target?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+}
 const syncActiveByScroll = () => {
   const main = adminMain.value
   if (!main) return
+  if (Date.now() < navSyncLockedUntil) return
   const topThreshold = 140
   let candidate: AdminSectionKey | null = null
   let minPositive = Number.POSITIVE_INFINITY
@@ -2217,6 +2334,10 @@ onMounted(() => {
 onUnmounted(() => {
   const el = adminMain.value
   if (el && adminScrollHandler) el.removeEventListener('scroll', adminScrollHandler)
+})
+watch(() => activeSection.value, async () => {
+  await nextTick()
+  syncSidebarActiveItem()
 })
 
 const theme = computed(() => {
@@ -5637,6 +5758,9 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   font-weight: 700;
   line-height: 1.1;
 }
+.admin-dashboard-panels-grid {
+  align-items: start;
+}
 .admin-dashboard-track {
   height: 8px;
   border-radius: 999px;
@@ -5655,6 +5779,58 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 .admin-dashboard-date {
   margin-top: 6px;
   font-size: 13px;
+}
+.admin-dashboard-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.admin-dashboard-mini-card {
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(148, 163, 184, 0.08);
+  padding: 10px 12px;
+}
+.admin-dashboard-mini-label {
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+.admin-dashboard-mini-value {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+  word-break: break-word;
+}
+.admin-dashboard-mini-desc {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.admin-system-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 12px;
+}
+.admin-system-summary-card {
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  padding: 14px;
+}
+.admin-system-summary-label {
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.admin-system-summary-value {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+  word-break: break-word;
+}
+.admin-system-summary-desc {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
 }
 .admin-calendar-shell {
   margin-top: 12px;
@@ -5853,7 +6029,7 @@ html.dark .textarea-resize-handle { background: rgba(255,255,255,0.16); }
   color: #d1dae8;
 }
 .admin-nav-group-btn-open {
-  background: rgba(148, 163, 184, 0.16);
+  background: rgba(148, 163, 184, 0.08);
 }
 .admin-nav-item {
   width: 100%;
@@ -5870,6 +6046,7 @@ html.dark .textarea-resize-handle { background: rgba(255,255,255,0.16); }
 }
 .admin-nav-item:hover {
   background: rgba(148, 163, 184, 0.14);
+  color: #ffffff;
 }
 .admin-nav-collapse-enter-active,
 .admin-nav-collapse-leave-active {
@@ -5887,18 +6064,23 @@ html.dark .textarea-resize-handle { background: rgba(255,255,255,0.16); }
 }
 .admin-root.admin-theme-light .admin-nav-group-btn {
   color: #334155;
-  background: rgba(241, 245, 249, 0.9);
+  background: rgba(226, 232, 240, 0.38);
 }
 .admin-root.admin-theme-light .admin-nav-item {
   color: #475569;
 }
 .admin-root.admin-theme-light .admin-nav-item:hover {
-  background: rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.08);
+  color: #0f172a;
 }
 .admin-root.admin-theme-light .admin-nav-item-active {
   background: #111827;
   color: #ffffff;
   box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+}
+.admin-root.admin-theme-light .admin-nav-item-active:hover {
+  background: #111827;
+  color: #ffffff;
 }
 .theme-dot-btn {
   width: 22px;
@@ -5993,14 +6175,23 @@ html.dark .textarea-resize-handle { background: rgba(255,255,255,0.16); }
   .admin-form-shell {
     padding-left: 10px !important;
     padding-right: 10px !important;
-    padding-bottom: calc(86px + env(safe-area-inset-bottom)) !important;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom)) !important;
   }
   .admin-dashboard-stat-value {
     font-size: 24px;
   }
+  .admin-dashboard-mini-grid {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
 }
 @media (min-width: 768px) {
   .admin-dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .admin-dashboard-mini-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .admin-system-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .life-preview-grid {
@@ -6013,6 +6204,9 @@ html.dark .textarea-resize-handle { background: rgba(255,255,255,0.16); }
   }
   .admin-dashboard-grid + .admin-dashboard-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .admin-system-summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 </style>

@@ -1,4 +1,4 @@
-FROM public.ecr.aws/docker/library/node:20-alpine
+FROM docker.io/library/node:20-alpine
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install --production

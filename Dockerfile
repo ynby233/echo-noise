@@ -2,7 +2,7 @@
 # 注意：前端产物是静态文件，与 CPU 架构无关。
 # multi-arch 构建时如果在 TARGETPLATFORM（例如 linux/arm64）上执行 npm，会触发 QEMU 模拟导致极慢。
 # 因此固定在 BUILDPLATFORM 上构建前端。
-FROM --platform=$BUILDPLATFORM public.ecr.aws/docker/library/node:22.14.0-alpine AS frontend-build
+FROM --platform=$BUILDPLATFORM docker.io/library/node:22.14.0-alpine AS frontend-build
 
 # 设置工作目录
 WORKDIR /app/web
@@ -23,7 +23,7 @@ RUN npm run generate
 RUN mkdir -p /app/public && cp -r .output/public/* /app/public/
 
 # 构建阶段：后端
-FROM public.ecr.aws/docker/library/golang:1.24.1-alpine AS backend-build
+FROM docker.io/library/golang:1.24.1-alpine AS backend-build
 
 # 设置环境变量
 ENV CGO_ENABLED=0
@@ -52,7 +52,7 @@ RUN mkdir -p /app/data /app/public && chmod -R 755 /app/data
 
 # MCP 构建阶段（打包为单文件，避免在最终镜像中保留 node_modules）
 # MCP 产物为 JS bundle，与 CPU 架构无关，同样固定在 BUILDPLATFORM 上构建。
-FROM --platform=$BUILDPLATFORM public.ecr.aws/docker/library/node:20-alpine AS mcp-build
+FROM --platform=$BUILDPLATFORM docker.io/library/node:20-alpine AS mcp-build
 WORKDIR /app/mcp
 COPY ./mcp/package.json ./
 RUN --mount=type=cache,target=/root/.npm \
@@ -67,7 +67,7 @@ RUN npx --yes esbuild@0.23.0 server.js \
 # FFmpeg 构建阶段（尽量静态链接，减少运行时依赖体积）
 # 注意：源码编译非常耗时，且 multi-arch 下会被重复构建。
 # 默认 final 镜像将改为通过 apk 安装 ffmpeg；如需自编译版本，请使用 --target final-ffmpeg。
-FROM public.ecr.aws/docker/library/alpine:3.21 AS ffmpeg-build
+FROM docker.io/library/alpine:3.21 AS ffmpeg-build
 ARG FFMPEG_VERSION=7.1
 RUN set -eux; \
     apk add --no-cache \
@@ -103,7 +103,7 @@ RUN set -eux; \
     /opt/ffmpeg/bin/ffmpeg -version
 
 # 运行时阶段
-FROM public.ecr.aws/docker/library/alpine:3.21 AS final
+FROM docker.io/library/alpine:3.21 AS final
 
 # 可选：是否使用 UPX 压缩二进制（1=启用，0=禁用）
 ARG USE_UPX=1
@@ -201,7 +201,7 @@ EXPOSE 1314
 EXPOSE 1315
 CMD ["sh","-c","node /app/mcp/server.bundle.mjs & exec /app/noise"]
 
-FROM public.ecr.aws/docker/library/node:20-alpine AS mcp-final
+FROM docker.io/library/node:20-alpine AS mcp-final
 WORKDIR /app/mcp
 COPY --from=mcp-build /app/mcp/server.bundle.mjs /app/mcp/server.bundle.mjs
 ENV NOTE_HTTP_PORT=1315

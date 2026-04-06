@@ -13,8 +13,9 @@
             <p class="mx-auto max-w-md text-sm leading-6 text-slate-200/90">{{ description }}</p>
           </div>
           <div class="flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <UButton color="primary" size="lg" class="w-full sm:w-auto" @click="goHome">返回首页</UButton>
-            <UButton variant="soft" color="gray" size="lg" class="w-full sm:w-auto" @click="goLogin">返回登录</UButton>
+            <UButton color="primary" size="lg" class="w-full sm:w-auto sm:hidden" @click="goLogin">前往登录</UButton>
+            <UButton color="primary" size="lg" class="hidden w-full sm:inline-flex sm:w-auto" @click="goHome">返回首页</UButton>
+            <UButton variant="soft" color="gray" size="lg" class="hidden w-full sm:inline-flex sm:w-auto" @click="goLogin">返回登录</UButton>
           </div>
         </div>
       </UCard>
@@ -23,6 +24,11 @@
 </template>
 
 <script setup lang="ts">
+// @ts-ignore Nuxt macro
+definePageMeta({ layout: false })
+import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+
 const router = useRouter()
 const route = useRoute()
 
