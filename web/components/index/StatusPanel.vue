@@ -1525,7 +1525,7 @@
                     <div class="font-semibold" :class="theme.text">攻击记录（最近 {{ attackLogs.length }} 条）</div>
                   </div>
                   <div class="space-y-3 md:hidden">
-                    <div v-for="row in attackLogs" :key="`attack-mobile-${row.id}`" class="rounded-xl border p-3 space-y-2" :class="[theme.border, theme.cardBg]">
+                    <div v-for="(row, index) in attackLogs" :key="`attack-mobile-${row.ID ?? row.id ?? `${row.created_at || row.CreatedAt || ''}-${row.ip || row.IP || ''}-${index}`}`" class="rounded-xl border p-3 space-y-2" :class="[theme.border, theme.cardBg]">
                       <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0">
                           <div class="text-xs" :class="theme.mutedText">时间</div>
@@ -1564,7 +1564,7 @@
                         </tr>
                       </thead>
                       <tbody>
-                        <tr v-for="row in attackLogs" :key="row.id" class="border-t" :class="theme.border">
+                        <tr v-for="(row, index) in attackLogs" :key="row.ID ?? row.id ?? `${row.created_at || row.CreatedAt || ''}-${row.ip || row.IP || ''}-${index}`" class="border-t" :class="theme.border">
                           <td class="py-2 pr-4" :class="theme.mutedText">{{ formatShanghai(row.created_at || row.CreatedAt || '') }}</td>
                           <td class="py-2 pr-4 font-mono" :class="theme.text">{{ row.ip || row.IP }}</td>
                           <td class="py-2 pr-4" :class="theme.mutedText">{{ row.method || row.Method }}</td>
@@ -1592,7 +1592,7 @@
                     </div>
                   </div>
                   <div class="space-y-3 md:hidden">
-                    <div v-for="b in ipBans" :key="`ban-mobile-${b.id}`" class="rounded-xl border p-3 space-y-2" :class="[theme.border, theme.cardBg]">
+                    <div v-for="(b, index) in ipBans" :key="`ban-mobile-${b.ID ?? b.id ?? `${b.ip || b.IP || ''}-${b.until || b.Until || 'permanent'}-${index}`}`" class="rounded-xl border p-3 space-y-2" :class="[theme.border, theme.cardBg]">
                       <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0">
                           <div class="text-xs" :class="theme.mutedText">IP</div>
@@ -1624,7 +1624,7 @@
                         </tr>
                       </thead>
                       <tbody>
-                        <tr v-for="b in ipBans" :key="b.id" class="border-t" :class="theme.border">
+                        <tr v-for="(b, index) in ipBans" :key="b.ID ?? b.id ?? `${b.ip || b.IP || ''}-${b.until || b.Until || 'permanent'}-${index}`" class="border-t" :class="theme.border">
                           <td class="py-2 pr-4 font-mono" :class="theme.text">{{ b.ip || b.IP }}</td>
                           <td class="py-2 pr-4" :class="theme.mutedText">{{ b.reason || b.Reason || '-' }}</td>
                           <td class="py-2 pr-4" :class="theme.mutedText">{{ b.until || b.Until ? formatShanghai(b.until || b.Until) : '永久' }}</td>
