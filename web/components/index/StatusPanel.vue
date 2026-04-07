@@ -7,11 +7,6 @@
       <div class="admin-dashboard-shell min-h-screen w-full">
         <aside class="admin-sidebar-surface h-screen overflow-y-auto backdrop-blur-md flex flex-col fixed left-0 top-0 z-40 transition-transform duration-300 md:transition-[width] border-r" :class="adminSidebarClass">
         <div class="px-4 py-4 border-b flex flex-col items-center gap-2" :class="theme.border">
-          <div class="w-full admin-desktop-flex justify-end">
-            <button class="admin-sidebar-toggle-btn" :class="headerBtnCls" :title="desktopSidebarToggleText" :aria-label="desktopSidebarToggleText" @click="sidebarCollapsed = !sidebarCollapsed">
-              <UIcon :name="desktopSidebarToggleIcon" class="w-4 h-4" />
-            </button>
-          </div>
           <img :src="avatarSrc" class="w-14 h-14 rounded-full ring-2 ring-indigo-400/60 shadow-lg object-cover" alt="avatar" @error="onAvatarImgError" />
           <div class="w-full text-center transition-all duration-200" :class="sidebarCollapsed ? 'max-h-0 opacity-0 pointer-events-none' : 'max-h-20 opacity-100'">
             <div class="font-semibold text-base truncate">{{ displayUsername }}</div>
@@ -20,7 +15,7 @@
         </div>
         <nav ref="sidebarNavRef" class="flex-1 overflow-y-auto px-2 py-3 space-y-2">
           <div v-for="group in adminNavGroups" :key="group.key" class="admin-nav-group">
-            <div class="admin-nav-group-btn admin-nav-group-btn-open" :class="[sidebarCollapsed ? 'justify-center' : '']">
+            <div class="admin-nav-group-btn admin-nav-group-btn-open cursor-pointer" :class="[sidebarCollapsed ? 'justify-center' : '']" @click="onNavGroupClick(group)">
               <span class="flex items-center gap-2">
                 <UIcon :name="group.icon" class="w-5 h-5" />
                 <span v-show="!sidebarCollapsed" class="text-sm font-semibold tracking-wide">{{ group.label }}</span>
@@ -43,7 +38,7 @@
             </div>
           </div>
         </nav>
-        <div class="px-4 py-3 border-t" :class="theme.border">
+        <div v-if="!sidebarCollapsed" class="px-4 py-3 border-t" :class="theme.border">
           <div class="text-xs text-slate-400">当前版本: {{ versionInfo.currentVersion || '最新' }}</div>
           <div class="mt-2 flex items-center gap-2">
             <UButton size="xs" color="indigo" variant="soft" :loading="versionInfo.checking" class="shadow-md" @click="checkVersion">{{ versionInfo.checking ? '检测中...' : '检查版本发布时间' }}</UButton>
@@ -587,14 +582,16 @@
                     <div v-if="!isSwitchConfigKey(String(key))" class="space-y-3">
                       <template v-if="String(key) === 'backgrounds'">
                         <div class="space-y-3">
-                          <div v-for="(bg, index) in frontendConfig.backgrounds" :key="index" class="admin-array-row">
-                            <img :src="bg || '/favicon.ico'" class="w-16 h-16 rounded-xl object-cover border" :class="theme.border" @click="previewImage(bg)" />
-                            <UInput v-model="frontendConfig.backgrounds[index]" placeholder="输入头部图 URL" class="flex-1" />
-                            <div class="flex flex-wrap items-center gap-2">
+                          <div class="admin-bg-grid">
+                            <div v-for="(bg, index) in frontendConfig.backgrounds" :key="index" class="admin-bg-item">
+                              <img :src="bg || '/favicon.ico'" class="admin-bg-thumb border" :class="theme.border" @click="previewImage(bg)" />
+                              <UInput v-model="frontendConfig.backgrounds[index]" placeholder="输入头部图 URL" class="w-full" />
+                              <div class="flex flex-wrap items-center gap-2">
                               <UButton size="xs" variant="soft" icon="i-heroicons-arrow-up" @click="moveBackgroundUp(index)">上移</UButton>
                               <UButton size="xs" variant="soft" icon="i-heroicons-arrow-down" @click="moveBackgroundDown(index)">下移</UButton>
                               <UButton size="xs" variant="soft" icon="i-heroicons-eye" @click="previewImage(bg)">预览</UButton>
                               <UButton size="xs" color="red" variant="soft" icon="i-heroicons-trash" @click="removeBackground(index)">删除</UButton>
+                              </div>
                             </div>
                           </div>
                           <div class="rounded-xl border-2 border-dashed p-4 text-center" :class="theme.border" @dragover.prevent @drop.prevent="onDropFiles">
@@ -1868,6 +1865,18 @@ const openOnlyGroup = (groupKey: string) => {
 const toggleNavGroup = (groupKey: string) => {
   openOnlyGroup(groupKey)
 }
+const onNavGroupClick = (group: { key: string; items: Array<{ key: AdminSectionKey }> }) => {
+  openOnlyGroup(group.key)
+  if (sidebarCollapsed.value) {
+    sidebarCollapsed.value = false
+    return
+  }
+  if (!group.items?.length) return
+  const hasActive = group.items.some((item) => item.key === activeSection.value)
+  if (!hasActive) {
+    activeSection.value = group.items[0].key
+  }
+}
 watch(() => activeSection.value, (section) => {
   const groupKey = sectionGroupMap.value[section]
   if (groupKey) openOnlyGroup(groupKey)
@@ -1914,6 +1923,22 @@ const sidebarCollapsed = ref(
 )
 const desktopSidebarToggleIcon = computed(() => (sidebarCollapsed.value ? 'i-mdi-chevron-double-right' : 'i-mdi-chevron-double-left'))
 const desktopSidebarToggleText = computed(() => (sidebarCollapsed.value ? '展开导航' : '收起导航'))
+const adminThemeStorageKey = 'adminTheme'
+const isValidAdminTheme = (value: unknown): value is 'dark' | 'midnight' | 'slate' | 'light' => (
+  value === 'dark' || value === 'midnight' || value === 'slate' || value === 'light'
+)
+const resolveInitialAdminTheme = (): 'dark' | 'midnight' | 'slate' | 'light' => {
+  if (typeof window === 'undefined') return 'light'
+  try {
+    const savedTheme = localStorage.getItem(adminThemeStorageKey)
+    if (isValidAdminTheme(savedTheme)) return savedTheme
+    // 首次进入后台时默认白色主题
+    localStorage.setItem(adminThemeStorageKey, 'light')
+    return 'light'
+  } catch {
+    return 'light'
+  }
+}
 const syncSidebarViewport = () => {
   if (typeof window === 'undefined') return
   if (window.innerWidth >= 768) {
@@ -1931,7 +1956,7 @@ watch(sidebarCollapsed, (v) => {
   localStorage.setItem('adminSidebarCollapsed', v ? '1' : '0')
 })
 const panelTheme = ref<'dark' | 'midnight' | 'slate' | 'light'>(
-  (typeof window !== 'undefined' && (localStorage.getItem('adminTheme') as any)) || 'light'
+  resolveInitialAdminTheme()
 )
 const prevRootDark = ref<boolean | null>(null)
 const baseApi = useRuntimeConfig().public.baseApi || '/api'
@@ -2193,10 +2218,38 @@ const setActive = async (name: AdminSectionKey, evt?: MouseEvent) => {
   if (typeof window !== 'undefined' && window.innerWidth < 768) sidebarOpen.value = false
 }
 
+const resolveSectionFromHash = (rawHash: string): AdminSectionKey | null => {
+  const decoded = decodeURIComponent(String(rawHash || '')).replace(/^#/, '').trim()
+  if (!decoded) return null
+  const sectionKey = decoded.endsWith('-section') ? decoded.slice(0, -8) : decoded
+  const allowed = new Set<AdminSectionKey>()
+  for (const group of adminNavGroups.value) {
+    for (const item of group.items) {
+      allowed.add(item.key)
+    }
+  }
+  if (allowed.has(sectionKey as AdminSectionKey)) return sectionKey as AdminSectionKey
+  const alias = (Object.keys(sectionGroupMap.value) as AdminSectionKey[]).find((key) => normalizeSection(key) === sectionKey)
+  return alias && allowed.has(alias) ? alias : null
+}
+
+const restoreSectionFromHash = async () => {
+  if (typeof window === 'undefined') return
+  const targetSection = resolveSectionFromHash(window.location.hash)
+  if (!targetSection) return
+  if (activeSection.value === targetSection) return
+  await setActive(targetSection)
+}
+
+const onAdminHashChange = () => {
+  restoreSectionFromHash()
+}
+
 onMounted(() => {
   loadStorageConfig()
   sidebarOpen.value = window.innerWidth >= 768
   window.addEventListener('resize', syncSidebarViewport, { passive: true })
+  window.addEventListener('hashchange', onAdminHashChange)
   dashboardTimer = window.setInterval(() => {
     dashboardNow.value = new Date()
   }, 1000)
@@ -2224,6 +2277,7 @@ onMounted(() => {
 onUnmounted(() => {
   if (typeof window !== 'undefined') document.body.style.overflow = ''
   if (typeof window !== 'undefined') window.removeEventListener('resize', syncSidebarViewport)
+  if (typeof window !== 'undefined') window.removeEventListener('hashchange', onAdminHashChange)
   if (dashboardTimer) {
     clearInterval(dashboardTimer)
     dashboardTimer = null
@@ -2269,7 +2323,7 @@ watch(() => userStore.status, () => { loadUserMessagesCount() })
 onMounted(() => { loadUserMessagesCount() })
 
 watch(() => panelTheme.value, (val: string) => {
-  try { localStorage.setItem('adminTheme', String(val)) } catch {}
+  try { localStorage.setItem(adminThemeStorageKey, String(val)) } catch {}
   syncRootDarkForAdmin()
 })
 
@@ -2343,16 +2397,16 @@ watch(() => activeSection.value, async () => {
 const theme = computed(() => {
   if (panelTheme.value === 'light') {
     return {
-      sidebarBg: 'bg-slate-100/95',
+      sidebarBg: 'bg-white/98',
       headerBg: 'bg-white/95',
       bottomBg: 'bg-white/95',
-      cardBg: 'bg-white/95',
-      subtleBg: 'bg-slate-50',
-      border: 'border-slate-200',
+      cardBg: 'bg-white/96',
+      subtleBg: 'bg-slate-50/85',
+      border: 'border-slate-200/90',
       text: 'text-slate-800',
       sidebarText: 'text-slate-900',
       mutedText: 'text-slate-600',
-      pageBg: 'bg-slate-100',
+      pageBg: 'bg-[#f8fafc]',
       navBtnBg: 'bg-white',
       navBtnHoverBg: 'hover:bg-slate-100'
     }
@@ -2562,7 +2616,7 @@ const clearFriendLinkApplications = async () => {
 
 
 const saveAdminTheme = async () => {
-  localStorage.setItem('adminTheme', panelTheme.value)
+  localStorage.setItem(adminThemeStorageKey, panelTheme.value)
   try {
     const resConfig = await fetch(`${baseApi}/frontend/config`, { credentials: 'include' })
     const dataConfig = await resConfig.json()
@@ -4219,6 +4273,15 @@ const fetchConfig = async () => {
                     ;(frontendConfig as any)[key] = typeof v === 'string' ? v.trim() : v
                 }
             });
+            // 后台主题：优先本地，其次服务端，兜底白色
+            if (typeof window !== 'undefined') {
+              const localTheme = localStorage.getItem(adminThemeStorageKey)
+              if (!isValidAdminTheme(localTheme)) {
+                const serverTheme = String((settings as any).adminTheme || '').trim()
+                panelTheme.value = isValidAdminTheme(serverTheme) ? serverTheme : 'light'
+                try { localStorage.setItem(adminThemeStorageKey, panelTheme.value) } catch {}
+              }
+            }
 
             // 独立处理布尔型未包含在 frontendConfig 键中的字段
             if (settings.enableGithubCard !== undefined) {
@@ -5193,6 +5256,8 @@ onMounted(async () => {
         });
     } finally {
         isLoading.value = false;
+        await nextTick();
+        await restoreSectionFromHash();
     }
 });
 const databaseFileInput = ref<HTMLInputElement | null>(null)
@@ -5660,27 +5725,27 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
               #0b1020;
 }
 .admin-root.admin-theme-light {
-  background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+  background: linear-gradient(180deg, #fbfdff 0%, #f1f5f9 55%, #edf2f7 100%);
 }
 .admin-dashboard-shell {
   background-image: repeating-linear-gradient(-28deg, rgba(148, 163, 184, 0.025) 0 8px, transparent 8px 22px);
 }
 .admin-root.admin-theme-light .admin-dashboard-shell {
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(241, 245, 249, 0.92));
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(245, 249, 255, 0.95));
 }
 .admin-sidebar-surface {
   background: linear-gradient(180deg, rgba(12, 18, 30, 0.96), rgba(8, 13, 23, 0.96));
   box-shadow: 12px 0 28px rgba(2, 6, 23, 0.56);
 }
 .admin-root.admin-theme-light .admin-sidebar-surface {
-  background: linear-gradient(180deg, #ffffff, #f8fafc);
-  box-shadow: 10px 0 30px rgba(15, 23, 42, 0.08);
+  background: linear-gradient(180deg, #ffffff, #f7fbff);
+  box-shadow: 8px 0 22px rgba(15, 23, 42, 0.06);
 }
 .admin-main-surface {
   background: linear-gradient(180deg, rgba(15, 23, 42, 0.2), rgba(2, 6, 23, 0.12));
 }
 .admin-root.admin-theme-light .admin-main-surface {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(248, 250, 252, 0.9));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(246, 250, 255, 0.95));
 }
 .admin-topbar-surface {
   backdrop-filter: blur(8px);
@@ -5964,6 +6029,30 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 .admin-root.dark .admin-array-row {
   background: rgba(15, 23, 42, 0.38);
 }
+.admin-bg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}
+.admin-bg-item {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(255, 255, 255, 0.62);
+}
+.admin-root.dark .admin-bg-item {
+  background: rgba(15, 23, 42, 0.38);
+}
+.admin-bg-thumb {
+  width: 100%;
+  height: 128px;
+  border-radius: 12px;
+  object-fit: cover;
+  cursor: pointer;
+}
 .admin-form-shell > .col-span-12 > div {
   border-radius: var(--admin-radius);
   box-shadow: var(--admin-shadow);
@@ -6173,6 +6262,9 @@ html.dark .textarea-resize-handle { background: rgba(255,255,255,0.16); }
   .admin-array-row {
     flex-direction: column;
     align-items: stretch;
+  }
+  .admin-bg-grid {
+    grid-template-columns: 1fr;
   }
 }
 @media (max-width: 768px) {
