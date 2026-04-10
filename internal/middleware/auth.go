@@ -78,18 +78,72 @@ func SessionAuthMiddleware() gin.HandlerFunc {
 }
 
 func AdminAuthMiddleware() gin.HandlerFunc {
-    return func(ctx *gin.Context) {
-        session := sessions.Default(ctx)
-        isAdmin := session.Get("is_admin")
+	return func(ctx *gin.Context) {
+		// 优先使用上游中间件写入的上下文
+		if v, ok := ctx.Get("is_admin"); ok {
+			if b, ok := v.(bool); ok && b {
+				ctx.Next()
+				return
+			}
+		}
 
-        if isAdmin == nil || !isAdmin.(bool) {
-            ctx.JSON(http.StatusForbidden, dto.Fail[any]("需要管理员权限"))
-            ctx.Abort()
-            return
-        }
+		// 其次尝试根据 user_id 实时查询，避免只信任 session 中布尔位
+		if v, ok := ctx.Get("user_id"); ok {
+			if uid, ok := toUint(v); ok {
+				db, err := database.GetDB()
+				if err == nil {
+					var user models.User
+					if err := db.Select("id,is_admin").First(&user, uid).Error; err == nil && user.IsAdmin {
+						ctx.Set("is_admin", true)
+						ctx.Next()
+						return
+					}
+				}
+			}
+		}
 
-        ctx.Next()
-    }
+		// 最后兼容旧逻辑
+		session := sessions.Default(ctx)
+		if b, ok := session.Get("is_admin").(bool); ok && b {
+			ctx.Next()
+			return
+		}
+
+		ctx.JSON(http.StatusForbidden, dto.Fail[any]("需要管理员权限"))
+		ctx.Abort()
+	}
+}
+
+func toUint(v any) (uint, bool) {
+	switch val := v.(type) {
+	case uint:
+		return val, true
+	case int:
+		if val >= 0 {
+			return uint(val), true
+		}
+	case int64:
+		if val >= 0 {
+			return uint(val), true
+		}
+	case float64:
+		if val >= 0 {
+			return uint(val), true
+		}
+	case string:
+		if s := strings.TrimSpace(val); s != "" {
+			var n uint64
+			for i := 0; i < len(s); i++ {
+				c := s[i]
+				if c < '0' || c > '9' {
+					return 0, false
+				}
+				n = n*10 + uint64(c-'0')
+			}
+			return uint(n), true
+		}
+	}
+	return 0, false
 }
 
 func TokenAuthMiddleware() gin.HandlerFunc {

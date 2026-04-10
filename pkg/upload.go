@@ -148,7 +148,8 @@ func UploadImage(c *gin.Context, allowedExtensions []string, siteConfig *models.
 		if compressedData, err := CompressImageWithFFmpeg(fileData, ext); err == nil {
 			fileData = compressedData
 		} else {
-			fmt.Printf("图片压缩失败: %v\n", err)
+			// 压缩失败不影响主流程，回退原图上传
+			_ = err
 		}
 	}
 
@@ -169,7 +170,6 @@ func UploadImage(c *gin.Context, allowedExtensions []string, siteConfig *models.
 	// 保存文件到指定目录
 	savePath := filepath.Join(config.Config.Upload.SavePath, newFileName)
 	if err := os.WriteFile(savePath, fileData, 0644); err != nil {
-		fmt.Println(savePath)
 		return "", errors.New(models.ImageUploadErrorMessage)
 	}
 
@@ -252,8 +252,6 @@ func UploadAttachmentToCloud(cfg *models.SiteConfig, fileName string, content io
 
 // 检查文件类型是否合法
 func isAllowedType(contentType string, allowedTypes []string) bool {
-	fmt.Println(contentType)
-	fmt.Println(allowedTypes)
 	for _, allowed := range allowedTypes {
 		if contentType == allowed {
 			return true
@@ -336,7 +334,8 @@ func UploadVideo(c *gin.Context, allowedExtensions []string, siteConfig *models.
 			contentType = "video/mp4"
 		} else {
 			if err != nil {
-				fmt.Printf("视频压缩失败: %v\n", err)
+				// 压缩失败不影响主流程，回退原视频上传
+				_ = err
 			}
 		}
 	}

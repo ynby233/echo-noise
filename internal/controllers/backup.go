@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gin-contrib/sessions"
 	"github.com/rcy1314/echo-noise/config"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
@@ -23,18 +22,9 @@ import (
 	"github.com/rcy1314/echo-noise/internal/syncmanager"
 )
 
-func isAdmin(c *gin.Context) bool {
-	session := sessions.Default(c)
-	isAdmin := session.Get("is_admin")
-	if isAdmin == nil {
-		return false
-	}
-	return isAdmin.(bool)
-}
-
 // 通过预签名URL上传备份到云存储（R2/S3）
 func HandleBackupUploadToURL(c *gin.Context) {
-	if !isAdmin(c) {
+	if _, err := checkAdmin(c); err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "需要管理员权限"})
 		return
 	}
@@ -130,7 +120,7 @@ func HandleBackupUploadToURL(c *gin.Context) {
 
 // 通过预签名URL从云存储恢复
 func HandleBackupRestoreFromURL(c *gin.Context) {
-	if !isAdmin(c) {
+	if _, err := checkAdmin(c); err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "需要管理员权限"})
 		return
 	}
@@ -234,7 +224,7 @@ func HandleBackupRestoreFromURL(c *gin.Context) {
 }
 
 func HandleBackupDownload(c *gin.Context) {
-	if !isAdmin(c) {
+	if _, err := checkAdmin(c); err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "需要管理员权限"})
 		return
 	}
@@ -297,7 +287,7 @@ func HandleBackupDownload(c *gin.Context) {
 }
 
 func HandleBackupRestore(c *gin.Context) {
-	if !isAdmin(c) {
+	if _, err := checkAdmin(c); err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "需要管理员权限"})
 		return
 	}
@@ -403,7 +393,7 @@ func HandleBackupRestore(c *gin.Context) {
 }
 
 func HandleBackupPresignUpload(c *gin.Context) {
-	if !isAdmin(c) {
+	if _, err := checkAdmin(c); err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "需要管理员权限"})
 		return
 	}
@@ -444,7 +434,7 @@ func HandleBackupPresignUpload(c *gin.Context) {
 }
 
 func HandleBackupPresignDownload(c *gin.Context) {
-	if !isAdmin(c) {
+	if _, err := checkAdmin(c); err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "需要管理员权限"})
 		return
 	}
@@ -482,7 +472,7 @@ func HandleBackupPresignDownload(c *gin.Context) {
 
 // 立即执行云端同步（备份到 R2/S3）
 func HandleBackupSyncNow(c *gin.Context) {
-	if !isAdmin(c) {
+	if _, err := checkAdmin(c); err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "需要管理员权限"})
 		return
 	}
@@ -514,7 +504,7 @@ func HandleBackupSyncNow(c *gin.Context) {
 
 // 确认云同步（首次启用/首次启动门禁）
 func HandleBackupSyncConfirm(c *gin.Context) {
-	if !isAdmin(c) {
+	if _, err := checkAdmin(c); err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "需要管理员权限"})
 		return
 	}

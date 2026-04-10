@@ -3126,22 +3126,21 @@ func ChangeEmail(c *gin.Context) {
 
 // 删除用户
 func DeleteUser(c *gin.Context) {
+	currentID, err := checkAdmin(c)
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
+		return
+	}
+
 	userIDStr := c.Query("id")
 	if userIDStr == "" {
 		c.JSON(http.StatusOK, dto.Fail[string]("缺少用户ID"))
 		return
 	}
 	id, _ := strconv.Atoi(userIDStr)
-	// 权限校验：必须管理员
-	session := sessions.Default(c)
-	isAdmin, _ := session.Get("is_admin").(bool)
-	if !isAdmin {
-		c.JSON(http.StatusOK, dto.Fail[string]("权限不足"))
-		return
-	}
+
 	// 不允许删除自己
-	selfID, _ := session.Get("user_id").(uint)
-	if uint(id) == selfID {
+	if uint(id) == currentID {
 		c.JSON(http.StatusOK, dto.Fail[string]("不允许删除当前登录用户"))
 		return
 	}

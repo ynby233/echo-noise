@@ -38,6 +38,7 @@
 
 ## 2026更新状态
 
+- 使用SESSION_SECRET增强会话安全、管理员鉴权、增加“上下文+实时查库”校验，并新增 ACCESS_LOG 开关（生产默认不打印访问日志）
 - 图床按钮弹窗增加兰空图床、自定义图床
 - 优化首页卡片暗黑模式下的背景样式，增加通透度
 - 增强使用域名反代时的规则判断处理
@@ -265,13 +266,20 @@
 
 一键部署
 
+如果你使用 `docker buildx build --push` 发布镜像（不使用 `docker-compose.yml`），
+运行时请在 `docker run` 显式添加日志与安全参数（尤其是 `SESSION_SECRET`、`ACCESS_LOG`、`--log-opt`）。
+
 无任何数据库挂载时默认：
 
 ```
 docker run -d \
   --name Ech0-Noise \
   --platform linux/amd64 \
+  --log-opt max-size=10m \
+  --log-opt max-file=3 \
   -p 1314:1314 \
+  -e ACCESS_LOG=false \
+  -e SESSION_SECRET=请替换为至少32位随机字符串 \
 noise233/echo-noise:latest
 ```
 
@@ -287,9 +295,13 @@ noise233/echo-noise:latest
 docker run -d \
   --name Ech0-Noise \
   --platform linux/amd64 \
+  --log-opt max-size=10m \
+  --log-opt max-file=3 \
   -v /opt/data:/app/data \
   -p 1314:1314 \
   -e TZ=Asia/Shanghai \
+  -e ACCESS_LOG=false \
+  -e SESSION_SECRET=请替换为至少32位随机字符串 \
 noise233/echo-noise:latest
 ```
 
@@ -300,6 +312,8 @@ docker run -d \
   --name Ech0-Noise \
   --platform linux/amd64 \
   --restart unless-stopped \
+  --log-opt max-size=10m \
+  --log-opt max-file=3 \
   -v /opt/data:/app/data \
   -p 1314:1314 \
   -v /var/run/docker.sock:/var/run/docker.sock \
@@ -307,6 +321,8 @@ docker run -d \
   -e UPDATE_IMAGE=noise233/echo-noise:latest \
   -e TZ=Asia/Shanghai \
   -e HTTP_PORT=1314 \
+  -e ACCESS_LOG=false \
+  -e SESSION_SECRET=请替换为至少32位随机字符串 \
   noise233/echo-noise:latest
 ```
 
@@ -320,6 +336,14 @@ docker run -d \
 > - CONTAINER_NAME 默认即 Ech0-Noise ，用于定位旧容器；
 > - UPDATE_IMAGE 指定升级目标镜像；
 > - HTTP_PORT 指定容器内服务端口映射到宿主机。
+> - ACCESS_LOG 默认生产建议 false，避免高频请求刷满容器日志。
+> - SESSION_SECRET 强烈建议显式设置，长度建议至少 32 位（6 位可用但不安全，不建议）。
+> - 若未设置 SESSION_SECRET，程序会在启动时自动生成临时随机密钥；该方式在容器重启后会导致会话失效，不建议用于生产。
+>
+> `SESSION_SECRET` 生成示例（推荐先生成再写入 `-e SESSION_SECRET=...`）：
+>
+> - Linux/macOS：`SESSION_SECRET=$(head -c 32 /dev/urandom | xxd -p -c 64)`
+> - OpenSSL：`SESSION_SECRET=$(openssl rand -hex 32)`
 >
 > - 时区可选： -e TZ=Asia/Shanghai
 > - 使用 -v /opt/data:/app/data \ 可挂载你原有的数据，请确保/opt/data文件夹中包含原数据库文件，如有图片请一起放在data文件夹下images 文件夹中，如果没有原数据库文件还使用该命令，进入页面会无任何可用数据显示 
@@ -333,10 +357,14 @@ docker run -d \
 ```
 docker run -d \
   --name Ech0-Noise \
+  --log-opt max-size=10m \
+  --log-opt max-file=3 \
   -p 1314:1314 \
   -p 1315:1315 \
   -e NOTE_HOST=http://localhost:1314 \
   -e NOTE_HTTP_PORT=1315 \
+  -e ACCESS_LOG=false \
+  -e SESSION_SECRET=请替换为至少32位随机字符串 \
   noise233/echo-noise:latest-mcp
 ```
 
@@ -347,9 +375,13 @@ docker run -d \
 ```
 docker run -d \
   --name Ech0-Noise \
+  --log-opt max-size=10m \
+  --log-opt max-file=3 \
   -p 1314:1314 \
   -e NOTE_HOST=http://localhost:1314 \
   -e NOTE_HTTP_PORT=0 \
+  -e ACCESS_LOG=false \
+  -e SESSION_SECRET=请替换为至少32位随机字符串 \
   noise233/echo-noise:latest-mcp
 ```
 
@@ -1563,8 +1595,8 @@ docker buildx create --use --name mybuilder
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final \
-  --build-arg VERSION=v2.7 \
-  -t noise233/echo-noise:v2.7 \
+  --build-arg VERSION=v2.8 \
+  -t noise233/echo-noise:v2.8 \
   -t noise233/echo-noise:latest \
   --push .
 ```
@@ -1575,8 +1607,8 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final-mcp \
-  --build-arg VERSION=v2.7 \
-  -t noise233/echo-noise:v2.7-mcp \
+  --build-arg VERSION=v2.8 \
+  -t noise233/echo-noise:v2.8-mcp \
   -t noise233/echo-noise:latest-mcp \
   --push .
 ```
@@ -1587,9 +1619,9 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64 \
   --target final \
-  --build-arg VERSION=v2.7 \
+  --build-arg VERSION=v2.8 \
   --build-arg INSTALL_FFMPEG=0 \
-  -t noise233/echo-noise:v2.7-amd64 \
+  -t noise233/echo-noise:v2.8-amd64 \
   -t noise233/echo-noise:last-amd64 \
   --push .
 ```

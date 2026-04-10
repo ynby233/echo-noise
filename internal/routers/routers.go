@@ -16,7 +16,11 @@ import (
 )
 
 func SetupRouter() *gin.Engine {
-	r := gin.Default()
+	r := gin.New()
+	r.Use(gin.Recovery())
+	if enableAccessLog() {
+		r.Use(gin.Logger())
+	}
 	// 支持大文件上传（视频压缩/直传云端可能超过 200MB）
 	r.MaxMultipartMemory = 1024 << 20
 	basePath := normalizeProxyPrefix(os.Getenv("BASE_PATH"))
@@ -355,6 +359,17 @@ func SetupRouter() *gin.Engine {
 	})
 
 	return r
+}
+
+func enableAccessLog() bool {
+	v := strings.TrimSpace(os.Getenv("ACCESS_LOG"))
+	if v != "" {
+		v = strings.ToLower(v)
+		return v == "1" || v == "true" || v == "yes" || v == "on"
+	}
+	mode := strings.ToLower(strings.TrimSpace(gin.Mode()))
+	// 生产默认关闭访问日志；开发环境默认开启，便于调试
+	return mode != gin.ReleaseMode
 }
 
 func pickDir(candidates []string, fallback string) string {
