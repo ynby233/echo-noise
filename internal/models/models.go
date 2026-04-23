@@ -229,7 +229,7 @@ type SiteConfig struct {
 	// 信息流聚合配置
 	FeedEnabled            bool   `gorm:"default:false"`
 	FeedSources            string `gorm:"type:text"`
-	FeedLimit              int    `gorm:"default:20"`
+	FeedLimit              int    `gorm:"default:100"`
 	FeedRefreshSeconds     int    `gorm:"default:7200"`
 	LinksApplyTitle        string `gorm:"type:varchar(100)"`
 	LinksApplyText         string `gorm:"type:text"`

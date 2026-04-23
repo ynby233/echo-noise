@@ -701,8 +701,9 @@
                       <div class="rounded-lg p-4 space-y-3" :class="theme.subtleBg">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div>
-                            <div class="text-xs mb-1" :class="theme.mutedText">条数上限（1-100）</div>
-                            <UInput v-model.number="frontendConfig.feedLimit" type="number" min="1" max="100" placeholder="默认 20" />
+                            <div class="text-xs mb-1" :class="theme.mutedText">最大抓取条数（留空显示全部，单独设置时为 1-100）</div>
+                            <UInput v-model="frontendConfig.feedLimit" type="number" min="1" max="100" placeholder="留空显示全部" />
+                            <div class="mt-1 text-[11px]" :class="theme.mutedText">这里控制信息流总抓取上限；留空后会显示全部已抓取内容，不影响前台每页分页条数。</div>
                           </div>
                           <div>
                             <div class="text-xs mb-1" :class="theme.mutedText">自动刷新周期（秒，10-86400）</div>
@@ -3994,7 +3995,7 @@ interface FrontendConfig {
     musicCssCdnURL: string;
     musicJsCdnURL: string;
     feedEnabled: boolean;
-    feedLimit: number;
+    feedLimit: number | '';
     feedRefreshSeconds: number;
     feedSources: Array<{ type: string; group?: string; name?: string; url: string; enabled?: boolean; visible?: boolean }>;
     socialLinks: Array<{ name?: string; url: string; icon?: string }>;
@@ -4084,7 +4085,7 @@ const frontendConfig = reactive<FrontendConfig>({
     musicCssCdnURL: '',
     musicJsCdnURL: '',
     feedEnabled: false,
-    feedLimit: 20,
+    feedLimit: 100,
     feedRefreshSeconds: 7200,
     feedSources: [] as Array<{ type: string; group?: string; name?: string; url: string; enabled?: boolean; visible?: boolean }>,
     socialLinks: [] as Array<{ name?: string; url: string; icon?: string }>,
@@ -4195,7 +4196,7 @@ const defaultConfig: Record<string, any> = {
     musicCssCdnURL: '',
     musicJsCdnURL: '',
     feedEnabled: false,
-    feedLimit: 20,
+    feedLimit: 100,
     feedRefreshSeconds: 7200,
     feedSources: [] as Array<{ type: string; group?: string; name?: string; url: string; enabled?: boolean; visible?: boolean }>,
     githubOAuthEnabled: false,
@@ -4300,6 +4301,18 @@ const normalizeFeedSources = (raw: any): FeedSourceEntry[] => {
       } as FeedSourceEntry
     })
     .filter((x: FeedSourceEntry) => x.url !== '')
+}
+
+const normalizeFeedLimitInput = (raw: any): number | '' => {
+  if (raw === '' || raw === null || raw === undefined) return ''
+  const value = Number(raw)
+  if (!Number.isFinite(value) || value <= 0) return ''
+  return Math.max(1, Math.min(100, Math.floor(value)))
+}
+
+const serializeFeedLimit = (raw: any): number => {
+  const normalized = normalizeFeedLimitInput(raw)
+  return normalized === '' ? 0 : normalized
 }
 
 const serializeFeedSourcesText = (arr: FeedSourceEntry[]) => (
@@ -4694,7 +4707,7 @@ const fetchConfig = async () => {
                 }
             });
             ;(frontendConfig as any).feedSources = normalizeFeedSources((frontendConfig as any).feedSources)
-            ;(frontendConfig as any).feedLimit = Math.max(1, Math.min(100, Number((frontendConfig as any).feedLimit || 20)))
+            ;(frontendConfig as any).feedLimit = normalizeFeedLimitInput((frontendConfig as any).feedLimit)
             ;(frontendConfig as any).feedRefreshSeconds = Math.max(10, Math.min(86400, Number((frontendConfig as any).feedRefreshSeconds || 7200)))
             syncFeedEditor((frontendConfig as any).feedSources)
             // 后台主题：优先本地，其次服务端，兜底白色
@@ -4824,7 +4837,7 @@ const saveConfigItem = async (key: string) => {
             ;(frontendConfig as any).feedSources = cleanedFeedSources
             feedSourcesEditor.value = cleanedFeedSources
             feedSourceText.value = serializeFeedSourcesText(cleanedFeedSources)
-            ;(frontendConfig as any).feedLimit = Math.max(1, Math.min(100, Number((frontendConfig as any).feedLimit || 20)))
+            ;(frontendConfig as any).feedLimit = normalizeFeedLimitInput((frontendConfig as any).feedLimit)
             ;(frontendConfig as any).feedRefreshSeconds = Math.max(10, Math.min(86400, Number((frontendConfig as any).feedRefreshSeconds || 7200)))
         }
 
@@ -4833,7 +4846,7 @@ const saveConfigItem = async (key: string) => {
                 ...(key === 'feed'
                   ? {
                       feedEnabled: !!(frontendConfig as any).feedEnabled,
-                      feedLimit: Number((frontendConfig as any).feedLimit || 20),
+                      feedLimit: serializeFeedLimit((frontendConfig as any).feedLimit),
                       feedRefreshSeconds: Number((frontendConfig as any).feedRefreshSeconds || 7200),
                       feedSources: (frontendConfig as any).feedSources
                     }
@@ -4975,7 +4988,7 @@ const saveConfig = async () => {
         socialLinks: cleanedSocialLinks,
         friendLinks: cleanedFriendLinks,
         feedSources: cleanedFeedSources,
-        feedLimit: Math.max(1, Math.min(100, Number((frontendConfig as any).feedLimit || 20))),
+        feedLimit: serializeFeedLimit((frontendConfig as any).feedLimit),
         feedRefreshSeconds: Math.max(10, Math.min(86400, Number((frontendConfig as any).feedRefreshSeconds || 7200))),
         feedEnabled: !!(frontendConfig as any).feedEnabled,
         leftAdsIntervalMs: Number((frontendConfig as any).leftAdsIntervalMs || 0) || Number((defaultConfig as any).leftAdsIntervalMs || 4000),

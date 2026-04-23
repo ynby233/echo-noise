@@ -148,8 +148,8 @@ func GetFrontendConfig() (map[string]interface{}, error) {
 		}
 	}
 	feedLimit := config.FeedLimit
-	if feedLimit <= 0 {
-		feedLimit = 20
+	if feedLimit < 0 {
+		feedLimit = 0
 	}
 	feedRefreshSeconds := config.FeedRefreshSeconds
 	if feedRefreshSeconds <= 0 {
@@ -592,7 +592,7 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 		}
 	}
 	if config.FeedLimit <= 0 {
-		config.FeedLimit = 20
+		config.FeedLimit = 0
 	}
 	if vi, ok := frontendSettings["feedRefreshSeconds"].(float64); ok {
 		config.FeedRefreshSeconds = int(vi)
@@ -1149,7 +1149,7 @@ func getDefaultConfig() map[string]interface{} {
 			"aboutPageDescription":   "这里是站点的介绍与说明",
 			"aboutMarkdown":          "# 关于我\n\n这里是一个默认的个人简介示例：\n\n- 喜欢记录与分享\n- 热爱开源与学习\n- 持续打磨产品体验\n\n欢迎通过友链或留言与我交流！",
 			"feedEnabled":            false,
-			"feedLimit":              20,
+			"feedLimit":              100,
 			"feedRefreshSeconds":     7200,
 			"feedSources": []map[string]interface{}{
 				{"type": "rss", "group": "默认分组", "name": "站点 RSS", "url": "/rss", "enabled": true, "visible": true},

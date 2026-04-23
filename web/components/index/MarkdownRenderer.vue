@@ -38,6 +38,7 @@ const resolveImageUrl = (path: string) => {
 
 const previewElement = ref<HTMLDivElement | null>(null);
 let zoom: any = null;
+let themeClassObserver: MutationObserver | null = null
 // 添加 window 类型声明
 declare global {
   interface Window {
@@ -67,6 +68,7 @@ const props = defineProps({
 });
 
 const contentTheme = inject('contentTheme') as any
+const HASHTAG_REG = /(^|[\s(（[{【])#([\p{L}\p{N}_-]+)/gu
 const METING_API_FALLBACKS = [
   'https://meting.soopy.cn/api',
   'https://api.injahow.cn/meting/',
@@ -130,8 +132,88 @@ const initializeZoom = () => {
   }
 };
 
+const shouldSkipHashtagNode = (node: Node | null) => {
+  const parent = node?.parentElement
+  if (!parent) return true
+  return !!parent.closest('a, button, code, pre, script, style, textarea, input, .clickable-tag, .github-card, .video-wrapper, .aplayer')
+}
+
+const applyClickableTags = () => {
+  if (!previewElement.value || typeof document === 'undefined') return
+  const root = previewElement.value
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      if (!node.textContent || !node.textContent.includes('#')) return NodeFilter.FILTER_REJECT
+      if (shouldSkipHashtagNode(node)) return NodeFilter.FILTER_REJECT
+      return NodeFilter.FILTER_ACCEPT
+    }
+  })
+  const textNodes: Text[] = []
+  while (walker.nextNode()) {
+    textNodes.push(walker.currentNode as Text)
+  }
+
+  textNodes.forEach((textNode) => {
+    const raw = String(textNode.textContent || '')
+    HASHTAG_REG.lastIndex = 0
+    let match: RegExpExecArray | null = null
+    let lastIndex = 0
+    let changed = false
+    const frag = document.createDocumentFragment()
+
+    while ((match = HASHTAG_REG.exec(raw)) !== null) {
+      changed = true
+      const full = match[0] || ''
+      const prefix = match[1] || ''
+      const tag = String(match[2] || '').trim()
+      const matchIndex = match.index
+      const prefixStart = matchIndex + prefix.length
+
+      if (matchIndex > lastIndex) {
+        frag.appendChild(document.createTextNode(raw.slice(lastIndex, matchIndex)))
+      }
+      if (prefix) {
+        frag.appendChild(document.createTextNode(prefix))
+      }
+
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = 'clickable-tag'
+      button.dataset.tag = tag
+      button.textContent = `#${tag}`
+      frag.appendChild(button)
+      lastIndex = prefixStart + full.slice(prefix.length).length
+    }
+
+    if (!changed) return
+    if (lastIndex < raw.length) {
+      frag.appendChild(document.createTextNode(raw.slice(lastIndex)))
+    }
+    textNode.parentNode?.replaceChild(frag, textNode)
+  })
+}
+
+const onPreviewClick = (event: Event) => {
+  const target = (event.target as HTMLElement | null)?.closest('.clickable-tag') as HTMLElement | null
+  if (!target) return
+  event.preventDefault()
+  event.stopPropagation()
+  const tag = String(target.dataset.tag || target.textContent || '').replace(/^#/, '').trim()
+  if (!tag) return
+  emit('tagClick', tag)
+}
+
 const applyImageGrid = () => {
   if (!previewElement.value) return;
+
+  previewElement.value.querySelectorAll('.image-grid, .single-media').forEach((node) => {
+    const parent = node.parentElement
+    if (!parent) return
+    while (node.firstChild) {
+      parent.insertBefore(node.firstChild, node)
+    }
+    node.remove()
+  })
   
   const isMediaNode = (node: any): boolean => {
     if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
@@ -142,6 +224,11 @@ const applyImageGrid = () => {
            el.classList.contains('video-wrapper') || 
            (tag === 'a' && el.querySelector('img') !== null);
   };
+
+  const isSingleMediaWrapper = (el: Element | null) => {
+    if (!el) return false
+    return el.classList.contains('single-media') && Array.from(el.children).some((child) => isMediaNode(child))
+  }
 
   const isPureMediaParagraph = (p: Element) => {
     const children = Array.from(p.childNodes);
@@ -176,13 +263,27 @@ const applyImageGrid = () => {
   };
 
   // 1. Identify Candidates
-  const allCandidates = Array.from(previewElement.value.querySelectorAll('p, video, .video-wrapper')) as HTMLElement[];
+  const allCandidates = Array.from(previewElement.value.querySelectorAll('p, img, a, video, .video-wrapper, .single-media')) as HTMLElement[];
   const blocks: HTMLElement[] = [];
   
   for (const el of allCandidates) {
      const tag = el.tagName.toLowerCase();
      if (tag === 'p') {
        if (isPureMediaParagraph(el)) blocks.push(el);
+     } else if (tag === 'img') {
+       const parent = el.parentElement;
+       if (!parent) continue;
+       if (parent.tagName.toLowerCase() === 'p' && isPureMediaParagraph(parent)) continue;
+       if (parent.tagName.toLowerCase() === 'a') continue;
+       blocks.push(el);
+     } else if (tag === 'a') {
+       if (!el.querySelector('img')) continue;
+       const parent = el.parentElement;
+       if (!parent) continue;
+       if (parent.tagName.toLowerCase() === 'p' && isPureMediaParagraph(parent)) continue;
+       blocks.push(el);
+     } else if (isSingleMediaWrapper(el)) {
+       blocks.push(el)
      } else {
        const parent = el.parentElement;
        if (parent && parent.tagName.toLowerCase() === 'p' && isPureMediaParagraph(parent)) continue;
@@ -226,6 +327,10 @@ const applyImageGrid = () => {
               block.childNodes.forEach((node) => {
                  if (isMediaNode(node)) mediaItems.push({ node: node as HTMLElement });
               });
+           } else if (isSingleMediaWrapper(block)) {
+             Array.from(block.children).forEach((node) => {
+               if (isMediaNode(node)) mediaItems.push({ node: node as HTMLElement })
+             })
            } else {
               mediaItems.push({ node: block });
            }
@@ -333,7 +438,7 @@ const applyImageGrid = () => {
          }
  
          for (const block of run) {
-            if (block.tagName.toLowerCase() === 'p') block.remove();
+            if (block.tagName.toLowerCase() === 'p' || isSingleMediaWrapper(block)) block.remove();
          }
  
          const updateGridUniformity = () => {
@@ -762,6 +867,7 @@ const renderMarkdown = async (markdown: string) => {
             }
           });
           await enhanceDouyinShortLinks()
+          applyClickableTags()
           
           // Explicitly handle existing video tags (e.g. from raw HTML or markdown)
           const existingVideos = previewElement.value?.querySelectorAll('video');
@@ -812,8 +918,7 @@ watch(
   () => props.content,
   async (newContent) => {
     await renderMarkdown(newContent);
-  },
-  { immediate: true }
+  }
 );
 
 onMounted(() => {
@@ -826,9 +931,10 @@ onMounted(() => {
   }
   applyThemeClass();
   try {
-    const observer = new MutationObserver(() => applyThemeClass())
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    themeClassObserver = new MutationObserver(() => applyThemeClass())
+    themeClassObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
   } catch {}
+  previewElement.value?.addEventListener('click', onPreviewClick)
 });
 
 
@@ -836,6 +942,11 @@ onBeforeUnmount(() => {
   if (zoom) {
     zoom.detach();
     zoom = null;
+  }
+  previewElement.value?.removeEventListener('click', onPreviewClick)
+  if (themeClassObserver) {
+    themeClassObserver.disconnect()
+    themeClassObserver = null
   }
 });
 
@@ -983,9 +1094,18 @@ watch(() => props.enableGithubCard, () => {
   cursor: pointer;
   transition: color 0.2s ease;
   padding: 0 2px;
+  background: transparent !important;
+  border: 0 !important;
+  appearance: none;
+  font: inherit;
+  line-height: inherit;
+  display: inline;
+  margin: 0;
+  box-shadow: none !important;
+  text-shadow: none !important;
 }
 .theme-dark .clickable-tag { color: #fb923c !important; }
-.theme-light .clickable-tag { color: #b45309 !important; }
+.theme-light .clickable-tag { color: #fb923c !important; }
 
 .clickable-tag:hover {
   color: #f97316 !important;

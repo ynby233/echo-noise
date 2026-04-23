@@ -161,6 +161,9 @@ import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from '
 // @ts-ignore Vetur 对 .vue 默认导出识别不稳定，这里与项目内其他组件保持一致
 import MarkdownRenderer from "~/components/index/MarkdownRenderer.vue";
 
+const FEED_CACHE_PREFIX = 'ech0-noise:feed-cache:v1'
+const feedMemoryCache = new Map<string, { ts: number; items: FeedItem[] }>()
+
 type FeedItem = {
   title: string
   link: string
@@ -198,12 +201,16 @@ const currentPage = ref(1)
 const previewOpen = ref(false)
 const previewImageURL = ref('')
 const brokenAvatarSet = ref<Set<string>>(new Set())
-const collapsedContentHeight = 700
+const collapsedContentHeight = 360
 const isExpanded = ref<Record<string, boolean>>({})
 const shouldShowExpandButton = ref<Record<string, boolean>>({})
 const measureTimer = ref<number | null>(null)
 const feedSummaryRefs = ref<Record<string, HTMLElement | null>>({})
 const feedResizeObservers = new Map<string, ResizeObserver>()
+const cacheKey = computed(() => {
+  const apiBase = String(props.baseApi || '/api').replace(/\/$/, '')
+  return `${FEED_CACHE_PREFIX}:${apiBase}:${maxItems.value ?? 'all'}`
+})
 
 const gridClass = computed(() => {
   if (props.layoutState === 'single') return 'feed-grid-single'
@@ -220,7 +227,16 @@ const gradientClass = computed(() => contentTheme.value === 'dark'
   ? 'from-[var(--home-surface-dark)] via-[rgba(32,42,54,0.82)] to-transparent'
   : 'from-[rgba(255,255,255,1)] via-[rgba(255,255,255,0.8)] to-transparent')
 
-const pageSize = computed(() => Math.max(1, Math.min(50, Number(props.limit || 20))))
+const maxItems = computed<number | null>(() => {
+  const value = Number(props.limit)
+  if (!Number.isFinite(value) || value <= 0) return null
+  return Math.max(1, Math.min(100, Math.floor(value)))
+})
+const pageSize = computed(() => {
+  if (props.layoutState === 'single') return 8
+  if (props.layoutState === 'two') return 10
+  return 12
+})
 const totalPages = computed(() => {
   const total = Math.ceil(allItems.value.length / pageSize.value)
   return total > 0 ? total : 1
@@ -341,15 +357,69 @@ const checkContentHeights = () => {
   })
 }
 
+const applyFeedItems = (items: FeedItem[]) => {
+  const sortedItems = sortFeedItems(items)
+  allItems.value = typeof maxItems.value === 'number' ? sortedItems.slice(0, maxItems.value) : sortedItems
+  clampPage()
+  emit('count-change', allItems.value.length)
+  deferMeasure()
+}
+
+const readCachedFeed = () => {
+  const key = cacheKey.value
+  const memoryCached = feedMemoryCache.get(key)
+  if (memoryCached && Array.isArray(memoryCached.items) && memoryCached.items.length > 0) {
+    return memoryCached
+  }
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0) {
+      const payload = {
+        ts: Number(parsed.ts || 0),
+        items: parsed.items as FeedItem[]
+      }
+      feedMemoryCache.set(key, payload)
+      return payload
+    }
+  } catch {}
+  return null
+}
+
+const hydrateFeedCache = () => {
+  const cached = readCachedFeed()
+  if (!cached) return false
+  applyFeedItems(cached.items)
+  return true
+}
+
+const persistFeedCache = (items: FeedItem[]) => {
+  const sortedItems = sortFeedItems(items)
+  const payload = {
+    ts: Date.now(),
+    items: typeof maxItems.value === 'number' ? sortedItems.slice(0, maxItems.value) : sortedItems
+  }
+  const key = cacheKey.value
+  feedMemoryCache.set(key, payload)
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(key, JSON.stringify(payload))
+  } catch {}
+}
+
 const loadFeed = async () => {
   if (requestInFlight.value) return
   requestInFlight.value = true
-  loading.value = true
+  const hasVisibleItems = allItems.value.length > 0
+  loading.value = !hasVisibleItems
   errorText.value = ''
   try {
-    const limit = Math.max(pageSize.value, Math.min(100, pageSize.value * 8))
+    const limit = maxItems.value
     const apiBase = String(props.baseApi || '/api').replace(/\/$/, '')
-    const resp = await fetch(`${apiBase}/feed/items?limit=${limit}`, {
+    const query = typeof limit === 'number' ? `?limit=${limit}` : ''
+    const resp = await fetch(`${apiBase}/feed/items${query}`, {
       credentials: 'include',
       headers: { Accept: 'application/json' }
     })
@@ -360,15 +430,15 @@ const loadFeed = async () => {
     const list = Array.isArray(data?.data?.items)
       ? data.data.items
       : (Array.isArray(data?.data) ? data.data : [])
-    allItems.value = sortFeedItems(list)
-    clampPage()
-    emit('count-change', allItems.value.length)
-    deferMeasure()
+    applyFeedItems(list)
+    persistFeedCache(list)
   } catch (err: any) {
     errorText.value = err?.message || '信息流加载失败'
-    allItems.value = []
-    currentPage.value = 1
-    emit('count-change', 0)
+    if (!allItems.value.length) {
+      allItems.value = []
+      currentPage.value = 1
+      emit('count-change', 0)
+    }
   } finally {
     loading.value = false
     requestInFlight.value = false
@@ -461,21 +531,46 @@ const normalizeContent = (value: string) => {
     .trim()
 }
 
-const toComparable = (value: string) => normalizeContent(value)
+const extractComparableText = (value: string) => {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  if (!/<[a-z][\s\S]*>/i.test(raw)) return normalizeContent(raw)
+  return cleanComparableMarkup(raw)
+}
+
+const cleanComparableMarkup = (value: string) => {
+  return String(value || '')
+    .replace(/<img[\s\S]*?>/gi, ' ')
+    .replace(/<video[\s\S]*?>[\s\S]*?<\/video>/gi, ' ')
+    .replace(/<source[\s\S]*?>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|blockquote|h[1-6])>/gi, '\n')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\u00A0/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim()
+}
+
+const toComparable = (value: string) => extractComparableText(value)
   .replace(/[#*_`~>|[\](){}]+/g, '')
   .replace(/[：:，,。.!！?？\-\s]+/g, '')
   .toLowerCase()
 
 const getDisplayRaw = (item: FeedItem) => {
+  const isRSS = isRSSItem(item)
   const title = normalizeContent(item.title || '')
   const summaryRaw = String(item.summary || '').trim()
   const contentRaw = String(item.content || '').trim()
   // 优先使用后端保留的原始内容，确保 Markdown/媒体卡片可被正确渲染。
   let text = contentRaw || summaryRaw
   if (!text) return ''
+  // RSS 正文经常包含首段标题、导语、图片或链接混排，前端不要再做首行裁剪，避免把正文误伤没了。
+  if (isRSS) return text
   if (!title) return text
   const titleComparable = toComparable(title)
-  const textComparable = toComparable(normalizeContent(text))
+  const textComparable = toComparable(text)
   if (!titleComparable) return text
   // 避免把单行正文直接清空导致“只有标题”。
   if (textComparable === titleComparable) return text
@@ -484,7 +579,7 @@ const getDisplayRaw = (item: FeedItem) => {
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
-  if (lines.length > 1 && toComparable(normalizeContent(lines[0])) === titleComparable) {
+  if (lines.length > 1 && toComparable(lines[0]) === titleComparable) {
     lines.shift()
     text = lines.join('\n').trim()
   }
@@ -552,6 +647,7 @@ const copyLink = async (url: string) => {
 
 watch(() => props.active, (v) => {
   if (v) {
+    hydrateFeedCache()
     void loadFeed()
     scheduleRefresh()
     return
@@ -561,18 +657,25 @@ watch(() => props.active, (v) => {
 
 watch(() => props.limit, () => {
   currentPage.value = 1
+  hydrateFeedCache()
   if (props.active) void loadFeed()
+})
+
+watch(() => props.layoutState, () => {
+  currentPage.value = 1
+  deferMeasure()
 })
 
 watch(pageItems, () => {
   deferMeasure()
-}, { deep: true })
+})
 
 watch(() => props.refreshSeconds, () => {
   scheduleRefresh()
 })
 
 onMounted(() => {
+  hydrateFeedCache()
   if (props.active !== false) {
     void loadFeed()
   }
@@ -676,28 +779,42 @@ onUnmounted(() => {
 
 .author-row {
   line-height: 1.1;
+  position: relative;
 }
 
 .feed-source-user {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
+  gap: 8px;
+  min-width: 0;
+  font-size: 14px;
   font-weight: 700;
   opacity: 0.92;
 }
 
 .feed-avatar {
-  width: 18px;
-  height: 18px;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
   border-radius: 999px;
   object-fit: cover;
   border: 1px solid rgba(148, 163, 184, 0.45);
 }
 
+.feed-source-user span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.15;
+}
+
 .feed-time {
-  font-size: 12px;
+  flex: 0 0 auto;
+  font-size: clamp(11px, 0.9vw, 12px);
+  line-height: 1.2;
   opacity: 0.72;
+  white-space: nowrap;
+  text-align: right;
 }
 
 .feed-title {
@@ -756,6 +873,34 @@ onUnmounted(() => {
 .feed-summary-markdown :deep(.markdown-preview p) {
   margin: 4px 0 !important;
   text-shadow: none !important;
+}
+
+.feed-wrap-light .feed-summary-markdown :deep(.markdown-preview a),
+.feed-wrap-light .feed-summary-markdown :deep(.markdown-preview a span),
+.feed-wrap-light .feed-summary-markdown :deep(.markdown-preview .vditor-reset a) {
+  color: #2563eb !important;
+  text-decoration: underline !important;
+  text-underline-offset: 2px;
+}
+
+.feed-wrap-light .feed-summary-markdown :deep(.markdown-preview a:hover),
+.feed-wrap-light .feed-summary-markdown :deep(.markdown-preview a:hover span),
+.feed-wrap-light .feed-summary-markdown :deep(.markdown-preview .vditor-reset a:hover) {
+  color: #1d4ed8 !important;
+}
+
+.feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview a),
+.feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview a span),
+.feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview .vditor-reset a) {
+  color: #60a5fa !important;
+  text-decoration: underline !important;
+  text-underline-offset: 2px;
+}
+
+.feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview a:hover),
+.feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview a:hover span),
+.feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview .vditor-reset a:hover) {
+  color: #93c5fd !important;
 }
 
 .feed-summary-markdown :deep(.markdown-preview ul),
@@ -1076,6 +1221,18 @@ onUnmounted(() => {
   }
   .feed-title { font-size: 16px; }
   .feed-summary { font-size: 14px; }
+  .feed-source-user {
+    gap: 7px;
+    font-size: 13px;
+  }
+  .feed-avatar {
+    width: 32px;
+    height: 32px;
+    flex-basis: 32px;
+  }
+  .feed-time {
+    font-size: 11px;
+  }
   .feed-footer {
     font-size: 12px;
     gap: 8px;

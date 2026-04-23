@@ -39,6 +39,12 @@ type InfoFeedItem struct {
 	Timestamp   int64  `json:"timestamp"`
 }
 
+type infoFeedCacheEntry struct {
+	cachedAt time.Time
+	items    []InfoFeedItem
+	err      error
+}
+
 var (
 	reCData        = regexp.MustCompile(`(?s)<!\[CDATA\[(.*?)\]\]>`)
 	reTag          = regexp.MustCompile(`(?s)<[^>]+>`)
@@ -53,18 +59,24 @@ var (
 	reHref         = regexp.MustCompile(`(?is)<link[^>]+href=["']([^"']+)["']`)
 	reAnchorTag    = regexp.MustCompile(`(?is)<a[^>]+href=["']([^"']+)["'][^>]*>(.*?)</a>`)
 	reLiOpen       = regexp.MustCompile(`(?is)<li[^>]*>`)
+	infoFeedCache  sync.Map
+)
+
+const (
+	infoFeedCacheTTL           = 90 * time.Second
+	infoFeedUnlimitedFetchSize = 500
 )
 
 func GetInfoFeedConfig() (bool, int, []InfoFeedSource, error) {
 	cfg, err := GetFrontendConfig()
 	if err != nil {
-		return false, 20, nil, err
+		return false, 0, nil, err
 	}
 	fs, _ := cfg["frontendSettings"].(map[string]interface{})
 	enabled := toBool(fs["feedEnabled"])
-	limit := toInt(fs["feedLimit"], 20)
-	if limit <= 0 {
-		limit = 20
+	limit := toInt(fs["feedLimit"], 0)
+	if limit < 0 {
+		limit = 0
 	}
 	if limit > 100 {
 		limit = 100
@@ -81,21 +93,33 @@ func LoadInfoFeedItems(baseURL string, limit int) ([]InfoFeedItem, error) {
 	if !enabled {
 		return []InfoFeedItem{}, nil
 	}
-	if limit <= 0 {
-		limit = cfgLimit
+	displayLimit := limit
+	if displayLimit <= 0 {
+		displayLimit = cfgLimit
 	}
-	if limit > 100 {
-		limit = 100
+	if displayLimit < 0 {
+		displayLimit = 0
+	}
+	if displayLimit > 100 {
+		displayLimit = 100
+	}
+	fetchLimit := displayLimit
+	if fetchLimit <= 0 {
+		fetchLimit = infoFeedUnlimitedFetchSize
 	}
 	if len(sources) == 0 {
 		return []InfoFeedItem{}, nil
+	}
+	cacheKey := buildInfoFeedCacheKey(baseURL, displayLimit, sources)
+	if cached, ok := readInfoFeedCache(cacheKey); ok {
+		return cached.items, cached.err
 	}
 
 	client := &http.Client{Timeout: 12 * time.Second}
 	var (
 		wg      sync.WaitGroup
 		mu      sync.Mutex
-		all     = make([]InfoFeedItem, 0, limit*len(sources))
+		all     = make([]InfoFeedItem, 0, fetchLimit*len(sources))
 		onceErr error
 	)
 	for _, src := range sources {
@@ -112,20 +136,20 @@ func LoadInfoFeedItems(baseURL string, limit int) ([]InfoFeedItem, error) {
 			st := strings.ToLower(strings.TrimSpace(source.Type))
 			switch st {
 			case "note", "custom":
-				items, ferr = fetchByAutoType(client, source, limit)
+				items, ferr = fetchByAutoType(client, source, fetchLimit)
 			case "说说笔记":
-				items, ferr = fetchByAutoType(client, source, limit)
+				items, ferr = fetchByAutoType(client, source, fetchLimit)
 			case "ech0":
-				items, ferr = fetchEch0Source(client, source, limit)
+				items, ferr = fetchEch0Source(client, source, fetchLimit)
 			case "memos":
-				items, ferr = fetchMemosSource(client, source, limit)
+				items, ferr = fetchMemosSource(client, source, fetchLimit)
 			case "mastodon":
-				items, ferr = fetchMastodonSource(client, source, limit)
+				items, ferr = fetchMastodonSource(client, source, fetchLimit)
 			default:
-				items, ferr = fetchRSSSource(client, source, limit)
+				items, ferr = fetchRSSSource(client, source, fetchLimit)
 				// RSS 失败或内容为空时自动按 URL 回退到非 RSS 解析，兼容配置类型不准确的场景。
 				if ferr != nil || len(items) == 0 {
-					autoItems, autoErr := fetchByAutoType(client, source, limit)
+					autoItems, autoErr := fetchByAutoType(client, source, fetchLimit)
 					if autoErr == nil && len(autoItems) > 0 {
 						items, ferr = autoItems, nil
 					} else if ferr == nil {
@@ -160,10 +184,60 @@ func LoadInfoFeedItems(baseURL string, limit int) ([]InfoFeedItem, error) {
 	sort.Slice(dedup, func(i, j int) bool {
 		return dedup[i].Timestamp > dedup[j].Timestamp
 	})
-	if len(dedup) > limit {
-		dedup = dedup[:limit]
+	if displayLimit > 0 && len(dedup) > displayLimit {
+		dedup = dedup[:displayLimit]
+	}
+	if len(dedup) > 0 || onceErr == nil {
+		writeInfoFeedCache(cacheKey, dedup, onceErr)
 	}
 	return dedup, onceErr
+}
+
+func buildInfoFeedCacheKey(baseURL string, limit int, sources []InfoFeedSource) string {
+	payload := struct {
+		BaseURL string           `json:"baseURL"`
+		Limit   int              `json:"limit"`
+		Sources []InfoFeedSource `json:"sources"`
+	}{
+		BaseURL: strings.TrimSpace(baseURL),
+		Limit:   limit,
+		Sources: sources,
+	}
+	bs, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Sprintf("%s|%d|%d", strings.TrimSpace(baseURL), limit, len(sources))
+	}
+	return string(bs)
+}
+
+func cloneInfoFeedItems(items []InfoFeedItem) []InfoFeedItem {
+	if len(items) == 0 {
+		return []InfoFeedItem{}
+	}
+	cloned := make([]InfoFeedItem, len(items))
+	copy(cloned, items)
+	return cloned
+}
+
+func readInfoFeedCache(cacheKey string) (infoFeedCacheEntry, bool) {
+	if raw, ok := infoFeedCache.Load(cacheKey); ok {
+		if entry, ok := raw.(infoFeedCacheEntry); ok {
+			if time.Since(entry.cachedAt) <= infoFeedCacheTTL {
+				entry.items = cloneInfoFeedItems(entry.items)
+				return entry, true
+			}
+			infoFeedCache.Delete(cacheKey)
+		}
+	}
+	return infoFeedCacheEntry{}, false
+}
+
+func writeInfoFeedCache(cacheKey string, items []InfoFeedItem, fetchErr error) {
+	infoFeedCache.Store(cacheKey, infoFeedCacheEntry{
+		cachedAt: time.Now(),
+		items:    cloneInfoFeedItems(items),
+		err:      fetchErr,
+	})
 }
 
 func fetchRSSSource(client *http.Client, source InfoFeedSource, limit int) ([]InfoFeedItem, error) {
@@ -244,7 +318,7 @@ func fetchRSSSource(client *http.Client, source InfoFeedSource, limit int) ([]In
 			Timestamp:   tm.Unix(),
 		})
 	}
-	if len(items) > limit {
+	if limit > 0 && len(items) > limit {
 		items = items[:limit]
 	}
 	return items, nil

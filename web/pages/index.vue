@@ -226,7 +226,7 @@
               <div class="feed-page-content">
                 <InfoFeedList
                   :layout-state="layoutState"
-                  :limit="Number(frontendConfig.feedLimit || 20)"
+                  :limit="Number(frontendConfig.feedLimit) > 0 ? Number(frontendConfig.feedLimit) : undefined"
                   :refresh-seconds="Number(frontendConfig.feedRefreshSeconds || 7200)"
                   :active="activeTab==='feed'"
                   :base-api="baseApi"
@@ -582,15 +582,21 @@ const centerContainerClass = computed(() => (
 ))
 const toggleHeatmapCard = () => { showHeatmap.value = !showHeatmap.value }
 // 主题预设。统一由 ThemePresetSwitcher 控制 documentElement 类，不在容器上附加主题类
-  const centerTabs = [
+const activeTab = ref('latest')
+const feedResultCount = ref(0)
+const isFeedEnabled = computed(() => frontendConfig.value?.feedEnabled === true)
+const centerTabs = computed(() => {
+  const tabs = [
     { key: 'latest', name: '最新', icon: 'i-heroicons-sparkles' },
     { key: 'links', name: '友链', icon: 'i-heroicons-link' },
-    { key: 'feed', name: '信息流', icon: 'i-heroicons-rss' },
     { key: 'comment', name: '留言', icon: 'i-heroicons-chat-bubble-left-right' },
     { key: 'about', name: '关于', icon: 'i-heroicons-information-circle' }
   ]
-  const activeTab = ref('latest')
-  const feedResultCount = ref(0)
+  if (isFeedEnabled.value) {
+    tabs.splice(2, 0, { key: 'feed', name: '信息流', icon: 'i-heroicons-rss' })
+  }
+  return tabs
+})
 
 
 // 添加 messageList ref
@@ -1066,7 +1072,7 @@ const frontendConfig = ref<any>({
   linksTitle: '',
   linksDescription: '',
   feedEnabled: false,
-  feedLimit: 20,
+  feedLimit: 100,
   feedRefreshSeconds: 7200,
   feedSources: [] as Array<{ type: string; group?: string; name?: string; url: string; enabled?: boolean; visible?: boolean }>,
   commentPageTitle: '',
@@ -1117,6 +1123,12 @@ const frontendConfig = ref<any>({
     ],
   leftAdsIntervalMs: 4000
 })
+watch(isFeedEnabled, (enabled) => {
+  if (!enabled) {
+    if (activeTab.value === 'feed') activeTab.value = 'latest'
+    feedResultCount.value = 0
+  }
+}, { immediate: true })
 const musicConfigLoaded = ref(false)
 const resolveMusicSource = (cfg: any) => {
   const playlistId = String(cfg?.musicPlaylistId || '').trim()
@@ -1610,7 +1622,7 @@ const headerImageStyle = computed(() => ({
   rssAuthorName: 'Noise',
   rssFaviconURL: '/favicon.ico',
   feedEnabled: false,
-  feedLimit: 20,
+  feedLimit: 100,
   feedRefreshSeconds: 7200,
   feedSources: [] as Array<{ type: string; group?: string; name?: string; url: string; enabled?: boolean; visible?: boolean }>,
   aboutMarkdown: '# 关于我\n\n这里是一个默认的个人简介示例：\n\n- 喜欢记录与分享\n- 热爱开源与学习\n- 持续打磨产品体验\n\n欢迎通过友链或留言与我交流！',
