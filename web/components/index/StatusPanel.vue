@@ -685,6 +685,110 @@
                     </div>
                   </div>
                 </div>
+                <div id="site-feed-section" class="col-span-12">
+                  <div :class="adminPanelCardClass">
+                    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
+                      <div class="font-semibold flex items-center gap-2" :class="theme.text">
+                        <UIcon name="i-heroicons-rss" class="w-5 h-5" />
+                        <span>信息流配置</span>
+                      </div>
+                      <div class="flex flex-wrap items-center gap-3">
+                        <span class="text-sm" :class="theme.mutedText">启用</span>
+                        <UToggle v-model="frontendConfig.feedEnabled" />
+                      </div>
+                    </div>
+                    <div class="px-4 pb-4">
+                      <div class="rounded-lg p-4 space-y-3" :class="theme.subtleBg">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <div class="text-xs mb-1" :class="theme.mutedText">条数上限（1-100）</div>
+                            <UInput v-model.number="frontendConfig.feedLimit" type="number" min="1" max="100" placeholder="默认 20" />
+                          </div>
+                          <div>
+                            <div class="text-xs mb-1" :class="theme.mutedText">自动刷新周期（秒，10-86400）</div>
+                            <UInput v-model.number="frontendConfig.feedRefreshSeconds" type="number" min="10" max="86400" placeholder="默认 7200（2小时）" />
+                          </div>
+                        </div>
+                        <div class="rounded-xl border p-3 space-y-3" :class="theme.border">
+                          <div class="text-xs" :class="theme.mutedText">支持可视化分组管理，支持 `rss`、`说说笔记(本项目 API)`、`ech0`、`memos`、`mastodon` 类型源。</div>
+                          <div class="flex flex-col lg:flex-row gap-2 lg:items-center lg:justify-between">
+                            <div class="flex items-center gap-2 w-full lg:w-auto">
+                              <UInput v-model="feedGroupDraft" placeholder="输入新分组名" class="w-full lg:w-56" />
+                              <UButton size="sm" color="indigo" variant="soft" class="shadow" @click="addFeedGroup">新增分组</UButton>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                              <UButton size="sm" color="gray" variant="soft" class="shadow" @click="triggerFeedImport">导入</UButton>
+                              <UButton size="sm" color="gray" variant="soft" class="shadow" @click="exportFeedSources('json')">导出 JSON</UButton>
+                              <UButton size="sm" color="gray" variant="soft" class="shadow" @click="exportFeedSources('opml')">导出 OPML</UButton>
+                              <UButton size="sm" color="gray" variant="soft" class="shadow" @click="exportFeedSources('txt')">导出 TXT</UButton>
+                            </div>
+                          </div>
+                          <input
+                            ref="feedImportInput"
+                            type="file"
+                            accept=".json,.txt,.opml,.xml,application/json,text/plain,text/xml,application/xml"
+                            class="hidden"
+                            @change="handleFeedImport"
+                          />
+                          <div v-if="feedGroupedSources.length === 0" class="text-xs" :class="theme.mutedText">
+                            暂无信息流源，请先新增分组并添加源。
+                          </div>
+                          <div
+                            v-for="group in feedGroupedSources"
+                            :key="group.name"
+                            class="rounded-xl border p-3 space-y-2"
+                            :class="theme.border"
+                          >
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                              <div class="font-semibold text-sm flex items-center gap-2" :class="theme.text">
+                                <span>{{ group.name }}</span>
+                                <span class="text-xs px-2 py-0.5 rounded-full" :class="theme.subtleBg">{{ group.items.length }} 条</span>
+                              </div>
+                              <div class="flex items-center gap-2">
+                                <UButton size="xs" color="indigo" variant="soft" @click="renameFeedGroup(group.name)">重命名分组</UButton>
+                                <UButton size="xs" color="red" variant="soft" @click="removeFeedGroup(group.name)">删除分组</UButton>
+                              </div>
+                            </div>
+                            <div class="space-y-2">
+                              <div
+                                v-for="(item, itemIndex) in group.items"
+                                :key="`${group.name}-${itemIndex}-${item.url}`"
+                                class="rounded-lg border p-3 space-y-2"
+                                :class="theme.border"
+                              >
+                                <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+                                  <USelect v-model="item.type" :options="feedTypeOptions" value-attribute="value" />
+                                  <UInput v-model="item.name" placeholder="来源名称（可选）" />
+                                  <UInput v-model="item.url" class="md:col-span-2" placeholder="源地址（RSS/Atom 或站点地址）" />
+                                </div>
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                  <div class="flex flex-wrap items-center gap-4">
+                                    <div class="flex items-center gap-2">
+                                      <span class="text-xs" :class="theme.mutedText">抓取启用</span>
+                                      <UToggle v-model="item.enabled" />
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                      <span class="text-xs" :class="theme.mutedText">前台可见</span>
+                                      <UToggle v-model="item.visible" />
+                                    </div>
+                                  </div>
+                                  <UButton size="xs" color="red" variant="soft" @click="removeFeedSource(item)">删除源</UButton>
+                                </div>
+                              </div>
+                            </div>
+                            <div class="flex justify-end">
+                              <UButton size="xs" color="indigo" variant="soft" @click="addFeedSource(group.name)">新增源</UButton>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="text-xs" :class="theme.mutedText">`rss` 用于 RSS/Atom；`说说笔记` 为本项目 API（/api/messages/page）；其余类型按平台接口抓取。</div>
+                        <div class="flex justify-end">
+                          <UButton color="primary" class="shadow" @click="saveInfoFeedConfig">保存信息流配置</UButton>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
                 <div id="hitokoto-section" class="col-span-12">
                   <div :class="adminPanelCardClass">
                     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
@@ -1752,7 +1856,7 @@ const cardCls = 'rounded-2xl border shadow-2xl'
 type AdminSectionKey =
   'dashboard' | 'system' | 'user' | 'site' | 'notify' | 'attachments' | 'attachment-storage' | 'db' | 'version' | 'security' |
   'site-register' | 'site-pwa' | 'site-github-card' | 'site-github-login' | 'site-announcement' | 'site-music' |
-  'site-default-theme' | 'site-social-links' | 'site-ads' | 'hitokoto' | 'life-countdown' |
+  'site-default-theme' | 'site-social-links' | 'site-ads' | 'site-feed' | 'hitokoto' | 'life-countdown' |
   'friend-links' | 'site-configs' | 'comments' | 'email' | 'admin-users' |
   'storage'
 const activeSection = ref<AdminSectionKey>('dashboard')
@@ -1780,6 +1884,7 @@ const adminNavGroups = computed(() => {
         { key: 'site-pwa', label: 'PWA 模式', icon: 'i-heroicons-rocket-launch' },
         { key: 'site-announcement', label: '公告栏', icon: 'i-heroicons-megaphone' },
         { key: 'site-ads', label: '左侧广告', icon: 'i-heroicons-photo' },
+        { key: 'site-feed', label: '信息流', icon: 'i-heroicons-rss' },
         { key: 'hitokoto', label: '随机一言', icon: 'i-heroicons-sparkles' },
         { key: 'life-countdown', label: '人生倒计时', icon: 'i-heroicons-heart' },
         { key: 'site-social-links', label: '社交链接', icon: 'i-heroicons-link' }
@@ -1851,7 +1956,7 @@ const sectionGroupMap = computed(() => {
   return map
 })
 const normalizeSection = (key: AdminSectionKey): AdminSectionKey => {
-  if (['site-register', 'site-pwa', 'site-github-card', 'site-announcement', 'site-music', 'site-default-theme', 'site-social-links', 'site-configs', 'site-ads', 'hitokoto', 'life-countdown', 'friend-links'].includes(key)) return 'site'
+  if (['site-register', 'site-pwa', 'site-github-card', 'site-announcement', 'site-music', 'site-default-theme', 'site-social-links', 'site-configs', 'site-ads', 'site-feed', 'hitokoto', 'life-countdown', 'friend-links'].includes(key)) return 'site'
   if (key === 'version') return 'db'
   return key
 }
@@ -3888,6 +3993,10 @@ interface FrontendConfig {
     musicHideOnMobile: boolean;
     musicCssCdnURL: string;
     musicJsCdnURL: string;
+    feedEnabled: boolean;
+    feedLimit: number;
+    feedRefreshSeconds: number;
+    feedSources: Array<{ type: string; group?: string; name?: string; url: string; enabled?: boolean; visible?: boolean }>;
     socialLinks: Array<{ name?: string; url: string; icon?: string }>;
     socialLinksEnabled: boolean;
     calendarEnabled: boolean;
@@ -3974,6 +4083,10 @@ const frontendConfig = reactive<FrontendConfig>({
     musicHideOnMobile: true,
     musicCssCdnURL: '',
     musicJsCdnURL: '',
+    feedEnabled: false,
+    feedLimit: 20,
+    feedRefreshSeconds: 7200,
+    feedSources: [] as Array<{ type: string; group?: string; name?: string; url: string; enabled?: boolean; visible?: boolean }>,
     socialLinks: [] as Array<{ name?: string; url: string; icon?: string }>,
     socialLinksEnabled: true,
     calendarEnabled: true,
@@ -4081,6 +4194,10 @@ const defaultConfig: Record<string, any> = {
     musicHideOnMobile: true,
     musicCssCdnURL: '',
     musicJsCdnURL: '',
+    feedEnabled: false,
+    feedLimit: 20,
+    feedRefreshSeconds: 7200,
+    feedSources: [] as Array<{ type: string; group?: string; name?: string; url: string; enabled?: boolean; visible?: boolean }>,
     githubOAuthEnabled: false,
     notifyEnabled: false,
     calendarEnabled: true,
@@ -4124,6 +4241,302 @@ const defaultConfig: Record<string, any> = {
       { name: '主页', url: 'https://www.noisework.cn/', icon: 'i-mdi-home' },
       { name: '博客', url: 'https://www.noiseblogs.top/', icon: 'i-mdi-notebook' }
     ]
+}
+
+type FeedSourceType = 'rss' | '说说笔记' | 'ech0' | 'memos' | 'mastodon'
+
+type FeedSourceEntry = {
+  type: FeedSourceType
+  group: string
+  name: string
+  url: string
+  enabled: boolean
+  visible: boolean
+}
+
+const feedTypeOptions = [
+  { label: 'RSS 源', value: 'rss' },
+  { label: '说说笔记', value: '说说笔记' },
+  { label: 'Ech0', value: 'ech0' },
+  { label: 'Memos', value: 'memos' },
+  { label: 'Mastodon', value: 'mastodon' }
+]
+
+const normalizeFeedSourceType = (raw: any): FeedSourceType => {
+  let candidate = raw
+  if (candidate && typeof candidate === 'object') {
+    candidate = candidate.value ?? candidate.type ?? candidate.label ?? ''
+  }
+  const t = String(candidate || 'rss').trim().toLowerCase()
+  if (t === 'note' || t === 'custom' || t === '说说笔记' || t === '本项目api' || t === '本项目 api') return '说说笔记'
+  if (t === 'ech0') return 'ech0'
+  if (t === 'memos') return 'memos'
+  if (t === 'mastodon') return 'mastodon'
+  return 'rss'
+}
+
+const feedImportInput = ref<HTMLInputElement | null>(null)
+const feedGroupDraft = ref('')
+const feedSourceText = ref('')
+const feedSourcesEditor = ref<FeedSourceEntry[]>([])
+
+const normalizeFeedGroupName = (raw: any) => {
+  const text = String(raw || '').trim()
+  return text || '默认分组'
+}
+
+const normalizeFeedSources = (raw: any): FeedSourceEntry[] => {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((x: any) => {
+      const type = normalizeFeedSourceType(x?.type)
+      return {
+        type,
+        group: normalizeFeedGroupName(x?.group),
+        name: String(x?.name || '').trim(),
+        url: String(x?.url || '').trim(),
+        enabled: !(x?.enabled === false || x?.enabled === 'false' || x?.enabled === 0 || x?.enabled === '0'),
+        visible: !(x?.visible === false || x?.visible === 'false' || x?.visible === 0 || x?.visible === '0')
+      } as FeedSourceEntry
+    })
+    .filter((x: FeedSourceEntry) => x.url !== '')
+}
+
+const serializeFeedSourcesText = (arr: FeedSourceEntry[]) => (
+  (arr || [])
+    .map((x) => `${x.type || 'rss'}|${normalizeFeedGroupName(x.group)}|${x.name || ''}|${x.url || ''}|${x.enabled ? '1' : '0'}|${x.visible ? '1' : '0'}`)
+    .join('\n')
+)
+
+const parseFeedSourcesText = (raw: string): FeedSourceEntry[] => {
+  const lines = String(raw || '')
+    .split('\n')
+    .map((x) => x.trim())
+    .filter((x) => x !== '' && !x.startsWith('#'))
+  const list: FeedSourceEntry[] = []
+  for (const line of lines) {
+    const parts = line.split('|').map((x) => x.trim())
+    if (parts.length < 2) continue
+    const type = normalizeFeedSourceType(parts[0] || 'rss')
+    if (parts.length >= 6) {
+      const enabledRaw = parts[4].toLowerCase()
+      const visibleRaw = parts[5].toLowerCase()
+      list.push({
+        type,
+        group: normalizeFeedGroupName(parts[1]),
+        name: parts[2],
+        url: parts[3],
+        enabled: enabledRaw !== '0' && enabledRaw !== 'false' && enabledRaw !== 'off',
+        visible: visibleRaw !== '0' && visibleRaw !== 'false' && visibleRaw !== 'off'
+      })
+      continue
+    }
+    if (parts.length >= 4) {
+      list.push({
+        type,
+        group: normalizeFeedGroupName(parts[1]),
+        name: parts[2],
+        url: parts.slice(3).join('|'),
+        enabled: true,
+        visible: true
+      })
+      continue
+    }
+    const name = parts.length >= 3 ? parts[1] : ''
+    const url = parts.length >= 3 ? parts.slice(2).join('|') : parts[1]
+    if (!url) continue
+    list.push({ type, group: '默认分组', name, url, enabled: true, visible: true })
+  }
+  return normalizeFeedSources(list)
+}
+
+const feedGroupedSources = computed(() => {
+  const groupMap = new Map<string, FeedSourceEntry[]>()
+  for (const item of feedSourcesEditor.value) {
+    const group = normalizeFeedGroupName(item.group)
+    if (!groupMap.has(group)) groupMap.set(group, [])
+    groupMap.get(group)!.push(item)
+  }
+  return Array.from(groupMap.entries()).map(([name, items]) => ({ name, items }))
+})
+
+const syncFeedEditor = (raw: any) => {
+  const normalized = normalizeFeedSources(raw)
+  feedSourcesEditor.value = normalized
+  ;(frontendConfig as any).feedSources = normalized
+  feedSourceText.value = serializeFeedSourcesText(normalized)
+}
+
+watch(feedSourcesEditor, (rows) => {
+  const normalized = normalizeFeedSources(rows)
+  ;(frontendConfig as any).feedSources = normalized
+  feedSourceText.value = serializeFeedSourcesText(normalized)
+}, { deep: true })
+
+const addFeedGroup = () => {
+  const name = normalizeFeedGroupName(feedGroupDraft.value)
+  if (feedGroupedSources.value.some((x) => x.name === name)) {
+    useToast().add({ title: '提示', description: '分组已存在', color: 'orange' })
+    return
+  }
+  feedSourcesEditor.value.push({ type: 'rss', group: name, name: '', url: '', enabled: true, visible: true })
+  feedGroupDraft.value = ''
+}
+
+const renameFeedGroup = (fromGroup: string) => {
+  if (typeof window === 'undefined') return
+  const next = normalizeFeedGroupName(window.prompt('输入新的分组名', fromGroup) || '')
+  if (!next || next === fromGroup) return
+  if (feedGroupedSources.value.some((x) => x.name === next)) {
+    useToast().add({ title: '提示', description: '目标分组名已存在', color: 'orange' })
+    return
+  }
+  feedSourcesEditor.value.forEach((x) => {
+    if (normalizeFeedGroupName(x.group) === fromGroup) x.group = next
+  })
+}
+
+const removeFeedGroup = (group: string) => {
+  feedSourcesEditor.value = feedSourcesEditor.value.filter((x) => normalizeFeedGroupName(x.group) !== group)
+}
+
+const addFeedSource = (group: string) => {
+  feedSourcesEditor.value.push({ type: 'rss', group: normalizeFeedGroupName(group), name: '', url: '', enabled: true, visible: true })
+}
+
+const removeFeedSource = (target: FeedSourceEntry) => {
+  const index = feedSourcesEditor.value.indexOf(target)
+  if (index >= 0) feedSourcesEditor.value.splice(index, 1)
+}
+
+const triggerFeedImport = () => {
+  feedImportInput.value?.click()
+}
+
+const parseFeedSourcesFromOPML = (raw: string): FeedSourceEntry[] => {
+  if (typeof DOMParser === 'undefined') return []
+  const doc = new DOMParser().parseFromString(raw, 'text/xml')
+  if (!doc || doc.querySelector('parsererror')) return []
+  const all = Array.from(doc.querySelectorAll('outline'))
+  const out: FeedSourceEntry[] = []
+  for (const node of all) {
+    const url = String(node.getAttribute('xmlUrl') || node.getAttribute('url') || '').trim()
+    if (!url) continue
+    const parent = node.parentElement?.closest('outline')
+    const group = normalizeFeedGroupName(parent?.getAttribute('text') || parent?.getAttribute('title') || '默认分组')
+    const type = normalizeFeedSourceType(node.getAttribute('type') || node.getAttribute('data-type') || 'rss')
+    const name = String(node.getAttribute('title') || node.getAttribute('text') || '').trim()
+    const enabledRaw = String(node.getAttribute('data-enabled') || '1').toLowerCase()
+    const visibleRaw = String(node.getAttribute('data-visible') || '1').toLowerCase()
+    out.push({
+      type,
+      group,
+      name,
+      url,
+      enabled: enabledRaw !== '0' && enabledRaw !== 'false' && enabledRaw !== 'off',
+      visible: visibleRaw !== '0' && visibleRaw !== 'false' && visibleRaw !== 'off'
+    })
+  }
+  return normalizeFeedSources(out)
+}
+
+const parseFeedSourcesForImport = (raw: string, fileName: string): FeedSourceEntry[] => {
+  const text = String(raw || '')
+  const lower = String(fileName || '').toLowerCase()
+  if (lower.endsWith('.opml') || lower.endsWith('.xml')) {
+    return parseFeedSourcesFromOPML(text)
+  }
+  if (lower.endsWith('.json') || text.trim().startsWith('[')) {
+    try {
+      return normalizeFeedSources(JSON.parse(text))
+    } catch {
+      return []
+    }
+  }
+  if (text.includes('<opml') || text.includes('<outline')) {
+    return parseFeedSourcesFromOPML(text)
+  }
+  return parseFeedSourcesText(text)
+}
+
+const mergeFeedSources = (rows: FeedSourceEntry[]) => {
+  if (!rows.length) return
+  const merged = normalizeFeedSources([...feedSourcesEditor.value, ...rows])
+  const dedup = new Map<string, FeedSourceEntry>()
+  for (const row of merged) {
+    const key = `${row.type}|${normalizeFeedGroupName(row.group)}|${row.name}|${row.url}`
+    if (!dedup.has(key)) dedup.set(key, row)
+  }
+  feedSourcesEditor.value = Array.from(dedup.values())
+}
+
+const handleFeedImport = async (event: Event) => {
+  const files = (event.target as HTMLInputElement)?.files
+  const file = files && files[0]
+  if (!file) return
+  try {
+    const text = await file.text()
+    const rows = parseFeedSourcesForImport(text, file.name)
+    if (!rows.length) throw new Error('导入文件中未识别出有效源')
+    mergeFeedSources(rows)
+    useToast().add({ title: '成功', description: `已导入 ${rows.length} 条源`, color: 'green' })
+  } catch (error: any) {
+    useToast().add({ title: '失败', description: error?.message || '导入失败', color: 'red' })
+  } finally {
+    if (feedImportInput.value) feedImportInput.value.value = ''
+  }
+}
+
+const xmlEscape = (raw: string) => String(raw || '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&apos;')
+
+const downloadFile = (filename: string, content: string, type: string) => {
+  const blob = new Blob([content], { type })
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  window.URL.revokeObjectURL(url)
+}
+
+const exportFeedSources = (format: 'json' | 'opml' | 'txt') => {
+  const rows = normalizeFeedSources(feedSourcesEditor.value)
+  if (!rows.length) {
+    useToast().add({ title: '提示', description: '暂无可导出的源', color: 'orange' })
+    return
+  }
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')
+  if (format === 'json') {
+    downloadFile(`info-feed-sources-${stamp}.json`, JSON.stringify(rows, null, 2), 'application/json;charset=utf-8')
+    return
+  }
+  if (format === 'txt') {
+    const text = serializeFeedSourcesText(rows)
+    downloadFile(`info-feed-sources-${stamp}.txt`, text, 'text/plain;charset=utf-8')
+    return
+  }
+  const groups = new Map<string, FeedSourceEntry[]>()
+  rows.forEach((row) => {
+    const g = normalizeFeedGroupName(row.group)
+    if (!groups.has(g)) groups.set(g, [])
+    groups.get(g)!.push(row)
+  })
+  const outlines = Array.from(groups.entries()).map(([group, items]) => {
+    const children = items.map((item) => {
+      const text = xmlEscape(item.name || item.url)
+      return `<outline text="${text}" title="${text}" type="${item.type}" xmlUrl="${xmlEscape(item.url)}" data-type="${item.type}" data-enabled="${item.enabled ? '1' : '0'}" data-visible="${item.visible ? '1' : '0'}" />`
+    }).join('\n      ')
+    return `<outline text="${xmlEscape(group)}" title="${xmlEscape(group)}">\n      ${children}\n    </outline>`
+  }).join('\n    ')
+  const opml = `<?xml version="1.0" encoding="UTF-8"?>\n<opml version="2.0">\n  <head>\n    <title>Echo-Noise Feed Sources</title>\n  </head>\n  <body>\n    ${outlines}\n  </body>\n</opml>\n`
+  downloadFile(`info-feed-sources-${stamp}.opml`, opml, 'text/xml;charset=utf-8')
 }
 
 const addSocialLink = () => {
@@ -4237,7 +4650,7 @@ const fetchConfig = async () => {
             const settings = data.data.frontendSettings;
             
             // 遍历配置项进行更新（布尔型键需强制转换）
-            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile', 'commentEnabled', 'commentEmailEnabled', 'commentLoginRequired', 'githubOAuthEnabled', 'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'friendLinkEmailEnabled', 'socialLinksEnabled']
+            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile', 'commentEnabled', 'commentEmailEnabled', 'commentLoginRequired', 'githubOAuthEnabled', 'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'friendLinkEmailEnabled', 'socialLinksEnabled', 'feedEnabled']
             Object.keys(frontendConfig).forEach(key => {
                 if (key === 'backgrounds') {
                     const serverBackgrounds = settings[key];
@@ -4258,6 +4671,13 @@ const fetchConfig = async () => {
                     } else {
                         frontendConfig[key] = [...(defaultConfig.leftAds || [])];
                     }
+                } else if (key === 'feedSources') {
+                    const arr = settings[key];
+                    if (Array.isArray(arr)) {
+                        frontendConfig[key] = [...arr];
+                    } else {
+                        frontendConfig[key] = [...(defaultConfig.feedSources || [])];
+                    }
                 } else if (key === 'friendLinks') {
                     const arr = settings[key];
                     if (Array.isArray(arr) && arr.length > 0) {
@@ -4273,6 +4693,10 @@ const fetchConfig = async () => {
                     ;(frontendConfig as any)[key] = typeof v === 'string' ? v.trim() : v
                 }
             });
+            ;(frontendConfig as any).feedSources = normalizeFeedSources((frontendConfig as any).feedSources)
+            ;(frontendConfig as any).feedLimit = Math.max(1, Math.min(100, Number((frontendConfig as any).feedLimit || 20)))
+            ;(frontendConfig as any).feedRefreshSeconds = Math.max(10, Math.min(86400, Number((frontendConfig as any).feedRefreshSeconds || 7200)))
+            syncFeedEditor((frontendConfig as any).feedSources)
             // 后台主题：优先本地，其次服务端，兜底白色
             if (typeof window !== 'undefined') {
               const localTheme = localStorage.getItem(adminThemeStorageKey)
@@ -4395,10 +4819,27 @@ const saveConfigItem = async (key: string) => {
               : []
             ;(frontendConfig as any).friendLinks = cleaned
         }
+        if (key === 'feed') {
+            const cleanedFeedSources = normalizeFeedSources(feedSourcesEditor.value)
+            ;(frontendConfig as any).feedSources = cleanedFeedSources
+            feedSourcesEditor.value = cleanedFeedSources
+            feedSourceText.value = serializeFeedSourcesText(cleanedFeedSources)
+            ;(frontendConfig as any).feedLimit = Math.max(1, Math.min(100, Number((frontendConfig as any).feedLimit || 20)))
+            ;(frontendConfig as any).feedRefreshSeconds = Math.max(10, Math.min(86400, Number((frontendConfig as any).feedRefreshSeconds || 7200)))
+        }
 
         const settingsToSave = {
             frontendSettings: {
-                [key]: isSwitchConfigKey(key) ? !!(frontendConfig as any)[key] : (frontendConfig as any)[key]
+                ...(key === 'feed'
+                  ? {
+                      feedEnabled: !!(frontendConfig as any).feedEnabled,
+                      feedLimit: Number((frontendConfig as any).feedLimit || 20),
+                      feedRefreshSeconds: Number((frontendConfig as any).feedRefreshSeconds || 7200),
+                      feedSources: (frontendConfig as any).feedSources
+                    }
+                  : {
+                      [key]: isSwitchConfigKey(key) ? !!(frontendConfig as any)[key] : (frontendConfig as any)[key]
+                    })
             }
         };
 
@@ -4434,6 +4875,8 @@ const saveConfigItem = async (key: string) => {
                 useToast().add({ title: '成功', description: '友链已更新', color: 'green' })
             } else if (key === 'linksApplyTitle' || key === 'linksApplyText') {
                 useToast().add({ title: '成功', description: '友链说明已更新', color: 'green' })
+            } else if (key === 'feed') {
+                useToast().add({ title: '成功', description: '信息流配置已更新', color: 'green' })
             } else {
                 const label = key === 'defaultContentTheme' ? '默认主题色' : (configLabels[key] || (key === 'pwa' ? 'PWA 设置' : key))
                 useToast().add({ title: '成功', description: `${label}已更新`, color: 'green' })
@@ -4522,6 +4965,7 @@ const saveConfig = async () => {
           }))
           .filter((x: any) => x.link !== '')
       : (frontendConfig as any).friendLinks
+    const cleanedFeedSources = normalizeFeedSources(feedSourcesEditor.value)
 
     const payload = {
       frontendSettings: {
@@ -4530,6 +4974,10 @@ const saveConfig = async () => {
         leftAds: cleanedLeftAds,
         socialLinks: cleanedSocialLinks,
         friendLinks: cleanedFriendLinks,
+        feedSources: cleanedFeedSources,
+        feedLimit: Math.max(1, Math.min(100, Number((frontendConfig as any).feedLimit || 20))),
+        feedRefreshSeconds: Math.max(10, Math.min(86400, Number((frontendConfig as any).feedRefreshSeconds || 7200))),
+        feedEnabled: !!(frontendConfig as any).feedEnabled,
         leftAdsIntervalMs: Number((frontendConfig as any).leftAdsIntervalMs || 0) || Number((defaultConfig as any).leftAdsIntervalMs || 4000),
         leftAdEnabled: !!(frontendConfig as any).leftAdEnabled,
         socialLinksEnabled: !!(frontendConfig as any).socialLinksEnabled,
@@ -4574,6 +5022,12 @@ const saveConfig = async () => {
   } catch (error: any) {
     useToast().add({ title: '失败', description: error?.message || '保存失败', color: 'red' })
   }
+}
+
+const saveInfoFeedConfig = async () => {
+  try {
+    await saveConfigItem('feed')
+  } catch {}
 }
 
 const savePWAConfig = async () => {

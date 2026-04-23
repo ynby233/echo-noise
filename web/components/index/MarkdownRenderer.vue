@@ -45,6 +45,7 @@ declare global {
     mediumZoom: any;
     APlayer: any;
     MetingJSElement: any;
+    meting_api?: string;
   }
 }
 let __gh_gid = 0
@@ -55,6 +56,10 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  themeMode: {
+    type: [String, Object],
+    default: undefined,
+  },
   enableGithubCard: {
     type: Boolean,
     default: true,
@@ -62,11 +67,43 @@ const props = defineProps({
 });
 
 const contentTheme = inject('contentTheme') as any
+const METING_API_FALLBACKS = [
+  'https://meting.soopy.cn/api',
+  'https://api.injahow.cn/meting/',
+  'https://api.i-meto.com/meting/api',
+]
+
+const resolveMetingApiTemplate = () => {
+  const fromWindow = String(window?.meting_api || '').trim()
+  const base = fromWindow || METING_API_FALLBACKS[0]
+  return `${base.replace(/\?$/, '')}?server=:server&type=:type&id=:id&auth=:auth&r=:r`
+}
+
+const ensureMetingApiReady = () => {
+  if (typeof window === 'undefined') return
+  if (!String(window.meting_api || '').trim()) {
+    window.meting_api = METING_API_FALLBACKS[0]
+  }
+}
+
+const buildMetingSongEmbed = (songId: string) => {
+  const id = String(songId || '').trim()
+  if (!id) return ''
+  return `<div class='music-wrapper'><meting-js api='${resolveMetingApiTemplate()}' server='netease' type='song' id='${id}' auto='https://music.163.com/#/song?id=${id}'></meting-js></div>`
+}
 
 const applyThemeClass = () => {
   if (!previewElement.value) return
+  const propTheme = (() => {
+    const v: any = props.themeMode as any
+    if (typeof v === 'string') return v.trim().toLowerCase()
+    if (v && typeof v.value === 'string') return String(v.value).trim().toLowerCase()
+    return ''
+  })()
   let isDark = false
-  if (contentTheme && typeof (contentTheme as any).value !== 'undefined') {
+  if (propTheme === 'dark' || propTheme === 'light') {
+    isDark = propTheme === 'dark'
+  } else if (contentTheme && typeof (contentTheme as any).value !== 'undefined') {
     isDark = (contentTheme as any).value === 'dark'
   } else {
     isDark = document.documentElement.classList.contains('dark')
@@ -402,10 +439,10 @@ const applyImageLoadingPlaceholders = () => {
 
 
 // 修改正则，避免匹配 Markdown 图片链接
-// 1. 匹配 markdown 普通链接（非图片）
-const GITHUB_MD_LINK_REG = /(?<!!)\[([^\]]+)\]\((https:\/\/github\.com\/([\w-]+)\/([\w.-]+)(?:\/[^\s)]*)?)\)/g;
-// 2. 匹配裸仓库链接（非图片）
-const GITHUB_BARE_LINK_REG = /(?<!["'\(])\bhttps:\/\/github\.com\/([\w-]+)\/([\w.-]+)(?:\/[^\s<\)]*)?\b/g;
+// 1. 匹配 markdown 普通链接（非图片）- 避免使用 lookbehind，兼容低版本运行环境
+const GITHUB_MD_LINK_REG = /(^|[^!])\[([^\]]+)\]\((https:\/\/github\.com\/([\w-]+)\/([\w.-]+)(?:\/[^\s)]*)?)\)/g;
+// 2. 匹配裸仓库链接（非图片）- 避免使用 lookbehind，兼容低版本运行环境
+const GITHUB_BARE_LINK_REG = /(^|[\s>])(https:\/\/github\.com\/([\w-]+)\/([\w.-]+)(?:\/[^\s<\)]*)?)/g;
 
 const buildYouTubeEmbedHtml = (videoId: string) => {
   const watchUrl = `https://www.youtube.com/watch?v=${videoId}`
@@ -427,31 +464,48 @@ const replaceNodeWithHtml = (node: HTMLElement, html: string) => {
 }
 
 const processMediaLinks = (content: string): string => {
+  ensureMetingApiReady()
+  // 先处理 markdown 链接与行内代码里的媒体链接，避免后续替换打断 markdown 结构
+  const BILIBILI_MD_LINK_REG = /\[[^\]]*]\((https:\/\/www\.bilibili\.com\/video\/(BV[\w]+)\/?)\)/g;
+  const YOUTUBE_MD_LINK_REG = /\[[^\]]*]\((https:\/\/(?:www\.)?youtube\.com\/watch\?v=([\w-]+)|https:\/\/youtu\.be\/([\w-]+))\)/g;
+  const NETEASE_MD_LINK_REG = /\[[^\]]*]\((https:\/\/music\.163\.com(?:\/#)?\/song\?id=(\d+))\)/g;
+  // 允许反引号内 URL 前后有空格，避免 ` https://... ` 这类写法漏匹配
+  const NETEASE_INLINE_CODE_REG = /`[\t ]*https:\/\/music\.163\.com(?:\/#)?\/song\?id=(\d+)[\t ]*`/g;
+  content = content
+    .replace(BILIBILI_MD_LINK_REG, "<div class='video-wrapper'><iframe src='https://www.bilibili.com/blackboard/html5mobileplayer.html?bvid=$2&as_wide=1&high_quality=1&danmaku=0' scrolling='no' border='0' frameborder='no' framespacing='0' allowfullscreen='true' style='position:absolute;height:100%;width:100%'></iframe></div>")
+    .replace(YOUTUBE_MD_LINK_REG, (_m, _full, id1, id2) => {
+      const videoId = String(id1 || id2 || '').trim()
+      if (!videoId) return _m
+      return buildYouTubeEmbedHtml(videoId)
+    })
+    .replace(NETEASE_MD_LINK_REG, (_m, _full, songId) => buildMetingSongEmbed(songId) || _m)
+    .replace(NETEASE_INLINE_CODE_REG, (_m, songId) => buildMetingSongEmbed(songId) || _m)
+
   // GitHub 卡片解析（可开关）
   if (props.enableGithubCard) {
-    content = content.replace(GITHUB_MD_LINK_REG, (match, text, url, owner, repo) => {
+    content = content.replace(GITHUB_MD_LINK_REG, (_match, prefix, _text, _url, owner, repo) => {
       const cardId = `github-card-${owner}-${repo}-${++__gh_gid}`;
-      return `<div class="github-card" id="${cardId}" data-owner="${owner}" data-repo="${repo}">
+      return `${prefix}<div class="github-card" id="${cardId}" data-owner="${owner}" data-repo="${repo}">
         <div class="github-card-loading">Loading GitHub Repo...</div>
       </div>`;
     });
-    content = content.replace(GITHUB_BARE_LINK_REG, (match, owner, repo) => {
+    content = content.replace(GITHUB_BARE_LINK_REG, (_match, prefix, _url, owner, repo) => {
       const cardId = `github-card-${owner}-${repo}-${++__gh_gid}`;
-      return `<div class="github-card" id="${cardId}" data-owner="${owner}" data-repo="${repo}">
+      return `${prefix}<div class="github-card" id="${cardId}" data-owner="${owner}" data-repo="${repo}">
         <div class="github-card-loading">Loading GitHub Repo...</div>
       </div>`;
     });
   }
   // 将裸视频文件链接替换为内联视频标签（先于链接化处理）
   // 仅匹配前导为空白字符或行首的 URL，避免匹配 HTML 属性中的 URL（如 src="http..."）
-  const VIDEO_FILE_REG = /(?<=^|\s)((?:https?:\/\/|\/api\/video\/|\/video\/)[^\s<"']+\.(?:mp4|webm|mov|avi)(?:\?[^\s<"']*)?)/g;
-  content = content.replace(VIDEO_FILE_REG, (m) => {
-    const src = resolveImageUrl(m);
-    return `<video src="${src}" controls preload="metadata" style="width:100%;height:auto"></video>`;
+  const VIDEO_FILE_REG = /(^|[\s>])((?:https?:\/\/|\/api\/video\/|\/video\/)[^\s<"']+\.(?:mp4|webm|mov|avi)(?:\?[^\s<"']*)?)/g;
+  content = content.replace(VIDEO_FILE_REG, (_m, prefix, videoUrl) => {
+    const src = resolveImageUrl(videoUrl);
+    return `${prefix}<video src="${src}" controls preload="metadata" style="width:100%;height:auto"></video>`;
   });
   content = content
     .replace(BILIBILI_REG, "<div class='video-wrapper'><iframe src='https://www.bilibili.com/blackboard/html5mobileplayer.html?bvid=$1&as_wide=1&high_quality=1&danmaku=0' scrolling='no' border='0' frameborder='no' framespacing='0' allowfullscreen='true' style='position:absolute;height:100%;width:100%'></iframe></div>")
-    .replace(NETEASE_MUSIC_REG, "<div class='music-wrapper'><meting-js auto='https://music.163.com/#/song?id=$1'></meting-js></div>")
+    .replace(NETEASE_MUSIC_REG, (_m, songId) => buildMetingSongEmbed(songId) || _m)
     .replace(QQMUSIC_REG, "<meting-js auto='https://y.qq.com/n/yqq/song$1.html'></meting-js>")
     .replace(QQVIDEO_REG, "<div class='video-wrapper'><iframe src='//v.qq.com/iframe/player.html?vid=$1' allowFullScreen='true' frameborder='no'></iframe></div>")
     .replace(SPOTIFY_REG, "<div class='spotify-wrapper'><iframe style='border-radius:12px' src='https://open.spotify.com/embed/$1/$2?utm_source=generator&theme=0' width='100%' frameBorder='0' allowfullscreen='' allow='autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture' loading='lazy'></iframe></div>")
@@ -622,9 +676,22 @@ const enhanceDouyinShortLinks = async () => {
 const renderMarkdown = async (markdown: string) => {
   if (!previewElement.value) return;
 
+  const renderPlainFallback = (raw: string) => {
+    if (!previewElement.value) return
+    const text = String(raw || '')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>/gi, '\n\n')
+      .replace(/<[^>]+>/g, '')
+      .trim()
+    previewElement.value.textContent = text
+    applyThemeClass()
+  }
+
   try {
+    ensureMetingApiReady()
     if (typeof Vditor === 'undefined') {
       console.error('Vditor is not loaded.');
+      renderPlainFallback(markdown ?? '')
       return;
     }
 
@@ -640,19 +707,23 @@ const renderMarkdown = async (markdown: string) => {
     const withLinks = linkifyBareUrls(processedContent);
     
     // 修改标签匹配规则，排除HTML标签内的内容
-    let finalContent = '';
-    try {
-      finalContent = withLinks
-        .replace(/<a /g, '<a target="_blank" ')
-        .replace(
-          /(?<!<[^>]*)#([^\s#<>]+)(?![^<]*>)/g,
-          '<span class="clickable-tag" onclick="window.handleTagClick(\'$1\')" style="cursor: pointer;">#$1</span>'
-        );
-    } catch {
-      finalContent = withLinks.replace(/<a /g, '<a target="_blank" ');
-    }
+    const finalContent = withLinks.replace(/<a /g, '<a target="_blank" ');
 
-    const currentTheme = (contentTheme && (contentTheme as any).value) ? ((contentTheme as any).value === 'dark' ? 'dark' : 'light') : (document.documentElement.classList.contains('dark') ? 'dark' : 'light')
+    const currentTheme = (() => {
+      const v: any = props.themeMode as any
+      if (typeof v === 'string') {
+        const out = v.trim().toLowerCase()
+        if (out === 'dark' || out === 'light') return out
+      }
+      if (v && typeof v.value === 'string') {
+        const out = String(v.value).trim().toLowerCase()
+        if (out === 'dark' || out === 'light') return out
+      }
+      if (contentTheme && (contentTheme as any).value) {
+        return (contentTheme as any).value === 'dark' ? 'dark' : 'light'
+      }
+      return document.documentElement.classList.contains('dark') ? 'dark' : 'light'
+    })()
     const hljsStyle = currentTheme === 'dark' ? 'github-dark' : 'github'
     Vditor.preview(previewElement.value!, finalContent, {
       mode: currentTheme as any,
@@ -661,86 +732,80 @@ const renderMarkdown = async (markdown: string) => {
       hljs: { style: hljsStyle, lineNumber: true, enable: true },
       markdown: { sanitize: false },
       after: async () => {
-        const images = previewElement.value?.querySelectorAll('img');
-        images?.forEach(img => {
-           const src = img.getAttribute('src');
-           if (src && !/^https?:\/\//.test(src)) {
-               img.src = resolveImageUrl(src);
-           }
-        });
-        const links = previewElement.value?.querySelectorAll('a');
-        links?.forEach(link => {
-          if (!link.hasAttribute('target')) {
-            link.setAttribute('target', '_blank');
-            link.setAttribute('rel', 'noopener noreferrer');
-          }
-        });
-        applyThemeClass();
-        const anchors = previewElement.value?.querySelectorAll('a[href]') || [] as any;
-        anchors.forEach((a: HTMLAnchorElement) => {
-          const href = a.getAttribute('href') || ''
-          if (/\.(mp4|webm|mov|avi)(\?.*)?$/i.test(href)) {
-            const v = document.createElement('video')
-            v.setAttribute('src', resolveImageUrl(href))
-            v.setAttribute('controls', 'true')
-            v.setAttribute('preload', 'metadata')
-            v.style.width = '100%'
-            v.style.height = 'auto'
-            a.replaceWith(v)
-          }
-        });
-        await enhanceDouyinShortLinks()
-        
-        // Explicitly handle existing video tags (e.g. from raw HTML or markdown)
-        const existingVideos = previewElement.value?.querySelectorAll('video');
-        existingVideos?.forEach((v: HTMLVideoElement) => {
-            const src = v.getAttribute('src');
-            if (src && !/^https?:\/\//.test(src)) {
-                v.setAttribute('src', resolveImageUrl(src));
+        try {
+          const images = previewElement.value?.querySelectorAll('img');
+          images?.forEach(img => {
+             const src = img.getAttribute('src');
+             if (src && !/^https?:\/\//.test(src)) {
+                 img.src = resolveImageUrl(src);
+             }
+          });
+          const links = previewElement.value?.querySelectorAll('a');
+          links?.forEach(link => {
+            if (!link.hasAttribute('target')) {
+              link.setAttribute('target', '_blank');
+              link.setAttribute('rel', 'noopener noreferrer');
             }
-            if (!v.hasAttribute('controls')) {
-                v.setAttribute('controls', 'true');
+          });
+          applyThemeClass();
+          const anchors = previewElement.value?.querySelectorAll('a[href]') || [] as any;
+          anchors.forEach((a: HTMLAnchorElement) => {
+            const href = a.getAttribute('href') || ''
+            if (/\.(mp4|webm|mov|avi)(\?.*)?$/i.test(href)) {
+              const v = document.createElement('video')
+              v.setAttribute('src', resolveImageUrl(href))
+              v.setAttribute('controls', 'true')
+              v.setAttribute('preload', 'metadata')
+              v.style.width = '100%'
+              v.style.height = 'auto'
+              a.replaceWith(v)
             }
-            // Ensure proper sizing to prevent collapse (fixes height="100%" issue)
-            v.style.width = '100%';
-            v.style.height = 'auto';
-            v.style.maxWidth = '100%';
-        });
+          });
+          await enhanceDouyinShortLinks()
+          
+          // Explicitly handle existing video tags (e.g. from raw HTML or markdown)
+          const existingVideos = previewElement.value?.querySelectorAll('video');
+          existingVideos?.forEach((v: HTMLVideoElement) => {
+              const src = v.getAttribute('src');
+              if (src && !/^https?:\/\//.test(src)) {
+                  v.setAttribute('src', resolveImageUrl(src));
+              }
+              if (!v.hasAttribute('controls')) {
+                  v.setAttribute('controls', 'true');
+              }
+              // Ensure proper sizing to prevent collapse (fixes height="100%" issue)
+              v.style.width = '100%';
+              v.style.height = 'auto';
+              v.style.maxWidth = '100%';
+          });
 
-        applyImageGrid();
-        initializeZoom();
-        applyImageLoadingPlaceholders();
-        emit('rendered');
-        const proc = (window as any).processNMPv2Shortcodes
-        if (proc && previewElement.value) {
-          proc(previewElement.value)
-        }
-        const tags = previewElement.value?.querySelectorAll('.clickable-tag');
-        tags?.forEach(tag => {
-          tag.addEventListener('click', (e) => {
-            e.preventDefault();
-            const tagText = tag.textContent?.substring(1);
-            if (tagText) {
-              emit('tagClick', tagText);
-            }
-          });
-        });
-        if (props.enableGithubCard) {
-          const githubCards = previewElement.value?.querySelectorAll('.github-card');
-          githubCards?.forEach(card => {
-            const owner = card.getAttribute('data-owner');
-            const repo = card.getAttribute('data-repo');
-            const cardId = card.id;
-            if (owner && repo && cardId) {
-              fetchGitHubRepoInfo(owner, repo, cardId);
-            }
-          });
+          applyImageGrid();
+          initializeZoom();
+          applyImageLoadingPlaceholders();
+          emit('rendered');
+          const proc = (window as any).processNMPv2Shortcodes
+          if (proc && previewElement.value) {
+            proc(previewElement.value)
+          }
+          if (props.enableGithubCard) {
+            const githubCards = previewElement.value?.querySelectorAll('.github-card');
+            githubCards?.forEach(card => {
+              const owner = card.getAttribute('data-owner');
+              const repo = card.getAttribute('data-repo');
+              const cardId = card.id;
+              if (owner && repo && cardId) {
+                fetchGitHubRepoInfo(owner, repo, cardId);
+              }
+            });
+          }
+        } catch (err) {
+          console.error('Markdown post-processing failed:', err)
         }
       }
     });
   } catch (error) {
     console.error("Error rendering markdown:", error);
-    previewElement.value.innerHTML = '';
+    renderPlainFallback(markdown ?? '')
   }
 };
 watch(
@@ -860,6 +925,15 @@ watch(() => props.enableGithubCard, () => {
 .markdown-preview {
   font-family: "LXGW WenKai Screen";
   line-height: 1.6;
+}
+
+/* 信息流正文兜底：即使第三方样式注入异常，也保证文本可见 */
+.markdown-preview,
+.markdown-preview .vditor-reset,
+.markdown-preview .vditor-reset p,
+.markdown-preview .vditor-reset li,
+.markdown-preview .vditor-reset span {
+  opacity: 1 !important;
 }
 
 /* 主题化整体与标题颜色（容器自身带主题类） */

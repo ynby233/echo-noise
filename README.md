@@ -38,6 +38,7 @@
 
 ## 2026更新状态
 
+- 增加信息流页面，支持rss源、Echo源、说说笔记源、memos源
 - 修复自动解封逻辑并验证到期IP会从封禁列表移除
 - 使用SESSION_SECRET增强会话安全、管理员鉴权、增加“上下文+实时查库”校验，并新增 ACCESS_LOG 开关（生产默认不打印访问日志）
 - 图床按钮弹窗增加兰空图床、自定义图床
@@ -1596,8 +1597,8 @@ docker buildx create --use --name mybuilder
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final \
-  --build-arg VERSION=v2.8 \
-  -t noise233/echo-noise:v2.8 \
+  --build-arg VERSION=v2.9 \
+  -t noise233/echo-noise:v2.9 \
   -t noise233/echo-noise:latest \
   --push .
 ```
@@ -1608,8 +1609,8 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final-mcp \
-  --build-arg VERSION=v2.8 \
-  -t noise233/echo-noise:v2.8-mcp \
+  --build-arg VERSION=v2.9 \
+  -t noise233/echo-noise:v2.9-mcp \
   -t noise233/echo-noise:latest-mcp \
   --push .
 ```
@@ -1620,9 +1621,9 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64 \
   --target final \
-  --build-arg VERSION=v2.8 \
+  --build-arg VERSION=v2.9 \
   --build-arg INSTALL_FFMPEG=0 \
-  -t noise233/echo-noise:v2.8-amd64 \
+  -t noise233/echo-noise:v2.9-amd64 \
   -t noise233/echo-noise:last-amd64 \
   --push .
 ```
@@ -2024,12 +2025,11 @@ isSuspiciousPath() 里的任意一条规则，就会：
 - [x] docker环境下的一键升级功能
 - [x] 前端可定制化主题
 - [x] 数据库备份优化
-- [ ] 增加RSS阅读组件（前端展示，后台控制）
+- [x] 增加RSS阅读组件（前端展示，后台控制）
 - [x] 媒体附件增加分离式存储，提供云端和本地两种方式
 - [x] 增加人生倒计时组件（ui 优化）
-- [ ] 增加通知系统（新的用户评论可显示通知）
-- [ ] 后台增加数据库一键切换为云端数据库
-- [ ] 增加在线聊天组件
+- [ ] 增加skill
+- [ ] 增加ai协作或聊天组件
 - [ ] 扩展支持一键识别当前网站信息并写入笔记
 - [ ] 其它组件的添加
 

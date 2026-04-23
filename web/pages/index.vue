@@ -217,6 +217,25 @@
               </div>
             </UCard>
           </div>
+          <div v-else-if="activeTab==='feed'" class="feed-page">
+            <UCard class="search-card feed-shell-card mb-3" :ui="{ body: 'p-0' }">
+              <div :class="['feed-page-head', isDark ? 'feed-page-head-dark' : 'feed-page-head-light']">
+                <div class="card-title text-center text-black dark:text-white">实时聚合内容动态</div>
+                <div class="section-subtitle">聚合综合内容信息源内容，当前结果 {{ feedResultCount }} 条</div>
+              </div>
+              <div class="feed-page-content">
+                <InfoFeedList
+                  :layout-state="layoutState"
+                  :limit="Number(frontendConfig.feedLimit || 20)"
+                  :refresh-seconds="Number(frontendConfig.feedRefreshSeconds || 7200)"
+                  :active="activeTab==='feed'"
+                  :base-api="baseApi"
+                  :enable-github-card="frontendConfig.enableGithubCard === true"
+                  @count-change="feedResultCount = $event"
+                />
+              </div>
+            </UCard>
+          </div>
           <div v-else-if="activeTab==='comment'" class="comment-page">
             <UCard class="search-card mb-3" :ui="{ body: 'p-5 md:p-6' }">
               <div class="card-title text-center mb-4 text-black dark:text-white">{{ frontendConfig.commentPageTitle || '留言' }}</div>
@@ -505,6 +524,7 @@ import Notification from '~/components/widgets/Notification.vue';
 import HeatmapWidget from '~/components/widgets/heatmap.vue'
 import SearchMode from '~/components/index/Searchmode.vue' // 导入 SearchMode 组件
 import TagList from '~/components/index/TagList.vue'
+import InfoFeedList from '@/components/index/InfoFeedList.vue'
 import AnnouncementBar from '~/components/widgets/AnnouncementBar.vue'
 import FloatingToolSidebar from '~/components/widgets/FloatingToolSidebar.vue'
 import BuiltinComments from '~/components/comments/BuiltinComments.vue'
@@ -565,10 +585,12 @@ const toggleHeatmapCard = () => { showHeatmap.value = !showHeatmap.value }
   const centerTabs = [
     { key: 'latest', name: '最新', icon: 'i-heroicons-sparkles' },
     { key: 'links', name: '友链', icon: 'i-heroicons-link' },
+    { key: 'feed', name: '信息流', icon: 'i-heroicons-rss' },
     { key: 'comment', name: '留言', icon: 'i-heroicons-chat-bubble-left-right' },
     { key: 'about', name: '关于', icon: 'i-heroicons-information-circle' }
   ]
   const activeTab = ref('latest')
+  const feedResultCount = ref(0)
 
 
 // 添加 messageList ref
@@ -1027,7 +1049,7 @@ watch(() => route.hash, (newHash) => {
 }, { immediate: true })
 
 // 添加前端配置的响应式对象
-const frontendConfig = ref({
+const frontendConfig = ref<any>({
     siteTitle: '',
     subtitleText: '',
     avatarURL: '',
@@ -1043,6 +1065,10 @@ const frontendConfig = ref({
   rssFaviconURL: '',
   linksTitle: '',
   linksDescription: '',
+  feedEnabled: false,
+  feedLimit: 20,
+  feedRefreshSeconds: 7200,
+  feedSources: [] as Array<{ type: string; group?: string; name?: string; url: string; enabled?: boolean; visible?: boolean }>,
   commentPageTitle: '',
   commentPageDescription: '',
   aboutPageTitle: '',
@@ -1583,6 +1609,10 @@ const headerImageStyle = computed(() => ({
   rssDescription: '一个说说笔记~',
   rssAuthorName: 'Noise',
   rssFaviconURL: '/favicon.ico',
+  feedEnabled: false,
+  feedLimit: 20,
+  feedRefreshSeconds: 7200,
+  feedSources: [] as Array<{ type: string; group?: string; name?: string; url: string; enabled?: boolean; visible?: boolean }>,
   aboutMarkdown: '# 关于我\n\n这里是一个默认的个人简介示例：\n\n- 喜欢记录与分享\n- 热爱开源与学习\n- 持续打磨产品体验\n\n欢迎通过友链或留言与我交流！',
   linksTitle: '友情链接',
   linksDescription: '推荐站点和朋友们的主页',
@@ -1653,11 +1683,13 @@ const fetchConfig = async () => {
         const res = await getRequest<any>('frontend/config', undefined, { credentials: 'include' })
         if (res && res.code === 1 && res.data && res.data.frontendSettings) {
             const settings = res.data.frontendSettings
-            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'commentEnabled', 'commentEmailEnabled', 'commentLoginRequired', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'socialLinksEnabled']
+            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'commentEnabled', 'commentEmailEnabled', 'commentLoginRequired', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'socialLinksEnabled', 'feedEnabled']
             Object.keys(nextConfig).forEach(key => {
                 if (settings[key] !== null && settings[key] !== undefined) {
                     if (key === 'backgrounds' && Array.isArray(settings[key])) {
                         nextConfig.backgrounds = [...settings[key]]
+                    } else if (key === 'feedSources' && Array.isArray(settings[key])) {
+                        nextConfig.feedSources = [...settings[key]]
                     } else if (key === 'socialLinks' && Array.isArray(settings[key])) {
                         const arr = settings[key]
                         nextConfig.socialLinks = (arr.length > 0) ? [...arr] : [...defaultConfig.socialLinks]
@@ -3120,6 +3152,35 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
 }
 
 .links-page { padding-bottom: 120px; }
+.feed-shell-card {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.feed-shell-card :deep(.u-card-body),
+.feed-shell-card :deep(.u-card__body) {
+  padding: 0 !important;
+  background: transparent !important;
+}
+.feed-page-head {
+  padding: 14px 16px 12px;
+  border-radius: var(--home-radius-panel);
+}
+.feed-page-head-light {
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+.feed-page-head-dark {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: var(--home-surface-dark);
+  box-shadow: none;
+}
+.feed-page-content {
+  margin-top: 10px;
+}
 .links-page .section-title { font-weight: 600; font-size: 14px; margin-bottom: 12px; padding: 0; border-radius: 0; display: inline-flex; align-items: center; gap: 6px; }
 .card-title { font-weight: 700; font-size: 18px; margin-bottom: 14px; padding: 0; border-radius: 0; display: block; }
 .section-subtitle { text-align: center; font-size: 13px; opacity: 0.8; margin-top: 2px; margin-bottom: 16px; line-height: 1.7; }

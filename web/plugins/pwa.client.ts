@@ -2,11 +2,32 @@ export default defineNuxtPlugin(() => {
   // 默认启用PWA，避免不必要的延迟
   let pwaEnabled = true
   let configLoaded = false
+
+  const cleanupStalePwaOnce = async () => {
+    if (!('serviceWorker' in navigator)) return
+    const cleanupKey = 'pwaCleanupVersion'
+    const currentVersion = '2026-04-23-1'
+    try {
+      if (localStorage.getItem(cleanupKey) === currentVersion) return
+      const regs = await navigator.serviceWorker.getRegistrations()
+      for (const reg of regs) {
+        await reg.unregister()
+      }
+      const keys = await caches.keys()
+      await Promise.all(keys.map((k) => caches.delete(k)))
+      localStorage.setItem(cleanupKey, currentVersion)
+      // 强制刷新一次，确保马上切到新静态资源
+      window.location.reload()
+    } catch (error) {
+      console.error('PWA cleanup failed:', error)
+    }
+  }
   
   // 立即注册Service Worker，不等待配置
-  if ('serviceWorker' in navigator && process.client) {
+  if ('serviceWorker' in navigator && typeof window !== 'undefined') {
     // 延迟注册，避免阻塞页面加载
-    setTimeout(() => {
+    setTimeout(async () => {
+      await cleanupStalePwaOnce()
       navigator.serviceWorker.getRegistrations().then(async regs => {
         if (!regs || regs.length === 0) {
           try {
@@ -66,7 +87,7 @@ export default defineNuxtPlugin(() => {
   }
 
   // 使用节流机制，避免频繁请求配置
-  let configTimeout = null
+  let configTimeout: ReturnType<typeof setTimeout> | null = null
   const loadAndApplyThrottled = () => {
     if (configTimeout) clearTimeout(configTimeout)
     configTimeout = setTimeout(() => {
@@ -105,12 +126,12 @@ export default defineNuxtPlugin(() => {
   }
 
   // 延迟加载配置，避免阻塞页面渲染
-  if (process.client) {
+  if (typeof window !== 'undefined') {
     setTimeout(loadAndApplyThrottled, 2000) // 延迟2秒，确保页面完全加载后再请求配置
   }
   
   // 监听后台面板触发的配置更新事件
-  if (process.client) {
+  if (typeof window !== 'undefined') {
     window.addEventListener('frontend-config-updated', loadAndApplyThrottled)
   }
 })

@@ -132,6 +132,29 @@ func GetFrontendConfig() (map[string]interface{}, error) {
 			"icon": icon,
 		})
 	}
+
+	var feedSourcesRaw []map[string]interface{}
+	if strings.TrimSpace(config.FeedSources) != "" {
+		_ = json.Unmarshal([]byte(config.FeedSources), &feedSourcesRaw)
+	}
+	normalizedFeedSources := normalizeFeedSources(feedSourcesRaw)
+	if len(normalizedFeedSources) == 0 {
+		if defFrontend, ok := getDefaultConfig()["frontendSettings"].(map[string]interface{}); ok {
+			if defFeeds, ok := defFrontend["feedSources"].([]map[string]interface{}); ok {
+				normalizedFeedSources = append(normalizedFeedSources, normalizeFeedSources(defFeeds)...)
+			} else if defFeeds2, ok := defFrontend["feedSources"].([]map[string]interface{}); ok {
+				normalizedFeedSources = append(normalizedFeedSources, normalizeFeedSources(defFeeds2)...)
+			}
+		}
+	}
+	feedLimit := config.FeedLimit
+	if feedLimit <= 0 {
+		feedLimit = 20
+	}
+	feedRefreshSeconds := config.FeedRefreshSeconds
+	if feedRefreshSeconds <= 0 {
+		feedRefreshSeconds = 7200
+	}
 	if len(normalizedSocialLinks) == 0 {
 		if defFrontend, ok := getDefaultConfig()["frontendSettings"].(map[string]interface{}); ok {
 			if defLinks, ok := defFrontend["socialLinks"].([]map[string]string); ok {
@@ -193,6 +216,11 @@ func GetFrontendConfig() (map[string]interface{}, error) {
 			"aboutPageTitle":         choose(config.AboutPageTitle, getDefaultConfig()["frontendSettings"].(map[string]interface{})["aboutPageTitle"].(string)),
 			"aboutPageDescription":   choose(config.AboutPageDescription, getDefaultConfig()["frontendSettings"].(map[string]interface{})["aboutPageDescription"].(string)),
 			"aboutMarkdown":          choose(config.AboutMarkdown, getDefaultConfig()["frontendSettings"].(map[string]interface{})["aboutMarkdown"].(string)),
+			// 信息流
+			"feedEnabled":        config.FeedEnabled,
+			"feedSources":        normalizedFeedSources,
+			"feedLimit":          feedLimit,
+			"feedRefreshSeconds": feedRefreshSeconds,
 			// 系统欢迎组件（与用户资料解耦；若未设置则回退默认）
 			"welcomeAvatarURL":   choose(config.WelcomeAvatarURL, getDefaultConfig()["frontendSettings"].(map[string]interface{})["welcomeAvatarURL"].(string)),
 			"welcomeName":        choose(config.WelcomeName, getDefaultConfig()["frontendSettings"].(map[string]interface{})["welcomeName"].(string)),
@@ -547,6 +575,48 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 		config.SocialLinksEnabled = vb
 	} else if vs, ok := frontendSettings["socialLinksEnabled"].(string); ok {
 		config.SocialLinksEnabled = (vs == "true")
+	}
+	// 信息流设置
+	if vb, ok := frontendSettings["feedEnabled"].(bool); ok {
+		config.FeedEnabled = vb
+	} else if vs, ok := frontendSettings["feedEnabled"].(string); ok {
+		config.FeedEnabled = strings.EqualFold(strings.TrimSpace(vs), "true")
+	}
+	if vi, ok := frontendSettings["feedLimit"].(float64); ok {
+		config.FeedLimit = int(vi)
+	} else if vi2, ok := frontendSettings["feedLimit"].(int); ok {
+		config.FeedLimit = vi2
+	} else if vs, ok := frontendSettings["feedLimit"].(string); ok {
+		if n, err := strconv.Atoi(strings.TrimSpace(vs)); err == nil {
+			config.FeedLimit = n
+		}
+	}
+	if config.FeedLimit <= 0 {
+		config.FeedLimit = 20
+	}
+	if vi, ok := frontendSettings["feedRefreshSeconds"].(float64); ok {
+		config.FeedRefreshSeconds = int(vi)
+	} else if vi2, ok := frontendSettings["feedRefreshSeconds"].(int); ok {
+		config.FeedRefreshSeconds = vi2
+	} else if vs, ok := frontendSettings["feedRefreshSeconds"].(string); ok {
+		if n, err := strconv.Atoi(strings.TrimSpace(vs)); err == nil {
+			config.FeedRefreshSeconds = n
+		}
+	}
+	if config.FeedRefreshSeconds <= 0 {
+		config.FeedRefreshSeconds = 7200
+	}
+	if arr, ok := frontendSettings["feedSources"].([]interface{}); ok {
+		list := normalizeFeedSources(arr)
+		bs, _ := json.Marshal(list)
+		config.FeedSources = string(bs)
+	} else if arr2, ok := frontendSettings["feedSources"].([]map[string]interface{}); ok {
+		list := normalizeFeedSources(arr2)
+		bs, _ := json.Marshal(list)
+		config.FeedSources = string(bs)
+	} else if arr3, ok := frontendSettings["feedSources"].([]map[string]string); ok {
+		bs, _ := json.Marshal(arr3)
+		config.FeedSources = string(bs)
 	}
 
 	// 友链列表（管理员直接配置）
@@ -1078,6 +1148,12 @@ func getDefaultConfig() map[string]interface{} {
 			"aboutPageTitle":         "关于本站",
 			"aboutPageDescription":   "这里是站点的介绍与说明",
 			"aboutMarkdown":          "# 关于我\n\n这里是一个默认的个人简介示例：\n\n- 喜欢记录与分享\n- 热爱开源与学习\n- 持续打磨产品体验\n\n欢迎通过友链或留言与我交流！",
+			"feedEnabled":            false,
+			"feedLimit":              20,
+			"feedRefreshSeconds":     7200,
+			"feedSources": []map[string]interface{}{
+				{"type": "rss", "group": "默认分组", "name": "站点 RSS", "url": "/rss", "enabled": true, "visible": true},
+			},
 			// 系统欢迎组件默认参数
 			"welcomeAvatarURL":       "https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png",
 			"welcomeName":            "Noise",
@@ -1179,6 +1255,103 @@ func pickAny(m map[string]interface{}, keys ...string) interface{} {
 		}
 	}
 	return ""
+}
+
+func normalizeFeedSources(raw interface{}) []map[string]interface{} {
+	list := []map[string]interface{}{}
+	switch arr := raw.(type) {
+	case []map[string]interface{}:
+		for _, m := range arr {
+			itemType := normalizeFeedSourceTypeRaw(pickAny(m, "type", "Type"))
+			item := map[string]interface{}{
+				"type":    itemType,
+				"group":   strings.TrimSpace(fmt.Sprintf("%v", pickAny(m, "group", "Group"))),
+				"name":    strings.TrimSpace(fmt.Sprintf("%v", pickAny(m, "name", "Name"))),
+				"url":     strings.TrimSpace(fmt.Sprintf("%v", pickAny(m, "url", "URL"))),
+				"enabled": parseBoolLike(pickAny(m, "enabled", "Enabled"), true),
+				"visible": parseBoolLike(pickAny(m, "visible", "Visible"), true),
+			}
+			if strings.TrimSpace(fmt.Sprintf("%v", item["url"])) == "" {
+				continue
+			}
+			if strings.TrimSpace(fmt.Sprintf("%v", item["group"])) == "" {
+				item["group"] = "默认分组"
+			}
+			if itemType == "" {
+				item["type"] = "rss"
+			}
+			list = append(list, item)
+		}
+	case []interface{}:
+		for _, it := range arr {
+			m, ok := it.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			itemType := normalizeFeedSourceTypeRaw(pickAny(m, "type", "Type"))
+			item := map[string]interface{}{
+				"type":    itemType,
+				"group":   strings.TrimSpace(fmt.Sprintf("%v", pickAny(m, "group", "Group"))),
+				"name":    strings.TrimSpace(fmt.Sprintf("%v", pickAny(m, "name", "Name"))),
+				"url":     strings.TrimSpace(fmt.Sprintf("%v", pickAny(m, "url", "URL"))),
+				"enabled": parseBoolLike(pickAny(m, "enabled", "Enabled"), true),
+				"visible": parseBoolLike(pickAny(m, "visible", "Visible"), true),
+			}
+			if strings.TrimSpace(fmt.Sprintf("%v", item["url"])) == "" {
+				continue
+			}
+			if strings.TrimSpace(fmt.Sprintf("%v", item["group"])) == "" {
+				item["group"] = "默认分组"
+			}
+			if itemType == "" {
+				item["type"] = "rss"
+			}
+			list = append(list, item)
+		}
+	}
+	return list
+}
+
+func normalizeFeedSourceTypeRaw(raw interface{}) string {
+	candidate := raw
+	if obj, ok := raw.(map[string]interface{}); ok {
+		candidate = pickAny(obj, "value", "type", "label")
+	}
+	t := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", candidate)))
+	switch t {
+	case "rss":
+		return "rss"
+	case "note", "custom", "说说笔记", "本项目api", "本项目 api":
+		return "note"
+	case "ech0":
+		return "ech0"
+	case "memos":
+		return "memos"
+	case "mastodon":
+		return "mastodon"
+	default:
+		return "rss"
+	}
+}
+
+func parseBoolLike(v interface{}, def bool) bool {
+	switch x := v.(type) {
+	case bool:
+		return x
+	case string:
+		s := strings.ToLower(strings.TrimSpace(x))
+		if s == "true" || s == "1" || s == "yes" || s == "on" {
+			return true
+		}
+		if s == "false" || s == "0" || s == "no" || s == "off" {
+			return false
+		}
+	case float64:
+		return int(x) == 1
+	case int:
+		return x == 1
+	}
+	return def
 }
 
 func copyFile(src, dst string) error {
