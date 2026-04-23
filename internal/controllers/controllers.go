@@ -601,61 +601,75 @@ func UpdateSetting(c *gin.Context) {
 	}
 
 	frontendSettings := setting.FrontendSettings
-	if frontendSettings == nil {
-		frontendSettings = map[string]interface{}{}
-	}
-
-	settingMap := map[string]interface{}{
-		"frontendSettings": frontendSettings,
+	settingMap := map[string]interface{}{}
+	hasSiteConfigUpdate := false
+	if frontendSettings != nil {
+		settingMap["frontendSettings"] = frontendSettings
+		hasSiteConfigUpdate = true
 	}
 	if setting.AllowRegistration != nil {
 		settingMap["allowRegistration"] = *setting.AllowRegistration
 	}
 	if setting.SmtpEnabled != nil {
 		settingMap["smtpEnabled"] = *setting.SmtpEnabled
+		hasSiteConfigUpdate = true
 	}
 	if setting.SmtpDriver != nil {
 		settingMap["smtpDriver"] = *setting.SmtpDriver
+		hasSiteConfigUpdate = true
 	}
 	if setting.SmtpHost != nil {
 		settingMap["smtpHost"] = *setting.SmtpHost
+		hasSiteConfigUpdate = true
 	}
 	if setting.SmtpPort != nil {
 		settingMap["smtpPort"] = *setting.SmtpPort
+		hasSiteConfigUpdate = true
 	}
 	if setting.SmtpUser != nil {
 		settingMap["smtpUser"] = *setting.SmtpUser
+		hasSiteConfigUpdate = true
 	}
 	if setting.SmtpPass != nil {
 		settingMap["smtpPass"] = *setting.SmtpPass
+		hasSiteConfigUpdate = true
 	}
 	if setting.SmtpFrom != nil {
 		settingMap["smtpFrom"] = *setting.SmtpFrom
+		hasSiteConfigUpdate = true
 	}
 	if setting.SmtpEncryption != nil {
 		settingMap["smtpEncryption"] = *setting.SmtpEncryption
+		hasSiteConfigUpdate = true
 	}
 	if setting.SmtpTLS != nil {
 		settingMap["smtpTLS"] = *setting.SmtpTLS
+		hasSiteConfigUpdate = true
 	}
 
 	if setting.StorageEnabled != nil {
 		settingMap["storageEnabled"] = *setting.StorageEnabled
+		hasSiteConfigUpdate = true
 	}
 	if setting.StorageConfig != nil {
 		settingMap["storageConfig"] = setting.StorageConfig
+		hasSiteConfigUpdate = true
 	}
 
 	if setting.AttachmentStorageEnabled != nil {
 		settingMap["attachmentStorageEnabled"] = *setting.AttachmentStorageEnabled
+		hasSiteConfigUpdate = true
 	}
 	if setting.AttachmentStorageConfig != nil {
 		settingMap["attachmentStorageConfig"] = setting.AttachmentStorageConfig
+		hasSiteConfigUpdate = true
 	}
 
-	if err := services.UpdateFrontendSetting(0, settingMap); err != nil {
-		c.JSON(http.StatusOK, dto.Fail[string]("保存前端配置失败: "+err.Error()))
-		return
+	if hasSiteConfigUpdate {
+		if err := services.UpdateFrontendSetting(0, settingMap); err != nil {
+			c.JSON(http.StatusOK, dto.Fail[string]("保存前端配置失败: "+err.Error()))
+			return
+		}
 	}
 
 	if err := db.Table("settings").Save(&oldSetting).Error; err != nil {

@@ -49,12 +49,21 @@ type banReq struct {
 	Minutes int    `json:"minutes"`
 }
 
+func cleanupExpiredBans(db *gorm.DB) {
+	if db == nil {
+		return
+	}
+	now := time.Now()
+	_ = db.Where("until IS NOT NULL AND until <= ?", now).Delete(&models.SecurityIPBan{}).Error
+}
+
 func GetIPBans(c *gin.Context) {
 	db := models.GetDB()
 	if db == nil {
 		c.JSON(http.StatusOK, dto.OK([]models.SecurityIPBan{}, "ok"))
 		return
 	}
+	cleanupExpiredBans(db)
 	var bans []models.SecurityIPBan
 	_ = db.Order("id desc").Find(&bans).Error
 	c.JSON(http.StatusOK, dto.OK(bans, "ok"))

@@ -58,7 +58,10 @@ func recordAndMaybeAutoBan(ip string) {
 	autoMu.Lock()
 	it := autoCount[ip]
 	if it.Start.IsZero() || now.Sub(it.Start) > window {
-		it = struct{ Count int; Start time.Time }{Count: 0, Start: now}
+		it = struct {
+			Count int
+			Start time.Time
+		}{Count: 0, Start: now}
 	}
 	it.Count++
 	autoCount[ip] = it
@@ -92,7 +95,7 @@ func recordAndMaybeAutoBan(ip string) {
 
 	// 立刻让 banCache 生效
 	banMu.Lock()
-	banCache[ip] = banCacheItem{Banned: true, Exp: time.Now().Add(30 * time.Second)}
+	banCache[ip] = banCacheItem{Banned: true, Until: until, Exp: time.Now().Add(5 * time.Second)}
 	banMu.Unlock()
 
 	// reset counter after banning
@@ -103,6 +106,7 @@ func recordAndMaybeAutoBan(ip string) {
 
 type banCacheItem struct {
 	Banned bool
+	Until  *time.Time
 	Exp    time.Time
 }
 
@@ -110,8 +114,11 @@ var (
 	banMu    sync.RWMutex
 	banCache = map[string]banCacheItem{}
 
-	autoMu     sync.Mutex
-	autoCount  = map[string]struct{ Count int; Start time.Time }{}
+	autoMu    sync.Mutex
+	autoCount = map[string]struct {
+		Count int
+		Start time.Time
+	}{}
 	autoCfgMu  sync.RWMutex
 	autoCfg    *models.SecurityConfig
 	autoCfgExp time.Time
@@ -170,6 +177,18 @@ func isBannedIP(ip string) bool {
 	it, ok := banCache[ip]
 	banMu.RUnlock()
 	if ok {
+		now := time.Now()
+		if it.Banned && it.Until != nil && now.After(*it.Until) {
+			// 缓存命中但已到期：立即清理数据库记录，避免“列表仍显示封禁”。
+			db := models.GetDB()
+			if db != nil {
+				_ = db.Where("ip = ?", ip).Delete(&models.SecurityIPBan{}).Error
+			}
+			banMu.Lock()
+			banCache[ip] = banCacheItem{Banned: false, Exp: now.Add(30 * time.Second)}
+			banMu.Unlock()
+			return false
+		}
 		if time.Now().Before(it.Exp) {
 			return it.Banned
 		}
@@ -195,6 +214,7 @@ func isBannedIP(ip string) bool {
 		return false
 	}
 	if ban.Until != nil && time.Now().After(*ban.Until) {
+		_ = db.Where("ip = ?", ip).Delete(&models.SecurityIPBan{}).Error
 		banMu.Lock()
 		banCache[ip] = banCacheItem{Banned: false, Exp: time.Now().Add(30 * time.Second)}
 		banMu.Unlock()
@@ -202,7 +222,7 @@ func isBannedIP(ip string) bool {
 	}
 
 	banMu.Lock()
-	banCache[ip] = banCacheItem{Banned: true, Exp: time.Now().Add(30 * time.Second)}
+	banCache[ip] = banCacheItem{Banned: true, Until: ban.Until, Exp: time.Now().Add(5 * time.Second)}
 	banMu.Unlock()
 	return true
 }
@@ -248,7 +268,7 @@ func isSuspiciousPath(path string) bool {
 func SecurityMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := c.ClientIP()
-		
+
 		// 白名单机制：如果是本地 IP，则直接放行，不记录攻击日志，也不检查是否被 ban
 		if isLocalIP(ip) {
 			c.Next()

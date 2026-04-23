@@ -320,9 +320,13 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 		return fmt.Errorf("数据库连接失败: %v", err)
 	}
 
-	frontendSettings, ok := settingMap["frontendSettings"].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("无效的前端配置格式")
+	frontendSettings := map[string]interface{}{}
+	if raw, exists := settingMap["frontendSettings"]; exists {
+		parsed, ok := raw.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("无效的前端配置格式")
+		}
+		frontendSettings = parsed
 	}
 
 	// 开启事务
