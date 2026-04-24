@@ -30,7 +30,7 @@
           <div
             :ref="(el) => setFeedSummaryRef(getFeedItemId(item), el)"
             class="feed-summary-body overflow-y-hidden relative"
-            :class="{ 'max-h-[700px]': shouldShowExpandButton[getFeedItemId(item)] && !isExpanded[getFeedItemId(item)] }"
+            :style="shouldShowExpandButton[getFeedItemId(item)] && !isExpanded[getFeedItemId(item)] ? { maxHeight: `${collapsedContentHeight}px` } : undefined"
           >
             <div class="feed-summary-markdown">
               <MarkdownRenderer
@@ -201,7 +201,7 @@ const currentPage = ref(1)
 const previewOpen = ref(false)
 const previewImageURL = ref('')
 const brokenAvatarSet = ref<Set<string>>(new Set())
-const collapsedContentHeight = 360
+const collapsedContentHeight = 820
 const isExpanded = ref<Record<string, boolean>>({})
 const shouldShowExpandButton = ref<Record<string, boolean>>({})
 const measureTimer = ref<number | null>(null)
