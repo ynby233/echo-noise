@@ -28,7 +28,7 @@
 
 ## 简单上手
 
-[安装部署](#安装部署)🏷️  [开发](#开发)🏷️  [API指南](#API指南)🏷️  [MCP接入](#MCP接入)🏷️  [扩展组件](#扩展组件)🏷️ [云存储使用说明](docs/r2-s3.md) 🏷️ [🟢安全防护](#🟢安全防护)
+[安装部署](#安装部署)🏷️  [开发](#开发)🏷️  [API指南](#API指南)🏷️  [MCP接入](#MCP接入)🏷️  [Skill使用](#skill使用)🏷️  [扩展组件](#扩展组件)🏷️ [云存储使用说明](docs/r2-s3.md) 🏷️ [🟢安全防护](#🟢安全防护)
 
 [TOC]
 
@@ -38,6 +38,7 @@
 
 ## 2026更新状态
 
+- 新增“说说笔记”独立 skill 包，支持api和mcp两种模式使用
 - 增加信息流页面，支持rss源、Echo源、说说笔记源、memos源
 - 修复自动解封逻辑并验证到期IP会从封禁列表移除
 - 使用SESSION_SECRET增强会话安全、管理员鉴权、增加“上下文+实时查库”校验，并新增 ACCESS_LOG 开关（生产默认不打印访问日志）
@@ -1568,6 +1569,90 @@ curl -N -X POST http://localhost:1315/mcp/tool/搜索 -H 'Content-Type: applicat
 - 令牌：`/api/user/token/regenerate`
 - RSS：`/rss`
 
+## Skill使用
+
+仓库已新增“说说笔记”独立 skill 包，位于：
+
+- `/skill`
+
+该 skill 采用单一综合 skill 方案，默认区分两种模式：
+
+- `API 模式`：默认模式，未确认 MCP 已启用时优先使用
+- `MCP 模式`：仅在已明确启用 MCP 时使用
+
+适用能力包括：
+
+- 发布、搜索、分页、详情、更新、删除、置顶
+- 登录、获取或重建 token
+- 查询状态、配置、日历、RSS
+- 排查当前环境应走 API 还是 MCP
+
+目录结构：
+
+```text
+skill/
+    SKILL.md
+    USAGE.md
+    EXAMPLES.md
+```
+
+文件说明：
+
+- `SKILL.md`：主 skill 文件，定义能力范围、模式选择、调用策略
+- `USAGE.md`：完整使用说明，包含快速开始、认证方式、操作流程、排障指南
+- `EXAMPLES.md`：可直接复制使用的 API / MCP 调用示例与响应模板
+
+推荐阅读顺序：
+
+1. 先看 `USAGE.md`
+2. 再看 `SKILL.md`
+3. 需要复制命令或模板时再看 `EXAMPLES.md`
+
+相关文件：
+
+- [SKILL.md](skill/SKILL.md)
+- [USAGE.md](skill/USAGE.md)
+- [EXAMPLES.md](skill/EXAMPLES.md)
+
+快速安装：
+
+1. 将 `skill` 整个目录复制到本地 AI 客户端的技能目录
+2. 保持文件名不变：`SKILL.md`、`USAGE.md`、`EXAMPLES.md`
+3. 重启或刷新客户端技能索引
+4. 未确认 MCP 时，先按 API 模式使用
+
+最小使用示例：
+
+默认部署建议先验证 API：
+
+```bash
+curl http://localhost:1314/api/status
+curl "http://localhost:1314/api/messages/page?page=1&pageSize=5"
+curl http://localhost:1314/rss
+```
+
+若以上接口正常，说明可以直接通过 API 模式使用这份 skill。
+
+如已明确启用 MCP，再额外验证：
+
+```bash
+curl http://localhost:1315/mcp/tools
+curl -N http://localhost:1315/mcp/sse
+```
+
+若以上接口正常，说明可切换到 MCP 模式。
+
+使用建议：
+
+- 普通默认部署先走 API，不要默认假设 MCP 已启用
+- 若已配置 MCP 客户端，或已验证 `/mcp/tools`、`/mcp/sse` 可访问，再切换 MCP 模式
+- 删除、更新、置顶等危险操作，先确认目标内容再执行
+
+补充说明：
+
+- 本仓库 `docker-compose.yml` 默认主应用使用 `final`，并不等于默认直接走 MCP
+- 如需结合 MCP 使用，请同时参考本节上方的 `MCP接入` 说明与 `mcp/README.md`
+
 ------
 
 ## 🎁发布说明
@@ -2028,7 +2113,7 @@ isSuspiciousPath() 里的任意一条规则，就会：
 - [x] 增加RSS阅读组件（前端展示，后台控制）
 - [x] 媒体附件增加分离式存储，提供云端和本地两种方式
 - [x] 增加人生倒计时组件（ui 优化）
-- [ ] 增加skill
+- [x] 增加skill
 - [ ] 增加ai协作或聊天组件
 - [ ] 扩展支持一键识别当前网站信息并写入笔记
 - [ ] 其它组件的添加
