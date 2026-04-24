@@ -558,6 +558,10 @@ const toComparable = (value: string) => extractComparableText(value)
   .replace(/[：:，,。.!！?？\-\s]+/g, '')
   .toLowerCase()
 
+const isEch0Item = (item: FeedItem) => {
+  return String(item.type || '').toLowerCase() === 'ech0'
+}
+
 const getDisplayRaw = (item: FeedItem) => {
   const isRSS = isRSSItem(item)
   const title = normalizeContent(item.title || '')
@@ -566,8 +570,8 @@ const getDisplayRaw = (item: FeedItem) => {
   // 优先使用后端保留的原始内容，确保 Markdown/媒体卡片可被正确渲染。
   let text = contentRaw || summaryRaw
   if (!text) return ''
-  // RSS 正文经常包含首段标题、导语、图片或链接混排，前端不要再做首行裁剪，避免把正文误伤没了。
-  if (isRSS) return text
+  // RSS 与 Ech0 正文都可能把第一段作为真实内容的一部分，不能按标题首行去重裁剪。
+  if (isRSS || isEch0Item(item)) return text
   if (!title) return text
   const titleComparable = toComparable(title)
   const textComparable = toComparable(text)
