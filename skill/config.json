@@ -1,0 +1,16 @@
+{
+  "baseUrl": "",
+  "mcpBaseUrl": "",
+  "defaultMode": "api",
+  "autoFallbackToApi": true,
+  "onboarding": {
+    "enabled": true,
+    "completed": false,
+    "promptOnMissingConfig": true
+  },
+  "auth": {
+    "token": "",
+    "preferSessionForUpdatePinSettings": true
+  },
+  "notes": "首次安装建议保留空 baseUrl。AI 在首次使用时应主动引导你通过对话填写域名与模式。"
+}

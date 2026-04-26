@@ -24,27 +24,10 @@ func GetInfoFeedItems(c *gin.Context) {
 		limit = 0
 	}
 
-	baseURL := requestBaseURL(c)
-	items, err := services.LoadInfoFeedItems(baseURL, limit)
+	items, err := services.LoadInfoFeedItems(limit)
 	if err != nil && len(items) == 0 {
 		c.JSON(http.StatusOK, dto.Fail[string]("加载信息流失败: "+err.Error()))
 		return
 	}
 	c.JSON(http.StatusOK, dto.OK(items, "ok"))
-}
-
-func requestBaseURL(c *gin.Context) string {
-	scheme := c.GetHeader("X-Forwarded-Proto")
-	if scheme == "" {
-		if c.Request.TLS != nil {
-			scheme = "https"
-		} else {
-			scheme = "http"
-		}
-	}
-	host := strings.TrimSpace(c.GetHeader("X-Forwarded-Host"))
-	if host == "" {
-		host = c.Request.Host
-	}
-	return scheme + "://" + host
 }

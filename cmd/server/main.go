@@ -72,6 +72,7 @@ func main() {
 			syncmanager.Configure(cfg)
 		}
 	}()
+	services.StartInfoFeedAutoRefresh()
 
 	// 设置Gin模式
 	ginMode := config.Config.Server.Mode

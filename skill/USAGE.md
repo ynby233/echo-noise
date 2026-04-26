@@ -42,10 +42,63 @@ skill/
 - `SKILL.md`：主 skill 文件，定义能力、策略和触发范围
 - `USAGE.md`：完整使用说明文档
 - `EXAMPLES.md`：可直接复制使用的示例与响应模板
+- `config.json`：域名、默认模式、回退策略与认证偏好配置
 
 ## 快速开始
 
 如果你只想尽快用起来，按下面步骤执行即可。
+
+### 域名通用变量（推荐）
+
+无论是 `https://note.noisework.cn` 还是其它域名，都建议先定义统一变量：
+
+```bash
+export BASE_URL="https://your-domain.com"
+export MCP_BASE_URL="https://your-domain.com"
+```
+
+说明：
+
+- `BASE_URL` 用于 API 与 RSS
+- `MCP_BASE_URL` 用于 MCP HTTP/SSE 端点（若已启用）
+- 若你本地调试，可改为 `http://localhost:1314` 与 `http://localhost:1315`
+
+### 配置文件驱动（推荐）
+
+如果你希望“安装后直接用，后续只改配置不改文档”，请优先维护：
+
+```text
+skill/config.json
+```
+
+建议流程：
+
+1. 安装 skill 后先改 `config.json` 的 `baseUrl` 与 `mcpBaseUrl`
+2. 每次对话先让 AI 读取 `config.json`
+3. 若本轮有临时域名或模式要求，用对话参数覆盖配置
+
+示例提示词：
+
+```text
+先读取 skill/config.json，并按其中 baseUrl/defaultMode 执行本次任务；若 MCP 不可用则回退 API。
+```
+
+### 首次安装的默认行为（自动解锁配置）
+
+你不需要先输入固定口令。安装后首次使用 skill 时，AI 应自动检查 `config.json`：
+
+- 若 `baseUrl` 为空或是占位值，AI 主动发起配置提问
+- 若配置完整，AI 直接按配置执行任务
+- 若你在对话中临时改域名，本轮以对话参数为准
+
+推荐 AI 首次提问模板：
+
+```text
+检测到你还未完成 skill 配置。请告诉我：
+1) 你的站点域名（例如 https://example.com）
+2) 默认模式（API/MCP）
+3) MCP 不可用时是否自动回退 API（是/否）
+```
 
 ### 步骤 1：放置 skill 文件
 
@@ -54,6 +107,7 @@ skill/
 - `SKILL.md`
 - `USAGE.md`
 - `EXAMPLES.md`
+- `config.json`
 
 ### 步骤 2：先判断使用 API 还是 MCP
 
@@ -69,9 +123,9 @@ skill/
 默认部署场景先检查以下接口：
 
 ```bash
-curl http://localhost:1314/api/status
-curl "http://localhost:1314/api/messages/page?page=1&pageSize=5"
-curl http://localhost:1314/rss
+curl "$BASE_URL/api/status"
+curl "$BASE_URL/api/messages/page?page=1&pageSize=5"
+curl "$BASE_URL/rss"
 ```
 
 若这三个接口正常，说明 API 模式基本可用。
@@ -121,8 +175,8 @@ curl http://localhost:1314/rss
 验证命令：
 
 ```bash
-curl http://localhost:1315/mcp/tools
-curl -N http://localhost:1315/mcp/sse
+curl "$MCP_BASE_URL/mcp/tools"
+curl -N "$MCP_BASE_URL/mcp/sse"
 ```
 
 ### 什么时候必须按 API 处理
@@ -148,7 +202,7 @@ curl -N http://localhost:1315/mcp/sse
 典型地址：
 
 - 本地：`http://localhost:1314`
-- 远程：`http://<服务器IP>:1314`
+- 线上：`https://your-domain.com`
 
 ### MCP 模式前提
 
@@ -267,7 +321,7 @@ PUT    /api/token/settings
 推荐示例：
 
 ```bash
-curl "http://localhost:1314/api/messages/search?keyword=欢迎&page=1&pageSize=10"
+curl "$BASE_URL/api/messages/search?keyword=欢迎&page=1&pageSize=10"
 ```
 
 说明：
@@ -279,13 +333,13 @@ curl "http://localhost:1314/api/messages/search?keyword=欢迎&page=1&pageSize=1
 #### 分页
 
 ```bash
-curl "http://localhost:1314/api/messages/page?page=1&pageSize=10"
+curl "$BASE_URL/api/messages/page?page=1&pageSize=10"
 ```
 
 或：
 
 ```bash
-curl -X POST "http://localhost:1314/api/messages/page" \
+curl -X POST "$BASE_URL/api/messages/page" \
   -H "Content-Type: application/json" \
   -d '{"page":1,"pageSize":10}'
 ```
@@ -293,13 +347,13 @@ curl -X POST "http://localhost:1314/api/messages/page" \
 #### 详情
 
 ```bash
-curl "http://localhost:1314/api/messages/123"
+curl "$BASE_URL/api/messages/123"
 ```
 
 #### 发布文本
 
 ```bash
-curl -X POST "http://localhost:1314/api/token/messages" \
+curl -X POST "$BASE_URL/api/token/messages" \
   -H "Authorization: Bearer <你的Token>" \
   -H "Content-Type: application/json" \
   -d '{"type":"text","content":"今天完成了双模式 skill 调整"}'
@@ -308,7 +362,7 @@ curl -X POST "http://localhost:1314/api/token/messages" \
 #### 发布 Markdown
 
 ```bash
-curl -X POST "http://localhost:1314/api/token/messages" \
+curl -X POST "$BASE_URL/api/token/messages" \
   -H "Authorization: Bearer <你的Token>" \
   -H "Content-Type: application/json" \
   -d '{"type":"markdown","content":"# 标题\n正文内容"}'
@@ -317,7 +371,7 @@ curl -X POST "http://localhost:1314/api/token/messages" \
 #### 更新内容
 
 ```bash
-curl -X PUT "http://localhost:1314/api/messages/123" \
+curl -X PUT "$BASE_URL/api/messages/123" \
   -H "Content-Type: application/json" \
   -b cookie.txt \
   -d '{"content":"更新后的内容"}'
@@ -326,14 +380,14 @@ curl -X PUT "http://localhost:1314/api/messages/123" \
 #### 删除内容
 
 ```bash
-curl -X DELETE "http://localhost:1314/api/token/messages/123" \
+curl -X DELETE "$BASE_URL/api/token/messages/123" \
   -H "Authorization: Bearer <你的Token>"
 ```
 
 #### 置顶内容
 
 ```bash
-curl -X PUT "http://localhost:1314/api/messages/123/pin" \
+curl -X PUT "$BASE_URL/api/messages/123/pin" \
   -H "Content-Type: application/json" \
   -b cookie.txt \
   -d '{"pinned":true}'
@@ -342,13 +396,13 @@ curl -X PUT "http://localhost:1314/api/messages/123/pin" \
 #### 获取 token
 
 ```bash
-curl "http://localhost:1314/api/user/token" -b cookie.txt
+curl "$BASE_URL/api/user/token" -b cookie.txt
 ```
 
 #### 重建 token
 
 ```bash
-curl -X POST "http://localhost:1314/api/user/token/regenerate" -b cookie.txt
+curl -X POST "$BASE_URL/api/user/token/regenerate" -b cookie.txt
 ```
 
 ## MCP 模式完整说明
@@ -398,7 +452,7 @@ npm install
       "command": "node",
       "args": ["/Library/Github/Ech0-Noise/mcp/server.js"],
       "env": {
-        "NOTE_HOST": "http://localhost:1314",
+        "NOTE_HOST": "https://your-domain.com",
         "NOTE_HTTP_PORT": "0",
         "NOTE_TOKEN": "你的后台token"
       }
@@ -418,8 +472,8 @@ npm install
 若服务端已暴露 MCP 端点，可先验证：
 
 ```bash
-curl http://localhost:1315/mcp/tools
-curl -N http://localhost:1315/mcp/sse
+curl "$MCP_BASE_URL/mcp/tools"
+curl -N "$MCP_BASE_URL/mcp/sse"
 ```
 
 ### MCP 调用策略
@@ -447,7 +501,7 @@ curl -N http://localhost:1315/mcp/sse
 登录示例：
 
 ```bash
-curl -X POST "http://localhost:1314/api/login" \
+curl -X POST "$BASE_URL/api/login" \
   -H "Content-Type: application/json" \
   -c cookie.txt \
   -d '{"username":"admin","password":"your_password"}'
@@ -608,9 +662,16 @@ Authorization: Bearer <你的Token>
 
 处理方式：
 
-- 先确认基础地址
+- 先确认基础地址（建议先执行 `GET $BASE_URL/api/status`）
 - 再确认接口路径
 - 最后确认目标资源存在
+
+### 反代场景检查清单
+
+- 必须正确转发 `/api/*` 与 `/rss`
+- 若启用 MCP，还需转发 `/mcp/*`（含 SSE）
+- 避免把应用挂在子路径却不改文档路径（如 `/note/api/*`）
+- 若首页可打开但 API 返回 404，通常是反代规则缺失而不是 skill 问题
 
 ### `EADDRINUSE`
 

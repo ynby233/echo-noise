@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -14,6 +15,10 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/rcy1314/echo-noise/config"
+	"github.com/rcy1314/echo-noise/internal/database"
+	"github.com/rcy1314/echo-noise/internal/models"
 )
 
 type InfoFeedSource struct {
@@ -45,6 +50,12 @@ type infoFeedCacheEntry struct {
 	err      error
 }
 
+type infoFeedSnapshot struct {
+	updatedAt time.Time
+	items     []InfoFeedItem
+	err       error
+}
+
 var (
 	reCData        = regexp.MustCompile(`(?s)<!\[CDATA\[(.*?)\]\]>`)
 	reTag          = regexp.MustCompile(`(?s)<[^>]+>`)
@@ -60,6 +71,11 @@ var (
 	reAnchorTag    = regexp.MustCompile(`(?is)<a[^>]+href=["']([^"']+)["'][^>]*>(.*?)</a>`)
 	reLiOpen       = regexp.MustCompile(`(?is)<li[^>]*>`)
 	infoFeedCache  sync.Map
+	feedSnapshotMu sync.RWMutex
+	feedSnapshot   infoFeedSnapshot
+	feedRefreshMu  sync.Mutex
+	feedTickerMu   sync.Mutex
+	feedTickerStop chan struct{}
 )
 
 const (
@@ -85,7 +101,157 @@ func GetInfoFeedConfig() (bool, int, []InfoFeedSource, error) {
 	return enabled, limit, sources, nil
 }
 
-func LoadInfoFeedItems(baseURL string, limit int) ([]InfoFeedItem, error) {
+func LoadInfoFeedItems(limit int) ([]InfoFeedItem, error) {
+	enabled, cfgLimit, sources, err := GetInfoFeedConfig()
+	if err != nil {
+		return nil, err
+	}
+	if !enabled {
+		return []InfoFeedItem{}, nil
+	}
+	displayLimit := limit
+	if displayLimit <= 0 {
+		displayLimit = cfgLimit
+	}
+	if displayLimit < 0 {
+		displayLimit = 0
+	}
+	if displayLimit > 100 {
+		displayLimit = 100
+	}
+	if len(sources) == 0 {
+		return []InfoFeedItem{}, nil
+	}
+	snapshot := readInfoFeedSnapshot()
+	items := cloneInfoFeedItems(snapshot.items)
+	if displayLimit > 0 && len(items) > displayLimit {
+		items = items[:displayLimit]
+	}
+	if snapshot.err != nil && len(items) == 0 {
+		return items, snapshot.err
+	}
+	return items, nil
+}
+
+// StartInfoFeedAutoRefresh 启动/重建信息流后台定时刷新任务。
+func StartInfoFeedAutoRefresh() {
+	enabled, _, _, err := GetInfoFeedConfig()
+	if err != nil {
+		log.Printf("信息流自动刷新配置读取失败: %v", err)
+		return
+	}
+	interval := time.Duration(getInfoFeedRefreshSeconds()) * time.Second
+
+	feedTickerMu.Lock()
+	if feedTickerStop != nil {
+		close(feedTickerStop)
+		feedTickerStop = nil
+	}
+	if !enabled {
+		writeInfoFeedSnapshot([]InfoFeedItem{}, nil, time.Now())
+		log.Printf("信息流自动刷新未启动: feedEnabled=false")
+		feedTickerMu.Unlock()
+		return
+	}
+	stop := make(chan struct{})
+	feedTickerStop = stop
+	feedTickerMu.Unlock()
+
+	log.Printf("信息流后台自动刷新已启动，间隔: %v", interval)
+	go func(stop <-chan struct{}, interval time.Duration) {
+		refreshInfoFeedSnapshot()
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				refreshInfoFeedSnapshot()
+			case <-stop:
+				log.Printf("信息流后台自动刷新已停止")
+				return
+			}
+		}
+	}(stop, interval)
+}
+
+func getInfoFeedRefreshSeconds() int {
+	cfg, err := GetFrontendConfig()
+	if err != nil {
+		return 7200
+	}
+	fs, _ := cfg["frontendSettings"].(map[string]interface{})
+	seconds := toInt(fs["feedRefreshSeconds"], 7200)
+	if seconds < 10 {
+		seconds = 10
+	}
+	if seconds > 86400 {
+		seconds = 86400
+	}
+	return seconds
+}
+
+func readInfoFeedSnapshot() infoFeedSnapshot {
+	feedSnapshotMu.RLock()
+	defer feedSnapshotMu.RUnlock()
+	return infoFeedSnapshot{
+		updatedAt: feedSnapshot.updatedAt,
+		items:     cloneInfoFeedItems(feedSnapshot.items),
+		err:       feedSnapshot.err,
+	}
+}
+
+func writeInfoFeedSnapshot(items []InfoFeedItem, fetchErr error, updatedAt time.Time) {
+	feedSnapshotMu.Lock()
+	feedSnapshot = infoFeedSnapshot{
+		updatedAt: updatedAt,
+		items:     cloneInfoFeedItems(items),
+		err:       fetchErr,
+	}
+	feedSnapshotMu.Unlock()
+}
+
+func refreshInfoFeedSnapshot() {
+	feedRefreshMu.Lock()
+	defer feedRefreshMu.Unlock()
+
+	baseURL := resolveSchedulerBaseURL()
+	items, err := loadInfoFeedItemsFromSources(baseURL, 0)
+	if err != nil && len(items) == 0 {
+		log.Printf("信息流后台刷新失败: %v", err)
+		writeInfoFeedSnapshot([]InfoFeedItem{}, err, time.Now())
+		return
+	}
+	if err != nil {
+		log.Printf("信息流后台刷新部分失败: %v（保留可用内容 %d 条）", err, len(items))
+	} else {
+		log.Printf("信息流后台刷新成功: %d 条", len(items))
+	}
+	writeInfoFeedSnapshot(items, err, time.Now())
+}
+
+func resolveSchedulerBaseURL() string {
+	db, err := database.GetDB()
+	if err == nil && db != nil {
+		var siteCfg models.SiteConfig
+		if err := db.Table("site_configs").First(&siteCfg).Error; err == nil {
+			u := strings.TrimSpace(siteCfg.CommentEmailSiteURL)
+			if strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") {
+				return strings.TrimRight(u, "/")
+			}
+		}
+	}
+	host := strings.TrimSpace(config.Config.Server.Host)
+	port := strings.TrimSpace(config.Config.Server.Port)
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	if port == "" {
+		port = "1314"
+	}
+	return "http://" + host + ":" + port
+}
+
+func loadInfoFeedItemsFromSources(baseURL string, limit int) ([]InfoFeedItem, error) {
 	enabled, cfgLimit, sources, err := GetInfoFeedConfig()
 	if err != nil {
 		return nil, err
@@ -110,11 +276,6 @@ func LoadInfoFeedItems(baseURL string, limit int) ([]InfoFeedItem, error) {
 	if len(sources) == 0 {
 		return []InfoFeedItem{}, nil
 	}
-	cacheKey := buildInfoFeedCacheKey(baseURL, displayLimit, sources)
-	if cached, ok := readInfoFeedCache(cacheKey); ok {
-		return cached.items, cached.err
-	}
-
 	client := &http.Client{Timeout: 12 * time.Second}
 	var (
 		wg      sync.WaitGroup
@@ -186,9 +347,6 @@ func LoadInfoFeedItems(baseURL string, limit int) ([]InfoFeedItem, error) {
 	})
 	if displayLimit > 0 && len(dedup) > displayLimit {
 		dedup = dedup[:displayLimit]
-	}
-	if len(dedup) > 0 || onceErr == nil {
-		writeInfoFeedCache(cacheKey, dedup, onceErr)
 	}
 	return dedup, onceErr
 }

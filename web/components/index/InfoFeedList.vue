@@ -193,7 +193,6 @@ const emit = defineEmits<{
 const loading = ref(false)
 const allItems = ref<FeedItem[]>([])
 const errorText = ref('')
-const refreshTimer = ref<number | null>(null)
 const requestInFlight = ref(false)
 const copiedLink = ref('')
 const copiedTimer = ref<number | null>(null)
@@ -445,24 +444,6 @@ const loadFeed = async () => {
   }
 }
 
-const clearRefreshTimer = () => {
-  if (refreshTimer.value) {
-    window.clearInterval(refreshTimer.value)
-    refreshTimer.value = null
-  }
-}
-
-const scheduleRefresh = () => {
-  clearRefreshTimer()
-  if (typeof window === 'undefined') return
-  if (props.active === false) return
-  const seconds = Math.max(10, Math.min(86400, Number(props.refreshSeconds || 7200)))
-  refreshTimer.value = window.setInterval(() => {
-    if (props.active === false) return
-    void loadFeed()
-  }, seconds * 1000)
-}
-
 const formatDate = (s: string) => {
   const text = String(s || '').trim()
   if (!text) return '-'
@@ -653,10 +634,8 @@ watch(() => props.active, (v) => {
   if (v) {
     hydrateFeedCache()
     void loadFeed()
-    scheduleRefresh()
     return
   }
-  clearRefreshTimer()
 })
 
 watch(() => props.limit, () => {
@@ -674,20 +653,14 @@ watch(pageItems, () => {
   deferMeasure()
 })
 
-watch(() => props.refreshSeconds, () => {
-  scheduleRefresh()
-})
-
 onMounted(() => {
   hydrateFeedCache()
   if (props.active !== false) {
     void loadFeed()
   }
-  scheduleRefresh()
 })
 
 onUnmounted(() => {
-  clearRefreshTimer()
   Array.from(feedResizeObservers.keys()).forEach((feedId) => cleanupFeedSummaryObserver(feedId))
   if (copiedTimer.value) {
     window.clearTimeout(copiedTimer.value)

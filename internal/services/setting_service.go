@@ -1102,6 +1102,7 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	if err := tx.Commit().Error; err != nil {
 		return fmt.Errorf("提交配置更新失败: %v", err)
 	}
+	StartInfoFeedAutoRefresh()
 
 	return nil
 }
