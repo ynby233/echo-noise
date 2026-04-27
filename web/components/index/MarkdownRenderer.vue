@@ -615,8 +615,8 @@ const processMediaLinks = (content: string): string => {
     .replace(QQVIDEO_REG, "<div class='video-wrapper'><iframe src='//v.qq.com/iframe/player.html?vid=$1' allowFullScreen='true' frameborder='no'></iframe></div>")
     .replace(SPOTIFY_REG, "<div class='spotify-wrapper'><iframe style='border-radius:12px' src='https://open.spotify.com/embed/$1/$2?utm_source=generator&theme=0' width='100%' frameBorder='0' allowfullscreen='' allow='autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture' loading='lazy'></iframe></div>")
     .replace(YOUKU_REG, "<div class='video-wrapper'><iframe src='https://player.youku.com/embed/$1' frameborder=0 'allowfullscreen'></iframe></div>")
-    .replace(DOUYIN_REG, "<div class='video-wrapper douyin-video-wrapper'><iframe src='https://open.douyin.com/player/video?vid=$1&autoplay=0' frameborder='0' scrolling='no' allow='autoplay; encrypted-media' allowfullscreen='true' referrerpolicy='unsafe-url'></iframe></div>")
-    .replace(DOUYIN_SHORTCODE_REG, "<div class='video-wrapper douyin-video-wrapper'><iframe src='https://open.douyin.com/player/video?vid=$1&autoplay=0' frameborder='0' scrolling='no' allow='autoplay; encrypted-media' allowfullscreen='true' referrerpolicy='unsafe-url'></iframe></div>");
+    .replace(DOUYIN_REG, "<div class='video-wrapper douyin-video-wrapper' data-douyin-vid='$1'><iframe src='https://open.douyin.com/player/video?vid=$1&autoplay=0' frameborder='0' scrolling='no' allow='autoplay; encrypted-media' allowfullscreen='true' referrerpolicy='unsafe-url'></iframe></div>")
+    .replace(DOUYIN_SHORTCODE_REG, "<div class='video-wrapper douyin-video-wrapper' data-douyin-vid='$1'><iframe src='https://open.douyin.com/player/video?vid=$1&autoplay=0' frameborder='0' scrolling='no' allow='autoplay; encrypted-media' allowfullscreen='true' referrerpolicy='unsafe-url'></iframe></div>");
   content = content.replace(YOUTUBE_REG, (_m, id1, id2) => {
     const videoId = String(id1 || id2 || '').trim()
     if (!videoId) return _m
@@ -736,19 +736,25 @@ const fetchGitHubRepoInfo = async (owner: string, repo: string, cardId: string) 
   `
   card.classList.add('github-card-error')
 };
-const buildDouyinEmbedHtml = (videoId: string) => `<div class='video-wrapper douyin-video-wrapper'><iframe src='https://open.douyin.com/player/video?vid=${videoId}&autoplay=0' frameborder='0' scrolling='no' allow='autoplay; encrypted-media' allowfullscreen='true' referrerpolicy='unsafe-url'></iframe></div>`
+const buildDouyinEmbedHtml = (videoId: string) => {
+  const vid = String(videoId || '').trim()
+  if (!vid) return ''
+  return `<div class='video-wrapper douyin-video-wrapper' data-douyin-vid='${vid}'><iframe src='https://open.douyin.com/player/video?vid=${vid}&autoplay=0' frameborder='0' scrolling='no' allow='autoplay; encrypted-media' allowfullscreen='true' referrerpolicy='unsafe-url'></iframe></div>`
+}
 const buildDouyinFallbackHtml = (link: string) => `<div class='video-fallback-card douyin-fallback-card'><div class='video-fallback-content'><div class='video-fallback-title'>抖音短链解析失败</div><a class='video-fallback-link' href='${link}' target='_blank' rel='noopener noreferrer'>打开原链接</a></div></div>`
-const resolveDouyinShortToVideoId = async (link: string): Promise<string> => {
+const resolveDouyinShortToVideoInfo = async (link: string): Promise<{ videoId: string }> => {
   try {
     const endpoint = `${String(BASE_API).replace(/\/$/, '')}/douyin/resolve?url=${encodeURIComponent(link)}`
     const res = await fetch(endpoint, { method: 'GET', credentials: 'omit' })
     const data = await res.json().catch(() => ({} as any))
     if (data?.code === 1) {
-      return String(data?.data?.video_id || '').trim()
+      return {
+        videoId: String(data?.data?.video_id || '').trim(),
+      }
     }
-    return ''
+    return { videoId: '' }
   } catch {
-    return ''
+    return { videoId: '' }
   }
 }
 const enhanceDouyinShortLinks = async () => {
@@ -761,22 +767,86 @@ const enhanceDouyinShortLinks = async () => {
     return true
   })
   if (!targets.length) return
-  const cache = new Map<string, string>()
+  const cache = new Map<string, { videoId: string }>()
   for (const a of targets) {
     const href = String(a.getAttribute('href') || '').trim()
     if (!href) continue
-    let vid = cache.get(href) || ''
-    if (!vid) {
-      vid = await resolveDouyinShortToVideoId(href)
-      cache.set(href, vid)
+    let info = cache.get(href) || { videoId: '' }
+    if (!info.videoId) {
+      info = await resolveDouyinShortToVideoInfo(href)
+      cache.set(href, info)
     }
     ;(a as any).__dyResolved = true
-    if (!vid) {
+    if (!info.videoId) {
       replaceNodeWithHtml(a, buildDouyinFallbackHtml(href))
       continue
     }
-    replaceNodeWithHtml(a, buildDouyinEmbedHtml(vid))
+    replaceNodeWithHtml(a, buildDouyinEmbedHtml(info.videoId))
   }
+}
+const applyDouyinVideoLayout = () => {
+  if (!previewElement.value || typeof window === 'undefined') return
+  const douyinIframes = Array.from(
+    previewElement.value.querySelectorAll("iframe[src*='open.douyin.com/player/video']")
+  ) as HTMLIFrameElement[]
+  douyinIframes.forEach((iframe) => {
+    const wrap = iframe.closest('.video-wrapper') as HTMLElement | null
+    if (wrap) wrap.classList.add('douyin-video-wrapper')
+  })
+  const wrappers = Array.from(previewElement.value.querySelectorAll('.douyin-video-wrapper')) as HTMLElement[]
+  if (!wrappers.length) return
+  const ua = String(window.navigator?.userAgent || '').toLowerCase()
+  const isRealMobileDevice = /android|iphone|ipod|ipad|mobile|windows phone/.test(ua)
+    || (window.matchMedia('(pointer: coarse)').matches && window.matchMedia('(hover: none)').matches)
+  const isMobileViewport = window.matchMedia('(max-width: 1024px)').matches
+  const useMobilePortrait = isRealMobileDevice && isMobileViewport
+  const rootInThreeColumn = !!previewElement.value.closest('.layout-container.grid-3, .feed-grid-three')
+  wrappers.forEach((el) => {
+    const inThreeColumnByClass = !!(
+      rootInThreeColumn
+      || el.closest('.layout-container.grid-3')
+      || el.closest('.feed-grid-three')
+      || previewElement.value?.closest('.layout-container.grid-3')
+      || previewElement.value?.closest('.feed-grid-three')
+    )
+    const card = el.closest('.content-container, .feed-item-card, .message-item, .feed-summary-markdown') as HTMLElement | null
+    const cardWidth = Math.max(
+      0,
+      Number(card?.clientWidth || 0),
+      Number((el.parentElement as HTMLElement | null)?.clientWidth || 0)
+    )
+    // 类名判定 + 卡片宽度双重判定，避免三栏样式漏判
+    const inferredThreeColumn = inThreeColumnByClass || (cardWidth > 0 && cardWidth <= 560)
+
+    el.classList.toggle('douyin-three-col', inferredThreeColumn)
+    // 三栏优先级最高：强制横屏，避免与 mobile-portrait 同时生效造成竖屏拉高
+    el.classList.toggle('douyin-mobile-portrait', !inferredThreeColumn && useMobilePortrait)
+    // 三栏下使用“半尺寸画布”策略，缓解官方播放器在窄卡片里的竖屏回退
+    el.classList.toggle('douyin-half-canvas', inferredThreeColumn && !useMobilePortrait)
+
+    el.style.margin = '0.4em auto'
+    el.style.height = 'auto'
+    el.style.paddingBottom = '0'
+    const currentVid = String(el.getAttribute('data-douyin-vid') || '').trim()
+    if (currentVid && !el.querySelector("iframe[src*='open.douyin.com/player/video']")) {
+      el.innerHTML = `<iframe src='https://open.douyin.com/player/video?vid=${currentVid}&autoplay=0' frameborder='0' scrolling='no' allow='autoplay; encrypted-media' allowfullscreen='true' referrerpolicy='unsafe-url'></iframe>`
+    }
+    if (inferredThreeColumn) {
+      el.style.width = '100%'
+      el.style.maxWidth = '100%'
+      el.style.aspectRatio = '16 / 9'
+      return
+    }
+    if (useMobilePortrait) {
+      el.style.width = '100%'
+      el.style.maxWidth = '100%'
+      el.style.aspectRatio = '9 / 16'
+      return
+    }
+    el.style.width = '100%'
+    el.style.maxWidth = '100%'
+    el.style.aspectRatio = '16 / 9'
+  })
 }
 const renderMarkdown = async (markdown: string) => {
   if (!previewElement.value) return;
@@ -867,6 +937,7 @@ const renderMarkdown = async (markdown: string) => {
             }
           });
           await enhanceDouyinShortLinks()
+          applyDouyinVideoLayout()
           applyClickableTags()
           
           // Explicitly handle existing video tags (e.g. from raw HTML or markdown)
@@ -886,6 +957,10 @@ const renderMarkdown = async (markdown: string) => {
           });
 
           applyImageGrid();
+          applyDouyinVideoLayout()
+          setTimeout(() => {
+            applyDouyinVideoLayout()
+          }, 80)
           initializeZoom();
           applyImageLoadingPlaceholders();
           emit('rendered');
@@ -935,6 +1010,9 @@ onMounted(() => {
     themeClassObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
   } catch {}
   previewElement.value?.addEventListener('click', onPreviewClick)
+  try {
+    window.addEventListener('resize', applyDouyinVideoLayout, { passive: true })
+  } catch {}
 });
 
 
@@ -944,6 +1022,9 @@ onBeforeUnmount(() => {
     zoom = null;
   }
   previewElement.value?.removeEventListener('click', onPreviewClick)
+  try {
+    window.removeEventListener('resize', applyDouyinVideoLayout)
+  } catch {}
   if (themeClassObserver) {
     themeClassObserver.disconnect()
     themeClassObserver = null
@@ -1185,35 +1266,74 @@ watch(() => props.enableGithubCard, () => {
   margin-top: 4px;
 }
 .douyin-video-wrapper {
-  width: min(100%, 340px);
-  margin-left: auto;
-  margin-right: auto;
-  padding-bottom: 0;
-  aspect-ratio: 9 / 16;
-  min-height: 280px;
-  max-height: min(64vh, 560px);
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  padding-bottom: 0 !important; /* 覆盖 .video-wrapper 的 56.25% 撑高，避免三栏尺寸被撑乱 */
+  margin: 0.4em auto;
+  aspect-ratio: 16 / 9; /* PC 默认横屏 */
+  height: auto;
+  min-height: 0;
+  max-height: 100%;
   border-radius: 12px;
   overflow: hidden;
   background: #000;
 }
 .douyin-video-wrapper iframe {
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
   display: block;
   background: #000;
 }
-.douyin-video-wrapper.douyin-landscape {
-  width: min(100%, 620px);
-  aspect-ratio: 16 / 9;
-  min-height: 220px;
-  max-height: min(52vh, 380px);
+.douyin-video-wrapper.douyin-half-canvas iframe {
+  width: 200% !important;
+  height: 200% !important;
+  transform: scale(0.5);
+  transform-origin: left top;
 }
-@media (max-width: 768px) {
-  .douyin-video-wrapper {
-    width: min(100%, 320px);
-    min-height: 240px;
-    max-height: 58vh;
-  }
+.douyin-video-wrapper .douyin-video-el {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+  object-fit: contain;
+  background: #000;
+}
+.douyin-video-wrapper.douyin-landscape {
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 16 / 9;
+  height: auto;
+}
+:global(.layout-container.grid-3) .douyin-video-wrapper,
+:global(.layout-container.grid-3) .markdown-preview .douyin-video-wrapper,
+:global(.feed-grid-three) .douyin-video-wrapper,
+.douyin-video-wrapper.douyin-three-col {
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 16 / 9;
+  height: auto;
+  margin: 0.4em 0;
+}
+.douyin-video-wrapper.douyin-three-col.douyin-mobile-portrait,
+:global(.layout-container.grid-3) .douyin-video-wrapper.douyin-mobile-portrait,
+:global(.feed-grid-three) .douyin-video-wrapper.douyin-mobile-portrait {
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 16 / 9;
+}
+.image-grid-item .douyin-video-wrapper {
+  width: 100%;
+  max-width: 100%;
+}
+.douyin-video-wrapper.douyin-mobile-portrait {
+  width: 100% !important;
+  max-width: 100% !important;
+  aspect-ratio: 9 / 16 !important;
+  border-radius: 10px;
 }
 
 .music-wrapper {

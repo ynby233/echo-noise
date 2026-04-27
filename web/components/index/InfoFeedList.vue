@@ -23,7 +23,7 @@
             <UIcon v-else :name="getHeadIcon(item)" class="w-4 h-4 opacity-70" />
             <span>{{ getDisplayName(item) }}</span>
           </div>
-          <div class="feed-time">{{ formatDate(item.publishedAt) }}</div>
+          <div class="feed-time">{{ formatDate(item) }}</div>
         </div>
         <h3 v-if="shouldShowTitle(item)" class="feed-title">{{ item.title }}</h3>
         <div v-if="getDisplayRaw(item)" class="feed-summary-block content-container" :data-feed-id="getFeedItemId(item)">
@@ -202,6 +202,7 @@ const previewImageURL = ref('')
 const brokenAvatarSet = ref<Set<string>>(new Set())
 const collapsedContentHeight = 820
 const isExpanded = ref<Record<string, boolean>>({})
+const hasUserToggled = ref<Record<string, boolean>>({})
 const shouldShowExpandButton = ref<Record<string, boolean>>({})
 const measureTimer = ref<number | null>(null)
 const feedSummaryRefs = ref<Record<string, HTMLElement | null>>({})
@@ -296,6 +297,7 @@ const goNextPage = () => {
 }
 
 const toggleExpand = (feedId: string) => {
+  hasUserToggled.value[feedId] = true
   isExpanded.value[feedId] = !isExpanded.value[feedId]
 }
 
@@ -345,12 +347,13 @@ const checkContentHeights = () => {
       const fullHeight = contentEl.scrollHeight
       if (fullHeight > collapsedContentHeight) {
         shouldShowExpandButton.value[feedId] = true
-        if (typeof isExpanded.value[feedId] === 'undefined') {
+        if (!hasUserToggled.value[feedId]) {
           isExpanded.value[feedId] = false
         }
       } else {
         shouldShowExpandButton.value[feedId] = false
         isExpanded.value[feedId] = true
+        hasUserToggled.value[feedId] = false
       }
     })
   })
@@ -359,6 +362,9 @@ const checkContentHeights = () => {
 const applyFeedItems = (items: FeedItem[]) => {
   const sortedItems = sortFeedItems(items)
   allItems.value = typeof maxItems.value === 'number' ? sortedItems.slice(0, maxItems.value) : sortedItems
+  isExpanded.value = {}
+  hasUserToggled.value = {}
+  shouldShowExpandButton.value = {}
   clampPage()
   emit('count-change', allItems.value.length)
   deferMeasure()
@@ -444,12 +450,37 @@ const loadFeed = async () => {
   }
 }
 
-const formatDate = (s: string) => {
-  const text = String(s || '').trim()
-  if (!text) return '-'
-  const d = new Date(text)
-  if (Number.isNaN(d.getTime())) return text
-  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`
+const shanghaiDateTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false
+})
+
+const parseFeedDate = (item: FeedItem) => {
+  const ts = Number(item?.timestamp || 0)
+  if (Number.isFinite(ts) && ts > 0) {
+    return new Date(ts * 1000)
+  }
+  const text = String(item?.publishedAt || '').trim()
+  if (!text) return null
+  const hasTimezone = /(?:Z|[+\-]\d{2}:?\d{2})$/i.test(text)
+  const normalized = hasTimezone ? text : `${text.replace(' ', 'T')}Z`
+  const d = new Date(normalized)
+  if (Number.isNaN(d.getTime())) return null
+  return d
+}
+
+const formatDate = (item: FeedItem) => {
+  const d = parseFeedDate(item)
+  if (!d) return String(item?.publishedAt || '').trim() || '-'
+  const parts = shanghaiDateTimeFormatter.formatToParts(d)
+  const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || ''
+  return `${pick('year')}/${pick('month')}/${pick('day')} ${pick('hour')}:${pick('minute')}:${pick('second')}`
 }
 
 const getLinkHost = (url: string) => {

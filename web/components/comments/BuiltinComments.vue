@@ -363,6 +363,23 @@ const submit = async () => {
   }
 }
 
+const shanghaiDateTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false
+})
+
+const shanghaiMonthDayFormatter = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai',
+  month: 'numeric',
+  day: 'numeric'
+})
+
 const formatDate = (s: string) => {
   const d = new Date(s)
   const now = new Date()
@@ -376,14 +393,17 @@ const formatDate = (s: string) => {
   if (h < 24) return `${h}小时前`
   if (day < 30) return `${day}天前`
   if (mon < 12) return `${mon}个月前`
-  return d.toLocaleDateString()
+  const parts = shanghaiDateTimeFormatter.formatToParts(d)
+  const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || ''
+  return `${pick('year')}/${pick('month')}/${pick('day')} ${pick('hour')}:${pick('minute')}:${pick('second')}`
 }
 
 const formatDateMD = (s: string) => {
   const d = new Date(s)
-  const m = d.getMonth() + 1
-  const day = d.getDate()
-  return `${m}月${day}日`
+  const parts = shanghaiMonthDayFormatter.formatToParts(d)
+  const month = parts.find((part) => part.type === 'month')?.value || ''
+  const day = parts.find((part) => part.type === 'day')?.value || ''
+  return `${month}月${day}日`
 }
 
 const safeURL = (s: string) => {

@@ -904,6 +904,23 @@ const pinnedTopItems = ref<any[]>([]);
     }
   };
 
+const shanghaiDateTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false
+})
+
+const formatShanghaiDateTime = (date: Date) => {
+  const parts = shanghaiDateTimeFormatter.formatToParts(date)
+  const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || ''
+  return `${pick('year')}/${pick('month')}/${pick('day')} ${pick('hour')}:${pick('minute')}:${pick('second')}`
+}
+
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
   const now = new Date();
@@ -922,7 +939,7 @@ const formatDate = (dateString: string) => {
   } else if (diffInDays < 3) {
     return `${diffInDays}天前`;
   } else {
-    return date.toLocaleString();
+    return formatShanghaiDateTime(date);
   }
 };
 // 添加展开状态管理

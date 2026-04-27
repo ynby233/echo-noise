@@ -2706,6 +2706,30 @@ html.dark .search-card { background: var(--home-surface-dark); color: #fff; bord
   .hero-tab-icon { width: 13px; height: 13px; }
 }
 .hero-tabs::-webkit-scrollbar { display: none; }
+.hero-tabs {
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+}
+.hero-tab {
+  scroll-snap-align: center;
+}
+@media (max-width: 768px) {
+  .hero-tabs {
+    gap: 1px;
+    padding: 3px;
+    width: max-content;
+    max-width: calc(100% - 28px);
+  }
+  .hero-tab {
+    padding: 7px 10px;
+    gap: 2px;
+    font-size: 0.84rem;
+  }
+  .hero-tab-icon {
+    width: 13px;
+    height: 13px;
+  }
+}
 .theme-default { --accent: #ff8c3a }
 .theme-mint { --accent: #3bb273 }
 .theme-rose { --accent: #e85d75 }

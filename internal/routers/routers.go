@@ -173,6 +173,7 @@ func SetupRouter() *gin.Engine {
 	// 友链申请（公开）
 	api.POST("/friend-links/apply", controllers.SubmitFriendLinkApply)
 	api.GET("/douyin/resolve", controllers.ResolveDouyinShortURL)
+	api.GET("/douyin/play", controllers.ProxyDouyinVideo)
 
 	// 需要鉴权的路由
 	authRoutes := api.Group("")
