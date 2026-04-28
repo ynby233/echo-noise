@@ -18,7 +18,10 @@
   },
   "permissions": [
     "storage",
-    "activeTab"
+    "activeTab",
+    "contextMenus",
+    "scripting",
+    "tabs"
   ],
   "host_permissions": [
     "<all_urls>"
