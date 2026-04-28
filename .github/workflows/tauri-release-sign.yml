@@ -694,15 +694,38 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -f mobile/android/app/libs/backend.aar
-          unzip -l mobile/android/app/libs/backend.aar | grep -E "Mobilebackend.class|Backend.class" >/dev/null
-          test -f mobile/android/app/src/main/java/cn/noisework/saynote/ServerStarter.java
-          grep -q "ServerStarter.start(this);" mobile/android/app/src/main/java/cn/noisework/saynote/MainActivity.java
-          test -f mobile/android/app/src/main/assets/data/noise.db
-          test -f mobile/android/app/src/main/assets/public/index.html
+          AAR="mobile/android/app/libs/backend.aar"
+          MAIN_JAVA="mobile/android/app/src/main/java/cn/noisework/saynote/MainActivity.java"
+          MAIN_KT="mobile/android/app/src/main/java/cn/noisework/saynote/MainActivity.kt"
+          STARTER="mobile/android/app/src/main/java/cn/noisework/saynote/ServerStarter.java"
+
+          [ -f "$AAR" ] || (echo "ERROR: backend.aar missing at $AAR" && exit 1)
+          unzip -l "$AAR" | grep -E "Mobilebackend.class|Backend.class" >/dev/null || (echo "ERROR: backend.aar does not contain mobile backend class" && exit 1)
+
+          main_file=""
+          if [ -f "$MAIN_JAVA" ]; then
+            main_file="$MAIN_JAVA"
+          elif [ -f "$MAIN_KT" ]; then
+            main_file="$MAIN_KT"
+          else
+            echo "ERROR: MainActivity not found (.java/.kt)"
+            exit 1
+          fi
+
+          # Accept either bootstrap style:
+          # 1) ServerStarter.start(this)
+          # 2) Direct Mobilebackend.start(filesDir)
+          if [ -f "$STARTER" ]; then
+            grep -Eq "ServerStarter\.start\(this\)" "$main_file" || grep -Eq "Mobilebackend\.start\(" "$main_file" || (echo "ERROR: backend start call missing in $main_file" && sed -n '1,220p' "$main_file" && exit 1)
+          else
+            grep -Eq "Mobilebackend\.start\(" "$main_file" || (echo "ERROR: ServerStarter.java missing and direct Mobilebackend.start not found in $main_file" && sed -n '1,220p' "$main_file" && exit 1)
+          fi
+
+          [ -f mobile/android/app/src/main/assets/data/noise.db ] || (echo "ERROR: missing asset data/noise.db" && exit 1)
+          [ -f mobile/android/app/src/main/assets/public/index.html ] || (echo "ERROR: missing web asset public/index.html" && exit 1)
           APK_CANDIDATE="${APK_PATH:-$(find mobile/android/app/build/outputs/apk/release -name '*.apk' | head -n1)}"
-          [ -n "$APK_CANDIDATE" ] && [ -f "$APK_CANDIDATE" ]
-          unzip -l "$APK_CANDIDATE" | grep -E "classes.dex" >/dev/null
+          [ -n "$APK_CANDIDATE" ] && [ -f "$APK_CANDIDATE" ] || (echo "ERROR: apk candidate not found (APK_PATH=$APK_PATH)" && exit 1)
+          unzip -l "$APK_CANDIDATE" | grep -E "classes.dex" >/dev/null || (echo "ERROR: apk missing classes.dex: $APK_CANDIDATE" && exit 1)
       - name: Zipalign APK
         if: env.MOBILE_READY == 'true'
         run: |
