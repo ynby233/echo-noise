@@ -40,7 +40,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build-matrix:
     needs: create_release
-    continue-on-error: true
+    continue-on-error: false
     strategy:
       fail-fast: false
       matrix:
@@ -73,7 +73,65 @@ jobs:
           REF_TAG: ${{ github.ref_name }}
           SIGNING_IDENTITY: ${{ secrets.MAC_SIGNING_IDENTITY }}
         run: |
-          node -e "const fs=require('fs'),p=require('path');const tag=(process.env.INPUT_TAG||process.env.REF_TAG||'');const ver=tag.replace(/^v/i,'').replace(/^V/i,'');const id=process.env.SIGNING_IDENTITY||null;const sdir=p.join('desktop','tauri','src-tauri');const conf=p.join(sdir,'tauri.conf.json');fs.mkdirSync(sdir,{recursive:true});let obj;if(fs.existsSync(conf)){try{obj=JSON.parse(fs.readFileSync(conf,'utf8'))}catch(e){obj=null}}if(!obj){obj={\"$schema\":\"https://schema.tauri.app/config/2\",productName:'说说笔记',version:ver||'0.0.0',identifier:'cn.noisework.saynote',build:{devUrl:'http://localhost:1314',frontendDist:'../dist'},app:{windows:[{title:'说说笔记',width:1280,height:800}]},bundle:{active:true,targets:['dmg','nsis'],icon:['icons/icon.ico','icons/icon-128.png','icons/icon-256.png','icons/icon-512.png'],resources:['icons/favicon.svg','public','data/noise.db','config'],externalBin:['bin/server','bin/ffmpeg'],windows:{nsis:{}},macOS:{hardenedRuntime:!!id,minimumSystemVersion:'10.13',signingIdentity:id}},plugins:{updater:{active:false}}}};obj.version=ver||obj.version||'0.0.0';obj.bundle=obj.bundle||{};obj.bundle.externalBin=Array.from(new Set([...(obj.bundle.externalBin||[]), 'bin/server','bin/ffmpeg']));obj.bundle.macOS=obj.bundle.macOS||{};obj.bundle.macOS.signingIdentity=id;obj.bundle.macOS.hardenedRuntime=!!id;if(!obj.build)obj.build={};obj.build.frontendDist=obj.build.frontendDist||'../dist';fs.writeFileSync(conf,JSON.stringify(obj,null,2));console.log('Version set',{tag,ver,conf,id});"
+          node <<'NODE'
+          const fs = require('fs')
+          const p = require('path')
+          const tag = (process.env.INPUT_TAG || process.env.REF_TAG || '')
+          const raw = tag.replace(/^v/i, '').replace(/^V/i, '').trim()
+          const toSemver = (v) => {
+            const m = v.match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:[-+].*)?$/)
+            if (!m) return '0.0.0'
+            const major = m[1]
+            const minor = m[2] || '0'
+            const patch = m[3] || '0'
+            return `${major}.${minor}.${patch}`
+          }
+          const ver = toSemver(raw)
+          const id = process.env.SIGNING_IDENTITY || null
+          const sdir = p.join('desktop', 'tauri', 'src-tauri')
+          const conf = p.join(sdir, 'tauri.conf.json')
+
+          fs.mkdirSync(sdir, { recursive: true })
+          let obj
+          if (fs.existsSync(conf)) {
+            try {
+              obj = JSON.parse(fs.readFileSync(conf, 'utf8'))
+            } catch {
+              obj = null
+            }
+          }
+          if (!obj) {
+            obj = {
+              $schema: 'https://schema.tauri.app/config/2',
+              productName: '说说笔记',
+              version: ver || '0.0.0',
+              identifier: 'cn.noisework.saynote',
+              build: { devUrl: 'http://localhost:1314', frontendDist: '../dist' },
+              app: { windows: [{ title: '说说笔记', width: 1280, height: 800 }] },
+              bundle: {
+                active: true,
+                targets: ['dmg', 'nsis'],
+                icon: ['icons/icon.ico', 'icons/icon-128.png', 'icons/icon-256.png', 'icons/icon-512.png'],
+                resources: ['icons/favicon.svg', 'public', 'data/noise.db', 'config'],
+                externalBin: ['bin/server', 'bin/ffmpeg'],
+                windows: { nsis: {} },
+                macOS: { hardenedRuntime: !!id, minimumSystemVersion: '10.13', signingIdentity: id }
+              },
+              plugins: { updater: { active: false } }
+            }
+          }
+
+          obj.version = ver || obj.version || '0.0.0'
+          obj.bundle = obj.bundle || {}
+          obj.bundle.externalBin = Array.from(new Set([...(obj.bundle.externalBin || []), 'bin/server', 'bin/ffmpeg']))
+          obj.bundle.macOS = obj.bundle.macOS || {}
+          obj.bundle.macOS.signingIdentity = id
+          obj.bundle.macOS.hardenedRuntime = !!id
+          obj.build = obj.build || {}
+          obj.build.frontendDist = obj.build.frontendDist || '../dist'
+          fs.writeFileSync(conf, JSON.stringify(obj, null, 2))
+          console.log('Version set', { tag, raw, ver, conf, id })
+          NODE
           echo "DESKTOP_READY=true" >> "$GITHUB_ENV"
       - name: Bootstrap Tauri Rust skeleton if missing
         shell: bash
