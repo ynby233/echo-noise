@@ -38,7 +38,7 @@
 
 ## 2026更新状态
 
-- 优化浏览器扩展，增加一键识别当前网站信息并写入笔记
+- 优化浏览器扩展，增加右键一键识别当前网站信息并写入笔记
 - 重新优化后台入口及配置页面同时增加“配色”主题
 - 新增“说说笔记”独立 skill 包，支持api和mcp两种模式使用
 - 增加信息流页面，支持rss源、Echo源、说说笔记源、memos源
@@ -2013,7 +2013,7 @@ isSuspiciousPath() 里的任意一条规则，就会：
 
 命中规则包括（举例）：
 
-- **敏感文件/目录**：`/.env`、`/.git`、`/.svn`、`/.hg`、`/.DS_Store`
+- **敏感文件/目录**：`/.env`、`/.git`、`/.svn`、`/.hg`
 - **源码/配置目录**：`/internal`、`/config`、`/cmd`、`/pkg`、`/scripts`、`/vendor`、`/node_modules`
 - **容器/Go 依赖文件**：`/docker-compose.yml`、`/Dockerfile`、`/go.mod`、`/go.sum`
 - **常见 Web 扫描入口**：`/wp-admin`、`/wp-login.php`、`/xmlrpc.php`
