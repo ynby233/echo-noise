@@ -96,10 +96,7 @@ jobs:
         shell: powershell
         run: |
           choco install ffmpeg -y --no-progress
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+      - uses: dtolnay/rust-toolchain@stable
       - name: Build web and copy resources
         shell: bash
         if: env.DESKTOP_READY == 'true'
@@ -153,6 +150,37 @@ jobs:
         if: env.DESKTOP_READY == 'true'
         run: |
           bash desktop/tauri/build-sidecar.sh
+      - name: Normalize sidecar binaries
+        shell: bash
+        if: env.DESKTOP_READY == 'true'
+        env:
+          BUILD_OS: ${{ matrix.os }}
+        run: |
+          CONF="desktop/tauri/src-tauri/tauri.conf.json"
+          if [ "$BUILD_OS" = "windows-latest" ]; then
+            SERVER_BIN="desktop/tauri/src-tauri/bin/server-x86_64-pc-windows-msvc.exe"
+            FFMPEG_BIN="desktop/tauri/src-tauri/bin/ffmpeg-x86_64-pc-windows-msvc.exe"
+          else
+            ARCH="$(uname -m)"
+            if [ "$ARCH" = "arm64" ]; then
+              SERVER_BIN="desktop/tauri/src-tauri/bin/server-aarch64-apple-darwin"
+              FFMPEG_BIN="desktop/tauri/src-tauri/bin/ffmpeg-aarch64-apple-darwin"
+            else
+              SERVER_BIN="desktop/tauri/src-tauri/bin/server-x86_64-apple-darwin"
+              FFMPEG_BIN="desktop/tauri/src-tauri/bin/ffmpeg-x86_64-apple-darwin"
+            fi
+          fi
+
+          if [ ! -f "$SERVER_BIN" ]; then
+            echo "ERROR: required sidecar missing: $SERVER_BIN"
+            find desktop/tauri/src-tauri/bin -maxdepth 1 -type f -print || true
+            exit 1
+          fi
+
+          if [ ! -f "$FFMPEG_BIN" ]; then
+            echo "ffmpeg sidecar not found, remove optional ffmpeg from externalBin"
+            node -e "const fs=require('fs');const p='$CONF';const c=JSON.parse(fs.readFileSync(p,'utf8'));const b=(c.bundle=c.bundle||{});const ex=Array.isArray(b.externalBin)?b.externalBin:[];b.externalBin=ex.filter(x=>!String(x).includes('ffmpeg'));fs.writeFileSync(p,JSON.stringify(c,null,2));console.log('externalBin =>',b.externalBin);"
+          fi
       - name: Install Tauri deps
         shell: bash
         if: env.DESKTOP_READY == 'true'
@@ -207,7 +235,7 @@ jobs:
         if: env.DESKTOP_READY == 'true'
         run: |
           cd desktop/tauri
-          npx @tauri-apps/cli@latest build --verbose
+          npx tauri build --verbose
       - name: Upload DMG (macos)
         if: env.DESKTOP_READY == 'true' && matrix.os == 'macos-latest'
         shell: bash
@@ -253,7 +281,7 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
         run: |
-          find src-tauri/target/**/release/bundle/dmg -name '*.dmg' -print
+          find desktop/tauri/src-tauri/target -name '*.dmg' -print
           # Notarize using notarytool if API key is available (placeholder)
           if [ -f AuthKey.p8 ]; then
             echo "Notarization step configured via APPLE_API_KEY_ID/APPLE_API_ISSUER_ID"

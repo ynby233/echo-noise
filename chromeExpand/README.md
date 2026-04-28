@@ -25,6 +25,14 @@
 4. 选择本项目的 `chromeExpand` 目录，点击「打包扩展程序」
 5. 生成的 `.crx` 文件可以直接拖拽到Chrome浏览器安装
 
+### 本地生成 ZIP 分发包
+
+1. 在项目根目录执行：
+   `bash chromeExpand/package-zip.sh`
+2. 脚本会自动读取 `manifest.json` 版本号并生成：
+   `chromeExpand/dist/saynote-browser-extension-v<version>.zip`
+3. 将该 zip 分发给用户后，用户可在扩展管理页使用「加载已解压的扩展程序」进行安装（先解压 zip）
+
 ## 使用方法
 
 1. 点击Chrome工具栏中的图标打开插件
