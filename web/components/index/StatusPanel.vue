@@ -13,7 +13,7 @@
             <div class="text-xs" :class="theme.mutedText">总笔记 {{ userStore?.status?.total_messages || 0 }}</div>
           </div>
         </div>
-        <nav ref="sidebarNavRef" class="flex-1 overflow-y-auto px-2 py-3 space-y-2">
+        <nav class="flex-1 overflow-y-auto px-2 py-3 space-y-2">
           <div v-for="group in adminNavGroups" :key="group.key" class="admin-nav-group">
             <div class="admin-nav-group-btn admin-nav-group-btn-open cursor-pointer" :class="[sidebarCollapsed ? 'justify-center' : '']" @click="onNavGroupClick(group)">
               <span class="flex items-center gap-2">
@@ -27,7 +27,6 @@
                 :key="item.key"
                 class="admin-nav-item"
                 :class="[activeSection === item.key ? 'admin-nav-item-active' : '']"
-                :data-nav-key="item.key"
                 @click="setActive(item.key, $event)"
               >
                 <span class="flex items-center gap-2">
@@ -57,8 +56,8 @@
             <span class="font-semibold truncate">系统管理面板</span>
           </div>
           <div class="flex items-center gap-1.5 shrink-0">
-            <UButton icon="i-heroicons-home" size="xs" :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelTheme === 'light' ? 'gray' : (panelTheme === 'midnight' ? 'blue' : (panelTheme === 'slate' ? 'indigo' : 'gray'))" class="shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90 sm:hidden" @click="$router.push('/')" />
-            <UButton :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelTheme === 'light' ? 'gray' : (panelTheme === 'midnight' ? 'blue' : (panelTheme === 'slate' ? 'indigo' : 'gray'))" size="xs" class="admin-sm-inline-flex shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90" @click="$router.push('/')">返回首页</UButton>
+            <UButton icon="i-heroicons-home" size="xs" :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelThemeButtonColor" class="shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90 sm:hidden" @click="$router.push('/')" />
+            <UButton :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelThemeButtonColor" size="xs" class="admin-sm-inline-flex shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90" @click="$router.push('/')">返回首页</UButton>
             <UButton v-if="isLogin" icon="i-heroicons-power" color="red" variant="solid" size="xs" class="sm:hidden" @click="handleLogout" />
             <UButton v-if="isLogin" icon="i-heroicons-power" color="red" variant="solid" size="xs" class="admin-sm-inline-flex" @click="handleLogout">退出登录</UButton>
           </div>
@@ -68,7 +67,6 @@
           <div class="min-w-0 flex items-center">
             <button class="admin-desktop-toggle-btn" :class="headerBtnCls" :title="desktopSidebarToggleText" :aria-label="desktopSidebarToggleText" @click="sidebarCollapsed = !sidebarCollapsed">
               <UIcon :name="desktopSidebarToggleIcon" class="w-5 h-5 shrink-0" />
-              <span class="admin-desktop-toggle-text">{{ desktopSidebarToggleText }}</span>
             </button>
             <div class="mx-4 h-8 w-px opacity-70" :class="theme.border"></div>
             <div class="min-w-0">
@@ -77,7 +75,7 @@
             </div>
           </div>
           <div class="flex items-center gap-2 shrink-0">
-            <UButton :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelTheme === 'light' ? 'gray' : (panelTheme === 'midnight' ? 'blue' : (panelTheme === 'slate' ? 'indigo' : 'gray'))" class="shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90" @click="$router.push('/')">返回首页</UButton>
+            <UButton :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelThemeButtonColor" class="shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90" @click="$router.push('/')">返回首页</UButton>
             <UButton v-if="isLogin" icon="i-heroicons-power" color="red" variant="solid" class="shadow" @click="handleLogout">退出登录</UButton>
           </div>
         </div>
@@ -85,7 +83,7 @@
           <div class="col-span-12">
             <h1 class="text-xl md:text-2xl font-bold text-left md:hidden" :class="theme.text">系统管理面板</h1>
           </div>
-          <div class="col-span-12">
+          <div v-if="isSectionVisible('dashboard')" class="col-span-12">
             <div :class="adminPanelCardClass">
               <div class="px-4 py-3 flex items-center justify-between">
                 <div class="flex items-center gap-4">
@@ -97,7 +95,7 @@
                       type="button"
                       class="theme-dot-btn"
                       :class="[panelTheme === opt.value ? 'theme-dot-btn-active' : '']"
-                      :style="{ background: opt.value === 'dark' ? '#111827' : (opt.value === 'midnight' ? '#1e1b4b' : (opt.value === 'slate' ? '#334155' : '#e2e8f0')) }"
+                      :style="{ background: panelThemeDotColorMap[opt.value] }"
                       @click="panelTheme = opt.value"
                     />
                   </div>
@@ -109,7 +107,7 @@
               </div>
             </div>
           </div>
-          <div id="dashboard-section" class="col-span-12">
+          <div id="dashboard-section" v-if="isSectionVisible('dashboard')" class="col-span-12">
             <div :class="adminShellCardClass">
               <div :class="adminSectionHeaderClass">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -187,7 +185,7 @@
               </div>
             </div>
           </div>
-          <div id="system-section" class="col-span-12">
+          <div id="system-section" v-if="isSectionVisible('dashboard')" class="col-span-12">
             <div :class="adminShellCardClass">
               <div :class="adminSectionHeaderClass">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -209,7 +207,7 @@
           
           
 
-          <div id="user-section" class="col-span-12" v-if="isLogin">
+          <div id="user-section" class="col-span-12" v-if="isLogin && isSectionVisible('user')">
             <div :class="adminShellCardClass">
               <div :class="adminSectionHeaderClass">
                 <div class="font-semibold">用户信息配置</div>
@@ -380,7 +378,7 @@
             </div>
           </div>
 
-          <div id="site-section" v-if="isAdmin" class="col-span-12">
+          <div id="site-section" v-if="isAdmin && isSiteSectionPage" class="col-span-12">
           <div :class="adminShellCardClass">
             <div :class="adminSectionHeaderClass">
               <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -389,7 +387,7 @@
               </div>
             </div>
             <div class="px-4 pb-4 space-y-4">
-              <div :class="adminSubtleCardClass">
+              <div v-if="isSectionVisible('site')" :class="adminSubtleCardClass">
                 <div class="flex justify-between items-center mb-3">
                   <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-hand-thumb-up" class="w-4 h-4" /><span>系统欢迎组件</span></div>
                   <div class="flex items-center gap-2">
@@ -414,14 +412,14 @@
                 </div>
                 <div class="text-xs mt-2" :class="theme.mutedText">未登录时展示该组件；登录后显示当前用户的头像与签名</div>
               </div>
-              <div id="site-register-section" class="flex items-center rounded-lg p-3 justify-between" :class="theme.subtleBg">
+              <div id="site-register-section" v-if="isSectionVisible('site-register')" class="flex items-center rounded-lg p-3 justify-between" :class="theme.subtleBg">
                 <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-user-plus" class="w-4 h-4" /> <span>新用户注册</span></div>
                 <div class="flex items-center gap-4">
                   <UToggle v-model="registerEnabled" />
                   <UButton color="green" @click="saveRegisterConfig" class="shadow">保存</UButton>
                 </div>
                 </div>
-                <div id="site-pwa-section" class="rounded-lg p-4" :class="theme.subtleBg">
+                <div id="site-pwa-section" v-if="isSectionVisible('site-pwa')" class="rounded-lg p-4" :class="theme.subtleBg">
                   <div class="flex justify-between items-center mb-3">
                     <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-rocket-launch" class="w-4 h-4" /> <span>PWA 模式</span></div>
                     <div class="flex items-center gap-4">
@@ -444,21 +442,21 @@
   </div>
   </div>
                 </div>
-                <div id="site-github-card-section" class="flex flex-col sm:flex-row items-start sm:items-center rounded-lg p-3 justify-between gap-3 sm:gap-0" :class="theme.subtleBg">
+                <div id="site-github-card-section" v-if="isSectionVisible('site-github-card')" class="flex flex-col sm:flex-row items-start sm:items-center rounded-lg p-3 justify-between gap-3 sm:gap-0" :class="theme.subtleBg">
                   <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-mdi-github" class="w-4 h-4" /> <span>GitHub 链接卡片解析</span></div>
                   <div class="flex flex-wrap items-center gap-4">
                     <UToggle v-model="githubCardEnabled" />
                     <UButton color="green" @click="saveGithubCardConfig" class="shadow">保存</UButton>
                   </div>
                 </div>
-                <div id="site-announcement-section" class="flex flex-col sm:flex-row items-start sm:items-center rounded-lg p-3 justify-between gap-3 sm:gap-0" :class="theme.subtleBg">
+                <div id="site-announcement-section" v-if="isSectionVisible('site-announcement')" class="flex flex-col sm:flex-row items-start sm:items-center rounded-lg p-3 justify-between gap-3 sm:gap-0" :class="theme.subtleBg">
                   <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-megaphone" class="w-4 h-4" /> <span>公告栏开关</span></div>
                   <div class="flex flex-wrap items-center gap-4">
                     <UToggle v-model="frontendConfig.announcementEnabled" />
                     <UButton color="green" @click="saveConfigItem('announcementEnabled')" class="shadow">保存</UButton>
                   </div>
                 </div>
-                <div class="rounded-lg p-3 mt-3" :class="theme.subtleBg">
+                <div v-if="isSectionVisible('site-announcement')" class="rounded-lg p-3 mt-3" :class="theme.subtleBg">
                   <div class="text-sm mb-2" :class="theme.mutedText">公告栏文本</div>
                   <UTextarea v-model="frontendConfig.announcementText" placeholder="请输入公告内容" class="w-full mb-2" />
                   <div class="flex justify-end">
@@ -466,7 +464,7 @@
                   </div>
                 </div>
                 <div id="site-music-legacy-section" class="hidden" />
-                <div id="site-music-section" class="col-span-12 mt-4">
+                <div id="site-music-section" v-if="isSectionVisible('site-music')" class="col-span-12 mt-4">
                   <div :class="adminPanelCardClass">
                     <div :class="adminSectionHeaderClass">
                       <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -548,7 +546,7 @@
                     </div>
                   </div>
                 </div>
-                <div id="site-default-theme-section" class="rounded-lg p-3 space-y-3" :class="theme.subtleBg">
+                <div id="site-default-theme-section" v-if="isSectionVisible('site-default-theme')" class="rounded-lg p-3 space-y-3" :class="theme.subtleBg">
                   <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                     <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-swatch" class="w-4 h-4" /> <span>默认主题色</span></div>
                     <div class="flex flex-wrap items-center gap-4">
@@ -564,7 +562,7 @@
                     </div>
                   </div>
                 </div>
-                <div id="site-configs-section" class="space-y-4">
+                <div id="site-configs-section" v-if="isSectionVisible('site-configs')" class="space-y-4">
                 <div v-for="(label, key) in configLabels" :key="key" :class="adminSubtleCardClass">
                     <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-3">
                       <div class="space-y-1">
@@ -633,7 +631,7 @@
                   <UButton @click="resetConfig" variant="ghost" color="indigo">重置</UButton>
                   <UButton @click="saveConfig" color="primary" class="shadow">保存所有更改</UButton>
                 </div>
-                <div id="site-ads-section" class="col-span-12">
+                <div id="site-ads-section" v-if="isSectionVisible('site-ads')" class="col-span-12">
                   <div :class="adminPanelCardClass">
                     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                       <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -685,7 +683,7 @@
                     </div>
                   </div>
                 </div>
-                <div id="site-feed-section" class="col-span-12">
+                <div id="site-feed-section" v-if="isSectionVisible('site-feed')" class="col-span-12">
                   <div :class="adminPanelCardClass">
                     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                       <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -790,7 +788,7 @@
                     </div>
                   </div>
                 </div>
-                <div id="hitokoto-section" class="col-span-12">
+                <div id="hitokoto-section" v-if="isSectionVisible('hitokoto')" class="col-span-12">
                   <div :class="adminPanelCardClass">
                     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                       <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -809,7 +807,7 @@
                     </div>
                   </div>
                 </div>
-                <div id="life-countdown-section" class="col-span-12">
+                <div id="life-countdown-section" v-if="isSectionVisible('life-countdown')" class="col-span-12">
                   <div :class="adminPanelCardClass">
                     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                       <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -884,7 +882,7 @@
                     </div>
                   </div>
                 </div>
-                <div id="site-social-links-section" class="col-span-12">
+                <div id="site-social-links-section" v-if="isSectionVisible('site-social-links')" class="col-span-12">
                   <div :class="adminPanelCardClass">
                     <div :class="adminSectionHeaderClass">
                       <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -925,7 +923,7 @@
                     </div>
                   </div>
                 </div>
-                <div id="friend-links-section" class="col-span-12 mt-4">
+                <div id="friend-links-section" v-if="isSectionVisible('friend-links')" class="col-span-12 mt-4">
                   <div :class="adminPanelCardClass">
                     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                       <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -974,7 +972,7 @@
             </div>
           </div>
           <!-- 友链申请审核管理（管理员） -->
-          <div v-if="isAdmin" id="friend-links-audit" class="col-span-12 mt-4">
+          <div v-if="isAdmin && isSectionVisible('friend-links-audit')" id="friend-links-audit-section" class="col-span-12 mt-4">
             <div :class="adminPanelCardClass">
               <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -1009,7 +1007,7 @@
           </div>
           
           
-          <div id="comments-section" class="col-span-12" v-if="isAdmin">
+          <div id="comments-section" class="col-span-12" v-if="isAdmin && isSectionVisible('comments')">
             <div :class="adminPanelCardClass">
               <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-4 sm:gap-0">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -1100,7 +1098,7 @@
       
       <div class="mx-4 my-2 border-t" :class="theme.border"></div>
 
-          <div id="email-section" v-if="isAdmin" class="col-span-12">
+          <div id="email-section" v-if="isAdmin && isSectionVisible('email')" class="col-span-12">
             <div :class="adminPanelCardClass">
               <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -1160,7 +1158,7 @@
             </div>
           </div>
 
-          <div id="admin-users-section" v-if="isAdmin" class="col-span-12">
+          <div id="admin-users-section" v-if="isAdmin && isSectionVisible('admin-users')" class="col-span-12">
             <div :class="adminPanelCardClass">
               <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -1248,7 +1246,7 @@
             </UCard>
           </UModal>
 
-          <div id="notify-section" v-if="isAdmin" class="col-span-12">
+          <div id="notify-section" v-if="isAdmin && isSectionVisible('notify')" class="col-span-12">
             <div :class="adminShellCardClass">
               <div :class="adminSectionHeaderClass">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -1272,7 +1270,7 @@
           </div>
           
 
-          <div id="site-github-login-section" v-if="isAdmin" class="col-span-12">
+          <div id="site-github-login-section" v-if="isAdmin && isSectionVisible('site-github-login')" class="col-span-12">
             <div :class="adminShellCardClass">
               <div :class="adminSectionHeaderClass">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -1310,13 +1308,13 @@
             </div>
           </div>
 
-          <div id="attachments-section" v-if="isAdmin" class="col-span-12">
+          <div id="attachments-section" v-if="isAdmin && isSectionVisible('attachments')" class="col-span-12">
             <div :class="adminShellCardClass">
               <AttachmentManager :theme="theme" :is-cloud="attachmentStorageEnabled" />
             </div>
           </div>
 
-          <div id="attachment-storage-section" v-if="isAdmin" class="col-span-12">
+          <div id="attachment-storage-section" v-if="isAdmin && isSectionVisible('storage')" class="col-span-12">
             <div :class="adminShellCardClass">
               <div class="px-4 py-3 font-semibold flex items-center gap-2" :class="theme.text">
                 <UIcon name="i-heroicons-cloud" class="w-5 h-5 text-indigo-300" />
@@ -1401,7 +1399,7 @@
             </div>
           </div>
 
-          <div id="storage-section" v-if="isAdmin" class="col-span-12">
+          <div id="storage-section" v-if="isAdmin && isSectionVisible('storage')" class="col-span-12">
             <div :class="adminShellCardClass">
               <div class="px-4 py-3 font-semibold flex items-center gap-2" :class="theme.text">
                 <UIcon name="i-heroicons-cloud" class="w-5 h-5 text-indigo-300" />
@@ -1522,7 +1520,7 @@
             </div>
           </div>
 
-          <div id="db-section" v-if="isAdmin" class="col-span-12">
+          <div id="db-section" v-if="isAdmin && isSectionVisible('db')" class="col-span-12">
             <div :class="adminShellCardClass">
               <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-4 py-3">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -1549,11 +1547,19 @@
                     <UButton color="blue" variant="solid" :disabled="!storageEnabled || !storageConfig.publicBaseURL" @click="restoreFromConfiguredCloud">按配置恢复</UButton>
                   </div>
                 </div>
-                <div id="version-section" v-if="isAdmin" :class="adminSubtleCardClass">
-                  <div class="font-semibold mb-2 flex items-center gap-2" :class="theme.text">
-                    <UIcon name="i-heroicons-information-circle" class="w-5 h-5 text-indigo-300" />
-                    <span>版本与更新</span>
-                  </div>
+              </div>
+            </div>
+          </div>
+          <div id="version-section" v-if="isAdmin && isSectionVisible('version')" class="col-span-12">
+            <div :class="adminShellCardClass">
+              <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-4 py-3">
+                <div class="font-semibold mb-0 flex items-center gap-2" :class="theme.text">
+                  <UIcon name="i-heroicons-information-circle" class="w-5 h-5 text-indigo-300" />
+                  <span>版本与更新</span>
+                </div>
+              </div>
+              <div class="px-4 pb-4 space-y-4">
+                <div :class="adminSubtleCardClass">
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <div class="text-sm" :class="theme.mutedText">当前版本</div>
@@ -1581,7 +1587,7 @@
             </div>
           </div>
 
-          <div id="security-section" v-if="isAdmin" class="col-span-12">
+          <div id="security-section" v-if="isAdmin && isSectionVisible('security')" class="col-span-12">
             <div :class="adminShellCardClass">
               <div :class="adminSectionHeaderClass">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -1750,7 +1756,7 @@
       <div v-if="showBottomBar" class="admin-desktop-flex fixed bottom-0 left-0 right-0 z-50 border-t px-3 py-3 justify-between items-center backdrop-blur-md shadow-xl transition-[left] duration-200" :class="[theme.bottomBg, theme.border, bottomBarClass]">
         <UButton
           icon="i-heroicons-arrow-left"
-          :color="panelTheme === 'light' ? 'gray' : (panelTheme === 'midnight' ? 'blue' : (panelTheme === 'slate' ? 'indigo' : 'gray'))"
+          :color="panelThemeButtonColor"
           :variant="panelTheme === 'light' ? 'soft' : 'solid'"
           @click="$router.push('/')"
           class="shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90"
@@ -1853,12 +1859,12 @@ const formatShanghai = (s: string) => {
   } catch { return s.replace('T', ' ').replace('Z', '') }
 }
  
-const cardCls = 'rounded-2xl border shadow-2xl'
+const cardCls = 'rounded-xl border shadow-sm'
 type AdminSectionKey =
-  'dashboard' | 'system' | 'user' | 'site' | 'notify' | 'attachments' | 'attachment-storage' | 'db' | 'version' | 'security' |
+  'dashboard' | 'user' | 'site' | 'notify' | 'attachments' | 'db' | 'version' | 'security' |
   'site-register' | 'site-pwa' | 'site-github-card' | 'site-github-login' | 'site-announcement' | 'site-music' |
   'site-default-theme' | 'site-social-links' | 'site-ads' | 'site-feed' | 'hitokoto' | 'life-countdown' |
-  'friend-links' | 'site-configs' | 'comments' | 'email' | 'admin-users' |
+  'friend-links' | 'friend-links-audit' | 'site-configs' | 'comments' | 'email' | 'admin-users' |
   'storage'
 const activeSection = ref<AdminSectionKey>('dashboard')
 const adminNavGroups = computed(() => {
@@ -1869,7 +1875,6 @@ const adminNavGroups = computed(() => {
       icon: 'i-heroicons-home',
       items: [
         { key: 'dashboard', label: '仪表盘', icon: 'i-heroicons-squares-2x2' },
-        { key: 'system', label: '系统信息', icon: 'i-heroicons-cpu-chip' },
         { key: 'user', label: '用户信息', icon: 'i-heroicons-user-circle' }
       ] as Array<{ key: AdminSectionKey, label: string, icon: string }>
     },
@@ -1897,6 +1902,7 @@ const adminNavGroups = computed(() => {
       icon: 'i-heroicons-puzzle-piece',
       items: [
         { key: 'friend-links', label: '友情链接', icon: 'i-heroicons-users' },
+        { key: 'friend-links-audit', label: '友链申请审核', icon: 'i-heroicons-check-badge' },
         { key: 'comments', label: '评论系统', icon: 'i-heroicons-chat-bubble-left-right' },
         { key: 'site-github-card', label: 'GitHub 卡片', icon: 'i-mdi-github' },
         { key: 'site-github-login', label: 'GitHub 登录', icon: 'i-mdi-github' },
@@ -1920,7 +1926,6 @@ const adminNavGroups = computed(() => {
       icon: 'i-heroicons-circle-stack',
       items: [
         { key: 'attachments', label: '附件管理', icon: 'i-heroicons-paper-clip' },
-        { key: 'attachment-storage', label: '附件存储', icon: 'i-heroicons-cloud-arrow-up' },
         { key: 'storage', label: '存储方案', icon: 'i-heroicons-cloud' },
         { key: 'db', label: '数据库管理', icon: 'i-heroicons-circle-stack' },
         { key: 'version', label: '版本与更新', icon: 'i-heroicons-arrow-path' }
@@ -1956,12 +1961,24 @@ const sectionGroupMap = computed(() => {
   }
   return map
 })
-const normalizeSection = (key: AdminSectionKey): AdminSectionKey => {
-  if (['site-register', 'site-pwa', 'site-github-card', 'site-announcement', 'site-music', 'site-default-theme', 'site-social-links', 'site-configs', 'site-ads', 'site-feed', 'hitokoto', 'life-countdown', 'friend-links'].includes(key)) return 'site'
-  if (key === 'version') return 'db'
-  return key
-}
-const isSectionVisible = (key: AdminSectionKey) => normalizeSection(activeSection.value) === normalizeSection(key)
+const siteSectionKeys: AdminSectionKey[] = [
+  'site',
+  'site-register',
+  'site-pwa',
+  'site-github-card',
+  'site-announcement',
+  'site-music',
+  'site-default-theme',
+  'site-social-links',
+  'site-configs',
+  'site-ads',
+  'site-feed',
+  'hitokoto',
+  'life-countdown',
+  'friend-links'
+]
+const isSectionVisible = (key: AdminSectionKey) => activeSection.value === key
+const isSiteSectionPage = computed(() => siteSectionKeys.includes(activeSection.value))
 const openOnlyGroup = (groupKey: string) => {
   Object.keys(navGroupOpen).forEach((key) => { navGroupOpen[key] = true })
   if (typeof window !== 'undefined') {
@@ -2030,10 +2047,11 @@ const sidebarCollapsed = ref(
 const desktopSidebarToggleIcon = computed(() => (sidebarCollapsed.value ? 'i-mdi-chevron-double-right' : 'i-mdi-chevron-double-left'))
 const desktopSidebarToggleText = computed(() => (sidebarCollapsed.value ? '展开导航' : '收起导航'))
 const adminThemeStorageKey = 'adminTheme'
-const isValidAdminTheme = (value: unknown): value is 'dark' | 'midnight' | 'slate' | 'light' => (
-  value === 'dark' || value === 'midnight' || value === 'slate' || value === 'light'
+type AdminTheme = 'dark' | 'midnight' | 'forest' | 'plum' | 'light'
+const isValidAdminTheme = (value: unknown): value is AdminTheme => (
+  value === 'dark' || value === 'midnight' || value === 'forest' || value === 'plum' || value === 'light'
 )
-const resolveInitialAdminTheme = (): 'dark' | 'midnight' | 'slate' | 'light' => {
+const resolveInitialAdminTheme = (): AdminTheme => {
   if (typeof window === 'undefined') return 'light'
   try {
     const savedTheme = localStorage.getItem(adminThemeStorageKey)
@@ -2061,9 +2079,22 @@ watch(sidebarCollapsed, (v) => {
   if (typeof window === 'undefined') return
   localStorage.setItem('adminSidebarCollapsed', v ? '1' : '0')
 })
-const panelTheme = ref<'dark' | 'midnight' | 'slate' | 'light'>(
+const panelTheme = ref<AdminTheme>(
   resolveInitialAdminTheme()
 )
+const panelThemeDotColorMap: Record<AdminTheme, string> = {
+  dark: '#111827',
+  midnight: '#1e1b4b',
+  forest: '#0f3d2e',
+  plum: '#4c1d95',
+  light: '#e2e8f0',
+}
+const panelThemeButtonColor = computed(() => {
+  if (panelTheme.value === 'midnight') return 'blue'
+  if (panelTheme.value === 'forest') return 'green'
+  if (panelTheme.value === 'plum') return 'violet'
+  return 'gray'
+})
 const prevRootDark = ref<boolean | null>(null)
 const baseApi = useRuntimeConfig().public.baseApi || '/api'
 const localPreview = ref('')
@@ -2289,34 +2320,20 @@ const avatarSrc = computed(() => {
 })
 
 const setActive = async (name: AdminSectionKey, evt?: MouseEvent) => {
-  navSyncLockedUntil = Date.now() + 700
   activeSection.value = name
   const groupKey = sectionGroupMap.value[name]
   if (groupKey) openOnlyGroup(groupKey)
-  if (name === 'attachment-storage') {
+  if (name === 'storage') {
     loadAttachmentStorageConfig()
+    loadStorageConfig()
   }
-  await nextTick()
-  const exactId = `${name}-section`
-  const normalizedId = `${normalizeSection(name)}-section`
-  const id = document.getElementById(exactId) ? exactId : normalizedId
-  const el = document.getElementById(id)
-  if (!el) return
   try {
     const main = adminMain.value
-    if (main) {
-      const mainTop = main.getBoundingClientRect().top
-      const elTop = (el as HTMLElement).getBoundingClientRect().top
-      const fixedOffset = 16
-      const nextTop = Math.max(0, main.scrollTop + (elTop - mainTop) - fixedOffset)
-      main.scrollTo({ top: nextTop, behavior: 'smooth' })
-    } else {
-      ;(el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' })
-    }
+    main?.scrollTo({ top: 0, behavior: 'auto' })
     try {
       if (typeof window !== 'undefined') {
         const url = new URL(window.location.href)
-        url.hash = id
+        url.hash = `${name}-section`
         window.history.replaceState({}, document.title, url.toString())
       }
     } catch {}
@@ -2327,7 +2344,10 @@ const setActive = async (name: AdminSectionKey, evt?: MouseEvent) => {
 const resolveSectionFromHash = (rawHash: string): AdminSectionKey | null => {
   const decoded = decodeURIComponent(String(rawHash || '')).replace(/^#/, '').trim()
   if (!decoded) return null
-  const sectionKey = decoded.endsWith('-section') ? decoded.slice(0, -8) : decoded
+  let sectionKey = decoded.endsWith('-section') ? decoded.slice(0, -8) : decoded
+  // 兼容历史 hash：面板外观/系统信息已并入仪表盘
+  if (sectionKey === 'panel-theme' || sectionKey === 'system') sectionKey = 'dashboard'
+  if (sectionKey === 'attachment-storage') sectionKey = 'storage'
   const allowed = new Set<AdminSectionKey>()
   for (const group of adminNavGroups.value) {
     for (const item of group.items) {
@@ -2335,8 +2355,7 @@ const resolveSectionFromHash = (rawHash: string): AdminSectionKey | null => {
     }
   }
   if (allowed.has(sectionKey as AdminSectionKey)) return sectionKey as AdminSectionKey
-  const alias = (Object.keys(sectionGroupMap.value) as AdminSectionKey[]).find((key) => normalizeSection(key) === sectionKey)
-  return alias && allowed.has(alias) ? alias : null
+  return null
 }
 
 const restoreSectionFromHash = async () => {
@@ -2448,136 +2467,115 @@ onUnmounted(() => {
 
 const headerCompact = ref(false)
 const adminMain = ref<HTMLElement | null>(null)
-const sidebarNavRef = ref<HTMLElement | null>(null)
 const headerBtnCls = computed(() => panelTheme.value === 'light' ? 'bg-gray-100 hover:bg-gray-200 text-slate-900' : 'bg-slate-800/70 hover:bg-slate-700/70 text-white')
 let adminScrollHandler: any = null
-let navSyncLockedUntil = 0
-const syncSidebarActiveItem = () => {
-  const nav = sidebarNavRef.value
-  if (!nav) return
-  const target = nav.querySelector(`[data-nav-key="${activeSection.value}"]`) as HTMLElement | null
-  target?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-}
-const syncActiveByScroll = () => {
-  const main = adminMain.value
-  if (!main) return
-  if (Date.now() < navSyncLockedUntil) return
-  const topThreshold = 140
-  let candidate: AdminSectionKey | null = null
-  let minPositive = Number.POSITIVE_INFINITY
-  const keys = Object.keys(sectionGroupMap.value) as AdminSectionKey[]
-  for (const key of keys) {
-    const el = document.getElementById(`${key}-section`) as HTMLElement | null
-    if (!el) continue
-    if (el.offsetParent === null) continue
-    const top = el.getBoundingClientRect().top - main.getBoundingClientRect().top
-    if (top <= topThreshold) candidate = key
-    const abs = Math.abs(top - topThreshold)
-    if (abs < minPositive) minPositive = abs
-    if (!candidate && abs === minPositive) candidate = key
-  }
-  if (!candidate || candidate === activeSection.value) return
-  activeSection.value = candidate
-  const groupKey = sectionGroupMap.value[candidate]
-  if (groupKey) openOnlyGroup(groupKey)
-}
 onMounted(() => {
   const el = adminMain.value
   if (!el) return
   adminScrollHandler = () => {
     headerCompact.value = el.scrollTop > 8
-    syncActiveByScroll()
   }
   el.addEventListener('scroll', adminScrollHandler)
-  syncActiveByScroll()
 })
 onUnmounted(() => {
   const el = adminMain.value
   if (el && adminScrollHandler) el.removeEventListener('scroll', adminScrollHandler)
 })
-watch(() => activeSection.value, async () => {
-  await nextTick()
-  syncSidebarActiveItem()
-})
 
 const theme = computed(() => {
   if (panelTheme.value === 'light') {
     return {
-      sidebarBg: 'bg-white/98',
-      headerBg: 'bg-white/95',
-      bottomBg: 'bg-white/95',
-      cardBg: 'bg-white/96',
-      subtleBg: 'bg-slate-50/85',
-      border: 'border-slate-200/90',
-      text: 'text-slate-800',
-      sidebarText: 'text-slate-900',
-      mutedText: 'text-slate-600',
-      pageBg: 'bg-[#f8fafc]',
-      navBtnBg: 'bg-white',
-      navBtnHoverBg: 'hover:bg-slate-100'
+      sidebarBg: 'bg-[#ffffff]',
+      headerBg: 'bg-[#ffffff]/95',
+      bottomBg: 'bg-[#ffffff]/95',
+      cardBg: 'bg-[#ffffff]/95',
+      subtleBg: 'bg-[#f7f8fa]',
+      border: 'border-[#e5e6eb]',
+      text: 'text-[#1d2129]',
+      sidebarText: 'text-[#1d2129]',
+      mutedText: 'text-[#86909c]',
+      pageBg: 'bg-[#f2f3f5]',
+      navBtnBg: 'bg-[#ffffff]',
+      navBtnHoverBg: 'hover:bg-[#f2f3f5]'
     }
   }
   if (panelTheme.value === 'dark') {
     return {
-      sidebarBg: 'bg-[#0a0f1a]/95',
-      headerBg: 'bg-[#0c1422]/95',
-      bottomBg: 'bg-[#0c1422]/95',
-      cardBg: 'bg-[#0f1728]/92',
-      subtleBg: 'bg-[#131d33]',
-      border: 'border-[#22314f]',
-      text: 'text-white',
-      sidebarText: 'text-white',
-      mutedText: 'text-slate-300',
-      pageBg: 'bg-[#090f1d]',
-      navBtnBg: 'bg-[#131d31]',
-      navBtnHoverBg: 'hover:bg-[#1a2741]'
+      sidebarBg: 'bg-[#1f2329]',
+      headerBg: 'bg-[#23272e]/95',
+      bottomBg: 'bg-[#23272e]/95',
+      cardBg: 'bg-[#23272e]/92',
+      subtleBg: 'bg-[#2a2f37]',
+      border: 'border-[#3f444c]',
+      text: 'text-[#f7f8fa]',
+      sidebarText: 'text-[#f7f8fa]',
+      mutedText: 'text-[#c9cdd4]',
+      pageBg: 'bg-[#17171a]',
+      navBtnBg: 'bg-[#2a2f37]',
+      navBtnHoverBg: 'hover:bg-[#31363f]'
     }
   }
   if (panelTheme.value === 'midnight') {
     return {
-      sidebarBg: 'bg-[#0a1022]/95',
-      headerBg: 'bg-[#121a33]/95',
-      bottomBg: 'bg-[#121a33]/95',
-      cardBg: 'bg-[#182347]/88',
-      subtleBg: 'bg-[#1a274e]',
-      border: 'border-[#2a3f76]',
-      text: 'text-white',
-      sidebarText: 'text-white',
-      mutedText: 'text-indigo-200',
-      pageBg: 'bg-[#0b1124]',
-      navBtnBg: 'bg-[#1a2a56]',
-      navBtnHoverBg: 'hover:bg-[#22376f]'
+      sidebarBg: 'bg-[#111827]',
+      headerBg: 'bg-[#1f2937]/95',
+      bottomBg: 'bg-[#1f2937]/95',
+      cardBg: 'bg-[#1f2937]/92',
+      subtleBg: 'bg-[#273449]',
+      border: 'border-[#364152]',
+      text: 'text-[#f3f4f6]',
+      sidebarText: 'text-[#f3f4f6]',
+      mutedText: 'text-[#9ca3af]',
+      pageBg: 'bg-[#0f172a]',
+      navBtnBg: 'bg-[#273449]',
+      navBtnHoverBg: 'hover:bg-[#334155]'
     }
   }
-  if (panelTheme.value === 'slate') {
+  if (panelTheme.value === 'forest') {
     return {
-      sidebarBg: 'bg-[#1b2433]/95',
-      headerBg: 'bg-[#1f2a3b]/95',
-      bottomBg: 'bg-[#1f2a3b]/95',
-      cardBg: 'bg-[#253145]/88',
-      subtleBg: 'bg-[#2a384f]',
-      border: 'border-[#3a4d6c]',
-      text: 'text-white',
-      sidebarText: 'text-white',
-      mutedText: 'text-slate-200',
-      pageBg: 'bg-[#182234]',
-      navBtnBg: 'bg-[#2a374d]',
-      navBtnHoverBg: 'hover:bg-[#33445f]'
+      sidebarBg: 'bg-[#10281f]',
+      headerBg: 'bg-[#163328]/95',
+      bottomBg: 'bg-[#163328]/95',
+      cardBg: 'bg-[#163328]/92',
+      subtleBg: 'bg-[#1d4737]',
+      border: 'border-[#2f5f4a]',
+      text: 'text-[#ecfdf5]',
+      sidebarText: 'text-[#ecfdf5]',
+      mutedText: 'text-[#a7f3d0]',
+      pageBg: 'bg-[#0b1f17]',
+      navBtnBg: 'bg-[#1d4737]',
+      navBtnHoverBg: 'hover:bg-[#255a45]'
+    }
+  }
+  if (panelTheme.value === 'plum') {
+    return {
+      sidebarBg: 'bg-[#2a1144]',
+      headerBg: 'bg-[#34155a]/95',
+      bottomBg: 'bg-[#34155a]/95',
+      cardBg: 'bg-[#34155a]/92',
+      subtleBg: 'bg-[#44206d]',
+      border: 'border-[#5d3590]',
+      text: 'text-[#faf5ff]',
+      sidebarText: 'text-[#faf5ff]',
+      mutedText: 'text-[#d8b4fe]',
+      pageBg: 'bg-[#1b0b2e]',
+      navBtnBg: 'bg-[#44206d]',
+      navBtnHoverBg: 'hover:bg-[#5b2f8b]'
     }
   }
   return {
-    sidebarBg: 'bg-slate-900/70',
-    headerBg: 'bg-slate-900/60',
-    bottomBg: 'bg-slate-900/60',
-    cardBg: 'bg-slate-800/70',
-    subtleBg: 'bg-slate-900/40',
-      border: 'border-slate-700/40',
-    text: 'text-white',
-    sidebarText: 'text-white',
-    mutedText: 'text-slate-200',
-    pageBg: 'bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-800',
-    navBtnBg: 'bg-slate-800/70',
-    navBtnHoverBg: 'hover:bg-slate-700/70'
+    sidebarBg: 'bg-[#1f2329]',
+    headerBg: 'bg-[#23272e]/95',
+    bottomBg: 'bg-[#23272e]/95',
+    cardBg: 'bg-[#23272e]/92',
+    subtleBg: 'bg-[#2a2f37]',
+    border: 'border-[#3f444c]',
+    text: 'text-[#f7f8fa]',
+    sidebarText: 'text-[#f7f8fa]',
+    mutedText: 'text-[#c9cdd4]',
+    pageBg: 'bg-[#17171a]',
+    navBtnBg: 'bg-[#2a2f37]',
+    navBtnHoverBg: 'hover:bg-[#31363f]'
   }
 })
 const adminRootClass = computed(() => ([
@@ -2620,7 +2618,7 @@ const adminPanelCardClass = computed(() => ([
   'backdrop-blur-sm transition-colors duration-200'
 ]))
 const adminShellCardClass = computed(() => ([
-  'rounded-xl border shadow-xl',
+  'rounded-xl border shadow-sm',
   theme.value.cardBg,
   theme.value.border
 ]))
@@ -3117,7 +3115,7 @@ const filteredUsers = computed<any[]>(() => {
 const refreshUsers = async () => {
   await userStore.getStatus()
 }
-const showUsers = ref(false)
+const showUsers = ref(true)
 const expandedUsersStorageKey = 'adminExpandedUsers'
 const readExpandedUsers = () => {
   if (typeof window === 'undefined') return {}
@@ -6136,10 +6134,11 @@ const musicThemeOptions = [
   { label: '浅色', value: 'light' },
   { label: '深色', value: 'dark' },
 ]
-const panelThemeOptions: Array<{ label: string, value: 'dark' | 'midnight' | 'slate' | 'light' }> = [
+const panelThemeOptions: Array<{ label: string, value: AdminTheme }> = [
   { label: '暗黑', value: 'dark' },
   { label: '深蓝', value: 'midnight' },
-  { label: '石板', value: 'slate' },
+  { label: '墨绿', value: 'forest' },
+  { label: '紫夜', value: 'plum' },
   { label: '明亮', value: 'light' },
 ]
 const aboutMdWrap = ref<HTMLElement | null>(null)
@@ -6185,52 +6184,55 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 
 <style scoped>
 .admin-root {
-  --admin-radius: 16px;
-  --admin-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
-  background: radial-gradient(1200px 600px at 18% -12%, rgba(56, 189, 248, 0.1), transparent 55%),
-              radial-gradient(900px 500px at 84% 4%, rgba(99, 102, 241, 0.06), transparent 60%),
-              #0b1020;
+  --admin-radius: 8px;
+  --admin-shadow: 0 2px 10px rgba(29, 33, 41, 0.08);
+  --admin-shadow-hover: 0 8px 24px rgba(29, 33, 41, 0.12);
+  background: #17171a;
 }
 .admin-root.admin-theme-light {
-  background: linear-gradient(180deg, #fbfdff 0%, #f1f5f9 55%, #edf2f7 100%);
+  background: #f2f3f5;
 }
-.admin-dashboard-shell {
-  background-image: repeating-linear-gradient(-28deg, rgba(148, 163, 184, 0.025) 0 8px, transparent 8px 22px);
-}
-.admin-root.admin-theme-light .admin-dashboard-shell {
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(245, 249, 255, 0.95));
+.admin-dashboard-shell,
+.admin-main-surface {
+  background: transparent;
 }
 .admin-sidebar-surface {
-  background: linear-gradient(180deg, rgba(12, 18, 30, 0.96), rgba(8, 13, 23, 0.96));
-  box-shadow: 12px 0 28px rgba(2, 6, 23, 0.56);
-}
-.admin-root.admin-theme-light .admin-sidebar-surface {
-  background: linear-gradient(180deg, #ffffff, #f7fbff);
-  box-shadow: 8px 0 22px rgba(15, 23, 42, 0.06);
-}
-.admin-main-surface {
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.2), rgba(2, 6, 23, 0.12));
-}
-.admin-root.admin-theme-light .admin-main-surface {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(246, 250, 255, 0.95));
+  box-shadow: 2px 0 8px rgba(29, 33, 41, 0.12);
 }
 .admin-topbar-surface {
   backdrop-filter: blur(8px);
-  box-shadow: 0 6px 22px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 1px 4px rgba(29, 33, 41, 0.1);
 }
-.admin-desktop-toggle-btn {
-  width: 52px;
-  height: 52px;
-  border-radius: 10px;
+.admin-form-shell {
+  width: 100%;
+  max-width: 1360px;
+  margin: 0 auto;
+}
+.admin-form-shell > .col-span-12 > div {
+  border-radius: var(--admin-radius);
+  box-shadow: var(--admin-shadow);
+}
+.admin-desktop-toggle-btn,
+.admin-sidebar-toggle-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 0 16px;
-  width: auto;
-  min-width: 52px;
-  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.24);
-  transition: transform .16s ease, box-shadow .16s ease;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+.admin-desktop-toggle-btn {
+  width: 40px;
+  min-width: 40px;
+  padding: 0;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid rgba(229, 230, 235, 0.55);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+}
+.admin-desktop-toggle-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(59, 130, 246, 0.22);
 }
 .admin-desktop-toggle-text {
   font-size: 13px;
@@ -6241,23 +6243,63 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 .admin-sidebar-toggle-btn {
   width: 32px;
   height: 32px;
+}
+.admin-nav-group {
   border-radius: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform .15s ease, opacity .15s ease;
+  padding: 2px;
 }
-.admin-sidebar-toggle-btn:hover {
-  transform: translateY(-1px);
-}
-.admin-desktop-toggle-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.42), 0 8px 18px rgba(2, 6, 23, 0.24);
-}
-.admin-form-shell {
+.admin-nav-group-btn {
   width: 100%;
-  max-width: 1320px;
-  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-radius: 6px;
+  padding: 10px 12px;
+  transition: all 0.2s ease;
+  font-size: 14px;
+  font-weight: 600;
+  color: #c9cdd4;
+}
+.admin-nav-group-btn-open {
+  background: rgba(255, 255, 255, 0.06);
+}
+.admin-nav-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  border-radius: 6px;
+  padding: 8px 12px 8px 16px;
+  transition: all 0.2s ease;
+  font-size: 13px;
+  font-weight: 500;
+  color: #c9cdd4;
+}
+.admin-nav-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+.admin-nav-item-active {
+  background: #165dff;
+  color: #ffffff;
+  box-shadow: 0 4px 10px rgba(22, 93, 255, 0.35);
+}
+.admin-root.admin-theme-light .admin-nav-group-btn {
+  color: #4e5969;
+  background: #f2f3f5;
+}
+.admin-root.admin-theme-light .admin-nav-item {
+  color: #4e5969;
+}
+.admin-root.admin-theme-light .admin-nav-item:hover {
+  background: #e5e6eb;
+  color: #1d2129;
+}
+.admin-root.admin-theme-light .admin-nav-item-active {
+  background: #165dff;
+  color: #ffffff;
 }
 .admin-dashboard-grid {
   display: grid;
@@ -6265,44 +6307,36 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   gap: 12px;
 }
 .admin-dashboard-stat,
+.admin-dashboard-panel,
+.admin-system-summary-card,
+.life-preview-shell,
+.admin-bg-item {
+  border-radius: 8px;
+  border: 1px solid rgba(229, 230, 235, 0.18);
+  transition: all 0.2s ease;
+}
+.admin-dashboard-stat,
 .admin-dashboard-panel {
-  border-radius: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
   padding: 12px;
-  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
 }
 .admin-dashboard-stat:hover,
 .admin-dashboard-panel:hover {
   transform: translateY(-1px);
-  border-color: rgba(99, 102, 241, 0.35);
-  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.18);
+  box-shadow: var(--admin-shadow-hover);
 }
 .admin-dashboard-stat-title,
-.admin-dashboard-panel-title {
+.admin-dashboard-panel-title,
+.admin-system-summary-label {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 .admin-dashboard-stat-value {
   font-size: 28px;
   font-weight: 700;
   line-height: 1.1;
-}
-.admin-dashboard-panels-grid {
-  align-items: start;
-}
-.admin-dashboard-track {
-  height: 8px;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.2);
-  overflow: hidden;
-}
-.admin-dashboard-fill {
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #38bdf8, #6366f1);
 }
 .admin-dashboard-time {
   font-size: 24px;
@@ -6310,66 +6344,63 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 }
 .admin-dashboard-date {
   margin-top: 6px;
-  font-size: 13px;
+  font-size: 12px;
 }
-.admin-dashboard-mini-grid {
+.admin-dashboard-track,
+.life-preview-track {
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(134, 144, 156, 0.22);
+}
+.admin-dashboard-fill,
+.life-preview-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #165dff, #4080ff);
+}
+.admin-dashboard-mini-grid,
+.admin-system-summary-grid,
+.life-preview-grid {
   display: grid;
   grid-template-columns: repeat(1, minmax(0, 1fr));
   gap: 10px;
-  margin-top: 14px;
+}
+.admin-dashboard-mini-grid {
+  margin-top: 12px;
 }
 .admin-dashboard-mini-card {
-  border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(148, 163, 184, 0.08);
+  border-radius: 8px;
+  border: 1px solid rgba(229, 230, 235, 0.18);
   padding: 10px 12px;
 }
-.admin-dashboard-mini-label {
+.admin-dashboard-mini-label,
+.life-preview-label {
   font-size: 11px;
-  margin-bottom: 6px;
 }
-.admin-dashboard-mini-value {
+.admin-dashboard-mini-value,
+.life-preview-value,
+.admin-system-summary-value {
+  margin-top: 4px;
   font-size: 18px;
   font-weight: 700;
   line-height: 1.2;
   word-break: break-word;
 }
-.admin-dashboard-mini-desc {
-  margin-top: 4px;
-  font-size: 12px;
-  line-height: 1.4;
-}
-.admin-system-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(1, minmax(0, 1fr));
-  gap: 12px;
-}
 .admin-system-summary-card {
-  border-radius: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
   padding: 14px;
 }
-.admin-system-summary-label {
-  font-size: 12px;
-  margin-bottom: 8px;
-}
-.admin-system-summary-value {
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1.2;
-  word-break: break-word;
-}
-.admin-system-summary-desc {
-  margin-top: 6px;
+.admin-system-summary-desc,
+.admin-dashboard-mini-desc {
+  margin-top: 4px;
   font-size: 12px;
   line-height: 1.5;
 }
 .admin-calendar-shell {
   margin-top: 12px;
   padding: 10px;
-  border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  background: rgba(148, 163, 184, 0.08);
+  border-radius: 8px;
+  border: 1px solid rgba(229, 230, 235, 0.2);
 }
 .admin-calendar-title {
   font-size: 13px;
@@ -6391,81 +6422,45 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 6px;
   min-height: 28px;
   font-size: 12px;
-  font-weight: 600;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  background: rgba(15, 23, 42, 0.14);
+  border: 1px solid rgba(229, 230, 235, 0.25);
 }
 .admin-calendar-cell-out {
   opacity: 0.45;
 }
 .admin-calendar-cell-today {
-  border-color: rgba(56, 189, 248, 0.75);
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.3), rgba(99, 102, 241, 0.26));
-  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.28);
+  border-color: #165dff;
+  box-shadow: 0 0 0 1px rgba(22, 93, 255, 0.32);
 }
-.life-preview-shell {
-  border-radius: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
+.life-preview-shell,
+.admin-bg-item {
   padding: 12px;
-  background: rgba(148, 163, 184, 0.08);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.life-preview-grid {
-  display: grid;
-  grid-template-columns: repeat(1, minmax(0, 1fr));
-  gap: 8px;
-}
-.life-preview-card {
-  border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  padding: 10px;
-}
-.life-preview-label {
-  font-size: 12px;
-}
-.life-preview-value {
-  margin-top: 4px;
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1.2;
 }
 .life-preview-progress-wrap {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-.life-preview-track {
-  height: 10px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: rgba(148, 163, 184, 0.2);
-}
-.life-preview-fill {
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #34d399, #22d3ee, #6366f1);
-}
 .admin-setting-stack {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
-.admin-setting-block {
+.admin-setting-block,
+.admin-array-row {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 16px;
-  border-radius: 18px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(255, 255, 255, 0.72);
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(229, 230, 235, 0.2);
+  background: rgba(255, 255, 255, 0.55);
 }
-.admin-root.dark .admin-setting-block {
-  background: rgba(15, 23, 42, 0.42);
+.admin-root.dark .admin-setting-block,
+.admin-root.dark .admin-array-row {
+  background: rgba(255, 255, 255, 0.04);
 }
 .admin-setting-heading {
   display: flex;
@@ -6476,53 +6471,23 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 .admin-setting-title {
   font-size: 15px;
   font-weight: 700;
-  line-height: 1.2;
 }
 .admin-setting-desc {
   margin-top: 4px;
   font-size: 12px;
   line-height: 1.5;
 }
-.admin-array-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  border-radius: 18px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(255, 255, 255, 0.62);
-}
-.admin-root.dark .admin-array-row {
-  background: rgba(15, 23, 42, 0.38);
-}
 .admin-bg-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 12px;
 }
-.admin-bg-item {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 18px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(255, 255, 255, 0.62);
-}
-.admin-root.dark .admin-bg-item {
-  background: rgba(15, 23, 42, 0.38);
-}
 .admin-bg-thumb {
   width: 100%;
   height: 128px;
-  border-radius: 12px;
+  border-radius: 8px;
   object-fit: cover;
   cursor: pointer;
-}
-.admin-form-shell > .col-span-12 > div {
-  border-radius: var(--admin-radius);
-  box-shadow: var(--admin-shadow);
 }
 .admin-loading-wrap {
   position: fixed;
@@ -6531,23 +6496,24 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(2, 6, 23, 0.7);
-  backdrop-filter: blur(3px);
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(2px);
 }
 .admin-loading-spinner {
-  width: 64px;
-  height: 64px;
+  width: 54px;
+  height: 54px;
   border-radius: 999px;
-  border: 6px solid rgba(255, 255, 255, 0.14);
-  border-top-color: rgba(255, 255, 255, 0.95);
-  border-right-color: rgba(255, 255, 255, 0.7);
-  animation: adminSpin .86s linear infinite;
+  border: 4px solid rgba(255, 255, 255, 0.24);
+  border-top-color: #165dff;
+  animation: adminSpin 0.72s linear infinite;
 }
 @keyframes adminSpin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 .hidden {
-    display: none;
+  display: none;
 }
 .admin-desktop-flex,
 .admin-desktop-block,
@@ -6567,112 +6533,43 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
     display: block !important;
   }
 }
-.resizable-textarea :deep(textarea) {
-    resize: vertical !important;
-    min-height: 180px;
-}
+.resizable-textarea :deep(textarea),
 .resizable-wrapper :deep(textarea) {
   resize: vertical !important;
   overflow: auto !important;
 }
-.resizable-wrapper { position: relative; }
+.resizable-textarea :deep(textarea) {
+  min-height: 180px;
+}
+.resizable-wrapper {
+  position: relative;
+}
 .textarea-resize-handle {
   height: 8px;
   margin-top: 6px;
   border-radius: 6px;
-  background: rgba(255,255,255,0.12);
+  background: rgba(134, 144, 156, 0.3);
   cursor: ns-resize;
 }
-html.dark .textarea-resize-handle { background: rgba(255,255,255,0.16); }
-.textarea-resize-handle:hover { background: rgba(251,146,60,0.6); }
-.admin-nav-group {
-  border-radius: 14px;
-  padding: 2px;
-}
-.admin-nav-group-btn {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  border-radius: 10px;
-  padding: 10px 12px;
-  transition: all .18s ease;
-  font-weight: 600;
-  font-size: 14px;
-  color: #d1dae8;
-}
-.admin-nav-group-btn-open {
-  background: rgba(148, 163, 184, 0.08);
-}
-.admin-nav-item {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  border-radius: 10px;
-  padding: 8px 12px 8px 16px;
-  transition: all .18s ease;
-  font-weight: 500;
-  font-size: 13px;
-  color: rgba(226, 232, 240, 0.88);
-}
-.admin-nav-item:hover {
-  background: rgba(148, 163, 184, 0.14);
-  color: #ffffff;
-}
-.admin-nav-collapse-enter-active,
-.admin-nav-collapse-leave-active {
-  transition: opacity .18s ease, transform .18s ease;
-}
-.admin-nav-collapse-enter-from,
-.admin-nav-collapse-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
-}
-.admin-nav-item-active {
-  background: rgba(148, 163, 184, 0.24);
-  transform: translateX(2px);
-  color: #ffffff;
-}
-.admin-root.admin-theme-light .admin-nav-group-btn {
-  color: #334155;
-  background: rgba(226, 232, 240, 0.38);
-}
-.admin-root.admin-theme-light .admin-nav-item {
-  color: #475569;
-}
-.admin-root.admin-theme-light .admin-nav-item:hover {
-  background: rgba(15, 23, 42, 0.08);
-  color: #0f172a;
-}
-.admin-root.admin-theme-light .admin-nav-item-active {
-  background: #111827;
-  color: #ffffff;
-  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
-}
-.admin-root.admin-theme-light .admin-nav-item-active:hover {
-  background: #111827;
-  color: #ffffff;
+.textarea-resize-handle:hover {
+  background: rgba(22, 93, 255, 0.5);
 }
 .theme-dot-btn {
   width: 22px;
   height: 22px;
   border-radius: 999px;
-  border: 2px solid rgba(148, 163, 184, 0.45);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.2);
-  transition: transform .16s ease, border-color .16s ease;
+  border: 2px solid rgba(134, 144, 156, 0.45);
+  transition: all 0.16s ease;
 }
 .theme-dot-btn:hover {
-  transform: translateY(-1px) scale(1.05);
+  transform: translateY(-1px) scale(1.04);
 }
 .theme-dot-btn-active {
-  border-color: #f8fafc;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.42);
+  border-color: #ffffff;
+  box-shadow: 0 0 0 2px rgba(22, 93, 255, 0.4);
 }
 :deep(.u-toggle) {
-  transform: scale(1.06);
+  transform: scale(1.04);
 }
 :deep(.u-toggle [role="switch"]),
 :deep([role="switch"]) {
@@ -6692,37 +6589,33 @@ html.dark .textarea-resize-handle { background: rgba(255,255,255,0.16); }
 .admin-root :deep(.u-card__body) {
   color: inherit;
 }
-.admin-form-shell :deep(input),
-.admin-form-shell :deep(textarea),
-.admin-form-shell :deep(select) {
-  border-radius: 14px !important;
-  min-height: 42px;
+.admin-root :deep(.u-button) {
+  border-radius: 6px !important;
 }
 .admin-form-shell :deep(input),
 .admin-form-shell :deep(textarea),
 .admin-form-shell :deep(select) {
+  border-radius: 6px !important;
+  min-height: 38px;
   background: #ffffff !important;
-  border-color: #cbd5e1 !important;
-  color: #0f172a !important;
+  border-color: #c9cdd4 !important;
+  color: #1d2129 !important;
+}
+.admin-form-shell :deep(textarea) {
+  min-height: 120px;
 }
 .admin-form-shell :deep(input:focus),
 .admin-form-shell :deep(textarea:focus),
 .admin-form-shell :deep(select:focus) {
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25) !important;
-  border-color: rgba(99, 102, 241, 0.65) !important;
+  box-shadow: 0 0 0 2px rgba(22, 93, 255, 0.2) !important;
+  border-color: rgba(22, 93, 255, 0.55) !important;
 }
 .admin-root.dark .admin-form-shell :deep(input),
 .admin-root.dark .admin-form-shell :deep(textarea),
 .admin-root.dark .admin-form-shell :deep(select) {
-  background: rgba(15, 23, 42, 0.52) !important;
-  border-color: rgba(71, 85, 105, 0.7) !important;
-  color: #f8fafc !important;
-}
-.admin-root :deep(.u-button) {
-  border-radius: 12px !important;
-}
-.admin-form-shell :deep(textarea) {
-  min-height: 120px;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(201, 205, 212, 0.35) !important;
+  color: #f7f8fa !important;
 }
 @media (max-width: 767px) {
   .admin-setting-heading,
@@ -6738,14 +6631,6 @@ html.dark .textarea-resize-handle { background: rgba(255,255,255,0.16); }
   .admin-topbar-surface {
     display: none;
   }
-  .admin-nav-group-btn {
-    padding: 10px 12px;
-  }
-  .admin-loading-spinner {
-    width: 52px;
-    height: 52px;
-    border-width: 5px;
-  }
   .admin-nav-item {
     padding: 9px 12px 9px 14px;
   }
@@ -6757,20 +6642,13 @@ html.dark .textarea-resize-handle { background: rgba(255,255,255,0.16); }
   .admin-dashboard-stat-value {
     font-size: 24px;
   }
-  .admin-dashboard-mini-grid {
-    grid-template-columns: repeat(1, minmax(0, 1fr));
-  }
 }
 @media (min-width: 768px) {
   .admin-dashboard-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .admin-dashboard-mini-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .admin-system-summary-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+  .admin-dashboard-mini-grid,
+  .admin-system-summary-grid,
   .life-preview-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

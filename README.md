@@ -38,6 +38,7 @@
 
 ## 2026更新状态
 
+- 重新优化后台入口及配置页面同时增加“配色”主题
 - 新增“说说笔记”独立 skill 包，支持api和mcp两种模式使用
 - 增加信息流页面，支持rss源、Echo源、说说笔记源、memos源
 - 修复自动解封逻辑并验证到期IP会从封禁列表移除
@@ -1681,8 +1682,8 @@ docker buildx create --use --name mybuilder
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final \
-  --build-arg VERSION=v3.0 \
-  -t noise233/echo-noise:v3.0 \
+  --build-arg VERSION=v3.1 \
+  -t noise233/echo-noise:v3.1 \
   -t noise233/echo-noise:latest \
   --push .
 ```
@@ -1693,8 +1694,8 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final-mcp \
-  --build-arg VERSION=v3.0 \
-  -t noise233/echo-noise:v3.0-mcp \
+  --build-arg VERSION=v3.1 \
+  -t noise233/echo-noise:v3.1-mcp \
   -t noise233/echo-noise:latest-mcp \
   --push .
 ```
@@ -1705,9 +1706,9 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64 \
   --target final \
-  --build-arg VERSION=v3.0 \
+  --build-arg VERSION=v3.1 \
   --build-arg INSTALL_FFMPEG=0 \
-  -t noise233/echo-noise:v3.0-amd64 \
+  -t noise233/echo-noise:v3.1-amd64 \
   -t noise233/echo-noise:last-amd64 \
   --push .
 ```
