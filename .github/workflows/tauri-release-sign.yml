@@ -29,7 +29,12 @@ jobs:
         shell: bash
         run: |
           RAW="${{ inputs.tag_name != '' && inputs.tag_name || github.ref_name }}"
-          VER=$(echo "$RAW" | sed -E 's/^[vV]//')
+          RAW="$(echo "$RAW" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+          VER="$(echo "$RAW" | sed -E 's/^[vV][[:space:]]*//; s/^[[:space:]]+|[[:space:]]+$//g')"
+          if [ -z "$VER" ]; then
+            echo "ERROR: invalid release tag: '$RAW'"
+            exit 1
+          fi
           echo "RELEASE_TAG=V$VER" >> "$GITHUB_ENV"
       - name: Create or update draft release
         uses: softprops/action-gh-release@v2
@@ -55,7 +60,12 @@ jobs:
         shell: bash
         run: |
           RAW="${{ inputs.tag_name != '' && inputs.tag_name || github.ref_name }}"
-          VER=$(echo "$RAW" | sed -E 's/^[vV]//')
+          RAW="$(echo "$RAW" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+          VER="$(echo "$RAW" | sed -E 's/^[vV][[:space:]]*//; s/^[[:space:]]+|[[:space:]]+$//g')"
+          if [ -z "$VER" ]; then
+            echo "ERROR: invalid release tag: '$RAW'"
+            exit 1
+          fi
           echo "RELEASE_TAG=V$VER" >> "$GITHUB_ENV"
       - name: Check desktop directory exists
         shell: bash
@@ -77,7 +87,7 @@ jobs:
           const fs = require('fs')
           const p = require('path')
           const tag = (process.env.INPUT_TAG || process.env.REF_TAG || '')
-          const raw = tag.replace(/^v/i, '').replace(/^V/i, '').trim()
+          const raw = tag.trim().replace(/^[vV\s]+/, '').trim()
           const toSemver = (v) => {
             const m = v.match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:[-+].*)?$/)
             if (!m) return '0.0.0'
@@ -239,6 +249,48 @@ jobs:
             echo "ffmpeg sidecar not found, remove optional ffmpeg from externalBin"
             node -e "const fs=require('fs');const p='$CONF';const c=JSON.parse(fs.readFileSync(p,'utf8'));const b=(c.bundle=c.bundle||{});const ex=Array.isArray(b.externalBin)?b.externalBin:[];b.externalBin=ex.filter(x=>!String(x).includes('ffmpeg'));fs.writeFileSync(p,JSON.stringify(c,null,2));console.log('externalBin =>',b.externalBin);"
           fi
+      - name: Smoke test desktop backend sidecar
+        shell: bash
+        if: env.DESKTOP_READY == 'true'
+        env:
+          BUILD_OS: ${{ matrix.os }}
+        run: |
+          set -euo pipefail
+          if [ "$BUILD_OS" = "windows-latest" ]; then
+            SERVER_BIN="desktop/tauri/src-tauri/bin/server-x86_64-pc-windows-msvc.exe"
+          else
+            ARCH="$(uname -m)"
+            if [ "$ARCH" = "arm64" ]; then
+              SERVER_BIN="desktop/tauri/src-tauri/bin/server-aarch64-apple-darwin"
+            else
+              SERVER_BIN="desktop/tauri/src-tauri/bin/server-x86_64-apple-darwin"
+            fi
+          fi
+          [ -f "$SERVER_BIN" ] || (echo "ERROR: sidecar missing: $SERVER_BIN" && exit 1)
+
+          SMOKE_DIR="$RUNNER_TEMP/saynote-sidecar-smoke"
+          mkdir -p "$SMOKE_DIR/data" "$SMOKE_DIR/logs"
+          : > "$SMOKE_DIR/data/noise.db"
+          : > "$SMOKE_DIR/smoke.log"
+
+          DB_TYPE=sqlite DB_PATH="$SMOKE_DIR/data/noise.db" APP_VERSION=0.0.0 ECHO_NOISE_VERSION=0.0.0 IMAGE_TAG=V0.0.0 "$SERVER_BIN" >"$SMOKE_DIR/smoke.log" 2>&1 &
+          PID=$!
+          trap 'kill "$PID" 2>/dev/null || true' EXIT
+
+          ok=false
+          for _ in $(seq 1 30); do
+            if curl -fsS "http://127.0.0.1:1314/api/status" >/dev/null 2>&1 || curl -fsS "http://127.0.0.1:1314/status" >/dev/null 2>&1; then
+              ok=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ok" != "true" ]; then
+            echo "ERROR: desktop sidecar failed to become ready"
+            tail -n 120 "$SMOKE_DIR/smoke.log" || true
+            exit 1
+          fi
+          kill "$PID" 2>/dev/null || true
       - name: Install Tauri deps
         shell: bash
         if: env.DESKTOP_READY == 'true'
@@ -308,7 +360,7 @@ jobs:
              exit 1
           fi
           echo "Found DMG: $DMG_PATH"
-          gh release upload ${{ env.RELEASE_TAG }} "$DMG_PATH" --clobber
+          gh release upload "${{ env.RELEASE_TAG }}" "$DMG_PATH" --clobber
       - name: Upload Windows EXE
         if: env.DESKTOP_READY == 'true' && matrix.os == 'windows-latest'
         shell: powershell
@@ -323,7 +375,7 @@ jobs:
             exit 1
           }
           Write-Host ("Found EXE: " + $exe.FullName)
-          gh release upload $env:RELEASE_TAG $exe.FullName --clobber
+          gh release upload "$env:RELEASE_TAG" "$($exe.FullName)" --clobber
       - name: Upload Release (desktop placeholder)
         if: env.DESKTOP_READY != 'true'
         shell: bash
@@ -331,7 +383,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "placeholder desktop build (signed workflow) for ${{ matrix.os }} at tag ${{ inputs.tag_name }}" > "$RUNNER_TEMP/placeholder-desktop-${{ matrix.os }}.txt"
-          gh release upload ${{ env.RELEASE_TAG }} "$RUNNER_TEMP/placeholder-desktop-${{ matrix.os }}.txt" --clobber
+          gh release upload "${{ env.RELEASE_TAG }}" "$RUNNER_TEMP/placeholder-desktop-${{ matrix.os }}.txt" --clobber
       - name: Sign mac app & notarize
         shell: bash
         if: matrix.os == 'macos-latest' && steps.mac_codesign.outputs.ready == 'true'
@@ -364,7 +416,12 @@ jobs:
         shell: bash
         run: |
           RAW="${{ inputs.tag_name != '' && inputs.tag_name || github.ref_name }}"
-          VER=$(echo "$RAW" | sed -E 's/^[vV]//')
+          RAW="$(echo "$RAW" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+          VER="$(echo "$RAW" | sed -E 's/^[vV][[:space:]]*//; s/^[[:space:]]+|[[:space:]]+$//g')"
+          if [ -z "$VER" ]; then
+            echo "ERROR: invalid release tag: '$RAW'"
+            exit 1
+          fi
           echo "RELEASE_TAG=V$VER" >> "$GITHUB_ENV"
       - name: Check mobile directory exists
         id: chk
@@ -414,8 +471,77 @@ jobs:
           REF_TAG: ${{ github.ref_name }}
         run: |
           RAW="${INPUT_TAG:-$REF_TAG}"
-          VER=$(echo "$RAW" | sed -E 's/^[vV]//')
-          echo "APP_VERSION_NAME=$VER" >> "$GITHUB_ENV"
+          RAW="$(echo "$RAW" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+          VER="$(echo "$RAW" | sed -E 's/^[vV][[:space:]]*//; s/^[[:space:]]+|[[:space:]]+$//g')"
+          if [[ "$VER" =~ ^([0-9]+)(\.([0-9]+))?(\.([0-9]+))? ]]; then
+            MAJOR="${BASH_REMATCH[1]}"
+            MINOR="${BASH_REMATCH[3]:-0}"
+            PATCH="${BASH_REMATCH[5]:-0}"
+            APP_VERSION_NAME="${MAJOR}.${MINOR}.${PATCH}"
+          else
+            APP_VERSION_NAME="0.0.1"
+          fi
+          echo "APP_VERSION_NAME=$APP_VERSION_NAME" >> "$GITHUB_ENV"
+      - name: Smoke test mobile backend runtime (host)
+        if: env.MOBILE_READY == 'true'
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/mobilebackend_smoke.go" <<'EOF'
+          package main
+          
+          import (
+            "fmt"
+            "net/http"
+            "os"
+            "path/filepath"
+            "time"
+          
+            "github.com/rcy1314/echo-noise/mobilebackend"
+          )
+          
+          func main() {
+            wd, err := os.MkdirTemp("", "mobilebackend-smoke-*")
+            if err != nil {
+              panic(err)
+            }
+            defer os.RemoveAll(wd)
+            if err := os.MkdirAll(filepath.Join(wd, "data"), 0o755); err != nil {
+              panic(err)
+            }
+            f, err := os.Create(filepath.Join(wd, "data", "noise.db"))
+            if err != nil {
+              panic(err)
+            }
+            _ = f.Close()
+            if err := mobilebackend.Start(wd); err != nil {
+              panic(err)
+            }
+            defer mobilebackend.Stop()
+          
+            client := &http.Client{Timeout: 2 * time.Second}
+            urls := []string{
+              "http://127.0.0.1:1314/api/status",
+              "http://127.0.0.1:1314/status",
+            }
+            deadline := time.Now().Add(30 * time.Second)
+            for time.Now().Before(deadline) {
+              for _, u := range urls {
+                resp, err := client.Get(u)
+                if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 500 {
+                  _ = resp.Body.Close()
+                  fmt.Println("mobile backend smoke ok:", u)
+                  return
+                }
+                if resp != nil {
+                  _ = resp.Body.Close()
+                }
+              }
+              time.Sleep(1 * time.Second)
+            }
+            panic("mobile backend smoke failed: status endpoint not reachable")
+          }
+          EOF
+          go run "$RUNNER_TEMP/mobilebackend_smoke.go"
       - name: Build Nuxt static
         if: env.MOBILE_READY == 'true'
         env:
@@ -563,6 +689,20 @@ jobs:
              echo "ERROR: APK not found in mobile/android/app/build/outputs/apk/release"
              exit 1
           fi
+      - name: Verify Android backend integration artifacts
+        if: env.MOBILE_READY == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f mobile/android/app/libs/backend.aar
+          unzip -l mobile/android/app/libs/backend.aar | grep -E "Mobilebackend.class|Backend.class" >/dev/null
+          test -f mobile/android/app/src/main/java/cn/noisework/saynote/ServerStarter.java
+          grep -q "ServerStarter.start(this);" mobile/android/app/src/main/java/cn/noisework/saynote/MainActivity.java
+          test -f mobile/android/app/src/main/assets/data/noise.db
+          test -f mobile/android/app/src/main/assets/public/index.html
+          APK_CANDIDATE="${APK_PATH:-$(find mobile/android/app/build/outputs/apk/release -name '*.apk' | head -n1)}"
+          [ -n "$APK_CANDIDATE" ] && [ -f "$APK_CANDIDATE" ]
+          unzip -l "$APK_CANDIDATE" | grep -E "classes.dex" >/dev/null
       - name: Zipalign APK
         if: env.MOBILE_READY == 'true'
         run: |
@@ -638,7 +778,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload ${{ env.RELEASE_TAG }} ${{ env.FINAL_APK }} --clobber
+          gh release upload "${{ env.RELEASE_TAG }}" "${{ env.FINAL_APK }}" --clobber
       - name: Upload Release (apk placeholder)
         if: env.MOBILE_READY != 'true'
         shell: bash
@@ -646,4 +786,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "placeholder android apk at tag ${{ inputs.tag_name }}" > "$RUNNER_TEMP/placeholder-android.txt"
-          gh release upload ${{ env.RELEASE_TAG }} "$RUNNER_TEMP/placeholder-android.txt" --clobber
+          gh release upload "${{ env.RELEASE_TAG }}" "$RUNNER_TEMP/placeholder-android.txt" --clobber
