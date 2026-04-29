@@ -657,7 +657,8 @@ const hasInlineMediaInContent = (item: FeedItem) => {
 const shouldShowStandaloneImage = (item: FeedItem) => {
   const hasImage = String(item.imageURL || '').trim().length > 0
   if (!hasImage) return false
-  if (isRSSItem(item)) return true
+  // RSS 若正文中已包含内联图片/媒体，不再额外展示独立图片，避免重复渲染。
+  if (isRSSItem(item)) return !hasInlineMediaInContent(item)
   return !hasInlineMediaInContent(item)
 }
 
