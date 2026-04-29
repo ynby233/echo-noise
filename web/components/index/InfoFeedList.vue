@@ -576,11 +576,74 @@ const isEch0Item = (item: FeedItem) => {
   return String(item.type || '').toLowerCase() === 'ech0'
 }
 
+const isMemosItem = (item: FeedItem) => {
+  return String(item.type || '').toLowerCase() === 'memos'
+}
+
+const isNoteItem = (item: FeedItem) => {
+  return String(item.type || '').toLowerCase() === 'note'
+}
+
+const isMastodonItem = (item: FeedItem) => {
+  return String(item.type || '').toLowerCase() === 'mastodon'
+}
+
+const splitNormalizedLines = (raw: string) => {
+  return String(raw || '')
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
+const dedupeTitleFromFirstLine = (rawText: string, rawTitle: string) => {
+  const text = String(rawText || '').trim()
+  const title = normalizeContent(rawTitle || '')
+  if (!text || !title) return text
+  const textComparable = toComparable(text)
+  const titleComparable = toComparable(title)
+  if (!textComparable || !titleComparable) return text
+  if (textComparable === titleComparable) return ''
+  const lines = splitNormalizedLines(text)
+  if (lines.length > 1 && toComparable(lines[0]) === titleComparable) {
+    return lines.slice(1).join('\n').trim()
+  }
+  return text
+}
+
 const getDisplayRaw = (item: FeedItem) => {
   const summaryRaw = String(item.summary || '').trim()
   const contentRaw = String(item.content || '').trim()
-  // 始终优先使用后端返回的原始正文，避免首行裁剪误伤 Memos/RSS/说说中的真实文本与标签。
-  return contentRaw || summaryRaw
+  const text = contentRaw || summaryRaw
+  if (!text) return ''
+
+  // RSS：常见问题是正文首行重复标题，做有条件去重；避免标题+正文双重显示。
+  if (isRSSItem(item)) {
+    return dedupeTitleFromFirstLine(text, item.title || '')
+  }
+
+  // Memos：保留原始正文（含首行标签、代码块、引用等），不做裁剪。
+  if (isMemosItem(item)) {
+    return text
+  }
+
+  // Ech0/说说：保留原始正文，避免误删首段内容。
+  if (isEch0Item(item)) {
+    return text
+  }
+
+  // Note：仅做轻量首行去重，避免“标题+第一行同文”重复。
+  if (isNoteItem(item)) {
+    return dedupeTitleFromFirstLine(text, item.title || '')
+  }
+
+  // Mastodon：保留原始正文（含 CW/卡片文本/标签），避免误裁剪造成信息丢失。
+  if (isMastodonItem(item)) {
+    return text
+  }
+
+  // 其它未知源默认原样显示，降低误伤风险。
+  return text
 }
 
 const isRSSItem = (item: FeedItem) => String(item.type || '').toLowerCase() === 'rss'
