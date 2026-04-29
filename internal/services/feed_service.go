@@ -1100,7 +1100,7 @@ func buildGenericFeedItems(rows []interface{}, sourceName, base string, opt plat
 		)
 		content := normalizeRawContent(rawContent)
 		extensionContent := buildExtensionRenderableContent(m)
-		resourceContent := buildResourcesRenderableContent(base, m, opt.ResourcesKeys)
+		resourceContent := buildResourcesRenderableContent(base, m, opt.ResourcesKeys, content)
 		content = joinRenderableContent(content, extensionContent, resourceContent)
 		if content == "" {
 			content = cleanText(rawContent)
@@ -2041,6 +2041,12 @@ func normalizeContentForCard(raw string) string {
 		if href == "" {
 			return text
 		}
+		if text == "" && isImageResourceURL(strings.ToLower(href)) {
+			return "![](" + href + ")"
+		}
+		if strings.EqualFold(text, href) && isImageResourceURL(strings.ToLower(href)) {
+			return "![](" + href + ")"
+		}
 		if text == "" {
 			text = href
 		}
@@ -2123,10 +2129,11 @@ func buildExtensionRenderableContent(m map[string]interface{}) string {
 	}
 }
 
-func buildResourcesRenderableContent(base string, m map[string]interface{}, resourcesKeys []string) string {
+func buildResourcesRenderableContent(base string, m map[string]interface{}, resourcesKeys []string, existingContent string) string {
 	if len(resourcesKeys) == 0 {
 		return ""
 	}
+	existingContentLower := strings.ToLower(html.UnescapeString(strings.TrimSpace(existingContent)))
 	seen := map[string]struct{}{}
 	lines := make([]string, 0)
 	for _, key := range resourcesKeys {
@@ -2152,6 +2159,9 @@ func buildResourcesRenderableContent(base string, m map[string]interface{}, reso
 			if candidate == "" {
 				continue
 			}
+			if resourceURLAlreadyInContent(existingContentLower, candidate) {
+				continue
+			}
 			if _, ok := seen[candidate]; ok {
 				continue
 			}
@@ -2162,10 +2172,55 @@ func buildResourcesRenderableContent(base string, m map[string]interface{}, reso
 				lines = append(lines, candidate)
 				continue
 			}
-			lines = append(lines, "![]("+candidate+")")
+			if isImageResourceURL(lower) {
+				lines = append(lines, "![]("+candidate+")")
+			}
 		}
 	}
 	return strings.TrimSpace(strings.Join(lines, "\n"))
+}
+
+func resourceURLAlreadyInContent(contentLower, candidate string) bool {
+	if strings.TrimSpace(contentLower) == "" || strings.TrimSpace(candidate) == "" {
+		return false
+	}
+	candidateLower := strings.ToLower(strings.TrimSpace(candidate))
+	if candidateLower == "" {
+		return false
+	}
+	if strings.Contains(contentLower, candidateLower) {
+		return true
+	}
+	trimmed := candidateLower
+	if idx := strings.Index(trimmed, "?"); idx >= 0 {
+		trimmed = trimmed[:idx]
+	}
+	if idx := strings.Index(trimmed, "#"); idx >= 0 {
+		trimmed = trimmed[:idx]
+	}
+	if trimmed != "" && trimmed != candidateLower && strings.Contains(contentLower, trimmed) {
+		return true
+	}
+	return false
+}
+
+func isImageResourceURL(raw string) bool {
+	if raw == "" {
+		return false
+	}
+	base := raw
+	if idx := strings.Index(base, "?"); idx >= 0 {
+		base = base[:idx]
+	}
+	if idx := strings.Index(base, "#"); idx >= 0 {
+		base = base[:idx]
+	}
+	for _, ext := range []string{".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg", ".avif", ".heic", ".heif"} {
+		if strings.HasSuffix(base, ext) {
+			return true
+		}
+	}
+	return false
 }
 
 func joinRenderableContent(parts ...string) string {

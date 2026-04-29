@@ -226,8 +226,11 @@ type SiteConfig struct {
 	AboutPageTitle         string `gorm:"type:varchar(100)"`
 	AboutPageDescription   string `gorm:"type:varchar(191)"`
 	AboutMarkdown          string `gorm:"type:text"`
+	LoginExpireDays        int    `gorm:"default:3"`
 	// 信息流聚合配置
 	FeedEnabled            bool   `gorm:"default:false"`
+	FeedPageTitle          string `gorm:"type:varchar(100)"`
+	FeedPageDescription    string `gorm:"type:varchar(191)"`
 	FeedSources            string `gorm:"type:text"`
 	FeedLimit              int    `gorm:"default:100"`
 	FeedRefreshSeconds     int    `gorm:"default:7200"`

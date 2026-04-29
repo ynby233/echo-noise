@@ -24,7 +24,8 @@ func InitSession(r *gin.Engine) {
 	secret := sessionSecretFromEnv()
 	store := cookie.NewStore([]byte(secret))
 
-	maxAge := 86400
+	// Keep cookie lifetime long enough; actual login expiration is enforced server-side.
+	maxAge := 86400 * 3650
 	if v := strings.TrimSpace(os.Getenv("SESSION_MAX_AGE")); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			maxAge = n

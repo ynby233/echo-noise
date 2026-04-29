@@ -53,9 +53,12 @@ func SeedDefaultData() error {
 			LeftAdEnabled:     true,
 			LeftAds:           `[{"imageURL":"https://picsum.photos/seed/ad-1/640/640","linkURL":"https://note.noisework.cn","description":"写作与记录，开启灵感之旅"},{"imageURL":"https://picsum.photos/seed/ad-2/640/640","linkURL":"https://noisework.cn","description":"探索新主题与小工具"},{"imageURL":"https://picsum.photos/seed/ad-3/640/640","linkURL":"https://github.com","description":"开源项目，欢迎 Star"}]`,
 			LeftAdsIntervalMs: 4000,
+			LoginExpireDays:   3,
 			// 社交链接默认
-			SocialLinksEnabled: true,
-			SocialLinks:        `[{"name":"TG","url":"https://tg.noisework.cn","icon":"i-mdi-near-me"},{"name":"X","url":"https://x.com/liangwenhao3","icon":"i-mdi-twitter"},{"name":"主页","url":"https://www.noisework.cn/","icon":"i-mdi-home"},{"name":"博客","url":"https://www.noiseblogs.top/","icon":"i-mdi-notebook"}]`,
+			SocialLinksEnabled:  true,
+			SocialLinks:         `[{"name":"TG","url":"https://tg.noisework.cn","icon":"i-mdi-near-me"},{"name":"X","url":"https://x.com/liangwenhao3","icon":"i-mdi-twitter"},{"name":"主页","url":"https://www.noisework.cn/","icon":"i-mdi-home"},{"name":"博客","url":"https://www.noiseblogs.top/","icon":"i-mdi-notebook"}]`,
+			FeedPageTitle:       "实时聚合内容动态",
+			FeedPageDescription: "聚合综合内容信息源内容，当前结果 {count} 条",
 			// PWA defaults
 			PwaEnabled:        true,
 			PwaTitle:          "说说笔记",

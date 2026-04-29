@@ -178,14 +178,16 @@ type FeedItem = {
   timestamp: number
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   layoutState: 'three' | 'two' | 'single'
   limit?: number
   refreshSeconds?: number
   active?: boolean
   baseApi?: string
   enableGithubCard?: boolean
-}>()
+}>(), {
+  enableGithubCard: false
+})
 const emit = defineEmits<{
   (e: 'count-change', count: number): void
 }>()
@@ -575,31 +577,10 @@ const isEch0Item = (item: FeedItem) => {
 }
 
 const getDisplayRaw = (item: FeedItem) => {
-  const isRSS = isRSSItem(item)
-  const title = normalizeContent(item.title || '')
   const summaryRaw = String(item.summary || '').trim()
   const contentRaw = String(item.content || '').trim()
-  // 优先使用后端保留的原始内容，确保 Markdown/媒体卡片可被正确渲染。
-  let text = contentRaw || summaryRaw
-  if (!text) return ''
-  // RSS 与 Ech0 正文都可能把第一段作为真实内容的一部分，不能按标题首行去重裁剪。
-  if (isRSS || isEch0Item(item)) return text
-  if (!title) return text
-  const titleComparable = toComparable(title)
-  const textComparable = toComparable(text)
-  if (!titleComparable) return text
-  // 避免把单行正文直接清空导致“只有标题”。
-  if (textComparable === titleComparable) return text
-  const lines = text
-    .replace(/\r\n/g, '\n')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-  if (lines.length > 1 && toComparable(lines[0]) === titleComparable) {
-    lines.shift()
-    text = lines.join('\n').trim()
-  }
-  return text
+  // 始终优先使用后端返回的原始正文，避免首行裁剪误伤 Memos/RSS/说说中的真实文本与标签。
+  return contentRaw || summaryRaw
 }
 
 const isRSSItem = (item: FeedItem) => String(item.type || '').toLowerCase() === 'rss'

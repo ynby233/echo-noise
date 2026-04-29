@@ -207,20 +207,28 @@ func GetFrontendConfig() (map[string]interface{}, error) {
 			"enableGithubCard": config.EnableGithubCard,
 			"notifyEnabled":    config.NotifyEnabled,
 			// 页面文案与关于页内容
-			"linksTitle":             choose(config.LinksTitle, getDefaultConfig()["frontendSettings"].(map[string]interface{})["linksTitle"].(string)),
-			"linksDescription":       choose(config.LinksDescription, getDefaultConfig()["frontendSettings"].(map[string]interface{})["linksDescription"].(string)),
-			"linksApplyTitle":        choose(config.LinksApplyTitle, "申请友链须知"),
-			"linksApplyText":         choose(config.LinksApplyText, "请提供站点名称、网址、图标（可选）、简介与有效邮箱。提交后需管理员审核，审核通过后展示。"),
+			"linksTitle":       choose(config.LinksTitle, getDefaultConfig()["frontendSettings"].(map[string]interface{})["linksTitle"].(string)),
+			"linksDescription": choose(config.LinksDescription, getDefaultConfig()["frontendSettings"].(map[string]interface{})["linksDescription"].(string)),
+			"linksApplyTitle":  choose(config.LinksApplyTitle, "申请友链须知"),
+			"linksApplyText":   choose(config.LinksApplyText, "请提供站点名称、网址、图标（可选）、简介与有效邮箱。提交后需管理员审核，审核通过后展示。"),
+			"loginExpireDays": func() int {
+				if config.LoginExpireDays > 0 {
+					return config.LoginExpireDays
+				}
+				return 3
+			}(),
 			"commentPageTitle":       choose(config.CommentPageTitle, getDefaultConfig()["frontendSettings"].(map[string]interface{})["commentPageTitle"].(string)),
 			"commentPageDescription": choose(config.CommentPageDescription, getDefaultConfig()["frontendSettings"].(map[string]interface{})["commentPageDescription"].(string)),
 			"aboutPageTitle":         choose(config.AboutPageTitle, getDefaultConfig()["frontendSettings"].(map[string]interface{})["aboutPageTitle"].(string)),
 			"aboutPageDescription":   choose(config.AboutPageDescription, getDefaultConfig()["frontendSettings"].(map[string]interface{})["aboutPageDescription"].(string)),
 			"aboutMarkdown":          choose(config.AboutMarkdown, getDefaultConfig()["frontendSettings"].(map[string]interface{})["aboutMarkdown"].(string)),
 			// 信息流
-			"feedEnabled":        config.FeedEnabled,
-			"feedSources":        normalizedFeedSources,
-			"feedLimit":          feedLimit,
-			"feedRefreshSeconds": feedRefreshSeconds,
+			"feedEnabled":         config.FeedEnabled,
+			"feedPageTitle":       choose(config.FeedPageTitle, getDefaultConfig()["frontendSettings"].(map[string]interface{})["feedPageTitle"].(string)),
+			"feedPageDescription": choose(config.FeedPageDescription, getDefaultConfig()["frontendSettings"].(map[string]interface{})["feedPageDescription"].(string)),
+			"feedSources":         normalizedFeedSources,
+			"feedLimit":           feedLimit,
+			"feedRefreshSeconds":  feedRefreshSeconds,
 			// 系统欢迎组件（与用户资料解耦；若未设置则回退默认）
 			"welcomeAvatarURL":   choose(config.WelcomeAvatarURL, getDefaultConfig()["frontendSettings"].(map[string]interface{})["welcomeAvatarURL"].(string)),
 			"welcomeName":        choose(config.WelcomeName, getDefaultConfig()["frontendSettings"].(map[string]interface{})["welcomeName"].(string)),
@@ -439,6 +447,23 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	if v, ok := frontendSettings["aboutMarkdown"].(string); ok {
 		config.AboutMarkdown = v
 	}
+	if vi, ok := frontendSettings["loginExpireDays"].(float64); ok {
+		n := int(vi)
+		if n > 0 {
+			config.LoginExpireDays = n
+		}
+	} else if vi2, ok := frontendSettings["loginExpireDays"].(int); ok {
+		if vi2 > 0 {
+			config.LoginExpireDays = vi2
+		}
+	} else if vs, ok := frontendSettings["loginExpireDays"].(string); ok {
+		if n, err := strconv.Atoi(strings.TrimSpace(vs)); err == nil && n > 0 {
+			config.LoginExpireDays = n
+		}
+	}
+	if config.LoginExpireDays <= 0 {
+		config.LoginExpireDays = 3
+	}
 	if vb, ok := frontendSettings["calendarEnabled"].(bool); ok {
 		config.CalendarEnabled = vb
 	} else if vs, ok := frontendSettings["calendarEnabled"].(string); ok {
@@ -581,6 +606,12 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 		config.FeedEnabled = vb
 	} else if vs, ok := frontendSettings["feedEnabled"].(string); ok {
 		config.FeedEnabled = strings.EqualFold(strings.TrimSpace(vs), "true")
+	}
+	if v, ok := frontendSettings["feedPageTitle"].(string); ok {
+		config.FeedPageTitle = strings.TrimSpace(v)
+	}
+	if v, ok := frontendSettings["feedPageDescription"].(string); ok {
+		config.FeedPageDescription = strings.TrimSpace(v)
 	}
 	if vi, ok := frontendSettings["feedLimit"].(float64); ok {
 		config.FeedLimit = int(vi)
@@ -1149,7 +1180,10 @@ func getDefaultConfig() map[string]interface{} {
 			"aboutPageTitle":         "关于本站",
 			"aboutPageDescription":   "这里是站点的介绍与说明",
 			"aboutMarkdown":          "# 关于我\n\n这里是一个默认的个人简介示例：\n\n- 喜欢记录与分享\n- 热爱开源与学习\n- 持续打磨产品体验\n\n欢迎通过友链或留言与我交流！",
+			"loginExpireDays":        3,
 			"feedEnabled":            false,
+			"feedPageTitle":          "实时聚合内容动态",
+			"feedPageDescription":    "聚合综合内容信息源内容，当前结果 {count} 条",
 			"feedLimit":              100,
 			"feedRefreshSeconds":     7200,
 			"feedSources": []map[string]interface{}{

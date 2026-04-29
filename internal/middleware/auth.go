@@ -1,80 +1,113 @@
 package middleware
 
 import (
-    "net/http"
-    "strings"
-    "github.com/gin-contrib/sessions"
-    "github.com/gin-gonic/gin"
-    "github.com/rcy1314/echo-noise/internal/dto"
-    "github.com/rcy1314/echo-noise/internal/models"
-    "github.com/rcy1314/echo-noise/internal/database"
+	"github.com/gin-contrib/sessions"
+	"github.com/gin-gonic/gin"
+	"github.com/rcy1314/echo-noise/internal/database"
+	"github.com/rcy1314/echo-noise/internal/dto"
+	"github.com/rcy1314/echo-noise/internal/models"
+	"net/http"
+	"strings"
+	"time"
 )
 
 func SessionAuthMiddleware() gin.HandlerFunc {
-    return func(ctx *gin.Context) {
-        session := sessions.Default(ctx)
-        userID := session.Get("user_id")
+	return func(ctx *gin.Context) {
+		session := sessions.Default(ctx)
+		userID := session.Get("user_id")
+		expireAt := parseSessionExpireAt(session.Get("login_expire_at"))
 
-        if userID == nil {
-            // Bearer Token 回退认证（无需 Cookie）
-            auth := ctx.GetHeader("Authorization")
-            if strings.TrimSpace(auth) != "" {
-                var token string
-                if strings.HasPrefix(auth, "Bearer ") {
-                    token = strings.TrimPrefix(auth, "Bearer ")
-                } else {
-                    token = auth
-                }
+		if userID == nil || (expireAt > 0 && time.Now().Unix() > expireAt) {
+			if userID != nil && expireAt > 0 && time.Now().Unix() > expireAt {
+				session.Clear()
+				_ = session.Save()
+			}
+			// Bearer Token 回退认证（无需 Cookie）
+			auth := ctx.GetHeader("Authorization")
+			if strings.TrimSpace(auth) != "" {
+				var token string
+				if strings.HasPrefix(auth, "Bearer ") {
+					token = strings.TrimPrefix(auth, "Bearer ")
+				} else {
+					token = auth
+				}
 
-                db, err := database.GetDB()
-                if err == nil {
-                    var user models.User
-                    if err := db.Where("token = ?", strings.TrimSpace(token)).First(&user).Error; err == nil && user.ID != 0 {
-                        ctx.Set("user_id", user.ID)
-                        ctx.Set("username", user.Username)
-                        ctx.Set("is_admin", user.IsAdmin)
-                        ctx.Set("auth_via", "token")
-                        ctx.Next()
-                        return
-                    }
-                }
-            }
-            // 定义公共路由
-            publicPaths := []string{
-                "/api/messages/page",
-                "/api/messages/",
-                "/api/messages",
-                "/api/messages/search",
-                "/api/messages/tags",
-                "/api/messages/tags/",
-                "/api/messages/images",
-                "/api/messages/calendar",
-                "/api/frontend/config",
-                "/api/status",
-                "/api/version/check",
-            }
+				db, err := database.GetDB()
+				if err == nil {
+					var user models.User
+					if err := db.Where("token = ?", strings.TrimSpace(token)).First(&user).Error; err == nil && user.ID != 0 {
+						ctx.Set("user_id", user.ID)
+						ctx.Set("username", user.Username)
+						ctx.Set("is_admin", user.IsAdmin)
+						ctx.Set("auth_via", "token")
+						ctx.Next()
+						return
+					}
+				}
+			}
+			// 定义公共路由
+			publicPaths := []string{
+				"/api/messages/page",
+				"/api/messages/",
+				"/api/messages",
+				"/api/messages/search",
+				"/api/messages/tags",
+				"/api/messages/tags/",
+				"/api/messages/images",
+				"/api/messages/calendar",
+				"/api/frontend/config",
+				"/api/status",
+				"/api/version/check",
+			}
 
-            // 检查是否是公共路由
-            for _, path := range publicPaths {
-                if strings.HasPrefix(ctx.Request.URL.Path, path) {
-                    ctx.Set("user_id", uint(0))
-                    ctx.Next()
-                    return
-                }
-            }
+			// 检查是否是公共路由
+			for _, path := range publicPaths {
+				if strings.HasPrefix(ctx.Request.URL.Path, path) {
+					ctx.Set("user_id", uint(0))
+					ctx.Next()
+					return
+				}
+			}
 
-            ctx.JSON(http.StatusUnauthorized, dto.Fail[any]("未登录或登录已过期"))
-            ctx.Abort()
-            return
-        }
+			ctx.JSON(http.StatusUnauthorized, dto.Fail[any]("未登录或登录已过期"))
+			ctx.Abort()
+			return
+		}
 
-        // 将用户信息存储到上下文中
-        ctx.Set("user_id", userID.(uint))
-        ctx.Set("username", session.Get("username"))
-        ctx.Set("is_admin", session.Get("is_admin"))
-        ctx.Set("auth_via", "session")
-        ctx.Next()
-    }
+		// 将用户信息存储到上下文中
+		ctx.Set("user_id", userID.(uint))
+		ctx.Set("username", session.Get("username"))
+		ctx.Set("is_admin", session.Get("is_admin"))
+		ctx.Set("auth_via", "session")
+		ctx.Next()
+	}
+}
+
+func parseSessionExpireAt(v interface{}) int64 {
+	switch x := v.(type) {
+	case int64:
+		return x
+	case int:
+		return int64(x)
+	case float64:
+		return int64(x)
+	case string:
+		s := strings.TrimSpace(x)
+		if s == "" {
+			return 0
+		}
+		var n int64
+		for i := 0; i < len(s); i++ {
+			c := s[i]
+			if c < '0' || c > '9' {
+				return 0
+			}
+			n = n*10 + int64(c-'0')
+		}
+		return n
+	default:
+		return 0
+	}
 }
 
 func AdminAuthMiddleware() gin.HandlerFunc {
@@ -147,49 +180,49 @@ func toUint(v any) (uint, bool) {
 }
 
 func TokenAuthMiddleware() gin.HandlerFunc {
-    return func(c *gin.Context) {
-        auth := c.GetHeader("Authorization")
-        if auth == "" {
-            c.JSON(http.StatusUnauthorized, dto.Fail[any]("未提供认证信息"))
-            c.Abort()
-            return
-        }
+	return func(c *gin.Context) {
+		auth := c.GetHeader("Authorization")
+		if auth == "" {
+			c.JSON(http.StatusUnauthorized, dto.Fail[any]("未提供认证信息"))
+			c.Abort()
+			return
+		}
 
-        // 提取 token
-        var token string
-        if strings.HasPrefix(auth, "Bearer ") {
-            token = strings.TrimPrefix(auth, "Bearer ")
-        } else {
-            token = auth
-        }
+		// 提取 token
+		var token string
+		if strings.HasPrefix(auth, "Bearer ") {
+			token = strings.TrimPrefix(auth, "Bearer ")
+		} else {
+			token = auth
+		}
 
-        db, err := database.GetDB()
-        if err != nil {
-            c.JSON(http.StatusUnauthorized, dto.Fail[any]("系统错误"))
-            c.Abort()
-            return
-        }
+		db, err := database.GetDB()
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, dto.Fail[any]("系统错误"))
+			c.Abort()
+			return
+		}
 
-        // 查询用户
-        var user models.User
-        if err := db.Where("token = ?", token).First(&user).Error; err != nil {
-            c.JSON(http.StatusUnauthorized, dto.Fail[any]("无效的token"))
-            c.Abort()
-            return
-        }
+		// 查询用户
+		var user models.User
+		if err := db.Where("token = ?", token).First(&user).Error; err != nil {
+			c.JSON(http.StatusUnauthorized, dto.Fail[any]("无效的token"))
+			c.Abort()
+			return
+		}
 
-        // 检查 token 是否为空
-        if user.Token == "" {
-            c.JSON(http.StatusUnauthorized, dto.Fail[any]("token已失效"))
-            c.Abort()
-            return
-        }
+		// 检查 token 是否为空
+		if user.Token == "" {
+			c.JSON(http.StatusUnauthorized, dto.Fail[any]("token已失效"))
+			c.Abort()
+			return
+		}
 
-        // 设置用户信息到上下文
-        c.Set("user_id", user.ID)
-        c.Set("username", user.Username)
-        c.Set("is_admin", user.IsAdmin)
-        c.Set("auth_via", "token")
-        c.Next()
-    }
+		// 设置用户信息到上下文
+		c.Set("user_id", user.ID)
+		c.Set("username", user.Username)
+		c.Set("is_admin", user.IsAdmin)
+		c.Set("auth_via", "token")
+		c.Next()
+	}
 }

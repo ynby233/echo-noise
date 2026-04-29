@@ -89,6 +89,27 @@ func checkUser(c *gin.Context) (*models.User, error) {
 	return user, nil
 }
 
+func getLoginExpireDays() int {
+	db, err := database.GetDB()
+	if err != nil {
+		return 3
+	}
+	var cfg models.SiteConfig
+	if err := db.Table("site_configs").First(&cfg).Error; err != nil {
+		return 3
+	}
+	if cfg.LoginExpireDays > 0 {
+		return cfg.LoginExpireDays
+	}
+	return 3
+}
+
+func applyLoginSessionExpire(session sessions.Session) {
+	days := getLoginExpireDays()
+	ttlSeconds := days * 24 * 60 * 60
+	session.Set("login_expire_at", time.Now().Add(time.Duration(ttlSeconds)*time.Second).Unix())
+}
+
 func Login(c *gin.Context) {
 	var loginDto dto.LoginDto
 	if err := c.ShouldBindJSON(&loginDto); err != nil {
@@ -107,6 +128,7 @@ func Login(c *gin.Context) {
 
 	session := sessions.Default(c)
 	session.Clear()
+	applyLoginSessionExpire(session)
 	session.Set("user_id", user.ID)
 	session.Set("username", user.Username)
 	session.Set("is_admin", user.IsAdmin)
@@ -3126,6 +3148,7 @@ func GithubCallback(c *gin.Context) {
 	// 设置会话
 	session := sessions.Default(c)
 	session.Clear()
+	applyLoginSessionExpire(session)
 	session.Set("user_id", user.ID)
 	session.Set("username", user.Username)
 	session.Set("is_admin", user.IsAdmin)

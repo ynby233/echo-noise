@@ -7,7 +7,7 @@
       <div class="admin-dashboard-shell min-h-screen w-full">
         <aside class="admin-sidebar-surface h-screen overflow-y-auto backdrop-blur-md flex flex-col fixed left-0 top-0 z-40 transition-transform duration-300 md:transition-[width] border-r" :class="adminSidebarClass">
         <div class="px-4 py-4 border-b flex flex-col items-center gap-2" :class="theme.border">
-          <img :src="avatarSrc" class="w-14 h-14 rounded-full ring-2 ring-indigo-400/60 shadow-lg object-cover" alt="avatar" @error="onAvatarImgError" />
+          <img :src="avatarSrc" class="admin-sidebar-avatar w-14 h-14 rounded-full ring-2 ring-indigo-400/60 shadow-lg object-cover" alt="avatar" @error="onAvatarImgError" />
           <div class="w-full text-center transition-all duration-200" :class="sidebarCollapsed ? 'max-h-0 opacity-0 pointer-events-none' : 'max-h-20 opacity-100'">
             <div class="font-semibold text-base truncate">{{ displayUsername }}</div>
             <div class="text-xs" :class="theme.mutedText">总笔记 {{ userStore?.status?.total_messages || 0 }}</div>
@@ -419,6 +419,21 @@
                   <UButton color="green" @click="saveRegisterConfig" class="shadow">保存</UButton>
                 </div>
                 </div>
+                <div id="site-login-expire-section" v-if="isSectionVisible('site-register')" class="rounded-lg p-3 mt-3" :class="theme.subtleBg">
+                  <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div class="flex items-center gap-2" :class="theme.text">
+                      <UIcon name="i-heroicons-clock" class="w-4 h-4" />
+                      <span>登录过期时间</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <UInput v-model.number="frontendConfig.loginExpireDays" type="number" min="1" step="1" class="w-44" />
+                      <UButton color="gray" variant="soft" @click="frontendConfig.loginExpireDays = 3" class="shadow">3 天</UButton>
+                      <UButton color="gray" variant="soft" @click="frontendConfig.loginExpireDays = 7" class="shadow">7 天</UButton>
+                      <UButton color="green" @click="saveConfigItem('loginExpireDays')" class="shadow">保存</UButton>
+                    </div>
+                  </div>
+                  <div class="text-xs mt-2" :class="theme.mutedText">会话过期后需重新登录；支持任意正整数天数，默认快捷为 3 天和 7 天。</div>
+                </div>
                 <div id="site-pwa-section" v-if="isSectionVisible('site-pwa')" class="rounded-lg p-4" :class="theme.subtleBg">
                   <div class="flex justify-between items-center mb-3">
                     <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-rocket-launch" class="w-4 h-4" /> <span>PWA 模式</span></div>
@@ -698,6 +713,14 @@
                     <div class="px-4 pb-4">
                       <div class="rounded-lg p-4 space-y-3" :class="theme.subtleBg">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <div class="text-xs mb-1" :class="theme.mutedText">信息流页面标题</div>
+                            <UInput v-model="frontendConfig.feedPageTitle" placeholder="实时聚合内容动态" />
+                          </div>
+                          <div>
+                            <div class="text-xs mb-1" :class="theme.mutedText">信息流页面介绍（支持 {count} 占位）</div>
+                            <UInput v-model="frontendConfig.feedPageDescription" placeholder="聚合综合内容信息源内容，当前结果 {count} 条" />
+                          </div>
                           <div>
                             <div class="text-xs mb-1" :class="theme.mutedText">最大抓取条数（留空显示全部，单独设置时为 1-100）</div>
                             <UInput v-model="frontendConfig.feedLimit" type="number" min="1" max="100" placeholder="留空显示全部" />
@@ -3887,6 +3910,7 @@ const useInitialsAvatar = async () => {
 const configLabels: Record<string, string> = {
     siteTitle: '站点标题',
     subtitleText: '欢迎语',
+    loginExpireDays: '登录过期时间',
     backgrounds: '头部图',
     cardFooterTitle: '卡片页脚标题',
     cardFooterLink: '卡片页脚链接',
@@ -3900,6 +3924,8 @@ const configLabels: Record<string, string> = {
     aboutPageTitle: '关于页面标题',
     aboutPageDescription: '关于页面说明',
     aboutMarkdown: '关于页面 Markdown 内容',
+    feedPageTitle: '信息流标题',
+    feedPageDescription: '信息流介绍',
 }
 const configFieldHints: Record<string, string> = {
   siteTitle: '站点首页与浏览器标题展示名称。',
@@ -3916,7 +3942,10 @@ const configFieldHints: Record<string, string> = {
   commentPageDescription: '留言页顶部描述文字。',
   aboutPageTitle: '关于页标题。',
   aboutPageDescription: '关于页简介说明。',
-  aboutMarkdown: '关于页正文内容，支持 Markdown。'
+  aboutMarkdown: '关于页正文内容，支持 Markdown。',
+  loginExpireDays: '登录态过期时间，支持任意正整数天数。',
+  feedPageTitle: '首页信息流 Tab 的标题文案。',
+  feedPageDescription: '首页信息流 Tab 的介绍文案，支持 {count} 占位符。'
 }
 const switchConfigKeySet = new Set([
   'enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled',
@@ -3955,6 +3984,7 @@ interface FrontendConfig {
     linksDescription: string;
     linksApplyTitle: string;
     linksApplyText: string;
+    loginExpireDays: number;
     friendLinkEmailEnabled: boolean;
     commentPageTitle: string;
     commentPageDescription: string;
@@ -3993,6 +4023,8 @@ interface FrontendConfig {
     musicCssCdnURL: string;
     musicJsCdnURL: string;
     feedEnabled: boolean;
+    feedPageTitle: string;
+    feedPageDescription: string;
     feedLimit: number | '';
     feedRefreshSeconds: number;
     feedSources: Array<{ type: string; group?: string; name?: string; url: string; enabled?: boolean; visible?: boolean }>;
@@ -4043,6 +4075,7 @@ const frontendConfig = reactive<FrontendConfig>({
     linksDescription: '推荐站点和朋友们的主页',
     linksApplyTitle: '申请友链须知',
     linksApplyText: '请提供站点名称、网址、图标（可选）、简介与有效邮箱。提交后需管理员审核，审核通过后展示。',
+    loginExpireDays: 3,
     friendLinkEmailEnabled: false,
     commentPageTitle: '',
     commentPageDescription: '',
@@ -4083,6 +4116,10 @@ const frontendConfig = reactive<FrontendConfig>({
     musicCssCdnURL: '',
     musicJsCdnURL: '',
     feedEnabled: false,
+    feedPageTitle: '实时聚合内容动态',
+    feedPageDescription: '聚合综合内容信息源内容，当前结果 {count} 条',
+    feedLimit: 100,
+    feedPageDescription: '聚合综合内容信息源内容，当前结果 {count} 条',
     feedLimit: 100,
     feedRefreshSeconds: 7200,
     feedSources: [] as Array<{ type: string; group?: string; name?: string; url: string; enabled?: boolean; visible?: boolean }>,
@@ -4208,6 +4245,7 @@ const defaultConfig: Record<string, any> = {
     linksDescription: '推荐站点和朋友们的主页',
     linksApplyTitle: '申请友链须知',
     linksApplyText: '请提供站点名称、网址、图标（可选）、简介与有效邮箱。提交后需管理员审核，审核通过后展示。',
+    loginExpireDays: 3,
     friendLinkEmailEnabled: false,
     friendLinks: [
       { title: 'NoiseWork', link: 'https://www.noisework.cn/', icon: 'i-mdi-home', description: '个人主页与作品集合' },
@@ -4306,6 +4344,12 @@ const normalizeFeedLimitInput = (raw: any): number | '' => {
   const value = Number(raw)
   if (!Number.isFinite(value) || value <= 0) return ''
   return Math.max(1, Math.min(100, Math.floor(value)))
+}
+
+const normalizeLoginExpireDays = (raw: any): number => {
+  const value = Number(raw)
+  if (!Number.isFinite(value) || value <= 0) return 3
+  return Math.floor(value)
 }
 
 const serializeFeedLimit = (raw: any): number => {
@@ -4707,6 +4751,7 @@ const fetchConfig = async () => {
             ;(frontendConfig as any).feedSources = normalizeFeedSources((frontendConfig as any).feedSources)
             ;(frontendConfig as any).feedLimit = normalizeFeedLimitInput((frontendConfig as any).feedLimit)
             ;(frontendConfig as any).feedRefreshSeconds = Math.max(10, Math.min(86400, Number((frontendConfig as any).feedRefreshSeconds || 7200)))
+            ;(frontendConfig as any).loginExpireDays = normalizeLoginExpireDays((frontendConfig as any).loginExpireDays)
             syncFeedEditor((frontendConfig as any).feedSources)
             // 后台主题：优先本地，其次服务端，兜底白色
             if (typeof window !== 'undefined') {
@@ -4837,6 +4882,11 @@ const saveConfigItem = async (key: string) => {
             feedSourceText.value = serializeFeedSourcesText(cleanedFeedSources)
             ;(frontendConfig as any).feedLimit = normalizeFeedLimitInput((frontendConfig as any).feedLimit)
             ;(frontendConfig as any).feedRefreshSeconds = Math.max(10, Math.min(86400, Number((frontendConfig as any).feedRefreshSeconds || 7200)))
+            ;(frontendConfig as any).feedPageTitle = String((frontendConfig as any).feedPageTitle || '').trim()
+            ;(frontendConfig as any).feedPageDescription = String((frontendConfig as any).feedPageDescription || '').trim()
+        }
+        if (key === 'loginExpireDays') {
+            ;(frontendConfig as any).loginExpireDays = normalizeLoginExpireDays((frontendConfig as any).loginExpireDays)
         }
 
         const settingsToSave = {
@@ -4844,6 +4894,8 @@ const saveConfigItem = async (key: string) => {
                 ...(key === 'feed'
                   ? {
                       feedEnabled: !!(frontendConfig as any).feedEnabled,
+                      feedPageTitle: String((frontendConfig as any).feedPageTitle || '').trim(),
+                      feedPageDescription: String((frontendConfig as any).feedPageDescription || '').trim(),
                       feedLimit: serializeFeedLimit((frontendConfig as any).feedLimit),
                       feedRefreshSeconds: Number((frontendConfig as any).feedRefreshSeconds || 7200),
                       feedSources: (frontendConfig as any).feedSources
@@ -4986,9 +5038,12 @@ const saveConfig = async () => {
         socialLinks: cleanedSocialLinks,
         friendLinks: cleanedFriendLinks,
         feedSources: cleanedFeedSources,
+        feedPageTitle: String((frontendConfig as any).feedPageTitle || '').trim(),
+        feedPageDescription: String((frontendConfig as any).feedPageDescription || '').trim(),
         feedLimit: serializeFeedLimit((frontendConfig as any).feedLimit),
         feedRefreshSeconds: Math.max(10, Math.min(86400, Number((frontendConfig as any).feedRefreshSeconds || 7200))),
         feedEnabled: !!(frontendConfig as any).feedEnabled,
+        loginExpireDays: normalizeLoginExpireDays((frontendConfig as any).loginExpireDays),
         leftAdsIntervalMs: Number((frontendConfig as any).leftAdsIntervalMs || 0) || Number((defaultConfig as any).leftAdsIntervalMs || 4000),
         leftAdEnabled: !!(frontendConfig as any).leftAdEnabled,
         socialLinksEnabled: !!(frontendConfig as any).socialLinksEnabled,
@@ -6202,6 +6257,17 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 .admin-topbar-surface {
   backdrop-filter: blur(8px);
   box-shadow: 0 1px 4px rgba(29, 33, 41, 0.1);
+}
+.admin-sidebar-avatar {
+  width: 3.5rem !important;
+  height: 3.5rem !important;
+  min-width: 3.5rem;
+  min-height: 3.5rem;
+  aspect-ratio: 1 / 1;
+  border-radius: 9999px !important;
+  object-fit: cover;
+  flex-shrink: 0;
+  display: block;
 }
 .admin-form-shell {
   width: 100%;

@@ -220,8 +220,8 @@
           <div v-else-if="activeTab==='feed'" class="feed-page">
             <UCard class="search-card feed-shell-card mb-3" :ui="{ body: 'p-0' }">
               <div :class="['feed-page-head', isDark ? 'feed-page-head-dark' : 'feed-page-head-light']">
-                <div class="card-title text-center text-black dark:text-white">实时聚合内容动态</div>
-                <div class="section-subtitle">聚合综合内容信息源内容，当前结果 {{ feedResultCount }} 条</div>
+                <div class="card-title text-center text-black dark:text-white">{{ feedPageTitleText }}</div>
+                <div class="section-subtitle">{{ feedPageDescriptionText }}</div>
               </div>
               <div class="feed-page-content">
                 <InfoFeedList
@@ -230,7 +230,7 @@
                   :refresh-seconds="Number(frontendConfig.feedRefreshSeconds || 7200)"
                   :active="activeTab==='feed'"
                   :base-api="baseApi"
-                  :enable-github-card="frontendConfig.enableGithubCard === true"
+                  :enable-github-card="feedEnableGithubCard"
                   @count-change="feedResultCount = $event"
                 />
               </div>
@@ -585,6 +585,16 @@ const toggleHeatmapCard = () => { showHeatmap.value = !showHeatmap.value }
 const activeTab = ref('latest')
 const feedResultCount = ref(0)
 const isFeedEnabled = computed(() => frontendConfig.value?.feedEnabled === true)
+const feedEnableGithubCard = computed(() => frontendConfig.value?.enableGithubCard === true)
+const feedPageTitleText = computed(() => {
+  const text = String(frontendConfig.value?.feedPageTitle || '').trim()
+  return text || '实时聚合内容动态'
+})
+const feedPageDescriptionText = computed(() => {
+  const raw = String(frontendConfig.value?.feedPageDescription || '').trim()
+  const tpl = raw || '聚合综合内容信息源内容，当前结果 {count} 条'
+  return tpl.replace(/\{count\}/g, String(feedResultCount.value))
+})
 const centerTabs = computed(() => {
   const tabs = [
     { key: 'latest', name: '最新', icon: 'i-heroicons-sparkles' },
@@ -1072,6 +1082,8 @@ const frontendConfig = ref<any>({
   linksTitle: '',
   linksDescription: '',
   feedEnabled: false,
+  feedPageTitle: '',
+  feedPageDescription: '',
   feedLimit: 100,
   feedRefreshSeconds: 7200,
   feedSources: [] as Array<{ type: string; group?: string; name?: string; url: string; enabled?: boolean; visible?: boolean }>,
@@ -1622,6 +1634,8 @@ const headerImageStyle = computed(() => ({
   rssAuthorName: 'Noise',
   rssFaviconURL: '/favicon.ico',
   feedEnabled: false,
+  feedPageTitle: '实时聚合内容动态',
+  feedPageDescription: '聚合综合内容信息源内容，当前结果 {count} 条',
   feedLimit: 100,
   feedRefreshSeconds: 7200,
   feedSources: [] as Array<{ type: string; group?: string; name?: string; url: string; enabled?: boolean; visible?: boolean }>,
