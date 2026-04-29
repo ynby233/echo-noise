@@ -1683,8 +1683,8 @@ docker buildx create --use --name mybuilder
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final \
-  --build-arg VERSION=v3.1 \
-  -t noise233/echo-noise:v3.1 \
+  --build-arg VERSION=v3.2 \
+  -t noise233/echo-noise:v3.2 \
   -t noise233/echo-noise:latest \
   --push .
 ```
@@ -1695,8 +1695,8 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final-mcp \
-  --build-arg VERSION=v3.1 \
-  -t noise233/echo-noise:v3.1-mcp \
+  --build-arg VERSION=v3.2 \
+  -t noise233/echo-noise:v3.2-mcp \
   -t noise233/echo-noise:latest-mcp \
   --push .
 ```
@@ -1707,9 +1707,9 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64 \
   --target final \
-  --build-arg VERSION=v3.1 \
+  --build-arg VERSION=v3.2 \
   --build-arg INSTALL_FFMPEG=0 \
-  -t noise233/echo-noise:v3.1-amd64 \
+  -t noise233/echo-noise:v3.2-amd64 \
   -t noise233/echo-noise:last-amd64 \
   --push .
 ```

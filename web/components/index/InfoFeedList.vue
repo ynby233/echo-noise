@@ -651,14 +651,27 @@ const isRSSItem = (item: FeedItem) => String(item.type || '').toLowerCase() === 
 const hasInlineMediaInContent = (item: FeedItem) => {
   const raw = getDisplayRaw(item)
   if (!raw) return false
-  return /!\[[^\]]*]\(([^)]+)\)/i.test(raw) || /<img[\s\S]*?>/i.test(raw)
+  return (
+    /!\[[^\]]*]\((?:<)?[^)\s>]+(?:>)?\)/i.test(raw) ||
+    /<img[\s\S]*?>/i.test(raw) ||
+    /<picture[\s\S]*?>/i.test(raw) ||
+    /<video[\s\S]*?>/i.test(raw) ||
+    /\[[^\]]*]\((?:https?:\/\/)?[^\s)]+\.(?:jpg|jpeg|png|gif|webp|bmp|svg|avif|heic|heif)(?:\?[^\s)]*)?\)/i.test(raw) ||
+    /(?:^|[\s(（[{【<])https?:\/\/[^\s<>()]+\.(?:jpg|jpeg|png|gif|webp|bmp|svg|avif|heic|heif)(?:\?[^\s<>()]*)?(?:$|[\s)）\]}>，,。.!！?？])/i.test(raw)
+  )
 }
 
 const shouldShowStandaloneImage = (item: FeedItem) => {
   const hasImage = String(item.imageURL || '').trim().length > 0
   if (!hasImage) return false
   // RSS 若正文中已包含内联图片/媒体，不再额外展示独立图片，避免重复渲染。
-  if (isRSSItem(item)) return !hasInlineMediaInContent(item)
+  if (isRSSItem(item)) {
+    const hasContent = String(getDisplayRaw(item) || '').trim().length > 0
+    if (hasInlineMediaInContent(item)) return false
+    // RSS 存在正文时优先相信正文，不额外补独立图，避免“正文图 + 独立图”重复。
+    if (hasContent) return false
+    return true
+  }
   return !hasInlineMediaInContent(item)
 }
 
