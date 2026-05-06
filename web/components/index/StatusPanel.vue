@@ -3910,7 +3910,6 @@ const useInitialsAvatar = async () => {
 const configLabels: Record<string, string> = {
     siteTitle: '站点标题',
     subtitleText: '欢迎语',
-    loginExpireDays: '登录过期时间',
     backgrounds: '头部图',
     cardFooterTitle: '卡片页脚标题',
     cardFooterLink: '卡片页脚链接',
