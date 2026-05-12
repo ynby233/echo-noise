@@ -38,6 +38,7 @@
 
 ## 2026更新状态
 
+- 修复了用户直接修改原始密码或头像立即退出再登录失败的问题，改为返回安全副本，避免污染缓存中的用户对象，现在只更新实际变更字段，不再把内存里的空密码覆盖回数据库，保留明文/MD5/bcrypt密码兼容逻辑
 - 优化浏览器扩展，增加右键一键识别当前网站信息并写入笔记
 - 重新优化后台入口及配置页面同时增加“配色”主题
 - 新增“说说笔记”独立 skill 包，支持api和mcp两种模式使用
@@ -1683,8 +1684,8 @@ docker buildx create --use --name mybuilder
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final \
-  --build-arg VERSION=v3.2 \
-  -t noise233/echo-noise:v3.2 \
+  --build-arg VERSION=v3.3 \
+  -t noise233/echo-noise:v3.3 \
   -t noise233/echo-noise:latest \
   --push .
 ```
@@ -1695,8 +1696,8 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final-mcp \
-  --build-arg VERSION=v3.2 \
-  -t noise233/echo-noise:v3.2-mcp \
+  --build-arg VERSION=v3.3 \
+  -t noise233/echo-noise:v3.3-mcp \
   -t noise233/echo-noise:latest-mcp \
   --push .
 ```
@@ -1707,9 +1708,9 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64 \
   --target final \
-  --build-arg VERSION=v3.2 \
+  --build-arg VERSION=v3.3 \
   --build-arg INSTALL_FFMPEG=0 \
-  -t noise233/echo-noise:v3.2-amd64 \
+  -t noise233/echo-noise:v3.3-amd64 \
   -t noise233/echo-noise:last-amd64 \
   --push .
 ```

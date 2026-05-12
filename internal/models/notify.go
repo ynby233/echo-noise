@@ -611,7 +611,14 @@ func SendTelegramPhotoWithCaption(photoURL string, caption string) error {
 		if err != nil {
 			return fmt.Errorf("下载图片失败: %v", err)
 		}
+		if imgResp == nil || imgResp.Body == nil {
+			return fmt.Errorf("下载图片失败: 返回了空响应")
+		}
 		defer imgResp.Body.Close()
+		if imgResp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(imgResp.Body)
+			return fmt.Errorf("下载图片失败: HTTP %d: %s", imgResp.StatusCode, string(body))
+		}
 
 		// 创建photo部分
 		part, err := writer.CreateFormFile("photo", "image.jpg")
@@ -665,6 +672,9 @@ func SendTelegramPhotoWithCaption(photoURL string, caption string) error {
 
 	if err != nil {
 		return err
+	}
+	if resp == nil || resp.Body == nil {
+		return fmt.Errorf("Telegram API 返回了空响应")
 	}
 	defer resp.Body.Close()
 
@@ -721,6 +731,9 @@ func SendTelegramVideoWithCaption(videoURL string, caption string) error {
 		if err != nil {
 			return err
 		}
+		if resp == nil || resp.Body == nil {
+			return fmt.Errorf("Telegram API 返回了空响应")
+		}
 		defer resp.Body.Close()
 
 		// 检查响应
@@ -755,6 +768,9 @@ func SendTelegramVideoWithCaption(videoURL string, caption string) error {
 	resp, err := notifyHTTPClient.Do(req)
 	if err != nil {
 		return err
+	}
+	if resp == nil || resp.Body == nil {
+		return fmt.Errorf("Telegram API 返回了空响应")
 	}
 	defer resp.Body.Close()
 

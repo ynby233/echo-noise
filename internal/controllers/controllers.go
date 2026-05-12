@@ -595,8 +595,10 @@ func GetUserInfo(c *gin.Context) {
 		return
 	}
 
-	user.Password = ""
-	c.JSON(http.StatusOK, dto.OK(user, models.QuerySuccessMessage))
+	// 返回副本，避免污染缓存中的用户对象。
+	safeUser := *user
+	safeUser.Password = ""
+	c.JSON(http.StatusOK, dto.OK(safeUser, models.QuerySuccessMessage))
 }
 
 func UpdateSetting(c *gin.Context) {

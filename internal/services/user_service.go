@@ -332,15 +332,11 @@ func UpdateUser(user *models.User, userdto dto.UserInfoDto) error {
 		}
 	}
 
-	// 应用更新
-	if err := repository.UpdateUserField(user.ID, "username", updates["username"]); err != nil && updates["username"] != nil {
-		return errors.New(err.Error())
-	}
-	if err := repository.UpdateUserField(user.ID, "avatar_url", updates["avatar_url"]); err != nil && updates["avatar_url"] != nil {
-		return errors.New(err.Error())
-	}
-	if err := repository.UpdateUserField(user.ID, "description", updates["description"]); err != nil && updates["description"] != nil {
-		return errors.New(err.Error())
+	// 仅更新请求中实际变化的字段，避免整对象保存时覆盖密码等敏感字段。
+	for field, value := range updates {
+		if err := repository.UpdateUserField(user.ID, field, value); err != nil {
+			return errors.New(err.Error())
+		}
 	}
 
 	// 同步到本地结构体
@@ -354,8 +350,6 @@ func UpdateUser(user *models.User, userdto dto.UserInfoDto) error {
 		user.Description = v.(string)
 	}
 
-	// 清理缓存
-	_ = repository.UpdateUser(user)
 	return nil
 }
 

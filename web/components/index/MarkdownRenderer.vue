@@ -551,9 +551,7 @@ const GITHUB_BARE_LINK_REG = /(^|[\s>])(https:\/\/github\.com\/([\w-]+)\/([\w.-]
 
 const buildYouTubeEmbedHtml = (videoId: string) => {
   const watchUrl = `https://www.youtube.com/watch?v=${videoId}`
-  const thumbPrimary = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
-  const thumbFallback = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
-  return `<div class='video-block youtube-video-block'><div class='video-wrapper youtube-video-wrapper'><iframe src='https://www.youtube.com/embed/${videoId}' title='YouTube video player' frameborder='0' allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture' allowfullscreen></iframe></div><div class='video-fallback-card'><img class='video-fallback-thumb' src='${thumbPrimary}' data-fallback-src='${thumbFallback}' alt='YouTube preview' loading='lazy' referrerpolicy='no-referrer' onerror="const f=this.getAttribute('data-fallback-src'); if (f && this.src!==f){this.src=f}else{this.style.display='none'}" /><div class='video-fallback-content'><div class='video-fallback-title'>YouTube 受限网络兜底预览</div><a class='video-fallback-link' href='${watchUrl}' target='_blank' rel='noopener noreferrer'>打开原链接</a></div></div></div>`
+  return `<div class='video-block youtube-video-block'><div class='video-wrapper youtube-video-wrapper'><iframe src='https://www.youtube.com/embed/${videoId}' title='YouTube video player' frameborder='0' allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture' allowfullscreen></iframe></div><div class='video-fallback-card youtube-fallback-card'><div class='video-fallback-content'><div class='video-fallback-title'>当前网络若无法加载 YouTube，可直接访问：</div><a class='video-fallback-link' href='${watchUrl}' target='_blank' rel='noopener noreferrer'>${watchUrl}</a></div></div></div>`
 }
 const replaceNodeWithHtml = (node: HTMLElement, html: string) => {
   const holder = document.createElement('div')
@@ -1220,39 +1218,28 @@ watch(() => props.enableGithubCard, () => {
 .video-fallback-card {
   display: flex;
   align-items: center;
-  gap: 12px;
   margin-top: 10px;
   padding: 10px;
   border-radius: 12px;
   border: 1px solid rgba(148, 163, 184, 0.35);
   background: rgba(148, 163, 184, 0.08);
 }
-.video-fallback-thumb {
-  width: 160px;
-  min-width: 160px;
-  height: 90px;
-  object-fit: cover;
-  border-radius: 10px;
-}
 .video-fallback-content {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0;
 }
 .video-fallback-title {
   font-size: 13px;
   font-weight: 600;
 }
 .video-fallback-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: inline-block;
   width: fit-content;
-  padding: 5px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(59, 130, 246, 0.45);
   color: #2563eb;
   font-size: 12px;
+  word-break: break-all;
 }
 .theme-dark .video-fallback-card {
   border-color: rgba(148, 163, 184, 0.4);
@@ -1260,7 +1247,6 @@ watch(() => props.enableGithubCard, () => {
 }
 .theme-dark .video-fallback-link {
   color: #93c5fd;
-  border-color: rgba(147, 197, 253, 0.5);
 }
 .douyin-fallback-card {
   margin-top: 4px;
