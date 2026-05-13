@@ -9,6 +9,7 @@ const tagBtn = document.getElementById("tagBtn");
 const linkBtn = document.getElementById("linkBtn");
 const imageBtn = document.getElementById("imageBtn");
 const clearBtn = document.getElementById("clearBtn");
+const notifyToggle = document.getElementById("notifyToggle");
 const resultContainer = document.getElementById("resultContainer");
 const closeResultBtn = document.getElementById("closeResultBtn");
 const previewContent = document.getElementById("previewContent");
@@ -59,7 +60,7 @@ async function initEditor() {
     autoDownloadFontAwesome: false,
     promptURLs: false,
     shortcuts: { togglePreview: null, toggleSideBySide: null, drawTable: null },
-    previewRender: (plainText) => marked.parse(plainText)
+    previewRender: (plainText) => renderMarkdownPreview(plainText, siteUrlInput.value)
   });
 
   if (savedContent) {
@@ -88,6 +89,12 @@ function setupEventListeners() {
   clearBtn.addEventListener("click", clearEditorContent);
   sendBtn.addEventListener("click", sendMessage);
   closeResultBtn.addEventListener("click", () => resultContainer.classList.add("hidden"));
+  viewLink.addEventListener("click", (event) => {
+    const href = viewLink.getAttribute("href");
+    if (!href || href === "#") return;
+    event.preventDefault();
+    chrome.tabs.create({ url: href });
+  });
   insertSiteInfoBtn.addEventListener("click", insertSiteInfoToEditor);
   hideSiteInfoBtn.addEventListener("click", hideSiteInfoCard);
 }
@@ -96,6 +103,7 @@ async function loadSettings() {
   const { siteUrl = "", apiToken = "" } = await chrome.storage.sync.get(["siteUrl", "apiToken"]);
   siteUrlInput.value = siteUrl;
   apiTokenInput.value = apiToken;
+  await syncNotifySetting(siteUrl);
 }
 
 function openSettings() {
@@ -104,6 +112,101 @@ function openSettings() {
 
 function closeSettings() {
   settingsModal.classList.add("hidden");
+}
+
+async function syncNotifySetting(siteUrl) {
+  if (!notifyToggle) return;
+
+  const base = normalizeSiteUrl(siteUrl);
+  if (!base) {
+    notifyToggle.checked = true;
+    return;
+  }
+
+  try {
+    const response = await fetch(joinSiteUrl(base, "/api/frontend/config"), {
+      method: "GET",
+      headers: { "Accept": "application/json" }
+    });
+    const data = await response.json();
+    const enabled = data?.data?.frontendSettings?.notifyEnabled;
+    notifyToggle.checked = enabled === true || enabled === "true";
+  } catch (error) {
+    console.warn("读取站内推送设置失败，使用默认开启", error);
+    notifyToggle.checked = true;
+  }
+}
+
+function normalizeSiteUrl(siteUrl) {
+  const value = String(siteUrl || "").trim();
+  if (!value) return "";
+
+  try {
+    const url = new URL(value);
+    return `${url.origin}${url.pathname}`.replace(/\/+$/, "");
+  } catch {
+    return value.replace(/\/+$/, "");
+  }
+}
+
+function joinSiteUrl(siteUrl, path) {
+  const base = normalizeSiteUrl(siteUrl);
+  const suffix = String(path || "");
+  if (!base) return suffix;
+  if (!suffix) return base;
+  return `${base}/${suffix.replace(/^\/+/, "")}`;
+}
+
+function resolvePreviewUrl(rawUrl, siteUrl) {
+  const value = String(rawUrl || "").trim();
+  if (!value) return "";
+
+  if (
+    value.startsWith("data:") ||
+    value.startsWith("mailto:") ||
+    value.startsWith("tel:")
+  ) {
+    return value;
+  }
+
+  const base = normalizeSiteUrl(siteUrl);
+  try {
+    return base ? new URL(value, `${base}/`).toString() : new URL(value).toString();
+  } catch {
+    return value;
+  }
+}
+
+function renderMarkdownPreview(content, siteUrl) {
+  const html = marked.parse(content || "");
+  const template = document.createElement("template");
+  template.innerHTML = html;
+
+  template.content.querySelectorAll("img").forEach((img) => {
+    const src = img.getAttribute("src");
+    const resolvedSrc = resolvePreviewUrl(src, siteUrl);
+    if (resolvedSrc) {
+      img.setAttribute("src", resolvedSrc);
+    }
+  });
+
+  template.content.querySelectorAll("a").forEach((link) => {
+    const href = link.getAttribute("href");
+    const resolvedHref = resolvePreviewUrl(href, siteUrl);
+    if (resolvedHref) {
+      link.setAttribute("href", resolvedHref);
+    }
+    link.setAttribute("target", "_blank");
+    link.setAttribute("rel", "noopener noreferrer");
+  });
+
+  return template.innerHTML;
+}
+
+function buildMessageViewUrl(siteUrl, messageId) {
+  const base = normalizeSiteUrl(siteUrl);
+  if (!base || !messageId) return "";
+  return `${base}/#/messages/${encodeURIComponent(String(messageId))}`;
 }
 
 async function saveSettings() {
@@ -117,8 +220,12 @@ async function saveSettings() {
   }
 
   try {
-    const normalizedSiteUrl = new URL(siteUrl).origin;
+    const normalizedSiteUrl = normalizeSiteUrl(siteUrl);
+    if (!normalizedSiteUrl) {
+      throw new Error("invalid site url");
+    }
     await chrome.storage.sync.set({ siteUrl: normalizedSiteUrl, apiToken });
+    await syncNotifySetting(normalizedSiteUrl);
     showToast("设置已保存", "success");
     closeSettings();
   } catch (error) {
@@ -144,7 +251,7 @@ function insertLink() {
 function insertImage() {
   const url = window.prompt("请输入图片地址:", "https://");
   if (!url) return;
-  const alt = window.prompt("请输入图片描述:", "图片") || "图片";
+  const alt = window.prompt("请输入图片描述:", "") || "";
   insertMarkdown(`![${alt}](${url})`);
 }
 
@@ -165,8 +272,8 @@ async function clearEditorContent() {
 }
 
 async function sendMessage() {
-  const content = editor.value().trim();
-  if (!content) {
+  const content = editor.value();
+  if (!content.trim()) {
     showResult({ success: false, message: "请输入内容后再发送" });
     return;
   }
@@ -181,8 +288,9 @@ async function sendMessage() {
   setSending(true);
 
   try {
-    const payload = { content, private: false, notify: false, username: "" };
-    let response = await fetch(`${siteUrl}/api/token/messages`, {
+    const shouldNotify = Boolean(notifyToggle?.checked);
+    const payload = { content, private: false, notify: shouldNotify, username: "" };
+    let response = await fetch(joinSiteUrl(siteUrl, "/api/token/messages"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -192,10 +300,10 @@ async function sendMessage() {
     });
 
     if (!response.ok && !apiToken) {
-      response = await fetch(`${siteUrl}/api/messages`, {
+      response = await fetch(joinSiteUrl(siteUrl, "/api/messages"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, private: false, notify: false }),
+        body: JSON.stringify({ content, private: false, notify: shouldNotify }),
         credentials: "include"
       });
     }
@@ -236,7 +344,7 @@ function showResult({ success, message, content = "", siteUrl = "", messageId = 
   resultContainer.classList.add(success ? "success" : "error");
 
   if (success && content) {
-    previewContent.innerHTML = marked.parse(content);
+    previewContent.innerHTML = renderMarkdownPreview(content, siteUrl);
     previewContent.classList.remove("hidden");
   } else {
     previewContent.innerHTML = "";
@@ -244,7 +352,7 @@ function showResult({ success, message, content = "", siteUrl = "", messageId = 
   }
 
   if (success && siteUrl && messageId) {
-    viewLink.href = `${siteUrl}/message/${messageId}`;
+    viewLink.href = buildMessageViewUrl(siteUrl, messageId);
     viewLink.classList.remove("hidden");
   } else {
     viewLink.classList.add("hidden");
