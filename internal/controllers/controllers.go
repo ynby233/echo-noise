@@ -1215,43 +1215,48 @@ func PostComment(c *gin.Context) {
 			host := c.Request.Host
 			siteURL = fmt.Sprintf("%s://%s", scheme, host)
 		}
-		// 管理员邮箱
-		adminTo := cfg.SmtpFrom
-		if adminTo == "" {
-			adminTo = cfg.SmtpUser
-		}
-		prefixAdmin := strings.TrimSpace(cfg.CommentEmailAdminPrefix)
-		if prefixAdmin != "" {
-			prefixAdmin = prefixAdmin + " "
-		}
-		subject := fmt.Sprintf("%s新评论通知 - %s", prefixAdmin, cfg.SiteTitle)
-		textBody := fmt.Sprintf("站点：%s\n用户：%s\n邮箱：%s\n网址：%s\n内容：\n%s\n\n查看：%s/m/%d", cfg.SiteTitle, comment.Nick, comment.Mail, comment.Link, comment.Content, siteURL, message.ID)
-		if strings.TrimSpace(cfg.CommentEmailAdminTemplate) != "" {
-			tpl := cfg.CommentEmailAdminTemplate
-			tpl = strings.ReplaceAll(tpl, "{site}", cfg.SiteTitle)
-			tpl = strings.ReplaceAll(tpl, "{nick}", comment.Nick)
-			tpl = strings.ReplaceAll(tpl, "{mail}", comment.Mail)
-			tpl = strings.ReplaceAll(tpl, "{link}", comment.Link)
-			tpl = strings.ReplaceAll(tpl, "{content}", comment.Content)
-			tpl = strings.ReplaceAll(tpl, "{url}", fmt.Sprintf("%s/m/%d", siteURL, message.ID))
-			textBody = tpl
-		}
-		htmlTpl := strings.TrimSpace(cfg.CommentEmailAdminTemplateHTML)
-		if htmlTpl != "" {
-			htmlTpl = strings.ReplaceAll(htmlTpl, "{site}", cfg.SiteTitle)
-			htmlTpl = strings.ReplaceAll(htmlTpl, "{nick}", comment.Nick)
-			htmlTpl = strings.ReplaceAll(htmlTpl, "{mail}", comment.Mail)
-			htmlTpl = strings.ReplaceAll(htmlTpl, "{link}", comment.Link)
-			htmlTpl = strings.ReplaceAll(htmlTpl, "{content}", comment.Content)
-			htmlTpl = strings.ReplaceAll(htmlTpl, "{url}", fmt.Sprintf("%s/m/%d", siteURL, message.ID))
-			_ = models.SendEmailHTML(adminTo, subject, htmlTpl)
-		} else {
-			_ = models.SendEmail(adminTo, subject, textBody)
+		if comment.ParentID == nil || cfg.CommentEmailAdminNotifyAll {
+			adminTo := cfg.SmtpFrom
+			if adminTo == "" {
+				adminTo = cfg.SmtpUser
+			}
+			prefixAdmin := strings.TrimSpace(cfg.CommentEmailAdminPrefix)
+			if prefixAdmin != "" {
+				prefixAdmin = prefixAdmin + " "
+			}
+			subject := fmt.Sprintf("%s新评论通知 - %s", prefixAdmin, cfg.SiteTitle)
+			textBody := fmt.Sprintf("站点：%s\n用户：%s\n邮箱：%s\n网址：%s\n内容：\n%s\n\n查看：%s/m/%d", cfg.SiteTitle, comment.Nick, comment.Mail, comment.Link, comment.Content, siteURL, message.ID)
+			if strings.TrimSpace(cfg.CommentEmailAdminTemplate) != "" {
+				tpl := cfg.CommentEmailAdminTemplate
+				tpl = strings.ReplaceAll(tpl, "{site}", cfg.SiteTitle)
+				tpl = strings.ReplaceAll(tpl, "{nick}", comment.Nick)
+				tpl = strings.ReplaceAll(tpl, "{mail}", comment.Mail)
+				tpl = strings.ReplaceAll(tpl, "{link}", comment.Link)
+				tpl = strings.ReplaceAll(tpl, "{content}", comment.Content)
+				tpl = strings.ReplaceAll(tpl, "{url}", fmt.Sprintf("%s/m/%d", siteURL, message.ID))
+				textBody = tpl
+			}
+			htmlTpl := strings.TrimSpace(cfg.CommentEmailAdminTemplateHTML)
+			if htmlTpl != "" {
+				htmlTpl = strings.ReplaceAll(htmlTpl, "{site}", cfg.SiteTitle)
+				htmlTpl = strings.ReplaceAll(htmlTpl, "{nick}", comment.Nick)
+				htmlTpl = strings.ReplaceAll(htmlTpl, "{mail}", comment.Mail)
+				htmlTpl = strings.ReplaceAll(htmlTpl, "{link}", comment.Link)
+				htmlTpl = strings.ReplaceAll(htmlTpl, "{content}", comment.Content)
+				htmlTpl = strings.ReplaceAll(htmlTpl, "{url}", fmt.Sprintf("%s/m/%d", siteURL, message.ID))
+				_ = models.SendEmailHTML(adminTo, subject, htmlTpl)
+			} else {
+				_ = models.SendEmail(adminTo, subject, textBody)
+			}
 		}
 		// 回复通知
 		if comment.ParentID != nil {
 			var parent models.Comment
-			if err := db.First(&parent, *comment.ParentID).Error; err == nil && strings.TrimSpace(parent.Mail) != "" {
+			parentMail := ""
+			if err := db.First(&parent, *comment.ParentID).Error; err == nil {
+				parentMail = strings.TrimSpace(parent.Mail)
+			}
+			if parentMail != "" && strings.TrimSpace(comment.Mail) != parentMail {
 				prefixReply := strings.TrimSpace(cfg.CommentEmailReplyPrefix)
 				if prefixReply != "" {
 					prefixReply = prefixReply + " "
@@ -1272,9 +1277,9 @@ func PostComment(c *gin.Context) {
 					htmlTpl = strings.ReplaceAll(htmlTpl, "{nick}", comment.Nick)
 					htmlTpl = strings.ReplaceAll(htmlTpl, "{content}", comment.Content)
 					htmlTpl = strings.ReplaceAll(htmlTpl, "{url}", fmt.Sprintf("%s/m/%d", siteURL, message.ID))
-					_ = models.SendEmailHTMLWithFrom(strings.TrimSpace(parent.Mail), replySubject, htmlTpl, strings.TrimSpace(cfg.CommentEmailReplyName))
+					_ = models.SendEmailHTMLWithFrom(parentMail, replySubject, htmlTpl, strings.TrimSpace(cfg.CommentEmailReplyName))
 				} else {
-					_ = models.SendEmailWithFrom(strings.TrimSpace(parent.Mail), replySubject, textTpl, strings.TrimSpace(cfg.CommentEmailReplyName))
+					_ = models.SendEmailWithFrom(parentMail, replySubject, textTpl, strings.TrimSpace(cfg.CommentEmailReplyName))
 				}
 			}
 		}
@@ -2584,11 +2589,9 @@ func PostMessage(c *gin.Context) {
 				firstVideoURL = request.VideoURL
 			}
 
-			// 从 Markdown 内容中提取第一张图片
-			imageRegex := regexp.MustCompile(`!\[([^\]]*)\]\(([^)]+)\)`)
-			matches := imageRegex.FindAllStringSubmatch(request.Content, -1)
-			if firstImageURL == "" && len(matches) > 0 {
-				firstImageURL = matches[0][2]
+			cleanContent, extractedImages := models.ExtractImageURLsFromMarkdown(request.Content)
+			if firstImageURL == "" && len(extractedImages) > 0 {
+				firstImageURL = extractedImages[0]
 			}
 
 			// 从 Markdown 内容中提取第一段视频（如 [video](url)）
@@ -2598,16 +2601,7 @@ func PostMessage(c *gin.Context) {
 				firstVideoURL = videoMatches[0][1]
 			}
 
-			// 移除第一张图片的Markdown语法
-			formattedContent = request.Content
-			if len(matches) > 0 {
-				formattedContent = imageRegex.ReplaceAllStringFunc(request.Content, func(match string) string {
-					if match == matches[0][0] {
-						return ""
-					}
-					return match
-				})
-			}
+			formattedContent = cleanContent
 
 			// 处理长内容，如果超过4000字符，进行截断
 			const maxContentLength = 4000
@@ -2625,8 +2619,11 @@ func PostMessage(c *gin.Context) {
 			// 准备图片和视频数组
 			var images []string
 			var videos []string
-			if firstImageURL != "" {
-				images = []string{firstImageURL}
+			if request.ImageURL != "" {
+				images = append(images, request.ImageURL)
+			}
+			if len(extractedImages) > 0 {
+				images = append(images, extractedImages...)
 			}
 			if firstVideoURL != "" {
 				videos = []string{firstVideoURL}
@@ -2649,22 +2646,45 @@ func PostMessage(c *gin.Context) {
 
 					// 推送图片
 					if len(images) > 0 {
-						if isPublicURL(images[0]) {
-							caption := formattedContent
-							if len(caption) > telegramMaxCaption {
-								caption = caption[:telegramMaxCaption] + "...\n(内容过长，已截断)"
+						allPublic := true
+						for _, img := range images {
+							if !isPublicURL(img) {
+								allPublic = false
+								break
 							}
-							err := models.SendTelegramPhotoWithCaption(images[0], caption)
-							if err != nil {
-								sendTelegramErrorNotify(c, err)
+						}
+
+						if allPublic {
+							caption := formattedContent
+							if len([]rune(caption)) > telegramMaxCaption {
+								msg := caption
+								if len([]rune(msg)) > telegramMaxText {
+									msg = string([]rune(msg)[:telegramMaxText]) + "...\n(内容过长，已截断)"
+								}
+								if err := models.SendTelegramMessage(msg); err != nil {
+									sendTelegramErrorNotify(c, err)
+								}
+								caption = ""
+							}
+
+							if len(images) == 1 {
+								if err := models.SendTelegramPhotoWithCaption(images[0], caption); err != nil {
+									sendTelegramErrorNotify(c, err)
+								}
+							} else {
+								if err := models.SendTelegramMediaGroupWithCaption(images, caption); err != nil {
+									sendTelegramErrorNotify(c, err)
+								}
 							}
 						} else {
-							msg := formattedContent + "\n[图片] " + images[0]
-							if len(msg) > telegramMaxText {
-								msg = msg[:telegramMaxText] + "...\n(内容过长，已截断)"
+							msg := formattedContent
+							for _, img := range images {
+								msg += "\n[图片] " + img
 							}
-							err := models.SendTelegramMessage(msg)
-							if err != nil {
+							if len([]rune(msg)) > telegramMaxText {
+								msg = string([]rune(msg)[:telegramMaxText]) + "...\n(内容过长，已截断)"
+							}
+							if err := models.SendTelegramMessage(msg); err != nil {
 								sendTelegramErrorNotify(c, err)
 							}
 						}

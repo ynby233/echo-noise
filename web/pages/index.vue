@@ -147,17 +147,30 @@
             <HeatmapWidget />
           </UCard>
         
-        <UCard class="sidebar-card no-padding-card">
-          <div class="text-xs opacity-70 mb-1">最新评论</div>
-          <div class="scroll-list p-0">
-            <div class="flex flex-wrap gap-2">
-                <div v-for="(c, i) in visibleRecentComments" :key="c.id || i" class="inline-flex items-center gap-2 px-2 py-1 rounded-full" :class="recentItemClass">
-                  <img :src="recentAvatar(c)" :data-mail="c.mail || ''" :data-qq="qqNumberFromEmail(c?.mail || '')" data-try="0" class="w-5 h-5 rounded-full object-cover" alt="avatar" @error="onRecentAvatarError($event, c.nick || '')" />
-                  <span class="text-xs" :class="recentTextClass">{{ shortText(c.content) }}</span>
-                </div>
+        <UCard class="sidebar-card no-padding-card" :class="sidebarThemeCard">
+          <div>
+            <div class="text-xs opacity-70 mb-2">最新评论（{{ (recentComments || []).length }}）</div>
+            <div class="scroll-comments">
+              <div class="comment-pill-grid">
+                <a
+                  v-for="(c, i) in (recentComments || []).slice(0, 15)"
+                  :key="c.id || i"
+                  :href="c.link || '/'"
+                  class="comment-pill"
+                  :class="isDark ? 'comment-pill-dark' : 'comment-pill-light'"
+                >
+                  <img
+                    :src="recentAvatar(c)"
+                    class="comment-pill-avatar"
+                    alt="avatar"
+                    @error="onRecentAvatarError($event, c.nick || '')"
+                  />
+                  <span class="comment-pill-text" @wheel="onCommentTextWheel">{{ (c.nick || '匿名') + '：' + shortText(c.content) }}</span>
+                </a>
               </div>
             </div>
-          </UCard>
+          </div>
+        </UCard>
           
         </div>
       </div>
@@ -309,12 +322,25 @@
         </UCard>
         
         <UCard class="sidebar-card mt-2 no-padding-card" :class="sidebarThemeCard">
-          <div class="text-xs opacity-70 mb-1">最新评论</div>
-          <div class="scroll-list p-0">
-            <div class="flex flex-wrap gap-2">
-              <div v-for="(c, i) in visibleRecentComments" :key="c.id || i" class="inline-flex items-center gap-2 px-2 py-1 rounded-full" :class="recentItemClass">
-                <img :src="recentAvatar(c)" :data-mail="c.mail || ''" :data-qq="qqNumberFromEmail(c?.mail || '')" data-try="0" class="w-5 h-5 rounded-full object-cover" alt="avatar" @error="onRecentAvatarError($event, c.nick || '')" />
-                <span class="text-xs" :class="recentTextClass">{{ shortText(c.content) }}</span>
+          <div>
+            <div class="text-xs opacity-70 mb-2">最新评论（{{ (recentComments || []).length }}）</div>
+            <div class="scroll-comments">
+              <div class="comment-pill-grid">
+                <a
+                  v-for="(c, i) in (recentComments || []).slice(0, 15)"
+                  :key="c.id || i"
+                  :href="c.link || '/'"
+                  class="comment-pill"
+                  :class="isDark ? 'comment-pill-dark' : 'comment-pill-light'"
+                >
+                  <img
+                    :src="recentAvatar(c)"
+                    class="comment-pill-avatar"
+                    alt="avatar"
+                    @error="onRecentAvatarError($event, c.nick || '')"
+                  />
+                  <span class="comment-pill-text" @wheel="onCommentTextWheel">{{ (c.nick || '匿名') + '：' + shortText(c.content) }}</span>
+                </a>
               </div>
             </div>
           </div>
@@ -2139,6 +2165,21 @@ onUnmounted(() => { if (adTimer) clearInterval(adTimer) })
 const recentComments = ref<Array<any>>([])
 const recentIndex = ref(0)
 const containsImage = (s: string) => /!\[[^\]]*\]\([^)]*\)/.test(String(s || '')) || /<img[^>]*>/i.test(String(s || ''))
+const formatRecentTime = (v: any) => {
+  try {
+    const d = new Date(v)
+    if (Number.isNaN(d.getTime())) return ''
+    const now = new Date()
+    const diff = Math.floor((now.getTime() - d.getTime()) / 1000)
+    if (diff < 60) return '刚刚'
+    if (diff < 3600) return `${Math.floor(diff / 60)}m`
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h`
+    if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}d`
+    return `${d.getMonth() + 1}/${d.getDate()}`
+  } catch {
+    return ''
+  }
+}
 const visibleRecentComments = computed(() => {
   const items = recentComments.value.filter((c) => !containsImage(c?.content || ''))
   if (items.length <= 8) return items
@@ -2150,7 +2191,16 @@ const shortText = (s: string) => {
   const noMdImg = String(s || '').replace(/!\[[^\]]*\]\([^)]*\)/g, '')
   const noHtmlImg = noMdImg.replace(/<img[^>]*>/gi, '')
   const t = noHtmlImg.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
-  return t.length > 20 ? t.slice(0, 20) : (t || '评论')
+  return t.length > 36 ? t.slice(0, 36) : (t || '评论')
+}
+const onCommentTextWheel = (e: WheelEvent) => {
+  const el = e.currentTarget as HTMLElement | null
+  if (!el) return
+  const max = el.scrollWidth - el.clientWidth
+  if (max <= 0) return
+  e.preventDefault()
+  const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
+  el.scrollLeft = Math.max(0, Math.min(max, el.scrollLeft + delta))
 }
 const escapeHTML = (s: string) => String(s || '')
   .replace(/&/g, '&amp;')
@@ -2265,12 +2315,20 @@ const loadRecentComments = async () => {
     collected.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
     recentComments.value = collected.filter((c: any) => c.message_id !== guestbookMessageId.value)
       .filter((c: any) => !containsImage(c?.content || ''))
-      .map((c: any) => ({ id: c.id, nick: c.nick, mail: c.mail, content: c.content }))
-      .slice(0, 24)
+      .map((c: any) => ({ 
+        id: c.id, 
+        nick: c.nick, 
+        mail: c.mail, 
+        content: c.content, 
+        created_at: c.created_at, 
+        message_id: c.message_id,
+        link: `/#/messages/${c.message_id}`
+      }))
+      .slice(0, 30)
     if (recentComments.value.length > 0) return
   } catch {}
   recentComments.value = ['期待','对方的','发个','困难','路口提示','测试','你好','加油','真不错','赞同','有趣','哈哈','有用','收藏','不错','灵感','记录']
-    .map((t, i) => ({ id: i + 1, nick: '匿名', mail: '', content: t }))
+    .map((t, i) => ({ id: i + 1, nick: '匿名', mail: '', content: t, created_at: '', message_id: 0 }))
 }
 onMounted(async () => {
   await loadRecentComments()
@@ -2282,8 +2340,8 @@ onMounted(() => {
   try { (window as any).Fancybox?.bind?.('[data-fancybox]', {}) } catch {}
 })
 
-const recentItemClass = computed(() => (isDark.value ? 'bg-[#273242] text-white' : 'bg-slate-100 text-slate-800'))
-const recentTextClass = computed(() => (isDark.value ? 'text-white' : 'text-slate-800'))
+const recentItemClass = computed(() => (isDark.value ? 'recent-comment-row-dark' : 'recent-comment-row-light'))
+const recentTextClass = computed(() => (isDark.value ? 'text-white' : 'text-slate-900'))
 
 // 监听前端配置更新事件，保存后主动刷新配置
 onMounted(() => {
@@ -3342,6 +3400,19 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
 }
 
 .scroll-list { height: 64px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 2px 2px; }
+.scroll-comments { height: 132px; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding-right: 2px; scrollbar-width: none; -ms-overflow-style: none; }
+.scroll-comments::-webkit-scrollbar { width: 0; height: 0; display: none; }
+.comment-pill-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.comment-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 9999px; text-decoration: none; max-width: 100%; transition: transform .18s ease, box-shadow .18s ease, filter .18s ease; }
+.comment-pill-light { background: #fff; border: 1px solid rgba(0,0,0,0.08); box-shadow: 0 1px 2px rgba(0,0,0,0.10); }
+.comment-pill-dark { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 1px 2px rgba(255,255,255,0.06); }
+.comment-pill:hover { transform: translate3d(0,0,0) scale(1.01); filter: saturate(1.04); }
+.comment-pill-light:hover { box-shadow: 0 6px 18px rgba(0,0,0,0.18); }
+.comment-pill-dark:hover { box-shadow: 0 8px 22px rgba(255,255,255,0.12); }
+.comment-pill-avatar { width: 18px; height: 18px; border-radius: 9999px; object-fit: cover; flex: 0 0 auto; }
+.comment-pill-text { font-size: 12px; opacity: 0.9; display: inline-block; overflow-x: hidden; overflow-y: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; scrollbar-width: none; -ms-overflow-style: none; }
+.comment-pill-text::-webkit-scrollbar { width: 0; height: 0; display: none; }
+.comment-pill:hover .comment-pill-text { overflow-x: auto; text-overflow: clip; }
 .recent-inline-img { display:inline-block; width:18px; height:18px; object-fit:cover; border-radius:4px; vertical-align:middle; margin: -2px 2px 0 2px; }
 .ad-wrap { position: relative; aspect-ratio: var(--ad-aspect, 1 / 1); }
 .ad-image { width: 100%; height: 100%; object-fit: contain; transition: filter .12s ease, transform .12s ease; }

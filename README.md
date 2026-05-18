@@ -38,6 +38,7 @@
 
 ## 2026更新状态
 
+- 评论系统增加管理员全站评论邮件通知开关，调整多张图片内容推送到Telegram时图片转为相册发送
 - 修复了某些情况下用户直接修改资料时如密码或头像立即退出再登录失败的问题，现在只更新实际变更字段，不再把内存里的空密码覆盖回数据库，保留了明文/MD5/bcrypt密码兼容逻辑,调整了youtube视频兜底逻辑，改为文本提示➕点击链接
 - 优化浏览器扩展，增加右键一键识别当前网站信息并写入笔记
 - 重新优化后台入口及配置页面同时增加“配色”主题
@@ -1684,8 +1685,8 @@ docker buildx create --use --name mybuilder
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final \
-  --build-arg VERSION=v3.3 \
-  -t noise233/echo-noise:v3.3 \
+  --build-arg VERSION=v3.4 \
+  -t noise233/echo-noise:v3.4 \
   -t noise233/echo-noise:latest \
   --push .
 ```
@@ -1696,8 +1697,8 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --target final-mcp \
-  --build-arg VERSION=v3.3 \
-  -t noise233/echo-noise:v3.3-mcp \
+  --build-arg VERSION=v3.4 \
+  -t noise233/echo-noise:v3.4-mcp \
   -t noise233/echo-noise:latest-mcp \
   --push .
 ```
@@ -1708,9 +1709,9 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64 \
   --target final \
-  --build-arg VERSION=v3.3 \
+  --build-arg VERSION=v3.4 \
   --build-arg INSTALL_FFMPEG=0 \
-  -t noise233/echo-noise:v3.3-amd64 \
+  -t noise233/echo-noise:v3.4-amd64 \
   -t noise233/echo-noise:last-amd64 \
   --push .
 ```

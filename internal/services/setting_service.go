@@ -264,10 +264,11 @@ func GetFrontendConfig() (map[string]interface{}, error) {
 			"musicCssCdnURL":        choose(config.MusicCssCdnURL, ""),
 			"musicJsCdnURL":         choose(config.MusicJsCdnURL, ""),
 			// 评论系统
-			"commentEnabled":       config.CommentEnabled,
-			"commentSystem":        choose(config.CommentSystem, "builtin"),
-			"commentEmailEnabled":  config.CommentEmailEnabled,
-			"commentLoginRequired": config.CommentLoginRequired,
+			"commentEnabled":             config.CommentEnabled,
+			"commentSystem":              choose(config.CommentSystem, "builtin"),
+			"commentEmailEnabled":        config.CommentEmailEnabled,
+			"commentEmailAdminNotifyAll": config.CommentEmailAdminNotifyAll,
+			"commentLoginRequired":       config.CommentLoginRequired,
 			// 扩展组件开关
 			"calendarEnabled":        config.CalendarEnabled,
 			"timeEnabled":            config.TimeEnabled,
@@ -783,6 +784,15 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 			config.CommentEmailEnabled = false
 		}
 	}
+	if vb, ok := frontendSettings["commentEmailAdminNotifyAll"].(bool); ok {
+		config.CommentEmailAdminNotifyAll = vb
+	} else if vs, ok := frontendSettings["commentEmailAdminNotifyAll"].(string); ok {
+		if vs == "true" {
+			config.CommentEmailAdminNotifyAll = true
+		} else if vs == "false" {
+			config.CommentEmailAdminNotifyAll = false
+		}
+	}
 	// GitHub OAuth 设置
 	if vb, ok := frontendSettings["githubOAuthEnabled"].(bool); ok {
 		config.GithubOAuthEnabled = vb
@@ -1190,42 +1200,43 @@ func getDefaultConfig() map[string]interface{} {
 				{"type": "rss", "group": "默认分组", "name": "站点 RSS", "url": "/rss", "enabled": true, "visible": true},
 			},
 			// 系统欢迎组件默认参数
-			"welcomeAvatarURL":       "https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png",
-			"welcomeName":            "Noise",
-			"welcomeDescription":     "执迷不悟",
-			"welcomeUseAdmin":        true,
-			"githubOAuthEnabled":     false,
-			"githubClientId":         "",
-			"githubClientSecret":     "",
-			"githubCallbackURL":      "",
-			"pwaEnabled":             true,
-			"pwaTitle":               "",
-			"pwaDescription":         "",
-			"pwaIconURL":             "",
-			"defaultContentTheme":    "light",
-			"homeLayoutDefault":      "three",
-			"announcementText":       "欢迎访问我的说说笔记！",
-			"announcementEnabled":    true,
-			"musicEnabled":           false,
-			"musicPlaylistId":        "",
-			"musicSongId":            "",
-			"musicPosition":          "bottom-left",
-			"musicTheme":             "auto",
-			"musicLyric":             true,
-			"musicAutoplay":          false,
-			"musicDefaultMinimized":  true,
-			"musicEmbed":             false,
-			"musicHideOnMobile":      true,
-			"musicCssCdnURL":         "",
-			"musicJsCdnURL":          "",
-			"commentEnabled":         true,
-			"commentSystem":          "builtin",
-			"commentEmailEnabled":    false,
-			"commentLoginRequired":   false,
-			"hitokotoEnabled":        true,
-			"lifeCountdownEnabled":   false,
-			"lifeCountdownBirthDate": "",
-			"lifeExpectancyYears":    80,
+			"welcomeAvatarURL":           "https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png",
+			"welcomeName":                "Noise",
+			"welcomeDescription":         "执迷不悟",
+			"welcomeUseAdmin":            true,
+			"githubOAuthEnabled":         false,
+			"githubClientId":             "",
+			"githubClientSecret":         "",
+			"githubCallbackURL":          "",
+			"pwaEnabled":                 true,
+			"pwaTitle":                   "",
+			"pwaDescription":             "",
+			"pwaIconURL":                 "",
+			"defaultContentTheme":        "light",
+			"homeLayoutDefault":          "three",
+			"announcementText":           "欢迎访问我的说说笔记！",
+			"announcementEnabled":        true,
+			"musicEnabled":               false,
+			"musicPlaylistId":            "",
+			"musicSongId":                "",
+			"musicPosition":              "bottom-left",
+			"musicTheme":                 "auto",
+			"musicLyric":                 true,
+			"musicAutoplay":              false,
+			"musicDefaultMinimized":      true,
+			"musicEmbed":                 false,
+			"musicHideOnMobile":          true,
+			"musicCssCdnURL":             "",
+			"musicJsCdnURL":              "",
+			"commentEnabled":             true,
+			"commentSystem":              "builtin",
+			"commentEmailEnabled":        false,
+			"commentEmailAdminNotifyAll": true,
+			"commentLoginRequired":       false,
+			"hitokotoEnabled":            true,
+			"lifeCountdownEnabled":       false,
+			"lifeCountdownBirthDate":     "",
+			"lifeExpectancyYears":        80,
 			// 广告默认参数（多广告位）
 			"leftAdEnabled": true,
 			"leftAds": []map[string]string{

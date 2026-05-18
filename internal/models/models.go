@@ -190,6 +190,7 @@ type SiteConfig struct {
 	CommentEnabled                bool   `gorm:"default:true"`
 	CommentSystem                 string `gorm:"type:varchar(20)"` // builtin/waline/none/other
 	CommentEmailEnabled           bool   `gorm:"default:false"`
+	CommentEmailAdminNotifyAll    bool   `gorm:"default:true;not null" json:"commentEmailAdminNotifyAll"`
 	CommentLoginRequired          bool   `gorm:"default:true"`
 	CommentEmailReplyName         string `gorm:"type:varchar(100)"`
 	CommentEmailAdminPrefix       string `gorm:"type:varchar(50)"`

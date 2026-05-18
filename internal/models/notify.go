@@ -2,9 +2,9 @@ package models
 
 import (
 	"bytes"
-	"crypto/tls"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -558,9 +558,155 @@ func SendTelegramWithFormat(content string, images []string, parseHTML bool) err
 }
 
 var (
-	markdownLinkRegex  = regexp.MustCompile(`\[([^\]]+)\]\(([^)]+)\)`)
-	markdownImageRegex = regexp.MustCompile(`!\[([^\]]*)\]\(([^)]+)\)`)
+	markdownLinkRegex              = regexp.MustCompile(`\[([^\]]+)\]\(([^)]+)\)`)
+	markdownImageRegex             = regexp.MustCompile(`!\[([^\]]*)\]\(([^)]+)\)`)
+	telegramBangBacktickImageRegex = regexp.MustCompile("^!\\s*`\\s*(https?://[^\\s`]+)\\s*`\\s*$")
+	telegramBangURLImageRegex      = regexp.MustCompile("^!\\s*(https?://\\S+)\\s*$")
 )
+
+func ExtractImageURLsFromMarkdown(content string) (string, []string) {
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+
+	var extracted []string
+	content = markdownImageRegex.ReplaceAllStringFunc(content, func(match string) string {
+		parts := markdownImageRegex.FindStringSubmatch(match)
+		if len(parts) == 3 {
+			u := strings.TrimSpace(parts[2])
+			if u != "" {
+				extracted = append(extracted, u)
+			}
+		}
+		return ""
+	})
+
+	lines := strings.Split(content, "\n")
+	outLines := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			outLines = append(outLines, line)
+			continue
+		}
+
+		if m := telegramBangBacktickImageRegex.FindStringSubmatch(trimmed); len(m) == 2 {
+			extracted = append(extracted, m[1])
+			continue
+		}
+		if m := telegramBangURLImageRegex.FindStringSubmatch(trimmed); len(m) == 2 {
+			extracted = append(extracted, m[1])
+			continue
+		}
+
+		outLines = append(outLines, line)
+	}
+
+	clean := strings.TrimSpace(strings.Join(outLines, "\n"))
+	clean = regexp.MustCompile("\n{3,}").ReplaceAllString(clean, "\n\n")
+	return clean, dedupeStringsKeepOrder(extracted)
+}
+
+func SendTelegramMediaGroupWithCaption(photoURLs []string, caption string) error {
+	config := GetNotifyConfig()
+	if config == nil || !config.TelegramEnabled {
+		return fmt.Errorf("Telegram 推送未启用")
+	}
+
+	photoURLs = dedupeStringsKeepOrder(photoURLs)
+	if len(photoURLs) == 0 {
+		return nil
+	}
+
+	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMediaGroup", config.TelegramToken)
+
+	const chunkSize = 10
+	firstChunk := true
+	for i := 0; i < len(photoURLs); i += chunkSize {
+		end := i + chunkSize
+		if end > len(photoURLs) {
+			end = len(photoURLs)
+		}
+		chunk := photoURLs[i:end]
+
+		media := make([]map[string]interface{}, 0, len(chunk))
+		for j, u := range chunk {
+			item := map[string]interface{}{
+				"type":  "photo",
+				"media": u,
+			}
+			if firstChunk && j == 0 {
+				c := strings.TrimSpace(caption)
+				if c != "" {
+					item["caption"] = telegramMarkdownToHTML(c)
+					item["parse_mode"] = "HTML"
+				}
+			}
+			media = append(media, item)
+		}
+
+		payload := map[string]interface{}{
+			"chat_id": config.TelegramChatID,
+			"media":   media,
+		}
+
+		jsonData, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+
+		req, err := http.NewRequest(http.MethodPost, apiURL, bytes.NewBuffer(jsonData))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := notifyHTTPClient.Do(req)
+		if err != nil {
+			return err
+		}
+		if resp == nil || resp.Body == nil {
+			return fmt.Errorf("Telegram API 返回了空响应")
+		}
+
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("Telegram API 错误: %s", string(bodyBytes))
+		}
+
+		var response map[string]interface{}
+		_ = json.Unmarshal(bodyBytes, &response)
+
+		ok, _ := response["ok"].(bool)
+		if !ok {
+			if desc, ok2 := response["description"].(string); ok2 && desc != "" {
+				return fmt.Errorf("telegram发送失败: %v", desc)
+			}
+			return fmt.Errorf("telegram发送失败")
+		}
+
+		firstChunk = false
+	}
+
+	return nil
+}
+
+func dedupeStringsKeepOrder(items []string) []string {
+	seen := make(map[string]struct{}, len(items))
+	out := make([]string, 0, len(items))
+	for _, it := range items {
+		it = strings.TrimSpace(it)
+		if it == "" {
+			continue
+		}
+		if _, ok := seen[it]; ok {
+			continue
+		}
+		seen[it] = struct{}{}
+		out = append(out, it)
+	}
+	return out
+}
 
 // SendTelegramPhotoWithCaption 发送图片和文本作为一条消息
 func SendTelegramPhotoWithCaption(photoURL string, caption string) error {

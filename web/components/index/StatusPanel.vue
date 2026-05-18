@@ -1048,6 +1048,10 @@
                       <UToggle v-model="frontendConfig.commentEmailEnabled" :disabled="!frontendConfig.commentEnabled" class="shrink-0" />
                     </div>
                     <div class="flex items-center gap-2 w-auto">
+                      <span class="text-xs sm:text-sm whitespace-nowrap" :class="theme.mutedText">管理员全站</span>
+                      <UToggle v-model="frontendConfig.commentEmailAdminNotifyAll" :disabled="!frontendConfig.commentEnabled || !frontendConfig.commentEmailEnabled" class="shrink-0" />
+                    </div>
+                    <div class="flex items-center gap-2 w-auto">
                       <span class="text-xs sm:text-sm whitespace-nowrap" :class="theme.mutedText">仅登录</span>
                       <UToggle v-model="frontendConfig.commentLoginRequired" :disabled="!frontendConfig.commentEnabled" class="shrink-0" />
                     </div>
@@ -4031,6 +4035,7 @@ interface FrontendConfig {
     socialLinksEnabled: boolean;
     calendarEnabled: boolean;
     timeEnabled: boolean;
+    commentEmailAdminNotifyAll: boolean;
     lifeCountdownEnabled: boolean;
     lifeCountdownBirthDate: string;
     lifeExpectancyYears: number | '';
@@ -4085,6 +4090,7 @@ const frontendConfig = reactive<FrontendConfig>({
     commentEnabled: true,
     commentSystem: 'builtin',
     commentEmailEnabled: false,
+    commentEmailAdminNotifyAll: true,
   commentLoginRequired: true,
   githubOAuthEnabled: false,
   githubClientId: '',
@@ -4704,7 +4710,7 @@ const fetchConfig = async () => {
             const settings = data.data.frontendSettings;
             
             // 遍历配置项进行更新（布尔型键需强制转换）
-            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile', 'commentEnabled', 'commentEmailEnabled', 'commentLoginRequired', 'githubOAuthEnabled', 'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'friendLinkEmailEnabled', 'socialLinksEnabled', 'feedEnabled']
+            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile', 'commentEnabled', 'commentEmailEnabled', 'commentEmailAdminNotifyAll', 'commentLoginRequired', 'githubOAuthEnabled', 'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'friendLinkEmailEnabled', 'socialLinksEnabled', 'feedEnabled']
             Object.keys(frontendConfig).forEach(key => {
                 if (key === 'backgrounds') {
                     const serverBackgrounds = settings[key];
@@ -5204,6 +5210,7 @@ const saveCommentConfig = async () => {
         commentEnabled: !!frontendConfig.commentEnabled,
         commentSystem: 'builtin',
         commentEmailEnabled: !!frontendConfig.commentEmailEnabled,
+        commentEmailAdminNotifyAll: !!frontendConfig.commentEmailAdminNotifyAll,
         commentLoginRequired: !!frontendConfig.commentLoginRequired
       }
     }
