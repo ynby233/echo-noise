@@ -25,10 +25,10 @@
       <UIcon :name="themeIcon" class="w-6 h-6" />
       <span class="btn-label">切换亮暗</span>
     </button>
-    <a v-show="!collapsed" href="/rss" target="_blank" rel="noopener noreferrer" class="tool-btn" :class="isDark ? 'btn-dark' : 'btn-light'" aria-label="RSS">
-      <UIcon name="i-mdi-rss" class="w-6 h-6" />
-      <span class="btn-label">RSS</span>
-    </a>
+    <button v-show="!collapsed" class="tool-btn" :class="isDark ? 'btn-dark' : 'btn-light'" aria-label="留言" @click="$emit('open-comment')">
+      <UIcon name="i-heroicons-chat-bubble-left-right" class="w-6 h-6" />
+      <span class="btn-label">留言</span>
+    </button>
     <button v-show="!collapsed" class="tool-btn" :class="isDark ? 'btn-dark' : 'btn-light'" aria-label="后台" @click="$emit('open-admin')">
       <UIcon name="i-mdi-server-outline" class="w-6 h-6" />
       <span class="btn-label">后台</span>

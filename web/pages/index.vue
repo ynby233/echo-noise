@@ -418,6 +418,7 @@
     @switch-background="changeBackground"
     @toggle-theme="toggleThemeGlobal"
     @toggle-layout="cycleLayout"
+    @open-comment="openCommentBoard"
     @open-admin="openAdmin"
   />
   <UModal v-model="showAuthModal" :ui="{ width: 'sm:max-w-md', container: 'items-center', base: 'backdrop-blur-sm' }">
@@ -620,7 +621,6 @@ const centerTabs = computed(() => {
   const tabs = [
     { key: 'latest', name: '最新', icon: 'i-heroicons-sparkles' },
     { key: 'links', name: '友链', icon: 'i-heroicons-link' },
-    { key: 'comment', name: '留言', icon: 'i-heroicons-chat-bubble-left-right' },
     { key: 'about', name: '关于', icon: 'i-heroicons-information-circle' }
   ]
   if (isFeedEnabled.value) {
@@ -780,6 +780,9 @@ const openAdmin = async () => {
       githubEnabled.value = !!data?.data?.frontendSettings?.githubOAuthEnabled
     } catch {}
   }
+}
+const openCommentBoard = () => {
+  activeTab.value = 'comment'
 }
 onUnmounted(() => {
   if (captchaTimer) clearInterval(captchaTimer)
