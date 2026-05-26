@@ -23,11 +23,14 @@ RUN npm run generate
 RUN mkdir -p /app/public && cp -r .output/public/* /app/public/
 
 # 构建阶段：后端
-FROM docker.io/library/golang:1.24.1-alpine AS backend-build
+# Go 使用 BUILDPLATFORM 交叉编译到 TARGETOS/TARGETARCH，避免 multi-arch 构建时在 QEMU 中运行编译器。
+FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.24.1-alpine AS backend-build
 
 # 设置环境变量
 ENV CGO_ENABLED=0
 ENV GO111MODULE=on
+ARG TARGETOS
+ARG TARGETARCH
 
 # 设置工作目录
 WORKDIR /app
@@ -45,6 +48,7 @@ COPY ./config ./config
 # 编译 Go 应用（使用缓存优化）
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
+    GOOS="${TARGETOS:-linux}" GOARCH="${TARGETARCH:-$(go env GOARCH)}" \
     go build -trimpath -ldflags "-s -w -buildid=" -o /app/noise ./cmd/server/main.go
 
 # 创建必要的目录并设置权限
