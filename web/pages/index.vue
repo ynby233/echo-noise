@@ -24,16 +24,16 @@
             </div>
             <div class="profile-desc">{{ profileDesc }}</div>
             <div v-if="!isOnline" class="auth-actions">
-              <UTooltip text="登录">
-                <UButton variant="ghost" color="indigo" class="auth-btn" @click="authMode='login'; showAuthModal=true">
+              <span class="auth-tooltip" data-label="登录">
+                <UButton variant="ghost" color="indigo" class="auth-btn" aria-label="登录" @click="authMode='login'; showAuthModal=true">
                   <UIcon name="i-heroicons-arrow-right-end-on-rectangle" class="w-5 h-5" />
                 </UButton>
-              </UTooltip>
-              <UTooltip text="注册">
-                <UButton variant="ghost" color="orange" class="auth-btn" @click="switchToRegister(); showAuthModal=true">
+              </span>
+              <span class="auth-tooltip" data-label="注册">
+                <UButton variant="ghost" color="orange" class="auth-btn" aria-label="注册" @click="switchToRegister(); showAuthModal=true">
                   <UIcon name="i-heroicons-user-plus" class="w-5 h-5" />
                 </UButton>
-              </UTooltip>
+              </span>
             </div>
           </div>
         </UCard>
@@ -3167,6 +3167,15 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
   padding: 0;
 }
 .auth-actions { margin-top: 6px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.auth-tooltip { position: relative; display: inline-flex; align-items: center; justify-content: center; }
+.auth-tooltip::before,
+.auth-tooltip::after { position: absolute; left: 50%; opacity: 0; pointer-events: none; transition: opacity .15s ease, transform .15s ease; z-index: 30; }
+.auth-tooltip::before { content: ''; bottom: calc(100% + 2px); transform: translateX(-50%) translateY(2px); border: 4px solid transparent; border-top-color: rgba(17, 24, 39, 0.95); }
+.auth-tooltip::after { content: attr(data-label); bottom: calc(100% + 10px); transform: translateX(-50%) translateY(2px); padding: 4px 8px; border-radius: 6px; background: rgba(17, 24, 39, 0.95); color: #fff; font-size: 12px; line-height: 1; white-space: nowrap; box-shadow: 0 6px 16px rgba(15, 23, 42, 0.2); }
+.auth-tooltip:hover::before,
+.auth-tooltip:hover::after,
+.auth-tooltip:focus-within::before,
+.auth-tooltip:focus-within::after { opacity: 1; transform: translateX(-50%) translateY(0); }
 .auth-btn { width: 36px; height: 36px; padding: 0; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; background: transparent !important; border: none !important; box-shadow: none !important; }
 .auth-btn:hover { background: transparent !important; transform: translateY(-1px); }
 .avatar-lg {
