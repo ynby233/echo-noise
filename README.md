@@ -359,7 +359,7 @@ docker run -d \
 
 运行带MCP 镜像包：
 
-本 fork 已通过 GitHub Actions 自动构建与发布带 MCP 双架构镜像，可在 fnOS/Docker 中拉取：`ghcr.io/ynby233/echo-noise:latest-mcp`。构建目标与原说明保持一致：`--platform linux/amd64,linux/arm64 --target final-mcp`。
+本 fork 提供 GitHub Actions 手动构建与发布带 MCP 双架构镜像，可在需要用户测试的版本中发布到：`ghcr.io/ynby233/echo-noise:latest-mcp`。构建目标与原说明保持一致：`--platform linux/amd64,linux/arm64 --target final-mcp`。
 
 提供 HTTP/SSE（对外暴露 1315，便于 curl /浏览器调用 MCP）：
 
