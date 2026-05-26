@@ -521,15 +521,10 @@
   <UModal v-model="showForgot" :ui="{ container: 'items-center', base: 'backdrop-blur-sm' }">
     <UCard class="search-card">
       <div class="font-semibold mb-2">找回密码</div>
-      <UForm @submit.prevent="onForgot">
-        <div class="space-y-3">
-          <UInput v-model="forgot.account" placeholder="用户名或邮箱" />
-          <div class="flex justify-end gap-2">
-            <UButton variant="ghost" @click="showForgot = false">取消</UButton>
-            <UButton :disabled="forgotCooldown>0 || !smtpEnabled" type="submit" color="primary">{{ smtpEnabled ? (forgotCooldown>0 ? `请稍候(${forgotCooldown}s)` : '发送重置邮件') : '邮件未开启' }}</UButton>
-          </div>
-        </div>
-      </UForm>
+      <p class="text-sm opacity-80 mb-4">请通过Vocechat联系管理员进行处理</p>
+      <div class="flex justify-end">
+        <UButton color="primary" @click="showForgot = false">知道了</UButton>
+      </div>
     </UCard>
   </UModal>
   <div class="scroll-buttons" @mouseenter="hoverScroll = true" @mouseleave="hoverScroll = false">
@@ -698,11 +693,7 @@ const remaining = ref(0)
 let captchaExpiresAt: number | null = null
 let captchaTimer: any = null
 const showForgot = ref(false)
-const forgot = reactive({ account: '' })
-const forgotCooldown = ref(0)
-let forgotTimer: any = null
 let recentTicker: any = null
-const smtpEnabled = ref(true)
 const githubEnabled = ref(false)
 const refreshCaptcha = async () => {
   try {
@@ -787,13 +778,11 @@ const openAdmin = async () => {
       const res = await fetch(`${baseApi}/frontend/config`, { credentials: 'include' })
       const data = await res.json()
       githubEnabled.value = !!data?.data?.frontendSettings?.githubOAuthEnabled
-      smtpEnabled.value = !!data?.data?.smtpEnabled
     } catch {}
   }
 }
 onUnmounted(() => {
   if (captchaTimer) clearInterval(captchaTimer)
-  if (forgotTimer) clearInterval(forgotTimer)
   if (recentTicker) clearInterval(recentTicker)
 })
 
@@ -811,19 +800,6 @@ watch(showAuthModal, (v) => {
   }
 })
 const loginWithGithub = () => { window.location.href = `${baseApi}/oauth/github/login` }
-const onForgot = async () => {
-  try {
-    const res = await fetch(`${baseApi}/password/forgot`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ account: forgot.account }) })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok || data.code !== 1) throw new Error(data?.msg || '发送失败')
-    useToast().add({ title: data?.msg || '已发送', description: '请查收重置邮件', color: 'green' })
-    forgotCooldown.value = 60
-    if (forgotTimer) clearInterval(forgotTimer)
-    forgotTimer = setInterval(() => { if (forgotCooldown.value > 0) forgotCooldown.value--; else clearInterval(forgotTimer) }, 1000)
-  } catch (e: any) {
-    useToast().add({ title: '失败', description: e.message || '发送失败', color: 'red' })
-  }
-}
 // 修复：定义 targetMessageId，避免模板引用未定义导致列表不渲染
 const targetMessageId = ref<string | null>(null)
 // 添加搜索结果处理函数

@@ -337,7 +337,7 @@
                       <div class="admin-setting-heading">
                         <div>
                           <div class="admin-setting-title" :class="theme.text">绑定邮箱</div>
-                          <p class="admin-setting-desc" :class="theme.mutedText">绑定后可用于找回密码和接收系统通知。</p>
+                          <p class="admin-setting-desc" :class="theme.mutedText">绑定后可用于接收系统通知。</p>
                         </div>
                       </div>
                       <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-3">
