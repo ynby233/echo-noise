@@ -109,9 +109,9 @@ FROM docker.io/library/alpine:3.21 AS final
 ARG USE_UPX=1
 # 可选：是否安装 ffmpeg（1=启用，0=禁用）。默认启用以保持原有功能
 ARG INSTALL_FFMPEG=1
-# 默认使用精简自编译 ffmpeg（二进制文件 + 少量依赖）以降低镜像体积。
-# 如需更快构建可使用 --build-arg FFMPEG_MODE=apk
-ARG FFMPEG_MODE=custom
+# 默认使用 apk 版 ffmpeg，避免双架构镜像构建时重复源码编译。
+# 如需自编译版本，请显式构建 --target final-ffmpeg。
+ARG FFMPEG_MODE=apk
 # 镜像版本（用于在运行时展示），构建时可通过 --build-arg VERSION=xxx 传入
 ARG VERSION=latest
 ENV APP_VERSION=$VERSION
@@ -151,19 +151,11 @@ RUN set -eux; \
       find /app/public -type f -name '.DS_Store' -delete; \
     fi
 
-COPY --from=ffmpeg-build /opt/ffmpeg/bin/ffmpeg /usr/local/bin/ffmpeg
 RUN set -eux; \
-    apk add --no-cache ca-certificates x264-libs; \
+    apk add --no-cache ca-certificates; \
     if [ "$INSTALL_FFMPEG" = "1" ]; then \
-      if [ "$FFMPEG_MODE" = "apk" ]; then \
-        apk add --no-cache ffmpeg; \
-        rm -f /usr/local/bin/ffmpeg; \
-      else \
-        chmod +x /usr/local/bin/ffmpeg; \
-        /usr/local/bin/ffmpeg -version >/dev/null; \
-      fi; \
-    else \
-      rm -f /usr/local/bin/ffmpeg; \
+      apk add --no-cache ffmpeg; \
+      ffmpeg -version >/dev/null; \
     fi; \
     rm -rf /usr/share/man /usr/share/doc /usr/share/licenses /usr/share/locale; \
     rm -rf /var/cache/apk/*; \
@@ -190,6 +182,11 @@ CMD ["/app/noise"]
 # 显式的“带自编译 ffmpeg 的最终镜像”目标。
 # 用法：docker build --target final-ffmpeg ...
 FROM final AS final-ffmpeg
+COPY --from=ffmpeg-build /opt/ffmpeg/bin/ffmpeg /usr/local/bin/ffmpeg
+RUN set -eux; \
+    apk add --no-cache x264-libs; \
+    chmod +x /usr/local/bin/ffmpeg; \
+    /usr/local/bin/ffmpeg -version >/dev/null
 
 FROM final AS final-mcp
 RUN apk update && \
