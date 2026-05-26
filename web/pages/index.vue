@@ -20,7 +20,7 @@
               <span class="px-1.5 py-0.5 rounded bg-orange-500 text-white text-[10px]">管理员</span>
             </div>
             <div v-else class="mt-1">
-              <span class="px-1.5 py-0.5 rounded bg-indigo-500 text-white text-[10px]">探索者</span>
+              <span class="px-1.5 py-0.5 rounded bg-indigo-500 text-white text-[10px]">{{ isLoggedIn ? '用户' : '探索者' }}</span>
             </div>
             <div class="profile-desc">{{ profileDesc }}</div>
             <div v-if="!isOnline" class="auth-actions">
@@ -853,6 +853,7 @@ onMounted(() => { loadGuestbookTarget() })
 
 
 const userStore = useUserStore()
+const isLoggedIn = computed(() => !!(userStore.isLogin && userStore.user))
 const isOnline = computed(() => !!(userStore.user))
 const isAdmin = computed(() => {
   const u = userStore.user as any
