@@ -383,9 +383,16 @@ func GetMessagesByPage(c *gin.Context) {
 			authorID = &vv
 		}
 	}
+	if authorID == nil && pageRequest.AuthorID != nil {
+		authorID = pageRequest.AuthorID
+	}
 	var username *string
 	if un := c.Query("username"); strings.TrimSpace(un) != "" {
 		u := strings.TrimSpace(un)
+		username = &u
+	}
+	if username == nil && pageRequest.Username != nil && strings.TrimSpace(*pageRequest.Username) != "" {
+		u := strings.TrimSpace(*pageRequest.Username)
 		username = &u
 	}
 

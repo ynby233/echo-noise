@@ -6,9 +6,14 @@
       <div v-if="isPageLoading">
         <p>加载中...</p>
       </div>
+      <div v-else-if="isPersonalGuest">
+        <UIcon name="i-heroicons-user-circle" class="w-12 h-12 mx-auto mb-4" />
+        <p>请先登录查看个人笔记</p>
+        <p class="text-xs mt-2 opacity-70">登录后这里只显示你自己发表的内容</p>
+      </div>
       <div v-else>
-        <UIcon name="i-heroicons-inbox" class="w-12 h-12 mx-auto mb-4" />
-        <p>暂无消息内容</p>
+        <UIcon :name="isPersonalTab ? 'i-heroicons-document-text' : 'i-heroicons-inbox'" class="w-12 h-12 mx-auto mb-4" />
+        <p>{{ isPersonalTab ? '暂无个人笔记' : '暂无消息内容' }}</p>
       </div>
     </div>
     
@@ -150,9 +155,9 @@
         </div>
       </div>
       <!-- 预取下一页哨兵 -->
-      <div v-if="!isSearchMode" ref="prefetchSentinel" style="height:1px"></div>
+      <div v-if="!isSearchMode && !isPersonalGuest" ref="prefetchSentinel" style="height:1px"></div>
       <!-- 分页控制区域 -->
-      <div v-if="!isSearchMode" class="pager-shell flex justify-center items-center space-x-4 w-full my-4 flex-wrap md:flex-nowrap">
+      <div v-if="!isSearchMode && !isPersonalGuest" class="pager-shell flex justify-center items-center space-x-4 w-full my-4 flex-wrap md:flex-nowrap">
   <div class="flex justify-center items-center space-x-4 w-full md:w-auto">
     <UButton 
       v-if="message.page > 1"
@@ -451,10 +456,7 @@ const jumpToPage = async () => {
   try {
     const sc = document.querySelector('.content-wrapper') as HTMLElement | null;
     const prevY = sc ? sc.scrollTop : window.scrollY;
-    const result = await message.getMessages({
-      page,
-      pageSize: 15,
-    });
+    const result = await message.getMessages(pageQueryFor(page));
     
     if (!result) {
       throw new Error('跳转页面失败');
@@ -493,6 +495,10 @@ const props = defineProps({
   pageReady: {
     type: Boolean,
     default: true
+  },
+  activeTab: {
+    type: String,
+    default: 'latest'
   }
 });
 const outerContainerClass = computed(() => props.wide ? 'flex-grow w-full px-1 sm:px-2' : 'flex-grow w-full px-1 sm:px-2')
@@ -636,6 +642,21 @@ const fetchGuestbookId = async () => {
   const getMessageById = (id: number) => (message.messages || []).find((m: any) => m.id === id)
   const userStore = useUserStore();
   const isLogin = computed(() => userStore.isLogin);
+  const isPersonalTab = computed(() => props.activeTab === 'personal')
+  const isPersonalGuest = computed(() => isPersonalTab.value && !userStore.isLogin)
+  const currentUserId = computed(() => Number((userStore.user as any)?.userid || (userStore.user as any)?.id || (userStore.user as any)?.user_id || 0))
+  const currentUsername = computed(() => String((userStore.user as any)?.username || '').trim())
+  const pageQueryFor = (pageNumber: number) => {
+    const query: any = { page: pageNumber, pageSize: 15 }
+    if (isPersonalTab.value && currentUserId.value) query.authorId = currentUserId.value
+    return query
+  }
+  const isCurrentUserMessage = (msg: any) => {
+    if (!msg || !userStore.isLogin) return false
+    const msgUserId = Number(msg?.user_id || msg?.userId || 0)
+    if (currentUserId.value && msgUserId) return msgUserId === currentUserId.value
+    return !!currentUsername.value && String(msg?.username || '').trim() === currentUsername.value
+  }
   const isContentEmpty = (m: any) => {
     const img = String(m?.image_url || '').trim()
     const c0 = String(m?.content || '')
@@ -684,11 +705,8 @@ const resetList = async () => {
   searchResults.value = [];
   isSearchMode.value = false;
   
-  // 重新获取完整消息列表
-  await message.getMessages({
-    page: 1,
-    pageSize: 15,
-  });
+  // 重新获取当前视图消息列表
+  await message.getMessages(pageQueryFor(1));
   
   await nextTick();
   deferMeasure();
@@ -1226,6 +1244,29 @@ watch(() => route.hash, async (newHash) => {
 // 修改 loadMore 为 loadNextPage
 const isPageLoading = ref(false);
 
+watch(
+  [() => props.activeTab, () => userStore.isLogin, () => currentUserId.value],
+  async () => {
+    if (route.hash.includes('/messages/')) return
+    searchResults.value = []
+    isSearchMode.value = false
+    if (isPersonalGuest.value) {
+      message.reset()
+      return
+    }
+    isPageLoading.value = true
+    try {
+      await message.getMessages(pageQueryFor(1))
+      expandedCommentsMap.value = {}
+      await nextTick()
+      deferMeasure()
+      deferInitFancybox()
+    } finally {
+      isPageLoading.value = false
+    }
+  }
+)
+
 const loadPreviousPage = async () => {
   if (isPageLoading.value || message.page <= 1) return;
   isPageLoading.value = true;
@@ -1233,10 +1274,7 @@ const loadPreviousPage = async () => {
     const sc = document.querySelector('.content-wrapper') as HTMLElement | null;
     const prevY = sc ? sc.scrollTop : window.scrollY;
     const targetPage = message.page - 1;
-    const result = await message.getMessages({
-      page: targetPage,
-      pageSize: 15,
-    });
+    const result = await message.getMessages(pageQueryFor(targetPage));
     if (result && Array.isArray(result.items)) {
       const nonPinned = result.items.filter((m: any) => !m.pinned && !isGuestbookMessage(m));
       message.messages = [...pinnedTopItems.value, ...nonPinned];
@@ -1269,10 +1307,7 @@ const loadNextPage = async () => {
     const sc = document.querySelector('.content-wrapper') as HTMLElement | null;
     const prevY = sc ? sc.scrollTop : window.scrollY;
     const targetPage = message.page + 1;
-    const result = await message.getMessages({
-      page: targetPage,
-      pageSize: 15,
-    });
+    const result = await message.getMessages(pageQueryFor(targetPage));
     if (result && Array.isArray(result.items)) {
       const nonPinned = result.items.filter((m: any) => !m.pinned && !isGuestbookMessage(m));
       message.messages = [...pinnedTopItems.value, ...nonPinned];
@@ -1301,12 +1336,9 @@ const loadNextPage = async () => {
 watch(
   () => userStore.isLogin,
   (newVal) => {
-    if (newVal) {
+    if (newVal && !isPersonalTab.value) {
       // 用户登录后的处理
-      message.getMessages({
-        page: 1,
-        pageSize: 15,
-      });
+      message.getMessages(pageQueryFor(1));
     }
   }
 );
@@ -1996,16 +2028,17 @@ const resetSearch = () => {
   });
 };
 
-// 修改displayMessages计算属性以支持搜索模式
+// 修改displayMessages计算属性以支持搜索模式和个人视图
 const displayMessages = computed(() => {
+  const filterPersonal = (items: any[]) => isPersonalTab.value ? items.filter(isCurrentUserMessage) : items
   if (isSearchMode.value && Array.isArray(searchResults.value)) {
-    return (searchResults.value || []);
+    return filterPersonal(searchResults.value || []);
   }
   const base = (message.messages || []).filter((m: any) => !isGuestbookMessage(m));
   const pinned = (pinnedTopItems.value || []).filter((m: any) => !isGuestbookMessage(m));
-  if (!pinned.length) return base;
+  if (!pinned.length) return filterPersonal(base);
   const rest = base.filter((m: any) => !pinned.some((p: any) => p.id === m.id));
-  return [...pinned, ...rest];
+  return filterPersonal([...pinned, ...rest]);
 });
 
 // 添加事件监听

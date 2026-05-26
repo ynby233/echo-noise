@@ -269,10 +269,10 @@
             </UCard>
           </div>
           <template v-else>
-            <AddForm @search-result="handleSearchResult" :hide-header-tools="layoutState==='three'" :wide="layoutState==='two'" />
+            <AddForm v-if="activeTab !== 'personal' || isLoggedIn" @search-result="handleSearchResult" :hide-header-tools="layoutState==='three'" :wide="layoutState==='two'" />
             <div :class="layoutState==='two' ? 'w-full max-w-none mt-3' : 'mx-auto w-full sm:max-w-4xl mt-3'">
               <TagList 
-                v-if="tags && tags.length > 0"
+                v-if="activeTab === 'latest' && tags && tags.length > 0"
                 :tags="tags"
                 @tagClick="handleTagClick"
                 @updateTags="handleTagsUpdate" 
@@ -285,6 +285,7 @@
             :target-message-id="targetMessageId" 
             :wide="layoutState==='two'"
             :page-ready="isLoaded"
+            :active-tab="activeTab"
           />
           </template>
           <div class="page-footer" v-html="(frontendConfig.pageFooterHTML || defaultConfig.pageFooterHTML)"></div>
@@ -620,6 +621,7 @@ const feedPageDescriptionText = computed(() => {
 const centerTabs = computed(() => {
   const tabs = [
     { key: 'latest', name: '最新', icon: 'i-heroicons-sparkles' },
+    { key: 'personal', name: '个人', icon: 'i-heroicons-user-circle' },
     { key: 'links', name: '友链', icon: 'i-heroicons-link' },
     { key: 'about', name: '关于', icon: 'i-heroicons-information-circle' }
   ]

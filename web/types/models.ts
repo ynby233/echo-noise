@@ -2,6 +2,8 @@ export interface Message {
     id: number;
     content: string;
     username?: string;
+    user_id?: number;
+    userId?: number;
     image_url?: string;
     private: boolean;
     created_at: string;
@@ -19,6 +21,8 @@ export interface MessageToSave {
 export interface PageQuery {
     page: number;
     pageSize: number;
+    authorId?: number;
+    username?: string;
 }
 
 export interface PageQueryResult {
