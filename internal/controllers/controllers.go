@@ -1079,6 +1079,49 @@ func AuditFriendLink(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.OK(apply, "已拒绝"))
 }
 
+// 评论账号鉴权：兼容当前登录逻辑写入的 user_id session，保留中间件注入上下文的可能性。
+func commentAuthUserID(c *gin.Context) (uint, bool) {
+	if v, ok := c.Get("user_id"); ok {
+		if id, ok := commentUint(v); ok && id > 0 {
+			return id, true
+		}
+	}
+	session := sessions.Default(c)
+	if id, ok := commentUint(session.Get("user_id")); ok && id > 0 {
+		return id, true
+	}
+	return 0, false
+}
+
+func commentUint(v any) (uint, bool) {
+	switch val := v.(type) {
+	case uint:
+		return val, true
+	case int:
+		if val >= 0 {
+			return uint(val), true
+		}
+	case int64:
+		if val >= 0 {
+			return uint(val), true
+		}
+	case float64:
+		if val >= 0 {
+			return uint(val), true
+		}
+	case string:
+		s := strings.TrimSpace(val)
+		if s == "" {
+			return 0, false
+		}
+		n, err := strconv.ParseUint(s, 10, 64)
+		if err == nil {
+			return uint(n), true
+		}
+	}
+	return 0, false
+}
+
 // 获取指定消息的评论列表（内置评论系统）
 func GetComments(c *gin.Context) {
 	idStr := c.Param("id")
@@ -1092,6 +1135,46 @@ func GetComments(c *gin.Context) {
 	if err := db.Where("message_id = ?", msgID).Order("created_at ASC").Find(&comments).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取评论失败"})
 		return
+	}
+	userIDs := make([]uint, 0)
+	seenUserIDs := map[uint]bool{}
+	for _, comment := range comments {
+		if comment.UserID != nil && *comment.UserID > 0 {
+			if !seenUserIDs[*comment.UserID] {
+				seenUserIDs[*comment.UserID] = true
+				userIDs = append(userIDs, *comment.UserID)
+			}
+		}
+	}
+	for i := range comments {
+		if comments[i].UserID != nil {
+			comments[i].Mail = ""
+			comments[i].Link = ""
+		}
+	}
+	if len(userIDs) > 0 {
+		var users []models.User
+		if err := db.Select("id, username, avatar_url").Where("id IN ?", userIDs).Find(&users).Error; err == nil {
+			userInfo := map[uint]models.CommentUserInfo{}
+			for _, user := range users {
+				userInfo[user.ID] = models.CommentUserInfo{
+					ID:        user.ID,
+					Username:  strings.TrimSpace(user.Username),
+					AvatarURL: strings.TrimSpace(user.AvatarURL),
+				}
+			}
+			for i := range comments {
+				if comments[i].UserID == nil {
+					continue
+				}
+				if info, ok := userInfo[*comments[i].UserID]; ok {
+					comments[i].User = &info
+					if info.Username != "" {
+						comments[i].Nick = info.Username
+					}
+				}
+			}
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": comments})
 }
@@ -1190,20 +1273,37 @@ func PostComment(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
 		return
 	}
-	// 读取站点配置并根据需要校验登录状态
+	// 读取站点配置；评论/留言/回复统一强制绑定当前登录账号，不再信任前端提交的昵称/邮箱/网址。
 	var cfg models.SiteConfig
 	_ = db.Table("site_configs").First(&cfg).Error
-	if cfg.CommentLoginRequired {
-		if _, ok := pkg.GetUserSession(c); !ok {
-			c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "请登录后评论"})
+	userID, ok := commentAuthUserID(c)
+	if !ok {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "请登录后评论"})
+		return
+	}
+	var currentUser models.User
+	if err := db.Select("id, username, avatar_url").First(&currentUser, userID).Error; err != nil || currentUser.ID == 0 {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "账号不存在或已失效"})
+		return
+	}
+	if req.ParentID != nil {
+		var parent models.Comment
+		if err := db.Select("id, message_id").First(&parent, *req.ParentID).Error; err != nil || parent.MessageID != msgID {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "回复目标不存在"})
 			return
 		}
 	}
+	commentUserID := currentUser.ID
+	commentNick := strings.TrimSpace(currentUser.Username)
+	if commentNick == "" {
+		commentNick = fmt.Sprintf("用户%d", currentUser.ID)
+	}
 	comment := models.Comment{
 		MessageID: msgID,
-		Nick:      strings.TrimSpace(req.Nick),
-		Mail:      strings.TrimSpace(req.Mail),
-		Link:      strings.TrimSpace(req.Link),
+		UserID:    &commentUserID,
+		Nick:      commentNick,
+		Mail:      "",
+		Link:      "",
 		Content:   req.Content,
 		ParentID:  req.ParentID,
 	}
@@ -1211,6 +1311,7 @@ func PostComment(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "保存评论失败"})
 		return
 	}
+	comment.User = &models.CommentUserInfo{ID: currentUser.ID, Username: commentNick, AvatarURL: strings.TrimSpace(currentUser.AvatarURL)}
 	// 邮件通知
 	if cfg.SmtpEnabled && cfg.CommentEmailEnabled {
 		siteURL := strings.TrimSpace(cfg.CommentEmailSiteURL)
@@ -1263,7 +1364,7 @@ func PostComment(c *gin.Context) {
 			if err := db.First(&parent, *comment.ParentID).Error; err == nil {
 				parentMail = strings.TrimSpace(parent.Mail)
 			}
-			if parentMail != "" && strings.TrimSpace(comment.Mail) != parentMail {
+			if parentMail != "" && strings.TrimSpace(comment.Mail) != "" && strings.TrimSpace(comment.Mail) != parentMail {
 				prefixReply := strings.TrimSpace(cfg.CommentEmailReplyPrefix)
 				if prefixReply != "" {
 					prefixReply = prefixReply + " "

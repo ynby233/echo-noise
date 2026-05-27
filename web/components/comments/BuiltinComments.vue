@@ -61,12 +61,13 @@
         </div>
       <div v-if="!sortedRootComments.length" class="text-xs mb-4" :class="themeMuted">暂无评论</div>
 
-      <div v-if="(props.showInput || !!replyTo) && enabled && siteConfig?.commentEmailEnabled && canComment" class="text-xs mb-3 mt-1" :class="themeMuted">新评论或回复会发送通知邮件</div>
-      <div v-if="(props.showInput || !!replyTo) && enabled && canComment" class="space-y-4 mt-4 md:mt-5">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <input v-model="nick" placeholder="昵称" :class="inputNickClass" @input="onNickInput" />
-          <input v-model="mail" placeholder="邮箱" :class="inputMailClass" />
-          <input v-model="link" placeholder="网址（可选）" :class="inputLinkClass" />
+      <div v-if="formVisible" class="space-y-4 mt-4 md:mt-5">
+        <div class="comment-account-card" :class="accountCardClass">
+          <img class="input-avatar avatar-img" :src="currentUserAvatar" alt="avatar" />
+          <div class="min-w-0">
+            <div class="text-sm font-medium" :class="themeText">以 {{ currentUsername || '当前账号' }} 身份发布</div>
+            <div class="text-xs" :class="themeMuted">评论、留言和回复都会绑定到当前登录账号</div>
+          </div>
         </div>
         <div class="flex flex-wrap items-center gap-2 mb-3">
           <button class="text-xs px-2 py-1 rounded border" :class="themeBorder" @click="applyFormat('bold')">加粗</button>
@@ -83,7 +84,7 @@
           </div>
         </div>
         <div class="comment-input-card">
-          <img v-if="showInputAvatar && !avatarLoadFailed" class="input-avatar avatar-img" :src="inputAvatar" :data-mail="mail" alt="avatar" @error="onInputAvatarError" />
+          <img class="input-avatar avatar-img" :src="currentUserAvatar" alt="avatar" />
           <div class="input-main">
             <textarea ref="taRef" v-model="content" :class="textareaClass" rows="4" placeholder="说说你的想法" @input="onInput" @keydown="onKeydown" @blur="hideMention" />
             <div class="input-actions">
@@ -138,17 +139,10 @@ import { useUserStore } from '~/store/user'
 
 const props = defineProps<{ messageId: number, siteConfig: any, showInput?: boolean }>()
 const comments = ref<any[]>([])
-const nick = ref('')
-const initialNick = ref('')
-const nickEdited = ref(false)
-const mail = ref('')
-const link = ref('')
 const content = ref('')
 const taRef = ref<any>(null)
 const isSubmitting = ref(false)
 const replyTo = ref<number | null>(null)
-const nickError = ref(false)
-const mailError = ref(false)
 const deleteId = ref<number | null>(null)
 const user = useUserStore()
 const isAdmin = computed(() => !!(user.user as any)?.is_admin)
@@ -156,12 +150,8 @@ const enabled = computed(() => {
   const s: any = props.siteConfig || {}
   return !!(s && (s.commentEnabled === true || s.commentEnabled === 'true'))
 })
-const loginRequired = computed(() => {
-  const s: any = props.siteConfig || {}
-  return !!(s && (s.commentLoginRequired === true || s.commentLoginRequired === 'true'))
-})
 const canComment = computed(() => {
-  return (!loginRequired.value || user.isLogin) && enabled.value
+  return enabled.value && user.isLogin
 })
 // 使用原始 textarea 输入框
 
@@ -180,11 +170,6 @@ const themeItem = computed(() => (isDark.value ? 'bg-[rgba(24,28,32,0.7)]' : 'bg
 const childBorder = computed(() => (isDark.value ? 'border-white/20' : 'border-black'))
 const rootCardClass = computed(() => (isDark.value ? 'rounded-md p-3 bg-transparent border border-white/20 shadow-[0_6px_16px_rgba(0,0,0,0.35)]' : 'rounded-md p-3 bg-transparent border border-black/10 shadow-[0_4px_12px_rgba(0,0,0,0.12)]'))
 const childCardClass = computed(() => (isDark.value ? 'rounded-md p-2 bg-transparent border border-white/20' : 'rounded-md p-2 bg-transparent border border-black/10'))
-const inputBaseLight = 'w-full px-2 py-1 border rounded ring-0 focus:ring-0 outline-none'
-const inputDark = 'w-full px-2 py-1 bg-[rgba(24,28,32,0.85)] text-white border rounded focus:ring-0 outline-none placeholder:text-gray-400'
-const inputNickClass = computed(() => (nickError.value ? 'ring-1 ring-red-500' : (isDark.value ? `${inputDark} border-white/20` : `bg-gray-50 ${inputBaseLight} border-black`)))
-const inputMailClass = computed(() => (mailError.value ? 'ring-1 ring-red-500' : (isDark.value ? `${inputDark} border-white/20` : `bg-gray-50 ${inputBaseLight} border-black`)))
-const inputLinkClass = computed(() => (isDark.value ? `${inputDark} border-white/20` : `bg-white ${inputBaseLight} border-black`))
 const textareaClass = computed(() => (isDark.value ? `w-full px-3 py-2 bg-[rgba(24,28,32,0.95)] text-white border border-blue-500 focus:border-blue-400 rounded-md ring-0 outline-none` : `w-full px-3 py-2 bg-white text-black border border-blue-500 focus:border-blue-600 rounded-md ring-0 outline-none`))
 const avatarPlaceholder = computed(() => {
   const s: any = props.siteConfig || {}
@@ -209,14 +194,9 @@ const qqNumberFromEmail = (email: string) => {
 }
 const qqAvatarUrl = (qq: string, size = 100) => qq ? `https://q1.qlogo.cn/g?b=qq&nk=${qq}&s=${size}` : ''
 
-const nickAvatar = (n: string) => {
-  const name = String(n || '').trim()
-  const qq = qqNumberFromEmail(mail.value)
-  const qqUrl = qqAvatarUrl(qq)
-  return qqUrl || dicebear(name) || avatarPlaceholder.value
-}
-
 const commentAvatar = (c: any) => {
+  const accountAvatar = normalizeMediaURL(getUserField(c?.user || {}, ['avatar_url','AvatarURL','avatar','Avatar']))
+  if (accountAvatar) return accountAvatar
   const name = String(c?.nick || '').trim()
   const mailStr = String(c?.mail || '').trim()
   const qq = qqNumberFromEmail(mailStr)
@@ -252,26 +232,22 @@ const avatarOnError = (e: Event, seed: string) => {
   if (img && fallback) img.src = fallback
 }
 
-const showInputAvatar = computed(() => {
-  const hasQQ = !!qqNumberFromEmail(String(mail.value || ''))
-  const hasNick = !!String(nick.value || '').trim() && nickEdited.value
-  return hasQQ || hasNick
-})
-const inputAvatar = computed(() => {
-  const mailStr = String(mail.value || '').trim()
-  const qq = qqNumberFromEmail(mailStr)
-  if (qq) return qqAvatarUrl(qq, 100)
-  const name = String(nick.value || '').trim()
-  if (name) return dicebear(name)
-  return ''
-})
-const avatarLoadFailed = ref(false)
-const onInputAvatarError = () => { avatarLoadFailed.value = true }
-watch([nick, mail], () => { avatarLoadFailed.value = false })
-const onNickInput = () => { nickEdited.value = true }
-onMounted(() => { initialNick.value = nick.value })
-
 const BASE_API = useRuntimeConfig().public.baseApi || '/api'
+const normalizeMediaURL = (raw: string) => {
+  const value = String(raw || '').trim()
+  if (!value) return ''
+  if (/^https?:\/\//i.test(value) || value.startsWith('data:')) return value
+  return `${BASE_API}${value.startsWith('/') ? value : `/${value}`}`
+}
+const currentUsername = computed(() => {
+  const u: any = (user.user as any) || {}
+  return getUserField(u, ['nick','nickname','Nick','Nickname','username','Username','name','Name'])
+})
+const currentUserAvatar = computed(() => {
+  const u: any = (user.user as any) || {}
+  return normalizeMediaURL(getUserField(u, ['avatar_url','AvatarURL','avatar','Avatar'])) || dicebear(currentUsername.value || 'user') || avatarPlaceholder.value
+})
+const accountCardClass = computed(() => (isDark.value ? 'border border-white/20 bg-white/5 text-gray-200' : 'border border-black/10 bg-black/5 text-black'))
 const showDeleteConfirm = ref(false)
 const confirmAcknowledged = ref(false)
 const pendingDelete = computed(() => {
@@ -319,23 +295,15 @@ const load = async () => {
 const submit = async () => {
   try {
     if (isSubmitting.value) return
-    isSubmitting.value = true
-    nickError.value = !nick.value.trim()
-    mailError.value = !mail.value.trim()
-    if (nickError.value || mailError.value) {
-      useToast().add({ title: '缺少必填字段', description: (!nick.value ? '昵称 ' : '') + (!mail.value ? '邮箱' : ''), color: 'red' })
-      isSubmitting.value = false
+    if (!user.isLogin) {
+      useToast().add({ title: '请登录后评论', color: 'orange' })
       return
     }
+    isSubmitting.value = true
     const md = content.value.trim()
-    const payload: any = { nick: nick.value.trim(), mail: mail.value.trim(), link: link.value.trim(), content: md }
+    const payload: any = { content: md }
     if (!payload.content) {
       useToast().add({ title: '内容不能为空', color: 'red' })
-      isSubmitting.value = false
-      return
-    }
-    if (payload.mail && !/^\S+@\S+\.\S+$/.test(payload.mail)) {
-      useToast().add({ title: '邮箱格式不正确', color: 'red' })
       isSubmitting.value = false
       return
     }
@@ -420,19 +388,9 @@ const getUserField = (o: any, keys: string[]) => {
   }
   return ''
 }
-const prefillUserContact = () => {
-  const u: any = (user.user as any) || {}
-  const n = getUserField(u, ['nick','nickname','Nick','Nickname','username','Username','name','Name'])
-  const m = getUserField(u, ['email','Email','mail','Mail'])
-  const l = getUserField(u, ['link','Link','website','Website','homepage','HomePage','url','Url'])
-  if (!nick.value && n) nick.value = n
-  if (!mail.value && m) mail.value = m
-  if (!link.value && l) link.value = l
-}
 const hiddenByCancel = ref(false)
 const formVisible = computed(() => (((props.showInput && !hiddenByCancel.value) || !!replyTo.value) && canComment.value))
 watch(() => props.showInput, (v) => { if (v) hiddenByCancel.value = false })
-watch([formVisible, () => user.isLogin], () => { if (formVisible.value && user.isLogin) prefillUserContact() }, { immediate: true })
 
 onMounted(load)
 // 保持与父组件的显示控制，但不再初始化富文本编辑器
@@ -447,9 +405,12 @@ onBeforeUnmount(() => {
 watch(() => props.messageId, load)
 
 const startReply = (id: number, nickName: string) => {
+  if (!user.isLogin) {
+    useToast().add({ title: '请登录后回复', color: 'orange' })
+    return
+  }
   replyTo.value = id
   if (!content.value.startsWith(`@${nickName} `)) content.value = `@${nickName} ` + content.value
-  prefillUserContact()
 }
 
 const confirmDelete = (id: number) => {

@@ -41,15 +41,23 @@ type MessageLike struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type CommentUserInfo struct {
+	ID        uint   `json:"id"`
+	Username  string `json:"username"`
+	AvatarURL string `json:"avatar_url,omitempty"`
+}
+
 type Comment struct {
-	ID        uint      `gorm:"primaryKey" json:"id"`
-	MessageID uint      `gorm:"index;not null" json:"message_id"`
-	Nick      string    `gorm:"type:varchar(100)" json:"nick"`
-	Mail      string    `gorm:"type:varchar(191)" json:"mail"`
-	Link      string    `gorm:"type:varchar(191)" json:"link"`
-	Content   string    `gorm:"type:text;not null" json:"content"`
-	ParentID  *uint     `json:"parent_id"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        uint             `gorm:"primaryKey" json:"id"`
+	MessageID uint             `gorm:"index;not null" json:"message_id"`
+	UserID    *uint            `gorm:"index" json:"user_id,omitempty"`
+	User      *CommentUserInfo `gorm:"-" json:"user,omitempty"`
+	Nick      string           `gorm:"type:varchar(100)" json:"nick"`
+	Mail      string           `gorm:"type:varchar(191)" json:"mail"`
+	Link      string           `gorm:"type:varchar(191)" json:"link"`
+	Content   string           `gorm:"type:text;not null" json:"content"`
+	ParentID  *uint            `json:"parent_id"`
+	CreatedAt time.Time        `json:"created_at"`
 }
 
 type User struct {
