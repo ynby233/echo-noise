@@ -1093,6 +1093,42 @@ func commentAuthUserID(c *gin.Context) (uint, bool) {
 	return 0, false
 }
 
+func commentAuthIsAdmin(c *gin.Context) bool {
+	if v, ok := c.Get("is_admin"); ok {
+		if b, ok := v.(bool); ok && b {
+			return true
+		}
+	}
+	session := sessions.Default(c)
+	if b, ok := session.Get("is_admin").(bool); ok && b {
+		return true
+	}
+	return false
+}
+
+func normalizeCommentVisibility(value string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "public":
+		return "public", true
+	case "users", "all_users", "logged_in", "logged-in":
+		return "users", true
+	case "contacts":
+		return "contacts", true
+	case "private":
+		return "private", true
+	default:
+		return "", false
+	}
+}
+
+func canManageComment(c *gin.Context, comment models.Comment) bool {
+	if commentAuthIsAdmin(c) {
+		return true
+	}
+	userID, ok := commentAuthUserID(c)
+	return ok && comment.UserID != nil && *comment.UserID == userID
+}
+
 func commentUint(v any) (uint, bool) {
 	switch val := v.(type) {
 	case uint:
@@ -1132,7 +1168,16 @@ func GetComments(c *gin.Context) {
 	}
 	db, _ := database.GetDB()
 	var comments []models.Comment
-	if err := db.Where("message_id = ?", msgID).Order("created_at ASC").Find(&comments).Error; err != nil {
+	query := db.Where("message_id = ?", msgID)
+	if !commentAuthIsAdmin(c) {
+		if userID, ok := commentAuthUserID(c); ok {
+			// contacts 为后续 VoceChat 联系人权限预留；在联系人关系未接入前，仅作者本人和管理员可见。
+			query = query.Where("visibility = '' OR visibility = ? OR visibility = ? OR user_id = ?", "public", "users", userID)
+		} else {
+			query = query.Where("visibility = '' OR visibility = ?", "public")
+		}
+	}
+	if err := query.Order("created_at ASC").Find(&comments).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取评论失败"})
 		return
 	}
@@ -1194,11 +1239,17 @@ func GetCommentCounts(c *gin.Context) {
 		Cnt       int64 `gorm:"column:cnt"`
 	}
 	var rows []row
-	if err := db.Model(&models.Comment{}).
+	query := db.Model(&models.Comment{}).
 		Select("message_id, COUNT(*) as cnt").
-		Where("message_id IN ?", req.IDs).
-		Group("message_id").
-		Find(&rows).Error; err != nil {
+		Where("message_id IN ?", req.IDs)
+	if !commentAuthIsAdmin(c) {
+		if userID, ok := commentAuthUserID(c); ok {
+			query = query.Where("visibility = '' OR visibility = ? OR visibility = ? OR user_id = ?", "public", "users", userID)
+		} else {
+			query = query.Where("visibility = '' OR visibility = ?", "public")
+		}
+	}
+	if err := query.Group("message_id").Find(&rows).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取评论数量失败"})
 		return
 	}
@@ -1251,11 +1302,12 @@ func PostComment(c *gin.Context) {
 	}
 	msgID := uint(msgID64)
 	var req struct {
-		Nick     string `json:"nick"`
-		Mail     string `json:"mail"`
-		Link     string `json:"link"`
-		Content  string `json:"content"`
-		ParentID *uint  `json:"parent_id"`
+		Nick       string `json:"nick"`
+		Mail       string `json:"mail"`
+		Link       string `json:"link"`
+		Content    string `json:"content"`
+		Visibility string `json:"visibility"`
+		ParentID   *uint  `json:"parent_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "请求参数错误"})
@@ -1264,6 +1316,11 @@ func PostComment(c *gin.Context) {
 	req.Content = strings.TrimSpace(req.Content)
 	if req.Content == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "评论内容不能为空"})
+		return
+	}
+	visibility, ok := normalizeCommentVisibility(req.Visibility)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "无效的可见范围"})
 		return
 	}
 	db, _ := database.GetDB()
@@ -1299,13 +1356,14 @@ func PostComment(c *gin.Context) {
 		commentNick = fmt.Sprintf("用户%d", currentUser.ID)
 	}
 	comment := models.Comment{
-		MessageID: msgID,
-		UserID:    &commentUserID,
-		Nick:      commentNick,
-		Mail:      "",
-		Link:      "",
-		Content:   req.Content,
-		ParentID:  req.ParentID,
+		MessageID:  msgID,
+		UserID:     &commentUserID,
+		Nick:       commentNick,
+		Mail:       "",
+		Link:       "",
+		Content:    req.Content,
+		Visibility: visibility,
+		ParentID:   req.ParentID,
 	}
 	if err := db.Create(&comment).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "保存评论失败"})
@@ -1395,7 +1453,61 @@ func PostComment(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": comment, "msg": "评论已发布"})
 }
 
-// 删除评论（管理员）
+// 更新评论：管理员可更新任意评论，普通用户仅可更新自己发布的评论/留言/回复。
+func UpdateComment(c *gin.Context) {
+	msgIDStr := c.Param("id")
+	cidStr := c.Param("cid")
+	msgID, err1 := strconv.ParseUint(msgIDStr, 10, 64)
+	cid, err2 := strconv.ParseUint(cidStr, 10, 64)
+	if err1 != nil || err2 != nil || msgID == 0 || cid == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "无效的ID"})
+		return
+	}
+	var req struct {
+		Content    string `json:"content"`
+		Visibility string `json:"visibility"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "请求参数错误"})
+		return
+	}
+	req.Content = strings.TrimSpace(req.Content)
+	if req.Content == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "评论内容不能为空"})
+		return
+	}
+	db, _ := database.GetDB()
+	var cm models.Comment
+	if err := db.First(&cm, cid).Error; err != nil || cm.MessageID != uint(msgID) {
+		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "评论不存在"})
+		return
+	}
+	if !canManageComment(c, cm) {
+		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限"})
+		return
+	}
+	visibility := cm.Visibility
+	if strings.TrimSpace(visibility) == "" {
+		visibility = "public"
+	}
+	if strings.TrimSpace(req.Visibility) != "" {
+		var ok bool
+		visibility, ok = normalizeCommentVisibility(req.Visibility)
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "无效的可见范围"})
+			return
+		}
+	}
+	cm.Content = req.Content
+	cm.Visibility = visibility
+	if err := db.Save(&cm).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "更新失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": cm, "msg": "已更新"})
+}
+
+// 删除评论：管理员可删除任意评论，普通用户仅可删除自己发布的评论/留言/回复。
 func DeleteComment(c *gin.Context) {
 	msgIDStr := c.Param("id")
 	cidStr := c.Param("cid")
@@ -1405,16 +1517,15 @@ func DeleteComment(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "无效的ID"})
 		return
 	}
-	isAdmin, _ := c.Get("is_admin")
-	if b, ok := isAdmin.(bool); !ok || !b {
-		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限"})
-		return
-	}
 	db, _ := database.GetDB()
 	// 确认评论属于该消息
 	var cm models.Comment
 	if err := db.First(&cm, cid).Error; err != nil || cm.MessageID != uint(msgID) {
 		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "评论不存在"})
+		return
+	}
+	if !canManageComment(c, cm) {
+		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限"})
 		return
 	}
 	if err := db.Delete(&cm).Error; err != nil {

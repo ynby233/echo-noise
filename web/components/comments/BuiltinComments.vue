@@ -16,14 +16,29 @@
                 </template>
               </span>
             </div>
-            <div class="comment-content" :class="themeText"><MarkdownRenderer :content="c.content" /></div>
+            <div v-if="editingId === c.id" class="edit-card">
+              <textarea v-model="editingContent" :class="textareaClass" rows="3" placeholder="编辑内容" />
+              <div class="edit-actions">
+                <label class="visibility-picker" :class="themeMuted">
+                  可见范围
+                  <select v-model="editingVisibility" :class="selectClass">
+                    <option v-for="opt in visibilityOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                  </select>
+                </label>
+                <button class="cancel-btn" :class="cancelBtnClass" @click="cancelEdit">取消</button>
+                <button class="submit-btn" :class="submitBtnClass" :disabled="isEditingSubmitting || !editingContent.trim()" @click="submitEdit">保存</button>
+              </div>
+            </div>
+            <div v-else class="comment-content" :class="themeText"><MarkdownRenderer :content="c.content" /></div>
             <div class="comment-footer">
               <span class="comment-time">{{ formatDateMD(c.created_at) }}</span>
               <span class="comment-replies">回复 {{ repliesCount(c.id) }}</span>
+              <span v-if="visibilityLabel(c.visibility)" class="comment-visibility">{{ visibilityLabel(c.visibility) }}</span>
             </div>
             <div class="comment-actions">
               <button class="action-btn" @click="startReply(c.id, c.nick || '匿名')">回复</button>
-              <button v-if="isAdmin" class="action-btn text-red-500" @click="confirmDelete(c.id)">删除</button>
+              <button v-if="canManageComment(c)" class="action-btn" @click="startEdit(c)">编辑</button>
+              <button v-if="canManageComment(c)" class="action-btn text-red-500" @click="confirmDelete(c.id)">删除</button>
             </div>
             <div v-if="childrenMap[c.id]?.length" class="mt-2 replies-list">
               <div v-for="child in visibleChildren(c.id)" :key="child.id" class="comment-item child" :class="childCardClass">
@@ -39,13 +54,28 @@
                       </template>
                     </span>
                   </div>
-                  <div class="comment-content" :class="themeText"><MarkdownRenderer :content="child.content" /></div>
+                  <div v-if="editingId === child.id" class="edit-card">
+                    <textarea v-model="editingContent" :class="textareaClass" rows="3" placeholder="编辑内容" />
+                    <div class="edit-actions">
+                      <label class="visibility-picker" :class="themeMuted">
+                        可见范围
+                        <select v-model="editingVisibility" :class="selectClass">
+                          <option v-for="opt in visibilityOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                        </select>
+                      </label>
+                      <button class="cancel-btn" :class="cancelBtnClass" @click="cancelEdit">取消</button>
+                      <button class="submit-btn" :class="submitBtnClass" :disabled="isEditingSubmitting || !editingContent.trim()" @click="submitEdit">保存</button>
+                    </div>
+                  </div>
+                  <div v-else class="comment-content" :class="themeText"><MarkdownRenderer :content="child.content" /></div>
                   <div class="comment-footer">
                     <span class="comment-time">{{ formatDateMD(child.created_at) }}</span>
+                    <span v-if="visibilityLabel(child.visibility)" class="comment-visibility">{{ visibilityLabel(child.visibility) }}</span>
                   </div>
                   <div class="comment-actions">
                     <button class="action-btn" @click="startReply(child.id, child.nick || '匿名')">回复</button>
-                    <button v-if="isAdmin" class="action-btn text-red-500" @click="confirmDelete(child.id)">删除</button>
+                    <button v-if="canManageComment(child)" class="action-btn" @click="startEdit(child)">编辑</button>
+                    <button v-if="canManageComment(child)" class="action-btn text-red-500" @click="confirmDelete(child.id)">删除</button>
                   </div>
                 </div>
               </div>
@@ -70,6 +100,12 @@
           </div>
         </div>
         <div class="flex flex-wrap items-center gap-2 mb-3">
+          <label class="visibility-picker" :class="themeMuted">
+            可见范围
+            <select v-model="selectedVisibility" :class="selectClass">
+              <option v-for="opt in visibilityOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+            </select>
+          </label>
           <button class="text-xs px-2 py-1 rounded border" :class="themeBorder" @click="applyFormat('bold')">加粗</button>
           <button class="text-xs px-2 py-1 rounded border" :class="themeBorder" @click="applyFormat('italic')">斜体</button>
           <button class="text-xs px-2 py-1 rounded border" :class="themeBorder" @click="applyFormat('link')">链接</button>
@@ -134,10 +170,11 @@
 import { ref, onMounted, watch, computed, nextTick, inject, onBeforeUnmount } from 'vue'
 import MarkdownRenderer from '~/components/index/MarkdownRenderer.vue'
 import { useToast } from '#ui/composables/useToast'
-import { getRequest, postRequest, deleteRequest } from '~/utils/api'
+import { getRequest, postRequest, putRequest, deleteRequest } from '~/utils/api'
 import { useUserStore } from '~/store/user'
 
 const props = defineProps<{ messageId: number, siteConfig: any, showInput?: boolean, contextLabel?: string }>()
+const emit = defineEmits(['cancel'])
 const contextLabel = computed(() => String(props.contextLabel || '评论').trim() || '评论')
 const loginRequiredText = computed(() => `请登录后${contextLabel.value}`)
 const comments = ref<any[]>([])
@@ -148,6 +185,29 @@ const replyTo = ref<number | null>(null)
 const deleteId = ref<number | null>(null)
 const user = useUserStore()
 const isAdmin = computed(() => !!(user.user as any)?.is_admin)
+const currentUserId = computed(() => Number((user.user as any)?.userid || (user.user as any)?.id || (user.user as any)?.ID || 0))
+const visibilityOptions = [
+  { value: 'public', label: '公开' },
+  { value: 'users', label: '所有用户' },
+  { value: 'contacts', label: '联系人' },
+  { value: 'private', label: '私密' }
+]
+const normalizeVisibility = (v: any) => {
+  const value = String(v || 'public').trim()
+  return visibilityOptions.some((opt) => opt.value === value) ? value : 'public'
+}
+const visibilityLabel = (v: any) => {
+  const value = normalizeVisibility(v)
+  if (value === 'public') return ''
+  return visibilityOptions.find((opt) => opt.value === value)?.label || ''
+}
+const commentOwnerId = (c: any) => Number(c?.user_id || c?.UserID || c?.user?.id || c?.user?.ID || c?.user?.user_id || 0)
+const canManageComment = (c: any) => isAdmin.value || (!!currentUserId.value && commentOwnerId(c) === currentUserId.value)
+const selectedVisibility = ref('public')
+const editingId = ref<number | null>(null)
+const editingContent = ref('')
+const editingVisibility = ref('public')
+const isEditingSubmitting = ref(false)
 const enabled = computed(() => {
   const s: any = props.siteConfig || {}
   return !!(s && (s.commentEnabled === true || s.commentEnabled === 'true'))
@@ -173,6 +233,7 @@ const childBorder = computed(() => (isDark.value ? 'border-white/20' : 'border-b
 const rootCardClass = computed(() => (isDark.value ? 'rounded-md p-3 bg-transparent border border-white/20 shadow-[0_6px_16px_rgba(0,0,0,0.35)]' : 'rounded-md p-3 bg-transparent border border-black/10 shadow-[0_4px_12px_rgba(0,0,0,0.12)]'))
 const childCardClass = computed(() => (isDark.value ? 'rounded-md p-2 bg-transparent border border-white/20' : 'rounded-md p-2 bg-transparent border border-black/10'))
 const textareaClass = computed(() => (isDark.value ? `w-full px-3 py-2 bg-[rgba(24,28,32,0.95)] text-white border border-blue-500 focus:border-blue-400 rounded-md ring-0 outline-none` : `w-full px-3 py-2 bg-white text-black border border-blue-500 focus:border-blue-600 rounded-md ring-0 outline-none`))
+const selectClass = computed(() => (isDark.value ? 'px-2 py-1 rounded border border-white/20 bg-[rgba(24,28,32,0.95)] text-gray-200 text-xs' : 'px-2 py-1 rounded border border-black/10 bg-white text-black text-xs'))
 const avatarPlaceholder = computed(() => {
   const s: any = props.siteConfig || {}
   const raw = String(s.avatarURL || '').trim()
@@ -303,7 +364,7 @@ const submit = async () => {
     }
     isSubmitting.value = true
     const md = content.value.trim()
-    const payload: any = { content: md }
+    const payload: any = { content: md, visibility: selectedVisibility.value }
     if (!payload.content) {
       useToast().add({ title: '内容不能为空', color: 'red' })
       isSubmitting.value = false
@@ -314,6 +375,7 @@ const submit = async () => {
     if (res && res.code === 1) {
       content.value = ''
       replyTo.value = null
+      selectedVisibility.value = 'public'
       comments.value = [...comments.value, res.data]
       await load()
       await nextTick()
@@ -411,8 +473,54 @@ const startReply = (id: number, nickName: string) => {
     useToast().add({ title: '请登录后回复', color: 'orange' })
     return
   }
+  cancelEdit()
   replyTo.value = id
   if (!content.value.startsWith(`@${nickName} `)) content.value = `@${nickName} ` + content.value
+}
+
+const startEdit = (c: any) => {
+  if (!canManageComment(c)) {
+    useToast().add({ title: '没有权限编辑该内容', color: 'orange' })
+    return
+  }
+  editingId.value = Number(c.id)
+  editingContent.value = String(c.content || '')
+  editingVisibility.value = normalizeVisibility(c.visibility)
+}
+
+const cancelEdit = () => {
+  editingId.value = null
+  editingContent.value = ''
+  editingVisibility.value = 'public'
+  isEditingSubmitting.value = false
+}
+
+const submitEdit = async () => {
+  if (!editingId.value || isEditingSubmitting.value) return
+  const nextContent = editingContent.value.trim()
+  if (!nextContent) {
+    useToast().add({ title: '内容不能为空', color: 'red' })
+    return
+  }
+  try {
+    isEditingSubmitting.value = true
+    const res = await putRequest<any>(`messages/${props.messageId}/comments/${editingId.value}`, {
+      content: nextContent,
+      visibility: editingVisibility.value
+    }, { credentials: 'include' })
+    if (res && res.code === 1) {
+      comments.value = comments.value.map((item: any) => Number(item.id) === Number(editingId.value) ? { ...item, ...(res.data || {}), content: nextContent, visibility: editingVisibility.value } : item)
+      cancelEdit()
+      await load()
+      useToast().add({ title: '已保存', color: 'green' })
+    } else {
+      useToast().add({ title: '保存失败', description: res?.msg, color: 'red' })
+    }
+  } catch (e: any) {
+    useToast().add({ title: '保存失败', color: 'red' })
+  } finally {
+    isEditingSubmitting.value = false
+  }
 }
 
 const confirmDelete = (id: number) => {
@@ -435,6 +543,7 @@ const doDelete = async () => {
     const res = await deleteRequest<any>(`messages/${props.messageId}/comments/${deleteId.value}`, undefined, { credentials: 'include' })
     if (res && res.code === 1) {
       comments.value = comments.value.filter(c => c.id !== deleteId.value)
+      if (editingId.value === deleteId.value) cancelEdit()
       useToast().add({ title: '已删除', color: 'green' })
       scrollToMessage()
     } else {
@@ -516,8 +625,10 @@ const clearContent = () => { content.value = ''; hideMention(); nextTick(autoRes
 const cancelInput = () => {
   content.value = ''
   replyTo.value = null
+  selectedVisibility.value = 'public'
   hiddenByCancel.value = true
   hideMention()
+  cancelEdit()
   const el = taRef.value as HTMLTextAreaElement
   el?.blur?.()
   nextTick(autoResizeTextarea)
@@ -670,6 +781,10 @@ const repliesCount = (rootId: number) => {
 .comment-footer { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:4px; }
 .comment-actions { display:flex; align-items:center; gap:10px; margin-top:6px; font-size:12px; white-space: normal; flex-wrap: wrap; }
 .action-btn:hover { opacity:1; }
+.comment-visibility { font-size:11px; opacity:.72; padding:1px 6px; border-radius:9999px; border:1px solid currentColor; }
+.visibility-picker { display:inline-flex; align-items:center; gap:6px; font-size:12px; }
+.edit-card { display:flex; flex-direction:column; gap:8px; margin:4px 0 6px; }
+.edit-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:center; gap:8px; }
 .comment-input-card { display:flex; align-items:flex-start; gap:12px; margin-top:6px; }
 .input-avatar { width:36px; height:36px; border-radius:9999px; object-fit:cover; }
 .input-main { flex:1; display:flex; flex-direction:column; gap:8px; }
@@ -703,4 +818,3 @@ const repliesCount = (rootId: number) => {
 .comment-input-card textarea { overflow:hidden; resize:none; min-height:80px; flex:1; width:100%; min-width:0; }
 .submit-btn[disabled] { opacity:.6; cursor:not-allowed; }
 .comments-list { margin-bottom: 12px; }
-const emit = defineEmits(['cancel'])

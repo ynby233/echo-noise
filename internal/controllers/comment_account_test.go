@@ -36,7 +36,7 @@ func setupCommentAccountTest(t *testing.T) (*gorm.DB, *gin.Engine, models.User, 
 		models.SetDB(nil)
 	})
 
-	user := models.User{Username: "alice", Password: "secret", AvatarURL: "https://example.com/avatar.png"}
+	user := models.User{Username: "alice", Password: "", AvatarURL: "https://example.com/avatar.png"}
 	if err := db.Create(&user).Error; err != nil {
 		t.Fatalf("create user: %v", err)
 	}
@@ -53,6 +53,16 @@ func setupCommentAccountTest(t *testing.T) (*gorm.DB, *gin.Engine, models.User, 
 func performCommentRequest(r http.Handler, messageID uint, body map[string]any) *httptest.ResponseRecorder {
 	payload, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/messages/"+strconvFormatUint(messageID)+"/comments", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	return w
+}
+
+func performCommentJSONRequest(r http.Handler, method string, messageID uint, commentID uint, body map[string]any) *httptest.ResponseRecorder {
+	payload, _ := json.Marshal(body)
+	path := "/messages/" + strconvFormatUint(messageID) + "/comments/" + strconvFormatUint(commentID)
+	req := httptest.NewRequest(method, path, bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -191,5 +201,204 @@ func TestGetCommentsReturnsAccountInfoAndKeepsLegacyComments(t *testing.T) {
 	}
 	if resp.Data[1].User != nil || resp.Data[1].Nick != legacyComment.Nick || resp.Data[1].Mail != legacyComment.Mail || resp.Data[1].Link != legacyComment.Link {
 		t.Fatalf("expected legacy comment preserved, got %#v", resp.Data[1])
+	}
+}
+
+func TestOwnerCanUpdateOwnCommentContentAndVisibility(t *testing.T) {
+	db, r, user, msg := setupCommentAccountTest(t)
+	r.Use(func(c *gin.Context) {
+		c.Set("user_id", user.ID)
+		c.Set("is_admin", false)
+		c.Next()
+	})
+	r.PUT("/messages/:id/comments/:cid", UpdateComment)
+
+	comment := models.Comment{MessageID: msg.ID, UserID: &user.ID, Nick: user.Username, Content: "old", Visibility: "public"}
+	if err := db.Create(&comment).Error; err != nil {
+		t.Fatalf("create comment: %v", err)
+	}
+
+	w := performCommentJSONRequest(r, http.MethodPut, msg.ID, comment.ID, map[string]any{
+		"content":    "updated content",
+		"visibility": "private",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Code float64        `json:"code"`
+		Data models.Comment `json:"data"`
+		Msg  string         `json:"msg"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Code != 1 || resp.Data.Content != "updated content" || resp.Data.Visibility != "private" {
+		t.Fatalf("expected updated content and visibility, got %#v", resp)
+	}
+	var saved models.Comment
+	if err := db.First(&saved, comment.ID).Error; err != nil {
+		t.Fatalf("load saved comment: %v", err)
+	}
+	if saved.Content != "updated content" || saved.Visibility != "private" {
+		t.Fatalf("saved comment mismatch: %#v", saved)
+	}
+}
+
+func TestUserCannotUpdateOthersComment(t *testing.T) {
+	db, r, user, msg := setupCommentAccountTest(t)
+	other := models.User{Username: "bob", Password: ""}
+	if err := db.Create(&other).Error; err != nil {
+		t.Fatalf("create other user: %v", err)
+	}
+	r.Use(func(c *gin.Context) {
+		c.Set("user_id", user.ID)
+		c.Set("is_admin", false)
+		c.Next()
+	})
+	r.PUT("/messages/:id/comments/:cid", UpdateComment)
+
+	comment := models.Comment{MessageID: msg.ID, UserID: &other.ID, Nick: other.Username, Content: "other", Visibility: "public"}
+	if err := db.Create(&comment).Error; err != nil {
+		t.Fatalf("create comment: %v", err)
+	}
+
+	w := performCommentJSONRequest(r, http.MethodPut, msg.ID, comment.ID, map[string]any{
+		"content":    "hacked",
+		"visibility": "private",
+	})
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+	}
+	var saved models.Comment
+	if err := db.First(&saved, comment.ID).Error; err != nil {
+		t.Fatalf("load saved comment: %v", err)
+	}
+	if saved.Content != "other" || saved.Visibility != "public" {
+		t.Fatalf("expected other user's comment unchanged, got %#v", saved)
+	}
+}
+
+func TestOwnerCanDeleteOwnCommentButNotOthers(t *testing.T) {
+	db, r, user, msg := setupCommentAccountTest(t)
+	other := models.User{Username: "bob", Password: ""}
+	if err := db.Create(&other).Error; err != nil {
+		t.Fatalf("create other user: %v", err)
+	}
+	r.Use(func(c *gin.Context) {
+		c.Set("user_id", user.ID)
+		c.Set("is_admin", false)
+		c.Next()
+	})
+	r.DELETE("/messages/:id/comments/:cid", DeleteComment)
+
+	ownComment := models.Comment{MessageID: msg.ID, UserID: &user.ID, Nick: user.Username, Content: "mine", Visibility: "public"}
+	otherComment := models.Comment{MessageID: msg.ID, UserID: &other.ID, Nick: other.Username, Content: "other", Visibility: "public"}
+	if err := db.Create(&ownComment).Error; err != nil {
+		t.Fatalf("create own comment: %v", err)
+	}
+	if err := db.Create(&otherComment).Error; err != nil {
+		t.Fatalf("create other comment: %v", err)
+	}
+
+	w := performCommentJSONRequest(r, http.MethodDelete, msg.ID, ownComment.ID, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected owner delete 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var count int64
+	if err := db.Model(&models.Comment{}).Where("id = ?", ownComment.ID).Count(&count).Error; err != nil {
+		t.Fatalf("count own comment: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected own comment deleted, got count %d", count)
+	}
+
+	w = performCommentJSONRequest(r, http.MethodDelete, msg.ID, otherComment.ID, nil)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected other delete 403, got %d: %s", w.Code, w.Body.String())
+	}
+	if err := db.Model(&models.Comment{}).Where("id = ?", otherComment.ID).Count(&count).Error; err != nil {
+		t.Fatalf("count other comment: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected other comment retained, got count %d", count)
+	}
+}
+
+func TestGetCommentsFiltersVisibility(t *testing.T) {
+	db, r, owner, msg := setupCommentAccountTest(t)
+	other := models.User{Username: "bob", Password: ""}
+	if err := db.Create(&other).Error; err != nil {
+		t.Fatalf("create other user: %v", err)
+	}
+	r.Use(func(c *gin.Context) {
+		if raw := c.GetHeader("X-Test-User-ID"); raw != "" {
+			id, _ := strconv.ParseUint(raw, 10, 64)
+			c.Set("user_id", uint(id))
+			c.Set("is_admin", c.GetHeader("X-Test-Is-Admin") == "true")
+		}
+		c.Next()
+	})
+	r.GET("/messages/:id/comments", GetComments)
+
+	comments := []models.Comment{
+		{MessageID: msg.ID, UserID: &owner.ID, Nick: owner.Username, Content: "public", Visibility: "public"},
+		{MessageID: msg.ID, UserID: &owner.ID, Nick: owner.Username, Content: "users", Visibility: "users"},
+		{MessageID: msg.ID, UserID: &owner.ID, Nick: owner.Username, Content: "private", Visibility: "private"},
+		{MessageID: msg.ID, UserID: &owner.ID, Nick: owner.Username, Content: "contacts", Visibility: "contacts"},
+	}
+	for i := range comments {
+		if err := db.Create(&comments[i]).Error; err != nil {
+			t.Fatalf("create comment %d: %v", i, err)
+		}
+	}
+
+	decode := func(w *httptest.ResponseRecorder) []models.Comment {
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			Code float64          `json:"code"`
+			Data []models.Comment `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if resp.Code != 1 {
+			t.Fatalf("expected success response, got %#v", resp)
+		}
+		return resp.Data
+	}
+	request := func(userID uint, isAdmin bool) []models.Comment {
+		req := httptest.NewRequest(http.MethodGet, "/messages/"+strconvFormatUint(msg.ID)+"/comments", nil)
+		if userID > 0 {
+			req.Header.Set("X-Test-User-ID", strconvFormatUint(userID))
+		}
+		if isAdmin {
+			req.Header.Set("X-Test-Is-Admin", "true")
+		}
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return decode(w)
+	}
+	contents := func(list []models.Comment) []string {
+		out := make([]string, 0, len(list))
+		for _, c := range list {
+			out = append(out, c.Content)
+		}
+		return out
+	}
+
+	if got := contents(request(0, false)); len(got) != 1 || got[0] != "public" {
+		t.Fatalf("anonymous should only see public comments, got %#v", got)
+	}
+	if got := contents(request(other.ID, false)); len(got) != 2 || got[0] != "public" || got[1] != "users" {
+		t.Fatalf("logged-in non-owner should see public/users comments, got %#v", got)
+	}
+	if got := contents(request(owner.ID, false)); len(got) != 4 {
+		t.Fatalf("owner should see all own comments, got %#v", got)
+	}
+	if got := contents(request(other.ID, true)); len(got) != 4 {
+		t.Fatalf("admin should see all comments, got %#v", got)
 	}
 }
