@@ -1155,19 +1155,32 @@ func canViewComment(message models.Message, comment models.Comment, parent *mode
 	if message.Private {
 		return hasViewer && viewerID == message.UserID
 	}
+	visibility := normalizedCommentVisibilityOrPublic(comment.Visibility)
 	if comment.ParentID != nil {
-		if !hasViewer {
+		if parent != nil {
+			parentVisibility := normalizedCommentVisibilityOrPublic(parent.Visibility)
+			if commentVisibilityRank(visibility) > commentVisibilityRank(parentVisibility) {
+				visibility = parentVisibility
+			}
+		}
+		switch visibility {
+		case "public":
+			return true
+		case "users":
+			return hasViewer
+		case "contacts", "private":
+			if !hasViewer {
+				return false
+			}
+			if comment.UserID != nil && *comment.UserID == viewerID {
+				return true
+			}
+			return parent != nil && parent.UserID != nil && *parent.UserID == viewerID
+		default:
 			return false
 		}
-		if comment.UserID != nil && *comment.UserID == viewerID {
-			return true
-		}
-		if parent != nil && parent.UserID != nil && *parent.UserID == viewerID {
-			return true
-		}
-		return false
 	}
-	switch normalizedCommentVisibilityOrPublic(comment.Visibility) {
+	switch visibility {
 	case "public":
 		return true
 	case "users":

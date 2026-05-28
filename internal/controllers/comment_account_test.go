@@ -574,6 +574,162 @@ func TestReplyVisibilityMatchesNewRules(t *testing.T) {
 	}
 }
 
+func TestPublicAndUsersRepliesFollowVisibilityRules(t *testing.T) {
+	db, r, postAuthor, msg := setupCommentAccountTest(t)
+	parentAuthor := models.User{Username: "bob", Password: ""}
+	replyAuthor := models.User{Username: "charlie", Password: ""}
+	outsider := models.User{Username: "dave", Password: ""}
+	admin := models.User{Username: "admin", Password: "", IsAdmin: true}
+	for _, u := range []*models.User{&parentAuthor, &replyAuthor, &outsider, &admin} {
+		if err := db.Create(u).Error; err != nil {
+			t.Fatalf("create user %s: %v", u.Username, err)
+		}
+	}
+	publicParent := createTestComment(t, db, msg.ID, &parentAuthor, "parent-public", "public", nil)
+	usersParent := createTestComment(t, db, msg.ID, &parentAuthor, "parent-users", "users", nil)
+	createTestComment(t, db, msg.ID, &replyAuthor, "reply-public", "public", &publicParent.ID)
+	createTestComment(t, db, msg.ID, &replyAuthor, "reply-users", "users", &usersParent.ID)
+	_ = postAuthor
+
+	r.Use(func(c *gin.Context) {
+		if raw := c.GetHeader("X-Test-User-ID"); raw != "" {
+			id, _ := strconv.ParseUint(raw, 10, 64)
+			c.Set("user_id", uint(id))
+		}
+		if c.GetHeader("X-Test-Is-Admin") == "true" {
+			c.Set("is_admin", true)
+		}
+		c.Next()
+	})
+	r.GET("/messages/:id/comments", GetComments)
+
+	request := func(userID uint, isAdmin bool) []models.Comment {
+		req := httptest.NewRequest(http.MethodGet, "/messages/"+strconvFormatUint(msg.ID)+"/comments", nil)
+		if userID > 0 {
+			req.Header.Set("X-Test-User-ID", strconvFormatUint(userID))
+		}
+		if isAdmin {
+			req.Header.Set("X-Test-Is-Admin", "true")
+		}
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return decodeCommentListResponse(t, w)
+	}
+
+	if got := contentsOfComments(request(0, false)); len(got) != 2 || got[0] != "parent-public" || got[1] != "reply-public" {
+		t.Fatalf("anonymous should see public parent and public reply, got %#v", got)
+	}
+	if got := contentsOfComments(request(outsider.ID, false)); len(got) != 4 {
+		t.Fatalf("logged-in outsider should see public/users parents and replies, got %#v", got)
+	}
+	if got := contentsOfComments(request(admin.ID, true)); len(got) != 4 {
+		t.Fatalf("admin should see all public/users parents and replies, got %#v", got)
+	}
+}
+
+func TestCommentCountsIncludeVisibleReplies(t *testing.T) {
+	db, r, _, msg := setupCommentAccountTest(t)
+	parentAuthor := models.User{Username: "bob", Password: ""}
+	replyAuthor := models.User{Username: "charlie", Password: ""}
+	outsider := models.User{Username: "dave", Password: ""}
+	if err := db.Create(&parentAuthor).Error; err != nil {
+		t.Fatalf("create parent author: %v", err)
+	}
+	if err := db.Create(&replyAuthor).Error; err != nil {
+		t.Fatalf("create reply author: %v", err)
+	}
+	if err := db.Create(&outsider).Error; err != nil {
+		t.Fatalf("create outsider: %v", err)
+	}
+	publicParent := createTestComment(t, db, msg.ID, &parentAuthor, "parent-public", "public", nil)
+	usersParent := createTestComment(t, db, msg.ID, &parentAuthor, "parent-users", "users", nil)
+	createTestComment(t, db, msg.ID, &replyAuthor, "reply-public", "public", &publicParent.ID)
+	createTestComment(t, db, msg.ID, &replyAuthor, "reply-users", "users", &usersParent.ID)
+
+	r.Use(func(c *gin.Context) {
+		if raw := c.GetHeader("X-Test-User-ID"); raw != "" {
+			id, _ := strconv.ParseUint(raw, 10, 64)
+			c.Set("user_id", uint(id))
+		}
+		c.Next()
+	})
+	r.POST("/messages/comments/counts", GetCommentCounts)
+
+	request := func(userID uint) map[uint]int64 {
+		body, _ := json.Marshal(map[string]any{"ids": []uint{msg.ID}})
+		req := httptest.NewRequest(http.MethodPost, "/messages/comments/counts", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		if userID > 0 {
+			req.Header.Set("X-Test-User-ID", strconvFormatUint(userID))
+		}
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return decodeCommentCountResponse(t, w)
+	}
+
+	if got := request(0)[msg.ID]; got != 2 {
+		t.Fatalf("anonymous should count public parent and reply, got %d", got)
+	}
+	if got := request(outsider.ID)[msg.ID]; got != 4 {
+		t.Fatalf("logged-in user should count public/users parents and replies, got %d", got)
+	}
+}
+
+func TestReplyVisibilityDoesNotOutliveParentVisibility(t *testing.T) {
+	db, r, _, msg := setupCommentAccountTest(t)
+	parentAuthor := models.User{Username: "bob", Password: ""}
+	replyAuthor := models.User{Username: "charlie", Password: ""}
+	outsider := models.User{Username: "dave", Password: ""}
+	admin := models.User{Username: "admin", Password: "", IsAdmin: true}
+	for _, u := range []*models.User{&parentAuthor, &replyAuthor, &outsider, &admin} {
+		if err := db.Create(u).Error; err != nil {
+			t.Fatalf("create user %s: %v", u.Username, err)
+		}
+	}
+	usersParent := createTestComment(t, db, msg.ID, &parentAuthor, "parent-users", "users", nil)
+	privateParent := createTestComment(t, db, msg.ID, &parentAuthor, "parent-private", "private", nil)
+	createTestComment(t, db, msg.ID, &replyAuthor, "public-reply-under-users", "public", &usersParent.ID)
+	createTestComment(t, db, msg.ID, &replyAuthor, "public-reply-under-private", "public", &privateParent.ID)
+
+	r.Use(func(c *gin.Context) {
+		if raw := c.GetHeader("X-Test-User-ID"); raw != "" {
+			id, _ := strconv.ParseUint(raw, 10, 64)
+			c.Set("user_id", uint(id))
+		}
+		if c.GetHeader("X-Test-Is-Admin") == "true" {
+			c.Set("is_admin", true)
+		}
+		c.Next()
+	})
+	r.GET("/messages/:id/comments", GetComments)
+
+	request := func(userID uint, isAdmin bool) []models.Comment {
+		req := httptest.NewRequest(http.MethodGet, "/messages/"+strconvFormatUint(msg.ID)+"/comments", nil)
+		if userID > 0 {
+			req.Header.Set("X-Test-User-ID", strconvFormatUint(userID))
+		}
+		if isAdmin {
+			req.Header.Set("X-Test-Is-Admin", "true")
+		}
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return decodeCommentListResponse(t, w)
+	}
+
+	if got := contentsOfComments(request(0, false)); len(got) != 0 {
+		t.Fatalf("anonymous should not see replies whose parent is not visible, got %#v", got)
+	}
+	if got := contentsOfComments(request(outsider.ID, false)); len(got) != 2 || got[0] != "parent-users" || got[1] != "public-reply-under-users" {
+		t.Fatalf("logged-in outsider should see users parent and capped reply only, got %#v", got)
+	}
+	if got := contentsOfComments(request(parentAuthor.ID, false)); len(got) != 4 {
+		t.Fatalf("parent author should see both parents and replies, got %#v", got)
+	}
+	if got := contentsOfComments(request(admin.ID, true)); len(got) != 4 {
+		t.Fatalf("admin should see all parents and replies, got %#v", got)
+	}
+}
+
 func TestCommentCountsFollowVisibilityRules(t *testing.T) {
 	db, r, postAuthor, msg := setupCommentAccountTest(t)
 	commenter := models.User{Username: "bob", Password: ""}
