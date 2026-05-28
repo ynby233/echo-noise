@@ -1,7 +1,7 @@
 <template>
   <div class="builtin-comments">
   <div class="waline-wrapper px-2 py-2 rounded-lg" :class="[themeBg]">
-      <div class="text-sm mb-2" :class="themeText">评论 ({{ comments.length }})</div>
+      <div class="text-sm mb-2" :class="themeText">{{ contextLabel }} ({{ comments.length }})</div>
       <div v-if="sortedRootComments.length" class="comments-list">
         <div v-for="c in visibleRootComments" :key="c.id" class="comment-item" :class="rootCardClass">
           <img class="comment-avatar avatar-img" :src="commentAvatar(c)" alt="avatar" :data-mail="c.mail || ''" @error="avatarOnError($event, c.nick || '')" />
@@ -57,9 +57,9 @@
           </div>
         </div>
         <div v-if="hasMore" class="flex justify-center">
-          <button class="text-xs px-3 py-1 rounded border" :class="themeBorder" @click="loadMore">加载更多评论</button>
+          <button class="text-xs px-3 py-1 rounded border" :class="themeBorder" @click="loadMore">加载更多{{ contextLabel }}</button>
         </div>
-      <div v-if="!sortedRootComments.length" class="text-xs mb-4" :class="themeMuted">暂无评论</div>
+      <div v-if="!sortedRootComments.length" class="text-xs mb-4" :class="themeMuted">暂无{{ contextLabel }}</div>
 
       <div v-if="formVisible" class="space-y-4 mt-4 md:mt-5">
         <div class="comment-account-card" :class="accountCardClass">
@@ -95,8 +95,8 @@
           </div>
         </div>
       </div>
-      <div v-else-if="props.showInput && !enabled" class="text-xs text-center mt-5 mb-3" :class="themeMuted">评论功能未开启</div>
-      <div v-else-if="props.showInput && enabled && !canComment" class="text-xs text-center mt-5 mb-3" :class="themeMuted">请登录后评论</div>
+      <div v-else-if="props.showInput && !enabled" class="text-xs text-center mt-5 mb-3" :class="themeMuted">{{ contextLabel }}功能未开启</div>
+      <div v-else-if="props.showInput && enabled && !canComment" class="text-xs text-center mt-5 mb-3" :class="themeMuted">{{ loginRequiredText }}</div>
       
   </div>
 
@@ -137,7 +137,9 @@ import { useToast } from '#ui/composables/useToast'
 import { getRequest, postRequest, deleteRequest } from '~/utils/api'
 import { useUserStore } from '~/store/user'
 
-const props = defineProps<{ messageId: number, siteConfig: any, showInput?: boolean }>()
+const props = defineProps<{ messageId: number, siteConfig: any, showInput?: boolean, contextLabel?: string }>()
+const contextLabel = computed(() => String(props.contextLabel || '评论').trim() || '评论')
+const loginRequiredText = computed(() => `请登录后${contextLabel.value}`)
 const comments = ref<any[]>([])
 const content = ref('')
 const taRef = ref<any>(null)
@@ -296,7 +298,7 @@ const submit = async () => {
   try {
     if (isSubmitting.value) return
     if (!user.isLogin) {
-      useToast().add({ title: '请登录后评论', color: 'orange' })
+      useToast().add({ title: loginRequiredText.value, color: 'orange' })
       return
     }
     isSubmitting.value = true
