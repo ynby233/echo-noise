@@ -22,7 +22,7 @@
                 <label class="visibility-picker" :class="themeMuted">
                   可见范围
                   <select v-model="editingVisibility" :class="selectClass">
-                    <option v-for="opt in visibilityOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                    <option v-for="opt in editingVisibilityOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                   </select>
                 </label>
                 <button class="cancel-btn" :class="cancelBtnClass" @click="cancelEdit">取消</button>
@@ -60,7 +60,7 @@
                       <label class="visibility-picker" :class="themeMuted">
                         可见范围
                         <select v-model="editingVisibility" :class="selectClass">
-                          <option v-for="opt in visibilityOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                          <option v-for="opt in editingVisibilityOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                         </select>
                       </label>
                       <button class="cancel-btn" :class="cancelBtnClass" @click="cancelEdit">取消</button>
@@ -95,15 +95,14 @@
         <div class="comment-account-card" :class="accountCardClass">
           <img class="input-avatar avatar-img" :src="currentUserAvatar" alt="avatar" />
           <div class="min-w-0">
-            <div class="text-sm font-medium" :class="themeText">以 {{ currentUsername || '当前账号' }} 身份发布</div>
-            <div class="text-xs" :class="themeMuted">评论、留言和回复都会绑定到当前登录账号</div>
+            <div class="text-sm font-medium" :class="themeText">以‘{{ currentUsername || '当前账号' }}’的身份发布</div>
           </div>
         </div>
         <div class="flex flex-wrap items-center gap-2 mb-3">
           <label class="visibility-picker" :class="themeMuted">
             可见范围
             <select v-model="selectedVisibility" :class="selectClass">
-              <option v-for="opt in visibilityOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+              <option v-for="opt in selectedVisibilityOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
             </select>
           </label>
           <button class="text-xs px-2 py-1 rounded border" :class="themeBorder" @click="applyFormat('bold')">加粗</button>
@@ -192,9 +191,25 @@ const visibilityOptions = [
   { value: 'contacts', label: '联系人' },
   { value: 'private', label: '私密' }
 ]
+const visibilityRank: Record<string, number> = {
+  public: 0,
+  users: 1,
+  contacts: 2,
+  private: 3
+}
 const normalizeVisibility = (v: any) => {
   const value = String(v || 'public').trim()
   return visibilityOptions.some((opt) => opt.value === value) ? value : 'public'
+}
+const visibilityLimitOptions = (limit?: any) => {
+  const normalizedLimit = normalizeVisibility(limit)
+  const minRank = visibilityRank[normalizedLimit] ?? visibilityRank.public
+  return visibilityOptions.filter((opt) => (visibilityRank[opt.value] ?? visibilityRank.public) >= minRank)
+}
+const clampVisibilityToLimit = (value: any, limit?: any) => {
+  const normalizedValue = normalizeVisibility(value)
+  const allowed = visibilityLimitOptions(limit)
+  return allowed.some((opt) => opt.value === normalizedValue) ? normalizedValue : (allowed[0]?.value || 'public')
 }
 const visibilityLabel = (v: any) => {
   const value = normalizeVisibility(v)
@@ -475,6 +490,7 @@ const startReply = (id: number, nickName: string) => {
   }
   cancelEdit()
   replyTo.value = id
+  selectedVisibility.value = clampVisibilityToLimit(selectedVisibility.value, byId.value[id]?.visibility)
   if (!content.value.startsWith(`@${nickName} `)) content.value = `@${nickName} ` + content.value
 }
 
@@ -485,7 +501,8 @@ const startEdit = (c: any) => {
   }
   editingId.value = Number(c.id)
   editingContent.value = String(c.content || '')
-  editingVisibility.value = normalizeVisibility(c.visibility)
+  const parentVisibility = c?.parent_id ? byId.value[Number(c.parent_id)]?.visibility : undefined
+  editingVisibility.value = clampVisibilityToLimit(c.visibility, parentVisibility)
 }
 
 const cancelEdit = () => {
@@ -494,6 +511,17 @@ const cancelEdit = () => {
   editingVisibility.value = 'public'
   isEditingSubmitting.value = false
 }
+
+watch(replyingToComment, (comment) => {
+  if (!comment) return
+  selectedVisibility.value = clampVisibilityToLimit(selectedVisibility.value, comment.visibility)
+})
+
+watch(editingVisibilityOptions, (options) => {
+  if (!options.length) return
+  const limit = options[0]?.value || 'public'
+  editingVisibility.value = clampVisibilityToLimit(editingVisibility.value, limit)
+})
 
 const submitEdit = async () => {
   if (!editingId.value || isEditingSubmitting.value) return
@@ -685,6 +713,23 @@ const byId = computed(() => {
   const list = Array.isArray(comments.value) ? comments.value : []
   list.forEach((c: any) => { m[Number(c.id)] = c })
   return m
+})
+const replyingToComment = computed(() => {
+  const id = Number(replyTo.value || 0)
+  return id > 0 ? byId.value[id] || null : null
+})
+const selectedVisibilityOptions = computed(() => {
+  return replyingToComment.value ? visibilityLimitOptions(replyingToComment.value.visibility) : visibilityOptions
+})
+const editingComment = computed(() => {
+  const id = Number(editingId.value || 0)
+  return id > 0 ? byId.value[id] || null : null
+})
+const editingVisibilityOptions = computed(() => {
+  const parentId = Number(editingComment.value?.parent_id || 0)
+  if (parentId <= 0) return visibilityOptions
+  const parent = byId.value[parentId]
+  return parent ? visibilityLimitOptions(parent.visibility) : visibilityOptions
 })
 const childrenWithTarget = computed(() => {
   const map: Record<number, any[]> = {}

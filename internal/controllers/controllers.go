@@ -1121,6 +1121,85 @@ func normalizeCommentVisibility(value string) (string, bool) {
 	}
 }
 
+func normalizedCommentVisibilityOrPublic(value string) string {
+	if visibility, ok := normalizeCommentVisibility(value); ok {
+		return visibility
+	}
+	return "public"
+}
+
+func commentVisibilityRank(value string) int {
+	switch normalizedCommentVisibilityOrPublic(value) {
+	case "public":
+		return 4
+	case "users":
+		return 3
+	case "contacts":
+		return 2
+	case "private":
+		return 1
+	default:
+		return 0
+	}
+}
+
+func isGuestbookMessage(message models.Message) bool {
+	content := strings.ToLower(strings.TrimSpace(message.Content))
+	return strings.Contains(content, "#guestbook") || strings.Contains(content, "#留言") || strings.Contains(content, "留言板")
+}
+
+func canViewComment(message models.Message, comment models.Comment, parent *models.Comment, viewerID uint, hasViewer bool, isAdmin bool) bool {
+	if isAdmin {
+		return true
+	}
+	if message.Private {
+		return hasViewer && viewerID == message.UserID
+	}
+	if isGuestbookMessage(message) {
+		if !hasViewer {
+			return false
+		}
+		if viewerID == message.UserID {
+			return true
+		}
+		if comment.UserID != nil && *comment.UserID == viewerID {
+			return true
+		}
+		if comment.ParentID != nil && parent != nil && parent.UserID != nil && *parent.UserID == viewerID {
+			return true
+		}
+		return false
+	}
+	if comment.ParentID != nil {
+		if !hasViewer {
+			return false
+		}
+		if comment.UserID != nil && *comment.UserID == viewerID {
+			return true
+		}
+		if parent != nil && parent.UserID != nil && *parent.UserID == viewerID {
+			return true
+		}
+		return false
+	}
+	switch normalizedCommentVisibilityOrPublic(comment.Visibility) {
+	case "public":
+		return true
+	case "users":
+		return hasViewer
+	case "contacts", "private":
+		if !hasViewer {
+			return false
+		}
+		if viewerID == message.UserID {
+			return true
+		}
+		return comment.UserID != nil && *comment.UserID == viewerID
+	default:
+		return false
+	}
+}
+
 func canManageComment(c *gin.Context, comment models.Comment) bool {
 	if commentAuthIsAdmin(c) {
 		return true
@@ -1167,23 +1246,37 @@ func GetComments(c *gin.Context) {
 		return
 	}
 	db, _ := database.GetDB()
-	var comments []models.Comment
-	query := db.Where("message_id = ?", msgID)
-	if !commentAuthIsAdmin(c) {
-		if userID, ok := commentAuthUserID(c); ok {
-			// contacts 为后续 VoceChat 联系人权限预留；在联系人关系未接入前，仅作者本人和管理员可见。
-			query = query.Where("visibility = '' OR visibility = ? OR visibility = ? OR user_id = ?", "public", "users", userID)
-		} else {
-			query = query.Where("visibility = '' OR visibility = ?", "public")
-		}
+	var message models.Message
+	if err := db.First(&message, msgID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
+		return
 	}
-	if err := query.Order("created_at ASC").Find(&comments).Error; err != nil {
+	var comments []models.Comment
+	if err := db.Where("message_id = ?", msgID).Order("created_at ASC").Find(&comments).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取评论失败"})
 		return
 	}
+	viewerID, hasViewer := commentAuthUserID(c)
+	isAdmin := commentAuthIsAdmin(c)
+	commentMap := make(map[uint]models.Comment, len(comments))
+	for _, comment := range comments {
+		commentMap[comment.ID] = comment
+	}
+	visibleComments := make([]models.Comment, 0, len(comments))
+	for _, comment := range comments {
+		var parent *models.Comment
+		if comment.ParentID != nil {
+			if loaded, ok := commentMap[*comment.ParentID]; ok {
+				parent = &loaded
+			}
+		}
+		if canViewComment(message, comment, parent, viewerID, hasViewer, isAdmin) {
+			visibleComments = append(visibleComments, comment)
+		}
+	}
 	userIDs := make([]uint, 0)
 	seenUserIDs := map[uint]bool{}
-	for _, comment := range comments {
+	for _, comment := range visibleComments {
 		if comment.UserID != nil && *comment.UserID > 0 {
 			if !seenUserIDs[*comment.UserID] {
 				seenUserIDs[*comment.UserID] = true
@@ -1191,10 +1284,10 @@ func GetComments(c *gin.Context) {
 			}
 		}
 	}
-	for i := range comments {
-		if comments[i].UserID != nil {
-			comments[i].Mail = ""
-			comments[i].Link = ""
+	for i := range visibleComments {
+		if visibleComments[i].UserID != nil {
+			visibleComments[i].Mail = ""
+			visibleComments[i].Link = ""
 		}
 	}
 	if len(userIDs) > 0 {
@@ -1208,20 +1301,20 @@ func GetComments(c *gin.Context) {
 					AvatarURL: strings.TrimSpace(user.AvatarURL),
 				}
 			}
-			for i := range comments {
-				if comments[i].UserID == nil {
+			for i := range visibleComments {
+				if visibleComments[i].UserID == nil {
 					continue
 				}
-				if info, ok := userInfo[*comments[i].UserID]; ok {
-					comments[i].User = &info
+				if info, ok := userInfo[*visibleComments[i].UserID]; ok {
+					visibleComments[i].User = &info
 					if info.Username != "" {
-						comments[i].Nick = info.Username
+						visibleComments[i].Nick = info.Username
 					}
 				}
 			}
 		}
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 1, "data": comments})
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": visibleComments})
 }
 
 // 批量获取评论数量
@@ -1234,29 +1327,47 @@ func GetCommentCounts(c *gin.Context) {
 		return
 	}
 	db, _ := database.GetDB()
-	type row struct {
-		MessageID uint  `gorm:"column:message_id"`
-		Cnt       int64 `gorm:"column:cnt"`
-	}
-	var rows []row
-	query := db.Model(&models.Comment{}).
-		Select("message_id, COUNT(*) as cnt").
-		Where("message_id IN ?", req.IDs)
-	if !commentAuthIsAdmin(c) {
-		if userID, ok := commentAuthUserID(c); ok {
-			query = query.Where("visibility = '' OR visibility = ? OR visibility = ? OR user_id = ?", "public", "users", userID)
-		} else {
-			query = query.Where("visibility = '' OR visibility = ?", "public")
-		}
-	}
-	if err := query.Group("message_id").Find(&rows).Error; err != nil {
+	var messages []models.Message
+	if err := db.Where("id IN ?", req.IDs).Find(&messages).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取评论数量失败"})
 		return
 	}
-	// 组装为 id->count 的数组结构
-	result := make([]gin.H, 0, len(rows))
-	for _, r := range rows {
-		result = append(result, gin.H{"id": r.MessageID, "count": r.Cnt})
+	messageMap := make(map[uint]models.Message, len(messages))
+	for _, message := range messages {
+		messageMap[message.ID] = message
+	}
+	var comments []models.Comment
+	if err := db.Where("message_id IN ?", req.IDs).Order("created_at ASC").Find(&comments).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取评论数量失败"})
+		return
+	}
+	viewerID, hasViewer := commentAuthUserID(c)
+	isAdmin := commentAuthIsAdmin(c)
+	commentMap := make(map[uint]models.Comment, len(comments))
+	for _, comment := range comments {
+		commentMap[comment.ID] = comment
+	}
+	counts := make(map[uint]int64)
+	for _, comment := range comments {
+		message, ok := messageMap[comment.MessageID]
+		if !ok {
+			continue
+		}
+		var parent *models.Comment
+		if comment.ParentID != nil {
+			if loaded, ok := commentMap[*comment.ParentID]; ok {
+				parent = &loaded
+			}
+		}
+		if canViewComment(message, comment, parent, viewerID, hasViewer, isAdmin) {
+			counts[comment.MessageID]++
+		}
+	}
+	result := make([]gin.H, 0, len(counts))
+	for _, id := range req.IDs {
+		if cnt, ok := counts[id]; ok {
+			result = append(result, gin.H{"id": id, "count": cnt})
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": result})
 }
@@ -1343,10 +1454,38 @@ func PostComment(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "账号不存在或已失效"})
 		return
 	}
+	if message.Private && currentUser.ID != message.UserID {
+		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "私密帖子仅作者可评论或回复"})
+		return
+	}
 	if req.ParentID != nil {
 		var parent models.Comment
-		if err := db.Select("id, message_id").First(&parent, *req.ParentID).Error; err != nil || parent.MessageID != msgID {
+		if err := db.First(&parent, *req.ParentID).Error; err != nil || parent.MessageID != msgID {
 			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "回复目标不存在"})
+			return
+		}
+		var grandParent *models.Comment
+		if parent.ParentID != nil {
+			var loaded models.Comment
+			if err := db.First(&loaded, *parent.ParentID).Error; err == nil && loaded.MessageID == msgID {
+				grandParent = &loaded
+			}
+		}
+		if !canViewComment(message, parent, grandParent, currentUser.ID, true, commentAuthIsAdmin(c)) {
+			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限回复该内容"})
+			return
+		}
+		parentVisibility := normalizedCommentVisibilityOrPublic(parent.Visibility)
+		if commentVisibilityRank(visibility) > commentVisibilityRank(parentVisibility) {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "回复可见范围不能宽于被回复内容"})
+			return
+		}
+		if isGuestbookMessage(message) && currentUser.ID != message.UserID {
+			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "留言仅管理员可以回复"})
+			return
+		}
+		if commentAuthIsAdmin(c) && currentUser.ID != message.UserID && parentVisibility != "public" {
+			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "管理员不可回复非公开评论"})
 			return
 		}
 	}
@@ -1496,6 +1635,16 @@ func UpdateComment(c *gin.Context) {
 		if !ok {
 			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "无效的可见范围"})
 			return
+		}
+	}
+	if cm.ParentID != nil {
+		var parent models.Comment
+		if err := db.First(&parent, *cm.ParentID).Error; err == nil {
+			parentVisibility := normalizedCommentVisibilityOrPublic(parent.Visibility)
+			if commentVisibilityRank(visibility) > commentVisibilityRank(parentVisibility) {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "回复可见范围不能宽于被回复内容"})
+				return
+			}
 		}
 	}
 	cm.Content = req.Content
