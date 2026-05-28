@@ -512,17 +512,6 @@ const cancelEdit = () => {
   isEditingSubmitting.value = false
 }
 
-watch(replyingToComment, (comment) => {
-  if (!comment) return
-  selectedVisibility.value = clampVisibilityToLimit(selectedVisibility.value, comment.visibility)
-})
-
-watch(editingVisibilityOptions, (options) => {
-  if (!options.length) return
-  const limit = options[0]?.value || 'public'
-  editingVisibility.value = clampVisibilityToLimit(editingVisibility.value, limit)
-})
-
 const submitEdit = async () => {
   if (!editingId.value || isEditingSubmitting.value) return
   const nextContent = editingContent.value.trim()
@@ -731,6 +720,18 @@ const editingVisibilityOptions = computed(() => {
   const parent = byId.value[parentId]
   return parent ? visibilityLimitOptions(parent.visibility) : visibilityOptions
 })
+
+watch(replyingToComment, (comment) => {
+  if (!comment) return
+  selectedVisibility.value = clampVisibilityToLimit(selectedVisibility.value, comment.visibility)
+})
+
+watch(editingVisibilityOptions, (options) => {
+  if (!options.length) return
+  const limit = options[0]?.value || 'public'
+  editingVisibility.value = clampVisibilityToLimit(editingVisibility.value, limit)
+})
+
 const childrenWithTarget = computed(() => {
   const map: Record<number, any[]> = {}
   const targetMap: Record<number, string> = {}
