@@ -1341,23 +1341,16 @@ func GetCommentCounts(c *gin.Context) {
 	}
 	viewerID, hasViewer := commentAuthUserID(c)
 	isAdmin := commentAuthIsAdmin(c)
-	commentMap := make(map[uint]models.Comment, len(comments))
-	for _, comment := range comments {
-		commentMap[comment.ID] = comment
-	}
 	counts := make(map[uint]int64)
 	for _, comment := range comments {
+		if comment.ParentID != nil {
+			continue
+		}
 		message, ok := messageMap[comment.MessageID]
 		if !ok {
 			continue
 		}
-		var parent *models.Comment
-		if comment.ParentID != nil {
-			if loaded, ok := commentMap[*comment.ParentID]; ok {
-				parent = &loaded
-			}
-		}
-		if canViewComment(message, comment, parent, viewerID, hasViewer, isAdmin) {
+		if canViewComment(message, comment, nil, viewerID, hasViewer, isAdmin) {
 			counts[comment.MessageID]++
 		}
 	}

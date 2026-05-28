@@ -1,7 +1,7 @@
 <template>
   <div class="builtin-comments">
   <div class="waline-wrapper px-2 py-2 rounded-lg" :class="[themeBg]">
-      <div class="text-sm mb-2" :class="themeText">{{ contextLabel }} ({{ comments.length }})</div>
+      <div class="text-sm mb-2" :class="themeText">{{ contextLabel }} ({{ rootCommentTotal }})</div>
       <div v-if="sortedRootComments.length" class="comments-list">
         <div v-for="c in visibleRootComments" :key="c.id" class="comment-item" :class="rootCardClass">
           <img class="comment-avatar avatar-img" :src="commentAvatar(c)" alt="avatar" :data-mail="c.mail || ''" @error="avatarOnError($event, c.nick || '')" />
@@ -339,6 +339,12 @@ const deletePreviewText = computed(() => {
   return s.length > 120 ? (s.slice(0, 120) + '...') : s
 })
 const resetDeleteConfirm = () => { confirmAcknowledged.value = false; showDeleteConfirm.value = false }
+const topLevelCommentCount = (list: any[]) => {
+  return (Array.isArray(list) ? list : []).filter((c: any) => c && (c.parent_id === null || Number(c.parent_id || 0) === 0)).length
+}
+const dispatchCommentCount = () => {
+  try { window.dispatchEvent(new CustomEvent('comment-count-updated', { detail: { messageId: props.messageId, count: topLevelCommentCount(comments.value) } })) } catch {}
+}
 const load = async () => {
   try {
     const tryFetch = async (url: string) => {
@@ -364,7 +370,7 @@ const load = async () => {
       }
     }
     comments.value = (list || []).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    try { window.dispatchEvent(new CustomEvent('comment-count-updated', { detail: { messageId: props.messageId, count: comments.value.length } })) } catch {}
+    dispatchCommentCount()
   } catch (e) {
     comments.value = []
   }
@@ -399,7 +405,7 @@ const submit = async () => {
       const target = items && items.length ? (items[items.length - 1] as HTMLElement) : null
       target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       useToast().add({ title: '已发布', color: 'green' })
-      try { window.dispatchEvent(new CustomEvent('comment-count-updated', { detail: { messageId: props.messageId, count: comments.value.length } })) } catch {}
+      dispatchCommentCount()
     } else {
       useToast().add({ title: '发布失败', description: res?.msg, color: 'red' })
     }
@@ -560,6 +566,7 @@ const doDelete = async () => {
     const res = await deleteRequest<any>(`messages/${props.messageId}/comments/${deleteId.value}`, undefined, { credentials: 'include' })
     if (res && res.code === 1) {
       comments.value = comments.value.filter(c => c.id !== deleteId.value)
+      dispatchCommentCount()
       if (editingId.value === deleteId.value) cancelEdit()
       useToast().add({ title: '已删除', color: 'green' })
       scrollToMessage()
@@ -697,6 +704,7 @@ const rootComments = computed(() => {
   const roots = list.filter((c: any) => c && (c.parent_id === null || Number(c.parent_id || 0) === 0))
   return roots
 })
+const rootCommentTotal = computed(() => topLevelCommentCount(comments.value))
 const byId = computed(() => {
   const m: Record<number, any> = {}
   const list = Array.isArray(comments.value) ? comments.value : []

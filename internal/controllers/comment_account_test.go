@@ -627,19 +627,16 @@ func TestPublicAndUsersRepliesFollowVisibilityRules(t *testing.T) {
 	}
 }
 
-func TestCommentCountsIncludeVisibleReplies(t *testing.T) {
+func TestCommentCountsExcludeVisibleReplies(t *testing.T) {
 	db, r, _, msg := setupCommentAccountTest(t)
 	parentAuthor := models.User{Username: "bob", Password: ""}
 	replyAuthor := models.User{Username: "charlie", Password: ""}
 	outsider := models.User{Username: "dave", Password: ""}
-	if err := db.Create(&parentAuthor).Error; err != nil {
-		t.Fatalf("create parent author: %v", err)
-	}
-	if err := db.Create(&replyAuthor).Error; err != nil {
-		t.Fatalf("create reply author: %v", err)
-	}
-	if err := db.Create(&outsider).Error; err != nil {
-		t.Fatalf("create outsider: %v", err)
+	admin := models.User{Username: "admin", Password: "", IsAdmin: true}
+	for _, user := range []*models.User{&parentAuthor, &replyAuthor, &outsider, &admin} {
+		if err := db.Create(user).Error; err != nil {
+			t.Fatalf("create user %s: %v", user.Username, err)
+		}
 	}
 	publicParent := createTestComment(t, db, msg.ID, &parentAuthor, "parent-public", "public", nil)
 	usersParent := createTestComment(t, db, msg.ID, &parentAuthor, "parent-users", "users", nil)
@@ -651,27 +648,36 @@ func TestCommentCountsIncludeVisibleReplies(t *testing.T) {
 			id, _ := strconv.ParseUint(raw, 10, 64)
 			c.Set("user_id", uint(id))
 		}
+		if c.GetHeader("X-Test-Is-Admin") == "true" {
+			c.Set("is_admin", true)
+		}
 		c.Next()
 	})
 	r.POST("/messages/comments/counts", GetCommentCounts)
 
-	request := func(userID uint) map[uint]int64 {
+	request := func(userID uint, isAdmin bool) map[uint]int64 {
 		body, _ := json.Marshal(map[string]any{"ids": []uint{msg.ID}})
 		req := httptest.NewRequest(http.MethodPost, "/messages/comments/counts", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		if userID > 0 {
 			req.Header.Set("X-Test-User-ID", strconvFormatUint(userID))
 		}
+		if isAdmin {
+			req.Header.Set("X-Test-Is-Admin", "true")
+		}
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 		return decodeCommentCountResponse(t, w)
 	}
 
-	if got := request(0)[msg.ID]; got != 2 {
-		t.Fatalf("anonymous should count public parent and reply, got %d", got)
+	if got := request(0, false)[msg.ID]; got != 1 {
+		t.Fatalf("anonymous should count only top-level public comments, got %d", got)
 	}
-	if got := request(outsider.ID)[msg.ID]; got != 4 {
-		t.Fatalf("logged-in user should count public/users parents and replies, got %d", got)
+	if got := request(outsider.ID, false)[msg.ID]; got != 2 {
+		t.Fatalf("logged-in user should count only top-level public/users comments, got %d", got)
+	}
+	if got := request(admin.ID, true)[msg.ID]; got != 2 {
+		t.Fatalf("admin should count only top-level comments, got %d", got)
 	}
 }
 
