@@ -1155,21 +1155,6 @@ func canViewComment(message models.Message, comment models.Comment, parent *mode
 	if message.Private {
 		return hasViewer && viewerID == message.UserID
 	}
-	if isGuestbookMessage(message) {
-		if !hasViewer {
-			return false
-		}
-		if viewerID == message.UserID {
-			return true
-		}
-		if comment.UserID != nil && *comment.UserID == viewerID {
-			return true
-		}
-		if comment.ParentID != nil && parent != nil && parent.UserID != nil && *parent.UserID == viewerID {
-			return true
-		}
-		return false
-	}
 	if comment.ParentID != nil {
 		if !hasViewer {
 			return false
@@ -1478,10 +1463,6 @@ func PostComment(c *gin.Context) {
 		parentVisibility := normalizedCommentVisibilityOrPublic(parent.Visibility)
 		if commentVisibilityRank(visibility) > commentVisibilityRank(parentVisibility) {
 			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "回复可见范围不能宽于被回复内容"})
-			return
-		}
-		if isGuestbookMessage(message) && currentUser.ID != message.UserID {
-			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "留言仅管理员可以回复"})
 			return
 		}
 		if commentAuthIsAdmin(c) && currentUser.ID != message.UserID && parentVisibility != "public" {

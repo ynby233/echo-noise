@@ -696,7 +696,7 @@ func TestReplyCannotBroadenParentVisibility(t *testing.T) {
 	}
 }
 
-func TestGuestbookVisibilityAndReplyRestrictions(t *testing.T) {
+func TestGuestbookFollowsCommentVisibilityRules(t *testing.T) {
 	db, r, _, _ := setupCommentAccountTest(t)
 	admin := models.User{Username: "admin", Password: "", IsAdmin: true}
 	visitor := models.User{Username: "bob", Password: ""}
@@ -710,8 +710,9 @@ func TestGuestbookVisibilityAndReplyRestrictions(t *testing.T) {
 	if err := db.Create(&guestbook).Error; err != nil {
 		t.Fatalf("create guestbook: %v", err)
 	}
-	entry := createTestComment(t, db, guestbook.ID, &visitor, "guestbook-entry", "public", nil)
-	createTestComment(t, db, guestbook.ID, &admin, "admin-reply", "private", &entry.ID)
+	entry := createTestComment(t, db, guestbook.ID, &visitor, "public-entry", "public", nil)
+	createTestComment(t, db, guestbook.ID, &admin, "users-entry", "users", nil)
+	createTestComment(t, db, guestbook.ID, &visitor, "private-entry", "private", nil)
 
 	r.Use(func(c *gin.Context) {
 		if raw := c.GetHeader("X-Test-User-ID"); raw != "" {
@@ -739,17 +740,17 @@ func TestGuestbookVisibilityAndReplyRestrictions(t *testing.T) {
 		return decodeCommentListResponse(t, w)
 	}
 
-	if got := contentsOfComments(request(0, false)); len(got) != 0 {
-		t.Fatalf("anonymous should not see guestbook thread, got %#v", got)
+	if got := contentsOfComments(request(0, false)); len(got) != 1 || got[0] != "public-entry" {
+		t.Fatalf("anonymous should see public guestbook entries, got %#v", got)
 	}
-	if got := contentsOfComments(request(outsider.ID, false)); len(got) != 0 {
-		t.Fatalf("outsider should not see guestbook thread, got %#v", got)
+	if got := contentsOfComments(request(outsider.ID, false)); len(got) != 2 || got[0] != "public-entry" || got[1] != "users-entry" {
+		t.Fatalf("logged-in users should see public/users guestbook entries, got %#v", got)
 	}
-	if got := contentsOfComments(request(visitor.ID, false)); len(got) != 2 {
-		t.Fatalf("guestbook author should see entry and admin reply, got %#v", got)
+	if got := contentsOfComments(request(visitor.ID, false)); len(got) != 3 || got[0] != "private-entry" || got[1] != "public-entry" || got[2] != "users-entry" {
+		t.Fatalf("guestbook entry author should see own private entry plus public/users entries, got %#v", got)
 	}
-	if got := contentsOfComments(request(admin.ID, true)); len(got) != 2 {
-		t.Fatalf("admin should see guestbook thread, got %#v", got)
+	if got := contentsOfComments(request(admin.ID, true)); len(got) != 3 {
+		t.Fatalf("admin should see all guestbook entries, got %#v", got)
 	}
 
 	payload, _ := json.Marshal(map[string]any{
@@ -762,8 +763,18 @@ func TestGuestbookVisibilityAndReplyRestrictions(t *testing.T) {
 	req.Header.Set("X-Test-User-ID", strconvFormatUint(visitor.ID))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("expected 403 when non-admin replies guestbook entry, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected visitor can reply guestbook entry, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Code float64        `json:"code"`
+		Data models.Comment `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode reply response: %v", err)
+	}
+	if resp.Code != 1 || resp.Data.ParentID == nil || *resp.Data.ParentID != entry.ID {
+		t.Fatalf("expected successful guestbook reply response, got %#v", resp)
 	}
 }
 
