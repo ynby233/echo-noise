@@ -4,7 +4,7 @@
       <div class="text-sm mb-2" :class="themeText">{{ contextLabel }} ({{ rootCommentTotal }})</div>
       <div v-if="sortedRootComments.length" class="comments-list">
         <div v-for="c in visibleRootComments" :key="c.id" class="comment-item" :class="rootCardClass">
-          <img class="comment-avatar avatar-img" :src="commentAvatar(c)" alt="avatar" :data-mail="c.mail || ''" @error="avatarOnError($event, c.nick || '')" />
+          <img class="comment-avatar avatar-img" :src="commentAvatar(c)" alt="avatar" :data-mail="c.mail || ''" @error="avatarOnError" />
           <div class="comment-body">
             <div class="comment-header" :class="themeText">
               <span class="comment-nick">
@@ -42,7 +42,7 @@
             </div>
             <div v-if="childrenMap[c.id]?.length" class="mt-2 replies-list">
               <div v-for="child in visibleChildren(c.id)" :key="child.id" class="comment-item child" :class="childCardClass">
-                <img class="comment-avatar avatar-img" :src="commentAvatar(child)" alt="avatar" :data-mail="child.mail || ''" @error="avatarOnError($event, child.nick || '')" />
+                <img class="comment-avatar avatar-img" :src="commentAvatar(child)" alt="avatar" :data-mail="child.mail || ''" @error="avatarOnError" />
                 <div class="comment-body">
                   <div class="comment-header" :class="themeText">
                     <span class="comment-nick">
@@ -262,11 +262,7 @@ const avatarPlaceholder = computed(() => {
   return icon
 })
 
-const dicebear = (seed: string, size = 60) => {
-  const s = encodeURIComponent(String(seed || '').trim())
-  if (!s) return ''
-  return `https://api.dicebear.com/7.x/initials/svg?seed=${s}&backgroundType=gradient&radius=50&scale=100&size=${size}`
-}
+const accountFallbackAvatar = () => avatarPlaceholder.value || genericGrayAvatar(60)
 
 const qqNumberFromEmail = (email: string) => {
   const m = String(email || '').trim().match(/^([0-9]{5,12})@qq\.com$/i)
@@ -279,7 +275,7 @@ const commentAvatar = (c: any) => {
   const accountAvatar = normalizeMediaURL(getUserField(accountUser, ['avatar_url','AvatarURL','avatar','Avatar']))
   if (accountAvatar) return accountAvatar
   const accountName = getUserField(accountUser, ['username','Username','nick','nickname','Nick','Nickname','name','Name'])
-  if (accountName) return dicebear(accountName)
+  if (accountName) return accountFallbackAvatar()
   const name = String(c?.nick || '').trim()
   const mailStr = String(c?.mail || '').trim()
   const qq = qqNumberFromEmail(mailStr)
@@ -287,26 +283,20 @@ const commentAvatar = (c: any) => {
   const cur = useUserStore()
   const loginName = String((cur.user as any)?.username || (cur.user as any)?.Username || '').trim()
   const uav = String(((cur.user as any)?.avatar_url || (cur.user as any)?.AvatarURL || '')).trim()
-  if (loginName && name && loginName === name && uav) return normalizeMediaURL(uav)
-  const seed = name || mailStr || 'anonymous'
-  return qqUrl || pravatar(seed) || avatarPlaceholder.value
+  if (loginName && name && loginName === name) return normalizeMediaURL(uav) || accountFallbackAvatar()
+  return qqUrl || accountFallbackAvatar()
 }
 
-const pravatar = (seed: string, size = 60) => {
-  const s = encodeURIComponent(String(seed || '').trim())
-  if (!s) return ''
-  return `https://i.pravatar.cc/${size}?u=${s}`
-}
 const genericGrayAvatar = (size = 60) => {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 64 64"><rect width="64" height="64" rx="32" fill="#9ca3af"/><circle cx="32" cy="24" r="12" fill="#e5e7eb"/><path d="M16 52c0-10 8-18 16-18s16 8 16 18" fill="#e5e7eb"/></svg>`
   return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg)
 }
-const avatarOnError = (e: Event, seed: string) => {
+const avatarOnError = (e: Event) => {
   const img = e.target as HTMLImageElement
   const mailAttr = (img?.dataset?.mail || '') as string
   const qq = qqNumberFromEmail(mailAttr)
   const fallbackQQ = qqAvatarUrl(qq)
-  const fallback = fallbackQQ || pravatar(seed || mailAttr || 'anonymous') || genericGrayAvatar(60)
+  const fallback = fallbackQQ || accountFallbackAvatar()
   if (img && fallback) img.src = fallback
 }
 
@@ -316,7 +306,7 @@ const currentUsername = computed(() => {
 })
 const currentUserAvatar = computed(() => {
   const u: any = (user.user as any) || {}
-  return normalizeMediaURL(getUserField(u, ['avatar_url','AvatarURL','avatar','Avatar'])) || dicebear(currentUsername.value || 'user') || avatarPlaceholder.value
+  return normalizeMediaURL(getUserField(u, ['avatar_url','AvatarURL','avatar','Avatar'])) || accountFallbackAvatar()
 })
 const accountCardClass = computed(() => (isDark.value ? 'border border-white/20 bg-white/5 text-gray-200' : 'border border-black/10 bg-black/5 text-black'))
 const showDeleteConfirm = ref(false)

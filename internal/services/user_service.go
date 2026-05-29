@@ -258,9 +258,10 @@ func GetStatus() (models.Status, error) {
 	}
 	for _, user := range allusers {
 		users = append(users, models.UserStatus{
-			ID:       user.ID,
-			Username: user.Username,
-			IsAdmin:  user.IsAdmin,
+			ID:        user.ID,
+			Username:  user.Username,
+			IsAdmin:   user.IsAdmin,
+			AvatarURL: strings.TrimSpace(user.AvatarURL),
 		})
 	}
 

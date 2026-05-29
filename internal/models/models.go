@@ -13,10 +13,11 @@ import (
 var DB *gorm.DB
 
 type UserStatus struct {
-	ID       uint   `json:"id"`
-	Username string `json:"username"`
-	IsAdmin  bool   `json:"is_admin"`
-	Status   Status `json:"status"`
+	ID        uint   `json:"id"`
+	Username  string `json:"username"`
+	IsAdmin   bool   `json:"is_admin"`
+	AvatarURL string `json:"avatar_url,omitempty"`
+	Status    Status `json:"status"`
 }
 
 type Message struct {

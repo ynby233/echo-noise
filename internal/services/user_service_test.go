@@ -132,3 +132,37 @@ func TestUserProfileUpdatesDoNotOverwritePasswordsAndPasswordFormatsRemainCompat
 		t.Fatalf("login with changed password should succeed: %v", err)
 	}
 }
+
+func TestGetStatusIncludesUserAvatarURLs(t *testing.T) {
+	setupUserServiceTestDB(t)
+
+	mustCreateUser(t, models.User{
+		Username:  "admin",
+		Password:  models.HashPassword("admin"),
+		IsAdmin:   true,
+		Token:     models.GenerateToken(32),
+		AvatarURL: "https://example.com/admin-avatar.png",
+	})
+	mustCreateUser(t, models.User{
+		Username:  "alice",
+		Password:  models.HashPassword("alice"),
+		Token:     models.GenerateToken(32),
+		AvatarURL: "/api/images/alice.png",
+	})
+
+	status, err := GetStatus()
+	if err != nil {
+		t.Fatalf("get status: %v", err)
+	}
+
+	avatars := map[string]string{}
+	for _, user := range status.Users {
+		avatars[user.Username] = user.AvatarURL
+	}
+	if avatars["admin"] != "https://example.com/admin-avatar.png" {
+		t.Fatalf("admin avatar missing from status, got %q", avatars["admin"])
+	}
+	if avatars["alice"] != "/api/images/alice.png" {
+		t.Fatalf("alice avatar missing from status, got %q", avatars["alice"])
+	}
+}
