@@ -170,6 +170,7 @@ import { ref, onMounted, watch, computed, nextTick, inject, onBeforeUnmount } fr
 import MarkdownRenderer from '~/components/index/MarkdownRenderer.vue'
 import { useToast } from '#ui/composables/useToast'
 import { getRequest, postRequest, putRequest, deleteRequest } from '~/utils/api'
+import { resolveMediaURL } from '~/utils/media-url'
 import { useUserStore } from '~/store/user'
 
 const props = defineProps<{ messageId: number, siteConfig: any, showInput?: boolean, contextLabel?: string }>()
@@ -249,13 +250,14 @@ const rootCardClass = computed(() => (isDark.value ? 'rounded-md p-3 bg-transpar
 const childCardClass = computed(() => (isDark.value ? 'rounded-md p-2 bg-transparent border border-white/20' : 'rounded-md p-2 bg-transparent border border-black/10'))
 const textareaClass = computed(() => (isDark.value ? `w-full px-3 py-2 bg-[rgba(24,28,32,0.95)] text-white border border-blue-500 focus:border-blue-400 rounded-md ring-0 outline-none` : `w-full px-3 py-2 bg-white text-black border border-blue-500 focus:border-blue-600 rounded-md ring-0 outline-none`))
 const selectClass = computed(() => (isDark.value ? 'px-2 py-1 rounded border border-white/20 bg-[rgba(24,28,32,0.95)] text-gray-200 text-xs' : 'px-2 py-1 rounded border border-black/10 bg-white text-black text-xs'))
+const BASE_API = useRuntimeConfig().public.baseApi || '/api'
+const normalizeMediaURL = (raw: string) => resolveMediaURL(BASE_API, raw)
+
 const avatarPlaceholder = computed(() => {
   const s: any = props.siteConfig || {}
   const raw = String(s.avatarURL || '').trim()
-  if (raw) {
-    if (/^https?:\/\//i.test(raw)) return raw
-    return `${BASE_API}${raw}`
-  }
+  const normalizedAvatar = normalizeMediaURL(raw)
+  if (normalizedAvatar) return normalizedAvatar
   const icon = String(s.rssFaviconURL || '/favicon.svg').trim()
   return icon
 })
@@ -273,8 +275,11 @@ const qqNumberFromEmail = (email: string) => {
 const qqAvatarUrl = (qq: string, size = 100) => qq ? `https://q1.qlogo.cn/g?b=qq&nk=${qq}&s=${size}` : ''
 
 const commentAvatar = (c: any) => {
-  const accountAvatar = normalizeMediaURL(getUserField(c?.user || {}, ['avatar_url','AvatarURL','avatar','Avatar']))
+  const accountUser = c?.user || {}
+  const accountAvatar = normalizeMediaURL(getUserField(accountUser, ['avatar_url','AvatarURL','avatar','Avatar']))
   if (accountAvatar) return accountAvatar
+  const accountName = getUserField(accountUser, ['username','Username','nick','nickname','Nick','Nickname','name','Name'])
+  if (accountName) return dicebear(accountName)
   const name = String(c?.nick || '').trim()
   const mailStr = String(c?.mail || '').trim()
   const qq = qqNumberFromEmail(mailStr)
@@ -282,12 +287,7 @@ const commentAvatar = (c: any) => {
   const cur = useUserStore()
   const loginName = String((cur.user as any)?.username || (cur.user as any)?.Username || '').trim()
   const uav = String(((cur.user as any)?.avatar_url || (cur.user as any)?.AvatarURL || '')).trim()
-  const pick = (s: string) => {
-    if (!s) return ''
-    if (/^https?:\/\//i.test(s)) return s
-    return `${BASE_API}${s}`
-  }
-  if (loginName && name && loginName === name && uav) return pick(uav)
+  if (loginName && name && loginName === name && uav) return normalizeMediaURL(uav)
   const seed = name || mailStr || 'anonymous'
   return qqUrl || pravatar(seed) || avatarPlaceholder.value
 }
@@ -310,13 +310,6 @@ const avatarOnError = (e: Event, seed: string) => {
   if (img && fallback) img.src = fallback
 }
 
-const BASE_API = useRuntimeConfig().public.baseApi || '/api'
-const normalizeMediaURL = (raw: string) => {
-  const value = String(raw || '').trim()
-  if (!value) return ''
-  if (/^https?:\/\//i.test(value) || value.startsWith('data:')) return value
-  return `${BASE_API}${value.startsWith('/') ? value : `/${value}`}`
-}
 const currentUsername = computed(() => {
   const u: any = (user.user as any) || {}
   return getUserField(u, ['nick','nickname','Nick','Nickname','username','Username','name','Name'])

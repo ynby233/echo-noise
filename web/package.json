@@ -8,6 +8,7 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "test:api-auth": "node scripts/api-auth-handling.test.mjs",
+    "test:media-url": "node scripts/media-url.test.mjs",
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
