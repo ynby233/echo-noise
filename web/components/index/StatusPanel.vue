@@ -5250,6 +5250,13 @@ const formatDate = (v: any) => {
     return String(v)
   }
 }
+const adminCommentAuthorName = (c: any) => {
+  const user = c?.user || c?.User || {}
+  const username = String(user.username || user.Username || c?.username || c?.Username || '').trim()
+  if (username) return username
+  const userID = c?.user_id || c?.UserID
+  return userID ? `用户#${userID}` : '用户'
+}
 const toggleAdminComments = () => {
   showAdminComments.value = !showAdminComments.value
   if (showAdminComments.value) loadAdminComments()

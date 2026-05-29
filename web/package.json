@@ -10,6 +10,7 @@
     "test:api-auth": "node scripts/api-auth-handling.test.mjs",
     "test:media-url": "node scripts/media-url.test.mjs",
     "test:comment-avatar": "node scripts/comment-avatar-fallback.test.mjs",
+    "test:admin-comments": "node scripts/admin-comments-panel.test.mjs",
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
