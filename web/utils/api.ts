@@ -59,6 +59,27 @@ const handleAuthExpiredFromResponse = (res: any, options?: { silent?: boolean })
     }
 }
 
+const extractServerMsg = (error: any, fallback = '网络异常') => {
+    return error?.response?._data?.msg || error?.data?.msg || error?.response?.statusText || error?.message || fallback
+}
+
+const handleHttpStatusError = <T>(status: any, msg?: string, options?: { silent?: boolean }) => {
+    const normalizedStatus = Number(status || 0)
+    if (normalizedStatus === 401) {
+        const authMsg = msg || '未登录或登录已过期'
+        handleAuthExpired(authMsg, options)
+        return { code: 0, msg: authMsg, data: null } as any as Response<T>
+    }
+    if (normalizedStatus === 403) {
+        const forbiddenMsg = msg || '当前账号没有权限执行此操作'
+        if (!shouldSuppressToast(options)) {
+            useToast().add({ title: '没有权限', description: forbiddenMsg, color: 'orange', timeout: 2000 })
+        }
+        return { code: 0, msg: forbiddenMsg, data: null } as any as Response<T>
+    }
+    return null
+}
+
 export const postRequest = async <T>(url: string, body: object | FormData, options?: { credentials?: RequestCredentials; silent?: boolean; signal?: AbortSignal }) => {
     const BASE_API = useRuntimeConfig().public.baseApi || '/api';
     const userStore = useUserStore();
@@ -85,11 +106,9 @@ export const postRequest = async <T>(url: string, body: object | FormData, optio
     } catch (error) {
         const e: any = error;
         const status = e?.response?.status || e?.status;
-        const serverMsg = e?.response?._data?.msg || e?.response?.statusText || '网络异常';
-        if (status === 401 || status === 403) {
-            handleAuthExpired(serverMsg, options);
-            return { code: 0, msg: serverMsg, data: null } as any as Response<T>;
-        }
+        const serverMsg = extractServerMsg(e, '网络异常');
+        const handled = handleHttpStatusError<T>(status, serverMsg, options)
+        if (handled) return handled
         const toast = useToast();
         if (!shouldSuppressToast(options)) {
             toast.add({ title: '请求失败', description: serverMsg || '网络异常或服务器不可用', color: 'red', timeout: 2000 });
@@ -123,16 +142,14 @@ export const getRequest = async <T>(url: string, params?: any, options?: { crede
     } catch (error) {
         const e: any = error;
         const status = e?.response?.status || e?.status;
-        if (status === 401 || status === 403) {
-            const msg = e?.response?._data?.msg || e?.response?.statusText || '未登录或登录已过期';
-            handleAuthExpired(msg, options);
-            return { code: 0, msg } as any as Response<T>;
-        }
+        const serverMsg = extractServerMsg(e, '网络异常');
+        const handled = handleHttpStatusError<T>(status, serverMsg, options)
+        if (handled) return handled
         const toast = useToast();
         if (!shouldSuppressToast(options)) {
-            toast.add({ title: '请求失败', description: '网络异常或服务器不可用', color: 'red', timeout: 2000 });
+            toast.add({ title: '请求失败', description: serverMsg || '网络异常或服务器不可用', color: 'red', timeout: 2000 });
         }
-        return { code: 0, msg: '网络异常', data: null } as any as Response<T>;
+        return { code: 0, msg: serverMsg, data: null } as any as Response<T>;
     }
 };
 
@@ -175,11 +192,9 @@ export const putRequest = async <T>(url: string, body: object, options?: { crede
     } catch (error) {
         const e: any = error;
         const status = e?.response?.status || e?.status;
-        const serverMsg = e?.response?._data?.msg || e?.response?.statusText || '网络异常';
-        if (status === 401 || status === 403) {
-            handleAuthExpired(serverMsg, options);
-            return { code: 0, msg: serverMsg, data: null } as any as Response<T>;
-        }
+        const serverMsg = extractServerMsg(e, '网络异常');
+        const handled = handleHttpStatusError<T>(status, serverMsg, options)
+        if (handled) return handled
         const toast = useToast();
         if (!shouldSuppressToast(options)) {
             toast.add({ title: '请求失败', description: '网络异常或服务器不可用', color: 'red', timeout: 2000 });
@@ -209,11 +224,9 @@ export const deleteRequest = async <T>(url: string, params?: any, options?: { cr
     } catch (error) {
         const e: any = error;
         const status = e?.response?.status || e?.status;
-        const serverMsg = e?.response?._data?.msg || e?.response?.statusText || '网络异常';
-        if (status === 401 || status === 403) {
-            handleAuthExpired(serverMsg, options);
-            return { code: 0, msg: serverMsg, data: null } as any as Response<T>;
-        }
+        const serverMsg = extractServerMsg(e, '网络异常');
+        const handled = handleHttpStatusError<T>(status, serverMsg, options)
+        if (handled) return handled
         console.error('请求失败:', error);
         throw error;
     }
