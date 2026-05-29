@@ -126,10 +126,16 @@ WORKDIR /app
 
 # 从后端构建阶段复制配置文件和二进制文件
 COPY --from=backend-build /app/config /app/config
+COPY --from=backend-build /app/config /app/default-config
 COPY --from=backend-build /app/noise /app/noise
 
 # 复制docker-compose.yml文件到容器中，用于Docker更新
 COPY ./docker-compose.yml /app/docker-compose.yml
+
+# 运行时入口：支持从 /app/config/runtime.env 自动加载环境变量，便于 GUI 容器部署时文件化维护配置
+COPY ./docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # 从前端构建阶段复制静态文件
 COPY --from=frontend-build /app/public /app/public

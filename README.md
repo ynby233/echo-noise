@@ -351,6 +351,20 @@ docker run -d \
 > - Linux/macOS：`SESSION_SECRET=$(head -c 32 /dev/urandom | xxd -p -c 64)`
 > - OpenSSL：`SESSION_SECRET=$(openssl rand -hex 32)`
 >
+> 如果使用图形化 Docker 面板、不方便长期维护 `-e` 环境变量，可将宿主机配置目录挂载到 `/app/config`。容器会在该目录中保留 `runtime.env.example` 模板；复制为 `runtime.env` 后即可文件化维护环境变量。容器启动时会自动读取 `/app/config/runtime.env` 并导出变量，写法与 shell `.env` 一致，例如：
+>
+> ```
+> TZ=Asia/Shanghai
+> ACCESS_LOG=false
+> SESSION_SECRET=请替换为至少32位随机字符串
+> DB_TYPE=sqlite
+> DB_PATH=/app/data/noise.db
+> NOTE_HOST=http://localhost:1314
+> NOTE_HTTP_PORT=1315
+> ```
+>
+> `runtime.env` 只能固定环境变量，不能固定数据卷映射；数据卷仍需在 `docker run`、docker-compose 或图形化容器面板中配置。环境变量优先级上，`runtime.env` 会覆盖镜像默认 ENV 与面板中同名变量。`runtime.env.example` 只是模板，不会被自动加载；已有 `runtime.env` 和 `config.yaml` 不会被覆盖。若 `/app/config` 是空挂载目录，容器会在首次启动时自动写入默认 `config.yaml` 与 `runtime.env.example`。
+>
 > - 时区可选： -e TZ=Asia/Shanghai
 > - 使用 -v /opt/data:/app/data \ 可挂载你原有的数据，请确保/opt/data文件夹中包含原数据库文件，如有图片请一起放在data文件夹下images 文件夹中，如果没有原数据库文件还使用该命令，进入页面会无任何可用数据显示 
 > - 使用 --platform linux/amd64 命令可选择不同架构运行部署
