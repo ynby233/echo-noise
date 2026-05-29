@@ -1,16 +1,46 @@
 package controllers
 
 import (
-    "net/http"
-    "time"
-    "strconv"  // 添加 strconv 包
-    "github.com/gin-gonic/gin"
-    "github.com/rcy1314/echo-noise/internal/models"
-    "github.com/rcy1314/echo-noise/internal/database"
-    "github.com/rcy1314/echo-noise/internal/services"  // 添加 services 包
-    "regexp"
+	"net/http"
+	"regexp"
+	"strconv"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/rcy1314/echo-noise/internal/database"
+	"github.com/rcy1314/echo-noise/internal/models"
+	"github.com/rcy1314/echo-noise/internal/services"
 )
-// GetMessagesByTag 获取指定标签的消息
+
+var (
+	messageTagExtractRegexp = regexp.MustCompile(`#([^\s#\p{P}\p{S}]+)([/?=&][^\s#]*)?`)
+	invalidMessageTagRegexp = regexp.MustCompile(`[/?=&]|^(song|video|playlist)\?id=\d+$`)
+)
+
+func extractMessageTags(content string) []string {
+	matches := messageTagExtractRegexp.FindAllStringSubmatch(content, -1)
+	tags := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if len(match) <= 1 || match[1] == "" || invalidMessageTagRegexp.MatchString(match[1]) {
+			continue
+		}
+		if len(match) > 2 && match[2] != "" {
+			continue
+		}
+		tags = append(tags, match[1])
+	}
+	return tags
+}
+
+func messageHasTag(content string, tag string) bool {
+	for _, current := range extractMessageTags(content) {
+		if current == tag {
+			return true
+		}
+	}
+	return false
+}
+
 // GetMessagesByTag 获取指定标签的消息
 func GetMessagesByTag(c *gin.Context) {
     tag := c.Param("tag")
@@ -45,11 +75,10 @@ func GetMessagesByTag(c *gin.Context) {
         return
     }
 
-    // 使用正则表达式进行精确匹配
+    // 使用统一标签提取逻辑进行精确匹配
     var filteredMessages []models.Message
-    tagRegex := regexp.MustCompile(`#` + regexp.QuoteMeta(tag) + `(?:[\s,.!?]|$)`)
     for _, msg := range messages {
-        if tagRegex.MatchString(msg.Content) {
+        if messageHasTag(msg.Content, tag) {
             filteredMessages = append(filteredMessages, msg)
         }
     }
@@ -79,14 +108,10 @@ func GetAllTags(c *gin.Context) {
 
     // 提取并统计标签
     tagMap := make(map[string]int)
-    invalidTagPattern := regexp.MustCompile(`[/?=&]|^(song|video|playlist)\?id=\d+$`)
-    
+
     for _, msg := range messages {
-        tags := regexp.MustCompile(`#([^\s#]+)`).FindAllStringSubmatch(msg.Content, -1)
-        for _, tag := range tags {
-            if len(tag) > 1 && !invalidTagPattern.MatchString(tag[1]) {
-                tagMap[tag[1]]++
-            }
+        for _, tag := range extractMessageTags(msg.Content) {
+            tagMap[tag]++
         }
     }
 

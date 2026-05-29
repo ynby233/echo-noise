@@ -496,13 +496,7 @@ func DeleteMessage(c *gin.Context) {
 }
 
 func GenerateRSS(c *gin.Context) {
-	atom, err := services.GenerateRSS(c)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.Fail[string](models.GenerateRSSFailMessage))
-		return
-	}
-
-	c.Data(http.StatusOK, "application/rss+xml; charset=utf-8", []byte(atom))
+	c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "RSS 已禁用"})
 }
 
 func UpdateUser(c *gin.Context) {
@@ -2112,21 +2106,11 @@ func RegenerateUserToken(c *gin.Context) {
 	}, "更新成功"))
 }
 
-// RefreshRSS 刷新 RSS 内容
+// RefreshRSS 已禁用，保留旧接口的显式 404 响应
 func RefreshRSS(c *gin.Context) {
-	// 重新生成 RSS
-	_, err := services.GenerateRSS(c)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code": 0,
-			"msg":  "RSS 刷新失败: " + err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"code": 1,
-		"msg":  "RSS 已刷新",
+	c.JSON(http.StatusNotFound, gin.H{
+		"code": 0,
+		"msg":  "RSS 已禁用",
 	})
 }
 
