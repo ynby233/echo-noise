@@ -239,7 +239,7 @@
                       </div>
                       <div class="flex flex-wrap items-center gap-2">
                         <UButton size="sm" @click.stop="chooseAvatar" color="indigo" variant="soft" class="shadow">上传头像</UButton>
-                        <UButton size="sm" :loading="avatarUploadingGravatar" @click.stop="useInitialsAvatar" color="orange" variant="soft" class="shadow">使用 Gravatar 默认头像</UButton>
+                        <UButton size="sm" :loading="avatarApplyingDefault" @click.stop="useSiteDefaultAvatar" color="orange" variant="soft" class="shadow">使用站点默认头像</UButton>
                       </div>
                       <input ref="avatarInput" type="file" accept="image/*" class="hidden" @change="onAvatarFileChange" />
                       <div class="flex flex-col md:flex-row items-stretch gap-2 w-full">
@@ -1062,7 +1062,7 @@
                 <CommentsSettings :config="frontendConfig" :theme="theme" @update:config="updateCommentsConfig" @comment-system-changed="uiCommentSystem = $event" />
                 <div v-if="isAdmin && frontendConfig.commentEnabled && String(uiCommentSystem || frontendConfig.commentSystem).toLowerCase() === 'builtin'" class="mt-4 rounded-lg p-3" :class="theme.subtleBg">
                   <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-2">
-                    <UInput v-model="commentSearch" placeholder="搜索评论内容/昵称/邮箱/网址" class="flex-1" />
+                    <UInput v-model="commentSearch" placeholder="搜索评论内容或用户名" class="flex-1" />
                     <div class="flex items-center gap-2">
                       <UButton color="primary" variant="soft" @click="loadAdminComments" class="flex-1 sm:flex-none">搜索</UButton>
                       <UButton variant="soft" :color="showAdminComments ? 'gray' : 'indigo'" @click="toggleAdminComments" class="flex-1 sm:flex-none">{{ showAdminComments ? '折叠' : '展开' }}</UButton>
@@ -1071,15 +1071,13 @@
                   <div v-if="showAdminComments" class="space-y-2">
                     <div v-for="c in adminComments" :key="c.id" class="rounded border px-3 py-2" :class="theme.border">
                       <div class="flex items-center justify-between gap-2">
-                        <div class="text-xs sm:text-sm truncate" :class="theme.text">#{{ c.id }} · {{ c.nick || '匿名' }} · {{ formatDate(c.created_at) }}</div>
+                        <div class="text-xs sm:text-sm truncate" :class="theme.text">#{{ c.id }} · {{ adminCommentAuthorName(c) }} · {{ formatDate(c.created_at) }}</div>
                         <UButton size="xs" variant="ghost" :color="isCommentExpanded(c) ? 'gray' : 'primary'" @click="toggleCommentExpanded(c)">{{ isCommentExpanded(c) ? '收起' : '展开' }}</UButton>
                       </div>
                       <div class="mt-1 text-xs sm:text-sm truncate" :class="theme.text">{{ c.content }}</div>
                       <div v-if="isCommentExpanded(c)" class="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs sm:text-sm">
                         <div><span :class="theme.mutedText">消息ID</span>：<span :class="theme.text">{{ c.message_id }}</span></div>
                         <div><span :class="theme.mutedText">父评论ID</span>：<span :class="theme.text">{{ c.parent_id || 0 }}</span></div>
-                        <div><span :class="theme.mutedText">邮箱</span>：<span :class="theme.text">{{ c.mail || '-' }}</span></div>
-                        <div class="md:col-span-3"><span :class="theme.mutedText">网址</span>：<a v-if="c.link" :href="c.link" target="_blank" rel="noopener" class="underline">{{ c.link }}</a><span v-else :class="theme.text">-</span></div>
                         <div class="md:col-span-3 flex gap-2">
                           <UButton color="red" size="xs" variant="soft" @click="openAdminDeleteConfirm(c)">删除该评论</UButton>
                         </div>
@@ -1103,9 +1101,8 @@
             </template>
             <div class="space-y-3">
               <div class="text-sm">此操作不可恢复，确认删除该评论？</div>
-              <div class="text-sm">评论ID：{{ adminPendingDelete?.id }}</div>
               <div class="text-sm">消息ID：{{ adminPendingDelete?.message_id }}</div>
-              <div class="text-sm">昵称：{{ adminPendingDelete?.nick || '匿名' }}</div>
+              <div class="text-sm">用户：{{ adminCommentAuthorName(adminPendingDelete) }}</div>
               <div class="text-sm break-words">内容片段：{{ adminDeletePreviewText }}</div>
               <label class="flex items-center gap-2 text-sm">
                 <input type="checkbox" v-model="adminConfirmAcknowledged" />
@@ -2302,19 +2299,24 @@ const lifePreview = computed(() => {
     endDateText: new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(endDate)
   }
 })
-const hex32 = (s: string) => {
-  let h1 = 0x811c9dc5, h2 = 0x811c9dc5
-  const t = String(s || '')
-  for (let i = 0; i < t.length; i++) {
-    const c = t.charCodeAt(i)
-    h1 = (h1 ^ c) + ((h1 << 1) + (h1 << 4) + (h1 << 7) + (h1 << 8) + (h1 << 24))
-    h2 = (h2 ^ (c * 13)) + ((h2 << 1) + (h2 << 4) + (h2 << 7) + (h2 << 8) + (h2 << 24))
-    h1 >>>= 0
-    h2 >>>= 0
-  }
-  const toHex = (v: number) => ('00000000' + (v >>> 0).toString(16)).slice(-8)
-  return (toHex(h1) + toHex(h2) + toHex(h1 ^ h2) + toHex((h1 + h2) >>> 0)).slice(0, 32)
+const genericGrayAvatar = (size = 64) => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 64 64"><rect width="64" height="64" rx="32" fill="#9ca3af"/><circle cx="32" cy="24" r="12" fill="#e5e7eb"/><path d="M16 52c0-10 8-18 16-18s16 8 16 18" fill="#e5e7eb"/></svg>`
+  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg)
 }
+const resolveAdminMediaURL = (raw: string) => {
+  const s = String(raw || '').trim()
+  if (!s) return ''
+  if (/^https?:\/\//i.test(s)) return s
+  if (s.startsWith('/api/')) return s
+  if (s.startsWith('/images/')) return `${String(baseApi || '/api').replace(/\/$/, '')}${s}`
+  if (s.startsWith('/')) return s
+  return `${String(baseApi || '/api').replace(/\/$/, '')}/${s.replace(/^\//, '')}`
+}
+const siteDefaultAvatar = computed(() => {
+  return resolveAdminMediaURL(String((frontendConfig as any)?.avatarURL || '')) ||
+    resolveAdminMediaURL(String((frontendConfig as any)?.rssFaviconURL || '/favicon.svg')) ||
+    genericGrayAvatar(64)
+})
 const displayUsername = computed(() => {
   const u: any = userStore.user
   const name = String(u?.username || u?.Username || '').trim()
@@ -2327,23 +2329,7 @@ const avatarSrc = computed(() => {
   const u: any = userStore.user
   const userAvatar = String((u?.avatar_url || u?.AvatarURL || '')).trim()
   const adminAvatar = String((adminProfile.value?.avatar_url || '')).trim()
-  const rawName = String((u?.username || u?.Username || '')).trim()
-  const seed = rawName || String((adminProfile.value?.username || (userStore.status as any)?.username || 'admin'))
-  const pick = (s: string) => {
-    if (!s) return ''
-    if (/^https?:\/\//i.test(s)) return s
-    const base = (baseApi || '').replace(/\/$/, '')
-    const path = String(s || '')
-    if (path.startsWith('/')) return path
-    return `${base}/${path.replace(/^\//, '')}`
-  }
-  const gravatar = (seed: string, size = 100) => {
-    const email = String(((userStore.user as any)?.email || '')).trim().toLowerCase()
-    const s = email ? email : ''
-    const hash = s ? hex32(s) : '00000000000000000000000000000000'
-    return `https://cravatar.cn/avatar/${hash}?d=retro&s=${size}`
-  }
-  return pick(userAvatar) || pick(adminAvatar) || gravatar(seed, 100)
+  return resolveAdminMediaURL(userAvatar) || resolveAdminMediaURL(adminAvatar) || siteDefaultAvatar.value
 })
 
 const setActive = async (name: AdminSectionKey, evt?: MouseEvent) => {
@@ -3500,7 +3486,7 @@ const handleLogout = async () => {
 }
 const onAvatarImgError = (e: Event) => {
   const img = e.target as HTMLImageElement
-  if (img) img.src = 'https://cravatar.cn/avatar/00000000000000000000000000000000?d=retro&s=64'
+  if (img) img.src = siteDefaultAvatar.value
 }
 // 状态变量
 const isLogin = computed(() => userStore?.isLogin ?? false)
@@ -3516,7 +3502,7 @@ const bgFileInput = ref<HTMLInputElement | null>(null)
 const siteAvatarInput = ref<HTMLInputElement | null>(null)
 const avatarFile = ref<File | null>(null)
 const avatarUploading = ref(false)
-const avatarUploadingGravatar = ref(false)
+const avatarApplyingDefault = ref(false)
 const avatarUploadingLink = ref(false)
 const avatarUploadingFile = ref(false)
 const avatarLink = ref('')
@@ -3884,28 +3870,21 @@ const closeCropper = () => {
   cropperOpen.value = false
 }
 
-// 移除站点头像依赖
-
-const useInitialsAvatar = async () => {
+const useSiteDefaultAvatar = async () => {
   try {
-    const name = String((userStore.user as any)?.username || (userStore.user as any)?.Username || '').trim()
-    if (!name) throw new Error('请先设置用户名')
-    const email = String((userStore.user as any)?.email || '').trim().toLowerCase()
-    const hash = email ? hex32(email.toLowerCase()) : '00000000000000000000000000000000'
-    const grav = `https://cravatar.cn/avatar/${hash}?d=retro&s=100`
-    avatarUploadingGravatar.value = true
-    const res = await putRequest<any>('user/update', { avatar_url: grav }, { credentials: 'include' })
+    const avatar = siteDefaultAvatar.value
+    avatarApplyingDefault.value = true
+    const res = await putRequest<any>('user/update', { avatar_url: avatar }, { credentials: 'include' })
     if (!res || res.code !== 1) throw new Error(res?.msg || '保存失败')
     await userStore.getUser()
-    // 清理任何手动输入或本地预览，确保生效
     localPreview.value = ''
     avatarLink.value = ''
     if (avatarInput.value) avatarInput.value.value = ''
-    useToast().add({ title: '成功', description: '已切换为 Gravatar 默认头像', color: 'green' })
+    useToast().add({ title: '成功', description: '已切换为站点默认头像', color: 'green' })
   } catch (e: any) {
     useToast().add({ title: '错误', description: e?.message || '操作失败', color: 'red' })
   } finally {
-    avatarUploadingGravatar.value = false
+    avatarApplyingDefault.value = false
   }
 }
 

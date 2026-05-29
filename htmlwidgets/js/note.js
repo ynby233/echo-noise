@@ -362,13 +362,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 el: `#${commentId}`,
                 serverURL: window.note.commentServer || 'https://ment.noisework.cn', // 使用配置中的评论服务器地址
                 reaction: 'true',
-                meta: ['nick', 'mail', 'link'],
-                requiredMeta: ['mail', 'nick'],
                 pageview: true,
                 search: false,
                 wordLimit: 200,
                 pageSize: 5,
-                avatar: 'monsterid',
                 emoji: [
                     'https://unpkg.com/@waline/emojis@1.2.0/tieba',
                 ],

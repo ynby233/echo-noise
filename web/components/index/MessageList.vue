@@ -312,11 +312,11 @@ const authorAvatar = (msg: any) => {
   const uname = String(((useUserStore().user as any)?.username || '')).trim()
   const uav = String((((useUserStore().user as any)?.avatar_url || (useUserStore().user as any)?.AvatarURL) || '')).trim()
   if (uname && String(msg?.username || '').trim() === uname && uav) return resolveMediaUrl(uav)
-  return `https://www.gravatar.com/avatar/00000000000000000000000000000000?d=retro&s=64`
+  return resolveMediaUrl(String(((props.siteConfig as any)?.avatarURL || (props.siteConfig as any)?.rssFaviconURL || '/favicon.svg')).trim())
 }
 const authorAvatarOnError = (e: Event, seed: string) => {
   const img = e.target as HTMLImageElement
-  const fallback = `https://www.gravatar.com/avatar/00000000000000000000000000000000?d=retro&s=64`
+  const fallback = resolveMediaUrl(String(((props.siteConfig as any)?.avatarURL || (props.siteConfig as any)?.rssFaviconURL || '/favicon.svg')).trim())
   if (img) img.src = fallback
 }
 // 主题切换改为纯 CSS（html.dark）控制，避免组件重渲染导致媒体刷新
@@ -843,13 +843,10 @@ const toggleComment = async (msgId: number) => {
         serverURL: props.siteConfig.walineServerURL,
         path: `messages/${msgId}`,
         reaction: false,
-        meta: ["nick", "mail", "link"],
-        requiredMeta: ["mail", "nick"],
         pageview: true,
         search: false,
         wordLimit: 200,
         pageSize: 5,
-        avatar: "monsterid",
         emoji: ["https://unpkg.com/@waline/emojis@1.2.0/tieba"],
         imageUploader: false,
         copyright: false,

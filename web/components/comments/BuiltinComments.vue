@@ -4,17 +4,10 @@
       <div class="text-sm mb-2" :class="themeText">{{ contextLabel }} ({{ rootCommentTotal }})</div>
       <div v-if="sortedRootComments.length" class="comments-list">
         <div v-for="c in visibleRootComments" :key="c.id" class="comment-item" :class="rootCardClass">
-          <img class="comment-avatar avatar-img" :src="commentAvatar(c)" alt="avatar" :data-mail="c.mail || ''" @error="avatarOnError" />
+          <img class="comment-avatar avatar-img" :src="commentAvatar(c)" alt="avatar" @error="avatarOnError" />
           <div class="comment-body">
             <div class="comment-header" :class="themeText">
-              <span class="comment-nick">
-                <template v-if="safeURL(c.link)">
-                  <a :href="safeURL(c.link)" target="_blank" rel="noopener noreferrer">{{ c.nick || '匿名' }}</a>
-                </template>
-                <template v-else>
-                  {{ c.nick || '匿名' }}
-                </template>
-              </span>
+              <span class="comment-author">{{ commentAuthorName(c) }}</span>
             </div>
             <div v-if="editingId === c.id" class="edit-card">
               <textarea v-model="editingContent" :class="textareaClass" rows="3" placeholder="编辑内容" />
@@ -36,23 +29,16 @@
               <span v-if="visibilityLabel(c.visibility)" class="comment-visibility">{{ visibilityLabel(c.visibility) }}</span>
             </div>
             <div class="comment-actions">
-              <button class="action-btn" @click="startReply(c.id, c.nick || '匿名')">回复</button>
+              <button class="action-btn" @click="startReply(c.id, commentAuthorName(c))">回复</button>
               <button v-if="canManageComment(c)" class="action-btn" @click="startEdit(c)">编辑</button>
               <button v-if="canManageComment(c)" class="action-btn text-red-500" @click="confirmDelete(c.id)">删除</button>
             </div>
             <div v-if="childrenMap[c.id]?.length" class="mt-2 replies-list">
               <div v-for="child in visibleChildren(c.id)" :key="child.id" class="comment-item child" :class="childCardClass">
-                <img class="comment-avatar avatar-img" :src="commentAvatar(child)" alt="avatar" :data-mail="child.mail || ''" @error="avatarOnError" />
+                <img class="comment-avatar avatar-img" :src="commentAvatar(child)" alt="avatar" @error="avatarOnError" />
                 <div class="comment-body">
                   <div class="comment-header" :class="themeText">
-                    <span class="comment-nick">
-                      <template v-if="safeURL(child.link)">
-                        <a :href="safeURL(child.link)" target="_blank" rel="noopener noreferrer">{{ child.nick || '匿名' }}</a>
-                      </template>
-                      <template v-else>
-                        {{ child.nick || '匿名' }}
-                      </template>
-                    </span>
+                    <span class="comment-author">{{ commentAuthorName(child) }}</span>
                   </div>
                   <div v-if="editingId === child.id" class="edit-card">
                     <textarea v-model="editingContent" :class="textareaClass" rows="3" placeholder="编辑内容" />
@@ -73,7 +59,7 @@
                     <span v-if="visibilityLabel(child.visibility)" class="comment-visibility">{{ visibilityLabel(child.visibility) }}</span>
                   </div>
                   <div class="comment-actions">
-                    <button class="action-btn" @click="startReply(child.id, child.nick || '匿名')">回复</button>
+                    <button class="action-btn" @click="startReply(child.id, commentAuthorName(child))">回复</button>
                     <button v-if="canManageComment(child)" class="action-btn" @click="startEdit(child)">编辑</button>
                     <button v-if="canManageComment(child)" class="action-btn text-red-500" @click="confirmDelete(child.id)">删除</button>
                   </div>
@@ -95,7 +81,7 @@
         <div class="comment-account-card" :class="accountCardClass">
           <img class="input-avatar avatar-img" :src="currentUserAvatar" alt="avatar" />
           <div class="min-w-0">
-            <div class="text-sm font-medium" :class="themeText">以‘{{ currentUsername || '当前账号' }}’的身份发布</div>
+            <div class="text-sm font-medium" :class="themeText">以“{{ currentUsername || '当前账号' }}”的身份发布</div>
           </div>
         </div>
         <div class="flex flex-wrap items-center gap-2 mb-3">
@@ -145,8 +131,7 @@
       </template>
       <div class="space-y-3">
         <div class="text-sm">此操作不可恢复，确认删除该评论？</div>
-        <div class="text-sm">评论ID：{{ pendingDelete?.id || deleteId }}</div>
-        <div class="text-sm">昵称：{{ pendingDelete?.nick || '匿名' }}</div>
+        <div class="text-sm">作者：{{ pendingDelete ? commentAuthorName(pendingDelete) : '当前账号' }}</div>
         <div class="text-sm break-words">内容片段：{{ deletePreviewText }}</div>
         <label class="flex items-center gap-2 text-sm">
           <input type="checkbox" v-model="confirmAcknowledged" />
@@ -264,27 +249,17 @@ const avatarPlaceholder = computed(() => {
 
 const accountFallbackAvatar = () => avatarPlaceholder.value || genericGrayAvatar(60)
 
-const qqNumberFromEmail = (email: string) => {
-  const m = String(email || '').trim().match(/^([0-9]{5,12})@qq\.com$/i)
-  return m ? m[1] : ''
-}
-const qqAvatarUrl = (qq: string, size = 100) => qq ? `https://q1.qlogo.cn/g?b=qq&nk=${qq}&s=${size}` : ''
-
 const commentAvatar = (c: any) => {
   const accountUser = c?.user || {}
   const accountAvatar = normalizeMediaURL(getUserField(accountUser, ['avatar_url','AvatarURL','avatar','Avatar']))
   if (accountAvatar) return accountAvatar
-  const accountName = getUserField(accountUser, ['username','Username','nick','nickname','Nick','Nickname','name','Name'])
+  const accountName = getUserField(accountUser, ['username','Username','name','Name'])
   if (accountName) return accountFallbackAvatar()
-  const name = String(c?.nick || '').trim()
-  const mailStr = String(c?.mail || '').trim()
-  const qq = qqNumberFromEmail(mailStr)
-  const qqUrl = qqAvatarUrl(qq)
   const cur = useUserStore()
   const loginName = String((cur.user as any)?.username || (cur.user as any)?.Username || '').trim()
   const uav = String(((cur.user as any)?.avatar_url || (cur.user as any)?.AvatarURL || '')).trim()
-  if (loginName && name && loginName === name) return normalizeMediaURL(uav) || accountFallbackAvatar()
-  return qqUrl || accountFallbackAvatar()
+  if (loginName && Number(c?.user_id || 0) === currentUserId.value) return normalizeMediaURL(uav) || accountFallbackAvatar()
+  return accountFallbackAvatar()
 }
 
 const genericGrayAvatar = (size = 60) => {
@@ -293,16 +268,13 @@ const genericGrayAvatar = (size = 60) => {
 }
 const avatarOnError = (e: Event) => {
   const img = e.target as HTMLImageElement
-  const mailAttr = (img?.dataset?.mail || '') as string
-  const qq = qqNumberFromEmail(mailAttr)
-  const fallbackQQ = qqAvatarUrl(qq)
-  const fallback = fallbackQQ || accountFallbackAvatar()
+  const fallback = accountFallbackAvatar()
   if (img && fallback) img.src = fallback
 }
 
 const currentUsername = computed(() => {
   const u: any = (user.user as any) || {}
-  return getUserField(u, ['nick','nickname','Nick','Nickname','username','Username','name','Name'])
+  return getUserField(u, ['username','Username','name','Name'])
 })
 const currentUserAvatar = computed(() => {
   const u: any = (user.user as any) || {}
@@ -442,19 +414,16 @@ const formatDateMD = (s: string) => {
   return `${month}月${day}日`
 }
 
-const safeURL = (s: string) => {
-  const url = String(s || '').trim()
-  if (!url) return ''
-  if (/^https?:\/\//i.test(url)) return url
-  return ''
-}
-
 const getUserField = (o: any, keys: string[]) => {
   for (const k of keys) {
     const v = String((o || {})[k] || '').trim()
     if (v) return v
   }
   return ''
+}
+const commentAuthorName = (c: any) => {
+  const accountUser = c?.user || {}
+  return getUserField(accountUser, ['username','Username','name','Name']) || '用户'
 }
 const hiddenByCancel = ref(false)
 const formVisible = computed(() => (((props.showInput && !hiddenByCancel.value) || !!replyTo.value) && canComment.value))
@@ -472,7 +441,7 @@ onBeforeUnmount(() => {
 })
 watch(() => props.messageId, load)
 
-const startReply = (id: number, nickName: string) => {
+const startReply = (id: number, authorName: string) => {
   if (!user.isLogin) {
     useToast().add({ title: '请登录后回复', color: 'orange' })
     return
@@ -480,7 +449,7 @@ const startReply = (id: number, nickName: string) => {
   cancelEdit()
   replyTo.value = id
   selectedVisibility.value = clampVisibilityToLimit(selectedVisibility.value, byId.value[id]?.visibility)
-  if (!content.value.startsWith(`@${nickName} `)) content.value = `@${nickName} ` + content.value
+  if (!content.value.startsWith(`@${authorName} `)) content.value = `@${authorName} ` + content.value
 }
 
 const startEdit = (c: any) => {
@@ -569,18 +538,18 @@ const scrollToMessage = () => {
   el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-const allNicks = computed(() => {
+const allAuthors = computed(() => {
   const list = Array.isArray(comments.value) ? comments.value : []
   const set = new Set<string>()
-  list.forEach((c: any) => { const n = String(c?.nick || '').trim(); if (n) set.add(n) })
+  list.forEach((c: any) => { const n = commentAuthorName(c); if (n && n !== '用户') set.add(n) })
   return Array.from(set)
 })
 const showMention = ref(false)
 const mentionQuery = ref('')
 const mentionIndex = ref(0)
-const filteredNicks = computed(() => {
+const filteredAuthors = computed(() => {
   const q = mentionQuery.value.toLowerCase()
-  const arr = allNicks.value.filter(n => n.toLowerCase().startsWith(q))
+  const arr = allAuthors.value.filter(n => n.toLowerCase().startsWith(q))
   return arr.slice(0, 20)
 })
 const hideMention = () => { showMention.value = false; mentionIndex.value = 0; mentionQuery.value = '' }
@@ -620,9 +589,9 @@ const onKeydown = (e: KeyboardEvent) => {
   if ((e.key === 'Enter') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (content.value.trim()) submit(); return }
   if (e.key === '@') { nextTick(computeMention); return }
   if (!showMention.value) return
-  if (e.key === 'ArrowDown') { e.preventDefault(); mentionIndex.value = Math.min(mentionIndex.value + 1, filteredNicks.value.length - 1) }
+  if (e.key === 'ArrowDown') { e.preventDefault(); mentionIndex.value = Math.min(mentionIndex.value + 1, filteredAuthors.value.length - 1) }
   else if (e.key === 'ArrowUp') { e.preventDefault(); mentionIndex.value = Math.max(mentionIndex.value - 1, 0) }
-  else if (e.key === 'Enter') { e.preventDefault(); const n = filteredNicks.value[mentionIndex.value]; if (n) chooseNick(n) }
+  else if (e.key === 'Enter') { e.preventDefault(); const n = filteredAuthors.value[mentionIndex.value]; if (n) chooseAuthor(n) }
   else if (e.key === 'Escape') { hideMention() }
 }
 onMounted(() => { nextTick(autoResizeTextarea) })
@@ -641,7 +610,7 @@ const cancelInput = () => {
   nextTick(autoResizeTextarea)
   emit('cancel', { empty: (comments.value || []).length === 0 })
 }
-const chooseNick = (nick: string) => {
+const chooseAuthor = (author: string) => {
   const el = taRef.value as HTMLTextAreaElement
   if (!el) return
   const pos = el.selectionStart || 0
@@ -650,9 +619,9 @@ const chooseNick = (nick: string) => {
   while (i >= 0 && s[i] !== '\n' && s[i] !== ' ') i--
   const start = i + 1
   const end = pos
-  content.value = replaceRange(s, start, end, `@${nick} `)
+  content.value = replaceRange(s, start, end, `@${author} `)
   hideMention()
-  nextTick(() => { const p = start + nick.length + 2; el.setSelectionRange(p, p); el.focus() })
+  nextTick(() => { const p = start + author.length + 2; el.setSelectionRange(p, p); el.focus() })
 }
 
 const showEmoji = ref(false)
@@ -725,14 +694,12 @@ watch(editingVisibilityOptions, (options) => {
 
 const childrenWithTarget = computed(() => {
   const map: Record<number, any[]> = {}
-  const targetMap: Record<number, string> = {}
   const list = Array.isArray(comments.value) ? comments.value : []
   list.forEach((c: any) => {
     const pid = Number(c?.parent_id || 0)
     if (pid > 0) {
       const parent = byId.value[pid]
       if (!parent) return
-      targetMap[Number(c.id)] = String(parent.nick || '')
       let rootNode: any = parent
       while (Number(rootNode?.parent_id || 0) > 0) {
         const next = byId.value[Number(rootNode.parent_id)]
@@ -747,10 +714,9 @@ const childrenWithTarget = computed(() => {
   Object.keys(map).forEach((k) => {
     map[Number(k)] = (map[Number(k)] || []).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
   })
-  return { map, targetMap }
+  return { map }
 })
 const childrenMap = computed(() => childrenWithTarget.value.map)
-const replyNickMap = computed(() => childrenWithTarget.value.targetMap)
 const sortedRootComments = computed(() => {
   const roots = Array.isArray(rootComments.value) ? rootComments.value : []
   return roots.slice().sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -808,7 +774,7 @@ const repliesCount = (rootId: number) => {
 .comment-header { display:flex; align-items:baseline; flex-wrap:wrap; gap:8px; font-size:14px; font-weight:600; line-height:1.4; color: inherit; }
 .comment-meta { display:flex; align-items:center; gap:8px; font-size:12px; white-space: normal; }
 .reply-target { font-size:12px; opacity:.7; }
-.comment-nick { font-weight:600; color: inherit; }
+.comment-author { font-weight:600; color: inherit; }
 .comment-floor { color: inherit; opacity:.6; font-size:12px; }
 .comment-time { opacity:.7; font-size:12px; }
 .comment-content { margin-top:2px; font-size:14px; }
@@ -832,7 +798,7 @@ const repliesCount = (rootId: number) => {
 .comment-item.child :where(.comment-avatar) { width:28px; height:28px; }
 .avatar-img { width:36px; height:36px; border-radius:9999px; object-fit:cover; display:block; }
 .comment-item.child .avatar-img { width:28px; height:28px; }
-.comment-nick a { color: inherit; text-decoration: none; }
+.comment-author a { color: inherit; text-decoration: none; }
 :global(html.dark) .comment-item.child { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.12); }
 :global(html:not(.dark)) .comment-item.child { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.08); }
 

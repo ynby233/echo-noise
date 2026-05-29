@@ -15,7 +15,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1282,12 +1281,6 @@ func GetComments(c *gin.Context) {
 			}
 		}
 	}
-	for i := range visibleComments {
-		if visibleComments[i].UserID != nil {
-			visibleComments[i].Mail = ""
-			visibleComments[i].Link = ""
-		}
-	}
 	if len(userIDs) > 0 {
 		var users []models.User
 		if err := db.Select("id, username, avatar_url").Where("id IN ?", userIDs).Find(&users).Error; err == nil {
@@ -1305,9 +1298,6 @@ func GetComments(c *gin.Context) {
 				}
 				if info, ok := userInfo[*visibleComments[i].UserID]; ok {
 					visibleComments[i].User = &info
-					if info.Username != "" {
-						visibleComments[i].Nick = info.Username
-					}
 				}
 			}
 		}
@@ -1404,9 +1394,6 @@ func PostComment(c *gin.Context) {
 	}
 	msgID := uint(msgID64)
 	var req struct {
-		Nick       string `json:"nick"`
-		Mail       string `json:"mail"`
-		Link       string `json:"link"`
 		Content    string `json:"content"`
 		Visibility string `json:"visibility"`
 		ParentID   *uint  `json:"parent_id"`
@@ -1441,7 +1428,7 @@ func PostComment(c *gin.Context) {
 		return
 	}
 	var currentUser models.User
-	if err := db.Select("id, username, avatar_url").First(&currentUser, userID).Error; err != nil || currentUser.ID == 0 {
+	if err := db.Select("id, username, avatar_url, email").First(&currentUser, userID).Error; err != nil || currentUser.ID == 0 {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "账号不存在或已失效"})
 		return
 	}
@@ -1477,16 +1464,13 @@ func PostComment(c *gin.Context) {
 		}
 	}
 	commentUserID := currentUser.ID
-	commentNick := strings.TrimSpace(currentUser.Username)
-	if commentNick == "" {
-		commentNick = fmt.Sprintf("用户%d", currentUser.ID)
+	commentUsername := strings.TrimSpace(currentUser.Username)
+	if commentUsername == "" {
+		commentUsername = fmt.Sprintf("用户%d", currentUser.ID)
 	}
 	comment := models.Comment{
 		MessageID:  msgID,
 		UserID:     &commentUserID,
-		Nick:       commentNick,
-		Mail:       "",
-		Link:       "",
 		Content:    req.Content,
 		Visibility: visibility,
 		ParentID:   req.ParentID,
@@ -1495,7 +1479,7 @@ func PostComment(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "保存评论失败"})
 		return
 	}
-	comment.User = &models.CommentUserInfo{ID: currentUser.ID, Username: commentNick, AvatarURL: strings.TrimSpace(currentUser.AvatarURL)}
+	comment.User = &models.CommentUserInfo{ID: currentUser.ID, Username: commentUsername, AvatarURL: strings.TrimSpace(currentUser.AvatarURL)}
 	// 邮件通知
 	if cfg.SmtpEnabled && cfg.CommentEmailEnabled {
 		siteURL := strings.TrimSpace(cfg.CommentEmailSiteURL)
@@ -1517,13 +1501,11 @@ func PostComment(c *gin.Context) {
 				prefixAdmin = prefixAdmin + " "
 			}
 			subject := fmt.Sprintf("%s新评论通知 - %s", prefixAdmin, cfg.SiteTitle)
-			textBody := fmt.Sprintf("站点：%s\n用户：%s\n邮箱：%s\n网址：%s\n内容：\n%s\n\n查看：%s/m/%d", cfg.SiteTitle, comment.Nick, comment.Mail, comment.Link, comment.Content, siteURL, message.ID)
+			textBody := fmt.Sprintf("站点：%s\n用户：%s\n内容：\n%s\n\n查看：%s/m/%d", cfg.SiteTitle, commentUsername, comment.Content, siteURL, message.ID)
 			if strings.TrimSpace(cfg.CommentEmailAdminTemplate) != "" {
 				tpl := cfg.CommentEmailAdminTemplate
 				tpl = strings.ReplaceAll(tpl, "{site}", cfg.SiteTitle)
-				tpl = strings.ReplaceAll(tpl, "{nick}", comment.Nick)
-				tpl = strings.ReplaceAll(tpl, "{mail}", comment.Mail)
-				tpl = strings.ReplaceAll(tpl, "{link}", comment.Link)
+				tpl = strings.ReplaceAll(tpl, "{user}", commentUsername)
 				tpl = strings.ReplaceAll(tpl, "{content}", comment.Content)
 				tpl = strings.ReplaceAll(tpl, "{url}", fmt.Sprintf("%s/m/%d", siteURL, message.ID))
 				textBody = tpl
@@ -1531,9 +1513,7 @@ func PostComment(c *gin.Context) {
 			htmlTpl := strings.TrimSpace(cfg.CommentEmailAdminTemplateHTML)
 			if htmlTpl != "" {
 				htmlTpl = strings.ReplaceAll(htmlTpl, "{site}", cfg.SiteTitle)
-				htmlTpl = strings.ReplaceAll(htmlTpl, "{nick}", comment.Nick)
-				htmlTpl = strings.ReplaceAll(htmlTpl, "{mail}", comment.Mail)
-				htmlTpl = strings.ReplaceAll(htmlTpl, "{link}", comment.Link)
+				htmlTpl = strings.ReplaceAll(htmlTpl, "{user}", commentUsername)
 				htmlTpl = strings.ReplaceAll(htmlTpl, "{content}", comment.Content)
 				htmlTpl = strings.ReplaceAll(htmlTpl, "{url}", fmt.Sprintf("%s/m/%d", siteURL, message.ID))
 				_ = models.SendEmailHTML(adminTo, subject, htmlTpl)
@@ -1544,21 +1524,24 @@ func PostComment(c *gin.Context) {
 		// 回复通知
 		if comment.ParentID != nil {
 			var parent models.Comment
-			parentMail := ""
-			if err := db.First(&parent, *comment.ParentID).Error; err == nil {
-				parentMail = strings.TrimSpace(parent.Mail)
+			var parentUser models.User
+			parentEmail := ""
+			if err := db.First(&parent, *comment.ParentID).Error; err == nil && parent.UserID != nil {
+				if err := db.Select("id, email, email_verified").First(&parentUser, *parent.UserID).Error; err == nil && parentUser.EmailVerified {
+					parentEmail = strings.TrimSpace(parentUser.Email)
+				}
 			}
-			if parentMail != "" && strings.TrimSpace(comment.Mail) != "" && strings.TrimSpace(comment.Mail) != parentMail {
+			if parentEmail != "" && parent.UserID != nil && *parent.UserID != currentUser.ID {
 				prefixReply := strings.TrimSpace(cfg.CommentEmailReplyPrefix)
 				if prefixReply != "" {
 					prefixReply = prefixReply + " "
 				}
 				replySubject := fmt.Sprintf("%s你的评论有新回复 - %s", prefixReply, cfg.SiteTitle)
-				textTpl := fmt.Sprintf("用户 %s 回复了你的评论：\n\n原评论：%s\n回复内容：%s\n\n查看：%s/m/%d", comment.Nick, parent.Content, comment.Content, siteURL, message.ID)
+				textTpl := fmt.Sprintf("用户 %s 回复了你的评论：\n\n原评论：%s\n回复内容：%s\n\n查看：%s/m/%d", commentUsername, parent.Content, comment.Content, siteURL, message.ID)
 				if strings.TrimSpace(cfg.CommentEmailReplyTemplate) != "" {
 					tpl := cfg.CommentEmailReplyTemplate
 					tpl = strings.ReplaceAll(tpl, "{site}", cfg.SiteTitle)
-					tpl = strings.ReplaceAll(tpl, "{nick}", comment.Nick)
+					tpl = strings.ReplaceAll(tpl, "{user}", commentUsername)
 					tpl = strings.ReplaceAll(tpl, "{content}", comment.Content)
 					tpl = strings.ReplaceAll(tpl, "{url}", fmt.Sprintf("%s/m/%d", siteURL, message.ID))
 					textTpl = tpl
@@ -1566,12 +1549,12 @@ func PostComment(c *gin.Context) {
 				htmlTpl := strings.TrimSpace(cfg.CommentEmailReplyTemplateHTML)
 				if htmlTpl != "" {
 					htmlTpl = strings.ReplaceAll(htmlTpl, "{site}", cfg.SiteTitle)
-					htmlTpl = strings.ReplaceAll(htmlTpl, "{nick}", comment.Nick)
+					htmlTpl = strings.ReplaceAll(htmlTpl, "{user}", commentUsername)
 					htmlTpl = strings.ReplaceAll(htmlTpl, "{content}", comment.Content)
 					htmlTpl = strings.ReplaceAll(htmlTpl, "{url}", fmt.Sprintf("%s/m/%d", siteURL, message.ID))
-					_ = models.SendEmailHTMLWithFrom(parentMail, replySubject, htmlTpl, strings.TrimSpace(cfg.CommentEmailReplyName))
+					_ = models.SendEmailHTMLWithFrom(parentEmail, replySubject, htmlTpl, strings.TrimSpace(cfg.CommentEmailReplyName))
 				} else {
-					_ = models.SendEmailWithFrom(parentMail, replySubject, textTpl, strings.TrimSpace(cfg.CommentEmailReplyName))
+					_ = models.SendEmailWithFrom(parentEmail, replySubject, textTpl, strings.TrimSpace(cfg.CommentEmailReplyName))
 				}
 			}
 		}
@@ -1671,76 +1654,6 @@ func DeleteComment(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "已删除"})
 }
 
-func BackfillCommentParents(c *gin.Context) {
-	isAdmin, _ := c.Get("is_admin")
-	if b, ok := isAdmin.(bool); !ok || !b {
-		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限"})
-		return
-	}
-	db, _ := database.GetDB()
-	var all []models.Comment
-	if err := db.Order("message_id ASC").Order("created_at ASC").Find(&all).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "查询失败"})
-		return
-	}
-	type key struct{ mid uint }
-	groups := map[uint][]models.Comment{}
-	for _, cm := range all {
-		groups[cm.MessageID] = append(groups[cm.MessageID], cm)
-	}
-	mention := regexp.MustCompile(`^@([^\s:：]+)`)
-	updated := 0
-	for mid, list := range groups {
-		for i := range list {
-			cmt := list[i]
-			if cmt.ParentID != nil {
-				continue
-			}
-			m := mention.FindStringSubmatch(strings.TrimSpace(cmt.Content))
-			if len(m) < 2 {
-				continue
-			}
-			nick := strings.TrimSpace(m[1])
-			var candidates []models.Comment
-			for j := range list {
-				if list[j].ID == cmt.ID {
-					continue
-				}
-				if strings.TrimSpace(list[j].Nick) == nick {
-					candidates = append(candidates, list[j])
-				}
-			}
-			if len(candidates) == 0 {
-				continue
-			}
-			ct := cmt.CreatedAt
-			var parent *models.Comment
-			var earlier []models.Comment
-			for _, cand := range candidates {
-				if !cand.CreatedAt.After(ct) {
-					earlier = append(earlier, cand)
-				}
-			}
-			if len(earlier) > 0 {
-				sort.Slice(earlier, func(a, b int) bool { return earlier[a].CreatedAt.After(earlier[b].CreatedAt) })
-				p := earlier[0]
-				parent = &p
-			} else {
-				sort.Slice(candidates, func(a, b int) bool { return candidates[a].CreatedAt.After(candidates[b].CreatedAt) })
-				p := candidates[0]
-				parent = &p
-			}
-			if parent != nil {
-				pid := parent.ID
-				if err := db.Model(&models.Comment{}).Where("id = ? AND message_id = ?", cmt.ID, mid).Update("parent_id", pid).Error; err == nil {
-					updated++
-				}
-			}
-		}
-	}
-	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"updated": updated}})
-}
-
 // 列出所有内置评论（管理员，支持搜索与分页）
 func ListComments(c *gin.Context) {
 	_, err := checkAdmin(c)
@@ -1758,10 +1671,10 @@ func ListComments(c *gin.Context) {
 		pageSize = 30
 	}
 	db, _ := database.GetDB()
-	tx := db.Model(&models.Comment{})
+	tx := db.Model(&models.Comment{}).Joins("LEFT JOIN users ON users.id = comments.user_id")
 	if q != "" {
 		like := "%" + q + "%"
-		tx = tx.Where("nick LIKE ? OR content LIKE ? OR mail LIKE ? OR link LIKE ?", like, like, like, like)
+		tx = tx.Where("comments.content LIKE ? OR users.username LIKE ?", like, like)
 	}
 	var total int64
 	if err := tx.Count(&total).Error; err != nil {
@@ -1769,9 +1682,32 @@ func ListComments(c *gin.Context) {
 		return
 	}
 	var list []models.Comment
-	if err := tx.Order("created_at DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&list).Error; err != nil {
+	if err := tx.Select("comments.*").Order("comments.created_at DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&list).Error; err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string]("查询失败"))
 		return
+	}
+	userIDs := make([]uint, 0)
+	for _, item := range list {
+		if item.UserID != nil {
+			userIDs = append(userIDs, *item.UserID)
+		}
+	}
+	if len(userIDs) > 0 {
+		var users []models.User
+		if err := db.Select("id, username, avatar_url").Where("id IN ?", userIDs).Find(&users).Error; err == nil {
+			userInfo := map[uint]models.CommentUserInfo{}
+			for _, user := range users {
+				userInfo[user.ID] = models.CommentUserInfo{ID: user.ID, Username: strings.TrimSpace(user.Username), AvatarURL: strings.TrimSpace(user.AvatarURL)}
+			}
+			for i := range list {
+				if list[i].UserID == nil {
+					continue
+				}
+				if info, ok := userInfo[*list[i].UserID]; ok {
+					list[i].User = &info
+				}
+			}
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"total": total, "items": list}})
 }
@@ -3352,20 +3288,10 @@ func PasswordForgot(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.Fail[string]("账号不能为空"))
 		return
 	}
-	var user *models.User
-	var err error
-	if strings.Contains(account, "@") {
-		user, err = repository.GetUserByEmail(account)
-		if err != nil || user == nil {
-			c.JSON(http.StatusOK, dto.Fail[string]("用户不存在"))
-			return
-		}
-	} else {
-		user, err = services.GetUserByUsername(account)
-		if err != nil || user == nil {
-			c.JSON(http.StatusOK, dto.Fail[string]("用户不存在"))
-			return
-		}
+	user, err := services.GetUserByUsername(account)
+	if err != nil || user == nil {
+		c.JSON(http.StatusOK, dto.Fail[string]("用户不存在"))
+		return
 	}
 	if strings.TrimSpace(user.Email) == "" || !user.EmailVerified {
 		c.JSON(http.StatusOK, dto.Fail[string]("未绑定邮箱或未验证"))

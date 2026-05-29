@@ -53,9 +53,6 @@ type Comment struct {
 	MessageID  uint             `gorm:"index;not null" json:"message_id"`
 	UserID     *uint            `gorm:"index" json:"user_id,omitempty"`
 	User       *CommentUserInfo `gorm:"-" json:"user,omitempty"`
-	Nick       string           `gorm:"type:varchar(100)" json:"nick"`
-	Mail       string           `gorm:"type:varchar(191)" json:"mail"`
-	Link       string           `gorm:"type:varchar(191)" json:"link"`
 	Content    string           `gorm:"type:text;not null" json:"content"`
 	Visibility string           `gorm:"type:varchar(20);not null;default:public;index" json:"visibility"`
 	ParentID   *uint            `json:"parent_id"`

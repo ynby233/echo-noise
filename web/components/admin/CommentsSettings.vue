@@ -9,10 +9,10 @@
         <UInput v-model="local.commentEmailReplyName" :ui="{base: theme?.text}" placeholder="邮件发件显示名（回复通知）" />
         <UInput v-model="local.commentEmailAdminPrefix" :ui="{base: theme?.text}" placeholder="管理员通知主题前缀（可选）" />
         <UInput v-model="local.commentEmailReplyPrefix" :ui="{base: theme?.text}" placeholder="回复通知主题前缀（可选）" />
-        <UTextarea v-model="local.commentEmailReplyTemplate" :ui="{base: theme?.text}" placeholder="回复通知正文模板（默认示例）支持 {site} {nick} {content} {url}" />
-        <UTextarea v-model="local.commentEmailAdminTemplate" :ui="{base: theme?.text}" placeholder="管理员通知正文模板（可选）支持 {site} {nick} {mail} {link} {content} {url}" />
-        <UTextarea v-model="local.commentEmailReplyTemplateHTML" :ui="{base: theme?.text}" placeholder="回复通知 HTML 模板（可选）支持 {site} {nick} {content} {url}" />
-        <UTextarea v-model="local.commentEmailAdminTemplateHTML" :ui="{base: theme?.text}" placeholder="管理员通知 HTML 模板（可选）支持 {site} {nick} {mail} {link} {content} {url}" />
+        <UTextarea v-model="local.commentEmailReplyTemplate" :ui="{base: theme?.text}" placeholder="回复通知正文模板（默认示例）支持 {site} {user} {content} {url}" />
+        <UTextarea v-model="local.commentEmailAdminTemplate" :ui="{base: theme?.text}" placeholder="管理员通知正文模板（可选）支持 {site} {user} {content} {url}" />
+        <UTextarea v-model="local.commentEmailReplyTemplateHTML" :ui="{base: theme?.text}" placeholder="回复通知 HTML 模板（可选）支持 {site} {user} {content} {url}" />
+        <UTextarea v-model="local.commentEmailAdminTemplateHTML" :ui="{base: theme?.text}" placeholder="管理员通知 HTML 模板（可选）支持 {site} {user} {content} {url}" />
         <div class="md:col-span-3 rounded border p-3" :class="theme?.border">
           <div :class="theme?.text">回复通知富文本预览</div>
           <div class="mt-2 rounded p-2 email-preview" v-html="previewReplyHTML"></div>
@@ -42,8 +42,9 @@ const local = reactive({
   commentEmailAdminPrefix: '',
   commentEmailReplyPrefix: '',
   commentEmailReplyTemplate: '',
-  commentEmailAdminTemplate: ''
-  ,commentEmailReplyTemplateHTML: '',
+  commentEmailAdminTemplate: '',
+  commentEmailSiteURL: '',
+  commentEmailReplyTemplateHTML: '',
   commentEmailAdminTemplateHTML: ''
 })
 
@@ -113,41 +114,36 @@ const textCls = computed(() => 'text-white')
 
 const previewReplyHTML = computed(() => {
   const site = String(props.config?.siteTitle || '站点')
-  const nick = 'Mike'
+  const user = 'Mike'
   const content = '这里是示例内容'
   const base = String(local.commentEmailSiteURL || '')
   const url = (base ? base.replace(/\/$/, '') : '') + '/m/123'
   const tpl = local.commentEmailReplyTemplateHTML || `
 <div>
   <p>您在<strong>{site}</strong>主页上的内容有了新的评论</p>
-  <p><strong>{nick}</strong> 回复说：</p>
+  <p><strong>{user}</strong> 回复说：</p>
   <p>{content}</p>
   <p>您可以点击查看回复的完整内容：<a href="{url}" target="_blank">{url}</a></p>
 </div>`
-  return tpl.replaceAll('{site}', site).replaceAll('{nick}', nick).replaceAll('{content}', content).replaceAll('{url}', url)
+  return tpl.replaceAll('{site}', site).replaceAll('{user}', user).replaceAll('{content}', content).replaceAll('{url}', url)
 })
 const previewAdminHTML = computed(() => {
   const site = String(props.config?.siteTitle || '站点')
-  const nick = 'Mike'
-  const mail = 'mike@example.com'
-  const link = 'https://example.com'
+  const user = 'Mike'
   const content = '这里是示例内容'
   const base = String(local.commentEmailSiteURL || '')
   const url = (base ? base.replace(/\/$/, '') : '') + '/m/123'
   const tpl = local.commentEmailAdminTemplateHTML || `
 <div>
   <p>站点：<strong>{site}</strong></p>
-  <p>用户：{nick}（{mail}）</p>
-  <p>网址：<a href="{link}" target="_blank">{link}</a></p>
+  <p>用户：{user}</p>
   <p>内容：</p>
   <div>{content}</div>
   <p>查看：<a href="{url}" target="_blank">{url}</a></p>
 </div>`
   return tpl
     .replaceAll('{site}', site)
-    .replaceAll('{nick}', nick)
-    .replaceAll('{mail}', mail)
-    .replaceAll('{link}', link)
+    .replaceAll('{user}', user)
     .replaceAll('{content}', content)
     .replaceAll('{url}', url)
 })

@@ -79,14 +79,36 @@ func createTestComment(t *testing.T, db *gorm.DB, messageID uint, author *models
 	comment := models.Comment{MessageID: messageID, Content: content, Visibility: visibility, ParentID: parentID}
 	if author != nil {
 		comment.UserID = &author.ID
-		comment.Nick = author.Username
-	} else {
-		comment.Nick = "legacy"
 	}
 	if err := db.Create(&comment).Error; err != nil {
 		t.Fatalf("create comment %s: %v", content, err)
 	}
 	return comment
+}
+
+func assertNoLegacyCommentFields(t *testing.T, body []byte) {
+	t.Helper()
+	var payload any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("decode response for legacy field assertion: %v", err)
+	}
+	var walk func(any)
+	walk = func(v any) {
+		switch value := v.(type) {
+		case map[string]any:
+			for key, nested := range value {
+				if key == "nick" || key == "mail" || key == "link" {
+					t.Fatalf("legacy comment field %q should not be serialized in response: %s", key, string(body))
+				}
+				walk(nested)
+			}
+		case []any:
+			for _, nested := range value {
+				walk(nested)
+			}
+		}
+	}
+	walk(payload)
 }
 
 func decodeCommentListResponse(t *testing.T, w *httptest.ResponseRecorder) []models.Comment {
@@ -146,9 +168,6 @@ func TestPostCommentRequiresAccount(t *testing.T) {
 	r.POST("/messages/:id/comments", PostComment)
 
 	w := performCommentRequest(r, msg.ID, map[string]any{
-		"nick":    "visitor",
-		"mail":    "visitor@example.com",
-		"link":    "https://example.com",
 		"content": "unauthenticated comment",
 	})
 
@@ -171,7 +190,7 @@ func TestPostCommentRequiresAccount(t *testing.T) {
 	}
 }
 
-func TestPostCommentBindsCurrentAccountAndIgnoresContactFields(t *testing.T) {
+func TestPostCommentBindsCurrentAccountAndIgnoresLegacyContactFields(t *testing.T) {
 	db, r, user, msg := setupCommentAccountTest(t)
 	r.Use(func(c *gin.Context) {
 		c.Set("user_id", user.ID)
@@ -199,14 +218,9 @@ func TestPostCommentBindsCurrentAccountAndIgnoresContactFields(t *testing.T) {
 	if resp.Code != 1 {
 		t.Fatalf("expected success response, got %#v", resp)
 	}
+	assertNoLegacyCommentFields(t, w.Body.Bytes())
 	if resp.Data.UserID == nil || *resp.Data.UserID != user.ID {
 		t.Fatalf("expected response user_id %d, got %#v", user.ID, resp.Data.UserID)
-	}
-	if resp.Data.Nick != user.Username {
-		t.Fatalf("expected response nick %q, got %q", user.Username, resp.Data.Nick)
-	}
-	if resp.Data.Mail != "" || resp.Data.Link != "" {
-		t.Fatalf("expected response contact fields cleared, got mail=%q link=%q", resp.Data.Mail, resp.Data.Link)
 	}
 	if resp.Data.User == nil || resp.Data.User.ID != user.ID || resp.Data.User.Username != user.Username || resp.Data.User.AvatarURL != user.AvatarURL {
 		t.Fatalf("expected response user info populated, got %#v", resp.Data.User)
@@ -219,43 +233,32 @@ func TestPostCommentBindsCurrentAccountAndIgnoresContactFields(t *testing.T) {
 	if saved.UserID == nil || *saved.UserID != user.ID {
 		t.Fatalf("expected saved user_id %d, got %#v", user.ID, saved.UserID)
 	}
-	if saved.Nick != user.Username {
-		t.Fatalf("expected saved nick %q, got %q", user.Username, saved.Nick)
-	}
-	if saved.Mail != "" || saved.Link != "" {
-		t.Fatalf("expected saved contact fields cleared, got mail=%q link=%q", saved.Mail, saved.Link)
-	}
 }
 
-func TestGetCommentsReturnsAccountInfoAndKeepsLegacyComments(t *testing.T) {
+func TestGetCommentsReturnsAccountInfoWithoutLegacyContactFields(t *testing.T) {
 	db, r, user, msg := setupCommentAccountTest(t)
 	r.GET("/messages/:id/comments", GetComments)
 
 	accountComment := models.Comment{
 		MessageID: msg.ID,
 		UserID:    &user.ID,
-		Nick:      "outdated-nick",
-		Mail:      "secret@example.com",
-		Link:      "https://hidden.example.com",
 		Content:   "account-backed",
 	}
-	legacyComment := models.Comment{
+	unboundComment := models.Comment{
 		MessageID: msg.ID,
-		Nick:      "legacy visitor",
-		Mail:      "legacy@example.com",
-		Link:      "https://legacy.example.com",
-		Content:   "legacy comment",
+		Content:   "unbound comment",
 	}
 	if err := db.Create(&accountComment).Error; err != nil {
 		t.Fatalf("create account comment: %v", err)
 	}
-	if err := db.Create(&legacyComment).Error; err != nil {
-		t.Fatalf("create legacy comment: %v", err)
+	if err := db.Create(&unboundComment).Error; err != nil {
+		t.Fatalf("create unbound comment: %v", err)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/messages/"+strconvFormatUint(msg.ID)+"/comments", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
+	assertNoLegacyCommentFields(t, w.Body.Bytes())
 
 	comments := decodeCommentListResponse(t, w)
 	if len(comments) != 2 {
@@ -263,17 +266,17 @@ func TestGetCommentsReturnsAccountInfoAndKeepsLegacyComments(t *testing.T) {
 	}
 
 	var gotAccount *models.Comment
-	var gotLegacy *models.Comment
+	var gotUnbound *models.Comment
 	for i := range comments {
 		comment := comments[i]
 		switch comment.Content {
 		case "account-backed":
 			gotAccount = &comment
-		case "legacy comment":
-			gotLegacy = &comment
+		case "unbound comment":
+			gotUnbound = &comment
 		}
 	}
-	if gotAccount == nil || gotLegacy == nil {
+	if gotAccount == nil || gotUnbound == nil {
 		t.Fatalf("unexpected comments payload: %#v", comments)
 	}
 	if gotAccount.User == nil {
@@ -282,17 +285,8 @@ func TestGetCommentsReturnsAccountInfoAndKeepsLegacyComments(t *testing.T) {
 	if gotAccount.User.ID != user.ID || gotAccount.User.Username != user.Username || gotAccount.User.AvatarURL != user.AvatarURL {
 		t.Fatalf("unexpected account user info: %#v", gotAccount.User)
 	}
-	if gotAccount.Nick != user.Username {
-		t.Fatalf("expected account nick overwritten with username %q, got %q", user.Username, gotAccount.Nick)
-	}
-	if gotAccount.Mail != "" || gotAccount.Link != "" {
-		t.Fatalf("expected account contact fields cleared, got mail=%q link=%q", gotAccount.Mail, gotAccount.Link)
-	}
-	if gotLegacy.User != nil {
-		t.Fatalf("expected legacy comment user info nil, got %#v", gotLegacy.User)
-	}
-	if gotLegacy.Nick != legacyComment.Nick || gotLegacy.Mail != legacyComment.Mail || gotLegacy.Link != legacyComment.Link {
-		t.Fatalf("expected legacy fields kept, got %#v", gotLegacy)
+	if gotUnbound.User != nil {
+		t.Fatalf("expected unbound comment user info nil, got %#v", gotUnbound.User)
 	}
 }
 
@@ -305,7 +299,7 @@ func TestOwnerCanUpdateOwnCommentContentAndVisibility(t *testing.T) {
 	})
 	r.PUT("/messages/:id/comments/:cid", UpdateComment)
 
-	comment := models.Comment{MessageID: msg.ID, UserID: &user.ID, Nick: user.Username, Content: "old", Visibility: "public"}
+	comment := models.Comment{MessageID: msg.ID, UserID: &user.ID, Content: "old", Visibility: "public"}
 	if err := db.Create(&comment).Error; err != nil {
 		t.Fatalf("create comment: %v", err)
 	}
@@ -340,7 +334,7 @@ func TestUserCannotUpdateOthersComment(t *testing.T) {
 	})
 	r.PUT("/messages/:id/comments/:cid", UpdateComment)
 
-	comment := models.Comment{MessageID: msg.ID, UserID: &user.ID, Nick: user.Username, Content: "mine", Visibility: "public"}
+	comment := models.Comment{MessageID: msg.ID, UserID: &user.ID, Content: "mine", Visibility: "public"}
 	if err := db.Create(&comment).Error; err != nil {
 		t.Fatalf("create comment: %v", err)
 	}
@@ -374,8 +368,8 @@ func TestOwnerCanDeleteOwnCommentButNotOthers(t *testing.T) {
 	})
 	r.DELETE("/messages/:id/comments/:cid", DeleteComment)
 
-	ownComment := models.Comment{MessageID: msg.ID, UserID: &user.ID, Nick: user.Username, Content: "mine", Visibility: "public"}
-	otherComment := models.Comment{MessageID: msg.ID, UserID: &other.ID, Nick: other.Username, Content: "other", Visibility: "public"}
+	ownComment := models.Comment{MessageID: msg.ID, UserID: &user.ID, Content: "mine", Visibility: "public"}
+	otherComment := models.Comment{MessageID: msg.ID, UserID: &other.ID, Content: "other", Visibility: "public"}
 	if err := db.Create(&ownComment).Error; err != nil {
 		t.Fatalf("create own comment: %v", err)
 	}
@@ -424,10 +418,10 @@ func TestGetCommentsFiltersVisibility(t *testing.T) {
 	r.GET("/messages/:id/comments", GetComments)
 
 	comments := []models.Comment{
-		{MessageID: msg.ID, UserID: &owner.ID, Nick: owner.Username, Content: "public", Visibility: "public"},
-		{MessageID: msg.ID, UserID: &owner.ID, Nick: owner.Username, Content: "users", Visibility: "users"},
-		{MessageID: msg.ID, UserID: &owner.ID, Nick: owner.Username, Content: "private", Visibility: "private"},
-		{MessageID: msg.ID, UserID: &owner.ID, Nick: owner.Username, Content: "contacts", Visibility: "contacts"},
+		{MessageID: msg.ID, UserID: &owner.ID, Content: "public", Visibility: "public"},
+		{MessageID: msg.ID, UserID: &owner.ID, Content: "users", Visibility: "users"},
+		{MessageID: msg.ID, UserID: &owner.ID, Content: "private", Visibility: "private"},
+		{MessageID: msg.ID, UserID: &owner.ID, Content: "contacts", Visibility: "contacts"},
 	}
 	for i := range comments {
 		if err := db.Create(&comments[i]).Error; err != nil {

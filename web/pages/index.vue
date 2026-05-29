@@ -163,9 +163,9 @@
                     :src="recentAvatar(c)"
                     class="comment-pill-avatar"
                     alt="avatar"
-                    @error="onRecentAvatarError($event, c.nick || '')"
+                    @error="onRecentAvatarError($event)"
                   />
-                  <span class="comment-pill-text" @wheel="onCommentTextWheel">{{ (c.nick || '匿名') + '：' + shortText(c.content) }}</span>
+                  <span class="comment-pill-text" @wheel="onCommentTextWheel">{{ recentAuthorName(c) + '：' + shortText(c.content) }}</span>
                 </a>
               </div>
             </div>
@@ -338,9 +338,9 @@
                     :src="recentAvatar(c)"
                     class="comment-pill-avatar"
                     alt="avatar"
-                    @error="onRecentAvatarError($event, c.nick || '')"
+                    @error="onRecentAvatarError($event)"
                   />
-                  <span class="comment-pill-text" @wheel="onCommentTextWheel">{{ (c.nick || '匿名') + '：' + shortText(c.content) }}</span>
+                  <span class="comment-pill-text" @wheel="onCommentTextWheel">{{ recentAuthorName(c) + '：' + shortText(c.content) }}</span>
                 </a>
               </div>
             </div>
@@ -438,7 +438,7 @@
         <div v-if="authMode==='login'">
           <UForm @submit.prevent="onLoginSubmit">
             <div class="space-y-3">
-              <UInput v-model="loginForm.username" placeholder="用户名或邮箱" />
+              <UInput v-model="loginForm.username" placeholder="用户名" />
               <UInput
                 ref="loginPasswordInput"
                 v-model="loginForm.password"
@@ -850,36 +850,6 @@ const profileName = computed(() => {
 const fallbackAvatarURL = 'https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png'
 const adminWelcome = ref<any>(null)
 
-const hex32 = (s: string) => {
-  let h1 = 0x811c9dc5, h2 = 0x811c9dc5
-  const t = String(s || '')
-  for (let i = 0; i < t.length; i++) {
-    const c = t.charCodeAt(i)
-    h1 = (h1 ^ c) + ((h1 << 1) + (h1 << 4) + (h1 << 7) + (h1 << 8) + (h1 << 24))
-    h2 = (h2 ^ (c * 13)) + ((h2 << 1) + (h2 << 4) + (h2 << 7) + (h2 << 8) + (h2 << 24))
-    h1 >>>= 0
-    h2 >>>= 0
-  }
-  const toHex = (v: number) => ('00000000' + (v >>> 0).toString(16)).slice(-8)
-  return (toHex(h1) + toHex(h2) + toHex(h1 ^ h2) + toHex((h1 + h2) >>> 0)).slice(0, 32)
-}
-const seedAvatar = (seed: string, size = 72) => {
-  const normalized = String(seed || '').trim() || 'noise'
-  const hash = hex32(normalized)
-  const bg = `#${hash.slice(0, 6)}`
-  const fg = `#${hash.slice(6, 12)}`
-  const text = (normalized.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '').slice(0, 2) || 'N').toUpperCase()
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 72 72"><rect width="72" height="72" rx="36" fill="${bg}"/><circle cx="36" cy="36" r="34" fill="none" stroke="${fg}" stroke-opacity="0.35" stroke-width="2"/><text x="50%" y="53%" dominant-baseline="middle" text-anchor="middle" fill="#ffffff" font-size="30" font-family="Arial, PingFang SC, Microsoft YaHei" font-weight="700">${text}</text></svg>`
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
-}
-const gravatarFromUser = (size = 72) => {
-  const u = userStore.user as any
-  const email = String(u?.email || u?.Email || '').trim().toLowerCase()
-  const name = String(u?.username || u?.Username || '').trim().toLowerCase()
-  const seed = email || name
-  const hash = seed ? hex32(seed) : '00000000000000000000000000000000'
-  return `https://www.gravatar.com/avatar/${hash}?d=retro&s=${size}`
-}
 const profileAvatar = computed(() => {
   const u = userStore.user as any
   const raw = String(u?.avatar_url || u?.AvatarURL || '').trim()
@@ -895,9 +865,6 @@ const profileAvatar = computed(() => {
   if (raw) {
     return pick(raw)
   }
-  if (isOnline.value) {
-    return gravatarFromUser(72)
-  }
   const useAdmin = !!((frontendConfig.value as any)?.welcomeUseAdmin)
   const araw = String((adminWelcome.value?.avatar_url || '')).trim()
   if (useAdmin && araw) return pick(araw)
@@ -906,7 +873,6 @@ const profileAvatar = computed(() => {
   return fallbackAvatarURL
 })
 const profileAvatarFallback = computed(() => {
-  if (isOnline.value) return seedAvatar(profileName.value || 'user', 72)
   const useAdmin = !!((frontendConfig.value as any)?.welcomeUseAdmin)
   const araw = String((adminWelcome.value?.avatar_url || '')).trim()
   if (useAdmin && araw) return araw
@@ -2201,30 +2167,6 @@ const recentHTML = (s: string) => {
   // Undo escaping for the injected <img> tags
   return safe.replace(/&lt;img class=\"recent-inline-img\" src=\"([^\"]+)\" alt=\"img\" loading=\"lazy\" \/&gt;/g, '<img class="recent-inline-img" src="$1" alt="img" loading="lazy" />')
 }
-const pravatar = (seed: string) => `https://i.pravatar.cc/64?u=${encodeURIComponent(seed || Math.random().toString(36).slice(2))}`
-const qqNumberFromEmail = (mail?: string) => {
-  const m = String(mail || '').trim()
-  const match = m.match(/^(\d+)@qq\.com$/i)
-  return match ? match[1] : ''
-}
-const qqAvatarUrl = (qq: string) => qq ? `https://q1.qlogo.cn/g?b=qq&nk=${qq}&s=100` : ''
-const hashCode = (s: string) => { let h = 0; const t = String(s || ''); for (let i = 0; i < t.length; i++) { h = ((h << 5) - h) + t.charCodeAt(i); h |= 0 } return Math.abs(h) }
-const initialsText = (s: string) => {
-  const t = String(s || '').trim()
-  if (!t) return 'U'
-  if (/^[\u4e00-\u9fa5]/.test(t)) return t.slice(0, 1)
-  const parts = t.split(/\s+|[_.-]+/).filter(Boolean)
-  const a = (parts[0] || t)[0] || 'U'
-  const b = (parts[1] || '')[0] || ''
-  return (a + b).toUpperCase()
-}
-const initialsAvatar = (seed: string, size = 40) => {
-  const txt = initialsText(seed)
-  const hue = hashCode(seed) % 360
-  const bg = `hsl(${hue},70%,50%)`
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><rect width="${size}" height="${size}" rx="${size/2}" fill="${bg}"/><text x="50%" y="55%" font-size="${Math.floor(size*0.5)}" text-anchor="middle" fill="#fff" font-family="-apple-system,Segoe UI,Roboto,Helvetica,Arial">${txt}</text></svg>`
-  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg)
-}
 const avatarPlaceholder = computed(() => {
   const raw = String((frontendConfig.value.avatarURL || '')).trim()
   const base = useRuntimeConfig().public.baseApi || '/api'
@@ -2232,31 +2174,30 @@ const avatarPlaceholder = computed(() => {
   const icon = String(frontendConfig.value.rssFaviconURL || '/favicon.svg').trim()
   return icon
 })
-const qqAvatarCandidates = (qq: string, size = 100) => [
-  qq ? `https://q1.qlogo.cn/g?b=qq&nk=${qq}&s=${size}` : '',
-  qq ? `https://q2.qlogo.cn/g?b=qq&nk=${qq}&s=${size}` : '',
-  qq ? `https://q.qlogo.cn/g?b=qq&nk=${qq}&s=${size}` : ''
-].filter(Boolean)
-const recentAvatar = (c: any) => {
-  const qq = qqNumberFromEmail(c?.mail || '')
-  const name = String(c?.nick || '').trim()
-  const arr = qqAvatarCandidates(qq)
-  return (arr[0] || '') || initialsAvatar(name || c?.mail || 'anonymous') || avatarPlaceholder.value || pravatar(name || c?.mail || '')
-}
-const onRecentAvatarError = (e: Event, seed: string) => {
-  const img = e.target as HTMLImageElement
-  const mailAttr = (img?.dataset?.mail || '') as string
-  const qq = String(img?.dataset?.qq || '')
-  const tries = Number(img?.dataset?.try || 0)
-  const candidates = qqAvatarCandidates(qq)
-  if (qq && tries < candidates.length) {
-    const nextIdx = Math.min(tries + 1, candidates.length - 1)
-    const next = candidates[nextIdx]
-    img.dataset.try = String(nextIdx)
-    img.src = next
-    return
+const recentUserField = (c: any, keys: string[]) => {
+  const accountUser = c?.user || {}
+  for (const key of keys) {
+    const value = String(accountUser?.[key] || '').trim()
+    if (value) return value
   }
-  const fallback = initialsAvatar(seed || mailAttr || 'anonymous') || avatarPlaceholder.value || pravatar(seed || mailAttr || 'anonymous')
+  return ''
+}
+const normalizeAvatarURL = (raw: string) => {
+  const s = String(raw || '').trim()
+  if (!s) return ''
+  const base = useRuntimeConfig().public.baseApi || '/api'
+  if (/^https?:\/\//i.test(s)) return s
+  if (s.startsWith('/images/')) return `${base.replace(/\/$/, '')}${s}`
+  if (s.startsWith('/')) return s
+  return `${base.replace(/\/$/, '')}/${s.replace(/^\//, '')}`
+}
+const recentAuthorName = (c: any) => recentUserField(c, ['username', 'Username', 'name', 'Name']) || '用户'
+const recentAvatar = (c: any) => {
+  return normalizeAvatarURL(recentUserField(c, ['avatar_url', 'AvatarURL', 'avatar', 'Avatar'])) || avatarPlaceholder.value || fallbackAvatarURL
+}
+const onRecentAvatarError = (e: Event) => {
+  const img = e.target as HTMLImageElement
+  const fallback = avatarPlaceholder.value || fallbackAvatarURL
   if (img && fallback) img.src = fallback
 }
 const BASE_API = useRuntimeConfig().public.baseApi || '/api'
@@ -2284,7 +2225,7 @@ const loadRecentComments = async () => {
           if (!r.ok) return []
           const d = await r.json()
           const arr = Array.isArray(d?.data) ? d.data : []
-          return arr.map((c: any) => ({ id: c.id, nick: c.nick, mail: c.mail, content: c.content, created_at: c.created_at, message_id: id }))
+          return arr.map((c: any) => ({ id: c.id, user: c.user, user_id: c.user_id, content: c.content, created_at: c.created_at, message_id: id }))
         } catch { return [] }
       })
       const results = await Promise.all(tasks)
@@ -2299,8 +2240,8 @@ const loadRecentComments = async () => {
       .filter((c: any) => !containsImage(c?.content || ''))
       .map((c: any) => ({ 
         id: c.id, 
-        nick: c.nick, 
-        mail: c.mail, 
+        user: c.user,
+        user_id: c.user_id,
         content: c.content, 
         created_at: c.created_at, 
         message_id: c.message_id,
@@ -2310,7 +2251,7 @@ const loadRecentComments = async () => {
     if (recentComments.value.length > 0) return
   } catch {}
   recentComments.value = ['期待','对方的','发个','困难','路口提示','测试','你好','加油','真不错','赞同','有趣','哈哈','有用','收藏','不错','灵感','记录']
-    .map((t, i) => ({ id: i + 1, nick: '匿名', mail: '', content: t, created_at: '', message_id: 0 }))
+    .map((t, i) => ({ id: i + 1, user: { username: '用户' }, content: t, created_at: '', message_id: 0 }))
 }
 onMounted(async () => {
   await loadRecentComments()
