@@ -4103,8 +4103,6 @@ const frontendConfig = reactive<FrontendConfig>({
     feedPageTitle: '实时聚合内容动态',
     feedPageDescription: '聚合综合内容信息源内容，当前结果 {count} 条',
     feedLimit: 100,
-    feedPageDescription: '聚合综合内容信息源内容，当前结果 {count} 条',
-    feedLimit: 100,
     feedRefreshSeconds: 7200,
     feedSources: [] as Array<{ type: string; group?: string; name?: string; url: string; enabled?: boolean; visible?: boolean }>,
     socialLinks: [] as Array<{ name?: string; url: string; icon?: string }>,
