@@ -24,7 +24,7 @@
             </div>
             <div v-else class="comment-content" :class="themeText"><MarkdownRenderer :content="c.content" /></div>
             <div class="comment-footer">
-              <span class="comment-time">{{ formatDateMD(c.created_at) }}</span>
+              <span class="comment-time">{{ formatCommentTime(c.created_at) }}</span>
               <span class="comment-replies">回复 {{ repliesCount(c.id) }}</span>
               <span v-if="visibilityLabel(c.visibility)" class="comment-visibility">{{ visibilityLabel(c.visibility) }}</span>
             </div>
@@ -55,7 +55,7 @@
                   </div>
                   <div v-else class="comment-content" :class="themeText"><MarkdownRenderer :content="child.content" /></div>
                   <div class="comment-footer">
-                    <span class="comment-time">{{ formatDateMD(child.created_at) }}</span>
+                    <span class="comment-time">{{ formatCommentTime(child.created_at) }}</span>
                     <span v-if="visibilityLabel(child.visibility)" class="comment-visibility">{{ visibilityLabel(child.visibility) }}</span>
                   </div>
                   <div class="comment-actions">
@@ -66,14 +66,16 @@
                 </div>
               </div>
             </div>
-            <div v-if="hasMoreReplies(c.id)" class="flex justify-end w-full">
-              <button class="text-xs px-2 py-1 rounded border" :class="themeBorder" @click="loadMoreReplies(c.id)">加载更多回复</button>
+            <div v-if="hasMoreReplies(c.id) || canCollapseReplies(c.id)" class="flex justify-end w-full gap-2">
+              <button v-if="canCollapseReplies(c.id)" class="text-xs px-2 py-1 rounded border" :class="themeBorder" @click="collapseReplies(c.id)">收回回复</button>
+              <button v-if="hasMoreReplies(c.id)" class="text-xs px-2 py-1 rounded border" :class="themeBorder" @click="loadMoreReplies(c.id)">加载更多回复</button>
             </div>
           </div>
           </div>
         </div>
-        <div v-if="hasMore" class="flex justify-center">
-          <button class="text-xs px-3 py-1 rounded border" :class="themeBorder" @click="loadMore">加载更多{{ contextLabel }}</button>
+        <div v-if="hasMore || canCollapseRootComments" class="flex justify-center gap-2">
+          <button v-if="canCollapseRootComments" class="text-xs px-3 py-1 rounded border" :class="themeBorder" @click="collapseRootComments">收回</button>
+          <button v-if="hasMore" class="text-xs px-3 py-1 rounded border" :class="themeBorder" @click="loadMore">加载更多{{ contextLabel }}</button>
         </div>
       <div v-if="!sortedRootComments.length" class="text-xs mb-4" :class="themeMuted">暂无{{ contextLabel }}</div>
 
@@ -324,7 +326,7 @@ const load = async () => {
         if (list.length > 0) break
       }
     }
-    comments.value = (list || []).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    comments.value = (list || []).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
     dispatchCommentCount()
   } catch (e) {
     comments.value = []
@@ -379,39 +381,15 @@ const shanghaiDateTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
   hour: '2-digit',
   minute: '2-digit',
   second: '2-digit',
-  hour12: false
+  hourCycle: 'h23'
 })
 
-const shanghaiMonthDayFormatter = new Intl.DateTimeFormat('zh-CN', {
-  timeZone: 'Asia/Shanghai',
-  month: 'numeric',
-  day: 'numeric'
-})
-
-const formatDate = (s: string) => {
+const formatCommentTime = (s: string) => {
   const d = new Date(s)
-  const now = new Date()
-  const diff = Math.floor((now.getTime() - d.getTime()) / 1000)
-  const m = Math.floor(diff / 60)
-  const h = Math.floor(diff / 3600)
-  const day = Math.floor(diff / 86400)
-  const mon = Math.floor(day / 30)
-  if (diff < 60) return '刚刚'
-  if (m < 60) return `${m}分钟前`
-  if (h < 24) return `${h}小时前`
-  if (day < 30) return `${day}天前`
-  if (mon < 12) return `${mon}个月前`
+  if (Number.isNaN(d.getTime())) return ''
   const parts = shanghaiDateTimeFormatter.formatToParts(d)
   const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || ''
-  return `${pick('year')}/${pick('month')}/${pick('day')} ${pick('hour')}:${pick('minute')}:${pick('second')}`
-}
-
-const formatDateMD = (s: string) => {
-  const d = new Date(s)
-  const parts = shanghaiMonthDayFormatter.formatToParts(d)
-  const month = parts.find((part) => part.type === 'month')?.value || ''
-  const day = parts.find((part) => part.type === 'day')?.value || ''
-  return `${month}月${day}日`
+  return `${pick('year')}-${pick('month')}-${pick('day')} ${pick('hour')}:${pick('minute')}:${pick('second')}`
 }
 
 const getUserField = (o: any, keys: string[]) => {
@@ -712,40 +690,53 @@ const childrenWithTarget = computed(() => {
     }
   })
   Object.keys(map).forEach((k) => {
-    map[Number(k)] = (map[Number(k)] || []).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    map[Number(k)] = (map[Number(k)] || []).sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
   })
   return { map }
 })
 const childrenMap = computed(() => childrenWithTarget.value.map)
 const sortedRootComments = computed(() => {
   const roots = Array.isArray(rootComments.value) ? rootComments.value : []
-  return roots.slice().sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  return roots.slice().sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
 })
-const visibleCount = ref(2)
+const INITIAL_ROOT_VISIBLE = 2
+const INITIAL_CHILDREN_VISIBLE = 3
+
+const visibleCount = ref(INITIAL_ROOT_VISIBLE)
 const visibleRootComments = computed(() => sortedRootComments.value.slice(0, visibleCount.value))
 const hasMore = computed(() => sortedRootComments.value.length > visibleCount.value)
-const loadMore = () => { visibleCount.value += 2 }
-watch(() => props.messageId, () => { visibleCount.value = 2 })
+const canCollapseRootComments = computed(() => sortedRootComments.value.length > INITIAL_ROOT_VISIBLE && visibleCount.value > INITIAL_ROOT_VISIBLE)
+const loadMore = () => { visibleCount.value += INITIAL_ROOT_VISIBLE }
+const collapseRootComments = () => { visibleCount.value = INITIAL_ROOT_VISIBLE }
+watch(() => props.messageId, () => { visibleCount.value = INITIAL_ROOT_VISIBLE })
 
 const visibleChildrenCount = ref<Record<number, number>>({})
 const visibleChildren = (rootId: number) => {
-  const n = visibleChildrenCount.value[rootId] ?? 3
+  const n = visibleChildrenCount.value[rootId] ?? INITIAL_CHILDREN_VISIBLE
   return (childrenMap.value[rootId] || []).slice(0, n)
 }
 const hasMoreReplies = (rootId: number) => {
   const total = (childrenMap.value[rootId] || []).length
-  const n = visibleChildrenCount.value[rootId] ?? 3
+  const n = visibleChildrenCount.value[rootId] ?? INITIAL_CHILDREN_VISIBLE
   return total > n
 }
+const canCollapseReplies = (rootId: number) => {
+  const total = (childrenMap.value[rootId] || []).length
+  const n = visibleChildrenCount.value[rootId] ?? INITIAL_CHILDREN_VISIBLE
+  return total > INITIAL_CHILDREN_VISIBLE && n > INITIAL_CHILDREN_VISIBLE
+}
 const loadMoreReplies = (rootId: number) => {
-  const cur = visibleChildrenCount.value[rootId] ?? 3
-  visibleChildrenCount.value[rootId] = cur + 3
+  const cur = visibleChildrenCount.value[rootId] ?? INITIAL_CHILDREN_VISIBLE
+  visibleChildrenCount.value[rootId] = cur + INITIAL_CHILDREN_VISIBLE
+}
+const collapseReplies = (rootId: number) => {
+  visibleChildrenCount.value[rootId] = INITIAL_CHILDREN_VISIBLE
 }
 watch(childrenMap, (m) => {
   const next: Record<number, number> = { ...visibleChildrenCount.value }
   Object.keys(m || {}).forEach((k) => {
     const id = Number(k)
-    if (!next[id]) next[id] = 3
+    if (!next[id]) next[id] = INITIAL_CHILDREN_VISIBLE
   })
   visibleChildrenCount.value = next
 })
