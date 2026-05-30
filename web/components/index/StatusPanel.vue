@@ -130,22 +130,21 @@
                     <div class="admin-dashboard-stat-value" :class="theme.text">{{ dashboardStats.receivedReplyCount }}</div>
                   </div>
                   <div class="admin-dashboard-stat" :class="theme.subtleBg">
-                    <div class="admin-dashboard-stat-title" :class="theme.mutedText"><UIcon name="i-heroicons-heart" class="w-4 h-4" />人生进度</div>
-                    <div class="admin-dashboard-stat-value" :class="theme.text">{{ dashboardStats.lifePercent }}%</div>
+                    <div class="admin-dashboard-stat-title" :class="theme.mutedText"><UIcon name="i-heroicons-inbox-arrow-down" class="w-4 h-4" />收到互动</div>
+                    <div class="admin-dashboard-stat-value" :class="theme.text">{{ dashboardStats.receivedFeedbackCount }}</div>
                   </div>
                 </div>
                 <div class="admin-dashboard-grid admin-dashboard-panels-grid">
                   <div class="admin-dashboard-panel" :class="theme.subtleBg">
-                    <div class="admin-dashboard-panel-title" :class="theme.mutedText"><UIcon name="i-heroicons-chart-bar-square" class="w-4 h-4" />运行统计</div>
-                    <div class="space-y-3">
-                      <div v-for="bar in dashboardBars" :key="bar.label" class="space-y-1">
-                        <div class="flex items-center justify-between text-xs" :class="theme.mutedText">
-                          <span>{{ bar.label }}</span>
-                          <span>{{ bar.percent }}%</span>
+                    <div class="admin-dashboard-panel-title" :class="theme.mutedText"><UIcon name="i-heroicons-presentation-chart-line" class="w-4 h-4" />运营概览</div>
+                    <div class="admin-dashboard-insight-grid">
+                      <div v-for="item in dashboardInsightCards" :key="item.label" class="admin-dashboard-insight-card">
+                        <div class="admin-dashboard-insight-heading" :class="theme.mutedText">
+                          <UIcon :name="item.icon" class="w-4 h-4" />
+                          <span>{{ item.label }}</span>
                         </div>
-                        <div class="admin-dashboard-track">
-                          <div class="admin-dashboard-fill" :style="{ width: `${bar.percent}%` }" />
-                        </div>
+                        <div class="admin-dashboard-insight-value" :class="theme.text">{{ item.value }}</div>
+                        <div class="admin-dashboard-insight-desc" :class="theme.mutedText">{{ item.desc }}</div>
                       </div>
                     </div>
                     <div class="admin-dashboard-mini-grid">
@@ -2131,46 +2130,52 @@ const toCount = (v: any) => {
   const n = Number(v)
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0
 }
-const dashboardLifePercent = computed(() => {
-  const birth = String((frontendConfig as any).lifeCountdownBirthDate || '').trim()
-  const expectYearsRaw = Number((frontendConfig as any).lifeExpectancyYears)
-  const expectYears = Number.isFinite(expectYearsRaw) && expectYearsRaw > 0
-    ? Math.min(150, Math.max(1, Math.floor(expectYearsRaw)))
-    : 0
-  if (!birth) return 0
-  if (expectYears <= 0) return 0
-  const birthDate = new Date(`${birth}T00:00:00`)
-  if (Number.isNaN(birthDate.getTime())) return 0
-  const expectDate = new Date(birthDate)
-  expectDate.setFullYear(expectDate.getFullYear() + expectYears)
-  const total = expectDate.getTime() - birthDate.getTime()
-  if (total <= 0) return 0
-  const elapsed = dashboardNow.value.getTime() - birthDate.getTime()
-  const ratio = Math.min(1, Math.max(0, elapsed / total))
-  return Math.round(ratio * 100)
-})
 const dashboardStats = computed(() => {
   const status: any = userStore?.status || {}
+  const messageCount = toCount(status.total_messages ?? status.totalMessages ?? userMessagesCount.value)
+  const totalUserCount = toCount(status.total_users ?? status.totalUsers ?? status.users_count ?? status.users?.length)
+  const totalCommentCount = toCount(status.total_comments ?? status.totalComments ?? status.comments_count)
+  const totalReplyCount = toCount(status.total_replies ?? status.totalReplies ?? status.replies_count)
+  const receivedCommentCount = toCount(status.received_comments ?? status.receivedComments)
+  const receivedReplyCount = toCount(status.received_replies ?? status.receivedReplies)
   return {
-    messageCount: toCount(status.total_messages ?? status.totalMessages ?? userMessagesCount.value),
-    totalUserCount: toCount(status.total_users ?? status.totalUsers ?? status.users_count ?? status.users?.length),
-    totalCommentCount: toCount(status.total_comments ?? status.totalComments ?? status.comments_count),
-    totalReplyCount: toCount(status.total_replies ?? status.totalReplies ?? status.replies_count),
-    receivedCommentCount: toCount(status.received_comments ?? status.receivedComments),
-    receivedReplyCount: toCount(status.received_replies ?? status.receivedReplies),
-    lifePercent: dashboardLifePercent.value,
+    messageCount,
+    totalUserCount,
+    totalCommentCount,
+    totalReplyCount,
+    receivedCommentCount,
+    receivedReplyCount,
+    receivedFeedbackCount: receivedCommentCount + receivedReplyCount,
+    totalFeedbackCount: totalCommentCount + totalReplyCount,
   }
 })
-const dashboardBars = computed(() => {
-  const receivedFeedbackCount = dashboardStats.value.receivedCommentCount + dashboardStats.value.receivedReplyCount
-  const totalFeedbackCount = dashboardStats.value.totalCommentCount + dashboardStats.value.totalReplyCount
-  const messageBase = Math.max(20, dashboardStats.value.messageCount, receivedFeedbackCount, totalFeedbackCount)
-  const userBase = Math.max(5, dashboardStats.value.totalUserCount)
+const dashboardInsightCards = computed(() => {
+  const stats = dashboardStats.value
   return [
-    { label: '内容活跃度', percent: Math.min(100, Math.round((dashboardStats.value.messageCount / messageBase) * 100)) },
-    { label: '评论活跃度', percent: Math.min(100, Math.round((receivedFeedbackCount / messageBase) * 100)) },
-    { label: '用户活跃度', percent: Math.min(100, Math.round((dashboardStats.value.totalUserCount / userBase) * 100)) },
-    { label: '人生进度', percent: dashboardStats.value.lifePercent },
+    {
+      label: '内容口径',
+      value: isAdmin.value ? '全站内容' : '我的内容',
+      desc: `${stats.messageCount} 条笔记纳入当前后台统计`,
+      icon: 'i-heroicons-document-text'
+    },
+    {
+      label: '收到互动',
+      value: `${stats.receivedFeedbackCount} 条`,
+      desc: `评论 ${stats.receivedCommentCount} / 回复 ${stats.receivedReplyCount}`,
+      icon: 'i-heroicons-inbox-arrow-down'
+    },
+    {
+      label: '全站反馈',
+      value: `${stats.totalFeedbackCount} 条`,
+      desc: `评论 ${stats.totalCommentCount} / 回复 ${stats.totalReplyCount}`,
+      icon: 'i-heroicons-chat-bubble-left-right'
+    },
+    {
+      label: '用户与注册',
+      value: `${stats.totalUserCount} 个用户`,
+      desc: registerEnabled.value ? '当前允许新用户注册' : '当前仅允许已有用户登录',
+      icon: 'i-heroicons-users'
+    }
   ]
 })
 const dashboardOverviewCards = computed(() => {
@@ -6408,18 +6413,46 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   margin-top: 6px;
   font-size: 12px;
 }
-.admin-dashboard-track,
 .life-preview-track {
   height: 8px;
   border-radius: 999px;
   overflow: hidden;
   background: rgba(134, 144, 156, 0.22);
 }
-.admin-dashboard-fill,
 .life-preview-fill {
   height: 100%;
   border-radius: 999px;
   background: linear-gradient(90deg, #165dff, #4080ff);
+}
+.admin-dashboard-insight-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+.admin-dashboard-insight-card {
+  min-height: 96px;
+  border-radius: 8px;
+  border: 1px solid rgba(229, 230, 235, 0.18);
+  padding: 12px;
+}
+.admin-dashboard-insight-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.admin-dashboard-insight-value {
+  margin-top: 10px;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.15;
+  word-break: break-word;
+}
+.admin-dashboard-insight-desc {
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 1.45;
 }
 .admin-dashboard-mini-grid,
 .admin-system-summary-grid,
