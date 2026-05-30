@@ -810,6 +810,19 @@ const deferMeasure = () => {
   } catch { setTimeout(run, 0) }
 }
 
+const scrollToCommentInput = async (msgId: number) => {
+  await nextTick()
+  const container = document.querySelector(`#comment-container-${msgId}`) as HTMLElement | null
+  const input = container?.querySelector('.comment-input-card textarea') as HTMLTextAreaElement | null
+  const target = (input?.closest('.comment-input-card') as HTMLElement | null) || input || container
+  target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  try {
+    input?.focus({ preventScroll: true })
+  } catch {
+    input?.focus?.()
+  }
+}
+
 const toggleComment = async (msgId: number) => {
   const m = getMessageById(msgId)
   if (isGuestbookMessage(m)) return
@@ -820,17 +833,12 @@ const toggleComment = async (msgId: number) => {
     return
   }
   activeCommentId.value = msgId
-  await nextTick();
   commentRefreshKey.value[msgId] = (commentRefreshKey.value[msgId] || 0) + 1;
   expandedCommentsMap.value[msgId] = true;
   if ((props.siteConfig?.commentSystem || 'waline') === 'builtin') {
+    await nextTick();
     window.dispatchEvent(new Event(`refresh-comments-${msgId}`));
-    const container = document.querySelector(`.content-container[data-msg-id="${msgId}"] .builtin-comments`);
-    if (container) {
-      container.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      const ta = container.querySelector('textarea');
-      (ta as HTMLTextAreaElement | null)?.focus?.();
-    }
+    await scrollToCommentInput(msgId)
     return;
   }
   if (useWaline.value) {

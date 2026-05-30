@@ -3,7 +3,7 @@
   <div class="waline-wrapper px-2 py-2 rounded-lg" :class="[themeBg]">
       <div class="text-sm mb-2" :class="themeText">{{ contextLabel }} ({{ rootCommentTotal }})</div>
       <div v-if="sortedRootComments.length" class="comments-list">
-        <div v-for="c in visibleRootComments" :key="c.id" class="comment-item" :class="rootCardClass">
+        <div v-for="c in visibleRootComments" :key="c.id" class="comment-item" :class="rootCardClass" :data-comment-id="c.id">
           <img class="comment-avatar avatar-img" :src="commentAvatar(c)" alt="avatar" @error="avatarOnError" />
           <div class="comment-body">
             <div class="comment-header" :class="themeText">
@@ -34,7 +34,7 @@
               <button v-if="canManageComment(c)" class="action-btn text-red-500" @click="confirmDelete(c.id)">删除</button>
             </div>
             <div v-if="childrenMap[c.id]?.length" class="mt-2 replies-list">
-              <div v-for="child in visibleChildren(c.id)" :key="child.id" class="comment-item child" :class="childCardClass">
+              <div v-for="child in visibleChildren(c.id)" :key="child.id" class="comment-item child" :class="childCardClass" :data-comment-id="child.id">
                 <img class="comment-avatar avatar-img" :src="commentAvatar(child)" alt="avatar" @error="avatarOnError" />
                 <div class="comment-body">
                   <div class="comment-header" :class="themeText">
@@ -105,6 +105,10 @@
               </div>
             </div>
           </div>
+          <button v-if="returnTargetLabel" class="return-target-btn text-xs px-2 py-1 rounded border" :class="themeBorder" @click="returnToInputTarget">
+            <UIcon :name="returnTargetIcon" class="w-3.5 h-3.5" />
+            <span>{{ returnTargetLabel }}</span>
+          </button>
         </div>
         <div class="comment-input-card">
           <img class="input-avatar avatar-img" :src="currentUserAvatar" alt="avatar" />
@@ -405,7 +409,11 @@ const commentAuthorName = (c: any) => {
 }
 const hiddenByCancel = ref(false)
 const formVisible = computed(() => (((props.showInput && !hiddenByCancel.value) || !!replyTo.value) && canComment.value))
-watch(() => props.showInput, (v) => { if (v) hiddenByCancel.value = false })
+watch(() => props.showInput, (v) => {
+  if (!v) return
+  hiddenByCancel.value = false
+  nextTick(() => scrollToInput())
+})
 
 onMounted(load)
 // 保持与父组件的显示控制，但不再初始化富文本编辑器
@@ -419,15 +427,50 @@ onBeforeUnmount(() => {
 })
 watch(() => props.messageId, load)
 
+const commentRootElement = () => {
+  if (typeof document === 'undefined') return null as HTMLElement | null
+  const input = taRef.value as HTMLTextAreaElement | null
+  return (input?.closest('.builtin-comments') as HTMLElement | null)
+    || (document.querySelector(`.content-container[data-msg-id="${props.messageId}"] .builtin-comments`) as HTMLElement | null)
+}
+
+const commentElement = (id: number) => {
+  const root = commentRootElement()
+  return root?.querySelector(`[data-comment-id="${id}"]`) as HTMLElement | null
+}
+
+const focusInput = () => {
+  const el = taRef.value as HTMLTextAreaElement | null
+  if (!el) return
+  try {
+    el.focus({ preventScroll: true })
+  } catch {
+    el.focus?.()
+  }
+}
+
+const scrollToInput = async (focus = true) => {
+  await nextTick()
+  const el = taRef.value as HTMLTextAreaElement | null
+  const target = (el?.closest('.comment-input-card') as HTMLElement | null) || el
+  target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  if (focus) focusInput()
+}
+
 const startReply = (id: number, authorName: string) => {
   if (!user.isLogin) {
     useToast().add({ title: '请登录后回复', color: 'orange' })
     return
   }
   cancelEdit()
+  hiddenByCancel.value = false
   replyTo.value = id
   selectedVisibility.value = clampVisibilityToLimit(selectedVisibility.value, byId.value[id]?.visibility)
   if (!content.value.startsWith(`@${authorName} `)) content.value = `@${authorName} ` + content.value
+  nextTick(() => {
+    autoResizeTextarea()
+    scrollToInput()
+  })
 }
 
 const startEdit = (c: any) => {
@@ -572,7 +615,12 @@ const onKeydown = (e: KeyboardEvent) => {
   else if (e.key === 'Enter') { e.preventDefault(); const n = filteredAuthors.value[mentionIndex.value]; if (n) chooseAuthor(n) }
   else if (e.key === 'Escape') { hideMention() }
 }
-onMounted(() => { nextTick(autoResizeTextarea) })
+onMounted(() => {
+  nextTick(() => {
+    autoResizeTextarea()
+    if (formVisible.value) scrollToInput(false)
+  })
+})
 const submitBtnClass = computed(() => (isDark.value ? 'bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-60' : 'bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-60'))
 const cancelBtnClass = computed(() => (isDark.value ? 'bg-gray-600 text-white hover:bg-gray-500' : 'bg-gray-200 text-black hover:bg-gray-300'))
 const clearContent = () => { content.value = ''; hideMention(); nextTick(autoResizeTextarea) }
@@ -645,6 +693,24 @@ const replyingToComment = computed(() => {
   const id = Number(replyTo.value || 0)
   return id > 0 ? byId.value[id] || null : null
 })
+const returnTargetLabel = computed(() => {
+  const target = replyingToComment.value
+  if (target) return Number(target.parent_id || 0) > 0 ? '返回回复' : '返回评论'
+  if (!props.showInput) return ''
+  return contextLabel.value === '留言' ? '返回留言板' : '返回帖子'
+})
+const returnTargetIcon = computed(() => replyingToComment.value ? 'i-heroicons-chat-bubble-left-right' : 'i-heroicons-document-text')
+const returnToInputTarget = () => {
+  const id = Number(replyingToComment.value?.id || 0)
+  if (id > 0) {
+    const target = commentElement(id)
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
+  }
+  scrollToMessage()
+}
 const selectedVisibilityOptions = computed(() => {
   return replyingToComment.value ? visibilityLimitOptions(replyingToComment.value.visibility) : visibilityOptions
 })
@@ -751,7 +817,7 @@ const repliesCount = (rootId: number) => {
 .builtin-comments, .waline-wrapper { width: 100%; }
 .waline-wrapper { display:block; width:100%; max-width:none; }
  
-.comments-list { display:flex; flex-direction:column; gap:10px; width:100%; }
+.comments-list { display:flex; flex-direction:column; gap:10px; width:100%; margin-bottom:12px; }
 .replies-list { display:flex; flex-direction:column; gap:6px; width:100%; }
 .comment-item { display:flex; align-items:flex-start; gap:10px; }
 .comment-item.child { padding:6px; border-radius:12px; border:1px solid transparent; gap:8px; }
@@ -779,12 +845,15 @@ const repliesCount = (rootId: number) => {
 .visibility-picker { display:inline-flex; align-items:center; gap:6px; font-size:12px; }
 .edit-card { display:flex; flex-direction:column; gap:8px; margin:4px 0 6px; }
 .edit-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:center; gap:8px; }
-.comment-input-card { display:flex; align-items:flex-start; gap:12px; margin-top:6px; }
+.comment-input-card { display:flex; align-items:flex-start; gap:12px; margin-top:6px; width:100%; }
 .input-avatar { width:36px; height:36px; border-radius:9999px; object-fit:cover; }
 .input-main { flex:1; display:flex; flex-direction:column; gap:8px; }
 .input-actions { display:flex; justify-content:flex-end; gap:8px; }
+.return-target-btn { display:inline-flex; align-items:center; gap:4px; min-height:28px; }
 .submit-btn { min-width:64px; height:32px; border-radius:8px; padding:0 12px; font-size:13px; display:inline-flex; align-items:center; justify-content:center; }
 .cancel-btn { min-width:64px; height:32px; border-radius:8px; padding:0 12px; font-size:13px; display:inline-flex; align-items:center; justify-content:center; }
+.comment-input-card textarea { overflow:hidden; resize:none; min-height:80px; flex:1; width:100%; min-width:0; }
+.submit-btn[disabled] { opacity:.6; cursor:not-allowed; }
 :where(.comment-avatar) { width:36px; height:36px; border-radius:9999px; object-fit:cover; }
 .comment-item.child :where(.comment-avatar) { width:28px; height:28px; }
 .avatar-img { width:36px; height:36px; border-radius:9999px; object-fit:cover; display:block; }
@@ -804,11 +873,3 @@ const repliesCount = (rootId: number) => {
 :global(html.dark) .comment-floor, :global(html.dark) .comment-time { color: #9ca3af; }
 :global(html:not(.dark)) .comment-floor, :global(html:not(.dark)) .comment-time { color: #6b7280; }
 </style>
-
- 
-.comment-input-card { display:flex; align-items:flex-start; gap:12px; width:100%; }
-.submit-btn { min-width:64px; height:32px; border-radius:8px; padding:0 12px; font-size:13px; display:inline-flex; align-items:center; justify-content:center; }
-.cancel-btn { min-width:64px; height:32px; border-radius:8px; padding:0 12px; font-size:13px; display:inline-flex; align-items:center; justify-content:center; }
-.comment-input-card textarea { overflow:hidden; resize:none; min-height:80px; flex:1; width:100%; min-width:0; }
-.submit-btn[disabled] { opacity:.6; cursor:not-allowed; }
-.comments-list { margin-bottom: 12px; }
