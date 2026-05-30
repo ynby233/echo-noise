@@ -16,10 +16,202 @@ import (
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/syncmanager"
 	"github.com/rcy1314/echo-noise/pkg"
+	"gorm.io/gorm"
 )
 
+type lifeCountdownSettings struct {
+	Enabled             bool
+	BirthDate           string
+	LifeExpectancyYears int
+}
+
+var lifeCountdownSettingKeys = map[string]struct{}{
+	"lifeCountdownEnabled":   {},
+	"lifeCountdownBirthDate": {},
+	"lifeExpectancyYears":    {},
+}
+
+func HasLifeCountdownSettings(frontendSettings map[string]interface{}) bool {
+	for key := range lifeCountdownSettingKeys {
+		if _, ok := frontendSettings[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func IsLifeCountdownSettingsOnly(frontendSettings map[string]interface{}) bool {
+	if len(frontendSettings) == 0 {
+		return false
+	}
+	for key := range frontendSettings {
+		if _, ok := lifeCountdownSettingKeys[key]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func StripLifeCountdownSettings(frontendSettings map[string]interface{}) map[string]interface{} {
+	stripped := make(map[string]interface{}, len(frontendSettings))
+	for key, value := range frontendSettings {
+		if _, ok := lifeCountdownSettingKeys[key]; ok {
+			continue
+		}
+		stripped[key] = value
+	}
+	return stripped
+}
+
+func UpdateUserLifeCountdownConfig(userID uint, frontendSettings map[string]interface{}) error {
+	if userID == 0 || !HasLifeCountdownSettings(frontendSettings) {
+		return nil
+	}
+
+	db, err := database.GetDB()
+	if err != nil {
+		return err
+	}
+
+	var config models.UserLifeCountdownConfig
+	err = db.Where("user_id = ?", userID).First(&config).Error
+	if err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return err
+		}
+		config = models.UserLifeCountdownConfig{UserID: userID}
+	}
+
+	if v, ok := frontendSettings["lifeCountdownEnabled"]; ok {
+		if parsed, ok := parseBoolSetting(v); ok {
+			config.Enabled = parsed
+		}
+	}
+	if v, ok := frontendSettings["lifeCountdownBirthDate"]; ok {
+		birthDate, err := normalizeLifeCountdownBirthDate(v)
+		if err != nil {
+			return err
+		}
+		config.BirthDate = birthDate
+	}
+	if v, ok := frontendSettings["lifeExpectancyYears"]; ok {
+		years, err := normalizeLifeExpectancyYears(v)
+		if err != nil {
+			return err
+		}
+		config.LifeExpectancyYears = years
+	}
+
+	if config.ID == 0 {
+		return db.Create(&config).Error
+	}
+	return db.Save(&config).Error
+}
+
+func parseBoolSetting(value interface{}) (bool, bool) {
+	switch v := value.(type) {
+	case bool:
+		return v, true
+	case string:
+		text := strings.TrimSpace(v)
+		if strings.EqualFold(text, "true") {
+			return true, true
+		}
+		if strings.EqualFold(text, "false") {
+			return false, true
+		}
+	}
+	return false, false
+}
+
+func normalizeLifeCountdownBirthDate(value interface{}) (string, error) {
+	text := strings.TrimSpace(fmt.Sprintf("%v", value))
+	if text == "" || text == "<nil>" {
+		return "", nil
+	}
+	if _, err := time.Parse("2006-01-02", text); err != nil {
+		return "", fmt.Errorf("生日格式无效，请使用 YYYY-MM-DD")
+	}
+	return text, nil
+}
+
+func normalizeLifeExpectancyYears(value interface{}) (int, error) {
+	var years int
+	switch v := value.(type) {
+	case int:
+		years = v
+	case int64:
+		years = int(v)
+	case float64:
+		years = int(v)
+		if float64(years) != v {
+			return 0, fmt.Errorf("预期寿命必须是整数")
+		}
+	case string:
+		text := strings.TrimSpace(v)
+		if text == "" {
+			return 0, nil
+		}
+		parsed, err := strconv.Atoi(text)
+		if err != nil {
+			return 0, fmt.Errorf("预期寿命必须是整数")
+		}
+		years = parsed
+	default:
+		return 0, fmt.Errorf("预期寿命格式无效")
+	}
+	if years != 0 && (years < 1 || years > 150) {
+		return 0, fmt.Errorf("预期寿命必须在 1-150 年之间")
+	}
+	return years, nil
+}
+
+func resolveLifeCountdownSettings(db *gorm.DB, viewerUserID uint, siteConfig models.SiteConfig) lifeCountdownSettings {
+	targetUserID := viewerUserID
+	fallbackToSiteConfig := false
+
+	if targetUserID == 0 {
+		var admin models.User
+		if err := db.Where("is_admin = ?", true).Order("id ASC").First(&admin).Error; err == nil {
+			targetUserID = admin.ID
+		}
+		fallbackToSiteConfig = true
+	} else {
+		var user models.User
+		if err := db.Select("id, is_admin").First(&user, targetUserID).Error; err == nil && user.IsAdmin {
+			fallbackToSiteConfig = true
+		}
+	}
+
+	if targetUserID != 0 {
+		var config models.UserLifeCountdownConfig
+		if err := db.Where("user_id = ?", targetUserID).First(&config).Error; err == nil {
+			return lifeCountdownSettings{
+				Enabled:             config.Enabled,
+				BirthDate:           strings.TrimSpace(config.BirthDate),
+				LifeExpectancyYears: config.LifeExpectancyYears,
+			}
+		}
+	}
+
+	if fallbackToSiteConfig {
+		return lifeCountdownSettings{
+			Enabled:             siteConfig.LifeCountdownEnabled,
+			BirthDate:           strings.TrimSpace(siteConfig.LifeCountdownBirthDate),
+			LifeExpectancyYears: siteConfig.LifeExpectancyYears,
+		}
+	}
+
+	return lifeCountdownSettings{}
+}
+
 // GetFrontendConfig 获取前端配置
-func GetFrontendConfig() (map[string]interface{}, error) {
+func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
+	viewerUserID := uint(0)
+	if len(viewerUserIDs) > 0 {
+		viewerUserID = viewerUserIDs[0]
+	}
+
 	db, err := database.GetDB()
 	if err != nil {
 		return getDefaultConfig(), nil
@@ -184,6 +376,7 @@ func GetFrontendConfig() (map[string]interface{}, error) {
 		}
 	}
 
+	lifeCountdown := resolveLifeCountdownSettings(db, viewerUserID, config)
 	effectiveSyncConfirmed := config.StorageSyncConfirmed && syncmanager.IsStorageSyncConfirmedLocal()
 
 	configMap := map[string]interface{}{
@@ -273,11 +466,11 @@ func GetFrontendConfig() (map[string]interface{}, error) {
 			"calendarEnabled":        config.CalendarEnabled,
 			"timeEnabled":            config.TimeEnabled,
 			"hitokotoEnabled":        config.HitokotoEnabled,
-			"lifeCountdownEnabled":   config.LifeCountdownEnabled,
-			"lifeCountdownBirthDate": choose(config.LifeCountdownBirthDate, ""),
+			"lifeCountdownEnabled":   lifeCountdown.Enabled,
+			"lifeCountdownBirthDate": choose(lifeCountdown.BirthDate, ""),
 			"lifeExpectancyYears": func() int {
-				if config.LifeExpectancyYears > 0 {
-					return config.LifeExpectancyYears
+				if lifeCountdown.LifeExpectancyYears > 0 {
+					return lifeCountdown.LifeExpectancyYears
 				}
 				return 0
 			}(),

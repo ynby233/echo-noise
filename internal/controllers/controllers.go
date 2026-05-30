@@ -602,10 +602,47 @@ func GetUserInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.OK(safeUser, models.QuerySuccessMessage))
 }
 
+func hasAdminOnlySettingFields(setting dto.SettingDto) bool {
+	return setting.AllowRegistration != nil ||
+		setting.SmtpEnabled != nil ||
+		setting.SmtpDriver != nil ||
+		setting.SmtpHost != nil ||
+		setting.SmtpPort != nil ||
+		setting.SmtpUser != nil ||
+		setting.SmtpPass != nil ||
+		setting.SmtpFrom != nil ||
+		setting.SmtpEncryption != nil ||
+		setting.SmtpTLS != nil ||
+		setting.StorageEnabled != nil ||
+		setting.StorageConfig != nil ||
+		setting.AttachmentStorageEnabled != nil ||
+		setting.AttachmentStorageConfig != nil
+}
+
 func UpdateSetting(c *gin.Context) {
-	_, err := checkAdmin(c)
+	user, err := checkUser(c)
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
+		return
+	}
+
+	var setting dto.SettingDto
+	if err := c.ShouldBindJSON(&setting); err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string](models.InvalidRequestBodyMessage))
+		return
+	}
+
+	frontendSettings := setting.FrontendSettings
+	if !user.IsAdmin {
+		if hasAdminOnlySettingFields(setting) || frontendSettings == nil || !services.IsLifeCountdownSettingsOnly(frontendSettings) {
+			c.JSON(http.StatusOK, dto.Fail[string]("需要管理员权限"))
+			return
+		}
+		if err := services.UpdateUserLifeCountdownConfig(user.ID, frontendSettings); err != nil {
+			c.JSON(http.StatusOK, dto.Fail[string]("保存人生倒计时配置失败: "+err.Error()))
+			return
+		}
+		c.JSON(http.StatusOK, dto.OK[any](nil, models.UpdateSettingSuccessMessage))
 		return
 	}
 
@@ -616,22 +653,24 @@ func UpdateSetting(c *gin.Context) {
 		return
 	}
 
-	var setting dto.SettingDto
-	if err := c.ShouldBindJSON(&setting); err != nil {
-		c.JSON(http.StatusOK, dto.Fail[string](models.InvalidRequestBodyMessage))
-		return
-	}
-
 	if setting.AllowRegistration != nil {
 		oldSetting.AllowRegistration = *setting.AllowRegistration
 	}
 
-	frontendSettings := setting.FrontendSettings
 	settingMap := map[string]interface{}{}
 	hasSiteConfigUpdate := false
 	if frontendSettings != nil {
-		settingMap["frontendSettings"] = frontendSettings
-		hasSiteConfigUpdate = true
+		if services.HasLifeCountdownSettings(frontendSettings) {
+			if err := services.UpdateUserLifeCountdownConfig(user.ID, frontendSettings); err != nil {
+				c.JSON(http.StatusOK, dto.Fail[string]("保存人生倒计时配置失败: "+err.Error()))
+				return
+			}
+			frontendSettings = services.StripLifeCountdownSettings(frontendSettings)
+		}
+		if len(frontendSettings) > 0 {
+			settingMap["frontendSettings"] = frontendSettings
+			hasSiteConfigUpdate = true
+		}
 	}
 	if setting.AllowRegistration != nil {
 		settingMap["allowRegistration"] = *setting.AllowRegistration
@@ -707,7 +746,12 @@ func UpdateSetting(c *gin.Context) {
 }
 
 func GetFrontendConfig(c *gin.Context) {
-	config, err := services.GetFrontendConfig()
+	viewerUserID := uint(0)
+	if userID, ok := commentAuthUserID(c); ok {
+		viewerUserID = userID
+	}
+
+	config, err := services.GetFrontendConfig(viewerUserID)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "获取配置失败"})
 		return

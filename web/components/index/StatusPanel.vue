@@ -395,12 +395,12 @@
             </div>
           </div>
 
-          <div id="site-section" v-if="isAdmin && isSiteSectionPage" class="col-span-12">
+          <div id="site-section" v-if="(isAdmin && isSiteSectionPage) || isSectionVisible('life-countdown')" class="col-span-12">
           <div :class="adminShellCardClass">
             <div :class="adminSectionHeaderClass">
               <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                <UIcon name="i-heroicons-cog-6-tooth" class="w-5 h-5" />
-                <span>网站配置</span>
+                <UIcon :name="isSectionVisible('life-countdown') && !isAdmin ? 'i-heroicons-heart' : 'i-heroicons-cog-6-tooth'" class="w-5 h-5" />
+                <span>{{ isSectionVisible('life-countdown') && !isAdmin ? '人生倒计时' : '网站配置' }}</span>
               </div>
             </div>
             <div class="px-4 pb-4 space-y-4">
@@ -1829,8 +1829,10 @@ type AdminSectionKey =
   'site-configs' | 'comments' | 'email' | 'admin-users' |
   'storage'
 const activeSection = ref<AdminSectionKey>('dashboard')
-const adminNavGroups = computed(() => {
-  const groups = [
+type AdminNavItem = { key: AdminSectionKey, label: string, icon: string }
+type AdminNavGroup = { key: string, label: string, icon: string, items: AdminNavItem[] }
+const adminNavGroups = computed<AdminNavGroup[]>(() => {
+  const groups: AdminNavGroup[] = [
     {
       key: 'overview',
       label: '概览',
@@ -1893,7 +1895,14 @@ const adminNavGroups = computed(() => {
     }
   ]
   if (isAdmin.value) return groups
-  return groups.filter((g) => g.key === 'overview')
+  const overviewGroup = groups.find((g) => g.key === 'overview')!
+  return [{
+    ...overviewGroup,
+    items: [
+      ...overviewGroup.items,
+      { key: 'life-countdown', label: '人生倒计时', icon: 'i-heroicons-heart' }
+    ]
+  }]
 })
 const navGroupStorageKey = 'adminNavGroupOpen'
 const resolveSavedNavGroup = () => {

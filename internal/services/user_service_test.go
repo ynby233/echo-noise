@@ -239,3 +239,78 @@ func TestGetStatusUsesViewerScopedDashboardCounts(t *testing.T) {
 		t.Fatalf("total replies = %d, want 2", adminStatus.TotalReplies)
 	}
 }
+
+func lifeCountdownFrontendSettings(t *testing.T, viewerUserID uint) map[string]interface{} {
+	t.Helper()
+
+	config, err := GetFrontendConfig(viewerUserID)
+	if err != nil {
+		t.Fatalf("get frontend config: %v", err)
+	}
+	frontendSettings, ok := config["frontendSettings"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("frontendSettings has type %T", config["frontendSettings"])
+	}
+	return frontendSettings
+}
+
+func assertLifeCountdownFrontendSettings(t *testing.T, frontendSettings map[string]interface{}, enabled bool, birthDate string, lifeExpectancyYears int) {
+	t.Helper()
+
+	if got, ok := frontendSettings["lifeCountdownEnabled"].(bool); !ok || got != enabled {
+		t.Fatalf("lifeCountdownEnabled = %#v, want %v", frontendSettings["lifeCountdownEnabled"], enabled)
+	}
+	if got, ok := frontendSettings["lifeCountdownBirthDate"].(string); !ok || got != birthDate {
+		t.Fatalf("lifeCountdownBirthDate = %#v, want %q", frontendSettings["lifeCountdownBirthDate"], birthDate)
+	}
+	if got, ok := frontendSettings["lifeExpectancyYears"].(int); !ok || got != lifeExpectancyYears {
+		t.Fatalf("lifeExpectancyYears = %#v, want %d", frontendSettings["lifeExpectancyYears"], lifeExpectancyYears)
+	}
+}
+
+func TestGetFrontendConfigUsesViewerScopedLifeCountdown(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	admin := mustCreateUser(t, models.User{Username: "admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+	alice := mustCreateUser(t, models.User{Username: "alice", Password: models.HashPassword("alice"), Token: models.GenerateToken(32)})
+
+	if err := db.Create(&models.Setting{AllowRegistration: true}).Error; err != nil {
+		t.Fatalf("create setting: %v", err)
+	}
+	if err := db.Create(&models.SiteConfig{
+		SiteTitle:                  "Test Site",
+		LifeCountdownEnabled:       true,
+		LifeCountdownBirthDate:     "1970-01-02",
+		LifeExpectancyYears:        90,
+		CalendarEnabled:            true,
+		TimeEnabled:                true,
+		HitokotoEnabled:            true,
+		CommentEmailAdminNotifyAll: true,
+	}).Error; err != nil {
+		t.Fatalf("create site config: %v", err)
+	}
+
+	if err := UpdateUserLifeCountdownConfig(admin.ID, map[string]interface{}{
+		"lifeCountdownEnabled":   true,
+		"lifeCountdownBirthDate": "1980-03-04",
+		"lifeExpectancyYears":    float64(88),
+	}); err != nil {
+		t.Fatalf("save admin life countdown: %v", err)
+	}
+
+	assertLifeCountdownFrontendSettings(t, lifeCountdownFrontendSettings(t, 0), true, "1980-03-04", 88)
+	assertLifeCountdownFrontendSettings(t, lifeCountdownFrontendSettings(t, alice.ID), false, "", 0)
+
+	if err := UpdateUserLifeCountdownConfig(alice.ID, map[string]interface{}{
+		"lifeCountdownEnabled":   true,
+		"lifeCountdownBirthDate": "1995-06-07",
+		"lifeExpectancyYears":    "75",
+	}); err != nil {
+		t.Fatalf("save alice life countdown: %v", err)
+	}
+	assertLifeCountdownFrontendSettings(t, lifeCountdownFrontendSettings(t, alice.ID), true, "1995-06-07", 75)
+
+	if err := db.Where("user_id = ?", admin.ID).Delete(&models.UserLifeCountdownConfig{}).Error; err != nil {
+		t.Fatalf("delete admin life countdown: %v", err)
+	}
+	assertLifeCountdownFrontendSettings(t, lifeCountdownFrontendSettings(t, admin.ID), true, "1970-01-02", 90)
+}

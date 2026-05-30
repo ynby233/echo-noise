@@ -290,6 +290,14 @@ func UpdateMessage(id string, content string) error {
 	return nil
 }
 
+type UserLifeCountdownConfig struct {
+	gorm.Model
+	UserID              uint   `json:"user_id" gorm:"uniqueIndex;not null"`
+	Enabled             bool   `json:"lifeCountdownEnabled" gorm:"default:false"`
+	BirthDate           string `json:"lifeCountdownBirthDate"`
+	LifeExpectancyYears int    `json:"lifeExpectancyYears" gorm:"default:0"`
+}
+
 type FriendLink struct {
 	ID          uint      `gorm:"primaryKey" json:"id"`
 	Title       string    `gorm:"type:varchar(100)" json:"title"`
