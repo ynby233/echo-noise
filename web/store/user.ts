@@ -12,10 +12,10 @@ export const useUserStore = defineStore("userStore", () => {
     const setUserStatus = (newStatus: Status) => {
         status.value = newStatus as any;
         const list = (newStatus as any).users || (newStatus as any).Users || []
-        const u = list.find((it: any) => (it.user_id ?? it.ID) === (user.value as any)?.userid)
+        const u = list.find((it: any) => (it.user_id ?? it.id ?? it.ID) === (user.value as any)?.userid)
         if (u) {
             user.value = {
-                userid: u.user_id ?? u.ID,
+                userid: u.user_id ?? u.id ?? u.ID,
                 username: u.username ?? u.Username,
                 is_admin: u.is_admin ?? u.IsAdmin,
                 avatar_url: u.avatar_url ?? u.AvatarURL,

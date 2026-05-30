@@ -122,12 +122,12 @@
                     <div class="admin-dashboard-stat-value" :class="theme.text">{{ dashboardStats.messageCount }}</div>
                   </div>
                   <div class="admin-dashboard-stat" :class="theme.subtleBg">
-                    <div class="admin-dashboard-stat-title" :class="theme.mutedText"><UIcon name="i-heroicons-user-group" class="w-4 h-4" />用户总数</div>
-                    <div class="admin-dashboard-stat-value" :class="theme.text">{{ dashboardStats.userCount }}</div>
+                    <div class="admin-dashboard-stat-title" :class="theme.mutedText"><UIcon name="i-heroicons-chat-bubble-left-right" class="w-4 h-4" />收到评论</div>
+                    <div class="admin-dashboard-stat-value" :class="theme.text">{{ dashboardStats.receivedCommentCount }}</div>
                   </div>
                   <div class="admin-dashboard-stat" :class="theme.subtleBg">
-                    <div class="admin-dashboard-stat-title" :class="theme.mutedText"><UIcon name="i-heroicons-chat-bubble-left-right" class="w-4 h-4" />评论总数</div>
-                    <div class="admin-dashboard-stat-value" :class="theme.text">{{ dashboardStats.commentCount }}</div>
+                    <div class="admin-dashboard-stat-title" :class="theme.mutedText"><UIcon name="i-heroicons-arrow-uturn-left" class="w-4 h-4" />收到回复</div>
+                    <div class="admin-dashboard-stat-value" :class="theme.text">{{ dashboardStats.receivedReplyCount }}</div>
                   </div>
                   <div class="admin-dashboard-stat" :class="theme.subtleBg">
                     <div class="admin-dashboard-stat-title" :class="theme.mutedText"><UIcon name="i-heroicons-heart" class="w-4 h-4" />人生进度</div>
@@ -2153,18 +2153,23 @@ const dashboardStats = computed(() => {
   const status: any = userStore?.status || {}
   return {
     messageCount: toCount(status.total_messages ?? status.totalMessages ?? userMessagesCount.value),
-    userCount: toCount(status.total_users ?? status.totalUsers ?? status.users_count),
-    commentCount: toCount(status.total_comments ?? status.totalComments ?? status.comments_count),
+    totalUserCount: toCount(status.total_users ?? status.totalUsers ?? status.users_count ?? status.users?.length),
+    totalCommentCount: toCount(status.total_comments ?? status.totalComments ?? status.comments_count),
+    totalReplyCount: toCount(status.total_replies ?? status.totalReplies ?? status.replies_count),
+    receivedCommentCount: toCount(status.received_comments ?? status.receivedComments),
+    receivedReplyCount: toCount(status.received_replies ?? status.receivedReplies),
     lifePercent: dashboardLifePercent.value,
   }
 })
 const dashboardBars = computed(() => {
-  const messageBase = Math.max(20, dashboardStats.value.messageCount, dashboardStats.value.commentCount)
-  const userBase = Math.max(5, dashboardStats.value.userCount)
+  const receivedFeedbackCount = dashboardStats.value.receivedCommentCount + dashboardStats.value.receivedReplyCount
+  const totalFeedbackCount = dashboardStats.value.totalCommentCount + dashboardStats.value.totalReplyCount
+  const messageBase = Math.max(20, dashboardStats.value.messageCount, receivedFeedbackCount, totalFeedbackCount)
+  const userBase = Math.max(5, dashboardStats.value.totalUserCount)
   return [
     { label: '内容活跃度', percent: Math.min(100, Math.round((dashboardStats.value.messageCount / messageBase) * 100)) },
-    { label: '评论活跃度', percent: Math.min(100, Math.round((dashboardStats.value.commentCount / messageBase) * 100)) },
-    { label: '用户活跃度', percent: Math.min(100, Math.round((dashboardStats.value.userCount / userBase) * 100)) },
+    { label: '评论活跃度', percent: Math.min(100, Math.round((receivedFeedbackCount / messageBase) * 100)) },
+    { label: '用户活跃度', percent: Math.min(100, Math.round((dashboardStats.value.totalUserCount / userBase) * 100)) },
     { label: '人生进度', percent: dashboardStats.value.lifePercent },
   ]
 })
@@ -2208,7 +2213,7 @@ const systemSummaryItems = computed(() => {
   return [
     { label: '系统管理员', value: adminName, desc: '后台默认管理账号' },
     { label: '当前用户', value: loginName, desc: isAdmin.value ? '拥有管理员权限' : '普通账户视图' },
-    { label: '笔记总数', value: totalMessages, desc: '当前站点内容规模' },
+    { label: '笔记总数', value: totalMessages, desc: isAdmin.value ? '当前站点内容规模' : '当前账户内容规模' },
     { label: '系统版本', value: versionText, desc: versionInfo.hasUpdate && versionInfo.latestVersion ? `可更新到 ${versionInfo.latestVersion}` : '当前版本状态正常' },
     { label: '注册状态', value: registerText, desc: registerEnabled.value ? '允许新用户创建账户' : '仅限已有账户登录' },
     { label: '安全策略', value: securityText, desc: securityConfig.autoBanEnabled ? `阈值 ${securityConfig.autoBanThreshold} 次` : '可在下方安全面板配置' }

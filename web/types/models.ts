@@ -54,7 +54,8 @@ export interface User {
 }
 
 export interface UserStatus {
-    user_id: number;
+    id?: number;
+    user_id?: number;
     username: string;
     is_admin: boolean;
 }
@@ -66,6 +67,11 @@ export interface Status {
     sys_admin_id: number;
     users: UserStatus[];
     total_messages: number;
+    total_users?: number;
+    total_comments?: number;
+    total_replies?: number;
+    received_comments?: number;
+    received_replies?: number;
     messages?: Message[];  // 添加消息列表字段
     total?: number;        // 添加总数字段
     items?: Message[];     // 添加与后端返回结构匹配的字段

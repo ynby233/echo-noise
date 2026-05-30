@@ -230,7 +230,7 @@ func Login(userdto dto.LoginDto) (*models.User, error) {
 	return user, nil
 }
 
-func GetStatus() (models.Status, error) {
+func GetStatus(currentUserID uint) (models.Status, error) {
 	sysuser, err := repository.GetSysAdmin()
 	if err != nil {
 		return models.Status{}, errors.New(models.UserNotFoundMessage)
@@ -263,12 +263,75 @@ func GetStatus() (models.Status, error) {
 		return status, errors.New(models.GetAllMessagesFailMessage)
 	}
 
+	var totalComments int64
+	if err := database.DB.Model(&models.Comment{}).Where("parent_id IS NULL").Count(&totalComments).Error; err != nil {
+		return status, errors.New(models.GetStatusFailMessage)
+	}
+
+	var totalReplies int64
+	if err := database.DB.Model(&models.Comment{}).Where("parent_id IS NOT NULL").Count(&totalReplies).Error; err != nil {
+		return status, errors.New(models.GetStatusFailMessage)
+	}
+
 	status.SysAdminID = sysuser.ID
 	status.Username = sysuser.Username
 	status.Users = users
 	status.TotalMessages = int(total)
+	status.TotalUsers = len(users)
+	status.TotalComments = int(totalComments)
+	status.TotalReplies = int(totalReplies)
+
+	if currentUserID > 0 {
+		var currentUser models.User
+		if err := database.DB.Select("id, is_admin").First(&currentUser, currentUserID).Error; err == nil && currentUser.ID != 0 {
+			if !currentUser.IsAdmin {
+				var currentUserTotal int64
+				if err := database.DB.Model(&models.Message{}).
+					Where("user_id = ?", currentUser.ID).
+					Where("private = ?", false).
+					Where("content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ?",
+						"%#guestbook%", "%#留言%", "%留言板%",
+						"%#友链%", "%友情链接%",
+						"%#关于%", "%关于本站%").
+					Count(&currentUserTotal).Error; err != nil {
+					return status, errors.New(models.GetAllMessagesFailMessage)
+				}
+				status.TotalMessages = int(currentUserTotal)
+			}
+
+			receivedComments, receivedReplies, err := countReceivedCommentStats(currentUser.ID)
+			if err != nil {
+				return status, errors.New(models.GetStatusFailMessage)
+			}
+			status.ReceivedComments = int(receivedComments)
+			status.ReceivedReplies = int(receivedReplies)
+		}
+	}
 
 	return status, nil
+}
+
+func countReceivedCommentStats(userID uint) (int64, int64, error) {
+	var receivedComments int64
+	if err := database.DB.Model(&models.Comment{}).
+		Joins("JOIN messages ON messages.id = comments.message_id").
+		Where("messages.user_id = ?", userID).
+		Where("comments.parent_id IS NULL").
+		Where("(comments.user_id IS NULL OR comments.user_id <> ?)", userID).
+		Count(&receivedComments).Error; err != nil {
+		return 0, 0, err
+	}
+
+	var receivedReplies int64
+	if err := database.DB.Model(&models.Comment{}).
+		Joins("JOIN comments AS parent_comments ON parent_comments.id = comments.parent_id").
+		Where("parent_comments.user_id = ?", userID).
+		Where("(comments.user_id IS NULL OR comments.user_id <> ?)", userID).
+		Count(&receivedReplies).Error; err != nil {
+		return 0, 0, err
+	}
+
+	return receivedComments, receivedReplies, nil
 }
 
 func GetUserByID(userID uint) (*models.User, error) {

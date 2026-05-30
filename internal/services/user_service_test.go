@@ -150,7 +150,7 @@ func TestGetStatusIncludesUserAvatarURLs(t *testing.T) {
 		AvatarURL: "/api/images/alice.png",
 	})
 
-	status, err := GetStatus()
+	status, err := GetStatus(0)
 	if err != nil {
 		t.Fatalf("get status: %v", err)
 	}
@@ -164,5 +164,78 @@ func TestGetStatusIncludesUserAvatarURLs(t *testing.T) {
 	}
 	if avatars["alice"] != "/api/images/alice.png" {
 		t.Fatalf("alice avatar missing from status, got %q", avatars["alice"])
+	}
+}
+
+func TestGetStatusUsesViewerScopedDashboardCounts(t *testing.T) {
+	setupUserServiceTestDB(t)
+
+	admin := mustCreateUser(t, models.User{Username: "admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+	alice := mustCreateUser(t, models.User{Username: "alice", Password: models.HashPassword("alice"), Token: models.GenerateToken(32)})
+	bob := mustCreateUser(t, models.User{Username: "bob", Password: models.HashPassword("bob"), Token: models.GenerateToken(32)})
+
+	adminMessage := models.Message{Content: "admin message", UserID: admin.ID, Username: admin.Username}
+	aliceMessage := models.Message{Content: "alice message", UserID: alice.ID, Username: alice.Username}
+	bobMessage := models.Message{Content: "bob message", UserID: bob.ID, Username: bob.Username}
+	if err := database.DB.Create(&adminMessage).Error; err != nil {
+		t.Fatalf("create admin message: %v", err)
+	}
+	if err := database.DB.Create(&aliceMessage).Error; err != nil {
+		t.Fatalf("create alice message: %v", err)
+	}
+	if err := database.DB.Create(&bobMessage).Error; err != nil {
+		t.Fatalf("create bob message: %v", err)
+	}
+
+	bobCommentOnAlice := models.Comment{MessageID: aliceMessage.ID, UserID: &bob.ID, Content: "bob comment", Visibility: "public"}
+	aliceCommentOnAlice := models.Comment{MessageID: aliceMessage.ID, UserID: &alice.ID, Content: "self comment", Visibility: "public"}
+	aliceCommentOnBob := models.Comment{MessageID: bobMessage.ID, UserID: &alice.ID, Content: "alice comment", Visibility: "public"}
+	bobCommentOnAdmin := models.Comment{MessageID: adminMessage.ID, UserID: &bob.ID, Content: "bob admin comment", Visibility: "public"}
+	for _, comment := range []*models.Comment{&bobCommentOnAlice, &aliceCommentOnAlice, &aliceCommentOnBob, &bobCommentOnAdmin} {
+		if err := database.DB.Create(comment).Error; err != nil {
+			t.Fatalf("create comment: %v", err)
+		}
+	}
+	parentID := aliceCommentOnBob.ID
+	bobReplyToAlice := models.Comment{MessageID: bobMessage.ID, UserID: &bob.ID, ParentID: &parentID, Content: "bob reply", Visibility: "public"}
+	aliceReplyToSelf := models.Comment{MessageID: bobMessage.ID, UserID: &alice.ID, ParentID: &parentID, Content: "self reply", Visibility: "public"}
+	for _, reply := range []*models.Comment{&bobReplyToAlice, &aliceReplyToSelf} {
+		if err := database.DB.Create(reply).Error; err != nil {
+			t.Fatalf("create reply: %v", err)
+		}
+	}
+
+	aliceStatus, err := GetStatus(alice.ID)
+	if err != nil {
+		t.Fatalf("get alice status: %v", err)
+	}
+	if aliceStatus.TotalMessages != 1 {
+		t.Fatalf("alice total messages = %d, want 1", aliceStatus.TotalMessages)
+	}
+	if aliceStatus.ReceivedComments != 1 {
+		t.Fatalf("alice received comments = %d, want 1", aliceStatus.ReceivedComments)
+	}
+	if aliceStatus.ReceivedReplies != 1 {
+		t.Fatalf("alice received replies = %d, want 1", aliceStatus.ReceivedReplies)
+	}
+
+	adminStatus, err := GetStatus(admin.ID)
+	if err != nil {
+		t.Fatalf("get admin status: %v", err)
+	}
+	if adminStatus.TotalMessages != 3 {
+		t.Fatalf("admin total messages = %d, want 3", adminStatus.TotalMessages)
+	}
+	if adminStatus.ReceivedComments != 1 {
+		t.Fatalf("admin received comments = %d, want 1", adminStatus.ReceivedComments)
+	}
+	if adminStatus.TotalUsers != 3 {
+		t.Fatalf("total users = %d, want 3", adminStatus.TotalUsers)
+	}
+	if adminStatus.TotalComments != 4 {
+		t.Fatalf("total comments = %d, want 4", adminStatus.TotalComments)
+	}
+	if adminStatus.TotalReplies != 2 {
+		t.Fatalf("total replies = %d, want 2", adminStatus.TotalReplies)
 	}
 }

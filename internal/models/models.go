@@ -83,10 +83,15 @@ func GenerateToken(length int) string {
 }
 
 type Status struct {
-	SysAdminID    uint         `json:"sys_admin_id"`
-	Username      string       `json:"username"`
-	Users         []UserStatus `json:"users"`
-	TotalMessages int          `json:"total_messages"`
+	SysAdminID       uint         `json:"sys_admin_id"`
+	Username         string       `json:"username"`
+	Users            []UserStatus `json:"users"`
+	TotalMessages    int          `json:"total_messages"`
+	TotalUsers       int          `json:"total_users"`
+	TotalComments    int          `json:"total_comments"`
+	TotalReplies     int          `json:"total_replies"`
+	ReceivedComments int          `json:"received_comments"`
+	ReceivedReplies  int          `json:"received_replies"`
 }
 
 type UserSession struct {

@@ -404,7 +404,8 @@ func GetMessagesByPage(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.OK(pageQueryResult, models.GetMessagesByPageSuccess))
 }
 func GetStatus(c *gin.Context) {
-	status, err := services.GetStatus()
+	currentUserID, _ := commentAuthUserID(c)
+	status, err := services.GetStatus(currentUserID)
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string](models.GetStatusFailMessage))
 		return
