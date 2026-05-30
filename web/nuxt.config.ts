@@ -31,8 +31,6 @@ export default defineNuxtConfig({
           defer: true 
         },
         { src: 'https://unpkg.com/medium-zoom/dist/medium-zoom.min.js', body: true, defer: true },
-        { src: 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js', body: true, defer: true },
-        { src: 'https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js', body: true, defer: true },
         { src: 'https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js', body: true, defer: true },
       ],
       meta: [

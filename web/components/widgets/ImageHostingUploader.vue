@@ -234,6 +234,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
 import { useToast, useRuntimeConfig } from '#imports';
+import { writeClipboardText } from '~/utils/clipboard';
 
 // 修改 position 属性定义
 const props = defineProps({
@@ -441,7 +442,7 @@ const insertImage = () => {
 // 添加复制到剪贴板方法
 const copyToClipboard = async (text: string) => {
   try {
-    await navigator.clipboard.writeText(text);
+    await writeClipboardText(text);
     toast.add({
       title: '成功',
       description: '已复制到剪贴板',

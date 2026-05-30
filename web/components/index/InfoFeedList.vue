@@ -160,6 +160,7 @@
 import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 // @ts-ignore Vetur 对 .vue 默认导出识别不稳定，这里与项目内其他组件保持一致
 import MarkdownRenderer from "~/components/index/MarkdownRenderer.vue";
+import { writeClipboardText } from '~/utils/clipboard'
 
 const FEED_CACHE_PREFIX = 'ech0-noise:feed-cache:v1'
 const feedMemoryCache = new Map<string, { ts: number; items: FeedItem[] }>()
@@ -693,22 +694,11 @@ const openImagePreview = (url: string) => {
 const copyLink = async (url: string) => {
   const text = String(url || '').trim()
   if (!text || typeof window === 'undefined') return
-  let copied = false
   try {
-    if (navigator?.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text)
-      copied = true
-    }
-  } catch {}
-  if (!copied) {
-    const input = document.createElement('input')
-    input.value = text
-    document.body.appendChild(input)
-    input.select()
-    copied = document.execCommand('copy')
-    document.body.removeChild(input)
+    await writeClipboardText(text)
+  } catch {
+    return
   }
-  if (!copied) return
   copiedLink.value = text
   if (copiedTimer.value) {
     window.clearTimeout(copiedTimer.value)

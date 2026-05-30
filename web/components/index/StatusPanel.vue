@@ -1871,6 +1871,7 @@ import NotifyPanel from './NotifyPanel.vue'
 import CommentsSettings from '~/components/admin/CommentsSettings.vue'
 import AttachmentManager from '~/components/admin/AttachmentManager.vue'
 import { getRequest, putRequest, postRequest, deleteRequest } from '~/utils/api'
+import { writeClipboardText } from '~/utils/clipboard'
 import { useRuntimeConfig, useHead, useRouter } from '#imports'
 const formatShanghai = (s: string) => {
   try {
@@ -3450,7 +3451,7 @@ const regenerateToken = async () => {
 // 复制 Token
 const copyToken = async () => {
     try {
-        await navigator.clipboard.writeText(userToken.value)
+        await writeClipboardText(userToken.value)
         useToast().add({
             title: '成功',
             description: 'Token 已复制到剪贴板',
