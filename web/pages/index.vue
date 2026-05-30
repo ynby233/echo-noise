@@ -147,31 +147,6 @@
             <HeatmapWidget />
           </UCard>
         
-        <UCard class="sidebar-card no-padding-card" :class="sidebarThemeCard">
-          <div>
-            <div class="text-xs opacity-70 mb-2">最新评论（{{ (recentComments || []).length }}）</div>
-            <div class="scroll-comments">
-              <div class="comment-pill-grid">
-                <a
-                  v-for="(c, i) in (recentComments || []).slice(0, 15)"
-                  :key="c.id || i"
-                  :href="c.link || '/'"
-                  class="comment-pill"
-                  :class="isDark ? 'comment-pill-dark' : 'comment-pill-light'"
-                >
-                  <img
-                    :src="recentAvatar(c)"
-                    class="comment-pill-avatar"
-                    alt="avatar"
-                    @error="onRecentAvatarError($event)"
-                  />
-                  <span class="comment-pill-text" @wheel="onCommentTextWheel">{{ recentAuthorName(c) + '：' + shortText(c.content) }}</span>
-                </a>
-              </div>
-            </div>
-          </div>
-        </UCard>
-          
         </div>
       </div>
       </ClientOnly>
@@ -189,48 +164,7 @@
               </div>
             </div>
           </div>
-          <div v-if="activeTab==='links'" class="links-page">
-            <UCard class="search-card mb-3" :ui="{ body: 'p-3 md:p-4' }">
-              <div class="card-title text-center text-black dark:text-white">{{ frontendConfig.linksTitle || '友情链接' }}</div>
-              <div v-if="(frontendConfig.linksDescription || '').trim() !== ''" class="section-subtitle">{{ frontendConfig.linksDescription }}</div>
-              <div v-if="friendLinksList.length > 0" class="mx-auto w-full max-w-6xl px-4 sm:px-6 mt-3 mb-3">
-                <div class="link-grid">
-                  <a v-for="fl in friendLinksList" :key="fl.link || fl.title" :href="fl.link" target="_blank" rel="noopener noreferrer" class="link-card" :class="isDark ? 'link-card-dark' : 'link-card-light'">
-                    <div :class="['link-avatar', isDark ? 'link-avatar-dark' : 'link-avatar-light']">
-                      <template v-if="fl.imageURL">
-                        <img :src="imgSrc(fl.imageURL)" alt="avatar" class="link-avatar-img" />
-                      </template>
-                      <template v-else>
-                        <UIcon :name="getIconName({ url: fl.link, icon: fl.icon })" class="w-6 h-6" />
-                      </template>
-                    </div>
-                    <div class="link-content">
-                      <div class="link-title">{{ fl.title }}</div>
-                      <div v-if="fl.description" class="link-desc text-xs opacity-75">{{ fl.description }}</div>
-                    </div>
-                  </a>
-                </div>
-              </div>
-              <div v-if="(frontendConfig.linksApplyTitle || '').trim() !== '' || (frontendConfig.linksApplyText || '').trim() !== ''" class="links-apply-copy">
-                <div class="text-sm font-medium text-center mb-2 text-black dark:text-white">{{ (frontendConfig.linksApplyTitle || '申请友链须知') }}</div>
-                <div class="apply-text text-center text-black/70 dark:text-white/80">{{ (frontendConfig.linksApplyText || '').trim() }}</div>
-              </div>
-              <div class="links-apply-form mt-5 mx-auto w-full max-w-2xl px-4 sm:px-6">
-                <div class="text-center text-xs opacity-70 mb-3">提交后需管理员审核</div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <UInput v-model="linkApply.title" placeholder="站点名称（可选）" />
-                  <UInput v-model="linkApply.link" placeholder="网址（必填，如 https://example.com）" />
-                  <UInput v-model="linkApply.icon" placeholder="图标标识（可选，例如 i-mdi-home）" />
-                  <UInput v-model="linkApply.email" placeholder="邮箱（用于通知，可选）" />
-                  <UTextarea v-model="linkApply.description" :rows="2" placeholder="简介（可选）" class="sm:col-span-2" />
-                </div>
-                <div class="flex justify-center mt-3">
-                  <UButton :loading="applying" color="primary" @click="submitFriendLinkApply">提交申请</UButton>
-                </div>
-              </div>
-            </UCard>
-          </div>
-          <div v-else-if="activeTab==='feed'" class="feed-page">
+          <div v-if="activeTab==='feed'" class="feed-page">
             <UCard class="search-card feed-shell-card mb-3" :ui="{ body: 'p-0' }">
               <div :class="['feed-page-head', isDark ? 'feed-page-head-dark' : 'feed-page-head-light']">
                 <div class="card-title text-center text-black dark:text-white">{{ feedPageTitleText }}</div>
@@ -320,31 +254,6 @@
         </UCard>
         <UCard class="sidebar-card no-padding-card" :class="sidebarThemeCard">
           <HeatmapWidget />
-        </UCard>
-        
-        <UCard class="sidebar-card mt-2 no-padding-card" :class="sidebarThemeCard">
-          <div>
-            <div class="text-xs opacity-70 mb-2">最新评论（{{ (recentComments || []).length }}）</div>
-            <div class="scroll-comments">
-              <div class="comment-pill-grid">
-                <a
-                  v-for="(c, i) in (recentComments || []).slice(0, 15)"
-                  :key="c.id || i"
-                  :href="c.link || '/'"
-                  class="comment-pill"
-                  :class="isDark ? 'comment-pill-dark' : 'comment-pill-light'"
-                >
-                  <img
-                    :src="recentAvatar(c)"
-                    class="comment-pill-avatar"
-                    alt="avatar"
-                    @error="onRecentAvatarError($event)"
-                  />
-                  <span class="comment-pill-text" @wheel="onCommentTextWheel">{{ recentAuthorName(c) + '：' + shortText(c.content) }}</span>
-                </a>
-              </div>
-            </div>
-          </div>
         </UCard>
         
         
@@ -622,7 +531,6 @@ const centerTabs = computed(() => {
   const tabs = [
     { key: 'latest', name: '最新', icon: 'i-heroicons-sparkles' },
     { key: 'personal', name: '个人', icon: 'i-heroicons-user-circle' },
-    { key: 'links', name: '友链', icon: 'i-heroicons-link' },
     { key: 'about', name: '关于', icon: 'i-heroicons-information-circle' }
   ]
   if (isFeedEnabled.value) {
@@ -695,7 +603,6 @@ const remaining = ref(0)
 let captchaExpiresAt: number | null = null
 let captchaTimer: any = null
 const showForgot = ref(false)
-let recentTicker: any = null
 const githubEnabled = ref(false)
 const refreshCaptcha = async () => {
   try {
@@ -788,7 +695,6 @@ const openCommentBoard = () => {
 }
 onUnmounted(() => {
   if (captchaTimer) clearInterval(captchaTimer)
-  if (recentTicker) clearInterval(recentTicker)
 })
 
 watch(() => route.query.login, (v) => {
@@ -946,12 +852,12 @@ const scrollToTop = () => {
 
   const autoScrollCleanups: Array<() => void> = []
   const startAutoScroll = () => {
-    const lists = Array.from(document.querySelectorAll('.scroll-list, .scroll-images')) as HTMLElement[]
+    const lists = Array.from(document.querySelectorAll('.scroll-images')) as HTMLElement[]
     lists.forEach((el) => {
       let id = 0
       let last = performance.now()
       let pauseUntil = 0
-      const speed = el.classList.contains('scroll-list') ? 0.25 : 0.35
+      const speed = 0.35
       const pauseMs = 1200
       const step = (ts: number) => {
         id = requestAnimationFrame(step)
@@ -1051,12 +957,10 @@ const frontendConfig = ref<any>({
     pageFooterHTML: '',
     rssTitle: '',
     rssDescription: '',
-  rssAuthorName: '',
-  rssFaviconURL: '',
-  linksTitle: '',
-  linksDescription: '',
-  feedEnabled: false,
-  feedPageTitle: '',
+    rssAuthorName: '',
+    rssFaviconURL: '',
+    feedEnabled: false,
+    feedPageTitle: '',
   feedPageDescription: '',
   feedLimit: 100,
   feedRefreshSeconds: 7200,
@@ -1066,7 +970,6 @@ const frontendConfig = ref<any>({
   aboutPageTitle: '',
   aboutPageDescription: '',
   aboutMarkdown: '',
-  friendLinks: [] as Array<{ title?: string; link: string; icon?: string; description?: string }>,
     enableGithubCard: false,
     // PWA
     pwaEnabled: true,
@@ -1613,11 +1516,7 @@ const headerImageStyle = computed(() => ({
   feedLimit: 100,
   feedRefreshSeconds: 7200,
   feedSources: [] as Array<{ type: string; group?: string; name?: string; url: string; enabled?: boolean; visible?: boolean }>,
-  aboutMarkdown: '# 关于我\n\n这里是一个默认的个人简介示例：\n\n- 喜欢记录与分享\n- 热爱开源与学习\n- 持续打磨产品体验\n\n欢迎通过友链或留言与我交流！',
-  linksTitle: '友情链接',
-  linksDescription: '推荐站点和朋友们的主页',
-  linksApplyTitle: '申请友链须知',
-  linksApplyText: '请提供站点名称、网址、图标（可选）、简介与有效邮箱。提交后需管理员审核，审核通过后展示。',
+  aboutMarkdown: '# 关于我\n\n这里是一个默认的个人简介示例：\n\n- 喜欢记录与分享\n- 热爱开源与学习\n- 持续打磨产品体验\n\n欢迎通过留言与我交流！',
   commentPageTitle: '留言',
   commentPageDescription: '欢迎留下你的看法',
   aboutPageTitle: '关于本站',
@@ -1656,10 +1555,6 @@ const headerImageStyle = computed(() => ({
       { name: '主页', url: 'https://www.noisework.cn/', icon: 'i-mdi-home' },
       { name: '博客', url: 'https://www.noiseblogs.top/', icon: 'i-mdi-notebook' }
   ],
-  friendLinks: [
-    { title: 'NoiseWork', link: 'https://www.noisework.cn/', icon: 'i-mdi-home', description: '个人主页与作品集合' },
-    { title: 'NoiseBlogs', link: 'https://www.noiseblogs.top/', icon: 'i-mdi-notebook', description: '技术随笔与学习记录' }
-  ],
   socialLinksEnabled: true,
     calendarEnabled: true,
     timeEnabled: true,
@@ -1695,14 +1590,7 @@ const fetchConfig = async () => {
                         nextConfig.socialLinks = (arr.length > 0) ? [...arr] : [...defaultConfig.socialLinks]
                     } else if (key === 'leftAds' && Array.isArray(settings[key])) {
                         nextConfig.leftAds = [...settings[key]]
-                    } else if (key === 'friendLinks') {
-                        const arr = settings[key]
-                        if (Array.isArray(arr) && arr.length > 0) {
-                            nextConfig.friendLinks = [...arr]
-                        } else {
-                            nextConfig.friendLinks = [...defaultConfig.friendLinks]
-                        }
-                            } else if (booleanKeys.includes(key)) {
+                    } else if (booleanKeys.includes(key)) {
                                 const v = settings[key]
                                 nextConfig[key] = (v === true || v === 'true' || v === 1 || v === '1')
                             } else {
@@ -1805,67 +1693,6 @@ const simpleLinks = computed(() => {
   return arr.filter((it: any) => String(it?.url || '').trim() !== '').map((it: any) => ({ ...it, name: it?.name || it?.url }))
 })
 const visibleSocialLinks = computed(() => simpleLinks.value)
-const friendLinksList = computed(() => {
-  const raw = (frontendConfig as any).value?.friendLinks ?? (frontendConfig as any).friendLinks
-  const arr = Array.isArray(raw) ? raw : []
-  const isImg = (s: string) => {
-    const t = String(s || '').trim().toLowerCase()
-    return !!t && (t.startsWith('http') || t.startsWith('data:image') || /\.(png|jpg|jpeg|webp|gif|ico)(\?.*)?$/.test(t))
-  }
-  return arr.filter((it: any) => String(it?.link || '').trim() !== '').map((it: any) => {
-    const icon = String(it?.icon || '').trim()
-    const imageURL = isImg(icon) ? icon : ''
-    return {
-      title: String(it?.title || it?.link || '').trim(),
-      link: String(it?.link || '').trim(),
-      icon,
-      imageURL,
-      description: String(it?.description || '').trim(),
-    }
-  })
-})
-// 友链申请表单与提交
-const linkApply = reactive<{ title: string; link: string; icon: string; email: string; description: string }>({ title: '', link: '', icon: '', email: '', description: '' })
-const applying = ref(false)
-const submitFriendLinkApply = async () => {
-  if (!String(linkApply.link || '').trim()) {
-    useToast().add({ title: '提示', description: '请填写网址（必填）', color: 'orange' })
-    return
-  }
-  const url = String(linkApply.link || '').trim()
-  if (!/^https?:\/\//i.test(url)) {
-    useToast().add({ title: '提示', description: '网址需以 http(s):// 开头', color: 'orange' })
-    return
-  }
-  applying.value = true
-  try {
-    const res = await fetch(`${baseApi}/friend-links/apply`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
-        title: String(linkApply.title || '').trim(),
-        link: url,
-        icon: String(linkApply.icon || '').trim(),
-        description: String(linkApply.description || '').trim(),
-        email: String(linkApply.email || '').trim(),
-      })
-    })
-    const data = await res.json().catch(() => ({}))
-    if (res.ok && (data?.code === 1 || data?.data)) {
-      useToast().add({ title: '已提交，待审核', color: 'green' })
-      linkApply.title = ''
-      linkApply.link = ''
-      linkApply.icon = ''
-      linkApply.email = ''
-      linkApply.description = ''
-    } else {
-      useToast().add({ title: '提交失败', description: data?.msg || '请稍后重试', color: 'red' })
-    }
-  } catch (e: any) {
-    useToast().add({ title: '提交失败', description: e?.message || '网络异常', color: 'red' })
-  } finally { applying.value = false }
-}
 const HITOKOTO_FALLBACKS = [
   '身为冒险者，如果安静的老死在床上，那简直就是耻辱！',
   '愿你出走半生，归来仍是少年。',
@@ -2109,162 +1936,10 @@ watch([leftAds, () => (frontendConfig.value as any)?.leftAdsIntervalMs], () => {
 }, { immediate: true })
 onUnmounted(() => { if (adTimer) clearInterval(adTimer) })
 
-// 最新评论（右栏）
-const recentComments = ref<Array<any>>([])
-const recentIndex = ref(0)
-const containsImage = (s: string) => /!\[[^\]]*\]\([^)]*\)/.test(String(s || '')) || /<img[^>]*>/i.test(String(s || ''))
-const formatRecentTime = (v: any) => {
-  try {
-    const d = new Date(v)
-    if (Number.isNaN(d.getTime())) return ''
-    const now = new Date()
-    const diff = Math.floor((now.getTime() - d.getTime()) / 1000)
-    if (diff < 60) return '刚刚'
-    if (diff < 3600) return `${Math.floor(diff / 60)}m`
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h`
-    if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}d`
-    return `${d.getMonth() + 1}/${d.getDate()}`
-  } catch {
-    return ''
-  }
-}
-const visibleRecentComments = computed(() => {
-  const items = recentComments.value.filter((c) => !containsImage(c?.content || ''))
-  if (items.length <= 8) return items
-  const start = recentIndex.value % items.length
-  const end = (start + 8) % items.length
-  return start < end ? items.slice(start, end) : [...items.slice(start), ...items.slice(0, end)]
-})
-const shortText = (s: string) => {
-  const noMdImg = String(s || '').replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-  const noHtmlImg = noMdImg.replace(/<img[^>]*>/gi, '')
-  const t = noHtmlImg.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
-  return t.length > 36 ? t.slice(0, 36) : (t || '评论')
-}
-const onCommentTextWheel = (e: WheelEvent) => {
-  const el = e.currentTarget as HTMLElement | null
-  if (!el) return
-  const max = el.scrollWidth - el.clientWidth
-  if (max <= 0) return
-  e.preventDefault()
-  const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
-  el.scrollLeft = Math.max(0, Math.min(max, el.scrollLeft + delta))
-}
-const escapeHTML = (s: string) => String(s || '')
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
-  .replace(/'/g, '&#39;')
-const recentHTML = (s: string) => {
-  const raw = String(s || '')
-  // Replace Markdown image ![alt](url)
-  const replacedMd = raw.replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_m, url) => `<img class=\"recent-inline-img\" src=\"${escapeHTML(url)}\" alt=\"img\" loading=\"lazy\" />`)
-  // Replace HTML <img ... src="..."> with small inline
-  const replacedHtmlImg = replacedMd.replace(/<img[^>]*src=[\"']([^\"']+)[\"'][^>]*>/gi, (_m, url) => `<img class=\"recent-inline-img\" src=\"${escapeHTML(url)}\" alt=\"img\" loading=\"lazy\" />`)
-  // Escape other HTML
-  const safe = escapeHTML(replacedHtmlImg)
-  // Undo escaping for the injected <img> tags
-  return safe.replace(/&lt;img class=\"recent-inline-img\" src=\"([^\"]+)\" alt=\"img\" loading=\"lazy\" \/&gt;/g, '<img class="recent-inline-img" src="$1" alt="img" loading="lazy" />')
-}
-const avatarPlaceholder = computed(() => {
-  const raw = String((frontendConfig.value.avatarURL || '')).trim()
-  const base = useRuntimeConfig().public.baseApi || '/api'
-  if (raw) return raw.startsWith('http') ? raw : `${base}${raw}`
-  const icon = String(frontendConfig.value.rssFaviconURL || '/favicon.svg').trim()
-  return icon
-})
-const recentUserField = (c: any, keys: string[]) => {
-  const accountUser = c?.user || {}
-  for (const key of keys) {
-    const value = String(accountUser?.[key] || '').trim()
-    if (value) return value
-  }
-  return ''
-}
-const normalizeAvatarURL = (raw: string) => {
-  const s = String(raw || '').trim()
-  if (!s) return ''
-  const base = useRuntimeConfig().public.baseApi || '/api'
-  if (/^https?:\/\//i.test(s)) return s
-  if (s.startsWith('/images/')) return `${base.replace(/\/$/, '')}${s}`
-  if (s.startsWith('/')) return s
-  return `${base.replace(/\/$/, '')}/${s.replace(/^\//, '')}`
-}
-const recentAuthorName = (c: any) => recentUserField(c, ['username', 'Username', 'name', 'Name']) || '用户'
-const recentAvatar = (c: any) => {
-  return normalizeAvatarURL(recentUserField(c, ['avatar_url', 'AvatarURL', 'avatar', 'Avatar'])) || avatarPlaceholder.value || fallbackAvatarURL
-}
-const onRecentAvatarError = (e: Event) => {
-  const img = e.target as HTMLImageElement
-  const fallback = avatarPlaceholder.value || fallbackAvatarURL
-  if (img && fallback) img.src = fallback
-}
-const BASE_API = useRuntimeConfig().public.baseApi || '/api'
-const loadRecentComments = async () => {
-  try {
-    let page = 1
-    let pageSize = 50
-    let total = 0
-    const collected: any[] = []
-    for (let round = 0; round < 3; round++) {
-      const resp = await fetch(`${BASE_API}/messages/page`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ page, pageSize })
-      })
-      if (!resp.ok) break
-      const js = await resp.json().catch(() => null)
-      const items = js?.data?.items || []
-      total = Number(js?.data?.total || 0)
-      const ids = items.map((m: any) => m.id).filter((id: number) => id !== guestbookMessageId.value)
-      const tasks = ids.map(async (id: number) => {
-        try {
-          const r = await fetch(`${BASE_API}/messages/${id}/comments`, { credentials: 'include', headers: { 'Accept': 'application/json' } })
-          if (!r.ok) return []
-          const d = await r.json()
-          const arr = Array.isArray(d?.data) ? d.data : []
-          return arr.map((c: any) => ({ id: c.id, user: c.user, user_id: c.user_id, content: c.content, created_at: c.created_at, message_id: id }))
-        } catch { return [] }
-      })
-      const results = await Promise.all(tasks)
-      const flat = ([] as any[]).concat(...results)
-      collected.push(...flat)
-      const lastPage = Math.max(1, Math.ceil(total / pageSize))
-      if (collected.length >= 24 || page >= lastPage) break
-      page += 1
-    }
-    collected.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
-    recentComments.value = collected.filter((c: any) => c.message_id !== guestbookMessageId.value)
-      .filter((c: any) => !containsImage(c?.content || ''))
-      .map((c: any) => ({ 
-        id: c.id, 
-        user: c.user,
-        user_id: c.user_id,
-        content: c.content, 
-        created_at: c.created_at, 
-        message_id: c.message_id,
-        link: `/#/messages/${c.message_id}`
-      }))
-      .slice(0, 30)
-    if (recentComments.value.length > 0) return
-  } catch {}
-  recentComments.value = ['期待','对方的','发个','困难','路口提示','测试','你好','加油','真不错','赞同','有趣','哈哈','有用','收藏','不错','灵感','记录']
-    .map((t, i) => ({ id: i + 1, user: { username: '用户' }, content: t, created_at: '', message_id: 0 }))
-}
-onMounted(async () => {
-  await loadRecentComments()
-  recentTicker = setInterval(() => { recentIndex.value = (recentIndex.value + 1) % Math.max(1, recentComments.value.length) }, 3000)
-})
-
 // 绑定 Fancybox 以支持推荐图集预览
 onMounted(() => {
   try { (window as any).Fancybox?.bind?.('[data-fancybox]', {}) } catch {}
 })
-
-const recentItemClass = computed(() => (isDark.value ? 'recent-comment-row-dark' : 'recent-comment-row-light'))
-const recentTextClass = computed(() => (isDark.value ? 'text-white' : 'text-slate-900'))
 
 // 监听前端配置更新事件，保存后主动刷新配置
 onMounted(() => {
@@ -3191,7 +2866,6 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
   padding: 8px 10px;
 }
 
-.links-page { padding-bottom: 120px; }
 .feed-shell-card {
   background: transparent !important;
   border: none !important;
@@ -3221,47 +2895,10 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
 .feed-page-content {
   margin-top: 10px;
 }
-.links-page .section-title { font-weight: 600; font-size: 14px; margin-bottom: 12px; padding: 0; border-radius: 0; display: inline-flex; align-items: center; gap: 6px; }
 .card-title { font-weight: 700; font-size: 18px; margin-bottom: 14px; padding: 0; border-radius: 0; display: block; }
 .section-subtitle { text-align: center; font-size: 13px; opacity: 0.8; margin-top: 2px; margin-bottom: 16px; line-height: 1.7; }
-.links-apply-copy { margin-top: 16px; margin-bottom: 6px; }
-.links-apply-form { padding-top: 8px; }
-.apply-text { white-space: pre-wrap; line-height: 1.85; }
 .comment-subtitle { margin-bottom: 20px; }
 .comment-board-wrap { margin-top: 10px; margin-bottom: 8px; }
-.section-title-light { color: #111827; }
-.section-title-dark { color: #fff; }
-.link-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-@media (min-width: 768px) {
-  .link-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
-.link-grid { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-.link-card { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px; text-decoration: none; transition: background-color .16s ease, border-color .16s ease, transform .12s ease; }
-.link-card { width: 100%; }
-.link-card-light { 
-  background: #fff !important; 
-  color: #111827 !important; 
-  border: 1px solid rgba(0,0,0,0.08) !important; 
-  box-shadow: 0 1px 2px rgba(0,0,0,0.06) !important; 
-}
-.link-card-dark { background: var(--home-surface-dark-elevated); color: var(--home-text-dark); border: 1px solid var(--home-border-dark-strong); box-shadow: var(--home-shadow-dark); }
-.link-card:hover { background-color: transparent; transform: none; }
-.link-card-dark:hover { background-color: var(--home-surface-dark-elevated); }
-.link-card-light:hover { background: #fff !important; }
-.link-avatar { width: 32px; height: 32px; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; }
-.link-avatar-light { background: #eef2ff; color: #4f46e5; border: 1px solid rgba(0,0,0,0.06); }
-.link-avatar-dark { background: rgba(255,255,255,0.12); color: #c7d2fe; border: 1px solid rgba(255,255,255,0.16); }
-.link-avatar-img { width: 100%; height: 100%; object-fit: cover; border-radius: 9999px; display: block; }
-.link-content { flex: 1; min-width: 0; }
-.link-title { font-weight: 600; font-size: 13px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.link-desc { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-/* 确保白天模式下链接卡片文本颜色是黑色的 */
-:global(html:not(.dark)) .link-title {
-  color: #111827 !important;
-}
-.link-sub { display: none; }
-
 .about-header { display: flex; align-items: center; gap: 14px; border-radius: 0; padding: 14px; }
 .about-header-light { 
   background: #fff !important; 
@@ -3331,21 +2968,6 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
   .recommend-image-box:hover { box-shadow: 0 8px 22px rgba(255,255,255,0.12); }
 }
 
-.scroll-list { height: 64px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 2px 2px; }
-.scroll-comments { height: 132px; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding-right: 2px; scrollbar-width: none; -ms-overflow-style: none; }
-.scroll-comments::-webkit-scrollbar { width: 0; height: 0; display: none; }
-.comment-pill-grid { display: flex; flex-wrap: wrap; gap: 6px; }
-.comment-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 9999px; text-decoration: none; max-width: 100%; transition: transform .18s ease, box-shadow .18s ease, filter .18s ease; }
-.comment-pill-light { background: #fff; border: 1px solid rgba(0,0,0,0.08); box-shadow: 0 1px 2px rgba(0,0,0,0.10); }
-.comment-pill-dark { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 1px 2px rgba(255,255,255,0.06); }
-.comment-pill:hover { transform: translate3d(0,0,0) scale(1.01); filter: saturate(1.04); }
-.comment-pill-light:hover { box-shadow: 0 6px 18px rgba(0,0,0,0.18); }
-.comment-pill-dark:hover { box-shadow: 0 8px 22px rgba(255,255,255,0.12); }
-.comment-pill-avatar { width: 18px; height: 18px; border-radius: 9999px; object-fit: cover; flex: 0 0 auto; }
-.comment-pill-text { font-size: 12px; opacity: 0.9; display: inline-block; overflow-x: hidden; overflow-y: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; scrollbar-width: none; -ms-overflow-style: none; }
-.comment-pill-text::-webkit-scrollbar { width: 0; height: 0; display: none; }
-.comment-pill:hover .comment-pill-text { overflow-x: auto; text-overflow: clip; }
-.recent-inline-img { display:inline-block; width:18px; height:18px; object-fit:cover; border-radius:4px; vertical-align:middle; margin: -2px 2px 0 2px; }
 .ad-wrap { position: relative; aspect-ratio: var(--ad-aspect, 1 / 1); }
 .ad-image { width: 100%; height: 100%; object-fit: contain; transition: filter .12s ease, transform .12s ease; }
 .ad-wrap::before { content: ""; position: absolute; inset: 0; background-image: var(--ad-bg); background-size: cover; background-position: center; filter: blur(12px) brightness(0.95); transform: scale(1.05); }

@@ -628,7 +628,7 @@
                           <UInput v-model="frontendConfig.avatarURL" placeholder="输入图片 URL" class="w-full" />
                         </div>
                       </template>
-                      <template v-else-if="String(key) === 'subtitleText' || String(key) === 'linksDescription' || String(key) === 'commentPageDescription' || String(key) === 'aboutPageDescription' || String(key) === 'aboutMarkdown'">
+                      <template v-else-if="String(key) === 'subtitleText' || String(key) === 'commentPageDescription' || String(key) === 'aboutPageDescription' || String(key) === 'aboutMarkdown'">
                         <UTextarea v-model="frontendConfig[String(key)]" :placeholder="`输入${label}`" class="w-full mb-2" />
                       </template>
                       <template v-else>
@@ -945,89 +945,9 @@
                     </div>
                   </div>
                 </div>
-                <div id="friend-links-section" v-if="isSectionVisible('friend-links')" class="col-span-12 mt-4">
-                  <div :class="adminPanelCardClass">
-                    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
-                      <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                        <UIcon name="i-heroicons-link" class="w-5 h-5" />
-                        <span>友链配置</span>
-                      </div>
-                      <div class="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-                        <UButton size="sm" color="indigo" variant="soft" class="shadow" @click="frontendConfig.friendLinks.push({ title: '', link: '', icon: '', description: '' })">新增友链</UButton>
-                        <UButton size="sm" color="indigo" variant="soft" class="shadow" @click="resetFriendLinksConfig">重置为默认</UButton>
-                        <UButton color="primary" class="shadow" @click="saveFriendLinksConfig">保存</UButton>
-                      </div>
-                    </div>
-                <div class="px-4 pb-4">
-                  <div class="rounded-lg p-4 mb-3" :class="theme.subtleBg">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <UInput v-model="frontendConfig.linksApplyTitle" placeholder="友链申请标题，如 申请友链须知" />
-                      <UTextarea v-model="frontendConfig.linksApplyText" placeholder="填写申请说明与格式" class="md:col-span-2" />
-                      <div class="flex flex-wrap items-center gap-2">
-                        <span class="text-sm" :class="theme.mutedText">审核结果邮件通知</span>
-                        <UToggle v-model="frontendConfig.friendLinkEmailEnabled" />
-                        <UButton size="xs" color="green" variant="soft" @click="saveConfigItem('friendLinkEmailEnabled')">保存开关</UButton>
-                      </div>
-                    </div>
-                    <div class="flex justify-end gap-2 mt-2">
-                      <UButton color="primary" variant="soft" @click="saveFriendLinksConfig">保存说明</UButton>
-                    </div>
-                  </div>
-                  <div class="rounded-lg p-4 space-y-3" :class="theme.subtleBg">
-                        <div v-for="(fl, i) in frontendConfig.friendLinks" :key="i" class="rounded-md border p-3 space-y-2" :class="theme.border">
-                          <div class="flex items-center justify-between">
-                            <div class="text-sm" :class="theme.text">友链 #{{ i + 1 }}</div>
-                            <UButton size="xs" color="red" variant="soft" @click="frontendConfig.friendLinks.splice(i, 1)">删除</UButton>
-                          </div>
-                          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <UInput v-model="fl.title" placeholder="网站标题" />
-                            <UInput v-model="fl.link" placeholder="链接 (http/https)" />
-                            <UInput v-model="fl.icon" placeholder="图标名称或图片URL (可选)" />
-                            <UTextarea v-model="fl.description" placeholder="网站介绍 (可选)" class="md:col-span-2" />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
-          <!-- 友链申请审核管理（管理员） -->
-          <div v-if="isAdmin && isSectionVisible('friend-links-audit')" id="friend-links-audit-section" class="col-span-12 mt-4">
-            <div :class="adminPanelCardClass">
-              <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
-                <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                  <UIcon name="i-heroicons-check-badge" class="w-5 h-5" />
-                  <span>友链申请审核</span>
-                </div>
-                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-                  <UInput v-model="friendLinkSearch" placeholder="搜索标题或网址" class="w-full sm:w-64" />
-                  <UButton color="red" variant="soft" :loading="friendLinkOperating" @click="clearFriendLinkApplications">清空记录</UButton>
-                  <UButton color="primary" variant="soft" @click="loadFriendLinkApplications">刷新</UButton>
-                </div>
-              </div>
-              <div class="px-4 pb-4">
-                <div v-if="friendLinkApps.length === 0" class="text-sm" :class="theme.mutedText">暂无申请</div>
-                <div v-else class="space-y-2">
-                  <div v-for="app in friendLinkApps" :key="app.id" class="rounded border px-3 py-2" :class="theme.border">
-                    <div class="flex items-center justify-between gap-2">
-                      <div class="text-sm truncate" :class="theme.text">#{{ app.id }} · {{ app.title || app.link }} · {{ formatDate(app.created_at) }} · <span class="px-2 py-0.5 rounded text-xs" :class="statusClass(app.status)">{{ app.status }}</span></div>
-                      <div class="flex items-center gap-2">
-                        <UButton size="xs" color="gray" variant="soft" :loading="friendLinkOperating" @click="deleteFriendLinkApplication(app)">删除记录</UButton>
-                        <UButton size="xs" color="green" variant="soft" @click="openApprove(app)">通过</UButton>
-                        <UButton size="xs" color="red" variant="soft" @click="openReject(app)">拒绝</UButton>
-                      </div>
-                    </div>
-                    <div class="text-xs mt-1" :class="theme.mutedText">{{ app.description || '-' }}</div>
-                    <div class="text-xs mt-1" :class="theme.mutedText">邮箱：{{ app.email || '-' }}</div>
-                    <div v-if="app.feedback" class="text-xs mt-1" :class="theme.mutedText">反馈：{{ app.feedback }}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          
           
           <div id="comments-section" class="col-span-12" v-if="isAdmin && isSectionVisible('comments')">
             <div :class="adminPanelCardClass">
@@ -1888,7 +1808,7 @@ type AdminSectionKey =
   'dashboard' | 'user' | 'site' | 'notify' | 'attachments' | 'db' | 'version' | 'security' |
   'site-register' | 'site-pwa' | 'site-github-card' | 'site-github-login' | 'site-announcement' | 'site-music' |
   'site-default-theme' | 'site-social-links' | 'site-ads' | 'site-feed' | 'hitokoto' | 'life-countdown' |
-  'friend-links' | 'friend-links-audit' | 'site-configs' | 'comments' | 'email' | 'admin-users' |
+  'site-configs' | 'comments' | 'email' | 'admin-users' |
   'storage'
 const activeSection = ref<AdminSectionKey>('dashboard')
 const adminNavGroups = computed(() => {
@@ -1925,8 +1845,6 @@ const adminNavGroups = computed(() => {
       label: '内容与互动',
       icon: 'i-heroicons-puzzle-piece',
       items: [
-        { key: 'friend-links', label: '友情链接', icon: 'i-heroicons-users' },
-        { key: 'friend-links-audit', label: '友链申请审核', icon: 'i-heroicons-check-badge' },
         { key: 'comments', label: '评论系统', icon: 'i-heroicons-chat-bubble-left-right' },
         { key: 'site-github-card', label: 'GitHub 卡片', icon: 'i-mdi-github' },
         { key: 'site-github-login', label: 'GitHub 登录', icon: 'i-mdi-github' },
@@ -1998,8 +1916,7 @@ const siteSectionKeys: AdminSectionKey[] = [
   'site-ads',
   'site-feed',
   'hitokoto',
-  'life-countdown',
-  'friend-links'
+  'life-countdown'
 ]
 const isSectionVisible = (key: AdminSectionKey) => activeSection.value === key
 const isSiteSectionPage = computed(() => siteSectionKeys.includes(activeSection.value))
@@ -2655,94 +2572,6 @@ const adminSubtleCardClass = computed(() => ([
   'rounded-lg p-3 backdrop-blur-sm transition-colors duration-200',
   theme.value.subtleBg
 ]))
-
-// 友链申请审核数据与方法
-const friendLinkApps = ref<any[]>([])
-const friendLinkSearch = ref('')
-const friendLinkOperating = ref(false)
-const statusClass = (s: string) => {
-  const v = String(s || '').toLowerCase()
-  if (v === 'approved') return 'bg-green-500/20 text-green-400'
-  if (v === 'rejected') return 'bg-red-500/20 text-red-400'
-  return 'bg-gray-500/20 text-gray-300'
-}
-const loadFriendLinkApplications = async () => {
-  try {
-    const q = (friendLinkSearch.value || '').trim()
-    const res: any = await getRequest<any>('friend-links/apply', q ? { q } : undefined, { credentials: 'include' })
-    if (res && res.code === 1) {
-      friendLinkApps.value = Array.isArray(res.data) ? res.data : []
-      useToast().add({ title: '已刷新', description: `共 ${friendLinkApps.value.length} 条申请`, color: 'green' })
-    } else {
-      throw new Error(res?.msg || '加载失败')
-    }
-  } catch (e: any) {
-    useToast().add({ title: '加载失败', description: e.message || '请稍后重试', color: 'red' })
-  }
-}
-const openApprove = async (app: any) => {
-  const fb = prompt('可填写通过说明（选填）：', '')
-  await auditFriendLink(app, true, fb || '')
-}
-const openReject = async (app: any) => {
-  const fb = prompt('请填写拒绝原因（选填）：', '')
-  await auditFriendLink(app, false, fb || '')
-}
-const auditFriendLink = async (app: any, approve: boolean, feedback: string) => {
-  try {
-    const res: any = await putRequest<any>(`friend-links/${app.id}/audit`, { approve, feedback }, { credentials: 'include' })
-    if (res && res.code === 1) {
-      useToast().add({ title: '成功', description: approve ? '已通过并入库展示' : '已拒绝并通知', color: approve ? 'green' : 'orange' })
-      await fetchConfig()
-      await loadFriendLinkApplications()
-      window.dispatchEvent(new Event('frontend-config-updated'))
-    } else {
-      throw new Error(res?.msg || '操作失败')
-    }
-  } catch (e: any) {
-    useToast().add({ title: '操作失败', description: e.message || '请稍后重试', color: 'red' })
-  }
-}
-const deleteFriendLinkApplication = async (app: any) => {
-  if (!app?.id) return
-  if (!window.confirm(`确认删除申请记录 #${app.id} 吗？`)) return
-  friendLinkOperating.value = true
-  try {
-    const res: any = await deleteRequest<any>(`friend-links/apply/${app.id}`, undefined, { credentials: 'include' })
-    if (res && res.code === 1) {
-      useToast().add({ title: '删除成功', color: 'green' })
-      await loadFriendLinkApplications()
-    } else {
-      throw new Error(res?.msg || '删除失败')
-    }
-  } catch (e: any) {
-    useToast().add({ title: '删除失败', description: e.message || '请稍后重试', color: 'red' })
-  } finally {
-    friendLinkOperating.value = false
-  }
-}
-const clearFriendLinkApplications = async () => {
-  if (!friendLinkApps.value.length) {
-    useToast().add({ title: '暂无记录可清空', color: 'orange' })
-    return
-  }
-  if (!window.confirm('确认清空全部友链申请记录吗？此操作不可恢复。')) return
-  friendLinkOperating.value = true
-  try {
-    const res: any = await deleteRequest<any>('friend-links/apply', undefined, { credentials: 'include' })
-    if (res && res.code === 1) {
-      useToast().add({ title: '已清空', color: 'green' })
-      friendLinkApps.value = []
-    } else {
-      throw new Error(res?.msg || '清空失败')
-    }
-  } catch (e: any) {
-    useToast().add({ title: '清空失败', description: e.message || '请稍后重试', color: 'red' })
-  } finally {
-    friendLinkOperating.value = false
-  }
-}
-
 
 const saveAdminTheme = async () => {
   localStorage.setItem(adminThemeStorageKey, panelTheme.value)
@@ -3946,7 +3775,7 @@ const switchConfigKeySet = new Set([
   'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile',
   'commentEnabled', 'commentEmailEnabled', 'commentLoginRequired', 'githubOAuthEnabled',
   'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled',
-  'leftAdEnabled', 'welcomeUseAdmin', 'friendLinkEmailEnabled', 'socialLinksEnabled'
+  'leftAdEnabled', 'welcomeUseAdmin', 'socialLinksEnabled'
 ])
 const isSwitchConfigKey = (key: string) => switchConfigKeySet.has(String(key))
 const getConfigSummary = (key: string) => {
@@ -3973,13 +3802,7 @@ interface FrontendConfig {
     rssAuthorName: string;
     rssFaviconURL: string;
     hitokotoEnabled: boolean;
-    friendLinks: Array<{ title: string; link: string; icon?: string; description?: string }>;
-    linksTitle: string;
-    linksDescription: string;
-    linksApplyTitle: string;
-    linksApplyText: string;
     loginExpireDays: number;
-    friendLinkEmailEnabled: boolean;
     commentPageTitle: string;
     commentPageDescription: string;
     aboutPageTitle: string;
@@ -4062,16 +3885,7 @@ const frontendConfig = reactive<FrontendConfig>({
     rssAuthorName: '',
     rssFaviconURL: '',
     hitokotoEnabled: true,
-  friendLinks: [
-    { title: 'NoiseWork', link: 'https://www.noisework.cn/', icon: 'i-mdi-home', description: '个人主页与作品集合' },
-    { title: 'NoiseBlogs', link: 'https://www.noiseblogs.top/', icon: 'i-mdi-notebook', description: '技术随笔与学习记录' },
-  ] as Array<{ title: string; link: string; icon?: string; description?: string }>,
-    linksTitle: '友情链接',
-    linksDescription: '推荐站点和朋友们的主页',
-    linksApplyTitle: '申请友链须知',
-    linksApplyText: '请提供站点名称、网址、图标（可选）、简介与有效邮箱。提交后需管理员审核，审核通过后展示。',
     loginExpireDays: 3,
-    friendLinkEmailEnabled: false,
     commentPageTitle: '',
     commentPageDescription: '',
     aboutPageTitle: '',
@@ -4164,7 +3978,6 @@ const editItem = reactive<Record<string, boolean>>({
     walineServerURL: false,
     socialLinks: false,
     
-    friendLinkEmailEnabled: false,
     commentPageTitle: false,
     commentPageDescription: false,
     aboutPageTitle: false,
@@ -4235,21 +4048,12 @@ const defaultConfig: Record<string, any> = {
     lifeCountdownEnabled: false,
     lifeCountdownBirthDate: '',
     lifeExpectancyYears: '',
-    linksTitle: '友情链接',
-    linksDescription: '推荐站点和朋友们的主页',
-    linksApplyTitle: '申请友链须知',
-    linksApplyText: '请提供站点名称、网址、图标（可选）、简介与有效邮箱。提交后需管理员审核，审核通过后展示。',
     loginExpireDays: 3,
-    friendLinkEmailEnabled: false,
-    friendLinks: [
-      { title: 'NoiseWork', link: 'https://www.noisework.cn/', icon: 'i-mdi-home', description: '个人主页与作品集合' },
-      { title: 'NoiseBlogs', link: 'https://www.noiseblogs.top/', icon: 'i-mdi-notebook', description: '技术随笔与学习记录' },
-    ],
     commentPageTitle: '留言',
     commentPageDescription: '欢迎留下你的看法',
     aboutPageTitle: '关于本站',
     aboutPageDescription: '这里是站点的介绍与说明',
-    aboutMarkdown: '# 关于我\n\n这里是一个默认的个人简介示例：\n\n- 喜欢记录与分享\n- 热爱开源与学习\n- 持续打磨产品体验\n\n欢迎通过友链或留言与我交流！',
+    aboutMarkdown: '# 关于我\n\n这里是一个默认的个人简介示例：\n\n- 喜欢记录与分享\n- 热爱开源与学习\n- 持续打磨产品体验\n\n欢迎留言与我交流！',
     walineServerURL: '请前往waline官网https://waline.js.org查看部署配置',
     
     // 广告位默认数据
@@ -4631,51 +4435,6 @@ const saveSocialLinks = async () => {
   }
 }
 
-const saveFriendLinksConfig = async () => {
-  try {
-    const cleaned = Array.isArray((frontendConfig as any).friendLinks)
-      ? (frontendConfig as any).friendLinks
-          .map((x: any) => ({
-            title: String(x?.title || '').trim(),
-            link: String(x?.link || '').trim(),
-            icon: String(x?.icon || '').trim(),
-            description: String(x?.description || '').trim(),
-          }))
-          .filter((x: any) => x.link !== '')
-      : []
-
-    ;(frontendConfig as any).friendLinks = cleaned
-
-    const payload = {
-      frontendSettings: {
-        linksTitle: String((frontendConfig as any).linksTitle || '').trim(),
-        linksDescription: String((frontendConfig as any).linksDescription || '').trim(),
-        linksApplyTitle: String((frontendConfig as any).linksApplyTitle || '').trim(),
-        linksApplyText: String((frontendConfig as any).linksApplyText || '').trim(),
-        friendLinkEmailEnabled: !!(frontendConfig as any).friendLinkEmailEnabled,
-        friendLinks: cleaned,
-      }
-    }
-
-    const res = await fetch(`${baseApi}/settings`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(payload)
-    })
-    const data = await res.json()
-    if (data.code === 1) {
-      await fetchConfig()
-      window.dispatchEvent(new Event('frontend-config-updated'))
-      useToast().add({ title: '成功', description: '友链配置已保存', color: 'green' })
-    } else {
-      throw new Error(data.msg || '保存失败')
-    }
-  } catch (e: any) {
-    useToast().add({ title: '失败', description: e.message || '保存失败', color: 'red' })
-  }
-}
-
 // 添加单个配置项保存方法
 
 // 添加单个配置项重置方法
@@ -4699,7 +4458,7 @@ const fetchConfig = async () => {
             const settings = data.data.frontendSettings;
             
             // 遍历配置项进行更新（布尔型键需强制转换）
-            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile', 'commentEnabled', 'commentEmailEnabled', 'commentEmailAdminNotifyAll', 'commentLoginRequired', 'githubOAuthEnabled', 'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'friendLinkEmailEnabled', 'socialLinksEnabled', 'feedEnabled']
+            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile', 'commentEnabled', 'commentEmailEnabled', 'commentEmailAdminNotifyAll', 'commentLoginRequired', 'githubOAuthEnabled', 'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'socialLinksEnabled', 'feedEnabled']
             Object.keys(frontendConfig).forEach(key => {
                 if (key === 'backgrounds') {
                     const serverBackgrounds = settings[key];
@@ -4726,13 +4485,6 @@ const fetchConfig = async () => {
                         frontendConfig[key] = [...arr];
                     } else {
                         frontendConfig[key] = [...(defaultConfig.feedSources || [])];
-                    }
-                } else if (key === 'friendLinks') {
-                    const arr = settings[key];
-                    if (Array.isArray(arr) && arr.length > 0) {
-                        frontendConfig[key] = [...arr];
-                    } else {
-                        frontendConfig[key] = [...(defaultConfig.friendLinks || [])];
                     }
                 } else if (booleanKeys.includes(key)) {
                     const v = settings[key] ?? (defaultConfig as any)[key]
@@ -4856,19 +4608,6 @@ const saveConfigItem = async (key: string) => {
             })).filter((ad: any) => ad.imageURL !== '');
             frontendConfig.leftAds = cleaned;
         }
-        if (key === 'friendLinks') {
-            const cleaned = Array.isArray((frontendConfig as any).friendLinks)
-              ? (frontendConfig as any).friendLinks
-                  .map((x: any) => ({
-                    title: String(x?.title || '').trim(),
-                    link: String(x?.link || '').trim(),
-                    icon: String(x?.icon || '').trim(),
-                    description: String(x?.description || '').trim(),
-                  }))
-                  .filter((x: any) => x.link !== '')
-              : []
-            ;(frontendConfig as any).friendLinks = cleaned
-        }
         if (key === 'feed') {
             const cleanedFeedSources = normalizeFeedSources(feedSourcesEditor.value)
             ;(frontendConfig as any).feedSources = cleanedFeedSources
@@ -4925,13 +4664,6 @@ const saveConfigItem = async (key: string) => {
             } else if (key === 'announcementEnabled') {
                 const enabled = !!frontendConfig.announcementEnabled
                 useToast().add({ title: '成功', description: enabled ? '已开启公告' : '已关闭公告', color: enabled ? 'green' : 'gray' })
-            } else if (key === 'friendLinkEmailEnabled') {
-                const enabled = !!frontendConfig.friendLinkEmailEnabled
-                useToast().add({ title: '成功', description: enabled ? '已开启友链审核结果邮件通知' : '已关闭友链审核结果邮件通知', color: enabled ? 'green' : 'gray' })
-            } else if (key === 'friendLinks') {
-                useToast().add({ title: '成功', description: '友链已更新', color: 'green' })
-            } else if (key === 'linksApplyTitle' || key === 'linksApplyText') {
-                useToast().add({ title: '成功', description: '友链说明已更新', color: 'green' })
             } else if (key === 'feed') {
                 useToast().add({ title: '成功', description: '信息流配置已更新', color: 'green' })
             } else {
@@ -5012,16 +4744,6 @@ const saveConfig = async () => {
           .filter((x: any) => x.url !== '')
       : []
 
-    const cleanedFriendLinks = Array.isArray((frontendConfig as any).friendLinks)
-      ? (frontendConfig as any).friendLinks
-          .map((x: any) => ({
-            title: String(x?.title || '').trim(),
-            link: String(x?.link || '').trim(),
-            icon: String(x?.icon || '').trim(),
-            description: String(x?.description || '').trim(),
-          }))
-          .filter((x: any) => x.link !== '')
-      : (frontendConfig as any).friendLinks
     const cleanedFeedSources = normalizeFeedSources(feedSourcesEditor.value)
 
     const payload = {
@@ -5030,7 +4752,6 @@ const saveConfig = async () => {
         backgrounds: cleanedBackgrounds,
         leftAds: cleanedLeftAds,
         socialLinks: cleanedSocialLinks,
-        friendLinks: cleanedFriendLinks,
         feedSources: cleanedFeedSources,
         feedPageTitle: String((frontendConfig as any).feedPageTitle || '').trim(),
         feedPageDescription: String((frontendConfig as any).feedPageDescription || '').trim(),
@@ -5061,7 +4782,6 @@ const saveConfig = async () => {
         musicHideOnMobile: !!(frontendConfig as any).musicHideOnMobile,
         githubOAuthEnabled: !!(frontendConfig as any).githubOAuthEnabled,
         welcomeUseAdmin: !!(frontendConfig as any).welcomeUseAdmin,
-        friendLinkEmailEnabled: !!(frontendConfig as any).friendLinkEmailEnabled,
       },
     }
 
@@ -5478,21 +5198,6 @@ const resetAdsConfig = () => {
     description: String(x?.description || '')
   }))
   ;(frontendConfig as any).leftAdsIntervalMs = Number(def.leftAdsIntervalMs || 4000)
-}
-
-const resetFriendLinksConfig = () => {
-  const def = (defaultConfig as any)
-  ;(frontendConfig as any).linksTitle = String(def.linksTitle || '').trim()
-  ;(frontendConfig as any).linksDescription = String(def.linksDescription || '').trim()
-  ;(frontendConfig as any).linksApplyTitle = String(def.linksApplyTitle || '').trim()
-  ;(frontendConfig as any).linksApplyText = String(def.linksApplyText || '').trim()
-  const arr = Array.isArray(def.friendLinks) ? def.friendLinks : []
-  ;(frontendConfig as any).friendLinks = arr.map((x: any) => ({
-    title: String(x?.title || '').trim(),
-    link: String(x?.link || '').trim(),
-    icon: String(x?.icon || '').trim(),
-    description: String(x?.description || '').trim(),
-  }))
 }
 
 const toggleMusic = async (enabled: boolean) => {

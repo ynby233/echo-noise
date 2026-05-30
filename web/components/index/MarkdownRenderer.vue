@@ -8,7 +8,7 @@ import { useRuntimeConfig } from '#imports';
 import Vditor from 'vditor';
 
 // 定义正则表达式
-const BILIBILI_REG = /https:\/\/www\.bilibili\.com\/video\/(BV[\w]+)\/?/g;
+const BILIBILI_REG = /https:\/\/www\.bilibili\.com\/video\/(BV[\w]+)\/?(?:\?[^\s<)]*)?/g;
 const YOUTUBE_REG = /https:\/\/(?:www\.)?youtube\.com\/watch\?v=([\w-]+)|https:\/\/youtu\.be\/([\w-]+)/g;
 const NETEASE_MUSIC_REG = /https:\/\/music\.163\.com(?:\/#)?\/song\?id=(\d+)/g;
 const QQMUSIC_REG = /https:\/\/y\.qq\.com\/n\/yqq\/song(\w+)\.html/g;
@@ -553,6 +553,13 @@ const buildYouTubeEmbedHtml = (videoId: string) => {
   const watchUrl = `https://www.youtube.com/watch?v=${videoId}`
   return `<div class='video-block youtube-video-block'><div class='video-wrapper youtube-video-wrapper'><iframe src='https://www.youtube.com/embed/${videoId}' title='YouTube video player' frameborder='0' allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture' allowfullscreen></iframe></div><div class='video-fallback-card youtube-fallback-card'><div class='video-fallback-content'><div class='video-fallback-title'>当前网络若无法加载 YouTube，可直接访问：</div><a class='video-fallback-link' href='${watchUrl}' target='_blank' rel='noopener noreferrer'>${watchUrl}</a></div></div></div>`
 }
+const buildBilibiliEmbedHtml = (bvid: string, page?: string) => {
+  const bv = String(bvid || '').trim()
+  if (!bv) return ''
+  const p = String(page || '1').trim() || '1'
+  const src = `https://player.bilibili.com/player.html?isOutside=true&bvid=${encodeURIComponent(bv)}&p=${encodeURIComponent(p)}&autoplay=0&high_quality=1&danmaku=0&muted=0`
+  return `<div class='video-wrapper'><iframe src='${src}' scrolling='no' frameborder='0' allowfullscreen allow='autoplay; fullscreen; picture-in-picture; encrypted-media' referrerpolicy='no-referrer-when-downgrade' loading='lazy'></iframe></div>`
+}
 const replaceNodeWithHtml = (node: HTMLElement, html: string) => {
   const holder = document.createElement('div')
   holder.innerHTML = html
@@ -569,13 +576,20 @@ const replaceNodeWithHtml = (node: HTMLElement, html: string) => {
 const processMediaLinks = (content: string): string => {
   ensureMetingApiReady()
   // 先处理 markdown 链接与行内代码里的媒体链接，避免后续替换打断 markdown 结构
-  const BILIBILI_MD_LINK_REG = /\[[^\]]*]\((https:\/\/www\.bilibili\.com\/video\/(BV[\w]+)\/?)\)/g;
+  const BILIBILI_MD_LINK_REG = /\[[^\]]*]\((https:\/\/www\.bilibili\.com\/video\/(BV[\w]+)\/?(?:\?[^\s)]*)?)\)/g;
   const YOUTUBE_MD_LINK_REG = /\[[^\]]*]\((https:\/\/(?:www\.)?youtube\.com\/watch\?v=([\w-]+)|https:\/\/youtu\.be\/([\w-]+))\)/g;
   const NETEASE_MD_LINK_REG = /\[[^\]]*]\((https:\/\/music\.163\.com(?:\/#)?\/song\?id=(\d+))\)/g;
   // 允许反引号内 URL 前后有空格，避免 ` https://... ` 这类写法漏匹配
   const NETEASE_INLINE_CODE_REG = /`[\t ]*https:\/\/music\.163\.com(?:\/#)?\/song\?id=(\d+)[\t ]*`/g;
   content = content
-    .replace(BILIBILI_MD_LINK_REG, "<div class='video-wrapper'><iframe src='https://www.bilibili.com/blackboard/html5mobileplayer.html?bvid=$2&as_wide=1&high_quality=1&danmaku=0' scrolling='no' border='0' frameborder='no' framespacing='0' allowfullscreen='true' style='position:absolute;height:100%;width:100%'></iframe></div>")
+    .replace(BILIBILI_MD_LINK_REG, (_m, fullUrl, bvid) => {
+      let page = '1'
+      try {
+        const u = new URL(String(fullUrl))
+        page = u.searchParams.get('p') || u.searchParams.get('page') || '1'
+      } catch {}
+      return buildBilibiliEmbedHtml(bvid, page) || _m
+    })
     .replace(YOUTUBE_MD_LINK_REG, (_m, _full, id1, id2) => {
       const videoId = String(id1 || id2 || '').trim()
       if (!videoId) return _m
@@ -607,7 +621,14 @@ const processMediaLinks = (content: string): string => {
     return `${prefix}<video src="${src}" controls preload="metadata" style="width:100%;height:auto"></video>`;
   });
   content = content
-    .replace(BILIBILI_REG, "<div class='video-wrapper'><iframe src='https://www.bilibili.com/blackboard/html5mobileplayer.html?bvid=$1&as_wide=1&high_quality=1&danmaku=0' scrolling='no' border='0' frameborder='no' framespacing='0' allowfullscreen='true' style='position:absolute;height:100%;width:100%'></iframe></div>")
+    .replace(BILIBILI_REG, (m, bvid) => {
+      let page = '1'
+      try {
+        const u = new URL(String(m))
+        page = u.searchParams.get('p') || u.searchParams.get('page') || '1'
+      } catch {}
+      return buildBilibiliEmbedHtml(bvid, page) || m
+    })
     .replace(NETEASE_MUSIC_REG, (_m, songId) => buildMetingSongEmbed(songId) || _m)
     .replace(QQMUSIC_REG, "<meting-js auto='https://y.qq.com/n/yqq/song$1.html'></meting-js>")
     .replace(QQVIDEO_REG, "<div class='video-wrapper'><iframe src='//v.qq.com/iframe/player.html?vid=$1' allowFullScreen='true' frameborder='no'></iframe></div>")
