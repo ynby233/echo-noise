@@ -10,7 +10,7 @@
           <img :src="avatarSrc" class="admin-sidebar-avatar w-14 h-14 rounded-full ring-2 ring-indigo-400/60 shadow-lg object-cover" alt="avatar" @error="onAvatarImgError" />
           <div class="w-full text-center transition-all duration-200" :class="sidebarCollapsed ? 'max-h-0 opacity-0 pointer-events-none' : 'max-h-20 opacity-100'">
             <div class="font-semibold text-base truncate">{{ displayUsername }}</div>
-            <div class="text-xs" :class="theme.mutedText">总笔记 {{ userStore?.status?.total_messages || 0 }}</div>
+            <div class="text-xs" :class="theme.mutedText">{{ sidebarNoteCountLabel }} {{ dashboardStats.messageCount }}</div>
           </div>
         </div>
         <nav class="flex-1 overflow-y-auto px-2 py-3 space-y-2">
@@ -2149,6 +2149,7 @@ const dashboardStats = computed(() => {
     totalFeedbackCount: totalCommentCount + totalReplyCount,
   }
 })
+const sidebarNoteCountLabel = computed(() => (isAdmin.value ? '全站笔记' : '我的笔记'))
 const dashboardInsightCards = computed(() => {
   const stats = dashboardStats.value
   return [
