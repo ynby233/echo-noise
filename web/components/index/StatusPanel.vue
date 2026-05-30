@@ -248,14 +248,32 @@
                       <UModal v-model="cropperOpen">
                         <div class="p-4">
                           <div :class="theme.mutedText" class="mb-2">裁剪头像（拖动图片调整位置，滑块调整缩放）</div>
-                          <div class="mx-auto" style="width:240px;height:240px;border-radius:9999px;overflow:hidden;position:relative;background:#111">
-                            <img v-if="cropImageUrl" :src="cropImageUrl" alt="to-crop"
-                                 :style="{ position: 'absolute', left: '50%', top: '50%', transform: `translate(-50%, -50%) translate(${cropX}px, ${cropY}px) scale(${cropScale})`, userSelect: 'none' }"
-                                 @mousedown="startDrag" @touchstart="startDrag" />
+                          <div
+                            class="mx-auto"
+                            :style="{
+                              width: `${AVATAR_CROP_PREVIEW_SIZE}px`,
+                              height: `${AVATAR_CROP_PREVIEW_SIZE}px`,
+                              borderRadius: '9999px',
+                              overflow: 'hidden',
+                              position: 'relative',
+                              background: '#111'
+                            }"
+                          >
+                            <img
+                              v-if="cropImageUrl"
+                              :src="cropImageUrl"
+                              alt="to-crop"
+                              :style="cropImageStyle"
+                              draggable="false"
+                              @load="onCropImageLoad"
+                              @dragstart.prevent
+                              @mousedown="startDrag"
+                              @touchstart="startDrag"
+                            />
                           </div>
                           <div class="mt-3 flex items-center gap-3">
                             <span :class="theme.mutedText">缩放</span>
-                            <input type="range" min="0.5" max="3" step="0.01" v-model.number="cropScale" />
+                            <input type="range" min="1" max="3" step="0.01" v-model.number="cropScale" />
                             <UButton :loading="avatarUploadingFile" color="green" @click="performCropAndUpload">裁剪并保存</UButton>
                             <UButton color="indigo" variant="soft" @click="closeCropper">取消</UButton>
                           </div>
@@ -2038,6 +2056,8 @@ const panelThemeButtonColor = computed(() => {
 })
 const prevRootDark = ref<boolean | null>(null)
 const baseApi = useRuntimeConfig().public.baseApi || '/api'
+const AVATAR_CROP_PREVIEW_SIZE = 240
+const AVATAR_CROP_OUTPUT_SIZE = 400
 const localPreview = ref('')
 const userMessagesCount = ref(0)
 const adminProfile = ref<any>(null)
@@ -3352,8 +3372,66 @@ const cropImageUrl = ref('')
 const cropScale = ref(1)
 const cropX = ref(0)
 const cropY = ref(0)
+const cropNaturalWidth = ref(0)
+const cropNaturalHeight = ref(0)
+const cropBaseScale = computed(() => {
+  const iw = cropNaturalWidth.value
+  const ih = cropNaturalHeight.value
+  if (!iw || !ih) return 1
+  return Math.max(AVATAR_CROP_PREVIEW_SIZE / iw, AVATAR_CROP_PREVIEW_SIZE / ih)
+})
+const cropDisplayWidth = computed(() => {
+  const iw = cropNaturalWidth.value || AVATAR_CROP_PREVIEW_SIZE
+  return iw * cropBaseScale.value * cropScale.value
+})
+const cropDisplayHeight = computed(() => {
+  const ih = cropNaturalHeight.value || AVATAR_CROP_PREVIEW_SIZE
+  return ih * cropBaseScale.value * cropScale.value
+})
+const cropImageStyle = computed(() => ({
+  position: 'absolute',
+  left: `${AVATAR_CROP_PREVIEW_SIZE / 2 + cropX.value}px`,
+  top: `${AVATAR_CROP_PREVIEW_SIZE / 2 + cropY.value}px`,
+  width: `${cropDisplayWidth.value}px`,
+  height: `${cropDisplayHeight.value}px`,
+  maxWidth: 'none',
+  transform: 'translate(-50%, -50%)',
+  transformOrigin: 'center center',
+  userSelect: 'none',
+  touchAction: 'none',
+  cursor: 'grab'
+}))
 let dragging = false
 let lastPos = { x: 0, y: 0 }
+const revokeCropImageUrl = () => {
+  if (cropImageUrl.value && cropImageUrl.value.startsWith('blob:')) {
+    URL.revokeObjectURL(cropImageUrl.value)
+  }
+}
+const clampCropOffset = () => {
+  const maxX = Math.max(0, (cropDisplayWidth.value - AVATAR_CROP_PREVIEW_SIZE) / 2)
+  const maxY = Math.max(0, (cropDisplayHeight.value - AVATAR_CROP_PREVIEW_SIZE) / 2)
+  cropX.value = Math.min(maxX, Math.max(-maxX, cropX.value))
+  cropY.value = Math.min(maxY, Math.max(-maxY, cropY.value))
+}
+const resetAvatarCropState = (clearSelection = false) => {
+  revokeCropImageUrl()
+  cropImageUrl.value = ''
+  cropNaturalWidth.value = 0
+  cropNaturalHeight.value = 0
+  cropScale.value = 1
+  cropX.value = 0
+  cropY.value = 0
+  dragging = false
+  if (clearSelection) {
+    avatarFile.value = null
+    localPreview.value = ''
+    if (avatarInput.value) avatarInput.value.value = ''
+  }
+}
+watch([cropScale, cropNaturalWidth, cropNaturalHeight], () => {
+  clampCropOffset()
+})
 const userForm = reactive({
     username: '',
     description: '',
@@ -3571,15 +3649,24 @@ const chooseAvatar = () => {
 }
 const onAvatarFileChange = () => {
   const f = avatarInput.value?.files?.[0] || null
+  resetAvatarCropState(false)
   avatarFile.value = f || null
-  if (f) {
-    cropImageUrl.value = URL.createObjectURL(f)
-    localPreview.value = cropImageUrl.value
-    cropScale.value = 1
-    cropX.value = 0
-    cropY.value = 0
-    cropperOpen.value = true
+  if (!f) {
+    localPreview.value = ''
+    return
   }
+  const url = URL.createObjectURL(f)
+  cropImageUrl.value = url
+  localPreview.value = url
+  cropperOpen.value = true
+}
+const onCropImageLoad = (event: Event) => {
+  const img = event.target as HTMLImageElement | null
+  cropNaturalWidth.value = img?.naturalWidth || AVATAR_CROP_PREVIEW_SIZE
+  cropNaturalHeight.value = img?.naturalHeight || AVATAR_CROP_PREVIEW_SIZE
+  cropX.value = 0
+  cropY.value = 0
+  clampCropOffset()
 }
 const openCropperOrUpload = async () => {
   if (avatarFile.value && cropImageUrl.value) {
@@ -3645,21 +3732,24 @@ watch(avatarLink, (val: any) => {
 })
 
 const startDrag = (e: any) => {
+  e?.preventDefault?.()
   dragging = true
   const pt = e.touches ? e.touches[0] : e
   lastPos = { x: pt.clientX, y: pt.clientY }
   window.addEventListener('mousemove', onDrag)
   window.addEventListener('mouseup', endDrag)
-  window.addEventListener('touchmove', onDrag)
+  window.addEventListener('touchmove', onDrag, { passive: false })
   window.addEventListener('touchend', endDrag)
 }
 const onDrag = (e: any) => {
   if (!dragging) return
+  e?.preventDefault?.()
   const pt = e.touches ? e.touches[0] : e
   const dx = pt.clientX - lastPos.x
   const dy = pt.clientY - lastPos.y
   cropX.value += dx
   cropY.value += dy
+  clampCropOffset()
   lastPos = { x: pt.clientX, y: pt.clientY }
 }
 const endDrag = () => {
@@ -3680,27 +3770,26 @@ const performCropAndUpload = async () => {
       image.onerror = reject
       image.src = cropImageUrl.value
     })
-    const size = 400
+    const size = AVATAR_CROP_OUTPUT_SIZE
+    const previewToOutputRatio = size / AVATAR_CROP_PREVIEW_SIZE
     const canvas = document.createElement('canvas')
     canvas.width = size
     canvas.height = size
     const ctx = canvas.getContext('2d')!
-    const s = cropScale.value
-    const iw = img.naturalWidth
-    const ih = img.naturalHeight
-    const dw = iw * s
-    const dh = ih * s
-    const dx = size / 2 + cropX.value - dw / 2
-    const dy = size / 2 + cropY.value - dh / 2
+    const iw = img.naturalWidth || cropNaturalWidth.value || AVATAR_CROP_PREVIEW_SIZE
+    const ih = img.naturalHeight || cropNaturalHeight.value || AVATAR_CROP_PREVIEW_SIZE
+    const baseScale = Math.max(AVATAR_CROP_PREVIEW_SIZE / iw, AVATAR_CROP_PREVIEW_SIZE / ih)
+    const dw = iw * baseScale * cropScale.value * previewToOutputRatio
+    const dh = ih * baseScale * cropScale.value * previewToOutputRatio
+    const dx = size / 2 + cropX.value * previewToOutputRatio - dw / 2
+    const dy = size / 2 + cropY.value * previewToOutputRatio - dh / 2
     ctx.clearRect(0, 0, size, size)
     ctx.drawImage(img, dx, dy, dw, dh)
     const blob: Blob = await new Promise((resolve) => canvas.toBlob(b => resolve(b as Blob), 'image/png'))
     const file = new File([blob], 'avatar.png', { type: 'image/png' })
     await uploadAvatarRaw(file)
     cropperOpen.value = false
-    if (cropImageUrl.value) URL.revokeObjectURL(cropImageUrl.value)
-    cropImageUrl.value = ''
-    localPreview.value = ''
+    resetAvatarCropState(false)
   } catch (e: any) {
     useToast().add({ title: '错误', description: e.message || '裁剪失败', color: 'red' })
   } finally {
@@ -3709,6 +3798,7 @@ const performCropAndUpload = async () => {
 }
 const closeCropper = () => {
   cropperOpen.value = false
+  resetAvatarCropState(true)
 }
 
 const useSiteDefaultAvatar = async () => {
