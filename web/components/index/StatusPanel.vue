@@ -306,7 +306,7 @@
                 <div v-if="userToken" class="mb-2">
                   <div class="flex items-center gap-2 w-full flex-nowrap">
                     <UInput v-model="userToken" :type="showToken ? 'text' : 'password'" readonly class="font-mono text-sm flex-1 min-w-0" />
-                    <UButton :icon="showToken ? 'i-heroicons-eye-slash' : 'i-heroicons-eye'" color="indigo" variant="ghost" @click="showToken = !showToken" :title="showToken ? '隐藏' : '显示'" />
+                    <UButton :icon="showToken ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="indigo" variant="ghost" @click="showToken = !showToken" :title="showToken ? '隐藏' : '显示'" />
                     <UButton icon="i-heroicons-clipboard" color="indigo" variant="ghost" @click="copyToken" title="复制 Token" />
                   </div>
                   <p class="text-xs mt-1" :class="theme.mutedText">请妥善保管此 Token</p>
@@ -334,15 +334,15 @@
                       <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div class="w-full flex items-center gap-2">
                           <UInput v-model="userForm.oldPassword" :type="showOldPassword ? 'text' : 'password'" placeholder="当前密码" class="flex-1" />
-                          <UButton :icon="showOldPassword ? 'i-heroicons-eye-slash' : 'i-heroicons-eye'" color="indigo" variant="ghost" @click="showOldPassword = !showOldPassword" />
+                          <UButton :icon="showOldPassword ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="indigo" variant="ghost" @click="showOldPassword = !showOldPassword" />
                         </div>
                         <div class="w-full flex items-center gap-2">
                           <UInput v-model="userForm.newPassword" :type="showNewPassword ? 'text' : 'password'" placeholder="新密码" class="flex-1" />
-                          <UButton :icon="showNewPassword ? 'i-heroicons-eye-slash' : 'i-heroicons-eye'" color="indigo" variant="ghost" @click="showNewPassword = !showNewPassword" />
+                          <UButton :icon="showNewPassword ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="indigo" variant="ghost" @click="showNewPassword = !showNewPassword" />
                         </div>
                         <div class="w-full flex items-center gap-2">
                           <UInput v-model="userForm.confirmPassword" :type="showConfirmPassword ? 'text' : 'password'" placeholder="确认新密码" class="flex-1" />
-                          <UButton :icon="showConfirmPassword ? 'i-heroicons-eye-slash' : 'i-heroicons-eye'" color="indigo" variant="ghost" @click="showConfirmPassword = !showConfirmPassword" />
+                          <UButton :icon="showConfirmPassword ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="indigo" variant="ghost" @click="showConfirmPassword = !showConfirmPassword" />
                         </div>
                       </div>
                       <div class="flex justify-end">
@@ -1177,7 +1177,7 @@
                           <div class="text-sm mb-1" :class="theme.text">重置密码</div>
                           <div class="flex items-center gap-2">
                             <UInput v-model="resetForm.password[(u.id ?? u.ID)]" :type="showResetPassword ? 'text' : 'password'" placeholder="新密码" class="flex-1" />
-                            <UButton :icon="showResetPassword ? 'i-heroicons-eye-slash' : 'i-heroicons-eye'" color="indigo" variant="ghost" @click="showResetPassword = !showResetPassword" />
+                            <UButton :icon="showResetPassword ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="indigo" variant="ghost" @click="showResetPassword = !showResetPassword" />
                             <UButton :disabled="!canReset(u)" color="primary" @click="resetUserPassword(u)">保存</UButton>
                           </div>
                         </div>

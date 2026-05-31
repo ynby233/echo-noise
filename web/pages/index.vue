@@ -363,7 +363,7 @@
               >
                 <template #trailing>
                   <UButton
-                    :icon="showLoginPassword ? 'i-heroicons-eye-slash' : 'i-heroicons-eye'"
+                    :icon="showLoginPassword ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'"
                     variant="ghost"
                     color="gray"
                     type="button"
@@ -408,7 +408,7 @@
               >
                 <template #trailing>
                   <UButton
-                    :icon="showRegisterPassword ? 'i-heroicons-eye-slash' : 'i-heroicons-eye'"
+                    :icon="showRegisterPassword ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'"
                     variant="ghost"
                     color="gray"
                     type="button"

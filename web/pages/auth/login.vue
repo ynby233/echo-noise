@@ -27,7 +27,7 @@
             >
               <template #trailing>
                 <UButton
-                  :icon="showPassword ? 'i-heroicons-eye-slash' : 'i-heroicons-eye'"
+                  :icon="showPassword ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'"
                   variant="ghost"
                   color="gray"
                   type="button"
