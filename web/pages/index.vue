@@ -357,6 +357,7 @@
                 autocorrect="off"
                 autocapitalize="off"
                 spellcheck="false"
+                :ui="{ icon: { trailing: { pointer: 'pointer-events-auto' } } }"
                 @focus="syncLoginPasswordInput"
                 @input="syncLoginPasswordInput"
               >
@@ -401,6 +402,7 @@
                 autocorrect="off"
                 autocapitalize="off"
                 spellcheck="false"
+                :ui="{ icon: { trailing: { pointer: 'pointer-events-auto' } } }"
                 @focus="syncRegisterPasswordInput"
                 @input="syncRegisterPasswordInput"
               >
@@ -1827,7 +1829,7 @@ const images = ref<any[]>([])
 const status = ref<any>(null)
 const fetchImages = async () => {
   try {
-    const r = await getRequest<any>('messages/images')
+    const r = await getRequest<any>('messages/images', undefined, { credentials: 'include' })
     if (r && r.code === 1 && Array.isArray(r.data)) images.value = r.data
   } catch {}
 }

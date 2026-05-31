@@ -15,7 +15,28 @@
             <UInput v-model="form.username" placeholder="请输入用户名或已绑定邮箱" />
           </UFormGroup>
           <UFormGroup label="密码" class="mb-2">
-            <UInput v-model="form.password" type="password" placeholder="请输入密码" autocomplete="current-password" autocorrect="off" autocapitalize="off" spellcheck="false" />
+            <UInput
+              v-model="form.password"
+              :type="showPassword ? 'text' : 'password'"
+              placeholder="请输入密码"
+              autocomplete="current-password"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck="false"
+              :ui="{ icon: { trailing: { pointer: 'pointer-events-auto' } } }"
+            >
+              <template #trailing>
+                <UButton
+                  :icon="showPassword ? 'i-heroicons-eye-slash' : 'i-heroicons-eye'"
+                  variant="ghost"
+                  color="gray"
+                  type="button"
+                  :aria-label="showPassword ? '隐藏密码' : '查看密码'"
+                  @mousedown.prevent
+                  @click.stop="showPassword = !showPassword"
+                />
+              </template>
+            </UInput>
           </UFormGroup>
           <div class="flex justify-between items-center mb-3">
             <UButton variant="ghost" size="sm" @click="showForgot = true">忘记密码</UButton>
@@ -57,6 +78,7 @@ const form = reactive({ username: '', password: '' })
 const submitting = ref(false)
 const githubEnabled = ref(true)
 const showForgot = ref(false)
+const showPassword = ref(false)
 
 const onSubmit = async () => {
   submitting.value = true

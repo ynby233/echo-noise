@@ -4,12 +4,14 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/services"
+	"gorm.io/gorm"
 )
 
 var (
@@ -43,161 +45,185 @@ func messageHasTag(content string, tag string) bool {
 
 // GetMessagesByTag 获取指定标签的消息
 func GetMessagesByTag(c *gin.Context) {
-    tag := c.Param("tag")
-    if tag == "" {
-        c.JSON(http.StatusOK, gin.H{"code": 1, "data": []models.Message{}})
-        return
-    }
+	tag := c.Param("tag")
+	if tag == "" {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []models.Message{}})
+		return
+	}
 
-    db, err := database.GetDB()
-    if err != nil {
-        c.JSON(http.StatusOK, gin.H{"code": 1, "data": []models.Message{}})
-        return
-    }
+	db, err := database.GetDB()
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []models.Message{}})
+		return
+	}
 
-    var messages []models.Message
-    // 使用 LIKE 进行初步筛选
-    tagPattern := "%#" + tag + "%"
-    q := db.Where("content LIKE ?", tagPattern)
-    // 作者筛选（可选）
-    if aid := c.Query("authorId"); aid != "" {
-        if v, err := strconv.ParseUint(aid, 10, 64); err == nil {
-            q = q.Where("user_id = ?", uint(v))
-        }
-    }
-    if un := c.Query("username"); un != "" {
-        q = q.Where("username = ?", un)
-    }
-    // 仅公开内容（小组件场景）
-    q = q.Where("private = ?", false)
-    if err := q.Order("created_at DESC").Find(&messages).Error; err != nil {
-        c.JSON(http.StatusOK, gin.H{"code": 1, "data": []models.Message{}})
-        return
-    }
+	var messages []models.Message
+	// 使用 LIKE 进行初步筛选
+	tagPattern := "%#" + tag + "%"
+	q := db.Where("content LIKE ?", tagPattern)
+	// 作者筛选（可选）
+	if aid := c.Query("authorId"); aid != "" {
+		if v, err := strconv.ParseUint(aid, 10, 64); err == nil {
+			q = q.Where("user_id = ?", uint(v))
+		}
+	}
+	if un := c.Query("username"); un != "" {
+		q = q.Where("username = ?", un)
+	}
+	// 仅公开内容（小组件场景）
+	q = q.Where("private = ?", false)
+	if err := q.Order("created_at DESC").Find(&messages).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []models.Message{}})
+		return
+	}
 
-    // 使用统一标签提取逻辑进行精确匹配
-    var filteredMessages []models.Message
-    for _, msg := range messages {
-        if messageHasTag(msg.Content, tag) {
-            filteredMessages = append(filteredMessages, msg)
-        }
-    }
+	// 使用统一标签提取逻辑进行精确匹配
+	var filteredMessages []models.Message
+	for _, msg := range messages {
+		if messageHasTag(msg.Content, tag) {
+			filteredMessages = append(filteredMessages, msg)
+		}
+	}
 
-    c.JSON(http.StatusOK, gin.H{"code": 1, "data": filteredMessages})
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": filteredMessages})
 }
 
 // GetAllTags 获取所有标签列表
 func GetAllTags(c *gin.Context) {
-    db, err := database.GetDB()
-    if err != nil {
-        c.JSON(http.StatusOK, gin.H{"code": 1, "data": []map[string]interface{}{}})
-        return
-    }
+	db, err := database.GetDB()
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []map[string]interface{}{}})
+		return
+	}
 
-    // 添加缓存控制头
-    c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
-    c.Header("Pragma", "no-cache")
-    c.Header("Expires", "0")
+	// 添加缓存控制头
+	c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+	c.Header("Pragma", "no-cache")
+	c.Header("Expires", "0")
 
-    var messages []models.Message
-    // 修改查询，按创建时间倒序排列并限制数量
-    if err := db.Select("content").Order("created_at DESC").Find(&messages).Error; err != nil {
-        c.JSON(http.StatusOK, gin.H{"code": 1, "data": []map[string]interface{}{}})
-        return
-    }
+	var messages []models.Message
+	// 修改查询，按创建时间倒序排列并限制数量
+	if err := db.Select("content").Order("created_at DESC").Find(&messages).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []map[string]interface{}{}})
+		return
+	}
 
-    // 提取并统计标签
-    tagMap := make(map[string]int)
+	// 提取并统计标签
+	tagMap := make(map[string]int)
 
-    for _, msg := range messages {
-        for _, tag := range extractMessageTags(msg.Content) {
-            tagMap[tag]++
-        }
-    }
+	for _, msg := range messages {
+		for _, tag := range extractMessageTags(msg.Content) {
+			tagMap[tag]++
+		}
+	}
 
-    // 转换为数组格式并按计数倒序排序
-    var tagList []map[string]interface{}
-    for tag, count := range tagMap {
-        tagList = append(tagList, map[string]interface{}{
-            "name":  tag,
-            "count": count,
-        })
-    }
+	// 转换为数组格式并按计数倒序排序
+	var tagList []map[string]interface{}
+	for tag, count := range tagMap {
+		tagList = append(tagList, map[string]interface{}{
+			"name":  tag,
+			"count": count,
+		})
+	}
 
-    c.JSON(http.StatusOK, gin.H{
-        "code": 1, 
-        "data": tagList,
-        "timestamp": time.Now().Unix(), // 添加时间戳
-    })
+	c.JSON(http.StatusOK, gin.H{
+		"code":      1,
+		"data":      tagList,
+		"timestamp": time.Now().Unix(), // 添加时间戳
+	})
 }
+
 // GetAllImages 获取所有图片列表.
 func GetAllImages(c *gin.Context) {
-    db, err := database.GetDB()
-    if err != nil {
-        c.JSON(http.StatusOK, gin.H{"code": 1, "data": []map[string]interface{}{}})
-        return
-    }
+	db, err := database.GetDB()
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []map[string]interface{}{}})
+		return
+	}
 
-    var messages []models.Message
-    if err := db.Select("id", "content", "image_url", "created_at").Order("created_at DESC").Find(&messages).Error; err != nil {
-        c.JSON(http.StatusOK, gin.H{"code": 1, "data": []map[string]interface{}{}})
-        return
-    }
+	var messages []models.Message
+	q := db.Select("id", "content", "image_url", "created_at").Order("created_at DESC")
+	viewerID, hasViewer, isAdmin := resolveImageViewer(c, db)
+	if !isAdmin {
+		if hasViewer {
+			q = q.Where("private = ? OR user_id = ?", false, viewerID)
+		} else {
+			q = q.Where("private = ?", false)
+		}
+	}
+	if err := q.Find(&messages).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []map[string]interface{}{}})
+		return
+	}
 
-    type ImageInfo struct {
-        ID        uint      `json:"id"`
-        ImageURL  string    `json:"image_url"`
-        CreatedAt time.Time `json:"created_at"`
-    }
+	type ImageInfo struct {
+		ID        uint      `json:"id"`
+		ImageURL  string    `json:"image_url"`
+		CreatedAt time.Time `json:"created_at"`
+	}
 
-    var allImages []ImageInfo
-    
-    // 正则表达式匹配 Markdown 格式的图片
-    imageRegex := regexp.MustCompile(`!\[.*?\]\((.*?)\)`)
+	var allImages []ImageInfo
+	imageRegex := regexp.MustCompile(`!\[.*?\]\((.*?)\)`)
 
-    for _, msg := range messages {
-        // 添加 image_url 字段的图片
-        if msg.ImageURL != "" {
-            allImages = append(allImages, ImageInfo{
-                ID:        msg.ID,
-                ImageURL:  msg.ImageURL,
-                CreatedAt: msg.CreatedAt,
-            })
-        }
+	for _, msg := range messages {
+		if msg.ImageURL != "" {
+			allImages = append(allImages, ImageInfo{
+				ID:        msg.ID,
+				ImageURL:  msg.ImageURL,
+				CreatedAt: msg.CreatedAt,
+			})
+		}
 
-        // 提取内容中的 Markdown 格式图片
-        matches := imageRegex.FindAllStringSubmatch(msg.Content, -1)
-        for _, match := range matches {
-            if len(match) > 1 {
-                allImages = append(allImages, ImageInfo{
-                    ID:        msg.ID,
-                    ImageURL:  match[1],
-                    CreatedAt: msg.CreatedAt,
-                })
-            }
-        }
-    }
+		matches := imageRegex.FindAllStringSubmatch(msg.Content, -1)
+		for _, match := range matches {
+			if len(match) > 1 {
+				allImages = append(allImages, ImageInfo{
+					ID:        msg.ID,
+					ImageURL:  match[1],
+					CreatedAt: msg.CreatedAt,
+				})
+			}
+		}
+	}
 
-    c.JSON(http.StatusOK, gin.H{"code": 1, "data": allImages})
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": allImages})
+}
+
+func resolveImageViewer(c *gin.Context, db *gorm.DB) (uint, bool, bool) {
+	if userID, ok := commentAuthUserID(c); ok {
+		return userID, true, commentAuthIsAdmin(c)
+	}
+
+	token := strings.TrimSpace(c.GetHeader("Authorization"))
+	token = strings.TrimSpace(strings.TrimPrefix(token, "Bearer "))
+	if token == "" || strings.EqualFold(token, "null") {
+		return 0, false, false
+	}
+
+	var user models.User
+	if err := db.Where("token = ?", token).First(&user).Error; err != nil || user.ID == 0 {
+		return 0, false, false
+	}
+	return user.ID, true, user.IsAdmin
 }
 
 // GetMessagePage 处理消息详情页请求
 func GetMessagePage(c *gin.Context) {
-    id := c.Param("id")
-    messageID, err := strconv.ParseUint(id, 10, 64)
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "无效的消息ID"})
-        return
-    }
-    
-    message, err := services.GetMessagePage(uint(messageID))
-    if err != nil {
-        c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": err.Error()})
-        return
-    }
-    
-    c.JSON(http.StatusOK, gin.H{
-        "code": 1,
-        "data": message,
-    })
+	id := c.Param("id")
+	messageID, err := strconv.ParseUint(id, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "无效的消息ID"})
+		return
+	}
+
+	message, err := services.GetMessagePage(uint(messageID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 1,
+		"data": message,
+	})
 }
