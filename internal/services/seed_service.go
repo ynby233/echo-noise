@@ -9,6 +9,7 @@ import (
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 // SeedDefaultData 初始化默认数据
@@ -21,7 +22,7 @@ func SeedDefaultData() error {
 	// 1. 初始化站点配置
 	var count int64
 	if err := db.Model(&models.SiteConfig{}).Count(&count).Error; err == nil && count == 0 {
-		defaultBg := `["https://s2.loli.net/2025/03/27/KJ1trnU2ksbFEYM.jpg","https://s2.loli.net/2025/03/27/MZqaLczCvwjSmW7.jpg","https://s2.loli.net/2025/03/27/UMijKXwJ9yTqSeE.jpg","https://s2.loli.net/2025/03/27/WJQIlkXvBg2afcR.jpg","https://s2.loli.net/2025/03/27/oHNQtf4spkq2iln.jpg","https://s2.loli.net/2025/03/27/PMRuX5loc6Uaimw.jpg","https://s2.loli.net/2025/03/27/U2WIslbNyTLt4rD.jpg","https://s2.loli.net/2025/03/27/xu1jZL5Og4pqT9d.jpg","https://s2.loli.net/2025/03/27/OXqwzZ6v3PVIns9.jpg","https://s2.loli.net/2025/03/27/HGuqlE6apgNywbh.jpg","https://s2.loli.net/2025/03/26/d7iyuPYA8cRqD1K.jpg","https://s2.loli.net/2025/03/27/7Zck3y6XTzhYPs5.jpg","https://s2.loli.net/2025/03/27/y67m2k5xcSdTsHN.jpg"]`
+		defaultBg := defaultHeaderImagesJSON()
 
 		defaultConfig := models.SiteConfig{
 			SiteTitle:              "说说笔记",
@@ -204,6 +205,32 @@ func SeedDefaultData() error {
 			if c == 0 {
 				db.Create(&m)
 			}
+		}
+	}
+
+	if err := collapseLegacyDefaultBackgrounds(db); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func collapseLegacyDefaultBackgrounds(db *gorm.DB) error {
+	var configs []models.SiteConfig
+	if err := db.Table("site_configs").Find(&configs).Error; err != nil {
+		return fmt.Errorf("查询站点头图配置失败: %v", err)
+	}
+
+	defaultBg := defaultHeaderImagesJSON()
+	for _, config := range configs {
+		if !shouldCollapseLegacyBackgrounds(config.GetBackgroundsList()) {
+			continue
+		}
+		if strings.TrimSpace(config.Backgrounds) == defaultBg {
+			continue
+		}
+		if err := db.Table("site_configs").Where("id = ?", config.ID).Update("backgrounds", defaultBg).Error; err != nil {
+			return fmt.Errorf("收敛默认头图配置失败: %v", err)
 		}
 	}
 

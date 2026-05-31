@@ -31,6 +31,52 @@ var lifeCountdownSettingKeys = map[string]struct{}{
 	"lifeExpectancyYears":    {},
 }
 
+const defaultHeaderImageURL = "https://s2.loli.net/2025/03/26/d7iyuPYA8cRqD1K.jpg"
+
+var legacyDefaultHeaderImageURLs = map[string]struct{}{
+	"https://s2.loli.net/2025/03/27/KJ1trnU2ksbFEYM.jpg": {},
+	"https://s2.loli.net/2025/03/27/MZqaLczCvwjSmW7.jpg": {},
+	"https://s2.loli.net/2025/03/27/UMijKXwJ9yTqSeE.jpg": {},
+	"https://s2.loli.net/2025/03/27/WJQIlkXvBg2afcR.jpg": {},
+	"https://s2.loli.net/2025/03/27/oHNQtf4spkq2iln.jpg": {},
+	"https://s2.loli.net/2025/03/27/PMRuX5loc6Uaimw.jpg": {},
+	"https://s2.loli.net/2025/03/27/U2WIslbNyTLt4rD.jpg": {},
+	"https://s2.loli.net/2025/03/27/xu1jZL5Og4pqT9d.jpg": {},
+	"https://s2.loli.net/2025/03/27/OXqwzZ6v3PVIns9.jpg": {},
+	"https://s2.loli.net/2025/03/27/HGuqlE6apgNywbh.jpg": {},
+	"https://s2.loli.net/2025/03/27/7Zck3y6XTzhYPs5.jpg": {},
+	"https://s2.loli.net/2025/03/27/wYy12qDMH6bGJOI.jpg": {},
+	"https://s2.loli.net/2025/03/27/y67m2k5xcSdTsHN.jpg": {},
+	defaultHeaderImageURL: {},
+}
+
+func defaultHeaderImages() []string {
+	return []string{defaultHeaderImageURL}
+}
+
+func defaultHeaderImagesJSON() string {
+	data, err := json.Marshal(defaultHeaderImages())
+	if err != nil {
+		return `["` + defaultHeaderImageURL + `"]`
+	}
+	return string(data)
+}
+
+func shouldCollapseLegacyBackgrounds(backgrounds []string) bool {
+	hasBackground := false
+	for _, raw := range backgrounds {
+		url := strings.TrimSpace(raw)
+		if url == "" {
+			continue
+		}
+		hasBackground = true
+		if _, ok := legacyDefaultHeaderImageURLs[url]; !ok {
+			return false
+		}
+	}
+	return hasBackground
+}
+
 func HasLifeCountdownSettings(frontendSettings map[string]interface{}) bool {
 	for key := range lifeCountdownSettingKeys {
 		if _, ok := frontendSettings[key]; ok {
@@ -1352,16 +1398,7 @@ func getDefaultConfig() map[string]interface{} {
 			"username":      "Noise",
 			"description":   "执迷不悟",
 			"notifyEnabled": false,
-			"backgrounds": []string{
-				"https://s2.loli.net/2025/03/27/KJ1trnU2ksbFEYM.jpg",
-				"https://s2.loli.net/2025/03/27/MZqaLczCvwjSmW7.jpg",
-				"https://s2.loli.net/2025/03/27/UMijKXwJ9yTqSeE.jpg",
-				"https://s2.loli.net/2025/03/27/WJQIlkXvBg2afcR.jpg",
-				"https://s2.loli.net/2025/03/27/oHNQtf4spkq2iln.jpg",
-				"https://s2.loli.net/2025/03/27/PMRuX5loc6Uaimw.jpg",
-				"https://s2.loli.net/2025/03/27/U2WIslbNyTLt4rD.jpg",
-				"https://s2.loli.net/2025/03/27/xu1jZL5Og4pqT9d.jpg",
-			},
+			"backgrounds": defaultHeaderImages(),
 			"cardFooterTitle":  "Noise·说说·笔记~",
 			"cardFooterLink":   "note.noisework.cn",
 			"pageFooterHTML":   `<div class="text-center text-xs text-gray-400 py-4">来自<a href="https://www.noisework.cn" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:text-orange-500">Noise</a> 使用<a href="https://github.com/rcy1314/echo-noise" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:text-orange-500">Ech0-Noise</a>发布</div>`,
