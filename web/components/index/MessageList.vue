@@ -230,7 +230,7 @@
         <UTextarea
           v-model="editingContent"
           placeholder="编辑内容..."
-          rows="10"
+          :rows="10"
           class="font-mono text-sm"
         />
         <div class="border-t border-gray-200 my-2 pt-2">
@@ -261,6 +261,7 @@
 import { useMessageStore } from "~/store/message";
 import { useUserStore } from "~/store/user";
 import MarkdownRenderer from "~/components/index/MarkdownRenderer.vue";
+import type { Message } from '~/types/models'
 import BuiltinComments from '../comments/BuiltinComments.vue'
 import { writeClipboardText } from '~/utils/clipboard'
 import { useRuntimeConfig } from '#imports'
@@ -439,7 +440,7 @@ const like = async (id: number) => {
   }
 }
 
-const targetPage = ref('');
+const targetPage = ref<string>('');
 const totalPages = computed(() => Math.ceil(message.total / 15));
 const jumpToPage = async () => {
   const page = parseInt(targetPage.value);
@@ -777,7 +778,9 @@ const initFancybox = () => {
         wrapper.href = src;
         wrapper.setAttribute("data-fancybox", "uploaded-image");
         wrapper.style.display = "block";
-        img.parentNode.insertBefore(wrapper, img);
+        const parentNode = img.parentNode;
+        if (!parentNode) return;
+        parentNode.insertBefore(wrapper, img);
         wrapper.appendChild(img);
       }
     });
@@ -1489,7 +1492,7 @@ const saveEditedMessage = async () => {
 };
 // 添加搜索相关变量
 const isSearchMode = ref(false);
-const searchResults = ref([]);
+const searchResults = ref<Message[]>([]);
 
 // 添加搜索结果处理函数
 const handleSearchResult = async (results: any) => {

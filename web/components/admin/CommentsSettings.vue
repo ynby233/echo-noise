@@ -37,6 +37,7 @@ const emit = defineEmits<{ (e: 'update:config', v: any): void, (e: 'comment-syst
 const local = reactive({
   commentEnabled: false,
   commentSystem: 'builtin',
+  walineServerURL: '',
   commentEmailEnabled: false,
   commentEmailReplyName: '',
   commentEmailAdminPrefix: '',

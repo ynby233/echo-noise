@@ -179,6 +179,8 @@ export const useUserStore = defineStore("userStore", () => {
         }
     }
 
+    const fetchUserInfo = async () => getUser()
+
     return {
         user,
         status,
@@ -189,12 +191,13 @@ export const useUserStore = defineStore("userStore", () => {
         getStatus,
         logout,
         getUser,
+        fetchUserInfo,
         setUserStatus,
         clearUserStatus,
         checkLoginStatus
     }
 }, {
     persist: {
-        paths: ["user", "isLogin", "token"],
+        pick: ["user", "isLogin", "token"],
     }
 })

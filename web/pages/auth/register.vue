@@ -10,7 +10,7 @@
           </div>
           <NuxtLink to="/auth/login" class="text-sm text-indigo-300 hover:text-indigo-200">去登录</NuxtLink>
         </div>
-        <UForm @submit.prevent="onSubmit">
+        <UForm :state="form" @submit.prevent="onSubmit">
           <UFormGroup label="用户名" class="mb-3">
             <UInput v-model="form.username" placeholder="请输入用户名" />
           </UFormGroup>

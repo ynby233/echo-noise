@@ -32,44 +32,42 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import type { Tag } from '~/types/models'
 
 const emit = defineEmits(['tagClick', 'updateTags'])
 const isRefreshing = ref(false)
 const timestamp = ref(Date.now())
 
-const props = defineProps({
-  tags: {
-    type: Array,
-    default: () => []
-  }
+const props = withDefaults(defineProps<{ tags?: Tag[] }>(), {
+  tags: () => []
 })
 
 const filteredTags = computed(() => {
-  const invalidChars = /[/?=&]/;
-  const isMediaLink = /^(song|video|playlist)\?id=\d+$/;
-  const cache = new Map();
+  const invalidChars = /[/?=&]/
+  const isMediaLink = /^(song|video|playlist)\?id=\d+$/
+  const cache = new Map<string, true>()
   const isGuestbookTag = (name: string) => {
-    const n = String(name || '').trim().toLowerCase();
-    return n === '留言' || n === 'guestbook';
-  };
-  
-  return props.tags.reduce((acc, tag) => {
+    const n = String(name || '').trim().toLowerCase()
+    return n === '留言' || n === 'guestbook'
+  }
+
+  return props.tags.reduce<Tag[]>((acc, tag) => {
     if (cache.has(tag.name)) {
-      return acc;
+      return acc
     }
-    const name = String(tag?.name || '');
+    const name = String(tag?.name || '')
     if (
       name &&
       !invalidChars.test(name) &&
       !isMediaLink.test(name) &&
       !isGuestbookTag(name)
     ) {
-      cache.set(tag.name, true);
-      acc.push(tag);
+      cache.set(tag.name, true)
+      acc.push(tag)
     }
-    return acc;
-  }, []);
-}, { immediate: true });
+    return acc
+  }, [])
+})
 
 const handleTagClick = (tagName: string) => {
   emit('tagClick', tagName)

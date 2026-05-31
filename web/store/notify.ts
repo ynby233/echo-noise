@@ -56,12 +56,13 @@ export const useNotifyStore = defineStore('notify', {
         const data = await response.json()
         if (data.code === 1) {
           // 修复：用后端返回的最新配置，并确保布尔类型
-          const newConfig = data.data || config
-          Object.keys(this.config).forEach(key => {
+          const currentConfig = this.config as any
+          const newConfig = (data.data || config) as Record<string, string | boolean | undefined>
+          Object.keys(this.config).forEach((key) => {
             if (key.endsWith('Enabled')) {
-              this.config[key] = !!newConfig[key] && newConfig[key] !== 'false'
+              currentConfig[key] = !!newConfig[key] && newConfig[key] !== 'false'
             } else if (newConfig[key] !== undefined) {
-              this.config[key] = newConfig[key]
+              currentConfig[key] = newConfig[key] as string | boolean
             }
           })
           return true

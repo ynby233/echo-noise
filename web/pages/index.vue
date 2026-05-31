@@ -103,7 +103,7 @@
                   </div>
                 </a>
                 <div v-if="leftAds.length > 1" class="absolute bottom-2 left-0 right-0 flex justify-center gap-2">
-                  <button v-for="(ad, i) in leftAds" :key="i" @click="switchAd(i)" class="w-2 h-2 rounded-full" :class="i === adIndex ? 'bg-white' : 'bg-white/40'" aria-label="switch-ad"></button>
+                  <button v-for="(ad, i) in leftAds" :key="i" @click="switchAd(Number(i))" class="w-2 h-2 rounded-full" :class="Number(i) === adIndex ? 'bg-white' : 'bg-white/40'" aria-label="switch-ad"></button>
                 </div>
               </div>
             </template>
@@ -165,7 +165,7 @@
             </div>
           </div>
           <div v-if="activeTab==='feed'" class="feed-page">
-            <UCard class="search-card feed-shell-card mb-3" :ui="{ body: 'p-0' }">
+            <UCard class="search-card feed-shell-card mb-3" :ui="{ body: { padding: 'p-0' } }">
               <div :class="['feed-page-head', isDark ? 'feed-page-head-dark' : 'feed-page-head-light']">
                 <div class="card-title text-center text-black dark:text-white">{{ feedPageTitleText }}</div>
                 <div class="section-subtitle">{{ feedPageDescriptionText }}</div>
@@ -184,7 +184,7 @@
             </UCard>
           </div>
           <div v-else-if="activeTab==='comment'" class="comment-page">
-            <UCard class="search-card mb-3" :ui="{ body: 'p-5 md:p-6' }">
+            <UCard class="search-card mb-3" :ui="{ body: { padding: 'p-5 md:p-6' } }">
               <div class="card-title text-center mb-4 text-black dark:text-white">{{ frontendConfig.commentPageTitle || '留言' }}</div>
               <div v-if="(frontendConfig.commentPageDescription || '').trim() !== ''" class="section-subtitle comment-subtitle">{{ frontendConfig.commentPageDescription }}</div>
               <div class="max-w-3xl mx-auto comment-board-wrap">
@@ -194,7 +194,7 @@
             </UCard>
           </div>
           <div v-else-if="activeTab==='about'" class="about-page">
-            <UCard class="search-card mb-3" :ui="{ body: 'p-6' }">
+            <UCard class="search-card mb-3" :ui="{ body: { padding: 'p-6' } }">
               <div class="card-title text-center text-black dark:text-white">{{ frontendConfig.aboutPageTitle || '关于本站' }}</div>
               <div v-if="(frontendConfig.aboutPageDescription || '').trim() !== ''" class="section-subtitle">{{ frontendConfig.aboutPageDescription }}</div>
               <div class="mx-auto w-full max-w-3xl px-4 sm:px-6">
@@ -216,7 +216,7 @@
             ref="messageList" 
             class="message-list-container" 
             :site-config="frontendConfig"
-            :target-message-id="targetMessageId" 
+            :target-message-id="targetMessageId ?? undefined"
             :wide="layoutState==='two'"
             :page-ready="isLoaded"
             :active-tab="activeTab"
@@ -299,7 +299,7 @@
                 </div>
               </a>
               <div v-if="leftAds.length > 1" class="absolute bottom-2 left-0 right-0 flex justify-center gap-2">
-                <button v-for="(ad, i) in leftAds" :key="i" @click="switchAd(i)" class="w-2 h-2 rounded-full" :class="i === adIndex ? 'bg-white' : 'bg-white/40'" aria-label="switch-ad"></button>
+                <button v-for="(ad, i) in leftAds" :key="i" @click="switchAd(Number(i))" class="w-2 h-2 rounded-full" :class="Number(i) === adIndex ? 'bg-white' : 'bg-white/40'" aria-label="switch-ad"></button>
               </div>
             </div>
             
@@ -345,7 +345,7 @@
       </template>
       <div class="space-y-3">
         <div v-if="authMode==='login'">
-          <UForm @submit.prevent="onLoginSubmit">
+          <UForm :state="loginForm" @submit.prevent="onLoginSubmit">
             <div class="space-y-3">
               <UInput v-model="loginForm.username" placeholder="用户名" />
               <UInput
@@ -390,7 +390,7 @@
           
         </div>
         <div v-else>
-          <UForm @submit.prevent="onRegisterSubmit">
+          <UForm :state="registerForm" @submit.prevent="onRegisterSubmit">
             <div class="space-y-3">
               <UInput v-model="registerForm.username" placeholder="用户名" />
               <UInput
@@ -450,7 +450,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, inject, provide, onMounted, onUnmounted, watch, nextTick, reactive } from 'vue'
+import { ref, computed, inject, provide, onMounted, onUnmounted, watch, nextTick, reactive, type ComponentPublicInstance } from 'vue'
 import { useRouter, useRoute, useRuntimeConfig } from '#imports'
 import AddForm from '@/components/index/AddForm.vue'
 import MessageList from '@/components/index/MessageList.vue'
@@ -466,6 +466,7 @@ import MarkdownRenderer from '~/components/index/MarkdownRenderer.vue'
 import { getRequest } from '~/utils/api'
 import { useToast } from '#ui/composables/useToast'
 import { useUserStore } from '~/store/user'
+import type { Tag } from '~/types/models'
 const router = useRouter()
 const route = useRoute()
 const baseApi = useRuntimeConfig().public.baseApi || '/api'
@@ -543,7 +544,11 @@ const centerTabs = computed(() => {
 
 
 // 添加 messageList ref
-const messageList = ref(null)
+type MessageListExpose = ComponentPublicInstance & {
+  handleSearchResult: (result: unknown) => void
+}
+
+const messageList = ref<MessageListExpose | null>(null)
 // 搜索模态的开关
 const showSearchModal = ref(false)
 const showAuthModal = ref(false)
@@ -1804,7 +1809,7 @@ watch(() => [frontendConfig.value.pwaEnabled, frontendConfig.value.pwaTitle, fro
   scheduleHeadUpdate()
 }, { immediate: true })
 const subtitleEl = ref<HTMLElement | null>(null)
-  const tags = ref([])
+const tags = ref<Tag[]>([])
 // 添加标签更新处理函数
 const handleTagsUpdate = async () => {
   await fetchTags()

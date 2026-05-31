@@ -1491,7 +1491,7 @@
                 </div>
                 <div class="flex gap-2 flex-wrap justify-start sm:justify-end items-center w-full sm:w-auto">
                   <UButton color="primary" icon="i-heroicons-arrow-down-tray" :disabled="dbType !== 'sqlite'" @click="downloadBackup">下载本地备份</UButton>
-                  <UButton color="warning" variant="soft" icon="i-heroicons-arrow-up-tray" :disabled="dbType !== 'sqlite'" @click="triggerDatabaseUpload">恢复本地数据库</UButton>
+                  <UButton color="orange" variant="soft" icon="i-heroicons-arrow-up-tray" :disabled="dbType !== 'sqlite'" @click="triggerDatabaseUpload">恢复本地数据库</UButton>
                   <input type="file" ref="databaseFileInput" accept=".zip" class="hidden" @change="handleDatabaseUpload" />
                 </div>
               </div>
@@ -1737,7 +1737,7 @@
         </div>
         <div v-else class="flex gap-2">
           <UButton color="primary" @click="$router.push({ path: '/', query: { login: '1', mode: 'login', redirect: '/status' } })">登录</UButton>
-          <UButton color="secondary" @click="$router.push({ path: '/', query: { login: '1', mode: 'register', redirect: '/status' } })">注册</UButton>
+          <UButton color="gray" @click="$router.push({ path: '/', query: { login: '1', mode: 'register', redirect: '/status' } })">注册</UButton>
         </div>
       </div>
       </div>
@@ -1798,7 +1798,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick, type CSSProperties } from 'vue'
 import type { UserToLogin, UserToRegister } from '~/types/models'
 import { useUser } from '~/composables/useUser'
 import { useUserStore } from '~/store/user'
@@ -3397,7 +3397,7 @@ const cropDisplayHeight = computed(() => {
   const ih = cropNaturalHeight.value || AVATAR_CROP_PREVIEW_SIZE
   return ih * cropBaseScale.value * cropScale.value
 })
-const cropImageStyle = computed(() => ({
+const cropImageStyle = computed<CSSProperties>(() => ({
   position: 'absolute',
   left: `${AVATAR_CROP_PREVIEW_SIZE / 2 + cropX.value}px`,
   top: `${AVATAR_CROP_PREVIEW_SIZE / 2 + cropY.value}px`,
@@ -4058,9 +4058,10 @@ const githubCardEnabled = computed({
     }
 })
 
-const authForm = reactive<UserToLogin | UserToRegister>({
+const authForm = reactive<UserToRegister>({
     username: '',
-    password: ''
+    password: '',
+    captcha: ''
 })
 
 const editItem = reactive<Record<string, boolean>>({

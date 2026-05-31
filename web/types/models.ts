@@ -1,13 +1,19 @@
 export interface Message {
     id: number;
+    ID?: number;
     content: string;
     username?: string;
+    Username?: string;
     user_id?: number;
     userId?: number;
     image_url?: string;
+    avatar_url?: string;
+    AvatarURL?: string;
     private: boolean;
     created_at: string;
     pinned?: boolean;
+    notify?: boolean;
+    like_count?: number;
 }
 
 export interface MessageToSave {
@@ -28,6 +34,7 @@ export interface PageQuery {
 export interface PageQueryResult {
     total: number;
     items: Message[];
+    page?: number;
 }
 
 // UserToLogin
@@ -47,10 +54,52 @@ export interface UserToRegister {
 // User
 export interface User {
     userid: number;
+    id?: number;
+    ID?: number;
+    user_id?: number;
     username: string;
+    Username?: string;
     is_admin: boolean;
+    IsAdmin?: boolean;
     total_messages: number;
     token?: string;
+    avatar_url?: string;
+    AvatarURL?: string;
+    description?: string;
+    Description?: string;
+    email?: string;
+    Email?: string;
+    email_verified?: boolean;
+    EmailVerified?: boolean;
+    github_id?: string | number;
+}
+
+export interface Tag {
+    name: string;
+    count: number;
+}
+
+export interface NotifyConfig {
+    webhookEnabled: boolean;
+    webhookURL: string;
+    telegramEnabled: boolean;
+    telegramToken: string;
+    telegramChatID: string;
+    weworkEnabled: boolean;
+    weworkKey: string;
+    feishuEnabled: boolean;
+    feishuWebhook: string;
+    feishuSecret: string;
+    twitterEnabled: boolean;
+    twitterApiKey: string;
+    twitterApiSecret: string;
+    twitterAccessToken: string;
+    twitterAccessTokenSecret: string;
+    customHttpEnabled: boolean;
+    customHttpUrl: string;
+    customHttpMethod: string;
+    customHttpHeaders: string;
+    customHttpBody: string;
 }
 
 export interface UserStatus {

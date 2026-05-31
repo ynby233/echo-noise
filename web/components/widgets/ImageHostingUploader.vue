@@ -232,7 +232,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, type CSSProperties } from 'vue';
 import { useToast, useRuntimeConfig } from '#imports';
 import { writeClipboardText } from '~/utils/clipboard';
 
@@ -251,7 +251,7 @@ const props = defineProps({
 });
 
 // 添加弹窗位置计算
-const getPopupPosition = computed(() => {
+const getPopupPosition = computed<CSSProperties>(() => {
   if (typeof window === 'undefined') return {};
   
   const screenWidth = window.innerWidth;

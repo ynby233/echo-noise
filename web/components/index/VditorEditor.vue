@@ -65,7 +65,6 @@ const editorOptions: IOptions = {
   ],
   toolbarConfig: {
     pin: true,
-    hideTooltip: true,
   },
   counter: {
     enable: false,

@@ -504,8 +504,8 @@ const applyImageGridHTML = (html: string) => {
 watch(MessageContent, (val) => {
   scheduleDraftSave()
   if (previewRenderTimer) clearTimeout(previewRenderTimer)
-  previewRenderTimer = setTimeout(() => {
-    const raw = Vditor.md2html(normalizeInlineImageLinks(val || ""));
+  previewRenderTimer = setTimeout(async () => {
+    const raw = await Vditor.md2html(normalizeInlineImageLinks(val || ""));
     MessageContentHtml.value = applyImageGridHTML(raw);
     nextTick(() => {
       const roots = document.querySelectorAll('.editor-preview');
@@ -539,7 +539,7 @@ onMounted(async () => {
   Fancybox.bind("[data-fancybox]", {});
   if (!userStore.isLogin) {
     const token = localStorage.getItem('token');
-    if (token && userStore.fetchUserInfo) {
+    if (token) {
       await userStore.fetchUserInfo();
     }
   }

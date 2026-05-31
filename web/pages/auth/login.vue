@@ -10,7 +10,7 @@
           </div>
           <UButton variant="link" color="indigo" class="text-sm" @click="goRegister">去注册</UButton>
         </div>
-        <UForm @submit.prevent="onSubmit">
+        <UForm :state="form" @submit.prevent="onSubmit">
           <UFormGroup label="用户名/已绑定邮箱" class="mb-3">
             <UInput v-model="form.username" placeholder="请输入用户名或已绑定邮箱" />
           </UFormGroup>

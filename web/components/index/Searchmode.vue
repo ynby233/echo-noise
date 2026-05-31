@@ -34,6 +34,12 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 
+interface SearchResponse {
+  code: number;
+  msg?: string;
+  data?: unknown;
+}
+
 const toast = useToast();
 const config = useRuntimeConfig();
 const BASE_API = config.public.baseApi || '/api';
@@ -73,7 +79,7 @@ const handleSearch = async () => {
   }
   
   try {
-    const { data: response, error } = await useFetch('/messages/search', {
+    const { data: response, error } = await useFetch<SearchResponse>('/messages/search', {
       method: 'GET',
       baseURL: BASE_API,
       params: {

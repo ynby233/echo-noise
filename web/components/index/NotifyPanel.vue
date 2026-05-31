@@ -147,7 +147,7 @@
                     </div>
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">请求体模板</label>
-                        <p class="notify-field-tip" :class="mutedText">支持内容模板变量，例如 {{content}}。</p>
+                        <p v-pre class="notify-field-tip" :class="mutedText">支持内容模板变量，例如 {{content}}。</p>
                         <UTextarea v-model="localConfig.customHttpBody" :rows="6" placeholder='{"content":"{{content}}"}' />
                     </div>
                 </template>
