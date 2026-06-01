@@ -1880,11 +1880,18 @@ func UpdateMessage(c *gin.Context) {
 	}
 
 	var req struct {
-		Content *string `json:"content"`
-		Private *bool   `json:"private"`
+		Content   *string `json:"content"`
+		Private   *bool   `json:"private"`
+		CreatedAt *string `json:"created_at"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "请求参数错误"})
+		return
+	}
+
+	createdAt, err := parseMessageCreatedAt(req.CreatedAt)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": err.Error()})
 		return
 	}
 
@@ -1913,8 +1920,12 @@ func UpdateMessage(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限修改此消息"})
 		return
 	}
+	if createdAt != nil && (!user.IsAdmin || message.UserID != userID.(uint)) {
+		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "仅管理员可以修改自己发布内容的发布时间"})
+		return
+	}
 
-	updated, err := services.UpdateMessage(uint(messageID), req.Content, req.Private)
+	updated, err := services.UpdateMessage(uint(messageID), req.Content, req.Private, createdAt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
 		return
@@ -2858,18 +2869,56 @@ func TestNotify(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.OK[any](nil, "推送测试已发送"))
 }
 
+func parseMessageCreatedAt(raw *string) (*time.Time, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	value := strings.TrimSpace(*raw)
+	if value == "" {
+		return nil, fmt.Errorf("发布时间不能为空")
+	}
+
+	if t, err := time.Parse(time.RFC3339Nano, value); err == nil {
+		return &t, nil
+	}
+
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("Asia/Shanghai", 8*60*60)
+	}
+	for _, layout := range []string{
+		"2006-01-02T15:04:05",
+		"2006-01-02T15:04",
+		"2006-01-02 15:04:05",
+		"2006-01-02 15:04",
+	} {
+		if t, err := time.ParseInLocation(layout, value, loc); err == nil {
+			return &t, nil
+		}
+	}
+
+	return nil, fmt.Errorf("发布时间格式错误")
+}
+
 // 保留这个新版本的 PostMessage 函数
 func PostMessage(c *gin.Context) {
 	// 解析请求数据
 	var request struct {
-		Content  string `json:"content"`
-		Private  bool   `json:"private"`
-		ImageURL string `json:"image_url"`
-		VideoURL string `json:"video_url"` // 新增视频字段
-		Notify   *bool  `json:"notify"`
+		Content   string  `json:"content"`
+		Private   bool    `json:"private"`
+		ImageURL  string  `json:"image_url"`
+		VideoURL  string  `json:"video_url"` // 新增视频字段
+		Notify    *bool   `json:"notify"`
+		CreatedAt *string `json:"created_at"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string]("内容不能为空"))
+		return
+	}
+
+	createdAt, err := parseMessageCreatedAt(request.CreatedAt)
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
 		return
 	}
 
@@ -2879,6 +2928,17 @@ func PostMessage(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.Fail[string]("未授权访问"))
 		return
 	}
+	if createdAt != nil {
+		user, err := services.GetUserByID(userID.(uint))
+		if err != nil {
+			c.JSON(http.StatusOK, dto.Fail[string]("获取用户信息失败"))
+			return
+		}
+		if !user.IsAdmin {
+			c.JSON(http.StatusOK, dto.Fail[string]("仅管理员可以指定发布时间"))
+			return
+		}
+	}
 
 	// 创建消息
 	message := &models.Message{
@@ -2886,6 +2946,9 @@ func PostMessage(c *gin.Context) {
 		Private:  request.Private,
 		ImageURL: request.ImageURL,
 		UserID:   userID.(uint),
+	}
+	if createdAt != nil {
+		message.CreatedAt = *createdAt
 	}
 
 	if err := services.CreateMessage(message); err != nil {

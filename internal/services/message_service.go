@@ -262,7 +262,7 @@ func contains(s, substr string) bool {
 }
 
 // UpdateMessage 更新消息字段
-func UpdateMessage(messageID uint, content *string, private *bool) (*models.Message, error) {
+func UpdateMessage(messageID uint, content *string, private *bool, createdAt *time.Time) (*models.Message, error) {
 	message, err := repository.GetMessageByID(messageID, true)
 	if err != nil {
 		return nil, fmt.Errorf("获取消息失败: %v", err)
@@ -279,6 +279,9 @@ func UpdateMessage(messageID uint, content *string, private *bool) (*models.Mess
 	}
 	if private != nil {
 		message.Private = *private
+	}
+	if createdAt != nil {
+		message.CreatedAt = *createdAt
 	}
 	if err := database.DB.Save(message).Error; err != nil {
 		return nil, fmt.Errorf("更新消息失败: %v", err)

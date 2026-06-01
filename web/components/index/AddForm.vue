@@ -30,6 +30,15 @@
           <button class="tb-btn" @click="toggleNotify" :title="enableNotify ? '关闭推送' : '开启推送'">
             <UIcon :name="enableNotify ? 'i-mdi-bell' : 'i-mdi-bell-off'" class="w-5 h-5" />
           </button>          
+          <label v-if="canSetPublishTime" class="publish-time-control" title="自定义发布时间">
+            <UIcon name="i-mdi-calendar-clock-outline" class="w-4 h-4" />
+            <input
+              v-model="PublishedAtInput"
+              type="datetime-local"
+              class="publish-time-input"
+              aria-label="发布时间"
+            />
+          </label>
         </div>
         <div class="toolbar-right">
           <span v-if="isEditorLoading" class="text-xs text-orange-400 flex items-center" style="margin-right: auto">
@@ -148,6 +157,7 @@ const toggleHeatmap = () => {
 const Username = ref("");
 const MessageContent = ref("");
 const MessageContentHtml = ref("");
+const PublishedAtInput = ref("");
 const Private = ref<boolean>(typeof window !== 'undefined' && localStorage.getItem('postPrivate') === 'true');
 const contentTheme = inject('contentTheme') as Ref<string>
 const toggleContentTheme = inject('toggleContentTheme') as (() => void) | undefined
@@ -242,6 +252,7 @@ const clearForm = () => {
   Username.value = "";
   MessageContent.value = "";
   MessageContentHtml.value = "";
+  PublishedAtInput.value = "";
   clearDraft()
   
   if (vditorEditor.value) {
@@ -250,6 +261,18 @@ const clearForm = () => {
 };
 
 const userStore = useUserStore();
+const canSetPublishTime = computed(() => {
+  const user = userStore.user as any
+  return !!(user?.is_admin || user?.IsAdmin)
+})
+
+const datetimeLocalToISO = (value: string) => {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  const date = new Date(raw)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toISOString()
+}
 
 const checkLogin = () => {
   if (!userStore.isLogin) {
@@ -618,6 +641,10 @@ const addMessage = async () => {
     private: Private.value,
     notify: enableNotify.value,
   };
+  const publishTime = canSetPublishTime.value ? datetimeLocalToISO(PublishedAtInput.value) : ''
+  if (publishTime) {
+    message.created_at = publishTime
+  }
 
   try {
     const response = await save(message);
@@ -644,12 +671,17 @@ const addMessage = async () => {
 .tb-btn { display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; transition: all .18s ease; border:none; }
 .tb-btn:hover { transform: translate3d(0,0,0) scale(1.06); background: rgba(0,0,0,0.12); }
 .tb-btn.primary { background: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color: #fff; }
+.publish-time-control { display:flex; align-items:center; gap:6px; min-height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 10px; }
+.publish-time-input { width: 166px; max-width: 48vw; border: none; outline: none; background: transparent; color: inherit; font-size: 12px; }
+.publish-time-input::-webkit-calendar-picker-indicator { opacity: .72; cursor: pointer; }
 .tb-sep { width:1px; height:24px; background: rgba(0,0,0,0.12); margin: 0 2px; }
 .preview-card { backdrop-filter: blur(8px); background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 8px; color:#111827; }
 html.dark .editor-box { background: var(--home-surface-dark, #202a36); border: 1px solid rgba(255,255,255,0.16); color:#fff; }
 html.dark .editor-toolbar { background: rgba(39, 50, 66, 0.68); backdrop-filter: saturate(1.1) blur(6px); }
 html.dark .tb-btn { background: rgba(255,255,255,0.06); color:#cbd5e1; border:none; }
 html.dark .tb-btn:hover { background: rgba(255,255,255,0.12); }
+html.dark .publish-time-control { background: rgba(255,255,255,0.06); color:#cbd5e1; }
+html.dark .publish-time-input::-webkit-calendar-picker-indicator { filter: invert(1); opacity: .72; }
 html.dark .tb-sep { background: rgba(255,255,255,0.12); }
 html.dark .preview-card { background: rgba(39, 50, 66, 0.68); border: 1px solid rgba(255,255,255,0.18); color:#fff; }
 .editor-toolbar :deep(.u-button) { border:none !important; box-shadow:none !important; background: transparent !important; color:#374151 !important; }

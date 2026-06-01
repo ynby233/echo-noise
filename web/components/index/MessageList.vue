@@ -233,6 +233,19 @@
           :rows="10"
           class="font-mono text-sm"
         />
+        <div v-if="canEditPublishTime(editingMessage)" class="space-y-1">
+          <label class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-300">
+            <UIcon name="i-mdi-calendar-clock-outline" class="w-4 h-4" />
+            发布时间
+          </label>
+          <input
+            v-model="editingPublishedAtInput"
+            type="datetime-local"
+            class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-orange-400 dark:border-white/10 dark:bg-[var(--home-surface-dark-elevated)] dark:text-white"
+            aria-label="发布时间"
+          />
+          <p class="text-xs text-gray-400">仅管理员可修改自己发布内容的发布时间</p>
+        </div>
         <div class="border-t border-gray-200 my-2 pt-2">
           <div class="text-sm text-gray-500 mb-2">预览：</div>
           <div class="p-4 rounded-lg overflow-auto max-h-[300px] bg-white dark:bg-[var(--home-surface-dark-elevated)]">
@@ -647,6 +660,7 @@ const fetchGuestbookId = async () => {
   const isPersonalGuest = computed(() => isPersonalTab.value && !userStore.isLogin)
   const currentUserId = computed(() => Number((userStore.user as any)?.userid || (userStore.user as any)?.id || (userStore.user as any)?.user_id || 0))
   const currentUsername = computed(() => String((userStore.user as any)?.username || '').trim())
+  const currentUserIsAdmin = computed(() => !!((userStore.user as any)?.is_admin || (userStore.user as any)?.IsAdmin))
   const pageQueryFor = (pageNumber: number) => {
     const query: any = { page: pageNumber, pageSize: 15 }
     if (isPersonalTab.value && currentUserId.value) query.authorId = currentUserId.value
@@ -1401,10 +1415,54 @@ const copyContent = async (content: string) => {
 const showEditModal = ref(false);
 const editingContent = ref('');
 const editingMessageId = ref<number | null>(null);
+const editingMessage = ref<any | null>(null);
+const editingPublishedAtInput = ref('');
 const isSaving = ref(false);
+
+const toDatetimeLocalValue = (value: any) => {
+  const date = new Date(value || '')
+  if (Number.isNaN(date.getTime())) return ''
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+  return local.toISOString().slice(0, 16)
+}
+
+const datetimeLocalToISO = (value: string) => {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  const date = new Date(raw)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toISOString()
+}
+
+const canEditPublishTime = (msg: any) => {
+  if (!msg || !currentUserIsAdmin.value || !currentUserId.value) return false
+  const authorId = Number(msg?.user_id || msg?.userId || msg?.UserID || 0)
+  return authorId === currentUserId.value
+}
+
+const sortMessagesByCreatedAt = () => {
+  const byTimeDesc = (a: any, b: any) => new Date(b?.created_at || 0).getTime() - new Date(a?.created_at || 0).getTime()
+  const pinned = (message.messages || []).filter((m: any) => m.pinned)
+  const rest = (message.messages || []).filter((m: any) => !m.pinned).sort(byTimeDesc)
+  message.messages = [...pinned, ...rest]
+  searchResults.value = (searchResults.value || []).sort(byTimeDesc)
+}
+
+const applyEditedMessage = (id: number, updated: any) => {
+  const apply = (items: any[]) => {
+    const idx = items.findIndex((msg: any) => msg.id === id)
+    if (idx !== -1) items[idx] = { ...items[idx], ...updated }
+  }
+  apply(message.messages as any[])
+  apply(searchResults.value as any[])
+  apply(pinnedTopItems.value as any[])
+  sortMessagesByCreatedAt()
+}
 
 const editMessage = (msg: any) => {
   editingMessageId.value = msg.id;
+  editingMessage.value = msg;
+  editingPublishedAtInput.value = canEditPublishTime(msg) ? toDatetimeLocalValue(msg.created_at) : '';
   
   // 保存原始内容，不包含附件图片
   editingContent.value = msg.content;
@@ -1424,7 +1482,7 @@ const saveEditedMessage = async () => {
   isSaving.value = true;
   try {
     // 获取当前编辑的消息
-    const currentMsg = message.messages.find(msg => msg.id === editingMessageId.value);
+    const currentMsg = message.messages.find(msg => msg.id === editingMessageId.value) || editingMessage.value;
     if (!currentMsg) return;
 
     // 处理编辑内容，移除附件图片的 Markdown 标记
@@ -1433,18 +1491,38 @@ const saveEditedMessage = async () => {
     // 移除附件图片的 Markdown 标记
     processedContent = processedContent.replace(/\n*<!-- 附件图片\(编辑时可删除\) -->\n!\[附件图片\]\(.*?\)\n<!-- 附件图片结束 -->\n*/g, '');
     
-    // 检查内容是否有修改
-    if (processedContent === currentMsg.content) {
+    const originalPublishTime = toDatetimeLocalValue(currentMsg.created_at)
+    const canUpdatePublishTime = canEditPublishTime(currentMsg)
+    const nextCreatedAt = canUpdatePublishTime ? datetimeLocalToISO(editingPublishedAtInput.value) : ''
+    if (canUpdatePublishTime && editingPublishedAtInput.value && !nextCreatedAt) {
+      useToast().add({
+        title: '发布时间格式无效',
+        color: 'red',
+        timeout: 2000
+      });
+      return;
+    }
+    const publishTimeChanged = canUpdatePublishTime && !!nextCreatedAt && editingPublishedAtInput.value !== originalPublishTime
+    const contentChanged = processedContent !== currentMsg.content
+
+    // 检查内容或发布时间是否有修改
+    if (!contentChanged && !publishTimeChanged) {
       useToast().add({
         title: '内容未修改',
-        description: '请修改内容后再保存',
+        description: '请修改内容或发布时间后再保存',
         color: 'orange',
         timeout: 2000
       });
       isSaving.value = false;
       return;
     }
-    // 直接使用编辑器中的内容，不做任何修改
+    const payload: any = {
+      content: processedContent,
+      image_url: currentMsg.image_url
+    }
+    if (publishTimeChanged) {
+      payload.created_at = nextCreatedAt
+    }
     const response = await fetch(`${BASE_API}/messages/${editingMessageId.value}`, {
       method: 'PUT',
       headers: {
@@ -1452,24 +1530,19 @@ const saveEditedMessage = async () => {
         'Accept': 'application/json'
       },
       credentials: 'include',
-      body: JSON.stringify({
-        content: processedContent,
-        image_url: currentMsg.image_url
-      })
+      body: JSON.stringify(payload)
     });
 
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
     const data = await response.json();
     if (data.code === 1) {
-      const index = message.messages.findIndex(msg => msg.id === editingMessageId.value);
-      if (index !== -1) {
-        message.messages[index] = {
-          ...message.messages[index],
-          content: editingContent.value,  // 修正：使用 editingContent.value 替代 pureContent
-          image_url: currentMsg.image_url  // 修正：使用 currentMsg.image_url 替代 imageUrl
-        };
-      }
+      const updatedData = data.data || {}
+      applyEditedMessage(editingMessageId.value, {
+        content: updatedData.content ?? processedContent,
+        image_url: updatedData.image_url ?? currentMsg.image_url,
+        created_at: updatedData.created_at ?? (publishTimeChanged ? nextCreatedAt : currentMsg.created_at)
+      })
       showEditModal.value = false;
       useToast().add({
         title: '更新成功',
