@@ -164,7 +164,7 @@ import { getRequest, postRequest, putRequest, deleteRequest } from '~/utils/api'
 import { resolveMediaURL } from '~/utils/media-url'
 import { useUserStore } from '~/store/user'
 
-const props = defineProps<{ messageId: number, siteConfig: any, showInput?: boolean, contextLabel?: string }>()
+const props = defineProps<{ messageId: number, siteConfig: any, showInput?: boolean, contextLabel?: string, autoScrollInput?: boolean }>()
 const emit = defineEmits(['cancel'])
 const contextLabel = computed(() => String(props.contextLabel || '评论').trim() || '评论')
 const loginRequiredText = computed(() => `请登录后${contextLabel.value}`)
@@ -332,6 +332,10 @@ const load = async () => {
     }
     comments.value = (list || []).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
     dispatchCommentCount()
+    if (pendingInputScroll.value && formVisible.value) {
+      await scrollToInput()
+      pendingInputScroll.value = false
+    }
   } catch (e) {
     comments.value = []
   }
@@ -360,13 +364,10 @@ const submit = async () => {
       selectedVisibility.value = 'public'
       comments.value = [...comments.value, res.data]
       await load()
-      await nextTick()
-      const container = document.querySelector(`.content-container[data-msg-id="${props.messageId}"] .builtin-comments`)
-      const items = container?.querySelectorAll('.rounded-md')
-      const target = items && items.length ? (items[items.length - 1] as HTMLElement) : null
-      target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       useToast().add({ title: '已发布', color: 'green' })
       dispatchCommentCount()
+      await nextTick()
+      restoreInputScroll()
     } else {
       useToast().add({ title: '发布失败', description: res?.msg, color: 'red' })
     }
@@ -408,14 +409,39 @@ const commentAuthorName = (c: any) => {
   return getUserField(accountUser, ['username','Username','name','Name']) || '用户'
 }
 const hiddenByCancel = ref(false)
+const inputRestoreScrollY = ref<number | null>(null)
+const pendingInputScroll = ref(false)
 const formVisible = computed(() => (((props.showInput && !hiddenByCancel.value) || !!replyTo.value) && canComment.value))
+const captureInputRestoreScroll = () => {
+  if (typeof window === 'undefined') return
+  if (inputRestoreScrollY.value === null) inputRestoreScrollY.value = window.scrollY || window.pageYOffset || 0
+}
+const restoreInputScroll = () => {
+  if (typeof window === 'undefined') return
+  const top = inputRestoreScrollY.value
+  inputRestoreScrollY.value = null
+  pendingInputScroll.value = false
+  if (top === null || Number.isNaN(top)) return
+  requestAnimationFrame(() => {
+    window.scrollTo({ top, behavior: 'smooth' })
+  })
+}
 watch(() => props.showInput, (v) => {
   if (!v) return
   hiddenByCancel.value = false
+  if (!props.autoScrollInput) return
+  captureInputRestoreScroll()
+  pendingInputScroll.value = true
   nextTick(() => scrollToInput())
 })
 
-onMounted(load)
+onMounted(() => {
+  if (props.showInput && props.autoScrollInput) {
+    captureInputRestoreScroll()
+    pendingInputScroll.value = true
+  }
+  load()
+})
 // 保持与父组件的显示控制，但不再初始化富文本编辑器
 // 监听来自父级的刷新事件（每次展开评论时确保重新拉取）
 const handler = () => load()
@@ -453,7 +479,10 @@ const scrollToInput = async (focus = true) => {
   await nextTick()
   const el = taRef.value as HTMLTextAreaElement | null
   const target = (el?.closest('.comment-input-card') as HTMLElement | null) || el
-  target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  if (target && typeof requestAnimationFrame !== 'undefined') {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+  }
+  target?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   if (focus) focusInput()
 }
 
@@ -463,6 +492,7 @@ const startReply = (id: number, authorName: string) => {
     return
   }
   cancelEdit()
+  captureInputRestoreScroll()
   hiddenByCancel.value = false
   replyTo.value = id
   selectedVisibility.value = clampVisibilityToLimit(selectedVisibility.value, byId.value[id]?.visibility)
@@ -635,6 +665,7 @@ const cancelInput = () => {
   el?.blur?.()
   nextTick(autoResizeTextarea)
   emit('cancel', { empty: (comments.value || []).length === 0 })
+  nextTick(restoreInputScroll)
 }
 const chooseAuthor = (author: string) => {
   const el = taRef.value as HTMLTextAreaElement

@@ -146,7 +146,7 @@
                 </div>
               </div>
               <div v-if="(expandedCommentsMap[msg.id] || activeCommentId === msg.id) && isCommentEnabled && !isGuestbookMessage(msg)" :id="`comment-container-${msg.id}`" class="mt-2" style="position: relative;">
-                <BuiltinComments v-if="isBuiltin && apiReachable" :key="(commentRefreshKey[msg.id] || 0)" :message-id="msg.id" :site-config="siteConfig" :show-input="activeCommentId === msg.id" @cancel="handleCancel(msg.id, $event)" />
+                <BuiltinComments v-if="isBuiltin && apiReachable" :key="(commentRefreshKey[msg.id] || 0)" :message-id="msg.id" :site-config="siteConfig" :show-input="activeCommentId === msg.id" auto-scroll-input @cancel="handleCancel(msg.id, $event)" />
                 <div v-else-if="useWaline && apiReachable" :id="`waline-${msg.id}`"></div>
               </div>
             </div>
@@ -827,19 +827,6 @@ const deferMeasure = () => {
   } catch { setTimeout(run, 0) }
 }
 
-const scrollToCommentInput = async (msgId: number) => {
-  await nextTick()
-  const container = document.querySelector(`#comment-container-${msgId}`) as HTMLElement | null
-  const input = container?.querySelector('.comment-input-card textarea') as HTMLTextAreaElement | null
-  const target = (input?.closest('.comment-input-card') as HTMLElement | null) || input || container
-  target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  try {
-    input?.focus({ preventScroll: true })
-  } catch {
-    input?.focus?.()
-  }
-}
-
 const toggleComment = async (msgId: number) => {
   const m = getMessageById(msgId)
   if (isGuestbookMessage(m)) return
@@ -855,7 +842,6 @@ const toggleComment = async (msgId: number) => {
   if ((props.siteConfig?.commentSystem || 'waline') === 'builtin') {
     await nextTick();
     window.dispatchEvent(new Event(`refresh-comments-${msgId}`));
-    await scrollToCommentInput(msgId)
     return;
   }
   if (useWaline.value) {

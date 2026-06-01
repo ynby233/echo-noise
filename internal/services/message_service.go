@@ -368,34 +368,49 @@ func ToggleLike(messageID uint, userID *uint, sessionID string) (bool, int, erro
 	liked := q2.First(&check).Error == nil && check.ID != 0
 	return liked, int(cnt), nil
 }
+func shanghaiLocation() *time.Location {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		return time.FixedZone("Asia/Shanghai", 8*60*60)
+	}
+	return loc
+}
+
 func GetMessagesGroupByDate() ([]struct {
 	Date  string `json:"date"`
 	Count int    `json:"count"`
 }, error) {
-	var results []struct {
-		Date  string `json:"date"`
-		Count int    `json:"count"`
+	type createdAtRow struct {
+		CreatedAt time.Time `json:"created_at"`
 	}
 
-	// 移除 deleted_at 条件，因为该列不存在
-	err := database.DB.Table("messages").
-		Select("DATE(created_at) as date, COUNT(*) as count").
-		// 移除这一行: Where("deleted_at IS NULL").
-		Group("DATE(created_at)").
-		Order("date DESC").
-		Scan(&results).Error
-
-	if err != nil {
+	var rows []createdAtRow
+	if err := database.DB.Table("messages").
+		Select("created_at").
+		Order("created_at DESC").
+		Scan(&rows).Error; err != nil {
 		fmt.Printf("获取消息日历数据失败: %v\n", err)
 		return nil, err
 	}
 
-	// 如果结果为空，返回空数组而不是nil
-	if len(results) == 0 {
-		return []struct {
-			Date  string `json:"date"`
-			Count int    `json:"count"`
-		}{}, nil
+	results := make([]struct {
+		Date  string `json:"date"`
+		Count int    `json:"count"`
+	}, 0)
+	counts := make(map[string]int)
+	loc := shanghaiLocation()
+	for _, row := range rows {
+		date := row.CreatedAt.In(loc).Format("2006-01-02")
+		if _, ok := counts[date]; !ok {
+			results = append(results, struct {
+				Date  string `json:"date"`
+				Count int    `json:"count"`
+			}{Date: date})
+		}
+		counts[date]++
+	}
+	for i := range results {
+		results[i].Count = counts[results[i].Date]
 	}
 
 	return results, nil

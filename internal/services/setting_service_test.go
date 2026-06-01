@@ -163,3 +163,40 @@ func TestGenerateRSSExportsOnlySelectedMembersPublicMessages(t *testing.T) {
 		}
 	}
 }
+
+func TestMessagesCalendarGroupsByShanghaiDate(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	admin := mustCreateUser(t, models.User{Username: "calendar-admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+	messages := []models.Message{
+		{
+			Content:   "early morning in shanghai",
+			Username:  admin.Username,
+			UserID:    admin.ID,
+			CreatedAt: time.Date(2026, 5, 31, 23, 30, 0, 0, time.UTC), // 2026-06-01 07:30 Asia/Shanghai
+		},
+		{
+			Content:   "same local day",
+			Username:  admin.Username,
+			UserID:    admin.ID,
+			CreatedAt: time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC),
+		},
+	}
+	if err := db.Create(&messages).Error; err != nil {
+		t.Fatalf("create messages: %v", err)
+	}
+
+	calendar, err := GetMessagesGroupByDate()
+	if err != nil {
+		t.Fatalf("get calendar: %v", err)
+	}
+	counts := make(map[string]int)
+	for _, row := range calendar {
+		counts[row.Date] = row.Count
+	}
+	if got := counts["2026-06-01"]; got != 2 {
+		t.Fatalf("2026-06-01 count = %d, want 2; rows=%#v", got, calendar)
+	}
+	if got := counts["2026-05-31"]; got != 0 {
+		t.Fatalf("2026-05-31 count = %d, want 0; rows=%#v", got, calendar)
+	}
+}
