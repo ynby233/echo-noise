@@ -1180,10 +1180,20 @@ const initNMP = async () => {
       if (!player) return
       observeNmpState(el)
       const sourceKey = `${source.playlistId}|${source.songId}`
+      let sourceChanged = false
       if (el.getAttribute('data-source-key') !== sourceKey) {
         el.setAttribute('data-source-key', sourceKey)
-        if (source.playlistId) player.loadPlaylist?.(source.playlistId)
-        else if (source.songId) player.loadSingleSong?.(source.songId)
+        if (source.playlistId) {
+          await player.loadPlaylist?.(source.playlistId)
+          sourceChanged = true
+        } else if (source.songId) {
+          await player.loadSingleSong?.(source.songId)
+          sourceChanged = true
+        }
+      }
+      if (sourceChanged || (!player.currentSong && Array.isArray(player.playlist) && player.playlist.length > 0)) {
+        if (typeof player.currentIndex === 'number') player.currentIndex = 0
+        await player.loadCurrentSong?.()
       }
       const isDarkNow = document.documentElement.classList.contains('dark')
       const theme = normalizeMusicTheme(cfg.musicTheme)

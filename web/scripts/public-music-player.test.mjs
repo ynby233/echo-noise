@@ -46,4 +46,26 @@ assert.doesNotMatch(
   'guest music visibility must not depend on login, admin, token, or auth state'
 )
 
+const initStart = indexPage.indexOf('const initNMP = async () => {')
+const initEnd = indexPage.indexOf('const dedupeStrings', initStart)
+assert.notEqual(initStart, -1, 'home page must define initNMP')
+assert.notEqual(initEnd, -1, 'home page must keep initNMP before NMP asset helpers')
+const initBody = indexPage.slice(initStart, initEnd)
+
+assert.match(
+  initBody,
+  /await\s+player\.loadPlaylist\?\.\(source\.playlistId\)/,
+  'when a playlist source is applied to an existing early-created player, initNMP must await loading the playlist'
+)
+assert.match(
+  initBody,
+  /await\s+player\.loadSingleSong\?\.\(source\.songId\)/,
+  'when a song source is applied to an existing early-created player, initNMP must await loading the song'
+)
+assert.match(
+  initBody,
+  /await\s+player\.loadCurrentSong\?\.\(\)/,
+  'after applying a source to an existing early-created player, initNMP must load the current song into the visible UI/audio element'
+)
+
 console.log('public music player tests passed')
