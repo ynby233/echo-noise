@@ -318,7 +318,7 @@ const getBackgroundColor = (day: { count: number; level: number }) => {
     display: flex;
     gap: 3px;
     overflow-x: auto;
-    padding-bottom: 0;
+    padding-bottom: 8px;
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
