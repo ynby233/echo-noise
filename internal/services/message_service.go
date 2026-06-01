@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -13,6 +14,8 @@ import (
 	"github.com/rcy1314/echo-noise/internal/repository"
 	"github.com/rcy1314/echo-noise/pkg"
 )
+
+var ErrRSSDisabled = errors.New("RSS 已禁用")
 
 // GetAllMessages 封装业务逻辑，获取所有笔记
 func GetAllMessages(showPrivate bool) ([]models.Message, error) {
@@ -144,25 +147,17 @@ func DeleteMessageByAdmin(id uint) error {
 }
 
 func GenerateRSS(c *gin.Context) (string, error) {
-	messages, err := GetAllMessages(false)
+	rssConfig, err := GetRSSConfig()
+	if err != nil {
+		return "", fmt.Errorf("获取 RSS 配置失败: %v", err)
+	}
+	if !rssConfig.Enabled || len(rssConfig.MemberIDs) == 0 {
+		return "", ErrRSSDisabled
+	}
+
+	messages, err := repository.GetPublicMessagesByUserIDs(rssConfig.MemberIDs)
 	if err != nil {
 		return "", fmt.Errorf("获取消息失败: %v", err)
-	}
-
-	// 获取前端配置
-	config, err := GetFrontendConfig()
-	if err != nil {
-		return "", fmt.Errorf("获取配置失败: %v", err)
-	}
-
-	// 从配置中安全获取值
-	getConfigValue := func(key string, defaultValue string) string {
-		if settings, ok := config["frontendSettings"].(map[string]any); ok {
-			if value, exists := settings[key].(string); exists && value != "" {
-				return value
-			}
-		}
-		return defaultValue
 	}
 
 	// 判断请求协议
@@ -176,7 +171,7 @@ func GenerateRSS(c *gin.Context) (string, error) {
 	var baseURL string
 
 	// 从配置获取站点URL，如果没有则使用请求的host
-	configURL := getConfigValue("siteURL", "")
+	configURL := ""
 
 	// 检查请求来源是否为反向代理域名
 	if strings.Contains(requestHost, "note.noisework.cn") {
@@ -207,16 +202,16 @@ func GenerateRSS(c *gin.Context) (string, error) {
 	baseURL = strings.TrimSuffix(baseURL, "/")
 
 	feed := &feeds.Feed{
-		Title: getConfigValue("rssTitle", "Noise的说说笔记"),
+		Title: rssConfig.Title,
 		Link: &feeds.Link{
 			Href: baseURL + "/",
 		},
 		Image: &feeds.Image{
-			Url: baseURL + getConfigValue("rssFaviconURL", "/favicon.ico"),
+			Url: baseURL + rssConfig.FaviconURL,
 		},
-		Description: getConfigValue("rssDescription", "一个说说笔记~"),
+		Description: rssConfig.Description,
 		Author: &feeds.Author{
-			Name: getConfigValue("rssAuthorName", "Noise"),
+			Name: rssConfig.AuthorName,
 		},
 		Updated: time.Now(),
 	}

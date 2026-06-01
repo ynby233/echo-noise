@@ -27,6 +27,19 @@ func GetAllMessages(showPrivate bool) ([]models.Message, error) {
 	return messages, nil
 }
 
+func GetPublicMessagesByUserIDs(userIDs []uint) ([]models.Message, error) {
+	messages := []models.Message{}
+	if len(userIDs) == 0 {
+		return messages, nil
+	}
+
+	if err := database.DB.Where("private = ? AND user_id IN ?", false, userIDs).Order("pinned DESC, created_at DESC").Find(&messages).Error; err != nil {
+		return nil, err
+	}
+
+	return messages, nil
+}
+
 // GetMessageByID 根据 ID 获取留言
 func GetMessageByID(id uint, showPrivate bool) (*models.Message, error) {
     var message models.Message

@@ -121,6 +121,8 @@ type SiteConfig struct {
 	RSSDescription   string `gorm:"type:varchar(191)"`
 	RSSAuthorName    string `gorm:"type:varchar(50)"`
 	RSSFaviconURL    string `gorm:"type:varchar(191)"`
+	RSSEnabled       bool   `gorm:"default:false"`
+	RSSMemberIDs     string `gorm:"type:text"`
 	WalineServerURL  string `gorm:"type:varchar(191)"`
 	EnableGithubCard bool   `gorm:"default:false"`
 	// 推送模块总开关（与具体推送渠道配置解耦）

@@ -133,7 +133,7 @@ func SetupRouter() *gin.Engine {
 	// 消息详情页路由（移到 API 组外）
 	r.GET("/m/:id", controllers.GetMessagePage)
 
-	// RSS 已禁用：保留显式 404 响应，避免旧链接落入前端兜底页。
+	// RSS 路由保留在 API 组外，禁用时仍返回显式 404，避免旧链接落入前端兜底页。
 	r.GET("/rss", controllers.GenerateRSS)
 	api.POST("/rss/refresh", middleware.SessionAuthMiddleware(), controllers.RefreshRSS)
 

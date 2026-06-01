@@ -828,6 +828,80 @@
                     </div>
                   </div>
                 </div>
+                <div id="site-rss-section" v-if="isSectionVisible('site-rss')" class="col-span-12">
+                  <div :class="adminPanelCardClass">
+                    <div :class="adminSectionHeaderClass">
+                      <div class="font-semibold flex items-center gap-2" :class="theme.text">
+                        <UIcon name="i-heroicons-rss" class="w-5 h-5" />
+                        <span>RSS 订阅</span>
+                      </div>
+                      <div class="flex flex-wrap items-center gap-3">
+                        <span :class="[frontendConfig.rssEnabled && rssMemberCount > 0 ? 'text-green-400' : 'text-red-400', 'text-sm']">{{ frontendConfig.rssEnabled && rssMemberCount > 0 ? '已启用' : '未启用' }}</span>
+                        <UToggle v-model="frontendConfig.rssEnabled" :disabled="rssMemberCount === 0" />
+                        <UButton color="green" class="shadow" @click="saveRSSConfig">保存</UButton>
+                      </div>
+                    </div>
+                    <div class="px-4 pb-4">
+                      <div class="rounded-lg p-4 space-y-4" :class="theme.subtleBg">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <label class="text-sm mb-1 block" :class="theme.mutedText">订阅标题</label>
+                            <UInput v-model="frontendConfig.rssTitle" placeholder="Noise的说说笔记" />
+                          </div>
+                          <div>
+                            <label class="text-sm mb-1 block" :class="theme.mutedText">作者名称</label>
+                            <UInput v-model="frontendConfig.rssAuthorName" placeholder="Noise" />
+                          </div>
+                          <div>
+                            <label class="text-sm mb-1 block" :class="theme.mutedText">订阅图标</label>
+                            <UInput v-model="frontendConfig.rssFaviconURL" placeholder="/favicon-32x32.png" />
+                          </div>
+                          <div>
+                            <label class="text-sm mb-1 block" :class="theme.mutedText">订阅描述</label>
+                            <UInput v-model="frontendConfig.rssDescription" placeholder="一个说说笔记~" />
+                          </div>
+                        </div>
+
+                        <div class="rounded-xl border p-3 space-y-3" :class="theme.border">
+                          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                            <div class="flex items-center gap-2" :class="theme.text">
+                              <UIcon name="i-heroicons-user-group" class="w-4 h-4" />
+                              <span class="font-semibold text-sm">成员白名单</span>
+                              <span class="text-xs px-2 py-0.5 rounded-full" :class="theme.subtleBg">{{ rssMemberCount }} / {{ rssAvailableMembers.length }}</span>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                              <UButton size="xs" icon="i-heroicons-check-circle" color="indigo" variant="soft" @click="selectAllRSSMembers">全选</UButton>
+                              <UButton size="xs" icon="i-heroicons-x-circle" color="gray" variant="soft" @click="clearRSSMembers">清空</UButton>
+                            </div>
+                          </div>
+                          <div v-if="rssAvailableMembers.length === 0" class="text-xs" :class="theme.mutedText">暂无可选成员</div>
+                          <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+                            <label
+                              v-for="member in rssAvailableMembers"
+                              :key="member.id"
+                              class="flex items-center gap-3 rounded-lg border px-3 py-2 cursor-pointer"
+                              :class="theme.border"
+                            >
+                              <input
+                                type="checkbox"
+                                class="h-4 w-4 rounded border-slate-400 text-indigo-500 focus:ring-indigo-500"
+                                :checked="isRSSMemberSelected(member)"
+                                @change="onRSSMemberToggle(member, $event)"
+                              />
+                              <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2 min-w-0">
+                                  <span class="truncate text-sm" :class="theme.text">{{ rssMemberDisplayName(member) }}</span>
+                                  <UBadge size="xs" :color="member.isAdmin ? 'orange' : 'gray'" variant="soft">{{ member.isAdmin ? '管理员' : '用户' }}</UBadge>
+                                </div>
+                              </div>
+                            </label>
+                          </div>
+                          <div class="text-xs" :class="theme.mutedText">保存时未选择成员会关闭 RSS；输出仅包含所选成员的公开笔记。</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
                 <div id="hitokoto-section" v-if="isSectionVisible('hitokoto')" class="col-span-12">
                   <div :class="adminPanelCardClass">
                     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
@@ -1825,7 +1899,7 @@ const cardCls = 'rounded-xl border shadow-sm'
 type AdminSectionKey =
   'dashboard' | 'user' | 'site' | 'notify' | 'attachments' | 'db' | 'version' | 'security' |
   'site-register' | 'site-pwa' | 'site-github-card' | 'site-github-login' | 'site-announcement' | 'site-music' |
-  'site-default-theme' | 'site-social-links' | 'site-ads' | 'site-feed' | 'hitokoto' | 'life-countdown' |
+  'site-default-theme' | 'site-social-links' | 'site-ads' | 'site-feed' | 'site-rss' | 'hitokoto' | 'life-countdown' |
   'site-configs' | 'comments' | 'email' | 'admin-users' |
   'storage'
 const activeSection = ref<AdminSectionKey>('dashboard')
@@ -1855,6 +1929,7 @@ const adminNavGroups = computed<AdminNavGroup[]>(() => {
         { key: 'site-announcement', label: '公告栏', icon: 'i-heroicons-megaphone' },
         { key: 'site-ads', label: '左侧广告', icon: 'i-heroicons-photo' },
         { key: 'site-feed', label: '信息流', icon: 'i-heroicons-rss' },
+        { key: 'site-rss', label: 'RSS 订阅', icon: 'i-heroicons-rss' },
         { key: 'hitokoto', label: '随机一言', icon: 'i-heroicons-sparkles' },
         { key: 'life-countdown', label: '人生倒计时', icon: 'i-heroicons-heart' },
         { key: 'site-social-links', label: '社交链接', icon: 'i-heroicons-link' }
@@ -1942,6 +2017,7 @@ const siteSectionKeys: AdminSectionKey[] = [
   'site-configs',
   'site-ads',
   'site-feed',
+  'site-rss',
   'hitokoto',
   'life-countdown'
 ]
@@ -3837,10 +3913,6 @@ const configLabels: Record<string, string> = {
     cardFooterTitle: '卡片页脚标题',
     cardFooterLink: '卡片页脚链接',
     pageFooterHTML: '页面底部HTML',
-    rssTitle: 'RSS 标题',
-    rssDescription: 'RSS 描述',
-    rssAuthorName: 'RSS 作者',
-    rssFaviconURL: 'RSS 图标链接',
     commentPageTitle: '留言页面标题',
     commentPageDescription: '留言页面说明',
     aboutPageTitle: '关于页面标题',
@@ -3856,10 +3928,6 @@ const configFieldHints: Record<string, string> = {
   cardFooterTitle: '首页底部卡片标题文案。',
   cardFooterLink: '点击页脚标题后的跳转地址。',
   pageFooterHTML: '页脚自定义 HTML 内容，适合备案或额外说明。',
-  rssTitle: 'RSS 订阅标题。',
-  rssDescription: 'RSS 订阅说明文字。',
-  rssAuthorName: 'RSS 输出作者名称。',
-  rssFaviconURL: 'RSS 图标地址，建议使用 1:1 图片。',
   commentPageTitle: '留言页大标题。',
   commentPageDescription: '留言页顶部描述文字。',
   aboutPageTitle: '关于页标题。',
@@ -3874,7 +3942,7 @@ const switchConfigKeySet = new Set([
   'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile',
   'commentEnabled', 'commentEmailEnabled', 'commentLoginRequired', 'githubOAuthEnabled',
   'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled',
-  'leftAdEnabled', 'welcomeUseAdmin', 'socialLinksEnabled'
+  'leftAdEnabled', 'welcomeUseAdmin', 'socialLinksEnabled', 'rssEnabled'
 ])
 const isSwitchConfigKey = (key: string) => switchConfigKeySet.has(String(key))
 const getConfigSummary = (key: string) => {
@@ -3900,6 +3968,8 @@ interface FrontendConfig {
     rssDescription: string;
     rssAuthorName: string;
     rssFaviconURL: string;
+    rssEnabled: boolean;
+    rssMemberIDs: number[];
     hitokotoEnabled: boolean;
     loginExpireDays: number;
     commentPageTitle: string;
@@ -3983,6 +4053,8 @@ const frontendConfig = reactive<FrontendConfig>({
     rssDescription: '',
     rssAuthorName: '',
     rssFaviconURL: '',
+    rssEnabled: false,
+    rssMemberIDs: [] as number[],
     hitokotoEnabled: true,
     loginExpireDays: 3,
     commentPageTitle: '',
@@ -4071,10 +4143,6 @@ const editItem = reactive<Record<string, boolean>>({
     cardFooterTitle: false,
     cardFooterLink: false, 
     pageFooterHTML: false,
-    rssTitle: false,
-    rssDescription: false,
-    rssAuthorName: false,
-    rssFaviconURL: false,
     walineServerURL: false,
     socialLinks: false,
     
@@ -4103,7 +4171,9 @@ const defaultConfig: Record<string, any> = {
     rssTitle: 'Noise的说说笔记',
     rssDescription: '一个说说笔记~',
     rssAuthorName: 'Noise',
-    rssFaviconURL: '/favicon.ico',
+    rssFaviconURL: '/favicon-32x32.png',
+    rssEnabled: false,
+    rssMemberIDs: [] as number[],
     hitokotoEnabled: true,
     commentEnabled: true,
     commentSystem: 'builtin',
@@ -4241,6 +4311,76 @@ const normalizeLoginExpireDays = (raw: any): number => {
 const serializeFeedLimit = (raw: any): number => {
   const normalized = normalizeFeedLimitInput(raw)
   return normalized === '' ? 0 : normalized
+}
+
+interface RSSMemberOption {
+  id: number
+  username: string
+  avatarURL?: string
+  isAdmin: boolean
+}
+
+const rssAvailableMembers = ref<RSSMemberOption[]>([])
+
+const normalizeRSSMemberIDs = (raw: any): number[] => {
+  let source = raw
+  if (typeof source === 'string') {
+    try { source = JSON.parse(source) } catch { source = [] }
+  }
+  if (!Array.isArray(source)) return []
+  const seen = new Set<number>()
+  const ids: number[] = []
+  for (const item of source) {
+    const value = typeof item === 'object' && item !== null ? item.id : item
+    const id = Number(value)
+    if (!Number.isFinite(id) || id <= 0) continue
+    const normalized = Math.floor(id)
+    if (seen.has(normalized)) continue
+    seen.add(normalized)
+    ids.push(normalized)
+  }
+  return ids
+}
+
+const normalizeRSSAvailableMembers = (raw: any): RSSMemberOption[] => {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((item: any) => {
+      const id = Number(item?.id)
+      if (!Number.isFinite(id) || id <= 0) return null
+      return {
+        id: Math.floor(id),
+        username: String(item?.username || '').trim() || `用户 ${Math.floor(id)}`,
+        avatarURL: String(item?.avatarURL || '').trim(),
+        isAdmin: item?.isAdmin === true || item?.isAdmin === 'true' || item?.isAdmin === 1 || item?.isAdmin === '1'
+      } as RSSMemberOption
+    })
+    .filter(Boolean) as RSSMemberOption[]
+}
+
+const setRSSMemberIDs = (ids: any) => {
+  ;(frontendConfig as any).rssMemberIDs = normalizeRSSMemberIDs(ids)
+  if ((frontendConfig as any).rssMemberIDs.length === 0) {
+    ;(frontendConfig as any).rssEnabled = false
+  }
+}
+
+const rssSelectedMemberIDSet = computed(() => new Set(normalizeRSSMemberIDs((frontendConfig as any).rssMemberIDs)))
+const rssMemberCount = computed(() => rssSelectedMemberIDSet.value.size)
+const rssMemberDisplayName = (member: RSSMemberOption) => member.username || `用户 ${member.id}`
+const isRSSMemberSelected = (member: RSSMemberOption) => rssSelectedMemberIDSet.value.has(member.id)
+const onRSSMemberToggle = (member: RSSMemberOption, event: Event) => {
+  const checked = !!(event.target as HTMLInputElement | null)?.checked
+  const ids = new Set(normalizeRSSMemberIDs((frontendConfig as any).rssMemberIDs))
+  if (checked) ids.add(member.id)
+  else ids.delete(member.id)
+  setRSSMemberIDs(Array.from(ids))
+}
+const selectAllRSSMembers = () => {
+  setRSSMemberIDs(rssAvailableMembers.value.map((member) => member.id))
+}
+const clearRSSMembers = () => {
+  setRSSMemberIDs([])
 }
 
 const serializeFeedSourcesText = (arr: FeedSourceEntry[]) => (
@@ -4546,7 +4686,7 @@ const fetchConfig = async () => {
             const settings = data.data.frontendSettings;
             
             // 遍历配置项进行更新（布尔型键需强制转换）
-            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile', 'commentEnabled', 'commentEmailEnabled', 'commentEmailAdminNotifyAll', 'commentLoginRequired', 'githubOAuthEnabled', 'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'socialLinksEnabled', 'feedEnabled']
+            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile', 'commentEnabled', 'commentEmailEnabled', 'commentEmailAdminNotifyAll', 'commentLoginRequired', 'githubOAuthEnabled', 'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'socialLinksEnabled', 'feedEnabled', 'rssEnabled']
             Object.keys(frontendConfig).forEach(key => {
                 if (key === 'backgrounds') {
                     const serverBackgrounds = settings[key];
@@ -4586,6 +4726,9 @@ const fetchConfig = async () => {
             ;(frontendConfig as any).feedLimit = normalizeFeedLimitInput((frontendConfig as any).feedLimit)
             ;(frontendConfig as any).feedRefreshSeconds = Math.max(10, Math.min(86400, Number((frontendConfig as any).feedRefreshSeconds || 7200)))
             ;(frontendConfig as any).loginExpireDays = normalizeLoginExpireDays((frontendConfig as any).loginExpireDays)
+            setRSSMemberIDs(settings.rssMemberIDs ?? (frontendConfig as any).rssMemberIDs)
+            ;(frontendConfig as any).rssEnabled = !!(frontendConfig as any).rssEnabled && rssMemberCount.value > 0
+            rssAvailableMembers.value = normalizeRSSAvailableMembers(settings.rssAvailableMembers)
             syncFeedEditor((frontendConfig as any).feedSources)
             // 后台主题：优先本地，其次服务端，兜底白色
             if (typeof window !== 'undefined') {
@@ -4802,6 +4945,28 @@ const saveLifeCountdownConfig = async () => {
   }
 }
 
+const saveRSSConfig = async () => {
+  try {
+    const memberIDs = normalizeRSSMemberIDs((frontendConfig as any).rssMemberIDs)
+    const enabled = !!(frontendConfig as any).rssEnabled && memberIDs.length > 0
+    ;(frontendConfig as any).rssMemberIDs = memberIDs
+    ;(frontendConfig as any).rssEnabled = enabled
+    await saveConfigFields({
+      rssEnabled: enabled,
+      rssMemberIDs: memberIDs,
+      rssTitle: String((frontendConfig as any).rssTitle || '').trim(),
+      rssDescription: String((frontendConfig as any).rssDescription || '').trim(),
+      rssAuthorName: String((frontendConfig as any).rssAuthorName || '').trim(),
+      rssFaviconURL: String((frontendConfig as any).rssFaviconURL || '').trim()
+    })
+    await fetchConfig()
+    window.dispatchEvent(new Event('frontend-config-updated'))
+    useToast().add({ title: '成功', description: enabled ? 'RSS 配置已保存' : 'RSS 已关闭', color: enabled ? 'green' : 'gray' })
+  } catch (error: any) {
+    useToast().add({ title: '失败', description: error?.message || 'RSS 配置保存失败', color: 'red' })
+  }
+}
+
 const saveConfig = async () => {
   try {
     const lifeExpectancyRaw = Number((frontendConfig as any).lifeExpectancyYears)
@@ -4833,6 +4998,7 @@ const saveConfig = async () => {
       : []
 
     const cleanedFeedSources = normalizeFeedSources(feedSourcesEditor.value)
+    const cleanedRSSMemberIDs = normalizeRSSMemberIDs((frontendConfig as any).rssMemberIDs)
 
     const payload = {
       frontendSettings: {
@@ -4846,6 +5012,12 @@ const saveConfig = async () => {
         feedLimit: serializeFeedLimit((frontendConfig as any).feedLimit),
         feedRefreshSeconds: Math.max(10, Math.min(86400, Number((frontendConfig as any).feedRefreshSeconds || 7200))),
         feedEnabled: !!(frontendConfig as any).feedEnabled,
+        rssEnabled: !!(frontendConfig as any).rssEnabled && cleanedRSSMemberIDs.length > 0,
+        rssMemberIDs: cleanedRSSMemberIDs,
+        rssTitle: String((frontendConfig as any).rssTitle || '').trim(),
+        rssDescription: String((frontendConfig as any).rssDescription || '').trim(),
+        rssAuthorName: String((frontendConfig as any).rssAuthorName || '').trim(),
+        rssFaviconURL: String((frontendConfig as any).rssFaviconURL || '').trim(),
         loginExpireDays: normalizeLoginExpireDays((frontendConfig as any).loginExpireDays),
         leftAdsIntervalMs: Number((frontendConfig as any).leftAdsIntervalMs || 0) || Number((defaultConfig as any).leftAdsIntervalMs || 4000),
         leftAdEnabled: !!(frontendConfig as any).leftAdEnabled,
