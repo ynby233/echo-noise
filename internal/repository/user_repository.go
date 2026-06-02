@@ -87,6 +87,12 @@ func clearUserCache(id uint) {
 	cacheMutex.Unlock()
 }
 
+func ClearUserCache() {
+	cacheMutex.Lock()
+	userCacheMap = make(map[uint]userCacheItem)
+	cacheMutex.Unlock()
+}
+
 func UpdateUser(user *models.User) error {
 	if user == nil {
 		return nil

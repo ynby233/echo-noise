@@ -15,6 +15,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
+	"github.com/rcy1314/echo-noise/internal/repository"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -30,9 +31,11 @@ func setupCommentAccountTest(t *testing.T) (*gorm.DB, *gin.Engine, models.User, 
 	if err := db.AutoMigrate(&models.User{}, &models.Message{}, &models.Comment{}, &models.SiteConfig{}); err != nil {
 		t.Fatalf("migrate test db: %v", err)
 	}
+	repository.ClearUserCache()
 	database.DB = db
 	models.SetDB(db)
 	t.Cleanup(func() {
+		repository.ClearUserCache()
 		database.DB = nil
 		models.SetDB(nil)
 	})

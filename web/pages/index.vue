@@ -38,20 +38,24 @@
           </div>
         </UCard>
         <UCard class="sidebar-card no-padding-card mt-2" :class="sidebarThemeCard">
-          <div class="p-0 grid grid-cols-3 gap-2 text-center text-sm">
+          <div v-if="isLoggedIn" class="p-0 grid grid-cols-3 gap-2 text-center text-sm">
             <div>
-              <div class="font-semibold">{{ (status?.total_messages ?? status?.TotalMessages ?? 0) }}</div>
+              <div class="font-semibold">{{ profileTotalMessages }}</div>
               <div class="opacity-70">笔记数</div>
             </div>
             <div>
-              <div class="font-semibold">{{ tagsCount }}</div>
+              <div class="font-semibold">{{ profileTotalTags }}</div>
               <div class="opacity-70">标签</div>
             </div>
             <div>
-              <div class="font-semibold">{{ (images?.length || 0) }}</div>
+              <div class="font-semibold">{{ profileTotalImages }}</div>
               <div class="opacity-70">图片</div>
             </div>
           </div>
+          <button v-else type="button" class="stats-login-prompt" @click="authMode='login'; showAuthModal=true">
+            <UIcon name="i-heroicons-lock-closed" class="w-4 h-4" />
+            <span>登录查看统计</span>
+          </button>
         </UCard>
         <UCard v-if="frontendConfig.socialLinksEnabled === true && (frontendConfig.socialLinks || []).length > 0" class="sidebar-card no-padding-card mt-2" :class="sidebarThemeCard">
           <div class="social-list" v-if="frontendConfig.socialLinksEnabled === true">
@@ -749,6 +753,39 @@ onMounted(() => { loadGuestbookTarget() })
 const userStore = useUserStore()
 const isLoggedIn = computed(() => !!(userStore.isLogin && userStore.user))
 const isOnline = computed(() => !!(userStore.user))
+type ProfileHomeStats = {
+  total_messages?: number
+  total_tags?: number
+  total_images?: number
+  TotalMessages?: number
+  TotalTags?: number
+  TotalImages?: number
+}
+const profileHomeStats = ref<ProfileHomeStats | null>(null)
+const readProfileStat = (snakeKey: keyof ProfileHomeStats, pascalKey: keyof ProfileHomeStats) => {
+  const raw = profileHomeStats.value?.[snakeKey] ?? profileHomeStats.value?.[pascalKey] ?? 0
+  const n = Number(raw)
+  return Number.isFinite(n) ? n : 0
+}
+const profileTotalMessages = computed(() => readProfileStat('total_messages', 'TotalMessages'))
+const profileTotalTags = computed(() => readProfileStat('total_tags', 'TotalTags'))
+const profileTotalImages = computed(() => readProfileStat('total_images', 'TotalImages'))
+const fetchProfileHomeStats = async () => {
+  if (!isLoggedIn.value) {
+    profileHomeStats.value = null
+    return
+  }
+  try {
+    const res = await getRequest<ProfileHomeStats>('users/me/stats', undefined, { credentials: 'include', silent: true })
+    profileHomeStats.value = res && res.code === 1 ? (res.data || null) : null
+  } catch {
+    profileHomeStats.value = null
+  }
+}
+watch(() => [userStore.isLogin, (userStore.user as any)?.id, userStore.token], () => {
+  fetchProfileHomeStats()
+}, { deep: false })
+onMounted(() => { fetchProfileHomeStats() })
 const isAdmin = computed(() => {
   const u = userStore.user as any
   return !!(userStore.isLogin && u && (u.is_admin || u.IsAdmin))
@@ -2873,6 +2910,24 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
 .auth-tooltip:focus-within::after { opacity: 1; transform: translateX(-50%) translateY(0); }
 .auth-btn { width: 36px; height: 36px; padding: 0; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; background: transparent !important; border: none !important; box-shadow: none !important; }
 .auth-btn:hover { background: transparent !important; transform: translateY(-1px); }
+.stats-login-prompt {
+  width: 100%;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: rgba(79, 70, 229, 0.92);
+  font-size: 13px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.stats-login-prompt:hover { color: #4338ca; }
+html.dark .stats-login-prompt { color: rgba(165, 180, 252, 0.94); }
+html.dark .stats-login-prompt:hover { color: #c7d2fe; }
 .avatar-lg {
   width: 72px;
   height: 72px;

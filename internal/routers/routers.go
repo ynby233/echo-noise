@@ -178,6 +178,7 @@ func SetupRouter() *gin.Engine {
 	// 需要鉴权的路由
 	authRoutes := api.Group("")
 	authRoutes.Use(middleware.SessionAuthMiddleware())
+	authRoutes.GET("/users/me/stats", controllers.GetCurrentUserHomeStats)
 	// 版本更新（管理员）
 	authRoutes.POST("/version/update", controllers.UpdateVersion)
 	authRoutes.GET("/version/update/stream", controllers.UpdateVersionStream)

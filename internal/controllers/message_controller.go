@@ -17,6 +17,7 @@ import (
 var (
 	messageTagExtractRegexp = regexp.MustCompile(`#([^\s#\p{P}\p{S}]+)([/?=&][^\s#]*)?`)
 	invalidMessageTagRegexp = regexp.MustCompile(`[/?=&]|^(song|video|playlist)\?id=\d+$`)
+	markdownImageRegexp     = regexp.MustCompile(`!\[.*?\]\((.*?)\)`)
 )
 
 func extractMessageTags(content string) []string {
@@ -41,6 +42,65 @@ func messageHasTag(content string, tag string) bool {
 		}
 	}
 	return false
+}
+
+func isHomeStatsExcludedMessage(content string) bool {
+	lowerContent := strings.ToLower(content)
+	return strings.Contains(lowerContent, "#guestbook") ||
+		strings.Contains(content, "#留言") ||
+		strings.Contains(content, "关于本站") ||
+		strings.Contains(content, "友情链接")
+}
+
+// GetCurrentUserHomeStats 获取当前登录用户首页个人统计。
+func GetCurrentUserHomeStats(c *gin.Context) {
+	user, err := checkUser(c)
+	if err != nil || user == nil || user.ID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "未登录或登录已过期"})
+		return
+	}
+
+	db, err := database.GetDB()
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "数据库连接失败", "data": gin.H{}})
+		return
+	}
+
+	var messages []models.Message
+	if err := db.Select("id", "content", "image_url", "user_id").Where("user_id = ?", user.ID).Find(&messages).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "获取个人统计失败", "data": gin.H{}})
+		return
+	}
+
+	tagSet := make(map[string]struct{})
+	totalMessages := 0
+	totalImages := 0
+	for _, msg := range messages {
+		if isHomeStatsExcludedMessage(msg.Content) {
+			continue
+		}
+		totalMessages++
+		for _, tag := range extractMessageTags(msg.Content) {
+			tagSet[tag] = struct{}{}
+		}
+		if strings.TrimSpace(msg.ImageURL) != "" {
+			totalImages++
+		}
+		for _, match := range markdownImageRegexp.FindAllStringSubmatch(msg.Content, -1) {
+			if len(match) > 1 && strings.TrimSpace(match[1]) != "" {
+				totalImages++
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 1,
+		"data": gin.H{
+			"total_messages": totalMessages,
+			"total_tags":     len(tagSet),
+			"total_images":   totalImages,
+		},
+	})
 }
 
 // GetMessagesByTag 获取指定标签的消息
@@ -163,8 +223,6 @@ func GetAllImages(c *gin.Context) {
 	}
 
 	var allImages []ImageInfo
-	imageRegex := regexp.MustCompile(`!\[.*?\]\((.*?)\)`)
-
 	for _, msg := range messages {
 		if msg.ImageURL != "" {
 			allImages = append(allImages, ImageInfo{
@@ -174,7 +232,7 @@ func GetAllImages(c *gin.Context) {
 			})
 		}
 
-		matches := imageRegex.FindAllStringSubmatch(msg.Content, -1)
+		matches := markdownImageRegexp.FindAllStringSubmatch(msg.Content, -1)
 		for _, match := range matches {
 			if len(match) > 1 {
 				allImages = append(allImages, ImageInfo{
