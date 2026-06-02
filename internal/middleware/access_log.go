@@ -11,7 +11,7 @@ import (
 
 func AccessLogMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if shouldSkipAccessLog(c.Request.Method, c.Request.URL.Path) {
+		if shouldSkipAccessLog(c.Request.Method, c.Request.URL.Path) || !isAccessLogEnabled() {
 			c.Next()
 			return
 		}
@@ -20,6 +20,18 @@ func AccessLogMiddleware() gin.HandlerFunc {
 		c.Next()
 		recordAccessLog(c, time.Since(start))
 	}
+}
+
+func isAccessLogEnabled() bool {
+	db := models.GetDB()
+	if db == nil {
+		return false
+	}
+	var cfg models.SecurityConfig
+	if err := db.Select("access_log_enabled").Order("id asc").First(&cfg).Error; err != nil {
+		return false
+	}
+	return cfg.AccessLogEnabled
 }
 
 func shouldSkipAccessLog(method string, path string) bool {

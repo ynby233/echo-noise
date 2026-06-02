@@ -1289,27 +1289,43 @@
                   <span>访问日志</span>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
+                  <span class="text-sm" :class="theme.mutedText">记录</span>
+                  <span :class="[securityConfig.accessLogEnabled ? 'text-green-400' : 'text-red-400', 'text-sm']">{{ securityConfig.accessLogEnabled ? '已开启' : '已关闭' }}</span>
+                  <UToggle v-model="securityConfig.accessLogEnabled" />
+                  <UButton size="sm" color="green" variant="soft" class="shadow" @click="saveSecurityConfig">保存开关</UButton>
                   <UButton size="sm" color="indigo" variant="soft" class="shadow" :loading="accessLogLoading" @click="refreshAccessLogs">刷新</UButton>
                   <UButton size="sm" color="red" variant="soft" class="shadow" @click="clearAccessLogs">清空</UButton>
                 </div>
               </div>
               <div class="px-4 pb-4 space-y-4">
                 <div :class="adminSubtleCardClass">
-                  <div class="grid grid-cols-1 md:grid-cols-5 gap-2">
+                  <div class="grid grid-cols-1 md:grid-cols-6 gap-2">
                     <UInput v-model="accessLogFilter.ip" placeholder="IP" />
-                    <UInput v-model="accessLogFilter.username" placeholder="用户" />
+                    <UInput v-model="accessLogFilter.username" placeholder="用户名或访客" />
                     <UInput v-model="accessLogFilter.path" placeholder="路径" class="md:col-span-2" />
                     <USelect v-model="accessLogFilter.method" :options="accessLogMethodOptions" />
-                    <div class="md:col-span-5 flex items-center gap-2 justify-end">
+                    <USelect v-model="accessLogFilter.limit" :options="accessLogLimitOptions" />
+                    <UInput v-model="accessLogFilter.startDate" type="date" />
+                    <UInput v-model="accessLogFilter.endDate" type="date" />
+                    <div class="md:col-span-4 flex items-center gap-2 justify-end">
                       <UButton color="primary" variant="soft" @click="refreshAccessLogs">搜索</UButton>
                       <UButton color="gray" variant="soft" @click="resetAccessLogFilter">清空筛选</UButton>
+                    </div>
+                  </div>
+                  <div class="mt-3 space-y-2">
+                    <div class="text-xs" :class="theme.mutedText">用户勾选筛选</div>
+                    <div class="flex flex-wrap gap-2">
+                      <label v-for="option in accessLogUserOptions" :key="option.id" class="inline-flex items-center gap-2 rounded border px-2 py-1 text-sm cursor-pointer" :class="theme.border">
+                        <input v-model="accessLogSelectedUserIds" type="checkbox" :value="option.id" />
+                        <span :class="theme.text">{{ option.label }}</span>
+                      </label>
                     </div>
                   </div>
                 </div>
 
                 <div :class="adminSubtleCardClass">
                   <div class="flex items-center justify-between mb-2">
-                    <div class="font-semibold" :class="theme.text">站点访问（最近 {{ accessLogs.length }} 条）</div>
+                    <div class="font-semibold" :class="theme.text">站点访问（显示 {{ accessLogs.length }} 条，最多 {{ accessLogFilter.limit }} 条）</div>
                   </div>
                   <div class="space-y-3 md:hidden">
                     <div v-for="(row, index) in accessLogs" :key="`access-log-mobile-${row.ID ?? row.id ?? `${row.created_at || row.CreatedAt || ''}-${row.ip || row.IP || ''}-${index}`}`" class="rounded-xl border p-3 space-y-2" :class="[theme.border, theme.cardBg]">
@@ -2939,7 +2955,7 @@ const userToken = ref('')
 const attackLogs = ref<any[]>([])
 const accessLogs = ref<any[]>([])
 const accessLogLoading = ref(false)
-const accessLogFilter = reactive({ ip: '', username: '', path: '', method: '' })
+const accessLogFilter = reactive({ ip: '', username: '', path: '', method: '', startDate: '', endDate: '', limit: '50' })
 const accessLogMethodOptions = [
   { label: '全部方法', value: '' },
   { label: 'GET', value: 'GET' },
@@ -2948,25 +2964,52 @@ const accessLogMethodOptions = [
   { label: 'PATCH', value: 'PATCH' },
   { label: 'DELETE', value: 'DELETE' }
 ]
+const accessLogLimitOptions = [
+  { label: '20 条', value: '20' },
+  { label: '50 条', value: '50' },
+  { label: '100 条', value: '100' },
+  { label: '200 条', value: '200' }
+]
+const accessLogSelectedUserIds = ref<string[]>([])
+const accessLogUserOptions = computed(() => {
+  const options = [{ id: '0', label: '访客' }]
+  const status: any = userStore.status || {}
+  const list = status.users || status.Users || []
+  const users = Array.isArray(list) ? list : []
+  for (const u of users) {
+    const id = String(u.id ?? u.ID ?? u.user_id ?? '').trim()
+    const name = String(u.username ?? u.Username ?? '').trim()
+    if (!id) continue
+    options.push({ id, label: name ? `${name} #${id}` : `用户 #${id}` })
+  }
+  return options
+})
 const loginAudits = ref<any[]>([])
 const loginAuditLoading = ref(false)
 const loginAuditFilter = reactive({ username: '', ip: '' })
 const ipBans = ref<any[]>([])
 const banForm = reactive({ ip: '', minutes: 0 as any, reason: '' })
-const securityConfig = reactive({ autoBanEnabled: false, autoBanWindowSeconds: 600 as any, autoBanThreshold: 10 as any, autoBanMinutes: 60 as any })
+const securityConfig = reactive({ autoBanEnabled: false, autoBanWindowSeconds: 600 as any, autoBanThreshold: 10 as any, autoBanMinutes: 60 as any, accessLogEnabled: false })
 
 const refreshAccessLogs = async () => {
   try {
     accessLogLoading.value = true
-    const params: Record<string, any> = { limit: 200 }
+    const limit = String(accessLogFilter.limit || '50').trim()
+    const params: Record<string, any> = { limit }
     const ip = String(accessLogFilter.ip || '').trim()
     const username = String(accessLogFilter.username || '').trim()
     const path = String(accessLogFilter.path || '').trim()
     const method = String(accessLogFilter.method || '').trim()
+    const startDate = String(accessLogFilter.startDate || '').trim()
+    const endDate = String(accessLogFilter.endDate || '').trim()
+    const userIDs = accessLogSelectedUserIds.value.map((id) => String(id).trim()).filter(Boolean)
     if (ip) params.ip = ip
     if (username) params.username = username
     if (path) params.path = path
     if (method) params.method = method
+    if (startDate) params.startDate = startDate
+    if (endDate) params.endDate = endDate
+    if (userIDs.length > 0) params.user_ids = userIDs.join(',')
     const res: any = await getRequest<any>('security/access-logs', params, { credentials: 'include', silent: true })
     if (res && res.code === 1) {
       accessLogs.value = Array.isArray(res.data) ? res.data : []
@@ -2985,6 +3028,10 @@ const resetAccessLogFilter = async () => {
   accessLogFilter.username = ''
   accessLogFilter.path = ''
   accessLogFilter.method = ''
+  accessLogFilter.startDate = ''
+  accessLogFilter.endDate = ''
+  accessLogFilter.limit = '50'
+  accessLogSelectedUserIds.value = []
   await refreshAccessLogs()
 }
 
@@ -3058,6 +3105,7 @@ const refreshSecurity = async () => {
 			securityConfig.autoBanWindowSeconds = res3.data.autoBanWindowSeconds ?? 600
 			securityConfig.autoBanThreshold = res3.data.autoBanThreshold ?? 10
 			securityConfig.autoBanMinutes = res3.data.autoBanMinutes ?? 60
+			securityConfig.accessLogEnabled = !!res3.data.accessLogEnabled
 		}
   } catch {}
 }
@@ -3068,7 +3116,8 @@ const saveSecurityConfig = async () => {
       autoBanEnabled: !!securityConfig.autoBanEnabled,
       autoBanWindowSeconds: Number(securityConfig.autoBanWindowSeconds || 0),
       autoBanThreshold: Number(securityConfig.autoBanThreshold || 0),
-      autoBanMinutes: Number(securityConfig.autoBanMinutes || 0)
+      autoBanMinutes: Number(securityConfig.autoBanMinutes || 0),
+      accessLogEnabled: !!securityConfig.accessLogEnabled
     }
     const res: any = await putRequest<any>('security/config', payload, { credentials: 'include' })
     if (res && res.code === 1) {
@@ -3085,7 +3134,10 @@ const saveSecurityConfig = async () => {
 onMounted(async () => {
   if (isAdmin.value) {
     await refreshSecurity()
-    if (activeSection.value === 'access-logs') await refreshAccessLogs()
+    if (activeSection.value === 'access-logs') {
+      await refreshUsers()
+      await refreshAccessLogs()
+    }
     if (activeSection.value === 'login-audits') await refreshLoginAudits()
   }
 })
@@ -3093,13 +3145,19 @@ onMounted(async () => {
 watch(() => isAdmin.value, async (v) => {
   if (v) {
     await refreshSecurity()
-    if (activeSection.value === 'access-logs') await refreshAccessLogs()
+    if (activeSection.value === 'access-logs') {
+      await refreshUsers()
+      await refreshAccessLogs()
+    }
     if (activeSection.value === 'login-audits') await refreshLoginAudits()
   }
 })
 
 watch(() => activeSection.value, async (section) => {
-  if (section === 'access-logs' && isAdmin.value) await refreshAccessLogs()
+  if (section === 'access-logs' && isAdmin.value) {
+    await refreshUsers()
+    await refreshAccessLogs()
+  }
   if (section === 'login-audits' && isAdmin.value) await refreshLoginAudits()
 })
 

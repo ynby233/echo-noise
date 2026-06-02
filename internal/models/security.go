@@ -28,6 +28,7 @@ type SecurityConfig struct {
 	AutoBanWindowSeconds int  `gorm:"default:600" json:"autoBanWindowSeconds"`
 	AutoBanThreshold     int  `gorm:"default:10" json:"autoBanThreshold"`
 	AutoBanMinutes       int  `gorm:"default:60" json:"autoBanMinutes"`
+	AccessLogEnabled     bool `gorm:"default:false" json:"accessLogEnabled"`
 }
 
 type SecurityLoginAudit struct {

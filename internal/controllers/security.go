@@ -86,10 +86,10 @@ func GetAccessLogs(c *gin.Context) {
 		return
 	}
 
-	limit := 200
+	limit := 50
 	if v := strings.TrimSpace(c.Query("limit")); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
-			if n > 0 && n <= 1000 {
+			if n > 0 && n <= 200 {
 				limit = n
 			}
 		}
@@ -99,7 +99,14 @@ func GetAccessLogs(c *gin.Context) {
 	if ip := strings.TrimSpace(c.Query("ip")); ip != "" {
 		query = query.Where("ip = ?", ip)
 	}
-	if username := strings.TrimSpace(c.Query("username")); username != "" {
+	username := strings.TrimSpace(c.Query("username"))
+	visitorOnly := isVisitorKeyword(username)
+	if visitorFlag := strings.ToLower(strings.TrimSpace(c.Query("visitor"))); visitorFlag == "1" || visitorFlag == "true" {
+		visitorOnly = true
+	}
+	if visitorOnly {
+		query = query.Where("user_id = 0")
+	} else if username != "" {
 		query = query.Where("username LIKE ?", "%"+username+"%")
 	}
 	if method := strings.ToUpper(strings.TrimSpace(c.Query("method"))); method != "" {
@@ -113,15 +120,67 @@ func GetAccessLogs(c *gin.Context) {
 			query = query.Where("status = ?", n)
 		}
 	}
-	if userID := strings.TrimSpace(c.Query("user_id")); userID != "" {
+	if userIDs := parseAccessLogUserIDs(c.Query("user_ids")); len(userIDs) > 0 {
+		query = query.Where("user_id IN ?", userIDs)
+	} else if userID := strings.TrimSpace(c.Query("user_id")); userID != "" {
 		if n, err := strconv.ParseUint(userID, 10, 64); err == nil {
 			query = query.Where("user_id = ?", uint(n))
 		}
+	}
+	if start, ok := parseAccessLogDate(c.Query("startDate")); ok {
+		query = query.Where("created_at >= ?", start)
+	}
+	if end, ok := parseAccessLogDate(c.Query("endDate")); ok {
+		query = query.Where("created_at < ?", end.AddDate(0, 0, 1))
 	}
 
 	var logs []models.SecurityAccessLog
 	_ = query.Find(&logs).Error
 	c.JSON(http.StatusOK, dto.OK(logs, "ok"))
+}
+
+func isVisitorKeyword(value string) bool {
+	s := strings.ToLower(strings.TrimSpace(value))
+	return s == "访客" || s == "游客" || s == "guest" || s == "visitor"
+}
+
+func parseAccessLogUserIDs(value string) []uint {
+	parts := strings.Split(strings.TrimSpace(value), ",")
+	ids := make([]uint, 0, len(parts))
+	seen := map[uint]bool{}
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		n, err := strconv.ParseUint(part, 10, 64)
+		if err != nil {
+			continue
+		}
+		id := uint(n)
+		if seen[id] {
+			continue
+		}
+		ids = append(ids, id)
+		seen[id] = true
+	}
+	return ids
+}
+
+func parseAccessLogDate(value string) (time.Time, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return time.Time{}, false
+	}
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.Local
+	}
+	parsed, err := time.ParseInLocation("2006-01-02", value, loc)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return parsed, true
 }
 
 func ClearAccessLogs(c *gin.Context) {
@@ -249,6 +308,7 @@ type securityConfigReq struct {
 	AutoBanWindowSeconds int  `json:"autoBanWindowSeconds"`
 	AutoBanThreshold     int  `json:"autoBanThreshold"`
 	AutoBanMinutes       int  `json:"autoBanMinutes"`
+	AccessLogEnabled     bool `json:"accessLogEnabled"`
 }
 
 func UpdateSecurityConfig(c *gin.Context) {
@@ -289,6 +349,7 @@ func UpdateSecurityConfig(c *gin.Context) {
 	cfg.AutoBanWindowSeconds = req.AutoBanWindowSeconds
 	cfg.AutoBanThreshold = req.AutoBanThreshold
 	cfg.AutoBanMinutes = req.AutoBanMinutes
+	cfg.AccessLogEnabled = req.AccessLogEnabled
 	if cfg.ID == 0 {
 		_ = db.Create(&cfg).Error
 	} else {
