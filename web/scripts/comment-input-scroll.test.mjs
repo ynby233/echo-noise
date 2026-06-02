@@ -66,4 +66,22 @@ assert.match(
   'the return-to-comment/reply button should use controlled content-wrapper scrolling'
 )
 
+assert.match(
+  component,
+  /const\s+showReopenInput\s*=\s*computed\(\(\)\s*=>\s*!!props\.showInput\s*&&\s*hiddenByCancel\.value[\s\S]*?canComment\.value\)/,
+  'a permanently visible comment board should expose a reopen state after canceling the input'
+)
+
+assert.match(
+  component,
+  /<button\s+class="submit-btn comment-reopen-btn"[\s\S]*?@click="reopenInput"[\s\S]*?>写\{\{\s*contextLabel\s*\}\}<\/button>/,
+  'canceling the guestbook input should leave a visible button to open it again without refreshing'
+)
+
+assert.match(
+  component,
+  /const\s+reopenInput\s*=\s*\(\)\s*=>\s*\{[\s\S]*?hiddenByCancel\.value\s*=\s*false[\s\S]*?focusInput\(\)/,
+  'the reopen button should restore local input visibility and focus the textarea'
+)
+
 console.log('comment input scroll restoration tests passed')

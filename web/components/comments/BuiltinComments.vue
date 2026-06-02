@@ -122,6 +122,9 @@
           </div>
         </div>
       </div>
+      <div v-else-if="showReopenInput" class="comment-reopen-row mt-5 mb-3">
+        <button class="submit-btn comment-reopen-btn" :class="submitBtnClass" @click="reopenInput">写{{ contextLabel }}</button>
+      </div>
       <div v-else-if="props.showInput && !enabled" class="text-xs text-center mt-5 mb-3" :class="themeMuted">{{ contextLabel }}功能未开启</div>
       <div v-else-if="props.showInput && enabled && !canComment" class="text-xs text-center mt-5 mb-3" :class="themeMuted">{{ loginRequiredText }}</div>
       
@@ -419,6 +422,7 @@ type CommentScrollBlock = 'nearest' | 'start' | 'center'
 const inputRestoreScroll = ref<InputScrollSnapshot | null>(null)
 const pendingInputScroll = ref(false)
 const formVisible = computed(() => (((props.showInput && !hiddenByCancel.value) || !!replyTo.value) && canComment.value))
+const showReopenInput = computed(() => !!props.showInput && hiddenByCancel.value && !replyTo.value && canComment.value)
 const isScrollableY = (el: HTMLElement) => {
   if (typeof window === 'undefined') return false
   const style = window.getComputedStyle(el)
@@ -582,6 +586,16 @@ const scrollToInput = async (focus = true) => {
   }
   scrollElementIntoInputContainer(target, 'nearest')
   if (focus) focusInput()
+}
+
+const reopenInput = () => {
+  hiddenByCancel.value = false
+  replyTo.value = null
+  hideMention()
+  nextTick(() => {
+    autoResizeTextarea()
+    focusInput()
+  })
 }
 
 const startReply = (id: number, authorName: string) => {
@@ -978,6 +992,8 @@ const repliesCount = (rootId: number) => {
 .input-avatar { width:36px; height:36px; border-radius:9999px; object-fit:cover; }
 .input-main { flex:1; display:flex; flex-direction:column; gap:8px; }
 .input-actions { display:flex; justify-content:flex-end; gap:8px; }
+.comment-reopen-row { display:flex; justify-content:flex-end; }
+.comment-reopen-btn { min-width:84px; }
 .return-target-btn { display:inline-flex; align-items:center; gap:4px; min-height:28px; }
 .submit-btn { min-width:64px; height:32px; border-radius:8px; padding:0 12px; font-size:13px; display:inline-flex; align-items:center; justify-content:center; }
 .cancel-btn { min-width:64px; height:32px; border-radius:8px; padding:0 12px; font-size:13px; display:inline-flex; align-items:center; justify-content:center; }
