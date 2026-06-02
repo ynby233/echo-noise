@@ -16,34 +16,19 @@ func SessionAuthMiddleware() gin.HandlerFunc {
 		session := sessions.Default(ctx)
 		userID := session.Get("user_id")
 		expireAt := parseSessionExpireAt(session.Get("login_expire_at"))
+		isSessionAdmin, _ := session.Get("is_admin").(bool)
+		now := time.Now().Unix()
+		sessionExpired := userID != nil && !isSessionAdmin && expireAt > 0 && now > expireAt
 
-		if userID == nil || (expireAt > 0 && time.Now().Unix() > expireAt) {
-			if userID != nil && expireAt > 0 && time.Now().Unix() > expireAt {
+		if userID == nil || sessionExpired {
+			if sessionExpired {
 				session.Clear()
 				_ = session.Save()
 			}
-			// Bearer Token 回退认证（无需 Cookie）
-			auth := ctx.GetHeader("Authorization")
-			if strings.TrimSpace(auth) != "" {
-				var token string
-				if strings.HasPrefix(auth, "Bearer ") {
-					token = strings.TrimPrefix(auth, "Bearer ")
-				} else {
-					token = auth
-				}
-
-				db, err := database.GetDB()
-				if err == nil {
-					var user models.User
-					if err := db.Where("token = ?", strings.TrimSpace(token)).First(&user).Error; err == nil && user.ID != 0 {
-						ctx.Set("user_id", user.ID)
-						ctx.Set("username", user.Username)
-						ctx.Set("is_admin", user.IsAdmin)
-						ctx.Set("auth_via", "token")
-						ctx.Next()
-						return
-					}
-				}
+			// Bearer Token 回退仅保留给管理员，避免普通用户的持久化 token 绕过登录过期时间。
+			if authenticateAdminBearerToken(ctx) {
+				ctx.Next()
+				return
 			}
 			// 定义公共路由
 			publicPaths := []string{
@@ -81,6 +66,36 @@ func SessionAuthMiddleware() gin.HandlerFunc {
 		ctx.Set("auth_via", "session")
 		ctx.Next()
 	}
+}
+
+func authenticateAdminBearerToken(ctx *gin.Context) bool {
+	auth := ctx.GetHeader("Authorization")
+	if strings.TrimSpace(auth) == "" {
+		return false
+	}
+	var token string
+	if strings.HasPrefix(auth, "Bearer ") {
+		token = strings.TrimPrefix(auth, "Bearer ")
+	} else {
+		token = auth
+	}
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return false
+	}
+	db, err := database.GetDB()
+	if err != nil {
+		return false
+	}
+	var user models.User
+	if err := db.Where("token = ?", token).First(&user).Error; err != nil || user.ID == 0 || user.Token == "" || !user.IsAdmin {
+		return false
+	}
+	ctx.Set("user_id", user.ID)
+	ctx.Set("username", user.Username)
+	ctx.Set("is_admin", true)
+	ctx.Set("auth_via", "token")
+	return true
 }
 
 func parseSessionExpireAt(v interface{}) int64 {

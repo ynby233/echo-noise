@@ -243,6 +243,7 @@ type SiteConfig struct {
 	AboutPageDescription   string `gorm:"type:varchar(191)"`
 	AboutMarkdown          string `gorm:"type:text"`
 	LoginExpireDays        int    `gorm:"default:3"`
+	LoginExpireHours       int    `gorm:"default:0"`
 	// 信息流聚合配置
 	FeedEnabled            bool   `gorm:"default:false"`
 	FeedPageTitle          string `gorm:"type:varchar(100)"`

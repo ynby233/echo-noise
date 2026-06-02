@@ -442,14 +442,20 @@
                       <UIcon name="i-heroicons-clock" class="w-4 h-4" />
                       <span>登录过期时间</span>
                     </div>
-                    <div class="flex items-center gap-2">
-                      <UInput v-model.number="frontendConfig.loginExpireDays" type="number" min="1" step="1" class="w-44" />
-                      <UButton color="gray" variant="soft" @click="frontendConfig.loginExpireDays = 3" class="shadow">3 天</UButton>
-                      <UButton color="gray" variant="soft" @click="frontendConfig.loginExpireDays = 7" class="shadow">7 天</UButton>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <div class="flex items-center gap-1">
+                        <UInput v-model.number="frontendConfig.loginExpireDays" type="number" min="0" max="31" step="1" class="w-24" />
+                        <span class="text-sm" :class="theme.mutedText">天</span>
+                      </div>
+                      <div class="flex items-center gap-1">
+                        <UInput v-model.number="frontendConfig.loginExpireHours" type="number" min="0" max="24" step="1" class="w-24" />
+                        <span class="text-sm" :class="theme.mutedText">小时</span>
+                      </div>
+                      <UButton v-for="preset in loginExpirePresetOptions" :key="preset.label" color="gray" variant="soft" @click="setLoginExpirePreset(preset.days, preset.hours)" class="shadow">{{ preset.label }}</UButton>
                       <UButton color="green" @click="saveConfigItem('loginExpireDays')" class="shadow">保存</UButton>
                     </div>
                   </div>
-                  <div class="text-xs mt-2" :class="theme.mutedText">会话过期后需重新登录；支持任意正整数天数，默认快捷为 3 天和 7 天。</div>
+                  <div class="text-xs mt-2" :class="theme.mutedText">普通用户从登录那一刻开始计算，过期后需重新登录；管理员不受该过期清退影响。支持 0-31 天和 0-24 小时，最长 31 天 24 小时。</div>
                 </div>
                 <div id="site-pwa-section" v-if="isSectionVisible('site-pwa')" class="rounded-lg p-4" :class="theme.subtleBg">
                   <div class="flex justify-between items-center mb-3">
@@ -4493,7 +4499,7 @@ const configFieldHints: Record<string, string> = {
   aboutPageTitle: '关于页标题。',
   aboutPageDescription: '关于页简介说明。',
   aboutMarkdown: '关于页正文内容，支持 Markdown。',
-  loginExpireDays: '登录态过期时间，支持任意正整数天数。',
+  loginExpireDays: '登录态过期时间，支持天数和小时组合，普通用户过期后需重新登录。',
   feedPageTitle: '首页信息流 Tab 的标题文案。',
   feedPageDescription: '首页信息流 Tab 的介绍文案，支持 {count} 占位符。'
 }
@@ -4532,6 +4538,7 @@ interface FrontendConfig {
     rssMemberIDs: number[];
     hitokotoEnabled: boolean;
     loginExpireDays: number;
+    loginExpireHours: number;
     commentPageTitle: string;
     commentPageDescription: string;
     aboutPageTitle: string;
@@ -4617,6 +4624,7 @@ const frontendConfig = reactive<FrontendConfig>({
     rssMemberIDs: [] as number[],
     hitokotoEnabled: true,
     loginExpireDays: 3,
+    loginExpireHours: 0,
     commentPageTitle: '',
     commentPageDescription: '',
     aboutPageTitle: '',
@@ -4767,6 +4775,7 @@ const defaultConfig: Record<string, any> = {
     lifeCountdownBirthDate: '',
     lifeExpectancyYears: '',
     loginExpireDays: 3,
+    loginExpireHours: 0,
     commentPageTitle: '留言',
     commentPageDescription: '欢迎留下你的看法',
     aboutPageTitle: '关于本站',
@@ -4862,10 +4871,33 @@ const normalizeFeedLimitInput = (raw: any): number | '' => {
   return Math.max(1, Math.min(100, Math.floor(value)))
 }
 
-const normalizeLoginExpireDays = (raw: any): number => {
+const normalizeLoginExpireValue = (raw: any): number => {
   const value = Number(raw)
-  if (!Number.isFinite(value) || value <= 0) return 3
+  if (!Number.isFinite(value) || value < 0) return 0
   return Math.floor(value)
+}
+
+const normalizeLoginExpireConfig = (rawDays: any, rawHours: any): { days: number; hours: number } => {
+  let days = normalizeLoginExpireValue(rawDays)
+  let hours = normalizeLoginExpireValue(rawHours)
+  if (days > 31) return { days: 31, hours: 24 }
+  if (hours > 24) hours = 24
+  if (days === 0 && hours === 0) return { days: 3, hours: 0 }
+  return { days, hours }
+}
+
+const loginExpirePresetOptions = [
+  { label: '1 小时', days: 0, hours: 1 },
+  { label: '6 小时', days: 0, hours: 6 },
+  { label: '12 小时', days: 0, hours: 12 },
+  { label: '1 天', days: 1, hours: 0 },
+  { label: '3 天', days: 3, hours: 0 },
+  { label: '7 天', days: 7, hours: 0 }
+]
+
+const setLoginExpirePreset = (days: number, hours: number) => {
+  ;(frontendConfig as any).loginExpireDays = days
+  ;(frontendConfig as any).loginExpireHours = hours
 }
 
 const serializeFeedLimit = (raw: any): number => {
@@ -5285,7 +5317,9 @@ const fetchConfig = async () => {
             ;(frontendConfig as any).feedSources = normalizeFeedSources((frontendConfig as any).feedSources)
             ;(frontendConfig as any).feedLimit = normalizeFeedLimitInput((frontendConfig as any).feedLimit)
             ;(frontendConfig as any).feedRefreshSeconds = Math.max(10, Math.min(86400, Number((frontendConfig as any).feedRefreshSeconds || 7200)))
-            ;(frontendConfig as any).loginExpireDays = normalizeLoginExpireDays((frontendConfig as any).loginExpireDays)
+            const loginExpire = normalizeLoginExpireConfig((frontendConfig as any).loginExpireDays, (frontendConfig as any).loginExpireHours)
+            ;(frontendConfig as any).loginExpireDays = loginExpire.days
+            ;(frontendConfig as any).loginExpireHours = loginExpire.hours
             setRSSMemberIDs(settings.rssMemberIDs ?? (frontendConfig as any).rssMemberIDs)
             ;(frontendConfig as any).rssEnabled = !!(frontendConfig as any).rssEnabled && rssMemberCount.value > 0
             rssAvailableMembers.value = normalizeRSSAvailableMembers(settings.rssAvailableMembers)
@@ -5410,7 +5444,9 @@ const saveConfigItem = async (key: string) => {
             ;(frontendConfig as any).feedPageDescription = String((frontendConfig as any).feedPageDescription || '').trim()
         }
         if (key === 'loginExpireDays') {
-            ;(frontendConfig as any).loginExpireDays = normalizeLoginExpireDays((frontendConfig as any).loginExpireDays)
+            const loginExpire = normalizeLoginExpireConfig((frontendConfig as any).loginExpireDays, (frontendConfig as any).loginExpireHours)
+            ;(frontendConfig as any).loginExpireDays = loginExpire.days
+            ;(frontendConfig as any).loginExpireHours = loginExpire.hours
         }
 
         const settingsToSave = {
@@ -5424,9 +5460,14 @@ const saveConfigItem = async (key: string) => {
                       feedRefreshSeconds: Number((frontendConfig as any).feedRefreshSeconds || 7200),
                       feedSources: (frontendConfig as any).feedSources
                     }
-                  : {
-                      [key]: isSwitchConfigKey(key) ? !!(frontendConfig as any)[key] : (frontendConfig as any)[key]
-                    })
+                  : key === 'loginExpireDays'
+                    ? {
+                        loginExpireDays: (frontendConfig as any).loginExpireDays,
+                        loginExpireHours: (frontendConfig as any).loginExpireHours
+                      }
+                    : {
+                        [key]: isSwitchConfigKey(key) ? !!(frontendConfig as any)[key] : (frontendConfig as any)[key]
+                      })
             }
         };
 
@@ -5559,6 +5600,7 @@ const saveConfig = async () => {
 
     const cleanedFeedSources = normalizeFeedSources(feedSourcesEditor.value)
     const cleanedRSSMemberIDs = normalizeRSSMemberIDs((frontendConfig as any).rssMemberIDs)
+    const loginExpire = normalizeLoginExpireConfig((frontendConfig as any).loginExpireDays, (frontendConfig as any).loginExpireHours)
 
     const payload = {
       frontendSettings: {
@@ -5578,7 +5620,8 @@ const saveConfig = async () => {
         rssDescription: String((frontendConfig as any).rssDescription || '').trim(),
         rssAuthorName: String((frontendConfig as any).rssAuthorName || '').trim(),
         rssFaviconURL: String((frontendConfig as any).rssFaviconURL || '').trim(),
-        loginExpireDays: normalizeLoginExpireDays((frontendConfig as any).loginExpireDays),
+        loginExpireDays: loginExpire.days,
+        loginExpireHours: loginExpire.hours,
         leftAdsIntervalMs: Number((frontendConfig as any).leftAdsIntervalMs || 0) || Number((defaultConfig as any).leftAdsIntervalMs || 4000),
         leftAdEnabled: !!(frontendConfig as any).leftAdEnabled,
         socialLinksEnabled: !!(frontendConfig as any).socialLinksEnabled,

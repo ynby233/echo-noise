@@ -88,25 +88,51 @@ func checkUser(c *gin.Context) (*models.User, error) {
 	return user, nil
 }
 
-func getLoginExpireDays() int {
+const (
+	defaultLoginExpireDays  = 3
+	defaultLoginExpireHours = 0
+	maxLoginExpireDays      = 31
+	maxLoginExpireHours     = 24
+)
+
+func normalizeLoginExpireConfig(days int, hours int) (int, int) {
+	if days < 0 {
+		days = 0
+	}
+	if hours < 0 {
+		hours = 0
+	}
+	if days > maxLoginExpireDays {
+		return maxLoginExpireDays, maxLoginExpireHours
+	}
+	if hours > maxLoginExpireHours {
+		hours = maxLoginExpireHours
+	}
+	if days == 0 && hours == 0 {
+		return defaultLoginExpireDays, defaultLoginExpireHours
+	}
+	return days, hours
+}
+
+func getLoginExpireDuration() time.Duration {
 	db, err := database.GetDB()
 	if err != nil {
-		return 3
+		return time.Duration(defaultLoginExpireDays) * 24 * time.Hour
 	}
 	var cfg models.SiteConfig
 	if err := db.Table("site_configs").First(&cfg).Error; err != nil {
-		return 3
+		return time.Duration(defaultLoginExpireDays) * 24 * time.Hour
 	}
-	if cfg.LoginExpireDays > 0 {
-		return cfg.LoginExpireDays
-	}
-	return 3
+	days, hours := normalizeLoginExpireConfig(cfg.LoginExpireDays, cfg.LoginExpireHours)
+	return (time.Duration(days)*24 + time.Duration(hours)) * time.Hour
 }
 
-func applyLoginSessionExpire(session sessions.Session) {
-	days := getLoginExpireDays()
-	ttlSeconds := days * 24 * 60 * 60
-	session.Set("login_expire_at", time.Now().Add(time.Duration(ttlSeconds)*time.Second).Unix())
+func applyLoginSessionExpire(session sessions.Session, user *models.User) {
+	if user != nil && user.IsAdmin {
+		session.Set("login_expire_at", int64(0))
+		return
+	}
+	session.Set("login_expire_at", time.Now().Add(getLoginExpireDuration()).Unix())
 }
 
 func Login(c *gin.Context) {
@@ -127,7 +153,7 @@ func Login(c *gin.Context) {
 
 	session := sessions.Default(c)
 	session.Clear()
-	applyLoginSessionExpire(session)
+	applyLoginSessionExpire(session, user)
 	session.Set("user_id", user.ID)
 	session.Set("username", user.Username)
 	session.Set("is_admin", user.IsAdmin)
@@ -3605,7 +3631,7 @@ func GithubCallback(c *gin.Context) {
 	// 设置会话
 	session := sessions.Default(c)
 	session.Clear()
-	applyLoginSessionExpire(session)
+	applyLoginSessionExpire(session, user)
 	session.Set("user_id", user.ID)
 	session.Set("username", user.Username)
 	session.Set("is_admin", user.IsAdmin)

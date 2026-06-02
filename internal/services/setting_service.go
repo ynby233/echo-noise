@@ -43,6 +43,52 @@ var lifeCountdownSettingKeys = map[string]struct{}{
 
 const defaultHeaderImageURL = "https://s2.loli.net/2025/03/26/d7iyuPYA8cRqD1K.jpg"
 
+const (
+	defaultLoginExpireDays  = 3
+	defaultLoginExpireHours = 0
+	maxLoginExpireDays      = 31
+	maxLoginExpireHours     = 24
+)
+
+func normalizeLoginExpireConfig(days int, hours int) (int, int) {
+	if days < 0 {
+		days = 0
+	}
+	if hours < 0 {
+		hours = 0
+	}
+	if days > maxLoginExpireDays {
+		return maxLoginExpireDays, maxLoginExpireHours
+	}
+	if hours > maxLoginExpireHours {
+		hours = maxLoginExpireHours
+	}
+	if days == 0 && hours == 0 {
+		return defaultLoginExpireDays, defaultLoginExpireHours
+	}
+	return days, hours
+}
+
+func parsePositiveIntSetting(raw interface{}) (int, bool) {
+	switch v := raw.(type) {
+	case float64:
+		return int(v), true
+	case float32:
+		return int(v), true
+	case int:
+		return v, true
+	case int64:
+		return int(v), true
+	case uint:
+		return int(v), true
+	case string:
+		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
+			return n, true
+		}
+	}
+	return 0, false
+}
+
 var legacyDefaultHeaderImageURLs = map[string]struct{}{
 	"https://s2.loli.net/2025/03/27/KJ1trnU2ksbFEYM.jpg": {},
 	"https://s2.loli.net/2025/03/27/MZqaLczCvwjSmW7.jpg": {},
@@ -660,10 +706,12 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 			"linksApplyTitle":  choose(config.LinksApplyTitle, "申请友链须知"),
 			"linksApplyText":   choose(config.LinksApplyText, "请提供站点名称、网址、图标（可选）、简介与有效邮箱。提交后需管理员审核，审核通过后展示。"),
 			"loginExpireDays": func() int {
-				if config.LoginExpireDays > 0 {
-					return config.LoginExpireDays
-				}
-				return 3
+				days, _ := normalizeLoginExpireConfig(config.LoginExpireDays, config.LoginExpireHours)
+				return days
+			}(),
+			"loginExpireHours": func() int {
+				_, hours := normalizeLoginExpireConfig(config.LoginExpireDays, config.LoginExpireHours)
+				return hours
 			}(),
 			"commentPageTitle":       choose(config.CommentPageTitle, getDefaultConfig()["frontendSettings"].(map[string]interface{})["commentPageTitle"].(string)),
 			"commentPageDescription": choose(config.CommentPageDescription, getDefaultConfig()["frontendSettings"].(map[string]interface{})["commentPageDescription"].(string)),
@@ -921,23 +969,15 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	if v, ok := frontendSettings["aboutMarkdown"].(string); ok {
 		config.AboutMarkdown = v
 	}
-	if vi, ok := frontendSettings["loginExpireDays"].(float64); ok {
-		n := int(vi)
-		if n > 0 {
-			config.LoginExpireDays = n
-		}
-	} else if vi2, ok := frontendSettings["loginExpireDays"].(int); ok {
-		if vi2 > 0 {
-			config.LoginExpireDays = vi2
-		}
-	} else if vs, ok := frontendSettings["loginExpireDays"].(string); ok {
-		if n, err := strconv.Atoi(strings.TrimSpace(vs)); err == nil && n > 0 {
-			config.LoginExpireDays = n
-		}
+	loginExpireDays := config.LoginExpireDays
+	loginExpireHours := config.LoginExpireHours
+	if n, ok := parsePositiveIntSetting(frontendSettings["loginExpireDays"]); ok {
+		loginExpireDays = n
 	}
-	if config.LoginExpireDays <= 0 {
-		config.LoginExpireDays = 3
+	if n, ok := parsePositiveIntSetting(frontendSettings["loginExpireHours"]); ok {
+		loginExpireHours = n
 	}
+	config.LoginExpireDays, config.LoginExpireHours = normalizeLoginExpireConfig(loginExpireDays, loginExpireHours)
 	if vb, ok := frontendSettings["calendarEnabled"].(bool); ok {
 		config.CalendarEnabled = vb
 	} else if vs, ok := frontendSettings["calendarEnabled"].(string); ok {
@@ -1658,6 +1698,7 @@ func getDefaultConfig() map[string]interface{} {
 			"aboutPageDescription":   "这里是站点的介绍与说明",
 			"aboutMarkdown":          "# 关于我\n\n这里是一个默认的个人简介示例：\n\n- 喜欢记录与分享\n- 热爱开源与学习\n- 持续打磨产品体验\n\n欢迎通过友链或留言与我交流！",
 			"loginExpireDays":        3,
+			"loginExpireHours":       0,
 			"feedEnabled":            false,
 			"feedPageTitle":          "实时聚合内容动态",
 			"feedPageDescription":    "聚合综合内容信息源内容，当前结果 {count} 条",
