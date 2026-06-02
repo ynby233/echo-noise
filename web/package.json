@@ -16,6 +16,7 @@
     "test:admin-comments": "node scripts/admin-comments-panel.test.mjs",
     "test:login-audit": "node scripts/login-audit.test.mjs",
     "test:login-expire": "node scripts/login-expire.test.mjs",
+    "test:auth-recovery": "node scripts/auth-recovery-sync.test.mjs",
     "test:access-log": "node scripts/access-log.test.mjs",
     "test:public-music-player": "node scripts/public-music-player.test.mjs",
     "postinstall": "nuxt prepare"
