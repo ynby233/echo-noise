@@ -20,7 +20,7 @@
               <span class="px-1.5 py-0.5 rounded bg-orange-500 text-white text-[10px]">管理员</span>
             </div>
             <div v-else class="mt-1">
-              <span class="px-1.5 py-0.5 rounded bg-indigo-500 text-white text-[10px]">{{ isLoggedIn ? '用户' : '探索者' }}</span>
+              <span class="px-1.5 py-0.5 rounded bg-indigo-500 text-white text-[10px]">{{ isLoggedIn ? '用户' : '访客' }}</span>
             </div>
             <div class="profile-desc">{{ profileDesc }}</div>
             <div v-if="!isOnline" class="auth-actions">
@@ -54,7 +54,7 @@
           </div>
           <button v-else type="button" class="stats-login-prompt" @click="authMode='login'; showAuthModal=true">
             <UIcon name="i-heroicons-lock-closed" class="w-4 h-4" />
-            <span>登录查看统计</span>
+            <span>登录后方可查看个人数据统计</span>
           </button>
         </UCard>
         <UCard v-if="frontendConfig.socialLinksEnabled === true && (frontendConfig.socialLinks || []).length > 0" class="sidebar-card no-padding-card mt-2" :class="sidebarThemeCard">
