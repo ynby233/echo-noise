@@ -1281,6 +1281,89 @@
             </UCard>
           </UModal>
 
+          <div id="login-audits-section" v-if="isAdmin && isSectionVisible('login-audits')" class="col-span-12">
+            <div :class="adminShellCardClass">
+              <div :class="adminSectionHeaderClass">
+                <div class="font-semibold flex items-center gap-2" :class="theme.text">
+                  <UIcon name="i-heroicons-clipboard-document-check" class="w-5 h-5" />
+                  <span>登录审计</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <UButton size="sm" color="indigo" variant="soft" class="shadow" :loading="loginAuditLoading" @click="refreshLoginAudits">刷新</UButton>
+                </div>
+              </div>
+              <div class="px-4 pb-4 space-y-4">
+                <div :class="adminSubtleCardClass">
+                  <div class="flex flex-col md:flex-row items-stretch md:items-center gap-2">
+                    <UInput v-model="loginAuditFilter.username" placeholder="用户名" class="flex-1" />
+                    <UInput v-model="loginAuditFilter.ip" placeholder="IP" class="flex-1" />
+                    <div class="flex items-center gap-2 justify-end">
+                      <UButton color="primary" variant="soft" @click="refreshLoginAudits">搜索</UButton>
+                      <UButton color="gray" variant="soft" @click="resetLoginAuditFilter">清空</UButton>
+                    </div>
+                  </div>
+                </div>
+
+                <div :class="adminSubtleCardClass">
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="font-semibold" :class="theme.text">普通用户登录（最近 {{ loginAudits.length }} 条）</div>
+                  </div>
+                  <div class="space-y-3 md:hidden">
+                    <div v-for="(row, index) in loginAudits" :key="`login-audit-mobile-${row.ID ?? row.id ?? `${row.created_at || row.CreatedAt || ''}-${row.user_id || row.UserID || ''}-${index}`}`" class="rounded-xl border p-3 space-y-2" :class="[theme.border, theme.cardBg]">
+                      <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                          <div class="text-xs" :class="theme.mutedText">时间</div>
+                          <div class="text-sm break-words" :class="theme.text">{{ formatShanghai(row.created_at || row.CreatedAt || '') }}</div>
+                        </div>
+                        <UBadge color="gray" variant="soft" class="shrink-0">#{{ row.user_id || row.UserID }}</UBadge>
+                      </div>
+                      <div class="grid grid-cols-1 gap-2 text-sm">
+                        <div>
+                          <div class="text-xs" :class="theme.mutedText">用户</div>
+                          <div class="break-words" :class="theme.text">{{ row.username || row.Username || '-' }}</div>
+                        </div>
+                        <div>
+                          <div class="text-xs" :class="theme.mutedText">IP</div>
+                          <div class="font-mono break-all" :class="theme.text">{{ row.ip || row.IP || '-' }}</div>
+                        </div>
+                        <div>
+                          <div class="text-xs" :class="theme.mutedText">User-Agent</div>
+                          <div class="break-all" :class="theme.text">{{ row.user_agent || row.UserAgent || '-' }}</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div v-if="!loginAudits.length" class="rounded-xl border p-4 text-sm text-center" :class="[theme.border, theme.mutedText]">暂无记录</div>
+                  </div>
+                  <div class="admin-desktop-block overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                      <thead>
+                        <tr :class="theme.mutedText">
+                          <th class="text-left py-2 pr-4">时间</th>
+                          <th class="text-left py-2 pr-4">用户ID</th>
+                          <th class="text-left py-2 pr-4">用户名</th>
+                          <th class="text-left py-2 pr-4">IP</th>
+                          <th class="text-left py-2">User-Agent</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="(row, index) in loginAudits" :key="row.ID ?? row.id ?? `${row.created_at || row.CreatedAt || ''}-${row.user_id || row.UserID || ''}-${index}`" class="border-t" :class="theme.border">
+                          <td class="py-2 pr-4 whitespace-nowrap" :class="theme.mutedText">{{ formatShanghai(row.created_at || row.CreatedAt || '') }}</td>
+                          <td class="py-2 pr-4" :class="theme.mutedText">{{ row.user_id || row.UserID }}</td>
+                          <td class="py-2 pr-4" :class="theme.text">{{ row.username || row.Username || '-' }}</td>
+                          <td class="py-2 pr-4 font-mono" :class="theme.text">{{ row.ip || row.IP || '-' }}</td>
+                          <td class="py-2 break-all max-w-xl" :class="theme.mutedText">{{ row.user_agent || row.UserAgent || '-' }}</td>
+                        </tr>
+                        <tr v-if="!loginAudits.length">
+                          <td colspan="5" class="py-3" :class="theme.mutedText">暂无记录</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div id="notify-section" v-if="isAdmin && isSectionVisible('notify')" class="col-span-12">
             <div :class="adminShellCardClass">
               <div :class="adminSectionHeaderClass">
@@ -1897,7 +1980,7 @@ const formatShanghai = (s: string) => {
  
 const cardCls = 'rounded-xl border shadow-sm'
 type AdminSectionKey =
-  'dashboard' | 'user' | 'site' | 'notify' | 'attachments' | 'db' | 'version' | 'security' |
+  'dashboard' | 'user' | 'site' | 'notify' | 'attachments' | 'db' | 'version' | 'security' | 'login-audits' |
   'site-register' | 'site-pwa' | 'site-github-card' | 'site-github-login' | 'site-announcement' | 'site-music' |
   'site-default-theme' | 'site-social-links' | 'site-ads' | 'site-feed' | 'site-rss' | 'hitokoto' | 'life-countdown' |
   'site-configs' | 'comments' | 'email' | 'admin-users' |
@@ -1954,6 +2037,7 @@ const adminNavGroups = computed<AdminNavGroup[]>(() => {
       icon: 'i-heroicons-shield-check',
       items: [
         { key: 'admin-users', label: '用户管理', icon: 'i-heroicons-user-group' },
+        { key: 'login-audits', label: '登录审计', icon: 'i-heroicons-clipboard-document-check' },
         { key: 'security', label: '安全防护', icon: 'i-heroicons-shield-exclamation' }
       ] as Array<{ key: AdminSectionKey, label: string, icon: string }>
     },
@@ -2756,9 +2840,39 @@ const router = useRouter()
 const userToken = ref('')
 
 const attackLogs = ref<any[]>([])
+const loginAudits = ref<any[]>([])
+const loginAuditLoading = ref(false)
+const loginAuditFilter = reactive({ username: '', ip: '' })
 const ipBans = ref<any[]>([])
 const banForm = reactive({ ip: '', minutes: 0 as any, reason: '' })
 const securityConfig = reactive({ autoBanEnabled: false, autoBanWindowSeconds: 600 as any, autoBanThreshold: 10 as any, autoBanMinutes: 60 as any })
+
+const refreshLoginAudits = async () => {
+  try {
+    loginAuditLoading.value = true
+    const params: Record<string, any> = { limit: 200 }
+    const username = String(loginAuditFilter.username || '').trim()
+    const ip = String(loginAuditFilter.ip || '').trim()
+    if (username) params.username = username
+    if (ip) params.ip = ip
+    const res: any = await getRequest<any>('security/login-audits', params, { credentials: 'include', silent: true })
+    if (res && res.code === 1) {
+      loginAudits.value = Array.isArray(res.data) ? res.data : []
+    } else {
+      throw new Error(res?.msg || '加载登录审计失败')
+    }
+  } catch (e: any) {
+    useToast().add({ title: '加载登录审计失败', description: e.message, color: 'red' })
+  } finally {
+    loginAuditLoading.value = false
+  }
+}
+
+const resetLoginAuditFilter = async () => {
+  loginAuditFilter.username = ''
+  loginAuditFilter.ip = ''
+  await refreshLoginAudits()
+}
 
 const refreshSecurity = async () => {
   try {
@@ -2800,11 +2914,19 @@ const saveSecurityConfig = async () => {
 onMounted(async () => {
   if (isAdmin.value) {
     await refreshSecurity()
+    if (activeSection.value === 'login-audits') await refreshLoginAudits()
   }
 })
 
 watch(() => isAdmin.value, async (v) => {
-  if (v) await refreshSecurity()
+  if (v) {
+    await refreshSecurity()
+    if (activeSection.value === 'login-audits') await refreshLoginAudits()
+  }
+})
+
+watch(() => activeSection.value, async (section) => {
+  if (section === 'login-audits' && isAdmin.value) await refreshLoginAudits()
 })
 
 const clearAttackLogs = async () => {

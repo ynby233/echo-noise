@@ -13,6 +13,7 @@
     "test:comment-input-scroll": "node scripts/comment-input-scroll.test.mjs",
     "test:home-stats": "node scripts/home-stats.test.mjs",
     "test:admin-comments": "node scripts/admin-comments-panel.test.mjs",
+    "test:login-audit": "node scripts/login-audit.test.mjs",
     "test:public-music-player": "node scripts/public-music-player.test.mjs",
     "postinstall": "nuxt prepare"
   },

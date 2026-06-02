@@ -135,6 +135,7 @@ func Login(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.Fail[any]("Session 保存失败"))
 		return
 	}
+	_ = recordUserLoginAudit(c, user)
 
 	c.JSON(http.StatusOK, dto.OK(user, "登录成功"))
 }
@@ -3572,6 +3573,7 @@ func GithubCallback(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.Fail[any]("Session 保存失败"))
 		return
 	}
+	_ = recordUserLoginAudit(c, user)
 	// 跳转
 	if isNew {
 		c.Redirect(http.StatusFound, "/")

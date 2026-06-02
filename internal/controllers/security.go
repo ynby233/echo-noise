@@ -33,6 +33,52 @@ func GetAttackRecords(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.OK(logs, "ok"))
 }
 
+func recordUserLoginAudit(c *gin.Context, user *models.User) error {
+	if user == nil || user.ID == 0 || user.IsAdmin {
+		return nil
+	}
+	db := models.GetDB()
+	if db == nil {
+		return nil
+	}
+	audit := models.SecurityLoginAudit{
+		UserID:    user.ID,
+		Username:  strings.TrimSpace(user.Username),
+		IP:        c.ClientIP(),
+		UserAgent: c.GetHeader("User-Agent"),
+	}
+	return db.Create(&audit).Error
+}
+
+func GetLoginAudits(c *gin.Context) {
+	db := models.GetDB()
+	if db == nil {
+		c.JSON(http.StatusOK, dto.OK([]models.SecurityLoginAudit{}, "ok"))
+		return
+	}
+
+	limit := 200
+	if v := strings.TrimSpace(c.Query("limit")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			if n > 0 && n <= 1000 {
+				limit = n
+			}
+		}
+	}
+
+	query := db.Order("id desc").Limit(limit)
+	if username := strings.TrimSpace(c.Query("username")); username != "" {
+		query = query.Where("username = ?", username)
+	}
+	if ip := strings.TrimSpace(c.Query("ip")); ip != "" {
+		query = query.Where("ip = ?", ip)
+	}
+
+	var audits []models.SecurityLoginAudit
+	_ = query.Find(&audits).Error
+	c.JSON(http.StatusOK, dto.OK(audits, "ok"))
+}
+
 func ClearAttackRecords(c *gin.Context) {
 	db := models.GetDB()
 	if db == nil {

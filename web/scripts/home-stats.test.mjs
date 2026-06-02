@@ -49,7 +49,7 @@ assert.match(
 )
 assert.match(
   statsCard,
-  /<button\s+v-else\s+type="button"\s+class="stats-login-prompt"[\s\S]*?登录查看统计/,
+  /<button\s+v-else\s+type="button"\s+class="stats-login-prompt"[\s\S]*?登录(?:查看统计|后方可查看个人数据统计)/,
   'guests should see only the login prompt in the stats card'
 )
 assert.match(

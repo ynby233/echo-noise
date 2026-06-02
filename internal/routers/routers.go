@@ -252,6 +252,7 @@ func SetupRouter() *gin.Engine {
 	{
 		security.GET("/attacks", middleware.AdminAuthMiddleware(), controllers.GetAttackRecords)
 		security.DELETE("/attacks", middleware.AdminAuthMiddleware(), controllers.ClearAttackRecords)
+		security.GET("/login-audits", middleware.AdminAuthMiddleware(), controllers.GetLoginAudits)
 		security.GET("/bans", middleware.AdminAuthMiddleware(), controllers.GetIPBans)
 		security.POST("/bans", middleware.AdminAuthMiddleware(), controllers.AddIPBan)
 		security.DELETE("/bans", middleware.AdminAuthMiddleware(), controllers.RemoveIPBan)
