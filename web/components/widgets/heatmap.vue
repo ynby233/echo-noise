@@ -20,10 +20,13 @@
 </template>
   
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick, inject } from 'vue'
+import { ref, onMounted, computed, watch, inject } from 'vue'
+import { useUserStore } from '~/store/user'
 
 interface HeatItem { date: string; count: number }
 interface CalendarDay { date: string; count: number; level: number }
+const props = withDefaults(defineProps<{ activeTab?: string }>(), { activeTab: 'latest' })
+const userStore = useUserStore()
 const rawData = ref<HeatItem[]>([])
 const calendarData = ref<CalendarDay[][]>([])
 const calendarContainer = ref<HTMLElement | null>(null)
@@ -88,22 +91,38 @@ const getBackgroundColor = (day: { count: number; level: number }) => {
   if (!day.count) return isDark.value ? 'rgba(255, 255, 255, 0.10)' : '#e5e7eb'
   return getColor(day.level)
 }
-  const fetchHeatmapData = async () => {
-    try {
-      const response = await fetch('/api/messages/calendar')
-      const data = await response.json()
-      
-      if (data && data.code === 1 && data.data && data.data.length > 0) {
-        rawData.value = data.data
-        generateCalendarData()
-      } else {
-        generateTestData()
-      }
-    } catch (error) {
-      console.error('获取热力图数据失败:', error)
-      generateTestData()
-    }
+const currentUserId = computed(() => Number((userStore.user as any)?.userid || (userStore.user as any)?.id || (userStore.user as any)?.user_id || 0))
+const isPersonalScope = computed(() => props.activeTab === 'personal')
+const calendarRequestURL = computed(() => {
+  const params = new URLSearchParams()
+  if (isPersonalScope.value && currentUserId.value > 0) {
+    params.set('authorId', String(currentUserId.value))
   }
+  const query = params.toString()
+  return `/api/messages/calendar${query ? `?${query}` : ''}`
+})
+const fetchHeatmapData = async () => {
+  if (isPersonalScope.value && (!userStore.isLogin || currentUserId.value <= 0)) {
+    rawData.value = []
+    generateEmptyCalendar()
+    return
+  }
+  try {
+    const response = await fetch(calendarRequestURL.value, { credentials: 'include' })
+    const data = await response.json()
+    if (data && data.code === 1 && Array.isArray(data.data) && data.data.length > 0) {
+      rawData.value = data.data
+      generateCalendarData()
+    } else {
+      rawData.value = []
+      generateEmptyCalendar()
+    }
+  } catch (error) {
+    console.error('获取热力图数据失败:', error)
+    rawData.value = []
+    generateEmptyCalendar()
+  }
+}
   const showTooltip = (e: MouseEvent, day: any) => {
     tooltip.value.text = `${day.date} · ${day.count || 0} 条`
     const target = e.target as HTMLElement
@@ -126,28 +145,6 @@ const getBackgroundColor = (day: { count: number; level: number }) => {
   }
   const hideTooltip = () => {
     tooltip.value.visible = false
-  }
-  
-  const generateTestData = () => {
-    const today = new Date()
-    const startDate = new Date(today)
-    startDate.setMonth(today.getMonth() - 11) // 从11个月前开始
-    startDate.setDate(1) // 从月初开始
-    
-    const testData: HeatItem[] = []
-    let currentDate = new Date(startDate)
-    
-    while (currentDate <= today) {
-      const count = Math.random() > 0.7 ? Math.floor(Math.random() * 10) + 1 : 0
-      testData.push({
-        date: formatDate(currentDate),
-        count: count
-      })
-      currentDate.setDate(currentDate.getDate() + 1)
-    }
-    
-    rawData.value = testData
-    generateCalendarData()
   }
   
   const formatDate = (date: Date) => {
@@ -262,6 +259,11 @@ const getBackgroundColor = (day: { count: number; level: number }) => {
     ensureFillColumns(calendar, new Map<string, number>())
     calendarData.value = calendar
   }
+
+  watch(
+    [() => props.activeTab, () => userStore.isLogin, () => currentUserId.value],
+    () => { fetchHeatmapData() }
+  )
 
   onMounted(() => {
     generateEmptyCalendar()

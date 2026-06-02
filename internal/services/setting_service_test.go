@@ -185,18 +185,70 @@ func TestMessagesCalendarGroupsByShanghaiDate(t *testing.T) {
 		t.Fatalf("create messages: %v", err)
 	}
 
-	calendar, err := GetMessagesGroupByDate()
+	calendar, err := GetMessagesGroupByDate(nil, false, nil)
 	if err != nil {
 		t.Fatalf("get calendar: %v", err)
 	}
-	counts := make(map[string]int)
-	for _, row := range calendar {
-		counts[row.Date] = row.Count
-	}
+	counts := messageDateCounts(calendar)
 	if got := counts["2026-06-01"]; got != 2 {
 		t.Fatalf("2026-06-01 count = %d, want 2; rows=%#v", got, calendar)
 	}
 	if got := counts["2026-05-31"]; got != 0 {
 		t.Fatalf("2026-05-31 count = %d, want 0; rows=%#v", got, calendar)
 	}
+}
+
+func TestMessagesCalendarRespectsVisibilityAndPersonalScope(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	admin := mustCreateUser(t, models.User{Username: "calendar-admin-visibility", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+	alice := mustCreateUser(t, models.User{Username: "calendar-alice", Password: models.HashPassword("alice"), Token: models.GenerateToken(32)})
+	bob := mustCreateUser(t, models.User{Username: "calendar-bob", Password: models.HashPassword("bob"), Token: models.GenerateToken(32)})
+	day := time.Date(2026, 6, 2, 12, 0, 0, 0, time.UTC)
+	messages := []models.Message{
+		{Content: "alice public", Username: alice.Username, UserID: alice.ID, CreatedAt: day},
+		{Content: "alice private", Username: alice.Username, UserID: alice.ID, Private: true, CreatedAt: day},
+		{Content: "bob public", Username: bob.Username, UserID: bob.ID, CreatedAt: day},
+		{Content: "bob private", Username: bob.Username, UserID: bob.ID, Private: true, CreatedAt: day},
+	}
+	if err := db.Create(&messages).Error; err != nil {
+		t.Fatalf("create messages: %v", err)
+	}
+
+	aliceID := alice.ID
+	bobID := bob.ID
+	tests := []struct {
+		name     string
+		userID   *uint
+		isAdmin  bool
+		authorID *uint
+		want     int
+	}{
+		{name: "guest latest sees public only", want: 2},
+		{name: "member latest sees public and own private", userID: &aliceID, want: 3},
+		{name: "admin latest sees every message", userID: &admin.ID, isAdmin: true, want: 4},
+		{name: "member personal includes own private", userID: &aliceID, authorID: &aliceID, want: 2},
+		{name: "member viewing another author only sees public", userID: &aliceID, authorID: &bobID, want: 1},
+		{name: "admin author scope sees that author's private messages", userID: &admin.ID, isAdmin: true, authorID: &bobID, want: 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			calendar, err := GetMessagesGroupByDate(tt.userID, tt.isAdmin, tt.authorID)
+			if err != nil {
+				t.Fatalf("get calendar: %v", err)
+			}
+			counts := messageDateCounts(calendar)
+			if got := counts["2026-06-02"]; got != tt.want {
+				t.Fatalf("2026-06-02 count = %d, want %d; rows=%#v", got, tt.want, calendar)
+			}
+		})
+	}
+}
+
+func messageDateCounts(rows []MessageDateCount) map[string]int {
+	counts := make(map[string]int, len(rows))
+	for _, row := range rows {
+		counts[row.Date] = row.Count
+	}
+	return counts
 }

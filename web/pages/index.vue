@@ -148,7 +148,7 @@
             </div>
           </UCard>
           <UCard class="sidebar-card no-padding-card" :class="sidebarThemeCard">
-            <HeatmapWidget />
+            <HeatmapWidget :active-tab="activeTab" />
           </UCard>
         
         </div>
@@ -257,7 +257,7 @@
           </div>
         </UCard>
         <UCard class="sidebar-card no-padding-card" :class="sidebarThemeCard">
-          <HeatmapWidget />
+          <HeatmapWidget :active-tab="activeTab" />
         </UCard>
         
         
@@ -286,7 +286,7 @@
         </div>
       </UCard>
       <div class="mx-auto sm:max-w-2xl mb-4">
-        <HeatmapWidget />
+        <HeatmapWidget :active-tab="activeTab" />
       </div>
       <UCard v-if="frontendConfig.leftAdEnabled && leftAds.length > 0" class="mx-auto sm:max-w-2xl mb-3 sidebar-card">
         <div class="sidebar-title flex items-center gap-2">

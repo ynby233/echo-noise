@@ -376,16 +376,33 @@ func shanghaiLocation() *time.Location {
 	return loc
 }
 
-func GetMessagesGroupByDate() ([]struct {
+type MessageDateCount struct {
 	Date  string `json:"date"`
 	Count int    `json:"count"`
-}, error) {
+}
+
+func GetMessagesGroupByDate(userID *uint, isAdmin bool, authorID *uint) ([]MessageDateCount, error) {
 	type createdAtRow struct {
 		CreatedAt time.Time `json:"created_at"`
 	}
 
 	var rows []createdAtRow
-	if err := database.DB.Table("messages").
+	q := database.DB.Table("messages")
+	if authorID != nil {
+		q = q.Where("user_id = ?", *authorID)
+	}
+	if !isAdmin {
+		if userID != nil {
+			if authorID != nil && *authorID == *userID {
+				// Personal view: include the current user's own private messages.
+			} else {
+				q = q.Where("private = ? OR user_id = ?", false, *userID)
+			}
+		} else {
+			q = q.Where("private = ?", false)
+		}
+	}
+	if err := q.
 		Select("created_at").
 		Order("created_at DESC").
 		Scan(&rows).Error; err != nil {
@@ -393,19 +410,13 @@ func GetMessagesGroupByDate() ([]struct {
 		return nil, err
 	}
 
-	results := make([]struct {
-		Date  string `json:"date"`
-		Count int    `json:"count"`
-	}, 0)
+	results := make([]MessageDateCount, 0)
 	counts := make(map[string]int)
 	loc := shanghaiLocation()
 	for _, row := range rows {
 		date := row.CreatedAt.In(loc).Format("2006-01-02")
 		if _, ok := counts[date]; !ok {
-			results = append(results, struct {
-				Date  string `json:"date"`
-				Count int    `json:"count"`
-			}{Date: date})
+			results = append(results, MessageDateCount{Date: date})
 		}
 		counts[date]++
 	}

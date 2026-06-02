@@ -2065,8 +2065,22 @@ func ToggleMessageLike(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": map[string]interface{}{"liked": liked, "like_count": count}})
 }
 func GetMessagesCalendar(c *gin.Context) {
-	// 改为调用 services 层方法
-	calendarData, err := services.GetMessagesGroupByDate()
+	var currentUserID *uint
+	isAdmin := false
+	if uid, ok := commentAuthUserID(c); ok {
+		currentUserID = &uid
+		isAdmin = commentAuthIsAdmin(c)
+	}
+
+	var authorID *uint
+	if aid := strings.TrimSpace(c.Query("authorId")); aid != "" {
+		if v, err := strconv.ParseUint(aid, 10, 64); err == nil && v > 0 {
+			vv := uint(v)
+			authorID = &vv
+		}
+	}
+
+	calendarData, err := services.GetMessagesGroupByDate(currentUserID, isAdmin, authorID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
