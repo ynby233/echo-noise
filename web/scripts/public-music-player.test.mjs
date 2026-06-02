@@ -46,26 +46,46 @@ assert.doesNotMatch(
   'guest music visibility must not depend on login, admin, token, or auth state'
 )
 
-const initStart = indexPage.indexOf('const initNMP = async () => {')
-const initEnd = indexPage.indexOf('const dedupeStrings', initStart)
-assert.notEqual(initStart, -1, 'home page must define initNMP')
-assert.notEqual(initEnd, -1, 'home page must keep initNMP before NMP asset helpers')
-const initBody = indexPage.slice(initStart, initEnd)
+const reconcileStart = indexPage.indexOf('const reconcileMusicPlayer = async (reason = \'state\') => {')
+const reconcileEnd = indexPage.indexOf('const dedupeStrings', reconcileStart)
+assert.notEqual(reconcileStart, -1, 'home page must define one public music reconciler')
+assert.notEqual(reconcileEnd, -1, 'home page must keep the reconciler before NMP asset helpers')
+const reconcileBody = indexPage.slice(reconcileStart, reconcileEnd)
 
 assert.match(
-  initBody,
-  /await\s+player\.loadPlaylist\?\.\(source\.playlistId\)/,
-  'when a playlist source is applied to an existing early-created player, initNMP must await loading the playlist'
+  indexPage,
+  /const\s+scheduleMusicPlayerReconcile\s*=\s*\(reason = 'state'\) => \{[\s\S]*?await\s+reconcileMusicPlayer\(reason\)/,
+  'all music startup triggers must be funneled through scheduleMusicPlayerReconcile'
 )
 assert.match(
-  initBody,
-  /await\s+player\.loadSingleSong\?\.\(source\.songId\)/,
-  'when a song source is applied to an existing early-created player, initNMP must await loading the song'
+  reconcileBody,
+  /syncNmpAttributes\(el, cfg\)[\s\S]*?loadNMPAssets\(\)/,
+  'the reconciler must write public music attributes before loading the self-initializing NMP script'
 )
 assert.match(
-  initBody,
-  /await\s+player\.loadCurrentSong\?\.\(\)/,
-  'after applying a source to an existing early-created player, initNMP must load the current song into the visible UI/audio element'
+  reconcileBody,
+  /refreshNmpConfig\(player\)[\s\S]*?await\s+syncNmpSource\(el, player, source\)/,
+  'the reconciler must refresh reused NMP config before syncing source and theme'
+)
+assert.match(
+  indexPage,
+  /const\s+syncNmpSource[\s\S]*?await\s+player\.loadPlaylist\?\.\(source\.playlistId\)[\s\S]*?await\s+player\.loadSingleSong\?\.\(source\.songId\)[\s\S]*?await\s+loadNmpCurrentSong\(player\)/,
+  'source synchronization must reload playlist/song sources and then load the current song'
+)
+assert.match(
+  indexPage,
+  /watch\(\(\) => \[[\s\S]*?musicConfigLoaded\.value[\s\S]*?frontendConfig\.value\.musicEnabled[\s\S]*?scheduleMusicPlayerReconcile\('public-config'\)/,
+  'public music config changes must trigger the same reconciler'
+)
+assert.match(
+  indexPage,
+  /watch\(\(\) => \[isLoggedIn\.value, isOnline\.value, route\.fullPath, activeTab\.value\][\s\S]*?scheduleMusicPlayerReconcile\('context-change'\)/,
+  'login/logout and route/tab changes must only resync through the same reconciler'
+)
+assert.match(
+  indexPage,
+  /scheduleMusicPlayerReconcile\('mounted'\)[\s\S]*?scheduleMusicPlayerReconcile\('mounted-idle'\)[\s\S]*?scheduleMusicPlayerReconcile\('first-interaction'\)/,
+  'mount and first-interaction triggers must use the same music reconciler'
 )
 
 console.log('public music player tests passed')

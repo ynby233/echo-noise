@@ -1059,11 +1059,11 @@ const runIdle = (cb: () => void) => {
 }
 let nmpThemeObserver: MutationObserver | null = null
 let nmpStateObserver: MutationObserver | null = null
-let nmpInitPromise: Promise<void> | null = null
 let nmpAssetsPromise: Promise<boolean> | null = null
 const nmpDisabled = ref(false)
 let nmpFailureCount = 0
-let nmpEnsureQueued = false
+let nmpReconcileQueued = false
+let nmpReconcileRequested = false
 const clearNmpRuntime = () => {
   try { nmpThemeObserver?.disconnect() } catch {}
   try { nmpStateObserver?.disconnect() } catch {}
@@ -1072,8 +1072,12 @@ const clearNmpRuntime = () => {
   if (typeof document === 'undefined') return
   const el = document.querySelector('.netease-mini-player') as any
   if (!el) return
+  const player = el.neteasePlayer || el._neteasePlayer
+  try { player?.pause?.() } catch {}
+  try { player?.audio?.pause?.() } catch {}
   try { el.removeAttribute('data-autoplay-tried') } catch {}
   try { el.removeAttribute('data-source-key') } catch {}
+  try { delete el.neteasePlayer } catch {}
   try { delete el._neteasePlayer } catch {}
   try { el.innerHTML = '' } catch {}
 }
@@ -1154,72 +1158,155 @@ const syncNmpAttributes = (el: any, cfg: any) => {
   if (cfg.musicDefaultMinimized) el.setAttribute('data-instant', 'true')
   else el.removeAttribute('data-instant')
 }
-const initNMP = async () => {
-  if (nmpInitPromise) return nmpInitPromise
-  nmpInitPromise = (async () => {
-    try {
-      await nextTick()
-      const NMP = (window as any).NeteaseMiniPlayer
-      const el = document.querySelector('.netease-mini-player') as any
-      if (!NMP || !el) return
-      const cfg = (frontendConfig as any).value || (frontendConfig as any)
-      const source = resolveMusicSource(cfg)
-      if (!source.hasSource) {
-        clearNmpRuntime()
-        return
-      }
-      syncNmpAttributes(el, cfg)
-      syncNmpState(el, cfg)
-      let player = el.neteasePlayer || el._neteasePlayer || null
-      if (!player && typeof NMP.initPlayer === 'function') player = NMP.initPlayer(el)
-      if (!player && typeof NMP.init === 'function') {
-        NMP.init()
-        await nextTick()
-        player = el.neteasePlayer || el._neteasePlayer || (typeof NMP.initPlayer === 'function' ? NMP.initPlayer(el) : null)
-      }
-      if (!player) return
-      observeNmpState(el)
-      const sourceKey = `${source.playlistId}|${source.songId}`
-      let sourceChanged = false
-      if (el.getAttribute('data-source-key') !== sourceKey) {
-        el.setAttribute('data-source-key', sourceKey)
-        if (source.playlistId) {
-          await player.loadPlaylist?.(source.playlistId)
-          sourceChanged = true
-        } else if (source.songId) {
-          await player.loadSingleSong?.(source.songId)
-          sourceChanged = true
-        }
-      }
-      if (sourceChanged || (!player.currentSong && Array.isArray(player.playlist) && player.playlist.length > 0)) {
-        if (typeof player.currentIndex === 'number') player.currentIndex = 0
-        await player.loadCurrentSong?.()
-      }
-      const isDarkNow = document.documentElement.classList.contains('dark')
-      const theme = normalizeMusicTheme(cfg.musicTheme)
-      player.setTheme?.(theme === 'auto' ? (isDarkNow ? 'dark' : 'light') : theme)
-      try { nmpThemeObserver?.disconnect() } catch {}
-      nmpThemeObserver = new MutationObserver(() => {
-        const nowDark = document.documentElement.classList.contains('dark')
-        const nextTheme = normalizeMusicTheme(((frontendConfig as any).value?.musicTheme ?? cfg.musicTheme) || 'auto')
-        try { player.setTheme?.(nextTheme === 'auto' ? (nowDark ? 'dark' : 'light') : nextTheme) } catch {}
-      })
-      nmpThemeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
-      if (cfg.musicAutoplay && !el.getAttribute('data-autoplay-tried')) {
-        el.setAttribute('data-autoplay-tried', 'true')
-        try { await player.play?.() } catch {}
-      }
-      if (cfg.musicDefaultMinimized) {
-        const enableTransitions = () => { try { el.removeAttribute('data-instant') } catch {} }
-        el.addEventListener('pointerdown', enableTransitions, { once: true, capture: true })
-      }
-    } catch (error) {
-      console.error('Failed to initialize NeteaseMiniPlayer:', error)
-    } finally {
-      nmpInitPromise = null
+const waitForNmpPlayerReady = async (player: any, timeoutMs = 800) => {
+  const started = Date.now()
+  while (Date.now() - started < timeoutMs) {
+    if (player?.elements?.songTitle && typeof player.loadCurrentSong === 'function') return true
+    await new Promise(resolve => setTimeout(resolve, 20))
+  }
+  return !!(player?.elements?.songTitle && typeof player.loadCurrentSong === 'function')
+}
+const getNmpPlayer = async (el: any, NMP: any) => {
+  let player = el?.neteasePlayer || el?._neteasePlayer || null
+  if (!player && typeof NMP?.initPlayer === 'function') player = NMP.initPlayer(el)
+  if (!player && typeof NMP?.init === 'function') {
+    NMP.init()
+    await nextTick()
+    player = el?.neteasePlayer || el?._neteasePlayer || (typeof NMP.initPlayer === 'function' ? NMP.initPlayer(el) : null)
+  }
+  if (player) {
+    try { el.neteasePlayer = player } catch {}
+    try { el._neteasePlayer = player } catch {}
+    await waitForNmpPlayerReady(player)
+  }
+  return player
+}
+const resetNmpCurrentIndex = (player: any) => {
+  if (!Array.isArray(player?.playlist) || player.playlist.length === 0) return
+  if (typeof player.currentIndex !== 'number' || player.currentIndex < 0 || player.currentIndex >= player.playlist.length) {
+    player.currentIndex = 0
+  }
+}
+const refreshNmpConfig = (player: any) => {
+  try {
+    if (typeof player?.parseConfig === 'function') {
+      player.config = player.parseConfig()
+      player.showLyrics = !!player.config?.lyric
     }
-  })()
-  return nmpInitPromise
+  } catch {}
+}
+const loadNmpCurrentSong = async (player: any) => {
+  if (!Array.isArray(player?.playlist) || player.playlist.length === 0 || typeof player?.loadCurrentSong !== 'function') return false
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    resetNmpCurrentIndex(player)
+    await waitForNmpPlayerReady(player)
+    await player.loadCurrentSong()
+    if (player.currentSong) return true
+    await new Promise(resolve => setTimeout(resolve, 50))
+  }
+  return !!player.currentSong
+}
+const syncNmpSource = async (el: any, player: any, source: ReturnType<typeof resolveMusicSource>) => {
+  const sourceKey = `${source.playlistId}|${source.songId}`
+  const playlist = Array.isArray(player?.playlist) ? player.playlist : []
+  const loadedHasSource = source.songId
+    ? String(playlist[0]?.id || '').trim() === source.songId
+    : playlist.length > 0
+  const shouldReloadSource = el.getAttribute('data-source-key') !== sourceKey || !loadedHasSource
+  if (shouldReloadSource) {
+    if (source.playlistId) {
+      await player.loadPlaylist?.(source.playlistId)
+    } else if (source.songId) {
+      await player.loadSingleSong?.(source.songId)
+    }
+    el.setAttribute('data-source-key', sourceKey)
+    if (typeof player.currentIndex === 'number') player.currentIndex = 0
+  }
+  const hasPlayableList = Array.isArray(player?.playlist) && player.playlist.length > 0
+  if (hasPlayableList && (shouldReloadSource || !player.currentSong)) {
+    await loadNmpCurrentSong(player)
+  }
+  if (hasPlayableList && !player.currentSong) {
+    await new Promise(resolve => setTimeout(resolve, 100))
+    await loadNmpCurrentSong(player)
+  }
+  return !!player.currentSong
+}
+const reconcileMusicPlayer = async (reason = 'state') => {
+  try {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return false
+    const cfg = (frontendConfig as any).value || (frontendConfig as any) || {}
+    const source = resolveMusicSource(cfg)
+    if (nmpDisabled.value || !musicConfigLoaded.value || !cfg.musicEnabled || !source.hasSource || (!!cfg.musicHideOnMobile && isMobile.value)) {
+      clearNmpRuntime()
+      return false
+    }
+    await nextTick()
+    const el = document.querySelector('.netease-mini-player') as any
+    if (!el) return false
+
+    // 先把公共配置写入 DOM，再加载脚本；NMP 脚本会自初始化，必须避免它读到空的初始属性。
+    syncNmpAttributes(el, cfg)
+    syncNmpState(el, cfg)
+
+    if (!nmpAssetsPromise) {
+      nmpAssetsPromise = loadNMPAssets().then(res => {
+        nmpAssetsPromise = null
+        return res
+      }).catch(() => {
+        nmpAssetsPromise = null
+        return false
+      })
+    }
+    const assetsLoaded = await nmpAssetsPromise
+    if (!assetsLoaded) {
+      nmpFailureCount += 1
+      return false
+    }
+    const NMP = (window as any).NeteaseMiniPlayer
+    if (!NMP) {
+      nmpFailureCount += 1
+      return false
+    }
+
+    // 脚本加载期间可能自初始化或改写 DOM，加载完成后再统一同步一次。
+    syncNmpAttributes(el, cfg)
+    syncNmpState(el, cfg)
+    const player = await getNmpPlayer(el, NMP)
+    if (!player) {
+      nmpFailureCount += 1
+      return false
+    }
+    refreshNmpConfig(player)
+    observeNmpState(el)
+    await syncNmpSource(el, player, source)
+
+    const isDarkNow = document.documentElement.classList.contains('dark')
+    const theme = normalizeMusicTheme(cfg.musicTheme)
+    player.setTheme?.(theme === 'auto' ? (isDarkNow ? 'dark' : 'light') : theme)
+    try { nmpThemeObserver?.disconnect() } catch {}
+    nmpThemeObserver = new MutationObserver(() => {
+      const nowDark = document.documentElement.classList.contains('dark')
+      const nextTheme = normalizeMusicTheme(((frontendConfig as any).value?.musicTheme ?? cfg.musicTheme) || 'auto')
+      try { player.setTheme?.(nextTheme === 'auto' ? (nowDark ? 'dark' : 'light') : nextTheme) } catch {}
+    })
+    nmpThemeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+
+    if (cfg.musicAutoplay && !el.getAttribute('data-autoplay-tried')) {
+      el.setAttribute('data-autoplay-tried', 'true')
+      try { await player.play?.() } catch {}
+    }
+    if (cfg.musicDefaultMinimized) {
+      const enableTransitions = () => { try { el.removeAttribute('data-instant') } catch {} }
+      el.addEventListener('pointerdown', enableTransitions, { once: true, capture: true })
+    }
+    nmpFailureCount = 0
+    return true
+  } catch (error) {
+    nmpFailureCount += 1
+    console.error(`Failed to reconcile NeteaseMiniPlayer (${reason}):`, error)
+    return false
+  }
 }
 const dedupeStrings = (items: string[]) => Array.from(new Set(items.map(item => String(item || '').trim()).filter(Boolean)))
 
@@ -1350,38 +1437,22 @@ const loadNMPAssets = async (): Promise<boolean> => {
     return false
   }
 }
-const ensureNMPReady = async () => {
-  try {
-    if (!shouldShowMusicPlayer.value || nmpDisabled.value) return false
-    if (!nmpAssetsPromise) {
-      nmpAssetsPromise = loadNMPAssets().then(res => {
-        nmpAssetsPromise = null
-        return res
-      }).catch(() => {
-        nmpAssetsPromise = null
-        return false
-      })
-    }
-    const loaded = await nmpAssetsPromise
-    if (!loaded) {
-      nmpFailureCount += 1
-      return false
-    }
-    await initNMP()
-    nmpFailureCount = 0
-    return true
-  } catch {
-    nmpFailureCount += 1
-    return false
-  }
-}
-const queueEnsureNMPReady = () => {
-  if (nmpEnsureQueued || nmpDisabled.value) return
-  nmpEnsureQueued = true
+const scheduleMusicPlayerReconcile = (reason = 'state') => {
+  if (typeof window === 'undefined') return
+  nmpReconcileRequested = true
+  if (nmpReconcileQueued) return
+  nmpReconcileQueued = true
   Promise.resolve()
-    .then(() => ensureNMPReady())
-    .then(() => { nmpEnsureQueued = false })
-    .catch(() => { nmpEnsureQueued = false })
+    .then(async () => {
+      while (nmpReconcileRequested) {
+        nmpReconcileRequested = false
+        await reconcileMusicPlayer(reason)
+      }
+    })
+    .finally(() => {
+      nmpReconcileQueued = false
+      if (nmpReconcileRequested) scheduleMusicPlayerReconcile(reason)
+    })
 }
 
 // 移除 meting 兜底依赖，避免显示“请求失败”造成误导
@@ -1437,15 +1508,10 @@ const loadHitokoto = async () => {
   if (!txt) hitokotoText.value = '身为冒险者，如果安静的老死在床上，那简直就是耻辱！'
 }
 
-watch(shouldShowMusicPlayer, async (enabled) => {
-  if (enabled) {
-    queueEnsureNMPReady()
-  } else {
-    clearNmpRuntime()
-  }
-}, { immediate: true })
-
 watch(() => [
+  musicConfigLoaded.value,
+  shouldShowMusicPlayer.value,
+  frontendConfig.value.musicEnabled,
   frontendConfig.value.musicPlaylistId,
   frontendConfig.value.musicSongId,
   frontendConfig.value.musicPosition,
@@ -1453,20 +1519,24 @@ watch(() => [
   frontendConfig.value.musicLyric,
   frontendConfig.value.musicDefaultMinimized,
   frontendConfig.value.musicEmbed,
-  frontendConfig.value.musicAutoplay
-], async () => {
+  frontendConfig.value.musicAutoplay,
+  frontendConfig.value.musicHideOnMobile,
+  frontendConfig.value.musicCssCdnURL,
+  frontendConfig.value.musicJsCdnURL,
+  isMobile.value
+], () => {
   nmpDisabled.value = false
   nmpFailureCount = 0
-  if (shouldShowMusicPlayer.value) {
-    queueEnsureNMPReady()
-  } else {
-    clearNmpRuntime()
-  }
+  scheduleMusicPlayerReconcile('public-config')
+}, { immediate: true })
+
+watch(() => [isLoggedIn.value, isOnline.value, route.fullPath, activeTab.value], () => {
+  scheduleMusicPlayerReconcile('context-change')
 })
-const onMusicVisibilityChange = async () => {
+
+const onMusicVisibilityChange = () => {
   if (document.visibilityState !== 'visible') return
-  if (!shouldShowMusicPlayer.value) return
-  queueEnsureNMPReady()
+  scheduleMusicPlayerReconcile('visibility')
 }
 onMounted(() => {
   document.addEventListener('visibilitychange', onMusicVisibilityChange)
@@ -2037,11 +2107,10 @@ onMounted(async () => {
       fetchConfig(),
       new Promise<void>((resolve) => setTimeout(() => resolve(), 2500))
     ])
-    if (shouldShowMusicPlayer.value) {
-      runIdle(() => { queueEnsureNMPReady() })
-      const onceInit = () => { queueEnsureNMPReady() }
-      window.addEventListener('pointerdown', onceInit, { once: true })
-    }
+    scheduleMusicPlayerReconcile('mounted')
+    runIdle(() => { scheduleMusicPlayerReconcile('mounted-idle') })
+    const onceInit = () => { scheduleMusicPlayerReconcile('first-interaction') }
+    window.addEventListener('pointerdown', onceInit, { once: true })
     
     // 非关键内容延迟加载
     runIdle(async () => {
