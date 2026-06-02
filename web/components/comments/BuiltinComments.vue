@@ -409,22 +409,68 @@ const commentAuthorName = (c: any) => {
   return getUserField(accountUser, ['username','Username','name','Name']) || '用户'
 }
 const hiddenByCancel = ref(false)
-const inputRestoreScrollY = ref<number | null>(null)
+type InputScrollSnapshot = {
+  container?: HTMLElement | null
+  top: number
+  left: number
+  useWindow?: boolean
+}
+const inputRestoreScroll = ref<InputScrollSnapshot | null>(null)
 const pendingInputScroll = ref(false)
 const formVisible = computed(() => (((props.showInput && !hiddenByCancel.value) || !!replyTo.value) && canComment.value))
+const isScrollableY = (el: HTMLElement) => {
+  if (typeof window === 'undefined') return false
+  const style = window.getComputedStyle(el)
+  const overflowY = `${style.overflowY || ''} ${style.overflow || ''}`
+  return /(auto|scroll|overlay)/.test(overflowY) && el.scrollHeight > el.clientHeight
+}
+const findInputScrollContainer = () => {
+  if (typeof document === 'undefined') return null as HTMLElement | null
+  let el = ((taRef.value as HTMLTextAreaElement | null)?.parentElement || commentRootElement()) as HTMLElement | null
+  while (el && el !== document.body && el !== document.documentElement) {
+    if (isScrollableY(el)) return el
+    el = el.parentElement as HTMLElement | null
+  }
+  const wrapper = document.querySelector('.content-wrapper') as HTMLElement | null
+  return wrapper && isScrollableY(wrapper) ? wrapper : null
+}
 const captureInputRestoreScroll = () => {
   if (typeof window === 'undefined') return
-  if (inputRestoreScrollY.value === null) inputRestoreScrollY.value = window.scrollY || window.pageYOffset || 0
+  if (inputRestoreScroll.value) return
+  const container = findInputScrollContainer()
+  if (container) {
+    inputRestoreScroll.value = { container, top: container.scrollTop || 0, left: container.scrollLeft || 0 }
+    return
+  }
+  inputRestoreScroll.value = { top: window.scrollY || window.pageYOffset || 0, left: window.scrollX || window.pageXOffset || 0, useWindow: true }
 }
 const restoreInputScroll = () => {
   if (typeof window === 'undefined') return
-  const top = inputRestoreScrollY.value
-  inputRestoreScrollY.value = null
+  const snapshot = inputRestoreScroll.value
+  inputRestoreScroll.value = null
   pendingInputScroll.value = false
-  if (top === null || Number.isNaN(top)) return
-  requestAnimationFrame(() => {
-    window.scrollTo({ top, behavior: 'smooth' })
-  })
+  if (!snapshot || Number.isNaN(snapshot.top)) return
+  const restore = () => {
+    const container = (!snapshot.useWindow && snapshot.container && document.contains(snapshot.container))
+      ? snapshot.container
+      : (!snapshot.useWindow ? findInputScrollContainer() : null)
+    if (container) {
+      try {
+        container.scrollTo({ top: snapshot.top, left: snapshot.left || 0, behavior: 'auto' })
+      } catch {
+        container.scrollTop = snapshot.top
+        container.scrollLeft = snapshot.left || 0
+      }
+      return
+    }
+    try {
+      window.scrollTo({ top: snapshot.top, left: snapshot.left || 0, behavior: 'auto' })
+    } catch {
+      window.scrollTo(snapshot.left || 0, snapshot.top)
+    }
+  }
+  if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(restore)
+  else setTimeout(restore, 0)
 }
 watch(() => props.showInput, (v) => {
   if (!v) return
