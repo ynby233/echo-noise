@@ -140,10 +140,114 @@ func TestGetAccessLogsFiltersAndClears(t *testing.T) {
 	}
 }
 
+func TestSiteVisitMiddlewareRecordsHomepageOnly(t *testing.T) {
+	db, r, user, _ := setupCommentAccountTest(t)
+	if err := db.AutoMigrate(&models.SecurityConfig{}, &models.SecurityAccessLog{}, &models.SecuritySiteVisitLog{}); err != nil {
+		t.Fatalf("migrate site visit logs: %v", err)
+	}
+	if err := db.Create(&models.SecurityConfig{SiteVisitLogEnabled: true}).Error; err != nil {
+		t.Fatalf("enable site visit logs: %v", err)
+	}
+
+	r.Use(middleware.AccessLogMiddleware())
+	r.GET("/", func(c *gin.Context) {
+		c.Set("user_id", user.ID)
+		c.Set("username", user.Username)
+		c.Set("is_admin", false)
+		c.String(http.StatusOK, "home")
+	})
+	r.GET("/api/messages/page", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	performAccessLogRequestWithAccept(r, http.MethodGet, "/", "198.51.100.7:1234", "visit-agent", "text/html")
+	performAccessLogRequestWithAccept(r, http.MethodGet, "/api/messages/page", "198.51.100.8:1234", "api-agent", "text/html")
+
+	var siteVisits []models.SecuritySiteVisitLog
+	if err := db.Find(&siteVisits).Error; err != nil {
+		t.Fatalf("list site visits: %v", err)
+	}
+	if len(siteVisits) != 1 {
+		t.Fatalf("expected one homepage site visit, got %d", len(siteVisits))
+	}
+	visit := siteVisits[0]
+	if visit.IP != "198.51.100.7" || visit.UserID != user.ID || visit.Username != user.Username || visit.UserAgent != "visit-agent" {
+		t.Fatalf("unexpected site visit fields: %#v", visit)
+	}
+
+	var accessCount int64
+	if err := db.Model(&models.SecurityAccessLog{}).Count(&accessCount).Error; err != nil {
+		t.Fatalf("count access logs: %v", err)
+	}
+	if accessCount != 0 {
+		t.Fatalf("expected access logs to stay disabled, got %d", accessCount)
+	}
+}
+
+func TestGetSiteVisitsFiltersAndClears(t *testing.T) {
+	db, r, user, _ := setupCommentAccountTest(t)
+	if err := db.AutoMigrate(&models.SecuritySiteVisitLog{}); err != nil {
+		t.Fatalf("migrate site visit logs: %v", err)
+	}
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatalf("load timezone: %v", err)
+	}
+
+	rows := []models.SecuritySiteVisitLog{
+		{IP: "198.51.100.7", UserID: user.ID, Username: user.Username, UserAgent: "first"},
+		{IP: "203.0.113.8", UserID: 0, Username: "", UserAgent: "second"},
+	}
+	rows[0].CreatedAt = time.Date(2026, 1, 2, 9, 0, 0, 0, loc)
+	rows[1].CreatedAt = time.Date(2026, 1, 3, 9, 0, 0, 0, loc)
+	for _, row := range rows {
+		if err := db.Create(&row).Error; err != nil {
+			t.Fatalf("create site visit row: %v", err)
+		}
+	}
+
+	r.GET("/security/site-visits", GetSiteVisits)
+	r.DELETE("/security/site-visits", ClearSiteVisits)
+
+	filtered := decodeSiteVisitsResponse(t, performAccessLogRequest(r, http.MethodGet, "/security/site-visits?ip=198.51.100.7&username=ali&startDate=2026-01-02&endDate=2026-01-02", "127.0.0.1:1", "test"))
+	if len(filtered) != 1 || filtered[0].Username != user.Username || filtered[0].IP != "198.51.100.7" {
+		t.Fatalf("expected filtered site visit, got %#v", filtered)
+	}
+
+	visitor := decodeSiteVisitsResponse(t, performAccessLogRequest(r, http.MethodGet, "/security/site-visits?username=%E8%AE%BF%E5%AE%A2", "127.0.0.1:1", "test"))
+	if len(visitor) != 1 || visitor[0].UserID != 0 || visitor[0].IP != "203.0.113.8" {
+		t.Fatalf("expected visitor site visit, got %#v", visitor)
+	}
+
+	selectedUsers := decodeSiteVisitsResponse(t, performAccessLogRequest(r, http.MethodGet, "/security/site-visits?user_ids=0,"+strconv.Itoa(int(user.ID)), "127.0.0.1:1", "test"))
+	if len(selectedUsers) != 2 {
+		t.Fatalf("expected selected visitor and user site visits, got %#v", selectedUsers)
+	}
+
+	clear := performAccessLogRequest(r, http.MethodDelete, "/security/site-visits", "127.0.0.1:1", "test")
+	if clear.Code != http.StatusOK {
+		t.Fatalf("expected clear 200, got %d: %s", clear.Code, clear.Body.String())
+	}
+	var count int64
+	if err := db.Model(&models.SecuritySiteVisitLog{}).Count(&count).Error; err != nil {
+		t.Fatalf("count site visits: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected site visits to be cleared, got %d", count)
+	}
+}
+
 func performAccessLogRequest(r http.Handler, method string, path string, remoteAddr string, userAgent string) *httptest.ResponseRecorder {
+	return performAccessLogRequestWithAccept(r, method, path, remoteAddr, userAgent, "")
+}
+
+func performAccessLogRequestWithAccept(r http.Handler, method string, path string, remoteAddr string, userAgent string, accept string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, nil)
 	req.RemoteAddr = remoteAddr
 	req.Header.Set("User-Agent", userAgent)
+	if accept != "" {
+		req.Header.Set("Accept", accept)
+	}
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	return w
@@ -157,6 +261,24 @@ func decodeAccessLogsResponse(t *testing.T, w *httptest.ResponseRecorder) []mode
 	var resp struct {
 		Code int                        `json:"code"`
 		Data []models.SecurityAccessLog `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Code != 1 {
+		t.Fatalf("expected success response, got %#v", resp)
+	}
+	return resp.Data
+}
+
+func decodeSiteVisitsResponse(t *testing.T, w *httptest.ResponseRecorder) []models.SecuritySiteVisitLog {
+	t.Helper()
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Code int                           `json:"code"`
+		Data []models.SecuritySiteVisitLog `json:"data"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode response: %v", err)

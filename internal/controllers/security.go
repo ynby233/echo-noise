@@ -33,7 +33,12 @@ func GetAttackRecords(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.OK(logs, "ok"))
 }
 
-func recordUserLoginAudit(c *gin.Context, user *models.User) error {
+const (
+	loginAuditActionLogin  = "login"
+	loginAuditActionLogout = "logout"
+)
+
+func recordUserLoginAudit(c *gin.Context, user *models.User, action string) error {
 	if user == nil || user.ID == 0 || user.IsAdmin {
 		return nil
 	}
@@ -44,10 +49,20 @@ func recordUserLoginAudit(c *gin.Context, user *models.User) error {
 	audit := models.SecurityLoginAudit{
 		UserID:    user.ID,
 		Username:  strings.TrimSpace(user.Username),
+		Action:    normalizeLoginAuditAction(action),
 		IP:        c.ClientIP(),
 		UserAgent: c.GetHeader("User-Agent"),
 	}
 	return db.Create(&audit).Error
+}
+
+func normalizeLoginAuditAction(action string) string {
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case loginAuditActionLogout:
+		return loginAuditActionLogout
+	default:
+		return loginAuditActionLogin
+	}
 }
 
 func GetLoginAudits(c *gin.Context) {
@@ -73,6 +88,14 @@ func GetLoginAudits(c *gin.Context) {
 	if ip := strings.TrimSpace(c.Query("ip")); ip != "" {
 		query = query.Where("ip = ?", ip)
 	}
+	if action := strings.ToLower(strings.TrimSpace(c.Query("action"))); action != "" {
+		switch normalizeLoginAuditAction(action) {
+		case loginAuditActionLogout:
+			query = query.Where("action = ?", loginAuditActionLogout)
+		default:
+			query = query.Where("action = ? OR action IS NULL OR action = ''", loginAuditActionLogin)
+		}
+	}
 
 	var audits []models.SecurityLoginAudit
 	_ = query.Find(&audits).Error
@@ -96,6 +119,61 @@ func GetAccessLogs(c *gin.Context) {
 	}
 
 	query := db.Order("id desc").Limit(limit)
+	query = applyVisitIdentityFilters(c, query)
+	if method := strings.ToUpper(strings.TrimSpace(c.Query("method"))); method != "" {
+		query = query.Where("method = ?", method)
+	}
+	if path := strings.TrimSpace(c.Query("path")); path != "" {
+		query = query.Where("path LIKE ?", "%"+path+"%")
+	}
+	if status := strings.TrimSpace(c.Query("status")); status != "" {
+		if n, err := strconv.Atoi(status); err == nil && n >= 100 && n <= 599 {
+			query = query.Where("status = ?", n)
+		}
+	}
+	if start, ok := parseAccessLogDate(c.Query("startDate")); ok {
+		query = query.Where("created_at >= ?", start)
+	}
+	if end, ok := parseAccessLogDate(c.Query("endDate")); ok {
+		query = query.Where("created_at < ?", end.AddDate(0, 0, 1))
+	}
+
+	var logs []models.SecurityAccessLog
+	_ = query.Find(&logs).Error
+	c.JSON(http.StatusOK, dto.OK(logs, "ok"))
+}
+
+func GetSiteVisits(c *gin.Context) {
+	db := models.GetDB()
+	if db == nil {
+		c.JSON(http.StatusOK, dto.OK([]models.SecuritySiteVisitLog{}, "ok"))
+		return
+	}
+
+	limit := 50
+	if v := strings.TrimSpace(c.Query("limit")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			if n > 0 && n <= 200 {
+				limit = n
+			}
+		}
+	}
+
+	query := db.Order("id desc").Limit(limit)
+	query = applyVisitIdentityFilters(c, query)
+	if start, ok := parseAccessLogDate(c.Query("startDate")); ok {
+		query = query.Where("created_at >= ?", start)
+	}
+	if end, ok := parseAccessLogDate(c.Query("endDate")); ok {
+		query = query.Where("created_at < ?", end.AddDate(0, 0, 1))
+	}
+
+	var logs []models.SecuritySiteVisitLog
+	_ = query.Find(&logs).Error
+	c.JSON(http.StatusOK, dto.OK(logs, "ok"))
+}
+
+func applyVisitIdentityFilters(c *gin.Context, query *gorm.DB) *gorm.DB {
 	if ip := strings.TrimSpace(c.Query("ip")); ip != "" {
 		query = query.Where("ip = ?", ip)
 	}
@@ -109,17 +187,6 @@ func GetAccessLogs(c *gin.Context) {
 	} else if username != "" {
 		query = query.Where("username LIKE ?", "%"+username+"%")
 	}
-	if method := strings.ToUpper(strings.TrimSpace(c.Query("method"))); method != "" {
-		query = query.Where("method = ?", method)
-	}
-	if path := strings.TrimSpace(c.Query("path")); path != "" {
-		query = query.Where("path LIKE ?", "%"+path+"%")
-	}
-	if status := strings.TrimSpace(c.Query("status")); status != "" {
-		if n, err := strconv.Atoi(status); err == nil && n >= 100 && n <= 599 {
-			query = query.Where("status = ?", n)
-		}
-	}
 	if userIDs := parseAccessLogUserIDs(c.Query("user_ids")); len(userIDs) > 0 {
 		query = query.Where("user_id IN ?", userIDs)
 	} else if userID := strings.TrimSpace(c.Query("user_id")); userID != "" {
@@ -127,16 +194,7 @@ func GetAccessLogs(c *gin.Context) {
 			query = query.Where("user_id = ?", uint(n))
 		}
 	}
-	if start, ok := parseAccessLogDate(c.Query("startDate")); ok {
-		query = query.Where("created_at >= ?", start)
-	}
-	if end, ok := parseAccessLogDate(c.Query("endDate")); ok {
-		query = query.Where("created_at < ?", end.AddDate(0, 0, 1))
-	}
-
-	var logs []models.SecurityAccessLog
-	_ = query.Find(&logs).Error
-	c.JSON(http.StatusOK, dto.OK(logs, "ok"))
+	return query
 }
 
 func isVisitorKeyword(value string) bool {
@@ -190,6 +248,16 @@ func ClearAccessLogs(c *gin.Context) {
 		return
 	}
 	_ = db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.SecurityAccessLog{}).Error
+	c.JSON(http.StatusOK, dto.OK[any](nil, "已清空"))
+}
+
+func ClearSiteVisits(c *gin.Context) {
+	db := models.GetDB()
+	if db == nil {
+		c.JSON(http.StatusOK, dto.OK[any](nil, "已清空"))
+		return
+	}
+	_ = db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.SecuritySiteVisitLog{}).Error
 	c.JSON(http.StatusOK, dto.OK[any](nil, "已清空"))
 }
 
@@ -297,7 +365,7 @@ func GetSecurityConfig(c *gin.Context) {
 	}
 	var cfg models.SecurityConfig
 	if err := db.Order("id asc").First(&cfg).Error; err != nil {
-		cfg = models.SecurityConfig{AutoBanEnabled: false, AutoBanWindowSeconds: 600, AutoBanThreshold: 10, AutoBanMinutes: 60}
+		cfg = models.SecurityConfig{AutoBanEnabled: false, AutoBanWindowSeconds: 600, AutoBanThreshold: 10, AutoBanMinutes: 60, AccessLogEnabled: false, SiteVisitLogEnabled: false}
 		_ = db.Create(&cfg).Error
 	}
 	c.JSON(http.StatusOK, dto.OK(cfg, "ok"))
@@ -309,6 +377,7 @@ type securityConfigReq struct {
 	AutoBanThreshold     int  `json:"autoBanThreshold"`
 	AutoBanMinutes       int  `json:"autoBanMinutes"`
 	AccessLogEnabled     bool `json:"accessLogEnabled"`
+	SiteVisitLogEnabled  bool `json:"siteVisitLogEnabled"`
 }
 
 func UpdateSecurityConfig(c *gin.Context) {
@@ -350,6 +419,7 @@ func UpdateSecurityConfig(c *gin.Context) {
 	cfg.AutoBanThreshold = req.AutoBanThreshold
 	cfg.AutoBanMinutes = req.AutoBanMinutes
 	cfg.AccessLogEnabled = req.AccessLogEnabled
+	cfg.SiteVisitLogEnabled = req.SiteVisitLogEnabled
 	if cfg.ID == 0 {
 		_ = db.Create(&cfg).Error
 	} else {

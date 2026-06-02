@@ -29,12 +29,14 @@ type SecurityConfig struct {
 	AutoBanThreshold     int  `gorm:"default:10" json:"autoBanThreshold"`
 	AutoBanMinutes       int  `gorm:"default:60" json:"autoBanMinutes"`
 	AccessLogEnabled     bool `gorm:"default:false" json:"accessLogEnabled"`
+	SiteVisitLogEnabled  bool `gorm:"default:false" json:"siteVisitLogEnabled"`
 }
 
 type SecurityLoginAudit struct {
 	gorm.Model
 	UserID    uint   `gorm:"index;not null" json:"user_id"`
 	Username  string `gorm:"type:varchar(191);index;not null" json:"username"`
+	Action    string `gorm:"type:varchar(20);index;default:login" json:"action"`
 	IP        string `gorm:"type:varchar(191);index" json:"ip"`
 	UserAgent string `gorm:"type:text" json:"user_agent"`
 }
@@ -51,4 +53,14 @@ type SecurityAccessLog struct {
 	UserAgent  string `gorm:"type:text" json:"user_agent"`
 	Referer    string `gorm:"type:text" json:"referer"`
 	DurationMS int64  `json:"duration_ms"`
+}
+
+type SecuritySiteVisitLog struct {
+	gorm.Model
+	IP        string `gorm:"type:varchar(191);index" json:"ip"`
+	UserID    uint   `gorm:"index" json:"user_id"`
+	Username  string `gorm:"type:varchar(191);index" json:"username"`
+	IsAdmin   bool   `gorm:"index" json:"is_admin"`
+	UserAgent string `gorm:"type:text" json:"user_agent"`
+	Referer   string `gorm:"type:text" json:"referer"`
 }

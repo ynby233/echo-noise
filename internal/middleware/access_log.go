@@ -11,14 +11,21 @@ import (
 
 func AccessLogMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if shouldSkipAccessLog(c.Request.Method, c.Request.URL.Path) || !isAccessLogEnabled() {
+		recordAccess := !shouldSkipAccessLog(c.Request.Method, c.Request.URL.Path) && isAccessLogEnabled()
+		recordSiteVisit := shouldRecordSiteVisitRequest(c) && isSiteVisitLogEnabled()
+		if !recordAccess && !recordSiteVisit {
 			c.Next()
 			return
 		}
 
 		start := time.Now()
 		c.Next()
-		recordAccessLog(c, time.Since(start))
+		if recordAccess {
+			recordAccessLog(c, time.Since(start))
+		}
+		if recordSiteVisit && responseAllowsSiteVisitLog(c) {
+			recordSiteVisitLog(c)
+		}
 	}
 }
 
@@ -32,6 +39,18 @@ func isAccessLogEnabled() bool {
 		return false
 	}
 	return cfg.AccessLogEnabled
+}
+
+func isSiteVisitLogEnabled() bool {
+	db := models.GetDB()
+	if db == nil {
+		return false
+	}
+	var cfg models.SecurityConfig
+	if err := db.Select("site_visit_log_enabled").Order("id asc").First(&cfg).Error; err != nil {
+		return false
+	}
+	return cfg.SiteVisitLogEnabled
 }
 
 func shouldSkipAccessLog(method string, path string) bool {
@@ -55,6 +74,7 @@ func shouldSkipAccessLog(method string, path string) bool {
 		"/api/images",
 		"/api/video",
 		"/api/security/access-logs",
+		"/api/security/site-visits",
 	}
 	for _, prefix := range skipPrefixes {
 		if strings.HasPrefix(path, prefix) {
@@ -83,6 +103,38 @@ func shouldSkipAccessLog(method string, path string) bool {
 	return false
 }
 
+func shouldRecordSiteVisitRequest(c *gin.Context) bool {
+	if c == nil || c.Request == nil {
+		return false
+	}
+	if !strings.EqualFold(c.Request.Method, "GET") {
+		return false
+	}
+	path := strings.TrimSpace(c.Request.URL.Path)
+	if path != "/" && path != "/index.html" {
+		return false
+	}
+	return headerAcceptsHTML(c.GetHeader("Accept"))
+}
+
+func headerAcceptsHTML(value string) bool {
+	for _, part := range strings.Split(value, ",") {
+		mediaType := strings.TrimSpace(strings.SplitN(part, ";", 2)[0])
+		if strings.EqualFold(mediaType, "text/html") {
+			return true
+		}
+	}
+	return false
+}
+
+func responseAllowsSiteVisitLog(c *gin.Context) bool {
+	status := c.Writer.Status()
+	if status == 0 {
+		status = 200
+	}
+	return status >= 200 && status < 400
+}
+
 func recordAccessLog(c *gin.Context, duration time.Duration) {
 	db := models.GetDB()
 	if db == nil {
@@ -106,6 +158,23 @@ func recordAccessLog(c *gin.Context, duration time.Duration) {
 		UserAgent:  trimLogField(c.GetHeader("User-Agent"), 2048),
 		Referer:    trimLogField(c.GetHeader("Referer"), 2048),
 		DurationMS: duration.Milliseconds(),
+	}
+	_ = db.Create(&log).Error
+}
+
+func recordSiteVisitLog(c *gin.Context) {
+	db := models.GetDB()
+	if db == nil {
+		return
+	}
+	userID, username, isAdmin := resolveAccessLogUser(c)
+	log := models.SecuritySiteVisitLog{
+		IP:        trimLogField(c.ClientIP(), 191),
+		UserID:    userID,
+		Username:  trimLogField(username, 191),
+		IsAdmin:   isAdmin,
+		UserAgent: trimLogField(c.GetHeader("User-Agent"), 2048),
+		Referer:   trimLogField(c.GetHeader("Referer"), 2048),
 	}
 	_ = db.Create(&log).Error
 }

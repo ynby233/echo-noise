@@ -1325,7 +1325,7 @@
 
                 <div :class="adminSubtleCardClass">
                   <div class="flex items-center justify-between mb-2">
-                    <div class="font-semibold" :class="theme.text">站点访问（显示 {{ accessLogs.length }} 条，最多 {{ accessLogFilter.limit }} 条）</div>
+                    <div class="font-semibold" :class="theme.text">完整请求日志（显示 {{ accessLogs.length }} 条，最多 {{ accessLogFilter.limit }} 条）</div>
                   </div>
                   <div class="space-y-3 md:hidden">
                     <div v-for="(row, index) in accessLogs" :key="`access-log-mobile-${row.ID ?? row.id ?? `${row.created_at || row.CreatedAt || ''}-${row.ip || row.IP || ''}-${index}`}`" class="rounded-xl border p-3 space-y-2" :class="[theme.border, theme.cardBg]">
@@ -1393,6 +1393,106 @@
             </div>
           </div>
 
+          <div id="site-visits-section" v-if="isAdmin && isSectionVisible('site-visits')" class="col-span-12">
+            <div :class="adminShellCardClass">
+              <div :class="adminSectionHeaderClass">
+                <div class="font-semibold flex items-center gap-2" :class="theme.text">
+                  <UIcon name="i-heroicons-home" class="w-5 h-5" />
+                  <span>站点访问</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="text-sm" :class="theme.mutedText">首页访问记录</span>
+                  <span :class="[securityConfig.siteVisitLogEnabled ? 'text-green-400' : 'text-red-400', 'text-sm']">{{ securityConfig.siteVisitLogEnabled ? '已开启' : '已关闭' }}</span>
+                  <UToggle v-model="securityConfig.siteVisitLogEnabled" />
+                  <UButton size="sm" color="green" variant="soft" class="shadow" @click="saveSecurityConfig">保存开关</UButton>
+                  <UButton size="sm" color="indigo" variant="soft" class="shadow" :loading="siteVisitLoading" @click="refreshSiteVisits">刷新</UButton>
+                  <UButton size="sm" color="red" variant="soft" class="shadow" @click="clearSiteVisits">清空</UButton>
+                </div>
+              </div>
+              <div class="px-4 pb-4 space-y-4">
+                <div :class="adminSubtleCardClass">
+                  <div class="grid grid-cols-1 md:grid-cols-5 gap-2">
+                    <UInput v-model="siteVisitFilter.ip" placeholder="IP" />
+                    <UInput v-model="siteVisitFilter.username" placeholder="用户名或访客" />
+                    <USelect v-model="siteVisitFilter.limit" :options="accessLogLimitOptions" />
+                    <UInput v-model="siteVisitFilter.startDate" type="date" />
+                    <UInput v-model="siteVisitFilter.endDate" type="date" />
+                    <div class="md:col-span-5 flex items-center gap-2 justify-end">
+                      <UButton color="primary" variant="soft" @click="refreshSiteVisits">搜索</UButton>
+                      <UButton color="gray" variant="soft" @click="resetSiteVisitFilter">清空筛选</UButton>
+                    </div>
+                  </div>
+                  <div class="mt-3 space-y-2">
+                    <div class="text-xs" :class="theme.mutedText">用户勾选筛选</div>
+                    <div class="flex flex-wrap gap-2">
+                      <label v-for="option in siteVisitUserOptions" :key="option.id" class="inline-flex items-center gap-2 rounded border px-2 py-1 text-sm cursor-pointer" :class="theme.border">
+                        <input v-model="siteVisitSelectedUserIds" type="checkbox" :value="option.id" />
+                        <span :class="theme.text">{{ option.label }}</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <div :class="adminSubtleCardClass">
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="font-semibold" :class="theme.text">首页访问（显示 {{ siteVisits.length }} 条，最多 {{ siteVisitFilter.limit }} 条）</div>
+                  </div>
+                  <div class="space-y-3 md:hidden">
+                    <div v-for="(row, index) in siteVisits" :key="`site-visit-mobile-${row.ID ?? row.id ?? `${row.created_at || row.CreatedAt || ''}-${row.ip || row.IP || ''}-${index}`}`" class="rounded-xl border p-3 space-y-2" :class="[theme.border, theme.cardBg]">
+                      <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                          <div class="text-xs" :class="theme.mutedText">时间</div>
+                          <div class="text-sm break-words" :class="theme.text">{{ formatShanghai(row.created_at || row.CreatedAt || '') }}</div>
+                        </div>
+                        <UBadge color="gray" variant="soft" class="shrink-0">{{ visitUserLabel(row) }}</UBadge>
+                      </div>
+                      <div class="grid grid-cols-1 gap-2 text-sm">
+                        <div>
+                          <div class="text-xs" :class="theme.mutedText">IP</div>
+                          <div class="font-mono break-all" :class="theme.text">{{ row.ip || row.IP || '-' }}</div>
+                        </div>
+                        <div>
+                          <div class="text-xs" :class="theme.mutedText">来源</div>
+                          <div class="break-all" :class="theme.text">{{ row.referer || row.Referer || '-' }}</div>
+                        </div>
+                        <div>
+                          <div class="text-xs" :class="theme.mutedText">User-Agent</div>
+                          <div class="break-all" :class="theme.text">{{ row.user_agent || row.UserAgent || '-' }}</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div v-if="!siteVisits.length" class="rounded-xl border p-4 text-sm text-center" :class="[theme.border, theme.mutedText]">暂无记录</div>
+                  </div>
+                  <div class="admin-desktop-block overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                      <thead>
+                        <tr :class="theme.mutedText">
+                          <th class="text-left py-2 pr-4">时间</th>
+                          <th class="text-left py-2 pr-4">用户</th>
+                          <th class="text-left py-2 pr-4">IP</th>
+                          <th class="text-left py-2 pr-4">来源</th>
+                          <th class="text-left py-2">User-Agent</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="(row, index) in siteVisits" :key="row.ID ?? row.id ?? `${row.created_at || row.CreatedAt || ''}-${row.ip || row.IP || ''}-${index}`" class="border-t" :class="theme.border">
+                          <td class="py-2 pr-4 whitespace-nowrap" :class="theme.mutedText">{{ formatShanghai(row.created_at || row.CreatedAt || '') }}</td>
+                          <td class="py-2 pr-4" :class="theme.text">{{ visitUserLabel(row) }}</td>
+                          <td class="py-2 pr-4 font-mono" :class="theme.text">{{ row.ip || row.IP || '-' }}</td>
+                          <td class="py-2 pr-4 break-all max-w-md" :class="theme.text">{{ row.referer || row.Referer || '-' }}</td>
+                          <td class="py-2 break-all max-w-xl" :class="theme.mutedText">{{ row.user_agent || row.UserAgent || '-' }}</td>
+                        </tr>
+                        <tr v-if="!siteVisits.length">
+                          <td colspan="5" class="py-3" :class="theme.mutedText">暂无记录</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div id="login-audits-section" v-if="isAdmin && isSectionVisible('login-audits')" class="col-span-12">
             <div :class="adminShellCardClass">
               <div :class="adminSectionHeaderClass">
@@ -1409,6 +1509,7 @@
                   <div class="flex flex-col md:flex-row items-stretch md:items-center gap-2">
                     <UInput v-model="loginAuditFilter.username" placeholder="用户名" class="flex-1" />
                     <UInput v-model="loginAuditFilter.ip" placeholder="IP" class="flex-1" />
+                    <USelect v-model="loginAuditFilter.action" :options="loginAuditActionOptions" class="w-full md:w-36" />
                     <div class="flex items-center gap-2 justify-end">
                       <UButton color="primary" variant="soft" @click="refreshLoginAudits">搜索</UButton>
                       <UButton color="gray" variant="soft" @click="resetLoginAuditFilter">清空</UButton>
@@ -1418,7 +1519,7 @@
 
                 <div :class="adminSubtleCardClass">
                   <div class="flex items-center justify-between mb-2">
-                    <div class="font-semibold" :class="theme.text">普通用户登录（最近 {{ loginAudits.length }} 条）</div>
+                    <div class="font-semibold" :class="theme.text">普通用户登录/登出（最近 {{ loginAudits.length }} 条）</div>
                   </div>
                   <div class="space-y-3 md:hidden">
                     <div v-for="(row, index) in loginAudits" :key="`login-audit-mobile-${row.ID ?? row.id ?? `${row.created_at || row.CreatedAt || ''}-${row.user_id || row.UserID || ''}-${index}`}`" class="rounded-xl border p-3 space-y-2" :class="[theme.border, theme.cardBg]">
@@ -1427,12 +1528,16 @@
                           <div class="text-xs" :class="theme.mutedText">时间</div>
                           <div class="text-sm break-words" :class="theme.text">{{ formatShanghai(row.created_at || row.CreatedAt || '') }}</div>
                         </div>
-                        <UBadge color="gray" variant="soft" class="shrink-0">#{{ row.user_id || row.UserID }}</UBadge>
+                        <UBadge :color="loginAuditActionColor(row.action || row.Action)" variant="soft" class="shrink-0">{{ loginAuditActionLabel(row.action || row.Action) }}</UBadge>
                       </div>
                       <div class="grid grid-cols-1 gap-2 text-sm">
                         <div>
                           <div class="text-xs" :class="theme.mutedText">用户</div>
                           <div class="break-words" :class="theme.text">{{ row.username || row.Username || '-' }}</div>
+                        </div>
+                        <div>
+                          <div class="text-xs" :class="theme.mutedText">用户ID</div>
+                          <div class="break-words" :class="theme.text">#{{ row.user_id || row.UserID }}</div>
                         </div>
                         <div>
                           <div class="text-xs" :class="theme.mutedText">IP</div>
@@ -1451,6 +1556,7 @@
                       <thead>
                         <tr :class="theme.mutedText">
                           <th class="text-left py-2 pr-4">时间</th>
+                          <th class="text-left py-2 pr-4">事件</th>
                           <th class="text-left py-2 pr-4">用户ID</th>
                           <th class="text-left py-2 pr-4">用户名</th>
                           <th class="text-left py-2 pr-4">IP</th>
@@ -1460,13 +1566,14 @@
                       <tbody>
                         <tr v-for="(row, index) in loginAudits" :key="row.ID ?? row.id ?? `${row.created_at || row.CreatedAt || ''}-${row.user_id || row.UserID || ''}-${index}`" class="border-t" :class="theme.border">
                           <td class="py-2 pr-4 whitespace-nowrap" :class="theme.mutedText">{{ formatShanghai(row.created_at || row.CreatedAt || '') }}</td>
+                          <td class="py-2 pr-4"><UBadge :color="loginAuditActionColor(row.action || row.Action)" variant="soft">{{ loginAuditActionLabel(row.action || row.Action) }}</UBadge></td>
                           <td class="py-2 pr-4" :class="theme.mutedText">{{ row.user_id || row.UserID }}</td>
                           <td class="py-2 pr-4" :class="theme.text">{{ row.username || row.Username || '-' }}</td>
                           <td class="py-2 pr-4 font-mono" :class="theme.text">{{ row.ip || row.IP || '-' }}</td>
                           <td class="py-2 break-all max-w-xl" :class="theme.mutedText">{{ row.user_agent || row.UserAgent || '-' }}</td>
                         </tr>
                         <tr v-if="!loginAudits.length">
-                          <td colspan="5" class="py-3" :class="theme.mutedText">暂无记录</td>
+                          <td colspan="6" class="py-3" :class="theme.mutedText">暂无记录</td>
                         </tr>
                       </tbody>
                     </table>
@@ -2092,7 +2199,7 @@ const formatShanghai = (s: string) => {
  
 const cardCls = 'rounded-xl border shadow-sm'
 type AdminSectionKey =
-  'dashboard' | 'user' | 'site' | 'notify' | 'attachments' | 'db' | 'version' | 'security' | 'access-logs' | 'login-audits' |
+  'dashboard' | 'user' | 'site' | 'notify' | 'attachments' | 'db' | 'version' | 'security' | 'access-logs' | 'site-visits' | 'login-audits' |
   'site-register' | 'site-pwa' | 'site-github-card' | 'site-github-login' | 'site-announcement' | 'site-music' |
   'site-default-theme' | 'site-social-links' | 'site-ads' | 'site-feed' | 'site-rss' | 'hitokoto' | 'life-countdown' |
   'site-configs' | 'comments' | 'email' | 'admin-users' |
@@ -2150,6 +2257,7 @@ const adminNavGroups = computed<AdminNavGroup[]>(() => {
       items: [
         { key: 'admin-users', label: '用户管理', icon: 'i-heroicons-user-group' },
         { key: 'access-logs', label: '访问日志', icon: 'i-heroicons-eye' },
+        { key: 'site-visits', label: '站点访问', icon: 'i-heroicons-home' },
         { key: 'login-audits', label: '登录审计', icon: 'i-heroicons-clipboard-document-check' },
         { key: 'security', label: '安全防护', icon: 'i-heroicons-shield-exclamation' }
       ] as Array<{ key: AdminSectionKey, label: string, icon: string }>
@@ -2984,12 +3092,22 @@ const accessLogUserOptions = computed(() => {
   }
   return options
 })
+const siteVisits = ref<any[]>([])
+const siteVisitLoading = ref(false)
+const siteVisitFilter = reactive({ ip: '', username: '', startDate: '', endDate: '', limit: '50' })
+const siteVisitSelectedUserIds = ref<string[]>([])
+const siteVisitUserOptions = accessLogUserOptions
 const loginAudits = ref<any[]>([])
 const loginAuditLoading = ref(false)
-const loginAuditFilter = reactive({ username: '', ip: '' })
+const loginAuditFilter = reactive({ username: '', ip: '', action: '' })
+const loginAuditActionOptions = [
+  { label: '全部事件', value: '' },
+  { label: '登录', value: 'login' },
+  { label: '登出', value: 'logout' }
+]
 const ipBans = ref<any[]>([])
 const banForm = reactive({ ip: '', minutes: 0 as any, reason: '' })
-const securityConfig = reactive({ autoBanEnabled: false, autoBanWindowSeconds: 600 as any, autoBanThreshold: 10 as any, autoBanMinutes: 60 as any, accessLogEnabled: false })
+const securityConfig = reactive({ autoBanEnabled: false, autoBanWindowSeconds: 600 as any, autoBanThreshold: 10 as any, autoBanMinutes: 60 as any, accessLogEnabled: false, siteVisitLogEnabled: false })
 
 const refreshAccessLogs = async () => {
   try {
@@ -3050,6 +3168,66 @@ const clearAccessLogs = async () => {
   }
 }
 
+const refreshSiteVisits = async () => {
+  try {
+    siteVisitLoading.value = true
+    const limit = String(siteVisitFilter.limit || '50').trim()
+    const params: Record<string, any> = { limit }
+    const ip = String(siteVisitFilter.ip || '').trim()
+    const username = String(siteVisitFilter.username || '').trim()
+    const startDate = String(siteVisitFilter.startDate || '').trim()
+    const endDate = String(siteVisitFilter.endDate || '').trim()
+    const userIDs = siteVisitSelectedUserIds.value.map((id) => String(id).trim()).filter(Boolean)
+    if (ip) params.ip = ip
+    if (username) params.username = username
+    if (startDate) params.startDate = startDate
+    if (endDate) params.endDate = endDate
+    if (userIDs.length > 0) params.user_ids = userIDs.join(',')
+    const res: any = await getRequest<any>('security/site-visits', params, { credentials: 'include', silent: true })
+    if (res && res.code === 1) {
+      siteVisits.value = Array.isArray(res.data) ? res.data : []
+    } else {
+      throw new Error(res?.msg || '加载站点访问记录失败')
+    }
+  } catch (e: any) {
+    useToast().add({ title: '加载站点访问记录失败', description: e.message, color: 'red' })
+  } finally {
+    siteVisitLoading.value = false
+  }
+}
+
+const resetSiteVisitFilter = async () => {
+  siteVisitFilter.ip = ''
+  siteVisitFilter.username = ''
+  siteVisitFilter.startDate = ''
+  siteVisitFilter.endDate = ''
+  siteVisitFilter.limit = '50'
+  siteVisitSelectedUserIds.value = []
+  await refreshSiteVisits()
+}
+
+const clearSiteVisits = async () => {
+  try {
+    if (!window.confirm('确定清空所有站点访问记录吗？')) return
+    const res: any = await deleteRequest<any>('security/site-visits', undefined, { credentials: 'include' })
+    if (res && res.code === 1) {
+      useToast().add({ title: '已清空', color: 'green' })
+      siteVisits.value = []
+    } else {
+      throw new Error(res?.msg || '清空失败')
+    }
+  } catch (e: any) {
+    useToast().add({ title: '操作失败', description: e.message, color: 'red' })
+  }
+}
+
+const visitUserLabel = (row: any) => {
+  const username = String(row?.username ?? row?.Username ?? '').trim()
+  const userID = Number(row?.user_id ?? row?.UserID ?? 0)
+  if (username) return userID > 0 ? `${username} #${userID}` : username
+  return userID > 0 ? `用户 #${userID}` : '访客'
+}
+
 const formatDurationMs = (value: any) => {
   const n = Number(value || 0)
   if (!Number.isFinite(n) || n < 0) return '-'
@@ -3065,14 +3243,27 @@ const accessLogStatusColor = (value: any) => {
   return 'gray'
 }
 
+const loginAuditActionLabel = (value: any) => {
+  const action = String(value || 'login').trim().toLowerCase()
+  if (action === 'logout') return '登出'
+  return '登录'
+}
+
+const loginAuditActionColor = (value: any) => {
+  const action = String(value || 'login').trim().toLowerCase()
+  return action === 'logout' ? 'orange' : 'green'
+}
+
 const refreshLoginAudits = async () => {
   try {
     loginAuditLoading.value = true
     const params: Record<string, any> = { limit: 200 }
     const username = String(loginAuditFilter.username || '').trim()
     const ip = String(loginAuditFilter.ip || '').trim()
+    const action = String(loginAuditFilter.action || '').trim()
     if (username) params.username = username
     if (ip) params.ip = ip
+    if (action) params.action = action
     const res: any = await getRequest<any>('security/login-audits', params, { credentials: 'include', silent: true })
     if (res && res.code === 1) {
       loginAudits.value = Array.isArray(res.data) ? res.data : []
@@ -3089,6 +3280,7 @@ const refreshLoginAudits = async () => {
 const resetLoginAuditFilter = async () => {
   loginAuditFilter.username = ''
   loginAuditFilter.ip = ''
+  loginAuditFilter.action = ''
   await refreshLoginAudits()
 }
 
@@ -3106,6 +3298,7 @@ const refreshSecurity = async () => {
 			securityConfig.autoBanThreshold = res3.data.autoBanThreshold ?? 10
 			securityConfig.autoBanMinutes = res3.data.autoBanMinutes ?? 60
 			securityConfig.accessLogEnabled = !!res3.data.accessLogEnabled
+			securityConfig.siteVisitLogEnabled = !!res3.data.siteVisitLogEnabled
 		}
   } catch {}
 }
@@ -3117,7 +3310,8 @@ const saveSecurityConfig = async () => {
       autoBanWindowSeconds: Number(securityConfig.autoBanWindowSeconds || 0),
       autoBanThreshold: Number(securityConfig.autoBanThreshold || 0),
       autoBanMinutes: Number(securityConfig.autoBanMinutes || 0),
-      accessLogEnabled: !!securityConfig.accessLogEnabled
+      accessLogEnabled: !!securityConfig.accessLogEnabled,
+      siteVisitLogEnabled: !!securityConfig.siteVisitLogEnabled
     }
     const res: any = await putRequest<any>('security/config', payload, { credentials: 'include' })
     if (res && res.code === 1) {
@@ -3138,6 +3332,10 @@ onMounted(async () => {
       await refreshUsers()
       await refreshAccessLogs()
     }
+    if (activeSection.value === 'site-visits') {
+      await refreshUsers()
+      await refreshSiteVisits()
+    }
     if (activeSection.value === 'login-audits') await refreshLoginAudits()
   }
 })
@@ -3149,6 +3347,10 @@ watch(() => isAdmin.value, async (v) => {
       await refreshUsers()
       await refreshAccessLogs()
     }
+    if (activeSection.value === 'site-visits') {
+      await refreshUsers()
+      await refreshSiteVisits()
+    }
     if (activeSection.value === 'login-audits') await refreshLoginAudits()
   }
 })
@@ -3157,6 +3359,10 @@ watch(() => activeSection.value, async (section) => {
   if (section === 'access-logs' && isAdmin.value) {
     await refreshUsers()
     await refreshAccessLogs()
+  }
+  if (section === 'site-visits' && isAdmin.value) {
+    await refreshUsers()
+    await refreshSiteVisits()
   }
   if (section === 'login-audits' && isAdmin.value) await refreshLoginAudits()
 })

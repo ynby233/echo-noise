@@ -135,7 +135,7 @@ func Login(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.Fail[any]("Session 保存失败"))
 		return
 	}
-	_ = recordUserLoginAudit(c, user)
+	_ = recordUserLoginAudit(c, user, loginAuditActionLogin)
 
 	c.JSON(http.StatusOK, dto.OK(user, "登录成功"))
 }
@@ -143,9 +143,35 @@ func Login(c *gin.Context) {
 // 添加登出功能
 func Logout(c *gin.Context) {
 	session := sessions.Default(c)
+	recordSessionLogoutAudit(c, session)
 	session.Clear()
 	session.Save()
 	c.JSON(http.StatusOK, dto.OK[any](nil, "登出成功"))
+}
+
+func recordSessionLogoutAudit(c *gin.Context, session sessions.Session) {
+	if session == nil {
+		return
+	}
+	userID, ok := commentUint(session.Get("user_id"))
+	if !ok || userID == 0 {
+		return
+	}
+	username := ""
+	if v := session.Get("username"); v != nil {
+		username = strings.TrimSpace(fmt.Sprintf("%v", v))
+	}
+	user := models.User{ID: userID, Username: username}
+	if isAdmin, ok := session.Get("is_admin").(bool); ok {
+		user.IsAdmin = isAdmin
+	}
+	if user.Username == "" || !user.IsAdmin {
+		if loaded, err := services.GetUserByID(userID); err == nil && loaded != nil {
+			user.Username = loaded.Username
+			user.IsAdmin = loaded.IsAdmin
+		}
+	}
+	_ = recordUserLoginAudit(c, &user, loginAuditActionLogout)
 }
 func Register(c *gin.Context) {
 	// 新增：注册前判断是否允许注册
@@ -3587,7 +3613,7 @@ func GithubCallback(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.Fail[any]("Session 保存失败"))
 		return
 	}
-	_ = recordUserLoginAudit(c, user)
+	_ = recordUserLoginAudit(c, user, loginAuditActionLogin)
 	// 跳转
 	if isNew {
 		c.Redirect(http.StatusFound, "/")

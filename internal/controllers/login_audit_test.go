@@ -22,30 +22,45 @@ func TestLoginAuditRecordsOnlyOrdinaryUsers(t *testing.T) {
 	}
 
 	r.GET("/audit-user", func(c *gin.Context) {
-		if err := recordUserLoginAudit(c, &user); err != nil {
+		if err := recordUserLoginAudit(c, &user, loginAuditActionLogin); err != nil {
 			t.Fatalf("record ordinary user audit: %v", err)
 		}
 		c.Status(http.StatusNoContent)
 	})
+	r.GET("/audit-user-logout", func(c *gin.Context) {
+		if err := recordUserLoginAudit(c, &user, loginAuditActionLogout); err != nil {
+			t.Fatalf("record ordinary user logout audit: %v", err)
+		}
+		c.Status(http.StatusNoContent)
+	})
 	r.GET("/audit-admin", func(c *gin.Context) {
-		if err := recordUserLoginAudit(c, &admin); err != nil {
+		if err := recordUserLoginAudit(c, &admin, loginAuditActionLogin); err != nil {
 			t.Fatalf("record admin audit: %v", err)
 		}
 		c.Status(http.StatusNoContent)
 	})
 
 	performLoginAuditRecordRequest(r, "/audit-user", "198.51.100.7:1234", "audit-test-agent")
+	performLoginAuditRecordRequest(r, "/audit-user-logout", "198.51.100.8:1234", "logout-agent")
 	performLoginAuditRecordRequest(r, "/audit-admin", "203.0.113.8:5678", "admin-agent")
 
 	var audits []models.SecurityLoginAudit
-	if err := db.Find(&audits).Error; err != nil {
+	if err := db.Order("id asc").Find(&audits).Error; err != nil {
 		t.Fatalf("list audits: %v", err)
 	}
-	if len(audits) != 1 {
-		t.Fatalf("expected one ordinary user audit, got %d", len(audits))
+	if len(audits) != 2 {
+		t.Fatalf("expected two ordinary user audits, got %d", len(audits))
 	}
-	if audits[0].UserID != user.ID || audits[0].Username != user.Username {
-		t.Fatalf("unexpected audited user: %#v", audits[0])
+	for _, audit := range audits {
+		if audit.UserID != user.ID || audit.Username != user.Username {
+			t.Fatalf("unexpected audited user: %#v", audit)
+		}
+	}
+	if audits[0].Action != loginAuditActionLogin || audits[0].IP != "198.51.100.7" {
+		t.Fatalf("expected login audit first, got %#v", audits[0])
+	}
+	if audits[1].Action != loginAuditActionLogout || audits[1].IP != "198.51.100.8" {
+		t.Fatalf("expected logout audit second, got %#v", audits[1])
 	}
 	if audits[0].IP != "198.51.100.7" {
 		t.Fatalf("expected ClientIP remote address, got %q", audits[0].IP)
@@ -66,8 +81,8 @@ func TestGetLoginAuditsFiltersByUsernameAndIP(t *testing.T) {
 	}
 
 	rows := []models.SecurityLoginAudit{
-		{UserID: user.ID, Username: user.Username, IP: "198.51.100.7", UserAgent: "first"},
-		{UserID: other.ID, Username: other.Username, IP: "203.0.113.8", UserAgent: "second"},
+		{UserID: user.ID, Username: user.Username, Action: loginAuditActionLogin, IP: "198.51.100.7", UserAgent: "first"},
+		{UserID: other.ID, Username: other.Username, Action: loginAuditActionLogout, IP: "203.0.113.8", UserAgent: "second"},
 	}
 	for _, row := range rows {
 		if err := db.Create(&row).Error; err != nil {
@@ -84,6 +99,11 @@ func TestGetLoginAuditsFiltersByUsernameAndIP(t *testing.T) {
 	all := decodeLoginAuditsResponse(t, performLoginAuditListRequest(r, "/security/login-audits"))
 	if len(all) != 2 {
 		t.Fatalf("expected all audits, got %d", len(all))
+	}
+
+	logoutOnly := decodeLoginAuditsResponse(t, performLoginAuditListRequest(r, "/security/login-audits?action=logout"))
+	if len(logoutOnly) != 1 || logoutOnly[0].Username != other.Username || logoutOnly[0].Action != loginAuditActionLogout {
+		t.Fatalf("expected logout audit, got %#v", logoutOnly)
 	}
 }
 

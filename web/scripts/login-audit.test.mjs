@@ -15,8 +15,8 @@ const migrate = await readFile(join(repoRoot, 'internal/models/migrate.go'), 'ut
 
 assert.match(
   securityModel,
-  /type\s+SecurityLoginAudit\s+struct\s*\{[\s\S]*?UserID\s+uint[\s\S]*?Username\s+string[\s\S]*?IP\s+string[\s\S]*?UserAgent\s+string[\s\S]*?\}/,
-  'login audit model must store user id, username, IP, and user agent'
+  /type\s+SecurityLoginAudit\s+struct\s*\{[\s\S]*?UserID\s+uint[\s\S]*?Username\s+string[\s\S]*?Action\s+string[\s\S]*?IP\s+string[\s\S]*?UserAgent\s+string[\s\S]*?\}/,
+  'login audit model must store user id, username, action, IP, and user agent'
 )
 
 assert.match(
@@ -27,26 +27,38 @@ assert.match(
 
 assert.match(
   securityController,
-  /func\s+recordUserLoginAudit\(c \*gin\.Context, user \*models\.User\) error \{[\s\S]*?user\s*==\s*nil\s*\|\|\s*user\.ID\s*==\s*0\s*\|\|\s*user\.IsAdmin[\s\S]*?c\.ClientIP\(\)[\s\S]*?db\.Create\(&audit\)/,
-  'login audit recording must skip administrators and use gin ClientIP() for ordinary users'
+  /func\s+recordUserLoginAudit\(c \*gin\.Context, user \*models\.User, action string\) error \{[\s\S]*?user\s*==\s*nil\s*\|\|\s*user\.ID\s*==\s*0\s*\|\|\s*user\.IsAdmin[\s\S]*?Action:\s*normalizeLoginAuditAction\(action\)[\s\S]*?c\.ClientIP\(\)[\s\S]*?db\.Create\(&audit\)/,
+  'login audit recording must normalize the action, skip administrators, and use gin ClientIP() for ordinary users'
 )
 
 assert.match(
   loginController,
-  /session\.Save\(\)[\s\S]*?_\s*=\s*recordUserLoginAudit\(c,\s*user\)[\s\S]*?c\.JSON\(http\.StatusOK,\s*dto\.OK\(user,\s*"登录成功"\)\)/,
-  'successful password login should record the audit after the session is saved and before responding'
+  /session\.Save\(\)[\s\S]*?_\s*=\s*recordUserLoginAudit\(c,\s*user,\s*loginAuditActionLogin\)[\s\S]*?c\.JSON\(http\.StatusOK,\s*dto\.OK\(user,\s*"登录成功"\)\)/,
+  'successful password login should record the login audit after the session is saved and before responding'
 )
 
-const auditRecordCalls = loginController.match(/recordUserLoginAudit\(c,\s*\*?user\)/g) || []
+const auditRecordCalls = loginController.match(/recordUserLoginAudit\(c,\s*\*?user,\s*loginAuditActionLogin\)/g) || []
 assert.ok(
   auditRecordCalls.length >= 2,
   'password login and GitHub callback should both record successful ordinary-user login audits'
 )
 
 assert.match(
+  loginController,
+  /func\s+Logout\(c \*gin\.Context\)[\s\S]*?recordSessionLogoutAudit\(c,\s*session\)[\s\S]*?session\.Clear\(\)/,
+  'logout should record the audit before clearing the session'
+)
+
+assert.match(
+  loginController,
+  /recordUserLoginAudit\(c,\s*&user,\s*loginAuditActionLogout\)/,
+  'logout should record ordinary-user logout audits with the logout action'
+)
+
+assert.match(
   securityController,
-  /func\s+GetLoginAudits\(c \*gin\.Context\)[\s\S]*?Limit\(limit\)[\s\S]*?Query\("username"\)[\s\S]*?Query\("ip"\)[\s\S]*?Find\(&audits\)/,
-  'admin login audit API should list recent audits and support username/IP filters'
+  /func\s+GetLoginAudits\(c \*gin\.Context\)[\s\S]*?Limit\(limit\)[\s\S]*?Query\("username"\)[\s\S]*?Query\("ip"\)[\s\S]*?Query\("action"\)[\s\S]*?Find\(&audits\)/,
+  'admin login audit API should list recent audits and support username/IP/action filters'
 )
 
 assert.match(
