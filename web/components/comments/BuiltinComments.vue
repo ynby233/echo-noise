@@ -1,5 +1,5 @@
 <template>
-  <div class="builtin-comments">
+  <div ref="rootRef" class="builtin-comments">
   <div class="waline-wrapper px-2 py-2 rounded-lg" :class="[themeBg]">
       <div class="text-sm mb-2" :class="themeText">{{ contextLabel }} ({{ rootCommentTotal }})</div>
       <div v-if="sortedRootComments.length" class="comments-list">
@@ -173,6 +173,7 @@ const contextLabel = computed(() => String(props.contextLabel || '评论').trim(
 const loginRequiredText = computed(() => `请登录后${contextLabel.value}`)
 const comments = ref<any[]>([])
 const content = ref('')
+const rootRef = ref<HTMLElement | null>(null)
 const taRef = ref<any>(null)
 const isSubmitting = ref(false)
 const replyTo = ref<number | null>(null)
@@ -557,6 +558,7 @@ watch(() => props.messageId, load)
 
 const commentRootElement = () => {
   if (typeof document === 'undefined') return null as HTMLElement | null
+  if (rootRef.value && document.contains(rootRef.value)) return rootRef.value
   const input = taRef.value as HTMLTextAreaElement | null
   return (input?.closest('.builtin-comments') as HTMLElement | null)
     || (document.querySelector(`.content-container[data-msg-id="${props.messageId}"] .builtin-comments`) as HTMLElement | null)
@@ -697,7 +699,8 @@ const doDelete = async () => {
 }
 
 const scrollToMessage = () => {
-  const el = document.querySelector(`.content-container[data-msg-id="${props.messageId}"]`) as HTMLElement | null
+  const el = (document.querySelector(`.content-container[data-msg-id="${props.messageId}"]`) as HTMLElement | null)
+    || commentRootElement()
   scrollElementIntoInputContainer(el, 'start')
 }
 
@@ -838,7 +841,7 @@ const replyingToComment = computed(() => {
 })
 const returnTargetLabel = computed(() => {
   const target = replyingToComment.value
-  if (target) return Number(target.parent_id || 0) > 0 ? '返回回复' : '返回评论'
+  if (target) return Number(target.parent_id || 0) > 0 ? '返回回复' : `返回${contextLabel.value}`
   if (!props.showInput) return ''
   return contextLabel.value === '留言' ? '返回留言板' : '返回帖子'
 })

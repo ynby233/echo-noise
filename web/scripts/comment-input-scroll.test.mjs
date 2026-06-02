@@ -68,6 +68,24 @@ assert.match(
 
 assert.match(
   component,
+  /<div\s+ref="rootRef"\s+class="builtin-comments">/,
+  'the comments component should expose a stable root element for guestbook-only return jumps'
+)
+
+assert.match(
+  component,
+  /const\s+scrollToMessage\s*=\s*\(\)\s*=>\s*\{[\s\S]*?document\.querySelector\(`\.content-container\[data-msg-id="\$\{props\.messageId\}"\]`\)[\s\S]*?\|\|\s*commentRootElement\(\)[\s\S]*?scrollElementIntoInputContainer\(el,\s*'start'\)/,
+  'returning to the guestbook should fall back to the comments root when there is no message content container'
+)
+
+assert.match(
+  component,
+  /if\s*\(target\)\s*return\s+Number\(target\.parent_id\s*\|\|\s*0\)\s*>\s*0\s*\?\s*'返回回复'\s*:\s*`返回\$\{contextLabel\.value\}`/,
+  'replying to a top-level guestbook message should label the return button as 返回留言 instead of 返回评论'
+)
+
+assert.match(
+  component,
   /const\s+showReopenInput\s*=\s*computed\(\(\)\s*=>\s*!!props\.showInput\s*&&\s*hiddenByCancel\.value[\s\S]*?canComment\.value\)/,
   'a permanently visible comment board should expose a reopen state after canceling the input'
 )
