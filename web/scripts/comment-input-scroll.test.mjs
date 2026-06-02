@@ -42,4 +42,28 @@ assert.match(
   'window scrolling should remain as a fallback for pages without a local scroll container'
 )
 
+assert.equal(
+  component.includes('scrollIntoView'),
+  false,
+  'comment and reply jumps must not use native scrollIntoView because it can scroll the wrong page ancestor'
+)
+
+assert.match(
+  component,
+  /const\s+scrollElementIntoInputContainer\s*=\s*\([\s\S]*?const\s+container\s*=\s*findInputScrollContainer\(\)[\s\S]*?container\.scrollTo\(\{\s*top:\s*nextTop,\s*left:\s*container\.scrollLeft\s*\|\|\s*0,\s*behavior\s*\}\)/,
+  'automatic comment positioning should only move the resolved scroll container'
+)
+
+assert.match(
+  component,
+  /if\s*\(formVisible\.value\s*&&\s*props\.autoScrollInput\)\s*scrollToInput\(false\)/,
+  'initially visible inputs should only auto-scroll when the parent explicitly requests it'
+)
+
+assert.match(
+  component,
+  /const\s+returnToInputTarget\s*=\s*\(\)\s*=>\s*\{[\s\S]*?scrollElementIntoInputContainer\(target,\s*'center'\)/,
+  'the return-to-comment/reply button should use controlled content-wrapper scrolling'
+)
+
 console.log('comment input scroll restoration tests passed')

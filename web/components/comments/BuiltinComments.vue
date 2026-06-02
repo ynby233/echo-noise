@@ -415,6 +415,7 @@ type InputScrollSnapshot = {
   left: number
   useWindow?: boolean
 }
+type CommentScrollBlock = 'nearest' | 'start' | 'center'
 const inputRestoreScroll = ref<InputScrollSnapshot | null>(null)
 const pendingInputScroll = ref(false)
 const formVisible = computed(() => (((props.showInput && !hiddenByCancel.value) || !!replyTo.value) && canComment.value))
@@ -433,6 +434,57 @@ const findInputScrollContainer = () => {
   }
   const wrapper = document.querySelector('.content-wrapper') as HTMLElement | null
   return wrapper && isScrollableY(wrapper) ? wrapper : null
+}
+const boundedScrollTop = (container: HTMLElement, top: number) => {
+  const max = Math.max(0, container.scrollHeight - container.clientHeight)
+  return Math.min(max, Math.max(0, top))
+}
+const scrollElementIntoInputContainer = (target: HTMLElement | null, block: CommentScrollBlock = 'nearest', behavior: ScrollBehavior = 'smooth') => {
+  if (typeof window === 'undefined' || !target) return
+  const margin = 16
+  const container = findInputScrollContainer()
+  if (container && document.contains(container) && document.contains(target)) {
+    const containerRect = container.getBoundingClientRect()
+    const targetRect = target.getBoundingClientRect()
+    let nextTop = container.scrollTop
+    if (block === 'center') {
+      nextTop += targetRect.top - containerRect.top - ((container.clientHeight - targetRect.height) / 2)
+    } else if (block === 'start') {
+      nextTop += targetRect.top - containerRect.top - margin
+    } else if (targetRect.top < containerRect.top + margin) {
+      nextTop += targetRect.top - containerRect.top - margin
+    } else if (targetRect.bottom > containerRect.bottom - margin) {
+      nextTop += targetRect.bottom - containerRect.bottom + margin
+    } else {
+      return
+    }
+    nextTop = boundedScrollTop(container, nextTop)
+    try {
+      container.scrollTo({ top: nextTop, left: container.scrollLeft || 0, behavior })
+    } catch {
+      container.scrollTop = nextTop
+    }
+    return
+  }
+
+  const targetRect = target.getBoundingClientRect()
+  let nextTop = window.scrollY || window.pageYOffset || 0
+  if (block === 'center') {
+    nextTop += targetRect.top - ((window.innerHeight - targetRect.height) / 2)
+  } else if (block === 'start') {
+    nextTop += targetRect.top - margin
+  } else if (targetRect.top < margin) {
+    nextTop += targetRect.top - margin
+  } else if (targetRect.bottom > window.innerHeight - margin) {
+    nextTop += targetRect.bottom - window.innerHeight + margin
+  } else {
+    return
+  }
+  try {
+    window.scrollTo({ top: Math.max(0, nextTop), left: window.scrollX || window.pageXOffset || 0, behavior })
+  } catch {
+    window.scrollTo(window.scrollX || window.pageXOffset || 0, Math.max(0, nextTop))
+  }
 }
 const captureInputRestoreScroll = () => {
   if (typeof window === 'undefined') return
@@ -528,7 +580,7 @@ const scrollToInput = async (focus = true) => {
   if (target && typeof requestAnimationFrame !== 'undefined') {
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
   }
-  target?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  scrollElementIntoInputContainer(target, 'nearest')
   if (focus) focusInput()
 }
 
@@ -631,8 +683,8 @@ const doDelete = async () => {
 }
 
 const scrollToMessage = () => {
-  const el = document.querySelector(`.content-container[data-msg-id="${props.messageId}"]`)
-  el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const el = document.querySelector(`.content-container[data-msg-id="${props.messageId}"]`) as HTMLElement | null
+  scrollElementIntoInputContainer(el, 'start')
 }
 
 const allAuthors = computed(() => {
@@ -694,7 +746,7 @@ const onKeydown = (e: KeyboardEvent) => {
 onMounted(() => {
   nextTick(() => {
     autoResizeTextarea()
-    if (formVisible.value) scrollToInput(false)
+    if (formVisible.value && props.autoScrollInput) scrollToInput(false)
   })
 })
 const submitBtnClass = computed(() => (isDark.value ? 'bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-60' : 'bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-60'))
@@ -782,7 +834,7 @@ const returnToInputTarget = () => {
   if (id > 0) {
     const target = commentElement(id)
     if (target) {
-      target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      scrollElementIntoInputContainer(target, 'center')
       return
     }
   }
