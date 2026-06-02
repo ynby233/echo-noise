@@ -48,6 +48,7 @@ func SetupRouter() *gin.Engine {
 
 	// 使用 pkg 中的 session 初始化
 	pkg.InitSession(r)
+	r.Use(middleware.AccessLogMiddleware())
 	// 配置 CORS
 	corsConfig := cors.DefaultConfig()
 	// 动态按环境变量或放通所有来源（支持反代与跨域小组件）
@@ -252,6 +253,8 @@ func SetupRouter() *gin.Engine {
 	{
 		security.GET("/attacks", middleware.AdminAuthMiddleware(), controllers.GetAttackRecords)
 		security.DELETE("/attacks", middleware.AdminAuthMiddleware(), controllers.ClearAttackRecords)
+		security.GET("/access-logs", middleware.AdminAuthMiddleware(), controllers.GetAccessLogs)
+		security.DELETE("/access-logs", middleware.AdminAuthMiddleware(), controllers.ClearAccessLogs)
 		security.GET("/login-audits", middleware.AdminAuthMiddleware(), controllers.GetLoginAudits)
 		security.GET("/bans", middleware.AdminAuthMiddleware(), controllers.GetIPBans)
 		security.POST("/bans", middleware.AdminAuthMiddleware(), controllers.AddIPBan)

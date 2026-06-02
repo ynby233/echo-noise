@@ -15,6 +15,7 @@
     "test:heatmap-scope": "node scripts/heatmap-scope.test.mjs",
     "test:admin-comments": "node scripts/admin-comments-panel.test.mjs",
     "test:login-audit": "node scripts/login-audit.test.mjs",
+    "test:access-log": "node scripts/access-log.test.mjs",
     "test:public-music-player": "node scripts/public-music-player.test.mjs",
     "postinstall": "nuxt prepare"
   },

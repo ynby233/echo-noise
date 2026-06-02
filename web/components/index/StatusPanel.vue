@@ -1281,6 +1281,102 @@
             </UCard>
           </UModal>
 
+          <div id="access-logs-section" v-if="isAdmin && isSectionVisible('access-logs')" class="col-span-12">
+            <div :class="adminShellCardClass">
+              <div :class="adminSectionHeaderClass">
+                <div class="font-semibold flex items-center gap-2" :class="theme.text">
+                  <UIcon name="i-heroicons-eye" class="w-5 h-5" />
+                  <span>访问日志</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <UButton size="sm" color="indigo" variant="soft" class="shadow" :loading="accessLogLoading" @click="refreshAccessLogs">刷新</UButton>
+                  <UButton size="sm" color="red" variant="soft" class="shadow" @click="clearAccessLogs">清空</UButton>
+                </div>
+              </div>
+              <div class="px-4 pb-4 space-y-4">
+                <div :class="adminSubtleCardClass">
+                  <div class="grid grid-cols-1 md:grid-cols-5 gap-2">
+                    <UInput v-model="accessLogFilter.ip" placeholder="IP" />
+                    <UInput v-model="accessLogFilter.username" placeholder="用户" />
+                    <UInput v-model="accessLogFilter.path" placeholder="路径" class="md:col-span-2" />
+                    <USelect v-model="accessLogFilter.method" :options="accessLogMethodOptions" />
+                    <div class="md:col-span-5 flex items-center gap-2 justify-end">
+                      <UButton color="primary" variant="soft" @click="refreshAccessLogs">搜索</UButton>
+                      <UButton color="gray" variant="soft" @click="resetAccessLogFilter">清空筛选</UButton>
+                    </div>
+                  </div>
+                </div>
+
+                <div :class="adminSubtleCardClass">
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="font-semibold" :class="theme.text">站点访问（最近 {{ accessLogs.length }} 条）</div>
+                  </div>
+                  <div class="space-y-3 md:hidden">
+                    <div v-for="(row, index) in accessLogs" :key="`access-log-mobile-${row.ID ?? row.id ?? `${row.created_at || row.CreatedAt || ''}-${row.ip || row.IP || ''}-${index}`}`" class="rounded-xl border p-3 space-y-2" :class="[theme.border, theme.cardBg]">
+                      <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                          <div class="text-xs" :class="theme.mutedText">时间</div>
+                          <div class="text-sm break-words" :class="theme.text">{{ formatShanghai(row.created_at || row.CreatedAt || '') }}</div>
+                        </div>
+                        <UBadge :color="accessLogStatusColor(row.status || row.Status)" variant="soft" class="shrink-0">{{ row.status || row.Status || '-' }}</UBadge>
+                      </div>
+                      <div class="grid grid-cols-1 gap-2 text-sm">
+                        <div>
+                          <div class="text-xs" :class="theme.mutedText">请求</div>
+                          <div class="break-all" :class="theme.text"><span class="font-mono">{{ row.method || row.Method || '-' }}</span> {{ row.path || row.Path || '-' }}</div>
+                        </div>
+                        <div>
+                          <div class="text-xs" :class="theme.mutedText">用户</div>
+                          <div class="break-words" :class="theme.text">{{ row.username || row.Username || (row.user_id || row.UserID ? `#${row.user_id || row.UserID}` : '访客') }}</div>
+                        </div>
+                        <div>
+                          <div class="text-xs" :class="theme.mutedText">IP</div>
+                          <div class="font-mono break-all" :class="theme.text">{{ row.ip || row.IP || '-' }}</div>
+                        </div>
+                        <div>
+                          <div class="text-xs" :class="theme.mutedText">User-Agent</div>
+                          <div class="break-all" :class="theme.text">{{ row.user_agent || row.UserAgent || '-' }}</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div v-if="!accessLogs.length" class="rounded-xl border p-4 text-sm text-center" :class="[theme.border, theme.mutedText]">暂无记录</div>
+                  </div>
+                  <div class="admin-desktop-block overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                      <thead>
+                        <tr :class="theme.mutedText">
+                          <th class="text-left py-2 pr-4">时间</th>
+                          <th class="text-left py-2 pr-4">方法</th>
+                          <th class="text-left py-2 pr-4">状态</th>
+                          <th class="text-left py-2 pr-4">路径</th>
+                          <th class="text-left py-2 pr-4">用户</th>
+                          <th class="text-left py-2 pr-4">IP</th>
+                          <th class="text-left py-2 pr-4">耗时</th>
+                          <th class="text-left py-2">User-Agent</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="(row, index) in accessLogs" :key="row.ID ?? row.id ?? `${row.created_at || row.CreatedAt || ''}-${row.ip || row.IP || ''}-${index}`" class="border-t" :class="theme.border">
+                          <td class="py-2 pr-4 whitespace-nowrap" :class="theme.mutedText">{{ formatShanghai(row.created_at || row.CreatedAt || '') }}</td>
+                          <td class="py-2 pr-4 font-mono" :class="theme.text">{{ row.method || row.Method || '-' }}</td>
+                          <td class="py-2 pr-4"><UBadge :color="accessLogStatusColor(row.status || row.Status)" variant="soft">{{ row.status || row.Status || '-' }}</UBadge></td>
+                          <td class="py-2 pr-4 font-mono break-all max-w-md" :class="theme.text">{{ row.path || row.Path || '-' }}</td>
+                          <td class="py-2 pr-4" :class="theme.text">{{ row.username || row.Username || (row.user_id || row.UserID ? `#${row.user_id || row.UserID}` : '访客') }}</td>
+                          <td class="py-2 pr-4 font-mono" :class="theme.text">{{ row.ip || row.IP || '-' }}</td>
+                          <td class="py-2 pr-4 whitespace-nowrap" :class="theme.mutedText">{{ formatDurationMs(row.duration_ms ?? row.DurationMS ?? 0) }}</td>
+                          <td class="py-2 break-all max-w-xl" :class="theme.mutedText">{{ row.user_agent || row.UserAgent || '-' }}</td>
+                        </tr>
+                        <tr v-if="!accessLogs.length">
+                          <td colspan="8" class="py-3" :class="theme.mutedText">暂无记录</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div id="login-audits-section" v-if="isAdmin && isSectionVisible('login-audits')" class="col-span-12">
             <div :class="adminShellCardClass">
               <div :class="adminSectionHeaderClass">
@@ -1980,7 +2076,7 @@ const formatShanghai = (s: string) => {
  
 const cardCls = 'rounded-xl border shadow-sm'
 type AdminSectionKey =
-  'dashboard' | 'user' | 'site' | 'notify' | 'attachments' | 'db' | 'version' | 'security' | 'login-audits' |
+  'dashboard' | 'user' | 'site' | 'notify' | 'attachments' | 'db' | 'version' | 'security' | 'access-logs' | 'login-audits' |
   'site-register' | 'site-pwa' | 'site-github-card' | 'site-github-login' | 'site-announcement' | 'site-music' |
   'site-default-theme' | 'site-social-links' | 'site-ads' | 'site-feed' | 'site-rss' | 'hitokoto' | 'life-countdown' |
   'site-configs' | 'comments' | 'email' | 'admin-users' |
@@ -2037,6 +2133,7 @@ const adminNavGroups = computed<AdminNavGroup[]>(() => {
       icon: 'i-heroicons-shield-check',
       items: [
         { key: 'admin-users', label: '用户管理', icon: 'i-heroicons-user-group' },
+        { key: 'access-logs', label: '访问日志', icon: 'i-heroicons-eye' },
         { key: 'login-audits', label: '登录审计', icon: 'i-heroicons-clipboard-document-check' },
         { key: 'security', label: '安全防护', icon: 'i-heroicons-shield-exclamation' }
       ] as Array<{ key: AdminSectionKey, label: string, icon: string }>
@@ -2840,12 +2937,86 @@ const router = useRouter()
 const userToken = ref('')
 
 const attackLogs = ref<any[]>([])
+const accessLogs = ref<any[]>([])
+const accessLogLoading = ref(false)
+const accessLogFilter = reactive({ ip: '', username: '', path: '', method: '' })
+const accessLogMethodOptions = [
+  { label: '全部方法', value: '' },
+  { label: 'GET', value: 'GET' },
+  { label: 'POST', value: 'POST' },
+  { label: 'PUT', value: 'PUT' },
+  { label: 'PATCH', value: 'PATCH' },
+  { label: 'DELETE', value: 'DELETE' }
+]
 const loginAudits = ref<any[]>([])
 const loginAuditLoading = ref(false)
 const loginAuditFilter = reactive({ username: '', ip: '' })
 const ipBans = ref<any[]>([])
 const banForm = reactive({ ip: '', minutes: 0 as any, reason: '' })
 const securityConfig = reactive({ autoBanEnabled: false, autoBanWindowSeconds: 600 as any, autoBanThreshold: 10 as any, autoBanMinutes: 60 as any })
+
+const refreshAccessLogs = async () => {
+  try {
+    accessLogLoading.value = true
+    const params: Record<string, any> = { limit: 200 }
+    const ip = String(accessLogFilter.ip || '').trim()
+    const username = String(accessLogFilter.username || '').trim()
+    const path = String(accessLogFilter.path || '').trim()
+    const method = String(accessLogFilter.method || '').trim()
+    if (ip) params.ip = ip
+    if (username) params.username = username
+    if (path) params.path = path
+    if (method) params.method = method
+    const res: any = await getRequest<any>('security/access-logs', params, { credentials: 'include', silent: true })
+    if (res && res.code === 1) {
+      accessLogs.value = Array.isArray(res.data) ? res.data : []
+    } else {
+      throw new Error(res?.msg || '加载访问日志失败')
+    }
+  } catch (e: any) {
+    useToast().add({ title: '加载访问日志失败', description: e.message, color: 'red' })
+  } finally {
+    accessLogLoading.value = false
+  }
+}
+
+const resetAccessLogFilter = async () => {
+  accessLogFilter.ip = ''
+  accessLogFilter.username = ''
+  accessLogFilter.path = ''
+  accessLogFilter.method = ''
+  await refreshAccessLogs()
+}
+
+const clearAccessLogs = async () => {
+  try {
+    if (!window.confirm('确定清空所有访问日志吗？')) return
+    const res: any = await deleteRequest<any>('security/access-logs', undefined, { credentials: 'include' })
+    if (res && res.code === 1) {
+      useToast().add({ title: '已清空', color: 'green' })
+      accessLogs.value = []
+    } else {
+      throw new Error(res?.msg || '清空失败')
+    }
+  } catch (e: any) {
+    useToast().add({ title: '操作失败', description: e.message, color: 'red' })
+  }
+}
+
+const formatDurationMs = (value: any) => {
+  const n = Number(value || 0)
+  if (!Number.isFinite(n) || n < 0) return '-'
+  return `${Math.round(n)}ms`
+}
+
+const accessLogStatusColor = (value: any) => {
+  const n = Number(value || 0)
+  if (n >= 500) return 'red'
+  if (n >= 400) return 'orange'
+  if (n >= 300) return 'blue'
+  if (n >= 200) return 'green'
+  return 'gray'
+}
 
 const refreshLoginAudits = async () => {
   try {
@@ -2914,6 +3085,7 @@ const saveSecurityConfig = async () => {
 onMounted(async () => {
   if (isAdmin.value) {
     await refreshSecurity()
+    if (activeSection.value === 'access-logs') await refreshAccessLogs()
     if (activeSection.value === 'login-audits') await refreshLoginAudits()
   }
 })
@@ -2921,11 +3093,13 @@ onMounted(async () => {
 watch(() => isAdmin.value, async (v) => {
   if (v) {
     await refreshSecurity()
+    if (activeSection.value === 'access-logs') await refreshAccessLogs()
     if (activeSection.value === 'login-audits') await refreshLoginAudits()
   }
 })
 
 watch(() => activeSection.value, async (section) => {
+  if (section === 'access-logs' && isAdmin.value) await refreshAccessLogs()
   if (section === 'login-audits' && isAdmin.value) await refreshLoginAudits()
 })
 

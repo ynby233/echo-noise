@@ -79,6 +79,61 @@ func GetLoginAudits(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.OK(audits, "ok"))
 }
 
+func GetAccessLogs(c *gin.Context) {
+	db := models.GetDB()
+	if db == nil {
+		c.JSON(http.StatusOK, dto.OK([]models.SecurityAccessLog{}, "ok"))
+		return
+	}
+
+	limit := 200
+	if v := strings.TrimSpace(c.Query("limit")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			if n > 0 && n <= 1000 {
+				limit = n
+			}
+		}
+	}
+
+	query := db.Order("id desc").Limit(limit)
+	if ip := strings.TrimSpace(c.Query("ip")); ip != "" {
+		query = query.Where("ip = ?", ip)
+	}
+	if username := strings.TrimSpace(c.Query("username")); username != "" {
+		query = query.Where("username LIKE ?", "%"+username+"%")
+	}
+	if method := strings.ToUpper(strings.TrimSpace(c.Query("method"))); method != "" {
+		query = query.Where("method = ?", method)
+	}
+	if path := strings.TrimSpace(c.Query("path")); path != "" {
+		query = query.Where("path LIKE ?", "%"+path+"%")
+	}
+	if status := strings.TrimSpace(c.Query("status")); status != "" {
+		if n, err := strconv.Atoi(status); err == nil && n >= 100 && n <= 599 {
+			query = query.Where("status = ?", n)
+		}
+	}
+	if userID := strings.TrimSpace(c.Query("user_id")); userID != "" {
+		if n, err := strconv.ParseUint(userID, 10, 64); err == nil {
+			query = query.Where("user_id = ?", uint(n))
+		}
+	}
+
+	var logs []models.SecurityAccessLog
+	_ = query.Find(&logs).Error
+	c.JSON(http.StatusOK, dto.OK(logs, "ok"))
+}
+
+func ClearAccessLogs(c *gin.Context) {
+	db := models.GetDB()
+	if db == nil {
+		c.JSON(http.StatusOK, dto.OK[any](nil, "已清空"))
+		return
+	}
+	_ = db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.SecurityAccessLog{}).Error
+	c.JSON(http.StatusOK, dto.OK[any](nil, "已清空"))
+}
+
 func ClearAttackRecords(c *gin.Context) {
 	db := models.GetDB()
 	if db == nil {

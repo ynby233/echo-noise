@@ -37,3 +37,17 @@ type SecurityLoginAudit struct {
 	IP        string `gorm:"type:varchar(191);index" json:"ip"`
 	UserAgent string `gorm:"type:text" json:"user_agent"`
 }
+
+type SecurityAccessLog struct {
+	gorm.Model
+	IP         string `gorm:"type:varchar(191);index" json:"ip"`
+	Method     string `gorm:"type:varchar(20);index" json:"method"`
+	Path       string `gorm:"type:varchar(1024)" json:"path"`
+	Status     int    `gorm:"index" json:"status"`
+	UserID     uint   `gorm:"index" json:"user_id"`
+	Username   string `gorm:"type:varchar(191);index" json:"username"`
+	IsAdmin    bool   `gorm:"index" json:"is_admin"`
+	UserAgent  string `gorm:"type:text" json:"user_agent"`
+	Referer    string `gorm:"type:text" json:"referer"`
+	DurationMS int64  `json:"duration_ms"`
+}
