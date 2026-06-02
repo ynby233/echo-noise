@@ -65,8 +65,36 @@ assert.match(
 )
 assert.match(
   component,
-  /loginExpirePresetOptions\s*=\s*\[[\s\S]*?label: '1 小时'[\s\S]*?label: '12 小时'[\s\S]*?label: '7 天'/,
-  'login expiry quick presets must include hour-level and day-level options'
+  /loginExpirePresetOptions:\s*Array<[\s\S]*?label: '1h'[\s\S]*?label: '3h'[\s\S]*?label: '5h'[\s\S]*?label: '12h'[\s\S]*?label: '1天'[\s\S]*?label: '3天'[\s\S]*?label: '7天'/,
+  'login expiry quick presets must include the required hour-level and day-level options'
+)
+assert.match(
+  component,
+  /@click="setLoginExpirePreset\(preset\)"/,
+  'login expiry quick preset buttons must pass the preset object'
+)
+assert.doesNotMatch(
+  component,
+  /setLoginExpirePreset\(preset\.days/,
+  'login expiry quick preset buttons must not replace both fields at once'
+)
+const presetHandlerStart = component.indexOf('const setLoginExpirePreset =')
+const presetHandlerEnd = component.indexOf('const serializeFeedLimit =', presetHandlerStart)
+const presetHandler = component.slice(presetHandlerStart, presetHandlerEnd)
+assert.match(presetHandler, /preset\.unit === 'days'/, 'preset handler must branch on the preset unit')
+assert.match(presetHandler, /loginExpireDays = preset\.value[\s\S]*?return/, 'day presets must replace only the days field')
+assert.match(presetHandler, /loginExpireHours = preset\.value/, 'hour presets must replace only the hours field')
+assert.doesNotMatch(presetHandler, /loginExpireDays = preset\.value[\s\S]*?loginExpireHours = preset\.value[\s\S]*?return/, 'day presets must not also replace hours before returning')
+assert.match(
+  component,
+  /id="security-section"[\s\S]*?id="site-login-expire-section"/,
+  'login expiry settings should be shown under security protection'
+)
+const registerSection = component.match(/id="site-register-section"[\s\S]*?id="site-pwa-section"/)?.[0] || ''
+assert.doesNotMatch(
+  registerSection,
+  /site-login-expire-section/,
+  'login expiry settings should not remain under registration config'
 )
 assert.match(
   component,

@@ -435,28 +435,7 @@
                   <UToggle v-model="registerEnabled" />
                   <UButton color="green" @click="saveRegisterConfig" class="shadow">保存</UButton>
                 </div>
-                </div>
-                <div id="site-login-expire-section" v-if="isSectionVisible('site-register')" class="rounded-lg p-3 mt-3" :class="theme.subtleBg">
-                  <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                    <div class="flex items-center gap-2" :class="theme.text">
-                      <UIcon name="i-heroicons-clock" class="w-4 h-4" />
-                      <span>登录过期时间</span>
-                    </div>
-                    <div class="flex flex-wrap items-center gap-2">
-                      <div class="flex items-center gap-1">
-                        <UInput v-model.number="frontendConfig.loginExpireDays" type="number" min="0" max="31" step="1" class="w-24" />
-                        <span class="text-sm" :class="theme.mutedText">天</span>
-                      </div>
-                      <div class="flex items-center gap-1">
-                        <UInput v-model.number="frontendConfig.loginExpireHours" type="number" min="0" max="24" step="1" class="w-24" />
-                        <span class="text-sm" :class="theme.mutedText">小时</span>
-                      </div>
-                      <UButton v-for="preset in loginExpirePresetOptions" :key="preset.label" color="gray" variant="soft" @click="setLoginExpirePreset(preset.days, preset.hours)" class="shadow">{{ preset.label }}</UButton>
-                      <UButton color="green" @click="saveConfigItem('loginExpireDays')" class="shadow">保存</UButton>
-                    </div>
-                  </div>
-                  <div class="text-xs mt-2" :class="theme.mutedText">普通用户从登录那一刻开始计算，过期后需重新登录；管理员不受该过期清退影响。支持 0-31 天和 0-24 小时，最长 31 天 24 小时。</div>
-                </div>
+              </div>
                 <div id="site-pwa-section" v-if="isSectionVisible('site-pwa')" class="rounded-lg p-4" :class="theme.subtleBg">
                   <div class="flex justify-between items-center mb-3">
                     <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-rocket-launch" class="w-4 h-4" /> <span>PWA 模式</span></div>
@@ -1971,6 +1950,28 @@
                   <div class="text-xs mt-2" :class="theme.mutedText">仅对敏感路径扫描命中进行计数；达到阈值后将自动写入封禁列表并立即生效</div>
                 </div>
 
+                <div id="site-login-expire-section" :class="adminSubtleCardClass">
+                  <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div class="flex items-center gap-2" :class="theme.text">
+                      <UIcon name="i-heroicons-clock" class="w-4 h-4" />
+                      <span>登录过期时间</span>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <div class="flex items-center gap-1">
+                        <UInput v-model.number="frontendConfig.loginExpireDays" type="number" min="0" max="31" step="1" class="w-24" />
+                        <span class="text-sm" :class="theme.mutedText">天</span>
+                      </div>
+                      <div class="flex items-center gap-1">
+                        <UInput v-model.number="frontendConfig.loginExpireHours" type="number" min="0" max="24" step="1" class="w-24" />
+                        <span class="text-sm" :class="theme.mutedText">小时</span>
+                      </div>
+                      <UButton v-for="preset in loginExpirePresetOptions" :key="preset.label" color="gray" variant="soft" @click="setLoginExpirePreset(preset)" class="shadow">{{ preset.label }}</UButton>
+                      <UButton color="green" @click="saveConfigItem('loginExpireDays')" class="shadow">保存</UButton>
+                    </div>
+                  </div>
+                  <div class="text-xs mt-2" :class="theme.mutedText">普通用户从登录那一刻开始计算，过期后需重新登录；管理员不受该过期清退影响。天数和小时相加计算，例如 2 天 5 小时等于 53 小时；最长 31 天 24 小时。</div>
+                </div>
+
                 <div :class="adminSubtleCardClass">
                   <div class="flex items-center justify-between mb-2">
                     <div class="font-semibold" :class="theme.text">攻击记录（最近 {{ attackLogs.length }} 条）</div>
@@ -2232,7 +2233,7 @@ const adminNavGroups = computed<AdminNavGroup[]>(() => {
         { key: 'site', label: '网站配置', icon: 'i-heroicons-wrench-screwdriver' },
         { key: 'site-configs', label: '站点信息', icon: 'i-heroicons-cog-6-tooth' },
         { key: 'site-default-theme', label: '主题与布局', icon: 'i-heroicons-swatch' },
-        { key: 'site-register', label: '注册开关', icon: 'i-heroicons-user-plus' },
+        { key: 'site-register', label: '注册配置', icon: 'i-heroicons-user-plus' },
         { key: 'site-pwa', label: 'PWA 模式', icon: 'i-heroicons-rocket-launch' },
         { key: 'site-announcement', label: '公告栏', icon: 'i-heroicons-megaphone' },
         { key: 'site-ads', label: '左侧广告', icon: 'i-heroicons-photo' },
@@ -2393,7 +2394,7 @@ const isLifeBirthdayInvalid = computed(() => {
 })
  
 
-// 新用户注册开关相关
+// 新用户注册配置相关
 const registerEnabled = ref(true);
 const sidebarOpen = ref(false)
 const sidebarCollapsed = ref(
@@ -4886,18 +4887,22 @@ const normalizeLoginExpireConfig = (rawDays: any, rawHours: any): { days: number
   return { days, hours }
 }
 
-const loginExpirePresetOptions = [
-  { label: '1 小时', days: 0, hours: 1 },
-  { label: '6 小时', days: 0, hours: 6 },
-  { label: '12 小时', days: 0, hours: 12 },
-  { label: '1 天', days: 1, hours: 0 },
-  { label: '3 天', days: 3, hours: 0 },
-  { label: '7 天', days: 7, hours: 0 }
+const loginExpirePresetOptions: Array<{ label: string; unit: 'days' | 'hours'; value: number }> = [
+  { label: '1h', unit: 'hours', value: 1 },
+  { label: '3h', unit: 'hours', value: 3 },
+  { label: '5h', unit: 'hours', value: 5 },
+  { label: '12h', unit: 'hours', value: 12 },
+  { label: '1天', unit: 'days', value: 1 },
+  { label: '3天', unit: 'days', value: 3 },
+  { label: '7天', unit: 'days', value: 7 }
 ]
 
-const setLoginExpirePreset = (days: number, hours: number) => {
-  ;(frontendConfig as any).loginExpireDays = days
-  ;(frontendConfig as any).loginExpireHours = hours
+const setLoginExpirePreset = (preset: { unit: 'days' | 'hours'; value: number }) => {
+  if (preset.unit === 'days') {
+    ;(frontendConfig as any).loginExpireDays = preset.value
+    return
+  }
+  ;(frontendConfig as any).loginExpireHours = preset.value
 }
 
 const serializeFeedLimit = (raw: any): number => {
