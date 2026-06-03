@@ -1,3 +1,5 @@
+export type MessageVisibility = 'public' | 'users' | 'contacts' | 'private';
+
 export interface Message {
     id: number;
     ID?: number;
@@ -10,6 +12,7 @@ export interface Message {
     avatar_url?: string;
     AvatarURL?: string;
     private: boolean;
+    visibility?: MessageVisibility;
     created_at: string;
     pinned?: boolean;
     notify?: boolean;
@@ -21,6 +24,7 @@ export interface MessageToSave {
     content: string;
     image_url?: string;
     private: boolean;
+    visibility: MessageVisibility;
     notify: boolean;
     created_at?: string;
 }

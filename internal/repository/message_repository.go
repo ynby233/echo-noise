@@ -19,7 +19,7 @@ func GetAllMessages(showPrivate bool) ([]models.Message, error) {
             return nil, err
         }
     } else {
-        if err := database.DB.Where("private = ?", false).Order("pinned DESC, created_at DESC").Find(&messages).Error; err != nil {
+        if err := database.DB.Where("private = ? AND (visibility = ? OR visibility = ? OR visibility IS NULL)", false, "public", "").Order("pinned DESC, created_at DESC").Find(&messages).Error; err != nil {
             return nil, err
         }
     }
@@ -33,7 +33,7 @@ func GetPublicMessagesByUserIDs(userIDs []uint) ([]models.Message, error) {
 		return messages, nil
 	}
 
-	if err := database.DB.Where("private = ? AND user_id IN ?", false, userIDs).Order("pinned DESC, created_at DESC").Find(&messages).Error; err != nil {
+	if err := database.DB.Where("private = ? AND (visibility = ? OR visibility = ? OR visibility IS NULL) AND user_id IN ?", false, "public", "", userIDs).Order("pinned DESC, created_at DESC").Find(&messages).Error; err != nil {
 		return nil, err
 	}
 
@@ -51,7 +51,11 @@ func GetMessageByID(id uint, showPrivate bool) (*models.Message, error) {
         return nil, result.Error
     }
 
-    if !showPrivate && message.Private {
+    visibility := strings.ToLower(strings.TrimSpace(message.Visibility))
+    if visibility == "" {
+        visibility = "public"
+    }
+    if !showPrivate && (message.Private || visibility != "public") {
         return nil, errors.New("无权访问该消息")
     }
 
@@ -127,6 +131,7 @@ func UpdateMessageContent(id uint, content string) error {
         Content:   content,
         ImageURL:  oldMessage.ImageURL,
         Private:   oldMessage.Private,
+        Visibility: oldMessage.Visibility,
         CreatedAt: oldMessage.CreatedAt,
     }
     

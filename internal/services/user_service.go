@@ -252,9 +252,23 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 
 	status := models.Status{}
 
+	var currentUser models.User
+	var viewerUserID *uint
+	isAdmin := false
+	if currentUserID > 0 {
+		if err := database.DB.Select("id, is_admin").First(&currentUser, currentUserID).Error; err == nil && currentUser.ID != 0 {
+			id := currentUser.ID
+			viewerUserID = &id
+			isAdmin = currentUser.IsAdmin
+		}
+	}
+
 	var total int64
-	if err := database.DB.Model(&models.Message{}).
-		Where("private = ?", false).
+	messageQuery := ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), viewerUserID, isAdmin)
+	if viewerUserID != nil && !isAdmin {
+		messageQuery = messageQuery.Where("user_id = ?", *viewerUserID)
+	}
+	if err := messageQuery.
 		Where("content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ?",
 			"%#guestbook%", "%#留言%", "%留言板%",
 			"%#友链%", "%友情链接%",
@@ -281,31 +295,13 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 	status.TotalComments = int(totalComments)
 	status.TotalReplies = int(totalReplies)
 
-	if currentUserID > 0 {
-		var currentUser models.User
-		if err := database.DB.Select("id, is_admin").First(&currentUser, currentUserID).Error; err == nil && currentUser.ID != 0 {
-			if !currentUser.IsAdmin {
-				var currentUserTotal int64
-				if err := database.DB.Model(&models.Message{}).
-					Where("user_id = ?", currentUser.ID).
-					Where("private = ?", false).
-					Where("content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ?",
-						"%#guestbook%", "%#留言%", "%留言板%",
-						"%#友链%", "%友情链接%",
-						"%#关于%", "%关于本站%").
-					Count(&currentUserTotal).Error; err != nil {
-					return status, errors.New(models.GetAllMessagesFailMessage)
-				}
-				status.TotalMessages = int(currentUserTotal)
-			}
-
-			receivedComments, receivedReplies, err := countReceivedCommentStats(currentUser.ID)
-			if err != nil {
-				return status, errors.New(models.GetStatusFailMessage)
-			}
-			status.ReceivedComments = int(receivedComments)
-			status.ReceivedReplies = int(receivedReplies)
+	if currentUser.ID != 0 {
+		receivedComments, receivedReplies, err := countReceivedCommentStats(currentUser.ID)
+		if err != nil {
+			return status, errors.New(models.GetStatusFailMessage)
 		}
+		status.ReceivedComments = int(receivedComments)
+		status.ReceivedReplies = int(receivedReplies)
 	}
 
 	return status, nil

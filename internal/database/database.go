@@ -150,7 +150,7 @@ func GetSystemStatus() (map[string]interface{}, error) {
 	var totalMessages int64
 	// 仅统计公开笔记，并排除“留言/友链/关于”等页面型内容
 	if err := DB.Model(&models.Message{}).
-		Where("private = ?", false).
+		Where("private = ? AND (visibility = ? OR visibility = ? OR visibility IS NULL)", false, "public", "").
 		Where("content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ?",
 			"%#guestbook%", "%#留言%", "%留言板%",
 			"%#友链%", "%友情链接%",

@@ -130,8 +130,8 @@ func GetMessagesByTag(c *gin.Context) {
 	if un := c.Query("username"); un != "" {
 		q = q.Where("username = ?", un)
 	}
-	// 仅公开内容（小组件场景）
-	q = q.Where("private = ?", false)
+	currentUserID, isAdmin := currentMessageViewer(c)
+	q = services.ApplyMessageVisibilityScope(q, currentUserID, isAdmin)
 	if err := q.Order("created_at DESC").Find(&messages).Error; err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []models.Message{}})
 		return
@@ -162,8 +162,9 @@ func GetAllTags(c *gin.Context) {
 	c.Header("Expires", "0")
 
 	var messages []models.Message
-	// 修改查询，按创建时间倒序排列并限制数量
-	if err := db.Select("content").Order("created_at DESC").Find(&messages).Error; err != nil {
+	currentUserID, isAdmin := currentMessageViewer(c)
+	q := services.ApplyMessageVisibilityScope(db.Model(&models.Message{}).Select("content", "private", "visibility", "user_id"), currentUserID, isAdmin)
+	if err := q.Order("created_at DESC").Find(&messages).Error; err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []map[string]interface{}{}})
 		return
 	}
@@ -202,15 +203,14 @@ func GetAllImages(c *gin.Context) {
 	}
 
 	var messages []models.Message
-	q := db.Select("id", "content", "image_url", "created_at").Order("created_at DESC")
+	q := db.Select("id", "content", "image_url", "created_at", "private", "visibility", "user_id").Order("created_at DESC")
 	viewerID, hasViewer, isAdmin := resolveImageViewer(c, db)
-	if !isAdmin {
-		if hasViewer {
-			q = q.Where("private = ? OR user_id = ?", false, viewerID)
-		} else {
-			q = q.Where("private = ?", false)
-		}
+	var currentUserID *uint
+	if hasViewer {
+		id := viewerID
+		currentUserID = &id
 	}
+	q = services.ApplyMessageVisibilityScope(q, currentUserID, isAdmin)
 	if err := q.Find(&messages).Error; err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []map[string]interface{}{}})
 		return
@@ -274,7 +274,8 @@ func GetMessagePage(c *gin.Context) {
 		return
 	}
 
-	message, err := services.GetMessagePage(uint(messageID))
+	currentUserID, isAdmin := currentMessageViewer(c)
+	message, err := services.GetMessagePage(uint(messageID), currentUserID, isAdmin)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": err.Error()})
 		return

@@ -49,6 +49,17 @@ func MigrateDB(db *gorm.DB) error {
 			}
 		}
 
+		if err := tx.Model(&Message{}).
+			Where("private = ? AND (visibility IS NULL OR visibility = ? OR visibility = ?)", true, "", "public").
+			Update("visibility", "private").Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&Message{}).
+			Where("private = ? AND (visibility IS NULL OR visibility = ?)", false, "").
+			Update("visibility", "public").Error; err != nil {
+			return err
+		}
+
 		// 注意：默认数据的初始化逻辑已迁移至 services.SeedDefaultData，
 		// 以避免重复并确保逻辑统一。migrate.go 仅负责数据库结构迁移和必要的数据修补。
 

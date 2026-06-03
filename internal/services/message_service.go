@@ -13,33 +13,119 @@ import (
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/repository"
 	"github.com/rcy1314/echo-noise/pkg"
+	"gorm.io/gorm"
 )
 
 var ErrRSSDisabled = errors.New("RSS 已禁用")
 
+const (
+	MessageVisibilityPublic   = "public"
+	MessageVisibilityUsers    = "users"
+	MessageVisibilityContacts = "contacts"
+	MessageVisibilityPrivate  = "private"
+)
+
+func NormalizeMessageVisibility(value string, fallbackPrivate bool) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "":
+		if fallbackPrivate {
+			return MessageVisibilityPrivate, true
+		}
+		return MessageVisibilityPublic, true
+	case MessageVisibilityPublic:
+		return MessageVisibilityPublic, true
+	case MessageVisibilityUsers, "members", "member", "all_users", "logged_in", "logged-in":
+		return MessageVisibilityUsers, true
+	case MessageVisibilityContacts:
+		return MessageVisibilityContacts, true
+	case MessageVisibilityPrivate:
+		return MessageVisibilityPrivate, true
+	default:
+		return "", false
+	}
+}
+
+func MessageVisibilityRequiresPrivateFlag(visibility string) bool {
+	return visibility != MessageVisibilityPublic
+}
+
+func ApplyMessageVisibilityForSave(message *models.Message) error {
+	if message == nil {
+		return nil
+	}
+	visibility, ok := NormalizeMessageVisibility(message.Visibility, message.Private)
+	if !ok {
+		return fmt.Errorf("无效的可见范围")
+	}
+	message.Visibility = visibility
+	message.Private = MessageVisibilityRequiresPrivateFlag(visibility)
+	return nil
+}
+
+func StoredMessageVisibility(message models.Message) string {
+	visibility, ok := NormalizeMessageVisibility(message.Visibility, message.Private)
+	if !ok {
+		if message.Private {
+			return MessageVisibilityPrivate
+		}
+		return MessageVisibilityPublic
+	}
+	if message.Private && visibility == MessageVisibilityPublic {
+		return MessageVisibilityPrivate
+	}
+	return visibility
+}
+
+func CanViewMessage(message models.Message, userID *uint, isAdmin bool) bool {
+	if isAdmin {
+		return true
+	}
+	if userID != nil && *userID != 0 && message.UserID == *userID {
+		return true
+	}
+	switch StoredMessageVisibility(message) {
+	case MessageVisibilityPublic:
+		return true
+	case MessageVisibilityUsers:
+		return userID != nil && *userID != 0
+	case MessageVisibilityContacts, MessageVisibilityPrivate:
+		return false
+	default:
+		return false
+	}
+}
+
+func ApplyMessageVisibilityScope(query *gorm.DB, userID *uint, isAdmin bool) *gorm.DB {
+	if isAdmin {
+		return query
+	}
+	publicSQL := "(private = ? AND (visibility = ? OR visibility = ? OR visibility IS NULL))"
+	if userID != nil && *userID != 0 {
+		return query.Where("(user_id = ? OR "+publicSQL+" OR visibility = ?)", *userID, false, MessageVisibilityPublic, "", MessageVisibilityUsers)
+	}
+	return query.Where(publicSQL, false, MessageVisibilityPublic, "")
+}
+
 // GetAllMessages 封装业务逻辑，获取所有笔记
 func GetAllMessages(showPrivate bool) ([]models.Message, error) {
-	var messages []models.Message
-	var err error
-
 	if showPrivate {
-		// 如果是管理员或作者，则不需要过滤私密笔记
-		messages, err = repository.GetAllMessages(true)
-	} else {
-		// 如果不是管理员或作者，则只查询公开的笔记
-		messages, err = repository.GetAllMessages(false)
+		return GetAllMessagesForViewer(nil, true)
 	}
+	return GetAllMessagesForViewer(nil, false)
+}
 
-	if err != nil {
+func GetAllMessagesForViewer(userID *uint, isAdmin bool) ([]models.Message, error) {
+	var messages []models.Message
+	query := ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), userID, isAdmin)
+	if err := query.Order("pinned DESC, created_at DESC").Find(&messages).Error; err != nil {
 		return nil, fmt.Errorf("获取消息失败: %v", err)
 	}
-
 	return messages, nil
 }
 
 // GetMessageByID 根据 ID 获取笔记
 func GetMessageByID(id uint, showPrivate bool) (*models.Message, error) {
-	message, err := repository.GetMessageByID(id, showPrivate)
+	message, err := repository.GetMessageByID(id, true)
 	if err != nil {
 		return nil, fmt.Errorf("获取消息失败: %v", err)
 	}
@@ -47,7 +133,24 @@ func GetMessageByID(id uint, showPrivate bool) (*models.Message, error) {
 	if message == nil {
 		return nil, fmt.Errorf("消息不存在")
 	}
+	if !showPrivate && !CanViewMessage(*message, nil, false) {
+		return nil, fmt.Errorf("无权访问")
+	}
 
+	return message, nil
+}
+
+func GetMessageByIDForViewer(id uint, userID *uint, isAdmin bool) (*models.Message, error) {
+	message, err := repository.GetMessageByID(id, true)
+	if err != nil {
+		return nil, fmt.Errorf("获取消息失败: %v", err)
+	}
+	if message == nil {
+		return nil, fmt.Errorf("消息不存在")
+	}
+	if !CanViewMessage(*message, userID, isAdmin) {
+		return nil, fmt.Errorf("无权访问")
+	}
 	return message, nil
 }
 
@@ -76,32 +179,7 @@ func GetMessagesByPage(page, pageSize int, userID *uint, isAdmin bool, authorID 
 		q = q.Where("username = ?", *username)
 	}
 	// 隐私过滤
-	if isAdmin {
-		// 管理员查看全部
-	} else if userID != nil {
-		if authorID != nil {
-			if *authorID == *userID {
-				// 查看自己的：全部（已通过作者筛选）
-			} else {
-				// 查看他人：仅公开
-				q = q.Where("private = ?", false)
-			}
-		} else if username != nil && *username != "" {
-			// 仅提供了用户名时，判断是否为当前用户
-			if u, err := GetUserByID(*userID); err == nil && strings.TrimSpace(u.Username) == *username {
-				// 查看自己的：全部（已通过作者筛选）
-			} else {
-				// 查看他人：仅公开
-				q = q.Where("private = ?", false)
-			}
-		} else {
-			// 无作者筛选：公开的 + 自己的私密
-			q = q.Where("private = ? OR user_id = ?", false, *userID)
-		}
-	} else {
-		// 未登录用户：仅公开
-		q = q.Where("private = ?", false)
-	}
+	q = ApplyMessageVisibilityScope(q, userID, isAdmin)
 
 	q.Count(&total)
 	if err := q.Limit(pageSize).Offset(offset).Order("pinned DESC, created_at DESC").Find(&messages).Error; err != nil {
@@ -122,6 +200,9 @@ func CreateMessage(message *models.Message) error {
 
 	// 删除管理员权限检查，允许所有登录用户发布信息
 	message.Username = user.Username // 获取用户名
+	if err := ApplyMessageVisibilityForSave(message); err != nil {
+		return err
+	}
 	return repository.CreateMessage(message)
 }
 
@@ -262,7 +343,7 @@ func contains(s, substr string) bool {
 }
 
 // UpdateMessage 更新消息字段
-func UpdateMessage(messageID uint, content *string, private *bool, createdAt *time.Time) (*models.Message, error) {
+func UpdateMessage(messageID uint, content *string, private *bool, visibility *string, createdAt *time.Time) (*models.Message, error) {
 	message, err := repository.GetMessageByID(messageID, true)
 	if err != nil {
 		return nil, fmt.Errorf("获取消息失败: %v", err)
@@ -277,8 +358,17 @@ func UpdateMessage(messageID uint, content *string, private *bool, createdAt *ti
 		}
 		message.Content = c
 	}
-	if private != nil {
+	if visibility != nil {
+		message.Visibility = *visibility
+		if err := ApplyMessageVisibilityForSave(message); err != nil {
+			return nil, err
+		}
+	} else if private != nil {
 		message.Private = *private
+		message.Visibility = ""
+		if err := ApplyMessageVisibilityForSave(message); err != nil {
+			return nil, err
+		}
 	}
 	if createdAt != nil {
 		message.CreatedAt = *createdAt
@@ -307,7 +397,7 @@ func UpdateMessagePinned(messageID uint, pinned bool) error {
 
 // IncrementLikeCount 点赞计数加一
 func IncrementLikeCount(messageID uint) (int, error) {
-	message, err := repository.GetMessageByID(messageID, false)
+	message, err := GetMessageByIDForViewer(messageID, nil, false)
 	if err != nil {
 		return 0, fmt.Errorf("获取消息失败: %v", err)
 	}
@@ -322,9 +412,16 @@ func IncrementLikeCount(messageID uint) (int, error) {
 }
 
 // ToggleLike 根据 session 或用户切换点赞状态
-func ToggleLike(messageID uint, userID *uint, sessionID string) (bool, int, error) {
+func ToggleLike(messageID uint, userID *uint, sessionID string, isAdmin bool) (bool, int, error) {
 	if sessionID == "" && (userID == nil || *userID == 0) {
 		return false, 0, fmt.Errorf("缺少会话或用户信息")
+	}
+	var currentUserID *uint
+	if userID != nil && *userID != 0 {
+		currentUserID = userID
+	}
+	if _, err := GetMessageByIDForViewer(messageID, currentUserID, isAdmin); err != nil {
+		return false, 0, err
 	}
 	// 查询是否已有点赞
 	var existing models.MessageLike
@@ -391,17 +488,7 @@ func GetMessagesGroupByDate(userID *uint, isAdmin bool, authorID *uint) ([]Messa
 	if authorID != nil {
 		q = q.Where("user_id = ?", *authorID)
 	}
-	if !isAdmin {
-		if userID != nil {
-			if authorID != nil && *authorID == *userID {
-				// Personal view: include the current user's own private messages.
-			} else {
-				q = q.Where("private = ? OR user_id = ?", false, *userID)
-			}
-		} else {
-			q = q.Where("private = ?", false)
-		}
-	}
+	q = ApplyMessageVisibilityScope(q, userID, isAdmin)
 	if err := q.
 		Select("created_at").
 		Order("created_at DESC").
@@ -428,25 +515,11 @@ func GetMessagesGroupByDate(userID *uint, isAdmin bool, authorID *uint) ([]Messa
 }
 
 // GetMessagePage 获取消息详情页
-func GetMessagePage(id uint) (*models.Message, error) {
-	message, err := repository.GetMessageByID(id, false)
-	if err != nil {
-		return nil, err
-	}
-
-	if message == nil {
-		return nil, fmt.Errorf("消息不存在")
-	}
-
-	// 如果是私密消息，需要进行额外处理
-	if message.Private {
-		return nil, fmt.Errorf("无权访问")
-	}
-
-	return message, nil
+func GetMessagePage(id uint, userID *uint, isAdmin bool) (*models.Message, error) {
+	return GetMessageByIDForViewer(id, userID, isAdmin)
 }
 
-func SearchMessages(keyword string, page, pageSize int, showPrivate bool, authorID *uint, username *string) (dto.PageQueryResult, error) {
+func SearchMessages(keyword string, page, pageSize int, userID *uint, isAdmin bool, authorID *uint, username *string) (dto.PageQueryResult, error) {
 	// 参数校验
 	if page < 1 {
 		page = 1
@@ -457,7 +530,7 @@ func SearchMessages(keyword string, page, pageSize int, showPrivate bool, author
 
 	// 直接使用服务层实现
 	query := database.DB.Model(&models.Message{}).
-		Select("id, content, created_at, username, image_url, private, user_id").
+		Select("id, content, created_at, username, image_url, private, visibility, user_id").
 		Where("content LIKE ?", "%"+keyword+"%")
 	// 作者筛选
 	if authorID != nil {
@@ -465,10 +538,7 @@ func SearchMessages(keyword string, page, pageSize int, showPrivate bool, author
 	} else if username != nil && *username != "" {
 		query = query.Where("username = ?", *username)
 	}
-
-	if !showPrivate {
-		query = query.Where("private = ?", false)
-	}
+	query = ApplyMessageVisibilityScope(query, userID, isAdmin)
 
 	var total int64
 	var messages []models.Message

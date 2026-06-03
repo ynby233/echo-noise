@@ -88,6 +88,14 @@ func checkUser(c *gin.Context) (*models.User, error) {
 	return user, nil
 }
 
+func currentMessageViewer(c *gin.Context) (*uint, bool) {
+	if uid, ok := commentAuthUserID(c); ok {
+		id := uid
+		return &id, commentAuthIsAdmin(c)
+	}
+	return nil, false
+}
+
 const (
 	defaultLoginExpireDays  = 3
 	defaultLoginExpireHours = 0
@@ -286,16 +294,8 @@ func GetCaptcha(c *gin.Context) {
 
 // GetMessages 处理 GET /messages 请求，返回所有留言
 func GetMessages(c *gin.Context) {
-	showPrivate := false
-	userID, exists := c.Get("user_id")
-	if exists {
-		user, err := services.GetUserByID(userID.(uint))
-		if err == nil && user.IsAdmin {
-			showPrivate = true
-		}
-	}
-
-	messages, err := services.GetAllMessages(showPrivate)
+	currentUserID, isAdmin := currentMessageViewer(c)
+	messages, err := services.GetAllMessagesForViewer(currentUserID, isAdmin)
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string](models.GetAllMessagesFailMessage))
 		return
@@ -313,18 +313,8 @@ func GetMessage(c *gin.Context) {
 		return
 	}
 
-	// 检查是否显示私密消息
-	showPrivate := false
-	userID, exists := c.Get("user_id")
-	if exists {
-		user, err := services.GetUserByID(userID.(uint))
-		if err == nil && user.IsAdmin {
-			showPrivate = true
-		}
-	}
-
-	// 调用 Service 层根据 ID 获取留言
-	message, err := services.GetMessageByID(uint(id), showPrivate)
+	currentUserID, isAdmin := currentMessageViewer(c)
+	message, err := services.GetMessageByIDForViewer(uint(id), currentUserID, isAdmin)
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string](models.GetMessageByIDFailMessage))
 		return
@@ -494,14 +484,14 @@ func GetUserProfile(c *gin.Context) {
 		return
 	}
 	var total int64
-	if err := database.DB.Model(&models.Message{}).
+	currentUserID, isAdmin := currentMessageViewer(c)
+	q := services.ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), currentUserID, isAdmin).
 		Where("user_id = ?", user.ID).
-		Where("private = ?", false).
 		Where("content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ?",
 			"%#guestbook%", "%#留言%", "%留言板%",
 			"%#友链%", "%友情链接%",
-			"%#关于%", "%关于本站%").
-		Count(&total).Error; err != nil {
+			"%#关于%", "%关于本站%")
+	if err := q.Count(&total).Error; err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string](models.GetAllMessagesFailMessage))
 		return
 	}
@@ -1254,7 +1244,16 @@ func canViewComment(message models.Message, comment models.Comment, parent *mode
 	if isAdmin {
 		return true
 	}
-	if message.Private {
+	var currentUserID *uint
+	if hasViewer {
+		id := viewerID
+		currentUserID = &id
+	}
+	if !services.CanViewMessage(message, currentUserID, false) {
+		return false
+	}
+	messageVisibility := services.StoredMessageVisibility(message)
+	if messageVisibility == services.MessageVisibilityPrivate || messageVisibility == services.MessageVisibilityContacts {
 		return hasViewer && viewerID == message.UserID
 	}
 	visibility := normalizedCommentVisibilityOrPublic(comment.Visibility)
@@ -1460,7 +1459,7 @@ func GetCommentCounts(c *gin.Context) {
 func GetGuestbookMessageID(c *gin.Context) {
 	db, _ := database.GetDB()
 	var msg models.Message
-	if err := db.Where("private = ?", false).
+	if err := db.Where("private = ? AND (visibility = ? OR visibility = ? OR visibility IS NULL)", false, services.MessageVisibilityPublic, "").
 		Where("content LIKE ? OR content LIKE ? OR content LIKE ?",
 			"%#留言%", "%#guestbook%", "%留言板%").
 		Order("created_at ASC").First(&msg).Error; err == nil && msg.ID != 0 {
@@ -1479,7 +1478,7 @@ func GetGuestbookMessageID(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"id": existing.ID}})
 		return
 	}
-	msg = models.Message{Content: content, UserID: uid, Private: false, Pinned: false}
+	msg = models.Message{Content: content, UserID: uid, Private: false, Visibility: services.MessageVisibilityPublic, Pinned: false}
 	if err := db.Create(&msg).Error; err != nil || msg.ID == 0 {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "初始化留言板失败"})
 		return
@@ -1535,8 +1534,14 @@ func PostComment(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "账号不存在或已失效"})
 		return
 	}
-	if message.Private && currentUser.ID != message.UserID {
-		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "私密帖子仅作者可评论或回复"})
+	messageVisibility := services.StoredMessageVisibility(message)
+	if (messageVisibility == services.MessageVisibilityPrivate || messageVisibility == services.MessageVisibilityContacts) && currentUser.ID != message.UserID {
+		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "受限帖子仅作者可评论或回复"})
+		return
+	}
+	viewerIDForMessage := currentUser.ID
+	if !services.CanViewMessage(message, &viewerIDForMessage, commentAuthIsAdmin(c)) {
+		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限评论该内容"})
 		return
 	}
 	if req.ParentID != nil {
@@ -1933,9 +1938,10 @@ func UpdateMessage(c *gin.Context) {
 	}
 
 	var req struct {
-		Content   *string `json:"content"`
-		Private   *bool   `json:"private"`
-		CreatedAt *string `json:"created_at"`
+		Content    *string `json:"content"`
+		Private    *bool   `json:"private"`
+		Visibility *string `json:"visibility"`
+		CreatedAt  *string `json:"created_at"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "请求参数错误"})
@@ -1978,7 +1984,7 @@ func UpdateMessage(c *gin.Context) {
 		return
 	}
 
-	updated, err := services.UpdateMessage(uint(messageID), req.Content, req.Private, createdAt)
+	updated, err := services.UpdateMessage(uint(messageID), req.Content, req.Private, req.Visibility, createdAt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
 		return
@@ -2109,7 +2115,7 @@ func ToggleMessageLike(c *gin.Context) {
 			sessionID = sid
 		}
 	}
-	liked, count, err := services.ToggleLike(uint(messageID), uid, sessionID)
+	liked, count, err := services.ToggleLike(uint(messageID), uid, sessionID, commentAuthIsAdmin(c))
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": err.Error()})
 		return
@@ -2161,17 +2167,7 @@ func SearchMessages(c *gin.Context) {
 		}
 	}
 
-	// 默认只搜索公开内容
-	showPrivate := false
-
-	// 检查用户是否为管理员，管理员可以看到私密内容
-	userID, exists := c.Get("user_id")
-	if exists {
-		user, err := services.GetUserByID(userID.(uint))
-		if err == nil && user.IsAdmin {
-			showPrivate = true
-		}
-	}
+	currentUserID, isAdmin := currentMessageViewer(c)
 
 	// 可选作者筛选
 	var authorID *uint
@@ -2187,7 +2183,7 @@ func SearchMessages(c *gin.Context) {
 		username = &u
 	}
 
-	result, err := services.SearchMessages(keyword, page, pageSize, showPrivate, authorID, username)
+	result, err := services.SearchMessages(keyword, page, pageSize, currentUserID, isAdmin, authorID, username)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"code": 0,
@@ -2971,12 +2967,13 @@ func parseMessageCreatedAt(raw *string) (*time.Time, error) {
 func PostMessage(c *gin.Context) {
 	// 解析请求数据
 	var request struct {
-		Content   string  `json:"content"`
-		Private   bool    `json:"private"`
-		ImageURL  string  `json:"image_url"`
-		VideoURL  string  `json:"video_url"` // 新增视频字段
-		Notify    *bool   `json:"notify"`
-		CreatedAt *string `json:"created_at"`
+		Content    string  `json:"content"`
+		Private    bool    `json:"private"`
+		Visibility string  `json:"visibility"`
+		ImageURL   string  `json:"image_url"`
+		VideoURL   string  `json:"video_url"` // 新增视频字段
+		Notify     *bool   `json:"notify"`
+		CreatedAt  *string `json:"created_at"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string]("内容不能为空"))
@@ -3009,10 +3006,11 @@ func PostMessage(c *gin.Context) {
 
 	// 创建消息
 	message := &models.Message{
-		Content:  request.Content,
-		Private:  request.Private,
-		ImageURL: request.ImageURL,
-		UserID:   userID.(uint),
+		Content:    request.Content,
+		Private:    request.Private,
+		Visibility: request.Visibility,
+		ImageURL:   request.ImageURL,
+		UserID:     userID.(uint),
 	}
 	if createdAt != nil {
 		message.CreatedAt = *createdAt

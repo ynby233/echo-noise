@@ -62,8 +62,8 @@ assert.match(
 )
 assert.match(
   messageService,
-  /authorID != nil[\s\S]*?Where\("user_id = \?", \*authorID\)[\s\S]*?!isAdmin[\s\S]*?Where\("private = \? OR user_id = \?", false, \*userID\)[\s\S]*?Where\("private = \?", false\)/,
-  'calendar service must filter rows with the same public/own/admin visibility rules as message lists'
+  /authorID != nil[\s\S]*?q = q\.Where\("user_id = \?", \*authorID\)[\s\S]*?q = ApplyMessageVisibilityScope\(q, userID, isAdmin\)[\s\S]*?Select\("created_at"\)/,
+  'calendar service must apply author filtering before the shared four-state visibility scope'
 )
 
 console.log('heatmap scope tests passed')

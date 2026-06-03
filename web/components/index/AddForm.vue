@@ -24,9 +24,14 @@
            <!-- 新增图床上传按钮 -->
            <button class="tb-btn" @click="showImageUploader = true" title="图床上传"><UIcon name="i-mdi-cloud-upload-outline" class="w-5 h-5" /></button>
           
-          <button class="tb-btn" @click="togglePrivate" :title="Private ? '设为公开' : '设为私密'">
-            <UIcon :name="privateIcon" class="w-5 h-5" />
-          </button>
+          <label class="visibility-control" :title="`可见范围：${visibilityLabel}`">
+            <UIcon :name="visibilityIcon" class="w-5 h-5" />
+            <select v-model="Visibility" class="visibility-select" aria-label="可见范围">
+              <option v-for="option in messageVisibilityOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </label>
           <button class="tb-btn" @click="toggleNotify" :title="enableNotify ? '关闭推送' : '开启推送'">
             <UIcon :name="enableNotify ? 'i-mdi-bell' : 'i-mdi-bell-off'" class="w-5 h-5" />
           </button>          
@@ -84,7 +89,7 @@
 
 <script setup lang="ts">
 import { ref, computed, inject, onMounted, onBeforeUnmount, watch, defineAsyncComponent, nextTick } from 'vue'
-import type { MessageToSave } from "~/types/models";
+import type { MessageToSave, MessageVisibility } from "~/types/models";
 import { useMessage } from "~/composables/useMessage";
 import { useUserStore } from '~/store/user'
 import { Fancybox } from '@fancyapps/ui'
@@ -158,7 +163,28 @@ const Username = ref("");
 const MessageContent = ref("");
 const MessageContentHtml = ref("");
 const PublishedAtInput = ref("");
-const Private = ref<boolean>(typeof window !== 'undefined' && localStorage.getItem('postPrivate') === 'true');
+const messageVisibilityOptions: { value: MessageVisibility; label: string; icon: string }[] = [
+  { value: 'public', label: '公开', icon: 'i-mdi-earth' },
+  { value: 'users', label: '成员', icon: 'i-mdi-account-group-outline' },
+  { value: 'contacts', label: '联系人', icon: 'i-mdi-account-multiple-check-outline' },
+  { value: 'private', label: '私密', icon: 'i-mdi-lock-outline' }
+]
+const normalizeMessageVisibility = (value: any, fallbackPrivate = false): MessageVisibility => {
+  const raw = String(value || '').trim().toLowerCase()
+  if (raw === 'users' || raw === 'members' || raw === 'member' || raw === 'logged_in' || raw === 'logged-in') return 'users'
+  if (raw === 'contacts') return 'contacts'
+  if (raw === 'private') return 'private'
+  if (raw === 'public') return 'public'
+  return fallbackPrivate ? 'private' : 'public'
+}
+const initialPostVisibility = (): MessageVisibility => {
+  if (typeof window === 'undefined') return 'public'
+  return normalizeMessageVisibility(localStorage.getItem('postVisibility'), localStorage.getItem('postPrivate') === 'true')
+}
+const Visibility = ref<MessageVisibility>(initialPostVisibility())
+const Private = computed(() => Visibility.value !== 'public')
+const visibilityLabel = computed(() => messageVisibilityOptions.find((option) => option.value === Visibility.value)?.label || '公开')
+const visibilityIcon = computed(() => messageVisibilityOptions.find((option) => option.value === Visibility.value)?.icon || 'i-mdi-earth')
 const contentTheme = inject('contentTheme') as Ref<string>
 const toggleContentTheme = inject('toggleContentTheme') as (() => void) | undefined
 const toggleTheme = () => {
@@ -205,7 +231,7 @@ const saveDraft = () => {
     }
     localStorage.setItem(
       DRAFT_KEY,
-      JSON.stringify({ content: MessageContent.value || '', private: !!Private.value, notify: !!enableNotify.value, savedAt: Date.now() })
+      JSON.stringify({ content: MessageContent.value || '', private: !!Private.value, visibility: Visibility.value, notify: !!enableNotify.value, savedAt: Date.now() })
     )
   } catch {}
 }
@@ -242,7 +268,6 @@ const syncContentFromEditor = () => {
   } catch {}
 }
 
-const privateIcon = computed(() => (Private.value ? 'i-mdi-eye-off-outline' : 'i-mdi-eye-outline'));
 const previewProseClass = computed(() => contentTheme.value === 'dark' ? 'prose prose-invert' : 'prose')
 
 const notifyStore = useNotifyStore()
@@ -524,6 +549,13 @@ const applyImageGridHTML = (html: string) => {
   return doc.body.innerHTML;
 };
 
+watch(Visibility, (value) => {
+  if (typeof window === 'undefined') return
+  localStorage.setItem('postVisibility', value)
+  localStorage.setItem('postPrivate', value !== 'public' ? 'true' : 'false')
+  scheduleDraftSave()
+})
+
 watch(MessageContent, (val) => {
   scheduleDraftSave()
   if (previewRenderTimer) clearTimeout(previewRenderTimer)
@@ -566,7 +598,7 @@ onMounted(async () => {
       await userStore.fetchUserInfo();
     }
   }
-  Private.value = localStorage.getItem('postPrivate') === 'true'
+  Visibility.value = initialPostVisibility()
   contentTheme.value = localStorage.getItem('contentTheme') || contentTheme.value
 
   try {
@@ -576,7 +608,7 @@ onMounted(async () => {
       const draftContent = String(draft?.content || '')
       if (draftContent.trim().length > 0 && MessageContent.value.trim().length === 0) {
         MessageContent.value = draftContent
-        if (typeof draft?.private === 'boolean') Private.value = draft.private
+        Visibility.value = normalizeMessageVisibility(draft?.visibility, typeof draft?.private === 'boolean' ? draft.private : Visibility.value === 'private')
         if (typeof draft?.notify === 'boolean') enableNotify.value = draft.notify
         vditorEditor.value?.setValue?.(draftContent)
         toast.add({ title: '草稿已恢复', description: '已自动恢复上次未发布内容', color: 'green', timeout: 2000 })
@@ -600,12 +632,6 @@ const toggleNotify = () => {
   enableNotify.value = !enableNotify.value;
   localStorage.setItem('enableNotify', enableNotify.value.toString());
 };
-
-const togglePrivate = () => {
-  Private.value = !Private.value
-  localStorage.setItem('postPrivate', Private.value ? 'true' : 'false')
-}
-
 
 const checkVideoLogin = (e: Event) => {
   if (!userStore.isLogin) {
@@ -639,6 +665,7 @@ const addMessage = async () => {
     username: Username.value,
     content: MessageContent.value,
     private: Private.value,
+    visibility: Visibility.value,
     notify: enableNotify.value,
   };
   const publishTime = canSetPublishTime.value ? datetimeLocalToISO(PublishedAtInput.value) : ''
@@ -672,6 +699,8 @@ const addMessage = async () => {
 .tb-btn:hover { transform: translate3d(0,0,0) scale(1.06); background: rgba(0,0,0,0.12); }
 .tb-btn.primary { background: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color: #fff; }
 .publish-time-control { display:flex; align-items:center; gap:6px; min-height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 10px; }
+.visibility-control { display:flex; align-items:center; gap:6px; min-height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 8px; }
+.visibility-select { width: 64px; border: none; outline: none; background: transparent; color: inherit; font-size: 12px; cursor: pointer; }
 .publish-time-input { width: 166px; max-width: 48vw; border: none; outline: none; background: transparent; color: inherit; font-size: 12px; }
 .publish-time-input::-webkit-calendar-picker-indicator { opacity: .72; cursor: pointer; }
 .tb-sep { width:1px; height:24px; background: rgba(0,0,0,0.12); margin: 0 2px; }
@@ -680,7 +709,9 @@ html.dark .editor-box { background: var(--home-surface-dark, #202a36); border: 1
 html.dark .editor-toolbar { background: rgba(39, 50, 66, 0.68); backdrop-filter: saturate(1.1) blur(6px); }
 html.dark .tb-btn { background: rgba(255,255,255,0.06); color:#cbd5e1; border:none; }
 html.dark .tb-btn:hover { background: rgba(255,255,255,0.12); }
-html.dark .publish-time-control { background: rgba(255,255,255,0.06); color:#cbd5e1; }
+html.dark .publish-time-control,
+html.dark .visibility-control { background: rgba(255,255,255,0.06); color:#cbd5e1; }
+html.dark .visibility-select option { color:#111827; }
 html.dark .publish-time-input::-webkit-calendar-picker-indicator { filter: invert(1); opacity: .72; }
 html.dark .tb-sep { background: rgba(255,255,255,0.12); }
 html.dark .preview-card { background: rgba(39, 50, 66, 0.68); border: 1px solid rgba(255,255,255,0.18); color:#fff; }

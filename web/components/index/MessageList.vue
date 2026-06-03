@@ -65,7 +65,7 @@
                   </div>
                 </div>
                 <div class="ml-auto flex items-center gap-2 text-xs opacity-80">
-                  <UIcon v-if="msg.private" name="i-mdi-lock-outline" class="w-4 h-4" />
+                  <UIcon v-if="messageVisibility(msg) !== 'public'" :name="messageVisibilityIcon(messageVisibility(msg))" class="w-4 h-4" :title="messageVisibilityLabel(messageVisibility(msg))" />
                   <UIcon v-if="msg.pinned" name="i-mdi-pin" class="w-4 h-4" />
                 </div>
               </div>
@@ -135,8 +135,7 @@
                   </UButton>
                   <div class="message-toolbox overlay" v-show="openToolboxId === msg.id">
                     <div class="tool-icons">
-                      <div v-if="canEdit(msg)" class="tool-icon" :data-label="(msg.private ? '设为公开' : '设为私密')" @click="togglePrivate(msg)"><UIcon :name="msg.private ? 'i-mdi-lock-outline' : 'i-mdi-lock-open-outline'" /></div>
-                      <div v-else-if="msg.private" class="tool-icon" data-label="私密"><UIcon name="i-mdi-lock-outline" /></div>
+                      <div v-if="messageVisibility(msg) !== 'public'" class="tool-icon" :data-label="messageVisibilityLabel(messageVisibility(msg))"><UIcon :name="messageVisibilityIcon(messageVisibility(msg))" /></div>
                       <div v-if="canPin(msg)" class="tool-icon" :data-label="(msg.pinned ? '取消置顶' : '置顶内容')" @click="togglePin(msg)"><UIcon :name="msg.pinned ? 'i-mdi-pin' : 'i-mdi-pin-outline'" /></div>
                       <div v-if="isLogin" class="tool-icon" data-label="编辑" @click="editMessage(msg)"><UIcon name="i-mdi-pencil-outline" /></div>
                       <div class="tool-icon" data-label="复制" @click="copyContent(msg.content)"><UIcon name="i-mdi-content-copy" /></div>
@@ -233,6 +232,21 @@
           :rows="10"
           class="font-mono text-sm"
         />
+        <div class="space-y-1">
+          <label class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-300">
+            <UIcon :name="messageVisibilityIcon(editingVisibility)" class="w-4 h-4" />
+            可见范围
+          </label>
+          <select
+            v-model="editingVisibility"
+            class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-orange-400 dark:border-white/10 dark:bg-[var(--home-surface-dark-elevated)] dark:text-white"
+            aria-label="可见范围"
+          >
+            <option v-for="option in messageVisibilityOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </div>
         <div v-if="canEditPublishTime(editingMessage)" class="space-y-1">
           <label class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-300">
             <UIcon name="i-mdi-calendar-clock-outline" class="w-4 h-4" />
@@ -274,13 +288,34 @@
 import { useMessageStore } from "~/store/message";
 import { useUserStore } from "~/store/user";
 import MarkdownRenderer from "~/components/index/MarkdownRenderer.vue";
-import type { Message } from '~/types/models'
+import type { Message, MessageVisibility } from '~/types/models'
 import BuiltinComments from '../comments/BuiltinComments.vue'
 import { writeClipboardText } from '~/utils/clipboard'
 import { useRuntimeConfig } from '#imports'
 import { useToast } from '#ui/composables/useToast'
 const config = useRuntimeConfig()
 const BASE_API = config.public.baseApi || '/api'
+
+const messageVisibilityOptions: { value: MessageVisibility; label: string; icon: string }[] = [
+  { value: 'public', label: '公开', icon: 'i-mdi-earth' },
+  { value: 'users', label: '成员可见', icon: 'i-mdi-account-group-outline' },
+  { value: 'contacts', label: '联系人可见', icon: 'i-mdi-account-multiple-check-outline' },
+  { value: 'private', label: '私密', icon: 'i-mdi-lock-outline' }
+]
+
+const normalizeMessageVisibility = (value: any, fallbackPrivate = false): MessageVisibility => {
+  const raw = String(value || '').trim().toLowerCase()
+  if (raw === 'users' || raw === 'members' || raw === 'member' || raw === 'logged_in' || raw === 'logged-in') return 'users'
+  if (raw === 'contacts') return 'contacts'
+  if (raw === 'private') return 'private'
+  if (raw === 'public') return 'public'
+  return fallbackPrivate ? 'private' : 'public'
+}
+
+const messageVisibility = (msg: any): MessageVisibility => normalizeMessageVisibility(msg?.visibility, !!msg?.private)
+const messageVisibilityRequiresPrivate = (value: MessageVisibility) => value !== 'public'
+const messageVisibilityLabel = (value: any) => messageVisibilityOptions.find((option) => option.value === normalizeMessageVisibility(value))?.label || '公开'
+const messageVisibilityIcon = (value: any) => messageVisibilityOptions.find((option) => option.value === normalizeMessageVisibility(value))?.icon || 'i-mdi-earth'
 
 const resolveMediaUrl = (s: string) => {
   if (!s) return ''
@@ -918,18 +953,6 @@ const pinnedTopItems = ref<any[]>([]);
   }
   };
 
-  const togglePrivate = async (msg: any) => {
-    try {
-      const next = !msg.private;
-      const res = await message.setPrivate(msg.id, next);
-      if (res) {
-        useToast().add({ title: next ? '已设为私密' : '已设为公开', color: 'green', timeout: 1500 });
-      }
-    } catch (e) {
-      useToast().add({ title: '操作失败', color: 'red', timeout: 2000 });
-    }
-  };
-
 const shanghaiDateTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
   timeZone: 'Asia/Shanghai',
   year: 'numeric',
@@ -1402,6 +1425,7 @@ const showEditModal = ref(false);
 const editingContent = ref('');
 const editingMessageId = ref<number | null>(null);
 const editingMessage = ref<any | null>(null);
+const editingVisibility = ref<MessageVisibility>('public');
 const editingPublishedAtInput = ref('');
 const isSaving = ref(false);
 
@@ -1448,6 +1472,7 @@ const applyEditedMessage = (id: number, updated: any) => {
 const editMessage = (msg: any) => {
   editingMessageId.value = msg.id;
   editingMessage.value = msg;
+  editingVisibility.value = messageVisibility(msg);
   editingPublishedAtInput.value = canEditPublishTime(msg) ? toDatetimeLocalValue(msg.created_at) : '';
   
   // 保存原始内容，不包含附件图片
@@ -1490,12 +1515,14 @@ const saveEditedMessage = async () => {
     }
     const publishTimeChanged = canUpdatePublishTime && !!nextCreatedAt && editingPublishedAtInput.value !== originalPublishTime
     const contentChanged = processedContent !== currentMsg.content
+    const nextVisibility = normalizeMessageVisibility(editingVisibility.value, !!currentMsg.private)
+    const visibilityChanged = nextVisibility !== messageVisibility(currentMsg)
 
-    // 检查内容或发布时间是否有修改
-    if (!contentChanged && !publishTimeChanged) {
+    // 检查内容、发布时间或可见范围是否有修改
+    if (!contentChanged && !publishTimeChanged && !visibilityChanged) {
       useToast().add({
         title: '内容未修改',
-        description: '请修改内容或发布时间后再保存',
+        description: '请修改内容、发布时间或可见范围后再保存',
         color: 'orange',
         timeout: 2000
       });
@@ -1504,7 +1531,9 @@ const saveEditedMessage = async () => {
     }
     const payload: any = {
       content: processedContent,
-      image_url: currentMsg.image_url
+      image_url: currentMsg.image_url,
+      visibility: nextVisibility,
+      private: messageVisibilityRequiresPrivate(nextVisibility)
     }
     if (publishTimeChanged) {
       payload.created_at = nextCreatedAt
@@ -1524,10 +1553,14 @@ const saveEditedMessage = async () => {
     const data = await response.json();
     if (data.code === 1) {
       const updatedData = data.data || {}
+      const savedVisibility = normalizeMessageVisibility(updatedData.visibility ?? nextVisibility, !!updatedData.private)
+      const savedPrivate = typeof updatedData.private === 'boolean' ? updatedData.private : messageVisibilityRequiresPrivate(savedVisibility)
       applyEditedMessage(editingMessageId.value, {
         content: updatedData.content ?? processedContent,
         image_url: updatedData.image_url ?? currentMsg.image_url,
-        created_at: updatedData.created_at ?? (publishTimeChanged ? nextCreatedAt : currentMsg.created_at)
+        created_at: updatedData.created_at ?? (publishTimeChanged ? nextCreatedAt : currentMsg.created_at),
+        visibility: savedVisibility,
+        private: savedPrivate
       })
       showEditModal.value = false;
       useToast().add({
