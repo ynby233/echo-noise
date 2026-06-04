@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -151,5 +152,22 @@ func TestAdminTokenManagerFallsBackToLoginWhenRenewFails(t *testing.T) {
 	}
 	if loginCount != 2 {
 		t.Fatalf("loginCount = %d, want 2", loginCount)
+	}
+}
+
+func TestAdminTokenManagerExplainsMissingAdminEmail(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/token/login" {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	client := mustTestClient(t, server)
+	manager := NewAdminTokenManager(client, Config{AdminUsername: "Noise", AdminPassword: "secret"})
+	_, err := manager.GetToken(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "管理员邮箱不存在") {
+		t.Fatalf("get token err = %v, want admin email hint", err)
 	}
 }

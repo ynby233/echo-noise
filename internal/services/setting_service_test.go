@@ -166,6 +166,30 @@ func TestFrontendConfigExposesVoceChatStatusWithoutSecrets(t *testing.T) {
 	}
 }
 
+func TestApplyVoceChatConfigRejectsAdminDisplayNameWhenPasswordLoginIsUsed(t *testing.T) {
+	config := &models.SiteConfig{}
+	err := applyVoceChatConfigUpdate(config, map[string]interface{}{
+		"enabled":       true,
+		"baseURL":       "https://vc.example.test",
+		"adminUsername": "Noise",
+		"adminPassword": "secret",
+	})
+	if err == nil || !strings.Contains(err.Error(), "管理员邮箱格式无效") {
+		t.Fatalf("apply voce config err = %v, want admin email validation error", err)
+	}
+}
+
+func TestApplyVoceChatConfigAllowsAdminTokenWithoutAdminEmail(t *testing.T) {
+	config := &models.SiteConfig{}
+	if err := applyVoceChatConfigUpdate(config, map[string]interface{}{
+		"enabled":    true,
+		"baseURL":    "https://vc.example.test",
+		"adminToken": "configured-token",
+	}); err != nil {
+		t.Fatalf("apply voce config with token: %v", err)
+	}
+}
+
 func TestGenerateRSSExportsOnlySelectedMembersPublicMessages(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db := setupUserServiceTestDB(t)

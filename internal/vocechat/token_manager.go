@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -58,6 +59,10 @@ func (m *AdminTokenManager) GetToken(ctx context.Context) (string, error) {
 
 	login, err := m.client.LoginWithPassword(ctx, m.config.AdminUsername, m.config.AdminPassword, defaultDevice)
 	if err != nil {
+		var apiErr *APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+			return "", fmt.Errorf("VoceChat 管理员邮箱不存在，请填写管理员邮箱而不是显示名: %w", err)
+		}
 		return "", err
 	}
 	m.applyLoginToken(login, now)

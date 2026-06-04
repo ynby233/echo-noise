@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -411,6 +412,9 @@ func parseBoolSetting(value interface{}) (bool, bool) {
 }
 
 func applySensitiveStringSetting(raw map[string]interface{}, valueKey, clearKey string, target *string) {
+	if target == nil {
+		return
+	}
 	if clear, exists := raw[clearKey]; exists && parseBoolLike(clear, false) {
 		*target = ""
 		return
@@ -421,6 +425,15 @@ func applySensitiveStringSetting(raw map[string]interface{}, valueKey, clearKey 
 			*target = v
 		}
 	}
+}
+
+func isValidVoceChatAdminEmail(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || !strings.Contains(value, "@") {
+		return false
+	}
+	addr, err := mail.ParseAddress(value)
+	return err == nil && addr.Address == value
 }
 
 func applyVoceChatConfigUpdate(config *models.SiteConfig, raw map[string]interface{}) error {
@@ -462,6 +475,11 @@ func applyVoceChatConfigUpdate(config *models.SiteConfig, raw map[string]interfa
 	}
 	if strings.TrimSpace(config.VoceChatEmailDomain) == "" {
 		config.VoceChatEmailDomain = vocechat.DefaultEmailDomain
+	}
+	if strings.TrimSpace(config.VoceChatAdminToken) == "" && strings.TrimSpace(config.VoceChatAdminPassword) != "" && strings.TrimSpace(config.VoceChatAdminUsername) != "" {
+		if !isValidVoceChatAdminEmail(config.VoceChatAdminUsername) {
+			return fmt.Errorf("管理员邮箱格式无效，请填写 VoceChat 管理员邮箱，不要填写显示名")
+		}
 	}
 	return nil
 }

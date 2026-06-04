@@ -482,8 +482,8 @@
                       <UInput v-model="voceChatConfig.emailDomain" placeholder="vc.com" />
                     </div>
                     <div>
-                      <label class="text-sm mb-1 block" :class="theme.mutedText">管理员用户名</label>
-                      <UInput v-model="voceChatConfig.adminUsername" placeholder="新用户名（留空不变）" />
+                      <label class="text-sm mb-1 block" :class="theme.mutedText">管理员邮箱</label>
+                      <UInput v-model="voceChatConfig.adminUsername" placeholder="新管理员邮箱（留空不变）" />
                     </div>
                     <div>
                       <label class="text-sm mb-1 block" :class="theme.mutedText">管理员密码</label>
@@ -3335,6 +3335,9 @@ const buildVoceChatConfigPayload = () => {
   const adminToken = String(voceChatConfig.adminToken || '').trim()
   const thirdPartySecret = String(voceChatConfig.thirdPartySecret || '').trim()
   const emailDomain = String(voceChatConfig.emailDomain || '').trim()
+  if (adminUsername && !/^[^\s@]+@[^\s@]+$/.test(adminUsername)) {
+    throw new Error('VoceChat 管理员邮箱格式无效，请填写邮箱而不是显示名')
+  }
   if (baseURL) payload.baseURL = baseURL
   if (adminUsername) payload.adminUsername = adminUsername
   if (adminPassword) payload.adminPassword = adminPassword
