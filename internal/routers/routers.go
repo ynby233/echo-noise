@@ -300,6 +300,14 @@ func SetupRouter() *gin.Engine {
 		user.POST("/email/change", controllers.ChangeEmail)
 	}
 
+	// 注册申请管理（管理员）
+	registration := authRoutes.Group("/registration")
+	{
+		registration.GET("/applications", middleware.AdminAuthMiddleware(), controllers.ListRegistrationApplications)
+		registration.PUT("/applications/:id/approve", middleware.AdminAuthMiddleware(), controllers.ApproveRegistrationApplication)
+		registration.PUT("/applications/:id/reject", middleware.AdminAuthMiddleware(), controllers.RejectRegistrationApplication)
+	}
+
 	// 设置路由
 	authRoutes.PUT("/settings", controllers.UpdateSetting)
 	// 友链申请管理（管理员）

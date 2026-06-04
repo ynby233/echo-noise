@@ -1,11 +1,16 @@
 package services
 
 import (
+	"context"
+	"errors"
+	"path/filepath"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
+	"github.com/rcy1314/echo-noise/internal/vocechat"
 )
 
 func TestApplyMessageVisibilityForSaveNormalizesAndSyncsPrivateFlag(t *testing.T) {
@@ -159,6 +164,189 @@ func TestUpdateMessageAcceptsVisibilityAndLegacyPrivatePayloads(t *testing.T) {
 	if updated.Visibility != MessageVisibilityPublic || updated.Private {
 		t.Fatalf("updated legacy public visibility/private = %q/%v, want public/false", updated.Visibility, updated.Private)
 	}
+}
+
+func TestVoceChatContactCacheAllowsContactsVisibility(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	storePath := filepath.Join(t.TempDir(), "plain-passwords.db")
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
+	enableVoceChatContactsForTest(t)
+
+	alice := mustCreateUser(t, models.User{Username: "contact_alice", Password: models.HashPassword("alice"), Token: models.GenerateToken(32), VoceChatEmail: "alice@vc.com", VoceChatUserID: "101"})
+	bob := mustCreateUser(t, models.User{Username: "contact_bob", Password: models.HashPassword("bob"), Token: models.GenerateToken(32), VoceChatEmail: "bob@vc.com", VoceChatUserID: "202"})
+	charlie := mustCreateUser(t, models.User{Username: "contact_charlie", Password: models.HashPassword("charlie"), Token: models.GenerateToken(32), VoceChatEmail: "charlie@vc.com", VoceChatUserID: "303"})
+	if err := vocechat.NewPlainPasswordStore(storePath).UpsertUserPassword(alice.ID, alice.Username, "alice-vc-password", alice.VoceChatEmail, alice.VoceChatUserID); err != nil {
+		t.Fatalf("seed author plain password: %v", err)
+	}
+
+	message := models.Message{Content: "alice contacts", Username: alice.Username, UserID: alice.ID, Visibility: MessageVisibilityContacts}
+	if err := ApplyMessageVisibilityForSave(&message); err != nil {
+		t.Fatalf("apply contacts visibility: %v", err)
+	}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatalf("create contacts message: %v", err)
+	}
+
+	stubVoceChatPasswordLogin(t, func(ctx context.Context, config vocechat.Config, email, password string) (*vocechat.LoginResponse, error) {
+		if email != "alice@vc.com" || password != "alice-vc-password" {
+			t.Fatalf("vc author login args email=%q password=%q", email, password)
+		}
+		return &vocechat.LoginResponse{Token: "alice-token"}, nil
+	})
+	stubVoceChatListContacts(t, func(ctx context.Context, config vocechat.Config, apiKey string) ([]vocechat.UserContact, error) {
+		if apiKey != "alice-token" {
+			t.Fatalf("contacts api key = %q", apiKey)
+		}
+		return []vocechat.UserContact{{TargetUID: 202}}, nil
+	})
+
+	bobID := bob.ID
+	var rows []models.Message
+	query := ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), &bobID, false)
+	if err := query.Find(&rows).Error; err != nil {
+		t.Fatalf("query visible messages: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Content != "alice contacts" {
+		t.Fatalf("bob visible rows = %#v", rows)
+	}
+
+	if err := database.DB.Where("user_id = ?", alice.ID).Delete(&models.VoceChatContactCache{}).Error; err != nil {
+		t.Fatalf("clear contact cache: %v", err)
+	}
+	if _, err := GetMessageByIDForViewer(message.ID, &bobID, false); err != nil {
+		t.Fatalf("bob should access contacts detail after cache refresh: %v", err)
+	}
+
+	charlieID := charlie.ID
+	if _, err := GetMessageByIDForViewer(message.ID, &charlieID, false); err == nil {
+		t.Fatalf("non-contact viewer should not access contacts detail")
+	}
+}
+
+func TestVoceChatContactVisibilityDisabledIgnoresFreshCache(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	if err := database.DB.Create(&models.SiteConfig{
+		SiteTitle:                       "Test Site",
+		VoceChatEnabled:                 true,
+		VoceChatContactsEnabled:         false,
+		VoceChatContactsCacheTTLSeconds: 3600,
+	}).Error; err != nil {
+		t.Fatalf("create disabled contacts site config: %v", err)
+	}
+
+	alice := mustCreateUser(t, models.User{Username: "disabled_contact_alice", Password: models.HashPassword("alice"), Token: models.GenerateToken(32), VoceChatEmail: "alice@vc.com", VoceChatUserID: "101"})
+	bob := mustCreateUser(t, models.User{Username: "disabled_contact_bob", Password: models.HashPassword("bob"), Token: models.GenerateToken(32), VoceChatEmail: "bob@vc.com", VoceChatUserID: "202"})
+	message := models.Message{Content: "disabled contacts", Username: alice.Username, UserID: alice.ID, Visibility: MessageVisibilityContacts}
+	if err := ApplyMessageVisibilityForSave(&message); err != nil {
+		t.Fatalf("apply contacts visibility: %v", err)
+	}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatalf("create contacts message: %v", err)
+	}
+	now := time.Now().UTC()
+	if err := database.DB.Create(&models.VoceChatContactCache{
+		UserID:            alice.ID,
+		ContactUserID:     bob.ID,
+		VoceChatUserID:    alice.VoceChatUserID,
+		ContactVoceChatID: bob.VoceChatUserID,
+		Source:            "vocechat",
+		SyncedAt:          now,
+		ExpiresAt:         now.Add(time.Hour),
+		LastSyncStatus:    models.VoceChatContactSyncStatusOK,
+	}).Error; err != nil {
+		t.Fatalf("seed fresh contact cache: %v", err)
+	}
+
+	bobID := bob.ID
+	var rows []models.Message
+	query := ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), &bobID, false)
+	if err := query.Find(&rows).Error; err != nil {
+		t.Fatalf("query visible messages: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("disabled contacts visibility should ignore cache, got %#v", rows)
+	}
+	if _, err := GetMessageByIDForViewer(message.ID, &bobID, false); err == nil {
+		t.Fatalf("disabled contacts detail should remain hidden")
+	}
+}
+
+func TestVoceChatContactCacheFailureKeepsContactsPrivate(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	storePath := filepath.Join(t.TempDir(), "plain-passwords.db")
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
+	enableVoceChatContactsForTest(t)
+
+	alice := mustCreateUser(t, models.User{Username: "fail_alice", Password: models.HashPassword("alice"), Token: models.GenerateToken(32), VoceChatEmail: "alice@vc.com", VoceChatUserID: "101"})
+	bob := mustCreateUser(t, models.User{Username: "fail_bob", Password: models.HashPassword("bob"), Token: models.GenerateToken(32), VoceChatEmail: "bob@vc.com", VoceChatUserID: "202"})
+	if err := vocechat.NewPlainPasswordStore(storePath).UpsertUserPassword(alice.ID, alice.Username, "alice-vc-password", alice.VoceChatEmail, alice.VoceChatUserID); err != nil {
+		t.Fatalf("seed author plain password: %v", err)
+	}
+
+	message := models.Message{Content: "alice contacts", Username: alice.Username, UserID: alice.ID, Visibility: MessageVisibilityContacts}
+	if err := ApplyMessageVisibilityForSave(&message); err != nil {
+		t.Fatalf("apply contacts visibility: %v", err)
+	}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatalf("create contacts message: %v", err)
+	}
+
+	stubVoceChatPasswordLogin(t, func(ctx context.Context, config vocechat.Config, email, password string) (*vocechat.LoginResponse, error) {
+		return &vocechat.LoginResponse{Token: "alice-token"}, nil
+	})
+	listCalls := 0
+	stubVoceChatListContacts(t, func(ctx context.Context, config vocechat.Config, apiKey string) ([]vocechat.UserContact, error) {
+		listCalls++
+		return nil, errors.New("vc contacts unavailable")
+	})
+
+	bobID := bob.ID
+	for i := 0; i < 2; i++ {
+		var rows []models.Message
+		query := ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), &bobID, false)
+		if err := query.Find(&rows).Error; err != nil {
+			t.Fatalf("query visible messages: %v", err)
+		}
+		if len(rows) != 0 {
+			t.Fatalf("contacts message should be private on sync failure, got %#v", rows)
+		}
+	}
+	if listCalls != 1 {
+		t.Fatalf("contacts sync should be cooled down after failure, calls=%d", listCalls)
+	}
+	if _, err := GetMessageByIDForViewer(message.ID, &bobID, false); err == nil {
+		t.Fatalf("contacts detail should remain hidden on sync failure")
+	}
+
+	var marker models.VoceChatContactCache
+	if err := database.DB.Where("user_id = ?", alice.ID).First(&marker).Error; err != nil {
+		t.Fatalf("read failure marker: %v", err)
+	}
+	if marker.ContactUserID != 0 || marker.LastSyncStatus != models.VoceChatContactSyncStatusFailed || marker.LastSyncError == "" {
+		t.Fatalf("unexpected failure marker: %#v", marker)
+	}
+}
+
+func enableVoceChatContactsForTest(t *testing.T) {
+	t.Helper()
+	if err := database.DB.Create(&models.SiteConfig{
+		SiteTitle:                       "Test Site",
+		VoceChatEnabled:                 true,
+		VoceChatBaseURL:                 "https://vc.example.com",
+		VoceChatAdminUsername:           "admin@vc.com",
+		VoceChatAdminPassword:           "admin-secret",
+		VoceChatContactsEnabled:         true,
+		VoceChatContactsCacheTTLSeconds: 3600,
+	}).Error; err != nil {
+		t.Fatalf("create vc contacts site config: %v", err)
+	}
+}
+
+func stubVoceChatListContacts(t *testing.T, fn voceChatListContactsFunc) {
+	t.Helper()
+	original := voceChatListContacts
+	voceChatListContacts = fn
+	t.Cleanup(func() { voceChatListContacts = original })
 }
 
 func sameStringSlice(a []string, b []string) bool {

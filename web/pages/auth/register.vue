@@ -13,6 +13,7 @@
         <UForm :state="form" @submit.prevent="onSubmit">
           <UFormGroup label="用户名" class="mb-3">
             <UInput v-model="form.username" placeholder="请输入用户名" />
+            <p class="mt-1 text-xs text-slate-400">用户名 2-20 字符，支持中文、日文、英文字母、数字和下划线，大小写敏感。</p>
           </UFormGroup>
           <UFormGroup label="密码" class="mb-3">
             <UInput v-model="form.password" type="password" placeholder="请输入密码" />
@@ -99,7 +100,7 @@ const onSubmit = async () => {
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok || data.code !== 1) throw new Error(data?.msg || '注册失败')
-    toast.add({ title: '注册成功', color: 'green' })
+    toast.add({ title: '申请已提交', description: '请等待管理员审核后再登录', color: 'green' })
     router.push('/auth/login')
   } catch (e: any) {
     toast.add({ title: '注册失败', description: e.message || '请稍后重试', color: 'red' })

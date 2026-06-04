@@ -1,18 +1,41 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
+	"strconv"
 	"strings"
+	"time"
+	"unicode"
 
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/dto"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/repository"
+	"github.com/rcy1314/echo-noise/internal/vocechat"
 	"github.com/rcy1314/echo-noise/pkg"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
+
+const maxPendingRegistrationApplications = 5
+
+type localLoginResult struct {
+	matched        string
+	usedOverride   bool
+	upgradePlain   string
+	upgradeAllowed bool
+	needUpgrade    bool
+}
+
+type voceChatPasswordLoginFunc func(ctx context.Context, config vocechat.Config, email, password string) (*vocechat.LoginResponse, error)
+type voceChatAdminUpdateUserFunc func(ctx context.Context, config vocechat.Config, uid int64, request vocechat.UpdateUserRequest) (*vocechat.User, error)
+
+var voceChatPasswordLogin voceChatPasswordLoginFunc = defaultVoceChatPasswordLogin
+var voceChatAdminUpdateUser voceChatAdminUpdateUserFunc = defaultVoceChatAdminUpdateUser
 
 func isHexMD5String(s string) bool {
 	if len(s) != 32 {
@@ -63,73 +86,489 @@ func passwordMatchesStored(stored string, input string) bool {
 	return pw == plain || pw == plainTrim
 }
 
+func validateRegistrationUsername(username string) error {
+	username = strings.TrimSpace(username)
+	length := 0
+	for _, r := range username {
+		length++
+		if r == '_' || (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || unicode.Is(unicode.Han, r) || unicode.In(r, unicode.Hiragana, unicode.Katakana) {
+			continue
+		}
+		return errors.New("用户名仅支持中文、日文、英文、数字和下划线")
+	}
+	if length < 2 || length > 20 {
+		return errors.New("用户名长度需为 2-20 个字符")
+	}
+	return nil
+}
+
+func generateRegistrationApplicationID() (string, error) {
+	for i := 0; i < 5; i++ {
+		applicationID := "a" + strings.ToLower(models.GenerateToken(18))
+		_, err := repository.GetRegistrationApplicationByApplicationID(applicationID)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return applicationID, nil
+		}
+		if err != nil {
+			return "", err
+		}
+	}
+	return "", errors.New("生成注册申请ID失败")
+}
+
+func existingUser(username string) (bool, error) {
+	user, err := repository.GetUserByUsername(username)
+	if err == nil && user != nil && user.ID != 0 {
+		return true, nil
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil
+	}
+	return false, err
+}
+
 func Register(userdto dto.RegisterDto) error {
-	if userdto.Username == "" || userdto.Password == "" {
+	username := strings.TrimSpace(userdto.Username)
+	if username == "" || userdto.Password == "" {
 		return errors.New(models.UsernameOrPasswordCannotBeEmptyMessage)
 	}
+	if err := validateRegistrationUsername(username); err != nil {
+		return err
+	}
 
-	// 使用 bcrypt 存储新用户密码
+	exists, err := existingUser(username)
+	if err != nil {
+		return errors.New(models.DatabaseErrorMessage)
+	}
+	if exists {
+		return errors.New(models.UsernameAlreadyExistsMessage)
+	}
+
+	hasPending, err := repository.HasPendingRegistrationApplication(username)
+	if err != nil {
+		return errors.New(models.DatabaseErrorMessage)
+	}
+	if hasPending {
+		return errors.New("该用户名正在审核中")
+	}
+
+	pendingCount, err := repository.CountPendingRegistrationApplications()
+	if err != nil {
+		return errors.New(models.DatabaseErrorMessage)
+	}
+	if pendingCount >= maxPendingRegistrationApplications {
+		return errors.New("当前待审核申请已满，请稍后再试")
+	}
+
 	hashed := models.HashPassword(userdto.Password)
 	if hashed == "" {
 		return errors.New("密码加密失败")
 	}
-
-	newuser := models.User{
-		Username: userdto.Username,
-		Password: hashed,
-		IsAdmin:  false,
-		Token:    models.GenerateToken(32),
+	applicationID, err := generateRegistrationApplicationID()
+	if err != nil {
+		return errors.New("创建注册申请失败")
 	}
 
-	user, err := repository.GetUserByUsername(userdto.Username)
-	if err == nil && user != nil && user.ID != 0 {
-		return errors.New(models.UsernameAlreadyExistsMessage)
+	provision := registrationVoceChatProvision(applicationID, username, userdto.Password)
+	if strings.TrimSpace(provision.Email) == "" {
+		provision.Email = buildVoceChatApplicationEmail(applicationID, vocechat.DefaultEmailDomain)
+	}
+	if strings.TrimSpace(provision.SyncStatus) == "" {
+		provision.SyncStatus = models.VoceChatSyncStatusNone
 	}
 
-	db, err := database.GetDB()
-	if err == nil {
-		var adminCount int64
-		_ = db.Model(&models.User{}).Where("is_admin = ?", true).Count(&adminCount).Error
-		if adminCount == 0 {
-			newuser.IsAdmin = true
-		} else {
-			var nonSystemAdminCount int64
-			_ = db.Model(&models.User{}).Where("username <> ? AND is_admin = ?", "system_default", true).Count(&nonSystemAdminCount).Error
-
-			var nonSystemCount int64
-			_ = db.Model(&models.User{}).Where("username <> ?", "system_default").Count(&nonSystemCount).Error
-			if nonSystemAdminCount == 0 && nonSystemCount == 0 {
-				newuser.IsAdmin = true
-			}
-		}
-	} else {
-		users, err := repository.GetAllUsers()
-		if err != nil {
-			return errors.New(models.GetAllUsersFailMessage)
-		}
-		hasNonSystem := false
-		hasNonSystemAdmin := false
-		for _, u := range users {
-			if u == nil {
-				continue
-			}
-			if strings.TrimSpace(u.Username) != "system_default" {
-				hasNonSystem = true
-				if u.IsAdmin {
-					hasNonSystemAdmin = true
-				}
-			}
-		}
-		if !hasNonSystem && !hasNonSystemAdmin {
-			newuser.IsAdmin = true
-		}
+	plainStore := vocechat.DefaultPlainPasswordStore()
+	if err := plainStore.UpsertApplicationPassword(applicationID, username, userdto.Password, provision.Email, provision.UserID); err != nil {
+		return errors.New("创建注册申请失败")
 	}
 
-	if err := repository.CreateUser(&newuser); err != nil {
-		return errors.New(models.CreateUserFailMessage)
+	application := models.RegistrationApplication{
+		ApplicationID:      applicationID,
+		Username:           username,
+		PasswordHash:       hashed,
+		Status:             models.RegistrationApplicationStatusPending,
+		VoceChatUserID:     strings.TrimSpace(provision.UserID),
+		VoceChatEmail:      strings.TrimSpace(provision.Email),
+		VoceChatSyncStatus: strings.TrimSpace(provision.SyncStatus),
+		VoceChatSyncError:  strings.TrimSpace(provision.SyncError),
+	}
+	if err := repository.CreateRegistrationApplication(&application); err != nil {
+		_ = plainStore.DeleteApplicationPassword(applicationID)
+		return errors.New("创建注册申请失败")
 	}
 
 	return nil
+}
+
+func defaultVoceChatPasswordLogin(ctx context.Context, config vocechat.Config, email, password string) (*vocechat.LoginResponse, error) {
+	client, err := vocechat.NewClient(config)
+	if err != nil {
+		return nil, err
+	}
+	return client.LoginWithPassword(ctx, email, password, "echo-noise")
+}
+
+func defaultVoceChatAdminUpdateUser(ctx context.Context, config vocechat.Config, uid int64, request vocechat.UpdateUserRequest) (*vocechat.User, error) {
+	if !config.IsReady() {
+		return nil, errors.New("VoceChat 未配置完成")
+	}
+	client, err := vocechat.NewClient(config)
+	if err != nil {
+		return nil, err
+	}
+	tokenManager := vocechat.NewAdminTokenManager(client, config)
+	apiKey, err := tokenManager.GetToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return client.UpdateUser(ctx, apiKey, uid, request)
+}
+
+func loadVoceChatSiteConfig() (vocechat.Config, error) {
+	if database.DB == nil {
+		return vocechat.Config{}, nil
+	}
+
+	var siteConfig models.SiteConfig
+	if err := database.DB.Table("site_configs").First(&siteConfig).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return vocechat.Config{}, nil
+		}
+		return vocechat.Config{}, err
+	}
+
+	return vocechat.FromSiteConfig(siteConfig), nil
+}
+
+func loadVoceChatLoginConfig() (vocechat.Config, bool, error) {
+	config, err := loadVoceChatSiteConfig()
+	if err != nil {
+		return vocechat.Config{}, false, err
+	}
+	return config, config.Enabled && config.LoginVerificationEnabled, nil
+}
+
+func authenticateLocalPassword(username string, user *models.User, plain string) (localLoginResult, error) {
+	result := localLoginResult{}
+	md5pwd := pkg.MD5Encrypt(plain)
+	pw := strings.TrimSpace(user.Password)
+	isMD5 := isHexMD5String(pw)
+	isBcrypt := strings.HasPrefix(pw, "$2a$") || strings.HasPrefix(pw, "$2b$") || strings.HasPrefix(pw, "$2y$")
+
+	if isMD5 {
+		if strings.EqualFold(pw, md5pwd) {
+			result.matched = plain
+			result.upgradePlain = plain
+			result.upgradeAllowed = true
+		} else {
+			return result, errors.New(models.PasswordIncorrectMessage)
+		}
+	} else if isBcrypt {
+		if bcrypt.CompareHashAndPassword([]byte(pw), []byte(plain)) == nil {
+			result.matched = plain
+		} else {
+			tplain := strings.TrimSpace(plain)
+			if tplain != plain && bcrypt.CompareHashAndPassword([]byte(pw), []byte(tplain)) == nil {
+				result.matched = tplain
+			} else if bcrypt.CompareHashAndPassword([]byte(pw), []byte(md5pwd)) == nil {
+				result.matched = plain
+			} else {
+				tmd5 := pkg.MD5Encrypt(tplain)
+				if tplain != plain && bcrypt.CompareHashAndPassword([]byte(pw), []byte(tmd5)) == nil {
+					result.matched = tplain
+				} else if bcrypt.CompareHashAndPassword([]byte(pw), []byte(strings.ToUpper(md5pwd))) == nil {
+					result.matched = plain
+				} else {
+					override := strings.TrimSpace(os.Getenv("NOISE_ADMIN_PASSWORD"))
+					if override != "" && (strings.EqualFold(username, "noise") || user.IsAdmin) && plain == override {
+						result.matched = plain
+						result.usedOverride = true
+					} else {
+						return result, errors.New(models.PasswordIncorrectMessage)
+					}
+				}
+			}
+		}
+	} else {
+		if pw == plain {
+			result.matched = plain
+			result.upgradePlain = plain
+			result.upgradeAllowed = true
+		} else {
+			return result, errors.New(models.PasswordIncorrectMessage)
+		}
+	}
+
+	if result.matched == "" {
+		return result, errors.New(models.PasswordIncorrectMessage)
+	}
+	result.needUpgrade = isMD5 || !isBcrypt
+	return result, nil
+}
+
+func applyLocalLoginUpgrade(user *models.User, result localLoginResult) {
+	if !result.needUpgrade || result.usedOverride || !result.upgradeAllowed || result.upgradePlain == "" {
+		return
+	}
+	newHash := models.HashPassword(result.upgradePlain)
+	if newHash == "" {
+		return
+	}
+	_ = repository.UpdateUserField(user.ID, "password", newHash)
+	user.Password = newHash
+}
+
+func ensureLoginToken(user *models.User) error {
+	if user.Token != "" {
+		return nil
+	}
+	user.Token = models.GenerateToken(32)
+	if err := repository.UpdateUserField(user.ID, "token", user.Token); err != nil {
+		return fmt.Errorf("生成用户 token 失败: %v", err)
+	}
+	return nil
+}
+
+func shouldUseVoceChatLogin(user *models.User, config vocechat.Config, enabled bool) bool {
+	return enabled && user != nil && !user.IsAdmin && strings.TrimSpace(user.VoceChatEmail) != "" && strings.TrimSpace(user.VoceChatUserID) != ""
+}
+
+func isVoceChatCredentialRejected(err error) bool {
+	var apiErr *vocechat.APIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	switch apiErr.StatusCode {
+	case http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden:
+		return true
+	default:
+		return false
+	}
+}
+
+func recordVoceChatLoginHealth(status string, healthErr error) {
+	if database.DB == nil {
+		return
+	}
+	var siteConfig models.SiteConfig
+	if err := database.DB.Table("site_configs").Select("id").First(&siteConfig).Error; err != nil || siteConfig.ID == 0 {
+		return
+	}
+
+	errorText := ""
+	if healthErr != nil {
+		errorText = strings.TrimSpace(healthErr.Error())
+	}
+	now := time.Now().UTC()
+	_ = database.DB.Model(&models.SiteConfig{}).Where("id = ?", siteConfig.ID).Updates(map[string]interface{}{
+		"voce_chat_last_health_status":   status,
+		"voce_chat_last_health_error":    errorText,
+		"voce_chat_last_health_check_at": now,
+	}).Error
+}
+
+func applyVoceChatLoginResponse(user *models.User, response *vocechat.LoginResponse) {
+	if user == nil {
+		return
+	}
+
+	now := time.Now().UTC()
+	updates := map[string]interface{}{
+		"voce_chat_sync_status":  models.VoceChatSyncStatusLinked,
+		"voce_chat_sync_error":   "",
+		"voce_chat_last_sync_at": now,
+	}
+	user.VoceChatSyncStatus = models.VoceChatSyncStatusLinked
+	user.VoceChatSyncError = ""
+	user.VoceChatLastSyncAt = &now
+
+	if response != nil {
+		if response.User.UID > 0 {
+			uid := strconv.FormatInt(response.User.UID, 10)
+			if uid != strings.TrimSpace(user.VoceChatUserID) {
+				updates["voce_chat_user_id"] = uid
+				user.VoceChatUserID = uid
+			}
+		}
+		if email := strings.TrimSpace(response.User.Email); email != "" && email != strings.TrimSpace(user.VoceChatEmail) {
+			updates["voce_chat_email"] = email
+			user.VoceChatEmail = email
+		}
+		if name := strings.TrimSpace(response.User.Name); name != "" && name != strings.TrimSpace(user.VoceChatUsername) {
+			updates["voce_chat_username"] = name
+			user.VoceChatUsername = name
+		}
+	}
+
+	for field, value := range updates {
+		_ = repository.UpdateUserField(user.ID, field, value)
+	}
+}
+
+func syncPasswordAfterVoceChatLogin(user *models.User, plain string) {
+	if user == nil || plain == "" {
+		return
+	}
+
+	pw := strings.TrimSpace(user.Password)
+	isBcrypt := strings.HasPrefix(pw, "$2a$") || strings.HasPrefix(pw, "$2b$") || strings.HasPrefix(pw, "$2y$")
+	shouldUpdateHash := true
+	if isBcrypt && bcrypt.CompareHashAndPassword([]byte(pw), []byte(plain)) == nil {
+		shouldUpdateHash = false
+	}
+	if shouldUpdateHash {
+		if newHash := models.HashPassword(plain); newHash != "" {
+			_ = repository.UpdateUserField(user.ID, "password", newHash)
+			user.Password = newHash
+		}
+	}
+
+	_ = vocechat.DefaultPlainPasswordStore().UpsertUserPassword(user.ID, user.Username, plain, user.VoceChatEmail, user.VoceChatUserID)
+}
+
+func updatePlainPasswordUserMetadata(user *models.User) {
+	if user == nil || user.ID == 0 {
+		return
+	}
+	store := vocechat.DefaultPlainPasswordStore()
+	record, ok, err := store.GetUserPassword(user.ID)
+	if err != nil || !ok || record.Password == "" {
+		return
+	}
+	_ = store.UpsertUserPassword(user.ID, user.Username, record.Password, user.VoceChatEmail, user.VoceChatUserID)
+}
+
+func markVoceChatUserSync(user *models.User, status string, syncErr error, vcUser *vocechat.User, fallbackName string) {
+	if user == nil || user.ID == 0 {
+		return
+	}
+	now := time.Now().UTC()
+	updates := map[string]interface{}{
+		"voce_chat_sync_status":  status,
+		"voce_chat_last_sync_at": now,
+	}
+	user.VoceChatSyncStatus = status
+	user.VoceChatLastSyncAt = &now
+	if syncErr != nil {
+		errorText := strings.TrimSpace(syncErr.Error())
+		updates["voce_chat_sync_error"] = errorText
+		user.VoceChatSyncError = errorText
+	} else {
+		updates["voce_chat_sync_error"] = ""
+		user.VoceChatSyncError = ""
+	}
+	if vcUser != nil {
+		if vcUser.UID > 0 {
+			uid := strconv.FormatInt(vcUser.UID, 10)
+			updates["voce_chat_user_id"] = uid
+			user.VoceChatUserID = uid
+		}
+		if email := strings.TrimSpace(vcUser.Email); email != "" {
+			updates["voce_chat_email"] = email
+			user.VoceChatEmail = email
+		}
+		if name := strings.TrimSpace(vcUser.Name); name != "" {
+			updates["voce_chat_username"] = name
+			user.VoceChatUsername = name
+		}
+	} else if name := strings.TrimSpace(fallbackName); name != "" && syncErr == nil {
+		updates["voce_chat_username"] = name
+		user.VoceChatUsername = name
+	}
+	for field, value := range updates {
+		_ = repository.UpdateUserField(user.ID, field, value)
+	}
+	updatePlainPasswordUserMetadata(user)
+}
+
+func syncVoceChatBoundUserUpdate(user *models.User, request vocechat.UpdateUserRequest, requireForLoginVerification bool, fallbackName string) error {
+	if user == nil || user.IsAdmin || strings.TrimSpace(user.VoceChatUserID) == "" {
+		return nil
+	}
+	config, err := loadVoceChatSiteConfig()
+	if err != nil {
+		return errors.New(models.DatabaseErrorMessage)
+	}
+	if !config.Enabled {
+		return nil
+	}
+	required := requireForLoginVerification && config.LoginVerificationEnabled
+	if !config.IsReady() {
+		err := errors.New("VoceChat 未配置完成")
+		if required {
+			return err
+		}
+		markVoceChatUserSync(user, models.VoceChatSyncStatusFailed, err, nil, "")
+		return nil
+	}
+	uid, err := strconv.ParseInt(strings.TrimSpace(user.VoceChatUserID), 10, 64)
+	if err != nil || uid <= 0 {
+		err = errors.New("VoceChat 用户ID无效")
+		if required {
+			return err
+		}
+		markVoceChatUserSync(user, models.VoceChatSyncStatusFailed, err, nil, "")
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	vcUser, err := voceChatAdminUpdateUser(ctx, config, uid, request)
+	if err != nil {
+		markVoceChatUserSync(user, models.VoceChatSyncStatusFailed, err, nil, "")
+		if required {
+			return fmt.Errorf("同步 VoceChat 账号失败: %w", err)
+		}
+		return nil
+	}
+	markVoceChatUserSync(user, models.VoceChatSyncStatusLinked, nil, vcUser, fallbackName)
+	return nil
+}
+
+func saveLocalUserPassword(user *models.User, plain string) error {
+	hashed := models.HashPassword(plain)
+	if hashed == "" {
+		return fmt.Errorf("密码加密失败")
+	}
+	if err := repository.UpdateUserField(user.ID, "password", hashed); err != nil {
+		return fmt.Errorf("更新密码失败: %v", err)
+	}
+	user.Password = hashed
+	_ = vocechat.DefaultPlainPasswordStore().UpsertUserPassword(user.ID, user.Username, plain, user.VoceChatEmail, user.VoceChatUserID)
+	return nil
+}
+
+func authenticateVoceChatPassword(user *models.User, config vocechat.Config, plain string) (bool, error) {
+	email := strings.TrimSpace(user.VoceChatEmail)
+	if email == "" {
+		return false, errors.New("账号尚未绑定 VoceChat，请联系管理员")
+	}
+	if strings.TrimSpace(config.BaseURL) == "" {
+		if config.LocalFallbackEnabled {
+			return false, nil
+		}
+		return false, errors.New("VoceChat 登录校验未配置，请联系管理员")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	response, err := voceChatPasswordLogin(ctx, config, email, plain)
+	if err != nil {
+		if isVoceChatCredentialRejected(err) {
+			recordVoceChatLoginHealth("ok", nil)
+			return false, errors.New(models.PasswordIncorrectMessage)
+		}
+		recordVoceChatLoginHealth("failed", err)
+		if config.LocalFallbackEnabled {
+			return false, nil
+		}
+		return false, errors.New("VoceChat 登录校验暂不可用，请稍后再试")
+	}
+
+	recordVoceChatLoginHealth("ok", nil)
+	applyVoceChatLoginResponse(user, response)
+	syncPasswordAfterVoceChatLogin(user, plain)
+	return true, nil
 }
 
 func Login(userdto dto.LoginDto) (*models.User, error) {
@@ -139,92 +578,38 @@ func Login(userdto dto.LoginDto) (*models.User, error) {
 
 	username := strings.TrimSpace(userdto.Username)
 	plain := userdto.Password
-	md5pwd := pkg.MD5Encrypt(plain)
 
 	user, err := repository.GetUserByUsername(username)
 	if err != nil || user == nil {
 		return nil, errors.New(models.UserNotFoundMessage)
 	}
 
-	pw := strings.TrimSpace(user.Password)
-	isMD5 := len(pw) == 32 && func(s string) bool {
-		for i := 0; i < len(s); i++ {
-			c := s[i]
-			if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F') {
-				return false
-			}
+	voceConfig, voceLoginEnabled, err := loadVoceChatLoginConfig()
+	if err != nil {
+		return nil, errors.New(models.DatabaseErrorMessage)
+	}
+	if shouldUseVoceChatLogin(user, voceConfig, voceLoginEnabled) {
+		verified, err := authenticateVoceChatPassword(user, voceConfig, plain)
+		if err != nil {
+			return nil, err
 		}
-		return true
-	}(pw)
-	isBcrypt := strings.HasPrefix(pw, "$2a$") || strings.HasPrefix(pw, "$2b$") || strings.HasPrefix(pw, "$2y$")
-
-	matched := ""
-	usedOverride := false
-	upgradePlain := ""
-	upgradeAllowed := false
-	if isMD5 {
-		if strings.EqualFold(pw, md5pwd) {
-			matched = plain
-			upgradePlain = plain
-			upgradeAllowed = true
-		} else {
-			return nil, errors.New(models.PasswordIncorrectMessage)
-		}
-	} else if isBcrypt {
-		if bcrypt.CompareHashAndPassword([]byte(pw), []byte(plain)) == nil {
-			matched = plain
-		} else {
-			tplain := strings.TrimSpace(userdto.Password)
-			if tplain != plain && bcrypt.CompareHashAndPassword([]byte(pw), []byte(tplain)) == nil {
-				matched = tplain
-			} else if bcrypt.CompareHashAndPassword([]byte(pw), []byte(md5pwd)) == nil {
-				matched = plain
-			} else {
-				tplain := strings.TrimSpace(userdto.Password)
-				tmd5 := pkg.MD5Encrypt(tplain)
-				if tplain != plain && bcrypt.CompareHashAndPassword([]byte(pw), []byte(tmd5)) == nil {
-					matched = tplain
-				} else if bcrypt.CompareHashAndPassword([]byte(pw), []byte(strings.ToUpper(md5pwd))) == nil {
-					matched = plain
-				} else {
-					override := strings.TrimSpace(os.Getenv("NOISE_ADMIN_PASSWORD"))
-					if override != "" && (strings.EqualFold(username, "noise") || user.IsAdmin) && plain == override {
-						matched = plain
-						usedOverride = true
-					} else {
-						return nil, errors.New(models.PasswordIncorrectMessage)
-					}
-				}
+		if !verified {
+			result, err := authenticateLocalPassword(username, user, plain)
+			if err != nil {
+				return nil, err
 			}
+			applyLocalLoginUpgrade(user, result)
 		}
 	} else {
-		if pw == plain {
-			matched = plain
-			upgradePlain = plain
-			upgradeAllowed = true
-		} else {
-			return nil, errors.New(models.PasswordIncorrectMessage)
+		result, err := authenticateLocalPassword(username, user, plain)
+		if err != nil {
+			return nil, err
 		}
+		applyLocalLoginUpgrade(user, result)
 	}
 
-	if matched == "" {
-		return nil, errors.New(models.PasswordIncorrectMessage)
-	}
-
-	needUpgrade := isMD5 || !isBcrypt
-	if needUpgrade && !usedOverride && upgradeAllowed && upgradePlain != "" {
-		newHash := models.HashPassword(upgradePlain)
-		if newHash != "" {
-			_ = repository.UpdateUserField(user.ID, "password", newHash)
-			user.Password = newHash
-		}
-	}
-
-	if user.Token == "" {
-		user.Token = models.GenerateToken(32)
-		if err := repository.UpdateUser(user); err != nil {
-			return nil, fmt.Errorf("生成用户 token 失败: %v", err)
-		}
+	if err := ensureLoginToken(user); err != nil {
+		return nil, err
 	}
 
 	return user, nil
@@ -355,7 +740,11 @@ func UpdateUser(user *models.User, userdto dto.UserInfoDto) error {
 
 	// 用户名更新
 	if userdto.Username != "" && userdto.Username != user.Username {
-		updates["username"] = userdto.Username
+		username := strings.TrimSpace(userdto.Username)
+		if err := validateRegistrationUsername(username); err != nil {
+			return err
+		}
+		updates["username"] = username
 	}
 
 	// 头像地址更新
@@ -394,6 +783,12 @@ func UpdateUser(user *models.User, userdto dto.UserInfoDto) error {
 	if v, ok := updates["description"]; ok && v != nil {
 		user.Description = v.(string)
 	}
+	updatePlainPasswordUserMetadata(user)
+
+	if _, ok := updates["username"]; ok {
+		name := user.Username
+		_ = syncVoceChatBoundUserUpdate(user, vocechat.UpdateUserRequest{Name: &name}, false, name)
+	}
 
 	return nil
 }
@@ -413,18 +808,10 @@ func ChangePassword(user *models.User, userdto dto.UserInfoDto) error {
 		return errors.New(models.PasswordCannotBeSameAsBeforeMessage)
 	}
 
-	// 使用 bcrypt 更新密码
-	hashed := models.HashPassword(newPassword)
-	if hashed == "" {
-		return fmt.Errorf("密码加密失败")
+	if err := syncVoceChatBoundUserUpdate(user, vocechat.UpdateUserRequest{Password: &newPassword}, true, ""); err != nil {
+		return err
 	}
-	user.Password = hashed
-
-	if err := repository.UpdateUser(user); err != nil {
-		return fmt.Errorf("更新密码失败: %v", err)
-	}
-
-	return nil
+	return saveLocalUserPassword(user, newPassword)
 }
 
 // ChangePasswordWithOld 验证旧密码后更新为新密码（兼容历史明文/MD5/bcrypt）
@@ -477,16 +864,10 @@ func ChangePasswordWithOld(user *models.User, old string, new string) error {
 		return errors.New(models.PasswordCannotBeSameAsBeforeMessage)
 	}
 
-	// 使用 bcrypt 更新密码
-	hashed := models.HashPassword(new)
-	if hashed == "" {
-		return fmt.Errorf("密码加密失败")
+	if err := syncVoceChatBoundUserUpdate(user, vocechat.UpdateUserRequest{Password: &new}, true, ""); err != nil {
+		return err
 	}
-	user.Password = hashed
-	if err := repository.UpdateUser(user); err != nil {
-		return fmt.Errorf("更新密码失败: %v", err)
-	}
-	return nil
+	return saveLocalUserPassword(user, new)
 }
 
 func UpdateUserAdmin(userID uint, currentUserID uint) error {

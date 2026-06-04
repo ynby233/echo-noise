@@ -74,6 +74,62 @@ type User struct {
 	EmailPending       string     `gorm:"type:varchar(191)" json:"-"`
 	EmailVerifyCode    string     `gorm:"type:varchar(20)" json:"-"`
 	EmailVerifyExpires *time.Time `json:"-"`
+	VoceChatUserID     string     `gorm:"type:varchar(191);index" json:"voce_chat_user_id,omitempty"`
+	VoceChatEmail      string     `gorm:"type:varchar(191);index" json:"voce_chat_email,omitempty"`
+	VoceChatUsername   string     `gorm:"type:varchar(191)" json:"voce_chat_username,omitempty"`
+	VoceChatLinkedAt   *time.Time `json:"voce_chat_linked_at,omitempty"`
+	VoceChatSyncStatus string     `gorm:"type:varchar(30);default:none;index" json:"voce_chat_sync_status,omitempty"`
+	VoceChatSyncError  string     `gorm:"type:text" json:"-"`
+	VoceChatLastSyncAt *time.Time `json:"voce_chat_last_sync_at,omitempty"`
+}
+
+const (
+	RegistrationApplicationStatusPending  = "pending"
+	RegistrationApplicationStatusApproved = "approved"
+	RegistrationApplicationStatusRejected = "rejected"
+
+	VoceChatSyncStatusNone       = "none"
+	VoceChatSyncStatusPending    = "pending"
+	VoceChatSyncStatusCreated    = "created"
+	VoceChatSyncStatusLinked     = "linked"
+	VoceChatSyncStatusFailed     = "failed"
+	VoceChatSyncStatusConflicted = "conflicted"
+
+	VoceChatContactSyncStatusOK     = "ok"
+	VoceChatContactSyncStatusFailed = "failed"
+)
+
+type RegistrationApplication struct {
+	ID                 uint       `gorm:"primaryKey" json:"id"`
+	ApplicationID      string     `gorm:"type:varchar(64);not null;uniqueIndex" json:"application_id"`
+	Username           string     `gorm:"type:varchar(191);not null;index" json:"username"`
+	PasswordHash       string     `gorm:"type:varchar(191);not null" json:"-"`
+	Status             string     `gorm:"type:varchar(20);not null;default:pending;index" json:"status"`
+	VoceChatUserID     string     `gorm:"type:varchar(191);index" json:"voce_chat_user_id,omitempty"`
+	VoceChatEmail      string     `gorm:"type:varchar(191);index" json:"voce_chat_email,omitempty"`
+	VoceChatSyncStatus string     `gorm:"type:varchar(30);default:none;index" json:"voce_chat_sync_status,omitempty"`
+	VoceChatSyncError  string     `gorm:"type:text" json:"-"`
+	LocalUserID        *uint      `gorm:"index" json:"local_user_id,omitempty"`
+	ReviewerUserID     *uint      `gorm:"index" json:"reviewer_user_id,omitempty"`
+	ReviewNote         string     `gorm:"type:text" json:"review_note,omitempty"`
+	ReviewedAt         *time.Time `json:"reviewed_at,omitempty"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
+}
+
+type VoceChatContactCache struct {
+	ID                uint      `gorm:"primaryKey" json:"id"`
+	UserID            uint      `gorm:"not null;index;uniqueIndex:idx_voce_contact_pair" json:"user_id"`
+	ContactUserID     uint      `gorm:"not null;index;uniqueIndex:idx_voce_contact_pair" json:"contact_user_id"`
+	VoceChatUserID    string    `gorm:"type:varchar(191);index" json:"voce_chat_user_id"`
+	ContactVoceChatID string    `gorm:"type:varchar(191);index" json:"contact_voce_chat_id"`
+	Source            string    `gorm:"type:varchar(30);default:vocechat" json:"source"`
+	SyncedAt          time.Time `gorm:"index" json:"synced_at"`
+	ExpiresAt         time.Time `gorm:"index" json:"expires_at"`
+	LastSyncStatus    string    `gorm:"type:varchar(30);default:ok;index" json:"last_sync_status"`
+	LastSyncError     string    `gorm:"type:text" json:"-"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 // 生成 Token 的工具函数
@@ -153,6 +209,21 @@ type SiteConfig struct {
 	GithubClientId     string `gorm:"type:varchar(191)"`
 	GithubClientSecret string `gorm:"type:varchar(191)"`
 	GithubCallbackURL  string `gorm:"type:varchar(191)"`
+	// VoceChat 外挂配置
+	VoceChatEnabled                  bool       `gorm:"default:false"`
+	VoceChatBaseURL                  string     `gorm:"type:varchar(191)"`
+	VoceChatAdminUsername            string     `gorm:"type:varchar(191)"`
+	VoceChatAdminPassword            string     `gorm:"type:varchar(191)" json:"-"`
+	VoceChatAdminToken               string     `gorm:"type:text" json:"-"`
+	VoceChatThirdPartySecret         string     `gorm:"type:varchar(191)" json:"-"`
+	VoceChatEmailDomain              string     `gorm:"type:varchar(100);default:vc.com"`
+	VoceChatLoginVerificationEnabled bool       `gorm:"default:false"`
+	VoceChatLocalFallbackEnabled     bool       `gorm:"default:false"`
+	VoceChatContactsEnabled          bool       `gorm:"default:false"`
+	VoceChatContactsCacheTTLSeconds  int        `gorm:"default:60"`
+	VoceChatLastHealthStatus         string     `gorm:"type:varchar(30)"`
+	VoceChatLastHealthError          string     `gorm:"type:text"`
+	VoceChatLastHealthCheckAt        *time.Time `json:"voceChatLastHealthCheckAt"`
 	// 云存储（S3/R2）备份设置
 	StorageEnabled       bool   `gorm:"default:false"`
 	StorageProvider      string `gorm:"type:varchar(20)"` // s3 或 r2

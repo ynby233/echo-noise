@@ -88,7 +88,16 @@ func CanViewMessage(message models.Message, userID *uint, isAdmin bool) bool {
 		return true
 	case MessageVisibilityUsers:
 		return userID != nil && *userID != 0
-	case MessageVisibilityContacts, MessageVisibilityPrivate:
+	case MessageVisibilityContacts:
+		if userID == nil || *userID == 0 {
+			return false
+		}
+		if !voceChatContactsVisibilityEnabled() {
+			return false
+		}
+		ok, err := repository.IsFreshVoceChatContact(message.UserID, *userID, time.Now().UTC())
+		return err == nil && ok
+	case MessageVisibilityPrivate:
 		return false
 	default:
 		return false
@@ -101,9 +110,20 @@ func ApplyMessageVisibilityScope(query *gorm.DB, userID *uint, isAdmin bool) *go
 	}
 	publicSQL := "(private = ? AND (visibility = ? OR visibility = ? OR visibility IS NULL))"
 	if userID != nil && *userID != 0 {
+		if voceChatContactsVisibilityEnabled() {
+			EnsureVoceChatContactCachesForViewer(userID, isAdmin)
+			now := time.Now().UTC()
+			contactsSQL := "(visibility = ? AND EXISTS (SELECT 1 FROM voce_chat_contact_caches AS vcc WHERE vcc.user_id = messages.user_id AND vcc.contact_user_id = ? AND vcc.last_sync_status = ? AND vcc.expires_at > ?))"
+			return query.Where("(user_id = ? OR "+publicSQL+" OR visibility = ? OR "+contactsSQL+")", *userID, false, MessageVisibilityPublic, "", MessageVisibilityUsers, MessageVisibilityContacts, *userID, models.VoceChatContactSyncStatusOK, now)
+		}
 		return query.Where("(user_id = ? OR "+publicSQL+" OR visibility = ?)", *userID, false, MessageVisibilityPublic, "", MessageVisibilityUsers)
 	}
 	return query.Where(publicSQL, false, MessageVisibilityPublic, "")
+}
+
+func voceChatContactsVisibilityEnabled() bool {
+	config, err := loadVoceChatSiteConfig()
+	return err == nil && config.Enabled && config.ContactsEnabled
 }
 
 // GetAllMessages 封装业务逻辑，获取所有笔记
@@ -147,6 +167,9 @@ func GetMessageByIDForViewer(id uint, userID *uint, isAdmin bool) (*models.Messa
 	}
 	if message == nil {
 		return nil, fmt.Errorf("消息不存在")
+	}
+	if !isAdmin && userID != nil && *userID != 0 && message.UserID != *userID && StoredMessageVisibility(*message) == MessageVisibilityContacts {
+		_ = EnsureVoceChatContactCacheForAuthor(message.UserID)
 	}
 	if !CanViewMessage(*message, userID, isAdmin) {
 		return nil, fmt.Errorf("无权访问")

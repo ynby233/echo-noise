@@ -15,6 +15,7 @@ import (
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/syncmanager"
+	"github.com/rcy1314/echo-noise/internal/vocechat"
 	"github.com/rcy1314/echo-noise/pkg"
 	"gorm.io/gorm"
 )
@@ -409,6 +410,62 @@ func parseBoolSetting(value interface{}) (bool, bool) {
 	return false, false
 }
 
+func applySensitiveStringSetting(raw map[string]interface{}, valueKey, clearKey string, target *string) {
+	if clear, exists := raw[clearKey]; exists && parseBoolLike(clear, false) {
+		*target = ""
+		return
+	}
+	if v, ok := raw[valueKey].(string); ok {
+		v = strings.TrimSpace(v)
+		if v != "" {
+			*target = v
+		}
+	}
+}
+
+func applyVoceChatConfigUpdate(config *models.SiteConfig, raw map[string]interface{}) error {
+	if raw == nil {
+		return nil
+	}
+
+	if v, exists := raw["enabled"]; exists {
+		config.VoceChatEnabled = parseBoolLike(v, config.VoceChatEnabled)
+	}
+	if v, ok := raw["baseURL"].(string); ok {
+		config.VoceChatBaseURL = vocechat.NormalizeBaseURL(v)
+	}
+	if v, ok := raw["adminUsername"].(string); ok {
+		config.VoceChatAdminUsername = strings.TrimSpace(v)
+	}
+	applySensitiveStringSetting(raw, "adminPassword", "clearAdminPassword", &config.VoceChatAdminPassword)
+	applySensitiveStringSetting(raw, "adminToken", "clearAdminToken", &config.VoceChatAdminToken)
+	applySensitiveStringSetting(raw, "thirdPartySecret", "clearThirdPartySecret", &config.VoceChatThirdPartySecret)
+	if v, ok := raw["emailDomain"].(string); ok {
+		config.VoceChatEmailDomain = vocechat.NormalizeEmailDomain(v)
+	}
+	if v, exists := raw["loginVerificationEnabled"]; exists {
+		config.VoceChatLoginVerificationEnabled = parseBoolLike(v, config.VoceChatLoginVerificationEnabled)
+	}
+	if v, exists := raw["localFallbackEnabled"]; exists {
+		config.VoceChatLocalFallbackEnabled = parseBoolLike(v, config.VoceChatLocalFallbackEnabled)
+	}
+	if v, exists := raw["contactsEnabled"]; exists {
+		config.VoceChatContactsEnabled = parseBoolLike(v, config.VoceChatContactsEnabled)
+	}
+	if v, exists := raw["contactsCacheTTLSeconds"]; exists {
+		if ttl, ok := parsePositiveIntSetting(v); ok {
+			config.VoceChatContactsCacheTTLSeconds = ttl
+		}
+	}
+	if config.VoceChatContactsCacheTTLSeconds <= 0 {
+		config.VoceChatContactsCacheTTLSeconds = vocechat.DefaultContactsCacheTTLSeconds
+	}
+	if strings.TrimSpace(config.VoceChatEmailDomain) == "" {
+		config.VoceChatEmailDomain = vocechat.DefaultEmailDomain
+	}
+	return nil
+}
+
 func normalizeLifeCountdownBirthDate(value interface{}) (string, error) {
 	text := strings.TrimSpace(fmt.Sprintf("%v", value))
 	if text == "" || text == "<nil>" {
@@ -787,6 +844,7 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 			"socialLinksEnabled": config.SocialLinksEnabled,
 			"socialLinks":        normalizedSocialLinks,
 		},
+		"voceChatConfig": vocechat.PublicConfigFromSiteConfig(config),
 		"storageEnabled": config.StorageEnabled,
 		"storageConfig": map[string]interface{}{
 			"provider":      choose(config.StorageProvider, ""),
@@ -1555,6 +1613,13 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 		config.AttachmentStorageUsePathStyle = true
 	}
 
+	if sc, ok := settingMap["voceChatConfig"].(map[string]interface{}); ok {
+		if err := applyVoceChatConfigUpdate(&config, sc); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("VoceChat 配置错误: %v", err)
+		}
+	}
+
 	// 邮件设置
 	if v, ok := settingMap["smtpEnabled"].(bool); ok {
 		config.SmtpEnabled = v
@@ -1762,6 +1827,7 @@ func getDefaultConfig() map[string]interface{} {
 				{"name": "博客", "url": "https://www.noiseblogs.top/", "icon": "i-mdi-notebook"},
 			},
 		},
+		"voceChatConfig": vocechat.DefaultPublicConfig(),
 		"storageEnabled": false,
 		"storageConfig": map[string]interface{}{
 			"provider":           "",

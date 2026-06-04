@@ -1,6 +1,8 @@
 package services
 
 import (
+	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,7 +12,9 @@ import (
 	"github.com/rcy1314/echo-noise/internal/dto"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/repository"
+	"github.com/rcy1314/echo-noise/internal/vocechat"
 	"github.com/rcy1314/echo-noise/pkg"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
@@ -50,6 +54,176 @@ func mustGetUserByUsername(t *testing.T, username string) *models.User {
 	return user
 }
 
+func enableVoceChatLoginForTest(t *testing.T, fallbackEnabled bool) {
+	t.Helper()
+
+	if err := database.DB.Create(&models.SiteConfig{
+		SiteTitle:                        "Test Site",
+		VoceChatEnabled:                  true,
+		VoceChatBaseURL:                  "https://vc.example.com",
+		VoceChatAdminUsername:            "admin@vc.com",
+		VoceChatAdminPassword:            "admin-secret",
+		VoceChatLoginVerificationEnabled: true,
+		VoceChatLocalFallbackEnabled:     fallbackEnabled,
+		VoceChatEmailDomain:              "vc.com",
+	}).Error; err != nil {
+		t.Fatalf("create vc site config: %v", err)
+	}
+}
+
+func stubVoceChatPasswordLogin(t *testing.T, fn voceChatPasswordLoginFunc) {
+	t.Helper()
+
+	original := voceChatPasswordLogin
+	voceChatPasswordLogin = fn
+	t.Cleanup(func() { voceChatPasswordLogin = original })
+}
+
+func stubVoceChatAdminUpdateUser(t *testing.T, fn voceChatAdminUpdateUserFunc) {
+	t.Helper()
+
+	original := voceChatAdminUpdateUser
+	voceChatAdminUpdateUser = fn
+	t.Cleanup(func() { voceChatAdminUpdateUser = original })
+}
+
+func TestRegisterCreatesPendingApplicationInsteadOfUser(t *testing.T) {
+	setupUserServiceTestDB(t)
+	storePath := filepath.Join(t.TempDir(), "plain-passwords.db")
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
+
+	originalProvision := registrationVoceChatProvision
+	registrationVoceChatProvision = func(applicationID, username, password string) registrationVoceChatProvisionResult {
+		return registrationVoceChatProvisionResult{
+			Email:      buildVoceChatApplicationEmail(applicationID, vocechat.DefaultEmailDomain),
+			Username:   username,
+			SyncStatus: models.VoceChatSyncStatusNone,
+		}
+	}
+	defer func() { registrationVoceChatProvision = originalProvision }()
+
+	if err := Register(dto.RegisterDto{Username: "新用户_01", Password: "secret-pass"}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	if _, err := repository.GetUserByUsername("新用户_01"); err == nil {
+		t.Fatalf("register should not create local user before review")
+	} else if err != gorm.ErrRecordNotFound {
+		t.Fatalf("get local user: %v", err)
+	}
+
+	application, err := repository.GetPendingRegistrationApplicationByUsername("新用户_01")
+	if err != nil {
+		t.Fatalf("get pending application: %v", err)
+	}
+	if application.Status != models.RegistrationApplicationStatusPending {
+		t.Fatalf("application status = %q", application.Status)
+	}
+	if application.VoceChatSyncStatus != models.VoceChatSyncStatusNone {
+		t.Fatalf("vc sync status = %q", application.VoceChatSyncStatus)
+	}
+	if strings.Contains(application.ApplicationID, "_") {
+		t.Fatalf("application id %q must be usable as VC email prefix", application.ApplicationID)
+	}
+	if application.VoceChatEmail != application.ApplicationID+"@vc.com" {
+		t.Fatalf("vc email = %q", application.VoceChatEmail)
+	}
+	if !strings.HasPrefix(application.PasswordHash, "$2") {
+		t.Fatalf("password hash should be bcrypt, got %q", application.PasswordHash)
+	}
+
+	record, ok, err := vocechat.NewPlainPasswordStore(storePath).GetApplicationPassword(application.ApplicationID)
+	if err != nil {
+		t.Fatalf("read plain password record: %v", err)
+	}
+	if !ok {
+		t.Fatalf("plain password record missing")
+	}
+	if record.Password != "secret-pass" || record.Username != "新用户_01" || record.VoceChatEmail != application.VoceChatEmail {
+		t.Fatalf("unexpected plain password record: %#v", record)
+	}
+}
+
+func TestRegisterStoresVoceChatPrecreateResult(t *testing.T) {
+	setupUserServiceTestDB(t)
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", filepath.Join(t.TempDir(), "plain-passwords.db"))
+
+	originalProvision := registrationVoceChatProvision
+	registrationVoceChatProvision = func(applicationID, username, password string) registrationVoceChatProvisionResult {
+		return registrationVoceChatProvisionResult{
+			Email:      applicationID + "@vc.com",
+			UserID:     "42",
+			Username:   username,
+			SyncStatus: models.VoceChatSyncStatusCreated,
+		}
+	}
+	defer func() { registrationVoceChatProvision = originalProvision }()
+
+	if err := Register(dto.RegisterDto{Username: "alice_01", Password: "secret-pass"}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	application, err := repository.GetPendingRegistrationApplicationByUsername("alice_01")
+	if err != nil {
+		t.Fatalf("get pending application: %v", err)
+	}
+	if application.VoceChatSyncStatus != models.VoceChatSyncStatusCreated {
+		t.Fatalf("vc sync status = %q", application.VoceChatSyncStatus)
+	}
+	if application.VoceChatUserID != "42" {
+		t.Fatalf("vc user id = %q", application.VoceChatUserID)
+	}
+}
+
+func TestRegisterRejectsInvalidOrDuplicatePendingUsernames(t *testing.T) {
+	setupUserServiceTestDB(t)
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", filepath.Join(t.TempDir(), "plain-passwords.db"))
+
+	originalProvision := registrationVoceChatProvision
+	registrationVoceChatProvision = func(applicationID, username, password string) registrationVoceChatProvisionResult {
+		return registrationVoceChatProvisionResult{
+			Email:      applicationID + "@vc.com",
+			Username:   username,
+			SyncStatus: models.VoceChatSyncStatusNone,
+		}
+	}
+	defer func() { registrationVoceChatProvision = originalProvision }()
+
+	if err := Register(dto.RegisterDto{Username: "a", Password: "secret-pass"}); err == nil {
+		t.Fatalf("one-character username should be rejected")
+	}
+	if err := Register(dto.RegisterDto{Username: "bad-name", Password: "secret-pass"}); err == nil {
+		t.Fatalf("username with hyphen should be rejected")
+	}
+	if err := Register(dto.RegisterDto{Username: "Tom", Password: "secret-pass"}); err != nil {
+		t.Fatalf("register Tom: %v", err)
+	}
+	if err := Register(dto.RegisterDto{Username: "tom", Password: "secret-pass"}); err != nil {
+		t.Fatalf("case-sensitive username tom should be allowed: %v", err)
+	}
+	if err := Register(dto.RegisterDto{Username: "Tom", Password: "secret-pass"}); err == nil {
+		t.Fatalf("duplicate pending username should be rejected")
+	}
+}
+
+func TestGetUserByUsernameIsCaseSensitive(t *testing.T) {
+	setupUserServiceTestDB(t)
+
+	mustCreateUser(t, models.User{Username: "Tom", Password: models.HashPassword("tom"), Token: models.GenerateToken(32)})
+	mustCreateUser(t, models.User{Username: "tom", Password: models.HashPassword("tom"), Token: models.GenerateToken(32)})
+	mustCreateUser(t, models.User{Username: "TOM", Password: models.HashPassword("tom"), Token: models.GenerateToken(32)})
+
+	if got := mustGetUserByUsername(t, "Tom"); got.Username != "Tom" {
+		t.Fatalf("GetUserByUsername(Tom) returned %q", got.Username)
+	}
+	if got := mustGetUserByUsername(t, "tom"); got.Username != "tom" {
+		t.Fatalf("GetUserByUsername(tom) returned %q", got.Username)
+	}
+	if got := mustGetUserByUsername(t, "TOM"); got.Username != "TOM" {
+		t.Fatalf("GetUserByUsername(TOM) returned %q", got.Username)
+	}
+}
+
 func TestUserProfileUpdatesDoNotOverwritePasswordsAndPasswordFormatsRemainCompatible(t *testing.T) {
 	setupUserServiceTestDB(t)
 
@@ -70,14 +244,14 @@ func TestUserProfileUpdatesDoNotOverwritePasswordsAndPasswordFormatsRemainCompat
 	cachedUser.Password = ""
 
 	if err := UpdateUser(cachedUser, dto.UserInfoDto{
-		Username:    "admin-renamed",
+		Username:    "admin_renamed",
 		AvatarURL:   "https://example.com/avatar.png",
 		Description: "updated profile",
 	}); err != nil {
 		t.Fatalf("update user profile: %v", err)
 	}
 
-	updatedProfileUser := mustGetUserByUsername(t, "admin-renamed")
+	updatedProfileUser := mustGetUserByUsername(t, "admin_renamed")
 	if updatedProfileUser.Password != originalHash {
 		t.Fatalf("password hash changed unexpectedly after profile update, got %q want original hash", updatedProfileUser.Password)
 	}
@@ -88,14 +262,14 @@ func TestUserProfileUpdatesDoNotOverwritePasswordsAndPasswordFormatsRemainCompat
 		t.Fatalf("description not updated, got %q", updatedProfileUser.Description)
 	}
 
-	if _, err := Login(dto.LoginDto{Username: "admin-renamed", Password: "admin"}); err != nil {
+	if _, err := Login(dto.LoginDto{Username: "admin_renamed", Password: "admin"}); err != nil {
 		t.Fatalf("login with original password after profile update should succeed: %v", err)
 	}
 
 	if err := ChangePasswordWithOld(updatedProfileUser, "admin", "new-password"); err != nil {
 		t.Fatalf("change password with old password: %v", err)
 	}
-	if _, err := Login(dto.LoginDto{Username: "admin-renamed", Password: "new-password"}); err != nil {
+	if _, err := Login(dto.LoginDto{Username: "admin_renamed", Password: "new-password"}); err != nil {
 		t.Fatalf("login with new password should succeed: %v", err)
 	}
 
@@ -130,6 +304,292 @@ func TestUserProfileUpdatesDoNotOverwritePasswordsAndPasswordFormatsRemainCompat
 	}
 	if _, err := Login(dto.LoginDto{Username: "md5-user", Password: "md5pass-new"}); err != nil {
 		t.Fatalf("login with changed password should succeed: %v", err)
+	}
+}
+
+func TestLoginWithVoceChatSuccessSyncsLocalPasswordAndBinding(t *testing.T) {
+	setupUserServiceTestDB(t)
+	enableVoceChatLoginForTest(t, false)
+	storePath := filepath.Join(t.TempDir(), "plain-passwords.db")
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
+
+	user := mustCreateUser(t, models.User{
+		Username:           "alice",
+		Password:           models.HashPassword("old-local-password"),
+		VoceChatEmail:      "alice@vc.com",
+		VoceChatUserID:     "12",
+		VoceChatSyncStatus: models.VoceChatSyncStatusLinked,
+	})
+
+	stubVoceChatPasswordLogin(t, func(ctx context.Context, config vocechat.Config, email, password string) (*vocechat.LoginResponse, error) {
+		if email != "alice@vc.com" || password != "vc-password" {
+			t.Fatalf("vc login args email=%q password=%q", email, password)
+		}
+		if !config.LoginVerificationEnabled || config.LocalFallbackEnabled {
+			t.Fatalf("unexpected vc config: %#v", config)
+		}
+		return &vocechat.LoginResponse{User: vocechat.UserInfo{UID: 99, Email: "alice-updated@vc.com", Name: "Alice VC"}}, nil
+	})
+
+	loggedIn, err := Login(dto.LoginDto{Username: "alice", Password: "vc-password"})
+	if err != nil {
+		t.Fatalf("login through vc: %v", err)
+	}
+	if loggedIn.Token == "" {
+		t.Fatalf("login should generate token")
+	}
+
+	updated := mustGetUserByUsername(t, "alice")
+	if updated.VoceChatUserID != "99" || updated.VoceChatEmail != "alice-updated@vc.com" || updated.VoceChatUsername != "Alice VC" {
+		t.Fatalf("vc binding not synced: %#v", updated)
+	}
+	if updated.VoceChatSyncStatus != models.VoceChatSyncStatusLinked || updated.VoceChatSyncError != "" || updated.VoceChatLastSyncAt == nil {
+		t.Fatalf("vc sync status not refreshed: %#v", updated)
+	}
+	if bcrypt.CompareHashAndPassword([]byte(updated.Password), []byte("vc-password")) != nil {
+		t.Fatalf("local password hash was not synced after vc login")
+	}
+
+	record, ok, err := vocechat.NewPlainPasswordStore(storePath).GetUserPassword(user.ID)
+	if err != nil {
+		t.Fatalf("read plain password record: %v", err)
+	}
+	if !ok || record.Password != "vc-password" || record.VoceChatEmail != "alice-updated@vc.com" || record.VoceChatUserID != "99" {
+		t.Fatalf("plain password record not synced: ok=%v record=%#v", ok, record)
+	}
+}
+
+func TestLoginWithVoceChatCredentialRejectionDoesNotUseLocalFallback(t *testing.T) {
+	setupUserServiceTestDB(t)
+	enableVoceChatLoginForTest(t, true)
+
+	mustCreateUser(t, models.User{
+		Username:       "bob",
+		Password:       models.HashPassword("local-password"),
+		VoceChatEmail:  "bob@vc.com",
+		VoceChatUserID: "21",
+	})
+
+	stubVoceChatPasswordLogin(t, func(ctx context.Context, config vocechat.Config, email, password string) (*vocechat.LoginResponse, error) {
+		return nil, &vocechat.APIError{StatusCode: 401, Method: "POST", Path: "/api/token/login"}
+	})
+
+	if _, err := Login(dto.LoginDto{Username: "bob", Password: "local-password"}); err == nil || err.Error() != models.PasswordIncorrectMessage {
+		t.Fatalf("vc credential rejection should not fall back locally, err=%v", err)
+	}
+
+	after := mustGetUserByUsername(t, "bob")
+	if after.Token != "" {
+		t.Fatalf("failed login should not generate token")
+	}
+}
+
+func TestLoginWithVoceChatEnabledUsesLocalPasswordForUnboundUser(t *testing.T) {
+	setupUserServiceTestDB(t)
+	enableVoceChatLoginForTest(t, false)
+
+	mustCreateUser(t, models.User{
+		Username: "legacy",
+		Password: models.HashPassword("local-password"),
+	})
+
+	stubVoceChatPasswordLogin(t, func(ctx context.Context, config vocechat.Config, email, password string) (*vocechat.LoginResponse, error) {
+		t.Fatalf("unbound user should not call VoceChat login")
+		return nil, nil
+	})
+
+	loggedIn, err := Login(dto.LoginDto{Username: "legacy", Password: "local-password"})
+	if err != nil {
+		t.Fatalf("unbound user should keep local login: %v", err)
+	}
+	if loggedIn.Token == "" {
+		t.Fatalf("local login should generate token")
+	}
+}
+
+func TestLoginWithVoceChatUnavailableRequiresFallbackSwitch(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		fallbackEnabled bool
+		wantLogin       bool
+	}{
+		{name: "fallback disabled", fallbackEnabled: false, wantLogin: false},
+		{name: "fallback enabled", fallbackEnabled: true, wantLogin: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setupUserServiceTestDB(t)
+			enableVoceChatLoginForTest(t, tc.fallbackEnabled)
+
+			mustCreateUser(t, models.User{
+				Username:       "carol",
+				Password:       models.HashPassword("local-password"),
+				VoceChatEmail:  "carol@vc.com",
+				VoceChatUserID: "33",
+			})
+
+			stubVoceChatPasswordLogin(t, func(ctx context.Context, config vocechat.Config, email, password string) (*vocechat.LoginResponse, error) {
+				return nil, errors.New("dial tcp failed")
+			})
+
+			loggedIn, err := Login(dto.LoginDto{Username: "carol", Password: "local-password"})
+			if tc.wantLogin {
+				if err != nil {
+					t.Fatalf("login should fall back locally: %v", err)
+				}
+				if loggedIn.Token == "" {
+					t.Fatalf("fallback login should generate token")
+				}
+			} else {
+				if err == nil || !strings.Contains(err.Error(), "VoceChat 登录校验暂不可用") {
+					t.Fatalf("login should fail while fallback disabled, err=%v", err)
+				}
+			}
+
+			var siteConfig models.SiteConfig
+			if err := database.DB.First(&siteConfig).Error; err != nil {
+				t.Fatalf("read site config: %v", err)
+			}
+			if siteConfig.VoceChatLastHealthStatus != "failed" || !strings.Contains(siteConfig.VoceChatLastHealthError, "dial tcp failed") || siteConfig.VoceChatLastHealthCheckAt == nil {
+				t.Fatalf("vc health failure not recorded: %#v", siteConfig)
+			}
+		})
+	}
+}
+
+func TestChangePasswordWithVoceChatSyncsRemoteThenLocalPassword(t *testing.T) {
+	setupUserServiceTestDB(t)
+	enableVoceChatLoginForTest(t, false)
+	storePath := filepath.Join(t.TempDir(), "plain-passwords.db")
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
+
+	user := mustCreateUser(t, models.User{
+		Username:           "dora",
+		Password:           models.HashPassword("old-password"),
+		VoceChatEmail:      "dora@vc.com",
+		VoceChatUserID:     "55",
+		VoceChatUsername:   "Dora",
+		VoceChatSyncStatus: models.VoceChatSyncStatusLinked,
+	})
+
+	called := false
+	stubVoceChatAdminUpdateUser(t, func(ctx context.Context, config vocechat.Config, uid int64, request vocechat.UpdateUserRequest) (*vocechat.User, error) {
+		called = true
+		if uid != 55 {
+			t.Fatalf("vc uid = %d", uid)
+		}
+		if request.Password == nil || *request.Password != "new-password" {
+			t.Fatalf("vc password request = %#v", request.Password)
+		}
+		if request.Name != nil {
+			t.Fatalf("password change should not send name update: %#v", request.Name)
+		}
+		if !config.LoginVerificationEnabled || !config.HasAdminCredential() {
+			t.Fatalf("unexpected vc config: %#v", config)
+		}
+		return &vocechat.User{UID: 55, Email: "dora@vc.com", Name: "Dora"}, nil
+	})
+
+	if err := ChangePasswordWithOld(user, "old-password", "new-password"); err != nil {
+		t.Fatalf("change password: %v", err)
+	}
+	if !called {
+		t.Fatalf("vc admin update was not called")
+	}
+
+	updated := mustGetUserByUsername(t, "dora")
+	if bcrypt.CompareHashAndPassword([]byte(updated.Password), []byte("new-password")) != nil {
+		t.Fatalf("local password was not updated after vc sync")
+	}
+	if updated.VoceChatSyncStatus != models.VoceChatSyncStatusLinked || updated.VoceChatSyncError != "" || updated.VoceChatLastSyncAt == nil {
+		t.Fatalf("vc sync status not marked linked: %#v", updated)
+	}
+	record, ok, err := vocechat.NewPlainPasswordStore(storePath).GetUserPassword(user.ID)
+	if err != nil {
+		t.Fatalf("read plain password record: %v", err)
+	}
+	if !ok || record.Password != "new-password" || record.Username != "dora" || record.VoceChatUserID != "55" {
+		t.Fatalf("plain password record not updated: ok=%v record=%#v", ok, record)
+	}
+}
+
+func TestChangePasswordWithVoceChatFailureDoesNotUpdateLocalPassword(t *testing.T) {
+	setupUserServiceTestDB(t)
+	enableVoceChatLoginForTest(t, false)
+	storePath := filepath.Join(t.TempDir(), "plain-passwords.db")
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
+
+	user := mustCreateUser(t, models.User{
+		Username:       "erin",
+		Password:       models.HashPassword("old-password"),
+		VoceChatEmail:  "erin@vc.com",
+		VoceChatUserID: "56",
+	})
+
+	stubVoceChatAdminUpdateUser(t, func(ctx context.Context, config vocechat.Config, uid int64, request vocechat.UpdateUserRequest) (*vocechat.User, error) {
+		return nil, errors.New("vc update failed")
+	})
+
+	err := ChangePasswordWithOld(user, "old-password", "new-password")
+	if err == nil || !strings.Contains(err.Error(), "同步 VoceChat 账号失败") {
+		t.Fatalf("expected vc sync error, got %v", err)
+	}
+
+	updated := mustGetUserByUsername(t, "erin")
+	if bcrypt.CompareHashAndPassword([]byte(updated.Password), []byte("old-password")) != nil {
+		t.Fatalf("local password changed even though vc sync failed")
+	}
+	if updated.VoceChatSyncStatus != models.VoceChatSyncStatusFailed || !strings.Contains(updated.VoceChatSyncError, "vc update failed") {
+		t.Fatalf("vc failure not recorded: %#v", updated)
+	}
+	if _, ok, err := vocechat.NewPlainPasswordStore(storePath).GetUserPassword(user.ID); err != nil || ok {
+		t.Fatalf("plain password record should not be created on failed change, ok=%v err=%v", ok, err)
+	}
+}
+
+func TestUpdateUserVoceChatNameSyncFailureDoesNotBlockLocalProfile(t *testing.T) {
+	setupUserServiceTestDB(t)
+	enableVoceChatLoginForTest(t, false)
+	storePath := filepath.Join(t.TempDir(), "plain-passwords.db")
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
+
+	user := mustCreateUser(t, models.User{
+		Username:           "faye",
+		Password:           models.HashPassword("faye-password"),
+		VoceChatEmail:      "faye@vc.com",
+		VoceChatUserID:     "57",
+		VoceChatSyncStatus: models.VoceChatSyncStatusLinked,
+	})
+	if err := vocechat.NewPlainPasswordStore(storePath).UpsertUserPassword(user.ID, user.Username, "faye-password", user.VoceChatEmail, user.VoceChatUserID); err != nil {
+		t.Fatalf("seed plain password record: %v", err)
+	}
+
+	stubVoceChatAdminUpdateUser(t, func(ctx context.Context, config vocechat.Config, uid int64, request vocechat.UpdateUserRequest) (*vocechat.User, error) {
+		if uid != 57 {
+			t.Fatalf("vc uid = %d", uid)
+		}
+		if request.Name == nil || *request.Name != "faye_new" {
+			t.Fatalf("vc name request = %#v", request.Name)
+		}
+		if request.Password != nil {
+			t.Fatalf("profile rename should not send password update")
+		}
+		return nil, errors.New("vc rename failed")
+	})
+
+	if err := UpdateUser(user, dto.UserInfoDto{Username: "faye_new"}); err != nil {
+		t.Fatalf("profile update should not fail when vc name sync fails: %v", err)
+	}
+
+	updated := mustGetUserByUsername(t, "faye_new")
+	if updated.VoceChatSyncStatus != models.VoceChatSyncStatusFailed || !strings.Contains(updated.VoceChatSyncError, "vc rename failed") {
+		t.Fatalf("vc rename failure not recorded: %#v", updated)
+	}
+	record, ok, err := vocechat.NewPlainPasswordStore(storePath).GetUserPassword(user.ID)
+	if err != nil {
+		t.Fatalf("read plain password record: %v", err)
+	}
+	if !ok || record.Username != "faye_new" || record.Password != "faye-password" || record.VoceChatUserID != "57" {
+		t.Fatalf("plain password metadata not updated: ok=%v record=%#v", ok, record)
 	}
 }
 

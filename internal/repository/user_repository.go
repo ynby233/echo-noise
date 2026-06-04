@@ -22,7 +22,7 @@ var (
 
 func GetUserByUsername(username string) (*models.User, error) {
 	var user models.User
-	err := database.DB.Where("LOWER(username) = ?", strings.ToLower(strings.TrimSpace(username))).First(&user).Error
+	err := database.DB.Where("username = ?", strings.TrimSpace(username)).First(&user).Error
 	if err != nil {
 		return nil, err
 	}

@@ -21,8 +21,8 @@ export const useUser = () => {
         const response = await userStore.register(userToRegister);
         if (response) {
             toast.add({
-                title: '注册成功',
-                description: '欢迎使用！请登录',
+                title: '申请已提交',
+                description: '请等待管理员审核后再登录',
                 icon: 'i-fluent-checkmark-starburst-16-filled',
                 color: 'green',
                 timeout: 1000,

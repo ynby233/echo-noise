@@ -397,6 +397,7 @@
           <UForm :state="registerForm" @submit.prevent="onRegisterSubmit">
             <div class="space-y-3">
               <UInput v-model="registerForm.username" placeholder="用户名" />
+              <p class="text-xs text-gray-500">用户名 2-20 字符，支持中文、日文、英文字母、数字和下划线，大小写敏感。</p>
               <UInput
                 ref="registerPasswordInput"
                 v-model="registerForm.password"
@@ -679,7 +680,7 @@ const onRegisterSubmit = async () => {
     const res = await fetch(`${baseApi}/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload) })
     const data = await res.json().catch(() => ({}))
     if (!res.ok || data.code !== 1) throw new Error(data?.msg || '注册失败')
-    useToast().add({ title: '注册成功', color: 'green' })
+    useToast().add({ title: '申请已提交', description: '请等待管理员审核后再登录', color: 'green' })
     authMode.value = 'login'
   } catch (e: any) {
     useToast().add({ title: '注册失败', description: e.message || '请稍后重试', color: 'red' })

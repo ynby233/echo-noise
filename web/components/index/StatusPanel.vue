@@ -429,11 +429,104 @@
                 </div>
                 <div class="text-xs mt-2" :class="theme.mutedText">未登录时展示该组件；登录后显示当前用户的头像与签名</div>
               </div>
-              <div id="site-register-section" v-if="isSectionVisible('site-register')" class="flex items-center rounded-lg p-3 justify-between" :class="theme.subtleBg">
-                <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-user-plus" class="w-4 h-4" /> <span>新用户注册</span></div>
-                <div class="flex items-center gap-4">
-                  <UToggle v-model="registerEnabled" />
-                  <UButton color="green" @click="saveRegisterConfig" class="shadow">保存</UButton>
+              <div id="site-register-section" v-if="isSectionVisible('site-register')" class="space-y-3">
+                <div class="flex flex-col sm:flex-row items-start sm:items-center rounded-lg p-3 justify-between gap-3 sm:gap-0" :class="theme.subtleBg">
+                  <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-user-plus" class="w-4 h-4" /> <span>新用户注册</span></div>
+                  <div class="flex items-center gap-4 w-full sm:w-auto justify-end">
+                    <UToggle v-model="registerEnabled" />
+                    <UButton color="green" @click="saveRegisterConfig" class="shadow">保存</UButton>
+                  </div>
+                </div>
+
+                <div class="rounded-lg p-4 space-y-4" :class="theme.subtleBg">
+                  <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div class="flex items-center gap-2" :class="theme.text">
+                      <UIcon name="i-heroicons-chat-bubble-left-right" class="w-4 h-4" />
+                      <span>VoceChat 配置</span>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap justify-end">
+                      <UBadge :color="voceChatConfig.configured ? 'green' : 'gray'" variant="soft">{{ voceChatConfig.configured ? '已就绪' : '未就绪' }}</UBadge>
+                      <UBadge :color="voceChatConfig.adminCredentialConfigured ? 'green' : 'orange'" variant="soft">凭据 {{ voceChatConfig.adminCredentialConfigured ? '已配置' : '未配置' }}</UBadge>
+                      <UButton variant="soft" color="indigo" @click="fetchRegisterConfig">刷新</UButton>
+                      <UButton color="green" :loading="savingVoceChatConfig" @click="saveVoceChatConfig">保存</UButton>
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
+                      <span class="text-sm" :class="theme.text">启用外挂</span>
+                      <UToggle v-model="voceChatConfig.enabled" />
+                    </label>
+                    <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
+                      <span class="text-sm" :class="theme.text">登录校验</span>
+                      <UToggle v-model="voceChatConfig.loginVerificationEnabled" />
+                    </label>
+                    <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
+                      <span class="text-sm" :class="theme.text">本地兜底</span>
+                      <UToggle v-model="voceChatConfig.localFallbackEnabled" />
+                    </label>
+                    <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
+                      <span class="text-sm" :class="theme.text">联系人可见性</span>
+                      <UToggle v-model="voceChatConfig.contactsEnabled" />
+                    </label>
+                  </div>
+
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-sm mb-1 block" :class="theme.mutedText">服务地址</label>
+                      <UInput v-model="voceChatConfig.baseURL" placeholder="https://chat.example.com" />
+                      <div class="text-xs mt-1" :class="theme.mutedText">当前：{{ voceChatConfig.baseURLConfigured ? '已配置' : '未配置' }}</div>
+                    </div>
+                    <div>
+                      <label class="text-sm mb-1 block" :class="theme.mutedText">邮箱域名</label>
+                      <UInput v-model="voceChatConfig.emailDomain" placeholder="vc.com" />
+                    </div>
+                    <div>
+                      <label class="text-sm mb-1 block" :class="theme.mutedText">管理员用户名</label>
+                      <UInput v-model="voceChatConfig.adminUsername" placeholder="新用户名（留空不变）" />
+                    </div>
+                    <div>
+                      <label class="text-sm mb-1 block" :class="theme.mutedText">管理员密码</label>
+                      <UInput v-model="voceChatConfig.adminPassword" type="password" placeholder="新密码（留空不变）" />
+                    </div>
+                    <div>
+                      <label class="text-sm mb-1 block" :class="theme.mutedText">管理员 Token</label>
+                      <UInput v-model="voceChatConfig.adminToken" type="password" placeholder="新 Token（留空不变）" />
+                    </div>
+                    <div>
+                      <label class="text-sm mb-1 block" :class="theme.mutedText">Third Party Secret</label>
+                      <UInput v-model="voceChatConfig.thirdPartySecret" type="password" placeholder="新 Secret（留空不变）" />
+                      <div class="text-xs mt-1" :class="theme.mutedText">当前：{{ voceChatConfig.thirdPartySecretConfigured ? '已配置' : '未配置' }}</div>
+                    </div>
+                    <div>
+                      <label class="text-sm mb-1 block" :class="theme.mutedText">联系人缓存 TTL（秒）</label>
+                      <UInput v-model.number="voceChatConfig.contactsCacheTTLSeconds" type="number" min="1" placeholder="60" />
+                    </div>
+                    <div>
+                      <label class="text-sm mb-1 block" :class="theme.mutedText">健康状态</label>
+                      <div class="rounded border px-3 py-2 text-sm min-h-[40px]" :class="[theme.border, theme.text]">
+                        <span>{{ voceChatHealthLabel }}</span>
+                        <span v-if="voceChatConfig.lastHealthCheckAt" class="ml-2" :class="theme.mutedText">{{ formatShanghai(voceChatConfig.lastHealthCheckAt) }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div v-if="voceChatConfig.lastHealthError" class="rounded border px-3 py-2 text-xs" :class="[theme.border, theme.mutedText]">{{ voceChatConfig.lastHealthError }}</div>
+
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
+                      <span class="text-sm" :class="theme.text">清除已存密码</span>
+                      <UToggle v-model="voceChatClear.adminPassword" />
+                    </label>
+                    <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
+                      <span class="text-sm" :class="theme.text">清除已存 Token</span>
+                      <UToggle v-model="voceChatClear.adminToken" />
+                    </label>
+                    <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
+                      <span class="text-sm" :class="theme.text">清除已存 Secret</span>
+                      <UToggle v-model="voceChatClear.thirdPartySecret" />
+                    </label>
+                  </div>
                 </div>
               </div>
                 <div id="site-pwa-section" v-if="isSectionVisible('site-pwa')" class="rounded-lg p-4" :class="theme.subtleBg">
@@ -1172,6 +1265,61 @@
                   <div class="flex justify-end gap-2 mt-3">
                     <UButton variant="soft" color="indigo" @click="loadSmtp">刷新</UButton>
                     <UButton color="green" @click="saveSmtp">保存</UButton>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="registration-review-section" v-if="isAdmin && isSectionVisible('registration-review')" class="col-span-12">
+            <div :class="adminPanelCardClass">
+              <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
+                <div class="font-semibold flex items-center gap-2" :class="theme.text">
+                  <UIcon name="i-heroicons-user-plus" class="w-5 h-5" />
+                  <span>注册审核</span>
+                </div>
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+                  <USelect v-model="registrationStatusFilter" :options="registrationStatusOptions" class="w-full sm:w-36" />
+                  <UButton variant="soft" color="indigo" :loading="registrationApplicationsLoading" @click="refreshRegistrationApplications">刷新</UButton>
+                </div>
+              </div>
+              <div class="px-4 pb-4">
+                <div :class="adminSubtleCardClass">
+                  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                    <div class="text-sm" :class="theme.text">待审核 {{ registrationPendingCount }} / 5</div>
+                    <div class="text-sm" :class="theme.mutedText">共 {{ registrationApplicationsTotal }} 条</div>
+                  </div>
+                  <div v-if="registrationApplicationsLoading" class="py-8 text-center text-sm" :class="theme.mutedText">加载中...</div>
+                  <div v-else-if="registrationApplications.length === 0" class="py-8 text-center text-sm" :class="theme.mutedText">暂无注册申请</div>
+                  <div v-else class="space-y-3">
+                    <div v-for="app in registrationApplications" :key="app.id || app.application_id" class="rounded border p-3 space-y-3" :class="theme.border">
+                      <div class="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr_1fr_auto] gap-3 lg:items-center">
+                        <div class="min-w-0">
+                          <div class="flex items-center gap-2 flex-wrap">
+                            <span class="font-medium truncate" :class="theme.text">{{ app.username }}</span>
+                            <UBadge :color="registrationStatusColor(app.status)" variant="soft">{{ registrationStatusLabel(app.status) }}</UBadge>
+                          </div>
+                          <div class="text-xs mt-1 break-all" :class="theme.mutedText">申请 ID：{{ app.application_id }}</div>
+                        </div>
+                        <div class="text-sm min-w-0">
+                          <div :class="theme.mutedText">VoceChat</div>
+                          <div class="flex items-center gap-2 flex-wrap mt-1">
+                            <UBadge :color="voceChatProvisionColor(app.voce_chat_sync_status)" variant="soft">{{ voceChatProvisionLabel(app.voce_chat_sync_status) }}</UBadge>
+                            <span class="truncate" :class="theme.text">{{ app.voce_chat_email || '未绑定邮箱' }}</span>
+                          </div>
+                        </div>
+                        <div class="text-sm">
+                          <div :class="theme.mutedText">提交时间</div>
+                          <div class="mt-1" :class="theme.text">{{ formatShanghai(app.created_at || '') || '-' }}</div>
+                        </div>
+                        <div class="flex items-center justify-end gap-2">
+                          <UButton size="sm" color="green" :disabled="app.status !== 'pending'" :loading="registrationReviewBusy[String(app.id)] === 'approve'" @click="approveRegistrationApplication(app)">通过</UButton>
+                          <UButton size="sm" color="red" variant="soft" :disabled="app.status !== 'pending'" :loading="registrationReviewBusy[String(app.id)] === 'reject'" @click="rejectRegistrationApplication(app)">拒绝</UButton>
+                        </div>
+                      </div>
+                      <UInput v-model="registrationReviewNotes[String(app.id)]" placeholder="审核备注" />
+                      <div v-if="app.voce_chat_sync_error" class="text-xs break-all" :class="theme.mutedText">{{ app.voce_chat_sync_error }}</div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2209,7 +2357,7 @@ type AdminSectionKey =
   'dashboard' | 'user' | 'site' | 'notify' | 'attachments' | 'db' | 'version' | 'security' | 'access-logs' | 'site-visits' | 'login-audits' |
   'site-register' | 'site-pwa' | 'site-github-card' | 'site-github-login' | 'site-announcement' | 'site-music' |
   'site-default-theme' | 'site-social-links' | 'site-ads' | 'site-feed' | 'site-rss' | 'hitokoto' | 'life-countdown' |
-  'site-configs' | 'comments' | 'email' | 'admin-users' |
+  'site-configs' | 'comments' | 'email' | 'admin-users' | 'registration-review' |
   'storage'
 const activeSection = ref<AdminSectionKey>('dashboard')
 type AdminNavItem = { key: AdminSectionKey, label: string, icon: string }
@@ -2263,6 +2411,7 @@ const adminNavGroups = computed<AdminNavGroup[]>(() => {
       icon: 'i-heroicons-shield-check',
       items: [
         { key: 'admin-users', label: '用户管理', icon: 'i-heroicons-user-group' },
+        { key: 'registration-review', label: '注册审核', icon: 'i-heroicons-user-plus' },
         { key: 'access-logs', label: '访问日志', icon: 'i-heroicons-eye' },
         { key: 'site-visits', label: '站点访问', icon: 'i-heroicons-home' },
         { key: 'login-audits', label: '登录审计', icon: 'i-heroicons-clipboard-document-check' },
@@ -2396,6 +2545,97 @@ const isLifeBirthdayInvalid = computed(() => {
 
 // 新用户注册配置相关
 const registerEnabled = ref(true);
+
+type RegistrationApplication = {
+  id: number
+  application_id: string
+  username: string
+  status: string
+  voce_chat_user_id?: string
+  voce_chat_email?: string
+  voce_chat_sync_status?: string
+  voce_chat_sync_error?: string
+  local_user_id?: number
+  reviewer_user_id?: number
+  review_note?: string
+  reviewed_at?: string
+  created_at?: string
+  updated_at?: string
+}
+
+type RegistrationApplicationListData = {
+  items?: RegistrationApplication[]
+  total?: number
+}
+
+type VoceChatConfigState = {
+  enabled: boolean
+  configured: boolean
+  baseURLConfigured: boolean
+  adminCredentialConfigured: boolean
+  thirdPartySecretConfigured: boolean
+  baseURL: string
+  adminUsername: string
+  adminPassword: string
+  adminToken: string
+  thirdPartySecret: string
+  emailDomain: string
+  loginVerificationEnabled: boolean
+  localFallbackEnabled: boolean
+  contactsEnabled: boolean
+  contactsCacheTTLSeconds: number | string
+  lastHealthStatus: string
+  lastHealthError: string
+  lastHealthCheckAt: string
+}
+
+const registrationStatusOptions = [
+  { label: '待审核', value: 'pending' },
+  { label: '已通过', value: 'approved' },
+  { label: '已拒绝', value: 'rejected' },
+  { label: '全部', value: '' }
+]
+const registrationStatusFilter = ref('pending')
+const registrationApplications = ref<RegistrationApplication[]>([])
+const registrationApplicationsTotal = ref(0)
+const registrationApplicationsLoading = ref(false)
+const registrationReviewNotes = reactive<Record<string, string>>({})
+const registrationReviewBusy = reactive<Record<string, string>>({})
+const registrationPendingCount = computed(() => registrationApplications.value.filter((app) => app.status === 'pending').length)
+
+const voceChatConfig = reactive<VoceChatConfigState>({
+  enabled: false,
+  configured: false,
+  baseURLConfigured: false,
+  adminCredentialConfigured: false,
+  thirdPartySecretConfigured: false,
+  baseURL: '',
+  adminUsername: '',
+  adminPassword: '',
+  adminToken: '',
+  thirdPartySecret: '',
+  emailDomain: 'vc.com',
+  loginVerificationEnabled: false,
+  localFallbackEnabled: false,
+  contactsEnabled: false,
+  contactsCacheTTLSeconds: 60,
+  lastHealthStatus: '',
+  lastHealthError: '',
+  lastHealthCheckAt: ''
+})
+const voceChatClear = reactive({
+  adminPassword: false,
+  adminToken: false,
+  thirdPartySecret: false
+})
+const savingVoceChatConfig = ref(false)
+const voceChatHealthLabel = computed(() => {
+  const status = String(voceChatConfig.lastHealthStatus || '').trim()
+  if (!status) return '未检查'
+  if (status === 'ok') return '正常'
+  if (status === 'failed') return '失败'
+  return status
+})
 const sidebarOpen = ref(false)
 const sidebarCollapsed = ref(
   typeof window !== 'undefined' ? localStorage.getItem('adminSidebarCollapsed') === '1' : false
@@ -2685,6 +2925,9 @@ const setActive = async (name: AdminSectionKey, evt?: MouseEvent) => {
   if (name === 'storage') {
     loadAttachmentStorageConfig()
     loadStorageConfig()
+  }
+  if (name === 'registration-review') {
+    refreshRegistrationApplications()
   }
   try {
     const main = adminMain.value
@@ -3016,56 +3259,218 @@ const saveAdminTheme = async () => {
 
 // 页面加载时获取配置
 const fetchRegisterConfig = async () => {
-    try {
-        const res = await fetch(`${baseApi}/frontend/config`, { credentials: 'include' });
-        const data = await res.json();
-        if (data.code === 1 && typeof data.data.allowRegistration === 'boolean') {
-            registerEnabled.value = data.data.allowRegistration;
-        }
-    } catch (e: any) {
-        useToast().add({ title: '获取注册配置失败', color: 'red' });
+  try {
+    const res: any = await getRequest<any>('frontend/config', undefined, { credentials: 'include', silent: true })
+    if (res && res.code === 1) {
+      const data = res.data || {}
+      if (typeof data.allowRegistration === 'boolean') {
+        registerEnabled.value = data.allowRegistration
+      }
+      applyVoceChatPublicConfig(data.voceChatConfig)
+    } else {
+      throw new Error(res?.msg || '获取注册配置失败')
     }
-};
-onMounted(fetchRegisterConfig);
+  } catch (e: any) {
+    useToast().add({ title: '获取注册配置失败', description: e?.message, color: 'red' })
+  }
+}
 
-// 保存配置
+const applyVoceChatPublicConfig = (raw: any) => {
+  const cfg = raw && typeof raw === 'object' ? raw : {}
+  voceChatConfig.enabled = !!cfg.enabled
+  voceChatConfig.configured = !!cfg.configured
+  voceChatConfig.baseURLConfigured = !!cfg.baseURLConfigured
+  voceChatConfig.adminCredentialConfigured = !!cfg.adminCredentialConfigured
+  voceChatConfig.thirdPartySecretConfigured = !!cfg.thirdPartySecretConfigured
+  voceChatConfig.baseURL = ''
+  voceChatConfig.adminUsername = ''
+  voceChatConfig.adminPassword = ''
+  voceChatConfig.adminToken = ''
+  voceChatConfig.thirdPartySecret = ''
+  voceChatConfig.emailDomain = String(cfg.emailDomain || 'vc.com').trim() || 'vc.com'
+  voceChatConfig.loginVerificationEnabled = !!cfg.loginVerificationEnabled
+  voceChatConfig.localFallbackEnabled = !!cfg.localFallbackEnabled
+  voceChatConfig.contactsEnabled = !!cfg.contactsEnabled
+  const ttl = Number(cfg.contactsCacheTTLSeconds || 60)
+  voceChatConfig.contactsCacheTTLSeconds = Number.isFinite(ttl) && ttl > 0 ? ttl : 60
+  voceChatConfig.lastHealthStatus = String(cfg.lastHealthStatus || '')
+  voceChatConfig.lastHealthError = String(cfg.lastHealthError || '')
+  voceChatConfig.lastHealthCheckAt = String(cfg.lastHealthCheckAt || '')
+  voceChatClear.adminPassword = false
+  voceChatClear.adminToken = false
+  voceChatClear.thirdPartySecret = false
+}
+
+onMounted(fetchRegisterConfig)
+
 const saveRegisterConfig = async () => {
-    try {
-        // 先获取完整配置
-        const resConfig = await fetch(`${baseApi}/frontend/config`, { credentials: 'include' });
-        const dataConfig = await resConfig.json();
-        let payload = {};
-        if (dataConfig.code === 1) {
-            payload = {
-                ...dataConfig.data,
-                allowRegistration: registerEnabled.value
-            };
-        } else {
-            // 如果获取失败，只发 allowRegistration（兼容旧接口）
-            payload = { allowRegistration: registerEnabled.value };
-        }
-
-        const res = await fetch(`${baseApi}/settings`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-        if (data.code === 1) {
-            useToast().add({ title: '保存成功', color: 'green' });
-        } else {
-            throw new Error(data.msg || '保存失败');
-        }
-    } catch (e: any) {
-        useToast().add({ title: '保存失败', color: 'red' });
+  try {
+    const res: any = await putRequest<any>('settings', { allowRegistration: registerEnabled.value }, { credentials: 'include' })
+    if (res && res.code === 1) {
+      useToast().add({ title: '保存成功', color: 'green' })
+      await fetchRegisterConfig()
+    } else {
+      throw new Error(res?.msg || '保存失败')
     }
-};
+  } catch (e: any) {
+    useToast().add({ title: '保存失败', description: e?.message, color: 'red' })
+  }
+}
+
+const buildVoceChatConfigPayload = () => {
+  const ttl = Number(voceChatConfig.contactsCacheTTLSeconds || 0)
+  if (!Number.isFinite(ttl) || ttl <= 0) {
+    throw new Error('联系人缓存 TTL 必须是正整数')
+  }
+  const payload: Record<string, any> = {
+    enabled: !!voceChatConfig.enabled,
+    loginVerificationEnabled: !!voceChatConfig.loginVerificationEnabled,
+    localFallbackEnabled: !!voceChatConfig.localFallbackEnabled,
+    contactsEnabled: !!voceChatConfig.contactsEnabled,
+    contactsCacheTTLSeconds: Math.floor(ttl)
+  }
+  const baseURL = String(voceChatConfig.baseURL || '').trim()
+  const adminUsername = String(voceChatConfig.adminUsername || '').trim()
+  const adminPassword = String(voceChatConfig.adminPassword || '').trim()
+  const adminToken = String(voceChatConfig.adminToken || '').trim()
+  const thirdPartySecret = String(voceChatConfig.thirdPartySecret || '').trim()
+  const emailDomain = String(voceChatConfig.emailDomain || '').trim()
+  if (baseURL) payload.baseURL = baseURL
+  if (adminUsername) payload.adminUsername = adminUsername
+  if (adminPassword) payload.adminPassword = adminPassword
+  if (adminToken) payload.adminToken = adminToken
+  if (thirdPartySecret) payload.thirdPartySecret = thirdPartySecret
+  if (emailDomain) payload.emailDomain = emailDomain
+  if (voceChatClear.adminPassword && !adminPassword) payload.clearAdminPassword = true
+  if (voceChatClear.adminToken && !adminToken) payload.clearAdminToken = true
+  if (voceChatClear.thirdPartySecret && !thirdPartySecret) payload.clearThirdPartySecret = true
+  return payload
+}
+
+const saveVoceChatConfig = async () => {
+  try {
+    savingVoceChatConfig.value = true
+    const payload = buildVoceChatConfigPayload()
+    const res: any = await putRequest<any>('settings', { voceChatConfig: payload }, { credentials: 'include' })
+    if (res && res.code === 1) {
+      useToast().add({ title: 'VoceChat 配置已保存', color: 'green' })
+      await fetchRegisterConfig()
+    } else {
+      throw new Error(res?.msg || '保存失败')
+    }
+  } catch (e: any) {
+    useToast().add({ title: '保存 VoceChat 配置失败', description: e?.message, color: 'red' })
+  } finally {
+    savingVoceChatConfig.value = false
+  }
+}
 
 const userStore = useUserStore()
 const { login, register, logout } = useUser()
 const router = useRouter()
 const userToken = ref('')
+
+const registrationStatusLabel = (status: string) => {
+  const value = String(status || '')
+  if (value === 'pending') return '待审核'
+  if (value === 'approved') return '已通过'
+  if (value === 'rejected') return '已拒绝'
+  return value || '未知'
+}
+const registrationStatusColor = (status: string) => {
+  const value = String(status || '')
+  if (value === 'pending') return 'orange'
+  if (value === 'approved') return 'green'
+  if (value === 'rejected') return 'red'
+  return 'gray'
+}
+const voceChatProvisionLabel = (status?: string) => {
+  const value = String(status || '').trim()
+  if (!value || value === 'none') return '未创建'
+  if (value === 'created') return '已预创建'
+  if (value === 'linked') return '已绑定'
+  if (value === 'failed') return '失败'
+  return value
+}
+const voceChatProvisionColor = (status?: string) => {
+  const value = String(status || '').trim()
+  if (value === 'created') return 'blue'
+  if (value === 'linked') return 'green'
+  if (value === 'failed') return 'red'
+  return 'gray'
+}
+
+const refreshRegistrationApplications = async () => {
+  try {
+    registrationApplicationsLoading.value = true
+    const params: Record<string, any> = { limit: 50, offset: 0 }
+    const status = String(registrationStatusFilter.value || '').trim()
+    if (status) params.status = status
+    const res: any = await getRequest<any>('registration/applications', params, { credentials: 'include', silent: true })
+    if (res && res.code === 1) {
+      const data: RegistrationApplicationListData = res.data || {}
+      const items = Array.isArray(data.items) ? data.items : []
+      registrationApplications.value = items
+      registrationApplicationsTotal.value = Number(data.total ?? items.length) || 0
+      for (const item of items) {
+        const key = String(item.id)
+        if (registrationReviewNotes[key] === undefined) {
+          registrationReviewNotes[key] = item.review_note || ''
+        }
+      }
+    } else {
+      throw new Error(res?.msg || '加载注册申请失败')
+    }
+  } catch (e: any) {
+    useToast().add({ title: '加载注册申请失败', description: e?.message, color: 'red' })
+  } finally {
+    registrationApplicationsLoading.value = false
+  }
+}
+
+const approveRegistrationApplication = async (app: RegistrationApplication) => {
+  const key = String(app.id)
+  try {
+    if (!window.confirm(`确定通过 ${app.username} 的注册申请吗？`)) return
+    registrationReviewBusy[key] = 'approve'
+    const note = String(registrationReviewNotes[key] || '').trim()
+    const res: any = await putRequest<any>(`registration/applications/${app.id}/approve`, { note }, { credentials: 'include' })
+    if (res && res.code === 1) {
+      useToast().add({ title: '已通过注册申请', color: 'green' })
+      await Promise.all([refreshRegistrationApplications(), userStore.getStatus()])
+    } else {
+      throw new Error(res?.msg || '审核失败')
+    }
+  } catch (e: any) {
+    useToast().add({ title: '审核失败', description: e?.message, color: 'red' })
+  } finally {
+    delete registrationReviewBusy[key]
+  }
+}
+
+const rejectRegistrationApplication = async (app: RegistrationApplication) => {
+  const key = String(app.id)
+  try {
+    if (!window.confirm(`确定拒绝 ${app.username} 的注册申请吗？`)) return
+    registrationReviewBusy[key] = 'reject'
+    const note = String(registrationReviewNotes[key] || '').trim()
+    const res: any = await putRequest<any>(`registration/applications/${app.id}/reject`, { note }, { credentials: 'include' })
+    if (res && res.code === 1) {
+      useToast().add({ title: '已拒绝注册申请', color: 'green' })
+      await refreshRegistrationApplications()
+    } else {
+      throw new Error(res?.msg || '审核失败')
+    }
+  } catch (e: any) {
+    useToast().add({ title: '审核失败', description: e?.message, color: 'red' })
+  } finally {
+    delete registrationReviewBusy[key]
+  }
+}
+
+watch(registrationStatusFilter, () => {
+  if (activeSection.value === 'registration-review') refreshRegistrationApplications()
+})
 
 const attackLogs = ref<any[]>([])
 const accessLogs = ref<any[]>([])

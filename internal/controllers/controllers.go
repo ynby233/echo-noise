@@ -643,6 +643,70 @@ func UpdateUserAdmin(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.OK[any](nil, models.UpdateUserSuccessMessage))
 }
 
+type registrationApplicationReviewRequest struct {
+	Note string `json:"note"`
+}
+
+func ListRegistrationApplications(c *gin.Context) {
+	_, err := checkAdmin(c)
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
+		return
+	}
+
+	status := strings.TrimSpace(c.Query("status"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	result, err := services.ListRegistrationApplications(status, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string]("获取注册申请失败: "+err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK(result, models.QuerySuccessMessage))
+}
+
+func ApproveRegistrationApplication(c *gin.Context) {
+	reviewerUserID, err := checkAdmin(c)
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
+		return
+	}
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusOK, dto.Fail[string](models.InvalidIDMessage))
+		return
+	}
+	var req registrationApplicationReviewRequest
+	_ = c.ShouldBindJSON(&req)
+	user, err := services.ApproveRegistrationApplication(uint(id), reviewerUserID, req.Note)
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
+		return
+	}
+	user.Password = ""
+	c.JSON(http.StatusOK, dto.OK(user, models.UpdateUserSuccessMessage))
+}
+
+func RejectRegistrationApplication(c *gin.Context) {
+	reviewerUserID, err := checkAdmin(c)
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
+		return
+	}
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusOK, dto.Fail[string](models.InvalidIDMessage))
+		return
+	}
+	var req registrationApplicationReviewRequest
+	_ = c.ShouldBindJSON(&req)
+	if err := services.RejectRegistrationApplication(uint(id), reviewerUserID, req.Note); err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK[any](nil, models.UpdateUserSuccessMessage))
+}
+
 func GetUserInfo(c *gin.Context) {
 	user, err := checkUser(c)
 	if err != nil {
@@ -670,7 +734,8 @@ func hasAdminOnlySettingFields(setting dto.SettingDto) bool {
 		setting.StorageEnabled != nil ||
 		setting.StorageConfig != nil ||
 		setting.AttachmentStorageEnabled != nil ||
-		setting.AttachmentStorageConfig != nil
+		setting.AttachmentStorageConfig != nil ||
+		setting.VoceChatConfig != nil
 }
 
 func UpdateSetting(c *gin.Context) {
@@ -781,6 +846,10 @@ func UpdateSetting(c *gin.Context) {
 	}
 	if setting.AttachmentStorageConfig != nil {
 		settingMap["attachmentStorageConfig"] = setting.AttachmentStorageConfig
+		hasSiteConfigUpdate = true
+	}
+	if setting.VoceChatConfig != nil {
+		settingMap["voceChatConfig"] = setting.VoceChatConfig
 		hasSiteConfigUpdate = true
 	}
 

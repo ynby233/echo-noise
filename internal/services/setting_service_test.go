@@ -117,6 +117,55 @@ func TestRSSConfigDefaultsToAdminMembersAndHidesMemberListFromPublic(t *testing.
 	}
 }
 
+func TestFrontendConfigExposesVoceChatStatusWithoutSecrets(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	if err := db.Create(&models.SiteConfig{
+		VoceChatEnabled:                  true,
+		VoceChatBaseURL:                  "https://vc.example.test/",
+		VoceChatAdminUsername:            "admin",
+		VoceChatAdminPassword:            "admin-password",
+		VoceChatAdminToken:               "admin-token",
+		VoceChatThirdPartySecret:         "third-party-secret",
+		VoceChatEmailDomain:              "vc.com",
+		VoceChatLoginVerificationEnabled: true,
+		VoceChatContactsEnabled:          true,
+		VoceChatContactsCacheTTLSeconds:  120,
+		VoceChatLastHealthStatus:         "ok",
+		VoceChatLastHealthError:          "",
+	}).Error; err != nil {
+		t.Fatalf("create site config: %v", err)
+	}
+
+	config, err := GetFrontendConfig()
+	if err != nil {
+		t.Fatalf("get frontend config: %v", err)
+	}
+	voceConfig, ok := config["voceChatConfig"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("voceChatConfig has type %T", config["voceChatConfig"])
+	}
+	for _, secretKey := range []string{"adminPassword", "adminToken", "thirdPartySecret"} {
+		if _, exists := voceConfig[secretKey]; exists {
+			t.Fatalf("voceChatConfig exposes secret key %s", secretKey)
+		}
+	}
+	if got := voceConfig["enabled"]; got != true {
+		t.Fatalf("enabled = %#v, want true", got)
+	}
+	if got := voceConfig["configured"]; got != true {
+		t.Fatalf("configured = %#v, want true", got)
+	}
+	if got := voceConfig["adminCredentialConfigured"]; got != true {
+		t.Fatalf("adminCredentialConfigured = %#v, want true", got)
+	}
+	if got := voceConfig["thirdPartySecretConfigured"]; got != true {
+		t.Fatalf("thirdPartySecretConfigured = %#v, want true", got)
+	}
+	if got := voceConfig["contactsCacheTTLSeconds"]; got != 120 {
+		t.Fatalf("contactsCacheTTLSeconds = %#v, want 120", got)
+	}
+}
+
 func TestGenerateRSSExportsOnlySelectedMembersPublicMessages(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db := setupUserServiceTestDB(t)
