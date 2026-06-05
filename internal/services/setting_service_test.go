@@ -190,6 +190,28 @@ func TestApplyVoceChatConfigAllowsAdminTokenWithoutAdminEmail(t *testing.T) {
 	}
 }
 
+func TestApplyVoceChatConfigResetsStaleHealthWhenConnectionSettingsChange(t *testing.T) {
+	now := time.Now().UTC()
+	config := &models.SiteConfig{
+		VoceChatEnabled:           true,
+		VoceChatBaseURL:           "https://vc.example.test",
+		VoceChatAdminUsername:     "admin@vc.com",
+		VoceChatAdminPassword:     "secret",
+		VoceChatLastHealthStatus:  "ok",
+		VoceChatLastHealthError:   "",
+		VoceChatLastHealthCheckAt: &now,
+	}
+
+	if err := applyVoceChatConfigUpdate(config, map[string]interface{}{
+		"baseURL": "https://wrong.example.test",
+	}); err != nil {
+		t.Fatalf("apply voce config: %v", err)
+	}
+	if config.VoceChatLastHealthStatus != "" || config.VoceChatLastHealthError != "" || config.VoceChatLastHealthCheckAt != nil {
+		t.Fatalf("stale vc health was not reset: %#v", config)
+	}
+}
+
 func TestGenerateRSSExportsOnlySelectedMembersPublicMessages(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db := setupUserServiceTestDB(t)

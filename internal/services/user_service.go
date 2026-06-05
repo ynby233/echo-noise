@@ -127,6 +127,34 @@ func existingUser(username string) (bool, error) {
 	return false, err
 }
 
+func usernameCaseFoldReserved(username string) (bool, error) {
+	username = strings.TrimSpace(username)
+	if username == "" {
+		return false, nil
+	}
+
+	users, err := repository.GetAllUsers()
+	if err != nil {
+		return false, err
+	}
+	for _, user := range users {
+		if user != nil && strings.EqualFold(strings.TrimSpace(user.Username), username) {
+			return true, nil
+		}
+	}
+
+	applications, _, err := repository.ListRegistrationApplications(models.RegistrationApplicationStatusPending, maxPendingRegistrationApplications, 0)
+	if err != nil {
+		return false, err
+	}
+	for _, application := range applications {
+		if strings.EqualFold(strings.TrimSpace(application.Username), username) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func Register(userdto dto.RegisterDto) error {
 	username := strings.TrimSpace(userdto.Username)
 	if username == "" || userdto.Password == "" {
@@ -150,6 +178,14 @@ func Register(userdto dto.RegisterDto) error {
 	}
 	if hasPending {
 		return errors.New("该用户名正在审核中")
+	}
+
+	caseFoldReserved, err := usernameCaseFoldReserved(username)
+	if err != nil {
+		return errors.New(models.DatabaseErrorMessage)
+	}
+	if caseFoldReserved {
+		return errors.New(models.UsernameAlreadyExistsMessage)
 	}
 
 	pendingCount, err := repository.CountPendingRegistrationApplications()
@@ -492,7 +528,7 @@ func syncVoceChatBoundUserUpdate(user *models.User, request vocechat.UpdateUserR
 	if !config.Enabled {
 		return nil
 	}
-	required := requireForLoginVerification && config.LoginVerificationEnabled
+	required := requireForLoginVerification
 	if !config.IsReady() {
 		err := errors.New("VoceChat 未配置完成")
 		if required {
@@ -814,6 +850,46 @@ func ChangePassword(user *models.User, userdto dto.UserInfoDto) error {
 	return saveLocalUserPassword(user, newPassword)
 }
 
+func verifyVoceChatPasswordForPasswordChange(user *models.User, config vocechat.Config, plain string) (bool, error) {
+	response, err := voceChatPasswordLogin(context.Background(), config, strings.TrimSpace(user.VoceChatEmail), plain)
+	if err == nil {
+		recordVoceChatLoginHealth("ok", nil)
+		applyVoceChatLoginResponse(user, response)
+		return true, nil
+	}
+
+	if isVoceChatCredentialRejected(err) {
+		recordVoceChatLoginHealth("failed", err)
+		return false, errors.New(models.PasswordIncorrectMessage)
+	}
+
+	recordVoceChatLoginHealth("failed", err)
+	if config.LocalFallbackEnabled {
+		return false, nil
+	}
+	return false, errors.New("VoceChat 登录校验暂不可用，请稍后再试或联系管理员开启本地兜底")
+}
+
+func verifyPasswordChangeOldPassword(user *models.User, old string) error {
+	config, voceLoginEnabled, err := loadVoceChatLoginConfig()
+	if err != nil {
+		return errors.New(models.DatabaseErrorMessage)
+	}
+	if shouldUseVoceChatLogin(user, config, voceLoginEnabled) {
+		verified, err := verifyVoceChatPasswordForPasswordChange(user, config, old)
+		if err != nil {
+			return err
+		}
+		if verified {
+			return nil
+		}
+	}
+	if !passwordMatchesStored(user.Password, old) {
+		return errors.New(models.PasswordIncorrectMessage)
+	}
+	return nil
+}
+
 // ChangePasswordWithOld 验证旧密码后更新为新密码（兼容历史明文/MD5/bcrypt）
 func ChangePasswordWithOld(user *models.User, old string, new string) error {
 	if user == nil {
@@ -825,42 +901,15 @@ func ChangePasswordWithOld(user *models.User, old string, new string) error {
 		return errors.New(models.PasswordCannotBeEmptyMessage)
 	}
 
-	// 校验旧密码是否正确（兼容历史存储格式）
-	pw := strings.TrimSpace(user.Password)
-	md5old := pkg.MD5Encrypt(old)
-	isMD5 := len(pw) == 32 && func(s string) bool {
-		for i := 0; i < len(s); i++ {
-			c := s[i]
-			if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F') {
-				return false
-			}
-		}
-		return true
-	}(pw)
-
-	matched := false
-	if strings.HasPrefix(pw, "$2a$") || strings.HasPrefix(pw, "$2b$") || strings.HasPrefix(pw, "$2y$") {
-		if bcrypt.CompareHashAndPassword([]byte(pw), []byte(old)) == nil {
-			matched = true
-		} else if bcrypt.CompareHashAndPassword([]byte(pw), []byte(md5old)) == nil {
-			matched = true
-		} else if bcrypt.CompareHashAndPassword([]byte(pw), []byte(strings.ToUpper(md5old))) == nil {
-			matched = true
-		}
-	} else if isMD5 {
-		matched = strings.EqualFold(pw, md5old)
-	} else {
-		matched = (pw == old)
-	}
-	if !matched {
-		return errors.New(models.PasswordIncorrectMessage)
+	if err := verifyPasswordChangeOldPassword(user, old); err != nil {
+		return err
 	}
 
 	// 新密码不得与旧密码一致
 	if old == new {
 		return errors.New(models.PasswordCannotBeSameAsBeforeMessage)
 	}
-	if bcrypt.CompareHashAndPassword([]byte(pw), []byte(new)) == nil {
+	if passwordMatchesStored(user.Password, new) {
 		return errors.New(models.PasswordCannotBeSameAsBeforeMessage)
 	}
 

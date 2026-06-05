@@ -481,7 +481,33 @@ func applyVoceChatConfigUpdate(config *models.SiteConfig, raw map[string]interfa
 			return fmt.Errorf("管理员邮箱格式无效，请填写 VoceChat 管理员邮箱，不要填写显示名")
 		}
 	}
+	if voceChatHealthAffectingConfigChanged(raw) {
+		config.VoceChatLastHealthStatus = ""
+		config.VoceChatLastHealthError = ""
+		config.VoceChatLastHealthCheckAt = nil
+	}
 	return nil
+}
+
+func voceChatHealthAffectingConfigChanged(raw map[string]interface{}) bool {
+	for _, key := range []string{
+		"enabled",
+		"baseURL",
+		"adminUsername",
+		"adminPassword",
+		"clearAdminPassword",
+		"adminToken",
+		"clearAdminToken",
+		"thirdPartySecret",
+		"clearThirdPartySecret",
+		"loginVerificationEnabled",
+		"contactsEnabled",
+	} {
+		if _, exists := raw[key]; exists {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeLifeCountdownBirthDate(value interface{}) (string, error) {

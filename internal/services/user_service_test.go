@@ -198,11 +198,21 @@ func TestRegisterRejectsInvalidOrDuplicatePendingUsernames(t *testing.T) {
 	if err := Register(dto.RegisterDto{Username: "Tom", Password: "secret-pass"}); err != nil {
 		t.Fatalf("register Tom: %v", err)
 	}
-	if err := Register(dto.RegisterDto{Username: "tom", Password: "secret-pass"}); err != nil {
-		t.Fatalf("case-sensitive username tom should be allowed: %v", err)
+	if err := Register(dto.RegisterDto{Username: "tom", Password: "secret-pass"}); err == nil {
+		t.Fatalf("case-fold duplicate pending username should be rejected")
 	}
 	if err := Register(dto.RegisterDto{Username: "Tom", Password: "secret-pass"}); err == nil {
 		t.Fatalf("duplicate pending username should be rejected")
+	}
+}
+
+func TestRegisterRejectsCaseFoldExistingUsername(t *testing.T) {
+	setupUserServiceTestDB(t)
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", filepath.Join(t.TempDir(), "plain-passwords.db"))
+	mustCreateUser(t, models.User{Username: "Tom", Password: models.HashPassword("tom"), Token: models.GenerateToken(32)})
+
+	if err := Register(dto.RegisterDto{Username: "tom", Password: "secret-pass"}); err == nil {
+		t.Fatalf("case-fold duplicate existing username should be rejected")
 	}
 }
 
@@ -464,11 +474,18 @@ func TestChangePasswordWithVoceChatSyncsRemoteThenLocalPassword(t *testing.T) {
 
 	user := mustCreateUser(t, models.User{
 		Username:           "dora",
-		Password:           models.HashPassword("old-password"),
+		Password:           models.HashPassword("stale-local-password"),
 		VoceChatEmail:      "dora@vc.com",
 		VoceChatUserID:     "55",
 		VoceChatUsername:   "Dora",
 		VoceChatSyncStatus: models.VoceChatSyncStatusLinked,
+	})
+
+	stubVoceChatPasswordLogin(t, func(ctx context.Context, config vocechat.Config, email, password string) (*vocechat.LoginResponse, error) {
+		if email != "dora@vc.com" || password != "vc-current-password" {
+			t.Fatalf("vc password login = %s/%s", email, password)
+		}
+		return &vocechat.LoginResponse{Token: "token", User: vocechat.UserInfo{UID: 55, Email: "dora@vc.com", Name: "Dora"}}, nil
 	})
 
 	called := false
@@ -489,7 +506,7 @@ func TestChangePasswordWithVoceChatSyncsRemoteThenLocalPassword(t *testing.T) {
 		return &vocechat.User{UID: 55, Email: "dora@vc.com", Name: "Dora"}, nil
 	})
 
-	if err := ChangePasswordWithOld(user, "old-password", "new-password"); err != nil {
+	if err := ChangePasswordWithOld(user, "vc-current-password", "new-password"); err != nil {
 		t.Fatalf("change password: %v", err)
 	}
 	if !called {
@@ -523,6 +540,13 @@ func TestChangePasswordWithVoceChatFailureDoesNotUpdateLocalPassword(t *testing.
 		Password:       models.HashPassword("old-password"),
 		VoceChatEmail:  "erin@vc.com",
 		VoceChatUserID: "56",
+	})
+
+	stubVoceChatPasswordLogin(t, func(ctx context.Context, config vocechat.Config, email, password string) (*vocechat.LoginResponse, error) {
+		if email != "erin@vc.com" || password != "old-password" {
+			t.Fatalf("vc password login = %s/%s", email, password)
+		}
+		return &vocechat.LoginResponse{Token: "token", User: vocechat.UserInfo{UID: 56, Email: "erin@vc.com", Name: "Erin"}}, nil
 	})
 
 	stubVoceChatAdminUpdateUser(t, func(ctx context.Context, config vocechat.Config, uid int64, request vocechat.UpdateUserRequest) (*vocechat.User, error) {

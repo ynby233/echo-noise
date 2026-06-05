@@ -454,7 +454,7 @@
 
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
-                      <span class="text-sm" :class="theme.text">启用外挂</span>
+                      <span class="text-sm" :class="theme.text">启用 VC 集成</span>
                       <UToggle v-model="voceChatConfig.enabled" />
                     </label>
                     <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
@@ -2630,6 +2630,8 @@ const voceChatClear = reactive({
 })
 const savingVoceChatConfig = ref(false)
 const voceChatHealthLabel = computed(() => {
+  if (!voceChatConfig.enabled) return '未启用'
+  if (!voceChatConfig.configured) return '未配置'
   const status = String(voceChatConfig.lastHealthStatus || '').trim()
   if (!status) return '未检查'
   if (status === 'ok') return '正常'
