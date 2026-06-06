@@ -56,14 +56,19 @@ func mustGetUserByUsername(t *testing.T, username string) *models.User {
 
 func enableVoceChatLoginForTest(t *testing.T, fallbackEnabled bool) {
 	t.Helper()
+	configureVoceChatForTest(t, true, true, fallbackEnabled)
+}
+
+func configureVoceChatForTest(t *testing.T, enabled bool, loginVerificationEnabled bool, fallbackEnabled bool) {
+	t.Helper()
 
 	if err := database.DB.Create(&models.SiteConfig{
 		SiteTitle:                        "Test Site",
-		VoceChatEnabled:                  true,
+		VoceChatEnabled:                  enabled,
 		VoceChatBaseURL:                  "https://vc.example.com",
 		VoceChatAdminUsername:            "admin@vc.com",
 		VoceChatAdminPassword:            "admin-secret",
-		VoceChatLoginVerificationEnabled: true,
+		VoceChatLoginVerificationEnabled: loginVerificationEnabled,
 		VoceChatLocalFallbackEnabled:     fallbackEnabled,
 		VoceChatEmailDomain:              "vc.com",
 	}).Error; err != nil {
@@ -466,6 +471,50 @@ func TestLoginWithVoceChatUnavailableRequiresFallbackSwitch(t *testing.T) {
 	}
 }
 
+func TestLoginWithBoundVoceChatUserRequiresExplicitFallbackWhenVerificationDisabled(t *testing.T) {
+	for _, tc := range []struct {
+		name                     string
+		voceEnabled              bool
+		loginVerificationEnabled bool
+		fallbackEnabled          bool
+		wantLogin                bool
+	}{
+		{name: "plugin disabled fallback disabled", voceEnabled: false, loginVerificationEnabled: true, fallbackEnabled: false, wantLogin: false},
+		{name: "login verification disabled fallback disabled", voceEnabled: true, loginVerificationEnabled: false, fallbackEnabled: false, wantLogin: false},
+		{name: "plugin disabled fallback enabled", voceEnabled: false, loginVerificationEnabled: true, fallbackEnabled: true, wantLogin: true},
+		{name: "login verification disabled fallback enabled", voceEnabled: true, loginVerificationEnabled: false, fallbackEnabled: true, wantLogin: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setupUserServiceTestDB(t)
+			configureVoceChatForTest(t, tc.voceEnabled, tc.loginVerificationEnabled, tc.fallbackEnabled)
+
+			mustCreateUser(t, models.User{
+				Username:       "bound",
+				Password:       models.HashPassword("local-password"),
+				VoceChatEmail:  "bound@vc.com",
+				VoceChatUserID: "44",
+			})
+
+			stubVoceChatPasswordLogin(t, func(ctx context.Context, config vocechat.Config, email, password string) (*vocechat.LoginResponse, error) {
+				t.Fatalf("vc login should not be called when verification is not active")
+				return nil, nil
+			})
+
+			loggedIn, err := Login(dto.LoginDto{Username: "bound", Password: "local-password"})
+			if tc.wantLogin {
+				if err != nil {
+					t.Fatalf("login should use explicit local fallback: %v", err)
+				}
+				if loggedIn == nil || loggedIn.Token == "" {
+					t.Fatalf("fallback login should generate token")
+				}
+			} else if err == nil || !strings.Contains(err.Error(), "本地备用登录") {
+				t.Fatalf("bound vc user should not be silently taken over by local auth, err=%v", err)
+			}
+		})
+	}
+}
+
 func TestChangePasswordWithVoceChatSyncsRemoteThenLocalPassword(t *testing.T) {
 	setupUserServiceTestDB(t)
 	enableVoceChatLoginForTest(t, false)
@@ -567,6 +616,57 @@ func TestChangePasswordWithVoceChatFailureDoesNotUpdateLocalPassword(t *testing.
 	}
 	if _, ok, err := vocechat.NewPlainPasswordStore(storePath).GetUserPassword(user.ID); err != nil || ok {
 		t.Fatalf("plain password record should not be created on failed change, ok=%v err=%v", ok, err)
+	}
+}
+
+func TestChangePasswordForBoundVoceChatUserRequiresFallbackWhenIntegrationDisabled(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		fallbackEnabled bool
+		wantChange      bool
+	}{
+		{name: "fallback disabled", fallbackEnabled: false, wantChange: false},
+		{name: "fallback enabled", fallbackEnabled: true, wantChange: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setupUserServiceTestDB(t)
+			configureVoceChatForTest(t, false, true, tc.fallbackEnabled)
+
+			user := mustCreateUser(t, models.User{
+				Username:       "frank",
+				Password:       models.HashPassword("old-password"),
+				VoceChatEmail:  "frank@vc.com",
+				VoceChatUserID: "57",
+			})
+
+			stubVoceChatPasswordLogin(t, func(ctx context.Context, config vocechat.Config, email, password string) (*vocechat.LoginResponse, error) {
+				t.Fatalf("vc password login should not be attempted when integration is disabled")
+				return nil, nil
+			})
+			stubVoceChatAdminUpdateUser(t, func(ctx context.Context, config vocechat.Config, uid int64, request vocechat.UpdateUserRequest) (*vocechat.User, error) {
+				t.Fatalf("vc password update should not be attempted when integration is disabled")
+				return nil, nil
+			})
+
+			err := ChangePasswordWithOld(user, "old-password", "new-password")
+			updated := mustGetUserByUsername(t, "frank")
+
+			if tc.wantChange {
+				if err != nil {
+					t.Fatalf("password change should use explicit local fallback: %v", err)
+				}
+				if bcrypt.CompareHashAndPassword([]byte(updated.Password), []byte("new-password")) != nil {
+					t.Fatalf("local password was not updated by explicit fallback")
+				}
+			} else {
+				if err == nil || !strings.Contains(err.Error(), "本地备用登录") {
+					t.Fatalf("bound vc user password change should require fallback while integration disabled, err=%v", err)
+				}
+				if bcrypt.CompareHashAndPassword([]byte(updated.Password), []byte("old-password")) != nil {
+					t.Fatalf("local password changed while fallback was disabled")
+				}
+			}
+		})
 	}
 }
 

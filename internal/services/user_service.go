@@ -365,8 +365,16 @@ func ensureLoginToken(user *models.User) error {
 	return nil
 }
 
+func isVoceChatBoundOrdinaryUser(user *models.User) bool {
+	return user != nil && !user.IsAdmin && strings.TrimSpace(user.VoceChatEmail) != "" && strings.TrimSpace(user.VoceChatUserID) != ""
+}
+
 func shouldUseVoceChatLogin(user *models.User, config vocechat.Config, enabled bool) bool {
-	return enabled && user != nil && !user.IsAdmin && strings.TrimSpace(user.VoceChatEmail) != "" && strings.TrimSpace(user.VoceChatUserID) != ""
+	return enabled && isVoceChatBoundOrdinaryUser(user)
+}
+
+func inactiveVoceChatLocalFallbackError() error {
+	return errors.New("已绑定 VoceChat，当前未启用 VC 登录校验，且未开启本地备用登录")
 }
 
 func isVoceChatCredentialRejected(err error) bool {
@@ -637,6 +645,9 @@ func Login(userdto dto.LoginDto) (*models.User, error) {
 			applyLocalLoginUpgrade(user, result)
 		}
 	} else {
+		if isVoceChatBoundOrdinaryUser(user) && !voceConfig.LocalFallbackEnabled {
+			return nil, inactiveVoceChatLocalFallbackError()
+		}
 		result, err := authenticateLocalPassword(username, user, plain)
 		if err != nil {
 			return nil, err
@@ -883,6 +894,8 @@ func verifyPasswordChangeOldPassword(user *models.User, old string) error {
 		if verified {
 			return nil
 		}
+	} else if isVoceChatBoundOrdinaryUser(user) && !config.LocalFallbackEnabled {
+		return inactiveVoceChatLocalFallbackError()
 	}
 	if !passwordMatchesStored(user.Password, old) {
 		return errors.New(models.PasswordIncorrectMessage)
