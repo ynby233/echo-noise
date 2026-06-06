@@ -139,6 +139,39 @@ func TestApplyMessageVisibilityScopeMatchesFourStateRules(t *testing.T) {
 	}
 }
 
+func TestAdminCannotLikeOthersPrivateMessage(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	admin := mustCreateUser(t, models.User{Username: "like-admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+	alice := mustCreateUser(t, models.User{Username: "like-alice", Password: models.HashPassword("alice"), Token: models.GenerateToken(32)})
+	message := models.Message{Content: "alice private", Username: alice.Username, UserID: alice.ID, Visibility: MessageVisibilityPrivate, Private: true}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatalf("create private message: %v", err)
+	}
+
+	adminID := admin.ID
+	visible, err := GetMessageByIDForViewer(message.ID, &adminID, true)
+	if err != nil {
+		t.Fatalf("admin should still read private message: %v", err)
+	}
+	if visible == nil || visible.ID != message.ID {
+		t.Fatalf("admin read wrong message: %#v", visible)
+	}
+	liked, count, err := ToggleLike(message.ID, &adminID, "", true)
+	if err == nil {
+		t.Fatalf("expected admin like on other private message to fail")
+	}
+	if liked || count != 0 {
+		t.Fatalf("rejected like returned liked=%v count=%d", liked, count)
+	}
+	var likeCount int64
+	if err := db.Model(&models.MessageLike{}).Where("message_id = ?", message.ID).Count(&likeCount).Error; err != nil {
+		t.Fatalf("count likes: %v", err)
+	}
+	if likeCount != 0 {
+		t.Fatalf("expected no likes stored, got %d", likeCount)
+	}
+}
+
 func TestUpdateMessageAcceptsVisibilityAndLegacyPrivatePayloads(t *testing.T) {
 	db := setupUserServiceTestDB(t)
 	alice := mustCreateUser(t, models.User{Username: "update-visibility-alice", Password: models.HashPassword("alice"), Token: models.GenerateToken(32)})
@@ -220,6 +253,64 @@ func TestVoceChatContactCacheAllowsContactsVisibility(t *testing.T) {
 	charlieID := charlie.ID
 	if _, err := GetMessageByIDForViewer(message.ID, &charlieID, false); err == nil {
 		t.Fatalf("non-contact viewer should not access contacts detail")
+	}
+}
+
+func TestVoceChatContactCacheUsesConfiguredAdminForSysAdminAuthor(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	enableVoceChatContactsForTest(t)
+
+	admin := mustCreateUser(t, models.User{Username: "sys_admin_contacts", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+	bob := mustCreateUser(t, models.User{Username: "admin_contact_bob", Password: models.HashPassword("bob"), Token: models.GenerateToken(32), VoceChatEmail: "bob@vc.com", VoceChatUserID: "202"})
+	if admin.ID != 1 {
+		t.Fatalf("admin ID = %d, want 1", admin.ID)
+	}
+
+	message := models.Message{Content: "admin contacts", Username: admin.Username, UserID: admin.ID, Visibility: MessageVisibilityContacts}
+	if err := ApplyMessageVisibilityForSave(&message); err != nil {
+		t.Fatalf("apply contacts visibility: %v", err)
+	}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatalf("create contacts message: %v", err)
+	}
+
+	stubVoceChatPasswordLogin(t, func(ctx context.Context, config vocechat.Config, email, password string) (*vocechat.LoginResponse, error) {
+		if email != "admin@vc.com" || password != "admin-secret" {
+			t.Fatalf("vc admin login args email=%q password=%q", email, password)
+		}
+		return &vocechat.LoginResponse{Token: "admin-token", User: vocechat.UserInfo{UID: 99, Email: "admin@vc.com", IsAdmin: true}}, nil
+	})
+	stubVoceChatListContacts(t, func(ctx context.Context, config vocechat.Config, apiKey string) ([]vocechat.UserContact, error) {
+		if apiKey != "admin-token" {
+			t.Fatalf("contacts api key = %q", apiKey)
+		}
+		return []vocechat.UserContact{{TargetUID: 202}}, nil
+	})
+
+	bobID := bob.ID
+	var rows []models.Message
+	query := ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), &bobID, false)
+	if err := query.Find(&rows).Error; err != nil {
+		t.Fatalf("query visible messages: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Content != "admin contacts" {
+		t.Fatalf("bob visible rows = %#v", rows)
+	}
+
+	var storedAdmin models.User
+	if err := database.DB.First(&storedAdmin, admin.ID).Error; err != nil {
+		t.Fatalf("load stored admin: %v", err)
+	}
+	if storedAdmin.VoceChatUserID != "" || storedAdmin.VoceChatEmail != "" || storedAdmin.VoceChatSyncStatus != "" {
+		t.Fatalf("admin should not be bound by contacts sync, got uid %q email %q status %q", storedAdmin.VoceChatUserID, storedAdmin.VoceChatEmail, storedAdmin.VoceChatSyncStatus)
+	}
+
+	var marker models.VoceChatContactCache
+	if err := database.DB.Where("user_id = ? AND contact_user_id = ?", admin.ID, 0).First(&marker).Error; err != nil {
+		t.Fatalf("load admin contact marker: %v", err)
+	}
+	if marker.VoceChatUserID != "99" || marker.LastSyncStatus != models.VoceChatContactSyncStatusOK {
+		t.Fatalf("admin contact marker = %#v", marker)
 	}
 }
 

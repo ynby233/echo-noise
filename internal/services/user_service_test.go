@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -127,8 +128,11 @@ func TestRegisterCreatesPendingApplicationInsteadOfUser(t *testing.T) {
 	if application.VoceChatSyncStatus != models.VoceChatSyncStatusNone {
 		t.Fatalf("vc sync status = %q", application.VoceChatSyncStatus)
 	}
+	if application.ApplicationID != "1" {
+		t.Fatalf("application id = %q, want 1", application.ApplicationID)
+	}
 	if strings.Contains(application.ApplicationID, "_") {
-		t.Fatalf("application id %q must be usable as VC email prefix", application.ApplicationID)
+		t.Fatalf("application id %q must be usable as VoceChat email prefix", application.ApplicationID)
 	}
 	if application.VoceChatEmail != application.ApplicationID+"@vc.com" {
 		t.Fatalf("vc email = %q", application.VoceChatEmail)
@@ -146,6 +150,46 @@ func TestRegisterCreatesPendingApplicationInsteadOfUser(t *testing.T) {
 	}
 	if record.Password != "secret-pass" || record.Username != "新用户_01" || record.VoceChatEmail != application.VoceChatEmail {
 		t.Fatalf("unexpected plain password record: %#v", record)
+	}
+}
+
+func TestRegisterUsesIncreasingNumericApplicationIDs(t *testing.T) {
+	setupUserServiceTestDB(t)
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", filepath.Join(t.TempDir(), "plain-passwords.db"))
+
+	originalProvision := registrationVoceChatProvision
+	registrationVoceChatProvision = func(applicationID, username, password string) registrationVoceChatProvisionResult {
+		return registrationVoceChatProvisionResult{
+			Email:      buildVoceChatApplicationEmail(applicationID, vocechat.DefaultEmailDomain),
+			Username:   username,
+			SyncStatus: models.VoceChatSyncStatusNone,
+		}
+	}
+	defer func() { registrationVoceChatProvision = originalProvision }()
+
+	if err := Register(dto.RegisterDto{Username: "alice_01", Password: "secret-pass"}); err != nil {
+		t.Fatalf("register first user: %v", err)
+	}
+	first, err := repository.GetPendingRegistrationApplicationByUsername("alice_01")
+	if err != nil {
+		t.Fatalf("get first application: %v", err)
+	}
+	if first.ApplicationID != "1" {
+		t.Fatalf("first application id = %q", first.ApplicationID)
+	}
+	if err := repository.UpdateRegistrationApplicationFields(first.ID, map[string]interface{}{"status": models.RegistrationApplicationStatusRejected}); err != nil {
+		t.Fatalf("mark first application rejected: %v", err)
+	}
+
+	if err := Register(dto.RegisterDto{Username: "bob_01", Password: "secret-pass"}); err != nil {
+		t.Fatalf("register second user: %v", err)
+	}
+	second, err := repository.GetPendingRegistrationApplicationByUsername("bob_01")
+	if err != nil {
+		t.Fatalf("get second application: %v", err)
+	}
+	if second.ApplicationID != "2" {
+		t.Fatalf("second application id = %q", second.ApplicationID)
 	}
 }
 
@@ -322,7 +366,7 @@ func TestUserProfileUpdatesDoNotOverwritePasswordsAndPasswordFormatsRemainCompat
 	}
 }
 
-func TestLoginWithVoceChatSuccessSyncsLocalPasswordAndBinding(t *testing.T) {
+func TestLoginWithVoceChatSuccessKeepsLocalPasswordAndSyncsBinding(t *testing.T) {
 	setupUserServiceTestDB(t)
 	enableVoceChatLoginForTest(t, false)
 	storePath := filepath.Join(t.TempDir(), "plain-passwords.db")
@@ -361,8 +405,8 @@ func TestLoginWithVoceChatSuccessSyncsLocalPasswordAndBinding(t *testing.T) {
 	if updated.VoceChatSyncStatus != models.VoceChatSyncStatusLinked || updated.VoceChatSyncError != "" || updated.VoceChatLastSyncAt == nil {
 		t.Fatalf("vc sync status not refreshed: %#v", updated)
 	}
-	if bcrypt.CompareHashAndPassword([]byte(updated.Password), []byte("vc-password")) != nil {
-		t.Fatalf("local password hash was not synced after vc login")
+	if bcrypt.CompareHashAndPassword([]byte(updated.Password), []byte("old-local-password")) != nil {
+		t.Fatalf("local password hash should not be overwritten after VoceChat login")
 	}
 
 	record, ok, err := vocechat.NewPlainPasswordStore(storePath).GetUserPassword(user.ID)
@@ -619,18 +663,11 @@ func TestChangePasswordWithVoceChatFailureDoesNotUpdateLocalPassword(t *testing.
 	}
 }
 
-func TestChangePasswordForBoundVoceChatUserRequiresFallbackWhenIntegrationDisabled(t *testing.T) {
-	for _, tc := range []struct {
-		name            string
-		fallbackEnabled bool
-		wantChange      bool
-	}{
-		{name: "fallback disabled", fallbackEnabled: false, wantChange: false},
-		{name: "fallback enabled", fallbackEnabled: true, wantChange: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+func TestChangePasswordForBoundVoceChatUserRejectsWhenIntegrationDisabled(t *testing.T) {
+	for _, fallbackEnabled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("fallback %v", fallbackEnabled), func(t *testing.T) {
 			setupUserServiceTestDB(t)
-			configureVoceChatForTest(t, false, true, tc.fallbackEnabled)
+			configureVoceChatForTest(t, false, true, fallbackEnabled)
 
 			user := mustCreateUser(t, models.User{
 				Username:       "frank",
@@ -651,20 +688,11 @@ func TestChangePasswordForBoundVoceChatUserRequiresFallbackWhenIntegrationDisabl
 			err := ChangePasswordWithOld(user, "old-password", "new-password")
 			updated := mustGetUserByUsername(t, "frank")
 
-			if tc.wantChange {
-				if err != nil {
-					t.Fatalf("password change should use explicit local fallback: %v", err)
-				}
-				if bcrypt.CompareHashAndPassword([]byte(updated.Password), []byte("new-password")) != nil {
-					t.Fatalf("local password was not updated by explicit fallback")
-				}
-			} else {
-				if err == nil || !strings.Contains(err.Error(), "本地备用登录") {
-					t.Fatalf("bound vc user password change should require fallback while integration disabled, err=%v", err)
-				}
-				if bcrypt.CompareHashAndPassword([]byte(updated.Password), []byte("old-password")) != nil {
-					t.Fatalf("local password changed while fallback was disabled")
-				}
+			if err == nil || !strings.Contains(err.Error(), "VoceChat 登录校验暂不可用") {
+				t.Fatalf("bound VoceChat user password change should require active VoceChat validation, err=%v", err)
+			}
+			if bcrypt.CompareHashAndPassword([]byte(updated.Password), []byte("old-password")) != nil {
+				t.Fatalf("local password changed while VoceChat validation was unavailable")
 			}
 		})
 	}

@@ -310,6 +310,7 @@ func SetupRouter() *gin.Engine {
 
 	// 设置路由
 	authRoutes.PUT("/settings", controllers.UpdateSetting)
+	authRoutes.POST("/settings/vocechat/health", middleware.AdminAuthMiddleware(), controllers.CheckVoceChatHealth)
 	// 友链申请管理（管理员）
 	authRoutes.GET("/friend-links/apply", controllers.ListFriendLinkApplications)
 	authRoutes.DELETE("/friend-links/apply", controllers.ClearFriendLinkApplications)

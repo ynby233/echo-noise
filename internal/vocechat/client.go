@@ -197,6 +197,11 @@ func (c *Client) ListUsers(ctx context.Context, apiKey string) ([]User, error) {
 	return users, nil
 }
 
+func (c *Client) CheckHealth(ctx context.Context, apiKey string) error {
+	_, err := c.ListUsers(ctx, apiKey)
+	return err
+}
+
 func (c *Client) GetUser(ctx context.Context, apiKey string, uid int64) (*User, error) {
 	var user User
 	if err := c.do(ctx, http.MethodGet, "/admin/user/"+strconv.FormatInt(uid, 10), apiKey, nil, &user, nil); err != nil {

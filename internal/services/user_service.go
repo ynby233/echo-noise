@@ -94,7 +94,7 @@ func validateRegistrationUsername(username string) error {
 		if r == '_' || (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || unicode.Is(unicode.Han, r) || unicode.In(r, unicode.Hiragana, unicode.Katakana) {
 			continue
 		}
-		return errors.New("用户名仅支持中文、日文、英文、数字和下划线")
+		return errors.New("用户名仅支持大小写英文字母、中文、日文、数字和下划线")
 	}
 	if length < 2 || length > 20 {
 		return errors.New("用户名长度需为 2-20 个字符")
@@ -103,17 +103,11 @@ func validateRegistrationUsername(username string) error {
 }
 
 func generateRegistrationApplicationID() (string, error) {
-	for i := 0; i < 5; i++ {
-		applicationID := "a" + strings.ToLower(models.GenerateToken(18))
-		_, err := repository.GetRegistrationApplicationByApplicationID(applicationID)
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return applicationID, nil
-		}
-		if err != nil {
-			return "", err
-		}
+	maxID, err := repository.MaxNumericRegistrationApplicationID()
+	if err != nil {
+		return "", err
 	}
-	return "", errors.New("生成注册申请ID失败")
+	return strconv.FormatInt(maxID+1, 10), nil
 }
 
 func existingUser(username string) (bool, error) {
@@ -374,7 +368,7 @@ func shouldUseVoceChatLogin(user *models.User, config vocechat.Config, enabled b
 }
 
 func inactiveVoceChatLocalFallbackError() error {
-	return errors.New("已绑定 VoceChat，当前未启用 VC 登录校验，且未开启本地备用登录")
+	return errors.New("已绑定 VoceChat，当前未启用 VoceChat 登录校验，且未开启本地备用登录")
 }
 
 func isVoceChatCredentialRejected(err error) bool {
@@ -452,19 +446,6 @@ func applyVoceChatLoginResponse(user *models.User, response *vocechat.LoginRespo
 func syncPasswordAfterVoceChatLogin(user *models.User, plain string) {
 	if user == nil || plain == "" {
 		return
-	}
-
-	pw := strings.TrimSpace(user.Password)
-	isBcrypt := strings.HasPrefix(pw, "$2a$") || strings.HasPrefix(pw, "$2b$") || strings.HasPrefix(pw, "$2y$")
-	shouldUpdateHash := true
-	if isBcrypt && bcrypt.CompareHashAndPassword([]byte(pw), []byte(plain)) == nil {
-		shouldUpdateHash = false
-	}
-	if shouldUpdateHash {
-		if newHash := models.HashPassword(plain); newHash != "" {
-			_ = repository.UpdateUserField(user.ID, "password", newHash)
-			user.Password = newHash
-		}
 	}
 
 	_ = vocechat.DefaultPlainPasswordStore().UpsertUserPassword(user.ID, user.Username, plain, user.VoceChatEmail, user.VoceChatUserID)
@@ -861,41 +842,34 @@ func ChangePassword(user *models.User, userdto dto.UserInfoDto) error {
 	return saveLocalUserPassword(user, newPassword)
 }
 
-func verifyVoceChatPasswordForPasswordChange(user *models.User, config vocechat.Config, plain string) (bool, error) {
+func verifyVoceChatPasswordForPasswordChange(user *models.User, config vocechat.Config, plain string) error {
+	if !config.Enabled || !config.IsReady() {
+		return errors.New("VoceChat 登录校验暂不可用，请稍后再试")
+	}
 	response, err := voceChatPasswordLogin(context.Background(), config, strings.TrimSpace(user.VoceChatEmail), plain)
 	if err == nil {
 		recordVoceChatLoginHealth("ok", nil)
 		applyVoceChatLoginResponse(user, response)
-		return true, nil
+		syncPasswordAfterVoceChatLogin(user, plain)
+		return nil
 	}
 
 	if isVoceChatCredentialRejected(err) {
-		recordVoceChatLoginHealth("failed", err)
-		return false, errors.New(models.PasswordIncorrectMessage)
+		recordVoceChatLoginHealth("ok", nil)
+		return errors.New(models.PasswordIncorrectMessage)
 	}
 
 	recordVoceChatLoginHealth("failed", err)
-	if config.LocalFallbackEnabled {
-		return false, nil
-	}
-	return false, errors.New("VoceChat 登录校验暂不可用，请稍后再试或联系管理员开启本地兜底")
+	return errors.New("VoceChat 登录校验暂不可用，请稍后再试")
 }
 
 func verifyPasswordChangeOldPassword(user *models.User, old string) error {
-	config, voceLoginEnabled, err := loadVoceChatLoginConfig()
+	config, _, err := loadVoceChatLoginConfig()
 	if err != nil {
 		return errors.New(models.DatabaseErrorMessage)
 	}
-	if shouldUseVoceChatLogin(user, config, voceLoginEnabled) {
-		verified, err := verifyVoceChatPasswordForPasswordChange(user, config, old)
-		if err != nil {
-			return err
-		}
-		if verified {
-			return nil
-		}
-	} else if isVoceChatBoundOrdinaryUser(user) && !config.LocalFallbackEnabled {
-		return inactiveVoceChatLocalFallbackError()
+	if isVoceChatBoundOrdinaryUser(user) {
+		return verifyVoceChatPasswordForPasswordChange(user, config, old)
 	}
 	if !passwordMatchesStored(user.Password, old) {
 		return errors.New(models.PasswordIncorrectMessage)

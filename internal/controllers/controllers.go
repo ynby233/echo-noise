@@ -882,6 +882,24 @@ func GetFrontendConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": config})
 }
 
+func CheckVoceChatHealth(c *gin.Context) {
+	if _, err := checkAdmin(c); err != nil {
+		c.JSON(http.StatusOK, dto.Fail[map[string]interface{}](err.Error()))
+		return
+	}
+
+	config, err := services.CheckVoceChatHealth(c.Request.Context())
+	if err != nil {
+		if config != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 0, "msg": err.Error(), "data": config})
+			return
+		}
+		c.JSON(http.StatusOK, dto.Fail[map[string]interface{}](err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK(config, "VoceChat 健康检查完成"))
+}
+
 // SubmitFriendLinkApply 提交友链申请（公开）
 func SubmitFriendLinkApply(c *gin.Context) {
 	var req struct {
@@ -1304,6 +1322,48 @@ func commentVisibilityRank(value string) int {
 	}
 }
 
+func defaultCommentVisibilityForMessage(messageVisibility string) string {
+	switch messageVisibility {
+	case services.MessageVisibilityContacts:
+		return "contacts"
+	case services.MessageVisibilityPrivate:
+		return "private"
+	case services.MessageVisibilityPublic, services.MessageVisibilityUsers:
+		return "users"
+	default:
+		return "users"
+	}
+}
+
+func normalizeRequestedCommentVisibility(value string, messageVisibility string) (string, bool) {
+	if strings.TrimSpace(value) == "" {
+		return defaultCommentVisibilityForMessage(messageVisibility), true
+	}
+	return normalizeCommentVisibility(value)
+}
+
+func commentVisibilityAllowedForMessage(visibility string, messageVisibility string) bool {
+	visibility = normalizedCommentVisibilityOrPublic(visibility)
+	switch messageVisibility {
+	case services.MessageVisibilityPublic, services.MessageVisibilityUsers:
+		return visibility == "users" || visibility == "contacts" || visibility == "private"
+	case services.MessageVisibilityContacts:
+		return visibility == "contacts" || visibility == "private"
+	case services.MessageVisibilityPrivate:
+		return visibility == "private"
+	default:
+		return false
+	}
+}
+
+func effectiveCommentVisibilityForMessage(visibility string, messageVisibility string) string {
+	visibility = normalizedCommentVisibilityOrPublic(visibility)
+	if commentVisibilityAllowedForMessage(visibility, messageVisibility) {
+		return visibility
+	}
+	return defaultCommentVisibilityForMessage(messageVisibility)
+}
+
 func isGuestbookMessage(message models.Message) bool {
 	content := strings.ToLower(strings.TrimSpace(message.Content))
 	return strings.Contains(content, "#guestbook") || strings.Contains(content, "#留言") || strings.Contains(content, "留言板")
@@ -1325,10 +1385,10 @@ func canViewComment(message models.Message, comment models.Comment, parent *mode
 	if messageVisibility == services.MessageVisibilityPrivate || messageVisibility == services.MessageVisibilityContacts {
 		return hasViewer && viewerID == message.UserID
 	}
-	visibility := normalizedCommentVisibilityOrPublic(comment.Visibility)
+	visibility := effectiveCommentVisibilityForMessage(comment.Visibility, messageVisibility)
 	if comment.ParentID != nil {
 		if parent != nil {
-			parentVisibility := normalizedCommentVisibilityOrPublic(parent.Visibility)
+			parentVisibility := effectiveCommentVisibilityForMessage(parent.Visibility, messageVisibility)
 			if commentVisibilityRank(visibility) > commentVisibilityRank(parentVisibility) {
 				visibility = parentVisibility
 			}
@@ -1578,11 +1638,6 @@ func PostComment(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "评论内容不能为空"})
 		return
 	}
-	visibility, ok := normalizeCommentVisibility(req.Visibility)
-	if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "无效的可见范围"})
-		return
-	}
 	db, _ := database.GetDB()
 	// 校验消息存在
 	var message models.Message
@@ -1604,6 +1659,15 @@ func PostComment(c *gin.Context) {
 		return
 	}
 	messageVisibility := services.StoredMessageVisibility(message)
+	visibility, ok := normalizeRequestedCommentVisibility(req.Visibility, messageVisibility)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "无效的可见范围"})
+		return
+	}
+	if !commentVisibilityAllowedForMessage(visibility, messageVisibility) {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "评论可见范围不能宽于当前笔记"})
+		return
+	}
 	if (messageVisibility == services.MessageVisibilityPrivate || messageVisibility == services.MessageVisibilityContacts) && currentUser.ID != message.UserID {
 		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "受限帖子仅作者可评论或回复"})
 		return
@@ -1630,10 +1694,14 @@ func PostComment(c *gin.Context) {
 			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限回复该内容"})
 			return
 		}
-		parentVisibility := normalizedCommentVisibilityOrPublic(parent.Visibility)
+		parentVisibility := effectiveCommentVisibilityForMessage(parent.Visibility, messageVisibility)
 		if commentVisibilityRank(visibility) > commentVisibilityRank(parentVisibility) {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "回复可见范围不能宽于被回复内容"})
-			return
+			if strings.TrimSpace(req.Visibility) == "" {
+				visibility = parentVisibility
+			} else {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "回复可见范围不能宽于被回复内容"})
+				return
+			}
 		}
 		if commentAuthIsAdmin(c) && currentUser.ID != message.UserID && parentVisibility != "public" {
 			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "管理员不可回复非公开评论"})
@@ -1772,10 +1840,13 @@ func UpdateComment(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限"})
 		return
 	}
-	visibility := cm.Visibility
-	if strings.TrimSpace(visibility) == "" {
-		visibility = "public"
+	var message models.Message
+	if err := db.First(&message, uint(msgID)).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
+		return
 	}
+	messageVisibility := services.StoredMessageVisibility(message)
+	visibility := cm.Visibility
 	if strings.TrimSpace(req.Visibility) != "" {
 		var ok bool
 		visibility, ok = normalizeCommentVisibility(req.Visibility)
@@ -1783,14 +1854,31 @@ func UpdateComment(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "无效的可见范围"})
 			return
 		}
+	} else if strings.TrimSpace(visibility) == "" {
+		visibility = defaultCommentVisibilityForMessage(messageVisibility)
+	} else {
+		var ok bool
+		visibility, ok = normalizeCommentVisibility(visibility)
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "无效的可见范围"})
+			return
+		}
+	}
+	if !commentVisibilityAllowedForMessage(visibility, messageVisibility) {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "评论可见范围不能宽于当前笔记"})
+		return
 	}
 	if cm.ParentID != nil {
 		var parent models.Comment
 		if err := db.First(&parent, *cm.ParentID).Error; err == nil {
-			parentVisibility := normalizedCommentVisibilityOrPublic(parent.Visibility)
+			parentVisibility := effectiveCommentVisibilityForMessage(parent.Visibility, messageVisibility)
 			if commentVisibilityRank(visibility) > commentVisibilityRank(parentVisibility) {
-				c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "回复可见范围不能宽于被回复内容"})
-				return
+				if strings.TrimSpace(req.Visibility) == "" {
+					visibility = parentVisibility
+				} else {
+					c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "回复可见范围不能宽于被回复内容"})
+					return
+				}
 			}
 		}
 	}

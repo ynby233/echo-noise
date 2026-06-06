@@ -238,6 +238,129 @@ func TestPostCommentBindsCurrentAccountAndIgnoresLegacyContactFields(t *testing.
 	}
 }
 
+func TestPostCommentCannotBePublicOnPublicMessage(t *testing.T) {
+	db, r, user, msg := setupCommentAccountTest(t)
+	r.Use(func(c *gin.Context) {
+		c.Set("user_id", user.ID)
+		c.Set("is_admin", false)
+		c.Next()
+	})
+	r.POST("/messages/:id/comments", PostComment)
+
+	w := performCommentRequest(r, msg.ID, map[string]any{
+		"content":    "too-wide",
+		"visibility": "public",
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 when public message gets public comment, got %d: %s", w.Code, w.Body.String())
+	}
+	var count int64
+	if err := db.Model(&models.Comment{}).Where("content = ?", "too-wide").Count(&count).Error; err != nil {
+		t.Fatalf("count comments: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected no public comment created, got %d", count)
+	}
+}
+
+func TestPostCommentDefaultsToMessageVisibilityLimit(t *testing.T) {
+	db, r, user, _ := setupCommentAccountTest(t)
+	contactsMsg := models.Message{Content: "contacts-only", UserID: user.ID, Visibility: "contacts", Private: true}
+	privateMsg := models.Message{Content: "private-only", UserID: user.ID, Visibility: "private", Private: true}
+	for _, msg := range []*models.Message{&contactsMsg, &privateMsg} {
+		if err := db.Create(msg).Error; err != nil {
+			t.Fatalf("create message %s: %v", msg.Content, err)
+		}
+	}
+	r.Use(func(c *gin.Context) {
+		c.Set("user_id", user.ID)
+		c.Set("is_admin", false)
+		c.Next()
+	})
+	r.POST("/messages/:id/comments", PostComment)
+
+	contactsResp := performCommentRequest(r, contactsMsg.ID, map[string]any{"content": "contacts-default"})
+	if contactsResp.Code != http.StatusOK {
+		t.Fatalf("expected contacts default comment success, got %d: %s", contactsResp.Code, contactsResp.Body.String())
+	}
+	privateResp := performCommentRequest(r, privateMsg.ID, map[string]any{"content": "private-default"})
+	if privateResp.Code != http.StatusOK {
+		t.Fatalf("expected private default comment success, got %d: %s", privateResp.Code, privateResp.Body.String())
+	}
+
+	var contactsComment models.Comment
+	if err := db.Where("content = ?", "contacts-default").First(&contactsComment).Error; err != nil {
+		t.Fatalf("load contacts comment: %v", err)
+	}
+	if contactsComment.Visibility != "contacts" {
+		t.Fatalf("contacts message default visibility = %q, want contacts", contactsComment.Visibility)
+	}
+	var privateComment models.Comment
+	if err := db.Where("content = ?", "private-default").First(&privateComment).Error; err != nil {
+		t.Fatalf("load private comment: %v", err)
+	}
+	if privateComment.Visibility != "private" {
+		t.Fatalf("private message default visibility = %q, want private", privateComment.Visibility)
+	}
+}
+
+func TestPostCommentCannotExceedContactsMessageVisibility(t *testing.T) {
+	_, r, user, msg := setupCommentAccountTest(t)
+	msg.Visibility = "contacts"
+	msg.Private = true
+	if err := database.DB.Save(&msg).Error; err != nil {
+		t.Fatalf("save contacts message: %v", err)
+	}
+	r.Use(func(c *gin.Context) {
+		c.Set("user_id", user.ID)
+		c.Set("is_admin", false)
+		c.Next()
+	})
+	r.POST("/messages/:id/comments", PostComment)
+
+	w := performCommentRequest(r, msg.ID, map[string]any{
+		"content":    "users-too-wide",
+		"visibility": "users",
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 when contacts message gets users comment, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestUpdateCommentCannotExceedMessageVisibility(t *testing.T) {
+	db, r, user, msg := setupCommentAccountTest(t)
+	msg.Visibility = "contacts"
+	msg.Private = true
+	if err := db.Save(&msg).Error; err != nil {
+		t.Fatalf("save contacts message: %v", err)
+	}
+	comment := models.Comment{MessageID: msg.ID, UserID: &user.ID, Content: "contacts-comment", Visibility: "contacts"}
+	if err := db.Create(&comment).Error; err != nil {
+		t.Fatalf("create comment: %v", err)
+	}
+	r.Use(func(c *gin.Context) {
+		c.Set("user_id", user.ID)
+		c.Set("is_admin", false)
+		c.Next()
+	})
+	r.PUT("/messages/:id/comments/:cid", UpdateComment)
+
+	w := performCommentJSONRequest(r, http.MethodPut, msg.ID, comment.ID, map[string]any{
+		"content":    "widened",
+		"visibility": "users",
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 when comment update widens message visibility, got %d: %s", w.Code, w.Body.String())
+	}
+	var saved models.Comment
+	if err := db.First(&saved, comment.ID).Error; err != nil {
+		t.Fatalf("load saved comment: %v", err)
+	}
+	if saved.Content != "contacts-comment" || saved.Visibility != "contacts" {
+		t.Fatalf("comment changed after rejected update: %#v", saved)
+	}
+}
+
 func TestGetCommentsReturnsAccountInfoWithoutLegacyContactFields(t *testing.T) {
 	db, r, user, msg := setupCommentAccountTest(t)
 	r.GET("/messages/:id/comments", GetComments)

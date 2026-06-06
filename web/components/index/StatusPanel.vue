@@ -447,27 +447,28 @@
                     <div class="flex items-center gap-2 flex-wrap justify-end">
                       <UBadge :color="voceChatConfig.configured ? 'green' : 'gray'" variant="soft">{{ voceChatConfig.configured ? '已就绪' : '未就绪' }}</UBadge>
                       <UBadge :color="voceChatConfig.adminCredentialConfigured ? 'green' : 'orange'" variant="soft">凭据 {{ voceChatConfig.adminCredentialConfigured ? '已配置' : '未配置' }}</UBadge>
-                      <UButton variant="soft" color="indigo" @click="fetchRegisterConfig">刷新</UButton>
+                      <UButton variant="soft" color="indigo" icon="i-heroicons-arrow-path" @click="fetchRegisterConfig">刷新</UButton>
+                      <UButton variant="soft" color="primary" icon="i-heroicons-signal" :loading="checkingVoceChatHealth" @click="checkVoceChatHealth">检查当前状态</UButton>
                       <UButton color="green" :loading="savingVoceChatConfig" @click="saveVoceChatConfig">保存</UButton>
                     </div>
                   </div>
 
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
-                      <span class="text-sm" :class="theme.text">启用 VC 集成</span>
+                      <span class="text-sm" :class="theme.text">启用 VoceChat 集成</span>
                       <UToggle v-model="voceChatConfig.enabled" />
                     </label>
                     <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
                       <span class="text-sm" :class="theme.text">登录校验</span>
-                      <UToggle v-model="voceChatConfig.loginVerificationEnabled" />
+                      <UToggle v-model="voceChatConfig.loginVerificationEnabled" :disabled="!voceChatConfig.enabled" />
                     </label>
                     <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
-                      <span class="text-sm" :class="theme.text">本地兜底</span>
+                      <span class="text-sm" :class="theme.text">本地备用登录</span>
                       <UToggle v-model="voceChatConfig.localFallbackEnabled" />
                     </label>
                     <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
                       <span class="text-sm" :class="theme.text">联系人可见性</span>
-                      <UToggle v-model="voceChatConfig.contactsEnabled" />
+                      <UToggle v-model="voceChatConfig.contactsEnabled" :disabled="!voceChatConfig.enabled" />
                     </label>
                   </div>
 
@@ -2629,6 +2630,7 @@ const voceChatClear = reactive({
   thirdPartySecret: false
 })
 const savingVoceChatConfig = ref(false)
+const checkingVoceChatHealth = ref(false)
 const voceChatHealthLabel = computed(() => {
   if (!voceChatConfig.enabled) return '未启用'
   if (!voceChatConfig.configured) return '未配置'
@@ -3293,6 +3295,10 @@ const applyVoceChatPublicConfig = (raw: any) => {
   voceChatConfig.loginVerificationEnabled = !!cfg.loginVerificationEnabled
   voceChatConfig.localFallbackEnabled = !!cfg.localFallbackEnabled
   voceChatConfig.contactsEnabled = !!cfg.contactsEnabled
+  if (!voceChatConfig.enabled) {
+    voceChatConfig.loginVerificationEnabled = false
+    voceChatConfig.contactsEnabled = false
+  }
   const ttl = Number(cfg.contactsCacheTTLSeconds || 60)
   voceChatConfig.contactsCacheTTLSeconds = Number.isFinite(ttl) && ttl > 0 ? ttl : 60
   voceChatConfig.lastHealthStatus = String(cfg.lastHealthStatus || '')
@@ -3326,9 +3332,9 @@ const buildVoceChatConfigPayload = () => {
   }
   const payload: Record<string, any> = {
     enabled: !!voceChatConfig.enabled,
-    loginVerificationEnabled: !!voceChatConfig.loginVerificationEnabled,
+    loginVerificationEnabled: !!voceChatConfig.enabled && !!voceChatConfig.loginVerificationEnabled,
     localFallbackEnabled: !!voceChatConfig.localFallbackEnabled,
-    contactsEnabled: !!voceChatConfig.contactsEnabled,
+    contactsEnabled: !!voceChatConfig.enabled && !!voceChatConfig.contactsEnabled,
     contactsCacheTTLSeconds: Math.floor(ttl)
   }
   const baseURL = String(voceChatConfig.baseURL || '').trim()
@@ -3367,6 +3373,27 @@ const saveVoceChatConfig = async () => {
     useToast().add({ title: '保存 VoceChat 配置失败', description: e?.message, color: 'red' })
   } finally {
     savingVoceChatConfig.value = false
+  }
+}
+
+const checkVoceChatHealth = async () => {
+  try {
+    checkingVoceChatHealth.value = true
+    const res: any = await postRequest<any>('settings/vocechat/health', {}, { credentials: 'include' })
+    const data = res?.data || {}
+    const publicConfig = data.voceChatConfig || data
+    if (publicConfig && typeof publicConfig === 'object') {
+      applyVoceChatPublicConfig(publicConfig)
+    }
+    if (res && res.code === 1) {
+      useToast().add({ title: 'VoceChat 状态检查完成', color: 'green' })
+    } else {
+      throw new Error(res?.msg || 'VoceChat 状态检查失败')
+    }
+  } catch (e: any) {
+    useToast().add({ title: 'VoceChat 状态检查失败', description: e?.message, color: 'red' })
+  } finally {
+    checkingVoceChatHealth.value = false
   }
 }
 

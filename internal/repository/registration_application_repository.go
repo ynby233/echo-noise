@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/rcy1314/echo-noise/internal/database"
@@ -54,6 +55,25 @@ func CountPendingRegistrationApplications() (int64, error) {
 		return 0, err
 	}
 	return count, nil
+}
+
+func MaxNumericRegistrationApplicationID() (int64, error) {
+	var applicationIDs []string
+	if err := database.DB.Model(&models.RegistrationApplication{}).Pluck("application_id", &applicationIDs).Error; err != nil {
+		return 0, err
+	}
+
+	var maxID int64
+	for _, raw := range applicationIDs {
+		id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+		if err != nil || id <= 0 {
+			continue
+		}
+		if id > maxID {
+			maxID = id
+		}
+	}
+	return maxID, nil
 }
 
 func ListRegistrationApplications(status string, limit int, offset int) ([]models.RegistrationApplication, int64, error) {

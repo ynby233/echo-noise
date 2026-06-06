@@ -1,7 +1,10 @@
 package services
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -209,6 +212,85 @@ func TestApplyVoceChatConfigResetsStaleHealthWhenConnectionSettingsChange(t *tes
 	}
 	if config.VoceChatLastHealthStatus != "" || config.VoceChatLastHealthError != "" || config.VoceChatLastHealthCheckAt != nil {
 		t.Fatalf("stale vc health was not reset: %#v", config)
+	}
+}
+
+func TestCheckVoceChatHealthDoesNotBindLocalSysAdmin(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	mustCreateUser(t, models.User{Username: "sys-admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/token/login":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"token":         "health-token",
+				"refresh_token": "refresh-token",
+				"expired_in":    3600,
+				"user": map[string]interface{}{
+					"uid":      42,
+					"email":    "admin@vc.example",
+					"name":     "Voce Admin",
+					"is_admin": true,
+				},
+			})
+		case "/api/admin/user":
+			if got := r.Header.Get("X-API-Key"); got != "health-token" {
+				t.Fatalf("X-API-Key = %q, want health-token", got)
+			}
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{{"uid": 42, "email": "admin@vc.example"}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	if err := db.Create(&models.SiteConfig{
+		VoceChatEnabled:       true,
+		VoceChatBaseURL:       server.URL,
+		VoceChatAdminUsername: "admin@vc.example",
+		VoceChatAdminPassword: "secret",
+	}).Error; err != nil {
+		t.Fatalf("create site config: %v", err)
+	}
+
+	publicConfig, err := CheckVoceChatHealth(context.Background())
+	if err != nil {
+		t.Fatalf("check health: %v", err)
+	}
+	if got := publicConfig["lastHealthStatus"]; got != "ok" {
+		t.Fatalf("lastHealthStatus = %#v, want ok", got)
+	}
+
+	var admin models.User
+	if err := db.First(&admin, 1).Error; err != nil {
+		t.Fatalf("load admin: %v", err)
+	}
+	if admin.VoceChatUserID != "" || admin.VoceChatEmail != "" || admin.VoceChatSyncStatus != "" {
+		t.Fatalf("health check should not bind local admin, got uid %q email %q status %q", admin.VoceChatUserID, admin.VoceChatEmail, admin.VoceChatSyncStatus)
+	}
+}
+
+func TestCheckVoceChatHealthRecordsFailure(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	mustCreateUser(t, models.User{Username: "sys-admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+
+	if err := db.Create(&models.SiteConfig{
+		VoceChatEnabled: true,
+		VoceChatBaseURL: "https://vc.example.test",
+	}).Error; err != nil {
+		t.Fatalf("create site config: %v", err)
+	}
+
+	publicConfig, err := CheckVoceChatHealth(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "管理员凭据未配置") {
+		t.Fatalf("check health err = %v, want missing credential error", err)
+	}
+	if got := publicConfig["lastHealthStatus"]; got != "failed" {
+		t.Fatalf("lastHealthStatus = %#v, want failed", got)
+	}
+	if got, ok := publicConfig["lastHealthError"].(string); !ok || !strings.Contains(got, "管理员凭据未配置") {
+		t.Fatalf("lastHealthError = %#v, want missing credential error", publicConfig["lastHealthError"])
 	}
 }
 

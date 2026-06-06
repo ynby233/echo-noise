@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -476,6 +477,10 @@ func applyVoceChatConfigUpdate(config *models.SiteConfig, raw map[string]interfa
 	if strings.TrimSpace(config.VoceChatEmailDomain) == "" {
 		config.VoceChatEmailDomain = vocechat.DefaultEmailDomain
 	}
+	if !config.VoceChatEnabled {
+		config.VoceChatLoginVerificationEnabled = false
+		config.VoceChatContactsEnabled = false
+	}
 	if strings.TrimSpace(config.VoceChatAdminToken) == "" && strings.TrimSpace(config.VoceChatAdminPassword) != "" && strings.TrimSpace(config.VoceChatAdminUsername) != "" {
 		if !isValidVoceChatAdminEmail(config.VoceChatAdminUsername) {
 			return fmt.Errorf("管理员邮箱格式无效，请填写 VoceChat 管理员邮箱，不要填写显示名")
@@ -508,6 +513,88 @@ func voceChatHealthAffectingConfigChanged(raw map[string]interface{}) bool {
 		}
 	}
 	return false
+}
+
+func CheckVoceChatHealth(ctx context.Context) (map[string]interface{}, error) {
+	db, err := database.GetDB()
+	if err != nil {
+		return nil, fmt.Errorf("获取数据库连接失败: %w", err)
+	}
+
+	var config models.SiteConfig
+	if err := db.Table("site_configs").First(&config).Error; err != nil {
+		return nil, fmt.Errorf("读取 VoceChat 配置失败: %w", err)
+	}
+
+	now := time.Now().UTC()
+	fail := func(healthErr error) (map[string]interface{}, error) {
+		writeVoceChatHealth(db, config.ID, "failed", healthErr, now)
+		config.VoceChatLastHealthStatus = "failed"
+		config.VoceChatLastHealthError = strings.TrimSpace(healthErr.Error())
+		config.VoceChatLastHealthCheckAt = &now
+		return vocechat.PublicConfigFromSiteConfig(config), healthErr
+	}
+
+	if !config.VoceChatEnabled {
+		return fail(fmt.Errorf("VoceChat 集成未启用"))
+	}
+
+	vcConfig := vocechat.FromSiteConfig(config)
+	if strings.TrimSpace(vcConfig.BaseURL) == "" {
+		return fail(fmt.Errorf("VoceChat 服务地址未配置"))
+	}
+	client, err := vocechat.NewClient(vcConfig)
+	if err != nil {
+		return fail(err)
+	}
+
+	token := strings.TrimSpace(vcConfig.AdminToken)
+	var adminLogin *vocechat.LoginResponse
+	if strings.TrimSpace(vcConfig.AdminUsername) != "" || strings.TrimSpace(vcConfig.AdminPassword) != "" {
+		if strings.TrimSpace(vcConfig.AdminUsername) == "" || strings.TrimSpace(vcConfig.AdminPassword) == "" {
+			return fail(fmt.Errorf("VoceChat 管理员邮箱或密码未配置完整"))
+		}
+		if !isValidVoceChatAdminEmail(vcConfig.AdminUsername) {
+			return fail(fmt.Errorf("管理员邮箱格式无效，请填写 VoceChat 管理员邮箱，不要填写显示名"))
+		}
+		adminLogin, err = client.LoginWithPassword(ctx, vcConfig.AdminUsername, vcConfig.AdminPassword, "echo-noise-health-check")
+		if err != nil {
+			return fail(err)
+		}
+		if adminLogin == nil || strings.TrimSpace(adminLogin.Token) == "" {
+			return fail(fmt.Errorf("VoceChat 管理员登录未返回 token"))
+		}
+		if !adminLogin.User.IsAdmin {
+			return fail(fmt.Errorf("VoceChat 管理员邮箱对应账号不是管理员"))
+		}
+		token = strings.TrimSpace(adminLogin.Token)
+	}
+	if token == "" {
+		return fail(fmt.Errorf("VoceChat 管理员凭据未配置"))
+	}
+	if err := client.CheckHealth(ctx, token); err != nil {
+		return fail(err)
+	}
+	writeVoceChatHealth(db, config.ID, "ok", nil, now)
+	config.VoceChatLastHealthStatus = "ok"
+	config.VoceChatLastHealthError = ""
+	config.VoceChatLastHealthCheckAt = &now
+	return vocechat.PublicConfigFromSiteConfig(config), nil
+}
+
+func writeVoceChatHealth(db *gorm.DB, configID uint, status string, healthErr error, checkedAt time.Time) {
+	if db == nil || configID == 0 {
+		return
+	}
+	errorText := ""
+	if healthErr != nil {
+		errorText = strings.TrimSpace(healthErr.Error())
+	}
+	_ = db.Model(&models.SiteConfig{}).Where("id = ?", configID).Updates(map[string]interface{}{
+		"voce_chat_last_health_status":   status,
+		"voce_chat_last_health_error":    errorText,
+		"voce_chat_last_health_check_at": checkedAt,
+	}).Error
 }
 
 func normalizeLifeCountdownBirthDate(value interface{}) (string, error) {

@@ -13,7 +13,7 @@
         <UForm :state="form" @submit.prevent="onSubmit">
           <UFormGroup label="用户名" class="mb-3">
             <UInput v-model="form.username" placeholder="请输入用户名" />
-            <p class="mt-1 text-xs text-slate-400">用户名 2-20 字符，支持中文、日文、英文字母、数字和下划线，大小写敏感。</p>
+            <p class="mt-1 text-xs text-slate-400">用户名 2-20 字符，支持大小写英文字母、中文、日文、数字和下划线。</p>
           </UFormGroup>
           <UFormGroup label="密码" class="mb-3">
             <UInput v-model="form.password" type="password" placeholder="请输入密码" />

@@ -69,39 +69,77 @@ func EnsureVoceChatContactCacheForAuthor(authorID uint) error {
 		markVoceChatContactCacheFailure(&author, ttl, errors.New("VoceChat 未配置完成"))
 		return nil
 	}
-	if strings.TrimSpace(author.VoceChatEmail) == "" || strings.TrimSpace(author.VoceChatUserID) == "" {
-		markVoceChatContactCacheFailure(&author, ttl, errors.New("作者未绑定 VoceChat"))
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	contactOwner, token, err := loginVoceChatContactOwner(ctx, config, &author)
+	if err != nil {
+		markVoceChatContactCacheFailure(&contactOwner, ttl, err)
+		return nil
+	}
+	contacts, err := voceChatListContacts(ctx, config, token)
+	if err != nil {
+		markVoceChatContactCacheFailure(&contactOwner, ttl, err)
 		return nil
 	}
 
+	return replaceVoceChatContactCacheFromRemote(&contactOwner, contacts, now, now.Add(ttl))
+}
+
+func loginVoceChatContactOwner(ctx context.Context, config vocechat.Config, author *models.User) (models.User, string, error) {
+	owner := models.User{}
+	if author != nil {
+		owner = *author
+	}
+	if author == nil || author.ID == 0 {
+		return owner, "", errors.New("作者不存在")
+	}
+
+	if author.ID == 1 && author.IsAdmin {
+		email := strings.TrimSpace(config.AdminUsername)
+		password := strings.TrimSpace(config.AdminPassword)
+		if email == "" || password == "" {
+			return owner, "", errors.New("VoceChat 管理员邮箱或密码未配置完整")
+		}
+		login, err := voceChatPasswordLogin(ctx, config, email, password)
+		if err != nil {
+			return owner, "", err
+		}
+		if login == nil || strings.TrimSpace(login.Token) == "" {
+			return owner, "", errors.New("VoceChat 联系人令牌为空")
+		}
+		if !login.User.IsAdmin {
+			return owner, "", errors.New("VoceChat 管理员邮箱对应账号不是管理员")
+		}
+		if login.User.UID <= 0 {
+			return owner, "", errors.New("VoceChat 管理员账号缺少用户 ID")
+		}
+		if loginEmail := strings.TrimSpace(login.User.Email); loginEmail != "" {
+			owner.VoceChatEmail = loginEmail
+		} else {
+			owner.VoceChatEmail = email
+		}
+		owner.VoceChatUserID = strconv.FormatInt(login.User.UID, 10)
+		return owner, strings.TrimSpace(login.Token), nil
+	}
+
+	if strings.TrimSpace(author.VoceChatEmail) == "" || strings.TrimSpace(author.VoceChatUserID) == "" {
+		return owner, "", errors.New("作者未绑定 VoceChat")
+	}
 	record, ok, err := vocechat.DefaultPlainPasswordStore().GetUserPassword(author.ID)
 	if err != nil || !ok || strings.TrimSpace(record.Password) == "" {
 		if err == nil {
 			err = errors.New("作者 VoceChat 密码不可用")
 		}
-		markVoceChatContactCacheFailure(&author, ttl, err)
-		return nil
+		return owner, "", err
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
 	login, err := voceChatPasswordLogin(ctx, config, strings.TrimSpace(author.VoceChatEmail), record.Password)
 	if err != nil {
-		markVoceChatContactCacheFailure(&author, ttl, err)
-		return nil
+		return owner, "", err
 	}
 	if login == nil || strings.TrimSpace(login.Token) == "" {
-		err := errors.New("VoceChat 联系人令牌为空")
-		markVoceChatContactCacheFailure(&author, ttl, err)
-		return nil
+		return owner, "", errors.New("VoceChat 联系人令牌为空")
 	}
-	contacts, err := voceChatListContacts(ctx, config, login.Token)
-	if err != nil {
-		markVoceChatContactCacheFailure(&author, ttl, err)
-		return nil
-	}
-
-	return replaceVoceChatContactCacheFromRemote(&author, contacts, now, now.Add(ttl))
+	return owner, strings.TrimSpace(login.Token), nil
 }
 
 func replaceVoceChatContactCacheFromRemote(author *models.User, contacts []vocechat.UserContact, syncedAt time.Time, expiresAt time.Time) error {

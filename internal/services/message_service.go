@@ -443,8 +443,12 @@ func ToggleLike(messageID uint, userID *uint, sessionID string, isAdmin bool) (b
 	if userID != nil && *userID != 0 {
 		currentUserID = userID
 	}
-	if _, err := GetMessageByIDForViewer(messageID, currentUserID, isAdmin); err != nil {
+	message, err := GetMessageByIDForViewer(messageID, currentUserID, isAdmin)
+	if err != nil {
 		return false, 0, err
+	}
+	if isAdmin && StoredMessageVisibility(*message) == MessageVisibilityPrivate && (currentUserID == nil || message.UserID != *currentUserID) {
+		return false, 0, fmt.Errorf("无权点赞私密内容")
 	}
 	// 查询是否已有点赞
 	var existing models.MessageLike

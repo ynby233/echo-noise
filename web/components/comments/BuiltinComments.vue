@@ -167,7 +167,7 @@ import { getRequest, postRequest, putRequest, deleteRequest } from '~/utils/api'
 import { resolveMediaURL } from '~/utils/media-url'
 import { useUserStore } from '~/store/user'
 
-const props = defineProps<{ messageId: number, siteConfig: any, showInput?: boolean, contextLabel?: string, autoScrollInput?: boolean }>()
+const props = defineProps<{ messageId: number, siteConfig: any, showInput?: boolean, contextLabel?: string, autoScrollInput?: boolean, messageVisibility?: string }>()
 const emit = defineEmits(['cancel'])
 const contextLabel = computed(() => String(props.contextLabel || '评论').trim() || '评论')
 const loginRequiredText = computed(() => `请登录后${contextLabel.value}`)
@@ -197,15 +197,26 @@ const normalizeVisibility = (v: any) => {
   const value = String(v || 'public').trim()
   return visibilityOptions.some((opt) => opt.value === value) ? value : 'public'
 }
+const messageVisibilityLimit = computed(() => {
+  const value = String(props.messageVisibility || 'public').trim()
+  if (value === 'contacts') return 'contacts'
+  if (value === 'private') return 'private'
+  return 'users'
+})
+const narrowestVisibilityLimit = (...limits: any[]) => {
+  const normalized = limits.map(normalizeVisibility)
+  return normalized.reduce((max, value) => ((visibilityRank[value] ?? 0) > (visibilityRank[max] ?? 0) ? value : max), 'public')
+}
 const visibilityLimitOptions = (limit?: any) => {
   const normalizedLimit = normalizeVisibility(limit)
   const minRank = visibilityRank[normalizedLimit] ?? visibilityRank.public
   return visibilityOptions.filter((opt) => (visibilityRank[opt.value] ?? visibilityRank.public) >= minRank)
 }
+const commentVisibilityOptions = (limit?: any) => visibilityLimitOptions(narrowestVisibilityLimit(messageVisibilityLimit.value, limit))
 const clampVisibilityToLimit = (value: any, limit?: any) => {
   const normalizedValue = normalizeVisibility(value)
-  const allowed = visibilityLimitOptions(limit)
-  return allowed.some((opt) => opt.value === normalizedValue) ? normalizedValue : (allowed[0]?.value || 'public')
+  const allowed = commentVisibilityOptions(limit)
+  return allowed.some((opt) => opt.value === normalizedValue) ? normalizedValue : (allowed[0]?.value || messageVisibilityLimit.value)
 }
 const visibilityLabel = (v: any) => {
   const value = normalizeVisibility(v)
@@ -214,10 +225,10 @@ const visibilityLabel = (v: any) => {
 }
 const commentOwnerId = (c: any) => Number(c?.user_id || c?.UserID || c?.user?.id || c?.user?.ID || c?.user?.user_id || 0)
 const canManageComment = (c: any) => isAdmin.value || (!!currentUserId.value && commentOwnerId(c) === currentUserId.value)
-const selectedVisibility = ref('public')
+const selectedVisibility = ref(messageVisibilityLimit.value)
 const editingId = ref<number | null>(null)
 const editingContent = ref('')
-const editingVisibility = ref('public')
+const editingVisibility = ref(messageVisibilityLimit.value)
 const isEditingSubmitting = ref(false)
 const enabled = computed(() => {
   const s: any = props.siteConfig || {}
@@ -365,7 +376,7 @@ const submit = async () => {
     if (res && res.code === 1) {
       content.value = ''
       replyTo.value = null
-      selectedVisibility.value = 'public'
+      selectedVisibility.value = clampVisibilityToLimit(messageVisibilityLimit.value)
       comments.value = [...comments.value, res.data]
       await load()
       useToast().add({ title: '已发布', color: 'green' })
@@ -631,7 +642,7 @@ const startEdit = (c: any) => {
 const cancelEdit = () => {
   editingId.value = null
   editingContent.value = ''
-  editingVisibility.value = 'public'
+  editingVisibility.value = clampVisibilityToLimit(messageVisibilityLimit.value)
   isEditingSubmitting.value = false
 }
 
@@ -772,7 +783,7 @@ const clearContent = () => { content.value = ''; hideMention(); nextTick(autoRes
 const cancelInput = () => {
   content.value = ''
   replyTo.value = null
-  selectedVisibility.value = 'public'
+  selectedVisibility.value = clampVisibilityToLimit(messageVisibilityLimit.value)
   hiddenByCancel.value = true
   hideMention()
   cancelEdit()
@@ -858,7 +869,7 @@ const returnToInputTarget = () => {
   scrollToMessage()
 }
 const selectedVisibilityOptions = computed(() => {
-  return replyingToComment.value ? visibilityLimitOptions(replyingToComment.value.visibility) : visibilityOptions
+  return replyingToComment.value ? commentVisibilityOptions(replyingToComment.value.visibility) : commentVisibilityOptions()
 })
 const editingComment = computed(() => {
   const id = Number(editingId.value || 0)
@@ -866,19 +877,23 @@ const editingComment = computed(() => {
 })
 const editingVisibilityOptions = computed(() => {
   const parentId = Number(editingComment.value?.parent_id || 0)
-  if (parentId <= 0) return visibilityOptions
+  if (parentId <= 0) return commentVisibilityOptions()
   const parent = byId.value[parentId]
-  return parent ? visibilityLimitOptions(parent.visibility) : visibilityOptions
+  return parent ? commentVisibilityOptions(parent.visibility) : commentVisibilityOptions()
 })
 
 watch(replyingToComment, (comment) => {
-  if (!comment) return
-  selectedVisibility.value = clampVisibilityToLimit(selectedVisibility.value, comment.visibility)
+  selectedVisibility.value = clampVisibilityToLimit(selectedVisibility.value, comment?.visibility)
+})
+
+watch(messageVisibilityLimit, () => {
+  selectedVisibility.value = clampVisibilityToLimit(selectedVisibility.value, replyingToComment.value?.visibility)
+  editingVisibility.value = clampVisibilityToLimit(editingVisibility.value, editingComment.value?.parent_id ? byId.value[Number(editingComment.value.parent_id)]?.visibility : undefined)
 })
 
 watch(editingVisibilityOptions, (options) => {
   if (!options.length) return
-  const limit = options[0]?.value || 'public'
+  const limit = options[0]?.value || messageVisibilityLimit.value
   editingVisibility.value = clampVisibilityToLimit(editingVisibility.value, limit)
 })
 

@@ -397,7 +397,7 @@
           <UForm :state="registerForm" @submit.prevent="onRegisterSubmit">
             <div class="space-y-3">
               <UInput v-model="registerForm.username" placeholder="用户名" />
-              <p class="text-xs text-gray-500">用户名 2-20 字符，支持中文、日文、英文字母、数字和下划线，大小写敏感。</p>
+              <p class="text-xs text-gray-500">用户名 2-20 字符，支持大小写英文字母、中文、日文、数字和下划线。</p>
               <UInput
                 ref="registerPasswordInput"
                 v-model="registerForm.password"

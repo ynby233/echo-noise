@@ -145,7 +145,7 @@
                 </div>
               </div>
               <div v-if="(expandedCommentsMap[msg.id] || activeCommentId === msg.id) && isCommentEnabled && !isGuestbookMessage(msg)" :id="`comment-container-${msg.id}`" class="mt-2" style="position: relative;">
-                <BuiltinComments v-if="isBuiltin && apiReachable" :key="(commentRefreshKey[msg.id] || 0)" :message-id="msg.id" :site-config="siteConfig" :show-input="activeCommentId === msg.id" auto-scroll-input @cancel="handleCancel(msg.id, $event)" />
+                <BuiltinComments v-if="isBuiltin && apiReachable" :key="(commentRefreshKey[msg.id] || 0)" :message-id="msg.id" :message-visibility="msg.visibility" :site-config="siteConfig" :show-input="activeCommentId === msg.id" auto-scroll-input @cancel="handleCancel(msg.id, $event)" />
                 <div v-else-if="useWaline && apiReachable" :id="`waline-${msg.id}`"></div>
               </div>
             </div>
