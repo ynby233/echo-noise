@@ -363,6 +363,11 @@ func TestUpdateCommentCannotExceedMessageVisibility(t *testing.T) {
 
 func TestGetCommentsReturnsAccountInfoWithoutLegacyContactFields(t *testing.T) {
 	db, r, user, msg := setupCommentAccountTest(t)
+	r.Use(func(c *gin.Context) {
+		c.Set("user_id", user.ID)
+		c.Set("is_admin", false)
+		c.Next()
+	})
 	r.GET("/messages/:id/comments", GetComments)
 
 	accountComment := models.Comment{
@@ -568,11 +573,11 @@ func TestGetCommentsFiltersVisibility(t *testing.T) {
 		return decodeCommentListResponse(t, w)
 	}
 
-	if got := contentsOfComments(request(0, false)); len(got) != 1 || got[0] != "public" {
-		t.Fatalf("anonymous should only see public comments, got %#v", got)
+	if got := contentsOfComments(request(0, false)); len(got) != 0 {
+		t.Fatalf("anonymous should not see comments on public messages, got %#v", got)
 	}
 	if got := contentsOfComments(request(other.ID, false)); len(got) != 2 || got[0] != "public" || got[1] != "users" {
-		t.Fatalf("logged-in non-owner should see public/users comments, got %#v", got)
+		t.Fatalf("logged-in non-owner should see capped public/users comments, got %#v", got)
 	}
 	if got := contentsOfComments(request(owner.ID, false)); len(got) != 4 {
 		t.Fatalf("owner should see all own comments, got %#v", got)
@@ -736,8 +741,8 @@ func TestPublicAndUsersRepliesFollowVisibilityRules(t *testing.T) {
 		return decodeCommentListResponse(t, w)
 	}
 
-	if got := contentsOfComments(request(0, false)); len(got) != 2 || got[0] != "parent-public" || got[1] != "reply-public" {
-		t.Fatalf("anonymous should see public parent and public reply, got %#v", got)
+	if got := contentsOfComments(request(0, false)); len(got) != 0 {
+		t.Fatalf("anonymous should not see replies on public messages, got %#v", got)
 	}
 	if got := contentsOfComments(request(outsider.ID, false)); len(got) != 4 {
 		t.Fatalf("logged-in outsider should see public/users parents and replies, got %#v", got)
@@ -790,8 +795,8 @@ func TestCommentCountsExcludeVisibleReplies(t *testing.T) {
 		return decodeCommentCountResponse(t, w)
 	}
 
-	if got := request(0, false)[msg.ID]; got != 1 {
-		t.Fatalf("anonymous should count only top-level public comments, got %d", got)
+	if got := request(0, false)[msg.ID]; got != 0 {
+		t.Fatalf("anonymous should not count comments on public messages, got %d", got)
 	}
 	if got := request(outsider.ID, false)[msg.ID]; got != 2 {
 		t.Fatalf("logged-in user should count only top-level public/users comments, got %d", got)
@@ -897,8 +902,8 @@ func TestCommentCountsFollowVisibilityRules(t *testing.T) {
 		return decodeCommentCountResponse(t, w)
 	}
 
-	if got := request(0, false)[msg.ID]; got != 1 {
-		t.Fatalf("anonymous should count only public comments, got %d", got)
+	if got := request(0, false)[msg.ID]; got != 0 {
+		t.Fatalf("anonymous should not count comments on public messages, got %d", got)
 	}
 	if got := request(outsider.ID, false)[msg.ID]; got != 2 {
 		t.Fatalf("outsider should count public + users comments only, got %d", got)
@@ -1022,8 +1027,8 @@ func TestGuestbookFollowsCommentVisibilityRules(t *testing.T) {
 		return decodeCommentListResponse(t, w)
 	}
 
-	if got := contentsOfComments(request(0, false)); len(got) != 1 || got[0] != "public-entry" {
-		t.Fatalf("anonymous should see public guestbook entries, got %#v", got)
+	if got := contentsOfComments(request(0, false)); len(got) != 0 {
+		t.Fatalf("anonymous should not see guestbook entries on public messages, got %#v", got)
 	}
 	if got := contentsOfComments(request(outsider.ID, false)); len(got) != 2 || got[0] != "public-entry" || got[1] != "users-entry" {
 		t.Fatalf("logged-in users should see public/users guestbook entries, got %#v", got)

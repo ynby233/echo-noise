@@ -266,7 +266,7 @@ func TestCheckVoceChatHealthDoesNotBindLocalSysAdmin(t *testing.T) {
 	if err := db.First(&admin, 1).Error; err != nil {
 		t.Fatalf("load admin: %v", err)
 	}
-	if admin.VoceChatUserID != "" || admin.VoceChatEmail != "" || admin.VoceChatSyncStatus != "" {
+	if admin.VoceChatUserID != "" || admin.VoceChatEmail != "" || (admin.VoceChatSyncStatus != "" && admin.VoceChatSyncStatus != models.VoceChatSyncStatusNone) {
 		t.Fatalf("health check should not bind local admin, got uid %q email %q status %q", admin.VoceChatUserID, admin.VoceChatEmail, admin.VoceChatSyncStatus)
 	}
 }

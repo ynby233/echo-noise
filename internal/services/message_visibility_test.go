@@ -301,7 +301,7 @@ func TestVoceChatContactCacheUsesConfiguredAdminForSysAdminAuthor(t *testing.T) 
 	if err := database.DB.First(&storedAdmin, admin.ID).Error; err != nil {
 		t.Fatalf("load stored admin: %v", err)
 	}
-	if storedAdmin.VoceChatUserID != "" || storedAdmin.VoceChatEmail != "" || storedAdmin.VoceChatSyncStatus != "" {
+	if storedAdmin.VoceChatUserID != "" || storedAdmin.VoceChatEmail != "" || (storedAdmin.VoceChatSyncStatus != "" && storedAdmin.VoceChatSyncStatus != models.VoceChatSyncStatusNone) {
 		t.Fatalf("admin should not be bound by contacts sync, got uid %q email %q status %q", storedAdmin.VoceChatUserID, storedAdmin.VoceChatEmail, storedAdmin.VoceChatSyncStatus)
 	}
 

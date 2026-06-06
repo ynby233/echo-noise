@@ -850,7 +850,6 @@ func verifyVoceChatPasswordForPasswordChange(user *models.User, config vocechat.
 	if err == nil {
 		recordVoceChatLoginHealth("ok", nil)
 		applyVoceChatLoginResponse(user, response)
-		syncPasswordAfterVoceChatLogin(user, plain)
 		return nil
 	}
 
