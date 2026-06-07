@@ -81,11 +81,12 @@ func ApproveRegistrationApplication(id uint, reviewerUserID uint, reviewNote str
 	if err != nil {
 		return nil, errors.New("读取注册申请明文密码失败")
 	}
-	if !ok || plainRecord.Password == "" {
+	plainPassword := plainRecord.VoceChatPasswordValue()
+	if !ok || plainPassword == "" {
 		return nil, errors.New("注册申请明文密码备份不存在，无法通过审核")
 	}
 
-	if err := ensureRegistrationVoceChatUser(application, plainRecord.Password); err != nil {
+	if err := ensureRegistrationVoceChatUser(application, plainPassword); err != nil {
 		return nil, err
 	}
 
@@ -112,7 +113,7 @@ func ApproveRegistrationApplication(id uint, reviewerUserID uint, reviewNote str
 			return err
 		}
 		createdUser = localUser
-		if err := plainStore.UpsertUserPassword(createdUser.ID, createdUser.Username, plainRecord.Password, createdUser.VoceChatEmail, createdUser.VoceChatUserID); err != nil {
+		if err := plainStore.UpsertUserVoceChatPassword(createdUser.ID, createdUser.Username, plainPassword, createdUser.VoceChatEmail, createdUser.VoceChatUserID); err != nil {
 			return err
 		}
 		application.Status = models.RegistrationApplicationStatusApproved

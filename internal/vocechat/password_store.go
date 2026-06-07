@@ -24,15 +24,19 @@ const (
 )
 
 type PlainPasswordRecord struct {
-	Key            string    `json:"key" gorm:"primaryKey;size:128"`
-	Kind           string    `json:"kind" gorm:"index;size:32;not null"`
-	UserID         uint      `json:"user_id,omitempty" gorm:"index"`
-	ApplicationID  string    `json:"application_id,omitempty" gorm:"index;size:64"`
-	Username       string    `json:"username" gorm:"size:255;not null"`
-	Password       string    `json:"password" gorm:"not null"`
-	VoceChatEmail  string    `json:"voce_chat_email,omitempty" gorm:"size:255"`
-	VoceChatUserID string    `json:"voce_chat_user_id,omitempty" gorm:"size:64"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	Key                            string     `json:"key" gorm:"primaryKey;size:128"`
+	Kind                           string     `json:"kind" gorm:"index;size:32;not null"`
+	UserID                         uint       `json:"user_id,omitempty" gorm:"index"`
+	ApplicationID                  string     `json:"application_id,omitempty" gorm:"index;size:64"`
+	Username                       string     `json:"username" gorm:"size:255;not null"`
+	Password                       string     `json:"password,omitempty" gorm:"not null"`
+	VoceChatPassword               string     `json:"voce_chat_password,omitempty"`
+	VoceChatPasswordUpdatedAt      *time.Time `json:"voce_chat_password_updated_at,omitempty"`
+	LocalFallbackPassword          string     `json:"local_fallback_password,omitempty"`
+	LocalFallbackPasswordUpdatedAt *time.Time `json:"local_fallback_password_updated_at,omitempty"`
+	VoceChatEmail                  string     `json:"voce_chat_email,omitempty" gorm:"size:255"`
+	VoceChatUserID                 string     `json:"voce_chat_user_id,omitempty" gorm:"size:64"`
+	UpdatedAt                      time.Time  `json:"updated_at"`
 }
 
 func (PlainPasswordRecord) TableName() string {
@@ -63,34 +67,89 @@ func DefaultPlainPasswordStore() *PlainPasswordStore {
 	return NewPlainPasswordStore("")
 }
 
+func (r PlainPasswordRecord) VoceChatPasswordValue() string {
+	if strings.TrimSpace(r.VoceChatPassword) != "" {
+		return r.VoceChatPassword
+	}
+	return r.Password
+}
+
+func (r PlainPasswordRecord) LocalFallbackPasswordValue() string {
+	if strings.TrimSpace(r.LocalFallbackPassword) != "" {
+		return r.LocalFallbackPassword
+	}
+	return ""
+}
+
+func (r PlainPasswordRecord) HasAnyPassword() bool {
+	return strings.TrimSpace(r.VoceChatPasswordValue()) != "" || strings.TrimSpace(r.LocalFallbackPasswordValue()) != ""
+}
+
 func (s *PlainPasswordStore) UpsertUserPassword(userID uint, username, password, voceChatEmail, voceChatUserID string) error {
+	return s.UpsertUserVoceChatPassword(userID, username, password, voceChatEmail, voceChatUserID)
+}
+
+func (s *PlainPasswordStore) UpsertUserVoceChatPassword(userID uint, username, password, voceChatEmail, voceChatUserID string) error {
 	if userID == 0 {
 		return errors.New("用户ID不能为空")
 	}
-	return s.upsert(PlainPasswordRecord{
-		Key:            userRecordKey(userID),
-		Kind:           PlainPasswordKindUser,
-		UserID:         userID,
-		Username:       strings.TrimSpace(username),
-		Password:       password,
-		VoceChatEmail:  strings.TrimSpace(voceChatEmail),
-		VoceChatUserID: strings.TrimSpace(voceChatUserID),
+	return s.upsert(plainPasswordUpdate{
+		key:              userRecordKey(userID),
+		kind:             PlainPasswordKindUser,
+		userID:           userID,
+		username:         strings.TrimSpace(username),
+		voceChatEmail:    strings.TrimSpace(voceChatEmail),
+		voceChatUserID:   strings.TrimSpace(voceChatUserID),
+		voceChatPassword: stringPtr(password),
+	})
+}
+
+func (s *PlainPasswordStore) UpsertUserLocalFallbackPassword(userID uint, username, password, voceChatEmail, voceChatUserID string) error {
+	if userID == 0 {
+		return errors.New("用户ID不能为空")
+	}
+	return s.upsert(plainPasswordUpdate{
+		key:                   userRecordKey(userID),
+		kind:                  PlainPasswordKindUser,
+		userID:                userID,
+		username:              strings.TrimSpace(username),
+		voceChatEmail:         strings.TrimSpace(voceChatEmail),
+		voceChatUserID:        strings.TrimSpace(voceChatUserID),
+		localFallbackPassword: stringPtr(password),
+	})
+}
+
+func (s *PlainPasswordStore) UpsertUserPasswordMetadata(userID uint, username, voceChatEmail, voceChatUserID string) error {
+	if userID == 0 {
+		return errors.New("用户ID不能为空")
+	}
+	return s.upsert(plainPasswordUpdate{
+		key:            userRecordKey(userID),
+		kind:           PlainPasswordKindUser,
+		userID:         userID,
+		username:       strings.TrimSpace(username),
+		voceChatEmail:  strings.TrimSpace(voceChatEmail),
+		voceChatUserID: strings.TrimSpace(voceChatUserID),
 	})
 }
 
 func (s *PlainPasswordStore) UpsertApplicationPassword(applicationID, username, password, voceChatEmail, voceChatUserID string) error {
+	return s.UpsertApplicationVoceChatPassword(applicationID, username, password, voceChatEmail, voceChatUserID)
+}
+
+func (s *PlainPasswordStore) UpsertApplicationVoceChatPassword(applicationID, username, password, voceChatEmail, voceChatUserID string) error {
 	applicationID = strings.TrimSpace(applicationID)
 	if applicationID == "" {
 		return errors.New("申请ID不能为空")
 	}
-	return s.upsert(PlainPasswordRecord{
-		Key:            applicationRecordKey(applicationID),
-		Kind:           PlainPasswordKindApplication,
-		ApplicationID:  applicationID,
-		Username:       strings.TrimSpace(username),
-		Password:       password,
-		VoceChatEmail:  strings.TrimSpace(voceChatEmail),
-		VoceChatUserID: strings.TrimSpace(voceChatUserID),
+	return s.upsert(plainPasswordUpdate{
+		key:              applicationRecordKey(applicationID),
+		kind:             PlainPasswordKindApplication,
+		applicationID:    applicationID,
+		username:         strings.TrimSpace(username),
+		voceChatEmail:    strings.TrimSpace(voceChatEmail),
+		voceChatUserID:   strings.TrimSpace(voceChatUserID),
+		voceChatPassword: stringPtr(password),
 	})
 }
 
@@ -114,9 +173,28 @@ func (s *PlainPasswordStore) Path() string {
 	return s.path
 }
 
-func (s *PlainPasswordStore) upsert(record PlainPasswordRecord) error {
-	if strings.TrimSpace(record.Password) == "" {
-		return errors.New("明文密码不能为空")
+type plainPasswordUpdate struct {
+	key                   string
+	kind                  string
+	userID                uint
+	applicationID         string
+	username              string
+	voceChatEmail         string
+	voceChatUserID        string
+	voceChatPassword      *string
+	localFallbackPassword *string
+}
+
+func stringPtr(value string) *string {
+	return &value
+}
+
+func (s *PlainPasswordStore) upsert(update plainPasswordUpdate) error {
+	if update.voceChatPassword != nil && strings.TrimSpace(*update.voceChatPassword) == "" {
+		return errors.New("VoceChat 明文密码不能为空")
+	}
+	if update.localFallbackPassword != nil && strings.TrimSpace(*update.localFallbackPassword) == "" {
+		return errors.New("本地备用明文密码不能为空")
 	}
 
 	s.mu.Lock()
@@ -128,7 +206,37 @@ func (s *PlainPasswordStore) upsert(record PlainPasswordRecord) error {
 	}
 	defer closeDatabase(db)
 
-	record.UpdatedAt = time.Now().UTC()
+	now := time.Now().UTC()
+	record := PlainPasswordRecord{}
+	if err := db.First(&record, "key = ?", update.key).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("读取明文密码库失败: %w", err)
+		}
+		record = PlainPasswordRecord{Key: update.key}
+	} else {
+		backfillLegacyPasswords(&record)
+	}
+
+	record.Key = update.key
+	record.Kind = update.kind
+	record.UserID = update.userID
+	record.ApplicationID = strings.TrimSpace(update.applicationID)
+	record.Username = strings.TrimSpace(update.username)
+	record.VoceChatEmail = strings.TrimSpace(update.voceChatEmail)
+	record.VoceChatUserID = strings.TrimSpace(update.voceChatUserID)
+	if update.voceChatPassword != nil {
+		record.VoceChatPassword = *update.voceChatPassword
+		updatedAt := now
+		record.VoceChatPasswordUpdatedAt = &updatedAt
+	}
+	if update.localFallbackPassword != nil {
+		record.LocalFallbackPassword = *update.localFallbackPassword
+		updatedAt := now
+		record.LocalFallbackPasswordUpdatedAt = &updatedAt
+	}
+	record.Password = ""
+	record.UpdatedAt = now
+
 	if err := db.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "key"}},
 		UpdateAll: true,
@@ -136,6 +244,20 @@ func (s *PlainPasswordStore) upsert(record PlainPasswordRecord) error {
 		return fmt.Errorf("写入明文密码库失败: %w", err)
 	}
 	return s.ensurePermissionsLocked()
+}
+
+func backfillLegacyPasswords(record *PlainPasswordRecord) {
+	if record == nil || strings.TrimSpace(record.Password) == "" {
+		return
+	}
+	legacyUpdatedAt := record.UpdatedAt
+	if strings.TrimSpace(record.VoceChatPassword) == "" {
+		record.VoceChatPassword = record.Password
+		if record.VoceChatPasswordUpdatedAt == nil && !legacyUpdatedAt.IsZero() {
+			updatedAt := legacyUpdatedAt
+			record.VoceChatPasswordUpdatedAt = &updatedAt
+		}
+	}
 }
 
 func (s *PlainPasswordStore) get(key string) (PlainPasswordRecord, bool, error) {
@@ -155,6 +277,7 @@ func (s *PlainPasswordStore) get(key string) (PlainPasswordRecord, bool, error) 
 		}
 		return PlainPasswordRecord{}, false, fmt.Errorf("读取明文密码库失败: %w", err)
 	}
+	backfillLegacyPasswords(&record)
 	return record, true, nil
 }
 

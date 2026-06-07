@@ -208,7 +208,7 @@ func Register(userdto dto.RegisterDto) error {
 	}
 
 	plainStore := vocechat.DefaultPlainPasswordStore()
-	if err := plainStore.UpsertApplicationPassword(applicationID, username, userdto.Password, provision.Email, provision.UserID); err != nil {
+	if err := plainStore.UpsertApplicationVoceChatPassword(applicationID, username, userdto.Password, provision.Email, provision.UserID); err != nil {
 		return errors.New("创建注册申请失败")
 	}
 
@@ -448,7 +448,26 @@ func syncPasswordAfterVoceChatLogin(user *models.User, plain string) {
 		return
 	}
 
-	_ = vocechat.DefaultPlainPasswordStore().UpsertUserPassword(user.ID, user.Username, plain, user.VoceChatEmail, user.VoceChatUserID)
+	hashed := models.HashPassword(plain)
+	if hashed != "" {
+		if err := repository.UpdateUserField(user.ID, "password", hashed); err == nil {
+			user.Password = hashed
+		}
+	}
+	_ = vocechat.DefaultPlainPasswordStore().UpsertUserVoceChatPassword(user.ID, user.Username, plain, user.VoceChatEmail, user.VoceChatUserID)
+}
+
+func syncPasswordAfterLocalFallbackLogin(user *models.User, result localLoginResult) {
+	if !isVoceChatBoundOrdinaryUser(user) || result.usedOverride || result.matched == "" {
+		return
+	}
+	hashed := models.HashPassword(result.matched)
+	if hashed != "" {
+		if err := repository.UpdateUserField(user.ID, "password", hashed); err == nil {
+			user.Password = hashed
+		}
+	}
+	_ = vocechat.DefaultPlainPasswordStore().UpsertUserLocalFallbackPassword(user.ID, user.Username, result.matched, user.VoceChatEmail, user.VoceChatUserID)
 }
 
 func updatePlainPasswordUserMetadata(user *models.User) {
@@ -457,10 +476,10 @@ func updatePlainPasswordUserMetadata(user *models.User) {
 	}
 	store := vocechat.DefaultPlainPasswordStore()
 	record, ok, err := store.GetUserPassword(user.ID)
-	if err != nil || !ok || record.Password == "" {
+	if err != nil || !ok || !record.HasAnyPassword() {
 		return
 	}
-	_ = store.UpsertUserPassword(user.ID, user.Username, record.Password, user.VoceChatEmail, user.VoceChatUserID)
+	_ = store.UpsertUserPasswordMetadata(user.ID, user.Username, user.VoceChatEmail, user.VoceChatUserID)
 }
 
 func markVoceChatUserSync(user *models.User, status string, syncErr error, vcUser *vocechat.User, fallbackName string) {
@@ -559,7 +578,11 @@ func saveLocalUserPassword(user *models.User, plain string) error {
 		return fmt.Errorf("更新密码失败: %v", err)
 	}
 	user.Password = hashed
-	_ = vocechat.DefaultPlainPasswordStore().UpsertUserPassword(user.ID, user.Username, plain, user.VoceChatEmail, user.VoceChatUserID)
+	if isVoceChatBoundOrdinaryUser(user) {
+		_ = vocechat.DefaultPlainPasswordStore().UpsertUserVoceChatPassword(user.ID, user.Username, plain, user.VoceChatEmail, user.VoceChatUserID)
+	} else {
+		_ = vocechat.DefaultPlainPasswordStore().UpsertUserLocalFallbackPassword(user.ID, user.Username, plain, user.VoceChatEmail, user.VoceChatUserID)
+	}
 	return nil
 }
 
@@ -624,6 +647,7 @@ func Login(userdto dto.LoginDto) (*models.User, error) {
 				return nil, err
 			}
 			applyLocalLoginUpgrade(user, result)
+			syncPasswordAfterLocalFallbackLogin(user, result)
 		}
 	} else {
 		if isVoceChatBoundOrdinaryUser(user) && !voceConfig.LocalFallbackEnabled {
@@ -634,6 +658,7 @@ func Login(userdto dto.LoginDto) (*models.User, error) {
 			return nil, err
 		}
 		applyLocalLoginUpgrade(user, result)
+		syncPasswordAfterLocalFallbackLogin(user, result)
 	}
 
 	if err := ensureLoginToken(user); err != nil {
@@ -656,10 +681,11 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 	}
 	for _, user := range allusers {
 		users = append(users, models.UserStatus{
-			ID:        user.ID,
-			Username:  user.Username,
-			IsAdmin:   user.IsAdmin,
-			AvatarURL: strings.TrimSpace(user.AvatarURL),
+			ID:            user.ID,
+			Username:      user.Username,
+			IsAdmin:       user.IsAdmin,
+			AvatarURL:     strings.TrimSpace(user.AvatarURL),
+			VoceChatEmail: strings.TrimSpace(user.VoceChatEmail),
 		})
 	}
 

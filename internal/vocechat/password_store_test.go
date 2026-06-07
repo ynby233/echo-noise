@@ -35,15 +35,25 @@ func TestPlainPasswordStoreUpsertDeleteAndPermissions(t *testing.T) {
 	if !found {
 		t.Fatal("user password record not found")
 	}
-	if userRecord.Password != "updated-password" || userRecord.VoceChatEmail != "Tom@vc.com" {
+	if userRecord.Password != "" || userRecord.VoceChatPassword != "updated-password" || userRecord.LocalFallbackPassword != "" || userRecord.VoceChatPasswordUpdatedAt == nil || userRecord.VoceChatEmail != "Tom@vc.com" {
 		t.Fatalf("user record = %#v", userRecord)
+	}
+	if err := store.UpsertUserLocalFallbackPassword(7, "Tom", "fallback-password", "Tom@vc.com", "vc-7"); err != nil {
+		t.Fatalf("update user fallback password: %v", err)
+	}
+	userRecord, found, err = store.GetUserPassword(7)
+	if err != nil {
+		t.Fatalf("get updated user password: %v", err)
+	}
+	if !found || userRecord.VoceChatPassword != "updated-password" || userRecord.LocalFallbackPassword != "fallback-password" || userRecord.LocalFallbackPasswordUpdatedAt == nil {
+		t.Fatalf("user record after fallback update = %#v", userRecord)
 	}
 
 	applicationRecord, found, err := store.GetApplicationPassword("app-1")
 	if err != nil {
 		t.Fatalf("get application password: %v", err)
 	}
-	if !found || applicationRecord.Kind != PlainPasswordKindApplication || applicationRecord.Password != "pending-password" {
+	if !found || applicationRecord.Kind != PlainPasswordKindApplication || applicationRecord.Password != "" || applicationRecord.VoceChatPassword != "pending-password" || applicationRecord.VoceChatPasswordUpdatedAt == nil {
 		t.Fatalf("application record found=%v record=%#v", found, applicationRecord)
 	}
 

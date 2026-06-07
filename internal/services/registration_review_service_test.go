@@ -85,7 +85,7 @@ func TestApproveRegistrationApplicationCreatesLocalUserAndMovesPlainPassword(t *
 	if err != nil {
 		t.Fatalf("read user plain password: %v", err)
 	}
-	if !ok || record.Password != "secret-pass" || record.VoceChatUserID != "99" {
+	if !ok || record.VoceChatPassword != "secret-pass" || record.LocalFallbackPassword != "" || record.VoceChatPasswordUpdatedAt == nil || record.VoceChatUserID != "99" {
 		t.Fatalf("unexpected user plain password record: ok=%v record=%#v", ok, record)
 	}
 }

@@ -104,6 +104,13 @@ func CanViewMessage(message models.Message, userID *uint, isAdmin bool) bool {
 	}
 }
 
+func CanInteractWithMessage(message models.Message, userID *uint) bool {
+	if userID != nil && *userID != 0 && message.UserID != *userID && StoredMessageVisibility(message) == MessageVisibilityContacts {
+		_ = EnsureVoceChatContactCacheForAuthor(message.UserID)
+	}
+	return CanViewMessage(message, userID, false)
+}
+
 func ApplyMessageVisibilityScope(query *gorm.DB, userID *uint, isAdmin bool) *gorm.DB {
 	if isAdmin {
 		return query
@@ -447,8 +454,8 @@ func ToggleLike(messageID uint, userID *uint, sessionID string, isAdmin bool) (b
 	if err != nil {
 		return false, 0, err
 	}
-	if isAdmin && StoredMessageVisibility(*message) == MessageVisibilityPrivate && (currentUserID == nil || message.UserID != *currentUserID) {
-		return false, 0, fmt.Errorf("无权点赞私密内容")
+	if !CanInteractWithMessage(*message, currentUserID) {
+		return false, 0, fmt.Errorf("无权点赞该内容")
 	}
 	// 查询是否已有点赞
 	var existing models.MessageLike

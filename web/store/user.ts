@@ -14,12 +14,17 @@ export const useUserStore = defineStore("userStore", () => {
         const list = (newStatus as any).users || (newStatus as any).Users || []
         const u = list.find((it: any) => (it.user_id ?? it.id ?? it.ID) === (user.value as any)?.userid)
         if (u) {
+            const previous = (user.value || {}) as any
             user.value = {
+                ...previous,
                 userid: u.user_id ?? u.id ?? u.ID,
+                id: u.id ?? u.user_id ?? u.ID,
                 username: u.username ?? u.Username,
                 is_admin: u.is_admin ?? u.IsAdmin,
-                avatar_url: u.avatar_url ?? u.AvatarURL,
-                total_messages: (newStatus as any).total_messages ?? 0
+                avatar_url: u.avatar_url ?? u.AvatarURL ?? previous.avatar_url,
+                email: u.email ?? u.Email ?? previous.email,
+                voce_chat_email: u.voce_chat_email ?? u.VoceChatEmail ?? previous.voce_chat_email,
+                total_messages: (newStatus as any).total_messages ?? previous.total_messages ?? 0
             } as any
             isLogin.value = true
         }

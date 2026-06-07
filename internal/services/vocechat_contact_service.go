@@ -126,13 +126,14 @@ func loginVoceChatContactOwner(ctx context.Context, config vocechat.Config, auth
 		return owner, "", errors.New("作者未绑定 VoceChat")
 	}
 	record, ok, err := vocechat.DefaultPlainPasswordStore().GetUserPassword(author.ID)
-	if err != nil || !ok || strings.TrimSpace(record.Password) == "" {
+	password := record.VoceChatPasswordValue()
+	if err != nil || !ok || strings.TrimSpace(password) == "" {
 		if err == nil {
 			err = errors.New("作者 VoceChat 密码不可用")
 		}
 		return owner, "", err
 	}
-	login, err := voceChatPasswordLogin(ctx, config, strings.TrimSpace(author.VoceChatEmail), record.Password)
+	login, err := voceChatPasswordLogin(ctx, config, strings.TrimSpace(author.VoceChatEmail), password)
 	if err != nil {
 		return owner, "", err
 	}

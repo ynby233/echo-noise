@@ -74,6 +74,8 @@ export interface User {
     Description?: string;
     email?: string;
     Email?: string;
+    voce_chat_email?: string;
+    VoceChatEmail?: string;
     email_verified?: boolean;
     EmailVerified?: boolean;
     github_id?: string | number;
@@ -112,6 +114,8 @@ export interface UserStatus {
     user_id?: number;
     username: string;
     is_admin: boolean;
+    avatar_url?: string;
+    voce_chat_email?: string;
 }
 
 export interface Status {

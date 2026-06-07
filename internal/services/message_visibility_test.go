@@ -208,7 +208,7 @@ func TestVoceChatContactCacheAllowsContactsVisibility(t *testing.T) {
 	alice := mustCreateUser(t, models.User{Username: "contact_alice", Password: models.HashPassword("alice"), Token: models.GenerateToken(32), VoceChatEmail: "alice@vc.com", VoceChatUserID: "101"})
 	bob := mustCreateUser(t, models.User{Username: "contact_bob", Password: models.HashPassword("bob"), Token: models.GenerateToken(32), VoceChatEmail: "bob@vc.com", VoceChatUserID: "202"})
 	charlie := mustCreateUser(t, models.User{Username: "contact_charlie", Password: models.HashPassword("charlie"), Token: models.GenerateToken(32), VoceChatEmail: "charlie@vc.com", VoceChatUserID: "303"})
-	if err := vocechat.NewPlainPasswordStore(storePath).UpsertUserPassword(alice.ID, alice.Username, "alice-vc-password", alice.VoceChatEmail, alice.VoceChatUserID); err != nil {
+	if err := vocechat.NewPlainPasswordStore(storePath).UpsertUserVoceChatPassword(alice.ID, alice.Username, "alice-vc-password", alice.VoceChatEmail, alice.VoceChatUserID); err != nil {
 		t.Fatalf("seed author plain password: %v", err)
 	}
 
@@ -362,6 +362,40 @@ func TestVoceChatContactVisibilityDisabledIgnoresFreshCache(t *testing.T) {
 	}
 }
 
+func TestAdminCannotLikeContactsMessageHiddenFromOwnSocialGraph(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	storePath := filepath.Join(t.TempDir(), "plain-passwords.db")
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
+	enableVoceChatContactsForTest(t)
+
+	admin := mustCreateUser(t, models.User{Username: "like_admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32), VoceChatEmail: "admin@vc.com", VoceChatUserID: "1"})
+	alice := mustCreateUser(t, models.User{Username: "like_alice", Password: models.HashPassword("alice"), Token: models.GenerateToken(32), VoceChatEmail: "alice@vc.com", VoceChatUserID: "101"})
+
+	message := models.Message{Content: "alice contacts", Username: alice.Username, UserID: alice.ID, Visibility: MessageVisibilityContacts}
+	if err := ApplyMessageVisibilityForSave(&message); err != nil {
+		t.Fatalf("apply contacts visibility: %v", err)
+	}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatalf("create contacts message: %v", err)
+	}
+
+	adminID := admin.ID
+	if _, err := GetMessageByIDForViewer(message.ID, &adminID, true); err != nil {
+		t.Fatalf("admin should still read contacts message for moderation: %v", err)
+	}
+	if liked, count, err := ToggleLike(message.ID, &adminID, "", true); err == nil || liked || count != 0 {
+		t.Fatalf("admin should not like contacts message outside own contacts, liked=%v count=%d err=%v", liked, count, err)
+	}
+
+	var likeCount int64
+	if err := database.DB.Model(&models.MessageLike{}).Where("message_id = ?", message.ID).Count(&likeCount).Error; err != nil {
+		t.Fatalf("count likes: %v", err)
+	}
+	if likeCount != 0 {
+		t.Fatalf("unexpected like rows = %d", likeCount)
+	}
+}
+
 func TestVoceChatContactCacheFailureKeepsContactsPrivate(t *testing.T) {
 	db := setupUserServiceTestDB(t)
 	storePath := filepath.Join(t.TempDir(), "plain-passwords.db")
@@ -370,7 +404,7 @@ func TestVoceChatContactCacheFailureKeepsContactsPrivate(t *testing.T) {
 
 	alice := mustCreateUser(t, models.User{Username: "fail_alice", Password: models.HashPassword("alice"), Token: models.GenerateToken(32), VoceChatEmail: "alice@vc.com", VoceChatUserID: "101"})
 	bob := mustCreateUser(t, models.User{Username: "fail_bob", Password: models.HashPassword("bob"), Token: models.GenerateToken(32), VoceChatEmail: "bob@vc.com", VoceChatUserID: "202"})
-	if err := vocechat.NewPlainPasswordStore(storePath).UpsertUserPassword(alice.ID, alice.Username, "alice-vc-password", alice.VoceChatEmail, alice.VoceChatUserID); err != nil {
+	if err := vocechat.NewPlainPasswordStore(storePath).UpsertUserVoceChatPassword(alice.ID, alice.Username, "alice-vc-password", alice.VoceChatEmail, alice.VoceChatUserID); err != nil {
 		t.Fatalf("seed author plain password: %v", err)
 	}
 
