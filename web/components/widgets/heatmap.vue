@@ -1,5 +1,5 @@
 <template>
-  <div class="calendar-wrapper">
+  <div class="calendar-wrapper" :class="{ 'heatmap-compact': props.compact }">
     <div class="calendar-container" ref="calendarContainer" :class="isDark ? 'heatmap-dark' : 'heatmap-light'">
       <div class="heatmap-grid">
         <div v-for="(week, i) in calendarData" :key="i" class="heatmap-week">
@@ -25,7 +25,7 @@ import { useUserStore } from '~/store/user'
 
 interface HeatItem { date: string; count: number }
 interface CalendarDay { date: string; count: number; level: number }
-const props = withDefaults(defineProps<{ activeTab?: string }>(), { activeTab: 'latest' })
+const props = withDefaults(defineProps<{ activeTab?: string; compact?: boolean }>(), { activeTab: 'latest', compact: false })
 const userStore = useUserStore()
 const rawData = ref<HeatItem[]>([])
 const calendarData = ref<CalendarDay[][]>([])
@@ -343,6 +343,27 @@ const fetchHeatmapData = async () => {
     border-radius: 2px;
     transition: all 0.2s ease;
     border: 1px solid transparent;
+  }
+
+  .heatmap-compact .heatmap-grid {
+    gap: 2px;
+    padding-bottom: 4px;
+  }
+
+  .heatmap-compact .heatmap-grid::-webkit-scrollbar { height: 4px; }
+
+  .heatmap-compact .heatmap-week {
+    gap: 2px;
+  }
+
+  .heatmap-compact .heatmap-day {
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+  }
+
+  .heatmap-compact .heatmap-day:hover {
+    transform: scale(1.3);
   }
   .heatmap-light .heatmap-day { border-color: #cbd5e1; }
   .heatmap-dark .heatmap-day { border-color: rgba(255,255,255,0.12); }

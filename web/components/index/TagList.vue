@@ -3,7 +3,7 @@
     <div class="relative">
       <div class="tags-wrapper">
         <div class="tags-scroll">
-          <template v-for="tag in filteredTags" :key="tag.name + timestamp">
+          <template v-for="tag in filteredTags" :key="tag.name">
             <span
               class="tag-item"
               @click="handleTagClick(tag.name)"
@@ -14,29 +14,16 @@
           </template>
         </div>
       </div>
-      <div 
-        class="absolute -right-1 top-1/2 -translate-y-1/2 p-2 cursor-pointer transition-all duration-200 hover:scale-110 z-10 refresh-toggle"
-        @click="refreshTags"
-        title="刷新标签"
-      >
-        <UIcon 
-          name="i-mdi-refresh" 
-          class="w-5 h-5 refresh-icon"
-          :class="{ 'animate-spin': isRefreshing }"
-        />
-      </div>
       <div class="scroll-fade"></div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import type { Tag } from '~/types/models'
 
-const emit = defineEmits(['tagClick', 'updateTags'])
-const isRefreshing = ref(false)
-const timestamp = ref(Date.now())
+const emit = defineEmits(['tagClick'])
 
 const props = withDefaults(defineProps<{ tags?: Tag[] }>(), {
   tags: () => []
@@ -71,18 +58,6 @@ const filteredTags = computed(() => {
 
 const handleTagClick = (tagName: string) => {
   emit('tagClick', tagName)
-}
-
-const refreshTags = async () => {
-  if (isRefreshing.value) return
-  
-  isRefreshing.value = true
-  timestamp.value = Date.now()
-  emit('updateTags')
-  
-  setTimeout(() => {
-    isRefreshing.value = false
-  }, 1000)
 }
 </script>
 
@@ -148,7 +123,4 @@ const refreshTags = async () => {
   width: 32px;
   pointer-events: none;
 }
-.refresh-icon { color: var(--title-color, #e5e7eb); filter: drop-shadow(0 0 1px rgba(0,0,0,0.35)); }
-.refresh-toggle { opacity: 0; pointer-events: none; }
-.tags-container:hover .refresh-toggle { opacity: 1; pointer-events: auto; }
 </style>

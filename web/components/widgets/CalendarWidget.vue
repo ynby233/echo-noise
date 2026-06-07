@@ -4,9 +4,14 @@
       <button type="button" class="calendar-nav" aria-label="上个月" @click="moveMonth(-1)">
         <UIcon name="i-heroicons-chevron-left" class="w-4 h-4" />
       </button>
-      <div class="calendar-title">
-        <UIcon name="i-heroicons-calendar-days" class="w-4 h-4" />
-        <span>{{ monthTitle }}</span>
+      <div class="calendar-picker">
+        <UIcon name="i-heroicons-calendar-days" class="w-4 h-4 calendar-picker-icon" />
+        <select class="calendar-select year-select" :value="currentYear" aria-label="选择年份" @change="setYearFromEvent">
+          <option v-for="year in yearOptions" :key="year" :value="year">{{ year }}年</option>
+        </select>
+        <select class="calendar-select month-select" :value="currentMonthNumber" aria-label="选择月份" @change="setMonthFromEvent">
+          <option v-for="month in monthOptions" :key="month" :value="month">{{ month }}月</option>
+        </select>
       </div>
       <button type="button" class="calendar-nav" aria-label="下个月" @click="moveMonth(1)">
         <UIcon name="i-heroicons-chevron-right" class="w-4 h-4" />
@@ -105,7 +110,22 @@ const today = computed(() => formatLocalDate(new Date()))
 const currentUserId = computed(() => Number((userStore.user as any)?.userid || (userStore.user as any)?.id || (userStore.user as any)?.user_id || 0))
 const personalActive = computed(() => props.activeTab === 'personal')
 const scopeLabel = computed(() => personalActive.value ? '个人笔记' : '全部可见笔记')
-const monthTitle = computed(() => `${currentMonth.value.getFullYear()}年${currentMonth.value.getMonth() + 1}月`)
+const currentYear = computed(() => currentMonth.value.getFullYear())
+const currentMonthNumber = computed(() => currentMonth.value.getMonth() + 1)
+const monthOptions = Array.from({ length: 12 }, (_, index) => index + 1)
+const yearOptions = computed(() => {
+  const nowYear = new Date().getFullYear()
+  const years = new Set<number>([nowYear, currentYear.value])
+  const selected = parseLocalDate(props.selectedDate)
+  if (selected) years.add(selected.getFullYear())
+  for (const date of Object.keys(countMap.value)) {
+    const year = Number(date.slice(0, 4))
+    if (Number.isFinite(year)) years.add(year)
+  }
+  const min = Math.min(...years) - 5
+  const max = Math.max(...years) + 5
+  return Array.from({ length: max - min + 1 }, (_, index) => min + index)
+})
 
 const calendarDays = computed<CalendarDay[]>(() => {
   const first = currentMonth.value
@@ -164,6 +184,20 @@ const moveMonth = (delta: number) => {
   currentMonth.value = new Date(currentMonth.value.getFullYear(), currentMonth.value.getMonth() + delta, 1)
 }
 
+const setYearFromEvent = (event: Event) => {
+  const year = Number((event.target as HTMLSelectElement).value)
+  if (Number.isFinite(year)) {
+    currentMonth.value = new Date(year, currentMonth.value.getMonth(), 1)
+  }
+}
+
+const setMonthFromEvent = (event: Event) => {
+  const month = Number((event.target as HTMLSelectElement).value)
+  if (Number.isFinite(month)) {
+    currentMonth.value = new Date(currentMonth.value.getFullYear(), month - 1, 1)
+  }
+}
+
 const selectDay = (day: CalendarDay) => {
   const parsed = parseLocalDate(day.date)
   if (parsed && !day.inMonth) currentMonth.value = startOfMonth(parsed)
@@ -189,7 +223,7 @@ onMounted(() => {
 
 <style scoped>
 .calendar-widget {
-  padding: 8px;
+  padding: 4px 5px 5px;
   min-width: 0;
 }
 
@@ -198,26 +232,58 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 5px;
 }
 
 .calendar-head {
-  margin-bottom: 10px;
+  margin-bottom: 4px;
 }
 
-.calendar-title {
+.calendar-picker {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
-  font-size: 13px;
-  font-weight: 700;
+  flex: 1;
+}
+
+.calendar-picker-icon {
+  flex: 0 0 auto;
+  opacity: 0.78;
+}
+
+.calendar-select {
+  height: 22px;
+  min-width: 0;
+  padding: 0 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(148, 163, 184, 0.08);
+  color: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+  outline: none;
+}
+
+.calendar-select:hover,
+.calendar-select:focus-visible {
+  border-color: rgba(249, 115, 22, 0.34);
+}
+
+.year-select {
+  width: 68px;
+}
+
+.month-select {
+  width: 50px;
 }
 
 .calendar-nav {
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -232,29 +298,31 @@ onMounted(() => {
   border-color: rgba(249, 115, 22, 0.34);
 }
 
-.calendar-weekdays,
-.calendar-grid {
+.calendar-grid,
+.calendar-weekdays {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 4px;
+  gap: 2px;
 }
 
 .calendar-weekdays {
-  margin-bottom: 6px;
-  font-size: 11px;
+  margin-bottom: 3px;
+  color: rgba(100, 116, 139, 0.85);
+  font-size: 10px;
+  font-weight: 600;
   opacity: 0.66;
   text-align: center;
 }
 
 .calendar-day {
   position: relative;
-  aspect-ratio: 1 / 1;
+  height: 21px;
   min-width: 0;
-  border-radius: 7px;
+  border-radius: 5px;
   border: 1px solid transparent;
   background: rgba(148, 163, 184, 0.08);
   color: inherit;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
@@ -269,7 +337,8 @@ onMounted(() => {
 }
 
 .calendar-day.is-today {
-  border-color: rgba(59, 130, 246, 0.46);
+  border-color: rgba(37, 99, 235, 0.86);
+  background: rgba(37, 99, 235, 0.12);
 }
 
 .calendar-day.is-selected {
@@ -280,23 +349,41 @@ onMounted(() => {
 
 .day-number {
   position: absolute;
-  top: 6px;
-  left: 6px;
+  top: 3px;
+  left: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+}
+
+.calendar-day.is-today .day-number {
+  background: rgb(37, 99, 235);
+  color: #fff;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.22);
+}
+
+.calendar-day.is-selected .day-number {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+  box-shadow: none;
 }
 
 .day-count {
   position: absolute;
-  right: 4px;
-  bottom: 4px;
+  right: 2px;
+  bottom: 2px;
   max-width: calc(100% - 8px);
-  min-width: 14px;
-  height: 14px;
-  padding: 0 3px;
+  min-width: 12px;
+  height: 12px;
+  padding: 0 2px;
   border-radius: 999px;
   background: rgba(14, 165, 233, 0.16);
   color: rgb(2, 132, 199);
-  font-size: 9px;
-  line-height: 14px;
+  font-size: 8px;
+  line-height: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -327,15 +414,15 @@ onMounted(() => {
 }
 
 .calendar-foot {
-  min-height: 26px;
-  margin-top: 9px;
-  font-size: 12px;
+  min-height: 21px;
+  margin-top: 4px;
+  font-size: 11px;
 }
 
 .calendar-today,
 .calendar-clear {
-  height: 24px;
-  padding: 0 8px;
+  height: 20px;
+  padding: 0 6px;
   border-radius: 6px;
   border: 1px solid rgba(148, 163, 184, 0.28);
   background: rgba(148, 163, 184, 0.08);

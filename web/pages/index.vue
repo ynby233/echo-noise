@@ -121,16 +121,24 @@
             </div>
           </div>
         </UCard>
-        <div v-if="layoutState==='two'" class="mt-2 space-y-3">
-          <UCard v-if="frontendConfig.announcementEnabled && (frontendConfig.announcementText || '').trim() !== ''" class="sidebar-card" :class="sidebarThemeCard">
+        <div v-if="layoutState==='two'" class="mt-2 space-y-2">
+          <UCard v-if="frontendConfig.announcementEnabled && (frontendConfig.announcementText || '').trim() !== ''" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
             <AnnouncementBar :text="frontendConfig.announcementText || '欢迎访问我的说说笔记！'" />
           </UCard>
           <UCard class="sidebar-card no-padding-card" :class="sidebarThemeCard">
-            <div>
-              <div class="text-xs opacity-70 mb-2">热门标签</div>
-              <div class="scroll-tags mb-2">
+            <div class="hot-tags-block">
+              <div class="hot-tags-head">
+                <div class="text-xs opacity-70">热门标签</div>
+                <button type="button" class="hot-tags-refresh" title="刷新标签" aria-label="刷新标签" @click="refreshHotTags">
+                  <UIcon name="i-mdi-refresh" class="w-4 h-4" :class="{ 'animate-spin': tagsRefreshing }" />
+                </button>
+              </div>
+              <div class="scroll-tags">
                 <div class="tag-grid">
-                  <button v-for="t in popularTags" :key="t.name" class="px-2 py-1 rounded text-xs border opacity-80 hover:opacity-100" @click="handleTagClick(t.name)">#{{ t.name }}<span class="ml-1 opacity-60">{{ t.count }}</span></button>
+                  <button v-for="t in popularTags" :key="t.name" class="hot-tag-btn" @click="handleTagClick(t.name)">
+                    <span class="hot-tag-name">#{{ t.name }}</span>
+                    <span class="hot-tag-count">{{ t.count }}</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -139,8 +147,8 @@
             <CalendarWidget :active-tab="activeTab" :selected-date="selectedCalendarDate" @select-date="handleCalendarDateSelect" />
           </UCard>
           <UCard class="sidebar-card no-padding-card" :class="sidebarThemeCard">
-            <div>
-              <div class="text-xs opacity-70 mb-2">图集</div>
+            <div class="image-gallery-block">
+              <div class="text-xs opacity-70 mb-2">最新图集（{{ recommendedImages.length }}）</div>
               <div class="scroll-images">
                 <div class="recommend-grid">
                   <a v-for="img in recommendedImages" :key="img.id || img" :href="imageSrc(img)" data-fancybox="recommend-gallery" class="block">
@@ -151,7 +159,7 @@
             </div>
           </UCard>
           <UCard class="sidebar-card no-padding-card" :class="sidebarThemeCard">
-            <HeatmapWidget :active-tab="activeTab" />
+            <HeatmapWidget :active-tab="activeTab" compact />
           </UCard>
         
         </div>
@@ -216,7 +224,6 @@
                 v-if="activeTab === 'latest' && tags && tags.length > 0"
                 :tags="tags"
                 @tagClick="handleTagClick"
-                @updateTags="handleTagsUpdate" 
               />
             </div>
           <MessageList 
@@ -235,16 +242,24 @@
         </div>
       </div>
       <ClientOnly>
-      <div class="right-col space-y-3" v-if="!isMobile && layoutState==='three'">
-        <UCard v-if="frontendConfig.announcementEnabled && (frontendConfig.announcementText || '').trim() !== ''" class="sidebar-card" :class="sidebarThemeCard">
+      <div class="right-col space-y-2" v-if="!isMobile && layoutState==='three'">
+        <UCard v-if="frontendConfig.announcementEnabled && (frontendConfig.announcementText || '').trim() !== ''" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
           <AnnouncementBar :text="frontendConfig.announcementText || '欢迎访问我的说说笔记！'" />
         </UCard>
         <UCard class="sidebar-card no-padding-card" :class="sidebarThemeCard">
-          <div>
-            <div class="text-xs opacity-70 mb-2">热门标签</div>
-            <div class="scroll-tags mb-2">
+          <div class="hot-tags-block">
+            <div class="hot-tags-head">
+              <div class="text-xs opacity-70">热门标签</div>
+              <button type="button" class="hot-tags-refresh" title="刷新标签" aria-label="刷新标签" @click="refreshHotTags">
+                <UIcon name="i-mdi-refresh" class="w-4 h-4" :class="{ 'animate-spin': tagsRefreshing }" />
+              </button>
+            </div>
+            <div class="scroll-tags">
               <div class="tag-grid">
-                <button v-for="t in popularTags" :key="t.name" class="px-2 py-1 rounded text-xs border opacity-80 hover:opacity-100" @click="handleTagClick(t.name)">#{{ t.name }}<span class="ml-1 opacity-60">{{ t.count }}</span></button>
+                <button v-for="t in popularTags" :key="t.name" class="hot-tag-btn" @click="handleTagClick(t.name)">
+                  <span class="hot-tag-name">#{{ t.name }}</span>
+                  <span class="hot-tag-count">{{ t.count }}</span>
+                </button>
               </div>
             </div>
           </div>
@@ -253,7 +268,7 @@
           <CalendarWidget :active-tab="activeTab" :selected-date="selectedCalendarDate" @select-date="handleCalendarDateSelect" />
         </UCard>
         <UCard class="sidebar-card no-padding-card" :class="sidebarThemeCard">
-          <div>
+          <div class="image-gallery-block">
             <div class="text-xs opacity-70 mb-2">最新图集（{{ recommendedImages.length }}）</div>
             <div class="scroll-images">
               <div class="recommend-grid">
@@ -265,7 +280,7 @@
           </div>
         </UCard>
         <UCard class="sidebar-card no-padding-card" :class="sidebarThemeCard">
-          <HeatmapWidget :active-tab="activeTab" />
+          <HeatmapWidget :active-tab="activeTab" compact />
         </UCard>
         
         
@@ -294,7 +309,7 @@
         </div>
       </UCard>
       <div class="mx-auto sm:max-w-2xl mb-4">
-        <HeatmapWidget :active-tab="activeTab" />
+        <HeatmapWidget :active-tab="activeTab" compact />
       </div>
       <UCard v-if="frontendConfig.leftAdEnabled && leftAds.length > 0" class="mx-auto sm:max-w-2xl mb-3 sidebar-card">
         <div class="sidebar-title flex items-center gap-2">
@@ -322,7 +337,6 @@
         v-if="tags && tags.length > 0"
         :tags="tags"
         @tagClick="handleTagClick"
-        @updateTags="handleTagsUpdate" 
       />
     </div>
       <!-- 音乐播放器容器（浮动或嵌入） -->
@@ -1934,9 +1948,17 @@ watch(() => [frontendConfig.value.pwaEnabled, frontendConfig.value.pwaTitle, fro
 }, { immediate: true })
 const subtitleEl = ref<HTMLElement | null>(null)
 const tags = ref<Tag[]>([])
-// 添加标签更新处理函数
-const handleTagsUpdate = async () => {
-  await fetchTags()
+const tagsRefreshing = ref(false)
+const refreshHotTags = async () => {
+  if (tagsRefreshing.value) return
+  tagsRefreshing.value = true
+  try {
+    await fetchTags()
+  } finally {
+    window.setTimeout(() => {
+      tagsRefreshing.value = false
+    }, 300)
+  }
 }
 // 获取所有标签
 const fetchTags = async () => {
@@ -1987,7 +2009,7 @@ const popularTags = computed(() => {
   return arr
     .filter((t: any) => !excluded.includes(String(t?.name || '').toLowerCase()))
     .sort((a: any, b: any) => (b.count || 0) - (a.count || 0))
-    .slice(0, 8)
+    .slice(0, 9)
 })
 const tagsCount = computed(() => {
   const arr = Array.isArray(tags.value) ? [...tags.value] : []
@@ -3096,6 +3118,15 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
 </style>
 <style>
 /* 推荐图集图片 box 效果与悬停动画 */
+.sidebar-card.no-padding-card > div[class*="px-4"][class*="py-5"] { padding: 0 !important; }
+.hot-tags-block, .image-gallery-block { padding: 6px 7px; }
+.hot-tags-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 20px; margin-bottom: 5px; }
+.hot-tags-refresh { width: 20px; height: 20px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: inherit; opacity: 0.78; border: 1px solid rgba(148, 163, 184, 0.24); background: rgba(148, 163, 184, 0.08); transition: opacity .15s ease, border-color .15s ease, background-color .15s ease; }
+.hot-tags-refresh:hover { opacity: 1; border-color: rgba(249, 115, 22, 0.34); background: rgba(249, 115, 22, 0.12); }
+.hot-tag-btn { min-width: 0; height: 23px; padding: 0 5px; border-radius: 6px; border: 1px solid rgba(148, 163, 184, 0.32); display: inline-flex; align-items: center; justify-content: space-between; gap: 4px; color: inherit; opacity: .84; font-size: 11px; line-height: 1; overflow: hidden; transition: opacity .15s ease, border-color .15s ease, background-color .15s ease; }
+.hot-tag-btn:hover { opacity: 1; border-color: rgba(249, 115, 22, 0.36); background: rgba(249, 115, 22, 0.1); }
+.hot-tag-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hot-tag-count { flex: 0 0 auto; opacity: .62; }
 .recommend-image-box {
   width: 100%;
   height: 100%;
@@ -3105,7 +3136,7 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
   transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
   box-shadow: 0 1px 2px rgba(0,0,0,0.10);
 }
-.recommend-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 88px; gap: 6px; }
+.recommend-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 34px; gap: 4px; }
 .recommend-grid a { display:block; height:100%; }
 .recommend-image-box:hover {
   transform: translate3d(0,0,0) scale(1.03);
@@ -3153,14 +3184,14 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
 :global(html:not(.dark)) .ad-overlay-box a { color: var(--home-accent-warn) !important; text-decoration:none; }
 .ad-wrap:hover .ad-overlay { opacity:1; }
 .ad-wrap:hover .ad-image { filter: contrast(0.95) brightness(0.9); }
-.scroll-images { height: 176px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-right: 2px; }
+.scroll-images { height: 72px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-right: 2px; }
 /* 标签三栏栅格与滚动容器 */
-.scroll-tags { max-height: 160px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-right: 2px; min-height: 0; overscroll-behavior: contain; }
-.tag-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: minmax(28px, auto); gap: 6px; }
-@media screen and (max-width: 1024px) { .tag-grid { grid-template-columns: repeat(2, 1fr); } .scroll-tags { max-height: 120px; } }
+.scroll-tags { max-height: 77px; overflow: hidden; -webkit-overflow-scrolling: touch; min-height: 0; overscroll-behavior: contain; }
+.tag-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 23px; gap: 4px; }
+@media screen and (max-width: 1024px) { .scroll-tags { max-height: 77px; } }
 @media screen and (max-width: 1024px) {
-  .scroll-images { height: 180px; }
-  .recommend-grid { grid-auto-rows: 56px; gap: 4px; }
+  .scroll-images { height: 70px; }
+  .recommend-grid { grid-auto-rows: 33px; gap: 4px; }
 }
 @media screen and (max-width: 768px) { .center-col { padding-left: 2%; padding-right: 2%; } }
 @media screen and (max-width: 480px) { .center-col { padding-left: 3%; padding-right: 3%; } }
