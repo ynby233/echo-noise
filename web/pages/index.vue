@@ -3118,26 +3118,28 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
 </style>
 <style>
 /* 推荐图集图片 box 效果与悬停动画 */
+.right-col.space-y-2 > :not([hidden]) ~ :not([hidden]) { margin-top: 5px !important; }
 .sidebar-card.no-padding-card > div[class*="px-4"][class*="py-5"] { padding: 0 !important; }
-.hot-tags-block, .image-gallery-block { padding: 6px 7px; }
-.hot-tags-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 20px; margin-bottom: 5px; }
-.hot-tags-refresh { width: 20px; height: 20px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: inherit; opacity: 0.78; border: 1px solid rgba(148, 163, 184, 0.24); background: rgba(148, 163, 184, 0.08); transition: opacity .15s ease, border-color .15s ease, background-color .15s ease; }
+.hot-tags-block, .image-gallery-block { padding: 10px 12px; }
+.hot-tags-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 22px; margin-bottom: 6px; }
+.hot-tags-refresh { width: 22px; height: 22px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: inherit; opacity: 0.78; border: 1px solid rgba(148, 163, 184, 0.24); background: rgba(148, 163, 184, 0.08); transition: opacity .15s ease, border-color .15s ease, background-color .15s ease; }
 .hot-tags-refresh:hover { opacity: 1; border-color: rgba(249, 115, 22, 0.34); background: rgba(249, 115, 22, 0.12); }
-.hot-tag-btn { min-width: 0; height: 23px; padding: 0 5px; border-radius: 6px; border: 1px solid rgba(148, 163, 184, 0.32); display: inline-flex; align-items: center; justify-content: space-between; gap: 4px; color: inherit; opacity: .84; font-size: 11px; line-height: 1; overflow: hidden; transition: opacity .15s ease, border-color .15s ease, background-color .15s ease; }
+.hot-tag-btn { min-width: 0; height: 24px; padding: 0 6px; border-radius: 6px; border: 1px solid rgba(148, 163, 184, 0.32); display: inline-flex; align-items: center; justify-content: space-between; gap: 4px; color: inherit; opacity: .84; font-size: 11px; line-height: 1; overflow: hidden; transition: opacity .15s ease, border-color .15s ease, background-color .15s ease; }
 .hot-tag-btn:hover { opacity: 1; border-color: rgba(249, 115, 22, 0.36); background: rgba(249, 115, 22, 0.1); }
 .hot-tag-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hot-tag-count { flex: 0 0 auto; opacity: .62; }
 .recommend-image-box {
   width: 100%;
   height: 100%;
-  border-radius: 12px;
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
   object-fit: cover;
   display: block;
   transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
   box-shadow: 0 1px 2px rgba(0,0,0,0.10);
 }
-.recommend-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 34px; gap: 4px; }
-.recommend-grid a { display:block; height:100%; }
+.recommend-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.recommend-grid a { display:block; aspect-ratio: 1 / 1; min-width: 0; overflow: hidden; border-radius: 8px; }
 .recommend-image-box:hover {
   transform: translate3d(0,0,0) scale(1.03);
   box-shadow: 0 6px 18px rgba(0,0,0,0.28);
@@ -3184,14 +3186,14 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
 :global(html:not(.dark)) .ad-overlay-box a { color: var(--home-accent-warn) !important; text-decoration:none; }
 .ad-wrap:hover .ad-overlay { opacity:1; }
 .ad-wrap:hover .ad-image { filter: contrast(0.95) brightness(0.9); }
-.scroll-images { height: 72px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-right: 2px; }
+.scroll-images { max-height: 102px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-right: 2px; }
 /* 标签三栏栅格与滚动容器 */
-.scroll-tags { max-height: 77px; overflow: hidden; -webkit-overflow-scrolling: touch; min-height: 0; overscroll-behavior: contain; }
-.tag-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 23px; gap: 4px; }
-@media screen and (max-width: 1024px) { .scroll-tags { max-height: 77px; } }
+.scroll-tags { max-height: 84px; overflow: hidden; -webkit-overflow-scrolling: touch; min-height: 0; overscroll-behavior: contain; }
+.tag-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 24px; gap: 5px; }
+@media screen and (max-width: 1024px) { .scroll-tags { max-height: 84px; } }
 @media screen and (max-width: 1024px) {
-  .scroll-images { height: 70px; }
-  .recommend-grid { grid-auto-rows: 33px; gap: 4px; }
+  .scroll-images { max-height: 96px; }
+  .recommend-grid { gap: 5px; }
 }
 @media screen and (max-width: 768px) { .center-col { padding-left: 2%; padding-right: 2%; } }
 @media screen and (max-width: 480px) { .center-col { padding-left: 3%; padding-right: 3%; } }

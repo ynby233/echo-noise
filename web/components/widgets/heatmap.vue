@@ -161,8 +161,8 @@ const fetchHeatmapData = async () => {
   const requiredColumns = () => {
     const w = calendarContainer.value?.clientWidth || 0
     const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 1024px)').matches
-    const daySize = isMobile ? 8 : 12
-    const gap = 3
+    const daySize = props.compact ? (isMobile ? 9 : 10) : (isMobile ? 8 : 12)
+    const gap = props.compact ? 2 : 3
     if (!w) return 0
     return Math.max(0, Math.floor((w + gap) / (daySize + gap)))
   }
@@ -278,6 +278,11 @@ const fetchHeatmapData = async () => {
     margin: 0;
     padding: 0;
     width: 100%;
+    box-sizing: border-box;
+  }
+
+  .calendar-wrapper.heatmap-compact {
+    padding: 6px 8px 6px;
   }
 
   .calendar-container {
@@ -357,8 +362,8 @@ const fetchHeatmapData = async () => {
   }
 
   .heatmap-compact .heatmap-day {
-    width: 9px;
-    height: 9px;
+    width: 10px;
+    height: 10px;
     border-radius: 2px;
   }
 
@@ -401,7 +406,11 @@ const fetchHeatmapData = async () => {
       width: 8px;
       height: 8px;
     }
-    
+
+    .heatmap-compact .heatmap-day {
+      width: 9px;
+      height: 9px;
+    }
     .month-label {
       font-size: 10px;
     }

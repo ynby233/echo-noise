@@ -38,7 +38,6 @@
         @click="selectDay(day)"
       >
         <span class="day-number">{{ day.day }}</span>
-        <span v-if="day.count > 0" class="day-count">{{ day.count > 99 ? '99+' : day.count }}</span>
         <span class="day-tooltip">{{ day.count }} 条笔记</span>
       </button>
     </div>
@@ -223,7 +222,7 @@ onMounted(() => {
 
 <style scoped>
 .calendar-widget {
-  padding: 4px 5px 5px;
+  padding: 8px 9px 7px;
   min-width: 0;
 }
 
@@ -232,11 +231,11 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 5px;
+  gap: 6px;
 }
 
 .calendar-head {
-  margin-bottom: 4px;
+  margin-bottom: 5px;
 }
 
 .calendar-picker {
@@ -254,13 +253,14 @@ onMounted(() => {
 }
 
 .calendar-select {
-  height: 22px;
+  height: 24px;
   min-width: 0;
-  padding: 0 4px;
+  padding: 0 6px;
   border-radius: 6px;
   border: 1px solid rgba(148, 163, 184, 0.28);
   background: rgba(148, 163, 184, 0.08);
   color: inherit;
+  color-scheme: light;
   font-size: 11px;
   font-weight: 650;
   line-height: 1;
@@ -273,16 +273,16 @@ onMounted(() => {
 }
 
 .year-select {
-  width: 68px;
+  width: 76px;
 }
 
 .month-select {
-  width: 50px;
+  width: 56px;
 }
 
 .calendar-nav {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -316,9 +316,12 @@ onMounted(() => {
 
 .calendar-day {
   position: relative;
-  height: 21px;
+  height: 18px;
   min-width: 0;
-  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
   border: 1px solid transparent;
   background: rgba(148, 163, 184, 0.08);
   color: inherit;
@@ -348,14 +351,11 @@ onMounted(() => {
 }
 
 .day-number {
-  position: absolute;
-  top: 3px;
-  left: 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
   border-radius: 999px;
 }
 
@@ -369,28 +369,6 @@ onMounted(() => {
   background: rgba(255, 255, 255, 0.22);
   color: #fff;
   box-shadow: none;
-}
-
-.day-count {
-  position: absolute;
-  right: 2px;
-  bottom: 2px;
-  max-width: calc(100% - 8px);
-  min-width: 12px;
-  height: 12px;
-  padding: 0 2px;
-  border-radius: 999px;
-  background: rgba(14, 165, 233, 0.16);
-  color: rgb(2, 132, 199);
-  font-size: 8px;
-  line-height: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.calendar-day.is-selected .day-count {
-  background: rgba(255, 255, 255, 0.24);
-  color: #fff;
 }
 
 .day-tooltip {
@@ -414,8 +392,8 @@ onMounted(() => {
 }
 
 .calendar-foot {
-  min-height: 21px;
-  margin-top: 4px;
+  min-height: 20px;
+  margin-top: 3px;
   font-size: 11px;
 }
 
@@ -441,9 +419,18 @@ onMounted(() => {
   white-space: nowrap;
   opacity: 0.66;
 }
+</style>
 
-:global(html.dark) .day-count {
-  background: rgba(125, 211, 252, 0.18);
-  color: rgb(125, 211, 252);
+<style>
+html.dark .calendar-select {
+  background: rgba(15, 23, 42, 0.92) !important;
+  color: #f8fafc !important;
+  border-color: rgba(148, 163, 184, 0.42) !important;
+  color-scheme: dark;
+}
+
+html.dark .calendar-select option {
+  background: #0f172a;
+  color: #f8fafc;
 }
 </style>
