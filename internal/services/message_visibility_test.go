@@ -172,6 +172,29 @@ func TestAdminCannotLikeOthersPrivateMessage(t *testing.T) {
 	}
 }
 
+func TestGetMessagesByPageFiltersByShanghaiDate(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	alice := mustCreateUser(t, models.User{Username: "calendar-alice", Password: models.HashPassword("alice"), Token: models.GenerateToken(32)})
+	loc := shanghaiLocation()
+	messages := []models.Message{
+		{Content: "day-before", Username: alice.Username, UserID: alice.ID, Visibility: MessageVisibilityPublic, CreatedAt: time.Date(2026, 1, 1, 23, 30, 0, 0, loc)},
+		{Content: "target-day", Username: alice.Username, UserID: alice.ID, Visibility: MessageVisibilityPublic, CreatedAt: time.Date(2026, 1, 2, 12, 0, 0, 0, loc)},
+		{Content: "day-after", Username: alice.Username, UserID: alice.ID, Visibility: MessageVisibilityPublic, CreatedAt: time.Date(2026, 1, 3, 0, 0, 0, 0, loc)},
+	}
+	if err := db.Create(&messages).Error; err != nil {
+		t.Fatalf("create messages: %v", err)
+	}
+
+	date := "2026-01-02"
+	result, err := GetMessagesByPage(1, 10, nil, false, nil, nil, &date)
+	if err != nil {
+		t.Fatalf("get messages by date: %v", err)
+	}
+	if result.Total != 1 || len(result.Items) != 1 || result.Items[0].Content != "target-day" {
+		t.Fatalf("date filtered result = total %d items %#v, want only target-day", result.Total, result.Items)
+	}
+}
+
 func TestUpdateMessageAcceptsVisibilityAndLegacyPrivatePayloads(t *testing.T) {
 	db := setupUserServiceTestDB(t)
 	alice := mustCreateUser(t, models.User{Username: "update-visibility-alice", Password: models.HashPassword("alice"), Token: models.GenerateToken(32)})

@@ -135,6 +135,9 @@
               </div>
             </div>
           </UCard>
+          <UCard v-if="frontendConfig.calendarEnabled !== false" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
+            <CalendarWidget :active-tab="activeTab" :selected-date="selectedCalendarDate" @select-date="handleCalendarDateSelect" />
+          </UCard>
           <UCard class="sidebar-card no-padding-card" :class="sidebarThemeCard">
             <div>
               <div class="text-xs opacity-70 mb-2">图集</div>
@@ -224,6 +227,8 @@
             :wide="layoutState==='two'"
             :page-ready="isLoaded"
             :active-tab="activeTab"
+            :calendar-date="calendarMessageDate"
+            @clear-calendar-date="handleCalendarDateSelect('')"
           />
           </template>
           <div class="page-footer" v-html="(frontendConfig.pageFooterHTML || defaultConfig.pageFooterHTML)"></div>
@@ -243,6 +248,9 @@
               </div>
             </div>
           </div>
+        </UCard>
+        <UCard v-if="frontendConfig.calendarEnabled !== false" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
+          <CalendarWidget :active-tab="activeTab" :selected-date="selectedCalendarDate" @select-date="handleCalendarDateSelect" />
         </UCard>
         <UCard class="sidebar-card no-padding-card" :class="sidebarThemeCard">
           <div>
@@ -461,6 +469,7 @@ import AddForm from '@/components/index/AddForm.vue'
 import MessageList from '@/components/index/MessageList.vue'
 import Notification from '~/components/widgets/Notification.vue';
 import HeatmapWidget from '~/components/widgets/heatmap.vue'
+import CalendarWidget from '~/components/widgets/CalendarWidget.vue'
 import SearchMode from '~/components/index/Searchmode.vue' // 导入 SearchMode 组件
 import TagList from '~/components/index/TagList.vue'
 import InfoFeedList from '@/components/index/InfoFeedList.vue'
@@ -523,6 +532,14 @@ const centerContainerClass = computed(() => (
 const toggleHeatmapCard = () => { showHeatmap.value = !showHeatmap.value }
 // 主题预设。统一由 ThemePresetSwitcher 控制 documentElement 类，不在容器上附加主题类
 const activeTab = ref('latest')
+const selectedCalendarDate = ref('')
+const calendarMessageDate = computed(() => (activeTab.value === 'latest' || activeTab.value === 'personal') ? selectedCalendarDate.value : '')
+const handleCalendarDateSelect = (date: string) => {
+  selectedCalendarDate.value = /^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) ? date : ''
+}
+watch(() => activeTab.value, (tab) => {
+  if (tab !== 'latest' && tab !== 'personal') selectedCalendarDate.value = ''
+})
 const feedResultCount = ref(0)
 const isFeedEnabled = computed(() => frontendConfig.value?.feedEnabled === true)
 const feedEnableGithubCard = computed(() => frontendConfig.value?.enableGithubCard === true)
@@ -728,6 +745,7 @@ const targetMessageId = ref<string | null>(null)
 // 添加搜索结果处理函数
 const handleSearchResult = (result: any) => {
   console.log('接收到搜索结果:', result); // 添加调试日志
+  selectedCalendarDate.value = ''
   if (messageList.value) {
     // 直接传递原始结果，让 MessageList 组件自己处理数据格式
     messageList.value.handleSearchResult(result);
@@ -2064,6 +2082,7 @@ onMounted(() => {
 })
 // 标签点击处理
 const handleTagClick = async (tag: string) => {
+  selectedCalendarDate.value = ''
   try {
     const encodedTag = encodeURIComponent(tag.trim())
     const res = await getRequest<any>(`messages/tags/${encodedTag}`, undefined, { credentials: 'include' })
@@ -3134,7 +3153,7 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
 :global(html:not(.dark)) .ad-overlay-box a { color: var(--home-accent-warn) !important; text-decoration:none; }
 .ad-wrap:hover .ad-overlay { opacity:1; }
 .ad-wrap:hover .ad-image { filter: contrast(0.95) brightness(0.9); }
-.scroll-images { height: 240px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-right: 2px; }
+.scroll-images { height: 176px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-right: 2px; }
 /* 标签三栏栅格与滚动容器 */
 .scroll-tags { max-height: 160px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-right: 2px; min-height: 0; overscroll-behavior: contain; }
 .tag-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: minmax(28px, auto); gap: 6px; }

@@ -437,8 +437,13 @@ func GetMessagesByPage(c *gin.Context) {
 		u := strings.TrimSpace(*pageRequest.Username)
 		username = &u
 	}
+	if queryDate := strings.TrimSpace(c.Query("date")); queryDate != "" {
+		pageRequest.Date = queryDate
+	} else {
+		pageRequest.Date = strings.TrimSpace(pageRequest.Date)
+	}
 
-	pageQueryResult, err := services.GetMessagesByPage(page, pageSize, currentUserID, isAdmin, authorID, username)
+	pageQueryResult, err := services.GetMessagesByPage(page, pageSize, currentUserID, isAdmin, authorID, username, &pageRequest.Date)
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
 		return

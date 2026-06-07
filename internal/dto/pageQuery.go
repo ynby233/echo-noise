@@ -9,6 +9,7 @@ type PageQueryDto struct {
 	PageSize int     `json:"pageSize"`
 	AuthorID *uint   `json:"authorId,omitempty"`
 	Username *string `json:"username,omitempty"`
+	Date     string  `json:"date,omitempty"`
 }
 
 type PageQueryResult struct {

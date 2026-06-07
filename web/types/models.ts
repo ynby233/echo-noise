@@ -34,6 +34,7 @@ export interface PageQuery {
     pageSize: number;
     authorId?: number;
     username?: string;
+    date?: string;
 }
 
 export interface PageQueryResult {

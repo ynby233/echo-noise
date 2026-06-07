@@ -184,8 +184,8 @@ func GetMessageByIDForViewer(id uint, userID *uint, isAdmin bool) (*models.Messa
 	return message, nil
 }
 
-// GetMessagesByPage 分页获取笔记（支持作者筛选；管理员查看全部；普通用户可查看公开和自己的私密）
-func GetMessagesByPage(page, pageSize int, userID *uint, isAdmin bool, authorID *uint, username *string) (dto.PageQueryResult, error) {
+// GetMessagesByPage 分页获取笔记（支持作者和日期筛选；管理员查看全部；普通用户可查看公开和自己的私密）
+func GetMessagesByPage(page, pageSize int, userID *uint, isAdmin bool, authorID *uint, username *string, date *string) (dto.PageQueryResult, error) {
 	// 参数校验
 	if page < 1 {
 		page = 1
@@ -207,6 +207,13 @@ func GetMessagesByPage(page, pageSize int, userID *uint, isAdmin bool, authorID 
 		q = q.Where("user_id = ?", *authorID)
 	} else if username != nil && *username != "" {
 		q = q.Where("username = ?", *username)
+	}
+	if date != nil && strings.TrimSpace(*date) != "" {
+		day, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(*date), shanghaiLocation())
+		if err != nil {
+			return dto.PageQueryResult{}, fmt.Errorf("日期格式无效")
+		}
+		q = q.Where("created_at >= ? AND created_at < ?", day, day.AddDate(0, 0, 1))
 	}
 	// 隐私过滤
 	q = ApplyMessageVisibilityScope(q, userID, isAdmin)

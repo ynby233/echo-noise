@@ -18,6 +18,22 @@
     </div>
     
     <div :class="outerContainerClass">
+      <!-- 日期筛选提示 -->
+      <div v-if="props.pageReady && !isSearchMode && props.calendarDate" class="date-filter-bar">
+        <div class="date-filter-title">
+          <UIcon name="i-heroicons-calendar-days" class="w-4 h-4" />
+          <span>{{ calendarDateLabel }} 的笔记</span>
+        </div>
+        <UButton
+          size="xs"
+          variant="ghost"
+          color="orange"
+          icon="i-heroicons-x-mark"
+          @click="emit('clear-calendar-date')"
+        >
+          返回完整列表
+        </UButton>
+      </div>
       <!-- 搜索模式提示 -->
       <div 
         v-if="isSearchMode" 
@@ -548,8 +564,15 @@ const props = defineProps({
   activeTab: {
     type: String,
     default: 'latest'
+  },
+  calendarDate: {
+    type: String,
+    default: ''
   }
 });
+const emit = defineEmits<{
+  (e: 'clear-calendar-date'): void
+}>()
 const outerContainerClass = computed(() => props.wide ? 'flex-grow w-full px-1 sm:px-2' : 'flex-grow w-full px-1 sm:px-2')
 const innerContainerClass = computed(() => props.wide ? '' : 'mx-auto sm:max-w-4xl')
 // 独立的内容主题（与页面主题解耦）
@@ -696,9 +719,15 @@ const fetchGuestbookId = async () => {
   const currentUserId = computed(() => Number((userStore.user as any)?.userid || (userStore.user as any)?.id || (userStore.user as any)?.user_id || 0))
   const currentUsername = computed(() => String((userStore.user as any)?.username || '').trim())
   const currentUserIsAdmin = computed(() => !!((userStore.user as any)?.is_admin || (userStore.user as any)?.IsAdmin))
+  const calendarDateLabel = computed(() => {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(props.calendarDate || ''))
+    if (!match) return ''
+    return `${match[1]}年${Number(match[2])}月${Number(match[3])}日`
+  })
   const pageQueryFor = (pageNumber: number) => {
     const query: any = { page: pageNumber, pageSize: 15 }
     if (isPersonalTab.value && currentUserId.value) query.authorId = currentUserId.value
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(props.calendarDate || ''))) query.date = props.calendarDate
     return query
   }
   const isCurrentUserMessage = (msg: any) => {
@@ -754,6 +783,10 @@ const handleTagClick = async (tag: string) => {
 const resetList = async () => {
   searchResults.value = [];
   isSearchMode.value = false;
+  if (props.calendarDate) {
+    emit('clear-calendar-date')
+    return
+  }
   
   // 重新获取当前视图消息列表
   await message.getMessages(pageQueryFor(1));
@@ -1131,7 +1164,7 @@ onMounted(async () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ page: 1, pageSize: 15 })
+          body: JSON.stringify(pageQueryFor(1))
         });
         if (response.ok) {
           const data = await response.json();
@@ -1206,7 +1239,7 @@ watch(() => route.hash, async (newHash) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ page: 1, pageSize: 15 })
+      body: JSON.stringify(pageQueryFor(1))
     });
     if (response.ok) {
       const data = await response.json();
@@ -1276,7 +1309,7 @@ watch(() => route.hash, async (newHash) => {
 const isPageLoading = ref(false);
 
 watch(
-  [() => props.activeTab, () => userStore.isLogin, () => currentUserId.value],
+  [() => props.activeTab, () => props.calendarDate, () => userStore.isLogin, () => currentUserId.value],
   async () => {
     if (route.hash.includes('/messages/')) return
     searchResults.value = []
@@ -1783,6 +1816,52 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.date-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(249, 115, 22, 0.24);
+  background: rgba(249, 115, 22, 0.08);
+}
+
+.date-filter-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(234, 88, 12);
+}
+
+.date-filter-title span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(html.dark) .date-filter-bar {
+  background: rgba(249, 115, 22, 0.14);
+  border-color: rgba(251, 146, 60, 0.28);
+}
+
+:global(html.dark) .date-filter-title {
+  color: rgb(251, 146, 60);
+}
+
+@media screen and (max-width: 480px) {
+  .date-filter-bar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 /* 修改内容卡片样式 */
 .content-container {
   padding: 10px;
