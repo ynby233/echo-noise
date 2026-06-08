@@ -121,7 +121,7 @@
             </div>
           </div>
         </UCard>
-        <div v-if="layoutState==='two'" class="mt-2 space-y-2">
+        <div v-if="layoutState==='two'" class="mt-2 space-y-3">
           <UCard v-if="frontendConfig.announcementEnabled && (frontendConfig.announcementText || '').trim() !== ''" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
             <AnnouncementBar :text="frontendConfig.announcementText || '欢迎访问我的说说笔记！'" />
           </UCard>
@@ -143,7 +143,7 @@
               </div>
             </div>
           </UCard>
-          <UCard v-if="frontendConfig.calendarEnabled !== false" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
+          <UCard v-if="frontendConfig.calendarEnabled !== false" class="sidebar-card no-padding-card calendar-sidebar-card" :class="sidebarThemeCard">
             <CalendarWidget :active-tab="activeTab" :selected-date="selectedCalendarDate" @select-date="handleCalendarDateSelect" />
           </UCard>
           <UCard class="sidebar-card no-padding-card" :class="sidebarThemeCard">
@@ -242,7 +242,7 @@
         </div>
       </div>
       <ClientOnly>
-      <div class="right-col space-y-2" v-if="!isMobile && layoutState==='three'">
+      <div class="right-col space-y-3" v-if="!isMobile && layoutState==='three'">
         <UCard v-if="frontendConfig.announcementEnabled && (frontendConfig.announcementText || '').trim() !== ''" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
           <AnnouncementBar :text="frontendConfig.announcementText || '欢迎访问我的说说笔记！'" />
         </UCard>
@@ -264,7 +264,7 @@
             </div>
           </div>
         </UCard>
-        <UCard v-if="frontendConfig.calendarEnabled !== false" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
+        <UCard v-if="frontendConfig.calendarEnabled !== false" class="sidebar-card no-padding-card calendar-sidebar-card" :class="sidebarThemeCard">
           <CalendarWidget :active-tab="activeTab" :selected-date="selectedCalendarDate" @select-date="handleCalendarDateSelect" />
         </UCard>
         <UCard class="sidebar-card no-padding-card" :class="sidebarThemeCard">
@@ -2849,6 +2849,13 @@ white-space: nowrap;  /* 防止换行 */
 }
 .layout-container { --sidebar-width: 320px; --grid-gap: 16px; }
 .left-col, .right-col { position: sticky; top: 0; align-self: start; height: fit-content; }
+.right-col {
+  max-height: calc(100vh - 24px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
 .center-col { min-width: 0; box-sizing: border-box; }
 .sidebar-card {
   border-radius: var(--home-radius-card);
@@ -2883,6 +2890,10 @@ white-space: nowrap;  /* 防止换行 */
 :global(html.dark) .center-col {
   background: linear-gradient(180deg, rgba(30, 41, 59, 0.38) 0%, rgba(15, 23, 42, 0.7) 100%);
 }
+:global(html.dark) .right-col {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
 :global(html.dark) .left-col::before,
 :global(html.dark) .center-col::before,
 :global(html.dark) .right-col::before {
@@ -2900,16 +2911,11 @@ white-space: nowrap;  /* 防止换行 */
 :global(html:not(.dark)) :where(.u-card, .u-card-body, .u-card__body, .u-card-header, .u-card__header) { background-color: var(--home-surface-light) !important; }
 :global(html:not(.dark)) :where(.bg-gray-50, .bg-gray-100, .bg-gray-200, .bg-gray-300, .bg-slate-50, .bg-slate-100, .bg-slate-200) { background-color: var(--home-surface-light) !important; }
 :global(html:not(.dark)) :where(.border-gray-200, .border-gray-300, .border-slate-200) { border-color: var(--home-border-light) !important; }
-/* 去除指定卡片内部默认留白，使内容铺满容器 */
-.no-padding-card :deep(.u-card-body),
-.no-padding-card :deep(.u-card__body) { padding: 0 !important; }
-.no-padding-card :deep(.u-card-header),
-.no-padding-card :deep(.u-card__header) { padding: 8px 12px !important; }
-/* 统一压缩所有侧栏卡片的默认内边距 */
-.sidebar-card :deep(.u-card-body),
-.sidebar-card :deep(.u-card__body) { padding: 0 !important; }
-.sidebar-card :deep(.u-card-header),
-.sidebar-card :deep(.u-card__header) { padding: 6px 8px !important; }
+/* 日历卡片保持紧凑，其他侧栏卡片使用 Nuxt UI 默认内距 */
+.calendar-sidebar-card.no-padding-card :deep(.u-card-body),
+.calendar-sidebar-card.no-padding-card :deep(.u-card__body) { padding: 0 !important; }
+.calendar-sidebar-card.no-padding-card :deep(.u-card-header),
+.calendar-sidebar-card.no-padding-card :deep(.u-card__header) { padding: 8px 12px !important; }
 html.dark .sidebar-card {
   background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.8) 100%);
   color: var(--home-text-dark);
@@ -3118,12 +3124,12 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
 </style>
 <style>
 /* 推荐图集图片 box 效果与悬停动画 */
-.sidebar-card.no-padding-card > div[class*="px-4"][class*="py-5"] { padding: 0 !important; }
-.hot-tags-block, .image-gallery-block { padding: 6px 7px; }
-.hot-tags-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 20px; margin-bottom: 5px; }
+.calendar-sidebar-card.no-padding-card > div[class*="px-4"][class*="py-5"] { padding: 0 !important; }
+.hot-tags-block, .image-gallery-block { padding: 0; }
+.hot-tags-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 20px; margin-bottom: 8px; }
 .hot-tags-refresh { width: 20px; height: 20px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: inherit; opacity: 0.78; border: 1px solid rgba(148, 163, 184, 0.24); background: rgba(148, 163, 184, 0.08); transition: opacity .15s ease, border-color .15s ease, background-color .15s ease; }
 .hot-tags-refresh:hover { opacity: 1; border-color: rgba(249, 115, 22, 0.34); background: rgba(249, 115, 22, 0.12); }
-.hot-tag-btn { min-width: 0; height: 23px; padding: 0 5px; border-radius: 6px; border: 1px solid rgba(148, 163, 184, 0.32); display: inline-flex; align-items: center; justify-content: space-between; gap: 4px; color: inherit; opacity: .84; font-size: 11px; line-height: 1; overflow: hidden; transition: opacity .15s ease, border-color .15s ease, background-color .15s ease; }
+.hot-tag-btn { min-width: 0; min-height: 34px; padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(148, 163, 184, 0.32); display: inline-flex; align-items: center; justify-content: center; gap: 2px 4px; color: inherit; opacity: .8; font-size: 12px; line-height: 1.25; overflow: hidden; text-align: center; flex-wrap: wrap; transition: opacity .15s ease, border-color .15s ease, background-color .15s ease; }
 .hot-tag-btn:hover { opacity: 1; border-color: rgba(249, 115, 22, 0.36); background: rgba(249, 115, 22, 0.1); }
 .hot-tag-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hot-tag-count { flex: 0 0 auto; opacity: .62; }
@@ -3136,8 +3142,8 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
   transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
   box-shadow: 0 1px 2px rgba(0,0,0,0.10);
 }
-.recommend-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 34px; gap: 4px; }
-.recommend-grid a { display:block; height:100%; }
+.recommend-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.recommend-grid a { display:block; aspect-ratio: 1 / 1; }
 .recommend-image-box:hover {
   transform: translate3d(0,0,0) scale(1.03);
   box-shadow: 0 6px 18px rgba(0,0,0,0.28);
@@ -3184,15 +3190,11 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
 :global(html:not(.dark)) .ad-overlay-box a { color: var(--home-accent-warn) !important; text-decoration:none; }
 .ad-wrap:hover .ad-overlay { opacity:1; }
 .ad-wrap:hover .ad-image { filter: contrast(0.95) brightness(0.9); }
-.scroll-images { height: 72px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-right: 2px; }
+.scroll-images { aspect-ratio: 3 / 2; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-right: 2px; }
 /* 标签三栏栅格与滚动容器 */
-.scroll-tags { max-height: 77px; overflow: hidden; -webkit-overflow-scrolling: touch; min-height: 0; overscroll-behavior: contain; }
-.tag-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 23px; gap: 4px; }
-@media screen and (max-width: 1024px) { .scroll-tags { max-height: 77px; } }
-@media screen and (max-width: 1024px) {
-  .scroll-images { height: 70px; }
-  .recommend-grid { grid-auto-rows: 33px; gap: 4px; }
-}
+.scroll-tags { max-height: 114px; overflow: hidden; -webkit-overflow-scrolling: touch; min-height: 0; overscroll-behavior: contain; }
+.tag-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+@media screen and (max-width: 1024px) { .scroll-tags { max-height: 114px; } }
 @media screen and (max-width: 768px) { .center-col { padding-left: 2%; padding-right: 2%; } }
 @media screen and (max-width: 480px) { .center-col { padding-left: 3%; padding-right: 3%; } }
 .page-footer { text-align: center; font-size: 12px; padding: 12px 0; }

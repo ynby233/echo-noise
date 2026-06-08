@@ -282,7 +282,7 @@ const fetchHeatmapData = async () => {
   }
 
   .calendar-wrapper.heatmap-compact {
-    padding: 6px 8px;
+    padding: 0;
   }
 
   .calendar-container {
@@ -352,7 +352,7 @@ const fetchHeatmapData = async () => {
 
   .heatmap-compact .heatmap-grid {
     gap: 2px;
-    padding-bottom: 4px;
+    padding-bottom: 0;
   }
 
   .heatmap-compact .heatmap-grid::-webkit-scrollbar { height: 4px; }
