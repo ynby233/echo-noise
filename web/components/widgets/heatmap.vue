@@ -1,7 +1,7 @@
 <template>
   <div class="calendar-wrapper" :class="{ 'heatmap-compact': props.compact }">
     <div class="calendar-container" ref="calendarContainer" :class="isDark ? 'heatmap-dark' : 'heatmap-light'">
-      <div class="heatmap-grid">
+      <div class="heatmap-grid" :style="{ width: gridViewportWidth }">
         <div v-for="(week, i) in calendarData" :key="i" class="heatmap-week">
           <div 
             v-for="(day, j) in week" 
@@ -20,7 +20,7 @@
 </template>
   
 <script setup lang="ts">
-import { ref, onMounted, computed, watch, inject } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch, inject } from 'vue'
 import { useUserStore } from '~/store/user'
 
 interface HeatItem { date: string; count: number }
@@ -31,6 +31,7 @@ const rawData = ref<HeatItem[]>([])
 const calendarData = ref<CalendarDay[][]>([])
 const calendarContainer = ref<HTMLElement | null>(null)
 const tooltip = ref({ visible: false, text: '', x: 0, y: 0 })
+const gridViewportWidth = ref('100%')
 
 // 主题注入与样式类
 const injectedTheme = inject('contentTheme', ref('light')) as any
@@ -158,13 +159,33 @@ const fetchHeatmapData = async () => {
     const dt = new Date(y, (m || 1) - 1, d || 1)
     return dt
   }
-  const requiredColumns = () => {
-    const w = calendarContainer.value?.clientWidth || 0
+  const getHeatmapSizing = () => {
     const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 1024px)').matches
-    const daySize = props.compact ? (isMobile ? 9 : 10) : (isMobile ? 8 : 12)
-    const gap = props.compact ? 2 : 3
-    if (!w) return 0
-    return Math.max(0, Math.floor((w + gap) / (daySize + gap)))
+    return {
+      daySize: props.compact ? (isMobile ? 9 : 10) : (isMobile ? 8 : 12),
+      gap: props.compact ? 2 : 3,
+      endGutter: props.compact ? 8 : 0
+    }
+  }
+  const visibleColumnCount = () => {
+    const w = calendarContainer.value?.clientWidth || 0
+    const { daySize, gap, endGutter } = getHeatmapSizing()
+    const availableWidth = Math.max(0, w - endGutter)
+    if (!availableWidth) return 0
+    return Math.max(0, Math.floor((availableWidth + gap) / (daySize + gap)))
+  }
+  const syncGridViewportWidth = () => {
+    const columns = visibleColumnCount()
+    if (!columns) {
+      gridViewportWidth.value = '100%'
+      return
+    }
+    const { daySize, gap } = getHeatmapSizing()
+    const width = columns * daySize + Math.max(0, columns - 1) * gap
+    gridViewportWidth.value = `${width}px`
+  }
+  const requiredColumns = () => {
+    return visibleColumnCount()
   }
   const ensureFillColumns = (calendar: CalendarDay[][], dateMap: Map<string, number>) => {
     const need = requiredColumns()
@@ -260,6 +281,15 @@ const fetchHeatmapData = async () => {
     calendarData.value = calendar
   }
 
+  const refreshCalendarLayout = () => {
+    syncGridViewportWidth()
+    if (rawData.value.length) {
+      generateCalendarData()
+    } else {
+      generateEmptyCalendar()
+    }
+  }
+
   watch(
     [() => props.activeTab, () => userStore.isLogin, () => currentUserId.value],
     () => { fetchHeatmapData() }
@@ -267,7 +297,13 @@ const fetchHeatmapData = async () => {
 
   onMounted(() => {
     generateEmptyCalendar()
+    syncGridViewportWidth()
+    window.addEventListener('resize', refreshCalendarLayout)
     fetchHeatmapData()
+  })
+
+  onBeforeUnmount(() => {
+    window.removeEventListener('resize', refreshCalendarLayout)
   })
   </script>
   
@@ -330,6 +366,7 @@ const fetchHeatmapData = async () => {
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
     width: 100%;
+    max-width: 100%;
   }
   .heatmap-grid::-webkit-scrollbar { height: 6px; }
   .heatmap-light .heatmap-grid::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.08); border-radius: 3px; }
@@ -345,6 +382,7 @@ const fetchHeatmapData = async () => {
   .heatmap-day {
     width: 12px;
     height: 12px;
+    box-sizing: border-box;
     border-radius: 2px;
     transition: all 0.2s ease;
     border: 1px solid transparent;
