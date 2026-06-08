@@ -253,24 +253,27 @@ const updatePickerPosition = () => {
   const menuWidth = Math.max(menu?.offsetWidth || minWidth, minWidth)
   const menuHeight = menu?.offsetHeight || 180
   const pad = 8
-  const gap = 6
+  const gap = 4
   const maxLeft = Math.max(pad, window.innerWidth - menuWidth - pad)
-  const left = Math.min(Math.max(rect.left, pad), maxLeft)
-  const belowTop = rect.bottom + gap
-  const aboveTop = rect.top - menuHeight - gap
-  const top = belowTop + menuHeight <= window.innerHeight - pad || aboveTop < pad ? belowTop : aboveTop
+  const idealLeft = rect.left + rect.width / 2 - menuWidth / 2
+  const maxTop = Math.max(pad, window.innerHeight - menuHeight - pad)
   pickerMenuStyle.value = {
-    left: `${left}px`,
-    top: `${Math.min(Math.max(top, pad), Math.max(pad, window.innerHeight - menuHeight - pad))}px`,
+    left: `${Math.min(Math.max(idealLeft, pad), maxLeft)}px`,
+    top: `${Math.min(Math.max(rect.bottom + gap, pad), maxTop)}px`,
     minWidth: `${minWidth}px`
   }
+}
+
+const schedulePickerPosition = () => {
+  updatePickerPosition()
+  if (typeof window !== 'undefined') window.requestAnimationFrame(updatePickerPosition)
 }
 
 const togglePicker = async (type: PickerType) => {
   openPicker.value = openPicker.value === type ? '' : type
   if (openPicker.value) {
     await nextTick()
-    updatePickerPosition()
+    schedulePickerPosition()
   }
 }
 
@@ -337,10 +340,9 @@ onBeforeUnmount(() => {
 .calendar-widget {
   padding: 10px 9px;
   min-width: 0;
-  --calendar-control-bg: rgba(30, 41, 59, 0.82);
-  --calendar-control-border: rgba(148, 163, 184, 0.36);
-  --calendar-control-border-hover: rgba(96, 165, 250, 0.72);
-  --calendar-control-text: #f8fafc;
+  --calendar-control-bg: rgba(148, 163, 184, 0.08);
+  --calendar-control-bg-hover: rgba(249, 115, 22, 0.12);
+  --calendar-control-text: inherit;
   --calendar-option-bg: #1f2937;
 }
 
@@ -374,16 +376,13 @@ onBeforeUnmount(() => {
   min-width: 0;
   padding: 0 7px;
   border-radius: 8px;
-  border: 1px solid var(--calendar-control-border);
+  border: 0;
   background: var(--calendar-control-bg);
   color: var(--calendar-control-text);
-  color-scheme: dark;
   font-size: 11px;
   font-weight: 650;
   line-height: 1;
   outline: none;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
 }
 
 .calendar-select-button {
@@ -399,7 +398,7 @@ onBeforeUnmount(() => {
 
 .calendar-select:hover,
 .calendar-select:focus-visible {
-  border-color: var(--calendar-control-border-hover);
+  background: var(--calendar-control-bg-hover);
 }
 
 .year-select {
@@ -418,14 +417,13 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   border-radius: 6px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  background: rgba(148, 163, 184, 0.08);
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  border: 0;
+  background: var(--calendar-control-bg);
+  transition: background-color 0.15s ease;
 }
 
 .calendar-nav:hover {
-  background: rgba(249, 115, 22, 0.12);
-  border-color: rgba(249, 115, 22, 0.34);
+  background: var(--calendar-control-bg-hover);
 }
 
 .calendar-grid,
@@ -533,21 +531,17 @@ onBeforeUnmount(() => {
   height: 24px;
   padding: 0 7px;
   border-radius: 8px;
-  border: 1px solid var(--calendar-control-border);
+  border: 0;
   background: var(--calendar-control-bg);
   color: var(--calendar-control-text);
-  color-scheme: dark;
   font-size: 11px;
   font-weight: 650;
   line-height: 1;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
 }
 
 .calendar-today:hover,
 .calendar-clear:hover {
-  border-color: var(--calendar-control-border-hover);
-  color: #ffffff;
+  background: var(--calendar-control-bg-hover);
 }
 
 .calendar-scope {
@@ -571,9 +565,8 @@ onBeforeUnmount(() => {
 <style>
 html.dark .calendar-select {
   background: var(--calendar-control-bg) !important;
-  color: #f8fafc !important;
-  border-color: var(--calendar-control-border) !important;
-  color-scheme: dark;
+  color: inherit !important;
+  border: 0 !important;
 }
 
 .calendar-floating-menu {

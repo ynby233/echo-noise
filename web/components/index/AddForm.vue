@@ -471,27 +471,39 @@ const publishPickerDays = computed<PublishDateDay[]>(() => {
   return days
 })
 
+type FloatingMenuPlacement = 'below' | 'above-right'
+
 const positionFloatingMenu = (
   trigger: HTMLElement | null,
   menu: HTMLElement | null,
   styleRef: Ref<Record<string, string>>,
-  minWidth = 120
+  minWidth = 120,
+  placement: FloatingMenuPlacement = 'below'
 ) => {
   if (!trigger || typeof window === 'undefined') return
   const rect = trigger.getBoundingClientRect()
   const menuWidth = Math.max(menu?.offsetWidth || minWidth, minWidth, rect.width)
   const menuHeight = menu?.offsetHeight || 180
   const pad = 8
-  const gap = 6
-  const left = Math.min(Math.max(rect.left, pad), Math.max(pad, window.innerWidth - menuWidth - pad))
-  const belowTop = rect.bottom + gap
+  const gap = 4
+  const maxLeft = Math.max(pad, window.innerWidth - menuWidth - pad)
+  const idealLeft = placement === 'above-right'
+    ? rect.right - menuWidth
+    : rect.left + rect.width / 2 - menuWidth / 2
   const aboveTop = rect.top - menuHeight - gap
-  const top = belowTop + menuHeight <= window.innerHeight - pad || aboveTop < pad ? belowTop : aboveTop
+  const belowTop = rect.bottom + gap
+  const maxTop = Math.max(pad, window.innerHeight - menuHeight - pad)
+  const idealTop = placement === 'above-right' && aboveTop >= pad ? aboveTop : belowTop
   styleRef.value = {
-    left: `${left}px`,
-    top: `${Math.min(Math.max(top, pad), Math.max(pad, window.innerHeight - menuHeight - pad))}px`,
+    left: `${Math.min(Math.max(idealLeft, pad), maxLeft)}px`,
+    top: `${Math.min(Math.max(idealTop, pad), maxTop)}px`,
     minWidth: `${Math.max(minWidth, rect.width)}px`
   }
+}
+
+const scheduleFloatingMenuPosition = (positioner: () => void) => {
+  positioner()
+  if (typeof window !== 'undefined') window.requestAnimationFrame(positioner)
 }
 
 const closeFloatingMenus = () => {
@@ -499,15 +511,15 @@ const closeFloatingMenus = () => {
   showPublishDateMenu.value = false
 }
 
-const positionVisibilityMenu = () => positionFloatingMenu(visibilityControlRef.value, visibilityMenuRef.value, visibilityMenuStyle, 126)
-const positionPublishDateMenu = () => positionFloatingMenu(publishTimeControlRef.value, publishDateMenuRef.value, publishDateMenuStyle, 292)
+const positionVisibilityMenu = () => positionFloatingMenu(visibilityControlRef.value, visibilityMenuRef.value, visibilityMenuStyle, 126, 'above-right')
+const positionPublishDateMenu = () => positionFloatingMenu(publishTimeControlRef.value, publishDateMenuRef.value, publishDateMenuStyle, 292, 'above-right')
 
 const toggleVisibilityMenu = async () => {
   showPublishDateMenu.value = false
   showVisibilityMenu.value = !showVisibilityMenu.value
   if (showVisibilityMenu.value) {
     await nextTick()
-    positionVisibilityMenu()
+    scheduleFloatingMenuPosition(positionVisibilityMenu)
   }
 }
 
@@ -539,13 +551,13 @@ const togglePublishDateMenu = async () => {
   if (showPublishDateMenu.value) {
     syncPublishDraftFromInput()
     await nextTick()
-    positionPublishDateMenu()
+    scheduleFloatingMenuPosition(positionPublishDateMenu)
   }
 }
 
 const movePublishMonth = (delta: number) => {
   publishPickerMonth.value = new Date(publishPickerMonth.value.getFullYear(), publishPickerMonth.value.getMonth() + delta, 1)
-  nextTick(positionPublishDateMenu)
+  nextTick(() => scheduleFloatingMenuPosition(positionPublishDateMenu))
 }
 
 const selectPublishDay = (day: PublishDateDay) => {
@@ -995,18 +1007,18 @@ const addMessage = async () => {
 
 <style scoped>
 .editor-box { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 10px 24px rgba(0,0,0,.08); padding: 8px; color:#111827; }
-.editor-toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:6px; padding:6px; border-radius:12px; background: rgba(255,255,255,0.85); flex-wrap: wrap; overflow:hidden; position: sticky; bottom: 0; z-index: 95; backdrop-filter: saturate(1.1) blur(6px); --publish-control-bg: rgba(17, 24, 39, 0.86); --publish-control-border: rgba(148, 163, 184, 0.34); --publish-control-border-active: rgba(96, 165, 250, 0.68); --publish-control-text: #f8fafc; }
+.editor-toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:6px; padding:6px; border-radius:12px; background: rgba(255,255,255,0.85); flex-wrap: wrap; overflow:hidden; position: sticky; bottom: 0; z-index: 95; backdrop-filter: saturate(1.1) blur(6px); }
 .toolbar-left, .toolbar-right { display:flex; align-items:center; gap:8px; flex-wrap: wrap; }
 .tb-btn { display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; transition: all .18s ease; border:none; }
 .tb-btn:hover { transform: translate3d(0,0,0) scale(1.06); background: rgba(0,0,0,0.12); }
 .tb-btn.primary { background: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color: #fff; }
-.publish-time-control { display:flex; align-items:center; gap:6px; min-height:36px; border-radius:12px; background: var(--publish-control-bg); color:var(--publish-control-text); padding:0 10px; border: 1px solid var(--publish-control-border); box-shadow: none; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); transition: border-color .15s ease, background-color .15s ease; }
-.visibility-control { display:flex; align-items:center; gap:6px; min-height:36px; border-radius:12px; background: var(--publish-control-bg); color:var(--publish-control-text); padding:0 8px; border: 1px solid var(--publish-control-border); box-shadow: none; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); transition: border-color .15s ease, background-color .15s ease; }
+.publish-time-control { display:flex; align-items:center; gap:6px; min-height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 10px; border: none; box-shadow: none; transition: background-color .18s ease, transform .18s ease; }
+.visibility-control { display:flex; align-items:center; gap:6px; min-height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 8px; border: none; box-shadow: none; transition: background-color .18s ease, transform .18s ease; }
 .publish-time-control:hover,
 .publish-time-control:focus-within,
 .visibility-control:hover,
-.visibility-control:focus-within { border-color: var(--publish-control-border-active); }
-.visibility-select { width: 82px; height: 28px; padding: 0 6px; border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 9px; outline: none; background: rgba(15, 23, 42, 0.46); color: inherit; font-size: 12px; cursor: pointer; }
+.visibility-control:focus-within { background: rgba(0,0,0,0.12); }
+.visibility-select { width: 82px; height: 28px; padding: 0 6px; border: 0; border-radius: 9px; outline: none; background: transparent; color: inherit; font-size: 12px; cursor: pointer; }
 .visibility-trigger,
 .publish-time-trigger { display: inline-flex; align-items: center; justify-content: space-between; gap: 4px; }
 .visibility-trigger svg,
@@ -1048,8 +1060,12 @@ html.dark .editor-toolbar { background: rgba(39, 50, 66, 0.68); backdrop-filter:
 html.dark .tb-btn { background: rgba(255,255,255,0.06); color:#cbd5e1; border:none; }
 html.dark .tb-btn:hover { background: rgba(255,255,255,0.12); }
 html.dark .publish-time-control,
-html.dark .visibility-control { background: rgba(17,24,39,0.86); color:#f8fafc; border-color: rgba(148,163,184,0.34); }
-html.dark .visibility-select { background: rgba(30,41,59,0.82); border-color: rgba(148,163,184,0.36); color:#f8fafc; }
+html.dark .visibility-control { background: rgba(255,255,255,0.06); color:#cbd5e1; border: none; }
+html.dark .publish-time-control:hover,
+html.dark .publish-time-control:focus-within,
+html.dark .visibility-control:hover,
+html.dark .visibility-control:focus-within { background: rgba(255,255,255,0.12); }
+html.dark .visibility-select { background: transparent; border: 0; color: inherit; }
 html.dark .tb-sep { background: rgba(255,255,255,0.12); }
 html.dark .preview-card { background: rgba(39, 50, 66, 0.68); border: 1px solid rgba(255,255,255,0.18); color:#fff; }
 .editor-toolbar :deep(.u-button) { border:none !important; box-shadow:none !important; background: transparent !important; color:#374151 !important; }

@@ -127,6 +127,8 @@ const fetchHeatmapData = async () => {
     generateEmptyCalendar()
   }
 }
+  const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
+
   const placeTooltip = (target: HTMLElement) => {
     const rect = target.getBoundingClientRect()
     const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : rect.right
@@ -135,17 +137,29 @@ const fetchHeatmapData = async () => {
     const tooltipWidth = tip?.offsetWidth || 112
     const tooltipHeight = tip?.offsetHeight || 24
     const pad = 8
-    const gap = 8
+    const gap = 4
     const maxLeft = Math.max(pad, viewportWidth - tooltipWidth - pad)
-    const left = Math.min(Math.max(rect.left + rect.width / 2 - tooltipWidth / 2, pad), maxLeft)
+    const idealLeft = rect.left + rect.width / 2 - tooltipWidth / 2
+    const left = clamp(idealLeft, pad, maxLeft)
     const aboveTop = rect.top - tooltipHeight - gap
     const belowTop = rect.bottom + gap
-    const shouldPlaceBelow = aboveTop < pad && belowTop + tooltipHeight <= viewportHeight - pad
-    const rawTop = shouldPlaceBelow ? belowTop : aboveTop
     const maxTop = Math.max(pad, viewportHeight - tooltipHeight - pad)
-    const top = Math.min(Math.max(rawTop, pad), maxTop)
+    const centerTop = clamp(rect.top + rect.height / 2 - tooltipHeight / 2, pad, maxTop)
+    const horizontalDrift = Math.abs(left + tooltipWidth / 2 - (rect.left + rect.width / 2))
+    const canPlaceRight = rect.right + gap + tooltipWidth <= viewportWidth - pad
+    const canPlaceLeft = rect.left - gap - tooltipWidth >= pad
+
+    if (horizontalDrift > Math.max(18, tooltipWidth * 0.22) && (canPlaceRight || canPlaceLeft)) {
+      const sideLeft = canPlaceRight ? rect.right + gap : rect.left - tooltipWidth - gap
+      tooltip.value.x = clamp(sideLeft, pad, maxLeft)
+      tooltip.value.y = centerTop
+      return
+    }
+
+    const preferBelow = aboveTop < pad && belowTop + tooltipHeight <= viewportHeight - pad
+    const rawTop = preferBelow ? belowTop : aboveTop
     tooltip.value.x = left
-    tooltip.value.y = top
+    tooltip.value.y = clamp(rawTop, pad, maxTop)
   }
 
   const showTooltip = (e: MouseEvent, day: any) => {
