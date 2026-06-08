@@ -423,14 +423,14 @@ onMounted(() => {
 
 <style>
 html.dark .calendar-select {
-  background: rgba(15, 23, 42, 0.92) !important;
+  background: rgba(148, 163, 184, 0.16) !important;
   color: #f8fafc !important;
   border-color: rgba(148, 163, 184, 0.42) !important;
   color-scheme: dark;
 }
 
 html.dark .calendar-select option {
-  background: #0f172a;
+  background: #334155;
   color: #f8fafc;
 }
 </style>
