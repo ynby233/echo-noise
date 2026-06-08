@@ -222,8 +222,13 @@ onMounted(() => {
 
 <style scoped>
 .calendar-widget {
-  padding: 8px 9px 5px;
+  padding: 10px 9px;
   min-width: 0;
+  --calendar-control-bg: rgba(30, 41, 59, 0.82);
+  --calendar-control-border: rgba(148, 163, 184, 0.36);
+  --calendar-control-border-hover: rgba(96, 165, 250, 0.72);
+  --calendar-control-text: #f8fafc;
+  --calendar-option-bg: #1f2937;
 }
 
 .calendar-head,
@@ -231,7 +236,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 4px;
+  gap: 3px;
 }
 
 .calendar-head {
@@ -244,7 +249,7 @@ onMounted(() => {
   justify-content: center;
   gap: 3px;
   min-width: 0;
-  flex: 1;
+  flex: 0 0 auto;
 }
 
 .calendar-picker-icon {
@@ -252,31 +257,33 @@ onMounted(() => {
 }
 
 .calendar-select {
-  height: 22px;
+  height: 24px;
   min-width: 0;
-  padding: 0 5px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(0, 0, 0, 0.72);
-  color: #f8fafc;
+  padding: 0 7px;
+  border-radius: 8px;
+  border: 1px solid var(--calendar-control-border);
+  background: var(--calendar-control-bg);
+  color: var(--calendar-control-text);
   color-scheme: dark;
   font-size: 11px;
   font-weight: 650;
   line-height: 1;
   outline: none;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .calendar-select:hover,
 .calendar-select:focus-visible {
-  border-color: rgba(249, 115, 22, 0.34);
+  border-color: var(--calendar-control-border-hover);
 }
 
 .year-select {
-  width: 64px;
+  width: 86px;
 }
 
 .month-select {
-  width: 44px;
+  width: 60px;
 }
 
 .calendar-nav {
@@ -399,35 +406,36 @@ onMounted(() => {
 
 .calendar-today,
 .calendar-clear {
-  height: 22px;
-  padding: 0 6px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(0, 0, 0, 0.72);
-  color: #f8fafc;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 8px;
+  border: 1px solid var(--calendar-control-border);
+  background: var(--calendar-control-bg);
+  color: var(--calendar-control-text);
+  color-scheme: dark;
   font-size: 11px;
   font-weight: 650;
   line-height: 1;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .calendar-today:hover,
 .calendar-clear:hover {
-  border-color: rgba(249, 115, 22, 0.34);
-  color: rgb(249, 115, 22);
+  border-color: var(--calendar-control-border-hover);
+  color: #ffffff;
 }
 
 .calendar-scope {
   flex: 0 0 auto;
-  height: 22px;
-  min-width: 28px;
+  min-width: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 6px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(0, 0, 0, 0.58);
-  color: #f8fafc;
+  padding: 0 1px;
+  border: 0;
+  background: transparent;
+  color: rgba(248, 250, 252, 0.86);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -438,15 +446,15 @@ onMounted(() => {
 
 <style>
 html.dark .calendar-select {
-  background: rgba(0, 0, 0, 0.72) !important;
+  background: var(--calendar-control-bg) !important;
   color: #f8fafc !important;
-  border-color: rgba(255, 255, 255, 0.2) !important;
+  border-color: var(--calendar-control-border) !important;
   color-scheme: dark;
 }
 
 .calendar-select option,
 html.dark .calendar-select option {
-  background: #111827;
+  background: var(--calendar-option-bg, #1f2937);
   color: #f8fafc;
 }
 </style>

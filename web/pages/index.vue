@@ -2863,6 +2863,9 @@ white-space: nowrap;  /* 防止换行 */
   color: var(--home-text-light);
   border: 1px solid #e5e7eb;
 }
+.right-col .sidebar-card {
+  box-shadow: none !important;
+}
 /* 三栏容器在浅色模式统一白色背景（不影响深色与背景图层） */
 :global(html:not(.dark)) .left-col,
 :global(html:not(.dark)) .center-col,
@@ -2929,6 +2932,12 @@ html.dark .sidebar-card:hover {
   transform: none;
   border-color: var(--home-border-dark);
   box-shadow: 0 10px 24px rgba(2, 6, 23, 0.4);
+}
+html.dark .right-col .sidebar-card {
+  box-shadow: none !important;
+}
+html.dark .right-col .sidebar-card:hover {
+  box-shadow: none !important;
 }
 html.dark .search-card {
   background: linear-gradient(180deg, rgba(30, 41, 59, 0.44) 0%, rgba(15, 23, 42, 0.78) 100%);
@@ -3136,14 +3145,14 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
 .recommend-image-box {
   width: 100%;
   height: 100%;
-  border-radius: 12px;
+  border-radius: 8px;
   object-fit: cover;
   display: block;
   transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
   box-shadow: 0 1px 2px rgba(0,0,0,0.10);
 }
 .recommend-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-.recommend-grid a { display:block; aspect-ratio: 1 / 1; }
+.recommend-grid a { display:block; aspect-ratio: 1 / 1; overflow: hidden; border-radius: 8px; }
 .recommend-image-box:hover {
   transform: translate3d(0,0,0) scale(1.03);
   box-shadow: 0 6px 18px rgba(0,0,0,0.28);
@@ -3190,7 +3199,7 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
 :global(html:not(.dark)) .ad-overlay-box a { color: var(--home-accent-warn) !important; text-decoration:none; }
 .ad-wrap:hover .ad-overlay { opacity:1; }
 .ad-wrap:hover .ad-image { filter: contrast(0.95) brightness(0.9); }
-.scroll-images { aspect-ratio: 3 / 1.67; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding-inline: 2px; scrollbar-gutter: stable both-edges; }
+.scroll-images { aspect-ratio: 3 / 2; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding-inline: 0; scrollbar-width: thin; }
 /* 标签三栏栅格与滚动容器 */
 .scroll-tags { max-height: 108px; overflow: hidden; -webkit-overflow-scrolling: touch; min-height: 0; overscroll-behavior: contain; }
 .tag-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }

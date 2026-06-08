@@ -16,13 +16,13 @@
       </div>
     </div>
     <Teleport to="body">
-      <div v-if="tooltip.visible" class="heatmap-tooltip" :class="isDark ? 'heatmap-tooltip-dark' : 'heatmap-tooltip-light'" :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }">{{ tooltip.text }}</div>
+      <div v-if="tooltip.visible" ref="heatmapTooltip" class="heatmap-tooltip" :class="isDark ? 'heatmap-tooltip-dark' : 'heatmap-tooltip-light'" :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }">{{ tooltip.text }}</div>
     </Teleport>
   </div>
 </template>
   
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed, watch, inject } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch, inject, nextTick } from 'vue'
 import { useUserStore } from '~/store/user'
 
 interface HeatItem { date: string; count: number }
@@ -32,6 +32,7 @@ const userStore = useUserStore()
 const rawData = ref<HeatItem[]>([])
 const calendarData = ref<CalendarDay[][]>([])
 const calendarContainer = ref<HTMLElement | null>(null)
+const heatmapTooltip = ref<HTMLElement | null>(null)
 const tooltip = ref({ visible: false, text: '', x: 0, y: 0 })
 const gridViewportWidth = ref('100%')
 
@@ -129,16 +130,24 @@ const fetchHeatmapData = async () => {
   const placeTooltip = (target: HTMLElement) => {
     const rect = target.getBoundingClientRect()
     const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : rect.right
-    const x = Math.min(Math.max(rect.left + rect.width / 2, 12), Math.max(12, viewportWidth - 12))
-    const y = Math.max(28, rect.top - 8)
+    const tip = heatmapTooltip.value
+    const tooltipWidth = tip?.offsetWidth || 0
+    const tooltipHeight = tip?.offsetHeight || 0
+    const pad = 8
+    const minX = tooltipWidth ? tooltipWidth / 2 + pad : 12
+    const maxX = tooltipWidth ? viewportWidth - tooltipWidth / 2 - pad : viewportWidth - 12
+    const x = Math.min(Math.max(rect.left + rect.width / 2, minX), Math.max(minX, maxX))
+    const y = Math.max(tooltipHeight ? tooltipHeight + pad : 28, rect.top - 8)
     tooltip.value.x = x
     tooltip.value.y = y
   }
 
   const showTooltip = (e: MouseEvent, day: any) => {
     tooltip.value.text = `${day.date} · ${day.count || 0} 条`
-    placeTooltip(e.target as HTMLElement)
+    const target = e.target as HTMLElement
+    placeTooltip(target)
     tooltip.value.visible = true
+    nextTick(() => placeTooltip(target))
   }
   const moveTooltip = (e: MouseEvent) => {
     placeTooltip(e.target as HTMLElement)
@@ -367,6 +376,7 @@ const fetchHeatmapData = async () => {
     scrollbar-width: thin;
     width: 100%;
     max-width: 100%;
+    margin-inline: auto;
   }
   .heatmap-grid::-webkit-scrollbar { height: 6px; }
   .heatmap-light .heatmap-grid::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.08); border-radius: 3px; }
@@ -384,16 +394,17 @@ const fetchHeatmapData = async () => {
     height: 12px;
     box-sizing: border-box;
     border-radius: 2px;
-    transition: all 0.2s ease;
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
     border: 1px solid transparent;
   }
 
   .heatmap-compact .heatmap-grid {
     gap: 2px;
-    padding-bottom: 3px;
+    padding-bottom: 0;
+    scrollbar-width: none;
   }
 
-  .heatmap-compact .heatmap-grid::-webkit-scrollbar { height: 4px; }
+  .heatmap-compact .heatmap-grid::-webkit-scrollbar { display: none; height: 0; }
 
   .heatmap-compact .heatmap-week {
     gap: 2px;
@@ -406,13 +417,14 @@ const fetchHeatmapData = async () => {
   }
 
   .heatmap-compact .heatmap-day:hover {
-    transform: scale(1.18);
+    box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.32);
   }
   .heatmap-light .heatmap-day { border-color: #cbd5e1; }
   .heatmap-dark .heatmap-day { border-color: rgba(255,255,255,0.12); }
   
   .heatmap-day:hover {
-    transform: scale(1.2);
+    border-color: rgba(96, 165, 250, 0.72);
+    box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.24);
   }
   .heatmap-tooltip {
     position: fixed;

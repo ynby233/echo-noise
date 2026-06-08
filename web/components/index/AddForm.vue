@@ -693,14 +693,18 @@ const addMessage = async () => {
 
 <style scoped>
 .editor-box { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 10px 24px rgba(0,0,0,.08); padding: 8px; color:#111827; }
-.editor-toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:6px; padding:6px; border-radius:12px; background: rgba(255,255,255,0.85); flex-wrap: wrap; overflow:hidden; position: sticky; bottom: 0; z-index: 95; backdrop-filter: saturate(1.1) blur(6px); }
+.editor-toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:6px; padding:6px; border-radius:12px; background: rgba(255,255,255,0.85); flex-wrap: wrap; overflow:hidden; position: sticky; bottom: 0; z-index: 95; backdrop-filter: saturate(1.1) blur(6px); --publish-control-bg: rgba(17, 24, 39, 0.86); --publish-control-border: rgba(148, 163, 184, 0.34); --publish-control-border-active: rgba(96, 165, 250, 0.68); --publish-control-text: #f8fafc; }
 .toolbar-left, .toolbar-right { display:flex; align-items:center; gap:8px; flex-wrap: wrap; }
 .tb-btn { display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; transition: all .18s ease; border:none; }
 .tb-btn:hover { transform: translate3d(0,0,0) scale(1.06); background: rgba(0,0,0,0.12); }
 .tb-btn.primary { background: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color: #fff; }
-.publish-time-control { display:flex; align-items:center; gap:6px; min-height:36px; border-radius:12px; background: rgba(0,0,0,0.72); color:#f8fafc; padding:0 10px; border: 1px solid rgba(255,255,255,0.18); box-shadow: 0 6px 16px rgba(0,0,0,0.18); }
-.visibility-control { display:flex; align-items:center; gap:6px; min-height:36px; border-radius:12px; background: rgba(0,0,0,0.72); color:#f8fafc; padding:0 8px; border: 1px solid rgba(255,255,255,0.18); box-shadow: 0 6px 16px rgba(0,0,0,0.18); }
-.visibility-select { width: 64px; border: none; outline: none; background: transparent; color: inherit; color-scheme: dark; font-size: 12px; cursor: pointer; }
+.publish-time-control { display:flex; align-items:center; gap:6px; min-height:36px; border-radius:12px; background: var(--publish-control-bg); color:var(--publish-control-text); padding:0 10px; border: 1px solid var(--publish-control-border); box-shadow: none; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); transition: border-color .15s ease, background-color .15s ease; }
+.visibility-control { display:flex; align-items:center; gap:6px; min-height:36px; border-radius:12px; background: var(--publish-control-bg); color:var(--publish-control-text); padding:0 8px; border: 1px solid var(--publish-control-border); box-shadow: none; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); transition: border-color .15s ease, background-color .15s ease; }
+.publish-time-control:hover,
+.publish-time-control:focus-within,
+.visibility-control:hover,
+.visibility-control:focus-within { border-color: var(--publish-control-border-active); }
+.visibility-select { width: 82px; height: 28px; padding: 0 6px; border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 9px; outline: none; background: rgba(15, 23, 42, 0.46); color: inherit; color-scheme: dark; font-size: 12px; cursor: pointer; }
 .publish-time-input { width: 166px; max-width: 48vw; border: none; outline: none; background: transparent; color: inherit; color-scheme: dark; font-size: 12px; }
 .publish-time-input::-webkit-calendar-picker-indicator { filter: invert(1); opacity: .72; cursor: pointer; }
 .tb-sep { width:1px; height:24px; background: rgba(0,0,0,0.12); margin: 0 2px; }
@@ -710,9 +714,10 @@ html.dark .editor-toolbar { background: rgba(39, 50, 66, 0.68); backdrop-filter:
 html.dark .tb-btn { background: rgba(255,255,255,0.06); color:#cbd5e1; border:none; }
 html.dark .tb-btn:hover { background: rgba(255,255,255,0.12); }
 html.dark .publish-time-control,
-html.dark .visibility-control { background: rgba(0,0,0,0.72); color:#f8fafc; border-color: rgba(255,255,255,0.2); }
+html.dark .visibility-control { background: rgba(17,24,39,0.86); color:#f8fafc; border-color: rgba(148,163,184,0.34); }
+html.dark .visibility-select { background: rgba(30,41,59,0.82); border-color: rgba(148,163,184,0.36); color:#f8fafc; }
 .visibility-select option,
-html.dark .visibility-select option { background:#111827; color:#f8fafc; }
+html.dark .visibility-select option { background:#1f2937; color:#f8fafc; }
 html.dark .publish-time-input::-webkit-calendar-picker-indicator { filter: invert(1); opacity: .72; }
 html.dark .tb-sep { background: rgba(255,255,255,0.12); }
 html.dark .preview-card { background: rgba(39, 50, 66, 0.68); border: 1px solid rgba(255,255,255,0.18); color:#fff; }
