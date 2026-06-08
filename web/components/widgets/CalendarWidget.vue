@@ -4,6 +4,7 @@
       <button type="button" class="calendar-nav" aria-label="上个月" @click="moveMonth(-1)">
         <UIcon name="i-heroicons-chevron-left" class="w-4 h-4" />
       </button>
+      <button type="button" class="calendar-today" @click="goToday">今天</button>
       <div class="calendar-picker">
         <UIcon name="i-heroicons-calendar-days" class="w-4 h-4 calendar-picker-icon" />
         <select class="calendar-select year-select" :value="currentYear" aria-label="选择年份" @change="setYearFromEvent">
@@ -13,6 +14,7 @@
           <option v-for="month in monthOptions" :key="month" :value="month">{{ month }}月</option>
         </select>
       </div>
+      <span class="calendar-scope">{{ scopeLabel }}</span>
       <button type="button" class="calendar-nav" aria-label="下个月" @click="moveMonth(1)">
         <UIcon name="i-heroicons-chevron-right" class="w-4 h-4" />
       </button>
@@ -42,10 +44,8 @@
       </button>
     </div>
 
-    <div class="calendar-foot">
-      <button type="button" class="calendar-today" @click="goToday">今天</button>
-      <button v-if="selectedDate" type="button" class="calendar-clear" @click="emit('select-date', '')">清除筛选</button>
-      <span v-else class="calendar-scope">{{ scopeLabel }}</span>
+    <div v-if="selectedDate" class="calendar-foot">
+      <button type="button" class="calendar-clear" @click="emit('select-date', '')">清除筛选</button>
     </div>
   </div>
 </template>
@@ -108,7 +108,7 @@ const parseLocalDate = (value: string) => {
 const today = computed(() => formatLocalDate(new Date()))
 const currentUserId = computed(() => Number((userStore.user as any)?.userid || (userStore.user as any)?.id || (userStore.user as any)?.user_id || 0))
 const personalActive = computed(() => props.activeTab === 'personal')
-const scopeLabel = computed(() => personalActive.value ? '个人笔记' : '全部可见笔记')
+const scopeLabel = computed(() => personalActive.value ? '个人' : '全部')
 const currentYear = computed(() => currentMonth.value.getFullYear())
 const currentMonthNumber = computed(() => currentMonth.value.getMonth() + 1)
 const monthOptions = Array.from({ length: 12 }, (_, index) => index + 1)
@@ -222,7 +222,7 @@ onMounted(() => {
 
 <style scoped>
 .calendar-widget {
-  padding: 8px 9px 7px;
+  padding: 8px 9px 5px;
   min-width: 0;
 }
 
@@ -231,7 +231,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 4px;
 }
 
 .calendar-head {
@@ -242,25 +242,24 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
   flex: 1;
 }
 
 .calendar-picker-icon {
-  flex: 0 0 auto;
-  opacity: 0.78;
+  display: none;
 }
 
 .calendar-select {
-  height: 24px;
+  height: 22px;
   min-width: 0;
-  padding: 0 6px;
+  padding: 0 5px;
   border-radius: 6px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  background: rgba(148, 163, 184, 0.08);
-  color: inherit;
-  color-scheme: light;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.72);
+  color: #f8fafc;
+  color-scheme: dark;
   font-size: 11px;
   font-weight: 650;
   line-height: 1;
@@ -273,16 +272,16 @@ onMounted(() => {
 }
 
 .year-select {
-  width: 76px;
+  width: 64px;
 }
 
 .month-select {
-  width: 56px;
+  width: 44px;
 }
 
 .calendar-nav {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -392,18 +391,23 @@ onMounted(() => {
 }
 
 .calendar-foot {
-  min-height: 20px;
-  margin-top: 3px;
+  min-height: 18px;
+  margin-top: 2px;
   font-size: 11px;
+  justify-content: center;
 }
 
 .calendar-today,
 .calendar-clear {
-  height: 20px;
+  height: 22px;
   padding: 0 6px;
   border-radius: 6px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.72);
+  color: #f8fafc;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
 }
 
 .calendar-today:hover,
@@ -413,24 +417,36 @@ onMounted(() => {
 }
 
 .calendar-scope {
-  min-width: 0;
+  flex: 0 0 auto;
+  height: 22px;
+  min-width: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.58);
+  color: #f8fafc;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  opacity: 0.66;
+  font-size: 11px;
+  font-weight: 650;
 }
 </style>
 
 <style>
 html.dark .calendar-select {
-  background: rgba(148, 163, 184, 0.16) !important;
+  background: rgba(0, 0, 0, 0.72) !important;
   color: #f8fafc !important;
-  border-color: rgba(148, 163, 184, 0.42) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
   color-scheme: dark;
 }
 
+.calendar-select option,
 html.dark .calendar-select option {
-  background: #334155;
+  background: #111827;
   color: #f8fafc;
 }
 </style>

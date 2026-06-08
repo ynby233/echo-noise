@@ -698,11 +698,11 @@ const addMessage = async () => {
 .tb-btn { display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; transition: all .18s ease; border:none; }
 .tb-btn:hover { transform: translate3d(0,0,0) scale(1.06); background: rgba(0,0,0,0.12); }
 .tb-btn.primary { background: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color: #fff; }
-.publish-time-control { display:flex; align-items:center; gap:6px; min-height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 10px; }
-.visibility-control { display:flex; align-items:center; gap:6px; min-height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 8px; }
-.visibility-select { width: 64px; border: none; outline: none; background: transparent; color: inherit; font-size: 12px; cursor: pointer; }
-.publish-time-input { width: 166px; max-width: 48vw; border: none; outline: none; background: transparent; color: inherit; font-size: 12px; }
-.publish-time-input::-webkit-calendar-picker-indicator { opacity: .72; cursor: pointer; }
+.publish-time-control { display:flex; align-items:center; gap:6px; min-height:36px; border-radius:12px; background: rgba(0,0,0,0.72); color:#f8fafc; padding:0 10px; border: 1px solid rgba(255,255,255,0.18); box-shadow: 0 6px 16px rgba(0,0,0,0.18); }
+.visibility-control { display:flex; align-items:center; gap:6px; min-height:36px; border-radius:12px; background: rgba(0,0,0,0.72); color:#f8fafc; padding:0 8px; border: 1px solid rgba(255,255,255,0.18); box-shadow: 0 6px 16px rgba(0,0,0,0.18); }
+.visibility-select { width: 64px; border: none; outline: none; background: transparent; color: inherit; color-scheme: dark; font-size: 12px; cursor: pointer; }
+.publish-time-input { width: 166px; max-width: 48vw; border: none; outline: none; background: transparent; color: inherit; color-scheme: dark; font-size: 12px; }
+.publish-time-input::-webkit-calendar-picker-indicator { filter: invert(1); opacity: .72; cursor: pointer; }
 .tb-sep { width:1px; height:24px; background: rgba(0,0,0,0.12); margin: 0 2px; }
 .preview-card { backdrop-filter: blur(8px); background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 8px; color:#111827; }
 html.dark .editor-box { background: var(--home-surface-dark, #202a36); border: 1px solid rgba(255,255,255,0.16); color:#fff; }
@@ -710,8 +710,9 @@ html.dark .editor-toolbar { background: rgba(39, 50, 66, 0.68); backdrop-filter:
 html.dark .tb-btn { background: rgba(255,255,255,0.06); color:#cbd5e1; border:none; }
 html.dark .tb-btn:hover { background: rgba(255,255,255,0.12); }
 html.dark .publish-time-control,
-html.dark .visibility-control { background: rgba(255,255,255,0.06); color:#cbd5e1; }
-html.dark .visibility-select option { color:#111827; }
+html.dark .visibility-control { background: rgba(0,0,0,0.72); color:#f8fafc; border-color: rgba(255,255,255,0.2); }
+.visibility-select option,
+html.dark .visibility-select option { background:#111827; color:#f8fafc; }
 html.dark .publish-time-input::-webkit-calendar-picker-indicator { filter: invert(1); opacity: .72; }
 html.dark .tb-sep { background: rgba(255,255,255,0.12); }
 html.dark .preview-card { background: rgba(39, 50, 66, 0.68); border: 1px solid rgba(255,255,255,0.18); color:#fff; }

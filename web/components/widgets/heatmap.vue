@@ -14,8 +14,10 @@
           ></div>
         </div>
       </div>
-      <div v-if="tooltip.visible" class="heatmap-tooltip" :class="isDark ? 'heatmap-tooltip-dark' : 'heatmap-tooltip-light'" :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }">{{ tooltip.text }}</div>
     </div>
+    <Teleport to="body">
+      <div v-if="tooltip.visible" class="heatmap-tooltip" :class="isDark ? 'heatmap-tooltip-dark' : 'heatmap-tooltip-light'" :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }">{{ tooltip.text }}</div>
+    </Teleport>
   </div>
 </template>
   
@@ -124,25 +126,22 @@ const fetchHeatmapData = async () => {
     generateEmptyCalendar()
   }
 }
-  const showTooltip = (e: MouseEvent, day: any) => {
-    tooltip.value.text = `${day.date} · ${day.count || 0} 条`
-    const target = e.target as HTMLElement
-    const tRect = target.getBoundingClientRect()
-    const cRect = (calendarContainer.value as HTMLElement)?.getBoundingClientRect()
-    const x = tRect.left - (cRect?.left || 0) + tRect.width / 2
-    const y = tRect.top - (cRect?.top || 0) - 6
+  const placeTooltip = (target: HTMLElement) => {
+    const rect = target.getBoundingClientRect()
+    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : rect.right
+    const x = Math.min(Math.max(rect.left + rect.width / 2, 12), Math.max(12, viewportWidth - 12))
+    const y = Math.max(28, rect.top - 8)
     tooltip.value.x = x
     tooltip.value.y = y
+  }
+
+  const showTooltip = (e: MouseEvent, day: any) => {
+    tooltip.value.text = `${day.date} · ${day.count || 0} 条`
+    placeTooltip(e.target as HTMLElement)
     tooltip.value.visible = true
   }
   const moveTooltip = (e: MouseEvent) => {
-    const target = e.target as HTMLElement
-    const tRect = target.getBoundingClientRect()
-    const cRect = (calendarContainer.value as HTMLElement)?.getBoundingClientRect()
-    const x = tRect.left - (cRect?.left || 0) + tRect.width / 2
-    const y = tRect.top - (cRect?.top || 0) - 6
-    tooltip.value.x = x
-    tooltip.value.y = y
+    placeTooltip(e.target as HTMLElement)
   }
   const hideTooltip = () => {
     tooltip.value.visible = false
@@ -361,6 +360,7 @@ const fetchHeatmapData = async () => {
     display: flex;
     gap: 3px;
     overflow-x: auto;
+    overflow-y: visible;
     padding-bottom: 8px;
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
@@ -390,7 +390,7 @@ const fetchHeatmapData = async () => {
 
   .heatmap-compact .heatmap-grid {
     gap: 2px;
-    padding-bottom: 0;
+    padding-bottom: 3px;
   }
 
   .heatmap-compact .heatmap-grid::-webkit-scrollbar { height: 4px; }
@@ -406,7 +406,7 @@ const fetchHeatmapData = async () => {
   }
 
   .heatmap-compact .heatmap-day:hover {
-    transform: scale(1.3);
+    transform: scale(1.18);
   }
   .heatmap-light .heatmap-day { border-color: #cbd5e1; }
   .heatmap-dark .heatmap-day { border-color: rgba(255,255,255,0.12); }
@@ -415,7 +415,7 @@ const fetchHeatmapData = async () => {
     transform: scale(1.2);
   }
   .heatmap-tooltip {
-    position: absolute;
+    position: fixed;
     transform: translate(-50%, -100%);
     padding: 4px 8px;
     border-radius: 6px;
@@ -423,7 +423,7 @@ const fetchHeatmapData = async () => {
     line-height: 1.2;
     white-space: nowrap;
     pointer-events: none;
-    z-index: 1000;
+    z-index: 5000;
   }
   .heatmap-tooltip-light {
     background: rgba(255,255,255,0.95);
