@@ -7,12 +7,30 @@
       <button type="button" class="calendar-today" @click="goToday">今天</button>
       <div class="calendar-picker">
         <UIcon name="i-heroicons-calendar-days" class="w-4 h-4 calendar-picker-icon" />
-        <select class="calendar-select year-select" :value="currentYear" aria-label="选择年份" @change="setYearFromEvent">
-          <option v-for="year in yearOptions" :key="year" :value="year">{{ year }}年</option>
-        </select>
-        <select class="calendar-select month-select" :value="currentMonthNumber" aria-label="选择月份" @change="setMonthFromEvent">
-          <option v-for="month in monthOptions" :key="month" :value="month">{{ month }}月</option>
-        </select>
+        <button
+          ref="yearPickerButton"
+          type="button"
+          class="calendar-select calendar-select-button year-select"
+          aria-label="选择年份"
+          aria-haspopup="listbox"
+          :aria-expanded="openPicker === 'year'"
+          @click="togglePicker('year')"
+        >
+          <span>{{ currentYear }}年</span>
+          <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
+        </button>
+        <button
+          ref="monthPickerButton"
+          type="button"
+          class="calendar-select calendar-select-button month-select"
+          aria-label="选择月份"
+          aria-haspopup="listbox"
+          :aria-expanded="openPicker === 'month'"
+          @click="togglePicker('month')"
+        >
+          <span>{{ currentMonthNumber }}月</span>
+          <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
+        </button>
       </div>
       <span class="calendar-scope">{{ scopeLabel }}</span>
       <button type="button" class="calendar-nav" aria-label="下个月" @click="moveMonth(1)">
@@ -47,11 +65,36 @@
     <div v-if="selectedDate" class="calendar-foot">
       <button type="button" class="calendar-clear" @click="emit('select-date', '')">清除筛选</button>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="openPicker"
+        ref="pickerMenu"
+        class="calendar-floating-menu"
+        :class="`is-${openPicker}`"
+        :style="pickerMenuStyle"
+        role="listbox"
+        @mousedown.stop
+      >
+        <button
+          v-for="option in pickerOptions"
+          :key="option.value"
+          type="button"
+          class="calendar-floating-option"
+          :class="{ 'is-selected': option.selected }"
+          role="option"
+          :aria-selected="option.selected"
+          @click="selectPickerValue(option.value)"
+        >
+          {{ option.label }}
+        </button>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRuntimeConfig } from '#imports'
 import { useUserStore } from '~/store/user'
 
@@ -111,7 +154,14 @@ const personalActive = computed(() => props.activeTab === 'personal')
 const scopeLabel = computed(() => personalActive.value ? '个人' : '全部')
 const currentYear = computed(() => currentMonth.value.getFullYear())
 const currentMonthNumber = computed(() => currentMonth.value.getMonth() + 1)
+type PickerType = 'year' | 'month'
+
 const monthOptions = Array.from({ length: 12 }, (_, index) => index + 1)
+const openPicker = ref<PickerType | ''>('')
+const yearPickerButton = ref<HTMLElement | null>(null)
+const monthPickerButton = ref<HTMLElement | null>(null)
+const pickerMenu = ref<HTMLElement | null>(null)
+const pickerMenuStyle = ref<Record<string, string>>({})
 const yearOptions = computed(() => {
   const nowYear = new Date().getFullYear()
   const years = new Set<number>([nowYear, currentYear.value])
@@ -124,6 +174,16 @@ const yearOptions = computed(() => {
   const min = Math.min(...years) - 5
   const max = Math.max(...years) + 5
   return Array.from({ length: max - min + 1 }, (_, index) => min + index)
+})
+
+const pickerOptions = computed(() => {
+  if (openPicker.value === 'year') {
+    return yearOptions.value.map((year) => ({ value: year, label: `${year}年`, selected: year === currentYear.value }))
+  }
+  if (openPicker.value === 'month') {
+    return monthOptions.map((month) => ({ value: month, label: `${month}月`, selected: month === currentMonthNumber.value }))
+  }
+  return []
 })
 
 const calendarDays = computed<CalendarDay[]>(() => {
@@ -183,18 +243,48 @@ const moveMonth = (delta: number) => {
   currentMonth.value = new Date(currentMonth.value.getFullYear(), currentMonth.value.getMonth() + delta, 1)
 }
 
-const setYearFromEvent = (event: Event) => {
-  const year = Number((event.target as HTMLSelectElement).value)
-  if (Number.isFinite(year)) {
-    currentMonth.value = new Date(year, currentMonth.value.getMonth(), 1)
+const updatePickerPosition = () => {
+  if (!openPicker.value || typeof window === 'undefined') return
+  const trigger = openPicker.value === 'year' ? yearPickerButton.value : monthPickerButton.value
+  if (!trigger) return
+  const rect = trigger.getBoundingClientRect()
+  const menu = pickerMenu.value
+  const minWidth = Math.max(rect.width, openPicker.value === 'year' ? 112 : 88)
+  const menuWidth = Math.max(menu?.offsetWidth || minWidth, minWidth)
+  const menuHeight = menu?.offsetHeight || 180
+  const pad = 8
+  const gap = 6
+  const maxLeft = Math.max(pad, window.innerWidth - menuWidth - pad)
+  const left = Math.min(Math.max(rect.left, pad), maxLeft)
+  const belowTop = rect.bottom + gap
+  const aboveTop = rect.top - menuHeight - gap
+  const top = belowTop + menuHeight <= window.innerHeight - pad || aboveTop < pad ? belowTop : aboveTop
+  pickerMenuStyle.value = {
+    left: `${left}px`,
+    top: `${Math.min(Math.max(top, pad), Math.max(pad, window.innerHeight - menuHeight - pad))}px`,
+    minWidth: `${minWidth}px`
   }
 }
 
-const setMonthFromEvent = (event: Event) => {
-  const month = Number((event.target as HTMLSelectElement).value)
-  if (Number.isFinite(month)) {
-    currentMonth.value = new Date(currentMonth.value.getFullYear(), month - 1, 1)
+const togglePicker = async (type: PickerType) => {
+  openPicker.value = openPicker.value === type ? '' : type
+  if (openPicker.value) {
+    await nextTick()
+    updatePickerPosition()
   }
+}
+
+const closePicker = () => {
+  openPicker.value = ''
+}
+
+const selectPickerValue = (value: number) => {
+  if (openPicker.value === 'year' && Number.isFinite(value)) {
+    currentMonth.value = new Date(value, currentMonth.value.getMonth(), 1)
+  } else if (openPicker.value === 'month' && Number.isFinite(value)) {
+    currentMonth.value = new Date(currentMonth.value.getFullYear(), value - 1, 1)
+  }
+  closePicker()
 }
 
 const selectDay = (day: CalendarDay) => {
@@ -209,6 +299,20 @@ const goToday = () => {
   emit('select-date', formatLocalDate(now))
 }
 
+const handleDocumentPointerDown = (event: MouseEvent) => {
+  if (!openPicker.value) return
+  const target = event.target as Node | null
+  if (!target) return
+  if (pickerMenu.value?.contains(target)) return
+  if (yearPickerButton.value?.contains(target)) return
+  if (monthPickerButton.value?.contains(target)) return
+  closePicker()
+}
+
+const handleViewportChange = () => {
+  if (openPicker.value) updatePickerPosition()
+}
+
 watch([() => props.activeTab, () => userStore.isLogin, () => currentUserId.value], fetchCounts)
 watch(() => props.selectedDate, (value) => {
   const parsed = parseLocalDate(value)
@@ -217,6 +321,15 @@ watch(() => props.selectedDate, (value) => {
 
 onMounted(() => {
   fetchCounts()
+  document.addEventListener('mousedown', handleDocumentPointerDown)
+  window.addEventListener('resize', handleViewportChange)
+  window.addEventListener('scroll', handleViewportChange, true)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', handleDocumentPointerDown)
+  window.removeEventListener('resize', handleViewportChange)
+  window.removeEventListener('scroll', handleViewportChange, true)
 })
 </script>
 
@@ -271,6 +384,17 @@ onMounted(() => {
   outline: none;
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
+}
+
+.calendar-select-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+
+.calendar-select-button svg {
+  opacity: 0.72;
 }
 
 .calendar-select:hover,
@@ -452,9 +576,50 @@ html.dark .calendar-select {
   color-scheme: dark;
 }
 
-.calendar-select option,
-html.dark .calendar-select option {
-  background: var(--calendar-option-bg, #1f2937);
+.calendar-floating-menu {
+  position: fixed;
+  z-index: 5002;
+  display: grid;
+  gap: 4px;
+  max-height: 228px;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.80);
   color: #f8fafc;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  scrollbar-width: thin;
+}
+
+.calendar-floating-menu.is-month {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.calendar-floating-option {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  text-align: left;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.calendar-floating-option:hover,
+.calendar-floating-option:focus-visible {
+  border-color: rgba(249, 115, 22, 0.38);
+  background: rgba(249, 115, 22, 0.18);
+  outline: none;
+}
+
+.calendar-floating-option.is-selected {
+  border-color: rgba(249, 115, 22, 0.7);
+  background: rgba(249, 115, 22, 0.30);
+  color: #ffffff;
 }
 </style>

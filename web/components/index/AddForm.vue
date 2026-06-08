@@ -24,26 +24,37 @@
            <!-- 新增图床上传按钮 -->
            <button class="tb-btn" @click="showImageUploader = true" title="图床上传"><UIcon name="i-mdi-cloud-upload-outline" class="w-5 h-5" /></button>
           
-          <label class="visibility-control" :title="`可见范围：${visibilityLabel}`">
+          <div ref="visibilityControlRef" class="visibility-control" :title="`可见范围：${visibilityLabel}`">
             <UIcon :name="visibilityIcon" class="w-5 h-5" />
-            <select v-model="Visibility" class="visibility-select" aria-label="可见范围">
-              <option v-for="option in messageVisibilityOptions" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
-          </label>
+            <button
+              type="button"
+              class="visibility-select visibility-trigger"
+              aria-label="可见范围"
+              aria-haspopup="listbox"
+              :aria-expanded="showVisibilityMenu"
+              @click="toggleVisibilityMenu"
+            >
+              <span>{{ visibilityLabel }}</span>
+              <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
+            </button>
+          </div>
           <button class="tb-btn" @click="toggleNotify" :title="enableNotify ? '关闭推送' : '开启推送'">
             <UIcon :name="enableNotify ? 'i-mdi-bell' : 'i-mdi-bell-off'" class="w-5 h-5" />
           </button>          
-          <label v-if="canSetPublishTime" class="publish-time-control" title="自定义发布时间">
+          <div v-if="canSetPublishTime" ref="publishTimeControlRef" class="publish-time-control" title="自定义发布时间">
             <UIcon name="i-mdi-calendar-clock-outline" class="w-4 h-4" />
-            <input
-              v-model="PublishedAtInput"
-              type="datetime-local"
-              class="publish-time-input"
+            <button
+              type="button"
+              class="publish-time-input publish-time-trigger"
               aria-label="发布时间"
-            />
-          </label>
+              aria-haspopup="dialog"
+              :aria-expanded="showPublishDateMenu"
+              @click="togglePublishDateMenu"
+            >
+              <span>{{ publishTimeLabel }}</span>
+              <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
+            </button>
+          </div>
         </div>
         <div class="toolbar-right">
           <span v-if="isEditorLoading" class="text-xs text-orange-400 flex items-center" style="margin-right: auto">
@@ -84,11 +95,108 @@
   @upload-success="handleImageHostingSuccess"
   @update:position="handlePositionUpdate"
 />
+
+  <Teleport to="body">
+    <div
+      v-if="showVisibilityMenu"
+      ref="visibilityMenuRef"
+      class="floating-control-menu visibility-floating-menu"
+      :style="visibilityMenuStyle"
+      role="listbox"
+      @mousedown.stop
+    >
+      <button
+        v-for="option in messageVisibilityOptions"
+        :key="option.value"
+        type="button"
+        class="floating-control-option"
+        :class="{ 'is-selected': option.value === Visibility }"
+        role="option"
+        :aria-selected="option.value === Visibility"
+        @click="selectVisibility(option.value)"
+      >
+        <UIcon :name="option.icon" class="w-4 h-4" />
+        <span>{{ option.label }}</span>
+      </button>
+    </div>
+  </Teleport>
+
+  <Teleport to="body">
+    <div
+      v-if="showPublishDateMenu"
+      ref="publishDateMenuRef"
+      class="floating-control-menu publish-datetime-menu"
+      :style="publishDateMenuStyle"
+      role="dialog"
+      aria-label="发布时间选择"
+      @mousedown.stop
+    >
+      <div class="publish-date-head">
+        <button type="button" class="floating-icon-btn" aria-label="上个月" @click="movePublishMonth(-1)">
+          <UIcon name="i-heroicons-chevron-left" class="w-4 h-4" />
+        </button>
+        <span class="publish-date-title">{{ publishPickerTitle }}</span>
+        <button type="button" class="floating-icon-btn" aria-label="下个月" @click="movePublishMonth(1)">
+          <UIcon name="i-heroicons-chevron-right" class="w-4 h-4" />
+        </button>
+      </div>
+      <div class="publish-date-weekdays">
+        <span v-for="label in publishWeekLabels" :key="label">{{ label }}</span>
+      </div>
+      <div class="publish-date-grid">
+        <button
+          v-for="day in publishPickerDays"
+          :key="day.key"
+          type="button"
+          class="publish-date-day"
+          :class="{
+            'is-muted': !day.inMonth,
+            'is-today': day.isToday,
+            'is-selected': day.selected
+          }"
+          @click="selectPublishDay(day)"
+        >
+          {{ day.day }}
+        </button>
+      </div>
+      <div class="publish-time-panel">
+        <div class="publish-time-column" aria-label="小时">
+          <button
+            v-for="hour in publishHourOptions"
+            :key="hour"
+            type="button"
+            class="publish-time-option"
+            :class="{ 'is-selected': hour === publishDraftHour }"
+            @click="setPublishHour(hour)"
+          >
+            {{ pad2(hour) }}
+          </button>
+        </div>
+        <div class="publish-time-column" aria-label="分钟">
+          <button
+            v-for="minute in publishMinuteOptions"
+            :key="minute"
+            type="button"
+            class="publish-time-option"
+            :class="{ 'is-selected': minute === publishDraftMinute }"
+            @click="setPublishMinute(minute)"
+          >
+            {{ pad2(minute) }}
+          </button>
+        </div>
+      </div>
+      <div class="publish-date-actions">
+        <button type="button" class="floating-action-btn" @click="clearPublishDate">清除</button>
+        <button type="button" class="floating-action-btn primary" @click="usePublishNow">现在</button>
+      </div>
+    </div>
+  </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, inject, onMounted, onBeforeUnmount, watch, defineAsyncComponent, nextTick } from 'vue'
+import type { Ref } from 'vue'
 import type { MessageToSave, MessageVisibility } from "~/types/models";
 import { useMessage } from "~/composables/useMessage";
 import { useUserStore } from '~/store/user'
@@ -185,6 +293,22 @@ const Visibility = ref<MessageVisibility>(initialPostVisibility())
 const Private = computed(() => Visibility.value !== 'public')
 const visibilityLabel = computed(() => messageVisibilityOptions.find((option) => option.value === Visibility.value)?.label || '公开')
 const visibilityIcon = computed(() => messageVisibilityOptions.find((option) => option.value === Visibility.value)?.icon || 'i-mdi-earth')
+const showVisibilityMenu = ref(false)
+const showPublishDateMenu = ref(false)
+const visibilityControlRef = ref<HTMLElement | null>(null)
+const visibilityMenuRef = ref<HTMLElement | null>(null)
+const publishTimeControlRef = ref<HTMLElement | null>(null)
+const publishDateMenuRef = ref<HTMLElement | null>(null)
+const visibilityMenuStyle = ref<Record<string, string>>({})
+const publishDateMenuStyle = ref<Record<string, string>>({})
+const pad2 = (value: number) => String(value).padStart(2, '0')
+const publishWeekLabels = ['一', '二', '三', '四', '五', '六', '日']
+const publishHourOptions = Array.from({ length: 24 }, (_, index) => index)
+const publishMinuteOptions = Array.from({ length: 60 }, (_, index) => index)
+const publishPickerMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
+const publishDraftDate = ref('')
+const publishDraftHour = ref(0)
+const publishDraftMinute = ref(0)
 const contentTheme = inject('contentTheme') as Ref<string>
 const toggleContentTheme = inject('toggleContentTheme') as (() => void) | undefined
 const toggleTheme = () => {
@@ -297,6 +421,178 @@ const datetimeLocalToISO = (value: string) => {
   const date = new Date(raw)
   if (Number.isNaN(date.getTime())) return ''
   return date.toISOString()
+}
+
+type PublishDateDay = {
+  key: string
+  date: string
+  day: number
+  inMonth: boolean
+  isToday: boolean
+  selected: boolean
+}
+
+const formatLocalDate = (date: Date) => `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
+const formatDatetimeLocal = (date: string, hour: number, minute: number) => `${date}T${pad2(hour)}:${pad2(minute)}`
+const parseDatetimeLocal = (value: string) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(String(value || '').trim())
+  if (!match) return null
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  const hour = Number(match[4])
+  const minute = Number(match[5])
+  if (Number.isNaN(date.getTime()) || hour < 0 || hour > 23 || minute < 0 || minute > 59) return null
+  return { date, dateText: formatLocalDate(date), hour, minute }
+}
+
+const publishTimeLabel = computed(() => {
+  const parsed = parseDatetimeLocal(PublishedAtInput.value)
+  if (!parsed) return '选择时间'
+  return `${parsed.dateText} ${pad2(parsed.hour)}:${pad2(parsed.minute)}`
+})
+
+const publishPickerTitle = computed(() => `${publishPickerMonth.value.getFullYear()}年${publishPickerMonth.value.getMonth() + 1}月`)
+const publishPickerDays = computed<PublishDateDay[]>(() => {
+  const first = new Date(publishPickerMonth.value.getFullYear(), publishPickerMonth.value.getMonth(), 1)
+  const startOffset = (first.getDay() + 6) % 7
+  const todayText = formatLocalDate(new Date())
+  const days: PublishDateDay[] = []
+  for (let index = 0; index < 42; index += 1) {
+    const date = new Date(first.getFullYear(), first.getMonth(), 1 - startOffset + index)
+    const value = formatLocalDate(date)
+    days.push({
+      key: value,
+      date: value,
+      day: date.getDate(),
+      inMonth: date.getMonth() === first.getMonth(),
+      isToday: value === todayText,
+      selected: value === publishDraftDate.value
+    })
+  }
+  return days
+})
+
+const positionFloatingMenu = (
+  trigger: HTMLElement | null,
+  menu: HTMLElement | null,
+  styleRef: Ref<Record<string, string>>,
+  minWidth = 120
+) => {
+  if (!trigger || typeof window === 'undefined') return
+  const rect = trigger.getBoundingClientRect()
+  const menuWidth = Math.max(menu?.offsetWidth || minWidth, minWidth, rect.width)
+  const menuHeight = menu?.offsetHeight || 180
+  const pad = 8
+  const gap = 6
+  const left = Math.min(Math.max(rect.left, pad), Math.max(pad, window.innerWidth - menuWidth - pad))
+  const belowTop = rect.bottom + gap
+  const aboveTop = rect.top - menuHeight - gap
+  const top = belowTop + menuHeight <= window.innerHeight - pad || aboveTop < pad ? belowTop : aboveTop
+  styleRef.value = {
+    left: `${left}px`,
+    top: `${Math.min(Math.max(top, pad), Math.max(pad, window.innerHeight - menuHeight - pad))}px`,
+    minWidth: `${Math.max(minWidth, rect.width)}px`
+  }
+}
+
+const closeFloatingMenus = () => {
+  showVisibilityMenu.value = false
+  showPublishDateMenu.value = false
+}
+
+const positionVisibilityMenu = () => positionFloatingMenu(visibilityControlRef.value, visibilityMenuRef.value, visibilityMenuStyle, 126)
+const positionPublishDateMenu = () => positionFloatingMenu(publishTimeControlRef.value, publishDateMenuRef.value, publishDateMenuStyle, 292)
+
+const toggleVisibilityMenu = async () => {
+  showPublishDateMenu.value = false
+  showVisibilityMenu.value = !showVisibilityMenu.value
+  if (showVisibilityMenu.value) {
+    await nextTick()
+    positionVisibilityMenu()
+  }
+}
+
+const selectVisibility = (value: MessageVisibility) => {
+  Visibility.value = value
+  showVisibilityMenu.value = false
+}
+
+const syncPublishDraftFromInput = () => {
+  const parsed = parseDatetimeLocal(PublishedAtInput.value)
+  const base = parsed || (() => {
+    const now = new Date()
+    return { date: now, dateText: formatLocalDate(now), hour: now.getHours(), minute: now.getMinutes() }
+  })()
+  publishPickerMonth.value = new Date(base.date.getFullYear(), base.date.getMonth(), 1)
+  publishDraftDate.value = base.dateText
+  publishDraftHour.value = base.hour
+  publishDraftMinute.value = base.minute
+}
+
+const applyPublishDraft = () => {
+  if (!publishDraftDate.value) return
+  PublishedAtInput.value = formatDatetimeLocal(publishDraftDate.value, publishDraftHour.value, publishDraftMinute.value)
+}
+
+const togglePublishDateMenu = async () => {
+  showVisibilityMenu.value = false
+  showPublishDateMenu.value = !showPublishDateMenu.value
+  if (showPublishDateMenu.value) {
+    syncPublishDraftFromInput()
+    await nextTick()
+    positionPublishDateMenu()
+  }
+}
+
+const movePublishMonth = (delta: number) => {
+  publishPickerMonth.value = new Date(publishPickerMonth.value.getFullYear(), publishPickerMonth.value.getMonth() + delta, 1)
+  nextTick(positionPublishDateMenu)
+}
+
+const selectPublishDay = (day: PublishDateDay) => {
+  publishDraftDate.value = day.date
+  if (!day.inMonth) {
+    const parsed = new Date(`${day.date}T00:00:00`)
+    if (!Number.isNaN(parsed.getTime())) publishPickerMonth.value = new Date(parsed.getFullYear(), parsed.getMonth(), 1)
+  }
+  applyPublishDraft()
+}
+
+const setPublishHour = (hour: number) => {
+  publishDraftHour.value = hour
+  applyPublishDraft()
+}
+
+const setPublishMinute = (minute: number) => {
+  publishDraftMinute.value = minute
+  applyPublishDraft()
+}
+
+const usePublishNow = () => {
+  const now = new Date()
+  publishPickerMonth.value = new Date(now.getFullYear(), now.getMonth(), 1)
+  publishDraftDate.value = formatLocalDate(now)
+  publishDraftHour.value = now.getHours()
+  publishDraftMinute.value = now.getMinutes()
+  applyPublishDraft()
+  showPublishDateMenu.value = false
+}
+
+const clearPublishDate = () => {
+  PublishedAtInput.value = ''
+  showPublishDateMenu.value = false
+}
+
+const handleFloatingMenuPointerDown = (event: MouseEvent) => {
+  const target = event.target as Node | null
+  if (!target) return
+  if (visibilityControlRef.value?.contains(target) || visibilityMenuRef.value?.contains(target)) return
+  if (publishTimeControlRef.value?.contains(target) || publishDateMenuRef.value?.contains(target)) return
+  closeFloatingMenus()
+}
+
+const handleFloatingMenuViewportChange = () => {
+  if (showVisibilityMenu.value) positionVisibilityMenu()
+  if (showPublishDateMenu.value) positionPublishDateMenu()
 }
 
 const checkLogin = () => {
@@ -592,6 +888,9 @@ watch(() => userStore.isLogin, (newLoginState) => {
 
 onMounted(async () => {
   Fancybox.bind("[data-fancybox]", {});
+  document.addEventListener('mousedown', handleFloatingMenuPointerDown)
+  window.addEventListener('resize', handleFloatingMenuViewportChange)
+  window.addEventListener('scroll', handleFloatingMenuViewportChange, true)
   if (!userStore.isLogin) {
     const token = localStorage.getItem('token');
     if (token) {
@@ -627,6 +926,9 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   Fancybox.destroy();
+  document.removeEventListener('mousedown', handleFloatingMenuPointerDown)
+  window.removeEventListener('resize', handleFloatingMenuViewportChange)
+  window.removeEventListener('scroll', handleFloatingMenuViewportChange, true)
 });
 const toggleNotify = () => {
   enableNotify.value = !enableNotify.value;
@@ -704,9 +1006,41 @@ const addMessage = async () => {
 .publish-time-control:focus-within,
 .visibility-control:hover,
 .visibility-control:focus-within { border-color: var(--publish-control-border-active); }
-.visibility-select { width: 82px; height: 28px; padding: 0 6px; border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 9px; outline: none; background: rgba(15, 23, 42, 0.46); color: inherit; color-scheme: dark; font-size: 12px; cursor: pointer; }
-.publish-time-input { width: 166px; max-width: 48vw; border: none; outline: none; background: transparent; color: inherit; color-scheme: dark; font-size: 12px; }
-.publish-time-input::-webkit-calendar-picker-indicator { filter: invert(1); opacity: .72; cursor: pointer; }
+.visibility-select { width: 82px; height: 28px; padding: 0 6px; border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 9px; outline: none; background: rgba(15, 23, 42, 0.46); color: inherit; font-size: 12px; cursor: pointer; }
+.visibility-trigger,
+.publish-time-trigger { display: inline-flex; align-items: center; justify-content: space-between; gap: 4px; }
+.visibility-trigger svg,
+.publish-time-trigger svg { flex: 0 0 auto; opacity: .72; }
+.publish-time-input { width: 166px; max-width: 48vw; min-height: 28px; border: none; outline: none; background: transparent; color: inherit; font-size: 12px; text-align: left; }
+.publish-time-trigger span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.floating-control-menu { position: fixed; z-index: 5004; border: 1px solid rgba(255,255,255,0.16); border-radius: 12px; background: rgba(0,0,0,0.80); color: #f8fafc; box-shadow: 0 18px 42px rgba(0,0,0,0.38); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.visibility-floating-menu { display: grid; gap: 4px; padding: 8px; }
+.floating-control-option { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 10px; border-radius: 9px; border: 1px solid transparent; color: inherit; font-size: 12px; font-weight: 650; text-align: left; transition: background-color .15s ease, border-color .15s ease, color .15s ease; }
+.floating-control-option:hover,
+.floating-control-option:focus-visible { outline: none; border-color: rgba(249,115,22,0.38); background: rgba(249,115,22,0.18); }
+.floating-control-option.is-selected { border-color: rgba(249,115,22,0.7); background: rgba(249,115,22,0.30); color: #fff; }
+.publish-datetime-menu { width: 292px; padding: 10px; }
+.publish-date-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.publish-date-title { font-size: 13px; font-weight: 700; color: #fff; }
+.floating-icon-btn { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.06); color: inherit; }
+.floating-icon-btn:hover { border-color: rgba(249,115,22,0.34); background: rgba(249,115,22,0.16); }
+.publish-date-weekdays,
+.publish-date-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.publish-date-weekdays { margin-bottom: 4px; color: rgba(226,232,240,0.66); font-size: 10px; font-weight: 700; text-align: center; }
+.publish-date-day { height: 28px; border-radius: 8px; border: 1px solid transparent; background: rgba(255,255,255,0.06); color: #f8fafc; font-size: 12px; line-height: 1; }
+.publish-date-day:hover { border-color: rgba(249,115,22,0.34); background: rgba(249,115,22,0.16); }
+.publish-date-day.is-muted { opacity: .38; }
+.publish-date-day.is-today { border-color: rgba(96,165,250,0.68); background: rgba(59,130,246,0.22); }
+.publish-date-day.is-selected { border-color: rgba(249,115,22,0.82); background: rgba(249,115,22,0.34); color: #fff; }
+.publish-time-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.publish-time-column { display: grid; grid-auto-rows: 28px; gap: 4px; max-height: 116px; overflow-y: auto; padding: 4px; border-radius: 10px; background: rgba(15,23,42,0.46); scrollbar-width: thin; }
+.publish-time-option { border-radius: 7px; border: 1px solid transparent; color: inherit; font-size: 12px; font-weight: 650; }
+.publish-time-option:hover { border-color: rgba(249,115,22,0.34); background: rgba(249,115,22,0.16); }
+.publish-time-option.is-selected { border-color: rgba(249,115,22,0.7); background: rgba(249,115,22,0.30); color: #fff; }
+.publish-date-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.floating-action-btn { height: 30px; padding: 0 12px; border-radius: 9px; border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.06); color: inherit; font-size: 12px; font-weight: 650; }
+.floating-action-btn:hover { border-color: rgba(249,115,22,0.34); background: rgba(249,115,22,0.16); }
+.floating-action-btn.primary { border-color: rgba(249,115,22,0.72); background: rgba(249,115,22,0.32); color: #fff; }
 .tb-sep { width:1px; height:24px; background: rgba(0,0,0,0.12); margin: 0 2px; }
 .preview-card { backdrop-filter: blur(8px); background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 8px; color:#111827; }
 html.dark .editor-box { background: var(--home-surface-dark, #202a36); border: 1px solid rgba(255,255,255,0.16); color:#fff; }
@@ -716,9 +1050,6 @@ html.dark .tb-btn:hover { background: rgba(255,255,255,0.12); }
 html.dark .publish-time-control,
 html.dark .visibility-control { background: rgba(17,24,39,0.86); color:#f8fafc; border-color: rgba(148,163,184,0.34); }
 html.dark .visibility-select { background: rgba(30,41,59,0.82); border-color: rgba(148,163,184,0.36); color:#f8fafc; }
-.visibility-select option,
-html.dark .visibility-select option { background:#1f2937; color:#f8fafc; }
-html.dark .publish-time-input::-webkit-calendar-picker-indicator { filter: invert(1); opacity: .72; }
 html.dark .tb-sep { background: rgba(255,255,255,0.12); }
 html.dark .preview-card { background: rgba(39, 50, 66, 0.68); border: 1px solid rgba(255,255,255,0.18); color:#fff; }
 .editor-toolbar :deep(.u-button) { border:none !important; box-shadow:none !important; background: transparent !important; color:#374151 !important; }

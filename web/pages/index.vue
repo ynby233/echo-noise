@@ -158,7 +158,7 @@
               </div>
             </div>
           </UCard>
-          <UCard class="sidebar-card no-padding-card" :class="sidebarThemeCard">
+          <UCard class="sidebar-card no-padding-card heatmap-sidebar-card" :class="sidebarThemeCard">
             <HeatmapWidget :active-tab="activeTab" compact />
           </UCard>
         
@@ -279,7 +279,7 @@
             </div>
           </div>
         </UCard>
-        <UCard class="sidebar-card no-padding-card" :class="sidebarThemeCard">
+        <UCard class="sidebar-card no-padding-card heatmap-sidebar-card" :class="sidebarThemeCard">
           <HeatmapWidget :active-tab="activeTab" compact />
         </UCard>
         
@@ -3134,7 +3134,9 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
 <style>
 /* 推荐图集图片 box 效果与悬停动画 */
 .calendar-sidebar-card.no-padding-card > div[class*="px-4"][class*="py-5"] { padding: 0 !important; }
+.heatmap-sidebar-card.no-padding-card > div[class*="px-4"][class*="py-5"] { padding: 10px 24px !important; }
 .hot-tags-block, .image-gallery-block { padding: 0; }
+.image-gallery-block { container-type: inline-size; }
 .hot-tags-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 20px; margin-bottom: 8px; }
 .hot-tags-refresh { width: 20px; height: 20px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: inherit; opacity: 0.78; border: 1px solid rgba(148, 163, 184, 0.24); background: rgba(148, 163, 184, 0.08); transition: opacity .15s ease, border-color .15s ease, background-color .15s ease; }
 .hot-tags-refresh:hover { opacity: 1; border-color: rgba(249, 115, 22, 0.34); background: rgba(249, 115, 22, 0.12); }
@@ -3199,7 +3201,10 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
 :global(html:not(.dark)) .ad-overlay-box a { color: var(--home-accent-warn) !important; text-decoration:none; }
 .ad-wrap:hover .ad-overlay { opacity:1; }
 .ad-wrap:hover .ad-image { filter: contrast(0.95) brightness(0.9); }
-.scroll-images { aspect-ratio: 3 / 2; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding-inline: 0; scrollbar-width: thin; }
+.scroll-images { aspect-ratio: 1.525 / 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding-inline: 0; scrollbar-width: thin; }
+@supports (height: 1cqw) {
+  .scroll-images { aspect-ratio: auto; height: calc(66.6667cqw - 2.5px); }
+}
 /* 标签三栏栅格与滚动容器 */
 .scroll-tags { max-height: 108px; overflow: hidden; -webkit-overflow-scrolling: touch; min-height: 0; overscroll-behavior: contain; }
 .tag-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }

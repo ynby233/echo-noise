@@ -130,27 +130,33 @@ const fetchHeatmapData = async () => {
   const placeTooltip = (target: HTMLElement) => {
     const rect = target.getBoundingClientRect()
     const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : rect.right
+    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : rect.bottom
     const tip = heatmapTooltip.value
-    const tooltipWidth = tip?.offsetWidth || 0
-    const tooltipHeight = tip?.offsetHeight || 0
+    const tooltipWidth = tip?.offsetWidth || 112
+    const tooltipHeight = tip?.offsetHeight || 24
     const pad = 8
-    const minX = tooltipWidth ? tooltipWidth / 2 + pad : 12
-    const maxX = tooltipWidth ? viewportWidth - tooltipWidth / 2 - pad : viewportWidth - 12
-    const x = Math.min(Math.max(rect.left + rect.width / 2, minX), Math.max(minX, maxX))
-    const y = Math.max(tooltipHeight ? tooltipHeight + pad : 28, rect.top - 8)
-    tooltip.value.x = x
-    tooltip.value.y = y
+    const gap = 8
+    const maxLeft = Math.max(pad, viewportWidth - tooltipWidth - pad)
+    const left = Math.min(Math.max(rect.left + rect.width / 2 - tooltipWidth / 2, pad), maxLeft)
+    const aboveTop = rect.top - tooltipHeight - gap
+    const belowTop = rect.bottom + gap
+    const shouldPlaceBelow = aboveTop < pad && belowTop + tooltipHeight <= viewportHeight - pad
+    const rawTop = shouldPlaceBelow ? belowTop : aboveTop
+    const maxTop = Math.max(pad, viewportHeight - tooltipHeight - pad)
+    const top = Math.min(Math.max(rawTop, pad), maxTop)
+    tooltip.value.x = left
+    tooltip.value.y = top
   }
 
   const showTooltip = (e: MouseEvent, day: any) => {
     tooltip.value.text = `${day.date} · ${day.count || 0} 条`
-    const target = e.target as HTMLElement
+    const target = e.currentTarget as HTMLElement
     placeTooltip(target)
     tooltip.value.visible = true
     nextTick(() => placeTooltip(target))
   }
   const moveTooltip = (e: MouseEvent) => {
-    placeTooltip(e.target as HTMLElement)
+    placeTooltip(e.currentTarget as HTMLElement)
   }
   const hideTooltip = () => {
     tooltip.value.visible = false
@@ -428,7 +434,6 @@ const fetchHeatmapData = async () => {
   }
   .heatmap-tooltip {
     position: fixed;
-    transform: translate(-50%, -100%);
     padding: 4px 8px;
     border-radius: 6px;
     font-size: 11px;
@@ -436,6 +441,7 @@ const fetchHeatmapData = async () => {
     white-space: nowrap;
     pointer-events: none;
     z-index: 5000;
+    will-change: left, top;
   }
   .heatmap-tooltip-light {
     background: rgba(255,255,255,0.95);
