@@ -243,30 +243,72 @@ const moveMonth = (delta: number) => {
   currentMonth.value = new Date(currentMonth.value.getFullYear(), currentMonth.value.getMonth() + delta, 1)
 }
 
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), Math.max(min, max))
+
+const getFixedCoordinateScale = () => {
+  if (typeof window === 'undefined') return 1
+  const zoom = Number.parseFloat(window.getComputedStyle(document.body).zoom || '1')
+  return Number.isFinite(zoom) && zoom > 0 ? zoom : 1
+}
+
+const getFixedViewport = (scale: number) => {
+  const viewport = window.visualViewport
+  const left = (viewport?.offsetLeft || 0) / scale
+  const top = (viewport?.offsetTop || 0) / scale
+  const width = (viewport?.width || window.innerWidth) / scale
+  const height = (viewport?.height || window.innerHeight) / scale
+  return { left, top, right: left + width, bottom: top + height }
+}
+
+const getFixedRect = (element: HTMLElement, scale: number) => {
+  const rect = element.getBoundingClientRect()
+  return {
+    left: rect.left / scale,
+    right: rect.right / scale,
+    top: rect.top / scale,
+    bottom: rect.bottom / scale,
+    width: rect.width / scale,
+    height: rect.height / scale
+  }
+}
+
 const updatePickerPosition = () => {
   if (!openPicker.value || typeof window === 'undefined') return
   const trigger = openPicker.value === 'year' ? yearPickerButton.value : monthPickerButton.value
   if (!trigger) return
-  const rect = trigger.getBoundingClientRect()
+  const scale = getFixedCoordinateScale()
+  const rect = getFixedRect(trigger, scale)
+  const viewport = getFixedViewport(scale)
   const menu = pickerMenu.value
   const minWidth = Math.max(rect.width, openPicker.value === 'year' ? 112 : 88)
   const menuWidth = Math.max(menu?.offsetWidth || minWidth, minWidth)
   const menuHeight = menu?.offsetHeight || 180
   const pad = 8
   const gap = 4
-  const maxLeft = Math.max(pad, window.innerWidth - menuWidth - pad)
+  const minLeft = viewport.left + pad
+  const maxLeft = Math.max(minLeft, viewport.right - menuWidth - pad)
   const idealLeft = rect.left + rect.width / 2 - menuWidth / 2
-  const maxTop = Math.max(pad, window.innerHeight - menuHeight - pad)
+  const minTop = viewport.top + pad
+  const maxTop = Math.max(minTop, viewport.bottom - menuHeight - pad)
   pickerMenuStyle.value = {
-    left: `${Math.min(Math.max(idealLeft, pad), maxLeft)}px`,
-    top: `${Math.min(Math.max(rect.bottom + gap, pad), maxTop)}px`,
+    position: 'fixed',
+    left: `${clamp(idealLeft, minLeft, maxLeft)}px`,
+    top: `${clamp(rect.bottom + gap, minTop, maxTop)}px`,
+    right: 'auto',
+    bottom: 'auto',
+    transform: 'none',
     minWidth: `${minWidth}px`
   }
 }
 
 const schedulePickerPosition = () => {
   updatePickerPosition()
-  if (typeof window !== 'undefined') window.requestAnimationFrame(updatePickerPosition)
+  if (typeof window !== 'undefined') {
+    window.requestAnimationFrame(() => {
+      updatePickerPosition()
+      window.requestAnimationFrame(updatePickerPosition)
+    })
+  }
 }
 
 const togglePicker = async (type: PickerType) => {
@@ -402,7 +444,7 @@ onBeforeUnmount(() => {
 }
 
 .year-select {
-  width: 86px;
+  width: 80px;
 }
 
 .month-select {

@@ -1876,16 +1876,18 @@ onMounted(() => {
 /* 内容图片 box 效果与悬停预览动画 */
 .message-image-box {
   width: 100%;
-  height: auto;
+  height: 100%;
   border-radius: 12px;
   display: block;
-  object-fit: contain;
+  object-fit: cover;
   transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
   box-shadow: 0 1px 2px rgba(0,0,0,0.10);
 }
 .message-image-wrap {
   display: block;
-  width: 100%;
+  width: var(--inline-image-thumb-size);
+  height: var(--inline-image-thumb-size);
+  max-width: 100%;
   overflow: hidden;
   border-radius: 12px;
   background: rgba(0,0,0,0.04);
@@ -1919,6 +1921,33 @@ onMounted(() => {
   content-visibility: auto;
   contain-intrinsic-size: 150px auto;
   will-change: transform;
+}
+
+.content-container .message-image-box,
+.content-container .inline-image-thumb img {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  object-fit: cover !important;
+  object-position: center;
+  margin: 0 !important;
+  contain-intrinsic-size: auto !important;
+}
+
+.content-container .inline-image-thumb {
+  width: var(--inline-image-thumb-size);
+  height: var(--inline-image-thumb-size);
+  max-width: 100%;
+  margin: 6px 0;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+.content-container .inline-image-thumb > a,
+.content-container .inline-image-thumb > img {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
 }
 /* 简化过渡动画 */
 .overflow-y-hidden {

@@ -230,6 +230,54 @@ const applyImageGrid = () => {
     return el.classList.contains('single-media') && Array.from(el.children).some((child) => isMediaNode(child))
   }
 
+  const fullSizeRenderSelector = [
+    '[data-render-source="xiaohongshu"]',
+    '[data-render-source="xhs"]',
+    '[data-render-source="rednote"]',
+    '.xiaohongshu-render',
+    '.xhs-render',
+    '.rednote-render',
+    '.xiaohongshu-render-image',
+    '.xhs-render-image',
+    '.rednote-render-image',
+  ].join(',')
+
+  const shouldKeepFullSizeImage = (el: Element | null) => !!el?.closest(fullSizeRenderSelector)
+
+  const getPlainImage = (node: HTMLElement): HTMLImageElement | null => {
+    if (shouldKeepFullSizeImage(node)) return null
+    const tagName = node.tagName.toLowerCase()
+    if (tagName === 'img') return node as HTMLImageElement
+    if (tagName === 'a' && !node.closest('.github-card, .video-wrapper, .douyin-video-wrapper')) {
+      const img = node.querySelector('img') as HTMLImageElement | null
+      if (shouldKeepFullSizeImage(img)) return null
+      return img
+    }
+    return null
+  }
+
+  const isPlainImageNode = (node: HTMLElement) => !!getPlainImage(node)
+
+  const ensureImageAnchor = (node: HTMLElement, group: string): HTMLElement => {
+    const img = getPlainImage(node)
+    if (!img) return node
+    const src = img.getAttribute('src') || img.currentSrc || img.src || ''
+    if (node.tagName.toLowerCase() === 'a') {
+      const anchor = node as HTMLAnchorElement
+      const href = anchor.getAttribute('href') || ''
+      if (!href || href === '#' || href.startsWith('javascript:')) anchor.setAttribute('href', src)
+      anchor.setAttribute('data-fancybox', group)
+      anchor.classList.add('inline-image-link')
+      return anchor
+    }
+    const anchor = document.createElement('a')
+    anchor.setAttribute('href', src)
+    anchor.setAttribute('data-fancybox', group)
+    anchor.className = 'inline-image-link'
+    anchor.appendChild(img)
+    return anchor
+  }
+
   const isPureMediaParagraph = (p: Element) => {
     const children = Array.from(p.childNodes);
     if (children.length === 0) return false;
@@ -341,12 +389,15 @@ const applyImageGrid = () => {
             const firstBlock = run[0]
             const only = mediaItems[0]?.node
             if (firstBlock?.parentNode && only) {
+              const isPlainImage = isPlainImageNode(only)
               const wrapper = document.createElement('div')
-              wrapper.className = 'single-media'
+              wrapper.className = isPlainImage ? 'single-media inline-image-thumb' : 'single-media'
               firstBlock.parentNode.insertBefore(wrapper, firstBlock)
-              wrapper.appendChild(only)
+              wrapper.appendChild(isPlainImage ? ensureImageAnchor(only, 'inline-image') : only)
 
               if (firstBlock.tagName.toLowerCase() === 'p') firstBlock.remove()
+
+              if (isPlainImage) continue
 
               const applyPortrait = (w: number, h: number) => {
                 if (w > 0 && h > 0 && h > w) {
@@ -1696,6 +1747,33 @@ watch(() => props.enableGithubCard, () => {
   width: 100%;
   height: 100% !important;
   display: block;
+}
+
+.markdown-preview .inline-image-thumb {
+  width: var(--inline-image-thumb-size);
+  height: var(--inline-image-thumb-size);
+  max-width: 100%;
+  margin: 6px 0;
+  overflow: hidden;
+  border-radius: 10px;
+  display: block;
+}
+
+.markdown-preview .inline-image-thumb > a,
+.markdown-preview .inline-image-thumb > img {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.markdown-preview .inline-image-thumb img {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  object-fit: cover !important;
+  object-position: center;
+  border-radius: inherit;
 }
 
 .github-card {

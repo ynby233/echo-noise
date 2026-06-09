@@ -26,7 +26,26 @@ let toolbarEl: HTMLElement | null = null;
 let placeholderEl: HTMLElement | null = null;
 let mutationObserver: MutationObserver | null = null;
 let fixedCleanup: (() => void) | null = null;
+let imagePreviewCleanup: (() => void) | null = null;
 const isReady = ref(false);
+
+const setupInlineImagePreview = () => {
+  const root = editorContainer.value;
+  if (!root) return;
+
+  const onImageClick = (event: MouseEvent) => {
+    const img = (event.target as HTMLElement | null)?.closest('.vditor-reset img') as HTMLImageElement | null;
+    if (!img || !root.contains(img) || img.closest('.vditor-toolbar, .vditor-panel, .vditor-hint')) return;
+    const src = img.currentSrc || img.src || img.getAttribute('src') || '';
+    if (!src) return;
+    event.preventDefault();
+    event.stopPropagation();
+    window.open(src, '_blank', 'noopener,noreferrer');
+  };
+
+  root.addEventListener('click', onImageClick, true);
+  imagePreviewCleanup = () => root.removeEventListener('click', onImageClick, true);
+};
 
 const editorOptions: IOptions = {
   mode: "ir",
@@ -198,7 +217,10 @@ onMounted(async () => {
   };
 
   // 在下一轮微任务确保 DOM 就绪
-  nextTick(() => setupFixedToolbar());
+  nextTick(() => {
+    setupFixedToolbar();
+    setupInlineImagePreview();
+  });
 });
 
 onBeforeUnmount(() => {
@@ -210,6 +232,10 @@ onBeforeUnmount(() => {
     if (fixedCleanup) {
       fixedCleanup();
       fixedCleanup = null;
+    }
+    if (imagePreviewCleanup) {
+      imagePreviewCleanup();
+      imagePreviewCleanup = null;
     }
   } catch (e) {
     console.warn('Vditor destroy error', e);
@@ -347,6 +373,23 @@ watch(() => props.theme, (newTheme) => {
 
 .vditor-reset {
   color: #111827 !important;
+}
+
+.vditor-container .vditor-reset img:not(.emoji):not(.xiaohongshu-render-image):not(.xhs-render-image):not(.rednote-render-image) {
+  width: var(--inline-image-thumb-size) !important;
+  height: var(--inline-image-thumb-size) !important;
+  max-width: 100% !important;
+  min-height: 0 !important;
+  object-fit: cover;
+  object-position: center;
+  border-radius: 10px;
+  cursor: zoom-in;
+  display: inline-block;
+  vertical-align: top;
+}
+
+.vditor-container .vditor-reset a > img:not(.emoji) {
+  display: block;
 }
 
 .vditor-reset table {

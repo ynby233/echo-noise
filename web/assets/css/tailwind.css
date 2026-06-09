@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --inline-image-thumb-size: 96px;
+}
+
 html, body {
     font-family: "LXGW WenKai Screen";
     scrollbar-width: thin;

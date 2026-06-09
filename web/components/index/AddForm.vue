@@ -473,6 +473,35 @@ const publishPickerDays = computed<PublishDateDay[]>(() => {
 
 type FloatingMenuPlacement = 'below' | 'above-right'
 
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), Math.max(min, max))
+
+const getFixedCoordinateScale = () => {
+  if (typeof window === 'undefined') return 1
+  const zoom = Number.parseFloat(window.getComputedStyle(document.body).zoom || '1')
+  return Number.isFinite(zoom) && zoom > 0 ? zoom : 1
+}
+
+const getFixedViewport = (scale: number) => {
+  const viewport = window.visualViewport
+  const left = (viewport?.offsetLeft || 0) / scale
+  const top = (viewport?.offsetTop || 0) / scale
+  const width = (viewport?.width || window.innerWidth) / scale
+  const height = (viewport?.height || window.innerHeight) / scale
+  return { left, top, right: left + width, bottom: top + height }
+}
+
+const getFixedRect = (element: HTMLElement, scale: number) => {
+  const rect = element.getBoundingClientRect()
+  return {
+    left: rect.left / scale,
+    right: rect.right / scale,
+    top: rect.top / scale,
+    bottom: rect.bottom / scale,
+    width: rect.width / scale,
+    height: rect.height / scale
+  }
+}
+
 const positionFloatingMenu = (
   trigger: HTMLElement | null,
   menu: HTMLElement | null,
@@ -481,29 +510,42 @@ const positionFloatingMenu = (
   placement: FloatingMenuPlacement = 'below'
 ) => {
   if (!trigger || typeof window === 'undefined') return
-  const rect = trigger.getBoundingClientRect()
+  const scale = getFixedCoordinateScale()
+  const rect = getFixedRect(trigger, scale)
+  const viewport = getFixedViewport(scale)
   const menuWidth = Math.max(menu?.offsetWidth || minWidth, minWidth, rect.width)
   const menuHeight = menu?.offsetHeight || 180
   const pad = 8
   const gap = 4
-  const maxLeft = Math.max(pad, window.innerWidth - menuWidth - pad)
+  const minLeft = viewport.left + pad
+  const maxLeft = Math.max(minLeft, viewport.right - menuWidth - pad)
   const idealLeft = placement === 'above-right'
     ? rect.right - menuWidth
     : rect.left + rect.width / 2 - menuWidth / 2
   const aboveTop = rect.top - menuHeight - gap
   const belowTop = rect.bottom + gap
-  const maxTop = Math.max(pad, window.innerHeight - menuHeight - pad)
-  const idealTop = placement === 'above-right' && aboveTop >= pad ? aboveTop : belowTop
+  const minTop = viewport.top + pad
+  const maxTop = Math.max(minTop, viewport.bottom - menuHeight - pad)
+  const idealTop = placement === 'above-right' && aboveTop >= minTop ? aboveTop : belowTop
   styleRef.value = {
-    left: `${Math.min(Math.max(idealLeft, pad), maxLeft)}px`,
-    top: `${Math.min(Math.max(idealTop, pad), maxTop)}px`,
+    position: 'fixed',
+    left: `${clamp(idealLeft, minLeft, maxLeft)}px`,
+    top: `${clamp(idealTop, minTop, maxTop)}px`,
+    right: 'auto',
+    bottom: 'auto',
+    transform: 'none',
     minWidth: `${Math.max(minWidth, rect.width)}px`
   }
 }
 
 const scheduleFloatingMenuPosition = (positioner: () => void) => {
   positioner()
-  if (typeof window !== 'undefined') window.requestAnimationFrame(positioner)
+  if (typeof window !== 'undefined') {
+    window.requestAnimationFrame(() => {
+      positioner()
+      window.requestAnimationFrame(positioner)
+    })
+  }
 }
 
 const closeFloatingMenus = () => {
@@ -781,6 +823,18 @@ const normalizeInlineImageLinks = (md: string): string => md.replace(INLINE_IMAG
 const applyImageGridHTML = (html: string) => {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
+  const fullSizeRenderSelector = [
+    '[data-render-source="xiaohongshu"]',
+    '[data-render-source="xhs"]',
+    '[data-render-source="rednote"]',
+    '.xiaohongshu-render',
+    '.xhs-render',
+    '.rednote-render',
+    '.xiaohongshu-render-image',
+    '.xhs-render-image',
+    '.rednote-render-image',
+  ].join(',');
+  const shouldKeepFullSizeImage = (el: Element | null) => !!el?.closest(fullSizeRenderSelector);
   const isPureImageParagraph = (p: Element) => {
     let ok = true;
     const children = Array.from(p.childNodes);
@@ -789,8 +843,15 @@ const applyImageGridHTML = (html: string) => {
       if (node.nodeType === Node.ELEMENT_NODE) {
         const el = node as Element;
         const tag = el.tagName.toLowerCase();
-        if (tag === 'img') continue;
-        if (tag === 'a' && el.childElementCount === 1 && el.querySelector('img')) continue;
+        if (tag === 'img') {
+          if (shouldKeepFullSizeImage(el)) { ok = false; break; }
+          continue;
+        }
+        const linkedImg = tag === 'a' && el.childElementCount === 1 ? el.querySelector('img') : null;
+        if (linkedImg) {
+          if (shouldKeepFullSizeImage(el) || shouldKeepFullSizeImage(linkedImg)) { ok = false; break; }
+          continue;
+        }
         if (tag === 'br') { ok = false; break; }
         ok = false; break;
       } else if (node.nodeType === Node.TEXT_NODE) {
@@ -818,6 +879,43 @@ const applyImageGridHTML = (html: string) => {
     }
   }
   if (current.length >= 2) runs.push(current);
+
+  const getSingleImagePayload = (p: Element) => {
+    const anchors = Array.from(p.querySelectorAll('a')).filter((a) => a.querySelector('img')) as HTMLAnchorElement[];
+    const anchoredImages = anchors.map((a) => a.querySelector('img')).filter(Boolean) as HTMLImageElement[];
+    const looseImages = Array.from(p.querySelectorAll('img')).filter((img) => !img.closest('a')) as HTMLImageElement[];
+    const count = anchoredImages.length + looseImages.length;
+    if (count !== 1) return null;
+    return anchors[0]
+      ? { anchor: anchors[0], img: anchoredImages[0] }
+      : { anchor: null, img: looseImages[0] };
+  };
+
+  const ensurePreviewImageAnchor = (payload: { anchor: HTMLAnchorElement | null; img: HTMLImageElement }, group: string) => {
+    const src = payload.img.getAttribute('src') || payload.img.src || '';
+    if (payload.anchor) {
+      const href = payload.anchor.getAttribute('href') || '';
+      if (!href || href === '#' || href.startsWith('javascript:')) payload.anchor.setAttribute('href', src);
+      payload.anchor.setAttribute('data-fancybox', group);
+      payload.anchor.classList.add('inline-image-link');
+      return payload.anchor;
+    }
+    const anchor = doc.createElement('a');
+    anchor.setAttribute('href', src);
+    anchor.setAttribute('data-fancybox', group);
+    anchor.className = 'inline-image-link';
+    anchor.appendChild(payload.img);
+    return anchor;
+  };
+
+  const wrapSingleImageParagraph = (p: Element) => {
+    const payload = getSingleImagePayload(p);
+    if (!payload) return;
+    const wrapper = doc.createElement('div');
+    wrapper.className = 'single-media inline-image-thumb';
+    wrapper.appendChild(ensurePreviewImageAnchor(payload, 'editor-preview-image'));
+    p.replaceWith(wrapper);
+  };
 
   for (const run of runs) {
     const grid = doc.createElement('div');
@@ -854,6 +952,10 @@ const applyImageGridHTML = (html: string) => {
     first.replaceWith(grid);
     for (let i = 1; i < run.length; i++) run[i].remove();
   }
+
+  Array.from(doc.body.querySelectorAll('p')).forEach((p) => {
+    if (isPureImageParagraph(p)) wrapSingleImageParagraph(p);
+  });
   return doc.body.innerHTML;
 };
 
@@ -1012,18 +1114,18 @@ const addMessage = async () => {
 .tb-btn { display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; transition: all .18s ease; border:none; }
 .tb-btn:hover { transform: translate3d(0,0,0) scale(1.06); background: rgba(0,0,0,0.12); }
 .tb-btn.primary { background: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color: #fff; }
-.publish-time-control { display:flex; align-items:center; gap:6px; min-height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 10px; border: none; box-shadow: none; transition: background-color .18s ease, transform .18s ease; }
-.visibility-control { display:flex; align-items:center; gap:6px; min-height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 8px; border: none; box-shadow: none; transition: background-color .18s ease, transform .18s ease; }
+.publish-time-control { display:flex; align-items:center; gap:6px; min-height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 8px 0 10px; border: none; box-shadow: none; transition: background-color .18s ease, transform .18s ease; }
+.visibility-control { display:flex; align-items:center; gap:6px; min-height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 8px 0 10px; border: none; box-shadow: none; transition: background-color .18s ease, transform .18s ease; }
 .publish-time-control:hover,
 .publish-time-control:focus-within,
 .visibility-control:hover,
 .visibility-control:focus-within { background: rgba(0,0,0,0.12); }
-.visibility-select { width: 82px; height: 28px; padding: 0 6px; border: 0; border-radius: 9px; outline: none; background: transparent; color: inherit; font-size: 12px; cursor: pointer; }
+.visibility-select { width: 86px; height: 28px; padding: 0 8px; border: 0; border-radius: 9px; outline: none; background: transparent; color: inherit; font-size: 12px; cursor: pointer; }
 .visibility-trigger,
 .publish-time-trigger { display: inline-flex; align-items: center; justify-content: space-between; gap: 4px; }
 .visibility-trigger svg,
 .publish-time-trigger svg { flex: 0 0 auto; opacity: .72; }
-.publish-time-input { width: 166px; max-width: 48vw; min-height: 28px; border: none; outline: none; background: transparent; color: inherit; font-size: 12px; text-align: left; }
+.publish-time-input { width: 172px; max-width: 48vw; min-height: 28px; padding: 0 8px; border: none; outline: none; background: transparent; color: inherit; font-size: 12px; text-align: left; }
 .publish-time-trigger span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .floating-control-menu { position: fixed; z-index: 5004; border: 1px solid rgba(255,255,255,0.16); border-radius: 12px; background: rgba(0,0,0,0.80); color: #f8fafc; box-shadow: 0 18px 42px rgba(0,0,0,0.38); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
 .visibility-floating-menu { display: grid; gap: 4px; padding: 8px; }
@@ -1080,6 +1182,30 @@ html.dark .upload-progress-track { background: rgba(255,255,255,0.14); }
 html.dark .upload-progress-text { color: rgba(226,232,240,0.72); }
 .editor-preview p { margin: 0.5rem 0; }
 .editor-preview img { margin: 0.4rem 0; }
+.editor-preview .inline-image-thumb {
+  width: var(--inline-image-thumb-size);
+  height: var(--inline-image-thumb-size);
+  max-width: 100%;
+  margin: 6px 0;
+  overflow: hidden;
+  border-radius: 10px;
+  display: block;
+}
+.editor-preview .inline-image-thumb > a,
+.editor-preview .inline-image-thumb > img {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+.editor-preview .inline-image-thumb img {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  object-fit: cover;
+  object-position: center;
+  border-radius: inherit;
+}
 .image-grid {
   display: grid;
   gap: 6px;

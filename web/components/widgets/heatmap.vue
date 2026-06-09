@@ -127,39 +127,68 @@ const fetchHeatmapData = async () => {
     generateEmptyCalendar()
   }
 }
-  const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
+  const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), Math.max(min, max))
+
+  const getFixedCoordinateScale = () => {
+    if (typeof window === 'undefined') return 1
+    const zoom = Number.parseFloat(window.getComputedStyle(document.body).zoom || '1')
+    return Number.isFinite(zoom) && zoom > 0 ? zoom : 1
+  }
+
+  const getFixedViewport = (scale: number) => {
+    const viewport = window.visualViewport
+    const left = (viewport?.offsetLeft || 0) / scale
+    const top = (viewport?.offsetTop || 0) / scale
+    const width = (viewport?.width || window.innerWidth) / scale
+    const height = (viewport?.height || window.innerHeight) / scale
+    return { left, top, right: left + width, bottom: top + height }
+  }
+
+  const getFixedRect = (element: HTMLElement, scale: number) => {
+    const rect = element.getBoundingClientRect()
+    return {
+      left: rect.left / scale,
+      right: rect.right / scale,
+      top: rect.top / scale,
+      bottom: rect.bottom / scale,
+      width: rect.width / scale,
+      height: rect.height / scale
+    }
+  }
 
   const placeTooltip = (target: HTMLElement) => {
-    const rect = target.getBoundingClientRect()
-    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : rect.right
-    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : rect.bottom
+    const scale = getFixedCoordinateScale()
+    const rect = getFixedRect(target, scale)
+    const viewport = getFixedViewport(scale)
     const tip = heatmapTooltip.value
     const tooltipWidth = tip?.offsetWidth || 112
     const tooltipHeight = tip?.offsetHeight || 24
     const pad = 8
     const gap = 4
-    const maxLeft = Math.max(pad, viewportWidth - tooltipWidth - pad)
+    const minLeft = viewport.left + pad
+    const maxLeft = Math.max(minLeft, viewport.right - tooltipWidth - pad)
     const idealLeft = rect.left + rect.width / 2 - tooltipWidth / 2
-    const left = clamp(idealLeft, pad, maxLeft)
+    const left = clamp(idealLeft, minLeft, maxLeft)
     const aboveTop = rect.top - tooltipHeight - gap
     const belowTop = rect.bottom + gap
-    const maxTop = Math.max(pad, viewportHeight - tooltipHeight - pad)
-    const centerTop = clamp(rect.top + rect.height / 2 - tooltipHeight / 2, pad, maxTop)
+    const minTop = viewport.top + pad
+    const maxTop = Math.max(minTop, viewport.bottom - tooltipHeight - pad)
+    const centerTop = clamp(rect.top + rect.height / 2 - tooltipHeight / 2, minTop, maxTop)
     const horizontalDrift = Math.abs(left + tooltipWidth / 2 - (rect.left + rect.width / 2))
-    const canPlaceRight = rect.right + gap + tooltipWidth <= viewportWidth - pad
-    const canPlaceLeft = rect.left - gap - tooltipWidth >= pad
+    const canPlaceRight = rect.right + gap + tooltipWidth <= viewport.right - pad
+    const canPlaceLeft = rect.left - gap - tooltipWidth >= viewport.left + pad
 
     if (horizontalDrift > Math.max(18, tooltipWidth * 0.22) && (canPlaceRight || canPlaceLeft)) {
       const sideLeft = canPlaceRight ? rect.right + gap : rect.left - tooltipWidth - gap
-      tooltip.value.x = clamp(sideLeft, pad, maxLeft)
+      tooltip.value.x = clamp(sideLeft, minLeft, maxLeft)
       tooltip.value.y = centerTop
       return
     }
 
-    const preferBelow = aboveTop < pad && belowTop + tooltipHeight <= viewportHeight - pad
+    const preferBelow = aboveTop < minTop && belowTop + tooltipHeight <= viewport.bottom - pad
     const rawTop = preferBelow ? belowTop : aboveTop
     tooltip.value.x = left
-    tooltip.value.y = clamp(rawTop, pad, maxTop)
+    tooltip.value.y = clamp(rawTop, minTop, maxTop)
   }
 
   const showTooltip = (e: MouseEvent, day: any) => {
@@ -167,7 +196,10 @@ const fetchHeatmapData = async () => {
     const target = e.currentTarget as HTMLElement
     placeTooltip(target)
     tooltip.value.visible = true
-    nextTick(() => placeTooltip(target))
+    nextTick(() => {
+      placeTooltip(target)
+      if (typeof window !== 'undefined') window.requestAnimationFrame(() => placeTooltip(target))
+    })
   }
   const moveTooltip = (e: MouseEvent) => {
     placeTooltip(e.currentTarget as HTMLElement)
