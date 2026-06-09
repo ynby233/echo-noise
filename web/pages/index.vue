@@ -11,7 +11,7 @@
       <div class="left-col" v-if="!isMobile && layoutState!=='single'">
         <UCard class="sidebar-card" :class="sidebarThemeCard">
           <div class="profile-card">
-            <div class="avatar-wrap relative">
+            <div class="avatar-wrap relative nw-tooltip-anchor nw-tooltip-below" data-tooltip="切换背景">
               <img class="avatar-lg" :src="profileAvatar" :alt="profileName" @click="changeBackground" @error="handleAvatarError">
               <span class="avatar-status" :class="isOnline ? 'bg-green-500' : 'bg-gray-400'"></span>
             </div>
@@ -24,12 +24,12 @@
             </div>
             <div class="profile-desc">{{ profileDesc }}</div>
             <div v-if="!isOnline" class="auth-actions">
-              <span class="auth-tooltip" data-label="登录">
+              <span class="auth-tooltip nw-tooltip-anchor" data-tooltip="登录">
                 <UButton variant="ghost" color="indigo" class="auth-btn" aria-label="登录" @click="authMode='login'; showAuthModal=true">
                   <UIcon name="i-heroicons-arrow-right-end-on-rectangle" class="w-5 h-5" />
                 </UButton>
               </span>
-              <span class="auth-tooltip" data-label="注册">
+              <span class="auth-tooltip nw-tooltip-anchor" data-tooltip="注册">
                 <UButton variant="ghost" color="orange" class="auth-btn" aria-label="注册" @click="switchToRegister(); showAuthModal=true">
                   <UIcon name="i-heroicons-user-plus" class="w-5 h-5" />
                 </UButton>
@@ -59,7 +59,7 @@
         </UCard>
         <UCard v-if="frontendConfig.socialLinksEnabled === true && (frontendConfig.socialLinks || []).length > 0" class="sidebar-card no-padding-card mt-2" :class="sidebarThemeCard">
           <div class="social-list" v-if="frontendConfig.socialLinksEnabled === true">
-            <a v-for="item in (frontendConfig.socialLinks || [])" :key="item.url || item.name" class="social-item" :href="item.url" target="_blank" rel="noopener noreferrer" :data-label="item.name || item.url">
+            <a v-for="item in (frontendConfig.socialLinks || [])" :key="item.url || item.name" class="social-item nw-tooltip-anchor" :href="item.url" target="_blank" rel="noopener noreferrer" :data-tooltip="item.name || item.url">
               <template v-if="item.imageURL">
                 <img :src="item.imageURL" alt="icon" class="social-icon-img" />
               </template>
@@ -129,7 +129,7 @@
             <div class="hot-tags-block">
               <div class="hot-tags-head">
                 <div class="text-xs opacity-70">热门标签</div>
-                <button type="button" class="hot-tags-refresh" title="刷新标签" aria-label="刷新标签" @click="refreshHotTags">
+                <button type="button" class="hot-tags-refresh nw-tooltip-anchor" data-tooltip="刷新标签" aria-label="刷新标签" @click="refreshHotTags">
                   <UIcon name="i-mdi-refresh" class="w-4 h-4" :class="{ 'animate-spin': tagsRefreshing }" />
                 </button>
               </div>
@@ -250,7 +250,7 @@
           <div class="hot-tags-block">
             <div class="hot-tags-head">
               <div class="text-xs opacity-70">热门标签</div>
-              <button type="button" class="hot-tags-refresh" title="刷新标签" aria-label="刷新标签" @click="refreshHotTags">
+              <button type="button" class="hot-tags-refresh nw-tooltip-anchor" data-tooltip="刷新标签" aria-label="刷新标签" @click="refreshHotTags">
                 <UIcon name="i-mdi-refresh" class="w-4 h-4" :class="{ 'animate-spin': tagsRefreshing }" />
               </button>
             </div>
@@ -2957,14 +2957,6 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
 }
 .auth-actions { margin-top: 6px; display: flex; align-items: center; justify-content: center; gap: 10px; }
 .auth-tooltip { position: relative; display: inline-flex; align-items: center; justify-content: center; }
-.auth-tooltip::before,
-.auth-tooltip::after { position: absolute; left: 50%; opacity: 0; pointer-events: none; transition: opacity .15s ease, transform .15s ease; z-index: 30; }
-.auth-tooltip::before { content: ''; bottom: calc(100% + 2px); transform: translateX(-50%) translateY(2px); border: 4px solid transparent; border-top-color: rgba(17, 24, 39, 0.95); }
-.auth-tooltip::after { content: attr(data-label); bottom: calc(100% + 10px); transform: translateX(-50%) translateY(2px); padding: 4px 8px; border-radius: 6px; background: rgba(17, 24, 39, 0.95); color: #fff; font-size: 12px; line-height: 1; white-space: nowrap; box-shadow: 0 6px 16px rgba(15, 23, 42, 0.2); }
-.auth-tooltip:hover::before,
-.auth-tooltip:hover::after,
-.auth-tooltip:focus-within::before,
-.auth-tooltip:focus-within::after { opacity: 1; transform: translateX(-50%) translateY(0); }
 .auth-btn { width: 36px; height: 36px; padding: 0; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; background: transparent !important; border: none !important; box-shadow: none !important; }
 .auth-btn:hover { background: transparent !important; transform: translateY(-1px); }
 .stats-login-prompt {
@@ -3039,14 +3031,6 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
 .social-item { color: inherit; text-decoration: none; }
 .social-item:hover { transform: scale(1.06); transition: transform .12s ease; }
 .social-icon-img { width: clamp(24px, 5.2vw, 32px); height: clamp(24px, 5.2vw, 32px); border-radius:6px; object-fit:cover; display:inline-block; }
-.social-item::after { content: attr(data-label); position:absolute; bottom:calc(100% + 2px); left:50%; transform: translateX(-50%); white-space:nowrap; padding:4px 8px; font-size:12px; border-radius:6px; pointer-events:none; opacity:0; transition: opacity .12s ease; }
-:global(html.dark) .social-item::after { background: var(--home-surface-dark); color: var(--home-text-dark); border: 1px solid var(--home-border-dark-soft); }
-:global(html:not(.dark)) .social-item::after { 
-  background:#fff !important; 
-  color:#111 !important; 
-  border:1px solid rgba(0,0,0,0.08) !important; 
-}
-.social-item:hover::after { opacity:1; }
 .sidebar-title {
   font-weight: 600;
   padding: 8px 10px;

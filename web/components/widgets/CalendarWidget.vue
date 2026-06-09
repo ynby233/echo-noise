@@ -70,7 +70,7 @@
       <div
         v-if="openPicker"
         ref="pickerMenu"
-        class="calendar-floating-menu"
+        class="calendar-floating-menu nw-floating-menu"
         :class="`is-${openPicker}`"
         :style="pickerMenuStyle"
         role="listbox"
@@ -80,7 +80,7 @@
           v-for="option in pickerOptions"
           :key="option.value"
           type="button"
-          class="calendar-floating-option"
+          class="calendar-floating-option nw-floating-option"
           :class="{ 'is-selected': option.selected }"
           role="option"
           :aria-selected="option.selected"
@@ -276,12 +276,12 @@ const updatePickerPosition = () => {
   if (!openPicker.value || typeof window === 'undefined') return
   const trigger = openPicker.value === 'year' ? yearPickerButton.value : monthPickerButton.value
   if (!trigger) return
+  const pickerType = openPicker.value
   const scale = getFixedCoordinateScale()
   const rect = getFixedRect(trigger, scale)
   const viewport = getFixedViewport(scale)
   const menu = pickerMenu.value
-  const minWidth = Math.max(rect.width, openPicker.value === 'year' ? 112 : 88)
-  const menuWidth = Math.max(menu?.offsetWidth || minWidth, minWidth)
+  const menuWidth = Math.ceil(Math.max(rect.width, pickerType === 'year' ? 88 : 92))
   const menuHeight = menu?.offsetHeight || 180
   const pad = 8
   const gap = 4
@@ -290,14 +290,21 @@ const updatePickerPosition = () => {
   const idealLeft = rect.left + rect.width / 2 - menuWidth / 2
   const minTop = viewport.top + pad
   const maxTop = Math.max(minTop, viewport.bottom - menuHeight - pad)
+  const belowTop = rect.bottom + gap
+  const aboveTop = rect.top - menuHeight - gap
+  const idealTop = belowTop + menuHeight <= viewport.bottom - pad
+    ? belowTop
+    : (aboveTop >= minTop ? aboveTop : belowTop)
   pickerMenuStyle.value = {
     position: 'fixed',
     left: `${clamp(idealLeft, minLeft, maxLeft)}px`,
-    top: `${clamp(rect.bottom + gap, minTop, maxTop)}px`,
+    top: `${clamp(idealTop, minTop, maxTop)}px`,
     right: 'auto',
     bottom: 'auto',
     transform: 'none',
-    minWidth: `${minWidth}px`
+    width: `${menuWidth}px`,
+    minWidth: `${menuWidth}px`,
+    visibility: 'visible'
   }
 }
 
@@ -314,6 +321,14 @@ const schedulePickerPosition = () => {
 const togglePicker = async (type: PickerType) => {
   openPicker.value = openPicker.value === type ? '' : type
   if (openPicker.value) {
+    pickerMenuStyle.value = {
+      position: 'fixed',
+      left: '0px',
+      top: '0px',
+      right: 'auto',
+      bottom: 'auto',
+      visibility: 'hidden'
+    }
     await nextTick()
     schedulePickerPosition()
   }
@@ -444,11 +459,11 @@ onBeforeUnmount(() => {
 }
 
 .year-select {
-  width: 75px;
+  width: 68px;
 }
 
 .month-select {
-  width: 50px;
+  width: 46px;
 }
 
 .calendar-nav {
@@ -549,11 +564,14 @@ onBeforeUnmount(() => {
   transform: translateX(-50%);
   display: none;
   white-space: nowrap;
-  padding: 4px 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--nw-tooltip-border);
   border-radius: 6px;
-  background: rgba(15, 23, 42, 0.92);
-  color: #fff;
+  background: var(--nw-tooltip-bg);
+  color: var(--nw-tooltip-text);
+  box-shadow: var(--nw-tooltip-shadow);
   font-size: 11px;
+  font-weight: 650;
   pointer-events: none;
 }
 
@@ -619,14 +637,16 @@ html.dark .calendar-select {
   max-height: 228px;
   overflow-y: auto;
   padding: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.80);
-  color: #f8fafc;
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.38);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--nw-floating-border);
+  background: var(--nw-floating-bg);
+  color: var(--nw-floating-text);
+  box-shadow: var(--nw-floating-shadow);
   scrollbar-width: thin;
+}
+
+.calendar-floating-menu.is-year {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .calendar-floating-menu.is-month {
@@ -634,27 +654,30 @@ html.dark .calendar-select {
 }
 
 .calendar-floating-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 28px;
-  padding: 0 10px;
+  padding: 0 8px;
   border-radius: 8px;
   border: 1px solid transparent;
   color: inherit;
   font-size: 12px;
   font-weight: 650;
-  text-align: left;
+  text-align: center;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .calendar-floating-option:hover,
 .calendar-floating-option:focus-visible {
-  border-color: rgba(249, 115, 22, 0.38);
-  background: rgba(249, 115, 22, 0.18);
+  border-color: var(--nw-floating-hover-border);
+  background: var(--nw-floating-hover-bg);
   outline: none;
 }
 
 .calendar-floating-option.is-selected {
-  border-color: rgba(249, 115, 22, 0.7);
-  background: rgba(249, 115, 22, 0.30);
-  color: #ffffff;
+  border-color: var(--nw-floating-selected-border);
+  background: var(--nw-floating-selected-bg);
+  color: var(--nw-floating-text);
 }
 </style>

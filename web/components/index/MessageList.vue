@@ -265,6 +265,7 @@
               color="gray"
               variant="soft"
               icon="i-mdi-image-plus-outline"
+              class="edit-upload-btn"
               :disabled="isEditUploading"
               :loading="editUploadKind === 'image'"
               @click="triggerEditMediaInput('image')"
@@ -276,6 +277,7 @@
               color="gray"
               variant="soft"
               icon="i-mdi-video-plus-outline"
+              class="edit-upload-btn"
               :disabled="isEditUploading"
               :loading="editUploadKind === 'video'"
               @click="triggerEditMediaInput('video')"
@@ -2001,6 +2003,10 @@ onMounted(() => {
   justify-content: space-between;
   gap: 10px;
   min-height: 32px;
+  padding: 6px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.04);
 }
 
 .edit-upload-actions {
@@ -2014,6 +2020,41 @@ onMounted(() => {
   flex-shrink: 0;
   font-size: 12px;
   color: rgb(249, 115, 22);
+}
+
+.edit-upload-actions :deep(.edit-upload-btn) {
+  min-height: 32px;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+  border-radius: 10px !important;
+  background: rgba(15, 23, 42, 0.06) !important;
+  color: #374151 !important;
+  box-shadow: none !important;
+  transition: background-color .18s ease, border-color .18s ease, transform .18s ease;
+}
+
+.edit-upload-actions :deep(.edit-upload-btn:hover:not(:disabled)) {
+  transform: translate3d(0,0,0) scale(1.03);
+  border-color: var(--nw-floating-hover-border) !important;
+  background: var(--nw-floating-hover-bg) !important;
+}
+
+:global(html.dark) .edit-upload-toolbar {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+:global(html.dark) .edit-upload-actions :deep(.edit-upload-btn) {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #cbd5e1 !important;
+}
+
+:global(html.dark) .edit-upload-actions :deep(.edit-upload-btn:hover:not(:disabled)) {
+  background: var(--nw-floating-hover-bg) !important;
+}
+
+:global(html.dark) .edit-upload-status {
+  color: rgb(251, 146, 60);
 }
 
 @media screen and (max-width: 480px) {

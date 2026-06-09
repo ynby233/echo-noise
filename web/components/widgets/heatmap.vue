@@ -16,7 +16,7 @@
       </div>
     </div>
     <Teleport to="body">
-      <div v-if="tooltip.visible" ref="heatmapTooltip" class="heatmap-tooltip" :class="isDark ? 'heatmap-tooltip-dark' : 'heatmap-tooltip-light'" :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }">{{ tooltip.text }}</div>
+      <div v-if="tooltip.visible" ref="heatmapTooltip" class="heatmap-tooltip nw-tooltip" :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }">{{ tooltip.text }}</div>
     </Teleport>
   </div>
 </template>
@@ -479,28 +479,7 @@ const fetchHeatmapData = async () => {
     box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.24);
   }
   .heatmap-tooltip {
-    position: fixed;
-    padding: 4px 8px;
-    border-radius: 6px;
-    font-size: 11px;
-    line-height: 1.2;
-    white-space: nowrap;
-    pointer-events: none;
-    z-index: 5000;
-    will-change: left, top;
-  }
-  .heatmap-tooltip-light {
-    background: rgba(255,255,255,0.95);
-    color: #111827;
-    border: 1px solid rgba(0,0,0,0.18);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-  }
-  .heatmap-tooltip-dark {
-    background: rgba(12, 17, 23, 0.92);
-    color: #ffffff;
-    border: 1px solid rgba(255,255,255,0.20);
-    box-shadow: 0 6px 16px rgba(0,0,0,0.35);
-    backdrop-filter: blur(6px);
+    z-index: 5006;
   }
   
   @media screen and (max-width: 1024px) {

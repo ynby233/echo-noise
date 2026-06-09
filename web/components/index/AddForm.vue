@@ -20,13 +20,14 @@
             @video-uploaded="handleVideoUploaded"
             @upload-progress="handleVideoUploadProgress"
           />
-          <button class="tb-btn" @click="triggerFileInput" title="插入图片"><UIcon name="i-fluent-image-20-regular" class="w-5 h-5" /></button>
+          <button type="button" class="tb-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" @click="triggerFileInput"><UIcon name="i-mdi-image-plus-outline" class="w-5 h-5" /></button>
           <!-- 新增图床上传按钮 -->
-          <button class="tb-btn" @click="showImageUploader = true" title="图床上传"><UIcon name="i-mdi-cloud-upload-outline" class="w-5 h-5" /></button>
-          <button class="tb-btn" @click="toggleNotify" :title="enableNotify ? '关闭推送' : '开启推送'">
+          <button type="button" class="tb-btn nw-tooltip-anchor" data-tooltip="图床上传" aria-label="图床上传" @click="showImageUploader = true"><UIcon name="i-mdi-cloud-upload-outline" class="w-5 h-5" /></button>
+          <button type="button" class="tb-btn has-label notify-btn nw-tooltip-anchor" :class="{ 'is-enabled': enableNotify }" :data-tooltip="enableNotify ? '关闭推送' : '开启推送'" :aria-label="enableNotify ? '关闭推送' : '开启推送'" @click="toggleNotify">
             <UIcon :name="enableNotify ? 'i-mdi-bell' : 'i-mdi-bell-off'" class="w-5 h-5" />
+            <span class="notify-label">{{ enableNotify ? '推送' : '静默' }}</span>
           </button>
-          <div ref="visibilityControlRef" class="visibility-control" :title="`可见范围：${visibilityLabel}`">
+          <div ref="visibilityControlRef" class="visibility-control nw-tooltip-anchor" :data-tooltip="`可见范围：${visibilityLabel}`">
             <UIcon :name="visibilityIcon" class="w-5 h-5" />
             <button
               type="button"
@@ -40,7 +41,7 @@
               <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
             </button>
           </div>
-          <div v-if="canSetPublishTime" ref="publishTimeControlRef" class="publish-time-control" title="自定义发布时间">
+          <div v-if="canSetPublishTime" ref="publishTimeControlRef" class="publish-time-control nw-tooltip-anchor" :data-tooltip="publishTimeLabel === '选择时间' ? '自定义发布时间' : `发布时间：${publishTimeLabel}`">
             <UIcon name="i-mdi-calendar-clock-outline" class="w-5 h-5" />
             <button
               type="button"
@@ -60,8 +61,8 @@
             <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin mr-1" />
             加载中...
           </span>
-          <button class="tb-btn" @click="clearForm" title="清空"><UIcon name="i-fluent-broom-16-regular" class="w-5 h-5" /></button>
-          <button class="tb-btn primary" @click="addMessage" title="发布"><UIcon name="i-fluent-add-12-filled" class="w-5 h-5" /></button>
+          <button type="button" class="tb-btn nw-tooltip-anchor" data-tooltip="清空" aria-label="清空" @click="clearForm"><UIcon name="i-mdi-broom" class="w-5 h-5" /></button>
+          <button type="button" class="tb-btn primary nw-tooltip-anchor" data-tooltip="发布" aria-label="发布" @click="addMessage"><UIcon name="i-mdi-send" class="w-5 h-5" /></button>
         </div>
         <div v-if="activeUploadPercent > 0 && activeUploadPercent < 100" class="upload-progress">
           <div class="upload-progress-track">
@@ -99,7 +100,7 @@
     <div
       v-if="showVisibilityMenu"
       ref="visibilityMenuRef"
-      class="floating-control-menu visibility-floating-menu"
+      class="floating-control-menu visibility-floating-menu nw-floating-menu"
       :style="visibilityMenuStyle"
       role="listbox"
       @mousedown.stop
@@ -108,7 +109,7 @@
         v-for="option in messageVisibilityOptions"
         :key="option.value"
         type="button"
-        class="floating-control-option"
+        class="floating-control-option nw-floating-option"
         :class="{ 'is-selected': option.value === Visibility }"
         role="option"
         :aria-selected="option.value === Visibility"
@@ -124,7 +125,7 @@
     <div
       v-if="showPublishDateMenu"
       ref="publishDateMenuRef"
-      class="floating-control-menu publish-datetime-menu"
+      class="floating-control-menu publish-datetime-menu nw-floating-menu"
       :style="publishDateMenuStyle"
       role="dialog"
       aria-label="发布时间选择"
@@ -991,59 +992,63 @@ const addMessage = async () => {
 
 <style scoped>
 .editor-box { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 10px 24px rgba(0,0,0,.08); padding: 8px; color:#111827; }
-.editor-toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:6px; padding:6px; border-radius:12px; background: rgba(255,255,255,0.85); flex-wrap: wrap; overflow:hidden; position: sticky; bottom: 0; z-index: 95; backdrop-filter: saturate(1.1) blur(6px); }
+.editor-toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:6px; padding:6px; border-radius:12px; background: rgba(255,255,255,0.85); flex-wrap: wrap; overflow: visible; position: sticky; bottom: 0; z-index: 95; backdrop-filter: saturate(1.1) blur(6px); }
 .toolbar-left, .toolbar-right { display:flex; align-items:center; gap:8px; flex-wrap: wrap; }
-.tb-btn { display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; transition: all .18s ease; border:none; }
-.tb-btn:hover { transform: translate3d(0,0,0) scale(1.06); background: rgba(0,0,0,0.12); }
+.tb-btn { display:flex; align-items:center; justify-content:center; flex: 0 0 auto; width:36px; min-width:36px; height:36px; border-radius:12px; background: rgba(15,23,42,0.06); color:#374151; transition: background-color .18s ease, transform .18s ease, border-color .18s ease, box-shadow .18s ease; border:1px solid rgba(15,23,42,0.08); box-shadow:none; }
+.tb-btn:hover { transform: translate3d(0,0,0) scale(1.06); border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
 .tb-btn.primary { background: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color: #fff; }
-.publish-time-control { display:flex; align-items:center; gap:4px; min-height:36px; height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 6px; border: none; box-shadow: none; transition: background-color .18s ease, transform .18s ease; }
-.visibility-control { display:flex; align-items:center; gap:4px; min-height:36px; height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 6px; border: none; box-shadow: none; transition: background-color .18s ease, transform .18s ease; }
+.tb-btn.has-label { width: auto; min-width: 66px; gap: 5px; padding: 0 10px; }
+.notify-btn.is-enabled { background: rgba(249,115,22,0.16); color: #c2410c; box-shadow: inset 0 0 0 1px rgba(249,115,22,0.32); }
+.notify-label { font-size: 12px; font-weight: 700; line-height: 1; white-space: nowrap; }
+.publish-time-control { display:flex; align-items:center; gap:5px; min-height:36px; height:36px; width: max-content; max-width: min(210px, calc(100vw - 32px)); border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 8px; border: none; box-shadow: none; transition: background-color .18s ease, transform .18s ease; }
+.visibility-control { display:flex; align-items:center; gap:5px; min-height:36px; height:36px; width: max-content; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 8px; border: none; box-shadow: none; transition: background-color .18s ease, transform .18s ease; }
 .publish-time-control:hover,
 .publish-time-control:focus-within,
 .visibility-control:hover,
 .visibility-control:focus-within { background: rgba(0,0,0,0.12); }
-.visibility-select { width: auto; min-width: 42px; max-width: 64px; height: 28px; padding: 0; border: 0; border-radius: 9px; outline: none; background: transparent; color: inherit; font-size: 12px; cursor: pointer; }
+.visibility-select { width: auto; min-width: 46px; max-width: 76px; height: 28px; padding: 0; border: 0; border-radius: 9px; outline: none; background: transparent; color: inherit; font-size: 12px; cursor: pointer; }
 .visibility-trigger,
 .publish-time-trigger { display: inline-flex; align-items: center; justify-content: space-between; gap: 3px; }
 .visibility-trigger span,
 .publish-time-trigger span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .visibility-trigger svg,
 .publish-time-trigger svg { flex: 0 0 auto; opacity: .72; }
-.publish-time-input { width: 66px; max-width: 30vw; min-height: 28px; padding: 0; border: none; outline: none; background: transparent; color: inherit; font-size: 12px; text-align: left; }
-.floating-control-menu { position: fixed; z-index: 5004; border: 1px solid rgba(255,255,255,0.16); border-radius: 12px; background: rgba(0,0,0,0.80); color: #f8fafc; box-shadow: 0 18px 42px rgba(0,0,0,0.38); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.publish-time-input { width: max-content; max-width: 148px; min-height: 28px; padding: 0; border: none; outline: none; background: transparent; color: inherit; font-size: 12px; text-align: left; }
+.floating-control-menu { position: fixed; z-index: 5004; border: 1px solid var(--nw-floating-border); border-radius: 12px; background: var(--nw-floating-bg); color: var(--nw-floating-text); box-shadow: var(--nw-floating-shadow); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
 .visibility-floating-menu { display: grid; gap: 4px; padding: 8px; }
 .floating-control-option { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 10px; border-radius: 9px; border: 1px solid transparent; color: inherit; font-size: 12px; font-weight: 650; text-align: left; transition: background-color .15s ease, border-color .15s ease, color .15s ease; }
 .floating-control-option:hover,
-.floating-control-option:focus-visible { outline: none; border-color: rgba(249,115,22,0.38); background: rgba(249,115,22,0.18); }
-.floating-control-option.is-selected { border-color: rgba(249,115,22,0.7); background: rgba(249,115,22,0.30); color: #fff; }
+.floating-control-option:focus-visible { outline: none; border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
+.floating-control-option.is-selected { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
 .publish-datetime-menu { width: 292px; padding: 10px; }
 .publish-date-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-.publish-date-title { font-size: 13px; font-weight: 700; color: #fff; }
-.floating-icon-btn { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.06); color: inherit; }
-.floating-icon-btn:hover { border-color: rgba(249,115,22,0.34); background: rgba(249,115,22,0.16); }
+.publish-date-title { font-size: 13px; font-weight: 700; color: inherit; }
+.floating-icon-btn { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid var(--nw-floating-border); background: rgba(15,23,42,0.04); color: inherit; }
+.floating-icon-btn:hover { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
 .publish-date-weekdays,
 .publish-date-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
-.publish-date-weekdays { margin-bottom: 4px; color: rgba(226,232,240,0.66); font-size: 10px; font-weight: 700; text-align: center; }
-.publish-date-day { height: 28px; border-radius: 8px; border: 1px solid transparent; background: rgba(255,255,255,0.06); color: #f8fafc; font-size: 12px; line-height: 1; }
-.publish-date-day:hover { border-color: rgba(249,115,22,0.34); background: rgba(249,115,22,0.16); }
+.publish-date-weekdays { margin-bottom: 4px; color: rgba(71,85,105,0.72); font-size: 10px; font-weight: 700; text-align: center; }
+.publish-date-day { height: 28px; border-radius: 8px; border: 1px solid transparent; background: rgba(15,23,42,0.05); color: var(--nw-floating-text); font-size: 12px; line-height: 1; }
+.publish-date-day:hover { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
 .publish-date-day.is-muted { opacity: .38; }
 .publish-date-day.is-today { border-color: rgba(96,165,250,0.68); background: rgba(59,130,246,0.22); }
-.publish-date-day.is-selected { border-color: rgba(249,115,22,0.82); background: rgba(249,115,22,0.34); color: #fff; }
+.publish-date-day.is-selected { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
 .publish-time-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
-.publish-time-column { display: grid; grid-auto-rows: 28px; gap: 4px; max-height: 116px; overflow-y: auto; padding: 4px; border-radius: 10px; background: rgba(15,23,42,0.46); scrollbar-width: thin; }
+.publish-time-column { display: grid; grid-auto-rows: 28px; gap: 4px; max-height: 116px; overflow-y: auto; padding: 4px; border-radius: 10px; background: rgba(15,23,42,0.06); scrollbar-width: thin; }
 .publish-time-option { border-radius: 7px; border: 1px solid transparent; color: inherit; font-size: 12px; font-weight: 650; }
-.publish-time-option:hover { border-color: rgba(249,115,22,0.34); background: rgba(249,115,22,0.16); }
-.publish-time-option.is-selected { border-color: rgba(249,115,22,0.7); background: rgba(249,115,22,0.30); color: #fff; }
+.publish-time-option:hover { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
+.publish-time-option.is-selected { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
 .publish-date-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
-.floating-action-btn { height: 30px; padding: 0 12px; border-radius: 9px; border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.06); color: inherit; font-size: 12px; font-weight: 650; }
-.floating-action-btn:hover { border-color: rgba(249,115,22,0.34); background: rgba(249,115,22,0.16); }
-.floating-action-btn.primary { border-color: rgba(249,115,22,0.72); background: rgba(249,115,22,0.32); color: #fff; }
+.floating-action-btn { height: 30px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--nw-floating-border); background: rgba(15,23,42,0.04); color: inherit; font-size: 12px; font-weight: 650; }
+.floating-action-btn:hover { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
+.floating-action-btn.primary { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
 .tb-sep { width:1px; height:24px; background: rgba(0,0,0,0.12); margin: 0 2px; }
 .preview-card { backdrop-filter: blur(8px); background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 8px; color:#111827; }
 html.dark .editor-box { background: var(--home-surface-dark, #202a36); border: 1px solid rgba(255,255,255,0.16); color:#fff; }
 html.dark .editor-toolbar { background: rgba(39, 50, 66, 0.68); backdrop-filter: saturate(1.1) blur(6px); }
-html.dark .tb-btn { background: rgba(255,255,255,0.06); color:#cbd5e1; border:none; }
-html.dark .tb-btn:hover { background: rgba(255,255,255,0.12); }
+html.dark .tb-btn { background: rgba(255,255,255,0.06); color:#cbd5e1; border-color: rgba(255,255,255,0.12); }
+html.dark .tb-btn:hover { background: var(--nw-floating-hover-bg); border-color: var(--nw-floating-hover-border); }
+html.dark .notify-btn.is-enabled { background: rgba(249,115,22,0.22); color: #fed7aa; box-shadow: inset 0 0 0 1px rgba(251,146,60,0.38); }
 html.dark .publish-time-control,
 html.dark .visibility-control { background: rgba(255,255,255,0.06); color:#cbd5e1; border: none; }
 html.dark .publish-time-control:hover,
@@ -1051,6 +1056,11 @@ html.dark .publish-time-control:focus-within,
 html.dark .visibility-control:hover,
 html.dark .visibility-control:focus-within { background: rgba(255,255,255,0.12); }
 html.dark .visibility-select { background: transparent; border: 0; color: inherit; }
+html.dark .floating-icon-btn,
+html.dark .floating-action-btn { background: rgba(255,255,255,0.06); }
+html.dark .publish-date-weekdays { color: rgba(226,232,240,0.66); }
+html.dark .publish-date-day { background: rgba(255,255,255,0.06); }
+html.dark .publish-time-column { background: rgba(15,23,42,0.46); }
 html.dark .tb-sep { background: rgba(255,255,255,0.12); }
 html.dark .preview-card { background: rgba(39, 50, 66, 0.68); border: 1px solid rgba(255,255,255,0.18); color:#fff; }
 .editor-toolbar :deep(.u-button) { border:none !important; box-shadow:none !important; background: transparent !important; color:#374151 !important; }

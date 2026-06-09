@@ -1,5 +1,6 @@
 <template>
   <div ref="rootRef" class="builtin-comments">
+    <input ref="commentImageInput" type="file" accept="image/*" multiple class="hidden" @change="handleCommentImageInputChange" />
   <div class="waline-wrapper px-2 py-2 rounded-lg" :class="[themeBg]">
       <div class="text-sm mb-2" :class="themeText">{{ contextLabel }} ({{ rootCommentTotal }})</div>
       <div v-if="sortedRootComments.length" class="comments-list">
@@ -10,14 +11,33 @@
               <span class="comment-author">{{ commentAuthorName(c) }}</span>
             </div>
             <div v-if="editingId === c.id" class="edit-card">
-              <textarea v-model="editingContent" :class="textareaClass" rows="3" placeholder="编辑内容" />
-              <div class="edit-actions">
-                <label class="visibility-picker" :class="themeMuted">
-                  可见范围
-                  <select v-model="editingVisibility" :class="selectClass">
+              <textarea ref="editingTaRef" v-model="editingContent" :class="textareaClass" rows="3" placeholder="编辑内容" />
+              <div v-if="editingImagePreviewUrls.length" class="comment-media-preview-strip">
+                <a v-for="url in editingImagePreviewUrls" :key="url" :href="url" target="_blank" rel="noopener noreferrer" class="comment-media-preview-item">
+                  <img :src="url" alt="图片预览" />
+                </a>
+              </div>
+              <div class="comment-editor-toolbar edit-toolbar">
+                <label class="visibility-picker toolbar-control nw-tooltip-anchor" data-tooltip="可见范围" :class="themeMuted">
+                  <UIcon name="i-mdi-eye-outline" class="w-4 h-4" />
+                  <select v-model="editingVisibility" :class="selectClass" aria-label="可见范围">
                     <option v-for="opt in editingVisibilityOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                   </select>
                 </label>
+                <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="加粗" aria-label="加粗" @click="applyFormat('edit', 'bold')"><UIcon name="i-mdi-format-bold" class="w-4 h-4" /></button>
+                <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="斜体" aria-label="斜体" @click="applyFormat('edit', 'italic')"><UIcon name="i-mdi-format-italic" class="w-4 h-4" /></button>
+                <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="链接" aria-label="链接" @click="applyFormat('edit', 'link')"><UIcon name="i-mdi-link-variant" class="w-4 h-4" /></button>
+                <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="图片链接" aria-label="图片链接" @click="applyFormat('edit', 'imageLink')"><UIcon name="i-mdi-image-outline" class="w-4 h-4" /></button>
+                <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" :disabled="isCommentImageUploading" @click="triggerCommentImageUpload('edit')"><UIcon name="i-mdi-image-plus-outline" class="w-4 h-4" /></button>
+                <div class="emoji-wrap">
+                  <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="表情" aria-label="表情" @click="toggleEmoji('edit')"><UIcon name="i-mdi-emoticon-outline" class="w-4 h-4" /></button>
+                  <div v-if="showEmojiTarget === 'edit'" class="emoji-popover nw-floating-menu">
+                    <button v-for="e in emojis" :key="e" type="button" class="emoji-option" @click="insertEmoji(e)">{{ e }}</button>
+                  </div>
+                </div>
+                <span v-if="activeCommentEditorTarget === 'edit' && commentImageUploadPercent > 0 && commentImageUploadPercent < 100" class="comment-upload-status">{{ commentImageUploadPercent }}%</span>
+              </div>
+              <div class="edit-actions">
                 <button class="cancel-btn" :class="cancelBtnClass" @click="cancelEdit">取消</button>
                 <button class="submit-btn" :class="submitBtnClass" :disabled="isEditingSubmitting || !editingContent.trim()" @click="submitEdit">保存</button>
               </div>
@@ -41,14 +61,33 @@
                     <span class="comment-author">{{ commentAuthorName(child) }}</span>
                   </div>
                   <div v-if="editingId === child.id" class="edit-card">
-                    <textarea v-model="editingContent" :class="textareaClass" rows="3" placeholder="编辑内容" />
-                    <div class="edit-actions">
-                      <label class="visibility-picker" :class="themeMuted">
-                        可见范围
-                        <select v-model="editingVisibility" :class="selectClass">
+                    <textarea ref="editingTaRef" v-model="editingContent" :class="textareaClass" rows="3" placeholder="编辑内容" />
+                    <div v-if="editingImagePreviewUrls.length" class="comment-media-preview-strip">
+                      <a v-for="url in editingImagePreviewUrls" :key="url" :href="url" target="_blank" rel="noopener noreferrer" class="comment-media-preview-item">
+                        <img :src="url" alt="图片预览" />
+                      </a>
+                    </div>
+                    <div class="comment-editor-toolbar edit-toolbar">
+                      <label class="visibility-picker toolbar-control nw-tooltip-anchor" data-tooltip="可见范围" :class="themeMuted">
+                        <UIcon name="i-mdi-eye-outline" class="w-4 h-4" />
+                        <select v-model="editingVisibility" :class="selectClass" aria-label="可见范围">
                           <option v-for="opt in editingVisibilityOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                         </select>
                       </label>
+                      <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="加粗" aria-label="加粗" @click="applyFormat('edit', 'bold')"><UIcon name="i-mdi-format-bold" class="w-4 h-4" /></button>
+                      <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="斜体" aria-label="斜体" @click="applyFormat('edit', 'italic')"><UIcon name="i-mdi-format-italic" class="w-4 h-4" /></button>
+                      <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="链接" aria-label="链接" @click="applyFormat('edit', 'link')"><UIcon name="i-mdi-link-variant" class="w-4 h-4" /></button>
+                      <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="图片链接" aria-label="图片链接" @click="applyFormat('edit', 'imageLink')"><UIcon name="i-mdi-image-outline" class="w-4 h-4" /></button>
+                      <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" :disabled="isCommentImageUploading" @click="triggerCommentImageUpload('edit')"><UIcon name="i-mdi-image-plus-outline" class="w-4 h-4" /></button>
+                      <div class="emoji-wrap">
+                        <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="表情" aria-label="表情" @click="toggleEmoji('edit')"><UIcon name="i-mdi-emoticon-outline" class="w-4 h-4" /></button>
+                        <div v-if="showEmojiTarget === 'edit'" class="emoji-popover nw-floating-menu">
+                          <button v-for="e in emojis" :key="e" type="button" class="emoji-option" @click="insertEmoji(e)">{{ e }}</button>
+                        </div>
+                      </div>
+                      <span v-if="activeCommentEditorTarget === 'edit' && commentImageUploadPercent > 0 && commentImageUploadPercent < 100" class="comment-upload-status">{{ commentImageUploadPercent }}%</span>
+                    </div>
+                    <div class="edit-actions">
                       <button class="cancel-btn" :class="cancelBtnClass" @click="cancelEdit">取消</button>
                       <button class="submit-btn" :class="submitBtnClass" :disabled="isEditingSubmitting || !editingContent.trim()" @click="submitEdit">保存</button>
                     </div>
@@ -80,32 +119,26 @@
       <div v-if="!sortedRootComments.length" class="text-xs mb-4" :class="themeMuted">暂无{{ contextLabel }}</div>
 
       <div v-if="formVisible" class="space-y-4 mt-4 md:mt-5">
-        <div class="comment-account-card" :class="accountCardClass">
-          <img class="input-avatar avatar-img" :src="currentUserAvatar" alt="avatar" />
-          <div class="min-w-0">
-            <div class="text-sm font-medium" :class="themeText">以“{{ currentUsername || '当前账号' }}”的身份发布</div>
-          </div>
-        </div>
-        <div class="flex flex-wrap items-center gap-2 mb-3">
-          <label class="visibility-picker" :class="themeMuted">
-            可见范围
-            <select v-model="selectedVisibility" :class="selectClass">
+        <div class="comment-editor-toolbar main-toolbar">
+          <label class="visibility-picker toolbar-control nw-tooltip-anchor" data-tooltip="可见范围" :class="themeMuted">
+            <UIcon name="i-mdi-eye-outline" class="w-4 h-4" />
+            <select v-model="selectedVisibility" :class="selectClass" aria-label="可见范围">
               <option v-for="opt in selectedVisibilityOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
             </select>
           </label>
-          <button class="text-xs px-2 py-1 rounded border" :class="themeBorder" @click="applyFormat('bold')">加粗</button>
-          <button class="text-xs px-2 py-1 rounded border" :class="themeBorder" @click="applyFormat('italic')">斜体</button>
-          <button class="text-xs px-2 py-1 rounded border" :class="themeBorder" @click="applyFormat('link')">链接</button>
-          <button class="text-xs px-2 py-1 rounded border" :class="themeBorder" @click="applyFormat('image')">图片</button>
-          <div class="relative">
-            <button class="text-xs px-2 py-1 rounded border" :class="themeBorder" @click="toggleEmoji">表情</button>
-            <div v-if="showEmoji" class="absolute z-10 mt-1 p-2 rounded border bg-white shadow" :class="themeBorder">
-              <div class="flex flex-wrap gap-1 w-56">
-                <button v-for="e in emojis" :key="e" class="px-2 py-1 text-sm" @click="insertEmoji(e)">{{ e }}</button>
-              </div>
+          <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="加粗" aria-label="加粗" @click="applyFormat('content', 'bold')"><UIcon name="i-mdi-format-bold" class="w-4 h-4" /></button>
+          <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="斜体" aria-label="斜体" @click="applyFormat('content', 'italic')"><UIcon name="i-mdi-format-italic" class="w-4 h-4" /></button>
+          <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="链接" aria-label="链接" @click="applyFormat('content', 'link')"><UIcon name="i-mdi-link-variant" class="w-4 h-4" /></button>
+          <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="图片链接" aria-label="图片链接" @click="applyFormat('content', 'imageLink')"><UIcon name="i-mdi-image-outline" class="w-4 h-4" /></button>
+          <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" :disabled="isCommentImageUploading" @click="triggerCommentImageUpload('content')"><UIcon name="i-mdi-image-plus-outline" class="w-4 h-4" /></button>
+          <div class="emoji-wrap">
+            <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="表情" aria-label="表情" @click="toggleEmoji('content')"><UIcon name="i-mdi-emoticon-outline" class="w-4 h-4" /></button>
+            <div v-if="showEmojiTarget === 'content'" class="emoji-popover nw-floating-menu">
+              <button v-for="e in emojis" :key="e" type="button" class="emoji-option" @click="insertEmoji(e)">{{ e }}</button>
             </div>
           </div>
-          <button v-if="returnTargetLabel" class="return-target-btn text-xs px-2 py-1 rounded border" :class="themeBorder" @click="returnToInputTarget">
+          <span v-if="activeCommentEditorTarget === 'content' && commentImageUploadPercent > 0 && commentImageUploadPercent < 100" class="comment-upload-status">{{ commentImageUploadPercent }}%</span>
+          <button v-if="returnTargetLabel" type="button" class="return-target-btn" @click="returnToInputTarget">
             <UIcon :name="returnTargetIcon" class="w-3.5 h-3.5" />
             <span>{{ returnTargetLabel }}</span>
           </button>
@@ -114,6 +147,11 @@
           <img class="input-avatar avatar-img" :src="currentUserAvatar" alt="avatar" />
           <div class="input-main">
             <textarea ref="taRef" v-model="content" :class="textareaClass" rows="4" placeholder="说说你的想法" @input="onInput" @keydown="onKeydown" @blur="hideMention" />
+            <div v-if="contentImagePreviewUrls.length" class="comment-media-preview-strip">
+              <a v-for="url in contentImagePreviewUrls" :key="url" :href="url" target="_blank" rel="noopener noreferrer" class="comment-media-preview-item">
+                <img :src="url" alt="图片预览" />
+              </a>
+            </div>
             <div class="input-actions">
               <button v-if="content.trim()" class="cancel-btn" :class="cancelBtnClass" @click="clearContent">清除</button>
               <button class="cancel-btn" :class="cancelBtnClass" @click="cancelInput">取消</button>
@@ -166,6 +204,9 @@ import { useToast } from '#ui/composables/useToast'
 import { getRequest, postRequest, putRequest, deleteRequest } from '~/utils/api'
 import { resolveMediaURL } from '~/utils/media-url'
 import { useUserStore } from '~/store/user'
+import { uploadMediaFiles } from '~/utils/media-upload'
+
+type CommentEditorTarget = 'content' | 'edit'
 
 const props = defineProps<{ messageId: number, siteConfig: any, showInput?: boolean, contextLabel?: string, autoScrollInput?: boolean, messageVisibility?: string }>()
 const emit = defineEmits(['cancel'])
@@ -174,7 +215,12 @@ const loginRequiredText = computed(() => `请登录后${contextLabel.value}`)
 const comments = ref<any[]>([])
 const content = ref('')
 const rootRef = ref<HTMLElement | null>(null)
-const taRef = ref<any>(null)
+const taRef = ref<HTMLTextAreaElement | null>(null)
+const editingTaRef = ref<HTMLTextAreaElement | HTMLTextAreaElement[] | null>(null)
+const commentImageInput = ref<HTMLInputElement | null>(null)
+const activeCommentEditorTarget = ref<CommentEditorTarget>('content')
+const commentImageUploadPercent = ref(0)
+const isCommentImageUploading = ref(false)
 const isSubmitting = ref(false)
 const replyTo = ref<number | null>(null)
 const deleteId = ref<number | null>(null)
@@ -250,14 +296,25 @@ const themeBg = computed(() => 'bg-transparent')
 const themeBorder = computed(() => (isDark.value ? 'border-white/20' : 'border-black'))
 const themeText = computed(() => (isDark.value ? 'text-gray-200' : 'text-black'))
 const themeMuted = computed(() => (isDark.value ? 'text-gray-400' : 'text-gray-500'))
-const themeItem = computed(() => (isDark.value ? 'bg-[rgba(24,28,32,0.7)]' : 'bg-white'))
-const childBorder = computed(() => (isDark.value ? 'border-white/20' : 'border-black'))
 const rootCardClass = computed(() => (isDark.value ? 'rounded-md p-3 bg-transparent border border-white/20 shadow-[0_6px_16px_rgba(0,0,0,0.35)]' : 'rounded-md p-3 bg-transparent border border-black/10 shadow-[0_4px_12px_rgba(0,0,0,0.12)]'))
 const childCardClass = computed(() => (isDark.value ? 'rounded-md p-2 bg-transparent border border-white/20' : 'rounded-md p-2 bg-transparent border border-black/10'))
 const textareaClass = computed(() => (isDark.value ? `w-full px-3 py-2 bg-[rgba(24,28,32,0.95)] text-white border border-blue-500 focus:border-blue-400 rounded-md ring-0 outline-none` : `w-full px-3 py-2 bg-white text-black border border-blue-500 focus:border-blue-600 rounded-md ring-0 outline-none`))
-const selectClass = computed(() => (isDark.value ? 'px-2 py-1 rounded border border-white/20 bg-[rgba(24,28,32,0.95)] text-gray-200 text-xs' : 'px-2 py-1 rounded border border-black/10 bg-white text-black text-xs'))
+const selectClass = computed(() => 'comment-visibility-select')
 const BASE_API = useRuntimeConfig().public.baseApi || '/api'
 const normalizeMediaURL = (raw: string) => resolveMediaURL(BASE_API, raw)
+const extractImagePreviewUrls = (markdown: string) => {
+  const urls = new Set<string>()
+  const pattern = /!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(String(markdown || '')))) {
+    const raw = String(match[1] || '').trim().replace(/^<|>$/g, '')
+    const url = normalizeMediaURL(raw)
+    if (url) urls.add(url)
+  }
+  return Array.from(urls).slice(0, 12)
+}
+const contentImagePreviewUrls = computed(() => extractImagePreviewUrls(content.value))
+const editingImagePreviewUrls = computed(() => extractImagePreviewUrls(editingContent.value))
 
 const avatarPlaceholder = computed(() => {
   const s: any = props.siteConfig || {}
@@ -293,15 +350,10 @@ const avatarOnError = (e: Event) => {
   if (img && fallback) img.src = fallback
 }
 
-const currentUsername = computed(() => {
-  const u: any = (user.user as any) || {}
-  return getUserField(u, ['username','Username','name','Name'])
-})
 const currentUserAvatar = computed(() => {
   const u: any = (user.user as any) || {}
   return normalizeMediaURL(getUserField(u, ['avatar_url','AvatarURL','avatar','Avatar'])) || accountFallbackAvatar()
 })
-const accountCardClass = computed(() => (isDark.value ? 'border border-white/20 bg-white/5 text-gray-200' : 'border border-black/10 bg-black/5 text-black'))
 const showDeleteConfirm = ref(false)
 const confirmAcknowledged = ref(false)
 const pendingDelete = computed(() => {
@@ -633,10 +685,13 @@ const startEdit = (c: any) => {
     useToast().add({ title: '没有权限编辑该内容', color: 'orange' })
     return
   }
+  activeCommentEditorTarget.value = 'edit'
+  showEmojiTarget.value = null
   editingId.value = Number(c.id)
   editingContent.value = String(c.content || '')
   const parentVisibility = c?.parent_id ? byId.value[Number(c.parent_id)]?.visibility : undefined
   editingVisibility.value = clampVisibilityToLimit(c.visibility, parentVisibility)
+  nextTick(() => textareaForTarget('edit')?.focus())
 }
 
 const cancelEdit = () => {
@@ -644,6 +699,8 @@ const cancelEdit = () => {
   editingContent.value = ''
   editingVisibility.value = clampVisibilityToLimit(messageVisibilityLimit.value)
   isEditingSubmitting.value = false
+  if (activeCommentEditorTarget.value === 'edit') activeCommentEditorTarget.value = 'content'
+  if (showEmojiTarget.value === 'edit') showEmojiTarget.value = null
 }
 
 const submitEdit = async () => {
@@ -731,9 +788,24 @@ const filteredAuthors = computed(() => {
 })
 const hideMention = () => { showMention.value = false; mentionIndex.value = 0; mentionQuery.value = '' }
 const openMention = () => { showMention.value = true; mentionIndex.value = 0 }
-const getCaret = () => {
-  const el = taRef.value as HTMLTextAreaElement
-  if (!el) return { start: 0, end: 0 }
+const unwrapTextareaRef = (value: HTMLTextAreaElement | HTMLTextAreaElement[] | null): HTMLTextAreaElement | null => {
+  if (Array.isArray(value)) return value.find(Boolean) || null
+  return value || null
+}
+const textareaForTarget = (target: CommentEditorTarget = activeCommentEditorTarget.value) => {
+  return target === 'edit' ? unwrapTextareaRef(editingTaRef.value) : taRef.value
+}
+const editorValueForTarget = (target: CommentEditorTarget) => target === 'edit' ? editingContent.value : content.value
+const setEditorValueForTarget = (target: CommentEditorTarget, value: string) => {
+  if (target === 'edit') editingContent.value = value
+  else content.value = value
+}
+const getCaret = (target: CommentEditorTarget = activeCommentEditorTarget.value) => {
+  const el = textareaForTarget(target)
+  if (!el) {
+    const end = editorValueForTarget(target).length
+    return { start: end, end }
+  }
   return { start: el.selectionStart || 0, end: el.selectionEnd || 0 }
 }
 const replaceRange = (text: string, start: number, end: number, insert: string) => {
@@ -779,13 +851,19 @@ onMounted(() => {
 })
 const submitBtnClass = computed(() => (isDark.value ? 'bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-60' : 'bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-60'))
 const cancelBtnClass = computed(() => (isDark.value ? 'bg-gray-600 text-white hover:bg-gray-500' : 'bg-gray-200 text-black hover:bg-gray-300'))
-const clearContent = () => { content.value = ''; hideMention(); nextTick(autoResizeTextarea) }
+const clearContent = () => {
+  content.value = ''
+  hideMention()
+  if (showEmojiTarget.value === 'content') showEmojiTarget.value = null
+  nextTick(autoResizeTextarea)
+}
 const cancelInput = () => {
   content.value = ''
   replyTo.value = null
   selectedVisibility.value = clampVisibilityToLimit(messageVisibilityLimit.value)
   hiddenByCancel.value = true
   hideMention()
+  if (showEmojiTarget.value === 'content') showEmojiTarget.value = null
   cancelEdit()
   const el = taRef.value as HTMLTextAreaElement
   el?.blur?.()
@@ -807,30 +885,96 @@ const chooseAuthor = (author: string) => {
   nextTick(() => { const p = start + author.length + 2; el.setSelectionRange(p, p); el.focus() })
 }
 
-const showEmoji = ref(false)
+const showEmojiTarget = ref<CommentEditorTarget | null>(null)
 const emojis = ['😀','😄','😁','😆','😊','😍','🤔','👍','🔥','🎉','❤️','🥳','✨','🌟','🍀']
-const toggleEmoji = () => { showEmoji.value = !showEmoji.value }
-const insertAtCaret = (text: string) => {
-  const el = taRef.value as HTMLTextAreaElement
-  if (!el) { content.value += text; return }
-  const { start, end } = getCaret()
-  content.value = replaceRange(content.value, start, end, text)
-  const p = start + text.length
-  nextTick(() => { el.setSelectionRange(p, p); el.focus() })
+const toggleEmoji = (target: CommentEditorTarget) => {
+  activeCommentEditorTarget.value = target
+  showEmojiTarget.value = showEmojiTarget.value === target ? null : target
 }
-const insertEmoji = (e: string) => { insertAtCaret(e) ; showEmoji.value = false }
-const applyFormat = (type: string) => {
-  const el = taRef.value as HTMLTextAreaElement
-  const { start, end } = getCaret()
-  const sel = content.value.slice(start, end)
-  if (type === 'bold') insertAtCaret(sel ? `**${sel}**` : `**加粗**`)
-  else if (type === 'italic') insertAtCaret(sel ? `*${sel}*` : `*斜体*`)
-  else if (type === 'link') {
+const insertAtCaret = (text: string, target: CommentEditorTarget = activeCommentEditorTarget.value) => {
+  activeCommentEditorTarget.value = target
+  const value = editorValueForTarget(target)
+  const { start, end } = getCaret(target)
+  const nextValue = replaceRange(value, start, end, text)
+  setEditorValueForTarget(target, nextValue)
+  const nextCursor = start + text.length
+  nextTick(() => {
+    const el = textareaForTarget(target)
+    if (el) {
+      el.focus()
+      el.setSelectionRange(nextCursor, nextCursor)
+    }
+    if (target === 'content') autoResizeTextarea()
+  })
+}
+const insertEmoji = (e: string) => {
+  insertAtCaret(e)
+  showEmojiTarget.value = null
+}
+const applyFormat = (target: CommentEditorTarget, type: string) => {
+  activeCommentEditorTarget.value = target
+  const value = editorValueForTarget(target)
+  const { start, end } = getCaret(target)
+  const sel = value.slice(start, end)
+  if (type === 'bold') {
+    insertAtCaret(sel ? `**${sel}**` : `**加粗**`, target)
+  } else if (type === 'italic') {
+    insertAtCaret(sel ? `*${sel}*` : `*斜体*`, target)
+  } else if (type === 'link') {
     const url = window.prompt('请输入链接地址', 'https://') || ''
-    if (/^https?:\/\//i.test(url)) insertAtCaret(sel ? `[${sel}](${url})` : `[链接文本](${url})`)
-  } else if (type === 'image') {
+    if (/^https?:\/\//i.test(url)) insertAtCaret(sel ? `[${sel}](${url})` : `[链接文本](${url})`, target)
+  } else if (type === 'imageLink') {
     const url = window.prompt('请输入图片地址', 'https://') || ''
-    if (/^https?:\/\//i.test(url)) insertAtCaret(`![图片](${url})`)
+    if (/^https?:\/\//i.test(url)) insertAtCaret(`\n![图片](${url})\n`, target)
+  }
+}
+const resetCommentImageUploadState = () => {
+  setTimeout(() => { commentImageUploadPercent.value = 0 }, 500)
+}
+const triggerCommentImageUpload = (target: CommentEditorTarget) => {
+  if (!user.isLogin) {
+    useToast().add({ title: loginRequiredText.value, color: 'orange' })
+    return
+  }
+  if (isCommentImageUploading.value) return
+  activeCommentEditorTarget.value = target
+  showEmojiTarget.value = null
+  commentImageInput.value?.click()
+}
+const handleCommentImageInputChange = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const files = input.files ? Array.from(input.files) : []
+  if (!files.length) return
+  const target = activeCommentEditorTarget.value
+  isCommentImageUploading.value = true
+  commentImageUploadPercent.value = 1
+  try {
+    const uploaded = await uploadMediaFiles({
+      files,
+      kind: 'image',
+      baseApi: String(BASE_API || '/api'),
+      token: (user as any).token || '',
+      onProgress: (percent) => { commentImageUploadPercent.value = percent }
+    })
+    if (uploaded.length) insertAtCaret(uploaded.map((item) => item.markdown).join(''), target)
+    commentImageUploadPercent.value = 100
+    useToast().add({
+      title: '成功',
+      description: uploaded.length > 1 ? `已上传 ${uploaded.length} 张图片` : '图片上传成功',
+      color: 'green',
+      timeout: 2000
+    })
+  } catch (error: any) {
+    useToast().add({
+      title: '错误',
+      description: error?.message || '图片上传失败',
+      color: 'red',
+      timeout: 2000
+    })
+  } finally {
+    if (input) input.value = ''
+    isCommentImageUploading.value = false
+    resetCommentImageUploadState()
   }
 }
 
@@ -1035,4 +1179,30 @@ const repliesCount = (rootId: number) => {
 
 :global(html.dark) .comment-floor, :global(html.dark) .comment-time { color: #9ca3af; }
 :global(html:not(.dark)) .comment-floor, :global(html:not(.dark)) .comment-time { color: #6b7280; }
+.comment-editor-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:6px; min-height:34px; }
+.main-toolbar { margin-bottom:8px; }
+.edit-toolbar { margin-top:2px; }
+.toolbar-control,
+.comment-tool-btn { height:32px; border-radius:8px; border:1px solid rgba(0,0,0,0.12); background:rgba(255,255,255,0.82); color:inherit; }
+.toolbar-control { min-width:94px; padding:0 8px; }
+.comment-tool-btn { width:32px; display:inline-flex; align-items:center; justify-content:center; transition:background .15s ease, border-color .15s ease, transform .15s ease; }
+.comment-tool-btn:hover:not(:disabled) { background:rgba(0,0,0,0.06); border-color:rgba(0,0,0,0.18); }
+.comment-tool-btn:active:not(:disabled) { transform:translateY(1px); }
+.comment-tool-btn:disabled { cursor:not-allowed; opacity:.5; }
+.comment-visibility-select { min-width:58px; border:0; outline:0; background:transparent; color:inherit; font-size:12px; line-height:1; cursor:pointer; }
+.comment-visibility-select option { color:#111827; background:#fff; }
+.emoji-wrap { position:relative; display:inline-flex; }
+.emoji-popover { position:absolute; left:0; bottom:calc(100% + 8px); z-index:30; display:grid; grid-template-columns:repeat(6, 30px); gap:4px; width:max-content; padding:8px; }
+.emoji-option { width:30px; height:30px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; font-size:16px; line-height:1; }
+.emoji-option:hover { background:rgba(0,0,0,0.08); }
+.comment-upload-status { height:24px; min-width:34px; padding:0 8px; border-radius:9999px; display:inline-flex; align-items:center; justify-content:center; font-size:12px; border:1px solid currentColor; opacity:.8; }
+.comment-media-preview-strip { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.comment-media-preview-item { width:var(--inline-image-thumb-size, 96px); height:var(--inline-image-thumb-size, 96px); border-radius:8px; overflow:hidden; display:block; border:1px solid rgba(0,0,0,0.12); background:rgba(0,0,0,0.04); }
+.comment-media-preview-item img { width:100%; height:100%; display:block; object-fit:cover; }
+:global(html.dark) .toolbar-control,
+:global(html.dark) .comment-tool-btn { background:rgba(255,255,255,0.07); border-color:rgba(255,255,255,0.16); }
+:global(html.dark) .comment-tool-btn:hover:not(:disabled) { background:rgba(255,255,255,0.12); border-color:rgba(255,255,255,0.24); }
+:global(html.dark) .comment-visibility-select option { color:#f3f4f6; background:#1f2937; }
+:global(html.dark) .emoji-option:hover { background:rgba(255,255,255,0.12); }
+:global(html.dark) .comment-media-preview-item { border-color:rgba(255,255,255,0.16); background:rgba(255,255,255,0.06); }
 </style>
