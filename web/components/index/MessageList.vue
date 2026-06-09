@@ -242,7 +242,51 @@
         </div>
       </template>
       <div class="flex flex-col space-y-4">
+        <div class="edit-upload-toolbar">
+          <input
+            ref="editImageInputRef"
+            type="file"
+            accept="image/*"
+            multiple
+            class="hidden"
+            @change="handleEditMediaChange($event, 'image')"
+          />
+          <input
+            ref="editVideoInputRef"
+            type="file"
+            accept="video/*"
+            multiple
+            class="hidden"
+            @change="handleEditMediaChange($event, 'video')"
+          />
+          <div class="edit-upload-actions">
+            <UButton
+              size="xs"
+              color="gray"
+              variant="soft"
+              icon="i-mdi-image-plus-outline"
+              :disabled="isEditUploading"
+              :loading="editUploadKind === 'image'"
+              @click="triggerEditMediaInput('image')"
+            >
+              上传图片
+            </UButton>
+            <UButton
+              size="xs"
+              color="gray"
+              variant="soft"
+              icon="i-mdi-video-plus-outline"
+              :disabled="isEditUploading"
+              :loading="editUploadKind === 'video'"
+              @click="triggerEditMediaInput('video')"
+            >
+              上传视频
+            </UButton>
+          </div>
+          <span v-if="isEditUploading" class="edit-upload-status">{{ editUploadLabel }} {{ editUploadProgress }}%</span>
+        </div>
         <UTextarea
+          ref="editTextareaRef"
           v-model="editingContent"
           placeholder="编辑内容..."
           :rows="10"
@@ -307,6 +351,7 @@ import MarkdownRenderer from "~/components/index/MarkdownRenderer.vue";
 import type { Message, MessageVisibility } from '~/types/models'
 import BuiltinComments from '../comments/BuiltinComments.vue'
 import { writeClipboardText } from '~/utils/clipboard'
+import { uploadMediaFiles } from '~/utils/media-upload'
 import { useRuntimeConfig } from '#imports'
 import { useToast } from '#ui/composables/useToast'
 const config = useRuntimeConfig()
@@ -1461,6 +1506,101 @@ const editingMessage = ref<any | null>(null);
 const editingVisibility = ref<MessageVisibility>('public');
 const editingPublishedAtInput = ref('');
 const isSaving = ref(false);
+const editTextareaRef = ref<any>(null);
+const editImageInputRef = ref<HTMLInputElement | null>(null);
+const editVideoInputRef = ref<HTMLInputElement | null>(null);
+const editUploadProgress = ref(0);
+const editUploadKind = ref<'image' | 'video' | ''>('');
+const editUploadLabel = ref('');
+const isEditUploading = computed(() => editUploadProgress.value > 0);
+
+const getEditTextareaElement = (): HTMLTextAreaElement | null => {
+  const target = editTextareaRef.value as any
+  if (!target) return null
+  if (target instanceof HTMLTextAreaElement) return target
+  const direct = target.textarea || target.input || target.$el
+  if (direct instanceof HTMLTextAreaElement) return direct
+  return direct?.querySelector?.('textarea') || null
+}
+
+const insertEditingMarkdown = async (markdown: string) => {
+  const textarea = getEditTextareaElement()
+  if (!textarea) {
+    editingContent.value += markdown
+    return
+  }
+  const start = Number(textarea.selectionStart ?? editingContent.value.length)
+  const end = Number(textarea.selectionEnd ?? start)
+  const before = editingContent.value.slice(0, start)
+  const after = editingContent.value.slice(end)
+  editingContent.value = `${before}${markdown}${after}`
+  await nextTick()
+  const nextTextarea = getEditTextareaElement()
+  if (nextTextarea) {
+    const nextCursor = start + markdown.length
+    nextTextarea.focus()
+    nextTextarea.setSelectionRange(nextCursor, nextCursor)
+  }
+}
+
+const resetEditUploadState = () => {
+  setTimeout(() => {
+    editUploadProgress.value = 0
+    editUploadKind.value = ''
+    editUploadLabel.value = ''
+  }, 400)
+}
+
+const triggerEditMediaInput = (kind: 'image' | 'video') => {
+  if (!userStore.isLogin) {
+    useToast().add({ title: '提示', description: '请登录后操作', color: 'orange', timeout: 2000 })
+    return
+  }
+  if (isEditUploading.value) return
+  if (kind === 'image') editImageInputRef.value?.click()
+  else editVideoInputRef.value?.click()
+}
+
+const handleEditMediaChange = async (event: Event, kind: 'image' | 'video') => {
+  const input = event.target as HTMLInputElement
+  const files = input.files ? Array.from(input.files) : []
+  if (!files.length) return
+  editUploadKind.value = kind
+  editUploadLabel.value = kind === 'image' ? '图片上传中' : '视频上传中'
+  editUploadProgress.value = 1
+
+  try {
+    const uploaded = await uploadMediaFiles({
+      files,
+      kind,
+      baseApi: String(BASE_API || '/api'),
+      token: userStore.token || '',
+      onProgress: (percent) => { editUploadProgress.value = percent }
+    })
+    if (uploaded.length) {
+      await insertEditingMarkdown(uploaded.map((item) => item.markdown).join(''))
+    }
+    editUploadProgress.value = 100
+    useToast().add({
+      title: '成功',
+      description: kind === 'image'
+        ? (uploaded.length > 1 ? `已上传 ${uploaded.length} 张图片` : '图片上传成功')
+        : (uploaded.length > 1 ? `已上传 ${uploaded.length} 个视频` : '视频上传成功'),
+      color: 'green',
+      timeout: 2000
+    })
+  } catch (error: any) {
+    useToast().add({
+      title: '错误',
+      description: error?.message || (kind === 'image' ? '图片上传失败' : '视频上传失败'),
+      color: 'red',
+      timeout: 2000
+    })
+  } finally {
+    if (input) input.value = ''
+    resetEditUploadState()
+  }
+}
 
 const toDatetimeLocalValue = (value: any) => {
   const date = new Date(value || '')
@@ -1855,8 +1995,34 @@ onMounted(() => {
   color: rgb(251, 146, 60);
 }
 
+.edit-upload-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 32px;
+}
+
+.edit-upload-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.edit-upload-status {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: rgb(249, 115, 22);
+}
+
 @media screen and (max-width: 480px) {
   .date-filter-bar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .edit-upload-toolbar {
     align-items: flex-start;
     flex-direction: column;
   }

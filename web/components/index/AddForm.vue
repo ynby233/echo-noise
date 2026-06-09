@@ -10,6 +10,7 @@
             ref="fileInput"
             type="file"
             accept="image/*"
+            multiple
             @change="addImage"
             class="hidden"
             placeholder="选择图片"
@@ -17,7 +18,6 @@
           <!-- 视频上传按钮 -->
   <VideoUpload
     @video-uploaded="handleVideoUploaded"
-    @before-upload="checkVideoLogin"
     @upload-progress="handleVideoUploadProgress"
   />
           <button class="tb-btn" @click="triggerFileInput" title="插入图片"><UIcon name="i-fluent-image-20-regular" class="w-5 h-5" /></button>
@@ -210,6 +210,7 @@ import { useMessageStore } from '~/store/message'
 import { useNotifyStore } from '~/store/notify'
 import VideoUpload from './VideoUpload.vue'
 import ImageHostingUploader from '~/components/widgets/ImageHostingUploader.vue'
+import { createVideoMarkdown, resolveUploadedMediaUrl, uploadMediaFiles } from '~/utils/media-upload'
 const props = defineProps<{ wide?: boolean }>()
 const containerClass = computed(() => (props.wide ? 'w-full max-w-none' : 'mx-auto w-full sm:max-w-4xl'))
 const isEditorLoading = ref(true)
@@ -367,22 +368,6 @@ const scheduleDraftSave = () => {
 
 const clearDraft = () => {
   try { localStorage.removeItem(DRAFT_KEY) } catch {}
-}
-
-const normalizeCloudObjectURL = (u: string): string => {
-  const raw = String(u || '')
-  if (!/^https?:\/\//.test(raw)) return raw
-  try {
-    const parsed = new URL(raw)
-    const parts = parsed.pathname.split('/').filter(Boolean)
-    if (parts[0] === 'note') {
-      parsed.pathname = '/' + parts.slice(1).join('/')
-      return parsed.toString()
-    }
-    return raw
-  } catch {
-    return raw.replace('/note/', '/')
-  }
 }
 
 const syncContentFromEditor = () => {
@@ -663,18 +648,15 @@ const checkLogin = () => {
 };
 
 const triggerFileInput = () => {
-  const input = document.getElementById("file-input");
-  if (input) {
-    input.click();
-  }
+  fileInput.value?.click();
 };
 
 const addImage = async (event: Event) => {
   if (!checkLogin()) return;
   const input = event.target as HTMLInputElement;
-  const file = input.files ? input.files[0] : null;
+  const files = input.files ? Array.from(input.files) : [];
 
-  if (!file) {
+  if (!files.length) {
     toast.add({
       title: '错误',
       description: '没有选择文件',
@@ -684,97 +666,27 @@ const addImage = async (event: Event) => {
     return;
   }
 
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-  const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-  const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
-  if (!allowedTypes.includes(file.type) || !allowedExtensions.includes(fileExtension)) {
-    toast.add({
-      title: '错误',
-      description: '仅支持 JPG、PNG、GIF、WEBP 格式的图片',
-      color: 'red',
-      timeout: 2000
-    });
-    return;
-  }
-  const maxSize = 50 * 1024 * 1024; // 50MB
-  if (file.size > maxSize) {
-    toast.add({
-      title: '错误',
-      description: '图片大小不能超过 50MB',
-      color: 'red',
-      timeout: 2000
-    });
-    return;
-  }
-
   try {
-    const formData = new FormData();
-    formData.append('image', file);
-    imageUploadProgress.value = 1
-    const data = await new Promise<any>((resolve, reject) => {
-      const xhr = new XMLHttpRequest()
-      xhr.open('POST', `${BASE_API}/images/upload`, true)
-      xhr.withCredentials = true
-      const token = userStore.token || ''
-      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
-      xhr.upload.onprogress = (e) => {
-        if (!e.lengthComputable) return
-        const percent = Math.round((e.loaded / e.total) * 100)
-        imageUploadProgress.value = Math.max(1, Math.min(99, percent))
-      }
-      xhr.onload = () => {
-        try {
-          const js = JSON.parse(xhr.responseText || '{}')
-          if (xhr.status >= 200 && xhr.status < 300) {
-            resolve(js)
-          } else {
-            reject(new Error(js?.msg || '图片上传失败'))
-          }
-        } catch (e: any) {
-          reject(new Error(e?.message || '图片上传失败'))
-        }
-      }
-      xhr.onerror = () => reject(new Error('图片上传失败'))
-      xhr.send(formData)
+    const uploaded = await uploadMediaFiles({
+      files,
+      kind: 'image',
+      baseApi: String(BASE_API || '/api'),
+      token: userStore.token || '',
+      onProgress: (percent) => { imageUploadProgress.value = percent }
     })
-
-    if (data?.code === 1 && data?.data) {
-      if (vditorEditor.value?.insertValue) {
-        const origin = typeof window !== 'undefined' ? window.location.origin : ''
-        const base = String(BASE_API || '/api')
-        const ret = String(data.data || '')
-        let full = ''
-        if (ret.startsWith('http')) {
-          full = normalizeCloudObjectURL(ret)
-        } else {
-          const path = ret.startsWith('/') ? ret : `/${ret}`
-          if (/^https?:\/\//.test(base)) {
-            full = `${base}${path}`
-          } else {
-            const cleanBase = base.replace(/\/$/, '')
-            if (path.startsWith(cleanBase)) {
-              full = `${origin}${path}`
-            } else {
-              full = `${origin}${cleanBase}${path}`
-            }
-          }
-        }
-        const imageMarkdown = `\n![](${full})\n`
-        vditorEditor.value.insertValue(imageMarkdown)
-        syncContentFromEditor()
-        focusEditor()
-      }
-      imageUploadProgress.value = 100
-      setTimeout(() => { imageUploadProgress.value = 0 }, 400)
-      toast.add({
-        title: '成功',
-        description: '图片上传成功',
-        color: 'green',
-        timeout: 2000
-      });
-    } else {
-      throw new Error(data?.msg || '图片上传失败');
+    if (uploaded.length && vditorEditor.value?.insertValue) {
+      vditorEditor.value.insertValue(uploaded.map((item) => item.markdown).join(''))
+      syncContentFromEditor()
+      focusEditor()
     }
+    imageUploadProgress.value = 100
+    setTimeout(() => { imageUploadProgress.value = 0 }, 400)
+    toast.add({
+      title: '成功',
+      description: uploaded.length > 1 ? `已上传 ${uploaded.length} 张图片` : '图片上传成功',
+      color: 'green',
+      timeout: 2000
+    });
   } catch (error: any) {
     console.error('上传错误:', error);
     toast.add({
@@ -794,22 +706,7 @@ const addImage = async (event: Event) => {
 };
 
 const handleVideoUploaded = (videoUrl: string) => {
-  const raw = String(videoUrl || '')
-  const baseApi = useRuntimeConfig().public.baseApi || '/api'
-  let full = raw
-  if (/^https?:\/\//.test(raw)) {
-    full = normalizeCloudObjectURL(raw)
-  } else {
-    const path = raw.startsWith('/') ? raw : `/${raw}`
-    if (/^https?:\/\//.test(String(baseApi))) {
-      const base = String(baseApi).replace(/\/api$/, '')
-      full = `${base}${path}`
-    } else {
-      const origin = typeof window !== 'undefined' ? window.location.origin : ''
-      full = `${origin}${path}`
-    }
-  }
-  const videoTag = `<video width="100%" height="100%" src="${full}" controls loop></video>\n`
+  const videoTag = createVideoMarkdown(resolveUploadedMediaUrl(videoUrl, String(BASE_API || '/api')))
   if (vditorEditor.value?.insertValue) {
     vditorEditor.value.insertValue(videoTag)
     syncContentFromEditor()
@@ -1047,20 +944,6 @@ onBeforeUnmount(() => {
 const toggleNotify = () => {
   enableNotify.value = !enableNotify.value;
   localStorage.setItem('enableNotify', enableNotify.value.toString());
-};
-
-const checkVideoLogin = (e: Event) => {
-  if (!userStore.isLogin) {
-    toast.add({
-      title: '提示',
-      description: '请登录后操作',
-      color: 'orange',
-      timeout: 2000
-    });
-    e.preventDefault && e.preventDefault();
-    return false;
-  }
-  return true;
 };
 
 const addMessage = async () => {
