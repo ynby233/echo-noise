@@ -36,11 +36,7 @@
             >
               <span>{{ visibilityLabel }}</span>
               <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
-            </button>
-          </div>
-          <button class="tb-btn" @click="toggleNotify" :title="enableNotify ? '关闭推送' : '开启推送'">
-            <UIcon :name="enableNotify ? 'i-mdi-bell' : 'i-mdi-bell-off'" class="w-5 h-5" />
-          </button>          
+            </button>          
           <div v-if="canSetPublishTime" ref="publishTimeControlRef" class="publish-time-control" title="自定义发布时间">
             <UIcon name="i-mdi-calendar-clock-outline" class="w-4 h-4" />
             <button
@@ -54,6 +50,10 @@
               <span>{{ publishTimeLabel }}</span>
               <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
             </button>
+          </div>
+          <button class="tb-btn" @click="toggleNotify" :title="enableNotify ? '关闭推送' : '开启推送'">
+            <UIcon :name="enableNotify ? 'i-mdi-bell' : 'i-mdi-bell-off'" class="w-5 h-5" />
+          </button>
           </div>
         </div>
         <div class="toolbar-right">
@@ -1120,12 +1120,12 @@ const addMessage = async () => {
 .publish-time-control:focus-within,
 .visibility-control:hover,
 .visibility-control:focus-within { background: rgba(0,0,0,0.12); }
-.visibility-select { width: 86px; height: 28px; padding: 0 8px; border: 0; border-radius: 9px; outline: none; background: transparent; color: inherit; font-size: 12px; cursor: pointer; }
+.visibility-select { width: 60px; height: 28px; padding: 0 8px; border: 0; border-radius: 9px; outline: none; background: transparent; color: inherit; font-size: 12px; cursor: pointer; }
 .visibility-trigger,
 .publish-time-trigger { display: inline-flex; align-items: center; justify-content: space-between; gap: 4px; }
 .visibility-trigger svg,
 .publish-time-trigger svg { flex: 0 0 auto; opacity: .72; }
-.publish-time-input { width: 172px; max-width: 48vw; min-height: 28px; padding: 0 8px; border: none; outline: none; background: transparent; color: inherit; font-size: 12px; text-align: left; }
+.publish-time-input { width: 100px; max-width: 48vw; min-height: 28px; padding: 0 8px; border: none; outline: none; background: transparent; color: inherit; font-size: 12px; text-align: left; }
 .publish-time-trigger span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .floating-control-menu { position: fixed; z-index: 5004; border: 1px solid rgba(255,255,255,0.16); border-radius: 12px; background: rgba(0,0,0,0.80); color: #f8fafc; box-shadow: 0 18px 42px rgba(0,0,0,0.38); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
 .visibility-floating-menu { display: grid; gap: 4px; padding: 8px; }
