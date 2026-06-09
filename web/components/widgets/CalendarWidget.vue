@@ -444,11 +444,11 @@ onBeforeUnmount(() => {
 }
 
 .year-select {
-  width: 80px;
+  width: 70px;
 }
 
 .month-select {
-  width: 60px;
+  width: 50px;
 }
 
 .calendar-nav {
