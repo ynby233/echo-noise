@@ -16,14 +16,16 @@
             placeholder="选择图片"
           />
           <!-- 视频上传按钮 -->
-  <VideoUpload
-    @video-uploaded="handleVideoUploaded"
-    @upload-progress="handleVideoUploadProgress"
-  />
+          <VideoUpload
+            @video-uploaded="handleVideoUploaded"
+            @upload-progress="handleVideoUploadProgress"
+          />
           <button class="tb-btn" @click="triggerFileInput" title="插入图片"><UIcon name="i-fluent-image-20-regular" class="w-5 h-5" /></button>
-           <!-- 新增图床上传按钮 -->
-           <button class="tb-btn" @click="showImageUploader = true" title="图床上传"><UIcon name="i-mdi-cloud-upload-outline" class="w-5 h-5" /></button>
-          
+          <!-- 新增图床上传按钮 -->
+          <button class="tb-btn" @click="showImageUploader = true" title="图床上传"><UIcon name="i-mdi-cloud-upload-outline" class="w-5 h-5" /></button>
+          <button class="tb-btn" @click="toggleNotify" :title="enableNotify ? '关闭推送' : '开启推送'">
+            <UIcon :name="enableNotify ? 'i-mdi-bell' : 'i-mdi-bell-off'" class="w-5 h-5" />
+          </button>
           <div ref="visibilityControlRef" class="visibility-control" :title="`可见范围：${visibilityLabel}`">
             <UIcon :name="visibilityIcon" class="w-5 h-5" />
             <button
@@ -36,9 +38,10 @@
             >
               <span>{{ visibilityLabel }}</span>
               <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
-            </button>          
+            </button>
+          </div>
           <div v-if="canSetPublishTime" ref="publishTimeControlRef" class="publish-time-control" title="自定义发布时间">
-            <UIcon name="i-mdi-calendar-clock-outline" class="w-4 h-4" />
+            <UIcon name="i-mdi-calendar-clock-outline" class="w-5 h-5" />
             <button
               type="button"
               class="publish-time-input publish-time-trigger"
@@ -50,10 +53,6 @@
               <span>{{ publishTimeLabel }}</span>
               <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
             </button>
-          </div>
-          <button class="tb-btn" @click="toggleNotify" :title="enableNotify ? '关闭推送' : '开启推送'">
-            <UIcon :name="enableNotify ? 'i-mdi-bell' : 'i-mdi-bell-off'" class="w-5 h-5" />
-          </button>
           </div>
         </div>
         <div class="toolbar-right">
@@ -997,19 +996,20 @@ const addMessage = async () => {
 .tb-btn { display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; transition: all .18s ease; border:none; }
 .tb-btn:hover { transform: translate3d(0,0,0) scale(1.06); background: rgba(0,0,0,0.12); }
 .tb-btn.primary { background: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color: #fff; }
-.publish-time-control { display:flex; align-items:center; gap:6px; min-height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 8px 0 10px; border: none; box-shadow: none; transition: background-color .18s ease, transform .18s ease; }
-.visibility-control { display:flex; align-items:center; gap:6px; min-height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 8px 0 10px; border: none; box-shadow: none; transition: background-color .18s ease, transform .18s ease; }
+.publish-time-control { display:flex; align-items:center; gap:4px; min-height:36px; height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 6px; border: none; box-shadow: none; transition: background-color .18s ease, transform .18s ease; }
+.visibility-control { display:flex; align-items:center; gap:4px; min-height:36px; height:36px; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 6px; border: none; box-shadow: none; transition: background-color .18s ease, transform .18s ease; }
 .publish-time-control:hover,
 .publish-time-control:focus-within,
 .visibility-control:hover,
 .visibility-control:focus-within { background: rgba(0,0,0,0.12); }
-.visibility-select { width: 60px; height: 28px; padding: 0 8px; border: 0; border-radius: 9px; outline: none; background: transparent; color: inherit; font-size: 12px; cursor: pointer; }
+.visibility-select { width: auto; min-width: 42px; max-width: 64px; height: 28px; padding: 0; border: 0; border-radius: 9px; outline: none; background: transparent; color: inherit; font-size: 12px; cursor: pointer; }
 .visibility-trigger,
-.publish-time-trigger { display: inline-flex; align-items: center; justify-content: space-between; gap: 4px; }
+.publish-time-trigger { display: inline-flex; align-items: center; justify-content: space-between; gap: 3px; }
+.visibility-trigger span,
+.publish-time-trigger span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .visibility-trigger svg,
 .publish-time-trigger svg { flex: 0 0 auto; opacity: .72; }
-.publish-time-input { width: 100px; max-width: 48vw; min-height: 28px; padding: 0 8px; border: none; outline: none; background: transparent; color: inherit; font-size: 12px; text-align: left; }
-.publish-time-trigger span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.publish-time-input { width: 66px; max-width: 30vw; min-height: 28px; padding: 0; border: none; outline: none; background: transparent; color: inherit; font-size: 12px; text-align: left; }
 .floating-control-menu { position: fixed; z-index: 5004; border: 1px solid rgba(255,255,255,0.16); border-radius: 12px; background: rgba(0,0,0,0.80); color: #f8fafc; box-shadow: 0 18px 42px rgba(0,0,0,0.38); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
 .visibility-floating-menu { display: grid; gap: 4px; padding: 8px; }
 .floating-control-option { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 10px; border-radius: 9px; border: 1px solid transparent; color: inherit; font-size: 12px; font-weight: 650; text-align: left; transition: background-color .15s ease, border-color .15s ease, color .15s ease; }
