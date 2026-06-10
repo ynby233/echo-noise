@@ -999,7 +999,7 @@ const addMessage = async () => {
 .tb-btn.primary { background: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color: #fff; }
 .tb-btn.has-label { width: auto; min-width: 66px; gap: 5px; padding: 0 10px; }
 .notify-btn.is-enabled { background: rgba(249,115,22,0.16); color: #c2410c; box-shadow: inset 0 0 0 1px rgba(249,115,22,0.32); }
-.notify-label { font-size: 12px; font-weight: 700; line-height: 1; white-space: nowrap; }
+.notify-label { font-size: 12px; line-height: 1; white-space: nowrap; }
 .publish-time-control { display:flex; align-items:center; gap:5px; min-height:36px; height:36px; width: max-content; max-width: min(210px, calc(100vw - 32px)); border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 8px; border: none; box-shadow: none; transition: background-color .18s ease, transform .18s ease; }
 .visibility-control { display:flex; align-items:center; gap:5px; min-height:36px; height:36px; width: max-content; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 8px; border: none; box-shadow: none; transition: background-color .18s ease, transform .18s ease; }
 .publish-time-control:hover,
