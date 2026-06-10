@@ -220,7 +220,7 @@
                           <div class="admin-setting-title" :class="theme.text">用户名</div>
                           <p class="admin-setting-desc" :class="theme.mutedText">登录名与后台展示名保持一致，修改后立即生效。</p>
                         </div>
-                        <UBadge color="primary" variant="soft" class="text-xs px-2 py-1 rounded-md !text-slate-800 dark:!text-slate-200">{{ userStore.user?.username || '未设置' }}</UBadge>
+                        <UBadge color="primary" variant="soft" class="text-xs px-2 py-1 rounded-md !text-primary-600 dark:!text-primary-300">{{ userStore.user?.username || '未设置' }}</UBadge>
                       </div>
                       <UInput v-model="userForm.username" :placeholder="userStore.user?.username || '输入用户名'" class="w-full" />
                       <div class="flex justify-end">
@@ -232,7 +232,7 @@
                       <div class="admin-setting-heading">
                         <div>
                           <div class="admin-setting-title" :class="theme.text">头像</div>
-                          <p class="admin-setting-desc" :class="theme.mutedText">上传图片会自动进入裁剪流程，也可以直接填写远程链接。</p>
+                          <p class="admin-setting-desc" :class="theme.mutedText">上传图片会进入裁剪流程，也可以直接填写远程链接。</p>
                         </div>
                         <img :src="avatarSrc" class="w-12 h-12 rounded-full object-cover ring-2 ring-indigo-400/20" alt="avatar" @error="onAvatarImgError" />
                       </div>
@@ -301,20 +301,19 @@
                       <div class="admin-setting-heading">
                         <div>
                           <div class="admin-setting-title" :class="theme.text">API Token</div>
-                          <p class="admin-setting-desc" :class="theme.mutedText">用于访问开放接口；重新生成后旧 Token 将立即失效。</p>
+                          <p class="admin-setting-desc" :class="theme.mutedText">用于访问开放接口；重新生成后旧 Token 将立即失效，请务必妥善保管此 Token。</p>
                         </div>
                         <div class="flex flex-wrap items-center justify-end gap-2">
-                          <UBadge color="primary" variant="soft" class="text-xs px-2 py-1 rounded-md !text-slate-800 dark:!text-slate-200">{{ userToken ? '已生成' : '未生成' }}</UBadge>
-                          <UButton size="xs" :loading="regeneratingToken" @click="regenerateToken" color="indigo" variant="soft" class="shadow" title="重新生成将使旧 Token 失效">重新生成</UButton>
+                          <UBadge color="primary" variant="soft" class="text-xs px-2 py-1 rounded-md !text-primary-600 dark:!text-primary-300">{{ userToken ? '已生成' : '未生成' }}</UBadge>
+                          <UButton size="xs" :loading="regeneratingToken" @click="regenerateToken" color="indigo" variant="soft" class="shadow">重新生成</UButton>
                         </div>
                       </div>
                       <div v-if="userToken" class="space-y-1">
                         <div class="flex items-center gap-2 w-full flex-nowrap">
                           <UInput v-model="userToken" :type="showToken ? 'text' : 'password'" readonly class="font-mono text-sm flex-1 min-w-0" />
-                          <UButton :icon="showToken ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="indigo" variant="ghost" @click="showToken = !showToken" :title="showToken ? '隐藏' : '显示'" />
-                          <UButton icon="i-heroicons-clipboard" color="indigo" variant="ghost" @click="copyToken" title="复制 Token" />
+                          <UButton :icon="showToken ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="indigo" variant="ghost" @click="showToken = !showToken" />
+                          <UButton icon="i-heroicons-clipboard" color="indigo" variant="ghost" @click="copyToken" />
                         </div>
-                        <p class="admin-setting-desc" :class="theme.mutedText">请妥善保管此 Token</p>
                       </div>
                       <p v-else class="admin-setting-desc" :class="theme.mutedText">暂无 Token</p>
                     </div>
@@ -352,7 +351,7 @@
                         </div>
                         <div class="flex items-center gap-3 justify-end">
                           <UToggle v-model="userForm.voceChatNotificationEnabled" :disabled="!userStore.user?.voce_chat_email" />
-                          <UButton size="xs" color="primary" variant="soft" :disabled="!userStore.user?.voce_chat_email" @click="updateVoceChatNotificationPreference">保存</UButton>
+                          <UButton size="xs" color="primary" class="shadow" variant="soft" :disabled="!userStore.user?.voce_chat_email" @click="updateVoceChatNotificationPreference">保存</UButton>
                         </div>
                       </div>
                     </div>
