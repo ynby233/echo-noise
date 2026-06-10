@@ -229,7 +229,7 @@ const isAdmin = computed(() => !!(user.user as any)?.is_admin)
 const currentUserId = computed(() => Number((user.user as any)?.userid || (user.user as any)?.id || (user.user as any)?.ID || 0))
 const visibilityOptions = [
   { value: 'public', label: '公开' },
-  { value: 'users', label: '所有用户' },
+  { value: 'users', label: '成员' },
   { value: 'contacts', label: '联系人' },
   { value: 'private', label: '私密' }
 ]
