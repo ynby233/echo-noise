@@ -296,50 +296,66 @@
                   </div>
                 </div>
                 <div class="rounded-lg p-4 md:col-span-2" :class="theme.subtleBg">
-                <div class="flex justify-between items-center mb-2">
-                  <div class="flex items-center gap-2">
-                    <span :class="theme.mutedText">API Token</span>
-                    <UBadge color="primary" variant="subtle" class="text-xs px-2 py-1 rounded-md !text-primary-600 dark:!text-primary-300">{{ userToken ? '已生成' : '未生成' }}</UBadge>
-                    <UButton size="xs" :loading="regeneratingToken" @click="regenerateToken" color="indigo" variant="soft" class="shadow text-xs px-2 py-1 rounded-md text-slate-600 dark:text-slate-200" title="重新生成将使旧 Token 失效">重新生成</UButton>
-                  </div>
-                </div>
-                <div v-if="userToken" class="mb-2">
-                  <div class="flex items-center gap-2 w-full flex-nowrap">
-                    <UInput v-model="userToken" :type="showToken ? 'text' : 'password'" readonly class="font-mono text-sm flex-1 min-w-0" />
-                    <UButton :icon="showToken ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="indigo" variant="ghost" @click="showToken = !showToken" :title="showToken ? '隐藏' : '显示'" />
-                    <UButton icon="i-heroicons-clipboard" color="indigo" variant="ghost" @click="copyToken" title="复制 Token" />
-                  </div>
-                  <p class="text-xs mt-1" :class="theme.mutedText">请妥善保管此 Token</p>
-                </div>
-                <div v-else>
-                  <p :class="theme.mutedText">暂无 Token</p>
-                </div>
-                <div class="mt-3 flex items-center justify-between">
-                  <span :class="theme.mutedText">邮箱</span>
-                  <span v-if="userStore.user?.email" :class="[theme.text, theme.border, 'inline-flex items-center px-2 py-0.5 rounded-md']">
-                    {{ userStore.user?.email }}
-                  </span>
-                  <span v-else class="inline-flex items-center px-2 py-0.5 rounded-md text-amber-400 border border-amber-400/40">未绑定邮箱，请先绑定邮箱</span>
-                </div>
-                <div class="mt-3 flex items-center justify-between gap-3">
-                  <span :class="theme.mutedText">注册绑定 VoceChat 邮箱</span>
-                  <span v-if="userStore.user?.voce_chat_email" :class="[theme.text, theme.border, 'inline-flex items-center px-2 py-0.5 rounded-md break-all text-right']">
-                    {{ userStore.user?.voce_chat_email }}
-                  </span>
-                  <span v-else class="inline-flex items-center px-2 py-0.5 rounded-md text-slate-400 border border-slate-400/30">未绑定 VoceChat 邮箱</span>
-                </div>
-                <div class="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded border px-3 py-2" :class="theme.border">
-                  <div>
-                    <div class="text-sm font-medium" :class="theme.text">接收 VoceChat 推送</div>
-                    <div class="text-xs mt-1" :class="theme.mutedText">开启后，站内通知会同步推送到已绑定的 VoceChat 账号。</div>
-                  </div>
-                  <div class="flex items-center gap-3 justify-end">
-                    <UToggle v-model="userForm.voceChatNotificationEnabled" :disabled="!userStore.user?.voce_chat_email" />
-                    <UButton size="xs" color="primary" variant="soft" :disabled="!userStore.user?.voce_chat_email" @click="updateVoceChatNotificationPreference">保存</UButton>
-                  </div>
-                </div>
-                <div class="border-t mt-4 pt-4" :class="theme.border">
                   <div class="admin-setting-stack">
+                    <div class="admin-setting-block">
+                      <div class="admin-setting-heading">
+                        <div>
+                          <div class="admin-setting-title" :class="theme.text">API Token</div>
+                          <p class="admin-setting-desc" :class="theme.mutedText">用于访问开放接口；重新生成后旧 Token 将立即失效。</p>
+                        </div>
+                        <div class="flex flex-wrap items-center justify-end gap-2">
+                          <UBadge color="primary" variant="soft" class="text-xs px-2 py-1 rounded-md !text-slate-800 dark:!text-slate-200">{{ userToken ? '已生成' : '未生成' }}</UBadge>
+                          <UButton size="xs" :loading="regeneratingToken" @click="regenerateToken" color="indigo" variant="soft" class="shadow" title="重新生成将使旧 Token 失效">重新生成</UButton>
+                        </div>
+                      </div>
+                      <div v-if="userToken" class="space-y-1">
+                        <div class="flex items-center gap-2 w-full flex-nowrap">
+                          <UInput v-model="userToken" :type="showToken ? 'text' : 'password'" readonly class="font-mono text-sm flex-1 min-w-0" />
+                          <UButton :icon="showToken ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="indigo" variant="ghost" @click="showToken = !showToken" :title="showToken ? '隐藏' : '显示'" />
+                          <UButton icon="i-heroicons-clipboard" color="indigo" variant="ghost" @click="copyToken" title="复制 Token" />
+                        </div>
+                        <p class="admin-setting-desc" :class="theme.mutedText">请妥善保管此 Token</p>
+                      </div>
+                      <p v-else class="admin-setting-desc" :class="theme.mutedText">暂无 Token</p>
+                    </div>
+
+                    <div class="admin-setting-block">
+                      <div class="admin-setting-heading">
+                        <div>
+                          <div class="admin-setting-title" :class="theme.text">账号绑定</div>
+                          <p class="admin-setting-desc" :class="theme.mutedText">邮箱和 VoceChat 账号用于接收系统通知。</p>
+                        </div>
+                      </div>
+                      <div class="space-y-2">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded border px-3 py-2" :class="theme.border">
+                          <span class="text-sm" :class="theme.mutedText">邮箱</span>
+                          <span v-if="userStore.user?.email" :class="[theme.text, theme.border, 'inline-flex items-center px-2 py-0.5 rounded-md break-all']">
+                            {{ userStore.user?.email }}
+                          </span>
+                          <span v-else class="inline-flex items-center px-2 py-0.5 rounded-md text-amber-400 border border-amber-400/40">未绑定邮箱，请先绑定邮箱</span>
+                        </div>
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded border px-3 py-2" :class="theme.border">
+                          <span class="text-sm" :class="theme.mutedText">注册绑定 VoceChat 邮箱</span>
+                          <span v-if="userStore.user?.voce_chat_email" :class="[theme.text, theme.border, 'inline-flex items-center px-2 py-0.5 rounded-md break-all text-right']">
+                            {{ userStore.user?.voce_chat_email }}
+                          </span>
+                          <span v-else class="inline-flex items-center px-2 py-0.5 rounded-md text-slate-400 border border-slate-400/30">未绑定 VoceChat 邮箱</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="admin-setting-block">
+                      <div class="admin-setting-heading">
+                        <div>
+                          <div class="admin-setting-title" :class="theme.text">接收 VoceChat 推送</div>
+                          <p class="admin-setting-desc" :class="theme.mutedText">开启后，站内通知会同步推送到已绑定的 VoceChat 账号。</p>
+                        </div>
+                        <div class="flex items-center gap-3 justify-end">
+                          <UToggle v-model="userForm.voceChatNotificationEnabled" :disabled="!userStore.user?.voce_chat_email" />
+                          <UButton size="xs" color="primary" variant="soft" :disabled="!userStore.user?.voce_chat_email" @click="updateVoceChatNotificationPreference">保存</UButton>
+                        </div>
+                      </div>
+                    </div>
                     <div class="admin-setting-block">
                       <div class="admin-setting-heading">
                         <div>
@@ -406,7 +422,6 @@
                     </div>
                   </div>
                 </div>
-              </div>
               </div>
               
             </div>
