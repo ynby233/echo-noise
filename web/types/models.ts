@@ -76,6 +76,7 @@ export interface User {
     email?: string;
     Email?: string;
     voce_chat_email?: string;
+    voce_chat_notification_enabled?: boolean;
     VoceChatEmail?: string;
     email_verified?: boolean;
     EmailVerified?: boolean;
@@ -117,6 +118,7 @@ export interface UserStatus {
     is_admin: boolean;
     avatar_url?: string;
     voce_chat_email?: string;
+    voce_chat_notification_enabled?: boolean;
 }
 
 export interface Status {

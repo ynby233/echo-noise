@@ -29,6 +29,11 @@
       <UIcon name="i-heroicons-chat-bubble-left-right" class="w-6 h-6" />
       <span class="btn-label">留言</span>
     </button>
+    <button v-show="!collapsed" class="tool-btn" :class="isDark ? 'btn-dark' : 'btn-light'" aria-label="通知" @click="$emit('open-notifications')">
+      <UIcon name="i-heroicons-bell" class="w-6 h-6" />
+      <span v-if="notificationUnreadCount > 0" class="notification-badge">{{ badgeText }}</span>
+      <span class="btn-label">通知</span>
+    </button>
     <button v-show="!collapsed" class="tool-btn" :class="isDark ? 'btn-dark' : 'btn-light'" aria-label="后台" @click="$emit('open-admin')">
       <UIcon name="i-mdi-server-outline" class="w-6 h-6" />
       <span class="btn-label">后台</span>
@@ -37,7 +42,9 @@
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{ contentTheme?: string; layoutIcon?: string }>()
+const props = defineProps<{ contentTheme?: string; layoutIcon?: string; notificationUnreadCount?: number }>()
+const notificationUnreadCount = computed(() => Math.max(0, Number(props.notificationUnreadCount || 0)))
+const badgeText = computed(() => notificationUnreadCount.value > 99 ? '99+' : String(notificationUnreadCount.value))
 const isDark = computed(() => props.contentTheme === 'dark')
 const themeIcon = computed(() => (props.contentTheme === 'dark' ? 'i-mdi-weather-night' : 'i-mdi-white-balance-sunny'))
 const layoutIconProp = computed(() => props.layoutIcon || 'i-mdi-view-grid')
@@ -106,6 +113,8 @@ const toggleCollapsed = () => {
 .floating-sidebar.fs-light { background: transparent !important; box-shadow: none; }
 .tool-btn { display:flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:10px; transition: all .18s ease; box-sizing: border-box; flex-shrink: 0; aspect-ratio: 1 / 1; }
 .tool-btn { position: relative; }
+.notification-badge { position: absolute; right: -6px; top: -6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: #ef4444; color: #fff; font-size: 11px; line-height: 18px; font-weight: 700; box-shadow: 0 0 0 2px rgba(255,255,255,.92); }
+.btn-dark .notification-badge { box-shadow: 0 0 0 2px #202a36; }
 .btn-label { position: absolute; right: calc(100% + 8px); top: 50%; transform: translateY(-50%) translateX(-6px); opacity: 0; pointer-events: none; white-space: nowrap; display: inline-block; padding: 6px 8px; font-size: 12px; border-radius: 8px; transition: opacity .08s ease, transform .08s ease; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.2)); box-sizing: border-box; }
 .btn-dark .btn-label { background: #1f2630; color: #fff; border: 1px solid rgba(255,255,255,0.16); }
 .btn-light .btn-label { background: rgba(255,255,255,0.95); color: #111827; border: 1px solid rgba(0,0,0,0.14); }

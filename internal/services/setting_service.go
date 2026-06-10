@@ -454,6 +454,10 @@ func applyVoceChatConfigUpdate(config *models.SiteConfig, raw map[string]interfa
 	applySensitiveStringSetting(raw, "adminPassword", "clearAdminPassword", &config.VoceChatAdminPassword)
 	applySensitiveStringSetting(raw, "adminToken", "clearAdminToken", &config.VoceChatAdminToken)
 	applySensitiveStringSetting(raw, "thirdPartySecret", "clearThirdPartySecret", &config.VoceChatThirdPartySecret)
+	applySensitiveStringSetting(raw, "botApiKey", "clearBotApiKey", &config.VoceChatBotAPIKey)
+	if v, exists := raw["notificationEnabled"]; exists {
+		config.VoceChatNotificationEnabled = parseBoolLike(v, config.VoceChatNotificationEnabled)
+	}
 	if v, ok := raw["emailDomain"].(string); ok {
 		config.VoceChatEmailDomain = vocechat.NormalizeEmailDomain(v)
 	}
@@ -480,6 +484,7 @@ func applyVoceChatConfigUpdate(config *models.SiteConfig, raw map[string]interfa
 	if !config.VoceChatEnabled {
 		config.VoceChatLoginVerificationEnabled = false
 		config.VoceChatContactsEnabled = false
+		config.VoceChatNotificationEnabled = false
 	}
 	if strings.TrimSpace(config.VoceChatAdminToken) == "" && strings.TrimSpace(config.VoceChatAdminPassword) != "" && strings.TrimSpace(config.VoceChatAdminUsername) != "" {
 		if !isValidVoceChatAdminEmail(config.VoceChatAdminUsername) {
@@ -505,6 +510,9 @@ func voceChatHealthAffectingConfigChanged(raw map[string]interface{}) bool {
 		"clearAdminToken",
 		"thirdPartySecret",
 		"clearThirdPartySecret",
+		"notificationEnabled",
+		"botApiKey",
+		"clearBotApiKey",
 		"loginVerificationEnabled",
 		"contactsEnabled",
 	} {

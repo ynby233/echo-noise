@@ -13,12 +13,13 @@ import (
 var DB *gorm.DB
 
 type UserStatus struct {
-	ID            uint   `json:"id"`
-	Username      string `json:"username"`
-	IsAdmin       bool   `json:"is_admin"`
-	AvatarURL     string `json:"avatar_url,omitempty"`
-	VoceChatEmail string `json:"voce_chat_email,omitempty"`
-	Status        Status `json:"status"`
+	ID                          uint   `json:"id"`
+	Username                    string `json:"username"`
+	IsAdmin                     bool   `json:"is_admin"`
+	AvatarURL                   string `json:"avatar_url,omitempty"`
+	VoceChatEmail               string `json:"voce_chat_email,omitempty"`
+	VoceChatNotificationEnabled bool   `json:"voce_chat_notification_enabled"`
+	Status                      Status `json:"status"`
 }
 
 type Message struct {
@@ -62,26 +63,47 @@ type Comment struct {
 	UpdatedAt  time.Time        `json:"updated_at"`
 }
 
+const (
+	UserNotificationTypeLike      = "like"
+	UserNotificationTypeComment   = "comment"
+	UserNotificationTypeReply     = "reply"
+	UserNotificationTypeGuestbook = "guestbook"
+)
+
+type UserNotification struct {
+	ID              uint       `gorm:"primaryKey" json:"id"`
+	RecipientUserID uint       `gorm:"not null;index" json:"recipient_user_id"`
+	ActorUserID     *uint      `gorm:"index" json:"actor_user_id,omitempty"`
+	Type            string     `gorm:"type:varchar(30);not null;index" json:"type"`
+	MessageID       *uint      `gorm:"index" json:"message_id,omitempty"`
+	CommentID       *uint      `gorm:"index" json:"comment_id,omitempty"`
+	ParentCommentID *uint      `gorm:"index" json:"parent_comment_id,omitempty"`
+	ReadAt          *time.Time `gorm:"index" json:"read_at,omitempty"`
+	CreatedAt       time.Time  `gorm:"index" json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+}
+
 type User struct {
-	ID                 uint       `gorm:"primaryKey" json:"id"`
-	Username           string     `gorm:"type:varchar(191);not null;uniqueIndex" json:"username"`
-	Password           string     `gorm:"type:varchar(191);not null" json:"password"`
-	IsAdmin            bool       `json:"is_admin"`
-	Token              string     `gorm:"type:varchar(191)" json:"token"`
-	AvatarURL          string     `gorm:"type:varchar(191)" json:"avatar_url"`
-	Description        string     `gorm:"type:varchar(191)" json:"description"`
-	Email              string     `gorm:"type:varchar(191)" json:"email"`
-	EmailVerified      bool       `json:"email_verified"`
-	EmailPending       string     `gorm:"type:varchar(191)" json:"-"`
-	EmailVerifyCode    string     `gorm:"type:varchar(20)" json:"-"`
-	EmailVerifyExpires *time.Time `json:"-"`
-	VoceChatUserID     string     `gorm:"type:varchar(191);index" json:"voce_chat_user_id,omitempty"`
-	VoceChatEmail      string     `gorm:"type:varchar(191);index" json:"voce_chat_email,omitempty"`
-	VoceChatUsername   string     `gorm:"type:varchar(191)" json:"voce_chat_username,omitempty"`
-	VoceChatLinkedAt   *time.Time `json:"voce_chat_linked_at,omitempty"`
-	VoceChatSyncStatus string     `gorm:"type:varchar(30);default:none;index" json:"voce_chat_sync_status,omitempty"`
-	VoceChatSyncError  string     `gorm:"type:text" json:"-"`
-	VoceChatLastSyncAt *time.Time `json:"voce_chat_last_sync_at,omitempty"`
+	ID                          uint       `gorm:"primaryKey" json:"id"`
+	Username                    string     `gorm:"type:varchar(191);not null;uniqueIndex" json:"username"`
+	Password                    string     `gorm:"type:varchar(191);not null" json:"password"`
+	IsAdmin                     bool       `json:"is_admin"`
+	Token                       string     `gorm:"type:varchar(191)" json:"token"`
+	AvatarURL                   string     `gorm:"type:varchar(191)" json:"avatar_url"`
+	Description                 string     `gorm:"type:varchar(191)" json:"description"`
+	Email                       string     `gorm:"type:varchar(191)" json:"email"`
+	EmailVerified               bool       `json:"email_verified"`
+	EmailPending                string     `gorm:"type:varchar(191)" json:"-"`
+	EmailVerifyCode             string     `gorm:"type:varchar(20)" json:"-"`
+	EmailVerifyExpires          *time.Time `json:"-"`
+	VoceChatUserID              string     `gorm:"type:varchar(191);index" json:"voce_chat_user_id,omitempty"`
+	VoceChatEmail               string     `gorm:"type:varchar(191);index" json:"voce_chat_email,omitempty"`
+	VoceChatUsername            string     `gorm:"type:varchar(191)" json:"voce_chat_username,omitempty"`
+	VoceChatLinkedAt            *time.Time `json:"voce_chat_linked_at,omitempty"`
+	VoceChatSyncStatus          string     `gorm:"type:varchar(30);default:none;index" json:"voce_chat_sync_status,omitempty"`
+	VoceChatSyncError           string     `gorm:"type:text" json:"-"`
+	VoceChatLastSyncAt          *time.Time `json:"voce_chat_last_sync_at,omitempty"`
+	VoceChatNotificationEnabled bool       `gorm:"default:false;not null" json:"voce_chat_notification_enabled"`
 }
 
 const (
@@ -217,6 +239,8 @@ type SiteConfig struct {
 	VoceChatAdminPassword            string     `gorm:"type:varchar(191)" json:"-"`
 	VoceChatAdminToken               string     `gorm:"type:text" json:"-"`
 	VoceChatThirdPartySecret         string     `gorm:"type:varchar(191)" json:"-"`
+	VoceChatNotificationEnabled      bool       `gorm:"default:false;not null" json:"voceChatNotificationEnabled"`
+	VoceChatBotAPIKey                string     `gorm:"type:text" json:"-"`
 	VoceChatEmailDomain              string     `gorm:"type:varchar(100);default:vc.com"`
 	VoceChatLoginVerificationEnabled bool       `gorm:"default:false"`
 	VoceChatLocalFallbackEnabled     bool       `gorm:"default:false"`

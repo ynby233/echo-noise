@@ -681,11 +681,12 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 	}
 	for _, user := range allusers {
 		users = append(users, models.UserStatus{
-			ID:            user.ID,
-			Username:      user.Username,
-			IsAdmin:       user.IsAdmin,
-			AvatarURL:     strings.TrimSpace(user.AvatarURL),
-			VoceChatEmail: strings.TrimSpace(user.VoceChatEmail),
+			ID:                          user.ID,
+			Username:                    user.Username,
+			IsAdmin:                     user.IsAdmin,
+			AvatarURL:                   strings.TrimSpace(user.AvatarURL),
+			VoceChatEmail:               strings.TrimSpace(user.VoceChatEmail),
+			VoceChatNotificationEnabled: user.VoceChatNotificationEnabled,
 		})
 	}
 
@@ -808,6 +809,9 @@ func UpdateUser(user *models.User, userdto dto.UserInfoDto) error {
 	if strings.TrimSpace(userdto.Description) != "" && strings.TrimSpace(userdto.Description) != strings.TrimSpace(user.Description) {
 		updates["description"] = strings.TrimSpace(userdto.Description)
 	}
+	if userdto.VoceChatNotificationEnabled != nil && *userdto.VoceChatNotificationEnabled != user.VoceChatNotificationEnabled {
+		updates["voce_chat_notification_enabled"] = *userdto.VoceChatNotificationEnabled
+	}
 
 	if len(updates) == 0 {
 		return nil
@@ -836,6 +840,9 @@ func UpdateUser(user *models.User, userdto dto.UserInfoDto) error {
 	}
 	if v, ok := updates["description"]; ok && v != nil {
 		user.Description = v.(string)
+	}
+	if v, ok := updates["voce_chat_notification_enabled"]; ok && v != nil {
+		user.VoceChatNotificationEnabled = v.(bool)
 	}
 	updatePlainPasswordUserMetadata(user)
 

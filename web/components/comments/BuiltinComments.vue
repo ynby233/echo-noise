@@ -1116,6 +1116,68 @@ watch(() => props.messageId, () => { visibleChildrenCount.value = {} })
 const repliesCount = (rootId: number) => {
   return (childrenMap.value[rootId] || []).length
 }
+
+const rootIdForComment = (commentId: number) => {
+  let node = byId.value[commentId]
+  if (!node) return 0
+  while (Number(node?.parent_id || 0) > 0) {
+    const parent = byId.value[Number(node.parent_id)]
+    if (!parent) break
+    node = parent
+  }
+  return Number(node?.id || 0)
+}
+
+const revealComment = async (commentId: number) => {
+  const target = byId.value[commentId]
+  if (!target) return false
+  const rootId = rootIdForComment(commentId)
+  if (!rootId) return false
+  const rootIndex = sortedRootComments.value.findIndex((item: any) => Number(item.id) === rootId)
+  if (rootIndex >= 0 && visibleCount.value <= rootIndex) visibleCount.value = rootIndex + 1
+  if (Number(target.parent_id || 0) > 0) {
+    const children = childrenMap.value[rootId] || []
+    const childIndex = children.findIndex((item: any) => Number(item.id) === commentId)
+    if (childIndex >= 0) {
+      const current = visibleChildrenCount.value[rootId] ?? INITIAL_CHILDREN_VISIBLE
+      if (current <= childIndex) visibleChildrenCount.value[rootId] = childIndex + 1
+    }
+  }
+  await nextTick()
+  return true
+}
+
+const highlightComment = (commentId: number) => {
+  const el = commentElement(commentId)
+  if (!el) return
+  el.classList.add('comment-target-highlight')
+  setTimeout(() => el.classList.remove('comment-target-highlight'), 2400)
+  scrollElementIntoInputContainer(el, 'center')
+}
+
+const focusCommentById = async (commentId: number) => {
+  await load()
+  if (!await revealComment(commentId)) {
+    useToast().add({ title: '评论不可见或已删除', color: 'orange' })
+    return false
+  }
+  highlightComment(commentId)
+  return true
+}
+
+const replyToCommentById = async (commentId: number) => {
+  await load()
+  if (!await revealComment(commentId)) {
+    useToast().add({ title: '评论不可见或已删除', color: 'orange' })
+    return false
+  }
+  const target = byId.value[commentId]
+  highlightComment(commentId)
+  startReply(commentId, commentAuthorName(target))
+  return true
+}
+
+defineExpose({ load, focusCommentById, replyToCommentById })
 </script>
 
 <style scoped>
@@ -1126,6 +1188,7 @@ const repliesCount = (rootId: number) => {
 .replies-list { display:flex; flex-direction:column; gap:6px; width:100%; }
 .comment-item { display:flex; align-items:flex-start; gap:10px; }
 .comment-item.child { padding:6px; border-radius:12px; border:1px solid transparent; gap:8px; }
+.comment-target-highlight { outline: 2px solid rgba(59, 130, 246, .8); outline-offset: 3px; border-radius: 12px; transition: outline-color .2s ease; }
 .comment-body { flex:1; min-width:0; }
 .comment-header { display:flex; align-items:center; justify-content:space-between; font-weight:600; margin-bottom:4px; }
 .comment-content { margin:4px 0 6px; }

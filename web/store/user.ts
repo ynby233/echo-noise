@@ -24,6 +24,7 @@ export const useUserStore = defineStore("userStore", () => {
                 avatar_url: u.avatar_url ?? u.AvatarURL ?? previous.avatar_url,
                 email: u.email ?? u.Email ?? previous.email,
                 voce_chat_email: u.voce_chat_email ?? u.VoceChatEmail ?? previous.voce_chat_email,
+                voce_chat_notification_enabled: u.voce_chat_notification_enabled ?? u.VoceChatNotificationEnabled ?? previous.voce_chat_notification_enabled ?? false,
                 total_messages: (newStatus as any).total_messages ?? previous.total_messages ?? 0
             } as any
             isLogin.value = true
@@ -84,7 +85,9 @@ export const useUserStore = defineStore("userStore", () => {
                 avatar_url: u.avatar_url ?? u.AvatarURL,
                 description: u.description ?? u.Description,
                 email: u.email ?? u.Email,
-                email_verified: u.email_verified ?? u.EmailVerified
+                email_verified: u.email_verified ?? u.EmailVerified,
+                voce_chat_email: u.voce_chat_email ?? u.VoceChatEmail,
+                voce_chat_notification_enabled: u.voce_chat_notification_enabled ?? u.VoceChatNotificationEnabled ?? false
             } as any
             token.value = u.token ?? u.Token ?? token.value
             isLogin.value = true;
@@ -152,7 +155,9 @@ export const useUserStore = defineStore("userStore", () => {
                 avatar_url: u.avatar_url ?? u.AvatarURL,
                 description: u.description ?? u.Description,
                 email: u.email ?? u.Email,
-                email_verified: u.email_verified ?? u.EmailVerified
+                email_verified: u.email_verified ?? u.EmailVerified,
+                voce_chat_email: u.voce_chat_email ?? u.VoceChatEmail,
+                voce_chat_notification_enabled: u.voce_chat_notification_enabled ?? u.VoceChatNotificationEnabled ?? false
             } as any
             isLogin.value = true;
             await getStatus();

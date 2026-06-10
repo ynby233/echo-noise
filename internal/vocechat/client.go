@@ -202,6 +202,45 @@ func (c *Client) CheckHealth(ctx context.Context, apiKey string) error {
 	return err
 }
 
+func (c *Client) SendMarkdownToUser(ctx context.Context, botAPIKey string, uid string, markdown string) error {
+	botAPIKey = strings.TrimSpace(botAPIKey)
+	uid = strings.TrimSpace(uid)
+	markdown = strings.TrimSpace(markdown)
+	if botAPIKey == "" {
+		return fmt.Errorf("VoceChat Bot API Key 未配置")
+	}
+	if uid == "" {
+		return fmt.Errorf("VoceChat 用户 ID 为空")
+	}
+	if markdown == "" {
+		return fmt.Errorf("VoceChat 推送内容为空")
+	}
+
+	path := "/bot/send_to_user/" + url.PathEscape(uid)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, strings.NewReader(markdown))
+	if err != nil {
+		return fmt.Errorf("创建 VoceChat Bot 请求失败: %w", err)
+	}
+	req.Header.Set(apiKeyHeader, botAPIKey)
+	req.Header.Set("Content-Type", "text/markdown; charset=utf-8")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("调用 VoceChat Bot 失败: %w", err)
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return fmt.Errorf("读取 VoceChat Bot 响应失败: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return &APIError{StatusCode: resp.StatusCode, Method: http.MethodPost, Path: path, Body: string(data)}
+	}
+	return nil
+}
+
 func (c *Client) GetUser(ctx context.Context, apiKey string, uid int64) (*User, error) {
 	var user User
 	if err := c.do(ctx, http.MethodGet, "/admin/user/"+strconv.FormatInt(uid, 10), apiKey, nil, &user, nil); err != nil {

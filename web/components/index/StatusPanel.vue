@@ -328,6 +328,16 @@
                   </span>
                   <span v-else class="inline-flex items-center px-2 py-0.5 rounded-md text-slate-400 border border-slate-400/30">未绑定 VoceChat 邮箱</span>
                 </div>
+                <div class="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded border px-3 py-2" :class="theme.border">
+                  <div>
+                    <div class="text-sm font-medium" :class="theme.text">接收 VoceChat 推送</div>
+                    <div class="text-xs mt-1" :class="theme.mutedText">开启后，站内通知会同步推送到已绑定的 VoceChat 账号。</div>
+                  </div>
+                  <div class="flex items-center gap-3 justify-end">
+                    <UToggle v-model="userForm.voceChatNotificationEnabled" :disabled="!userStore.user?.voce_chat_email" />
+                    <UButton size="xs" color="primary" variant="soft" :disabled="!userStore.user?.voce_chat_email" @click="updateVoceChatNotificationPreference">保存</UButton>
+                  </div>
+                </div>
                 <div class="border-t mt-4 pt-4" :class="theme.border">
                   <div class="admin-setting-stack">
                     <div class="admin-setting-block">
@@ -477,6 +487,10 @@
                       <span class="text-sm" :class="theme.text">联系人可见性</span>
                       <UToggle v-model="voceChatConfig.contactsEnabled" :disabled="!voceChatConfig.enabled" />
                     </label>
+                    <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
+                      <span class="text-sm" :class="theme.text">通知推送</span>
+                      <UToggle v-model="voceChatConfig.notificationEnabled" :disabled="!voceChatConfig.enabled" />
+                    </label>
                   </div>
 
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -507,6 +521,11 @@
                       <div class="text-xs mt-1" :class="theme.mutedText">当前：{{ voceChatConfig.thirdPartySecretConfigured ? '已配置' : '未配置' }}</div>
                     </div>
                     <div>
+                      <label class="text-sm mb-1 block" :class="theme.mutedText">Bot API Key</label>
+                      <UInput v-model="voceChatConfig.botApiKey" type="password" placeholder="新 Bot API Key（留空不变）" />
+                      <div class="text-xs mt-1" :class="theme.mutedText">当前：{{ voceChatConfig.botApiKeyConfigured ? '已配置' : '未配置' }}</div>
+                    </div>
+                    <div>
                       <label class="text-sm mb-1 block" :class="theme.mutedText">联系人缓存 TTL（秒）</label>
                       <UInput v-model.number="voceChatConfig.contactsCacheTTLSeconds" type="number" min="1" placeholder="60" />
                     </div>
@@ -521,7 +540,7 @@
 
                   <div v-if="voceChatConfig.lastHealthError" class="rounded border px-3 py-2 text-xs" :class="[theme.border, theme.mutedText]">{{ voceChatConfig.lastHealthError }}</div>
 
-                  <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                  <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
                     <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
                       <span class="text-sm" :class="theme.text">清除已存密码</span>
                       <UToggle v-model="voceChatClear.adminPassword" />
@@ -533,6 +552,10 @@
                     <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
                       <span class="text-sm" :class="theme.text">清除已存 Secret</span>
                       <UToggle v-model="voceChatClear.thirdPartySecret" />
+                    </label>
+                    <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
+                      <span class="text-sm" :class="theme.text">清除 Bot Key</span>
+                      <UToggle v-model="voceChatClear.botApiKey" />
                     </label>
                   </div>
                 </div>
@@ -2582,11 +2605,14 @@ type VoceChatConfigState = {
   baseURLConfigured: boolean
   adminCredentialConfigured: boolean
   thirdPartySecretConfigured: boolean
+  notificationEnabled: boolean
+  botApiKeyConfigured: boolean
   baseURL: string
   adminUsername: string
   adminPassword: string
   adminToken: string
   thirdPartySecret: string
+  botApiKey: string
   emailDomain: string
   loginVerificationEnabled: boolean
   localFallbackEnabled: boolean
@@ -2617,11 +2643,14 @@ const voceChatConfig = reactive<VoceChatConfigState>({
   baseURLConfigured: false,
   adminCredentialConfigured: false,
   thirdPartySecretConfigured: false,
+  notificationEnabled: false,
+  botApiKeyConfigured: false,
   baseURL: '',
   adminUsername: '',
   adminPassword: '',
   adminToken: '',
   thirdPartySecret: '',
+  botApiKey: '',
   emailDomain: 'vc.com',
   loginVerificationEnabled: false,
   localFallbackEnabled: false,
@@ -2634,7 +2663,8 @@ const voceChatConfig = reactive<VoceChatConfigState>({
 const voceChatClear = reactive({
   adminPassword: false,
   adminToken: false,
-  thirdPartySecret: false
+  thirdPartySecret: false,
+  botApiKey: false
 })
 const savingVoceChatConfig = ref(false)
 const checkingVoceChatHealth = ref(false)
@@ -3293,11 +3323,14 @@ const applyVoceChatPublicConfig = (raw: any) => {
   voceChatConfig.baseURLConfigured = !!cfg.baseURLConfigured
   voceChatConfig.adminCredentialConfigured = !!cfg.adminCredentialConfigured
   voceChatConfig.thirdPartySecretConfigured = !!cfg.thirdPartySecretConfigured
+  voceChatConfig.notificationEnabled = !!cfg.notificationEnabled
+  voceChatConfig.botApiKeyConfigured = !!cfg.botApiKeyConfigured
   voceChatConfig.baseURL = ''
   voceChatConfig.adminUsername = ''
   voceChatConfig.adminPassword = ''
   voceChatConfig.adminToken = ''
   voceChatConfig.thirdPartySecret = ''
+  voceChatConfig.botApiKey = ''
   voceChatConfig.emailDomain = String(cfg.emailDomain || 'vc.com').trim() || 'vc.com'
   voceChatConfig.loginVerificationEnabled = !!cfg.loginVerificationEnabled
   voceChatConfig.localFallbackEnabled = !!cfg.localFallbackEnabled
@@ -3305,6 +3338,7 @@ const applyVoceChatPublicConfig = (raw: any) => {
   if (!voceChatConfig.enabled) {
     voceChatConfig.loginVerificationEnabled = false
     voceChatConfig.contactsEnabled = false
+    voceChatConfig.notificationEnabled = false
   }
   const ttl = Number(cfg.contactsCacheTTLSeconds || 60)
   voceChatConfig.contactsCacheTTLSeconds = Number.isFinite(ttl) && ttl > 0 ? ttl : 60
@@ -3314,6 +3348,7 @@ const applyVoceChatPublicConfig = (raw: any) => {
   voceChatClear.adminPassword = false
   voceChatClear.adminToken = false
   voceChatClear.thirdPartySecret = false
+  voceChatClear.botApiKey = false
 }
 
 onMounted(fetchRegisterConfig)
@@ -3342,6 +3377,7 @@ const buildVoceChatConfigPayload = () => {
     loginVerificationEnabled: !!voceChatConfig.enabled && !!voceChatConfig.loginVerificationEnabled,
     localFallbackEnabled: !!voceChatConfig.localFallbackEnabled,
     contactsEnabled: !!voceChatConfig.enabled && !!voceChatConfig.contactsEnabled,
+    notificationEnabled: !!voceChatConfig.enabled && !!voceChatConfig.notificationEnabled,
     contactsCacheTTLSeconds: Math.floor(ttl)
   }
   const baseURL = String(voceChatConfig.baseURL || '').trim()
@@ -3349,6 +3385,7 @@ const buildVoceChatConfigPayload = () => {
   const adminPassword = String(voceChatConfig.adminPassword || '').trim()
   const adminToken = String(voceChatConfig.adminToken || '').trim()
   const thirdPartySecret = String(voceChatConfig.thirdPartySecret || '').trim()
+  const botApiKey = String(voceChatConfig.botApiKey || '').trim()
   const emailDomain = String(voceChatConfig.emailDomain || '').trim()
   if (adminUsername && !/^[^\s@]+@[^\s@]+$/.test(adminUsername)) {
     throw new Error('VoceChat 管理员邮箱格式无效，请填写邮箱而不是显示名')
@@ -3358,10 +3395,12 @@ const buildVoceChatConfigPayload = () => {
   if (adminPassword) payload.adminPassword = adminPassword
   if (adminToken) payload.adminToken = adminToken
   if (thirdPartySecret) payload.thirdPartySecret = thirdPartySecret
+  if (botApiKey) payload.botApiKey = botApiKey
   if (emailDomain) payload.emailDomain = emailDomain
   if (voceChatClear.adminPassword && !adminPassword) payload.clearAdminPassword = true
   if (voceChatClear.adminToken && !adminToken) payload.clearAdminToken = true
   if (voceChatClear.thirdPartySecret && !thirdPartySecret) payload.clearThirdPartySecret = true
+  if (voceChatClear.botApiKey && !botApiKey) payload.clearBotApiKey = true
   return payload
 }
 
@@ -4537,7 +4576,8 @@ const userForm = reactive({
     email: '',
     emailCode: '',
     newEmail: '',
-    changeCode: ''
+    changeCode: '',
+    voceChatNotificationEnabled: false
 })
 const editUserInfo = reactive({
     username: false,
@@ -4550,6 +4590,7 @@ watch(() => userStore.user, (user) => {
     if (!user) return
     if (!String(userForm.username || '').trim()) userForm.username = String((user as any)?.username || '')
     if (!String(userForm.description || '').trim()) userForm.description = String((user as any)?.description || '欢迎访问')
+    userForm.voceChatNotificationEnabled = !!(user as any)?.voce_chat_notification_enabled
 }, { immediate: true, deep: true })
 watch(() => editUserInfo.description, (v: boolean) => {
     if (!v) return
@@ -4627,6 +4668,21 @@ const updateDescription = async () => {
         }
     } catch (e: any) {
         useToast().add({ title: '错误', description: e?.message || '更新失败', color: 'red' })
+    }
+}
+
+const updateVoceChatNotificationPreference = async () => {
+    try {
+        const enabled = !!userForm.voceChatNotificationEnabled
+        const res = await putRequest<any>('user/update', { voce_chat_notification_enabled: enabled }, { credentials: 'include' })
+        if (!res || res.code !== 1) {
+            throw new Error(res?.msg || '保存失败')
+        }
+        await userStore.getUser()
+        useToast().add({ title: '成功', description: enabled ? '已开启 VoceChat 推送' : '已关闭 VoceChat 推送', color: 'green' })
+    } catch (e: any) {
+        userForm.voceChatNotificationEnabled = !!(userStore.user as any)?.voce_chat_notification_enabled
+        useToast().add({ title: '错误', description: e?.message || '保存失败', color: 'red' })
     }
 }
 

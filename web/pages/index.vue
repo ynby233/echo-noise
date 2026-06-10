@@ -208,6 +208,14 @@
               </div>
             </UCard>
           </div>
+          <div v-else-if="activeTab==='notifications'" class="notification-page">
+            <UserNotificationCenter
+              :site-config="frontendConfig"
+              :initial-message-id="notificationTargetMessageId ?? undefined"
+              :initial-comment-id="notificationTargetCommentId ?? undefined"
+              @unread-change="handleNotificationUnreadChange"
+            />
+          </div>
           <div v-else-if="activeTab==='about'" class="about-page">
             <UCard class="search-card mb-3" :ui="{ body: { padding: 'p-6' } }">
               <div class="card-title text-center text-black dark:text-white">{{ frontendConfig.aboutPageTitle || '关于本站' }}</div>
@@ -350,11 +358,13 @@
   <FloatingToolSidebar 
     :content-theme="contentTheme"
     :layout-icon="layoutIcon"
+    :notification-unread-count="notificationUnreadCount"
     @search="showSearchModal = true"
     @switch-background="changeBackground"
     @toggle-theme="toggleThemeGlobal"
     @toggle-layout="cycleLayout"
     @open-comment="openCommentBoard"
+    @open-notifications="openNotificationCenter"
     @open-admin="openAdmin"
   />
   <UModal v-model="showAuthModal" :ui="{ width: 'sm:max-w-md', container: 'items-center', base: 'backdrop-blur-sm' }">
@@ -487,6 +497,7 @@ import CalendarWidget from '~/components/widgets/CalendarWidget.vue'
 import SearchMode from '~/components/index/Searchmode.vue' // 导入 SearchMode 组件
 import TagList from '~/components/index/TagList.vue'
 import InfoFeedList from '@/components/index/InfoFeedList.vue'
+import UserNotificationCenter from '@/components/index/UserNotificationCenter.vue'
 import AnnouncementBar from '~/components/widgets/AnnouncementBar.vue'
 import FloatingToolSidebar from '~/components/widgets/FloatingToolSidebar.vue'
 import BuiltinComments from '~/components/comments/BuiltinComments.vue'
@@ -546,6 +557,9 @@ const centerContainerClass = computed(() => (
 const toggleHeatmapCard = () => { showHeatmap.value = !showHeatmap.value }
 // 主题预设。统一由 ThemePresetSwitcher 控制 documentElement 类，不在容器上附加主题类
 const activeTab = ref('latest')
+const notificationTargetMessageId = ref<number | null>(null)
+const notificationTargetCommentId = ref<number | null>(null)
+const notificationUnreadCount = ref(0)
 const selectedCalendarDate = ref('')
 const calendarMessageDate = computed(() => (activeTab.value === 'latest' || activeTab.value === 'personal') ? selectedCalendarDate.value : '')
 const handleCalendarDateSelect = (date: string) => {
@@ -570,6 +584,7 @@ const centerTabs = computed(() => {
   const tabs = [
     { key: 'latest', name: '最新', icon: 'i-heroicons-sparkles' },
     { key: 'personal', name: '个人', icon: 'i-heroicons-user-circle' },
+    { key: 'notifications', name: '通知', icon: 'i-heroicons-bell' },
     { key: 'about', name: '关于', icon: 'i-heroicons-information-circle' }
   ]
   if (isFeedEnabled.value) {
@@ -756,6 +771,23 @@ watch(showAuthModal, (v) => {
 const loginWithGithub = () => { window.location.href = `${baseApi}/oauth/github/login` }
 // 修复：定义 targetMessageId，避免模板引用未定义导致列表不渲染
 const targetMessageId = ref<string | null>(null)
+const parseRouteNumber = (value: unknown) => {
+  const raw = Array.isArray(value) ? value[0] : value
+  const n = Number(raw)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+const applyRouteTargets = () => {
+  const tab = String(route.query.tab || '').trim()
+  if (['latest', 'personal', 'feed', 'comment', 'notifications', 'about'].includes(tab)) {
+    activeTab.value = tab
+  }
+  const messageId = parseRouteNumber(route.query.message_id)
+  const commentId = parseRouteNumber(route.query.comment_id)
+  targetMessageId.value = messageId ? String(messageId) : null
+  notificationTargetMessageId.value = messageId
+  notificationTargetCommentId.value = commentId
+}
+watch(() => [route.query.tab, route.query.message_id, route.query.comment_id], applyRouteTargets, { immediate: true })
 // 添加搜索结果处理函数
 const handleSearchResult = (result: any) => {
   console.log('接收到搜索结果:', result); // 添加调试日志
@@ -786,6 +818,42 @@ onMounted(() => { loadGuestbookTarget() })
 const userStore = useUserStore()
 const isLoggedIn = computed(() => !!(userStore.isLogin && userStore.user))
 const isOnline = computed(() => !!(userStore.user))
+
+const handleNotificationUnreadChange = (count: number) => {
+  notificationUnreadCount.value = Math.max(0, Number(count || 0))
+}
+
+const loadNotificationUnreadCount = async () => {
+  if (!isLoggedIn.value) {
+    notificationUnreadCount.value = 0
+    return
+  }
+  const res = await getRequest<any>('notifications/unread-count', {}, { credentials: 'include', silent: true })
+  const count = Number(res?.data?.unread_count ?? res?.data?.unreadCount ?? 0)
+  notificationUnreadCount.value = Number.isFinite(count) ? Math.max(0, count) : 0
+}
+
+const openNotificationCenter = async () => {
+  const ok = await userStore.checkLoginStatus()
+  if (ok) {
+    activeTab.value = 'notifications'
+    await loadNotificationUnreadCount()
+    return
+  }
+  authMode.value = 'login'
+  showAuthModal.value = true
+  try {
+    const res = await fetch(`${baseApi}/frontend/config`, { credentials: 'include' })
+    const data = await res.json()
+    githubEnabled.value = !!data?.data?.frontendSettings?.githubOAuthEnabled
+  } catch {}
+}
+
+watch(isLoggedIn, (loggedIn) => {
+  if (loggedIn) loadNotificationUnreadCount()
+  else notificationUnreadCount.value = 0
+}, { immediate: true })
+
 type ProfileHomeStats = {
   total_messages?: number
   total_tags?: number
@@ -1017,8 +1085,13 @@ useHead({
 })
 // 同步路由中的消息ID到 MessageList，用于高亮或定位
 watch(() => route.hash, (newHash) => {
-  const id = (newHash || '').split('/messages/').pop()
-  targetMessageId.value = id || null
+  const hash = String(newHash || '')
+  if (hash.includes('/messages/')) {
+    const id = hash.split('/messages/').pop()
+    targetMessageId.value = id || null
+  } else if (!route.query.message_id) {
+    targetMessageId.value = null
+  }
 }, { immediate: true })
 
 // 添加前端配置的响应式对象

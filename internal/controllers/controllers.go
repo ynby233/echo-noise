@@ -1682,12 +1682,14 @@ func PostComment(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限评论该内容"})
 		return
 	}
+	var notificationParent *models.Comment
 	if req.ParentID != nil {
 		var parent models.Comment
 		if err := db.First(&parent, *req.ParentID).Error; err != nil || parent.MessageID != msgID {
 			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "回复目标不存在"})
 			return
 		}
+		notificationParent = &parent
 		var grandParent *models.Comment
 		if parent.ParentID != nil {
 			var loaded models.Comment
@@ -1730,6 +1732,9 @@ func PostComment(c *gin.Context) {
 		return
 	}
 	comment.User = &models.CommentUserInfo{ID: currentUser.ID, Username: commentUsername, AvatarURL: strings.TrimSpace(currentUser.AvatarURL)}
+	if err := services.CreateNotificationsForComment(message, comment, notificationParent); err != nil {
+		log.Printf("创建站内评论通知失败: %v", err)
+	}
 	// 邮件通知
 	if cfg.SmtpEnabled && cfg.CommentEmailEnabled {
 		siteURL := strings.TrimSpace(cfg.CommentEmailSiteURL)
@@ -2281,6 +2286,11 @@ func ToggleMessageLike(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": err.Error()})
 		return
+	}
+	if liked && uid != nil && *uid != 0 {
+		if err := services.CreateNotificationForLike(uint(messageID), *uid); err != nil {
+			log.Printf("创建点赞通知失败: %v", err)
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": map[string]interface{}{"liked": liked, "like_count": count}})
 }

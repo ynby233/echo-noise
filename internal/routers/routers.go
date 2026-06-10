@@ -224,6 +224,15 @@ func SetupRouter() *gin.Engine {
 		notify.PUT("/config", controllers.SaveNotifyConfig) // 保存配置
 	}
 
+	// 站内通知路由
+	notifications := authRoutes.Group("/notifications")
+	{
+		notifications.GET("", controllers.ListUserNotifications)
+		notifications.GET("/unread-count", controllers.GetUserNotificationUnreadCount)
+		notifications.PUT("/read-all", controllers.MarkAllUserNotificationsRead)
+		notifications.PUT("/read/:id", controllers.MarkUserNotificationRead)
+	}
+
 	email := authRoutes.Group("/email")
 	{
 		email.POST("/test", controllers.EmailTest)

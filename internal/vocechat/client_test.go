@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -127,6 +128,34 @@ func TestClientCheckEmailAndThirdPartyKey(t *testing.T) {
 	}
 	if key != "login-key" {
 		t.Fatalf("key = %q, want login-key", key)
+	}
+}
+
+func TestClientSendMarkdownToUserUsesBotAPIKey(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/bot/send_to_user/42" {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		if r.Header.Get(apiKeyHeader) != "bot-token" {
+			t.Fatalf("%s = %q, want bot-token", apiKeyHeader, r.Header.Get(apiKeyHeader))
+		}
+		if r.Header.Get("Content-Type") != "text/markdown; charset=utf-8" {
+			t.Fatalf("Content-Type = %q", r.Header.Get("Content-Type"))
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		if string(body) != "hello **world**" {
+			t.Fatalf("body = %q", string(body))
+		}
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	client := mustTestClient(t, server)
+	if err := client.SendMarkdownToUser(context.Background(), " bot-token ", " 42 ", " hello **world** "); err != nil {
+		t.Fatalf("send markdown: %v", err)
 	}
 }
 
