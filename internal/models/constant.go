@@ -56,7 +56,7 @@ const (
 	UserNotFoundMessage                    = "用户未找到"
 	PasswordIncorrectMessage               = "密码错误"
 	GenerateTokenFailMessage               = "生成令牌失败"
-	GetAllUsersFailMessage                 = "获取所有用户失败"
+	GetAllUsersFailMessage                 = "获取成员失败"
 	GetStatusFailMessage                   = "获取状态失败"
 	GetStatusSuccessMessage                = "获取状态成功"
 	CannotBeEmptyMessage                   = "内容不能为空"
