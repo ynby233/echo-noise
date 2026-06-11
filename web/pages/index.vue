@@ -213,6 +213,7 @@
               :site-config="frontendConfig"
               :initial-message-id="notificationTargetMessageId ?? undefined"
               :initial-comment-id="notificationTargetCommentId ?? undefined"
+              :restore-focus-id="notificationReturnFocusId ?? undefined"
               @unread-change="handleNotificationUnreadChange"
               @jump="handleNotificationJump"
             />
@@ -563,6 +564,7 @@ const notificationTargetMessageId = ref<number | null>(null)
 const notificationTargetCommentId = ref<number | null>(null)
 const notificationUnreadCount = ref(0)
 const notificationReturnPending = ref(false)
+const notificationReturnFocusId = ref<number | null>(null)
 const selectedCalendarDate = ref('')
 const calendarMessageDate = computed(() => (activeTab.value === 'latest' || activeTab.value === 'personal') ? selectedCalendarDate.value : '')
 const handleCalendarDateSelect = (date: string) => {
@@ -604,6 +606,7 @@ type CommentThreadExpose = ComponentPublicInstance & {
   focusCommentById: (commentId: number) => Promise<boolean>
 }
 type NotificationJumpItem = {
+  id?: number
   type?: string
   message_id?: number | null
   comment_id?: number | null
@@ -849,6 +852,7 @@ const handleNotificationJump = async (item: NotificationJumpItem) => {
   const messageId = Number(item?.message_id || 0)
   const commentId = Number(item?.comment_id || 0)
   notificationReturnPending.value = true
+  notificationReturnFocusId.value = Number(item?.id || 0) || null
   notificationTargetMessageId.value = messageId || null
   notificationTargetCommentId.value = commentId || null
 
@@ -886,6 +890,7 @@ const openNotificationCenter = async () => {
     }
     notificationTargetMessageId.value = null
     notificationTargetCommentId.value = null
+    notificationReturnFocusId.value = null
     activeTab.value = 'notifications'
     await loadNotificationUnreadCount()
     return

@@ -54,7 +54,7 @@
                 class="reply-toggle"
                 @click="toggleReply(item)"
               >
-                回复
+                {{ replyOpenId === item.id ? '收起' : '回复' }}
               </button>
               <UIcon v-else-if="item.type === 'like'" name="i-mdi-hand-heart-outline" class="like-corner-icon" />
             </div>
@@ -155,7 +155,7 @@ type NotificationListPayload = {
   pageSize?: number
 }
 
-const props = defineProps<{ siteConfig?: any, initialMessageId?: number | null, initialCommentId?: number | null }>()
+const props = defineProps<{ siteConfig?: any, initialMessageId?: number | null, initialCommentId?: number | null, restoreFocusId?: number | null }>()
 const emit = defineEmits<{
   (event: 'unread-change', count: number): void
   (event: 'jump', item: UserNotification): void
@@ -172,6 +172,7 @@ const pageSize = 20
 const total = ref(0)
 const unreadCount = ref(0)
 const resolvingInitialTarget = ref(false)
+const resolvingRestoreFocus = ref(false)
 const highlightedId = ref<number | null>(null)
 const replyOpenId = ref<number | null>(null)
 const replyDrafts = ref<Record<number, string>>({})
@@ -272,6 +273,7 @@ const onAvatarError = (event: Event) => {
 
 const initialMessageId = () => Number(props.initialMessageId || 0)
 const initialCommentId = () => Number(props.initialCommentId || 0)
+const restoreFocusId = () => Number(props.restoreFocusId || 0)
 const hasInitialTarget = () => initialMessageId() > 0 || initialCommentId() > 0
 const matchesInitialTarget = (item: UserNotification) => {
   const messageId = initialMessageId()
@@ -299,6 +301,15 @@ const selectInitialNotification = async () => {
   return true
 }
 
+const selectRestoreNotification = async () => {
+  const id = restoreFocusId()
+  if (!id || hasInitialTarget()) return false
+  const matched = items.value.find((item) => Number(item.id) === id)
+  if (!matched) return false
+  await focusNotificationItem(matched)
+  return true
+}
+
 const resolveInitialTargetAcrossPages = async () => {
   if (!hasInitialTarget() || resolvingInitialTarget.value) return
   resolvingInitialTarget.value = true
@@ -316,7 +327,24 @@ const resolveInitialTargetAcrossPages = async () => {
   }
 }
 
-const loadNotifications = async (reset = false, options: { skipInitialResolve?: boolean } = {}) => {
+const resolveRestoreFocusAcrossPages = async () => {
+  if (!restoreFocusId() || resolvingRestoreFocus.value || hasInitialTarget()) return
+  resolvingRestoreFocus.value = true
+  try {
+    let found = await selectRestoreNotification()
+    while (!found && items.value.length < total.value) {
+      const beforeCount = items.value.length
+      page.value += 1
+      await loadNotifications(false, { skipInitialResolve: true, skipRestoreResolve: true })
+      if (items.value.length <= beforeCount) break
+      found = await selectRestoreNotification()
+    }
+  } finally {
+    resolvingRestoreFocus.value = false
+  }
+}
+
+const loadNotifications = async (reset = false, options: { skipInitialResolve?: boolean, skipRestoreResolve?: boolean } = {}) => {
   if (!user.isLogin) return
   if (reset) page.value = 1
   loading.value = reset || !items.value.length
@@ -329,6 +357,7 @@ const loadNotifications = async (reset = false, options: { skipInitialResolve?: 
       total.value = Number(payload.total ?? items.value.length)
       setUnreadCount(Number(payload.unread_count ?? payload.unreadCount ?? 0))
       if (!options.skipInitialResolve) await resolveInitialTargetAcrossPages()
+      if (!options.skipRestoreResolve) await resolveRestoreFocusAcrossPages()
     }
   } finally {
     loading.value = false
@@ -507,12 +536,13 @@ defineExpose({ refresh: () => loadNotifications(true) })
 :global(.dark) .notification-target-card:hover { background:rgba(51,65,85,.88); }
 :global(.dark) .inline-reply-input { background:rgba(15,23,42,.72); border-color:rgba(148,163,184,.26); color:#e5e7eb; }
 @media (max-width: 720px) {
-  .notification-header { align-items:flex-start; flex-direction:column; }
-  .notification-actions { justify-content:flex-start; }
+  .notification-header { align-items:center; flex-direction:column; text-align:center; gap:10px; }
+  .notification-subtitle { display:none; }
+  .notification-actions { justify-content:center; width:100%; }
   .notification-feed-item { gap:10px; padding:15px 12px 18px; }
   .notification-avatar { width:40px; height:40px; flex-basis:40px; }
   .notification-actor-name { font-size:16px; }
-  .notification-target-card { padding:10px 12px; }
+  .notification-target-card { padding:12px; border-radius:3px; }
   .notification-target-image { width:56px; height:56px; flex-basis:56px; }
 }
 </style>
