@@ -156,25 +156,15 @@ const currentYear = computed(() => currentMonth.value.getFullYear())
 const currentMonthNumber = computed(() => currentMonth.value.getMonth() + 1)
 type PickerType = 'year' | 'month'
 
+const CALENDAR_MIN_YEAR = 1971
+const CALENDAR_MAX_YEAR = 2099
 const monthOptions = Array.from({ length: 12 }, (_, index) => index + 1)
 const openPicker = ref<PickerType | ''>('')
 const yearPickerButton = ref<HTMLElement | null>(null)
 const monthPickerButton = ref<HTMLElement | null>(null)
 const pickerMenu = ref<HTMLElement | null>(null)
 const pickerMenuStyle = ref<Record<string, string>>({})
-const yearOptions = computed(() => {
-  const nowYear = new Date().getFullYear()
-  const years = new Set<number>([nowYear, currentYear.value])
-  const selected = parseLocalDate(props.selectedDate)
-  if (selected) years.add(selected.getFullYear())
-  for (const date of Object.keys(countMap.value)) {
-    const year = Number(date.slice(0, 4))
-    if (Number.isFinite(year)) years.add(year)
-  }
-  const min = Math.min(...years) - 5
-  const max = Math.max(...years) + 5
-  return Array.from({ length: max - min + 1 }, (_, index) => min + index)
-})
+const yearOptions = computed(() => Array.from({ length: CALENDAR_MAX_YEAR - CALENDAR_MIN_YEAR + 1 }, (_, index) => CALENDAR_MIN_YEAR + index))
 
 const pickerOptions = computed(() => {
   if (openPicker.value === 'year') {
@@ -262,11 +252,14 @@ const getFixedViewport = (scale: number) => {
 
 const getFixedRect = (element: HTMLElement, scale: number) => {
   const rect = element.getBoundingClientRect()
+  const viewport = window.visualViewport
+  const offsetLeft = viewport?.offsetLeft || 0
+  const offsetTop = viewport?.offsetTop || 0
   return {
-    left: rect.left / scale,
-    right: rect.right / scale,
-    top: rect.top / scale,
-    bottom: rect.bottom / scale,
+    left: (rect.left + offsetLeft) / scale,
+    right: (rect.right + offsetLeft) / scale,
+    top: (rect.top + offsetTop) / scale,
+    bottom: (rect.bottom + offsetTop) / scale,
     width: rect.width / scale,
     height: rect.height / scale
   }
@@ -281,8 +274,8 @@ const updatePickerPosition = () => {
   const rect = getFixedRect(trigger, scale)
   const viewport = getFixedViewport(scale)
   const menu = pickerMenu.value
-  const menuWidth = Math.ceil(Math.max(rect.width, pickerType === 'year' ? 88 : rect.width))
-  const menuHeight = menu?.offsetHeight || 180
+  const menuWidth = Math.ceil(rect.width)
+  const menuHeight = menu?.offsetHeight || (pickerType === 'year' ? 204 : 167)
   const pad = 8
   const gap = 4
   const minLeft = viewport.left + pad
@@ -384,12 +377,16 @@ onMounted(() => {
   document.addEventListener('mousedown', handleDocumentPointerDown)
   window.addEventListener('resize', handleViewportChange)
   window.addEventListener('scroll', handleViewportChange, true)
+  window.visualViewport?.addEventListener('resize', handleViewportChange)
+  window.visualViewport?.addEventListener('scroll', handleViewportChange)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', handleDocumentPointerDown)
   window.removeEventListener('resize', handleViewportChange)
   window.removeEventListener('scroll', handleViewportChange, true)
+  window.visualViewport?.removeEventListener('resize', handleViewportChange)
+  window.visualViewport?.removeEventListener('scroll', handleViewportChange)
 })
 </script>
 
@@ -632,9 +629,10 @@ html.dark .calendar-select {
 .calendar-floating-menu {
   position: fixed;
   z-index: 5002;
+  box-sizing: border-box;
   display: grid;
   gap: 4px;
-  max-height: 228px;
+  max-height: 204px;
   overflow-y: auto;
   padding: 8px;
   border-radius: 10px;
@@ -652,7 +650,7 @@ html.dark .calendar-select {
 .calendar-floating-menu.is-month {
   grid-template-columns: minmax(0, 1fr);
   gap: 3px;
-  max-height: none;
+  max-height: 167px;
   padding: 4px;
 }
 
@@ -666,13 +664,17 @@ html.dark .calendar-select {
   align-items: center;
   justify-content: center;
   min-height: 28px;
-  padding: 0 8px;
+  min-width: 0;
+  width: 100%;
+  padding: 0 6px;
   border-radius: 8px;
   border: 1px solid transparent;
   color: inherit;
   font-size: 12px;
   font-weight: 650;
+  line-height: 1;
   text-align: center;
+  white-space: nowrap;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 

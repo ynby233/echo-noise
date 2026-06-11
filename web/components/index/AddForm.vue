@@ -135,7 +135,32 @@
         <button type="button" class="floating-icon-btn" aria-label="上个月" @click="movePublishMonth(-1)">
           <UIcon name="i-heroicons-chevron-left" class="w-4 h-4" />
         </button>
-        <span class="publish-date-title">{{ publishPickerTitle }}</span>
+        <div class="publish-date-picker-controls" aria-label="选择年月">
+          <button
+            ref="publishYearPickerButton"
+            type="button"
+            class="publish-date-title publish-picker-trigger"
+            aria-label="选择年份"
+            aria-haspopup="listbox"
+            :aria-expanded="openPublishPicker === 'year'"
+            @click.stop="togglePublishPicker('year')"
+          >
+            <span>{{ publishPickerMonth.getFullYear() }}年</span>
+            <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
+          </button>
+          <button
+            ref="publishMonthPickerButton"
+            type="button"
+            class="publish-date-title publish-picker-trigger"
+            aria-label="选择月份"
+            aria-haspopup="listbox"
+            :aria-expanded="openPublishPicker === 'month'"
+            @click.stop="togglePublishPicker('month')"
+          >
+            <span>{{ publishPickerMonth.getMonth() + 1 }}月</span>
+            <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
+          </button>
+        </div>
         <button type="button" class="floating-icon-btn" aria-label="下个月" @click="movePublishMonth(1)">
           <UIcon name="i-heroicons-chevron-right" class="w-4 h-4" />
         </button>
@@ -189,6 +214,31 @@
         <button type="button" class="floating-action-btn" @click="clearPublishDate">清除</button>
         <button type="button" class="floating-action-btn primary" @click="usePublishNow">现在</button>
       </div>
+    </div>
+  </Teleport>
+
+  <Teleport to="body">
+    <div
+      v-if="openPublishPicker"
+      ref="publishPickerMenuRef"
+      class="publish-picker-floating-menu nw-floating-menu"
+      :class="`is-${openPublishPicker}`"
+      :style="publishPickerMenuStyle"
+      role="listbox"
+      @mousedown.stop
+    >
+      <button
+        v-for="option in publishPickerOptions"
+        :key="option.value"
+        type="button"
+        class="publish-picker-floating-option nw-floating-option"
+        :class="{ 'is-selected': option.selected }"
+        role="option"
+        :aria-selected="option.selected"
+        @click="selectPublishPickerValue(option.value)"
+      >
+        {{ option.label }}
+      </button>
     </div>
   </Teleport>
   </div>
@@ -296,12 +346,22 @@ const visibilityLabel = computed(() => messageVisibilityOptions.find((option) =>
 const visibilityIcon = computed(() => messageVisibilityOptions.find((option) => option.value === Visibility.value)?.icon || 'i-mdi-earth')
 const showVisibilityMenu = ref(false)
 const showPublishDateMenu = ref(false)
+type PublishPickerType = 'year' | 'month'
+const PUBLISH_MIN_YEAR = 1971
+const PUBLISH_MAX_YEAR = 2099
+const publishYearOptions = Array.from({ length: PUBLISH_MAX_YEAR - PUBLISH_MIN_YEAR + 1 }, (_, index) => PUBLISH_MIN_YEAR + index)
+const publishMonthOptions = Array.from({ length: 12 }, (_, index) => index + 1)
+const openPublishPicker = ref<PublishPickerType | ''>('')
 const visibilityControlRef = ref<HTMLElement | null>(null)
 const visibilityMenuRef = ref<HTMLElement | null>(null)
 const publishTimeControlRef = ref<HTMLElement | null>(null)
 const publishDateMenuRef = ref<HTMLElement | null>(null)
+const publishYearPickerButton = ref<HTMLElement | null>(null)
+const publishMonthPickerButton = ref<HTMLElement | null>(null)
+const publishPickerMenuRef = ref<HTMLElement | null>(null)
 const visibilityMenuStyle = ref<Record<string, string>>({})
 const publishDateMenuStyle = ref<Record<string, string>>({})
+const publishPickerMenuStyle = ref<Record<string, string>>({})
 const pad2 = (value: number) => String(value).padStart(2, '0')
 const publishWeekLabels = ['一', '二', '三', '四', '五', '六', '日']
 const publishHourOptions = Array.from({ length: 24 }, (_, index) => index)
@@ -434,8 +494,16 @@ const publishTimeLabel = computed(() => {
   if (!parsed) return '选择时间'
   return `${parsed.dateText} ${pad2(parsed.hour)}:${pad2(parsed.minute)}`
 })
-
-const publishPickerTitle = computed(() => `${publishPickerMonth.value.getFullYear()}年${publishPickerMonth.value.getMonth() + 1}月`)
+const publishPickerOptions = computed(() => {
+  if (openPublishPicker.value === 'year') {
+    return publishYearOptions.map((year) => ({ value: year, label: `${year}年`, selected: year === publishPickerMonth.value.getFullYear() }))
+  }
+  if (openPublishPicker.value === 'month') {
+    const current = publishPickerMonth.value.getMonth() + 1
+    return publishMonthOptions.map((month) => ({ value: month, label: `${month}月`, selected: month === current }))
+  }
+  return []
+})
 const publishPickerDays = computed<PublishDateDay[]>(() => {
   const first = new Date(publishPickerMonth.value.getFullYear(), publishPickerMonth.value.getMonth(), 1)
   const startOffset = (first.getDay() + 6) % 7
@@ -477,11 +545,14 @@ const getFixedViewport = (scale: number) => {
 
 const getFixedRect = (element: HTMLElement, scale: number) => {
   const rect = element.getBoundingClientRect()
+  const viewport = window.visualViewport
+  const offsetLeft = viewport?.offsetLeft || 0
+  const offsetTop = viewport?.offsetTop || 0
   return {
-    left: rect.left / scale,
-    right: rect.right / scale,
-    top: rect.top / scale,
-    bottom: rect.bottom / scale,
+    left: (rect.left + offsetLeft) / scale,
+    right: (rect.right + offsetLeft) / scale,
+    top: (rect.top + offsetTop) / scale,
+    bottom: (rect.bottom + offsetTop) / scale,
     width: rect.width / scale,
     height: rect.height / scale
   }
@@ -536,13 +607,49 @@ const scheduleFloatingMenuPosition = (positioner: () => void) => {
 const closeFloatingMenus = () => {
   showVisibilityMenu.value = false
   showPublishDateMenu.value = false
+  openPublishPicker.value = ''
 }
 
 const positionVisibilityMenu = () => positionFloatingMenu(visibilityControlRef.value, visibilityMenuRef.value, visibilityMenuStyle, 126, 'above-right')
 const positionPublishDateMenu = () => positionFloatingMenu(publishTimeControlRef.value, publishDateMenuRef.value, publishDateMenuStyle, 292, 'above-right')
+const positionPublishPickerMenu = () => {
+  if (!openPublishPicker.value || typeof window === 'undefined') return
+  const trigger = openPublishPicker.value === 'year' ? publishYearPickerButton.value : publishMonthPickerButton.value
+  if (!trigger) return
+  const scale = getFixedCoordinateScale()
+  const rect = getFixedRect(trigger, scale)
+  const viewport = getFixedViewport(scale)
+  const menu = publishPickerMenuRef.value
+  const menuWidth = Math.ceil(rect.width)
+  const menuHeight = menu?.offsetHeight || (openPublishPicker.value === 'year' ? 204 : 167)
+  const pad = 8
+  const gap = 4
+  const minLeft = viewport.left + pad
+  const maxLeft = Math.max(minLeft, viewport.right - menuWidth - pad)
+  const idealLeft = rect.left + rect.width / 2 - menuWidth / 2
+  const minTop = viewport.top + pad
+  const maxTop = Math.max(minTop, viewport.bottom - menuHeight - pad)
+  const belowTop = rect.bottom + gap
+  const aboveTop = rect.top - menuHeight - gap
+  const idealTop = belowTop + menuHeight <= viewport.bottom - pad
+    ? belowTop
+    : (aboveTop >= minTop ? aboveTop : belowTop)
+  publishPickerMenuStyle.value = {
+    position: 'fixed',
+    left: `${clamp(idealLeft, minLeft, maxLeft)}px`,
+    top: `${clamp(idealTop, minTop, maxTop)}px`,
+    right: 'auto',
+    bottom: 'auto',
+    transform: 'none',
+    width: `${menuWidth}px`,
+    minWidth: `${menuWidth}px`,
+    visibility: 'visible'
+  }
+}
 
 const toggleVisibilityMenu = async () => {
   showPublishDateMenu.value = false
+  openPublishPicker.value = ''
   showVisibilityMenu.value = !showVisibilityMenu.value
   if (showVisibilityMenu.value) {
     await nextTick()
@@ -574,12 +681,39 @@ const applyPublishDraft = () => {
 
 const togglePublishDateMenu = async () => {
   showVisibilityMenu.value = false
+  openPublishPicker.value = ''
   showPublishDateMenu.value = !showPublishDateMenu.value
   if (showPublishDateMenu.value) {
     syncPublishDraftFromInput()
     await nextTick()
     scheduleFloatingMenuPosition(positionPublishDateMenu)
   }
+}
+
+const togglePublishPicker = async (type: PublishPickerType) => {
+  openPublishPicker.value = openPublishPicker.value === type ? '' : type
+  if (openPublishPicker.value) {
+    publishPickerMenuStyle.value = {
+      position: 'fixed',
+      left: '0px',
+      top: '0px',
+      right: 'auto',
+      bottom: 'auto',
+      visibility: 'hidden'
+    }
+    await nextTick()
+    scheduleFloatingMenuPosition(positionPublishPickerMenu)
+  }
+}
+
+const selectPublishPickerValue = (value: number) => {
+  if (openPublishPicker.value === 'year' && Number.isFinite(value)) {
+    publishPickerMonth.value = new Date(value, publishPickerMonth.value.getMonth(), 1)
+  } else if (openPublishPicker.value === 'month' && Number.isFinite(value)) {
+    publishPickerMonth.value = new Date(publishPickerMonth.value.getFullYear(), value - 1, 1)
+  }
+  openPublishPicker.value = ''
+  nextTick(() => scheduleFloatingMenuPosition(positionPublishDateMenu))
 }
 
 const movePublishMonth = (delta: number) => {
@@ -614,11 +748,13 @@ const usePublishNow = () => {
   publishDraftMinute.value = now.getMinutes()
   applyPublishDraft()
   showPublishDateMenu.value = false
+  openPublishPicker.value = ''
 }
 
 const clearPublishDate = () => {
   PublishedAtInput.value = ''
   showPublishDateMenu.value = false
+  openPublishPicker.value = ''
 }
 
 const handleFloatingMenuPointerDown = (event: MouseEvent) => {
@@ -626,12 +762,14 @@ const handleFloatingMenuPointerDown = (event: MouseEvent) => {
   if (!target) return
   if (visibilityControlRef.value?.contains(target) || visibilityMenuRef.value?.contains(target)) return
   if (publishTimeControlRef.value?.contains(target) || publishDateMenuRef.value?.contains(target)) return
+  if (publishYearPickerButton.value?.contains(target) || publishMonthPickerButton.value?.contains(target) || publishPickerMenuRef.value?.contains(target)) return
   closeFloatingMenus()
 }
 
 const handleFloatingMenuViewportChange = () => {
   if (showVisibilityMenu.value) positionVisibilityMenu()
   if (showPublishDateMenu.value) positionPublishDateMenu()
+  if (openPublishPicker.value) positionPublishPickerMenu()
 }
 
 const checkLogin = () => {
@@ -902,6 +1040,8 @@ onMounted(async () => {
   document.addEventListener('mousedown', handleFloatingMenuPointerDown)
   window.addEventListener('resize', handleFloatingMenuViewportChange)
   window.addEventListener('scroll', handleFloatingMenuViewportChange, true)
+  window.visualViewport?.addEventListener('resize', handleFloatingMenuViewportChange)
+  window.visualViewport?.addEventListener('scroll', handleFloatingMenuViewportChange)
   if (!userStore.isLogin) {
     const token = localStorage.getItem('token');
     if (token) {
@@ -940,6 +1080,8 @@ onBeforeUnmount(() => {
   document.removeEventListener('mousedown', handleFloatingMenuPointerDown)
   window.removeEventListener('resize', handleFloatingMenuViewportChange)
   window.removeEventListener('scroll', handleFloatingMenuViewportChange, true)
+  window.visualViewport?.removeEventListener('resize', handleFloatingMenuViewportChange)
+  window.visualViewport?.removeEventListener('scroll', handleFloatingMenuViewportChange)
 });
 const toggleNotify = () => {
   enableNotify.value = !enableNotify.value;
@@ -1022,9 +1164,22 @@ const addMessage = async () => {
 .floating-control-option.is-selected { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
 .publish-datetime-menu { width: 292px; padding: 10px; }
 .publish-date-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.publish-date-picker-controls { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; }
 .publish-date-title { font-size: 13px; font-weight: 700; color: inherit; }
+.publish-picker-trigger { min-height: 28px; padding: 0 7px; border-radius: 8px; border: 1px solid transparent; background: rgba(15,23,42,0.04); display: inline-flex; align-items: center; justify-content: center; gap: 3px; white-space: nowrap; }
+.publish-picker-trigger:hover,
+.publish-picker-trigger:focus-visible { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); outline: none; }
+.publish-picker-trigger:first-child { width: 75px; }
+.publish-picker-trigger:last-child { width: 50px; }
 .floating-icon-btn { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid var(--nw-floating-border); background: rgba(15,23,42,0.04); color: inherit; }
 .floating-icon-btn:hover { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
+.publish-picker-floating-menu { position: fixed; z-index: 5005; box-sizing: border-box; display: grid; gap: 4px; max-height: 204px; overflow-y: auto; padding: 8px; border: 1px solid var(--nw-floating-border); border-radius: 10px; background: var(--nw-floating-bg); color: var(--nw-floating-text); box-shadow: var(--nw-floating-shadow); scrollbar-width: thin; }
+.publish-picker-floating-menu.is-month { gap: 3px; max-height: 167px; padding: 4px; }
+.publish-picker-floating-option { display: inline-flex; align-items: center; justify-content: center; min-height: 28px; min-width: 0; width: 100%; padding: 0 6px; border-radius: 8px; border: 1px solid transparent; color: inherit; font-size: 12px; font-weight: 650; line-height: 1; text-align: center; white-space: nowrap; transition: background-color .15s ease, border-color .15s ease, color .15s ease; }
+.publish-picker-floating-menu.is-month .publish-picker-floating-option { min-height: 24px; padding: 0 4px; }
+.publish-picker-floating-option:hover,
+.publish-picker-floating-option:focus-visible { outline: none; border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
+.publish-picker-floating-option.is-selected { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
 .publish-date-weekdays,
 .publish-date-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
 .publish-date-weekdays { margin-bottom: 4px; color: rgba(71,85,105,0.72); font-size: 10px; font-weight: 700; text-align: center; }
@@ -1057,7 +1212,8 @@ html.dark .visibility-control:hover,
 html.dark .visibility-control:focus-within { background: rgba(255,255,255,0.12); }
 html.dark .visibility-select { background: transparent; border: 0; color: inherit; }
 html.dark .floating-icon-btn,
-html.dark .floating-action-btn { background: rgba(255,255,255,0.06); }
+html.dark .floating-action-btn,
+html.dark .publish-picker-trigger { background: rgba(255,255,255,0.06); }
 html.dark .publish-date-weekdays { color: rgba(226,232,240,0.66); }
 html.dark .publish-date-day { background: rgba(255,255,255,0.06); }
 html.dark .publish-time-column { background: rgba(15,23,42,0.46); }
