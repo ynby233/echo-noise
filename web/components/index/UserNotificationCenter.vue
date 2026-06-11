@@ -72,6 +72,7 @@
               <textarea
                 v-model="replyDrafts[item.id]"
                 class="inline-reply-input"
+                :data-reply-input-id="item.id"
                 :placeholder="`回复${actorName(item)}：`"
                 rows="2"
                 @keydown.ctrl.enter.prevent="submitInlineReply(item)"
@@ -245,7 +246,11 @@ const formatTime = (value?: string) => {
   if (!value) return ''
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hour = String(date.getHours()).padStart(2, '0')
+  const minute = String(date.getMinutes()).padStart(2, '0')
+  return `${month}月${day}日${hour}:${minute}`
 }
 
 const genericAvatar = () => {
@@ -370,11 +375,22 @@ const jumpToTarget = async (item: UserNotification) => {
   emit('jump', item)
 }
 
+const focusInlineReplyInput = async (itemId: number) => {
+  await nextTick()
+  const input = feedRef.value?.querySelector(`[data-reply-input-id="${itemId}"]`) as HTMLTextAreaElement | null
+  if (!input) return
+  input.focus({ preventScroll: true })
+  input.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+}
+
 const toggleReply = async (item: UserNotification) => {
   if (!canReply(item)) return
   await markRead(item)
   replyOpenId.value = replyOpenId.value === item.id ? null : item.id
-  if (replyOpenId.value === item.id && replyDrafts.value[item.id] === undefined) replyDrafts.value[item.id] = ''
+  if (replyOpenId.value === item.id) {
+    if (replyDrafts.value[item.id] === undefined) replyDrafts.value[item.id] = ''
+    await focusInlineReplyInput(item.id)
+  }
 }
 
 const submitInlineReply = async (item: UserNotification) => {
