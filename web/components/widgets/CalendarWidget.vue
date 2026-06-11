@@ -314,8 +314,16 @@ const schedulePickerPosition = () => {
 const scrollSelectedPickerOptionToTop = () => {
   const menu = pickerMenu.value
   const selected = menu?.querySelector<HTMLElement>('.calendar-floating-option.is-selected')
-  if (!menu || !selected) return
-  menu.scrollTop = Math.max(0, selected.offsetTop)
+  if (!menu || !selected || typeof window === 'undefined') return
+  const options = Array.from(menu.querySelectorAll<HTMLElement>('.calendar-floating-option'))
+  const selectedIndex = options.indexOf(selected)
+  if (selectedIndex < 0) return
+  const style = window.getComputedStyle(menu)
+  const gap = Number.parseFloat(style.rowGap || style.gap || '0')
+  const paddingTop = Number.parseFloat(style.paddingTop || '0')
+  const step = selected.offsetHeight + (Number.isFinite(gap) ? gap : 0)
+  const maxScrollTop = Math.max(0, menu.scrollHeight - menu.clientHeight)
+  menu.scrollTop = clamp(paddingTop + selectedIndex * step, 0, maxScrollTop)
 }
 
 const togglePicker = async (type: PickerType) => {
@@ -648,7 +656,12 @@ html.dark .calendar-select {
   background: var(--nw-floating-bg);
   color: var(--nw-floating-text);
   box-shadow: var(--nw-floating-shadow);
-  scrollbar-width: thin;
+  scrollbar-width: none;
+}
+
+.calendar-floating-menu::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .calendar-floating-menu.is-year {
@@ -668,6 +681,7 @@ html.dark .calendar-select {
 }
 
 .calendar-floating-option {
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;

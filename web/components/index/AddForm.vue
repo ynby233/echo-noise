@@ -606,19 +606,29 @@ const scheduleFloatingMenuPosition = (positioner: () => void) => {
   }
 }
 
-const scrollSelectedOptionToTop = (container: HTMLElement | null, selector: string) => {
+const scrollSelectedOptionToRow = (container: HTMLElement | null, selector: string, rowIndex = 0) => {
   const selected = container?.querySelector<HTMLElement>(selector)
   if (!container || !selected || typeof window === 'undefined') return
-  container.scrollTop = Math.max(0, selected.offsetTop)
+  const optionSelector = selector.replace('.is-selected', '')
+  const options = Array.from(container.querySelectorAll<HTMLElement>(optionSelector))
+  const selectedIndex = options.indexOf(selected)
+  if (selectedIndex < 0) return
+  const style = window.getComputedStyle(container)
+  const gap = Number.parseFloat(style.rowGap || style.gap || '0')
+  const paddingTop = Number.parseFloat(style.paddingTop || '0')
+  const step = selected.offsetHeight + (Number.isFinite(gap) ? gap : 0)
+  const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
+  const target = paddingTop + selectedIndex * step - step * Math.max(0, rowIndex)
+  container.scrollTop = clamp(target, 0, maxScrollTop)
 }
 
 const scrollPublishPickerSelectionToTop = () => {
-  scrollSelectedOptionToTop(publishPickerMenuRef.value, '.publish-picker-floating-option.is-selected')
+  scrollSelectedOptionToRow(publishPickerMenuRef.value, '.publish-picker-floating-option.is-selected')
 }
 
-const scrollPublishTimeSelectionToTop = () => {
-  scrollSelectedOptionToTop(publishHourColumnRef.value, '.publish-time-option.is-selected')
-  scrollSelectedOptionToTop(publishMinuteColumnRef.value, '.publish-time-option.is-selected')
+const scrollPublishTimeSelectionToSecondRow = () => {
+  scrollSelectedOptionToRow(publishHourColumnRef.value, '.publish-time-option.is-selected', 1)
+  scrollSelectedOptionToRow(publishMinuteColumnRef.value, '.publish-time-option.is-selected', 1)
 }
 
 const closeFloatingMenus = () => {
@@ -703,7 +713,7 @@ const togglePublishDateMenu = async () => {
   if (showPublishDateMenu.value) {
     syncPublishDraftFromInput()
     await nextTick()
-    scrollPublishTimeSelectionToTop()
+    scrollPublishTimeSelectionToSecondRow()
     scheduleFloatingMenuPosition(positionPublishDateMenu)
   }
 }
@@ -1192,9 +1202,10 @@ const addMessage = async () => {
 .publish-picker-trigger:last-child { width: 50px; }
 .floating-icon-btn { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid var(--nw-floating-border); background: rgba(15,23,42,0.04); color: inherit; }
 .floating-icon-btn:hover { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
-.publish-picker-floating-menu { position: fixed; z-index: 5005; box-sizing: border-box; display: grid; gap: 4px; max-height: 204px; overflow-y: auto; padding: 8px; border: 1px solid var(--nw-floating-border); border-radius: 10px; background: var(--nw-floating-bg); color: var(--nw-floating-text); box-shadow: var(--nw-floating-shadow); scrollbar-width: thin; }
+.publish-picker-floating-menu { position: fixed; z-index: 5005; box-sizing: border-box; display: grid; gap: 4px; max-height: 204px; overflow-y: auto; padding: 8px; border: 1px solid var(--nw-floating-border); border-radius: 10px; background: var(--nw-floating-bg); color: var(--nw-floating-text); box-shadow: var(--nw-floating-shadow); scrollbar-width: none; }
+.publish-picker-floating-menu::-webkit-scrollbar { width: 0; height: 0; }
 .publish-picker-floating-menu.is-month { gap: 3px; max-height: 167px; padding: 4px; }
-.publish-picker-floating-option { display: inline-flex; align-items: center; justify-content: center; min-height: 28px; min-width: 0; width: 100%; padding: 0 6px; border-radius: 8px; border: 1px solid transparent; color: inherit; font-size: 12px; font-weight: 650; line-height: 1; text-align: center; white-space: nowrap; transition: background-color .15s ease, border-color .15s ease, color .15s ease; }
+.publish-picker-floating-option { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; min-height: 28px; min-width: 0; width: 100%; padding: 0 6px; border-radius: 8px; border: 1px solid transparent; color: inherit; font-size: 12px; font-weight: 650; line-height: 1; text-align: center; white-space: nowrap; transition: background-color .15s ease, border-color .15s ease, color .15s ease; }
 .publish-picker-floating-menu.is-month .publish-picker-floating-option { min-height: 24px; padding: 0 4px; }
 .publish-picker-floating-option:hover,
 .publish-picker-floating-option:focus-visible { outline: none; border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
@@ -1208,8 +1219,9 @@ const addMessage = async () => {
 .publish-date-day.is-today { border-color: rgba(96,165,250,0.68); background: rgba(59,130,246,0.22); }
 .publish-date-day.is-selected { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
 .publish-time-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
-.publish-time-column { display: grid; grid-auto-rows: 28px; gap: 4px; max-height: 116px; overflow-y: auto; padding: 4px; border-radius: 10px; background: rgba(15,23,42,0.06); scrollbar-width: thin; }
-.publish-time-option { border-radius: 7px; border: 1px solid transparent; color: inherit; font-size: 12px; font-weight: 650; }
+.publish-time-column { box-sizing: border-box; display: grid; grid-auto-rows: 28px; gap: 4px; height: 124px; max-height: 124px; overflow-y: auto; padding: 0; border-radius: 10px; background: rgba(15,23,42,0.06); scrollbar-width: none; }
+.publish-time-column::-webkit-scrollbar { width: 0; height: 0; }
+.publish-time-option { box-sizing: border-box; border-radius: 7px; border: 1px solid transparent; color: inherit; font-size: 12px; font-weight: 650; }
 .publish-time-option:hover { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
 .publish-time-option.is-selected { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
 .publish-date-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
