@@ -2,7 +2,7 @@
   <section class="notification-center">
     <div class="notification-header">
       <div>
-        <h2 class="notification-title">通知</h2>
+        <h2 class="notification-title">空间消息</h2>
         <p class="notification-subtitle">评论、回复、留言和点赞</p>
       </div>
       <div v-if="user.isLogin" class="notification-actions">
@@ -19,96 +19,91 @@
       <div class="empty-title">登录后查看通知</div>
     </div>
 
-    <div v-else class="notification-shell">
-      <div class="notification-list-panel">
-        <div v-if="loading && !items.length" class="empty-state compact">
-          <UIcon name="i-mdi-loading" class="empty-icon spin" />
-          <div class="empty-title">正在加载</div>
-        </div>
-
-        <div v-else-if="!items.length" class="empty-state compact">
-          <UIcon name="i-mdi-bell-outline" class="empty-icon" />
-          <div class="empty-title">暂无通知</div>
-        </div>
-
-        <div v-else class="notification-masonry">
-          <article
-            v-for="item in items"
-            :key="item.id"
-            class="notification-card"
-            :class="{ unread: !item.read, active: selected?.id === item.id }"
-            @click="openNotification(item)"
-          >
-            <div class="notification-card-top">
-              <div class="notification-icon-wrap" :class="item.type">
-                <UIcon :name="typeIcon(item.type)" class="w-4 h-4" />
-              </div>
-              <div class="notification-card-title">
-                <div class="notification-title-line">{{ titleFor(item) }}</div>
-                <div class="notification-time">{{ formatTime(item.created_at) }}</div>
-              </div>
-              <span v-if="!item.read" class="unread-dot" aria-label="未读"></span>
-            </div>
-
-            <p v-if="primaryText(item)" class="notification-primary">{{ primaryText(item) }}</p>
-            <p v-if="messageText(item)" class="notification-message">{{ messageText(item) }}</p>
-
-            <div class="notification-card-actions">
-              <button type="button" class="inline-action" @click.stop="openNotification(item)">查看</button>
-              <button v-if="canReply(item)" type="button" class="inline-action strong" @click.stop="replyNotification(item)">回复</button>
-            </div>
-          </article>
-        </div>
-
-        <div v-if="items.length < total" class="load-more-row">
-          <button type="button" class="text-action" :disabled="loadingMore" @click="loadMore">
-            {{ loadingMore ? '加载中' : '加载更多' }}
-          </button>
-        </div>
+    <div v-else class="notification-feed-panel">
+      <div v-if="loading && !items.length" class="empty-state compact">
+        <UIcon name="i-mdi-loading" class="empty-icon spin" />
+        <div class="empty-title">正在加载</div>
       </div>
 
-      <aside class="notification-detail-panel">
-        <div v-if="selected" class="notification-detail-card">
-          <div class="detail-head">
-            <div class="notification-icon-wrap" :class="selected.type">
-              <UIcon :name="typeIcon(selected.type)" class="w-4 h-4" />
-            </div>
-            <div class="min-w-0">
-              <div class="detail-title">{{ titleFor(selected) }}</div>
-              <div class="detail-meta">{{ formatTime(selected.created_at) }}</div>
-            </div>
-          </div>
-          <div v-if="selected.message" class="detail-message">
-            <div class="detail-label">原内容</div>
-            <MarkdownRenderer :content="messageText(selected) || '无内容'" />
-          </div>
-          <BuiltinComments
-            v-if="selected.message_id"
-            :key="selected.message_id"
-            ref="commentThreadRef"
-            :message-id="selected.message_id"
-            :site-config="siteConfig"
-            :show-input="true"
-            :auto-scroll-input="false"
-            context-label="评论"
-          />
-        </div>
+      <div v-else-if="!items.length" class="empty-state compact">
+        <UIcon name="i-mdi-bell-outline" class="empty-icon" />
+        <div class="empty-title">暂无通知</div>
+      </div>
 
-        <div v-else class="empty-state detail-empty">
-          <UIcon name="i-mdi-bell-ring-outline" class="empty-icon" />
-          <div class="empty-title">选择一条通知</div>
-        </div>
-      </aside>
+      <div v-else ref="feedRef" class="notification-feed">
+        <article
+          v-for="item in items"
+          :key="item.id"
+          class="notification-feed-item"
+          :class="{ unread: !item.read, highlighted: highlightedId === item.id }"
+          :data-notification-id="item.id"
+        >
+          <img :src="actorAvatar(item)" class="notification-avatar" :alt="actorName(item)" loading="lazy" @error="onAvatarError" />
+          <div class="notification-item-body">
+            <div class="notification-item-head">
+              <div class="notification-actor-block">
+                <div class="notification-actor-line">
+                  <span class="notification-actor-name">{{ actorName(item) }}</span>
+                  <span v-if="item.type === 'like'" class="like-action-inline">赞了</span>
+                </div>
+                <div class="notification-time">{{ formatTime(item.created_at) }}</div>
+              </div>
+              <button
+                v-if="canReply(item)"
+                type="button"
+                class="reply-toggle"
+                @click="toggleReply(item)"
+              >
+                回复
+              </button>
+              <UIcon v-else-if="item.type === 'like'" name="i-mdi-hand-heart-outline" class="like-corner-icon" />
+            </div>
+
+            <p v-if="actorContent(item)" class="notification-actor-content">{{ actorContent(item) }}</p>
+
+            <button type="button" class="notification-target-card" @click="jumpToTarget(item)">
+              <img v-if="targetImage(item)" :src="targetImage(item)" class="notification-target-image" alt="通知关联图片" loading="lazy" />
+              <div class="notification-target-text">
+                <span v-if="targetOwner(item)" class="target-owner">{{ targetOwner(item) }}：</span>{{ targetText(item) || targetFallbackText(item) }}
+              </div>
+            </button>
+
+            <div v-if="replyOpenId === item.id" class="inline-reply-box">
+              <textarea
+                v-model="replyDrafts[item.id]"
+                class="inline-reply-input"
+                :placeholder="`回复${actorName(item)}：`"
+                rows="2"
+                @keydown.ctrl.enter.prevent="submitInlineReply(item)"
+                @keydown.meta.enter.prevent="submitInlineReply(item)"
+              ></textarea>
+              <div class="inline-reply-actions">
+                <span class="inline-reply-hint">Ctrl / ⌘ + Enter 发送</span>
+                <button type="button" class="inline-reply-cancel" :disabled="replySubmitting[item.id]" @click="replyOpenId = null">取消</button>
+                <button type="button" class="inline-reply-submit" :disabled="replySubmitting[item.id]" @click="submitInlineReply(item)">
+                  {{ replySubmitting[item.id] ? '发送中' : '发送' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div v-if="items.length < total" class="load-more-row">
+        <button type="button" class="text-action" :disabled="loadingMore" @click="loadMore">
+          {{ loadingMore ? '加载中' : '加载更多' }}
+        </button>
+      </div>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import BuiltinComments from '~/components/comments/BuiltinComments.vue'
-import MarkdownRenderer from '~/components/index/MarkdownRenderer.vue'
 import { useUserStore } from '~/store/user'
-import { getRequest, putRequest } from '~/utils/api'
+import { getRequest, postRequest, putRequest } from '~/utils/api'
+import { resolveMediaURL } from '~/utils/media-url'
+
 type NotificationActor = {
   id: number
   username?: string
@@ -121,6 +116,7 @@ type NotificationMessage = {
   image_url?: string
   visibility?: string
   user_id?: number
+  username?: string
   is_guestbook?: boolean
 }
 
@@ -158,18 +154,15 @@ type NotificationListPayload = {
   pageSize?: number
 }
 
-type CommentThreadExpose = {
-  focusCommentById: (commentId: number) => Promise<boolean>
-  replyToCommentById: (commentId: number) => Promise<boolean>
-}
-
 const props = defineProps<{ siteConfig?: any, initialMessageId?: number | null, initialCommentId?: number | null }>()
-const emit = defineEmits<{ (event: 'unread-change', count: number): void }>()
+const emit = defineEmits<{
+  (event: 'unread-change', count: number): void
+  (event: 'jump', item: UserNotification): void
+}>()
 
 const user = useUserStore()
 const items = ref<UserNotification[]>([])
-const selected = ref<UserNotification | null>(null)
-const commentThreadRef = ref<CommentThreadExpose | null>(null)
+const feedRef = ref<HTMLElement | null>(null)
 const loading = ref(false)
 const loadingMore = ref(false)
 const markingAll = ref(false)
@@ -178,8 +171,13 @@ const pageSize = 20
 const total = ref(0)
 const unreadCount = ref(0)
 const resolvingInitialTarget = ref(false)
+const highlightedId = ref<number | null>(null)
+const replyOpenId = ref<number | null>(null)
+const replyDrafts = ref<Record<number, string>>({})
+const replySubmitting = ref<Record<number, boolean>>({})
 
-const siteConfig = computed(() => props.siteConfig || {})
+const runtimeConfig = useRuntimeConfig()
+const baseApi = computed(() => runtimeConfig.public.baseApi || '/api')
 
 const setUnreadCount = (count: number) => {
   unreadCount.value = Math.max(0, Number(count || 0))
@@ -194,7 +192,7 @@ const normalizeText = (value?: string | null) => {
     .trim()
 }
 
-const truncate = (value?: string | null, limit = 96) => {
+const truncate = (value?: string | null, limit = 120) => {
   const text = normalizeText(value)
   if (text.length <= limit) return text
   return `${text.slice(0, limit)}...`
@@ -205,26 +203,39 @@ const actorName = (item: UserNotification) => {
   return name || '有用户'
 }
 
-const typeIcon = (type: string) => {
-  if (type === 'reply') return 'i-mdi-reply-outline'
-  if (type === 'guestbook') return 'i-mdi-message-badge-outline'
-  if (type === 'like') return 'i-mdi-heart-outline'
-  return 'i-mdi-comment-text-outline'
+const messageOwnerName = (item: UserNotification) => {
+  const name = String(item.message?.username || '').trim()
+  return name || ''
 }
 
-const titleFor = (item: UserNotification) => {
-  if (item.type === 'reply') return `${actorName(item)} 回复了你`
-  if (item.type === 'guestbook') return `${actorName(item)} 留言了`
-  if (item.type === 'like') return `${actorName(item)} 点赞了你的内容`
-  return `${actorName(item)} 评论了你的内容`
+const actorContent = (item: UserNotification) => {
+  if (item.type === 'like' || item.type === 'guestbook') return ''
+  return truncate(item.comment?.content || '', 160)
 }
 
-const primaryText = (item: UserNotification) => {
-  if (item.type === 'like') return ''
-  return truncate(item.comment?.content || '', 120)
+const targetText = (item: UserNotification) => {
+  if (item.type === 'guestbook') return truncate(item.comment?.content || '', 160)
+  if (item.type === 'reply') return truncate(item.parent_comment?.content || item.message?.content || '', 160)
+  return truncate(item.message?.content || '', 160)
 }
 
-const messageText = (item: UserNotification) => truncate(item.message?.content || '', 120)
+const targetOwner = (item: UserNotification) => {
+  if (item.type === 'reply') return item.parent_comment?.user?.username || ''
+  if (item.type === 'guestbook') return actorName(item)
+  return messageOwnerName(item)
+}
+
+const targetFallbackText = (item: UserNotification) => {
+  if (item.type === 'like') return '查看被点赞的笔记'
+  if (item.type === 'reply') return '查看被回复的内容'
+  if (item.type === 'guestbook') return '查看留言'
+  return '查看被评论的笔记'
+}
+
+const targetImage = (item: UserNotification) => {
+  const raw = String(item.message?.image_url || '').trim()
+  return raw ? resolveMediaURL(baseApi.value, raw) : ''
+}
 
 const canReply = (item: UserNotification) => {
   return item.type !== 'like' && Number(item.comment_id || 0) > 0 && Number(item.message_id || 0) > 0
@@ -237,6 +248,23 @@ const formatTime = (value?: string) => {
   return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
+const genericAvatar = () => {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96"><rect width="96" height="96" rx="48" fill="#94a3b8"/><circle cx="48" cy="36" r="18" fill="#e2e8f0"/><path d="M22 80c4-18 18-30 26-30s22 12 26 30" fill="#e2e8f0"/></svg>'
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
+}
+
+const actorAvatar = (item: UserNotification) => {
+  const raw = String(item.actor?.avatar_url || '').trim()
+  if (raw) return resolveMediaURL(baseApi.value, raw)
+  const siteAvatar = String(props.siteConfig?.avatarURL || '').trim()
+  return siteAvatar ? resolveMediaURL(baseApi.value, siteAvatar) : genericAvatar()
+}
+
+const onAvatarError = (event: Event) => {
+  const img = event.target as HTMLImageElement | null
+  if (img) img.src = genericAvatar()
+}
+
 const initialMessageId = () => Number(props.initialMessageId || 0)
 const initialCommentId = () => Number(props.initialCommentId || 0)
 const hasInitialTarget = () => initialMessageId() > 0 || initialCommentId() > 0
@@ -247,12 +275,22 @@ const matchesInitialTarget = (item: UserNotification) => {
   return messageId > 0 && Number(item.message_id || 0) === messageId
 }
 
+const focusNotificationItem = async (item: UserNotification) => {
+  highlightedId.value = item.id
+  await markRead(item)
+  await nextTick()
+  const el = feedRef.value?.querySelector(`[data-notification-id="${item.id}"]`) as HTMLElement | null
+  el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  window.setTimeout(() => {
+    if (highlightedId.value === item.id) highlightedId.value = null
+  }, 2200)
+}
+
 const selectInitialNotification = async () => {
   if (!hasInitialTarget()) return false
-  if (selected.value && matchesInitialTarget(selected.value)) return true
   const matched = items.value.find(matchesInitialTarget)
   if (!matched) return false
-  await openNotification(matched)
+  await focusNotificationItem(matched)
   return true
 }
 
@@ -326,28 +364,52 @@ const markAllRead = async () => {
   }
 }
 
-const openNotification = async (item: UserNotification) => {
-  selected.value = item
+const jumpToTarget = async (item: UserNotification) => {
   await markRead(item)
-  await nextTick()
-  const commentId = Number(item.comment_id || 0)
-  if (commentId > 0) await commentThreadRef.value?.focusCommentById(commentId)
+  highlightedId.value = item.id
+  emit('jump', item)
 }
 
-const replyNotification = async (item: UserNotification) => {
-  selected.value = item
+const toggleReply = async (item: UserNotification) => {
+  if (!canReply(item)) return
   await markRead(item)
-  await nextTick()
+  replyOpenId.value = replyOpenId.value === item.id ? null : item.id
+  if (replyOpenId.value === item.id && replyDrafts.value[item.id] === undefined) replyDrafts.value[item.id] = ''
+}
+
+const submitInlineReply = async (item: UserNotification) => {
+  if (!canReply(item) || replySubmitting.value[item.id]) return
+  const content = String(replyDrafts.value[item.id] || '').trim()
+  if (!content) {
+    useToast().add({ title: '回复内容不能为空', color: 'orange' })
+    return
+  }
+  const messageId = Number(item.message_id || 0)
   const commentId = Number(item.comment_id || 0)
-  if (commentId > 0) await commentThreadRef.value?.replyToCommentById(commentId)
+  replySubmitting.value = { ...replySubmitting.value, [item.id]: true }
+  try {
+    const res = await postRequest<any>(`messages/${messageId}/comments`, { content, parent_id: commentId }, { credentials: 'include' })
+    if (res?.code === 1) {
+      replyDrafts.value[item.id] = ''
+      replyOpenId.value = null
+      useToast().add({ title: '已回复', color: 'green' })
+      await loadNotifications(true)
+    } else {
+      useToast().add({ title: '回复失败', description: res?.msg, color: 'red' })
+    }
+  } catch {
+    useToast().add({ title: '回复失败', color: 'red' })
+  } finally {
+    replySubmitting.value = { ...replySubmitting.value, [item.id]: false }
+  }
 }
 
 watch(() => user.isLogin, (loggedIn) => {
   if (loggedIn) loadNotifications(true)
   else {
     items.value = []
-    selected.value = null
     total.value = 0
+    replyOpenId.value = null
     setUnreadCount(0)
   }
 })
@@ -360,69 +422,81 @@ defineExpose({ refresh: () => loadNotifications(true) })
 </script>
 
 <style scoped>
-.notification-center { width: 100%; }
-.notification-header { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:16px; }
+.notification-center { width:100%; }
+.notification-header { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:14px; }
 .notification-title { margin:0; font-size:20px; line-height:1.3; font-weight:700; }
 .notification-subtitle { margin:4px 0 0; font-size:13px; opacity:.68; }
 .notification-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
 .unread-pill { display:inline-flex; align-items:center; min-height:28px; padding:0 10px; border-radius:999px; font-size:12px; font-weight:600; color:#fff; background:#2563eb; }
-.icon-action, .text-action, .inline-action { border:1px solid rgba(148,163,184,.36); background:rgba(255,255,255,.72); color:inherit; }
+.icon-action, .text-action { border:1px solid rgba(148,163,184,.36); background:rgba(255,255,255,.72); color:inherit; }
 .icon-action { width:32px; height:32px; display:inline-flex; align-items:center; justify-content:center; border-radius:8px; }
 .text-action { min-height:32px; padding:0 12px; border-radius:8px; font-size:13px; }
-.inline-action { min-height:28px; padding:0 10px; border-radius:7px; font-size:12px; }
-.inline-action.strong { border-color:rgba(37,99,235,.42); color:#1d4ed8; }
 .icon-action:disabled, .text-action:disabled { opacity:.5; cursor:not-allowed; }
-.notification-shell { display:grid; grid-template-columns:minmax(0, 1fr) minmax(320px, .86fr); gap:16px; align-items:start; }
-.notification-list-panel, .notification-detail-card, .empty-state { border:1px solid rgba(148,163,184,.24); background:rgba(255,255,255,.66); backdrop-filter:blur(12px); border-radius:8px; }
-.notification-list-panel { padding:12px; min-height:260px; }
-.notification-masonry { column-count:2; column-gap:12px; }
-.notification-card { break-inside:avoid; margin:0 0 12px; padding:12px; border:1px solid rgba(148,163,184,.26); border-radius:8px; background:rgba(255,255,255,.86); cursor:pointer; transition:border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
-.notification-card:hover { border-color:rgba(37,99,235,.38); box-shadow:0 8px 24px rgba(15,23,42,.08); transform:translateY(-1px); }
-.notification-card.unread { border-color:rgba(37,99,235,.42); background:rgba(239,246,255,.92); }
-.notification-card.active { box-shadow:0 0 0 2px rgba(37,99,235,.22); }
-.notification-card-top { display:flex; align-items:flex-start; gap:10px; }
-.notification-icon-wrap { width:32px; height:32px; flex:0 0 32px; display:inline-flex; align-items:center; justify-content:center; border-radius:8px; background:#e0f2fe; color:#0369a1; }
-.notification-icon-wrap.reply { background:#ecfdf5; color:#047857; }
-.notification-icon-wrap.guestbook { background:#fef3c7; color:#92400e; }
-.notification-icon-wrap.like { background:#ffe4e6; color:#be123c; }
-.notification-card-title { min-width:0; flex:1; }
-.notification-title-line { font-size:14px; font-weight:700; line-height:1.4; word-break:break-word; }
-.notification-time, .detail-meta { font-size:12px; opacity:.62; margin-top:2px; }
-.unread-dot { width:8px; height:8px; border-radius:999px; background:#2563eb; margin-top:4px; }
-.notification-primary { margin:10px 0 0; font-size:14px; line-height:1.55; word-break:break-word; }
-.notification-message { margin:8px 0 0; padding:8px; border-left:3px solid rgba(148,163,184,.42); background:rgba(248,250,252,.8); border-radius:6px; font-size:12px; line-height:1.5; opacity:.82; word-break:break-word; }
-.notification-card-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
-.notification-detail-panel { min-width:0; }
-.notification-detail-card { padding:14px; }
-.detail-head { display:flex; align-items:flex-start; gap:10px; margin-bottom:12px; }
-.detail-title { font-size:15px; line-height:1.4; font-weight:700; word-break:break-word; }
-.detail-message { margin-bottom:12px; padding:10px; border:1px solid rgba(148,163,184,.24); border-radius:8px; background:rgba(248,250,252,.68); font-size:13px; line-height:1.55; }
-.detail-label { font-size:12px; opacity:.62; margin-bottom:4px; }
+.notification-feed-panel, .empty-state { border:1px solid rgba(148,163,184,.22); background:rgba(255,255,255,.72); backdrop-filter:blur(12px); border-radius:10px; }
+.notification-feed-panel { padding:0; overflow:hidden; }
+.notification-feed { display:flex; flex-direction:column; }
+.notification-feed-item { display:flex; gap:14px; padding:18px 18px 20px; border-bottom:1px solid rgba(148,163,184,.18); transition:background .16s ease, box-shadow .16s ease; }
+.notification-feed-item:last-child { border-bottom:0; }
+.notification-feed-item.unread { background:rgba(239,246,255,.66); }
+.notification-feed-item.highlighted { box-shadow:inset 4px 0 0 rgba(37,99,235,.72); background:rgba(219,234,254,.72); }
+.notification-avatar { width:44px; height:44px; flex:0 0 44px; border-radius:999px; object-fit:cover; background:#e2e8f0; }
+.notification-item-body { min-width:0; flex:1; }
+.notification-item-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; min-height:44px; }
+.notification-actor-block { min-width:0; }
+.notification-actor-line { display:flex; align-items:center; gap:8px; min-width:0; }
+.notification-actor-name { font-size:17px; line-height:1.25; font-weight:700; color:#0f172a; word-break:break-word; }
+.like-action-inline { font-size:14px; color:#64748b; }
+.notification-time { margin-top:3px; font-size:13px; line-height:1.2; color:#8a94a6; }
+.reply-toggle { flex:0 0 auto; border:0; background:transparent; color:#0f3f75; font-size:15px; line-height:1.4; font-weight:700; padding:2px 0 2px 10px; cursor:pointer; }
+.reply-toggle:hover { color:#2563eb; }
+.like-corner-icon { width:24px; height:24px; color:#64748b; }
+.notification-actor-content { margin:12px 0 0; font-size:15px; line-height:1.72; white-space:pre-wrap; word-break:break-word; color:#0f172a; }
+.notification-target-card { width:100%; margin-top:14px; padding:12px 14px; border:0; border-radius:4px; background:#f1f5f9; color:#0f172a; display:flex; align-items:center; gap:12px; text-align:left; cursor:pointer; transition:background .16s ease, transform .16s ease; }
+.notification-target-card:hover { background:#e9eef5; transform:translateY(-1px); }
+.notification-target-image { width:64px; height:64px; flex:0 0 64px; object-fit:cover; border-radius:2px; background:#e2e8f0; }
+.notification-target-text { min-width:0; font-size:15px; line-height:1.6; word-break:break-word; }
+.target-owner { color:#0f3f75; font-weight:700; }
+.inline-reply-box { margin-top:14px; }
+.inline-reply-input { width:100%; min-height:42px; resize:vertical; border:1px solid rgba(148,163,184,.24); border-radius:5px; background:#f3f6fb; color:#0f172a; padding:10px 12px; line-height:1.5; outline:none; }
+.inline-reply-input:focus { border-color:rgba(37,99,235,.42); box-shadow:0 0 0 3px rgba(37,99,235,.1); }
+.inline-reply-actions { display:flex; align-items:center; justify-content:flex-end; gap:10px; margin-top:8px; }
+.inline-reply-hint { margin-right:auto; font-size:12px; color:#94a3b8; }
+.inline-reply-cancel, .inline-reply-submit { min-height:30px; border-radius:7px; padding:0 12px; font-size:13px; }
+.inline-reply-cancel { border:1px solid rgba(148,163,184,.3); background:rgba(255,255,255,.72); color:inherit; }
+.inline-reply-submit { border:1px solid rgba(37,99,235,.44); background:#2563eb; color:#fff; }
+.inline-reply-cancel:disabled, .inline-reply-submit:disabled { opacity:.55; cursor:not-allowed; }
 .empty-state { min-height:220px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; text-align:center; padding:24px; }
-.empty-state.compact { min-height:180px; border:0; background:transparent; }
-.empty-state.detail-empty { min-height:260px; }
+.empty-state.compact { min-height:220px; border:0; background:transparent; }
 .empty-icon { width:28px; height:28px; opacity:.62; }
 .empty-title { font-size:14px; font-weight:600; opacity:.72; }
-.load-more-row { display:flex; justify-content:center; padding:8px 0 2px; }
+.load-more-row { display:flex; justify-content:center; padding:14px 0 16px; border-top:1px solid rgba(148,163,184,.16); }
 .spin { animation:notification-spin 1s linear infinite; }
 @keyframes notification-spin { to { transform:rotate(360deg); } }
 :global(.dark) .icon-action,
 :global(.dark) .text-action,
-:global(.dark) .inline-action { background:rgba(15,23,42,.72); border-color:rgba(148,163,184,.28); }
-:global(.dark) .notification-list-panel,
-:global(.dark) .notification-detail-card,
+:global(.dark) .inline-reply-cancel { background:rgba(15,23,42,.72); border-color:rgba(148,163,184,.28); }
+:global(.dark) .notification-feed-panel,
 :global(.dark) .empty-state { background:rgba(15,23,42,.64); border-color:rgba(148,163,184,.22); }
-:global(.dark) .notification-card { background:rgba(15,23,42,.82); border-color:rgba(148,163,184,.22); }
-:global(.dark) .notification-card.unread { background:rgba(30,58,138,.32); border-color:rgba(96,165,250,.4); }
-:global(.dark) .notification-message,
-:global(.dark) .detail-message { background:rgba(15,23,42,.54); border-color:rgba(148,163,184,.22); }
-@media (max-width: 1100px) {
-  .notification-shell { grid-template-columns:1fr; }
-  .notification-detail-panel { order:-1; }
-}
+:global(.dark) .notification-feed-item { border-color:rgba(148,163,184,.16); }
+:global(.dark) .notification-feed-item.unread { background:rgba(30,58,138,.24); }
+:global(.dark) .notification-feed-item.highlighted { background:rgba(30,58,138,.34); box-shadow:inset 4px 0 0 rgba(96,165,250,.72); }
+:global(.dark) .notification-actor-name,
+:global(.dark) .notification-actor-content,
+:global(.dark) .notification-target-card { color:#e5e7eb; }
+:global(.dark) .notification-time,
+:global(.dark) .like-action-inline { color:#94a3b8; }
+:global(.dark) .reply-toggle,
+:global(.dark) .target-owner { color:#93c5fd; }
+:global(.dark) .notification-target-card { background:rgba(30,41,59,.86); }
+:global(.dark) .notification-target-card:hover { background:rgba(51,65,85,.88); }
+:global(.dark) .inline-reply-input { background:rgba(15,23,42,.72); border-color:rgba(148,163,184,.26); color:#e5e7eb; }
 @media (max-width: 720px) {
   .notification-header { align-items:flex-start; flex-direction:column; }
   .notification-actions { justify-content:flex-start; }
-  .notification-masonry { column-count:1; }
+  .notification-feed-item { gap:10px; padding:15px 12px 18px; }
+  .notification-avatar { width:40px; height:40px; flex-basis:40px; }
+  .notification-actor-name { font-size:16px; }
+  .notification-target-card { padding:10px 12px; }
+  .notification-target-image { width:56px; height:56px; flex-basis:56px; }
 }
 </style>

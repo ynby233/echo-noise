@@ -203,7 +203,7 @@
               <div class="card-title text-center mb-4 text-black dark:text-white">{{ frontendConfig.commentPageTitle || '留言' }}</div>
               <div v-if="(frontendConfig.commentPageDescription || '').trim() !== ''" class="section-subtitle comment-subtitle">{{ frontendConfig.commentPageDescription }}</div>
               <div class="max-w-3xl mx-auto comment-board-wrap">
-                <BuiltinComments v-if="guestbookMessageId" :message-id="guestbookMessageId" :site-config="frontendConfig" :show-input="true" context-label="留言" />
+                <BuiltinComments v-if="guestbookMessageId" ref="guestbookCommentsRef" :message-id="guestbookMessageId" :site-config="frontendConfig" :show-input="true" context-label="留言" />
                 <div v-else class="text-sm opacity-70">正在准备留言板...</div>
               </div>
             </UCard>
@@ -214,6 +214,7 @@
               :initial-message-id="notificationTargetMessageId ?? undefined"
               :initial-comment-id="notificationTargetCommentId ?? undefined"
               @unread-change="handleNotificationUnreadChange"
+              @jump="handleNotificationJump"
             />
           </div>
           <div v-else-if="activeTab==='about'" class="about-page">
@@ -239,6 +240,7 @@
             class="message-list-container" 
             :site-config="frontendConfig"
             :target-message-id="targetMessageId ?? undefined"
+            :target-comment-id="notificationTargetCommentId ?? undefined"
             :wide="layoutState==='two'"
             :page-ready="isLoaded"
             :active-tab="activeTab"
@@ -560,6 +562,7 @@ const activeTab = ref('latest')
 const notificationTargetMessageId = ref<number | null>(null)
 const notificationTargetCommentId = ref<number | null>(null)
 const notificationUnreadCount = ref(0)
+const notificationReturnPending = ref(false)
 const selectedCalendarDate = ref('')
 const calendarMessageDate = computed(() => (activeTab.value === 'latest' || activeTab.value === 'personal') ? selectedCalendarDate.value : '')
 const handleCalendarDateSelect = (date: string) => {
@@ -597,8 +600,18 @@ const centerTabs = computed(() => {
 type MessageListExpose = ComponentPublicInstance & {
   handleSearchResult: (result: unknown) => void
 }
+type CommentThreadExpose = ComponentPublicInstance & {
+  focusCommentById: (commentId: number) => Promise<boolean>
+}
+type NotificationJumpItem = {
+  type?: string
+  message_id?: number | null
+  comment_id?: number | null
+  message?: { is_guestbook?: boolean } | null
+}
 
 const messageList = ref<MessageListExpose | null>(null)
+const guestbookCommentsRef = ref<CommentThreadExpose | null>(null)
 // 搜索模态的开关
 const showSearchModal = ref(false)
 const showAuthModal = ref(false)
@@ -822,6 +835,36 @@ const handleNotificationUnreadChange = (count: number) => {
   notificationUnreadCount.value = Math.max(0, Number(count || 0))
 }
 
+const focusGuestbookNotificationComment = async (commentId: number) => {
+  if (!commentId) return
+  await nextTick()
+  for (let i = 0; i < 8; i += 1) {
+    const ok = await guestbookCommentsRef.value?.focusCommentById(commentId)
+    if (ok) return
+    await new Promise((resolve) => window.setTimeout(resolve, 120))
+  }
+}
+
+const handleNotificationJump = async (item: NotificationJumpItem) => {
+  const messageId = Number(item?.message_id || 0)
+  const commentId = Number(item?.comment_id || 0)
+  notificationReturnPending.value = true
+  notificationTargetMessageId.value = messageId || null
+  notificationTargetCommentId.value = commentId || null
+
+  if (item?.type === 'guestbook' || item?.message?.is_guestbook) {
+    selectedCalendarDate.value = ''
+    activeTab.value = 'comment'
+    await loadGuestbookTarget()
+    await focusGuestbookNotificationComment(commentId)
+    return
+  }
+
+  selectedCalendarDate.value = ''
+  activeTab.value = 'latest'
+  targetMessageId.value = messageId ? String(messageId) : null
+}
+
 const loadNotificationUnreadCount = async () => {
   if (!isLoggedIn.value) {
     notificationUnreadCount.value = 0
@@ -835,6 +878,12 @@ const loadNotificationUnreadCount = async () => {
 const openNotificationCenter = async () => {
   const ok = await userStore.checkLoginStatus()
   if (ok) {
+    if (notificationReturnPending.value) {
+      activeTab.value = 'notifications'
+      notificationReturnPending.value = false
+      await loadNotificationUnreadCount()
+      return
+    }
     notificationTargetMessageId.value = null
     notificationTargetCommentId.value = null
     activeTab.value = 'notifications'

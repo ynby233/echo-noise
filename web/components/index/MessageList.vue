@@ -606,6 +606,10 @@ const props = defineProps({
     type: String,
     default: null
   },
+  targetCommentId: {
+    type: Number,
+    default: null
+  },
   wide: {
     type: Boolean,
     default: false
@@ -636,22 +640,6 @@ const gradientClass = computed(() => contentTheme.value === 'dark' ? 'from-[var(
 const useWaline = computed(() => {
   return false
 })
-// 添加监听器
-watch(() => props.targetMessageId, async (newId) => {
-  if (!newId) return;
-  
-  await nextTick();
-  const targetElement = document.querySelector(`.content-container[data-msg-id="${newId}"]`);
-  if (targetElement) {
-    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    // 添加高亮效果
-    targetElement.classList.add('highlight-message');
-    setTimeout(() => {
-      targetElement.classList.remove('highlight-message');
-    }, 2000);
-  }
-}, { immediate: true });
-
 const authorProfiles = ref<Record<string, any>>({})
 const openAuthorId = ref<number | null>(null)
 const openAuthorStyle = ref<Record<string, string>>({})
@@ -764,7 +752,62 @@ const fetchGuestbookId = async () => {
     }
   } catch {}
 }
-  const getMessageById = (id: number) => (message.messages || []).find((m: any) => m.id === id)
+  const getMessageById = (id: number) => (message.messages || []).find((m: any) => Number(m?.id || 0) === Number(id))
+  const loadSingleTargetMessage = async (id: number) => {
+    if (!id) return false
+    if (getMessageById(id)) return true
+    try {
+      const response = await fetch(`${BASE_API}/messages/${id}`, {
+        credentials: 'include',
+        headers: { 'Accept': 'application/json' }
+      })
+      if (!response.ok) return false
+      const data = await response.json()
+      const item = data?.code === 1 ? data.data : null
+      if (!item || isGuestbookMessage(item)) return false
+      message.messages = [item]
+      message.hasMore = false
+      message.page = 1
+      await nextTick()
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  const focusTargetMessageAndComment = async () => {
+    if (typeof document === 'undefined') return
+    const messageId = Number(props.targetMessageId || 0)
+    if (!messageId) return
+    const ok = await loadSingleTargetMessage(messageId)
+    if (!ok) return
+    await nextTick()
+    const targetElement = document.querySelector(`.content-container[data-msg-id="${messageId}"]`) as HTMLElement | null
+    if (targetElement) {
+      targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      targetElement.classList.add('highlight-message')
+      window.setTimeout(() => targetElement.classList.remove('highlight-message'), 2000)
+    }
+
+    const commentId = Number(props.targetCommentId || 0)
+    if (!commentId) return
+    expandedCommentsMap.value[messageId] = true
+    await nextTick()
+    for (let i = 0; i < 12; i += 1) {
+      const commentEl = document.querySelector(`.content-container[data-msg-id="${messageId}"] [data-comment-id="${commentId}"]`) as HTMLElement | null
+      if (commentEl) {
+        commentEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        commentEl.classList.add('notification-comment-highlight')
+        window.setTimeout(() => commentEl.classList.remove('notification-comment-highlight'), 2200)
+        return
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 160))
+    }
+  }
+
+  watch(() => [props.targetMessageId, props.targetCommentId], () => {
+    focusTargetMessageAndComment()
+  }, { immediate: true })
   const userStore = useUserStore();
   const isLogin = computed(() => userStore.isLogin);
   const isPersonalTab = computed(() => props.activeTab === 'personal')
@@ -2730,6 +2773,16 @@ onMounted(() => {
 
 .highlight-message {
   animation: highlight 2s ease-out;
+}
+
+:global(.notification-comment-highlight) {
+  animation: notification-comment-highlight 2.2s ease-out;
+  border-color: rgba(37, 99, 235, 0.45) !important;
+}
+
+@keyframes notification-comment-highlight {
+  0% { background: rgba(59, 130, 246, 0.22); }
+  100% { background: transparent; }
 }
 
 /* 轻模式覆盖 Markdown 颜色 */
