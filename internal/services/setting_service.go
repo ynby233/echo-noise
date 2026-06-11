@@ -540,7 +540,7 @@ func CheckVoceChatHealth(ctx context.Context) (map[string]interface{}, error) {
 		config.VoceChatLastHealthStatus = "failed"
 		config.VoceChatLastHealthError = strings.TrimSpace(healthErr.Error())
 		config.VoceChatLastHealthCheckAt = &now
-		return vocechat.PublicConfigFromSiteConfig(config), healthErr
+		return vocechat.PublicConfigFromSiteConfig(config, true), healthErr
 	}
 
 	if !config.VoceChatEnabled {
@@ -587,7 +587,7 @@ func CheckVoceChatHealth(ctx context.Context) (map[string]interface{}, error) {
 	config.VoceChatLastHealthStatus = "ok"
 	config.VoceChatLastHealthError = ""
 	config.VoceChatLastHealthCheckAt = &now
-	return vocechat.PublicConfigFromSiteConfig(config), nil
+	return vocechat.PublicConfigFromSiteConfig(config, true), nil
 }
 
 func writeVoceChatHealth(db *gorm.DB, configID uint, status string, healthErr error, checkedAt time.Time) {
@@ -983,7 +983,7 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 			"socialLinksEnabled": config.SocialLinksEnabled,
 			"socialLinks":        normalizedSocialLinks,
 		},
-		"voceChatConfig": vocechat.PublicConfigFromSiteConfig(config),
+		"voceChatConfig": vocechat.PublicConfigFromSiteConfig(config, viewerUserID == models.PrimaryAdminUserID),
 		"storageEnabled": config.StorageEnabled,
 		"storageConfig": map[string]interface{}{
 			"provider":      choose(config.StorageProvider, ""),

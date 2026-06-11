@@ -24,8 +24,8 @@
           <!-- 新增图床上传按钮 -->
           <button type="button" class="tb-btn nw-tooltip-anchor" data-tooltip="图床上传" aria-label="图床上传" @click="showImageUploader = true"><UIcon name="i-mdi-cloud-upload-outline" class="w-5 h-5" /></button>
           <button type="button" class="tb-btn has-label notify-btn nw-tooltip-anchor" :class="{ 'is-enabled': enableNotify }" :data-tooltip="enableNotify ? '关闭推送' : '开启推送'" :aria-label="enableNotify ? '关闭推送' : '开启推送'" @click="toggleNotify">
-            <UIcon :name="enableNotify ? 'i-mdi-bell' : 'i-mdi-bell-off'" class="w-5 h-5" />
-            <span class="notify-label">{{ enableNotify ? '推送' : '静默' }}</span>
+            <UIcon :name="enableNotify ? 'i-mdi-bell-off-outline' : 'i-mdi-bell-ring-outline'" class="w-5 h-5" />
+            <span class="notify-label">{{ enableNotify ? '关闭' : '开启' }}</span>
           </button>
           <div ref="visibilityControlRef" class="visibility-control nw-tooltip-anchor" :data-tooltip="`可见范围：${visibilityLabel}`">
             <UIcon :name="visibilityIcon" class="w-5 h-5" />

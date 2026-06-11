@@ -265,24 +265,26 @@
               color="gray"
               variant="soft"
               icon="i-mdi-image-plus-outline"
-              class="edit-upload-btn"
+              class="edit-upload-btn text-slate-700 dark:text-slate-200"
+              :ui="{ base: 'bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 border border-slate-200 dark:border-white/10 shadow-none' }"
               :disabled="isEditUploading"
               :loading="editUploadKind === 'image'"
               @click="triggerEditMediaInput('image')"
             >
-              上传图片
+              添加图片
             </UButton>
             <UButton
               size="xs"
               color="gray"
               variant="soft"
               icon="i-mdi-video-plus-outline"
-              class="edit-upload-btn"
+              class="edit-upload-btn text-slate-700 dark:text-slate-200"
+              :ui="{ base: 'bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 border border-slate-200 dark:border-white/10 shadow-none' }"
               :disabled="isEditUploading"
               :loading="editUploadKind === 'video'"
               @click="triggerEditMediaInput('video')"
             >
-              上传视频
+              添加视频
             </UButton>
           </div>
           <span v-if="isEditUploading" class="edit-upload-status">{{ editUploadLabel }} {{ editUploadProgress }}%</span>
@@ -538,16 +540,20 @@ onMounted(() => {
 })
 onBeforeUnmount(() => { try { io && io.disconnect() } catch {} })
 const like = async (id: number) => {
+  if (!isLogin.value) {
+    useToast().add({ title: '请先登录后再点赞', color: 'orange', timeout: 2000 })
+    return
+  }
   try {
     const resp = await fetch(`${BASE_API}/messages/${id}/like/toggle`, { method: 'POST', credentials: 'include', headers: { 'Accept': 'application/json' } })
-    if (!resp.ok) throw new Error('点赞失败')
-    const js = await resp.json()
+    const js = await resp.json().catch(() => ({}))
+    if (!resp.ok || js?.code === 0) throw new Error(js?.msg || '点赞失败')
     const count = js?.data?.like_count ?? (likesMap.value[id] || 0)
     const liked = !!js?.data?.liked
     likesMap.value[id] = count
     likedMap.value[id] = liked
-  } catch (e) {
-    useToast().add({ title: '点赞失败', color: 'red', timeout: 2000 })
+  } catch (e: any) {
+    useToast().add({ title: e?.message || '点赞失败', color: 'red', timeout: 2000 })
   }
 }
 

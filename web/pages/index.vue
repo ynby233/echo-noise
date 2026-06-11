@@ -836,6 +836,8 @@ const loadNotificationUnreadCount = async () => {
 const openNotificationCenter = async () => {
   const ok = await userStore.checkLoginStatus()
   if (ok) {
+    notificationTargetMessageId.value = null
+    notificationTargetCommentId.value = null
     activeTab.value = 'notifications'
     await loadNotificationUnreadCount()
     return

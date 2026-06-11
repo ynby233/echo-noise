@@ -3,7 +3,7 @@
     <div class="notification-header">
       <div>
         <h2 class="notification-title">通知</h2>
-        <p class="notification-subtitle">评论、回复和留言</p>
+        <p class="notification-subtitle">评论、回复、留言和点赞</p>
       </div>
       <div v-if="user.isLogin" class="notification-actions">
         <span v-if="unreadCount > 0" class="unread-pill">{{ unreadCount }} 未读</span>
@@ -177,6 +177,7 @@ const page = ref(1)
 const pageSize = 20
 const total = ref(0)
 const unreadCount = ref(0)
+const resolvingInitialTarget = ref(false)
 
 const siteConfig = computed(() => props.siteConfig || {})
 
@@ -236,19 +237,43 @@ const formatTime = (value?: string) => {
   return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
-const selectInitialNotification = async () => {
-  const messageId = Number(props.initialMessageId || 0)
-  const commentId = Number(props.initialCommentId || 0)
-  if (!messageId && !commentId) return
-  const matched = items.value.find((item) => {
-    const sameMessage = messageId > 0 && Number(item.message_id || 0) === messageId
-    const sameComment = commentId > 0 && Number(item.comment_id || 0) === commentId
-    return commentId > 0 ? sameComment : sameMessage
-  })
-  if (matched) await openNotification(matched)
+const initialMessageId = () => Number(props.initialMessageId || 0)
+const initialCommentId = () => Number(props.initialCommentId || 0)
+const hasInitialTarget = () => initialMessageId() > 0 || initialCommentId() > 0
+const matchesInitialTarget = (item: UserNotification) => {
+  const messageId = initialMessageId()
+  const commentId = initialCommentId()
+  if (commentId > 0) return Number(item.comment_id || 0) === commentId
+  return messageId > 0 && Number(item.message_id || 0) === messageId
 }
 
-const loadNotifications = async (reset = false) => {
+const selectInitialNotification = async () => {
+  if (!hasInitialTarget()) return false
+  if (selected.value && matchesInitialTarget(selected.value)) return true
+  const matched = items.value.find(matchesInitialTarget)
+  if (!matched) return false
+  await openNotification(matched)
+  return true
+}
+
+const resolveInitialTargetAcrossPages = async () => {
+  if (!hasInitialTarget() || resolvingInitialTarget.value) return
+  resolvingInitialTarget.value = true
+  try {
+    let found = await selectInitialNotification()
+    while (!found && items.value.length < total.value) {
+      const beforeCount = items.value.length
+      page.value += 1
+      await loadNotifications(false, { skipInitialResolve: true })
+      if (items.value.length <= beforeCount) break
+      found = await selectInitialNotification()
+    }
+  } finally {
+    resolvingInitialTarget.value = false
+  }
+}
+
+const loadNotifications = async (reset = false, options: { skipInitialResolve?: boolean } = {}) => {
   if (!user.isLogin) return
   if (reset) page.value = 1
   loading.value = reset || !items.value.length
@@ -258,9 +283,9 @@ const loadNotifications = async (reset = false) => {
       const payload = res.data
       const nextItems = Array.isArray(payload.items) ? payload.items : []
       items.value = page.value === 1 ? nextItems : [...items.value, ...nextItems]
-      total.value = Number(payload.total || nextItems.length || 0)
+      total.value = Number(payload.total ?? items.value.length)
       setUnreadCount(Number(payload.unread_count ?? payload.unreadCount ?? 0))
-      if (!selected.value) await selectInitialNotification()
+      if (!options.skipInitialResolve) await resolveInitialTargetAcrossPages()
     }
   } finally {
     loading.value = false
@@ -327,7 +352,7 @@ watch(() => user.isLogin, (loggedIn) => {
   }
 })
 
-watch(() => [props.initialMessageId, props.initialCommentId], () => selectInitialNotification())
+watch(() => [props.initialMessageId, props.initialCommentId], () => resolveInitialTargetAcrossPages())
 
 onMounted(() => loadNotifications(true))
 

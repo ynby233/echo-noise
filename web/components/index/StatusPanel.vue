@@ -220,12 +220,12 @@
                           <div class="admin-setting-title" :class="theme.text">用户名</div>
                           <p class="admin-setting-desc" :class="theme.mutedText">登录名与后台展示名保持一致，修改后立即生效。</p>
                         </div>
-                        <UBadge color="primary" variant="soft" class="text-xs px-2 py-1 rounded-md !text-primary-600 dark:!text-primary-300">{{ userStore.user?.username || '未设置' }}</UBadge>
+                        <div class="flex flex-wrap items-center justify-end gap-2">
+                          <UBadge color="primary" variant="soft" class="text-xs px-2 py-1 rounded-md !text-primary-600 dark:!text-primary-300">{{ userStore.user?.username || '未设置' }}</UBadge>
+                          <UButton size="xs" @click="updateUsername" color="primary" class="shadow">保存用户名</UButton>
+                        </div>
                       </div>
                       <UInput v-model="userForm.username" :placeholder="userStore.user?.username || '输入用户名'" class="w-full" />
-                      <div class="flex justify-end">
-                        <UButton @click="updateUsername" color="primary" class="shadow">保存用户名</UButton>
-                      </div>
                     </div>
 
                     <div class="admin-setting-block">
@@ -287,10 +287,21 @@
                           <div class="admin-setting-title" :class="theme.text">个性签名</div>
                           <p class="admin-setting-desc" :class="theme.mutedText">展示在个人信息区域，支持多行文本。</p>
                         </div>
+                        <UButton size="xs" @click="updateDescription" color="primary" class="shadow">保存签名</UButton>
                       </div>
                       <UTextarea v-model="userForm.description" :placeholder="userStore.user?.description || '欢迎访问'" class="w-full" />
-                      <div class="flex justify-end">
-                        <UButton @click="updateDescription" color="primary" class="shadow">保存签名</UButton>
+                    </div>
+
+                    <div class="admin-setting-block">
+                      <div class="admin-setting-heading">
+                        <div>
+                          <div class="admin-setting-title" :class="theme.text">接收 VoceChat 推送</div>
+                          <p class="admin-setting-desc" :class="theme.mutedText">开启后，站内通知会同步推送到已绑定的 VoceChat 账号。</p>
+                        </div>
+                        <div class="flex items-center gap-3 justify-end">
+                          <UToggle v-model="userForm.voceChatNotificationEnabled" :disabled="!registeredVoceChatEmail" />
+                          <UButton size="xs" color="primary" class="shadow" :disabled="!registeredVoceChatEmail" @click="updateVoceChatNotificationPreference">保存</UButton>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -325,18 +336,18 @@
                           <p class="admin-setting-desc" :class="theme.mutedText">邮箱和 VoceChat 账号用于接收系统通知。</p>
                         </div>
                       </div>
-                      <div class="space-y-2">
-                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded border px-3 py-2" :class="theme.border">
+                      <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,0.72fr)] gap-2">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded border px-3 py-2 min-w-0" :class="theme.border">
                           <span class="text-sm" :class="theme.mutedText">邮箱</span>
                           <span v-if="userStore.user?.email" :class="[theme.text, theme.border, 'inline-flex items-center px-2 py-0.5 rounded-md break-all']">
                             {{ userStore.user?.email }}
                           </span>
                           <span v-else class="inline-flex items-center px-2 py-0.5 rounded-md text-amber-400 border border-amber-400/40">未绑定邮箱，请先绑定邮箱</span>
                         </div>
-                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded border px-3 py-2" :class="theme.border">
-                          <span class="text-sm" :class="theme.mutedText">注册绑定 VoceChat 邮箱</span>
-                          <span v-if="userStore.user?.voce_chat_email" :class="[theme.text, theme.border, 'inline-flex items-center px-2 py-0.5 rounded-md break-all text-right']">
-                            {{ userStore.user?.voce_chat_email }}
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded border px-3 py-2 min-w-0" :class="theme.border">
+                          <span class="text-sm whitespace-nowrap" :class="theme.mutedText">注册绑定 VC 邮箱</span>
+                          <span v-if="registeredVoceChatEmail" :class="[theme.text, theme.border, 'inline-flex items-center px-2 py-0.5 rounded-md break-all text-right']">
+                            {{ registeredVoceChatEmail }}
                           </span>
                           <span v-else class="inline-flex items-center px-2 py-0.5 rounded-md text-slate-400 border border-slate-400/30">未绑定 VoceChat 邮箱</span>
                         </div>
@@ -346,22 +357,13 @@
                     <div class="admin-setting-block">
                       <div class="admin-setting-heading">
                         <div>
-                          <div class="admin-setting-title" :class="theme.text">接收 VoceChat 推送</div>
-                          <p class="admin-setting-desc" :class="theme.mutedText">开启后，站内通知会同步推送到已绑定的 VoceChat 账号。</p>
-                        </div>
-                        <div class="flex items-center gap-3 justify-end">
-                          <UToggle v-model="userForm.voceChatNotificationEnabled" :disabled="!userStore.user?.voce_chat_email" />
-                          <UButton size="xs" color="primary" class="shadow" variant="soft" :disabled="!userStore.user?.voce_chat_email" @click="updateVoceChatNotificationPreference">保存</UButton>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="admin-setting-block">
-                      <div class="admin-setting-heading">
-                        <div>
                           <div class="admin-setting-title" :class="theme.text">密码设置</div>
                           <p class="admin-setting-desc" :class="theme.mutedText">输入当前密码后即可修改新密码，强度需达到中及以上。</p>
                         </div>
-                        <UBadge :color="passwordStrengthColor" variant="soft">{{ passwordStrengthLabel }}</UBadge>
+                        <div class="flex flex-wrap items-center justify-end gap-2">
+                          <UBadge :color="passwordStrengthColor" variant="soft">{{ passwordStrengthLabel }}</UBadge>
+                          <UButton size="xs" @click="updatePassword" :disabled="!canSavePassword" color="primary" class="shadow">保存密码</UButton>
+                        </div>
                       </div>
                       <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div class="w-full flex items-center gap-2">
@@ -376,9 +378,6 @@
                           <UInput v-model="userForm.confirmPassword" :type="showConfirmPassword ? 'text' : 'password'" placeholder="确认新密码" class="flex-1" />
                           <UButton :icon="showConfirmPassword ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="indigo" variant="ghost" @click="showConfirmPassword = !showConfirmPassword" />
                         </div>
-                      </div>
-                      <div class="flex justify-end">
-                        <UButton @click="updatePassword" :disabled="!canSavePassword" color="primary" class="shadow">保存密码</UButton>
                       </div>
                     </div>
 
@@ -478,77 +477,78 @@
                     <div class="flex items-center gap-2 flex-wrap justify-end">
                       <UBadge :color="voceChatConfig.configured ? 'green' : 'gray'" variant="soft">{{ voceChatConfig.configured ? '已就绪' : '未就绪' }}</UBadge>
                       <UBadge :color="voceChatConfig.adminCredentialConfigured ? 'green' : 'orange'" variant="soft">凭据 {{ voceChatConfig.adminCredentialConfigured ? '已配置' : '未配置' }}</UBadge>
+                      <UBadge v-if="!canManageVoceChatConfig" color="gray" variant="soft">仅 1 号管理员可管理</UBadge>
                       <UButton variant="soft" color="indigo" icon="i-heroicons-arrow-path" @click="fetchRegisterConfig">刷新</UButton>
-                      <UButton variant="soft" color="primary" icon="i-heroicons-signal" :loading="checkingVoceChatHealth" @click="checkVoceChatHealth">检查当前状态</UButton>
-                      <UButton color="green" :loading="savingVoceChatConfig" @click="saveVoceChatConfig">保存</UButton>
+                      <UButton variant="soft" color="primary" icon="i-heroicons-signal" :loading="checkingVoceChatHealth" :disabled="!canManageVoceChatConfig" @click="checkVoceChatHealth">检查当前状态</UButton>
+                      <UButton color="green" :loading="savingVoceChatConfig" :disabled="!canManageVoceChatConfig" @click="saveVoceChatConfig">保存</UButton>
                     </div>
                   </div>
 
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
                       <span class="text-sm" :class="theme.text">启用 VoceChat 集成</span>
-                      <UToggle v-model="voceChatConfig.enabled" />
+                      <UToggle v-model="voceChatConfig.enabled" :disabled="!canManageVoceChatConfig" />
                     </label>
                     <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
                       <span class="text-sm" :class="theme.text">登录校验</span>
-                      <UToggle v-model="voceChatConfig.loginVerificationEnabled" :disabled="!voceChatConfig.enabled" />
+                      <UToggle v-model="voceChatConfig.loginVerificationEnabled" :disabled="!canManageVoceChatConfig || !voceChatConfig.enabled" />
                     </label>
                     <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
                       <span class="text-sm" :class="theme.text">本地备用登录</span>
-                      <UToggle v-model="voceChatConfig.localFallbackEnabled" />
+                      <UToggle v-model="voceChatConfig.localFallbackEnabled" :disabled="!canManageVoceChatConfig" />
                     </label>
                     <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
                       <span class="text-sm" :class="theme.text">联系人可见性</span>
-                      <UToggle v-model="voceChatConfig.contactsEnabled" :disabled="!voceChatConfig.enabled" />
+                      <UToggle v-model="voceChatConfig.contactsEnabled" :disabled="!canManageVoceChatConfig || !voceChatConfig.enabled" />
                     </label>
                     <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
                       <span class="text-sm" :class="theme.text">通知推送</span>
-                      <UToggle v-model="voceChatConfig.notificationEnabled" :disabled="!voceChatConfig.enabled" />
+                      <UToggle v-model="voceChatConfig.notificationEnabled" :disabled="!canManageVoceChatConfig || !voceChatConfig.enabled" />
                     </label>
+                    <div class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
+                      <span class="text-sm" :class="theme.text">健康状态</span>
+                      <div class="text-right text-sm min-w-0" :class="theme.text">
+                        <span>{{ voceChatHealthLabel }}</span>
+                        <span v-if="voceChatConfig.lastHealthCheckAt" class="ml-2" :class="theme.mutedText">{{ formatShanghai(voceChatConfig.lastHealthCheckAt) }}</span>
+                      </div>
+                    </div>
                   </div>
 
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <label class="text-sm mb-1 block" :class="theme.mutedText">服务地址</label>
-                      <UInput v-model="voceChatConfig.baseURL" placeholder="https://chat.example.com" />
+                      <UInput v-model="voceChatConfig.baseURL" placeholder="https://chat.example.com" :disabled="!canManageVoceChatConfig" />
                       <div class="text-xs mt-1" :class="theme.mutedText">当前：{{ voceChatConfig.baseURLConfigured ? '已配置' : '未配置' }}</div>
                     </div>
                     <div>
                       <label class="text-sm mb-1 block" :class="theme.mutedText">邮箱域名</label>
-                      <UInput v-model="voceChatConfig.emailDomain" placeholder="vc.com" />
+                      <UInput v-model="voceChatConfig.emailDomain" placeholder="vc.com" :disabled="!canManageVoceChatConfig" />
                     </div>
                     <div>
                       <label class="text-sm mb-1 block" :class="theme.mutedText">管理员邮箱</label>
-                      <UInput v-model="voceChatConfig.adminUsername" placeholder="新管理员邮箱（留空不变）" />
+                      <UInput v-model="voceChatConfig.adminUsername" placeholder="新管理员邮箱（留空不变）" :disabled="!canManageVoceChatConfig" />
                     </div>
                     <div>
                       <label class="text-sm mb-1 block" :class="theme.mutedText">管理员密码</label>
-                      <UInput v-model="voceChatConfig.adminPassword" type="password" placeholder="新密码（留空不变）" />
+                      <UInput v-model="voceChatConfig.adminPassword" type="password" placeholder="新密码（留空不变）" :disabled="!canManageVoceChatConfig" />
                     </div>
                     <div>
                       <label class="text-sm mb-1 block" :class="theme.mutedText">管理员 Token</label>
-                      <UInput v-model="voceChatConfig.adminToken" type="password" placeholder="新 Token（留空不变）" />
+                      <UInput v-model="voceChatConfig.adminToken" type="password" placeholder="新 Token（留空不变）" :disabled="!canManageVoceChatConfig" />
                     </div>
                     <div>
                       <label class="text-sm mb-1 block" :class="theme.mutedText">Third Party Secret</label>
-                      <UInput v-model="voceChatConfig.thirdPartySecret" type="password" placeholder="新 Secret（留空不变）" />
+                      <UInput v-model="voceChatConfig.thirdPartySecret" type="password" placeholder="新 Secret（留空不变）" :disabled="!canManageVoceChatConfig" />
                       <div class="text-xs mt-1" :class="theme.mutedText">当前：{{ voceChatConfig.thirdPartySecretConfigured ? '已配置' : '未配置' }}</div>
                     </div>
                     <div>
                       <label class="text-sm mb-1 block" :class="theme.mutedText">Bot API Key</label>
-                      <UInput v-model="voceChatConfig.botApiKey" type="password" placeholder="新 Bot API Key（留空不变）" />
+                      <UInput v-model="voceChatConfig.botApiKey" type="password" placeholder="新 Bot API Key（留空不变）" :disabled="!canManageVoceChatConfig" />
                       <div class="text-xs mt-1" :class="theme.mutedText">当前：{{ voceChatConfig.botApiKeyConfigured ? '已配置' : '未配置' }}</div>
                     </div>
                     <div>
                       <label class="text-sm mb-1 block" :class="theme.mutedText">联系人缓存 TTL（秒）</label>
-                      <UInput v-model.number="voceChatConfig.contactsCacheTTLSeconds" type="number" min="1" placeholder="60" />
-                    </div>
-                    <div>
-                      <label class="text-sm mb-1 block" :class="theme.mutedText">健康状态</label>
-                      <div class="rounded border px-3 py-2 text-sm min-h-[40px]" :class="[theme.border, theme.text]">
-                        <span>{{ voceChatHealthLabel }}</span>
-                        <span v-if="voceChatConfig.lastHealthCheckAt" class="ml-2" :class="theme.mutedText">{{ formatShanghai(voceChatConfig.lastHealthCheckAt) }}</span>
-                      </div>
+                      <UInput v-model.number="voceChatConfig.contactsCacheTTLSeconds" type="number" min="1" placeholder="60" :disabled="!canManageVoceChatConfig" />
                     </div>
                   </div>
 
@@ -557,19 +557,19 @@
                   <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
                     <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
                       <span class="text-sm" :class="theme.text">清除已存密码</span>
-                      <UToggle v-model="voceChatClear.adminPassword" />
+                      <UToggle v-model="voceChatClear.adminPassword" :disabled="!canManageVoceChatConfig" />
                     </label>
                     <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
                       <span class="text-sm" :class="theme.text">清除已存 Token</span>
-                      <UToggle v-model="voceChatClear.adminToken" />
+                      <UToggle v-model="voceChatClear.adminToken" :disabled="!canManageVoceChatConfig" />
                     </label>
                     <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
                       <span class="text-sm" :class="theme.text">清除已存 Secret</span>
-                      <UToggle v-model="voceChatClear.thirdPartySecret" />
+                      <UToggle v-model="voceChatClear.thirdPartySecret" :disabled="!canManageVoceChatConfig" />
                     </label>
                     <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
                       <span class="text-sm" :class="theme.text">清除 Bot Key</span>
-                      <UToggle v-model="voceChatClear.botApiKey" />
+                      <UToggle v-model="voceChatClear.botApiKey" :disabled="!canManageVoceChatConfig" />
                     </label>
                   </div>
                 </div>
@@ -2621,6 +2621,7 @@ type VoceChatConfigState = {
   thirdPartySecretConfigured: boolean
   notificationEnabled: boolean
   botApiKeyConfigured: boolean
+  adminUsernameConfiguredValue: string
   baseURL: string
   adminUsername: string
   adminPassword: string
@@ -2659,6 +2660,7 @@ const voceChatConfig = reactive<VoceChatConfigState>({
   thirdPartySecretConfigured: false,
   notificationEnabled: false,
   botApiKeyConfigured: false,
+  adminUsernameConfiguredValue: '',
   baseURL: '',
   adminUsername: '',
   adminPassword: '',
@@ -3288,6 +3290,12 @@ const adminSubtleCardClass = computed(() => ([
   theme.value.subtleBg
 ]))
 
+const settingsPayloadWithoutVoceChat = (payload: Record<string, any>) => {
+  const next = { ...(payload || {}) }
+  delete next.voceChatConfig
+  return next
+}
+
 const saveAdminTheme = async () => {
   localStorage.setItem(adminThemeStorageKey, panelTheme.value)
   try {
@@ -3299,6 +3307,7 @@ const saveAdminTheme = async () => {
     } else {
       payload = { adminTheme: panelTheme.value }
     }
+    payload = settingsPayloadWithoutVoceChat(payload)
     const res = await fetch(`${baseApi}/settings`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -3339,6 +3348,7 @@ const applyVoceChatPublicConfig = (raw: any) => {
   voceChatConfig.thirdPartySecretConfigured = !!cfg.thirdPartySecretConfigured
   voceChatConfig.notificationEnabled = !!cfg.notificationEnabled
   voceChatConfig.botApiKeyConfigured = !!cfg.botApiKeyConfigured
+  voceChatConfig.adminUsernameConfiguredValue = String(cfg.adminUsernameConfiguredValue || '').trim()
   voceChatConfig.baseURL = ''
   voceChatConfig.adminUsername = ''
   voceChatConfig.adminPassword = ''
@@ -3419,6 +3429,10 @@ const buildVoceChatConfigPayload = () => {
 }
 
 const saveVoceChatConfig = async () => {
+  if (!canManageVoceChatConfig.value) {
+    useToast().add({ title: '无权管理 VoceChat 配置', description: '仅 1 号管理员可管理该配置。', color: 'red' })
+    return
+  }
   try {
     savingVoceChatConfig.value = true
     const payload = buildVoceChatConfigPayload()
@@ -3437,6 +3451,10 @@ const saveVoceChatConfig = async () => {
 }
 
 const checkVoceChatHealth = async () => {
+  if (!canManageVoceChatConfig.value) {
+    useToast().add({ title: '无权检查 VoceChat 状态', description: '仅 1 号管理员可执行状态检查。', color: 'red' })
+    return
+  }
   try {
     checkingVoceChatHealth.value = true
     const res: any = await postRequest<any>('settings/vocechat/health', {}, { credentials: 'include' })
@@ -4012,7 +4030,7 @@ onMounted(loadSmtp)
 const saveSmtp = async () => {
   try {
     const resCfg = await getRequest<any>('frontend/config', undefined, { credentials: 'include' })
-    const payload: any = resCfg?.code === 1 ? { ...resCfg.data } : {}
+    const payload: any = settingsPayloadWithoutVoceChat(resCfg?.code === 1 ? { ...resCfg.data } : {})
     payload.smtpEnabled = smtp.enabled
     payload.smtpDriver = smtp.driver
     payload.smtpHost = smtp.host
@@ -4085,7 +4103,7 @@ const removeAdmin = (name: string) => {
 const saveAdmins = async () => {
   try {
     const resCfg = await getRequest<any>('frontend/config', undefined, { credentials: 'include' })
-    const payload: any = resCfg?.code === 1 ? { ...resCfg.data } : {}
+    const payload: any = settingsPayloadWithoutVoceChat(resCfg?.code === 1 ? { ...resCfg.data } : {})
     payload.adminUsers = [...adminUsers.value]
     const res = await putRequest<any>('settings', payload, { credentials: 'include' })
     if (res && res.code === 1) {
@@ -4102,7 +4120,7 @@ const resetAdminPassword = async () => {
   try {
     if (!canSaveAdminReset.value) throw new Error('请填写符合强度的新密码并确认一致')
     const resCfg = await getRequest<any>('frontend/config', undefined, { credentials: 'include' })
-    const payload: any = resCfg?.code === 1 ? { ...resCfg.data } : {}
+    const payload: any = settingsPayloadWithoutVoceChat(resCfg?.code === 1 ? { ...resCfg.data } : {})
     payload.adminPasswordReset = adminReset.newPass
     const res = await putRequest<any>('settings', payload, { credentials: 'include' })
     if (res && res.code === 1) {
@@ -4503,6 +4521,18 @@ const isLogin = computed(() => userStore?.isLogin ?? false)
 const isAdmin = computed(() => {
     const u: any = userStore.user
     return !!(userStore.isLogin && u && (u.is_admin || u.IsAdmin))
+})
+const currentUserId = computed(() => {
+  const u: any = userStore.user
+  const id = Number(u?.id ?? u?.ID ?? 0)
+  return Number.isFinite(id) ? id : 0
+})
+const isPrimaryAdmin = computed(() => isAdmin.value && currentUserId.value === 1)
+const canManageVoceChatConfig = computed(() => isPrimaryAdmin.value)
+const registeredVoceChatEmail = computed(() => {
+  const userVoceEmail = String((userStore.user as any)?.voce_chat_email || (userStore.user as any)?.VoceChatEmail || '').trim()
+  if (isPrimaryAdmin.value && voceChatConfig.adminUsernameConfiguredValue) return voceChatConfig.adminUsernameConfiguredValue
+  return userVoceEmail
 })
 const authmode = ref(true)
 const showLoginModal = ref(false)

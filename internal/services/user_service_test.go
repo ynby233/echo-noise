@@ -871,6 +871,89 @@ func TestGetStatusUsesViewerScopedDashboardCounts(t *testing.T) {
 	}
 }
 
+func TestCreateUserNotificationsFollowRecipientRules(t *testing.T) {
+	setupUserServiceTestDB(t)
+
+	admin := mustCreateUser(t, models.User{Username: "admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+	adminTwo := mustCreateUser(t, models.User{Username: "admin2", Password: models.HashPassword("admin2"), IsAdmin: true, Token: models.GenerateToken(32)})
+	alice := mustCreateUser(t, models.User{Username: "alice", Password: models.HashPassword("alice"), Token: models.GenerateToken(32)})
+	bob := mustCreateUser(t, models.User{Username: "bob", Password: models.HashPassword("bob"), Token: models.GenerateToken(32)})
+
+	aliceMessage := models.Message{Content: "alice message", UserID: alice.ID, Username: alice.Username}
+	bobMessage := models.Message{Content: "bob message", UserID: bob.ID, Username: bob.Username}
+	guestbookMessage := models.Message{Content: "#guestbook 留言板", UserID: alice.ID, Username: alice.Username}
+	for _, message := range []*models.Message{&aliceMessage, &bobMessage, &guestbookMessage} {
+		if err := database.DB.Create(message).Error; err != nil {
+			t.Fatalf("create message: %v", err)
+		}
+	}
+
+	bobComment := models.Comment{MessageID: aliceMessage.ID, UserID: &bob.ID, Content: "bob comment", Visibility: "public"}
+	if err := database.DB.Create(&bobComment).Error; err != nil {
+		t.Fatalf("create bob comment: %v", err)
+	}
+	if err := CreateNotificationsForComment(aliceMessage, bobComment, nil); err != nil {
+		t.Fatalf("create comment notification: %v", err)
+	}
+
+	aliceSelfComment := models.Comment{MessageID: aliceMessage.ID, UserID: &alice.ID, Content: "self comment", Visibility: "public"}
+	if err := database.DB.Create(&aliceSelfComment).Error; err != nil {
+		t.Fatalf("create self comment: %v", err)
+	}
+	if err := CreateNotificationsForComment(aliceMessage, aliceSelfComment, nil); err != nil {
+		t.Fatalf("create self comment notification: %v", err)
+	}
+
+	aliceParentComment := models.Comment{MessageID: bobMessage.ID, UserID: &alice.ID, Content: "alice comment", Visibility: "public"}
+	if err := database.DB.Create(&aliceParentComment).Error; err != nil {
+		t.Fatalf("create parent comment: %v", err)
+	}
+	parentID := aliceParentComment.ID
+	bobReply := models.Comment{MessageID: bobMessage.ID, UserID: &bob.ID, ParentID: &parentID, Content: "bob reply", Visibility: "public"}
+	if err := database.DB.Create(&bobReply).Error; err != nil {
+		t.Fatalf("create reply: %v", err)
+	}
+	if err := CreateNotificationsForComment(bobMessage, bobReply, &aliceParentComment); err != nil {
+		t.Fatalf("create reply notification: %v", err)
+	}
+
+	bobGuestbookComment := models.Comment{MessageID: guestbookMessage.ID, UserID: &bob.ID, Content: "guestbook", Visibility: "public"}
+	adminGuestbookComment := models.Comment{MessageID: guestbookMessage.ID, UserID: &admin.ID, Content: "admin guestbook", Visibility: "public"}
+	for _, comment := range []*models.Comment{&bobGuestbookComment, &adminGuestbookComment} {
+		if err := database.DB.Create(comment).Error; err != nil {
+			t.Fatalf("create guestbook comment: %v", err)
+		}
+		if err := CreateNotificationsForComment(guestbookMessage, *comment, nil); err != nil {
+			t.Fatalf("create guestbook notification: %v", err)
+		}
+	}
+
+	if err := CreateNotificationForLike(aliceMessage.ID, bob.ID); err != nil {
+		t.Fatalf("create like notification: %v", err)
+	}
+	if err := CreateNotificationForLike(aliceMessage.ID, bob.ID); err != nil {
+		t.Fatalf("dedupe like notification: %v", err)
+	}
+
+	assertNotificationCount := func(recipient uint, notificationType string, want int64) {
+		t.Helper()
+		var got int64
+		if err := database.DB.Model(&models.UserNotification{}).Where("recipient_user_id = ? AND type = ?", recipient, notificationType).Count(&got).Error; err != nil {
+			t.Fatalf("count notifications: %v", err)
+		}
+		if got != want {
+			t.Fatalf("recipient %d type %s count = %d, want %d", recipient, notificationType, got, want)
+		}
+	}
+
+	assertNotificationCount(alice.ID, models.UserNotificationTypeComment, 1)
+	assertNotificationCount(alice.ID, models.UserNotificationTypeReply, 1)
+	assertNotificationCount(alice.ID, models.UserNotificationTypeLike, 1)
+	assertNotificationCount(bob.ID, models.UserNotificationTypeReply, 0)
+	assertNotificationCount(admin.ID, models.UserNotificationTypeGuestbook, 1)
+	assertNotificationCount(adminTwo.ID, models.UserNotificationTypeGuestbook, 2)
+}
+
 func lifeCountdownFrontendSettings(t *testing.T, viewerUserID uint) map[string]interface{} {
 	t.Helper()
 

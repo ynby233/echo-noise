@@ -83,23 +83,28 @@ func (c Config) IsNotificationReady() bool {
 	return c.Enabled && c.NotificationEnabled && c.BaseURL != "" && strings.TrimSpace(c.BotAPIKey) != ""
 }
 
-func PublicConfigFromSiteConfig(config models.SiteConfig) map[string]interface{} {
+func PublicConfigFromSiteConfig(config models.SiteConfig, includeAdminUsername ...bool) map[string]interface{} {
 	cfg := FromSiteConfig(config)
+	adminUsernameConfiguredValue := ""
+	if len(includeAdminUsername) > 0 && includeAdminUsername[0] {
+		adminUsernameConfiguredValue = strings.TrimSpace(cfg.AdminUsername)
+	}
 	return map[string]interface{}{
-		"enabled":                    cfg.Enabled,
-		"configured":                 cfg.IsReady(),
-		"baseURLConfigured":          cfg.BaseURL != "",
-		"adminCredentialConfigured":  cfg.HasAdminCredential(),
-		"thirdPartySecretConfigured": cfg.ThirdPartySecret != "",
-		"notificationEnabled":        cfg.NotificationEnabled,
-		"botApiKeyConfigured":        cfg.BotAPIKey != "",
-		"emailDomain":                cfg.EmailDomain,
-		"loginVerificationEnabled":   cfg.LoginVerificationEnabled,
-		"localFallbackEnabled":       cfg.LocalFallbackEnabled,
-		"contactsEnabled":            cfg.ContactsEnabled,
-		"contactsCacheTTLSeconds":    cfg.ContactsCacheTTLSeconds,
-		"lastHealthStatus":           strings.TrimSpace(config.VoceChatLastHealthStatus),
-		"lastHealthError":            strings.TrimSpace(config.VoceChatLastHealthError),
+		"enabled":                      cfg.Enabled,
+		"configured":                   cfg.IsReady(),
+		"baseURLConfigured":            cfg.BaseURL != "",
+		"adminCredentialConfigured":    cfg.HasAdminCredential(),
+		"adminUsernameConfiguredValue": adminUsernameConfiguredValue,
+		"thirdPartySecretConfigured":   cfg.ThirdPartySecret != "",
+		"notificationEnabled":          cfg.NotificationEnabled,
+		"botApiKeyConfigured":          cfg.BotAPIKey != "",
+		"emailDomain":                  cfg.EmailDomain,
+		"loginVerificationEnabled":     cfg.LoginVerificationEnabled,
+		"localFallbackEnabled":         cfg.LocalFallbackEnabled,
+		"contactsEnabled":              cfg.ContactsEnabled,
+		"contactsCacheTTLSeconds":      cfg.ContactsCacheTTLSeconds,
+		"lastHealthStatus":             strings.TrimSpace(config.VoceChatLastHealthStatus),
+		"lastHealthError":              strings.TrimSpace(config.VoceChatLastHealthError),
 		"lastHealthCheckAt": func() string {
 			if config.VoceChatLastHealthCheckAt == nil {
 				return ""

@@ -10,6 +10,8 @@ import (
 	"gorm.io/gorm"
 )
 
+const PrimaryAdminUserID uint = 1
+
 var DB *gorm.DB
 
 type UserStatus struct {

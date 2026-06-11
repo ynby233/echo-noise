@@ -139,6 +139,53 @@ func TestApplyMessageVisibilityScopeMatchesFourStateRules(t *testing.T) {
 	}
 }
 
+func TestGuestCannotLikePublicMessage(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	alice := mustCreateUser(t, models.User{Username: "guest-like-alice", Password: models.HashPassword("alice"), Token: models.GenerateToken(32)})
+	message := models.Message{Content: "public message", Username: alice.Username, UserID: alice.ID, Visibility: MessageVisibilityPublic}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatalf("create public message: %v", err)
+	}
+
+	if liked, count, err := ToggleLike(message.ID, nil, "guest-session", false); err == nil || liked || count != 0 {
+		t.Fatalf("guest toggle like should fail, liked=%v count=%d err=%v", liked, count, err)
+	}
+	if created, count, err := IncrementLikeCount(message.ID, 0, false); err == nil || created || count != 0 {
+		t.Fatalf("guest increment like should fail, created=%v count=%d err=%v", created, count, err)
+	}
+
+	var likeCount int64
+	if err := db.Model(&models.MessageLike{}).Where("message_id = ?", message.ID).Count(&likeCount).Error; err != nil {
+		t.Fatalf("count likes: %v", err)
+	}
+	if likeCount != 0 {
+		t.Fatalf("expected no guest likes stored, got %d", likeCount)
+	}
+}
+
+func TestUserCannotLikeInvisiblePrivateMessage(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	alice := mustCreateUser(t, models.User{Username: "private-like-alice", Password: models.HashPassword("alice"), Token: models.GenerateToken(32)})
+	bob := mustCreateUser(t, models.User{Username: "private-like-bob", Password: models.HashPassword("bob"), Token: models.GenerateToken(32)})
+	message := models.Message{Content: "alice private", Username: alice.Username, UserID: alice.ID, Visibility: MessageVisibilityPrivate, Private: true}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatalf("create private message: %v", err)
+	}
+
+	bobID := bob.ID
+	if liked, count, err := ToggleLike(message.ID, &bobID, "", false); err == nil || liked || count != 0 {
+		t.Fatalf("invisible private like should fail, liked=%v count=%d err=%v", liked, count, err)
+	}
+
+	var likeCount int64
+	if err := db.Model(&models.MessageLike{}).Where("message_id = ?", message.ID).Count(&likeCount).Error; err != nil {
+		t.Fatalf("count likes: %v", err)
+	}
+	if likeCount != 0 {
+		t.Fatalf("expected no invisible private likes stored, got %d", likeCount)
+	}
+}
+
 func TestAdminCannotLikeOthersPrivateMessage(t *testing.T) {
 	db := setupUserServiceTestDB(t)
 	admin := mustCreateUser(t, models.User{Username: "like-admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})

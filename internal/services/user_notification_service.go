@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -156,10 +157,10 @@ func sendUserNotificationToVoceChat(ctx context.Context, notificationID uint) er
 	}
 
 	var recipient models.User
-	if err := database.DB.Select("id, username, voce_chat_user_id, voce_chat_notification_enabled").First(&recipient, notification.RecipientUserID).Error; err != nil {
+	if err := database.DB.Select("id, username, is_admin, voce_chat_user_id, voce_chat_notification_enabled").First(&recipient, notification.RecipientUserID).Error; err != nil {
 		return err
 	}
-	if !recipient.VoceChatNotificationEnabled || strings.TrimSpace(recipient.VoceChatUserID) == "" {
+	if !recipient.VoceChatNotificationEnabled {
 		return nil
 	}
 
@@ -175,12 +176,47 @@ func sendUserNotificationToVoceChat(ctx context.Context, notificationID uint) er
 	if err != nil {
 		return err
 	}
+	recipientVoceChatUserID, err := resolveNotificationRecipientVoceChatUserID(ctx, client, vcConfig, recipient)
+	if err != nil {
+		return err
+	}
+	if recipientVoceChatUserID == "" {
+		return nil
+	}
 
 	markdown := buildVoceChatNotificationMarkdown(siteConfig, notification)
 	if strings.TrimSpace(markdown) == "" {
 		return nil
 	}
-	return client.SendMarkdownToUser(ctx, vcConfig.BotAPIKey, recipient.VoceChatUserID, markdown)
+	return client.SendMarkdownToUser(ctx, vcConfig.BotAPIKey, recipientVoceChatUserID, markdown)
+}
+
+func resolveNotificationRecipientVoceChatUserID(ctx context.Context, client *vocechat.Client, vcConfig vocechat.Config, recipient models.User) (string, error) {
+	if uid := strings.TrimSpace(recipient.VoceChatUserID); uid != "" {
+		return uid, nil
+	}
+	if recipient.ID != models.PrimaryAdminUserID {
+		return "", nil
+	}
+	adminEmail := strings.TrimSpace(vcConfig.AdminUsername)
+	if adminEmail == "" || !vcConfig.HasAdminCredential() || client == nil {
+		return "", nil
+	}
+	tokenManager := vocechat.NewAdminTokenManager(client, vcConfig)
+	apiKey, err := tokenManager.GetToken(ctx)
+	if err != nil {
+		return "", err
+	}
+	users, err := client.ListUsers(ctx, apiKey)
+	if err != nil {
+		return "", err
+	}
+	for _, user := range users {
+		if user.UID > 0 && strings.EqualFold(strings.TrimSpace(user.Email), adminEmail) {
+			return strconv.FormatInt(user.UID, 10), nil
+		}
+	}
+	return "", nil
 }
 
 func buildVoceChatNotificationMarkdown(siteConfig models.SiteConfig, notification models.UserNotification) string {

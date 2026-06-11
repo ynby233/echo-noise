@@ -577,7 +577,9 @@ func UpdateUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, dto.OK[any](nil, models.UpdateUserSuccessMessage))
+	safeUser := *user
+	safeUser.Password = ""
+	c.JSON(http.StatusOK, dto.OK(safeUser, models.UpdateUserSuccessMessage))
 }
 
 func ChangePassword(c *gin.Context) {
@@ -618,6 +620,17 @@ func checkAdmin(c *gin.Context) (uint, error) {
 		return 0, fmt.Errorf("需要管理员权限")
 	}
 	return userID.(uint), nil
+}
+
+func requirePrimaryAdmin(c *gin.Context) (uint, error) {
+	userID, err := checkAdmin(c)
+	if err != nil {
+		return 0, err
+	}
+	if userID != models.PrimaryAdminUserID {
+		return 0, fmt.Errorf("仅 1 号管理员可管理 VoceChat 配置")
+	}
+	return userID, nil
 }
 
 func UpdateUserAdmin(c *gin.Context) {
@@ -854,6 +867,10 @@ func UpdateSetting(c *gin.Context) {
 		hasSiteConfigUpdate = true
 	}
 	if setting.VoceChatConfig != nil {
+		if user.ID != models.PrimaryAdminUserID {
+			c.JSON(http.StatusOK, dto.Fail[string]("仅 1 号管理员可管理 VoceChat 配置"))
+			return
+		}
 		settingMap["voceChatConfig"] = setting.VoceChatConfig
 		hasSiteConfigUpdate = true
 	}
@@ -888,7 +905,7 @@ func GetFrontendConfig(c *gin.Context) {
 }
 
 func CheckVoceChatHealth(c *gin.Context) {
-	if _, err := checkAdmin(c); err != nil {
+	if _, err := requirePrimaryAdmin(c); err != nil {
 		c.JSON(http.StatusOK, dto.Fail[map[string]interface{}](err.Error()))
 		return
 	}
@@ -2222,7 +2239,7 @@ func UpdateMessagePinned(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "更新成功"})
 }
 
-// 点赞接口：POST /api/messages/:id/like （无需登录）
+// 点赞接口：POST /api/messages/:id/like
 func IncrementMessageLike(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -2234,12 +2251,22 @@ func IncrementMessageLike(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "无效的消息ID"})
 		return
 	}
-	count, err := services.IncrementLikeCount(uint(messageID))
+	user, ok := pkg.GetUserSession(c)
+	if !ok || user.ID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "请先登录后再点赞"})
+		return
+	}
+	created, count, err := services.IncrementLikeCount(uint(messageID), user.ID, commentAuthIsAdmin(c))
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 1, "data": map[string]int{"like_count": count}})
+	if created {
+		if err := services.CreateNotificationForLike(uint(messageID), user.ID); err != nil {
+			log.Printf("创建点赞通知失败: %v", err)
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": map[string]interface{}{"liked": true, "like_count": count}})
 }
 
 // 点赞切换：POST /api/messages/:id/like/toggle
@@ -2255,40 +2282,19 @@ func ToggleMessageLike(c *gin.Context) {
 		return
 	}
 
-	// 用户或会话
-	var uid *uint
-	if user, ok := pkg.GetUserSession(c); ok {
-		u := user.ID
-		uid = &u
+	user, ok := pkg.GetUserSession(c)
+	if !ok || user.ID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "请先登录后再点赞"})
+		return
 	}
-	sessionID := ""
-	if cookie, _ := c.Request.Cookie("ech0_session"); cookie != nil {
-		sessionID = cookie.Value
-	}
-	// 兼容匿名用户：若无会话则使用自定义 Cookie 维持点赞状态
-	if sessionID == "" {
-		if ck, _ := c.Request.Cookie("like_sid"); ck != nil && ck.Value != "" {
-			sessionID = ck.Value
-		} else {
-			sid := models.GenerateToken(32)
-			http.SetCookie(c.Writer, &http.Cookie{
-				Name:     "like_sid",
-				Value:    sid,
-				Path:     "/",
-				MaxAge:   86400 * 365,
-				HttpOnly: true,
-				SameSite: http.SameSiteLaxMode,
-			})
-			sessionID = sid
-		}
-	}
-	liked, count, err := services.ToggleLike(uint(messageID), uid, sessionID, commentAuthIsAdmin(c))
+	uid := user.ID
+	liked, count, err := services.ToggleLike(uint(messageID), &uid, "", commentAuthIsAdmin(c))
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": err.Error()})
 		return
 	}
-	if liked && uid != nil && *uid != 0 {
-		if err := services.CreateNotificationForLike(uint(messageID), *uid); err != nil {
+	if liked {
+		if err := services.CreateNotificationForLike(uint(messageID), user.ID); err != nil {
 			log.Printf("创建点赞通知失败: %v", err)
 		}
 	}

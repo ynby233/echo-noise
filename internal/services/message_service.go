@@ -432,79 +432,85 @@ func UpdateMessagePinned(messageID uint, pinned bool) error {
 	return nil
 }
 
-// IncrementLikeCount 点赞计数加一
-func IncrementLikeCount(messageID uint) (int, error) {
-	message, err := GetMessageByIDForViewer(messageID, nil, false)
-	if err != nil {
-		return 0, fmt.Errorf("获取消息失败: %v", err)
+// IncrementLikeCount 登录用户点赞；已点赞时保持现状。
+func IncrementLikeCount(messageID uint, userID uint, isAdmin bool) (bool, int, error) {
+	if userID == 0 {
+		return false, 0, fmt.Errorf("请先登录后再点赞")
 	}
-	if message == nil {
-		return 0, fmt.Errorf("消息不存在")
-	}
-	message.LikeCount = message.LikeCount + 1
-	if err := database.DB.Save(message).Error; err != nil {
-		return 0, fmt.Errorf("更新点赞失败: %v", err)
-	}
-	return message.LikeCount, nil
-}
-
-// ToggleLike 根据 session 或用户切换点赞状态
-func ToggleLike(messageID uint, userID *uint, sessionID string, isAdmin bool) (bool, int, error) {
-	if sessionID == "" && (userID == nil || *userID == 0) {
-		return false, 0, fmt.Errorf("缺少会话或用户信息")
-	}
-	var currentUserID *uint
-	if userID != nil && *userID != 0 {
-		currentUserID = userID
-	}
-	message, err := GetMessageByIDForViewer(messageID, currentUserID, isAdmin)
+	currentUserID := userID
+	message, err := GetMessageByIDForViewer(messageID, &currentUserID, isAdmin)
 	if err != nil {
 		return false, 0, err
 	}
-	if !CanInteractWithMessage(*message, currentUserID) {
+	if !CanInteractWithMessage(*message, &currentUserID) {
 		return false, 0, fmt.Errorf("无权点赞该内容")
 	}
-	// 查询是否已有点赞
+
+	created := false
 	var existing models.MessageLike
-	q := database.DB.Where("message_id = ?", messageID)
-	if userID != nil && *userID != 0 {
-		q = q.Where("user_id = ?", *userID)
-	} else {
-		q = q.Where("session_id = ?", sessionID)
-	}
-	if err := q.First(&existing).Error; err == nil && existing.ID != 0 {
-		// 已点赞 -> 取消
-		if err := database.DB.Delete(&existing).Error; err != nil {
-			return false, 0, err
-		}
-	} else {
-		// 未点赞 -> 新增
-		like := models.MessageLike{MessageID: messageID, SessionID: sessionID}
-		if userID != nil && *userID != 0 {
-			like.UserID = userID
-		}
+	err = database.DB.Where("message_id = ? AND user_id = ?", messageID, userID).First(&existing).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		like := models.MessageLike{MessageID: messageID, UserID: &currentUserID}
 		if err := database.DB.Create(&like).Error; err != nil {
 			return false, 0, err
 		}
-	}
-	// 重新统计总数并同步
-	var cnt int64
-	if err := database.DB.Model(&models.MessageLike{}).Where("message_id = ?", messageID).Count(&cnt).Error; err != nil {
+		created = true
+	} else if err != nil {
 		return false, 0, err
 	}
-	if err := database.DB.Model(&models.Message{}).Where("id = ?", messageID).Update("like_count", cnt).Error; err != nil {
-		return false, int(cnt), err
+
+	count, err := syncMessageLikeCount(messageID)
+	return created, count, err
+}
+
+// ToggleLike 根据登录用户切换点赞状态。
+func ToggleLike(messageID uint, userID *uint, _ string, isAdmin bool) (bool, int, error) {
+	if userID == nil || *userID == 0 {
+		return false, 0, fmt.Errorf("请先登录后再点赞")
 	}
-	// 再查一次是否点赞状态
+	currentUserID := *userID
+	message, err := GetMessageByIDForViewer(messageID, &currentUserID, isAdmin)
+	if err != nil {
+		return false, 0, err
+	}
+	if !CanInteractWithMessage(*message, &currentUserID) {
+		return false, 0, fmt.Errorf("无权点赞该内容")
+	}
+
+	var existing models.MessageLike
+	err = database.DB.Where("message_id = ? AND user_id = ?", messageID, currentUserID).First(&existing).Error
+	if err == nil && existing.ID != 0 {
+		if err := database.DB.Delete(&existing).Error; err != nil {
+			return false, 0, err
+		}
+	} else if errors.Is(err, gorm.ErrRecordNotFound) {
+		like := models.MessageLike{MessageID: messageID, UserID: &currentUserID}
+		if err := database.DB.Create(&like).Error; err != nil {
+			return false, 0, err
+		}
+	} else if err != nil {
+		return false, 0, err
+	}
+
+	count, err := syncMessageLikeCount(messageID)
+	if err != nil {
+		return false, count, err
+	}
+
 	var check models.MessageLike
-	q2 := database.DB.Where("message_id = ?", messageID)
-	if userID != nil && *userID != 0 {
-		q2 = q2.Where("user_id = ?", *userID)
-	} else {
-		q2 = q2.Where("session_id = ?", sessionID)
+	liked := database.DB.Where("message_id = ? AND user_id = ?", messageID, currentUserID).First(&check).Error == nil && check.ID != 0
+	return liked, count, nil
+}
+
+func syncMessageLikeCount(messageID uint) (int, error) {
+	var cnt int64
+	if err := database.DB.Model(&models.MessageLike{}).Where("message_id = ?", messageID).Count(&cnt).Error; err != nil {
+		return 0, err
 	}
-	liked := q2.First(&check).Error == nil && check.ID != 0
-	return liked, int(cnt), nil
+	if err := database.DB.Model(&models.Message{}).Where("id = ?", messageID).Update("like_count", cnt).Error; err != nil {
+		return int(cnt), err
+	}
+	return int(cnt), nil
 }
 func shanghaiLocation() *time.Location {
 	loc, err := time.LoadLocation("Asia/Shanghai")
