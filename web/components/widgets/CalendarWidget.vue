@@ -311,6 +311,13 @@ const schedulePickerPosition = () => {
   }
 }
 
+const scrollSelectedPickerOptionToTop = () => {
+  const menu = pickerMenu.value
+  const selected = menu?.querySelector<HTMLElement>('.calendar-floating-option.is-selected')
+  if (!menu || !selected) return
+  menu.scrollTop = Math.max(0, selected.offsetTop)
+}
+
 const togglePicker = async (type: PickerType) => {
   openPicker.value = openPicker.value === type ? '' : type
   if (openPicker.value) {
@@ -323,6 +330,7 @@ const togglePicker = async (type: PickerType) => {
       visibility: 'hidden'
     }
     await nextTick()
+    scrollSelectedPickerOptionToTop()
     schedulePickerPosition()
   }
 }

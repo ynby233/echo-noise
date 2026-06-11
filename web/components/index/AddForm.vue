@@ -185,7 +185,7 @@
         </button>
       </div>
       <div class="publish-time-panel">
-        <div class="publish-time-column" aria-label="小时">
+        <div ref="publishHourColumnRef" class="publish-time-column" aria-label="小时">
           <button
             v-for="hour in publishHourOptions"
             :key="hour"
@@ -197,7 +197,7 @@
             {{ pad2(hour) }}
           </button>
         </div>
-        <div class="publish-time-column" aria-label="分钟">
+        <div ref="publishMinuteColumnRef" class="publish-time-column" aria-label="分钟">
           <button
             v-for="minute in publishMinuteOptions"
             :key="minute"
@@ -359,6 +359,8 @@ const publishDateMenuRef = ref<HTMLElement | null>(null)
 const publishYearPickerButton = ref<HTMLElement | null>(null)
 const publishMonthPickerButton = ref<HTMLElement | null>(null)
 const publishPickerMenuRef = ref<HTMLElement | null>(null)
+const publishHourColumnRef = ref<HTMLElement | null>(null)
+const publishMinuteColumnRef = ref<HTMLElement | null>(null)
 const visibilityMenuStyle = ref<Record<string, string>>({})
 const publishDateMenuStyle = ref<Record<string, string>>({})
 const publishPickerMenuStyle = ref<Record<string, string>>({})
@@ -604,6 +606,21 @@ const scheduleFloatingMenuPosition = (positioner: () => void) => {
   }
 }
 
+const scrollSelectedOptionToTop = (container: HTMLElement | null, selector: string) => {
+  const selected = container?.querySelector<HTMLElement>(selector)
+  if (!container || !selected || typeof window === 'undefined') return
+  container.scrollTop = Math.max(0, selected.offsetTop)
+}
+
+const scrollPublishPickerSelectionToTop = () => {
+  scrollSelectedOptionToTop(publishPickerMenuRef.value, '.publish-picker-floating-option.is-selected')
+}
+
+const scrollPublishTimeSelectionToTop = () => {
+  scrollSelectedOptionToTop(publishHourColumnRef.value, '.publish-time-option.is-selected')
+  scrollSelectedOptionToTop(publishMinuteColumnRef.value, '.publish-time-option.is-selected')
+}
+
 const closeFloatingMenus = () => {
   showVisibilityMenu.value = false
   showPublishDateMenu.value = false
@@ -686,6 +703,7 @@ const togglePublishDateMenu = async () => {
   if (showPublishDateMenu.value) {
     syncPublishDraftFromInput()
     await nextTick()
+    scrollPublishTimeSelectionToTop()
     scheduleFloatingMenuPosition(positionPublishDateMenu)
   }
 }
@@ -702,6 +720,7 @@ const togglePublishPicker = async (type: PublishPickerType) => {
       visibility: 'hidden'
     }
     await nextTick()
+    scrollPublishPickerSelectionToTop()
     scheduleFloatingMenuPosition(positionPublishPickerMenu)
   }
 }
