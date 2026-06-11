@@ -85,6 +85,86 @@ html.dark {
   color: var(--nw-floating-text);
 }
 
+.fancybox__container {
+  --fancybox-bg: rgba(0, 0, 0, 0.9);
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  transform: none !important;
+  transform-origin: center center !important;
+  z-index: 9999 !important;
+}
+
+.fancybox__backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+}
+
+.fancybox__carousel,
+.fancybox__viewport,
+.fancybox__track {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+}
+
+.fancybox__carousel,
+.fancybox__viewport {
+  overflow: hidden !important;
+}
+
+.fancybox__track {
+  display: flex !important;
+  align-items: stretch !important;
+}
+
+.fancybox__slide {
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex: 0 0 100% !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 100% !important;
+  min-height: 0 !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  padding: max(44px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(44px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)) !important;
+}
+
+.fancybox__carousel.has-thumbs .fancybox__slide {
+  padding-bottom: max(88px, env(safe-area-inset-bottom)) !important;
+}
+
+.fancybox__slide .fancybox__content {
+  margin: auto !important;
+  max-width: calc(100vw - 24px) !important;
+  max-height: calc(100dvh - 88px) !important;
+}
+
+.fancybox__carousel.has-thumbs .fancybox__slide .fancybox__content {
+  max-height: calc(100dvh - 132px) !important;
+}
+
+.fancybox__slide.has-image .fancybox__content,
+.fancybox__slide.has-image .fancybox__image {
+  object-fit: contain !important;
+  object-position: center center !important;
+}
+
+/* Counter the site-level body zoom applied on wide screens. */
+@media (min-width: 1920px) {
+  .fancybox__container {
+    zoom: 0.9090909091 !important;
+  }
+}
+
 .nw-tooltip-anchor[data-tooltip] {
   position: relative;
 }

@@ -344,6 +344,35 @@ watch(() => props.theme, (newTheme) => {
   overflow: auto;
 }
 .vditor-tip, .vditor-tooltip { position: fixed; z-index: 10000; }
+.vditor-toolbar .vditor-tooltipped::after {
+  padding: 6px 8px !important;
+  color: var(--nw-tooltip-text) !important;
+  background: var(--nw-tooltip-bg) !important;
+  border: 1px solid var(--nw-tooltip-border) !important;
+  border-radius: 6px !important;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12) !important;
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+}
+.vditor-toolbar .vditor-tooltipped::before {
+  color: var(--nw-tooltip-bg) !important;
+}
+.vditor-toolbar .vditor-tooltipped__s::before,
+.vditor-toolbar .vditor-tooltipped__se::before,
+.vditor-toolbar .vditor-tooltipped__sw::before {
+  border-bottom-color: var(--nw-tooltip-bg) !important;
+}
+.vditor-toolbar .vditor-tooltipped__n::before,
+.vditor-toolbar .vditor-tooltipped__ne::before,
+.vditor-toolbar .vditor-tooltipped__nw::before {
+  border-top-color: var(--nw-tooltip-bg) !important;
+}
+.vditor-toolbar .vditor-tooltipped__e::before {
+  border-right-color: var(--nw-tooltip-bg) !important;
+}
+.vditor-toolbar .vditor-tooltipped__w::before {
+  border-left-color: var(--nw-tooltip-bg) !important;
+}
 .vditor-toolbar__item {
   flex-shrink: 0;
   padding: 6px !important;

@@ -584,7 +584,6 @@ const centerTabs = computed(() => {
   const tabs = [
     { key: 'latest', name: '最新', icon: 'i-heroicons-sparkles' },
     { key: 'personal', name: '个人', icon: 'i-heroicons-user-circle' },
-    { key: 'notifications', name: '通知', icon: 'i-heroicons-bell' },
     { key: 'about', name: '关于', icon: 'i-heroicons-information-circle' }
   ]
   if (isFeedEnabled.value) {

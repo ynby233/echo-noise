@@ -281,7 +281,7 @@ const updatePickerPosition = () => {
   const rect = getFixedRect(trigger, scale)
   const viewport = getFixedViewport(scale)
   const menu = pickerMenu.value
-  const menuWidth = Math.ceil(Math.max(rect.width, pickerType === 'year' ? 88 : 92))
+  const menuWidth = Math.ceil(Math.max(rect.width, pickerType === 'year' ? 88 : rect.width))
   const menuHeight = menu?.offsetHeight || 180
   const pad = 8
   const gap = 4
@@ -650,7 +650,15 @@ html.dark .calendar-select {
 }
 
 .calendar-floating-menu.is-month {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+  max-height: none;
+  padding: 4px;
+}
+
+.calendar-floating-menu.is-month .calendar-floating-option {
+  min-height: 24px;
+  padding: 0 4px;
 }
 
 .calendar-floating-option {
