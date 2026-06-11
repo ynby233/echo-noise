@@ -52,6 +52,8 @@
                 v-if="canReply(item)"
                 type="button"
                 class="reply-toggle"
+                :aria-expanded="replyOpenId === item.id"
+                :aria-controls="`notification-reply-${item.id}`"
                 @click="toggleReply(item)"
               >
                 {{ replyOpenId === item.id ? '收起' : '回复' }}
@@ -61,14 +63,14 @@
 
             <p v-if="actorContent(item)" class="notification-actor-content">{{ actorContent(item) }}</p>
 
-            <button type="button" class="notification-target-card" @click="jumpToTarget(item)">
+            <button type="button" class="notification-target-card" :aria-label="targetAriaLabel(item)" @click="jumpToTarget(item)">
               <img v-if="targetImage(item)" :src="targetImage(item)" class="notification-target-image" alt="通知关联图片" loading="lazy" />
               <div class="notification-target-text">
                 <span v-if="targetOwner(item)" class="target-owner">{{ targetOwner(item) }}：</span>{{ targetText(item) || targetFallbackText(item) }}
               </div>
             </button>
 
-            <div v-if="replyOpenId === item.id" class="inline-reply-box">
+            <div v-if="replyOpenId === item.id" :id="`notification-reply-${item.id}`" class="inline-reply-box">
               <textarea
                 v-model="replyDrafts[item.id]"
                 class="inline-reply-input"
@@ -234,6 +236,13 @@ const targetFallbackText = (item: UserNotification) => {
   return '查看被评论的笔记'
 }
 
+const targetAriaLabel = (item: UserNotification) => {
+  if (item.type === 'guestbook') return '查看对应留言位置'
+  if (item.type === 'reply') return '查看被回复内容位置'
+  if (item.type === 'like') return '查看被点赞笔记位置'
+  return '查看被评论笔记位置'
+}
+
 const targetImage = (item: UserNotification) => {
   const raw = String(item.message?.image_url || '').trim()
   return raw ? resolveMediaURL(baseApi.value, raw) : ''
@@ -282,12 +291,25 @@ const matchesInitialTarget = (item: UserNotification) => {
   return messageId > 0 && Number(item.message_id || 0) === messageId
 }
 
+const scrollElementToAppCenter = (el: HTMLElement) => {
+  if (typeof document === 'undefined') return
+  const wrapper = document.querySelector('.content-wrapper') as HTMLElement | null
+  if (!wrapper) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    return
+  }
+  const wrapperRect = wrapper.getBoundingClientRect()
+  const elRect = el.getBoundingClientRect()
+  const targetTop = wrapper.scrollTop + elRect.top - wrapperRect.top - Math.max(24, (wrapper.clientHeight - elRect.height) / 2)
+  wrapper.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' })
+}
+
 const focusNotificationItem = async (item: UserNotification) => {
   highlightedId.value = item.id
   await markRead(item)
   await nextTick()
   const el = feedRef.value?.querySelector(`[data-notification-id="${item.id}"]`) as HTMLElement | null
-  el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  if (el) scrollElementToAppCenter(el)
   window.setTimeout(() => {
     if (highlightedId.value === item.id) highlightedId.value = null
   }, 2200)
@@ -409,7 +431,7 @@ const focusInlineReplyInput = async (itemId: number) => {
   const input = feedRef.value?.querySelector(`[data-reply-input-id="${itemId}"]`) as HTMLTextAreaElement | null
   if (!input) return
   input.focus({ preventScroll: true })
-  input.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  scrollElementToAppCenter(input)
 }
 
 const toggleReply = async (item: UserNotification) => {
