@@ -2251,18 +2251,18 @@ func IncrementMessageLike(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "无效的消息ID"})
 		return
 	}
-	user, ok := pkg.GetUserSession(c)
-	if !ok || user.ID == 0 {
+	userID, ok := commentAuthUserID(c)
+	if !ok || userID == 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "请先登录后再点赞"})
 		return
 	}
-	created, count, err := services.IncrementLikeCount(uint(messageID), user.ID, commentAuthIsAdmin(c))
+	created, count, err := services.IncrementLikeCount(uint(messageID), userID, commentAuthIsAdmin(c))
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": err.Error()})
 		return
 	}
 	if created {
-		if err := services.CreateNotificationForLike(uint(messageID), user.ID); err != nil {
+		if err := services.CreateNotificationForLike(uint(messageID), userID); err != nil {
 			log.Printf("创建点赞通知失败: %v", err)
 		}
 	}
@@ -2282,19 +2282,19 @@ func ToggleMessageLike(c *gin.Context) {
 		return
 	}
 
-	user, ok := pkg.GetUserSession(c)
-	if !ok || user.ID == 0 {
+	userID, ok := commentAuthUserID(c)
+	if !ok || userID == 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "请先登录后再点赞"})
 		return
 	}
-	uid := user.ID
+	uid := userID
 	liked, count, err := services.ToggleLike(uint(messageID), &uid, "", commentAuthIsAdmin(c))
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": err.Error()})
 		return
 	}
 	if liked {
-		if err := services.CreateNotificationForLike(uint(messageID), user.ID); err != nil {
+		if err := services.CreateNotificationForLike(uint(messageID), userID); err != nil {
 			log.Printf("创建点赞通知失败: %v", err)
 		}
 	}

@@ -28,7 +28,7 @@ func setupCommentAccountTest(t *testing.T) (*gorm.DB, *gin.Engine, models.User, 
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}
-	if err := db.AutoMigrate(&models.User{}, &models.Message{}, &models.Comment{}, &models.SiteConfig{}, &models.VoceChatContactCache{}); err != nil {
+	if err := db.AutoMigrate(&models.User{}, &models.Message{}, &models.MessageLike{}, &models.Comment{}, &models.SiteConfig{}, &models.VoceChatContactCache{}); err != nil {
 		t.Fatalf("migrate test db: %v", err)
 	}
 	repository.ClearUserCache()
@@ -1062,6 +1062,51 @@ func TestGuestbookFollowsCommentVisibilityRules(t *testing.T) {
 	}
 	if resp.Code != 1 || resp.Data.ParentID == nil || *resp.Data.ParentID != entry.ID {
 		t.Fatalf("expected successful guestbook reply response, got %#v", resp)
+	}
+}
+
+func TestToggleMessageLikeUsesLoginSessionUserID(t *testing.T) {
+	db, r, user, msg := setupCommentAccountTest(t)
+	r.Use(func(c *gin.Context) {
+		session := sessions.Default(c)
+		session.Set("user_id", user.ID)
+		session.Set("username", user.Username)
+		session.Set("is_admin", user.IsAdmin)
+		if err := session.Save(); err != nil {
+			t.Fatalf("save session: %v", err)
+		}
+		c.Next()
+	})
+	r.POST("/messages/:id/like/toggle", ToggleMessageLike)
+
+	req := httptest.NewRequest(http.MethodPost, "/messages/"+strconvFormatUint(msg.ID)+"/like/toggle", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Code float64 `json:"code"`
+		Data struct {
+			Liked     bool `json:"liked"`
+			LikeCount int  `json:"like_count"`
+		} `json:"data"`
+		Msg string `json:"msg"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Code != 1 || !resp.Data.Liked || resp.Data.LikeCount != 1 {
+		t.Fatalf("expected successful like response, got %#v", resp)
+	}
+
+	var count int64
+	if err := db.Model(&models.MessageLike{}).Where("message_id = ? AND user_id = ?", msg.ID, user.ID).Count(&count).Error; err != nil {
+		t.Fatalf("count likes: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected one like row for logged-in session user, got %d", count)
 	}
 }
 
