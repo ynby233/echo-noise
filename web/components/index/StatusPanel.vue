@@ -345,7 +345,7 @@
                           <span v-else class="inline-flex items-center px-2 py-0.5 rounded-md text-amber-400 border border-amber-400/40">未绑定邮箱，请先绑定邮箱</span>
                         </div>
                         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded border px-3 py-2 min-w-0" :class="theme.border">
-                          <span class="text-sm whitespace-nowrap" :class="theme.mutedText">注册绑定 VC 邮箱</span>
+                          <span class="text-sm whitespace-nowrap" :class="theme.mutedText">注册绑定 VoceChat 邮箱</span>
                           <span v-if="registeredVoceChatEmail" :class="[theme.text, theme.border, 'inline-flex items-center px-2 py-0.5 rounded-md break-all text-right']">
                             {{ registeredVoceChatEmail }}
                           </span>
