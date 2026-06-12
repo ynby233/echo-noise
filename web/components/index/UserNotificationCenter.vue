@@ -177,6 +177,7 @@ const props = defineProps<{ siteConfig?: any, initialMessageId?: number | null, 
 const emit = defineEmits<{
   (event: 'unread-change', count: number): void
   (event: 'jump', item: UserNotification): void
+  (event: 'restore-consumed'): void
 }>()
 
 const user = useUserStore()
@@ -348,6 +349,7 @@ const selectRestoreNotification = async () => {
   const matched = items.value.find((item) => Number(item.id) === id)
   if (!matched) return false
   await focusNotificationItem(matched)
+  emit('restore-consumed')
   return true
 }
 

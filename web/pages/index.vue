@@ -216,6 +216,7 @@
               :restore-focus-id="notificationReturnFocusId ?? undefined"
               @unread-change="handleNotificationUnreadChange"
               @jump="handleNotificationJump"
+              @restore-consumed="handleNotificationRestoreConsumed"
             />
           </div>
           <div v-else-if="activeTab==='about'" class="about-page">
@@ -867,6 +868,10 @@ const handleNotificationJump = async (item: NotificationJumpItem) => {
   selectedCalendarDate.value = ''
   activeTab.value = 'latest'
   targetMessageId.value = messageId ? String(messageId) : null
+}
+
+const handleNotificationRestoreConsumed = () => {
+  notificationReturnFocusId.value = null
 }
 
 const loadNotificationUnreadCount = async () => {
