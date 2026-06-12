@@ -65,7 +65,7 @@
         <div v-if="sidebarOpen" class="fixed inset-0 z-30 bg-slate-950/45 backdrop-blur-[1px] md:hidden" @click="sidebarOpen=false"></div>
         <div class="admin-desktop-flex admin-topbar-surface items-center justify-between gap-3 px-5 py-4 border-b sticky top-0 z-30" :class="desktopTopbarClass">
           <div class="min-w-0 flex items-center">
-            <button class="admin-desktop-toggle-btn" :class="headerBtnCls" :title="desktopSidebarToggleText" :aria-label="desktopSidebarToggleText" @click="sidebarCollapsed = !sidebarCollapsed">
+            <button class="admin-desktop-toggle-btn nw-tooltip-anchor" :class="headerBtnCls" :data-tooltip="desktopSidebarToggleText" :aria-label="desktopSidebarToggleText" @click="sidebarCollapsed = !sidebarCollapsed">
               <UIcon :name="desktopSidebarToggleIcon" class="w-5 h-5 shrink-0" />
             </button>
             <div class="mx-4 h-8 w-px opacity-70" :class="theme.border"></div>

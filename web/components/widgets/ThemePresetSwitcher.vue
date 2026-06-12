@@ -2,7 +2,7 @@
   <UCard class="rounded-xl">
     <div class="px-3 py-2 text-xs opacity-70">主题预设</div>
     <div class="flex items-center gap-2 p-2">
-      <button v-for="p in presets" :key="p.key" class="w-6 h-6 rounded-full border hover:scale-105" :style="{ background: p.color }" @click="apply(p.key)" :title="p.name"></button>
+      <button v-for="p in presets" :key="p.key" class="w-6 h-6 rounded-full border hover:scale-105 nw-tooltip-anchor" :style="{ background: p.color }" :data-tooltip="p.name" :aria-label="p.name" @click="apply(p.key)"></button>
     </div>
   </UCard>
 </template>

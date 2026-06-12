@@ -127,7 +127,7 @@
               </div>
               <div class="border-t border-gray-300 dark:border-gray-700 my-3"></div>
               <div class="message-socialbar">
-                <button class="social-item" @click="like(msg.id)" :title="'点赞'">
+                <button class="social-item nw-tooltip-anchor" data-tooltip="点赞" aria-label="点赞" @click="like(msg.id)">
                   <UIcon
                     :name="(likedMap[msg.id] ? 'i-mdi-heart' : 'i-mdi-heart-outline')"
                     class="social-icon"
@@ -135,7 +135,7 @@
                   />
                   <span :class="['opacity-80', isMobile ? 'text-xs' : 'text-sm']">{{ likesMap[msg.id] ?? (msg.like_count || 0) }}</span>
                 </button>
-                <button v-if="!isGuestbookMessage(msg)" class="social-item" @click="toggleComment(msg.id)" :title="'评论'">
+                <button v-if="!isGuestbookMessage(msg)" class="social-item nw-tooltip-anchor" data-tooltip="评论" aria-label="评论" @click="toggleComment(msg.id)">
                   <UIcon name="i-mdi-comment-outline" class="social-icon" />
                   <span :class="['opacity-80', isMobile ? 'text-xs' : 'text-sm']">{{ commentCountMap[msg.id] || 0 }}</span>
                 </button>
@@ -146,16 +146,16 @@
                   </span>
                 </div>
                 <div class="toolbox-anchor">
-                  <UButton size="xs" color="gray" variant="ghost" :ui="{ base: 'rounded-full' }" class="tool-open-btn" @click="toggleToolbox(msg.id)" title="展开工具">
+                  <UButton size="xs" color="gray" variant="ghost" :ui="{ base: 'rounded-full' }" class="tool-open-btn nw-tooltip-anchor" data-tooltip="展开工具" aria-label="展开工具" @click="toggleToolbox(msg.id)">
                     <UIcon name="i-heroicons-ellipsis-horizontal" style="font-size: 16px; line-height: 1;" />
                   </UButton>
                   <div class="message-toolbox overlay" v-show="openToolboxId === msg.id">
                     <div class="tool-icons">
-                      <div v-if="messageVisibility(msg) !== 'public'" class="tool-icon" :data-label="messageVisibilityLabel(messageVisibility(msg))"><UIcon :name="messageVisibilityIcon(messageVisibility(msg))" /></div>
-                      <div v-if="canPin(msg)" class="tool-icon" :data-label="(msg.pinned ? '取消置顶' : '置顶内容')" @click="togglePin(msg)"><UIcon :name="msg.pinned ? 'i-mdi-pin' : 'i-mdi-pin-outline'" /></div>
-                      <div v-if="isLogin" class="tool-icon" data-label="编辑" @click="editMessage(msg)"><UIcon name="i-mdi-pencil-outline" /></div>
-                      <div class="tool-icon" data-label="复制" @click="copyContent(msg.content)"><UIcon name="i-mdi-content-copy" /></div>
-                      <div v-if="isLogin" class="tool-icon" data-label="删除" @click="deleteMsg(msg.id)"><UIcon name="i-mdi-trash-can-outline" /></div>
+                      <div v-if="messageVisibility(msg) !== 'public'" class="tool-icon nw-tooltip-anchor" :data-label="messageVisibilityLabel(messageVisibility(msg))"><UIcon :name="messageVisibilityIcon(messageVisibility(msg))" /></div>
+                      <div v-if="canPin(msg)" class="tool-icon nw-tooltip-anchor" :data-label="(msg.pinned ? '取消置顶' : '置顶内容')" @click="togglePin(msg)"><UIcon :name="msg.pinned ? 'i-mdi-pin' : 'i-mdi-pin-outline'" /></div>
+                      <div v-if="isLogin" class="tool-icon nw-tooltip-anchor" data-label="编辑" @click="editMessage(msg)"><UIcon name="i-mdi-pencil-outline" /></div>
+                      <div class="tool-icon nw-tooltip-anchor" data-label="复制" @click="copyContent(msg.content)"><UIcon name="i-mdi-content-copy" /></div>
+                      <div v-if="isLogin" class="tool-icon nw-tooltip-anchor" data-label="删除" @click="deleteMsg(msg.id)"><UIcon name="i-mdi-trash-can-outline" /></div>
                   </div>
                   </div>
                 </div>
@@ -2344,6 +2344,7 @@ onMounted(() => {
 :global(html:not(.dark)) .tool-icon::after { background: #ffffff; color: #111827; border: 1px solid rgba(0,0,0,0.12); box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
 :global(html.dark) .tool-icon::after { background: var(--home-surface-dark-elevated); color: #ffffff; border: 1px solid rgba(255,255,255,0.16); box-shadow: 0 2px 8px rgba(255,255,255,0.06); }
 .tool-icon:hover::after { opacity: 1; }
+.tool-icon.nw-tooltip-suppressed::after { opacity: 0 !important; }
 .toolbox-dark { background: var(--home-surface-dark-elevated); border: 1px solid rgba(255,255,255,0.16); }
 .toolbox-light { background: #fff; border: 1px solid rgba(0,0,0,0.08); }
 

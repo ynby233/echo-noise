@@ -238,7 +238,7 @@ func TestPostCommentBindsCurrentAccountAndIgnoresLegacyContactFields(t *testing.
 	}
 }
 
-func TestPostCommentCannotBePublicOnPublicMessage(t *testing.T) {
+func TestPostCommentAllowsPublicOnPublicMessage(t *testing.T) {
 	db, r, user, msg := setupCommentAccountTest(t)
 	r.Use(func(c *gin.Context) {
 		c.Set("user_id", user.ID)
@@ -248,18 +248,18 @@ func TestPostCommentCannotBePublicOnPublicMessage(t *testing.T) {
 	r.POST("/messages/:id/comments", PostComment)
 
 	w := performCommentRequest(r, msg.ID, map[string]any{
-		"content":    "too-wide",
+		"content":    "public-comment",
 		"visibility": "public",
 	})
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 when public message gets public comment, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 when public message gets public comment, got %d: %s", w.Code, w.Body.String())
 	}
-	var count int64
-	if err := db.Model(&models.Comment{}).Where("content = ?", "too-wide").Count(&count).Error; err != nil {
-		t.Fatalf("count comments: %v", err)
+	var saved models.Comment
+	if err := db.Where("content = ?", "public-comment").First(&saved).Error; err != nil {
+		t.Fatalf("load public comment: %v", err)
 	}
-	if count != 0 {
-		t.Fatalf("expected no public comment created, got %d", count)
+	if saved.Visibility != "public" {
+		t.Fatalf("public message comment visibility = %q, want public", saved.Visibility)
 	}
 }
 

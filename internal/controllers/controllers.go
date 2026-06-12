@@ -1346,14 +1346,16 @@ func commentVisibilityRank(value string) int {
 
 func defaultCommentVisibilityForMessage(messageVisibility string) string {
 	switch messageVisibility {
+	case services.MessageVisibilityPublic:
+		return "public"
+	case services.MessageVisibilityUsers:
+		return "users"
 	case services.MessageVisibilityContacts:
 		return "contacts"
 	case services.MessageVisibilityPrivate:
 		return "private"
-	case services.MessageVisibilityPublic, services.MessageVisibilityUsers:
-		return "users"
 	default:
-		return "users"
+		return "public"
 	}
 }
 
@@ -1367,7 +1369,9 @@ func normalizeRequestedCommentVisibility(value string, messageVisibility string)
 func commentVisibilityAllowedForMessage(visibility string, messageVisibility string) bool {
 	visibility = normalizedCommentVisibilityOrPublic(visibility)
 	switch messageVisibility {
-	case services.MessageVisibilityPublic, services.MessageVisibilityUsers:
+	case services.MessageVisibilityPublic:
+		return visibility == "public" || visibility == "users" || visibility == "contacts" || visibility == "private"
+	case services.MessageVisibilityUsers:
 		return visibility == "users" || visibility == "contacts" || visibility == "private"
 	case services.MessageVisibilityContacts:
 		return visibility == "contacts" || visibility == "private"

@@ -18,9 +18,9 @@
                 </a>
               </div>
               <div class="comment-editor-toolbar edit-toolbar">
-                <div class="visibility-picker comment-visibility-picker toolbar-control nw-tooltip-anchor" data-tooltip="可见范围" :class="themeMuted" @mousedown.stop>
+                <div class="visibility-picker comment-visibility-picker toolbar-control nw-tooltip-anchor" data-tooltip="可见范围" @mousedown.stop>
+                  <UIcon :name="visibilityIconFor('edit')" class="w-5 h-5" />
                   <button type="button" class="comment-visibility-trigger" aria-label="可见范围" aria-haspopup="listbox" :aria-expanded="isCommentVisibilityMenuOpen('edit', c.id)" @click="toggleCommentVisibilityMenu('edit', c.id)">
-                    <UIcon :name="visibilityIconFor('edit')" class="w-4 h-4" />
                     <span>{{ selectedVisibilityLabelFor('edit') }}</span>
                     <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
                   </button>
@@ -31,13 +31,13 @@
                     </button>
                   </div>
                 </div>
-                <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="加粗" aria-label="加粗" @click="applyFormat('edit', 'bold')"><UIcon name="i-mdi-format-bold" class="w-4 h-4" /></button>
-                <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="斜体" aria-label="斜体" @click="applyFormat('edit', 'italic')"><UIcon name="i-mdi-format-italic" class="w-4 h-4" /></button>
-                <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="链接" aria-label="链接" @click="applyFormat('edit', 'link')"><UIcon name="i-mdi-link-variant" class="w-4 h-4" /></button>
-                <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="图片链接" aria-label="图片链接" @click="applyFormat('edit', 'imageLink')"><UIcon name="i-mdi-image-outline" class="w-4 h-4" /></button>
-                <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" :disabled="isCommentImageUploading" @click="triggerCommentImageUpload('edit')"><UIcon name="i-mdi-image-plus-outline" class="w-4 h-4" /></button>
+                <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="加粗" aria-label="加粗" @click="applyFormat('edit', 'bold')"><UIcon name="i-mdi-format-bold" class="w-5 h-5" /></button>
+                <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="斜体" aria-label="斜体" @click="applyFormat('edit', 'italic')"><UIcon name="i-mdi-format-italic" class="w-5 h-5" /></button>
+                <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="链接" aria-label="链接" @click="applyFormat('edit', 'link')"><UIcon name="i-mdi-link-variant" class="w-5 h-5" /></button>
+                <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="图片链接" aria-label="图片链接" @click="applyFormat('edit', 'imageLink')"><UIcon name="i-mdi-image-outline" class="w-5 h-5" /></button>
+                <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" :disabled="isCommentImageUploading" @click="triggerCommentImageUpload('edit')"><UIcon name="i-mdi-image-plus-outline" class="w-5 h-5" /></button>
                 <div class="emoji-wrap">
-                  <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="表情" aria-label="表情" @click="toggleEmoji('edit')"><UIcon name="i-mdi-emoticon-outline" class="w-4 h-4" /></button>
+                  <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="表情" aria-label="表情" @click="toggleEmoji('edit')"><UIcon name="i-mdi-emoticon-outline" class="w-5 h-5" /></button>
                   <div v-if="showEmojiTarget === 'edit'" class="emoji-popover nw-floating-menu">
                     <button v-for="e in emojis" :key="e" type="button" class="emoji-option" @click="insertEmoji(e)">{{ e }}</button>
                   </div>
@@ -75,9 +75,9 @@
                       </a>
                     </div>
                     <div class="comment-editor-toolbar edit-toolbar">
-                      <div class="visibility-picker comment-visibility-picker toolbar-control nw-tooltip-anchor" data-tooltip="可见范围" :class="themeMuted" @mousedown.stop>
+                      <div class="visibility-picker comment-visibility-picker toolbar-control nw-tooltip-anchor" data-tooltip="可见范围" @mousedown.stop>
+                        <UIcon :name="visibilityIconFor('edit')" class="w-5 h-5" />
                         <button type="button" class="comment-visibility-trigger" aria-label="可见范围" aria-haspopup="listbox" :aria-expanded="isCommentVisibilityMenuOpen('edit', child.id)" @click="toggleCommentVisibilityMenu('edit', child.id)">
-                          <UIcon :name="visibilityIconFor('edit')" class="w-4 h-4" />
                           <span>{{ selectedVisibilityLabelFor('edit') }}</span>
                           <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
                         </button>
@@ -88,13 +88,13 @@
                           </button>
                         </div>
                       </div>
-                      <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="加粗" aria-label="加粗" @click="applyFormat('edit', 'bold')"><UIcon name="i-mdi-format-bold" class="w-4 h-4" /></button>
-                      <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="斜体" aria-label="斜体" @click="applyFormat('edit', 'italic')"><UIcon name="i-mdi-format-italic" class="w-4 h-4" /></button>
-                      <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="链接" aria-label="链接" @click="applyFormat('edit', 'link')"><UIcon name="i-mdi-link-variant" class="w-4 h-4" /></button>
-                      <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="图片链接" aria-label="图片链接" @click="applyFormat('edit', 'imageLink')"><UIcon name="i-mdi-image-outline" class="w-4 h-4" /></button>
-                      <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" :disabled="isCommentImageUploading" @click="triggerCommentImageUpload('edit')"><UIcon name="i-mdi-image-plus-outline" class="w-4 h-4" /></button>
+                      <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="加粗" aria-label="加粗" @click="applyFormat('edit', 'bold')"><UIcon name="i-mdi-format-bold" class="w-5 h-5" /></button>
+                      <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="斜体" aria-label="斜体" @click="applyFormat('edit', 'italic')"><UIcon name="i-mdi-format-italic" class="w-5 h-5" /></button>
+                      <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="链接" aria-label="链接" @click="applyFormat('edit', 'link')"><UIcon name="i-mdi-link-variant" class="w-5 h-5" /></button>
+                      <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="图片链接" aria-label="图片链接" @click="applyFormat('edit', 'imageLink')"><UIcon name="i-mdi-image-outline" class="w-5 h-5" /></button>
+                      <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" :disabled="isCommentImageUploading" @click="triggerCommentImageUpload('edit')"><UIcon name="i-mdi-image-plus-outline" class="w-5 h-5" /></button>
                       <div class="emoji-wrap">
-                        <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="表情" aria-label="表情" @click="toggleEmoji('edit')"><UIcon name="i-mdi-emoticon-outline" class="w-4 h-4" /></button>
+                        <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="表情" aria-label="表情" @click="toggleEmoji('edit')"><UIcon name="i-mdi-emoticon-outline" class="w-5 h-5" /></button>
                         <div v-if="showEmojiTarget === 'edit'" class="emoji-popover nw-floating-menu">
                           <button v-for="e in emojis" :key="e" type="button" class="emoji-option" @click="insertEmoji(e)">{{ e }}</button>
                         </div>
@@ -134,9 +134,9 @@
 
       <div v-if="formVisible" class="space-y-4 mt-4 md:mt-5">
         <div class="comment-editor-toolbar main-toolbar">
-          <div class="visibility-picker comment-visibility-picker toolbar-control nw-tooltip-anchor" data-tooltip="可见范围" :class="themeMuted" @mousedown.stop>
+          <div class="visibility-picker comment-visibility-picker toolbar-control nw-tooltip-anchor" data-tooltip="可见范围" @mousedown.stop>
+            <UIcon :name="visibilityIconFor('content')" class="w-5 h-5" />
             <button type="button" class="comment-visibility-trigger" aria-label="可见范围" aria-haspopup="listbox" :aria-expanded="isCommentVisibilityMenuOpen('content')" @click="toggleCommentVisibilityMenu('content')">
-              <UIcon :name="visibilityIconFor('content')" class="w-4 h-4" />
               <span>{{ selectedVisibilityLabelFor('content') }}</span>
               <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
             </button>
@@ -147,20 +147,20 @@
               </button>
             </div>
           </div>
-          <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="加粗" aria-label="加粗" @click="applyFormat('content', 'bold')"><UIcon name="i-mdi-format-bold" class="w-4 h-4" /></button>
-          <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="斜体" aria-label="斜体" @click="applyFormat('content', 'italic')"><UIcon name="i-mdi-format-italic" class="w-4 h-4" /></button>
-          <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="链接" aria-label="链接" @click="applyFormat('content', 'link')"><UIcon name="i-mdi-link-variant" class="w-4 h-4" /></button>
-          <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="图片链接" aria-label="图片链接" @click="applyFormat('content', 'imageLink')"><UIcon name="i-mdi-image-outline" class="w-4 h-4" /></button>
-          <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" :disabled="isCommentImageUploading" @click="triggerCommentImageUpload('content')"><UIcon name="i-mdi-image-plus-outline" class="w-4 h-4" /></button>
+          <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="加粗" aria-label="加粗" @click="applyFormat('content', 'bold')"><UIcon name="i-mdi-format-bold" class="w-5 h-5" /></button>
+          <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="斜体" aria-label="斜体" @click="applyFormat('content', 'italic')"><UIcon name="i-mdi-format-italic" class="w-5 h-5" /></button>
+          <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="链接" aria-label="链接" @click="applyFormat('content', 'link')"><UIcon name="i-mdi-link-variant" class="w-5 h-5" /></button>
+          <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="图片链接" aria-label="图片链接" @click="applyFormat('content', 'imageLink')"><UIcon name="i-mdi-image-outline" class="w-5 h-5" /></button>
+          <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" :disabled="isCommentImageUploading" @click="triggerCommentImageUpload('content')"><UIcon name="i-mdi-image-plus-outline" class="w-5 h-5" /></button>
           <div class="emoji-wrap">
-            <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="表情" aria-label="表情" @click="toggleEmoji('content')"><UIcon name="i-mdi-emoticon-outline" class="w-4 h-4" /></button>
+            <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="表情" aria-label="表情" @click="toggleEmoji('content')"><UIcon name="i-mdi-emoticon-outline" class="w-5 h-5" /></button>
             <div v-if="showEmojiTarget === 'content'" class="emoji-popover nw-floating-menu">
               <button v-for="e in emojis" :key="e" type="button" class="emoji-option" @click="insertEmoji(e)">{{ e }}</button>
             </div>
           </div>
           <span v-if="activeCommentEditorTarget === 'content' && commentImageUploadPercent > 0 && commentImageUploadPercent < 100" class="comment-upload-status">{{ commentImageUploadPercent }}%</span>
           <button v-if="returnTargetLabel" type="button" class="return-target-btn" @click="returnToInputTarget">
-            <UIcon :name="returnTargetIcon" class="w-3.5 h-3.5" />
+            <UIcon :name="returnTargetIcon" class="w-5 h-5" />
             <span>{{ returnTargetLabel }}</span>
           </button>
         </div>
@@ -264,12 +264,7 @@ const normalizeVisibility = (v: any) => {
   const value = String(v || 'public').trim()
   return visibilityOptions.some((opt) => opt.value === value) ? value : 'public'
 }
-const messageVisibilityLimit = computed(() => {
-  const value = String(props.messageVisibility || 'public').trim()
-  if (value === 'contacts') return 'contacts'
-  if (value === 'private') return 'private'
-  return 'users'
-})
+const messageVisibilityLimit = computed(() => normalizeVisibility(props.messageVisibility))
 const narrowestVisibilityLimit = (...limits: any[]) => {
   const normalized = limits.map(normalizeVisibility)
   return normalized.reduce((max, value) => ((visibilityRank[value] ?? 0) > (visibilityRank[max] ?? 0) ? value : max), 'public')
@@ -1053,6 +1048,13 @@ const editingVisibilityOptions = computed(() => {
   return parent ? commentVisibilityOptions(parent.visibility) : commentVisibilityOptions()
 })
 
+watch(messageVisibilityLimit, () => {
+  selectedVisibility.value = clampVisibilityToLimit(selectedVisibility.value, replyingToComment.value?.visibility)
+  const parentId = Number(editingComment.value?.parent_id || 0)
+  const parent = parentId > 0 ? byId.value[parentId] : null
+  editingVisibility.value = clampVisibilityToLimit(editingVisibility.value, parent?.visibility)
+})
+
 const commentVisibilityMenuKey = (target: CommentEditorTarget, id?: number | null) => target === 'edit' ? `edit:${Number(id || editingId.value || 0)}` : 'content'
 const isCommentVisibilityMenuOpen = (target: CommentEditorTarget, id?: number | null) => openCommentVisibilityMenu.value === commentVisibilityMenuKey(target, id)
 const currentCommentVisibility = (target: CommentEditorTarget) => target === 'edit' ? editingVisibility.value : selectedVisibility.value
@@ -1273,7 +1275,7 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 .action-btn:hover { opacity:1; }
 .comment-visibility { font-size:11px; opacity:.72; padding:1px 6px; border-radius:9999px; border:1px solid currentColor; }
 .visibility-picker { display:inline-flex; align-items:center; gap:6px; font-size:12px; }
-.toolbar-control.comment-visibility-picker { position:relative; min-width:104px; padding:0; }
+.toolbar-control.comment-visibility-picker { position:relative; }
 .edit-card { display:flex; flex-direction:column; gap:8px; margin:4px 0 6px; }
 .edit-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:center; gap:8px; }
 .comment-input-card { display:flex; align-items:flex-start; gap:12px; margin-top:6px; width:100%; }
@@ -1307,8 +1309,8 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 :global(html:not(.dark)) .comment-floor, :global(html:not(.dark)) .comment-time { color: #6b7280; }
 .builtin-comments {
   --comment-toolbar-bg: rgba(255, 255, 255, 0.85);
-  --comment-toolbar-control-bg: rgba(15, 23, 42, 0.06);
-  --comment-toolbar-control-hover-bg: var(--nw-floating-hover-bg);
+  --comment-toolbar-control-bg: rgba(0, 0, 0, 0.06);
+  --comment-toolbar-control-hover-bg: rgba(0, 0, 0, 0.12);
   --comment-toolbar-border: rgba(15, 23, 42, 0.08);
   --comment-toolbar-text: #374151;
   --comment-toolbar-preview-border: rgba(0, 0, 0, 0.12);
@@ -1327,17 +1329,17 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 .comment-editor-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-height:48px; padding:6px; border-radius:12px; background:var(--comment-toolbar-bg); color:var(--comment-toolbar-text); backdrop-filter:saturate(1.1) blur(6px); -webkit-backdrop-filter:saturate(1.1) blur(6px); }
 .main-toolbar { margin-bottom:8px; }
 .edit-toolbar { margin-top:2px; }
-.toolbar-control { display:inline-flex; align-items:center; gap:5px; min-width:94px; height:36px; padding:0 8px; border:1px solid var(--comment-toolbar-border); border-radius:12px; background:var(--comment-toolbar-control-bg); color:var(--comment-toolbar-text); box-shadow:none; transition:background-color .18s ease, border-color .18s ease, transform .18s ease; }
+.toolbar-control { display:flex; align-items:center; gap:5px; min-height:36px; height:36px; width:max-content; max-width:min(220px, calc(100vw - 32px)); min-width:0; padding:0 8px; border:1px solid var(--comment-toolbar-border); border-radius:12px; background:var(--comment-toolbar-control-bg); color:var(--comment-toolbar-text); box-shadow:none; transition:background-color .18s ease, border-color .18s ease, transform .18s ease; }
 .toolbar-control:hover,
 .toolbar-control:focus-within { border-color:var(--nw-floating-hover-border); background:var(--comment-toolbar-control-hover-bg); }
-.comment-tool-btn { display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto; width:36px; min-width:36px; height:36px; border-radius:12px; border:1px solid var(--comment-toolbar-border); background:var(--comment-toolbar-control-bg); color:var(--comment-toolbar-text); box-shadow:none; transition:background-color .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+.comment-tool-btn { display:flex; align-items:center; justify-content:center; flex:0 0 auto; width:36px; min-width:36px; height:36px; border-radius:12px; border:1px solid var(--comment-toolbar-border); background:var(--comment-toolbar-control-bg); color:var(--comment-toolbar-text); box-shadow:none; transition:background-color .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
 .comment-tool-btn:hover:not(:disabled) { transform:translate3d(0,0,0) scale(1.06); border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
 .comment-tool-btn:active:not(:disabled) { transform:translate3d(0,0,0) scale(1.02); }
 .comment-tool-btn:disabled { cursor:not-allowed; opacity:.5; }
-.comment-visibility-trigger { display:inline-flex; align-items:center; justify-content:space-between; gap:5px; width:100%; min-width:0; height:100%; padding:0 8px; border:0; border-radius:12px; background:transparent; color:inherit; font-size:12px; line-height:1; cursor:pointer; }
-.comment-visibility-trigger span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.comment-visibility-trigger { display:inline-flex; align-items:center; justify-content:space-between; gap:3px; width:auto; min-width:46px; max-width:100%; height:28px; padding:0; border:0; border-radius:9px; background:transparent; color:inherit; font-size:12px; line-height:1; cursor:pointer; }
+.comment-visibility-trigger span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .comment-visibility-trigger svg { flex:0 0 auto; opacity:.72; }
-.comment-visibility-menu { position:absolute; left:0; bottom:calc(100% + 8px); z-index:35; display:grid; gap:4px; width:max-content; min-width:126px; padding:8px; border:1px solid var(--nw-floating-border); border-radius:12px; background:var(--nw-floating-bg); color:var(--nw-floating-text); box-shadow:var(--nw-floating-shadow); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
+.comment-visibility-menu { position:absolute; left:0; bottom:calc(100% + 8px); z-index:35; display:grid; gap:4px; width:max-content; min-width:100%; padding:8px; border:1px solid var(--nw-floating-border); border-radius:12px; background:var(--nw-floating-bg); color:var(--nw-floating-text); box-shadow:var(--nw-floating-shadow); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
 .comment-visibility-option { display:flex; align-items:center; gap:8px; min-height:32px; padding:0 10px; border-radius:9px; border:1px solid transparent; color:inherit; font-size:12px; font-weight:650; line-height:1; text-align:left; white-space:nowrap; transition:background-color .15s ease, border-color .15s ease, color .15s ease; }
 .comment-visibility-option:hover,
 .comment-visibility-option:focus-visible { outline:none; border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
