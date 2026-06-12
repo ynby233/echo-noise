@@ -1171,12 +1171,12 @@ const addMessage = async () => {
 .tb-btn.has-label { width: auto; min-width: 66px; gap: 5px; padding: 0 10px; }
 .notify-btn.is-enabled { background: rgba(249,115,22,0.16); color: #c2410c; box-shadow: inset 0 0 0 1px rgba(249,115,22,0.32); }
 .notify-label { font-size: 12px; line-height: 1; white-space: nowrap; }
-.publish-time-control { display:flex; align-items:center; gap:5px; min-height:36px; height:36px; width: max-content; max-width: min(210px, calc(100vw - 32px)); border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 8px; border: none; box-shadow: none; transition: background-color .18s ease, transform .18s ease; }
-.visibility-control { display:flex; align-items:center; gap:5px; min-height:36px; height:36px; width: max-content; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 8px; border: none; box-shadow: none; transition: background-color .18s ease, transform .18s ease; }
+.publish-time-control { display:flex; align-items:center; gap:5px; min-height:36px; height:36px; width: max-content; max-width: min(210px, calc(100vw - 32px)); border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 8px; border:1px solid rgba(15,23,42,0.08); box-shadow: none; transition: background-color .18s ease, border-color .18s ease, transform .18s ease; }
+.visibility-control { display:flex; align-items:center; gap:5px; min-height:36px; height:36px; width: max-content; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 8px; border:1px solid rgba(15,23,42,0.08); box-shadow: none; transition: background-color .18s ease, border-color .18s ease, transform .18s ease; }
 .publish-time-control:hover,
 .publish-time-control:focus-within,
 .visibility-control:hover,
-.visibility-control:focus-within { background: rgba(0,0,0,0.12); }
+.visibility-control:focus-within { border-color: var(--nw-floating-hover-border); background: rgba(0,0,0,0.12); }
 .visibility-select { width: auto; min-width: 46px; max-width: 76px; height: 28px; padding: 0; border: 0; border-radius: 9px; outline: none; background: transparent; color: inherit; font-size: 12px; cursor: pointer; }
 .visibility-trigger,
 .publish-time-trigger { display: inline-flex; align-items: center; justify-content: space-between; gap: 3px; }
@@ -1236,7 +1236,7 @@ html.dark .tb-btn { background: rgba(255,255,255,0.06); color:#cbd5e1; border-co
 html.dark .tb-btn:hover { background: var(--nw-floating-hover-bg); border-color: var(--nw-floating-hover-border); }
 html.dark .notify-btn.is-enabled { background: rgba(249,115,22,0.22); color: #fed7aa; box-shadow: inset 0 0 0 1px rgba(251,146,60,0.38); }
 html.dark .publish-time-control,
-html.dark .visibility-control { background: rgba(255,255,255,0.06); color:#cbd5e1; border: none; }
+html.dark .visibility-control { background: rgba(255,255,255,0.06); color:#cbd5e1; border-color: rgba(255,255,255,0.12); }
 html.dark .publish-time-control:hover,
 html.dark .publish-time-control:focus-within,
 html.dark .visibility-control:hover,
