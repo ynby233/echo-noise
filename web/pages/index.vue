@@ -888,6 +888,9 @@ const openNotificationCenter = async () => {
   const ok = await userStore.checkLoginStatus()
   if (ok) {
     if (notificationReturnPending.value) {
+      notificationTargetMessageId.value = null
+      notificationTargetCommentId.value = null
+      targetMessageId.value = null
       activeTab.value = 'notifications'
       notificationReturnPending.value = false
       await loadNotificationUnreadCount()
