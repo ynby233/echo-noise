@@ -2,8 +2,8 @@
   <section class="notification-center" :class="{ 'notification-theme-dark': isDark }">
     <div class="notification-header">
       <div>
-        <h2 class="notification-title">空间消息</h2>
-        <p class="notification-subtitle">评论、回复、留言和点赞</p>
+        <h2 class="notification-title">通知</h2>
+        <p class="notification-subtitle">欢迎彼此间互相交流</p>
       </div>
       <div v-if="user.isLogin" class="notification-actions">
         <span v-if="unreadCount > 0" class="unread-pill">{{ unreadCount }} 未读</span>
