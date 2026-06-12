@@ -69,11 +69,22 @@
 
             <p v-if="actorContent(item)" class="notification-actor-content">{{ actorContent(item) }}</p>
 
-            <button type="button" class="notification-target-card" :aria-label="targetAriaLabel(item)" @click="jumpToTarget(item)">
+            <button
+              type="button"
+              class="notification-target-card"
+              :class="{ jumping: jumpingId === item.id }"
+              :aria-label="targetAriaLabel(item)"
+              :disabled="jumpingId === item.id"
+              @click="jumpToTarget(item)"
+            >
               <img v-if="targetImage(item)" :src="targetImage(item)" class="notification-target-image" alt="通知关联图片" loading="lazy" />
               <div class="notification-target-text">
                 <span v-if="targetOwner(item)" class="target-owner">{{ targetOwner(item) }}：</span>{{ targetText(item) || targetFallbackText(item) }}
               </div>
+              <span v-if="jumpingId === item.id" class="notification-target-jumping" aria-live="polite">
+                <UIcon name="i-mdi-loading" class="notification-target-jumping-icon" />
+                正在跳转
+              </span>
             </button>
 
             <div v-if="replyOpenId === item.id" :id="`notification-reply-${item.id}`" class="inline-reply-box">
@@ -198,7 +209,9 @@ const replyOpenId = ref<number | null>(null)
 const replyDrafts = ref<Record<number, string>>({})
 const replySubmitting = ref<Record<number, boolean>>({})
 const replySuccessId = ref<number | null>(null)
+const jumpingId = ref<number | null>(null)
 let replySuccessTimer: ReturnType<typeof setTimeout> | null = null
+let jumpFeedbackTimer: ReturnType<typeof setTimeout> | null = null
 
 const runtimeConfig = useRuntimeConfig()
 const baseApi = computed(() => runtimeConfig.public.baseApi || '/api')
@@ -447,9 +460,16 @@ const markAllRead = async () => {
 }
 
 const jumpToTarget = async (item: UserNotification) => {
+  if (jumpingId.value === item.id) return
+  clearJumpFeedback()
+  jumpingId.value = item.id
   await markRead(item)
   highlightedId.value = item.id
   emit('jump', item)
+  jumpFeedbackTimer = setTimeout(() => {
+    if (jumpingId.value === item.id) jumpingId.value = null
+    jumpFeedbackTimer = null
+  }, 1600)
 }
 
 const focusInlineReplyInput = async (itemId: number) => {
@@ -464,6 +484,12 @@ const clearReplySuccess = () => {
   if (replySuccessTimer) clearTimeout(replySuccessTimer)
   replySuccessTimer = null
   replySuccessId.value = null
+}
+
+const clearJumpFeedback = () => {
+  if (jumpFeedbackTimer) clearTimeout(jumpFeedbackTimer)
+  jumpFeedbackTimer = null
+  jumpingId.value = null
 }
 
 const showReplySuccess = async (itemId: number) => {
@@ -523,6 +549,7 @@ watch(() => user.isLogin, (loggedIn) => {
     loadError.value = ''
     replyOpenId.value = null
     clearReplySuccess()
+    clearJumpFeedback()
     setUnreadCount(0)
   }
 })
@@ -533,6 +560,7 @@ onMounted(() => loadNotifications(true))
 
 onBeforeUnmount(() => {
   clearReplySuccess()
+  clearJumpFeedback()
 })
 
 defineExpose({ refresh: () => loadNotifications(true) })
@@ -569,11 +597,14 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .reply-toggle:hover { color:#2563eb; }
 .like-corner-icon { width:24px; height:24px; color:#64748b; }
 .notification-actor-content { margin:12px 0 0; font-size:15px; line-height:1.72; white-space:pre-wrap; word-break:break-word; color:#0f172a; }
-.notification-target-card { width:100%; margin-top:14px; padding:12px 14px; border:0; border-radius:4px; background:#f1f5f9; color:#0f172a; display:flex; align-items:center; gap:12px; text-align:left; cursor:pointer; transition:background .16s ease, transform .16s ease; }
+.notification-target-card { width:100%; margin-top:14px; padding:12px 14px; border:0; border-radius:4px; background:#f1f5f9; color:#0f172a; display:flex; align-items:center; flex-wrap:wrap; gap:12px; text-align:left; cursor:pointer; transition:background .16s ease, transform .16s ease, opacity .16s ease; }
 .notification-target-card:hover { background:#e9eef5; transform:translateY(-1px); }
+.notification-target-card.jumping { cursor:wait; opacity:.88; transform:none; }
 .notification-target-image { width:64px; height:64px; flex:0 0 64px; object-fit:cover; border-radius:2px; background:#e2e8f0; }
-.notification-target-text { min-width:0; font-size:15px; line-height:1.6; word-break:break-word; }
+.notification-target-text { min-width:0; flex:1 1 160px; font-size:15px; line-height:1.6; word-break:break-word; }
 .target-owner { color:#0f3f75; font-weight:700; }
+.notification-target-jumping { margin-left:auto; display:inline-flex; align-items:center; gap:4px; flex:0 0 auto; color:#2563eb; font-size:12px; font-weight:700; }
+.notification-target-jumping-icon { width:14px; height:14px; animation:notification-spin 1s linear infinite; }
 .inline-reply-box { margin-top:14px; }
 .inline-reply-input { width:100%; min-height:42px; resize:vertical; border:1px solid rgba(148,163,184,.24); border-radius:5px; background:#f3f6fb; color:#0f172a; padding:10px 12px; line-height:1.5; outline:none; }
 .inline-reply-input:focus { border-color:rgba(37,99,235,.42); box-shadow:0 0 0 3px rgba(37,99,235,.1); }
@@ -612,6 +643,7 @@ defineExpose({ refresh: () => loadNotifications(true) })
 :global(.dark) .target-owner { color:#93c5fd; }
 :global(.dark) .notification-target-card { background:rgba(30,41,59,.86); }
 :global(.dark) .notification-target-card:hover { background:rgba(51,65,85,.88); }
+:global(.dark) .notification-target-jumping { color:#93c5fd; }
 :global(.dark) .inline-reply-input { background:rgba(15,23,42,.72); border-color:rgba(148,163,184,.26); color:#e5e7eb; }
 :global(.dark) .inline-reply-success { background:rgba(34,197,94,.14); color:#86efac; }
 :global(.dark) .notification-feed-error { background:rgba(127,29,29,.22); border-color:rgba(248,113,113,.2); color:#fca5a5; }
@@ -630,6 +662,7 @@ defineExpose({ refresh: () => loadNotifications(true) })
   .notification-target-card { margin-top:14px; padding:12px; border-radius:3px; }
   .notification-target-image { width:58px; height:58px; flex-basis:58px; }
   .notification-target-text { font-size:15px; line-height:1.55; }
+  .notification-target-jumping { width:100%; justify-content:flex-end; }
   .inline-reply-actions { flex-wrap:wrap; }
   .inline-reply-hint { width:100%; margin-right:0; }
 }
