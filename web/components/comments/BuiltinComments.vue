@@ -18,7 +18,7 @@
                 </a>
               </div>
               <div class="comment-editor-toolbar edit-toolbar">
-                <div class="visibility-picker comment-visibility-picker toolbar-control nw-tooltip-anchor" data-tooltip="可见范围" @mousedown.stop>
+                <div class="visibility-picker comment-visibility-picker toolbar-control nw-tooltip-anchor" :data-tooltip="visibilityTooltipFor('edit')" @mousedown.stop>
                   <UIcon :name="visibilityIconFor('edit')" class="w-5 h-5" />
                   <button type="button" class="comment-visibility-trigger" aria-label="可见范围" aria-haspopup="listbox" :aria-expanded="isCommentVisibilityMenuOpen('edit', c.id)" @click="toggleCommentVisibilityMenu('edit', c.id)">
                     <span>{{ selectedVisibilityLabelFor('edit') }}</span>
@@ -58,7 +58,7 @@
             <div class="comment-actions">
               <button class="action-btn" @click="startReply(c.id, commentAuthorName(c))">回复</button>
               <button v-if="canManageComment(c)" class="action-btn" @click="startEdit(c)">编辑</button>
-              <button v-if="canManageComment(c)" class="action-btn text-red-500" @click="confirmDelete(c.id)">删除</button>
+              <button v-if="canManageComment(c)" class="action-btn delete-action-btn" @click="confirmDelete(c.id)">删除</button>
             </div>
             <div v-if="childrenMap[c.id]?.length" class="mt-2 replies-list">
               <div v-for="child in visibleChildren(c.id)" :key="child.id" class="comment-item child" :class="childCardClass" :data-comment-id="child.id">
@@ -75,7 +75,7 @@
                       </a>
                     </div>
                     <div class="comment-editor-toolbar edit-toolbar">
-                      <div class="visibility-picker comment-visibility-picker toolbar-control nw-tooltip-anchor" data-tooltip="可见范围" @mousedown.stop>
+                      <div class="visibility-picker comment-visibility-picker toolbar-control nw-tooltip-anchor" :data-tooltip="visibilityTooltipFor('edit')" @mousedown.stop>
                         <UIcon :name="visibilityIconFor('edit')" class="w-5 h-5" />
                         <button type="button" class="comment-visibility-trigger" aria-label="可见范围" aria-haspopup="listbox" :aria-expanded="isCommentVisibilityMenuOpen('edit', child.id)" @click="toggleCommentVisibilityMenu('edit', child.id)">
                           <span>{{ selectedVisibilityLabelFor('edit') }}</span>
@@ -114,7 +114,7 @@
                   <div class="comment-actions">
                     <button class="action-btn" @click="startReply(child.id, commentAuthorName(child))">回复</button>
                     <button v-if="canManageComment(child)" class="action-btn" @click="startEdit(child)">编辑</button>
-                    <button v-if="canManageComment(child)" class="action-btn text-red-500" @click="confirmDelete(child.id)">删除</button>
+                    <button v-if="canManageComment(child)" class="action-btn delete-action-btn" @click="confirmDelete(child.id)">删除</button>
                   </div>
                 </div>
               </div>
@@ -134,7 +134,7 @@
 
       <div v-if="formVisible" class="space-y-4 mt-4 md:mt-5">
         <div class="comment-editor-toolbar main-toolbar">
-          <div class="visibility-picker comment-visibility-picker toolbar-control nw-tooltip-anchor" data-tooltip="可见范围" @mousedown.stop>
+          <div class="visibility-picker comment-visibility-picker toolbar-control nw-tooltip-anchor" :data-tooltip="visibilityTooltipFor('content')" @mousedown.stop>
             <UIcon :name="visibilityIconFor('content')" class="w-5 h-5" />
             <button type="button" class="comment-visibility-trigger" aria-label="可见范围" aria-haspopup="listbox" :aria-expanded="isCommentVisibilityMenuOpen('content')" @click="toggleCommentVisibilityMenu('content')">
               <span>{{ selectedVisibilityLabelFor('content') }}</span>
@@ -867,8 +867,8 @@ onMounted(() => {
     if (formVisible.value && props.autoScrollInput) scrollToInput(false)
   })
 })
-const submitBtnClass = computed(() => (isDark.value ? 'bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-60' : 'bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-60'))
-const cancelBtnClass = computed(() => (isDark.value ? 'bg-gray-600 text-white hover:bg-gray-500' : 'bg-gray-200 text-black hover:bg-gray-300'))
+const submitBtnClass = computed(() => '')
+const cancelBtnClass = computed(() => '')
 const clearContent = () => {
   content.value = ''
   hideMention()
@@ -1059,6 +1059,7 @@ const commentVisibilityMenuKey = (target: CommentEditorTarget, id?: number | nul
 const isCommentVisibilityMenuOpen = (target: CommentEditorTarget, id?: number | null) => openCommentVisibilityMenu.value === commentVisibilityMenuKey(target, id)
 const currentCommentVisibility = (target: CommentEditorTarget) => target === 'edit' ? editingVisibility.value : selectedVisibility.value
 const selectedVisibilityLabelFor = (target: CommentEditorTarget) => visibilityOptionFor(currentCommentVisibility(target)).label
+const visibilityTooltipFor = (target: CommentEditorTarget) => `可见范围：${selectedVisibilityLabelFor(target)}`
 const visibilityIconFor = (target: CommentEditorTarget) => visibilityOptionFor(currentCommentVisibility(target)).icon
 const closeCommentVisibilityMenu = () => { openCommentVisibilityMenu.value = null }
 const toggleCommentVisibilityMenu = (target: CommentEditorTarget, id?: number | null) => {
@@ -1258,8 +1259,10 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 .comment-content { margin:4px 0 6px; }
 .comment-footer { display:flex; align-items:center; gap:10px; font-size:12px; opacity:.8; }
 .comment-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
-.action-btn { padding:6px 10px; border:1px solid rgba(0,0,0,0.1); border-radius:8px; font-size:12px; }
-.action-btn:hover { filter:brightness(1.05); }
+.action-btn { min-height:30px; padding:0 10px; border:1px solid var(--comment-toolbar-border); border-radius:10px; background:var(--comment-toolbar-control-bg); color:var(--comment-toolbar-text); font-size:12px; font-weight:650; line-height:1; transition:background-color .18s ease, border-color .18s ease, color .18s ease, transform .18s ease; }
+.action-btn:hover { transform:translate3d(0,0,0) scale(1.06); border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
+.delete-action-btn { border-color:rgba(234,88,12,.95); background:linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color:#fff !important; }
+.delete-action-btn:hover { transform:translate3d(0,0,0) scale(1.06); border-color:rgba(234,88,12,.95); background:linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); }
 .comment-header { display:flex; align-items:baseline; flex-wrap:wrap; gap:8px; font-size:14px; font-weight:600; line-height:1.4; color: inherit; }
 .comment-meta { display:flex; align-items:center; gap:8px; font-size:12px; white-space: normal; }
 .reply-target { font-size:12px; opacity:.7; }
@@ -1285,8 +1288,12 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 .comment-reopen-row { display:flex; justify-content:flex-end; }
 .comment-reopen-btn { min-width:84px; }
 .return-target-btn { display:inline-flex; align-items:center; justify-content:center; gap:5px; flex:0 0 auto; width:auto; min-width:66px; height:36px; padding:0 10px; border-radius:12px; border:1px solid rgba(15,23,42,0.08); background:rgba(15,23,42,0.06); color:#374151; font-size:12px; line-height:1; box-shadow:none; transition:background-color .18s ease, border-color .18s ease, transform .18s ease; }
-.submit-btn { min-width:64px; height:32px; border-radius:8px; padding:0 12px; font-size:13px; display:inline-flex; align-items:center; justify-content:center; }
-.cancel-btn { min-width:64px; height:32px; border-radius:8px; padding:0 12px; font-size:13px; display:inline-flex; align-items:center; justify-content:center; }
+.submit-btn,
+.cancel-btn { min-width:64px; height:32px; border-radius:10px; padding:0 12px; font-size:13px; font-weight:650; display:inline-flex; align-items:center; justify-content:center; border:1px solid transparent; transition:background-color .18s ease, border-color .18s ease, color .18s ease, transform .18s ease; }
+.cancel-btn { border-color:var(--comment-toolbar-border); background:var(--comment-toolbar-control-bg); color:var(--comment-toolbar-text); }
+.cancel-btn:hover { transform:translate3d(0,0,0) scale(1.06); border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
+.submit-btn { border-color:rgba(37,99,235,.72); background:#3b82f6; color:#fff; }
+.submit-btn:hover:not(:disabled) { transform:translate3d(0,0,0) scale(1.06); border-color:rgba(29,78,216,.86); background:#2563eb; }
 .comment-input-card textarea { overflow:hidden; resize:none; min-height:80px; flex:1; width:100%; min-width:0; }
 .submit-btn[disabled] { opacity:.6; cursor:not-allowed; }
 :where(.comment-avatar) { width:36px; height:36px; border-radius:9999px; object-fit:cover; }
@@ -1343,13 +1350,13 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 .builtin-comments.comment-theme-dark .toolbar-control:hover,
 .builtin-comments.comment-theme-dark .toolbar-control:focus-within,
 .builtin-comments.comment-theme-dark .comment-tool-btn:hover:not(:disabled),
-.builtin-comments.comment-theme-dark .return-target-btn:hover { background:var(--comment-toolbar-control-hover-bg) !important; border-color:var(--nw-floating-hover-border) !important; }
+.builtin-comments.comment-theme-dark .return-target-btn:hover { transform:translate3d(0,0,0) scale(1.06); background:var(--nw-floating-hover-bg) !important; border-color:var(--nw-floating-hover-border) !important; }
 .builtin-comments.comment-theme-dark .comment-visibility-menu { background:var(--nw-floating-bg) !important; color:var(--nw-floating-text) !important; border-color:var(--nw-floating-border) !important; }
 .main-toolbar { margin-bottom:8px; }
 .edit-toolbar { margin-top:2px; }
 .toolbar-control { display:flex; align-items:center; gap:5px; min-height:36px; height:36px; width:max-content; max-width:min(220px, calc(100vw - 32px)); min-width:0; padding:0 8px; border:1px solid var(--comment-toolbar-border); border-radius:12px; background:var(--comment-toolbar-control-bg); color:var(--comment-toolbar-text); box-shadow:none; transition:background-color .18s ease, border-color .18s ease, transform .18s ease; }
 .toolbar-control:hover,
-.toolbar-control:focus-within { border-color:var(--nw-floating-hover-border); background:var(--comment-toolbar-control-hover-bg); }
+.toolbar-control:focus-within { transform:translate3d(0,0,0) scale(1.06); border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
 .comment-tool-btn { display:flex; align-items:center; justify-content:center; flex:0 0 auto; width:36px; min-width:36px; height:36px; border-radius:12px; border:1px solid var(--comment-toolbar-border); background:var(--comment-toolbar-control-bg); color:var(--comment-toolbar-text); box-shadow:none; transition:background-color .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
 .comment-tool-btn:hover:not(:disabled) { transform:translate3d(0,0,0) scale(1.06); border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
 .comment-tool-btn:active:not(:disabled) { transform:translate3d(0,0,0) scale(1.02); }
@@ -1357,7 +1364,7 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 .comment-visibility-trigger { display:inline-flex; align-items:center; justify-content:space-between; gap:3px; width:auto; min-width:46px; max-width:100%; height:28px; padding:0; border:0; border-radius:9px; background:transparent; color:inherit; font-size:12px; line-height:1; cursor:pointer; }
 .comment-visibility-trigger span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .comment-visibility-trigger svg { flex:0 0 auto; opacity:.72; }
-.comment-visibility-menu { position:absolute; left:0; bottom:calc(100% + 8px); z-index:5006; display:grid; gap:4px; width:max-content; min-width:100%; padding:8px; border:1px solid var(--nw-floating-border); border-radius:12px; background:var(--nw-floating-bg) !important; color:var(--nw-floating-text); box-shadow:var(--nw-floating-shadow); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); isolation:isolate; pointer-events:auto; }
+.comment-visibility-menu { position:absolute; left:0; bottom:calc(100% + 8px); z-index:5006; display:grid; gap:4px; width:max-content; min-width:106px; padding:8px; border:1px solid var(--nw-floating-border); border-radius:12px; background:var(--nw-floating-bg) !important; color:var(--nw-floating-text); box-shadow:var(--nw-floating-shadow); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); isolation:isolate; pointer-events:auto; }
 .comment-visibility-option { display:flex; align-items:center; gap:8px; min-height:32px; padding:0 10px; border-radius:9px; border:1px solid transparent; color:inherit; font-size:12px; font-weight:650; line-height:1; text-align:left; white-space:nowrap; transition:background-color .15s ease, border-color .15s ease, color .15s ease; }
 .comment-visibility-option:hover,
 .comment-visibility-option:focus-visible { outline:none; border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }

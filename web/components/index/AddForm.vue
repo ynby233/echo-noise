@@ -637,7 +637,7 @@ const closeFloatingMenus = () => {
   openPublishPicker.value = ''
 }
 
-const positionVisibilityMenu = () => positionFloatingMenu(visibilityControlRef.value, visibilityMenuRef.value, visibilityMenuStyle, 126, 'above-right')
+const positionVisibilityMenu = () => positionFloatingMenu(visibilityControlRef.value, visibilityMenuRef.value, visibilityMenuStyle, 106, 'above-right')
 const positionPublishDateMenu = () => positionFloatingMenu(publishTimeControlRef.value, publishDateMenuRef.value, publishDateMenuStyle, 292, 'above-right')
 const positionPublishPickerMenu = () => {
   if (!openPublishPicker.value || typeof window === 'undefined') return
@@ -1176,7 +1176,7 @@ const addMessage = async () => {
 .publish-time-control:hover,
 .publish-time-control:focus-within,
 .visibility-control:hover,
-.visibility-control:focus-within { border-color: var(--nw-floating-hover-border); background: rgba(0,0,0,0.12); }
+.visibility-control:focus-within { transform: translate3d(0,0,0) scale(1.06); border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
 .visibility-select { width: auto; min-width: 46px; max-width: 76px; height: 28px; padding: 0; border: 0; border-radius: 9px; outline: none; background: transparent; color: inherit; font-size: 12px; cursor: pointer; }
 .visibility-trigger,
 .publish-time-trigger { display: inline-flex; align-items: center; justify-content: space-between; gap: 3px; }
@@ -1240,7 +1240,7 @@ html.dark .visibility-control { background: rgba(255,255,255,0.06); color:#cbd5e
 html.dark .publish-time-control:hover,
 html.dark .publish-time-control:focus-within,
 html.dark .visibility-control:hover,
-html.dark .visibility-control:focus-within { background: rgba(255,255,255,0.12); }
+html.dark .visibility-control:focus-within { background: var(--nw-floating-hover-bg); border-color: var(--nw-floating-hover-border); }
 html.dark .visibility-select { background: transparent; border: 0; color: inherit; }
 html.dark .floating-icon-btn,
 html.dark .floating-action-btn,
