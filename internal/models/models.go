@@ -36,6 +36,7 @@ type Message struct {
 	Notify     bool      `gorm:"default:false" json:"notify"` // 新增推送通知字段
 	Pinned     bool      `gorm:"default:false" json:"pinned"`
 	LikeCount  int       `gorm:"default:0" json:"like_count"`
+	Liked      bool      `gorm:"-" json:"liked"`
 }
 
 // MessageLike 点赞记录（用于幂等与取消点赞）

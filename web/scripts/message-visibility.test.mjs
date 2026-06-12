@@ -34,7 +34,7 @@ for (const state of ['public', 'users', 'contacts', 'private']) {
 
 assert.match(
   addForm,
-  /<select v-model="Visibility"[\s\S]*aria-label="可见范围"/,
+  /class="visibility-select visibility-trigger"[\s\S]*aria-label="可见范围"/,
   'publish form must render a visibility selector'
 )
 assert.match(

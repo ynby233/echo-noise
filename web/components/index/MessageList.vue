@@ -469,6 +469,18 @@ const pendingCommentIds = ref<number[]>([])
 let activeCommentBatch = false
 const batchSize = 20
 let io: IntersectionObserver | null = null
+const hydrateMessageEngagement = (items: any[]) => {
+  if (!Array.isArray(items)) return
+  items.forEach((item: any) => {
+    const id = Number(item?.id || 0)
+    if (!id) return
+    if (item?.like_count !== undefined && item?.like_count !== null) {
+      const count = Number(item.like_count)
+      if (Number.isFinite(count)) likesMap.value[id] = count
+    }
+    likedMap.value[id] = item?.liked === true
+  })
+}
 const fetchCommentCountsBatch = async (ids: number[]) => {
   if (!ids.length) return
   try {
@@ -1206,6 +1218,7 @@ const checkContentHeight = () => {
 
 // 确保在内容变化时重新检查高度
 watch(() => message.messages, () => {
+  hydrateMessageEngagement(message.messages as any[])
   // 如果是单条消息查看模式，不执行滚动
   if (route.hash.includes('/messages/')) {
     return;
@@ -1940,6 +1953,7 @@ defineExpose({
 // 添加watch监听searchResults变化
 watch(searchResults, (newVal) => {
   console.log('searchResults变化:', newVal);
+  hydrateMessageEngagement(newVal as any[])
   // 强制更新内容高度检查
   nextTick(() => {
     checkContentHeight();

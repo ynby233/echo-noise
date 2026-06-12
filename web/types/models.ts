@@ -17,6 +17,7 @@ export interface Message {
     pinned?: boolean;
     notify?: boolean;
     like_count?: number;
+    liked?: boolean;
 }
 
 export interface MessageToSave {

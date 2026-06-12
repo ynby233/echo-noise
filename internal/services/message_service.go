@@ -147,7 +147,40 @@ func GetAllMessagesForViewer(userID *uint, isAdmin bool) ([]models.Message, erro
 	if err := query.Order("pinned DESC, created_at DESC").Find(&messages).Error; err != nil {
 		return nil, fmt.Errorf("获取消息失败: %v", err)
 	}
+	applyMessageLikedState(messages, userID)
 	return messages, nil
+}
+
+func applyMessageLikedState(messages []models.Message, userID *uint) {
+	if userID == nil || *userID == 0 || len(messages) == 0 {
+		return
+	}
+	messageIDs := make([]uint, 0, len(messages))
+	seenIDs := make(map[uint]struct{}, len(messages))
+	for _, message := range messages {
+		if message.ID == 0 {
+			continue
+		}
+		if _, exists := seenIDs[message.ID]; exists {
+			continue
+		}
+		seenIDs[message.ID] = struct{}{}
+		messageIDs = append(messageIDs, message.ID)
+	}
+	if len(messageIDs) == 0 {
+		return
+	}
+	var likes []models.MessageLike
+	if err := database.DB.Select("message_id").Where("user_id = ? AND message_id IN ?", *userID, messageIDs).Find(&likes).Error; err != nil {
+		return
+	}
+	likedIDs := make(map[uint]struct{}, len(likes))
+	for _, like := range likes {
+		likedIDs[like.MessageID] = struct{}{}
+	}
+	for index := range messages {
+		_, messages[index].Liked = likedIDs[messages[index].ID]
+	}
 }
 
 // GetMessageByID 根据 ID 获取笔记
@@ -180,6 +213,12 @@ func GetMessageByIDForViewer(id uint, userID *uint, isAdmin bool) (*models.Messa
 	}
 	if !CanViewMessage(*message, userID, isAdmin) {
 		return nil, fmt.Errorf("无权访问")
+	}
+	if userID != nil && *userID != 0 {
+		var count int64
+		if err := database.DB.Model(&models.MessageLike{}).Where("user_id = ? AND message_id = ?", *userID, message.ID).Count(&count).Error; err == nil {
+			message.Liked = count > 0
+		}
 	}
 	return message, nil
 }
@@ -222,6 +261,7 @@ func GetMessagesByPage(page, pageSize int, userID *uint, isAdmin bool, authorID 
 	if err := q.Limit(pageSize).Offset(offset).Order("pinned DESC, created_at DESC").Find(&messages).Error; err != nil {
 		return dto.PageQueryResult{}, err
 	}
+	applyMessageLikedState(messages, userID)
 
 	// 返回结果
 	return dto.PageQueryResult{Total: total, Items: messages}, nil

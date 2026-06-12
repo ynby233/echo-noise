@@ -242,6 +242,41 @@ func TestGetMessagesByPageFiltersByShanghaiDate(t *testing.T) {
 	}
 }
 
+func TestGetMessagesByPageReturnsViewerLikedState(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	owner := mustCreateUser(t, models.User{Username: "like-owner", Password: models.HashPassword("owner"), Token: models.GenerateToken(32)})
+	viewer := mustCreateUser(t, models.User{Username: "like-viewer", Password: models.HashPassword("viewer"), Token: models.GenerateToken(32)})
+
+	liked := models.Message{Username: owner.Username, UserID: owner.ID, Content: "liked", Visibility: MessageVisibilityPublic, LikeCount: 1}
+	unliked := models.Message{Username: owner.Username, UserID: owner.ID, Content: "unliked", Visibility: MessageVisibilityPublic}
+	if err := db.Create(&liked).Error; err != nil {
+		t.Fatalf("create liked message: %v", err)
+	}
+	if err := db.Create(&unliked).Error; err != nil {
+		t.Fatalf("create unliked message: %v", err)
+	}
+	viewerID := viewer.ID
+	if err := db.Create(&models.MessageLike{MessageID: liked.ID, UserID: &viewerID}).Error; err != nil {
+		t.Fatalf("create message like: %v", err)
+	}
+
+	result, err := GetMessagesByPage(1, 10, &viewerID, false, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("query page: %v", err)
+	}
+
+	likedByID := map[uint]bool{}
+	for _, message := range result.Items {
+		likedByID[message.ID] = message.Liked
+	}
+	if !likedByID[liked.ID] {
+		t.Fatalf("expected liked message %d to be marked liked", liked.ID)
+	}
+	if likedByID[unliked.ID] {
+		t.Fatalf("expected unliked message %d to be marked unliked", unliked.ID)
+	}
+}
+
 func TestUpdateMessageAcceptsVisibilityAndLegacyPrivatePayloads(t *testing.T) {
 	db := setupUserServiceTestDB(t)
 	alice := mustCreateUser(t, models.User{Username: "update-visibility-alice", Password: models.HashPassword("alice"), Token: models.GenerateToken(32)})

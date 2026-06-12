@@ -68,7 +68,7 @@ assert.match(
 
 assert.match(
   component,
-  /<div\s+ref="rootRef"\s+class="builtin-comments">/,
+  /<div\s+ref="rootRef"\s+class="builtin-comments"[^>]*>/,
   'the comments component should expose a stable root element for guestbook-only return jumps'
 )
 

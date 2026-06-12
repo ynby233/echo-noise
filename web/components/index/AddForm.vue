@@ -1167,7 +1167,8 @@ const addMessage = async () => {
 .toolbar-left, .toolbar-right { display:flex; align-items:center; gap:8px; flex-wrap: wrap; }
 .tb-btn { display:flex; align-items:center; justify-content:center; flex: 0 0 auto; width:36px; min-width:36px; height:36px; border-radius:12px; background: rgba(15,23,42,0.06); color:#374151; transition: background-color .18s ease, transform .18s ease, border-color .18s ease, box-shadow .18s ease; border:1px solid rgba(15,23,42,0.08); box-shadow:none; }
 .tb-btn:hover { transform: translate3d(0,0,0) scale(1.06); border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
-.tb-btn.primary { background: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color: #fff; }
+.tb-btn.primary { border-color: rgba(37,99,235,.72); background: #3b82f6; color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.16); }
+.tb-btn.primary:hover { border-color: rgba(29,78,216,.8); background: #2563eb; }
 .tb-btn.has-label { width: auto; min-width: 66px; gap: 5px; padding: 0 10px; }
 .notify-btn.is-enabled { background: rgba(249,115,22,0.16); color: #c2410c; box-shadow: inset 0 0 0 1px rgba(249,115,22,0.32); }
 .notify-label { font-size: 12px; line-height: 1; white-space: nowrap; }
@@ -1234,6 +1235,8 @@ html.dark .editor-box { background: var(--home-surface-dark, #202a36); border: 1
 html.dark .editor-toolbar { background: rgba(39, 50, 66, 0.68); backdrop-filter: saturate(1.1) blur(6px); }
 html.dark .tb-btn { background: rgba(255,255,255,0.06); color:#cbd5e1; border-color: rgba(255,255,255,0.12); }
 html.dark .tb-btn:hover { background: var(--nw-floating-hover-bg); border-color: var(--nw-floating-hover-border); }
+html.dark .tb-btn.primary { border-color: rgba(37,99,235,.72); background: #3b82f6; color: #fff; }
+html.dark .tb-btn.primary:hover { border-color: rgba(29,78,216,.8); background: #2563eb; }
 html.dark .notify-btn.is-enabled { background: rgba(249,115,22,0.22); color: #fed7aa; box-shadow: inset 0 0 0 1px rgba(251,146,60,0.38); }
 html.dark .publish-time-control,
 html.dark .visibility-control { background: rgba(255,255,255,0.06); color:#cbd5e1; border-color: rgba(255,255,255,0.12); }
