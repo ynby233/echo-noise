@@ -64,7 +64,6 @@
               >
                 {{ replyOpenId === item.id ? '收起' : '回复' }}
               </button>
-              <UIcon v-else-if="item.type === 'like'" name="i-mdi-hand-heart-outline" class="like-corner-icon" />
             </div>
 
             <p v-if="actorContent(item)" class="notification-actor-content">{{ actorContent(item) }}</p>
@@ -578,13 +577,12 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .text-action { min-height:32px; padding:0 12px; border-radius:8px; font-size:13px; }
 .icon-action:disabled, .text-action:disabled { opacity:.5; cursor:not-allowed; }
 .empty-state { border:1px solid rgba(148,163,184,.22); background:rgba(255,255,255,.72); backdrop-filter:blur(12px); border-radius:10px; }
-.notification-feed-panel { padding:0; overflow:hidden; border:1px solid rgba(148,163,184,.18); background:rgba(241,245,249,.72); border-radius:10px; }
-.notification-feed { display:flex; flex-direction:column; }
-.notification-feed-item { position:relative; display:flex; gap:14px; padding:18px 18px 20px; border-bottom:10px solid rgba(241,245,249,.92); background:rgba(255,255,255,.9); transition:background .16s ease, box-shadow .16s ease; }
-.notification-feed-item:last-child { border-bottom:0; }
-.notification-feed-item.unread { background:rgba(239,246,255,.92); }
-.notification-feed-item.unread::before { content:''; position:absolute; left:8px; top:26px; width:6px; height:6px; border-radius:999px; background:#2563eb; }
-.notification-feed-item.highlighted { box-shadow:inset 4px 0 0 rgba(37,99,235,.72); background:rgba(219,234,254,.92); }
+.notification-feed-panel { padding:0; overflow:visible; border:0; background:transparent; border-radius:0; }
+.notification-feed { display:flex; flex-direction:column; gap:14px; }
+.notification-feed-item { position:relative; display:flex; gap:14px; padding:18px 18px 20px; border:1px solid rgba(148,163,184,.2); border-radius:14px; background:rgba(255,255,255,.92); box-shadow:0 10px 30px rgba(15,23,42,.08); transition:background .16s ease, box-shadow .16s ease, border-color .16s ease, transform .16s ease; }
+.notification-feed-item.unread { border-color:rgba(59,130,246,.34); background:rgba(239,246,255,.94); }
+.notification-feed-item.unread::before { content:''; position:absolute; left:9px; top:26px; width:6px; height:6px; border-radius:999px; background:#2563eb; }
+.notification-feed-item.highlighted { border-color:rgba(37,99,235,.5); box-shadow:inset 4px 0 0 rgba(37,99,235,.72), 0 12px 32px rgba(37,99,235,.14); background:rgba(219,234,254,.94); }
 .notification-avatar { width:44px; height:44px; flex:0 0 44px; border-radius:999px; object-fit:cover; background:#e2e8f0; }
 .notification-item-body { min-width:0; flex:1; }
 .notification-item-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; min-height:44px; }
@@ -595,7 +593,6 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .notification-time { margin-top:3px; font-size:13px; line-height:1.2; color:#8a94a6; }
 .reply-toggle { flex:0 0 auto; border:0; background:transparent; color:#0f3f75; font-size:15px; line-height:1.4; font-weight:700; padding:2px 0 2px 10px; cursor:pointer; }
 .reply-toggle:hover { color:#2563eb; }
-.like-corner-icon { width:24px; height:24px; color:#64748b; }
 .notification-actor-content { margin:12px 0 0; font-size:15px; line-height:1.72; white-space:pre-wrap; word-break:break-word; color:#0f172a; }
 .notification-target-card { width:100%; margin-top:14px; padding:12px 14px; border:0; border-radius:4px; background:#f1f5f9; color:#0f172a; display:flex; align-items:center; flex-wrap:wrap; gap:12px; text-align:left; cursor:pointer; transition:background .16s ease, transform .16s ease, opacity .16s ease; }
 .notification-target-card:hover { background:#e9eef5; transform:translateY(-1px); }
@@ -628,12 +625,12 @@ defineExpose({ refresh: () => loadNotifications(true) })
 :global(.dark) .icon-action,
 :global(.dark) .text-action,
 :global(.dark) .inline-reply-cancel { background:rgba(15,23,42,.72); border-color:rgba(148,163,184,.28); }
-:global(.dark) .notification-feed-panel { background:rgba(2,6,23,.5); border-color:rgba(148,163,184,.2); }
+:global(.dark) .notification-feed-panel { background:transparent; border-color:transparent; }
 :global(.dark) .empty-state { background:rgba(15,23,42,.64); border-color:rgba(148,163,184,.22); }
-:global(.dark) .notification-feed-item { background:rgba(15,23,42,.76); border-color:rgba(2,6,23,.78); }
-:global(.dark) .notification-feed-item.unread { background:rgba(30,58,138,.3); }
+:global(.dark) .notification-feed-item { background:rgba(15,23,42,.86); border-color:rgba(51,65,85,.76); box-shadow:0 12px 30px rgba(0,0,0,.28); }
+:global(.dark) .notification-feed-item.unread { background:rgba(30,58,138,.34); border-color:rgba(96,165,250,.36); }
 :global(.dark) .notification-feed-item.unread::before { background:#60a5fa; }
-:global(.dark) .notification-feed-item.highlighted { background:rgba(30,58,138,.4); box-shadow:inset 4px 0 0 rgba(96,165,250,.72); }
+:global(.dark) .notification-feed-item.highlighted { background:rgba(30,58,138,.42); border-color:rgba(96,165,250,.5); box-shadow:inset 4px 0 0 rgba(96,165,250,.72), 0 12px 32px rgba(37,99,235,.2); }
 :global(.dark) .notification-actor-name,
 :global(.dark) .notification-actor-content,
 :global(.dark) .notification-target-card { color:#e5e7eb; }
@@ -651,8 +648,9 @@ defineExpose({ refresh: () => loadNotifications(true) })
   .notification-header { align-items:center; flex-direction:column; text-align:center; gap:10px; margin-bottom:10px; }
   .notification-subtitle { display:none; }
   .notification-actions { justify-content:center; width:100%; }
-  .notification-feed-panel { border-radius:0; border-left:0; border-right:0; margin:0 -12px; }
-  .notification-feed-item { gap:10px; padding:16px 14px 18px; border-bottom-width:12px; }
+  .notification-feed-panel { border-radius:0; border-left:0; border-right:0; margin:0 -12px; padding:0 12px; }
+  .notification-feed { gap:12px; }
+  .notification-feed-item { gap:10px; padding:16px 14px 18px; border-radius:12px; }
   .notification-feed-item.unread::before { left:7px; top:25px; }
   .notification-avatar { width:40px; height:40px; flex-basis:40px; }
   .notification-actor-name { font-size:17px; }

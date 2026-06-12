@@ -507,9 +507,8 @@ const boundedScrollTop = (container: HTMLElement, top: number) => {
   const max = Math.max(0, container.scrollHeight - container.clientHeight)
   return Math.min(max, Math.max(0, top))
 }
-const scrollElementIntoInputContainer = (target: HTMLElement | null, block: CommentScrollBlock = 'nearest', behavior: ScrollBehavior = 'smooth') => {
+const scrollElementIntoInputContainer = (target: HTMLElement | null, block: CommentScrollBlock = 'nearest', behavior: ScrollBehavior = 'smooth', margin = 16) => {
   if (typeof window === 'undefined' || !target) return
-  const margin = 16
   const container = findInputScrollContainer()
   if (container && document.contains(container) && document.contains(target)) {
     const containerRect = container.getBoundingClientRect()
@@ -1152,7 +1151,9 @@ const highlightComment = (commentId: number) => {
   if (!el) return
   el.classList.add('comment-target-highlight')
   setTimeout(() => el.classList.remove('comment-target-highlight'), 2400)
-  scrollElementIntoInputContainer(el, 'center')
+  const scrollToTarget = () => scrollElementIntoInputContainer(el, 'start', 'smooth', 96)
+  scrollToTarget()
+  setTimeout(scrollToTarget, 260)
 }
 
 const focusCommentById = async (commentId: number) => {

@@ -775,17 +775,23 @@ const fetchGuestbookId = async () => {
     }
   }
 
-  const scrollElementToAppCenter = (el: HTMLElement) => {
+  const scrollElementToAppFocus = (el: HTMLElement, behavior: ScrollBehavior = 'smooth') => {
     if (typeof document === 'undefined') return
     const wrapper = document.querySelector('.content-wrapper') as HTMLElement | null
     if (!wrapper) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.scrollIntoView({ behavior, block: 'start' })
       return
     }
     const wrapperRect = wrapper.getBoundingClientRect()
     const elRect = el.getBoundingClientRect()
-    const targetTop = wrapper.scrollTop + elRect.top - wrapperRect.top - Math.max(24, (wrapper.clientHeight - elRect.height) / 2)
-    wrapper.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' })
+    const focusOffset = Math.min(140, Math.max(72, wrapper.clientHeight * 0.18))
+    const targetTop = wrapper.scrollTop + elRect.top - wrapperRect.top - focusOffset
+    wrapper.scrollTo({ top: Math.max(0, targetTop), behavior })
+  }
+
+  const stabilizeNotificationTargetScroll = (el: HTMLElement) => {
+    scrollElementToAppFocus(el)
+    window.setTimeout(() => scrollElementToAppFocus(el, 'smooth'), 260)
   }
 
   const focusTargetMessageAndComment = async () => {
@@ -797,7 +803,7 @@ const fetchGuestbookId = async () => {
     await nextTick()
     const targetElement = document.querySelector(`.content-container[data-msg-id="${messageId}"]`) as HTMLElement | null
     if (targetElement) {
-      scrollElementToAppCenter(targetElement)
+      stabilizeNotificationTargetScroll(targetElement)
       targetElement.classList.add('highlight-message')
       window.setTimeout(() => targetElement.classList.remove('highlight-message'), 2000)
     }
@@ -809,7 +815,7 @@ const fetchGuestbookId = async () => {
     for (let i = 0; i < 12; i += 1) {
       const commentEl = document.querySelector(`.content-container[data-msg-id="${messageId}"] [data-comment-id="${commentId}"]`) as HTMLElement | null
       if (commentEl) {
-        scrollElementToAppCenter(commentEl)
+        stabilizeNotificationTargetScroll(commentEl)
         commentEl.classList.add('notification-comment-highlight')
         window.setTimeout(() => commentEl.classList.remove('notification-comment-highlight'), 2200)
         return
