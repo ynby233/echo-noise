@@ -18,7 +18,7 @@
                 </a>
               </div>
               <div class="comment-editor-toolbar edit-toolbar">
-                <div class="visibility-picker comment-visibility-picker toolbar-control nw-tooltip-anchor" :class="{ 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('edit', c.id) }" :data-tooltip="visibilityTooltipFor('edit')" @mousedown.stop>
+                <div class="visibility-picker comment-visibility-picker toolbar-control nw-tooltip-anchor" :class="{ 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('edit', c.id) }" :data-tooltip="commentVisibilityTooltipFor('edit', c.id)" @mousedown.stop>
                   <UIcon :name="visibilityIconFor('edit')" class="w-5 h-5" />
                   <button type="button" class="comment-visibility-trigger" aria-label="可见范围" aria-haspopup="listbox" :aria-expanded="isCommentVisibilityMenuOpen('edit', c.id)" @click="toggleCommentVisibilityMenu('edit', c.id)">
                     <span>{{ selectedVisibilityLabelFor('edit') }}</span>
@@ -75,7 +75,7 @@
                       </a>
                     </div>
                     <div class="comment-editor-toolbar edit-toolbar">
-                      <div class="visibility-picker comment-visibility-picker toolbar-control nw-tooltip-anchor" :class="{ 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('edit', child.id) }" :data-tooltip="visibilityTooltipFor('edit')" @mousedown.stop>
+                      <div class="visibility-picker comment-visibility-picker toolbar-control nw-tooltip-anchor" :class="{ 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('edit', child.id) }" :data-tooltip="commentVisibilityTooltipFor('edit', child.id)" @mousedown.stop>
                         <UIcon :name="visibilityIconFor('edit')" class="w-5 h-5" />
                         <button type="button" class="comment-visibility-trigger" aria-label="可见范围" aria-haspopup="listbox" :aria-expanded="isCommentVisibilityMenuOpen('edit', child.id)" @click="toggleCommentVisibilityMenu('edit', child.id)">
                           <span>{{ selectedVisibilityLabelFor('edit') }}</span>
@@ -134,7 +134,7 @@
 
       <div v-if="formVisible" class="space-y-4 mt-4 md:mt-5">
         <div class="comment-editor-toolbar main-toolbar">
-          <div class="visibility-picker comment-visibility-picker toolbar-control nw-tooltip-anchor" :class="{ 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('content') }" :data-tooltip="visibilityTooltipFor('content')" @mousedown.stop>
+          <div class="visibility-picker comment-visibility-picker toolbar-control nw-tooltip-anchor" :class="{ 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('content') }" :data-tooltip="commentVisibilityTooltipFor('content')" @mousedown.stop>
             <UIcon :name="visibilityIconFor('content')" class="w-5 h-5" />
             <button type="button" class="comment-visibility-trigger" aria-label="可见范围" aria-haspopup="listbox" :aria-expanded="isCommentVisibilityMenuOpen('content')" @click="toggleCommentVisibilityMenu('content')">
               <span>{{ selectedVisibilityLabelFor('content') }}</span>
@@ -174,7 +174,7 @@
               </a>
             </div>
             <div class="input-actions">
-              <button v-if="content.trim()" class="cancel-btn" :class="cancelBtnClass" @click="clearContent">清除</button>
+              <button v-if="content.trim()" class="cancel-btn clear-action-btn" :class="cancelBtnClass" @click="clearContent">清除</button>
               <button class="cancel-btn" :class="cancelBtnClass" @click="cancelInput">取消</button>
               <button class="submit-btn" :class="submitBtnClass" :disabled="isSubmitting || !content.trim()" @click="submit">提交</button>
             </div>
@@ -1060,6 +1060,9 @@ const isCommentVisibilityMenuOpen = (target: CommentEditorTarget, id?: number | 
 const currentCommentVisibility = (target: CommentEditorTarget) => target === 'edit' ? editingVisibility.value : selectedVisibility.value
 const selectedVisibilityLabelFor = (target: CommentEditorTarget) => visibilityOptionFor(currentCommentVisibility(target)).label
 const visibilityTooltipFor = (target: CommentEditorTarget) => `可见范围：${selectedVisibilityLabelFor(target)}`
+const commentVisibilityTooltipFor = (target: CommentEditorTarget, id?: number | null) => {
+  return isCommentVisibilityMenuOpen(target, id) ? undefined : visibilityTooltipFor(target)
+}
 const visibilityIconFor = (target: CommentEditorTarget) => visibilityOptionFor(currentCommentVisibility(target)).icon
 const closeCommentVisibilityMenu = () => { openCommentVisibilityMenu.value = null }
 const toggleCommentVisibilityMenu = (target: CommentEditorTarget, id?: number | null) => {
@@ -1292,6 +1295,8 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 .cancel-btn { min-width:64px; height:32px; border-radius:10px; padding:0 12px; font-size:13px; font-weight:650; display:inline-flex; align-items:center; justify-content:center; border:1px solid transparent; transition:background-color .18s ease, border-color .18s ease, color .18s ease, transform .18s ease; }
 .cancel-btn { border-color:var(--comment-toolbar-border); background:var(--comment-toolbar-control-bg); color:var(--comment-toolbar-text); }
 .cancel-btn:hover { transform:translate3d(0,0,0) scale(1.06); border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
+.clear-action-btn,
+.clear-action-btn:hover { border-color:rgba(234,88,12,.95); background:linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color:#fff !important; }
 .submit-btn { border-color:rgba(37,99,235,.72); background:#3b82f6; color:#fff; }
 .submit-btn:hover:not(:disabled) { transform:translate3d(0,0,0) scale(1.06); border-color:rgba(29,78,216,.86); background:#2563eb; }
 .comment-input-card textarea { overflow:hidden; resize:none; min-height:80px; flex:1; width:100%; min-width:0; }

@@ -61,7 +61,7 @@
             <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin mr-1" />
             加载中...
           </span>
-          <button type="button" class="tb-btn nw-tooltip-anchor" data-tooltip="清空" aria-label="清空" @click="clearForm"><UIcon name="i-mdi-broom" class="w-5 h-5" /></button>
+          <button type="button" class="tb-btn danger nw-tooltip-anchor" data-tooltip="清除" aria-label="清除" @click="clearForm"><UIcon name="i-heroicons-trash" class="w-5 h-5" /></button>
           <button type="button" class="tb-btn primary nw-tooltip-anchor" data-tooltip="发布" aria-label="发布" @click="addMessage"><UIcon name="i-mdi-send" class="w-5 h-5" /></button>
         </div>
         <div v-if="activeUploadPercent > 0 && activeUploadPercent < 100" class="upload-progress">
@@ -1169,6 +1169,8 @@ const addMessage = async () => {
 .tb-btn:hover { transform: translate3d(0,0,0) scale(1.06); border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
 .tb-btn.primary { border-color: rgba(37,99,235,.72); background: #3b82f6; color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.16); }
 .tb-btn.primary:hover { border-color: rgba(29,78,216,.8); background: #2563eb; }
+.tb-btn.danger,
+.tb-btn.danger:hover { border-color: rgba(234,88,12,.95); background: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18); }
 .tb-btn.has-label { width: auto; min-width: 66px; gap: 5px; padding: 0 10px; }
 .notify-btn.is-enabled { background: rgba(249,115,22,0.16); color: #c2410c; box-shadow: inset 0 0 0 1px rgba(249,115,22,0.32); }
 .notify-label { font-size: 12px; line-height: 1; white-space: nowrap; }
@@ -1237,6 +1239,8 @@ html.dark .tb-btn { background: rgba(255,255,255,0.06); color:#cbd5e1; border-co
 html.dark .tb-btn:hover { background: var(--nw-floating-hover-bg); border-color: var(--nw-floating-hover-border); }
 html.dark .tb-btn.primary { border-color: rgba(37,99,235,.72); background: #3b82f6; color: #fff; }
 html.dark .tb-btn.primary:hover { border-color: rgba(29,78,216,.8); background: #2563eb; }
+html.dark .tb-btn.danger,
+html.dark .tb-btn.danger:hover { border-color: rgba(234,88,12,.95); background: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color: #fff; }
 html.dark .notify-btn.is-enabled { background: rgba(249,115,22,0.22); color: #fed7aa; box-shadow: inset 0 0 0 1px rgba(251,146,60,0.38); }
 html.dark .publish-time-control,
 html.dark .visibility-control { background: rgba(255,255,255,0.06); color:#cbd5e1; border-color: rgba(255,255,255,0.12); }

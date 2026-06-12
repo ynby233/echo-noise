@@ -211,6 +211,8 @@ html.dark {
 
 .nw-tooltip-anchor[data-tooltip].nw-tooltip-suppressed::before,
 .nw-tooltip-anchor[data-tooltip].nw-tooltip-suppressed::after {
+  content: none !important;
+  display: none !important;
   opacity: 0 !important;
   transform: translateX(-50%) translateY(2px) !important;
 }
