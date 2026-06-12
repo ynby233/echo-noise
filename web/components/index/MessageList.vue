@@ -161,7 +161,17 @@
                 </div>
               </div>
               <div v-if="(expandedCommentsMap[msg.id] || activeCommentId === msg.id) && isCommentEnabled && !isGuestbookMessage(msg)" :id="`comment-container-${msg.id}`" class="mt-2" style="position: relative;">
-                <BuiltinComments v-if="isBuiltin && apiReachable" :key="(commentRefreshKey[msg.id] || 0)" :message-id="msg.id" :message-visibility="msg.visibility" :site-config="siteConfig" :show-input="activeCommentId === msg.id" auto-scroll-input @cancel="handleCancel(msg.id, $event)" />
+                <BuiltinComments
+                  v-if="isBuiltin && apiReachable"
+                  :key="(commentRefreshKey[msg.id] || 0)"
+                  :ref="builtinCommentsRefFor(msg.id)"
+                  :message-id="msg.id"
+                  :message-visibility="msg.visibility"
+                  :site-config="siteConfig"
+                  :show-input="activeCommentId === msg.id"
+                  auto-scroll-input
+                  @cancel="handleCancel(msg.id, $event)"
+                />
                 <div v-else-if="useWaline && apiReachable" :id="`waline-${msg.id}`"></div>
               </div>
             </div>
@@ -358,6 +368,9 @@ import { writeClipboardText } from '~/utils/clipboard'
 import { uploadMediaFiles } from '~/utils/media-upload'
 import { useRuntimeConfig } from '#imports'
 import { useToast } from '#ui/composables/useToast'
+type BuiltinCommentsExpose = {
+  focusCommentById?: (commentId: number) => Promise<boolean>
+}
 const config = useRuntimeConfig()
 const BASE_API = config.public.baseApi || '/api'
 
@@ -740,6 +753,22 @@ watch(() => message.messages, () => { prefetchAuthorProfilesForList() }, { deep:
 const activeCommentId = ref<number | null>(null);
 const commentRefreshKey = ref<Record<number, number>>({});
 const expandedCommentsMap = ref<Record<number, boolean>>({});
+const builtinCommentsRefs = ref<Record<number, BuiltinCommentsExpose | null>>({});
+const setBuiltinCommentsRef = (messageId: number, instance: unknown) => {
+  const id = Number(messageId || 0)
+  if (!id) return
+  if (instance) builtinCommentsRefs.value[id] = instance as BuiltinCommentsExpose
+  else delete builtinCommentsRefs.value[id]
+}
+const builtinCommentsRefFor = (messageId: number) => (instance: unknown) => setBuiltinCommentsRef(messageId, instance)
+const focusBuiltinTargetComment = async (messageId: number, commentId: number) => {
+  for (let i = 0; i < 10; i += 1) {
+    const thread = builtinCommentsRefs.value[messageId]
+    if (thread?.focusCommentById) return await thread.focusCommentById(commentId)
+    await new Promise((resolve) => window.setTimeout(resolve, 140))
+  }
+  return false
+}
 const isCommentEnabled = computed(() => {
   const v: any = (props.siteConfig as any)?.commentEnabled
   return v === true || v === 'true'
@@ -824,6 +853,7 @@ const fetchGuestbookId = async () => {
     if (!commentId) return
     expandedCommentsMap.value[messageId] = true
     await nextTick()
+    if (await focusBuiltinTargetComment(messageId, commentId)) return
     for (let i = 0; i < 12; i += 1) {
       const commentEl = document.querySelector(`.content-container[data-msg-id="${messageId}"] [data-comment-id="${commentId}"]`) as HTMLElement | null
       if (commentEl) {

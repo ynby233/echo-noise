@@ -607,13 +607,15 @@ type CommentThreadExpose = ComponentPublicInstance & {
   focusCommentById: (commentId: number) => Promise<boolean>
 }
 type NotificationJumpItem = {
-  id?: number
+  id: number
   type?: string
   message_id?: number | null
   comment_id?: number | null
-  message?: { is_guestbook?: boolean } | null
+  parent_comment_id?: number | null
+  target_message_id?: number | null
+  target_comment_id?: number | null
+  message?: { id?: number | null; content?: string | null; is_guestbook?: boolean } | null
 }
-
 const messageList = ref<MessageListExpose | null>(null)
 const guestbookCommentsRef = ref<CommentThreadExpose | null>(null)
 // 搜索模态的开关
@@ -850,8 +852,8 @@ const focusGuestbookNotificationComment = async (commentId: number) => {
 }
 
 const handleNotificationJump = async (item: NotificationJumpItem) => {
-  const messageId = Number(item?.message_id || 0)
-  const commentId = Number(item?.comment_id || 0)
+  const messageId = Number(item?.target_message_id || item?.message_id || item?.message?.id || 0)
+  const commentId = Number(item?.target_comment_id || item?.comment_id || 0)
   notificationReturnPending.value = true
   notificationReturnFocusId.value = Number(item?.id || 0) || null
   notificationTargetMessageId.value = messageId || null

@@ -412,7 +412,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   --calendar-control-bg: rgba(148, 163, 184, 0.08);
   --calendar-control-bg-hover: rgba(249, 115, 22, 0.12);
-  --calendar-control-text: inherit;
+  --calendar-control-text: rgba(30, 41, 59, 0.88);
   --calendar-option-bg: #1f2937;
 }
 
@@ -426,6 +426,10 @@ onBeforeUnmount(() => {
 
 .calendar-head {
   margin-bottom: 5px;
+}
+
+:global(html.dark) .calendar-widget {
+  --calendar-control-text: rgba(248, 250, 252, 0.86);
 }
 
 .calendar-picker {
@@ -626,7 +630,7 @@ onBeforeUnmount(() => {
   padding: 0 1px;
   border: 0;
   background: transparent;
-  color: rgba(248, 250, 252, 0.86);
+  color: var(--calendar-control-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

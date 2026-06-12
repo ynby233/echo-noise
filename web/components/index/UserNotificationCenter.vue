@@ -1,7 +1,7 @@
 <template>
   <section class="notification-center" :class="{ 'notification-theme-dark': isDark }">
     <div class="notification-header">
-      <div>
+      <div class="notification-heading">
         <h2 class="notification-title">通知</h2>
         <p class="notification-subtitle">欢迎彼此间互相交流</p>
       </div>
@@ -87,27 +87,17 @@
             </button>
 
             <div v-if="replyOpenId === item.id" :id="`notification-reply-${item.id}`" class="inline-reply-box">
-              <textarea
-                v-model="replyDrafts[item.id]"
-                class="inline-reply-input"
-                :data-reply-input-id="item.id"
-                :placeholder="`回复${actorName(item)}：`"
-                rows="2"
-                @keydown.ctrl.enter.prevent="submitInlineReply(item)"
-                @keydown.meta.enter.prevent="submitInlineReply(item)"
-              ></textarea>
-              <div class="inline-reply-actions">
-                <span class="inline-reply-hint">Ctrl / ⌘ + Enter 发送</span>
-                <button type="button" class="inline-reply-cancel" :disabled="replySubmitting[item.id]" @click="replyOpenId = null">取消</button>
-                <button type="button" class="inline-reply-submit" :disabled="replySubmitting[item.id]" @click="submitInlineReply(item)">
-                  {{ replySubmitting[item.id] ? '发送中' : '发送' }}
-                </button>
-              </div>
-            </div>
-
-            <div v-if="replySuccessId === item.id" class="inline-reply-success" role="status">
-              <UIcon name="i-mdi-check-circle-outline" class="inline-reply-success-icon" />
-              已回复
+              <BuiltinComments
+                :key="`notification-reply-thread-${item.id}-${item.comment_id || 0}`"
+                :ref="replyThreadRefFor(item.id)"
+                :message-id="Number(item.message_id || 0)"
+                :message-visibility="item.message?.visibility"
+                :site-config="props.siteConfig"
+                :show-input="false"
+                :context-label="item.type === 'guestbook' ? '留言' : '评论'"
+                auto-scroll-input
+                @cancel="replyOpenId = null"
+              />
             </div>
           </div>
         </article>
@@ -130,7 +120,7 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useUserStore } from '~/store/user'
-import { getRequest, postRequest, putRequest } from '~/utils/api'
+import { getRequest, putRequest } from '~/utils/api'
 import { resolveMediaURL } from '~/utils/media-url'
 
 type NotificationActor = {
@@ -174,6 +164,15 @@ type UserNotification = {
   created_at: string
 }
 
+type NotificationJumpPayload = UserNotification & {
+  target_message_id?: number | null
+  target_comment_id?: number | null
+}
+
+type CommentThreadExpose = {
+  replyToCommentById?: (commentId: number) => Promise<boolean>
+}
+
 type NotificationListPayload = {
   items?: UserNotification[]
   total?: number
@@ -186,7 +185,7 @@ type NotificationListPayload = {
 const props = defineProps<{ siteConfig?: any, initialMessageId?: number | null, initialCommentId?: number | null, restoreFocusId?: number | null }>()
 const emit = defineEmits<{
   (event: 'unread-change', count: number): void
-  (event: 'jump', item: UserNotification): void
+  (event: 'jump', item: NotificationJumpPayload): void
   (event: 'restore-consumed'): void
 }>()
 
@@ -210,11 +209,8 @@ const resolvingInitialTarget = ref(false)
 const resolvingRestoreFocus = ref(false)
 const highlightedId = ref<number | null>(null)
 const replyOpenId = ref<number | null>(null)
-const replyDrafts = ref<Record<number, string>>({})
-const replySubmitting = ref<Record<number, boolean>>({})
-const replySuccessId = ref<number | null>(null)
+const replyThreadRefs = ref<Record<number, CommentThreadExpose | null>>({})
 const jumpingId = ref<number | null>(null)
-let replySuccessTimer: ReturnType<typeof setTimeout> | null = null
 let jumpFeedbackTimer: ReturnType<typeof setTimeout> | null = null
 
 const runtimeConfig = useRuntimeConfig()
@@ -287,6 +283,40 @@ const targetImage = (item: UserNotification) => {
 
 const canReply = (item: UserNotification) => {
   return item.type !== 'like' && Number(item.comment_id || 0) > 0 && Number(item.message_id || 0) > 0
+}
+
+const targetMessageId = (item: UserNotification) => Number(item.message_id || item.comment?.message_id || 0)
+const targetCommentId = (item: UserNotification) => Number(item.comment_id || item.comment?.id || 0)
+const jumpPayload = (item: UserNotification): NotificationJumpPayload => ({
+  ...item,
+  target_message_id: targetMessageId(item),
+  target_comment_id: targetCommentId(item) || null
+})
+
+const setReplyThreadRef = (itemId: number, instance: any) => {
+  if (instance) replyThreadRefs.value[itemId] = instance as CommentThreadExpose
+  else delete replyThreadRefs.value[itemId]
+}
+
+const replyThreadRefFor = (itemId: number) => (instance: unknown) => setReplyThreadRef(itemId, instance)
+
+const waitForReplyThread = async (itemId: number) => {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const thread = replyThreadRefs.value[itemId]
+    if (thread?.replyToCommentById) return thread
+    await new Promise<void>((resolve) => setTimeout(resolve, 80))
+  }
+  return null
+}
+
+const openNativeReplyEditor = async (item: UserNotification) => {
+  const commentId = targetCommentId(item)
+  if (!commentId) return
+  await nextTick()
+  const box = feedRef.value?.querySelector(`#notification-reply-${item.id}`) as HTMLElement | null
+  if (box) scrollElementToAppCenter(box)
+  const thread = await waitForReplyThread(item.id)
+  await thread?.replyToCommentById?.(commentId)
 }
 
 const formatTime = (value?: string) => {
@@ -469,25 +499,11 @@ const jumpToTarget = async (item: UserNotification) => {
   jumpingId.value = item.id
   await markRead(item)
   highlightedId.value = item.id
-  emit('jump', item)
+  emit('jump', jumpPayload(item))
   jumpFeedbackTimer = setTimeout(() => {
     if (jumpingId.value === item.id) jumpingId.value = null
     jumpFeedbackTimer = null
   }, 1600)
-}
-
-const focusInlineReplyInput = async (itemId: number) => {
-  await nextTick()
-  const input = feedRef.value?.querySelector(`[data-reply-input-id="${itemId}"]`) as HTMLTextAreaElement | null
-  if (!input) return
-  input.focus({ preventScroll: true })
-  scrollElementToAppCenter(input)
-}
-
-const clearReplySuccess = () => {
-  if (replySuccessTimer) clearTimeout(replySuccessTimer)
-  replySuccessTimer = null
-  replySuccessId.value = null
 }
 
 const clearJumpFeedback = () => {
@@ -496,53 +512,12 @@ const clearJumpFeedback = () => {
   jumpingId.value = null
 }
 
-const showReplySuccess = async (itemId: number) => {
-  clearReplySuccess()
-  replySuccessId.value = itemId
-  await nextTick()
-  const el = feedRef.value?.querySelector(`[data-notification-id="${itemId}"] .inline-reply-success`) as HTMLElement | null
-  if (el) scrollElementToAppCenter(el)
-  replySuccessTimer = setTimeout(() => {
-    if (replySuccessId.value === itemId) replySuccessId.value = null
-    replySuccessTimer = null
-  }, 2400)
-}
-
 const toggleReply = async (item: UserNotification) => {
   if (!canReply(item)) return
   await markRead(item)
-  replyOpenId.value = replyOpenId.value === item.id ? null : item.id
-  if (replyOpenId.value === item.id) {
-    if (replyDrafts.value[item.id] === undefined) replyDrafts.value[item.id] = ''
-    clearReplySuccess()
-    await focusInlineReplyInput(item.id)
-  }
-}
-
-const submitInlineReply = async (item: UserNotification) => {
-  if (!canReply(item) || replySubmitting.value[item.id]) return
-  const content = String(replyDrafts.value[item.id] || '').trim()
-  if (!content) {
-    useToast().add({ title: '回复内容不能为空', color: 'orange' })
-    return
-  }
-  const messageId = Number(item.message_id || 0)
-  const commentId = Number(item.comment_id || 0)
-  replySubmitting.value = { ...replySubmitting.value, [item.id]: true }
-  try {
-    const res = await postRequest<any>(`messages/${messageId}/comments`, { content, parent_id: commentId }, { credentials: 'include' })
-    if (res?.code === 1) {
-      replyDrafts.value[item.id] = ''
-      replyOpenId.value = null
-      await showReplySuccess(item.id)
-    } else {
-      useToast().add({ title: '回复失败', description: res?.msg, color: 'red' })
-    }
-  } catch {
-    useToast().add({ title: '回复失败', color: 'red' })
-  } finally {
-    replySubmitting.value = { ...replySubmitting.value, [item.id]: false }
-  }
+  const isOpening = replyOpenId.value !== item.id
+  replyOpenId.value = isOpening ? item.id : null
+  if (isOpening) await openNativeReplyEditor(item)
 }
 
 watch(() => user.isLogin, (loggedIn) => {
@@ -552,7 +527,6 @@ watch(() => user.isLogin, (loggedIn) => {
     total.value = 0
     loadError.value = ''
     replyOpenId.value = null
-    clearReplySuccess()
     clearJumpFeedback()
     setUnreadCount(0)
   }
@@ -563,7 +537,6 @@ watch(() => [props.initialMessageId, props.initialCommentId], () => resolveIniti
 onMounted(() => loadNotifications(true))
 
 onBeforeUnmount(() => {
-  clearReplySuccess()
   clearJumpFeedback()
 })
 
@@ -606,23 +579,20 @@ defineExpose({ refresh: () => loadNotifications(true) })
   backdrop-filter:blur(8px) saturate(118%);
   -webkit-backdrop-filter:blur(8px) saturate(118%);
 }
-.notification-header { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:14px; padding:0 2px; }
-.notification-title { margin:0; font-size:18px; line-height:1.35; font-weight:700; color:var(--notice-strong); }
-.notification-subtitle { margin:3px 0 0; font-size:13px; color:var(--notice-muted); }
-.notification-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.notification-header { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0; margin-bottom:14px; padding:0 2px; text-align:center; }
+.notification-heading { width:100%; }
+.notification-title { display:block; margin:0 0 14px; padding:0; border-radius:0; color:var(--notice-strong); font-size:18px; font-weight:700; line-height:1.35; }
+.notification-subtitle { margin:2px 0 20px; color:var(--notice-muted); font-size:13px; line-height:1.7; text-align:center; opacity:.8; }
+.notification-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:center; }
 .unread-pill { display:inline-flex; align-items:center; min-height:28px; padding:0 10px; border-radius:999px; font-size:12px; font-weight:650; color:#fff; background:#3b82f6; }
 .icon-action,
-.text-action,
-.inline-reply-cancel { border:1px solid var(--notice-border); background:var(--notice-card); color:var(--notice-text); transition:background-color .18s ease, border-color .18s ease, transform .18s ease; }
+.text-action { border:1px solid var(--notice-border); background:var(--notice-card); color:var(--notice-text); transition:background-color .18s ease, border-color .18s ease, transform .18s ease; }
 .icon-action { width:32px; height:32px; display:inline-flex; align-items:center; justify-content:center; border-radius:10px; }
 .text-action { min-height:32px; padding:0 12px; border-radius:10px; font-size:13px; font-weight:650; }
 .icon-action:hover:not(:disabled),
-.text-action:hover:not(:disabled),
-.inline-reply-cancel:hover:not(:disabled) { transform:translate3d(0,0,0) scale(1.04); border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
+.text-action:hover:not(:disabled) { transform:translate3d(0,0,0) scale(1.04); border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
 .icon-action:disabled,
-.text-action:disabled,
-.inline-reply-cancel:disabled,
-.inline-reply-submit:disabled { opacity:.55; cursor:not-allowed; }
+.text-action:disabled { opacity:.55; cursor:not-allowed; }
 .notification-feed-panel { padding:0; overflow:visible; border:0; background:transparent; border-radius:0; }
 .notification-feed { display:flex; flex-direction:column; gap:12px; }
 .notification-feed-item { position:relative; display:flex; gap:12px; padding:12px; border:1px solid var(--notice-border); border-radius:12px; background:var(--notice-card); color:var(--notice-text); box-shadow:none; transition:background-color .16s ease, border-color .16s ease, transform .16s ease; }
@@ -638,8 +608,8 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .notification-actor-name { font-size:14px; line-height:1.35; font-weight:700; color:var(--notice-strong); word-break:break-word; }
 .like-action-inline { font-size:13px; color:var(--notice-muted); }
 .notification-time { margin-top:3px; font-size:12px; line-height:1.25; color:var(--notice-muted); }
-.reply-toggle { flex:0 0 auto; border:1px solid transparent; border-radius:10px; background:transparent; color:var(--notice-link); font-size:13px; line-height:1.4; font-weight:700; padding:3px 8px; cursor:pointer; transition:background-color .18s ease, border-color .18s ease, transform .18s ease; }
-.reply-toggle:hover { transform:translate3d(0,0,0) scale(1.04); border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
+.reply-toggle { min-height:30px; flex:0 0 auto; padding:0 10px; border:1px solid var(--comment-toolbar-border, var(--notice-border)); border-radius:10px; background:var(--comment-toolbar-control-bg, var(--notice-card)); color:var(--comment-toolbar-text, var(--notice-text)); font-size:12px; font-weight:650; line-height:1; cursor:pointer; transition:background-color .18s ease, border-color .18s ease, color .18s ease, transform .18s ease; }
+.reply-toggle:hover { transform:translate3d(0,0,0) scale(1.06); border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
 .notification-actor-content { margin:8px 0 0; font-size:14px; line-height:1.68; white-space:pre-wrap; word-break:break-word; color:var(--notice-strong); }
 .notification-target-card { width:100%; margin-top:10px; padding:10px 12px; border:1px solid var(--notice-border); border-radius:10px; background:var(--notice-input); color:var(--notice-text); display:flex; align-items:center; flex-wrap:wrap; gap:10px; text-align:left; cursor:pointer; transition:background-color .16s ease, border-color .16s ease, transform .16s ease, opacity .16s ease; }
 .notification-target-card:hover { border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); transform:translateY(-1px); }
@@ -649,19 +619,9 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .target-owner { color:var(--notice-link); font-weight:700; }
 .notification-target-jumping { margin-left:auto; display:inline-flex; align-items:center; gap:4px; flex:0 0 auto; color:var(--notice-link); font-size:12px; font-weight:700; }
 .notification-target-jumping-icon { width:14px; height:14px; animation:notification-spin 1s linear infinite; }
-.inline-reply-box { margin-top:10px; }
-.inline-reply-input { width:100%; min-height:72px; resize:vertical; border:1px solid var(--notice-border); border-radius:10px; background:var(--notice-input); color:var(--notice-strong); padding:10px 12px; line-height:1.5; outline:none; }
-.inline-reply-input:focus { border-color:rgba(59,130,246,.48); box-shadow:0 0 0 3px rgba(59,130,246,.12); }
-.inline-reply-actions { display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-top:8px; }
-.inline-reply-hint { margin-right:auto; font-size:12px; color:var(--notice-muted); }
-.inline-reply-success { display:inline-flex; align-items:center; gap:6px; margin-top:10px; min-height:30px; padding:0 10px; border-radius:10px; border:1px solid rgba(22,163,74,.18); background:rgba(22,163,74,.1); color:#15803d; font-size:13px; font-weight:650; }
-:global(.dark) .inline-reply-success,
-.notification-center.notification-theme-dark .inline-reply-success { border-color:rgba(34,197,94,.22); background:rgba(34,197,94,.14); color:#86efac; }
-.inline-reply-success-icon { width:16px; height:16px; }
-.inline-reply-cancel,
-.inline-reply-submit { min-height:30px; border-radius:10px; padding:0 12px; font-size:13px; font-weight:650; }
-.inline-reply-submit { border:1px solid rgba(37,99,235,.58); background:#3b82f6; color:#fff; }
-.inline-reply-submit:hover:not(:disabled) { background:#2563eb; border-color:rgba(29,78,216,.76); }
+.inline-reply-box { margin-top:12px; padding-top:12px; border-top:1px solid var(--notice-border); }
+.inline-reply-box :deep(.builtin-comments) { color:var(--notice-text); }
+.inline-reply-box :deep(.waline-wrapper) { padding-left:0; padding-right:0; background:transparent !important; }
 .empty-state { min-height:220px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; text-align:center; padding:24px; border:1px solid var(--notice-border); background:var(--notice-card); color:var(--notice-text); border-radius:12px; }
 .empty-state.compact { min-height:220px; border:0; background:transparent; }
 .error-state .empty-icon { color:#ef4444; opacity:.82; }
@@ -686,7 +646,5 @@ defineExpose({ refresh: () => loadNotifications(true) })
   .notification-target-card { padding:10px; }
   .notification-target-image { width:54px; height:54px; flex-basis:54px; }
   .notification-target-jumping { width:100%; justify-content:flex-end; }
-  .inline-reply-actions { flex-wrap:wrap; }
-  .inline-reply-hint { width:100%; margin-right:0; }
 }
 </style>
