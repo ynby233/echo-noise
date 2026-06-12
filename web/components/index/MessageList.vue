@@ -243,117 +243,112 @@
     
 </div>
   <!-- 编辑对话框 -->
-  <UModal v-model="showEditModal" :ui="{ width: 'sm:max-w-2xl' }">
-    <UCard>
-      <template #header>
-        <div class="flex justify-between items-center">
-          <h3 class="text-lg font-medium">编辑内容</h3>
-          <UButton color="gray" variant="ghost" icon="i-mdi-close" class="-my-1" @click="showEditModal = false" />
+  <UModal v-model="showEditModal" :ui="{ width: 'sm:max-w-3xl' }">
+    <div class="edit-modal-shell">
+      <input
+        ref="editImageInputRef"
+        type="file"
+        accept="image/*"
+        multiple
+        class="hidden"
+        @change="handleEditMediaChange($event, 'image')"
+      />
+      <input
+        ref="editVideoInputRef"
+        type="file"
+        accept="video/*"
+        multiple
+        class="hidden"
+        @change="handleEditMediaChange($event, 'video')"
+      />
+
+      <div class="edit-modal-header">
+        <div class="edit-modal-title-block">
+          <h3 class="edit-modal-title">编辑内容</h3>
         </div>
-      </template>
-      <div class="flex flex-col space-y-4">
+        <button type="button" class="edit-icon-button nw-tooltip-anchor" data-tooltip="关闭" aria-label="关闭" @click="showEditModal = false">
+          <UIcon name="i-mdi-close" class="w-5 h-5" />
+        </button>
+      </div>
+
+      <div class="edit-modal-body">
         <div class="edit-upload-toolbar">
-          <input
-            ref="editImageInputRef"
-            type="file"
-            accept="image/*"
-            multiple
-            class="hidden"
-            @change="handleEditMediaChange($event, 'image')"
-          />
-          <input
-            ref="editVideoInputRef"
-            type="file"
-            accept="video/*"
-            multiple
-            class="hidden"
-            @change="handleEditMediaChange($event, 'video')"
-          />
           <div class="edit-upload-actions">
-            <UButton
-              size="xs"
-              color="gray"
-              variant="soft"
-              icon="i-mdi-image-plus-outline"
-              class="edit-upload-btn text-slate-700 dark:text-slate-200"
-              :ui="{ base: 'bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 border border-slate-200 dark:border-white/10 shadow-none' }"
+            <button
+              type="button"
+              class="edit-tool-button nw-tooltip-anchor"
+              data-tooltip="添加图片"
               :disabled="isEditUploading"
-              :loading="editUploadKind === 'image'"
               @click="triggerEditMediaInput('image')"
             >
-              添加图片
-            </UButton>
-            <UButton
-              size="xs"
-              color="gray"
-              variant="soft"
-              icon="i-mdi-video-plus-outline"
-              class="edit-upload-btn text-slate-700 dark:text-slate-200"
-              :ui="{ base: 'bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 border border-slate-200 dark:border-white/10 shadow-none' }"
+              <UIcon :name="editUploadKind === 'image' ? 'i-mdi-loading' : 'i-mdi-image-plus-outline'" class="w-5 h-5" :class="{ 'edit-spin': editUploadKind === 'image' }" />
+              <span>添加图片</span>
+            </button>
+            <button
+              type="button"
+              class="edit-tool-button nw-tooltip-anchor"
+              data-tooltip="添加视频"
               :disabled="isEditUploading"
-              :loading="editUploadKind === 'video'"
               @click="triggerEditMediaInput('video')"
             >
-              添加视频
-            </UButton>
+              <UIcon :name="editUploadKind === 'video' ? 'i-mdi-loading' : 'i-mdi-video-plus-outline'" class="w-5 h-5" :class="{ 'edit-spin': editUploadKind === 'video' }" />
+              <span>添加视频</span>
+            </button>
           </div>
           <span v-if="isEditUploading" class="edit-upload-status">{{ editUploadLabel }} {{ editUploadProgress }}%</span>
         </div>
-        <UTextarea
+
+        <textarea
           ref="editTextareaRef"
           v-model="editingContent"
           placeholder="编辑内容..."
-          :rows="10"
-          class="font-mono text-sm"
+          rows="10"
+          class="edit-content-textarea"
         />
-        <div class="space-y-1">
-          <label class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-300">
-            <UIcon :name="messageVisibilityIcon(editingVisibility)" class="w-4 h-4" />
-            可见范围
+
+        <div class="edit-settings-grid">
+          <label class="edit-setting-card">
+            <span class="edit-setting-label">
+              <UIcon :name="messageVisibilityIcon(editingVisibility)" class="w-4 h-4" />
+              可见范围
+            </span>
+            <select v-model="editingVisibility" class="edit-setting-control" aria-label="可见范围">
+              <option v-for="option in messageVisibilityOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
           </label>
-          <select
-            v-model="editingVisibility"
-            class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-orange-400 dark:border-white/10 dark:bg-[var(--home-surface-dark-elevated)] dark:text-white"
-            aria-label="可见范围"
-          >
-            <option v-for="option in messageVisibilityOptions" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
-        </div>
-        <div v-if="canEditPublishTime(editingMessage)" class="space-y-1">
-          <label class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-300">
-            <UIcon name="i-mdi-calendar-clock-outline" class="w-4 h-4" />
-            发布时间
+          <label v-if="canEditPublishTime(editingMessage)" class="edit-setting-card">
+            <span class="edit-setting-label">
+              <UIcon name="i-mdi-calendar-clock-outline" class="w-4 h-4" />
+              发布时间
+            </span>
+            <input
+              v-model="editingPublishedAtInput"
+              type="datetime-local"
+              class="edit-setting-control"
+              aria-label="发布时间"
+            />
+            <span class="edit-setting-hint">仅管理员可修改自己发布内容的发布时间</span>
           </label>
-          <input
-            v-model="editingPublishedAtInput"
-            type="datetime-local"
-            class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-orange-400 dark:border-white/10 dark:bg-[var(--home-surface-dark-elevated)] dark:text-white"
-            aria-label="发布时间"
-          />
-          <p class="text-xs text-gray-400">仅管理员可修改自己发布内容的发布时间</p>
         </div>
-        <div class="border-t border-gray-200 my-2 pt-2">
-          <div class="text-sm text-gray-500 mb-2">预览：</div>
-          <div class="p-4 rounded-lg overflow-auto max-h-[300px] bg-white dark:bg-[var(--home-surface-dark-elevated)]">
-            <div class="text-black dark:text-white">
-              <MarkdownRenderer :content="editingContent" :enableGithubCard="siteConfig?.enableGithubCard === true" />
-            </div>
+
+        <div class="edit-preview-block">
+          <div class="edit-preview-title">预览</div>
+          <div class="edit-preview-surface">
+            <MarkdownRenderer :content="editingContent" :enableGithubCard="siteConfig?.enableGithubCard === true" />
           </div>
         </div>
       </div>
-      <template #footer>
-        <div class="flex justify-end space-x-2">
-          <UButton color="gray" variant="outline" @click="showEditModal = false" class="text-white">
-            取消
-          </UButton>
-          <UButton color="orange" @click="saveEditedMessage" :loading="isSaving" class="text-white">
-            保存
-          </UButton>
-        </div>
-      </template>
-    </UCard>
+
+      <div class="edit-modal-footer">
+        <button type="button" class="edit-footer-button secondary" :disabled="isSaving" @click="showEditModal = false">取消</button>
+        <button type="button" class="edit-footer-button primary" :disabled="isSaving" @click="saveEditedMessage">
+          <UIcon v-if="isSaving" name="i-mdi-loading" class="w-4 h-4 edit-spin" />
+          <span>{{ isSaving ? '保存中' : '保存' }}</span>
+        </button>
+      </div>
+    </div>
   </UModal>
   </div>
 </template>
@@ -2109,16 +2104,89 @@ onMounted(() => {
   color: rgb(251, 146, 60);
 }
 
+.edit-modal-shell {
+  --edit-border: rgba(15, 23, 42, 0.10);
+  --edit-surface: #ffffff;
+  --edit-panel: #f8fafc;
+  --edit-panel-strong: #f1f5f9;
+  --edit-text: #111827;
+  --edit-muted: #64748b;
+  --edit-control: #ffffff;
+  width: 100%;
+  max-height: min(86vh, 860px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--edit-border);
+  border-radius: 12px;
+  background: var(--edit-surface);
+  color: var(--edit-text);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.18);
+}
+
+:global(html.dark) .edit-modal-shell {
+  --edit-border: rgba(255, 255, 255, 0.14);
+  --edit-surface: #0f172a;
+  --edit-panel: rgba(255, 255, 255, 0.055);
+  --edit-panel-strong: rgba(255, 255, 255, 0.085);
+  --edit-text: #f8fafc;
+  --edit-muted: #94a3b8;
+  --edit-control: rgba(15, 23, 42, 0.72);
+  box-shadow: 0 22px 54px rgba(2, 6, 23, 0.58);
+}
+
+.edit-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--edit-border);
+  background: var(--edit-panel);
+}
+
+.edit-modal-title-block { min-width: 0; }
+.edit-modal-title { margin: 0; font-size: 17px; line-height: 1.35; font-weight: 700; color: var(--edit-text); }
+
+.edit-icon-button,
+.edit-tool-button,
+.edit-footer-button {
+  border: 1px solid var(--edit-border);
+  background: var(--edit-control);
+  color: var(--edit-text);
+  transition: background-color .18s ease, border-color .18s ease, color .18s ease, transform .18s ease, opacity .18s ease;
+}
+
+.edit-icon-button {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 10px;
+}
+
+.edit-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
 .edit-upload-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  min-height: 32px;
-  padding: 6px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 12px;
-  background: rgba(15, 23, 42, 0.04);
+  min-height: 40px;
+  padding: 8px;
+  border: 1px solid var(--edit-border);
+  border-radius: 10px;
+  background: var(--edit-panel);
 }
 
 .edit-upload-actions {
@@ -2128,54 +2196,191 @@ onMounted(() => {
   gap: 8px;
 }
 
+.edit-tool-button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.edit-icon-button:hover:not(:disabled),
+.edit-tool-button:hover:not(:disabled),
+.edit-footer-button:hover:not(:disabled) {
+  transform: translate3d(0,0,0) scale(1.03);
+  border-color: var(--nw-floating-hover-border, var(--edit-border));
+  background: var(--nw-floating-hover-bg, var(--edit-panel-strong));
+}
+
+.edit-icon-button:disabled,
+.edit-tool-button:disabled,
+.edit-footer-button:disabled {
+  cursor: not-allowed;
+  opacity: .58;
+}
+
 .edit-upload-status {
   flex-shrink: 0;
   font-size: 12px;
-  color: rgb(249, 115, 22);
+  font-weight: 650;
+  color: rgb(234, 88, 12);
 }
 
-.edit-upload-actions :deep(.edit-upload-btn) {
-  min-height: 32px;
-  border: 1px solid rgba(15, 23, 42, 0.08) !important;
-  border-radius: 10px !important;
-  background: rgba(15, 23, 42, 0.06) !important;
-  color: #374151 !important;
-  box-shadow: none !important;
-  transition: background-color .18s ease, border-color .18s ease, transform .18s ease;
+:global(html.dark) .edit-upload-status { color: rgb(251, 146, 60); }
+
+.edit-content-textarea {
+  width: 100%;
+  min-height: 260px;
+  resize: vertical;
+  border: 1px solid var(--edit-border);
+  border-radius: 10px;
+  background: var(--edit-control);
+  color: var(--edit-text);
+  padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  outline: none;
+  transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
 }
 
-.edit-upload-actions :deep(.edit-upload-btn:hover:not(:disabled)) {
-  transform: translate3d(0,0,0) scale(1.03);
-  border-color: var(--nw-floating-hover-border) !important;
-  background: var(--nw-floating-hover-bg) !important;
+.edit-content-textarea::placeholder { color: var(--edit-muted); }
+.edit-content-textarea:focus,
+.edit-setting-control:focus {
+  border-color: rgba(249, 115, 22, 0.62);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.16);
 }
 
-:global(html.dark) .edit-upload-toolbar {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.05);
+.edit-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
-:global(html.dark) .edit-upload-actions :deep(.edit-upload-btn) {
-  border-color: rgba(255, 255, 255, 0.12) !important;
-  background: rgba(255, 255, 255, 0.06) !important;
-  color: #cbd5e1 !important;
+.edit-setting-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--edit-border);
+  border-radius: 10px;
+  background: var(--edit-panel);
 }
 
-:global(html.dark) .edit-upload-actions :deep(.edit-upload-btn:hover:not(:disabled)) {
-  background: var(--nw-floating-hover-bg) !important;
+.edit-setting-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+  color: var(--edit-muted);
 }
 
-:global(html.dark) .edit-upload-status {
-  color: rgb(251, 146, 60);
+.edit-setting-control {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--edit-border);
+  border-radius: 9px;
+  background: var(--edit-control);
+  color: var(--edit-text);
+  padding: 0 10px;
+  font-size: 14px;
+  outline: none;
+  color-scheme: light;
+  transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
+}
+
+:global(html.dark) .edit-setting-control { color-scheme: dark; }
+.edit-setting-control option { color: #111827; background: #ffffff; }
+:global(html.dark) .edit-setting-control option { color: #f8fafc; background: #0f172a; }
+
+.edit-setting-hint {
+  color: var(--edit-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.edit-preview-block {
+  border-top: 1px solid var(--edit-border);
+  padding-top: 12px;
+}
+
+.edit-preview-title {
+  margin-bottom: 8px;
+  color: var(--edit-muted);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.edit-preview-surface {
+  max-height: 300px;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--edit-border);
+  border-radius: 10px;
+  background: var(--edit-control);
+  color: var(--edit-text);
+}
+
+.edit-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--edit-border);
+  background: var(--edit-panel);
+}
+
+.edit-footer-button {
+  min-width: 86px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.edit-footer-button.primary {
+  border-color: rgba(249, 115, 22, 0.64);
+  background: rgb(249, 115, 22);
+  color: #fff;
+}
+
+.edit-footer-button.primary:hover:not(:disabled) {
+  border-color: rgb(234, 88, 12);
+  background: rgb(234, 88, 12);
+}
+
+.edit-spin { animation: edit-spin 1s linear infinite; }
+@keyframes edit-spin { to { transform: rotate(360deg); } }
+
+@media screen and (max-width: 640px) {
+  .edit-modal-shell { max-height: 90vh; border-radius: 10px; }
+  .edit-modal-header,
+  .edit-modal-body,
+  .edit-modal-footer { padding-left: 12px; padding-right: 12px; }
+  .edit-upload-toolbar { align-items: stretch; flex-direction: column; }
+  .edit-tool-button { flex: 1 1 140px; }
+  .edit-settings-grid { grid-template-columns: 1fr; }
+  .edit-modal-footer { justify-content: stretch; }
+  .edit-footer-button { flex: 1 1 0; }
 }
 
 @media screen and (max-width: 480px) {
   .date-filter-bar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .edit-upload-toolbar {
     align-items: flex-start;
     flex-direction: column;
   }

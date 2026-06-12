@@ -2,15 +2,17 @@
   <section class="notification-center" :class="{ 'notification-theme-dark': isDark }">
     <div class="notification-header">
       <div class="notification-heading">
-        <h2 class="notification-title">通知</h2>
+        <div class="notification-title-row">
+          <h2 class="notification-title">通知</h2>
+          <div v-if="user.isLogin" class="notification-actions">
+            <span v-if="unreadCount > 0" class="unread-pill">{{ unreadCount }} 未读</span>
+            <button type="button" class="icon-action nw-tooltip-anchor" data-tooltip="刷新" aria-label="刷新" :disabled="loading" @click="loadNotifications(true)">
+              <UIcon name="i-mdi-refresh" class="w-4 h-4" />
+            </button>
+            <button type="button" class="text-action" :disabled="markingAll || unreadCount === 0" @click="markAllRead">全部已读</button>
+          </div>
+        </div>
         <p class="notification-subtitle">欢迎彼此间互相交流</p>
-      </div>
-      <div v-if="user.isLogin" class="notification-actions">
-        <span v-if="unreadCount > 0" class="unread-pill">{{ unreadCount }} 未读</span>
-        <button type="button" class="icon-action nw-tooltip-anchor" data-tooltip="刷新" aria-label="刷新" :disabled="loading" @click="loadNotifications(true)">
-          <UIcon name="i-mdi-refresh" class="w-4 h-4" />
-        </button>
-        <button type="button" class="text-action" :disabled="markingAll || unreadCount === 0" @click="markAllRead">全部已读</button>
       </div>
     </div>
 
@@ -88,12 +90,13 @@
 
             <div v-if="replyOpenId === item.id" :id="`notification-reply-${item.id}`" class="inline-reply-box">
               <BuiltinComments
-                :key="`notification-reply-thread-${item.id}-${item.comment_id || 0}`"
-                :ref="replyThreadRefFor(item.id)"
-                :message-id="Number(item.message_id || 0)"
+                :key="`notification-reply-thread-${item.id}-${replyCommentId(item) || 0}`"
+                :message-id="targetMessageId(item)"
                 :message-visibility="item.message?.visibility"
                 :site-config="props.siteConfig"
-                :show-input="false"
+                :show-input="true"
+                :reply-input-only="true"
+                :reply-comment-id="replyCommentId(item)"
                 :context-label="item.type === 'guestbook' ? '留言' : '评论'"
                 auto-scroll-input
                 @cancel="replyOpenId = null"
@@ -169,10 +172,6 @@ type NotificationJumpPayload = UserNotification & {
   target_comment_id?: number | null
 }
 
-type CommentThreadExpose = {
-  replyToCommentById?: (commentId: number) => Promise<boolean>
-}
-
 type NotificationListPayload = {
   items?: UserNotification[]
   total?: number
@@ -209,7 +208,6 @@ const resolvingInitialTarget = ref(false)
 const resolvingRestoreFocus = ref(false)
 const highlightedId = ref<number | null>(null)
 const replyOpenId = ref<number | null>(null)
-const replyThreadRefs = ref<Record<number, CommentThreadExpose | null>>({})
 const jumpingId = ref<number | null>(null)
 let jumpFeedbackTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -281,42 +279,29 @@ const targetImage = (item: UserNotification) => {
   return raw ? resolveMediaURL(baseApi.value, raw) : ''
 }
 
-const canReply = (item: UserNotification) => {
-  return item.type !== 'like' && Number(item.comment_id || 0) > 0 && Number(item.message_id || 0) > 0
-}
-
 const targetMessageId = (item: UserNotification) => Number(item.message_id || item.comment?.message_id || 0)
-const targetCommentId = (item: UserNotification) => Number(item.comment_id || item.comment?.id || 0)
+const replyCommentId = (item: UserNotification) => Number(item.comment_id || item.comment?.id || 0)
+
+const canReply = (item: UserNotification) => {
+  return item.type !== 'like' && replyCommentId(item) > 0 && targetMessageId(item) > 0
+}
+const jumpCommentId = (item: UserNotification) => {
+  if (item.type === 'like') return 0
+  if (item.type === 'reply') {
+    return Number(item.parent_comment_id || item.parent_comment?.id || item.comment?.parent_id || item.comment_id || item.comment?.id || 0)
+  }
+  return Number(item.comment_id || item.comment?.id || 0)
+}
 const jumpPayload = (item: UserNotification): NotificationJumpPayload => ({
   ...item,
   target_message_id: targetMessageId(item),
-  target_comment_id: targetCommentId(item) || null
+  target_comment_id: jumpCommentId(item) || null
 })
 
-const setReplyThreadRef = (itemId: number, instance: any) => {
-  if (instance) replyThreadRefs.value[itemId] = instance as CommentThreadExpose
-  else delete replyThreadRefs.value[itemId]
-}
-
-const replyThreadRefFor = (itemId: number) => (instance: unknown) => setReplyThreadRef(itemId, instance)
-
-const waitForReplyThread = async (itemId: number) => {
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const thread = replyThreadRefs.value[itemId]
-    if (thread?.replyToCommentById) return thread
-    await new Promise<void>((resolve) => setTimeout(resolve, 80))
-  }
-  return null
-}
-
-const openNativeReplyEditor = async (item: UserNotification) => {
-  const commentId = targetCommentId(item)
-  if (!commentId) return
+const scrollInlineReplyIntoView = async (itemId: number) => {
   await nextTick()
-  const box = feedRef.value?.querySelector(`#notification-reply-${item.id}`) as HTMLElement | null
+  const box = feedRef.value?.querySelector(`#notification-reply-${itemId}`) as HTMLElement | null
   if (box) scrollElementToAppCenter(box)
-  const thread = await waitForReplyThread(item.id)
-  await thread?.replyToCommentById?.(commentId)
 }
 
 const formatTime = (value?: string) => {
@@ -354,7 +339,10 @@ const hasInitialTarget = () => initialMessageId() > 0 || initialCommentId() > 0
 const matchesInitialTarget = (item: UserNotification) => {
   const messageId = initialMessageId()
   const commentId = initialCommentId()
-  if (commentId > 0) return Number(item.comment_id || 0) === commentId
+  if (commentId > 0) {
+    return [item.comment_id, item.parent_comment_id, item.comment?.id, item.parent_comment?.id, item.comment?.parent_id]
+      .some((value) => Number(value || 0) === commentId)
+  }
   return messageId > 0 && Number(item.message_id || 0) === messageId
 }
 
@@ -517,7 +505,7 @@ const toggleReply = async (item: UserNotification) => {
   await markRead(item)
   const isOpening = replyOpenId.value !== item.id
   replyOpenId.value = isOpening ? item.id : null
-  if (isOpening) await openNativeReplyEditor(item)
+  if (isOpening) await scrollInlineReplyIntoView(item.id)
 }
 
 watch(() => user.isLogin, (loggedIn) => {
@@ -579,11 +567,12 @@ defineExpose({ refresh: () => loadNotifications(true) })
   backdrop-filter:blur(8px) saturate(118%);
   -webkit-backdrop-filter:blur(8px) saturate(118%);
 }
-.notification-header { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0; margin-bottom:14px; padding:0 2px; text-align:center; }
+.notification-header { display:block; margin-bottom:20px; padding:0 8px; text-align:center; }
 .notification-heading { width:100%; }
-.notification-title { display:block; margin:0 0 14px; padding:0; border-radius:0; color:var(--notice-strong); font-size:18px; font-weight:700; line-height:1.35; }
-.notification-subtitle { margin:2px 0 20px; color:var(--notice-muted); font-size:13px; line-height:1.7; text-align:center; opacity:.8; }
-.notification-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:center; }
+.notification-title-row { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:center; column-gap:12px; width:100%; min-height:32px; }
+.notification-title { grid-column:2; display:block; margin:0; padding:0; border-radius:0; color:var(--notice-strong); font-size:18px; font-weight:700; line-height:1.35; }
+.notification-subtitle { margin:14px 0 0; color:var(--notice-muted); font-size:13px; line-height:1.7; text-align:center; opacity:.8; }
+.notification-actions { grid-column:3; justify-self:end; display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; max-width:100%; }
 .unread-pill { display:inline-flex; align-items:center; min-height:28px; padding:0 10px; border-radius:999px; font-size:12px; font-weight:650; color:#fff; background:#3b82f6; }
 .icon-action,
 .text-action { border:1px solid var(--notice-border); background:var(--notice-card); color:var(--notice-text); transition:background-color .18s ease, border-color .18s ease, transform .18s ease; }
@@ -622,6 +611,9 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .inline-reply-box { margin-top:12px; padding-top:12px; border-top:1px solid var(--notice-border); }
 .inline-reply-box :deep(.builtin-comments) { color:var(--notice-text); }
 .inline-reply-box :deep(.waline-wrapper) { padding-left:0; padding-right:0; background:transparent !important; }
+.inline-reply-box :deep(.reply-input-only) { padding-top:0; padding-bottom:0; }
+.inline-reply-box :deep(.reply-input-only .space-y-4) { margin-top:0; }
+.inline-reply-box :deep(.reply-input-only .comment-input-card) { background:var(--notice-input); }
 .empty-state { min-height:220px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; text-align:center; padding:24px; border:1px solid var(--notice-border); background:var(--notice-card); color:var(--notice-text); border-radius:12px; }
 .empty-state.compact { min-height:220px; border:0; background:transparent; }
 .error-state .empty-icon { color:#ef4444; opacity:.82; }
@@ -634,9 +626,11 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .spin { animation:notification-spin 1s linear infinite; }
 @keyframes notification-spin { to { transform:rotate(360deg); } }
 @media (max-width: 720px) {
-  .notification-header { align-items:center; flex-direction:column; text-align:center; gap:10px; margin-bottom:10px; }
+  .notification-header { text-align:center; margin-bottom:16px; padding:0 4px; }
+  .notification-title-row { display:flex; flex-direction:column; justify-content:center; gap:10px; min-height:0; }
+  .notification-title { grid-column:auto; }
   .notification-subtitle { display:none; }
-  .notification-actions { justify-content:center; width:100%; }
+  .notification-actions { grid-column:auto; justify-content:center; width:100%; }
   .notification-feed-panel { margin:0 -12px; padding:0 12px; }
   .notification-feed-item { gap:10px; padding:14px 12px; }
   .notification-feed-item.unread::before { left:7px; top:24px; }

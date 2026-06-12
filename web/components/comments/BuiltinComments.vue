@@ -1,9 +1,9 @@
 <template>
   <div ref="rootRef" class="builtin-comments" :class="{ 'comment-theme-dark': isDark }">
     <input ref="commentImageInput" type="file" accept="image/*" multiple class="hidden" @change="handleCommentImageInputChange" />
-  <div class="waline-wrapper px-2 py-2 rounded-lg" :class="[themeBg]">
-      <div class="text-sm mb-2" :class="themeText">{{ contextLabel }} ({{ rootCommentTotal }})</div>
-      <div v-if="sortedRootComments.length" class="comments-list">
+  <div class="waline-wrapper px-2 py-2 rounded-lg" :class="[themeBg, { 'reply-input-only': props.replyInputOnly }]">
+      <div v-if="!props.replyInputOnly" class="text-sm mb-2" :class="themeText">{{ contextLabel }} ({{ rootCommentTotal }})</div>
+      <div v-if="!props.replyInputOnly && sortedRootComments.length" class="comments-list">
         <div v-for="c in visibleRootComments" :key="c.id" class="comment-item" :class="rootCardClass" :data-comment-id="c.id">
           <img class="comment-avatar avatar-img" :src="commentAvatar(c)" alt="avatar" @error="avatarOnError" />
           <div class="comment-body">
@@ -130,7 +130,7 @@
           <button v-if="canCollapseRootComments" class="text-xs px-3 py-1 rounded border" :class="themeBorder" @click="collapseRootComments">收回</button>
           <button v-if="hasMore" class="text-xs px-3 py-1 rounded border" :class="themeBorder" @click="loadMore">加载更多{{ contextLabel }}</button>
         </div>
-      <div v-if="!sortedRootComments.length" class="text-xs mb-4" :class="themeMuted">暂无{{ contextLabel }}</div>
+      <div v-if="!props.replyInputOnly && !sortedRootComments.length" class="text-xs mb-4" :class="themeMuted">暂无{{ contextLabel }}</div>
 
       <div v-if="formVisible" class="space-y-4 mt-4 md:mt-5">
         <div class="comment-editor-toolbar main-toolbar">
@@ -229,7 +229,7 @@ import { uploadMediaFiles } from '~/utils/media-upload'
 
 type CommentEditorTarget = 'content' | 'edit'
 
-const props = defineProps<{ messageId: number, siteConfig: any, showInput?: boolean, contextLabel?: string, autoScrollInput?: boolean, messageVisibility?: string }>()
+const props = defineProps<{ messageId: number, siteConfig: any, showInput?: boolean, contextLabel?: string, autoScrollInput?: boolean, messageVisibility?: string, replyInputOnly?: boolean, replyCommentId?: number | null }>()
 const emit = defineEmits(['cancel'])
 const contextLabel = computed(() => String(props.contextLabel || '评论').trim() || '评论')
 const loginRequiredText = computed(() => `请登录后${contextLabel.value}`)
@@ -502,8 +502,10 @@ type InputScrollSnapshot = {
 type CommentScrollBlock = 'nearest' | 'start' | 'center'
 const inputRestoreScroll = ref<InputScrollSnapshot | null>(null)
 const pendingInputScroll = ref(false)
-const formVisible = computed(() => (((props.showInput && !hiddenByCancel.value) || !!replyTo.value) && canComment.value))
-const showReopenInput = computed(() => !!props.showInput && hiddenByCancel.value && !replyTo.value && canComment.value)
+const formVisible = computed(() => props.replyInputOnly
+  ? (!!replyTo.value && canComment.value)
+  : (((props.showInput && !hiddenByCancel.value) || !!replyTo.value) && canComment.value))
+const showReopenInput = computed(() => !!props.showInput && hiddenByCancel.value && !props.replyInputOnly && !replyTo.value && canComment.value)
 const isScrollableY = (el: HTMLElement) => {
   if (typeof window === 'undefined') return false
   const style = window.getComputedStyle(el)
@@ -1244,6 +1246,12 @@ const replyToCommentById = async (commentId: number) => {
   startReply(commentId, commentAuthorName(target))
   return true
 }
+
+watch(() => props.replyCommentId, async (value) => {
+  const commentId = Number(value || 0)
+  if (!commentId) return
+  await replyToCommentById(commentId)
+}, { immediate: true })
 
 defineExpose({ load, focusCommentById, replyToCommentById })
 </script>
