@@ -88,6 +88,11 @@
                 </button>
               </div>
             </div>
+
+            <div v-if="replySuccessId === item.id" class="inline-reply-success" role="status">
+              <UIcon name="i-mdi-check-circle-outline" class="inline-reply-success-icon" />
+              已回复
+            </div>
           </div>
         </article>
       </div>
@@ -102,7 +107,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useUserStore } from '~/store/user'
 import { getRequest, postRequest, putRequest } from '~/utils/api'
 import { resolveMediaURL } from '~/utils/media-url'
@@ -179,6 +184,8 @@ const highlightedId = ref<number | null>(null)
 const replyOpenId = ref<number | null>(null)
 const replyDrafts = ref<Record<number, string>>({})
 const replySubmitting = ref<Record<number, boolean>>({})
+const replySuccessId = ref<number | null>(null)
+let replySuccessTimer: ReturnType<typeof setTimeout> | null = null
 
 const runtimeConfig = useRuntimeConfig()
 const baseApi = computed(() => runtimeConfig.public.baseApi || '/api')
@@ -434,12 +441,31 @@ const focusInlineReplyInput = async (itemId: number) => {
   scrollElementToAppCenter(input)
 }
 
+const clearReplySuccess = () => {
+  if (replySuccessTimer) clearTimeout(replySuccessTimer)
+  replySuccessTimer = null
+  replySuccessId.value = null
+}
+
+const showReplySuccess = async (itemId: number) => {
+  clearReplySuccess()
+  replySuccessId.value = itemId
+  await nextTick()
+  const el = feedRef.value?.querySelector(`[data-notification-id="${itemId}"] .inline-reply-success`) as HTMLElement | null
+  if (el) scrollElementToAppCenter(el)
+  replySuccessTimer = setTimeout(() => {
+    if (replySuccessId.value === itemId) replySuccessId.value = null
+    replySuccessTimer = null
+  }, 2400)
+}
+
 const toggleReply = async (item: UserNotification) => {
   if (!canReply(item)) return
   await markRead(item)
   replyOpenId.value = replyOpenId.value === item.id ? null : item.id
   if (replyOpenId.value === item.id) {
     if (replyDrafts.value[item.id] === undefined) replyDrafts.value[item.id] = ''
+    clearReplySuccess()
     await focusInlineReplyInput(item.id)
   }
 }
@@ -459,8 +485,7 @@ const submitInlineReply = async (item: UserNotification) => {
     if (res?.code === 1) {
       replyDrafts.value[item.id] = ''
       replyOpenId.value = null
-      useToast().add({ title: '已回复', color: 'green' })
-      await loadNotifications(true)
+      await showReplySuccess(item.id)
     } else {
       useToast().add({ title: '回复失败', description: res?.msg, color: 'red' })
     }
@@ -477,6 +502,7 @@ watch(() => user.isLogin, (loggedIn) => {
     items.value = []
     total.value = 0
     replyOpenId.value = null
+    clearReplySuccess()
     setUnreadCount(0)
   }
 })
@@ -484,6 +510,10 @@ watch(() => user.isLogin, (loggedIn) => {
 watch(() => [props.initialMessageId, props.initialCommentId], () => resolveInitialTargetAcrossPages())
 
 onMounted(() => loadNotifications(true))
+
+onBeforeUnmount(() => {
+  clearReplySuccess()
+})
 
 defineExpose({ refresh: () => loadNotifications(true) })
 </script>
@@ -529,6 +559,8 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .inline-reply-input:focus { border-color:rgba(37,99,235,.42); box-shadow:0 0 0 3px rgba(37,99,235,.1); }
 .inline-reply-actions { display:flex; align-items:center; justify-content:flex-end; gap:10px; margin-top:8px; }
 .inline-reply-hint { margin-right:auto; font-size:12px; color:#94a3b8; }
+.inline-reply-success { display:inline-flex; align-items:center; gap:6px; margin-top:12px; min-height:30px; padding:0 10px; border-radius:8px; background:rgba(22,163,74,.1); color:#15803d; font-size:13px; font-weight:600; }
+.inline-reply-success-icon { width:16px; height:16px; }
 .inline-reply-cancel, .inline-reply-submit { min-height:30px; border-radius:7px; padding:0 12px; font-size:13px; }
 .inline-reply-cancel { border:1px solid rgba(148,163,184,.3); background:rgba(255,255,255,.72); color:inherit; }
 .inline-reply-submit { border:1px solid rgba(37,99,235,.44); background:#2563eb; color:#fff; }
@@ -559,6 +591,7 @@ defineExpose({ refresh: () => loadNotifications(true) })
 :global(.dark) .notification-target-card { background:rgba(30,41,59,.86); }
 :global(.dark) .notification-target-card:hover { background:rgba(51,65,85,.88); }
 :global(.dark) .inline-reply-input { background:rgba(15,23,42,.72); border-color:rgba(148,163,184,.26); color:#e5e7eb; }
+:global(.dark) .inline-reply-success { background:rgba(34,197,94,.14); color:#86efac; }
 @media (max-width: 720px) {
   .notification-header { align-items:center; flex-direction:column; text-align:center; gap:10px; margin-bottom:10px; }
   .notification-subtitle { display:none; }
