@@ -1305,13 +1305,32 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 
 :global(html.dark) .comment-floor, :global(html.dark) .comment-time { color: #9ca3af; }
 :global(html:not(.dark)) .comment-floor, :global(html:not(.dark)) .comment-time { color: #6b7280; }
-.comment-editor-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-height:48px; padding:6px; border-radius:12px; background:rgba(255,255,255,0.85); backdrop-filter:saturate(1.1) blur(6px); -webkit-backdrop-filter:saturate(1.1) blur(6px); }
+.builtin-comments {
+  --comment-toolbar-bg: rgba(255, 255, 255, 0.85);
+  --comment-toolbar-control-bg: rgba(15, 23, 42, 0.06);
+  --comment-toolbar-control-hover-bg: var(--nw-floating-hover-bg);
+  --comment-toolbar-border: rgba(15, 23, 42, 0.08);
+  --comment-toolbar-text: #374151;
+  --comment-toolbar-preview-border: rgba(0, 0, 0, 0.12);
+  --comment-toolbar-preview-bg: rgba(0, 0, 0, 0.04);
+}
+:global(html.dark) .builtin-comments,
+:global(.dark) .builtin-comments {
+  --comment-toolbar-bg: rgba(39, 50, 66, 0.68);
+  --comment-toolbar-control-bg: rgba(255, 255, 255, 0.06);
+  --comment-toolbar-control-hover-bg: rgba(255, 255, 255, 0.12);
+  --comment-toolbar-border: rgba(255, 255, 255, 0.12);
+  --comment-toolbar-text: #cbd5e1;
+  --comment-toolbar-preview-border: rgba(255, 255, 255, 0.16);
+  --comment-toolbar-preview-bg: rgba(255, 255, 255, 0.06);
+}
+.comment-editor-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-height:48px; padding:6px; border-radius:12px; background:var(--comment-toolbar-bg); color:var(--comment-toolbar-text); backdrop-filter:saturate(1.1) blur(6px); -webkit-backdrop-filter:saturate(1.1) blur(6px); }
 .main-toolbar { margin-bottom:8px; }
 .edit-toolbar { margin-top:2px; }
-.toolbar-control { display:inline-flex; align-items:center; gap:5px; min-width:94px; height:36px; padding:0 8px; border:1px solid rgba(15,23,42,0.08); border-radius:12px; background:rgba(0,0,0,0.06); color:#374151; box-shadow:none; transition:background-color .18s ease, border-color .18s ease, transform .18s ease; }
+.toolbar-control { display:inline-flex; align-items:center; gap:5px; min-width:94px; height:36px; padding:0 8px; border:1px solid var(--comment-toolbar-border); border-radius:12px; background:var(--comment-toolbar-control-bg); color:var(--comment-toolbar-text); box-shadow:none; transition:background-color .18s ease, border-color .18s ease, transform .18s ease; }
 .toolbar-control:hover,
-.toolbar-control:focus-within { border-color:var(--nw-floating-hover-border); background:rgba(0,0,0,0.12); }
-.comment-tool-btn { display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto; width:36px; min-width:36px; height:36px; border-radius:12px; border:1px solid rgba(15,23,42,0.08); background:rgba(15,23,42,0.06); color:#374151; box-shadow:none; transition:background-color .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+.toolbar-control:focus-within { border-color:var(--nw-floating-hover-border); background:var(--comment-toolbar-control-hover-bg); }
+.comment-tool-btn { display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto; width:36px; min-width:36px; height:36px; border-radius:12px; border:1px solid var(--comment-toolbar-border); background:var(--comment-toolbar-control-bg); color:var(--comment-toolbar-text); box-shadow:none; transition:background-color .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
 .comment-tool-btn:hover:not(:disabled) { transform:translate3d(0,0,0) scale(1.06); border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
 .comment-tool-btn:active:not(:disabled) { transform:translate3d(0,0,0) scale(1.02); }
 .comment-tool-btn:disabled { cursor:not-allowed; opacity:.5; }
@@ -1326,20 +1345,12 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 .emoji-wrap { position:relative; display:inline-flex; }
 .emoji-popover { position:absolute; left:0; bottom:calc(100% + 8px); z-index:30; display:grid; grid-template-columns:repeat(6, 30px); gap:4px; width:max-content; padding:8px; }
 .emoji-option { width:30px; height:30px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; font-size:16px; line-height:1; }
-.emoji-option:hover { background:rgba(0,0,0,0.08); }
+.emoji-option:hover { background:var(--comment-toolbar-control-hover-bg); }
 .comment-upload-status { height:24px; min-width:34px; padding:0 8px; border-radius:9999px; display:inline-flex; align-items:center; justify-content:center; font-size:12px; border:1px solid currentColor; opacity:.8; }
 .comment-media-preview-strip { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
-.comment-media-preview-item { width:var(--inline-image-thumb-size, 96px); height:var(--inline-image-thumb-size, 96px); border-radius:8px; overflow:hidden; display:block; border:1px solid rgba(0,0,0,0.12); background:rgba(0,0,0,0.04); }
+.comment-media-preview-item { width:var(--inline-image-thumb-size, 96px); height:var(--inline-image-thumb-size, 96px); border-radius:8px; overflow:hidden; display:block; border:1px solid var(--comment-toolbar-preview-border); background:var(--comment-toolbar-preview-bg); }
 .comment-media-preview-item img { width:100%; height:100%; display:block; object-fit:cover; }
-:global(html.dark) .comment-editor-toolbar { background:rgba(39,50,66,0.68); backdrop-filter:saturate(1.1) blur(6px); -webkit-backdrop-filter:saturate(1.1) blur(6px); }
-:global(html.dark) .toolbar-control { background:rgba(255,255,255,0.06); color:#cbd5e1; border-color:rgba(255,255,255,0.12); }
-:global(html.dark) .toolbar-control:hover,
-:global(html.dark) .toolbar-control:focus-within { background:rgba(255,255,255,0.12); }
-:global(html.dark) .comment-tool-btn,
-:global(html.dark) .return-target-btn { background:rgba(255,255,255,0.06); color:#cbd5e1; border-color:rgba(255,255,255,0.12); }
-:global(html.dark) .comment-tool-btn:hover:not(:disabled),
-:global(html.dark) .return-target-btn:hover { background:var(--nw-floating-hover-bg); border-color:var(--nw-floating-hover-border); }
 .return-target-btn:hover { transform:translate3d(0,0,0) scale(1.06); border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
-:global(html.dark) .emoji-option:hover { background:rgba(255,255,255,0.12); }
-:global(html.dark) .comment-media-preview-item { border-color:rgba(255,255,255,0.16); background:rgba(255,255,255,0.06); }
+:global(html.dark) .return-target-btn,
+:global(.dark) .return-target-btn { background:var(--comment-toolbar-control-bg); color:var(--comment-toolbar-text); border-color:var(--comment-toolbar-border); }
 </style>

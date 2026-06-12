@@ -355,23 +355,18 @@ watch(() => props.theme, (newTheme) => {
   line-height: 1.2 !important;
 }
 .vditor-toolbar .vditor-tooltipped::before {
-  color: var(--nw-tooltip-bg) !important;
+  content: none !important;
+  display: none !important;
 }
 .vditor-toolbar .vditor-tooltipped__s::before,
 .vditor-toolbar .vditor-tooltipped__se::before,
-.vditor-toolbar .vditor-tooltipped__sw::before {
-  border-bottom-color: var(--nw-tooltip-bg) !important;
-}
+.vditor-toolbar .vditor-tooltipped__sw::before,
 .vditor-toolbar .vditor-tooltipped__n::before,
 .vditor-toolbar .vditor-tooltipped__ne::before,
-.vditor-toolbar .vditor-tooltipped__nw::before {
-  border-top-color: var(--nw-tooltip-bg) !important;
-}
-.vditor-toolbar .vditor-tooltipped__e::before {
-  border-right-color: var(--nw-tooltip-bg) !important;
-}
+.vditor-toolbar .vditor-tooltipped__nw::before,
+.vditor-toolbar .vditor-tooltipped__e::before,
 .vditor-toolbar .vditor-tooltipped__w::before {
-  border-left-color: var(--nw-tooltip-bg) !important;
+  border-color: transparent !important;
 }
 .vditor-toolbar__item {
   flex-shrink: 0;

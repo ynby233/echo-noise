@@ -180,11 +180,8 @@ html.dark {
 }
 
 .nw-tooltip-anchor[data-tooltip]::before {
-  content: '';
-  bottom: calc(100% + 2px);
-  transform: translateX(-50%) translateY(2px);
-  border: 4px solid transparent;
-  border-top-color: var(--nw-tooltip-bg);
+  content: none;
+  display: none;
 }
 
 .nw-tooltip-anchor[data-tooltip]::after {

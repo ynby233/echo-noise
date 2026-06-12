@@ -54,7 +54,7 @@
           'is-selected': day.selected,
           'has-count': day.count > 0
         }"
-        :title="`${day.date}，${day.count} 条笔记`"
+        :aria-label="`${day.date}，${day.count} 条笔记`"
         @click="selectDay(day)"
       >
         <span class="day-number">{{ day.day }}</span>
