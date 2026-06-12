@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootRef" class="builtin-comments">
+  <div ref="rootRef" class="builtin-comments" :class="{ 'comment-theme-dark': isDark }">
     <input ref="commentImageInput" type="file" accept="image/*" multiple class="hidden" @change="handleCommentImageInputChange" />
   <div class="waline-wrapper px-2 py-2 rounded-lg" :class="[themeBg]">
       <div class="text-sm mb-2" :class="themeText">{{ contextLabel }} ({{ rootCommentTotal }})</div>
@@ -1275,7 +1275,7 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 .action-btn:hover { opacity:1; }
 .comment-visibility { font-size:11px; opacity:.72; padding:1px 6px; border-radius:9999px; border:1px solid currentColor; }
 .visibility-picker { display:inline-flex; align-items:center; gap:6px; font-size:12px; }
-.toolbar-control.comment-visibility-picker { position:relative; }
+.toolbar-control.comment-visibility-picker { position:relative; z-index:5006; }
 .edit-card { display:flex; flex-direction:column; gap:8px; margin:4px 0 6px; }
 .edit-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:center; gap:8px; }
 .comment-input-card { display:flex; align-items:flex-start; gap:12px; margin-top:6px; width:100%; }
@@ -1316,6 +1316,7 @@ defineExpose({ load, focusCommentById, replyToCommentById })
   --comment-toolbar-preview-border: rgba(0, 0, 0, 0.12);
   --comment-toolbar-preview-bg: rgba(0, 0, 0, 0.04);
 }
+.builtin-comments.comment-theme-dark,
 :global(html.dark) .builtin-comments,
 :global(.dark) .builtin-comments {
   --comment-toolbar-bg: rgba(39, 50, 66, 0.68);
@@ -1325,8 +1326,25 @@ defineExpose({ load, focusCommentById, replyToCommentById })
   --comment-toolbar-text: #cbd5e1;
   --comment-toolbar-preview-border: rgba(255, 255, 255, 0.16);
   --comment-toolbar-preview-bg: rgba(255, 255, 255, 0.06);
+  --nw-floating-bg: rgba(15, 23, 42, 0.98);
+  --nw-floating-text: #f8fafc;
+  --nw-floating-border: rgba(255, 255, 255, 0.18);
+  --nw-floating-shadow: 0 18px 42px rgba(0, 0, 0, 0.42);
+  --nw-floating-hover-bg: rgba(249, 115, 22, 0.18);
+  --nw-floating-hover-border: rgba(249, 115, 22, 0.42);
+  --nw-floating-selected-bg: rgba(249, 115, 22, 0.30);
+  --nw-floating-selected-border: rgba(251, 146, 60, 0.58);
 }
-.comment-editor-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-height:48px; padding:6px; border-radius:12px; background:var(--comment-toolbar-bg); color:var(--comment-toolbar-text); backdrop-filter:saturate(1.1) blur(6px); -webkit-backdrop-filter:saturate(1.1) blur(6px); }
+.comment-editor-toolbar { position:relative; z-index:40; display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-height:48px; padding:6px; border-radius:12px; background:var(--comment-toolbar-bg) !important; color:var(--comment-toolbar-text); backdrop-filter:saturate(1.1) blur(6px); -webkit-backdrop-filter:saturate(1.1) blur(6px); }
+.builtin-comments.comment-theme-dark .comment-editor-toolbar { background:var(--comment-toolbar-bg) !important; color:var(--comment-toolbar-text) !important; }
+.builtin-comments.comment-theme-dark .toolbar-control,
+.builtin-comments.comment-theme-dark .comment-tool-btn,
+.builtin-comments.comment-theme-dark .return-target-btn { background:var(--comment-toolbar-control-bg) !important; color:var(--comment-toolbar-text) !important; border-color:var(--comment-toolbar-border) !important; }
+.builtin-comments.comment-theme-dark .toolbar-control:hover,
+.builtin-comments.comment-theme-dark .toolbar-control:focus-within,
+.builtin-comments.comment-theme-dark .comment-tool-btn:hover:not(:disabled),
+.builtin-comments.comment-theme-dark .return-target-btn:hover { background:var(--comment-toolbar-control-hover-bg) !important; border-color:var(--nw-floating-hover-border) !important; }
+.builtin-comments.comment-theme-dark .comment-visibility-menu { background:var(--nw-floating-bg) !important; color:var(--nw-floating-text) !important; border-color:var(--nw-floating-border) !important; }
 .main-toolbar { margin-bottom:8px; }
 .edit-toolbar { margin-top:2px; }
 .toolbar-control { display:flex; align-items:center; gap:5px; min-height:36px; height:36px; width:max-content; max-width:min(220px, calc(100vw - 32px)); min-width:0; padding:0 8px; border:1px solid var(--comment-toolbar-border); border-radius:12px; background:var(--comment-toolbar-control-bg); color:var(--comment-toolbar-text); box-shadow:none; transition:background-color .18s ease, border-color .18s ease, transform .18s ease; }
@@ -1339,7 +1357,7 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 .comment-visibility-trigger { display:inline-flex; align-items:center; justify-content:space-between; gap:3px; width:auto; min-width:46px; max-width:100%; height:28px; padding:0; border:0; border-radius:9px; background:transparent; color:inherit; font-size:12px; line-height:1; cursor:pointer; }
 .comment-visibility-trigger span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .comment-visibility-trigger svg { flex:0 0 auto; opacity:.72; }
-.comment-visibility-menu { position:absolute; left:0; bottom:calc(100% + 8px); z-index:35; display:grid; gap:4px; width:max-content; min-width:100%; padding:8px; border:1px solid var(--nw-floating-border); border-radius:12px; background:var(--nw-floating-bg); color:var(--nw-floating-text); box-shadow:var(--nw-floating-shadow); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
+.comment-visibility-menu { position:absolute; left:0; bottom:calc(100% + 8px); z-index:5006; display:grid; gap:4px; width:max-content; min-width:100%; padding:8px; border:1px solid var(--nw-floating-border); border-radius:12px; background:var(--nw-floating-bg) !important; color:var(--nw-floating-text); box-shadow:var(--nw-floating-shadow); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); isolation:isolate; pointer-events:auto; }
 .comment-visibility-option { display:flex; align-items:center; gap:8px; min-height:32px; padding:0 10px; border-radius:9px; border:1px solid transparent; color:inherit; font-size:12px; font-weight:650; line-height:1; text-align:left; white-space:nowrap; transition:background-color .15s ease, border-color .15s ease, color .15s ease; }
 .comment-visibility-option:hover,
 .comment-visibility-option:focus-visible { outline:none; border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
