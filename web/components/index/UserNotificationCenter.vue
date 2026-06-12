@@ -25,6 +25,12 @@
         <div class="empty-title">正在加载</div>
       </div>
 
+      <div v-else-if="loadError && !items.length" class="empty-state compact error-state">
+        <UIcon name="i-mdi-alert-circle-outline" class="empty-icon" />
+        <div class="empty-title">{{ loadError }}</div>
+        <button type="button" class="text-action" @click="loadNotifications(true)">重试</button>
+      </div>
+
       <div v-else-if="!items.length" class="empty-state compact">
         <UIcon name="i-mdi-bell-outline" class="empty-icon" />
         <div class="empty-title">暂无通知</div>
@@ -95,6 +101,11 @@
             </div>
           </div>
         </article>
+      </div>
+
+      <div v-if="loadError && items.length" class="notification-feed-error" role="status">
+        <span>{{ loadError }}</span>
+        <button type="button" class="text-action" @click="loadNotifications(false)">重试</button>
       </div>
 
       <div v-if="items.length < total" class="load-more-row">
@@ -174,6 +185,7 @@ const feedRef = ref<HTMLElement | null>(null)
 const loading = ref(false)
 const loadingMore = ref(false)
 const markingAll = ref(false)
+const loadError = ref('')
 const page = ref(1)
 const pageSize = 20
 const total = ref(0)
@@ -378,6 +390,7 @@ const loadNotifications = async (reset = false, options: { skipInitialResolve?: 
   if (reset) page.value = 1
   loading.value = reset || !items.value.length
   try {
+    loadError.value = ''
     const res = await getRequest<NotificationListPayload>('notifications', { page: page.value, pageSize }, { credentials: 'include', silent: true })
     if (res?.code === 1 && res.data) {
       const payload = res.data
@@ -387,7 +400,11 @@ const loadNotifications = async (reset = false, options: { skipInitialResolve?: 
       setUnreadCount(Number(payload.unread_count ?? payload.unreadCount ?? 0))
       if (!options.skipInitialResolve) await resolveInitialTargetAcrossPages()
       if (!options.skipRestoreResolve) await resolveRestoreFocusAcrossPages()
+    } else {
+      loadError.value = String(res?.msg || '通知加载失败')
     }
+  } catch {
+    loadError.value = '通知加载失败'
   } finally {
     loading.value = false
   }
@@ -501,6 +518,7 @@ watch(() => user.isLogin, (loggedIn) => {
   else {
     items.value = []
     total.value = 0
+    loadError.value = ''
     replyOpenId.value = null
     clearReplySuccess()
     setUnreadCount(0)
@@ -567,8 +585,10 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .inline-reply-cancel:disabled, .inline-reply-submit:disabled { opacity:.55; cursor:not-allowed; }
 .empty-state { min-height:220px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; text-align:center; padding:24px; }
 .empty-state.compact { min-height:220px; border:0; background:transparent; }
+.error-state .empty-icon { color:#ef4444; opacity:.82; }
 .empty-icon { width:28px; height:28px; opacity:.62; }
 .empty-title { font-size:14px; font-weight:600; opacity:.72; }
+.notification-feed-error { display:flex; align-items:center; justify-content:center; gap:10px; padding:12px 16px; border-top:1px solid rgba(248,113,113,.22); background:rgba(254,242,242,.78); color:#b91c1c; font-size:13px; }
 .load-more-row { display:flex; justify-content:center; padding:14px 0 16px; border-top:1px solid rgba(148,163,184,.16); }
 .spin { animation:notification-spin 1s linear infinite; }
 @keyframes notification-spin { to { transform:rotate(360deg); } }
@@ -592,6 +612,7 @@ defineExpose({ refresh: () => loadNotifications(true) })
 :global(.dark) .notification-target-card:hover { background:rgba(51,65,85,.88); }
 :global(.dark) .inline-reply-input { background:rgba(15,23,42,.72); border-color:rgba(148,163,184,.26); color:#e5e7eb; }
 :global(.dark) .inline-reply-success { background:rgba(34,197,94,.14); color:#86efac; }
+:global(.dark) .notification-feed-error { background:rgba(127,29,29,.22); border-color:rgba(248,113,113,.2); color:#fca5a5; }
 @media (max-width: 720px) {
   .notification-header { align-items:center; flex-direction:column; text-align:center; gap:10px; margin-bottom:10px; }
   .notification-subtitle { display:none; }
