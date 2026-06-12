@@ -2145,10 +2145,7 @@
 
                 <div id="site-login-expire-section" :class="adminSubtleCardClass">
                   <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                    <div class="flex items-center gap-2" :class="theme.text">
-                      <UIcon name="i-heroicons-clock" class="w-4 h-4" />
-                      <span>登录过期时间</span>
-                    </div>
+                    <div class="font-semibold" :class="theme.text">登录过期时间</div>
                     <div class="flex flex-wrap items-center gap-2">
                       <div class="flex items-center gap-1">
                         <UInput v-model.number="frontendConfig.loginExpireDays" type="number" min="0" max="31" step="1" class="w-24" />
@@ -2162,7 +2159,7 @@
                       <UButton color="green" @click="saveConfigItem('loginExpireDays')" class="shadow">保存</UButton>
                     </div>
                   </div>
-                  <div class="text-xs mt-2" :class="theme.mutedText">普通用户从登录那一刻开始计算，过期后需重新登录；管理员不受该过期清退影响。天数和小时相加计算，例如 2 天 5 小时等于 53 小时；最长 31 天 24 小时。</div>
+                  <div class="text-xs mt-2" :class="theme.mutedText">普通用户从登录那一刻开始计算，过期后需重新登录；管理员不受该过期清退影响。天数和小时相加计算。</div>
                 </div>
 
                 <div :class="adminSubtleCardClass">
