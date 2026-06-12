@@ -1220,7 +1220,7 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 .input-actions { display:flex; justify-content:flex-end; gap:8px; }
 .comment-reopen-row { display:flex; justify-content:flex-end; }
 .comment-reopen-btn { min-width:84px; }
-.return-target-btn { display:inline-flex; align-items:center; gap:4px; min-height:28px; }
+.return-target-btn { display:inline-flex; align-items:center; justify-content:center; gap:5px; flex:0 0 auto; width:auto; min-width:66px; height:36px; padding:0 10px; border-radius:12px; border:1px solid rgba(15,23,42,0.08); background:rgba(15,23,42,0.06); color:#374151; font-size:12px; line-height:1; box-shadow:none; transition:background-color .18s ease, border-color .18s ease, transform .18s ease; }
 .submit-btn { min-width:64px; height:32px; border-radius:8px; padding:0 12px; font-size:13px; display:inline-flex; align-items:center; justify-content:center; }
 .cancel-btn { min-width:64px; height:32px; border-radius:8px; padding:0 12px; font-size:13px; display:inline-flex; align-items:center; justify-content:center; }
 .comment-input-card textarea { overflow:hidden; resize:none; min-height:80px; flex:1; width:100%; min-width:0; }
@@ -1243,17 +1243,17 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 
 :global(html.dark) .comment-floor, :global(html.dark) .comment-time { color: #9ca3af; }
 :global(html:not(.dark)) .comment-floor, :global(html:not(.dark)) .comment-time { color: #6b7280; }
-.comment-editor-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:6px; min-height:34px; }
+.comment-editor-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-height:48px; padding:6px; border-radius:12px; background:rgba(255,255,255,0.85); backdrop-filter:saturate(1.1) blur(6px); -webkit-backdrop-filter:saturate(1.1) blur(6px); }
 .main-toolbar { margin-bottom:8px; }
 .edit-toolbar { margin-top:2px; }
-.toolbar-control,
-.comment-tool-btn { height:32px; border-radius:8px; border:1px solid rgba(0,0,0,0.12); background:rgba(255,255,255,0.82); color:inherit; }
-.toolbar-control { min-width:94px; padding:0 8px; }
-.comment-tool-btn { width:32px; display:inline-flex; align-items:center; justify-content:center; transition:background .15s ease, border-color .15s ease, transform .15s ease; }
-.comment-tool-btn:hover:not(:disabled) { background:rgba(0,0,0,0.06); border-color:rgba(0,0,0,0.18); }
-.comment-tool-btn:active:not(:disabled) { transform:translateY(1px); }
+.toolbar-control { display:inline-flex; align-items:center; gap:5px; min-width:94px; height:36px; padding:0 8px; border:0; border-radius:12px; background:rgba(0,0,0,0.06); color:#374151; box-shadow:none; transition:background-color .18s ease, transform .18s ease; }
+.toolbar-control:hover,
+.toolbar-control:focus-within { background:rgba(0,0,0,0.12); }
+.comment-tool-btn { display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto; width:36px; min-width:36px; height:36px; border-radius:12px; border:1px solid rgba(15,23,42,0.08); background:rgba(15,23,42,0.06); color:#374151; box-shadow:none; transition:background-color .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+.comment-tool-btn:hover:not(:disabled) { transform:translate3d(0,0,0) scale(1.06); border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
+.comment-tool-btn:active:not(:disabled) { transform:translate3d(0,0,0) scale(1.02); }
 .comment-tool-btn:disabled { cursor:not-allowed; opacity:.5; }
-.comment-visibility-select { min-width:58px; border:0; outline:0; background:transparent; color:inherit; font-size:12px; line-height:1; cursor:pointer; }
+.comment-visibility-select { min-width:58px; max-width:76px; height:28px; padding:0; border:0; outline:0; background:transparent; color:inherit; font-size:12px; line-height:1; cursor:pointer; }
 .comment-visibility-select option { color:#111827; background:#fff; }
 .emoji-wrap { position:relative; display:inline-flex; }
 .emoji-popover { position:absolute; left:0; bottom:calc(100% + 8px); z-index:30; display:grid; grid-template-columns:repeat(6, 30px); gap:4px; width:max-content; padding:8px; }
@@ -1263,9 +1263,15 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 .comment-media-preview-strip { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
 .comment-media-preview-item { width:var(--inline-image-thumb-size, 96px); height:var(--inline-image-thumb-size, 96px); border-radius:8px; overflow:hidden; display:block; border:1px solid rgba(0,0,0,0.12); background:rgba(0,0,0,0.04); }
 .comment-media-preview-item img { width:100%; height:100%; display:block; object-fit:cover; }
-:global(html.dark) .toolbar-control,
-:global(html.dark) .comment-tool-btn { background:rgba(255,255,255,0.07); border-color:rgba(255,255,255,0.16); }
-:global(html.dark) .comment-tool-btn:hover:not(:disabled) { background:rgba(255,255,255,0.12); border-color:rgba(255,255,255,0.24); }
+:global(html.dark) .comment-editor-toolbar { background:rgba(39,50,66,0.68); backdrop-filter:saturate(1.1) blur(6px); -webkit-backdrop-filter:saturate(1.1) blur(6px); }
+:global(html.dark) .toolbar-control { background:rgba(255,255,255,0.06); color:#cbd5e1; border:0; }
+:global(html.dark) .toolbar-control:hover,
+:global(html.dark) .toolbar-control:focus-within { background:rgba(255,255,255,0.12); }
+:global(html.dark) .comment-tool-btn,
+:global(html.dark) .return-target-btn { background:rgba(255,255,255,0.06); color:#cbd5e1; border-color:rgba(255,255,255,0.12); }
+:global(html.dark) .comment-tool-btn:hover:not(:disabled),
+:global(html.dark) .return-target-btn:hover { background:var(--nw-floating-hover-bg); border-color:var(--nw-floating-hover-border); }
+.return-target-btn:hover { transform:translate3d(0,0,0) scale(1.06); border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
 :global(html.dark) .comment-visibility-select option { color:#f3f4f6; background:#1f2937; }
 :global(html.dark) .emoji-option:hover { background:rgba(255,255,255,0.12); }
 :global(html.dark) .comment-media-preview-item { border-color:rgba(255,255,255,0.16); background:rgba(255,255,255,0.06); }
