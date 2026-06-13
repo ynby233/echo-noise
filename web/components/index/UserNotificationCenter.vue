@@ -97,6 +97,7 @@
                 :show-input="true"
                 :reply-input-only="true"
                 :reply-comment-id="replyCommentId(item)"
+                :reply-comment-author="replyCommentAuthor(item)"
                 :context-label="item.type === 'guestbook' ? '留言' : '评论'"
                 auto-scroll-input
                 @cancel="replyOpenId = null"
@@ -144,7 +145,7 @@ type NotificationMessage = {
 
 type NotificationComment = {
   id: number
-  message_id: number
+  message_id?: number | null
   content?: string
   user?: NotificationActor
   parent_id?: number | null
@@ -279,8 +280,9 @@ const targetImage = (item: UserNotification) => {
   return raw ? resolveMediaURL(baseApi.value, raw) : ''
 }
 
-const targetMessageId = (item: UserNotification) => Number(item.message_id || item.comment?.message_id || 0)
+const targetMessageId = (item: UserNotification) => Number(item.message_id || item.comment?.message_id || item.parent_comment?.message_id || item.message?.id || 0)
 const replyCommentId = (item: UserNotification) => Number(item.comment_id || item.comment?.id || 0)
+const replyCommentAuthor = (item: UserNotification) => item.comment?.user?.username || actorName(item)
 
 const canReply = (item: UserNotification) => {
   return item.type !== 'like' && replyCommentId(item) > 0 && targetMessageId(item) > 0
@@ -288,7 +290,7 @@ const canReply = (item: UserNotification) => {
 const jumpCommentId = (item: UserNotification) => {
   if (item.type === 'like') return 0
   if (item.type === 'reply') {
-    return Number(item.parent_comment_id || item.parent_comment?.id || item.comment?.parent_id || item.comment_id || item.comment?.id || 0)
+    return Number(item.comment_id || item.comment?.id || item.parent_comment_id || item.parent_comment?.id || item.comment?.parent_id || 0)
   }
   return Number(item.comment_id || item.comment?.id || 0)
 }
@@ -536,7 +538,7 @@ defineExpose({ refresh: () => loadNotifications(true) })
   width:100%;
   box-sizing:border-box;
   margin-top:10px;
-  padding:14px;
+  padding:20px 20px 16px;
   border:1px solid var(--notice-border);
   border-radius:12px;
   background:var(--notice-surface);
@@ -567,12 +569,12 @@ defineExpose({ refresh: () => loadNotifications(true) })
   backdrop-filter:blur(8px) saturate(118%);
   -webkit-backdrop-filter:blur(8px) saturate(118%);
 }
-.notification-header { display:block; margin-bottom:20px; padding:0 8px; text-align:center; }
+.notification-header { display:block; margin-bottom:14px; padding:0 8px; text-align:center; }
 .notification-heading { width:100%; }
-.notification-title-row { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:center; column-gap:12px; width:100%; min-height:32px; }
-.notification-title { grid-column:2; display:block; margin:0; padding:0; border-radius:0; color:var(--notice-strong); font-size:18px; font-weight:700; line-height:1.35; }
+.notification-title-row { position:relative; display:flex; align-items:center; justify-content:center; width:100%; min-height:32px; }
+.notification-title { display:block; margin:0; padding:0; border-radius:0; color:var(--notice-strong); font-size:18px; font-weight:700; line-height:24px; }
 .notification-subtitle { margin:14px 0 0; color:var(--notice-muted); font-size:13px; line-height:1.7; text-align:center; opacity:.8; }
-.notification-actions { grid-column:3; justify-self:end; display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; max-width:100%; }
+.notification-actions { position:absolute; right:0; top:50%; transform:translateY(-50%); display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; max-width:calc(50% - 48px); }
 .unread-pill { display:inline-flex; align-items:center; min-height:28px; padding:0 10px; border-radius:999px; font-size:12px; font-weight:650; color:#fff; background:#3b82f6; }
 .icon-action,
 .text-action { border:1px solid var(--notice-border); background:var(--notice-card); color:var(--notice-text); transition:background-color .18s ease, border-color .18s ease, transform .18s ease; }
@@ -626,11 +628,12 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .spin { animation:notification-spin 1s linear infinite; }
 @keyframes notification-spin { to { transform:rotate(360deg); } }
 @media (max-width: 720px) {
+  .notification-center { padding:20px 14px 16px; }
   .notification-header { text-align:center; margin-bottom:16px; padding:0 4px; }
   .notification-title-row { display:flex; flex-direction:column; justify-content:center; gap:10px; min-height:0; }
-  .notification-title { grid-column:auto; }
+  .notification-title { line-height:24px; }
   .notification-subtitle { display:none; }
-  .notification-actions { grid-column:auto; justify-content:center; width:100%; }
+  .notification-actions { position:static; transform:none; justify-content:center; width:100%; max-width:100%; }
   .notification-feed-panel { margin:0 -12px; padding:0 12px; }
   .notification-feed-item { gap:10px; padding:14px 12px; }
   .notification-feed-item.unread::before { left:7px; top:24px; }

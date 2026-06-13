@@ -248,6 +248,7 @@
             :active-tab="activeTab"
             :calendar-date="calendarMessageDate"
             @clear-calendar-date="handleCalendarDateSelect('')"
+            @target-consumed="handleNotificationTargetConsumed"
           />
           </template>
           <div class="page-footer" v-html="(frontendConfig.pageFooterHTML || defaultConfig.pageFooterHTML)"></div>
@@ -874,6 +875,13 @@ const handleNotificationJump = async (item: NotificationJumpItem) => {
 
 const handleNotificationRestoreConsumed = () => {
   notificationReturnFocusId.value = null
+}
+
+const handleNotificationTargetConsumed = () => {
+  if (!notificationTargetMessageId.value && !notificationTargetCommentId.value && !targetMessageId.value) return
+  notificationTargetMessageId.value = null
+  notificationTargetCommentId.value = null
+  targetMessageId.value = null
 }
 
 const loadNotificationUnreadCount = async () => {

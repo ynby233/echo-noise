@@ -272,32 +272,6 @@
       </div>
 
       <div class="edit-modal-body">
-        <div class="edit-upload-toolbar">
-          <div class="edit-upload-actions">
-            <button
-              type="button"
-              class="edit-tool-button nw-tooltip-anchor"
-              data-tooltip="添加图片"
-              :disabled="isEditUploading"
-              @click="triggerEditMediaInput('image')"
-            >
-              <UIcon :name="editUploadKind === 'image' ? 'i-mdi-loading' : 'i-mdi-image-plus-outline'" class="w-5 h-5" :class="{ 'edit-spin': editUploadKind === 'image' }" />
-              <span>添加图片</span>
-            </button>
-            <button
-              type="button"
-              class="edit-tool-button nw-tooltip-anchor"
-              data-tooltip="添加视频"
-              :disabled="isEditUploading"
-              @click="triggerEditMediaInput('video')"
-            >
-              <UIcon :name="editUploadKind === 'video' ? 'i-mdi-loading' : 'i-mdi-video-plus-outline'" class="w-5 h-5" :class="{ 'edit-spin': editUploadKind === 'video' }" />
-              <span>添加视频</span>
-            </button>
-          </div>
-          <span v-if="isEditUploading" class="edit-upload-status">{{ editUploadLabel }} {{ editUploadProgress }}%</span>
-        </div>
-
         <textarea
           ref="editTextareaRef"
           v-model="editingContent"
@@ -306,32 +280,47 @@
           class="edit-content-textarea"
         />
 
-        <div class="edit-settings-grid">
-          <label class="edit-setting-card">
-            <span class="edit-setting-label">
-              <UIcon :name="messageVisibilityIcon(editingVisibility)" class="w-4 h-4" />
-              可见范围
-            </span>
+        <div class="edit-toolbar">
+          <button
+            type="button"
+            class="edit-tool-button nw-tooltip-anchor"
+            data-tooltip="添加图片"
+            :disabled="isEditUploading"
+            @click="triggerEditMediaInput('image')"
+          >
+            <UIcon :name="editUploadKind === 'image' ? 'i-mdi-loading' : 'i-mdi-image-plus-outline'" class="w-5 h-5" :class="{ 'edit-spin': editUploadKind === 'image' }" />
+            <span>添加图片</span>
+          </button>
+          <button
+            type="button"
+            class="edit-tool-button nw-tooltip-anchor"
+            data-tooltip="添加视频"
+            :disabled="isEditUploading"
+            @click="triggerEditMediaInput('video')"
+          >
+            <UIcon :name="editUploadKind === 'video' ? 'i-mdi-loading' : 'i-mdi-video-plus-outline'" class="w-5 h-5" :class="{ 'edit-spin': editUploadKind === 'video' }" />
+            <span>添加视频</span>
+          </button>
+          <label class="edit-tool-select">
+            <UIcon :name="messageVisibilityIcon(editingVisibility)" class="w-5 h-5" />
             <select v-model="editingVisibility" class="edit-setting-control" aria-label="可见范围">
               <option v-for="option in messageVisibilityOptions" :key="option.value" :value="option.value">
                 {{ option.label }}
               </option>
             </select>
           </label>
-          <label v-if="canEditPublishTime(editingMessage)" class="edit-setting-card">
-            <span class="edit-setting-label">
-              <UIcon name="i-mdi-calendar-clock-outline" class="w-4 h-4" />
-              发布时间
-            </span>
+          <label v-if="canEditPublishTime(editingMessage)" class="edit-tool-date">
+            <UIcon name="i-mdi-calendar-clock-outline" class="w-5 h-5" />
             <input
               v-model="editingPublishedAtInput"
               type="datetime-local"
               class="edit-setting-control"
               aria-label="发布时间"
             />
-            <span class="edit-setting-hint">仅管理员可修改自己发布内容的发布时间</span>
           </label>
         </div>
+
+        <span v-if="isEditUploading" class="edit-upload-status">{{ editUploadLabel }} {{ editUploadProgress }}%</span>
 
         <div class="edit-preview-block">
           <div class="edit-preview-title">预览</div>
@@ -649,6 +638,7 @@ const props = defineProps({
 });
 const emit = defineEmits<{
   (e: 'clear-calendar-date'): void
+  (e: 'target-consumed'): void
 }>()
 const outerContainerClass = computed(() => props.wide ? 'flex-grow w-full px-1 sm:px-2' : 'flex-grow w-full px-1 sm:px-2')
 const innerContainerClass = computed(() => props.wide ? '' : 'mx-auto sm:max-w-4xl')
@@ -835,7 +825,10 @@ const fetchGuestbookId = async () => {
     const messageId = Number(props.targetMessageId || 0)
     if (!messageId) return
     const ok = await loadSingleTargetMessage(messageId)
-    if (!ok) return
+    if (!ok) {
+      emit('target-consumed')
+      return
+    }
     await nextTick()
     const targetElement = document.querySelector(`.content-container[data-msg-id="${messageId}"]`) as HTMLElement | null
     if (targetElement) {
@@ -845,20 +838,28 @@ const fetchGuestbookId = async () => {
     }
 
     const commentId = Number(props.targetCommentId || 0)
-    if (!commentId) return
+    if (!commentId) {
+      emit('target-consumed')
+      return
+    }
     expandedCommentsMap.value[messageId] = true
     await nextTick()
-    if (await focusBuiltinTargetComment(messageId, commentId)) return
+    if (await focusBuiltinTargetComment(messageId, commentId)) {
+      emit('target-consumed')
+      return
+    }
     for (let i = 0; i < 12; i += 1) {
       const commentEl = document.querySelector(`.content-container[data-msg-id="${messageId}"] [data-comment-id="${commentId}"]`) as HTMLElement | null
       if (commentEl) {
         stabilizeNotificationTargetScroll(commentEl)
         commentEl.classList.add('notification-comment-highlight')
         window.setTimeout(() => commentEl.classList.remove('notification-comment-highlight'), 2200)
+        emit('target-consumed')
         return
       }
       await new Promise((resolve) => window.setTimeout(resolve, 160))
     }
+    emit('target-consumed')
   }
 
   watch(() => [props.targetMessageId, props.targetCommentId], () => {
@@ -1465,6 +1466,10 @@ watch(
   [() => props.activeTab, () => props.calendarDate, () => userStore.isLogin, () => currentUserId.value],
   async () => {
     if (route.hash.includes('/messages/')) return
+    if (Number(props.targetMessageId || 0) > 0) {
+      await focusTargetMessageAndComment()
+      return
+    }
     searchResults.value = []
     isSearchMode.value = false
     if (isPersonalGuest.value) {
@@ -2177,40 +2182,54 @@ onMounted(() => {
   padding: 16px;
 }
 
-.edit-upload-toolbar {
+.edit-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 40px;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 48px;
   padding: 8px;
   border: 1px solid var(--edit-border);
   border-radius: 10px;
   background: var(--edit-panel);
 }
 
-.edit-upload-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.edit-tool-button {
+.edit-tool-button,
+.edit-tool-select,
+.edit-tool-date {
   min-height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
   padding: 0 12px;
+  border: 1px solid var(--edit-border);
   border-radius: 10px;
+  background: var(--edit-control);
+  color: var(--edit-text);
   font-size: 13px;
   font-weight: 650;
   line-height: 1;
+  transition: background-color .18s ease, border-color .18s ease, color .18s ease, transform .18s ease, opacity .18s ease;
+}
+
+.edit-tool-button {
+  flex: 0 0 auto;
+}
+
+.edit-tool-select,
+.edit-tool-date {
+  flex: 1 1 170px;
+  min-width: 150px;
+  max-width: 260px;
+  padding-right: 8px;
 }
 
 .edit-icon-button:hover:not(:disabled),
 .edit-tool-button:hover:not(:disabled),
+.edit-tool-select:hover,
+.edit-tool-date:hover,
 .edit-footer-button:hover:not(:disabled) {
   transform: translate3d(0,0,0) scale(1.03);
   border-color: var(--nw-floating-hover-border, var(--edit-border));
@@ -2256,43 +2275,17 @@ onMounted(() => {
   box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.16);
 }
 
-.edit-settings-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.edit-setting-card {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--edit-border);
-  border-radius: 10px;
-  background: var(--edit-panel);
-}
-
-.edit-setting-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 1.35;
-  color: var(--edit-muted);
-}
-
 .edit-setting-control {
   width: 100%;
-  min-height: 38px;
-  border: 1px solid var(--edit-border);
-  border-radius: 9px;
-  background: var(--edit-control);
+  min-width: 0;
+  min-height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
   color: var(--edit-text);
-  padding: 0 10px;
-  font-size: 14px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 650;
   outline: none;
   color-scheme: light;
   transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
@@ -2301,12 +2294,6 @@ onMounted(() => {
 :global(html.dark) .edit-setting-control { color-scheme: dark; }
 .edit-setting-control option { color: #111827; background: #ffffff; }
 :global(html.dark) .edit-setting-control option { color: #f8fafc; background: #0f172a; }
-
-.edit-setting-hint {
-  color: var(--edit-muted);
-  font-size: 12px;
-  line-height: 1.45;
-}
 
 .edit-preview-block {
   border-top: 1px solid var(--edit-border);
@@ -2354,14 +2341,14 @@ onMounted(() => {
 }
 
 .edit-footer-button.primary {
-  border-color: rgba(249, 115, 22, 0.64);
-  background: rgb(249, 115, 22);
+  border-color: rgba(37, 99, 235, 0.72);
+  background: #3b82f6;
   color: #fff;
 }
 
 .edit-footer-button.primary:hover:not(:disabled) {
-  border-color: rgb(234, 88, 12);
-  background: rgb(234, 88, 12);
+  border-color: rgba(29, 78, 216, 0.86);
+  background: #2563eb;
 }
 
 .edit-spin { animation: edit-spin 1s linear infinite; }
@@ -2372,9 +2359,10 @@ onMounted(() => {
   .edit-modal-header,
   .edit-modal-body,
   .edit-modal-footer { padding-left: 12px; padding-right: 12px; }
-  .edit-upload-toolbar { align-items: stretch; flex-direction: column; }
-  .edit-tool-button { flex: 1 1 140px; }
-  .edit-settings-grid { grid-template-columns: 1fr; }
+  .edit-toolbar { align-items: stretch; }
+  .edit-tool-button,
+  .edit-tool-select,
+  .edit-tool-date { flex: 1 1 calc(50% - 4px); max-width: none; }
   .edit-modal-footer { justify-content: stretch; }
   .edit-footer-button { flex: 1 1 0; }
 }

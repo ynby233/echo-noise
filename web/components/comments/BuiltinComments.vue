@@ -229,7 +229,7 @@ import { uploadMediaFiles } from '~/utils/media-upload'
 
 type CommentEditorTarget = 'content' | 'edit'
 
-const props = defineProps<{ messageId: number, siteConfig: any, showInput?: boolean, contextLabel?: string, autoScrollInput?: boolean, messageVisibility?: string, replyInputOnly?: boolean, replyCommentId?: number | null }>()
+const props = defineProps<{ messageId: number, siteConfig: any, showInput?: boolean, contextLabel?: string, autoScrollInput?: boolean, messageVisibility?: string, replyInputOnly?: boolean, replyCommentId?: number | null, replyCommentAuthor?: string | null }>()
 const emit = defineEmits(['cancel'])
 const contextLabel = computed(() => String(props.contextLabel || '评论').trim() || '评论')
 const loginRequiredText = computed(() => `请登录后${contextLabel.value}`)
@@ -1238,6 +1238,13 @@ const focusCommentById = async (commentId: number) => {
 const replyToCommentById = async (commentId: number) => {
   await load()
   if (!await revealComment(commentId)) {
+    const fallbackAuthor = String(props.replyCommentAuthor || '').trim()
+    if (props.replyInputOnly && fallbackAuthor) {
+      startReply(commentId, fallbackAuthor)
+      await nextTick()
+      scrollReplyInputIntoView()
+      return true
+    }
     useToast().add({ title: '评论不可见或已删除', color: 'orange' })
     return false
   }

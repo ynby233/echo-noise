@@ -429,6 +429,8 @@ onBeforeUnmount(() => {
 }
 
 :global(html.dark) .calendar-widget {
+  --calendar-control-bg: rgba(255, 255, 255, 0.075);
+  --calendar-control-bg-hover: rgba(249, 115, 22, 0.20);
   --calendar-control-text: rgba(248, 250, 252, 0.86);
 }
 
@@ -647,12 +649,6 @@ onBeforeUnmount(() => {
 </style>
 
 <style>
-html.dark .calendar-select {
-  background: var(--calendar-control-bg) !important;
-  color: inherit !important;
-  border: 0 !important;
-}
-
 .calendar-floating-menu {
   position: fixed;
   z-index: 5002;
