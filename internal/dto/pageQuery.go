@@ -5,12 +5,12 @@ import (
 )
 
 type PageQueryDto struct {
-	Page     int     `json:"page"`
-	PageSize int     `json:"pageSize"`
-	AuthorID *uint   `json:"authorId,omitempty"`
-	Username *string `json:"username,omitempty"`
-	Date     string  `json:"date,omitempty"`
-	ExcludeID *uint  `json:"excludeId,omitempty"`
+	Page      int     `json:"page"`
+	PageSize  int     `json:"pageSize"`
+	AuthorID  *uint   `json:"authorId,omitempty"`
+	Username  *string `json:"username,omitempty"`
+	Date      string  `json:"date,omitempty"`
+	ExcludeID *uint   `json:"excludeId,omitempty"`
 }
 
 type PageQueryResult struct {
