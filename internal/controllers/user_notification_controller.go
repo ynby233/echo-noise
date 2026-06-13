@@ -139,19 +139,12 @@ func buildVisibleUserNotifications(notifications []models.UserNotification, view
 	}
 	db := database.DB
 	messageIDs := make([]uint, 0, len(notifications))
-	commentIDs := make([]uint, 0, len(notifications)*2)
 	actorIDs := make([]uint, 0, len(notifications))
 	likeMessageIDs := make([]uint, 0)
 	likeActorIDs := make([]uint, 0)
 	for _, notification := range notifications {
 		if notification.MessageID != nil {
 			messageIDs = append(messageIDs, *notification.MessageID)
-		}
-		if notification.CommentID != nil {
-			commentIDs = append(commentIDs, *notification.CommentID)
-		}
-		if notification.ParentCommentID != nil {
-			commentIDs = append(commentIDs, *notification.ParentCommentID)
 		}
 		if notification.ActorUserID != nil {
 			actorIDs = append(actorIDs, *notification.ActorUserID)
@@ -174,25 +167,10 @@ func buildVisibleUserNotifications(notifications []models.UserNotification, view
 	}
 
 	commentMap := map[uint]models.Comment{}
-	commentIDs = uniqueNotificationIDs(commentIDs)
-	if len(commentIDs) > 0 {
+	if len(messageIDs) > 0 {
 		var comments []models.Comment
-		if err := db.Where("id IN ?", commentIDs).Find(&comments).Error; err == nil {
-			for _, comment := range comments {
-				commentMap[comment.ID] = comment
-				if comment.ParentID != nil {
-					commentIDs = append(commentIDs, *comment.ParentID)
-				}
-			}
-		}
-		commentIDs = uniqueNotificationIDs(commentIDs)
-		if len(commentIDs) > len(commentMap) {
-			var comments []models.Comment
-			if err := db.Where("id IN ?", commentIDs).Find(&comments).Error; err == nil {
-				for _, comment := range comments {
-					commentMap[comment.ID] = comment
-				}
-			}
+		if err := db.Where("message_id IN ?", messageIDs).Find(&comments).Error; err == nil {
+			commentMap = services.CommentMap(comments)
 		}
 	}
 
@@ -284,7 +262,7 @@ func buildVisibleUserNotifications(notifications []models.UserNotification, view
 				valid = false
 				break
 			}
-			if !canViewComment(message, comment, parent, viewerID, true, isAdmin) {
+			if !canViewComment(message, comment, commentMap, viewerID, true, isAdmin) {
 				valid = false
 				break
 			}

@@ -954,6 +954,62 @@ func TestCreateUserNotificationsFollowRecipientRules(t *testing.T) {
 	assertNotificationCount(adminTwo.ID, models.UserNotificationTypeGuestbook, 2)
 }
 
+func TestCommentThreadVisibilityFollowsAncestorRestrictions(t *testing.T) {
+	setupUserServiceTestDB(t)
+
+	alice := mustCreateUser(t, models.User{Username: "thread-alice", Password: models.HashPassword("alice"), Token: models.GenerateToken(32)})
+	bob := mustCreateUser(t, models.User{Username: "thread-bob", Password: models.HashPassword("bob"), Token: models.GenerateToken(32)})
+	charlie := mustCreateUser(t, models.User{Username: "thread-charlie", Password: models.HashPassword("charlie"), Token: models.GenerateToken(32)})
+	message := models.Message{Content: "public note", UserID: alice.ID, Username: alice.Username, Visibility: MessageVisibilityPublic}
+	if err := database.DB.Create(&message).Error; err != nil {
+		t.Fatalf("create message: %v", err)
+	}
+
+	bobRoot := models.Comment{MessageID: message.ID, UserID: &bob.ID, Content: "bob root", Visibility: "public"}
+	if err := database.DB.Create(&bobRoot).Error; err != nil {
+		t.Fatalf("create root comment: %v", err)
+	}
+	rootID := bobRoot.ID
+	charlieReply := models.Comment{MessageID: message.ID, UserID: &charlie.ID, ParentID: &rootID, Content: "charlie reply", Visibility: "users"}
+	if err := database.DB.Create(&charlieReply).Error; err != nil {
+		t.Fatalf("create charlie reply: %v", err)
+	}
+	bobRoot.Visibility = "private"
+	if err := database.DB.Save(&bobRoot).Error; err != nil {
+		t.Fatalf("make root comment private: %v", err)
+	}
+
+	commentMap, err := LoadCommentMapForMessage(message.ID)
+	if err != nil {
+		t.Fatalf("load comment map: %v", err)
+	}
+	if CanViewCommentInThread(message, charlieReply, commentMap, charlie.ID, true, false) {
+		t.Fatalf("charlie should not see a reply hidden by bob's private root comment")
+	}
+	if !CanViewCommentInThread(message, charlieReply, commentMap, bob.ID, true, false) {
+		t.Fatalf("bob should see replies inside his private root comment")
+	}
+	if !CanViewCommentInThread(message, charlieReply, commentMap, alice.ID, true, false) {
+		t.Fatalf("message author should see replies inside a private root comment on their note")
+	}
+
+	parentID := charlieReply.ID
+	bobFollowup := models.Comment{MessageID: message.ID, UserID: &bob.ID, ParentID: &parentID, Content: "bob followup", Visibility: "users"}
+	if err := database.DB.Create(&bobFollowup).Error; err != nil {
+		t.Fatalf("create bob followup: %v", err)
+	}
+	if err := CreateNotificationsForComment(message, bobFollowup, &charlieReply); err != nil {
+		t.Fatalf("create followup notification: %v", err)
+	}
+	var charlieReplyNotifications int64
+	if err := database.DB.Model(&models.UserNotification{}).Where("recipient_user_id = ? AND type = ?", charlie.ID, models.UserNotificationTypeReply).Count(&charlieReplyNotifications).Error; err != nil {
+		t.Fatalf("count charlie notifications: %v", err)
+	}
+	if charlieReplyNotifications != 0 {
+		t.Fatalf("charlie reply notifications = %d, want 0", charlieReplyNotifications)
+	}
+}
+
 func lifeCountdownFrontendSettings(t *testing.T, viewerUserID uint) map[string]interface{} {
 	t.Helper()
 

@@ -86,6 +86,14 @@ func CreateNotificationsForComment(message models.Message, comment models.Commen
 	actorID := *comment.UserID
 	messageID := message.ID
 	commentID := comment.ID
+	commentMap, err := LoadCommentMapForMessage(message.ID)
+	if err != nil {
+		return err
+	}
+	commentMap[comment.ID] = comment
+	if parent != nil {
+		commentMap[parent.ID] = *parent
+	}
 
 	if isGuestbookNotificationMessage(message) && comment.ParentID == nil {
 		var admins []models.User
@@ -107,14 +115,17 @@ func CreateNotificationsForComment(message models.Message, comment models.Commen
 		parentID := *comment.ParentID
 		if parent != nil {
 			parentID = parent.ID
-			if parent.UserID != nil && *parent.UserID != 0 {
+			if parent.UserID != nil && *parent.UserID != 0 && CanViewCommentInThread(message, comment, commentMap, *parent.UserID, true, false) {
 				return createUserNotification(*parent.UserID, &actorID, models.UserNotificationTypeReply, &messageID, &commentID, &parentID)
 			}
 		}
 		return nil
 	}
 
-	return createUserNotification(message.UserID, &actorID, models.UserNotificationTypeComment, &messageID, &commentID, nil)
+	if CanViewCommentInThread(message, comment, commentMap, message.UserID, true, false) {
+		return createUserNotification(message.UserID, &actorID, models.UserNotificationTypeComment, &messageID, &commentID, nil)
+	}
+	return nil
 }
 
 func MarkUserNotificationRead(userID uint, notificationID uint) error {

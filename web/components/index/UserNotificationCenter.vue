@@ -12,7 +12,7 @@
             <button type="button" class="text-action" :disabled="markingAll || unreadCount === 0" @click="markAllRead">全部已读</button>
           </div>
         </div>
-        <p class="notification-subtitle">欢迎彼此间互相交流</p>
+        <p class="notification-subtitle">{{ notificationDescription }}</p>
       </div>
     </div>
 
@@ -189,6 +189,8 @@ const emit = defineEmits<{
   (event: 'jump', item: NotificationJumpPayload): void
   (event: 'restore-consumed'): void
 }>()
+
+const notificationDescription = computed(() => String(props.siteConfig?.commentPageDescription || '').trim() || '欢迎留下你的看法')
 
 const user = useUserStore()
 const injectedTheme = inject('contentTheme', ref('light')) as any

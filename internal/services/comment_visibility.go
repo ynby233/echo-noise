@@ -1,0 +1,201 @@
+package services
+
+import (
+	"strings"
+
+	"github.com/rcy1314/echo-noise/internal/database"
+	"github.com/rcy1314/echo-noise/internal/models"
+)
+
+func NormalizeCommentVisibility(value string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "public":
+		return "public", true
+	case "users", "members", "member", "all_users", "logged_in", "logged-in":
+		return "users", true
+	case "contacts", "contact", "mutual":
+		return "contacts", true
+	case "private", "only_me":
+		return "private", true
+	default:
+		return "", false
+	}
+}
+
+func NormalizedCommentVisibilityOrPublic(value string) string {
+	visibility, ok := NormalizeCommentVisibility(value)
+	if ok {
+		return visibility
+	}
+	return "public"
+}
+
+func CommentVisibilityRank(value string) int {
+	switch NormalizedCommentVisibilityOrPublic(value) {
+	case "public":
+		return 4
+	case "users":
+		return 3
+	case "contacts":
+		return 2
+	case "private":
+		return 1
+	default:
+		return 0
+	}
+}
+
+func DefaultCommentVisibilityForMessage(messageVisibility string) string {
+	switch messageVisibility {
+	case MessageVisibilityPublic:
+		return "public"
+	case MessageVisibilityUsers:
+		return "users"
+	case MessageVisibilityContacts:
+		return "contacts"
+	case MessageVisibilityPrivate:
+		return "private"
+	default:
+		return "public"
+	}
+}
+
+func CommentVisibilityAllowedForMessage(visibility string, messageVisibility string) bool {
+	visibility = NormalizedCommentVisibilityOrPublic(visibility)
+	switch messageVisibility {
+	case MessageVisibilityPublic:
+		return true
+	case MessageVisibilityUsers:
+		return visibility == "users" || visibility == "contacts" || visibility == "private"
+	case MessageVisibilityContacts:
+		return visibility == "contacts" || visibility == "private"
+	case MessageVisibilityPrivate:
+		return visibility == "private"
+	default:
+		return visibility == "public"
+	}
+}
+
+func EffectiveCommentVisibilityForMessage(visibility string, messageVisibility string) string {
+	visibility = NormalizedCommentVisibilityOrPublic(visibility)
+	if CommentVisibilityAllowedForMessage(visibility, messageVisibility) {
+		return visibility
+	}
+	return DefaultCommentVisibilityForMessage(messageVisibility)
+}
+
+func CommentMap(comments []models.Comment) map[uint]models.Comment {
+	commentMap := make(map[uint]models.Comment, len(comments))
+	for _, comment := range comments {
+		commentMap[comment.ID] = comment
+	}
+	return commentMap
+}
+
+func LoadCommentMapForMessage(messageID uint) (map[uint]models.Comment, error) {
+	var comments []models.Comment
+	if err := database.DB.Where("message_id = ?", messageID).Find(&comments).Error; err != nil {
+		return nil, err
+	}
+	return CommentMap(comments), nil
+}
+
+func EffectiveCommentVisibilityInThread(comment models.Comment, messageVisibility string, commentMap map[uint]models.Comment) string {
+	visibility := EffectiveCommentVisibilityForMessage(comment.Visibility, messageVisibility)
+	seen := map[uint]bool{comment.ID: true}
+	parentID := comment.ParentID
+	for parentID != nil {
+		if seen[*parentID] {
+			break
+		}
+		parent, ok := commentMap[*parentID]
+		if !ok {
+			break
+		}
+		seen[parent.ID] = true
+		parentVisibility := EffectiveCommentVisibilityForMessage(parent.Visibility, messageVisibility)
+		if CommentVisibilityRank(visibility) > CommentVisibilityRank(parentVisibility) {
+			visibility = parentVisibility
+		}
+		parentID = parent.ParentID
+	}
+	return visibility
+}
+
+func CanViewCommentInThread(message models.Message, comment models.Comment, commentMap map[uint]models.Comment, viewerID uint, hasViewer bool, isAdmin bool) bool {
+	if isAdmin {
+		return true
+	}
+	var currentUserID *uint
+	if hasViewer {
+		id := viewerID
+		currentUserID = &id
+	}
+	if !CanViewMessage(message, currentUserID, false) {
+		return false
+	}
+	messageVisibility := StoredMessageVisibility(message)
+	if messageVisibility == MessageVisibilityPrivate || messageVisibility == MessageVisibilityContacts {
+		return hasViewer && viewerID == message.UserID
+	}
+
+	var parent *models.Comment
+	if comment.ParentID != nil {
+		loaded, ok := commentMap[*comment.ParentID]
+		if !ok {
+			return false
+		}
+		if !CanViewCommentInThread(message, loaded, commentMap, viewerID, hasViewer, false) {
+			return false
+		}
+		parent = &loaded
+	}
+
+	visibility := EffectiveCommentVisibilityInThread(comment, messageVisibility, commentMap)
+	if comment.ParentID != nil {
+		switch visibility {
+		case "public":
+			return true
+		case "users":
+			return hasViewer
+		case "contacts", "private":
+			if !hasViewer {
+				return false
+			}
+			if viewerID == message.UserID {
+				return true
+			}
+			if comment.UserID != nil && *comment.UserID == viewerID {
+				return true
+			}
+			return parent != nil && parent.UserID != nil && *parent.UserID == viewerID
+		default:
+			return false
+		}
+	}
+
+	switch visibility {
+	case "public":
+		return true
+	case "users":
+		return hasViewer
+	case "contacts", "private":
+		if !hasViewer {
+			return false
+		}
+		if viewerID == message.UserID {
+			return true
+		}
+		return comment.UserID != nil && *comment.UserID == viewerID
+	default:
+		return false
+	}
+}
+
+func CanUserViewCommentInThread(message models.Message, comment models.Comment, viewerID uint) bool {
+	commentMap, err := LoadCommentMapForMessage(message.ID)
+	if err != nil {
+		return false
+	}
+	return CanViewCommentInThread(message, comment, commentMap, viewerID, viewerID != 0, false)
+}

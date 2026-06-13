@@ -688,11 +688,11 @@ func TestReplyVisibilityMatchesNewRules(t *testing.T) {
 	if got := contentsOfComments(request(parentAuthor.ID, false)); len(got) != 2 {
 		t.Fatalf("parent author should see parent and reply, got %#v", got)
 	}
-	if got := contentsOfComments(request(postAuthor.ID, false)); len(got) != 1 || got[0] != "parent-private" {
-		t.Fatalf("post author should not see private reply, got %#v", got)
+	if got := contentsOfComments(request(postAuthor.ID, false)); len(got) != 2 {
+		t.Fatalf("post author should see private reply chain, got %#v", got)
 	}
-	if got := contentsOfComments(request(replyAuthor.ID, false)); len(got) != 1 || got[0] != "reply-private" {
-		t.Fatalf("reply author should only see own reply, got %#v", got)
+	if got := contentsOfComments(request(replyAuthor.ID, false)); len(got) != 0 {
+		t.Fatalf("reply author should not see reply under hidden private parent, got %#v", got)
 	}
 	if got := contentsOfComments(request(admin.ID, true)); len(got) != 2 {
 		t.Fatalf("admin should see private reply chain, got %#v", got)

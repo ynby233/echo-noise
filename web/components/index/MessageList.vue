@@ -284,7 +284,7 @@
           <div class="edit-toolbar-left">
             <button
               type="button"
-              class="tb-btn nw-tooltip-anchor"
+              class="tb-btn edit-media-button nw-tooltip-anchor"
               data-tooltip="上传图片"
               aria-label="上传图片"
               :disabled="isEditUploading"
@@ -294,7 +294,7 @@
             </button>
             <button
               type="button"
-              class="tb-btn nw-tooltip-anchor"
+              class="tb-btn edit-media-button nw-tooltip-anchor"
               data-tooltip="上传视频"
               aria-label="上传视频"
               :disabled="isEditUploading"
@@ -1019,6 +1019,8 @@ const loadTargetMessagePage = async (id: number) => {
     const messageId = Number(props.targetMessageId || 0)
     if (!messageId) return
     if (!targetListReady.value) return
+    searchResults.value = []
+    isSearchMode.value = false
     const ok = await loadTargetMessagePage(messageId)
     if (!ok) {
       resetNotificationTargetRetry()
@@ -2665,6 +2667,9 @@ onMounted(() => {
   --edit-text: #111827;
   --edit-muted: #64748b;
   --edit-control: #ffffff;
+  --edit-media-bg: rgba(249, 115, 22, 0.08);
+  --edit-media-border: rgba(249, 115, 22, 0.24);
+  --edit-media-text: #9a3412;
   --nw-tooltip-bg: rgba(255, 255, 255, 0.96);
   --nw-tooltip-text: #111827;
   --nw-tooltip-border: rgba(15, 23, 42, 0.14);
@@ -2698,6 +2703,9 @@ onMounted(() => {
   --edit-text: #f8fafc;
   --edit-muted: #94a3b8;
   --edit-control: rgba(15, 23, 42, 0.72);
+  --edit-media-bg: rgba(255, 255, 255, 0.08);
+  --edit-media-border: rgba(255, 255, 255, 0.16);
+  --edit-media-text: #f8fafc;
   --nw-tooltip-bg: rgba(15, 23, 42, 0.96);
   --nw-tooltip-text: #f8fafc;
   --nw-tooltip-border: rgba(255, 255, 255, 0.18);
@@ -2798,6 +2806,18 @@ onMounted(() => {
 .edit-modal-shell .tb-btn:disabled {
   cursor: not-allowed;
   opacity: .58;
+}
+
+.edit-modal-shell .edit-media-button {
+  border-color: var(--edit-media-border);
+  background: var(--edit-media-bg);
+  color: var(--edit-media-text);
+}
+
+.edit-modal-shell .edit-media-button:hover:not(:disabled) {
+  border-color: var(--nw-floating-hover-border);
+  background: var(--nw-floating-hover-bg);
+  color: var(--edit-text);
 }
 
 .edit-modal-shell .visibility-control,
@@ -2975,7 +2995,7 @@ onMounted(() => {
 .publish-date-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 .publish-date-picker-controls { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; }
 .publish-date-title { font-size: 13px; font-weight: 700; color: inherit; }
-.publish-picker-trigger { min-height: 28px; padding: 0 7px; border-radius: 8px; border: 1px solid transparent; background: rgba(15,23,42,0.04); display: inline-flex; align-items: center; justify-content: center; gap: 3px; white-space: nowrap; }
+.publish-picker-trigger { min-height: 28px; padding: 0 7px; border-radius: 8px; border: 1px solid var(--nw-floating-border); background: rgba(15,23,42,0.04); display: inline-flex; align-items: center; justify-content: center; gap: 3px; white-space: nowrap; }
 .publish-picker-trigger:hover,
 .publish-picker-trigger:focus-visible { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); outline: none; }
 .publish-picker-trigger:first-child { width: 75px; }
@@ -3005,15 +3025,15 @@ onMounted(() => {
 .publish-time-option:hover { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
 .publish-time-option.is-selected { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
 .publish-date-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
-.floating-action-btn { height: 30px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--nw-floating-border); background: rgba(15,23,42,0.04); color: inherit; font-size: 12px; font-weight: 650; }
+.floating-action-btn { min-width: 64px; height: 32px; display: inline-flex; align-items: center; justify-content: center; padding: 0 12px; border-radius: 10px; border: 1px solid var(--nw-floating-border); background: rgba(15,23,42,0.04); color: inherit; font-size: 13px; font-weight: 650; line-height: 1; }
 .floating-action-btn:hover { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
 .floating-action-btn.primary { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
 
 :global(html.dark) .floating-icon-btn,
 :global(html.dark) .floating-action-btn,
-:global(html.dark) .publish-picker-trigger { background: rgba(255,255,255,0.06); }
-:global(html.dark) .publish-date-weekdays { color: rgba(226,232,240,0.66); }
+:global(html.dark) .publish-picker-trigger,
 :global(html.dark) .publish-date-day { background: rgba(255,255,255,0.06); }
+:global(html.dark) .publish-date-weekdays { color: rgba(226,232,240,0.66); }
 :global(html.dark) .publish-time-column { background: rgba(15,23,42,0.46); }
 
 .edit-preview-block {
@@ -3042,23 +3062,24 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
   padding: 12px 16px;
   border-top: 1px solid var(--edit-border);
   background: var(--edit-panel);
 }
 
 .edit-footer-button {
-  min-width: 86px;
-  min-height: 36px;
+  min-width: 64px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 0 14px;
+  padding: 0 12px;
   border-radius: 10px;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1;
 }
 
 .edit-footer-button.primary {

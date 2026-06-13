@@ -1376,55 +1376,19 @@ func commentAuthIsAdmin(c *gin.Context) bool {
 }
 
 func normalizeCommentVisibility(value string) (string, bool) {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "", "public":
-		return "public", true
-	case "users", "all_users", "logged_in", "logged-in":
-		return "users", true
-	case "contacts":
-		return "contacts", true
-	case "private":
-		return "private", true
-	default:
-		return "", false
-	}
+	return services.NormalizeCommentVisibility(value)
 }
 
 func normalizedCommentVisibilityOrPublic(value string) string {
-	if visibility, ok := normalizeCommentVisibility(value); ok {
-		return visibility
-	}
-	return "public"
+	return services.NormalizedCommentVisibilityOrPublic(value)
 }
 
 func commentVisibilityRank(value string) int {
-	switch normalizedCommentVisibilityOrPublic(value) {
-	case "public":
-		return 4
-	case "users":
-		return 3
-	case "contacts":
-		return 2
-	case "private":
-		return 1
-	default:
-		return 0
-	}
+	return services.CommentVisibilityRank(value)
 }
 
 func defaultCommentVisibilityForMessage(messageVisibility string) string {
-	switch messageVisibility {
-	case services.MessageVisibilityPublic:
-		return "public"
-	case services.MessageVisibilityUsers:
-		return "users"
-	case services.MessageVisibilityContacts:
-		return "contacts"
-	case services.MessageVisibilityPrivate:
-		return "private"
-	default:
-		return "public"
-	}
+	return services.DefaultCommentVisibilityForMessage(messageVisibility)
 }
 
 func normalizeRequestedCommentVisibility(value string, messageVisibility string) (string, bool) {
@@ -1435,27 +1399,11 @@ func normalizeRequestedCommentVisibility(value string, messageVisibility string)
 }
 
 func commentVisibilityAllowedForMessage(visibility string, messageVisibility string) bool {
-	visibility = normalizedCommentVisibilityOrPublic(visibility)
-	switch messageVisibility {
-	case services.MessageVisibilityPublic:
-		return visibility == "public" || visibility == "users" || visibility == "contacts" || visibility == "private"
-	case services.MessageVisibilityUsers:
-		return visibility == "users" || visibility == "contacts" || visibility == "private"
-	case services.MessageVisibilityContacts:
-		return visibility == "contacts" || visibility == "private"
-	case services.MessageVisibilityPrivate:
-		return visibility == "private"
-	default:
-		return false
-	}
+	return services.CommentVisibilityAllowedForMessage(visibility, messageVisibility)
 }
 
 func effectiveCommentVisibilityForMessage(visibility string, messageVisibility string) string {
-	visibility = normalizedCommentVisibilityOrPublic(visibility)
-	if commentVisibilityAllowedForMessage(visibility, messageVisibility) {
-		return visibility
-	}
-	return defaultCommentVisibilityForMessage(messageVisibility)
+	return services.EffectiveCommentVisibilityForMessage(visibility, messageVisibility)
 }
 
 func isGuestbookMessage(message models.Message) bool {
@@ -1463,63 +1411,8 @@ func isGuestbookMessage(message models.Message) bool {
 	return strings.Contains(content, "#guestbook") || strings.Contains(content, "#留言") || strings.Contains(content, "留言板")
 }
 
-func canViewComment(message models.Message, comment models.Comment, parent *models.Comment, viewerID uint, hasViewer bool, isAdmin bool) bool {
-	if isAdmin {
-		return true
-	}
-	var currentUserID *uint
-	if hasViewer {
-		id := viewerID
-		currentUserID = &id
-	}
-	if !services.CanViewMessage(message, currentUserID, false) {
-		return false
-	}
-	messageVisibility := services.StoredMessageVisibility(message)
-	if messageVisibility == services.MessageVisibilityPrivate || messageVisibility == services.MessageVisibilityContacts {
-		return hasViewer && viewerID == message.UserID
-	}
-	visibility := effectiveCommentVisibilityForMessage(comment.Visibility, messageVisibility)
-	if comment.ParentID != nil {
-		if parent != nil {
-			parentVisibility := effectiveCommentVisibilityForMessage(parent.Visibility, messageVisibility)
-			if commentVisibilityRank(visibility) > commentVisibilityRank(parentVisibility) {
-				visibility = parentVisibility
-			}
-		}
-		switch visibility {
-		case "public":
-			return true
-		case "users":
-			return hasViewer
-		case "contacts", "private":
-			if !hasViewer {
-				return false
-			}
-			if comment.UserID != nil && *comment.UserID == viewerID {
-				return true
-			}
-			return parent != nil && parent.UserID != nil && *parent.UserID == viewerID
-		default:
-			return false
-		}
-	}
-	switch visibility {
-	case "public":
-		return true
-	case "users":
-		return hasViewer
-	case "contacts", "private":
-		if !hasViewer {
-			return false
-		}
-		if viewerID == message.UserID {
-			return true
-		}
-		return comment.UserID != nil && *comment.UserID == viewerID
-	default:
-		return false
-	}
+func canViewComment(message models.Message, comment models.Comment, commentMap map[uint]models.Comment, viewerID uint, hasViewer bool, isAdmin bool) bool {
+	return services.CanViewCommentInThread(message, comment, commentMap, viewerID, hasViewer, isAdmin)
 }
 
 func canManageComment(c *gin.Context, comment models.Comment) bool {
@@ -1580,19 +1473,10 @@ func GetComments(c *gin.Context) {
 	}
 	viewerID, hasViewer := commentAuthUserID(c)
 	isAdmin := commentAuthIsAdmin(c)
-	commentMap := make(map[uint]models.Comment, len(comments))
-	for _, comment := range comments {
-		commentMap[comment.ID] = comment
-	}
+	commentMap := services.CommentMap(comments)
 	visibleComments := make([]models.Comment, 0, len(comments))
 	for _, comment := range comments {
-		var parent *models.Comment
-		if comment.ParentID != nil {
-			if loaded, ok := commentMap[*comment.ParentID]; ok {
-				parent = &loaded
-			}
-		}
-		if canViewComment(message, comment, parent, viewerID, hasViewer, isAdmin) {
+		if canViewComment(message, comment, commentMap, viewerID, hasViewer, isAdmin) {
 			visibleComments = append(visibleComments, comment)
 		}
 	}
@@ -1779,18 +1663,17 @@ func PostComment(c *gin.Context) {
 			return
 		}
 		notificationParent = &parent
-		var grandParent *models.Comment
-		if parent.ParentID != nil {
-			var loaded models.Comment
-			if err := db.First(&loaded, *parent.ParentID).Error; err == nil && loaded.MessageID == msgID {
-				grandParent = &loaded
-			}
+		commentMap, err := services.LoadCommentMapForMessage(msgID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取评论失败"})
+			return
 		}
-		if !canViewComment(message, parent, grandParent, currentUser.ID, true, commentAuthIsAdmin(c)) {
+		commentMap[parent.ID] = parent
+		if !canViewComment(message, parent, commentMap, currentUser.ID, true, commentAuthIsAdmin(c)) {
 			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限回复该内容"})
 			return
 		}
-		parentVisibility := effectiveCommentVisibilityForMessage(parent.Visibility, messageVisibility)
+		parentVisibility := services.EffectiveCommentVisibilityInThread(parent, messageVisibility, commentMap)
 		if commentVisibilityRank(visibility) > commentVisibilityRank(parentVisibility) {
 			if strings.TrimSpace(req.Visibility) == "" {
 				visibility = parentVisibility
@@ -1875,7 +1758,7 @@ func PostComment(c *gin.Context) {
 					parentEmail = strings.TrimSpace(parentUser.Email)
 				}
 			}
-			if parentEmail != "" && parent.UserID != nil && *parent.UserID != currentUser.ID {
+			if parentEmail != "" && parent.UserID != nil && *parent.UserID != currentUser.ID && services.CanUserViewCommentInThread(message, comment, *parent.UserID) {
 				prefixReply := strings.TrimSpace(cfg.CommentEmailReplyPrefix)
 				if prefixReply != "" {
 					prefixReply = prefixReply + " "
@@ -1970,7 +1853,13 @@ func UpdateComment(c *gin.Context) {
 	if cm.ParentID != nil {
 		var parent models.Comment
 		if err := db.First(&parent, *cm.ParentID).Error; err == nil {
-			parentVisibility := effectiveCommentVisibilityForMessage(parent.Visibility, messageVisibility)
+			commentMap, err := services.LoadCommentMapForMessage(uint(msgID))
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取评论失败"})
+				return
+			}
+			commentMap[parent.ID] = parent
+			parentVisibility := services.EffectiveCommentVisibilityInThread(parent, messageVisibility, commentMap)
 			if commentVisibilityRank(visibility) > commentVisibilityRank(parentVisibility) {
 				if strings.TrimSpace(req.Visibility) == "" {
 					visibility = parentVisibility

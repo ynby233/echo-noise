@@ -862,6 +862,7 @@ const handleNotificationJump = async (item: NotificationJumpItem) => {
 
   if (item?.type === 'guestbook' || item?.message?.is_guestbook) {
     selectedCalendarDate.value = ''
+    targetMessageId.value = null
     activeTab.value = 'comment'
     await loadGuestbookTarget()
     await focusGuestbookNotificationComment(commentId)
@@ -2657,17 +2658,22 @@ html.dark .search-card { background: var(--home-surface-dark); color: #fff; bord
   border-color: rgba(255, 255, 255, 0.14);
 }
 :global(html:not(.dark)) .hero-tabs {
-  background: rgba(2, 6, 23, 0.54);
-  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(15, 23, 42, 0.10);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
 }
 :global(html:not(.dark)) .hero-tab {
-  color: rgba(248, 250, 252, 0.84);
+  color: rgba(15, 23, 42, 0.70);
   background: transparent;
 }
+:global(html:not(.dark)) .hero-tab:hover {
+  color: #111827;
+  background: rgba(249, 115, 22, 0.08);
+}
 :global(html:not(.dark)) .hero-tab.active {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.2);
-  box-shadow: none;
+  color: #9a3412;
+  background: #ffffff;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12), inset 0 0 0 1px rgba(249, 115, 22, 0.28);
 }
 @media (max-width: 480px) {
   .hero-tabs { gap: 2px; padding: 4px; }

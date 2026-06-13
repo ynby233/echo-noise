@@ -690,7 +690,7 @@ const startReply = (id: number, authorName: string) => {
   captureInputRestoreScroll()
   hiddenByCancel.value = false
   replyTo.value = id
-  selectedVisibility.value = clampVisibilityToLimit(selectedVisibility.value, byId.value[id]?.visibility)
+  selectedVisibility.value = clampVisibilityToLimit(selectedVisibility.value, threadVisibilityLimitFor(byId.value[id]))
   if (!content.value.startsWith(`@${authorName} `)) content.value = `@${authorName} ` + content.value
   nextTick(() => {
     autoResizeTextarea()
@@ -708,8 +708,7 @@ const startEdit = (c: any) => {
   closeCommentVisibilityMenu()
   editingId.value = Number(c.id)
   editingContent.value = String(c.content || '')
-  const parentVisibility = c?.parent_id ? byId.value[Number(c.parent_id)]?.visibility : undefined
-  editingVisibility.value = clampVisibilityToLimit(c.visibility, parentVisibility)
+  editingVisibility.value = clampVisibilityToLimit(c.visibility, parentThreadVisibilityLimitFor(c))
   nextTick(() => textareaForTarget('edit')?.focus())
 }
 
@@ -1014,6 +1013,25 @@ const byId = computed(() => {
   list.forEach((c: any) => { m[Number(c.id)] = c })
   return m
 })
+const threadVisibilityLimitFor = (comment?: any) => {
+  let node = comment
+  let limit = node?.visibility
+  const seen = new Set<number>()
+  while (node && Number(node.parent_id || 0) > 0) {
+    const parentId = Number(node.parent_id || 0)
+    if (seen.has(parentId)) break
+    seen.add(parentId)
+    const parent = byId.value[parentId]
+    if (!parent) break
+    limit = narrowestVisibilityLimit(limit, parent.visibility)
+    node = parent
+  }
+  return limit
+}
+const parentThreadVisibilityLimitFor = (comment?: any) => {
+  const parentId = Number(comment?.parent_id || 0)
+  return parentId > 0 ? threadVisibilityLimitFor(byId.value[parentId]) : undefined
+}
 const replyingToComment = computed(() => {
   const id = Number(replyTo.value || 0)
   return id > 0 ? byId.value[id] || null : null
@@ -1022,7 +1040,7 @@ const returnTargetLabel = computed(() => {
   const target = replyingToComment.value
   if (target) return Number(target.parent_id || 0) > 0 ? '返回回复' : `返回${contextLabel.value}`
   if (!props.showInput) return ''
-  return contextLabel.value === '留言' ? '返回留言板' : '返回帖子'
+  return contextLabel.value === '留言' ? '返回留言板' : '返回笔记'
 })
 const returnTargetIcon = computed(() => replyingToComment.value ? 'i-heroicons-chat-bubble-left-right' : 'i-heroicons-document-text')
 const returnToInputTarget = () => {
@@ -1037,24 +1055,20 @@ const returnToInputTarget = () => {
   scrollToMessage()
 }
 const selectedVisibilityOptions = computed(() => {
-  return replyingToComment.value ? commentVisibilityOptions(replyingToComment.value.visibility) : commentVisibilityOptions()
+  return replyingToComment.value ? commentVisibilityOptions(threadVisibilityLimitFor(replyingToComment.value)) : commentVisibilityOptions()
 })
 const editingComment = computed(() => {
   const id = Number(editingId.value || 0)
   return id > 0 ? byId.value[id] || null : null
 })
 const editingVisibilityOptions = computed(() => {
-  const parentId = Number(editingComment.value?.parent_id || 0)
-  if (parentId <= 0) return commentVisibilityOptions()
-  const parent = byId.value[parentId]
-  return parent ? commentVisibilityOptions(parent.visibility) : commentVisibilityOptions()
+  const limit = parentThreadVisibilityLimitFor(editingComment.value)
+  return typeof limit === 'undefined' ? commentVisibilityOptions() : commentVisibilityOptions(limit)
 })
 
 watch(messageVisibilityLimit, () => {
-  selectedVisibility.value = clampVisibilityToLimit(selectedVisibility.value, replyingToComment.value?.visibility)
-  const parentId = Number(editingComment.value?.parent_id || 0)
-  const parent = parentId > 0 ? byId.value[parentId] : null
-  editingVisibility.value = clampVisibilityToLimit(editingVisibility.value, parent?.visibility)
+  selectedVisibility.value = clampVisibilityToLimit(selectedVisibility.value, threadVisibilityLimitFor(replyingToComment.value))
+  editingVisibility.value = clampVisibilityToLimit(editingVisibility.value, parentThreadVisibilityLimitFor(editingComment.value))
 })
 
 const commentVisibilityMenuKey = (target: CommentEditorTarget, id?: number | null) => target === 'edit' ? `edit:${Number(id || editingId.value || 0)}` : 'content'
@@ -1095,12 +1109,12 @@ onBeforeUnmount(() => {
 })
 
 watch(replyingToComment, (comment) => {
-  selectedVisibility.value = clampVisibilityToLimit(selectedVisibility.value, comment?.visibility)
+  selectedVisibility.value = clampVisibilityToLimit(selectedVisibility.value, threadVisibilityLimitFor(comment))
 })
 
 watch(messageVisibilityLimit, () => {
-  selectedVisibility.value = clampVisibilityToLimit(selectedVisibility.value, replyingToComment.value?.visibility)
-  editingVisibility.value = clampVisibilityToLimit(editingVisibility.value, editingComment.value?.parent_id ? byId.value[Number(editingComment.value.parent_id)]?.visibility : undefined)
+  selectedVisibility.value = clampVisibilityToLimit(selectedVisibility.value, threadVisibilityLimitFor(replyingToComment.value))
+  editingVisibility.value = clampVisibilityToLimit(editingVisibility.value, parentThreadVisibilityLimitFor(editingComment.value))
 })
 
 watch(editingVisibilityOptions, (options) => {
