@@ -223,48 +223,103 @@ func GetMessageByIDForViewer(id uint, userID *uint, isAdmin bool) (*models.Messa
 	return message, nil
 }
 
-// GetMessagesByPage 分页获取笔记（支持作者和日期筛选；管理员查看全部；普通用户可查看公开和自己的私密）
-func GetMessagesByPage(page, pageSize int, userID *uint, isAdmin bool, authorID *uint, username *string, date *string) (dto.PageQueryResult, error) {
-	// 参数校验
+func normalizeMessagePageParams(page, pageSize int) (int, int) {
 	if page < 1 {
 		page = 1
 	}
 	if pageSize < 1 || pageSize > 100 {
 		pageSize = 10
 	}
+	return page, pageSize
+}
 
-	offset := (page - 1) * pageSize
-
-	// 查询数据库
-	var messages []models.Message
-	var total int64
-
-	// 基础查询
+func messagePageBaseQuery(userID *uint, isAdmin bool, authorID *uint, username *string, date *string, excludeID *uint) (*gorm.DB, error) {
 	q := database.DB.Model(&models.Message{})
-	// 作者筛选
+	if excludeID != nil && *excludeID != 0 {
+		q = q.Where("id <> ?", *excludeID)
+	}
 	if authorID != nil {
 		q = q.Where("user_id = ?", *authorID)
-	} else if username != nil && *username != "" {
-		q = q.Where("username = ?", *username)
+	} else if username != nil && strings.TrimSpace(*username) != "" {
+		q = q.Where("username = ?", strings.TrimSpace(*username))
 	}
 	if date != nil && strings.TrimSpace(*date) != "" {
 		day, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(*date), shanghaiLocation())
 		if err != nil {
-			return dto.PageQueryResult{}, fmt.Errorf("日期格式无效")
+			return nil, fmt.Errorf("日期格式无效")
 		}
 		q = q.Where("created_at >= ? AND created_at < ?", day, day.AddDate(0, 0, 1))
 	}
-	// 隐私过滤
-	q = ApplyMessageVisibilityScope(q, userID, isAdmin)
+	return ApplyMessageVisibilityScope(q, userID, isAdmin), nil
+}
 
-	q.Count(&total)
-	if err := q.Limit(pageSize).Offset(offset).Order("pinned DESC, created_at DESC").Find(&messages).Error; err != nil {
+// GetMessagesByPage 分页获取笔记（支持作者和日期筛选；管理员查看全部；普通用户可查看公开和自己的私密）
+func GetMessagesByPage(page, pageSize int, userID *uint, isAdmin bool, authorID *uint, username *string, date *string, excludeID *uint) (dto.PageQueryResult, error) {
+	page, pageSize = normalizeMessagePageParams(page, pageSize)
+	offset := (page - 1) * pageSize
+
+	q, err := messagePageBaseQuery(userID, isAdmin, authorID, username, date, excludeID)
+	if err != nil {
+		return dto.PageQueryResult{}, err
+	}
+
+	var messages []models.Message
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return dto.PageQueryResult{}, err
+	}
+	if err := q.Limit(pageSize).Offset(offset).Order("pinned DESC, created_at DESC, id DESC").Find(&messages).Error; err != nil {
 		return dto.PageQueryResult{}, err
 	}
 	applyMessageLikedState(messages, userID)
 
-	// 返回结果
 	return dto.PageQueryResult{Total: total, Items: messages}, nil
+}
+
+func LocateMessagePage(messageID uint, pageSize int, userID *uint, isAdmin bool, authorID *uint, username *string, date *string, excludeID *uint) (dto.MessagePageLocateResult, error) {
+	_, pageSize = normalizeMessagePageParams(1, pageSize)
+
+	targetQuery, err := messagePageBaseQuery(userID, isAdmin, authorID, username, date, excludeID)
+	if err != nil {
+		return dto.MessagePageLocateResult{}, err
+	}
+	var target models.Message
+	if err := targetQuery.Where("id = ?", messageID).First(&target).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return dto.MessagePageLocateResult{}, fmt.Errorf("消息不存在或无权访问")
+		}
+		return dto.MessagePageLocateResult{}, err
+	}
+
+	totalQuery, err := messagePageBaseQuery(userID, isAdmin, authorID, username, date, excludeID)
+	if err != nil {
+		return dto.MessagePageLocateResult{}, err
+	}
+	var total int64
+	if err := totalQuery.Count(&total).Error; err != nil {
+		return dto.MessagePageLocateResult{}, err
+	}
+
+	beforeQuery, err := messagePageBaseQuery(userID, isAdmin, authorID, username, date, excludeID)
+	if err != nil {
+		return dto.MessagePageLocateResult{}, err
+	}
+	if target.Pinned {
+		beforeQuery = beforeQuery.Where("pinned = ? AND (created_at > ? OR (created_at = ? AND id > ?))", true, target.CreatedAt, target.CreatedAt, target.ID)
+	} else {
+		beforeQuery = beforeQuery.Where("pinned = ? OR (pinned = ? AND (created_at > ? OR (created_at = ? AND id > ?)))", true, false, target.CreatedAt, target.CreatedAt, target.ID)
+	}
+	var before int64
+	if err := beforeQuery.Count(&before).Error; err != nil {
+		return dto.MessagePageLocateResult{}, err
+	}
+
+	return dto.MessagePageLocateResult{
+		MessageID: messageID,
+		Page:      int(before/int64(pageSize)) + 1,
+		PageSize:  pageSize,
+		Total:     total,
+	}, nil
 }
 
 // CreateMessage 发布一条笔记

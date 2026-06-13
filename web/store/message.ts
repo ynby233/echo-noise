@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import type { Message, PageQuery, PageQueryResult } from "~/types/models";
+import type { Message, MessagePageLocateResult, PageQuery, PageQueryResult } from "~/types/models";
 
 export const useMessageStore = defineStore("messageStore", () => {
   // 状态
@@ -164,6 +164,57 @@ const applyPrefetchedOrLoad = async (targetPage: number) => {
   if (cached && Array.isArray(cached.items)) return cached
   const res = await getMessages({ page: targetPage, pageSize: pageSize.value })
   return res as any
+}
+
+const loadMessagePage = async (query: PageQuery) => {
+  if (loading.value) return null;
+  loading.value = true;
+
+  try {
+    try { pageController?.abort() } catch {}
+    pageController = new AbortController()
+    const response = await postRequest<PageQueryResult>("messages/page", query, {
+      credentials: 'include',
+      silent: true,
+      signal: pageController.signal
+    });
+
+    if (!response || response.code !== 1) return null;
+
+    messages.value = response.data.items;
+    total.value = response.data.total;
+    page.value = query.page;
+    pageSize.value = query.pageSize;
+    hasMore.value = page.value * pageSize.value < total.value;
+
+    return response.data;
+  } catch (error) {
+    console.error("获取笔记列表失败:", error);
+    return null;
+  } finally {
+    loading.value = false;
+  }
+}
+
+const locateMessagePage = async (query: PageQuery & { messageId: number }) => {
+  try {
+    const response = await postRequest<MessagePageLocateResult>("messages/locate", {
+      messageId: query.messageId,
+      pageSize: query.pageSize,
+      authorId: query.authorId,
+      username: query.username,
+      date: query.date,
+      excludeId: query.excludeId,
+    }, {
+      credentials: 'include',
+      silent: true
+    });
+    if (!response || response.code !== 1) return null;
+    return response.data;
+  } catch (error) {
+    console.error("定位笔记分页失败:", error);
+    return null;
+  }
 }
 
   // 删除笔记
@@ -507,6 +558,8 @@ const createMessage = async (message: Message) => {
   siteConfig,
   reset,
   getMessages,
+  loadMessagePage,
+  locateMessagePage,
   deleteMessage,
   updateMessage,
   setPrivate,

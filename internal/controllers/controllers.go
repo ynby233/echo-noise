@@ -329,6 +329,66 @@ func GetMessage(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.OK(message, models.GetMessageByIDSuccess))
 }
 
+func LocateMessagePage(c *gin.Context) {
+	var request dto.MessagePageLocateDto
+	_ = c.ShouldBindJSON(&request)
+
+	if request.MessageID == 0 {
+		idStr := strings.TrimSpace(c.Query("messageId"))
+		if idStr == "" {
+			idStr = strings.TrimSpace(c.Query("id"))
+		}
+		if id, err := strconv.ParseUint(idStr, 10, 64); err == nil {
+			request.MessageID = uint(id)
+		}
+	}
+	if request.MessageID == 0 {
+		c.JSON(http.StatusOK, dto.Fail[string](models.InvalidIDMessage))
+		return
+	}
+	if request.PageSize == 0 {
+		if sizeStr := c.Query("pageSize"); sizeStr != "" {
+			if size, err := strconv.Atoi(sizeStr); err == nil {
+				request.PageSize = size
+			}
+		}
+	}
+	if request.AuthorID == nil {
+		if aid := c.Query("authorId"); aid != "" {
+			if v, err := strconv.ParseUint(aid, 10, 64); err == nil {
+				vv := uint(v)
+				request.AuthorID = &vv
+			}
+		}
+	}
+	if request.ExcludeID == nil {
+		if eid := c.Query("excludeId"); eid != "" {
+			if v, err := strconv.ParseUint(eid, 10, 64); err == nil {
+				vv := uint(v)
+				request.ExcludeID = &vv
+			}
+		}
+	}
+	if request.Username == nil {
+		if un := strings.TrimSpace(c.Query("username")); un != "" {
+			request.Username = &un
+		}
+	}
+	if queryDate := strings.TrimSpace(c.Query("date")); queryDate != "" {
+		request.Date = queryDate
+	} else {
+		request.Date = strings.TrimSpace(request.Date)
+	}
+
+	currentUserID, isAdmin := currentMessageViewer(c)
+	location, err := services.LocateMessagePage(request.MessageID, request.PageSize, currentUserID, isAdmin, request.AuthorID, request.Username, &request.Date, request.ExcludeID)
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK(location, models.GetMessagesByPageSuccess))
+}
+
 func GetMessagesByPage(c *gin.Context) {
 	var page, pageSize int = 1, 10
 
@@ -428,6 +488,14 @@ func GetMessagesByPage(c *gin.Context) {
 	if authorID == nil && pageRequest.AuthorID != nil {
 		authorID = pageRequest.AuthorID
 	}
+	if pageRequest.ExcludeID == nil {
+		if eid := c.Query("excludeId"); eid != "" {
+			if v, err := strconv.ParseUint(eid, 10, 64); err == nil {
+				vv := uint(v)
+				pageRequest.ExcludeID = &vv
+			}
+		}
+	}
 	var username *string
 	if un := c.Query("username"); strings.TrimSpace(un) != "" {
 		u := strings.TrimSpace(un)
@@ -443,7 +511,7 @@ func GetMessagesByPage(c *gin.Context) {
 		pageRequest.Date = strings.TrimSpace(pageRequest.Date)
 	}
 
-	pageQueryResult, err := services.GetMessagesByPage(page, pageSize, currentUserID, isAdmin, authorID, username, &pageRequest.Date)
+	pageQueryResult, err := services.GetMessagesByPage(page, pageSize, currentUserID, isAdmin, authorID, username, &pageRequest.Date, pageRequest.ExcludeID)
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
 		return

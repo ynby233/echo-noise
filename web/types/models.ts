@@ -36,12 +36,20 @@ export interface PageQuery {
     authorId?: number;
     username?: string;
     date?: string;
+    excludeId?: number;
 }
 
 export interface PageQueryResult {
     total: number;
     items: Message[];
     page?: number;
+}
+
+export interface MessagePageLocateResult {
+    messageId: number;
+    page: number;
+    pageSize: number;
+    total: number;
 }
 
 // UserToLogin

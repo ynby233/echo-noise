@@ -233,12 +233,45 @@ func TestGetMessagesByPageFiltersByShanghaiDate(t *testing.T) {
 	}
 
 	date := "2026-01-02"
-	result, err := GetMessagesByPage(1, 10, nil, false, nil, nil, &date)
+	result, err := GetMessagesByPage(1, 10, nil, false, nil, nil, &date, nil)
 	if err != nil {
 		t.Fatalf("get messages by date: %v", err)
 	}
 	if result.Total != 1 || len(result.Items) != 1 || result.Items[0].Content != "target-day" {
 		t.Fatalf("date filtered result = total %d items %#v, want only target-day", result.Total, result.Items)
+	}
+}
+
+func TestGetMessagesByPageAndLocateRespectExcludeID(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	alice := mustCreateUser(t, models.User{Username: "exclude-alice", Password: models.HashPassword("alice"), Token: models.GenerateToken(32)})
+	keep := models.Message{Content: "keep", Username: alice.Username, UserID: alice.ID, Visibility: MessageVisibilityPublic}
+	exclude := models.Message{Content: "exclude", Username: alice.Username, UserID: alice.ID, Visibility: MessageVisibilityPublic}
+	if err := db.Create(&keep).Error; err != nil {
+		t.Fatalf("create keep message: %v", err)
+	}
+	if err := db.Create(&exclude).Error; err != nil {
+		t.Fatalf("create excluded message: %v", err)
+	}
+
+	excludeID := exclude.ID
+	result, err := GetMessagesByPage(1, 10, nil, false, nil, nil, nil, &excludeID)
+	if err != nil {
+		t.Fatalf("query page with exclude id: %v", err)
+	}
+	if result.Total != 1 || len(result.Items) != 1 || result.Items[0].ID != keep.ID {
+		t.Fatalf("exclude filtered result = total %d items %#v, want only keep", result.Total, result.Items)
+	}
+
+	location, err := LocateMessagePage(keep.ID, 10, nil, false, nil, nil, nil, &excludeID)
+	if err != nil {
+		t.Fatalf("locate keep with exclude id: %v", err)
+	}
+	if location.Page != 1 || location.Total != 1 {
+		t.Fatalf("location = page %d total %d, want page 1 total 1", location.Page, location.Total)
+	}
+	if _, err := LocateMessagePage(exclude.ID, 10, nil, false, nil, nil, nil, &excludeID); err == nil {
+		t.Fatalf("expected excluded message to be unavailable to locate")
 	}
 }
 
@@ -260,7 +293,7 @@ func TestGetMessagesByPageReturnsViewerLikedState(t *testing.T) {
 		t.Fatalf("create message like: %v", err)
 	}
 
-	result, err := GetMessagesByPage(1, 10, &viewerID, false, nil, nil, nil)
+	result, err := GetMessagesByPage(1, 10, &viewerID, false, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("query page: %v", err)
 	}

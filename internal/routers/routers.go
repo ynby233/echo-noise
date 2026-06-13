@@ -150,9 +150,11 @@ func SetupRouter() *gin.Engine {
 	api.GET("/captcha", controllers.GetCaptcha)
 	// api.GET("/config", controllers.GetFrontendConfig)
 	api.GET("/messages", controllers.GetMessages)
-	api.GET("/messages/:id", controllers.GetMessage)
+	api.POST("/messages/locate", controllers.LocateMessagePage)
+	api.GET("/messages/locate", controllers.LocateMessagePage)
 	api.POST("/messages/page", controllers.GetMessagesByPage)
 	api.GET("/messages/page", controllers.GetMessagesByPage)
+	api.GET("/messages/:id", controllers.GetMessage)
 	api.GET("/messages/calendar", controllers.GetMessagesCalendar) // 新增热力图专用路由
 	api.GET("/messages/search", controllers.SearchMessages)        // 新增搜索消息路由
 	api.GET("/version/check", controllers.CheckVersion)            // 添加版本检查路由

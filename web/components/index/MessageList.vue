@@ -924,6 +924,7 @@ const isBuiltin = computed(() => {
   return true
 })
 const guestbookId = ref<number | null>(null)
+const targetListReady = ref(false)
 const isGuestbookMessage = (m: any) => {
   if (!m) return false
   if (guestbookId.value && m.id === guestbookId.value) return true
@@ -940,28 +941,34 @@ const fetchGuestbookId = async () => {
     }
   } catch {}
 }
-  const getMessageById = (id: number) => (message.messages || []).find((m: any) => Number(m?.id || 0) === Number(id))
-  const loadSingleTargetMessage = async (id: number) => {
-    if (!id) return false
-    if (getMessageById(id)) return true
-    try {
-      const response = await fetch(`${BASE_API}/messages/${id}`, {
-        credentials: 'include',
-        headers: { 'Accept': 'application/json' }
-      })
-      if (!response.ok) return false
-      const data = await response.json()
-      const item = data?.code === 1 ? data.data : null
-      if (!item || isGuestbookMessage(item)) return false
-      message.messages = [item]
-      message.hasMore = false
-      message.page = 1
-      await nextTick()
-      return true
-    } catch {
-      return false
-    }
+const getMessageById = (id: number) => (message.messages || []).find((m: any) => Number(m?.id || 0) === Number(id))
+const applyPageResult = (result: any, targetPage: number) => {
+  if (!result || !Array.isArray(result.items)) return false
+  const items = result.items.filter((m: any) => !isGuestbookMessage(m))
+  message.messages = items
+  message.total = Math.max(0, Number(result.total || 0))
+  message.page = Number((result as any).page || targetPage || 1)
+  message.pageSize = 15
+  const size = Number(message.pageSize || 15)
+  const lastPage = Math.max(1, Math.ceil((message.total || 0) / size))
+  message.hasMore = message.page < lastPage
+  return true
+}
+const loadTargetMessagePage = async (id: number) => {
+  if (!id || !targetListReady.value) return false
+  if (getMessageById(id)) return true
+  try {
+    const location = await message.locateMessagePage({ ...pageQueryFor(1), messageId: id })
+    const targetPage = Number(location?.page || 0)
+    if (targetPage < 1) return false
+    const result = await message.loadMessagePage(pageQueryFor(targetPage))
+    if (!applyPageResult(result, targetPage)) return false
+    await nextTick()
+    return !!getMessageById(id)
+  } catch {
+    return false
   }
+}
 
   const scrollElementToAppFocus = (el: HTMLElement, behavior: ScrollBehavior = 'smooth') => {
     if (typeof document === 'undefined') return
@@ -1011,7 +1018,8 @@ const fetchGuestbookId = async () => {
     if (typeof document === 'undefined') return
     const messageId = Number(props.targetMessageId || 0)
     if (!messageId) return
-    const ok = await loadSingleTargetMessage(messageId)
+    if (!targetListReady.value) return
+    const ok = await loadTargetMessagePage(messageId)
     if (!ok) {
       resetNotificationTargetRetry()
       emit('target-consumed')
@@ -1064,9 +1072,6 @@ const fetchGuestbookId = async () => {
     }
   }
 
-  watch(() => [props.targetMessageId, props.targetCommentId], () => {
-    focusTargetMessageAndComment()
-  }, { immediate: true })
   const userStore = useUserStore();
   const isLogin = computed(() => userStore.isLogin);
   const isPersonalTab = computed(() => props.activeTab === 'personal')
@@ -1081,10 +1086,14 @@ const fetchGuestbookId = async () => {
   })
   const pageQueryFor = (pageNumber: number) => {
     const query: any = { page: pageNumber, pageSize: 15 }
+    if (guestbookId.value) query.excludeId = guestbookId.value
     if (isPersonalTab.value && currentUserId.value) query.authorId = currentUserId.value
     if (/^\d{4}-\d{2}-\d{2}$/.test(String(props.calendarDate || ''))) query.date = props.calendarDate
     return query
   }
+  watch(() => [props.targetMessageId, props.targetCommentId], () => {
+    if (targetListReady.value) focusTargetMessageAndComment()
+  }, { immediate: true })
   const isCurrentUserMessage = (msg: any) => {
     if (!msg || !userStore.isLogin) return false
     const msgUserId = Number(msg?.user_id || msg?.userId || 0)
@@ -1524,16 +1533,7 @@ onMounted(async () => {
         });
         if (response.ok) {
           const data = await response.json();
-          if (data.code === 1 && data.data) {
-            const items = (data.data.items || []).filter((m: any) => !isGuestbookMessage(m));
-            message.messages = items;
-            const totalRaw = data.data.total || 0;
-            const adjustedTotal = totalRaw - (guestbookId.value ? 1 : 0);
-            message.total = Math.max(0, adjustedTotal);
-            const lastPage = Math.max(1, Math.ceil((message.total || 0) / 15));
-            message.page = 1;
-            message.hasMore = message.page < lastPage;
-          }
+          if (data.code === 1 && data.data) applyPageResult(data.data, 1)
         }
       }
     }
@@ -1576,6 +1576,9 @@ onMounted(async () => {
     }
   } finally {
     isPageLoading.value = false
+    targetListReady.value = true
+    await nextTick()
+    if (props.targetMessageId) focusTargetMessageAndComment()
   }
 });
 
@@ -1599,15 +1602,7 @@ watch(() => route.hash, async (newHash) => {
     });
     if (response.ok) {
       const data = await response.json();
-      if (data.code === 1 && data.data) {
-        const items = (data.data.items || []).filter((m: any) => !isGuestbookMessage(m));
-        message.messages = items;
-        const totalRaw = data.data.total || 0;
-        const adjustedTotal = totalRaw - (guestbookId.value ? 1 : 0);
-        message.total = Math.max(0, adjustedTotal);
-        const lastPage = Math.max(1, Math.ceil((message.total || 0) / 15));
-        message.page = 1;
-        message.hasMore = message.page < lastPage;
+      if (data.code === 1 && data.data && applyPageResult(data.data, 1)) {
         expandedCommentsMap.value = {};
         try {
           const tasks = (message.messages || []).filter((m: any) => !isGuestbookMessage(m)).map(async (m: any) => {
@@ -2670,6 +2665,18 @@ onMounted(() => {
   --edit-text: #111827;
   --edit-muted: #64748b;
   --edit-control: #ffffff;
+  --nw-tooltip-bg: rgba(255, 255, 255, 0.96);
+  --nw-tooltip-text: #111827;
+  --nw-tooltip-border: rgba(15, 23, 42, 0.14);
+  --nw-tooltip-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+  --nw-floating-bg: rgba(255, 255, 255, 0.96);
+  --nw-floating-text: #111827;
+  --nw-floating-border: rgba(15, 23, 42, 0.12);
+  --nw-floating-hover-bg: rgba(15, 23, 42, 0.06);
+  --nw-floating-hover-border: rgba(249, 115, 22, 0.34);
+  --nw-floating-selected-bg: rgba(249, 115, 22, 0.14);
+  --nw-floating-selected-border: rgba(249, 115, 22, 0.42);
+  --nw-floating-shadow: 0 18px 36px rgba(15, 23, 42, 0.16);
   width: 100%;
   max-height: min(86vh, 860px);
   display: flex;
@@ -2691,6 +2698,18 @@ onMounted(() => {
   --edit-text: #f8fafc;
   --edit-muted: #94a3b8;
   --edit-control: rgba(15, 23, 42, 0.72);
+  --nw-tooltip-bg: rgba(15, 23, 42, 0.96);
+  --nw-tooltip-text: #f8fafc;
+  --nw-tooltip-border: rgba(255, 255, 255, 0.18);
+  --nw-tooltip-shadow: 0 12px 30px rgba(0, 0, 0, 0.38);
+  --nw-floating-bg: rgba(15, 23, 42, 0.96);
+  --nw-floating-text: #f8fafc;
+  --nw-floating-border: rgba(255, 255, 255, 0.16);
+  --nw-floating-hover-bg: rgba(255, 255, 255, 0.10);
+  --nw-floating-hover-border: rgba(251, 146, 60, 0.42);
+  --nw-floating-selected-bg: rgba(249, 115, 22, 0.24);
+  --nw-floating-selected-border: rgba(251, 146, 60, 0.52);
+  --nw-floating-shadow: 0 18px 38px rgba(0, 0, 0, 0.42);
   box-shadow: 0 22px 54px rgba(2, 6, 23, 0.58);
 }
 

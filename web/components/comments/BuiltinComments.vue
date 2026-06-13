@@ -1375,6 +1375,24 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 .builtin-comments.comment-theme-dark .toolbar-control:focus-within,
 .builtin-comments.comment-theme-dark .comment-tool-btn:hover:not(:disabled),
 .builtin-comments.comment-theme-dark .return-target-btn:hover { transform:translate3d(0,0,0) scale(1.06); background:var(--nw-floating-hover-bg) !important; border-color:var(--nw-floating-hover-border) !important; }
+.builtin-comments.comment-theme-dark .cancel-btn,
+:global(html.dark) .builtin-comments .cancel-btn,
+:global(.dark) .builtin-comments .cancel-btn { background:rgba(255,255,255,0.08) !important; border-color:rgba(255,255,255,0.18) !important; color:#f8fafc !important; }
+.builtin-comments.comment-theme-dark .cancel-btn:hover,
+:global(html.dark) .builtin-comments .cancel-btn:hover,
+:global(.dark) .builtin-comments .cancel-btn:hover { background:rgba(249,115,22,0.18) !important; border-color:rgba(251,146,60,0.42) !important; color:#fff !important; }
+.builtin-comments.comment-theme-dark .clear-action-btn,
+.builtin-comments.comment-theme-dark .clear-action-btn:hover,
+:global(html.dark) .builtin-comments .clear-action-btn,
+:global(html.dark) .builtin-comments .clear-action-btn:hover,
+:global(.dark) .builtin-comments .clear-action-btn,
+:global(.dark) .builtin-comments .clear-action-btn:hover { border-color:rgba(251,146,60,.72) !important; background:linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)) !important; color:#fff !important; }
+.builtin-comments.comment-theme-dark .submit-btn,
+:global(html.dark) .builtin-comments .submit-btn,
+:global(.dark) .builtin-comments .submit-btn { border-color:rgba(96,165,250,.72) !important; background:#2563eb !important; color:#fff !important; }
+.builtin-comments.comment-theme-dark .submit-btn:hover:not(:disabled),
+:global(html.dark) .builtin-comments .submit-btn:hover:not(:disabled),
+:global(.dark) .builtin-comments .submit-btn:hover:not(:disabled) { border-color:rgba(147,197,253,.90) !important; background:#1d4ed8 !important; color:#fff !important; }
 .builtin-comments.comment-theme-dark .comment-visibility-menu { background:var(--nw-floating-bg) !important; color:var(--nw-floating-text) !important; border-color:var(--nw-floating-border) !important; }
 .main-toolbar { margin-bottom:8px; }
 .edit-toolbar { margin-top:2px; }
