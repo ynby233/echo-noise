@@ -20,7 +20,7 @@ let authSyncInFlight: Promise<unknown> | null = null
 let lastAuthSyncAt = 0
 
 const TOOLTIP_SUPPRESSED_CLASS = 'nw-tooltip-suppressed'
-const TOOLTIP_ANCHOR_SELECTOR = '.nw-tooltip-anchor[data-tooltip], .nw-tooltip-anchor[data-label], .vditor-toolbar .vditor-tooltipped[aria-label]'
+const TOOLTIP_ANCHOR_SELECTOR = '[data-tooltip]:not(.nw-tooltip-anchor-local), [data-label]:not(.nw-tooltip-anchor-local), .vditor-tooltipped[aria-label]'
 
 let tooltipEl: HTMLDivElement | null = null
 let tooltipAnchor: HTMLElement | null = null
