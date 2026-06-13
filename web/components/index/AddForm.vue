@@ -23,9 +23,9 @@
           <button type="button" class="tb-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" @click="triggerFileInput"><UIcon name="i-mdi-image-plus-outline" class="w-5 h-5" /></button>
           <!-- 新增图床上传按钮 -->
           <button type="button" class="tb-btn nw-tooltip-anchor" data-tooltip="图床上传" aria-label="图床上传" @click="showImageUploader = true"><UIcon name="i-mdi-cloud-upload-outline" class="w-5 h-5" /></button>
-          <button type="button" class="tb-btn has-label notify-btn nw-tooltip-anchor" :class="{ 'is-enabled': enableNotify }" :data-tooltip="enableNotify ? '推送已开启' : '推送已关闭'" :aria-label="enableNotify ? '推送已开启' : '推送已关闭'" :aria-pressed="enableNotify" @click="toggleNotify">
-            <UIcon :name="enableNotify ? 'i-mdi-bell-ring-outline' : 'i-mdi-bell-off-outline'" class="w-5 h-5" />
-            <span class="notify-label">{{ enableNotify ? '已开' : '已关' }}</span>
+          <button type="button" class="tb-btn has-label notify-btn nw-tooltip-anchor" :class="{ 'is-enabled': enableNotify }" :data-tooltip="enableNotify ? '关闭推送' : '开启推送'" :aria-label="enableNotify ? '关闭推送' : '开启推送'" @click="toggleNotify">
+            <UIcon :name="enableNotify ? 'i-mdi-bell-off-outline' : 'i-mdi-bell-ring-outline'" class="w-5 h-5" />
+            <span class="notify-label">{{ enableNotify ? '关闭' : '开启' }}</span>
           </button>
           <div ref="visibilityControlRef" class="visibility-control nw-tooltip-anchor" :data-tooltip="`可见范围：${visibilityLabel}`">
             <UIcon :name="visibilityIcon" class="w-5 h-5" />
