@@ -1241,8 +1241,7 @@ const replyToCommentById = async (commentId: number) => {
     const fallbackAuthor = String(props.replyCommentAuthor || '').trim()
     if (props.replyInputOnly && fallbackAuthor) {
       startReply(commentId, fallbackAuthor)
-      await nextTick()
-      scrollReplyInputIntoView()
+      await scrollToInput()
       return true
     }
     useToast().add({ title: '评论不可见或已删除', color: 'orange' })

@@ -854,7 +854,7 @@ const focusGuestbookNotificationComment = async (commentId: number) => {
 
 const handleNotificationJump = async (item: NotificationJumpItem) => {
   const messageId = Number(item?.target_message_id || item?.message_id || item?.message?.id || 0)
-  const commentId = Number(item?.target_comment_id || item?.comment_id || 0)
+  const commentId = Number(item?.target_comment_id || 0)
   notificationReturnPending.value = true
   notificationReturnFocusId.value = Number(item?.id || 0) || null
   notificationTargetMessageId.value = messageId || null

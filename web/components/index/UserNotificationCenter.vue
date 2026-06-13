@@ -263,14 +263,14 @@ const targetOwner = (item: UserNotification) => {
 
 const targetFallbackText = (item: UserNotification) => {
   if (item.type === 'like') return '查看被点赞的笔记'
-  if (item.type === 'reply') return '查看被回复的内容'
+  if (item.type === 'reply') return '查看对应回复'
   if (item.type === 'guestbook') return '查看留言'
   return '查看被评论的笔记'
 }
 
 const targetAriaLabel = (item: UserNotification) => {
   if (item.type === 'guestbook') return '查看对应留言位置'
-  if (item.type === 'reply') return '查看被回复内容位置'
+  if (item.type === 'reply') return '查看对应回复位置'
   if (item.type === 'like') return '查看被点赞笔记位置'
   return '查看被评论笔记位置'
 }
@@ -281,23 +281,20 @@ const targetImage = (item: UserNotification) => {
 }
 
 const targetMessageId = (item: UserNotification) => Number(item.message_id || item.comment?.message_id || item.parent_comment?.message_id || item.message?.id || 0)
-const replyCommentId = (item: UserNotification) => Number(item.comment_id || item.comment?.id || 0)
+const targetCommentId = (item: UserNotification) => {
+  if (item.type === 'like') return 0
+  return Number(item.comment_id || item.comment?.id || 0)
+}
+const replyCommentId = (item: UserNotification) => targetCommentId(item)
 const replyCommentAuthor = (item: UserNotification) => item.comment?.user?.username || actorName(item)
 
 const canReply = (item: UserNotification) => {
   return item.type !== 'like' && replyCommentId(item) > 0 && targetMessageId(item) > 0
 }
-const jumpCommentId = (item: UserNotification) => {
-  if (item.type === 'like') return 0
-  if (item.type === 'reply') {
-    return Number(item.comment_id || item.comment?.id || item.parent_comment_id || item.parent_comment?.id || item.comment?.parent_id || 0)
-  }
-  return Number(item.comment_id || item.comment?.id || 0)
-}
 const jumpPayload = (item: UserNotification): NotificationJumpPayload => ({
   ...item,
   target_message_id: targetMessageId(item),
-  target_comment_id: jumpCommentId(item) || null
+  target_comment_id: targetCommentId(item) || null
 })
 
 const scrollInlineReplyIntoView = async (itemId: number) => {
@@ -342,10 +339,9 @@ const matchesInitialTarget = (item: UserNotification) => {
   const messageId = initialMessageId()
   const commentId = initialCommentId()
   if (commentId > 0) {
-    return [item.comment_id, item.parent_comment_id, item.comment?.id, item.parent_comment?.id, item.comment?.parent_id]
-      .some((value) => Number(value || 0) === commentId)
+    return targetCommentId(item) === commentId
   }
-  return messageId > 0 && Number(item.message_id || 0) === messageId
+  return messageId > 0 && targetMessageId(item) === messageId
 }
 
 const scrollElementToAppCenter = (el: HTMLElement) => {
@@ -553,6 +549,21 @@ defineExpose({ refresh: () => loadNotifications(true) })
   --notice-strong: #111827;
   --notice-muted: #6b7280;
   --notice-link: #2563eb;
+  --comment-toolbar-bg: rgba(255, 255, 255, .86);
+  --comment-toolbar-control-bg: rgba(15, 23, 42, .06);
+  --comment-toolbar-control-hover-bg: rgba(15, 23, 42, .12);
+  --comment-toolbar-border: rgba(15, 23, 42, .10);
+  --comment-toolbar-text: #374151;
+  --comment-toolbar-preview-border: rgba(15, 23, 42, .12);
+  --comment-toolbar-preview-bg: rgba(15, 23, 42, .04);
+  --nw-floating-bg: rgba(255, 255, 255, .98);
+  --nw-floating-text: #111827;
+  --nw-floating-border: rgba(15, 23, 42, .12);
+  --nw-floating-shadow: 0 18px 42px rgba(15, 23, 42, .16);
+  --nw-floating-hover-bg: rgba(249, 115, 22, .12);
+  --nw-floating-hover-border: rgba(249, 115, 22, .36);
+  --nw-floating-selected-bg: rgba(249, 115, 22, .18);
+  --nw-floating-selected-border: rgba(249, 115, 22, .48);
 }
 :global(.dark) .notification-center,
 .notification-center.notification-theme-dark {
@@ -565,6 +576,21 @@ defineExpose({ refresh: () => loadNotifications(true) })
   --notice-strong: #f8fafc;
   --notice-muted: #94a3b8;
   --notice-link: #93c5fd;
+  --comment-toolbar-bg: rgba(39, 50, 66, .68);
+  --comment-toolbar-control-bg: rgba(255, 255, 255, .06);
+  --comment-toolbar-control-hover-bg: rgba(255, 255, 255, .12);
+  --comment-toolbar-border: rgba(255, 255, 255, .12);
+  --comment-toolbar-text: #cbd5e1;
+  --comment-toolbar-preview-border: rgba(255, 255, 255, .16);
+  --comment-toolbar-preview-bg: rgba(255, 255, 255, .06);
+  --nw-floating-bg: rgba(15, 23, 42, .98);
+  --nw-floating-text: #f8fafc;
+  --nw-floating-border: rgba(255, 255, 255, .18);
+  --nw-floating-shadow: 0 18px 42px rgba(0, 0, 0, .42);
+  --nw-floating-hover-bg: rgba(249, 115, 22, .18);
+  --nw-floating-hover-border: rgba(249, 115, 22, .42);
+  --nw-floating-selected-bg: rgba(249, 115, 22, .30);
+  --nw-floating-selected-border: rgba(251, 146, 60, .58);
   box-shadow:0 14px 28px rgba(2,6,23,.42);
   backdrop-filter:blur(8px) saturate(118%);
   -webkit-backdrop-filter:blur(8px) saturate(118%);
@@ -615,7 +641,7 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .inline-reply-box :deep(.waline-wrapper) { padding-left:0; padding-right:0; background:transparent !important; }
 .inline-reply-box :deep(.reply-input-only) { padding-top:0; padding-bottom:0; }
 .inline-reply-box :deep(.reply-input-only .space-y-4) { margin-top:0; }
-.inline-reply-box :deep(.reply-input-only .comment-input-card) { background:var(--notice-input); }
+.inline-reply-box :deep(.reply-input-only .comment-input-card) { padding:10px; border:1px solid var(--notice-border); border-radius:12px; background:var(--notice-input); }
 .empty-state { min-height:220px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; text-align:center; padding:24px; border:1px solid var(--notice-border); background:var(--notice-card); color:var(--notice-text); border-radius:12px; }
 .empty-state.compact { min-height:220px; border:0; background:transparent; }
 .error-state .empty-icon { color:#ef4444; opacity:.82; }

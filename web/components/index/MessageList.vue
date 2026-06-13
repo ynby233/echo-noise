@@ -151,11 +151,11 @@
                   </UButton>
                   <div class="message-toolbox overlay" v-show="openToolboxId === msg.id">
                     <div class="tool-icons">
-                      <div v-if="messageVisibility(msg) !== 'public'" class="tool-icon nw-tooltip-anchor" :data-label="messageVisibilityLabel(messageVisibility(msg))"><UIcon :name="messageVisibilityIcon(messageVisibility(msg))" /></div>
-                      <div v-if="canPin(msg)" class="tool-icon nw-tooltip-anchor" :data-label="(msg.pinned ? '取消置顶' : '置顶内容')" @click="togglePin(msg)"><UIcon :name="msg.pinned ? 'i-mdi-pin' : 'i-mdi-pin-outline'" /></div>
-                      <div v-if="isLogin" class="tool-icon nw-tooltip-anchor" data-label="编辑" @click="editMessage(msg)"><UIcon name="i-mdi-pencil-outline" /></div>
-                      <div class="tool-icon nw-tooltip-anchor" data-label="复制" @click="copyContent(msg.content)"><UIcon name="i-mdi-content-copy" /></div>
-                      <div v-if="isLogin" class="tool-icon nw-tooltip-anchor" data-label="删除" @click="deleteMsg(msg.id)"><UIcon name="i-mdi-trash-can-outline" /></div>
+                      <div v-if="messageVisibility(msg) !== 'public'" class="tool-icon nw-tooltip-anchor" :data-tooltip="messageVisibilityLabel(messageVisibility(msg))"><UIcon :name="messageVisibilityIcon(messageVisibility(msg))" /></div>
+                      <div v-if="canPin(msg)" class="tool-icon nw-tooltip-anchor" :data-tooltip="(msg.pinned ? '取消置顶' : '置顶内容')" @click="togglePin(msg)"><UIcon :name="msg.pinned ? 'i-mdi-pin' : 'i-mdi-pin-outline'" /></div>
+                      <div v-if="isLogin" class="tool-icon nw-tooltip-anchor" data-tooltip="编辑" @click="editMessage(msg)"><UIcon name="i-mdi-pencil-outline" /></div>
+                      <div class="tool-icon nw-tooltip-anchor" data-tooltip="复制" @click="copyContent(msg.content)"><UIcon name="i-mdi-content-copy" /></div>
+                      <div v-if="isLogin" class="tool-icon nw-tooltip-anchor" data-tooltip="删除" @click="deleteMsg(msg.id)"><UIcon name="i-mdi-trash-can-outline" /></div>
                   </div>
                   </div>
                 </div>
@@ -266,7 +266,7 @@
         <div class="edit-modal-title-block">
           <h3 class="edit-modal-title">编辑内容</h3>
         </div>
-        <button type="button" class="edit-icon-button nw-tooltip-anchor" data-tooltip="关闭" aria-label="关闭" @click="showEditModal = false">
+        <button type="button" class="edit-icon-button" aria-label="关闭" @click="showEditModal = false">
           <UIcon name="i-mdi-close" class="w-5 h-5" />
         </button>
       </div>
@@ -281,43 +281,56 @@
         />
 
         <div class="edit-toolbar">
-          <button
-            type="button"
-            class="edit-tool-button nw-tooltip-anchor"
-            data-tooltip="添加图片"
-            :disabled="isEditUploading"
-            @click="triggerEditMediaInput('image')"
-          >
-            <UIcon :name="editUploadKind === 'image' ? 'i-mdi-loading' : 'i-mdi-image-plus-outline'" class="w-5 h-5" :class="{ 'edit-spin': editUploadKind === 'image' }" />
-            <span>添加图片</span>
-          </button>
-          <button
-            type="button"
-            class="edit-tool-button nw-tooltip-anchor"
-            data-tooltip="添加视频"
-            :disabled="isEditUploading"
-            @click="triggerEditMediaInput('video')"
-          >
-            <UIcon :name="editUploadKind === 'video' ? 'i-mdi-loading' : 'i-mdi-video-plus-outline'" class="w-5 h-5" :class="{ 'edit-spin': editUploadKind === 'video' }" />
-            <span>添加视频</span>
-          </button>
-          <label class="edit-tool-select">
-            <UIcon :name="messageVisibilityIcon(editingVisibility)" class="w-5 h-5" />
-            <select v-model="editingVisibility" class="edit-setting-control" aria-label="可见范围">
-              <option v-for="option in messageVisibilityOptions" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
-          </label>
-          <label v-if="canEditPublishTime(editingMessage)" class="edit-tool-date">
-            <UIcon name="i-mdi-calendar-clock-outline" class="w-5 h-5" />
-            <input
-              v-model="editingPublishedAtInput"
-              type="datetime-local"
-              class="edit-setting-control"
-              aria-label="发布时间"
-            />
-          </label>
+          <div class="edit-toolbar-left">
+            <button
+              type="button"
+              class="tb-btn nw-tooltip-anchor"
+              data-tooltip="上传图片"
+              aria-label="上传图片"
+              :disabled="isEditUploading"
+              @click="triggerEditMediaInput('image')"
+            >
+              <UIcon :name="editUploadKind === 'image' ? 'i-mdi-loading' : 'i-mdi-image-plus-outline'" class="w-5 h-5" :class="{ 'edit-spin': editUploadKind === 'image' }" />
+            </button>
+            <button
+              type="button"
+              class="tb-btn nw-tooltip-anchor"
+              data-tooltip="上传视频"
+              aria-label="上传视频"
+              :disabled="isEditUploading"
+              @click="triggerEditMediaInput('video')"
+            >
+              <UIcon :name="editUploadKind === 'video' ? 'i-mdi-loading' : 'i-mdi-video-plus-outline'" class="w-5 h-5" :class="{ 'edit-spin': editUploadKind === 'video' }" />
+            </button>
+            <div ref="editVisibilityControlRef" class="visibility-control nw-tooltip-anchor" :data-tooltip="`可见范围：${editVisibilityLabel}`">
+              <UIcon :name="editVisibilityIcon" class="w-5 h-5" />
+              <button
+                type="button"
+                class="visibility-trigger"
+                aria-label="选择可见范围"
+                aria-haspopup="listbox"
+                :aria-expanded="showEditVisibilityMenu"
+                @click.stop="toggleEditVisibilityMenu"
+              >
+                <span>{{ editVisibilityLabel }}</span>
+                <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
+              </button>
+            </div>
+            <div v-if="canEditPublishTime(editingMessage)" ref="editPublishTimeControlRef" class="publish-time-control nw-tooltip-anchor" :data-tooltip="editPublishTimeLabel === '选择时间' ? '自定义发布时间' : `发布时间：${editPublishTimeLabel}`">
+              <UIcon name="i-mdi-calendar-clock-outline" class="w-5 h-5" />
+              <button
+                type="button"
+                class="publish-time-trigger"
+                aria-label="选择发布时间"
+                aria-haspopup="dialog"
+                :aria-expanded="showEditPublishDateMenu"
+                @click.stop="toggleEditPublishDateMenu"
+              >
+                <span>{{ editPublishTimeLabel }}</span>
+                <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
+              </button>
+            </div>
+          </div>
         </div>
 
         <span v-if="isEditUploading" class="edit-upload-status">{{ editUploadLabel }} {{ editUploadProgress }}%</span>
@@ -339,6 +352,152 @@
       </div>
     </div>
   </UModal>
+
+  <Teleport to="body">
+    <div
+      v-if="showEditVisibilityMenu"
+      ref="editVisibilityMenuRef"
+      class="floating-control-menu visibility-floating-menu nw-floating-menu"
+      :style="editVisibilityMenuStyle"
+      role="listbox"
+      @mousedown.stop
+    >
+      <button
+        v-for="option in messageVisibilityOptions"
+        :key="option.value"
+        type="button"
+        class="floating-control-option nw-floating-option"
+        :class="{ 'is-selected': option.value === editingVisibility }"
+        role="option"
+        :aria-selected="option.value === editingVisibility"
+        @click="selectEditVisibility(option.value)"
+      >
+        <UIcon :name="option.icon" class="w-4 h-4" />
+        <span>{{ option.label }}</span>
+      </button>
+    </div>
+  </Teleport>
+
+  <Teleport to="body">
+    <div
+      v-if="showEditPublishDateMenu"
+      ref="editPublishDateMenuRef"
+      class="floating-control-menu publish-datetime-menu nw-floating-menu"
+      :style="editPublishDateMenuStyle"
+      role="dialog"
+      aria-label="发布时间选择"
+      @mousedown.stop
+    >
+      <div class="publish-date-head">
+        <button type="button" class="floating-icon-btn" aria-label="上个月" @click="moveEditPublishMonth(-1)">
+          <UIcon name="i-heroicons-chevron-left" class="w-4 h-4" />
+        </button>
+        <div class="publish-date-picker-controls" aria-label="选择年月">
+          <button
+            ref="editPublishYearPickerButton"
+            type="button"
+            class="publish-date-title publish-picker-trigger"
+            aria-label="选择年份"
+            aria-haspopup="listbox"
+            :aria-expanded="openEditPublishPicker === 'year'"
+            @click.stop="toggleEditPublishPicker('year')"
+          >
+            <span>{{ editPublishPickerMonth.getFullYear() }}年</span>
+            <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
+          </button>
+          <button
+            ref="editPublishMonthPickerButton"
+            type="button"
+            class="publish-date-title publish-picker-trigger"
+            aria-label="选择月份"
+            aria-haspopup="listbox"
+            :aria-expanded="openEditPublishPicker === 'month'"
+            @click.stop="toggleEditPublishPicker('month')"
+          >
+            <span>{{ editPublishPickerMonth.getMonth() + 1 }}月</span>
+            <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
+          </button>
+        </div>
+        <button type="button" class="floating-icon-btn" aria-label="下个月" @click="moveEditPublishMonth(1)">
+          <UIcon name="i-heroicons-chevron-right" class="w-4 h-4" />
+        </button>
+      </div>
+      <div class="publish-date-weekdays">
+        <span v-for="label in editPublishWeekLabels" :key="label">{{ label }}</span>
+      </div>
+      <div class="publish-date-grid">
+        <button
+          v-for="day in editPublishPickerDays"
+          :key="day.key"
+          type="button"
+          class="publish-date-day"
+          :class="{
+            'is-muted': !day.inMonth,
+            'is-today': day.isToday,
+            'is-selected': day.selected
+          }"
+          @click="selectEditPublishDay(day)"
+        >
+          {{ day.day }}
+        </button>
+      </div>
+      <div class="publish-time-panel">
+        <div ref="editPublishHourColumnRef" class="publish-time-column" aria-label="小时">
+          <button
+            v-for="hour in editPublishHourOptions"
+            :key="hour"
+            type="button"
+            class="publish-time-option"
+            :class="{ 'is-selected': hour === editPublishDraftHour }"
+            @click="setEditPublishHour(hour)"
+          >
+            {{ pad2(hour) }}
+          </button>
+        </div>
+        <div ref="editPublishMinuteColumnRef" class="publish-time-column" aria-label="分钟">
+          <button
+            v-for="minute in editPublishMinuteOptions"
+            :key="minute"
+            type="button"
+            class="publish-time-option"
+            :class="{ 'is-selected': minute === editPublishDraftMinute }"
+            @click="setEditPublishMinute(minute)"
+          >
+            {{ pad2(minute) }}
+          </button>
+        </div>
+      </div>
+      <div class="publish-date-actions">
+        <button type="button" class="floating-action-btn" @click="clearEditPublishDate">清除</button>
+        <button type="button" class="floating-action-btn primary" @click="useEditPublishNow">现在</button>
+      </div>
+    </div>
+  </Teleport>
+
+  <Teleport to="body">
+    <div
+      v-if="openEditPublishPicker"
+      ref="editPublishPickerMenuRef"
+      class="publish-picker-floating-menu nw-floating-menu"
+      :class="`is-${openEditPublishPicker}`"
+      :style="editPublishPickerMenuStyle"
+      role="listbox"
+      @mousedown.stop
+    >
+      <button
+        v-for="option in editPublishPickerOptions"
+        :key="option.value"
+        type="button"
+        class="publish-picker-floating-option nw-floating-option"
+        :class="{ 'is-selected': option.selected }"
+        role="option"
+        :aria-selected="option.selected"
+        @click="selectEditPublishPickerValue(option.value)"
+      >
+        {{ option.label }}
+      </button>
+    </div>
+  </Teleport>
   </div>
 </template>
 
@@ -1626,6 +1785,357 @@ const editUploadProgress = ref(0);
 const editUploadKind = ref<'image' | 'video' | ''>('');
 const editUploadLabel = ref('');
 const isEditUploading = computed(() => editUploadProgress.value > 0);
+const editVisibilityLabel = computed(() => messageVisibilityLabel(editingVisibility.value));
+const editVisibilityIcon = computed(() => messageVisibilityIcon(editingVisibility.value));
+const showEditVisibilityMenu = ref(false);
+const showEditPublishDateMenu = ref(false);
+type EditPublishPickerType = 'year' | 'month';
+type EditPublishDateDay = {
+  key: string;
+  date: string;
+  day: number;
+  inMonth: boolean;
+  isToday: boolean;
+  selected: boolean;
+};
+const EDIT_PUBLISH_MIN_YEAR = 1971;
+const EDIT_PUBLISH_MAX_YEAR = 2099;
+const editPublishYearOptions = Array.from({ length: EDIT_PUBLISH_MAX_YEAR - EDIT_PUBLISH_MIN_YEAR + 1 }, (_, index) => EDIT_PUBLISH_MIN_YEAR + index);
+const editPublishMonthOptions = Array.from({ length: 12 }, (_, index) => index + 1);
+const editPublishWeekLabels = ['一', '二', '三', '四', '五', '六', '日'];
+const editPublishHourOptions = Array.from({ length: 24 }, (_, index) => index);
+const editPublishMinuteOptions = Array.from({ length: 60 }, (_, index) => index);
+const openEditPublishPicker = ref<EditPublishPickerType | ''>('');
+const editVisibilityControlRef = ref<HTMLElement | null>(null);
+const editVisibilityMenuRef = ref<HTMLElement | null>(null);
+const editPublishTimeControlRef = ref<HTMLElement | null>(null);
+const editPublishDateMenuRef = ref<HTMLElement | null>(null);
+const editPublishYearPickerButton = ref<HTMLElement | null>(null);
+const editPublishMonthPickerButton = ref<HTMLElement | null>(null);
+const editPublishPickerMenuRef = ref<HTMLElement | null>(null);
+const editPublishHourColumnRef = ref<HTMLElement | null>(null);
+const editPublishMinuteColumnRef = ref<HTMLElement | null>(null);
+const editVisibilityMenuStyle = ref<Record<string, string>>({});
+const editPublishDateMenuStyle = ref<Record<string, string>>({});
+const editPublishPickerMenuStyle = ref<Record<string, string>>({});
+const editPublishPickerMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+const editPublishDraftDate = ref('');
+const editPublishDraftHour = ref(0);
+const editPublishDraftMinute = ref(0);
+const pad2 = (value: number) => String(value).padStart(2, '0');
+const formatEditLocalDate = (date: Date) => `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+const formatEditDatetimeLocal = (date: string, hour: number, minute: number) => `${date}T${pad2(hour)}:${pad2(minute)}`;
+const parseEditDatetimeLocal = (value: string) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(String(value || '').trim());
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  if (Number.isNaN(date.getTime()) || hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return { date, dateText: formatEditLocalDate(date), hour, minute };
+};
+const editPublishTimeLabel = computed(() => {
+  const parsed = parseEditDatetimeLocal(editingPublishedAtInput.value);
+  if (!parsed) return '选择时间';
+  return `${parsed.dateText} ${pad2(parsed.hour)}:${pad2(parsed.minute)}`;
+});
+const editPublishPickerOptions = computed(() => {
+  if (openEditPublishPicker.value === 'year') {
+    return editPublishYearOptions.map((year) => ({ value: year, label: `${year}年`, selected: year === editPublishPickerMonth.value.getFullYear() }));
+  }
+  if (openEditPublishPicker.value === 'month') {
+    const current = editPublishPickerMonth.value.getMonth() + 1;
+    return editPublishMonthOptions.map((month) => ({ value: month, label: `${month}月`, selected: month === current }));
+  }
+  return [];
+});
+const editPublishPickerDays = computed<EditPublishDateDay[]>(() => {
+  const first = new Date(editPublishPickerMonth.value.getFullYear(), editPublishPickerMonth.value.getMonth(), 1);
+  const startOffset = (first.getDay() + 6) % 7;
+  const todayText = formatEditLocalDate(new Date());
+  const days: EditPublishDateDay[] = [];
+  for (let index = 0; index < 42; index += 1) {
+    const date = new Date(first.getFullYear(), first.getMonth(), 1 - startOffset + index);
+    const value = formatEditLocalDate(date);
+    days.push({
+      key: value,
+      date: value,
+      day: date.getDate(),
+      inMonth: date.getMonth() === first.getMonth(),
+      isToday: value === todayText,
+      selected: value === editPublishDraftDate.value
+    });
+  }
+  return days;
+});
+
+type EditFloatingMenuPlacement = 'below' | 'above-right';
+const clampEditFloatingValue = (value: number, min: number, max: number) => Math.min(Math.max(value, min), Math.max(min, max));
+const getEditFixedCoordinateScale = () => {
+  if (typeof window === 'undefined') return 1;
+  const zoom = Number.parseFloat(window.getComputedStyle(document.body).zoom || '1');
+  return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+};
+const getEditFixedViewport = (scale: number) => {
+  const viewport = window.visualViewport;
+  const left = (viewport?.offsetLeft || 0) / scale;
+  const top = (viewport?.offsetTop || 0) / scale;
+  const width = (viewport?.width || window.innerWidth) / scale;
+  const height = (viewport?.height || window.innerHeight) / scale;
+  return { left, top, right: left + width, bottom: top + height };
+};
+const getEditFixedRect = (element: HTMLElement, scale: number) => {
+  const rect = element.getBoundingClientRect();
+  const viewport = window.visualViewport;
+  const offsetLeft = viewport?.offsetLeft || 0;
+  const offsetTop = viewport?.offsetTop || 0;
+  return {
+    left: (rect.left + offsetLeft) / scale,
+    right: (rect.right + offsetLeft) / scale,
+    top: (rect.top + offsetTop) / scale,
+    bottom: (rect.bottom + offsetTop) / scale,
+    width: rect.width / scale,
+    height: rect.height / scale
+  };
+};
+const positionEditFloatingMenu = (
+  trigger: HTMLElement | null,
+  menu: HTMLElement | null,
+  styleRef: { value: Record<string, string> },
+  minWidth = 120,
+  placement: EditFloatingMenuPlacement = 'below'
+) => {
+  if (!trigger || typeof window === 'undefined') return;
+  const scale = getEditFixedCoordinateScale();
+  const rect = getEditFixedRect(trigger, scale);
+  const viewport = getEditFixedViewport(scale);
+  const menuWidth = Math.max(menu?.offsetWidth || minWidth, minWidth, rect.width);
+  const menuHeight = menu?.offsetHeight || 180;
+  const pad = 8;
+  const gap = 4;
+  const minLeft = viewport.left + pad;
+  const maxLeft = Math.max(minLeft, viewport.right - menuWidth - pad);
+  const idealLeft = placement === 'above-right' ? rect.right - menuWidth : rect.left + rect.width / 2 - menuWidth / 2;
+  const aboveTop = rect.top - menuHeight - gap;
+  const belowTop = rect.bottom + gap;
+  const minTop = viewport.top + pad;
+  const maxTop = Math.max(minTop, viewport.bottom - menuHeight - pad);
+  const idealTop = placement === 'above-right' && aboveTop >= minTop ? aboveTop : belowTop;
+  styleRef.value = {
+    position: 'fixed',
+    left: `${clampEditFloatingValue(idealLeft, minLeft, maxLeft)}px`,
+    top: `${clampEditFloatingValue(idealTop, minTop, maxTop)}px`,
+    right: 'auto',
+    bottom: 'auto',
+    transform: 'none',
+    minWidth: `${Math.max(minWidth, rect.width)}px`
+  };
+};
+const scheduleEditFloatingMenuPosition = (positioner: () => void) => {
+  positioner();
+  if (typeof window !== 'undefined') {
+    window.requestAnimationFrame(() => {
+      positioner();
+      window.requestAnimationFrame(positioner);
+    });
+  }
+};
+const scrollEditSelectedOptionToRow = (container: HTMLElement | null, selector: string, rowIndex = 0) => {
+  const selected = container?.querySelector<HTMLElement>(selector);
+  if (!container || !selected || typeof window === 'undefined') return;
+  const optionSelector = selector.replace('.is-selected', '');
+  const options = Array.from(container.querySelectorAll<HTMLElement>(optionSelector));
+  const selectedIndex = options.indexOf(selected);
+  if (selectedIndex < 0) return;
+  const style = window.getComputedStyle(container);
+  const gap = Number.parseFloat(style.rowGap || style.gap || '0');
+  const paddingTop = Number.parseFloat(style.paddingTop || '0');
+  const step = selected.offsetHeight + (Number.isFinite(gap) ? gap : 0);
+  const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+  const target = paddingTop + selectedIndex * step - step * Math.max(0, rowIndex);
+  container.scrollTop = clampEditFloatingValue(target, 0, maxScrollTop);
+};
+const scrollEditPublishPickerSelectionToTop = () => {
+  scrollEditSelectedOptionToRow(editPublishPickerMenuRef.value, '.publish-picker-floating-option.is-selected');
+};
+const scrollEditPublishTimeSelectionToSecondRow = () => {
+  scrollEditSelectedOptionToRow(editPublishHourColumnRef.value, '.publish-time-option.is-selected', 1);
+  scrollEditSelectedOptionToRow(editPublishMinuteColumnRef.value, '.publish-time-option.is-selected', 1);
+};
+const closeEditFloatingMenus = () => {
+  showEditVisibilityMenu.value = false;
+  showEditPublishDateMenu.value = false;
+  openEditPublishPicker.value = '';
+};
+const positionEditVisibilityMenu = () => positionEditFloatingMenu(editVisibilityControlRef.value, editVisibilityMenuRef.value, editVisibilityMenuStyle, 106, 'above-right');
+const positionEditPublishDateMenu = () => positionEditFloatingMenu(editPublishTimeControlRef.value, editPublishDateMenuRef.value, editPublishDateMenuStyle, 292, 'above-right');
+const positionEditPublishPickerMenu = () => {
+  if (!openEditPublishPicker.value || typeof window === 'undefined') return;
+  const trigger = openEditPublishPicker.value === 'year' ? editPublishYearPickerButton.value : editPublishMonthPickerButton.value;
+  if (!trigger) return;
+  const scale = getEditFixedCoordinateScale();
+  const rect = getEditFixedRect(trigger, scale);
+  const viewport = getEditFixedViewport(scale);
+  const menu = editPublishPickerMenuRef.value;
+  const menuWidth = Math.ceil(rect.width);
+  const menuHeight = menu?.offsetHeight || (openEditPublishPicker.value === 'year' ? 204 : 167);
+  const pad = 8;
+  const gap = 4;
+  const minLeft = viewport.left + pad;
+  const maxLeft = Math.max(minLeft, viewport.right - menuWidth - pad);
+  const idealLeft = rect.left + rect.width / 2 - menuWidth / 2;
+  const minTop = viewport.top + pad;
+  const maxTop = Math.max(minTop, viewport.bottom - menuHeight - pad);
+  const belowTop = rect.bottom + gap;
+  const aboveTop = rect.top - menuHeight - gap;
+  const idealTop = belowTop + menuHeight <= viewport.bottom - pad ? belowTop : (aboveTop >= minTop ? aboveTop : belowTop);
+  editPublishPickerMenuStyle.value = {
+    position: 'fixed',
+    left: `${clampEditFloatingValue(idealLeft, minLeft, maxLeft)}px`,
+    top: `${clampEditFloatingValue(idealTop, minTop, maxTop)}px`,
+    right: 'auto',
+    bottom: 'auto',
+    transform: 'none',
+    width: `${menuWidth}px`,
+    minWidth: `${menuWidth}px`,
+    visibility: 'visible'
+  };
+};
+const toggleEditVisibilityMenu = async () => {
+  showEditPublishDateMenu.value = false;
+  openEditPublishPicker.value = '';
+  showEditVisibilityMenu.value = !showEditVisibilityMenu.value;
+  if (showEditVisibilityMenu.value) {
+    await nextTick();
+    scheduleEditFloatingMenuPosition(positionEditVisibilityMenu);
+  }
+};
+const selectEditVisibility = (value: MessageVisibility) => {
+  editingVisibility.value = value;
+  showEditVisibilityMenu.value = false;
+};
+const syncEditPublishDraftFromInput = () => {
+  const parsed = parseEditDatetimeLocal(editingPublishedAtInput.value);
+  const base = parsed || (() => {
+    const now = new Date();
+    return { date: now, dateText: formatEditLocalDate(now), hour: now.getHours(), minute: now.getMinutes() };
+  })();
+  editPublishPickerMonth.value = new Date(base.date.getFullYear(), base.date.getMonth(), 1);
+  editPublishDraftDate.value = base.dateText;
+  editPublishDraftHour.value = base.hour;
+  editPublishDraftMinute.value = base.minute;
+};
+const applyEditPublishDraft = () => {
+  if (!editPublishDraftDate.value) return;
+  editingPublishedAtInput.value = formatEditDatetimeLocal(editPublishDraftDate.value, editPublishDraftHour.value, editPublishDraftMinute.value);
+};
+const toggleEditPublishDateMenu = async () => {
+  showEditVisibilityMenu.value = false;
+  openEditPublishPicker.value = '';
+  showEditPublishDateMenu.value = !showEditPublishDateMenu.value;
+  if (showEditPublishDateMenu.value) {
+    syncEditPublishDraftFromInput();
+    await nextTick();
+    scrollEditPublishTimeSelectionToSecondRow();
+    scheduleEditFloatingMenuPosition(positionEditPublishDateMenu);
+  }
+};
+const toggleEditPublishPicker = async (type: EditPublishPickerType) => {
+  openEditPublishPicker.value = openEditPublishPicker.value === type ? '' : type;
+  if (openEditPublishPicker.value) {
+    editPublishPickerMenuStyle.value = {
+      position: 'fixed',
+      left: '0px',
+      top: '0px',
+      right: 'auto',
+      bottom: 'auto',
+      visibility: 'hidden'
+    };
+    await nextTick();
+    scrollEditPublishPickerSelectionToTop();
+    scheduleEditFloatingMenuPosition(positionEditPublishPickerMenu);
+  }
+};
+const selectEditPublishPickerValue = (value: number) => {
+  if (openEditPublishPicker.value === 'year' && Number.isFinite(value)) {
+    editPublishPickerMonth.value = new Date(value, editPublishPickerMonth.value.getMonth(), 1);
+  } else if (openEditPublishPicker.value === 'month' && Number.isFinite(value)) {
+    editPublishPickerMonth.value = new Date(editPublishPickerMonth.value.getFullYear(), value - 1, 1);
+  }
+  openEditPublishPicker.value = '';
+  nextTick(() => scheduleEditFloatingMenuPosition(positionEditPublishDateMenu));
+};
+const moveEditPublishMonth = (delta: number) => {
+  editPublishPickerMonth.value = new Date(editPublishPickerMonth.value.getFullYear(), editPublishPickerMonth.value.getMonth() + delta, 1);
+  nextTick(() => scheduleEditFloatingMenuPosition(positionEditPublishDateMenu));
+};
+const selectEditPublishDay = (day: EditPublishDateDay) => {
+  editPublishDraftDate.value = day.date;
+  if (!day.inMonth) {
+    const parsed = new Date(`${day.date}T00:00:00`);
+    if (!Number.isNaN(parsed.getTime())) editPublishPickerMonth.value = new Date(parsed.getFullYear(), parsed.getMonth(), 1);
+  }
+  applyEditPublishDraft();
+};
+const setEditPublishHour = (hour: number) => {
+  editPublishDraftHour.value = hour;
+  applyEditPublishDraft();
+};
+const setEditPublishMinute = (minute: number) => {
+  editPublishDraftMinute.value = minute;
+  applyEditPublishDraft();
+};
+const useEditPublishNow = () => {
+  const now = new Date();
+  editPublishPickerMonth.value = new Date(now.getFullYear(), now.getMonth(), 1);
+  editPublishDraftDate.value = formatEditLocalDate(now);
+  editPublishDraftHour.value = now.getHours();
+  editPublishDraftMinute.value = now.getMinutes();
+  applyEditPublishDraft();
+  showEditPublishDateMenu.value = false;
+  openEditPublishPicker.value = '';
+};
+const clearEditPublishDate = () => {
+  editingPublishedAtInput.value = '';
+  showEditPublishDateMenu.value = false;
+  openEditPublishPicker.value = '';
+};
+const handleEditFloatingMenuPointerDown = (event: MouseEvent | PointerEvent) => {
+  if (!showEditVisibilityMenu.value && !showEditPublishDateMenu.value && !openEditPublishPicker.value) return;
+  const target = event.target as Node | null;
+  if (!target) return;
+  if (editVisibilityControlRef.value?.contains(target) || editVisibilityMenuRef.value?.contains(target)) return;
+  if (editPublishTimeControlRef.value?.contains(target) || editPublishDateMenuRef.value?.contains(target)) return;
+  if (editPublishYearPickerButton.value?.contains(target) || editPublishMonthPickerButton.value?.contains(target) || editPublishPickerMenuRef.value?.contains(target)) return;
+  closeEditFloatingMenus();
+};
+const handleEditFloatingMenuViewportChange = () => {
+  if (showEditVisibilityMenu.value) positionEditVisibilityMenu();
+  if (showEditPublishDateMenu.value) positionEditPublishDateMenu();
+  if (openEditPublishPicker.value) positionEditPublishPickerMenu();
+};
+
+onMounted(() => {
+  try {
+    document.addEventListener('pointerdown', handleEditFloatingMenuPointerDown, true);
+    window.addEventListener('resize', handleEditFloatingMenuViewportChange);
+    window.addEventListener('scroll', handleEditFloatingMenuViewportChange, true);
+    window.visualViewport?.addEventListener('resize', handleEditFloatingMenuViewportChange);
+    window.visualViewport?.addEventListener('scroll', handleEditFloatingMenuViewportChange);
+  } catch {}
+});
+onBeforeUnmount(() => {
+  try {
+    document.removeEventListener('pointerdown', handleEditFloatingMenuPointerDown, true);
+    window.removeEventListener('resize', handleEditFloatingMenuViewportChange);
+    window.removeEventListener('scroll', handleEditFloatingMenuViewportChange, true);
+    window.visualViewport?.removeEventListener('resize', handleEditFloatingMenuViewportChange);
+    window.visualViewport?.removeEventListener('scroll', handleEditFloatingMenuViewportChange);
+  } catch {}
+});
+watch(showEditModal, (visible) => {
+  if (!visible) closeEditFloatingMenus();
+});
 
 const getEditTextareaElement = (): HTMLTextAreaElement | null => {
   const target = editTextareaRef.value as any
@@ -2155,7 +2665,6 @@ onMounted(() => {
 .edit-modal-title { margin: 0; font-size: 17px; line-height: 1.35; font-weight: 700; color: var(--edit-text); }
 
 .edit-icon-button,
-.edit-tool-button,
 .edit-footer-button {
   border: 1px solid var(--edit-border);
   background: var(--edit-control);
@@ -2186,8 +2695,6 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  flex-wrap: wrap;
-  gap: 8px;
   min-height: 48px;
   padding: 8px;
   border: 1px solid var(--edit-border);
@@ -2195,41 +2702,118 @@ onMounted(() => {
   background: var(--edit-panel);
 }
 
-.edit-tool-button,
-.edit-tool-select,
-.edit-tool-date {
-  min-height: 34px;
+.edit-toolbar-left {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.edit-modal-shell .tb-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  padding: 0 12px;
-  border: 1px solid var(--edit-border);
-  border-radius: 10px;
-  background: var(--edit-control);
-  color: var(--edit-text);
-  font-size: 13px;
+  flex: 0 0 auto;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.06);
+  color: #374151;
+  box-shadow: none;
+  transition: background-color .18s ease, transform .18s ease, border-color .18s ease, box-shadow .18s ease, opacity .18s ease;
+}
+
+.edit-modal-shell .tb-btn:hover:not(:disabled) {
+  transform: translate3d(0,0,0) scale(1.06);
+  border-color: var(--nw-floating-hover-border);
+  background: var(--nw-floating-hover-bg);
+}
+
+.edit-modal-shell .tb-btn:disabled {
+  cursor: not-allowed;
+  opacity: .58;
+}
+
+.edit-modal-shell .visibility-control,
+.edit-modal-shell .publish-time-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 36px;
+  min-height: 36px;
+  width: max-content;
+  max-width: min(210px, calc(100vw - 32px));
+  padding: 0 8px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.06);
+  color: #374151;
+  box-shadow: none;
+  transition: background-color .18s ease, border-color .18s ease, transform .18s ease;
+}
+
+.edit-modal-shell .visibility-control:hover,
+.edit-modal-shell .visibility-control:focus-within,
+.edit-modal-shell .publish-time-control:hover,
+.edit-modal-shell .publish-time-control:focus-within {
+  transform: translate3d(0,0,0) scale(1.06);
+  border-color: var(--nw-floating-hover-border);
+  background: var(--nw-floating-hover-bg);
+}
+
+.edit-modal-shell .visibility-trigger,
+.edit-modal-shell .publish-time-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 3px;
+  min-width: 0;
+  max-width: 148px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
   font-weight: 650;
   line-height: 1;
-  transition: background-color .18s ease, border-color .18s ease, color .18s ease, transform .18s ease, opacity .18s ease;
+  outline: none;
 }
 
-.edit-tool-button {
+.edit-modal-shell .visibility-trigger span,
+.edit-modal-shell .publish-time-trigger span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edit-modal-shell .visibility-trigger svg,
+.edit-modal-shell .publish-time-trigger svg {
   flex: 0 0 auto;
+  opacity: .72;
 }
 
-.edit-tool-select,
-.edit-tool-date {
-  flex: 1 1 170px;
-  min-width: 150px;
-  max-width: 260px;
-  padding-right: 8px;
+:global(html.dark) .edit-modal-shell .tb-btn,
+:global(html.dark) .edit-modal-shell .visibility-control,
+:global(html.dark) .edit-modal-shell .publish-time-control {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #cbd5e1;
+}
+
+:global(html.dark) .edit-modal-shell .tb-btn:hover:not(:disabled),
+:global(html.dark) .edit-modal-shell .visibility-control:hover,
+:global(html.dark) .edit-modal-shell .visibility-control:focus-within,
+:global(html.dark) .edit-modal-shell .publish-time-control:hover,
+:global(html.dark) .edit-modal-shell .publish-time-control:focus-within {
+  border-color: var(--nw-floating-hover-border);
+  background: var(--nw-floating-hover-bg);
 }
 
 .edit-icon-button:hover:not(:disabled),
-.edit-tool-button:hover:not(:disabled),
-.edit-tool-select:hover,
-.edit-tool-date:hover,
 .edit-footer-button:hover:not(:disabled) {
   transform: translate3d(0,0,0) scale(1.03);
   border-color: var(--nw-floating-hover-border, var(--edit-border));
@@ -2237,7 +2821,6 @@ onMounted(() => {
 }
 
 .edit-icon-button:disabled,
-.edit-tool-button:disabled,
 .edit-footer-button:disabled {
   cursor: not-allowed;
   opacity: .58;
@@ -2269,31 +2852,97 @@ onMounted(() => {
 }
 
 .edit-content-textarea::placeholder { color: var(--edit-muted); }
-.edit-content-textarea:focus,
-.edit-setting-control:focus {
+.edit-content-textarea:focus {
   border-color: rgba(249, 115, 22, 0.62);
   box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.16);
 }
 
-.edit-setting-control {
-  width: 100%;
-  min-width: 0;
-  min-height: 32px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--edit-text);
-  padding: 0;
-  font-size: 13px;
-  font-weight: 650;
-  outline: none;
-  color-scheme: light;
-  transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
+.floating-control-menu {
+  position: fixed;
+  z-index: 5004;
+  border: 1px solid var(--nw-floating-border);
+  border-radius: 12px;
+  background: var(--nw-floating-bg);
+  color: var(--nw-floating-text);
+  box-shadow: var(--nw-floating-shadow);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
-:global(html.dark) .edit-setting-control { color-scheme: dark; }
-.edit-setting-control option { color: #111827; background: #ffffff; }
-:global(html.dark) .edit-setting-control option { color: #f8fafc; background: #0f172a; }
+.visibility-floating-menu { display: grid; gap: 4px; padding: 8px; }
+
+.floating-control-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  text-align: left;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.floating-control-option:hover,
+.floating-control-option:focus-visible {
+  outline: none;
+  border-color: var(--nw-floating-hover-border);
+  background: var(--nw-floating-hover-bg);
+}
+
+.floating-control-option.is-selected {
+  border-color: var(--nw-floating-selected-border);
+  background: var(--nw-floating-selected-bg);
+  color: var(--nw-floating-text);
+}
+
+.publish-datetime-menu { width: 292px; padding: 10px; }
+.publish-date-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.publish-date-picker-controls { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; }
+.publish-date-title { font-size: 13px; font-weight: 700; color: inherit; }
+.publish-picker-trigger { min-height: 28px; padding: 0 7px; border-radius: 8px; border: 1px solid transparent; background: rgba(15,23,42,0.04); display: inline-flex; align-items: center; justify-content: center; gap: 3px; white-space: nowrap; }
+.publish-picker-trigger:hover,
+.publish-picker-trigger:focus-visible { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); outline: none; }
+.publish-picker-trigger:first-child { width: 75px; }
+.publish-picker-trigger:last-child { width: 50px; }
+.floating-icon-btn { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid var(--nw-floating-border); background: rgba(15,23,42,0.04); color: inherit; }
+.floating-icon-btn:hover { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
+.publish-picker-floating-menu { position: fixed; z-index: 5005; box-sizing: border-box; display: grid; gap: 4px; max-height: 204px; overflow-y: auto; padding: 8px; border: 1px solid var(--nw-floating-border); border-radius: 10px; background: var(--nw-floating-bg); color: var(--nw-floating-text); box-shadow: var(--nw-floating-shadow); scrollbar-width: none; }
+.publish-picker-floating-menu::-webkit-scrollbar { width: 0; height: 0; }
+.publish-picker-floating-menu.is-month { gap: 3px; max-height: 167px; padding: 4px; }
+.publish-picker-floating-option { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; min-height: 28px; min-width: 0; width: 100%; padding: 0 6px; border-radius: 8px; border: 1px solid transparent; color: inherit; font-size: 12px; font-weight: 650; line-height: 1; text-align: center; white-space: nowrap; transition: background-color .15s ease, border-color .15s ease, color .15s ease; }
+.publish-picker-floating-menu.is-month .publish-picker-floating-option { min-height: 24px; padding: 0 4px; }
+.publish-picker-floating-option:hover,
+.publish-picker-floating-option:focus-visible { outline: none; border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
+.publish-picker-floating-option.is-selected { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
+.publish-date-weekdays,
+.publish-date-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.publish-date-weekdays { margin-bottom: 4px; color: rgba(71,85,105,0.72); font-size: 10px; font-weight: 700; text-align: center; }
+.publish-date-day { height: 28px; border-radius: 8px; border: 1px solid transparent; background: rgba(15,23,42,0.05); color: var(--nw-floating-text); font-size: 12px; line-height: 1; }
+.publish-date-day:hover { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
+.publish-date-day.is-muted { opacity: .38; }
+.publish-date-day.is-today { border-color: rgba(96,165,250,0.68); background: rgba(59,130,246,0.22); }
+.publish-date-day.is-selected { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
+.publish-time-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.publish-time-column { box-sizing: border-box; display: grid; grid-auto-rows: 28px; gap: 4px; height: 124px; max-height: 124px; overflow-y: auto; padding: 0; border-radius: 10px; background: rgba(15,23,42,0.06); scrollbar-width: none; }
+.publish-time-column::-webkit-scrollbar { width: 0; height: 0; }
+.publish-time-option { box-sizing: border-box; border-radius: 7px; border: 1px solid transparent; color: inherit; font-size: 12px; font-weight: 650; }
+.publish-time-option:hover { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
+.publish-time-option.is-selected { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
+.publish-date-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.floating-action-btn { height: 30px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--nw-floating-border); background: rgba(15,23,42,0.04); color: inherit; font-size: 12px; font-weight: 650; }
+.floating-action-btn:hover { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
+.floating-action-btn.primary { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
+
+:global(html.dark) .floating-icon-btn,
+:global(html.dark) .floating-action-btn,
+:global(html.dark) .publish-picker-trigger { background: rgba(255,255,255,0.06); }
+:global(html.dark) .publish-date-weekdays { color: rgba(226,232,240,0.66); }
+:global(html.dark) .publish-date-day { background: rgba(255,255,255,0.06); }
+:global(html.dark) .publish-time-column { background: rgba(15,23,42,0.46); }
 
 .edit-preview-block {
   border-top: 1px solid var(--edit-border);
@@ -2360,9 +3009,9 @@ onMounted(() => {
   .edit-modal-body,
   .edit-modal-footer { padding-left: 12px; padding-right: 12px; }
   .edit-toolbar { align-items: stretch; }
-  .edit-tool-button,
-  .edit-tool-select,
-  .edit-tool-date { flex: 1 1 calc(50% - 4px); max-width: none; }
+  .edit-toolbar-left { width: 100%; }
+  .edit-modal-shell .visibility-control,
+  .edit-modal-shell .publish-time-control { flex: 1 1 150px; max-width: none; }
   .edit-modal-footer { justify-content: stretch; }
   .edit-footer-button { flex: 1 1 0; }
 }
@@ -2577,11 +3226,6 @@ onMounted(() => {
 }
 
 .tool-icon > * { color: currentColor; }
-.tool-icon::after { content: attr(data-label); position: absolute; left: 50%; top: calc(100% + 6px); transform: translateX(-50%); white-space: nowrap; font-size: 12px; padding: 2px 8px; border-radius: 9999px; opacity: 0; transition: opacity .12s ease; pointer-events: none; }
-:global(html:not(.dark)) .tool-icon::after { background: #ffffff; color: #111827; border: 1px solid rgba(0,0,0,0.12); box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-:global(html.dark) .tool-icon::after { background: var(--home-surface-dark-elevated); color: #ffffff; border: 1px solid rgba(255,255,255,0.16); box-shadow: 0 2px 8px rgba(255,255,255,0.06); }
-.tool-icon:hover::after { opacity: 1; }
-.tool-icon.nw-tooltip-suppressed::after { opacity: 0 !important; }
 .toolbox-dark { background: var(--home-surface-dark-elevated); border: 1px solid rgba(255,255,255,0.16); }
 .toolbox-light { background: #fff; border: 1px solid rgba(0,0,0,0.08); }
 

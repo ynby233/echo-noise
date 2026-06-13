@@ -413,6 +413,9 @@ onBeforeUnmount(() => {
   --calendar-control-bg: rgba(148, 163, 184, 0.08);
   --calendar-control-bg-hover: rgba(249, 115, 22, 0.12);
   --calendar-control-text: rgba(30, 41, 59, 0.88);
+  --calendar-weekday-text: rgba(71, 85, 105, 0.86);
+  --calendar-day-text: rgba(30, 41, 59, 0.88);
+  --calendar-muted-day-text: rgba(100, 116, 139, 0.62);
   --calendar-option-bg: #1f2937;
 }
 
@@ -432,6 +435,9 @@ onBeforeUnmount(() => {
   --calendar-control-bg: rgba(255, 255, 255, 0.075);
   --calendar-control-bg-hover: rgba(249, 115, 22, 0.20);
   --calendar-control-text: rgba(248, 250, 252, 0.86);
+  --calendar-weekday-text: rgba(226, 232, 240, 0.72);
+  --calendar-day-text: rgba(248, 250, 252, 0.88);
+  --calendar-muted-day-text: rgba(203, 213, 225, 0.50);
 }
 
 :global(html.dark) .calendar-today,
@@ -518,10 +524,10 @@ onBeforeUnmount(() => {
 
 .calendar-weekdays {
   margin-bottom: 3px;
-  color: rgba(100, 116, 139, 0.85);
+  color: var(--calendar-weekday-text);
   font-size: 10px;
   font-weight: 600;
-  opacity: 0.66;
+  opacity: 0.78;
   text-align: center;
 }
 
@@ -535,7 +541,7 @@ onBeforeUnmount(() => {
   border-radius: 6px;
   border: 1px solid transparent;
   background: rgba(148, 163, 184, 0.08);
-  color: inherit;
+  color: var(--calendar-day-text);
   font-size: 11px;
   line-height: 1;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
@@ -547,7 +553,7 @@ onBeforeUnmount(() => {
 }
 
 .calendar-day.is-muted {
-  opacity: 0.36;
+  color: var(--calendar-muted-day-text);
 }
 
 .calendar-day.is-today {

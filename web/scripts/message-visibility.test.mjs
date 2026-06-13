@@ -60,8 +60,13 @@ assert.match(
 
 assert.match(
   messageList,
-  /<select\s+[\s\S]*v-model="editingVisibility"[\s\S]*aria-label="可见范围"/,
-  'edit dialog must render a visibility selector'
+  /class="visibility-trigger"[\s\S]*aria-label="选择可见范围"[\s\S]*editVisibilityLabel/,
+  'edit dialog must render the shared visibility trigger'
+)
+assert.match(
+  messageList,
+  /floating-control-menu visibility-floating-menu[\s\S]*v-for="option in messageVisibilityOptions"[\s\S]*selectEditVisibility\(option\.value\)/,
+  'edit dialog must render the shared visibility menu options'
 )
 assert.match(
   messageList,
