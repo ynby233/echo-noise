@@ -432,6 +432,13 @@ onBeforeUnmount(() => {
   --calendar-control-text: rgba(248, 250, 252, 0.86);
 }
 
+:global(html.dark) .calendar-today,
+:global(html.dark) .calendar-clear,
+:global(html.dark) .calendar-scope,
+:global(html.dark) .calendar-select {
+  color: var(--calendar-control-text) !important;
+}
+
 .calendar-picker {
   display: inline-flex;
   align-items: center;
