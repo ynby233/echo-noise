@@ -1,6 +1,7 @@
 <template>
   <div 
-    class="fixed z-[5000] bg-black/80 backdrop-blur-sm rounded-lg shadow-lg p-4 text-white"
+    class="image-hosting-popup fixed z-[5000] backdrop-blur-sm rounded-lg shadow-lg p-4"
+    :class="{ 'is-dark': isContentDark }"
     :style="getPopupPosition"
     @mousedown="startDrag"
     @touchstart="startDrag"
@@ -145,7 +146,7 @@
         </UButton>
       </div>
       
-      <div class="flex flex-col items-center justify-center border-2 border-dashed border-gray-500 rounded-lg p-4 cursor-pointer hover:border-blue-400 transition-colors"
+      <div class="image-drop-zone flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-4 cursor-pointer transition-colors"
            @click="triggerFileInput"
            @dragover.prevent="isDragging = true"
            @dragleave.prevent="isDragging = false"
@@ -162,7 +163,7 @@
         <UIcon 
           v-if="!isUploading && !previewUrl" 
           name="i-heroicons-cloud-arrow-up" 
-          class="w-10 h-10 text-gray-400 mb-2" 
+          class="image-drop-icon w-10 h-10 mb-2"
         />
         <img 
           v-if="previewUrl && !isUploading" 
@@ -175,10 +176,10 @@
           color="blue" 
           class="w-full mb-2" 
         />
-        <p v-if="!isUploading && !previewUrl" class="text-sm text-gray-300">
+        <p v-if="!isUploading && !previewUrl" class="image-helper-text text-sm">
           点击或拖拽图片到此处上传
         </p>
-        <p v-if="isUploading" class="text-sm text-gray-300">
+        <p v-if="isUploading" class="image-helper-text text-sm">
           上传中... {{ uploadProgress }}%
         </p>
       </div>
@@ -201,12 +202,12 @@
       </div>
          
       <div v-if="uploadedUrl" class="mt-2">
-        <div class="flex items-center gap-2 bg-gray-800 p-2 rounded">
+        <div class="image-url-row flex items-center gap-2 p-2 rounded">
           <input 
             type="text" 
             :value="uploadedUrl" 
             readonly 
-            class="bg-transparent flex-1 text-sm outline-none"
+            class="image-url-input bg-transparent flex-1 text-sm outline-none"
           />
           <UButton 
             icon="i-heroicons-clipboard" 
@@ -232,7 +233,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, type CSSProperties } from 'vue';
+import { ref, computed, watch, onMounted, inject, type CSSProperties, type Ref } from 'vue';
 import { useToast, useRuntimeConfig } from '#imports';
 import { writeClipboardText } from '~/utils/clipboard';
 
@@ -332,6 +333,8 @@ const stopDrag = () => {
 
 const emit = defineEmits(['close', 'upload-success', 'update:position']);
 const toast = useToast();
+const contentTheme = inject<Ref<string>>('contentTheme', ref('light'));
+const isContentDark = computed(() => contentTheme.value === 'dark');
 
 // 状态变量
 const selectedHost = ref('github');
@@ -989,23 +992,79 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.fixed {
+.image-hosting-popup {
   position: fixed !important;
+  border: 1px solid var(--nw-floating-border);
+  background: var(--nw-floating-bg);
+  color: var(--nw-floating-text);
+  box-shadow: var(--nw-floating-shadow);
+}
+
+.image-hosting-popup.is-dark {
+  --nw-floating-bg: rgba(15, 23, 42, 0.94);
+  --nw-floating-text: #f8fafc;
+  --nw-floating-border: rgba(255, 255, 255, 0.18);
+  --nw-floating-shadow: 0 18px 46px rgba(0, 0, 0, 0.42);
+  --nw-floating-hover-bg: rgba(249, 115, 22, 0.22);
+  --nw-floating-hover-border: rgba(251, 146, 60, 0.44);
+}
+
+.image-hosting-popup:not(.is-dark) {
+  --nw-floating-bg: rgba(255, 255, 255, 0.98);
+  --nw-floating-text: #111827;
+  --nw-floating-border: rgba(15, 23, 42, 0.14);
+  --nw-floating-shadow: 0 18px 46px rgba(15, 23, 42, 0.16);
+}
+
+.image-hosting-popup :deep(input),
+.image-hosting-popup :deep(textarea),
+.image-hosting-popup :deep(select) {
+  color: var(--nw-floating-text) !important;
+}
+
+.image-hosting-popup :deep(input::placeholder),
+.image-hosting-popup :deep(textarea::placeholder) {
+  color: color-mix(in srgb, var(--nw-floating-text) 54%, transparent) !important;
+}
+
+.image-drop-zone {
+  border-color: color-mix(in srgb, var(--nw-floating-text) 28%, transparent);
+  background: color-mix(in srgb, var(--nw-floating-bg) 74%, transparent);
+}
+
+.image-drop-zone:hover,
+.image-drop-zone.border-blue-400 {
+  border-color: rgba(59, 130, 246, 0.82) !important;
+  background: rgba(59, 130, 246, 0.10);
+}
+
+.image-drop-icon,
+.image-helper-text {
+  color: color-mix(in srgb, var(--nw-floating-text) 68%, transparent);
+}
+
+.image-url-row {
+  border: 1px solid color-mix(in srgb, var(--nw-floating-text) 18%, transparent);
+  background: color-mix(in srgb, var(--nw-floating-text) 8%, transparent);
+}
+
+.image-url-input {
+  color: var(--nw-floating-text);
 }
 
 .ih-close-btn {
-  color: #f8fafc !important;
-  background: rgba(255, 255, 255, 0.14) !important;
-  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  color: var(--nw-floating-text) !important;
+  background: color-mix(in srgb, var(--nw-floating-text) 10%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--nw-floating-text) 22%, transparent) !important;
 }
 
 .ih-close-btn:hover {
-  color: #ffffff !important;
-  background: rgba(255, 255, 255, 0.24) !important;
+  color: var(--nw-floating-text) !important;
+  background: color-mix(in srgb, var(--nw-floating-text) 16%, transparent) !important;
 }
 
 @media (max-width: 768px) {
-  .fixed {
+  .image-hosting-popup {
     max-height: 90vh;
     overflow-y: auto;
   }

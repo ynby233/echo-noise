@@ -285,8 +285,16 @@ const targetCommentId = (item: UserNotification) => {
   if (item.type === 'like') return 0
   return Number(item.comment_id || item.comment?.id || 0)
 }
-const replyCommentId = (item: UserNotification) => targetCommentId(item)
-const replyCommentAuthor = (item: UserNotification) => item.comment?.user?.username || actorName(item)
+const replyCommentId = (item: UserNotification) => {
+  if (item.type === 'reply') {
+    return Number(item.parent_comment_id || item.parent_comment?.id || item.comment?.parent_id || item.comment_id || item.comment?.id || 0)
+  }
+  return targetCommentId(item)
+}
+const replyCommentAuthor = (item: UserNotification) => {
+  if (item.type === 'reply') return item.parent_comment?.user?.username || item.comment?.user?.username || actorName(item)
+  return item.comment?.user?.username || actorName(item)
+}
 
 const canReply = (item: UserNotification) => {
   return item.type !== 'like' && replyCommentId(item) > 0 && targetMessageId(item) > 0

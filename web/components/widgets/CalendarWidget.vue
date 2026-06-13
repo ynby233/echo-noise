@@ -1,5 +1,5 @@
 <template>
-  <div class="calendar-widget">
+  <div class="calendar-widget" :class="{ 'calendar-theme-dark': isDarkTheme }">
     <div class="calendar-head">
       <button type="button" class="calendar-nav" aria-label="上个月" @click="moveMonth(-1)">
         <UIcon name="i-heroicons-chevron-left" class="w-4 h-4" />
@@ -94,7 +94,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRuntimeConfig } from '#imports'
 import { useUserStore } from '~/store/user'
 
@@ -132,6 +132,8 @@ const emit = defineEmits<{
 
 const baseApi = (useRuntimeConfig().public.baseApi || '/api').replace(/\/$/, '')
 const userStore = useUserStore()
+const contentTheme = inject('contentTheme', ref('light')) as { value: string }
+const isDarkTheme = computed(() => contentTheme.value === 'dark')
 const weekLabels = ['一', '二', '三', '四', '五', '六', '日']
 const loading = ref(false)
 const countMap = ref<Record<string, number>>({})
@@ -431,6 +433,7 @@ onBeforeUnmount(() => {
   margin-bottom: 5px;
 }
 
+.calendar-widget.calendar-theme-dark,
 :global(html.dark) .calendar-widget {
   --calendar-control-bg: rgba(255, 255, 255, 0.075);
   --calendar-control-bg-hover: rgba(249, 115, 22, 0.20);
@@ -440,6 +443,10 @@ onBeforeUnmount(() => {
   --calendar-muted-day-text: rgba(203, 213, 225, 0.50);
 }
 
+.calendar-widget.calendar-theme-dark .calendar-today,
+.calendar-widget.calendar-theme-dark .calendar-clear,
+.calendar-widget.calendar-theme-dark .calendar-scope,
+.calendar-widget.calendar-theme-dark .calendar-select,
 :global(html.dark) .calendar-today,
 :global(html.dark) .calendar-clear,
 :global(html.dark) .calendar-scope,
@@ -508,6 +515,7 @@ onBeforeUnmount(() => {
   border-radius: 6px;
   border: 0;
   background: var(--calendar-control-bg);
+  color: var(--calendar-control-text);
   transition: background-color 0.15s ease;
 }
 

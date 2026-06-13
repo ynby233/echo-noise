@@ -244,7 +244,7 @@
 </div>
   <!-- 编辑对话框 -->
   <UModal v-model="showEditModal" :ui="{ width: 'sm:max-w-3xl' }">
-    <div class="edit-modal-shell">
+    <div class="edit-modal-shell" :class="{ 'is-dark': isContentDark }">
       <input
         ref="editImageInputRef"
         type="file"
@@ -803,9 +803,10 @@ const outerContainerClass = computed(() => props.wide ? 'flex-grow w-full px-1 s
 const innerContainerClass = computed(() => props.wide ? '' : 'mx-auto sm:max-w-4xl')
 // 独立的内容主题（与页面主题解耦）
 const contentTheme = inject('contentTheme', ref<string>(typeof window !== 'undefined' ? (localStorage.getItem('contentTheme') || 'dark') : 'dark'))
-const listThemeClass = computed(() => contentTheme.value === 'dark' ? 'bg-[var(--home-surface-dark)] text-white' : 'bg-white text-black')
-const listThemeTextClass = computed(() => contentTheme.value === 'dark' ? 'text-white' : 'text-black')
-const gradientClass = computed(() => contentTheme.value === 'dark' ? 'from-[var(--home-surface-dark)] via-[rgba(32,42,54,0.82)] to-transparent' : 'from-[rgba(255,255,255,1)] via-[rgba(255,255,255,0.8)] to-transparent')
+const isContentDark = computed(() => contentTheme.value === 'dark')
+const listThemeClass = computed(() => isContentDark.value ? 'bg-[var(--home-surface-dark)] text-white' : 'bg-white text-black')
+const listThemeTextClass = computed(() => isContentDark.value ? 'text-white' : 'text-black')
+const gradientClass = computed(() => isContentDark.value ? 'from-[var(--home-surface-dark)] via-[rgba(32,42,54,0.82)] to-transparent' : 'from-[rgba(255,255,255,1)] via-[rgba(255,255,255,0.8)] to-transparent')
 const useWaline = computed(() => {
   return false
 })
@@ -979,12 +980,38 @@ const fetchGuestbookId = async () => {
     window.setTimeout(() => scrollElementToAppFocus(el, 'smooth'), 260)
   }
 
+  let notificationTargetRetryTimer: ReturnType<typeof window.setTimeout> | null = null
+  let notificationTargetRetryKey = ''
+  let notificationTargetRetryCount = 0
+  const resetNotificationTargetRetry = () => {
+    if (notificationTargetRetryTimer) window.clearTimeout(notificationTargetRetryTimer)
+    notificationTargetRetryTimer = null
+    notificationTargetRetryKey = ''
+    notificationTargetRetryCount = 0
+  }
+  const scheduleNotificationTargetRetry = (key: string) => {
+    if (notificationTargetRetryKey !== key) {
+      notificationTargetRetryKey = key
+      notificationTargetRetryCount = 0
+    }
+    if (notificationTargetRetryCount >= 6) return false
+    notificationTargetRetryCount += 1
+    if (notificationTargetRetryTimer) window.clearTimeout(notificationTargetRetryTimer)
+    notificationTargetRetryTimer = window.setTimeout(() => {
+      notificationTargetRetryTimer = null
+      focusTargetMessageAndComment()
+    }, 360)
+    return true
+  }
+  onBeforeUnmount(resetNotificationTargetRetry)
+
   const focusTargetMessageAndComment = async () => {
     if (typeof document === 'undefined') return
     const messageId = Number(props.targetMessageId || 0)
     if (!messageId) return
     const ok = await loadSingleTargetMessage(messageId)
     if (!ok) {
+      resetNotificationTargetRetry()
       emit('target-consumed')
       return
     }
@@ -997,13 +1024,16 @@ const fetchGuestbookId = async () => {
     }
 
     const commentId = Number(props.targetCommentId || 0)
+    const targetKey = `${messageId}:${commentId || 0}`
     if (!commentId) {
+      resetNotificationTargetRetry()
       emit('target-consumed')
       return
     }
     expandedCommentsMap.value[messageId] = true
     await nextTick()
     if (await focusBuiltinTargetComment(messageId, commentId)) {
+      resetNotificationTargetRetry()
       emit('target-consumed')
       return
     }
@@ -1013,12 +1043,16 @@ const fetchGuestbookId = async () => {
         stabilizeNotificationTargetScroll(commentEl)
         commentEl.classList.add('notification-comment-highlight')
         window.setTimeout(() => commentEl.classList.remove('notification-comment-highlight'), 2200)
+        resetNotificationTargetRetry()
         emit('target-consumed')
         return
       }
       await new Promise((resolve) => window.setTimeout(resolve, 160))
     }
-    emit('target-consumed')
+    if (!scheduleNotificationTargetRetry(targetKey)) {
+      resetNotificationTargetRetry()
+      emit('target-consumed')
+    }
   }
 
   watch(() => [props.targetMessageId, props.targetCommentId], () => {
@@ -2639,7 +2673,8 @@ onMounted(() => {
   box-shadow: 0 18px 44px rgba(15, 23, 42, 0.18);
 }
 
-:global(html.dark) .edit-modal-shell {
+:global(html.dark) .edit-modal-shell,
+.edit-modal-shell.is-dark {
   --edit-border: rgba(255, 255, 255, 0.14);
   --edit-surface: #0f172a;
   --edit-panel: rgba(255, 255, 255, 0.055);
@@ -2796,18 +2831,26 @@ onMounted(() => {
   opacity: .72;
 }
 
+.edit-modal-shell.is-dark .tb-btn,
 :global(html.dark) .edit-modal-shell .tb-btn,
+.edit-modal-shell.is-dark .visibility-control,
 :global(html.dark) .edit-modal-shell .visibility-control,
+.edit-modal-shell.is-dark .publish-time-control,
 :global(html.dark) .edit-modal-shell .publish-time-control {
   border-color: rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.06);
   color: #cbd5e1;
 }
 
+.edit-modal-shell.is-dark .tb-btn:hover:not(:disabled),
 :global(html.dark) .edit-modal-shell .tb-btn:hover:not(:disabled),
+.edit-modal-shell.is-dark .visibility-control:hover,
 :global(html.dark) .edit-modal-shell .visibility-control:hover,
+.edit-modal-shell.is-dark .visibility-control:focus-within,
 :global(html.dark) .edit-modal-shell .visibility-control:focus-within,
+.edit-modal-shell.is-dark .publish-time-control:hover,
 :global(html.dark) .edit-modal-shell .publish-time-control:hover,
+.edit-modal-shell.is-dark .publish-time-control:focus-within,
 :global(html.dark) .edit-modal-shell .publish-time-control:focus-within {
   border-color: var(--nw-floating-hover-border);
   background: var(--nw-floating-hover-bg);
@@ -2833,6 +2876,7 @@ onMounted(() => {
   color: rgb(234, 88, 12);
 }
 
+.edit-modal-shell.is-dark .edit-upload-status,
 :global(html.dark) .edit-upload-status { color: rgb(251, 146, 60); }
 
 .edit-content-textarea {
