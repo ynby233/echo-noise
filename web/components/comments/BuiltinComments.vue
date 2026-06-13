@@ -1238,8 +1238,8 @@ const focusCommentById = async (commentId: number) => {
 const replyToCommentById = async (commentId: number) => {
   await load()
   if (!await revealComment(commentId)) {
-    const fallbackAuthor = String(props.replyCommentAuthor || '').trim()
-    if (props.replyInputOnly && fallbackAuthor) {
+    if (props.replyInputOnly) {
+      const fallbackAuthor = String(props.replyCommentAuthor || '').trim() || '用户'
       startReply(commentId, fallbackAuthor)
       await scrollToInput()
       return true
@@ -1253,10 +1253,15 @@ const replyToCommentById = async (commentId: number) => {
   return true
 }
 
-watch(() => props.replyCommentId, async (value) => {
-  const commentId = Number(value || 0)
-  if (!commentId) return
+const applyReplyInputTarget = async () => {
+  const commentId = Number(props.replyCommentId || 0)
+  if (!props.replyInputOnly || !commentId || !canComment.value) return
+  if (replyTo.value === commentId) return
   await replyToCommentById(commentId)
+}
+
+watch(() => [props.replyCommentId, canComment.value, props.replyInputOnly], () => {
+  applyReplyInputTarget()
 }, { immediate: true })
 
 defineExpose({ load, focusCommentById, replyToCommentById })

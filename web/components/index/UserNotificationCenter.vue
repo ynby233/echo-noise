@@ -126,6 +126,7 @@ import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } fr
 import { useUserStore } from '~/store/user'
 import { getRequest, putRequest } from '~/utils/api'
 import { resolveMediaURL } from '~/utils/media-url'
+import BuiltinComments from '~/components/comments/BuiltinComments.vue'
 
 type NotificationActor = {
   id: number

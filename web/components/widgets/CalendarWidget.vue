@@ -447,11 +447,22 @@ onBeforeUnmount(() => {
 .calendar-widget.calendar-theme-dark .calendar-clear,
 .calendar-widget.calendar-theme-dark .calendar-scope,
 .calendar-widget.calendar-theme-dark .calendar-select,
-:global(html.dark) .calendar-today,
-:global(html.dark) .calendar-clear,
-:global(html.dark) .calendar-scope,
-:global(html.dark) .calendar-select {
+.calendar-widget.calendar-theme-dark .calendar-nav,
+.calendar-widget.calendar-theme-dark .calendar-weekdays,
+.calendar-widget.calendar-theme-dark .calendar-day,
+:global(html.dark) .calendar-widget .calendar-today,
+:global(html.dark) .calendar-widget .calendar-clear,
+:global(html.dark) .calendar-widget .calendar-scope,
+:global(html.dark) .calendar-widget .calendar-select,
+:global(html.dark) .calendar-widget .calendar-nav,
+:global(html.dark) .calendar-widget .calendar-weekdays,
+:global(html.dark) .calendar-widget .calendar-day {
   color: var(--calendar-control-text) !important;
+}
+
+.calendar-widget.calendar-theme-dark .calendar-day.is-muted,
+:global(html.dark) .calendar-widget .calendar-day.is-muted {
+  color: var(--calendar-muted-day-text) !important;
 }
 
 .calendar-picker {

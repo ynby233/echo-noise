@@ -344,16 +344,7 @@ watch(() => props.theme, (newTheme) => {
   overflow: auto;
 }
 .vditor-tip, .vditor-tooltip { position: fixed; z-index: 10000; }
-.vditor-toolbar .vditor-tooltipped::after {
-  padding: 6px 8px !important;
-  color: var(--nw-tooltip-text) !important;
-  background: var(--nw-tooltip-bg) !important;
-  border: 1px solid var(--nw-tooltip-border) !important;
-  border-radius: 6px !important;
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12) !important;
-  font-size: 12px !important;
-  line-height: 1.2 !important;
-}
+.vditor-toolbar .vditor-tooltipped::after,
 .vditor-toolbar .vditor-tooltipped::before {
   content: none !important;
   display: none !important;

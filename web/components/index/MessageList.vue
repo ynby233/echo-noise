@@ -909,7 +909,9 @@ const builtinCommentsRefFor = (messageId: number) => (instance: unknown) => setB
 const focusBuiltinTargetComment = async (messageId: number, commentId: number) => {
   for (let i = 0; i < 10; i += 1) {
     const thread = builtinCommentsRefs.value[messageId]
-    if (thread?.focusCommentById) return await thread.focusCommentById(commentId)
+    if (thread?.focusCommentById) {
+      if (await thread.focusCommentById(commentId)) return true
+    }
     await new Promise((resolve) => window.setTimeout(resolve, 140))
   }
   return false
@@ -1033,6 +1035,13 @@ const fetchGuestbookId = async () => {
     expandedCommentsMap.value[messageId] = true
     await nextTick()
     if (await focusBuiltinTargetComment(messageId, commentId)) {
+      await nextTick()
+      const commentEl = document.querySelector(`.content-container[data-msg-id="${messageId}"] [data-comment-id="${commentId}"]`) as HTMLElement | null
+      if (commentEl) {
+        stabilizeNotificationTargetScroll(commentEl)
+        commentEl.classList.add('notification-comment-highlight')
+        window.setTimeout(() => commentEl.classList.remove('notification-comment-highlight'), 2200)
+      }
       resetNotificationTargetRetry()
       emit('target-consumed')
       return
@@ -2753,10 +2762,10 @@ onMounted(() => {
   width: 36px;
   min-width: 36px;
   height: 36px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  border: 1px solid var(--edit-border);
   border-radius: 12px;
-  background: rgba(15, 23, 42, 0.06);
-  color: #374151;
+  background: var(--edit-panel-strong);
+  color: var(--edit-text);
   box-shadow: none;
   transition: background-color .18s ease, transform .18s ease, border-color .18s ease, box-shadow .18s ease, opacity .18s ease;
 }
@@ -2782,10 +2791,10 @@ onMounted(() => {
   width: max-content;
   max-width: min(210px, calc(100vw - 32px));
   padding: 0 8px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  border: 1px solid var(--edit-border);
   border-radius: 12px;
-  background: rgba(15, 23, 42, 0.06);
-  color: #374151;
+  background: var(--edit-panel-strong);
+  color: var(--edit-text);
   box-shadow: none;
   transition: background-color .18s ease, border-color .18s ease, transform .18s ease;
 }

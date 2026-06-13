@@ -20,7 +20,7 @@ let authSyncInFlight: Promise<unknown> | null = null
 let lastAuthSyncAt = 0
 
 const TOOLTIP_SUPPRESSED_CLASS = 'nw-tooltip-suppressed'
-const TOOLTIP_ANCHOR_SELECTOR = '.nw-tooltip-anchor[data-tooltip], .nw-tooltip-anchor[data-label]'
+const TOOLTIP_ANCHOR_SELECTOR = '.nw-tooltip-anchor[data-tooltip], .nw-tooltip-anchor[data-label], .vditor-toolbar .vditor-tooltipped[aria-label]'
 
 let tooltipEl: HTMLDivElement | null = null
 let tooltipAnchor: HTMLElement | null = null
@@ -32,7 +32,7 @@ const tooltipAnchorFromEvent = (event: Event) => {
 }
 
 const getTooltipText = (anchor: HTMLElement) => {
-  return (anchor.dataset.tooltip || anchor.dataset.label || '').trim()
+  return (anchor.dataset.tooltip || anchor.dataset.label || anchor.getAttribute('aria-label') || '').trim()
 }
 
 const ensureTooltipEl = () => {
@@ -45,20 +45,36 @@ const ensureTooltipEl = () => {
   return tooltipEl
 }
 
+const bodyZoomRatio = () => {
+  const body = document.body
+  if (!body) return 1
+  const layoutWidth = body.offsetWidth || document.documentElement.clientWidth || window.innerWidth || 1
+  const visualWidth = body.getBoundingClientRect().width || layoutWidth
+  const ratio = visualWidth / layoutWidth
+  return Number.isFinite(ratio) && ratio > 0 ? ratio : 1
+}
+
 const positionTooltip = (anchor: HTMLElement) => {
   if (!tooltipEl) return
   const rect = anchor.getBoundingClientRect()
   const tooltipRect = tooltipEl.getBoundingClientRect()
   const gap = 10
   const below = anchor.classList.contains('nw-tooltip-below')
-  const rawLeft = rect.left + rect.width / 2 - tooltipRect.width / 2
-  const left = Math.max(8, Math.min(rawLeft, window.innerWidth - tooltipRect.width - 8))
-  const top = below
-    ? Math.min(rect.bottom + gap, window.innerHeight - tooltipRect.height - 8)
-    : Math.max(8, rect.top - tooltipRect.height - gap)
+  const viewport = window.visualViewport
+  const viewportLeft = viewport?.offsetLeft || 0
+  const viewportTop = viewport?.offsetTop || 0
+  const viewportWidth = viewport?.width || window.innerWidth
+  const viewportHeight = viewport?.height || window.innerHeight
+  const zoom = bodyZoomRatio()
 
-  tooltipEl.style.left = `${left}px`
-  tooltipEl.style.top = `${top}px`
+  const rawLeft = viewportLeft + rect.left + rect.width / 2 - tooltipRect.width / 2
+  const left = Math.max(viewportLeft + 8, Math.min(rawLeft, viewportLeft + viewportWidth - tooltipRect.width - 8))
+  const top = below
+    ? Math.min(viewportTop + rect.bottom + gap, viewportTop + viewportHeight - tooltipRect.height - 8)
+    : Math.max(viewportTop + 8, viewportTop + rect.top - tooltipRect.height - gap)
+
+  tooltipEl.style.left = `${left / zoom}px`
+  tooltipEl.style.top = `${top / zoom}px`
 }
 
 const showTooltip = (anchor: HTMLElement) => {
