@@ -1721,7 +1721,7 @@ const loadHitokoto = async () => {
     }
   } catch {}
   const txt = String(hitokotoText.value || '').trim()
-  if (!txt) hitokotoText.value = '身为冒险者，如果安静的老死在床上，那简直就是耻辱！'
+  if (!txt) hitokotoText.value = '欲买桂花同载酒，终不似，少年游。'
 }
 
 watch(() => [
@@ -1985,7 +1985,7 @@ const simpleLinks = computed(() => {
 })
 const visibleSocialLinks = computed(() => simpleLinks.value)
 const HITOKOTO_FALLBACKS = [
-  '身为冒险者，如果安静的老死在床上，那简直就是耻辱！',
+  '欲买桂花同载酒，终不似，少年游。',
   '愿你出走半生，归来仍是少年。',
   '愿你眼里有光，心里有海。'
 ]
