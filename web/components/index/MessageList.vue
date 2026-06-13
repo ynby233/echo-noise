@@ -519,8 +519,8 @@ const BASE_API = config.public.baseApi || '/api'
 
 const messageVisibilityOptions: { value: MessageVisibility; label: string; icon: string }[] = [
   { value: 'public', label: '公开', icon: 'i-mdi-earth' },
-  { value: 'users', label: '成员可见', icon: 'i-mdi-account-group-outline' },
-  { value: 'contacts', label: '联系人可见', icon: 'i-mdi-account-multiple-check-outline' },
+  { value: 'users', label: '成员', icon: 'i-mdi-account-group-outline' },
+  { value: 'contacts', label: '联系人', icon: 'i-mdi-account-multiple-check-outline' },
   { value: 'private', label: '私密', icon: 'i-mdi-lock-outline' }
 ]
 
