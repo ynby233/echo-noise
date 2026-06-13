@@ -211,8 +211,8 @@
         </div>
       </div>
       <div class="publish-date-actions">
-        <button type="button" class="floating-action-btn" @click="clearPublishDate">清除</button>
-        <button type="button" class="floating-action-btn primary" @click="usePublishNow">现在</button>
+        <button type="button" class="floating-action-btn clear-action-btn" @click="clearPublishDate">清除</button>
+        <button type="button" class="floating-action-btn cancel-action-btn" @click="usePublishNow">现在</button>
       </div>
     </div>
   </Teleport>
@@ -1231,6 +1231,9 @@ const addMessage = async () => {
 .floating-action-btn { min-width: 64px; height: 32px; display: inline-flex; align-items: center; justify-content: center; padding: 0 12px; border-radius: 10px; border: 1px solid var(--nw-floating-border); background: rgba(15,23,42,0.04); color: inherit; font-size: 13px; font-weight: 650; line-height: 1; }
 .floating-action-btn:hover { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
 .floating-action-btn.primary { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
+.floating-action-btn.clear-action-btn,
+.floating-action-btn.clear-action-btn:hover { border-color: rgba(234,88,12,.95); background: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color: #fff; }
+.floating-action-btn.cancel-action-btn { border-color: var(--nw-floating-border); background: rgba(15,23,42,0.04); color: inherit; }
 .tb-sep { width:1px; height:24px; background: rgba(0,0,0,0.12); margin: 0 2px; }
 .preview-card { backdrop-filter: blur(8px); background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 8px; color:#111827; }
 html.dark .editor-box { background: var(--home-surface-dark, #202a36); border: 1px solid rgba(255,255,255,0.16); color:#fff; }
@@ -1253,6 +1256,9 @@ html.dark .visibility-select { background: transparent; border: 0; color: inheri
 :global(html.dark) .floating-action-btn,
 :global(html.dark) .publish-picker-trigger,
 :global(html.dark) .publish-date-day { background: rgba(255,255,255,0.06); }
+:global(html.dark) .floating-action-btn.clear-action-btn,
+:global(html.dark) .floating-action-btn.clear-action-btn:hover { border-color: rgba(234,88,12,.95); background: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color: #fff; }
+:global(html.dark) .floating-action-btn.cancel-action-btn { border-color: rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); color: #cbd5e1; }
 :global(html.dark) .publish-date-weekdays { color: rgba(226,232,240,0.66); }
 :global(html.dark) .publish-time-column { background: rgba(15,23,42,0.46); }
 :global(html.dark) .tb-sep { background: rgba(255,255,255,0.12); }

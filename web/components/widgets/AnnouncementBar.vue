@@ -2,7 +2,7 @@
   <div class="announcement-container mx-auto w-full sm:max-w-2xl px-2">
     <div class="announcement-wrapper">
       <UIcon name="i-mdi-bell-outline" class="w-4 h-4 mr-2 flex-shrink-0 text-orange-500" />
-      <div class="announcement-text" ref="textContainer" :title="text">
+      <div class="announcement-text nw-tooltip-anchor" ref="textContainer" :data-tooltip="text">
         <div class="marquee animate" ref="marquee" :style="{ '--distance': distance + 'px', animationDuration: duration + 's' }">
           <div class="marquee-item" ref="firstItem">
             <MarkdownRenderer :content="text" :enableGithubCard="false" />

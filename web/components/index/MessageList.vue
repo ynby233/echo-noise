@@ -81,7 +81,9 @@
                   </div>
                 </div>
                 <div class="ml-auto flex items-center gap-2 text-xs opacity-80">
-                  <UIcon v-if="messageVisibility(msg) !== 'public'" :name="messageVisibilityIcon(messageVisibility(msg))" class="w-4 h-4" :title="messageVisibilityLabel(messageVisibility(msg))" />
+                  <span v-if="messageVisibility(msg) !== 'public'" class="visibility-indicator nw-tooltip-anchor" :data-tooltip="messageVisibilityLabel(messageVisibility(msg))" :aria-label="messageVisibilityLabel(messageVisibility(msg))">
+                    <UIcon :name="messageVisibilityIcon(messageVisibility(msg))" class="w-4 h-4" />
+                  </span>
                   <UIcon v-if="msg.pinned" name="i-mdi-pin" class="w-4 h-4" />
                 </div>
               </div>
@@ -383,6 +385,7 @@
       v-if="showEditPublishDateMenu"
       ref="editPublishDateMenuRef"
       class="floating-control-menu publish-datetime-menu nw-floating-menu"
+      :class="{ 'is-dark': isContentDark }"
       :style="editPublishDateMenuStyle"
       role="dialog"
       aria-label="发布时间选择"
@@ -468,8 +471,8 @@
         </div>
       </div>
       <div class="publish-date-actions">
-        <button type="button" class="floating-action-btn" @click="clearEditPublishDate">清除</button>
-        <button type="button" class="floating-action-btn primary" @click="useEditPublishNow">现在</button>
+        <button type="button" class="floating-action-btn clear-action-btn" @click="clearEditPublishDate">清除</button>
+        <button type="button" class="floating-action-btn cancel-action-btn" @click="useEditPublishNow">现在</button>
       </div>
     </div>
   </Teleport>
@@ -479,7 +482,7 @@
       v-if="openEditPublishPicker"
       ref="editPublishPickerMenuRef"
       class="publish-picker-floating-menu nw-floating-menu"
-      :class="`is-${openEditPublishPicker}`"
+      :class="[`is-${openEditPublishPicker}`, { 'is-dark': isContentDark }]"
       :style="editPublishPickerMenuStyle"
       role="listbox"
       @mousedown.stop
@@ -2743,6 +2746,14 @@ onMounted(() => {
   transition: background-color .18s ease, border-color .18s ease, color .18s ease, transform .18s ease, opacity .18s ease;
 }
 
+.visibility-indicator {
+  width: 1rem;
+  height: 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .edit-icon-button {
   width: 34px;
   height: 34px;
@@ -2906,7 +2917,7 @@ onMounted(() => {
 
 .edit-icon-button:hover:not(:disabled),
 .edit-footer-button:hover:not(:disabled) {
-  transform: translate3d(0,0,0) scale(1.03);
+  transform: translate3d(0,0,0) scale(1.06);
   border-color: var(--nw-floating-hover-border, var(--edit-border));
   background: var(--nw-floating-hover-bg, var(--edit-panel-strong));
 }
@@ -2959,6 +2970,17 @@ onMounted(() => {
   box-shadow: var(--nw-floating-shadow);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+}
+
+.nw-floating-menu.is-dark {
+  --nw-floating-bg: rgba(15, 23, 42, 0.96);
+  --nw-floating-text: #f8fafc;
+  --nw-floating-border: rgba(255, 255, 255, 0.16);
+  --nw-floating-hover-bg: rgba(255, 255, 255, 0.10);
+  --nw-floating-hover-border: rgba(251, 146, 60, 0.42);
+  --nw-floating-selected-bg: rgba(249, 115, 22, 0.24);
+  --nw-floating-selected-border: rgba(251, 146, 60, 0.52);
+  --nw-floating-shadow: 0 18px 38px rgba(0, 0, 0, 0.42);
 }
 
 .visibility-floating-menu { display: grid; gap: 4px; padding: 8px; }
@@ -3028,13 +3050,28 @@ onMounted(() => {
 .floating-action-btn { min-width: 64px; height: 32px; display: inline-flex; align-items: center; justify-content: center; padding: 0 12px; border-radius: 10px; border: 1px solid var(--nw-floating-border); background: rgba(15,23,42,0.04); color: inherit; font-size: 13px; font-weight: 650; line-height: 1; }
 .floating-action-btn:hover { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
 .floating-action-btn.primary { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
+.floating-action-btn.clear-action-btn,
+.floating-action-btn.clear-action-btn:hover { border-color: rgba(234,88,12,.95); background: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color: #fff; }
+.floating-action-btn.cancel-action-btn { border-color: var(--nw-floating-border); background: rgba(15,23,42,0.04); color: inherit; }
 
 :global(html.dark) .floating-icon-btn,
 :global(html.dark) .floating-action-btn,
 :global(html.dark) .publish-picker-trigger,
 :global(html.dark) .publish-date-day { background: rgba(255,255,255,0.06); }
-:global(html.dark) .publish-date-weekdays { color: rgba(226,232,240,0.66); }
-:global(html.dark) .publish-time-column { background: rgba(15,23,42,0.46); }
+.publish-datetime-menu.is-dark .floating-icon-btn,
+.publish-datetime-menu.is-dark .floating-action-btn,
+.publish-datetime-menu.is-dark .publish-picker-trigger,
+.publish-datetime-menu.is-dark .publish-date-day { background: rgba(255,255,255,0.06); }
+.publish-datetime-menu.is-dark .floating-action-btn.clear-action-btn,
+.publish-datetime-menu.is-dark .floating-action-btn.clear-action-btn:hover,
+:global(html.dark) .floating-action-btn.clear-action-btn,
+:global(html.dark) .floating-action-btn.clear-action-btn:hover { border-color: rgba(234,88,12,.95); background: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color: #fff; }
+.publish-datetime-menu.is-dark .floating-action-btn.cancel-action-btn,
+:global(html.dark) .floating-action-btn.cancel-action-btn { border-color: rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); color: #cbd5e1; }
+:global(html.dark) .publish-date-weekdays,
+.publish-datetime-menu.is-dark .publish-date-weekdays { color: rgba(226,232,240,0.66); }
+:global(html.dark) .publish-time-column,
+.publish-datetime-menu.is-dark .publish-time-column { background: rgba(15,23,42,0.46); }
 
 .edit-preview-block {
   border-top: 1px solid var(--edit-border);
@@ -3080,6 +3117,12 @@ onMounted(() => {
   font-size: 13px;
   font-weight: 650;
   line-height: 1;
+}
+
+.edit-footer-button.secondary {
+  border-color: var(--edit-border);
+  background: var(--edit-panel-strong);
+  color: var(--edit-text);
 }
 
 .edit-footer-button.primary {

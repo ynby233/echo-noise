@@ -84,7 +84,7 @@
           </button>
         </div>
         <div class="feed-footer">
-          <div class="feed-domain" :title="item.link || ''">
+          <div class="feed-domain nw-tooltip-anchor" :data-tooltip="item.link || ''">
             <UIcon name="i-heroicons-link" class="w-4 h-4 opacity-70" />
             <span>{{ item.link ? getLinkHost(item.link) : '-' }}</span>
           </div>

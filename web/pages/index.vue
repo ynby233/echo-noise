@@ -116,7 +116,7 @@
         <UCard v-if="frontendConfig.hitokotoEnabled" class="sidebar-card mt-2" :class="sidebarThemeCard">
           <div class="hidden"><span id="hitokoto">正在获取中...</span></div>
           <div class="hitokoto-container mx-auto w-full sm:max-w-2xl px-2">
-            <div class="hitokoto-text" :title="hitokotoText || '正在获取中...'">
+            <div class="hitokoto-text nw-tooltip-anchor" :data-tooltip="hitokotoText || '正在获取中...'">
               <MarkdownRenderer :content="hitokotoText || '正在获取中...'" :enableGithubCard="false" />
             </div>
           </div>
@@ -2577,7 +2577,7 @@ html, body {
   box-shadow: 0 14px 34px rgba(15,23,42,0.24);
 }
 
-:global(html.dark) .header-image { box-shadow: 0 16px 36px rgba(0,0,0,0.42); }
+html.dark .header-image { box-shadow: 0 16px 36px rgba(0,0,0,0.42); }
 
 
 .header-title {
@@ -2653,27 +2653,27 @@ html.dark .search-card { background: var(--home-surface-dark); color: #fff; bord
 .hero-tab-icon {
   transition: none !important;
 }
-:global(html.dark) .hero-tabs {
+html.dark .hero-tabs {
   background: rgba(2, 6, 23, 0.58);
   border-color: rgba(255, 255, 255, 0.14);
 }
-:global(html:not(.dark)) .hero-tabs {
-  background: rgba(255, 255, 255, 0.92);
-  border-color: rgba(15, 23, 42, 0.10);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+html:not(.dark) .hero-tabs {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.14);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16), inset 0 0 0 1px rgba(255, 255, 255, 0.72);
 }
-:global(html:not(.dark)) .hero-tab {
-  color: rgba(15, 23, 42, 0.70);
+html:not(.dark) .hero-tab {
+  color: rgba(15, 23, 42, 0.72);
   background: transparent;
 }
-:global(html:not(.dark)) .hero-tab:hover {
+html:not(.dark) .hero-tab:hover {
   color: #111827;
-  background: rgba(249, 115, 22, 0.08);
+  background: rgba(15, 23, 42, 0.06);
 }
-:global(html:not(.dark)) .hero-tab.active {
+html:not(.dark) .hero-tab.active {
   color: #9a3412;
-  background: #ffffff;
-  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12), inset 0 0 0 1px rgba(249, 115, 22, 0.28);
+  background: rgba(249, 115, 22, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(249, 115, 22, 0.30);
 }
 @media (max-width: 480px) {
   .hero-tabs { gap: 2px; padding: 4px; }
@@ -2722,47 +2722,47 @@ html.dark .search-card { background: var(--home-surface-dark); color: #fff; bord
 .life-progress-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #22d3ee 0%, #6366f1 100%); transition: width .4s ease; }
 .life-countdown-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; opacity: 0.8; }
 .life-countdown-empty { font-size: 12px; opacity: 0.72; }
-.calendar-card :deep(.u-calendar) { width: 100% }
-.calendar-card :deep(.u-calendar) {
+.calendar-card .u-calendar { width: 100% }
+.calendar-card .u-calendar {
   width: 100%;
   display: block;
 }
-.calendar-card :deep(.u-calendar *) {
+.calendar-card .u-calendar * {
   color: inherit;
 }
-.calendar-card :deep(.u-calendar-header) {
+.calendar-card .u-calendar-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 6px 8px;
   color: var(--accent, #ff8c3a);
 }
-.calendar-card :deep(table) {
+.calendar-card table {
   width: 100%;
 }
-.calendar-card :deep(th) {
+.calendar-card th {
   color: inherit;
   font-weight: 500;
 }
-.calendar-card :deep(td) {
+.calendar-card td {
   padding: 2px;
 }
-.calendar-card :deep(td > button) {
+.calendar-card td > button {
   width: 100%;
   border-radius: 8px;
   padding: 6px 0;
   transition: background-color .15s ease, transform .1s ease;
   border: 1px solid rgba(0,0,0,0.06);
 }
-.calendar-card :deep(td > button:hover) {
+.calendar-card td > button:hover {
   transform: scale(1.02);
   background: rgba(0,0,0,0.06);
 }
-.calendar-card :deep(td > button[aria-selected="true"]) {
+.calendar-card td > button[aria-selected="true"] {
   background: var(--accent, #ff8c3a);
   color: #fff;
 }
-.calendar-card :deep(td > button[aria-current="date"]) {
+.calendar-card td > button[aria-current="date"] {
   outline: 2px solid var(--accent, #ff8c3a);
 }
 @media screen and (max-width: 768px) {
@@ -2916,8 +2916,8 @@ white-space: nowrap;  /* 防止换行 */
   text-shadow: none;
 }
 
-:global(input[type="password"]::-ms-reveal),
-:global(input[type="password"]::-ms-clear) {
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
   display: none;
 }
 
@@ -3019,18 +3019,18 @@ white-space: nowrap;  /* 防止换行 */
   box-shadow: none !important;
 }
 /* 三栏容器在浅色模式统一白色背景（不影响深色与背景图层） */
-:global(html:not(.dark)) .left-col,
-:global(html:not(.dark)) .center-col,
-:global(html:not(.dark)) .right-col {
+html:not(.dark) .left-col,
+html:not(.dark) .center-col,
+html:not(.dark) .right-col {
   background: var(--home-surface-light);
   border: 1px solid var(--home-border-light);
   border-radius: var(--home-radius-panel);
   padding: 8px;
   box-shadow: var(--home-shadow-light);
 }
-:global(html.dark) .left-col,
-:global(html.dark) .center-col,
-:global(html.dark) .right-col {
+html.dark .left-col,
+html.dark .center-col,
+html.dark .right-col {
   background: linear-gradient(180deg, rgba(30, 41, 59, 0.42) 0%, rgba(15, 23, 42, 0.72) 100%);
   color: var(--home-text-dark);
   border: 1px solid var(--home-border-dark);
@@ -3042,16 +3042,16 @@ white-space: nowrap;  /* 防止换行 */
   position: relative;
   overflow: hidden;
 }
-:global(html.dark) .center-col {
+html.dark .center-col {
   background: linear-gradient(180deg, rgba(30, 41, 59, 0.38) 0%, rgba(15, 23, 42, 0.7) 100%);
 }
-:global(html.dark) .right-col {
+html.dark .right-col {
   overflow-x: hidden;
   overflow-y: auto;
 }
-:global(html.dark) .left-col::before,
-:global(html.dark) .center-col::before,
-:global(html.dark) .right-col::before {
+html.dark .left-col::before,
+html.dark .center-col::before,
+html.dark .right-col::before {
   content: '';
   position: absolute;
   left: 0;
@@ -3061,16 +3061,16 @@ white-space: nowrap;  /* 防止换行 */
   background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0));
   pointer-events: none;
 }
-:global(html:not(.dark)) .layout-container.grid-3 { gap: 18px; }
+html:not(.dark) .layout-container.grid-3 { gap: 18px; }
 /* 统一浅色模式下所有卡片底色为纯白 */
-:global(html:not(.dark)) :where(.u-card, .u-card-body, .u-card__body, .u-card-header, .u-card__header) { background-color: var(--home-surface-light) !important; }
-:global(html:not(.dark)) :where(.bg-gray-50, .bg-gray-100, .bg-gray-200, .bg-gray-300, .bg-slate-50, .bg-slate-100, .bg-slate-200) { background-color: var(--home-surface-light) !important; }
-:global(html:not(.dark)) :where(.border-gray-200, .border-gray-300, .border-slate-200) { border-color: var(--home-border-light) !important; }
+html:not(.dark) :where(.u-card, .u-card-body, .u-card__body, .u-card-header, .u-card__header) { background-color: var(--home-surface-light) !important; }
+html:not(.dark) :where(.bg-gray-50, .bg-gray-100, .bg-gray-200, .bg-gray-300, .bg-slate-50, .bg-slate-100, .bg-slate-200) { background-color: var(--home-surface-light) !important; }
+html:not(.dark) :where(.border-gray-200, .border-gray-300, .border-slate-200) { border-color: var(--home-border-light) !important; }
 /* 日历卡片保持紧凑，其他侧栏卡片使用 Nuxt UI 默认内距 */
-.calendar-sidebar-card.no-padding-card :deep(.u-card-body),
-.calendar-sidebar-card.no-padding-card :deep(.u-card__body) { padding: 0 !important; }
-.calendar-sidebar-card.no-padding-card :deep(.u-card-header),
-.calendar-sidebar-card.no-padding-card :deep(.u-card__header) { padding: 8px 12px !important; }
+.calendar-sidebar-card.no-padding-card .u-card-body,
+.calendar-sidebar-card.no-padding-card .u-card__body { padding: 0 !important; }
+.calendar-sidebar-card.no-padding-card .u-card-header,
+.calendar-sidebar-card.no-padding-card .u-card__header { padding: 8px 12px !important; }
 html.dark .sidebar-card {
   background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.8) 100%);
   color: var(--home-text-dark);
@@ -3159,23 +3159,23 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
 }
 
 /* 确保白天模式下文本颜色是黑色的 */
-:global(html:not(.dark)) .profile-name {
+html:not(.dark) .profile-name {
   color: #111827 !important;
 }
-:global(html:not(.dark)) .profile-desc {
+html:not(.dark) .profile-desc {
   color: #374151 !important;
 }
 
 /* 确保白天模式下时钟颜色是黑色的 */
-:global(html:not(.dark)) .clock-display {
+html:not(.dark) .clock-display {
   color: #111827 !important;
 }
-:global(html:not(.dark)) .clock-date {
+html:not(.dark) .clock-date {
   color: #6b7280 !important;
 }
 
 /* 确保白天模式下一言文本颜色是黑色的 */
-:global(html:not(.dark)) .hitokoto-text {
+html:not(.dark) .hitokoto-text {
   color: #111827 !important;
 }
 .social-list { display:flex; flex-wrap:wrap; gap:10px; padding:0; justify-content:center; align-items:center; }
@@ -3195,8 +3195,8 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-.feed-shell-card :deep(.u-card-body),
-.feed-shell-card :deep(.u-card__body) {
+.feed-shell-card .u-card-body,
+.feed-shell-card .u-card__body {
   padding: 0 !important;
   background: transparent !important;
 }
@@ -3235,13 +3235,13 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
 .about-desc { font-size: 14px; opacity: 0.9; }
 
 /* 确保白天模式下关于页面文本颜色是黑色的 */
-:global(html:not(.dark)) .about-title {
+html:not(.dark) .about-title {
   color: #111827 !important;
 }
-:global(html:not(.dark)) .about-sub {
+html:not(.dark) .about-sub {
   color: #6b7280 !important;
 }
-:global(html:not(.dark)) .about-desc {
+html:not(.dark) .about-desc {
   color: #374151 !important;
 }
 
@@ -3307,8 +3307,8 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
 .ad-wrap > .ad-image { position: relative; z-index: 1; }
 .ad-overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; opacity:0; transition: opacity .12s ease; pointer-events:none; z-index: 2; }
 .ad-overlay-box { max-width: 90%; max-height: 70%; overflow-y: auto; padding: 8px 10px; border-radius: 10px; font-size: 14px; line-height: 1.5; word-break: break-word; overflow-wrap: anywhere; }
-:global(html.dark) .ad-overlay-box { background: var(--home-surface-dark); color: var(--home-accent-warn) !important; border: 1px solid var(--home-border-dark-soft); box-shadow: var(--home-shadow-float-dark); }
-:global(html.dark) .ad-overlay-box a { color: var(--home-accent-warn) !important; text-decoration:none; }
+html.dark .ad-overlay-box { background: var(--home-surface-dark); color: var(--home-accent-warn) !important; border: 1px solid var(--home-border-dark-soft); box-shadow: var(--home-shadow-float-dark); }
+html.dark .ad-overlay-box a { color: var(--home-accent-warn) !important; text-decoration:none; }
 
 /* 播放器：贴边与层级优化 */
 .netease-mini-player[data-position="bottom-left"] { left: 8px !important; }
@@ -3321,7 +3321,7 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
 .netease-mini-player.minimized[data-position="top-right"] { right: 0 !important; top: 12px !important; }
 
 /* 音乐播放器暗黑模式颜色统一 */
-:global(html.dark) .netease-mini-player {
+html.dark .netease-mini-player {
   --primary-bg: var(--home-surface-dark) !important;
   --secondary-bg: var(--home-surface-dark-elevated) !important;
   --bg-color: var(--home-surface-dark) !important;
@@ -3333,8 +3333,8 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
   .netease-mini-player[data-position="top-left"],
   .netease-mini-player[data-position="top-right"] { z-index: 2001 !important; }
 }
-:global(html:not(.dark)) .ad-overlay-box { background: var(--home-surface-light); color: var(--home-accent-warn) !important; border: 1px solid var(--home-border-light); box-shadow: var(--home-shadow-float-light); }
-:global(html:not(.dark)) .ad-overlay-box a { color: var(--home-accent-warn) !important; text-decoration:none; }
+html:not(.dark) .ad-overlay-box { background: var(--home-surface-light); color: var(--home-accent-warn) !important; border: 1px solid var(--home-border-light); box-shadow: var(--home-shadow-float-light); }
+html:not(.dark) .ad-overlay-box a { color: var(--home-accent-warn) !important; text-decoration:none; }
 .ad-wrap:hover .ad-overlay { opacity:1; }
 .ad-wrap:hover .ad-image { filter: contrast(0.95) brightness(0.9); }
 .scroll-images { aspect-ratio: 1.525 / 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding-inline: 0; scrollbar-width: thin; }
@@ -3348,23 +3348,23 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
 @media screen and (max-width: 768px) { .center-col { padding-left: 2%; padding-right: 2%; } }
 @media screen and (max-width: 480px) { .center-col { padding-left: 3%; padding-right: 3%; } }
 .page-footer { text-align: center; font-size: 12px; padding: 12px 0; }
-:global(html.dark) .center-col,
-:global(html:not(.dark)) .center-col { transition: none !important; }
-:global(html.dark) .center-col :where(.u-card, .u-card-body, .u-card__body, .u-card-header, .u-card__header),
-:global(html:not(.dark)) .center-col :where(.u-card, .u-card-body, .u-card__body, .u-card-header, .u-card__header) {
+html.dark .center-col,
+html:not(.dark) .center-col { transition: none !important; }
+html.dark .center-col :where(.u-card, .u-card-body, .u-card__body, .u-card-header, .u-card__header),
+html:not(.dark) .center-col :where(.u-card, .u-card-body, .u-card__body, .u-card-header, .u-card__header) {
   transition: none !important;
 }
-:global(html.dark) .center-col :deep(.message-list-container),
-:global(html:not(.dark)) .center-col :deep(.message-list-container) { transition: none !important; }
-:global(html.dark) .background-container::before {
+html.dark .center-col .message-list-container,
+html:not(.dark) .center-col .message-list-container { transition: none !important; }
+html.dark .background-container::before {
   filter: blur(10px) saturate(0.78) brightness(0.52);
   opacity: 0.9;
 }
-:global(html.dark) .background-container::after {
+html.dark .background-container::after {
   filter: blur(10px) saturate(0.78) brightness(0.52);
 }
-:global(html.dark) .center-col :deep(.content-container),
-:global(html:not(.dark)) .center-col :deep(.content-container) { transition: none !important; }
+html.dark .center-col .content-container,
+html:not(.dark) .center-col .content-container { transition: none !important; }
 .netease-mini-player.minimized[data-instant="true"] { transition: none !important; }
 .netease-mini-player.minimized[data-instant="true"] .album-cover-container,
 .netease-mini-player.minimized[data-instant="true"] .album-cover,

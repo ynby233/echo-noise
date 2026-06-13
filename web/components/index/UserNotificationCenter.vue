@@ -610,7 +610,7 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .notification-heading { width:100%; }
 .notification-title-row { position:relative; display:flex; align-items:center; justify-content:center; width:100%; min-height:32px; }
 .notification-title { display:block; margin:0; padding:0; border-radius:0; color:var(--notice-strong); font-size:18px; font-weight:700; line-height:24px; }
-.notification-subtitle { margin:14px 0 0; color:var(--notice-muted); font-size:13px; line-height:1.7; text-align:center; opacity:.8; }
+.notification-subtitle { margin:2px 0 16px; color:var(--notice-muted); font-size:13px; line-height:1.7; text-align:center; opacity:.8; }
 .notification-actions { position:absolute; right:0; top:50%; transform:translateY(-50%); display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; max-width:calc(50% - 48px); }
 .unread-pill { display:inline-flex; align-items:center; min-height:28px; padding:0 10px; border-radius:999px; font-size:12px; font-weight:650; color:#fff; background:#3b82f6; }
 .icon-action,

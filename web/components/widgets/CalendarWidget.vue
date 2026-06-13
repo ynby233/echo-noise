@@ -47,7 +47,7 @@
         v-for="day in calendarDays"
         :key="day.key"
         type="button"
-        class="calendar-day"
+        class="calendar-day nw-tooltip-anchor"
         :class="{
           'is-muted': !day.inMonth,
           'is-today': day.isToday,
@@ -55,10 +55,10 @@
           'has-count': day.count > 0
         }"
         :aria-label="`${day.date}，${day.count} 条笔记`"
+        :data-tooltip="`${day.count} 条笔记`"
         @click="selectDay(day)"
       >
         <span class="day-number">{{ day.day }}</span>
-        <span class="day-tooltip">{{ day.count }} 条笔记</span>
       </button>
     </div>
 
@@ -71,7 +71,7 @@
         v-if="openPicker"
         ref="pickerMenu"
         class="calendar-floating-menu nw-floating-menu"
-        :class="`is-${openPicker}`"
+        :class="[`is-${openPicker}`, { 'is-dark': isDarkTheme }]"
         :style="pickerMenuStyle"
         role="listbox"
         @mousedown.stop
@@ -607,29 +607,6 @@ onBeforeUnmount(() => {
   box-shadow: none;
 }
 
-.day-tooltip {
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 6px);
-  z-index: 3;
-  transform: translateX(-50%);
-  display: none;
-  white-space: nowrap;
-  padding: 4px 8px;
-  border: 1px solid var(--nw-tooltip-border);
-  border-radius: 6px;
-  background: var(--nw-tooltip-bg);
-  color: var(--nw-tooltip-text);
-  box-shadow: var(--nw-tooltip-shadow);
-  font-size: 11px;
-  font-weight: 650;
-  pointer-events: none;
-}
-
-.calendar-day:hover .day-tooltip {
-  display: block;
-}
-
 .calendar-foot {
   min-height: 18px;
   margin-top: 2px;
@@ -689,6 +666,17 @@ onBeforeUnmount(() => {
   color: var(--nw-floating-text);
   box-shadow: var(--nw-floating-shadow);
   scrollbar-width: none;
+}
+
+.calendar-floating-menu.is-dark {
+  --nw-floating-bg: rgba(15, 23, 42, 0.96);
+  --nw-floating-text: #f8fafc;
+  --nw-floating-border: rgba(255, 255, 255, 0.16);
+  --nw-floating-hover-bg: rgba(255, 255, 255, 0.10);
+  --nw-floating-hover-border: rgba(251, 146, 60, 0.42);
+  --nw-floating-selected-bg: rgba(249, 115, 22, 0.24);
+  --nw-floating-selected-border: rgba(251, 146, 60, 0.52);
+  --nw-floating-shadow: 0 18px 38px rgba(0, 0, 0, 0.42);
 }
 
 .calendar-floating-menu::-webkit-scrollbar {
