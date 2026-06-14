@@ -313,7 +313,7 @@ watch(() => props.theme, (newTheme) => {
 .vditor-toolbar {
   display: flex !important;
   flex-wrap: nowrap !important;
-  justify-content: flex-start;
+  justify-content: space-between;
   overflow-x: auto !important;
   overflow-y: hidden !important;
   width: 100%;
@@ -328,12 +328,13 @@ watch(() => props.theme, (newTheme) => {
   z-index: 100;
   overscroll-behavior-x: contain;
   box-sizing: border-box;
-  gap: 1px;
-  padding: 0 !important;
+  gap: 3px;
+  padding: 2px 4px !important;
 }
 
 .vditor-toolbar > * {
-  flex: 0 0 auto !important;
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
 }
 
 .vditor-toolbar__br {
@@ -354,6 +355,8 @@ watch(() => props.theme, (newTheme) => {
 .vditor-panel {
   position: fixed; /* 恢复为 fixed，避免被容器裁剪 */
   z-index: 10000;
+  display: grid;
+  gap: 4px;
   padding: 8px;
   background: var(--nw-floating-bg) !important;
   color: var(--nw-floating-text) !important;
@@ -367,11 +370,22 @@ watch(() => props.theme, (newTheme) => {
 .vditor-panel button,
 .vditor-panel .vditor-menu,
 .vditor-panel .vditor-toolbar__item {
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
   min-height: 32px;
+  width: 100% !important;
+  min-width: 132px !important;
+  padding: 0 10px !important;
   border: 1px solid transparent !important;
   border-radius: 9px !important;
   background: transparent !important;
   color: inherit !important;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  text-align: left;
 }
 
 .vditor-panel button:hover,
@@ -383,6 +397,14 @@ watch(() => props.theme, (newTheme) => {
   outline: none;
   border-color: var(--nw-floating-hover-border) !important;
   background: var(--nw-floating-hover-bg) !important;
+}
+
+.vditor-panel .vditor-menu--current,
+.vditor-panel .vditor-menu--active,
+.vditor-panel [aria-selected="true"] {
+  border-color: var(--nw-floating-selected-border) !important;
+  background: var(--nw-floating-selected-bg) !important;
+  color: var(--nw-floating-text) !important;
 }
 .vditor-hint {
   position: fixed;
@@ -411,9 +433,9 @@ watch(() => props.theme, (newTheme) => {
   border-color: transparent !important;
 }
 .vditor-toolbar__item {
-  flex: 0 0 auto !important;
-  width: 30px;
-  min-width: 30px;
+  flex: 1 1 0 !important;
+  width: auto;
+  min-width: 0;
   height: 32px;
   padding: 4px !important;
   margin: 0 !important;
@@ -425,8 +447,19 @@ watch(() => props.theme, (newTheme) => {
 }
 
 .vditor-toolbar__item:last-child {
-  margin-left: auto !important;
+  margin-left: 0 !important;
   margin-right: 0 !important;
+}
+
+.vditor-toolbar__item[data-type="|"],
+.vditor-toolbar__item--divider,
+.vditor-toolbar__divider {
+  flex: 0 0 1px !important;
+  width: 1px !important;
+  min-width: 1px !important;
+  max-width: 1px !important;
+  padding: 0 !important;
+  margin: 0 3px !important;
 }
 
 .vditor-toolbar__item:hover {

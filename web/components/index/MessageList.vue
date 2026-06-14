@@ -152,10 +152,10 @@
                   </UButton>
                   <div class="message-toolbox overlay" v-show="openToolboxId === msg.id">
                     <div class="tool-icons">
-                      <div v-if="canPin(msg)" class="tool-icon nw-tooltip-anchor" :data-tooltip="(msg.pinned ? '取消置顶' : '置顶内容')" @click="togglePin(msg)"><UIcon :name="msg.pinned ? 'i-mdi-pin' : 'i-mdi-pin-outline'" /></div>
-                      <div v-if="isLogin" class="tool-icon nw-tooltip-anchor" data-tooltip="编辑" @click="editMessage(msg)"><UIcon name="i-mdi-pencil-outline" /></div>
-                      <div class="tool-icon nw-tooltip-anchor" data-tooltip="复制" @click="copyContent(msg.content)"><UIcon name="i-mdi-content-copy" /></div>
-                      <div v-if="isLogin" class="tool-icon nw-tooltip-anchor" data-tooltip="删除" @click="deleteMsg(msg.id)"><UIcon name="i-mdi-trash-can-outline" /></div>
+                      <button v-if="canPin(msg)" type="button" class="tool-icon nw-action-btn nw-tooltip-anchor" :data-tooltip="(msg.pinned ? '取消置顶' : '置顶内容')" @click="togglePin(msg)"><UIcon :name="msg.pinned ? 'i-mdi-pin' : 'i-mdi-pin-outline'" /></button>
+                      <button v-if="isLogin" type="button" class="tool-icon nw-action-btn nw-tooltip-anchor" data-tooltip="编辑" @click="editMessage(msg)"><UIcon name="i-mdi-pencil-outline" /></button>
+                      <button type="button" class="tool-icon nw-action-btn nw-tooltip-anchor" data-tooltip="复制" @click="copyContent(msg.content)"><UIcon name="i-mdi-content-copy" /></button>
+                      <button v-if="isLogin" type="button" class="tool-icon nw-action-btn nw-action-btn--danger nw-tooltip-anchor" data-tooltip="删除" @click="deleteMsg(msg.id)"><UIcon name="i-mdi-trash-can-outline" /></button>
                   </div>
                   </div>
                 </div>
@@ -3241,74 +3241,54 @@ onMounted(() => {
   right:0; 
   bottom:calc(100% + 8px); 
   z-index:100; 
-  padding: 6px 10px; 
-  border-radius: 12px; 
+  padding: 8px;
+  border-radius: 12px;
   background: var(--toolbox-bg) !important;
   color: var(--toolbox-fg) !important;
   opacity: 1 !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-.tool-icons { display: flex; align-items: center; gap: 8px; padding: 6px 8px; }
+.tool-icons { display: flex; align-items: center; gap: 6px; padding: 0; }
 .tool-icon { 
-  width: 28px; 
-  height: 28px; 
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
   display:flex; 
   align-items:center; 
   justify-content:center; 
   cursor:pointer; 
   opacity:1; 
-  font-size:18px; 
+  font-size:18px;
   line-height:1; 
-  border-radius: 9999px; 
+  border-radius: 12px;
   position: relative; 
-  transition: all 0.2s ease;
-}
-
-:global(html:not(.dark)) .tool-icon { 
-  background: #ffffff; 
-  color: #111827; 
-  border: 1px solid rgba(0,0,0,0.12); 
-  box-shadow: 0 1px 6px rgba(0,0,0,0.08); 
-}
-:global(html.dark) .tool-icon { 
-  background: var(--home-surface-dark-elevated); 
-  color: #ffffff; 
-  border: 1px solid rgba(255,255,255,0.12); 
-  box-shadow: 0 1px 6px rgba(255,255,255,0.06); 
+  transition: background-color .18s ease, border-color .18s ease, color .18s ease, transform .18s ease;
 }
 
 .tool-icon:hover { 
   opacity: 1; 
   transform: translate3d(0,0,0) scale(1.06); 
-  transition: transform .12s ease, box-shadow .12s ease; 
-}
-
-:global(html:not(.dark)) .tool-icon:hover { 
-  box-shadow: 0 6px 18px rgba(0,0,0,0.20); 
-}
-:global(html.dark) .tool-icon:hover { 
-  box-shadow: 0 8px 22px rgba(255,255,255,0.12); 
 }
 
 .tool-icon > * { color: currentColor; }
-.toolbox-dark { background: var(--home-surface-dark-elevated); border: 1px solid rgba(255,255,255,0.16); }
-.toolbox-light { background: #fff; border: 1px solid rgba(0,0,0,0.08); }
+.toolbox-dark { background: var(--toolbox-bg); border: 1px solid var(--toolbox-border); }
+.toolbox-light { background: var(--toolbox-bg); border: 1px solid var(--toolbox-border); }
 
 /* 工具栏主题色（变量在全局定义，避免 scoped 优先级问题） */
 :global(html) {
-  --toolbox-bg: #ffffff;
+  --toolbox-bg: rgba(243, 244, 246, 0.96);
   --toolbox-fg: #111827;
-  --toolbox-border: rgba(100,116,139,0.40);
-  --toolbox-shadow: 0 8px 22px rgba(0,0,0,0.15);
+  --toolbox-border: rgba(15,23,42,0.12);
+  --toolbox-shadow: 0 14px 30px rgba(15,23,42,0.18);
 }
 :global(html.dark),
 :global(body.dark),
 :global(.dark) {
-  --toolbox-bg: var(--home-surface-dark-elevated);
+  --toolbox-bg: rgba(15, 23, 42, 0.94);
   --toolbox-fg: #ffffff;
-  --toolbox-border: rgba(148,163,184,0.50);
-  --toolbox-shadow: 0 8px 22px rgba(255,255,255,0.12);
+  --toolbox-border: rgba(255,255,255,0.18);
+  --toolbox-shadow: 0 18px 42px rgba(0,0,0,0.42);
 }
 
 .message-toolbox.overlay {
@@ -3325,55 +3305,17 @@ onMounted(() => {
   color: inherit;
 }
 
-/* 参考图的边缘描边效果（双层细描边） */
-.message-toolbox.overlay::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-}
-:global(html.dark) .message-toolbox.overlay::before {
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.15) !important;
-}
-:global(html:not(.dark)) .message-toolbox.overlay::before {
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15) !important;
-}
-
+.message-toolbox.overlay::before,
 .message-toolbox.overlay::after {
-  content: '';
-  position: absolute;
-  left: -28px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 24px;
-  height: 1px;
-  pointer-events: none;
-  border-radius: 1px;
+  content: none !important;
 }
-:global(html.dark) .message-toolbox.overlay::after { background-color: rgba(148,163,184,0.50) !important; }
-:global(html:not(.dark)) .message-toolbox.overlay::after { background-color: rgba(100,116,139,0.40) !important; }
-
-.message-toolbox.overlay::after {
-  content: '';
-  position: absolute;
-  left: -28px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 24px;
-  height: 1px;
-  pointer-events: none;
-  border-radius: 1px;
-}
-:global(html.dark) .message-toolbox.overlay::after { background-color: rgba(148,163,184,0.50) !important; }
-:global(html:not(.dark)) .message-toolbox.overlay::after { background-color: rgba(100,116,139,0.40) !important; }
 .author-row { line-height: 1.1; position: relative; }
 .message-socialbar { display:flex; align-items:center; gap:12px; padding:0; margin-top:6px; }
 .social-item { display:flex; align-items:center; gap:6px; opacity:.85; cursor:pointer; }
 .social-item:hover { opacity:1; }
 @media (max-width: 640px) {
-  .tool-icons { gap:10px; padding:6px 8px; }
-  .tool-icon { width:22px; height:22px; font-size:18px; }
+  .tool-icons { gap:6px; padding:0; }
+  .tool-icon { width:36px; min-width:36px; height:36px; font-size:18px; }
   .tool-icon :deep(svg) { width: 19px !important; height: 19px !important; }
   .tool-icon :deep(.iconify) {
     width: 19px !important;

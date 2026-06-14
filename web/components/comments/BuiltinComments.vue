@@ -20,16 +20,10 @@
               <div class="comment-editor-toolbar edit-toolbar">
                 <div class="visibility-picker comment-visibility-picker toolbar-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :class="{ 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('edit', c.id) }" :data-tooltip="commentVisibilityTooltipFor('edit', c.id)" @mousedown.stop>
                   <UIcon :name="visibilityIconFor('edit')" class="w-5 h-5" />
-                  <button type="button" class="comment-visibility-trigger" aria-label="可见范围" aria-haspopup="listbox" :aria-expanded="isCommentVisibilityMenuOpen('edit', c.id)" @click="toggleCommentVisibilityMenu('edit', c.id)">
+                  <button type="button" class="comment-visibility-trigger" aria-label="可见范围" aria-haspopup="listbox" :aria-expanded="isCommentVisibilityMenuOpen('edit', c.id)" @click="toggleCommentVisibilityMenu('edit', c.id, $event)">
                     <span>{{ selectedVisibilityLabelFor('edit') }}</span>
                     <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
                   </button>
-                  <div v-if="isCommentVisibilityMenuOpen('edit', c.id)" class="comment-visibility-menu nw-floating-menu" role="listbox" @mousedown.stop>
-                    <button v-for="opt in editingVisibilityOptions" :key="opt.value" type="button" class="comment-visibility-option nw-floating-option" :class="{ 'is-selected': opt.value === editingVisibility }" role="option" :aria-selected="opt.value === editingVisibility" @click="selectCommentVisibility('edit', opt.value)">
-                      <UIcon :name="opt.icon" class="w-4 h-4" />
-                      <span>{{ opt.label }}</span>
-                    </button>
-                  </div>
                 </div>
                 <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="加粗" aria-label="加粗" @click="applyFormat('edit', 'bold')"><UIcon name="i-mdi-format-bold" class="w-5 h-5" /></button>
                 <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="斜体" aria-label="斜体" @click="applyFormat('edit', 'italic')"><UIcon name="i-mdi-format-italic" class="w-5 h-5" /></button>
@@ -77,16 +71,10 @@
                     <div class="comment-editor-toolbar edit-toolbar">
                       <div class="visibility-picker comment-visibility-picker toolbar-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :class="{ 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('edit', child.id) }" :data-tooltip="commentVisibilityTooltipFor('edit', child.id)" @mousedown.stop>
                         <UIcon :name="visibilityIconFor('edit')" class="w-5 h-5" />
-                        <button type="button" class="comment-visibility-trigger" aria-label="可见范围" aria-haspopup="listbox" :aria-expanded="isCommentVisibilityMenuOpen('edit', child.id)" @click="toggleCommentVisibilityMenu('edit', child.id)">
+                        <button type="button" class="comment-visibility-trigger" aria-label="可见范围" aria-haspopup="listbox" :aria-expanded="isCommentVisibilityMenuOpen('edit', child.id)" @click="toggleCommentVisibilityMenu('edit', child.id, $event)">
                           <span>{{ selectedVisibilityLabelFor('edit') }}</span>
                           <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
                         </button>
-                        <div v-if="isCommentVisibilityMenuOpen('edit', child.id)" class="comment-visibility-menu nw-floating-menu" role="listbox" @mousedown.stop>
-                          <button v-for="opt in editingVisibilityOptions" :key="opt.value" type="button" class="comment-visibility-option nw-floating-option" :class="{ 'is-selected': opt.value === editingVisibility }" role="option" :aria-selected="opt.value === editingVisibility" @click="selectCommentVisibility('edit', opt.value)">
-                            <UIcon :name="opt.icon" class="w-4 h-4" />
-                            <span>{{ opt.label }}</span>
-                          </button>
-                        </div>
                       </div>
                       <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="加粗" aria-label="加粗" @click="applyFormat('edit', 'bold')"><UIcon name="i-mdi-format-bold" class="w-5 h-5" /></button>
                       <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="斜体" aria-label="斜体" @click="applyFormat('edit', 'italic')"><UIcon name="i-mdi-format-italic" class="w-5 h-5" /></button>
@@ -136,16 +124,10 @@
         <div class="comment-editor-toolbar main-toolbar">
           <div class="visibility-picker comment-visibility-picker toolbar-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :class="{ 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('content') }" :data-tooltip="commentVisibilityTooltipFor('content')" @mousedown.stop>
             <UIcon :name="visibilityIconFor('content')" class="w-5 h-5" />
-            <button type="button" class="comment-visibility-trigger" aria-label="可见范围" aria-haspopup="listbox" :aria-expanded="isCommentVisibilityMenuOpen('content')" @click="toggleCommentVisibilityMenu('content')">
+            <button type="button" class="comment-visibility-trigger" aria-label="可见范围" aria-haspopup="listbox" :aria-expanded="isCommentVisibilityMenuOpen('content')" @click="toggleCommentVisibilityMenu('content', null, $event)">
               <span>{{ selectedVisibilityLabelFor('content') }}</span>
               <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
             </button>
-            <div v-if="isCommentVisibilityMenuOpen('content')" class="comment-visibility-menu nw-floating-menu" role="listbox" @mousedown.stop>
-              <button v-for="opt in selectedVisibilityOptions" :key="opt.value" type="button" class="comment-visibility-option nw-floating-option" :class="{ 'is-selected': opt.value === selectedVisibility }" role="option" :aria-selected="opt.value === selectedVisibility" @click="selectCommentVisibility('content', opt.value)">
-                <UIcon :name="opt.icon" class="w-4 h-4" />
-                <span>{{ opt.label }}</span>
-              </button>
-            </div>
           </div>
           <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="加粗" aria-label="加粗" @click="applyFormat('content', 'bold')"><UIcon name="i-mdi-format-bold" class="w-5 h-5" /></button>
           <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="斜体" aria-label="斜体" @click="applyFormat('content', 'italic')"><UIcon name="i-mdi-format-italic" class="w-5 h-5" /></button>
@@ -188,6 +170,30 @@
       <div v-else-if="props.showInput && enabled && !canComment" class="text-xs text-center mt-5 mb-3" :class="themeMuted">{{ loginRequiredText }}</div>
       
   </div>
+
+  <Teleport to="body">
+    <div
+      v-if="openCommentVisibilityMenu"
+      class="comment-visibility-menu comment-visibility-floating-menu nw-floating-menu"
+      :style="commentVisibilityMenuStyle"
+      role="listbox"
+      @mousedown.stop
+    >
+      <button
+        v-for="opt in activeCommentVisibilityOptions"
+        :key="opt.value"
+        type="button"
+        class="comment-visibility-option nw-floating-option"
+        :class="{ 'is-selected': opt.value === activeCommentVisibilityValue }"
+        role="option"
+        :aria-selected="opt.value === activeCommentVisibilityValue"
+        @click="selectCommentVisibility(activeCommentEditorTarget, opt.value)"
+      >
+        <UIcon :name="opt.icon" class="w-4 h-4" />
+        <span>{{ opt.label }}</span>
+      </button>
+    </div>
+  </Teleport>
 
   <UModal v-model="showDeleteConfirm" :ui="{ width: 'sm:max-w-md' }">
     <UCard>
@@ -290,6 +296,7 @@ const commentOwnerId = (c: any) => Number(c?.user_id || c?.UserID || c?.user?.id
 const canManageComment = (c: any) => isAdmin.value || (!!currentUserId.value && commentOwnerId(c) === currentUserId.value)
 const selectedVisibility = ref(messageVisibilityLimit.value)
 const openCommentVisibilityMenu = ref<string | null>(null)
+const commentVisibilityMenuStyle = ref<Record<string, string>>({})
 const editingId = ref<number | null>(null)
 const editingContent = ref('')
 const editingVisibility = ref(messageVisibilityLimit.value)
@@ -1065,7 +1072,8 @@ const editingVisibilityOptions = computed(() => {
   const limit = parentThreadVisibilityLimitFor(editingComment.value)
   return typeof limit === 'undefined' ? commentVisibilityOptions() : commentVisibilityOptions(limit)
 })
-
+const activeCommentVisibilityOptions = computed(() => activeCommentEditorTarget.value === 'edit' ? editingVisibilityOptions.value : selectedVisibilityOptions.value)
+const activeCommentVisibilityValue = computed(() => activeCommentEditorTarget.value === 'edit' ? editingVisibility.value : selectedVisibility.value)
 watch(messageVisibilityLimit, () => {
   selectedVisibility.value = clampVisibilityToLimit(selectedVisibility.value, threadVisibilityLimitFor(replyingToComment.value))
   editingVisibility.value = clampVisibilityToLimit(editingVisibility.value, parentThreadVisibilityLimitFor(editingComment.value))
@@ -1080,12 +1088,34 @@ const commentVisibilityTooltipFor = (target: CommentEditorTarget, id?: number | 
   return isCommentVisibilityMenuOpen(target, id) ? undefined : visibilityTooltipFor(target)
 }
 const visibilityIconFor = (target: CommentEditorTarget) => visibilityOptionFor(currentCommentVisibility(target)).icon
+const positionCommentVisibilityMenu = (trigger: HTMLElement | null) => {
+  if (typeof window === 'undefined' || !trigger) return
+  const anchor = trigger.closest('.comment-visibility-picker') as HTMLElement | null
+  const rect = (anchor || trigger).getBoundingClientRect()
+  const menuWidth = 118
+  const menuHeight = Math.max(44, activeCommentVisibilityOptions.value.length * 36 + 16)
+  const left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - menuWidth - 8))
+  const top = rect.top - menuHeight - 8 >= 8
+    ? rect.top - menuHeight - 8
+    : Math.min(rect.bottom + 8, Math.max(8, window.innerHeight - menuHeight - 8))
+  commentVisibilityMenuStyle.value = {
+    left: `${Math.round(left)}px`,
+    top: `${Math.round(top)}px`,
+    minWidth: `${menuWidth}px`
+  }
+}
 const closeCommentVisibilityMenu = () => { openCommentVisibilityMenu.value = null }
-const toggleCommentVisibilityMenu = (target: CommentEditorTarget, id?: number | null) => {
+const toggleCommentVisibilityMenu = (target: CommentEditorTarget, id?: number | null, event?: MouseEvent) => {
   activeCommentEditorTarget.value = target
   showEmojiTarget.value = null
   const key = commentVisibilityMenuKey(target, id)
-  openCommentVisibilityMenu.value = openCommentVisibilityMenu.value === key ? null : key
+  if (openCommentVisibilityMenu.value === key) {
+    closeCommentVisibilityMenu()
+    return
+  }
+  openCommentVisibilityMenu.value = key
+  const trigger = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null
+  nextTick(() => positionCommentVisibilityMenu(trigger))
 }
 const selectCommentVisibility = (target: CommentEditorTarget, value: string) => {
   const next = normalizeVisibility(value)
@@ -1097,6 +1127,7 @@ const handleCommentVisibilityPointerDown = (event: MouseEvent) => {
   const target = event.target
   const element = target instanceof Element ? target : null
   if (element?.closest('.comment-visibility-picker')) return
+  if (element?.closest('.comment-visibility-floating-menu')) return
   closeCommentVisibilityMenu()
 }
 
@@ -1411,8 +1442,6 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 .edit-toolbar { margin-top:2px; }
 .toolbar-control { display:flex; align-items:center; gap:5px; min-height:36px; height:36px; width:max-content; max-width:min(220px, calc(100vw - 32px)); min-width:0; padding:0 8px; border:1px solid var(--comment-toolbar-border); border-radius:12px; background:var(--comment-toolbar-control-bg); color:var(--comment-toolbar-text); box-shadow:none; transition:background-color .18s ease, border-color .18s ease, transform .18s ease; }
 .toolbar-control:hover { transform:translate3d(0,0,0) scale(1.06); border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
-.toolbar-control.comment-visibility-picker:has(.comment-visibility-menu:hover),
-.toolbar-control.comment-visibility-picker:has(.comment-visibility-option:focus-visible) { transform:none !important; border-color:var(--comment-toolbar-border) !important; background:var(--comment-toolbar-control-bg) !important; color:var(--comment-toolbar-text) !important; }
 .comment-tool-btn { display:flex; align-items:center; justify-content:center; flex:0 0 auto; width:36px; min-width:36px; height:36px; border-radius:12px; border:1px solid var(--comment-toolbar-border); background:var(--comment-toolbar-control-bg); color:var(--comment-toolbar-text); box-shadow:none; transition:background-color .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
 .comment-tool-btn:hover:not(:disabled) { transform:translate3d(0,0,0) scale(1.06); border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
 .comment-tool-btn:active:not(:disabled) { transform:translate3d(0,0,0) scale(1.02); }
@@ -1420,7 +1449,7 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 .comment-visibility-trigger { display:inline-flex; align-items:center; justify-content:space-between; gap:3px; width:auto; min-width:46px; max-width:100%; height:28px; padding:0; border:0; border-radius:9px; background:transparent; color:inherit; font-size:12px; line-height:1; cursor:pointer; }
 .comment-visibility-trigger span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .comment-visibility-trigger svg { flex:0 0 auto; opacity:.72; }
-.comment-visibility-menu { position:absolute; left:0; bottom:calc(100% + 8px); z-index:5006; display:grid; gap:4px; width:max-content; min-width:106px; padding:8px; border:1px solid var(--nw-floating-border); border-radius:12px; background:var(--nw-floating-bg) !important; color:var(--nw-floating-text); box-shadow:var(--nw-floating-shadow); isolation:isolate; pointer-events:auto; }
+.comment-visibility-menu { position:fixed; z-index:5006; display:grid; gap:4px; width:max-content; min-width:106px; padding:8px; border:1px solid var(--nw-floating-border); border-radius:12px; background:var(--nw-floating-bg) !important; color:var(--nw-floating-text); box-shadow:var(--nw-floating-shadow); isolation:isolate; pointer-events:auto; }
 .comment-visibility-option { display:flex; align-items:center; gap:8px; min-height:32px; padding:0 10px; border-radius:9px; border:1px solid transparent; color:inherit; font-size:12px; font-weight:650; line-height:1; text-align:left; white-space:nowrap; transition:background-color .15s ease, border-color .15s ease, color .15s ease; }
 .comment-visibility-option:hover,
 .comment-visibility-option:focus-visible { outline:none; border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
