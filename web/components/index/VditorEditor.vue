@@ -113,7 +113,12 @@ const setupVditorPanelPositioning = () => {
   let headingsTrigger: HTMLElement | null = null
 
   const findVisiblePanel = () => {
-    const panels = Array.from(document.querySelectorAll<HTMLElement>('.vditor-panel'))
+    const scopedPanels = headingsTrigger
+      ? Array.from(headingsTrigger.querySelectorAll<HTMLElement>('.vditor-hint, .vditor-panel, .vditor-heading-floating-menu'))
+      : []
+    const panels = scopedPanels.length
+      ? scopedPanels
+      : Array.from(document.querySelectorAll<HTMLElement>('.vditor-hint.vditor-panel--arrow, .vditor-panel, .vditor-heading-floating-menu'))
     return panels.find((panel) => {
       if (panel.classList.contains('vditor-panel--none')) return false
       const style = window.getComputedStyle(panel)
@@ -121,14 +126,30 @@ const setupVditorPanelPositioning = () => {
     }) || null
   }
 
+  const getCurrentHeadingTag = () => {
+    const selection = typeof window !== 'undefined' ? window.getSelection() : null
+    const node = selection?.anchorNode || null
+    const element = node instanceof Element ? node : node?.parentElement || null
+    const heading = element?.closest?.('h1,h2,h3,h4,h5,h6') as HTMLElement | null
+    if (heading?.tagName) return heading.tagName.toLowerCase()
+    const block = element?.closest?.('.vditor-ir__node, [data-type="heading"]') as HTMLElement | null
+    const marker = block?.querySelector?.('.vditor-ir__marker--heading, [data-type="heading-marker"]') as HTMLElement | null
+    const markerText = (marker?.textContent || '').trim()
+    const level = markerText.match(/^#{1,6}/)?.[0]?.length || 0
+    return level ? `h${level}` : ''
+  }
+
   const positionHeadingsPanel = () => {
     const panel = findVisiblePanel()
     if (!headingsTrigger || !panel) return
     panel.classList.add('floating-control-menu', 'visibility-floating-menu', 'vditor-heading-floating-menu', 'nw-floating-menu')
+    panel.classList.remove('vditor-panel--arrow', 'vditor-panel--left')
     panel.classList.toggle('is-dark', props.theme === 'dark')
+    const currentHeading = getCurrentHeadingTag()
     panel.querySelectorAll<HTMLElement>('button, .vditor-menu, .vditor-toolbar__item').forEach((item) => {
       item.classList.add('floating-control-option', 'nw-floating-option')
-      item.classList.toggle('is-selected', item.classList.contains('vditor-menu--current') || item.classList.contains('vditor-menu--active') || item.getAttribute('aria-selected') === 'true')
+      const tag = (item.getAttribute('data-tag') || '').toLowerCase()
+      item.classList.toggle('is-selected', !!currentHeading && tag === currentHeading)
     })
     const styleRef = ref<Record<string, string>>({})
     positionFloatingMenu(headingsTrigger, panel, styleRef, 106, 'above-right')
@@ -632,6 +653,91 @@ html.dark .vditor-hint {
   color: #ffffff;
   border-color: rgba(255, 255, 255, 0.1);
 }
+
+.vditor-heading-floating-menu.vditor-hint,
+.vditor-heading-floating-menu.vditor-panel,
+.vditor-heading-floating-menu.floating-control-menu {
+  position: fixed !important;
+  z-index: 5004 !important;
+  box-sizing: border-box;
+  display: grid !important;
+  gap: 4px !important;
+  min-width: 106px !important;
+  width: auto !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 8px !important;
+  border: 1px solid var(--nw-floating-border) !important;
+  border-radius: 12px !important;
+  background: var(--nw-floating-bg) !important;
+  color: var(--nw-floating-text) !important;
+  box-shadow: var(--nw-floating-shadow) !important;
+  opacity: 1 !important;
+  line-height: 1 !important;
+  list-style: none !important;
+  overflow: visible !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.vditor-heading-floating-menu.vditor-panel--arrow::before,
+.vditor-heading-floating-menu::before,
+.vditor-heading-floating-menu::after {
+  content: none !important;
+  display: none !important;
+}
+
+.vditor-heading-floating-menu.is-dark {
+  --nw-floating-bg: #0f172a;
+  --nw-floating-text: #f8fafc;
+  --nw-floating-border: rgba(255, 255, 255, 0.18);
+  --nw-floating-shadow: 0 18px 42px rgba(0, 0, 0, 0.42);
+  --nw-floating-hover-bg: rgba(249, 115, 22, 0.26);
+  --nw-floating-hover-border: rgba(249, 115, 22, 0.58);
+  --nw-floating-selected-bg: rgba(249, 115, 22, 0.30);
+  --nw-floating-selected-border: rgba(249, 115, 22, 0.70);
+}
+
+.vditor-heading-floating-menu button.floating-control-option,
+.vditor-heading-floating-menu .floating-control-option {
+  box-sizing: border-box;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  width: 100% !important;
+  min-width: 106px !important;
+  min-height: 32px !important;
+  margin: 0 !important;
+  padding: 0 10px !important;
+  border: 1px solid transparent !important;
+  border-radius: 9px !important;
+  background: transparent !important;
+  color: inherit !important;
+  font-size: 12px !important;
+  font-weight: 650 !important;
+  line-height: 1 !important;
+  text-align: left !important;
+  white-space: nowrap !important;
+}
+
+.vditor-heading-floating-menu button.floating-control-option:hover,
+.vditor-heading-floating-menu button.floating-control-option:focus-visible,
+.vditor-heading-floating-menu .floating-control-option:hover,
+.vditor-heading-floating-menu .floating-control-option:focus-visible {
+  outline: none !important;
+  border-color: var(--nw-floating-hover-border) !important;
+  background: var(--nw-floating-hover-bg) !important;
+}
+
+.vditor-heading-floating-menu button.floating-control-option.is-selected,
+.vditor-heading-floating-menu .floating-control-option.is-selected {
+  border-color: var(--nw-floating-selected-border) !important;
+  background: var(--nw-floating-selected-bg) !important;
+  color: var(--nw-floating-text) !important;
+}
+
 html.dark .vditor-tooltip, html.dark .vditor-tip {
   color: #ffffff;
 }

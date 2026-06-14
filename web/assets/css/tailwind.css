@@ -88,11 +88,11 @@ html.dark {
 }
 
 .nw-action-btn--danger {
-  --nw-action-border: rgba(239, 68, 68, .95);
-  --nw-action-bg: #ef4444;
+  --nw-action-border: rgba(234, 88, 12, .95);
+  --nw-action-bg: linear-gradient(135deg, rgba(251, 146, 60, .95), rgba(234, 88, 12, .95));
   --nw-action-text: #fff;
-  --nw-action-hover-border: rgba(239, 68, 68, .95);
-  --nw-action-hover-bg: #ef4444;
+  --nw-action-hover-border: rgba(234, 88, 12, .95);
+  --nw-action-hover-bg: linear-gradient(135deg, rgba(251, 146, 60, .95), rgba(234, 88, 12, .95));
   --nw-action-hover-text: #fff;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .18);
 }
@@ -121,11 +121,11 @@ html.dark .nw-action-btn--primary {
 
 html.dark .nw-action-btn--danger,
 .nw-action-btn--danger.is-dark {
-  --nw-action-border: rgba(239, 68, 68, .95);
-  --nw-action-bg: #ef4444;
+  --nw-action-border: rgba(234, 88, 12, .95);
+  --nw-action-bg: linear-gradient(135deg, rgba(251, 146, 60, .95), rgba(234, 88, 12, .95));
   --nw-action-text: #fff;
-  --nw-action-hover-border: rgba(239, 68, 68, .95);
-  --nw-action-hover-bg: #ef4444;
+  --nw-action-hover-border: rgba(234, 88, 12, .95);
+  --nw-action-hover-bg: linear-gradient(135deg, rgba(251, 146, 60, .95), rgba(234, 88, 12, .95));
   --nw-action-hover-text: #fff;
 }
 
