@@ -1129,15 +1129,16 @@ const handleCommentVisibilityPointerDown = (event: MouseEvent) => {
 }
 
 const handleCommentVisibilityReposition = () => {
-  if (openCommentVisibilityMenu.value) scheduleFloatingMenuPosition(() => positionCommentVisibilityMenu())
+  if (openCommentVisibilityMenu.value) positionCommentVisibilityMenu()
 }
 
 onMounted(() => {
   if (typeof document !== 'undefined') document.addEventListener('mousedown', handleCommentVisibilityPointerDown)
   if (typeof window !== 'undefined') {
     window.addEventListener('resize', handleCommentVisibilityReposition)
-    window.addEventListener('scroll', handleCommentVisibilityReposition, { passive: true })
-    document.querySelector('.content-wrapper')?.addEventListener('scroll', handleCommentVisibilityReposition, { passive: true })
+    window.addEventListener('scroll', handleCommentVisibilityReposition, true)
+    window.visualViewport?.addEventListener('resize', handleCommentVisibilityReposition)
+    window.visualViewport?.addEventListener('scroll', handleCommentVisibilityReposition)
   }
 })
 
@@ -1145,8 +1146,9 @@ onBeforeUnmount(() => {
   if (typeof document !== 'undefined') document.removeEventListener('mousedown', handleCommentVisibilityPointerDown)
   if (typeof window !== 'undefined') {
     window.removeEventListener('resize', handleCommentVisibilityReposition)
-    window.removeEventListener('scroll', handleCommentVisibilityReposition)
-    document.querySelector('.content-wrapper')?.removeEventListener('scroll', handleCommentVisibilityReposition)
+    window.removeEventListener('scroll', handleCommentVisibilityReposition, true)
+    window.visualViewport?.removeEventListener('resize', handleCommentVisibilityReposition)
+    window.visualViewport?.removeEventListener('scroll', handleCommentVisibilityReposition)
   }
 })
 
