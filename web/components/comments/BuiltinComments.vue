@@ -174,7 +174,8 @@
   <Teleport to="body">
     <div
       v-if="openCommentVisibilityMenu"
-      class="comment-visibility-menu comment-visibility-floating-menu nw-floating-menu"
+      ref="commentVisibilityMenuRef"
+      class="floating-control-menu visibility-floating-menu comment-visibility-menu comment-visibility-floating-menu nw-floating-menu"
       :style="commentVisibilityMenuStyle"
       role="listbox"
       @mousedown.stop
@@ -183,7 +184,7 @@
         v-for="opt in activeCommentVisibilityOptions"
         :key="opt.value"
         type="button"
-        class="comment-visibility-option nw-floating-option"
+        class="floating-control-option comment-visibility-option nw-floating-option"
         :class="{ 'is-selected': opt.value === activeCommentVisibilityValue }"
         role="option"
         :aria-selected="opt.value === activeCommentVisibilityValue"
@@ -226,6 +227,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch, computed, nextTick, inject, onBeforeUnmount } from 'vue'
+import { positionFloatingMenu, scheduleFloatingMenuPosition } from '~/utils/floating-menu'
 import MarkdownRenderer from '~/components/index/MarkdownRenderer.vue'
 import { useToast } from '#ui/composables/useToast'
 import { getRequest, postRequest, putRequest, deleteRequest } from '~/utils/api'
@@ -296,6 +298,7 @@ const commentOwnerId = (c: any) => Number(c?.user_id || c?.UserID || c?.user?.id
 const canManageComment = (c: any) => isAdmin.value || (!!currentUserId.value && commentOwnerId(c) === currentUserId.value)
 const selectedVisibility = ref(messageVisibilityLimit.value)
 const openCommentVisibilityMenu = ref<string | null>(null)
+const commentVisibilityMenuRef = ref<HTMLElement | null>(null)
 const commentVisibilityMenuStyle = ref<Record<string, string>>({})
 const editingId = ref<number | null>(null)
 const editingContent = ref('')
@@ -1089,20 +1092,8 @@ const commentVisibilityTooltipFor = (target: CommentEditorTarget, id?: number | 
 }
 const visibilityIconFor = (target: CommentEditorTarget) => visibilityOptionFor(currentCommentVisibility(target)).icon
 const positionCommentVisibilityMenu = (trigger: HTMLElement | null) => {
-  if (typeof window === 'undefined' || !trigger) return
-  const anchor = trigger.closest('.comment-visibility-picker') as HTMLElement | null
-  const rect = (anchor || trigger).getBoundingClientRect()
-  const menuWidth = 118
-  const menuHeight = Math.max(44, activeCommentVisibilityOptions.value.length * 36 + 16)
-  const left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - menuWidth - 8))
-  const top = rect.top - menuHeight - 8 >= 8
-    ? rect.top - menuHeight - 8
-    : Math.min(rect.bottom + 8, Math.max(8, window.innerHeight - menuHeight - 8))
-  commentVisibilityMenuStyle.value = {
-    left: `${Math.round(left)}px`,
-    top: `${Math.round(top)}px`,
-    minWidth: `${menuWidth}px`
-  }
+  const anchor = trigger?.closest('.comment-visibility-picker') as HTMLElement | null
+  positionFloatingMenu(anchor || trigger, commentVisibilityMenuRef.value, commentVisibilityMenuStyle, 106, 'above-right')
 }
 const closeCommentVisibilityMenu = () => { openCommentVisibilityMenu.value = null }
 const toggleCommentVisibilityMenu = (target: CommentEditorTarget, id?: number | null, event?: MouseEvent) => {
@@ -1115,7 +1106,7 @@ const toggleCommentVisibilityMenu = (target: CommentEditorTarget, id?: number | 
   }
   openCommentVisibilityMenu.value = key
   const trigger = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null
-  nextTick(() => positionCommentVisibilityMenu(trigger))
+  nextTick(() => scheduleFloatingMenuPosition(() => positionCommentVisibilityMenu(trigger)))
 }
 const selectCommentVisibility = (target: CommentEditorTarget, value: string) => {
   const next = normalizeVisibility(value)

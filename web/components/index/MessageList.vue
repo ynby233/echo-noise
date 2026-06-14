@@ -155,7 +155,7 @@
                       <button v-if="canPin(msg)" type="button" class="tool-icon nw-action-btn nw-tooltip-anchor" :data-tooltip="(msg.pinned ? '取消置顶' : '置顶内容')" @click="togglePin(msg)"><UIcon :name="msg.pinned ? 'i-mdi-pin' : 'i-mdi-pin-outline'" /></button>
                       <button v-if="isLogin" type="button" class="tool-icon nw-action-btn nw-tooltip-anchor" data-tooltip="编辑" @click="editMessage(msg)"><UIcon name="i-mdi-pencil-outline" /></button>
                       <button type="button" class="tool-icon nw-action-btn nw-tooltip-anchor" data-tooltip="复制" @click="copyContent(msg.content)"><UIcon name="i-mdi-content-copy" /></button>
-                      <button v-if="isLogin" type="button" class="tool-icon nw-action-btn nw-action-btn--danger nw-tooltip-anchor" data-tooltip="删除" @click="deleteMsg(msg.id)"><UIcon name="i-mdi-trash-can-outline" /></button>
+                      <button v-if="isLogin" type="button" class="tool-icon nw-action-btn nw-action-btn--danger nw-tooltip-anchor" data-tooltip="删除" @click="deleteMsg(msg.id)"><UIcon name="i-mdi-close-octagon-outline" /></button>
                   </div>
                   </div>
                 </div>
@@ -3301,8 +3301,13 @@ onMounted(() => {
   color: var(--toolbox-fg) !important;
 }
 
-.message-toolbox.overlay .tool-icon {
+.message-toolbox.overlay .tool-icon:not(.nw-action-btn--danger) {
   color: inherit;
+}
+
+.message-toolbox.overlay .tool-icon.nw-action-btn--danger,
+.message-toolbox.overlay .tool-icon.nw-action-btn--danger > * {
+  color: #fff !important;
 }
 
 .message-toolbox.overlay::before,

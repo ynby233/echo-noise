@@ -4,6 +4,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from "vue";
+import { positionFloatingMenu, scheduleFloatingMenuPosition } from '~/utils/floating-menu'
 import Vditor from "vditor";
 import "vditor/dist/index.css";
 
@@ -26,6 +27,7 @@ let toolbarEl: HTMLElement | null = null;
 let placeholderEl: HTMLElement | null = null;
 let mutationObserver: MutationObserver | null = null;
 let fixedCleanup: (() => void) | null = null;
+let panelCleanup: (() => void) | null = null;
 let imagePreviewCleanup: (() => void) | null = null;
 const isReady = ref(false);
 
@@ -106,6 +108,54 @@ const editorOptions: IOptions = {
   placeholder: "灵感记录~"
 };
 
+const setupVditorPanelPositioning = () => {
+  if (panelCleanup || !toolbarEl) return
+  let headingsTrigger: HTMLElement | null = null
+
+  const findVisiblePanel = () => {
+    const panels = Array.from(document.querySelectorAll<HTMLElement>('.vditor-panel'))
+    return panels.find((panel) => {
+      if (panel.classList.contains('vditor-panel--none')) return false
+      const style = window.getComputedStyle(panel)
+      return style.display !== 'none' && style.visibility !== 'hidden'
+    }) || null
+  }
+
+  const positionHeadingsPanel = () => {
+    const panel = findVisiblePanel()
+    if (!headingsTrigger || !panel) return
+    panel.classList.add('floating-control-menu', 'visibility-floating-menu', 'vditor-heading-floating-menu', 'nw-floating-menu')
+    panel.querySelectorAll<HTMLElement>('button, .vditor-menu, .vditor-toolbar__item').forEach((item) => {
+      item.classList.add('floating-control-option', 'nw-floating-option')
+    })
+    const styleRef = ref<Record<string, string>>({})
+    positionFloatingMenu(headingsTrigger, panel, styleRef, 132, 'above-right')
+    Object.assign(panel.style, styleRef.value)
+  }
+
+  const isHeadingsItem = (item: HTMLElement | null) => {
+    if (!item) return false
+    const type = item.getAttribute('data-type') || ''
+    const label = item.getAttribute('aria-label') || item.getAttribute('title') || ''
+    return type === 'headings' || /标题|Heading|Headings/i.test(label)
+  }
+
+  const handleToolbarClick = (event: Event) => {
+    const target = event.target instanceof Element ? event.target : null
+    const item = target?.closest('.vditor-toolbar__item') as HTMLElement | null
+    if (!isHeadingsItem(item)) return
+    headingsTrigger = item
+    window.setTimeout(() => scheduleFloatingMenuPosition(positionHeadingsPanel), 0)
+    window.setTimeout(() => scheduleFloatingMenuPosition(positionHeadingsPanel), 80)
+  }
+
+  toolbarEl.addEventListener('click', handleToolbarClick, true)
+  panelCleanup = () => {
+    toolbarEl?.removeEventListener('click', handleToolbarClick, true)
+    panelCleanup = null
+  }
+}
+
 onMounted(async () => {
   if (!editorContainer.value) return;
 
@@ -128,7 +178,9 @@ onMounted(async () => {
   const setupFixedToolbar = () => {
     const root = editorContainer.value?.querySelector('.vditor') as HTMLElement | null;
     toolbarEl = root?.querySelector('.vditor-toolbar') as HTMLElement | null;
-    if (!root || !toolbarEl || placeholderEl) return;
+    if (!root || !toolbarEl) return;
+    setupVditorPanelPositioning();
+    if (placeholderEl) return;
 
     // 占位元素，避免工具栏脱离文档流后遮挡内容
     placeholderEl = document.createElement('div');
@@ -233,6 +285,10 @@ onBeforeUnmount(() => {
       fixedCleanup();
       fixedCleanup = null;
     }
+    if (panelCleanup) {
+      panelCleanup();
+      panelCleanup = null;
+    }
     if (imagePreviewCleanup) {
       imagePreviewCleanup();
       imagePreviewCleanup = null;
@@ -313,23 +369,21 @@ watch(() => props.theme, (newTheme) => {
 .vditor-toolbar {
   display: flex !important;
   flex-wrap: nowrap !important;
-  justify-content: space-between;
-  overflow-x: auto !important;
-  overflow-y: hidden !important;
+  align-items: center !important;
+  justify-content: stretch;
+  overflow: hidden !important;
   width: 100%;
   max-width: 100%;
   min-width: 0;
   white-space: nowrap;
-  -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   -ms-overflow-style: none;
   background-color: #f8f9fab7;
   border-bottom: none;
   z-index: 100;
-  overscroll-behavior-x: contain;
   box-sizing: border-box;
-  gap: 3px;
-  padding: 2px 4px !important;
+  gap: 2px;
+  padding: 0 !important;
 }
 
 .vditor-toolbar > * {
@@ -433,13 +487,25 @@ watch(() => props.theme, (newTheme) => {
   border-color: transparent !important;
 }
 .vditor-toolbar__item {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   flex: 1 1 0 !important;
   width: auto;
   min-width: 0;
-  height: 32px;
-  padding: 4px !important;
+  height: 34px;
+  padding: 0 !important;
   margin: 0 !important;
+  line-height: 1 !important;
   transition: all 0.2s ease;
+}
+
+.vditor-toolbar__item svg,
+.vditor-toolbar__item .vditor-icon {
+  display: block !important;
+  width: 18px !important;
+  height: 18px !important;
+  margin: auto !important;
 }
 
 .vditor-toolbar__item:first-child {
