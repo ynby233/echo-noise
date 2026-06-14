@@ -169,8 +169,8 @@
         <div :class="centerContainerClass">
           <div class="moments-header">
             <div class="header-image" :style="headerImageStyle">
-              <h1 class="header-title">{{ (frontendConfig.siteTitle || '说说笔记') }}</h1>
-              <div class="header-subtitle" ref="subtitleEl"></div>
+              <h1 class="header-title" :style="activeHeaderTextStyle.title">{{ (frontendConfig.siteTitle || '说说笔记') }}</h1>
+              <div class="header-subtitle" ref="subtitleEl" :style="activeHeaderTextStyle.subtitle"></div>
               <div class="hero-tabs">
                 <button v-for="t in centerTabs" :key="t.key" :class="['hero-tab', activeTab===t.key ? 'active' : '']" @click="activeTab=t.key">
                   <UIcon :name="t.icon" class="hero-tab-icon" />
@@ -1168,6 +1168,48 @@ watch(() => route.hash, (newHash) => {
   }
 }, { immediate: true })
 
+type HeaderBackgroundConfig = {
+  url: string
+  titleColor: string
+  titleOpacity: number
+  subtitleColor: string
+  subtitleOpacity: number
+}
+
+type HeaderBackgroundInput = string | Partial<HeaderBackgroundConfig> | null | undefined
+
+const defaultHeaderTextStyle = {
+  titleColor: '#ffffff',
+  titleOpacity: 1,
+  subtitleColor: '#ffffff',
+  subtitleOpacity: 1,
+}
+
+const clampOpacity = (value: any) => {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return 1
+  return Math.max(0, Math.min(1, num))
+}
+
+const normalizeHeaderBackground = (value: HeaderBackgroundInput): HeaderBackgroundConfig => {
+  if (typeof value === 'string') {
+    return { url: value.trim(), ...defaultHeaderTextStyle }
+  }
+  const item = value && typeof value === 'object' ? value : {}
+  return {
+    url: String((item as any).url || '').trim(),
+    titleColor: String((item as any).titleColor || defaultHeaderTextStyle.titleColor).trim(),
+    titleOpacity: clampOpacity((item as any).titleOpacity ?? defaultHeaderTextStyle.titleOpacity),
+    subtitleColor: String((item as any).subtitleColor || defaultHeaderTextStyle.subtitleColor).trim(),
+    subtitleOpacity: clampOpacity((item as any).subtitleOpacity ?? defaultHeaderTextStyle.subtitleOpacity),
+  }
+}
+
+const normalizeHeaderBackgrounds = (items: any): HeaderBackgroundConfig[] => {
+  if (!Array.isArray(items)) return []
+  return items.map((item) => normalizeHeaderBackground(item)).filter((item) => item.url !== '')
+}
+
 // 添加前端配置的响应式对象
 const frontendConfig = ref<any>({
     siteTitle: '',
@@ -1175,7 +1217,7 @@ const frontendConfig = ref<any>({
     avatarURL: '',
     username: '',
     description: '',
-    backgrounds: [] as string[],
+    backgrounds: [] as HeaderBackgroundConfig[],
     cardFooterTitle: '',
     cardFooterSubtitle: '',
     pageFooterHTML: '',
@@ -1767,14 +1809,28 @@ watch(() => frontendConfig.value.hitokotoEnabled, async (enabled) => {
   if (enabled) await loadHitokoto()
 }, { immediate: true })
 
+const firstBackgroundUrl = computed(() => frontendConfig.value.backgrounds[0]?.url || '')
+const activeHeaderTextStyle = computed(() => {
+  const bg = currentBackground.value || frontendConfig.value.backgrounds[0] || normalizeHeaderBackground('')
+  return {
+    title: {
+      color: bg.titleColor || defaultHeaderTextStyle.titleColor,
+      opacity: clampOpacity(bg.titleOpacity),
+    },
+    subtitle: {
+      color: bg.subtitleColor || defaultHeaderTextStyle.subtitleColor,
+      opacity: clampOpacity(bg.subtitleOpacity),
+    },
+  }
+})
 const backgroundStyle = computed(() => ({
-    '--bg-image': `url(${currentImage.value || frontendConfig.value.backgrounds[0]})`,
+    '--bg-image': `url(${currentImage.value || firstBackgroundUrl.value})`,
     '--bg-image-next': nextImage.value ? `url(${nextImage.value})` : 'none'
 }))
 const backgroundClass = computed(() => (isCrossfading.value ? 'bg-crossfade-active' : ''))
 // 添加 headerImageStyle 计算属性
 const headerImageStyle = computed(() => ({
-    'background-image': `url(${currentImage.value || frontendConfig.value.backgrounds[0]})`,
+    'background-image': `url(${currentImage.value || firstBackgroundUrl.value})`,
     'background-size': 'cover',
     'background-position': 'center'
 }))
@@ -1793,7 +1849,7 @@ const headerImageStyle = computed(() => ({
     welcomeDescription: '执迷不悟',
     welcomeUseAdmin: true,
     backgrounds: [
-      'https://s2.loli.net/2025/03/26/d7iyuPYA8cRqD1K.jpg',
+      normalizeHeaderBackground('https://s2.loli.net/2025/03/26/d7iyuPYA8cRqD1K.jpg'),
     ],
     cardFooterTitle: 'Noise·说说·笔记~',
     cardFooterSubtitle: 'note.noisework.cn',
@@ -1874,7 +1930,7 @@ const fetchConfig = async () => {
             Object.keys(nextConfig).forEach(key => {
                 if (settings[key] !== null && settings[key] !== undefined) {
                     if (key === 'backgrounds' && Array.isArray(settings[key])) {
-                        nextConfig.backgrounds = [...settings[key]]
+                        nextConfig.backgrounds = normalizeHeaderBackgrounds(settings[key])
                     } else if (key === 'feedSources' && Array.isArray(settings[key])) {
                         nextConfig.feedSources = [...settings[key]]
                     } else if (key === 'socialLinks' && Array.isArray(settings[key])) {
@@ -1907,8 +1963,9 @@ const fetchConfig = async () => {
             }
         }
         if (!nextConfig.backgrounds?.length) {
-            nextConfig.backgrounds = [...defaultConfig.backgrounds]
+            nextConfig.backgrounds = normalizeHeaderBackgrounds(defaultConfig.backgrounds)
         }
+        nextConfig.backgrounds = normalizeHeaderBackgrounds(nextConfig.backgrounds)
         nextConfig.musicTheme = normalizeMusicTheme(nextConfig.musicTheme)
         const source = resolveMusicSource(nextConfig)
         nextConfig.musicPlaylistId = source.playlistId
@@ -1916,11 +1973,15 @@ const fetchConfig = async () => {
         frontendConfig.value = nextConfig
         if (frontendConfig.value.backgrounds.length > 0) {
             const randomIndex = Math.floor(Math.random() * frontendConfig.value.backgrounds.length)
-            currentImage.value = frontendConfig.value.backgrounds[randomIndex]
+            const initialBackground = frontendConfig.value.backgrounds[randomIndex]
+            currentBackground.value = initialBackground
+            currentImage.value = initialBackground.url
         }
     } catch (error) {
         console.error('获取配置失败:', error)
-        frontendConfig.value = { ...defaultConfig }
+        frontendConfig.value = { ...defaultConfig, backgrounds: normalizeHeaderBackgrounds(defaultConfig.backgrounds) }
+        currentBackground.value = frontendConfig.value.backgrounds[0] || null
+        currentImage.value = currentBackground.value?.url || ''
     } finally {
         musicConfigLoaded.value = true
     }
@@ -1992,12 +2053,14 @@ const HITOKOTO_FALLBACKS = [
 ]
 const hitokotoText = ref(HITOKOTO_FALLBACKS[0])
 const currentImage = ref('')
+const currentBackground = ref<HeaderBackgroundConfig | null>(null)
 const isLoaded = ref(false)
 const imageLoading = ref(false)
 const nextImage = ref('')
 const isCrossfading = ref(false)
 // 添加图片预加载函数
-const preloadImages = async (images: string[]) => {
+const preloadImages = async (images: HeaderBackgroundInput[] | string[]) => {
+  const urls = normalizeHeaderBackgrounds(images).map((item) => item.url)
   const loadImage = (src: string) => {
     return new Promise((resolve) => {
       const img = new Image()
@@ -2008,9 +2071,9 @@ const preloadImages = async (images: string[]) => {
   }
   
   // 并行预加载所有图片
-  const firstBatch = images.slice(0, 6)
+  const firstBatch = urls.slice(0, 6)
   await Promise.all(firstBatch.map(src => loadImage(src)))
-  const restBatch = images.slice(6, 24)
+  const restBatch = urls.slice(6, 24)
   if (restBatch.length > 0) {
     runIdle(() => {
       restBatch.forEach((src) => { loadImage(src) })
@@ -2029,10 +2092,11 @@ const changeBackground = async () => {
   if (imageLoading.value) return
   imageLoading.value = true
 
-  const list = frontendConfig.value.backgrounds || []
+  const list = normalizeHeaderBackgrounds(frontendConfig.value.backgrounds || [])
   if (!list.length) { imageLoading.value = false; return }
   const newIndex = Math.floor(Math.random() * list.length)
-  const newImage = list[newIndex]
+  const newBackground = list[newIndex]
+  const newImage = newBackground.url
   if (!newImage || newImage === currentImage.value) { imageLoading.value = false; return }
 
   const img = new Image()
@@ -2041,6 +2105,7 @@ const changeBackground = async () => {
     nextImage.value = newImage
     isCrossfading.value = true
     setTimeout(() => {
+      currentBackground.value = newBackground
       currentImage.value = newImage
       isCrossfading.value = false
       nextImage.value = ''
@@ -2345,10 +2410,13 @@ onMounted(async () => {
     })
 
     // 确保配置加载完成后再执行后续操作
-    if (frontendConfig.value.backgrounds.length > 0) {
-      const initialImage = frontendConfig.value.backgrounds[
-        Math.floor(Math.random() * frontendConfig.value.backgrounds.length)
+    const headerBackgrounds = normalizeHeaderBackgrounds(frontendConfig.value.backgrounds)
+    if (headerBackgrounds.length > 0) {
+      const initialBackground = headerBackgrounds[
+        Math.floor(Math.random() * headerBackgrounds.length)
       ]
+      const initialImage = initialBackground.url
+      currentBackground.value = initialBackground
       
       // 先加载低质量版本
       const lowQualityImage = `${initialImage}?imageView2/2/w/100/q/30`

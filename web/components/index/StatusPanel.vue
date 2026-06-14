@@ -737,12 +737,30 @@
                         <div class="space-y-3">
                           <div class="admin-bg-grid">
                             <div v-for="(bg, index) in frontendConfig.backgrounds" :key="index" class="admin-bg-item">
-                              <img :src="bg || '/favicon.ico'" class="admin-bg-thumb border" :class="theme.border" @click="previewImage(bg)" />
-                              <UInput v-model="frontendConfig.backgrounds[index]" placeholder="输入头部图 URL" class="w-full" />
+                              <img :src="getBackgroundUrl(bg) || '/favicon.ico'" class="admin-bg-thumb border" :class="theme.border" @click="previewImage(getBackgroundUrl(bg))" />
+                              <UInput v-model="bg.url" placeholder="输入头部图 URL" class="w-full" />
+                              <div class="admin-bg-style-grid">
+                                <label class="admin-bg-style-control">
+                                  <span :class="theme.mutedText">标题颜色</span>
+                                  <input v-model="bg.titleColor" type="color" class="admin-bg-color-input" />
+                                </label>
+                                <label class="admin-bg-style-control">
+                                  <span :class="theme.mutedText">标题透明度 {{ Math.round(clampOpacity(bg.titleOpacity) * 100) }}%</span>
+                                  <input v-model.number="bg.titleOpacity" type="range" min="0" max="1" step="0.05" class="admin-bg-opacity-input" />
+                                </label>
+                                <label class="admin-bg-style-control">
+                                  <span :class="theme.mutedText">欢迎语颜色</span>
+                                  <input v-model="bg.subtitleColor" type="color" class="admin-bg-color-input" />
+                                </label>
+                                <label class="admin-bg-style-control">
+                                  <span :class="theme.mutedText">欢迎语透明度 {{ Math.round(clampOpacity(bg.subtitleOpacity) * 100) }}%</span>
+                                  <input v-model.number="bg.subtitleOpacity" type="range" min="0" max="1" step="0.05" class="admin-bg-opacity-input" />
+                                </label>
+                              </div>
                               <div class="flex flex-wrap items-center gap-2">
                               <UButton size="xs" variant="soft" icon="i-heroicons-arrow-up" @click="moveBackgroundUp(index)">上移</UButton>
                               <UButton size="xs" variant="soft" icon="i-heroicons-arrow-down" @click="moveBackgroundDown(index)">下移</UButton>
-                              <UButton size="xs" variant="soft" icon="i-heroicons-eye" @click="previewImage(bg)">预览</UButton>
+                              <UButton size="xs" variant="soft" icon="i-heroicons-eye" @click="previewImage(getBackgroundUrl(bg))">预览</UButton>
                               <UButton size="xs" color="red" variant="soft" icon="i-heroicons-trash" @click="removeBackground(index)">删除</UButton>
                               </div>
                             </div>
@@ -5062,13 +5080,58 @@ const getConfigSummary = (key: string) => {
   return text ? '已填写' : '待填写'
 }
 
+type HeaderBackgroundConfig = {
+  url: string
+  titleColor: string
+  titleOpacity: number
+  subtitleColor: string
+  subtitleOpacity: number
+}
+
+type HeaderBackgroundInput = string | Partial<HeaderBackgroundConfig> | null | undefined
+
+const defaultHeaderTextStyle = {
+  titleColor: '#ffffff',
+  titleOpacity: 1,
+  subtitleColor: '#ffffff',
+  subtitleOpacity: 1,
+}
+
+const clampOpacity = (value: any) => {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return 1
+  return Math.max(0, Math.min(1, num))
+}
+
+const normalizeHeaderBackground = (value: HeaderBackgroundInput): HeaderBackgroundConfig => {
+  if (typeof value === 'string') {
+    return { url: value.trim(), ...defaultHeaderTextStyle }
+  }
+  const item = value && typeof value === 'object' ? value : {}
+  return {
+    url: String((item as any).url || '').trim(),
+    titleColor: String((item as any).titleColor || defaultHeaderTextStyle.titleColor).trim(),
+    titleOpacity: clampOpacity((item as any).titleOpacity ?? defaultHeaderTextStyle.titleOpacity),
+    subtitleColor: String((item as any).subtitleColor || defaultHeaderTextStyle.subtitleColor).trim(),
+    subtitleOpacity: clampOpacity((item as any).subtitleOpacity ?? defaultHeaderTextStyle.subtitleOpacity),
+  }
+}
+
+const normalizeHeaderBackgrounds = (items: any): HeaderBackgroundConfig[] => {
+  if (!Array.isArray(items)) return []
+  return items.map((item) => normalizeHeaderBackground(item)).filter((item) => item.url !== '')
+}
+
+const getBackgroundUrl = (bg: HeaderBackgroundInput) => normalizeHeaderBackground(bg).url
+const makeEmptyBackground = (): HeaderBackgroundConfig => normalizeHeaderBackground({ url: '' })
+
 interface FrontendConfig {
     siteTitle: string;
     subtitleText: string;
     avatarURL: string;
     username: string;
     description: string;
-    backgrounds: string[];
+    backgrounds: HeaderBackgroundConfig[];
     cardFooterTitle: string;
     cardFooterLink: string;
     pageFooterHTML: string;
@@ -5154,7 +5217,7 @@ const frontendConfig = reactive<FrontendConfig>({
     welcomeAvatarURL: '',
     welcomeDescription: '',
     welcomeUseAdmin: false,
-    backgrounds: [] as string[],
+    backgrounds: [] as HeaderBackgroundConfig[],
     cardFooterTitle: '',
     cardFooterLink: '',
     pageFooterHTML: '',
@@ -5273,7 +5336,7 @@ const defaultConfig: Record<string, any> = {
     welcomeUseAdmin: false,
     
     backgrounds: [
-        "https://s2.loli.net/2025/03/26/d7iyuPYA8cRqD1K.jpg",
+        normalizeHeaderBackground("https://s2.loli.net/2025/03/26/d7iyuPYA8cRqD1K.jpg"),
     ],
     cardFooterTitle: "Noise·说说·笔记~",
     cardFooterLink: "note.noisework.cn",
@@ -5805,7 +5868,11 @@ const saveSocialLinks = async () => {
 
 // 添加单个配置项重置方法
 const resetConfigItem = (key: string) => {
-    ;(frontendConfig as any)[key] = (defaultConfig as any)[key]
+    if (key === 'backgrounds') {
+        frontendConfig.backgrounds = normalizeHeaderBackgrounds((defaultConfig as any).backgrounds)
+    } else {
+        ;(frontendConfig as any)[key] = (defaultConfig as any)[key]
+    }
     editItem[key] = false
 }
 const fetchConfig = async () => {
@@ -5829,7 +5896,7 @@ const fetchConfig = async () => {
                 if (key === 'backgrounds') {
                     const serverBackgrounds = settings[key];
                     if (Array.isArray(serverBackgrounds)) {
-                        frontendConfig[key] = [...serverBackgrounds];
+                        frontendConfig[key] = normalizeHeaderBackgrounds(serverBackgrounds);
                     }
                 } else if (key === 'socialLinks') {
                     const arr = settings[key];
@@ -5967,8 +6034,7 @@ const saveConfigItem = async (key: string) => {
     try {
         // 特殊处理背景图片数组
         if (key === 'backgrounds') {
-            const validBackgrounds = frontendConfig.backgrounds.filter((url: string) => url && url.trim() !== '');
-            frontendConfig.backgrounds = validBackgrounds;
+            frontendConfig.backgrounds = normalizeHeaderBackgrounds(frontendConfig.backgrounds)
         }
         // 特殊处理广告位数组：过滤空条目并裁剪字段
         if (key === 'leftAds') {
@@ -6120,9 +6186,7 @@ const saveConfig = async () => {
     const normalizedLifeExpectancyYears = Number.isFinite(lifeExpectancyRaw) && lifeExpectancyRaw > 0
       ? Math.min(150, Math.max(1, Math.floor(lifeExpectancyRaw)))
       : ''
-    const cleanedBackgrounds = Array.isArray(frontendConfig.backgrounds)
-      ? frontendConfig.backgrounds.filter((url: string) => String(url || '').trim() !== '').map((url: string) => String(url || '').trim())
-      : []
+    const cleanedBackgrounds = normalizeHeaderBackgrounds(frontendConfig.backgrounds)
 
     const cleanedLeftAds = Array.isArray((frontendConfig as any).leftAds)
       ? (frontendConfig as any).leftAds
@@ -6766,7 +6830,7 @@ const handleFileUpload = async (event: Event) => {
       }
       const imageUrl = String(data.data || '')
       const finalUrl = imageUrl.startsWith('http') ? imageUrl : `/api${imageUrl}`
-      const newBackgrounds = [...frontendConfig.backgrounds, finalUrl]
+      const newBackgrounds = [...frontendConfig.backgrounds, normalizeHeaderBackground(finalUrl)]
       frontendConfig.backgrounds = newBackgrounds
       await saveConfigItem('backgrounds')
       useToast().add({ title: '上传成功', description: `${file.name} 已添加到背景图片列表`, color: 'green' })
@@ -6803,7 +6867,7 @@ const resetConfig = () => {
 }
 
 const addBackground = async () => {
-    frontendConfig.backgrounds.push(''); 
+    frontendConfig.backgrounds.push(makeEmptyBackground());
 }
 
 const removeBackground = async (index: number) => {
@@ -7698,6 +7762,34 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   border-radius: 8px;
   object-fit: cover;
   cursor: pointer;
+}
+.admin-bg-style-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.admin-bg-style-control {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+.admin-bg-color-input {
+  width: 100%;
+  height: 34px;
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid rgba(134, 144, 156, 0.35);
+  background: rgba(255, 255, 255, 0.72);
+}
+.admin-bg-opacity-input {
+  width: 100%;
+  accent-color: #16a34a;
+}
+.admin-root.dark .admin-bg-color-input {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
 }
 .admin-loading-wrap {
   position: fixed;

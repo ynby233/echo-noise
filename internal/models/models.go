@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -356,17 +357,81 @@ type SiteConfig struct {
 	FriendLinkEmailEnabled bool   `gorm:"default:false"`
 }
 
-func (s *SiteConfig) GetBackgroundsList() []string {
+type HeaderBackground struct {
+	URL             string  `json:"url"`
+	TitleColor      string  `json:"titleColor,omitempty"`
+	TitleOpacity    float64 `json:"titleOpacity"`
+	SubtitleColor   string  `json:"subtitleColor,omitempty"`
+	SubtitleOpacity float64 `json:"subtitleOpacity"`
+}
+
+func normalizeHeaderBackgroundOpacity(value interface{}) float64 {
+	if num, ok := value.(float64); ok {
+		if num < 0 {
+			return 0
+		}
+		if num > 1 {
+			return 1
+		}
+		return num
+	}
+	return 1
+}
+
+func normalizeHeaderBackgroundFromMap(raw map[string]interface{}) (HeaderBackground, bool) {
+	url, _ := raw["url"].(string)
+	url = strings.TrimSpace(url)
+	if url == "" {
+		return HeaderBackground{}, false
+	}
+	titleColor, _ := raw["titleColor"].(string)
+	subtitleColor, _ := raw["subtitleColor"].(string)
+	return HeaderBackground{
+		URL:             url,
+		TitleColor:      strings.TrimSpace(titleColor),
+		TitleOpacity:    normalizeHeaderBackgroundOpacity(raw["titleOpacity"]),
+		SubtitleColor:   strings.TrimSpace(subtitleColor),
+		SubtitleOpacity: normalizeHeaderBackgroundOpacity(raw["subtitleOpacity"]),
+	}, true
+}
+
+func (s *SiteConfig) GetBackgroundsConfig() []HeaderBackground {
 	if s.Backgrounds == "" {
-		return []string{}
+		return []HeaderBackground{}
 	}
 
-	var backgrounds []string
-	if err := json.Unmarshal([]byte(s.Backgrounds), &backgrounds); err != nil {
-		// 如果解析失败，返回空数组
-		return []string{}
+	var legacy []string
+	if err := json.Unmarshal([]byte(s.Backgrounds), &legacy); err == nil {
+		backgrounds := make([]HeaderBackground, 0, len(legacy))
+		for _, url := range legacy {
+			url = strings.TrimSpace(url)
+			if url != "" {
+				backgrounds = append(backgrounds, HeaderBackground{URL: url, TitleOpacity: 1, SubtitleOpacity: 1})
+			}
+		}
+		return backgrounds
+	}
+
+	var rawBackgrounds []map[string]interface{}
+	if err := json.Unmarshal([]byte(s.Backgrounds), &rawBackgrounds); err != nil {
+		return []HeaderBackground{}
+	}
+	backgrounds := make([]HeaderBackground, 0, len(rawBackgrounds))
+	for _, raw := range rawBackgrounds {
+		if bg, ok := normalizeHeaderBackgroundFromMap(raw); ok {
+			backgrounds = append(backgrounds, bg)
+		}
 	}
 	return backgrounds
+}
+
+func (s *SiteConfig) GetBackgroundsList() []string {
+	backgrounds := s.GetBackgroundsConfig()
+	urls := make([]string, 0, len(backgrounds))
+	for _, bg := range backgrounds {
+		urls = append(urls, bg.URL)
+	}
+	return urls
 }
 func UpdateMessage(id string, content string) error {
 	// 先查询消息是否存在

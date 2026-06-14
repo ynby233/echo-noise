@@ -319,6 +319,101 @@ func shouldCollapseLegacyBackgrounds(backgrounds []string) bool {
 	return hasBackground
 }
 
+func defaultHeaderBackgroundConfigs() []models.HeaderBackground {
+	defaults := getDefaultConfig()["frontendSettings"].(map[string]interface{})["backgrounds"].([]string)
+	backgrounds := make([]models.HeaderBackground, 0, len(defaults))
+	for _, url := range defaults {
+		if trimmed := strings.TrimSpace(url); trimmed != "" {
+			backgrounds = append(backgrounds, models.HeaderBackground{URL: trimmed, TitleOpacity: 1, SubtitleOpacity: 1})
+		}
+	}
+	return backgrounds
+}
+
+func clampHeaderTextOpacity(value float64) float64 {
+	if value < 0 {
+		return 0
+	}
+	if value > 1 {
+		return 1
+	}
+	return value
+}
+
+func normalizeHeaderBackground(raw interface{}) (models.HeaderBackground, bool) {
+	switch bg := raw.(type) {
+	case string:
+		url := strings.TrimSpace(bg)
+		if url == "" {
+			return models.HeaderBackground{}, false
+		}
+		return models.HeaderBackground{URL: url, TitleOpacity: 1, SubtitleOpacity: 1}, true
+	case map[string]interface{}:
+		url, _ := bg["url"].(string)
+		url = strings.TrimSpace(url)
+		if url == "" {
+			return models.HeaderBackground{}, false
+		}
+		normalized := models.HeaderBackground{URL: url, TitleOpacity: 1, SubtitleOpacity: 1}
+		if v, ok := bg["titleColor"].(string); ok {
+			normalized.TitleColor = strings.TrimSpace(v)
+		}
+		if v, ok := bg["subtitleColor"].(string); ok {
+			normalized.SubtitleColor = strings.TrimSpace(v)
+		}
+		if v, ok := bg["titleOpacity"].(float64); ok {
+			normalized.TitleOpacity = clampHeaderTextOpacity(v)
+		}
+		if v, ok := bg["subtitleOpacity"].(float64); ok {
+			normalized.SubtitleOpacity = clampHeaderTextOpacity(v)
+		}
+		return normalized, true
+	case models.HeaderBackground:
+		bg.URL = strings.TrimSpace(bg.URL)
+		if bg.URL == "" {
+			return models.HeaderBackground{}, false
+		}
+		bg.TitleColor = strings.TrimSpace(bg.TitleColor)
+		bg.SubtitleColor = strings.TrimSpace(bg.SubtitleColor)
+		bg.TitleOpacity = clampHeaderTextOpacity(bg.TitleOpacity)
+		bg.SubtitleOpacity = clampHeaderTextOpacity(bg.SubtitleOpacity)
+		return bg, true
+	default:
+		return models.HeaderBackground{}, false
+	}
+}
+
+func normalizeHeaderBackgrounds(raw interface{}) []models.HeaderBackground {
+	var backgrounds []models.HeaderBackground
+	switch list := raw.(type) {
+	case []interface{}:
+		backgrounds = make([]models.HeaderBackground, 0, len(list))
+		for _, item := range list {
+			if bg, ok := normalizeHeaderBackground(item); ok {
+				backgrounds = append(backgrounds, bg)
+			}
+		}
+	case []string:
+		backgrounds = make([]models.HeaderBackground, 0, len(list))
+		for _, item := range list {
+			if bg, ok := normalizeHeaderBackground(item); ok {
+				backgrounds = append(backgrounds, bg)
+			}
+		}
+	case []models.HeaderBackground:
+		backgrounds = make([]models.HeaderBackground, 0, len(list))
+		for _, item := range list {
+			if bg, ok := normalizeHeaderBackground(item); ok {
+				backgrounds = append(backgrounds, bg)
+			}
+		}
+	}
+	if len(backgrounds) == 0 {
+		return defaultHeaderBackgroundConfigs()
+	}
+	return backgrounds
+}
+
 func HasLifeCountdownSettings(frontendSettings map[string]interface{}) bool {
 	for key := range lifeCountdownSettingKeys {
 		if _, ok := frontendSettings[key]; ok {
@@ -882,7 +977,7 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 			"avatarURL":           config.AvatarURL,
 			"username":            config.Username,
 			"description":         config.Description,
-			"backgrounds":         config.GetBackgroundsList(),
+			"backgrounds":         config.GetBackgroundsConfig(),
 			"cardFooterTitle":     config.CardFooterTitle,
 			"cardFooterLink":      config.CardFooterLink,
 			"pageFooterHTML":      config.PageFooterHTML,
@@ -1571,29 +1666,9 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	}
 
 	// 处理背景图片列表
-	if backgrounds, ok := frontendSettings["backgrounds"].([]interface{}); ok {
-		backgroundsList := make([]string, 0, len(backgrounds))
-		for _, bg := range backgrounds {
-			if bgStr, ok := bg.(string); ok && bgStr != "" {
-				backgroundsList = append(backgroundsList, bgStr)
-			}
-		}
-		// 确保至少保留一个默认背景
-		if len(backgroundsList) == 0 {
-			backgroundsList = getDefaultConfig()["frontendSettings"].(map[string]interface{})["backgrounds"].([]string)
-		}
+	if rawBackgrounds, ok := frontendSettings["backgrounds"]; ok {
+		backgroundsList := normalizeHeaderBackgrounds(rawBackgrounds)
 		backgroundsJSON, err := json.Marshal(backgroundsList)
-		if err != nil {
-			tx.Rollback()
-			return fmt.Errorf("背景图片列表序列化失败: %v", err)
-		}
-		config.Backgrounds = string(backgroundsJSON)
-	} else if backgrounds, ok := frontendSettings["backgrounds"].([]string); ok {
-		// 直接处理字符串数组
-		if len(backgrounds) == 0 {
-			backgrounds = getDefaultConfig()["frontendSettings"].(map[string]interface{})["backgrounds"].([]string)
-		}
-		backgroundsJSON, err := json.Marshal(backgrounds)
 		if err != nil {
 			tx.Rollback()
 			return fmt.Errorf("背景图片列表序列化失败: %v", err)
