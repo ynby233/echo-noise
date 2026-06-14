@@ -2577,7 +2577,7 @@ html, body {
   box-shadow: 0 14px 34px rgba(15,23,42,0.24);
 }
 
-html.dark .header-image { box-shadow: 0 16px 36px rgba(0,0,0,0.42); }
+:global(html.dark) .header-image { box-shadow: 0 16px 36px rgba(0,0,0,0.42); }
 
 
 .header-title {
@@ -2722,47 +2722,47 @@ html:not(.dark) .hero-tab.active {
 .life-progress-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #22d3ee 0%, #6366f1 100%); transition: width .4s ease; }
 .life-countdown-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; opacity: 0.8; }
 .life-countdown-empty { font-size: 12px; opacity: 0.72; }
-.calendar-card .u-calendar { width: 100% }
-.calendar-card .u-calendar {
+.calendar-card :deep(.u-calendar) { width: 100% }
+.calendar-card :deep(.u-calendar) {
   width: 100%;
   display: block;
 }
-.calendar-card .u-calendar * {
+.calendar-card :deep(.u-calendar *) {
   color: inherit;
 }
-.calendar-card .u-calendar-header {
+.calendar-card :deep(.u-calendar-header) {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 6px 8px;
   color: var(--accent, #ff8c3a);
 }
-.calendar-card table {
+.calendar-card :deep(table) {
   width: 100%;
 }
-.calendar-card th {
+.calendar-card :deep(th) {
   color: inherit;
   font-weight: 500;
 }
-.calendar-card td {
+.calendar-card :deep(td) {
   padding: 2px;
 }
-.calendar-card td > button {
+.calendar-card :deep(td > button) {
   width: 100%;
   border-radius: 8px;
   padding: 6px 0;
   transition: background-color .15s ease, transform .1s ease;
   border: 1px solid rgba(0,0,0,0.06);
 }
-.calendar-card td > button:hover {
+.calendar-card :deep(td > button:hover) {
   transform: scale(1.02);
   background: rgba(0,0,0,0.06);
 }
-.calendar-card td > button[aria-selected="true"] {
+.calendar-card :deep(td > button[aria-selected="true"]) {
   background: var(--accent, #ff8c3a);
   color: #fff;
 }
-.calendar-card td > button[aria-current="date"] {
+.calendar-card :deep(td > button[aria-current="date"]) {
   outline: 2px solid var(--accent, #ff8c3a);
 }
 @media screen and (max-width: 768px) {
@@ -2916,8 +2916,8 @@ white-space: nowrap;  /* 防止换行 */
   text-shadow: none;
 }
 
-input[type="password"]::-ms-reveal,
-input[type="password"]::-ms-clear {
+:global(input[type="password"]::-ms-reveal),
+:global(input[type="password"]::-ms-clear) {
   display: none;
 }
 
@@ -3019,18 +3019,18 @@ input[type="password"]::-ms-clear {
   box-shadow: none !important;
 }
 /* 三栏容器在浅色模式统一白色背景（不影响深色与背景图层） */
-html:not(.dark) .left-col,
-html:not(.dark) .center-col,
-html:not(.dark) .right-col {
+:global(html:not(.dark)) .left-col,
+:global(html:not(.dark)) .center-col,
+:global(html:not(.dark)) .right-col {
   background: var(--home-surface-light);
   border: 1px solid var(--home-border-light);
   border-radius: var(--home-radius-panel);
   padding: 8px;
   box-shadow: var(--home-shadow-light);
 }
-html.dark .left-col,
-html.dark .center-col,
-html.dark .right-col {
+:global(html.dark) .left-col,
+:global(html.dark) .center-col,
+:global(html.dark) .right-col {
   background: linear-gradient(180deg, rgba(30, 41, 59, 0.42) 0%, rgba(15, 23, 42, 0.72) 100%);
   color: var(--home-text-dark);
   border: 1px solid var(--home-border-dark);
@@ -3042,16 +3042,16 @@ html.dark .right-col {
   position: relative;
   overflow: hidden;
 }
-html.dark .center-col {
+:global(html.dark) .center-col {
   background: linear-gradient(180deg, rgba(30, 41, 59, 0.38) 0%, rgba(15, 23, 42, 0.7) 100%);
 }
-html.dark .right-col {
+:global(html.dark) .right-col {
   overflow-x: hidden;
   overflow-y: auto;
 }
-html.dark .left-col::before,
-html.dark .center-col::before,
-html.dark .right-col::before {
+:global(html.dark) .left-col::before,
+:global(html.dark) .center-col::before,
+:global(html.dark) .right-col::before {
   content: '';
   position: absolute;
   left: 0;
@@ -3061,16 +3061,16 @@ html.dark .right-col::before {
   background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0));
   pointer-events: none;
 }
-html:not(.dark) .layout-container.grid-3 { gap: 18px; }
+:global(html:not(.dark)) .layout-container.grid-3 { gap: 18px; }
 /* 统一浅色模式下所有卡片底色为纯白 */
-html:not(.dark) :where(.u-card, .u-card-body, .u-card__body, .u-card-header, .u-card__header) { background-color: var(--home-surface-light) !important; }
-html:not(.dark) :where(.bg-gray-50, .bg-gray-100, .bg-gray-200, .bg-gray-300, .bg-slate-50, .bg-slate-100, .bg-slate-200) { background-color: var(--home-surface-light) !important; }
-html:not(.dark) :where(.border-gray-200, .border-gray-300, .border-slate-200) { border-color: var(--home-border-light) !important; }
+:global(html:not(.dark)) :where(.u-card, .u-card-body, .u-card__body, .u-card-header, .u-card__header) { background-color: var(--home-surface-light) !important; }
+:global(html:not(.dark)) :where(.bg-gray-50, .bg-gray-100, .bg-gray-200, .bg-gray-300, .bg-slate-50, .bg-slate-100, .bg-slate-200) { background-color: var(--home-surface-light) !important; }
+:global(html:not(.dark)) :where(.border-gray-200, .border-gray-300, .border-slate-200) { border-color: var(--home-border-light) !important; }
 /* 日历卡片保持紧凑，其他侧栏卡片使用 Nuxt UI 默认内距 */
-.calendar-sidebar-card.no-padding-card .u-card-body,
-.calendar-sidebar-card.no-padding-card .u-card__body { padding: 0 !important; }
-.calendar-sidebar-card.no-padding-card .u-card-header,
-.calendar-sidebar-card.no-padding-card .u-card__header { padding: 8px 12px !important; }
+.calendar-sidebar-card.no-padding-card :deep(.u-card-body),
+.calendar-sidebar-card.no-padding-card :deep(.u-card__body) { padding: 0 !important; }
+.calendar-sidebar-card.no-padding-card :deep(.u-card-header),
+.calendar-sidebar-card.no-padding-card :deep(.u-card__header) { padding: 8px 12px !important; }
 html.dark .sidebar-card {
   background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.8) 100%);
   color: var(--home-text-dark);
@@ -3159,23 +3159,23 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
 }
 
 /* 确保白天模式下文本颜色是黑色的 */
-html:not(.dark) .profile-name {
+:global(html:not(.dark)) .profile-name {
   color: #111827 !important;
 }
-html:not(.dark) .profile-desc {
+:global(html:not(.dark)) .profile-desc {
   color: #374151 !important;
 }
 
 /* 确保白天模式下时钟颜色是黑色的 */
-html:not(.dark) .clock-display {
+:global(html:not(.dark)) .clock-display {
   color: #111827 !important;
 }
-html:not(.dark) .clock-date {
+:global(html:not(.dark)) .clock-date {
   color: #6b7280 !important;
 }
 
 /* 确保白天模式下一言文本颜色是黑色的 */
-html:not(.dark) .hitokoto-text {
+:global(html:not(.dark)) .hitokoto-text {
   color: #111827 !important;
 }
 .social-list { display:flex; flex-wrap:wrap; gap:10px; padding:0; justify-content:center; align-items:center; }
@@ -3195,8 +3195,8 @@ html:not(.dark) .hitokoto-text {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-.feed-shell-card .u-card-body,
-.feed-shell-card .u-card__body {
+.feed-shell-card :deep(.u-card-body),
+.feed-shell-card :deep(.u-card__body) {
   padding: 0 !important;
   background: transparent !important;
 }
@@ -3235,13 +3235,13 @@ html:not(.dark) .hitokoto-text {
 .about-desc { font-size: 14px; opacity: 0.9; }
 
 /* 确保白天模式下关于页面文本颜色是黑色的 */
-html:not(.dark) .about-title {
+:global(html:not(.dark)) .about-title {
   color: #111827 !important;
 }
-html:not(.dark) .about-sub {
+:global(html:not(.dark)) .about-sub {
   color: #6b7280 !important;
 }
-html:not(.dark) .about-desc {
+:global(html:not(.dark)) .about-desc {
   color: #374151 !important;
 }
 
@@ -3307,8 +3307,8 @@ html:not(.dark) .about-desc {
 .ad-wrap > .ad-image { position: relative; z-index: 1; }
 .ad-overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; opacity:0; transition: opacity .12s ease; pointer-events:none; z-index: 2; }
 .ad-overlay-box { max-width: 90%; max-height: 70%; overflow-y: auto; padding: 8px 10px; border-radius: 10px; font-size: 14px; line-height: 1.5; word-break: break-word; overflow-wrap: anywhere; }
-html.dark .ad-overlay-box { background: var(--home-surface-dark); color: var(--home-accent-warn) !important; border: 1px solid var(--home-border-dark-soft); box-shadow: var(--home-shadow-float-dark); }
-html.dark .ad-overlay-box a { color: var(--home-accent-warn) !important; text-decoration:none; }
+:global(html.dark) .ad-overlay-box { background: var(--home-surface-dark); color: var(--home-accent-warn) !important; border: 1px solid var(--home-border-dark-soft); box-shadow: var(--home-shadow-float-dark); }
+:global(html.dark) .ad-overlay-box a { color: var(--home-accent-warn) !important; text-decoration:none; }
 
 /* 播放器：贴边与层级优化 */
 .netease-mini-player[data-position="bottom-left"] { left: 8px !important; }
@@ -3321,7 +3321,7 @@ html.dark .ad-overlay-box a { color: var(--home-accent-warn) !important; text-de
 .netease-mini-player.minimized[data-position="top-right"] { right: 0 !important; top: 12px !important; }
 
 /* 音乐播放器暗黑模式颜色统一 */
-html.dark .netease-mini-player {
+:global(html.dark) .netease-mini-player {
   --primary-bg: var(--home-surface-dark) !important;
   --secondary-bg: var(--home-surface-dark-elevated) !important;
   --bg-color: var(--home-surface-dark) !important;
@@ -3333,8 +3333,8 @@ html.dark .netease-mini-player {
   .netease-mini-player[data-position="top-left"],
   .netease-mini-player[data-position="top-right"] { z-index: 2001 !important; }
 }
-html:not(.dark) .ad-overlay-box { background: var(--home-surface-light); color: var(--home-accent-warn) !important; border: 1px solid var(--home-border-light); box-shadow: var(--home-shadow-float-light); }
-html:not(.dark) .ad-overlay-box a { color: var(--home-accent-warn) !important; text-decoration:none; }
+:global(html:not(.dark)) .ad-overlay-box { background: var(--home-surface-light); color: var(--home-accent-warn) !important; border: 1px solid var(--home-border-light); box-shadow: var(--home-shadow-float-light); }
+:global(html:not(.dark)) .ad-overlay-box a { color: var(--home-accent-warn) !important; text-decoration:none; }
 .ad-wrap:hover .ad-overlay { opacity:1; }
 .ad-wrap:hover .ad-image { filter: contrast(0.95) brightness(0.9); }
 .scroll-images { aspect-ratio: 1.525 / 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding-inline: 0; scrollbar-width: thin; }
@@ -3348,23 +3348,23 @@ html:not(.dark) .ad-overlay-box a { color: var(--home-accent-warn) !important; t
 @media screen and (max-width: 768px) { .center-col { padding-left: 2%; padding-right: 2%; } }
 @media screen and (max-width: 480px) { .center-col { padding-left: 3%; padding-right: 3%; } }
 .page-footer { text-align: center; font-size: 12px; padding: 12px 0; }
-html.dark .center-col,
-html:not(.dark) .center-col { transition: none !important; }
-html.dark .center-col :where(.u-card, .u-card-body, .u-card__body, .u-card-header, .u-card__header),
-html:not(.dark) .center-col :where(.u-card, .u-card-body, .u-card__body, .u-card-header, .u-card__header) {
+:global(html.dark) .center-col,
+:global(html:not(.dark)) .center-col { transition: none !important; }
+:global(html.dark) .center-col :where(.u-card, .u-card-body, .u-card__body, .u-card-header, .u-card__header),
+:global(html:not(.dark)) .center-col :where(.u-card, .u-card-body, .u-card__body, .u-card-header, .u-card__header) {
   transition: none !important;
 }
-html.dark .center-col .message-list-container,
-html:not(.dark) .center-col .message-list-container { transition: none !important; }
-html.dark .background-container::before {
+:global(html.dark) .center-col :deep(.message-list-container),
+:global(html:not(.dark)) .center-col :deep(.message-list-container) { transition: none !important; }
+:global(html.dark) .background-container::before {
   filter: blur(10px) saturate(0.78) brightness(0.52);
   opacity: 0.9;
 }
-html.dark .background-container::after {
+:global(html.dark) .background-container::after {
   filter: blur(10px) saturate(0.78) brightness(0.52);
 }
-html.dark .center-col .content-container,
-html:not(.dark) .center-col .content-container { transition: none !important; }
+:global(html.dark) .center-col :deep(.content-container),
+:global(html:not(.dark)) .center-col :deep(.content-container) { transition: none !important; }
 .netease-mini-player.minimized[data-instant="true"] { transition: none !important; }
 .netease-mini-player.minimized[data-instant="true"] .album-cover-container,
 .netease-mini-player.minimized[data-instant="true"] .album-cover,
