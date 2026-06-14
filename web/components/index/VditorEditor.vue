@@ -48,7 +48,7 @@ const setupToolbarDragScroll = (toolbar: HTMLElement) => {
   };
 
   const onPointerDown = (event: PointerEvent) => {
-    if (event.button !== 0 || toolbar.scrollWidth <= toolbar.clientWidth) return;
+    if (event.button !== 0) return;
     const target = event.target as HTMLElement | null;
     if (target?.closest('input, textarea, select')) return;
 
@@ -90,17 +90,17 @@ const setupToolbarDragScroll = (toolbar: HTMLElement) => {
     event.stopImmediatePropagation();
   };
 
-  toolbar.addEventListener('pointerdown', onPointerDown);
-  toolbar.addEventListener('pointermove', onPointerMove);
-  toolbar.addEventListener('pointerup', onPointerUp);
-  toolbar.addEventListener('pointercancel', endDrag);
+  toolbar.addEventListener('pointerdown', onPointerDown, true);
+  window.addEventListener('pointermove', onPointerMove, { capture: true });
+  window.addEventListener('pointerup', onPointerUp, { capture: true });
+  window.addEventListener('pointercancel', endDrag, { capture: true });
   toolbar.addEventListener('click', onClickCapture, true);
 
   toolbarDragCleanup = () => {
-    toolbar.removeEventListener('pointerdown', onPointerDown);
-    toolbar.removeEventListener('pointermove', onPointerMove);
-    toolbar.removeEventListener('pointerup', onPointerUp);
-    toolbar.removeEventListener('pointercancel', endDrag);
+    toolbar.removeEventListener('pointerdown', onPointerDown, true);
+    window.removeEventListener('pointermove', onPointerMove, { capture: true } as AddEventListenerOptions);
+    window.removeEventListener('pointerup', onPointerUp, { capture: true } as AddEventListenerOptions);
+    window.removeEventListener('pointercancel', endDrag, { capture: true } as AddEventListenerOptions);
     toolbar.removeEventListener('click', onClickCapture, true);
     toolbar.classList.remove('is-dragging');
     toolbar.classList.remove('is-drag-ready');
@@ -392,8 +392,9 @@ watch(() => props.theme, (newTheme) => {
   counter-increment: list-counter;
 }
 .vditor-toolbar {
-  display: flex;
-  flex-wrap: nowrap;
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  justify-content: flex-start;
   overflow-x: auto;
   overflow-y: hidden;
   width: 100%;

@@ -153,7 +153,6 @@
                   </UButton>
                   <div class="message-toolbox overlay" v-show="openToolboxId === msg.id">
                     <div class="tool-icons">
-                      <div v-if="messageVisibility(msg) !== 'public'" class="tool-icon nw-tooltip-anchor" :data-tooltip="messageVisibilityLabel(messageVisibility(msg))"><UIcon :name="messageVisibilityIcon(messageVisibility(msg))" /></div>
                       <div v-if="canPin(msg)" class="tool-icon nw-tooltip-anchor" :data-tooltip="(msg.pinned ? '取消置顶' : '置顶内容')" @click="togglePin(msg)"><UIcon :name="msg.pinned ? 'i-mdi-pin' : 'i-mdi-pin-outline'" /></div>
                       <div v-if="isLogin" class="tool-icon nw-tooltip-anchor" data-tooltip="编辑" @click="editMessage(msg)"><UIcon name="i-mdi-pencil-outline" /></div>
                       <div class="tool-icon nw-tooltip-anchor" data-tooltip="复制" @click="copyContent(msg.content)"><UIcon name="i-mdi-content-copy" /></div>
@@ -286,7 +285,7 @@
           <div class="edit-toolbar-left">
             <button
               type="button"
-              class="tb-btn edit-media-button nw-tooltip-anchor"
+              class="tb-btn edit-media-button nw-action-btn nw-tooltip-anchor"
               data-tooltip="上传图片"
               aria-label="上传图片"
               :disabled="isEditUploading"
@@ -296,7 +295,7 @@
             </button>
             <button
               type="button"
-              class="tb-btn edit-media-button nw-tooltip-anchor"
+              class="tb-btn edit-media-button nw-action-btn nw-tooltip-anchor"
               data-tooltip="上传视频"
               aria-label="上传视频"
               :disabled="isEditUploading"
@@ -304,7 +303,7 @@
             >
               <UIcon :name="editUploadKind === 'video' ? 'i-mdi-loading' : 'i-mdi-video-plus-outline'" class="w-5 h-5" :class="{ 'edit-spin': editUploadKind === 'video' }" />
             </button>
-            <div ref="editVisibilityControlRef" class="visibility-control nw-tooltip-anchor" :data-tooltip="`可见范围：${editVisibilityLabel}`">
+            <div ref="editVisibilityControlRef" class="visibility-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :data-tooltip="`可见范围：${editVisibilityLabel}`">
               <UIcon :name="editVisibilityIcon" class="w-5 h-5" />
               <button
                 type="button"
@@ -318,7 +317,7 @@
                 <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
               </button>
             </div>
-            <div v-if="canEditPublishTime(editingMessage)" ref="editPublishTimeControlRef" class="publish-time-control nw-tooltip-anchor" :data-tooltip="editPublishTimeLabel === '选择时间' ? '自定义发布时间' : `发布时间：${editPublishTimeLabel}`">
+            <div v-if="canEditPublishTime(editingMessage)" ref="editPublishTimeControlRef" class="publish-time-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :data-tooltip="editPublishTimeLabel === '选择时间' ? '自定义发布时间' : `发布时间：${editPublishTimeLabel}`">
               <UIcon name="i-mdi-calendar-clock-outline" class="w-5 h-5" />
               <button
                 type="button"
@@ -346,8 +345,8 @@
       </div>
 
       <div class="edit-modal-footer">
-        <button type="button" class="edit-footer-button secondary" :disabled="isSaving" @click="showEditModal = false">取消</button>
-        <button type="button" class="edit-footer-button primary" :disabled="isSaving" @click="saveEditedMessage">
+        <button type="button" class="edit-footer-button nw-action-btn nw-action-btn--label secondary" :disabled="isSaving" @click="showEditModal = false">取消</button>
+        <button type="button" class="edit-footer-button nw-action-btn nw-action-btn--label nw-action-btn--primary primary" :disabled="isSaving" @click="saveEditedMessage">
           <UIcon v-if="isSaving" name="i-mdi-loading" class="w-4 h-4 edit-spin" />
           <span>{{ isSaving ? '保存中' : '保存' }}</span>
         </button>
@@ -2738,8 +2737,7 @@ onMounted(() => {
 .edit-modal-title-block { min-width: 0; }
 .edit-modal-title { margin: 0; font-size: 17px; line-height: 1.35; font-weight: 700; color: var(--edit-text); }
 
-.edit-icon-button,
-.edit-footer-button {
+.edit-icon-button {
   border: 1px solid var(--edit-border);
   background: var(--edit-control);
   color: var(--edit-text);
@@ -2793,69 +2791,16 @@ onMounted(() => {
 }
 
 .edit-modal-shell .tb-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
   width: 36px;
   min-width: 36px;
   height: 36px;
-  border: 1px solid var(--edit-border);
-  border-radius: 12px;
-  background: var(--edit-panel-strong);
-  color: var(--edit-text);
-  box-shadow: none;
-  transition: background-color .18s ease, transform .18s ease, border-color .18s ease, box-shadow .18s ease, opacity .18s ease;
-}
-
-.edit-modal-shell .tb-btn:hover:not(:disabled) {
-  transform: translate3d(0,0,0) scale(1.06);
-  border-color: var(--nw-floating-hover-border);
-  background: var(--nw-floating-hover-bg);
-}
-
-.edit-modal-shell .tb-btn:disabled {
-  cursor: not-allowed;
-  opacity: .58;
-}
-
-.edit-modal-shell .edit-media-button {
-  border-color: var(--edit-media-border);
-  background: var(--edit-media-bg);
-  color: var(--edit-media-text);
-}
-
-.edit-modal-shell .edit-media-button:hover:not(:disabled) {
-  border-color: var(--nw-floating-hover-border);
-  background: var(--nw-floating-hover-bg);
-  color: var(--edit-text);
 }
 
 .edit-modal-shell .visibility-control,
 .edit-modal-shell .publish-time-control {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 36px;
-  min-height: 36px;
   width: max-content;
   max-width: min(210px, calc(100vw - 32px));
   padding: 0 8px;
-  border: 1px solid var(--edit-border);
-  border-radius: 12px;
-  background: var(--edit-panel-strong);
-  color: var(--edit-text);
-  box-shadow: none;
-  transition: background-color .18s ease, border-color .18s ease, transform .18s ease;
-}
-
-.edit-modal-shell .visibility-control:hover,
-.edit-modal-shell .visibility-control:focus-within,
-.edit-modal-shell .publish-time-control:hover,
-.edit-modal-shell .publish-time-control:focus-within {
-  transform: translate3d(0,0,0) scale(1.06);
-  border-color: var(--nw-floating-hover-border);
-  background: var(--nw-floating-hover-bg);
 }
 
 .edit-modal-shell .visibility-trigger,
@@ -2890,40 +2835,13 @@ onMounted(() => {
   opacity: .72;
 }
 
-.edit-modal-shell.is-dark .tb-btn,
-:global(html.dark) .edit-modal-shell .tb-btn,
-.edit-modal-shell.is-dark .visibility-control,
-:global(html.dark) .edit-modal-shell .visibility-control,
-.edit-modal-shell.is-dark .publish-time-control,
-:global(html.dark) .edit-modal-shell .publish-time-control {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
-  color: #cbd5e1;
-}
-
-.edit-modal-shell.is-dark .tb-btn:hover:not(:disabled),
-:global(html.dark) .edit-modal-shell .tb-btn:hover:not(:disabled),
-.edit-modal-shell.is-dark .visibility-control:hover,
-:global(html.dark) .edit-modal-shell .visibility-control:hover,
-.edit-modal-shell.is-dark .visibility-control:focus-within,
-:global(html.dark) .edit-modal-shell .visibility-control:focus-within,
-.edit-modal-shell.is-dark .publish-time-control:hover,
-:global(html.dark) .edit-modal-shell .publish-time-control:hover,
-.edit-modal-shell.is-dark .publish-time-control:focus-within,
-:global(html.dark) .edit-modal-shell .publish-time-control:focus-within {
-  border-color: var(--nw-floating-hover-border);
-  background: var(--nw-floating-hover-bg);
-}
-
-.edit-icon-button:hover:not(:disabled),
-.edit-footer-button:hover:not(:disabled) {
+.edit-icon-button:hover:not(:disabled) {
   transform: translate3d(0,0,0) scale(1.06);
   border-color: var(--nw-floating-hover-border, var(--edit-border));
   background: var(--nw-floating-hover-bg, var(--edit-panel-strong));
 }
 
-.edit-icon-button:disabled,
-.edit-footer-button:disabled {
+.edit-icon-button:disabled {
   cursor: not-allowed;
   opacity: .58;
 }
@@ -3117,23 +3035,6 @@ onMounted(() => {
   font-size: 13px;
   font-weight: 650;
   line-height: 1;
-}
-
-.edit-footer-button.secondary {
-  border-color: var(--edit-border);
-  background: var(--edit-panel-strong);
-  color: var(--edit-text);
-}
-
-.edit-footer-button.primary {
-  border-color: rgba(37, 99, 235, 0.72);
-  background: #3b82f6;
-  color: #fff;
-}
-
-.edit-footer-button.primary:hover:not(:disabled) {
-  border-color: rgba(29, 78, 216, 0.86);
-  background: #2563eb;
 }
 
 .edit-spin { animation: edit-spin 1s linear infinite; }
