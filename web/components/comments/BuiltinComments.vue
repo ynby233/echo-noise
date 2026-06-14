@@ -175,7 +175,7 @@
     <div
       v-if="openCommentVisibilityMenu"
       ref="commentVisibilityMenuRef"
-      class="floating-control-menu visibility-floating-menu comment-visibility-menu comment-visibility-floating-menu nw-floating-menu"
+      :class="['floating-control-menu visibility-floating-menu comment-visibility-menu comment-visibility-floating-menu nw-floating-menu', { 'is-dark': isDark }]"
       :style="commentVisibilityMenuStyle"
       role="listbox"
       @mousedown.stop
@@ -300,6 +300,7 @@ const selectedVisibility = ref(messageVisibilityLimit.value)
 const openCommentVisibilityMenu = ref<string | null>(null)
 const commentVisibilityMenuRef = ref<HTMLElement | null>(null)
 const commentVisibilityMenuStyle = ref<Record<string, string>>({})
+const commentVisibilityAnchor = ref<HTMLElement | null>(null)
 const editingId = ref<number | null>(null)
 const editingContent = ref('')
 const editingVisibility = ref(messageVisibilityLimit.value)
@@ -1091,11 +1092,15 @@ const commentVisibilityTooltipFor = (target: CommentEditorTarget, id?: number | 
   return isCommentVisibilityMenuOpen(target, id) ? undefined : visibilityTooltipFor(target)
 }
 const visibilityIconFor = (target: CommentEditorTarget) => visibilityOptionFor(currentCommentVisibility(target)).icon
-const positionCommentVisibilityMenu = (trigger: HTMLElement | null) => {
-  const anchor = trigger?.closest('.comment-visibility-picker') as HTMLElement | null
-  positionFloatingMenu(anchor || trigger, commentVisibilityMenuRef.value, commentVisibilityMenuStyle, 106, 'above-right')
+const positionCommentVisibilityMenu = (trigger?: HTMLElement | null) => {
+  const source = trigger || commentVisibilityAnchor.value
+  const anchor = source?.closest('.comment-visibility-picker') as HTMLElement | null
+  positionFloatingMenu(anchor || source || null, commentVisibilityMenuRef.value, commentVisibilityMenuStyle, 106, 'above-right')
 }
-const closeCommentVisibilityMenu = () => { openCommentVisibilityMenu.value = null }
+const closeCommentVisibilityMenu = () => {
+  openCommentVisibilityMenu.value = null
+  commentVisibilityAnchor.value = null
+}
 const toggleCommentVisibilityMenu = (target: CommentEditorTarget, id?: number | null, event?: MouseEvent) => {
   activeCommentEditorTarget.value = target
   showEmojiTarget.value = null
@@ -1106,7 +1111,8 @@ const toggleCommentVisibilityMenu = (target: CommentEditorTarget, id?: number | 
   }
   openCommentVisibilityMenu.value = key
   const trigger = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null
-  nextTick(() => scheduleFloatingMenuPosition(() => positionCommentVisibilityMenu(trigger)))
+  commentVisibilityAnchor.value = (trigger?.closest('.comment-visibility-picker') as HTMLElement | null) || trigger
+  nextTick(() => scheduleFloatingMenuPosition(() => positionCommentVisibilityMenu()))
 }
 const selectCommentVisibility = (target: CommentEditorTarget, value: string) => {
   const next = normalizeVisibility(value)
@@ -1122,12 +1128,26 @@ const handleCommentVisibilityPointerDown = (event: MouseEvent) => {
   closeCommentVisibilityMenu()
 }
 
+const handleCommentVisibilityReposition = () => {
+  if (openCommentVisibilityMenu.value) scheduleFloatingMenuPosition(() => positionCommentVisibilityMenu())
+}
+
 onMounted(() => {
   if (typeof document !== 'undefined') document.addEventListener('mousedown', handleCommentVisibilityPointerDown)
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', handleCommentVisibilityReposition)
+    window.addEventListener('scroll', handleCommentVisibilityReposition, { passive: true })
+    document.querySelector('.content-wrapper')?.addEventListener('scroll', handleCommentVisibilityReposition, { passive: true })
+  }
 })
 
 onBeforeUnmount(() => {
   if (typeof document !== 'undefined') document.removeEventListener('mousedown', handleCommentVisibilityPointerDown)
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('resize', handleCommentVisibilityReposition)
+    window.removeEventListener('scroll', handleCommentVisibilityReposition)
+    document.querySelector('.content-wrapper')?.removeEventListener('scroll', handleCommentVisibilityReposition)
+  }
 })
 
 watch(replyingToComment, (comment) => {
@@ -1440,11 +1460,6 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 .comment-visibility-trigger { display:inline-flex; align-items:center; justify-content:space-between; gap:3px; width:auto; min-width:46px; max-width:100%; height:28px; padding:0; border:0; border-radius:9px; background:transparent; color:inherit; font-size:12px; line-height:1; cursor:pointer; }
 .comment-visibility-trigger span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .comment-visibility-trigger svg { flex:0 0 auto; opacity:.72; }
-.comment-visibility-menu { position:fixed; z-index:5006; display:grid; gap:4px; width:max-content; min-width:106px; padding:8px; border:1px solid var(--nw-floating-border); border-radius:12px; background:var(--nw-floating-bg) !important; color:var(--nw-floating-text); box-shadow:var(--nw-floating-shadow); isolation:isolate; pointer-events:auto; }
-.comment-visibility-option { display:flex; align-items:center; gap:8px; min-height:32px; padding:0 10px; border-radius:9px; border:1px solid transparent; color:inherit; font-size:12px; font-weight:650; line-height:1; text-align:left; white-space:nowrap; transition:background-color .15s ease, border-color .15s ease, color .15s ease; }
-.comment-visibility-option:hover,
-.comment-visibility-option:focus-visible { outline:none; border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
-.comment-visibility-option.is-selected { border-color:var(--nw-floating-selected-border); background:var(--nw-floating-selected-bg); color:var(--nw-floating-text); }
 .emoji-wrap { position:relative; display:inline-flex; }
 .emoji-popover { position:absolute; left:0; bottom:calc(100% + 8px); z-index:30; display:grid; grid-template-columns:repeat(6, 30px); gap:4px; width:max-content; padding:8px; }
 .emoji-option { width:30px; height:30px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; font-size:16px; line-height:1; }

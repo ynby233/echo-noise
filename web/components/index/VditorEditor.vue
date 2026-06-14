@@ -125,11 +125,13 @@ const setupVditorPanelPositioning = () => {
     const panel = findVisiblePanel()
     if (!headingsTrigger || !panel) return
     panel.classList.add('floating-control-menu', 'visibility-floating-menu', 'vditor-heading-floating-menu', 'nw-floating-menu')
+    panel.classList.toggle('is-dark', props.theme === 'dark')
     panel.querySelectorAll<HTMLElement>('button, .vditor-menu, .vditor-toolbar__item').forEach((item) => {
       item.classList.add('floating-control-option', 'nw-floating-option')
+      item.classList.toggle('is-selected', item.classList.contains('vditor-menu--current') || item.classList.contains('vditor-menu--active') || item.getAttribute('aria-selected') === 'true')
     })
     const styleRef = ref<Record<string, string>>({})
-    positionFloatingMenu(headingsTrigger, panel, styleRef, 132, 'above-right')
+    positionFloatingMenu(headingsTrigger, panel, styleRef, 106, 'above-right')
     Object.assign(panel.style, styleRef.value)
   }
 
@@ -149,9 +151,16 @@ const setupVditorPanelPositioning = () => {
     window.setTimeout(() => scheduleFloatingMenuPosition(positionHeadingsPanel), 80)
   }
 
+  const handleFloatingReposition = () => scheduleFloatingMenuPosition(positionHeadingsPanel)
   toolbarEl.addEventListener('click', handleToolbarClick, true)
+  window.addEventListener('resize', handleFloatingReposition)
+  window.addEventListener('scroll', handleFloatingReposition, { passive: true })
+  document.querySelector('.content-wrapper')?.addEventListener('scroll', handleFloatingReposition, { passive: true })
   panelCleanup = () => {
     toolbarEl?.removeEventListener('click', handleToolbarClick, true)
+    window.removeEventListener('resize', handleFloatingReposition)
+    window.removeEventListener('scroll', handleFloatingReposition)
+    document.querySelector('.content-wrapper')?.removeEventListener('scroll', handleFloatingReposition)
     panelCleanup = null
   }
 }
@@ -430,7 +439,7 @@ watch(() => props.theme, (newTheme) => {
   gap: 8px;
   min-height: 32px;
   width: 100% !important;
-  min-width: 132px !important;
+  min-width: 106px !important;
   padding: 0 10px !important;
   border: 1px solid transparent !important;
   border-radius: 9px !important;
@@ -503,8 +512,8 @@ watch(() => props.theme, (newTheme) => {
 .vditor-toolbar__item svg,
 .vditor-toolbar__item .vditor-icon {
   display: block !important;
-  width: 18px !important;
-  height: 18px !important;
+  width: 16px !important;
+  height: 16px !important;
   margin: auto !important;
 }
 

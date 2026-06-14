@@ -100,7 +100,7 @@
     <div
       v-if="showVisibilityMenu"
       ref="visibilityMenuRef"
-      class="floating-control-menu visibility-floating-menu nw-floating-menu"
+      :class="['floating-control-menu visibility-floating-menu nw-floating-menu', { 'is-dark': contentTheme === 'dark' }]"
       :style="visibilityMenuStyle"
       role="listbox"
       @mousedown.stop
