@@ -8,7 +8,7 @@
       class="hidden"
       @change="handleVideoChange"
     />
-    <button type="button" class="tb-btn nw-tooltip-anchor" data-tooltip="上传视频" aria-label="上传视频" @click="triggerVideoInput">
+    <button type="button" class="tb-btn nw-action-btn nw-tooltip-anchor" data-tooltip="上传视频" aria-label="上传视频" @click="triggerVideoInput">
       <UIcon name="i-mdi-video-plus-outline" class="w-5 h-5" />
     </button>
   </div>
@@ -64,8 +64,5 @@ const handleVideoChange = async (event: Event) => {
 </script>
 
 <style scoped>
-.tb-btn { display:flex; align-items:center; justify-content:center; flex: 0 0 auto; width:36px; min-width:36px; height:36px; border-radius:12px; background: rgba(15,23,42,0.06); color:#374151; transition: background-color .18s ease, transform .18s ease, border-color .18s ease; border:1px solid rgba(15,23,42,0.08); box-shadow:none; }
-.tb-btn:hover { transform: translate3d(0,0,0) scale(1.06); border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
-html.dark .tb-btn { background: rgba(255,255,255,0.06); color:#cbd5e1; border-color: rgba(255,255,255,0.12); }
-html.dark .tb-btn:hover { background: var(--nw-floating-hover-bg); border-color: var(--nw-floating-hover-border); }
+.tb-btn { padding: 0; }
 </style>

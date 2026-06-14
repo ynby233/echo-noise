@@ -33,6 +33,91 @@ html.dark {
   --nw-floating-selected-border: rgba(249, 115, 22, 0.70);
 }
 
+.nw-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  border: 1px solid var(--nw-action-border, rgba(15, 23, 42, 0.08));
+  border-radius: 12px;
+  background: var(--nw-action-bg, rgba(15, 23, 42, 0.06));
+  color: var(--nw-action-text, #374151);
+  box-shadow: none;
+  transition: background-color .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+.nw-action-btn:hover:not(:disabled),
+.nw-action-btn:focus-visible {
+  transform: translate3d(0, 0, 0) scale(1.06);
+  border-color: var(--nw-action-hover-border, var(--nw-floating-hover-border));
+  background: var(--nw-action-hover-bg, var(--nw-floating-hover-bg));
+  color: var(--nw-action-hover-text, var(--nw-action-text, #374151));
+  outline: none;
+}
+
+.nw-action-btn:disabled {
+  cursor: not-allowed;
+  opacity: .62;
+  transform: none;
+}
+
+.nw-action-btn--label {
+  width: auto;
+  min-width: 66px;
+  gap: 5px;
+  padding: 0 10px;
+}
+
+.nw-action-btn--primary {
+  --nw-action-border: rgba(37, 99, 235, .72);
+  --nw-action-bg: #3b82f6;
+  --nw-action-text: #fff;
+  --nw-action-hover-border: rgba(29, 78, 216, .8);
+  --nw-action-hover-bg: #2563eb;
+  --nw-action-hover-text: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16);
+}
+
+.nw-action-btn--danger {
+  --nw-action-border: rgba(234, 88, 12, .95);
+  --nw-action-bg: linear-gradient(135deg, rgba(251, 146, 60, .95), rgba(234, 88, 12, .95));
+  --nw-action-text: #fff;
+  --nw-action-hover-border: rgba(234, 88, 12, .95);
+  --nw-action-hover-bg: linear-gradient(135deg, rgba(251, 146, 60, .95), rgba(234, 88, 12, .95));
+  --nw-action-hover-text: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .18);
+}
+
+html.dark .nw-action-btn {
+  --nw-action-bg: rgba(255, 255, 255, .06);
+  --nw-action-text: #cbd5e1;
+  --nw-action-border: rgba(255, 255, 255, .12);
+  --nw-action-hover-bg: var(--nw-floating-hover-bg);
+  --nw-action-hover-border: var(--nw-floating-hover-border);
+  --nw-action-hover-text: #fff;
+}
+
+html.dark .nw-action-btn--primary {
+  --nw-action-border: rgba(96, 165, 250, .72);
+  --nw-action-bg: #2563eb;
+  --nw-action-text: #fff;
+  --nw-action-hover-border: rgba(147, 197, 253, .9);
+  --nw-action-hover-bg: #1d4ed8;
+  --nw-action-hover-text: #fff;
+}
+
+html.dark .nw-action-btn--danger {
+  --nw-action-border: rgba(251, 146, 60, .72);
+  --nw-action-bg: linear-gradient(135deg, rgba(251, 146, 60, .95), rgba(234, 88, 12, .95));
+  --nw-action-text: #fff;
+  --nw-action-hover-border: rgba(251, 146, 60, .72);
+  --nw-action-hover-bg: linear-gradient(135deg, rgba(251, 146, 60, .95), rgba(234, 88, 12, .95));
+  --nw-action-hover-text: #fff;
+}
+
 .nw-tooltip {
   position: fixed;
   z-index: 5006;

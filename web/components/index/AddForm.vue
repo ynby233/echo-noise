@@ -20,14 +20,14 @@
             @video-uploaded="handleVideoUploaded"
             @upload-progress="handleVideoUploadProgress"
           />
-          <button type="button" class="tb-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" @click="triggerFileInput"><UIcon name="i-mdi-image-plus-outline" class="w-5 h-5" /></button>
+          <button type="button" class="tb-btn nw-action-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" @click="triggerFileInput"><UIcon name="i-mdi-image-plus-outline" class="w-5 h-5" /></button>
           <!-- 新增图床上传按钮 -->
-          <button type="button" class="tb-btn nw-tooltip-anchor" data-tooltip="图床上传" aria-label="图床上传" @click="showImageUploader = true"><UIcon name="i-mdi-cloud-upload-outline" class="w-5 h-5" /></button>
-          <button type="button" class="tb-btn has-label notify-btn nw-tooltip-anchor" :class="{ 'is-enabled': enableNotify }" :data-tooltip="enableNotify ? '关闭推送' : '开启推送'" :aria-label="enableNotify ? '关闭推送' : '开启推送'" @click="toggleNotify">
+          <button type="button" class="tb-btn nw-action-btn nw-tooltip-anchor" data-tooltip="图床上传" aria-label="图床上传" @click="showImageUploader = true"><UIcon name="i-mdi-cloud-upload-outline" class="w-5 h-5" /></button>
+          <button type="button" class="tb-btn nw-action-btn nw-action-btn--label has-label notify-btn nw-tooltip-anchor" :class="{ 'is-enabled': enableNotify }" :data-tooltip="enableNotify ? '关闭推送' : '开启推送'" :aria-label="enableNotify ? '关闭推送' : '开启推送'" @click="toggleNotify">
             <UIcon :name="enableNotify ? 'i-mdi-bell-off-outline' : 'i-mdi-bell-ring-outline'" class="w-5 h-5" />
             <span class="notify-label">{{ enableNotify ? '关闭' : '开启' }}</span>
           </button>
-          <div ref="visibilityControlRef" class="visibility-control nw-tooltip-anchor" :data-tooltip="`可见范围：${visibilityLabel}`">
+          <div ref="visibilityControlRef" class="visibility-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :data-tooltip="`可见范围：${visibilityLabel}`">
             <UIcon :name="visibilityIcon" class="w-5 h-5" />
             <button
               type="button"
@@ -41,7 +41,7 @@
               <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
             </button>
           </div>
-          <div v-if="canSetPublishTime" ref="publishTimeControlRef" class="publish-time-control nw-tooltip-anchor" :data-tooltip="publishTimeLabel === '选择时间' ? '自定义发布时间' : `发布时间：${publishTimeLabel}`">
+          <div v-if="canSetPublishTime" ref="publishTimeControlRef" class="publish-time-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :data-tooltip="publishTimeLabel === '选择时间' ? '自定义发布时间' : `发布时间：${publishTimeLabel}`">
             <UIcon name="i-mdi-calendar-clock-outline" class="w-5 h-5" />
             <button
               type="button"
@@ -61,8 +61,8 @@
             <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin mr-1" />
             加载中...
           </span>
-          <button type="button" class="tb-btn danger nw-tooltip-anchor" data-tooltip="清除" aria-label="清除" @click="clearForm"><UIcon name="i-heroicons-trash" class="w-5 h-5" /></button>
-          <button type="button" class="tb-btn primary nw-tooltip-anchor" data-tooltip="发布" aria-label="发布" @click="addMessage"><UIcon name="i-mdi-send" class="w-5 h-5" /></button>
+          <button type="button" class="tb-btn nw-action-btn nw-action-btn--danger danger nw-tooltip-anchor" data-tooltip="清除" aria-label="清除" @click="clearForm"><UIcon name="i-heroicons-trash" class="w-5 h-5" /></button>
+          <button type="button" class="tb-btn nw-action-btn nw-action-btn--primary primary nw-tooltip-anchor" data-tooltip="发布" aria-label="发布" @click="addMessage"><UIcon name="i-mdi-send" class="w-5 h-5" /></button>
         </div>
         <div v-if="activeUploadPercent > 0 && activeUploadPercent < 100" class="upload-progress">
           <div class="upload-progress-track">
@@ -1165,21 +1165,11 @@ const addMessage = async () => {
 .editor-box { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 10px 24px rgba(0,0,0,.08); padding: 8px; color:#111827; }
 .editor-toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:6px; padding:6px; border-radius:12px; background: rgba(255,255,255,0.85); flex-wrap: wrap; overflow: visible; position: sticky; bottom: 0; z-index: 95; backdrop-filter: saturate(1.1) blur(6px); }
 .toolbar-left, .toolbar-right { display:flex; align-items:center; gap:8px; flex-wrap: wrap; }
-.tb-btn { display:flex; align-items:center; justify-content:center; flex: 0 0 auto; width:36px; min-width:36px; height:36px; border-radius:12px; background: rgba(15,23,42,0.06); color:#374151; transition: background-color .18s ease, transform .18s ease, border-color .18s ease, box-shadow .18s ease; border:1px solid rgba(15,23,42,0.08); box-shadow:none; }
-.tb-btn:hover { transform: translate3d(0,0,0) scale(1.06); border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
-.tb-btn.primary { border-color: rgba(37,99,235,.72); background: #3b82f6; color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.16); }
-.tb-btn.primary:hover { border-color: rgba(29,78,216,.8); background: #2563eb; }
-.tb-btn.danger,
-.tb-btn.danger:hover { border-color: rgba(234,88,12,.95); background: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18); }
-.tb-btn.has-label { width: auto; min-width: 66px; gap: 5px; padding: 0 10px; }
-.notify-btn.is-enabled { background: rgba(249,115,22,0.16); color: #c2410c; box-shadow: inset 0 0 0 1px rgba(249,115,22,0.32); }
+.tb-btn { padding: 0; }
+.notify-btn.is-enabled { --nw-action-border: rgba(249,115,22,0.32); --nw-action-bg: rgba(249,115,22,0.16); --nw-action-text: #c2410c; }
 .notify-label { font-size: 12px; line-height: 1; white-space: nowrap; }
-.publish-time-control { display:flex; align-items:center; gap:5px; min-height:36px; height:36px; width: max-content; max-width: min(210px, calc(100vw - 32px)); border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 8px; border:1px solid rgba(15,23,42,0.08); box-shadow: none; transition: background-color .18s ease, border-color .18s ease, transform .18s ease; }
-.visibility-control { display:flex; align-items:center; gap:5px; min-height:36px; height:36px; width: max-content; border-radius:12px; background: rgba(0,0,0,0.06); color:#374151; padding:0 8px; border:1px solid rgba(15,23,42,0.08); box-shadow: none; transition: background-color .18s ease, border-color .18s ease, transform .18s ease; }
-.publish-time-control:hover,
-.publish-time-control:focus-within,
-.visibility-control:hover,
-.visibility-control:focus-within { transform: translate3d(0,0,0) scale(1.06); border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
+.publish-time-control { max-width: min(210px, calc(100vw - 32px)); }
+.visibility-control { width: max-content; }
 .visibility-select { width: auto; min-width: 46px; max-width: 76px; height: 28px; padding: 0; border: 0; border-radius: 9px; outline: none; background: transparent; color: inherit; font-size: 12px; cursor: pointer; }
 .visibility-trigger,
 .publish-time-trigger { display: inline-flex; align-items: center; justify-content: space-between; gap: 3px; }
@@ -1238,19 +1228,7 @@ const addMessage = async () => {
 .preview-card { backdrop-filter: blur(8px); background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 8px; color:#111827; }
 html.dark .editor-box { background: var(--home-surface-dark, #202a36); border: 1px solid rgba(255,255,255,0.16); color:#fff; }
 html.dark .editor-toolbar { background: rgba(39, 50, 66, 0.68); backdrop-filter: saturate(1.1) blur(6px); }
-html.dark .tb-btn { background: rgba(255,255,255,0.06); color:#cbd5e1; border-color: rgba(255,255,255,0.12); }
-html.dark .tb-btn:hover { background: var(--nw-floating-hover-bg); border-color: var(--nw-floating-hover-border); }
-html.dark .tb-btn.primary { border-color: rgba(37,99,235,.72); background: #3b82f6; color: #fff; }
-html.dark .tb-btn.primary:hover { border-color: rgba(29,78,216,.8); background: #2563eb; }
-html.dark .tb-btn.danger,
-html.dark .tb-btn.danger:hover { border-color: rgba(234,88,12,.95); background: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color: #fff; }
-html.dark .notify-btn.is-enabled { background: rgba(249,115,22,0.22); color: #fed7aa; box-shadow: inset 0 0 0 1px rgba(251,146,60,0.38); }
-html.dark .publish-time-control,
-html.dark .visibility-control { background: rgba(255,255,255,0.06); color:#cbd5e1; border-color: rgba(255,255,255,0.12); }
-html.dark .publish-time-control:hover,
-html.dark .publish-time-control:focus-within,
-html.dark .visibility-control:hover,
-html.dark .visibility-control:focus-within { background: var(--nw-floating-hover-bg); border-color: var(--nw-floating-hover-border); }
+html.dark .notify-btn.is-enabled { --nw-action-border: rgba(251,146,60,0.38); --nw-action-bg: rgba(249,115,22,0.22); --nw-action-text: #fed7aa; }
 html.dark .visibility-select { background: transparent; border: 0; color: inherit; }
 :global(html.dark) .floating-icon-btn,
 :global(html.dark) .floating-action-btn,

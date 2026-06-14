@@ -27,7 +27,85 @@ let placeholderEl: HTMLElement | null = null;
 let mutationObserver: MutationObserver | null = null;
 let fixedCleanup: (() => void) | null = null;
 let imagePreviewCleanup: (() => void) | null = null;
+let toolbarDragCleanup: (() => void) | null = null;
 const isReady = ref(false);
+
+const setupToolbarDragScroll = (toolbar: HTMLElement) => {
+  toolbarDragCleanup?.();
+
+  let isPointerDown = false;
+  let isDragging = false;
+  let suppressClick = false;
+  let startX = 0;
+  let startScrollLeft = 0;
+  let activePointerId: number | null = null;
+
+  const endDrag = () => {
+    isPointerDown = false;
+    activePointerId = null;
+    toolbar.classList.remove('is-dragging');
+    toolbar.classList.remove('is-drag-ready');
+  };
+
+  const onPointerDown = (event: PointerEvent) => {
+    if (event.button !== 0 || toolbar.scrollWidth <= toolbar.clientWidth) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('input, textarea, select')) return;
+
+    isPointerDown = true;
+    isDragging = false;
+    activePointerId = event.pointerId;
+    startX = event.clientX;
+    startScrollLeft = toolbar.scrollLeft;
+    toolbar.classList.add('is-drag-ready');
+    toolbar.setPointerCapture?.(event.pointerId);
+  };
+
+  const onPointerMove = (event: PointerEvent) => {
+    if (!isPointerDown || activePointerId !== event.pointerId) return;
+    const deltaX = event.clientX - startX;
+    if (!isDragging && Math.abs(deltaX) < 4) return;
+
+    isDragging = true;
+    toolbar.classList.add('is-dragging');
+    toolbar.scrollLeft = startScrollLeft - deltaX;
+    event.preventDefault();
+  };
+
+  const onPointerUp = (event: PointerEvent) => {
+    if (!isPointerDown || activePointerId !== event.pointerId) return;
+    if (isDragging) {
+      suppressClick = true;
+      window.setTimeout(() => {
+        suppressClick = false;
+      }, 0);
+    }
+    toolbar.releasePointerCapture?.(event.pointerId);
+    endDrag();
+  };
+
+  const onClickCapture = (event: MouseEvent) => {
+    if (!suppressClick) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  };
+
+  toolbar.addEventListener('pointerdown', onPointerDown);
+  toolbar.addEventListener('pointermove', onPointerMove);
+  toolbar.addEventListener('pointerup', onPointerUp);
+  toolbar.addEventListener('pointercancel', endDrag);
+  toolbar.addEventListener('click', onClickCapture, true);
+
+  toolbarDragCleanup = () => {
+    toolbar.removeEventListener('pointerdown', onPointerDown);
+    toolbar.removeEventListener('pointermove', onPointerMove);
+    toolbar.removeEventListener('pointerup', onPointerUp);
+    toolbar.removeEventListener('pointercancel', endDrag);
+    toolbar.removeEventListener('click', onClickCapture, true);
+    toolbar.classList.remove('is-dragging');
+    toolbar.classList.remove('is-drag-ready');
+  };
+};
 
 const setupInlineImagePreview = () => {
   const root = editorContainer.value;
@@ -131,6 +209,7 @@ onMounted(async () => {
     const root = editorContainer.value?.querySelector('.vditor') as HTMLElement | null;
     toolbarEl = root?.querySelector('.vditor-toolbar') as HTMLElement | null;
     if (!root || !toolbarEl) return;
+    setupToolbarDragScroll(toolbarEl);
 
     // 占位元素，避免工具栏脱离文档流后遮挡内容
     placeholderEl = document.createElement('div');
@@ -202,6 +281,8 @@ onMounted(async () => {
       window.removeEventListener('scroll', updateToolbarPosition);
       mutationObserver?.disconnect();
       mutationObserver = null;
+      toolbarDragCleanup?.();
+      toolbarDragCleanup = null;
       if (toolbarEl) {
         toolbarEl.style.position = '';
         toolbarEl.style.top = '';
@@ -310,7 +391,33 @@ watch(() => props.theme, (newTheme) => {
   content: counter(list-counter) ".";
   counter-increment: list-counter;
 }
-.vditor-toolbar { display:flex; flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; width:100%; max-width:100%; white-space:nowrap; -webkit-overflow-scrolling:touch; scrollbar-width:none; -ms-overflow-style:none; background-color:#f8f9fab7; border-bottom:none; z-index:100; }
+.vditor-toolbar {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  width: 100%;
+  max-width: 100%;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  background-color: #f8f9fab7;
+  border-bottom: none;
+  z-index: 100;
+  cursor: grab;
+  touch-action: pan-x;
+  overscroll-behavior-x: contain;
+}
+
+.vditor-toolbar.is-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.vditor-toolbar.is-dragging .vditor-toolbar__item {
+  pointer-events: none;
+}
 
 .vditor-toolbar::-webkit-scrollbar {
   display: none; /* Chrome, Safari and Opera */
