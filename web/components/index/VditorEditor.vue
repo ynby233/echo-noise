@@ -40,6 +40,11 @@ const setupToolbarDragScroll = (toolbar: HTMLElement) => {
   let startScrollLeft = 0;
   let activePointerId: number | null = null;
 
+  const maxScrollLeft = () => Math.max(0, toolbar.scrollWidth - toolbar.clientWidth);
+  const setToolbarScrollLeft = (value: number) => {
+    toolbar.scrollLeft = Math.max(0, Math.min(maxScrollLeft(), value));
+  };
+
   const endDrag = () => {
     isPointerDown = false;
     activePointerId = null;
@@ -58,7 +63,9 @@ const setupToolbarDragScroll = (toolbar: HTMLElement) => {
     startX = event.clientX;
     startScrollLeft = toolbar.scrollLeft;
     toolbar.classList.add('is-drag-ready');
-    toolbar.setPointerCapture?.(event.pointerId);
+    try {
+      toolbar.setPointerCapture?.(event.pointerId);
+    } catch {}
   };
 
   const onPointerMove = (event: PointerEvent) => {
@@ -68,7 +75,16 @@ const setupToolbarDragScroll = (toolbar: HTMLElement) => {
 
     isDragging = true;
     toolbar.classList.add('is-dragging');
-    toolbar.scrollLeft = startScrollLeft - deltaX;
+    setToolbarScrollLeft(startScrollLeft - deltaX);
+    event.preventDefault();
+  };
+
+  const onWheel = (event: WheelEvent) => {
+    const scrollable = maxScrollLeft() > 0;
+    if (!scrollable) return;
+    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+    if (!delta) return;
+    setToolbarScrollLeft(toolbar.scrollLeft + delta);
     event.preventDefault();
   };
 
@@ -80,7 +96,9 @@ const setupToolbarDragScroll = (toolbar: HTMLElement) => {
         suppressClick = false;
       }, 0);
     }
-    toolbar.releasePointerCapture?.(event.pointerId);
+    try {
+      toolbar.releasePointerCapture?.(event.pointerId);
+    } catch {}
     endDrag();
   };
 
@@ -91,6 +109,7 @@ const setupToolbarDragScroll = (toolbar: HTMLElement) => {
   };
 
   toolbar.addEventListener('pointerdown', onPointerDown, true);
+  toolbar.addEventListener('wheel', onWheel, { passive: false });
   window.addEventListener('pointermove', onPointerMove, { capture: true });
   window.addEventListener('pointerup', onPointerUp, { capture: true });
   window.addEventListener('pointercancel', endDrag, { capture: true });
@@ -98,6 +117,7 @@ const setupToolbarDragScroll = (toolbar: HTMLElement) => {
 
   toolbarDragCleanup = () => {
     toolbar.removeEventListener('pointerdown', onPointerDown, true);
+    toolbar.removeEventListener('wheel', onWheel);
     window.removeEventListener('pointermove', onPointerMove, { capture: true } as AddEventListenerOptions);
     window.removeEventListener('pointerup', onPointerUp, { capture: true } as AddEventListenerOptions);
     window.removeEventListener('pointercancel', endDrag, { capture: true } as AddEventListenerOptions);

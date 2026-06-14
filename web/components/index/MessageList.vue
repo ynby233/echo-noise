@@ -37,18 +37,17 @@
       <!-- 搜索模式提示 -->
       <div 
         v-if="isSearchMode" 
-        class="flex justify-between items-center mb-4 p-4 rounded-lg"
+        class="search-mode-bar"
       >
-        <p class="text-gray-400">搜索结果 ({{ searchResults.length }} 条)</p>
-        <UButton
-          size="sm"
-          variant="ghost"
-          class="text-gray-400 hover:text-orange-500"
-          icon="i-heroicons-arrow-left"
+        <p class="search-mode-title">搜索结果 ({{ searchResults.length }} 条)</p>
+        <button
+          type="button"
+          class="search-mode-back nw-action-btn nw-action-btn--label"
           @click="resetList"
         >
-          返回完整列表
-        </UButton>
+          <UIcon name="i-heroicons-arrow-left" class="w-4 h-4" />
+          <span>返回完整列表</span>
+        </button>
       </div>
       <!-- 消息列表 -->
       <div class="my-4">
@@ -267,7 +266,7 @@
         <div class="edit-modal-title-block">
           <h3 class="edit-modal-title">编辑内容</h3>
         </div>
-        <button type="button" class="edit-icon-button" aria-label="关闭" @click="showEditModal = false">
+        <button type="button" class="edit-icon-button nw-action-btn nw-tooltip-anchor" data-tooltip="关闭" aria-label="关闭" @click="showEditModal = false">
           <UIcon name="i-mdi-close" class="w-5 h-5" />
         </button>
       </div>
@@ -303,7 +302,7 @@
             >
               <UIcon :name="editUploadKind === 'video' ? 'i-mdi-loading' : 'i-mdi-video-plus-outline'" class="w-5 h-5" :class="{ 'edit-spin': editUploadKind === 'video' }" />
             </button>
-            <div ref="editVisibilityControlRef" class="visibility-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :data-tooltip="`可见范围：${editVisibilityLabel}`">
+            <div ref="editVisibilityControlRef" class="visibility-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :class="{ 'is-open': showEditVisibilityMenu }" :data-tooltip="`可见范围：${editVisibilityLabel}`">
               <UIcon :name="editVisibilityIcon" class="w-5 h-5" />
               <button
                 type="button"
@@ -2622,6 +2621,36 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.search-mode-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  margin: 0 0 16px;
+  padding: 10px 0;
+  color: #111827;
+}
+
+.search-mode-title {
+  margin: 0;
+  min-width: 0;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.search-mode-back {
+  min-width: max-content;
+  height: 34px;
+  border-radius: 10px;
+}
+
+:global(html.dark) .search-mode-bar {
+  color: #f8fafc;
+}
+
 .date-filter-bar {
   display: flex;
   align-items: center;

@@ -16,6 +16,9 @@
   --nw-floating-hover-border: rgba(249, 115, 22, 0.34);
   --nw-floating-selected-bg: rgba(249, 115, 22, 0.20);
   --nw-floating-selected-border: rgba(249, 115, 22, 0.62);
+  --nw-action-hover-bg: rgba(249, 115, 22, 0.12);
+  --nw-action-hover-border: rgba(249, 115, 22, 0.34);
+  --nw-action-hover-text: #9a3412;
 }
 
 html.dark {
@@ -31,6 +34,9 @@ html.dark {
   --nw-floating-hover-border: rgba(249, 115, 22, 0.58);
   --nw-floating-selected-bg: rgba(249, 115, 22, 0.30);
   --nw-floating-selected-border: rgba(249, 115, 22, 0.70);
+  --nw-action-hover-bg: rgba(249, 115, 22, 0.26);
+  --nw-action-hover-border: rgba(249, 115, 22, 0.58);
+  --nw-action-hover-text: #fff;
 }
 
 .nw-action-btn {
@@ -50,7 +56,8 @@ html.dark {
 }
 
 .nw-action-btn:hover:not(:disabled),
-.nw-action-btn:focus-visible {
+.nw-action-btn:focus-visible,
+.nw-action-btn.is-open {
   transform: translate3d(0, 0, 0) scale(1.06);
   border-color: var(--nw-action-hover-border, var(--nw-floating-hover-border)) !important;
   background: var(--nw-action-hover-bg, var(--nw-floating-hover-bg)) !important;
@@ -95,16 +102,14 @@ html.dark .nw-action-btn {
   --nw-action-bg: rgba(255, 255, 255, .06);
   --nw-action-text: #cbd5e1;
   --nw-action-border: rgba(255, 255, 255, .12);
-  --nw-action-hover-bg: var(--nw-floating-hover-bg);
-  --nw-action-hover-border: var(--nw-floating-hover-border);
-  --nw-action-hover-text: #fff;
 }
 
 html.dark .nw-action-btn:not(.nw-action-btn--primary):not(.nw-action-btn--danger):hover:not(:disabled),
-html.dark .nw-action-btn:not(.nw-action-btn--primary):not(.nw-action-btn--danger):focus-visible {
-  border-color: var(--nw-floating-hover-border) !important;
-  background: var(--nw-floating-hover-bg) !important;
-  color: #fff !important;
+html.dark .nw-action-btn:not(.nw-action-btn--primary):not(.nw-action-btn--danger):focus-visible,
+html.dark .nw-action-btn:not(.nw-action-btn--primary):not(.nw-action-btn--danger).is-open {
+  border-color: var(--nw-action-hover-border) !important;
+  background: var(--nw-action-hover-bg) !important;
+  color: var(--nw-action-hover-text) !important;
 }
 
 html.dark .nw-action-btn--primary {

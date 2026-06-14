@@ -2694,8 +2694,8 @@ html.dark .search-card { background: var(--home-surface-dark); color: #fff; bord
   border-radius: 9999px;
   color: rgba(248, 250, 252, 0.84);
   background: transparent;
-  border: none;
-  transition: none;
+  border: 1px solid transparent;
+  transition: background-color .16s ease, border-color .16s ease, color .16s ease, font-weight .16s ease;
   white-space: nowrap;
   flex-shrink: 0;
   text-shadow: none;
@@ -2703,15 +2703,17 @@ html.dark .search-card { background: var(--home-surface-dark); color: #fff; bord
   -webkit-tap-highlight-color: transparent;
 }
 .hero-tab.active {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.18);
+  color: #fb923c;
+  background: rgba(249, 115, 22, 0.16);
+  border-color: rgba(249, 115, 22, 0.68);
   box-shadow: none;
 }
-.hero-tab:hover {
-  background: transparent;
+.hero-tab:not(.active):hover {
+  background: rgba(255, 255, 255, 0.16);
+  font-weight: 800;
 }
 .hero-tab.active:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(249, 115, 22, 0.20);
 }
 .hero-tab-icon {
   width: 15px;
@@ -2734,14 +2736,16 @@ html:not(.dark) .hero-tab {
   color: rgba(15, 23, 42, 0.72);
   background: transparent;
 }
-html:not(.dark) .hero-tab:hover {
+html:not(.dark) .hero-tab:not(.active):hover {
   color: #111827;
   background: rgba(15, 23, 42, 0.06);
+  font-weight: 800;
 }
 html:not(.dark) .hero-tab.active {
-  color: #9a3412;
-  background: rgba(249, 115, 22, 0.12);
-  box-shadow: inset 0 0 0 1px rgba(249, 115, 22, 0.30);
+  color: #ea580c;
+  background: rgba(249, 115, 22, 0.14);
+  border-color: rgba(249, 115, 22, 0.68);
+  box-shadow: inset 0 0 0 1px rgba(249, 115, 22, 0.18);
 }
 @media (max-width: 480px) {
   .hero-tabs { gap: 2px; padding: 4px; }

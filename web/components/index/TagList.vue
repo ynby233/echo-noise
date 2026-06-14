@@ -62,8 +62,8 @@ const handleTagClick = (tagName: string) => {
 </script>
 
 <style scoped>
-.tags-container { width: 100%; margin: 0; padding: 0; position: relative; background: transparent; --title-color: #d1d5db; }
-:global(html.dark) .tags-container { --title-color: #e5e7eb; }
+.tags-container { width: 100%; margin: 0; padding: 0; position: relative; background: transparent; --title-color: #111827; }
+:global(html.dark) .tags-container { --title-color: #f8fafc; }
 
 .tags-wrapper {
   position: relative;
@@ -106,7 +106,7 @@ const handleTagClick = (tagName: string) => {
 .tag-item:hover {
   color: #fb923c;
   opacity: 1;
-  transform: translateY(-1px);
+  transform: translateY(-1px) scale(1.06);
 }
 
 .tag-count {
