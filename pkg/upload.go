@@ -3,6 +3,8 @@ package pkg
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"image"
@@ -20,10 +22,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
+	"github.com/nfnt/resize"
 	"github.com/rcy1314/echo-noise/config"
 	"github.com/rcy1314/echo-noise/internal/models"
-	"github.com/nfnt/resize"
 )
 
 func escapeObjectKeyForURL(key string) string {
@@ -80,6 +81,60 @@ func normalizePublicBaseURL(raw string) string {
 	return strings.TrimRight(u.Scheme+"://"+u.Host+path, "/")
 }
 
+func normalizeUploadExt(ext, fallback string) string {
+	ext = strings.ToLower(strings.TrimSpace(ext))
+	if ext == "" {
+		return fallback
+	}
+	if !strings.HasPrefix(ext, ".") {
+		ext = "." + ext
+	}
+	for _, r := range ext[1:] {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			continue
+		}
+		return fallback
+	}
+	return ext
+}
+
+func hashedAttachmentFileNameFromBytes(data []byte, ext string) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]) + normalizeUploadExt(ext, ".bin")
+}
+
+func hashedAttachmentFileNameFromReadSeeker(content io.ReadSeeker, ext string) (string, error) {
+	if _, err := content.Seek(0, io.SeekStart); err != nil {
+		return "", err
+	}
+	h := sha256.New()
+	if _, err := io.Copy(h, content); err != nil {
+		return "", err
+	}
+	if _, err := content.Seek(0, io.SeekStart); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)) + normalizeUploadExt(ext, ".bin"), nil
+}
+
+func hashedAttachmentFileNameFromPath(path, ext string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)) + normalizeUploadExt(ext, ".bin"), nil
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
 // UploadImage 上传图片并返回图片的URL
 func UploadImage(c *gin.Context, allowedExtensions []string, siteConfig *models.SiteConfig) (string, error) {
 	// 获取上传的文件
@@ -90,7 +145,7 @@ func UploadImage(c *gin.Context, allowedExtensions []string, siteConfig *models.
 
 	// 检查图片类型是否合法
 	contentType := file.Header.Get("Content-Type")
-	if !isAllowedType(contentType, allowedExtensions) {
+	if !isAllowedImageType(contentType, allowedExtensions) {
 		return "", errors.New(models.NotSupportedImageTypeMessage)
 	}
 
@@ -141,7 +196,7 @@ func UploadImage(c *gin.Context, allowedExtensions []string, siteConfig *models.
 	}
 
 	// 获取原始文件名和扩展名
-	ext := filepath.Ext(file.Filename)
+	ext := normalizeUploadExt(filepath.Ext(file.Filename), ".img")
 
 	// 检查是否启用了压缩
 	if siteConfig != nil && siteConfig.EnableCompression {
@@ -153,8 +208,8 @@ func UploadImage(c *gin.Context, allowedExtensions []string, siteConfig *models.
 		}
 	}
 
-	// 使用 UUID 生成新的文件名，避免特殊字符问题
-	newFileName := fmt.Sprintf("%s%s", uuid.New().String(), ext)
+	// 使用最终内容的 SHA-256 生成稳定文件名，相同文件只保存一份。
+	newFileName := hashedAttachmentFileNameFromBytes(fileData, ext)
 
 	// 检查是否启用了附件云存储
 	if siteConfig != nil && siteConfig.AttachmentStorageEnabled {
@@ -167,10 +222,12 @@ func UploadImage(c *gin.Context, allowedExtensions []string, siteConfig *models.
 		return "", err
 	}
 
-	// 保存文件到指定目录
+	// 保存文件到指定目录；相同内容已经存在时直接复用。
 	savePath := filepath.Join(config.Config.Upload.SavePath, newFileName)
-	if err := os.WriteFile(savePath, fileData, 0644); err != nil {
-		return "", errors.New(models.ImageUploadErrorMessage)
+	if !fileExists(savePath) {
+		if err := os.WriteFile(savePath, fileData, 0644); err != nil {
+			return "", errors.New(models.ImageUploadErrorMessage)
+		}
 	}
 
 	// 返回图片的 URL
@@ -221,6 +278,25 @@ func UploadAttachmentToCloud(cfg *models.SiteConfig, fileName string, content io
 		key = prefix + "/" + key
 	}
 
+	// 构建返回 URL
+	buildPublicURL := func() (string, error) {
+		if strings.TrimSpace(cfg.AttachmentStoragePublicBaseURL) != "" {
+			if origin == "" {
+				return "", errors.New("请在设置中配置云存储公共访问域名(PublicBaseURL)")
+			}
+			return fmt.Sprintf("%s/%s", origin, escapeObjectKeyForURL(key)), nil
+		}
+
+		return "", errors.New("请在设置中配置云存储公共访问域名(PublicBaseURL)")
+	}
+
+	if _, err := client.HeadObject(context.TODO(), &s3.HeadObjectInput{
+		Bucket: aws.String(cfg.AttachmentStorageBucket),
+		Key:    aws.String(key),
+	}); err == nil {
+		return buildPublicURL()
+	}
+
 	// 上传文件
 	_, err = client.PutObject(context.TODO(), &s3.PutObjectInput{
 		Bucket:      aws.String(cfg.AttachmentStorageBucket),
@@ -238,26 +314,30 @@ func UploadAttachmentToCloud(cfg *models.SiteConfig, fileName string, content io
 		return "", fmt.Errorf("上传到云存储失败: %v", err)
 	}
 
-	// 构建返回 URL
-	if strings.TrimSpace(cfg.AttachmentStoragePublicBaseURL) != "" {
-		if origin == "" {
-			return "", errors.New("请在设置中配置云存储公共访问域名(PublicBaseURL)")
-		}
-		return fmt.Sprintf("%s/%s", origin, escapeObjectKeyForURL(key)), nil
-	}
-
-	// 如果没有设置公共 URL，尝试构建默认 URL
-	return "", errors.New("请在设置中配置云存储公共访问域名(PublicBaseURL)")
+	return buildPublicURL()
 }
 
 // 检查文件类型是否合法
 func isAllowedType(contentType string, allowedTypes []string) bool {
+	contentType = strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+	if contentType == "" {
+		return false
+	}
 	for _, allowed := range allowedTypes {
-		if contentType == allowed {
+		allowed = strings.ToLower(strings.TrimSpace(allowed))
+		if allowed == contentType {
+			return true
+		}
+		if strings.HasSuffix(allowed, "/*") && strings.HasPrefix(contentType, strings.TrimSuffix(allowed, "*")) {
 			return true
 		}
 	}
 	return false
+}
+
+func isAllowedImageType(contentType string, allowedTypes []string) bool {
+	contentType = strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+	return isAllowedType(contentType, allowedTypes) || strings.HasPrefix(contentType, "image/")
 }
 
 // 创建存储图片的目录
@@ -297,10 +377,7 @@ func UploadVideo(c *gin.Context, allowedExtensions []string, siteConfig *models.
 	}
 	defer srcFile.Close()
 
-	ext := filepath.Ext(file.Filename)
-	if ext == "" {
-		ext = ".mp4"
-	}
+	ext := normalizeUploadExt(filepath.Ext(file.Filename), ".mp4")
 
 	var uploadPath string
 	var cleanupPaths []string
@@ -343,8 +420,17 @@ func UploadVideo(c *gin.Context, allowedExtensions []string, siteConfig *models.
 		defer os.Remove(p)
 	}
 
-	// 使用 UUID 生成新的文件名，避免特殊字符问题
-	newFileName := fmt.Sprintf("%s%s", uuid.New().String(), ext)
+	var newFileName string
+	if uploadPath != "" {
+		newFileName, err = hashedAttachmentFileNameFromPath(uploadPath, ext)
+	} else if seeker, ok := srcFile.(io.ReadSeeker); ok {
+		newFileName, err = hashedAttachmentFileNameFromReadSeeker(seeker, ext)
+	} else {
+		return "", errors.New("无法读取上传文件")
+	}
+	if err != nil {
+		return "", err
+	}
 
 	// 检查是否启用了附件云存储
 	if siteConfig != nil && siteConfig.AttachmentStorageEnabled {
@@ -384,38 +470,40 @@ func UploadVideo(c *gin.Context, allowedExtensions []string, siteConfig *models.
 	}
 
 	savePath := filepath.Join(videoPath, newFileName)
-	if uploadPath != "" {
-		in, err := os.Open(uploadPath)
-		if err != nil {
-			return "", err
-		}
-		defer in.Close()
-		out, err := os.Create(savePath)
-		if err != nil {
-			return "", err
-		}
-		if _, err := io.Copy(out, in); err != nil {
-			out.Close()
-			_ = os.Remove(savePath)
-			return "", errors.New("视频上传失败")
-		}
-		if err := out.Close(); err != nil {
-			_ = os.Remove(savePath)
-			return "", errors.New("视频上传失败")
-		}
-	} else {
-		out, err := os.Create(savePath)
-		if err != nil {
-			return "", errors.New("视频上传失败")
-		}
-		if _, err := io.Copy(out, srcFile); err != nil {
-			out.Close()
-			_ = os.Remove(savePath)
-			return "", errors.New("视频上传失败")
-		}
-		if err := out.Close(); err != nil {
-			_ = os.Remove(savePath)
-			return "", errors.New("视频上传失败")
+	if !fileExists(savePath) {
+		if uploadPath != "" {
+			in, err := os.Open(uploadPath)
+			if err != nil {
+				return "", err
+			}
+			defer in.Close()
+			out, err := os.Create(savePath)
+			if err != nil {
+				return "", err
+			}
+			if _, err := io.Copy(out, in); err != nil {
+				out.Close()
+				_ = os.Remove(savePath)
+				return "", errors.New("视频上传失败")
+			}
+			if err := out.Close(); err != nil {
+				_ = os.Remove(savePath)
+				return "", errors.New("视频上传失败")
+			}
+		} else {
+			out, err := os.Create(savePath)
+			if err != nil {
+				return "", errors.New("视频上传失败")
+			}
+			if _, err := io.Copy(out, srcFile); err != nil {
+				out.Close()
+				_ = os.Remove(savePath)
+				return "", errors.New("视频上传失败")
+			}
+			if err := out.Close(); err != nil {
+				_ = os.Remove(savePath)
+				return "", errors.New("视频上传失败")
+			}
 		}
 	}
 

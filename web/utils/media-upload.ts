@@ -17,8 +17,6 @@ type UploadMediaFilesOptions = {
   onProgress?: UploadMediaProgress
 }
 
-const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp']
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo']
 const VIDEO_EXTENSIONS = ['.mp4', '.webm', '.mov', '.avi']
 const MAX_IMAGE_SIZE = 50 * 1024 * 1024
@@ -76,15 +74,15 @@ const fileExtension = (file: File) => {
 }
 
 export const validateMediaFile = (file: File, kind: UploadKind) => {
-  const ext = fileExtension(file)
   if (kind === 'image') {
-    if (!IMAGE_TYPES.includes(file.type) || !IMAGE_EXTENSIONS.includes(ext)) {
-      throw new Error('仅支持 JPG、PNG、GIF、WEBP 格式的图片')
+    if (!file.type.startsWith('image/')) {
+      throw new Error('仅支持图片文件')
     }
     if (file.size > MAX_IMAGE_SIZE) throw new Error('图片大小不能超过 50MB')
     return
   }
 
+  const ext = fileExtension(file)
   if (!VIDEO_TYPES.includes(file.type) || !VIDEO_EXTENSIONS.includes(ext)) {
     throw new Error('仅支持 MP4、WEBM、MOV、AVI 格式的视频')
   }

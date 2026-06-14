@@ -11,6 +11,7 @@ upload:
   maxsize: 52428800
   savepath: "data/images/"
   allowedtypes: 
+    - "image/*"
     - "image/jpeg"
     - "image/png"
     - "image/gif"

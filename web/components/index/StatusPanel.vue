@@ -6794,11 +6794,10 @@ const uploadingFileName = ref('')
 const handleFileUpload = async (event: Event) => {
   const files = (event.target as HTMLInputElement).files
   if (!files) return
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
   for (const file of Array.from(files)) {
     try {
-      if (!allowedTypes.includes(file.type)) {
-        throw new Error('仅支持 JPG/PNG/WEBP 格式')
+      if (!file.type.startsWith('image/')) {
+        throw new Error('仅支持图片文件')
       }
       isUploading.value = true
       uploadProgress.value = 0
@@ -6828,8 +6827,8 @@ const handleFileUpload = async (event: Event) => {
       if (!data || data.code !== 1) {
         throw new Error(data?.msg || '上传失败')
       }
-      const imageUrl = String(data.data || '')
-      const finalUrl = imageUrl.startsWith('http') ? imageUrl : `/api${imageUrl}`
+      const imageUrl = String(data.data || '').trim()
+      const finalUrl = imageUrl.startsWith('http') || imageUrl.startsWith('/api/') ? imageUrl : `/api${imageUrl}`
       const newBackgrounds = [...frontendConfig.backgrounds, normalizeHeaderBackground(finalUrl)]
       frontendConfig.backgrounds = newBackgrounds
       await saveConfigItem('backgrounds')
