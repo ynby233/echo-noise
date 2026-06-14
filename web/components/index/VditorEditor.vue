@@ -328,7 +328,8 @@ watch(() => props.theme, (newTheme) => {
   z-index: 100;
   overscroll-behavior-x: contain;
   box-sizing: border-box;
-  padding-left: 0 !important;
+  gap: 1px;
+  padding: 0 !important;
 }
 
 .vditor-toolbar > * {
@@ -343,7 +344,7 @@ watch(() => props.theme, (newTheme) => {
   display: none; /* Chrome, Safari and Opera */
 }
 
-.vditor-toolbar--pin { padding-left:0 !important; background-color:#f8f9fa; border-bottom:none; z-index:101; }
+.vditor-toolbar--pin { padding:0 !important; background-color:#f8f9fa; border-bottom:none; z-index:101; }
 
 /* 修改弹出面板样式 */
 .vditor-panel--none {
@@ -353,12 +354,35 @@ watch(() => props.theme, (newTheme) => {
 .vditor-panel {
   position: fixed; /* 恢复为 fixed，避免被容器裁剪 */
   z-index: 10000;
-  background: #fff;
-  box-shadow: 0 8px 24px rgba(0,0,0,.16);
-  border-radius: 8px;
-  border: 1px solid #e9ecef;
+  padding: 8px;
+  background: var(--nw-floating-bg) !important;
+  color: var(--nw-floating-text) !important;
+  box-shadow: var(--nw-floating-shadow);
+  border-radius: 12px;
+  border: 1px solid var(--nw-floating-border);
   max-height: 50vh;
   overflow: auto;
+}
+
+.vditor-panel button,
+.vditor-panel .vditor-menu,
+.vditor-panel .vditor-toolbar__item {
+  min-height: 32px;
+  border: 1px solid transparent !important;
+  border-radius: 9px !important;
+  background: transparent !important;
+  color: inherit !important;
+}
+
+.vditor-panel button:hover,
+.vditor-panel button:focus-visible,
+.vditor-panel .vditor-menu:hover,
+.vditor-panel .vditor-menu:focus-visible,
+.vditor-panel .vditor-toolbar__item:hover,
+.vditor-panel .vditor-toolbar__item:focus-visible {
+  outline: none;
+  border-color: var(--nw-floating-hover-border) !important;
+  background: var(--nw-floating-hover-bg) !important;
 }
 .vditor-hint {
   position: fixed;
@@ -388,9 +412,21 @@ watch(() => props.theme, (newTheme) => {
 }
 .vditor-toolbar__item {
   flex: 0 0 auto !important;
-  min-width: 32px;
-  padding: 6px !important;
+  width: 30px;
+  min-width: 30px;
+  height: 32px;
+  padding: 4px !important;
+  margin: 0 !important;
   transition: all 0.2s ease;
+}
+
+.vditor-toolbar__item:first-child {
+  margin-left: 0 !important;
+}
+
+.vditor-toolbar__item:last-child {
+  margin-left: auto !important;
+  margin-right: 0 !important;
 }
 
 .vditor-toolbar__item:hover {

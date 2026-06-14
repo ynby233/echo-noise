@@ -1,6 +1,6 @@
 <template>
   <div 
-    class="image-hosting-popup fixed z-[5000] backdrop-blur-sm rounded-lg shadow-lg p-4"
+    class="image-hosting-popup fixed z-[5000] rounded-lg shadow-lg p-4"
     :class="{ 'is-dark': isContentDark }"
     :style="getPopupPosition"
     @mousedown="startDrag"
@@ -8,42 +8,43 @@
   >
     <div class="flex justify-between items-center mb-3">
       <h3 class="text-lg font-medium">图床上传</h3>
-      <UButton 
-        icon="i-heroicons-x-mark" 
-        color="gray" 
-        variant="ghost" 
-        size="xs" 
-        class="ih-close-btn"
-        @click="$emit('close')" 
-      />
+      <button
+        type="button"
+        class="ih-close-btn nw-action-btn nw-tooltip-anchor"
+        data-tooltip="关闭"
+        aria-label="关闭"
+        @click="$emit('close')"
+      >
+        <UIcon name="i-heroicons-x-mark" class="w-4 h-4" />
+      </button>
     </div>
     
     <div class="mb-4">
-      <div class="flex gap-2 mb-3">
-        <UButton 
-          :color="selectedHost === 'github' ? 'blue' : 'gray'" 
-          variant="solid" 
-          size="sm" 
+      <div class="image-host-tabs mb-3">
+        <button
+          type="button"
+          class="image-host-btn nw-action-btn nw-action-btn--label"
+          :class="{ 'nw-action-btn--primary': selectedHost === 'github' }"
           @click="selectedHost = 'github'"
         >
-          GitHub
-        </UButton>
-        <UButton
-          :color="selectedHost === 'lskypro' ? 'blue' : 'gray'"
-          variant="solid"
-          size="sm"
+          Github
+        </button>
+        <button
+          type="button"
+          class="image-host-btn nw-action-btn nw-action-btn--label"
+          :class="{ 'nw-action-btn--primary': selectedHost === 'lskypro' }"
           @click="selectedHost = 'lskypro'"
         >
           兰空图床
-        </UButton>
-        <UButton
-          :color="selectedHost === 'custom' ? 'blue' : 'gray'"
-          variant="solid"
-          size="sm"
+        </button>
+        <button
+          type="button"
+          class="image-host-btn nw-action-btn nw-action-btn--label"
+          :class="{ 'nw-action-btn--primary': selectedHost === 'custom' }"
           @click="selectedHost = 'custom'"
         >
           自定义
-        </UButton>
+        </button>
       </div>
       
       <!-- GitHub 配置 -->
@@ -1001,7 +1002,7 @@ onMounted(() => {
 }
 
 .image-hosting-popup.is-dark {
-  --nw-floating-bg: rgba(15, 23, 42, 0.94);
+  --nw-floating-bg: #0f172a;
   --nw-floating-text: #f8fafc;
   --nw-floating-border: rgba(255, 255, 255, 0.18);
   --nw-floating-shadow: 0 18px 46px rgba(0, 0, 0, 0.42);
@@ -1010,10 +1011,19 @@ onMounted(() => {
 }
 
 .image-hosting-popup:not(.is-dark) {
-  --nw-floating-bg: rgba(255, 255, 255, 0.98);
+  --nw-floating-bg: #ffffff;
   --nw-floating-text: #111827;
   --nw-floating-border: rgba(15, 23, 42, 0.14);
   --nw-floating-shadow: 0 18px 46px rgba(15, 23, 42, 0.16);
+}
+
+.image-hosting-popup.is-dark .nw-action-btn:not(.nw-action-btn--primary):not(.nw-action-btn--danger) {
+  --nw-action-bg: rgba(255, 255, 255, .06);
+  --nw-action-text: #cbd5e1;
+  --nw-action-border: rgba(255, 255, 255, .12);
+  --nw-action-hover-bg: rgba(249, 115, 22, 0.22);
+  --nw-action-hover-border: rgba(251, 146, 60, 0.44);
+  --nw-action-hover-text: #fff;
 }
 
 .image-hosting-popup :deep(input),
@@ -1052,15 +1062,18 @@ onMounted(() => {
   color: var(--nw-floating-text);
 }
 
-.ih-close-btn {
-  color: var(--nw-floating-text) !important;
-  background: color-mix(in srgb, var(--nw-floating-text) 10%, transparent) !important;
-  border: 1px solid color-mix(in srgb, var(--nw-floating-text) 22%, transparent) !important;
+.image-host-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.ih-close-btn:hover {
-  color: var(--nw-floating-text) !important;
-  background: color-mix(in srgb, var(--nw-floating-text) 16%, transparent) !important;
+.image-host-btn {
+  height: 32px;
+  min-width: 68px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 650;
 }
 
 @media (max-width: 768px) {
