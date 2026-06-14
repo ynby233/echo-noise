@@ -302,7 +302,7 @@
             >
               <UIcon :name="editUploadKind === 'video' ? 'i-mdi-loading' : 'i-mdi-video-plus-outline'" class="w-5 h-5" :class="{ 'edit-spin': editUploadKind === 'video' }" />
             </button>
-            <div ref="editVisibilityControlRef" class="visibility-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :class="{ 'is-open': showEditVisibilityMenu }" :data-tooltip="`可见范围：${editVisibilityLabel}`">
+            <div ref="editVisibilityControlRef" class="visibility-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :data-tooltip="`可见范围：${editVisibilityLabel}`">
               <UIcon :name="editVisibilityIcon" class="w-5 h-5" />
               <button
                 type="button"

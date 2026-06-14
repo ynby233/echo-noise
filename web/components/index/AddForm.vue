@@ -27,7 +27,7 @@
             <UIcon :name="enableNotify ? 'i-mdi-bell-off-outline' : 'i-mdi-bell-ring-outline'" class="w-5 h-5" />
             <span class="notify-label">{{ enableNotify ? '关闭' : '开启' }}</span>
           </button>
-          <div ref="visibilityControlRef" class="visibility-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :class="{ 'is-open': showVisibilityMenu }" :data-tooltip="`可见范围：${visibilityLabel}`">
+          <div ref="visibilityControlRef" class="visibility-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :data-tooltip="`可见范围：${visibilityLabel}`">
             <UIcon :name="visibilityIcon" class="w-5 h-5" />
             <button
               type="button"

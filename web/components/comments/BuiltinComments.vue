@@ -18,7 +18,7 @@
                 </a>
               </div>
               <div class="comment-editor-toolbar edit-toolbar">
-                <div class="visibility-picker comment-visibility-picker toolbar-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :class="{ 'is-open': isCommentVisibilityMenuOpen('edit', c.id), 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('edit', c.id) }" :data-tooltip="commentVisibilityTooltipFor('edit', c.id)" @mousedown.stop>
+                <div class="visibility-picker comment-visibility-picker toolbar-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :class="{ 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('edit', c.id) }" :data-tooltip="commentVisibilityTooltipFor('edit', c.id)" @mousedown.stop>
                   <UIcon :name="visibilityIconFor('edit')" class="w-5 h-5" />
                   <button type="button" class="comment-visibility-trigger" aria-label="可见范围" aria-haspopup="listbox" :aria-expanded="isCommentVisibilityMenuOpen('edit', c.id)" @click="toggleCommentVisibilityMenu('edit', c.id)">
                     <span>{{ selectedVisibilityLabelFor('edit') }}</span>
@@ -75,7 +75,7 @@
                       </a>
                     </div>
                     <div class="comment-editor-toolbar edit-toolbar">
-                      <div class="visibility-picker comment-visibility-picker toolbar-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :class="{ 'is-open': isCommentVisibilityMenuOpen('edit', child.id), 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('edit', child.id) }" :data-tooltip="commentVisibilityTooltipFor('edit', child.id)" @mousedown.stop>
+                      <div class="visibility-picker comment-visibility-picker toolbar-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :class="{ 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('edit', child.id) }" :data-tooltip="commentVisibilityTooltipFor('edit', child.id)" @mousedown.stop>
                         <UIcon :name="visibilityIconFor('edit')" class="w-5 h-5" />
                         <button type="button" class="comment-visibility-trigger" aria-label="可见范围" aria-haspopup="listbox" :aria-expanded="isCommentVisibilityMenuOpen('edit', child.id)" @click="toggleCommentVisibilityMenu('edit', child.id)">
                           <span>{{ selectedVisibilityLabelFor('edit') }}</span>
@@ -134,7 +134,7 @@
 
       <div v-if="formVisible" class="space-y-4 mt-4 md:mt-5">
         <div class="comment-editor-toolbar main-toolbar">
-          <div class="visibility-picker comment-visibility-picker toolbar-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :class="{ 'is-open': isCommentVisibilityMenuOpen('content'), 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('content') }" :data-tooltip="commentVisibilityTooltipFor('content')" @mousedown.stop>
+          <div class="visibility-picker comment-visibility-picker toolbar-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :class="{ 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('content') }" :data-tooltip="commentVisibilityTooltipFor('content')" @mousedown.stop>
             <UIcon :name="visibilityIconFor('content')" class="w-5 h-5" />
             <button type="button" class="comment-visibility-trigger" aria-label="可见范围" aria-haspopup="listbox" :aria-expanded="isCommentVisibilityMenuOpen('content')" @click="toggleCommentVisibilityMenu('content')">
               <span>{{ selectedVisibilityLabelFor('content') }}</span>

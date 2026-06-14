@@ -79,6 +79,7 @@ const positionTooltip = (anchor: HTMLElement) => {
 
 const showTooltip = (anchor: HTMLElement) => {
   if (anchor.classList.contains(TOOLTIP_SUPPRESSED_CLASS)) return
+  if (!document.body.contains(anchor)) return
   const text = getTooltipText(anchor)
   if (!text) return
   const el = ensureTooltipEl()
@@ -100,13 +101,13 @@ const handleTooltipPointerOver = (event: PointerEvent) => {
   showTooltip(anchor)
 }
 
-const handleTooltipFocusIn = (event: FocusEvent) => {
-  const anchor = tooltipAnchorFromEvent(event)
-  if (anchor) showTooltip(anchor)
-}
-
 const handleTooltipPointerMove = () => {
-  if (tooltipAnchor) positionTooltip(tooltipAnchor)
+  if (!tooltipAnchor) return
+  if (!document.body.contains(tooltipAnchor) || tooltipAnchor.classList.contains(TOOLTIP_SUPPRESSED_CLASS)) {
+    hideTooltip()
+    return
+  }
+  positionTooltip(tooltipAnchor)
 }
 
 const hasLocalLoginState = () => !!userStore.isLogin || !!userStore.token
@@ -156,7 +157,6 @@ onMounted(() => {
   window.addEventListener('focus', syncAuthState)
   document.addEventListener('visibilitychange', syncAuthStateWhenVisible)
   document.addEventListener('pointerover', handleTooltipPointerOver, true)
-  document.addEventListener('focusin', handleTooltipFocusIn, true)
   document.addEventListener('pointermove', handleTooltipPointerMove, true)
   document.addEventListener('pointerdown', suppressTooltipOnActivation, true)
   document.addEventListener('click', suppressTooltipOnActivation, true)
@@ -171,7 +171,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('focus', syncAuthState)
   document.removeEventListener('visibilitychange', syncAuthStateWhenVisible)
   document.removeEventListener('pointerover', handleTooltipPointerOver, true)
-  document.removeEventListener('focusin', handleTooltipFocusIn, true)
   document.removeEventListener('pointermove', handleTooltipPointerMove, true)
   document.removeEventListener('pointerdown', suppressTooltipOnActivation, true)
   document.removeEventListener('click', suppressTooltipOnActivation, true)

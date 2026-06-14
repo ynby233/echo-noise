@@ -27,105 +27,7 @@ let placeholderEl: HTMLElement | null = null;
 let mutationObserver: MutationObserver | null = null;
 let fixedCleanup: (() => void) | null = null;
 let imagePreviewCleanup: (() => void) | null = null;
-let toolbarDragCleanup: (() => void) | null = null;
 const isReady = ref(false);
-
-const setupToolbarDragScroll = (toolbar: HTMLElement) => {
-  toolbarDragCleanup?.();
-
-  let isPointerDown = false;
-  let isDragging = false;
-  let suppressClick = false;
-  let startX = 0;
-  let startScrollLeft = 0;
-  let activePointerId: number | null = null;
-
-  const maxScrollLeft = () => Math.max(0, toolbar.scrollWidth - toolbar.clientWidth);
-  const setToolbarScrollLeft = (value: number) => {
-    toolbar.scrollLeft = Math.max(0, Math.min(maxScrollLeft(), value));
-  };
-
-  const endDrag = () => {
-    isPointerDown = false;
-    activePointerId = null;
-    toolbar.classList.remove('is-dragging');
-    toolbar.classList.remove('is-drag-ready');
-  };
-
-  const onPointerDown = (event: PointerEvent) => {
-    if (event.button !== 0) return;
-    const target = event.target as HTMLElement | null;
-    if (target?.closest('input, textarea, select')) return;
-
-    isPointerDown = true;
-    isDragging = false;
-    activePointerId = event.pointerId;
-    startX = event.clientX;
-    startScrollLeft = toolbar.scrollLeft;
-    toolbar.classList.add('is-drag-ready');
-    try {
-      toolbar.setPointerCapture?.(event.pointerId);
-    } catch {}
-  };
-
-  const onPointerMove = (event: PointerEvent) => {
-    if (!isPointerDown || activePointerId !== event.pointerId) return;
-    const deltaX = event.clientX - startX;
-    if (!isDragging && Math.abs(deltaX) < 4) return;
-
-    isDragging = true;
-    toolbar.classList.add('is-dragging');
-    setToolbarScrollLeft(startScrollLeft - deltaX);
-    event.preventDefault();
-  };
-
-  const onWheel = (event: WheelEvent) => {
-    const scrollable = maxScrollLeft() > 0;
-    if (!scrollable) return;
-    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-    if (!delta) return;
-    setToolbarScrollLeft(toolbar.scrollLeft + delta);
-    event.preventDefault();
-  };
-
-  const onPointerUp = (event: PointerEvent) => {
-    if (!isPointerDown || activePointerId !== event.pointerId) return;
-    if (isDragging) {
-      suppressClick = true;
-      window.setTimeout(() => {
-        suppressClick = false;
-      }, 0);
-    }
-    try {
-      toolbar.releasePointerCapture?.(event.pointerId);
-    } catch {}
-    endDrag();
-  };
-
-  const onClickCapture = (event: MouseEvent) => {
-    if (!suppressClick) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-  };
-
-  toolbar.addEventListener('pointerdown', onPointerDown, true);
-  toolbar.addEventListener('wheel', onWheel, { passive: false });
-  window.addEventListener('pointermove', onPointerMove, { capture: true });
-  window.addEventListener('pointerup', onPointerUp, { capture: true });
-  window.addEventListener('pointercancel', endDrag, { capture: true });
-  toolbar.addEventListener('click', onClickCapture, true);
-
-  toolbarDragCleanup = () => {
-    toolbar.removeEventListener('pointerdown', onPointerDown, true);
-    toolbar.removeEventListener('wheel', onWheel);
-    window.removeEventListener('pointermove', onPointerMove, { capture: true } as AddEventListenerOptions);
-    window.removeEventListener('pointerup', onPointerUp, { capture: true } as AddEventListenerOptions);
-    window.removeEventListener('pointercancel', endDrag, { capture: true } as AddEventListenerOptions);
-    toolbar.removeEventListener('click', onClickCapture, true);
-    toolbar.classList.remove('is-dragging');
-    toolbar.classList.remove('is-drag-ready');
-  };
-};
 
 const setupInlineImagePreview = () => {
   const root = editorContainer.value;
@@ -157,7 +59,6 @@ const editorOptions: IOptions = {
   lang: "zh_CN" as keyof II18n,
   theme: "classic",
   toolbar: [
-    "emoji",
     "headings",
     "bold",
     "italic",
@@ -173,7 +74,6 @@ const editorOptions: IOptions = {
     "code",
     "inline-code",
     "table",
-    "upload",
     "undo",
     "redo",
     "|",
@@ -229,7 +129,6 @@ onMounted(async () => {
     const root = editorContainer.value?.querySelector('.vditor') as HTMLElement | null;
     toolbarEl = root?.querySelector('.vditor-toolbar') as HTMLElement | null;
     if (!root || !toolbarEl || placeholderEl) return;
-    setupToolbarDragScroll(toolbarEl);
 
     // 占位元素，避免工具栏脱离文档流后遮挡内容
     placeholderEl = document.createElement('div');
@@ -301,8 +200,6 @@ onMounted(async () => {
       window.removeEventListener('scroll', updateToolbarPosition);
       mutationObserver?.disconnect();
       mutationObserver = null;
-      toolbarDragCleanup?.();
-      toolbarDragCleanup = null;
       if (toolbarEl) {
         toolbarEl.style.position = '';
         toolbarEl.style.top = '';
@@ -429,10 +326,9 @@ watch(() => props.theme, (newTheme) => {
   background-color: #f8f9fab7;
   border-bottom: none;
   z-index: 100;
-  cursor: grab;
-  touch-action: pan-x;
   overscroll-behavior-x: contain;
   box-sizing: border-box;
+  padding-left: 0 !important;
 }
 
 .vditor-toolbar > * {
@@ -443,20 +339,11 @@ watch(() => props.theme, (newTheme) => {
   display: none !important;
 }
 
-.vditor-toolbar.is-dragging {
-  cursor: grabbing;
-  user-select: none;
-}
-
-.vditor-toolbar.is-dragging .vditor-toolbar__item {
-  pointer-events: none;
-}
-
 .vditor-toolbar::-webkit-scrollbar {
   display: none; /* Chrome, Safari and Opera */
 }
 
-.vditor-toolbar--pin { padding-left:6px !important; background-color:#f8f9fa; border-bottom:none; z-index:101; }
+.vditor-toolbar--pin { padding-left:0 !important; background-color:#f8f9fa; border-bottom:none; z-index:101; }
 
 /* 修改弹出面板样式 */
 .vditor-panel--none {

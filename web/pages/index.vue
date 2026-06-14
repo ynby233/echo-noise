@@ -2727,6 +2727,9 @@ html.dark .hero-tabs {
   background: rgba(2, 6, 23, 0.58);
   border-color: rgba(255, 255, 255, 0.14);
 }
+html.dark .hero-tab:not(.active):hover {
+  color: #ffffff;
+}
 html:not(.dark) .hero-tabs {
   background: #ffffff;
   border-color: rgba(15, 23, 42, 0.14);
