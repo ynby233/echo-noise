@@ -27,8 +27,8 @@ html.dark {
   --nw-floating-text: #f8fafc;
   --nw-floating-border: rgba(255, 255, 255, 0.18);
   --nw-floating-shadow: 0 18px 42px rgba(0, 0, 0, 0.42);
-  --nw-floating-hover-bg: rgba(249, 115, 22, 0.18);
-  --nw-floating-hover-border: rgba(249, 115, 22, 0.42);
+  --nw-floating-hover-bg: rgba(249, 115, 22, 0.26);
+  --nw-floating-hover-border: rgba(249, 115, 22, 0.58);
   --nw-floating-selected-bg: rgba(249, 115, 22, 0.30);
   --nw-floating-selected-border: rgba(249, 115, 22, 0.70);
 }
@@ -52,9 +52,9 @@ html.dark {
 .nw-action-btn:hover:not(:disabled),
 .nw-action-btn:focus-visible {
   transform: translate3d(0, 0, 0) scale(1.06);
-  border-color: var(--nw-action-hover-border, var(--nw-floating-hover-border));
-  background: var(--nw-action-hover-bg, var(--nw-floating-hover-bg));
-  color: var(--nw-action-hover-text, var(--nw-action-text, #374151));
+  border-color: var(--nw-action-hover-border, var(--nw-floating-hover-border)) !important;
+  background: var(--nw-action-hover-bg, var(--nw-floating-hover-bg)) !important;
+  color: var(--nw-action-hover-text, var(--nw-action-text, #374151)) !important;
   outline: none;
 }
 
@@ -102,9 +102,9 @@ html.dark .nw-action-btn {
 
 html.dark .nw-action-btn:not(.nw-action-btn--primary):not(.nw-action-btn--danger):hover:not(:disabled),
 html.dark .nw-action-btn:not(.nw-action-btn--primary):not(.nw-action-btn--danger):focus-visible {
-  border-color: var(--nw-floating-hover-border);
-  background: var(--nw-floating-hover-bg);
-  color: #fff;
+  border-color: var(--nw-floating-hover-border) !important;
+  background: var(--nw-floating-hover-bg) !important;
+  color: #fff !important;
 }
 
 html.dark .nw-action-btn--primary {

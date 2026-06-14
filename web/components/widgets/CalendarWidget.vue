@@ -672,8 +672,8 @@ onBeforeUnmount(() => {
   --nw-floating-bg: rgba(15, 23, 42, 0.96);
   --nw-floating-text: #f8fafc;
   --nw-floating-border: rgba(255, 255, 255, 0.16);
-  --nw-floating-hover-bg: rgba(255, 255, 255, 0.10);
-  --nw-floating-hover-border: rgba(251, 146, 60, 0.42);
+  --nw-floating-hover-bg: rgba(249, 115, 22, 0.26);
+  --nw-floating-hover-border: rgba(249, 115, 22, 0.58);
   --nw-floating-selected-bg: rgba(249, 115, 22, 0.24);
   --nw-floating-selected-border: rgba(251, 146, 60, 0.52);
   --nw-floating-shadow: 0 18px 38px rgba(0, 0, 0, 0.42);

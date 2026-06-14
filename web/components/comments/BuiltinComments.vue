@@ -18,7 +18,7 @@
                 </a>
               </div>
               <div class="comment-editor-toolbar edit-toolbar">
-                <div class="visibility-picker comment-visibility-picker toolbar-control nw-tooltip-anchor" :class="{ 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('edit', c.id) }" :data-tooltip="commentVisibilityTooltipFor('edit', c.id)" @mousedown.stop>
+                <div class="visibility-picker comment-visibility-picker toolbar-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :class="{ 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('edit', c.id) }" :data-tooltip="commentVisibilityTooltipFor('edit', c.id)" @mousedown.stop>
                   <UIcon :name="visibilityIconFor('edit')" class="w-5 h-5" />
                   <button type="button" class="comment-visibility-trigger" aria-label="可见范围" aria-haspopup="listbox" :aria-expanded="isCommentVisibilityMenuOpen('edit', c.id)" @click="toggleCommentVisibilityMenu('edit', c.id)">
                     <span>{{ selectedVisibilityLabelFor('edit') }}</span>
@@ -31,13 +31,13 @@
                     </button>
                   </div>
                 </div>
-                <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="加粗" aria-label="加粗" @click="applyFormat('edit', 'bold')"><UIcon name="i-mdi-format-bold" class="w-5 h-5" /></button>
-                <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="斜体" aria-label="斜体" @click="applyFormat('edit', 'italic')"><UIcon name="i-mdi-format-italic" class="w-5 h-5" /></button>
-                <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="链接" aria-label="链接" @click="applyFormat('edit', 'link')"><UIcon name="i-mdi-link-variant" class="w-5 h-5" /></button>
-                <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="图片链接" aria-label="图片链接" @click="applyFormat('edit', 'imageLink')"><UIcon name="i-mdi-image-outline" class="w-5 h-5" /></button>
-                <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" :disabled="isCommentImageUploading" @click="triggerCommentImageUpload('edit')"><UIcon name="i-mdi-image-plus-outline" class="w-5 h-5" /></button>
+                <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="加粗" aria-label="加粗" @click="applyFormat('edit', 'bold')"><UIcon name="i-mdi-format-bold" class="w-5 h-5" /></button>
+                <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="斜体" aria-label="斜体" @click="applyFormat('edit', 'italic')"><UIcon name="i-mdi-format-italic" class="w-5 h-5" /></button>
+                <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="链接" aria-label="链接" @click="applyFormat('edit', 'link')"><UIcon name="i-mdi-link-variant" class="w-5 h-5" /></button>
+                <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="图片链接" aria-label="图片链接" @click="applyFormat('edit', 'imageLink')"><UIcon name="i-mdi-image-outline" class="w-5 h-5" /></button>
+                <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" :disabled="isCommentImageUploading" @click="triggerCommentImageUpload('edit')"><UIcon name="i-mdi-image-plus-outline" class="w-5 h-5" /></button>
                 <div class="emoji-wrap">
-                  <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="表情" aria-label="表情" @click="toggleEmoji('edit')"><UIcon name="i-mdi-emoticon-outline" class="w-5 h-5" /></button>
+                  <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="表情" aria-label="表情" @click="toggleEmoji('edit')"><UIcon name="i-mdi-emoticon-outline" class="w-5 h-5" /></button>
                   <div v-if="showEmojiTarget === 'edit'" class="emoji-popover nw-floating-menu">
                     <button v-for="e in emojis" :key="e" type="button" class="emoji-option" @click="insertEmoji(e)">{{ e }}</button>
                   </div>
@@ -75,7 +75,7 @@
                       </a>
                     </div>
                     <div class="comment-editor-toolbar edit-toolbar">
-                      <div class="visibility-picker comment-visibility-picker toolbar-control nw-tooltip-anchor" :class="{ 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('edit', child.id) }" :data-tooltip="commentVisibilityTooltipFor('edit', child.id)" @mousedown.stop>
+                      <div class="visibility-picker comment-visibility-picker toolbar-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :class="{ 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('edit', child.id) }" :data-tooltip="commentVisibilityTooltipFor('edit', child.id)" @mousedown.stop>
                         <UIcon :name="visibilityIconFor('edit')" class="w-5 h-5" />
                         <button type="button" class="comment-visibility-trigger" aria-label="可见范围" aria-haspopup="listbox" :aria-expanded="isCommentVisibilityMenuOpen('edit', child.id)" @click="toggleCommentVisibilityMenu('edit', child.id)">
                           <span>{{ selectedVisibilityLabelFor('edit') }}</span>
@@ -88,13 +88,13 @@
                           </button>
                         </div>
                       </div>
-                      <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="加粗" aria-label="加粗" @click="applyFormat('edit', 'bold')"><UIcon name="i-mdi-format-bold" class="w-5 h-5" /></button>
-                      <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="斜体" aria-label="斜体" @click="applyFormat('edit', 'italic')"><UIcon name="i-mdi-format-italic" class="w-5 h-5" /></button>
-                      <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="链接" aria-label="链接" @click="applyFormat('edit', 'link')"><UIcon name="i-mdi-link-variant" class="w-5 h-5" /></button>
-                      <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="图片链接" aria-label="图片链接" @click="applyFormat('edit', 'imageLink')"><UIcon name="i-mdi-image-outline" class="w-5 h-5" /></button>
-                      <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" :disabled="isCommentImageUploading" @click="triggerCommentImageUpload('edit')"><UIcon name="i-mdi-image-plus-outline" class="w-5 h-5" /></button>
+                      <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="加粗" aria-label="加粗" @click="applyFormat('edit', 'bold')"><UIcon name="i-mdi-format-bold" class="w-5 h-5" /></button>
+                      <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="斜体" aria-label="斜体" @click="applyFormat('edit', 'italic')"><UIcon name="i-mdi-format-italic" class="w-5 h-5" /></button>
+                      <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="链接" aria-label="链接" @click="applyFormat('edit', 'link')"><UIcon name="i-mdi-link-variant" class="w-5 h-5" /></button>
+                      <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="图片链接" aria-label="图片链接" @click="applyFormat('edit', 'imageLink')"><UIcon name="i-mdi-image-outline" class="w-5 h-5" /></button>
+                      <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" :disabled="isCommentImageUploading" @click="triggerCommentImageUpload('edit')"><UIcon name="i-mdi-image-plus-outline" class="w-5 h-5" /></button>
                       <div class="emoji-wrap">
-                        <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="表情" aria-label="表情" @click="toggleEmoji('edit')"><UIcon name="i-mdi-emoticon-outline" class="w-5 h-5" /></button>
+                        <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="表情" aria-label="表情" @click="toggleEmoji('edit')"><UIcon name="i-mdi-emoticon-outline" class="w-5 h-5" /></button>
                         <div v-if="showEmojiTarget === 'edit'" class="emoji-popover nw-floating-menu">
                           <button v-for="e in emojis" :key="e" type="button" class="emoji-option" @click="insertEmoji(e)">{{ e }}</button>
                         </div>
@@ -134,7 +134,7 @@
 
       <div v-if="formVisible" class="space-y-4 mt-4 md:mt-5">
         <div class="comment-editor-toolbar main-toolbar">
-          <div class="visibility-picker comment-visibility-picker toolbar-control nw-tooltip-anchor" :class="{ 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('content') }" :data-tooltip="commentVisibilityTooltipFor('content')" @mousedown.stop>
+          <div class="visibility-picker comment-visibility-picker toolbar-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :class="{ 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('content') }" :data-tooltip="commentVisibilityTooltipFor('content')" @mousedown.stop>
             <UIcon :name="visibilityIconFor('content')" class="w-5 h-5" />
             <button type="button" class="comment-visibility-trigger" aria-label="可见范围" aria-haspopup="listbox" :aria-expanded="isCommentVisibilityMenuOpen('content')" @click="toggleCommentVisibilityMenu('content')">
               <span>{{ selectedVisibilityLabelFor('content') }}</span>
@@ -147,13 +147,13 @@
               </button>
             </div>
           </div>
-          <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="加粗" aria-label="加粗" @click="applyFormat('content', 'bold')"><UIcon name="i-mdi-format-bold" class="w-5 h-5" /></button>
-          <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="斜体" aria-label="斜体" @click="applyFormat('content', 'italic')"><UIcon name="i-mdi-format-italic" class="w-5 h-5" /></button>
-          <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="链接" aria-label="链接" @click="applyFormat('content', 'link')"><UIcon name="i-mdi-link-variant" class="w-5 h-5" /></button>
-          <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="图片链接" aria-label="图片链接" @click="applyFormat('content', 'imageLink')"><UIcon name="i-mdi-image-outline" class="w-5 h-5" /></button>
-          <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" :disabled="isCommentImageUploading" @click="triggerCommentImageUpload('content')"><UIcon name="i-mdi-image-plus-outline" class="w-5 h-5" /></button>
+          <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="加粗" aria-label="加粗" @click="applyFormat('content', 'bold')"><UIcon name="i-mdi-format-bold" class="w-5 h-5" /></button>
+          <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="斜体" aria-label="斜体" @click="applyFormat('content', 'italic')"><UIcon name="i-mdi-format-italic" class="w-5 h-5" /></button>
+          <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="链接" aria-label="链接" @click="applyFormat('content', 'link')"><UIcon name="i-mdi-link-variant" class="w-5 h-5" /></button>
+          <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="图片链接" aria-label="图片链接" @click="applyFormat('content', 'imageLink')"><UIcon name="i-mdi-image-outline" class="w-5 h-5" /></button>
+          <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" :disabled="isCommentImageUploading" @click="triggerCommentImageUpload('content')"><UIcon name="i-mdi-image-plus-outline" class="w-5 h-5" /></button>
           <div class="emoji-wrap">
-            <button type="button" class="comment-tool-btn nw-tooltip-anchor" data-tooltip="表情" aria-label="表情" @click="toggleEmoji('content')"><UIcon name="i-mdi-emoticon-outline" class="w-5 h-5" /></button>
+            <button type="button" class="comment-tool-btn nw-action-btn nw-tooltip-anchor" data-tooltip="表情" aria-label="表情" @click="toggleEmoji('content')"><UIcon name="i-mdi-emoticon-outline" class="w-5 h-5" /></button>
             <div v-if="showEmojiTarget === 'content'" class="emoji-popover nw-floating-menu">
               <button v-for="e in emojis" :key="e" type="button" class="emoji-option" @click="insertEmoji(e)">{{ e }}</button>
             </div>
@@ -1375,8 +1375,8 @@ defineExpose({ load, focusCommentById, replyToCommentById })
   --nw-floating-text: #f8fafc;
   --nw-floating-border: rgba(255, 255, 255, 0.18);
   --nw-floating-shadow: 0 18px 42px rgba(0, 0, 0, 0.42);
-  --nw-floating-hover-bg: rgba(249, 115, 22, 0.18);
-  --nw-floating-hover-border: rgba(249, 115, 22, 0.42);
+  --nw-floating-hover-bg: rgba(249, 115, 22, 0.26);
+  --nw-floating-hover-border: rgba(249, 115, 22, 0.58);
   --nw-floating-selected-bg: rgba(249, 115, 22, 0.30);
   --nw-floating-selected-border: rgba(251, 146, 60, 0.58);
 }
@@ -1394,7 +1394,7 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 :global(.dark) .builtin-comments .cancel-btn { background:rgba(255,255,255,0.08) !important; border-color:rgba(255,255,255,0.18) !important; color:#f8fafc !important; }
 .builtin-comments.comment-theme-dark .cancel-btn:hover,
 :global(html.dark) .builtin-comments .cancel-btn:hover,
-:global(.dark) .builtin-comments .cancel-btn:hover { background:rgba(249,115,22,0.18) !important; border-color:rgba(251,146,60,0.42) !important; color:#fff !important; }
+:global(.dark) .builtin-comments .cancel-btn:hover { background:var(--nw-floating-hover-bg) !important; border-color:var(--nw-floating-hover-border) !important; color:#fff !important; }
 .builtin-comments.comment-theme-dark .clear-action-btn,
 .builtin-comments.comment-theme-dark .clear-action-btn:hover,
 :global(html.dark) .builtin-comments .clear-action-btn,

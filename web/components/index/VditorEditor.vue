@@ -208,7 +208,7 @@ onMounted(async () => {
   const setupFixedToolbar = () => {
     const root = editorContainer.value?.querySelector('.vditor') as HTMLElement | null;
     toolbarEl = root?.querySelector('.vditor-toolbar') as HTMLElement | null;
-    if (!root || !toolbarEl) return;
+    if (!root || !toolbarEl || placeholderEl) return;
     setupToolbarDragScroll(toolbarEl);
 
     // 占位元素，避免工具栏脱离文档流后遮挡内容
@@ -297,9 +297,11 @@ onMounted(async () => {
     };
   };
 
-  // 在下一轮微任务确保 DOM 就绪
+  // Vditor 的 toolbar 由内部异步渲染，分几次尝试避免错过绑定时机。
   nextTick(() => {
     setupFixedToolbar();
+    window.setTimeout(setupFixedToolbar, 50);
+    window.setTimeout(setupFixedToolbar, 250);
     setupInlineImagePreview();
   });
 });
@@ -395,10 +397,11 @@ watch(() => props.theme, (newTheme) => {
   display: flex !important;
   flex-wrap: nowrap !important;
   justify-content: flex-start;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
   width: 100%;
   max-width: 100%;
+  min-width: 0;
   white-space: nowrap;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
@@ -409,6 +412,15 @@ watch(() => props.theme, (newTheme) => {
   cursor: grab;
   touch-action: pan-x;
   overscroll-behavior-x: contain;
+  box-sizing: border-box;
+}
+
+.vditor-toolbar > * {
+  flex: 0 0 auto !important;
+}
+
+.vditor-toolbar__br {
+  display: none !important;
 }
 
 .vditor-toolbar.is-dragging {
@@ -468,13 +480,15 @@ watch(() => props.theme, (newTheme) => {
   border-color: transparent !important;
 }
 .vditor-toolbar__item {
-  flex-shrink: 0;
+  flex: 0 0 auto !important;
+  min-width: 32px;
   padding: 6px !important;
   transition: all 0.2s ease;
 }
 
 .vditor-toolbar__item:hover {
-  background-color: #e9ecef;
+  background-color: var(--nw-floating-hover-bg) !important;
+  border-color: var(--nw-floating-hover-border) !important;
   border-radius: 4px;
 }
 
@@ -536,7 +550,9 @@ html.dark .vditor-container { background-color: #202a36; border: 1px solid rgba(
 html.dark .vditor-toolbar { background-color: rgba(39, 50, 66, 0.68) !important; border-bottom: 1px solid rgba(255, 255, 255, 0.16) !important; }
 
 html.dark .vditor-toolbar__item:hover {
-  background-color: rgba(255, 255, 255, 0.06);
+  background-color: var(--nw-floating-hover-bg) !important;
+  border-color: var(--nw-floating-hover-border) !important;
+  color: #fff !important;
 }
 
 html.dark .vditor-ir pre.vditor-reset {
