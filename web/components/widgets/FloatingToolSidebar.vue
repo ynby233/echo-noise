@@ -153,9 +153,19 @@ const toggleCollapsed = () => {
   color: #cbd5e1 !important;
 }
 .tool-btn.tool-btn-round { border-radius:999px; }
-.floating-sidebar .tool-btn:hover:not(:disabled),
-.floating-sidebar .tool-btn:focus-visible {
-  background: var(--nw-action-hover-bg) !important;
+.floating-sidebar.fs-light .tool-btn:hover:not(:disabled),
+.floating-sidebar.fs-light .tool-btn:focus-visible {
+  background:
+    linear-gradient(rgba(249, 115, 22, .14), rgba(249, 115, 22, .14)),
+    rgba(241, 245, 249, .96) !important;
+  color: var(--nw-action-hover-text) !important;
+  border-color: var(--nw-action-hover-border) !important;
+}
+.floating-sidebar.fs-dark .tool-btn:hover:not(:disabled),
+.floating-sidebar.fs-dark .tool-btn:focus-visible {
+  background:
+    linear-gradient(rgba(249, 115, 22, .24), rgba(249, 115, 22, .24)),
+    rgba(51, 65, 85, .96) !important;
   color: var(--nw-action-hover-text) !important;
   border-color: var(--nw-action-hover-border) !important;
 }

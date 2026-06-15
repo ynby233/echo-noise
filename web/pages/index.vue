@@ -3085,6 +3085,22 @@ white-space: nowrap;  /* 防止换行 */
   border-color: rgba(148, 163, 184, .28) !important;
   color: #cbd5e1 !important;
 }
+.scroll-button.scroll-button-light:hover:not(:disabled),
+.scroll-button.scroll-button-light:focus-visible {
+  background:
+    linear-gradient(rgba(249, 115, 22, .14), rgba(249, 115, 22, .14)),
+    rgba(241, 245, 249, .96) !important;
+  border-color: var(--nw-action-hover-border) !important;
+  color: var(--nw-action-hover-text) !important;
+}
+.scroll-button.scroll-button-dark:hover:not(:disabled),
+.scroll-button.scroll-button-dark:focus-visible {
+  background:
+    linear-gradient(rgba(249, 115, 22, .24), rgba(249, 115, 22, .24)),
+    rgba(51, 65, 85, .96) !important;
+  border-color: var(--nw-action-hover-border) !important;
+  color: var(--nw-action-hover-text) !important;
+}
 
 .layout-container.grid-3 {
   display: grid;
