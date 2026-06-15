@@ -119,9 +119,9 @@ const toggleCollapsed = () => {
 .floating-sidebar { position: fixed; right: 16px; top: 50%; transform: translateY(-50%); z-index: 1000; display:flex; flex-direction:column; gap:10px; padding:8px; border-radius:12px; background: transparent; box-shadow: none; }
 .floating-sidebar.fs-dark {
   background: transparent !important;
-  --nw-action-bg: rgba(255, 255, 255, .06);
+  --nw-action-bg: rgba(51, 65, 85, .96);
   --nw-action-text: #cbd5e1;
-  --nw-action-border: rgba(255, 255, 255, .12);
+  --nw-action-border: rgba(148, 163, 184, .28);
   --nw-action-hover-bg: rgba(249, 115, 22, .26);
   --nw-action-hover-border: rgba(249, 115, 22, .58);
   --nw-action-hover-text: #fff;
@@ -129,14 +129,29 @@ const toggleCollapsed = () => {
 .floating-sidebar.fs-light {
   background: transparent !important;
   box-shadow: none;
-  --nw-action-bg: rgba(15, 23, 42, .06);
+  --nw-action-bg: rgba(241, 245, 249, .96);
   --nw-action-text: #374151;
-  --nw-action-border: rgba(15, 23, 42, .08);
+  --nw-action-border: rgba(15, 23, 42, .12);
   --nw-action-hover-bg: rgba(249, 115, 22, .12);
   --nw-action-hover-border: rgba(249, 115, 22, .34);
   --nw-action-hover-text: #9a3412;
 }
 .tool-btn { position: relative; display:flex; align-items:center; justify-content:center; width:40px; height:40px; min-width:40px; min-height:40px; padding:0; border-radius:10px; box-sizing: border-box; flex-shrink: 0; aspect-ratio: 1 / 1; }
+.floating-sidebar .tool-btn {
+  background: var(--nw-action-bg) !important;
+  border-color: var(--nw-action-border) !important;
+  color: var(--nw-action-text) !important;
+}
+.floating-sidebar.fs-light .tool-btn {
+  background: rgba(241, 245, 249, .96) !important;
+  border-color: rgba(15, 23, 42, .12) !important;
+  color: #374151 !important;
+}
+.floating-sidebar.fs-dark .tool-btn {
+  background: rgba(51, 65, 85, .96) !important;
+  border-color: rgba(148, 163, 184, .28) !important;
+  color: #cbd5e1 !important;
+}
 .tool-btn.tool-btn-round { border-radius:999px; }
 .floating-sidebar .tool-btn:hover:not(:disabled),
 .floating-sidebar .tool-btn:focus-visible {

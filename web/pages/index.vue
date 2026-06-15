@@ -3054,23 +3054,36 @@ white-space: nowrap;  /* 防止换行 */
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.95;
+  opacity: 1;
+  background: var(--nw-action-bg) !important;
+  border-color: var(--nw-action-border) !important;
+  color: var(--nw-action-text) !important;
 }
 .scroll-button-light {
-  --nw-action-bg: rgba(15, 23, 42, .06);
+  --nw-action-bg: rgba(241, 245, 249, .96);
   --nw-action-text: #374151;
-  --nw-action-border: rgba(15, 23, 42, .08);
+  --nw-action-border: rgba(15, 23, 42, .12);
   --nw-action-hover-bg: rgba(249, 115, 22, .12);
   --nw-action-hover-border: rgba(249, 115, 22, .34);
   --nw-action-hover-text: #9a3412;
 }
+.scroll-button.scroll-button-light {
+  background: rgba(241, 245, 249, .96) !important;
+  border-color: rgba(15, 23, 42, .12) !important;
+  color: #374151 !important;
+}
 .scroll-button-dark {
-  --nw-action-bg: rgba(255, 255, 255, .06);
+  --nw-action-bg: rgba(51, 65, 85, .96);
   --nw-action-text: #cbd5e1;
-  --nw-action-border: rgba(255, 255, 255, .12);
+  --nw-action-border: rgba(148, 163, 184, .28);
   --nw-action-hover-bg: rgba(249, 115, 22, .26);
   --nw-action-hover-border: rgba(249, 115, 22, .58);
   --nw-action-hover-text: #fff;
+}
+.scroll-button.scroll-button-dark {
+  background: rgba(51, 65, 85, .96) !important;
+  border-color: rgba(148, 163, 184, .28) !important;
+  color: #cbd5e1 !important;
 }
 
 .layout-container.grid-3 {
