@@ -682,8 +682,19 @@ watch(() => props.theme, (newTheme) => {
   min-height: 120px !important;
 }
 
-.vditor-ir pre.vditor-reset:empty:before {
-  color: #90a4ae !important;
+.vditor-ir pre.vditor-reset:empty:before,
+.vditor-wysiwyg .vditor-reset:empty:before,
+.vditor-sv .vditor-reset:empty:before,
+.vditor-ir__node--placeholder::before,
+.vditor-wysiwyg__placeholder,
+.vditor-placeholder {
+  color: rgba(51, 65, 85, 0.58) !important;
+  font-family: inherit !important;
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  line-height: 1.5 !important;
+  letter-spacing: normal !important;
+  font-style: normal !important;
 }
 
 .vditor-preview {
@@ -739,6 +750,15 @@ html.dark .vditor-toolbar__item:hover {
 
 html.dark .vditor-ir pre.vditor-reset {
   color: #ffffff !important;
+}
+
+html.dark .vditor-ir pre.vditor-reset:empty:before,
+html.dark .vditor-wysiwyg .vditor-reset:empty:before,
+html.dark .vditor-sv .vditor-reset:empty:before,
+html.dark .vditor-ir__node--placeholder::before,
+html.dark .vditor-wysiwyg__placeholder,
+html.dark .vditor-placeholder {
+  color: rgba(226, 232, 240, 0.58) !important;
 }
 
 html.dark .vditor-toolbar {

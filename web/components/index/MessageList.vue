@@ -181,63 +181,81 @@
       <!-- 预取下一页哨兵 -->
       <div v-if="!isSearchMode && !isPersonalGuest" ref="prefetchSentinel" style="height:1px"></div>
       <!-- 分页控制区域 -->
-      <div v-if="!isSearchMode && !isPersonalGuest" class="pager-shell flex justify-center items-center space-x-4 w-full my-4 flex-wrap md:flex-nowrap">
-  <div class="flex justify-center items-center space-x-4 w-full md:w-auto">
-    <UButton 
-      v-if="message.page > 1"
-      color="gray" 
-      variant="solid" 
-      size="xs" 
-      class="rounded-full px-4 py-1.5 shadow-lg hover:shadow-xl transition-all duration-300 pager-btn"
-      @click="loadPreviousPage"
-      :disabled="isPageLoading"
-    >
-      <span class="pager-icon-wrap"><UIcon name="i-heroicons-arrow-left" class="w-4 h-4 pager-icon" /></span>
-      上一页
-    </UButton>
+      <div v-if="!isSearchMode && !isPersonalGuest" class="pager-shell" :class="{ 'is-dark': isContentDark }">
+        <div class="pager-nav-group">
+          <button
+            v-if="message.page > 1"
+            type="button"
+            class="pager-btn nw-action-btn nw-action-btn--label"
+            @click="loadPreviousPage"
+            :disabled="isPageLoading"
+          >
+            <span class="pager-icon-wrap"><UIcon name="i-heroicons-arrow-left" class="w-4 h-4 pager-icon" /></span>
+            <span>上一页</span>
+          </button>
 
-    <UButton 
-      v-if="message.hasMore"
-      color="gray" 
-      variant="solid" 
-      size="xs" 
-      class="rounded-full px-4 py-1.5 shadow-lg hover:shadow-xl transition-all duration-300 pager-btn"
-      @click="loadNextPage"
-      :disabled="isPageLoading"
-    >
-      下一页
-      <span class="pager-icon-wrap"><UIcon name="i-heroicons-arrow-right" class="w-4 h-4 pager-icon" /></span>
-    </UButton>
-    <span v-if="isPageLoading" class="ml-2 text-orange-400">加载中...</span>
-  </div>
+          <button
+            v-if="message.hasMore"
+            type="button"
+            class="pager-btn nw-action-btn nw-action-btn--label"
+            @click="loadNextPage"
+            :disabled="isPageLoading"
+          >
+            <span>下一页</span>
+            <span class="pager-icon-wrap"><UIcon name="i-heroicons-arrow-right" class="w-4 h-4 pager-icon" /></span>
+          </button>
+          <span v-if="isPageLoading" class="pager-status-text">加载中...</span>
+        </div>
 
-  <!-- 页码显示和跳转 -->
-  <div class="flex items-center justify-center space-x-2 w-full md:w-auto mt-3 md:mt-0">
-    <span class="text-gray-500 text-shadow-sm text-sm">第 {{ message.page }} 页</span> 
-    <UInput
-      v-model="targetPage"
-      type="number"
-      min="1"
-      :max="totalPages"
-      class="w-12 text-center text-sm" 
-      placeholder="#"
-      @keyup.enter="jumpToPage"
-    />
-    <UButton
-      size="xs" 
-      color="gray"
-      variant="ghost"
-      class="text-gray-400 hover:text-orange-500 text-sm pager-jump-btn"  
-      @click="jumpToPage"
-    >
-      跳转
-    </UButton>
-  </div>
-</div>
+        <!-- 页码显示和跳转 -->
+        <div class="pager-jump-group">
+          <span class="pager-page-text">第 {{ message.page }} 页</span>
+          <div class="pager-number-control">
+            <input
+              v-model="targetPage"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              class="pager-page-input"
+              placeholder="#"
+              aria-label="跳转页码"
+              @keyup.enter="jumpToPage"
+            />
+            <div class="pager-stepper" aria-label="页码增减">
+              <button
+                type="button"
+                class="pager-stepper-btn nw-action-btn"
+                aria-label="页码加一"
+                :disabled="isPageLoading"
+                @click="adjustTargetPage(1)"
+              >
+                <UIcon name="i-heroicons-chevron-up-20-solid" class="w-3 h-3" />
+              </button>
+              <button
+                type="button"
+                class="pager-stepper-btn nw-action-btn"
+                aria-label="页码减一"
+                :disabled="isPageLoading"
+                @click="adjustTargetPage(-1)"
+              >
+                <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="pager-jump-btn nw-action-btn nw-action-btn--label"
+            @click="jumpToPage"
+            :disabled="isPageLoading"
+          >
+            跳转
+          </button>
+        </div>
+      </div>
       <!-- 加载完毕提示 -->
-      <div v-if="!isSearchMode && message.messages.length > 0 && !message.hasMore" class="text-center text-gray-500 mt-4">
+      <div v-if="!isSearchMode && message.messages.length > 0 && !message.hasMore" class="pager-done-wrap">
         <UIcon name="i-fluent-emoji-flat-confetti-ball" size="lg" />
-        加载完毕~
+        <span class="pager-done-text">加载完毕~</span>
       </div>
     </div>
     
@@ -727,7 +745,16 @@ const like = async (id: number) => {
 }
 
 const targetPage = ref<string>('');
-const totalPages = computed(() => Math.ceil(message.total / 15));
+const totalPages = computed(() => Math.max(1, Math.ceil(message.total / 15)));
+const normalizeTargetPage = (fallback = message.page) => {
+  const parsed = Number.parseInt(targetPage.value || '', 10);
+  const next = Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  return Math.min(Math.max(next, 1), totalPages.value);
+};
+const adjustTargetPage = (delta: number) => {
+  targetPage.value = String(normalizeTargetPage(message.page) + delta);
+  targetPage.value = String(normalizeTargetPage(message.page));
+};
 const jumpToPage = async () => {
   const page = parseInt(targetPage.value);
   if (!page || page < 1 || page > totalPages.value || message.loading) {
@@ -3808,69 +3835,132 @@ onMounted(() => {
 .author-card-muted { color: #7a7f85 }
 @media (max-width: 640px) { .noise-author-card { position: fixed; left: 12px; right: 12px; top: auto; bottom: auto; min-width: auto; z-index: 2147483647; } .noise-author-card::after { display: none; } }
 .pager-shell {
+  --pager-shell-bg: rgba(255, 255, 255, 0.85);
+  --pager-shell-border: rgba(15, 23, 42, 0.12);
+  --pager-shell-text: #334155;
+  --pager-shell-muted: #64748b;
+  --pager-input-bg: rgba(255, 255, 255, 0.92);
+  --pager-input-border: rgba(15, 23, 42, 0.16);
+  --pager-input-text: #0f172a;
+  --pager-input-placeholder: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+  margin: 16px 0;
   padding: 10px 14px;
+  border: 1px solid var(--pager-shell-border);
   border-radius: 999px;
-  backdrop-filter: blur(8px);
+  background: var(--pager-shell-bg);
+  color: var(--pager-shell-text);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.10);
+  flex-wrap: wrap;
+}
+.pager-shell.is-dark {
+  --pager-shell-bg: rgba(39, 50, 66, 0.68);
+  --pager-shell-border: rgba(255, 255, 255, 0.16);
+  --pager-shell-text: #e2e8f0;
+  --pager-shell-muted: #cbd5e1;
+  --pager-input-bg: rgba(17, 24, 39, 0.58);
+  --pager-input-border: rgba(255, 255, 255, 0.18);
+  --pager-input-text: #f8fafc;
+  --pager-input-placeholder: rgba(226, 232, 240, 0.58);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
+}
+.pager-nav-group,
+.pager-jump-group {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.pager-btn,
+.pager-jump-btn {
+  min-height: 34px;
+  padding-inline: 14px;
+  font-size: 13px;
+  font-weight: 700;
 }
 .pager-icon-wrap {
-  width: 1.45rem;
-  height: 1.45rem;
+  width: 1.35rem;
+  height: 1.35rem;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  background: color-mix(in srgb, var(--nw-action-text) 10%, transparent);
 }
-.pager-icon {
-  line-height: 1;
+.pager-icon { line-height: 1; }
+.pager-page-text,
+.pager-status-text,
+.pager-done-text {
+  color: var(--pager-shell-muted);
+  font-size: 13px;
+  font-weight: 650;
+  text-shadow: none;
 }
-.pager-btn {
+.pager-number-control {
   display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
+  align-items: stretch;
+  min-height: 34px;
+  border: 1px solid var(--pager-input-border);
+  border-radius: 12px;
+  background: var(--pager-input-bg);
+  color: var(--pager-input-text);
+  overflow: hidden;
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
 }
-.pager-jump-btn {
-  border-radius: 999px;
-  padding: 0.35rem 0.8rem;
+.pager-number-control:focus-within {
+  border-color: rgba(249, 115, 22, 0.72);
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.18);
 }
-:global(html.dark) .pager-shell {
-  background: rgba(18, 24, 34, 0.56) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3) !important;
+.pager-page-input {
+  width: 42px;
+  min-height: 32px;
+  padding: 0 6px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--pager-input-text);
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  appearance: textfield;
 }
-:global(html.dark) .pager-btn {
-  background: rgba(39, 50, 66, 0.58) !important;
-  color: #f8fafc !important;
-  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+.pager-page-input::placeholder { color: var(--pager-input-placeholder); }
+.pager-stepper {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  width: 24px;
+  border-left: 1px solid var(--pager-input-border);
 }
-:global(html.dark) .pager-btn:hover {
-  background: rgba(50, 62, 82, 0.72) !important;
+.pager-stepper-btn {
+  width: 24px;
+  min-width: 24px;
+  height: 16px;
+  min-height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
 }
-:global(html.dark) .pager-icon-wrap {
-  background: rgba(255, 255, 255, 0.14) !important;
+.pager-stepper-btn + .pager-stepper-btn {
+  border-top: 1px solid var(--pager-input-border);
 }
-:global(html.dark) .pager-jump-btn {
-  background: rgba(39, 50, 66, 0.45) !important;
-  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+.pager-stepper-btn svg { width: 12px; height: 12px; }
+.pager-done-wrap {
+  margin-top: 16px;
+  text-align: center;
 }
-:global(html:not(.dark)) .pager-shell {
-  background: rgba(255, 255, 255, 0.52) !important;
-  border: 1px solid rgba(15, 23, 42, 0.1) !important;
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12) !important;
-}
-:global(html:not(.dark)) .pager-btn {
-  background: rgba(255, 255, 255, 0.64) !important;
-  color: #0f172a !important;
-  border: 1px solid rgba(15, 23, 42, 0.16) !important;
-}
-:global(html:not(.dark)) .pager-btn:hover {
-  background: rgba(255, 255, 255, 0.8) !important;
-}
-:global(html:not(.dark)) .pager-icon-wrap {
-  background: rgba(15, 23, 42, 0.1) !important;
-}
-:global(html:not(.dark)) .pager-jump-btn {
-  background: rgba(255, 255, 255, 0.58) !important;
-  border: 1px solid rgba(15, 23, 42, 0.16) !important;
+@media (max-width: 640px) {
+  .pager-shell {
+    border-radius: 18px;
+    gap: 10px;
+  }
+  .pager-nav-group,
+  .pager-jump-group {
+    width: 100%;
+  }
 }
 </style>
