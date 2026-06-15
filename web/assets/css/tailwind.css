@@ -484,6 +484,15 @@ html.dark .publish-datetime-menu .publish-date-weekdays {
   color: inherit;
 }
 
+.floating-action-btn.cancel-action-btn:hover,
+.floating-action-btn.cancel-action-btn:focus-visible {
+  border-color: var(--nw-floating-hover-border);
+  background: var(--nw-floating-hover-bg);
+  color: var(--nw-floating-text);
+  transform: translate3d(0, 0, 0) scale(1.06);
+  outline: none;
+}
+
 .fancybox__container {
   --fancybox-bg: rgba(0, 0, 0, 0.9);
   position: fixed !important;
