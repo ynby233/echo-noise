@@ -449,7 +449,7 @@
             :key="hour"
             type="button"
             class="publish-time-option"
-            :class="{ 'is-selected': hour === editPublishDraftHour }"
+            :class="{ 'is-current': hour === editPublishCurrentHour, 'is-selected': hour === editPublishDraftHour }"
             @click="setEditPublishHour(hour)"
           >
             {{ pad2(hour) }}
@@ -461,7 +461,7 @@
             :key="minute"
             type="button"
             class="publish-time-option"
-            :class="{ 'is-selected': minute === editPublishDraftMinute }"
+            :class="{ 'is-current': minute === editPublishCurrentMinute, 'is-selected': minute === editPublishDraftMinute }"
             @click="setEditPublishMinute(minute)"
           >
             {{ pad2(minute) }}
@@ -1846,6 +1846,8 @@ const editPublishMonthOptions = Array.from({ length: 12 }, (_, index) => index +
 const editPublishWeekLabels = ['一', '二', '三', '四', '五', '六', '日'];
 const editPublishHourOptions = Array.from({ length: 24 }, (_, index) => index);
 const editPublishMinuteOptions = Array.from({ length: 60 }, (_, index) => index);
+const editPublishCurrentHour = computed(() => new Date().getHours());
+const editPublishCurrentMinute = computed(() => new Date().getMinutes());
 const openEditPublishPicker = ref<EditPublishPickerType | ''>('');
 const editVisibilityControlRef = ref<HTMLElement | null>(null);
 const editVisibilityMenuRef = ref<HTMLElement | null>(null);
@@ -2959,66 +2961,6 @@ onMounted(() => {
   background: var(--nw-floating-selected-bg);
   color: var(--nw-floating-text);
 }
-
-.publish-datetime-menu { width: 292px; padding: 10px; }
-.publish-date-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-.publish-date-picker-controls { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; }
-.publish-date-title { font-size: 13px; font-weight: 700; color: inherit; }
-.publish-picker-trigger { min-height: 28px; padding: 0 7px; border-radius: 8px; border: 1px solid var(--nw-floating-border); background: rgba(15,23,42,0.04); display: inline-flex; align-items: center; justify-content: center; gap: 3px; white-space: nowrap; }
-.publish-picker-trigger:hover,
-.publish-picker-trigger:focus-visible { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); outline: none; }
-.publish-picker-trigger:first-child { width: 75px; }
-.publish-picker-trigger:last-child { width: 50px; }
-.floating-icon-btn { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid var(--nw-floating-border); background: rgba(15,23,42,0.04); color: inherit; }
-.floating-icon-btn:hover { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
-.publish-picker-floating-menu { position: fixed; z-index: 5005; box-sizing: border-box; display: grid; gap: 4px; max-height: 204px; overflow-y: auto; padding: 8px; border: 1px solid var(--nw-floating-border); border-radius: 10px; background: var(--nw-floating-bg); color: var(--nw-floating-text); box-shadow: var(--nw-floating-shadow); scrollbar-width: none; }
-.publish-picker-floating-menu::-webkit-scrollbar { width: 0; height: 0; }
-.publish-picker-floating-menu.is-month { gap: 3px; max-height: 167px; padding: 4px; }
-.publish-picker-floating-option { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; min-height: 28px; min-width: 0; width: 100%; padding: 0 6px; border-radius: 8px; border: 1px solid transparent; color: inherit; font-size: 12px; font-weight: 650; line-height: 1; text-align: center; white-space: nowrap; transition: background-color .15s ease, border-color .15s ease, color .15s ease; }
-.publish-picker-floating-menu.is-month .publish-picker-floating-option { min-height: 24px; padding: 0 4px; }
-.publish-picker-floating-option:hover,
-.publish-picker-floating-option:focus-visible { outline: none; border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
-.publish-picker-floating-option.is-selected { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
-.publish-date-weekdays,
-.publish-date-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
-.publish-date-weekdays { margin-bottom: 4px; color: rgba(71,85,105,0.72); font-size: 10px; font-weight: 700; text-align: center; }
-.publish-date-day { height: 28px; border-radius: 8px; border: 1px solid transparent; background: rgba(15,23,42,0.05); color: var(--nw-floating-text); font-size: 12px; line-height: 1; }
-.publish-date-day:hover { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
-.publish-date-day.is-muted { opacity: .38; }
-.publish-date-day.is-today { border-color: rgba(96,165,250,0.68); background: rgba(59,130,246,0.22); }
-.publish-date-day.is-selected { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
-.publish-time-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
-.publish-time-column { box-sizing: border-box; display: grid; grid-auto-rows: 28px; gap: 4px; height: 124px; max-height: 124px; overflow-y: auto; padding: 0; border-radius: 10px; background: rgba(15,23,42,0.06); scrollbar-width: none; }
-.publish-time-column::-webkit-scrollbar { width: 0; height: 0; }
-.publish-time-option { box-sizing: border-box; border-radius: 7px; border: 1px solid transparent; color: inherit; font-size: 12px; font-weight: 650; }
-.publish-time-option:hover { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
-.publish-time-option.is-selected { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
-.publish-date-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
-.floating-action-btn { min-width: 64px; height: 32px; display: inline-flex; align-items: center; justify-content: center; padding: 0 12px; border-radius: 10px; border: 1px solid var(--nw-floating-border); background: rgba(15,23,42,0.04); color: inherit; font-size: 13px; font-weight: 650; line-height: 1; }
-.floating-action-btn:hover { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
-.floating-action-btn.primary { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
-.floating-action-btn.clear-action-btn,
-.floating-action-btn.clear-action-btn:hover { border-color: rgba(234,88,12,.95); background: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color: #fff; }
-.floating-action-btn.cancel-action-btn { border-color: var(--nw-floating-border); background: rgba(15,23,42,0.04); color: inherit; }
-
-:global(html.dark) .floating-icon-btn,
-:global(html.dark) .floating-action-btn,
-:global(html.dark) .publish-picker-trigger,
-:global(html.dark) .publish-date-day { background: rgba(255,255,255,0.06); }
-.publish-datetime-menu.is-dark .floating-icon-btn,
-.publish-datetime-menu.is-dark .floating-action-btn,
-.publish-datetime-menu.is-dark .publish-picker-trigger,
-.publish-datetime-menu.is-dark .publish-date-day { background: rgba(255,255,255,0.06); }
-.publish-datetime-menu.is-dark .floating-action-btn.clear-action-btn,
-.publish-datetime-menu.is-dark .floating-action-btn.clear-action-btn:hover,
-:global(html.dark) .floating-action-btn.clear-action-btn,
-:global(html.dark) .floating-action-btn.clear-action-btn:hover { border-color: rgba(234,88,12,.95); background: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color: #fff; }
-.publish-datetime-menu.is-dark .floating-action-btn.cancel-action-btn,
-:global(html.dark) .floating-action-btn.cancel-action-btn { border-color: rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); color: #cbd5e1; }
-:global(html.dark) .publish-date-weekdays,
-.publish-datetime-menu.is-dark .publish-date-weekdays { color: rgba(226,232,240,0.66); }
-:global(html.dark) .publish-time-column,
-.publish-datetime-menu.is-dark .publish-time-column { background: rgba(15,23,42,0.46); }
 
 .edit-preview-block {
   border-top: 1px solid var(--edit-border);

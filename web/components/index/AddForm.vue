@@ -126,6 +126,7 @@
       v-if="showPublishDateMenu"
       ref="publishDateMenuRef"
       class="floating-control-menu publish-datetime-menu nw-floating-menu"
+      :class="{ 'is-dark': contentTheme === 'dark' }"
       :style="publishDateMenuStyle"
       role="dialog"
       aria-label="发布时间选择"
@@ -191,7 +192,7 @@
             :key="hour"
             type="button"
             class="publish-time-option"
-            :class="{ 'is-selected': hour === publishDraftHour }"
+            :class="{ 'is-current': hour === publishCurrentHour, 'is-selected': hour === publishDraftHour }"
             @click="setPublishHour(hour)"
           >
             {{ pad2(hour) }}
@@ -203,7 +204,7 @@
             :key="minute"
             type="button"
             class="publish-time-option"
-            :class="{ 'is-selected': minute === publishDraftMinute }"
+            :class="{ 'is-current': minute === publishCurrentMinute, 'is-selected': minute === publishDraftMinute }"
             @click="setPublishMinute(minute)"
           >
             {{ pad2(minute) }}
@@ -222,7 +223,7 @@
       v-if="openPublishPicker"
       ref="publishPickerMenuRef"
       class="publish-picker-floating-menu nw-floating-menu"
-      :class="`is-${openPublishPicker}`"
+      :class="[`is-${openPublishPicker}`, { 'is-dark': contentTheme === 'dark' }]"
       :style="publishPickerMenuStyle"
       role="listbox"
       @mousedown.stop
@@ -368,6 +369,8 @@ const pad2 = (value: number) => String(value).padStart(2, '0')
 const publishWeekLabels = ['一', '二', '三', '四', '五', '六', '日']
 const publishHourOptions = Array.from({ length: 24 }, (_, index) => index)
 const publishMinuteOptions = Array.from({ length: 60 }, (_, index) => index)
+const publishCurrentHour = computed(() => new Date().getHours())
+const publishCurrentMinute = computed(() => new Date().getMinutes())
 const publishPickerMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
 const publishDraftDate = ref('')
 const publishDraftHour = ref(0)
@@ -1104,61 +1107,12 @@ const addMessage = async () => {
 .floating-control-option:hover,
 .floating-control-option:focus-visible { outline: none; border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
 .floating-control-option.is-selected { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
-.publish-datetime-menu { width: 292px; padding: 10px; }
-.publish-date-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-.publish-date-picker-controls { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; }
-.publish-date-title { font-size: 13px; font-weight: 700; color: inherit; }
-.publish-picker-trigger { min-height: 28px; padding: 0 7px; border-radius: 8px; border: 1px solid var(--nw-floating-border); background: rgba(15,23,42,0.04); display: inline-flex; align-items: center; justify-content: center; gap: 3px; white-space: nowrap; }
-.publish-picker-trigger:hover,
-.publish-picker-trigger:focus-visible { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); outline: none; }
-.publish-picker-trigger:first-child { width: 75px; }
-.publish-picker-trigger:last-child { width: 50px; }
-.floating-icon-btn { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid var(--nw-floating-border); background: rgba(15,23,42,0.04); color: inherit; }
-.floating-icon-btn:hover { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
-.publish-picker-floating-menu { position: fixed; z-index: 5005; box-sizing: border-box; display: grid; gap: 4px; max-height: 204px; overflow-y: auto; padding: 8px; border: 1px solid var(--nw-floating-border); border-radius: 10px; background: var(--nw-floating-bg); color: var(--nw-floating-text); box-shadow: var(--nw-floating-shadow); scrollbar-width: none; }
-.publish-picker-floating-menu::-webkit-scrollbar { width: 0; height: 0; }
-.publish-picker-floating-menu.is-month { gap: 3px; max-height: 167px; padding: 4px; }
-.publish-picker-floating-option { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; min-height: 28px; min-width: 0; width: 100%; padding: 0 6px; border-radius: 8px; border: 1px solid transparent; color: inherit; font-size: 12px; font-weight: 650; line-height: 1; text-align: center; white-space: nowrap; transition: background-color .15s ease, border-color .15s ease, color .15s ease; }
-.publish-picker-floating-menu.is-month .publish-picker-floating-option { min-height: 24px; padding: 0 4px; }
-.publish-picker-floating-option:hover,
-.publish-picker-floating-option:focus-visible { outline: none; border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
-.publish-picker-floating-option.is-selected { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
-.publish-date-weekdays,
-.publish-date-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
-.publish-date-weekdays { margin-bottom: 4px; color: rgba(71,85,105,0.72); font-size: 10px; font-weight: 700; text-align: center; }
-.publish-date-day { height: 28px; border-radius: 8px; border: 1px solid transparent; background: rgba(15,23,42,0.05); color: var(--nw-floating-text); font-size: 12px; line-height: 1; }
-.publish-date-day:hover { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
-.publish-date-day.is-muted { opacity: .38; }
-.publish-date-day.is-today { border-color: rgba(96,165,250,0.68); background: rgba(59,130,246,0.22); }
-.publish-date-day.is-selected { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
-.publish-time-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
-.publish-time-column { box-sizing: border-box; display: grid; grid-auto-rows: 28px; gap: 4px; height: 124px; max-height: 124px; overflow-y: auto; padding: 0; border-radius: 10px; background: rgba(15,23,42,0.06); scrollbar-width: none; }
-.publish-time-column::-webkit-scrollbar { width: 0; height: 0; }
-.publish-time-option { box-sizing: border-box; border-radius: 7px; border: 1px solid transparent; color: inherit; font-size: 12px; font-weight: 650; }
-.publish-time-option:hover { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
-.publish-time-option.is-selected { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
-.publish-date-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
-.floating-action-btn { min-width: 64px; height: 32px; display: inline-flex; align-items: center; justify-content: center; padding: 0 12px; border-radius: 10px; border: 1px solid var(--nw-floating-border); background: rgba(15,23,42,0.04); color: inherit; font-size: 13px; font-weight: 650; line-height: 1; }
-.floating-action-btn:hover { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
-.floating-action-btn.primary { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
-.floating-action-btn.clear-action-btn,
-.floating-action-btn.clear-action-btn:hover { border-color: rgba(234,88,12,.95); background: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color: #fff; }
-.floating-action-btn.cancel-action-btn { border-color: var(--nw-floating-border); background: rgba(15,23,42,0.04); color: inherit; }
 .tb-sep { width:1px; height:24px; background: rgba(0,0,0,0.12); margin: 0 2px; }
 .preview-card { backdrop-filter: blur(8px); background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 8px; color:#111827; }
 html.dark .editor-box { background: var(--home-surface-dark, #202a36); border: 1px solid rgba(255,255,255,0.16); color:#fff; }
 html.dark .editor-toolbar { background: rgba(39, 50, 66, 0.68); backdrop-filter: saturate(1.1) blur(6px); }
 html.dark .notify-btn.is-enabled { --nw-action-border: rgba(251,146,60,0.38); --nw-action-bg: rgba(249,115,22,0.22); --nw-action-text: #fed7aa; }
 html.dark .visibility-select { background: transparent; border: 0; color: inherit; }
-:global(html.dark) .floating-icon-btn,
-:global(html.dark) .floating-action-btn,
-:global(html.dark) .publish-picker-trigger,
-:global(html.dark) .publish-date-day { background: rgba(255,255,255,0.06); }
-:global(html.dark) .floating-action-btn.clear-action-btn,
-:global(html.dark) .floating-action-btn.clear-action-btn:hover { border-color: rgba(234,88,12,.95); background: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)); color: #fff; }
-:global(html.dark) .floating-action-btn.cancel-action-btn { border-color: rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); color: #cbd5e1; }
-:global(html.dark) .publish-date-weekdays { color: rgba(226,232,240,0.66); }
-:global(html.dark) .publish-time-column { background: rgba(15,23,42,0.46); }
 :global(html.dark) .tb-sep { background: rgba(255,255,255,0.12); }
 
 html.dark .preview-card { background: rgba(39, 50, 66, 0.68); border: 1px solid rgba(255,255,255,0.18); color:#fff; }
