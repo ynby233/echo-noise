@@ -873,16 +873,6 @@ html.dark .vditor-tooltip, html.dark .vditor-tip {
 }
 
 
-/* 隐藏 Vditor 编辑器内部底部状态/标签栏，不影响首页热门标签组件 */
-.vditor-status,
-.vditor-status__item,
-.vditor-counter,
-.vditor-resize,
-.vditor__resize,
-.vditor-toolbar + .vditor-status {
-  display: none !important;
-}
-
 html.dark .vditor-preview { background-color: rgba(39, 50, 66, 0.68) !important; }
 
 /* 全屏模式主题自适应 */

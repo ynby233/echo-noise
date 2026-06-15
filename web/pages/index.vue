@@ -230,13 +230,7 @@
           </div>
           <template v-else>
             <AddForm v-if="activeTab !== 'personal' || isLoggedIn" @search-result="handleSearchResult" :hide-header-tools="layoutState==='three'" :wide="layoutState==='two'" />
-            <div :class="layoutState==='two' ? 'w-full max-w-none mt-3' : 'mx-auto w-full sm:max-w-4xl mt-3'">
-              <TagList 
-                v-if="activeTab === 'latest' && tags && tags.length > 0"
-                :tags="tags"
-                @tagClick="handleTagClick"
-              />
-            </div>
+            <!-- 中心栏标签筛选已隐藏；右侧热门标签组件保留原功能 -->
           <MessageList 
             ref="messageList" 
             class="message-list-container" 
@@ -371,8 +365,6 @@
     @open-comment="openCommentBoard"
     @open-notifications="openNotificationCenter"
     @open-admin="openAdmin"
-    @scroll-top="scrollToTop"
-    @scroll-bottom="scrollToBottom"
   />
   <UModal v-model="showAuthModal" :ui="{ width: 'sm:max-w-md', container: 'items-center', base: 'backdrop-blur-sm' }">
     <UCard class="search-card">
@@ -1141,10 +1133,10 @@ const sidebarThemeCard = computed(() => (
 ))
 const scrollButtonClass = computed(() => (
   isDark.value
-    ? 'scroll-button bg-[#202a36] hover:bg-[#263243] text-white shadow-[0_8px_20px_rgba(0,0,0,0.4)]'
-    : 'scroll-button bg-white/95 hover:bg-white text-gray-700 ring-1 ring-gray-200 shadow-[0_4px_12px_rgba(0,0,0,0.12)]'
+    ? 'scroll-button bg-[#273242] hover:bg-[rgba(249,115,22,.26)] text-slate-100 ring-1 ring-white/15 hover:ring-orange-400/60 shadow-[0_8px_20px_rgba(0,0,0,0.4)]'
+    : 'scroll-button bg-slate-100/95 hover:bg-orange-50 text-slate-700 ring-1 ring-slate-200 hover:ring-orange-300/70 shadow-[0_4px_12px_rgba(0,0,0,0.12)]'
 ))
-const iconClass = computed(() => (isDark.value ? 'text-white w-6 h-6' : 'text-gray-600 w-6 h-6'))
+const iconClass = computed(() => (isDark.value ? 'text-slate-100 w-6 h-6' : 'text-slate-700 w-6 h-6'))
 
 // 添加监听，查看状态变化
 watch(showHeatmap, (newVal) => {
