@@ -160,7 +160,7 @@ const getCurrentHeadingTag = () => {
 }
 
 const positionHeadingMenu = () => {
-  positionFloatingMenu(headingTrigger.value, headingMenuRef.value, headingMenuStyle, 190, 'above-right')
+  positionFloatingMenu(headingTrigger.value, headingMenuRef.value, headingMenuStyle, 152, 'above-left')
 }
 
 const closeHeadingMenu = () => {
@@ -169,13 +169,48 @@ const closeHeadingMenu = () => {
   if (nativeHeadingPanel.value) nativeHeadingPanel.value.style.display = 'none'
 }
 
-const selectHeading = (option: typeof headingOptions[number]) => {
-  const nativeButton = nativeHeadingPanel.value?.querySelector<HTMLElement>(`button[data-tag="${option.tag}"]`)
-  if (nativeButton) {
-    nativeButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }))
-  } else {
-    vditorInstance?.insertMD?.(`${option.value}`)
+const applyHeadingFallback = (option: typeof headingOptions[number]) => {
+  if (!vditorInstance) return
+  const value = vditorInstance.getValue?.() || ''
+  if (!value.trim()) {
+    vditorInstance.setValue(option.value)
+    emit('update:modelValue', vditorInstance.getValue?.() || option.value)
+    return
   }
+  const editorRoot = editorContainer.value
+  const active = typeof document !== 'undefined' ? document.activeElement as HTMLElement | null : null
+  const selection = typeof window !== 'undefined' ? window.getSelection() : null
+  const selectedText = selection?.toString() || ''
+  let lineIndex = 0
+
+  const focusedBlock = active?.closest?.('.vditor-ir__node, .vditor-reset [data-block], .vditor-reset p, .vditor-reset h1, .vditor-reset h2, .vditor-reset h3, .vditor-reset h4, .vditor-reset h5, .vditor-reset h6')
+  const focusedText = (focusedBlock?.textContent || '').trim()
+  const lines = value.split('\n')
+  if (focusedText) {
+    const normalizedFocused = focusedText.replace(/^#{1,6}\s+/, '').trim()
+    const found = lines.findIndex((line) => line.replace(/^#{1,6}\s+/, '').trim() === normalizedFocused)
+    if (found >= 0) lineIndex = found
+  } else if (selectedText) {
+    const found = lines.findIndex((line) => line.includes(selectedText.trim()))
+    if (found >= 0) lineIndex = found
+  } else if (editorRoot) {
+    const editableText = editorRoot.querySelector<HTMLElement>('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-reset')?.textContent || ''
+    const firstLine = editableText.split('\n').find((line) => line.trim())?.trim()
+    const found = firstLine ? lines.findIndex((line) => line.replace(/^#{1,6}\s+/, '').trim() === firstLine.replace(/^#{1,6}\s+/, '').trim()) : -1
+    if (found >= 0) lineIndex = found
+  }
+
+  if (!lines.length) lines.push('')
+  const text = lines[lineIndex] || ''
+  const content = text.replace(/^#{1,6}\s*/, '').trimStart()
+  lines[lineIndex] = `${option.value}${content || '标题'}`
+  const nextValue = lines.join('\n')
+  vditorInstance.setValue(nextValue)
+  emit('update:modelValue', vditorInstance.getValue?.() || nextValue)
+}
+
+const selectHeading = (option: typeof headingOptions[number]) => {
+  applyHeadingFallback(option)
   selectedHeadingTag.value = option.tag
   closeHeadingMenu()
 }
@@ -737,7 +772,7 @@ html.dark .vditor-hint {
   box-sizing: border-box;
   display: grid !important;
   gap: 4px !important;
-  min-width: 106px !important;
+  min-width: 0 !important;
   width: auto !important;
   max-width: none !important;
   max-height: none !important;
@@ -782,10 +817,10 @@ html.dark .vditor-hint {
   justify-content: flex-start !important;
   gap: 8px !important;
   width: 100% !important;
-  min-width: 106px !important;
+  min-width: 0 !important;
   min-height: 32px !important;
   margin: 0 !important;
-  padding: 0 10px !important;
+  padding: 0 8px !important;
   border: 1px solid transparent !important;
   border-radius: 9px !important;
   background: transparent !important;

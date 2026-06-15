@@ -1,6 +1,6 @@
 import type { Ref } from 'vue'
 
-export type FloatingMenuPlacement = 'below' | 'above-right'
+export type FloatingMenuPlacement = 'below' | 'above-right' | 'above-left'
 
 export const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), Math.max(min, max))
 
@@ -53,12 +53,15 @@ export const positionFloatingMenu = (
   const maxLeft = Math.max(minLeft, viewport.right - menuWidth - pad)
   const idealLeft = placement === 'above-right'
     ? rect.right - menuWidth
-    : rect.left + rect.width / 2 - menuWidth / 2
+    : placement === 'above-left'
+      ? rect.right
+      : rect.left + rect.width / 2 - menuWidth / 2
   const aboveTop = rect.top - menuHeight - gap
   const belowTop = rect.bottom + gap
   const minTop = viewport.top + pad
   const maxTop = Math.max(minTop, viewport.bottom - menuHeight - pad)
-  const idealTop = placement === 'above-right' && aboveTop >= minTop ? aboveTop : belowTop
+  const preferAbove = placement === 'above-right' || placement === 'above-left'
+  const idealTop = preferAbove && aboveTop >= minTop ? aboveTop : belowTop
   styleRef.value = {
     position: 'fixed',
     left: `${clamp(idealLeft, minLeft, maxLeft)}px`,
