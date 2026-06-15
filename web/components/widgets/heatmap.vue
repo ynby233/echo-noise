@@ -77,14 +77,14 @@ const mutedTextClass = computed(() => (isDark.value ? 'text-white/70' : 'text-bl
   const weekdays = ['日', '一', '二', '三', '四', '五', '六']
   
 const getColor = (level: number) => {
-  // 统一为主题友好的绿色梯度（亮：GitHub风格；暗：降低饱和度提高层次）
-  const lightColors = ['#9be9a8', '#40c463', '#30a14e', '#216e39', '#0e4429']
+  // 统一为主题友好的橙色梯度，和站内交互强调色保持一致
+  const lightColors = ['#fed7aa', '#fdba74', '#fb923c', '#f97316', '#c2410c']
   const darkColors = [
-    'rgba(16, 185, 129, 0.28)',
-    'rgba(16, 185, 129, 0.45)',
-    'rgba(16, 185, 129, 0.62)',
-    'rgba(16, 185, 129, 0.80)',
-    'rgba(16, 185, 129, 0.98)'
+    'rgba(249, 115, 22, 0.24)',
+    'rgba(249, 115, 22, 0.42)',
+    'rgba(249, 115, 22, 0.60)',
+    'rgba(249, 115, 22, 0.78)',
+    'rgba(249, 115, 22, 0.96)'
   ]
   const arr = isDark.value ? darkColors : lightColors
   return arr[Math.min(Math.max(level - 1, 0), 4)] || (isDark.value ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)')
@@ -469,14 +469,14 @@ const fetchHeatmapData = async () => {
   }
 
   .heatmap-compact .heatmap-day:hover {
-    box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.32);
+    box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.32);
   }
   .heatmap-light .heatmap-day { border-color: #cbd5e1; }
   .heatmap-dark .heatmap-day { border-color: rgba(255,255,255,0.12); }
   
   .heatmap-day:hover {
-    border-color: rgba(96, 165, 250, 0.72);
-    box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.24);
+    border-color: rgba(249, 115, 22, 0.72);
+    box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.24);
   }
   .heatmap-tooltip {
     z-index: 5006;

@@ -371,6 +371,8 @@
     @open-comment="openCommentBoard"
     @open-notifications="openNotificationCenter"
     @open-admin="openAdmin"
+    @scroll-top="scrollToTop"
+    @scroll-bottom="scrollToBottom"
   />
   <UModal v-model="showAuthModal" :ui="{ width: 'sm:max-w-md', container: 'items-center', base: 'backdrop-blur-sm' }">
     <UCard class="search-card">
@@ -3422,7 +3424,16 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
 @media screen and (max-width: 1024px) { .scroll-tags { max-height: 108px; } }
 @media screen and (max-width: 768px) { .center-col { padding-left: 2%; padding-right: 2%; } }
 @media screen and (max-width: 480px) { .center-col { padding-left: 3%; padding-right: 3%; } }
-.page-footer { text-align: center; font-size: 12px; padding: 12px 0; }
+.page-footer {
+  text-align: center;
+  font-size: 12px;
+  padding: 12px 0;
+  color: rgba(17, 24, 39, 0.72);
+}
+.page-footer :where(a, span, p, div) { color: inherit; }
+.page-footer a { text-decoration: none; transition: color .16s ease; }
+.page-footer a:hover { color: rgb(249, 115, 22); }
+html.dark .page-footer { color: rgba(226, 232, 240, 0.72); }
 :global(html.dark) .center-col,
 :global(html:not(.dark)) .center-col { transition: none !important; }
 :global(html.dark) .center-col :where(.u-card, .u-card-body, .u-card__body, .u-card-header, .u-card__header),

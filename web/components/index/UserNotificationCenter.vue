@@ -547,7 +547,7 @@ defineExpose({ refresh: () => loadNotifications(true) })
   margin-top:10px;
   padding:20px 20px 16px;
   border:1px solid var(--notice-border);
-  border-radius:12px;
+  border-radius:16px;
   background:var(--notice-surface);
   color:var(--notice-text);
   box-shadow:0 1px 2px rgba(15,23,42,.08);
@@ -610,7 +610,7 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .notification-heading { width:100%; }
 .notification-title-row { position:relative; display:flex; align-items:center; justify-content:center; width:100%; min-height:32px; }
 .notification-title { display:block; margin:0; padding:0; border-radius:0; color:var(--notice-strong); font-size:18px; font-weight:700; line-height:24px; }
-.notification-subtitle { margin:2px 0 16px; color:var(--notice-muted); font-size:13px; line-height:1.7; text-align:center; opacity:.8; }
+.notification-subtitle { margin:2px 0 16px; color:var(--notice-muted); font-size:13px; line-height:1.7; text-align:center; opacity:.8; font-weight:400; }
 .notification-actions { position:absolute; right:0; top:50%; transform:translateY(-50%); display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; max-width:calc(50% - 48px); }
 .unread-pill { display:inline-flex; align-items:center; min-height:28px; padding:0 10px; border-radius:999px; font-size:12px; font-weight:650; color:#fff; background:#3b82f6; }
 .icon-action,
@@ -639,7 +639,7 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .reply-toggle { min-height:30px; flex:0 0 auto; padding:0 10px; border:1px solid var(--comment-toolbar-border, var(--notice-border)); border-radius:10px; background:var(--comment-toolbar-control-bg, var(--notice-card)); color:var(--comment-toolbar-text, var(--notice-text)); font-size:12px; font-weight:650; line-height:1; cursor:pointer; transition:background-color .18s ease, border-color .18s ease, color .18s ease, transform .18s ease; }
 .reply-toggle:hover { transform:translate3d(0,0,0) scale(1.06); border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
 .notification-actor-content { margin:8px 0 0; font-size:14px; line-height:1.68; white-space:pre-wrap; word-break:break-word; color:var(--notice-strong); }
-.notification-target-card { width:100%; margin-top:10px; padding:10px 12px; border:1px solid var(--notice-border); border-radius:10px; background:var(--notice-input); color:var(--notice-text); display:flex; align-items:center; flex-wrap:wrap; gap:10px; text-align:left; cursor:pointer; transition:background-color .16s ease, border-color .16s ease, transform .16s ease, opacity .16s ease; }
+.notification-target-card { width:100%; margin-top:10px; padding:10px 12px; border:1px solid var(--notice-border); border-radius:12px; background:var(--notice-input); color:var(--notice-text); display:flex; align-items:center; flex-wrap:wrap; gap:10px; text-align:left; cursor:pointer; transition:background-color .16s ease, border-color .16s ease, transform .16s ease, opacity .16s ease; }
 .notification-target-card:hover { border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); transform:translateY(-1px); }
 .notification-target-card.jumping { cursor:wait; opacity:.88; transform:none; }
 .notification-target-image { width:54px; height:54px; flex:0 0 54px; object-fit:cover; border-radius:10px; background:var(--notice-card); border:1px solid var(--notice-border); }
