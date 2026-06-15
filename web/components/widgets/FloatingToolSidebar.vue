@@ -1,39 +1,39 @@
 <template>
   <div class="floating-sidebar" :class="[isDark ? 'fs-dark' : 'fs-light', { 'is-collapsed': collapsed }]">
     <button
-      class="tool-btn collapse-toggle-btn nw-action-btn" :class="buttonThemeClass"
+      class="tool-btn collapse-toggle-btn nw-action-btn"
       :aria-label="collapsed ? '展开工具栏' : '收纳工具栏'"
       @click="toggleCollapsed"
     >
       <UIcon :name="collapsed ? 'i-heroicons-squares-2x2' : 'i-heroicons-bars-arrow-up'" class="w-6 h-6" />
       <span class="btn-label">{{ collapsed ? '展开' : '收纳' }}</span>
     </button>
-    <button v-show="!collapsed" class="tool-btn btn-layout nw-action-btn" :class="buttonThemeClass" @click="$emit('toggle-layout')" aria-label="布局">
+    <button v-show="!collapsed" class="tool-btn btn-layout nw-action-btn" @click="$emit('toggle-layout')" aria-label="布局">
       <UIcon :name="layoutIconProp" class="w-6 h-6" />
       <span class="btn-label">布局</span>
     </button>
-    <button v-show="!collapsed" class="tool-btn nw-action-btn" :class="buttonThemeClass" @click="$emit('search')" aria-label="搜索">
+    <button v-show="!collapsed" class="tool-btn nw-action-btn" @click="$emit('search')" aria-label="搜索">
       <UIcon name="i-heroicons-magnifying-glass" class="w-6 h-6" />
       <span class="btn-label">搜索</span>
     </button>
-    <button v-show="!collapsed" class="tool-btn nw-action-btn" :class="buttonThemeClass" @click="$emit('switch-background')" aria-label="背景">
+    <button v-show="!collapsed" class="tool-btn nw-action-btn" @click="$emit('switch-background')" aria-label="背景">
       <UIcon name="i-mdi-image-outline" class="w-6 h-6" />
       <span class="btn-label">背景</span>
     </button>
-    <button v-show="!collapsed" class="tool-btn nw-action-btn" :class="buttonThemeClass" @click="$emit('toggle-theme')" aria-label="切换亮暗">
+    <button v-show="!collapsed" class="tool-btn nw-action-btn" @click="$emit('toggle-theme')" aria-label="切换亮暗">
       <UIcon :name="themeIcon" class="w-6 h-6" />
       <span class="btn-label">切换亮暗</span>
     </button>
-    <button v-show="!collapsed" class="tool-btn nw-action-btn" :class="buttonThemeClass" aria-label="留言" @click="$emit('open-comment')">
+    <button v-show="!collapsed" class="tool-btn nw-action-btn" aria-label="留言" @click="$emit('open-comment')">
       <UIcon name="i-heroicons-chat-bubble-left-right" class="w-6 h-6" />
       <span class="btn-label">留言</span>
     </button>
-    <button v-show="!collapsed" class="tool-btn nw-action-btn" :class="buttonThemeClass" aria-label="通知" @click="$emit('open-notifications')">
+    <button v-show="!collapsed" class="tool-btn nw-action-btn" aria-label="通知" @click="$emit('open-notifications')">
       <UIcon name="i-heroicons-bell" class="w-6 h-6" />
       <span v-if="notificationUnreadCount > 0" class="notification-badge">{{ badgeText }}</span>
       <span class="btn-label">通知</span>
     </button>
-    <button v-show="!collapsed" class="tool-btn nw-action-btn" :class="buttonThemeClass" aria-label="后台" @click="$emit('open-admin')">
+    <button v-show="!collapsed" class="tool-btn nw-action-btn" aria-label="后台" @click="$emit('open-admin')">
       <UIcon name="i-mdi-server-outline" class="w-6 h-6" />
       <span class="btn-label">后台</span>
     </button>
@@ -56,7 +56,6 @@ const badgeText = computed(() => notificationUnreadCount.value > 99 ? '99+' : St
 const isDark = computed(() => props.contentTheme === 'dark')
 const themeIcon = computed(() => (props.contentTheme === 'dark' ? 'i-mdi-weather-night' : 'i-mdi-white-balance-sunny'))
 const layoutIconProp = computed(() => props.layoutIcon || 'i-mdi-view-grid')
-const buttonThemeClass = computed(() => (isDark.value ? 'tool-btn-dark' : 'tool-btn-light'))
 const mobileBreakpointQuery = '(max-width: 1024px)'
 const collapseStateStorageKey = 'floating_tool_sidebar_collapsed_v1'
 const collapsed = ref(false)
@@ -120,9 +119,9 @@ const toggleCollapsed = () => {
 .floating-sidebar { position: fixed; right: 16px; top: 50%; transform: translateY(-50%); z-index: 1000; display:flex; flex-direction:column; gap:10px; padding:8px; border-radius:12px; background: transparent; box-shadow: none; }
 .floating-sidebar.fs-dark {
   background: transparent !important;
-  --nw-action-bg: rgba(148, 163, 184, .18);
+  --nw-action-bg: rgba(255, 255, 255, .06);
   --nw-action-text: #cbd5e1;
-  --nw-action-border: rgba(148, 163, 184, .26);
+  --nw-action-border: rgba(255, 255, 255, .12);
   --nw-action-hover-bg: rgba(249, 115, 22, .26);
   --nw-action-hover-border: rgba(249, 115, 22, .58);
   --nw-action-hover-text: #fff;
@@ -130,54 +129,15 @@ const toggleCollapsed = () => {
 .floating-sidebar.fs-light {
   background: transparent !important;
   box-shadow: none;
-  --nw-action-bg: rgba(15, 23, 42, .09);
+  --nw-action-bg: rgba(15, 23, 42, .06);
   --nw-action-text: #374151;
-  --nw-action-border: rgba(15, 23, 42, .12);
+  --nw-action-border: rgba(15, 23, 42, .08);
   --nw-action-hover-bg: rgba(249, 115, 22, .12);
   --nw-action-hover-border: rgba(249, 115, 22, .34);
   --nw-action-hover-text: #9a3412;
 }
 .tool-btn { position: relative; display:flex; align-items:center; justify-content:center; width:40px; height:40px; min-width:40px; min-height:40px; padding:0; border-radius:10px; box-sizing: border-box; flex-shrink: 0; aspect-ratio: 1 / 1; }
 .tool-btn.tool-btn-round { border-radius:999px; }
-.tool-btn.tool-btn-light {
-  --nw-action-bg: rgba(15, 23, 42, .09);
-  --nw-action-text: #374151;
-  --nw-action-border: rgba(15, 23, 42, .12);
-  background: rgba(15, 23, 42, .09) !important;
-  color: #374151 !important;
-  border-color: rgba(15, 23, 42, .12) !important;
-}
-.tool-btn.tool-btn-dark {
-  --nw-action-bg: rgba(148, 163, 184, .18);
-  --nw-action-text: #cbd5e1;
-  --nw-action-border: rgba(148, 163, 184, .26);
-  background: rgba(148, 163, 184, .18) !important;
-  color: #cbd5e1 !important;
-  border-color: rgba(148, 163, 184, .26) !important;
-}
-
-.floating-sidebar.fs-dark .tool-btn {
-  --nw-action-bg: rgba(148, 163, 184, .18);
-  --nw-action-text: #cbd5e1;
-  --nw-action-border: rgba(148, 163, 184, .26);
-  --nw-action-hover-bg: rgba(249, 115, 22, .26);
-  --nw-action-hover-border: rgba(249, 115, 22, .58);
-  --nw-action-hover-text: #fff;
-  background: var(--nw-action-bg) !important;
-  color: var(--nw-action-text) !important;
-  border-color: var(--nw-action-border) !important;
-}
-.floating-sidebar.fs-light .tool-btn {
-  --nw-action-bg: rgba(15, 23, 42, .09);
-  --nw-action-text: #374151;
-  --nw-action-border: rgba(15, 23, 42, .12);
-  --nw-action-hover-bg: rgba(249, 115, 22, .12);
-  --nw-action-hover-border: rgba(249, 115, 22, .34);
-  --nw-action-hover-text: #9a3412;
-  background: var(--nw-action-bg) !important;
-  color: var(--nw-action-text) !important;
-  border-color: var(--nw-action-border) !important;
-}
 .floating-sidebar .tool-btn:hover:not(:disabled),
 .floating-sidebar .tool-btn:focus-visible {
   background: var(--nw-action-hover-bg) !important;

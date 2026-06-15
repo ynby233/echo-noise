@@ -477,9 +477,15 @@
     </UCard>
   </UModal>
   <div class="scroll-buttons" @mouseenter="hoverScroll = true" @mouseleave="hoverScroll = false">
-    <UButton v-show="showScroll" :class="scrollButtonClass" variant="ghost" size="sm" @click="handleScrollClick">
+    <button
+      v-show="showScroll"
+      type="button"
+      :class="scrollButtonClass"
+      :aria-label="isAtBottom && !isAtTop ? '返回页首' : '返回页尾'"
+      @click="handleScrollClick"
+    >
       <UIcon :class="iconClass" :name="scrollIconName" />
-    </UButton>
+    </button>
   </div>
   </div>
 </div>
@@ -1133,10 +1139,10 @@ const sidebarThemeCard = computed(() => (
 ))
 const scrollButtonClass = computed(() => (
   isDark.value
-    ? 'scroll-button bg-[#273242] hover:bg-[rgba(249,115,22,.26)] text-slate-100 ring-1 ring-white/15 hover:ring-orange-400/60 shadow-[0_8px_20px_rgba(0,0,0,0.4)]'
-    : 'scroll-button bg-slate-100/95 hover:bg-orange-50 text-slate-700 ring-1 ring-slate-200 hover:ring-orange-300/70 shadow-[0_4px_12px_rgba(0,0,0,0.12)]'
+    ? 'scroll-button nw-action-btn scroll-button-dark'
+    : 'scroll-button nw-action-btn scroll-button-light'
 ))
-const iconClass = computed(() => (isDark.value ? 'text-slate-100 w-6 h-6' : 'text-slate-700 w-6 h-6'))
+const iconClass = computed(() => 'w-6 h-6')
 
 // 添加监听，查看状态变化
 watch(showHeatmap, (newVal) => {
@@ -3041,17 +3047,30 @@ white-space: nowrap;  /* 防止换行 */
 }
 .scroll-button {
   width: 2.25rem;
+  min-width: 2.25rem;
   height: 2.25rem;
   border-radius: 9999px;
-  transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
-  backdrop-filter: blur(6px);
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   opacity: 0.95;
 }
-.scroll-button:hover {
-  transform: scale(1.06);
+.scroll-button-light {
+  --nw-action-bg: rgba(15, 23, 42, .06);
+  --nw-action-text: #374151;
+  --nw-action-border: rgba(15, 23, 42, .08);
+  --nw-action-hover-bg: rgba(249, 115, 22, .12);
+  --nw-action-hover-border: rgba(249, 115, 22, .34);
+  --nw-action-hover-text: #9a3412;
+}
+.scroll-button-dark {
+  --nw-action-bg: rgba(255, 255, 255, .06);
+  --nw-action-text: #cbd5e1;
+  --nw-action-border: rgba(255, 255, 255, .12);
+  --nw-action-hover-bg: rgba(249, 115, 22, .26);
+  --nw-action-hover-border: rgba(249, 115, 22, .58);
+  --nw-action-hover-text: #fff;
 }
 
 .layout-container.grid-3 {
