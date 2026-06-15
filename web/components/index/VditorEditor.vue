@@ -1,5 +1,29 @@
 <template>
   <div ref="editorContainer" class="vditor-container"></div>
+  <Teleport to="body">
+    <div
+      v-if="showHeadingMenu"
+      ref="headingMenuRef"
+      :class="['floating-control-menu visibility-floating-menu nw-floating-menu vditor-heading-menu', { 'is-dark': props.theme === 'dark' }]"
+      :style="headingMenuStyle"
+      role="listbox"
+      @mousedown.prevent.stop
+      @click.stop
+    >
+      <button
+        v-for="option in headingOptions"
+        :key="option.tag"
+        type="button"
+        :class="['floating-control-option nw-floating-option', { 'is-selected': selectedHeadingTag === option.tag }]"
+        :aria-selected="selectedHeadingTag === option.tag"
+        role="option"
+        @mousedown.prevent.stop
+        @click="selectHeading(option)"
+      >
+        {{ option.label }}
+      </button>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -30,6 +54,20 @@ let fixedCleanup: (() => void) | null = null;
 let panelCleanup: (() => void) | null = null;
 let imagePreviewCleanup: (() => void) | null = null;
 const isReady = ref(false);
+const showHeadingMenu = ref(false);
+const headingMenuRef = ref<HTMLElement | null>(null);
+const headingMenuStyle = ref<Record<string, string>>({});
+const selectedHeadingTag = ref('');
+const headingTrigger = ref<HTMLElement | null>(null);
+const nativeHeadingPanel = ref<HTMLElement | null>(null);
+const headingOptions = [
+  { tag: 'h1', value: '# ', label: '一级标题 <Alt+Ctrl+1>' },
+  { tag: 'h2', value: '## ', label: '二级标题 <Alt+Ctrl+2>' },
+  { tag: 'h3', value: '### ', label: '三级标题 <Alt+Ctrl+3>' },
+  { tag: 'h4', value: '#### ', label: '四级标题 <Alt+Ctrl+4>' },
+  { tag: 'h5', value: '##### ', label: '五级标题 <Alt+Ctrl+5>' },
+  { tag: 'h6', value: '###### ', label: '六级标题 <Alt+Ctrl+6>' }
+];
 
 const setupInlineImagePreview = () => {
   const root = editorContainer.value;
@@ -108,80 +146,110 @@ const editorOptions: IOptions = {
   placeholder: "灵感记录~"
 };
 
+const getCurrentHeadingTag = () => {
+  const selection = typeof window !== 'undefined' ? window.getSelection() : null
+  const node = selection?.anchorNode || null
+  const element = node instanceof Element ? node : node?.parentElement || null
+  const heading = element?.closest?.('h1,h2,h3,h4,h5,h6') as HTMLElement | null
+  if (heading?.tagName) return heading.tagName.toLowerCase()
+  const block = element?.closest?.('.vditor-ir__node, [data-type="heading"]') as HTMLElement | null
+  const marker = block?.querySelector?.('.vditor-ir__marker--heading, [data-type="heading-marker"]') as HTMLElement | null
+  const markerText = (marker?.textContent || '').trim()
+  const level = markerText.match(/^#{1,6}/)?.[0]?.length || 0
+  return level ? `h${level}` : ''
+}
+
+const positionHeadingMenu = () => {
+  positionFloatingMenu(headingTrigger.value, headingMenuRef.value, headingMenuStyle, 190, 'above-right')
+}
+
+const closeHeadingMenu = () => {
+  showHeadingMenu.value = false
+  nativeHeadingPanel.value?.classList.add('vditor-panel--none')
+  if (nativeHeadingPanel.value) nativeHeadingPanel.value.style.display = 'none'
+}
+
+const selectHeading = (option: typeof headingOptions[number]) => {
+  const nativeButton = nativeHeadingPanel.value?.querySelector<HTMLElement>(`button[data-tag="${option.tag}"]`)
+  if (nativeButton) {
+    nativeButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }))
+  } else {
+    vditorInstance?.insertMD?.(`${option.value}`)
+  }
+  selectedHeadingTag.value = option.tag
+  closeHeadingMenu()
+}
+
 const setupVditorPanelPositioning = () => {
-  if (panelCleanup || !toolbarEl) return
-  let headingsTrigger: HTMLElement | null = null
-
-  const findVisiblePanel = () => {
-    const scopedPanels = headingsTrigger
-      ? Array.from(headingsTrigger.querySelectorAll<HTMLElement>('.vditor-hint, .vditor-panel, .vditor-heading-floating-menu'))
-      : []
-    const panels = scopedPanels.length
-      ? scopedPanels
-      : Array.from(document.querySelectorAll<HTMLElement>('.vditor-hint.vditor-panel--arrow, .vditor-panel, .vditor-heading-floating-menu'))
-    return panels.find((panel) => {
-      if (panel.classList.contains('vditor-panel--none')) return false
-      const style = window.getComputedStyle(panel)
-      return style.display !== 'none' && style.visibility !== 'hidden'
-    }) || null
-  }
-
-  const getCurrentHeadingTag = () => {
-    const selection = typeof window !== 'undefined' ? window.getSelection() : null
-    const node = selection?.anchorNode || null
-    const element = node instanceof Element ? node : node?.parentElement || null
-    const heading = element?.closest?.('h1,h2,h3,h4,h5,h6') as HTMLElement | null
-    if (heading?.tagName) return heading.tagName.toLowerCase()
-    const block = element?.closest?.('.vditor-ir__node, [data-type="heading"]') as HTMLElement | null
-    const marker = block?.querySelector?.('.vditor-ir__marker--heading, [data-type="heading-marker"]') as HTMLElement | null
-    const markerText = (marker?.textContent || '').trim()
-    const level = markerText.match(/^#{1,6}/)?.[0]?.length || 0
-    return level ? `h${level}` : ''
-  }
-
-  const positionHeadingsPanel = () => {
-    const panel = findVisiblePanel()
-    if (!headingsTrigger || !panel) return
-    panel.classList.add('floating-control-menu', 'visibility-floating-menu', 'vditor-heading-floating-menu', 'nw-floating-menu')
-    panel.classList.remove('vditor-panel--arrow', 'vditor-panel--left')
-    panel.classList.toggle('is-dark', props.theme === 'dark')
-    const currentHeading = getCurrentHeadingTag()
-    panel.querySelectorAll<HTMLElement>('button, .vditor-menu, .vditor-toolbar__item').forEach((item) => {
-      item.classList.add('floating-control-option', 'nw-floating-option')
-      const tag = (item.getAttribute('data-tag') || '').toLowerCase()
-      item.classList.toggle('is-selected', !!currentHeading && tag === currentHeading)
-    })
-    const styleRef = ref<Record<string, string>>({})
-    positionFloatingMenu(headingsTrigger, panel, styleRef, 106, 'above-right')
-    Object.assign(panel.style, styleRef.value)
-  }
+  if (panelCleanup) return
 
   const isHeadingsItem = (item: HTMLElement | null) => {
     if (!item) return false
-    const type = item.getAttribute('data-type') || ''
-    const label = item.getAttribute('aria-label') || item.getAttribute('title') || ''
+    const action = item.matches('[data-type="headings"]')
+      ? item
+      : item.querySelector<HTMLElement>('[data-type="headings"], [aria-label*="标题"], [aria-label*="Heading"], [title*="标题"], [title*="Heading"]')
+    const type = action?.getAttribute('data-type') || ''
+    const label = action?.getAttribute('aria-label') || action?.getAttribute('title') || ''
     return type === 'headings' || /标题|Heading|Headings/i.test(label)
+  }
+
+  const openHeadingMenu = async (item: HTMLElement) => {
+    headingTrigger.value = item
+    nativeHeadingPanel.value = item.querySelector<HTMLElement>('.vditor-hint, .vditor-panel')
+    if (nativeHeadingPanel.value) {
+      nativeHeadingPanel.value.classList.add('vditor-panel--none')
+      nativeHeadingPanel.value.style.display = 'none'
+    }
+    selectedHeadingTag.value = getCurrentHeadingTag()
+    showHeadingMenu.value = true
+    await nextTick()
+    scheduleFloatingMenuPosition(positionHeadingMenu)
   }
 
   const handleToolbarClick = (event: Event) => {
     const target = event.target instanceof Element ? event.target : null
     const item = target?.closest('.vditor-toolbar__item') as HTMLElement | null
-    if (!isHeadingsItem(item)) return
-    headingsTrigger = item
-    window.setTimeout(() => scheduleFloatingMenuPosition(positionHeadingsPanel), 0)
-    window.setTimeout(() => scheduleFloatingMenuPosition(positionHeadingsPanel), 80)
+    if (!item || !editorContainer.value?.contains(item)) return
+    if (!item || !isHeadingsItem(item)) return
+    event.preventDefault()
+    event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    if (showHeadingMenu.value && headingTrigger.value === item) {
+      closeHeadingMenu()
+      return
+    }
+    openHeadingMenu(item)
   }
 
-  const handleFloatingReposition = () => scheduleFloatingMenuPosition(positionHeadingsPanel)
-  toolbarEl.addEventListener('click', handleToolbarClick, true)
+  const handleDocumentPointer = (event: Event) => {
+    if (!showHeadingMenu.value) return
+    const target = event.target instanceof Element ? event.target : null
+    if (target?.closest('.vditor-heading-menu')) return
+    if (target?.closest('.vditor-toolbar__item') === headingTrigger.value) return
+    closeHeadingMenu()
+  }
+
+  const handleFloatingReposition = () => {
+    if (showHeadingMenu.value) scheduleFloatingMenuPosition(positionHeadingMenu)
+  }
+  toolbarEl?.addEventListener('click', handleToolbarClick, true)
+  document.addEventListener('click', handleToolbarClick, true)
+  document.addEventListener('mousedown', handleDocumentPointer, true)
   window.addEventListener('resize', handleFloatingReposition)
-  window.addEventListener('scroll', handleFloatingReposition, { passive: true })
+  window.addEventListener('scroll', handleFloatingReposition, { passive: true, capture: true })
   document.querySelector('.content-wrapper')?.addEventListener('scroll', handleFloatingReposition, { passive: true })
+  window.visualViewport?.addEventListener('resize', handleFloatingReposition, { passive: true })
+  window.visualViewport?.addEventListener('scroll', handleFloatingReposition, { passive: true })
   panelCleanup = () => {
     toolbarEl?.removeEventListener('click', handleToolbarClick, true)
+    document.removeEventListener('click', handleToolbarClick, true)
+    document.removeEventListener('mousedown', handleDocumentPointer, true)
     window.removeEventListener('resize', handleFloatingReposition)
-    window.removeEventListener('scroll', handleFloatingReposition)
+    window.removeEventListener('scroll', handleFloatingReposition, true)
     document.querySelector('.content-wrapper')?.removeEventListener('scroll', handleFloatingReposition)
+    window.visualViewport?.removeEventListener('resize', handleFloatingReposition)
+    window.visualViewport?.removeEventListener('scroll', handleFloatingReposition)
+    closeHeadingMenu()
     panelCleanup = null
   }
 }
@@ -201,9 +269,14 @@ onMounted(async () => {
       vditorInstance?.setTheme(props.theme === 'dark' ? 'dark' : 'classic');
       isReady.value = true;
       emit("ready");
+      nextTick(() => {
+        setupFixedToolbar();
+        window.setTimeout(setupFixedToolbar, 80);
+      });
     },
   }
   vditorInstance = new Vditor(editorContainer.value, opts);
+  setupVditorPanelPositioning();
   // 等待渲染完成后设置工具栏固定到视窗顶部
   const setupFixedToolbar = () => {
     const root = editorContainer.value?.querySelector('.vditor') as HTMLElement | null;
@@ -301,6 +374,8 @@ onMounted(async () => {
     setupFixedToolbar();
     window.setTimeout(setupFixedToolbar, 50);
     window.setTimeout(setupFixedToolbar, 250);
+    window.setTimeout(setupFixedToolbar, 1000);
+    window.setTimeout(setupFixedToolbar, 2000);
     setupInlineImagePreview();
   });
 });
