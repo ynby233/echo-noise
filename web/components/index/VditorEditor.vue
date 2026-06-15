@@ -160,7 +160,7 @@ const getCurrentHeadingTag = () => {
 }
 
 const positionHeadingMenu = () => {
-  positionFloatingMenu(headingTrigger.value, headingMenuRef.value, headingMenuStyle, 152, 'above-left')
+  positionFloatingMenu(headingTrigger.value, headingMenuRef.value, headingMenuStyle, 152, 'above-align-left')
 }
 
 const closeHeadingMenu = () => {
