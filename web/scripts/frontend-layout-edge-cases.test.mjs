@@ -59,9 +59,10 @@ assert(
 assert(
   notificationCenter.includes('.notification-feed-item { position:relative;') &&
     notificationCenter.includes('background:var(--notice-card);') &&
+    notificationCenter.includes('background:linear-gradient(0deg, rgba(59,130,246,.10), rgba(59,130,246,.10)), var(--notice-card);') &&
     notificationCenter.includes('.notification-target-card { width:100%;') &&
-    notificationCenter.includes('background:var(--notice-input);'),
-  'notification cards and target previews must keep their own surfaces while the page shell stays transparent'
+    notificationCenter.includes('padding:0; border:0; border-radius:0; background:transparent;'),
+  'notification cards must keep their own surfaces while target previews do not render an extra rectangle surface'
 )
 
 assert(
