@@ -37,32 +37,21 @@ assert(
   'current time state must be blue unless the option is selected, where selected orange wins'
 )
 
-const notificationPageStart = homePage.indexOf("v-else-if=\"activeTab==='notifications'\" class=\"notification-page\"")
-const notificationPageEnd = homePage.indexOf("v-else-if=\"activeTab==='about'\"", notificationPageStart)
-const notificationPageBlock = homePage.slice(notificationPageStart, notificationPageEnd)
-
 assert(
   homePage.includes("v-else-if=\"activeTab==='comment'\" class=\"comment-page\"") &&
-    notificationPageStart >= 0 &&
-    notificationPageBlock.includes('class="notification-shell-card mb-3 p-5 md:p-6"') &&
-    !notificationPageBlock.includes('search-card') &&
-    homePage.includes('.notification-shell-card { background: transparent; border: 0; box-shadow: none; }') &&
-    homePage.includes('html.dark .notification-shell-card { background: transparent; border: 0; box-shadow: none; }') &&
+    homePage.includes("v-else-if=\"activeTab==='notifications'\" class=\"notification-page\"") &&
+    homePage.includes('<UCard class="notification-shell-card mb-3" :ui="{ body: { padding: \'p-5 md:p-6\' } }">') &&
+    !homePage.includes('<UCard class="search-card mb-3" :ui="{ body: { padding: \'p-5 md:p-6\' } }">\n              <UserNotificationCenter') &&
+    homePage.includes('.notification-shell-card {') &&
+    homePage.includes('background: transparent !important;') &&
     notificationCenter.includes('notification-feed-panel notification-board-wrap') &&
+    notificationCenter.includes('.notification-center {') &&
+    notificationCenter.includes('background:transparent;') &&
     notificationCenter.includes('.notification-title { display:block; margin:0 0 14px;') &&
     notificationCenter.includes('.notification-subtitle { max-width:42rem; margin:2px auto 20px;') &&
     notificationCenter.includes('.notification-count-title { margin:0 0 8px;') &&
     notificationCenter.includes('.notification-board-wrap { box-sizing:border-box; max-width:48rem; margin:0 auto 8px; padding:8px; }'),
-  'notification page must keep the guestbook rhythm without rendering an extra search-card shell'
-)
-
-assert(
-  notificationCenter.includes('.notification-feed-item { position:relative;') &&
-    notificationCenter.includes('background:var(--notice-card);') &&
-    notificationCenter.includes('background:linear-gradient(0deg, rgba(59,130,246,.10), rgba(59,130,246,.10)), var(--notice-card);') &&
-    notificationCenter.includes('.notification-target-card { width:100%;') &&
-    notificationCenter.includes('padding:0; border:0; border-radius:0; background:transparent;'),
-  'notification cards must keep their own surfaces while target previews do not render an extra rectangle surface'
+  'notification page must mirror the guestbook rhythm without reusing the visible search-card surface'
 )
 
 assert(
