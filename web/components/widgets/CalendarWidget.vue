@@ -414,6 +414,8 @@ onBeforeUnmount(() => {
   min-width: 0;
   --calendar-control-bg: rgba(148, 163, 184, 0.08);
   --calendar-control-bg-hover: rgba(249, 115, 22, 0.12);
+  --calendar-control-border: rgba(15, 23, 42, 0.10);
+  --calendar-control-border-hover: rgba(249, 115, 22, 0.34);
   --calendar-control-text: rgba(30, 41, 59, 0.88);
   --calendar-weekday-text: rgba(71, 85, 105, 0.86);
   --calendar-day-text: rgba(30, 41, 59, 0.88);
@@ -437,6 +439,8 @@ onBeforeUnmount(() => {
 :global(html.dark) .calendar-widget {
   --calendar-control-bg: rgba(255, 255, 255, 0.075);
   --calendar-control-bg-hover: rgba(249, 115, 22, 0.20);
+  --calendar-control-border: rgba(255, 255, 255, 0.14);
+  --calendar-control-border-hover: rgba(249, 115, 22, 0.50);
   --calendar-control-text: rgba(248, 250, 252, 0.86);
   --calendar-weekday-text: rgba(226, 232, 240, 0.72);
   --calendar-day-text: rgba(248, 250, 252, 0.88);
@@ -483,13 +487,14 @@ onBeforeUnmount(() => {
   min-width: 0;
   padding: 0 7px;
   border-radius: 8px;
-  border: 0;
+  border: 1px solid var(--calendar-control-border);
   background: var(--calendar-control-bg);
   color: var(--calendar-control-text);
   font-size: 11px;
   font-weight: 650;
   line-height: 1;
   outline: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .calendar-select-button {
@@ -506,6 +511,7 @@ onBeforeUnmount(() => {
 .calendar-select:hover,
 .calendar-select:focus-visible {
   background: var(--calendar-control-bg-hover);
+  border-color: var(--calendar-control-border-hover);
 }
 
 .year-select {
@@ -524,14 +530,15 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   border-radius: 6px;
-  border: 0;
+  border: 1px solid var(--calendar-control-border);
   background: var(--calendar-control-bg);
   color: var(--calendar-control-text);
-  transition: background-color 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .calendar-nav:hover {
   background: var(--calendar-control-bg-hover);
+  border-color: var(--calendar-control-border-hover);
 }
 
 .calendar-grid,
@@ -619,17 +626,19 @@ onBeforeUnmount(() => {
   height: 24px;
   padding: 0 7px;
   border-radius: 8px;
-  border: 0;
+  border: 1px solid var(--calendar-control-border);
   background: var(--calendar-control-bg);
   color: var(--calendar-control-text);
   font-size: 11px;
   font-weight: 650;
   line-height: 1;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .calendar-today:hover,
 .calendar-clear:hover {
   background: var(--calendar-control-bg-hover);
+  border-color: var(--calendar-control-border-hover);
 }
 
 .calendar-scope {

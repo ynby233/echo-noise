@@ -3074,7 +3074,7 @@ white-space: nowrap;  /* 防止换行 */
   --nw-action-bg: rgba(51, 65, 85, .96);
   --nw-action-text: #cbd5e1;
   --nw-action-border: rgba(148, 163, 184, .28);
-  --nw-action-hover-bg: rgba(249, 115, 22, .26);
+  --nw-action-hover-bg: linear-gradient(rgba(249, 115, 22, .24), rgba(249, 115, 22, .24)), rgba(51, 65, 85, .96);
   --nw-action-hover-border: rgba(249, 115, 22, .58);
   --nw-action-hover-text: #fff;
 }
