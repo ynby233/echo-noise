@@ -36,6 +36,8 @@ export interface PageQuery {
     authorId?: number;
     username?: string;
     date?: string;
+    keyword?: string;
+    tag?: string;
     excludeId?: number;
 }
 

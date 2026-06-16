@@ -379,9 +379,19 @@ func LocateMessagePage(c *gin.Context) {
 	} else {
 		request.Date = strings.TrimSpace(request.Date)
 	}
+	if keyword := strings.TrimSpace(c.Query("keyword")); keyword != "" {
+		request.Keyword = keyword
+	} else {
+		request.Keyword = strings.TrimSpace(request.Keyword)
+	}
+	if tag := strings.TrimSpace(c.Query("tag")); tag != "" {
+		request.Tag = strings.TrimPrefix(tag, "#")
+	} else {
+		request.Tag = strings.TrimPrefix(strings.TrimSpace(request.Tag), "#")
+	}
 
 	currentUserID, isAdmin := currentMessageViewer(c)
-	location, err := services.LocateMessagePage(request.MessageID, request.PageSize, currentUserID, isAdmin, request.AuthorID, request.Username, &request.Date, request.ExcludeID)
+	location, err := services.LocateMessagePage(request.MessageID, request.PageSize, currentUserID, isAdmin, request.AuthorID, request.Username, &request.Date, &request.Keyword, &request.Tag, request.ExcludeID)
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
 		return
@@ -510,8 +520,18 @@ func GetMessagesByPage(c *gin.Context) {
 	} else {
 		pageRequest.Date = strings.TrimSpace(pageRequest.Date)
 	}
+	if keyword := strings.TrimSpace(c.Query("keyword")); keyword != "" {
+		pageRequest.Keyword = keyword
+	} else {
+		pageRequest.Keyword = strings.TrimSpace(pageRequest.Keyword)
+	}
+	if tag := strings.TrimSpace(c.Query("tag")); tag != "" {
+		pageRequest.Tag = strings.TrimPrefix(tag, "#")
+	} else {
+		pageRequest.Tag = strings.TrimPrefix(strings.TrimSpace(pageRequest.Tag), "#")
+	}
 
-	pageQueryResult, err := services.GetMessagesByPage(page, pageSize, currentUserID, isAdmin, authorID, username, &pageRequest.Date, pageRequest.ExcludeID)
+	pageQueryResult, err := services.GetMessagesByPage(page, pageSize, currentUserID, isAdmin, authorID, username, &pageRequest.Date, &pageRequest.Keyword, &pageRequest.Tag, pageRequest.ExcludeID)
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
 		return

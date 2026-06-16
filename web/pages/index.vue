@@ -135,7 +135,7 @@
               </div>
               <div class="scroll-tags">
                 <div class="tag-grid">
-                  <button v-for="t in popularTags" :key="t.name" class="hot-tag-btn" @click="handleTagClick(t.name)">
+                  <button v-for="t in popularTags" :key="t.name" class="hot-tag-btn" :class="{ 'is-active': messageSelectedTag === t.name }" @click="handleTagClick(t.name)">
                     <span class="hot-tag-name">#{{ t.name }}</span>
                     <span class="hot-tag-count">{{ t.count }}</span>
                   </button>
@@ -242,7 +242,11 @@
             :page-ready="isLoaded"
             :active-tab="activeTab"
             :calendar-date="calendarMessageDate"
+            :search-keyword="messageSearchKeyword"
+            :selected-tag="messageSelectedTag"
             @clear-calendar-date="handleCalendarDateSelect('')"
+            @clear-filters="clearMessageFilters"
+            @select-tag="handleTagClick"
             @target-consumed="handleNotificationTargetConsumed"
           />
           </template>
@@ -263,7 +267,7 @@
             </div>
             <div class="scroll-tags">
               <div class="tag-grid">
-                <button v-for="t in popularTags" :key="t.name" class="hot-tag-btn" @click="handleTagClick(t.name)">
+                <button v-for="t in popularTags" :key="t.name" class="hot-tag-btn" :class="{ 'is-active': messageSelectedTag === t.name }" @click="handleTagClick(t.name)">
                   <span class="hot-tag-name">#{{ t.name }}</span>
                   <span class="hot-tag-count">{{ t.count }}</span>
                 </button>
@@ -568,12 +572,21 @@ const notificationUnreadCount = ref(0)
 const notificationReturnPending = ref(false)
 const notificationReturnFocusId = ref<number | null>(null)
 const selectedCalendarDate = ref('')
+const searchKeyword = ref('')
+const selectedTag = ref('')
 const calendarMessageDate = computed(() => (activeTab.value === 'latest' || activeTab.value === 'personal') ? selectedCalendarDate.value : '')
+const messageSearchKeyword = computed(() => (activeTab.value === 'latest' || activeTab.value === 'personal') ? searchKeyword.value : '')
+const messageSelectedTag = computed(() => (activeTab.value === 'latest' || activeTab.value === 'personal') ? selectedTag.value : '')
 const handleCalendarDateSelect = (date: string) => {
   selectedCalendarDate.value = /^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) ? date : ''
 }
+const clearMessageFilters = () => {
+  selectedCalendarDate.value = ''
+  searchKeyword.value = ''
+  selectedTag.value = ''
+}
 watch(() => activeTab.value, (tab) => {
-  if (tab !== 'latest' && tab !== 'personal') selectedCalendarDate.value = ''
+  if (tab !== 'latest' && tab !== 'personal') clearMessageFilters()
 })
 const feedResultCount = ref(0)
 const isFeedEnabled = computed(() => frontendConfig.value?.feedEnabled === true)
@@ -602,7 +615,7 @@ const centerTabs = computed(() => {
 
 // 添加 messageList ref
 type MessageListExpose = ComponentPublicInstance & {
-  handleSearchResult: (result: unknown) => void
+  refreshList: () => Promise<void>
 }
 type CommentThreadExpose = ComponentPublicInstance & {
   focusCommentById: (commentId: number) => Promise<boolean>
@@ -807,14 +820,16 @@ const applyRouteTargets = () => {
   notificationTargetCommentId.value = commentId
 }
 watch(() => [route.query.tab, route.query.message_id, route.query.comment_id], applyRouteTargets, { immediate: true })
+const ensureMessageTab = () => {
+  if (activeTab.value !== 'latest' && activeTab.value !== 'personal') activeTab.value = 'latest'
+}
+
 // 添加搜索结果处理函数
-const handleSearchResult = (result: any) => {
-  console.log('接收到搜索结果:', result); // 添加调试日志
-  selectedCalendarDate.value = ''
-  if (messageList.value) {
-    // 直接传递原始结果，让 MessageList 组件自己处理数据格式
-    messageList.value.handleSearchResult(result);
-  }
+const handleSearchResult = async (keyword: string) => {
+  ensureMessageTab()
+  searchKeyword.value = String(keyword || '').trim()
+  await nextTick()
+  await messageList.value?.refreshList?.()
 }
 // 留言板目标消息ID（默认取最新公开消息）
 const guestbookMessageId = ref<number | null>(null)
@@ -861,7 +876,7 @@ const handleNotificationJump = async (item: NotificationJumpItem) => {
   notificationTargetCommentId.value = commentId || null
 
   if (item?.type === 'guestbook' || item?.message?.is_guestbook) {
-    selectedCalendarDate.value = ''
+    clearMessageFilters()
     targetMessageId.value = null
     activeTab.value = 'comment'
     await loadGuestbookTarget()
@@ -869,7 +884,7 @@ const handleNotificationJump = async (item: NotificationJumpItem) => {
     return
   }
 
-  selectedCalendarDate.value = ''
+  clearMessageFilters()
   activeTab.value = 'latest'
   targetMessageId.value = messageId ? String(messageId) : null
 }
@@ -2314,26 +2329,12 @@ onMounted(() => {
 })
 // 标签点击处理
 const handleTagClick = async (tag: string) => {
-  selectedCalendarDate.value = ''
-  try {
-    const encodedTag = encodeURIComponent(tag.trim())
-    const res = await getRequest<any>(`messages/tags/${encodedTag}`, undefined, { credentials: 'include' })
-    if (res && res.code === 1 && Array.isArray(res.data)) {
-      if (messageList.value) {
-        messageList.value.handleSearchResult(res.data)
-      }
-    } else {
-      throw new Error(res?.msg || '获取标签内容失败')
-    }
-  } catch (error: any) {
-    console.error('获取标签消息失败:', error)
-    useToast().add({
-      title: '获取标签消息失败',
-      description: error.message || '服务器错误，请稍后重试',
-      color: 'red',
-      timeout: 3000
-    })
-  }
+  const normalizedTag = String(tag || '').trim().replace(/^#/, '')
+  if (!normalizedTag) return
+  ensureMessageTab()
+  selectedTag.value = selectedTag.value === normalizedTag ? '' : normalizedTag
+  await nextTick()
+  await messageList.value?.refreshList?.()
 }
 // 修改打字效果函数
 const startTypeEffect = () => {
@@ -3393,6 +3394,8 @@ html.dark .stats-login-prompt:hover { color: #c7d2fe; }
 .hot-tags-refresh:hover { opacity: 1; border-color: rgba(249, 115, 22, 0.34); background: rgba(249, 115, 22, 0.12); }
 .hot-tag-btn { min-width: 0; min-height: 30px; padding: 3px 7px; border-radius: 4px; border: 1px solid rgba(148, 163, 184, 0.32); display: inline-flex; align-items: center; justify-content: center; gap: 4px; color: inherit; opacity: .8; font-size: 12px; line-height: 1; overflow: hidden; text-align: center; flex-wrap: nowrap; white-space: nowrap; transition: opacity .15s ease, border-color .15s ease, background-color .15s ease; }
 .hot-tag-btn:hover { opacity: 1; border-color: rgba(249, 115, 22, 0.36); background: rgba(249, 115, 22, 0.1); }
+.hot-tag-btn.is-active { opacity: 1; color: rgb(234, 88, 12); border-color: rgba(249, 115, 22, 0.48); background: rgba(249, 115, 22, 0.14); }
+:global(html.dark) .hot-tag-btn.is-active { color: rgb(251, 146, 60); border-color: rgba(251, 146, 60, 0.42); background: rgba(249, 115, 22, 0.18); }
 .hot-tag-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hot-tag-count { flex: 0 0 auto; opacity: .62; white-space: nowrap; }
 .recommend-image-box {

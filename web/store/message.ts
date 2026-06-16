@@ -16,7 +16,18 @@ export const useMessageStore = defineStore("messageStore", () => {
   const images = ref<any[]>([]); // 添加图片状态
   const notifyConfig = ref<any>(null); // 添加推送配置状态
   let pageController: AbortController | null = null
-  const prefetchCache = ref<Record<number, PageQueryResult>>({})
+  const prefetchCache = ref<Record<string, PageQueryResult>>({})
+
+  const pageCacheKey = (query: PageQuery) => JSON.stringify({
+    page: query.page,
+    pageSize: query.pageSize,
+    authorId: query.authorId ?? null,
+    username: query.username ?? "",
+    date: query.date ?? "",
+    keyword: query.keyword ?? "",
+    tag: query.tag ?? "",
+    excludeId: query.excludeId ?? null,
+  })
 
   // 重置状态
   const reset = () => {
@@ -141,17 +152,18 @@ const getMessages = async (query: PageQuery) => {
 };
 
 // 预取指定页（不修改当前列表，仅缓存）
-const prefetchPage = async (pageNum: number) => {
-  if (prefetchCache.value[pageNum]) return prefetchCache.value[pageNum]
+const prefetchPage = async (query: PageQuery) => {
+  const cacheKey = pageCacheKey(query)
+  if (prefetchCache.value[cacheKey]) return prefetchCache.value[cacheKey]
   try {
     const controller = new AbortController()
-    const resp = await postRequest<PageQueryResult>("messages/page", { page: pageNum, pageSize: pageSize.value }, {
+    const resp = await postRequest<PageQueryResult>("messages/page", query, {
       credentials: 'include',
       silent: true,
       signal: controller.signal
     })
     if (resp && resp.code === 1) {
-      prefetchCache.value[pageNum] = resp.data
+      prefetchCache.value[cacheKey] = resp.data
       return resp.data
     }
     return null as any
@@ -159,10 +171,10 @@ const prefetchPage = async (pageNum: number) => {
 }
 
 // 读取并应用缓存页（命中则避免网络请求）
-const applyPrefetchedOrLoad = async (targetPage: number) => {
-  const cached = prefetchCache.value[targetPage]
+const applyPrefetchedOrLoad = async (query: PageQuery) => {
+  const cached = prefetchCache.value[pageCacheKey(query)]
   if (cached && Array.isArray(cached.items)) return cached
-  const res = await getMessages({ page: targetPage, pageSize: pageSize.value })
+  const res = await getMessages(query)
   return res as any
 }
 
@@ -204,6 +216,8 @@ const locateMessagePage = async (query: PageQuery & { messageId: number }) => {
       authorId: query.authorId,
       username: query.username,
       date: query.date,
+      keyword: query.keyword,
+      tag: query.tag,
       excludeId: query.excludeId,
     }, {
       credentials: 'include',
@@ -560,6 +574,8 @@ const createMessage = async (message: Message) => {
   getMessages,
   loadMessagePage,
   locateMessagePage,
+  prefetchPage,
+  applyPrefetchedOrLoad,
   deleteMessage,
   updateMessage,
   setPrivate,

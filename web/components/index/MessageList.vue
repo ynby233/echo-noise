@@ -18,44 +18,24 @@
     </div>
     
     <div :class="outerContainerClass">
-      <!-- 日期筛选提示 -->
-      <div v-if="props.pageReady && !isSearchMode && props.calendarDate" class="date-filter-bar">
+      <!-- 筛选提示 -->
+      <div v-if="props.pageReady && hasActiveFilters" class="date-filter-bar">
         <div class="date-filter-title">
-          <UIcon name="i-heroicons-calendar-days" class="w-4 h-4" />
-          <span>{{ calendarDateLabel }} 的笔记</span>
+          <UIcon name="i-heroicons-adjustments-horizontal" class="w-4 h-4" />
+          <span>{{ activeFilterSummary }}</span>
         </div>
         <UButton
           size="xs"
           variant="ghost"
           color="orange"
           icon="i-heroicons-x-mark"
-          @click="emit('clear-calendar-date')"
+          @click="resetList"
         >
           返回完整列表
         </UButton>
       </div>
-      <!-- 搜索模式提示 -->
-      <div 
-        v-if="isSearchMode" 
-        class="search-mode-bar"
-      >
-        <p class="search-mode-title">搜索结果 ({{ searchResults.length }} 条)</p>
-        <button
-          type="button"
-          class="search-mode-back nw-action-btn nw-action-btn--label"
-          @click="resetList"
-        >
-          <UIcon name="i-heroicons-arrow-left" class="w-4 h-4" />
-          <span>返回完整列表</span>
-        </button>
-      </div>
       <!-- 消息列表 -->
       <div class="my-4">
-         <!-- 无搜索结果提示 -->
-  <div v-if="isSearchMode && searchResults.length === 0" class="text-center text-gray-500 py-8">
-    <UIcon name="i-heroicons-magnifying-glass" class="w-12 h-12 mx-auto mb-4" />
-    <p>未找到相关内容</p>
-  </div>
         <!-- 消息列表内容 -->
         <div v-for="(msg, idx) in displayMessages" :key="msg.id" class="w-full h-auto overflow-hidden flex flex-col justify-between">
 
@@ -179,9 +159,9 @@
         </div>
       </div>
       <!-- 预取下一页哨兵 -->
-      <div v-if="!isSearchMode && !isPersonalGuest" ref="prefetchSentinel" style="height:1px"></div>
+      <div v-if="!isPersonalGuest" ref="prefetchSentinel" style="height:1px"></div>
       <!-- 分页控制区域 -->
-      <div v-if="!isSearchMode && !isPersonalGuest" class="pager-shell" :class="{ 'is-dark': isContentDark }">
+      <div v-if="!isPersonalGuest" class="pager-shell" :class="{ 'is-dark': isContentDark }">
         <div class="pager-nav-group">
           <button
             v-if="message.page > 1"
@@ -253,7 +233,7 @@
         </div>
       </div>
       <!-- 加载完毕提示 -->
-      <div v-if="!isSearchMode && message.messages.length > 0 && !message.hasMore" class="pager-done-wrap">
+      <div v-if="message.messages.length > 0 && !message.hasMore" class="pager-done-wrap">
         <UIcon name="i-fluent-emoji-flat-confetti-ball" size="lg" />
         <span class="pager-done-text">加载完毕~</span>
       </div>
@@ -524,7 +504,7 @@
 import { useMessageStore } from "~/store/message";
 import { useUserStore } from "~/store/user";
 import MarkdownRenderer from "~/components/index/MarkdownRenderer.vue";
-import type { Message, MessageVisibility } from '~/types/models'
+import type { MessageVisibility } from '~/types/models'
 import BuiltinComments from '../comments/BuiltinComments.vue'
 import { writeClipboardText } from '~/utils/clipboard'
 import { uploadMediaFiles } from '~/utils/media-upload'
@@ -821,10 +801,20 @@ const props = defineProps({
   calendarDate: {
     type: String,
     default: ''
+  },
+  searchKeyword: {
+    type: String,
+    default: ''
+  },
+  selectedTag: {
+    type: String,
+    default: ''
   }
 });
 const emit = defineEmits<{
   (e: 'clear-calendar-date'): void
+  (e: 'clear-filters'): void
+  (e: 'select-tag', tag: string): void
   (e: 'target-consumed'): void
 }>()
 const outerContainerClass = computed(() => props.wide ? 'flex-grow w-full px-1 sm:px-2' : 'flex-grow w-full px-1 sm:px-2')
@@ -1047,8 +1037,6 @@ const loadTargetMessagePage = async (id: number) => {
     const messageId = Number(props.targetMessageId || 0)
     if (!messageId) return
     if (!targetListReady.value) return
-    searchResults.value = []
-    isSearchMode.value = false
     const ok = await loadTargetMessagePage(messageId)
     if (!ok) {
       resetNotificationTargetRetry()
@@ -1114,11 +1102,23 @@ const loadTargetMessagePage = async (id: number) => {
     if (!match) return ''
     return `${match[1]}年${Number(match[2])}月${Number(match[3])}日`
   })
+  const normalizedSearchKeyword = computed(() => String(props.searchKeyword || '').trim())
+  const normalizedSelectedTag = computed(() => String(props.selectedTag || '').trim().replace(/^#/, ''))
+  const hasActiveFilters = computed(() => Boolean(props.calendarDate || normalizedSearchKeyword.value || normalizedSelectedTag.value))
+  const activeFilterSummary = computed(() => {
+    const filters: string[] = []
+    if (calendarDateLabel.value) filters.push(calendarDateLabel.value)
+    if (normalizedSearchKeyword.value) filters.push(`关键词：${normalizedSearchKeyword.value}`)
+    if (normalizedSelectedTag.value) filters.push(`#${normalizedSelectedTag.value}`)
+    return filters.length ? `筛选结果：${filters.join(' / ')}（${message.total || 0} 条）` : ''
+  })
   const pageQueryFor = (pageNumber: number) => {
     const query: any = { page: pageNumber, pageSize: 15 }
     if (guestbookId.value) query.excludeId = guestbookId.value
     if (isPersonalTab.value && currentUserId.value) query.authorId = currentUserId.value
     if (/^\d{4}-\d{2}-\d{2}$/.test(String(props.calendarDate || ''))) query.date = props.calendarDate
+    if (normalizedSearchKeyword.value) query.keyword = normalizedSearchKeyword.value
+    if (normalizedSelectedTag.value) query.tag = normalizedSelectedTag.value
     return query
   }
   watch(() => [props.targetMessageId, props.targetCommentId], () => {
@@ -1139,55 +1139,28 @@ const loadTargetMessagePage = async (id: number) => {
 const openInNewTab = (url: string) => {
   window.open(url, '_blank', 'noopener,noreferrer');
 };
-// 修改标签点击处理函数
-const handleTagClick = async (tag: string) => {
+// 标签点击处理函数
+const handleTagClick = (tag: string) => {
+  const normalizedTag = String(tag || '').trim().replace(/^#/, '')
+  if (normalizedTag) emit('select-tag', normalizedTag)
+}
+
+const refreshList = async () => {
+  isPageLoading.value = true
   try {
-    const encodedTag = encodeURIComponent(tag.trim());
-    const response = await fetch(`${BASE_API}/messages/tags/${encodedTag}`, {
-      credentials: 'include',
-      headers: {
-        'Accept': 'application/json'
-      }
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    const data = await response.json();
-    if (data.code === 1 && Array.isArray(data.data)) {
-      isSearchMode.value = true;
-      searchResults.value = data.data;
-      await nextTick();
-      deferMeasure();
-      deferInitFancybox();
-    } else {
-      throw new Error(data.msg || '获取标签内容失败');
-    }
-  } catch (error: any) {
-    console.error('获取标签消息失败:', error);
-    useToast().add({
-      title: '获取标签消息失败',
-      description: error.message || '服务器错误，请稍后重试',
-      color: 'red',
-      timeout: 3000
-    });
+    await message.getMessages(pageQueryFor(1));
+    await nextTick();
+    deferMeasure();
+    deferInitFancybox();
+  } finally {
+    isPageLoading.value = false
   }
-};
+}
+
 // 修改重置搜索函数名称，使其更通用
 // 修改 resetList 函数
 const resetList = async () => {
-  searchResults.value = [];
-  isSearchMode.value = false;
-  if (props.calendarDate) {
-    emit('clear-calendar-date')
-    return
-  }
-  
-  // 重新获取当前视图消息列表
-  await message.getMessages(pageQueryFor(1));
-  
-  await nextTick();
-  deferMeasure();
-  deferInitFancybox();
+  emit('clear-filters')
 };
 
 const deleteMsg = async (id: number) => {
@@ -1432,8 +1405,7 @@ const toggleExpand = (msgId: number) => {
 // 修改检查内容高度的函数
 const checkContentHeight = () => {
   nextTick(() => {
-    // 获取当前显示的消息列表（可能是普通列表或搜索结果）
-    const currentMessages = isSearchMode.value ? searchResults.value : message.messages;
+    const currentMessages = message.messages;
     
     // 检查每条消息的内容高度
     currentMessages.forEach((msg) => {
@@ -1690,29 +1662,26 @@ watch(() => route.hash, async (newHash) => {
 const isPageLoading = ref(false);
 
 watch(
-  [() => props.activeTab, () => props.calendarDate, () => userStore.isLogin, () => currentUserId.value],
+  [
+    () => props.activeTab,
+    () => props.calendarDate,
+    () => props.searchKeyword,
+    () => props.selectedTag,
+    () => userStore.isLogin,
+    () => currentUserId.value
+  ],
   async () => {
     if (route.hash.includes('/messages/')) return
     if (Number(props.targetMessageId || 0) > 0) {
       await focusTargetMessageAndComment()
       return
     }
-    searchResults.value = []
-    isSearchMode.value = false
     if (isPersonalGuest.value) {
       message.reset()
       return
     }
-    isPageLoading.value = true
-    try {
-      await message.getMessages(pageQueryFor(1))
-      expandedCommentsMap.value = {}
-      await nextTick()
-      deferMeasure()
-      deferInitFancybox()
-    } finally {
-      isPageLoading.value = false
-    }
+    await refreshList()
+    expandedCommentsMap.value = {}
   }
 )
 
@@ -2321,7 +2290,6 @@ const sortMessagesByCreatedAt = () => {
   const pinned = (message.messages || []).filter((m: any) => m.pinned)
   const rest = (message.messages || []).filter((m: any) => !m.pinned).sort(byTimeDesc)
   message.messages = [...pinned, ...rest]
-  searchResults.value = (searchResults.value || []).sort(byTimeDesc)
 }
 
 const applyEditedMessage = (id: number, updated: any) => {
@@ -2330,7 +2298,6 @@ const applyEditedMessage = (id: number, updated: any) => {
     if (idx !== -1) items[idx] = { ...items[idx], ...updated }
   }
   apply(message.messages as any[])
-  apply(searchResults.value as any[])
   apply(pinnedTopItems.value as any[])
   sortMessagesByCreatedAt()
 }
@@ -2448,106 +2415,9 @@ const saveEditedMessage = async () => {
     isSaving.value = false;
   }
 };
-// 添加搜索相关变量
-const isSearchMode = ref(false);
-const searchResults = ref<Message[]>([]);
-
-// 添加搜索结果处理函数
-const handleSearchResult = async (results: any) => {
-  try {
-    // 如果当前不是搜索模式，记录滚动位置
-    const scrollPosition = !isSearchMode.value ? window.scrollY : null;
-    
-    console.debug('API返回的原始数据:', results);
-    
-    if (!results) {
-      throw new Error('API返回数据为空');
-    }
-    
-    let items = [];
-    let total = 0;
-    
-    // 统一数据处理逻辑
-    if (results.code === 1) {
-      if (Array.isArray(results.data)) {
-        items = results.data;
-      } else if (results.data?.items) {
-        items = results.data.items;
-      }
-    } else if (Array.isArray(results)) {
-      items = results;
-    }
-    
-    if (!Array.isArray(items)) {
-      throw new Error('无效的数据格式');
-    }
-    
-    // 排除留言板消息
-    items = items.filter((m: any) => !isGuestbookMessage(m))
-    total = items.length;
-    
-    // 更新搜索状态和结果
-    isSearchMode.value = true;
-    searchResults.value = items;
-    
-    // 显示结果提示
-    if (total === 0) {
-      useToast().add({
-        title: '未找到相关内容',
-        color: 'orange',
-        timeout: 2000
-      });
-    } else {
-      useToast().add({
-        title: `找到 ${total} 条结果`,
-        color: 'green',
-        timeout: 2000
-      });
-    }
-    
-    // 如果是从非搜索模式切换来的，滚动到顶部
-    if (scrollPosition !== null) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-    
-    await nextTick();
-    checkContentHeight();
-    deferInitFancybox();
-    
-  } catch (error: any) {
-    console.error('处理搜索结果时出错:', error);
-    useToast().add({
-      title: '搜索失败',
-      description: error.message || '处理搜索结果时发生错误',
-      color: 'red',
-      timeout: 2000
-    });
-    resetSearch();
-  }
-};
-// 添加重置搜索函数
-const resetSearch = () => {
-  // 先清空结果数组
-  searchResults.value = [];
-  // 再关闭搜索模式
-  isSearchMode.value = false;
-  
-  console.log('重置搜索 - searchResults:', searchResults.value);
-  console.log('重置搜索 - isSearchMode:', isSearchMode.value);
-  
-  // 重置后更新UI
-  nextTick(() => {
-    checkContentHeight();
-    deferInitFancybox();
-  });
-};
-
-// 修改displayMessages计算属性以支持搜索模式和个人视图
+// displayMessages 使用统一分页结果；筛选条件由 pageQueryFor 传给后端
 const displayMessages = computed(() => {
   const filterPersonal = (items: any[]) => isPersonalTab.value ? items.filter(isCurrentUserMessage) : items
-  if (isSearchMode.value && Array.isArray(searchResults.value)) {
-    return filterPersonal(searchResults.value || []);
-  }
   const base = (message.messages || []).filter((m: any) => !isGuestbookMessage(m));
   const pinned = (pinnedTopItems.value || []).filter((m: any) => !isGuestbookMessage(m));
   if (!pinned.length) return filterPersonal(base);
@@ -2555,30 +2425,8 @@ const displayMessages = computed(() => {
   return filterPersonal([...pinned, ...rest]);
 });
 
-// 添加事件监听
 defineExpose({
-  handleSearchResult
-});
-
-// 添加watch监听searchResults变化
-watch(searchResults, (newVal) => {
-  console.log('searchResults变化:', newVal);
-  hydrateMessageEngagement(newVal as any[])
-  // 强制更新内容高度检查
-  nextTick(() => {
-    checkContentHeight();
-    initFancybox();
-  });
-}, { deep: true, immediate: true });
-
-// 添加watch监听isSearchMode变化
-watch(isSearchMode, (newVal) => {
-  console.log('isSearchMode变化:', newVal);
-  // 强制更新内容高度检查
-  nextTick(() => {
-    checkContentHeight();
-    initFancybox();
-  });
+  refreshList
 });
 const onCommentCountUpdated = (e: any) => {
   try {
@@ -2624,14 +2472,13 @@ onMounted(() => {
     const io2 = new IntersectionObserver((entries) => {
       entries.forEach(async (entry) => {
         if (!entry.isIntersecting) return
-        if (isSearchMode.value) return
         const nextPage = (message.page || 1) + 1
         if (!message.hasMore) return
         if (prefetchObservedPage === nextPage) return
         prefetchObservedPage = nextPage
         const anyMsg = message as any
         if (anyMsg && typeof anyMsg.prefetchPage === 'function') {
-          await anyMsg.prefetchPage(nextPage)
+          await anyMsg.prefetchPage(pageQueryFor(nextPage))
         }
       })
     }, { rootMargin: '512px 0px' })

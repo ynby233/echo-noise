@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -24,6 +25,31 @@ const (
 	MessageVisibilityContacts = "contacts"
 	MessageVisibilityPrivate  = "private"
 )
+
+var (
+	messageFilterTagExtractRegexp = regexp.MustCompile(`#([^\s#\p{P}\p{S}]+)([/?=&][^\s#]*)?`)
+	invalidMessageFilterTagRegexp = regexp.MustCompile(`[/?=&]|^(song|video|playlist)\?id=\d+$`)
+)
+
+func messageMatchesTag(content string, tag string) bool {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return true
+	}
+	matches := messageFilterTagExtractRegexp.FindAllStringSubmatch(content, -1)
+	for _, match := range matches {
+		if len(match) <= 1 || match[1] == "" || invalidMessageFilterTagRegexp.MatchString(match[1]) {
+			continue
+		}
+		if len(match) > 2 && match[2] != "" {
+			continue
+		}
+		if match[1] == tag {
+			return true
+		}
+	}
+	return false
+}
 
 func NormalizeMessageVisibility(value string, fallbackPrivate bool) (string, bool) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
@@ -233,7 +259,7 @@ func normalizeMessagePageParams(page, pageSize int) (int, int) {
 	return page, pageSize
 }
 
-func messagePageBaseQuery(userID *uint, isAdmin bool, authorID *uint, username *string, date *string, excludeID *uint) (*gorm.DB, error) {
+func messagePageBaseQuery(userID *uint, isAdmin bool, authorID *uint, username *string, date *string, keyword *string, tag *string, excludeID *uint) (*gorm.DB, error) {
 	q := database.DB.Model(&models.Message{})
 	if excludeID != nil && *excludeID != 0 {
 		q = q.Where("id <> ?", *excludeID)
@@ -250,21 +276,51 @@ func messagePageBaseQuery(userID *uint, isAdmin bool, authorID *uint, username *
 		}
 		q = q.Where("created_at >= ? AND created_at < ?", day, day.AddDate(0, 0, 1))
 	}
+	if keyword != nil && strings.TrimSpace(*keyword) != "" {
+		q = q.Where("content LIKE ?", "%"+strings.TrimSpace(*keyword)+"%")
+	}
+	if tag != nil && strings.TrimSpace(*tag) != "" {
+		q = q.Where("content LIKE ?", "%#"+strings.TrimSpace(*tag)+"%")
+	}
 	return ApplyMessageVisibilityScope(q, userID, isAdmin), nil
 }
 
 // GetMessagesByPage 分页获取笔记（支持作者和日期筛选；管理员查看全部；普通用户可查看公开和自己的私密）
-func GetMessagesByPage(page, pageSize int, userID *uint, isAdmin bool, authorID *uint, username *string, date *string, excludeID *uint) (dto.PageQueryResult, error) {
+func GetMessagesByPage(page, pageSize int, userID *uint, isAdmin bool, authorID *uint, username *string, date *string, keyword *string, tag *string, excludeID *uint) (dto.PageQueryResult, error) {
 	page, pageSize = normalizeMessagePageParams(page, pageSize)
 	offset := (page - 1) * pageSize
 
-	q, err := messagePageBaseQuery(userID, isAdmin, authorID, username, date, excludeID)
+	q, err := messagePageBaseQuery(userID, isAdmin, authorID, username, date, keyword, tag, excludeID)
 	if err != nil {
 		return dto.PageQueryResult{}, err
 	}
 
 	var messages []models.Message
 	var total int64
+	if tag != nil && strings.TrimSpace(*tag) != "" {
+		var candidates []models.Message
+		if err := q.Order("pinned DESC, created_at DESC, id DESC").Find(&candidates).Error; err != nil {
+			return dto.PageQueryResult{}, err
+		}
+		matched := make([]models.Message, 0, len(candidates))
+		for _, candidate := range candidates {
+			if messageMatchesTag(candidate.Content, *tag) {
+				matched = append(matched, candidate)
+			}
+		}
+		total = int64(len(matched))
+		if offset < len(matched) {
+			end := offset + pageSize
+			if end > len(matched) {
+				end = len(matched)
+			}
+			messages = matched[offset:end]
+		} else {
+			messages = []models.Message{}
+		}
+		applyMessageLikedState(messages, userID)
+		return dto.PageQueryResult{Total: total, Items: messages}, nil
+	}
 	if err := q.Count(&total).Error; err != nil {
 		return dto.PageQueryResult{}, err
 	}
@@ -276,10 +332,10 @@ func GetMessagesByPage(page, pageSize int, userID *uint, isAdmin bool, authorID 
 	return dto.PageQueryResult{Total: total, Items: messages}, nil
 }
 
-func LocateMessagePage(messageID uint, pageSize int, userID *uint, isAdmin bool, authorID *uint, username *string, date *string, excludeID *uint) (dto.MessagePageLocateResult, error) {
+func LocateMessagePage(messageID uint, pageSize int, userID *uint, isAdmin bool, authorID *uint, username *string, date *string, keyword *string, tag *string, excludeID *uint) (dto.MessagePageLocateResult, error) {
 	_, pageSize = normalizeMessagePageParams(1, pageSize)
 
-	targetQuery, err := messagePageBaseQuery(userID, isAdmin, authorID, username, date, excludeID)
+	targetQuery, err := messagePageBaseQuery(userID, isAdmin, authorID, username, date, keyword, tag, excludeID)
 	if err != nil {
 		return dto.MessagePageLocateResult{}, err
 	}
@@ -291,7 +347,38 @@ func LocateMessagePage(messageID uint, pageSize int, userID *uint, isAdmin bool,
 		return dto.MessagePageLocateResult{}, err
 	}
 
-	totalQuery, err := messagePageBaseQuery(userID, isAdmin, authorID, username, date, excludeID)
+	if tag != nil && strings.TrimSpace(*tag) != "" {
+		candidateQuery, err := messagePageBaseQuery(userID, isAdmin, authorID, username, date, keyword, tag, excludeID)
+		if err != nil {
+			return dto.MessagePageLocateResult{}, err
+		}
+		var candidates []models.Message
+		if err := candidateQuery.Order("pinned DESC, created_at DESC, id DESC").Find(&candidates).Error; err != nil {
+			return dto.MessagePageLocateResult{}, err
+		}
+		targetIndex := -1
+		total := 0
+		for _, candidate := range candidates {
+			if !messageMatchesTag(candidate.Content, *tag) {
+				continue
+			}
+			if candidate.ID == target.ID {
+				targetIndex = total
+			}
+			total++
+		}
+		if targetIndex < 0 {
+			return dto.MessagePageLocateResult{}, fmt.Errorf("消息不存在或无权访问")
+		}
+		return dto.MessagePageLocateResult{
+			MessageID: messageID,
+			Page:      targetIndex/pageSize + 1,
+			PageSize:  pageSize,
+			Total:     int64(total),
+		}, nil
+	}
+
+	totalQuery, err := messagePageBaseQuery(userID, isAdmin, authorID, username, date, keyword, tag, excludeID)
 	if err != nil {
 		return dto.MessagePageLocateResult{}, err
 	}
@@ -300,7 +387,7 @@ func LocateMessagePage(messageID uint, pageSize int, userID *uint, isAdmin bool,
 		return dto.MessagePageLocateResult{}, err
 	}
 
-	beforeQuery, err := messagePageBaseQuery(userID, isAdmin, authorID, username, date, excludeID)
+	beforeQuery, err := messagePageBaseQuery(userID, isAdmin, authorID, username, date, keyword, tag, excludeID)
 	if err != nil {
 		return dto.MessagePageLocateResult{}, err
 	}

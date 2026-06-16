@@ -10,6 +10,8 @@ type PageQueryDto struct {
 	AuthorID  *uint   `json:"authorId,omitempty"`
 	Username  *string `json:"username,omitempty"`
 	Date      string  `json:"date,omitempty"`
+	Keyword   string  `json:"keyword,omitempty"`
+	Tag       string  `json:"tag,omitempty"`
 	ExcludeID *uint   `json:"excludeId,omitempty"`
 }
 
@@ -24,6 +26,8 @@ type MessagePageLocateDto struct {
 	AuthorID  *uint   `json:"authorId,omitempty"`
 	Username  *string `json:"username,omitempty"`
 	Date      string  `json:"date,omitempty"`
+	Keyword   string  `json:"keyword,omitempty"`
+	Tag       string  `json:"tag,omitempty"`
 	ExcludeID *uint   `json:"excludeId,omitempty"`
 }
 

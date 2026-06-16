@@ -34,15 +34,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 
-interface SearchResponse {
-  code: number;
-  msg?: string;
-  data?: unknown;
-}
-
 const toast = useToast();
-const config = useRuntimeConfig();
-const BASE_API = config.public.baseApi || '/api';
 
 // 添加props和emits以支持v-model
 const props = defineProps({
@@ -68,8 +60,9 @@ const closeModal = () => {
 const searchQuery = ref('');
 
 // 搜索处理函数
-const handleSearch = async () => {
-  if (!searchQuery.value.trim()) {
+const handleSearch = () => {
+  const keyword = searchQuery.value.trim();
+  if (!keyword) {
     toast.add({
       title: '提示',
       description: '请输入搜索关键词',
@@ -77,47 +70,15 @@ const handleSearch = async () => {
     });
     return;
   }
-  
-  try {
-    const { data: response, error } = await useFetch<SearchResponse>('/messages/search', {
-      method: 'GET',
-      baseURL: BASE_API,
-      params: {
-        keyword: searchQuery.value,
-        page: 1,
-        pageSize: 10
-      }
-    });
 
-    if (error.value) {
-      throw new Error(error.value?.message || '网络请求失败');
-    }
-
-    if (!response.value) {
-      throw new Error('未收到服务器响应');
-    }
-
-    if (response.value.code === 1) {
-      // 确保发送正确的数据结构
-      emit('search-result', response.value);
-      emit('update:modelValue', false);
-      searchQuery.value = '';
-      toast.add({
-        title: '成功',
-        description: '搜索完成',
-        color: 'green'
-      });
-    } else {
-      throw new Error(response.value?.msg || '搜索失败');
-    }
-  } catch (error) {
-    console.error('Search error:', error);
-    toast.add({
-      title: '错误',
-      description: error instanceof Error ? error.message : '搜索失败，请稍后重试',
-      color: 'red'
-    });
-  }
+  emit('search-result', keyword);
+  emit('update:modelValue', false);
+  searchQuery.value = '';
+  toast.add({
+    title: '成功',
+    description: '搜索完成',
+    color: 'green'
+  });
 };
 
 // 暴露方法和属性给父组件
