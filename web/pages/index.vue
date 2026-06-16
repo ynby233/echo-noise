@@ -209,15 +209,17 @@
             </UCard>
           </div>
           <div v-else-if="activeTab==='notifications'" class="notification-page">
-            <UserNotificationCenter
-              :site-config="frontendConfig"
-              :initial-message-id="notificationTargetMessageId ?? undefined"
-              :initial-comment-id="notificationTargetCommentId ?? undefined"
-              :restore-focus-id="notificationReturnFocusId ?? undefined"
-              @unread-change="handleNotificationUnreadChange"
-              @jump="handleNotificationJump"
-              @restore-consumed="handleNotificationRestoreConsumed"
-            />
+            <UCard class="search-card mb-3" :ui="{ body: { padding: 'p-5 md:p-6' } }">
+              <UserNotificationCenter
+                :site-config="frontendConfig"
+                :initial-message-id="notificationTargetMessageId ?? undefined"
+                :initial-comment-id="notificationTargetCommentId ?? undefined"
+                :restore-focus-id="notificationReturnFocusId ?? undefined"
+                @unread-change="handleNotificationUnreadChange"
+                @jump="handleNotificationJump"
+                @restore-consumed="handleNotificationRestoreConsumed"
+              />
+            </UCard>
           </div>
           <div v-else-if="activeTab==='about'" class="about-page">
             <UCard class="search-card mb-3" :ui="{ body: { padding: 'p-6' } }">

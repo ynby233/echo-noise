@@ -38,11 +38,15 @@ assert(
 )
 
 assert(
-  notificationCenter.includes('notification-feed-panel notification-board-wrap') &&
+  homePage.includes("v-else-if=\"activeTab==='comment'\" class=\"comment-page\"") &&
+    homePage.includes("v-else-if=\"activeTab==='notifications'\" class=\"notification-page\"") &&
+    homePage.includes('<UCard class="search-card mb-3" :ui="{ body: { padding: \'p-5 md:p-6\' } }">') &&
+    notificationCenter.includes('notification-feed-panel notification-board-wrap') &&
     notificationCenter.includes('.notification-title { display:block; margin:0 0 14px;') &&
     notificationCenter.includes('.notification-subtitle { max-width:42rem; margin:2px auto 20px;') &&
-    notificationCenter.includes('.notification-board-wrap { max-width:48rem; margin:10px auto 8px;'),
-  'notification title, description, count, and list spacing must mirror the guestbook section rhythm'
+    notificationCenter.includes('.notification-count-title { margin:0 0 8px;') &&
+    notificationCenter.includes('.notification-board-wrap { box-sizing:border-box; max-width:48rem; margin:0 auto 8px; padding:8px; }'),
+  'notification page must share the guestbook card shell and content rhythm'
 )
 
 assert(
