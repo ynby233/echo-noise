@@ -37,16 +37,31 @@ assert(
   'current time state must be blue unless the option is selected, where selected orange wins'
 )
 
+const notificationPageStart = homePage.indexOf("v-else-if=\"activeTab==='notifications'\" class=\"notification-page\"")
+const notificationPageEnd = homePage.indexOf("v-else-if=\"activeTab==='about'\"", notificationPageStart)
+const notificationPageBlock = homePage.slice(notificationPageStart, notificationPageEnd)
+
 assert(
   homePage.includes("v-else-if=\"activeTab==='comment'\" class=\"comment-page\"") &&
-    homePage.includes("v-else-if=\"activeTab==='notifications'\" class=\"notification-page\"") &&
-    homePage.includes('<UCard class="search-card mb-3" :ui="{ body: { padding: \'p-5 md:p-6\' } }">') &&
+    notificationPageStart >= 0 &&
+    notificationPageBlock.includes('class="notification-shell-card mb-3 p-5 md:p-6"') &&
+    !notificationPageBlock.includes('search-card') &&
+    homePage.includes('.notification-shell-card { background: transparent; border: 0; box-shadow: none; }') &&
+    homePage.includes('html.dark .notification-shell-card { background: transparent; border: 0; box-shadow: none; }') &&
     notificationCenter.includes('notification-feed-panel notification-board-wrap') &&
     notificationCenter.includes('.notification-title { display:block; margin:0 0 14px;') &&
     notificationCenter.includes('.notification-subtitle { max-width:42rem; margin:2px auto 20px;') &&
     notificationCenter.includes('.notification-count-title { margin:0 0 8px;') &&
     notificationCenter.includes('.notification-board-wrap { box-sizing:border-box; max-width:48rem; margin:0 auto 8px; padding:8px; }'),
-  'notification page must share the guestbook card shell and content rhythm'
+  'notification page must keep the guestbook rhythm without rendering an extra search-card shell'
+)
+
+assert(
+  notificationCenter.includes('.notification-feed-item { position:relative;') &&
+    notificationCenter.includes('background:var(--notice-card);') &&
+    notificationCenter.includes('.notification-target-card { width:100%;') &&
+    notificationCenter.includes('background:var(--notice-input);'),
+  'notification cards and target previews must keep their own surfaces while the page shell stays transparent'
 )
 
 assert(
