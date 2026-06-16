@@ -38,20 +38,15 @@ assert(
 )
 
 assert(
-  homePage.includes("v-else-if=\"activeTab==='comment'\" class=\"comment-page\"") &&
-    homePage.includes("v-else-if=\"activeTab==='notifications'\" class=\"notification-page\"") &&
-    homePage.includes('<UCard class="notification-shell-card mb-3" :ui="{ body: { padding: \'p-5 md:p-6\' } }">') &&
-    !homePage.includes('<UCard class="search-card mb-3" :ui="{ body: { padding: \'p-5 md:p-6\' } }">\n              <UserNotificationCenter') &&
-    homePage.includes('.notification-shell-card {') &&
-    homePage.includes('background: transparent !important;') &&
-    notificationCenter.includes('notification-feed-panel notification-board-wrap') &&
-    notificationCenter.includes('.notification-center {') &&
+  notificationCenter.includes('notification-feed-panel notification-board-wrap') &&
+    notificationCenter.includes('margin-top:1px;') &&
     notificationCenter.includes('background:transparent;') &&
+    notificationCenter.includes('.notification-title-row { position:relative; display:block;') &&
     notificationCenter.includes('.notification-title { display:block; margin:0 0 14px;') &&
     notificationCenter.includes('.notification-subtitle { max-width:42rem; margin:2px auto 20px;') &&
     notificationCenter.includes('.notification-count-title { margin:0 0 8px;') &&
-    notificationCenter.includes('.notification-board-wrap { box-sizing:border-box; max-width:48rem; margin:0 auto 8px; padding:8px; }'),
-  'notification page must mirror the guestbook rhythm without reusing the visible search-card surface'
+    notificationCenter.includes('.notification-board-wrap { box-sizing:border-box; max-width:48rem; margin:0 auto 8px; padding:8px;'),
+  'notification title, description, count, and first-card spacing must mirror the measured guestbook rhythm'
 )
 
 assert(

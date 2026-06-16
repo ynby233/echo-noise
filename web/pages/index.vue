@@ -209,17 +209,15 @@
             </UCard>
           </div>
           <div v-else-if="activeTab==='notifications'" class="notification-page">
-            <UCard class="notification-shell-card mb-3" :ui="{ body: { padding: 'p-5 md:p-6' } }">
-              <UserNotificationCenter
-                :site-config="frontendConfig"
-                :initial-message-id="notificationTargetMessageId ?? undefined"
-                :initial-comment-id="notificationTargetCommentId ?? undefined"
-                :restore-focus-id="notificationReturnFocusId ?? undefined"
-                @unread-change="handleNotificationUnreadChange"
-                @jump="handleNotificationJump"
-                @restore-consumed="handleNotificationRestoreConsumed"
-              />
-            </UCard>
+            <UserNotificationCenter
+              :site-config="frontendConfig"
+              :initial-message-id="notificationTargetMessageId ?? undefined"
+              :initial-comment-id="notificationTargetCommentId ?? undefined"
+              :restore-focus-id="notificationReturnFocusId ?? undefined"
+              @unread-change="handleNotificationUnreadChange"
+              @jump="handleNotificationJump"
+              @restore-consumed="handleNotificationRestoreConsumed"
+            />
           </div>
           <div v-else-if="activeTab==='about'" class="about-page">
             <UCard class="search-card mb-3" :ui="{ body: { padding: 'p-6' } }">
@@ -2686,24 +2684,6 @@ html, body {
 /* 统一弹窗底色样式与搜索弹窗一致 */
 .search-card { background: var(--home-surface-light); color: #111827; border: 1px solid #e5e7eb; border-radius: var(--home-radius-panel); }
 html.dark .search-card { background: var(--home-surface-dark); color: #fff; border: 1px solid var(--home-border-dark); }
-.notification-shell-card {
-  background: transparent !important;
-  color: inherit;
-  border-color: transparent !important;
-  box-shadow: none !important;
-  --tw-ring-color: transparent !important;
-  --tw-ring-shadow: 0 0 #0000 !important;
-  --tw-ring-offset-shadow: 0 0 #0000 !important;
-}
-html.dark .notification-shell-card {
-  background: transparent !important;
-  border-color: transparent !important;
-  box-shadow: none !important;
-}
-.notification-shell-card > div {
-  background: transparent !important;
-  border-color: transparent !important;
-}
 .hero-tab {
   display: inline-flex;
   align-items: center;

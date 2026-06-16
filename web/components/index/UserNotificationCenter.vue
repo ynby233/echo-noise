@@ -546,7 +546,7 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .notification-center {
   width:100%;
   box-sizing:border-box;
-  margin:0;
+  margin-top:1px;
   padding:0;
   border:0;
   border-radius:0;
@@ -609,12 +609,12 @@ defineExpose({ refresh: () => loadNotifications(true) })
   --nw-floating-selected-bg: rgba(249, 115, 22, .30);
   --nw-floating-selected-border: rgba(251, 146, 60, .58);
   box-shadow:none;
-  backdrop-filter:blur(8px) saturate(118%);
-  -webkit-backdrop-filter:blur(8px) saturate(118%);
+  backdrop-filter:none;
+  -webkit-backdrop-filter:none;
 }
 .notification-header { display:block; margin-bottom:0; padding:0; text-align:center; }
 .notification-heading { width:100%; }
-.notification-title-row { position:relative; display:flex; align-items:center; justify-content:center; width:100%; min-height:24px; margin-bottom:0; }
+.notification-title-row { position:relative; display:block; width:100%; margin:0; padding:0; }
 .notification-title { display:block; margin:0 0 14px; padding:0; border-radius:0; color:var(--notice-heading); font-size:18px; font-weight:700; line-height:1.5; }
 .notification-subtitle { max-width:42rem; margin:2px auto 20px; color:var(--notice-heading); font-size:13px; line-height:1.7; text-align:center; opacity:.8; font-weight:400; }
 .notification-count-title { margin:0 0 8px; color:var(--notice-count); font-size:14px; font-weight:400; line-height:20px; }
@@ -675,10 +675,10 @@ defineExpose({ refresh: () => loadNotifications(true) })
 @media (max-width: 720px) {
   .notification-center { padding:0; }
   .notification-header { text-align:center; margin-bottom:0; padding:0; }
-  .notification-title-row { display:flex; flex-direction:column; justify-content:center; gap:10px; min-height:24px; margin-bottom:0; }
+  .notification-title-row { display:block; min-height:0; margin:0; }
   .notification-title { line-height:1.5; }
   .notification-subtitle { margin:2px auto 20px; }
-  .notification-actions { position:static; transform:none; justify-content:center; width:100%; max-width:100%; }
+  .notification-actions { position:static; transform:none; justify-content:center; width:100%; max-width:100%; margin:-4px 0 10px; }
   .notification-feed-panel { margin:0 auto 8px; padding:8px; }
   .notification-feed-item { gap:10px; padding:14px 12px; }
   .notification-feed-item.unread::before { left:7px; top:24px; }
