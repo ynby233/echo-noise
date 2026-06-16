@@ -49,8 +49,12 @@ assert(
     notificationCenter.includes('.notification-title { display:block; margin:0 0 14px;') &&
     notificationCenter.includes('.notification-subtitle { max-width:42rem; margin:2px auto 20px;') &&
     notificationCenter.includes('.notification-count-title { margin:0 0 8px;') &&
-    notificationCenter.includes('.notification-board-wrap { box-sizing:border-box; max-width:48rem; margin:0 auto 8px; padding:8px; }'),
-  'notification page must keep the guestbook content rhythm without rendering an extra shell background'
+    notificationCenter.includes('.notification-board-wrap { box-sizing:border-box; max-width:48rem; margin:0 auto 8px; padding:8px; }') &&
+    notificationCenter.includes('--notice-card: rgba(255,255,255,.74);') &&
+    notificationCenter.includes('--notice-card: rgba(15,23,42,.44);') &&
+    notificationCenter.includes('.notification-target-card { width:100%; margin-top:10px; padding:0; border:0; border-radius:0; background:transparent;') &&
+    notificationCenter.includes('background:linear-gradient(0deg, rgba(59,130,246,.10), rgba(59,130,246,.10)), var(--notice-card);'),
+  'notification page must keep the guestbook content rhythm, preserve item backgrounds, and avoid an extra nested target-card background'
 )
 
 assert(
