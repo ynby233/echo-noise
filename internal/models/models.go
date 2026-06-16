@@ -198,8 +198,6 @@ type SiteConfig struct {
 	Username         string `gorm:"type:varchar(50)"`
 	Description      string `gorm:"type:varchar(191)"`
 	Backgrounds      string `gorm:"type:text"`
-	CardFooterTitle  string `gorm:"type:varchar(100)"`
-	CardFooterLink   string `gorm:"type:varchar(100)"`
 	PageFooterHTML   string `gorm:"type:text"`
 	RSSTitle         string `gorm:"type:varchar(100)"`
 	RSSDescription   string `gorm:"type:varchar(191)"`
@@ -336,15 +334,17 @@ type SiteConfig struct {
 	LeftAds           string `gorm:"type:text"`
 	LeftAdsIntervalMs int    `gorm:"default:4000"`
 	// 关于/友链/留言等页面配置
-	LinksTitle             string `gorm:"type:varchar(100)"`
-	LinksDescription       string `gorm:"type:varchar(191)"`
-	CommentPageTitle       string `gorm:"type:varchar(100)"`
-	CommentPageDescription string `gorm:"type:varchar(191)"`
-	AboutPageTitle         string `gorm:"type:varchar(100)"`
-	AboutPageDescription   string `gorm:"type:varchar(191)"`
-	AboutMarkdown          string `gorm:"type:text"`
-	LoginExpireDays        int    `gorm:"default:3"`
-	LoginExpireHours       int    `gorm:"default:0"`
+	LinksTitle                  string `gorm:"type:varchar(100)"`
+	LinksDescription            string `gorm:"type:varchar(191)"`
+	CommentPageTitle            string `gorm:"type:varchar(100)"`
+	CommentPageDescription      string `gorm:"type:varchar(191)"`
+	NotificationPageTitle       string `gorm:"type:varchar(100)"`
+	NotificationPageDescription string `gorm:"type:varchar(191)"`
+	AboutPageTitle              string `gorm:"type:varchar(100)"`
+	AboutPageDescription        string `gorm:"type:varchar(191)"`
+	AboutMarkdown               string `gorm:"type:text"`
+	LoginExpireDays             int    `gorm:"default:3"`
+	LoginExpireHours            int    `gorm:"default:0"`
 	// 信息流聚合配置
 	FeedEnabled            bool   `gorm:"default:false"`
 	FeedPageTitle          string `gorm:"type:varchar(100)"`

@@ -978,8 +978,6 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 			"username":            config.Username,
 			"description":         config.Description,
 			"backgrounds":         config.GetBackgroundsConfig(),
-			"cardFooterTitle":     config.CardFooterTitle,
-			"cardFooterLink":      config.CardFooterLink,
 			"pageFooterHTML":      config.PageFooterHTML,
 			"rssTitle":            rssConfig.Title,
 			"rssDescription":      rssConfig.Description,
@@ -1004,11 +1002,13 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 				_, hours := normalizeLoginExpireConfig(config.LoginExpireDays, config.LoginExpireHours)
 				return hours
 			}(),
-			"commentPageTitle":       choose(config.CommentPageTitle, getDefaultConfig()["frontendSettings"].(map[string]interface{})["commentPageTitle"].(string)),
-			"commentPageDescription": choose(config.CommentPageDescription, getDefaultConfig()["frontendSettings"].(map[string]interface{})["commentPageDescription"].(string)),
-			"aboutPageTitle":         choose(config.AboutPageTitle, getDefaultConfig()["frontendSettings"].(map[string]interface{})["aboutPageTitle"].(string)),
-			"aboutPageDescription":   choose(config.AboutPageDescription, getDefaultConfig()["frontendSettings"].(map[string]interface{})["aboutPageDescription"].(string)),
-			"aboutMarkdown":          choose(config.AboutMarkdown, getDefaultConfig()["frontendSettings"].(map[string]interface{})["aboutMarkdown"].(string)),
+			"commentPageTitle":            choose(config.CommentPageTitle, getDefaultConfig()["frontendSettings"].(map[string]interface{})["commentPageTitle"].(string)),
+			"commentPageDescription":      choose(config.CommentPageDescription, getDefaultConfig()["frontendSettings"].(map[string]interface{})["commentPageDescription"].(string)),
+			"notificationPageTitle":       choose(config.NotificationPageTitle, getDefaultConfig()["frontendSettings"].(map[string]interface{})["notificationPageTitle"].(string)),
+			"notificationPageDescription": choose(config.NotificationPageDescription, getDefaultConfig()["frontendSettings"].(map[string]interface{})["notificationPageDescription"].(string)),
+			"aboutPageTitle":              choose(config.AboutPageTitle, getDefaultConfig()["frontendSettings"].(map[string]interface{})["aboutPageTitle"].(string)),
+			"aboutPageDescription":        choose(config.AboutPageDescription, getDefaultConfig()["frontendSettings"].(map[string]interface{})["aboutPageDescription"].(string)),
+			"aboutMarkdown":               choose(config.AboutMarkdown, getDefaultConfig()["frontendSettings"].(map[string]interface{})["aboutMarkdown"].(string)),
 			// 信息流
 			"feedEnabled":         config.FeedEnabled,
 			"feedPageTitle":       choose(config.FeedPageTitle, getDefaultConfig()["frontendSettings"].(map[string]interface{})["feedPageTitle"].(string)),
@@ -1184,12 +1184,6 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	if v, ok := frontendSettings["description"].(string); ok {
 		config.Description = v
 	}
-	if v, ok := frontendSettings["cardFooterTitle"].(string); ok {
-		config.CardFooterTitle = v
-	}
-	if v, ok := frontendSettings["cardFooterLink"].(string); ok {
-		config.CardFooterLink = v
-	}
 	if v, ok := frontendSettings["pageFooterHTML"].(string); ok {
 		config.PageFooterHTML = v
 	}
@@ -1251,6 +1245,12 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	}
 	if v, ok := frontendSettings["commentPageDescription"].(string); ok {
 		config.CommentPageDescription = v
+	}
+	if v, ok := frontendSettings["notificationPageTitle"].(string); ok {
+		config.NotificationPageTitle = v
+	}
+	if v, ok := frontendSettings["notificationPageDescription"].(string); ok {
+		config.NotificationPageDescription = v
 	}
 	if v, ok := frontendSettings["aboutPageTitle"].(string); ok {
 		config.AboutPageTitle = v
@@ -1952,8 +1952,6 @@ func getDefaultConfig() map[string]interface{} {
 			"description":         "执迷不悟",
 			"notifyEnabled":       false,
 			"backgrounds":         defaultHeaderImages(),
-			"cardFooterTitle":     "Noise·说说·笔记~",
-			"cardFooterLink":      "note.noisework.cn",
 			"pageFooterHTML":      `<div class="text-center text-xs text-gray-400 py-4">来自<a href="https://www.noisework.cn" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:text-orange-500">Noise</a> 使用<a href="https://github.com/rcy1314/echo-noise" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:text-orange-500">Ech0-Noise</a>发布</div>`,
 			"rssTitle":            "Noise的说说笔记",
 			"rssDescription":      "一个说说笔记~",
@@ -1971,18 +1969,20 @@ func getDefaultConfig() map[string]interface{} {
 				{"title": "NoiseWork", "link": "https://www.noisework.cn/", "icon": "i-mdi-home", "description": "个人主页与作品集合"},
 				{"title": "NoiseBlogs", "link": "https://www.noiseblogs.top/", "icon": "i-mdi-notebook", "description": "技术随笔与学习记录"},
 			},
-			"commentPageTitle":       "留言",
-			"commentPageDescription": "欢迎留下你的看法",
-			"aboutPageTitle":         "关于本站",
-			"aboutPageDescription":   "这里是站点的介绍与说明",
-			"aboutMarkdown":          "# 关于我\n\n这里是一个默认的个人简介示例：\n\n- 喜欢记录与分享\n- 热爱开源与学习\n- 持续打磨产品体验\n\n欢迎通过友链或留言与我交流！",
-			"loginExpireDays":        3,
-			"loginExpireHours":       0,
-			"feedEnabled":            false,
-			"feedPageTitle":          "实时聚合内容动态",
-			"feedPageDescription":    "聚合综合内容信息源内容，当前结果 {count} 条",
-			"feedLimit":              100,
-			"feedRefreshSeconds":     7200,
+			"commentPageTitle":            "留言",
+			"commentPageDescription":      "欢迎留下你的看法",
+			"notificationPageTitle":       "通知",
+			"notificationPageDescription": "欢迎彼此间互相交流",
+			"aboutPageTitle":              "关于本站",
+			"aboutPageDescription":        "这里是站点的介绍与说明",
+			"aboutMarkdown":               "# 关于我\n\n这里是一个默认的个人简介示例：\n\n- 喜欢记录与分享\n- 热爱开源与学习\n- 持续打磨产品体验\n\n欢迎通过友链或留言与我交流！",
+			"loginExpireDays":             3,
+			"loginExpireHours":            0,
+			"feedEnabled":                 false,
+			"feedPageTitle":               "实时聚合内容动态",
+			"feedPageDescription":         "聚合综合内容信息源内容，当前结果 {count} 条",
+			"feedLimit":                   100,
+			"feedRefreshSeconds":          7200,
 			"feedSources": []map[string]interface{}{
 				{"type": "rss", "group": "默认分组", "name": "站点 RSS", "url": "/rss", "enabled": true, "visible": true},
 			},

@@ -5036,11 +5036,11 @@ const configLabels: Record<string, string> = {
     siteTitle: '站点标题',
     subtitleText: '欢迎语',
     backgrounds: '头部图',
-    cardFooterTitle: '卡片页脚标题',
-    cardFooterLink: '卡片页脚链接',
     pageFooterHTML: '页面底部HTML',
     commentPageTitle: '留言页面标题',
     commentPageDescription: '留言页面说明',
+    notificationPageTitle: '通知页面标题',
+    notificationPageDescription: '通知页面说明',
     aboutPageTitle: '关于页面标题',
     aboutPageDescription: '关于页面说明',
     aboutMarkdown: '关于页面 Markdown 内容',
@@ -5051,11 +5051,11 @@ const configFieldHints: Record<string, string> = {
   siteTitle: '站点首页与浏览器标题展示名称。',
   subtitleText: '显示在首页主标题下方，建议控制在两行内。',
   backgrounds: '支持多张头图，按顺序轮播或展示。',
-  cardFooterTitle: '首页底部卡片标题文案。',
-  cardFooterLink: '点击页脚标题后的跳转地址。',
   pageFooterHTML: '页脚自定义 HTML 内容，适合备案或额外说明。',
   commentPageTitle: '留言页大标题。',
   commentPageDescription: '留言页顶部描述文字。',
+  notificationPageTitle: '通知页大标题。',
+  notificationPageDescription: '通知页顶部描述文字。',
   aboutPageTitle: '关于页标题。',
   aboutPageDescription: '关于页简介说明。',
   aboutMarkdown: '关于页正文内容，支持 Markdown。',
@@ -5132,8 +5132,6 @@ interface FrontendConfig {
     username: string;
     description: string;
     backgrounds: HeaderBackgroundConfig[];
-    cardFooterTitle: string;
-    cardFooterLink: string;
     pageFooterHTML: string;
     rssTitle: string;
     rssDescription: string;
@@ -5146,6 +5144,8 @@ interface FrontendConfig {
     loginExpireHours: number;
     commentPageTitle: string;
     commentPageDescription: string;
+    notificationPageTitle: string;
+    notificationPageDescription: string;
     aboutPageTitle: string;
     aboutPageDescription: string;
     aboutMarkdown: string;
@@ -5218,8 +5218,6 @@ const frontendConfig = reactive<FrontendConfig>({
     welcomeDescription: '',
     welcomeUseAdmin: false,
     backgrounds: [] as HeaderBackgroundConfig[],
-    cardFooterTitle: '',
-    cardFooterLink: '',
     pageFooterHTML: '',
     rssTitle: '',
     rssDescription: '',
@@ -5232,6 +5230,8 @@ const frontendConfig = reactive<FrontendConfig>({
     loginExpireHours: 0,
     commentPageTitle: '',
     commentPageDescription: '',
+    notificationPageTitle: '',
+    notificationPageDescription: '',
     aboutPageTitle: '',
     aboutPageDescription: '',
     aboutMarkdown: '',
@@ -5313,14 +5313,14 @@ const editItem = reactive<Record<string, boolean>>({
     siteTitle: false,
     subtitleText: false,
     backgrounds: false,
-    cardFooterTitle: false,
-    cardFooterLink: false, 
     pageFooterHTML: false,
     walineServerURL: false,
     socialLinks: false,
     
     commentPageTitle: false,
     commentPageDescription: false,
+    notificationPageTitle: false,
+    notificationPageDescription: false,
     aboutPageTitle: false,
     aboutPageDescription: false,
 })
@@ -5338,8 +5338,6 @@ const defaultConfig: Record<string, any> = {
     backgrounds: [
         normalizeHeaderBackground("https://s2.loli.net/2025/03/26/d7iyuPYA8cRqD1K.jpg"),
     ],
-    cardFooterTitle: "Noise·说说·笔记~",
-    cardFooterLink: "note.noisework.cn",
     pageFooterHTML: `<div class="text-center text-xs text-gray-400 py-4">来自<a href="https://www.noisework.cn" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:text-orange-500">Noise</a> 使用<a href="https://github.com/rcy1314/echo-noise" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:text-orange-500">Ech0-Noise</a>发布</div>`,
     rssTitle: 'Noise的说说笔记',
     rssDescription: '一个说说笔记~',
@@ -5383,6 +5381,8 @@ const defaultConfig: Record<string, any> = {
     loginExpireHours: 0,
     commentPageTitle: '留言',
     commentPageDescription: '欢迎留下你的看法',
+    notificationPageTitle: '通知',
+    notificationPageDescription: '欢迎彼此间互相交流',
     aboutPageTitle: '关于本站',
     aboutPageDescription: '这里是站点的介绍与说明',
     aboutMarkdown: '# 关于我\n\n这里是一个默认的个人简介示例：\n\n- 喜欢记录与分享\n- 热爱开源与学习\n- 持续打磨产品体验\n\n欢迎留言与我交流！',

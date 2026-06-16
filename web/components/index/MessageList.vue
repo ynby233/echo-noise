@@ -2616,14 +2616,6 @@ const preloadImage = (src: string): Promise<HTMLImageElement> => {
     img.src = src;
   });
 };
-// 确保在模板中使用正确的配置数据
-const footerConfig = computed(() => ({
-  cardFooterTitle: props.siteConfig.cardFooterTitle,
-  cardFooterSubtitle: props.siteConfig.cardFooterSubtitle,
-  pageFooterHTML: props.siteConfig.pageFooterHTML,
-  walineServerURL: props.siteConfig.walineServerURL
-}));
-
 // 下一页预取（靠近底部时触发）
 const prefetchSentinel = ref<HTMLElement | null>(null)
 let prefetchObservedPage = 0
