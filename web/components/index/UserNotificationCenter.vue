@@ -612,11 +612,11 @@ defineExpose({ refresh: () => loadNotifications(true) })
   backdrop-filter:blur(8px) saturate(118%);
   -webkit-backdrop-filter:blur(8px) saturate(118%);
 }
-.notification-header { display:block; margin-bottom:28px; padding:0; text-align:center; }
+.notification-header { display:block; margin-bottom:0; padding:0; text-align:center; }
 .notification-heading { width:100%; }
-.notification-title-row { position:relative; display:flex; align-items:center; justify-content:center; width:100%; min-height:24px; margin-bottom:16px; }
+.notification-title-row { position:relative; display:flex; align-items:center; justify-content:center; width:100%; min-height:24px; margin-bottom:0; }
 .notification-title { display:block; margin:0; padding:0; border-radius:0; color:var(--notice-heading); font-size:18px; font-weight:700; line-height:24px; }
-.notification-subtitle { margin:2px 0 0; color:var(--notice-heading); font-size:13px; line-height:1.7; text-align:center; opacity:.8; font-weight:400; }
+.notification-subtitle { max-width:42rem; margin:2px auto 20px; color:var(--notice-heading); font-size:13px; line-height:1.7; text-align:center; opacity:.8; font-weight:400; }
 .notification-count-title { margin:0 0 8px; color:var(--notice-count); font-size:14px; font-weight:400; line-height:20px; }
 .notification-actions { position:absolute; right:0; top:50%; transform:translateY(-50%); display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; max-width:calc(50% - 48px); }
 .unread-pill { display:inline-flex; align-items:center; min-height:28px; padding:0 10px; border-radius:999px; font-size:12px; font-weight:650; color:#fff; background:#3b82f6; }

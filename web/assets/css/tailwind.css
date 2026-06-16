@@ -253,9 +253,9 @@ html.dark .nw-action-btn--danger,
 
 .publish-datetime-menu.is-dark,
 html.dark .publish-datetime-menu {
-  --nw-date-cell-bg: rgba(255, 255, 255, 0.06);
-  --nw-time-column-bg: rgba(15, 23, 42, 0.46);
-  --nw-picker-button-bg: rgba(255, 255, 255, 0.06);
+  --nw-date-cell-bg: rgba(255, 255, 255, 0.09);
+  --nw-time-column-bg: rgba(255, 255, 255, 0.07);
+  --nw-picker-button-bg: rgba(255, 255, 255, 0.10);
   --nw-current-bg: rgba(59, 130, 246, 0.26);
   --nw-current-border: rgba(96, 165, 250, 0.74);
 }

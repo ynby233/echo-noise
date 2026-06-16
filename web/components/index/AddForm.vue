@@ -212,8 +212,8 @@
         </div>
       </div>
       <div class="publish-date-actions">
-        <button type="button" class="floating-action-btn clear-action-btn" @click="clearPublishDate">清除</button>
-        <button type="button" class="floating-action-btn cancel-action-btn" @click="usePublishNow">现在</button>
+        <button type="button" class="floating-action-btn clear-action-btn nw-action-btn nw-action-btn--label nw-action-btn--danger" @click="clearPublishDate">清除</button>
+        <button type="button" class="floating-action-btn cancel-action-btn nw-action-btn nw-action-btn--label" @click="usePublishNow">现在</button>
       </div>
     </div>
   </Teleport>

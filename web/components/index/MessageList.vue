@@ -342,8 +342,8 @@
       </div>
 
       <div class="edit-modal-footer">
-        <button type="button" class="edit-footer-button nw-action-btn nw-action-btn--label secondary" :disabled="isSaving" @click="showEditModal = false">取消</button>
-        <button type="button" class="edit-footer-button nw-action-btn nw-action-btn--label nw-action-btn--primary primary" :disabled="isSaving" @click="saveEditedMessage">
+        <button type="button" class="edit-footer-button nw-action-btn nw-action-btn--label" :disabled="isSaving" @click="showEditModal = false">取消</button>
+        <button type="button" class="edit-footer-button nw-action-btn nw-action-btn--label nw-action-btn--primary" :disabled="isSaving" @click="saveEditedMessage">
           <UIcon v-if="isSaving" name="i-mdi-loading" class="w-4 h-4 edit-spin" />
           <span>{{ isSaving ? '保存中' : '保存' }}</span>
         </button>
@@ -467,8 +467,8 @@
         </div>
       </div>
       <div class="publish-date-actions">
-        <button type="button" class="floating-action-btn clear-action-btn" @click="clearEditPublishDate">清除</button>
-        <button type="button" class="floating-action-btn cancel-action-btn" @click="useEditPublishNow">现在</button>
+        <button type="button" class="floating-action-btn clear-action-btn nw-action-btn nw-action-btn--label nw-action-btn--danger" @click="clearEditPublishDate">清除</button>
+        <button type="button" class="floating-action-btn cancel-action-btn nw-action-btn nw-action-btn--label" @click="useEditPublishNow">现在</button>
       </div>
     </div>
   </Teleport>
