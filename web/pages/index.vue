@@ -227,6 +227,7 @@
                 <MarkdownRenderer :content="(frontendConfig.aboutMarkdown || '').trim() || defaultConfig.aboutMarkdown" />
               </div>
             </UCard>
+            <div class="page-footer" v-html="(frontendConfig.pageFooterHTML || defaultConfig.pageFooterHTML)"></div>
           </div>
           <template v-else>
             <AddForm v-if="activeTab !== 'personal' || isLoggedIn" @search-result="handleSearchResult" :hide-header-tools="layoutState==='three'" :wide="layoutState==='two'" />
@@ -245,7 +246,6 @@
             @target-consumed="handleNotificationTargetConsumed"
           />
           </template>
-          <div class="page-footer" v-html="(frontendConfig.pageFooterHTML || defaultConfig.pageFooterHTML)"></div>
         </div>
       </div>
       <ClientOnly>
