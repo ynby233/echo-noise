@@ -2617,8 +2617,8 @@ html, body {
   min-height: 100dvh;
   overflow-y: auto;
   box-sizing: border-box;
-  padding-bottom: calc(32px + env(safe-area-inset-bottom, 0px));
-  scroll-padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  scroll-padding-bottom: calc(160px + env(safe-area-inset-bottom, 0px));
   z-index: 1;
   pointer-events: auto;
   cursor: default;

@@ -443,12 +443,15 @@ html.dark .publish-datetime-menu .publish-date-weekdays {
   transition: background-color .15s ease, border-color .15s ease, color .15s ease;
 }
 
+.publish-datetime-menu .publish-time-option.is-current:not(.is-selected),
 .publish-time-option.is-current:not(.is-selected) {
   border-color: var(--nw-current-border);
   background: var(--nw-current-bg);
   color: var(--nw-current-text);
 }
 .publish-time-option:hover:not(.is-selected) { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
+.publish-datetime-menu .publish-time-option.is-selected,
+.publish-datetime-menu .publish-time-option.is-current.is-selected,
 .publish-time-option.is-selected,
 .publish-time-option.is-current.is-selected {
   border-color: var(--nw-floating-selected-border);

@@ -21,7 +21,7 @@
       <div class="empty-title">登录后查看通知</div>
     </div>
 
-    <div v-else class="notification-feed-panel">
+    <div v-else class="notification-feed-panel notification-board-wrap">
       <div class="notification-count-title">通知 ({{ total }})</div>
       <div v-if="loading && !items.length" class="empty-state compact">
         <UIcon name="i-mdi-loading" class="empty-icon spin" />
@@ -612,11 +612,11 @@ defineExpose({ refresh: () => loadNotifications(true) })
   backdrop-filter:blur(8px) saturate(118%);
   -webkit-backdrop-filter:blur(8px) saturate(118%);
 }
-.notification-header { display:block; margin-bottom:8px; padding:0; text-align:center; }
+.notification-header { display:block; margin-bottom:0; padding:0; text-align:center; }
 .notification-heading { width:100%; }
 .notification-title-row { position:relative; display:flex; align-items:center; justify-content:center; width:100%; min-height:24px; margin-bottom:0; }
-.notification-title { display:block; margin:0; padding:0; border-radius:0; color:var(--notice-heading); font-size:18px; font-weight:700; line-height:24px; }
-.notification-subtitle { max-width:42rem; margin:4px auto 6px; color:var(--notice-heading); font-size:13px; line-height:20px; text-align:center; opacity:.8; font-weight:400; }
+.notification-title { display:block; margin:0 0 14px; padding:0; border-radius:0; color:var(--notice-heading); font-size:18px; font-weight:700; line-height:24px; }
+.notification-subtitle { max-width:42rem; margin:2px auto 20px; color:var(--notice-heading); font-size:13px; line-height:1.7; text-align:center; opacity:.8; font-weight:400; }
 .notification-count-title { margin:0; color:var(--notice-count); font-size:14px; font-weight:400; line-height:20px; }
 .notification-actions { position:absolute; right:0; top:50%; transform:translateY(-50%); display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; max-width:calc(50% - 48px); }
 .unread-pill { display:inline-flex; align-items:center; min-height:28px; padding:0 10px; border-radius:999px; font-size:12px; font-weight:650; color:#fff; background:#3b82f6; }
@@ -629,6 +629,7 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .icon-action:disabled,
 .text-action:disabled { opacity:.55; cursor:not-allowed; }
 .notification-feed-panel { padding:0; overflow:visible; border:0; background:transparent; border-radius:0; }
+.notification-board-wrap { max-width:48rem; margin:10px auto 8px; }
 .notification-feed { display:flex; flex-direction:column; gap:12px; }
 .notification-feed-item { position:relative; display:flex; gap:12px; padding:12px; border:1px solid var(--notice-border); border-radius:12px; background:var(--notice-card); color:var(--notice-text); box-shadow:none; transition:background-color .16s ease, border-color .16s ease, transform .16s ease; }
 .notification-feed-item:hover { background:var(--notice-card-hover); }
@@ -673,12 +674,12 @@ defineExpose({ refresh: () => loadNotifications(true) })
 @keyframes notification-spin { to { transform:rotate(360deg); } }
 @media (max-width: 720px) {
   .notification-center { padding:20px 14px 16px; }
-  .notification-header { text-align:center; margin-bottom:28px; padding:0; }
-  .notification-title-row { display:flex; flex-direction:column; justify-content:center; gap:10px; min-height:24px; margin-bottom:16px; }
+  .notification-header { text-align:center; margin-bottom:0; padding:0; }
+  .notification-title-row { display:flex; flex-direction:column; justify-content:center; gap:10px; min-height:24px; margin-bottom:0; }
   .notification-title { line-height:24px; }
-  .notification-subtitle { margin:2px 0 0; }
+  .notification-subtitle { margin:2px auto 20px; }
   .notification-actions { position:static; transform:none; justify-content:center; width:100%; max-width:100%; }
-  .notification-feed-panel { margin:0 -12px; padding:0 12px; }
+  .notification-feed-panel { margin:10px -12px 8px; padding:0 12px; }
   .notification-feed-item { gap:10px; padding:14px 12px; }
   .notification-feed-item.unread::before { left:7px; top:24px; }
   .notification-avatar { width:40px; height:40px; flex-basis:40px; }

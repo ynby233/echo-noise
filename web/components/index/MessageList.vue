@@ -2798,6 +2798,23 @@ onMounted(() => {
   --nw-floating-shadow: 0 18px 38px rgba(0, 0, 0, 0.42);
 }
 
+.publish-datetime-menu {
+  --nw-date-cell-bg: rgba(15, 23, 42, 0.05);
+  --nw-time-column-bg: rgba(15, 23, 42, 0.06);
+  --nw-current-bg: rgba(59, 130, 246, 0.22);
+  --nw-current-border: rgba(96, 165, 250, 0.68);
+  --nw-current-text: var(--nw-floating-text);
+  --nw-picker-button-bg: rgba(15, 23, 42, 0.04);
+}
+
+.publish-datetime-menu.is-dark {
+  --nw-date-cell-bg: rgba(255, 255, 255, 0.09);
+  --nw-time-column-bg: rgba(255, 255, 255, 0.07);
+  --nw-picker-button-bg: rgba(255, 255, 255, 0.10);
+  --nw-current-bg: rgba(59, 130, 246, 0.26);
+  --nw-current-border: rgba(96, 165, 250, 0.74);
+}
+
 .visibility-floating-menu { display: grid; gap: 4px; padding: 8px; }
 
 .floating-control-option {
@@ -3687,7 +3704,7 @@ onMounted(() => {
   justify-content: center;
   gap: 16px;
   width: 100%;
-  margin: 16px 0;
+  margin: 16px 0 72px;
   padding: 10px 14px;
   border: 1px solid var(--pager-shell-border);
   border-radius: 999px;

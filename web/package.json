@@ -19,6 +19,7 @@
     "test:auth-recovery": "node scripts/auth-recovery-sync.test.mjs",
     "test:message-visibility": "node scripts/message-visibility.test.mjs",
     "test:notification-jump": "node scripts/notification-jump-target.test.mjs",
+    "test:frontend-layout": "node scripts/frontend-layout-edge-cases.test.mjs",
     "test:access-log": "node scripts/access-log.test.mjs",
     "test:public-music-player": "node scripts/public-music-player.test.mjs",
     "postinstall": "nuxt prepare"
