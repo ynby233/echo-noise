@@ -18,13 +18,13 @@
       <div v-if="activeTab==='images'">
       <div v-if="images.length===0" class="text-sm" :class="theme?.mutedText">暂无图片附件</div>
       <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div v-for="item in imagesDisplay" :key="item.name" class="rounded-lg border p-3" :class="theme?.border">
-            <div class="flex items-center justify-between">
-              <div>
-                <div class="text-sm" :class="theme?.text">{{ item.name }}</div>
-                <div class="text-xs" :class="theme?.mutedText">{{ formatSize(item.size) }} · {{ formatDate(item.modified_at) }}</div>
+          <div v-for="item in imagesDisplay" :key="item.name" class="attachment-item-card rounded-lg border p-3" :class="theme?.border">
+            <div class="attachment-item-head">
+              <div class="attachment-file-meta">
+                <div class="attachment-file-name text-sm" :class="theme?.text">{{ item.name }}</div>
+                <div class="attachment-file-submeta text-xs" :class="theme?.mutedText">{{ formatSize(item.size) }} · {{ formatDate(item.modified_at) }}</div>
               </div>
-              <div class="flex items-center gap-2">
+              <div class="attachment-actions">
                 <UButton size="xs" icon="i-heroicons-arrow-down-tray" color="gray" variant="soft" @click="downloadAttachment(item)">下载</UButton>
                 <UButton size="xs" icon="i-heroicons-trash" color="red" variant="soft" @click="openDelete('image', item)">删除</UButton>
               </div>
@@ -57,13 +57,13 @@
       <div v-else>
         <div v-if="videos.length===0" class="text-sm" :class="theme?.mutedText">暂无视频附件</div>
         <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div v-for="item in videosDisplay" :key="item.name" class="rounded-lg border p-3" :class="theme?.border">
-            <div class="flex items-center justify-between">
-              <div>
-                <div class="text-sm" :class="theme?.text">{{ item.name }}</div>
-                <div class="text-xs" :class="theme?.mutedText">{{ formatSize(item.size) }} · {{ formatDate(item.modified_at) }}</div>
+          <div v-for="item in videosDisplay" :key="item.name" class="attachment-item-card rounded-lg border p-3" :class="theme?.border">
+            <div class="attachment-item-head">
+              <div class="attachment-file-meta">
+                <div class="attachment-file-name text-sm" :class="theme?.text">{{ item.name }}</div>
+                <div class="attachment-file-submeta text-xs" :class="theme?.mutedText">{{ formatSize(item.size) }} · {{ formatDate(item.modified_at) }}</div>
               </div>
-              <div class="flex items-center gap-2">
+              <div class="attachment-actions">
                 <UButton size="xs" icon="i-heroicons-arrow-down-tray" color="gray" variant="soft" @click="downloadAttachment(item)">下载</UButton>
                 <UButton size="xs" icon="i-heroicons-trash" color="red" variant="soft" @click="openDelete('video', item)">删除</UButton>
               </div>
@@ -236,4 +236,50 @@ const theme = computed(() => props.theme || {})
 </script>
 
 <style scoped>
+.attachment-item-card {
+  min-width: 0;
+}
+
+.attachment-item-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.attachment-file-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.attachment-file-name {
+  line-height: 1.45;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.attachment-file-submeta {
+  margin-top: 2px;
+}
+
+.attachment-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 520px) {
+  .attachment-item-head {
+    flex-direction: column;
+  }
+
+  .attachment-actions {
+    align-self: flex-end;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}
 </style>

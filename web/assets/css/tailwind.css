@@ -443,9 +443,18 @@ html.dark .publish-datetime-menu .publish-date-weekdays {
   transition: background-color .15s ease, border-color .15s ease, color .15s ease;
 }
 
-.publish-time-option.is-current { border-color: var(--nw-current-border); background: var(--nw-current-bg); color: var(--nw-current-text); }
+.publish-time-option.is-current:not(.is-selected) {
+  border-color: var(--nw-current-border);
+  background: var(--nw-current-bg);
+  color: var(--nw-current-text);
+}
 .publish-time-option:hover:not(.is-selected) { border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
-.publish-time-option.is-selected { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
+.publish-time-option.is-selected,
+.publish-time-option.is-current.is-selected {
+  border-color: var(--nw-floating-selected-border);
+  background: var(--nw-floating-selected-bg);
+  color: var(--nw-floating-text);
+}
 
 .publish-date-actions {
   display: flex;

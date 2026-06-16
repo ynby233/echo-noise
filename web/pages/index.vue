@@ -2616,6 +2616,9 @@ html, body {
   height: 100dvh;
   min-height: 100dvh;
   overflow-y: auto;
+  box-sizing: border-box;
+  padding-bottom: calc(32px + env(safe-area-inset-bottom, 0px));
+  scroll-padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
   z-index: 1;
   pointer-events: auto;
   cursor: default;
@@ -2841,7 +2844,8 @@ html:not(.dark) .hero-tab.active {
 }
 @media screen and (max-width: 768px) {
   .content-wrapper {
-   padding: 0.5rem; 
+   padding: 0.5rem;
+   padding-bottom: calc(0.5rem + 32px + env(safe-area-inset-bottom, 0px));
   }
   /* 优化移动端滚动性能 */
   .message-list-container {
