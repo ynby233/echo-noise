@@ -141,7 +141,8 @@ assert(
     messageList.includes("['search-results-panel', { 'is-dark': isContentDark }]") &&
     messageList.includes("props.pageReady && hasActiveFilters ? 'search-results-list' : 'my-4'") &&
     messageList.includes("class=\"w-full h-auto overflow-hidden flex flex-col justify-between\"") &&
-    messageList.includes("['content-container', innerContainerClass, listThemeClass, { 'search-result-note-card': props.pageReady && hasActiveFilters }]") &&
+    messageList.includes("['content-container', innerContainerClass, listThemeClass]") &&
+    !messageList.includes('search-result-note-card') &&
     !messageList.includes('search-result-note-frame') &&
     !messageList.includes('search-result-note-frame--bounded') &&
     !messageList.includes("props.pageReady && hasActiveFilters ? innerContainerClass : ''") &&
@@ -155,12 +156,12 @@ assert(
     !messageList.includes('max-width: 48rem;\n  margin: 20px auto 16px;') &&
     messageList.includes('font-weight: 400;') &&
     messageList.includes('line-height: 20px;') &&
-    messageList.includes('.content-container.search-result-note-card {') &&
-    messageList.includes('border: 1px solid rgba(15, 23, 42, 0.10);') &&
-    messageList.includes('box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);') &&
-    messageList.includes('.search-results-panel.is-dark .content-container.search-result-note-card {') &&
-    messageList.includes('border-color: rgba(255, 255, 255, 0.18);') &&
-    messageList.includes('box-shadow: 0 16px 32px rgba(2, 6, 23, 0.52);') &&
+    !messageList.includes('.content-container.search-result-note-card') &&
+    !messageList.includes('border: 1px solid rgba(15, 23, 42, 0.10);') &&
+    !messageList.includes('box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);') &&
+    !messageList.includes('.search-results-panel.is-dark .content-container.search-result-note-card') &&
+    !messageList.includes('border-color: rgba(255, 255, 255, 0.18);') &&
+    !messageList.includes('box-shadow: 0 16px 32px rgba(2, 6, 23, 0.52);') &&
     !messageList.includes('background: rgba(255, 255, 255, 0.72);') &&
     !messageList.includes('class="date-filter-bar"') &&
     !messageList.includes('筛选结果：'),
