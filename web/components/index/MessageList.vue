@@ -45,10 +45,10 @@
           <!-- 消息列表 -->
           <div v-if="!props.pageReady || !hasActiveFilters || displayMessages.length" :class="props.pageReady && hasActiveFilters ? 'search-results-list' : 'my-4'">
         <!-- 消息列表内容 -->
-        <div v-for="(msg, idx) in displayMessages" :key="msg.id" :class="['w-full h-auto overflow-hidden flex flex-col justify-between', { 'search-result-note-frame': props.pageReady && hasActiveFilters, 'search-result-note-frame--bounded': props.pageReady && hasActiveFilters && !props.wide }]">
+        <div v-for="(msg, idx) in displayMessages" :key="msg.id" class="w-full h-auto overflow-hidden flex flex-col justify-between">
 
           <div class="p-0">
-            <div :class="['content-container', innerContainerClass, listThemeClass]" :data-msg-id="msg.id">
+            <div :class="['content-container', innerContainerClass, listThemeClass, { 'search-result-note-card': props.pageReady && hasActiveFilters }]" :data-msg-id="msg.id">
               <div class="flex items-center gap-2 mb-1 author-row">
                 <img :src="authorAvatar(msg)" alt="avatar" class="avatar-img w-9 h-9 rounded-full object-cover" @error="authorAvatarOnError($event, msg.username || '匿名')" @mouseenter="showAuthorCard($event, msg)" @mouseleave="hideAuthorCard" @click="toggleAuthorCard($event, msg)" />
                 <div v-if="openAuthorId === msg.id" class="noise-author-card bg-white text-black dark:bg-[var(--home-surface-dark-elevated)] dark:text-white" :style="openAuthorStyle">
@@ -2707,30 +2707,13 @@ onMounted(() => {
   margin-top: 0;
 }
 
-.search-result-note-frame {
-  box-sizing: border-box;
-  width: 100%;
-  margin-right: auto;
-  margin-left: auto;
-  padding: 12px;
+.content-container.search-result-note-card {
   border: 1px solid rgba(15, 23, 42, 0.10);
-  border-radius: 12px;
-  background: #ffffff;
-  color: inherit;
   box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);
 }
 
-.search-result-note-frame--bounded {
-  max-width: calc(56rem + 26px);
-}
-
-.search-result-note-frame > .p-0 {
-  width: 100%;
-}
-
-.search-results-panel.is-dark .search-result-note-frame {
+.search-results-panel.is-dark .content-container.search-result-note-card {
   border-color: rgba(255, 255, 255, 0.18);
-  background: var(--home-surface-dark-elevated);
   box-shadow: 0 16px 32px rgba(2, 6, 23, 0.52);
 }
 
@@ -2760,10 +2743,6 @@ onMounted(() => {
 @media screen and (max-width: 640px) {
   .search-results-panel {
     padding: 20px 12px 12px;
-  }
-
-  .search-result-note-frame {
-    padding: 8px;
   }
 
   .search-results-head {
