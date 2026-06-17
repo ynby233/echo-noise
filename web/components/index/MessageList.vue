@@ -48,7 +48,7 @@
         <div v-for="(msg, idx) in displayMessages" :key="msg.id" class="w-full h-auto overflow-hidden flex flex-col justify-between">
 
           <div class="p-0">
-            <div :class="['content-container', innerContainerClass, listThemeClass]" :data-msg-id="msg.id">
+            <div :class="['content-container', innerContainerClass, listThemeClass, { 'search-result-note-card': props.pageReady && hasActiveFilters }]" :data-msg-id="msg.id">
               <div class="flex items-center gap-2 mb-1 author-row">
                 <img :src="authorAvatar(msg)" alt="avatar" class="avatar-img w-9 h-9 rounded-full object-cover" @error="authorAvatarOnError($event, msg.username || '匿名')" @mouseenter="showAuthorCard($event, msg)" @mouseleave="hideAuthorCard" @click="toggleAuthorCard($event, msg)" />
                 <div v-if="openAuthorId === msg.id" class="noise-author-card bg-white text-black dark:bg-[var(--home-surface-dark-elevated)] dark:text-white" :style="openAuthorStyle">
@@ -2705,6 +2705,16 @@ onMounted(() => {
   flex-direction: column;
   gap: 12px;
   margin-top: 0;
+}
+
+.content-container.search-result-note-card {
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);
+}
+
+.search-results-panel.is-dark .content-container.search-result-note-card {
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 16px 32px rgba(2, 6, 23, 0.52);
 }
 
 .search-results-empty {
