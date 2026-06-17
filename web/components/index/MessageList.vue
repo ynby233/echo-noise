@@ -2721,6 +2721,16 @@ onMounted(() => {
   margin-top: 0;
 }
 
+.search-results-list > .w-full > .p-0 > .content-container {
+  border: 1px solid rgba(15, 23, 42, .10);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, .12);
+}
+
+.search-results-panel.is-dark .search-results-list > .w-full > .p-0 > .content-container {
+  background: rgba(15, 23, 42, .52) !important;
+  border-color: rgba(255, 255, 255, .12);
+  box-shadow: 0 16px 32px rgba(2, 6, 23, .52);
+}
 
 .search-results-empty {
   display: flex;

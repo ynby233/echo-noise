@@ -3214,7 +3214,7 @@ html.dark .right-col .sidebar-card:hover {
   box-shadow: none !important;
 }
 html.dark .search-card {
-  background: linear-gradient(180deg, rgba(30, 41, 59, 0.44) 0%, rgba(15, 23, 42, 0.78) 100%);
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.82) 100%);
   border: 1px solid var(--home-border-dark);
   box-shadow: 0 14px 28px rgba(2, 6, 23, 0.45);
   backdrop-filter: blur(8px) saturate(118%);

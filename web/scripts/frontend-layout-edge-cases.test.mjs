@@ -17,6 +17,7 @@ const searchMode = read('components/index/Searchmode.vue')
 const authLogin = read('pages/auth/login.vue')
 const authRegister = read('pages/auth/register.vue')
 const homePage = read('pages/index.vue')
+const builtinComments = read('components/comments/BuiltinComments.vue')
 const floatingCss = read('assets/css/tailwind.css')
 
 assert(
@@ -164,8 +165,15 @@ assert(
     messageList.includes('font-weight: 650;') &&
     messageList.includes('.search-results-panel.is-dark .search-results-back {') &&
     messageList.includes('--nw-action-bg: rgba(51, 65, 85, .96);') &&
-    !messageList.includes('.search-results-panel .content-container {') &&
-    !messageList.includes('.search-results-panel.is-dark .content-container {') &&
+    messageList.includes('.search-results-list > .w-full > .p-0 > .content-container {') &&
+    messageList.includes('.search-results-panel.is-dark .search-results-list > .w-full > .p-0 > .content-container {') &&
+    messageList.includes('background: rgba(15, 23, 42, .52) !important;') &&
+    messageList.includes('box-shadow: 0 16px 32px rgba(2, 6, 23, .52);') &&
+    homePage.includes('background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.82) 100%);') &&
+    builtinComments.includes('bg-[rgba(15,23,42,0.52)]') &&
+    builtinComments.includes('shadow-[0_16px_32px_rgba(2,6,23,0.52)]') &&
+    !messageList.includes('.search-results-panel > .content-container {') &&
+    !messageList.includes('.search-result-note-card') &&
     !messageList.includes('.search-result-note-frame--bounded {') &&
     !messageList.includes('max-width: calc(56rem + 26px);') &&
     !messageList.includes('.search-result-note-frame .content-container') &&
