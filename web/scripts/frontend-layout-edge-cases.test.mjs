@@ -135,14 +135,23 @@ assert(
     messageList.includes('v-if="props.pageReady && hasActiveFilters && displayMessages.length" class="search-results-count"') &&
     messageList.includes('v-if="props.pageReady && hasActiveFilters && !displayMessages.length" class="search-results-empty"') &&
     messageList.includes('class="search-results-empty-icon"') &&
+    messageList.includes("['search-results-panel', { 'is-dark': isContentDark }]") &&
+    messageList.includes("['search-results-list', innerContainerClass]") &&
+    messageList.includes("'search-result-note-frame': props.pageReady && hasActiveFilters") &&
     messageList.includes("['content-container', innerContainerClass, listThemeClass]") &&
-    messageList.includes('.search-results-panel {') &&
-    messageList.includes('background: var(--home-surface-light);') &&
-    messageList.includes('.search-results-panel.is-dark {') &&
-    messageList.includes('background: var(--home-surface-dark);') &&
+    messageList.includes('max-width: 48rem;') &&
+    messageList.includes('margin: 20px auto 16px;') &&
+    messageList.includes('padding: 24px 8px 8px;') &&
+    messageList.includes('font-weight: 400;') &&
+    messageList.includes('line-height: 20px;') &&
+    messageList.includes('.search-result-note-frame {') &&
+    messageList.includes('background: rgba(255, 255, 255, 0.72);') &&
+    messageList.includes('box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);') &&
+    messageList.includes('.search-results-panel.is-dark .search-result-note-frame {') &&
+    messageList.includes('background: rgba(15, 23, 42, 0.52);') &&
     !messageList.includes('class="date-filter-bar"') &&
     !messageList.includes('筛选结果：'),
-  'filtered search results must use a fixed guestbook-aligned panel, shared action button, existing note cards, and empty state without a 0-count heading'
+  'filtered search results must keep guestbook/notification-aligned panel width, spacing, count typography, note width, framed result cards, and empty state without a 0-count heading'
 )
 
 assert(
