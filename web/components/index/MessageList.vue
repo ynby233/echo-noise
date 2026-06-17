@@ -2681,7 +2681,7 @@ onMounted(() => {
 .search-results-back {
   position: absolute;
   top: 0;
-  right: 0;
+  right: 17px;
   min-width: max-content;
   height: 28px;
   min-height: 28px;

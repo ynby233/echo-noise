@@ -157,6 +157,7 @@ assert(
     messageList.includes('padding: 24px 7px 16px;') &&
     messageList.includes('padding: 20px 3px 12px;') &&
     messageList.includes('background: linear-gradient(180deg, rgba(30,41,59,.48) 0%, rgba(15,23,42,.82) 100%);') &&
+    messageList.includes('right: 17px;') &&
     messageList.includes('height: 28px;') &&
     messageList.includes('padding: 0 8px;') &&
     messageList.includes('font-size: 12px;') &&
