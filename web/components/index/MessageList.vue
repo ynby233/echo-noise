@@ -1020,14 +1020,20 @@ const loadTargetMessagePage = async (id: number) => {
     await Promise.race([
       Promise.all(media.map((item) => new Promise<void>((resolve) => {
         if (item instanceof HTMLImageElement) {
-          if (item.complete && item.naturalWidth > 0) { resolve(); return }
-          const done = () => resolve()
-          item.addEventListener('load', done, { once: true })
-          item.addEventListener('error', done, { once: true })
+          const decodeImage = async () => {
+            try {
+              if (typeof item.decode === 'function') await item.decode()
+            } catch {}
+            resolve()
+          }
+          if (item.complete && item.naturalWidth > 0) { decodeImage(); return }
+          item.addEventListener('load', decodeImage, { once: true })
+          item.addEventListener('error', () => resolve(), { once: true })
           return
         }
-        if (item.readyState >= 1) { resolve(); return }
+        if (item.readyState >= 2) { resolve(); return }
         const done = () => resolve()
+        item.addEventListener('loadeddata', done, { once: true })
         item.addEventListener('loadedmetadata', done, { once: true })
         item.addEventListener('error', done, { once: true })
       }))),

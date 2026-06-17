@@ -10,7 +10,13 @@ const comments = await readFile(join(root, 'components/comments/BuiltinComments.
 
 assert.match(
   notificationCenter,
-  /const\s+targetCommentId\s*=\s*\(item:\s*UserNotification\)\s*=>\s*\{[\s\S]*?return\s+Number\(item\.comment_id\s*\|\|\s*item\.comment\?\.id\s*\|\|\s*0\)/,
+  /const\s+parseTargetUrlNumber\s*=\s*\(item:\s*UserNotification,\s*key:\s*'message_id'\s*\|\s*'comment_id'\)[\s\S]*?new URL\(raw[\s\S]*?url\.searchParams\.get\(key\)/,
+  'notification jumps should parse target_url as a fallback source for message/comment ids'
+)
+
+assert.match(
+  notificationCenter,
+  /const\s+targetCommentId\s*=\s*\(item:\s*UserNotification\)\s*=>\s*\{[\s\S]*?return\s+Number\(item\.comment_id\s*\|\|\s*item\.comment\?\.id\s*\|\|\s*parseTargetUrlNumber\(item,\s*'comment_id'\)\s*\|\|\s*0\)/,
   'notification jumps should target the concrete comment/reply id instead of the parent thread id'
 )
 
@@ -28,8 +34,8 @@ assert.match(
 
 assert.match(
   messageList,
-  /const\s+waitForNotificationMedia\s*=\s*async\s*\(messageId:\s*number[\s\S]*?querySelectorAll\('img, video'\)[\s\S]*?loadedmetadata/,
-  'notification jumps should wait for images and video metadata inside the target message before final alignment'
+  /const\s+waitForNotificationMedia\s*=\s*async\s*\(messageId:\s*number[\s\S]*?querySelectorAll\('img, video'\)[\s\S]*?item\.decode\(\)[\s\S]*?loadeddata/,
+  'notification jumps should wait for image decode and video data inside the target message before final alignment'
 )
 
 assert.match(

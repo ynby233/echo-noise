@@ -285,10 +285,24 @@ const targetImage = (item: UserNotification) => {
   return raw ? resolveMediaURL(baseApi.value, raw) : ''
 }
 
-const targetMessageId = (item: UserNotification) => Number(item.message_id || item.comment?.message_id || item.parent_comment?.message_id || item.message?.id || 0)
+const parseTargetUrlNumber = (item: UserNotification, key: 'message_id' | 'comment_id') => {
+  const raw = String(item.target_url || '').trim()
+  if (!raw) return 0
+  try {
+    const url = new URL(raw, typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
+    const n = Number(url.searchParams.get(key) || 0)
+    return Number.isFinite(n) && n > 0 ? n : 0
+  } catch {
+    const match = raw.match(new RegExp(`[?&]${key}=([0-9]+)`))
+    const n = Number(match?.[1] || 0)
+    return Number.isFinite(n) && n > 0 ? n : 0
+  }
+}
+
+const targetMessageId = (item: UserNotification) => Number(item.message_id || item.comment?.message_id || item.parent_comment?.message_id || item.message?.id || parseTargetUrlNumber(item, 'message_id') || 0)
 const targetCommentId = (item: UserNotification) => {
   if (item.type === 'like') return 0
-  return Number(item.comment_id || item.comment?.id || 0)
+  return Number(item.comment_id || item.comment?.id || parseTargetUrlNumber(item, 'comment_id') || 0)
 }
 const replyCommentId = (item: UserNotification) => {
   if (item.type === 'reply') {
