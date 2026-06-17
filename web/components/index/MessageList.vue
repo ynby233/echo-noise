@@ -1002,9 +1002,68 @@ const loadTargetMessagePage = async (id: number) => {
     wrapper.scrollTo({ top: Math.max(0, targetTop), behavior })
   }
 
-  const stabilizeNotificationTargetScroll = (el: HTMLElement) => {
-    scrollElementToAppFocus(el)
-    window.setTimeout(() => scrollElementToAppFocus(el, 'smooth'), 260)
+  const waitForNotificationFrame = () => new Promise<void>((resolve) => {
+    if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+      resolve()
+      return
+    }
+    window.requestAnimationFrame(() => resolve())
+  })
+
+  const waitForNotificationDelay = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms))
+
+  const waitForNotificationMedia = async (messageId: number, timeout = 2400) => {
+    const container = document.querySelector(`.content-container[data-msg-id="${messageId}"]`) as HTMLElement | null
+    if (!container) return
+    const media = Array.from(container.querySelectorAll('img, video')) as Array<HTMLImageElement | HTMLVideoElement>
+    if (!media.length) return
+    await Promise.race([
+      Promise.all(media.map((item) => new Promise<void>((resolve) => {
+        if (item instanceof HTMLImageElement) {
+          if (item.complete && item.naturalWidth > 0) { resolve(); return }
+          const done = () => resolve()
+          item.addEventListener('load', done, { once: true })
+          item.addEventListener('error', done, { once: true })
+          return
+        }
+        if (item.readyState >= 1) { resolve(); return }
+        const done = () => resolve()
+        item.addEventListener('loadedmetadata', done, { once: true })
+        item.addEventListener('error', done, { once: true })
+      }))),
+      waitForNotificationDelay(timeout)
+    ])
+  }
+
+  const stabilizeNotificationTargetScroll = async (el: HTMLElement, messageId: number, behavior: ScrollBehavior = 'smooth') => {
+    const correctUntilStable = async (duration: number, finalBehavior: ScrollBehavior = 'smooth') => {
+      let lastTop = Number.NaN
+      let lastHeight = Number.NaN
+      let stableFrames = 0
+      const startedAt = Date.now()
+      while (Date.now() - startedAt < duration) {
+        await waitForNotificationFrame()
+        if (!document.contains(el)) return false
+        const rect = el.getBoundingClientRect()
+        const topDelta = Math.abs(rect.top - lastTop)
+        const heightDelta = Math.abs(rect.height - lastHeight)
+        if (topDelta < 1 && heightDelta < 1) stableFrames += 1
+        else stableFrames = 0
+        lastTop = rect.top
+        lastHeight = rect.height
+        scrollElementToAppFocus(el, stableFrames >= 2 ? finalBehavior : 'instant')
+        if (stableFrames >= 3) break
+        await waitForNotificationDelay(120)
+      }
+      return document.contains(el)
+    }
+
+    scrollElementToAppFocus(el, behavior)
+    if (!await correctUntilStable(1800)) return
+    await waitForNotificationMedia(messageId)
+    if (!document.contains(el)) return
+    scrollElementToAppFocus(el, 'instant')
+    await correctUntilStable(1600)
   }
 
   let notificationTargetRetryTimer: ReturnType<typeof window.setTimeout> | null = null
@@ -1046,14 +1105,15 @@ const loadTargetMessagePage = async (id: number) => {
     await nextTick()
     const targetElement = document.querySelector(`.content-container[data-msg-id="${messageId}"]`) as HTMLElement | null
     if (targetElement) {
-      stabilizeNotificationTargetScroll(targetElement)
       targetElement.classList.add('highlight-message')
+      scrollElementToAppFocus(targetElement, 'instant')
       window.setTimeout(() => targetElement.classList.remove('highlight-message'), 2000)
     }
 
     const commentId = Number(props.targetCommentId || 0)
     const targetKey = `${messageId}:${commentId || 0}`
     if (!commentId) {
+      if (targetElement) await stabilizeNotificationTargetScroll(targetElement, messageId)
       resetNotificationTargetRetry()
       emit('target-consumed')
       return
@@ -1064,7 +1124,7 @@ const loadTargetMessagePage = async (id: number) => {
       await nextTick()
       const commentEl = document.querySelector(`.content-container[data-msg-id="${messageId}"] [data-comment-id="${commentId}"]`) as HTMLElement | null
       if (commentEl) {
-        stabilizeNotificationTargetScroll(commentEl)
+        await stabilizeNotificationTargetScroll(commentEl, messageId)
         commentEl.classList.add('notification-comment-highlight')
         window.setTimeout(() => commentEl.classList.remove('notification-comment-highlight'), 2200)
       }
@@ -1075,7 +1135,7 @@ const loadTargetMessagePage = async (id: number) => {
     for (let i = 0; i < 12; i += 1) {
       const commentEl = document.querySelector(`.content-container[data-msg-id="${messageId}"] [data-comment-id="${commentId}"]`) as HTMLElement | null
       if (commentEl) {
-        stabilizeNotificationTargetScroll(commentEl)
+        await stabilizeNotificationTargetScroll(commentEl, messageId)
         commentEl.classList.add('notification-comment-highlight')
         window.setTimeout(() => commentEl.classList.remove('notification-comment-highlight'), 2200)
         resetNotificationTargetRetry()

@@ -27,6 +27,24 @@ assert.match(
 )
 
 assert.match(
+  messageList,
+  /const\s+waitForNotificationMedia\s*=\s*async\s*\(messageId:\s*number[\s\S]*?querySelectorAll\('img, video'\)[\s\S]*?loadedmetadata/,
+  'notification jumps should wait for images and video metadata inside the target message before final alignment'
+)
+
+assert.match(
+  messageList,
+  /await\s+stabilizeNotificationTargetScroll\(commentEl,\s*messageId\)[\s\S]*?commentEl\.classList\.add\('notification-comment-highlight'\)/,
+  'comment and reply notifications should perform the final stabilized scroll on the concrete target element'
+)
+
+assert.match(
+  messageList,
+  /if\s*\(!commentId\)\s*\{[\s\S]*?await\s+stabilizeNotificationTargetScroll\(targetElement,\s*messageId\)/,
+  'message-only notifications should also stabilize after target attachments load'
+)
+
+assert.match(
   comments,
   /const\s+revealComment\s*=\s*async\s*\(commentId:\s*number\)\s*=>\s*\{[\s\S]*?visibleCount\.value\s*=\s*rootIndex\s*\+\s*1[\s\S]*?visibleChildrenCount\.value\[rootId\]\s*=\s*childIndex\s*\+\s*1/,
   'comment focusing should reveal hidden root comments and folded child replies before highlighting'
