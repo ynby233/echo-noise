@@ -76,27 +76,43 @@ assert(
 )
 
 assert(
-  searchMode.includes("class=\"search-card nw-modal-card search-modal-card\"") &&
+  searchMode.includes('class="nw-modal-card search-modal-card"') &&
     searchMode.includes("background: 'bg-transparent dark:bg-transparent'") &&
     searchMode.includes('color="orange"') &&
     searchMode.includes('class="search-input w-full"') &&
     searchMode.includes('class="search-modal-button nw-action-btn nw-action-btn--label"') &&
-    searchMode.includes('class="search-modal-button nw-action-btn nw-action-btn--label nw-action-btn--accent"') &&
+    !searchMode.includes('nw-action-btn--accent') &&
     searchMode.includes('.search-input :deep(input:focus)') &&
     searchMode.includes('rgba(249, 115, 22, .92)') &&
     !searchMode.includes('<UButton variant="ghost" color="gray" @click="closeModal">取消</UButton>') &&
     !searchMode.includes('<UButton color="orange" @click="handleSearch">搜索</UButton>'),
-  'site search modal must use orange input focus and shared action-button templates for cancel/search'
+  'site search modal must use orange input focus and shared general action-button templates for cancel/search'
 )
 
 assert(
   floatingCss.includes('.nw-modal-card {') &&
-    floatingCss.includes('.nw-action-btn--accent {') &&
-    homePage.includes('class="search-card nw-modal-card"') &&
+    floatingCss.includes('--nw-modal-bg: #111827;') &&
+    floatingCss.includes('.nw-modal-card :where(input:focus, input:focus-visible, textarea:focus, textarea:focus-visible)') &&
+    !floatingCss.includes('.nw-action-btn--accent {') &&
+    !floatingCss.includes('--nw-modal-bg: var(--home-surface-dark-elevated') &&
+    homePage.includes('class="nw-modal-card"') &&
+    !homePage.includes('class="search-card nw-modal-card"') &&
     authLogin.includes('class="nw-modal-card is-dark auth-page-card') &&
     authRegister.includes('class="nw-modal-card is-dark auth-page-card') &&
     authLogin.includes("background: 'bg-transparent dark:bg-transparent'"),
-  'search, login, and register dialog cards must share the single visible modal shell without default modal corner artifacts'
+  'search, login, and register dialog cards must share the single solid modal shell without default modal corner artifacts'
+)
+
+assert(
+  homePage.includes('color="orange" placeholder="用户名"') &&
+    homePage.includes(':color="remaining>0 ? \'orange\' : \'red\'"') &&
+    homePage.includes('color="orange" @click="showForgot = false"') &&
+    authLogin.includes('color="orange" placeholder="请输入用户名或已绑定邮箱"') &&
+    authRegister.includes('color="orange" placeholder="请输入验证码"') &&
+    !homePage.includes("color: 'green'") &&
+    !authLogin.includes("color: 'green'") &&
+    !authRegister.includes("color: 'green'"),
+  'auth and forgot-password dialogs must use orange controls instead of the green primary palette'
 )
 
 assert(

@@ -2,31 +2,31 @@
   <div class="fixed inset-0 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-800">
     <div class="absolute inset-0 backdrop-blur-xl"></div>
     <div class="relative z-10 flex min-h-screen items-center justify-center p-4">
-      <UCard class="nw-modal-card is-dark auth-page-card w-full max-w-md bg-slate-900/70 text-white border border-slate-700/40 shadow-2xl" :ui="{ rounded: 'rounded-none', ring: 'ring-0', shadow: 'shadow-none' }">
+      <UCard class="nw-modal-card is-dark auth-page-card w-full max-w-md text-white border border-slate-700/40 shadow-2xl" :ui="{ rounded: 'rounded-none', ring: 'ring-0', shadow: 'shadow-none' }">
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-2">
-            <UIcon name="i-heroicons-user-plus" class="w-6 h-6 text-indigo-300" />
+            <UIcon name="i-heroicons-user-plus" class="w-6 h-6 text-orange-300" />
             <h1 class="text-lg font-semibold">注册</h1>
           </div>
-          <NuxtLink to="/auth/login" class="text-sm text-indigo-300 hover:text-indigo-200">去登录</NuxtLink>
+          <NuxtLink to="/auth/login" class="text-sm text-orange-300 hover:text-orange-200">去登录</NuxtLink>
         </div>
         <UForm :state="form" @submit.prevent="onSubmit">
           <UFormGroup label="用户名" class="mb-3">
-            <UInput v-model="form.username" placeholder="请输入用户名" />
+            <UInput v-model="form.username" color="orange" placeholder="请输入用户名" />
             <p class="mt-1 text-xs text-slate-400">用户名 2-20 字符，支持大小写英文字母、中文、日文、数字和下划线。</p>
           </UFormGroup>
           <UFormGroup label="密码" class="mb-3">
-            <UInput v-model="form.password" type="password" placeholder="请输入密码" />
+            <UInput v-model="form.password" color="orange" type="password" placeholder="请输入密码" />
           </UFormGroup>
           <UFormGroup label="验证码" class="mb-2">
             <div class="flex items-center gap-2">
-              <UInput v-model="form.captcha" placeholder="请输入验证码" />
+              <UInput v-model="form.captcha" color="orange" placeholder="请输入验证码" />
               <img :src="captchaSrc" @click="refreshCaptcha" class="h-10 w-24 rounded border border-slate-700/40 cursor-pointer" alt="captcha" />
-              <UBadge :color="remaining>0 ? 'primary' : 'red'" variant="soft">{{ remaining>0 ? `有效 ${remaining}s` : '已过期' }}</UBadge>
+              <UBadge :color="remaining>0 ? 'orange' : 'red'" variant="soft">{{ remaining>0 ? `有效 ${remaining}s` : '已过期' }}</UBadge>
             </div>
           </UFormGroup>
           <div class="flex justify-end">
-            <UButton :loading="submitting" :disabled="remaining<=0 || submitting" type="submit" color="primary">{{ remaining>0 ? '注册' : '验证码已过期' }}</UButton>
+            <UButton :loading="submitting" :disabled="remaining<=0 || submitting" type="submit" color="orange">{{ remaining>0 ? '注册' : '验证码已过期' }}</UButton>
           </div>
         </UForm>
         <div class="mt-2" v-if="githubEnabled">
@@ -100,7 +100,7 @@ const onSubmit = async () => {
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok || data.code !== 1) throw new Error(data?.msg || '注册失败')
-    toast.add({ title: '申请已提交', description: '请等待管理员审核后再登录', color: 'green' })
+    toast.add({ title: '申请已提交', description: '请等待管理员审核后再登录', color: 'orange' })
     router.push('/auth/login')
   } catch (e: any) {
     toast.add({ title: '注册失败', description: e.message || '请稍后重试', color: 'red' })

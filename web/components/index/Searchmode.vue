@@ -4,7 +4,7 @@
     v-model="showModal"
     :ui="{ container: 'items-center', base: 'backdrop-blur-sm', background: 'bg-transparent dark:bg-transparent', shadow: 'shadow-none', rounded: 'rounded-none' }"
   >
-    <UCard class="search-card nw-modal-card search-modal-card" :ui="{ rounded: 'rounded-none', ring: 'ring-0', shadow: 'shadow-none' }">
+    <UCard class="nw-modal-card search-modal-card" :ui="{ rounded: 'rounded-none', ring: 'ring-0', shadow: 'shadow-none' }">
       <template #header>
         <div class="flex items-center gap-2">
           <UIcon name="i-heroicons-magnifying-glass" class="w-5 h-5" />
@@ -27,7 +27,7 @@
           <div class="text-xs opacity-70">按 Enter 搜索，Esc 关闭</div>
           <div class="flex justify-end gap-2">
             <button type="button" class="search-modal-button nw-action-btn nw-action-btn--label" @click="closeModal">取消</button>
-            <button type="button" class="search-modal-button nw-action-btn nw-action-btn--label nw-action-btn--accent" @click="handleSearch">搜索</button>
+            <button type="button" class="search-modal-button nw-action-btn nw-action-btn--label" @click="handleSearch">搜索</button>
           </div>
         </div>
       </div>
@@ -81,7 +81,7 @@ const handleSearch = () => {
   toast.add({
     title: '成功',
     description: '搜索完成',
-    color: 'green'
+    color: 'orange'
   });
 };
 
@@ -99,7 +99,7 @@ defineExpose({
 }
 
 html.dark .search-modal-card {
-  --nw-modal-bg: var(--home-surface-dark-elevated);
+  --nw-modal-bg: #111827;
   --nw-modal-border: var(--home-border-dark);
   --nw-modal-text: #fff;
 }

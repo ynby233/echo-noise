@@ -2,23 +2,24 @@
   <div class="fixed inset-0 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-800">
     <div class="absolute inset-0 backdrop-blur-xl"></div>
     <div class="relative z-10 flex min-h-screen items-center justify-center p-4">
-      <UCard class="nw-modal-card is-dark auth-page-card w-full max-w-md bg-slate-900/70 text-white border border-slate-700/40 shadow-2xl" :ui="{ rounded: 'rounded-none', ring: 'ring-0', shadow: 'shadow-none' }">
+      <UCard class="nw-modal-card is-dark auth-page-card w-full max-w-md text-white border border-slate-700/40 shadow-2xl" :ui="{ rounded: 'rounded-none', ring: 'ring-0', shadow: 'shadow-none' }">
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-2">
-            <UIcon name="i-heroicons-lock-closed" class="w-6 h-6 text-indigo-300" />
+            <UIcon name="i-heroicons-lock-closed" class="w-6 h-6 text-orange-300" />
             <h1 class="text-lg font-semibold">登录</h1>
           </div>
-          <UButton variant="link" color="indigo" class="text-sm" @click="goRegister">去注册</UButton>
+          <UButton variant="link" color="orange" class="text-sm" @click="goRegister">去注册</UButton>
         </div>
         <UForm :state="form" @submit.prevent="onSubmit">
           <UFormGroup label="用户名/已绑定邮箱" class="mb-3">
-            <UInput v-model="form.username" placeholder="请输入用户名或已绑定邮箱" />
+            <UInput v-model="form.username" color="orange" placeholder="请输入用户名或已绑定邮箱" />
           </UFormGroup>
           <UFormGroup label="密码" class="mb-2">
             <UInput
               v-model="form.password"
               :type="showPassword ? 'text' : 'password'"
               placeholder="请输入密码"
+              color="orange"
               autocomplete="current-password"
               autocorrect="off"
               autocapitalize="off"
@@ -39,8 +40,8 @@
             </UInput>
           </UFormGroup>
           <div class="flex justify-between items-center mb-3">
-            <UButton variant="ghost" size="sm" @click="showForgot = true">忘记密码</UButton>
-            <UButton :loading="submitting" :disabled="submitting" type="submit" color="primary">登录</UButton>
+            <UButton variant="ghost" color="orange" size="sm" @click="showForgot = true">忘记密码</UButton>
+            <UButton :loading="submitting" :disabled="submitting" type="submit" color="orange">登录</UButton>
           </div>
         </UForm>
         <div class="mt-2" v-if="githubEnabled">
@@ -53,11 +54,11 @@
     </div>
 
     <UModal v-model="showForgot" :ui="{ background: 'bg-transparent dark:bg-transparent', shadow: 'shadow-none', rounded: 'rounded-none' }">
-      <UCard class="nw-modal-card is-dark bg-slate-900/80 text-white border border-slate-700/40" :ui="{ rounded: 'rounded-none', ring: 'ring-0', shadow: 'shadow-none' }">
+      <UCard class="nw-modal-card is-dark text-white border border-slate-700/40" :ui="{ rounded: 'rounded-none', ring: 'ring-0', shadow: 'shadow-none' }">
         <div class="font-semibold mb-2">找回密码</div>
         <p class="text-sm opacity-80 mb-4">请通过Vocechat联系管理员进行处理</p>
         <div class="flex justify-end">
-          <UButton color="primary" @click="showForgot = false">知道了</UButton>
+          <UButton color="orange" @click="showForgot = false">知道了</UButton>
         </div>
       </UCard>
     </UModal>
@@ -91,7 +92,7 @@ const onSubmit = async () => {
   try {
     const ok = await user.login({ username: form.username, password: form.password })
     if (ok) {
-      useToast().add({ title: '登录成功', color: 'green' })
+      useToast().add({ title: '登录成功', color: 'orange' })
       const redirect = (route.query.redirect as string) || '/status'
       router.push(redirect)
     }

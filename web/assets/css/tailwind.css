@@ -97,16 +97,6 @@ html.dark {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .18);
 }
 
-.nw-action-btn--accent {
-  --nw-action-border: rgba(234, 88, 12, .88);
-  --nw-action-bg: #f97316;
-  --nw-action-text: #111827;
-  --nw-action-hover-border: rgba(234, 88, 12, .95);
-  --nw-action-hover-bg: #fb923c;
-  --nw-action-hover-text: #111827;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22);
-}
-
 .nw-modal-card {
   overflow: hidden;
   border-radius: 16px;
@@ -123,10 +113,17 @@ html.dark {
 
 html.dark .nw-modal-card,
 .nw-modal-card.is-dark {
-  --nw-modal-bg: var(--home-surface-dark-elevated, #111827);
+  --nw-modal-bg: #111827;
   --nw-modal-text: #f8fafc;
   --nw-modal-border: var(--home-border-dark, rgba(255, 255, 255, .18));
   --nw-modal-shadow: 0 18px 42px rgba(0, 0, 0, .42);
+}
+
+.nw-modal-card :where(input:focus, input:focus-visible, textarea:focus, textarea:focus-visible) {
+  border-color: rgba(249, 115, 22, .92) !important;
+  --tw-ring-color: rgba(249, 115, 22, .72) !important;
+  box-shadow: 0 0 0 1px rgba(249, 115, 22, .86), 0 0 0 4px rgba(249, 115, 22, .16) !important;
+  outline: none;
 }
 
 html.dark .nw-action-btn {
@@ -159,16 +156,6 @@ html.dark .nw-action-btn--danger,
   --nw-action-hover-border: rgba(234, 88, 12, .95);
   --nw-action-hover-bg: linear-gradient(135deg, rgba(251, 146, 60, .95), rgba(234, 88, 12, .95));
   --nw-action-hover-text: #fff;
-}
-
-html.dark .nw-action-btn--accent,
-.nw-action-btn--accent.is-dark {
-  --nw-action-border: rgba(251, 146, 60, .88);
-  --nw-action-bg: #fb923c;
-  --nw-action-text: #111827;
-  --nw-action-hover-border: rgba(251, 146, 60, .95);
-  --nw-action-hover-bg: #fdba74;
-  --nw-action-hover-text: #111827;
 }
 
 .nw-tooltip {

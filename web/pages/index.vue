@@ -371,7 +371,7 @@
     @open-admin="openAdmin"
   />
   <UModal v-model="showAuthModal" :ui="{ width: 'sm:max-w-md', container: 'items-center', base: 'backdrop-blur-sm', background: 'bg-transparent dark:bg-transparent', shadow: 'shadow-none', rounded: 'rounded-none' }">
-    <UCard class="search-card nw-modal-card" :ui="{ rounded: 'rounded-none', ring: 'ring-0', shadow: 'shadow-none' }">
+    <UCard class="nw-modal-card" :ui="{ rounded: 'rounded-none', ring: 'ring-0', shadow: 'shadow-none' }">
       <template #header>
         <div class="flex justify-between items-center">
           <h3 class="text-xl font-semibold">{{ authMode === 'login' ? '欢迎回来' : '创建账户' }}</h3>
@@ -386,12 +386,13 @@
         <div v-if="authMode==='login'">
           <UForm :state="loginForm" @submit.prevent="onLoginSubmit">
             <div class="space-y-3">
-              <UInput v-model="loginForm.username" placeholder="用户名" />
+              <UInput v-model="loginForm.username" color="orange" placeholder="用户名" />
               <UInput
                 ref="loginPasswordInput"
                 v-model="loginForm.password"
                 :type="showLoginPassword ? 'text' : 'password'"
                 placeholder="密码"
+                color="orange"
                 autocomplete="current-password"
                 autocorrect="off"
                 autocapitalize="off"
@@ -412,12 +413,12 @@
                   />
                 </template>
               </UInput>
-              <UButton class="w-full" :loading="loginSubmitting" :disabled="loginSubmitting" type="submit" color="primary">登录</UButton>
+              <UButton class="w-full" :loading="loginSubmitting" :disabled="loginSubmitting" type="submit" color="orange">登录</UButton>
             </div>
           </UForm>
           <div class="flex items-center justify-between text-sm mt-2">
-            <UButton variant="link" @click="switchToRegister">账号注册</UButton>
-            <UButton variant="link" @click="showForgot = true">忘记密码？</UButton>
+            <UButton variant="link" color="orange" @click="switchToRegister">账号注册</UButton>
+            <UButton variant="link" color="orange" @click="showForgot = true">忘记密码？</UButton>
           </div>
           <div class="text-center text-sm opacity-80 mt-3" v-if="githubEnabled">其他登录方式</div>
           <div class="mt-2" v-if="githubEnabled">
@@ -431,13 +432,14 @@
         <div v-else>
           <UForm :state="registerForm" @submit.prevent="onRegisterSubmit">
             <div class="space-y-3">
-              <UInput v-model="registerForm.username" placeholder="用户名" />
+              <UInput v-model="registerForm.username" color="orange" placeholder="用户名" />
               <p class="text-xs text-gray-500">用户名 2-20 字符，支持大小写英文字母、中文、日文、数字和下划线。</p>
               <UInput
                 ref="registerPasswordInput"
                 v-model="registerForm.password"
                 :type="showRegisterPassword ? 'text' : 'password'"
                 placeholder="密码"
+                color="orange"
                 autocomplete="new-password"
                 autocorrect="off"
                 autocapitalize="off"
@@ -459,11 +461,11 @@
                 </template>
               </UInput>
               <div class="flex items-center gap-2">
-                <UInput v-model="registerForm.captcha" placeholder="验证码" />
+                <UInput v-model="registerForm.captcha" color="orange" placeholder="验证码" />
                 <img :src="captchaSrc" @click="refreshCaptcha" class="h-10 w-24 rounded border cursor-pointer" alt="captcha" />
-                <UBadge :color="remaining>0 ? 'primary' : 'red'" variant="soft">{{ remaining>0 ? `有效 ${remaining}s` : '已过期' }}</UBadge>
+                <UBadge :color="remaining>0 ? 'orange' : 'red'" variant="soft">{{ remaining>0 ? `有效 ${remaining}s` : '已过期' }}</UBadge>
               </div>
-              <UButton class="w-full" :loading="registerSubmitting" :disabled="remaining<=0 || registerSubmitting" type="submit" color="primary">{{ remaining>0 ? '注册' : '验证码已过期' }}</UButton>
+              <UButton class="w-full" :loading="registerSubmitting" :disabled="remaining<=0 || registerSubmitting" type="submit" color="orange">{{ remaining>0 ? '注册' : '验证码已过期' }}</UButton>
             </div>
           </UForm>
           
@@ -472,11 +474,11 @@
     </UCard>
   </UModal>
   <UModal v-model="showForgot" :ui="{ container: 'items-center', base: 'backdrop-blur-sm', background: 'bg-transparent dark:bg-transparent', shadow: 'shadow-none', rounded: 'rounded-none' }">
-    <UCard class="search-card nw-modal-card" :ui="{ rounded: 'rounded-none', ring: 'ring-0', shadow: 'shadow-none' }">
+    <UCard class="nw-modal-card" :ui="{ rounded: 'rounded-none', ring: 'ring-0', shadow: 'shadow-none' }">
       <div class="font-semibold mb-2">找回密码</div>
       <p class="text-sm opacity-80 mb-4">请通过Vocechat联系管理员进行处理</p>
       <div class="flex justify-end">
-        <UButton color="primary" @click="showForgot = false">知道了</UButton>
+        <UButton color="orange" @click="showForgot = false">知道了</UButton>
       </div>
     </UCard>
   </UModal>
@@ -738,7 +740,7 @@ const onLoginSubmit = async () => {
   try {
     const ok = await useUserStore().login({ username: loginForm.username, password: loginForm.password })
     if (ok) {
-      useToast().add({ title: '登录成功', color: 'green' })
+      useToast().add({ title: '登录成功', color: 'orange' })
       showAuthModal.value = false
       const redirect = (route.query.redirect as string) || '/status'
       router.push(redirect)
@@ -758,7 +760,7 @@ const onRegisterSubmit = async () => {
     const res = await fetch(`${baseApi}/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload) })
     const data = await res.json().catch(() => ({}))
     if (!res.ok || data.code !== 1) throw new Error(data?.msg || '注册失败')
-    useToast().add({ title: '申请已提交', description: '请等待管理员审核后再登录', color: 'green' })
+    useToast().add({ title: '申请已提交', description: '请等待管理员审核后再登录', color: 'orange' })
     authMode.value = 'login'
   } catch (e: any) {
     useToast().add({ title: '注册失败', description: e.message || '请稍后重试', color: 'red' })
