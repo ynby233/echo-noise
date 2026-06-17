@@ -13,6 +13,9 @@ const assert = (condition, message) => {
 const addForm = read('components/index/AddForm.vue')
 const messageList = read('components/index/MessageList.vue')
 const notificationCenter = read('components/index/UserNotificationCenter.vue')
+const searchMode = read('components/index/Searchmode.vue')
+const authLogin = read('pages/auth/login.vue')
+const authRegister = read('pages/auth/register.vue')
 const homePage = read('pages/index.vue')
 const floatingCss = read('assets/css/tailwind.css')
 
@@ -70,6 +73,30 @@ assert(
     !notificationCenter.includes('.icon-action') &&
     !notificationCenter.includes('.text-action'),
   'notification refresh, mark-all-read, and reply buttons must use the shared general action button template'
+)
+
+assert(
+  searchMode.includes("class=\"search-card nw-modal-card search-modal-card\"") &&
+    searchMode.includes("background: 'bg-transparent dark:bg-transparent'") &&
+    searchMode.includes('color="orange"') &&
+    searchMode.includes('class="search-input w-full"') &&
+    searchMode.includes('class="search-modal-button nw-action-btn nw-action-btn--label"') &&
+    searchMode.includes('class="search-modal-button nw-action-btn nw-action-btn--label nw-action-btn--accent"') &&
+    searchMode.includes('.search-input :deep(input:focus)') &&
+    searchMode.includes('rgba(249, 115, 22, .92)') &&
+    !searchMode.includes('<UButton variant="ghost" color="gray" @click="closeModal">取消</UButton>') &&
+    !searchMode.includes('<UButton color="orange" @click="handleSearch">搜索</UButton>'),
+  'site search modal must use orange input focus and shared action-button templates for cancel/search'
+)
+
+assert(
+  floatingCss.includes('.nw-modal-card {') &&
+    floatingCss.includes('.nw-action-btn--accent {') &&
+    homePage.includes('class="search-card nw-modal-card"') &&
+    authLogin.includes('class="nw-modal-card is-dark auth-page-card') &&
+    authRegister.includes('class="nw-modal-card is-dark auth-page-card') &&
+    authLogin.includes("background: 'bg-transparent dark:bg-transparent'"),
+  'search, login, and register dialog cards must share the single visible modal shell without default modal corner artifacts'
 )
 
 assert(

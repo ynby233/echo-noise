@@ -370,8 +370,8 @@
     @open-notifications="openNotificationCenter"
     @open-admin="openAdmin"
   />
-  <UModal v-model="showAuthModal" :ui="{ width: 'sm:max-w-md', container: 'items-center', base: 'backdrop-blur-sm' }">
-    <UCard class="search-card">
+  <UModal v-model="showAuthModal" :ui="{ width: 'sm:max-w-md', container: 'items-center', base: 'backdrop-blur-sm', background: 'bg-transparent dark:bg-transparent', shadow: 'shadow-none', rounded: 'rounded-none' }">
+    <UCard class="search-card nw-modal-card" :ui="{ rounded: 'rounded-none', ring: 'ring-0', shadow: 'shadow-none' }">
       <template #header>
         <div class="flex justify-between items-center">
           <h3 class="text-xl font-semibold">{{ authMode === 'login' ? '欢迎回来' : '创建账户' }}</h3>
@@ -471,8 +471,8 @@
       </div>
     </UCard>
   </UModal>
-  <UModal v-model="showForgot" :ui="{ container: 'items-center', base: 'backdrop-blur-sm' }">
-    <UCard class="search-card">
+  <UModal v-model="showForgot" :ui="{ container: 'items-center', base: 'backdrop-blur-sm', background: 'bg-transparent dark:bg-transparent', shadow: 'shadow-none', rounded: 'rounded-none' }">
+    <UCard class="search-card nw-modal-card" :ui="{ rounded: 'rounded-none', ring: 'ring-0', shadow: 'shadow-none' }">
       <div class="font-semibold mb-2">找回密码</div>
       <p class="text-sm opacity-80 mb-4">请通过Vocechat联系管理员进行处理</p>
       <div class="flex justify-end">

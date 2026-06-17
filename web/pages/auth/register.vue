@@ -2,7 +2,7 @@
   <div class="fixed inset-0 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-800">
     <div class="absolute inset-0 backdrop-blur-xl"></div>
     <div class="relative z-10 flex min-h-screen items-center justify-center p-4">
-      <UCard class="w-full max-w-md bg-slate-900/70 text-white border border-slate-700/40 shadow-2xl">
+      <UCard class="nw-modal-card is-dark auth-page-card w-full max-w-md bg-slate-900/70 text-white border border-slate-700/40 shadow-2xl" :ui="{ rounded: 'rounded-none', ring: 'ring-0', shadow: 'shadow-none' }">
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-2">
             <UIcon name="i-heroicons-user-plus" class="w-6 h-6 text-indigo-300" />

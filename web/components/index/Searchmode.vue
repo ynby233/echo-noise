@@ -1,7 +1,10 @@
 <template>
   <!-- 搜索内容显示 -->
-  <UModal v-model="showModal" :ui="{ container: 'items-center', base: 'backdrop-blur-sm' }">
-    <UCard class="search-card">
+  <UModal
+    v-model="showModal"
+    :ui="{ container: 'items-center', base: 'backdrop-blur-sm', background: 'bg-transparent dark:bg-transparent', shadow: 'shadow-none', rounded: 'rounded-none' }"
+  >
+    <UCard class="search-card nw-modal-card search-modal-card" :ui="{ rounded: 'rounded-none', ring: 'ring-0', shadow: 'shadow-none' }">
       <template #header>
         <div class="flex items-center gap-2">
           <UIcon name="i-heroicons-magnifying-glass" class="w-5 h-5" />
@@ -12,8 +15,9 @@
         <div class="relative">
           <UInput
             v-model="searchQuery"
+            color="orange"
             placeholder="请输入关键词"
-            class="w-full"
+            class="search-input w-full"
             :ui="{ base: 'rounded-xl' }"
             @keyup.enter="handleSearch"
             autofocus
@@ -22,8 +26,8 @@
         <div class="flex justify-between items-center">
           <div class="text-xs opacity-70">按 Enter 搜索，Esc 关闭</div>
           <div class="flex justify-end gap-2">
-            <UButton variant="ghost" color="gray" @click="closeModal">取消</UButton>
-            <UButton color="orange" @click="handleSearch">搜索</UButton>
+            <button type="button" class="search-modal-button nw-action-btn nw-action-btn--label" @click="closeModal">取消</button>
+            <button type="button" class="search-modal-button nw-action-btn nw-action-btn--label nw-action-btn--accent" @click="handleSearch">搜索</button>
           </div>
         </div>
       </div>
@@ -88,6 +92,29 @@ defineExpose({
 </script>
 
 <style scoped>
-.search-card { background: #ffffff; color: #111827; border: 1px solid #e5e7eb; border-radius: 16px; }
-html.dark .search-card { background: var(--home-surface-dark-elevated); color: #fff; border: 1px solid var(--home-border-dark); }
+.search-modal-card {
+  --nw-modal-bg: #ffffff;
+  --nw-modal-border: #e5e7eb;
+  --nw-modal-text: #111827;
+}
+
+html.dark .search-modal-card {
+  --nw-modal-bg: var(--home-surface-dark-elevated);
+  --nw-modal-border: var(--home-border-dark);
+  --nw-modal-text: #fff;
+}
+
+.search-input :deep(input:focus),
+.search-input :deep(input:focus-visible) {
+  border-color: rgba(249, 115, 22, .92) !important;
+  --tw-ring-color: rgba(249, 115, 22, .72) !important;
+  box-shadow: 0 0 0 1px rgba(249, 115, 22, .86), 0 0 0 4px rgba(249, 115, 22, .16) !important;
+  outline: none;
+}
+
+.search-modal-button {
+  height: 34px;
+  min-width: 64px;
+  padding: 0 12px;
+}
 </style>
