@@ -547,17 +547,19 @@ defineExpose({ refresh: () => loadNotifications(true) })
   width:100%;
   box-sizing:border-box;
   margin-top:1px;
-  padding:0;
-  border:0;
-  border-radius:0;
-  background:transparent;
+  padding:24px;
+  border:1px solid var(--notice-border);
+  border-radius:16px;
+  background:var(--notice-surface);
   color:var(--notice-text);
-  box-shadow:none;
+  box-shadow:0 14px 28px rgba(15,23,42,.10);
+  backdrop-filter:blur(8px) saturate(118%);
+  -webkit-backdrop-filter:blur(8px) saturate(118%);
   --notice-border: rgba(15,23,42,.10);
-  --notice-surface: #ffffff;
-  --notice-card: rgba(15,23,42,.035);
-  --notice-card-hover: rgba(15,23,42,.055);
-  --notice-input: #ffffff;
+  --notice-surface: rgba(255,255,255,.88);
+  --notice-card: rgba(255,255,255,.72);
+  --notice-card-hover: rgba(255,255,255,.86);
+  --notice-input: rgba(255,255,255,.82);
   --notice-text: #374151;
   --notice-strong: #111827;
   --notice-heading: #000000;
@@ -583,9 +585,9 @@ defineExpose({ refresh: () => loadNotifications(true) })
 :global(.dark) .notification-center,
 .notification-center.notification-theme-dark {
   --notice-border: rgba(255,255,255,.14);
-  --notice-surface: linear-gradient(180deg, rgba(30,41,59,.44) 0%, rgba(15,23,42,.78) 100%);
-  --notice-card: rgba(255,255,255,.055);
-  --notice-card-hover: rgba(255,255,255,.085);
+  --notice-surface: linear-gradient(180deg, rgba(30,41,59,.48) 0%, rgba(15,23,42,.82) 100%);
+  --notice-card: rgba(15,23,42,.52);
+  --notice-card-hover: rgba(30,41,59,.68);
   --notice-input: rgba(15,23,42,.36);
   --notice-text: #cbd5e1;
   --notice-strong: #f8fafc;
@@ -608,9 +610,9 @@ defineExpose({ refresh: () => loadNotifications(true) })
   --nw-floating-hover-border: rgba(249, 115, 22, .42);
   --nw-floating-selected-bg: rgba(249, 115, 22, .30);
   --nw-floating-selected-border: rgba(251, 146, 60, .58);
-  box-shadow:none;
-  backdrop-filter:none;
-  -webkit-backdrop-filter:none;
+  box-shadow:0 14px 28px rgba(2,6,23,.45);
+  backdrop-filter:blur(8px) saturate(118%);
+  -webkit-backdrop-filter:blur(8px) saturate(118%);
 }
 .notification-header { display:block; margin-bottom:0; padding:0; text-align:center; }
 .notification-heading { width:100%; }
@@ -633,9 +635,9 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .notification-feed { display:flex; flex-direction:column; gap:12px; }
 .notification-feed-item { position:relative; display:flex; gap:12px; padding:12px; border:1px solid var(--notice-border); border-radius:12px; background:var(--notice-card); color:var(--notice-text); box-shadow:none; transition:background-color .16s ease, border-color .16s ease, transform .16s ease; }
 .notification-feed-item:hover { background:var(--notice-card-hover); }
-.notification-feed-item.unread { border-color:rgba(59,130,246,.36); background:rgba(59,130,246,.08); }
+.notification-feed-item.unread { border-color:rgba(59,130,246,.36); background:linear-gradient(0deg, rgba(59,130,246,.10), rgba(59,130,246,.10)), var(--notice-card); }
 .notification-feed-item.unread::before { content:''; position:absolute; left:8px; top:23px; width:6px; height:6px; border-radius:999px; background:#3b82f6; }
-.notification-feed-item.highlighted { border-color:rgba(59,130,246,.56); background:rgba(59,130,246,.12); box-shadow:inset 3px 0 0 rgba(59,130,246,.72); }
+.notification-feed-item.highlighted { border-color:rgba(59,130,246,.56); background:linear-gradient(0deg, rgba(59,130,246,.14), rgba(59,130,246,.14)), var(--notice-card); box-shadow:inset 3px 0 0 rgba(59,130,246,.72); }
 .notification-avatar { width:36px; height:36px; flex:0 0 36px; border-radius:999px; object-fit:cover; background:var(--notice-input); border:1px solid var(--notice-border); }
 .notification-item-body { min-width:0; flex:1; }
 .notification-item-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; min-height:36px; }
@@ -673,7 +675,7 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .spin { animation:notification-spin 1s linear infinite; }
 @keyframes notification-spin { to { transform:rotate(360deg); } }
 @media (max-width: 720px) {
-  .notification-center { padding:0; }
+  .notification-center { padding:20px; }
   .notification-header { text-align:center; margin-bottom:0; padding:0; }
   .notification-title-row { display:block; min-height:0; margin:0; }
   .notification-title { line-height:1.5; }
