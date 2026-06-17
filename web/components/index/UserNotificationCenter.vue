@@ -6,10 +6,10 @@
           <h2 class="notification-title">{{ notificationTitle }}</h2>
           <div v-if="user.isLogin" class="notification-actions">
             <span v-if="unreadCount > 0" class="unread-pill">{{ unreadCount }} 未读</span>
-            <button type="button" class="icon-action nw-tooltip-anchor" data-tooltip="刷新" aria-label="刷新" :disabled="loading" @click="loadNotifications(true)">
+            <button type="button" class="notification-refresh-button nw-action-btn nw-tooltip-anchor" data-tooltip="刷新" aria-label="刷新" :disabled="loading" @click="loadNotifications(true)">
               <UIcon name="i-mdi-refresh" class="w-4 h-4" />
             </button>
-            <button type="button" class="text-action" :disabled="markingAll || unreadCount === 0" @click="markAllRead">全部已读</button>
+            <button type="button" class="notification-text-button nw-action-btn nw-action-btn--label" :disabled="markingAll || unreadCount === 0" @click="markAllRead">全部已读</button>
           </div>
         </div>
         <p class="notification-subtitle">{{ notificationDescription }}</p>
@@ -31,7 +31,7 @@
       <div v-else-if="loadError && !items.length" class="empty-state compact error-state">
         <UIcon name="i-mdi-alert-circle-outline" class="empty-icon" />
         <div class="empty-title">{{ loadError }}</div>
-        <button type="button" class="text-action" @click="loadNotifications(true)">重试</button>
+        <button type="button" class="notification-text-button nw-action-btn nw-action-btn--label" @click="loadNotifications(true)">重试</button>
       </div>
 
       <div v-else-if="!items.length" class="empty-state compact">
@@ -60,7 +60,7 @@
               <button
                 v-if="canReply(item)"
                 type="button"
-                class="reply-toggle"
+                class="reply-toggle nw-action-btn nw-action-btn--label"
                 :aria-expanded="replyOpenId === item.id"
                 :aria-controls="`notification-reply-${item.id}`"
                 @click="toggleReply(item)"
@@ -110,11 +110,11 @@
 
       <div v-if="loadError && items.length" class="notification-feed-error" role="status">
         <span>{{ loadError }}</span>
-        <button type="button" class="text-action" @click="loadNotifications(false)">重试</button>
+        <button type="button" class="notification-text-button nw-action-btn nw-action-btn--label" @click="loadNotifications(false)">重试</button>
       </div>
 
       <div v-if="items.length < total" class="load-more-row">
-        <button type="button" class="text-action" :disabled="loadingMore" @click="loadMore">
+        <button type="button" class="notification-text-button nw-action-btn nw-action-btn--label" :disabled="loadingMore" @click="loadMore">
           {{ loadingMore ? '加载中' : '加载更多' }}
         </button>
       </div>
@@ -636,14 +636,9 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .notification-count-title { margin:0 0 8px; color:var(--notice-count); font-size:14px; font-weight:400; line-height:20px; }
 .notification-actions { position:absolute; right:0; top:50%; transform:translateY(-50%); display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; max-width:calc(50% - 48px); }
 .unread-pill { display:inline-flex; align-items:center; min-height:28px; padding:0 10px; border-radius:999px; font-size:12px; font-weight:650; color:#fff; background:#3b82f6; }
-.icon-action,
-.text-action { border:1px solid var(--notice-border); background:var(--notice-card); color:var(--notice-text); transition:background-color .18s ease, border-color .18s ease, transform .18s ease; }
-.icon-action { width:32px; height:32px; display:inline-flex; align-items:center; justify-content:center; border-radius:10px; }
-.text-action { min-height:32px; padding:0 12px; border-radius:10px; font-size:13px; font-weight:650; }
-.icon-action:hover:not(:disabled),
-.text-action:hover:not(:disabled) { transform:translate3d(0,0,0) scale(1.04); border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
-.icon-action:disabled,
-.text-action:disabled { opacity:.55; cursor:not-allowed; }
+.notification-refresh-button,
+.notification-text-button,
+.reply-toggle { --nw-action-bg:var(--notice-card); --nw-action-text:var(--notice-text); --nw-action-border:var(--notice-border); }
 .notification-feed-panel { padding:0; overflow:visible; border:0; background:transparent; border-radius:0; }
 .notification-board-wrap { box-sizing:border-box; max-width:48rem; margin:0 auto 8px; padding:8px; }
 .notification-feed { display:flex; flex-direction:column; gap:12px; }
@@ -660,8 +655,7 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .notification-actor-name { font-size:14px; line-height:1.35; font-weight:700; color:var(--notice-strong); word-break:break-word; }
 .like-action-inline { font-size:13px; color:var(--notice-muted); }
 .notification-time { margin-top:3px; font-size:12px; line-height:1.25; color:var(--notice-muted); }
-.reply-toggle { min-height:30px; flex:0 0 auto; padding:0 10px; border:1px solid var(--comment-toolbar-border, var(--notice-border)); border-radius:10px; background:var(--comment-toolbar-control-bg, var(--notice-card)); color:var(--comment-toolbar-text, var(--notice-text)); font-size:12px; font-weight:650; line-height:1; cursor:pointer; transition:background-color .18s ease, border-color .18s ease, color .18s ease, transform .18s ease; }
-.reply-toggle:hover { transform:translate3d(0,0,0) scale(1.06); border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
+.reply-toggle { min-height:30px; height:30px; min-width:58px; flex:0 0 auto; padding:0 10px; font-size:12px; font-weight:650; line-height:1; }
 .notification-actor-content { margin:8px 0 0; font-size:14px; line-height:1.68; white-space:pre-wrap; word-break:break-word; color:var(--notice-strong); }
 .notification-target-card { width:100%; margin-top:10px; padding:10px 12px; border:1px solid var(--notice-border); border-radius:12px; background:var(--notice-input); color:var(--notice-text); display:flex; align-items:center; flex-wrap:wrap; gap:10px; text-align:left; cursor:pointer; transition:background-color .16s ease, border-color .16s ease, transform .16s ease, opacity .16s ease; }
 .notification-target-card:hover { border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); transform:translateY(-1px); }

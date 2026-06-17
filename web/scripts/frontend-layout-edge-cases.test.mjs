@@ -61,6 +61,18 @@ assert(
 )
 
 assert(
+  notificationCenter.includes('class="notification-refresh-button nw-action-btn nw-tooltip-anchor"') &&
+    notificationCenter.includes('class="notification-text-button nw-action-btn nw-action-btn--label" :disabled="markingAll || unreadCount === 0"') &&
+    notificationCenter.includes('class="reply-toggle nw-action-btn nw-action-btn--label"') &&
+    notificationCenter.includes('.notification-refresh-button,\n.notification-text-button,\n.reply-toggle { --nw-action-bg:var(--notice-card);') &&
+    !notificationCenter.includes('class="icon-action') &&
+    !notificationCenter.includes('class="text-action') &&
+    !notificationCenter.includes('.icon-action') &&
+    !notificationCenter.includes('.text-action'),
+  'notification refresh, mark-all-read, and reply buttons must use the shared general action button template'
+)
+
+assert(
   messageList.includes('margin: 16px 0 72px;') &&
     homePage.includes('padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));') &&
     homePage.includes('scroll-padding-bottom: calc(160px + env(safe-area-inset-bottom, 0px));'),
