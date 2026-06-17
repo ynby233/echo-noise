@@ -149,7 +149,15 @@ assert(
     messageList.includes("return filtering ? 'flex-grow w-full' : 'flex-grow w-full px-1 sm:px-2'") &&
     !messageList.includes("['search-results-list', innerContainerClass]") &&
     messageList.includes('margin: 20px 0 16px;') &&
-    messageList.includes('padding: 24px;') &&
+    messageList.includes('padding: 24px 7px 16px;') &&
+    messageList.includes('padding: 20px 3px 12px;') &&
+    messageList.includes('background: linear-gradient(180deg, rgba(30,41,59,.48) 0%, rgba(15,23,42,.82) 100%);') &&
+    messageList.includes('.search-results-panel .content-container {') &&
+    messageList.includes('border: 1px solid rgba(15, 23, 42, 0.10);') &&
+    messageList.includes('box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);') &&
+    messageList.includes('.search-results-panel.is-dark .content-container {') &&
+    messageList.includes('background: rgba(15,23,42,.52);') &&
+    messageList.includes('box-shadow: 0 16px 32px rgba(2,6,23,.52);') &&
     !messageList.includes('.search-result-note-frame--bounded {') &&
     !messageList.includes('max-width: calc(56rem + 26px);') &&
     !messageList.includes('.search-result-note-frame .content-container') &&
@@ -157,15 +165,11 @@ assert(
     messageList.includes('font-weight: 400;') &&
     messageList.includes('line-height: 20px;') &&
     !messageList.includes('.content-container.search-result-note-card') &&
-    !messageList.includes('border: 1px solid rgba(15, 23, 42, 0.10);') &&
-    !messageList.includes('box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);') &&
     !messageList.includes('.search-results-panel.is-dark .content-container.search-result-note-card') &&
-    !messageList.includes('border-color: rgba(255, 255, 255, 0.18);') &&
-    !messageList.includes('box-shadow: 0 16px 32px rgba(2, 6, 23, 0.52);') &&
     !messageList.includes('background: rgba(255, 255, 255, 0.72);') &&
     !messageList.includes('class="date-filter-bar"') &&
     !messageList.includes('筛选结果：'),
-  'filtered search results must keep guestbook/notification-aligned panel width, spacing, count typography, original note width, framed result shadows, and empty state without a 0-count heading'
+  'filtered search results must keep guestbook/notification-aligned panel width, spacing, count typography, original note width, direct note-card framing, and empty state without a 0-count heading'
 )
 
 assert(

@@ -2628,7 +2628,7 @@ onMounted(() => {
   box-sizing: border-box;
   width: 100%;
   margin: 20px 0 16px;
-  padding: 24px;
+  padding: 24px 7px 16px;
   border: 1px solid #e5e7eb;
   border-radius: var(--home-radius-panel);
   background: var(--home-surface-light);
@@ -2638,9 +2638,21 @@ onMounted(() => {
 
 .search-results-panel.is-dark {
   border-color: var(--home-border-dark);
-  background: var(--home-surface-dark);
+  background: linear-gradient(180deg, rgba(30,41,59,.48) 0%, rgba(15,23,42,.82) 100%);
   color: #f8fafc;
   box-shadow: 0 14px 28px rgba(2, 6, 23, 0.45);
+}
+
+.search-results-panel .content-container {
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  background: #ffffff;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);
+}
+
+.search-results-panel.is-dark .content-container {
+  border-color: rgba(255,255,255,.14);
+  background: rgba(15,23,42,.52);
+  box-shadow: 0 16px 32px rgba(2,6,23,.52);
 }
 
 .search-results-head {
@@ -2733,7 +2745,7 @@ onMounted(() => {
 
 @media screen and (max-width: 640px) {
   .search-results-panel {
-    padding: 20px 12px 12px;
+    padding: 20px 3px 12px;
   }
 
   .search-results-head {
