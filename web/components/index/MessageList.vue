@@ -1033,6 +1033,8 @@ const loadTargetMessagePage = async (id: number) => {
     await Promise.race([
       Promise.all(media.map((item) => new Promise<void>((resolve) => {
         if (item instanceof HTMLImageElement) {
+          item.loading = 'eager'
+          try { (item as HTMLImageElement & { fetchPriority?: string }).fetchPriority = 'high' } catch {}
           const decodeImage = async () => {
             try {
               if (typeof item.decode === 'function') await item.decode()
@@ -1044,6 +1046,8 @@ const loadTargetMessagePage = async (id: number) => {
           item.addEventListener('error', () => resolve(), { once: true })
           return
         }
+        item.preload = 'metadata'
+        try { item.load() } catch {}
         if (item.readyState >= 2) { resolve(); return }
         const done = () => resolve()
         item.addEventListener('loadeddata', done, { once: true })
@@ -1054,56 +1058,39 @@ const loadTargetMessagePage = async (id: number) => {
     ])
   }
 
-  const stabilizeNotificationTargetScroll = async (el: HTMLElement, messageId: number, behavior: ScrollBehavior = 'smooth') => {
-    const followLayoutUntilStable = async (duration: number) => {
-      let lastTop = Number.NaN
-      let lastHeight = Number.NaN
-      let stableFrames = 0
-      let lastCorrectionAt = 0
-      const startedAt = Date.now()
-      while (Date.now() - startedAt < duration) {
-        await waitForNotificationFrame()
-        if (!document.contains(el)) return false
-        const rect = el.getBoundingClientRect()
-        const distance = notificationFocusDistance(el)
-        const nearFocus = Math.abs(distance) <= 12
-        const topDelta = Math.abs(rect.top - lastTop)
-        const heightDelta = Math.abs(rect.height - lastHeight)
-        if (topDelta < 1 && heightDelta < 1 && nearFocus) stableFrames += 1
-        else stableFrames = 0
-        lastTop = rect.top
-        lastHeight = rect.height
-        const now = Date.now()
-        if (!nearFocus && now - lastCorrectionAt > 180) {
-          scrollElementToAppFocus(el, 'instant')
-          lastCorrectionAt = now
-        }
-        if (stableFrames >= 4) break
-        await waitForNotificationDelay(96)
-      }
-      return document.contains(el)
-    }
-
-    const finishWithSingleSmoothScroll = async () => {
+  const waitForNotificationTargetLayout = async (el: HTMLElement, duration = 900) => {
+    let lastTop = Number.NaN
+    let lastHeight = Number.NaN
+    let stableFrames = 0
+    const startedAt = Date.now()
+    while (Date.now() - startedAt < duration) {
       await waitForNotificationFrame()
-      if (!document.contains(el)) return
-      const distance = Math.abs(notificationFocusDistance(el))
-      if (distance <= 2) return
-      scrollElementToAppFocus(el, behavior)
-      if (behavior === 'smooth') {
-        await waitForNotificationDelay(420)
-        if (document.contains(el) && Math.abs(notificationFocusDistance(el)) > 18) {
-          scrollElementToAppFocus(el, 'instant')
-        }
-      }
+      if (!document.contains(el)) return false
+      const rect = el.getBoundingClientRect()
+      const topDelta = Math.abs(rect.top - lastTop)
+      const heightDelta = Math.abs(rect.height - lastHeight)
+      if (topDelta < 1 && heightDelta < 1) stableFrames += 1
+      else stableFrames = 0
+      lastTop = rect.top
+      lastHeight = rect.height
+      if (stableFrames >= 4) break
+      await waitForNotificationDelay(80)
     }
+    return document.contains(el)
+  }
 
-    scrollElementToAppFocus(el, 'instant')
-    if (!await followLayoutUntilStable(900)) return
+  const stabilizeNotificationTargetScroll = async (el: HTMLElement, messageId: number, behavior: ScrollBehavior = 'smooth') => {
     await waitForNotificationMedia(messageId)
     if (!document.contains(el)) return
-    await followLayoutUntilStable(900)
-    await finishWithSingleSmoothScroll()
+    if (!await waitForNotificationTargetLayout(el)) return
+    const distance = Math.abs(notificationFocusDistance(el))
+    if (distance > 2) scrollElementToAppFocus(el, behavior)
+    if (behavior === 'smooth') {
+      await waitForNotificationDelay(520)
+      if (document.contains(el) && Math.abs(notificationFocusDistance(el)) > 18) {
+        scrollElementToAppFocus(el, 'instant')
+      }
+    }
   }
 
   let notificationTargetRetryTimer: ReturnType<typeof window.setTimeout> | null = null
@@ -1143,14 +1130,14 @@ const loadTargetMessagePage = async (id: number) => {
       return
     }
     await nextTick()
+    const commentId = Number(props.targetCommentId || 0)
     const targetElement = document.querySelector(`.content-container[data-msg-id="${messageId}"]`) as HTMLElement | null
     if (targetElement) {
       targetElement.classList.add('highlight-message')
-      scrollElementToAppFocus(targetElement, 'instant')
+      if (!commentId) scrollElementToAppFocus(targetElement, 'instant')
       window.setTimeout(() => targetElement.classList.remove('highlight-message'), 2000)
     }
 
-    const commentId = Number(props.targetCommentId || 0)
     const targetKey = `${messageId}:${commentId || 0}`
     if (!commentId) {
       if (targetElement) await stabilizeNotificationTargetScroll(targetElement, messageId)

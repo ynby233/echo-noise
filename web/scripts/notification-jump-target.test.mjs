@@ -40,20 +40,26 @@ assert.match(
 
 assert.match(
   messageList,
-  /const\s+followLayoutUntilStable[\s\S]*?scrollElementToAppFocus\(el,\s*'instant'\)[\s\S]*?const\s+finishWithSingleSmoothScroll[\s\S]*?scrollElementToAppFocus\(el,\s*behavior\)/,
-  'notification target stabilization should quietly follow layout shifts and use only one final smooth scroll'
+  /const\s+waitForNotificationTargetLayout[\s\S]*?if\s*\(distance\s*>\s*2\)\s*scrollElementToAppFocus\(el,\s*behavior\)/,
+  'notification target stabilization should wait for layout quietly and scroll only to the final target'
 )
 
 assert.doesNotMatch(
   messageList,
-  /stableFrames\s*>=\s*\d+\s*\?\s*finalBehavior\s*:\s*'instant'/,
-  'notification target stabilization should not restart smooth scrolling inside the stability loop'
+  /const\s+stabilizeNotificationTargetScroll[\s\S]*?scrollElementToAppFocus\(el,\s*'instant'\)[\s\S]*?waitForNotificationMedia/,
+  'notification target stabilization should not visibly snap to the target before media/layout settle'
 )
 
 assert.match(
   messageList,
   /const\s+waitForNotificationMedia\s*=\s*async\s*\(messageId:\s*number[\s\S]*?querySelectorAll\('img, video'\)[\s\S]*?item\.decode\(\)[\s\S]*?loadeddata/,
   'notification jumps should wait for image decode and video data inside the target message before final alignment'
+)
+
+assert.match(
+  messageList,
+  /if\s*\(targetElement\)\s*\{[\s\S]*?if\s*\(!commentId\)\s*scrollElementToAppFocus\(targetElement,\s*'instant'\)/,
+  'comment/reply notification jumps should not first snap to the message card before the concrete comment target is ready'
 )
 
 assert.match(
