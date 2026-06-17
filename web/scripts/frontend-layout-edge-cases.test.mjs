@@ -166,11 +166,15 @@ assert(
     messageList.includes('.search-results-panel.is-dark .search-results-back {') &&
     messageList.includes('--nw-action-bg: rgba(51, 65, 85, .96);') &&
     messageList.includes('.search-results-list > .w-full > .p-0 > .content-container {') &&
-    messageList.includes('.search-results-panel.is-dark .search-results-list > .w-full > .p-0 > .content-container {') &&
-    messageList.includes('background: rgba(15, 23, 42, .52) !important;') &&
+    messageList.includes('.search-results-panel.is-dark .search-results-list > .w-full > .p-0 > .content-container.content-container {') &&
+    messageList.includes('background: transparent !important;') &&
+    messageList.includes('background-color: transparent !important;') &&
+    messageList.includes('background-image: none !important;') &&
+    messageList.includes('border-color: rgba(255, 255, 255, .12);') &&
     messageList.includes('box-shadow: 0 16px 32px rgba(2, 6, 23, .52);') &&
     homePage.includes('background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.82) 100%);') &&
-    builtinComments.includes('bg-[rgba(15,23,42,0.52)]') &&
+    builtinComments.includes('rounded-xl p-3 bg-[rgba(15,23,42,0.52)]') &&
+    builtinComments.includes('rounded-xl p-2 bg-[rgba(15,23,42,0.52)]') &&
     builtinComments.includes('shadow-[0_16px_32px_rgba(2,6,23,0.52)]') &&
     !messageList.includes('.search-results-panel > .content-container {') &&
     !messageList.includes('.search-result-note-card') &&
