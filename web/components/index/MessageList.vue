@@ -32,7 +32,7 @@
               <span>返回完整列表</span>
             </button>
           </div>
-          <div v-if="props.pageReady && hasActiveFilters && displayMessages.length" class="search-results-count">笔记（{{ filteredResultCount }}）</div>
+          <div v-if="props.pageReady && hasActiveFilters && displayMessages.length" class="search-results-count">笔记 ({{ filteredResultCount }})</div>
           <div v-if="props.pageReady && hasActiveFilters && !displayMessages.length" class="search-results-empty">
             <div v-if="isPageLoading">
               <p>加载中...</p>
