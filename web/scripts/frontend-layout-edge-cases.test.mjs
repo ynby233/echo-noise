@@ -128,6 +128,24 @@ assert(
 )
 
 assert(
+  messageList.includes('class="search-results-title">搜索</div>') &&
+    messageList.includes('搜索内容：{{ activeFilterContent }}') &&
+    messageList.includes('class="search-results-back nw-action-btn nw-action-btn--label"') &&
+    messageList.includes('>笔记（{{ filteredResultCount }}）</div>') &&
+    messageList.includes('v-if="props.pageReady && hasActiveFilters && displayMessages.length" class="search-results-count"') &&
+    messageList.includes('v-if="props.pageReady && hasActiveFilters && !displayMessages.length" class="search-results-empty"') &&
+    messageList.includes('class="search-results-empty-icon"') &&
+    messageList.includes("['content-container', innerContainerClass, listThemeClass]") &&
+    messageList.includes('.search-results-panel {') &&
+    messageList.includes('background: var(--home-surface-light);') &&
+    messageList.includes('.search-results-panel.is-dark {') &&
+    messageList.includes('background: var(--home-surface-dark);') &&
+    !messageList.includes('class="date-filter-bar"') &&
+    !messageList.includes('筛选结果：'),
+  'filtered search results must use a fixed guestbook-aligned panel, shared action button, existing note cards, and empty state without a 0-count heading'
+)
+
+assert(
   messageList.includes('margin: 16px 0 72px;') &&
     homePage.includes('padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));') &&
     homePage.includes('scroll-padding-bottom: calc(160px + env(safe-area-inset-bottom, 0px));'),

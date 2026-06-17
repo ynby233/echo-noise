@@ -1,41 +1,49 @@
 <template>
   <div>
     <div class="min-h-screen flex flex-col">
-    <!-- 空状态显示 -->
-    <div v-if="props.pageReady && !displayMessages.length" class="text-center text-gray-500 py-8">
-      <div v-if="isPageLoading">
-        <p>加载中...</p>
-      </div>
-      <div v-else-if="isPersonalGuest">
-        <UIcon name="i-heroicons-user-circle" class="w-12 h-12 mx-auto mb-4" />
-        <p>请先登录查看个人笔记</p>
-        <p class="text-xs mt-2 opacity-70">登录后这里只显示你自己发表的内容</p>
-      </div>
-      <div v-else>
-        <UIcon :name="isPersonalTab ? 'i-heroicons-document-text' : 'i-heroicons-inbox'" class="w-12 h-12 mx-auto mb-4" />
-        <p>{{ isPersonalTab ? '暂无个人笔记' : '暂无消息内容' }}</p>
-      </div>
-    </div>
-    
-    <div :class="outerContainerClass">
-      <!-- 筛选提示 -->
-      <div v-if="props.pageReady && hasActiveFilters" class="date-filter-bar">
-        <div class="date-filter-title">
-          <UIcon name="i-heroicons-adjustments-horizontal" class="w-4 h-4" />
-          <span>{{ activeFilterSummary }}</span>
+      <!-- 空状态显示 -->
+      <div v-if="props.pageReady && !hasActiveFilters && !displayMessages.length" class="text-center text-gray-500 py-8">
+        <div v-if="isPageLoading">
+          <p>加载中...</p>
         </div>
-        <UButton
-          size="xs"
-          variant="ghost"
-          color="orange"
-          icon="i-heroicons-x-mark"
-          @click="resetList"
-        >
-          返回完整列表
-        </UButton>
+        <div v-else-if="isPersonalGuest">
+          <UIcon name="i-heroicons-user-circle" class="w-12 h-12 mx-auto mb-4" />
+          <p>请先登录查看个人笔记</p>
+          <p class="text-xs mt-2 opacity-70">登录后这里只显示你自己发表的内容</p>
+        </div>
+        <div v-else>
+          <UIcon :name="isPersonalTab ? 'i-heroicons-document-text' : 'i-heroicons-inbox'" class="w-12 h-12 mx-auto mb-4" />
+          <p>{{ isPersonalTab ? '暂无个人笔记' : '暂无消息内容' }}</p>
+        </div>
       </div>
-      <!-- 消息列表 -->
-      <div class="my-4">
+
+      <div :class="outerContainerClass">
+        <component
+          :is="props.pageReady && hasActiveFilters ? 'section' : 'div'"
+          :class="props.pageReady && hasActiveFilters ? ['search-results-panel', innerContainerClass, { 'is-dark': isContentDark }] : ''"
+        >
+          <div v-if="props.pageReady && hasActiveFilters" class="search-results-head">
+            <div class="search-results-heading">
+              <div class="search-results-title">搜索</div>
+              <div class="search-results-summary">搜索内容：{{ activeFilterContent }}</div>
+            </div>
+            <button type="button" class="search-results-back nw-action-btn nw-action-btn--label" @click="resetList">
+              <UIcon name="i-heroicons-x-mark" class="w-4 h-4" />
+              <span>返回完整列表</span>
+            </button>
+          </div>
+          <div v-if="props.pageReady && hasActiveFilters && displayMessages.length" class="search-results-count">笔记（{{ filteredResultCount }}）</div>
+          <div v-if="props.pageReady && hasActiveFilters && !displayMessages.length" class="search-results-empty">
+            <div v-if="isPageLoading">
+              <p>加载中...</p>
+            </div>
+            <div v-else>
+              <UIcon name="i-heroicons-inbox" class="search-results-empty-icon" />
+              <p>暂无消息内容</p>
+            </div>
+          </div>
+          <!-- 消息列表 -->
+          <div v-if="!props.pageReady || !hasActiveFilters || displayMessages.length" :class="props.pageReady && hasActiveFilters ? 'search-results-list' : 'my-4'">
         <!-- 消息列表内容 -->
         <div v-for="(msg, idx) in displayMessages" :key="msg.id" class="w-full h-auto overflow-hidden flex flex-col justify-between">
 
@@ -158,6 +166,7 @@
           </div>
         </div>
       </div>
+        </component>
       <!-- 预取下一页哨兵 -->
       <div v-if="!isPersonalGuest" ref="prefetchSentinel" style="height:1px"></div>
       <!-- 分页控制区域 -->
@@ -1192,12 +1201,18 @@ const loadTargetMessagePage = async (id: number) => {
   const normalizedSearchKeyword = computed(() => String(props.searchKeyword || '').trim())
   const normalizedSelectedTag = computed(() => String(props.selectedTag || '').trim().replace(/^#/, ''))
   const hasActiveFilters = computed(() => Boolean(props.calendarDate || normalizedSearchKeyword.value || normalizedSelectedTag.value))
-  const activeFilterSummary = computed(() => {
+  const activeFilterContent = computed(() => {
     const filters: string[] = []
     if (calendarDateLabel.value) filters.push(calendarDateLabel.value)
-    if (normalizedSearchKeyword.value) filters.push(`关键词：${normalizedSearchKeyword.value}`)
+    if (normalizedSearchKeyword.value) filters.push(normalizedSearchKeyword.value)
     if (normalizedSelectedTag.value) filters.push(`#${normalizedSelectedTag.value}`)
-    return filters.length ? `筛选结果：${filters.join(' / ')}（${message.total || 0} 条）` : ''
+    return filters.join(' / ')
+  })
+  const filteredResultCount = computed(() => {
+    const total = Number(message.total)
+    const visibleCount = displayMessages.value.length
+    if (!Number.isFinite(total) || total < visibleCount) return visibleCount
+    return total
   })
   const pageQueryFor = (pageNumber: number) => {
     const query: any = { page: pageNumber, pageSize: 15 }
@@ -2606,43 +2621,127 @@ onMounted(() => {
   color: #f8fafc;
 }
 
-.date-filter-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+.search-results-panel {
   width: 100%;
-  margin: 0 0 10px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(249, 115, 22, 0.24);
-  background: rgba(249, 115, 22, 0.08);
+  margin: 0 0 16px;
+  padding: 24px;
+  border: 1px solid #e5e7eb;
+  border-radius: var(--home-radius-panel);
+  background: var(--home-surface-light);
+  color: #111827;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
 }
 
-.date-filter-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.search-results-panel.is-dark {
+  border-color: var(--home-border-dark);
+  background: var(--home-surface-dark);
+  color: #f8fafc;
+  box-shadow: 0 14px 28px rgba(2, 6, 23, 0.45);
+}
+
+.search-results-head {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  min-height: 56px;
+  padding: 0 136px;
+}
+
+.search-results-heading {
   min-width: 0;
+  text-align: center;
+}
+
+.search-results-title {
+  display: block;
+  margin: 0 0 14px;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.search-results-summary {
+  max-width: 42rem;
+  margin: 2px auto 20px;
+  color: inherit;
   font-size: 13px;
-  font-weight: 600;
-  color: rgb(234, 88, 12);
+  line-height: 1.7;
+  opacity: .8;
+  overflow-wrap: anywhere;
 }
 
-.date-filter-title span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.search-results-back {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: max-content;
+  height: 34px;
+  border-radius: 10px;
 }
 
-:global(html.dark) .date-filter-bar {
-  background: rgba(249, 115, 22, 0.14);
-  border-color: rgba(251, 146, 60, 0.28);
+.search-results-count {
+  margin: 0 0 12px;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: left;
 }
 
-:global(html.dark) .date-filter-title {
-  color: rgb(251, 146, 60);
+.search-results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 0;
+}
+
+.search-results-empty {
+  display: flex;
+  min-height: 260px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 42px 12px 34px;
+  color: #9ca3af;
+  text-align: center;
+}
+
+.search-results-panel.is-dark .search-results-empty {
+  color: #cbd5e1;
+}
+
+.search-results-empty-icon {
+  display: block;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 4px;
+}
+
+@media screen and (max-width: 640px) {
+  .search-results-panel {
+    padding: 18px;
+  }
+
+  .search-results-head {
+    align-items: center;
+    flex-direction: column;
+    min-height: 0;
+    padding: 0;
+  }
+
+  .search-results-summary {
+    margin-bottom: 14px;
+  }
+
+  .search-results-back {
+    position: static;
+    align-self: center;
+  }
 }
 
 .edit-modal-shell {
@@ -2992,13 +3091,6 @@ onMounted(() => {
   .edit-modal-shell .publish-time-control { flex: 1 1 150px; max-width: none; }
   .edit-modal-footer { justify-content: stretch; }
   .edit-footer-button { flex: 1 1 0; }
-}
-
-@media screen and (max-width: 480px) {
-  .date-filter-bar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
 }
 
 /* 修改内容卡片样式 */
