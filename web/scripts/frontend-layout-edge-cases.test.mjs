@@ -141,11 +141,16 @@ assert(
     messageList.includes("['search-results-panel', { 'is-dark': isContentDark }]") &&
     messageList.includes("props.pageReady && hasActiveFilters ? 'search-results-list' : 'my-4'") &&
     messageList.includes("'search-result-note-frame': props.pageReady && hasActiveFilters") &&
-    messageList.includes("props.pageReady && hasActiveFilters ? innerContainerClass : ''") &&
+    messageList.includes("'search-result-note-frame--bounded': props.pageReady && hasActiveFilters && !props.wide") &&
+    !messageList.includes("props.pageReady && hasActiveFilters ? innerContainerClass : ''") &&
     messageList.includes("['content-container', innerContainerClass, listThemeClass]") &&
+    messageList.includes("return filtering ? 'flex-grow w-full' : 'flex-grow w-full px-1 sm:px-2'") &&
     !messageList.includes("['search-results-list', innerContainerClass]") &&
     messageList.includes('margin: 20px 0 16px;') &&
     messageList.includes('padding: 24px;') &&
+    messageList.includes('.search-result-note-frame--bounded {') &&
+    messageList.includes('max-width: calc(56rem + 26px);') &&
+    !messageList.includes('.search-result-note-frame .content-container') &&
     !messageList.includes('max-width: 48rem;\n  margin: 20px auto 16px;') &&
     messageList.includes('font-weight: 400;') &&
     messageList.includes('line-height: 20px;') &&

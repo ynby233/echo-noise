@@ -45,7 +45,7 @@
           <!-- 消息列表 -->
           <div v-if="!props.pageReady || !hasActiveFilters || displayMessages.length" :class="props.pageReady && hasActiveFilters ? 'search-results-list' : 'my-4'">
         <!-- 消息列表内容 -->
-        <div v-for="(msg, idx) in displayMessages" :key="msg.id" :class="['w-full h-auto overflow-hidden flex flex-col justify-between', { 'search-result-note-frame': props.pageReady && hasActiveFilters }, props.pageReady && hasActiveFilters ? innerContainerClass : '']">
+        <div v-for="(msg, idx) in displayMessages" :key="msg.id" :class="['w-full h-auto overflow-hidden flex flex-col justify-between', { 'search-result-note-frame': props.pageReady && hasActiveFilters, 'search-result-note-frame--bounded': props.pageReady && hasActiveFilters && !props.wide }]">
 
           <div class="p-0">
             <div :class="['content-container', innerContainerClass, listThemeClass]" :data-msg-id="msg.id">
@@ -826,7 +826,10 @@ const emit = defineEmits<{
   (e: 'select-tag', tag: string): void
   (e: 'target-consumed'): void
 }>()
-const outerContainerClass = computed(() => props.wide ? 'flex-grow w-full px-1 sm:px-2' : 'flex-grow w-full px-1 sm:px-2')
+const outerContainerClass = computed(() => {
+  const filtering = props.pageReady && Boolean(props.calendarDate || String(props.searchKeyword || '').trim() || String(props.selectedTag || '').trim())
+  return filtering ? 'flex-grow w-full' : 'flex-grow w-full px-1 sm:px-2'
+})
 const innerContainerClass = computed(() => props.wide ? '' : 'mx-auto sm:max-w-4xl')
 // 独立的内容主题（与页面主题解耦）
 const contentTheme = inject('contentTheme', ref<string>(typeof window !== 'undefined' ? (localStorage.getItem('contentTheme') || 'dark') : 'dark'))
@@ -2717,12 +2720,12 @@ onMounted(() => {
   box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);
 }
 
-.search-result-note-frame > .p-0 {
-  width: 100%;
+.search-result-note-frame--bounded {
+  max-width: calc(56rem + 26px);
 }
 
-.search-result-note-frame .content-container {
-  margin: 0;
+.search-result-note-frame > .p-0 {
+  width: 100%;
 }
 
 .search-results-panel.is-dark .search-result-note-frame {
