@@ -68,9 +68,14 @@ assert(
 
 assert(
   notificationCenter.includes('class="notification-refresh-button nw-action-btn nw-tooltip-anchor"') &&
-    notificationCenter.includes('class="notification-text-button nw-action-btn nw-action-btn--label" :disabled="markingAll || unreadCount === 0"') &&
-    notificationCenter.includes('class="reply-toggle nw-action-btn nw-action-btn--label"') &&
-    notificationCenter.includes('.notification-refresh-button,\n.notification-text-button,\n.reply-toggle { --nw-action-bg:var(--notice-card);') &&
+  notificationCenter.includes('class="notification-text-button nw-action-btn nw-action-btn--label" :disabled="markingAll || unreadCount === 0"') &&
+  notificationCenter.includes('class="reply-toggle nw-action-btn nw-action-btn--label"') &&
+  notificationCenter.includes('.notification-refresh-button,\n.notification-text-button,\n.reply-toggle {') &&
+  notificationCenter.includes('height:28px;') &&
+  notificationCenter.includes('font-size:12px;') &&
+  notificationCenter.includes('font-weight:650;') &&
+  notificationCenter.includes('.notification-text-button,\n.reply-toggle { min-width:max-content; padding:0 8px; }') &&
+  notificationCenter.includes('--nw-action-bg:rgba(51,65,85,.96);') &&
     !notificationCenter.includes('class="icon-action') &&
     !notificationCenter.includes('class="text-action') &&
     !notificationCenter.includes('.icon-action') &&
@@ -152,12 +157,14 @@ assert(
     messageList.includes('padding: 24px 7px 16px;') &&
     messageList.includes('padding: 20px 3px 12px;') &&
     messageList.includes('background: linear-gradient(180deg, rgba(30,41,59,.48) 0%, rgba(15,23,42,.82) 100%);') &&
-    messageList.includes('.search-results-panel .content-container {') &&
-    messageList.includes('border: 1px solid rgba(15, 23, 42, 0.10);') &&
-    messageList.includes('box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);') &&
-    messageList.includes('.search-results-panel.is-dark .content-container {') &&
-    messageList.includes('background: rgba(15,23,42,.52);') &&
-    messageList.includes('box-shadow: 0 16px 32px rgba(2,6,23,.52);') &&
+    messageList.includes('height: 28px;') &&
+    messageList.includes('padding: 0 8px;') &&
+    messageList.includes('font-size: 12px;') &&
+    messageList.includes('font-weight: 650;') &&
+    messageList.includes('.search-results-panel.is-dark .search-results-back {') &&
+    messageList.includes('--nw-action-bg: rgba(51, 65, 85, .96);') &&
+    !messageList.includes('.search-results-panel .content-container {') &&
+    !messageList.includes('.search-results-panel.is-dark .content-container {') &&
     !messageList.includes('.search-result-note-frame--bounded {') &&
     !messageList.includes('max-width: calc(56rem + 26px);') &&
     !messageList.includes('.search-result-note-frame .content-container') &&
