@@ -22,7 +22,7 @@
     </div>
 
     <div v-else class="notification-feed-panel notification-board-wrap">
-      <div class="notification-count-title">通知 ({{ total }})</div>
+      <div class="notification-count-title">通知（{{ total }}）</div>
       <div v-if="loading && !items.length" class="empty-state compact">
         <UIcon name="i-mdi-loading" class="empty-icon spin" />
         <div class="empty-title">正在加载</div>
@@ -567,13 +567,12 @@ defineExpose({ refresh: () => loadNotifications(true) })
   background:var(--notice-surface);
   color:var(--notice-text);
   box-shadow:0 14px 28px rgba(15,23,42,.10);
-  backdrop-filter:blur(8px) saturate(118%);
-  -webkit-backdrop-filter:blur(8px) saturate(118%);
   --notice-border: rgba(15,23,42,.10);
-  --notice-surface: rgba(255,255,255,.88);
-  --notice-card: rgba(255,255,255,.72);
-  --notice-card-hover: rgba(255,255,255,.86);
-  --notice-input: rgba(255,255,255,.82);
+  --notice-surface: #ffffff;
+  --notice-card: #ffffff;
+  --notice-card-hover: #f8fafc;
+  --notice-input: #f8fafc;
+  --notice-card-shadow: 0 14px 30px rgba(15,23,42,.12);
   --notice-text: #374151;
   --notice-strong: #111827;
   --notice-heading: #000000;
@@ -603,6 +602,7 @@ defineExpose({ refresh: () => loadNotifications(true) })
   --notice-card: rgba(15,23,42,.52);
   --notice-card-hover: rgba(30,41,59,.68);
   --notice-input: rgba(15,23,42,.36);
+  --notice-card-shadow: 0 16px 32px rgba(2,6,23,.52);
   --notice-text: #cbd5e1;
   --notice-strong: #f8fafc;
   --notice-heading: #ffffff;
@@ -642,11 +642,11 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .notification-feed-panel { padding:0; overflow:visible; border:0; background:transparent; border-radius:0; }
 .notification-board-wrap { box-sizing:border-box; max-width:48rem; margin:0 auto 8px; padding:8px; }
 .notification-feed { display:flex; flex-direction:column; gap:12px; }
-.notification-feed-item { position:relative; display:flex; gap:12px; padding:12px; border:1px solid var(--notice-border); border-radius:12px; background:var(--notice-card); color:var(--notice-text); box-shadow:none; transition:background-color .16s ease, border-color .16s ease, transform .16s ease; }
+.notification-feed-item { position:relative; display:flex; gap:12px; padding:12px; border:1px solid var(--notice-border); border-radius:12px; background:var(--notice-card); color:var(--notice-text); box-shadow:var(--notice-card-shadow); transition:background-color .16s ease, border-color .16s ease, transform .16s ease; }
 .notification-feed-item:hover { background:var(--notice-card-hover); }
 .notification-feed-item.unread { border-color:rgba(59,130,246,.36); background:linear-gradient(0deg, rgba(59,130,246,.10), rgba(59,130,246,.10)), var(--notice-card); }
 .notification-feed-item.unread::before { content:''; position:absolute; left:8px; top:23px; width:6px; height:6px; border-radius:999px; background:#3b82f6; }
-.notification-feed-item.highlighted { border-color:rgba(59,130,246,.56); background:linear-gradient(0deg, rgba(59,130,246,.14), rgba(59,130,246,.14)), var(--notice-card); box-shadow:inset 3px 0 0 rgba(59,130,246,.72); }
+.notification-feed-item.highlighted { border-color:rgba(59,130,246,.56); background:linear-gradient(0deg, rgba(59,130,246,.14), rgba(59,130,246,.14)), var(--notice-card); box-shadow:inset 3px 0 0 rgba(59,130,246,.72), var(--notice-card-shadow); }
 .notification-avatar { width:36px; height:36px; flex:0 0 36px; border-radius:999px; object-fit:cover; background:var(--notice-input); border:1px solid var(--notice-border); }
 .notification-item-body { min-width:0; flex:1; }
 .notification-item-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; min-height:36px; }

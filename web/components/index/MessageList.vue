@@ -43,9 +43,9 @@
             </div>
           </div>
           <!-- 消息列表 -->
-          <div v-if="!props.pageReady || !hasActiveFilters || displayMessages.length" :class="props.pageReady && hasActiveFilters ? ['search-results-list', innerContainerClass] : 'my-4'">
+          <div v-if="!props.pageReady || !hasActiveFilters || displayMessages.length" :class="props.pageReady && hasActiveFilters ? 'search-results-list' : 'my-4'">
         <!-- 消息列表内容 -->
-        <div v-for="(msg, idx) in displayMessages" :key="msg.id" :class="['w-full h-auto overflow-hidden flex flex-col justify-between', { 'search-result-note-frame': props.pageReady && hasActiveFilters }]">
+        <div v-for="(msg, idx) in displayMessages" :key="msg.id" :class="['w-full h-auto overflow-hidden flex flex-col justify-between', { 'search-result-note-frame': props.pageReady && hasActiveFilters }, props.pageReady && hasActiveFilters ? innerContainerClass : '']">
 
           <div class="p-0">
             <div :class="['content-container', innerContainerClass, listThemeClass]" :data-msg-id="msg.id">
@@ -2624,14 +2624,13 @@ onMounted(() => {
 .search-results-panel {
   box-sizing: border-box;
   width: 100%;
-  max-width: 48rem;
-  margin: 20px auto 16px;
-  padding: 24px 8px 8px;
+  margin: 20px 0 16px;
+  padding: 24px;
   border: 1px solid #e5e7eb;
   border-radius: var(--home-radius-panel);
   background: var(--home-surface-light);
   color: #111827;
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.10);
 }
 
 .search-results-panel.is-dark {
@@ -2708,12 +2707,14 @@ onMounted(() => {
 .search-result-note-frame {
   box-sizing: border-box;
   width: 100%;
+  margin-right: auto;
+  margin-left: auto;
   padding: 12px;
   border: 1px solid rgba(15, 23, 42, 0.10);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.72);
+  background: #ffffff;
   color: inherit;
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);
 }
 
 .search-result-note-frame > .p-0 {
@@ -2726,8 +2727,8 @@ onMounted(() => {
 
 .search-results-panel.is-dark .search-result-note-frame {
   border-color: rgba(255, 255, 255, 0.18);
-  background: rgba(15, 23, 42, 0.52);
-  box-shadow: 0 14px 28px rgba(2, 6, 23, 0.45);
+  background: var(--home-surface-dark-elevated);
+  box-shadow: 0 16px 32px rgba(2, 6, 23, 0.52);
 }
 
 .search-results-empty {
@@ -2755,7 +2756,7 @@ onMounted(() => {
 
 @media screen and (max-width: 640px) {
   .search-results-panel {
-    padding: 18px 8px 8px;
+    padding: 20px 12px 12px;
   }
 
   .search-result-note-frame {

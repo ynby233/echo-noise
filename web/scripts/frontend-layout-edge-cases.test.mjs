@@ -55,12 +55,15 @@ assert(
 )
 
 assert(
-  notificationCenter.includes('--notice-card: rgba(255,255,255,.72);') &&
+  notificationCenter.includes('--notice-card: #ffffff;') &&
     notificationCenter.includes('--notice-card: rgba(15,23,42,.52);') &&
-    notificationCenter.includes('.notification-feed-item { position:relative; display:flex; gap:12px; padding:12px; border:1px solid var(--notice-border); border-radius:12px; background:var(--notice-card);') &&
+    notificationCenter.includes('--notice-card-shadow: 0 14px 30px rgba(15,23,42,.12);') &&
+    notificationCenter.includes('--notice-card-shadow: 0 16px 32px rgba(2,6,23,.52);') &&
+    notificationCenter.includes('通知（{{ total }}）') &&
+    notificationCenter.includes('.notification-feed-item { position:relative; display:flex; gap:12px; padding:12px; border:1px solid var(--notice-border); border-radius:12px; background:var(--notice-card); color:var(--notice-text); box-shadow:var(--notice-card-shadow);') &&
     notificationCenter.includes('background:linear-gradient(0deg, rgba(59,130,246,.10), rgba(59,130,246,.10)), var(--notice-card);') &&
-    notificationCenter.includes('background:linear-gradient(0deg, rgba(59,130,246,.14), rgba(59,130,246,.14)), var(--notice-card);'),
-  'notification cards must keep their own visible surface in light and dark modes, including unread and highlighted states'
+    notificationCenter.includes('background:linear-gradient(0deg, rgba(59,130,246,.14), rgba(59,130,246,.14)), var(--notice-card); box-shadow:inset 3px 0 0 rgba(59,130,246,.72), var(--notice-card-shadow);'),
+  'notification cards must keep their own visible surface and framed shadow in light and dark modes, including unread and highlighted states'
 )
 
 assert(
@@ -136,22 +139,26 @@ assert(
     messageList.includes('v-if="props.pageReady && hasActiveFilters && !displayMessages.length" class="search-results-empty"') &&
     messageList.includes('class="search-results-empty-icon"') &&
     messageList.includes("['search-results-panel', { 'is-dark': isContentDark }]") &&
-    messageList.includes("['search-results-list', innerContainerClass]") &&
+    messageList.includes("props.pageReady && hasActiveFilters ? 'search-results-list' : 'my-4'") &&
     messageList.includes("'search-result-note-frame': props.pageReady && hasActiveFilters") &&
+    messageList.includes("props.pageReady && hasActiveFilters ? innerContainerClass : ''") &&
     messageList.includes("['content-container', innerContainerClass, listThemeClass]") &&
-    messageList.includes('max-width: 48rem;') &&
-    messageList.includes('margin: 20px auto 16px;') &&
-    messageList.includes('padding: 24px 8px 8px;') &&
+    !messageList.includes("['search-results-list', innerContainerClass]") &&
+    messageList.includes('margin: 20px 0 16px;') &&
+    messageList.includes('padding: 24px;') &&
+    !messageList.includes('max-width: 48rem;\n  margin: 20px auto 16px;') &&
     messageList.includes('font-weight: 400;') &&
     messageList.includes('line-height: 20px;') &&
     messageList.includes('.search-result-note-frame {') &&
-    messageList.includes('background: rgba(255, 255, 255, 0.72);') &&
-    messageList.includes('box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);') &&
+    messageList.includes('background: #ffffff;') &&
+    messageList.includes('box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);') &&
     messageList.includes('.search-results-panel.is-dark .search-result-note-frame {') &&
-    messageList.includes('background: rgba(15, 23, 42, 0.52);') &&
+    messageList.includes('background: var(--home-surface-dark-elevated);') &&
+    messageList.includes('box-shadow: 0 16px 32px rgba(2, 6, 23, 0.52);') &&
+    !messageList.includes('background: rgba(255, 255, 255, 0.72);') &&
     !messageList.includes('class="date-filter-bar"') &&
     !messageList.includes('筛选结果：'),
-  'filtered search results must keep guestbook/notification-aligned panel width, spacing, count typography, note width, framed result cards, and empty state without a 0-count heading'
+  'filtered search results must keep guestbook/notification-aligned panel width, spacing, count typography, original note width, framed result shadows, and empty state without a 0-count heading'
 )
 
 assert(
