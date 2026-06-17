@@ -22,7 +22,7 @@
     </div>
 
     <div v-else class="notification-feed-panel notification-board-wrap">
-      <div class="notification-count-title">通知（{{ total }}）</div>
+      <div class="notification-count-title">通知 ({{ total }})</div>
       <div v-if="loading && !items.length" class="empty-state compact">
         <UIcon name="i-mdi-loading" class="empty-icon spin" />
         <div class="empty-title">正在加载</div>
