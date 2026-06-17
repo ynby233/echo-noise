@@ -20,12 +20,12 @@
               <span class="px-1.5 py-0.5 rounded bg-orange-500 text-white text-[10px]">管理员</span>
             </div>
             <div v-else class="mt-1">
-              <span class="px-1.5 py-0.5 rounded bg-indigo-500 text-white text-[10px]">{{ isLoggedIn ? '用户' : '访客' }}</span>
+              <span class="px-1.5 py-0.5 rounded bg-blue-500 text-white text-[10px]">{{ isLoggedIn ? '用户' : '访客' }}</span>
             </div>
             <div class="profile-desc">{{ profileDesc }}</div>
             <div v-if="!isOnline" class="auth-actions">
               <span class="auth-tooltip nw-tooltip-anchor" data-tooltip="登录">
-                <UButton variant="ghost" color="indigo" class="auth-btn" aria-label="登录" @click="authMode='login'; showAuthModal=true">
+                <UButton variant="ghost" color="blue" class="auth-btn" aria-label="登录" @click="authMode='login'; showAuthModal=true">
                   <UIcon name="i-heroicons-arrow-right-end-on-rectangle" class="w-5 h-5" />
                 </UButton>
               </span>
@@ -3243,14 +3243,14 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
   padding: 8px 10px;
   border: 0;
   background: transparent;
-  color: rgba(79, 70, 229, 0.92);
+  color: #3b82f6;
   font-size: 13px;
   line-height: 1.2;
   cursor: pointer;
 }
-.stats-login-prompt:hover { color: #4338ca; }
-html.dark .stats-login-prompt { color: rgba(165, 180, 252, 0.94); }
-html.dark .stats-login-prompt:hover { color: #c7d2fe; }
+.stats-login-prompt:hover { color: #2563eb; }
+html.dark .stats-login-prompt { color: #60a5fa; }
+html.dark .stats-login-prompt:hover { color: #93c5fd; }
 .avatar-lg {
   width: 72px;
   height: 72px;

@@ -116,6 +116,18 @@ assert(
 )
 
 assert(
+  homePage.includes('rounded bg-blue-500 text-white text-[10px]">{{ isLoggedIn ? \'用户\' : \'访客\' }}</span>') &&
+    homePage.includes('<UButton variant="ghost" color="blue" class="auth-btn" aria-label="登录"') &&
+    homePage.includes('.stats-login-prompt:hover { color: #2563eb; }') &&
+    homePage.includes('html.dark .stats-login-prompt { color: #60a5fa; }') &&
+    !homePage.includes('rounded bg-indigo-500 text-white text-[10px]">{{ isLoggedIn ? \'用户\' : \'访客\' }}</span>') &&
+    !homePage.includes('<UButton variant="ghost" color="indigo" class="auth-btn" aria-label="登录"') &&
+    !homePage.includes('color: rgba(79, 70, 229, 0.92);') &&
+    !homePage.includes('.stats-login-prompt:hover { color: #4338ca; }'),
+  'sidebar guest/user badge, login button, and login-required stats prompt must use the same blue family as the comment submit button'
+)
+
+assert(
   messageList.includes('margin: 16px 0 72px;') &&
     homePage.includes('padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));') &&
     homePage.includes('scroll-padding-bottom: calc(160px + env(safe-area-inset-bottom, 0px));'),
