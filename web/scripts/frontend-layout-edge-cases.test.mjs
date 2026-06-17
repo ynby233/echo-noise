@@ -171,10 +171,16 @@ assert(
     messageList.includes('background-color: rgba(15, 23, 42, .52) !important;') &&
     messageList.includes('background-image: none !important;') &&
     messageList.includes('border-color: rgba(255, 255, 255, .12);') &&
-    messageList.includes('box-shadow: none !important;') &&
+    messageList.includes('box-shadow: 0 16px 32px rgba(2, 6, 23, .52) !important;') &&
     homePage.includes('background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.82) 100%);') &&
-    builtinComments.includes('rounded-xl p-3 bg-[rgba(15,23,42,0.52)] border border-white/10 shadow-none') &&
-    builtinComments.includes('rounded-xl p-2 bg-[rgba(15,23,42,0.52)] border border-white/10 shadow-none') &&
+    builtinComments.includes("const rootCardClass = computed(() => 'comment-card-frame comment-card-root')") &&
+    builtinComments.includes("const childCardClass = computed(() => 'comment-card-frame comment-card-child')") &&
+    builtinComments.includes('box-shadow: 0 16px 32px rgba(2, 6, 23, .52);') &&
+    builtinComments.includes('class="comment-load-btn nw-action-btn nw-action-btn--label"') &&
+    builtinComments.includes('<UIcon :name="visibilityTag(c.visibility).icon" class="w-4 h-4" />') &&
+    builtinComments.includes('<UIcon :name="visibilityTag(child.visibility).icon" class="w-4 h-4" />') &&
+    !builtinComments.includes(':global(html.dark) .comment-item.child { background: rgba(255,255,255,0.06);') &&
+    !builtinComments.includes(':global(html:not(.dark)) .comment-item.child { background: rgba(0,0,0,0.04);') &&
     !messageList.includes('.search-results-panel > .content-container {') &&
     !messageList.includes('.search-result-note-card') &&
     !messageList.includes('.search-result-note-frame--bounded {') &&

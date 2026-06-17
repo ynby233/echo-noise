@@ -2726,7 +2726,7 @@ onMounted(() => {
   background-color: rgba(255, 255, 255, .72) !important;
   background-image: none !important;
   border: 1px solid rgba(15, 23, 42, .10);
-  box-shadow: none !important;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, .12) !important;
 }
 
 .search-results-panel.is-dark .search-results-list > .w-full > .p-0 > .content-container.content-container {
@@ -2734,7 +2734,7 @@ onMounted(() => {
   background-color: rgba(15, 23, 42, .52) !important;
   background-image: none !important;
   border-color: rgba(255, 255, 255, .12);
-  box-shadow: none !important;
+  box-shadow: 0 16px 32px rgba(2, 6, 23, .52) !important;
 }
 
 .search-results-empty {

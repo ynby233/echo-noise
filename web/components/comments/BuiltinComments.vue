@@ -47,7 +47,9 @@
             <div class="comment-footer">
               <span class="comment-time">{{ formatCommentTime(c.created_at) }}</span>
               <span class="comment-replies">回复 {{ repliesCount(c.id) }}</span>
-              <span v-if="visibilityLabel(c.visibility)" class="comment-visibility">{{ visibilityLabel(c.visibility) }}</span>
+              <span class="comment-visibility nw-tooltip-anchor" :data-tooltip="`可见范围：${visibilityTag(c.visibility).label}`" :aria-label="`可见范围：${visibilityTag(c.visibility).label}`">
+                <UIcon :name="visibilityTag(c.visibility).icon" class="w-4 h-4" />
+              </span>
             </div>
             <div class="comment-actions">
               <button class="action-btn" @click="startReply(c.id, commentAuthorName(c))">回复</button>
@@ -97,7 +99,9 @@
                   <div v-else class="comment-content" :class="themeText"><MarkdownRenderer :content="child.content" /></div>
                   <div class="comment-footer">
                     <span class="comment-time">{{ formatCommentTime(child.created_at) }}</span>
-                    <span v-if="visibilityLabel(child.visibility)" class="comment-visibility">{{ visibilityLabel(child.visibility) }}</span>
+                    <span class="comment-visibility nw-tooltip-anchor" :data-tooltip="`可见范围：${visibilityTag(child.visibility).label}`" :aria-label="`可见范围：${visibilityTag(child.visibility).label}`">
+                      <UIcon :name="visibilityTag(child.visibility).icon" class="w-4 h-4" />
+                    </span>
                   </div>
                   <div class="comment-actions">
                     <button class="action-btn" @click="startReply(child.id, commentAuthorName(child))">回复</button>
@@ -108,15 +112,15 @@
               </div>
             </div>
             <div v-if="hasMoreReplies(c.id) || canCollapseReplies(c.id)" class="flex justify-end w-full gap-2">
-              <button v-if="canCollapseReplies(c.id)" class="text-xs px-2 py-1 rounded border" :class="themeBorder" @click="collapseReplies(c.id)">收回回复</button>
-              <button v-if="hasMoreReplies(c.id)" class="text-xs px-2 py-1 rounded border" :class="themeBorder" @click="loadMoreReplies(c.id)">加载更多回复</button>
+              <button v-if="canCollapseReplies(c.id)" type="button" class="comment-load-btn nw-action-btn nw-action-btn--label" @click="collapseReplies(c.id)">收回回复</button>
+              <button v-if="hasMoreReplies(c.id)" type="button" class="comment-load-btn nw-action-btn nw-action-btn--label" @click="loadMoreReplies(c.id)">加载更多回复</button>
             </div>
           </div>
           </div>
         </div>
         <div v-if="hasMore || canCollapseRootComments" class="flex justify-center gap-2">
-          <button v-if="canCollapseRootComments" class="text-xs px-3 py-1 rounded border" :class="themeBorder" @click="collapseRootComments">收回</button>
-          <button v-if="hasMore" class="text-xs px-3 py-1 rounded border" :class="themeBorder" @click="loadMore">加载更多{{ contextLabel }}</button>
+          <button v-if="canCollapseRootComments" type="button" class="comment-load-btn nw-action-btn nw-action-btn--label" @click="collapseRootComments">收回</button>
+          <button v-if="hasMore" type="button" class="comment-load-btn nw-action-btn nw-action-btn--label" @click="loadMore">加载更多{{ contextLabel }}</button>
         </div>
       <div v-if="!props.replyInputOnly && !sortedRootComments.length" class="text-xs mb-4" :class="themeMuted">暂无{{ contextLabel }}</div>
 
@@ -288,12 +292,8 @@ const clampVisibilityToLimit = (value: any, limit?: any) => {
   const allowed = commentVisibilityOptions(limit)
   return allowed.some((opt) => opt.value === normalizedValue) ? normalizedValue : (allowed[0]?.value || messageVisibilityLimit.value)
 }
-const visibilityLabel = (v: any) => {
-  const value = normalizeVisibility(v)
-  if (value === 'public') return ''
-  return visibilityOptions.find((opt) => opt.value === value)?.label || ''
-}
 const visibilityOptionFor = (v: any) => visibilityOptions.find((opt) => opt.value === normalizeVisibility(v)) || visibilityOptions[0]
+const visibilityTag = (v: any) => visibilityOptionFor(v)
 const commentOwnerId = (c: any) => Number(c?.user_id || c?.UserID || c?.user?.id || c?.user?.ID || c?.user?.user_id || 0)
 const canManageComment = (c: any) => isAdmin.value || (!!currentUserId.value && commentOwnerId(c) === currentUserId.value)
 const selectedVisibility = ref(messageVisibilityLimit.value)
@@ -322,11 +322,10 @@ const isDark = computed(() => {
 })
 
 const themeBg = computed(() => 'bg-transparent')
-const themeBorder = computed(() => (isDark.value ? 'border-white/20' : 'border-black'))
 const themeText = computed(() => (isDark.value ? 'text-gray-200' : 'text-black'))
 const themeMuted = computed(() => (isDark.value ? 'text-gray-400' : 'text-gray-500'))
-const rootCardClass = computed(() => (isDark.value ? 'rounded-xl p-3 bg-[rgba(15,23,42,0.52)] border border-white/10 shadow-none' : 'rounded-xl p-3 bg-white border border-black/10 shadow-none'))
-const childCardClass = computed(() => (isDark.value ? 'rounded-xl p-2 bg-[rgba(15,23,42,0.52)] border border-white/10 shadow-none' : 'rounded-xl p-2 bg-white border border-black/10 shadow-none'))
+const rootCardClass = computed(() => 'comment-card-frame comment-card-root')
+const childCardClass = computed(() => 'comment-card-frame comment-card-child')
 const textareaClass = computed(() => (isDark.value ? `w-full px-3 py-2 bg-[rgba(24,28,32,0.95)] text-white border border-blue-500 focus:border-blue-400 rounded-md ring-0 outline-none` : `w-full px-3 py-2 bg-white text-black border border-blue-500 focus:border-blue-600 rounded-md ring-0 outline-none`))
 const BASE_API = useRuntimeConfig().public.baseApi || '/api'
 const normalizeMediaURL = (raw: string) => resolveMediaURL(BASE_API, raw)
@@ -1333,7 +1332,17 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 .comments-list { display:flex; flex-direction:column; gap:10px; width:100%; margin-bottom:12px; }
 .replies-list { display:flex; flex-direction:column; gap:6px; width:100%; }
 .comment-item { display:flex; align-items:flex-start; gap:10px; }
-.comment-item.child { padding:6px; border-radius:12px; border:1px solid transparent; gap:8px; }
+.comment-card-frame {
+  padding: 12px;
+  border: 1px solid rgba(15, 23, 42, .10);
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, .12);
+}
+.comment-card-child {
+  padding: 8px;
+  background: #ffffff;
+}
 .comment-target-highlight { outline: 2px solid rgba(59, 130, 246, .8); outline-offset: 3px; border-radius: 12px; transition: outline-color .2s ease; }
 .comment-body { flex:1; min-width:0; }
 .comment-header { display:flex; align-items:center; justify-content:space-between; font-weight:600; margin-bottom:4px; }
@@ -1357,7 +1366,33 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 .comment-footer { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:4px; }
 .comment-actions { display:flex; align-items:center; gap:10px; margin-top:6px; font-size:12px; white-space: normal; flex-wrap: wrap; }
 .action-btn:hover { opacity:1; }
-.comment-visibility { font-size:11px; opacity:.72; padding:1px 6px; border-radius:9999px; border:1px solid currentColor; }
+.comment-visibility {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:0 0 auto;
+  width:24px;
+  height:24px;
+  border-radius:9999px;
+  border:1px solid var(--comment-toolbar-border);
+  background:var(--comment-toolbar-control-bg);
+  color:var(--comment-toolbar-text);
+  opacity:.9;
+}
+.comment-visibility svg { width:16px; height:16px; }
+.comment-load-btn {
+  min-width:max-content;
+  height:28px;
+  min-height:28px;
+  padding:0 8px;
+  border-radius:8px;
+  font-size:12px;
+  font-weight:650;
+  line-height:1;
+  --nw-action-bg:rgba(15,23,42,.06);
+  --nw-action-text:var(--comment-toolbar-text);
+  --nw-action-border:var(--comment-toolbar-border);
+}
 .visibility-picker { display:inline-flex; align-items:center; gap:6px; font-size:12px; }
 .toolbar-control.comment-visibility-picker { position:relative; z-index:5006; }
 .edit-card { display:flex; flex-direction:column; gap:8px; margin:4px 0 6px; }
@@ -1384,8 +1419,6 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 .avatar-img { width:36px; height:36px; border-radius:9999px; object-fit:cover; display:block; }
 .comment-item.child .avatar-img { width:28px; height:28px; }
 .comment-author a { color: inherit; text-decoration: none; }
-:global(html.dark) .comment-item.child { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.12); }
-:global(html:not(.dark)) .comment-item.child { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.08); }
 
 /* 子回复卡片头部样式 */
 .reply-header { display:flex; align-items:center; gap:6px; font-weight:600; }
@@ -1424,6 +1457,20 @@ defineExpose({ load, focusCommentById, replyToCommentById })
   --nw-floating-hover-border: rgba(249, 115, 22, 0.58);
   --nw-floating-selected-bg: rgba(249, 115, 22, 0.30);
   --nw-floating-selected-border: rgba(251, 146, 60, 0.58);
+}
+.builtin-comments.comment-theme-dark .comment-card-frame,
+:global(html.dark) .builtin-comments .comment-card-frame,
+:global(.dark) .builtin-comments .comment-card-frame {
+  border-color: rgba(255, 255, 255, .12);
+  background: rgba(15, 23, 42, .52);
+  box-shadow: 0 16px 32px rgba(2, 6, 23, .52);
+}
+.builtin-comments.comment-theme-dark .comment-load-btn,
+:global(html.dark) .builtin-comments .comment-load-btn,
+:global(.dark) .builtin-comments .comment-load-btn {
+  --nw-action-bg: rgba(51, 65, 85, .96);
+  --nw-action-text: #cbd5e1;
+  --nw-action-border: rgba(148, 163, 184, .28);
 }
 .comment-editor-toolbar { position:relative; z-index:40; display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-height:48px; padding:6px; border-radius:12px; background:var(--comment-toolbar-bg) !important; color:var(--comment-toolbar-text); backdrop-filter:saturate(1.1) blur(6px); -webkit-backdrop-filter:saturate(1.1) blur(6px); }
 .builtin-comments.comment-theme-dark .comment-editor-toolbar { background:var(--comment-toolbar-bg) !important; color:var(--comment-toolbar-text) !important; }
