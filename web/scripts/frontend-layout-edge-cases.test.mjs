@@ -134,7 +134,7 @@ assert(
   messageList.includes('class="search-results-title">搜索</div>') &&
     messageList.includes('搜索内容：{{ activeFilterContent }}') &&
     messageList.includes('class="search-results-back nw-action-btn nw-action-btn--label"') &&
-    messageList.includes('>笔记（{{ filteredResultCount }}）</div>') &&
+    messageList.includes('>笔记 ({{ filteredResultCount }})</div>') &&
     messageList.includes('v-if="props.pageReady && hasActiveFilters && displayMessages.length" class="search-results-count"') &&
     messageList.includes('v-if="props.pageReady && hasActiveFilters && !displayMessages.length" class="search-results-empty"') &&
     messageList.includes('class="search-results-empty-icon"') &&
