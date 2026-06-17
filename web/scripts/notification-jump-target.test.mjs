@@ -34,6 +34,24 @@ assert.match(
 
 assert.match(
   messageList,
+  /thread\.focusCommentById\(commentId,\s*\{\s*scroll:\s*false\s*\}\)/,
+  'notification jumps should let MessageList own the final scroll instead of stacking BuiltinComments smooth scrolling'
+)
+
+assert.match(
+  messageList,
+  /const\s+followLayoutUntilStable[\s\S]*?scrollElementToAppFocus\(el,\s*'instant'\)[\s\S]*?const\s+finishWithSingleSmoothScroll[\s\S]*?scrollElementToAppFocus\(el,\s*behavior\)/,
+  'notification target stabilization should quietly follow layout shifts and use only one final smooth scroll'
+)
+
+assert.doesNotMatch(
+  messageList,
+  /stableFrames\s*>=\s*\d+\s*\?\s*finalBehavior\s*:\s*'instant'/,
+  'notification target stabilization should not restart smooth scrolling inside the stability loop'
+)
+
+assert.match(
+  messageList,
   /const\s+waitForNotificationMedia\s*=\s*async\s*\(messageId:\s*number[\s\S]*?querySelectorAll\('img, video'\)[\s\S]*?item\.decode\(\)[\s\S]*?loadeddata/,
   'notification jumps should wait for image decode and video data inside the target message before final alignment'
 )

@@ -1273,23 +1273,24 @@ const revealComment = async (commentId: number) => {
   return true
 }
 
-const highlightComment = (commentId: number) => {
+const highlightComment = (commentId: number, options: { scroll?: boolean } = {}) => {
   const el = commentElement(commentId)
   if (!el) return
   el.classList.add('comment-target-highlight')
   setTimeout(() => el.classList.remove('comment-target-highlight'), 2400)
+  if (options.scroll === false) return
   const scrollToTarget = () => scrollElementIntoInputContainer(el, 'start', 'smooth', 96)
   scrollToTarget()
   setTimeout(scrollToTarget, 260)
 }
 
-const focusCommentById = async (commentId: number) => {
+const focusCommentById = async (commentId: number, options: { scroll?: boolean } = {}) => {
   await load()
   if (!await revealComment(commentId)) {
     useToast().add({ title: '评论不可见或已删除', color: 'orange' })
     return false
   }
-  highlightComment(commentId)
+  highlightComment(commentId, options)
   return true
 }
 

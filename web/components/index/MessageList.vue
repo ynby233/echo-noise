@@ -511,7 +511,7 @@ import { uploadMediaFiles } from '~/utils/media-upload'
 import { useRuntimeConfig } from '#imports'
 import { useToast } from '#ui/composables/useToast'
 type BuiltinCommentsExpose = {
-  focusCommentById?: (commentId: number) => Promise<boolean>
+  focusCommentById?: (commentId: number, options?: { scroll?: boolean }) => Promise<boolean>
 }
 const config = useRuntimeConfig()
 const BASE_API = config.public.baseApi || '/api'
@@ -928,7 +928,7 @@ const focusBuiltinTargetComment = async (messageId: number, commentId: number) =
   for (let i = 0; i < 10; i += 1) {
     const thread = builtinCommentsRefs.value[messageId]
     if (thread?.focusCommentById) {
-      if (await thread.focusCommentById(commentId)) return true
+      if (await thread.focusCommentById(commentId, { scroll: false })) return true
     }
     await new Promise((resolve) => window.setTimeout(resolve, 140))
   }
@@ -1002,6 +1002,19 @@ const loadTargetMessagePage = async (id: number) => {
     wrapper.scrollTo({ top: Math.max(0, targetTop), behavior })
   }
 
+  const notificationFocusDistance = (el: HTMLElement) => {
+    if (typeof document === 'undefined') return 0
+    const wrapper = document.querySelector('.content-wrapper') as HTMLElement | null
+    const elRect = el.getBoundingClientRect()
+    if (!wrapper) {
+      const focusOffset = Math.min(140, Math.max(72, window.innerHeight * 0.18))
+      return elRect.top - focusOffset
+    }
+    const wrapperRect = wrapper.getBoundingClientRect()
+    const focusOffset = Math.min(140, Math.max(72, wrapper.clientHeight * 0.18))
+    return elRect.top - wrapperRect.top - focusOffset
+  }
+
   const waitForNotificationFrame = () => new Promise<void>((resolve) => {
     if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
       resolve()
@@ -1042,34 +1055,55 @@ const loadTargetMessagePage = async (id: number) => {
   }
 
   const stabilizeNotificationTargetScroll = async (el: HTMLElement, messageId: number, behavior: ScrollBehavior = 'smooth') => {
-    const correctUntilStable = async (duration: number, finalBehavior: ScrollBehavior = 'smooth') => {
+    const followLayoutUntilStable = async (duration: number) => {
       let lastTop = Number.NaN
       let lastHeight = Number.NaN
       let stableFrames = 0
+      let lastCorrectionAt = 0
       const startedAt = Date.now()
       while (Date.now() - startedAt < duration) {
         await waitForNotificationFrame()
         if (!document.contains(el)) return false
         const rect = el.getBoundingClientRect()
+        const distance = notificationFocusDistance(el)
+        const nearFocus = Math.abs(distance) <= 12
         const topDelta = Math.abs(rect.top - lastTop)
         const heightDelta = Math.abs(rect.height - lastHeight)
-        if (topDelta < 1 && heightDelta < 1) stableFrames += 1
+        if (topDelta < 1 && heightDelta < 1 && nearFocus) stableFrames += 1
         else stableFrames = 0
         lastTop = rect.top
         lastHeight = rect.height
-        scrollElementToAppFocus(el, stableFrames >= 2 ? finalBehavior : 'instant')
-        if (stableFrames >= 3) break
-        await waitForNotificationDelay(120)
+        const now = Date.now()
+        if (!nearFocus && now - lastCorrectionAt > 180) {
+          scrollElementToAppFocus(el, 'instant')
+          lastCorrectionAt = now
+        }
+        if (stableFrames >= 4) break
+        await waitForNotificationDelay(96)
       }
       return document.contains(el)
     }
 
-    scrollElementToAppFocus(el, behavior)
-    if (!await correctUntilStable(1800)) return
+    const finishWithSingleSmoothScroll = async () => {
+      await waitForNotificationFrame()
+      if (!document.contains(el)) return
+      const distance = Math.abs(notificationFocusDistance(el))
+      if (distance <= 2) return
+      scrollElementToAppFocus(el, behavior)
+      if (behavior === 'smooth') {
+        await waitForNotificationDelay(420)
+        if (document.contains(el) && Math.abs(notificationFocusDistance(el)) > 18) {
+          scrollElementToAppFocus(el, 'instant')
+        }
+      }
+    }
+
+    scrollElementToAppFocus(el, 'instant')
+    if (!await followLayoutUntilStable(900)) return
     await waitForNotificationMedia(messageId)
     if (!document.contains(el)) return
-    scrollElementToAppFocus(el, 'instant')
-    await correctUntilStable(1600)
+    await followLayoutUntilStable(900)
+    await finishWithSingleSmoothScroll()
   }
 
   let notificationTargetRetryTimer: ReturnType<typeof window.setTimeout> | null = null
