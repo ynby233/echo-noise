@@ -515,7 +515,7 @@ onBeforeUnmount(() => {
 }
 
 .year-select {
-  width: 75px;
+  width: 70px;
 }
 
 .month-select {
