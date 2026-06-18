@@ -68,7 +68,7 @@
                   </div>
                 </div>
                 <div class="ml-auto flex items-center gap-2 text-xs opacity-80">
-                  <span v-if="messageVisibility(msg) !== 'public'" class="visibility-indicator nw-tooltip-anchor" :data-tooltip="messageVisibilityLabel(messageVisibility(msg))" :aria-label="messageVisibilityLabel(messageVisibility(msg))">
+                  <span class="visibility-indicator nw-tooltip-anchor" :data-tooltip="messageVisibilityLabel(messageVisibility(msg))" :aria-label="messageVisibilityLabel(messageVisibility(msg))">
                     <UIcon :name="messageVisibilityIcon(messageVisibility(msg))" class="w-4 h-4" />
                   </span>
                   <UIcon v-if="msg.pinned" name="i-mdi-pin" class="w-4 h-4" />
@@ -2726,7 +2726,7 @@ onMounted(() => {
   background-color: rgba(255, 255, 255, .72) !important;
   background-image: none !important;
   border: 1px solid rgba(15, 23, 42, .10);
-  box-shadow: none !important;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, .12) !important;
 }
 
 .search-results-panel.is-dark .search-results-list > .w-full > .p-0 > .content-container.content-container {
@@ -2734,7 +2734,7 @@ onMounted(() => {
   background-color: rgba(15, 23, 42, .52) !important;
   background-image: none !important;
   border-color: rgba(255, 255, 255, .12);
-  box-shadow: none !important;
+  box-shadow: 0 16px 32px rgba(2, 6, 23, .52) !important;
 }
 
 .search-results-empty {

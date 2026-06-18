@@ -1227,7 +1227,7 @@ watch(() => props.enableGithubCard, () => {
 }
 
 /* 主题化整体与标题颜色（容器自身带主题类） */
-.builtin-comments .markdown-preview.theme-dark { color: rgb(227, 220, 220) !important; }
+.builtin-comments .markdown-preview.theme-dark { color: #ffffff !important; }
 .builtin-comments .markdown-preview.theme-light { color: #111111 !important; }
 /* 通用主题文本颜色（非评论区域也适用） */
 .markdown-preview.theme-dark { color: rgb(227, 220, 220) !important; }
@@ -1237,7 +1237,7 @@ watch(() => props.enableGithubCard, () => {
 .builtin-comments .markdown-preview.theme-dark h3,
 .builtin-comments .markdown-preview.theme-dark h4,
 .builtin-comments .markdown-preview.theme-dark h5,
-.builtin-comments .markdown-preview.theme-dark h6 { color: rgb(251, 247, 247) !important; }
+.builtin-comments .markdown-preview.theme-dark h6 { color: #ffffff !important; }
 .builtin-comments .markdown-preview.theme-light h1,
 .builtin-comments .markdown-preview.theme-light h2,
 .builtin-comments .markdown-preview.theme-light h3,

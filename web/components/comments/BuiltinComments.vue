@@ -1371,12 +1371,12 @@ defineExpose({ load, focusCommentById, replyToCommentById })
   align-items:center;
   justify-content:center;
   flex:0 0 auto;
-  width:24px;
-  height:24px;
-  border-radius:9999px;
-  border:1px solid var(--comment-toolbar-border);
-  background:var(--comment-toolbar-control-bg);
-  color:var(--comment-toolbar-text);
+  width:1rem;
+  height:1rem;
+  border-radius:0;
+  border:0;
+  background:transparent;
+  color:inherit;
   opacity:.9;
 }
 .comment-visibility svg { width:16px; height:16px; }
