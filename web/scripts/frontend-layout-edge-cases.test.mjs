@@ -18,6 +18,7 @@ const authLogin = read('pages/auth/login.vue')
 const authRegister = read('pages/auth/register.vue')
 const homePage = read('pages/index.vue')
 const builtinComments = read('components/comments/BuiltinComments.vue')
+const markdownRenderer = read('components/index/MarkdownRenderer.vue')
 const floatingCss = read('assets/css/tailwind.css')
 
 assert(
@@ -196,6 +197,26 @@ assert(
     !messageList.includes('class="date-filter-bar"') &&
     !messageList.includes('筛选结果：'),
   'filtered search results must keep guestbook/notification-aligned panel width, spacing, count typography, original note width, direct note-card framing, and empty state without a 0-count heading'
+)
+
+assert(
+  addForm.includes('class="tb-btn nw-action-btn nw-action-btn--label has-label full-image-btn') &&
+    addForm.indexOf('data-tooltip="图床上传"') < addForm.indexOf(":data-tooltip=\"fullImageAttachments ? '关闭全图显示图片附件' : '全图显示图片附件'\"") &&
+    addForm.indexOf(":data-tooltip=\"fullImageAttachments ? '关闭全图显示图片附件' : '全图显示图片附件'\"") < addForm.indexOf(':data-tooltip="enableNotify ? \'关闭推送\' : \'开启推送\'"') &&
+    addForm.includes("const FULL_IMAGE_ATTACHMENTS_MARKER = '<!-- noise-full-image-attachments -->'") &&
+    addForm.includes('fullImageAttachments: !!fullImageAttachments.value') &&
+    addForm.includes('content: buildPublishContent(MessageContent.value)') &&
+    addForm.includes("applyImageGridHTML(raw, keepImagesFullSize)") &&
+    addForm.includes('.editor-preview :deep(.full-image-attachment img)') &&
+    markdownRenderer.includes('const FULL_IMAGE_ATTACHMENTS_MARKER_RE = /<!--\\s*noise-full-image-attachments\\s*-->\\s*/gi') &&
+    markdownRenderer.includes('const keepImagesFullSize = hasFullImageAttachmentsMarker(markdown ?? \'\')') &&
+    markdownRenderer.includes("wrapper.className = 'full-image-attachment'") &&
+    markdownRenderer.includes('wrapper.appendChild(ensureImageAnchor(node, group))') &&
+    markdownRenderer.includes('applyImageGrid(keepImagesFullSize)') &&
+    markdownRenderer.includes('.markdown-preview :deep(.full-image-attachment img)') &&
+    markdownRenderer.includes('height: auto !important;') &&
+    markdownRenderer.includes('object-fit: contain !important;'),
+  'publish composer must provide a full-image attachment toggle between image hosting and push, persist the hidden marker, and render marked image attachments as responsive full images with Fancybox links'
 )
 
 assert(

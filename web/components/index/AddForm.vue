@@ -23,6 +23,10 @@
           <button type="button" class="tb-btn nw-action-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" @click="triggerFileInput"><UIcon name="i-mdi-image-plus-outline" class="w-5 h-5" /></button>
           <!-- 新增图床上传按钮 -->
           <button type="button" class="tb-btn nw-action-btn nw-tooltip-anchor" data-tooltip="图床上传" aria-label="图床上传" @click="showImageUploader = true"><UIcon name="i-mdi-cloud-upload-outline" class="w-5 h-5" /></button>
+          <button type="button" class="tb-btn nw-action-btn nw-action-btn--label has-label full-image-btn nw-tooltip-anchor" :class="{ 'is-enabled': fullImageAttachments }" :data-tooltip="fullImageAttachments ? '关闭全图显示图片附件' : '全图显示图片附件'" :aria-label="fullImageAttachments ? '关闭全图显示图片附件' : '全图显示图片附件'" @click="toggleFullImageAttachments">
+            <UIcon name="i-mdi-image-size-select-large" class="w-5 h-5" />
+            <span class="full-image-label">全图</span>
+          </button>
           <button type="button" class="tb-btn nw-action-btn nw-action-btn--label has-label notify-btn nw-tooltip-anchor" :class="{ 'is-enabled': enableNotify }" :data-tooltip="enableNotify ? '关闭推送' : '开启推送'" :aria-label="enableNotify ? '关闭推送' : '开启推送'" @click="toggleNotify">
             <UIcon :name="enableNotify ? 'i-mdi-bell-off-outline' : 'i-mdi-bell-ring-outline'" class="w-5 h-5" />
             <span class="notify-label">{{ enableNotify ? '关闭' : '开启' }}</span>
@@ -275,6 +279,21 @@ const onEditorReady = async () => {
 }
 const showImageUploader = ref(false)
 const imageUploaderPosition = ref({ x: 400, y: 320 }) // 可根据实际调整
+const FULL_IMAGE_ATTACHMENTS_MARKER = '<!-- noise-full-image-attachments -->'
+const FULL_IMAGE_ATTACHMENTS_MARKER_RE = /<!--\s*noise-full-image-attachments\s*-->\s*/gi
+const hasFullImageAttachmentsMarker = (content: string) => {
+  FULL_IMAGE_ATTACHMENTS_MARKER_RE.lastIndex = 0
+  return FULL_IMAGE_ATTACHMENTS_MARKER_RE.test(String(content || ''))
+}
+const stripFullImageAttachmentsMarker = (content: string) => String(content || '').replace(FULL_IMAGE_ATTACHMENTS_MARKER_RE, '').trimStart()
+const fullImageAttachments = ref(false)
+const toggleFullImageAttachments = () => {
+  fullImageAttachments.value = !fullImageAttachments.value
+}
+const buildPublishContent = (content: string) => {
+  const clean = stripFullImageAttachmentsMarker(content).trim()
+  return fullImageAttachments.value ? `${FULL_IMAGE_ATTACHMENTS_MARKER}\n${clean}` : clean
+}
 // 处理图床上传成功，插入编辑器
 const handleImageHostingSuccess = (markdown: string) => {
   if (vditorEditor.value?.insertValue) {
@@ -421,7 +440,7 @@ const saveDraft = () => {
     }
     localStorage.setItem(
       DRAFT_KEY,
-      JSON.stringify({ content: MessageContent.value || '', private: !!Private.value, visibility: Visibility.value, notify: !!enableNotify.value, savedAt: Date.now() })
+      JSON.stringify({ content: MessageContent.value || '', private: !!Private.value, visibility: Visibility.value, notify: !!enableNotify.value, fullImageAttachments: !!fullImageAttachments.value, savedAt: Date.now() })
     )
   } catch {}
 }
@@ -452,6 +471,7 @@ const clearForm = () => {
   MessageContent.value = "";
   MessageContentHtml.value = "";
   PublishedAtInput.value = "";
+  fullImageAttachments.value = false;
   clearDraft()
   
   if (vditorEditor.value) {
@@ -807,7 +827,7 @@ const handleVideoUploaded = (videoUrl: string) => {
 const INLINE_IMAGE_REG = /!\s*(https?:\/\/[^\s!]+\.(?:png|jpe?g|gif|webp))(?:\?[^\s!]*)?/gi;
 const normalizeInlineImageLinks = (md: string): string => md.replace(INLINE_IMAGE_REG, (m, url) => `![](${url})`);
 
-const applyImageGridHTML = (html: string) => {
+const applyImageGridHTML = (html: string, keepImagesFullSize = false) => {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
   const fullSizeRenderSelector = [
@@ -895,6 +915,15 @@ const applyImageGridHTML = (html: string) => {
     return anchor;
   };
 
+  const wrapFullImageParagraph = (p: Element, group: string) => {
+    const payload = getSingleImagePayload(p);
+    if (!payload) return;
+    const wrapper = doc.createElement('div');
+    wrapper.className = 'full-image-attachment';
+    wrapper.appendChild(ensurePreviewImageAnchor(payload, group));
+    p.replaceWith(wrapper);
+  };
+
   const wrapSingleImageParagraph = (p: Element) => {
     const payload = getSingleImagePayload(p);
     if (!payload) return;
@@ -903,6 +932,13 @@ const applyImageGridHTML = (html: string) => {
     wrapper.appendChild(ensurePreviewImageAnchor(payload, 'editor-preview-image'));
     p.replaceWith(wrapper);
   };
+
+  if (keepImagesFullSize) {
+    Array.from(doc.body.querySelectorAll('p')).forEach((p, index) => {
+      if (isPureImageParagraph(p)) wrapFullImageParagraph(p, `editor-preview-full-image-${index}`);
+    });
+    return doc.body.innerHTML;
+  }
 
   for (const run of runs) {
     const grid = doc.createElement('div');
@@ -953,12 +989,15 @@ watch(Visibility, (value) => {
   scheduleDraftSave()
 })
 
-watch(MessageContent, (val) => {
+watch([MessageContent, fullImageAttachments], ([val]) => {
   scheduleDraftSave()
   if (previewRenderTimer) clearTimeout(previewRenderTimer)
   previewRenderTimer = setTimeout(async () => {
-    const raw = await Vditor.md2html(normalizeInlineImageLinks(val || ""));
-    MessageContentHtml.value = applyImageGridHTML(raw);
+    const rawValue = String(val || "")
+    const keepImagesFullSize = fullImageAttachments.value || hasFullImageAttachmentsMarker(rawValue)
+    const previewValue = stripFullImageAttachmentsMarker(rawValue)
+    const raw = await Vditor.md2html(normalizeInlineImageLinks(previewValue));
+    MessageContentHtml.value = applyImageGridHTML(raw, keepImagesFullSize);
     nextTick(() => {
       const roots = document.querySelectorAll('.editor-preview');
       roots.forEach((root) => {
@@ -1009,10 +1048,14 @@ onMounted(async () => {
       const draft = JSON.parse(raw)
       const draftContent = String(draft?.content || '')
       if (draftContent.trim().length > 0 && MessageContent.value.trim().length === 0) {
-        MessageContent.value = draftContent
+        fullImageAttachments.value = typeof draft?.fullImageAttachments === 'boolean'
+          ? draft.fullImageAttachments
+          : hasFullImageAttachmentsMarker(draftContent)
+        const editorContent = stripFullImageAttachmentsMarker(draftContent)
+        MessageContent.value = editorContent
         Visibility.value = normalizeMessageVisibility(draft?.visibility, typeof draft?.private === 'boolean' ? draft.private : Visibility.value === 'private')
         if (typeof draft?.notify === 'boolean') enableNotify.value = draft.notify
-        vditorEditor.value?.setValue?.(draftContent)
+        vditorEditor.value?.setValue?.(editorContent)
         toast.add({ title: '草稿已恢复', description: '已自动恢复上次未发布内容', color: 'green', timeout: 2000 })
       }
     }
@@ -1056,7 +1099,7 @@ const addMessage = async () => {
 
   const message: MessageToSave = {
     username: Username.value,
-    content: MessageContent.value,
+    content: buildPublishContent(MessageContent.value),
     private: Private.value,
     visibility: Visibility.value,
     notify: enableNotify.value,
@@ -1089,6 +1132,8 @@ const addMessage = async () => {
 .editor-toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:6px; padding:6px; border-radius:12px; background: rgba(255,255,255,0.85); flex-wrap: wrap; overflow: visible; position: sticky; bottom: 0; z-index: 95; backdrop-filter: saturate(1.1) blur(6px); }
 .toolbar-left, .toolbar-right { display:flex; align-items:center; gap:8px; flex-wrap: wrap; }
 .tb-btn { padding: 0; }
+.full-image-btn.is-enabled { --nw-action-border: rgba(37,99,235,0.32); --nw-action-bg: rgba(37,99,235,0.14); --nw-action-text: #1d4ed8; }
+.full-image-label { font-size: 12px; line-height: 1; white-space: nowrap; }
 .notify-btn.is-enabled { --nw-action-border: rgba(249,115,22,0.32); --nw-action-bg: rgba(249,115,22,0.16); --nw-action-text: #c2410c; }
 .notify-label { font-size: 12px; line-height: 1; white-space: nowrap; }
 .publish-time-control { max-width: min(210px, calc(100vw - 32px)); }
@@ -1111,6 +1156,7 @@ const addMessage = async () => {
 .preview-card { backdrop-filter: blur(8px); background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 8px; color:#111827; }
 html.dark .editor-box { background: var(--home-surface-dark, #202a36); border: 1px solid rgba(255,255,255,0.16); color:#fff; }
 html.dark .editor-toolbar { background: rgba(39, 50, 66, 0.68); backdrop-filter: saturate(1.1) blur(6px); }
+html.dark .full-image-btn.is-enabled { --nw-action-border: rgba(96,165,250,0.42); --nw-action-bg: rgba(37,99,235,0.28); --nw-action-text: #bfdbfe; }
 html.dark .notify-btn.is-enabled { --nw-action-border: rgba(251,146,60,0.38); --nw-action-bg: rgba(249,115,22,0.22); --nw-action-text: #fed7aa; }
 html.dark .visibility-select { background: transparent; border: 0; color: inherit; }
 :global(html.dark) .tb-sep { background: rgba(255,255,255,0.12); }
@@ -1151,6 +1197,27 @@ html.dark .upload-progress-text { color: rgba(226,232,240,0.72); }
   object-fit: cover;
   object-position: center;
   border-radius: inherit;
+}
+.editor-preview :deep(.full-image-attachment) {
+  width: 100%;
+  max-width: 100%;
+  margin: 8px 0;
+  overflow: visible;
+}
+.editor-preview :deep(.full-image-attachment > a) {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+}
+.editor-preview :deep(.full-image-attachment img) {
+  display: block;
+  width: auto !important;
+  max-width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  object-fit: contain !important;
+  border-radius: 12px;
 }
 .image-grid {
   display: grid;

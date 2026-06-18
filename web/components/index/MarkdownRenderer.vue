@@ -68,6 +68,12 @@ const props = defineProps({
 });
 
 const contentTheme = inject('contentTheme') as any
+const FULL_IMAGE_ATTACHMENTS_MARKER_RE = /<!--\s*noise-full-image-attachments\s*-->\s*/gi
+const hasFullImageAttachmentsMarker = (content: string) => {
+  FULL_IMAGE_ATTACHMENTS_MARKER_RE.lastIndex = 0
+  return FULL_IMAGE_ATTACHMENTS_MARKER_RE.test(String(content || ''))
+}
+const stripFullImageAttachmentsMarker = (content: string) => String(content || '').replace(FULL_IMAGE_ATTACHMENTS_MARKER_RE, '').trimStart()
 const HASHTAG_REG = /(^|[\s(（[{【])#([\p{L}\p{N}_-]+)/gu
 const METING_API_FALLBACKS = [
   'https://meting.soopy.cn/api',
@@ -203,10 +209,10 @@ const onPreviewClick = (event: Event) => {
   emit('tagClick', tag)
 }
 
-const applyImageGrid = () => {
+const applyImageGrid = (keepImagesFullSize = false) => {
   if (!previewElement.value) return;
 
-  previewElement.value.querySelectorAll('.image-grid, .single-media').forEach((node) => {
+  previewElement.value.querySelectorAll('.image-grid, .single-media, .full-image-attachment').forEach((node) => {
     const parent = node.parentElement
     if (!parent) return
     while (node.firstChild) {
@@ -382,6 +388,26 @@ const applyImageGrid = () => {
            } else {
               mediaItems.push({ node: block });
            }
+        }
+
+        if (keepImagesFullSize && mediaItems.length > 0 && mediaItems.every(({ node }) => isPlainImageNode(node))) {
+          const firstBlock = run[0]
+          const parentNode = firstBlock?.parentNode
+          if (parentNode) {
+            const group = `full-image-${Math.random().toString(36).slice(2)}`
+            const movedNodes = new Set(mediaItems.map(({ node }) => node))
+            for (const { node } of mediaItems) {
+              const wrapper = document.createElement('div')
+              wrapper.className = 'full-image-attachment'
+              wrapper.appendChild(ensureImageAnchor(node, group))
+              parentNode.insertBefore(wrapper, firstBlock)
+            }
+            for (const block of run) {
+              if (movedNodes.has(block)) continue
+              if (block.parentNode) block.remove()
+            }
+          }
+          continue
         }
 
         if (mediaItems.length < 2) {
@@ -941,7 +967,9 @@ const renderMarkdown = async (markdown: string) => {
     }
 
     // 先处理媒体链接
-    const processedContent = processMediaLinks(markdown ?? '');
+    const keepImagesFullSize = hasFullImageAttachmentsMarker(markdown ?? '')
+    const renderContent = stripFullImageAttachmentsMarker(markdown ?? '')
+    const processedContent = processMediaLinks(renderContent);
 
     // 将裸露的 URL 转为可点击链接（新标签页打开）
     const linkifyBareUrls = (text: string): string => {
@@ -1026,7 +1054,7 @@ const renderMarkdown = async (markdown: string) => {
               v.style.maxWidth = '100%';
           });
 
-          applyImageGrid();
+          applyImageGrid(keepImagesFullSize);
           applyDouyinVideoLayout()
           setTimeout(() => {
             applyDouyinVideoLayout()
@@ -1774,6 +1802,32 @@ watch(() => props.enableGithubCard, () => {
   object-fit: cover !important;
   object-position: center;
   border-radius: inherit;
+}
+
+.markdown-preview :deep(.full-image-attachment) {
+  width: 100%;
+  max-width: 100%;
+  margin: 8px 0;
+  overflow: visible;
+}
+
+.markdown-preview :deep(.full-image-attachment > a) {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+}
+
+.markdown-preview :deep(.full-image-attachment img) {
+  display: block;
+  width: auto !important;
+  max-width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  object-fit: contain !important;
+  object-position: center;
+  border-radius: 12px;
+  contain-intrinsic-size: auto !important;
 }
 
 .github-card {
