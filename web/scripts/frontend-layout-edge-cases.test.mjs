@@ -166,14 +166,16 @@ assert(
     messageList.includes('font-weight: 650;') &&
     messageList.includes('.search-results-panel.is-dark .search-results-back {') &&
     messageList.includes('--nw-action-bg: rgba(51, 65, 85, .96);') &&
+    messageList.includes('.search-results-list > .w-full,') &&
+    messageList.includes('.search-results-list > .w-full > .p-0 {') &&
+    messageList.includes('overflow: visible !important;') &&
     messageList.includes('.search-results-list > .w-full > .p-0 > .content-container {') &&
     messageList.includes('.search-results-panel.is-dark .search-results-list > .w-full > .p-0 > .content-container.content-container {') &&
     messageList.includes('background: rgba(15, 23, 42, .52) !important;') &&
     messageList.includes('background-color: rgba(15, 23, 42, .52) !important;') &&
     messageList.includes('background-image: none !important;') &&
     messageList.includes('border-color: rgba(255, 255, 255, .12);') &&
-    messageList.includes('box-shadow: none !important;') &&
-    !messageList.includes('box-shadow: 0 16px 32px rgba(2, 6, 23, .52) !important;') &&
+    messageList.includes('box-shadow: 0 16px 32px rgba(2, 6, 23, .52) !important;') &&
     homePage.includes('background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.82) 100%);') &&
     builtinComments.includes("const rootCardClass = computed(() => 'comment-card-frame comment-card-root')") &&
     builtinComments.includes("const childCardClass = computed(() => 'comment-card-frame comment-card-child')") &&

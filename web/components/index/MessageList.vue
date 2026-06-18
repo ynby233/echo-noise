@@ -2721,6 +2721,11 @@ onMounted(() => {
   margin-top: 0;
 }
 
+.search-results-list > .w-full,
+.search-results-list > .w-full > .p-0 {
+  overflow: visible !important;
+}
+
 .search-results-list > .w-full > .p-0 > .content-container {
   background: rgba(255, 255, 255, .72) !important;
   background-color: rgba(255, 255, 255, .72) !important;
