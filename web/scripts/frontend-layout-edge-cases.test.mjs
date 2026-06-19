@@ -52,6 +52,10 @@ assert(
     notificationCenter.includes('border-radius:var(--home-radius-panel);') &&
     notificationCenter.includes('background:var(--home-surface-light);') &&
     notificationCenter.includes('box-shadow:0 0 0 1px #e5e7eb, 0 14px 28px rgba(15,23,42,.10);') &&
+    notificationCenter.includes('--notice-frame-line:#e5e7eb;') &&
+    notificationCenter.includes('.notification-center::before {') &&
+    notificationCenter.includes('border:1px solid var(--notice-frame-line);') &&
+    notificationCenter.includes('--notice-frame-line: var(--home-border-dark);') &&
     notificationCenter.includes('background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.82) 100%);') &&
     notificationCenter.includes('box-shadow:0 0 0 1px var(--home-border-dark), 0 14px 28px rgba(2,6,23,.45);') &&
     notificationCenter.includes('.notification-center { padding:20px; }') &&
@@ -185,8 +189,12 @@ assert(
     messageList.includes('border-radius: var(--home-radius-panel);') &&
     messageList.includes('background: var(--home-surface-light);') &&
     messageList.includes('box-shadow: 0 0 0 1px #e5e7eb, 0 14px 28px rgba(15, 23, 42, 0.10);') &&
+    messageList.includes('--search-panel-frame-line: #e5e7eb;') &&
+    messageList.includes('.search-results-panel::before {') &&
+    messageList.includes('border: 1px solid var(--search-panel-frame-line);') &&
     messageList.includes('padding: 20px;') &&
     messageList.includes('background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.82) 100%);') &&
+    messageList.includes('--search-panel-frame-line: var(--home-border-dark);') &&
     messageList.includes('box-shadow: 0 0 0 1px var(--home-border-dark), 0 14px 28px rgba(2, 6, 23, 0.45);') &&
     messageList.includes('backdrop-filter: blur(8px) saturate(118%);') &&
     messageList.includes('right: 17px;') &&

@@ -569,6 +569,7 @@ defineExpose({ refresh: () => loadNotifications(true) })
 
 <style scoped>
 .notification-center {
+  position:relative;
   width:100%;
   box-sizing:border-box;
   margin:0 0 12px;
@@ -578,6 +579,7 @@ defineExpose({ refresh: () => loadNotifications(true) })
   background:var(--home-surface-light);
   color:var(--notice-text);
   box-shadow:0 0 0 1px #e5e7eb, 0 14px 28px rgba(15,23,42,.10);
+  --notice-frame-line:#e5e7eb;
   --notice-border: rgba(15,23,42,.10);
   --notice-surface: var(--home-surface-light);
   --notice-card: #ffffff;
@@ -606,8 +608,17 @@ defineExpose({ refresh: () => loadNotifications(true) })
   --nw-floating-selected-bg: rgba(249, 115, 22, .18);
   --nw-floating-selected-border: rgba(249, 115, 22, .48);
 }
+.notification-center::before {
+  content:'';
+  position:absolute;
+  inset:0;
+  border:1px solid var(--notice-frame-line);
+  border-radius:inherit;
+  pointer-events:none;
+}
 :global(.dark) .notification-center,
 .notification-center.notification-theme-dark {
+  --notice-frame-line: var(--home-border-dark);
   --notice-border: rgba(255,255,255,.14);
   --notice-surface: linear-gradient(180deg, rgba(30,41,59,.48) 0%, rgba(15,23,42,.82) 100%);
   --notice-card: rgba(15,23,42,.52);
