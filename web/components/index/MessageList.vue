@@ -2705,14 +2705,14 @@ onMounted(() => {
   border-radius: var(--home-radius-panel);
   background: var(--home-surface-light);
   color: #111827;
-  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.10);
+  box-shadow: 0 0 0 1px #e5e7eb, 0 14px 28px rgba(15, 23, 42, 0.10);
 }
 
 .search-results-panel.is-dark {
   border-color: var(--home-border-dark);
   background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.82) 100%);
   color: #f8fafc;
-  box-shadow: 0 14px 28px rgba(2, 6, 23, 0.45);
+  box-shadow: 0 0 0 1px var(--home-border-dark), 0 14px 28px rgba(2, 6, 23, 0.45);
   backdrop-filter: blur(8px) saturate(118%);
   -webkit-backdrop-filter: blur(8px) saturate(118%);
 }

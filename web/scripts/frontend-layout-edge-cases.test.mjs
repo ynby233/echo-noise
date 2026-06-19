@@ -51,7 +51,9 @@ assert(
     notificationCenter.includes('border:1px solid #e5e7eb;') &&
     notificationCenter.includes('border-radius:var(--home-radius-panel);') &&
     notificationCenter.includes('background:var(--home-surface-light);') &&
+    notificationCenter.includes('box-shadow:0 0 0 1px #e5e7eb, 0 14px 28px rgba(15,23,42,.10);') &&
     notificationCenter.includes('background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.82) 100%);') &&
+    notificationCenter.includes('box-shadow:0 0 0 1px var(--home-border-dark), 0 14px 28px rgba(2,6,23,.45);') &&
     notificationCenter.includes('.notification-center { padding:20px; }') &&
     notificationCenter.includes('.notification-title-row { position:relative; display:block;') &&
     notificationCenter.includes('.notification-title { display:block; margin:0 0 14px;') &&
@@ -182,9 +184,10 @@ assert(
     messageList.includes('border: 1px solid #e5e7eb;') &&
     messageList.includes('border-radius: var(--home-radius-panel);') &&
     messageList.includes('background: var(--home-surface-light);') &&
-    messageList.includes('box-shadow: 0 14px 28px rgba(15, 23, 42, 0.10);') &&
+    messageList.includes('box-shadow: 0 0 0 1px #e5e7eb, 0 14px 28px rgba(15, 23, 42, 0.10);') &&
     messageList.includes('padding: 20px;') &&
     messageList.includes('background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.82) 100%);') &&
+    messageList.includes('box-shadow: 0 0 0 1px var(--home-border-dark), 0 14px 28px rgba(2, 6, 23, 0.45);') &&
     messageList.includes('backdrop-filter: blur(8px) saturate(118%);') &&
     messageList.includes('right: 17px;') &&
     messageList.includes('height: 28px;') &&
