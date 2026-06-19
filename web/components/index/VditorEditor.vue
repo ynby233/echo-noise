@@ -675,6 +675,14 @@ watch(() => props.theme, (newTheme) => {
   border-radius: 4px;
 }
 
+.vditor-ir pre.vditor-reset,
+.vditor-wysiwyg .vditor-reset,
+.vditor-sv .vditor-reset {
+  font-family: inherit !important;
+  font-weight: 400 !important;
+  letter-spacing: normal !important;
+}
+
 .vditor-ir pre.vditor-reset {
   padding: 8px 12px !important;
   color: #1a2634 !important;

@@ -98,22 +98,17 @@
     :class="['absolute bottom-0 left-0 right-0 h-14 bg-gradient-to-t backdrop-blur-sm pointer-events-none content-fade-mask', gradientClass]" style="z-index:20"></div>
               </div>
               
-              <!-- 展开按钮 - 放在分割线上方 -->
-              <div v-if="shouldShowExpandButton[msg.id]"
-                :class="['relative left-0 right-0 flex justify-center z-30', isExpanded[msg.id] ? 'mb-1' : '-mt-2 mb-1']"
-              >
-                <div 
-                  class="expand-button-container px-4 py-1.5 rounded-full backdrop-blur-sm"
+              <div v-if="shouldShowExpandButton[msg.id]" class="expand-button-row">
+                <button
+                  type="button"
+                  class="expand-toggle-btn nw-action-btn nw-action-btn--label"
+                  @click="toggleExpand(msg.id)"
+                  :aria-expanded="!!isExpanded[msg.id]"
+                  :aria-label="isExpanded[msg.id] ? '收起全文' : '展开全文'"
                 >
-                  <button
-                    class="expand-toggle-btn text-sm inline-flex items-center justify-center gap-1"
-                    @click="toggleExpand(msg.id)"
-                    aria-label="toggle-expand"
-                  >
-                    {{ isExpanded[msg.id] ? '收起全文' : '展开全文' }}
-                    <UIcon :name="isExpanded[msg.id] ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="w-4 h-4 flex-shrink-0" />
-                  </button>
-                </div>
+                  {{ isExpanded[msg.id] ? '收起全文' : '展开全文' }}
+                  <UIcon :name="isExpanded[msg.id] ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="w-4 h-4 flex-shrink-0" />
+                </button>
               </div>
               <div class="border-t border-gray-300 dark:border-gray-700 my-3"></div>
               <div class="message-socialbar">
@@ -3069,14 +3064,21 @@ onMounted(() => {
   background: var(--edit-control);
   color: var(--edit-text);
   padding: 12px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family: inherit;
   font-size: 13px;
+  font-weight: 400;
   line-height: 1.7;
+  letter-spacing: normal;
   outline: none;
   transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
 }
 
-.edit-content-textarea::placeholder { color: var(--edit-muted); }
+.edit-content-textarea::placeholder {
+  color: var(--edit-muted);
+  font-family: inherit;
+  font-weight: 400;
+  letter-spacing: normal;
+}
 .edit-content-textarea:focus {
   border-color: rgba(249, 115, 22, 0.62);
   box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.16);
@@ -3491,74 +3493,20 @@ onMounted(() => {
 
 .tool-open-btn { border: none; background: transparent; box-shadow: none; padding: 0; }
 
-/* 添加展开/折叠按钮容器样式 */
-.expand-toggle-btn {
-  border: none;
-  background: transparent;
-  color: inherit;
-  font-weight: 600;
-  font-size: 14px;
-  padding: 4px 8px;
-  transition: all 0.2s ease;
+.expand-button-row {
+  position: relative;
+  z-index: 30;
   display: flex;
-  align-items: center;
   justify-content: center;
+  margin: 8px 0 4px;
+}
+
+.expand-toggle-btn {
+  min-width: 86px;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1;
   white-space: nowrap;
-  cursor: pointer;
-}
-
-/* 按钮容器样式 - 用于提供背景和轮廓 */
-.expand-toggle-btn:hover {
-  transform: scale(1.02);
-}
-
-/* 按钮容器样式 - 用于提供背景和轮廓 */
-.expand-toggle-btn:hover {
-  transform: scale(1.02);
-}
-
-/* 暗黑模式按钮容器样式 */
-:global(html.dark) .expand-toggle-btn {
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-}
-:global(html.dark) .expand-toggle-btn:hover {
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-}
-
-/* 白天模式按钮容器样式 */
-:global(html:not(.dark)) .expand-toggle-btn {
-  color: #111827;
-  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
-}
-:global(html:not(.dark)) .expand-toggle-btn:hover {
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-
-/* 暗黑模式按钮容器（父元素）样式 */
-:global(html.dark) .expand-button-container {
-  background: rgba(39, 50, 66, 0.92) !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
-  backdrop-filter: blur(4px) !important;
-}
-:global(html.dark) .expand-button-container:hover {
-  background: rgba(47, 59, 76, 0.96) !important;
-  border-color: rgba(255, 255, 255, 0.24) !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
-}
-
-/* 白天模式按钮容器（父元素）样式 */
-:global(html:not(.dark)) .expand-button-container {
-  background: rgba(255, 255, 255, 0.9) !important;
-  border: 1px solid rgba(251, 146, 60, 0.5) !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
-  backdrop-filter: blur(4px) !important;
-}
-:global(html:not(.dark)) .expand-button-container:hover {
-  background: rgba(255, 255, 255, 0.95) !important;
-  border-color: rgba(251, 146, 60, 0.7) !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
 }
 
 /* 确保内容区域的层级正确 */
