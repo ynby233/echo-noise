@@ -269,8 +269,12 @@ assert(
     !homePage.includes('waitForNextFrame') &&
     !homePage.includes('requestAnimationFrame(() => resolve())') &&
     homePage.includes('.content-wrapper {\n    overflow-y: hidden;') &&
-    homePage.includes(':global(html.dark) .left-col,\n  :global(html.dark) .center-col,\n  :global(html.dark) .right-col,') &&
-    homePage.includes('overflow-x: hidden !important;\n    overflow-y: auto !important;') &&
+    homePage.includes(':global(html.dark) .left-col,\n:global(html.dark) .center-col,\n:global(html.dark) .right-col {') &&
+    homePage.includes('overflow-x: hidden;') &&
+    homePage.includes('@media screen and (min-width: 769px) {\n  :global(html.dark) .left-col,\n  :global(html.dark) .center-col,\n  :global(html.dark) .right-col {\n    overflow-y: auto;') &&
+    messageList.includes('const getAppScrollContainer = (target?: HTMLElement | null) => {') &&
+    messageList.includes("target?.closest('.center-col')") &&
+    builtinComments.includes("document.querySelector('.center-col') as HTMLElement | null") &&
     homePage.includes('const switchActiveTab = async (tab: string, options: { resetScroll?: boolean } = {}) => {') &&
     homePage.includes('await runCenterNavigationReset(() => { activeTab.value = tab })') &&
     homePage.includes('@click="switchActiveTab(t.key, { resetScroll: true })"') &&

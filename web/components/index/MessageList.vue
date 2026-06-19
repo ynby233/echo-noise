@@ -744,6 +744,21 @@ const adjustTargetPage = (delta: number) => {
   targetPage.value = String(normalizeTargetPage(message.page) + delta);
   targetPage.value = String(normalizeTargetPage(message.page));
 };
+const getAppScrollContainer = (target?: HTMLElement | null) => {
+  if (typeof document === 'undefined') return null as HTMLElement | null
+  return (target?.closest('.center-col') as HTMLElement | null)
+    || (document.querySelector('.center-col') as HTMLElement | null)
+    || (document.querySelector('.content-wrapper') as HTMLElement | null)
+}
+const captureAppScrollTop = () => {
+  const sc = getAppScrollContainer()
+  return { sc, top: sc ? sc.scrollTop : (typeof window !== 'undefined' ? window.scrollY : 0) }
+}
+const restoreAppScrollTop = (snapshot: { sc: HTMLElement | null; top: number }) => {
+  const sc = snapshot.sc && document.contains(snapshot.sc) ? snapshot.sc : getAppScrollContainer()
+  if (sc) sc.scrollTo({ top: snapshot.top, behavior: 'instant' })
+  else window.scrollTo({ top: snapshot.top, behavior: 'instant' })
+}
 const jumpToPage = async () => {
   const page = parseInt(targetPage.value);
   if (!page || page < 1 || page > totalPages.value || message.loading) {
@@ -757,8 +772,7 @@ const jumpToPage = async () => {
   }
 
   try {
-    const sc = document.querySelector('.content-wrapper') as HTMLElement | null;
-    const prevY = sc ? sc.scrollTop : window.scrollY;
+    const scrollSnapshot = captureAppScrollTop();
     const result = await message.getMessages(pageQueryFor(page));
     
     if (!result) {
@@ -771,7 +785,7 @@ const jumpToPage = async () => {
     
     targetPage.value = '';
     await nextTick();
-    if (sc) sc.scrollTo({ top: prevY, behavior: 'instant' }); else window.scrollTo({ top: prevY, behavior: 'instant' });
+    restoreAppScrollTop(scrollSnapshot);
   } catch (error) {
     console.error('跳转页面失败:', error);
     useToast().add({
@@ -1003,7 +1017,7 @@ const loadTargetMessagePage = async (id: number) => {
 
   const scrollElementToAppFocus = (el: HTMLElement, behavior: ScrollBehavior = 'smooth') => {
     if (typeof document === 'undefined') return
-    const wrapper = document.querySelector('.content-wrapper') as HTMLElement | null
+    const wrapper = getAppScrollContainer(el)
     if (!wrapper) {
       el.scrollIntoView({ behavior, block: 'start' })
       return
@@ -1017,7 +1031,7 @@ const loadTargetMessagePage = async (id: number) => {
 
   const notificationFocusDistance = (el: HTMLElement) => {
     if (typeof document === 'undefined') return 0
-    const wrapper = document.querySelector('.content-wrapper') as HTMLElement | null
+    const wrapper = getAppScrollContainer(el)
     const elRect = el.getBoundingClientRect()
     if (!wrapper) {
       const focusOffset = Math.min(140, Math.max(72, window.innerHeight * 0.18))
@@ -1800,8 +1814,7 @@ const loadPreviousPage = async () => {
   if (isPageLoading.value || message.page <= 1) return;
   setPageLoading(true);
   try {
-    const sc = document.querySelector('.content-wrapper') as HTMLElement | null;
-    const prevY = sc ? sc.scrollTop : window.scrollY;
+    const scrollSnapshot = captureAppScrollTop();
     const targetPage = message.page - 1;
     const result = await message.getMessages(pageQueryFor(targetPage));
     if (result && Array.isArray(result.items)) {
@@ -1817,7 +1830,7 @@ const loadPreviousPage = async () => {
       message.page = targetPage;
     }
     await nextTick();
-    if (sc) sc.scrollTo({ top: prevY, behavior: 'instant' }); else window.scrollTo({ top: prevY, behavior: 'instant' });
+    restoreAppScrollTop(scrollSnapshot);
   } catch (error) {
     useToast().add({
       title: '加载失败',
@@ -1833,8 +1846,7 @@ const loadNextPage = async () => {
   if (isPageLoading.value || !message.hasMore) return;
   setPageLoading(true);
   try {
-    const sc = document.querySelector('.content-wrapper') as HTMLElement | null;
-    const prevY = sc ? sc.scrollTop : window.scrollY;
+    const scrollSnapshot = captureAppScrollTop();
     const targetPage = message.page + 1;
     const result = await message.getMessages(pageQueryFor(targetPage));
     if (result && Array.isArray(result.items)) {
@@ -1850,7 +1862,7 @@ const loadNextPage = async () => {
       message.page = targetPage;
     }
     await nextTick();
-    if (sc) sc.scrollTo({ top: prevY, behavior: 'instant' }); else window.scrollTo({ top: prevY, behavior: 'instant' });
+    restoreAppScrollTop(scrollSnapshot);
   } catch (error) {
     useToast().add({
       title: '加载失败',

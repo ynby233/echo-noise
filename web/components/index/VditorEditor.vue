@@ -267,12 +267,13 @@ const setupVditorPanelPositioning = () => {
   const handleFloatingReposition = () => {
     if (showHeadingMenu.value) scheduleFloatingMenuPosition(positionHeadingMenu)
   }
+  const scrollContainers = Array.from(document.querySelectorAll('.center-col, .content-wrapper')) as HTMLElement[]
   toolbarEl?.addEventListener('click', handleToolbarClick, true)
   document.addEventListener('click', handleToolbarClick, true)
   document.addEventListener('mousedown', handleDocumentPointer, true)
   window.addEventListener('resize', handleFloatingReposition)
   window.addEventListener('scroll', handleFloatingReposition, { passive: true, capture: true })
-  document.querySelector('.content-wrapper')?.addEventListener('scroll', handleFloatingReposition, { passive: true })
+  scrollContainers.forEach((el) => el.addEventListener('scroll', handleFloatingReposition, { passive: true }))
   window.visualViewport?.addEventListener('resize', handleFloatingReposition, { passive: true })
   window.visualViewport?.addEventListener('scroll', handleFloatingReposition, { passive: true })
   panelCleanup = () => {
@@ -281,7 +282,7 @@ const setupVditorPanelPositioning = () => {
     document.removeEventListener('mousedown', handleDocumentPointer, true)
     window.removeEventListener('resize', handleFloatingReposition)
     window.removeEventListener('scroll', handleFloatingReposition, true)
-    document.querySelector('.content-wrapper')?.removeEventListener('scroll', handleFloatingReposition)
+    scrollContainers.forEach((el) => el.removeEventListener('scroll', handleFloatingReposition))
     window.visualViewport?.removeEventListener('resize', handleFloatingReposition)
     window.visualViewport?.removeEventListener('scroll', handleFloatingReposition)
     closeHeadingMenu()
@@ -375,8 +376,8 @@ onMounted(async () => {
       if (placeholderEl) placeholderEl.style.height = `${h}px`;
     };
 
-    const contentWrapper = document.querySelector('.content-wrapper');
-    contentWrapper?.addEventListener('scroll', updateToolbarPosition, { passive: true });
+    const scrollContainers = Array.from(document.querySelectorAll('.center-col, .content-wrapper')) as HTMLElement[];
+    scrollContainers.forEach((el) => el.addEventListener('scroll', updateToolbarPosition, { passive: true }));
     window.addEventListener('resize', updateToolbarPosition);
     window.addEventListener('scroll', updateToolbarPosition, { passive: true });
     updateToolbarPosition();
@@ -385,7 +386,7 @@ onMounted(async () => {
     mutationObserver.observe(root, { attributes: true, attributeFilter: ['class'] });
 
     fixedCleanup = () => {
-      contentWrapper?.removeEventListener('scroll', updateToolbarPosition);
+      scrollContainers.forEach((el) => el.removeEventListener('scroll', updateToolbarPosition));
       window.removeEventListener('resize', updateToolbarPosition);
       window.removeEventListener('scroll', updateToolbarPosition);
       mutationObserver?.disconnect();

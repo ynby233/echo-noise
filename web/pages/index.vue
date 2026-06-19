@@ -3193,7 +3193,21 @@ white-space: nowrap;  /* 防止换行 */
   backdrop-filter: blur(10px) saturate(125%);
   -webkit-backdrop-filter: blur(10px) saturate(125%);
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
+}
+@media screen and (min-width: 769px) {
+  :global(html.dark) .left-col,
+  :global(html.dark) .center-col,
+  :global(html.dark) .right-col {
+    overflow-y: auto;
+  }
+}
+@media screen and (max-width: 768px) {
+  :global(html.dark) .left-col,
+  :global(html.dark) .center-col,
+  :global(html.dark) .right-col {
+    overflow-y: hidden;
+  }
 }
 :global(html.dark) .center-col {
   background: linear-gradient(180deg, rgba(30, 41, 59, 0.38) 0%, rgba(15, 23, 42, 0.7) 100%);

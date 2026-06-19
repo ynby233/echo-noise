@@ -529,6 +529,8 @@ const findInputScrollContainer = () => {
     if (isScrollableY(el)) return el
     el = el.parentElement as HTMLElement | null
   }
+  const center = document.querySelector('.center-col') as HTMLElement | null
+  if (center && isScrollableY(center)) return center
   const wrapper = document.querySelector('.content-wrapper') as HTMLElement | null
   return wrapper && isScrollableY(wrapper) ? wrapper : null
 }
