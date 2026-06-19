@@ -744,11 +744,20 @@ const adjustTargetPage = (delta: number) => {
   targetPage.value = String(normalizeTargetPage(message.page) + delta);
   targetPage.value = String(normalizeTargetPage(message.page));
 };
+const isScrollableY = (el: HTMLElement | null) => {
+  if (!el || typeof window === 'undefined') return false
+  const style = window.getComputedStyle(el)
+  return /(auto|scroll|overlay)/.test(`${style.overflowY || ''} ${style.overflow || ''}`) && el.scrollHeight > el.clientHeight
+}
 const getAppScrollContainer = (target?: HTMLElement | null) => {
   if (typeof document === 'undefined') return null as HTMLElement | null
-  return (target?.closest('.center-col') as HTMLElement | null)
-    || (document.querySelector('.center-col') as HTMLElement | null)
-    || (document.querySelector('.content-wrapper') as HTMLElement | null)
+  const candidates = [
+    target?.closest('.center-col') as HTMLElement | null,
+    target?.closest('.content-wrapper') as HTMLElement | null,
+    document.querySelector('.content-wrapper') as HTMLElement | null,
+    document.querySelector('.center-col') as HTMLElement | null,
+  ]
+  return candidates.find(isScrollableY) || candidates.find(Boolean) || null
 }
 const captureAppScrollTop = () => {
   const sc = getAppScrollContainer()

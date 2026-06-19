@@ -777,24 +777,15 @@ const onRegisterSubmit = async () => {
   } finally { registerSubmitting.value = false }
 }
 const centerCol = ref<HTMLElement | null>(null)
-const usesCenterColumnScroll = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 769px)').matches
 const getMainScrollElement = () => {
-  if (usesCenterColumnScroll()) {
-    return centerCol.value || document.querySelector('.center-col') as HTMLElement | null
-  }
   return contentWrapper.value || document.querySelector('.content-wrapper') as HTMLElement | null
 }
 const resetContentScrollInstant = () => {
   if (typeof window === 'undefined') return
-  const main = getMainScrollElement()
-  const wrapper = contentWrapper.value || document.querySelector('.content-wrapper') as HTMLElement | null
-  if (wrapper && wrapper !== main) {
-    wrapper.scrollTop = 0
-    wrapper.scrollLeft = 0
-  }
-  if (main) {
-    main.scrollTop = 0
-    main.scrollLeft = 0
+  const el = getMainScrollElement()
+  if (el) {
+    el.scrollTop = 0
+    el.scrollLeft = 0
   } else {
     window.scrollTo(0, 0)
   }
@@ -3124,35 +3115,6 @@ white-space: nowrap;  /* 防止换行 */
   display: block;
 }
 .layout-container { --sidebar-width: 320px; --grid-gap: 16px; }
-@media screen and (min-width: 769px) {
-  .content-wrapper {
-    overflow-y: hidden;
-  }
-  .container-fixed {
-    height: calc(100dvh - 32px);
-    max-height: calc(100dvh - 32px);
-  }
-  .layout-container.grid-3,
-  .layout-container.grid-2,
-  .layout-container.grid-1 {
-    height: 100%;
-    max-height: 100%;
-    overflow: hidden;
-  }
-  .layout-container.grid-3,
-  .layout-container.grid-2 {
-    align-items: stretch;
-  }
-  .left-col,
-  .right-col,
-  .center-col {
-    max-height: 100%;
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scrollbar-gutter: stable;
-  }
-}
 .left-col, .right-col { position: sticky; top: 0; align-self: start; height: fit-content; }
 .right-col {
   max-height: calc(100vh - 24px);
@@ -3543,17 +3505,6 @@ html.dark .page-footer { color: rgba(226, 232, 240, 0.72); }
 }
 :global(html.dark) .center-col :deep(.content-container),
 :global(html:not(.dark)) .center-col :deep(.content-container) { transition: none !important; }
-@media screen and (min-width: 769px) {
-  :global(html.dark) .left-col,
-  :global(html.dark) .center-col,
-  :global(html.dark) .right-col,
-  :global(html:not(.dark)) .left-col,
-  :global(html:not(.dark)) .center-col,
-  :global(html:not(.dark)) .right-col {
-    overflow-x: hidden !important;
-    overflow-y: auto !important;
-  }
-}
 .netease-mini-player.minimized[data-instant="true"] { transition: none !important; }
 .netease-mini-player.minimized[data-instant="true"] .album-cover-container,
 .netease-mini-player.minimized[data-instant="true"] .album-cover,

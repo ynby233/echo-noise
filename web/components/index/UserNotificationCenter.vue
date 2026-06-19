@@ -373,7 +373,18 @@ const matchesInitialTarget = (item: UserNotification) => {
 
 const scrollElementToAppCenter = (el: HTMLElement) => {
   if (typeof document === 'undefined') return
-  const wrapper = (el.closest('.center-col') || document.querySelector('.content-wrapper')) as HTMLElement | null
+  const isScrollableY = (target: HTMLElement | null) => {
+    if (!target || typeof window === 'undefined') return false
+    const style = window.getComputedStyle(target)
+    return /(auto|scroll|overlay)/.test(`${style.overflowY || ''} ${style.overflow || ''}`) && target.scrollHeight > target.clientHeight
+  }
+  const candidates = [
+    el.closest('.center-col') as HTMLElement | null,
+    el.closest('.content-wrapper') as HTMLElement | null,
+    document.querySelector('.content-wrapper') as HTMLElement | null,
+    document.querySelector('.center-col') as HTMLElement | null,
+  ]
+  const wrapper = candidates.find(isScrollableY) || candidates.find(Boolean) || null
   if (!wrapper) {
     el.scrollIntoView({ behavior: 'smooth', block: 'center' })
     return
