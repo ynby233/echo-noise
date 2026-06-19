@@ -229,23 +229,24 @@ assert(
 )
 
 assert(
-  homePage.includes("'center-navigation-resetting': centerNavigationResetting") &&
-    homePage.includes('.content-wrapper.center-navigation-resetting .center-col {') &&
-    homePage.includes('visibility: hidden;') &&
+  homePage.includes('class="content-wrapper gpu-accelerated"') &&
+    !homePage.includes('center-navigation-resetting') &&
+    !homePage.includes('visibility: hidden;') &&
     homePage.includes('const resetContentScrollInstant = () => {') &&
     homePage.includes("const el = contentWrapper.value || document.querySelector('.content-wrapper') as HTMLElement | null") &&
     homePage.includes('el.scrollTop = 0') &&
-    homePage.includes('const runCenterNavigationReset = async (mutate: () => void | Promise<void>) => {') &&
-    homePage.includes('await mutate()') &&
-    homePage.includes('resetContentScrollInstant()') &&
+    homePage.includes('const runCenterNavigationReset = async (mutate: () => void) => {') &&
+    homePage.includes('mutate()\n  await nextTick()\n  resetContentScrollInstant()') &&
+    !homePage.includes('waitForNextFrame') &&
+    !homePage.includes('requestAnimationFrame(() => resolve())') &&
     homePage.includes('const switchActiveTab = async (tab: string, options: { resetScroll?: boolean } = {}) => {') &&
-    homePage.includes('await runCenterNavigationReset(async () => { activeTab.value = tab })') &&
+    homePage.includes('await runCenterNavigationReset(() => { activeTab.value = tab })') &&
     homePage.includes('@click="switchActiveTab(t.key, { resetScroll: true })"') &&
     homePage.includes("switchActiveTab('comment', { resetScroll: true })") &&
     homePage.includes("switchActiveTab('notifications', { resetScroll: true })") &&
-    homePage.includes('await runCenterNavigationReset(async () => {\n    ensureMessageTab()\n    searchKeyword.value = String(keyword || \'\').trim()') &&
-    homePage.includes('await runCenterNavigationReset(async () => {\n    ensureMessageTab()\n    selectedTag.value = selectedTag.value === normalizedTag ? \'\' : normalizedTag'),
-  'center navigation, filtered search, tags, guestbook, and notification entries must hide the center column for the scroll reset frame and reset the real content-wrapper scroll before revealing the new view'
+    homePage.includes('await runCenterNavigationReset(() => {\n    ensureMessageTab()\n    searchKeyword.value = String(keyword || \'\').trim()') &&
+    homePage.includes('await runCenterNavigationReset(() => {\n    ensureMessageTab()\n    selectedTag.value = selectedTag.value === normalizedTag ? \'\' : normalizedTag'),
+  'center navigation, filtered search, tags, guestbook, and notification entries must reset the real content-wrapper scroll after DOM patch without hiding the center column for a visible frame'
 )
 
 console.log('frontend layout edge cases checks passed')
