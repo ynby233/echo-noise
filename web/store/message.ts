@@ -17,9 +17,9 @@ export const useMessageStore = defineStore("messageStore", () => {
   const notifyConfig = ref<any>(null); // 添加推送配置状态
   let pageController: AbortController | null = null
   const prefetchCache = ref<Record<string, PageQueryResult>>({})
+  const currentListQueryKey = ref("")
 
-  const pageCacheKey = (query: PageQuery) => JSON.stringify({
-    page: query.page,
+  const listQueryKey = (query: PageQuery) => JSON.stringify({
     pageSize: query.pageSize,
     authorId: query.authorId ?? null,
     username: query.username ?? "",
@@ -29,6 +29,11 @@ export const useMessageStore = defineStore("messageStore", () => {
     excludeId: query.excludeId ?? null,
   })
 
+  const pageCacheKey = (query: PageQuery) => JSON.stringify({
+    page: query.page,
+    ...JSON.parse(listQueryKey(query)),
+  })
+
   // 重置状态
   const reset = () => {
     messages.value = [];
@@ -36,6 +41,7 @@ export const useMessageStore = defineStore("messageStore", () => {
     hasMore.value = true;
     page.value = 1;
     loading.value = false;
+    currentListQueryKey.value = "";
   };
  // 获取网站配置
  const getSiteConfig = async () => {
@@ -135,6 +141,7 @@ const getMessages = async (query: PageQuery) => {
     page.value = query.page;
     pageSize.value = query.pageSize;
     hasMore.value = messages.value.length < total.value;
+    currentListQueryKey.value = listQueryKey(query);
 
     return response.data;
   } catch (error) {
@@ -198,6 +205,7 @@ const loadMessagePage = async (query: PageQuery) => {
     page.value = query.page;
     pageSize.value = query.pageSize;
     hasMore.value = page.value * pageSize.value < total.value;
+    currentListQueryKey.value = listQueryKey(query);
 
     return response.data;
   } catch (error) {
@@ -569,6 +577,8 @@ const createMessage = async (message: Message) => {
   page,
   pageSize,
   loading,
+  currentListQueryKey,
+  listQueryKey,
   siteConfig,
   reset,
   getMessages,

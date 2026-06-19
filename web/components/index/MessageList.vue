@@ -32,9 +32,9 @@
               <span>返回完整列表</span>
             </button>
           </div>
-          <div v-if="props.pageReady && hasActiveFilters && !isPageLoading && displayMessages.length" class="search-results-count">笔记 ({{ filteredResultCount }})</div>
-          <div v-if="props.pageReady && hasActiveFilters && !displayMessages.length" class="search-results-empty">
-            <div v-if="isPageLoading">
+          <div v-if="props.pageReady && hasActiveFilters && !isPageLoading && !isDisplayQueryPending && displayMessages.length" class="search-results-count">笔记 ({{ filteredResultCount }})</div>
+          <div v-if="props.pageReady && hasActiveFilters && (isPageLoading || isDisplayQueryPending || !displayMessages.length)" class="search-results-empty">
+            <div v-if="isPageLoading || isDisplayQueryPending">
               <p>加载中...</p>
             </div>
             <div v-else>
@@ -43,7 +43,7 @@
             </div>
           </div>
           <!-- 消息列表 -->
-          <div v-if="!props.pageReady || !hasActiveFilters || displayMessages.length" :class="props.pageReady && hasActiveFilters ? 'search-results-list' : 'my-4'">
+          <div v-if="!props.pageReady || !hasActiveFilters || (!isDisplayQueryPending && displayMessages.length)" :class="props.pageReady && hasActiveFilters ? 'search-results-list' : 'my-4'">
         <!-- 消息列表内容 -->
         <div v-for="(msg, idx) in displayMessages" :key="msg.id" class="w-full h-auto overflow-hidden flex flex-col justify-between">
 
@@ -2527,6 +2527,9 @@ const saveEditedMessage = async () => {
   }
 };
 const stableDisplayMessages = ref<any[]>([])
+const stableDisplayQueryKey = ref('')
+const currentDisplayQueryKey = computed(() => message.listQueryKey(pageQueryFor(1)))
+const isDisplayQueryPending = computed(() => Boolean(message.currentListQueryKey && message.currentListQueryKey !== currentDisplayQueryKey.value))
 const buildDisplayMessages = () => {
   const filterPersonal = (items: any[]) => isPersonalTab.value ? items.filter(isCurrentUserMessage) : items
   const base = (message.messages || []).filter((m: any) => !isGuestbookMessage(m));
@@ -2538,12 +2541,14 @@ const buildDisplayMessages = () => {
 
 // displayMessages 使用统一分页结果；筛选条件由 pageQueryFor 传给后端
 const displayMessages = computed(() => {
-  if (isPageLoading.value && stableDisplayMessages.value.length) return stableDisplayMessages.value
+  if (isDisplayQueryPending.value) return []
+  if (isPageLoading.value && stableDisplayQueryKey.value === currentDisplayQueryKey.value && stableDisplayMessages.value.length) return stableDisplayMessages.value
   return buildDisplayMessages()
 })
 
 const syncStableDisplayMessages = () => {
   stableDisplayMessages.value = buildDisplayMessages()
+  stableDisplayQueryKey.value = currentDisplayQueryKey.value
 }
 
 watch(
@@ -2552,6 +2557,9 @@ watch(
     () => pinnedTopItems.value,
     () => guestbookId.value,
     () => props.activeTab,
+    () => props.calendarDate,
+    () => props.searchKeyword,
+    () => props.selectedTag,
     () => userStore.isLogin,
     () => currentUserId.value
   ],

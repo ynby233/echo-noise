@@ -12,6 +12,7 @@ const assert = (condition, message) => {
 
 const addForm = read('components/index/AddForm.vue')
 const messageList = read('components/index/MessageList.vue')
+const messageStore = read('store/message.ts')
 const notificationCenter = read('components/index/UserNotificationCenter.vue')
 const searchMode = read('components/index/Searchmode.vue')
 const authLogin = read('pages/auth/login.vue')
@@ -142,9 +143,10 @@ assert(
     messageList.includes('搜索内容：{{ activeFilterContent }}') &&
     messageList.includes('class="search-results-back nw-action-btn nw-action-btn--label"') &&
     messageList.includes('>笔记 ({{ filteredResultCount }})</div>') &&
-    messageList.includes('v-if="props.pageReady && hasActiveFilters && !isPageLoading && displayMessages.length" class="search-results-count"') &&
-    messageList.includes('v-if="props.pageReady && hasActiveFilters && !displayMessages.length" class="search-results-empty"') &&
-    messageList.includes('v-if="!props.pageReady || !hasActiveFilters || displayMessages.length"') &&
+    messageList.includes('v-if="props.pageReady && hasActiveFilters && !isPageLoading && !isDisplayQueryPending && displayMessages.length" class="search-results-count"') &&
+    messageList.includes('v-if="props.pageReady && hasActiveFilters && (isPageLoading || isDisplayQueryPending || !displayMessages.length)" class="search-results-empty"') &&
+    messageList.includes('v-if="isPageLoading || isDisplayQueryPending"') &&
+    messageList.includes('v-if="!props.pageReady || !hasActiveFilters || (!isDisplayQueryPending && displayMessages.length)"') &&
     messageList.includes("(e: 'loading-change', loading: boolean): void") &&
     messageList.includes('const setPageLoading = (loading: boolean) => {') &&
     messageList.includes("emit('loading-change', loading)") &&
@@ -154,7 +156,10 @@ assert(
     !messageList.includes('lockListHeight()') &&
     !messageList.includes('releaseListHeight()') &&
     messageList.includes('const stableDisplayMessages = ref<any[]>([])') &&
-    messageList.includes('if (isPageLoading.value && stableDisplayMessages.value.length) return stableDisplayMessages.value') &&
+    messageList.includes("const currentDisplayQueryKey = computed(() => message.listQueryKey(pageQueryFor(1)))") &&
+    messageList.includes('const isDisplayQueryPending = computed(() => Boolean(message.currentListQueryKey && message.currentListQueryKey !== currentDisplayQueryKey.value))') &&
+    messageList.includes('if (isDisplayQueryPending.value) return []') &&
+    messageList.includes('if (isPageLoading.value && stableDisplayQueryKey.value === currentDisplayQueryKey.value && stableDisplayMessages.value.length) return stableDisplayMessages.value') &&
     messageList.includes('v-if="showPager" ref="prefetchSentinel"') &&
     messageList.includes('const showPager = computed(() => {') &&
     messageList.includes('class="search-results-empty-icon"') &&
@@ -265,6 +270,24 @@ assert(
     homePage.includes('await runCenterNavigationReset(() => {\n    ensureMessageTab()\n    searchKeyword.value = String(keyword || \'\').trim()') &&
     homePage.includes('await runCenterNavigationReset(() => {\n    ensureMessageTab()\n    selectedTag.value = selectedTag.value === normalizedTag ? \'\' : normalizedTag'),
   'center navigation, filtered search, tags, guestbook, and notification entries must reset the real content-wrapper scroll after DOM patch without hiding or height-locking the center column'
+)
+
+assert(
+  messageStore.includes('const currentListQueryKey = ref("")') &&
+    messageStore.includes('const listQueryKey = (query: PageQuery) => JSON.stringify({') &&
+    messageStore.includes('currentListQueryKey.value = listQueryKey(query);') &&
+    messageStore.includes('currentListQueryKey,') &&
+    messageStore.includes('listQueryKey,'),
+  'message store must expose the active list query key so filtered views can hide stale results while a new query is loading'
+)
+
+assert(
+  homePage.includes('<div class="header-subtitle" :style="activeHeaderTextStyle.subtitle">{{ frontendConfig.subtitleText || \'\' }}</div>') &&
+    !homePage.includes('subtitleEl') &&
+    !homePage.includes('startTypeEffect') &&
+    !homePage.includes('textContent = frontendConfig.value.subtitleText') &&
+    !homePage.includes('setInterval(() => {\n    if (!subtitleEl.value)'),
+  'home subtitle must render as stable text instead of a looping typewriter effect that mutates the shared center header during navigation'
 )
 
 console.log('frontend layout edge cases checks passed')

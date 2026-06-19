@@ -170,7 +170,7 @@
           <div class="moments-header">
             <div class="header-image" :style="headerImageStyle">
               <h1 class="header-title" :style="activeHeaderTextStyle.title">{{ (frontendConfig.siteTitle || '说说笔记') }}</h1>
-              <div class="header-subtitle" ref="subtitleEl" :style="activeHeaderTextStyle.subtitle"></div>
+              <div class="header-subtitle" :style="activeHeaderTextStyle.subtitle">{{ frontendConfig.subtitleText || '' }}</div>
               <div class="hero-tabs">
                 <button v-for="t in centerTabs" :key="t.key" :class="['hero-tab', activeTab===t.key ? 'active' : '']" @click="switchActiveTab(t.key, { resetScroll: true })">
                   <UIcon :name="t.icon" class="hero-tab-icon" />
@@ -2208,7 +2208,6 @@ const updateTitle = () => {
 watch(() => [frontendConfig.value.pwaEnabled, frontendConfig.value.pwaTitle, frontendConfig.value.pwaIconURL, frontendConfig.value.pwaDescription, frontendConfig.value.siteTitle, frontendConfig.value.rssFaviconURL, frontendConfig.value.description], () => {
   scheduleHeadUpdate()
 }, { immediate: true })
-const subtitleEl = ref<HTMLElement | null>(null)
 const tags = ref<Tag[]>([])
 const tagsRefreshing = ref(false)
 const refreshHotTags = async () => {
@@ -2374,53 +2373,6 @@ const handleTagClick = async (tag: string) => {
   })
   await messageList.value?.refreshList?.()
 }
-// 修改打字效果函数
-const startTypeEffect = () => {
-  if (!subtitleEl.value) return
-  
-  let index = 0
-  let isDeleting = false
-  let isWaiting = false
-  
-  const typeInterval = setInterval(() => {
-    if (!subtitleEl.value) {
-      clearInterval(typeInterval)
-      return
-    }
-    if (isWaiting) return
-
-    if (!isDeleting) {
-      // 打字过程
-      subtitleEl.value!.textContent = frontendConfig.value.subtitleText.slice(0, index + 1)
-      index++
-      
-      if (index >= frontendConfig.value.subtitleText.length) {
-        isWaiting = true
-        setTimeout(() => {
-          isDeleting = true
-          isWaiting = false
-        }, 2000)
-      }
-    } else {
-      // 删除过程
-      index--
-      subtitleEl.value!.textContent = frontendConfig.value.subtitleText.slice(0, index)
-      
-      if (index <= 0) {
-        isWaiting = true
-        subtitleEl.value!.textContent = ''
-        setTimeout(() => {
-          isDeleting = false
-          isWaiting = false
-          index = 0
-        }, 1000)
-      }
-    }
-  }, 100)
-
-  return typeInterval
-}
-
 // 修改 onMounted 钩子
 onMounted(async () => {
   try {
@@ -2485,14 +2437,6 @@ onMounted(async () => {
       isLoaded.value = true
     }
     clearTimeout(hardTimeout)
-    
-    // 启动打字效果
-    const typeInterval = startTypeEffect()
-    onUnmounted(() => {
-      if (typeInterval) {
-        clearInterval(typeInterval)
-      }
-    })
 
   } catch (error) {
     console.error('初始化失败:', error)
