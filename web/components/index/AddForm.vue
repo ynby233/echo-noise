@@ -15,21 +15,19 @@
             class="hidden"
             placeholder="选择图片"
           />
+          <button type="button" class="tb-btn nw-action-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" @click="triggerFileInput"><UIcon name="i-mdi-image-plus-outline" class="w-5 h-5" /></button>
           <!-- 视频上传按钮 -->
           <VideoUpload
             @video-uploaded="handleVideoUploaded"
             @upload-progress="handleVideoUploadProgress"
           />
-          <button type="button" class="tb-btn nw-action-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" @click="triggerFileInput"><UIcon name="i-mdi-image-plus-outline" class="w-5 h-5" /></button>
           <!-- 新增图床上传按钮 -->
           <button type="button" class="tb-btn nw-action-btn nw-tooltip-anchor" data-tooltip="图床上传" aria-label="图床上传" @click="showImageUploader = true"><UIcon name="i-mdi-cloud-upload-outline" class="w-5 h-5" /></button>
-          <button type="button" class="tb-btn nw-action-btn nw-action-btn--label has-label full-image-btn nw-tooltip-anchor" :class="{ 'is-enabled': fullImageAttachments }" :data-tooltip="fullImageAttachments ? '关闭全图显示图片附件' : '全图显示图片附件'" :aria-label="fullImageAttachments ? '关闭全图显示图片附件' : '全图显示图片附件'" @click="toggleFullImageAttachments">
-            <UIcon name="i-mdi-image-size-select-large" class="w-5 h-5" />
-            <span class="full-image-label">全图</span>
+          <button type="button" class="tb-btn nw-action-btn state-toggle-btn full-image-btn nw-tooltip-anchor" :class="{ 'is-enabled': fullImageAttachments }" :data-tooltip="`全图显示：${fullImageAttachments ? '已开启' : '已关闭'}`" :aria-label="`全图显示：${fullImageAttachments ? '已开启' : '已关闭'}`" :aria-pressed="fullImageAttachments" @click="toggleFullImageAttachments">
+            <UIcon :name="fullImageAttachments ? 'i-mdi-image-size-select-actual' : 'i-mdi-image-size-select-large'" class="w-5 h-5" />
           </button>
-          <button type="button" class="tb-btn nw-action-btn nw-action-btn--label has-label notify-btn nw-tooltip-anchor" :class="{ 'is-enabled': enableNotify }" :data-tooltip="enableNotify ? '关闭推送' : '开启推送'" :aria-label="enableNotify ? '关闭推送' : '开启推送'" @click="toggleNotify">
-            <UIcon :name="enableNotify ? 'i-mdi-bell-off-outline' : 'i-mdi-bell-ring-outline'" class="w-5 h-5" />
-            <span class="notify-label">{{ enableNotify ? '关闭' : '开启' }}</span>
+          <button type="button" class="tb-btn nw-action-btn state-toggle-btn notify-btn nw-tooltip-anchor" :class="{ 'is-enabled': enableNotify }" :data-tooltip="`推送：${enableNotify ? '已开启' : '已关闭'}`" :aria-label="`推送：${enableNotify ? '已开启' : '已关闭'}`" :aria-pressed="enableNotify" @click="toggleNotify">
+            <UIcon :name="enableNotify ? 'i-mdi-bell-ring-outline' : 'i-mdi-bell-outline'" class="w-5 h-5" />
           </button>
           <div ref="visibilityControlRef" class="visibility-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :data-tooltip="`可见范围：${visibilityLabel}`">
             <UIcon :name="visibilityIcon" class="w-5 h-5" />
@@ -356,9 +354,15 @@ const normalizeMessageVisibility = (value: any, fallbackPrivate = false): Messag
   if (raw === 'public') return 'public'
   return fallbackPrivate ? 'private' : 'public'
 }
+const DEFAULT_POST_VISIBILITY: MessageVisibility = 'users'
 const initialPostVisibility = (): MessageVisibility => {
-  if (typeof window === 'undefined') return 'public'
-  return normalizeMessageVisibility(localStorage.getItem('postVisibility'), localStorage.getItem('postPrivate') === 'true')
+  if (typeof window === 'undefined') return DEFAULT_POST_VISIBILITY
+  const storedVisibility = localStorage.getItem('postVisibility')
+  const storedPrivate = localStorage.getItem('postPrivate')
+  if (storedVisibility || storedPrivate !== null) {
+    return normalizeMessageVisibility(storedVisibility, storedPrivate === 'true')
+  }
+  return DEFAULT_POST_VISIBILITY
 }
 const Visibility = ref<MessageVisibility>(initialPostVisibility())
 const Private = computed(() => Visibility.value !== 'public')
@@ -464,7 +468,7 @@ const syncContentFromEditor = () => {
 const previewProseClass = computed(() => contentTheme.value === 'dark' ? 'prose prose-invert' : 'prose')
 
 const notifyStore = useNotifyStore()
-const enableNotify = ref(localStorage.getItem('enableNotify') === 'true')
+const enableNotify = ref(false)
 
 const clearForm = () => {
   Username.value = "";
@@ -472,6 +476,8 @@ const clearForm = () => {
   MessageContentHtml.value = "";
   PublishedAtInput.value = "";
   fullImageAttachments.value = false;
+  enableNotify.value = false;
+  Visibility.value = DEFAULT_POST_VISIBILITY;
   clearDraft()
   
   if (vditorEditor.value) {
@@ -1021,9 +1027,7 @@ watch([MessageContent, fullImageAttachments], ([val]) => {
 });
 
 watch(() => userStore.isLogin, (newLoginState) => {
-  if (newLoginState) {
-    enableNotify.value = localStorage.getItem('enableNotify') === 'true';
-  }
+  if (newLoginState) enableNotify.value = false;
 }, { immediate: true });
 
 onMounted(async () => {
@@ -1080,7 +1084,6 @@ onBeforeUnmount(() => {
 });
 const toggleNotify = () => {
   enableNotify.value = !enableNotify.value;
-  localStorage.setItem('enableNotify', enableNotify.value.toString());
 };
 
 const addMessage = async () => {
@@ -1132,10 +1135,8 @@ const addMessage = async () => {
 .editor-toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:6px; padding:6px; border-radius:12px; background: rgba(255,255,255,0.85); flex-wrap: wrap; overflow: visible; position: sticky; bottom: 0; z-index: 95; backdrop-filter: saturate(1.1) blur(6px); }
 .toolbar-left, .toolbar-right { display:flex; align-items:center; gap:8px; flex-wrap: wrap; }
 .tb-btn { padding: 0; }
-.full-image-btn.is-enabled { --nw-action-border: rgba(37,99,235,0.32); --nw-action-bg: rgba(37,99,235,0.14); --nw-action-text: #1d4ed8; }
-.full-image-label { font-size: 12px; line-height: 1; white-space: nowrap; }
-.notify-btn.is-enabled { --nw-action-border: rgba(249,115,22,0.32); --nw-action-bg: rgba(249,115,22,0.16); --nw-action-text: #c2410c; }
-.notify-label { font-size: 12px; line-height: 1; white-space: nowrap; }
+.state-toggle-btn { --nw-action-hover-border: rgba(15,23,42,0.16); --nw-action-hover-bg: rgba(15,23,42,0.1); --nw-action-hover-text: #111827; }
+.state-toggle-btn.is-enabled { --nw-action-border: rgba(249,115,22,0.42); --nw-action-bg: rgba(249,115,22,0.18); --nw-action-text: #c2410c; --nw-action-hover-border: rgba(249,115,22,0.58); --nw-action-hover-bg: rgba(249,115,22,0.24); --nw-action-hover-text: #9a3412; }
 .publish-time-control { max-width: min(210px, calc(100vw - 32px)); }
 .visibility-control { width: max-content; }
 .visibility-select { width: auto; min-width: 46px; max-width: 76px; height: 28px; padding: 0; border: 0; border-radius: 9px; outline: none; background: transparent; color: inherit; font-size: 12px; cursor: pointer; }
@@ -1156,8 +1157,8 @@ const addMessage = async () => {
 .preview-card { backdrop-filter: blur(8px); background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 8px; color:#111827; }
 html.dark .editor-box { background: var(--home-surface-dark, #202a36); border: 1px solid rgba(255,255,255,0.16); color:#fff; }
 html.dark .editor-toolbar { background: rgba(39, 50, 66, 0.68); backdrop-filter: saturate(1.1) blur(6px); }
-html.dark .full-image-btn.is-enabled { --nw-action-border: rgba(96,165,250,0.42); --nw-action-bg: rgba(37,99,235,0.28); --nw-action-text: #bfdbfe; }
-html.dark .notify-btn.is-enabled { --nw-action-border: rgba(251,146,60,0.38); --nw-action-bg: rgba(249,115,22,0.22); --nw-action-text: #fed7aa; }
+html.dark .state-toggle-btn { --nw-action-hover-border: rgba(255,255,255,0.22); --nw-action-hover-bg: rgba(255,255,255,0.12); --nw-action-hover-text: #f8fafc; }
+html.dark .state-toggle-btn.is-enabled { --nw-action-border: rgba(251,146,60,0.46); --nw-action-bg: rgba(249,115,22,0.26); --nw-action-text: #fed7aa; --nw-action-hover-border: rgba(251,146,60,0.66); --nw-action-hover-bg: rgba(249,115,22,0.34); --nw-action-hover-text: #fff7ed; }
 html.dark .visibility-select { background: transparent; border: 0; color: inherit; }
 :global(html.dark) .tb-sep { background: rgba(255,255,255,0.12); }
 

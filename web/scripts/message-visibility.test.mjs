@@ -44,6 +44,11 @@ assert.match(
 )
 assert.match(
   addForm,
+  /const DEFAULT_POST_VISIBILITY: MessageVisibility = 'users'/,
+  'publish form must default visibility to members for every role'
+)
+assert.match(
+  addForm,
   /localStorage\.setItem\('postVisibility', value\)[\s\S]*localStorage\.setItem\('postPrivate', value !== 'public' \? 'true' : 'false'\)/,
   'publish draft compatibility must mirror non-public visibility to postPrivate=true'
 )

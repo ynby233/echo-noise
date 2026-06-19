@@ -241,9 +241,14 @@ assert(
 )
 
 assert(
-  addForm.includes('class="tb-btn nw-action-btn nw-action-btn--label has-label full-image-btn') &&
-    addForm.indexOf('data-tooltip="图床上传"') < addForm.indexOf(":data-tooltip=\"fullImageAttachments ? '关闭全图显示图片附件' : '全图显示图片附件'\"") &&
-    addForm.indexOf(":data-tooltip=\"fullImageAttachments ? '关闭全图显示图片附件' : '全图显示图片附件'\"") < addForm.indexOf(':data-tooltip="enableNotify ? \'关闭推送\' : \'开启推送\'"') &&
+  addForm.includes('class="tb-btn nw-action-btn state-toggle-btn full-image-btn') &&
+    addForm.includes('class="tb-btn nw-action-btn state-toggle-btn notify-btn') &&
+    addForm.indexOf('data-tooltip="上传图片"') < addForm.indexOf('<VideoUpload') &&
+    addForm.indexOf('<VideoUpload') < addForm.indexOf('data-tooltip="图床上传"') &&
+    addForm.includes(':data-tooltip="`全图显示：${fullImageAttachments ? \'已开启\' : \'已关闭\'}`"') &&
+    addForm.includes(':data-tooltip="`推送：${enableNotify ? \'已开启\' : \'已关闭\'}`"') &&
+    addForm.includes(":aria-pressed=\"fullImageAttachments\"") &&
+    addForm.includes(":aria-pressed=\"enableNotify\"") &&
     addForm.includes("const FULL_IMAGE_ATTACHMENTS_MARKER = '<!-- noise-full-image-attachments -->'") &&
     addForm.includes('fullImageAttachments: !!fullImageAttachments.value') &&
     addForm.includes('content: buildPublishContent(MessageContent.value)') &&
@@ -257,7 +262,7 @@ assert(
     markdownRenderer.includes('.markdown-preview :deep(.full-image-attachment img)') &&
     markdownRenderer.includes('height: auto !important;') &&
     markdownRenderer.includes('object-fit: contain !important;'),
-  'publish composer must provide a full-image attachment toggle between image hosting and push, persist the hidden marker, and render marked image attachments as responsive full images with Fancybox links'
+  'publish composer must keep upload image before upload video, expose icon-only full-image and push toggles with current-state tooltips, persist the hidden marker, and render marked image attachments as responsive full images with Fancybox links'
 )
 
 assert(

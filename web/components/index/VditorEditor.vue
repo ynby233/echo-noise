@@ -772,13 +772,18 @@ html.dark .vditor-ir pre.vditor-reset {
   color: #ffffff !important;
 }
 
-html.dark .vditor-ir pre.vditor-reset:empty:before,
+html.dark .vditor-container .vditor-ir pre.vditor-reset:empty::before,
+html.dark .vditor-container .vditor-ir pre.vditor-reset[placeholder]:empty::before,
+html.dark .vditor-container .vditor-wysiwyg pre.vditor-reset:empty::before,
+html.dark .vditor-container .vditor-wysiwyg pre.vditor-reset[placeholder]:empty::before,
+html.dark .vditor-container .vditor-sv:empty::before,
+html.dark .vditor-container .vditor-sv[placeholder]:empty::before,
 html.dark .vditor-wysiwyg .vditor-reset:empty:before,
 html.dark .vditor-sv .vditor-reset:empty:before,
 html.dark .vditor-ir__node--placeholder::before,
 html.dark .vditor-wysiwyg__placeholder,
 html.dark .vditor-placeholder {
-  color: rgba(226, 232, 240, 0.58) !important;
+  color: rgba(226, 232, 240, 0.82) !important;
 }
 
 html.dark .vditor-toolbar {
