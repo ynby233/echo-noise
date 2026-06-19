@@ -39,6 +39,114 @@ html.dark {
   --nw-action-hover-text: #fff;
 }
 
+:where(
+  input:not([type]),
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="email"],
+  input[type="month"],
+  input[type="number"],
+  input[type="password"],
+  input[type="search"],
+  input[type="tel"],
+  input[type="text"],
+  input[type="time"],
+  input[type="url"],
+  input[type="week"],
+  textarea,
+  [contenteditable=""],
+  [contenteditable=""] *,
+  [contenteditable="true"],
+  [contenteditable="true"] *,
+  [contenteditable="plaintext-only"],
+  [contenteditable="plaintext-only"] *,
+  [role="textbox"],
+  [role="textbox"] *,
+  .vditor-reset,
+  .vditor-reset *,
+  .vditor-ir__node,
+  .vditor-ir__node *,
+  .vditor-wysiwyg,
+  .vditor-wysiwyg *,
+  .vditor-sv,
+  .vditor-sv *
+) {
+  cursor: text;
+}
+
+:where(
+  p,
+  span,
+  time,
+  small,
+  strong,
+  em,
+  b,
+  i,
+  mark,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  li,
+  dt,
+  dd,
+  blockquote,
+  figcaption,
+  caption,
+  th,
+  td,
+  pre,
+  code,
+  .prose,
+  .prose *,
+  .markdown-body,
+  .markdown-body *
+) {
+  cursor: text;
+}
+
+:where(
+  a,
+  a *,
+  button,
+  button *,
+  label,
+  label *,
+  select,
+  summary,
+  [role="button"],
+  [role="button"] *,
+  [role="link"],
+  [role="link"] *,
+  [role="menuitem"],
+  [role="menuitem"] *,
+  input[type="button"],
+  input[type="checkbox"],
+  input[type="color"],
+  input[type="file"],
+  input[type="image"],
+  input[type="radio"],
+  input[type="range"],
+  input[type="reset"],
+  input[type="submit"],
+  .cursor-pointer,
+  .cursor-pointer *
+) {
+  cursor: pointer;
+}
+
+:disabled,
+:disabled *,
+[disabled],
+[disabled] *,
+[aria-disabled="true"],
+[aria-disabled="true"] * {
+  cursor: not-allowed;
+}
+
 .nw-action-btn {
   display: inline-flex;
   align-items: center;
