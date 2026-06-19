@@ -515,11 +515,11 @@ onBeforeUnmount(() => {
 }
 
 .year-select {
-  width: 70px;
+  width: 75px;
 }
 
 .month-select {
-  width: 50px;
+  width: 55px;
 }
 
 .calendar-nav {
