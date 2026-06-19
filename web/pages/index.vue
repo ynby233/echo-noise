@@ -4,7 +4,7 @@
       <div class="rainbow-spinner"></div>
       <div class="loading-text">加载中...</div>
     </div>
-    <div ref="contentWrapper" class="content-wrapper" :class="{ 'gpu-accelerated': true }">
+    <div ref="contentWrapper" class="content-wrapper" :class="{ 'gpu-accelerated': true, 'center-navigation-resetting': centerNavigationResetting }">
       <UContainer class="container-fixed py-2 pb-4 my-4">
         <div :class="['layout-container', gridModeClass]">
       <ClientOnly>
@@ -172,7 +172,7 @@
               <h1 class="header-title" :style="activeHeaderTextStyle.title">{{ (frontendConfig.siteTitle || '说说笔记') }}</h1>
               <div class="header-subtitle" ref="subtitleEl" :style="activeHeaderTextStyle.subtitle"></div>
               <div class="hero-tabs">
-                <button v-for="t in centerTabs" :key="t.key" :class="['hero-tab', activeTab===t.key ? 'active' : '']" @click="activeTab=t.key">
+                <button v-for="t in centerTabs" :key="t.key" :class="['hero-tab', activeTab===t.key ? 'active' : '']" @click="switchActiveTab(t.key, { resetScroll: true })">
                   <UIcon :name="t.icon" class="hero-tab-icon" />
                   <span>{{ t.name }}</span>
                 </button>
@@ -245,7 +245,7 @@
             :search-keyword="messageSearchKeyword"
             :selected-tag="messageSelectedTag"
             @clear-calendar-date="handleCalendarDateSelect('')"
-            @clear-filters="clearMessageFilters"
+            @clear-filters="clearMessageFiltersWithReset"
             @select-tag="handleTagClick"
             @target-consumed="handleNotificationTargetConsumed"
           />
@@ -568,6 +568,7 @@ const centerContainerClass = computed(() => (
 const toggleHeatmapCard = () => { showHeatmap.value = !showHeatmap.value }
 // 主题预设。统一由 ThemePresetSwitcher 控制 documentElement 类，不在容器上附加主题类
 const activeTab = ref('latest')
+const centerNavigationResetting = ref(false)
 const notificationTargetMessageId = ref<number | null>(null)
 const notificationTargetCommentId = ref<number | null>(null)
 const notificationUnreadCount = ref(0)
@@ -579,13 +580,22 @@ const selectedTag = ref('')
 const calendarMessageDate = computed(() => (activeTab.value === 'latest' || activeTab.value === 'personal') ? selectedCalendarDate.value : '')
 const messageSearchKeyword = computed(() => (activeTab.value === 'latest' || activeTab.value === 'personal') ? searchKeyword.value : '')
 const messageSelectedTag = computed(() => (activeTab.value === 'latest' || activeTab.value === 'personal') ? selectedTag.value : '')
-const handleCalendarDateSelect = (date: string) => {
-  selectedCalendarDate.value = /^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) ? date : ''
+const handleCalendarDateSelect = async (date: string) => {
+  await runCenterNavigationReset(async () => {
+    ensureMessageTab()
+    selectedCalendarDate.value = /^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) ? date : ''
+  })
 }
-const clearMessageFilters = () => {
+const resetMessageFiltersState = () => {
   selectedCalendarDate.value = ''
   searchKeyword.value = ''
   selectedTag.value = ''
+}
+const clearMessageFilters = () => {
+  resetMessageFiltersState()
+}
+const clearMessageFiltersWithReset = async () => {
+  await runCenterNavigationReset(async () => { resetMessageFiltersState() })
 }
 watch(() => activeTab.value, (tab) => {
   if (tab !== 'latest' && tab !== 'personal') clearMessageFilters()
@@ -778,12 +788,32 @@ const resetContentScrollInstant = () => {
   }
   updateScrollState()
 }
-const switchActiveTab = async (tab: string, options: { resetScroll?: boolean } = {}) => {
-  activeTab.value = tab
-  if (options.resetScroll) {
+const waitForNextFrame = () => new Promise<void>((resolve) => {
+  if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+    resolve()
+    return
+  }
+  window.requestAnimationFrame(() => resolve())
+})
+const runCenterNavigationReset = async (mutate: () => void | Promise<void>) => {
+  centerNavigationResetting.value = true
+  try {
+    await nextTick()
+    await mutate()
     await nextTick()
     resetContentScrollInstant()
+    await waitForNextFrame()
+  } finally {
+    centerNavigationResetting.value = false
   }
+}
+const switchActiveTab = async (tab: string, options: { resetScroll?: boolean } = {}) => {
+  if (tab === activeTab.value) return
+  if (options.resetScroll) {
+    await runCenterNavigationReset(async () => { activeTab.value = tab })
+    return
+  }
+  activeTab.value = tab
 }
 const openAdmin = async () => {
   const ok = await useUserStore().checkLoginStatus()
@@ -846,9 +876,10 @@ const ensureMessageTab = () => {
 
 // 添加搜索结果处理函数
 const handleSearchResult = async (keyword: string) => {
-  ensureMessageTab()
-  searchKeyword.value = String(keyword || '').trim()
-  await nextTick()
+  await runCenterNavigationReset(async () => {
+    ensureMessageTab()
+    searchKeyword.value = String(keyword || '').trim()
+  })
   await messageList.value?.refreshList?.()
 }
 // 留言板目标消息ID（默认取最新公开消息）
@@ -2351,9 +2382,10 @@ onMounted(() => {
 const handleTagClick = async (tag: string) => {
   const normalizedTag = String(tag || '').trim().replace(/^#/, '')
   if (!normalizedTag) return
-  ensureMessageTab()
-  selectedTag.value = selectedTag.value === normalizedTag ? '' : normalizedTag
-  await nextTick()
+  await runCenterNavigationReset(async () => {
+    ensureMessageTab()
+    selectedTag.value = selectedTag.value === normalizedTag ? '' : normalizedTag
+  })
   await messageList.value?.refreshList?.()
 }
 // 修改打字效果函数
@@ -2646,6 +2678,9 @@ html, body {
   overscroll-behavior-y: none;
   overflow-anchor: none;
   scrollbar-gutter: stable;
+}
+.content-wrapper.center-navigation-resetting .center-col {
+  visibility: hidden;
 }
 
 .moments-header {
