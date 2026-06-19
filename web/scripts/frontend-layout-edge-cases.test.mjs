@@ -228,4 +228,14 @@ assert(
   'pagination must keep explicit bottom clearance from the browser viewport'
 )
 
+assert(
+  homePage.includes('const resetContentScrollInstant = () => {') &&
+    homePage.includes("const el = contentWrapper.value || document.querySelector('.content-wrapper') as HTMLElement | null") &&
+    homePage.includes('el.scrollTop = 0') &&
+    homePage.includes('const switchActiveTab = (tab: string, options: { resetScroll?: boolean } = {}) => {') &&
+    homePage.includes("switchActiveTab('comment', { resetScroll: true })") &&
+    homePage.includes("switchActiveTab('notifications', { resetScroll: true })"),
+  'floating guestbook and notification entries must reset the real content-wrapper scroll before switching to short panels'
+)
+
 console.log('frontend layout edge cases checks passed')

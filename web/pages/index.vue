@@ -767,6 +767,21 @@ const onRegisterSubmit = async () => {
     refreshCaptcha()
   } finally { registerSubmitting.value = false }
 }
+const resetContentScrollInstant = () => {
+  if (typeof window === 'undefined') return
+  const el = contentWrapper.value || document.querySelector('.content-wrapper') as HTMLElement | null
+  if (el) {
+    el.scrollTop = 0
+    el.scrollLeft = 0
+  } else {
+    window.scrollTo(0, 0)
+  }
+  updateScrollState()
+}
+const switchActiveTab = (tab: string, options: { resetScroll?: boolean } = {}) => {
+  if (options.resetScroll) resetContentScrollInstant()
+  activeTab.value = tab
+}
 const openAdmin = async () => {
   const ok = await useUserStore().checkLoginStatus()
   if (ok) {
@@ -783,7 +798,7 @@ const openAdmin = async () => {
   }
 }
 const openCommentBoard = () => {
-  activeTab.value = 'comment'
+  switchActiveTab('comment', { resetScroll: true })
 }
 onUnmounted(() => {
   if (captchaTimer) clearInterval(captchaTimer)
@@ -919,7 +934,7 @@ const openNotificationCenter = async () => {
       notificationTargetMessageId.value = null
       notificationTargetCommentId.value = null
       targetMessageId.value = null
-      activeTab.value = 'notifications'
+      switchActiveTab('notifications', { resetScroll: true })
       notificationReturnPending.value = false
       await loadNotificationUnreadCount()
       return
@@ -927,7 +942,7 @@ const openNotificationCenter = async () => {
     notificationTargetMessageId.value = null
     notificationTargetCommentId.value = null
     notificationReturnFocusId.value = null
-    activeTab.value = 'notifications'
+    switchActiveTab('notifications', { resetScroll: true })
     await loadNotificationUnreadCount()
     return
   }
