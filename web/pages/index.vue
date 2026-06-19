@@ -165,7 +165,7 @@
         </div>
       </div>
       </ClientOnly>
-      <div class="center-col">
+      <div ref="centerCol" class="center-col" :style="centerStabilityStyle">
         <div :class="centerContainerClass">
           <div class="moments-header">
             <div class="header-image" :style="headerImageStyle">
@@ -776,6 +776,25 @@ const onRegisterSubmit = async () => {
     refreshCaptcha()
   } finally { registerSubmitting.value = false }
 }
+const centerCol = ref<HTMLElement | null>(null)
+const centerMinHeight = ref('')
+let centerMinHeightTimer: ReturnType<typeof setTimeout> | null = null
+const centerStabilityStyle = computed(() => centerMinHeight.value ? { minHeight: centerMinHeight.value } : undefined)
+const lockCenterHeight = () => {
+  if (typeof window === 'undefined') return
+  const el = centerCol.value || document.querySelector('.center-col') as HTMLElement | null
+  if (!el) return
+  const height = Math.ceil(el.getBoundingClientRect().height)
+  if (height > 0) centerMinHeight.value = `${height}px`
+}
+const releaseCenterHeight = (delay = 700) => {
+  if (typeof window === 'undefined') return
+  if (centerMinHeightTimer) clearTimeout(centerMinHeightTimer)
+  centerMinHeightTimer = window.setTimeout(() => {
+    centerMinHeight.value = ''
+    centerMinHeightTimer = null
+  }, delay)
+}
 const resetContentScrollInstant = () => {
   if (typeof window === 'undefined') return
   const el = contentWrapper.value || document.querySelector('.content-wrapper') as HTMLElement | null
@@ -788,9 +807,11 @@ const resetContentScrollInstant = () => {
   updateScrollState()
 }
 const runCenterNavigationReset = async (mutate: () => void) => {
+  lockCenterHeight()
   mutate()
   await nextTick()
   resetContentScrollInstant()
+  releaseCenterHeight()
 }
 const switchActiveTab = async (tab: string, options: { resetScroll?: boolean } = {}) => {
   if (tab === activeTab.value) return
@@ -820,6 +841,7 @@ const openCommentBoard = () => {
 }
 onUnmounted(() => {
   if (captchaTimer) clearInterval(captchaTimer)
+  if (centerMinHeightTimer && typeof window !== 'undefined') clearTimeout(centerMinHeightTimer)
 })
 
 watch(() => route.query.login, (v) => {

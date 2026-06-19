@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div ref="listRoot" :style="listStabilityStyle">
     <div class="min-h-screen flex flex-col">
       <!-- 空状态显示 -->
       <div v-if="props.pageReady && !hasActiveFilters && !displayMessages.length" class="text-center text-gray-500 py-8">
@@ -32,8 +32,8 @@
               <span>返回完整列表</span>
             </button>
           </div>
-          <div v-if="props.pageReady && hasActiveFilters && displayMessages.length" class="search-results-count">笔记 ({{ filteredResultCount }})</div>
-          <div v-if="props.pageReady && hasActiveFilters && !displayMessages.length" class="search-results-empty">
+          <div v-if="props.pageReady && hasActiveFilters && !isPageLoading && displayMessages.length" class="search-results-count">笔记 ({{ filteredResultCount }})</div>
+          <div v-if="props.pageReady && hasActiveFilters && (isPageLoading || !displayMessages.length)" class="search-results-empty">
             <div v-if="isPageLoading">
               <p>加载中...</p>
             </div>
@@ -43,7 +43,7 @@
             </div>
           </div>
           <!-- 消息列表 -->
-          <div v-if="!props.pageReady || !hasActiveFilters || displayMessages.length" :class="props.pageReady && hasActiveFilters ? 'search-results-list' : 'my-4'">
+          <div v-if="!props.pageReady || !hasActiveFilters || (!isPageLoading && displayMessages.length)" :class="props.pageReady && hasActiveFilters ? 'search-results-list' : 'my-4'">
         <!-- 消息列表内容 -->
         <div v-for="(msg, idx) in displayMessages" :key="msg.id" class="w-full h-auto overflow-hidden flex flex-col justify-between">
 
@@ -168,9 +168,9 @@
       </div>
         </component>
       <!-- 预取下一页哨兵 -->
-      <div v-if="!isPersonalGuest" ref="prefetchSentinel" style="height:1px"></div>
+      <div v-if="showPager" ref="prefetchSentinel" style="height:1px"></div>
       <!-- 分页控制区域 -->
-      <div v-if="!isPersonalGuest" class="pager-shell" :class="{ 'is-dark': isContentDark }">
+      <div v-if="showPager" class="pager-shell" :class="{ 'is-dark': isContentDark }">
         <div class="pager-nav-group">
           <button
             v-if="message.page > 1"
@@ -1105,11 +1105,11 @@ const loadTargetMessagePage = async (id: number) => {
     }
   }
 
-  let notificationTargetRetryTimer: ReturnType<typeof window.setTimeout> | null = null
+  let notificationTargetRetryTimer: ReturnType<typeof setTimeout> | null = null
   let notificationTargetRetryKey = ''
   let notificationTargetRetryCount = 0
   const resetNotificationTargetRetry = () => {
-    if (notificationTargetRetryTimer) window.clearTimeout(notificationTargetRetryTimer)
+    if (notificationTargetRetryTimer) clearTimeout(notificationTargetRetryTimer)
     notificationTargetRetryTimer = null
     notificationTargetRetryKey = ''
     notificationTargetRetryCount = 0
@@ -1121,7 +1121,7 @@ const loadTargetMessagePage = async (id: number) => {
     }
     if (notificationTargetRetryCount >= 6) return false
     notificationTargetRetryCount += 1
-    if (notificationTargetRetryTimer) window.clearTimeout(notificationTargetRetryTimer)
+    if (notificationTargetRetryTimer) clearTimeout(notificationTargetRetryTimer)
     notificationTargetRetryTimer = window.setTimeout(() => {
       notificationTargetRetryTimer = null
       focusTargetMessageAndComment()
@@ -1251,6 +1251,7 @@ const handleTagClick = (tag: string) => {
 }
 
 const refreshList = async () => {
+  lockListHeight()
   isPageLoading.value = true
   try {
     await message.getMessages(pageQueryFor(1));
@@ -1259,6 +1260,7 @@ const refreshList = async () => {
     deferInitFancybox();
   } finally {
     isPageLoading.value = false
+    releaseListHeight()
   }
 }
 
@@ -1765,6 +1767,23 @@ watch(() => route.hash, async (newHash) => {
 
 // 修改 loadMore 为 loadNextPage
 const isPageLoading = ref(false);
+const listRoot = ref<HTMLElement | null>(null)
+const listMinHeight = ref('')
+let listMinHeightTimer: ReturnType<typeof setTimeout> | null = null
+const listStabilityStyle = computed(() => listMinHeight.value ? { minHeight: listMinHeight.value } : undefined)
+const lockListHeight = () => {
+  if (typeof window === 'undefined') return
+  const height = Math.ceil(listRoot.value?.getBoundingClientRect().height || 0)
+  if (height > 0) listMinHeight.value = `${height}px`
+}
+const releaseListHeight = (delay = 700) => {
+  if (typeof window === 'undefined') return
+  if (listMinHeightTimer) clearTimeout(listMinHeightTimer)
+  listMinHeightTimer = window.setTimeout(() => {
+    listMinHeight.value = ''
+    listMinHeightTimer = null
+  }, delay)
+}
 
 watch(
   [
@@ -1782,7 +1801,6 @@ watch(
       return
     }
     if (isPersonalGuest.value) {
-      message.reset()
       return
     }
     await refreshList()
@@ -2530,6 +2548,12 @@ const displayMessages = computed(() => {
   return filterPersonal([...pinned, ...rest]);
 });
 
+const showPager = computed(() => {
+  if (isPersonalGuest.value) return false
+  if (!hasActiveFilters.value) return true
+  return !isPageLoading.value && displayMessages.value.length > 0
+})
+
 defineExpose({
   refreshList
 });
@@ -2542,7 +2566,10 @@ const onCommentCountUpdated = (e: any) => {
   } catch {}
 }
 onMounted(() => { try { window.addEventListener('comment-count-updated', onCommentCountUpdated) } catch {} })
-onBeforeUnmount(() => { try { window.removeEventListener('comment-count-updated', onCommentCountUpdated) } catch {} })
+onBeforeUnmount(() => {
+  try { window.removeEventListener('comment-count-updated', onCommentCountUpdated) } catch {}
+  if (listMinHeightTimer && typeof window !== 'undefined') clearTimeout(listMinHeightTimer)
+})
 // 优化图片加载
 const optimizeImage = (url: string) => {
   if (!url) return url;
