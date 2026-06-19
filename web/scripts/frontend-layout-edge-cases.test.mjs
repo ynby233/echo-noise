@@ -187,6 +187,8 @@ assert(
     messageList.includes('border: 1px solid #e5e7eb;') &&
     messageList.includes('border-radius: var(--home-radius-panel);') &&
     messageList.includes('background: var(--home-surface-light);') &&
+    messageList.includes('margin-top: 20px;') &&
+    homePage.includes('.moments-header {\n  margin-bottom: 20px;\n}') &&
     messageList.includes('.search-card.is-dark {') &&
     messageList.includes('background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.82) 100%);') &&
     messageList.includes('box-shadow: 0 14px 28px rgba(2, 6, 23, 0.45);') &&

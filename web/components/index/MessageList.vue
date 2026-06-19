@@ -2718,6 +2718,7 @@ onMounted(() => {
   position: relative;
   box-sizing: border-box;
   width: 100%;
+  margin-top: 20px;
 }
 
 .search-results-panel.is-dark {
