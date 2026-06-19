@@ -150,9 +150,11 @@ assert(
     messageList.includes("emit('loading-change', loading)") &&
     messageList.includes('setPageLoading(true)') &&
     messageList.includes('setPageLoading(false)') &&
-    messageList.includes('const listStabilityStyle = computed(() => listMinHeight.value ? { minHeight: listMinHeight.value } : undefined)') &&
-    messageList.includes('lockListHeight()') &&
-    messageList.includes('releaseListHeight()') &&
+    !messageList.includes('listStabilityStyle') &&
+    !messageList.includes('lockListHeight()') &&
+    !messageList.includes('releaseListHeight()') &&
+    messageList.includes('const stableDisplayMessages = ref<any[]>([])') &&
+    messageList.includes('if (isPageLoading.value && stableDisplayMessages.value.length) return stableDisplayMessages.value') &&
     messageList.includes('v-if="showPager" ref="prefetchSentinel"') &&
     messageList.includes('const showPager = computed(() => {') &&
     messageList.includes('class="search-results-empty-icon"') &&
@@ -243,17 +245,15 @@ assert(
   homePage.includes('class="content-wrapper gpu-accelerated"') &&
     !homePage.includes('center-navigation-resetting') &&
     !homePage.includes('visibility: hidden;') &&
+    !homePage.includes('centerStabilityStyle') &&
+    !homePage.includes('centerHeightHoldCount') &&
+    !homePage.includes('holdCenterHeight') &&
+    !homePage.includes('releaseCenterHeightHold') &&
+    !homePage.includes('@loading-change="handleMessageListLoadingChange"') &&
     homePage.includes('const resetContentScrollInstant = () => {') &&
     homePage.includes("const el = contentWrapper.value || document.querySelector('.content-wrapper') as HTMLElement | null") &&
     homePage.includes('el.scrollTop = 0') &&
-    homePage.includes('let centerHeightHoldCount = 0') &&
-    homePage.includes('const holdCenterHeight = () => {') &&
-    homePage.includes('const releaseCenterHeightHold = (delay = 700) => {') &&
-    homePage.includes('const handleMessageListLoadingChange = async (loading: boolean) => {') &&
-    homePage.includes('@loading-change="handleMessageListLoadingChange"') &&
     homePage.includes('const runCenterNavigationReset = async (mutate: () => void) => {') &&
-    homePage.includes('holdCenterHeight()') &&
-    homePage.includes('releaseCenterHeightHold(700)') &&
     homePage.includes('mutate()\n  await nextTick()\n  resetContentScrollInstant()') &&
     !homePage.includes('waitForNextFrame') &&
     !homePage.includes('requestAnimationFrame(() => resolve())') &&
@@ -264,7 +264,7 @@ assert(
     homePage.includes("switchActiveTab('notifications', { resetScroll: true })") &&
     homePage.includes('await runCenterNavigationReset(() => {\n    ensureMessageTab()\n    searchKeyword.value = String(keyword || \'\').trim()') &&
     homePage.includes('await runCenterNavigationReset(() => {\n    ensureMessageTab()\n    selectedTag.value = selectedTag.value === normalizedTag ? \'\' : normalizedTag'),
-  'center navigation, filtered search, tags, guestbook, and notification entries must reset the real content-wrapper scroll after DOM patch without hiding the center column for a visible frame'
+  'center navigation, filtered search, tags, guestbook, and notification entries must reset the real content-wrapper scroll after DOM patch without hiding or height-locking the center column'
 )
 
 console.log('frontend layout edge cases checks passed')

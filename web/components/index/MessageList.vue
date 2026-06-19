@@ -1,5 +1,5 @@
 <template>
-  <div ref="listRoot" :style="listStabilityStyle">
+  <div>
     <div class="min-h-screen flex flex-col">
       <!-- 空状态显示 -->
       <div v-if="props.pageReady && !hasActiveFilters && !displayMessages.length" class="text-center text-gray-500 py-8">
@@ -1253,7 +1253,6 @@ const handleTagClick = (tag: string) => {
 
 const refreshList = async () => {
   if (isPageLoading.value) return
-  lockListHeight()
   setPageLoading(true)
   try {
     await message.getMessages(pageQueryFor(1));
@@ -1262,7 +1261,6 @@ const refreshList = async () => {
     deferInitFancybox();
   } finally {
     setPageLoading(false)
-    releaseListHeight()
   }
 }
 
@@ -1773,23 +1771,6 @@ const setPageLoading = (loading: boolean) => {
   if (isPageLoading.value === loading) return
   isPageLoading.value = loading
   emit('loading-change', loading)
-}
-const listRoot = ref<HTMLElement | null>(null)
-const listMinHeight = ref('')
-let listMinHeightTimer: ReturnType<typeof setTimeout> | null = null
-const listStabilityStyle = computed(() => listMinHeight.value ? { minHeight: listMinHeight.value } : undefined)
-const lockListHeight = () => {
-  if (typeof window === 'undefined') return
-  const height = Math.ceil(listRoot.value?.getBoundingClientRect().height || 0)
-  if (height > 0) listMinHeight.value = `${height}px`
-}
-const releaseListHeight = (delay = 700) => {
-  if (typeof window === 'undefined') return
-  if (listMinHeightTimer) clearTimeout(listMinHeightTimer)
-  listMinHeightTimer = window.setTimeout(() => {
-    listMinHeight.value = ''
-    listMinHeightTimer = null
-  }, delay)
 }
 
 watch(
@@ -2545,15 +2526,44 @@ const saveEditedMessage = async () => {
     isSaving.value = false;
   }
 };
-// displayMessages 使用统一分页结果；筛选条件由 pageQueryFor 传给后端
-const displayMessages = computed(() => {
+const stableDisplayMessages = ref<any[]>([])
+const buildDisplayMessages = () => {
   const filterPersonal = (items: any[]) => isPersonalTab.value ? items.filter(isCurrentUserMessage) : items
   const base = (message.messages || []).filter((m: any) => !isGuestbookMessage(m));
   const pinned = (pinnedTopItems.value || []).filter((m: any) => !isGuestbookMessage(m));
-  if (!pinned.length) return filterPersonal(base);
+  if (!pinned.length) return filterPersonal(base)
   const rest = base.filter((m: any) => !pinned.some((p: any) => p.id === m.id));
-  return filterPersonal([...pinned, ...rest]);
-});
+  return filterPersonal([...pinned, ...rest])
+}
+
+// displayMessages 使用统一分页结果；筛选条件由 pageQueryFor 传给后端
+const displayMessages = computed(() => {
+  if (isPageLoading.value && stableDisplayMessages.value.length) return stableDisplayMessages.value
+  return buildDisplayMessages()
+})
+
+const syncStableDisplayMessages = () => {
+  stableDisplayMessages.value = buildDisplayMessages()
+}
+
+watch(
+  [
+    () => message.messages,
+    () => pinnedTopItems.value,
+    () => guestbookId.value,
+    () => props.activeTab,
+    () => userStore.isLogin,
+    () => currentUserId.value
+  ],
+  () => {
+    if (!isPageLoading.value) syncStableDisplayMessages()
+  },
+  { deep: true, immediate: true }
+)
+
+watch(isPageLoading, (loading) => {
+  if (!loading) syncStableDisplayMessages()
+})
 
 const showPager = computed(() => {
   if (isPersonalGuest.value) return false
@@ -2575,7 +2585,6 @@ const onCommentCountUpdated = (e: any) => {
 onMounted(() => { try { window.addEventListener('comment-count-updated', onCommentCountUpdated) } catch {} })
 onBeforeUnmount(() => {
   try { window.removeEventListener('comment-count-updated', onCommentCountUpdated) } catch {}
-  if (listMinHeightTimer && typeof window !== 'undefined') clearTimeout(listMinHeightTimer)
 })
 // 优化图片加载
 const optimizeImage = (url: string) => {

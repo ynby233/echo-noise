@@ -165,7 +165,7 @@
         </div>
       </div>
       </ClientOnly>
-      <div ref="centerCol" class="center-col" :style="centerStabilityStyle">
+      <div ref="centerCol" class="center-col">
         <div :class="centerContainerClass">
           <div class="moments-header">
             <div class="header-image" :style="headerImageStyle">
@@ -248,7 +248,6 @@
             @clear-filters="clearMessageFiltersWithReset"
             @select-tag="handleTagClick"
             @target-consumed="handleNotificationTargetConsumed"
-            @loading-change="handleMessageListLoadingChange"
           />
           </template>
         </div>
@@ -778,46 +777,6 @@ const onRegisterSubmit = async () => {
   } finally { registerSubmitting.value = false }
 }
 const centerCol = ref<HTMLElement | null>(null)
-const centerMinHeight = ref('')
-let centerMinHeightTimer: ReturnType<typeof setTimeout> | null = null
-let centerHeightHoldCount = 0
-const centerStabilityStyle = computed(() => centerMinHeight.value ? { minHeight: centerMinHeight.value } : undefined)
-const lockCenterHeight = () => {
-  if (typeof window === 'undefined') return
-  if (centerMinHeightTimer) {
-    clearTimeout(centerMinHeightTimer)
-    centerMinHeightTimer = null
-  }
-  const el = centerCol.value || document.querySelector('.center-col') as HTMLElement | null
-  if (!el) return
-  const height = Math.ceil(el.getBoundingClientRect().height)
-  if (height > 0) centerMinHeight.value = `${height}px`
-}
-const holdCenterHeight = () => {
-  centerHeightHoldCount += 1
-  lockCenterHeight()
-}
-const releaseCenterHeight = (delay = 700) => {
-  if (typeof window === 'undefined') return
-  if (centerMinHeightTimer) clearTimeout(centerMinHeightTimer)
-  centerMinHeightTimer = window.setTimeout(() => {
-    if (centerHeightHoldCount > 0) return
-    centerMinHeight.value = ''
-    centerMinHeightTimer = null
-  }, delay)
-}
-const releaseCenterHeightHold = (delay = 700) => {
-  centerHeightHoldCount = Math.max(0, centerHeightHoldCount - 1)
-  if (centerHeightHoldCount === 0) releaseCenterHeight(delay)
-}
-const handleMessageListLoadingChange = async (loading: boolean) => {
-  if (loading) {
-    holdCenterHeight()
-    return
-  }
-  await nextTick()
-  releaseCenterHeightHold(220)
-}
 const resetContentScrollInstant = () => {
   if (typeof window === 'undefined') return
   const el = contentWrapper.value || document.querySelector('.content-wrapper') as HTMLElement | null
@@ -830,11 +789,9 @@ const resetContentScrollInstant = () => {
   updateScrollState()
 }
 const runCenterNavigationReset = async (mutate: () => void) => {
-  holdCenterHeight()
   mutate()
   await nextTick()
   resetContentScrollInstant()
-  releaseCenterHeightHold(700)
 }
 const switchActiveTab = async (tab: string, options: { resetScroll?: boolean } = {}) => {
   if (tab === activeTab.value) return
@@ -864,7 +821,6 @@ const openCommentBoard = () => {
 }
 onUnmounted(() => {
   if (captchaTimer) clearInterval(captchaTimer)
-  if (centerMinHeightTimer && typeof window !== 'undefined') clearTimeout(centerMinHeightTimer)
 })
 
 watch(() => route.query.login, (v) => {
