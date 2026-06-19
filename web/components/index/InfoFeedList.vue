@@ -116,32 +116,34 @@
         </div>
       </article>
     </div>
-    <div v-if="!loading && !errorText && allItems.length > 0" class="pager-shell">
-      <div class="pager-main">
-        <UButton
+    <div
+      v-if="!loading && !errorText && allItems.length > 0"
+      class="pager-shell"
+      :class="{ 'is-dark': contentTheme === 'dark' }"
+    >
+      <div class="pager-nav-group">
+        <button
           v-if="currentPage > 1"
-          color="gray"
-          variant="solid"
-          size="xs"
-          class="rounded-full px-4 py-1.5 shadow-lg hover:shadow-xl transition-all duration-300 pager-btn"
+          type="button"
+          class="pager-btn nw-action-btn nw-action-btn--label"
           @click="goPrevPage"
         >
           <span class="pager-icon-wrap"><UIcon name="i-heroicons-arrow-left" class="w-4 h-4 pager-icon" /></span>
-          上一页
-        </UButton>
-        <UButton
+          <span>上一页</span>
+        </button>
+        <button
           v-if="currentPage < totalPages"
-          color="gray"
-          variant="solid"
-          size="xs"
-          class="rounded-full px-4 py-1.5 shadow-lg hover:shadow-xl transition-all duration-300 pager-btn"
+          type="button"
+          class="pager-btn nw-action-btn nw-action-btn--label"
           @click="goNextPage"
         >
-          下一页
+          <span>下一页</span>
           <span class="pager-icon-wrap"><UIcon name="i-heroicons-arrow-right" class="w-4 h-4 pager-icon" /></span>
-        </UButton>
+        </button>
       </div>
-      <div class="pager-meta">第 {{ currentPage }} / {{ totalPages }} 页</div>
+      <div class="pager-jump-group">
+        <span class="pager-page-text">第 {{ currentPage }} / {{ totalPages }} 页</span>
+      </div>
     </div>
     <UModal v-model="previewOpen">
       <div class="feed-preview-modal">
@@ -1205,32 +1207,80 @@ onUnmounted(() => {
 }
 
 .pager-shell {
+  --pager-shell-bg: rgba(255, 255, 255, 0.85);
+  --pager-shell-border: rgba(15, 23, 42, 0.12);
+  --pager-shell-text: #334155;
+  --pager-shell-muted: #64748b;
   display: flex;
-  justify-content: center;
   align-items: center;
-  gap: 12px;
-  margin: 10px 0 4px;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+  margin: 16px 0 72px;
+  padding: 10px 14px;
+  border: 1px solid var(--pager-shell-border);
+  border-radius: 999px;
+  background: var(--pager-shell-bg);
+  color: var(--pager-shell-text);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.10);
   flex-wrap: wrap;
 }
 
-.pager-main {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.pager-shell.is-dark {
+  --pager-shell-bg: rgba(39, 50, 66, 0.68);
+  --pager-shell-border: rgba(255, 255, 255, 0.16);
+  --pager-shell-text: #e2e8f0;
+  --pager-shell-muted: #cbd5e1;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
 }
 
-.pager-meta {
+.pager-nav-group,
+.pager-jump-group {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pager-btn {
+  min-height: 34px;
+  padding-inline: 14px;
   font-size: 13px;
-  color: #64748b;
+  font-weight: 700;
+}
+
+.pager-page-text {
+  color: var(--pager-shell-muted);
+  font-size: 13px;
+  font-weight: 650;
+  text-shadow: none;
 }
 
 .pager-icon-wrap {
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--nw-action-text) 10%, transparent);
 }
 
-:global(html.dark) .pager-meta {
-  color: rgba(226, 232, 240, 0.8);
+.pager-icon {
+  line-height: 1;
+}
+
+@media (max-width: 640px) {
+  .pager-shell {
+    border-radius: 18px;
+    gap: 10px;
+  }
+
+  .pager-nav-group,
+  .pager-jump-group {
+    width: 100%;
+  }
 }
 
 :global(html.dark) .feed-icon-btn {

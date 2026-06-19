@@ -19,6 +19,7 @@ const authLogin = read('pages/auth/login.vue')
 const authRegister = read('pages/auth/register.vue')
 const homePage = read('pages/index.vue')
 const builtinComments = read('components/comments/BuiltinComments.vue')
+const infoFeedList = read('components/index/InfoFeedList.vue')
 const markdownRenderer = read('components/index/MarkdownRenderer.vue')
 const floatingCss = read('assets/css/tailwind.css')
 
@@ -241,9 +242,20 @@ assert(
 
 assert(
   messageList.includes('margin: 16px 0 72px;') &&
+    infoFeedList.includes('class="pager-btn nw-action-btn nw-action-btn--label"') &&
+    infoFeedList.includes('class="pager-nav-group"') &&
+    infoFeedList.includes('class="pager-jump-group"') &&
+    infoFeedList.includes('class="pager-page-text"') &&
+    infoFeedList.includes(":class=\"{ 'is-dark': contentTheme === 'dark' }\"") &&
+    infoFeedList.includes('border-radius: 999px;') &&
+    infoFeedList.includes('margin: 16px 0 72px;') &&
+    infoFeedList.includes('box-shadow: 0 8px 22px rgba(15, 23, 42, 0.10);') &&
+    !infoFeedList.includes('class="pager-main"') &&
+    !infoFeedList.includes('class="pager-meta"') &&
+    !infoFeedList.includes('<UButton\n          v-if="currentPage') &&
     homePage.includes('padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));') &&
     homePage.includes('scroll-padding-bottom: calc(160px + env(safe-area-inset-bottom, 0px));'),
-  'pagination must keep explicit bottom clearance from the browser viewport'
+  'pagination must keep explicit bottom clearance from the browser viewport and the info feed pager must use the same shared shell/action-button template as notes'
 )
 
 assert(
