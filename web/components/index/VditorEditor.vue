@@ -474,7 +474,7 @@ watch(() => props.theme, (newTheme) => {
 
 <style>
 .vditor-container {
-  --publish-editor-font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  --publish-editor-font: "LXGW WenKai Screen";
   border-radius: 8px;
   margin-bottom: 12px;
   position: relative;
@@ -699,9 +699,12 @@ watch(() => props.theme, (newTheme) => {
   min-height: 120px !important;
 }
 
-.vditor-container .vditor-ir pre.vditor-reset:empty:before,
-.vditor-container .vditor-wysiwyg .vditor-reset:empty:before,
-.vditor-container .vditor-sv .vditor-reset:empty:before,
+.vditor-container .vditor-ir pre.vditor-reset:empty::before,
+.vditor-container .vditor-ir pre.vditor-reset[placeholder]:empty::before,
+.vditor-container .vditor-wysiwyg pre.vditor-reset:empty::before,
+.vditor-container .vditor-wysiwyg pre.vditor-reset[placeholder]:empty::before,
+.vditor-container .vditor-sv:empty::before,
+.vditor-container .vditor-sv[placeholder]:empty::before,
 .vditor-container .vditor-ir__node--placeholder::before,
 .vditor-container .vditor-wysiwyg__placeholder,
 .vditor-container .vditor-placeholder {
