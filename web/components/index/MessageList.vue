@@ -33,7 +33,7 @@
             </button>
           </div>
           <div v-if="props.pageReady && hasActiveFilters && !isPageLoading && displayMessages.length" class="search-results-count">笔记 ({{ filteredResultCount }})</div>
-          <div v-if="props.pageReady && hasActiveFilters && (isPageLoading || !displayMessages.length)" class="search-results-empty">
+          <div v-if="props.pageReady && hasActiveFilters && !displayMessages.length" class="search-results-empty">
             <div v-if="isPageLoading">
               <p>加载中...</p>
             </div>
@@ -43,7 +43,7 @@
             </div>
           </div>
           <!-- 消息列表 -->
-          <div v-if="!props.pageReady || !hasActiveFilters || (!isPageLoading && displayMessages.length)" :class="props.pageReady && hasActiveFilters ? 'search-results-list' : 'my-4'">
+          <div v-if="!props.pageReady || !hasActiveFilters || displayMessages.length" :class="props.pageReady && hasActiveFilters ? 'search-results-list' : 'my-4'">
         <!-- 消息列表内容 -->
         <div v-for="(msg, idx) in displayMessages" :key="msg.id" class="w-full h-auto overflow-hidden flex flex-col justify-between">
 
@@ -825,6 +825,7 @@ const emit = defineEmits<{
   (e: 'clear-filters'): void
   (e: 'select-tag', tag: string): void
   (e: 'target-consumed'): void
+  (e: 'loading-change', loading: boolean): void
 }>()
 const outerContainerClass = computed(() => {
   const filtering = props.pageReady && Boolean(props.calendarDate || String(props.searchKeyword || '').trim() || String(props.selectedTag || '').trim())
@@ -1251,15 +1252,16 @@ const handleTagClick = (tag: string) => {
 }
 
 const refreshList = async () => {
+  if (isPageLoading.value) return
   lockListHeight()
-  isPageLoading.value = true
+  setPageLoading(true)
   try {
     await message.getMessages(pageQueryFor(1));
     await nextTick();
     deferMeasure();
     deferInitFancybox();
   } finally {
-    isPageLoading.value = false
+    setPageLoading(false)
     releaseListHeight()
   }
 }
@@ -1595,7 +1597,7 @@ const loadWalineAssets = async () => {
 }
 onMounted(async () => {
   try {
-    isPageLoading.value = true
+    setPageLoading(true)
     await checkApi()
     await fetchGuestbookId()
     // 获取路由中的消息ID
@@ -1684,7 +1686,7 @@ onMounted(async () => {
       });
     }
   } finally {
-    isPageLoading.value = false
+    setPageLoading(false)
     targetListReady.value = true
     await nextTick()
     if (props.targetMessageId) focusTargetMessageAndComment()
@@ -1767,6 +1769,11 @@ watch(() => route.hash, async (newHash) => {
 
 // 修改 loadMore 为 loadNextPage
 const isPageLoading = ref(false);
+const setPageLoading = (loading: boolean) => {
+  if (isPageLoading.value === loading) return
+  isPageLoading.value = loading
+  emit('loading-change', loading)
+}
 const listRoot = ref<HTMLElement | null>(null)
 const listMinHeight = ref('')
 let listMinHeightTimer: ReturnType<typeof setTimeout> | null = null
@@ -1810,7 +1817,7 @@ watch(
 
 const loadPreviousPage = async () => {
   if (isPageLoading.value || message.page <= 1) return;
-  isPageLoading.value = true;
+  setPageLoading(true);
   try {
     const sc = document.querySelector('.content-wrapper') as HTMLElement | null;
     const prevY = sc ? sc.scrollTop : window.scrollY;
@@ -1837,13 +1844,13 @@ const loadPreviousPage = async () => {
       timeout: 2000
     });
   } finally {
-    isPageLoading.value = false;
+    setPageLoading(false);
   }
 };
 
 const loadNextPage = async () => {
   if (isPageLoading.value || !message.hasMore) return;
-  isPageLoading.value = true;
+  setPageLoading(true);
   try {
     const sc = document.querySelector('.content-wrapper') as HTMLElement | null;
     const prevY = sc ? sc.scrollTop : window.scrollY;
@@ -1870,7 +1877,7 @@ const loadNextPage = async () => {
       timeout: 2000
     });
   } finally {
-    isPageLoading.value = false;
+    setPageLoading(false);
   }
 };
 // 添加登录状态变化监听

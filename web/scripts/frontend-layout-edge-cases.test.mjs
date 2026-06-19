@@ -143,8 +143,13 @@ assert(
     messageList.includes('class="search-results-back nw-action-btn nw-action-btn--label"') &&
     messageList.includes('>笔记 ({{ filteredResultCount }})</div>') &&
     messageList.includes('v-if="props.pageReady && hasActiveFilters && !isPageLoading && displayMessages.length" class="search-results-count"') &&
-    messageList.includes('v-if="props.pageReady && hasActiveFilters && (isPageLoading || !displayMessages.length)" class="search-results-empty"') &&
-    messageList.includes('v-if="!props.pageReady || !hasActiveFilters || (!isPageLoading && displayMessages.length)"') &&
+    messageList.includes('v-if="props.pageReady && hasActiveFilters && !displayMessages.length" class="search-results-empty"') &&
+    messageList.includes('v-if="!props.pageReady || !hasActiveFilters || displayMessages.length"') &&
+    messageList.includes("(e: 'loading-change', loading: boolean): void") &&
+    messageList.includes('const setPageLoading = (loading: boolean) => {') &&
+    messageList.includes("emit('loading-change', loading)") &&
+    messageList.includes('setPageLoading(true)') &&
+    messageList.includes('setPageLoading(false)') &&
     messageList.includes('const listStabilityStyle = computed(() => listMinHeight.value ? { minHeight: listMinHeight.value } : undefined)') &&
     messageList.includes('lockListHeight()') &&
     messageList.includes('releaseListHeight()') &&
@@ -241,9 +246,14 @@ assert(
     homePage.includes('const resetContentScrollInstant = () => {') &&
     homePage.includes("const el = contentWrapper.value || document.querySelector('.content-wrapper') as HTMLElement | null") &&
     homePage.includes('el.scrollTop = 0') &&
+    homePage.includes('let centerHeightHoldCount = 0') &&
+    homePage.includes('const holdCenterHeight = () => {') &&
+    homePage.includes('const releaseCenterHeightHold = (delay = 700) => {') &&
+    homePage.includes('const handleMessageListLoadingChange = async (loading: boolean) => {') &&
+    homePage.includes('@loading-change="handleMessageListLoadingChange"') &&
     homePage.includes('const runCenterNavigationReset = async (mutate: () => void) => {') &&
-    homePage.includes('lockCenterHeight()') &&
-    homePage.includes('releaseCenterHeight()') &&
+    homePage.includes('holdCenterHeight()') &&
+    homePage.includes('releaseCenterHeightHold(700)') &&
     homePage.includes('mutate()\n  await nextTick()\n  resetContentScrollInstant()') &&
     !homePage.includes('waitForNextFrame') &&
     !homePage.includes('requestAnimationFrame(() => resolve())') &&
