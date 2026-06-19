@@ -373,7 +373,7 @@ const matchesInitialTarget = (item: UserNotification) => {
 
 const scrollElementToAppCenter = (el: HTMLElement) => {
   if (typeof document === 'undefined') return
-  const wrapper = document.querySelector('.content-wrapper') as HTMLElement | null
+  const wrapper = (el.closest('.center-col') || document.querySelector('.content-wrapper')) as HTMLElement | null
   if (!wrapper) {
     el.scrollIntoView({ behavior: 'smooth', block: 'center' })
     return

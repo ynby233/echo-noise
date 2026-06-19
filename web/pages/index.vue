@@ -777,12 +777,24 @@ const onRegisterSubmit = async () => {
   } finally { registerSubmitting.value = false }
 }
 const centerCol = ref<HTMLElement | null>(null)
+const usesCenterColumnScroll = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 769px)').matches
+const getMainScrollElement = () => {
+  if (usesCenterColumnScroll()) {
+    return centerCol.value || document.querySelector('.center-col') as HTMLElement | null
+  }
+  return contentWrapper.value || document.querySelector('.content-wrapper') as HTMLElement | null
+}
 const resetContentScrollInstant = () => {
   if (typeof window === 'undefined') return
-  const el = contentWrapper.value || document.querySelector('.content-wrapper') as HTMLElement | null
-  if (el) {
-    el.scrollTop = 0
-    el.scrollLeft = 0
+  const main = getMainScrollElement()
+  const wrapper = contentWrapper.value || document.querySelector('.content-wrapper') as HTMLElement | null
+  if (wrapper && wrapper !== main) {
+    wrapper.scrollTop = 0
+    wrapper.scrollLeft = 0
+  }
+  if (main) {
+    main.scrollTop = 0
+    main.scrollLeft = 0
   } else {
     window.scrollTo(0, 0)
   }
@@ -1108,12 +1120,12 @@ const toggleThemeGlobal = () => {
 
 const contentWrapper = ref<HTMLElement | null>(null)
 const scrollToTop = () => {
-  const el = contentWrapper.value
+  const el = getMainScrollElement()
   if (el) el.scrollTo({ top: 0, behavior: 'smooth' })
   else window.scrollTo({ top: 0, behavior: 'smooth' })
 }
   const scrollToBottom = () => {
-    const el = contentWrapper.value
+    const el = getMainScrollElement()
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
     else {
       const h = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)
@@ -1151,7 +1163,7 @@ const hoverScroll = ref(false)
 const isAtTop = ref(true)
 const isAtBottom = ref(false)
 const updateScrollState = () => {
-  const el = contentWrapper.value
+  const el = getMainScrollElement()
   if (!el) {
     const y = window.scrollY || document.documentElement.scrollTop || 0
     const max = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)
@@ -1164,13 +1176,23 @@ const updateScrollState = () => {
   isAtTop.value = y <= 2
   isAtBottom.value = el.clientHeight + y >= max - 2
 }
+let scrollStateCleanup: (() => void) | null = null
+const bindScrollStateListener = () => {
+  scrollStateCleanup?.()
+  const el = getMainScrollElement()
+  if (!el) return
+  el.addEventListener('scroll', updateScrollState, { passive: true })
+  scrollStateCleanup = () => el.removeEventListener('scroll', updateScrollState)
+}
 onMounted(() => {
-  updateScrollState()
-  contentWrapper.value?.addEventListener('scroll', updateScrollState, { passive: true })
+  nextTick(() => {
+    updateScrollState()
+    bindScrollStateListener()
+  })
   if (enableAutoScroll.value) nextTick(() => startAutoScroll())
 })
 onUnmounted(() => {
-  contentWrapper.value?.removeEventListener('scroll', updateScrollState)
+  scrollStateCleanup?.()
   autoScrollCleanups.forEach((fn) => fn())
 })
 
@@ -3102,6 +3124,35 @@ white-space: nowrap;  /* 防止换行 */
   display: block;
 }
 .layout-container { --sidebar-width: 320px; --grid-gap: 16px; }
+@media screen and (min-width: 769px) {
+  .content-wrapper {
+    overflow-y: hidden;
+  }
+  .container-fixed {
+    height: calc(100dvh - 32px);
+    max-height: calc(100dvh - 32px);
+  }
+  .layout-container.grid-3,
+  .layout-container.grid-2,
+  .layout-container.grid-1 {
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+  }
+  .layout-container.grid-3,
+  .layout-container.grid-2 {
+    align-items: stretch;
+  }
+  .left-col,
+  .right-col,
+  .center-col {
+    max-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+}
 .left-col, .right-col { position: sticky; top: 0; align-self: start; height: fit-content; }
 .right-col {
   max-height: calc(100vh - 24px);
@@ -3478,6 +3529,17 @@ html.dark .page-footer { color: rgba(226, 232, 240, 0.72); }
 }
 :global(html.dark) .center-col :deep(.content-container),
 :global(html:not(.dark)) .center-col :deep(.content-container) { transition: none !important; }
+@media screen and (min-width: 769px) {
+  :global(html.dark) .left-col,
+  :global(html.dark) .center-col,
+  :global(html.dark) .right-col,
+  :global(html:not(.dark)) .left-col,
+  :global(html:not(.dark)) .center-col,
+  :global(html:not(.dark)) .right-col {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+  }
+}
 .netease-mini-player.minimized[data-instant="true"] { transition: none !important; }
 .netease-mini-player.minimized[data-instant="true"] .album-cover-container,
 .netease-mini-player.minimized[data-instant="true"] .album-cover,

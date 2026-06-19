@@ -255,13 +255,22 @@ assert(
     !homePage.includes('holdCenterHeight') &&
     !homePage.includes('releaseCenterHeightHold') &&
     !homePage.includes('@loading-change="handleMessageListLoadingChange"') &&
+    homePage.includes("const usesCenterColumnScroll = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 769px)').matches") &&
+    homePage.includes('const getMainScrollElement = () => {') &&
+    homePage.includes('if (usesCenterColumnScroll()) {') &&
+    homePage.includes("return centerCol.value || document.querySelector('.center-col') as HTMLElement | null") &&
+    homePage.includes("return contentWrapper.value || document.querySelector('.content-wrapper') as HTMLElement | null") &&
     homePage.includes('const resetContentScrollInstant = () => {') &&
-    homePage.includes("const el = contentWrapper.value || document.querySelector('.content-wrapper') as HTMLElement | null") &&
-    homePage.includes('el.scrollTop = 0') &&
+    homePage.includes('const main = getMainScrollElement()') &&
+    homePage.includes('wrapper.scrollTop = 0') &&
+    homePage.includes('main.scrollTop = 0') &&
     homePage.includes('const runCenterNavigationReset = async (mutate: () => void) => {') &&
     homePage.includes('mutate()\n  await nextTick()\n  resetContentScrollInstant()') &&
     !homePage.includes('waitForNextFrame') &&
     !homePage.includes('requestAnimationFrame(() => resolve())') &&
+    homePage.includes('.content-wrapper {\n    overflow-y: hidden;') &&
+    homePage.includes(':global(html.dark) .left-col,\n  :global(html.dark) .center-col,\n  :global(html.dark) .right-col,') &&
+    homePage.includes('overflow-x: hidden !important;\n    overflow-y: auto !important;') &&
     homePage.includes('const switchActiveTab = async (tab: string, options: { resetScroll?: boolean } = {}) => {') &&
     homePage.includes('await runCenterNavigationReset(() => { activeTab.value = tab })') &&
     homePage.includes('@click="switchActiveTab(t.key, { resetScroll: true })"') &&
@@ -269,7 +278,7 @@ assert(
     homePage.includes("switchActiveTab('notifications', { resetScroll: true })") &&
     homePage.includes('await runCenterNavigationReset(() => {\n    ensureMessageTab()\n    searchKeyword.value = String(keyword || \'\').trim()') &&
     homePage.includes('await runCenterNavigationReset(() => {\n    ensureMessageTab()\n    selectedTag.value = selectedTag.value === normalizedTag ? \'\' : normalizedTag'),
-  'center navigation, filtered search, tags, guestbook, and notification entries must reset the real content-wrapper scroll after DOM patch without hiding or height-locking the center column'
+  'center navigation must use an independent center-column scroll container on tablet/desktop, reset it after DOM patch, and avoid hiding or height-locking the center column'
 )
 
 assert(
