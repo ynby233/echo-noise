@@ -46,16 +46,19 @@ assert(
 
 assert(
   notificationCenter.includes('notification-feed-panel notification-board-wrap') &&
-    notificationCenter.includes('margin-top:1px;') &&
+    notificationCenter.includes('margin:0 0 12px;') &&
     notificationCenter.includes('padding:24px;') &&
-    notificationCenter.includes('background:var(--notice-surface);') &&
+    notificationCenter.includes('border:1px solid #e5e7eb;') &&
+    notificationCenter.includes('border-radius:var(--home-radius-panel);') &&
+    notificationCenter.includes('background:var(--home-surface-light);') &&
+    notificationCenter.includes('background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.82) 100%);') &&
     notificationCenter.includes('.notification-center { padding:20px; }') &&
     notificationCenter.includes('.notification-title-row { position:relative; display:block;') &&
     notificationCenter.includes('.notification-title { display:block; margin:0 0 14px;') &&
     notificationCenter.includes('.notification-subtitle { max-width:42rem; margin:2px auto 20px;') &&
     notificationCenter.includes('.notification-count-title { margin:0 0 8px;') &&
     notificationCenter.includes('.notification-board-wrap { box-sizing:border-box; max-width:48rem; margin:0 auto 8px; padding:8px;'),
-  'notification title, description, count, and first-card spacing must mirror the measured guestbook rhythm while keeping the outer surface'
+  'notification title, description, count, first-card spacing, and outer frame must mirror the measured guestbook rhythm'
 )
 
 assert(
@@ -175,9 +178,14 @@ assert(
     messageList.includes("return filtering ? 'flex-grow w-full' : 'flex-grow w-full px-1 sm:px-2'") &&
     !messageList.includes("['search-results-list', innerContainerClass]") &&
     messageList.includes('margin: 20px 0 16px;') &&
-    messageList.includes('padding: 24px 7px 16px;') &&
-    messageList.includes('padding: 20px 3px 12px;') &&
-    messageList.includes('background: linear-gradient(180deg, rgba(30,41,59,.48) 0%, rgba(15,23,42,.82) 100%);') &&
+    messageList.includes('padding: 24px;') &&
+    messageList.includes('border: 1px solid #e5e7eb;') &&
+    messageList.includes('border-radius: var(--home-radius-panel);') &&
+    messageList.includes('background: var(--home-surface-light);') &&
+    messageList.includes('box-shadow: 0 14px 28px rgba(15, 23, 42, 0.10);') &&
+    messageList.includes('padding: 20px;') &&
+    messageList.includes('background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.82) 100%);') &&
+    messageList.includes('backdrop-filter: blur(8px) saturate(118%);') &&
     messageList.includes('right: 17px;') &&
     messageList.includes('height: 28px;') &&
     messageList.includes('padding: 0 8px;') &&
