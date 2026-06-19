@@ -232,10 +232,11 @@ assert(
   homePage.includes('const resetContentScrollInstant = () => {') &&
     homePage.includes("const el = contentWrapper.value || document.querySelector('.content-wrapper') as HTMLElement | null") &&
     homePage.includes('el.scrollTop = 0') &&
-    homePage.includes('const switchActiveTab = (tab: string, options: { resetScroll?: boolean } = {}) => {') &&
+    homePage.includes('const switchActiveTab = async (tab: string, options: { resetScroll?: boolean } = {}) => {') &&
+    homePage.includes('activeTab.value = tab\n  if (options.resetScroll) {\n    await nextTick()\n    resetContentScrollInstant()\n  }') &&
     homePage.includes("switchActiveTab('comment', { resetScroll: true })") &&
     homePage.includes("switchActiveTab('notifications', { resetScroll: true })"),
-  'floating guestbook and notification entries must reset the real content-wrapper scroll before switching to short panels'
+  'floating guestbook and notification entries must switch to short panels before resetting the real content-wrapper scroll, avoiding a visible old-list jump'
 )
 
 console.log('frontend layout edge cases checks passed')

@@ -778,9 +778,12 @@ const resetContentScrollInstant = () => {
   }
   updateScrollState()
 }
-const switchActiveTab = (tab: string, options: { resetScroll?: boolean } = {}) => {
-  if (options.resetScroll) resetContentScrollInstant()
+const switchActiveTab = async (tab: string, options: { resetScroll?: boolean } = {}) => {
   activeTab.value = tab
+  if (options.resetScroll) {
+    await nextTick()
+    resetContentScrollInstant()
+  }
 }
 const openAdmin = async () => {
   const ok = await useUserStore().checkLoginStatus()
