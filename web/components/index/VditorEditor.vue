@@ -474,12 +474,12 @@ watch(() => props.theme, (newTheme) => {
 
 <style>
 .vditor-container {
+  --publish-editor-font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
   border-radius: 8px;
   margin-bottom: 12px;
   position: relative;
   overflow: visible;
-  
-  position: relative;
+  font-family: var(--publish-editor-font);
 }
 .vditor-content {
   position: relative;
@@ -675,10 +675,18 @@ watch(() => props.theme, (newTheme) => {
   border-radius: 4px;
 }
 
-.vditor-ir pre.vditor-reset,
-.vditor-wysiwyg .vditor-reset,
-.vditor-sv .vditor-reset {
-  font-family: inherit !important;
+.vditor-container .vditor,
+.vditor-container .vditor-content,
+.vditor-container .vditor-ir,
+.vditor-container .vditor-ir pre.vditor-reset,
+.vditor-container .vditor-ir pre.vditor-reset *,
+.vditor-container .vditor-ir__node,
+.vditor-container .vditor-ir__node *,
+.vditor-container .vditor-wysiwyg .vditor-reset,
+.vditor-container .vditor-wysiwyg .vditor-reset *,
+.vditor-container .vditor-sv .vditor-reset,
+.vditor-container .vditor-sv .vditor-reset * {
+  font-family: var(--publish-editor-font) !important;
   font-weight: 400 !important;
   letter-spacing: normal !important;
 }
@@ -691,14 +699,14 @@ watch(() => props.theme, (newTheme) => {
   min-height: 120px !important;
 }
 
-.vditor-ir pre.vditor-reset:empty:before,
-.vditor-wysiwyg .vditor-reset:empty:before,
-.vditor-sv .vditor-reset:empty:before,
-.vditor-ir__node--placeholder::before,
-.vditor-wysiwyg__placeholder,
-.vditor-placeholder {
+.vditor-container .vditor-ir pre.vditor-reset:empty:before,
+.vditor-container .vditor-wysiwyg .vditor-reset:empty:before,
+.vditor-container .vditor-sv .vditor-reset:empty:before,
+.vditor-container .vditor-ir__node--placeholder::before,
+.vditor-container .vditor-wysiwyg__placeholder,
+.vditor-container .vditor-placeholder {
   color: rgba(51, 65, 85, 0.58) !important;
-  font-family: inherit !important;
+  font-family: var(--publish-editor-font) !important;
   font-size: 14px !important;
   font-weight: 400 !important;
   line-height: 1.5 !important;
