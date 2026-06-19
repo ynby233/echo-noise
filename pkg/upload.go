@@ -21,6 +21,7 @@ import (
 	awscfg "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go"
 	"github.com/gin-gonic/gin"
 	"github.com/nfnt/resize"
 	"github.com/rcy1314/echo-noise/config"
@@ -98,36 +99,122 @@ func normalizeUploadExt(ext, fallback string) string {
 	return ext
 }
 
-func hashedAttachmentFileNameFromBytes(data []byte, ext string) string {
+const attachmentSHA256MetadataKey = "sha256"
+
+func attachmentContentHashFromBytes(data []byte) string {
 	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:]) + normalizeUploadExt(ext, ".bin")
+	return hex.EncodeToString(sum[:])
 }
 
-func hashedAttachmentFileNameFromReadSeeker(content io.ReadSeeker, ext string) (string, error) {
-	if _, err := content.Seek(0, io.SeekStart); err != nil {
-		return "", err
-	}
+func attachmentContentHashFromReader(content io.Reader) (string, error) {
 	h := sha256.New()
 	if _, err := io.Copy(h, content); err != nil {
 		return "", err
 	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func attachmentContentHashFromReadSeeker(content io.ReadSeeker) (string, error) {
 	if _, err := content.Seek(0, io.SeekStart); err != nil {
 		return "", err
 	}
-	return hex.EncodeToString(h.Sum(nil)) + normalizeUploadExt(ext, ".bin"), nil
+	hash, err := attachmentContentHashFromReader(content)
+	if err != nil {
+		return "", err
+	}
+	if _, err := content.Seek(0, io.SeekStart); err != nil {
+		return "", err
+	}
+	return hash, nil
 }
 
-func hashedAttachmentFileNameFromPath(path, ext string) (string, error) {
+func attachmentContentHashFromPath(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", err
 	}
 	defer f.Close()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
+	return attachmentContentHashFromReader(f)
+}
+
+func safeAttachmentFileName(originalName, ext, fallbackStem string) string {
+	clean := strings.TrimSpace(originalName)
+	clean = strings.ReplaceAll(clean, "\\", "/")
+	clean = filepath.Base(clean)
+	clean = strings.Map(func(r rune) rune {
+		if r == 0 || r < 32 || r == 127 || r == '/' || r == '\\' {
+			return -1
+		}
+		return r
+	}, clean)
+	clean = strings.TrimSpace(clean)
+
+	if strings.TrimSpace(fallbackStem) == "" {
+		fallbackStem = "attachment"
 	}
-	return hex.EncodeToString(h.Sum(nil)) + normalizeUploadExt(ext, ".bin"), nil
+	normalizedExt := normalizeUploadExt(ext, ".bin")
+	if clean == "" || clean == "." {
+		return fallbackStem + normalizedExt
+	}
+
+	currentExt := filepath.Ext(clean)
+	stem := strings.TrimSpace(strings.TrimSuffix(clean, currentExt))
+	if stem == "" || stem == "." {
+		stem = fallbackStem
+	}
+	return stem + normalizedExt
+}
+
+func sequencedAttachmentFileName(name string, index int) string {
+	if index <= 0 {
+		return name
+	}
+	ext := filepath.Ext(name)
+	stem := strings.TrimSuffix(name, ext)
+	return fmt.Sprintf("%s(%d)%s", stem, index, ext)
+}
+
+func localFileMatchesContentHash(path, contentHash string) bool {
+	if contentHash == "" {
+		return false
+	}
+	existingHash, err := attachmentContentHashFromPath(path)
+	return err == nil && existingHash == contentHash
+}
+
+func localAttachmentFileNameForContent(dir, preferredName, contentHash string) (string, bool, error) {
+	if contentHash != "" {
+		entries, err := os.ReadDir(dir)
+		if err != nil && !os.IsNotExist(err) {
+			return "", false, err
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			if localFileMatchesContentHash(filepath.Join(dir, entry.Name()), contentHash) {
+				return entry.Name(), true, nil
+			}
+		}
+	}
+
+	for i := 0; ; i++ {
+		candidate := sequencedAttachmentFileName(preferredName, i)
+		p := filepath.Join(dir, candidate)
+		info, err := os.Stat(p)
+		if os.IsNotExist(err) {
+			return candidate, false, nil
+		}
+		if err != nil {
+			return "", false, err
+		}
+		if info.IsDir() {
+			continue
+		}
+		if localFileMatchesContentHash(p, contentHash) {
+			return candidate, true, nil
+		}
+	}
 }
 
 func fileExists(path string) bool {
@@ -208,12 +295,12 @@ func UploadImage(c *gin.Context, allowedExtensions []string, siteConfig *models.
 		}
 	}
 
-	// 使用最终内容的 SHA-256 生成稳定文件名，相同文件只保存一份。
-	newFileName := hashedAttachmentFileNameFromBytes(fileData, ext)
+	contentHash := attachmentContentHashFromBytes(fileData)
+	preferredFileName := safeAttachmentFileName(file.Filename, ext, "image")
 
 	// 检查是否启用了附件云存储
 	if siteConfig != nil && siteConfig.AttachmentStorageEnabled {
-		return UploadAttachmentToCloud(siteConfig, newFileName, bytes.NewReader(fileData), contentType)
+		return UploadAttachmentToCloud(siteConfig, preferredFileName, bytes.NewReader(fileData), contentType, contentHash)
 	}
 
 	// 本地存储逻辑
@@ -222,23 +309,35 @@ func UploadImage(c *gin.Context, allowedExtensions []string, siteConfig *models.
 		return "", err
 	}
 
+	newFileName, existed, err := localAttachmentFileNameForContent(config.Config.Upload.SavePath, preferredFileName, contentHash)
+	if err != nil {
+		return "", err
+	}
+
 	// 保存文件到指定目录；相同内容已经存在时直接复用。
 	savePath := filepath.Join(config.Config.Upload.SavePath, newFileName)
-	if !fileExists(savePath) {
+	if !existed && !fileExists(savePath) {
 		if err := os.WriteFile(savePath, fileData, 0644); err != nil {
 			return "", errors.New(models.ImageUploadErrorMessage)
 		}
 	}
 
 	// 返回图片的 URL
-	imageURL := fmt.Sprintf("/api/images/%s", newFileName)
+	imageURL := fmt.Sprintf("/api/images/%s", url.PathEscape(newFileName))
 	return imageURL, nil
 }
 
 // UploadAttachmentToCloud 上传附件到云存储
-func UploadAttachmentToCloud(cfg *models.SiteConfig, fileName string, content io.ReadSeeker, contentType string) (string, error) {
+func UploadAttachmentToCloud(cfg *models.SiteConfig, preferredFileName string, content io.ReadSeeker, contentType string, contentHash string) (string, error) {
 	if cfg.AttachmentStorageBucket == "" || cfg.AttachmentStorageAccessKey == "" || cfg.AttachmentStorageSecretKey == "" || cfg.AttachmentStorageEndpoint == "" {
 		return "", errors.New("附件云存储配置不完整")
+	}
+	if contentHash == "" {
+		var err error
+		contentHash, err = attachmentContentHashFromReadSeeker(content)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	// 配置 AWS SDK
@@ -273,28 +372,55 @@ func UploadAttachmentToCloud(cfg *models.SiteConfig, fileName string, content io
 	}
 
 	origin, prefix := splitPublicBaseURL(cfg.AttachmentStoragePublicBaseURL)
-	key := strings.TrimLeft(fileName, "/")
-	if prefix != "" {
-		key = prefix + "/" + key
+	keyForName := func(name string) string {
+		key := strings.TrimLeft(name, "/")
+		if prefix != "" && !strings.HasPrefix(key, prefix+"/") {
+			key = prefix + "/" + key
+		}
+		return key
 	}
 
 	// 构建返回 URL
-	buildPublicURL := func() (string, error) {
+	buildPublicURL := func(cleanKey string) (string, error) {
 		if strings.TrimSpace(cfg.AttachmentStoragePublicBaseURL) != "" {
 			if origin == "" {
 				return "", errors.New("请在设置中配置云存储公共访问域名(PublicBaseURL)")
 			}
-			return fmt.Sprintf("%s/%s", origin, escapeObjectKeyForURL(key)), nil
+			keyForURL := strings.TrimLeft(cleanKey, "/")
+			if prefix != "" && !strings.HasPrefix(keyForURL, prefix+"/") {
+				keyForURL = prefix + "/" + keyForURL
+			}
+			return fmt.Sprintf("%s/%s", origin, escapeObjectKeyForURL(keyForURL)), nil
 		}
 
 		return "", errors.New("请在设置中配置云存储公共访问域名(PublicBaseURL)")
 	}
 
-	if _, err := client.HeadObject(context.TODO(), &s3.HeadObjectInput{
-		Bucket: aws.String(cfg.AttachmentStorageBucket),
-		Key:    aws.String(key),
-	}); err == nil {
-		return buildPublicURL()
+	if existingKey, ok, err := findCloudAttachmentByContentHash(context.TODO(), client, cfg.AttachmentStorageBucket, contentHash); err != nil {
+		return "", err
+	} else if ok {
+		return buildPublicURL(existingKey)
+	}
+
+	var key string
+	for i := 0; ; i++ {
+		candidateName := sequencedAttachmentFileName(preferredFileName, i)
+		candidateKey := keyForName(candidateName)
+		exists, sameContent, err := cloudObjectMatchesContentHash(context.TODO(), client, cfg.AttachmentStorageBucket, candidateKey, contentHash, true)
+		if err != nil {
+			return "", err
+		}
+		if sameContent {
+			return buildPublicURL(candidateKey)
+		}
+		if !exists {
+			key = candidateKey
+			break
+		}
+	}
+
+	if _, err := content.Seek(0, io.SeekStart); err != nil {
+		return "", err
 	}
 
 	// 上传文件
@@ -303,6 +429,9 @@ func UploadAttachmentToCloud(cfg *models.SiteConfig, fileName string, content io
 		Key:         aws.String(key),
 		Body:        content,
 		ContentType: aws.String(contentType),
+		Metadata: map[string]string{
+			attachmentSHA256MetadataKey: contentHash,
+		},
 		ContentLength: func() *int64 {
 			if contentLength > 0 {
 				return aws.Int64(contentLength)
@@ -314,7 +443,96 @@ func UploadAttachmentToCloud(cfg *models.SiteConfig, fileName string, content io
 		return "", fmt.Errorf("上传到云存储失败: %v", err)
 	}
 
-	return buildPublicURL()
+	return buildPublicURL(key)
+}
+
+func findCloudAttachmentByContentHash(ctx context.Context, client *s3.Client, bucket, contentHash string) (string, bool, error) {
+	if contentHash == "" {
+		return "", false, nil
+	}
+	var token *string
+	for {
+		resp, err := client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+			Bucket:            aws.String(bucket),
+			ContinuationToken: token,
+			MaxKeys:           aws.Int32(1000),
+		})
+		if err != nil {
+			return "", false, err
+		}
+		for _, obj := range resp.Contents {
+			key := strings.TrimLeft(aws.ToString(obj.Key), "/")
+			if key == "" {
+				continue
+			}
+			_, sameContent, err := cloudObjectMatchesContentHash(ctx, client, bucket, key, contentHash, false)
+			if err != nil {
+				return "", false, err
+			}
+			if sameContent {
+				return key, true, nil
+			}
+		}
+		if aws.ToBool(resp.IsTruncated) && resp.NextContinuationToken != nil && aws.ToString(resp.NextContinuationToken) != "" {
+			token = resp.NextContinuationToken
+			continue
+		}
+		break
+	}
+	return "", false, nil
+}
+
+func cloudObjectMatchesContentHash(ctx context.Context, client *s3.Client, bucket, key, contentHash string, allowBodyHash bool) (bool, bool, error) {
+	head, err := client.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		if isS3NotFound(err) {
+			return false, false, nil
+		}
+		return false, false, err
+	}
+	if contentHash != "" {
+		legacyName := filepath.Base(strings.TrimLeft(key, "/"))
+		if strings.TrimSuffix(legacyName, filepath.Ext(legacyName)) == contentHash {
+			return true, true, nil
+		}
+		for k, v := range head.Metadata {
+			if strings.EqualFold(k, attachmentSHA256MetadataKey) && strings.EqualFold(strings.TrimSpace(v), contentHash) {
+				return true, true, nil
+			}
+		}
+	}
+	if allowBodyHash && contentHash != "" {
+		obj, err := client.GetObject(ctx, &s3.GetObjectInput{
+			Bucket: aws.String(bucket),
+			Key:    aws.String(key),
+		})
+		if err != nil {
+			if isS3NotFound(err) {
+				return false, false, nil
+			}
+			return true, false, err
+		}
+		defer obj.Body.Close()
+		existingHash, err := attachmentContentHashFromReader(obj.Body)
+		if err != nil {
+			return true, false, err
+		}
+		return true, existingHash == contentHash, nil
+	}
+	return true, false, nil
+}
+
+func isS3NotFound(err error) bool {
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		code := strings.ToLower(apiErr.ErrorCode())
+		return code == "notfound" || code == "nosuchkey" || code == "404"
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "notfound") || strings.Contains(msg, "not found") || strings.Contains(msg, "nosuchkey") || strings.Contains(msg, "status code: 404")
 }
 
 // 检查文件类型是否合法
@@ -420,17 +638,18 @@ func UploadVideo(c *gin.Context, allowedExtensions []string, siteConfig *models.
 		defer os.Remove(p)
 	}
 
-	var newFileName string
+	var contentHash string
 	if uploadPath != "" {
-		newFileName, err = hashedAttachmentFileNameFromPath(uploadPath, ext)
+		contentHash, err = attachmentContentHashFromPath(uploadPath)
 	} else if seeker, ok := srcFile.(io.ReadSeeker); ok {
-		newFileName, err = hashedAttachmentFileNameFromReadSeeker(seeker, ext)
+		contentHash, err = attachmentContentHashFromReadSeeker(seeker)
 	} else {
 		return "", errors.New("无法读取上传文件")
 	}
 	if err != nil {
 		return "", err
 	}
+	preferredFileName := safeAttachmentFileName(file.Filename, ext, "video")
 
 	// 检查是否启用了附件云存储
 	if siteConfig != nil && siteConfig.AttachmentStorageEnabled {
@@ -443,13 +662,13 @@ func UploadVideo(c *gin.Context, allowedExtensions []string, siteConfig *models.
 			if _, err := f.Seek(0, io.SeekStart); err != nil {
 				return "", err
 			}
-			return UploadAttachmentToCloud(siteConfig, newFileName, f, contentType)
+			return UploadAttachmentToCloud(siteConfig, preferredFileName, f, contentType, contentHash)
 		}
 		if seeker, ok := srcFile.(io.ReadSeeker); ok {
 			if _, err := seeker.Seek(0, io.SeekStart); err != nil {
 				return "", err
 			}
-			return UploadAttachmentToCloud(siteConfig, newFileName, seeker, contentType)
+			return UploadAttachmentToCloud(siteConfig, preferredFileName, seeker, contentType, contentHash)
 		}
 		return "", errors.New("无法读取上传文件")
 	}
@@ -469,8 +688,13 @@ func UploadVideo(c *gin.Context, allowedExtensions []string, siteConfig *models.
 		return "", err
 	}
 
+	newFileName, existed, err := localAttachmentFileNameForContent(videoPath, preferredFileName, contentHash)
+	if err != nil {
+		return "", err
+	}
+
 	savePath := filepath.Join(videoPath, newFileName)
-	if !fileExists(savePath) {
+	if !existed && !fileExists(savePath) {
 		if uploadPath != "" {
 			in, err := os.Open(uploadPath)
 			if err != nil {
@@ -507,6 +731,6 @@ func UploadVideo(c *gin.Context, allowedExtensions []string, siteConfig *models.
 		}
 	}
 
-	videoURL := fmt.Sprintf("/api/video/%s", newFileName)
+	videoURL := fmt.Sprintf("/api/video/%s", url.PathEscape(newFileName))
 	return videoURL, nil
 }

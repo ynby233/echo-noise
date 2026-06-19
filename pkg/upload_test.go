@@ -2,33 +2,73 @@ package pkg
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func TestHashedAttachmentFileNameFromBytesIsStable(t *testing.T) {
-	first := hashedAttachmentFileNameFromBytes([]byte("same file"), ".PNG")
-	second := hashedAttachmentFileNameFromBytes([]byte("same file"), ".png")
+func TestAttachmentContentHashFromBytesIsStable(t *testing.T) {
+	first := attachmentContentHashFromBytes([]byte("same file"))
+	second := attachmentContentHashFromBytes([]byte("same file"))
 
 	if first != second {
-		t.Fatalf("expected stable filename, got %q and %q", first, second)
+		t.Fatalf("expected stable content hash, got %q and %q", first, second)
 	}
-	if !strings.HasSuffix(first, ".png") {
-		t.Fatalf("expected normalized extension, got %q", first)
+	if strings.Contains(first, ".") {
+		t.Fatalf("expected hash without filename extension, got %q", first)
 	}
 }
 
-func TestHashedAttachmentFileNameFromReadSeekerResetsReader(t *testing.T) {
+func TestAttachmentContentHashFromReadSeekerResetsReader(t *testing.T) {
 	reader := bytes.NewReader([]byte("video bytes"))
-	name, err := hashedAttachmentFileNameFromReadSeeker(reader, ".mp4")
+	hash, err := attachmentContentHashFromReadSeeker(reader)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.HasSuffix(name, ".mp4") {
-		t.Fatalf("expected mp4 extension, got %q", name)
+	if hash == "" {
+		t.Fatal("expected content hash")
 	}
 	if pos, _ := reader.Seek(0, 1); pos != 0 {
 		t.Fatalf("expected reader reset to start, got offset %d", pos)
+	}
+}
+
+func TestSafeAttachmentFileNameKeepsOriginalStem(t *testing.T) {
+	name := safeAttachmentFileName(`C:\uploads\假期照片.PNG`, ".png", "image")
+	if name != "假期照片.png" {
+		t.Fatalf("expected original stem with normalized extension, got %q", name)
+	}
+}
+
+func TestLocalAttachmentFileNameForContentDeduplicatesExistingFile(t *testing.T) {
+	dir := t.TempDir()
+	content := []byte("same file")
+	if err := os.WriteFile(filepath.Join(dir, "already-here.png"), content, 0644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	name, existed, err := localAttachmentFileNameForContent(dir, "upload.png", attachmentContentHashFromBytes(content))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !existed || name != "already-here.png" {
+		t.Fatalf("expected to reuse existing file, got name=%q existed=%v", name, existed)
+	}
+}
+
+func TestLocalAttachmentFileNameForContentSequencesNameConflict(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "photo.png"), []byte("different file"), 0644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	name, existed, err := localAttachmentFileNameForContent(dir, "photo.png", attachmentContentHashFromBytes([]byte("new file")))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if existed || name != "photo(1).png" {
+		t.Fatalf("expected sequenced filename, got name=%q existed=%v", name, existed)
 	}
 }
 
