@@ -572,13 +572,13 @@ defineExpose({ refresh: () => loadNotifications(true) })
   position:relative;
   width:100%;
   box-sizing:border-box;
-  margin:0 0 12px;
-  padding:24px;
-  border:1px solid #e5e7eb;
-  border-radius:var(--home-radius-panel);
-  background:var(--home-surface-light);
+  margin:0;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
   color:var(--notice-text);
-  box-shadow:0 14px 28px rgba(15,23,42,.10);
+  box-shadow:none;
   --notice-border: rgba(15,23,42,.10);
   --notice-surface: var(--home-surface-light);
   --notice-card: #ffffff;
@@ -636,11 +636,6 @@ defineExpose({ refresh: () => loadNotifications(true) })
   --nw-floating-hover-border: rgba(249, 115, 22, .42);
   --nw-floating-selected-bg: rgba(249, 115, 22, .30);
   --nw-floating-selected-border: rgba(251, 146, 60, .58);
-  border-color: var(--home-border-dark);
-  background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.82) 100%);
-  box-shadow:0 14px 28px rgba(2,6,23,.45);
-  backdrop-filter:blur(8px) saturate(118%);
-  -webkit-backdrop-filter:blur(8px) saturate(118%);
 }
 .notification-header { display:block; margin-bottom:0; padding:0; text-align:center; }
 .notification-heading { width:100%; }
@@ -720,7 +715,6 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .spin { animation:notification-spin 1s linear infinite; }
 @keyframes notification-spin { to { transform:rotate(360deg); } }
 @media (max-width: 720px) {
-  .notification-center { padding:20px; }
   .notification-header { text-align:center; margin-bottom:0; padding:0; }
   .notification-title-row { display:block; min-height:0; margin:0; }
   .notification-title { line-height:1.5; }

@@ -45,24 +45,23 @@ assert(
 )
 
 assert(
-  notificationCenter.includes('notification-feed-panel notification-board-wrap') &&
-    notificationCenter.includes('margin:0 0 12px;') &&
-    notificationCenter.includes('padding:24px;') &&
-    notificationCenter.includes('border:1px solid #e5e7eb;') &&
-    notificationCenter.includes('border-radius:var(--home-radius-panel);') &&
-    notificationCenter.includes('background:var(--home-surface-light);') &&
-    notificationCenter.includes('box-shadow:0 14px 28px rgba(15,23,42,.10);') &&
+  homePage.includes('<UCard class="search-card mb-3" :ui="{ body: { padding: \'p-5 md:p-6\' } }">\n              <UserNotificationCenter') &&
+    notificationCenter.includes('notification-feed-panel notification-board-wrap') &&
+    notificationCenter.includes('margin:0;') &&
+    notificationCenter.includes('padding:0;') &&
+    notificationCenter.includes('border:0;') &&
+    notificationCenter.includes('border-radius:0;') &&
+    notificationCenter.includes('background:transparent;') &&
+    notificationCenter.includes('box-shadow:none;') &&
     !notificationCenter.includes('--notice-frame-line') &&
     !notificationCenter.includes('.notification-center::before {') &&
-    notificationCenter.includes('background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.82) 100%);') &&
-    notificationCenter.includes('box-shadow:0 14px 28px rgba(2,6,23,.45);') &&
-    notificationCenter.includes('.notification-center { padding:20px; }') &&
+    !notificationCenter.includes('box-shadow:0 14px 28px rgba(2,6,23,.45);') &&
     notificationCenter.includes('.notification-title-row { position:relative; display:block;') &&
     notificationCenter.includes('.notification-title { display:block; margin:0 0 14px;') &&
     notificationCenter.includes('.notification-subtitle { max-width:42rem; margin:2px auto 20px;') &&
     notificationCenter.includes('.notification-count-title { margin:0 0 8px;') &&
     notificationCenter.includes('.notification-board-wrap { box-sizing:border-box; max-width:48rem; margin:0 auto 8px; padding:8px;'),
-  'notification title, description, count, first-card spacing, and outer frame must mirror the measured guestbook rhythm without an extra inner frame'
+  'notification page must use the same UCard.search-card outer frame as guestbook, with notification content no longer drawing its own frame'
 )
 
 assert(
@@ -171,7 +170,10 @@ assert(
     messageList.includes('v-if="showPager" ref="prefetchSentinel"') &&
     messageList.includes('const showPager = computed(() => {') &&
     messageList.includes('class="search-results-empty-icon"') &&
-    messageList.includes("['search-results-panel', { 'is-dark': isContentDark }]") &&
+    messageList.includes(":is=\"props.pageReady && hasActiveFilters ? resolveComponent('UCard') : 'div'\"") &&
+    messageList.includes("import { resolveComponent } from 'vue'") &&
+    messageList.includes("['search-card', 'search-results-panel', 'mb-3', { 'is-dark': isContentDark }]") &&
+    messageList.includes("ui: { body: { padding: 'p-5 md:p-6' } }") &&
     messageList.includes("props.pageReady && hasActiveFilters ? 'search-results-list' : 'my-4'") &&
     messageList.includes("class=\"w-full h-auto overflow-hidden flex flex-col justify-between\"") &&
     messageList.includes("['content-container', innerContainerClass, listThemeClass]") &&
@@ -181,18 +183,19 @@ assert(
     !messageList.includes("props.pageReady && hasActiveFilters ? innerContainerClass : ''") &&
     messageList.includes("return filtering ? 'flex-grow w-full' : 'flex-grow w-full px-1 sm:px-2'") &&
     !messageList.includes("['search-results-list', innerContainerClass]") &&
-    messageList.includes('margin: 20px 0 16px;') &&
-    messageList.includes('padding: 24px;') &&
+    messageList.includes('.search-card {') &&
     messageList.includes('border: 1px solid #e5e7eb;') &&
     messageList.includes('border-radius: var(--home-radius-panel);') &&
     messageList.includes('background: var(--home-surface-light);') &&
-    messageList.includes('box-shadow: 0 14px 28px rgba(15, 23, 42, 0.10);') &&
-    !messageList.includes('--search-panel-frame-line') &&
-    !messageList.includes('.search-results-panel::before {') &&
-    messageList.includes('padding: 20px;') &&
+    messageList.includes('.search-card.is-dark {') &&
     messageList.includes('background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.82) 100%);') &&
     messageList.includes('box-shadow: 0 14px 28px rgba(2, 6, 23, 0.45);') &&
     messageList.includes('backdrop-filter: blur(8px) saturate(118%);') &&
+    !messageList.includes('margin: 20px 0 16px;') &&
+    !messageList.includes('padding: 24px;') &&
+    !messageList.includes('padding: 20px;') &&
+    !messageList.includes('--search-panel-frame-line') &&
+    !messageList.includes('.search-results-panel::before {') &&
     messageList.includes('right: 17px;') &&
     messageList.includes('height: 28px;') &&
     messageList.includes('padding: 0 8px;') &&

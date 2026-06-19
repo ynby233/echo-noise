@@ -19,8 +19,9 @@
 
       <div :class="outerContainerClass">
         <component
-          :is="props.pageReady && hasActiveFilters ? 'section' : 'div'"
-          :class="props.pageReady && hasActiveFilters ? ['search-results-panel', { 'is-dark': isContentDark }] : ''"
+          :is="props.pageReady && hasActiveFilters ? resolveComponent('UCard') : 'div'"
+          :class="props.pageReady && hasActiveFilters ? ['search-card', 'search-results-panel', 'mb-3', { 'is-dark': isContentDark }] : ''"
+          v-bind="props.pageReady && hasActiveFilters ? { ui: { body: { padding: 'p-5 md:p-6' } } } : {}"
         >
           <div v-if="props.pageReady && hasActiveFilters" class="search-results-head">
             <div class="search-results-heading">
@@ -510,6 +511,7 @@
 </template>
 
 <script setup lang="ts">
+import { resolveComponent } from 'vue'
 import { useMessageStore } from "~/store/message";
 import { useUserStore } from "~/store/user";
 import MarkdownRenderer from "~/components/index/MarkdownRenderer.vue";
@@ -2696,26 +2698,30 @@ onMounted(() => {
   color: #f8fafc;
 }
 
+.search-card {
+  background: var(--home-surface-light);
+  color: #111827;
+  border: 1px solid #e5e7eb;
+  border-radius: var(--home-radius-panel);
+}
+
+.search-card.is-dark {
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.82) 100%);
+  color: #fff;
+  border: 1px solid var(--home-border-dark);
+  box-shadow: 0 14px 28px rgba(2, 6, 23, 0.45);
+  backdrop-filter: blur(8px) saturate(118%);
+  -webkit-backdrop-filter: blur(8px) saturate(118%);
+}
+
 .search-results-panel {
   position: relative;
   box-sizing: border-box;
   width: 100%;
-  margin: 20px 0 16px;
-  padding: 24px;
-  border: 1px solid #e5e7eb;
-  border-radius: var(--home-radius-panel);
-  background: var(--home-surface-light);
-  color: #111827;
-  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.10);
 }
 
 .search-results-panel.is-dark {
-  border-color: var(--home-border-dark);
-  background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.82) 100%);
   color: #f8fafc;
-  box-shadow: 0 14px 28px rgba(2, 6, 23, 0.45);
-  backdrop-filter: blur(8px) saturate(118%);
-  -webkit-backdrop-filter: blur(8px) saturate(118%);
 }
 
 .search-results-head {
@@ -2841,10 +2847,6 @@ onMounted(() => {
 }
 
 @media screen and (max-width: 640px) {
-  .search-results-panel {
-    padding: 20px;
-  }
-
   .search-results-head {
     align-items: center;
     flex-direction: column;
