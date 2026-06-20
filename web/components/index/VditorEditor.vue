@@ -160,6 +160,21 @@ const attachmentInfoFromAnchor = (anchor: HTMLAnchorElement | null) => {
   return null
 }
 
+const attachmentInfoFromIrNode = (node: HTMLElement | null) => {
+  if (!node) return null
+  const label = (node.querySelector<HTMLElement>('.vditor-ir__link')?.textContent || '').trim()
+  const url = (node.querySelector<HTMLElement>('.vditor-ir__marker--link')?.textContent || '').trim()
+  const match = label.match(ATTACHMENT_ANCHOR_LABEL_RE)
+  if (match && url) return normalizeAttachmentInfo(match[1], match[2], url)
+  return null
+}
+
+const attachmentInfoFromIrLabel = (label: HTMLElement | null) => {
+  if (!label?.classList.contains('vditor-ir__link')) return null
+  const node = label.closest<HTMLElement>('[data-type="a"]')
+  return attachmentInfoFromIrNode(node)
+}
+
 const setupAttachmentPreview = () => {
   const root = editorContainer.value
   if (!root || attachmentPreviewCleanup) return
@@ -177,6 +192,26 @@ const setupAttachmentPreview = () => {
       anchor.removeAttribute('title')
       anchor.setAttribute('draggable', 'false')
     })
+
+    root.querySelectorAll('[data-type="a"]').forEach((node) => {
+      const marker = node as HTMLElement
+      const label = marker.querySelector<HTMLElement>('.vditor-ir__link')
+      const info = attachmentInfoFromIrNode(marker)
+      marker.classList.toggle('editor-attachment-node', !!info)
+      label?.classList.toggle('editor-attachment-link', !!info)
+      if (!label) return
+      if (!info) {
+        label.removeAttribute('role')
+        label.removeAttribute('aria-label')
+        label.removeAttribute('data-attachment-kind')
+        label.removeAttribute('data-attachment-url')
+        return
+      }
+      label.setAttribute('role', 'button')
+      label.setAttribute('aria-label', `预览${info.title}`)
+      label.setAttribute('data-attachment-kind', info.type)
+      label.setAttribute('data-attachment-url', info.url)
+    })
   }
 
   const closeSiblingPreview = (block: HTMLElement) => {
@@ -190,8 +225,9 @@ const setupAttachmentPreview = () => {
 
   const toggleAttachmentPreview = (target: HTMLElement, fallbackInfo?: EditorAttachmentInfo | null) => {
     const anchor = target.closest('a.editor-attachment-link') as HTMLAnchorElement | null
-    const block = (target.closest('pre.vditor-reset, .vditor-ir__node, p, li, pre') || anchor?.closest('pre.vditor-reset, .vditor-ir__node, p, li, pre') || target.parentElement) as HTMLElement | null
-    const info = attachmentInfoFromAnchor(anchor) || fallbackInfo
+    const markerNode = target.closest<HTMLElement>('[data-type="a"].editor-attachment-node')
+    const block = (target.closest('p, li') || markerNode?.closest('p, li') || target.closest('pre.vditor-reset, .vditor-ir__node, pre') || anchor?.closest('pre.vditor-reset, .vditor-ir__node, p, li, pre') || target.parentElement) as HTMLElement | null
+    const info = attachmentInfoFromAnchor(anchor) || attachmentInfoFromIrLabel(target) || fallbackInfo
     if (!info || !block || !root.contains(block)) return
 
     if (info.type === 'image' || info.type === 'video') {
@@ -223,24 +259,32 @@ const setupAttachmentPreview = () => {
   const attachmentTargetFromEvent = (event: Event): { target: HTMLElement; info: EditorAttachmentInfo } | null => {
     const target = event.target as HTMLElement | null
     if (!target || !root.contains(target)) return null
+
+    const irLabel = target.closest<HTMLElement>('.vditor-ir__link.editor-attachment-link')
+    if (irLabel && root.contains(irLabel)) {
+      const irInfo = attachmentInfoFromIrLabel(irLabel)
+      if (irInfo) return { target: irLabel, info: irInfo }
+    }
+
     const anchor = target.closest('a.editor-attachment-link') as HTMLAnchorElement | null
     if (!anchor || !root.contains(anchor)) return null
     const anchorInfo = attachmentInfoFromAnchor(anchor)
-    if (anchor && anchorInfo) return { target: anchor, info: anchorInfo }
+    if (anchorInfo) return { target: anchor, info: anchorInfo }
     return null
   }
 
   const getAttachmentInfosByType = (type: EditorAttachmentInfo['type']) => {
     const seen = new Set<string>()
     const items: EditorAttachmentInfo[] = []
-    root.querySelectorAll('a.editor-attachment-link').forEach((node) => {
-      const info = attachmentInfoFromAnchor(node as HTMLAnchorElement)
+    const pushInfo = (info: EditorAttachmentInfo | null) => {
       if (!info || info.type !== type) return
       const key = `${info.type}\n${info.url}\n${info.name}`
       if (seen.has(key)) return
       seen.add(key)
       items.push(info)
-    })
+    }
+    root.querySelectorAll('a.editor-attachment-link').forEach((node) => pushInfo(attachmentInfoFromAnchor(node as HTMLAnchorElement)))
+    root.querySelectorAll('[data-type="a"].editor-attachment-node').forEach((node) => pushInfo(attachmentInfoFromIrNode(node as HTMLElement)))
     return items
   }
 

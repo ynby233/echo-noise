@@ -303,6 +303,10 @@ assert(
     vditorEditor.includes('editor-attachment-preview') &&
     vditorEditor.includes('refreshAttachmentLinks') &&
     vditorEditor.includes('editor-attachment-link') &&
+    vditorEditor.includes('attachmentInfoFromIrNode') &&
+    vditorEditor.includes('attachmentInfoFromIrLabel') &&
+    vditorEditor.includes("root.querySelectorAll('[data-type=\"a\"]')") &&
+    vditorEditor.includes("target.closest<HTMLElement>('.vditor-ir__link.editor-attachment-link')") &&
     vditorEditor.includes("target.closest('a.editor-attachment-link')") &&
     vditorEditor.includes('showAttachmentGallery(getAttachmentInfosByType(info.type), info)') &&
     vditorEditor.includes('buildVideoFancyboxHtml') &&
