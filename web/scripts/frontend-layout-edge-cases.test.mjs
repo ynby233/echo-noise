@@ -310,10 +310,15 @@ assert(
     vditorEditor.includes("target.closest('a.editor-attachment-link')") &&
     vditorEditor.includes('showAttachmentGallery(getAttachmentInfosByType(info.type), info)') &&
     vditorEditor.includes('buildVideoFancyboxHtml') &&
+    vditorEditor.includes('buildAttachmentPreviewHtml') &&
+    vditorEditor.includes('transform: transformAttachmentPreviewHtml') &&
     vditorEditor.includes('const showImageInProjectViewer = (info: EditorAttachmentInfo) => showAttachmentGallery([info], info)') &&
     vditorEditor.includes('Fancybox.show') &&
     vditorEditor.includes("backdropClick: 'close'") &&
-    vditorEditor.includes('closeButton: true') &&
+    vditorEditor.includes('closeButton: false') &&
+    vditorEditor.includes("right: ['close']") &&
+    vditorEditor.includes('suppressIrAttachmentChrome') &&
+    vditorEditor.includes('.fancybox__content:has(.editor-attachment-fancybox-video)') &&
     vditorEditor.includes('pointer-events: auto;') &&
     vditorEditor.includes('stopImmediatePropagation') &&
     vditorEditor.includes("root.addEventListener('pointerdown', preventAttachmentNavigation, true)") &&

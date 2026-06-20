@@ -97,14 +97,60 @@ const escapeAttachmentHtmlAttr = (value: string) => String(value || '')
   .replace(/\"/g, '&quot;')
   .replace(/'/g, '&#39;')
 
+const buildAttachmentPreviewHtml = (info: EditorAttachmentInfo) => {
+  const safeUrl = escapeAttachmentHtmlAttr(info.url)
+  const safeName = escapeAttachmentHtmlAttr(info.name)
+  if (info.type === 'image') {
+    return `<img class="noise-attachment-image" src="${safeUrl}" alt="${safeName}" loading="lazy" decoding="async" />`
+  }
+  if (info.type === 'video') {
+    return `<div class="noise-attachment-render noise-attachment-render--video"><video src="${safeUrl}" controls preload="metadata" playsinline style="width:100%;height:auto"></video></div>`
+  }
+  return `<div class="noise-attachment-render noise-attachment-render--audio"><audio src="${safeUrl}" controls preload="metadata"></audio></div>`
+}
+
+const transformAttachmentPreviewHtml = (html: string) => {
+  if (typeof document === 'undefined' || !html) return html
+  const holder = document.createElement('div')
+  holder.innerHTML = html
+  holder.querySelectorAll('a').forEach((node) => {
+    const anchor = node as HTMLAnchorElement
+    const info = attachmentInfoFromAnchor(anchor)
+    if (!info) return
+    const fragment = document.createElement('div')
+    fragment.innerHTML = buildAttachmentPreviewHtml(info)
+    const replacement = fragment.firstElementChild as HTMLElement | null
+    if (!replacement) return
+    const parent = anchor.parentElement
+    const onlyAttachmentInParagraph = parent?.tagName.toLowerCase() === 'p'
+      && parent.children.length === 1
+      && (parent.textContent || '').trim() === (anchor.textContent || '').trim()
+    if (onlyAttachmentInParagraph && info.type !== 'image') {
+      parent?.replaceWith(replacement)
+      return
+    }
+    anchor.replaceWith(replacement)
+  })
+  return holder.innerHTML
+}
+
 const getAttachmentFancyboxOptions = (startIndex = 0) => ({
   animated: true,
   backdropClick: 'close' as const,
-  closeButton: true,
+  closeButton: false,
   contentClick: false as const,
   dragToClose: false,
+  mainClass: 'editor-attachment-fancybox',
   startIndex,
-  Carousel: { infinite: false }
+  Carousel: { infinite: false },
+  Toolbar: {
+    enabled: true,
+    display: {
+      left: [],
+      middle: ['prev', 'counter', 'next'],
+      right: ['close']
+    }
+  }
 })
 
 const buildVideoFancyboxHtml = (info: EditorAttachmentInfo) => {
@@ -184,13 +230,21 @@ const setupAttachmentPreview = () => {
       const anchor = node as HTMLAnchorElement
       const info = attachmentInfoFromAnchor(anchor)
       anchor.classList.toggle('editor-attachment-link', !!info)
-      if (!info) return
+      if (!info) {
+        anchor.style.cursor = ''
+        anchor.removeAttribute('role')
+        anchor.removeAttribute('aria-label')
+        anchor.removeAttribute('data-attachment-kind')
+        anchor.removeAttribute('data-attachment-url')
+        return
+      }
       anchor.setAttribute('role', 'button')
       anchor.setAttribute('aria-label', `预览${info.title}`)
       anchor.setAttribute('data-attachment-kind', info.type)
       anchor.setAttribute('data-attachment-url', info.url)
       anchor.removeAttribute('title')
       anchor.setAttribute('draggable', 'false')
+      anchor.style.cursor = 'pointer'
     })
 
     root.querySelectorAll('[data-type="a"]').forEach((node) => {
@@ -201,6 +255,7 @@ const setupAttachmentPreview = () => {
       label?.classList.toggle('editor-attachment-link', !!info)
       if (!label) return
       if (!info) {
+        label.style.cursor = ''
         label.removeAttribute('role')
         label.removeAttribute('aria-label')
         label.removeAttribute('data-attachment-kind')
@@ -211,6 +266,7 @@ const setupAttachmentPreview = () => {
       label.setAttribute('aria-label', `预览${info.title}`)
       label.setAttribute('data-attachment-kind', info.type)
       label.setAttribute('data-attachment-url', info.url)
+      label.style.cursor = 'pointer'
     })
   }
 
@@ -273,6 +329,20 @@ const setupAttachmentPreview = () => {
     return null
   }
 
+  const suppressIrAttachmentChrome = (event: Event) => {
+    const target = event.target as HTMLElement | null
+    if (!target || !root.contains(target)) return false
+    const marker = target.closest<HTMLElement>('[data-type="a"].editor-attachment-node')
+    if (!marker || !root.contains(marker)) return false
+    const label = target.closest<HTMLElement>('.vditor-ir__link.editor-attachment-link')
+    if (label && marker.contains(label)) return false
+    if (!attachmentInfoFromIrNode(marker)) return false
+    event.preventDefault()
+    event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    return true
+  }
+
   const getAttachmentInfosByType = (type: EditorAttachmentInfo['type']) => {
     const seen = new Set<string>()
     const items: EditorAttachmentInfo[] = []
@@ -290,7 +360,10 @@ const setupAttachmentPreview = () => {
 
   const preventAttachmentNavigation = (event: Event) => {
     const hit = attachmentTargetFromEvent(event)
-    if (!hit) return
+    if (!hit) {
+      suppressIrAttachmentChrome(event)
+      return
+    }
     event.preventDefault()
     event.stopPropagation()
     ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
@@ -298,7 +371,10 @@ const setupAttachmentPreview = () => {
 
   const onAttachmentClick = (event: MouseEvent) => {
     const hit = attachmentTargetFromEvent(event)
-    if (!hit) return
+    if (!hit) {
+      suppressIrAttachmentChrome(event)
+      return
+    }
     event.preventDefault()
     event.stopPropagation()
     ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
@@ -387,6 +463,7 @@ const editorOptions: IOptions = {
       listStyle: true,
       mark: true,
     },
+    transform: transformAttachmentPreviewHtml,
     actions: [],
   },
   placeholder: "灵感记录~"
@@ -749,9 +826,28 @@ watch(() => props.theme, (newTheme) => {
   pointer-events: auto;
 }
 
+.editor-attachment-fancybox .fancybox__toolbar {
+  --f-button-width: 42px;
+  --f-button-height: 42px;
+  top: max(12px, env(safe-area-inset-top, 0px));
+  right: max(12px, env(safe-area-inset-right, 0px));
+}
+
+.editor-attachment-fancybox .fancybox__content:has(.editor-attachment-fancybox-video) {
+  padding: 0 !important;
+  background: transparent !important;
+  color: inherit !important;
+  box-shadow: none !important;
+}
+
+.editor-attachment-fancybox .fancybox__slide {
+  padding: 56px 16px 24px;
+}
+
 .editor-attachment-fancybox-video {
   width: min(92vw, 960px);
   max-height: 82vh;
+  background: transparent;
 }
 
 .editor-attachment-fancybox-video video {
