@@ -70,18 +70,48 @@ const headingOptions = [
   { tag: 'h6', value: '###### ', label: '六级标题 <Alt+Ctrl+6>' }
 ];
 
+type EditorAttachmentInfo = { type: 'image' | 'video' | 'audio'; title: string; name: string; url: string }
+const ATTACHMENT_MARKER_RE = /\[(图片附件|视频附件|音频附件)：([^\]]+)\]\(([^)\s]+)\)/
+
+const normalizeAttachmentInfo = (kindLabel: string, name: string, url: string): EditorAttachmentInfo | null => {
+  const href = String(url || '').trim()
+  if (!href) return null
+  const type = kindLabel === '图片附件' ? 'image' : (kindLabel === '视频附件' ? 'video' : 'audio')
+  const cleanName = String(name || '').trim() || '未命名附件'
+  return { type, title: `${kindLabel}：${cleanName}`, name: cleanName, url: href }
+}
+
+const attachmentInfoFromText = (text: string) => {
+  const match = String(text || '').match(ATTACHMENT_MARKER_RE)
+  if (!match) return null
+  return normalizeAttachmentInfo(match[1], match[2], match[3])
+}
+
 const setupInlineImagePreview = () => {
   const root = editorContainer.value;
   if (!root) return;
 
   const onImageClick = (event: MouseEvent) => {
     const img = (event.target as HTMLElement | null)?.closest('.vditor-reset img') as HTMLImageElement | null;
-    if (!img || !root.contains(img) || img.closest('.vditor-toolbar, .vditor-panel, .vditor-hint')) return;
+    if (!img || !root.contains(img) || img.closest('.vditor-toolbar, .vditor-panel, .vditor-hint, .editor-attachment-preview')) return;
     const src = img.currentSrc || img.src || img.getAttribute('src') || '';
     if (!src) return;
     event.preventDefault();
     event.stopPropagation();
-    window.open(src, '_blank', 'noopener,noreferrer');
+    const block = (img.closest('.vditor-ir__node, p, div, li') || img.parentElement) as HTMLElement | null
+    if (!block) return
+    const existing = block.nextElementSibling as HTMLElement | null
+    if (existing?.classList.contains('editor-attachment-preview')) { existing.remove(); return }
+    root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
+    const preview = document.createElement('div')
+    preview.className = 'editor-attachment-preview editor-attachment-preview--image'
+    preview.setAttribute('contenteditable', 'false')
+    const clone = document.createElement('img')
+    clone.src = src
+    clone.alt = img.alt || '图片预览'
+    clone.loading = 'lazy'
+    preview.appendChild(clone)
+    block.insertAdjacentElement('afterend', preview)
   };
 
   root.addEventListener('click', onImageClick, true);
@@ -92,17 +122,19 @@ const attachmentInfoFromAnchor = (anchor: HTMLAnchorElement | null) => {
   if (!anchor) return null
   const label = (anchor.textContent || '').trim()
   const match = label.match(/^(图片附件|视频附件|音频附件)：(.+)$/)
-  const href = anchor.getAttribute('href') || anchor.href || ''
-  if (!match || !href) return null
-  const type = match[1] === '图片附件' ? 'image' : (match[1] === '视频附件' ? 'video' : 'audio')
-  return { type, title: match[0], name: match[2], url: href }
+  const href = anchor.getAttribute('data-attachment-url') || anchor.getAttribute('href') || anchor.href || ''
+  if (match && href) return normalizeAttachmentInfo(match[1], match[2], href)
+  return attachmentInfoFromText(anchor.closest('.vditor-ir__node, p, li, pre')?.textContent || '')
 }
 
 const setupAttachmentPreview = () => {
   const root = editorContainer.value
   if (!root || attachmentPreviewCleanup) return
 
+  const markerBlockSelector = '.vditor-ir__node, .vditor-reset p, .vditor-reset li, .vditor-reset pre'
+
   const refreshAttachmentLinks = () => {
+    root.querySelectorAll('.editor-attachment-marker-block').forEach((node) => node.classList.remove('editor-attachment-marker-block'))
     root.querySelectorAll('a').forEach((node) => {
       const anchor = node as HTMLAnchorElement
       const info = attachmentInfoFromAnchor(anchor)
@@ -111,7 +143,14 @@ const setupAttachmentPreview = () => {
       anchor.setAttribute('role', 'button')
       anchor.setAttribute('aria-label', `预览${info.title}`)
       anchor.setAttribute('data-attachment-kind', info.type)
+      anchor.setAttribute('data-attachment-url', info.url)
       anchor.setAttribute('title', '点击预览附件')
+      anchor.setAttribute('draggable', 'false')
+      anchor.closest(markerBlockSelector)?.classList.add('editor-attachment-marker-block')
+    })
+    root.querySelectorAll(markerBlockSelector).forEach((node) => {
+      const el = node as HTMLElement
+      if (attachmentInfoFromText(el.textContent || '')) el.classList.add('editor-attachment-marker-block')
     })
   }
 
@@ -124,11 +163,11 @@ const setupAttachmentPreview = () => {
     return false
   }
 
-  const toggleAttachmentPreview = (anchor: HTMLAnchorElement) => {
-    const info = attachmentInfoFromAnchor(anchor)
-    if (!info || !root.contains(anchor)) return
-    const block = (anchor.closest('.vditor-ir__node, p, div, li, pre') || anchor.parentElement) as HTMLElement | null
-    if (!block) return
+  const toggleAttachmentPreview = (target: HTMLElement) => {
+    const anchor = target.closest('a') as HTMLAnchorElement | null
+    const block = (target.closest('.vditor-ir__node, p, li, pre') || anchor?.closest('.vditor-ir__node, p, li, pre') || target.parentElement) as HTMLElement | null
+    const info = attachmentInfoFromAnchor(anchor) || attachmentInfoFromText(block?.textContent || '')
+    if (!info || !block || !root.contains(block)) return
     if (closeSiblingPreview(block)) return
 
     root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
@@ -163,28 +202,41 @@ const setupAttachmentPreview = () => {
     block.insertAdjacentElement('afterend', preview)
   }
 
+  const attachmentTargetFromEvent = (event: Event) => {
+    const target = event.target as HTMLElement | null
+    if (!target || !root.contains(target)) return null
+    const anchor = target.closest('a') as HTMLAnchorElement | null
+    if (anchor && attachmentInfoFromAnchor(anchor)) return anchor
+    const block = target.closest('.editor-attachment-marker-block') as HTMLElement | null
+    if (block && attachmentInfoFromText(block.textContent || '')) return block
+    return null
+  }
+
   const preventAttachmentNavigation = (event: Event) => {
-    const anchor = (event.target as HTMLElement | null)?.closest('a') as HTMLAnchorElement | null
-    if (!anchor || !attachmentInfoFromAnchor(anchor) || !root.contains(anchor)) return
+    const target = attachmentTargetFromEvent(event)
+    if (!target) return
     event.preventDefault()
     event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
   }
 
   const onAttachmentClick = (event: MouseEvent) => {
-    const anchor = (event.target as HTMLElement | null)?.closest('a') as HTMLAnchorElement | null
-    if (!anchor || !attachmentInfoFromAnchor(anchor) || !root.contains(anchor)) return
+    const target = attachmentTargetFromEvent(event)
+    if (!target) return
     event.preventDefault()
     event.stopPropagation()
-    toggleAttachmentPreview(anchor)
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    toggleAttachmentPreview(target)
   }
 
   const onAttachmentKeydown = (event: KeyboardEvent) => {
     if (event.key !== 'Enter' && event.key !== ' ') return
-    const anchor = (event.target as HTMLElement | null)?.closest('a') as HTMLAnchorElement | null
-    if (!anchor || !attachmentInfoFromAnchor(anchor) || !root.contains(anchor)) return
+    const target = attachmentTargetFromEvent(event)
+    if (!target) return
     event.preventDefault()
     event.stopPropagation()
-    toggleAttachmentPreview(anchor)
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    toggleAttachmentPreview(target)
   }
 
   refreshAttachmentLinks()
@@ -610,7 +662,9 @@ watch(() => props.theme, (newTheme) => {
 }
 
 .vditor-container .editor-attachment-link,
-.vditor-container .editor-attachment-link * {
+.vditor-container .editor-attachment-link *,
+.vditor-container .editor-attachment-marker-block,
+.vditor-container .editor-attachment-marker-block * {
   cursor: pointer !important;
 }
 
@@ -618,7 +672,9 @@ watch(() => props.theme, (newTheme) => {
   text-decoration-style: dotted;
   text-underline-offset: 3px;
   -webkit-user-drag: none;
+  pointer-events: none;
 }
+
 
 .editor-attachment-preview {
   margin: 6px 12px 10px;

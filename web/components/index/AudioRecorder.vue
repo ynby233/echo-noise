@@ -131,8 +131,7 @@ const recordingFileName = (type: string) => {
   ].join('-')
   const user = userStore.user as any
   const userPart = safeNameSegment(user?.userid ?? user?.id ?? user?.username ?? 'user')
-  const suffix = Math.random().toString(36).slice(2, 8)
-  return `录音-${stamp}-${userPart}-${suffix}.${ext}`
+  return `录音-${stamp}-${userPart}.${ext}`
 }
 
 const positionMenu = () => positionFloatingMenu(triggerRef.value, menuRef.value, menuStyle, 292, 'above-align-left')

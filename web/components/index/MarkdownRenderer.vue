@@ -653,7 +653,7 @@ const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string) =>
   const safeName = escapeHtml(String(name || '').trim() || '未命名附件')
   if (!url) return ''
   if (kindLabel === '图片附件') {
-    return `<figure class="noise-attachment-render noise-attachment-render--image"><img src="${safeUrl}" alt="${safeName}" loading="lazy" decoding="async" /></figure>`
+    return `<img class="noise-attachment-image" src="${safeUrl}" alt="${safeName}" loading="lazy" decoding="async" />`
   }
   if (kindLabel === '视频附件') {
     return `<div class="noise-attachment-render noise-attachment-render--video"><video src="${safeUrl}" controls preload="metadata" style="width:100%;height:auto"></video></div>`

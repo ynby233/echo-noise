@@ -1541,6 +1541,11 @@ const checkContentHeight = () => {
       );
       if (!contentEl) return;
       const el = contentEl as HTMLElement;
+      if (typeof ResizeObserver !== 'undefined' && !(el as any).__contentMeasureResizeObserver) {
+        const ro = new ResizeObserver(() => deferMeasure());
+        ro.observe(el);
+        (el as any).__contentMeasureResizeObserver = ro;
+      }
       const prevCV = (el.style as any).contentVisibility;
       const prevCIS = (el.style as any).containIntrinsicSize;
       try {

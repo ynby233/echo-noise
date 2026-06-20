@@ -856,6 +856,21 @@ const handleAudioUploaded = (audioUrl: string) => {
 
 const INLINE_IMAGE_REG = /!\s*(https?:\/\/[^\s!]+\.(?:png|jpe?g|gif|webp))(?:\?[^\s!]*)?/gi;
 const normalizeInlineImageLinks = (md: string): string => md.replace(INLINE_IMAGE_REG, (m, url) => `![](${url})`);
+const ATTACHMENT_LINK_REG = /\[(图片附件|视频附件|音频附件)：([^\]]+)\]\(([^)\s]+)\)/g
+const escapePreviewAttr = (value: string) => String(value || '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;')
+const replaceAttachmentMarkersForPreview = (md: string): string => String(md || '').replace(ATTACHMENT_LINK_REG, (_m, kind, name, url) => {
+  const safeName = escapePreviewAttr(String(name || '').trim() || '未命名附件')
+  const safeUrl = escapePreviewAttr(String(url || '').trim())
+  if (!safeUrl) return _m
+  if (kind === '图片附件') return `![${safeName}](${safeUrl})`
+  if (kind === '视频附件') return `<video src="${safeUrl}" controls preload="metadata" style="width:100%;height:auto"></video>`
+  return `<audio src="${safeUrl}" controls preload="metadata"></audio>`
+})
 
 const applyImageGridHTML = (html: string, keepImagesFullSize = false) => {
   const parser = new DOMParser();
@@ -1025,7 +1040,7 @@ watch([MessageContent, fullImageAttachments], ([val]) => {
   previewRenderTimer = setTimeout(async () => {
     const rawValue = String(val || "")
     const keepImagesFullSize = fullImageAttachments.value || hasFullImageAttachmentsMarker(rawValue)
-    const previewValue = stripFullImageAttachmentsMarker(rawValue)
+    const previewValue = replaceAttachmentMarkersForPreview(stripFullImageAttachmentsMarker(rawValue))
     const raw = await Vditor.md2html(normalizeInlineImageLinks(previewValue));
     MessageContentHtml.value = applyImageGridHTML(raw, keepImagesFullSize);
     nextTick(() => {
