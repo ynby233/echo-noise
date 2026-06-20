@@ -1,6 +1,7 @@
 <template>
-  <div ref="triggerRef" class="audio-recorder-control">
+  <div class="audio-recorder-control">
     <button
+      ref="triggerRef"
       type="button"
       class="tb-btn nw-action-btn nw-tooltip-anchor"
       :class="{ 'is-recording': isRecording || isPaused || isProcessing }"
@@ -84,8 +85,8 @@ let startedAt = 0
 let accumulatedMs = 0
 let chunks: Blob[] = []
 
-const canPause = computed(() => !!recorder && (isRecording.value || isPaused.value) && !isProcessing.value)
-const canStop = computed(() => !!recorder && (isRecording.value || isPaused.value) && !isProcessing.value)
+const canPause = computed(() => (isRecording.value || isPaused.value) && !!recorder && !isProcessing.value)
+const canStop = computed(() => (isRecording.value || isPaused.value) && !!recorder && !isProcessing.value)
 const elapsedText = computed(() => {
   const seconds = Math.floor(elapsedMs.value / 1000)
   const min = Math.floor(seconds / 60)
@@ -139,13 +140,17 @@ const drawSpectrum = () => {
 
   let levels = new Uint8Array(SPECTRUM_BARS)
   if (analyser && isRecording.value) {
-    const raw = new Uint8Array(analyser.frequencyBinCount)
-    analyser.getByteFrequencyData(raw)
+    const raw = new Uint8Array(analyser.fftSize)
+    analyser.getByteTimeDomainData(raw)
     const step = Math.max(1, Math.floor(raw.length / SPECTRUM_BARS))
     levels = levels.map((_, index) => {
       let sum = 0
-      for (let i = 0; i < step; i += 1) sum += raw[index * step + i] || 0
-      return Math.round(sum / step)
+      for (let i = 0; i < step; i += 1) {
+        const sample = (raw[index * step + i] || 128) - 128
+        sum += sample * sample
+      }
+      const rms = Math.sqrt(sum / step)
+      return Math.min(255, Math.round(rms * 5.2))
     })
   }
 

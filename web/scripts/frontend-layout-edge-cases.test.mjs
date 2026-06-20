@@ -11,6 +11,7 @@ const assert = (condition, message) => {
 }
 
 const addForm = read('components/index/AddForm.vue')
+const audioRecorder = read('components/index/AudioRecorder.vue')
 const messageList = read('components/index/MessageList.vue')
 const messageStore = read('store/message.ts')
 const notificationCenter = read('components/index/UserNotificationCenter.vue')
@@ -242,6 +243,7 @@ assert(
 
 assert(
   addForm.includes('class="tb-btn nw-action-btn state-toggle-btn full-image-btn') &&
+    addForm.indexOf('<AudioRecorder') < addForm.indexOf('data-tooltip="上传图片"') &&
     addForm.includes('class="tb-btn nw-action-btn state-toggle-btn notify-btn') &&
     addForm.indexOf('data-tooltip="上传图片"') < addForm.indexOf('<VideoUpload') &&
     addForm.indexOf('<VideoUpload') < addForm.indexOf('data-tooltip="图床上传"') &&
@@ -263,6 +265,17 @@ assert(
     markdownRenderer.includes('height: auto !important;') &&
     markdownRenderer.includes('object-fit: contain !important;'),
   'publish composer must keep upload image before upload video, expose icon-only full-image and push toggles with current-state tooltips, persist the hidden marker, and render marked image attachments as responsive full images with Fancybox links'
+)
+
+assert(
+  audioRecorder.includes('<div class="audio-recorder-control">') &&
+    audioRecorder.includes('ref="triggerRef"\n      type="button"') &&
+    !audioRecorder.includes('<div ref="triggerRef" class="audio-recorder-control">') &&
+    audioRecorder.includes("const canPause = computed(() => (isRecording.value || isPaused.value) && !!recorder && !isProcessing.value)") &&
+    audioRecorder.includes("const canStop = computed(() => (isRecording.value || isPaused.value) && !!recorder && !isProcessing.value)") &&
+    audioRecorder.includes('analyser.getByteTimeDomainData(raw)') &&
+    !audioRecorder.includes('analyser.getByteFrequencyData(raw)'),
+  'audio recorder must anchor its floating menu to the real button, keep pause/stop reactive after recording starts, and draw level bars from time-domain volume data'
 )
 
 assert(
