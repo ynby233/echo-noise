@@ -295,6 +295,7 @@ assert(
     markdownRenderer.includes('buildAttachmentHtml(kindLabel, name, url)') &&
     markdownRenderer.includes('noise-attachment-render--audio') &&
     markdownRenderer.includes('noise-attachment-render--video') &&
+    markdownRenderer.includes('noise-attachment-paragraph') &&
     markdownRenderer.includes('noise-attachment-image') &&
     addForm.includes('replaceAttachmentMarkersForPreview') &&
     addForm.includes('const ATTACHMENT_LINK_REG = /\\[(图片附件|视频附件|音频附件)：([^\\]]+)\\]\\(([^)\\s]+)\\)/g') &&
