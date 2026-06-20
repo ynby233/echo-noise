@@ -30,6 +30,8 @@
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from "vue";
 import { positionFloatingMenu, scheduleFloatingMenuPosition } from '~/utils/floating-menu'
 import Vditor from "vditor";
+import { Fancybox } from "@fancyapps/ui";
+import "@fancyapps/ui/dist/fancybox/fancybox.css";
 import "vditor/dist/index.css";
 
 const props = defineProps({
@@ -87,6 +89,49 @@ const attachmentInfoFromText = (text: string) => {
   return normalizeAttachmentInfo(match[1], match[2], match[3])
 }
 
+const lineFromPoint = (event: MouseEvent, root: HTMLElement) => {
+  const doc = root.ownerDocument || document
+  const caret = (() => {
+    const anyDoc = doc as Document & { caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null; caretRangeFromPoint?: (x: number, y: number) => Range | null }
+    const pos = anyDoc.caretPositionFromPoint?.(event.clientX, event.clientY)
+    if (pos) return { node: pos.offsetNode, offset: pos.offset }
+    const range = anyDoc.caretRangeFromPoint?.(event.clientX, event.clientY)
+    if (range) return { node: range.startContainer, offset: range.startOffset }
+    return null
+  })()
+  if (!caret?.node) return ''
+  const host = (caret.node instanceof Element ? caret.node : caret.node.parentElement)?.closest?.('pre.vditor-reset, .vditor-ir__node, p, li') as HTMLElement | null
+  if (!host || !root.contains(host)) return ''
+  const text = host.textContent || ''
+  if (!text) return ''
+
+  let absoluteOffset = 0
+  const walker = doc.createTreeWalker(host, NodeFilter.SHOW_TEXT)
+  let current: Node | null = walker.nextNode()
+  while (current) {
+    if (current === caret.node) {
+      absoluteOffset += Math.max(0, Math.min(caret.offset || 0, current.textContent?.length || 0))
+      break
+    }
+    absoluteOffset += current.textContent?.length || 0
+    current = walker.nextNode()
+  }
+  const start = text.lastIndexOf('\n', Math.max(0, absoluteOffset - 1)) + 1
+  const nextBreak = text.indexOf('\n', absoluteOffset)
+  const end = nextBreak >= 0 ? nextBreak : text.length
+  return text.slice(start, end)
+}
+
+const showImageInProjectViewer = (info: EditorAttachmentInfo) => {
+  try {
+    Fancybox.show([{ src: info.url, type: 'image', caption: info.name }])
+  } catch {
+    try {
+      ;(window as any).Fancybox?.show?.([{ src: info.url, type: 'image', caption: info.name }])
+    } catch {}
+  }
+}
+
 const setupInlineImagePreview = () => {
   const root = editorContainer.value;
   if (!root) return;
@@ -98,20 +143,8 @@ const setupInlineImagePreview = () => {
     if (!src) return;
     event.preventDefault();
     event.stopPropagation();
-    const block = (img.closest('.vditor-ir__node, p, div, li') || img.parentElement) as HTMLElement | null
-    if (!block) return
-    const existing = block.nextElementSibling as HTMLElement | null
-    if (existing?.classList.contains('editor-attachment-preview')) { existing.remove(); return }
-    root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
-    const preview = document.createElement('div')
-    preview.className = 'editor-attachment-preview editor-attachment-preview--image'
-    preview.setAttribute('contenteditable', 'false')
-    const clone = document.createElement('img')
-    clone.src = src
-    clone.alt = img.alt || '图片预览'
-    clone.loading = 'lazy'
-    preview.appendChild(clone)
-    block.insertAdjacentElement('afterend', preview)
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    showImageInProjectViewer({ type: 'image', title: img.alt || '图片预览', name: img.alt || '图片预览', url: src });
   };
 
   root.addEventListener('click', onImageClick, true);
@@ -163,11 +196,18 @@ const setupAttachmentPreview = () => {
     return false
   }
 
-  const toggleAttachmentPreview = (target: HTMLElement) => {
+  const toggleAttachmentPreview = (target: HTMLElement, fallbackInfo?: EditorAttachmentInfo | null) => {
     const anchor = target.closest('a') as HTMLAnchorElement | null
-    const block = (target.closest('.vditor-ir__node, p, li, pre') || anchor?.closest('.vditor-ir__node, p, li, pre') || target.parentElement) as HTMLElement | null
-    const info = attachmentInfoFromAnchor(anchor) || attachmentInfoFromText(block?.textContent || '')
+    const block = (target.closest('pre.vditor-reset, .vditor-ir__node, p, li, pre') || anchor?.closest('pre.vditor-reset, .vditor-ir__node, p, li, pre') || target.parentElement) as HTMLElement | null
+    const info = attachmentInfoFromAnchor(anchor) || fallbackInfo || attachmentInfoFromText(block?.textContent || '')
     if (!info || !block || !root.contains(block)) return
+
+    if (info.type === 'image') {
+      root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
+      showImageInProjectViewer(info)
+      return
+    }
+
     if (closeSiblingPreview(block)) return
 
     root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
@@ -180,13 +220,7 @@ const setupAttachmentPreview = () => {
     header.textContent = info.title
     preview.appendChild(header)
 
-    if (info.type === 'image') {
-      const img = document.createElement('img')
-      img.src = info.url
-      img.alt = info.name
-      img.loading = 'lazy'
-      preview.appendChild(img)
-    } else if (info.type === 'video') {
+    if (info.type === 'video') {
       const video = document.createElement('video')
       video.src = info.url
       video.controls = true
@@ -202,41 +236,61 @@ const setupAttachmentPreview = () => {
     block.insertAdjacentElement('afterend', preview)
   }
 
-  const attachmentTargetFromEvent = (event: Event) => {
+  const attachmentTargetFromEvent = (event: Event): { target: HTMLElement; info: EditorAttachmentInfo } | null => {
     const target = event.target as HTMLElement | null
     if (!target || !root.contains(target)) return null
     const anchor = target.closest('a') as HTMLAnchorElement | null
-    if (anchor && attachmentInfoFromAnchor(anchor)) return anchor
-    const block = target.closest('.editor-attachment-marker-block') as HTMLElement | null
-    if (block && attachmentInfoFromText(block.textContent || '')) return block
+    const anchorInfo = attachmentInfoFromAnchor(anchor)
+    if (anchor && anchorInfo) return { target: anchor, info: anchorInfo }
+    const block = target.closest('.editor-attachment-marker-block, pre.vditor-reset, .vditor-ir__node') as HTMLElement | null
+    const blockInfo = block ? attachmentInfoFromText(block.textContent || '') : null
+    if (block && blockInfo) {
+      const lineInfo = event instanceof MouseEvent ? attachmentInfoFromText(lineFromPoint(event, root)) : null
+      if (event instanceof MouseEvent) return lineInfo ? { target: block, info: lineInfo } : null
+      return { target: block, info: blockInfo }
+    }
+    if (event instanceof MouseEvent) {
+      const lineInfo = attachmentInfoFromText(lineFromPoint(event, root))
+      const host = target.closest('pre.vditor-reset, .vditor-ir__node, p, li') as HTMLElement | null
+      if (lineInfo && host) return { target: host, info: lineInfo }
+    }
     return null
   }
 
   const preventAttachmentNavigation = (event: Event) => {
-    const target = attachmentTargetFromEvent(event)
-    if (!target) return
+    const hit = attachmentTargetFromEvent(event)
+    if (!hit) return
     event.preventDefault()
     event.stopPropagation()
     ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
   }
 
   const onAttachmentClick = (event: MouseEvent) => {
-    const target = attachmentTargetFromEvent(event)
-    if (!target) return
+    const hit = attachmentTargetFromEvent(event)
+    if (!hit) return
     event.preventDefault()
     event.stopPropagation()
     ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
-    toggleAttachmentPreview(target)
+    toggleAttachmentPreview(hit.target, hit.info)
   }
 
   const onAttachmentKeydown = (event: KeyboardEvent) => {
     if (event.key !== 'Enter' && event.key !== ' ') return
-    const target = attachmentTargetFromEvent(event)
-    if (!target) return
+    const hit = attachmentTargetFromEvent(event)
+    if (!hit) return
     event.preventDefault()
     event.stopPropagation()
     ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
-    toggleAttachmentPreview(target)
+    toggleAttachmentPreview(hit.target, hit.info)
+  }
+
+  const onAttachmentMouseMove = (event: MouseEvent) => {
+    const lineInfo = attachmentInfoFromText(lineFromPoint(event, root))
+    root.classList.toggle('is-hovering-attachment-line', !!lineInfo)
+  }
+
+  const clearAttachmentLineHover = () => {
+    root.classList.remove('is-hovering-attachment-line')
   }
 
   refreshAttachmentLinks()
@@ -246,12 +300,17 @@ const setupAttachmentPreview = () => {
   root.addEventListener('mousedown', preventAttachmentNavigation, true)
   root.addEventListener('click', onAttachmentClick, true)
   root.addEventListener('keydown', onAttachmentKeydown, true)
+  root.addEventListener('mousemove', onAttachmentMouseMove, { passive: true })
+  root.addEventListener('mouseleave', clearAttachmentLineHover, { passive: true })
   attachmentPreviewCleanup = () => {
     previewObserver.disconnect()
     root.removeEventListener('pointerdown', preventAttachmentNavigation, true)
     root.removeEventListener('mousedown', preventAttachmentNavigation, true)
     root.removeEventListener('click', onAttachmentClick, true)
     root.removeEventListener('keydown', onAttachmentKeydown, true)
+    root.removeEventListener('mousemove', onAttachmentMouseMove)
+    root.removeEventListener('mouseleave', clearAttachmentLineHover)
+    root.classList.remove('is-hovering-attachment-line')
     root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
     attachmentPreviewCleanup = null
   }
@@ -673,6 +732,30 @@ watch(() => props.theme, (newTheme) => {
   text-underline-offset: 3px;
   -webkit-user-drag: none;
   pointer-events: none;
+}
+
+.vditor-container .editor-attachment-marker-block {
+  display: block;
+  min-height: 28px;
+  margin: 2px -6px;
+  padding: 3px 10px;
+  border-radius: 8px;
+  transition: background-color .15s ease, box-shadow .15s ease;
+}
+
+.vditor-container .editor-attachment-marker-block:hover {
+  background: rgba(59, 130, 246, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.14);
+}
+
+.vditor-container.is-hovering-attachment-line .vditor-ir pre.vditor-reset {
+  cursor: pointer !important;
+}
+
+html.dark .vditor-container .editor-attachment-marker-block:hover,
+.vditor--dark .editor-attachment-marker-block:hover {
+  background: rgba(96, 165, 250, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(147, 197, 253, 0.18);
 }
 
 

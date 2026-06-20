@@ -303,12 +303,19 @@ assert(
     vditorEditor.includes('refreshAttachmentLinks') &&
     vditorEditor.includes('editor-attachment-link') &&
     vditorEditor.includes('editor-attachment-marker-block') &&
+    vditorEditor.includes('lineFromPoint(event, root)') &&
+    vditorEditor.includes("showImageInProjectViewer(info)") &&
+    vditorEditor.includes('Fancybox.show') &&
     vditorEditor.includes('pointer-events: none;') &&
     vditorEditor.includes('stopImmediatePropagation') &&
     vditorEditor.includes("root.addEventListener('pointerdown', preventAttachmentNavigation, true)") &&
     vditorEditor.includes("root.addEventListener('mousedown', preventAttachmentNavigation, true)") &&
-    vditorEditor.includes("root.addEventListener('keydown', onAttachmentKeydown, true)"),
-  'inserted image/video/audio attachments must use stable attachment links in the editor, render to media components in published markdown, and intercept attachment link navigation for click-to-toggle editor preview'
+    vditorEditor.includes("root.addEventListener('keydown', onAttachmentKeydown, true)") &&
+    vditorEditor.includes('.editor-attachment-marker-block:hover') &&
+    vditorEditor.includes('is-hovering-attachment-line') &&
+    vditorEditor.includes("root.addEventListener('mousemove', onAttachmentMouseMove") &&
+    !vditorEditor.includes('editor-attachment-preview editor-attachment-preview--image'),
+  'inserted image/video/audio attachments must use stable attachment links in the editor, render to media components in published markdown, intercept whole marker-line navigation, open image markers in the shared Fancybox viewer, and expose a wider pointer click area'
 )
 
 assert(
