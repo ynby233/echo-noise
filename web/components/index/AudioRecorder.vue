@@ -40,7 +40,7 @@
           <button type="button" class="floating-action-btn cancel-action-btn nw-action-btn nw-action-btn--label" :disabled="!canPause" @click="togglePause">
             {{ isPaused ? '继续' : '暂停' }}
           </button>
-          <button type="button" class="floating-action-btn clear-action-btn nw-action-btn nw-action-btn--label" :disabled="!canStop" @click="stopAndUpload">停止</button>
+          <button type="button" class="floating-action-btn clear-action-btn nw-action-btn nw-action-btn--label nw-action-btn--danger" :disabled="!canStop" @click="stopAndUpload">停止</button>
         </div>
       </div>
     </Teleport>
@@ -56,7 +56,8 @@ import { positionFloatingMenu, scheduleFloatingMenuPosition } from '~/utils/floa
 import { uploadMediaFiles } from '~/utils/media-upload'
 
 const MAX_RECORDING_MS = 10 * 60 * 1000
-const SPECTRUM_BARS = 24
+const SPECTRUM_BARS = 32
+const spectrumLevels = new Float32Array(SPECTRUM_BARS)
 
 const emit = defineEmits(['audio-uploaded', 'upload-progress'])
 const toast = useToast()
@@ -111,7 +112,7 @@ const audioExtension = (type: string) => {
   return 'webm'
 }
 
-const positionMenu = () => positionFloatingMenu(triggerRef.value, menuRef.value, menuStyle, 292, 'above-left')
+const positionMenu = () => positionFloatingMenu(triggerRef.value, menuRef.value, menuStyle, 292, 'above-align-left')
 
 const updateElapsed = () => {
   if (isRecording.value) elapsedMs.value = accumulatedMs + Math.max(0, Date.now() - startedAt)
@@ -138,34 +139,53 @@ const drawSpectrum = () => {
   const height = canvas.height
   ctx.clearRect(0, 0, width, height)
 
-  let levels = new Uint8Array(SPECTRUM_BARS)
+  const targetLevels = new Float32Array(SPECTRUM_BARS)
   if (analyser && isRecording.value) {
     const raw = new Uint8Array(analyser.fftSize)
     analyser.getByteTimeDomainData(raw)
     const step = Math.max(1, Math.floor(raw.length / SPECTRUM_BARS))
-    levels = levels.map((_, index) => {
+    for (let index = 0; index < SPECTRUM_BARS; index += 1) {
       let sum = 0
       for (let i = 0; i < step; i += 1) {
         const sample = (raw[index * step + i] || 128) - 128
         sum += sample * sample
       }
       const rms = Math.sqrt(sum / step)
-      return Math.min(255, Math.round(rms * 5.2))
-    })
+      const centerBias = 0.72 + 0.28 * Math.sin((index / Math.max(1, SPECTRUM_BARS - 1)) * Math.PI)
+      targetLevels[index] = Math.min(1, Math.pow(rms / 32, 0.78) * centerBias)
+    }
   }
 
-  const gap = 4
+  const gap = 3
   const barWidth = (width - gap * (SPECTRUM_BARS - 1)) / SPECTRUM_BARS
-  const base = contentTheme.value === 'dark' ? 'rgba(148,163,184,0.32)' : 'rgba(100,116,139,0.24)'
+  const base = contentTheme.value === 'dark' ? 'rgba(148,163,184,0.22)' : 'rgba(100,116,139,0.18)'
   const active = contentTheme.value === 'dark' ? '#fed7aa' : '#ea580c'
+  const activeSoft = contentTheme.value === 'dark' ? 'rgba(251,146,60,0.42)' : 'rgba(249,115,22,0.28)'
+  const drawRoundRect = (x: number, y: number, w: number, h: number, r: number) => {
+    if (typeof ctx.roundRect === 'function') {
+      ctx.beginPath()
+      ctx.roundRect(x, y, w, h, r)
+      ctx.fill()
+      return
+    }
+    ctx.fillRect(x, y, w, h)
+  }
   for (let i = 0; i < SPECTRUM_BARS; i += 1) {
-    const level = levels[i] || 0
-    const barHeight = Math.max(5, (level / 255) * (height - 4))
+    const target = isRecording.value ? targetLevels[i] || 0 : 0
+    spectrumLevels[i] = spectrumLevels[i] * 0.68 + target * 0.32
+    const level = spectrumLevels[i]
+    const minHeight = isRecording.value ? 6 : 4
+    const barHeight = Math.max(minHeight, level * (height - 6))
     const x = i * (barWidth + gap)
     const y = (height - barHeight) / 2
-    ctx.fillStyle = isRecording.value ? active : base
-    ctx.globalAlpha = isRecording.value ? Math.max(0.28, level / 255) : 1
-    ctx.fillRect(x, y, barWidth, barHeight)
+    ctx.fillStyle = base
+    ctx.globalAlpha = 1
+    drawRoundRect(x, (height - 4) / 2, barWidth, 4, 999)
+    if (isRecording.value) {
+      ctx.fillStyle = level > 0.38 ? active : activeSoft
+      ctx.globalAlpha = Math.max(0.38, Math.min(1, level + 0.28))
+      drawRoundRect(x, y, barWidth, barHeight, 999)
+    }
   }
   ctx.globalAlpha = 1
   animationId = window.requestAnimationFrame(drawSpectrum)
@@ -175,6 +195,7 @@ const cleanupRecording = () => {
   stopTimer()
   if (animationId) window.cancelAnimationFrame(animationId)
   animationId = 0
+  spectrumLevels.fill(0)
   recorder = null
   chunks = []
   analyser = null

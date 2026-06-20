@@ -3896,7 +3896,7 @@ onMounted(() => {
 
 :global(html:not(.dark)) .content-container :deep(audio) {
   background-color: #ffffff !important;
-  border: 1px solid #e5e7eb !important;
+  border: none !important;
   border-radius: 8px !important;
 }
 
@@ -3908,7 +3908,7 @@ onMounted(() => {
 
 :global(html.dark) .content-container :deep(audio) {
   background-color: var(--home-surface-dark) !important;
-  border: 1px solid rgba(255,255,255,0.10) !important;
+  border: none !important;
   border-radius: 8px !important;
 }
 

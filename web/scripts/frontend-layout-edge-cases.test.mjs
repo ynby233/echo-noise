@@ -269,13 +269,19 @@ assert(
 
 assert(
   audioRecorder.includes('<div class="audio-recorder-control">') &&
-    audioRecorder.includes('ref="triggerRef"\n      type="button"') &&
-    !audioRecorder.includes('<div ref="triggerRef" class="audio-recorder-control">') &&
-    audioRecorder.includes("const canPause = computed(() => (isRecording.value || isPaused.value) && !!recorder && !isProcessing.value)") &&
-    audioRecorder.includes("const canStop = computed(() => (isRecording.value || isPaused.value) && !!recorder && !isProcessing.value)") &&
-    audioRecorder.includes('analyser.getByteTimeDomainData(raw)') &&
-    !audioRecorder.includes('analyser.getByteFrequencyData(raw)'),
-  'audio recorder must anchor its floating menu to the real button, keep pause/stop reactive after recording starts, and draw level bars from time-domain volume data'
+  audioRecorder.includes('ref="triggerRef"\n      type="button"') &&
+  !audioRecorder.includes('<div ref="triggerRef" class="audio-recorder-control">') &&
+  audioRecorder.includes("positionFloatingMenu(triggerRef.value, menuRef.value, menuStyle, 292, 'above-align-left')") &&
+  audioRecorder.includes("const canPause = computed(() => (isRecording.value || isPaused.value) && !!recorder && !isProcessing.value)") &&
+  audioRecorder.includes("const canStop = computed(() => (isRecording.value || isPaused.value) && !!recorder && !isProcessing.value)") &&
+  audioRecorder.includes('class="floating-action-btn clear-action-btn nw-action-btn nw-action-btn--label nw-action-btn--danger"') &&
+  audioRecorder.includes('analyser.getByteTimeDomainData(raw)') &&
+  audioRecorder.includes('spectrumLevels[i] = spectrumLevels[i] * 0.68 + target * 0.32') &&
+  audioRecorder.includes('drawRoundRect(x, y, barWidth, barHeight, 999)') &&
+  !audioRecorder.includes('analyser.getByteFrequencyData(raw)') &&
+  markdownRenderer.includes("audio.style.border = 'none';") &&
+  messageList.includes(':global(html.dark) .content-container :deep(audio) {\n  background-color: var(--home-surface-dark) !important;\n  border: none !important;'),
+  'audio recorder must left-align its floating menu to the real button, keep pause/stop reactive, keep stop as a persistent danger button, draw smoothed time-domain bars, and render published audio without an extra frame'
 )
 
 assert(

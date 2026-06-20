@@ -1184,10 +1184,10 @@ watch(() => contentTheme && contentTheme.value, () => {
       const isDark = contentTheme && contentTheme.value === 'dark';
       if (isDark) {
         audio.style.backgroundColor = '#202a36';
-        audio.style.border = '1px solid rgba(255,255,255,0.10)';
+        audio.style.border = 'none';
       } else {
         audio.style.backgroundColor = '#ffffff';
-        audio.style.border = '1px solid #e5e7eb';
+        audio.style.border = 'none';
       }
     });
   }
@@ -1679,7 +1679,7 @@ watch(() => props.enableGithubCard, () => {
 
 .theme-light audio {
   background-color: #ffffff !important;
-  border: 1px solid #e5e7eb !important;
+  border: none !important;
   border-radius: 8px !important;
 }
 
@@ -1691,7 +1691,7 @@ watch(() => props.enableGithubCard, () => {
 
 .theme-dark audio {
   background-color: #202a36 !important;
-  border: 1px solid rgba(255,255,255,0.10) !important;
+  border: none !important;
   border-radius: 8px !important;
 }
 
