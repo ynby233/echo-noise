@@ -314,25 +314,35 @@ assert(
     vditorEditor.includes('transform: transformAttachmentPreviewHtml') &&
     vditorEditor.includes('const showImageInProjectViewer = (info: EditorAttachmentInfo) => showAttachmentGallery([info], info)') &&
     vditorEditor.includes('Fancybox.show') &&
+    vditorEditor.includes('getAttachmentImageFancyboxOptions') &&
+    vditorEditor.includes('getAttachmentVideoFancyboxOptions') &&
+    vditorEditor.includes("left: ['infobar']") &&
+    vditorEditor.includes("right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']") &&
     vditorEditor.includes("backdropClick: 'close'") &&
     vditorEditor.includes('closeButton: false') &&
+    vditorEditor.includes('middle: []') &&
     vditorEditor.includes("right: ['close']") &&
-    vditorEditor.includes('suppressIrAttachmentChrome') &&
-    vditorEditor.includes('irAttachmentNodeNearPointer') &&
+    vditorEditor.includes('collapseIrAttachmentChrome') &&
+    vditorEditor.includes('scheduleCollapseIrAttachmentChrome') &&
     vditorEditor.includes("marker.classList.remove('vditor-ir__node--expand')") &&
-    vditorEditor.includes('.editor-attachment-fancybox .fancybox__nav') &&
+    vditorEditor.includes("attributeFilter: ['class']") &&
+    vditorEditor.includes('.editor-attachment-image-fancybox .fancybox__nav') &&
+    vditorEditor.includes('.editor-attachment-video-fancybox .fancybox__nav') &&
+    vditorEditor.includes('display: flex !important;') &&
     vditorEditor.includes('.fancybox__content:has(.editor-attachment-fancybox-video)') &&
     vditorEditor.includes('pointer-events: auto;') &&
     vditorEditor.includes('stopImmediatePropagation') &&
     vditorEditor.includes("root.addEventListener('pointerdown', preventAttachmentNavigation, true)") &&
     vditorEditor.includes("root.addEventListener('mousedown', preventAttachmentNavigation, true)") &&
     vditorEditor.includes("root.addEventListener('keydown', onAttachmentKeydown, true)") &&
+    !vditorEditor.includes('suppressIrAttachmentChrome') &&
+    !vditorEditor.includes('irAttachmentNodeNearPointer') &&
     !vditorEditor.includes('editor-attachment-marker-block') &&
     !vditorEditor.includes('lineFromPoint(event, root)') &&
     !vditorEditor.includes('is-hovering-attachment-line') &&
     !vditorEditor.includes("root.addEventListener('mousemove', onAttachmentMouseMove") &&
     !vditorEditor.includes('editor-attachment-preview editor-attachment-preview--image'),
-  'inserted image/video/audio attachments must use stable attachment links in the editor, render to media components in published markdown, open image/video markers in the shared Fancybox viewer with one navigation surface, preview only from marker text, and suppress raw HTML expansion around attachment markers'
+  'inserted image/video/audio attachments must use stable attachment links in the editor, render to media components in published markdown, use image viewer controls for image markers, keep video side navigation without top prev/next controls, preview only from marker text, and collapse raw HTML expansion around attachment markers without blocking text editing'
 )
 
 assert(

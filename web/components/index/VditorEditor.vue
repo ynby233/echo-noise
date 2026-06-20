@@ -134,20 +134,41 @@ const transformAttachmentPreviewHtml = (html: string) => {
   return holder.innerHTML
 }
 
-const getAttachmentFancyboxOptions = (startIndex = 0) => ({
+const getAttachmentImageFancyboxOptions = (startIndex = 0) => ({
+  animated: true,
+  closeButton: false,
+  mainClass: 'editor-attachment-image-fancybox',
+  startIndex,
+  Carousel: { infinite: false },
+  Toolbar: {
+    enabled: true,
+    display: {
+      left: ['infobar'],
+      middle: [],
+      right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']
+    }
+  },
+  Image: {
+    zoom: true,
+    click: true,
+    wheel: 'slide'
+  }
+})
+
+const getAttachmentVideoFancyboxOptions = (startIndex = 0) => ({
   animated: true,
   backdropClick: 'close' as const,
   closeButton: false,
   contentClick: false as const,
   dragToClose: false,
-  mainClass: 'editor-attachment-fancybox',
+  mainClass: 'editor-attachment-video-fancybox',
   startIndex,
   Carousel: { infinite: false },
   Toolbar: {
     enabled: true,
     display: {
       left: [],
-      middle: ['prev', 'counter', 'next'],
+      middle: [],
       right: ['close']
     }
   }
@@ -167,11 +188,14 @@ const showAttachmentGallery = (items: EditorAttachmentInfo[], current: EditorAtt
     ? { src: buildVideoFancyboxHtml(item), type: 'html', caption: item.name }
     : { src: item.url, type: 'image', caption: item.name }
   )
+  const options = current.type === 'video'
+    ? getAttachmentVideoFancyboxOptions(startIndex)
+    : getAttachmentImageFancyboxOptions(startIndex)
   try {
-    Fancybox.show(slides as any, getAttachmentFancyboxOptions(startIndex))
+    Fancybox.show(slides as any, options as any)
   } catch {
     try {
-      ;(window as any).Fancybox?.show?.(slides, getAttachmentFancyboxOptions(startIndex))
+      ;(window as any).Fancybox?.show?.(slides, options)
     } catch {}
   }
 }
@@ -330,35 +354,16 @@ const setupAttachmentPreview = () => {
     return null
   }
 
-  const irAttachmentNodeNearPointer = (event: Event) => {
-    if (!(event instanceof MouseEvent)) return null
-    const target = event.target as HTMLElement | null
-    if (!target || !root.contains(target)) return null
-    const container = target.closest<HTMLElement>('p, li, pre.vditor-reset, .vditor-ir__node') || root
-    const x = event.clientX
-    const y = event.clientY
-    const nodes = Array.from(container.querySelectorAll<HTMLElement>('[data-type="a"].editor-attachment-node'))
-    return nodes.find((node) => {
-      if (!attachmentInfoFromIrNode(node)) return false
-      const label = node.querySelector<HTMLElement>('.vditor-ir__link.editor-attachment-link')
-      const rect = (label || node).getBoundingClientRect()
-      const linePad = 4
-      return y >= rect.top - linePad && y <= rect.bottom + linePad && x > rect.right
-    }) || null
+  const collapseIrAttachmentChrome = () => {
+    root.querySelectorAll<HTMLElement>('[data-type="a"].editor-attachment-node.vditor-ir__node--expand').forEach((marker) => {
+      if (attachmentInfoFromIrNode(marker)) marker.classList.remove('vditor-ir__node--expand')
+    })
   }
 
-  const suppressIrAttachmentChrome = (event: Event) => {
-    const target = event.target as HTMLElement | null
-    if (!target || !root.contains(target)) return false
-    const marker = target.closest<HTMLElement>('[data-type="a"].editor-attachment-node') || irAttachmentNodeNearPointer(event)
-    if (!marker || !root.contains(marker)) return false
-    const label = target.closest<HTMLElement>('.vditor-ir__link.editor-attachment-link')
-    if (label && marker.contains(label)) return false
-    if (!attachmentInfoFromIrNode(marker)) return false
-    event.preventDefault()
-    event.stopPropagation()
-    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
-    return true
+  const scheduleCollapseIrAttachmentChrome = () => {
+    collapseIrAttachmentChrome()
+    requestAnimationFrame(() => collapseIrAttachmentChrome())
+    window.setTimeout(() => collapseIrAttachmentChrome(), 0)
   }
 
   const getAttachmentInfosByType = (type: EditorAttachmentInfo['type']) => {
@@ -379,7 +384,7 @@ const setupAttachmentPreview = () => {
   const preventAttachmentNavigation = (event: Event) => {
     const hit = attachmentTargetFromEvent(event)
     if (!hit) {
-      suppressIrAttachmentChrome(event)
+      scheduleCollapseIrAttachmentChrome()
       return
     }
     event.preventDefault()
@@ -390,7 +395,7 @@ const setupAttachmentPreview = () => {
   const onAttachmentClick = (event: MouseEvent) => {
     const hit = attachmentTargetFromEvent(event)
     if (!hit) {
-      suppressIrAttachmentChrome(event)
+      scheduleCollapseIrAttachmentChrome()
       return
     }
     event.preventDefault()
@@ -410,8 +415,11 @@ const setupAttachmentPreview = () => {
   }
 
   refreshAttachmentLinks()
-  const previewObserver = new MutationObserver(() => refreshAttachmentLinks())
-  previewObserver.observe(root, { childList: true, subtree: true, characterData: true })
+  const previewObserver = new MutationObserver(() => {
+    refreshAttachmentLinks()
+    collapseIrAttachmentChrome()
+  })
+  previewObserver.observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class'] })
   root.addEventListener('pointerdown', preventAttachmentNavigation, true)
   root.addEventListener('mousedown', preventAttachmentNavigation, true)
   root.addEventListener('click', onAttachmentClick, true)
@@ -844,25 +852,30 @@ watch(() => props.theme, (newTheme) => {
   pointer-events: auto;
 }
 
-.editor-attachment-fancybox .fancybox__toolbar {
+.editor-attachment-image-fancybox .fancybox__toolbar,
+.editor-attachment-video-fancybox .fancybox__toolbar {
   --f-button-width: 42px;
   --f-button-height: 42px;
   top: max(12px, env(safe-area-inset-top, 0px));
   right: max(12px, env(safe-area-inset-right, 0px));
 }
 
-.editor-attachment-fancybox .fancybox__nav {
+.editor-attachment-image-fancybox .fancybox__nav {
   display: none !important;
 }
 
-.editor-attachment-fancybox .fancybox__content:has(.editor-attachment-fancybox-video) {
+.editor-attachment-video-fancybox .fancybox__nav {
+  display: flex !important;
+}
+
+.editor-attachment-video-fancybox .fancybox__content:has(.editor-attachment-fancybox-video) {
   padding: 0 !important;
   background: transparent !important;
   color: inherit !important;
   box-shadow: none !important;
 }
 
-.editor-attachment-fancybox .fancybox__slide {
+.editor-attachment-video-fancybox .fancybox__slide {
   padding: 56px 16px 24px;
 }
 
