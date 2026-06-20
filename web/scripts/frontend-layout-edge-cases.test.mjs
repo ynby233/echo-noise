@@ -324,8 +324,10 @@ assert(
     vditorEditor.includes("right: ['close']") &&
     vditorEditor.includes('collapseIrAttachmentChrome') &&
     vditorEditor.includes('scheduleCollapseIrAttachmentChrome') &&
+    vditorEditor.includes('scheduleRefreshAttachmentLinks') &&
     vditorEditor.includes("marker.classList.remove('vditor-ir__node--expand')") &&
-    vditorEditor.includes("attributeFilter: ['class']") &&
+    vditorEditor.includes('previewObserver.observe(root, { childList: true, subtree: true })') &&
+    !vditorEditor.includes('characterData: true') &&
     vditorEditor.includes('.editor-attachment-image-fancybox .fancybox__nav') &&
     vditorEditor.includes('.editor-attachment-video-fancybox .fancybox__nav') &&
     vditorEditor.includes('display: flex !important;') &&

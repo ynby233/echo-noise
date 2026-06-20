@@ -414,18 +414,27 @@ const setupAttachmentPreview = () => {
     toggleAttachmentPreview(hit.target, hit.info)
   }
 
+  let refreshQueued = false
+  const scheduleRefreshAttachmentLinks = () => {
+    if (refreshQueued) return
+    refreshQueued = true
+    requestAnimationFrame(() => {
+      refreshQueued = false
+      refreshAttachmentLinks()
+    })
+  }
+
   refreshAttachmentLinks()
-  const previewObserver = new MutationObserver(() => {
-    refreshAttachmentLinks()
-    collapseIrAttachmentChrome()
-  })
-  previewObserver.observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class'] })
+  const previewObserver = new MutationObserver(() => scheduleRefreshAttachmentLinks())
+  previewObserver.observe(root, { childList: true, subtree: true })
+  root.addEventListener('input', scheduleRefreshAttachmentLinks, true)
   root.addEventListener('pointerdown', preventAttachmentNavigation, true)
   root.addEventListener('mousedown', preventAttachmentNavigation, true)
   root.addEventListener('click', onAttachmentClick, true)
   root.addEventListener('keydown', onAttachmentKeydown, true)
   attachmentPreviewCleanup = () => {
     previewObserver.disconnect()
+    root.removeEventListener('input', scheduleRefreshAttachmentLinks, true)
     root.removeEventListener('pointerdown', preventAttachmentNavigation, true)
     root.removeEventListener('mousedown', preventAttachmentNavigation, true)
     root.removeEventListener('click', onAttachmentClick, true)
