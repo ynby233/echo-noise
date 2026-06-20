@@ -74,6 +74,7 @@ const headingOptions = [
 
 type EditorAttachmentInfo = { type: 'image' | 'video' | 'audio'; title: string; name: string; url: string }
 const ATTACHMENT_MARKER_RE = /\[(图片附件|视频附件|音频附件)：([^\]]+)\]\(([^)\s]+)\)/
+const ATTACHMENT_ANCHOR_LABEL_RE = /^(图片附件|视频附件|音频附件)：(.+)$/
 
 const normalizeAttachmentInfo = (kindLabel: string, name: string, url: string): EditorAttachmentInfo | null => {
   const href = String(url || '').trim()
@@ -89,48 +90,47 @@ const attachmentInfoFromText = (text: string) => {
   return normalizeAttachmentInfo(match[1], match[2], match[3])
 }
 
-const lineFromPoint = (event: MouseEvent, root: HTMLElement) => {
-  const doc = root.ownerDocument || document
-  const caret = (() => {
-    const anyDoc = doc as Document & { caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null; caretRangeFromPoint?: (x: number, y: number) => Range | null }
-    const pos = anyDoc.caretPositionFromPoint?.(event.clientX, event.clientY)
-    if (pos) return { node: pos.offsetNode, offset: pos.offset }
-    const range = anyDoc.caretRangeFromPoint?.(event.clientX, event.clientY)
-    if (range) return { node: range.startContainer, offset: range.startOffset }
-    return null
-  })()
-  if (!caret?.node) return ''
-  const host = (caret.node instanceof Element ? caret.node : caret.node.parentElement)?.closest?.('pre.vditor-reset, .vditor-ir__node, p, li') as HTMLElement | null
-  if (!host || !root.contains(host)) return ''
-  const text = host.textContent || ''
-  if (!text) return ''
+const escapeAttachmentHtmlAttr = (value: string) => String(value || '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/\"/g, '&quot;')
+  .replace(/'/g, '&#39;')
 
-  let absoluteOffset = 0
-  const walker = doc.createTreeWalker(host, NodeFilter.SHOW_TEXT)
-  let current: Node | null = walker.nextNode()
-  while (current) {
-    if (current === caret.node) {
-      absoluteOffset += Math.max(0, Math.min(caret.offset || 0, current.textContent?.length || 0))
-      break
-    }
-    absoluteOffset += current.textContent?.length || 0
-    current = walker.nextNode()
-  }
-  const start = text.lastIndexOf('\n', Math.max(0, absoluteOffset - 1)) + 1
-  const nextBreak = text.indexOf('\n', absoluteOffset)
-  const end = nextBreak >= 0 ? nextBreak : text.length
-  return text.slice(start, end)
+const getAttachmentFancyboxOptions = (startIndex = 0) => ({
+  animated: true,
+  backdropClick: 'close' as const,
+  closeButton: true,
+  contentClick: false as const,
+  dragToClose: false,
+  startIndex,
+  Carousel: { infinite: false }
+})
+
+const buildVideoFancyboxHtml = (info: EditorAttachmentInfo) => {
+  const safeUrl = escapeAttachmentHtmlAttr(info.url)
+  const safeName = escapeAttachmentHtmlAttr(info.name)
+  return `<div class="editor-attachment-fancybox-video"><video src="${safeUrl}" controls preload="metadata" playsinline aria-label="${safeName}"></video></div>`
 }
 
-const showImageInProjectViewer = (info: EditorAttachmentInfo) => {
+const showAttachmentGallery = (items: EditorAttachmentInfo[], current: EditorAttachmentInfo) => {
+  const sameType = items.filter((item) => item.type === current.type)
+  const galleryItems = sameType.length ? sameType : [current]
+  const startIndex = Math.max(0, galleryItems.findIndex((item) => item.url === current.url && item.name === current.name))
+  const slides = galleryItems.map((item) => item.type === 'video'
+    ? { src: buildVideoFancyboxHtml(item), type: 'html', caption: item.name }
+    : { src: item.url, type: 'image', caption: item.name }
+  )
   try {
-    Fancybox.show([{ src: info.url, type: 'image', caption: info.name }])
+    Fancybox.show(slides as any, getAttachmentFancyboxOptions(startIndex))
   } catch {
     try {
-      ;(window as any).Fancybox?.show?.([{ src: info.url, type: 'image', caption: info.name }])
+      ;(window as any).Fancybox?.show?.(slides, getAttachmentFancyboxOptions(startIndex))
     } catch {}
   }
 }
+
+const showImageInProjectViewer = (info: EditorAttachmentInfo) => showAttachmentGallery([info], info)
 
 const setupInlineImagePreview = () => {
   const root = editorContainer.value;
@@ -154,20 +154,17 @@ const setupInlineImagePreview = () => {
 const attachmentInfoFromAnchor = (anchor: HTMLAnchorElement | null) => {
   if (!anchor) return null
   const label = (anchor.textContent || '').trim()
-  const match = label.match(/^(图片附件|视频附件|音频附件)：(.+)$/)
+  const match = label.match(ATTACHMENT_ANCHOR_LABEL_RE)
   const href = anchor.getAttribute('data-attachment-url') || anchor.getAttribute('href') || anchor.href || ''
   if (match && href) return normalizeAttachmentInfo(match[1], match[2], href)
-  return attachmentInfoFromText(anchor.closest('.vditor-ir__node, p, li, pre')?.textContent || '')
+  return null
 }
 
 const setupAttachmentPreview = () => {
   const root = editorContainer.value
   if (!root || attachmentPreviewCleanup) return
 
-  const markerBlockSelector = '.vditor-ir__node, .vditor-reset p, .vditor-reset li, .vditor-reset pre'
-
   const refreshAttachmentLinks = () => {
-    root.querySelectorAll('.editor-attachment-marker-block').forEach((node) => node.classList.remove('editor-attachment-marker-block'))
     root.querySelectorAll('a').forEach((node) => {
       const anchor = node as HTMLAnchorElement
       const info = attachmentInfoFromAnchor(anchor)
@@ -177,13 +174,8 @@ const setupAttachmentPreview = () => {
       anchor.setAttribute('aria-label', `预览${info.title}`)
       anchor.setAttribute('data-attachment-kind', info.type)
       anchor.setAttribute('data-attachment-url', info.url)
-      anchor.setAttribute('title', '点击预览附件')
+      anchor.removeAttribute('title')
       anchor.setAttribute('draggable', 'false')
-      anchor.closest(markerBlockSelector)?.classList.add('editor-attachment-marker-block')
-    })
-    root.querySelectorAll(markerBlockSelector).forEach((node) => {
-      const el = node as HTMLElement
-      if (attachmentInfoFromText(el.textContent || '')) el.classList.add('editor-attachment-marker-block')
     })
   }
 
@@ -197,14 +189,14 @@ const setupAttachmentPreview = () => {
   }
 
   const toggleAttachmentPreview = (target: HTMLElement, fallbackInfo?: EditorAttachmentInfo | null) => {
-    const anchor = target.closest('a') as HTMLAnchorElement | null
+    const anchor = target.closest('a.editor-attachment-link') as HTMLAnchorElement | null
     const block = (target.closest('pre.vditor-reset, .vditor-ir__node, p, li, pre') || anchor?.closest('pre.vditor-reset, .vditor-ir__node, p, li, pre') || target.parentElement) as HTMLElement | null
-    const info = attachmentInfoFromAnchor(anchor) || fallbackInfo || attachmentInfoFromText(block?.textContent || '')
+    const info = attachmentInfoFromAnchor(anchor) || fallbackInfo
     if (!info || !block || !root.contains(block)) return
 
-    if (info.type === 'image') {
+    if (info.type === 'image' || info.type === 'video') {
       root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
-      showImageInProjectViewer(info)
+      showAttachmentGallery(getAttachmentInfosByType(info.type), info)
       return
     }
 
@@ -220,41 +212,36 @@ const setupAttachmentPreview = () => {
     header.textContent = info.title
     preview.appendChild(header)
 
-    if (info.type === 'video') {
-      const video = document.createElement('video')
-      video.src = info.url
-      video.controls = true
-      video.preload = 'metadata'
-      preview.appendChild(video)
-    } else {
-      const audio = document.createElement('audio')
-      audio.src = info.url
-      audio.controls = true
-      audio.preload = 'metadata'
-      preview.appendChild(audio)
-    }
+    const audio = document.createElement('audio')
+    audio.src = info.url
+    audio.controls = true
+    audio.preload = 'metadata'
+    preview.appendChild(audio)
     block.insertAdjacentElement('afterend', preview)
   }
 
   const attachmentTargetFromEvent = (event: Event): { target: HTMLElement; info: EditorAttachmentInfo } | null => {
     const target = event.target as HTMLElement | null
     if (!target || !root.contains(target)) return null
-    const anchor = target.closest('a') as HTMLAnchorElement | null
+    const anchor = target.closest('a.editor-attachment-link') as HTMLAnchorElement | null
+    if (!anchor || !root.contains(anchor)) return null
     const anchorInfo = attachmentInfoFromAnchor(anchor)
     if (anchor && anchorInfo) return { target: anchor, info: anchorInfo }
-    const block = target.closest('.editor-attachment-marker-block, pre.vditor-reset, .vditor-ir__node') as HTMLElement | null
-    const blockInfo = block ? attachmentInfoFromText(block.textContent || '') : null
-    if (block && blockInfo) {
-      const lineInfo = event instanceof MouseEvent ? attachmentInfoFromText(lineFromPoint(event, root)) : null
-      if (event instanceof MouseEvent) return lineInfo ? { target: block, info: lineInfo } : null
-      return { target: block, info: blockInfo }
-    }
-    if (event instanceof MouseEvent) {
-      const lineInfo = attachmentInfoFromText(lineFromPoint(event, root))
-      const host = target.closest('pre.vditor-reset, .vditor-ir__node, p, li') as HTMLElement | null
-      if (lineInfo && host) return { target: host, info: lineInfo }
-    }
     return null
+  }
+
+  const getAttachmentInfosByType = (type: EditorAttachmentInfo['type']) => {
+    const seen = new Set<string>()
+    const items: EditorAttachmentInfo[] = []
+    root.querySelectorAll('a.editor-attachment-link').forEach((node) => {
+      const info = attachmentInfoFromAnchor(node as HTMLAnchorElement)
+      if (!info || info.type !== type) return
+      const key = `${info.type}\n${info.url}\n${info.name}`
+      if (seen.has(key)) return
+      seen.add(key)
+      items.push(info)
+    })
+    return items
   }
 
   const preventAttachmentNavigation = (event: Event) => {
@@ -284,15 +271,6 @@ const setupAttachmentPreview = () => {
     toggleAttachmentPreview(hit.target, hit.info)
   }
 
-  const onAttachmentMouseMove = (event: MouseEvent) => {
-    const lineInfo = attachmentInfoFromText(lineFromPoint(event, root))
-    root.classList.toggle('is-hovering-attachment-line', !!lineInfo)
-  }
-
-  const clearAttachmentLineHover = () => {
-    root.classList.remove('is-hovering-attachment-line')
-  }
-
   refreshAttachmentLinks()
   const previewObserver = new MutationObserver(() => refreshAttachmentLinks())
   previewObserver.observe(root, { childList: true, subtree: true, characterData: true })
@@ -300,17 +278,12 @@ const setupAttachmentPreview = () => {
   root.addEventListener('mousedown', preventAttachmentNavigation, true)
   root.addEventListener('click', onAttachmentClick, true)
   root.addEventListener('keydown', onAttachmentKeydown, true)
-  root.addEventListener('mousemove', onAttachmentMouseMove, { passive: true })
-  root.addEventListener('mouseleave', clearAttachmentLineHover, { passive: true })
   attachmentPreviewCleanup = () => {
     previewObserver.disconnect()
     root.removeEventListener('pointerdown', preventAttachmentNavigation, true)
     root.removeEventListener('mousedown', preventAttachmentNavigation, true)
     root.removeEventListener('click', onAttachmentClick, true)
     root.removeEventListener('keydown', onAttachmentKeydown, true)
-    root.removeEventListener('mousemove', onAttachmentMouseMove)
-    root.removeEventListener('mouseleave', clearAttachmentLineHover)
-    root.classList.remove('is-hovering-attachment-line')
     root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
     attachmentPreviewCleanup = null
   }
@@ -721,9 +694,7 @@ watch(() => props.theme, (newTheme) => {
 }
 
 .vditor-container .editor-attachment-link,
-.vditor-container .editor-attachment-link *,
-.vditor-container .editor-attachment-marker-block,
-.vditor-container .editor-attachment-marker-block * {
+.vditor-container .editor-attachment-link * {
   cursor: pointer !important;
 }
 
@@ -731,33 +702,21 @@ watch(() => props.theme, (newTheme) => {
   text-decoration-style: dotted;
   text-underline-offset: 3px;
   -webkit-user-drag: none;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
-.vditor-container .editor-attachment-marker-block {
+.editor-attachment-fancybox-video {
+  width: min(92vw, 960px);
+  max-height: 82vh;
+}
+
+.editor-attachment-fancybox-video video {
   display: block;
-  min-height: 28px;
-  margin: 2px -6px;
-  padding: 3px 10px;
+  width: 100%;
+  max-height: 82vh;
+  background: #000;
   border-radius: 8px;
-  transition: background-color .15s ease, box-shadow .15s ease;
 }
-
-.vditor-container .editor-attachment-marker-block:hover {
-  background: rgba(59, 130, 246, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.14);
-}
-
-.vditor-container.is-hovering-attachment-line .vditor-ir pre.vditor-reset {
-  cursor: pointer !important;
-}
-
-html.dark .vditor-container .editor-attachment-marker-block:hover,
-.vditor--dark .editor-attachment-marker-block:hover {
-  background: rgba(96, 165, 250, 0.12);
-  box-shadow: inset 0 0 0 1px rgba(147, 197, 253, 0.18);
-}
-
 
 .editor-attachment-preview {
   margin: 6px 12px 10px;

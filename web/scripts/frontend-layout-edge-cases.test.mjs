@@ -303,20 +303,24 @@ assert(
     vditorEditor.includes('editor-attachment-preview') &&
     vditorEditor.includes('refreshAttachmentLinks') &&
     vditorEditor.includes('editor-attachment-link') &&
-    vditorEditor.includes('editor-attachment-marker-block') &&
-    vditorEditor.includes('lineFromPoint(event, root)') &&
-    vditorEditor.includes("showImageInProjectViewer(info)") &&
+    vditorEditor.includes("target.closest('a.editor-attachment-link')") &&
+    vditorEditor.includes('showAttachmentGallery(getAttachmentInfosByType(info.type), info)') &&
+    vditorEditor.includes('buildVideoFancyboxHtml') &&
+    vditorEditor.includes('const showImageInProjectViewer = (info: EditorAttachmentInfo) => showAttachmentGallery([info], info)') &&
     vditorEditor.includes('Fancybox.show') &&
-    vditorEditor.includes('pointer-events: none;') &&
+    vditorEditor.includes("backdropClick: 'close'") &&
+    vditorEditor.includes('closeButton: true') &&
+    vditorEditor.includes('pointer-events: auto;') &&
     vditorEditor.includes('stopImmediatePropagation') &&
     vditorEditor.includes("root.addEventListener('pointerdown', preventAttachmentNavigation, true)") &&
     vditorEditor.includes("root.addEventListener('mousedown', preventAttachmentNavigation, true)") &&
     vditorEditor.includes("root.addEventListener('keydown', onAttachmentKeydown, true)") &&
-    vditorEditor.includes('.editor-attachment-marker-block:hover') &&
-    vditorEditor.includes('is-hovering-attachment-line') &&
-    vditorEditor.includes("root.addEventListener('mousemove', onAttachmentMouseMove") &&
+    !vditorEditor.includes('editor-attachment-marker-block') &&
+    !vditorEditor.includes('lineFromPoint(event, root)') &&
+    !vditorEditor.includes('is-hovering-attachment-line') &&
+    !vditorEditor.includes("root.addEventListener('mousemove', onAttachmentMouseMove") &&
     !vditorEditor.includes('editor-attachment-preview editor-attachment-preview--image'),
-  'inserted image/video/audio attachments must use stable attachment links in the editor, render to media components in published markdown, intercept whole marker-line navigation, open image markers in the shared Fancybox viewer, and expose a wider pointer click area'
+  'inserted image/video/audio attachments must use stable attachment links in the editor, render to media components in published markdown, intercept only the marker text link, open image/video markers in the shared Fancybox viewer, and keep surrounding editor space editable'
 )
 
 assert(
