@@ -139,7 +139,7 @@ const getAttachmentImageFancyboxOptions = (startIndex = 0) => ({
   closeButton: false,
   mainClass: 'editor-attachment-image-fancybox',
   startIndex,
-  Carousel: { infinite: false },
+  Carousel: { infinite: true },
   Toolbar: {
     enabled: true,
     display: {
@@ -163,7 +163,7 @@ const getAttachmentVideoFancyboxOptions = (startIndex = 0) => ({
   dragToClose: false,
   mainClass: 'editor-attachment-video-fancybox',
   startIndex,
-  Carousel: { infinite: false },
+  Carousel: { infinite: true },
   Toolbar: {
     enabled: true,
     display: {
@@ -428,6 +428,9 @@ const setupAttachmentPreview = () => {
   const previewObserver = new MutationObserver(() => scheduleRefreshAttachmentLinks())
   previewObserver.observe(root, { childList: true, subtree: true })
   root.addEventListener('input', scheduleRefreshAttachmentLinks, true)
+  root.addEventListener('mouseup', scheduleCollapseIrAttachmentChrome, true)
+  root.addEventListener('keyup', scheduleCollapseIrAttachmentChrome, true)
+  document.addEventListener('selectionchange', scheduleCollapseIrAttachmentChrome, true)
   root.addEventListener('pointerdown', preventAttachmentNavigation, true)
   root.addEventListener('mousedown', preventAttachmentNavigation, true)
   root.addEventListener('click', onAttachmentClick, true)
@@ -435,6 +438,9 @@ const setupAttachmentPreview = () => {
   attachmentPreviewCleanup = () => {
     previewObserver.disconnect()
     root.removeEventListener('input', scheduleRefreshAttachmentLinks, true)
+    root.removeEventListener('mouseup', scheduleCollapseIrAttachmentChrome, true)
+    root.removeEventListener('keyup', scheduleCollapseIrAttachmentChrome, true)
+    document.removeEventListener('selectionchange', scheduleCollapseIrAttachmentChrome, true)
     root.removeEventListener('pointerdown', preventAttachmentNavigation, true)
     root.removeEventListener('mousedown', preventAttachmentNavigation, true)
     root.removeEventListener('click', onAttachmentClick, true)
@@ -861,6 +867,14 @@ watch(() => props.theme, (newTheme) => {
   pointer-events: auto;
 }
 
+.vditor-container .editor-attachment-node .vditor-ir__marker,
+.vditor-container .editor-attachment-node .vditor-ir__marker--link,
+.vditor-container .editor-attachment-node .vditor-ir__marker--bracket,
+.vditor-container .editor-attachment-node .vditor-ir__marker--open,
+.vditor-container .editor-attachment-node .vditor-ir__marker--close {
+  display: none !important;
+}
+
 .editor-attachment-image-fancybox .fancybox__toolbar,
 .editor-attachment-video-fancybox .fancybox__toolbar {
   --f-button-width: 42px;
@@ -869,10 +883,7 @@ watch(() => props.theme, (newTheme) => {
   right: max(12px, env(safe-area-inset-right, 0px));
 }
 
-.editor-attachment-image-fancybox .fancybox__nav {
-  display: none !important;
-}
-
+.editor-attachment-image-fancybox .fancybox__nav,
 .editor-attachment-video-fancybox .fancybox__nav {
   display: flex !important;
 }

@@ -318,6 +318,7 @@ assert(
     vditorEditor.includes('getAttachmentVideoFancyboxOptions') &&
     vditorEditor.includes("left: ['infobar']") &&
     vditorEditor.includes("right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']") &&
+    vditorEditor.includes('Carousel: { infinite: true }') &&
     vditorEditor.includes("backdropClick: 'close'") &&
     vditorEditor.includes('closeButton: false') &&
     vditorEditor.includes('middle: []') &&
@@ -336,7 +337,11 @@ assert(
     vditorEditor.includes('stopImmediatePropagation') &&
     vditorEditor.includes("root.addEventListener('pointerdown', preventAttachmentNavigation, true)") &&
     vditorEditor.includes("root.addEventListener('mousedown', preventAttachmentNavigation, true)") &&
+    vditorEditor.includes("root.addEventListener('mouseup', scheduleCollapseIrAttachmentChrome, true)") &&
+    vditorEditor.includes("root.addEventListener('keyup', scheduleCollapseIrAttachmentChrome, true)") &&
+    vditorEditor.includes("document.addEventListener('selectionchange', scheduleCollapseIrAttachmentChrome, true)") &&
     vditorEditor.includes("root.addEventListener('keydown', onAttachmentKeydown, true)") &&
+    vditorEditor.includes('.editor-attachment-node .vditor-ir__marker--link') &&
     !vditorEditor.includes('suppressIrAttachmentChrome') &&
     !vditorEditor.includes('irAttachmentNodeNearPointer') &&
     !vditorEditor.includes('editor-attachment-marker-block') &&
