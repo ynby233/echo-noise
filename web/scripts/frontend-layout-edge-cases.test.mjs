@@ -318,6 +318,9 @@ assert(
     vditorEditor.includes('closeButton: false') &&
     vditorEditor.includes("right: ['close']") &&
     vditorEditor.includes('suppressIrAttachmentChrome') &&
+    vditorEditor.includes('irAttachmentNodeNearPointer') &&
+    vditorEditor.includes("marker.classList.remove('vditor-ir__node--expand')") &&
+    vditorEditor.includes('.editor-attachment-fancybox .fancybox__nav') &&
     vditorEditor.includes('.fancybox__content:has(.editor-attachment-fancybox-video)') &&
     vditorEditor.includes('pointer-events: auto;') &&
     vditorEditor.includes('stopImmediatePropagation') &&
@@ -329,7 +332,7 @@ assert(
     !vditorEditor.includes('is-hovering-attachment-line') &&
     !vditorEditor.includes("root.addEventListener('mousemove', onAttachmentMouseMove") &&
     !vditorEditor.includes('editor-attachment-preview editor-attachment-preview--image'),
-  'inserted image/video/audio attachments must use stable attachment links in the editor, render to media components in published markdown, intercept only the marker text link, open image/video markers in the shared Fancybox viewer, and keep surrounding editor space editable'
+  'inserted image/video/audio attachments must use stable attachment links in the editor, render to media components in published markdown, open image/video markers in the shared Fancybox viewer with one navigation surface, preview only from marker text, and suppress raw HTML expansion around attachment markers'
 )
 
 assert(
