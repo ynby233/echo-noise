@@ -188,8 +188,17 @@ const startRecording = async () => {
     toast.add({ title: '提示', description: '请登录后操作', color: 'orange', timeout: 2000 })
     return
   }
+  if (typeof window !== 'undefined' && window.isSecureContext === false) {
+    toast.add({
+      title: '无法录音',
+      description: '录音需要 HTTPS 安全访问；当前 HTTP 地址下浏览器不会开放麦克风。请通过 HTTPS 域名或 localhost 访问后再试。',
+      color: 'red',
+      timeout: 7000,
+    })
+    return
+  }
   if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-    toast.add({ title: '无法录音', description: '当前浏览器不支持网页录音', color: 'red' })
+    toast.add({ title: '无法录音', description: '当前浏览器不支持网页录音，或浏览器未开放麦克风接口。', color: 'red' })
     return
   }
 
