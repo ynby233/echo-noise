@@ -67,11 +67,36 @@ export const resolveUploadedMediaUrl = (url: string, baseApi = '/api'): string =
   return `${origin}${base}${path}`
 }
 
-export const createImageMarkdown = (url: string): string => `\n![](${url})\n`
+const ATTACHMENT_LABELS: Record<UploadKind, string> = {
+  image: '图片附件',
+  video: '视频附件',
+  audio: '音频附件',
+}
 
-export const createVideoMarkdown = (url: string): string => `\n<video width="100%" height="100%" src="${url}" controls loop></video>\n`
+const sanitizeAttachmentName = (name?: string, url?: string) => {
+  const fallback = (() => {
+    try {
+      const parsed = new URL(String(url || ''), typeof window !== 'undefined' ? window.location.origin : 'http://local')
+      const last = decodeURIComponent(parsed.pathname.split('/').filter(Boolean).pop() || '')
+      return last
+    } catch {
+      return String(url || '').split('/').filter(Boolean).pop() || ''
+    }
+  })()
+  const clean = String(name || fallback || '').replace(/[\r\n\[\]]+/g, ' ').trim()
+  return clean || '未命名附件'
+}
 
-export const createAudioMarkdown = (url: string): string => `\n<audio src="${url}" controls preload="metadata"></audio>\n`
+const createAttachmentMarkdown = (kind: UploadKind, url: string, name?: string): string => {
+  const label = ATTACHMENT_LABELS[kind]
+  return `\n[${label}：${sanitizeAttachmentName(name, url)}](${url})\n`
+}
+
+export const createImageMarkdown = (url: string, name?: string): string => createAttachmentMarkdown('image', url, name)
+
+export const createVideoMarkdown = (url: string, name?: string): string => createAttachmentMarkdown('video', url, name)
+
+export const createAudioMarkdown = (url: string, name?: string): string => createAttachmentMarkdown('audio', url, name)
 
 const fileExtension = (file: File) => {
   const index = file.name.lastIndexOf('.')
@@ -183,7 +208,7 @@ export const uploadMediaFiles = async ({ files, kind, baseApi, token = '', onPro
     results.push({
       rawUrl,
       url,
-      markdown: kind === 'image' ? createImageMarkdown(url) : (kind === 'audio' ? createAudioMarkdown(url) : createVideoMarkdown(url)),
+      markdown: kind === 'image' ? createImageMarkdown(url, file.name) : (kind === 'audio' ? createAudioMarkdown(url, file.name) : createVideoMarkdown(url, file.name)),
       file,
     })
   }

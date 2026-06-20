@@ -53,6 +53,7 @@ let mutationObserver: MutationObserver | null = null;
 let fixedCleanup: (() => void) | null = null;
 let panelCleanup: (() => void) | null = null;
 let imagePreviewCleanup: (() => void) | null = null;
+let attachmentPreviewCleanup: (() => void) | null = null;
 const isReady = ref(false);
 const showHeadingMenu = ref(false);
 const headingMenuRef = ref<HTMLElement | null>(null);
@@ -86,6 +87,79 @@ const setupInlineImagePreview = () => {
   root.addEventListener('click', onImageClick, true);
   imagePreviewCleanup = () => root.removeEventListener('click', onImageClick, true);
 };
+
+const attachmentInfoFromAnchor = (anchor: HTMLAnchorElement | null) => {
+  if (!anchor) return null
+  const label = (anchor.textContent || '').trim()
+  const match = label.match(/^(图片附件|视频附件|音频附件)：(.+)$/)
+  const href = anchor.getAttribute('href') || anchor.href || ''
+  if (!match || !href) return null
+  const type = match[1] === '图片附件' ? 'image' : (match[1] === '视频附件' ? 'video' : 'audio')
+  return { type, title: match[0], name: match[2], url: href }
+}
+
+const setupAttachmentPreview = () => {
+  const root = editorContainer.value
+  if (!root || attachmentPreviewCleanup) return
+
+  const closeSiblingPreview = (block: HTMLElement) => {
+    const next = block.nextElementSibling as HTMLElement | null
+    if (next?.classList.contains('editor-attachment-preview')) {
+      next.remove()
+      return true
+    }
+    return false
+  }
+
+  const onAttachmentClick = (event: MouseEvent) => {
+    const anchor = (event.target as HTMLElement | null)?.closest('a') as HTMLAnchorElement | null
+    const info = attachmentInfoFromAnchor(anchor)
+    if (!anchor || !info || !root.contains(anchor)) return
+    event.preventDefault()
+    event.stopPropagation()
+    const block = (anchor.closest('.vditor-ir__node, p, div, li, pre') || anchor.parentElement) as HTMLElement | null
+    if (!block) return
+    if (closeSiblingPreview(block)) return
+
+    root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
+    const preview = document.createElement('div')
+    preview.className = `editor-attachment-preview editor-attachment-preview--${info.type}`
+    preview.setAttribute('contenteditable', 'false')
+
+    const header = document.createElement('div')
+    header.className = 'editor-attachment-preview__header'
+    header.textContent = info.title
+    preview.appendChild(header)
+
+    if (info.type === 'image') {
+      const img = document.createElement('img')
+      img.src = info.url
+      img.alt = info.name
+      img.loading = 'lazy'
+      preview.appendChild(img)
+    } else if (info.type === 'video') {
+      const video = document.createElement('video')
+      video.src = info.url
+      video.controls = true
+      video.preload = 'metadata'
+      preview.appendChild(video)
+    } else {
+      const audio = document.createElement('audio')
+      audio.src = info.url
+      audio.controls = true
+      audio.preload = 'metadata'
+      preview.appendChild(audio)
+    }
+    block.insertAdjacentElement('afterend', preview)
+  }
+
+  root.addEventListener('click', onAttachmentClick, true)
+  attachmentPreviewCleanup = () => {
+    root.removeEventListener('click', onAttachmentClick, true)
+    root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
+    attachmentPreviewCleanup = null
+  }
+}
 
 const editorOptions: IOptions = {
   mode: "ir",
@@ -413,6 +487,7 @@ onMounted(async () => {
     window.setTimeout(setupFixedToolbar, 1000);
     window.setTimeout(setupFixedToolbar, 2000);
     setupInlineImagePreview();
+    setupAttachmentPreview();
   });
 });
 
@@ -433,6 +508,10 @@ onBeforeUnmount(() => {
     if (imagePreviewCleanup) {
       imagePreviewCleanup();
       imagePreviewCleanup = null;
+    }
+    if (attachmentPreviewCleanup) {
+      attachmentPreviewCleanup();
+      attachmentPreviewCleanup = null;
     }
   } catch (e) {
     console.warn('Vditor destroy error', e);
@@ -484,6 +563,53 @@ watch(() => props.theme, (newTheme) => {
 .vditor-content {
   position: relative;
   z-index: 1;
+}
+
+.editor-attachment-preview {
+  margin: 6px 12px 10px;
+  padding: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.92);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
+}
+
+.editor-attachment-preview__header {
+  margin-bottom: 6px;
+  color: rgba(71, 85, 105, 0.95);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+  word-break: break-all;
+}
+
+.editor-attachment-preview img,
+.editor-attachment-preview video,
+.editor-attachment-preview audio {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+}
+
+.editor-attachment-preview img {
+  height: auto;
+  border-radius: 8px;
+}
+
+.editor-attachment-preview audio {
+  margin: 0;
+}
+
+html.dark .editor-attachment-preview,
+.vditor--dark .editor-attachment-preview {
+  border-color: rgba(148, 163, 184, 0.28);
+  background: rgba(30, 41, 59, 0.78);
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.28);
+}
+
+html.dark .editor-attachment-preview__header,
+.vditor--dark .editor-attachment-preview__header {
+  color: rgba(226, 232, 240, 0.86);
 }
 .vditor-container:hover {
   border-color: #90a4ae;

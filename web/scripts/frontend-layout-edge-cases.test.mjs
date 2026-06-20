@@ -12,6 +12,7 @@ const assert = (condition, message) => {
 
 const addForm = read('components/index/AddForm.vue')
 const audioRecorder = read('components/index/AudioRecorder.vue')
+const vditorEditor = read('components/index/VditorEditor.vue')
 const messageList = read('components/index/MessageList.vue')
 const messageStore = read('store/message.ts')
 const notificationCenter = read('components/index/UserNotificationCenter.vue')
@@ -22,6 +23,7 @@ const homePage = read('pages/index.vue')
 const builtinComments = read('components/comments/BuiltinComments.vue')
 const infoFeedList = read('components/index/InfoFeedList.vue')
 const markdownRenderer = read('components/index/MarkdownRenderer.vue')
+const mediaUpload = read('utils/media-upload.ts')
 const floatingCss = read('assets/css/tailwind.css')
 
 assert(
@@ -282,6 +284,21 @@ assert(
   markdownRenderer.includes("audio.style.border = 'none';") &&
   messageList.includes(':global(html.dark) .content-container :deep(audio) {\n  background-color: var(--home-surface-dark) !important;\n  border: none !important;'),
   'audio recorder must left-align its floating menu to the real button, keep pause/stop reactive, keep stop as a persistent danger button, draw smoothed time-domain bars, and render published audio without an extra frame'
+)
+
+assert(
+  mediaUpload.includes("return `\\n[${label}：${sanitizeAttachmentName(name, url)}](${url})\\n`") &&
+    mediaUpload.includes("createAttachmentMarkdown('image', url, name)") &&
+    mediaUpload.includes("createAttachmentMarkdown('video', url, name)") &&
+    mediaUpload.includes("createAttachmentMarkdown('audio', url, name)") &&
+    markdownRenderer.includes('const ATTACHMENT_LINK_REG = /\\[(图片附件|视频附件|音频附件)：([^\\]]+)\\]\\(([^)\\s]+)\\)/g') &&
+    markdownRenderer.includes('buildAttachmentHtml(kindLabel, name, url)') &&
+    markdownRenderer.includes('noise-attachment-render--audio') &&
+    markdownRenderer.includes('noise-attachment-render--video') &&
+    markdownRenderer.includes('noise-attachment-render--image') &&
+    vditorEditor.includes('setupAttachmentPreview()') &&
+    vditorEditor.includes('editor-attachment-preview'),
+  'inserted image/video/audio attachments must use stable attachment links in the editor, render to media components in published markdown, and support click-to-toggle editor preview'
 )
 
 assert(

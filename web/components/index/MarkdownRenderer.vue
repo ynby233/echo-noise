@@ -637,6 +637,30 @@ const buildBilibiliEmbedHtml = (bvid: string, page?: string) => {
   const src = `https://player.bilibili.com/player.html?isOutside=true&bvid=${encodeURIComponent(bv)}&p=${encodeURIComponent(p)}&autoplay=0&high_quality=1&danmaku=0&muted=0`
   return `<div class='video-wrapper'><iframe src='${src}' scrolling='no' frameborder='0' allowfullscreen allow='autoplay; fullscreen; picture-in-picture; encrypted-media' referrerpolicy='no-referrer-when-downgrade' loading='lazy'></iframe></div>`
 }
+
+const escapeHtml = (value: string) => String(value || '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;')
+
+const ATTACHMENT_LINK_REG = /\[(图片附件|视频附件|音频附件)：([^\]]+)\]\(([^)\s]+)\)/g
+
+const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string) => {
+  const url = resolveImageUrl(String(rawUrl || '').trim())
+  const safeUrl = escapeHtml(url)
+  const safeName = escapeHtml(String(name || '').trim() || '未命名附件')
+  if (!url) return ''
+  if (kindLabel === '图片附件') {
+    return `<figure class="noise-attachment-render noise-attachment-render--image"><img src="${safeUrl}" alt="${safeName}" loading="lazy" decoding="async" /></figure>`
+  }
+  if (kindLabel === '视频附件') {
+    return `<div class="noise-attachment-render noise-attachment-render--video"><video src="${safeUrl}" controls preload="metadata" style="width:100%;height:auto"></video></div>`
+  }
+  return `<div class="noise-attachment-render noise-attachment-render--audio"><audio src="${safeUrl}" controls preload="metadata"></audio></div>`
+}
+
 const replaceNodeWithHtml = (node: HTMLElement, html: string) => {
   const holder = document.createElement('div')
   holder.innerHTML = html
@@ -674,6 +698,9 @@ const processMediaLinks = (content: string): string => {
     })
     .replace(NETEASE_MD_LINK_REG, (_m, _full, songId) => buildMetingSongEmbed(songId) || _m)
     .replace(NETEASE_INLINE_CODE_REG, (_m, songId) => buildMetingSongEmbed(songId) || _m)
+
+  // 平台附件标记：编辑器内保持可移动的文本链接，发布/预览时再转成真正媒体组件。
+  content = content.replace(ATTACHMENT_LINK_REG, (_m, kindLabel, name, url) => buildAttachmentHtml(kindLabel, name, url) || _m)
 
   // GitHub 卡片解析（可开关）
   if (props.enableGithubCard) {
@@ -1483,6 +1510,31 @@ watch(() => props.enableGithubCard, () => {
   display: block;
   width: 100%;
   margin: 0.4em 0;
+}
+
+.markdown-preview :deep(.noise-attachment-render) {
+  display: block;
+  margin: 0.45em 0;
+}
+
+.markdown-preview :deep(.noise-attachment-render--image) {
+  width: fit-content;
+  max-width: 100%;
+}
+
+.markdown-preview :deep(.noise-attachment-render--image img) {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+.markdown-preview :deep(.noise-attachment-render--audio audio) {
+  margin: 0;
+}
+
+.markdown-preview :deep(.noise-attachment-render--video video) {
+  margin: 0;
 }
 
 
