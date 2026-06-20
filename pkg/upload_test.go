@@ -86,3 +86,25 @@ func TestIsAllowedTypeSupportsConfiguredWildcard(t *testing.T) {
 		t.Fatal("expected configured wildcard to accept image subtype")
 	}
 }
+
+func TestIsAllowedTypeAcceptsAudioMimeParameters(t *testing.T) {
+	allowed := []string{"audio/webm", "audio/ogg", "audio/mpeg", "audio/mp4", "audio/wav"}
+	if !isAllowedType("audio/webm;codecs=opus", allowed) {
+		t.Fatal("expected audio/webm with codec parameter to be accepted")
+	}
+	if isAllowedType("video/webm;codecs=vp9", allowed) {
+		t.Fatal("expected video mime type to be rejected for audio upload")
+	}
+}
+
+func TestAudioUploadExtAvoidsVideoMP4Classification(t *testing.T) {
+	if ext := audioUploadExt("recording.mp4", "audio/mp4"); ext != ".m4a" {
+		t.Fatalf("expected audio/mp4 to be stored as .m4a, got %q", ext)
+	}
+	if ext := audioUploadExt("recording.webm", "audio/webm;codecs=opus"); ext != ".webm" {
+		t.Fatalf("expected webm extension to be preserved, got %q", ext)
+	}
+	if ext := audioUploadExt("recording.txt", "audio/mpeg"); ext != ".mp3" {
+		t.Fatalf("expected audio/mpeg to use .mp3, got %q", ext)
+	}
+}

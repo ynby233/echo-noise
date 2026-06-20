@@ -122,10 +122,23 @@ func SetupRouter() *gin.Engine {
 		os.MkdirAll(vidDir, 0755)
 	}
 
+	// 确定音频目录，优先查找存在的目录
+	audioDir := pickDir([]string{
+		"./data/audio",
+		filepath.Join(wd, "data/audio"),
+		filepath.Join(exeDir, "data/audio"),
+		"/data/audio",
+		"/app/data/audio",
+	}, "./data/audio")
+	if _, err := os.Stat(audioDir); os.IsNotExist(err) {
+		os.MkdirAll(audioDir, 0755)
+	}
+
 	r.Static("/api/images", imgDir)
 	// 同时支持 /api/video 和 /video，兼容旧版路径和 API 规范
 	r.Static("/api/video", vidDir)
 	r.Static("/video", vidDir)
+	r.Static("/api/audio", audioDir)
 	// 常用静态文件已在上方映射
 
 	// API 路由组
@@ -280,6 +293,7 @@ func SetupRouter() *gin.Engine {
 	authRoutes.POST("/images/upload", controllers.UploadImage) // 上传图片
 	// 新增：视频上传路由（改为单数 video）
 	authRoutes.POST("/video/upload", controllers.UploadVideo) // 上传视频
+	authRoutes.POST("/audio/upload", controllers.UploadAudio) // 上传音频
 
 	// 附件管理路由
 	attachments := authRoutes.Group("/attachments")
@@ -288,8 +302,11 @@ func SetupRouter() *gin.Engine {
 		attachments.GET("/images/", controllers.ListImageAttachments)
 		attachments.GET("/video", controllers.ListVideoAttachments)
 		attachments.GET("/video/", controllers.ListVideoAttachments)
+		attachments.GET("/audio", controllers.ListAudioAttachments)
+		attachments.GET("/audio/", controllers.ListAudioAttachments)
 		attachments.DELETE("/images/*name", middleware.AdminAuthMiddleware(), controllers.DeleteImageAttachment)
 		attachments.DELETE("/video/*name", middleware.AdminAuthMiddleware(), controllers.DeleteVideoAttachment)
+		attachments.DELETE("/audio/*name", middleware.AdminAuthMiddleware(), controllers.DeleteAudioAttachment)
 	}
 
 	// 用户相关路由

@@ -3414,6 +3414,29 @@ func UploadVideo(c *gin.Context) {
 	})
 }
 
+// 上传音频
+func UploadAudio(c *gin.Context) {
+	db, _ := database.GetDB()
+	var siteConfig models.SiteConfig
+	if err := db.First(&siteConfig).Error; err != nil {
+		siteConfig = models.SiteConfig{}
+	}
+
+	allowedMimeTypes := []string{"audio/webm", "audio/ogg", "audio/mpeg", "audio/mp4", "audio/wav", "audio/x-wav"}
+
+	audioURL, err := pkg.UploadAudio(c, allowedMimeTypes, &siteConfig)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 1,
+		"msg":  "上传成功",
+		"data": audioURL,
+	})
+}
+
 // ResetDefaultData 重置/初始化默认数据
 func ResetDefaultData(c *gin.Context) {
 	_, err := checkAdmin(c)

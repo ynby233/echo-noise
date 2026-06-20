@@ -99,6 +99,28 @@ func normalizeUploadExt(ext, fallback string) string {
 	return ext
 }
 
+func audioUploadExt(filename, contentType string) string {
+	ext := normalizeUploadExt(filepath.Ext(filename), ".webm")
+	switch ext {
+	case ".webm", ".ogg", ".mp3", ".m4a", ".wav":
+		return ext
+	}
+
+	baseType := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+	switch baseType {
+	case "audio/ogg":
+		return ".ogg"
+	case "audio/mpeg":
+		return ".mp3"
+	case "audio/mp4":
+		return ".m4a"
+	case "audio/wav", "audio/x-wav":
+		return ".wav"
+	default:
+		return ".webm"
+	}
+}
+
 const attachmentSHA256MetadataKey = "sha256"
 
 func attachmentContentHashFromBytes(data []byte) string {
@@ -733,4 +755,80 @@ func UploadVideo(c *gin.Context, allowedExtensions []string, siteConfig *models.
 
 	videoURL := fmt.Sprintf("/api/video/%s", url.PathEscape(newFileName))
 	return videoURL, nil
+}
+
+// UploadAudio 上传音频并返回音频的URL
+func UploadAudio(c *gin.Context, allowedMimeTypes []string, siteConfig *models.SiteConfig) (string, error) {
+	file, err := c.FormFile("audio")
+	if err != nil {
+		return "", errors.New("未上传音频文件")
+	}
+
+	contentType := file.Header.Get("Content-Type")
+	if !isAllowedType(contentType, allowedMimeTypes) {
+		return "", errors.New("不支持的音频类型")
+	}
+
+	if file.Size > 200*1024*1024 {
+		return "", errors.New("音频大小不能超过200MB")
+	}
+
+	srcFile, err := file.Open()
+	if err != nil {
+		return "", err
+	}
+	defer srcFile.Close()
+
+	ext := audioUploadExt(file.Filename, contentType)
+	contentHash, err := attachmentContentHashFromReadSeeker(srcFile)
+	if err != nil {
+		return "", err
+	}
+	preferredFileName := safeAttachmentFileName(file.Filename, ext, "audio")
+
+	if siteConfig != nil && siteConfig.AttachmentStorageEnabled {
+		if _, err := srcFile.Seek(0, io.SeekStart); err != nil {
+			return "", err
+		}
+		return UploadAttachmentToCloud(siteConfig, preferredFileName, srcFile, contentType, contentHash)
+	}
+
+	audioPath := "./data/audio"
+	if _, err := os.Stat("/data"); err == nil {
+		audioPath = "/data/audio"
+	} else if _, err := os.Stat("/app/data"); err == nil {
+		audioPath = "/app/data/audio"
+	}
+
+	if err := createImageDirIfNotExist(audioPath); err != nil {
+		return "", err
+	}
+
+	newFileName, existed, err := localAttachmentFileNameForContent(audioPath, preferredFileName, contentHash)
+	if err != nil {
+		return "", err
+	}
+
+	savePath := filepath.Join(audioPath, newFileName)
+	if !existed && !fileExists(savePath) {
+		if _, err := srcFile.Seek(0, io.SeekStart); err != nil {
+			return "", err
+		}
+		out, err := os.Create(savePath)
+		if err != nil {
+			return "", errors.New("音频上传失败")
+		}
+		if _, err := io.Copy(out, srcFile); err != nil {
+			out.Close()
+			_ = os.Remove(savePath)
+			return "", errors.New("音频上传失败")
+		}
+		if err := out.Close(); err != nil {
+			_ = os.Remove(savePath)
+			return "", errors.New("音频上传失败")
+		}
+	}
+
+	audioURL := fmt.Sprintf("/api/audio/%s", url.PathEscape(newFileName))
+	return audioURL, nil
 }

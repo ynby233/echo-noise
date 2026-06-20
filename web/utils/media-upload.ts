@@ -1,4 +1,4 @@
-type UploadKind = 'image' | 'video'
+type UploadKind = 'image' | 'video' | 'audio'
 
 export type UploadMediaProgress = (percent: number, index: number, total: number) => void
 
@@ -19,8 +19,11 @@ type UploadMediaFilesOptions = {
 
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo']
 const VIDEO_EXTENSIONS = ['.mp4', '.webm', '.mov', '.avi']
+const AUDIO_TYPES = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-wav']
+const AUDIO_EXTENSIONS = ['.webm', '.ogg', '.mp3', '.m4a', '.wav']
 const MAX_IMAGE_SIZE = 50 * 1024 * 1024
 const MAX_VIDEO_SIZE = 1024 * 1024 * 1024
+const MAX_AUDIO_SIZE = 200 * 1024 * 1024
 
 export const normalizeCloudObjectURL = (url: string): string => {
   const raw = String(url || '')
@@ -68,10 +71,14 @@ export const createImageMarkdown = (url: string): string => `\n![](${url})\n`
 
 export const createVideoMarkdown = (url: string): string => `\n<video width="100%" height="100%" src="${url}" controls loop></video>\n`
 
+export const createAudioMarkdown = (url: string): string => `\n<audio src="${url}" controls preload="metadata"></audio>\n`
+
 const fileExtension = (file: File) => {
   const index = file.name.lastIndexOf('.')
   return index >= 0 ? file.name.slice(index).toLowerCase() : ''
 }
+
+const baseMimeType = (type: string) => String(type || '').split(';')[0].trim().toLowerCase()
 
 export const validateMediaFile = (file: File, kind: UploadKind) => {
   if (kind === 'image') {
@@ -83,14 +90,35 @@ export const validateMediaFile = (file: File, kind: UploadKind) => {
   }
 
   const ext = fileExtension(file)
-  if (!VIDEO_TYPES.includes(file.type) || !VIDEO_EXTENSIONS.includes(ext)) {
+  if (kind === 'audio') {
+    if (!AUDIO_TYPES.includes(baseMimeType(file.type)) || !AUDIO_EXTENSIONS.includes(ext)) {
+      throw new Error('仅支持 WEBM、OGG、MP3、M4A、WAV 格式的音频')
+    }
+    if (file.size > MAX_AUDIO_SIZE) throw new Error('音频不能超过200MB')
+    return
+  }
+
+  if (!VIDEO_TYPES.includes(baseMimeType(file.type)) || !VIDEO_EXTENSIONS.includes(ext)) {
     throw new Error('仅支持 MP4、WEBM、MOV、AVI 格式的视频')
   }
   if (file.size > MAX_VIDEO_SIZE) throw new Error('视频不能超过1024MB')
 }
 
-const endpointFor = (kind: UploadKind) => (kind === 'image' ? '/images/upload' : '/video/upload')
-const fieldFor = (kind: UploadKind) => (kind === 'image' ? 'image' : 'video')
+const endpointFor = (kind: UploadKind) => {
+  if (kind === 'image') return '/images/upload'
+  if (kind === 'audio') return '/audio/upload'
+  return '/video/upload'
+}
+const fieldFor = (kind: UploadKind) => {
+  if (kind === 'image') return 'image'
+  if (kind === 'audio') return 'audio'
+  return 'video'
+}
+const labelFor = (kind: UploadKind) => {
+  if (kind === 'image') return '图片'
+  if (kind === 'audio') return '音频'
+  return '视频'
+}
 
 const uploadOneMediaFile = async (
   file: File,
@@ -124,14 +152,14 @@ const uploadOneMediaFile = async (
         if (xhr.status >= 200 && xhr.status < 300 && data?.code === 1 && data?.data) {
           resolve(String(data.data))
         } else {
-          reject(new Error(data?.msg || (kind === 'image' ? '图片上传失败' : '视频上传失败')))
+          reject(new Error(data?.msg || `${labelFor(kind)}上传失败`))
         }
       } catch (error: any) {
-        reject(new Error(error?.message || (kind === 'image' ? '图片上传失败' : '视频上传失败')))
+        reject(new Error(error?.message || `${labelFor(kind)}上传失败`))
       }
     }
 
-    xhr.onerror = () => reject(new Error(kind === 'image' ? '图片上传失败' : '视频上传失败'))
+    xhr.onerror = () => reject(new Error(`${labelFor(kind)}上传失败`))
     xhr.ontimeout = () => reject(new Error('上传耗时较长，请稍后确认是否已上传成功'))
     xhr.send(formData)
   })
@@ -155,7 +183,7 @@ export const uploadMediaFiles = async ({ files, kind, baseApi, token = '', onPro
     results.push({
       rawUrl,
       url,
-      markdown: kind === 'image' ? createImageMarkdown(url) : createVideoMarkdown(url),
+      markdown: kind === 'image' ? createImageMarkdown(url) : (kind === 'audio' ? createAudioMarkdown(url) : createVideoMarkdown(url)),
       file,
     })
   }

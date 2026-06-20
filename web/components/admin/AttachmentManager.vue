@@ -14,6 +14,7 @@
       <div class="flex gap-2 mb-3">
         <UButton :color="activeTab==='images'?'primary':'gray'" variant="soft" @click="activeTab='images'">图片</UButton>
         <UButton :color="activeTab==='videos'?'primary':'gray'" variant="soft" @click="activeTab='videos'">视频</UButton>
+        <UButton :color="activeTab==='audios'?'primary':'gray'" variant="soft" @click="activeTab='audios'">音频</UButton>
       </div>
       <div v-if="activeTab==='images'">
       <div v-if="images.length===0" class="text-sm" :class="theme?.mutedText">暂无图片附件</div>
@@ -54,7 +55,7 @@
           </div>
         </div>
       </div>
-      <div v-else>
+      <div v-else-if="activeTab==='videos'">
         <div v-if="videos.length===0" class="text-sm" :class="theme?.mutedText">暂无视频附件</div>
         <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div v-for="item in videosDisplay" :key="item.name" class="attachment-item-card rounded-lg border p-3" :class="theme?.border">
@@ -93,11 +94,50 @@
           </div>
         </div>
       </div>
+      <div v-else>
+        <div v-if="audios.length===0" class="text-sm" :class="theme?.mutedText">暂无音频附件</div>
+        <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div v-for="item in audiosDisplay" :key="item.name" class="attachment-item-card rounded-lg border p-3" :class="theme?.border">
+            <div class="attachment-item-head">
+              <div class="attachment-file-meta">
+                <div class="attachment-file-name text-sm" :class="theme?.text">{{ item.name }}</div>
+                <div class="attachment-file-submeta text-xs" :class="theme?.mutedText">{{ formatSize(item.size) }} · {{ formatDate(item.modified_at) }}</div>
+              </div>
+              <div class="attachment-actions">
+                <UButton size="xs" icon="i-heroicons-arrow-down-tray" color="gray" variant="soft" @click="downloadAttachment(item)">下载</UButton>
+                <UButton size="xs" icon="i-heroicons-trash" color="red" variant="soft" @click="openDelete('audio', item)">删除</UButton>
+              </div>
+            </div>
+            <audio :src="fullURL(item.url)" class="mt-2 w-full" controls preload="metadata"></audio>
+            <div class="mt-2">
+              <UButton size="xs" color="gray" variant="ghost" @click="toggleExpand(item)">{{ isExpanded(item) ? '收起关联内容' : '查看关联内容' }}</UButton>
+              <div v-if="isExpanded(item)" class="mt-2 rounded p-2" :class="theme?.subtleBg">
+                <div v-if="!item.belongs?.length" class="text-xs" :class="theme?.mutedText">无关联内容</div>
+                <div v-else class="space-y-2">
+                  <div v-for="b in item.belongs" :key="b.id" class="text-xs" :class="theme?.text">
+                    <div class="flex items-center gap-2">
+                      <span class="px-2 py-1 rounded text-[10px]" :class="theme?.subtleBg">#{{ b.id }}</span>
+                      <span :class="theme?.mutedText">{{ formatDate(b.created_at) }}</span>
+                    </div>
+                    <div class="mt-1 line-clamp-2" :class="theme?.mutedText">{{ b.snippet }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="md:col-span-2 flex justify-center mt-2" v-if="audios.length > audiosDisplay.length">
+            <UButton color="gray" variant="soft" @click="loadMoreAudios">加载更多</UButton>
+          </div>
+          <div class="md:col-span-2 flex justify-center mt-2" v-else-if="audios.length > 4">
+            <UButton color="gray" variant="soft" @click="collapseAudios">收起</UButton>
+          </div>
+        </div>
+      </div>
     </div>
 
     <UModal v-model="confirmOpen">
       <UCard :class="theme?.cardBg">
-        <div class="text-sm" :class="theme?.text">确定删除该{{ deleteType==='image'?'图片':'视频' }}附件吗？此操作不可恢复。</div>
+        <div class="text-sm" :class="theme?.text">确定删除该{{ deleteTypeLabel }}附件吗？此操作不可恢复。</div>
         <div class="flex justify-end gap-2 mt-3">
           <UButton color="gray" variant="soft" @click="confirmOpen=false">取消</UButton>
           <UButton color="red" :loading="deleting" @click="doDelete">确认删除</UButton>
@@ -114,17 +154,19 @@ import { useUserStore } from '~/store/user'
 
 const props = defineProps<{ theme?: Record<string, string>, isCloud?: boolean }>()
 
-const activeTab = ref<'images'|'videos'>('images')
+const activeTab = ref<'images'|'videos'|'audios'>('images')
 const images = ref<any[]>([])
 const videos = ref<any[]>([])
+const audios = ref<any[]>([])
 const loading = ref(false)
 const expanded = ref<Record<string, boolean>>({})
 const confirmOpen = ref(false)
 const deleting = ref(false)
-const deleteType = ref<'image'|'video'>('image')
+const deleteType = ref<'image'|'video'|'audio'>('image')
 const deleteItem = ref<any>(null)
 const imagesVisible = ref(4)
 const videosVisible = ref(4)
+const audiosVisible = ref(4)
 
 const baseApi = useRuntimeConfig().public.baseApi || '/api'
 const userStore = useUserStore()
@@ -182,27 +224,44 @@ const fetchVideos = async () => {
   videos.value = sortNewestFirst(arr).filter((it: any) => /\.(mp4|webm|mov|avi)$/i.test(String(it.name || '')))
   videosVisible.value = 4
 }
+const fetchAudios = async () => {
+  const resp = await fetch(`${baseApi}/attachments/audio`, { credentials: 'include', headers: authHeaders.value as any })
+  const js = await resp.json().catch(() => null)
+  const arr = (js && js.code === 1 && Array.isArray(js.data)) ? js.data : []
+  audios.value = sortNewestFirst(arr).filter((it: any) => /\.(webm|ogg|mp3|m4a|wav)$/i.test(String(it.name || '')))
+  audiosVisible.value = 4
+}
 const refresh = async () => {
   try {
     loading.value = true
-    await Promise.all([fetchImages(), fetchVideos()])
+    await Promise.all([fetchImages(), fetchVideos(), fetchAudios()])
   } finally {
     loading.value = false
   }
 }
 onMounted(refresh)
 
-const openDelete = (type: 'image'|'video', item: any) => {
+const openDelete = (type: 'image'|'video'|'audio', item: any) => {
   deleteType.value = type
   deleteItem.value = item
   confirmOpen.value = true
 }
+const deleteTypeLabel = computed(() => {
+  if (deleteType.value === 'image') return '图片'
+  if (deleteType.value === 'audio') return '音频'
+  return '视频'
+})
+const deleteEndpoint = computed(() => {
+  if (deleteType.value === 'image') return 'images'
+  if (deleteType.value === 'audio') return 'audio'
+  return 'video'
+})
 const doDelete = async () => {
   if (!deleteItem.value) return
   try {
     deleting.value = true
     const key = deleteItem.value.key || deleteItem.value.name
-    const url = `${baseApi}/attachments/${deleteType.value === 'image' ? 'images' : 'video'}/${encodeURIComponent(key)}`
+    const url = `${baseApi}/attachments/${deleteEndpoint.value}/${encodeURIComponent(key)}`
     const resp = await fetch(url, { method: 'DELETE', credentials: 'include', headers: authHeaders.value as any })
     const js = await resp.json().catch(() => null)
     if (!resp.ok || !js || js.code !== 1) throw new Error(js?.msg || '删除失败')
@@ -219,10 +278,13 @@ const doDelete = async () => {
 
 const imagesDisplay = computed(() => images.value.slice(0, imagesVisible.value))
 const videosDisplay = computed(() => videos.value.slice(0, videosVisible.value))
+const audiosDisplay = computed(() => audios.value.slice(0, audiosVisible.value))
 const loadMoreImages = () => { imagesVisible.value += 4 }
 const loadMoreVideos = () => { videosVisible.value += 4 }
+const loadMoreAudios = () => { audiosVisible.value += 4 }
 const collapseImages = () => { imagesVisible.value = 4 }
 const collapseVideos = () => { videosVisible.value = 4 }
+const collapseAudios = () => { audiosVisible.value = 4 }
 const downloadAttachment = (item: any) => {
   const a = document.createElement('a')
   a.href = fullURL(item.url)

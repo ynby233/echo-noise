@@ -15,6 +15,10 @@
             class="hidden"
             placeholder="选择图片"
           />
+          <AudioRecorder
+            @audio-uploaded="handleAudioUploaded"
+            @upload-progress="handleAudioUploadProgress"
+          />
           <button type="button" class="tb-btn nw-action-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" @click="triggerFileInput"><UIcon name="i-mdi-image-plus-outline" class="w-5 h-5" /></button>
           <!-- 视频上传按钮 -->
           <VideoUpload
@@ -261,9 +265,10 @@ const VditorEditor = defineAsyncComponent(() => import('./VditorEditor.vue'))
 import SearchMode from './Searchmode.vue'
 import { useMessageStore } from '~/store/message'
 import { useNotifyStore } from '~/store/notify'
+import AudioRecorder from './AudioRecorder.vue'
 import VideoUpload from './VideoUpload.vue'
 import ImageHostingUploader from '~/components/widgets/ImageHostingUploader.vue'
-import { createVideoMarkdown, resolveUploadedMediaUrl, uploadMediaFiles } from '~/utils/media-upload'
+import { createAudioMarkdown, createVideoMarkdown, resolveUploadedMediaUrl, uploadMediaFiles } from '~/utils/media-upload'
 const props = defineProps<{ wide?: boolean }>()
 const containerClass = computed(() => (props.wide ? 'w-full max-w-none' : 'mx-auto w-full sm:max-w-4xl'))
 const isEditorLoading = ref(true)
@@ -308,18 +313,28 @@ const videoUploadProgress = ref(0); // 新增进度变量
 const handleVideoUploadProgress = (percent: number) => {
   videoUploadProgress.value = percent;
 };
+const audioUploadProgress = ref(0)
+const handleAudioUploadProgress = (percent: number) => {
+  audioUploadProgress.value = percent
+}
 const imageUploadProgress = ref(0)
 const activeUploadPercent = computed(() => {
+  if (audioUploadProgress.value > 0 && audioUploadProgress.value < 100) return audioUploadProgress.value
   if (videoUploadProgress.value > 0 && videoUploadProgress.value < 100) return videoUploadProgress.value
   if (imageUploadProgress.value > 0 && imageUploadProgress.value < 100) return imageUploadProgress.value
   return 0
 })
 const activeUploadKind = computed(() => {
+  if (audioUploadProgress.value > 0 && audioUploadProgress.value < 100) return 'audio'
   if (videoUploadProgress.value > 0 && videoUploadProgress.value < 100) return 'video'
   if (imageUploadProgress.value > 0 && imageUploadProgress.value < 100) return 'image'
   return ''
 })
-const activeUploadLabel = computed(() => (activeUploadKind.value === 'video' ? '视频' : '图片'))
+const activeUploadLabel = computed(() => {
+  if (activeUploadKind.value === 'audio') return '音频'
+  if (activeUploadKind.value === 'video') return '视频'
+  return '图片'
+})
 const showSearchModal = ref(false);
 const emit = defineEmits(['search-result','video-uploaded', 'before-upload', 'upload-progress']);
 const handleSearchResult = (result: any) => {
@@ -830,6 +845,15 @@ const handleVideoUploaded = (videoUrl: string) => {
   }
 };
 
+const handleAudioUploaded = (audioUrl: string) => {
+  const audioTag = createAudioMarkdown(resolveUploadedMediaUrl(audioUrl, String(BASE_API || '/api')))
+  if (vditorEditor.value?.insertValue) {
+    vditorEditor.value.insertValue(audioTag)
+    syncContentFromEditor()
+    focusEditor()
+  }
+};
+
 const INLINE_IMAGE_REG = /!\s*(https?:\/\/[^\s!]+\.(?:png|jpe?g|gif|webp))(?:\?[^\s!]*)?/gi;
 const normalizeInlineImageLinks = (md: string): string => md.replace(INLINE_IMAGE_REG, (m, url) => `![](${url})`);
 
@@ -1093,7 +1117,7 @@ const addMessage = async () => {
   if (!MessageContent.value.trim()) {
     toast.add({
       title: '错误',
-      description: '请输入内容或上传图片/视频',
+      description: '请输入内容或上传图片/视频/音频',
       color: 'red',
       timeout: 2000
     });
@@ -1170,6 +1194,7 @@ html.dark .editor-toolbar :deep(.u-button) { border:none !important; box-shadow:
 .upload-progress-fill { height: 100%; border-radius: 999px; }
 .upload-progress-fill.image { background: linear-gradient(90deg, rgba(167,139,250,1), rgba(244,114,182,1)); }
 .upload-progress-fill.video { background: linear-gradient(90deg, rgba(96,165,250,1), rgba(52,211,153,1)); }
+.upload-progress-fill.audio { background: linear-gradient(90deg, rgba(249,115,22,1), rgba(245,158,11,1)); }
 .upload-progress-text { font-size: 12px; line-height: 1; color: rgba(17,24,39,0.6); min-width: 76px; text-align: right; }
 html.dark .upload-progress-track { background: rgba(255,255,255,0.14); }
 html.dark .upload-progress-text { color: rgba(226,232,240,0.72); }

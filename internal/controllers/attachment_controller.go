@@ -176,6 +176,59 @@ func ListVideoAttachments(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": list})
 }
 
+func ListAudioAttachments(c *gin.Context) {
+	var siteCfg models.SiteConfig
+	_ = database.DB.Table("site_configs").First(&siteCfg).Error
+	if siteCfg.AttachmentStorageEnabled {
+		list, err := listCloudAttachments(siteCfg, func(name string) bool {
+			return isAudioExt(name)
+		})
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "data": []AttachmentInfo{}})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 1, "data": list})
+		return
+	}
+
+	wd, _ := os.Getwd()
+	exePath, _ := os.Executable()
+	exeDir := filepath.Dir(exePath)
+	dir := pickDir([]string{
+		"./data/audio",
+		filepath.Join(wd, "data/audio"),
+		filepath.Join(exeDir, "data/audio"),
+		"/data/audio",
+		"/app/data/audio",
+	}, "./data/audio")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []AttachmentInfo{}})
+		return
+	}
+
+	var messages []models.Message
+	database.DB.Select("id", "content", "image_url", "created_at").Order("created_at DESC").Find(&messages)
+
+	var list []AttachmentInfo
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		p := filepath.Join(dir, name)
+		fi, err := os.Stat(p)
+		if err != nil {
+			continue
+		}
+		urlPath := "/api/audio/" + url.PathEscape(name)
+		belongs := findBelongs(messages, name, "/audio/", "/api/audio/")
+		list = append(list, AttachmentInfo{Key: name, Name: name, URL: urlPath, Size: fi.Size(), ModifiedAt: fi.ModTime(), Belongs: belongs})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": list})
+}
+
 func findBelongs(messages []models.Message, name, p1, p2 string) []BelongItem {
 	var out []BelongItem
 	// 原始文件名匹配
@@ -304,6 +357,47 @@ func DeleteVideoAttachment(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": true})
 }
 
+func DeleteAudioAttachment(c *gin.Context) {
+	name := c.Param("name")
+	base := filepath.Base(name)
+
+	var siteCfg models.SiteConfig
+	_ = database.DB.Table("site_configs").First(&siteCfg).Error
+	if siteCfg.AttachmentStorageEnabled {
+		decoded, err := url.PathUnescape(name)
+		if err != nil {
+			decoded = name
+		}
+		if err := deleteCloudAttachment(siteCfg, decoded); err != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "删除失败"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 1, "data": true})
+		return
+	}
+
+	wd, _ := os.Getwd()
+	exePath, _ := os.Executable()
+	exeDir := filepath.Dir(exePath)
+	audioDir := pickDir([]string{
+		"./data/audio",
+		filepath.Join(wd, "data/audio"),
+		filepath.Join(exeDir, "data/audio"),
+		"/data/audio",
+		"/app/data/audio",
+	}, "./data/audio")
+	p := filepath.Join(audioDir, base)
+	if _, err := os.Stat(p); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "文件不存在"})
+		return
+	}
+	if err := os.Remove(p); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "删除失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": true})
+}
+
 func pickDir(candidates []string, fallback string) string {
 	for _, d := range candidates {
 		if d == "" {
@@ -405,6 +499,16 @@ func isVideoExt(name string) bool {
 	ext := strings.ToLower(filepath.Ext(name))
 	switch ext {
 	case ".mp4", ".webm", ".mov", ".avi":
+		return true
+	default:
+		return false
+	}
+}
+
+func isAudioExt(name string) bool {
+	ext := strings.ToLower(filepath.Ext(name))
+	switch ext {
+	case ".webm", ".ogg", ".mp3", ".m4a", ".wav":
 		return true
 	default:
 		return false
