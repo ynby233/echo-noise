@@ -82,6 +82,7 @@ let audioContext: AudioContext | null = null
 let analyser: AnalyserNode | null = null
 let animationId = 0
 let timerId: ReturnType<typeof setInterval> | null = null
+let recordingStartedAt = 0
 let startedAt = 0
 let accumulatedMs = 0
 let chunks: Blob[] = []
@@ -110,6 +111,28 @@ const audioExtension = (type: string) => {
   if (type.includes('ogg')) return 'ogg'
   if (type.includes('mp4')) return 'm4a'
   return 'webm'
+}
+
+const safeNameSegment = (value: unknown, fallback = 'user') => String(value || fallback)
+  .replace(/[\\/:*?"<>|\s]+/g, '-')
+  .replace(/^-+|-+$/g, '')
+  .slice(0, 32) || fallback
+
+const recordingFileName = (type: string) => {
+  const ext = audioExtension(type)
+  const started = new Date(recordingStartedAt || Date.now())
+  const stamp = [
+    started.getFullYear(),
+    String(started.getMonth() + 1).padStart(2, '0'),
+    String(started.getDate()).padStart(2, '0'),
+    String(started.getHours()).padStart(2, '0'),
+    String(started.getMinutes()).padStart(2, '0'),
+    String(started.getSeconds()).padStart(2, '0'),
+  ].join('-')
+  const user = userStore.user as any
+  const userPart = safeNameSegment(user?.userid ?? user?.id ?? user?.username ?? 'user')
+  const suffix = Math.random().toString(36).slice(2, 8)
+  return `录音-${stamp}-${userPart}-${suffix}.${ext}`
 }
 
 const positionMenu = () => positionFloatingMenu(triggerRef.value, menuRef.value, menuStyle, 292, 'above-align-left')
@@ -207,6 +230,7 @@ const cleanupRecording = () => {
   isPaused.value = false
   accumulatedMs = 0
   startedAt = 0
+  recordingStartedAt = 0
 }
 
 const startRecording = async () => {
@@ -242,6 +266,7 @@ const startRecording = async () => {
       if (event.data && event.data.size > 0) chunks.push(event.data)
     }
     recorder.start(1000)
+    recordingStartedAt = Date.now()
     isRecording.value = true
     isPaused.value = false
     elapsedMs.value = 0
@@ -318,9 +343,7 @@ const stopAndUpload = async () => {
     stopTimer()
     const blob = await stopRecorder()
     const type = blob.type || 'audio/webm'
-    const ext = audioExtension(type)
-    const stamp = new Date().toLocaleTimeString('zh-CN', { hour12: false }).replace(/:/g, '-')
-    const file = new File([blob], `录音-${stamp}.${ext}`, { type })
+    const file = new File([blob], recordingFileName(type), { type })
     const uploaded = await uploadMediaFiles({
       files: [file],
       kind: 'audio',

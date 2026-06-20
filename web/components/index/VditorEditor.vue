@@ -102,6 +102,19 @@ const setupAttachmentPreview = () => {
   const root = editorContainer.value
   if (!root || attachmentPreviewCleanup) return
 
+  const refreshAttachmentLinks = () => {
+    root.querySelectorAll('a').forEach((node) => {
+      const anchor = node as HTMLAnchorElement
+      const info = attachmentInfoFromAnchor(anchor)
+      anchor.classList.toggle('editor-attachment-link', !!info)
+      if (!info) return
+      anchor.setAttribute('role', 'button')
+      anchor.setAttribute('aria-label', `预览${info.title}`)
+      anchor.setAttribute('data-attachment-kind', info.type)
+      anchor.setAttribute('title', '点击预览附件')
+    })
+  }
+
   const closeSiblingPreview = (block: HTMLElement) => {
     const next = block.nextElementSibling as HTMLElement | null
     if (next?.classList.contains('editor-attachment-preview')) {
@@ -111,12 +124,9 @@ const setupAttachmentPreview = () => {
     return false
   }
 
-  const onAttachmentClick = (event: MouseEvent) => {
-    const anchor = (event.target as HTMLElement | null)?.closest('a') as HTMLAnchorElement | null
+  const toggleAttachmentPreview = (anchor: HTMLAnchorElement) => {
     const info = attachmentInfoFromAnchor(anchor)
-    if (!anchor || !info || !root.contains(anchor)) return
-    event.preventDefault()
-    event.stopPropagation()
+    if (!info || !root.contains(anchor)) return
     const block = (anchor.closest('.vditor-ir__node, p, div, li, pre') || anchor.parentElement) as HTMLElement | null
     if (!block) return
     if (closeSiblingPreview(block)) return
@@ -153,9 +163,43 @@ const setupAttachmentPreview = () => {
     block.insertAdjacentElement('afterend', preview)
   }
 
+  const preventAttachmentNavigation = (event: Event) => {
+    const anchor = (event.target as HTMLElement | null)?.closest('a') as HTMLAnchorElement | null
+    if (!anchor || !attachmentInfoFromAnchor(anchor) || !root.contains(anchor)) return
+    event.preventDefault()
+    event.stopPropagation()
+  }
+
+  const onAttachmentClick = (event: MouseEvent) => {
+    const anchor = (event.target as HTMLElement | null)?.closest('a') as HTMLAnchorElement | null
+    if (!anchor || !attachmentInfoFromAnchor(anchor) || !root.contains(anchor)) return
+    event.preventDefault()
+    event.stopPropagation()
+    toggleAttachmentPreview(anchor)
+  }
+
+  const onAttachmentKeydown = (event: KeyboardEvent) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    const anchor = (event.target as HTMLElement | null)?.closest('a') as HTMLAnchorElement | null
+    if (!anchor || !attachmentInfoFromAnchor(anchor) || !root.contains(anchor)) return
+    event.preventDefault()
+    event.stopPropagation()
+    toggleAttachmentPreview(anchor)
+  }
+
+  refreshAttachmentLinks()
+  const previewObserver = new MutationObserver(() => refreshAttachmentLinks())
+  previewObserver.observe(root, { childList: true, subtree: true, characterData: true })
+  root.addEventListener('pointerdown', preventAttachmentNavigation, true)
+  root.addEventListener('mousedown', preventAttachmentNavigation, true)
   root.addEventListener('click', onAttachmentClick, true)
+  root.addEventListener('keydown', onAttachmentKeydown, true)
   attachmentPreviewCleanup = () => {
+    previewObserver.disconnect()
+    root.removeEventListener('pointerdown', preventAttachmentNavigation, true)
+    root.removeEventListener('mousedown', preventAttachmentNavigation, true)
     root.removeEventListener('click', onAttachmentClick, true)
+    root.removeEventListener('keydown', onAttachmentKeydown, true)
     root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
     attachmentPreviewCleanup = null
   }
@@ -563,6 +607,17 @@ watch(() => props.theme, (newTheme) => {
 .vditor-content {
   position: relative;
   z-index: 1;
+}
+
+.vditor-container .editor-attachment-link,
+.vditor-container .editor-attachment-link * {
+  cursor: pointer !important;
+}
+
+.vditor-container .editor-attachment-link {
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+  -webkit-user-drag: none;
 }
 
 .editor-attachment-preview {

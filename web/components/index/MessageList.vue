@@ -1568,13 +1568,21 @@ const checkContentHeight = () => {
         if (prevCIS) (el.style as any).containIntrinsicSize = prevCIS;
       } catch {}
 
-      const imgs = Array.from(el.querySelectorAll('img')) as HTMLImageElement[];
-      imgs.forEach((img) => {
-        const flag = (img as any).__measureAttached;
+      const media = Array.from(el.querySelectorAll('img, video, audio')) as Array<HTMLImageElement | HTMLVideoElement | HTMLAudioElement>;
+      media.forEach((item) => {
+        const flag = (item as any).__measureAttached;
         if (!flag) {
-          (img as any).__measureAttached = true;
-          img.addEventListener('load', () => deferMeasure());
-          img.addEventListener('error', () => deferMeasure());
+          (item as any).__measureAttached = true;
+          const schedule = () => {
+            deferMeasure();
+            setTimeout(() => deferMeasure(), 120);
+            setTimeout(() => deferMeasure(), 420);
+          };
+          item.addEventListener('load', schedule);
+          item.addEventListener('loadedmetadata', schedule);
+          item.addEventListener('loadeddata', schedule);
+          item.addEventListener('canplay', schedule);
+          item.addEventListener('error', schedule);
         }
       });
     });

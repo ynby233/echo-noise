@@ -297,8 +297,31 @@ assert(
     markdownRenderer.includes('noise-attachment-render--video') &&
     markdownRenderer.includes('noise-attachment-render--image') &&
     vditorEditor.includes('setupAttachmentPreview()') &&
-    vditorEditor.includes('editor-attachment-preview'),
-  'inserted image/video/audio attachments must use stable attachment links in the editor, render to media components in published markdown, and support click-to-toggle editor preview'
+    vditorEditor.includes('editor-attachment-preview') &&
+    vditorEditor.includes('refreshAttachmentLinks') &&
+    vditorEditor.includes('editor-attachment-link') &&
+    vditorEditor.includes("root.addEventListener('pointerdown', preventAttachmentNavigation, true)") &&
+    vditorEditor.includes("root.addEventListener('mousedown', preventAttachmentNavigation, true)") &&
+    vditorEditor.includes("root.addEventListener('keydown', onAttachmentKeydown, true)"),
+  'inserted image/video/audio attachments must use stable attachment links in the editor, render to media components in published markdown, and intercept attachment link navigation for click-to-toggle editor preview'
+)
+
+assert(
+  audioRecorder.includes('let recordingStartedAt = 0') &&
+    audioRecorder.includes('const recordingFileName = (type: string) => {') &&
+    audioRecorder.includes('const userPart = safeNameSegment(user?.userid ?? user?.id ?? user?.username ?? \'user\')') &&
+    audioRecorder.includes('const suffix = Math.random().toString(36).slice(2, 8)') &&
+    audioRecorder.includes('new File([blob], recordingFileName(type), { type })'),
+  'recorded audio filenames must include date, user identity, and a short random suffix instead of only the start time'
+)
+
+assert(
+  messageList.includes("el.querySelectorAll('img, video, audio')") &&
+    messageList.includes("item.addEventListener('loadedmetadata', schedule)") &&
+    messageList.includes("item.addEventListener('loadeddata', schedule)") &&
+    messageList.includes("item.addEventListener('canplay', schedule)") &&
+    messageList.includes('setTimeout(() => deferMeasure(), 420)'),
+  'message expand measurement must re-check after image/video/audio media metadata and playback layout events so media attachments do not hide later content without an expand button'
 )
 
 assert(
