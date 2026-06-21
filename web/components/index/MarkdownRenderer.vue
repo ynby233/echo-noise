@@ -1,9 +1,9 @@
 <template>
-  <div ref="previewElement" class="markdown-preview"></div>
+  <div ref="previewElement" class="markdown-preview" :data-task-list-editable="props.taskListEditable ? 'true' : 'false'"></div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch, onBeforeUnmount, inject } from 'vue';
+import { nextTick, onMounted, ref, watch, onBeforeUnmount, inject } from 'vue';
 import { useRuntimeConfig } from '#imports';
 import { useMessageStore } from '~/store/message';
 import Vditor from 'vditor';
@@ -40,6 +40,8 @@ const resolveImageUrl = (path: string) => {
 const previewElement = ref<HTMLDivElement | null>(null);
 let zoom: any = null;
 let themeClassObserver: MutationObserver | null = null
+let taskListObserver: MutationObserver | null = null
+let taskListEnhanceTimer: ReturnType<typeof setTimeout> | null = null
 // 添加 window 类型声明
 declare global {
   interface Window {
@@ -249,6 +251,18 @@ const syncTaskListItemState = (input: HTMLInputElement) => {
   input.setAttribute('aria-label', input.checked ? '已完成任务' : '未完成任务')
 }
 
+const findRenderedTaskCheckboxes = () => {
+  const root = previewElement.value
+  if (!root) return [] as HTMLInputElement[]
+  return Array.from(root.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))
+}
+
+const taskIndexForInput = (input: HTMLInputElement) => {
+  const fromDataset = Number(input.dataset.taskIndex)
+  if (Number.isInteger(fromDataset) && fromDataset >= 0) return fromDataset
+  return findRenderedTaskCheckboxes().indexOf(input)
+}
+
 const persistTaskListChange = async (input: HTMLInputElement, taskIndex: number, checked: boolean) => {
   if (!props.taskListEditable || !props.messageId || taskUpdateInFlight.has(taskIndex)) return false
   const previousChecked = !checked
@@ -277,23 +291,57 @@ const persistTaskListChange = async (input: HTMLInputElement, taskIndex: number,
 const enableRenderedTaskLists = () => {
   const root = previewElement.value
   if (!root) return
+  root.dataset.taskListEditable = props.taskListEditable ? 'true' : 'false'
   let taskIndex = 0
-  root.querySelectorAll<HTMLInputElement>('li input[type="checkbox"], .contains-task-list input[type="checkbox"]').forEach((input) => {
+  findRenderedTaskCheckboxes().forEach((input) => {
     const currentIndex = taskIndex
     taskIndex += 1
     input.dataset.taskIndex = String(currentIndex)
     input.disabled = !props.taskListEditable
     if (props.taskListEditable) input.removeAttribute('disabled')
+    else input.setAttribute('disabled', 'disabled')
+    input.setAttribute('aria-disabled', props.taskListEditable ? 'false' : 'true')
+    input.tabIndex = props.taskListEditable ? 0 : -1
     input.style.pointerEvents = props.taskListEditable ? 'auto' : 'none'
     input.style.cursor = props.taskListEditable ? 'pointer' : 'default'
     syncTaskListItemState(input)
-    input.onchange = async () => {
-      const checked = input.checked
-      syncTaskListItemState(input)
-      await persistTaskListChange(input, currentIndex, checked)
-    }
-    input.onclick = (event) => event.stopPropagation()
+    input.onchange = null
+    input.onclick = null
   })
+}
+
+const scheduleTaskListEnhance = () => {
+  if (taskListEnhanceTimer) clearTimeout(taskListEnhanceTimer)
+  taskListEnhanceTimer = setTimeout(() => {
+    taskListEnhanceTimer = null
+    enableRenderedTaskLists()
+  }, 0)
+}
+
+const onTaskListClick = (event: Event) => {
+  const input = (event.target as HTMLElement | null)?.closest('input[type="checkbox"]') as HTMLInputElement | null
+  if (!input || !previewElement.value?.contains(input)) return
+  event.stopPropagation()
+  if (!props.taskListEditable) {
+    event.preventDefault()
+    if (typeof (event as any).stopImmediatePropagation === 'function') (event as any).stopImmediatePropagation()
+    enableRenderedTaskLists()
+  }
+}
+
+const onTaskListChange = async (event: Event) => {
+  const input = (event.target as HTMLElement | null)?.closest('input[type="checkbox"]') as HTMLInputElement | null
+  if (!input || !previewElement.value?.contains(input)) return
+  event.stopPropagation()
+  const taskIndex = taskIndexForInput(input)
+  if (!props.taskListEditable || taskIndex < 0) {
+    event.preventDefault()
+    enableRenderedTaskLists()
+    return
+  }
+  const checked = input.checked
+  syncTaskListItemState(input)
+  await persistTaskListChange(input, taskIndex, checked)
 }
 
 const applyImageGrid = (keepImagesFullSize = false) => {
@@ -1183,6 +1231,8 @@ const renderMarkdown = async (markdown: string) => {
           applyDouyinVideoLayout()
           applyClickableTags()
           enableRenderedTaskLists()
+          await nextTick()
+          scheduleTaskListEnhance()
           
           // Explicitly handle existing video tags (e.g. from raw HTML or markdown)
           const existingVideos = previewElement.value?.querySelectorAll('video');
@@ -1241,6 +1291,11 @@ watch(
   }
 );
 
+watch(
+  () => props.taskListEditable,
+  () => scheduleTaskListEnhance()
+);
+
 onMounted(() => {
   renderMarkdown(props.content);
   // 确保 MetingJS 正确初始化
@@ -1255,6 +1310,17 @@ onMounted(() => {
     themeClassObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
   } catch {}
   previewElement.value?.addEventListener('click', onPreviewClick)
+  previewElement.value?.addEventListener('click', onTaskListClick, true)
+  previewElement.value?.addEventListener('change', onTaskListChange, true)
+  try {
+    if (previewElement.value) {
+      taskListObserver = new MutationObserver(() => scheduleTaskListEnhance())
+      taskListObserver.observe(previewElement.value, {
+        childList: true,
+        subtree: true,
+      })
+    }
+  } catch {}
   try {
     window.addEventListener('resize', applyDouyinVideoLayout, { passive: true })
   } catch {}
@@ -1267,12 +1333,22 @@ onBeforeUnmount(() => {
     zoom = null;
   }
   previewElement.value?.removeEventListener('click', onPreviewClick)
+  previewElement.value?.removeEventListener('click', onTaskListClick, true)
+  previewElement.value?.removeEventListener('change', onTaskListChange, true)
+  if (taskListEnhanceTimer) {
+    clearTimeout(taskListEnhanceTimer)
+    taskListEnhanceTimer = null
+  }
   try {
     window.removeEventListener('resize', applyDouyinVideoLayout)
   } catch {}
   if (themeClassObserver) {
     themeClassObserver.disconnect()
     themeClassObserver = null
+  }
+  if (taskListObserver) {
+    taskListObserver.disconnect()
+    taskListObserver = null
   }
 });
 
@@ -1362,6 +1438,15 @@ watch(() => props.enableGithubCard, () => {
 .markdown-preview {
   font-family: "LXGW WenKai Screen";
   line-height: 1.6;
+}
+
+.markdown-preview[data-task-list-editable="false"] input[type="checkbox"] {
+  pointer-events: none !important;
+  cursor: default !important;
+}
+
+.markdown-preview[data-task-list-editable="true"] input[type="checkbox"] {
+  cursor: pointer;
 }
 
 /* 信息流正文兜底：即使第三方样式注入异常，也保证文本可见 */

@@ -470,6 +470,11 @@ assert(
     markdownRenderer.includes('if (!response) throw new Error') &&
     markdownRenderer.includes('input.disabled = !props.taskListEditable') &&
     markdownRenderer.includes("input.style.pointerEvents = props.taskListEditable ? 'auto' : 'none'") &&
+    markdownRenderer.includes("return Array.from(root.querySelectorAll<HTMLInputElement>('input[type=\"checkbox\"]'))") &&
+    markdownRenderer.includes("previewElement.value?.addEventListener('click', onTaskListClick, true)") &&
+    markdownRenderer.includes("previewElement.value?.addEventListener('change', onTaskListChange, true)") &&
+    markdownRenderer.includes('taskListObserver = new MutationObserver(() => scheduleTaskListEnhance())') &&
+    markdownRenderer.includes('.markdown-preview[data-task-list-editable="false"] input[type="checkbox"]') &&
     messageList.includes(':task-list-editable="canEditMessageTasks(msg)"') &&
     messageList.includes(':message-id="Number(msg.id)"') &&
     messageList.includes('const canEditMessageTasks = (msg: any) =>') &&
