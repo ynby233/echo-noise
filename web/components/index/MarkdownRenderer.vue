@@ -244,6 +244,18 @@ const updateTaskListContent = (content: string, taskIndex: number, checked: bool
   return seen >= taskIndex ? nextLines.join('\n') : ''
 }
 
+const taskCheckedInContent = (content: string, taskIndex: number) => {
+  let seen = -1
+  const lines = String(content || '').split('\n')
+  for (const line of lines) {
+    const match = line.match(TASK_LINE_REG)
+    if (!match) continue
+    seen += 1
+    if (seen === taskIndex) return match[2].toLowerCase() === 'x'
+  }
+  return false
+}
+
 const syncTaskListItemState = (input: HTMLInputElement) => {
   const item = input.closest('li')
   item?.classList.add('markdown-task-list-item')
@@ -261,6 +273,11 @@ const taskIndexForInput = (input: HTMLInputElement) => {
   const fromDataset = Number(input.dataset.taskIndex)
   if (Number.isInteger(fromDataset) && fromDataset >= 0) return fromDataset
   return findRenderedTaskCheckboxes().indexOf(input)
+}
+
+const resetTaskCheckbox = (input: HTMLInputElement, taskIndex = taskIndexForInput(input)) => {
+  input.checked = taskIndex >= 0 ? taskCheckedInContent(renderedTaskContent.value, taskIndex) : input.defaultChecked
+  syncTaskListItemState(input)
 }
 
 const persistTaskListChange = async (input: HTMLInputElement, taskIndex: number, checked: boolean) => {
@@ -297,6 +314,7 @@ const enableRenderedTaskLists = () => {
     const currentIndex = taskIndex
     taskIndex += 1
     input.dataset.taskIndex = String(currentIndex)
+    input.checked = taskCheckedInContent(renderedTaskContent.value, currentIndex)
     input.disabled = !props.taskListEditable
     if (props.taskListEditable) input.removeAttribute('disabled')
     else input.setAttribute('disabled', 'disabled')
@@ -305,8 +323,25 @@ const enableRenderedTaskLists = () => {
     input.style.pointerEvents = props.taskListEditable ? 'auto' : 'none'
     input.style.cursor = props.taskListEditable ? 'pointer' : 'default'
     syncTaskListItemState(input)
-    input.onchange = null
-    input.onclick = null
+    input.onclick = (event) => {
+      if (props.taskListEditable) return
+      event.preventDefault()
+      event.stopPropagation()
+      if (typeof (event as any).stopImmediatePropagation === 'function') (event as any).stopImmediatePropagation()
+      resetTaskCheckbox(input, currentIndex)
+    }
+    input.onchange = async (event) => {
+      event.stopPropagation()
+      if (typeof (event as any).stopImmediatePropagation === 'function') (event as any).stopImmediatePropagation()
+      if (!props.taskListEditable) {
+        event.preventDefault()
+        resetTaskCheckbox(input, currentIndex)
+        return
+      }
+      const checked = input.checked
+      syncTaskListItemState(input)
+      await persistTaskListChange(input, currentIndex, checked)
+    }
   })
 }
 
@@ -325,7 +360,8 @@ const onTaskListClick = (event: Event) => {
   if (!props.taskListEditable) {
     event.preventDefault()
     if (typeof (event as any).stopImmediatePropagation === 'function') (event as any).stopImmediatePropagation()
-    enableRenderedTaskLists()
+    resetTaskCheckbox(input)
+    scheduleTaskListEnhance()
   }
 }
 
@@ -336,7 +372,8 @@ const onTaskListChange = async (event: Event) => {
   const taskIndex = taskIndexForInput(input)
   if (!props.taskListEditable || taskIndex < 0) {
     event.preventDefault()
-    enableRenderedTaskLists()
+    resetTaskCheckbox(input, taskIndex)
+    scheduleTaskListEnhance()
     return
   }
   const checked = input.checked

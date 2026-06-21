@@ -471,6 +471,10 @@ assert(
     markdownRenderer.includes('input.disabled = !props.taskListEditable') &&
     markdownRenderer.includes("input.style.pointerEvents = props.taskListEditable ? 'auto' : 'none'") &&
     markdownRenderer.includes("return Array.from(root.querySelectorAll<HTMLInputElement>('input[type=\"checkbox\"]'))") &&
+    markdownRenderer.includes('const taskCheckedInContent = (content: string, taskIndex: number) => {') &&
+    markdownRenderer.includes('const resetTaskCheckbox = (input: HTMLInputElement, taskIndex = taskIndexForInput(input)) => {') &&
+    markdownRenderer.includes('input.onclick = (event) => {') &&
+    markdownRenderer.includes('input.onchange = async (event) => {') &&
     markdownRenderer.includes("previewElement.value?.addEventListener('click', onTaskListClick, true)") &&
     markdownRenderer.includes("previewElement.value?.addEventListener('change', onTaskListChange, true)") &&
     markdownRenderer.includes('taskListObserver = new MutationObserver(() => scheduleTaskListEnhance())') &&
