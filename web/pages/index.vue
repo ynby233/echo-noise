@@ -3103,26 +3103,32 @@ white-space: nowrap;  /* 防止换行 */
 
 .layout-container.grid-3 {
   display: grid;
-  grid-template-columns: minmax(260px, var(--sidebar-width, 320px)) minmax(0, 1fr) minmax(260px, var(--sidebar-width, 320px));
+  grid-template-columns: var(--sidebar-width, 320px) minmax(0, 1fr) var(--sidebar-width, 320px);
   gap: var(--grid-gap, 16px);
   align-items: start;
 }
 .layout-container.grid-2 {
   display: grid;
-  grid-template-columns: minmax(260px, var(--sidebar-width, 320px)) minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width, 320px) minmax(0, 1fr);
   gap: var(--grid-gap, 16px);
 }
 .layout-container.grid-1 {
   display: block;
 }
 .layout-container { --sidebar-width: 320px; --grid-gap: 16px; width: 100%; min-width: 0; }
-.left-col, .right-col { position: sticky; top: 0; align-self: start; height: fit-content; min-width: 0; box-sizing: border-box; }
+.left-col, .right-col { position: sticky; top: 0; align-self: start; height: fit-content; width: 100%; min-width: 0; box-sizing: border-box; }
 .right-col {
   max-height: calc(100vh - 24px);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
+  scrollbar-gutter: stable;
+}
+.right-col > * {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 .center-col { min-width: 0; width: 100%; box-sizing: border-box; }
 .center-col > * { min-width: 0; }

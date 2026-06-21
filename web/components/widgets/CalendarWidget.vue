@@ -410,8 +410,10 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .calendar-widget {
-  padding: 10px 9px;
+  width: 100%;
   min-width: 0;
+  box-sizing: border-box;
+  padding: 10px 9px;
   --calendar-control-bg: rgba(148, 163, 184, 0.08);
   --calendar-control-bg-hover: rgba(249, 115, 22, 0.12);
   --calendar-control-border: rgba(15, 23, 42, 0.10);

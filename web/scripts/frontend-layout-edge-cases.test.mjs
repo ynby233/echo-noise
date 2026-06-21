@@ -23,6 +23,7 @@ const homePage = read('pages/index.vue')
 const builtinComments = read('components/comments/BuiltinComments.vue')
 const infoFeedList = read('components/index/InfoFeedList.vue')
 const markdownRenderer = read('components/index/MarkdownRenderer.vue')
+const calendarWidget = read('components/widgets/CalendarWidget.vue')
 const mediaUpload = read('utils/media-upload.ts')
 const floatingCss = read('assets/css/tailwind.css')
 const backendRouter = read('../internal/routers/routers.go')
@@ -514,6 +515,12 @@ assert(
 
 assert(
   homePage.includes('transition: background-color .15s ease, border-color .15s ease, color .15s ease;') &&
+    homePage.includes('.layout-container.grid-3 {\n  display: grid;\n  grid-template-columns: var(--sidebar-width, 320px) minmax(0, 1fr) var(--sidebar-width, 320px);') &&
+    homePage.includes('.layout-container.grid-2 {\n  display: grid;\n  grid-template-columns: var(--sidebar-width, 320px) minmax(0, 1fr);') &&
+    homePage.includes('.left-col, .right-col { position: sticky; top: 0; align-self: start; height: fit-content; width: 100%; min-width: 0; box-sizing: border-box; }') &&
+    homePage.includes('scrollbar-gutter: stable;') &&
+    homePage.includes('.right-col > * {\n  width: 100%;\n  min-width: 0;\n  box-sizing: border-box;\n}') &&
+    calendarWidget.includes('.calendar-widget {\n  width: 100%;\n  min-width: 0;\n  box-sizing: border-box;') &&
     homePage.includes('.auth-btn:hover { background: transparent !important; transform: none !important; }') &&
     homePage.includes('.avatar-lg:hover { transform: none; }') &&
     homePage.includes('.social-item:hover { transform: none; transition: none; }') &&
@@ -521,9 +528,10 @@ assert(
     homePage.includes('.right-col :deep(*:hover),') &&
     homePage.includes('transition-property: background-color, border-color, color, opacity, box-shadow, filter !important;') &&
     infoFeedList.includes('.expand-toggle-btn:hover {\n  transform: none;\n}') &&
+    !homePage.includes('grid-template-columns: minmax(260px, var(--sidebar-width, 320px))') &&
     !homePage.includes('transform: scale(1.02);') &&
     !homePage.includes('transform: translateY(-1px);'),
-  'right sidebar and info-feed hover states must not resize elements after calendar filtering or feed measurement'
+  'right sidebar width and hover states must stay stable after calendar filtering or feed measurement'
 )
 
 assert(
