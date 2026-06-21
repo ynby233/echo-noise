@@ -191,7 +191,7 @@ const initializeMediaViewer = () => {
       }
     },
     Images: { zoom: true },
-    Html: { videoAutoplay: true },
+    Html: { videoAutoplay: false },
     Thumbs: { type: 'classic', autoStart: true },
     compact: false,
     placeFocusBack: false

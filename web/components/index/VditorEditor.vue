@@ -64,6 +64,22 @@
       </button>
     </div>
   </Teleport>
+  <Teleport to="body">
+    <button
+      v-if="showTableDeleteButton"
+      type="button"
+      class="editor-table-delete-button nw-action-btn nw-action-btn--danger nw-tooltip-anchor"
+      data-tooltip="删除表格"
+      :style="tableDeleteButtonStyle"
+      aria-label="删除该表格"
+      @pointerenter="cancelTableDeleteHide"
+      @pointerleave="scheduleTableDeleteHide"
+      @mousedown.prevent.stop
+      @click.prevent.stop="confirmDeleteHoveredTable"
+    >
+      ×
+    </button>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -101,6 +117,8 @@ let refreshAttachmentLinksFromEditor: () => void = () => {};
 let lastEditorSelectionRange: Range | null = null;
 let selectedEditorTable: HTMLTableElement | null = null;
 let selectedEditorTableIndex = -1;
+let hoveredEditorTable: HTMLTableElement | null = null;
+let tableDeleteHideTimer: number | null = null;
 const videoFirstFrameCache = new Map<string, Promise<string>>();
 const isReady = ref(false);
 const showHeadingMenu = ref(false);
@@ -114,6 +132,8 @@ const tableMenuRef = ref<HTMLElement | null>(null);
 const tableMenuStyle = ref<Record<string, string>>({});
 const tableTrigger = ref<HTMLElement | null>(null);
 const nativeTablePanel = ref<HTMLElement | null>(null);
+const showTableDeleteButton = ref(false);
+const tableDeleteButtonStyle = ref<Record<string, string>>({});
 const TABLE_SIZE_LIMIT = 10
 const tableRows = ref(3);
 const tableCols = ref(3);
@@ -129,6 +149,8 @@ const headingOptions = [
 
 type EditorAttachmentInfo = { type: 'image' | 'video' | 'audio'; title: string; name: string; url: string }
 const ATTACHMENT_MARKER_RE = /\[(图片附件|视频附件|音频附件)：([^\]]+)\]\(([^)\s]+)\)/
+const ATTACHMENT_MARKER_GLOBAL_RE = /\[(图片附件|视频附件|音频附件)：([^\]]+)\]\(([^)\s]+)\)/g
+const ADJACENT_ATTACHMENT_MARKER_RE = /(\[(?:图片附件|视频附件|音频附件)：[^\]]+\]\([^)\s]+\))(\[(?:图片附件|视频附件|音频附件)：[^\]]+\]\([^)\s]+\))/g
 const ATTACHMENT_ANCHOR_LABEL_RE = /^(图片附件|视频附件|音频附件)：(.+)$/
 
 const normalizeAttachmentInfo = (kindLabel: string, name: string, url: string): EditorAttachmentInfo | null => {
@@ -143,6 +165,31 @@ const attachmentInfoFromText = (text: string) => {
   const match = String(text || '').match(ATTACHMENT_MARKER_RE)
   if (!match) return null
   return normalizeAttachmentInfo(match[1], match[2], match[3])
+}
+
+const hasAttachmentMarker = (value: string) => {
+  ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+  return ATTACHMENT_MARKER_GLOBAL_RE.test(String(value || ''))
+}
+
+const normalizeAdjacentAttachmentMarkers = (value: string) => String(value || '').replace(ADJACENT_ATTACHMENT_MARKER_RE, '$1 $2')
+
+const normalizeAttachmentInsertValue = (value: string) => {
+  const raw = String(value || '')
+  if (!hasAttachmentMarker(raw)) return raw
+  const normalized = normalizeAdjacentAttachmentMarkers(raw.trim())
+  return `\n\n${normalized}\n\n`
+}
+
+const normalizeEditorAttachmentSource = () => {
+  if (!vditorInstance?.getValue || !vditorInstance?.setValue) return false
+  const value = vditorInstance.getValue()
+  const normalized = normalizeAdjacentAttachmentMarkers(value)
+  if (normalized === value) return false
+  vditorInstance.setValue(normalized)
+  emit('update:modelValue', vditorInstance.getValue?.() || normalized)
+  window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
+  return true
 }
 
 const escapeAttachmentHtmlAttr = (value: string) => String(value || '')
@@ -223,7 +270,7 @@ const getAttachmentVideoFancyboxOptions = (startIndex = 0) => ({
     }
   },
   Html: {
-    videoAutoplay: true
+    videoAutoplay: false
   },
   Thumbs: {
     type: 'classic',
@@ -238,14 +285,19 @@ const getVideoFirstFrameThumbnail = (url: string) => {
   if (cached) return cached
   const promise = new Promise<string>((resolve) => {
     const video = document.createElement('video')
+    let finished = false
+    let seekRequested = false
     const finish = (thumb: string) => {
+      if (finished) return
+      finished = true
       cleanup()
       resolve(thumb || src)
     }
     const cleanup = () => {
       window.clearTimeout(timer)
       video.removeEventListener('loadedmetadata', onLoadedMetadata)
-      video.removeEventListener('loadeddata', drawFrame)
+      video.removeEventListener('loadeddata', onLoadedData)
+      video.removeEventListener('canplay', drawFrame)
       video.removeEventListener('seeked', drawFrame)
       video.removeEventListener('error', onError)
       video.removeAttribute('src')
@@ -255,10 +307,7 @@ const getVideoFirstFrameThumbnail = (url: string) => {
       try {
         const width = video.videoWidth || 0
         const height = video.videoHeight || 0
-        if (!width || !height) {
-          finish(src)
-          return
-        }
+        if (!width || !height || video.readyState < 2) return
         const canvas = document.createElement('canvas')
         canvas.width = width
         canvas.height = height
@@ -268,30 +317,37 @@ const getVideoFirstFrameThumbnail = (url: string) => {
           return
         }
         ctx.drawImage(video, 0, 0, width, height)
-        finish(canvas.toDataURL('image/jpeg', 0.82))
+        finish(canvas.toDataURL('image/jpeg', 0.86))
       } catch {
         finish(src)
       }
     }
-    const onLoadedMetadata = () => {
+    const requestSeek = () => {
+      if (seekRequested) return
+      seekRequested = true
       try {
         const duration = Number(video.duration)
-        const seekTime = Number.isFinite(duration) && duration > 0 ? Math.min(0.12, duration / 20) : 0
+        const seekTime = Number.isFinite(duration) && duration > 0 ? Math.min(0.35, Math.max(0.12, duration * 0.08)) : 0
         if (seekTime > 0 && Math.abs(video.currentTime - seekTime) > 0.001) {
           video.currentTime = seekTime
           return
         }
       } catch {}
-      if (video.readyState >= 2) drawFrame()
+      drawFrame()
+    }
+    const onLoadedMetadata = () => requestSeek()
+    const onLoadedData = () => {
+      if (!seekRequested) requestSeek()
     }
     const onError = () => finish(src)
-    const timer = window.setTimeout(() => finish(src), 2600)
+    const timer = window.setTimeout(() => finish(src), 4200)
     video.crossOrigin = 'anonymous'
     video.muted = true
     video.playsInline = true
-    video.preload = 'metadata'
+    video.preload = 'auto'
     video.addEventListener('loadedmetadata', onLoadedMetadata)
-    video.addEventListener('loadeddata', drawFrame)
+    video.addEventListener('loadeddata', onLoadedData)
+    video.addEventListener('canplay', drawFrame)
     video.addEventListener('seeked', drawFrame)
     video.addEventListener('error', onError)
     video.src = src
@@ -308,10 +364,11 @@ const showAttachmentGallery = async (items: EditorAttachmentInfo[], current: Edi
   const videoThumbs = current.type === 'video'
     ? await Promise.all(galleryItems.map((item) => getVideoFirstFrameThumbnail(item.url)))
     : []
-  const slides = galleryItems.map((item, index) => item.type === 'video'
-    ? { src: item.url, type: 'html5video', thumbSrc: videoThumbs[index] || item.url }
-    : { src: item.url, type: 'image', thumbSrc: item.url }
-  )
+  const slides = galleryItems.map((item, index) => {
+    if (item.type !== 'video') return { src: item.url, type: 'image', thumbSrc: item.url }
+    const thumb = videoThumbs[index] || item.url
+    return { src: item.url, type: 'html5video', thumbSrc: thumb, poster: thumb }
+  })
   const options = current.type === 'video'
     ? getAttachmentVideoFancyboxOptions(startIndex)
     : getAttachmentImageFancyboxOptions(startIndex)
@@ -403,6 +460,7 @@ const setupAttachmentPreview = () => {
 
   const onEditorInput = () => {
     captureEditorSelection()
+    if (normalizeEditorAttachmentSource()) return
     scheduleRefreshAttachmentLinks()
   }
 
@@ -664,29 +722,38 @@ const setupAttachmentPreview = () => {
 
   const scheduleTableEnhance = () => requestAnimationFrame(() => enhanceEditorTables(root))
 
-  const onTableHandleClick = (event: MouseEvent) => {
-    const handle = getEventElement(event)?.closest('.editor-table-select-handle') as HTMLElement | null
-    if (!handle || !root.contains(handle)) return
-    const table = handle.nextElementSibling as HTMLTableElement | null
-    if (!table || table.tagName.toLowerCase() !== 'table') return
-    event.preventDefault()
-    event.stopPropagation()
-    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
-    selectEditorTable(table)
+  const tableFromEvent = (event: Event) => {
+    const target = getEventElement(event)
+    const table = target?.closest<HTMLTableElement>('.vditor-reset table.editor-deletable-table, .vditor-reset table') || null
+    return table && root.contains(table) ? table : null
   }
 
-  const onTableDeleteKeydown = (event: KeyboardEvent) => {
-    if (event.key !== 'Delete' && event.key !== 'Backspace') return
-    if (!selectedEditorTable && selectedEditorTableIndex < 0) return
-    if (!deleteSelectedEditorTable()) return
-    event.preventDefault()
-    event.stopPropagation()
-    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+  const onTablePointerMove = (event: PointerEvent) => {
+    const table = tableFromEvent(event)
+    if (!table) return
+    showTableDeleteForTable(table)
+  }
+
+  const onTablePointerOut = (event: PointerEvent) => {
+    const table = tableFromEvent(event)
+    if (!table) return
+    const next = event.relatedTarget instanceof Element ? event.relatedTarget : null
+    if (next && table.contains(next)) return
+    scheduleTableDeleteHide()
   }
 
   const onTablePointerDown = (event: PointerEvent) => {
-    const target = getEventElement(event)
-    if (!target?.closest('.editor-table-select-handle, table.editor-deletable-table')) clearSelectedEditorTable()
+    const table = tableFromEvent(event)
+    if (!table) clearSelectedEditorTable()
+  }
+
+  const repositionVisibleTableDeleteButton = () => {
+    if (!showTableDeleteButton.value || !hoveredEditorTable) return
+    if (!root.contains(hoveredEditorTable)) {
+      hideTableDeleteButton()
+      return
+    }
+    positionTableDeleteButton(hoveredEditorTable)
   }
 
   let refreshQueued = false
@@ -710,14 +777,16 @@ const setupAttachmentPreview = () => {
   root.addEventListener('keyup', onEditorSelectionEvent, true)
   document.addEventListener('selectionchange', onEditorSelectionChange, true)
   root.addEventListener('pointerdown', onTablePointerDown, true)
+  root.addEventListener('pointermove', onTablePointerMove, true)
+  root.addEventListener('pointerout', onTablePointerOut, true)
   root.addEventListener('pointerdown', preventAttachmentNavigation, true)
   root.addEventListener('mousedown', preventAttachmentNavigation, true)
-  root.addEventListener('click', onTableHandleClick, true)
   root.addEventListener('click', onAttachmentClick, true)
-  root.addEventListener('keydown', onTableDeleteKeydown, true)
   root.addEventListener('keydown', onPlainTextEnterKeydown, true)
   root.addEventListener('beforeinput', onEditorBeforeInput as EventListener, true)
   root.addEventListener('keydown', onAttachmentKeydown, true)
+  window.addEventListener('resize', repositionVisibleTableDeleteButton)
+  window.addEventListener('scroll', repositionVisibleTableDeleteButton, { passive: true, capture: true })
   attachmentPreviewCleanup = () => {
     previewObserver.disconnect()
     root.removeEventListener('input', onEditorInput, true)
@@ -725,16 +794,18 @@ const setupAttachmentPreview = () => {
     root.removeEventListener('keyup', onEditorSelectionEvent, true)
     document.removeEventListener('selectionchange', onEditorSelectionChange, true)
     root.removeEventListener('pointerdown', onTablePointerDown, true)
+    root.removeEventListener('pointermove', onTablePointerMove, true)
+    root.removeEventListener('pointerout', onTablePointerOut, true)
     root.removeEventListener('pointerdown', preventAttachmentNavigation, true)
     root.removeEventListener('mousedown', preventAttachmentNavigation, true)
-    root.removeEventListener('click', onTableHandleClick, true)
     root.removeEventListener('click', onAttachmentClick, true)
-    root.removeEventListener('keydown', onTableDeleteKeydown, true)
     root.removeEventListener('keydown', onPlainTextEnterKeydown, true)
     root.removeEventListener('beforeinput', onEditorBeforeInput as EventListener, true)
     root.removeEventListener('keydown', onAttachmentKeydown, true)
-    clearSelectedEditorTable()
-    root.querySelectorAll('.editor-attachment-preview, .editor-table-select-handle').forEach((node) => node.remove())
+    window.removeEventListener('resize', repositionVisibleTableDeleteButton)
+    window.removeEventListener('scroll', repositionVisibleTableDeleteButton, true)
+    hideTableDeleteButton()
+    root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
     refreshAttachmentLinksFromEditor = () => {}
     attachmentPreviewCleanup = null
   }
@@ -873,6 +944,60 @@ const selectEditorTable = (table: HTMLTableElement) => {
   selectedEditorTableIndex = tables.indexOf(table)
 }
 
+const cancelTableDeleteHide = () => {
+  if (tableDeleteHideTimer !== null) {
+    window.clearTimeout(tableDeleteHideTimer)
+    tableDeleteHideTimer = null
+  }
+}
+
+const hideTableDeleteButton = () => {
+  cancelTableDeleteHide()
+  showTableDeleteButton.value = false
+  hoveredEditorTable = null
+  clearSelectedEditorTable()
+}
+
+const scheduleTableDeleteHide = (delay: number | Event = 1800) => {
+  cancelTableDeleteHide()
+  const timeout = typeof delay === 'number' ? delay : 1800
+  tableDeleteHideTimer = window.setTimeout(() => hideTableDeleteButton(), timeout)
+}
+
+const positionTableDeleteButton = (table: HTMLTableElement) => {
+  const rect = table.getBoundingClientRect()
+  tableDeleteButtonStyle.value = {
+    position: 'fixed',
+    top: `${Math.max(8, rect.top - 12)}px`,
+    left: `${Math.max(8, rect.left - 12)}px`,
+    zIndex: '10020'
+  }
+}
+
+const showTableDeleteForTable = (table: HTMLTableElement) => {
+  if (!editorContainer.value?.contains(table)) return
+  cancelTableDeleteHide()
+  hoveredEditorTable = table
+  positionTableDeleteButton(table)
+  showTableDeleteButton.value = true
+}
+
+const confirmDeleteHoveredTable = () => {
+  const table = hoveredEditorTable
+  if (!table || !editorContainer.value?.contains(table)) {
+    hideTableDeleteButton()
+    return
+  }
+  selectEditorTable(table)
+  const confirmed = window.confirm('确定要删除该表格吗？')
+  if (!confirmed) {
+    scheduleTableDeleteHide()
+    return
+  }
+  deleteSelectedEditorTable()
+  hideTableDeleteButton()
+}
+
 const isMarkdownTableDivider = (line: string) => {
   const cells = String(line || '').trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim())
   return cells.length > 1 && cells.every((cell) => /^:?-{3,}:?$/.test(cell))
@@ -902,7 +1027,7 @@ const deleteSelectedEditorTable = () => {
   const block = blocks[tableIndex]
   if (!block) return false
   lines.splice(block.start, block.end - block.start)
-  const nextValue = lines.join('\n').replace(/\n{3,}/g, '\n\n')
+  const nextValue = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()
   vditorInstance.setValue(nextValue)
   emit('update:modelValue', vditorInstance.getValue?.() || nextValue)
   clearSelectedEditorTable()
@@ -910,20 +1035,9 @@ const deleteSelectedEditorTable = () => {
   return true
 }
 
-const enhanceEditorTables = (root: HTMLElement) => {
-  root.querySelectorAll<HTMLElement>('.editor-table-select-handle').forEach((handle) => {
-    const table = handle.nextElementSibling as HTMLTableElement | null
-    if (!table || table.tagName.toLowerCase() !== 'table' || !root.contains(table)) handle.remove()
-  })
+const enhanceEditorTables = (_root: HTMLElement) => {
   getEditorTables().forEach((table) => {
     table.classList.add('editor-deletable-table')
-    if (table.previousElementSibling?.classList.contains('editor-table-select-handle')) return
-    const handle = document.createElement('button')
-    handle.type = 'button'
-    handle.className = 'editor-table-select-handle'
-    handle.setAttribute('contenteditable', 'false')
-    handle.setAttribute('aria-label', '选中表格，按 Delete 删除')
-    table.insertAdjacentElement('beforebegin', handle)
   })
 }
 
@@ -1345,7 +1459,11 @@ defineExpose({
   insertValue: (val: string) => {
     if (vditorInstance) {
       if (insertValueIntoCurrentTableCell(val)) return
-      vditorInstance.insertValue(val);
+      const nextValue = normalizeAttachmentInsertValue(val)
+      vditorInstance.insertValue(nextValue);
+      normalizeEditorAttachmentSource()
+      refreshAttachmentLinksFromEditor()
+      window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
       emit("update:modelValue", vditorInstance.getValue());
     }
   },
@@ -1425,17 +1543,6 @@ watch(() => props.theme, (newTheme) => {
   top: max(0px, env(safe-area-inset-top, 0px));
   right: max(0px, env(safe-area-inset-right, 0px));
   padding: 0 !important;
-}
-
-.noise-media-fancybox .fancybox__infobar {
-  top: max(0px, env(safe-area-inset-top, 0px));
-  left: max(0px, env(safe-area-inset-left, 0px));
-  padding: 7px 10px !important;
-  border-radius: 0 0 8px 0;
-  background: rgba(0, 0, 0, 0.54);
-  color: #fff;
-  font-size: 13px;
-  line-height: 1;
 }
 
 .noise-media-fancybox .fancybox__nav {
@@ -1831,48 +1938,54 @@ html.dark .vditor-reset table td {
   color: rgba(226, 232, 240, 0.96);
 }
 
-.editor-table-select-handle {
+.editor-table-delete-button {
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  margin: 2px 0 4px;
-  border: 1px solid rgba(251, 146, 60, 0.72);
-  border-radius: 6px;
-  background: rgba(251, 146, 60, 0.14);
-  color: #f97316;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid rgba(239, 68, 68, 0.72);
+  border-radius: 7px;
+  background: rgba(254, 242, 242, 0.96);
+  color: #dc2626;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 8px 20px rgba(127, 29, 29, 0.18);
   cursor: pointer;
-  vertical-align: top;
 }
 
-.editor-table-select-handle::before {
-  content: "";
-  width: 9px;
-  height: 9px;
-  border-top: 2px solid currentColor;
-  border-left: 2px solid currentColor;
-}
-
-.editor-table-select-handle:hover,
-.editor-table-select-handle:focus-visible {
+.editor-table-delete-button:hover,
+.editor-table-delete-button:focus-visible {
   outline: none;
-  background: rgba(251, 146, 60, 0.24);
-  border-color: rgba(251, 146, 60, 0.92);
+  background: #fee2e2;
+  border-color: rgba(220, 38, 38, 0.92);
+  color: #b91c1c;
 }
 
 .vditor-reset table.editor-table-selected {
-  outline: 2px solid rgba(251, 146, 60, 0.86);
+  outline: 2px solid rgba(239, 68, 68, 0.72);
   outline-offset: 2px;
 }
 
-html.dark .editor-table-select-handle {
-  background: rgba(251, 146, 60, 0.20);
+html.dark .editor-table-delete-button {
+  background: rgba(127, 29, 29, 0.92);
+  border-color: rgba(248, 113, 113, 0.78);
+  color: #fecaca;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.32);
+}
+
+html.dark .editor-table-delete-button:hover,
+html.dark .editor-table-delete-button:focus-visible {
+  background: rgba(153, 27, 27, 0.96);
+  border-color: rgba(252, 165, 165, 0.92);
+  color: #fff;
 }
 
 html.dark .vditor-reset table.editor-table-selected {
-  outline-color: rgba(251, 146, 60, 0.96);
+  outline-color: rgba(248, 113, 113, 0.88);
 }
 
 html.dark .vditor-hint {

@@ -337,10 +337,10 @@ assert(
     vditorEditor.includes("right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']") &&
     !vditorEditor.includes("right: ['slideshow', 'fullscreen', 'thumbs', 'close']") &&
     vditorEditor.includes('Html: {') &&
-    vditorEditor.includes('videoAutoplay: true') &&
+    vditorEditor.includes('videoAutoplay: false') &&
     vditorEditor.includes('getVideoFirstFrameThumbnail') &&
     vditorEditor.includes("await Promise.all(galleryItems.map((item) => getVideoFirstFrameThumbnail(item.url)))") &&
-    vditorEditor.includes("{ src: item.url, type: 'html5video', thumbSrc: videoThumbs[index] || item.url }") &&
+    vditorEditor.includes("return { src: item.url, type: 'html5video', thumbSrc: thumb, poster: thumb }") &&
     !vditorEditor.includes('caption: item.name') &&
     vditorEditor.includes('autoStart: true') &&
     vditorEditor.includes('Images: {') &&
@@ -355,7 +355,6 @@ assert(
     vditorEditor.includes('middle: []') &&
     vditorEditor.includes('top: max(0px, env(safe-area-inset-top, 0px));') &&
     vditorEditor.includes('right: max(0px, env(safe-area-inset-right, 0px));') &&
-    vditorEditor.includes('left: max(0px, env(safe-area-inset-left, 0px));') &&
     vditorEditor.includes('width: min(300px, 100%);') &&
     vditorEditor.includes('TABLE_SIZE_LIMIT = 10') &&
     vditorEditor.includes('Array.from({ length: TABLE_SIZE_LIMIT * TABLE_SIZE_LIMIT }') &&
@@ -376,9 +375,14 @@ assert(
     vditorEditor.includes('if (insertValueIntoCurrentTableCell(val)) return') &&
     vditorEditor.includes('enhanceEditorTables(root)') &&
     vditorEditor.includes('deleteSelectedEditorTable') &&
-    vditorEditor.includes("root.addEventListener('click', onTableHandleClick, true)") &&
-    vditorEditor.includes("root.addEventListener('keydown', onTableDeleteKeydown, true)") &&
-    vditorEditor.includes('.editor-table-select-handle') &&
+    vditorEditor.includes('showTableDeleteButton') &&
+    vditorEditor.includes('tableDeleteButtonStyle') &&
+    vditorEditor.includes("Teleport to=\"body\"") &&
+    vditorEditor.includes('editor-table-delete-button') &&
+    vditorEditor.includes('confirm(\'确定要删除该表格吗？\')') &&
+    vditorEditor.includes("root.addEventListener('pointermove', onTablePointerMove, true)") &&
+    vditorEditor.includes("root.addEventListener('pointerout', onTablePointerOut, true)") &&
+    !vditorEditor.includes('editor-table-select-handle') &&
     vditorEditor.includes('.vditor-reset table.editor-table-selected') &&
     markdownRenderer.includes('.markdown-preview :deep(.noise-attachment-audio)') &&
     markdownRenderer.includes('.markdown-preview :deep(.noise-attachment-audio--table)') &&
@@ -389,15 +393,20 @@ assert(
     messageList.includes("left: ['infobar']") &&
     messageList.includes("right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']") &&
     messageList.includes('Images: {') &&
-    messageList.includes('Html: { videoAutoplay: true }') &&
+    messageList.includes('Html: { videoAutoplay: false }') &&
     messageList.includes("Thumbs: { type: 'classic', autoStart: true }") &&
     !/\bImage:\s*\{/.test(messageList) &&
     !messageList.includes('window.Fancybox.destroy()') &&
     messageList.includes(':deep(.noise-media-fancybox .fancybox__toolbar)') &&
-    messageList.includes(':deep(.noise-media-fancybox .fancybox__infobar)') &&
+    !messageList.includes(':deep(.noise-media-fancybox .fancybox__infobar)') &&
     vditorEditor.includes('collapseIrAttachmentChrome') &&
     vditorEditor.includes('scheduleCollapseIrAttachmentChrome') &&
     vditorEditor.includes('scheduleRefreshAttachmentLinks') &&
+    vditorEditor.includes('normalizeAttachmentInsertValue') &&
+    vditorEditor.includes('normalizeEditorAttachmentSource') &&
+    vditorEditor.includes('normalizeAdjacentAttachmentMarkers') &&
+    vditorEditor.includes('ADJACENT_ATTACHMENT_MARKER_RE') &&
+    vditorEditor.includes("return `\\n\\n${normalized}\\n\\n`") &&
     vditorEditor.includes("marker.setAttribute('contenteditable', 'false')") &&
     vditorEditor.includes('onPlainTextEnterKeydown') &&
     vditorEditor.includes("document.createTextNode('\\n')") &&
@@ -410,7 +419,7 @@ assert(
     markdownRenderer.includes('Fancybox.bind(root, \'[data-fancybox]\'') &&
     markdownRenderer.includes("right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']") &&
     markdownRenderer.includes("mainClass: 'noise-media-fancybox'") &&
-    markdownRenderer.includes('Html: { videoAutoplay: true }') &&
+    markdownRenderer.includes('Html: { videoAutoplay: false }') &&
     markdownRenderer.includes("Thumbs: { type: 'classic', autoStart: true }") &&
     markdownRenderer.includes("video.dataset.type = 'html5video'") &&
     !markdownRenderer.includes("video.dataset.type = 'video'") &&

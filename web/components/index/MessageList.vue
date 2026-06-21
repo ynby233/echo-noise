@@ -1379,7 +1379,7 @@ const initFancybox = () => {
         click: true,
         wheel: "slide",
       },
-      Html: { videoAutoplay: true },
+      Html: { videoAutoplay: false },
       Thumbs: { type: 'classic', autoStart: true },
       compact: false,
       placeFocusBack: false,
@@ -3665,17 +3665,6 @@ onMounted(() => {
   top: max(0px, env(safe-area-inset-top, 0px));
   right: max(0px, env(safe-area-inset-right, 0px));
   padding: 0 !important;
-}
-
-:deep(.noise-media-fancybox .fancybox__infobar) {
-  top: max(0px, env(safe-area-inset-top, 0px));
-  left: max(0px, env(safe-area-inset-left, 0px));
-  padding: 7px 10px !important;
-  border-radius: 0 0 8px 0;
-  background: rgba(0, 0, 0, 0.54);
-  color: #fff;
-  font-size: 13px;
-  line-height: 1;
 }
 
 :deep(.noise-media-fancybox .fancybox__caption) {
