@@ -25,6 +25,17 @@ const infoFeedList = read('components/index/InfoFeedList.vue')
 const markdownRenderer = read('components/index/MarkdownRenderer.vue')
 const mediaUpload = read('utils/media-upload.ts')
 const floatingCss = read('assets/css/tailwind.css')
+const backendRouter = read('../internal/routers/routers.go')
+
+assert(
+  addForm.includes('.editor-toolbar') &&
+    addForm.includes('position: relative;') &&
+    !addForm.includes('position: sticky; bottom: 0;') &&
+    backendRouter.includes('filePath := filepath.Join("./public", strings.TrimPrefix(cleanPath, "/"))') &&
+    backendRouter.includes('c.File("./public/index.html")') &&
+    !backendRouter.includes('static.Serve("/", static.LocalFile("./public", true))'),
+  'publish toolbar must stay in normal flow after editor resize, and backend static serving must not intercept SPA refresh fallback'
+)
 
 assert(
   addForm.includes("class=\"publish-time-option\"") &&
@@ -293,7 +304,8 @@ assert(
     mediaUpload.includes("createAttachmentMarkdown('audio', url, name)") &&
     markdownRenderer.includes('const ATTACHMENT_LINK_REG = /\\[(图片附件|视频附件|音频附件)：([^\\]]+)\\]\\(([^)\\s]+)\\)/g') &&
     markdownRenderer.includes('buildAttachmentHtml(kindLabel, name, url)') &&
-    markdownRenderer.includes('noise-attachment-render--audio') &&
+    markdownRenderer.includes('noise-attachment-audio') &&
+    !markdownRenderer.includes('noise-attachment-render--audio') &&
     markdownRenderer.includes('noise-attachment-render--video') &&
     markdownRenderer.includes('noise-attachment-paragraph') &&
     markdownRenderer.includes('noise-attachment-image') &&
@@ -329,16 +341,22 @@ assert(
     vditorEditor.includes('width: min(300px, 100%);') &&
     vditorEditor.includes('TABLE_SIZE_LIMIT = 10') &&
     vditorEditor.includes('Array.from({ length: TABLE_SIZE_LIMIT * TABLE_SIZE_LIMIT }') &&
+    vditorEditor.includes("positionFloatingMenu(tableTrigger.value, tableMenuRef.value, tableMenuStyle, 284, 'above-align-left')") &&
+    vditorEditor.includes('width: 284px !important;') &&
+    vditorEditor.includes('grid-template-columns: repeat(10, 24px);') &&
+    vditorEditor.includes("const header = Array.from({ length: colCount }, () => ' ')") &&
+    !vditorEditor.includes('`列 ${index + 1}`') &&
     vditorEditor.includes('getCurrentEditorTableCell') &&
     vditorEditor.includes('normalizeTableCellInsertion') &&
     vditorEditor.includes('insertValueIntoCurrentTableCell') &&
     vditorEditor.includes("range.insertNode(textNode)") &&
     vditorEditor.includes("inputType: 'insertText'") &&
     vditorEditor.includes('if (insertValueIntoCurrentTableCell(val)) return') &&
-    markdownRenderer.includes('.markdown-preview :deep(.noise-attachment-render--audio)') &&
-    markdownRenderer.includes('display: inline-flex;') &&
+    markdownRenderer.includes('.markdown-preview :deep(.noise-attachment-audio)') &&
+    markdownRenderer.includes('.markdown-preview :deep(.noise-attachment-audio--table)') &&
+    markdownRenderer.includes('width: min(300px, 100%) !important;') &&
     markdownRenderer.includes('max-width: 300px;') &&
-    markdownRenderer.includes('min-width: 220px;') &&
+    markdownRenderer.includes('min-width: min(220px, 100%);') &&
     messageList.includes("mainClass: 'noise-media-fancybox'") &&
     messageList.includes("left: ['infobar']") &&
     messageList.includes("right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']") &&
@@ -349,8 +367,9 @@ assert(
     vditorEditor.includes('scheduleRefreshAttachmentLinks') &&
     vditorEditor.includes("marker.setAttribute('contenteditable', 'false')") &&
     vditorEditor.includes('onPlainTextEnterKeydown') &&
-    vditorEditor.includes("document.execCommand('insertLineBreak')") &&
-    vditorEditor.includes("inputType: 'insertLineBreak'") &&
+    vditorEditor.includes("document.createTextNode('\\n')") &&
+    !vditorEditor.includes("document.execCommand('insertLineBreak')") &&
+    !vditorEditor.includes("inputType: 'insertLineBreak'") &&
     vditorEditor.includes("marker.classList.remove('vditor-ir__node--expand')") &&
     vditorEditor.includes('previewObserver.observe(root, { childList: true, subtree: true })') &&
     !vditorEditor.includes('characterData: true') &&

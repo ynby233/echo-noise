@@ -551,11 +551,23 @@ const setupAttachmentPreview = () => {
       inserted = false
     }
     if (!inserted) {
-      try { document.execCommand('insertLineBreak') } catch {}
+      const selection = window.getSelection()
+      if (selection?.rangeCount) {
+        const range = selection.getRangeAt(0)
+        range.deleteContents()
+        const lineBreak = document.createTextNode('\n')
+        range.insertNode(lineBreak)
+        range.setStartAfter(lineBreak)
+        range.collapse(true)
+        selection.removeAllRanges()
+        selection.addRange(range)
+        inserted = true
+      }
     }
+    if (!inserted) return
     const target = getEventElement(event)
     const editable = target?.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset') as HTMLElement | null
-    editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertLineBreak', data: '\n' }))
+    editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '\n' }))
     scheduleRefreshAttachmentLinks()
     window.setTimeout(() => {
       if (vditorInstance?.getValue) emit('update:modelValue', vditorInstance.getValue())
@@ -704,7 +716,7 @@ const closeHeadingMenu = () => {
 }
 
 const positionTableMenu = () => {
-  positionFloatingMenu(tableTrigger.value, tableMenuRef.value, tableMenuStyle, 196, 'above-align-left')
+  positionFloatingMenu(tableTrigger.value, tableMenuRef.value, tableMenuStyle, 284, 'above-align-left')
 }
 
 const closeTableMenu = () => {
@@ -724,7 +736,7 @@ const previewTableSize = (rows: number, cols: number) => {
 const buildMarkdownTable = (rows: number, cols: number) => {
   const rowCount = clampTableSize(rows)
   const colCount = clampTableSize(cols)
-  const header = Array.from({ length: colCount }, (_, index) => `列 ${index + 1}`)
+  const header = Array.from({ length: colCount }, () => ' ')
   const divider = Array.from({ length: colCount }, () => '---')
   const bodyRows = Array.from({ length: Math.max(1, rowCount - 1) }, () => Array.from({ length: colCount }, () => ' '))
   const formatRow = (cells: string[]) => `| ${cells.join(' | ')} |`
@@ -1658,11 +1670,11 @@ html.dark .vditor-hint {
   z-index: 5004 !important;
   box-sizing: border-box;
   display: grid !important;
-  gap: 8px !important;
-  width: 196px !important;
-  min-width: 196px !important;
-  max-width: min(196px, calc(100vw - 16px)) !important;
-  padding: 10px !important;
+  gap: 10px !important;
+  width: 284px !important;
+  min-width: 284px !important;
+  max-width: min(284px, calc(100vw - 16px)) !important;
+  padding: 12px !important;
   border: 1px solid var(--nw-floating-border) !important;
   border-radius: 12px !important;
   background: var(--nw-floating-bg) !important;
@@ -1732,16 +1744,16 @@ html.dark .vditor-hint {
 
 .table-size-grid {
   display: grid;
-  grid-template-columns: repeat(10, 18px);
-  gap: 5px;
+  grid-template-columns: repeat(10, 24px);
+  gap: 4px;
   justify-content: center;
 }
 
 .table-size-cell {
-  width: 18px;
-  height: 18px;
-  min-width: 18px;
-  border-radius: 5px !important;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border-radius: 6px !important;
   padding: 0 !important;
 }
 

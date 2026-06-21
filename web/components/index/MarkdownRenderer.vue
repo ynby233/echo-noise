@@ -832,7 +832,7 @@ const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string, co
     if (kindLabel === '视频附件') {
       return `<span class="${baseClass} noise-attachment-render--video"><video src="${safeUrl}" controls preload="metadata"></video></span>`
     }
-    return `<span class="${baseClass} noise-attachment-render--audio"><audio src="${safeUrl}" controls preload="metadata"></audio></span>`
+    return `<audio class="noise-attachment-audio noise-attachment-audio--table" src="${safeUrl}" controls preload="metadata"></audio>`
   }
   if (kindLabel === '图片附件') {
     return `<p class="noise-attachment-paragraph"><img class="noise-attachment-image" src="${safeUrl}" alt="${safeName}" loading="lazy" decoding="async" /></p>`
@@ -840,7 +840,7 @@ const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string, co
   if (kindLabel === '视频附件') {
     return `<div class="noise-attachment-render noise-attachment-render--video"><video src="${safeUrl}" controls preload="metadata" style="width:100%;height:auto"></video></div>`
   }
-  return `<div class="noise-attachment-render noise-attachment-render--audio"><audio src="${safeUrl}" controls preload="metadata"></audio></div>`
+  return `<audio class="noise-attachment-audio" src="${safeUrl}" controls preload="metadata"></audio>`
 }
 
 const attachmentInfoFromRenderedAnchor = (anchor: HTMLAnchorElement) => {
@@ -1771,19 +1771,20 @@ watch(() => props.enableGithubCard, () => {
   border-radius: 8px;
 }
 
-.markdown-preview :deep(.noise-attachment-render--audio) {
-  display: inline-flex;
-  width: fit-content;
-  max-width: 100%;
-  vertical-align: middle;
+.markdown-preview :deep(.noise-attachment-audio) {
+  display: block;
+  width: min(300px, 100%) !important;
+  max-width: 300px;
+  min-width: min(220px, 100%);
+  margin: 0.35em 0;
 }
 
-.markdown-preview :deep(.noise-attachment-render--audio audio) {
-  display: block;
-  width: min(300px, 100%);
-  max-width: 300px;
-  min-width: 220px;
-  margin: 0;
+.markdown-preview :deep(.noise-attachment-audio--table) {
+  display: inline-block;
+  width: min(260px, 100%) !important;
+  max-width: 260px;
+  margin: 2px 0;
+  vertical-align: middle;
 }
 
 .markdown-preview :deep(.noise-attachment-render--video video) {

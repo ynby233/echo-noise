@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/gin-contrib/cors"
-	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/config"
 	"github.com/rcy1314/echo-noise/internal/controllers"
@@ -361,8 +360,6 @@ func SetupRouter() *gin.Engine {
 	r.GET("/manifest.webmanifest", controllers.GetWebManifest)
 	r.GET("/api/manifest", controllers.GetWebManifest)
 
-	// 使用静态中间件托管根目录，支持 SPA Fallback
-	r.Use(static.Serve("/", static.LocalFile("./public", true)))
 	// 显式映射 Nuxt 资源目录和常用静态
 	r.Static("/_nuxt", "./public/_nuxt")
 	r.Static("/assets", "./public/assets")
@@ -385,6 +382,30 @@ func SetupRouter() *gin.Engine {
 			// Service Worker 需避免长缓存，确保更新及时生效
 			c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
 		}
+	})
+
+	r.Use(func(c *gin.Context) {
+		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
+			c.Next()
+			return
+		}
+		p := c.Request.URL.Path
+		if p == "/" || p == "/api" || strings.HasPrefix(p, "/api/") {
+			c.Next()
+			return
+		}
+		cleanPath := filepath.Clean("/" + p)
+		if cleanPath == "/" || strings.Contains(cleanPath, "..") {
+			c.Next()
+			return
+		}
+		filePath := filepath.Join("./public", strings.TrimPrefix(cleanPath, "/"))
+		if info, err := os.Stat(filePath); err == nil && !info.IsDir() {
+			c.File(filePath)
+			c.Abort()
+			return
+		}
+		c.Next()
 	})
 
 	r.NoRoute(func(c *gin.Context) {
