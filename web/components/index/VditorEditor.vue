@@ -97,6 +97,8 @@ let fixedCleanup: (() => void) | null = null;
 let panelCleanup: (() => void) | null = null;
 let imagePreviewCleanup: (() => void) | null = null;
 let attachmentPreviewCleanup: (() => void) | null = null;
+let refreshAttachmentLinksFromEditor: () => void = () => {};
+let lastEditorSelectionRange: Range | null = null;
 const isReady = ref(false);
 const showHeadingMenu = ref(false);
 const headingMenuRef = ref<HTMLElement | null>(null);
@@ -109,9 +111,10 @@ const tableMenuRef = ref<HTMLElement | null>(null);
 const tableMenuStyle = ref<Record<string, string>>({});
 const tableTrigger = ref<HTMLElement | null>(null);
 const nativeTablePanel = ref<HTMLElement | null>(null);
+const TABLE_SIZE_LIMIT = 10
 const tableRows = ref(3);
 const tableCols = ref(3);
-const tableGridCells = Array.from({ length: 36 }, (_, index) => ({ row: Math.floor(index / 6) + 1, col: (index % 6) + 1 }));
+const tableGridCells = Array.from({ length: TABLE_SIZE_LIMIT * TABLE_SIZE_LIMIT }, (_, index) => ({ row: Math.floor(index / TABLE_SIZE_LIMIT) + 1, col: (index % TABLE_SIZE_LIMIT) + 1 }));
 const headingOptions = [
   { tag: 'h1', value: '# ', label: '一级标题 <Alt+Ctrl+1>' },
   { tag: 'h2', value: '## ', label: '二级标题 <Alt+Ctrl+2>' },
@@ -216,7 +219,7 @@ const getAttachmentVideoFancyboxOptions = (startIndex = 0) => ({
   Toolbar: {
     enabled: true,
     display: {
-      left: [],
+      left: ['infobar'],
       middle: [],
       right: ['close']
     }
@@ -302,6 +305,33 @@ const setupAttachmentPreview = () => {
     const target = event.target as Node | null
     if (target instanceof Element) return target
     return target?.parentElement || null
+  }
+
+  const captureEditorSelection = () => {
+    if (typeof window === 'undefined') return
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return
+    const range = selection.getRangeAt(0)
+    const node = range.commonAncestorContainer
+    const element = node instanceof Element ? node : node.parentElement
+    if (!element || !root.contains(element)) return
+    if (!element.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset')) return
+    lastEditorSelectionRange = range.cloneRange()
+  }
+
+  const onEditorSelectionChange = () => {
+    captureEditorSelection()
+    scheduleCollapseIrAttachmentChrome()
+  }
+
+  const onEditorSelectionEvent = () => {
+    captureEditorSelection()
+    scheduleCollapseIrAttachmentChrome()
+  }
+
+  const onEditorInput = () => {
+    captureEditorSelection()
+    scheduleRefreshAttachmentLinks()
   }
 
   const refreshAttachmentLinks = () => {
@@ -514,10 +544,18 @@ const setupAttachmentPreview = () => {
     event.stopPropagation()
     ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
     moveCaretAfterAtomicAttachment()
-    document.execCommand('insertLineBreak')
+    let inserted = false
+    try {
+      inserted = document.execCommand('insertText', false, '\n')
+    } catch {
+      inserted = false
+    }
+    if (!inserted) {
+      try { document.execCommand('insertLineBreak') } catch {}
+    }
     const target = getEventElement(event)
     const editable = target?.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset') as HTMLElement | null
-    editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertLineBreak' }))
+    editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertLineBreak', data: '\n' }))
     scheduleRefreshAttachmentLinks()
     window.setTimeout(() => {
       if (vditorInstance?.getValue) emit('update:modelValue', vditorInstance.getValue())
@@ -549,14 +587,15 @@ const setupAttachmentPreview = () => {
       refreshAttachmentLinks()
     })
   }
+  refreshAttachmentLinksFromEditor = scheduleRefreshAttachmentLinks
 
   refreshAttachmentLinks()
   const previewObserver = new MutationObserver(() => scheduleRefreshAttachmentLinks())
   previewObserver.observe(root, { childList: true, subtree: true })
-  root.addEventListener('input', scheduleRefreshAttachmentLinks, true)
-  root.addEventListener('mouseup', scheduleCollapseIrAttachmentChrome, true)
-  root.addEventListener('keyup', scheduleCollapseIrAttachmentChrome, true)
-  document.addEventListener('selectionchange', scheduleCollapseIrAttachmentChrome, true)
+  root.addEventListener('input', onEditorInput, true)
+  root.addEventListener('mouseup', onEditorSelectionEvent, true)
+  root.addEventListener('keyup', onEditorSelectionEvent, true)
+  document.addEventListener('selectionchange', onEditorSelectionChange, true)
   root.addEventListener('pointerdown', preventAttachmentNavigation, true)
   root.addEventListener('mousedown', preventAttachmentNavigation, true)
   root.addEventListener('click', onAttachmentClick, true)
@@ -565,10 +604,10 @@ const setupAttachmentPreview = () => {
   root.addEventListener('keydown', onAttachmentKeydown, true)
   attachmentPreviewCleanup = () => {
     previewObserver.disconnect()
-    root.removeEventListener('input', scheduleRefreshAttachmentLinks, true)
-    root.removeEventListener('mouseup', scheduleCollapseIrAttachmentChrome, true)
-    root.removeEventListener('keyup', scheduleCollapseIrAttachmentChrome, true)
-    document.removeEventListener('selectionchange', scheduleCollapseIrAttachmentChrome, true)
+    root.removeEventListener('input', onEditorInput, true)
+    root.removeEventListener('mouseup', onEditorSelectionEvent, true)
+    root.removeEventListener('keyup', onEditorSelectionEvent, true)
+    document.removeEventListener('selectionchange', onEditorSelectionChange, true)
     root.removeEventListener('pointerdown', preventAttachmentNavigation, true)
     root.removeEventListener('mousedown', preventAttachmentNavigation, true)
     root.removeEventListener('click', onAttachmentClick, true)
@@ -576,6 +615,7 @@ const setupAttachmentPreview = () => {
     root.removeEventListener('beforeinput', onEditorBeforeInput as EventListener, true)
     root.removeEventListener('keydown', onAttachmentKeydown, true)
     root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
+    refreshAttachmentLinksFromEditor = () => {}
     attachmentPreviewCleanup = null
   }
 }
@@ -673,7 +713,7 @@ const closeTableMenu = () => {
   if (nativeTablePanel.value) nativeTablePanel.value.style.display = 'none'
 }
 
-const clampTableSize = (value: number) => Math.min(6, Math.max(1, Number(value) || 1))
+const clampTableSize = (value: number) => Math.min(TABLE_SIZE_LIMIT, Math.max(1, Number(value) || 1))
 const adjustTableRows = (delta: number) => { tableRows.value = clampTableSize(tableRows.value + delta) }
 const adjustTableCols = (delta: number) => { tableCols.value = clampTableSize(tableCols.value + delta) }
 const previewTableSize = (rows: number, cols: number) => {
@@ -1028,6 +1068,84 @@ onBeforeUnmount(() => {
   }
 });
 
+const getEditorTableCellFromRange = (range: Range | null) => {
+  if (!range || !editorContainer.value) return null as HTMLTableCellElement | null
+  const node = range.commonAncestorContainer
+  const element = node instanceof Element ? node : node.parentElement
+  const cell = element?.closest?.('td,th') as HTMLTableCellElement | null
+  if (!cell || !editorContainer.value.contains(cell)) return null
+  if (cell.closest('.vditor-ir table, .vditor-wysiwyg table, .vditor-reset table')) return cell
+  return null
+}
+
+const getCurrentEditorTableCell = () => {
+  if (typeof window === 'undefined') return null as HTMLTableCellElement | null
+  const selection = window.getSelection()
+  const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
+  return getEditorTableCellFromRange(range)
+}
+
+const restoreLastEditorSelection = () => {
+  if (typeof window === 'undefined' || !lastEditorSelectionRange || !editorContainer.value) return false
+  const cell = getEditorTableCellFromRange(lastEditorSelectionRange)
+  if (!cell) return false
+  const selection = window.getSelection()
+  if (!selection) return false
+  try {
+    selection.removeAllRanges()
+    selection.addRange(lastEditorSelectionRange.cloneRange())
+    return true
+  } catch {
+    return false
+  }
+}
+
+const normalizeTableCellInsertion = (value: string) => String(value || '')
+  .replace(/\r?\n+/g, ' ')
+  .replace(/\|/g, '\\|')
+  .trim()
+
+const insertValueIntoCurrentTableCell = (value: string) => {
+  if (!vditorInstance) return false
+  const text = normalizeTableCellInsertion(value)
+  if (!text) return false
+  let cell = getCurrentEditorTableCell()
+  if (!cell && restoreLastEditorSelection()) {
+    cell = getCurrentEditorTableCell()
+  }
+  if (!cell) return false
+  const selection = window.getSelection()
+  if (!selection || selection.rangeCount === 0) return false
+  const currentRange = selection.getRangeAt(0)
+  const rangeRoot = currentRange.commonAncestorContainer instanceof Element
+    ? currentRange.commonAncestorContainer
+    : currentRange.commonAncestorContainer.parentElement
+  if (!rangeRoot || !cell.contains(rangeRoot)) return false
+  let inserted = false
+  try {
+    inserted = document.execCommand('insertText', false, text)
+  } catch {
+    inserted = false
+  }
+  if (!inserted) {
+    const range = selection.getRangeAt(0)
+    range.deleteContents()
+    const textNode = document.createTextNode(text)
+    range.insertNode(textNode)
+    range.setStartAfter(textNode)
+    range.collapse(true)
+    selection.removeAllRanges()
+    selection.addRange(range)
+  }
+  const editable = cell.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset') as HTMLElement | null
+  editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }))
+  const updatedSelection = window.getSelection()
+  if (updatedSelection && updatedSelection.rangeCount > 0) lastEditorSelectionRange = updatedSelection.getRangeAt(0).cloneRange()
+  refreshAttachmentLinksFromEditor()
+  window.setTimeout(() => emit("update:modelValue", vditorInstance?.getValue?.() || ''), 0)
+  return true
+}
+
 defineExpose({
   clear: () => {
     if (vditorInstance) {
@@ -1037,6 +1155,7 @@ defineExpose({
   },
   insertValue: (val: string) => {
     if (vditorInstance) {
+      if (insertValueIntoCurrentTableCell(val)) return
       vditorInstance.insertValue(val);
       emit("update:modelValue", vditorInstance.getValue());
     }
@@ -1115,8 +1234,21 @@ watch(() => props.theme, (newTheme) => {
 .editor-attachment-video-fancybox .fancybox__toolbar {
   --f-button-width: 42px;
   --f-button-height: 42px;
-  top: max(12px, env(safe-area-inset-top, 0px));
-  right: max(12px, env(safe-area-inset-right, 0px));
+  top: max(0px, env(safe-area-inset-top, 0px));
+  right: max(0px, env(safe-area-inset-right, 0px));
+  padding: 0 !important;
+}
+
+.editor-attachment-image-fancybox .fancybox__infobar,
+.editor-attachment-video-fancybox .fancybox__infobar {
+  top: max(0px, env(safe-area-inset-top, 0px));
+  left: max(0px, env(safe-area-inset-left, 0px));
+  padding: 7px 10px !important;
+  border-radius: 0 0 8px 0;
+  background: rgba(0, 0, 0, 0.54);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
 }
 
 .editor-attachment-image-fancybox .fancybox__nav,
@@ -1168,8 +1300,7 @@ watch(() => props.theme, (newTheme) => {
 }
 
 .editor-attachment-preview img,
-.editor-attachment-preview video,
-.editor-attachment-preview audio {
+.editor-attachment-preview video {
   display: block;
   width: 100%;
   max-width: 100%;
@@ -1181,6 +1312,9 @@ watch(() => props.theme, (newTheme) => {
 }
 
 .editor-attachment-preview audio {
+  display: block;
+  width: min(300px, 100%);
+  max-width: 100%;
   margin: 0;
 }
 
@@ -1598,15 +1732,15 @@ html.dark .vditor-hint {
 
 .table-size-grid {
   display: grid;
-  grid-template-columns: repeat(6, 22px);
+  grid-template-columns: repeat(10, 18px);
   gap: 5px;
   justify-content: center;
 }
 
 .table-size-cell {
-  width: 22px;
-  height: 22px;
-  min-width: 22px;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
   border-radius: 5px !important;
   padding: 0 !important;
 }

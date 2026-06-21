@@ -209,7 +209,7 @@ assert(
     messageList.includes('.search-results-panel.is-dark .search-results-back {') &&
     messageList.includes('--nw-action-bg: rgba(51, 65, 85, .96);') &&
     messageList.includes('.search-results-list > .w-full,') &&
-    messageList.includes('.search-results-list > .w-full > .p-0 {') &&
+    !messageList.includes('max-width: none !important;') &&
     messageList.includes('overflow: visible !important;') &&
     messageList.includes('.search-results-list > .w-full > .p-0 > .content-container {') &&
     messageList.includes('.search-results-panel.is-dark .search-results-list > .w-full > .p-0 > .content-container.content-container {') &&
@@ -323,6 +323,27 @@ assert(
     vditorEditor.includes('closeButton: false') &&
     vditorEditor.includes('middle: []') &&
     vditorEditor.includes("right: ['close']") &&
+    vditorEditor.includes('top: max(0px, env(safe-area-inset-top, 0px));') &&
+    vditorEditor.includes('right: max(0px, env(safe-area-inset-right, 0px));') &&
+    vditorEditor.includes('left: max(0px, env(safe-area-inset-left, 0px));') &&
+    vditorEditor.includes('width: min(300px, 100%);') &&
+    vditorEditor.includes('TABLE_SIZE_LIMIT = 10') &&
+    vditorEditor.includes('Array.from({ length: TABLE_SIZE_LIMIT * TABLE_SIZE_LIMIT }') &&
+    vditorEditor.includes('getCurrentEditorTableCell') &&
+    vditorEditor.includes('normalizeTableCellInsertion') &&
+    vditorEditor.includes('insertValueIntoCurrentTableCell') &&
+    vditorEditor.includes("range.insertNode(textNode)") &&
+    vditorEditor.includes("inputType: 'insertText'") &&
+    vditorEditor.includes('if (insertValueIntoCurrentTableCell(val)) return') &&
+    markdownRenderer.includes('.markdown-preview :deep(.noise-attachment-render--audio)') &&
+    markdownRenderer.includes('display: inline-flex;') &&
+    markdownRenderer.includes('max-width: 300px;') &&
+    markdownRenderer.includes('min-width: 220px;') &&
+    messageList.includes("mainClass: 'noise-media-fancybox'") &&
+    messageList.includes("left: ['infobar']") &&
+    messageList.includes("right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']") &&
+    messageList.includes(':deep(.noise-media-fancybox .fancybox__toolbar)') &&
+    messageList.includes(':deep(.noise-media-fancybox .fancybox__infobar)') &&
     vditorEditor.includes('collapseIrAttachmentChrome') &&
     vditorEditor.includes('scheduleCollapseIrAttachmentChrome') &&
     vditorEditor.includes('scheduleRefreshAttachmentLinks') &&
@@ -341,7 +362,7 @@ assert(
     vditorEditor.includes('stopImmediatePropagation') &&
     vditorEditor.includes("root.addEventListener('pointerdown', preventAttachmentNavigation, true)") &&
     vditorEditor.includes("root.addEventListener('mousedown', preventAttachmentNavigation, true)") &&
-    vditorEditor.includes("document.addEventListener('selectionchange', scheduleCollapseIrAttachmentChrome, true)") &&
+    vditorEditor.includes("document.addEventListener('selectionchange', onEditorSelectionChange, true)") &&
     vditorEditor.includes("root.addEventListener('keydown', onPlainTextEnterKeydown, true)") &&
     vditorEditor.includes("root.addEventListener('keydown', onAttachmentKeydown, true)") &&
     vditorEditor.includes('.editor-attachment-node .vditor-ir__marker--link') &&
@@ -366,13 +387,17 @@ assert(
 )
 
 assert(
-  messageList.includes("el.querySelectorAll('img, video, audio')") &&
+  messageList.includes("const measureEl = (el.querySelector('.markdown-preview') as HTMLElement | null) || el;") &&
+    messageList.includes("measureEl.querySelectorAll('img, video, audio')") &&
     messageList.includes("item.addEventListener('loadedmetadata', schedule)") &&
     messageList.includes("item.addEventListener('loadeddata', schedule)") &&
     messageList.includes("item.addEventListener('canplay', schedule)") &&
-    messageList.includes('setTimeout(() => deferMeasure(), 420)') &&
-    messageList.includes('new ResizeObserver(() => deferMeasure())'),
-  'message expand measurement must re-check after image/video/audio media metadata and content resize events so media attachments do not hide later content without an expand button'
+    messageList.includes('const schedule = () => deferMeasure();') &&
+    messageList.includes('new ResizeObserver(() => deferMeasure())') &&
+    messageList.includes('measuredMessageHeights') &&
+    messageList.includes('const needsExpand = fullHeight > 708;') &&
+    !messageList.includes('setTimeout(() => deferMeasure(), 420)'),
+  'message expand measurement must observe rendered markdown content and re-check media metadata without threshold-edge layout churn'
 )
 
 assert(
@@ -439,10 +464,46 @@ assert(
 )
 
 assert(
+  markdownRenderer.includes('const updateTaskListContent = (content: string, taskIndex: number, checked: boolean) => {') &&
+    markdownRenderer.includes('const persistTaskListChange = async (input: HTMLInputElement, taskIndex: number, checked: boolean) => {') &&
+    markdownRenderer.includes('const response = await messageStore.updateMessage(Number(props.messageId), nextContent)') &&
+    markdownRenderer.includes('if (!response) throw new Error') &&
+    markdownRenderer.includes('input.disabled = !props.taskListEditable') &&
+    markdownRenderer.includes("input.style.pointerEvents = props.taskListEditable ? 'auto' : 'none'") &&
+    messageList.includes(':task-list-editable="canEditMessageTasks(msg)"') &&
+    messageList.includes(':message-id="Number(msg.id)"') &&
+    messageList.includes('const canEditMessageTasks = (msg: any) =>') &&
+    messageList.includes('userStore.isLogin && (currentUserIsAdmin.value || isCurrentUserMessage(msg))'),
+  'published markdown task lists must persist checkbox changes through the message update API and only allow authors/admins to interact'
+)
+
+assert(
+  messageList.includes('const result = await fetchListPage(pageQueryFor(targetPage));') &&
+    !messageList.includes('listRefreshController') &&
+    !messageList.includes('message.getMessages(pageQueryFor('),
+  'message pagination must reuse the unified page loader and must not keep stale local AbortController references'
+)
+
+assert(
+  homePage.includes('transition: background-color .15s ease, border-color .15s ease, color .15s ease;') &&
+    homePage.includes('.auth-btn:hover { background: transparent !important; transform: none !important; }') &&
+    homePage.includes('.avatar-lg:hover { transform: none; }') &&
+    homePage.includes('.social-item:hover { transform: none; transition: none; }') &&
+    homePage.includes('.right-col :where(.avatar-lg, .auth-btn, .social-item, .calendar-card button, .recommend-image-box, .ad-image)') &&
+    homePage.includes('.right-col :deep(*:hover),') &&
+    homePage.includes('transition-property: background-color, border-color, color, opacity, box-shadow, filter !important;') &&
+    infoFeedList.includes('.expand-toggle-btn:hover {\n  transform: none;\n}') &&
+    !homePage.includes('transform: scale(1.02);') &&
+    !homePage.includes('transform: translateY(-1px);'),
+  'right sidebar and info-feed hover states must not resize elements after calendar filtering or feed measurement'
+)
+
+assert(
   messageStore.includes('const currentListQueryKey = ref("")') &&
     messageStore.includes('const listQueryKey = (query: PageQuery) => JSON.stringify({') &&
-    messageStore.includes('currentListQueryKey.value = listQueryKey(query);') &&
-    messageStore.includes('currentListQueryKey,') &&
+    messageStore.includes('const requestListKey = listQueryKey(query);') &&
+    messageStore.includes('currentListQueryKey.value = requestListKey;') &&
+    messageStore.includes('messages.value = response.data.items;') &&
     messageStore.includes('listQueryKey,'),
   'message store must expose the active list query key so filtered views can hide stale results while a new query is loading'
 )

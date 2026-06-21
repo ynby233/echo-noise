@@ -93,7 +93,15 @@
               <div v-if="msg.image_url && msg.content" class="border-t border-gray-600 my-2"></div>
               <!-- 文本内容区域 -->
               <div class="overflow-y-hidden relative" :class="[{ 'max-h-[700px]': !isExpanded[msg.id] && !hasGrid[msg.id] }, listThemeTextClass]" :style="contentStyle(idx)">
-                <MarkdownRenderer :content="msg.content" :enableGithubCard="siteConfig?.enableGithubCard === true" @tagClick="handleTagClick" @rendered="checkContentHeight" link-target="_blank"/>
+                <MarkdownRenderer
+                  :content="msg.content"
+                  :enableGithubCard="siteConfig?.enableGithubCard === true"
+                  :message-id="Number(msg.id)"
+                  :task-list-editable="canEditMessageTasks(msg)"
+                  @tagClick="handleTagClick"
+                  @rendered="checkContentHeight"
+                  link-target="_blank"
+                />
                 <div v-if="shouldShowExpandButton[msg.id] && !isExpanded[msg.id]"
     :class="['absolute bottom-0 left-0 right-0 h-14 bg-gradient-to-t backdrop-blur-sm pointer-events-none content-fade-mask', gradientClass]" style="z-index:20"></div>
               </div>
@@ -714,8 +722,14 @@ onMounted(() => {
 onBeforeUnmount(() => { try { io && io.disconnect() } catch {} })
 onBeforeUnmount(() => {
   listRefreshSeq += 1
-  try { listRefreshController?.abort() } catch {}
-  listRefreshController = null
+  if (measureFrame !== null) {
+    cancelAnimationFrame(measureFrame)
+    measureFrame = null
+  }
+  if (measureTimer !== null) {
+    clearTimeout(measureTimer)
+    measureTimer = null
+  }
 })
 const like = async (id: number) => {
   if (!isLogin.value) {
@@ -784,16 +798,12 @@ const jumpToPage = async () => {
 
   try {
     const scrollSnapshot = captureAppScrollTop();
-    const result = await message.getMessages(pageQueryFor(page));
-    
-    if (!result) {
+    const result = await fetchListPage(pageQueryFor(page));
+
+    if (!applyPageResult(result, page)) {
       throw new Error('跳转页面失败');
     }
-    
-    const nonPinned = result.items.filter((m: any) => !m.pinned);
-    message.messages = [...pinnedTopItems.value, ...nonPinned];
-    message.page = result.page || page;
-    
+
     targetPage.value = '';
     await nextTick();
     restoreAppScrollTop(scrollSnapshot);
@@ -1258,10 +1268,11 @@ const loadTargetMessagePage = async (id: number) => {
   }, { immediate: true })
   const isCurrentUserMessage = (msg: any) => {
     if (!msg || !userStore.isLogin) return false
-    const msgUserId = Number(msg?.user_id || msg?.userId || 0)
+    const msgUserId = Number(msg?.user_id || msg?.userId || msg?.authorId || 0)
     if (currentUserId.value && msgUserId) return msgUserId === currentUserId.value
-    return !!currentUsername.value && String(msg?.username || '').trim() === currentUsername.value
+    return !!currentUsername.value && String(msg?.username || msg?.author || '').trim() === currentUsername.value
   }
+  const canEditMessageTasks = (msg: any) => userStore.isLogin && (currentUserIsAdmin.value || isCurrentUserMessage(msg))
   const isContentEmpty = (m: any) => {
     const img = String(m?.image_url || '').trim()
     const c0 = String(m?.content || '')
@@ -1277,24 +1288,10 @@ const handleTagClick = (tag: string) => {
   if (normalizedTag) emit('select-tag', normalizedTag)
 }
 
-let listRefreshController: AbortController | null = null
 let listRefreshSeq = 0
 
 const fetchListPage = async (query: any) => {
-  try { listRefreshController?.abort() } catch {}
-  const controller = new AbortController()
-  listRefreshController = controller
-  const response = await fetch(`${BASE_API}/messages/page`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    credentials: 'include',
-    signal: controller.signal,
-    body: JSON.stringify(query)
-  })
-  if (!response.ok) throw new Error('消息列表加载失败')
-  const data = await response.json()
-  if (data?.code !== 1 || !data?.data) throw new Error(data?.msg || '消息列表加载失败')
-  return data.data
+  return await message.loadMessagePage(query)
 }
 
 const clearCurrentList = () => {
@@ -1360,19 +1357,17 @@ const initFancybox = () => {
   if (window.Fancybox) {
     window.Fancybox.destroy();
     const fancyboxOptions = {
+      mainClass: 'noise-media-fancybox',
       Carousel: {
         infinite: false,
       },
       Toolbar: {
-        display: [
-          { id: "prev", position: "center" },
-          { id: "counter", position: "center" },
-          { id: "next", position: "center" },
-          "zoom",
-          "slideshow",
-          "fullscreen",
-          "close",
-        ],
+        enabled: true,
+        display: {
+          left: ['infobar'],
+          middle: [],
+          right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']
+        },
       },
       Image: {
         zoom: true,
@@ -1421,16 +1416,19 @@ const deferInitFancybox = () => {
   } catch { setTimeout(run, 0) }
 }
 
-let measureScheduled = false
+let measureFrame: number | null = null
+let measureTimer: number | null = null
 const deferMeasure = () => {
-  if (measureScheduled) return
-  measureScheduled = true
-  const run = () => { try { checkContentHeight() } finally { measureScheduled = false } }
-  try {
-    const w: any = window
-    if (w && typeof w.requestIdleCallback === 'function') w.requestIdleCallback(run)
-    else requestAnimationFrame(run)
-  } catch { setTimeout(run, 0) }
+  if (typeof window === 'undefined') return
+  if (measureFrame !== null) return
+  measureFrame = window.requestAnimationFrame(() => {
+    measureFrame = null
+    if (measureTimer !== null) window.clearTimeout(measureTimer)
+    measureTimer = window.setTimeout(() => {
+      checkContentHeight()
+      measureTimer = null
+    }, 80)
+  })
 }
 
 const toggleComment = async (msgId: number) => {
@@ -1566,6 +1564,7 @@ const formatDate = (dateString: string) => {
 const isExpanded = ref<{ [key: number]: boolean }>({});
 const shouldShowExpandButton = ref<{ [key: number]: boolean }>({});
 const hasGrid = ref<{ [key: number]: boolean }>({});
+const measuredMessageHeights = ref<Record<number, number>>({});
 
 // 添加展开/折叠切换函数
 const toggleExpand = (msgId: number) => {
@@ -1585,48 +1584,57 @@ const checkContentHeight = () => {
       );
       if (!contentEl) return;
       const el = contentEl as HTMLElement;
-      if (typeof ResizeObserver !== 'undefined' && !(el as any).__contentMeasureResizeObserver) {
+      const measureEl = (el.querySelector('.markdown-preview') as HTMLElement | null) || el;
+      if (typeof ResizeObserver !== 'undefined' && !(measureEl as any).__contentMeasureResizeObserver) {
         const ro = new ResizeObserver(() => deferMeasure());
-        ro.observe(el);
-        (el as any).__contentMeasureResizeObserver = ro;
+        ro.observe(measureEl);
+        (measureEl as any).__contentMeasureResizeObserver = ro;
       }
-      const prevCV = (el.style as any).contentVisibility;
-      const prevCIS = (el.style as any).containIntrinsicSize;
+      const prevCV = (measureEl.style as any).contentVisibility;
+      const prevCIS = (measureEl.style as any).containIntrinsicSize;
       try {
-        if (prevCV) (el.style as any).contentVisibility = 'visible';
-        if (prevCIS) (el.style as any).containIntrinsicSize = '';
+        if (prevCV) (measureEl.style as any).contentVisibility = 'visible';
+        if (prevCIS) (measureEl.style as any).containIntrinsicSize = '';
       } catch {}
-      const hasImageGrid = !!document.querySelector(`.content-container[data-msg-id="${msg.id}"] .image-grid`);
+      const hasImageGrid = !!measureEl.querySelector('.image-grid');
       hasGrid.value[msg.id] = hasImageGrid;
       if (hasImageGrid) {
+        measuredMessageHeights.value[msg.id] = measureEl.scrollHeight;
         shouldShowExpandButton.value[msg.id] = false;
         isExpanded.value[msg.id] = true;
+        try {
+          if (prevCV) (measureEl.style as any).contentVisibility = prevCV;
+          if (prevCIS) (measureEl.style as any).containIntrinsicSize = prevCIS;
+        } catch {}
         return;
       }
-      const fullHeight = (contentEl as HTMLElement).scrollHeight;
-      if (fullHeight > 700) {
-        shouldShowExpandButton.value[msg.id] = true;
-        if (isExpanded.value[msg.id] === undefined) {
-          isExpanded.value[msg.id] = false;
+      const fullHeight = measureEl.scrollHeight;
+      const needsExpand = fullHeight > 708;
+      const prevHeight = measuredMessageHeights.value[msg.id];
+      if (!(typeof prevHeight === 'number'
+        && Math.abs(fullHeight - prevHeight) <= 8
+        && shouldShowExpandButton.value[msg.id] === needsExpand)) {
+        measuredMessageHeights.value[msg.id] = fullHeight;
+        if (needsExpand) {
+          shouldShowExpandButton.value[msg.id] = true;
+          if (isExpanded.value[msg.id] === undefined) {
+            isExpanded.value[msg.id] = false;
+          }
+        } else {
+          shouldShowExpandButton.value[msg.id] = false;
         }
-      } else {
-        shouldShowExpandButton.value[msg.id] = false;
       }
       try {
-        if (prevCV) (el.style as any).contentVisibility = prevCV;
-        if (prevCIS) (el.style as any).containIntrinsicSize = prevCIS;
+        if (prevCV) (measureEl.style as any).contentVisibility = prevCV;
+        if (prevCIS) (measureEl.style as any).containIntrinsicSize = prevCIS;
       } catch {}
 
-      const media = Array.from(el.querySelectorAll('img, video, audio')) as Array<HTMLImageElement | HTMLVideoElement | HTMLAudioElement>;
+      const media = Array.from(measureEl.querySelectorAll('img, video, audio')) as Array<HTMLImageElement | HTMLVideoElement | HTMLAudioElement>;
       media.forEach((item) => {
         const flag = (item as any).__measureAttached;
         if (!flag) {
           (item as any).__measureAttached = true;
-          const schedule = () => {
-            deferMeasure();
-            setTimeout(() => deferMeasure(), 120);
-            setTimeout(() => deferMeasure(), 420);
-          };
+          const schedule = () => deferMeasure();
           item.addEventListener('load', schedule);
           item.addEventListener('loadedmetadata', schedule);
           item.addEventListener('loadeddata', schedule);
@@ -1711,16 +1719,8 @@ onMounted(async () => {
     } else {
       // 只有在非消息详情页时才加载列表
       if (!route.hash.includes('/messages/')) {
-        const response = await fetch(`${BASE_API}/messages/page`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(pageQueryFor(1))
-        });
-        if (response.ok) {
-          const data = await response.json();
-          if (data.code === 1 && data.data) applyPageResult(data.data, 1)
-        }
+        const result = await fetchListPage(pageQueryFor(1))
+        if (result) applyPageResult(result, 1)
       }
     }
 
@@ -1780,32 +1780,8 @@ watch(() => route.hash, async (newHash) => {
     }
     
     // 只有在首次加载且没有消息时才加载第一页
-    const response = await fetch(`${BASE_API}/messages/page`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(pageQueryFor(1))
-    });
-    if (response.ok) {
-      const data = await response.json();
-      if (data.code === 1 && data.data && applyPageResult(data.data, 1)) {
-        expandedCommentsMap.value = {};
-        try {
-          const tasks = (message.messages || []).filter((m: any) => !isGuestbookMessage(m)).map(async (m: any) => {
-            try {
-              const resp = await fetch(`${BASE_API}/messages/${m.id}/comments`, { credentials: 'include', headers: { 'Accept': 'application/json' } });
-              if (resp.ok) {
-                const js = await resp.json();
-                const count = Array.isArray(js.data) ? js.data.length : 0;
-                commentCountMap.value[m.id] = count;
-                if (isBuiltin.value && count > 0) expandedCommentsMap.value[m.id] = true;
-              }
-            } catch {}
-          });
-          await Promise.allSettled(tasks);
-        } catch {}
-      }
-    }
+    await refreshList()
+    expandedCommentsMap.value = {}
     return;
   }
   
@@ -1868,7 +1844,6 @@ watch(
     }
     if (isPersonalGuest.value) {
       listRefreshSeq += 1
-      try { listRefreshController?.abort() } catch {}
       clearCurrentList()
       expandedCommentsMap.value = {}
       setPageLoading(false)
@@ -1876,7 +1851,6 @@ watch(
     }
     if (personalUserPending.value) {
       listRefreshSeq += 1
-      try { listRefreshController?.abort() } catch {}
       message.currentListQueryKey = currentDisplayQueryKey.value
       setPageLoading(true)
       return
@@ -1892,19 +1866,8 @@ const loadPreviousPage = async () => {
   try {
     const scrollSnapshot = captureAppScrollTop();
     const targetPage = message.page - 1;
-    const result = await message.getMessages(pageQueryFor(targetPage));
-    if (result && Array.isArray(result.items)) {
-      const nonPinned = result.items.filter((m: any) => !m.pinned && !isGuestbookMessage(m));
-      message.messages = [...pinnedTopItems.value, ...nonPinned];
-      const totalRaw = (result as any).total || message.total || 0;
-      const adjustedTotal = totalRaw - (guestbookId.value ? 1 : 0);
-      message.total = Math.max(0, adjustedTotal);
-      message.page = (result as any).page || targetPage;
-      const lastPage = Math.max(1, Math.ceil((message.total || 0) / 15));
-      message.hasMore = message.page < lastPage;
-    } else {
-      message.page = targetPage;
-    }
+    const result = await fetchListPage(pageQueryFor(targetPage));
+    if (result) applyPageResult(result, targetPage);
     await nextTick();
     restoreAppScrollTop(scrollSnapshot);
   } catch (error) {
@@ -1924,19 +1887,8 @@ const loadNextPage = async () => {
   try {
     const scrollSnapshot = captureAppScrollTop();
     const targetPage = message.page + 1;
-    const result = await message.getMessages(pageQueryFor(targetPage));
-    if (result && Array.isArray(result.items)) {
-      const nonPinned = result.items.filter((m: any) => !m.pinned && !isGuestbookMessage(m));
-      message.messages = [...pinnedTopItems.value, ...nonPinned];
-      const totalRaw = (result as any).total || message.total || 0;
-      const adjustedTotal = totalRaw - (guestbookId.value ? 1 : 0);
-      message.total = Math.max(0, adjustedTotal);
-      message.page = (result as any).page || targetPage;
-      const lastPage = Math.max(1, Math.ceil((message.total || 0) / 15));
-      message.hasMore = message.page < lastPage;
-    } else {
-      message.page = targetPage;
-    }
+    const result = await fetchListPage(pageQueryFor(targetPage));
+    if (result) applyPageResult(result, targetPage);
     await nextTick();
     restoreAppScrollTop(scrollSnapshot);
   } catch (error) {
@@ -2859,16 +2811,10 @@ onMounted(() => {
 
 .search-results-list > .w-full,
 .search-results-list > .w-full > .p-0 {
-  width: 100% !important;
-  max-width: none !important;
   overflow: visible !important;
 }
 
 .search-results-list > .w-full > .p-0 > .content-container {
-  width: 100% !important;
-  max-width: none !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
   background: rgba(255, 255, 255, .72) !important;
   background-color: rgba(255, 255, 255, .72) !important;
   background-image: none !important;
@@ -3706,6 +3652,25 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   z-index: 9999 !important;
+}
+
+:deep(.noise-media-fancybox .fancybox__toolbar) {
+  --f-button-width: 42px;
+  --f-button-height: 42px;
+  top: max(0px, env(safe-area-inset-top, 0px));
+  right: max(0px, env(safe-area-inset-right, 0px));
+  padding: 0 !important;
+}
+
+:deep(.noise-media-fancybox .fancybox__infobar) {
+  top: max(0px, env(safe-area-inset-top, 0px));
+  left: max(0px, env(safe-area-inset-left, 0px));
+  padding: 7px 10px !important;
+  border-radius: 0 0 8px 0;
+  background: rgba(0, 0, 0, 0.54);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
 }
 
 :deep(.fancybox__backdrop) {

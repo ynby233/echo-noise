@@ -5,6 +5,7 @@
 <script setup lang="ts">
 import { onMounted, ref, watch, onBeforeUnmount, inject } from 'vue';
 import { useRuntimeConfig } from '#imports';
+import { useMessageStore } from '~/store/message';
 import Vditor from 'vditor';
 
 // 定义正则表达式
@@ -65,7 +66,19 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  messageId: {
+    type: Number,
+    default: 0,
+  },
+  taskListEditable: {
+    type: Boolean,
+    default: false,
+  },
 });
+
+const messageStore = useMessageStore();
+const taskUpdateInFlight = new Set<number>()
+const renderedTaskContent = ref(props.content)
 
 const contentTheme = inject('contentTheme') as any
 const FULL_IMAGE_ATTACHMENTS_MARKER_RE = /<!--\s*noise-full-image-attachments\s*-->\s*/gi
@@ -215,21 +228,69 @@ const onPreviewClick = (event: Event) => {
   emit('tagClick', tag)
 }
 
+const TASK_LINE_REG = /^(\s*(?:[-*+]|\d+[.)])\s+\[)([ xX])(\]\s+)/
+
+const updateTaskListContent = (content: string, taskIndex: number, checked: boolean) => {
+  let seen = -1
+  const lines = String(content || '').split('\n')
+  const nextLines = lines.map((line) => {
+    if (!TASK_LINE_REG.test(line)) return line
+    seen += 1
+    if (seen !== taskIndex) return line
+    return line.replace(TASK_LINE_REG, `$1${checked ? 'x' : ' '}$3`)
+  })
+  return seen >= taskIndex ? nextLines.join('\n') : ''
+}
+
+const syncTaskListItemState = (input: HTMLInputElement) => {
+  const item = input.closest('li')
+  item?.classList.add('markdown-task-list-item')
+  item?.classList.toggle('is-task-checked', input.checked)
+  input.setAttribute('aria-label', input.checked ? '已完成任务' : '未完成任务')
+}
+
+const persistTaskListChange = async (input: HTMLInputElement, taskIndex: number, checked: boolean) => {
+  if (!props.taskListEditable || !props.messageId || taskUpdateInFlight.has(taskIndex)) return false
+  const previousChecked = !checked
+  const previousContent = renderedTaskContent.value
+  const nextContent = updateTaskListContent(renderedTaskContent.value, taskIndex, checked)
+  if (!nextContent) return false
+  renderedTaskContent.value = nextContent
+  taskUpdateInFlight.add(taskIndex)
+  input.disabled = true
+  try {
+    const response = await messageStore.updateMessage(Number(props.messageId), nextContent)
+    if (!response) throw new Error('更新任务状态失败')
+    return true
+  } catch (error) {
+    renderedTaskContent.value = previousContent
+    input.checked = previousChecked
+    syncTaskListItemState(input)
+    console.error('更新任务状态失败:', error)
+    return false
+  } finally {
+    taskUpdateInFlight.delete(taskIndex)
+    input.disabled = !props.taskListEditable
+  }
+}
+
 const enableRenderedTaskLists = () => {
   const root = previewElement.value
   if (!root) return
+  let taskIndex = 0
   root.querySelectorAll<HTMLInputElement>('li input[type="checkbox"], .contains-task-list input[type="checkbox"]').forEach((input) => {
-    input.disabled = false
-    input.removeAttribute('disabled')
-    input.setAttribute('aria-label', input.checked ? '已完成任务' : '未完成任务')
-    input.style.pointerEvents = 'auto'
-    input.style.cursor = 'pointer'
-    const item = input.closest('li')
-    item?.classList.add('markdown-task-list-item')
-    item?.classList.toggle('is-task-checked', input.checked)
-    input.onchange = () => {
-      item?.classList.toggle('is-task-checked', input.checked)
-      input.setAttribute('aria-label', input.checked ? '已完成任务' : '未完成任务')
+    const currentIndex = taskIndex
+    taskIndex += 1
+    input.dataset.taskIndex = String(currentIndex)
+    input.disabled = !props.taskListEditable
+    if (props.taskListEditable) input.removeAttribute('disabled')
+    input.style.pointerEvents = props.taskListEditable ? 'auto' : 'none'
+    input.style.cursor = props.taskListEditable ? 'pointer' : 'default'
+    syncTaskListItemState(input)
+    input.onchange = async () => {
+      const checked = input.checked
+      syncTaskListItemState(input)
+      await persistTaskListChange(input, currentIndex, checked)
     }
     input.onclick = (event) => event.stopPropagation()
   })
@@ -1175,6 +1236,7 @@ const renderMarkdown = async (markdown: string) => {
 watch(
   () => props.content,
   async (newContent) => {
+    renderedTaskContent.value = newContent
     await renderMarkdown(newContent);
   }
 );
@@ -1587,7 +1649,18 @@ watch(() => props.enableGithubCard, () => {
   border-radius: 8px;
 }
 
+.markdown-preview :deep(.noise-attachment-render--audio) {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
 .markdown-preview :deep(.noise-attachment-render--audio audio) {
+  display: block;
+  width: min(300px, 100%);
+  max-width: 300px;
+  min-width: 220px;
   margin: 0;
 }
 

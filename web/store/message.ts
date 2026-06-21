@@ -16,6 +16,7 @@ export const useMessageStore = defineStore("messageStore", () => {
   const images = ref<any[]>([]); // 添加图片状态
   const notifyConfig = ref<any>(null); // 添加推送配置状态
   let pageController: AbortController | null = null
+  let pageRequestSeq = 0
   const prefetchCache = ref<Record<string, PageQueryResult>>({})
   const currentListQueryKey = ref("")
 
@@ -42,6 +43,8 @@ export const useMessageStore = defineStore("messageStore", () => {
     page.value = 1;
     loading.value = false;
     currentListQueryKey.value = "";
+    try { pageController?.abort() } catch {}
+    pageRequestSeq += 1;
   };
  // 获取网站配置
  const getSiteConfig = async () => {
@@ -103,17 +106,21 @@ const updateSiteConfig = async (key: string, value: any) => {
 
   // 分页获取笔记列表
 const getMessages = async (query: PageQuery) => {
-  if (loading.value) return;
+  const requestSeq = pageRequestSeq + 1;
+  pageRequestSeq = requestSeq;
+  const requestListKey = listQueryKey(query);
   loading.value = true;
 
   try {
     try { pageController?.abort() } catch {}
-    pageController = new AbortController()
+    const controller = new AbortController()
+    pageController = controller
     const response = await postRequest<PageQueryResult>("messages/page", query, {
       credentials: 'include',
       silent: true,
-      signal: pageController.signal
+      signal: controller.signal
     });
+    if (requestSeq !== pageRequestSeq) return null;
     
     if (!response) {
       toast.add({
@@ -141,10 +148,12 @@ const getMessages = async (query: PageQuery) => {
     page.value = query.page;
     pageSize.value = query.pageSize;
     hasMore.value = messages.value.length < total.value;
-    currentListQueryKey.value = listQueryKey(query);
+    currentListQueryKey.value = requestListKey;
 
     return response.data;
   } catch (error) {
+    if (requestSeq !== pageRequestSeq) return null;
+    if ((error as any)?.name === 'AbortError') return null;
     console.error("获取笔记列表失败:", error);
     toast.add({
       title: "获取笔记列表失败",
@@ -153,8 +162,9 @@ const getMessages = async (query: PageQuery) => {
       color: "red",
       timeout: 2000,
     });
+    return null;
   } finally {
-    loading.value = false;
+    if (requestSeq === pageRequestSeq) loading.value = false;
   }
 };
 
@@ -186,17 +196,21 @@ const applyPrefetchedOrLoad = async (query: PageQuery) => {
 }
 
 const loadMessagePage = async (query: PageQuery) => {
-  if (loading.value) return null;
+  const requestSeq = pageRequestSeq + 1;
+  pageRequestSeq = requestSeq;
+  const requestListKey = listQueryKey(query);
   loading.value = true;
 
   try {
     try { pageController?.abort() } catch {}
-    pageController = new AbortController()
+    const controller = new AbortController()
+    pageController = controller
     const response = await postRequest<PageQueryResult>("messages/page", query, {
       credentials: 'include',
       silent: true,
-      signal: pageController.signal
+      signal: controller.signal
     });
+    if (requestSeq !== pageRequestSeq) return null;
 
     if (!response || response.code !== 1) return null;
 
@@ -205,14 +219,16 @@ const loadMessagePage = async (query: PageQuery) => {
     page.value = query.page;
     pageSize.value = query.pageSize;
     hasMore.value = page.value * pageSize.value < total.value;
-    currentListQueryKey.value = listQueryKey(query);
+    currentListQueryKey.value = requestListKey;
 
     return response.data;
   } catch (error) {
+    if (requestSeq !== pageRequestSeq) return null;
+    if ((error as any)?.name === 'AbortError') return null;
     console.error("获取笔记列表失败:", error);
     return null;
   } finally {
-    loading.value = false;
+    if (requestSeq === pageRequestSeq) loading.value = false;
   }
 }
 

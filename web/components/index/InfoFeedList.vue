@@ -339,12 +339,13 @@ const setFeedSummaryRef = (feedId: string, el: any) => {
     return
   }
   feedSummaryRefs.value[feedId] = nextEl
-  bindSummaryMediaEvents(nextEl)
+  const measuredEl = (nextEl.querySelector('.feed-summary-measure') as HTMLElement | null) || nextEl
+  bindSummaryMediaEvents(measuredEl)
   if (typeof window !== 'undefined' && typeof window.ResizeObserver !== 'undefined') {
     const observer = new window.ResizeObserver(() => {
       deferMeasure()
     })
-    observer.observe(nextEl)
+    observer.observe(measuredEl)
     feedResizeObservers.set(feedId, observer)
   }
 }
@@ -1039,7 +1040,7 @@ onUnmounted(() => {
 }
 
 .expand-toggle-btn:hover {
-  transform: scale(1.02);
+  transform: none;
 }
 
 :global(html.dark) .expand-toggle-btn {

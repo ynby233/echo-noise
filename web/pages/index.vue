@@ -2825,11 +2825,10 @@ html:not(.dark) .hero-tab.active {
   width: 100%;
   border-radius: 8px;
   padding: 6px 0;
-  transition: background-color .15s ease, transform .1s ease;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
   border: 1px solid rgba(0,0,0,0.06);
 }
 .calendar-card :deep(td > button:hover) {
-  transform: scale(1.02);
   background: rgba(0,0,0,0.06);
 }
 .calendar-card :deep(td > button[aria-selected="true"]) {
@@ -3143,6 +3142,13 @@ white-space: nowrap;  /* 防止换行 */
 .right-col .sidebar-card:focus-within {
   transform: none !important;
 }
+.right-col :deep(*:hover),
+.right-col :deep(*:focus),
+.right-col :deep(*:focus-visible),
+.right-col :deep(*:active) {
+  transform: none !important;
+  transition-property: background-color, border-color, color, opacity, box-shadow, filter !important;
+}
 /* 三栏容器在浅色模式统一白色背景（不影响深色与背景图层） */
 :global(html:not(.dark)) .left-col,
 :global(html:not(.dark)) .center-col,
@@ -3217,7 +3223,7 @@ html.dark .sidebar-card {
   box-shadow: 0 10px 24px rgba(2, 6, 23, 0.4);
   backdrop-filter: blur(8px) saturate(118%);
   -webkit-backdrop-filter: blur(8px) saturate(118%);
-  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+  transition: border-color .16s ease, background-color .16s ease, color .16s ease, box-shadow .16s ease;
 }
 html.dark .sidebar-card:hover {
   transform: none;
@@ -3252,7 +3258,7 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
 .auth-actions { margin-top: 6px; display: flex; align-items: center; justify-content: center; gap: 10px; }
 .auth-tooltip { position: relative; display: inline-flex; align-items: center; justify-content: center; }
 .auth-btn { width: 36px; height: 36px; padding: 0; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; background: transparent !important; border: none !important; box-shadow: none !important; }
-.auth-btn:hover { background: transparent !important; transform: translateY(-1px); }
+.auth-btn:hover { background: transparent !important; transform: none !important; }
 .stats-login-prompt {
   width: 100%;
   min-height: 48px;
@@ -3280,7 +3286,7 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
   cursor: pointer;
   transition: transform .18s ease;
 }
-.avatar-lg:hover { transform: scale(1.05); }
+.avatar-lg:hover { transform: none; }
 /* 头像在线状态独立定位 */
 .avatar-wrap { display:inline-block; position:relative; }
 .avatar-status { position:absolute; right:-2px; top:-2px; width:10px; height:10px; border-radius:9999px; border:2px solid rgba(255,255,255,0.9); }
@@ -3323,7 +3329,7 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
 .social-list { display:flex; flex-wrap:wrap; gap:10px; padding:0; justify-content:center; align-items:center; }
 .social-item { position:relative; display:inline-flex; align-items:center; justify-content:center; width: clamp(28px, 6vw, 36px); height: clamp(28px, 6vw, 36px); border-radius:8px; }
 .social-item { color: inherit; text-decoration: none; }
-.social-item:hover { transform: scale(1.06); transition: transform .12s ease; }
+.social-item:hover { transform: none; transition: none; }
 .social-icon-img { width: clamp(24px, 5.2vw, 32px); height: clamp(24px, 5.2vw, 32px); border-radius:6px; object-fit:cover; display:inline-block; }
 .sidebar-title {
   font-weight: 600;
@@ -3443,6 +3449,9 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
 .right-col .recommend-image-box,
 .right-col .ad-image {
   transition: filter .12s ease, opacity .12s ease !important;
+}
+.right-col :where(.avatar-lg, .auth-btn, .social-item, .calendar-card button, .recommend-image-box, .ad-image) {
+  transform: none !important;
 }
 .right-col .recommend-image-box:hover,
 .right-col .ad-wrap:hover .ad-image {
