@@ -3104,20 +3104,20 @@ white-space: nowrap;  /* 防止换行 */
 
 .layout-container.grid-3 {
   display: grid;
-  grid-template-columns: var(--sidebar-width, 320px) 1fr var(--sidebar-width, 320px);
+  grid-template-columns: minmax(260px, var(--sidebar-width, 320px)) minmax(0, 1fr) minmax(260px, var(--sidebar-width, 320px));
   gap: var(--grid-gap, 16px);
   align-items: start;
 }
 .layout-container.grid-2 {
   display: grid;
-  grid-template-columns: var(--sidebar-width, 320px) 1fr;
+  grid-template-columns: minmax(260px, var(--sidebar-width, 320px)) minmax(0, 1fr);
   gap: var(--grid-gap, 16px);
 }
 .layout-container.grid-1 {
   display: block;
 }
-.layout-container { --sidebar-width: 320px; --grid-gap: 16px; }
-.left-col, .right-col { position: sticky; top: 0; align-self: start; height: fit-content; }
+.layout-container { --sidebar-width: 320px; --grid-gap: 16px; width: 100%; min-width: 0; }
+.left-col, .right-col { position: sticky; top: 0; align-self: start; height: fit-content; min-width: 0; box-sizing: border-box; }
 .right-col {
   max-height: calc(100vh - 24px);
   overflow-x: hidden;
@@ -3125,7 +3125,9 @@ white-space: nowrap;  /* 防止换行 */
   overscroll-behavior: contain;
   scrollbar-width: thin;
 }
-.center-col { min-width: 0; box-sizing: border-box; }
+.center-col { min-width: 0; width: 100%; box-sizing: border-box; }
+.center-col > * { min-width: 0; }
+.search-card { width: 100%; min-width: 0; box-sizing: border-box; }
 .sidebar-card {
   border-radius: var(--home-radius-card);
   background: var(--home-surface-light);
@@ -3134,6 +3136,12 @@ white-space: nowrap;  /* 防止换行 */
 }
 .right-col .sidebar-card {
   box-shadow: none !important;
+  transform: none !important;
+  transition: border-color .16s ease, background-color .16s ease, color .16s ease, box-shadow .16s ease !important;
+}
+.right-col .sidebar-card:hover,
+.right-col .sidebar-card:focus-within {
+  transform: none !important;
 }
 /* 三栏容器在浅色模式统一白色背景（不影响深色与背景图层） */
 :global(html:not(.dark)) .left-col,
@@ -3218,9 +3226,12 @@ html.dark .sidebar-card:hover {
 }
 html.dark .right-col .sidebar-card {
   box-shadow: none !important;
+  transform: none !important;
+  transition: border-color .16s ease, background-color .16s ease, color .16s ease, box-shadow .16s ease !important;
 }
 html.dark .right-col .sidebar-card:hover {
   box-shadow: none !important;
+  transform: none !important;
 }
 html.dark .search-card {
   background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.82) 100%);
@@ -3428,6 +3439,16 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
   transform: translate3d(0,0,0) scale(1.03);
   box-shadow: 0 6px 18px rgba(0,0,0,0.28);
   filter: saturate(1.06) contrast(1.02);
+}
+.right-col .recommend-image-box,
+.right-col .ad-image {
+  transition: filter .12s ease, opacity .12s ease !important;
+}
+.right-col .recommend-image-box:hover,
+.right-col .ad-wrap:hover .ad-image {
+  transform: none !important;
+  box-shadow: none !important;
+  filter: none !important;
 }
 @media (prefers-color-scheme: dark) {
   .recommend-image-box { box-shadow: 0 1px 2px rgba(255,255,255,0.06); }

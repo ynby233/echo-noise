@@ -2,7 +2,7 @@
   <!-- 搜索内容显示 -->
   <UModal
     v-model="showModal"
-    :ui="{ container: 'items-center', base: 'backdrop-blur-sm', background: 'bg-transparent dark:bg-transparent', shadow: 'shadow-none', rounded: 'rounded-none' }"
+    :ui="{ width: 'sm:max-w-xl', container: 'items-center px-3', base: 'backdrop-blur-sm', background: 'bg-transparent dark:bg-transparent', shadow: 'shadow-none', rounded: 'rounded-none' }"
   >
     <UCard class="nw-modal-card search-modal-card" :ui="{ rounded: 'rounded-none', ring: 'ring-0', shadow: 'shadow-none' }">
       <template #header>
@@ -96,6 +96,7 @@ defineExpose({
   --nw-modal-bg: #ffffff;
   --nw-modal-border: #e5e7eb;
   --nw-modal-text: #111827;
+  width: min(100%, 36rem);
 }
 
 html.dark .search-modal-card {

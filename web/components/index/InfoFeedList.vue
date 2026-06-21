@@ -32,12 +32,12 @@
             class="feed-summary-body overflow-y-hidden relative"
             :style="shouldShowExpandButton[getFeedItemId(item)] && !isExpanded[getFeedItemId(item)] ? { maxHeight: `${collapsedContentHeight}px` } : undefined"
           >
-            <div class="feed-summary-markdown">
+            <div class="feed-summary-markdown feed-summary-measure">
               <MarkdownRenderer
                 :content="getDisplayRaw(item)"
                 :enable-github-card="enableGithubCard"
                 :theme-mode="contentTheme"
-                @rendered="checkContentHeights"
+                @rendered="deferMeasure"
               />
             </div>
             <div v-if="shouldShowStandaloneImage(item)" class="feed-image-wrap feed-image-wrap-inline">
@@ -47,7 +47,7 @@
                 :aria-label="`查看大图：${item.title || '图片'}`"
                 @click="openImagePreview(item.imageURL)"
               >
-                <img :src="item.imageURL" :alt="item.title || 'image'" class="feed-image" loading="lazy" />
+                <img :src="item.imageURL" :alt="item.title || 'image'" class="feed-image" loading="lazy" decoding="async" @load="deferMeasure" @error="deferMeasure" />
               </button>
             </div>
             <div
@@ -80,7 +80,7 @@
             :aria-label="`查看大图：${item.title || '图片'}`"
             @click="openImagePreview(item.imageURL)"
           >
-            <img :src="item.imageURL" :alt="item.title || 'image'" class="feed-image" loading="lazy" />
+            <img :src="item.imageURL" :alt="item.title || 'image'" class="feed-image" loading="lazy" decoding="async" @load="deferMeasure" @error="deferMeasure" />
           </button>
         </div>
         <div class="feed-footer">
@@ -209,10 +209,12 @@ const collapsedContentHeight = 820
 const isExpanded = ref<Record<string, boolean>>({})
 const hasUserToggled = ref<Record<string, boolean>>({})
 const shouldShowExpandButton = ref<Record<string, boolean>>({})
+const measuredContentHeights = ref<Record<string, number>>({})
 const measureTimer = ref<number | null>(null)
 const measureFrame = ref<number | null>(null)
 const feedSummaryRefs = ref<Record<string, HTMLElement | null>>({})
 const feedResizeObservers = new Map<string, ResizeObserver>()
+const observedFeedMedia = new WeakSet<Element>()
 const cacheKey = computed(() => {
   const apiBase = String(props.baseApi || '/api').replace(/\/$/, '')
   return `${FEED_CACHE_PREFIX}:${apiBase}:${maxItems.value ?? 'all'}`
@@ -314,6 +316,19 @@ const cleanupFeedSummaryObserver = (feedId: string) => {
   feedResizeObservers.delete(feedId)
 }
 
+const bindSummaryMediaEvents = (container: HTMLElement) => {
+  const mediaList = container.querySelectorAll('img, video, iframe')
+  mediaList.forEach((media) => {
+    if (observedFeedMedia.has(media)) return
+    observedFeedMedia.add(media)
+    media.addEventListener('load', deferMeasure, { passive: true })
+    media.addEventListener('error', deferMeasure, { passive: true })
+    media.addEventListener('loadedmetadata', deferMeasure, { passive: true })
+    const image = media as HTMLImageElement
+    if (image.complete || image.naturalHeight > 0) deferMeasure()
+  })
+}
+
 const setFeedSummaryRef = (feedId: string, el: any) => {
   const currentEl = feedSummaryRefs.value[feedId]
   const nextEl = el instanceof HTMLElement ? el : null
@@ -324,6 +339,7 @@ const setFeedSummaryRef = (feedId: string, el: any) => {
     return
   }
   feedSummaryRefs.value[feedId] = nextEl
+  bindSummaryMediaEvents(nextEl)
   if (typeof window !== 'undefined' && typeof window.ResizeObserver !== 'undefined') {
     const observer = new window.ResizeObserver(() => {
       deferMeasure()
@@ -368,7 +384,17 @@ const checkContentHeights = () => {
       const feedId = getFeedItemId(item)
       const contentEl = feedSummaryRefs.value[feedId]
       if (!contentEl) return
-      const fullHeight = contentEl.scrollHeight
+      bindSummaryMediaEvents(contentEl)
+      const measuredEl = contentEl.querySelector('.feed-summary-measure') as HTMLElement | null
+      const fullHeight = measuredEl?.scrollHeight || contentEl.scrollHeight
+      const prevHeight = measuredContentHeights.value[feedId]
+      const needsExpand = fullHeight > collapsedContentHeight + 8
+      if (typeof prevHeight === 'number'
+        && Math.abs(fullHeight - prevHeight) <= 8
+        && shouldShowExpandButton.value[feedId] === needsExpand) {
+        return
+      }
+      measuredContentHeights.value[feedId] = fullHeight
       setFeedExpansionState(feedId, fullHeight > collapsedContentHeight + 8)
     })
   })
@@ -380,6 +406,7 @@ const applyFeedItems = (items: FeedItem[]) => {
   isExpanded.value = {}
   hasUserToggled.value = {}
   shouldShowExpandButton.value = {}
+  measuredContentHeights.value = {}
   clampPage()
   emit('count-change', allItems.value.length)
   deferMeasure()
@@ -992,7 +1019,7 @@ onUnmounted(() => {
 }
 
 .feed-summary-body {
-  transition: max-height 0.3s ease-in-out;
+  transition: none;
   z-index: 1;
 }
 
@@ -1085,6 +1112,8 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   padding: 6px;
+  aspect-ratio: 16 / 9;
+  max-height: 640px;
 }
 
 :global(html.dark) .feed-image-wrap {
@@ -1093,16 +1122,18 @@ onUnmounted(() => {
 
 .feed-image {
   width: 100%;
+  height: 100%;
   max-height: 640px;
   object-fit: contain;
-  height: auto;
   display: block;
   transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
 }
 
 .feed-image-btn {
   width: 100%;
+  height: 100%;
   display: flex;
+  align-items: center;
   justify-content: center;
   border: 0;
   background: transparent;

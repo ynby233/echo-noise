@@ -712,6 +712,11 @@ onMounted(() => {
   } catch {}
 })
 onBeforeUnmount(() => { try { io && io.disconnect() } catch {} })
+onBeforeUnmount(() => {
+  listRefreshSeq += 1
+  try { listRefreshController?.abort() } catch {}
+  listRefreshController = null
+})
 const like = async (id: number) => {
   if (!isLogin.value) {
     useToast().add({ title: '请先登录后再点赞', color: 'orange', timeout: 2000 })
@@ -1217,6 +1222,7 @@ const loadTargetMessagePage = async (id: number) => {
   const currentUserId = computed(() => Number((userStore.user as any)?.userid || (userStore.user as any)?.id || (userStore.user as any)?.user_id || 0))
   const currentUsername = computed(() => String((userStore.user as any)?.username || '').trim())
   const currentUserIsAdmin = computed(() => !!((userStore.user as any)?.is_admin || (userStore.user as any)?.IsAdmin))
+  const personalUserPending = computed(() => isPersonalTab.value && userStore.isLogin && !currentUserId.value && !currentUsername.value)
   const calendarDateLabel = computed(() => {
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(props.calendarDate || ''))
     if (!match) return ''
@@ -1271,16 +1277,54 @@ const handleTagClick = (tag: string) => {
   if (normalizedTag) emit('select-tag', normalizedTag)
 }
 
+let listRefreshController: AbortController | null = null
+let listRefreshSeq = 0
+
+const fetchListPage = async (query: any) => {
+  try { listRefreshController?.abort() } catch {}
+  const controller = new AbortController()
+  listRefreshController = controller
+  const response = await fetch(`${BASE_API}/messages/page`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    credentials: 'include',
+    signal: controller.signal,
+    body: JSON.stringify(query)
+  })
+  if (!response.ok) throw new Error('消息列表加载失败')
+  const data = await response.json()
+  if (data?.code !== 1 || !data?.data) throw new Error(data?.msg || '消息列表加载失败')
+  return data.data
+}
+
+const clearCurrentList = () => {
+  message.messages = []
+  message.total = 0
+  message.page = 1
+  message.pageSize = 15
+  message.hasMore = false
+}
+
 const refreshList = async () => {
-  if (isPageLoading.value) return
+  const requestId = ++listRefreshSeq
+  const query = pageQueryFor(1)
+  const requestQueryKey = message.listQueryKey(query)
+  message.currentListQueryKey = requestQueryKey
   setPageLoading(true)
   try {
-    await message.getMessages(pageQueryFor(1));
+    const result = await fetchListPage(query)
+    if (requestId !== listRefreshSeq || requestQueryKey !== currentDisplayQueryKey.value) return
+    applyPageResult(result, 1)
+    message.currentListQueryKey = requestQueryKey
     await nextTick();
     deferMeasure();
     deferInitFancybox();
+  } catch (error: any) {
+    if (error?.name === 'AbortError') return
+    console.error('刷新消息列表失败:', error)
+    useToast().add({ title: '加载失败', color: 'red', timeout: 2000 })
   } finally {
-    setPageLoading(false)
+    if (requestId === listRefreshSeq) setPageLoading(false)
   }
 }
 
@@ -1813,7 +1857,8 @@ watch(
     () => props.searchKeyword,
     () => props.selectedTag,
     () => userStore.isLogin,
-    () => currentUserId.value
+    () => currentUserId.value,
+    () => currentUsername.value
   ],
   async () => {
     if (route.hash.includes('/messages/')) return
@@ -1822,6 +1867,18 @@ watch(
       return
     }
     if (isPersonalGuest.value) {
+      listRefreshSeq += 1
+      try { listRefreshController?.abort() } catch {}
+      clearCurrentList()
+      expandedCommentsMap.value = {}
+      setPageLoading(false)
+      return
+    }
+    if (personalUserPending.value) {
+      listRefreshSeq += 1
+      try { listRefreshController?.abort() } catch {}
+      message.currentListQueryKey = currentDisplayQueryKey.value
+      setPageLoading(true)
       return
     }
     await refreshList()
@@ -1892,17 +1949,6 @@ const loadNextPage = async () => {
     setPageLoading(false);
   }
 };
-// 添加登录状态变化监听
-watch(
-  () => userStore.isLogin,
-  (newVal) => {
-    if (newVal && !isPersonalTab.value) {
-      // 用户登录后的处理
-      message.getMessages(pageQueryFor(1));
-    }
-  }
-);
-
 // 监听消息变化
 watch(
   () => message.messages,
@@ -2813,10 +2859,16 @@ onMounted(() => {
 
 .search-results-list > .w-full,
 .search-results-list > .w-full > .p-0 {
+  width: 100% !important;
+  max-width: none !important;
   overflow: visible !important;
 }
 
 .search-results-list > .w-full > .p-0 > .content-container {
+  width: 100% !important;
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
   background: rgba(255, 255, 255, .72) !important;
   background-color: rgba(255, 255, 255, .72) !important;
   background-image: none !important;

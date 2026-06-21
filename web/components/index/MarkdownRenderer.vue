@@ -200,13 +200,39 @@ const applyClickableTags = () => {
 }
 
 const onPreviewClick = (event: Event) => {
-  const target = (event.target as HTMLElement | null)?.closest('.clickable-tag') as HTMLElement | null
+  const element = event.target as HTMLElement | null
+  const taskCheckbox = element?.closest('input[type="checkbox"]') as HTMLInputElement | null
+  if (taskCheckbox && previewElement.value?.contains(taskCheckbox)) {
+    event.stopPropagation()
+    return
+  }
+  const target = element?.closest('.clickable-tag') as HTMLElement | null
   if (!target) return
   event.preventDefault()
   event.stopPropagation()
   const tag = String(target.dataset.tag || target.textContent || '').replace(/^#/, '').trim()
   if (!tag) return
   emit('tagClick', tag)
+}
+
+const enableRenderedTaskLists = () => {
+  const root = previewElement.value
+  if (!root) return
+  root.querySelectorAll<HTMLInputElement>('li input[type="checkbox"], .contains-task-list input[type="checkbox"]').forEach((input) => {
+    input.disabled = false
+    input.removeAttribute('disabled')
+    input.setAttribute('aria-label', input.checked ? '已完成任务' : '未完成任务')
+    input.style.pointerEvents = 'auto'
+    input.style.cursor = 'pointer'
+    const item = input.closest('li')
+    item?.classList.add('markdown-task-list-item')
+    item?.classList.toggle('is-task-checked', input.checked)
+    input.onchange = () => {
+      item?.classList.toggle('is-task-checked', input.checked)
+      input.setAttribute('aria-label', input.checked ? '已完成任务' : '未完成任务')
+    }
+    input.onclick = (event) => event.stopPropagation()
+  })
 }
 
 const applyImageGrid = (keepImagesFullSize = false) => {
@@ -647,11 +673,21 @@ const escapeHtml = (value: string) => String(value || '')
 
 const ATTACHMENT_LINK_REG = /\[(图片附件|视频附件|音频附件)：([^\]]+)\]\(([^)\s]+)\)/g
 
-const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string) => {
+const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string, compact = false) => {
   const url = resolveImageUrl(String(rawUrl || '').trim())
   const safeUrl = escapeHtml(url)
   const safeName = escapeHtml(String(name || '').trim() || '未命名附件')
   if (!url) return ''
+  if (compact) {
+    const baseClass = 'noise-attachment-render noise-attachment-render--table'
+    if (kindLabel === '图片附件') {
+      return `<span class="${baseClass} noise-attachment-render--image"><img class="noise-attachment-image" src="${safeUrl}" alt="${safeName}" loading="lazy" decoding="async" /></span>`
+    }
+    if (kindLabel === '视频附件') {
+      return `<span class="${baseClass} noise-attachment-render--video"><video src="${safeUrl}" controls preload="metadata"></video></span>`
+    }
+    return `<span class="${baseClass} noise-attachment-render--audio"><audio src="${safeUrl}" controls preload="metadata"></audio></span>`
+  }
   if (kindLabel === '图片附件') {
     return `<p class="noise-attachment-paragraph"><img class="noise-attachment-image" src="${safeUrl}" alt="${safeName}" loading="lazy" decoding="async" /></p>`
   }
@@ -659,6 +695,27 @@ const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string) =>
     return `<div class="noise-attachment-render noise-attachment-render--video"><video src="${safeUrl}" controls preload="metadata" style="width:100%;height:auto"></video></div>`
   }
   return `<div class="noise-attachment-render noise-attachment-render--audio"><audio src="${safeUrl}" controls preload="metadata"></audio></div>`
+}
+
+const attachmentInfoFromRenderedAnchor = (anchor: HTMLAnchorElement) => {
+  const label = (anchor.textContent || '').trim()
+  const match = label.match(/^(图片附件|视频附件|音频附件)：(.+)$/)
+  const href = anchor.getAttribute('href') || ''
+  if (!match || !href) return null
+  return { kindLabel: match[1], name: match[2], url: href }
+}
+
+const applyAttachmentRenders = () => {
+  const root = previewElement.value
+  if (!root) return
+  root.querySelectorAll<HTMLAnchorElement>('a[href]').forEach((anchor) => {
+    const info = attachmentInfoFromRenderedAnchor(anchor)
+    if (!info) return
+    const compact = !!anchor.closest('td, th')
+    const { kindLabel, name, url } = info
+    const html = compact ? buildAttachmentHtml(kindLabel, name, url, true) : buildAttachmentHtml(kindLabel, name, url)
+    replaceNodeWithHtml(anchor, html)
+  })
 }
 
 const replaceNodeWithHtml = (node: HTMLElement, html: string) => {
@@ -699,8 +756,7 @@ const processMediaLinks = (content: string): string => {
     .replace(NETEASE_MD_LINK_REG, (_m, _full, songId) => buildMetingSongEmbed(songId) || _m)
     .replace(NETEASE_INLINE_CODE_REG, (_m, songId) => buildMetingSongEmbed(songId) || _m)
 
-  // 平台附件标记：编辑器内保持可移动的文本链接，发布/预览时再转成真正媒体组件。
-  content = content.replace(ATTACHMENT_LINK_REG, (_m, kindLabel, name, url) => buildAttachmentHtml(kindLabel, name, url) || _m)
+  // 平台附件标记保留为 Markdown 链接，等 Markdown 表格先正常渲染后再替换成媒体节点。
 
   // GitHub 卡片解析（可开关）
   if (props.enableGithubCard) {
@@ -1047,6 +1103,7 @@ const renderMarkdown = async (markdown: string) => {
               link.setAttribute('rel', 'noopener noreferrer');
             }
           });
+          applyAttachmentRenders()
           applyThemeClass();
           const anchors = previewElement.value?.querySelectorAll('a[href]') || [] as any;
           anchors.forEach((a: HTMLAnchorElement) => {
@@ -1064,6 +1121,7 @@ const renderMarkdown = async (markdown: string) => {
           await enhanceDouyinShortLinks()
           applyDouyinVideoLayout()
           applyClickableTags()
+          enableRenderedTaskLists()
           
           // Explicitly handle existing video tags (e.g. from raw HTML or markdown)
           const existingVideos = previewElement.value?.querySelectorAll('video');
@@ -1537,6 +1595,31 @@ watch(() => props.enableGithubCard, () => {
   margin: 0;
 }
 
+.markdown-preview :deep(.noise-attachment-render--table) {
+  display: inline-flex;
+  max-width: 100%;
+  margin: 2px 0;
+  vertical-align: middle;
+}
+
+.markdown-preview :deep(td .noise-attachment-render--table),
+.markdown-preview :deep(th .noise-attachment-render--table) {
+  width: min(100%, 260px);
+}
+
+.markdown-preview :deep(.noise-attachment-render--table img),
+.markdown-preview :deep(.noise-attachment-render--table video) {
+  display: block;
+  width: 100%;
+  max-width: 260px;
+  height: auto;
+  border-radius: 6px;
+}
+
+.markdown-preview :deep(.noise-attachment-render--table audio) {
+  width: min(100%, 260px);
+  max-width: 260px;
+}
 
 .markdown-preview :deep(pre) {
   overflow-x: auto;

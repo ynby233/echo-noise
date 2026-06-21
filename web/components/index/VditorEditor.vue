@@ -24,6 +24,46 @@
       </button>
     </div>
   </Teleport>
+  <Teleport to="body">
+    <div
+      v-if="showTableMenu"
+      ref="tableMenuRef"
+      :class="['floating-control-menu visibility-floating-menu nw-floating-menu vditor-table-menu', { 'is-dark': props.theme === 'dark' }]"
+      :style="tableMenuStyle"
+      role="dialog"
+      aria-label="插入表格"
+      @mousedown.prevent.stop
+      @click.stop
+    >
+      <div class="table-menu-row">
+        <span class="table-menu-label">行</span>
+        <button type="button" class="table-stepper-btn nw-action-btn" aria-label="减少行" @click="adjustTableRows(-1)">-</button>
+        <span class="table-menu-value">{{ tableRows }}</span>
+        <button type="button" class="table-stepper-btn nw-action-btn" aria-label="增加行" @click="adjustTableRows(1)">+</button>
+      </div>
+      <div class="table-menu-row">
+        <span class="table-menu-label">列</span>
+        <button type="button" class="table-stepper-btn nw-action-btn" aria-label="减少列" @click="adjustTableCols(-1)">-</button>
+        <span class="table-menu-value">{{ tableCols }}</span>
+        <button type="button" class="table-stepper-btn nw-action-btn" aria-label="增加列" @click="adjustTableCols(1)">+</button>
+      </div>
+      <div class="table-size-grid" aria-label="快速选择表格尺寸">
+        <button
+          v-for="cell in tableGridCells"
+          :key="`${cell.row}-${cell.col}`"
+          type="button"
+          :class="['table-size-cell', { 'is-active': cell.row <= tableRows && cell.col <= tableCols }]"
+          :aria-label="`${cell.row} 行 ${cell.col} 列`"
+          @mouseenter="previewTableSize(cell.row, cell.col)"
+          @focus="previewTableSize(cell.row, cell.col)"
+          @click="insertTable(cell.row, cell.col)"
+        />
+      </div>
+      <button type="button" class="floating-control-option nw-floating-option table-insert-btn" @click="insertTable(tableRows, tableCols)">
+        插入 {{ tableRows }} 行 {{ tableCols }} 列
+      </button>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -52,6 +92,7 @@ let vditorInstance: Vditor | null = null;
 let toolbarEl: HTMLElement | null = null;
 let placeholderEl: HTMLElement | null = null;
 let mutationObserver: MutationObserver | null = null;
+let toolbarResizeObserver: ResizeObserver | null = null;
 let fixedCleanup: (() => void) | null = null;
 let panelCleanup: (() => void) | null = null;
 let imagePreviewCleanup: (() => void) | null = null;
@@ -63,6 +104,14 @@ const headingMenuStyle = ref<Record<string, string>>({});
 const selectedHeadingTag = ref('');
 const headingTrigger = ref<HTMLElement | null>(null);
 const nativeHeadingPanel = ref<HTMLElement | null>(null);
+const showTableMenu = ref(false);
+const tableMenuRef = ref<HTMLElement | null>(null);
+const tableMenuStyle = ref<Record<string, string>>({});
+const tableTrigger = ref<HTMLElement | null>(null);
+const nativeTablePanel = ref<HTMLElement | null>(null);
+const tableRows = ref(3);
+const tableCols = ref(3);
+const tableGridCells = Array.from({ length: 36 }, (_, index) => ({ row: Math.floor(index / 6) + 1, col: (index % 6) + 1 }));
 const headingOptions = [
   { tag: 'h1', value: '# ', label: '一级标题 <Alt+Ctrl+1>' },
   { tag: 'h2', value: '## ', label: '二级标题 <Alt+Ctrl+2>' },
@@ -437,33 +486,58 @@ const setupAttachmentPreview = () => {
     toggleAttachmentPreview(hit.target, hit.info)
   }
 
-  const isPlainParagraphEnter = (event: KeyboardEvent) => {
+  const isEditorSoftEnter = (event: KeyboardEvent) => {
     if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return false
     const selection = window.getSelection()
     const anchorNode = selection?.anchorNode || null
     const anchorElement = anchorNode instanceof Element ? anchorNode : anchorNode?.parentElement || getEventElement(event)
     if (!anchorElement || !root.contains(anchorElement)) return false
-    if (anchorElement.closest('.editor-attachment-node, .vditor-toolbar, .vditor-panel, .vditor-hint')) return false
-    if (!anchorElement.closest('.vditor-ir pre.vditor-reset')) return false
-    const block = anchorElement.closest('p') as HTMLElement | null
-    if (!block) return false
-    if (block.closest('li, blockquote, table, h1, h2, h3, h4, h5, h6, [data-type="code-block"], .vditor-ir__marker--pre')) return false
-    return true
+    if (anchorElement.closest('.vditor-toolbar, .vditor-panel, .vditor-hint, [data-type="code-block"], .vditor-ir__marker--pre')) return false
+    return !!anchorElement.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset')
   }
 
-  const onPlainTextEnterKeydown = (event: KeyboardEvent) => {
-    if (!isPlainParagraphEnter(event)) return
+  const moveCaretAfterAtomicAttachment = () => {
+    const selection = window.getSelection()
+    const anchorNode = selection?.anchorNode || null
+    const anchorElement = anchorNode instanceof Element ? anchorNode : anchorNode?.parentElement || null
+    const attachment = anchorElement?.closest<HTMLElement>('.editor-attachment-node')
+    if (!attachment || !selection) return
+    const range = document.createRange()
+    range.setStartAfter(attachment)
+    range.collapse(true)
+    selection.removeAllRanges()
+    selection.addRange(range)
+  }
+
+  const insertEditorSoftLineBreak = (event: Event) => {
     event.preventDefault()
     event.stopPropagation()
     ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    moveCaretAfterAtomicAttachment()
     document.execCommand('insertLineBreak')
     const target = getEventElement(event)
-    const editable = target?.closest('.vditor-ir pre.vditor-reset') as HTMLElement | null
+    const editable = target?.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset') as HTMLElement | null
     editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertLineBreak' }))
     scheduleRefreshAttachmentLinks()
     window.setTimeout(() => {
       if (vditorInstance?.getValue) emit('update:modelValue', vditorInstance.getValue())
     }, 0)
+  }
+
+  const onPlainTextEnterKeydown = (event: KeyboardEvent) => {
+    if (!isEditorSoftEnter(event)) return
+    insertEditorSoftLineBreak(event)
+  }
+
+  const onEditorBeforeInput = (event: InputEvent) => {
+    if (event.inputType !== 'insertParagraph' || event.isComposing) return
+    const selection = window.getSelection()
+    const anchorNode = selection?.anchorNode || null
+    const anchorElement = anchorNode instanceof Element ? anchorNode : anchorNode?.parentElement || getEventElement(event)
+    if (!anchorElement || !root.contains(anchorElement)) return
+    if (anchorElement.closest('.vditor-toolbar, .vditor-panel, .vditor-hint, [data-type="code-block"], .vditor-ir__marker--pre')) return
+    if (!anchorElement.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset')) return
+    insertEditorSoftLineBreak(event)
   }
 
   let refreshQueued = false
@@ -487,6 +561,7 @@ const setupAttachmentPreview = () => {
   root.addEventListener('mousedown', preventAttachmentNavigation, true)
   root.addEventListener('click', onAttachmentClick, true)
   root.addEventListener('keydown', onPlainTextEnterKeydown, true)
+  root.addEventListener('beforeinput', onEditorBeforeInput as EventListener, true)
   root.addEventListener('keydown', onAttachmentKeydown, true)
   attachmentPreviewCleanup = () => {
     previewObserver.disconnect()
@@ -498,6 +573,7 @@ const setupAttachmentPreview = () => {
     root.removeEventListener('mousedown', preventAttachmentNavigation, true)
     root.removeEventListener('click', onAttachmentClick, true)
     root.removeEventListener('keydown', onPlainTextEnterKeydown, true)
+    root.removeEventListener('beforeinput', onEditorBeforeInput as EventListener, true)
     root.removeEventListener('keydown', onAttachmentKeydown, true)
     root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
     attachmentPreviewCleanup = null
@@ -587,6 +663,41 @@ const closeHeadingMenu = () => {
   if (nativeHeadingPanel.value) nativeHeadingPanel.value.style.display = 'none'
 }
 
+const positionTableMenu = () => {
+  positionFloatingMenu(tableTrigger.value, tableMenuRef.value, tableMenuStyle, 196, 'above-align-left')
+}
+
+const closeTableMenu = () => {
+  showTableMenu.value = false
+  nativeTablePanel.value?.classList.add('vditor-panel--none')
+  if (nativeTablePanel.value) nativeTablePanel.value.style.display = 'none'
+}
+
+const clampTableSize = (value: number) => Math.min(6, Math.max(1, Number(value) || 1))
+const adjustTableRows = (delta: number) => { tableRows.value = clampTableSize(tableRows.value + delta) }
+const adjustTableCols = (delta: number) => { tableCols.value = clampTableSize(tableCols.value + delta) }
+const previewTableSize = (rows: number, cols: number) => {
+  tableRows.value = clampTableSize(rows)
+  tableCols.value = clampTableSize(cols)
+}
+
+const buildMarkdownTable = (rows: number, cols: number) => {
+  const rowCount = clampTableSize(rows)
+  const colCount = clampTableSize(cols)
+  const header = Array.from({ length: colCount }, (_, index) => `列 ${index + 1}`)
+  const divider = Array.from({ length: colCount }, () => '---')
+  const bodyRows = Array.from({ length: Math.max(1, rowCount - 1) }, () => Array.from({ length: colCount }, () => ' '))
+  const formatRow = (cells: string[]) => `| ${cells.join(' | ')} |`
+  return `\n${[formatRow(header), formatRow(divider), ...bodyRows.map(formatRow)].join('\n')}\n`
+}
+
+const insertTable = (rows: number, cols: number) => {
+  if (!vditorInstance) return
+  vditorInstance.insertValue(buildMarkdownTable(rows, cols))
+  emit('update:modelValue', vditorInstance.getValue?.() || '')
+  closeTableMenu()
+}
+
 const applyHeadingFallback = (option: typeof headingOptions[number]) => {
   if (!vditorInstance) return
   const value = vditorInstance.getValue?.() || ''
@@ -636,14 +747,23 @@ const selectHeading = (option: typeof headingOptions[number]) => {
 const setupVditorPanelPositioning = () => {
   if (panelCleanup) return
 
+  const toolbarAction = (item: HTMLElement | null) => {
+    if (!item) return null
+    return item.matches('[data-type]') ? item : item.querySelector<HTMLElement>('[data-type], [aria-label], [title]')
+  }
+
   const isHeadingsItem = (item: HTMLElement | null) => {
-    if (!item) return false
-    const action = item.matches('[data-type="headings"]')
-      ? item
-      : item.querySelector<HTMLElement>('[data-type="headings"], [aria-label*="标题"], [aria-label*="Heading"], [title*="标题"], [title*="Heading"]')
+    const action = toolbarAction(item)
     const type = action?.getAttribute('data-type') || ''
     const label = action?.getAttribute('aria-label') || action?.getAttribute('title') || ''
     return type === 'headings' || /标题|Heading|Headings/i.test(label)
+  }
+
+  const isTableItem = (item: HTMLElement | null) => {
+    const action = toolbarAction(item)
+    const type = action?.getAttribute('data-type') || ''
+    const label = action?.getAttribute('aria-label') || action?.getAttribute('title') || ''
+    return type === 'table' || /表格|Table/i.test(label)
   }
 
   const openHeadingMenu = async (item: HTMLElement) => {
@@ -653,39 +773,72 @@ const setupVditorPanelPositioning = () => {
       nativeHeadingPanel.value.classList.add('vditor-panel--none')
       nativeHeadingPanel.value.style.display = 'none'
     }
+    closeTableMenu()
     selectedHeadingTag.value = getCurrentHeadingTag()
     showHeadingMenu.value = true
     await nextTick()
     scheduleFloatingMenuPosition(positionHeadingMenu)
   }
 
+  const openTableMenu = async (item: HTMLElement) => {
+    tableTrigger.value = item
+    nativeTablePanel.value = item.querySelector<HTMLElement>('.vditor-hint, .vditor-panel')
+    if (nativeTablePanel.value) {
+      nativeTablePanel.value.classList.add('vditor-panel--none')
+      nativeTablePanel.value.style.display = 'none'
+    }
+    closeHeadingMenu()
+    showTableMenu.value = true
+    await nextTick()
+    scheduleFloatingMenuPosition(positionTableMenu)
+  }
+
   const handleToolbarClick = (event: Event) => {
     const target = event.target instanceof Element ? event.target : null
     const item = target?.closest('.vditor-toolbar__item') as HTMLElement | null
     if (!item || !editorContainer.value?.contains(item)) return
-    if (!item || !isHeadingsItem(item)) return
+    const isHeading = isHeadingsItem(item)
+    const isTable = isTableItem(item)
+    if (!isHeading && !isTable) return
     event.preventDefault()
     event.stopPropagation()
     ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
-    if (showHeadingMenu.value && headingTrigger.value === item) {
-      closeHeadingMenu()
+    if (isHeading) {
+      if (showHeadingMenu.value && headingTrigger.value === item) {
+        closeHeadingMenu()
+        return
+      }
+      openHeadingMenu(item)
       return
     }
-    openHeadingMenu(item)
+    if (showTableMenu.value && tableTrigger.value === item) {
+      closeTableMenu()
+      return
+    }
+    openTableMenu(item)
   }
 
   const handleDocumentPointer = (event: Event) => {
-    if (!showHeadingMenu.value) return
+    if (!showHeadingMenu.value && !showTableMenu.value) return
     const target = event.target instanceof Element ? event.target : null
-    if (target?.closest('.vditor-heading-menu')) return
-    if (target?.closest('.vditor-toolbar__item') === headingTrigger.value) return
+    if (target?.closest('.vditor-heading-menu, .vditor-table-menu')) return
+    const toolbarItem = target?.closest('.vditor-toolbar__item')
+    if (toolbarItem === headingTrigger.value || toolbarItem === tableTrigger.value) return
     closeHeadingMenu()
+    closeTableMenu()
   }
 
   const handleFloatingReposition = () => {
     if (showHeadingMenu.value) scheduleFloatingMenuPosition(positionHeadingMenu)
+    if (showTableMenu.value) scheduleFloatingMenuPosition(positionTableMenu)
   }
   const scrollContainers = Array.from(document.querySelectorAll('.center-col, .content-wrapper')) as HTMLElement[]
+  const observedPanelRoots = [editorContainer.value, editorContainer.value?.querySelector('.vditor'), editorContainer.value?.querySelector('.vditor-content'), toolbarEl]
+    .filter((el): el is HTMLElement => el instanceof HTMLElement)
+  const panelResizeObserver = typeof ResizeObserver !== 'undefined'
+    ? new ResizeObserver(() => handleFloatingReposition())
+    : null
+  observedPanelRoots.forEach((el) => panelResizeObserver?.observe(el))
   toolbarEl?.addEventListener('click', handleToolbarClick, true)
   document.addEventListener('click', handleToolbarClick, true)
   document.addEventListener('mousedown', handleDocumentPointer, true)
@@ -701,9 +854,12 @@ const setupVditorPanelPositioning = () => {
     window.removeEventListener('resize', handleFloatingReposition)
     window.removeEventListener('scroll', handleFloatingReposition, true)
     scrollContainers.forEach((el) => el.removeEventListener('scroll', handleFloatingReposition))
+    observedPanelRoots.forEach((el) => panelResizeObserver?.unobserve(el))
+    panelResizeObserver?.disconnect()
     window.visualViewport?.removeEventListener('resize', handleFloatingReposition)
     window.visualViewport?.removeEventListener('scroll', handleFloatingReposition)
     closeHeadingMenu()
+    closeTableMenu()
     panelCleanup = null
   }
 }
@@ -794,10 +950,18 @@ onMounted(async () => {
       if (placeholderEl) placeholderEl.style.height = `${h}px`;
     };
 
+    const scheduleToolbarPositionUpdate = () => requestAnimationFrame(updateToolbarPosition)
+
     const scrollContainers = Array.from(document.querySelectorAll('.center-col, .content-wrapper')) as HTMLElement[];
     scrollContainers.forEach((el) => el.addEventListener('scroll', updateToolbarPosition, { passive: true }));
     window.addEventListener('resize', updateToolbarPosition);
     window.addEventListener('scroll', updateToolbarPosition, { passive: true });
+    if (typeof ResizeObserver !== 'undefined') {
+      toolbarResizeObserver = new ResizeObserver(scheduleToolbarPositionUpdate)
+      toolbarResizeObserver.observe(root)
+      const content = root.querySelector('.vditor-content') as HTMLElement | null
+      if (content) toolbarResizeObserver.observe(content)
+    }
     updateToolbarPosition();
 
     mutationObserver = new MutationObserver(() => updateToolbarPosition());
@@ -809,6 +973,8 @@ onMounted(async () => {
       window.removeEventListener('scroll', updateToolbarPosition);
       mutationObserver?.disconnect();
       mutationObserver = null;
+      toolbarResizeObserver?.disconnect();
+      toolbarResizeObserver = null;
       if (toolbarEl) {
         toolbarEl.style.position = '';
         toolbarEl.style.top = '';
@@ -1351,6 +1517,104 @@ html.dark .vditor-hint {
   background: #202a36;
   color: #ffffff;
   border-color: rgba(255, 255, 255, 0.1);
+}
+
+.vditor-table-menu {
+  position: fixed !important;
+  z-index: 5004 !important;
+  box-sizing: border-box;
+  display: grid !important;
+  gap: 8px !important;
+  width: 196px !important;
+  min-width: 196px !important;
+  max-width: min(196px, calc(100vw - 16px)) !important;
+  padding: 10px !important;
+  border: 1px solid var(--nw-floating-border) !important;
+  border-radius: 12px !important;
+  background: var(--nw-floating-bg) !important;
+  color: var(--nw-floating-text) !important;
+  box-shadow: var(--nw-floating-shadow) !important;
+}
+
+.vditor-table-menu.is-dark {
+  --nw-floating-bg: #0f172a;
+  --nw-floating-text: #f8fafc;
+  --nw-floating-border: rgba(255, 255, 255, 0.18);
+  --nw-floating-shadow: 0 18px 42px rgba(0, 0, 0, 0.42);
+  --nw-floating-hover-bg: rgba(249, 115, 22, 0.26);
+  --nw-floating-hover-border: rgba(249, 115, 22, 0.58);
+  --nw-floating-selected-bg: rgba(249, 115, 22, 0.30);
+  --nw-floating-selected-border: rgba(249, 115, 22, 0.70);
+}
+
+.table-menu-row {
+  display: grid;
+  grid-template-columns: 1fr 28px 34px 28px;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.table-menu-label,
+.table-menu-value {
+  min-width: 0;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.table-menu-value {
+  text-align: center;
+}
+
+.table-stepper-btn,
+.table-size-cell {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  border: 1px solid var(--nw-floating-border) !important;
+  border-radius: 7px !important;
+  background: transparent !important;
+  color: inherit !important;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.table-stepper-btn:hover,
+.table-stepper-btn:focus-visible,
+.table-size-cell:hover,
+.table-size-cell:focus-visible,
+.table-size-cell.is-active {
+  outline: none !important;
+  border-color: var(--nw-floating-hover-border) !important;
+  background: var(--nw-floating-hover-bg) !important;
+}
+
+.table-size-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 22px);
+  gap: 5px;
+  justify-content: center;
+}
+
+.table-size-cell {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  border-radius: 5px !important;
+  padding: 0 !important;
+}
+
+.table-insert-btn {
+  width: 100% !important;
+  justify-content: center !important;
+  min-height: 32px !important;
 }
 
 .vditor-heading-floating-menu.vditor-hint,
