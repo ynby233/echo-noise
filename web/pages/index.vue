@@ -578,6 +578,7 @@ const notificationReturnFocusId = ref<number | null>(null)
 const selectedCalendarDate = ref('')
 const searchKeyword = ref('')
 const selectedTag = ref('')
+const frontendConfig = ref<any>({})
 const calendarMessageDate = computed(() => (activeTab.value === 'latest' || activeTab.value === 'personal') ? selectedCalendarDate.value : '')
 const messageSearchKeyword = computed(() => (activeTab.value === 'latest' || activeTab.value === 'personal') ? searchKeyword.value : '')
 const messageSelectedTag = computed(() => (activeTab.value === 'latest' || activeTab.value === 'personal') ? selectedTag.value : '')
@@ -1278,7 +1279,7 @@ const normalizeHeaderBackgrounds = (items: any): HeaderBackgroundConfig[] => {
 }
 
 // 添加前端配置的响应式对象
-const frontendConfig = ref<any>({
+Object.assign(frontendConfig.value, {
     siteTitle: '',
     subtitleText: '',
     avatarURL: '',
@@ -2365,9 +2366,27 @@ watch([leftAds, () => (frontendConfig.value as any)?.leftAdsIntervalMs], () => {
 }, { immediate: true })
 onUnmounted(() => { if (adTimer) clearInterval(adTimer) })
 
+const projectFancyboxOptions = {
+  mainClass: 'noise-media-fancybox',
+  Carousel: { infinite: true },
+  Toolbar: {
+    enabled: true,
+    display: {
+      left: ['infobar'],
+      middle: [],
+      right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']
+    }
+  },
+  Images: { zoom: true },
+  Html: { videoAutoplay: true },
+  Thumbs: { type: 'classic', autoStart: true },
+  compact: false,
+  placeFocusBack: false
+}
+
 // 绑定 Fancybox 以支持推荐图集预览
 onMounted(() => {
-  try { (window as any).Fancybox?.bind?.('[data-fancybox]', {}) } catch {}
+  try { (window as any).Fancybox?.bind?.('[data-fancybox]', projectFancyboxOptions) } catch {}
 })
 
 // 监听前端配置更新事件，保存后主动刷新配置

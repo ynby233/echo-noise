@@ -862,6 +862,12 @@ const emit = defineEmits<{
   (e: 'target-consumed'): void
   (e: 'loading-change', loading: boolean): void
 }>()
+const isPageLoading = ref(false);
+const setPageLoading = (loading: boolean) => {
+  if (isPageLoading.value === loading) return
+  isPageLoading.value = loading
+  emit('loading-change', loading)
+}
 const outerContainerClass = computed(() => {
   const filtering = props.pageReady && Boolean(props.calendarDate || String(props.searchKeyword || '').trim() || String(props.selectedTag || '').trim())
   return filtering ? 'flex-grow w-full' : 'flex-grow w-full px-1 sm:px-2'
@@ -1355,7 +1361,6 @@ const deleteMsg = async (id: number) => {
 
 const initFancybox = () => {
   if (window.Fancybox) {
-    window.Fancybox.destroy();
     const fancyboxOptions = {
       mainClass: 'noise-media-fancybox',
       Carousel: {
@@ -1369,11 +1374,15 @@ const initFancybox = () => {
           right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']
         },
       },
-      Image: {
+      Images: {
         zoom: true,
         click: true,
         wheel: "slide",
       },
+      Html: { videoAutoplay: true },
+      Thumbs: { type: 'classic', autoStart: true },
+      compact: false,
+      placeFocusBack: false,
     };
 
     const mdImages = document.querySelectorAll(".markdown-preview img");
@@ -1819,13 +1828,6 @@ watch(() => route.hash, async (newHash) => {
 }, { immediate: true });
 
 // 修改 loadMore 为 loadNextPage
-const isPageLoading = ref(false);
-const setPageLoading = (loading: boolean) => {
-  if (isPageLoading.value === loading) return
-  isPageLoading.value = loading
-  emit('loading-change', loading)
-}
-
 watch(
   [
     () => props.activeTab,
@@ -1925,7 +1927,7 @@ watch(
 // 组件卸载时清理
 onBeforeUnmount(() => {
   if (window.Fancybox) {
-    window.Fancybox.destroy();
+    window.Fancybox.unbind?.('[data-fancybox]');
   }
 });
 // 添加复制功能
@@ -2803,10 +2805,11 @@ onMounted(() => {
 .search-results-list {
   box-sizing: border-box;
   display: flex;
-  width: 100%;
+  width: calc(100% + 2rem + 2px);
+  max-width: calc(56rem + 2px);
   flex-direction: column;
   gap: 12px;
-  margin-top: 0;
+  margin: 0 calc(-1rem - 1px);
 }
 
 .search-results-list > .w-full,

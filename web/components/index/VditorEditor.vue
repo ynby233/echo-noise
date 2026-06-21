@@ -189,7 +189,7 @@ const transformAttachmentPreviewHtml = (html: string) => {
 const getAttachmentImageFancyboxOptions = (startIndex = 0) => ({
   animated: true,
   closeButton: false,
-  mainClass: 'editor-attachment-image-fancybox',
+  mainClass: 'noise-media-fancybox',
   startIndex,
   Carousel: { infinite: true },
   Toolbar: {
@@ -200,20 +200,15 @@ const getAttachmentImageFancyboxOptions = (startIndex = 0) => ({
       right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']
     }
   },
-  Image: {
-    zoom: true,
-    click: true,
-    wheel: 'slide'
+  Images: {
+    zoom: true
   }
 })
 
 const getAttachmentVideoFancyboxOptions = (startIndex = 0) => ({
   animated: true,
-  backdropClick: 'close' as const,
   closeButton: false,
-  contentClick: false as const,
-  dragToClose: false,
-  mainClass: 'editor-attachment-video-fancybox',
+  mainClass: 'noise-media-fancybox',
   startIndex,
   Carousel: { infinite: true },
   Toolbar: {
@@ -221,23 +216,24 @@ const getAttachmentVideoFancyboxOptions = (startIndex = 0) => ({
     display: {
       left: ['infobar'],
       middle: [],
-      right: ['close']
+      right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']
     }
+  },
+  Html: {
+    videoAutoplay: true
+  },
+  Thumbs: {
+    type: 'classic',
+    autoStart: true
   }
 })
-
-const buildVideoFancyboxHtml = (info: EditorAttachmentInfo) => {
-  const safeUrl = escapeAttachmentHtmlAttr(info.url)
-  const safeName = escapeAttachmentHtmlAttr(info.name)
-  return `<div class="editor-attachment-fancybox-video"><video src="${safeUrl}" controls preload="metadata" playsinline aria-label="${safeName}"></video></div>`
-}
 
 const showAttachmentGallery = (items: EditorAttachmentInfo[], current: EditorAttachmentInfo) => {
   const sameType = items.filter((item) => item.type === current.type)
   const galleryItems = sameType.length ? sameType : [current]
   const startIndex = Math.max(0, galleryItems.findIndex((item) => item.url === current.url && item.name === current.name))
   const slides = galleryItems.map((item) => item.type === 'video'
-    ? { src: buildVideoFancyboxHtml(item), type: 'html', caption: item.name }
+    ? { src: item.url, type: 'html5video', caption: item.name, thumbSrc: item.url }
     : { src: item.url, type: 'image', caption: item.name }
   )
   const options = current.type === 'video'
@@ -1242,8 +1238,7 @@ watch(() => props.theme, (newTheme) => {
   display: none !important;
 }
 
-.editor-attachment-image-fancybox .fancybox__toolbar,
-.editor-attachment-video-fancybox .fancybox__toolbar {
+.noise-media-fancybox .fancybox__toolbar {
   --f-button-width: 42px;
   --f-button-height: 42px;
   top: max(0px, env(safe-area-inset-top, 0px));
@@ -1251,8 +1246,7 @@ watch(() => props.theme, (newTheme) => {
   padding: 0 !important;
 }
 
-.editor-attachment-image-fancybox .fancybox__infobar,
-.editor-attachment-video-fancybox .fancybox__infobar {
+.noise-media-fancybox .fancybox__infobar {
   top: max(0px, env(safe-area-inset-top, 0px));
   left: max(0px, env(safe-area-inset-left, 0px));
   padding: 7px 10px !important;
@@ -1263,34 +1257,12 @@ watch(() => props.theme, (newTheme) => {
   line-height: 1;
 }
 
-.editor-attachment-image-fancybox .fancybox__nav,
-.editor-attachment-video-fancybox .fancybox__nav {
+.noise-media-fancybox .fancybox__nav {
   display: flex !important;
 }
 
-.editor-attachment-video-fancybox .fancybox__content:has(.editor-attachment-fancybox-video) {
-  padding: 0 !important;
-  background: transparent !important;
-  color: inherit !important;
-  box-shadow: none !important;
-}
-
-.editor-attachment-video-fancybox .fancybox__slide {
+.noise-media-fancybox .fancybox__slide {
   padding: 56px 16px 24px;
-}
-
-.editor-attachment-fancybox-video {
-  width: min(92vw, 960px);
-  max-height: 82vh;
-  background: transparent;
-}
-
-.editor-attachment-fancybox-video video {
-  display: block;
-  width: 100%;
-  max-height: 82vh;
-  background: #000;
-  border-radius: 8px;
 }
 
 .editor-attachment-preview {
@@ -1610,7 +1582,6 @@ html.dark .editor-attachment-preview__header,
 }
 
 .vditor-reset table th {
-  background: rgba(248, 250, 252, 0.98);
   font-weight: 600;
 }
 
@@ -1656,8 +1627,6 @@ html.dark .vditor-reset table td {
   background: rgba(39, 50, 66, 0.76);
   color: rgba(226, 232, 240, 0.96);
 }
-
-html.dark .vditor-reset table th { background: rgba(47, 59, 76, 0.88); }
 
 html.dark .vditor-hint {
   background: #202a36;
@@ -1750,9 +1719,13 @@ html.dark .vditor-hint {
 }
 
 .table-size-cell {
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px !important;
+  min-height: 24px !important;
+  max-width: 24px !important;
+  max-height: 24px !important;
+  flex: 0 0 24px;
   border-radius: 6px !important;
   padding: 0 !important;
 }

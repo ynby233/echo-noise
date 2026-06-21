@@ -47,6 +47,7 @@ declare global {
   interface Window {
     handleTagClick: (tag: string) => void;
     mediumZoom: any;
+    Fancybox?: any;
     APlayer: any;
     MetingJSElement: any;
     meting_api?: string;
@@ -135,22 +136,66 @@ const applyThemeClass = () => {
   previewElement.value.classList.toggle('theme-light', !isDark)
 }
 
-const initializeZoom = () => {
-  if (window.mediumZoom) {
-    // 如果已存在zoom实例，先销毁
-    if (zoom) {
-      zoom.detach();
-    }
-    
-    const images = previewElement.value?.getElementsByTagName('img');
-    if (images && images.length > 0) {
-      zoom = window.mediumZoom(images, {
-        background: 'rgba(0, 0, 0, 0.9)',
-        margin: 24,
-        scrollOffset: 0,
-      });
-    }
+const initializeMediaViewer = () => {
+  const root = previewElement.value
+  const Fancybox = window.Fancybox
+  if (!root || !Fancybox) return
+
+  if (zoom) {
+    try { zoom.detach?.() } catch {}
+    zoom = null
   }
+
+  const group = `markdown-media-${props.messageId || 'preview'}`
+  root.querySelectorAll('a[data-fancybox], img, video').forEach((node) => {
+    const el = node as HTMLElement
+    if (el.closest('.github-card, .video-wrapper, .douyin-video-wrapper, .bilibili-video-wrapper')) return
+    const tag = el.tagName.toLowerCase()
+    if (tag === 'a') {
+      const anchor = el as HTMLAnchorElement
+      anchor.setAttribute('data-fancybox', anchor.getAttribute('data-fancybox') || group)
+      return
+    }
+    if (tag === 'img') {
+      const img = el as HTMLImageElement
+      const parent = img.parentElement as HTMLAnchorElement | null
+      if (parent?.tagName?.toLowerCase() === 'a') {
+        parent.setAttribute('data-fancybox', parent.getAttribute('data-fancybox') || group)
+        if (!parent.getAttribute('href')) parent.setAttribute('href', img.currentSrc || img.src)
+      }
+      return
+    }
+    if (tag === 'video') {
+      const video = el as HTMLVideoElement
+      const src = video.currentSrc || video.getAttribute('src') || ''
+      if (!src) return
+      video.setAttribute('data-fancybox', video.getAttribute('data-fancybox') || group)
+      video.dataset.src = src
+      video.dataset.type = 'html5video'
+      video.classList.add('fancybox-video-trigger')
+    }
+  })
+
+  try {
+    Fancybox.unbind?.(root, '[data-fancybox]')
+  } catch {}
+  Fancybox.bind(root, '[data-fancybox]', {
+    mainClass: 'noise-media-fancybox',
+    Carousel: { infinite: true },
+    Toolbar: {
+      enabled: true,
+      display: {
+        left: ['infobar'],
+        middle: [],
+        right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']
+      }
+    },
+    Images: { zoom: true },
+    Html: { videoAutoplay: true },
+    Thumbs: { type: 'classic', autoStart: true },
+    compact: false,
+    placeFocusBack: false
+  })
 };
 
 const shouldSkipHashtagNode = (node: Node | null) => {
@@ -1292,7 +1337,7 @@ const renderMarkdown = async (markdown: string) => {
           setTimeout(() => {
             applyDouyinVideoLayout()
           }, 80)
-          initializeZoom();
+          initializeMediaViewer();
           applyImageLoadingPlaceholders();
           emit('rendered');
           const proc = (window as any).processNMPv2Shortcodes
@@ -1745,6 +1790,10 @@ watch(() => props.enableGithubCard, () => {
 }
 .image-loading-error {
   color: #ef4444;
+}
+
+.markdown-preview :deep(.fancybox-video-trigger) {
+  cursor: zoom-in;
 }
 
 .markdown-preview :deep(video),

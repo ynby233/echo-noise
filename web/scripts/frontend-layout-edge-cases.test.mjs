@@ -190,6 +190,10 @@ assert(
     messageList.includes("['search-card', 'search-results-panel', 'mb-3', { 'is-dark': isContentDark }]") &&
     messageList.includes("ui: { body: { padding: 'p-5 md:p-6' } }") &&
     messageList.includes("props.pageReady && hasActiveFilters ? 'search-results-list' : 'my-4'") &&
+    messageList.includes('.search-results-list {') &&
+    messageList.includes('width: calc(100% + 2rem + 2px);') &&
+    messageList.includes('max-width: calc(56rem + 2px);') &&
+    messageList.includes('margin: 0 calc(-1rem - 1px);') &&
     messageList.includes("class=\"w-full h-auto overflow-hidden flex flex-col justify-between\"") &&
     messageList.includes("['content-container', innerContainerClass, listThemeClass]") &&
     !messageList.includes('search-result-note-card') &&
@@ -322,7 +326,7 @@ assert(
     vditorEditor.includes("target.closest<HTMLElement>('.vditor-ir__link.editor-attachment-link')") &&
     vditorEditor.includes("target.closest('a.editor-attachment-link')") &&
     vditorEditor.includes('showAttachmentGallery(getAttachmentInfosByType(info.type), info)') &&
-    vditorEditor.includes('buildVideoFancyboxHtml') &&
+    !vditorEditor.includes('buildVideoFancyboxHtml') &&
     vditorEditor.includes('buildAttachmentPreviewHtml') &&
     vditorEditor.includes('transform: transformAttachmentPreviewHtml') &&
     vditorEditor.includes('const showImageInProjectViewer = (info: EditorAttachmentInfo) => showAttachmentGallery([info], info)') &&
@@ -331,11 +335,21 @@ assert(
     vditorEditor.includes('getAttachmentVideoFancyboxOptions') &&
     vditorEditor.includes("left: ['infobar']") &&
     vditorEditor.includes("right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']") &&
+    !vditorEditor.includes("right: ['slideshow', 'fullscreen', 'thumbs', 'close']") &&
+    vditorEditor.includes('Html: {') &&
+    vditorEditor.includes('videoAutoplay: true') &&
+    vditorEditor.includes("{ src: item.url, type: 'html5video', caption: item.name, thumbSrc: item.url }") &&
+    vditorEditor.includes('autoStart: true') &&
+    vditorEditor.includes('Images: {') &&
+    vditorEditor.includes("mainClass: 'noise-media-fancybox'") &&
+    !vditorEditor.includes('editor-attachment-image-fancybox') &&
+    !vditorEditor.includes('editor-attachment-video-fancybox') &&
+    !vditorEditor.includes("type: 'video'") &&
+    vditorEditor.includes('Thumbs: {') &&
     vditorEditor.includes('Carousel: { infinite: true }') &&
-    vditorEditor.includes("backdropClick: 'close'") &&
+    !vditorEditor.includes("backdropClick: 'close'") &&
     vditorEditor.includes('closeButton: false') &&
     vditorEditor.includes('middle: []') &&
-    vditorEditor.includes("right: ['close']") &&
     vditorEditor.includes('top: max(0px, env(safe-area-inset-top, 0px));') &&
     vditorEditor.includes('right: max(0px, env(safe-area-inset-right, 0px));') &&
     vditorEditor.includes('left: max(0px, env(safe-area-inset-left, 0px));') &&
@@ -345,6 +359,9 @@ assert(
     vditorEditor.includes("positionFloatingMenu(tableTrigger.value, tableMenuRef.value, tableMenuStyle, 284, 'above-align-left')") &&
     vditorEditor.includes('width: 284px !important;') &&
     vditorEditor.includes('grid-template-columns: repeat(10, 24px);') &&
+    vditorEditor.includes('width: 24px !important;') &&
+    !vditorEditor.includes('.vditor-reset table th {\n  background:') &&
+    !vditorEditor.includes('html.dark .vditor-reset table th { background:') &&
     vditorEditor.includes("const header = Array.from({ length: colCount }, () => ' ')") &&
     !vditorEditor.includes('`列 ${index + 1}`') &&
     vditorEditor.includes('getCurrentEditorTableCell') &&
@@ -361,6 +378,11 @@ assert(
     messageList.includes("mainClass: 'noise-media-fancybox'") &&
     messageList.includes("left: ['infobar']") &&
     messageList.includes("right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']") &&
+    messageList.includes('Images: {') &&
+    messageList.includes('Html: { videoAutoplay: true }') &&
+    messageList.includes("Thumbs: { type: 'classic', autoStart: true }") &&
+    !/\bImage:\s*\{/.test(messageList) &&
+    !messageList.includes('window.Fancybox.destroy()') &&
     messageList.includes(':deep(.noise-media-fancybox .fancybox__toolbar)') &&
     messageList.includes(':deep(.noise-media-fancybox .fancybox__infobar)') &&
     vditorEditor.includes('collapseIrAttachmentChrome') &&
@@ -374,11 +396,19 @@ assert(
     vditorEditor.includes("marker.classList.remove('vditor-ir__node--expand')") &&
     vditorEditor.includes('previewObserver.observe(root, { childList: true, subtree: true })') &&
     !vditorEditor.includes('characterData: true') &&
-    vditorEditor.includes('.editor-attachment-image-fancybox .fancybox__nav') &&
-    vditorEditor.includes('.editor-attachment-video-fancybox .fancybox__nav') &&
-    vditorEditor.includes('display: flex !important;') &&
-    vditorEditor.includes('.fancybox__content:has(.editor-attachment-fancybox-video)') &&
-    vditorEditor.includes('pointer-events: auto;') &&
+    markdownRenderer.includes('initializeMediaViewer') &&
+    markdownRenderer.includes('Fancybox.bind(root, \'[data-fancybox]\'') &&
+    markdownRenderer.includes("right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']") &&
+    markdownRenderer.includes("mainClass: 'noise-media-fancybox'") &&
+    markdownRenderer.includes('Html: { videoAutoplay: true }') &&
+    markdownRenderer.includes("Thumbs: { type: 'classic', autoStart: true }") &&
+    markdownRenderer.includes("video.dataset.type = 'html5video'") &&
+    !markdownRenderer.includes("video.dataset.type = 'video'") &&
+    homePage.includes('projectFancyboxOptions') &&
+    homePage.includes("Fancybox?.bind?.('[data-fancybox]', projectFancyboxOptions)") &&
+    homePage.includes("mainClass: 'noise-media-fancybox'") &&
+    !homePage.includes("Fancybox?.bind?.('[data-fancybox]', {})") &&
+    !markdownRenderer.includes('mediumZoom(') &&
     vditorEditor.includes('stopImmediatePropagation') &&
     vditorEditor.includes("root.addEventListener('pointerdown', preventAttachmentNavigation, true)") &&
     vditorEditor.includes("root.addEventListener('mousedown', preventAttachmentNavigation, true)") &&
@@ -481,6 +511,14 @@ assert(
     homePage.includes('await runCenterNavigationReset(() => {\n    ensureMessageTab()\n    searchKeyword.value = String(keyword || \'\').trim()') &&
     homePage.includes('await runCenterNavigationReset(() => {\n    ensureMessageTab()\n    selectedTag.value = selectedTag.value === normalizedTag ? \'\' : normalizedTag'),
   'center navigation must keep the shared content-wrapper as the desktop/tablet scroll container, reset it after DOM patch, and avoid hiding or height-locking the center column'
+)
+
+assert(
+  homePage.indexOf('const frontendConfig = ref<any>({})') > -1 &&
+    homePage.indexOf('const frontendConfig = ref<any>({})') < homePage.indexOf('const isFeedEnabled = computed(() =>') &&
+    homePage.includes('Object.assign(frontendConfig.value, {') &&
+    !homePage.includes('const frontendConfig = ref<any>({\n'),
+  'homepage frontendConfig must be initialized before computed values read it, avoiding production TDZ startup errors'
 )
 
 assert(
