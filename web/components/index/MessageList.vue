@@ -2792,9 +2792,11 @@ onMounted(() => {
 }
 
 .search-results-count {
-  max-width: 56rem;
-  margin: 0 auto 8px;
-  padding: 0 4px;
+  box-sizing: border-box;
+  width: calc(100% + 2rem + 2px);
+  max-width: calc(56rem + 2px);
+  margin: 0 calc(-1rem - 1px) 8px;
+  padding: 0;
   color: inherit;
   font-size: 14px;
   font-weight: 400;
@@ -3674,6 +3676,28 @@ onMounted(() => {
   color: #fff;
   font-size: 13px;
   line-height: 1;
+}
+
+:deep(.noise-media-fancybox .fancybox__caption) {
+  display: none !important;
+}
+
+:deep(.noise-media-fancybox .fancybox__thumbs) {
+  --f-thumb-width: 76px;
+  --f-thumb-height: 52px;
+}
+
+:deep(.noise-media-fancybox .fancybox__thumb),
+:deep(.noise-media-fancybox .fancybox__thumb img) {
+  transition: transform 160ms ease, opacity 160ms ease, border-color 160ms ease;
+}
+
+:deep(.noise-media-fancybox .fancybox__thumb.is-active),
+:deep(.noise-media-fancybox .is-nav-selected .fancybox__thumb) {
+  transform: scale(1.14);
+  opacity: 1;
+  border-color: rgba(251, 146, 60, 0.92);
+  z-index: 2;
 }
 
 :deep(.fancybox__backdrop) {

@@ -338,7 +338,10 @@ assert(
     !vditorEditor.includes("right: ['slideshow', 'fullscreen', 'thumbs', 'close']") &&
     vditorEditor.includes('Html: {') &&
     vditorEditor.includes('videoAutoplay: true') &&
-    vditorEditor.includes("{ src: item.url, type: 'html5video', caption: item.name, thumbSrc: item.url }") &&
+    vditorEditor.includes('getVideoFirstFrameThumbnail') &&
+    vditorEditor.includes("await Promise.all(galleryItems.map((item) => getVideoFirstFrameThumbnail(item.url)))") &&
+    vditorEditor.includes("{ src: item.url, type: 'html5video', thumbSrc: videoThumbs[index] || item.url }") &&
+    !vditorEditor.includes('caption: item.name') &&
     vditorEditor.includes('autoStart: true') &&
     vditorEditor.includes('Images: {') &&
     vditorEditor.includes("mainClass: 'noise-media-fancybox'") &&
@@ -356,8 +359,9 @@ assert(
     vditorEditor.includes('width: min(300px, 100%);') &&
     vditorEditor.includes('TABLE_SIZE_LIMIT = 10') &&
     vditorEditor.includes('Array.from({ length: TABLE_SIZE_LIMIT * TABLE_SIZE_LIMIT }') &&
-    vditorEditor.includes("positionFloatingMenu(tableTrigger.value, tableMenuRef.value, tableMenuStyle, 284, 'above-align-left')") &&
-    vditorEditor.includes('width: 284px !important;') &&
+    vditorEditor.includes("positionFloatingMenu(tableTrigger.value, tableMenuRef.value, tableMenuStyle, 324, 'above-align-left')") &&
+    vditorEditor.includes('width: 324px !important;') &&
+    vditorEditor.includes('min-width: 324px !important;') &&
     vditorEditor.includes('grid-template-columns: repeat(10, 24px);') &&
     vditorEditor.includes('width: 24px !important;') &&
     !vditorEditor.includes('.vditor-reset table th {\n  background:') &&
@@ -370,6 +374,12 @@ assert(
     vditorEditor.includes("range.insertNode(textNode)") &&
     vditorEditor.includes("inputType: 'insertText'") &&
     vditorEditor.includes('if (insertValueIntoCurrentTableCell(val)) return') &&
+    vditorEditor.includes('enhanceEditorTables(root)') &&
+    vditorEditor.includes('deleteSelectedEditorTable') &&
+    vditorEditor.includes("root.addEventListener('click', onTableHandleClick, true)") &&
+    vditorEditor.includes("root.addEventListener('keydown', onTableDeleteKeydown, true)") &&
+    vditorEditor.includes('.editor-table-select-handle') &&
+    vditorEditor.includes('.vditor-reset table.editor-table-selected') &&
     markdownRenderer.includes('.markdown-preview :deep(.noise-attachment-audio)') &&
     markdownRenderer.includes('.markdown-preview :deep(.noise-attachment-audio--table)') &&
     markdownRenderer.includes('width: min(300px, 100%) !important;') &&

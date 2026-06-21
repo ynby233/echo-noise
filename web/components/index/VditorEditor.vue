@@ -99,6 +99,9 @@ let imagePreviewCleanup: (() => void) | null = null;
 let attachmentPreviewCleanup: (() => void) | null = null;
 let refreshAttachmentLinksFromEditor: () => void = () => {};
 let lastEditorSelectionRange: Range | null = null;
+let selectedEditorTable: HTMLTableElement | null = null;
+let selectedEditorTableIndex = -1;
+const videoFirstFrameCache = new Map<string, Promise<string>>();
 const isReady = ref(false);
 const showHeadingMenu = ref(false);
 const headingMenuRef = ref<HTMLElement | null>(null);
@@ -228,13 +231,86 @@ const getAttachmentVideoFancyboxOptions = (startIndex = 0) => ({
   }
 })
 
-const showAttachmentGallery = (items: EditorAttachmentInfo[], current: EditorAttachmentInfo) => {
+const getVideoFirstFrameThumbnail = (url: string) => {
+  const src = String(url || '').trim()
+  if (!src || typeof document === 'undefined') return Promise.resolve(src)
+  const cached = videoFirstFrameCache.get(src)
+  if (cached) return cached
+  const promise = new Promise<string>((resolve) => {
+    const video = document.createElement('video')
+    const finish = (thumb: string) => {
+      cleanup()
+      resolve(thumb || src)
+    }
+    const cleanup = () => {
+      window.clearTimeout(timer)
+      video.removeEventListener('loadedmetadata', onLoadedMetadata)
+      video.removeEventListener('loadeddata', drawFrame)
+      video.removeEventListener('seeked', drawFrame)
+      video.removeEventListener('error', onError)
+      video.removeAttribute('src')
+      try { video.load() } catch {}
+    }
+    const drawFrame = () => {
+      try {
+        const width = video.videoWidth || 0
+        const height = video.videoHeight || 0
+        if (!width || !height) {
+          finish(src)
+          return
+        }
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          finish(src)
+          return
+        }
+        ctx.drawImage(video, 0, 0, width, height)
+        finish(canvas.toDataURL('image/jpeg', 0.82))
+      } catch {
+        finish(src)
+      }
+    }
+    const onLoadedMetadata = () => {
+      try {
+        const duration = Number(video.duration)
+        const seekTime = Number.isFinite(duration) && duration > 0 ? Math.min(0.12, duration / 20) : 0
+        if (seekTime > 0 && Math.abs(video.currentTime - seekTime) > 0.001) {
+          video.currentTime = seekTime
+          return
+        }
+      } catch {}
+      if (video.readyState >= 2) drawFrame()
+    }
+    const onError = () => finish(src)
+    const timer = window.setTimeout(() => finish(src), 2600)
+    video.crossOrigin = 'anonymous'
+    video.muted = true
+    video.playsInline = true
+    video.preload = 'metadata'
+    video.addEventListener('loadedmetadata', onLoadedMetadata)
+    video.addEventListener('loadeddata', drawFrame)
+    video.addEventListener('seeked', drawFrame)
+    video.addEventListener('error', onError)
+    video.src = src
+    try { video.load() } catch { finish(src) }
+  })
+  videoFirstFrameCache.set(src, promise)
+  return promise
+}
+
+const showAttachmentGallery = async (items: EditorAttachmentInfo[], current: EditorAttachmentInfo) => {
   const sameType = items.filter((item) => item.type === current.type)
   const galleryItems = sameType.length ? sameType : [current]
   const startIndex = Math.max(0, galleryItems.findIndex((item) => item.url === current.url && item.name === current.name))
-  const slides = galleryItems.map((item) => item.type === 'video'
-    ? { src: item.url, type: 'html5video', caption: item.name, thumbSrc: item.url }
-    : { src: item.url, type: 'image', caption: item.name }
+  const videoThumbs = current.type === 'video'
+    ? await Promise.all(galleryItems.map((item) => getVideoFirstFrameThumbnail(item.url)))
+    : []
+  const slides = galleryItems.map((item, index) => item.type === 'video'
+    ? { src: item.url, type: 'html5video', thumbSrc: videoThumbs[index] || item.url }
+    : { src: item.url, type: 'image', thumbSrc: item.url }
   )
   const options = current.type === 'video'
     ? getAttachmentVideoFancyboxOptions(startIndex)
@@ -586,6 +662,33 @@ const setupAttachmentPreview = () => {
     insertEditorSoftLineBreak(event)
   }
 
+  const scheduleTableEnhance = () => requestAnimationFrame(() => enhanceEditorTables(root))
+
+  const onTableHandleClick = (event: MouseEvent) => {
+    const handle = getEventElement(event)?.closest('.editor-table-select-handle') as HTMLElement | null
+    if (!handle || !root.contains(handle)) return
+    const table = handle.nextElementSibling as HTMLTableElement | null
+    if (!table || table.tagName.toLowerCase() !== 'table') return
+    event.preventDefault()
+    event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    selectEditorTable(table)
+  }
+
+  const onTableDeleteKeydown = (event: KeyboardEvent) => {
+    if (event.key !== 'Delete' && event.key !== 'Backspace') return
+    if (!selectedEditorTable && selectedEditorTableIndex < 0) return
+    if (!deleteSelectedEditorTable()) return
+    event.preventDefault()
+    event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+  }
+
+  const onTablePointerDown = (event: PointerEvent) => {
+    const target = getEventElement(event)
+    if (!target?.closest('.editor-table-select-handle, table.editor-deletable-table')) clearSelectedEditorTable()
+  }
+
   let refreshQueued = false
   const scheduleRefreshAttachmentLinks = () => {
     if (refreshQueued) return
@@ -593,20 +696,25 @@ const setupAttachmentPreview = () => {
     requestAnimationFrame(() => {
       refreshQueued = false
       refreshAttachmentLinks()
+      enhanceEditorTables(root)
     })
   }
   refreshAttachmentLinksFromEditor = scheduleRefreshAttachmentLinks
 
   refreshAttachmentLinks()
+  scheduleTableEnhance()
   const previewObserver = new MutationObserver(() => scheduleRefreshAttachmentLinks())
   previewObserver.observe(root, { childList: true, subtree: true })
   root.addEventListener('input', onEditorInput, true)
   root.addEventListener('mouseup', onEditorSelectionEvent, true)
   root.addEventListener('keyup', onEditorSelectionEvent, true)
   document.addEventListener('selectionchange', onEditorSelectionChange, true)
+  root.addEventListener('pointerdown', onTablePointerDown, true)
   root.addEventListener('pointerdown', preventAttachmentNavigation, true)
   root.addEventListener('mousedown', preventAttachmentNavigation, true)
+  root.addEventListener('click', onTableHandleClick, true)
   root.addEventListener('click', onAttachmentClick, true)
+  root.addEventListener('keydown', onTableDeleteKeydown, true)
   root.addEventListener('keydown', onPlainTextEnterKeydown, true)
   root.addEventListener('beforeinput', onEditorBeforeInput as EventListener, true)
   root.addEventListener('keydown', onAttachmentKeydown, true)
@@ -616,13 +724,17 @@ const setupAttachmentPreview = () => {
     root.removeEventListener('mouseup', onEditorSelectionEvent, true)
     root.removeEventListener('keyup', onEditorSelectionEvent, true)
     document.removeEventListener('selectionchange', onEditorSelectionChange, true)
+    root.removeEventListener('pointerdown', onTablePointerDown, true)
     root.removeEventListener('pointerdown', preventAttachmentNavigation, true)
     root.removeEventListener('mousedown', preventAttachmentNavigation, true)
+    root.removeEventListener('click', onTableHandleClick, true)
     root.removeEventListener('click', onAttachmentClick, true)
+    root.removeEventListener('keydown', onTableDeleteKeydown, true)
     root.removeEventListener('keydown', onPlainTextEnterKeydown, true)
     root.removeEventListener('beforeinput', onEditorBeforeInput as EventListener, true)
     root.removeEventListener('keydown', onAttachmentKeydown, true)
-    root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
+    clearSelectedEditorTable()
+    root.querySelectorAll('.editor-attachment-preview, .editor-table-select-handle').forEach((node) => node.remove())
     refreshAttachmentLinksFromEditor = () => {}
     attachmentPreviewCleanup = null
   }
@@ -712,7 +824,7 @@ const closeHeadingMenu = () => {
 }
 
 const positionTableMenu = () => {
-  positionFloatingMenu(tableTrigger.value, tableMenuRef.value, tableMenuStyle, 284, 'above-align-left')
+  positionFloatingMenu(tableTrigger.value, tableMenuRef.value, tableMenuStyle, 324, 'above-align-left')
 }
 
 const closeTableMenu = () => {
@@ -744,6 +856,75 @@ const insertTable = (rows: number, cols: number) => {
   vditorInstance.insertValue(buildMarkdownTable(rows, cols))
   emit('update:modelValue', vditorInstance.getValue?.() || '')
   closeTableMenu()
+}
+
+const getEditorTables = () => Array.from(editorContainer.value?.querySelectorAll<HTMLTableElement>('.vditor-reset table') || [])
+
+const clearSelectedEditorTable = () => {
+  selectedEditorTable?.classList.remove('editor-table-selected')
+  selectedEditorTable = null
+  selectedEditorTableIndex = -1
+}
+
+const selectEditorTable = (table: HTMLTableElement) => {
+  const tables = getEditorTables()
+  tables.forEach((item) => item.classList.toggle('editor-table-selected', item === table))
+  selectedEditorTable = table
+  selectedEditorTableIndex = tables.indexOf(table)
+}
+
+const isMarkdownTableDivider = (line: string) => {
+  const cells = String(line || '').trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim())
+  return cells.length > 1 && cells.every((cell) => /^:?-{3,}:?$/.test(cell))
+}
+
+const getMarkdownTableBlocks = (content: string) => {
+  const lines = String(content || '').split('\n')
+  const blocks: Array<{ start: number; end: number }> = []
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    if (!lines[index].includes('|') || !isMarkdownTableDivider(lines[index + 1])) continue
+    let end = index + 2
+    while (end < lines.length && lines[end].includes('|') && lines[end].trim() !== '') end += 1
+    blocks.push({ start: index, end })
+    index = end - 1
+  }
+  return blocks
+}
+
+const deleteSelectedEditorTable = () => {
+  if (!vditorInstance) return false
+  const tables = getEditorTables()
+  const tableIndex = selectedEditorTable ? tables.indexOf(selectedEditorTable) : selectedEditorTableIndex
+  if (tableIndex < 0) return false
+  const value = vditorInstance.getValue?.() || ''
+  const lines = value.split('\n')
+  const blocks = getMarkdownTableBlocks(value)
+  const block = blocks[tableIndex]
+  if (!block) return false
+  lines.splice(block.start, block.end - block.start)
+  const nextValue = lines.join('\n').replace(/\n{3,}/g, '\n\n')
+  vditorInstance.setValue(nextValue)
+  emit('update:modelValue', vditorInstance.getValue?.() || nextValue)
+  clearSelectedEditorTable()
+  window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
+  return true
+}
+
+const enhanceEditorTables = (root: HTMLElement) => {
+  root.querySelectorAll<HTMLElement>('.editor-table-select-handle').forEach((handle) => {
+    const table = handle.nextElementSibling as HTMLTableElement | null
+    if (!table || table.tagName.toLowerCase() !== 'table' || !root.contains(table)) handle.remove()
+  })
+  getEditorTables().forEach((table) => {
+    table.classList.add('editor-deletable-table')
+    if (table.previousElementSibling?.classList.contains('editor-table-select-handle')) return
+    const handle = document.createElement('button')
+    handle.type = 'button'
+    handle.className = 'editor-table-select-handle'
+    handle.setAttribute('contenteditable', 'false')
+    handle.setAttribute('aria-label', '选中表格，按 Delete 删除')
+    table.insertAdjacentElement('beforebegin', handle)
+  })
 }
 
 const applyHeadingFallback = (option: typeof headingOptions[number]) => {
@@ -1265,6 +1446,28 @@ watch(() => props.theme, (newTheme) => {
   padding: 56px 16px 24px;
 }
 
+.noise-media-fancybox .fancybox__caption {
+  display: none !important;
+}
+
+.noise-media-fancybox .fancybox__thumbs {
+  --f-thumb-width: 76px;
+  --f-thumb-height: 52px;
+}
+
+.noise-media-fancybox .fancybox__thumb,
+.noise-media-fancybox .fancybox__thumb img {
+  transition: transform 160ms ease, opacity 160ms ease, border-color 160ms ease;
+}
+
+.noise-media-fancybox .fancybox__thumb.is-active,
+.noise-media-fancybox .is-nav-selected .fancybox__thumb {
+  transform: scale(1.14);
+  opacity: 1;
+  border-color: rgba(251, 146, 60, 0.92);
+  z-index: 2;
+}
+
 .editor-attachment-preview {
   margin: 6px 12px 10px;
   padding: 8px;
@@ -1628,6 +1831,50 @@ html.dark .vditor-reset table td {
   color: rgba(226, 232, 240, 0.96);
 }
 
+.editor-table-select-handle {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: 2px 0 4px;
+  border: 1px solid rgba(251, 146, 60, 0.72);
+  border-radius: 6px;
+  background: rgba(251, 146, 60, 0.14);
+  color: #f97316;
+  cursor: pointer;
+  vertical-align: top;
+}
+
+.editor-table-select-handle::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-top: 2px solid currentColor;
+  border-left: 2px solid currentColor;
+}
+
+.editor-table-select-handle:hover,
+.editor-table-select-handle:focus-visible {
+  outline: none;
+  background: rgba(251, 146, 60, 0.24);
+  border-color: rgba(251, 146, 60, 0.92);
+}
+
+.vditor-reset table.editor-table-selected {
+  outline: 2px solid rgba(251, 146, 60, 0.86);
+  outline-offset: 2px;
+}
+
+html.dark .editor-table-select-handle {
+  background: rgba(251, 146, 60, 0.20);
+}
+
+html.dark .vditor-reset table.editor-table-selected {
+  outline-color: rgba(251, 146, 60, 0.96);
+}
+
 html.dark .vditor-hint {
   background: #202a36;
   color: #ffffff;
@@ -1640,10 +1887,10 @@ html.dark .vditor-hint {
   box-sizing: border-box;
   display: grid !important;
   gap: 10px !important;
-  width: 284px !important;
-  min-width: 284px !important;
-  max-width: min(284px, calc(100vw - 16px)) !important;
-  padding: 12px !important;
+  width: 324px !important;
+  min-width: 324px !important;
+  max-width: min(324px, calc(100vw - 16px)) !important;
+  padding: 12px 24px !important;
   border: 1px solid var(--nw-floating-border) !important;
   border-radius: 12px !important;
   background: var(--nw-floating-bg) !important;

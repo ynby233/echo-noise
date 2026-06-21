@@ -255,7 +255,7 @@
         </div>
       </div>
       <ClientOnly>
-      <div class="right-col space-y-3" v-if="!isMobile && layoutState==='three'">
+      <div class="right-col space-y-2" v-if="!isMobile && layoutState==='three'">
         <UCard v-if="frontendConfig.announcementEnabled && (frontendConfig.announcementText || '').trim() !== ''" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
           <AnnouncementBar :text="frontendConfig.announcementText || '欢迎访问我的说说笔记！'" />
         </UCard>
@@ -3562,6 +3562,39 @@ html.dark .page-footer { color: rgba(226, 232, 240, 0.72); }
 }
 :global(html.dark) .center-col :deep(.content-container),
 :global(html:not(.dark)) .center-col :deep(.content-container) { transition: none !important; }
+.noise-media-fancybox .fancybox__caption { display: none !important; }
+.noise-media-fancybox .fancybox__toolbar {
+  --f-button-width: 42px;
+  --f-button-height: 42px;
+  top: max(0px, env(safe-area-inset-top, 0px));
+  right: max(0px, env(safe-area-inset-right, 0px));
+  padding: 0 !important;
+}
+.noise-media-fancybox .fancybox__infobar {
+  top: max(0px, env(safe-area-inset-top, 0px));
+  left: max(0px, env(safe-area-inset-left, 0px));
+  padding: 7px 10px !important;
+  border-radius: 0 0 8px 0;
+  background: rgba(0, 0, 0, 0.54);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+}
+.noise-media-fancybox .fancybox__thumbs {
+  --f-thumb-width: 76px;
+  --f-thumb-height: 52px;
+}
+.noise-media-fancybox .fancybox__thumb,
+.noise-media-fancybox .fancybox__thumb img {
+  transition: transform 160ms ease, opacity 160ms ease, border-color 160ms ease;
+}
+.noise-media-fancybox .fancybox__thumb.is-active,
+.noise-media-fancybox .is-nav-selected .fancybox__thumb {
+  transform: scale(1.14);
+  opacity: 1;
+  border-color: rgba(251, 146, 60, 0.92);
+  z-index: 2;
+}
 .netease-mini-player.minimized[data-instant="true"] { transition: none !important; }
 .netease-mini-player.minimized[data-instant="true"] .album-cover-container,
 .netease-mini-player.minimized[data-instant="true"] .album-cover,
