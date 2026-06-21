@@ -249,6 +249,12 @@ const setupAttachmentPreview = () => {
   const root = editorContainer.value
   if (!root || attachmentPreviewCleanup) return
 
+  const getEventElement = (event: Event) => {
+    const target = event.target as Node | null
+    if (target instanceof Element) return target
+    return target?.parentElement || null
+  }
+
   const refreshAttachmentLinks = () => {
     root.querySelectorAll('a').forEach((node) => {
       const anchor = node as HTMLAnchorElement
@@ -277,7 +283,18 @@ const setupAttachmentPreview = () => {
       const info = attachmentInfoFromIrNode(marker)
       marker.classList.toggle('editor-attachment-node', !!info)
       label?.classList.toggle('editor-attachment-link', !!info)
-      if (info) marker.classList.remove('vditor-ir__node--expand')
+      if (info) {
+        marker.classList.remove('vditor-ir__node--expand')
+        marker.setAttribute('contenteditable', 'false')
+        marker.setAttribute('data-attachment-kind', info.type)
+        marker.setAttribute('data-attachment-url', info.url)
+        marker.setAttribute('aria-label', `预览${info.title}`)
+      } else {
+        marker.removeAttribute('contenteditable')
+        marker.removeAttribute('data-attachment-kind')
+        marker.removeAttribute('data-attachment-url')
+        marker.removeAttribute('aria-label')
+      }
       if (!label) return
       if (!info) {
         label.style.cursor = ''
@@ -338,8 +355,14 @@ const setupAttachmentPreview = () => {
   }
 
   const attachmentTargetFromEvent = (event: Event): { target: HTMLElement; info: EditorAttachmentInfo } | null => {
-    const target = event.target as HTMLElement | null
+    const target = getEventElement(event) as HTMLElement | null
     if (!target || !root.contains(target)) return null
+
+    const markerNode = target.closest<HTMLElement>('[data-type="a"].editor-attachment-node')
+    if (markerNode && root.contains(markerNode)) {
+      const markerInfo = attachmentInfoFromIrNode(markerNode)
+      if (markerInfo) return { target: markerNode, info: markerInfo }
+    }
 
     const irLabel = target.closest<HTMLElement>('.vditor-ir__link.editor-attachment-link')
     if (irLabel && root.contains(irLabel)) {
@@ -414,6 +437,35 @@ const setupAttachmentPreview = () => {
     toggleAttachmentPreview(hit.target, hit.info)
   }
 
+  const isPlainParagraphEnter = (event: KeyboardEvent) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return false
+    const selection = window.getSelection()
+    const anchorNode = selection?.anchorNode || null
+    const anchorElement = anchorNode instanceof Element ? anchorNode : anchorNode?.parentElement || getEventElement(event)
+    if (!anchorElement || !root.contains(anchorElement)) return false
+    if (anchorElement.closest('.editor-attachment-node, .vditor-toolbar, .vditor-panel, .vditor-hint')) return false
+    if (!anchorElement.closest('.vditor-ir pre.vditor-reset')) return false
+    const block = anchorElement.closest('p') as HTMLElement | null
+    if (!block) return false
+    if (block.closest('li, blockquote, table, h1, h2, h3, h4, h5, h6, [data-type="code-block"], .vditor-ir__marker--pre')) return false
+    return true
+  }
+
+  const onPlainTextEnterKeydown = (event: KeyboardEvent) => {
+    if (!isPlainParagraphEnter(event)) return
+    event.preventDefault()
+    event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    document.execCommand('insertLineBreak')
+    const target = getEventElement(event)
+    const editable = target?.closest('.vditor-ir pre.vditor-reset') as HTMLElement | null
+    editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertLineBreak' }))
+    scheduleRefreshAttachmentLinks()
+    window.setTimeout(() => {
+      if (vditorInstance?.getValue) emit('update:modelValue', vditorInstance.getValue())
+    }, 0)
+  }
+
   let refreshQueued = false
   const scheduleRefreshAttachmentLinks = () => {
     if (refreshQueued) return
@@ -434,6 +486,7 @@ const setupAttachmentPreview = () => {
   root.addEventListener('pointerdown', preventAttachmentNavigation, true)
   root.addEventListener('mousedown', preventAttachmentNavigation, true)
   root.addEventListener('click', onAttachmentClick, true)
+  root.addEventListener('keydown', onPlainTextEnterKeydown, true)
   root.addEventListener('keydown', onAttachmentKeydown, true)
   attachmentPreviewCleanup = () => {
     previewObserver.disconnect()
@@ -444,6 +497,7 @@ const setupAttachmentPreview = () => {
     root.removeEventListener('pointerdown', preventAttachmentNavigation, true)
     root.removeEventListener('mousedown', preventAttachmentNavigation, true)
     root.removeEventListener('click', onAttachmentClick, true)
+    root.removeEventListener('keydown', onPlainTextEnterKeydown, true)
     root.removeEventListener('keydown', onAttachmentKeydown, true)
     root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
     attachmentPreviewCleanup = null
@@ -867,11 +921,27 @@ watch(() => props.theme, (newTheme) => {
   pointer-events: auto;
 }
 
+.vditor-container .editor-attachment-node {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: baseline;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.vditor-container .editor-attachment-node .vditor-ir__link {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .vditor-container .editor-attachment-node .vditor-ir__marker,
 .vditor-container .editor-attachment-node .vditor-ir__marker--link,
 .vditor-container .editor-attachment-node .vditor-ir__marker--bracket,
 .vditor-container .editor-attachment-node .vditor-ir__marker--open,
-.vditor-container .editor-attachment-node .vditor-ir__marker--close {
+.vditor-container .editor-attachment-node .vditor-ir__marker--close,
+.vditor-container .editor-attachment-node .vditor-ir__marker--paren {
   display: none !important;
 }
 

@@ -326,6 +326,10 @@ assert(
     vditorEditor.includes('collapseIrAttachmentChrome') &&
     vditorEditor.includes('scheduleCollapseIrAttachmentChrome') &&
     vditorEditor.includes('scheduleRefreshAttachmentLinks') &&
+    vditorEditor.includes("marker.setAttribute('contenteditable', 'false')") &&
+    vditorEditor.includes('onPlainTextEnterKeydown') &&
+    vditorEditor.includes("document.execCommand('insertLineBreak')") &&
+    vditorEditor.includes("inputType: 'insertLineBreak'") &&
     vditorEditor.includes("marker.classList.remove('vditor-ir__node--expand')") &&
     vditorEditor.includes('previewObserver.observe(root, { childList: true, subtree: true })') &&
     !vditorEditor.includes('characterData: true') &&
@@ -337,11 +341,11 @@ assert(
     vditorEditor.includes('stopImmediatePropagation') &&
     vditorEditor.includes("root.addEventListener('pointerdown', preventAttachmentNavigation, true)") &&
     vditorEditor.includes("root.addEventListener('mousedown', preventAttachmentNavigation, true)") &&
-    vditorEditor.includes("root.addEventListener('mouseup', scheduleCollapseIrAttachmentChrome, true)") &&
-    vditorEditor.includes("root.addEventListener('keyup', scheduleCollapseIrAttachmentChrome, true)") &&
     vditorEditor.includes("document.addEventListener('selectionchange', scheduleCollapseIrAttachmentChrome, true)") &&
+    vditorEditor.includes("root.addEventListener('keydown', onPlainTextEnterKeydown, true)") &&
     vditorEditor.includes("root.addEventListener('keydown', onAttachmentKeydown, true)") &&
     vditorEditor.includes('.editor-attachment-node .vditor-ir__marker--link') &&
+    vditorEditor.includes('.editor-attachment-node .vditor-ir__marker--paren') &&
     !vditorEditor.includes('suppressIrAttachmentChrome') &&
     !vditorEditor.includes('irAttachmentNodeNearPointer') &&
     !vditorEditor.includes('editor-attachment-marker-block') &&
@@ -387,6 +391,15 @@ assert(
     homePage.includes('padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));') &&
     homePage.includes('scroll-padding-bottom: calc(160px + env(safe-area-inset-bottom, 0px));'),
   'pagination must keep explicit bottom clearance from the browser viewport and the info feed pager must use the same shared shell/action-button template as notes'
+)
+
+assert(
+  infoFeedList.includes('const measureFrame = ref<number | null>(null)') &&
+    infoFeedList.includes('window.requestAnimationFrame(() => {') &&
+    infoFeedList.includes('setFeedExpansionState(feedId, fullHeight > collapsedContentHeight + 8)') &&
+    infoFeedList.includes('window.cancelAnimationFrame(measureFrame.value)') &&
+    !infoFeedList.includes('fullHeight > collapsedContentHeight) {'),
+  'info feed expand measurement must batch ResizeObserver work by animation frame and avoid threshold-edge layout churn while full-size media loads'
 )
 
 assert(

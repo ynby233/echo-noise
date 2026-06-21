@@ -210,6 +210,7 @@ const isExpanded = ref<Record<string, boolean>>({})
 const hasUserToggled = ref<Record<string, boolean>>({})
 const shouldShowExpandButton = ref<Record<string, boolean>>({})
 const measureTimer = ref<number | null>(null)
+const measureFrame = ref<number | null>(null)
 const feedSummaryRefs = ref<Record<string, HTMLElement | null>>({})
 const feedResizeObservers = new Map<string, ResizeObserver>()
 const cacheKey = computed(() => {
@@ -334,13 +335,31 @@ const setFeedSummaryRef = (feedId: string, el: any) => {
 
 const deferMeasure = () => {
   if (typeof window === 'undefined') return
-  if (measureTimer.value) {
-    window.clearTimeout(measureTimer.value)
+  if (measureFrame.value) return
+  measureFrame.value = window.requestAnimationFrame(() => {
+    measureFrame.value = null
+    if (measureTimer.value) {
+      window.clearTimeout(measureTimer.value)
+    }
+    measureTimer.value = window.setTimeout(() => {
+      checkContentHeights()
+      measureTimer.value = null
+    }, 80)
+  })
+}
+
+const setFeedExpansionState = (feedId: string, needsExpand: boolean) => {
+  if (shouldShowExpandButton.value[feedId] !== needsExpand) {
+    shouldShowExpandButton.value[feedId] = needsExpand
   }
-  measureTimer.value = window.setTimeout(() => {
-    checkContentHeights()
-    measureTimer.value = null
-  }, 60)
+  if (needsExpand) {
+    if (!hasUserToggled.value[feedId] && isExpanded.value[feedId] !== false) {
+      isExpanded.value[feedId] = false
+    }
+    return
+  }
+  if (isExpanded.value[feedId] !== true) isExpanded.value[feedId] = true
+  if (hasUserToggled.value[feedId] !== false) hasUserToggled.value[feedId] = false
 }
 
 const checkContentHeights = () => {
@@ -350,16 +369,7 @@ const checkContentHeights = () => {
       const contentEl = feedSummaryRefs.value[feedId]
       if (!contentEl) return
       const fullHeight = contentEl.scrollHeight
-      if (fullHeight > collapsedContentHeight) {
-        shouldShowExpandButton.value[feedId] = true
-        if (!hasUserToggled.value[feedId]) {
-          isExpanded.value[feedId] = false
-        }
-      } else {
-        shouldShowExpandButton.value[feedId] = false
-        isExpanded.value[feedId] = true
-        hasUserToggled.value[feedId] = false
-      }
+      setFeedExpansionState(feedId, fullHeight > collapsedContentHeight + 8)
     })
   })
 }
@@ -750,6 +760,10 @@ onUnmounted(() => {
   if (measureTimer.value) {
     window.clearTimeout(measureTimer.value)
     measureTimer.value = null
+  }
+  if (measureFrame.value) {
+    window.cancelAnimationFrame(measureFrame.value)
+    measureFrame.value = null
   }
 })
 </script>
