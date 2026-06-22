@@ -340,7 +340,7 @@ assert(
     vditorEditor.includes('videoAutoplay: false') &&
     vditorEditor.includes('getVideoFirstFrameThumbnail') &&
     vditorEditor.includes("await Promise.all(galleryItems.map((item) => getVideoFirstFrameThumbnail(item.url)))") &&
-    vditorEditor.includes("return { src: item.url, type: 'html5video', thumbSrc: thumb, poster: thumb }") &&
+    vditorEditor.includes("return { src: item.url, type: 'html5video', thumbSrc: thumb, poster: thumb, ...source }") &&
     !vditorEditor.includes('caption: item.name') &&
     vditorEditor.includes('autoStart: true') &&
     vditorEditor.includes('Images: {') &&
@@ -378,13 +378,19 @@ assert(
     vditorEditor.includes('getRenderedTableRows') &&
     vditorEditor.includes('showTableDeleteButton') &&
     vditorEditor.includes('tableDeleteButtonStyle') &&
-    vditorEditor.includes("const size = 24") &&
+    vditorEditor.includes('const TABLE_DELETE_BUTTON_SIZE = 10') &&
     vditorEditor.includes("top: `${Math.max(6, rect.top - size)}px`") &&
     vditorEditor.includes("left: `${Math.max(6, rect.left - size)}px`") &&
     vditorEditor.includes("Teleport to=\"body\"") &&
     vditorEditor.includes('editor-table-delete-button') &&
     vditorEditor.includes('confirm(\'确定要删除该表格吗？\')') &&
-    vditorEditor.includes('background: linear-gradient(135deg, rgba(251, 146, 60, .95), rgba(234, 88, 12, .95)) !important;') &&
+    vditorEditor.includes('width: 10px !important;') &&
+    vditorEditor.includes('height: 10px !important;') &&
+    vditorEditor.includes('justify-content: center !important;') &&
+    vditorEditor.includes('background: #e53e3e !important;') &&
+    vditorEditor.includes('tableBlockFromDataset') &&
+    vditorEditor.includes('syncEditorAfterDomTableRemoval') &&
+    vditorEditor.includes('getHtmlTableBlocks') &&
     vditorEditor.includes("root.addEventListener('pointermove', onTablePointerMove, true)") &&
     vditorEditor.includes("root.addEventListener('pointerout', onTablePointerOut, true)") &&
     !vditorEditor.includes('editor-table-select-handle') &&
@@ -408,13 +414,18 @@ assert(
     messageList.includes(':deep(.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button)') &&
     vditorEditor.includes('.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button') &&
     homePage.includes('.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button') &&
+    messageList.includes(':deep(.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button::after)') &&
+    vditorEditor.includes('.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button::after') &&
+    homePage.includes('.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button::after') &&
     vditorEditor.includes('triggerEl?: HTMLElement | null') &&
+    vditorEditor.includes('thumbEl: sourceThumb') &&
     vditorEditor.includes('Fancybox.show(slides as any, viewerOptions as any)') &&
     !messageList.includes(':deep(.noise-media-fancybox .fancybox__infobar)') &&
     vditorEditor.includes('collapseIrAttachmentChrome') &&
     vditorEditor.includes('scheduleCollapseIrAttachmentChrome') &&
     vditorEditor.includes('scheduleRefreshAttachmentLinks') &&
     vditorEditor.includes('normalizeAttachmentInsertValue') &&
+    vditorEditor.includes('insertAttachmentSourceValue') &&
     vditorEditor.includes('normalizeEditorAttachmentSource') &&
     vditorEditor.includes('normalizeAdjacentAttachmentMarkers') &&
     vditorEditor.includes('ADJACENT_ATTACHMENT_MARKER_RE') &&

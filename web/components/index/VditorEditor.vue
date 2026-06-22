@@ -120,6 +120,7 @@ let selectedEditorTableIndex = -1;
 let hoveredEditorTable: HTMLTableElement | null = null;
 let tableDeleteHideTimer: number | null = null;
 const videoFirstFrameCache = new Map<string, Promise<string>>();
+const TABLE_DELETE_BUTTON_SIZE = 10;
 const isReady = ref(false);
 const showHeadingMenu = ref(false);
 const headingMenuRef = ref<HTMLElement | null>(null);
@@ -364,10 +365,16 @@ const showAttachmentGallery = async (items: EditorAttachmentInfo[], current: Edi
   const videoThumbs = current.type === 'video'
     ? await Promise.all(galleryItems.map((item) => getVideoFirstFrameThumbnail(item.url)))
     : []
+  const sourceThumb = triggerEl instanceof HTMLImageElement
+    ? triggerEl
+    : triggerEl?.querySelector?.('img') as HTMLImageElement | null
   const slides = galleryItems.map((item, index) => {
-    if (item.type !== 'video') return { src: item.url, type: 'image', thumbSrc: item.url }
+    const source = index === startIndex && sourceThumb
+      ? { thumb: sourceThumb, thumbEl: sourceThumb, thumbElSrc: sourceThumb.currentSrc || sourceThumb.src || item.url }
+      : {}
+    if (item.type !== 'video') return { src: item.url, type: 'image', thumbSrc: item.url, ...source }
     const thumb = videoThumbs[index] || item.url
-    return { src: item.url, type: 'html5video', thumbSrc: thumb, poster: thumb }
+    return { src: item.url, type: 'html5video', thumbSrc: thumb, poster: thumb, ...source }
   })
   const options = current.type === 'video'
     ? getAttachmentVideoFancyboxOptions(startIndex)
@@ -967,7 +974,7 @@ const scheduleTableDeleteHide = (delay: number | Event = 1800) => {
 
 const positionTableDeleteButton = (table: HTMLTableElement) => {
   const rect = table.getBoundingClientRect()
-  const size = 24
+  const size = TABLE_DELETE_BUTTON_SIZE
   tableDeleteButtonStyle.value = {
     position: 'fixed',
     top: `${Math.max(6, rect.top - size)}px`,
@@ -1010,18 +1017,38 @@ const isMarkdownTableDivider = (line: string) => {
   return cells.length > 1 && cells.every((cell) => /^:?-{3,}:?$/.test(cell))
 }
 
-const getMarkdownTableBlocks = (content: string) => {
+type EditorTableSourceBlock = { start: number; end: number; lines: string[]; kind: 'markdown' | 'html' }
+
+const getMarkdownTableBlocks = (content: string): EditorTableSourceBlock[] => {
   const lines = String(content || '').split('\n')
-  const blocks: Array<{ start: number; end: number; lines: string[] }> = []
+  const blocks: EditorTableSourceBlock[] = []
   for (let index = 0; index < lines.length - 1; index += 1) {
     if (!lines[index].includes('|') || !isMarkdownTableDivider(lines[index + 1])) continue
     let end = index + 2
     while (end < lines.length && lines[end].includes('|') && lines[end].trim() !== '') end += 1
-    blocks.push({ start: index, end, lines: lines.slice(index, end) })
+    blocks.push({ start: index, end, lines: lines.slice(index, end), kind: 'markdown' })
     index = end - 1
   }
   return blocks
 }
+
+const getHtmlTableBlocks = (content: string): EditorTableSourceBlock[] => {
+  const lines = String(content || '').split('\n')
+  const blocks: EditorTableSourceBlock[] = []
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!/<table\b/i.test(lines[index])) continue
+    let end = index + 1
+    while (end < lines.length && !/<\/table>/i.test(lines[end - 1])) end += 1
+    blocks.push({ start: index, end, lines: lines.slice(index, end), kind: 'html' })
+    index = end - 1
+  }
+  return blocks
+}
+
+const getEditorTableSourceBlocks = (content: string) => [
+  ...getMarkdownTableBlocks(content),
+  ...getHtmlTableBlocks(content)
+].sort((left, right) => left.start - right.start)
 
 const normalizeTableMatchText = (text: string) => String(text || '').replace(/\s+/g, ' ').trim()
 
@@ -1056,26 +1083,53 @@ const sameTableRows = (left: string[][], right: string[][]) => {
 }
 
 const findMarkdownTableBlock = (
-  blocks: Array<{ start: number; end: number; lines: string[] }>,
+  blocks: EditorTableSourceBlock[],
   renderedRows: string[][],
   preferredIndex: number
 ) => {
   if (tableRowsHaveComparableContent(renderedRows)) {
-    const matched = blocks.find((block) => sameTableRows(getMarkdownTableRows(block.lines), renderedRows))
+    const matched = blocks.find((block) => block.kind === 'markdown' && sameTableRows(getMarkdownTableRows(block.lines), renderedRows))
     if (matched) return matched
   }
   return preferredIndex >= 0 ? blocks[preferredIndex] : undefined
 }
 
+const tableBlockFromDataset = (table: HTMLTableElement | null, blocks: EditorTableSourceBlock[]) => {
+  if (!table) return undefined
+  const start = Number(table.dataset.editorTableBlockStart)
+  const end = Number(table.dataset.editorTableBlockEnd)
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return undefined
+  return blocks.find((block) => block.start === start && block.end === end)
+}
+
+const syncEditorAfterDomTableRemoval = (table: HTMLTableElement | null) => {
+  if (!table || !editorContainer.value?.contains(table)) return false
+  const editable = table.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset') as HTMLElement | null
+  const removable = table.closest<HTMLElement>('[data-type="table"], .vditor-ir__node') || table
+  removable.remove()
+  editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContent' }))
+  window.setTimeout(() => {
+    const nextValue = vditorInstance?.getValue?.() || ''
+    emit('update:modelValue', nextValue)
+    refreshAttachmentLinksFromEditor()
+  }, 0)
+  clearSelectedEditorTable()
+  return true
+}
+
+const applyTableSourceDeletion = (value: string, block: EditorTableSourceBlock) => {
+  const lines = value.split('\n')
+  lines.splice(block.start, block.end - block.start)
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+|\n+$/g, '')
+}
+
 const deleteEditorTable = (table: HTMLTableElement | null, preferredIndex = -1) => {
   if (!vditorInstance) return false
   const value = vditorInstance.getValue?.() || ''
-  const lines = value.split('\n')
-  const blocks = getMarkdownTableBlocks(value)
-  const block = findMarkdownTableBlock(blocks, getRenderedTableRows(table), preferredIndex)
-  if (!block) return false
-  lines.splice(block.start, block.end - block.start)
-  const nextValue = lines.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+|\n+$/g, '')
+  const blocks = getEditorTableSourceBlocks(value)
+  const block = tableBlockFromDataset(table, blocks) || findMarkdownTableBlock(blocks, getRenderedTableRows(table), preferredIndex)
+  if (!block) return syncEditorAfterDomTableRemoval(table)
+  const nextValue = applyTableSourceDeletion(value, block)
   vditorInstance.setValue(nextValue)
   emit('update:modelValue', nextValue)
   clearSelectedEditorTable()
@@ -1092,8 +1146,18 @@ const deleteSelectedEditorTable = () => {
 }
 
 const enhanceEditorTables = (_root: HTMLElement) => {
-  getEditorTables().forEach((table) => {
+  const blocks = getEditorTableSourceBlocks(vditorInstance?.getValue?.() || '')
+  getEditorTables().forEach((table, index) => {
     table.classList.add('editor-deletable-table')
+    table.dataset.editorTableIndex = String(index)
+    const block = blocks[index]
+    if (block) {
+      table.dataset.editorTableBlockStart = String(block.start)
+      table.dataset.editorTableBlockEnd = String(block.end)
+    } else {
+      delete table.dataset.editorTableBlockStart
+      delete table.dataset.editorTableBlockEnd
+    }
   })
 }
 
@@ -1505,6 +1569,21 @@ const insertValueIntoCurrentTableCell = (value: string) => {
   return true
 }
 
+const insertAttachmentSourceValue = (value: string) => {
+  if (!vditorInstance || !hasAttachmentMarker(value)) return false
+  const normalized = normalizeAttachmentInsertValue(value).trim()
+  if (!normalized) return false
+  const currentValue = vditorInstance.getValue?.() || ''
+  const base = currentValue.replace(/\s+$/g, '')
+  const nextValue = base ? `${base}\n\n${normalized}` : normalized
+  vditorInstance.setValue(nextValue)
+  normalizeEditorAttachmentSource()
+  refreshAttachmentLinksFromEditor()
+  window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
+  emit("update:modelValue", nextValue)
+  return true
+}
+
 defineExpose({
   clear: () => {
     if (vditorInstance) {
@@ -1515,6 +1594,7 @@ defineExpose({
   insertValue: (val: string) => {
     if (vditorInstance) {
       if (insertValueIntoCurrentTableCell(val)) return
+      if (insertAttachmentSourceValue(val)) return
       const nextValue = normalizeAttachmentInsertValue(val)
       vditorInstance.insertValue(nextValue);
       normalizeEditorAttachmentSource()
@@ -1613,6 +1693,16 @@ watch(() => props.theme, (newTheme) => {
 
 .noise-media-fancybox .f-thumbs__slide.is-nav-selected {
   z-index: 2;
+}
+
+.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button {
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
+.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button::after {
+  display: none !important;
 }
 
 .noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button {
@@ -1989,41 +2079,42 @@ html.dark .vditor-reset table td {
 
 .editor-table-delete-button {
   box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px !important;
-  min-width: 24px !important;
-  height: 24px !important;
-  min-height: 24px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 10px !important;
+  min-width: 10px !important;
+  height: 10px !important;
+  min-height: 10px !important;
   padding: 0 !important;
-  border: 1px solid rgba(234, 88, 12, .95) !important;
-  border-radius: 6px !important;
-  background: linear-gradient(135deg, rgba(251, 146, 60, .95), rgba(234, 88, 12, .95)) !important;
+  border: 0 !important;
+  border-radius: 2px !important;
+  background: #e53e3e !important;
   color: #fff !important;
-  font-size: 17px;
-  font-weight: 750;
+  font-size: 9px !important;
+  font-weight: 800;
   line-height: 1;
-  box-shadow: 0 8px 18px rgba(127, 29, 29, 0.18);
+  box-shadow: 0 1px 2px rgba(127, 29, 29, 0.35);
   cursor: pointer;
+  opacity: .96;
 }
 
 .editor-table-delete-button:hover,
 .editor-table-delete-button:focus-visible {
   outline: none;
-  border-color: rgba(234, 88, 12, .95) !important;
-  background: linear-gradient(135deg, rgba(251, 146, 60, .95), rgba(234, 88, 12, .95)) !important;
+  background: #c53030 !important;
   color: #fff !important;
-  box-shadow: 0 10px 22px rgba(127, 29, 29, 0.26);
+  box-shadow: 0 1px 3px rgba(127, 29, 29, 0.42);
+  opacity: 1;
 }
 
 html.dark .editor-table-delete-button {
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.32);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.42);
 }
 
 html.dark .editor-table-delete-button:hover,
 html.dark .editor-table-delete-button:focus-visible {
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 
 html.dark .vditor-hint {

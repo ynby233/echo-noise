@@ -3673,6 +3673,16 @@ onMounted(() => {
   z-index: 2;
 }
 
+:deep(.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button) {
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
+:deep(.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button::after) {
+  display: none !important;
+}
+
 :deep(.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button) {
   transform: scale(1.12);
 }
