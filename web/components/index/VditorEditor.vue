@@ -357,7 +357,7 @@ const getVideoFirstFrameThumbnail = (url: string) => {
   return promise
 }
 
-const showAttachmentGallery = async (items: EditorAttachmentInfo[], current: EditorAttachmentInfo) => {
+const showAttachmentGallery = async (items: EditorAttachmentInfo[], current: EditorAttachmentInfo, triggerEl?: HTMLElement | null) => {
   const sameType = items.filter((item) => item.type === current.type)
   const galleryItems = sameType.length ? sameType : [current]
   const startIndex = Math.max(0, galleryItems.findIndex((item) => item.url === current.url && item.name === current.name))
@@ -372,16 +372,17 @@ const showAttachmentGallery = async (items: EditorAttachmentInfo[], current: Edi
   const options = current.type === 'video'
     ? getAttachmentVideoFancyboxOptions(startIndex)
     : getAttachmentImageFancyboxOptions(startIndex)
+  const viewerOptions = triggerEl ? { ...options, triggerEl } : options
   try {
-    Fancybox.show(slides as any, options as any)
+    Fancybox.show(slides as any, viewerOptions as any)
   } catch {
     try {
-      ;(window as any).Fancybox?.show?.(slides, options)
+      ;(window as any).Fancybox?.show?.(slides, viewerOptions)
     } catch {}
   }
 }
 
-const showImageInProjectViewer = (info: EditorAttachmentInfo) => showAttachmentGallery([info], info)
+const showImageInProjectViewer = (info: EditorAttachmentInfo, triggerEl?: HTMLElement | null) => showAttachmentGallery([info], info, triggerEl)
 
 const setupInlineImagePreview = () => {
   const root = editorContainer.value;
@@ -395,7 +396,7 @@ const setupInlineImagePreview = () => {
     event.preventDefault();
     event.stopPropagation();
     ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
-    showImageInProjectViewer({ type: 'image', title: img.alt || '图片预览', name: img.alt || '图片预览', url: src });
+    showImageInProjectViewer({ type: 'image', title: img.alt || '图片预览', name: img.alt || '图片预览', url: src }, img);
   };
 
   root.addEventListener('click', onImageClick, true);
@@ -539,7 +540,7 @@ const setupAttachmentPreview = () => {
 
     if (info.type === 'image' || info.type === 'video') {
       root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
-      showAttachmentGallery(getAttachmentInfosByType(info.type), info)
+      showAttachmentGallery(getAttachmentInfosByType(info.type), info, target)
       return
     }
 
@@ -966,10 +967,11 @@ const scheduleTableDeleteHide = (delay: number | Event = 1800) => {
 
 const positionTableDeleteButton = (table: HTMLTableElement) => {
   const rect = table.getBoundingClientRect()
+  const size = 24
   tableDeleteButtonStyle.value = {
     position: 'fixed',
-    top: `${Math.max(8, rect.top - 12)}px`,
-    left: `${Math.max(8, rect.left - 12)}px`,
+    top: `${Math.max(6, rect.top - size)}px`,
+    left: `${Math.max(6, rect.left - size)}px`,
     zIndex: '10020'
   }
 }
@@ -988,13 +990,18 @@ const confirmDeleteHoveredTable = () => {
     hideTableDeleteButton()
     return
   }
-  selectEditorTable(table)
+  const tableIndex = getEditorTables().indexOf(table)
   const confirmed = window.confirm('确定要删除该表格吗？')
   if (!confirmed) {
     scheduleTableDeleteHide()
     return
   }
-  deleteSelectedEditorTable()
+  const deleted = deleteEditorTable(table, tableIndex)
+  if (!deleted) {
+    window.alert('未能定位到该表格，请先保存当前内容后重试。')
+    scheduleTableDeleteHide()
+    return
+  }
   hideTableDeleteButton()
 }
 
@@ -1005,15 +1012,75 @@ const isMarkdownTableDivider = (line: string) => {
 
 const getMarkdownTableBlocks = (content: string) => {
   const lines = String(content || '').split('\n')
-  const blocks: Array<{ start: number; end: number }> = []
+  const blocks: Array<{ start: number; end: number; lines: string[] }> = []
   for (let index = 0; index < lines.length - 1; index += 1) {
     if (!lines[index].includes('|') || !isMarkdownTableDivider(lines[index + 1])) continue
     let end = index + 2
     while (end < lines.length && lines[end].includes('|') && lines[end].trim() !== '') end += 1
-    blocks.push({ start: index, end })
+    blocks.push({ start: index, end, lines: lines.slice(index, end) })
     index = end - 1
   }
   return blocks
+}
+
+const normalizeTableMatchText = (text: string) => String(text || '').replace(/\s+/g, ' ').trim()
+
+const getRenderedTableRows = (table: HTMLTableElement | null) => {
+  if (!table) return [] as string[][]
+  return Array.from(table.rows).map((row) => Array.from(row.cells).map((cell) => normalizeTableMatchText(cell.textContent || '')))
+}
+
+const parseMarkdownTableRow = (line: string) => String(line || '')
+  .trim()
+  .replace(/^\|/, '')
+  .replace(/\|$/, '')
+  .split('|')
+  .map((cell) => normalizeTableMatchText(cell.replace(/\\\|/g, '|')))
+
+const getMarkdownTableRows = (lines: string[]) => {
+  if (lines.length < 2) return [] as string[][]
+  const rows = [parseMarkdownTableRow(lines[0])]
+  lines.slice(2).forEach((line) => rows.push(parseMarkdownTableRow(line)))
+  return rows
+}
+
+const tableRowsHaveComparableContent = (rows: string[][]) => rows.some((row) => row.some((cell) => !!cell))
+
+const sameTableRows = (left: string[][], right: string[][]) => {
+  if (!left.length || left.length !== right.length) return false
+  return left.every((row, rowIndex) => {
+    const other = right[rowIndex] || []
+    if (row.length !== other.length) return false
+    return row.every((cell, cellIndex) => cell === other[cellIndex])
+  })
+}
+
+const findMarkdownTableBlock = (
+  blocks: Array<{ start: number; end: number; lines: string[] }>,
+  renderedRows: string[][],
+  preferredIndex: number
+) => {
+  if (tableRowsHaveComparableContent(renderedRows)) {
+    const matched = blocks.find((block) => sameTableRows(getMarkdownTableRows(block.lines), renderedRows))
+    if (matched) return matched
+  }
+  return preferredIndex >= 0 ? blocks[preferredIndex] : undefined
+}
+
+const deleteEditorTable = (table: HTMLTableElement | null, preferredIndex = -1) => {
+  if (!vditorInstance) return false
+  const value = vditorInstance.getValue?.() || ''
+  const lines = value.split('\n')
+  const blocks = getMarkdownTableBlocks(value)
+  const block = findMarkdownTableBlock(blocks, getRenderedTableRows(table), preferredIndex)
+  if (!block) return false
+  lines.splice(block.start, block.end - block.start)
+  const nextValue = lines.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+|\n+$/g, '')
+  vditorInstance.setValue(nextValue)
+  emit('update:modelValue', nextValue)
+  clearSelectedEditorTable()
+  window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
+  return true
 }
 
 const deleteSelectedEditorTable = () => {
@@ -1021,18 +1088,7 @@ const deleteSelectedEditorTable = () => {
   const tables = getEditorTables()
   const tableIndex = selectedEditorTable ? tables.indexOf(selectedEditorTable) : selectedEditorTableIndex
   if (tableIndex < 0) return false
-  const value = vditorInstance.getValue?.() || ''
-  const lines = value.split('\n')
-  const blocks = getMarkdownTableBlocks(value)
-  const block = blocks[tableIndex]
-  if (!block) return false
-  lines.splice(block.start, block.end - block.start)
-  const nextValue = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()
-  vditorInstance.setValue(nextValue)
-  emit('update:modelValue', vditorInstance.getValue?.() || nextValue)
-  clearSelectedEditorTable()
-  window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
-  return true
+  return deleteEditorTable(selectedEditorTable, tableIndex)
 }
 
 const enhanceEditorTables = (_root: HTMLElement) => {
@@ -1537,14 +1593,6 @@ watch(() => props.theme, (newTheme) => {
   display: none !important;
 }
 
-.noise-media-fancybox .fancybox__toolbar {
-  --f-button-width: 42px;
-  --f-button-height: 42px;
-  top: max(0px, env(safe-area-inset-top, 0px));
-  right: max(0px, env(safe-area-inset-right, 0px));
-  padding: 0 !important;
-}
-
 .noise-media-fancybox .fancybox__nav {
   display: flex !important;
 }
@@ -1557,22 +1605,23 @@ watch(() => props.theme, (newTheme) => {
   display: none !important;
 }
 
-.noise-media-fancybox .fancybox__thumbs {
-  --f-thumb-width: 76px;
-  --f-thumb-height: 52px;
+.noise-media-fancybox .f-thumbs__slide,
+.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button,
+.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__img {
+  transition: transform 180ms ease, opacity 180ms ease, filter 180ms ease;
 }
 
-.noise-media-fancybox .fancybox__thumb,
-.noise-media-fancybox .fancybox__thumb img {
-  transition: transform 160ms ease, opacity 160ms ease, border-color 160ms ease;
-}
-
-.noise-media-fancybox .fancybox__thumb.is-active,
-.noise-media-fancybox .is-nav-selected .fancybox__thumb {
-  transform: scale(1.14);
-  opacity: 1;
-  border-color: rgba(251, 146, 60, 0.92);
+.noise-media-fancybox .f-thumbs__slide.is-nav-selected {
   z-index: 2;
+}
+
+.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button {
+  transform: scale(1.12);
+}
+
+.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__img {
+  opacity: 1;
+  filter: saturate(1.08) contrast(1.04);
 }
 
 .editor-attachment-preview {
@@ -1943,49 +1992,38 @@ html.dark .vditor-reset table td {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 1px solid rgba(239, 68, 68, 0.72);
-  border-radius: 7px;
-  background: rgba(254, 242, 242, 0.96);
-  color: #dc2626;
-  font-size: 18px;
-  font-weight: 700;
+  width: 24px !important;
+  min-width: 24px !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  padding: 0 !important;
+  border: 1px solid rgba(234, 88, 12, .95) !important;
+  border-radius: 6px !important;
+  background: linear-gradient(135deg, rgba(251, 146, 60, .95), rgba(234, 88, 12, .95)) !important;
+  color: #fff !important;
+  font-size: 17px;
+  font-weight: 750;
   line-height: 1;
-  box-shadow: 0 8px 20px rgba(127, 29, 29, 0.18);
+  box-shadow: 0 8px 18px rgba(127, 29, 29, 0.18);
   cursor: pointer;
 }
 
 .editor-table-delete-button:hover,
 .editor-table-delete-button:focus-visible {
   outline: none;
-  background: #fee2e2;
-  border-color: rgba(220, 38, 38, 0.92);
-  color: #b91c1c;
-}
-
-.vditor-reset table.editor-table-selected {
-  outline: 2px solid rgba(239, 68, 68, 0.72);
-  outline-offset: 2px;
+  border-color: rgba(234, 88, 12, .95) !important;
+  background: linear-gradient(135deg, rgba(251, 146, 60, .95), rgba(234, 88, 12, .95)) !important;
+  color: #fff !important;
+  box-shadow: 0 10px 22px rgba(127, 29, 29, 0.26);
 }
 
 html.dark .editor-table-delete-button {
-  background: rgba(127, 29, 29, 0.92);
-  border-color: rgba(248, 113, 113, 0.78);
-  color: #fecaca;
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.32);
 }
 
 html.dark .editor-table-delete-button:hover,
 html.dark .editor-table-delete-button:focus-visible {
-  background: rgba(153, 27, 27, 0.96);
-  border-color: rgba(252, 165, 165, 0.92);
-  color: #fff;
-}
-
-html.dark .vditor-reset table.editor-table-selected {
-  outline-color: rgba(248, 113, 113, 0.88);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
 }
 
 html.dark .vditor-hint {

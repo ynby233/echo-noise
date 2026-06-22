@@ -325,11 +325,11 @@ assert(
     vditorEditor.includes("root.querySelectorAll('[data-type=\"a\"]')") &&
     vditorEditor.includes("target.closest<HTMLElement>('.vditor-ir__link.editor-attachment-link')") &&
     vditorEditor.includes("target.closest('a.editor-attachment-link')") &&
-    vditorEditor.includes('showAttachmentGallery(getAttachmentInfosByType(info.type), info)') &&
+    vditorEditor.includes('showAttachmentGallery(getAttachmentInfosByType(info.type), info, target)') &&
     !vditorEditor.includes('buildVideoFancyboxHtml') &&
     vditorEditor.includes('buildAttachmentPreviewHtml') &&
     vditorEditor.includes('transform: transformAttachmentPreviewHtml') &&
-    vditorEditor.includes('const showImageInProjectViewer = (info: EditorAttachmentInfo) => showAttachmentGallery([info], info)') &&
+    vditorEditor.includes('const showImageInProjectViewer = (info: EditorAttachmentInfo, triggerEl?: HTMLElement | null) => showAttachmentGallery([info], info, triggerEl)') &&
     vditorEditor.includes('Fancybox.show') &&
     vditorEditor.includes('getAttachmentImageFancyboxOptions') &&
     vditorEditor.includes('getAttachmentVideoFancyboxOptions') &&
@@ -353,8 +353,7 @@ assert(
     !vditorEditor.includes("backdropClick: 'close'") &&
     vditorEditor.includes('closeButton: false') &&
     vditorEditor.includes('middle: []') &&
-    vditorEditor.includes('top: max(0px, env(safe-area-inset-top, 0px));') &&
-    vditorEditor.includes('right: max(0px, env(safe-area-inset-right, 0px));') &&
+    !vditorEditor.includes('.noise-media-fancybox .fancybox__toolbar') &&
     vditorEditor.includes('width: min(300px, 100%);') &&
     vditorEditor.includes('TABLE_SIZE_LIMIT = 10') &&
     vditorEditor.includes('Array.from({ length: TABLE_SIZE_LIMIT * TABLE_SIZE_LIMIT }') &&
@@ -374,16 +373,22 @@ assert(
     vditorEditor.includes("inputType: 'insertText'") &&
     vditorEditor.includes('if (insertValueIntoCurrentTableCell(val)) return') &&
     vditorEditor.includes('enhanceEditorTables(root)') &&
-    vditorEditor.includes('deleteSelectedEditorTable') &&
+    vditorEditor.includes('deleteEditorTable(table, tableIndex)') &&
+    vditorEditor.includes('findMarkdownTableBlock') &&
+    vditorEditor.includes('getRenderedTableRows') &&
     vditorEditor.includes('showTableDeleteButton') &&
     vditorEditor.includes('tableDeleteButtonStyle') &&
+    vditorEditor.includes("const size = 24") &&
+    vditorEditor.includes("top: `${Math.max(6, rect.top - size)}px`") &&
+    vditorEditor.includes("left: `${Math.max(6, rect.left - size)}px`") &&
     vditorEditor.includes("Teleport to=\"body\"") &&
     vditorEditor.includes('editor-table-delete-button') &&
     vditorEditor.includes('confirm(\'确定要删除该表格吗？\')') &&
+    vditorEditor.includes('background: linear-gradient(135deg, rgba(251, 146, 60, .95), rgba(234, 88, 12, .95)) !important;') &&
     vditorEditor.includes("root.addEventListener('pointermove', onTablePointerMove, true)") &&
     vditorEditor.includes("root.addEventListener('pointerout', onTablePointerOut, true)") &&
     !vditorEditor.includes('editor-table-select-handle') &&
-    vditorEditor.includes('.vditor-reset table.editor-table-selected') &&
+    !vditorEditor.includes('.vditor-reset table.editor-table-selected') &&
     markdownRenderer.includes('.markdown-preview :deep(.noise-attachment-audio)') &&
     markdownRenderer.includes('.markdown-preview :deep(.noise-attachment-audio--table)') &&
     markdownRenderer.includes('width: min(300px, 100%) !important;') &&
@@ -397,7 +402,14 @@ assert(
     messageList.includes("Thumbs: { type: 'classic', autoStart: true }") &&
     !/\bImage:\s*\{/.test(messageList) &&
     !messageList.includes('window.Fancybox.destroy()') &&
-    messageList.includes(':deep(.noise-media-fancybox .fancybox__toolbar)') &&
+    !messageList.includes(':deep(.noise-media-fancybox .fancybox__toolbar)') &&
+    !vditorEditor.includes('.noise-media-fancybox .fancybox__toolbar') &&
+    !homePage.includes('.noise-media-fancybox .fancybox__toolbar') &&
+    messageList.includes(':deep(.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button)') &&
+    vditorEditor.includes('.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button') &&
+    homePage.includes('.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button') &&
+    vditorEditor.includes('triggerEl?: HTMLElement | null') &&
+    vditorEditor.includes('Fancybox.show(slides as any, viewerOptions as any)') &&
     !messageList.includes(':deep(.noise-media-fancybox .fancybox__infobar)') &&
     vditorEditor.includes('collapseIrAttachmentChrome') &&
     vditorEditor.includes('scheduleCollapseIrAttachmentChrome') &&
