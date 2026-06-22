@@ -339,12 +339,16 @@ assert(
     !vditorEditor.includes("right: ['slideshow', 'fullscreen', 'thumbs', 'close']") &&
     vditorEditor.includes('Html: {') &&
     vditorEditor.includes('videoAutoplay: false') &&
-    vditorEditor.includes('getVideoFirstFrameThumbnail') &&
-    vditorEditor.includes("await Promise.all(galleryItems.map((item) => getVideoFirstFrameThumbnail(item.url)))") &&
-    vditorEditor.includes('createFancyboxProxyNode') &&
-    vditorEditor.includes("proxy.dataset.type = 'html5video'") &&
-    vditorEditor.includes('proxy.dataset.thumbSrc = thumbSrc || item.url') &&
-    vditorEditor.includes('proxy.dataset.poster = thumbSrc || item.url') &&
+    vditorEditor.includes('getVideoThumbnailFallback') &&
+    vditorEditor.includes('isImagePreviewSource') &&
+    vditorEditor.includes('getProjectThumbnailTargetSize') &&
+    vditorEditor.includes("document.querySelector('.recommend-grid a, .recommend-image-box')") &&
+    vditorEditor.includes('getPreviewProxyRect') &&
+    vditorEditor.includes('sourceRect.left + (sourceRect.width - size) / 2') &&
+    vditorEditor.includes('sourceRect.top + (sourceRect.height - size) / 2') &&
+    vditorEditor.includes('proxy.dataset.thumbSrc = proxyThumb') &&
+    vditorEditor.includes("? getVideoThumbnailFallback()") &&
+    vditorEditor.includes('proxy.dataset.poster = proxyThumb') &&
     vditorEditor.includes("on: { close: animateFancyboxHtml5VideoClose }") &&
     !vditorEditor.includes('caption: item.name') &&
     vditorEditor.includes('autoStart: true') &&
@@ -466,6 +470,13 @@ assert(
     fancyboxVideoClose.includes('export const animateFancyboxHtml5VideoClose') &&
     fancyboxVideoClose.includes('slide.type !== \'html5video\'') &&
     fancyboxVideoClose.includes('captureVideoFrame(video)') &&
+    fancyboxVideoClose.includes('getSlideImageFallback(slide, video)') &&
+    fancyboxVideoClose.includes("const overlay = document.createElement('img')") &&
+    fancyboxVideoClose.includes("return candidates.find(isImageSource) || ''") &&
+    fancyboxVideoClose.includes("transition: 'transform 260ms cubic-bezier(0.22, 1, 0.36, 1)'") &&
+    !fancyboxVideoClose.includes("document.createElement(frameSrc ? 'img' : 'div')") &&
+    !fancyboxVideoClose.includes("overlay.style.background = '#000'") &&
+    !fancyboxVideoClose.includes("overlay.style.opacity = '0.12'") &&
     fancyboxVideoClose.includes('export const getVideoElementSource') &&
     fancyboxVideoClose.includes('export const ensureFancyboxVideoThumbnail') &&
     !markdownRenderer.includes("video.dataset.type = 'video'") &&

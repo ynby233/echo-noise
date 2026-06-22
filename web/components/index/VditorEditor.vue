@@ -284,9 +284,16 @@ const getAttachmentVideoFancyboxOptions = (startIndex = 0) => ({
   on: { close: animateFancyboxHtml5VideoClose }
 })
 
+const getVideoThumbnailFallback = () => {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"><rect width="160" height="160" rx="16" fill="#111827"/><path d="M65 49v62l52-31-52-31z" fill="#f97316"/><path d="M22 22h116v116H22z" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="6"/></svg>'
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`
+}
+
+const isImagePreviewSource = (src: string) => /^(data:image|blob:)/i.test(src) || /\.(png|jpe?g|gif|webp|bmp|svg)(?:[?#].*)?$/i.test(src)
+
 const getVideoFirstFrameThumbnail = (url: string) => {
   const src = String(url || '').trim()
-  if (!src || typeof document === 'undefined') return Promise.resolve(src)
+  if (!src || typeof document === 'undefined') return Promise.resolve(getVideoThumbnailFallback())
   const cached = videoFirstFrameCache.get(src)
   if (cached) return cached
   const promise = new Promise<string>((resolve) => {
@@ -297,7 +304,7 @@ const getVideoFirstFrameThumbnail = (url: string) => {
       if (finished) return
       finished = true
       cleanup()
-      resolve(thumb || src)
+      resolve(isImagePreviewSource(thumb) ? thumb : getVideoThumbnailFallback())
     }
     const cleanup = () => {
       window.clearTimeout(timer)
@@ -363,34 +370,59 @@ const getVideoFirstFrameThumbnail = (url: string) => {
   return promise
 }
 
+const getProjectThumbnailTargetSize = () => {
+  if (typeof document === 'undefined') return 72
+  const galleryThumb = document.querySelector('.recommend-grid a, .recommend-image-box') as HTMLElement | null
+  const rect = galleryThumb?.getBoundingClientRect?.()
+  if (rect && rect.width > 16 && rect.height > 16) return Math.round(Math.min(rect.width, rect.height))
+  return 72
+}
+
+const getPreviewProxyRect = (sourceEl: HTMLElement | null, isCurrent: boolean) => {
+  if (!isCurrent || !sourceEl || typeof document === 'undefined') {
+    return { left: -9999, top: -9999, size: 1 }
+  }
+  const sourceRect = sourceEl.getBoundingClientRect()
+  const size = getProjectThumbnailTargetSize()
+  if (!sourceRect.width || !sourceRect.height) return { left: -9999, top: -9999, size }
+  return {
+    left: sourceRect.left + (sourceRect.width - size) / 2,
+    top: sourceRect.top + (sourceRect.height - size) / 2,
+    size
+  }
+}
+
 const createFancyboxProxyNode = (item: EditorAttachmentInfo, thumbSrc: string, sourceEl: HTMLElement | null, isCurrent: boolean, group: string) => {
   const proxy = document.createElement('a')
   proxy.href = item.url
   proxy.dataset.fancybox = group
   proxy.dataset.src = item.url
-  proxy.dataset.thumbSrc = thumbSrc || item.url
+  const proxyThumb = isImagePreviewSource(thumbSrc)
+    ? thumbSrc
+    : item.type === 'video'
+      ? getVideoThumbnailFallback()
+      : item.url
+  proxy.dataset.thumbSrc = proxyThumb
   if (item.type === 'video') {
     proxy.dataset.type = 'html5video'
-    proxy.dataset.poster = thumbSrc || item.url
+    proxy.dataset.poster = proxyThumb
   }
   proxy.setAttribute('aria-hidden', 'true')
   proxy.tabIndex = -1
-  const rect = isCurrent && sourceEl ? sourceEl.getBoundingClientRect() : null
-  const width = Math.max(1, rect?.width || 1)
-  const height = Math.max(1, rect?.height || 1)
+  const proxyRect = getPreviewProxyRect(sourceEl, isCurrent)
   Object.assign(proxy.style, {
     position: 'fixed',
-    left: `${rect ? rect.left : -9999}px`,
-    top: `${rect ? rect.top : -9999}px`,
-    width: `${width}px`,
-    height: `${height}px`,
+    left: `${proxyRect.left}px`,
+    top: `${proxyRect.top}px`,
+    width: `${proxyRect.size}px`,
+    height: `${proxyRect.size}px`,
     opacity: '0.001',
     pointerEvents: 'none',
     overflow: 'hidden',
     zIndex: '-1'
   })
   const img = document.createElement('img')
-  img.src = thumbSrc || item.url
+  img.src = proxyThumb
   img.alt = item.name || item.title
   Object.assign(img.style, {
     display: 'block',

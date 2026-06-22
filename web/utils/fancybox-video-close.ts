@@ -6,6 +6,11 @@ type FancyboxLike = {
 
 const validRect = (rect: DOMRect | null | undefined) => !!rect && rect.width > 1 && rect.height > 1
 
+const isImageSource = (src: string | null | undefined) => {
+  const value = String(src || '').trim()
+  return !!value && (/^(data:image|blob:)/i.test(value) || /\.(png|jpe?g|gif|webp|bmp|svg)(?:[?#].*)?$/i.test(value))
+}
+
 const captureVideoFrame = (video: HTMLVideoElement | null) => {
   if (!video || !video.videoWidth || !video.videoHeight || video.readyState < 2) return ''
   try {
@@ -30,6 +35,20 @@ export const getVideoElementSource = (video: HTMLVideoElement) => {
   return video.currentSrc || video.getAttribute('src') || video.querySelector('source')?.getAttribute('src') || ''
 }
 
+const getSlideImageFallback = (slide: any, video: HTMLVideoElement | null) => {
+  const candidates = [
+    video?.poster,
+    slide?.poster,
+    slide?.thumbElSrc,
+    slide?.thumbSrc,
+    slide?.triggerEl?.dataset?.thumbSrc,
+    slide?.triggerEl?.dataset?.poster,
+    slide?.thumbEl?.currentSrc,
+    slide?.thumbEl?.src
+  ]
+  return candidates.find(isImageSource) || ''
+}
+
 const getSlideContentElement = (slide: any) => {
   const video = getSlideVideoElement(slide)
   return video || (slide?.contentEl as HTMLElement | null) || (slide?.el?.querySelector?.('.fancybox__content') as HTMLElement | null)
@@ -51,15 +70,13 @@ export const animateFancyboxHtml5VideoClose = (instance: FancyboxLike) => {
   if (!contentEl || !validRect(startRect) || !validRect(targetRect)) return
 
   const video = getSlideVideoElement(slide)
-  const frameSrc = captureVideoFrame(video) || video?.poster || slide.poster || slide.thumbElSrc || slide.thumbSrc || ''
-  const overlay = document.createElement(frameSrc ? 'img' : 'div') as HTMLElement
-  if (overlay instanceof HTMLImageElement) {
-    overlay.src = frameSrc
-    overlay.alt = ''
-    overlay.decoding = 'async'
-  } else {
-    overlay.style.background = '#000'
-  }
+  const frameSrc = captureVideoFrame(video) || getSlideImageFallback(slide, video)
+  if (!frameSrc) return
+
+  const overlay = document.createElement('img')
+  overlay.src = frameSrc
+  overlay.alt = ''
+  overlay.decoding = 'async'
 
   Object.assign(overlay.style, {
     position: 'fixed',
@@ -72,8 +89,8 @@ export const animateFancyboxHtml5VideoClose = (instance: FancyboxLike) => {
     pointerEvents: 'none',
     zIndex: '10002',
     transformOrigin: 'top left',
-    transition: 'transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 260ms ease',
-    willChange: 'transform, opacity',
+    transition: 'transform 260ms cubic-bezier(0.22, 1, 0.36, 1)',
+    willChange: 'transform',
     opacity: '1'
   })
 
@@ -88,7 +105,6 @@ export const animateFancyboxHtml5VideoClose = (instance: FancyboxLike) => {
 
   requestAnimationFrame(() => {
     overlay.style.transform = `translate3d(${translateX}px, ${translateY}px, 0) scale(${scaleX}, ${scaleY})`
-    overlay.style.opacity = '0.12'
   })
 
   window.setTimeout(() => {
@@ -101,7 +117,7 @@ export const ensureFancyboxVideoThumbnail = (video: HTMLVideoElement, target: HT
   const src = getVideoElementSource(video)
   if (!src || target.dataset.thumbSrc) return
   const apply = (thumb: string) => {
-    if (!thumb || target.dataset.thumbSrc) return
+    if (!isImageSource(thumb) || target.dataset.thumbSrc) return
     target.dataset.thumbSrc = thumb
     target.dataset.poster = thumb
     video.setAttribute('poster', video.getAttribute('poster') || thumb)
