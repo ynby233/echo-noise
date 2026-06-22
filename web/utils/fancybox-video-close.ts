@@ -2,6 +2,7 @@ type FancyboxLike = {
   getSlide?: () => any
   container?: HTMLElement | null
   options?: Record<string, any>
+  __noiseVideoCloseAnimated?: boolean
 }
 
 const validRect = (rect: DOMRect | null | undefined) => !!rect && rect.width > 1 && rect.height > 1
@@ -28,6 +29,7 @@ const captureVideoFrame = (video: HTMLVideoElement | null) => {
 
 const getSlideVideoElement = (slide: any) => {
   const root = (slide?.contentEl || slide?.el) as HTMLElement | null
+  if (root instanceof HTMLVideoElement) return root
   return root?.querySelector?.('video') as HTMLVideoElement | null
 }
 
@@ -81,6 +83,7 @@ const containRect = (sourceRect: DOMRect, targetRect: DOMRect) => {
 
 export const animateFancyboxHtml5VideoClose = (instance: FancyboxLike) => {
   if (typeof document === 'undefined') return
+  if (instance.__noiseVideoCloseAnimated) return
   const slide = instance?.getSlide?.()
   if (!slide || slide.type !== 'html5video') return
 
@@ -93,6 +96,7 @@ export const animateFancyboxHtml5VideoClose = (instance: FancyboxLike) => {
   const video = getSlideVideoElement(slide)
   const frameSrc = captureVideoFrame(video) || getSlideImageFallback(slide, video)
   if (!frameSrc) return
+  instance.__noiseVideoCloseAnimated = true
 
   const overlay = document.createElement('img')
   overlay.src = frameSrc
@@ -115,8 +119,6 @@ export const animateFancyboxHtml5VideoClose = (instance: FancyboxLike) => {
     opacity: '1'
   })
 
-  const previousVisibility = contentEl.style.visibility
-  contentEl.style.visibility = 'hidden'
   document.body.appendChild(overlay)
 
   const finalRect = containRect(startRect!, targetRect!)
@@ -125,15 +127,34 @@ export const animateFancyboxHtml5VideoClose = (instance: FancyboxLike) => {
   const translateX = finalRect.left - startRect!.left
   const translateY = finalRect.top - startRect!.top
 
-  requestAnimationFrame(() => {
-    overlay.style.transform = `translate3d(${translateX}px, ${translateY}px, 0) scale(${scaleX}, ${scaleY})`
-    overlay.style.opacity = '0.08'
-  })
-
-  window.setTimeout(() => {
+  const previousVisibility = contentEl.style.visibility
+  let cleaned = false
+  const cleanup = () => {
+    if (cleaned) return
+    cleaned = true
     overlay.remove()
     contentEl.style.visibility = previousVisibility
-  }, 340)
+  }
+
+  const runAnimation = () => {
+    if (cleaned) return
+    contentEl.style.visibility = 'hidden'
+    requestAnimationFrame(() => {
+      overlay.style.transform = `translate3d(${translateX}px, ${translateY}px, 0) scale(${scaleX}, ${scaleY})`
+      overlay.style.opacity = '0'
+    })
+    overlay.addEventListener('transitionend', cleanup, { once: true })
+    window.setTimeout(cleanup, 360)
+  }
+
+  const decode = typeof overlay.decode === 'function'
+    ? overlay.decode()
+    : Promise.resolve()
+  decode.then(runAnimation).catch(cleanup)
+
+  if (!overlay.complete) {
+    overlay.addEventListener('error', cleanup, { once: true })
+  }
 }
 
 export const ensureFancyboxVideoThumbnail = (video: HTMLVideoElement, target: HTMLElement = video) => {

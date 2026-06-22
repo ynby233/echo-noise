@@ -281,7 +281,10 @@ const getAttachmentVideoFancyboxOptions = (startIndex = 0) => ({
   },
   compact: false,
   placeFocusBack: false,
-  on: { close: animateFancyboxHtml5VideoClose }
+  on: {
+    shouldClose: animateFancyboxHtml5VideoClose,
+    close: animateFancyboxHtml5VideoClose,
+  }
 })
 
 const getVideoThumbnailFallback = () => {
@@ -378,8 +381,8 @@ const getProjectThumbnailTargetSize = () => {
   return 72
 }
 
-const getPreviewProxyRect = (sourceEl: HTMLElement | null, isCurrent: boolean) => {
-  if (!isCurrent || !sourceEl || typeof document === 'undefined') {
+const getPreviewProxyRect = (sourceEl: HTMLElement | null) => {
+  if (!sourceEl || typeof document === 'undefined') {
     return { left: -9999, top: -9999, size: 1 }
   }
   const sourceRect = sourceEl.getBoundingClientRect()
@@ -392,7 +395,7 @@ const getPreviewProxyRect = (sourceEl: HTMLElement | null, isCurrent: boolean) =
   }
 }
 
-const createFancyboxProxyNode = (item: EditorAttachmentInfo, thumbSrc: string, sourceEl: HTMLElement | null, isCurrent: boolean, group: string) => {
+const createFancyboxProxyNode = (item: EditorAttachmentInfo, thumbSrc: string, sourceEl: HTMLElement | null, group: string) => {
   const proxy = document.createElement('a')
   proxy.href = item.url
   proxy.dataset.fancybox = group
@@ -409,7 +412,7 @@ const createFancyboxProxyNode = (item: EditorAttachmentInfo, thumbSrc: string, s
   }
   proxy.setAttribute('aria-hidden', 'true')
   proxy.tabIndex = -1
-  const proxyRect = getPreviewProxyRect(sourceEl, isCurrent)
+  const proxyRect = getPreviewProxyRect(sourceEl)
   Object.assign(proxy.style, {
     position: 'fixed',
     left: `${proxyRect.left}px`,
@@ -445,7 +448,7 @@ const showAttachmentGallery = async (items: EditorAttachmentInfo[], current: Edi
     : galleryItems.map((item) => item.url)
   const group = `editor-attachment-${Date.now()}-${Math.random().toString(36).slice(2)}`
   const sourceEl = triggerEl || null
-  const nodes = galleryItems.map((item, index) => createFancyboxProxyNode(item, thumbs[index] || item.url, sourceEl, index === startIndex, group))
+  const nodes = galleryItems.map((item, index) => createFancyboxProxyNode(item, thumbs[index] || item.url, sourceEl, group))
   const options = current.type === 'video'
     ? getAttachmentVideoFancyboxOptions(startIndex)
     : getAttachmentImageFancyboxOptions(startIndex)

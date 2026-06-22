@@ -200,7 +200,10 @@ const initializeMediaViewer = () => {
     Thumbs: { type: 'classic', autoStart: true },
     compact: false,
     placeFocusBack: false,
-    on: { close: animateFancyboxHtml5VideoClose }
+    on: {
+      shouldClose: animateFancyboxHtml5VideoClose,
+      close: animateFancyboxHtml5VideoClose,
+    }
   })
 };
 

@@ -349,7 +349,8 @@ assert(
     vditorEditor.includes('proxy.dataset.thumbSrc = proxyThumb') &&
     vditorEditor.includes("? getVideoThumbnailFallback()") &&
     vditorEditor.includes('proxy.dataset.poster = proxyThumb') &&
-    vditorEditor.includes("on: { close: animateFancyboxHtml5VideoClose }") &&
+    vditorEditor.includes('shouldClose: animateFancyboxHtml5VideoClose') &&
+    vditorEditor.includes('close: animateFancyboxHtml5VideoClose') &&
     !vditorEditor.includes('caption: item.name') &&
     vditorEditor.includes('autoStart: true') &&
     vditorEditor.includes('Images: {') &&
@@ -425,13 +426,11 @@ assert(
     !messageList.includes(':deep(.noise-media-fancybox .fancybox__toolbar)') &&
     !vditorEditor.includes('.noise-media-fancybox .fancybox__toolbar') &&
     !homePage.includes('.noise-media-fancybox .fancybox__toolbar') &&
-    floatingCss.includes('.noise-media-fancybox .f-carousel__thumbs.is-classic') &&
-    floatingCss.includes('--f-thumb-opacity: 0.52;') &&
-    floatingCss.includes('.f-thumbs__slide:not(.is-nav-selected) .f-thumbs__slide__button') &&
-    floatingCss.includes('transform: scale(0.92);') &&
-    floatingCss.includes('.f-thumbs__slide.is-nav-selected .f-thumbs__slide__button') &&
-    floatingCss.includes('transform: scale(1.08);') &&
-    floatingCss.includes('transition: transform 180ms ease, opacity 180ms ease, filter 180ms ease;') &&
+    !floatingCss.includes('.noise-media-fancybox .f-carousel__thumbs.is-classic') &&
+    !floatingCss.includes('.noise-media-fancybox .f-thumbs__slide') &&
+    !floatingCss.includes('--f-thumb-opacity: 0.52;') &&
+    !floatingCss.includes('transform: scale(0.92);') &&
+    !floatingCss.includes('transform: scale(1.08);') &&
     !messageList.includes(':deep(.noise-media-fancybox .f-thumbs__slide') &&
     !vditorEditor.includes('.noise-media-fancybox .f-thumbs__slide') &&
     !homePage.includes('.noise-media-fancybox .f-thumbs__slide') &&
@@ -439,7 +438,8 @@ assert(
     !vditorEditor.includes('.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button::after') &&
     !homePage.includes('.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button::after') &&
     vditorEditor.includes('triggerEl?: HTMLElement | null') &&
-    vditorEditor.includes('createFancyboxProxyNode(item, thumbs[index] || item.url, sourceEl, index === startIndex, group)') &&
+    vditorEditor.includes('createFancyboxProxyNode(item, thumbs[index] || item.url, sourceEl, group)') &&
+    !vditorEditor.includes('isCurrent: boolean') &&
     vditorEditor.includes('triggerEl: nodes[startIndex] || sourceEl || undefined') &&
     vditorEditor.includes('Fancybox.fromNodes(nodes, viewerOptions as any)') &&
     !vditorEditor.includes('thumbEl: sourceThumb') &&
@@ -471,19 +471,28 @@ assert(
     markdownRenderer.includes("trigger.dataset.type = 'html5video'") &&
     markdownRenderer.includes('getVideoElementSource(video)') &&
     markdownRenderer.includes('ensureFancyboxVideoThumbnail(video, trigger)') &&
-    markdownRenderer.includes('on: { close: animateFancyboxHtml5VideoClose }') &&
-    messageList.includes('on: { close: animateFancyboxHtml5VideoClose }') &&
-    homePage.includes('on: { close: animateFancyboxHtml5VideoClose }') &&
+    markdownRenderer.includes('shouldClose: animateFancyboxHtml5VideoClose') &&
+    markdownRenderer.includes('close: animateFancyboxHtml5VideoClose') &&
+    messageList.includes('shouldClose: animateFancyboxHtml5VideoClose') &&
+    messageList.includes('close: animateFancyboxHtml5VideoClose') &&
+    homePage.includes('shouldClose: animateFancyboxHtml5VideoClose') &&
+    homePage.includes('close: animateFancyboxHtml5VideoClose') &&
     fancyboxVideoClose.includes('export const animateFancyboxHtml5VideoClose') &&
     fancyboxVideoClose.includes('slide.type !== \'html5video\'') &&
+    fancyboxVideoClose.includes('if (root instanceof HTMLVideoElement) return root') &&
     fancyboxVideoClose.includes('captureVideoFrame(video)') &&
     fancyboxVideoClose.includes('getSlideImageFallback(slide, video)') &&
     fancyboxVideoClose.includes('const containRect = (sourceRect: DOMRect, targetRect: DOMRect) => {') &&
     fancyboxVideoClose.includes('const finalRect = containRect(startRect!, targetRect!)') &&
     fancyboxVideoClose.includes("transition: 'transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 280ms cubic-bezier(0.22, 1, 0.36, 1)'") &&
     fancyboxVideoClose.includes("willChange: 'transform, opacity'") &&
-    fancyboxVideoClose.includes("overlay.style.opacity = '0.08'") &&
+    fancyboxVideoClose.includes("overlay.style.opacity = '0'") &&
     fancyboxVideoClose.includes("const overlay = document.createElement('img')") &&
+    fancyboxVideoClose.includes('const runAnimation = () => {') &&
+    fancyboxVideoClose.includes("contentEl.style.visibility = 'hidden'") &&
+    fancyboxVideoClose.includes('overlay.decode()') &&
+    fancyboxVideoClose.includes('decode.then(runAnimation).catch(cleanup)') &&
+    fancyboxVideoClose.includes("overlay.addEventListener('transitionend', cleanup, { once: true })") &&
     fancyboxVideoClose.includes("return candidates.find(isImageSource) || ''") &&
     !fancyboxVideoClose.includes("document.createElement(frameSrc ? 'img' : 'div')") &&
     !fancyboxVideoClose.includes("overlay.style.background = '#000'") &&

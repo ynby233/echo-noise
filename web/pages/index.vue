@@ -2383,7 +2383,10 @@ const projectFancyboxOptions = {
   Thumbs: { type: 'classic', autoStart: true },
   compact: false,
   placeFocusBack: false,
-  on: { close: animateFancyboxHtml5VideoClose }
+  on: {
+    shouldClose: animateFancyboxHtml5VideoClose,
+    close: animateFancyboxHtml5VideoClose,
+  }
 }
 // 绑定 Fancybox 以支持推荐图集预览
 onMounted(() => {
