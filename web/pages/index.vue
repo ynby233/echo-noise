@@ -3567,6 +3567,22 @@ html.dark .page-footer { color: rgba(226, 232, 240, 0.72); }
 :global(html.dark) .center-col :deep(.content-container),
 :global(html:not(.dark)) .center-col :deep(.content-container) { transition: none !important; }
 .noise-media-fancybox .fancybox__caption { display: none !important; }
+.noise-media-fancybox .f-thumbs__slide {
+  overflow: visible;
+}
+
+.noise-media-fancybox .f-thumbs__slide__button {
+  transition: transform 180ms ease, opacity 180ms ease;
+  transform-origin: center;
+}
+
+.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button {
+  transform: scale(1.12);
+}
+
+.noise-media-fancybox .f-thumbs__slide__button::after {
+  display: none;
+}
 .netease-mini-player.minimized[data-instant="true"] { transition: none !important; }
 .netease-mini-player.minimized[data-instant="true"] .album-cover-container,
 .netease-mini-player.minimized[data-instant="true"] .album-cover,

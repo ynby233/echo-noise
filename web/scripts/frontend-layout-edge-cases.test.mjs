@@ -432,23 +432,17 @@ assert(
     !messageList.includes(':deep(.noise-media-fancybox .fancybox__toolbar)') &&
     !vditorEditor.includes('.noise-media-fancybox .fancybox__toolbar') &&
     !homePage.includes('.noise-media-fancybox .fancybox__toolbar') &&
-    floatingCss.includes('Fancybox thumbnail state shared by the built-in image viewer and attachment previews') &&
-    floatingCss.includes('.fancybox__thumbs .f-thumbs__slide,') &&
-    floatingCss.includes('.f-thumbs .f-thumbs__slide {') &&
-    floatingCss.includes('transform: scale(0.92);') &&
-    floatingCss.includes('transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease, filter 220ms ease;') &&
-    floatingCss.includes('.fancybox__thumbs .f-thumbs__slide.is-selected,') &&
-    floatingCss.includes('.f-thumbs .f-thumbs__slide.is-nav-selected {') &&
-    floatingCss.includes('transform: scale(1.12);') &&
-    floatingCss.includes('.fancybox__thumbs .f-thumbs__slide__button::after,') &&
-    floatingCss.includes('display: none !important;') &&
-    !floatingCss.includes('.f-thumbs .f-thumbs__slide__button {\n  transform: scale(0.92);') &&
+    !floatingCss.includes('Fancybox thumbnail state shared by the built-in image viewer and attachment previews') &&
+    !floatingCss.includes('.fancybox__thumbs .f-thumbs__slide,') &&
+    !floatingCss.includes('transform: scale(0.92);') &&
+    homePage.includes('.noise-media-fancybox .f-thumbs__slide {\n  overflow: visible;\n}') &&
+    homePage.includes('.noise-media-fancybox .f-thumbs__slide__button {\n  transition: transform 180ms ease, opacity 180ms ease;\n  transform-origin: center;\n}') &&
+    homePage.includes('.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button {\n  transform: scale(1.12);\n}') &&
+    homePage.includes('.noise-media-fancybox .f-thumbs__slide__button::after {\n  display: none;\n}') &&
     !messageList.includes(':deep(.noise-media-fancybox .f-thumbs__slide') &&
     !vditorEditor.includes('.noise-media-fancybox .f-thumbs__slide') &&
-    !homePage.includes('.noise-media-fancybox .f-thumbs__slide') &&
     !messageList.includes(':deep(.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button::after)') &&
     !vditorEditor.includes('.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button::after') &&
-    !homePage.includes('.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button::after') &&
     vditorEditor.includes('triggerEl?: HTMLElement | null') &&
     vditorEditor.includes('createFancyboxProxyNode(item, thumbs[index] || item.url, sourceEl, group)') &&
     !vditorEditor.includes('isCurrent: boolean') &&
@@ -497,10 +491,13 @@ assert(
     fancyboxVideoClose.includes('if (root instanceof HTMLVideoElement) return root') &&
     fancyboxVideoClose.includes('captureVideoFrame(video)') &&
     fancyboxVideoClose.includes('getSlideImageFallback(slide, video)') &&
-    fancyboxVideoClose.includes('waitForVideoFrameThenClose(instance, video)') &&
+    fancyboxVideoClose.includes('waitForVideoFrameThenClose(instance, slide, video, event)') &&
+    fancyboxVideoClose.includes("if (event?.type === 'shouldClose') event.preventDefault()") &&
+    fancyboxVideoClose.includes('applyVideoFrameFallback(slide, video, thumb)') &&
+    fancyboxVideoClose.includes('applyVideoFrameFallback(slide, video, frameSrc)') &&
     fancyboxVideoClose.includes("video.addEventListener('loadeddata', onReady)") &&
     fancyboxVideoClose.includes("video.addEventListener('canplay', onReady)") &&
-    fancyboxVideoClose.includes('if (shouldClose) requestAnimationFrame(() => instance.close?.())') &&
+    fancyboxVideoClose.includes('requestAnimationFrame(() => {\n      try { instance.close?.() } finally { instance.__noiseVideoCloseRetrying = false }\n    })') &&
     fancyboxVideoClose.includes('const containRect = (sourceRect: DOMRect, targetRect: DOMRect) => {') &&
     fancyboxVideoClose.includes('const finalRect = containRect(startRect!, targetRect!)') &&
     fancyboxVideoClose.includes("transition: 'transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 280ms cubic-bezier(0.22, 1, 0.36, 1)'") &&
