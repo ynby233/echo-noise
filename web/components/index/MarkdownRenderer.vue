@@ -6,7 +6,8 @@
 import { nextTick, onMounted, ref, watch, onBeforeUnmount, inject } from 'vue';
 import { useRuntimeConfig } from '#imports';
 import { useMessageStore } from '~/store/message';
-import { animateFancyboxHtml5VideoClose, ensureFancyboxVideoThumbnail, getVideoElementSource } from '~/utils/fancybox-video-close'
+import { ensureFancyboxVideoThumbnail, getVideoElementSource } from '~/utils/fancybox-video-close'
+import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import Vditor from 'vditor';
 
 // 定义正则表达式
@@ -184,27 +185,7 @@ const initializeMediaViewer = () => {
   try {
     Fancybox.unbind?.(root, '[data-fancybox]')
   } catch {}
-  Fancybox.bind(root, '[data-fancybox]', {
-    mainClass: 'noise-media-fancybox',
-    Carousel: { infinite: true },
-    Toolbar: {
-      enabled: true,
-      display: {
-        left: ['infobar'],
-        middle: [],
-        right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']
-      }
-    },
-    Images: { zoom: true },
-    Html: { videoAutoplay: false },
-    Thumbs: { type: 'classic', autoStart: true },
-    compact: false,
-    placeFocusBack: false,
-    on: {
-      shouldClose: animateFancyboxHtml5VideoClose,
-      close: animateFancyboxHtml5VideoClose,
-    }
-  })
+  Fancybox.bind(root, '[data-fancybox]', createMediaFancyboxOptions({ withVideoClose: true }) as any)
 };
 
 const shouldSkipHashtagNode = (node: Node | null) => {
