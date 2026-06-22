@@ -435,12 +435,14 @@ assert(
     floatingCss.includes('Fancybox thumbnail state shared by the built-in image viewer and attachment previews') &&
     floatingCss.includes('.fancybox__thumbs .f-thumbs__slide,') &&
     floatingCss.includes('.f-thumbs .f-thumbs__slide {') &&
-    floatingCss.includes('.fancybox__thumbs .f-thumbs__slide__button,') &&
-    floatingCss.includes('.f-thumbs .f-thumbs__slide__button {') &&
     floatingCss.includes('transform: scale(0.92);') &&
-    floatingCss.includes('.fancybox__thumbs .f-thumbs__slide.is-selected .f-thumbs__slide__button,') &&
-    floatingCss.includes('.f-thumbs .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button') &&
+    floatingCss.includes('transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease, filter 220ms ease;') &&
+    floatingCss.includes('.fancybox__thumbs .f-thumbs__slide.is-selected,') &&
+    floatingCss.includes('.f-thumbs .f-thumbs__slide.is-nav-selected {') &&
     floatingCss.includes('transform: scale(1.12);') &&
+    floatingCss.includes('.fancybox__thumbs .f-thumbs__slide__button::after,') &&
+    floatingCss.includes('display: none !important;') &&
+    !floatingCss.includes('.f-thumbs .f-thumbs__slide__button {\n  transform: scale(0.92);') &&
     !messageList.includes(':deep(.noise-media-fancybox .f-thumbs__slide') &&
     !vditorEditor.includes('.noise-media-fancybox .f-thumbs__slide') &&
     !homePage.includes('.noise-media-fancybox .f-thumbs__slide') &&
@@ -495,6 +497,10 @@ assert(
     fancyboxVideoClose.includes('if (root instanceof HTMLVideoElement) return root') &&
     fancyboxVideoClose.includes('captureVideoFrame(video)') &&
     fancyboxVideoClose.includes('getSlideImageFallback(slide, video)') &&
+    fancyboxVideoClose.includes('waitForVideoFrameThenClose(instance, video)') &&
+    fancyboxVideoClose.includes("video.addEventListener('loadeddata', onReady)") &&
+    fancyboxVideoClose.includes("video.addEventListener('canplay', onReady)") &&
+    fancyboxVideoClose.includes('if (shouldClose) requestAnimationFrame(() => instance.close?.())') &&
     fancyboxVideoClose.includes('const containRect = (sourceRect: DOMRect, targetRect: DOMRect) => {') &&
     fancyboxVideoClose.includes('const finalRect = containRect(startRect!, targetRect!)') &&
     fancyboxVideoClose.includes("transition: 'transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 280ms cubic-bezier(0.22, 1, 0.36, 1)'") &&

@@ -1,8 +1,10 @@
 type FancyboxLike = {
   getSlide?: () => any
+  close?: () => void
   container?: HTMLElement | null
   options?: Record<string, any>
   __noiseVideoCloseAnimated?: boolean
+  __noiseVideoClosePending?: boolean
 }
 
 const validRect = (rect: DOMRect | null | undefined) => !!rect && rect.width > 1 && rect.height > 1
@@ -119,6 +121,32 @@ const containRect = (sourceRect: DOMRect, targetRect: DOMRect) => {
   }
 }
 
+const waitForVideoFrameThenClose = (instance: FancyboxLike, video: HTMLVideoElement | null) => {
+  if (!video || instance.__noiseVideoClosePending) return false
+  instance.__noiseVideoClosePending = true
+  let done = false
+  const finish = (shouldClose: boolean) => {
+    if (done) return
+    done = true
+    window.clearTimeout(timer)
+    video.removeEventListener('loadeddata', onReady)
+    video.removeEventListener('canplay', onReady)
+    video.removeEventListener('seeked', onReady)
+    instance.__noiseVideoClosePending = false
+    if (shouldClose) requestAnimationFrame(() => instance.close?.())
+  }
+  const onReady = () => {
+    if (captureVideoFrame(video)) finish(true)
+  }
+  const timer = window.setTimeout(() => finish(!!captureVideoFrame(video)), 900)
+  video.addEventListener('loadeddata', onReady)
+  video.addEventListener('canplay', onReady)
+  video.addEventListener('seeked', onReady)
+  try { video.load?.() } catch {}
+  onReady()
+  return false
+}
+
 export const animateFancyboxHtml5VideoClose = (instance: FancyboxLike) => {
   if (typeof document === 'undefined') return
   if (instance.__noiseVideoCloseAnimated) return
@@ -133,7 +161,7 @@ export const animateFancyboxHtml5VideoClose = (instance: FancyboxLike) => {
 
   const video = getSlideVideoElement(slide)
   const frameSrc = captureVideoFrame(video) || getSlideImageFallback(slide, video)
-  if (!frameSrc) return
+  if (!frameSrc) return waitForVideoFrameThenClose(instance, video)
   instance.__noiseVideoCloseAnimated = true
 
   const overlay = document.createElement('img')
