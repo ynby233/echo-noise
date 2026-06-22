@@ -56,6 +56,12 @@ const getSlideContentElement = (slide: any) => {
   return video || (slide?.contentEl as HTMLElement | null) || (slide?.el?.querySelector?.('.fancybox__content') as HTMLElement | null)
 }
 
+const getSlideHideElement = (slide: any, contentEl: HTMLElement | null) => {
+  return (contentEl?.closest?.('.fancybox__content') as HTMLElement | null)
+    || (slide?.contentEl as HTMLElement | null)
+    || contentEl
+}
+
 const getTriggerElement = (instance: FancyboxLike, slide: any) => {
   return (slide?.triggerEl || slide?.thumbEl || instance?.options?.triggerEl || null) as HTMLElement | null
 }
@@ -127,18 +133,19 @@ export const animateFancyboxHtml5VideoClose = (instance: FancyboxLike) => {
   const translateX = finalRect.left - startRect!.left
   const translateY = finalRect.top - startRect!.top
 
-  const previousVisibility = contentEl.style.visibility
+  const hideEl = getSlideHideElement(slide, contentEl)
+  const previousVisibility = hideEl?.style.visibility || ''
   let cleaned = false
   const cleanup = () => {
     if (cleaned) return
     cleaned = true
     overlay.remove()
-    contentEl.style.visibility = previousVisibility
+    if (hideEl) hideEl.style.visibility = previousVisibility
   }
 
   const runAnimation = () => {
     if (cleaned) return
-    contentEl.style.visibility = 'hidden'
+    if (hideEl) hideEl.style.visibility = 'hidden'
     requestAnimationFrame(() => {
       overlay.style.transform = `translate3d(${translateX}px, ${translateY}px, 0) scale(${scaleX}, ${scaleY})`
       overlay.style.opacity = '0'
