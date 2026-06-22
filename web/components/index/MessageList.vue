@@ -522,7 +522,7 @@ import type { MessageVisibility } from '~/types/models'
 import BuiltinComments from '../comments/BuiltinComments.vue'
 import { writeClipboardText } from '~/utils/clipboard'
 import { uploadMediaFiles } from '~/utils/media-upload'
-import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
+import { animateFancyboxHtml5VideoClose } from '~/utils/fancybox-video-close'
 import { useRuntimeConfig } from '#imports'
 import { useToast } from '#ui/composables/useToast'
 type BuiltinCommentsExpose = {
@@ -1362,7 +1362,33 @@ const deleteMsg = async (id: number) => {
 
 const initFancybox = () => {
   if (window.Fancybox) {
-    const fancyboxOptions = createMediaFancyboxOptions({ withVideoClose: true });
+    const fancyboxOptions = {
+      mainClass: 'noise-media-fancybox',
+      Carousel: {
+        infinite: false,
+      },
+      Toolbar: {
+        enabled: true,
+        display: {
+          left: ['infobar'],
+          middle: [],
+          right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']
+        },
+      },
+      Images: {
+        zoom: true,
+        click: true,
+        wheel: "slide",
+      },
+      Html: { videoAutoplay: false },
+      Thumbs: { type: 'classic', autoStart: true },
+      compact: false,
+      placeFocusBack: false,
+      on: {
+        shouldClose: animateFancyboxHtml5VideoClose,
+        close: animateFancyboxHtml5VideoClose,
+      },
+    };
 
     const mdImages = document.querySelectorAll(".markdown-preview img");
     mdImages.forEach((img) => {

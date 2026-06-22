@@ -516,7 +516,7 @@ import FloatingToolSidebar from '~/components/widgets/FloatingToolSidebar.vue'
 import BuiltinComments from '~/components/comments/BuiltinComments.vue'
 import MarkdownRenderer from '~/components/index/MarkdownRenderer.vue'
 import { getRequest } from '~/utils/api'
-import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
+import { animateFancyboxHtml5VideoClose } from '~/utils/fancybox-video-close'
 import { useToast } from '#ui/composables/useToast'
 import { useUserStore } from '~/store/user'
 import type { Tag } from '~/types/models'
@@ -2367,7 +2367,27 @@ watch([leftAds, () => (frontendConfig.value as any)?.leftAdsIntervalMs], () => {
 }, { immediate: true })
 onUnmounted(() => { if (adTimer) clearInterval(adTimer) })
 
-const projectFancyboxOptions = createMediaFancyboxOptions({ withVideoClose: true })
+const projectFancyboxOptions = {
+  mainClass: 'noise-media-fancybox',
+  Carousel: { infinite: true },
+  Toolbar: {
+    enabled: true,
+    display: {
+      left: ['infobar'],
+      middle: [],
+      right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']
+    }
+  },
+  Images: { zoom: true },
+  Html: { videoAutoplay: false },
+  Thumbs: { type: 'classic', autoStart: true },
+  compact: false,
+  placeFocusBack: false,
+  on: {
+    shouldClose: animateFancyboxHtml5VideoClose,
+    close: animateFancyboxHtml5VideoClose,
+  }
+}
 // 绑定 Fancybox 以支持推荐图集预览
 onMounted(() => {
   try { (window as any).Fancybox?.bind?.('[data-fancybox]', projectFancyboxOptions) } catch {}

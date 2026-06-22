@@ -83,8 +83,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from "vue";
 import { positionFloatingMenu, scheduleFloatingMenuPosition } from '~/utils/floating-menu'
-import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
-import { normalizeSameSiteMediaSource } from '~/utils/fancybox-video-close'
+import { animateFancyboxHtml5VideoClose } from '~/utils/fancybox-video-close'
 import Vditor from "vditor";
 import { Fancybox } from "@fancyapps/ui";
 import "@fancyapps/ui/dist/fancybox/fancybox.css";
@@ -237,15 +236,67 @@ const transformAttachmentPreviewHtml = (html: string) => {
   return holder.innerHTML
 }
 
-const getAttachmentImageFancyboxOptions = (startIndex = 0) => createMediaFancyboxOptions({ startIndex })
+const getAttachmentImageFancyboxOptions = (startIndex = 0) => ({
+  animated: true,
+  closeButton: false,
+  mainClass: 'noise-media-fancybox',
+  startIndex,
+  Carousel: { infinite: true },
+  Toolbar: {
+    enabled: true,
+    display: {
+      left: ['infobar'],
+      middle: [],
+      right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']
+    }
+  },
+  Images: {
+    zoom: true
+  },
+  Thumbs: { type: 'classic', autoStart: true },
+  compact: false,
+  placeFocusBack: false
+})
 
-const getAttachmentVideoFancyboxOptions = (startIndex = 0) => createMediaFancyboxOptions({ startIndex, withVideoClose: true })
+const getAttachmentVideoFancyboxOptions = (startIndex = 0) => ({
+  animated: true,
+  closeButton: false,
+  mainClass: 'noise-media-fancybox',
+  startIndex,
+  Carousel: { infinite: true },
+  Toolbar: {
+    enabled: true,
+    display: {
+      left: ['infobar'],
+      middle: [],
+      right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']
+    }
+  },
+  Html: {
+    videoAutoplay: false
+  },
+  Thumbs: {
+    type: 'classic',
+    autoStart: true
+  },
+  compact: false,
+  placeFocusBack: false,
+  on: {
+    shouldClose: animateFancyboxHtml5VideoClose,
+    close: animateFancyboxHtml5VideoClose,
+  }
+})
+
+const getVideoThumbnailFallback = () => {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"><rect width="160" height="160" rx="16" fill="#111827"/><path d="M65 49v62l52-31-52-31z" fill="#f97316"/><path d="M22 22h116v116H22z" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="6"/></svg>'
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`
+}
 
 const isImagePreviewSource = (src: string) => /^(data:image|blob:)/i.test(src) || /\.(png|jpe?g|gif|webp|bmp|svg)(?:[?#].*)?$/i.test(src)
 
 const getVideoFirstFrameThumbnail = (url: string) => {
-  const src = normalizeSameSiteMediaSource(String(url || '').trim())
-  if (!src || typeof document === 'undefined') return Promise.resolve('')
+  const src = String(url || '').trim()
+  if (!src || typeof document === 'undefined') return Promise.resolve(getVideoThumbnailFallback())
   const cached = videoFirstFrameCache.get(src)
   if (cached) return cached
   const promise = new Promise<string>((resolve) => {
@@ -256,7 +307,7 @@ const getVideoFirstFrameThumbnail = (url: string) => {
       if (finished) return
       finished = true
       cleanup()
-      resolve(isImagePreviewSource(thumb) ? thumb : '')
+      resolve(isImagePreviewSource(thumb) ? thumb : getVideoThumbnailFallback())
     }
     const cleanup = () => {
       window.clearTimeout(timer)
@@ -346,14 +397,18 @@ const getPreviewProxyRect = (sourceEl: HTMLElement | null) => {
 
 const createFancyboxProxyNode = (item: EditorAttachmentInfo, thumbSrc: string, sourceEl: HTMLElement | null, group: string) => {
   const proxy = document.createElement('a')
-  proxy.href = item.type === 'video' ? normalizeSameSiteMediaSource(item.url) : item.url
+  proxy.href = item.url
   proxy.dataset.fancybox = group
-  proxy.dataset.src = proxy.href
-  const proxyThumb = isImagePreviewSource(thumbSrc) ? thumbSrc : (item.type === 'image' ? item.url : '')
-  if (proxyThumb) proxy.dataset.thumbSrc = proxyThumb
+  proxy.dataset.src = item.url
+  const proxyThumb = isImagePreviewSource(thumbSrc)
+    ? thumbSrc
+    : item.type === 'video'
+      ? getVideoThumbnailFallback()
+      : item.url
+  proxy.dataset.thumbSrc = proxyThumb
   if (item.type === 'video') {
     proxy.dataset.type = 'html5video'
-    if (proxyThumb) proxy.dataset.poster = proxyThumb
+    proxy.dataset.poster = proxyThumb
   }
   proxy.setAttribute('aria-hidden', 'true')
   proxy.tabIndex = -1
@@ -369,18 +424,16 @@ const createFancyboxProxyNode = (item: EditorAttachmentInfo, thumbSrc: string, s
     overflow: 'hidden',
     zIndex: '-1'
   })
-  if (proxyThumb) {
-    const img = document.createElement('img')
-    img.src = proxyThumb
-    img.alt = item.name || item.title
-    Object.assign(img.style, {
-      display: 'block',
-      width: '100%',
-      height: '100%',
-      objectFit: 'cover'
-    })
-    proxy.appendChild(img)
-  }
+  const img = document.createElement('img')
+  img.src = proxyThumb
+  img.alt = item.name || item.title
+  Object.assign(img.style, {
+    display: 'block',
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover'
+  })
+  proxy.appendChild(img)
   document.body.appendChild(proxy)
   return proxy
 }
