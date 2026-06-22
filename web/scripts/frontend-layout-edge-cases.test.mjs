@@ -427,10 +427,11 @@ assert(
     !vditorEditor.includes('.noise-media-fancybox .fancybox__toolbar') &&
     !homePage.includes('.noise-media-fancybox .fancybox__toolbar') &&
     floatingCss.includes('Fancybox thumbnail state shared by the built-in image viewer and attachment previews') &&
-    floatingCss.includes('.fancybox__thumbs .f-thumbs__slide {') &&
+    floatingCss.includes('.fancybox__thumbs .f-thumbs__slide,') &&
+    floatingCss.includes('.f-thumbs .f-thumbs__slide {') &&
     floatingCss.includes('transform: scale(0.92);') &&
     floatingCss.includes('.fancybox__thumbs .f-thumbs__slide.is-selected,') &&
-    floatingCss.includes('.fancybox__thumbs .f-thumbs__slide.is-nav-selected') &&
+    floatingCss.includes('.f-thumbs .f-thumbs__slide.is-nav-selected') &&
     floatingCss.includes('transform: scale(1.12);') &&
     !messageList.includes(':deep(.noise-media-fancybox .f-thumbs__slide') &&
     !vditorEditor.includes('.noise-media-fancybox .f-thumbs__slide') &&
@@ -490,8 +491,12 @@ assert(
     fancyboxVideoClose.includes("overlay.style.opacity = '0'") &&
     fancyboxVideoClose.includes("const overlay = document.createElement('img')") &&
     fancyboxVideoClose.includes('const runAnimation = () => {') &&
-    fancyboxVideoClose.includes("if (hideEl) hideEl.style.visibility = 'hidden'") &&
+    fancyboxVideoClose.includes('const getSlideHideElements = (slide: any, contentEl: HTMLElement | null) => {') &&
+    fancyboxVideoClose.includes('hideEls.forEach((item) => {') &&
+    fancyboxVideoClose.includes("item.style.visibility = 'hidden'") &&
+    fancyboxVideoClose.includes("item.style.opacity = '0'") &&
     fancyboxVideoClose.includes("contentEl?.closest?.('.fancybox__content')") &&
+    fancyboxVideoClose.includes('slide?.el as HTMLElement | null') &&
     fancyboxVideoClose.includes('overlay.decode()') &&
     fancyboxVideoClose.includes('decode.then(runAnimation).catch(cleanup)') &&
     fancyboxVideoClose.includes("overlay.addEventListener('transitionend', cleanup, { once: true })") &&

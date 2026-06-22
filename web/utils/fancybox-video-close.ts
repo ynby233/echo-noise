@@ -56,10 +56,13 @@ const getSlideContentElement = (slide: any) => {
   return video || (slide?.contentEl as HTMLElement | null) || (slide?.el?.querySelector?.('.fancybox__content') as HTMLElement | null)
 }
 
-const getSlideHideElement = (slide: any, contentEl: HTMLElement | null) => {
-  return (contentEl?.closest?.('.fancybox__content') as HTMLElement | null)
-    || (slide?.contentEl as HTMLElement | null)
-    || contentEl
+const getSlideHideElements = (slide: any, contentEl: HTMLElement | null) => {
+  return [
+    contentEl,
+    contentEl?.closest?.('.fancybox__content') as HTMLElement | null,
+    slide?.contentEl as HTMLElement | null,
+    slide?.el as HTMLElement | null
+  ].filter((item, index, list): item is HTMLElement => !!item && list.indexOf(item) === index)
 }
 
 const getTriggerElement = (instance: FancyboxLike, slide: any) => {
@@ -133,19 +136,26 @@ export const animateFancyboxHtml5VideoClose = (instance: FancyboxLike) => {
   const translateX = finalRect.left - startRect!.left
   const translateY = finalRect.top - startRect!.top
 
-  const hideEl = getSlideHideElement(slide, contentEl)
-  const previousVisibility = hideEl?.style.visibility || ''
+  const hideEls = getSlideHideElements(slide, contentEl)
+  const previousVisibility = hideEls.map((item) => item.style.visibility || '')
+  const previousOpacity = hideEls.map((item) => item.style.opacity || '')
   let cleaned = false
   const cleanup = () => {
     if (cleaned) return
     cleaned = true
     overlay.remove()
-    if (hideEl) hideEl.style.visibility = previousVisibility
+    hideEls.forEach((item, index) => {
+      item.style.visibility = previousVisibility[index] || ''
+      item.style.opacity = previousOpacity[index] || ''
+    })
   }
 
   const runAnimation = () => {
     if (cleaned) return
-    if (hideEl) hideEl.style.visibility = 'hidden'
+    hideEls.forEach((item) => {
+      item.style.visibility = 'hidden'
+      item.style.opacity = '0'
+    })
     requestAnimationFrame(() => {
       overlay.style.transform = `translate3d(${translateX}px, ${translateY}px, 0) scale(${scaleX}, ${scaleY})`
       overlay.style.opacity = '0'
