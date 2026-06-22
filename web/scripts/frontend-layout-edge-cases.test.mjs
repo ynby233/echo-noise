@@ -330,7 +330,7 @@ assert(
     vditorEditor.includes('buildAttachmentPreviewHtml') &&
     vditorEditor.includes('transform: transformAttachmentPreviewHtml') &&
     vditorEditor.includes('const showImageInProjectViewer = (info: EditorAttachmentInfo, triggerEl?: HTMLElement | null) => showAttachmentGallery([info], info, triggerEl)') &&
-    vditorEditor.includes('Fancybox.show') &&
+    vditorEditor.includes('Fancybox.fromNodes') &&
     vditorEditor.includes('getAttachmentImageFancyboxOptions') &&
     vditorEditor.includes('getAttachmentVideoFancyboxOptions') &&
     vditorEditor.includes("left: ['infobar']") &&
@@ -340,7 +340,10 @@ assert(
     vditorEditor.includes('videoAutoplay: false') &&
     vditorEditor.includes('getVideoFirstFrameThumbnail') &&
     vditorEditor.includes("await Promise.all(galleryItems.map((item) => getVideoFirstFrameThumbnail(item.url)))") &&
-    vditorEditor.includes("return { src: item.url, type: 'html5video', thumbSrc: thumb, poster: thumb, ...source }") &&
+    vditorEditor.includes('createFancyboxProxyNode') &&
+    vditorEditor.includes("proxy.dataset.type = 'html5video'") &&
+    vditorEditor.includes('proxy.dataset.thumbSrc = thumbSrc || item.url') &&
+    vditorEditor.includes('proxy.dataset.poster = thumbSrc || item.url') &&
     !vditorEditor.includes('caption: item.name') &&
     vditorEditor.includes('autoStart: true') &&
     vditorEditor.includes('Images: {') &&
@@ -386,8 +389,13 @@ assert(
     vditorEditor.includes('confirm(\'确定要删除该表格吗？\')') &&
     vditorEditor.includes('width: 10px !important;') &&
     vditorEditor.includes('height: 10px !important;') &&
-    vditorEditor.includes('justify-content: center !important;') &&
-    vditorEditor.includes('background: #e53e3e !important;') &&
+    vditorEditor.includes('place-items: center !important;') &&
+    vditorEditor.includes('background: #f97316 !important;') &&
+    vditorEditor.includes('background: #ea580c !important;') &&
+    vditorEditor.includes('.editor-table-delete-button::before') &&
+    vditorEditor.includes('.editor-table-delete-button::after') &&
+    vditorEditor.includes('transform: translate(-50%, -50%) rotate(45deg);') &&
+    !vditorEditor.includes('background: #e53e3e !important;') &&
     vditorEditor.includes('tableBlockFromDataset') &&
     vditorEditor.includes('syncEditorAfterDomTableRemoval') &&
     vditorEditor.includes('getHtmlTableBlocks') &&
@@ -411,15 +419,18 @@ assert(
     !messageList.includes(':deep(.noise-media-fancybox .fancybox__toolbar)') &&
     !vditorEditor.includes('.noise-media-fancybox .fancybox__toolbar') &&
     !homePage.includes('.noise-media-fancybox .fancybox__toolbar') &&
-    messageList.includes(':deep(.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button)') &&
-    vditorEditor.includes('.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button') &&
-    homePage.includes('.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button') &&
-    messageList.includes(':deep(.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button::after)') &&
-    vditorEditor.includes('.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button::after') &&
-    homePage.includes('.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button::after') &&
+    !messageList.includes(':deep(.noise-media-fancybox .f-thumbs__slide') &&
+    !vditorEditor.includes('.noise-media-fancybox .f-thumbs__slide') &&
+    !homePage.includes('.noise-media-fancybox .f-thumbs__slide') &&
+    !messageList.includes(':deep(.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button::after)') &&
+    !vditorEditor.includes('.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button::after') &&
+    !homePage.includes('.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button::after') &&
     vditorEditor.includes('triggerEl?: HTMLElement | null') &&
-    vditorEditor.includes('thumbEl: sourceThumb') &&
-    vditorEditor.includes('Fancybox.show(slides as any, viewerOptions as any)') &&
+    vditorEditor.includes('createFancyboxProxyNode(item, thumbs[index] || item.url, sourceEl, index === startIndex, group)') &&
+    vditorEditor.includes('triggerEl: nodes[startIndex] || sourceEl || undefined') &&
+    vditorEditor.includes('Fancybox.fromNodes(nodes, viewerOptions as any)') &&
+    !vditorEditor.includes('thumbEl: sourceThumb') &&
+    !vditorEditor.includes('Fancybox.show(slides as any, viewerOptions as any)') &&
     !messageList.includes(':deep(.noise-media-fancybox .fancybox__infobar)') &&
     vditorEditor.includes('collapseIrAttachmentChrome') &&
     vditorEditor.includes('scheduleCollapseIrAttachmentChrome') &&

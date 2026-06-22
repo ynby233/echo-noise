@@ -76,9 +76,7 @@
       @pointerleave="scheduleTableDeleteHide"
       @mousedown.prevent.stop
       @click.prevent.stop="confirmDeleteHoveredTable"
-    >
-      ×
-    </button>
+    />
   </Teleport>
 </template>
 
@@ -253,7 +251,10 @@ const getAttachmentImageFancyboxOptions = (startIndex = 0) => ({
   },
   Images: {
     zoom: true
-  }
+  },
+  Thumbs: { type: 'classic', autoStart: true },
+  compact: false,
+  placeFocusBack: false
 })
 
 const getAttachmentVideoFancyboxOptions = (startIndex = 0) => ({
@@ -276,7 +277,9 @@ const getAttachmentVideoFancyboxOptions = (startIndex = 0) => ({
   Thumbs: {
     type: 'classic',
     autoStart: true
-  }
+  },
+  compact: false,
+  placeFocusBack: false
 })
 
 const getVideoFirstFrameThumbnail = (url: string) => {
@@ -358,34 +361,78 @@ const getVideoFirstFrameThumbnail = (url: string) => {
   return promise
 }
 
+const createFancyboxProxyNode = (item: EditorAttachmentInfo, thumbSrc: string, sourceEl: HTMLElement | null, isCurrent: boolean, group: string) => {
+  const proxy = document.createElement('a')
+  proxy.href = item.url
+  proxy.dataset.fancybox = group
+  proxy.dataset.src = item.url
+  proxy.dataset.thumbSrc = thumbSrc || item.url
+  if (item.type === 'video') {
+    proxy.dataset.type = 'html5video'
+    proxy.dataset.poster = thumbSrc || item.url
+  }
+  proxy.setAttribute('aria-hidden', 'true')
+  proxy.tabIndex = -1
+  const rect = isCurrent && sourceEl ? sourceEl.getBoundingClientRect() : null
+  const width = Math.max(1, rect?.width || 1)
+  const height = Math.max(1, rect?.height || 1)
+  Object.assign(proxy.style, {
+    position: 'fixed',
+    left: `${rect ? rect.left : -9999}px`,
+    top: `${rect ? rect.top : -9999}px`,
+    width: `${width}px`,
+    height: `${height}px`,
+    opacity: '0.001',
+    pointerEvents: 'none',
+    overflow: 'hidden',
+    zIndex: '-1'
+  })
+  const img = document.createElement('img')
+  img.src = thumbSrc || item.url
+  img.alt = item.name || item.title
+  Object.assign(img.style, {
+    display: 'block',
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover'
+  })
+  proxy.appendChild(img)
+  document.body.appendChild(proxy)
+  return proxy
+}
+
 const showAttachmentGallery = async (items: EditorAttachmentInfo[], current: EditorAttachmentInfo, triggerEl?: HTMLElement | null) => {
+  if (typeof document === 'undefined') return
   const sameType = items.filter((item) => item.type === current.type)
   const galleryItems = sameType.length ? sameType : [current]
   const startIndex = Math.max(0, galleryItems.findIndex((item) => item.url === current.url && item.name === current.name))
-  const videoThumbs = current.type === 'video'
+  const thumbs = current.type === 'video'
     ? await Promise.all(galleryItems.map((item) => getVideoFirstFrameThumbnail(item.url)))
-    : []
-  const sourceThumb = triggerEl instanceof HTMLImageElement
-    ? triggerEl
-    : triggerEl?.querySelector?.('img') as HTMLImageElement | null
-  const slides = galleryItems.map((item, index) => {
-    const source = index === startIndex && sourceThumb
-      ? { thumb: sourceThumb, thumbEl: sourceThumb, thumbElSrc: sourceThumb.currentSrc || sourceThumb.src || item.url }
-      : {}
-    if (item.type !== 'video') return { src: item.url, type: 'image', thumbSrc: item.url, ...source }
-    const thumb = videoThumbs[index] || item.url
-    return { src: item.url, type: 'html5video', thumbSrc: thumb, poster: thumb, ...source }
-  })
+    : galleryItems.map((item) => item.url)
+  const group = `editor-attachment-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  const sourceEl = triggerEl || null
+  const nodes = galleryItems.map((item, index) => createFancyboxProxyNode(item, thumbs[index] || item.url, sourceEl, index === startIndex, group))
   const options = current.type === 'video'
     ? getAttachmentVideoFancyboxOptions(startIndex)
     : getAttachmentImageFancyboxOptions(startIndex)
-  const viewerOptions = triggerEl ? { ...options, triggerEl } : options
+  const cleanup = () => {
+    window.setTimeout(() => nodes.forEach((node) => node.remove()), 0)
+  }
+  const viewerOptions = {
+    ...options,
+    triggerEl: nodes[startIndex] || sourceEl || undefined,
+    on: {
+      destroy: cleanup
+    }
+  }
   try {
-    Fancybox.show(slides as any, viewerOptions as any)
+    Fancybox.fromNodes(nodes, viewerOptions as any)
   } catch {
     try {
-      ;(window as any).Fancybox?.show?.(slides, viewerOptions)
-    } catch {}
+      ;(window as any).Fancybox?.fromNodes?.(nodes, viewerOptions)
+    } catch {
+      cleanup()
+    }
   }
 }
 
@@ -1685,34 +1732,6 @@ watch(() => props.theme, (newTheme) => {
   display: none !important;
 }
 
-.noise-media-fancybox .f-thumbs__slide,
-.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button,
-.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__img {
-  transition: transform 180ms ease, opacity 180ms ease, filter 180ms ease;
-}
-
-.noise-media-fancybox .f-thumbs__slide.is-nav-selected {
-  z-index: 2;
-}
-
-.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button {
-  border: 0 !important;
-  outline: 0 !important;
-  box-shadow: none !important;
-}
-
-.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button::after {
-  display: none !important;
-}
-
-.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button {
-  transform: scale(1.12);
-}
-
-.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__img {
-  opacity: 1;
-  filter: saturate(1.08) contrast(1.04);
-}
 
 .editor-attachment-preview {
   margin: 6px 12px 10px;
@@ -2079,9 +2098,9 @@ html.dark .vditor-reset table td {
 
 .editor-table-delete-button {
   box-sizing: border-box;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
+  display: grid !important;
+  place-items: center !important;
+  position: fixed !important;
   width: 10px !important;
   min-width: 10px !important;
   height: 10px !important;
@@ -2089,22 +2108,40 @@ html.dark .vditor-reset table td {
   padding: 0 !important;
   border: 0 !important;
   border-radius: 2px !important;
-  background: #e53e3e !important;
+  background: #f97316 !important;
   color: #fff !important;
-  font-size: 9px !important;
-  font-weight: 800;
-  line-height: 1;
-  box-shadow: 0 1px 2px rgba(127, 29, 29, 0.35);
+  box-shadow: 0 1px 2px rgba(154, 52, 18, 0.35);
   cursor: pointer;
   opacity: .96;
+}
+
+.editor-table-delete-button::before,
+.editor-table-delete-button::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 7px;
+  height: 1.5px;
+  border-radius: 999px;
+  background: currentColor;
+  transform-origin: center;
+}
+
+.editor-table-delete-button::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.editor-table-delete-button::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
 }
 
 .editor-table-delete-button:hover,
 .editor-table-delete-button:focus-visible {
   outline: none;
-  background: #c53030 !important;
+  background: #ea580c !important;
   color: #fff !important;
-  box-shadow: 0 1px 3px rgba(127, 29, 29, 0.42);
+  box-shadow: 0 1px 3px rgba(154, 52, 18, 0.42);
   opacity: 1;
 }
 

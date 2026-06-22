@@ -3663,34 +3663,6 @@ onMounted(() => {
   display: none !important;
 }
 
-:deep(.noise-media-fancybox .f-thumbs__slide),
-:deep(.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button),
-:deep(.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__img) {
-  transition: transform 180ms ease, opacity 180ms ease, filter 180ms ease;
-}
-
-:deep(.noise-media-fancybox .f-thumbs__slide.is-nav-selected) {
-  z-index: 2;
-}
-
-:deep(.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button) {
-  border: 0 !important;
-  outline: 0 !important;
-  box-shadow: none !important;
-}
-
-:deep(.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button::after) {
-  display: none !important;
-}
-
-:deep(.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button) {
-  transform: scale(1.12);
-}
-
-:deep(.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__img) {
-  opacity: 1;
-  filter: saturate(1.08) contrast(1.04);
-}
 
 :deep(.fancybox__backdrop) {
   z-index: 9998 !important;
