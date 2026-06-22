@@ -6,7 +6,7 @@
 import { nextTick, onMounted, ref, watch, onBeforeUnmount, inject } from 'vue';
 import { useRuntimeConfig } from '#imports';
 import { useMessageStore } from '~/store/message';
-import { animateFancyboxHtml5VideoClose, ensureFancyboxVideoThumbnail, getVideoElementSource } from '~/utils/fancybox-video-close'
+import { animateFancyboxHtml5VideoClose, ensureFancyboxVideoThumbnail, getVideoElementSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
 import Vditor from 'vditor';
 
 // 定义正则表达式
@@ -168,12 +168,12 @@ const initializeMediaViewer = () => {
     }
     if (tag === 'video') {
       const video = el as HTMLVideoElement
-      const src = getVideoElementSource(video)
+      const src = normalizeMediaPreviewUrl(getVideoElementSource(video))
       if (!src) return
       const parent = video.parentElement as HTMLAnchorElement | null
       const trigger = parent?.tagName?.toLowerCase() === 'a' ? parent : video
       trigger.setAttribute('data-fancybox', trigger.getAttribute('data-fancybox') || group)
-      if (trigger instanceof HTMLAnchorElement) trigger.href = trigger.getAttribute('href') || src
+      if (trigger instanceof HTMLAnchorElement) trigger.href = src
       trigger.dataset.src = src
       trigger.dataset.type = 'html5video'
       ensureFancyboxVideoThumbnail(video, trigger)

@@ -12,6 +12,21 @@ const isImageSource = (src: string | null | undefined) => {
   return !!value && (/^(data:image|blob:)/i.test(value) || /\.(png|jpe?g|gif|webp|bmp|svg)(?:[?#].*)?$/i.test(value))
 }
 
+export const normalizeMediaPreviewUrl = (src: string) => {
+  const value = String(src || '').trim()
+  if (!value || typeof window === 'undefined') return value
+  try {
+    const url = new URL(value, window.location.href)
+    const isApiMediaPath = url.pathname.startsWith('/api/images/') || url.pathname.startsWith('/api/video/')
+    if (url.origin !== window.location.origin && isApiMediaPath) {
+      return `${window.location.origin}${url.pathname}${url.search}${url.hash}`
+    }
+    return url.href
+  } catch {
+    return value
+  }
+}
+
 const captureVideoFrame = (video: HTMLVideoElement | null) => {
   if (!video || !video.videoWidth || !video.videoHeight || video.readyState < 2) return ''
   try {
@@ -49,6 +64,20 @@ const getSlideImageFallback = (slide: any, video: HTMLVideoElement | null) => {
     slide?.thumbEl?.src
   ]
   return candidates.find(isImageSource) || ''
+}
+
+const updateOpenSelectedThumb = (thumb: string) => {
+  if (!isImageSource(thumb) || typeof document === 'undefined') return
+  const safeThumb = thumb.replace(/"/g, '\\"')
+  document.querySelectorAll('.f-thumbs__slide.is-nav-selected img, .f-thumbs__slide.is-selected img, .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button, .f-thumbs__slide.is-selected .f-thumbs__slide__button').forEach((node) => {
+    if (node instanceof HTMLImageElement) {
+      node.src = thumb
+      return
+    }
+    if (node instanceof HTMLElement) {
+      node.style.backgroundImage = `url("${safeThumb}")`
+    }
+  })
 }
 
 const getSlideContentElement = (slide: any) => {
@@ -139,6 +168,10 @@ export const animateFancyboxHtml5VideoClose = (instance: FancyboxLike) => {
   const hideEls = getSlideHideElements(slide, contentEl)
   const previousVisibility = hideEls.map((item) => item.style.visibility || '')
   const previousOpacity = hideEls.map((item) => item.style.opacity || '')
+  hideEls.forEach((item) => {
+    item.style.visibility = 'hidden'
+    item.style.opacity = '0'
+  })
   let cleaned = false
   const cleanup = () => {
     if (cleaned) return
@@ -152,10 +185,6 @@ export const animateFancyboxHtml5VideoClose = (instance: FancyboxLike) => {
 
   const runAnimation = () => {
     if (cleaned) return
-    hideEls.forEach((item) => {
-      item.style.visibility = 'hidden'
-      item.style.opacity = '0'
-    })
     requestAnimationFrame(() => {
       overlay.style.transform = `translate3d(${translateX}px, ${translateY}px, 0) scale(${scaleX}, ${scaleY})`
       overlay.style.opacity = '0'
@@ -175,37 +204,28 @@ export const animateFancyboxHtml5VideoClose = (instance: FancyboxLike) => {
 }
 
 export const ensureFancyboxVideoThumbnail = (video: HTMLVideoElement, target: HTMLElement = video) => {
-  const src = getVideoElementSource(video)
-  if (!src || target.dataset.thumbSrc) return
+  const src = normalizeMediaPreviewUrl(getVideoElementSource(video))
+  if (!src) return
   const apply = (thumb: string) => {
-    if (!isImageSource(thumb) || target.dataset.thumbSrc) return
+    if (!isImageSource(thumb)) return
     target.dataset.thumbSrc = thumb
     target.dataset.poster = thumb
     video.setAttribute('poster', video.getAttribute('poster') || thumb)
+    updateOpenSelectedThumb(thumb)
   }
-  const poster = video.getAttribute('poster') || ''
-  if (poster) {
-    apply(poster)
-    return
-  }
-  const draw = () => {
+  const poster = video.getAttribute('poster') || target.dataset.poster || target.dataset.thumbSrc || ''
+  if (poster) apply(poster)
+  const refresh = () => {
     const frame = captureVideoFrame(video)
     if (frame) apply(frame)
   }
-  if (video.readyState >= 2) {
-    draw()
-    return
-  }
-  const cleanup = () => {
-    video.removeEventListener('loadeddata', onReady)
-    video.removeEventListener('canplay', onReady)
-    video.removeEventListener('seeked', onReady)
-  }
-  const onReady = () => {
-    cleanup()
-    draw()
-  }
-  video.addEventListener('loadeddata', onReady, { once: true })
-  video.addEventListener('canplay', onReady, { once: true })
-  video.addEventListener('seeked', onReady, { once: true })
+  if (video.readyState >= 2) refresh()
+  if (target.dataset.noiseVideoThumbBound === 'true') return
+  target.dataset.noiseVideoThumbBound = 'true'
+  const onReady = () => refresh()
+  video.addEventListener('loadeddata', onReady)
+  video.addEventListener('canplay', onReady)
+  video.addEventListener('seeked', onReady)
+  video.addEventListener('pause', refresh)
+  video.addEventListener('timeupdate', refresh)
 }

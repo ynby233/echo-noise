@@ -259,6 +259,7 @@ import { useMessage } from "~/composables/useMessage";
 import { useUserStore } from '~/store/user'
 import { Fancybox } from '@fancyapps/ui'
 import '@fancyapps/ui/dist/fancybox/fancybox.css'
+import { animateFancyboxHtml5VideoClose } from '~/utils/fancybox-video-close'
 import Vditor from 'vditor'
 import 'vditor/dist/index.css'
 const VditorEditor = defineAsyncComponent(() => import('./VditorEditor.vue'))
@@ -1070,7 +1071,27 @@ watch(() => userStore.isLogin, (newLoginState) => {
 }, { immediate: true });
 
 onMounted(async () => {
-  Fancybox.bind("[data-fancybox]", {});
+  Fancybox.bind("[data-fancybox]", {
+    mainClass: 'noise-media-fancybox',
+    Carousel: { infinite: true },
+    Toolbar: {
+      enabled: true,
+      display: {
+        left: ['infobar'],
+        middle: [],
+        right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']
+      }
+    },
+    Images: { zoom: true },
+    Html: { videoAutoplay: false },
+    Thumbs: { type: 'classic', autoStart: true },
+    compact: false,
+    placeFocusBack: false,
+    on: {
+      shouldClose: animateFancyboxHtml5VideoClose,
+      close: animateFancyboxHtml5VideoClose,
+    }
+  } as any);
   document.addEventListener('mousedown', handleFloatingMenuPointerDown)
   window.addEventListener('resize', handleFloatingMenuViewportChange)
   window.addEventListener('scroll', handleFloatingMenuViewportChange, true)
@@ -1114,7 +1135,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  Fancybox.destroy();
+  Fancybox.unbind?.('[data-fancybox]');
   document.removeEventListener('mousedown', handleFloatingMenuPointerDown)
   window.removeEventListener('resize', handleFloatingMenuViewportChange)
   window.removeEventListener('scroll', handleFloatingMenuViewportChange, true)
