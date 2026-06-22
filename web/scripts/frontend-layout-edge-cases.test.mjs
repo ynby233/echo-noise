@@ -425,6 +425,13 @@ assert(
     !messageList.includes(':deep(.noise-media-fancybox .fancybox__toolbar)') &&
     !vditorEditor.includes('.noise-media-fancybox .fancybox__toolbar') &&
     !homePage.includes('.noise-media-fancybox .fancybox__toolbar') &&
+    floatingCss.includes('.noise-media-fancybox .f-carousel__thumbs.is-classic') &&
+    floatingCss.includes('--f-thumb-opacity: 0.52;') &&
+    floatingCss.includes('.f-thumbs__slide:not(.is-nav-selected) .f-thumbs__slide__button') &&
+    floatingCss.includes('transform: scale(0.92);') &&
+    floatingCss.includes('.f-thumbs__slide.is-nav-selected .f-thumbs__slide__button') &&
+    floatingCss.includes('transform: scale(1.08);') &&
+    floatingCss.includes('transition: transform 180ms ease, opacity 180ms ease, filter 180ms ease;') &&
     !messageList.includes(':deep(.noise-media-fancybox .f-thumbs__slide') &&
     !vditorEditor.includes('.noise-media-fancybox .f-thumbs__slide') &&
     !homePage.includes('.noise-media-fancybox .f-thumbs__slide') &&
@@ -471,9 +478,13 @@ assert(
     fancyboxVideoClose.includes('slide.type !== \'html5video\'') &&
     fancyboxVideoClose.includes('captureVideoFrame(video)') &&
     fancyboxVideoClose.includes('getSlideImageFallback(slide, video)') &&
+    fancyboxVideoClose.includes('const containRect = (sourceRect: DOMRect, targetRect: DOMRect) => {') &&
+    fancyboxVideoClose.includes('const finalRect = containRect(startRect!, targetRect!)') &&
+    fancyboxVideoClose.includes("transition: 'transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 280ms cubic-bezier(0.22, 1, 0.36, 1)'") &&
+    fancyboxVideoClose.includes("willChange: 'transform, opacity'") &&
+    fancyboxVideoClose.includes("overlay.style.opacity = '0.08'") &&
     fancyboxVideoClose.includes("const overlay = document.createElement('img')") &&
     fancyboxVideoClose.includes("return candidates.find(isImageSource) || ''") &&
-    fancyboxVideoClose.includes("transition: 'transform 260ms cubic-bezier(0.22, 1, 0.36, 1)'") &&
     !fancyboxVideoClose.includes("document.createElement(frameSrc ? 'img' : 'div')") &&
     !fancyboxVideoClose.includes("overlay.style.background = '#000'") &&
     !fancyboxVideoClose.includes("overlay.style.opacity = '0.12'") &&

@@ -58,6 +58,27 @@ const getTriggerElement = (instance: FancyboxLike, slide: any) => {
   return (slide?.triggerEl || slide?.thumbEl || instance?.options?.triggerEl || null) as HTMLElement | null
 }
 
+const containRect = (sourceRect: DOMRect, targetRect: DOMRect) => {
+  const sourceRatio = sourceRect.width / sourceRect.height
+  const targetRatio = targetRect.width / targetRect.height
+  if (!Number.isFinite(sourceRatio) || sourceRatio <= 0 || !Number.isFinite(targetRatio) || targetRatio <= 0) return targetRect
+
+  let width = targetRect.width
+  let height = targetRect.height
+  if (sourceRatio > targetRatio) {
+    height = width / sourceRatio
+  } else {
+    width = height * sourceRatio
+  }
+
+  return {
+    left: targetRect.left + (targetRect.width - width) / 2,
+    top: targetRect.top + (targetRect.height - height) / 2,
+    width,
+    height
+  }
+}
+
 export const animateFancyboxHtml5VideoClose = (instance: FancyboxLike) => {
   if (typeof document === 'undefined') return
   const slide = instance?.getSlide?.()
@@ -89,8 +110,8 @@ export const animateFancyboxHtml5VideoClose = (instance: FancyboxLike) => {
     pointerEvents: 'none',
     zIndex: '10002',
     transformOrigin: 'top left',
-    transition: 'transform 260ms cubic-bezier(0.22, 1, 0.36, 1)',
-    willChange: 'transform',
+    transition: 'transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 280ms cubic-bezier(0.22, 1, 0.36, 1)',
+    willChange: 'transform, opacity',
     opacity: '1'
   })
 
@@ -98,19 +119,21 @@ export const animateFancyboxHtml5VideoClose = (instance: FancyboxLike) => {
   contentEl.style.visibility = 'hidden'
   document.body.appendChild(overlay)
 
-  const scaleX = targetRect!.width / startRect!.width
-  const scaleY = targetRect!.height / startRect!.height
-  const translateX = targetRect!.left - startRect!.left
-  const translateY = targetRect!.top - startRect!.top
+  const finalRect = containRect(startRect!, targetRect!)
+  const scaleX = finalRect.width / startRect!.width
+  const scaleY = finalRect.height / startRect!.height
+  const translateX = finalRect.left - startRect!.left
+  const translateY = finalRect.top - startRect!.top
 
   requestAnimationFrame(() => {
     overlay.style.transform = `translate3d(${translateX}px, ${translateY}px, 0) scale(${scaleX}, ${scaleY})`
+    overlay.style.opacity = '0.08'
   })
 
   window.setTimeout(() => {
     overlay.remove()
     contentEl.style.visibility = previousVisibility
-  }, 320)
+  }, 340)
 }
 
 export const ensureFancyboxVideoThumbnail = (video: HTMLVideoElement, target: HTMLElement = video) => {
