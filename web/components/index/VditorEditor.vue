@@ -83,6 +83,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from "vue";
 import { positionFloatingMenu, scheduleFloatingMenuPosition } from '~/utils/floating-menu'
+import { animateFancyboxHtml5VideoClose } from '~/utils/fancybox-video-close'
 import Vditor from "vditor";
 import { Fancybox } from "@fancyapps/ui";
 import "@fancyapps/ui/dist/fancybox/fancybox.css";
@@ -279,7 +280,8 @@ const getAttachmentVideoFancyboxOptions = (startIndex = 0) => ({
     autoStart: true
   },
   compact: false,
-  placeFocusBack: false
+  placeFocusBack: false,
+  on: { close: animateFancyboxHtml5VideoClose }
 })
 
 const getVideoFirstFrameThumbnail = (url: string) => {
@@ -422,6 +424,7 @@ const showAttachmentGallery = async (items: EditorAttachmentInfo[], current: Edi
     ...options,
     triggerEl: nodes[startIndex] || sourceEl || undefined,
     on: {
+      ...(options as any).on,
       destroy: cleanup
     }
   }

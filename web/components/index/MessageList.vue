@@ -522,6 +522,7 @@ import type { MessageVisibility } from '~/types/models'
 import BuiltinComments from '../comments/BuiltinComments.vue'
 import { writeClipboardText } from '~/utils/clipboard'
 import { uploadMediaFiles } from '~/utils/media-upload'
+import { animateFancyboxHtml5VideoClose } from '~/utils/fancybox-video-close'
 import { useRuntimeConfig } from '#imports'
 import { useToast } from '#ui/composables/useToast'
 type BuiltinCommentsExpose = {
@@ -1383,6 +1384,7 @@ const initFancybox = () => {
       Thumbs: { type: 'classic', autoStart: true },
       compact: false,
       placeFocusBack: false,
+      on: { close: animateFancyboxHtml5VideoClose },
     };
 
     const mdImages = document.querySelectorAll(".markdown-preview img");

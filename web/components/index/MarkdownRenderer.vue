@@ -6,6 +6,7 @@
 import { nextTick, onMounted, ref, watch, onBeforeUnmount, inject } from 'vue';
 import { useRuntimeConfig } from '#imports';
 import { useMessageStore } from '~/store/message';
+import { animateFancyboxHtml5VideoClose, ensureFancyboxVideoThumbnail, getVideoElementSource } from '~/utils/fancybox-video-close'
 import Vditor from 'vditor';
 
 // 定义正则表达式
@@ -167,11 +168,15 @@ const initializeMediaViewer = () => {
     }
     if (tag === 'video') {
       const video = el as HTMLVideoElement
-      const src = video.currentSrc || video.getAttribute('src') || ''
+      const src = getVideoElementSource(video)
       if (!src) return
-      video.setAttribute('data-fancybox', video.getAttribute('data-fancybox') || group)
-      video.dataset.src = src
-      video.dataset.type = 'html5video'
+      const parent = video.parentElement as HTMLAnchorElement | null
+      const trigger = parent?.tagName?.toLowerCase() === 'a' ? parent : video
+      trigger.setAttribute('data-fancybox', trigger.getAttribute('data-fancybox') || group)
+      if (trigger instanceof HTMLAnchorElement) trigger.href = trigger.getAttribute('href') || src
+      trigger.dataset.src = src
+      trigger.dataset.type = 'html5video'
+      ensureFancyboxVideoThumbnail(video, trigger)
       video.classList.add('fancybox-video-trigger')
     }
   })
@@ -194,7 +199,8 @@ const initializeMediaViewer = () => {
     Html: { videoAutoplay: false },
     Thumbs: { type: 'classic', autoStart: true },
     compact: false,
-    placeFocusBack: false
+    placeFocusBack: false,
+    on: { close: animateFancyboxHtml5VideoClose }
   })
 };
 

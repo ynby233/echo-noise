@@ -516,6 +516,7 @@ import FloatingToolSidebar from '~/components/widgets/FloatingToolSidebar.vue'
 import BuiltinComments from '~/components/comments/BuiltinComments.vue'
 import MarkdownRenderer from '~/components/index/MarkdownRenderer.vue'
 import { getRequest } from '~/utils/api'
+import { animateFancyboxHtml5VideoClose } from '~/utils/fancybox-video-close'
 import { useToast } from '#ui/composables/useToast'
 import { useUserStore } from '~/store/user'
 import type { Tag } from '~/types/models'
@@ -2381,9 +2382,9 @@ const projectFancyboxOptions = {
   Html: { videoAutoplay: false },
   Thumbs: { type: 'classic', autoStart: true },
   compact: false,
-  placeFocusBack: false
+  placeFocusBack: false,
+  on: { close: animateFancyboxHtml5VideoClose }
 }
-
 // 绑定 Fancybox 以支持推荐图集预览
 onMounted(() => {
   try { (window as any).Fancybox?.bind?.('[data-fancybox]', projectFancyboxOptions) } catch {}

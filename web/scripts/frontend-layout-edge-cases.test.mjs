@@ -25,6 +25,7 @@ const infoFeedList = read('components/index/InfoFeedList.vue')
 const markdownRenderer = read('components/index/MarkdownRenderer.vue')
 const calendarWidget = read('components/widgets/CalendarWidget.vue')
 const mediaUpload = read('utils/media-upload.ts')
+const fancyboxVideoClose = read('utils/fancybox-video-close.ts')
 const floatingCss = read('assets/css/tailwind.css')
 const backendRouter = read('../internal/routers/routers.go')
 
@@ -344,6 +345,7 @@ assert(
     vditorEditor.includes("proxy.dataset.type = 'html5video'") &&
     vditorEditor.includes('proxy.dataset.thumbSrc = thumbSrc || item.url') &&
     vditorEditor.includes('proxy.dataset.poster = thumbSrc || item.url') &&
+    vditorEditor.includes("on: { close: animateFancyboxHtml5VideoClose }") &&
     !vditorEditor.includes('caption: item.name') &&
     vditorEditor.includes('autoStart: true') &&
     vditorEditor.includes('Images: {') &&
@@ -455,7 +457,17 @@ assert(
     markdownRenderer.includes("mainClass: 'noise-media-fancybox'") &&
     markdownRenderer.includes('Html: { videoAutoplay: false }') &&
     markdownRenderer.includes("Thumbs: { type: 'classic', autoStart: true }") &&
-    markdownRenderer.includes("video.dataset.type = 'html5video'") &&
+    markdownRenderer.includes("trigger.dataset.type = 'html5video'") &&
+    markdownRenderer.includes('getVideoElementSource(video)') &&
+    markdownRenderer.includes('ensureFancyboxVideoThumbnail(video, trigger)') &&
+    markdownRenderer.includes('on: { close: animateFancyboxHtml5VideoClose }') &&
+    messageList.includes('on: { close: animateFancyboxHtml5VideoClose }') &&
+    homePage.includes('on: { close: animateFancyboxHtml5VideoClose }') &&
+    fancyboxVideoClose.includes('export const animateFancyboxHtml5VideoClose') &&
+    fancyboxVideoClose.includes('slide.type !== \'html5video\'') &&
+    fancyboxVideoClose.includes('captureVideoFrame(video)') &&
+    fancyboxVideoClose.includes('export const getVideoElementSource') &&
+    fancyboxVideoClose.includes('export const ensureFancyboxVideoThumbnail') &&
     !markdownRenderer.includes("video.dataset.type = 'video'") &&
     homePage.includes('projectFancyboxOptions') &&
     homePage.includes("Fancybox?.bind?.('[data-fancybox]', projectFancyboxOptions)") &&
