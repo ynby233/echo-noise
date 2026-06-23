@@ -285,6 +285,10 @@ html.dark .nw-action-btn--danger,
   will-change: left, top;
 }
 
+.nw-tooltip--fancybox {
+  z-index: 10020;
+}
+
 .nw-floating-menu {
   position: fixed;
   z-index: 5004;

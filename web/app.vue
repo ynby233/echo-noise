@@ -20,6 +20,7 @@ let authSyncInFlight: Promise<unknown> | null = null
 let lastAuthSyncAt = 0
 
 const TOOLTIP_SUPPRESSED_CLASS = 'nw-tooltip-suppressed'
+const FANCYBOX_TOOLTIP_CLASS = 'nw-tooltip--fancybox'
 const TOOLTIP_ANCHOR_SELECTOR = '[data-tooltip]:not(.nw-tooltip-anchor-local), [data-label]:not(.nw-tooltip-anchor-local), .vditor-tooltipped[aria-label]'
 
 let tooltipEl: HTMLDivElement | null = null
@@ -85,13 +86,17 @@ const showTooltip = (anchor: HTMLElement) => {
   const el = ensureTooltipEl()
   tooltipAnchor = anchor
   el.textContent = text
+  el.classList.toggle(FANCYBOX_TOOLTIP_CLASS, !!anchor.closest('.fancybox__container'))
   el.style.display = 'block'
   positionTooltip(anchor)
 }
 
 const hideTooltip = () => {
   tooltipAnchor = null
-  if (tooltipEl) tooltipEl.style.display = 'none'
+  if (tooltipEl) {
+    tooltipEl.style.display = 'none'
+    tooltipEl.classList.remove(FANCYBOX_TOOLTIP_CLASS)
+  }
 }
 
 const handleTooltipPointerOver = (event: PointerEvent) => {

@@ -10,6 +10,7 @@ const assert = (condition, message) => {
   }
 }
 
+const appVue = read('app.vue')
 const addForm = read('components/index/AddForm.vue')
 const audioRecorder = read('components/index/AudioRecorder.vue')
 const vditorEditor = read('components/index/VditorEditor.vue')
@@ -344,6 +345,12 @@ assert(
     mediaFancybox.includes("button.classList.add('nw-tooltip-anchor', 'nw-tooltip-below')") &&
     mediaFancybox.includes('button.removeAttribute(\'title\')') &&
     mediaFancybox.includes("button.dataset.tooltip = label") &&
+    appVue.includes("const FANCYBOX_TOOLTIP_CLASS = 'nw-tooltip--fancybox'") &&
+    appVue.includes("el.classList.toggle(FANCYBOX_TOOLTIP_CLASS, !!anchor.closest('.fancybox__container'))") &&
+    appVue.includes('tooltipEl.classList.remove(FANCYBOX_TOOLTIP_CLASS)') &&
+    floatingCss.includes('.fancybox__container {\n  --fancybox-bg: rgba(0, 0, 0, 0.9);') &&
+    floatingCss.includes('z-index: 9999 !important;') &&
+    floatingCss.includes('.nw-tooltip--fancybox {\n  z-index: 10020;\n}') &&
     mediaFancybox.includes("mainClass: MEDIA_FANCYBOX_MAIN_CLASS") &&
     mediaFancybox.includes('Html = { videoAutoplay: false }') &&
     mediaFancybox.includes("Thumbs: {\n      autoStart: true,\n    }") &&
