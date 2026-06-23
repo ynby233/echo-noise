@@ -515,6 +515,7 @@ import AnnouncementBar from '~/components/widgets/AnnouncementBar.vue'
 import FloatingToolSidebar from '~/components/widgets/FloatingToolSidebar.vue'
 import BuiltinComments from '~/components/comments/BuiltinComments.vue'
 import MarkdownRenderer from '~/components/index/MarkdownRenderer.vue'
+import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { getRequest } from '~/utils/api'
 import { useToast } from '#ui/composables/useToast'
 import { useUserStore } from '~/store/user'
@@ -2368,7 +2369,7 @@ onUnmounted(() => { if (adTimer) clearInterval(adTimer) })
 
 // 绑定 Fancybox 以支持推荐图集预览
 onMounted(() => {
-  try { (window as any).Fancybox?.bind?.('[data-fancybox]', {}) } catch {}
+  try { (window as any).Fancybox?.bind?.('[data-fancybox]', createMediaFancyboxOptions() as any) } catch {}
 })
 
 // 监听前端配置更新事件，保存后主动刷新配置
@@ -3420,6 +3421,23 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
 }
 @media screen and (max-width: 1280px) {
   .layout-container { --sidebar-width: 280px; --grid-gap: 16px; }
+}
+
+.noise-media-fancybox .f-thumbs__slide {
+  overflow: visible;
+}
+
+.noise-media-fancybox .f-thumbs__slide__button {
+  transition: transform 180ms ease, opacity 180ms ease;
+  transform-origin: center;
+}
+
+.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button {
+  transform: scale(1.12);
+}
+
+.noise-media-fancybox .f-thumbs__slide__button::after {
+  display: none;
 }
 </style>
 <style>

@@ -83,7 +83,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from "vue";
 import { positionFloatingMenu, scheduleFloatingMenuPosition } from '~/utils/floating-menu'
-import { animateFancyboxHtml5VideoClose, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
+import { normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
+import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import Vditor from "vditor";
 import { Fancybox } from "@fancyapps/ui";
 import "@fancyapps/ui/dist/fancybox/fancybox.css";
@@ -236,49 +237,9 @@ const transformAttachmentPreviewHtml = (html: string) => {
   return holder.innerHTML
 }
 
-const getAttachmentImageFancyboxOptions = (startIndex = 0) => ({
-  animated: true,
-  closeButton: false,
-  startIndex,
-  Carousel: { infinite: true },
-  Toolbar: {
-    enabled: true,
-    display: {
-      left: ['infobar'],
-      middle: [],
-      right: ['iterateZoom', 'slideshow', 'fullscreen', 'close']
-    }
-  },
-  Images: {
-    zoom: true
-  },
-  compact: false,
-  placeFocusBack: false
-})
+const getAttachmentImageFancyboxOptions = (startIndex = 0) => createMediaFancyboxOptions({ startIndex })
 
-const getAttachmentVideoFancyboxOptions = (startIndex = 0) => ({
-  animated: true,
-  closeButton: false,
-  startIndex,
-  Carousel: { infinite: true },
-  Toolbar: {
-    enabled: true,
-    display: {
-      left: ['infobar'],
-      middle: [],
-      right: ['iterateZoom', 'slideshow', 'fullscreen', 'close']
-    }
-  },
-  Html: {
-    videoAutoplay: false
-  },
-  compact: false,
-  placeFocusBack: false,
-  on: {
-    shouldClose: animateFancyboxHtml5VideoClose,
-    close: animateFancyboxHtml5VideoClose,
-  }
-})
+const getAttachmentVideoFancyboxOptions = (startIndex = 0) => createMediaFancyboxOptions({ startIndex, video: true })
 
 const isImagePreviewSource = (src: string) => /^(data:image|blob:)/i.test(src) || /\.(png|jpe?g|gif|webp|bmp|svg)(?:[?#].*)?$/i.test(src)
 

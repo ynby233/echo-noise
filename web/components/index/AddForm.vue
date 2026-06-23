@@ -269,6 +269,7 @@ import AudioRecorder from './AudioRecorder.vue'
 import VideoUpload from './VideoUpload.vue'
 import ImageHostingUploader from '~/components/widgets/ImageHostingUploader.vue'
 import { createAudioMarkdown, createVideoMarkdown, resolveUploadedMediaUrl, uploadMediaFiles } from '~/utils/media-upload'
+import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 const props = defineProps<{ wide?: boolean }>()
 const containerClass = computed(() => (props.wide ? 'w-full max-w-none' : 'mx-auto w-full sm:max-w-4xl'))
 const isEditorLoading = ref(true)
@@ -1070,7 +1071,7 @@ watch(() => userStore.isLogin, (newLoginState) => {
 }, { immediate: true });
 
 onMounted(async () => {
-  Fancybox.bind("[data-fancybox]", {});
+  Fancybox.bind("[data-fancybox]", createMediaFancyboxOptions({ video: true }) as any);
   document.addEventListener('mousedown', handleFloatingMenuPointerDown)
   window.addEventListener('resize', handleFloatingMenuViewportChange)
   window.addEventListener('scroll', handleFloatingMenuViewportChange, true)

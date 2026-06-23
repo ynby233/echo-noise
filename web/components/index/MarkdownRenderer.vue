@@ -7,6 +7,7 @@ import { nextTick, onMounted, ref, watch, onBeforeUnmount, inject } from 'vue';
 import { useRuntimeConfig } from '#imports';
 import { useMessageStore } from '~/store/message';
 import { ensureFancyboxVideoThumbnail, getVideoElementSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
+import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import Vditor from 'vditor';
 
 // 定义正则表达式
@@ -184,7 +185,7 @@ const initializeMediaViewer = () => {
   try {
     Fancybox.unbind?.(root, '[data-fancybox]')
   } catch {}
-  Fancybox.bind(root, '[data-fancybox]', {})
+  Fancybox.bind(root, '[data-fancybox]', createMediaFancyboxOptions({ video: true }) as any)
 };
 
 const shouldSkipHashtagNode = (node: Node | null) => {

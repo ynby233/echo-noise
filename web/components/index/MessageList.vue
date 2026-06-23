@@ -522,6 +522,7 @@ import type { MessageVisibility } from '~/types/models'
 import BuiltinComments from '../comments/BuiltinComments.vue'
 import { writeClipboardText } from '~/utils/clipboard'
 import { uploadMediaFiles } from '~/utils/media-upload'
+import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { useRuntimeConfig } from '#imports'
 import { useToast } from '#ui/composables/useToast'
 type BuiltinCommentsExpose = {
@@ -1361,27 +1362,7 @@ const deleteMsg = async (id: number) => {
 
 const initFancybox = () => {
   if (window.Fancybox) {
-    const fancyboxOptions = {
-      Carousel: {
-        infinite: false,
-      },
-      Toolbar: {
-        display: [
-          { id: "prev", position: "center" },
-          { id: "counter", position: "center" },
-          { id: "next", position: "center" },
-          "zoom",
-          "slideshow",
-          "fullscreen",
-          "close",
-        ],
-      },
-      Image: {
-        zoom: true,
-        click: true,
-        wheel: "slide",
-      },
-    };
+    const fancyboxOptions = createMediaFancyboxOptions({ carouselInfinite: false })
 
     const mdImages = document.querySelectorAll(".markdown-preview img");
     mdImages.forEach((img) => {
