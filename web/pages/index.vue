@@ -516,7 +516,6 @@ import FloatingToolSidebar from '~/components/widgets/FloatingToolSidebar.vue'
 import BuiltinComments from '~/components/comments/BuiltinComments.vue'
 import MarkdownRenderer from '~/components/index/MarkdownRenderer.vue'
 import { getRequest } from '~/utils/api'
-import { animateFancyboxHtml5VideoClose } from '~/utils/fancybox-video-close'
 import { useToast } from '#ui/composables/useToast'
 import { useUserStore } from '~/store/user'
 import type { Tag } from '~/types/models'
@@ -2367,30 +2366,9 @@ watch([leftAds, () => (frontendConfig.value as any)?.leftAdsIntervalMs], () => {
 }, { immediate: true })
 onUnmounted(() => { if (adTimer) clearInterval(adTimer) })
 
-const projectFancyboxOptions = {
-  mainClass: 'noise-media-fancybox',
-  Carousel: { infinite: true },
-  Toolbar: {
-    enabled: true,
-    display: {
-      left: ['infobar'],
-      middle: [],
-      right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']
-    }
-  },
-  Images: { zoom: true },
-  Html: { videoAutoplay: false },
-  Thumbs: { type: 'classic', autoStart: true },
-  compact: false,
-  placeFocusBack: false,
-  on: {
-    shouldClose: animateFancyboxHtml5VideoClose,
-    close: animateFancyboxHtml5VideoClose,
-  }
-}
 // 绑定 Fancybox 以支持推荐图集预览
 onMounted(() => {
-  try { (window as any).Fancybox?.bind?.('[data-fancybox]', projectFancyboxOptions) } catch {}
+  try { (window as any).Fancybox?.bind?.('[data-fancybox]', {}) } catch {}
 })
 
 // 监听前端配置更新事件，保存后主动刷新配置
@@ -3566,23 +3544,7 @@ html.dark .page-footer { color: rgba(226, 232, 240, 0.72); }
 }
 :global(html.dark) .center-col :deep(.content-container),
 :global(html:not(.dark)) .center-col :deep(.content-container) { transition: none !important; }
-.noise-media-fancybox .fancybox__caption { display: none !important; }
-.noise-media-fancybox .f-thumbs__slide {
-  overflow: visible;
-}
 
-.noise-media-fancybox .f-thumbs__slide__button {
-  transition: transform 180ms ease, opacity 180ms ease;
-  transform-origin: center;
-}
-
-.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button {
-  transform: scale(1.12);
-}
-
-.noise-media-fancybox .f-thumbs__slide__button::after {
-  display: none;
-}
 .netease-mini-player.minimized[data-instant="true"] { transition: none !important; }
 .netease-mini-player.minimized[data-instant="true"] .album-cover-container,
 .netease-mini-player.minimized[data-instant="true"] .album-cover,

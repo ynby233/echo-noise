@@ -82,21 +82,6 @@ const applyVideoFrameFallback = (slide: any, video: HTMLVideoElement | null, thu
     trigger.dataset.poster = thumb
     trigger.dataset.thumbSrc = thumb
   }
-  updateOpenSelectedThumb(thumb)
-}
-
-const updateOpenSelectedThumb = (thumb: string) => {
-  if (!isImageSource(thumb) || typeof document === 'undefined') return
-  const safeThumb = thumb.replace(/"/g, '\\"')
-  document.querySelectorAll('.f-thumbs__slide.is-nav-selected img, .f-thumbs__slide.is-selected img, .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button, .f-thumbs__slide.is-selected .f-thumbs__slide__button').forEach((node) => {
-    if (node instanceof HTMLImageElement) {
-      node.src = thumb
-      return
-    }
-    if (node instanceof HTMLElement) {
-      node.style.backgroundImage = `url("${safeThumb}")`
-    }
-  })
 }
 
 const getSlideContentElement = (slide: any) => {
@@ -263,7 +248,6 @@ export const ensureFancyboxVideoThumbnail = (video: HTMLVideoElement, target: HT
     target.dataset.thumbSrc = thumb
     target.dataset.poster = thumb
     video.setAttribute('poster', video.getAttribute('poster') || thumb)
-    updateOpenSelectedThumb(thumb)
   }
   const poster = video.getAttribute('poster') || target.dataset.poster || target.dataset.thumbSrc || ''
   if (poster) apply(poster)
@@ -277,7 +261,4 @@ export const ensureFancyboxVideoThumbnail = (video: HTMLVideoElement, target: HT
   const onReady = () => refresh()
   video.addEventListener('loadeddata', onReady)
   video.addEventListener('canplay', onReady)
-  video.addEventListener('seeked', onReady)
-  video.addEventListener('pause', refresh)
-  video.addEventListener('timeupdate', refresh)
 }

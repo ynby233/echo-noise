@@ -335,8 +335,8 @@ assert(
     vditorEditor.includes('getAttachmentImageFancyboxOptions') &&
     vditorEditor.includes('getAttachmentVideoFancyboxOptions') &&
     vditorEditor.includes("left: ['infobar']") &&
-    vditorEditor.includes("right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']") &&
-    !vditorEditor.includes("right: ['slideshow', 'fullscreen', 'thumbs', 'close']") &&
+    vditorEditor.includes("right: ['iterateZoom', 'slideshow', 'fullscreen', 'close']") &&
+    !vditorEditor.includes("right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']") &&
     vditorEditor.includes('Html: {') &&
     vditorEditor.includes('videoAutoplay: false') &&
     !vditorEditor.includes('getVideoThumbnailFallback') &&
@@ -354,13 +354,13 @@ assert(
     vditorEditor.includes('shouldClose: animateFancyboxHtml5VideoClose') &&
     vditorEditor.includes('close: animateFancyboxHtml5VideoClose') &&
     !vditorEditor.includes('caption: item.name') &&
-    vditorEditor.includes('autoStart: true') &&
+    !vditorEditor.includes('autoStart: true') &&
     vditorEditor.includes('Images: {') &&
-    vditorEditor.includes("mainClass: 'noise-media-fancybox'") &&
+    !vditorEditor.includes("mainClass: 'noise-media-fancybox'") &&
     !vditorEditor.includes('editor-attachment-image-fancybox') &&
     !vditorEditor.includes('editor-attachment-video-fancybox') &&
     !vditorEditor.includes("type: 'video'") &&
-    vditorEditor.includes('Thumbs: {') &&
+    !vditorEditor.includes('Thumbs: {') &&
     vditorEditor.includes('Carousel: { infinite: true }') &&
     !vditorEditor.includes("backdropClick: 'close'") &&
     vditorEditor.includes('closeButton: false') &&
@@ -417,28 +417,32 @@ assert(
     markdownRenderer.includes('width: min(300px, 100%) !important;') &&
     markdownRenderer.includes('max-width: 300px;') &&
     markdownRenderer.includes('min-width: min(220px, 100%);') &&
-    messageList.includes("mainClass: 'noise-media-fancybox'") &&
-    messageList.includes("left: ['infobar']") &&
-    messageList.includes("right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']") &&
-    messageList.includes('Images: {') &&
-    messageList.includes('Html: { videoAutoplay: false }') &&
-    messageList.includes("Thumbs: { type: 'classic', autoStart: true }") &&
-    !/\bImage:\s*\{/.test(messageList) &&
+    !messageList.includes("mainClass: 'noise-media-fancybox'") &&
+    messageList.includes('{ id: "prev", position: "center" }') &&
+    messageList.includes('{ id: "counter", position: "center" }') &&
+    messageList.includes('{ id: "next", position: "center" }') &&
+    messageList.includes('Image: {') &&
+    !messageList.includes('Html: { videoAutoplay: false }') &&
+    !messageList.includes("Thumbs: { type: 'classic', autoStart: true }") &&
+    /\bImage:\s*\{/.test(messageList) &&
     !messageList.includes('window.Fancybox.destroy()') &&
-    !addForm.includes('Fancybox.bind("[data-fancybox]", {})') &&
+    addForm.includes('Fancybox.bind("[data-fancybox]", {})') &&
     !addForm.includes('Fancybox.destroy()') &&
     addForm.includes('Fancybox.unbind?.(\'[data-fancybox]\')') &&
-    addForm.includes('shouldClose: animateFancyboxHtml5VideoClose') &&
+    !addForm.includes('shouldClose: animateFancyboxHtml5VideoClose') &&
+    !messageList.includes('noise-media-fancybox') &&
+    !vditorEditor.includes('noise-media-fancybox') &&
+    !homePage.includes('noise-media-fancybox') &&
     !messageList.includes(':deep(.noise-media-fancybox .fancybox__toolbar)') &&
     !vditorEditor.includes('.noise-media-fancybox .fancybox__toolbar') &&
     !homePage.includes('.noise-media-fancybox .fancybox__toolbar') &&
     !floatingCss.includes('Fancybox thumbnail state shared by the built-in image viewer and attachment previews') &&
     !floatingCss.includes('.fancybox__thumbs .f-thumbs__slide,') &&
     !floatingCss.includes('transform: scale(0.92);') &&
-    homePage.includes('.noise-media-fancybox .f-thumbs__slide {\n  overflow: visible;\n}') &&
-    homePage.includes('.noise-media-fancybox .f-thumbs__slide__button {\n  transition: transform 180ms ease, opacity 180ms ease;\n  transform-origin: center;\n}') &&
-    homePage.includes('.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button {\n  transform: scale(1.12);\n}') &&
-    homePage.includes('.noise-media-fancybox .f-thumbs__slide__button::after {\n  display: none;\n}') &&
+    !homePage.includes('.noise-media-fancybox .f-thumbs__slide {\n  overflow: visible;\n}') &&
+    !homePage.includes('.noise-media-fancybox .f-thumbs__slide__button {\n  transition: transform 180ms ease, opacity 180ms ease;\n  transform-origin: center;\n}') &&
+    !homePage.includes('.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button {\n  transform: scale(1.12);\n}') &&
+    !homePage.includes('.noise-media-fancybox .f-thumbs__slide__button::after {\n  display: none;\n}') &&
     !messageList.includes(':deep(.noise-media-fancybox .f-thumbs__slide') &&
     !vditorEditor.includes('.noise-media-fancybox .f-thumbs__slide') &&
     !messageList.includes(':deep(.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button::after)') &&
@@ -469,21 +473,21 @@ assert(
     vditorEditor.includes('previewObserver.observe(root, { childList: true, subtree: true })') &&
     !vditorEditor.includes('characterData: true') &&
     markdownRenderer.includes('initializeMediaViewer') &&
-    markdownRenderer.includes('Fancybox.bind(root, \'[data-fancybox]\'') &&
-    markdownRenderer.includes("right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']") &&
-    markdownRenderer.includes("mainClass: 'noise-media-fancybox'") &&
-    markdownRenderer.includes('Html: { videoAutoplay: false }') &&
-    markdownRenderer.includes("Thumbs: { type: 'classic', autoStart: true }") &&
+    markdownRenderer.includes('Fancybox.bind(root, \'[data-fancybox]\', {})') &&
+    !markdownRenderer.includes("right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']") &&
+    !markdownRenderer.includes("mainClass: 'noise-media-fancybox'") &&
+    !markdownRenderer.includes('Html: { videoAutoplay: false }') &&
+    !markdownRenderer.includes("Thumbs: { type: 'classic', autoStart: true }") &&
     markdownRenderer.includes("trigger.dataset.type = 'html5video'") &&
     markdownRenderer.includes('normalizeMediaPreviewUrl(getVideoElementSource(video))') &&
     markdownRenderer.includes('if (trigger instanceof HTMLAnchorElement) trigger.href = src') &&
     markdownRenderer.includes('ensureFancyboxVideoThumbnail(video, trigger)') &&
-    markdownRenderer.includes('shouldClose: animateFancyboxHtml5VideoClose') &&
-    markdownRenderer.includes('close: animateFancyboxHtml5VideoClose') &&
-    messageList.includes('shouldClose: animateFancyboxHtml5VideoClose') &&
-    messageList.includes('close: animateFancyboxHtml5VideoClose') &&
-    homePage.includes('shouldClose: animateFancyboxHtml5VideoClose') &&
-    homePage.includes('close: animateFancyboxHtml5VideoClose') &&
+    !markdownRenderer.includes('shouldClose: animateFancyboxHtml5VideoClose') &&
+    !markdownRenderer.includes('close: animateFancyboxHtml5VideoClose') &&
+    !messageList.includes('shouldClose: animateFancyboxHtml5VideoClose') &&
+    !messageList.includes('close: animateFancyboxHtml5VideoClose') &&
+    !homePage.includes('shouldClose: animateFancyboxHtml5VideoClose') &&
+    !homePage.includes('close: animateFancyboxHtml5VideoClose') &&
     fancyboxVideoClose.includes('export const animateFancyboxHtml5VideoClose') &&
     fancyboxVideoClose.includes('export const normalizeMediaPreviewUrl') &&
     fancyboxVideoClose.includes("url.pathname.startsWith('/api/video/')") &&
@@ -506,8 +510,8 @@ assert(
     fancyboxVideoClose.includes("const overlay = document.createElement('img')") &&
     fancyboxVideoClose.includes('const runAnimation = () => {') &&
     fancyboxVideoClose.includes('const getSlideHideElements = (slide: any, contentEl: HTMLElement | null) => {') &&
-    fancyboxVideoClose.includes('updateOpenSelectedThumb(thumb)') &&
-    fancyboxVideoClose.includes("video.addEventListener('timeupdate', refresh)") &&
+    !fancyboxVideoClose.includes('updateOpenSelectedThumb(thumb)') &&
+    !fancyboxVideoClose.includes("video.addEventListener('timeupdate', refresh)") &&
     fancyboxVideoClose.includes("hideEls.forEach((item) => {\n    item.style.visibility = 'hidden'") &&
     fancyboxVideoClose.includes("item.style.visibility = 'hidden'") &&
     fancyboxVideoClose.includes("item.style.opacity = '0'") &&
@@ -523,10 +527,10 @@ assert(
     fancyboxVideoClose.includes('export const getVideoElementSource') &&
     fancyboxVideoClose.includes('export const ensureFancyboxVideoThumbnail') &&
     !markdownRenderer.includes("video.dataset.type = 'video'") &&
-    homePage.includes('projectFancyboxOptions') &&
-    homePage.includes("Fancybox?.bind?.('[data-fancybox]', projectFancyboxOptions)") &&
-    homePage.includes("mainClass: 'noise-media-fancybox'") &&
-    !homePage.includes("Fancybox?.bind?.('[data-fancybox]', {})") &&
+    !homePage.includes('projectFancyboxOptions') &&
+    homePage.includes("Fancybox?.bind?.('[data-fancybox]', {})") &&
+    !homePage.includes("mainClass: 'noise-media-fancybox'") &&
+    !homePage.includes("Fancybox?.bind?.('[data-fancybox]', projectFancyboxOptions)") &&
     !markdownRenderer.includes('mediumZoom(') &&
     vditorEditor.includes('stopImmediatePropagation') &&
     vditorEditor.includes("root.addEventListener('pointerdown', preventAttachmentNavigation, true)") &&

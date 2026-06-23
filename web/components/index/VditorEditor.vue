@@ -239,7 +239,6 @@ const transformAttachmentPreviewHtml = (html: string) => {
 const getAttachmentImageFancyboxOptions = (startIndex = 0) => ({
   animated: true,
   closeButton: false,
-  mainClass: 'noise-media-fancybox',
   startIndex,
   Carousel: { infinite: true },
   Toolbar: {
@@ -247,13 +246,12 @@ const getAttachmentImageFancyboxOptions = (startIndex = 0) => ({
     display: {
       left: ['infobar'],
       middle: [],
-      right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']
+      right: ['iterateZoom', 'slideshow', 'fullscreen', 'close']
     }
   },
   Images: {
     zoom: true
   },
-  Thumbs: { type: 'classic', autoStart: true },
   compact: false,
   placeFocusBack: false
 })
@@ -261,7 +259,6 @@ const getAttachmentImageFancyboxOptions = (startIndex = 0) => ({
 const getAttachmentVideoFancyboxOptions = (startIndex = 0) => ({
   animated: true,
   closeButton: false,
-  mainClass: 'noise-media-fancybox',
   startIndex,
   Carousel: { infinite: true },
   Toolbar: {
@@ -269,15 +266,11 @@ const getAttachmentVideoFancyboxOptions = (startIndex = 0) => ({
     display: {
       left: ['infobar'],
       middle: [],
-      right: ['iterateZoom', 'slideshow', 'fullscreen', 'thumbs', 'close']
+      right: ['iterateZoom', 'slideshow', 'fullscreen', 'close']
     }
   },
   Html: {
     videoAutoplay: false
-  },
-  Thumbs: {
-    type: 'classic',
-    autoStart: true
   },
   compact: false,
   placeFocusBack: false,
@@ -1739,19 +1732,6 @@ watch(() => props.theme, (newTheme) => {
 .vditor-container .editor-attachment-node .vditor-ir__marker--paren {
   display: none !important;
 }
-
-.noise-media-fancybox .fancybox__nav {
-  display: flex !important;
-}
-
-.noise-media-fancybox .fancybox__slide {
-  padding: 56px 16px 24px;
-}
-
-.noise-media-fancybox .fancybox__caption {
-  display: none !important;
-}
-
 
 .editor-attachment-preview {
   margin: 6px 12px 10px;
