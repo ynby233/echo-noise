@@ -83,7 +83,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from "vue";
 import { positionFloatingMenu, scheduleFloatingMenuPosition } from '~/utils/floating-menu'
-import { normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
+import { captureVideoFirstFrameFromSource, ensureFancyboxVideoThumbnail, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import Vditor from "vditor";
 import { Fancybox } from "@fancyapps/ui";
@@ -119,7 +119,6 @@ let selectedEditorTable: HTMLTableElement | null = null;
 let selectedEditorTableIndex = -1;
 let hoveredEditorTable: HTMLTableElement | null = null;
 let tableDeleteHideTimer: number | null = null;
-const videoFirstFrameCache = new Map<string, Promise<string>>();
 const TABLE_DELETE_BUTTON_SIZE = 10;
 const isReady = ref(false);
 const showHeadingMenu = ref(false);
@@ -243,68 +242,7 @@ const getAttachmentVideoFancyboxOptions = (startIndex = 0) => createMediaFancybo
 
 const isImagePreviewSource = (src: string) => /^(data:image|blob:)/i.test(src) || /\.(png|jpe?g|gif|webp|bmp|svg)(?:[?#].*)?$/i.test(src)
 
-const getVideoFirstFrameThumbnail = (url: string) => {
-  const src = normalizeMediaPreviewUrl(String(url || '').trim())
-  if (!src || typeof document === 'undefined') return Promise.resolve('')
-  const cached = videoFirstFrameCache.get(src)
-  if (cached) return cached
-  const promise = new Promise<string>((resolve) => {
-    const video = document.createElement('video')
-    let finished = false
-    const finish = (thumb: string) => {
-      if (finished) return
-      finished = true
-      cleanup()
-      resolve(isImagePreviewSource(thumb) ? thumb : '')
-    }
-    const cleanup = () => {
-      window.clearTimeout(timer)
-      video.removeEventListener('loadedmetadata', onLoadedMetadata)
-      video.removeEventListener('loadeddata', onLoadedData)
-      video.removeEventListener('canplay', drawFrame)
-      video.removeEventListener('seeked', drawFrame)
-      video.removeEventListener('error', onError)
-      video.removeAttribute('src')
-      try { video.load() } catch {}
-    }
-    const drawFrame = () => {
-      try {
-        const width = video.videoWidth || 0
-        const height = video.videoHeight || 0
-        if (!width || !height || video.readyState < 2) return
-        const canvas = document.createElement('canvas')
-        canvas.width = width
-        canvas.height = height
-        const ctx = canvas.getContext('2d')
-        if (!ctx) {
-          finish('')
-          return
-        }
-        ctx.drawImage(video, 0, 0, width, height)
-        finish(canvas.toDataURL('image/jpeg', 0.86))
-      } catch {
-        finish('')
-      }
-    }
-    const onLoadedMetadata = () => drawFrame()
-    const onLoadedData = () => drawFrame()
-    const onError = () => finish('')
-    const timer = window.setTimeout(() => finish(''), 4200)
-    video.crossOrigin = 'anonymous'
-    video.muted = true
-    video.playsInline = true
-    video.preload = 'auto'
-    video.addEventListener('loadedmetadata', onLoadedMetadata)
-    video.addEventListener('loadeddata', onLoadedData)
-    video.addEventListener('canplay', drawFrame)
-    video.addEventListener('seeked', drawFrame)
-    video.addEventListener('error', onError)
-    video.src = src
-    try { video.load() } catch { finish('') }
-  })
-  videoFirstFrameCache.set(src, promise)
-  return promise
-}
+const getVideoFirstFrameThumbnail = (url: string) => captureVideoFirstFrameFromSource(url)
 
 const getProjectThumbnailTargetSize = () => {
   if (typeof document === 'undefined') return 72
@@ -547,6 +485,10 @@ const setupAttachmentPreview = () => {
       label.setAttribute('data-attachment-kind', info.type)
       label.setAttribute('data-attachment-url', info.url)
       label.style.cursor = 'pointer'
+    })
+
+    root.querySelectorAll<HTMLVideoElement>('.noise-attachment-render--video video').forEach((video) => {
+      ensureFancyboxVideoThumbnail(video)
     })
   }
 

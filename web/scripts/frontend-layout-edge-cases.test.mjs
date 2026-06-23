@@ -489,6 +489,15 @@ assert(
     !homePage.includes('close: animateFancyboxHtml5VideoClose') &&
     fancyboxVideoClose.includes('export const animateFancyboxHtml5VideoClose') &&
     fancyboxVideoClose.includes('export const normalizeMediaPreviewUrl') &&
+    fancyboxVideoClose.includes('export const captureVideoFirstFrameFromSource') &&
+    fancyboxVideoClose.includes('const firstFrameCache = new Map<string, Promise<string>>()') &&
+    fancyboxVideoClose.includes("video.preload = 'auto'") &&
+    fancyboxVideoClose.includes('captureVideoFirstFrameFromSource(src).then(apply).catch(() => {})') &&
+    fancyboxVideoClose.includes('}, source ? 5600 : 1800)') &&
+    fancyboxVideoClose.includes('captureVideoFirstFrameFromSource(source).then(finish).catch(() => finish(captureVideoFrame(video) || getSlideImageFallback(slide, video)))') &&
+    fancyboxVideoClose.includes('closeWithoutFrame') &&
+    vditorEditor.includes("root.querySelectorAll<HTMLVideoElement>('.noise-attachment-render--video video')") &&
+    vditorEditor.includes('ensureFancyboxVideoThumbnail(video)') &&
     fancyboxVideoClose.includes("url.pathname.startsWith('/api/video/')") &&
     fancyboxVideoClose.includes('slide.type !== \'html5video\'') &&
     fancyboxVideoClose.includes('if (root instanceof HTMLVideoElement) return root') &&

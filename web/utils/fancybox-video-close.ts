@@ -8,6 +8,8 @@ type FancyboxLike = {
   __noiseVideoCloseRetrying?: boolean
 }
 
+const firstFrameCache = new Map<string, Promise<string>>()
+
 const validRect = (rect: DOMRect | null | undefined) => !!rect && rect.width > 1 && rect.height > 1
 
 const isImageSource = (src: string | null | undefined) => {
@@ -33,9 +35,11 @@ export const normalizeMediaPreviewUrl = (src: string) => {
 const captureVideoFrame = (video: HTMLVideoElement | null) => {
   if (!video || !video.videoWidth || !video.videoHeight || video.readyState < 2) return ''
   try {
+    const maxSize = 1280
+    const scale = Math.min(1, maxSize / Math.max(video.videoWidth, video.videoHeight))
     const canvas = document.createElement('canvas')
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale))
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale))
     const ctx = canvas.getContext('2d')
     if (!ctx) return ''
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
@@ -43,6 +47,68 @@ const captureVideoFrame = (video: HTMLVideoElement | null) => {
   } catch {
     return ''
   }
+}
+
+export const captureVideoFirstFrameFromSource = (source: string, timeoutMs = 5200) => {
+  const src = normalizeMediaPreviewUrl(source)
+  if (!src || typeof document === 'undefined' || typeof window === 'undefined') return Promise.resolve('')
+  const cached = firstFrameCache.get(src)
+  if (cached) return cached
+
+  const promise = new Promise<string>((resolve) => {
+    const video = document.createElement('video')
+    let finished = false
+    let soughtToStart = false
+    const finish = (thumb: string) => {
+      if (finished) return
+      finished = true
+      cleanup()
+      resolve(isImageSource(thumb) ? thumb : '')
+    }
+    const cleanup = () => {
+      window.clearTimeout(timer)
+      video.removeEventListener('loadedmetadata', onLoadedMetadata)
+      video.removeEventListener('loadeddata', onReady)
+      video.removeEventListener('canplay', onReady)
+      video.removeEventListener('seeked', onReady)
+      video.removeEventListener('error', onError)
+      video.removeAttribute('src')
+      try { video.load() } catch {}
+    }
+    const drawFrame = () => {
+      const thumb = captureVideoFrame(video)
+      if (thumb) finish(thumb)
+    }
+    const onReady = () => drawFrame()
+    const onLoadedMetadata = () => {
+      try {
+        if (!soughtToStart && Number.isFinite(video.duration) && video.duration > 0) {
+          soughtToStart = true
+          video.currentTime = 0
+        }
+      } catch {}
+      drawFrame()
+    }
+    const onError = () => finish('')
+    const timer = window.setTimeout(() => finish(captureVideoFrame(video)), timeoutMs)
+    video.crossOrigin = 'anonymous'
+    video.muted = true
+    video.playsInline = true
+    video.preload = 'auto'
+    video.addEventListener('loadedmetadata', onLoadedMetadata)
+    video.addEventListener('loadeddata', onReady)
+    video.addEventListener('canplay', onReady)
+    video.addEventListener('seeked', onReady)
+    video.addEventListener('error', onError)
+    video.src = src
+    try { video.load() } catch { finish('') }
+  })
+
+  firstFrameCache.set(src, promise)
+  promise.then((thumb) => {
+    if (!thumb) firstFrameCache.delete(src)
+  }).catch(() => firstFrameCache.delete(src))
+  return promise
 }
 
 const getSlideVideoElement = (slide: any) => {
@@ -128,6 +194,13 @@ const waitForVideoFrameThenClose = (instance: FancyboxLike, slide: any, video: H
   if (!video || event?.type !== 'shouldClose' || instance.__noiseVideoClosePending) return
   instance.__noiseVideoClosePending = true
   let done = false
+  const source = normalizeMediaPreviewUrl(getVideoElementSource(video) || slide?.src || slide?.triggerEl?.dataset?.src || '')
+  const closeWithoutFrame = () => {
+    instance.__noiseVideoCloseAnimated = true
+    requestAnimationFrame(() => {
+      instance.close?.()
+    })
+  }
   const finish = (thumb: string) => {
     if (done) return
     done = true
@@ -136,7 +209,10 @@ const waitForVideoFrameThenClose = (instance: FancyboxLike, slide: any, video: H
     video.removeEventListener('canplay', onReady)
     video.removeEventListener('seeked', onReady)
     instance.__noiseVideoClosePending = false
-    if (!thumb) return
+    if (!thumb) {
+      closeWithoutFrame()
+      return
+    }
     applyVideoFrameFallback(slide, video, thumb)
     instance.__noiseVideoCloseRetrying = true
     requestAnimationFrame(() => {
@@ -147,10 +223,13 @@ const waitForVideoFrameThenClose = (instance: FancyboxLike, slide: any, video: H
     const thumb = captureVideoFrame(video)
     if (thumb) finish(thumb)
   }
-  const timer = window.setTimeout(() => finish(captureVideoFrame(video)), 1200)
+  const timer = window.setTimeout(() => {
+    finish(captureVideoFrame(video) || getSlideImageFallback(slide, video))
+  }, source ? 5600 : 1800)
   video.addEventListener('loadeddata', onReady)
   video.addEventListener('canplay', onReady)
   video.addEventListener('seeked', onReady)
+  if (source) captureVideoFirstFrameFromSource(source).then(finish).catch(() => finish(captureVideoFrame(video) || getSlideImageFallback(slide, video)))
   try { video.load?.() } catch {}
   onReady()
 }
@@ -259,6 +338,9 @@ export const ensureFancyboxVideoThumbnail = (video: HTMLVideoElement, target: HT
   if (target.dataset.noiseVideoThumbBound === 'true') return
   target.dataset.noiseVideoThumbBound = 'true'
   const onReady = () => refresh()
+  video.preload = 'auto'
   video.addEventListener('loadeddata', onReady)
   video.addEventListener('canplay', onReady)
+  captureVideoFirstFrameFromSource(src).then(apply).catch(() => {})
+  try { video.load?.() } catch {}
 }
