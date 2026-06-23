@@ -28,6 +28,7 @@ const calendarWidget = read('components/widgets/CalendarWidget.vue')
 const mediaUpload = read('utils/media-upload.ts')
 const fancyboxVideoClose = read('utils/fancybox-video-close.ts')
 const mediaFancybox = read('utils/media-fancybox.ts')
+const userStore = read('store/user.ts')
 const floatingCss = read('assets/css/tailwind.css')
 const backendRouter = read('../internal/routers/routers.go')
 
@@ -491,10 +492,19 @@ assert(
     fancyboxVideoClose.includes('export const normalizeMediaPreviewUrl') &&
     fancyboxVideoClose.includes('export const captureVideoFirstFrameFromSource') &&
     fancyboxVideoClose.includes('const firstFrameCache = new Map<string, Promise<string>>()') &&
-    fancyboxVideoClose.includes("video.preload = 'auto'") &&
-    fancyboxVideoClose.includes('captureVideoFirstFrameFromSource(src).then(apply).catch(() => {})') &&
+    fancyboxVideoClose.includes('VIDEO_PLAYBACK_MEMORY_KEY') &&
+    fancyboxVideoClose.includes('const hasPlayback = currentTime > PLAYBACK_PROGRESS_THRESHOLD || !video.paused') &&
+    fancyboxVideoClose.includes('const frame = captureFrame && hasPlayback ? captureVideoFrame(video) : \'\'') &&
+    fancyboxVideoClose.includes('export const clearVideoPlaybackMemory') &&
+    fancyboxVideoClose.includes('updateVideoState(src, { firstFrame: thumb })') &&
+    fancyboxVideoClose.includes('const getVideoCloseFrame = (slide: any, video: HTMLVideoElement | null, source: string)') &&
+    fancyboxVideoClose.includes('if (!hasLivePlayback(video) && !hasRememberedPlayback(getVideoState(source))) return') &&
+    fancyboxVideoClose.includes('return state.firstFrame || getSlideImageFallback(slide, video)') &&
+    fancyboxVideoClose.includes('bindVideoPlaybackState(video, target, src)') &&
+    fancyboxVideoClose.includes('restoreStoredVideoTime(video, getVideoState(src))') &&
+    fancyboxVideoClose.includes('captureVideoFirstFrameFromSource(src).then((thumb) => {') &&
     fancyboxVideoClose.includes('}, source ? 5600 : 1800)') &&
-    fancyboxVideoClose.includes('captureVideoFirstFrameFromSource(source).then(finish).catch(() => finish(captureVideoFrame(video) || getSlideImageFallback(slide, video)))') &&
+    fancyboxVideoClose.includes('captureVideoFirstFrameFromSource(source).then(finish).catch(() => finish(getVideoCloseFrame(slide, video, source)))') &&
     fancyboxVideoClose.includes('closeWithoutFrame') &&
     vditorEditor.includes("root.querySelectorAll<HTMLVideoElement>('.noise-attachment-render--video video')") &&
     vditorEditor.includes('ensureFancyboxVideoThumbnail(video)') &&
@@ -505,8 +515,8 @@ assert(
     fancyboxVideoClose.includes('getSlideImageFallback(slide, video)') &&
     fancyboxVideoClose.includes('waitForVideoFrameThenClose(instance, slide, video, event)') &&
     fancyboxVideoClose.includes("if (event?.type === 'shouldClose') event.preventDefault()") &&
-    fancyboxVideoClose.includes('applyVideoFrameFallback(slide, video, thumb)') &&
-    fancyboxVideoClose.includes('applyVideoFrameFallback(slide, video, frameSrc)') &&
+    fancyboxVideoClose.includes('applyVideoFrameFallback(slide, video, thumb, source)') &&
+    fancyboxVideoClose.includes('applyVideoFrameFallback(slide, video, frameSrc, source)') &&
     fancyboxVideoClose.includes("video.addEventListener('loadeddata', onReady)") &&
     fancyboxVideoClose.includes("video.addEventListener('canplay', onReady)") &&
     fancyboxVideoClose.includes('requestAnimationFrame(() => {\n      try { instance.close?.() } finally { instance.__noiseVideoCloseRetrying = false }\n    })') &&
@@ -534,6 +544,13 @@ assert(
     !fancyboxVideoClose.includes("overlay.style.opacity = '0.12'") &&
     fancyboxVideoClose.includes('export const getVideoElementSource') &&
     fancyboxVideoClose.includes('export const ensureFancyboxVideoThumbnail') &&
+    mediaFancybox.includes("import { animateFancyboxHtml5VideoClose, prepareFancyboxHtml5VideoSlide } from './fancybox-video-close'") &&
+    mediaFancybox.includes('const videoSlideHandler = (instance: any) => prepareFancyboxHtml5VideoSlide(instance)') &&
+    mediaFancybox.includes('reveal: composeHandlers(tooltipHandler, videoSlideHandler, on.reveal)') &&
+    mediaFancybox.includes('done: composeHandlers(tooltipHandler, videoSlideHandler, on.done)') &&
+    mediaFancybox.includes("'Carousel.change': composeHandlers(tooltipHandler, videoSlideHandler, on['Carousel.change'])") &&
+    userStore.includes('import { clearVideoPlaybackMemory } from "~/utils/fancybox-video-close"') &&
+    userStore.includes('clearVideoPlaybackMemory();') &&
     !markdownRenderer.includes("video.dataset.type = 'video'") &&
     homePage.includes("Fancybox?.bind?.('[data-fancybox]', createMediaFancyboxOptions() as any)") &&
     homePage.includes("import { createMediaFancyboxOptions } from '~/utils/media-fancybox'") &&

@@ -1,4 +1,5 @@
 import type { User, Status, UserToLogin, UserToRegister, Response } from "~/types/models"
+import { clearVideoPlaybackMemory } from "~/utils/fancybox-video-close"
 
 export const useUserStore = defineStore("userStore", () => {
     // 状态
@@ -37,6 +38,7 @@ export const useUserStore = defineStore("userStore", () => {
         user.value = null;
         isLogin.value = false;
         token.value = "";
+        clearVideoPlaybackMemory();
     }
 
     // 注册

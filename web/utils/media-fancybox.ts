@@ -1,5 +1,5 @@
 import { zh_CN } from '@fancyapps/ui/l10n/Fancybox/zh_CN'
-import { animateFancyboxHtml5VideoClose } from './fancybox-video-close'
+import { animateFancyboxHtml5VideoClose, prepareFancyboxHtml5VideoSlide } from './fancybox-video-close'
 
 export const MEDIA_FANCYBOX_MAIN_CLASS = 'noise-media-fancybox'
 
@@ -107,6 +107,7 @@ type MediaFancyboxOptionsInput = {
 export const createMediaFancyboxOptions = (input: MediaFancyboxOptionsInput = {}) => {
   const { startIndex = 0, video = false, carouselInfinite = true, on = {} } = input
   const tooltipHandler = (instance: any) => scheduleProjectFancyboxTooltips(instance)
+  const videoSlideHandler = (instance: any) => prepareFancyboxHtml5VideoSlide(instance)
   const options: Record<string, any> = {
     mainClass: MEDIA_FANCYBOX_MAIN_CLASS,
     animated: true,
@@ -138,9 +139,9 @@ export const createMediaFancyboxOptions = (input: MediaFancyboxOptionsInput = {}
     on: {
       ...on,
       ready: composeHandlers(tooltipHandler, on.ready),
-      reveal: composeHandlers(tooltipHandler, on.reveal),
-      done: composeHandlers(tooltipHandler, on.done),
-      'Carousel.change': composeHandlers(tooltipHandler, on['Carousel.change']),
+      reveal: composeHandlers(tooltipHandler, videoSlideHandler, on.reveal),
+      done: composeHandlers(tooltipHandler, videoSlideHandler, on.done),
+      'Carousel.change': composeHandlers(tooltipHandler, videoSlideHandler, on['Carousel.change']),
     },
   }
 
