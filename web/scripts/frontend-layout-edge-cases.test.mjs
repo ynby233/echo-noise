@@ -493,14 +493,25 @@ assert(
     fancyboxVideoClose.includes('export const captureVideoFirstFrameFromSource') &&
     fancyboxVideoClose.includes('const firstFrameCache = new Map<string, Promise<string>>()') &&
     fancyboxVideoClose.includes('VIDEO_PLAYBACK_MEMORY_KEY') &&
+    fancyboxVideoClose.includes('const videoSurfaceRegistry = new Map<string, { videos: Set<HTMLVideoElement>; targets: Set<HTMLElement> }>()') &&
+    fancyboxVideoClose.includes('syncRegisteredVideoSurfaces(key, nextState)') &&
     fancyboxVideoClose.includes('const hasPlayback = currentTime > PLAYBACK_PROGRESS_THRESHOLD || !video.paused') &&
     fancyboxVideoClose.includes('const frame = captureFrame && hasPlayback ? captureVideoFrame(video) : \'\'') &&
     fancyboxVideoClose.includes('export const clearVideoPlaybackMemory') &&
+    fancyboxVideoClose.includes('videoSurfaceRegistry.clear()') &&
     fancyboxVideoClose.includes('updateVideoState(src, { firstFrame: thumb })') &&
+    fancyboxVideoClose.includes('const getStateFrame = (state: VideoPlaybackState) => {') &&
+    fancyboxVideoClose.includes('const registerVideoSurface = (source: string, video: HTMLVideoElement | null, targets: Array<HTMLElement | null | undefined>) => {') &&
+    fancyboxVideoClose.includes('const bindVideoPlaybackState = (video: HTMLVideoElement, target: HTMLElement, source: string, extraTargets: HTMLElement[] = []) => {') &&
+    fancyboxVideoClose.includes('registerVideoSurface(source, video, [target, ...extraTargets])') &&
+    fancyboxVideoClose.includes('applyFrameToTarget(target, frame)') &&
+    fancyboxVideoClose.includes('syncVideoTimeWhenReady(video, state)') &&
     fancyboxVideoClose.includes('const getVideoCloseFrame = (slide: any, video: HTMLVideoElement | null, source: string)') &&
     fancyboxVideoClose.includes('if (!hasLivePlayback(video) && !hasRememberedPlayback(getVideoState(source))) return') &&
     fancyboxVideoClose.includes('return state.firstFrame || getSlideImageFallback(slide, video)') &&
-    fancyboxVideoClose.includes('bindVideoPlaybackState(video, target, src)') &&
+    fancyboxVideoClose.includes('bindVideoPlaybackState(video, target, src, extraTargets)') &&
+    fancyboxVideoClose.includes('const extraTargets = [slide.thumbEl, slide.el?.querySelector?.(\'.f-thumbs__slide__img\')].filter(Boolean) as HTMLElement[]') &&
+    fancyboxVideoClose.includes('ensureFancyboxVideoThumbnail(video, target, extraTargets)') &&
     fancyboxVideoClose.includes('restoreStoredVideoTime(video, getVideoState(src))') &&
     fancyboxVideoClose.includes('captureVideoFirstFrameFromSource(src).then((thumb) => {') &&
     fancyboxVideoClose.includes('}, source ? 5600 : 1800)') &&

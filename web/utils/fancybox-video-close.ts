@@ -18,6 +18,7 @@ type VideoPlaybackState = {
 }
 
 const firstFrameCache = new Map<string, Promise<string>>()
+const videoSurfaceRegistry = new Map<string, { videos: Set<HTMLVideoElement>; targets: Set<HTMLElement> }>()
 const VIDEO_PLAYBACK_MEMORY_KEY = 'noise-video-playback-state:v1'
 const PLAYBACK_PROGRESS_THRESHOLD = 0.15
 
@@ -67,15 +68,18 @@ const updateVideoState = (source: string, patch: VideoPlaybackState) => {
   const key = normalizeMediaPreviewUrl(source)
   if (!key) return
   const memory = getPlaybackMemory()
-  memory[key] = {
+  const nextState = {
     ...(memory[key] || {}),
     ...patch,
     updatedAt: Date.now()
   }
+  memory[key] = nextState
   setPlaybackMemory(memory)
+  syncRegisteredVideoSurfaces(key, nextState)
 }
 
 export const clearVideoPlaybackMemory = () => {
+  videoSurfaceRegistry.clear()
   if (typeof localStorage === 'undefined') return
   try { localStorage.removeItem(VIDEO_PLAYBACK_MEMORY_KEY) } catch {}
 }
@@ -205,7 +209,78 @@ const restoreStoredVideoTime = (video: HTMLVideoElement, state: VideoPlaybackSta
   } catch {}
 }
 
-const bindVideoPlaybackState = (video: HTMLVideoElement, target: HTMLElement, source: string) => {
+const getStateFrame = (state: VideoPlaybackState) => {
+  return hasRememberedPlayback(state) ? (state.currentFrame || state.firstFrame || '') : (state.firstFrame || '')
+}
+
+const applyFrameToTarget = (target: HTMLElement | null | undefined, thumb: string) => {
+  if (!target || !isImageSource(thumb)) return
+  target.dataset.thumbSrc = thumb
+  target.dataset.poster = thumb
+  if (target instanceof HTMLImageElement) target.src = thumb
+  const img = target.querySelector?.('img') as HTMLImageElement | null
+  if (img) img.src = thumb
+}
+
+const syncVideoTimeWhenReady = (video: HTMLVideoElement, state: VideoPlaybackState) => {
+  if (video.readyState >= 1) {
+    restoreStoredVideoTime(video, state)
+    return
+  }
+  video.addEventListener('loadedmetadata', () => restoreStoredVideoTime(video, getVideoState(getVideoElementSource(video))), { once: true })
+}
+
+const getRegisteredSurfaces = (source: string) => {
+  const src = normalizeMediaPreviewUrl(source)
+  if (!src) return null
+  let entry = videoSurfaceRegistry.get(src)
+  if (!entry) {
+    entry = { videos: new Set<HTMLVideoElement>(), targets: new Set<HTMLElement>() }
+    videoSurfaceRegistry.set(src, entry)
+  }
+  return { src, entry }
+}
+
+const syncRegisteredVideoSurfaces = (source: string, state = getVideoState(source)) => {
+  const src = normalizeMediaPreviewUrl(source)
+  if (!src || typeof document === 'undefined') return
+  const entry = videoSurfaceRegistry.get(src)
+  const frame = getStateFrame(state)
+  entry?.videos.forEach((video) => {
+    if (!document.contains(video)) {
+      entry.videos.delete(video)
+      return
+    }
+    if (isImageSource(frame)) video.setAttribute('poster', frame)
+    syncVideoTimeWhenReady(video, state)
+  })
+  entry?.targets.forEach((target) => {
+    if (!document.contains(target)) {
+      entry.targets.delete(target)
+      return
+    }
+    applyFrameToTarget(target, frame)
+  })
+}
+
+const registerVideoSurface = (source: string, video: HTMLVideoElement | null, targets: Array<HTMLElement | null | undefined>) => {
+  const registered = getRegisteredSurfaces(source)
+  if (!registered) return
+  const { src, entry } = registered
+  if (video) {
+    entry.videos.add(video)
+    video.dataset.noiseVideoPlaybackSource = src
+  }
+  targets.forEach((target) => {
+    if (!target) return
+    entry.targets.add(target)
+    target.dataset.noiseVideoPlaybackSource = src
+  })
+  syncRegisteredVideoSurfaces(src, getVideoState(src))
+}
+
+const bindVideoPlaybackState = (video: HTMLVideoElement, target: HTMLElement, source: string, extraTargets: HTMLElement[] = []) => {
+  registerVideoSurface(source, video, [target, ...extraTargets])
   if (video.dataset.noiseVideoPlaybackBound === 'true') return
   video.dataset.noiseVideoPlaybackBound = 'true'
   const record = () => recordVideoProgress(video, source, false)
@@ -253,10 +328,7 @@ const applyVideoFrameFallback = (slide: any, video: HTMLVideoElement | null, thu
     slide.thumbElSrc = thumb
   }
   const trigger = slide?.triggerEl as HTMLElement | undefined
-  if (trigger?.dataset) {
-    trigger.dataset.poster = thumb
-    trigger.dataset.thumbSrc = thumb
-  }
+  ;[trigger, slide?.thumbEl, slide?.el?.querySelector?.('.f-thumbs__slide__img')].forEach((item) => applyFrameToTarget(item as HTMLElement | null | undefined, thumb))
   if (source) updateVideoState(source, { currentFrame: thumb })
 }
 
@@ -469,16 +541,16 @@ export const prepareFancyboxHtml5VideoSlide = (instance: FancyboxLike) => {
   const video = getSlideVideoElement(slide)
   if (!video) return
   const target = (slide.triggerEl || slide.thumbEl || video) as HTMLElement
-  ensureFancyboxVideoThumbnail(video, target)
+  const extraTargets = [slide.thumbEl, slide.el?.querySelector?.('.f-thumbs__slide__img')].filter(Boolean) as HTMLElement[]
+  ensureFancyboxVideoThumbnail(video, target, extraTargets)
 }
 
-export const ensureFancyboxVideoThumbnail = (video: HTMLVideoElement, target: HTMLElement = video) => {
+export const ensureFancyboxVideoThumbnail = (video: HTMLVideoElement, target: HTMLElement = video, extraTargets: HTMLElement[] = []) => {
   const src = normalizeMediaPreviewUrl(getVideoElementSource(video))
   if (!src) return
   const apply = (thumb: string, kind: 'first' | 'current' = 'first') => {
     if (!isImageSource(thumb)) return
-    target.dataset.thumbSrc = thumb
-    target.dataset.poster = thumb
+    ;[target, ...extraTargets].forEach((item) => applyFrameToTarget(item, thumb))
     video.setAttribute('poster', thumb)
     updateVideoState(src, kind === 'current' ? { currentFrame: thumb } : { firstFrame: thumb })
   }
@@ -491,7 +563,7 @@ export const ensureFancyboxVideoThumbnail = (video: HTMLVideoElement, target: HT
     const frame = captureVideoFrame(video)
     if (frame) apply(frame, 'current')
   }
-  bindVideoPlaybackState(video, target, src)
+  bindVideoPlaybackState(video, target, src, extraTargets)
   if (video.readyState >= 1) restoreStoredVideoTime(video, getVideoState(src))
   if (video.readyState >= 2) refresh()
   if (target.dataset.noiseVideoThumbBound === 'true') return
