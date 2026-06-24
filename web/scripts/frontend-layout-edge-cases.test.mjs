@@ -87,7 +87,8 @@ assert(
     notificationCenter.includes('.notification-title-row { position:relative; display:block;') &&
     notificationCenter.includes('.notification-title { display:block; margin:0 0 14px;') &&
     notificationCenter.includes('.notification-subtitle { max-width:42rem; margin:2px auto 20px;') &&
-    notificationCenter.includes('.notification-count-title { margin:0 0 8px;') &&
+    notificationCenter.includes('.notification-board-head { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:28px; margin:0 0 8px; }') &&
+    notificationCenter.includes('.notification-count-title { min-width:0; margin:0;') &&
     notificationCenter.includes('.notification-board-wrap { box-sizing:border-box; max-width:48rem; margin:0 auto 8px; padding:8px;'),
   'notification page must use the same UCard.search-card outer frame as guestbook, with notification content no longer drawing its own frame'
 )
@@ -106,6 +107,8 @@ assert(
 
 assert(
   notificationCenter.includes('class="notification-refresh-button nw-action-btn nw-tooltip-anchor"') &&
+  notificationCenter.includes('<div class="notification-board-head">') &&
+  notificationCenter.includes('<div class="notification-actions">') &&
   notificationCenter.includes(':disabled="notificationRefreshing || loading" @click="refreshNotifications"') &&
   notificationCenter.includes('class="w-4 h-4" :class="{ \'animate-spin\': notificationRefreshing }"') &&
   notificationCenter.includes('const notificationRefreshing = ref(false)') &&
@@ -114,6 +117,7 @@ assert(
   notificationCenter.includes('class="notification-text-button nw-action-btn nw-action-btn--label" :disabled="markingAll || unreadCount === 0"') &&
   notificationCenter.includes('class="reply-toggle nw-action-btn nw-action-btn--label"') &&
   notificationCenter.includes('.notification-refresh-button,\n.notification-text-button,\n.reply-toggle {') &&
+  notificationCenter.includes('.notification-actions { display:flex; align-items:center; gap:8px; flex:0 0 auto; flex-wrap:wrap; justify-content:flex-end; max-width:70%; }') &&
   notificationCenter.includes('height:28px;') &&
   notificationCenter.includes('font-size:12px;') &&
   notificationCenter.includes('font-weight:650;') &&
@@ -138,7 +142,11 @@ assert(
     builtinComments.includes('const refreshComments = async () => {') &&
     builtinComments.includes('setTimeout(() => {\n      commentsRefreshing.value = false\n    }, 300)') &&
     builtinComments.includes('.comment-refresh-button {') &&
-    builtinComments.includes('--nw-action-bg:var(--comment-toolbar-control-bg);'),
+    builtinComments.includes('--nw-action-bg:var(--comment-toolbar-control-bg);') &&
+    builtinComments.includes('.builtin-comments.comment-theme-dark .comment-refresh-button,') &&
+    builtinComments.includes(':global(html.dark) .builtin-comments .comment-refresh-button,') &&
+    builtinComments.includes(':global(.dark) .builtin-comments .comment-refresh-button {') &&
+    builtinComments.includes('--nw-action-bg: rgba(51, 65, 85, .96);'),
   'guestbook comments must expose the same spinning refresh action button as search and notifications'
 )
 
@@ -197,6 +205,7 @@ assert(
 assert(
   messageList.includes('class="search-results-title">搜索</div>') &&
     messageList.includes('搜索内容：{{ activeFilterContent }}') &&
+    messageList.includes('class="search-results-board-head"') &&
     messageList.includes('class="search-results-actions"') &&
     messageList.includes('class="search-results-refresh nw-action-btn nw-tooltip-anchor"') &&
     messageList.includes('data-tooltip="刷新"') &&
@@ -207,8 +216,9 @@ assert(
     messageList.includes('const refreshSearchResults = async () => {') &&
     messageList.includes('window.setTimeout(() => {\n      searchResultsRefreshing.value = false\n    }, 300)') &&
     messageList.includes('class="search-results-back nw-action-btn nw-action-btn--label"') &&
-    messageList.includes('>笔记 ({{ filteredResultCount }})</div>') &&
-    messageList.includes('v-if="props.pageReady && hasActiveFilters && !isPageLoading && !isDisplayQueryPending && displayMessages.length" class="search-results-count"') &&
+    messageList.includes('笔记 ({{ filteredResultCount }})') &&
+    messageList.includes('v-if="!isPageLoading && !isDisplayQueryPending && displayMessages.length"') &&
+    messageList.includes('class="search-results-count search-results-count-placeholder" aria-hidden="true"') &&
     messageList.includes('v-if="props.pageReady && hasActiveFilters && (isPageLoading || isDisplayQueryPending || !displayMessages.length)" class="search-results-empty"') &&
     messageList.includes('v-if="isPageLoading || isDisplayQueryPending"') &&
     messageList.includes('v-if="!props.pageReady || !hasActiveFilters || (!isDisplayQueryPending && displayMessages.length)"') &&
@@ -260,8 +270,12 @@ assert(
     !messageList.includes('padding: 20px;') &&
     !messageList.includes('--search-panel-frame-line') &&
     !messageList.includes('.search-results-panel::before {') &&
+    messageList.includes('.search-results-board-head {') &&
+    messageList.includes('min-height: 28px;') &&
+    messageList.includes('margin: 0 calc(-1rem - 1px) 8px;') &&
+    messageList.includes('padding: 8px 8px 0;') &&
     messageList.includes('.search-results-actions {') &&
-    messageList.includes('right: 0;') &&
+    !messageList.includes('.search-results-actions {\n  position: absolute;') &&
     messageList.includes('gap: 8px;') &&
     messageList.includes('.search-results-refresh,\n.search-results-back {') &&
     messageList.includes('height: 28px;') &&

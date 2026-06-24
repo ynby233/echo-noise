@@ -1514,7 +1514,10 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 }
 .builtin-comments.comment-theme-dark .comment-load-btn,
 :global(html.dark) .builtin-comments .comment-load-btn,
-:global(.dark) .builtin-comments .comment-load-btn {
+:global(.dark) .builtin-comments .comment-load-btn,
+.builtin-comments.comment-theme-dark .comment-refresh-button,
+:global(html.dark) .builtin-comments .comment-refresh-button,
+:global(.dark) .builtin-comments .comment-refresh-button {
   --nw-action-bg: rgba(51, 65, 85, .96);
   --nw-action-text: #cbd5e1;
   --nw-action-border: rgba(148, 163, 184, .28);

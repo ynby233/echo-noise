@@ -4,13 +4,6 @@
       <div class="notification-heading">
         <div class="notification-title-row">
           <h2 class="notification-title">{{ notificationTitle }}</h2>
-          <div v-if="user.isLogin" class="notification-actions">
-            <span v-if="unreadCount > 0" class="unread-pill">{{ unreadCount }} 未读</span>
-            <button type="button" class="notification-refresh-button nw-action-btn nw-tooltip-anchor" data-tooltip="刷新" aria-label="刷新" :disabled="notificationRefreshing || loading" @click="refreshNotifications">
-              <UIcon name="i-mdi-refresh" class="w-4 h-4" :class="{ 'animate-spin': notificationRefreshing }" />
-            </button>
-            <button type="button" class="notification-text-button nw-action-btn nw-action-btn--label" :disabled="markingAll || unreadCount === 0" @click="markAllRead">全部已读</button>
-          </div>
         </div>
         <p class="notification-subtitle">{{ notificationDescription }}</p>
       </div>
@@ -22,7 +15,16 @@
     </div>
 
     <div v-else class="notification-feed-panel notification-board-wrap">
-      <div class="notification-count-title">通知 ({{ total }})</div>
+      <div class="notification-board-head">
+        <div class="notification-count-title">通知 ({{ total }})</div>
+        <div class="notification-actions">
+          <span v-if="unreadCount > 0" class="unread-pill">{{ unreadCount }} 未读</span>
+          <button type="button" class="notification-refresh-button nw-action-btn nw-tooltip-anchor" data-tooltip="刷新" aria-label="刷新" :disabled="notificationRefreshing || loading" @click="refreshNotifications">
+            <UIcon name="i-mdi-refresh" class="w-4 h-4" :class="{ 'animate-spin': notificationRefreshing }" />
+          </button>
+          <button type="button" class="notification-text-button nw-action-btn nw-action-btn--label" :disabled="markingAll || unreadCount === 0" @click="markAllRead">全部已读</button>
+        </div>
+      </div>
       <div v-if="loading && !items.length" class="empty-state compact">
         <UIcon name="i-mdi-loading" class="empty-icon spin" />
         <div class="empty-title">正在加载</div>
@@ -655,8 +657,9 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .notification-title-row { position:relative; display:block; width:100%; margin:0; padding:0; }
 .notification-title { display:block; margin:0 0 14px; padding:0; border-radius:0; color:var(--notice-heading); font-size:18px; font-weight:700; line-height:1.5; }
 .notification-subtitle { max-width:42rem; margin:2px auto 20px; color:var(--notice-heading); font-size:13px; line-height:1.7; text-align:center; opacity:.8; font-weight:400; }
-.notification-count-title { margin:0 0 8px; color:var(--notice-count); font-size:14px; font-weight:400; line-height:20px; }
-.notification-actions { position:absolute; right:0; top:50%; transform:translateY(-50%); display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; max-width:calc(50% - 48px); }
+.notification-board-head { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:28px; margin:0 0 8px; }
+.notification-count-title { min-width:0; margin:0; color:var(--notice-count); font-size:14px; font-weight:400; line-height:20px; }
+.notification-actions { display:flex; align-items:center; gap:8px; flex:0 0 auto; flex-wrap:wrap; justify-content:flex-end; max-width:70%; }
 .unread-pill { display:inline-flex; align-items:center; min-height:28px; padding:0 10px; border-radius:999px; font-size:12px; font-weight:650; color:#fff; background:#3b82f6; }
 .notification-refresh-button,
 .notification-text-button,
@@ -732,8 +735,8 @@ defineExpose({ refresh: () => loadNotifications(true) })
   .notification-title-row { display:block; min-height:0; margin:0; }
   .notification-title { line-height:1.5; }
   .notification-subtitle { margin:2px auto 20px; }
-  .notification-actions { position:static; transform:none; justify-content:center; width:100%; max-width:100%; margin:-4px 0 10px; }
-  .notification-feed-panel { margin:0 auto 8px; padding:8px; }
+  .notification-board-head { align-items:center; flex-wrap:wrap; }
+  .notification-actions { justify-content:flex-end; max-width:100%; }
   .notification-feed-item { gap:10px; padding:14px 12px; }
   .notification-feed-item.unread::before { left:7px; top:24px; }
   .notification-avatar { width:40px; height:40px; flex-basis:40px; }

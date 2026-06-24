@@ -28,6 +28,15 @@
               <div class="search-results-title">搜索</div>
               <div class="search-results-summary">搜索内容：{{ activeFilterContent }}</div>
             </div>
+          </div>
+          <div v-if="props.pageReady && hasActiveFilters" class="search-results-board-head">
+            <div
+              v-if="!isPageLoading && !isDisplayQueryPending && displayMessages.length"
+              class="search-results-count"
+            >
+              笔记 ({{ filteredResultCount }})
+            </div>
+            <div v-else class="search-results-count search-results-count-placeholder" aria-hidden="true"></div>
             <div class="search-results-actions">
               <button
                 type="button"
@@ -45,7 +54,6 @@
               </button>
             </div>
           </div>
-          <div v-if="props.pageReady && hasActiveFilters && !isPageLoading && !isDisplayQueryPending && displayMessages.length" class="search-results-count">笔记 ({{ filteredResultCount }})</div>
           <div v-if="props.pageReady && hasActiveFilters && (isPageLoading || isDisplayQueryPending || !displayMessages.length)" class="search-results-empty">
             <div v-if="isPageLoading || isDisplayQueryPending">
               <p>加载中...</p>
@@ -2742,7 +2750,7 @@ onMounted(() => {
   align-items: flex-start;
   justify-content: center;
   min-height: 56px;
-  padding: 0 136px;
+  padding: 0;
 }
 
 .search-results-heading {
@@ -2771,12 +2779,23 @@ onMounted(() => {
   overflow-wrap: anywhere;
 }
 
-.search-results-actions {
-  position: absolute;
-  top: 0;
-  right: 0;
+.search-results-board-head {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: calc(100% + 2rem + 2px);
+  max-width: calc(56rem + 2px);
+  min-height: 28px;
+  margin: 0 calc(-1rem - 1px) 8px;
+  padding: 8px 8px 0;
+}
+
+.search-results-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
   gap: 8px;
 }
 
@@ -2810,15 +2829,18 @@ onMounted(() => {
 
 .search-results-count {
   box-sizing: border-box;
-  width: calc(100% + 2rem + 2px);
-  max-width: calc(56rem + 2px);
-  margin: 0 calc(-1rem - 1px) 8px;
+  min-width: 0;
+  margin: 0;
   padding: 0;
   color: inherit;
   font-size: 14px;
   font-weight: 400;
   line-height: 20px;
   text-align: left;
+}
+
+.search-results-count-placeholder {
+  visibility: hidden;
 }
 
 .search-results-list {
@@ -2888,7 +2910,6 @@ onMounted(() => {
   }
 
   .search-results-actions {
-    position: static;
     align-self: center;
   }
 }
