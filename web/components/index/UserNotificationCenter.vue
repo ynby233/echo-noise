@@ -6,8 +6,8 @@
           <h2 class="notification-title">{{ notificationTitle }}</h2>
           <div v-if="user.isLogin" class="notification-actions">
             <span v-if="unreadCount > 0" class="unread-pill">{{ unreadCount }} 未读</span>
-            <button type="button" class="notification-refresh-button nw-action-btn nw-tooltip-anchor" data-tooltip="刷新" aria-label="刷新" :disabled="loading" @click="loadNotifications(true)">
-              <UIcon name="i-mdi-refresh" class="w-4 h-4" :class="{ 'animate-spin': loading }" />
+            <button type="button" class="notification-refresh-button nw-action-btn nw-tooltip-anchor" data-tooltip="刷新" aria-label="刷新" :disabled="notificationRefreshing || loading" @click="refreshNotifications">
+              <UIcon name="i-mdi-refresh" class="w-4 h-4" :class="{ 'animate-spin': notificationRefreshing }" />
             </button>
             <button type="button" class="notification-text-button nw-action-btn nw-action-btn--label" :disabled="markingAll || unreadCount === 0" @click="markAllRead">全部已读</button>
           </div>
@@ -203,6 +203,7 @@ const isDark = computed(() => {
 const items = ref<UserNotification[]>([])
 const feedRef = ref<HTMLElement | null>(null)
 const loading = ref(false)
+const notificationRefreshing = ref(false)
 const loadingMore = ref(false)
 const markingAll = ref(false)
 const loadError = ref('')
@@ -480,6 +481,18 @@ const loadNotifications = async (reset = false, options: { skipInitialResolve?: 
     loadError.value = '通知加载失败'
   } finally {
     loading.value = false
+  }
+}
+
+const refreshNotifications = async () => {
+  if (notificationRefreshing.value || loading.value) return
+  notificationRefreshing.value = true
+  try {
+    await loadNotifications(true)
+  } finally {
+    setTimeout(() => {
+      notificationRefreshing.value = false
+    }, 300)
   }
 }
 

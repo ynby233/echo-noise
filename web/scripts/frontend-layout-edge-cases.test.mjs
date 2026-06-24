@@ -106,7 +106,11 @@ assert(
 
 assert(
   notificationCenter.includes('class="notification-refresh-button nw-action-btn nw-tooltip-anchor"') &&
-  notificationCenter.includes('class="w-4 h-4" :class="{ \'animate-spin\': loading }"') &&
+  notificationCenter.includes(':disabled="notificationRefreshing || loading" @click="refreshNotifications"') &&
+  notificationCenter.includes('class="w-4 h-4" :class="{ \'animate-spin\': notificationRefreshing }"') &&
+  notificationCenter.includes('const notificationRefreshing = ref(false)') &&
+  notificationCenter.includes('const refreshNotifications = async () => {') &&
+  notificationCenter.includes('setTimeout(() => {\n      notificationRefreshing.value = false\n    }, 300)') &&
   notificationCenter.includes('class="notification-text-button nw-action-btn nw-action-btn--label" :disabled="markingAll || unreadCount === 0"') &&
   notificationCenter.includes('class="reply-toggle nw-action-btn nw-action-btn--label"') &&
   notificationCenter.includes('.notification-refresh-button,\n.notification-text-button,\n.reply-toggle {') &&
@@ -120,6 +124,22 @@ assert(
     !notificationCenter.includes('.icon-action') &&
     !notificationCenter.includes('.text-action'),
   'notification refresh, mark-all-read, and reply buttons must use the shared general action button template'
+)
+
+assert(
+  builtinComments.includes('class="comment-list-head"') &&
+    builtinComments.includes('v-if="showCommentRefreshButton"') &&
+    builtinComments.includes('class="comment-refresh-button nw-action-btn nw-tooltip-anchor"') &&
+    builtinComments.includes(':disabled="commentsRefreshing"') &&
+    builtinComments.includes('@click="refreshComments"') &&
+    builtinComments.includes('name="i-mdi-refresh" class="w-4 h-4" :class="{ \'animate-spin\': commentsRefreshing }"') &&
+    builtinComments.includes("const showCommentRefreshButton = computed(() => contextLabel.value === '留言' && !props.replyInputOnly)") &&
+    builtinComments.includes('const commentsRefreshing = ref(false)') &&
+    builtinComments.includes('const refreshComments = async () => {') &&
+    builtinComments.includes('setTimeout(() => {\n      commentsRefreshing.value = false\n    }, 300)') &&
+    builtinComments.includes('.comment-refresh-button {') &&
+    builtinComments.includes('--nw-action-bg:var(--comment-toolbar-control-bg);'),
+  'guestbook comments must expose the same spinning refresh action button as search and notifications'
 )
 
 assert(

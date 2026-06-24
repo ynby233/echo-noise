@@ -2,7 +2,20 @@
   <div ref="rootRef" class="builtin-comments" :class="{ 'comment-theme-dark': isDark }">
     <input ref="commentImageInput" type="file" accept="image/*" multiple class="hidden" @change="handleCommentImageInputChange" />
   <div class="waline-wrapper px-2 py-2 rounded-lg" :class="[themeBg, { 'reply-input-only': props.replyInputOnly }]">
-      <div v-if="!props.replyInputOnly" class="text-sm mb-2" :class="themeText">{{ contextLabel }} ({{ rootCommentTotal }})</div>
+      <div v-if="!props.replyInputOnly" class="comment-list-head" :class="themeText">
+        <div class="comment-list-title">{{ contextLabel }} ({{ rootCommentTotal }})</div>
+        <button
+          v-if="showCommentRefreshButton"
+          type="button"
+          class="comment-refresh-button nw-action-btn nw-tooltip-anchor"
+          data-tooltip="刷新"
+          aria-label="刷新留言"
+          :disabled="commentsRefreshing"
+          @click="refreshComments"
+        >
+          <UIcon name="i-mdi-refresh" class="w-4 h-4" :class="{ 'animate-spin': commentsRefreshing }" />
+        </button>
+      </div>
       <div v-if="!props.replyInputOnly && sortedRootComments.length" class="comments-list">
         <div v-for="c in visibleRootComments" :key="c.id" class="comment-item" :class="rootCardClass" :data-comment-id="c.id">
           <img class="comment-avatar avatar-img" :src="commentAvatar(c)" alt="avatar" @error="avatarOnError" />
@@ -244,8 +257,10 @@ type CommentEditorTarget = 'content' | 'edit'
 const props = defineProps<{ messageId: number, siteConfig: any, showInput?: boolean, contextLabel?: string, autoScrollInput?: boolean, messageVisibility?: string, replyInputOnly?: boolean, replyCommentId?: number | null, replyCommentAuthor?: string | null }>()
 const emit = defineEmits(['cancel'])
 const contextLabel = computed(() => String(props.contextLabel || '评论').trim() || '评论')
+const showCommentRefreshButton = computed(() => contextLabel.value === '留言' && !props.replyInputOnly)
 const loginRequiredText = computed(() => `请登录后${contextLabel.value}`)
 const comments = ref<any[]>([])
+const commentsRefreshing = ref(false)
 const content = ref('')
 const rootRef = ref<HTMLElement | null>(null)
 const taRef = ref<HTMLTextAreaElement | null>(null)
@@ -432,6 +447,18 @@ const load = async () => {
     }
   } catch (e) {
     comments.value = []
+  }
+}
+
+const refreshComments = async () => {
+  if (commentsRefreshing.value) return
+  commentsRefreshing.value = true
+  try {
+    await load()
+  } finally {
+    setTimeout(() => {
+      commentsRefreshing.value = false
+    }, 300)
   }
 }
 
@@ -1330,6 +1357,24 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 <style scoped>
 .builtin-comments, .waline-wrapper { width: 100%; }
 .waline-wrapper { display:block; width:100%; max-width:none; }
+.comment-list-head { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:28px; margin-bottom:8px; }
+.comment-list-title { min-width:0; font-size:14px; line-height:1.4; }
+.comment-refresh-button {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:0 0 auto;
+  width:28px;
+  min-width:28px;
+  height:28px;
+  min-height:28px;
+  padding:0;
+  border-radius:8px;
+  --nw-action-bg:var(--comment-toolbar-control-bg);
+  --nw-action-text:var(--comment-toolbar-text);
+  --nw-action-border:var(--comment-toolbar-border);
+}
+.comment-refresh-button:disabled { cursor:not-allowed; opacity:.55; }
  
 .comments-list { display:flex; flex-direction:column; gap:10px; width:100%; margin-bottom:12px; }
 .replies-list { display:flex; flex-direction:column; gap:6px; width:100%; }
