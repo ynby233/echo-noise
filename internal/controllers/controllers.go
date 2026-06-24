@@ -259,12 +259,17 @@ func Register(c *gin.Context) {
 		}
 	}
 
-	if err := services.Register(user); err != nil {
+	result, err := services.RegisterWithResult(user)
+	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
 		return
 	}
 
-	c.JSON(http.StatusOK, dto.OK[any](nil, models.RegisterSuccessMessage))
+	message := models.RegisterSuccessMessage
+	if result.AutoApproved {
+		message = models.RegisterAutoApprovedMessage
+	}
+	c.JSON(http.StatusOK, dto.OK(result, message))
 }
 
 func GetCaptcha(c *gin.Context) {
@@ -828,6 +833,7 @@ func GetUserInfo(c *gin.Context) {
 
 func hasAdminOnlySettingFields(setting dto.SettingDto) bool {
 	return setting.AllowRegistration != nil ||
+		setting.AutoApproveRegistration != nil ||
 		setting.SmtpEnabled != nil ||
 		setting.SmtpDriver != nil ||
 		setting.SmtpHost != nil ||
@@ -881,6 +887,9 @@ func UpdateSetting(c *gin.Context) {
 	if setting.AllowRegistration != nil {
 		oldSetting.AllowRegistration = *setting.AllowRegistration
 	}
+	if setting.AutoApproveRegistration != nil {
+		oldSetting.AutoApproveRegistration = *setting.AutoApproveRegistration
+	}
 
 	settingMap := map[string]interface{}{}
 	hasSiteConfigUpdate := false
@@ -899,6 +908,9 @@ func UpdateSetting(c *gin.Context) {
 	}
 	if setting.AllowRegistration != nil {
 		settingMap["allowRegistration"] = *setting.AllowRegistration
+	}
+	if setting.AutoApproveRegistration != nil {
+		settingMap["autoApproveRegistration"] = *setting.AutoApproveRegistration
 	}
 	if setting.SmtpEnabled != nil {
 		settingMap["smtpEnabled"] = *setting.SmtpEnabled

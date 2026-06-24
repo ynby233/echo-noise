@@ -1347,6 +1347,16 @@
                 </div>
               </div>
               <div class="px-4 pb-4">
+                <div class="flex flex-col sm:flex-row items-start sm:items-center rounded-lg p-3 justify-between gap-3 mb-3" :class="theme.subtleBg">
+                  <div class="flex items-center gap-2" :class="theme.text">
+                    <UIcon name="i-heroicons-check-badge" class="w-4 h-4" />
+                    <span>自动通过审核</span>
+                  </div>
+                  <div class="flex items-center gap-4 w-full sm:w-auto justify-end">
+                    <UToggle v-model="autoApproveRegistration" />
+                    <UButton color="green" @click="saveRegisterConfig" class="shadow">保存</UButton>
+                  </div>
+                </div>
                 <div :class="adminSubtleCardClass">
                   <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
                     <div class="text-sm" :class="theme.text">待审核 {{ registrationPendingCount }} / 5</div>
@@ -2605,6 +2615,7 @@ const isLifeBirthdayInvalid = computed(() => {
 
 // 新用户注册配置相关
 const registerEnabled = ref(true);
+const autoApproveRegistration = ref(false);
 
 type RegistrationApplication = {
   id: number
@@ -3345,6 +3356,9 @@ const fetchRegisterConfig = async () => {
       if (typeof data.allowRegistration === 'boolean') {
         registerEnabled.value = data.allowRegistration
       }
+      if (typeof data.autoApproveRegistration === 'boolean') {
+        autoApproveRegistration.value = data.autoApproveRegistration
+      }
       applyVoceChatPublicConfig(data.voceChatConfig)
     } else {
       throw new Error(res?.msg || '获取注册配置失败')
@@ -3394,7 +3408,10 @@ onMounted(fetchRegisterConfig)
 
 const saveRegisterConfig = async () => {
   try {
-    const res: any = await putRequest<any>('settings', { allowRegistration: registerEnabled.value }, { credentials: 'include' })
+    const res: any = await putRequest<any>('settings', {
+      allowRegistration: registerEnabled.value,
+      autoApproveRegistration: autoApproveRegistration.value
+    }, { credentials: 'include' })
     if (res && res.code === 1) {
       useToast().add({ title: '保存成功', color: 'green' })
       await fetchRegisterConfig()

@@ -801,8 +801,10 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 	// 新增：读取Setting表的AllowRegistration
 	var setting models.Setting
 	allowReg := true
+	autoApproveReg := false
 	if err := db.Table("settings").First(&setting).Error; err == nil {
 		allowReg = setting.AllowRegistration
+		autoApproveReg = setting.AutoApproveRegistration
 	}
 
 	// 读取 DB 类型
@@ -969,8 +971,9 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 	effectiveSyncConfirmed := config.StorageSyncConfirmed && syncmanager.IsStorageSyncConfirmedLocal()
 
 	configMap := map[string]interface{}{
-		"allowRegistration": allowReg,
-		"dbType":            dbType,
+		"allowRegistration":       allowReg,
+		"autoApproveRegistration": autoApproveReg,
+		"dbType":                  dbType,
 		"frontendSettings": map[string]interface{}{
 			"siteTitle":           config.SiteTitle,
 			"subtitleText":        config.SubtitleText,
@@ -1943,7 +1946,8 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 // 获取默认配置
 func getDefaultConfig() map[string]interface{} {
 	return map[string]interface{}{
-		"allowRegistration": true,
+		"allowRegistration":       true,
+		"autoApproveRegistration": false,
 		"frontendSettings": map[string]interface{}{
 			"siteTitle":           "Noise的说说笔记",
 			"subtitleText":        "欢迎访问，点击头像可更换封面背景！",

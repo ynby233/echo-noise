@@ -13,6 +13,7 @@ const (
 	ServerLaunchSuccessMessage   = "服务器启动成功"
 	GetMessagesByPageSuccess     = "分页获取信息成功"
 	RegisterSuccessMessage       = "注册申请已提交，等待审核"
+	RegisterAutoApprovedMessage  = "注册成功，可以直接登录"
 	LoginSuccessMessage          = "登录成功"
 	UpdateUserSuccessMessage     = "更新用户成功"
 	ChangePasswordSuccessMessage = "修改密码成功"

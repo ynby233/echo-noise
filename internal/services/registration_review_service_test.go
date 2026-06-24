@@ -34,6 +34,7 @@ func setRegistrationVerifyForTest(t *testing.T, fn registrationVoceChatVerifyFun
 
 func TestApproveRegistrationApplicationCreatesLocalUserAndMovesPlainPassword(t *testing.T) {
 	setupUserServiceTestDB(t)
+	configureVoceChatForTest(t, true, true, false)
 	storePath := filepath.Join(t.TempDir(), "plain-passwords.db")
 	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
 	admin := mustCreateUser(t, models.User{Username: "admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
@@ -92,6 +93,7 @@ func TestApproveRegistrationApplicationCreatesLocalUserAndMovesPlainPassword(t *
 
 func TestApproveRegistrationApplicationRecreatesMissingPrecreatedVoceChatUser(t *testing.T) {
 	setupUserServiceTestDB(t)
+	configureVoceChatForTest(t, true, true, false)
 	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", filepath.Join(t.TempDir(), "plain-passwords.db"))
 	admin := mustCreateUser(t, models.User{Username: "admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
 	calls := 0
@@ -137,6 +139,7 @@ func TestApproveRegistrationApplicationRecreatesMissingPrecreatedVoceChatUser(t 
 
 func TestApproveRegistrationApplicationRetriesVoceChatCreation(t *testing.T) {
 	setupUserServiceTestDB(t)
+	configureVoceChatForTest(t, true, true, false)
 	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", filepath.Join(t.TempDir(), "plain-passwords.db"))
 	admin := mustCreateUser(t, models.User{Username: "admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
 	calls := 0

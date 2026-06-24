@@ -3,6 +3,7 @@ package dto
 
 type SettingDto struct {
 	AllowRegistration        *bool                  `json:"allowRegistration"`
+	AutoApproveRegistration  *bool                  `json:"autoApproveRegistration"`
 	FrontendSettings         map[string]interface{} `json:"frontendSettings"`
 	SmtpEnabled              *bool                  `json:"smtpEnabled"`
 	SmtpDriver               *string                `json:"smtpDriver"`

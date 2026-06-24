@@ -79,7 +79,8 @@ func SeedDefaultData() error {
 	// 1.5 初始化系统设置 (AllowRegistration)
 	if err := db.Model(&models.Setting{}).Count(&count).Error; err == nil && count == 0 {
 		defaultSetting := models.Setting{
-			AllowRegistration: true,
+			AllowRegistration:       true,
+			AutoApproveRegistration: false,
 		}
 		if err := db.Create(&defaultSetting).Error; err != nil {
 			return fmt.Errorf("初始化系统设置失败: %v", err)

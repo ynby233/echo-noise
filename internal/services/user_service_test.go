@@ -153,6 +153,94 @@ func TestRegisterCreatesPendingApplicationInsteadOfUser(t *testing.T) {
 	}
 }
 
+func TestRegisterAutoApprovesWhenVoceChatDisabled(t *testing.T) {
+	setupUserServiceTestDB(t)
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", filepath.Join(t.TempDir(), "plain-passwords.db"))
+	if err := database.DB.Create(&models.Setting{AllowRegistration: true, AutoApproveRegistration: true}).Error; err != nil {
+		t.Fatalf("create setting: %v", err)
+	}
+	setRegistrationProvisionForTest(t, func(applicationID, username, password string) registrationVoceChatProvisionResult {
+		return registrationVoceChatProvisionResult{
+			Email:      buildVoceChatApplicationEmail(applicationID, vocechat.DefaultEmailDomain),
+			Username:   username,
+			SyncStatus: models.VoceChatSyncStatusNone,
+		}
+	})
+
+	result, err := RegisterWithResult(dto.RegisterDto{Username: "auto_ok", Password: "secret-pass"})
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	if !result.AutoApproved {
+		t.Fatalf("auto approved = false")
+	}
+	if result.Status != models.RegistrationApplicationStatusApproved {
+		t.Fatalf("status = %q", result.Status)
+	}
+	if result.LocalUserID == nil || *result.LocalUserID == 0 {
+		t.Fatalf("local user id missing")
+	}
+
+	user := mustGetUserByUsername(t, "auto_ok")
+	if user.VoceChatSyncStatus != models.VoceChatSyncStatusNone || user.VoceChatUserID != "" || user.VoceChatEmail != "" {
+		t.Fatalf("unexpected vc fields on local user: %#v", user)
+	}
+	application, err := repository.GetRegistrationApplicationByApplicationID(result.ApplicationID)
+	if err != nil {
+		t.Fatalf("get application: %v", err)
+	}
+	if application.Status != models.RegistrationApplicationStatusApproved {
+		t.Fatalf("application status = %q", application.Status)
+	}
+	if application.VoceChatSyncStatus != models.VoceChatSyncStatusNone || application.VoceChatUserID != "" || application.VoceChatEmail != "" || application.VoceChatSyncError != "" {
+		t.Fatalf("unexpected vc fields on application: %#v", application)
+	}
+	if _, err := repository.GetPendingRegistrationApplicationByUsername("auto_ok"); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("pending application lookup err = %v", err)
+	}
+}
+
+func TestRegisterAutoApproveDefersWhenVoceChatUnavailable(t *testing.T) {
+	setupUserServiceTestDB(t)
+	configureVoceChatForTest(t, true, true, false)
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", filepath.Join(t.TempDir(), "plain-passwords.db"))
+	if err := database.DB.Create(&models.Setting{AllowRegistration: true, AutoApproveRegistration: true}).Error; err != nil {
+		t.Fatalf("create setting: %v", err)
+	}
+	setRegistrationProvisionForTest(t, func(applicationID, username, password string) registrationVoceChatProvisionResult {
+		return registrationVoceChatProvisionResult{
+			Email:      buildVoceChatApplicationEmail(applicationID, vocechat.DefaultEmailDomain),
+			Username:   username,
+			SyncStatus: models.VoceChatSyncStatusPending,
+			SyncError:  "vc down",
+		}
+	})
+
+	result, err := RegisterWithResult(dto.RegisterDto{Username: "auto_wait", Password: "secret-pass"})
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	if result.AutoApproved {
+		t.Fatalf("auto approved = true")
+	}
+	if result.Status != models.RegistrationApplicationStatusPending {
+		t.Fatalf("status = %q", result.Status)
+	}
+	if _, err := repository.GetUserByUsername("auto_wait"); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("local user lookup err = %v", err)
+	}
+	application, err := repository.GetPendingRegistrationApplicationByUsername("auto_wait")
+	if err != nil {
+		t.Fatalf("get pending application: %v", err)
+	}
+	if application.VoceChatSyncStatus != models.VoceChatSyncStatusPending {
+		t.Fatalf("vc sync status = %q", application.VoceChatSyncStatus)
+	}
+	if !strings.Contains(application.VoceChatSyncError, "vc down") {
+		t.Fatalf("vc sync error = %q", application.VoceChatSyncError)
+	}
+}
+
 func TestRegisterUsesIncreasingNumericApplicationIDs(t *testing.T) {
 	setupUserServiceTestDB(t)
 	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", filepath.Join(t.TempDir(), "plain-passwords.db"))

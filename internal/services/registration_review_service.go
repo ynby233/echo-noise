@@ -44,6 +44,28 @@ type registrationVoceChatVerifyFunc func(application models.RegistrationApplicat
 var registrationVoceChatDelete = deleteRegistrationUserWithVoceChat
 var registrationVoceChatVerify = verifyRegistrationUserWithVoceChat
 
+var errRegistrationApprovalDeferred = errors.New("registration approval deferred")
+
+type registrationApprovalDeferredError struct {
+	message string
+}
+
+func (e registrationApprovalDeferredError) Error() string {
+	return e.message
+}
+
+func (e registrationApprovalDeferredError) Is(target error) bool {
+	return target == errRegistrationApprovalDeferred
+}
+
+func newRegistrationApprovalDeferredError(message string) error {
+	return registrationApprovalDeferredError{message: message}
+}
+
+func isRegistrationApprovalDeferred(err error) bool {
+	return errors.Is(err, errRegistrationApprovalDeferred)
+}
+
 func ListRegistrationApplications(status string, limit int, offset int) (RegistrationApplicationListResult, error) {
 	applications, total, err := repository.ListRegistrationApplications(status, limit, offset)
 	if err != nil {
@@ -86,23 +108,27 @@ func ApproveRegistrationApplication(id uint, reviewerUserID uint, reviewNote str
 		return nil, errors.New("注册申请明文密码备份不存在，无法通过审核")
 	}
 
-	if err := ensureRegistrationVoceChatUser(application, plainPassword); err != nil {
+	voceChatLinked, err := ensureRegistrationVoceChatUser(application, plainPassword)
+	if err != nil {
 		return nil, err
 	}
 
 	now := time.Now().UTC()
-	linkedAt := now
 	localUser := models.User{
 		Username:           application.Username,
 		Password:           application.PasswordHash,
 		IsAdmin:            false,
 		Token:              models.GenerateToken(32),
-		VoceChatUserID:     strings.TrimSpace(application.VoceChatUserID),
-		VoceChatEmail:      strings.TrimSpace(application.VoceChatEmail),
-		VoceChatUsername:   strings.TrimSpace(application.Username),
-		VoceChatLinkedAt:   &linkedAt,
-		VoceChatSyncStatus: models.VoceChatSyncStatusLinked,
-		VoceChatLastSyncAt: &now,
+		VoceChatSyncStatus: models.VoceChatSyncStatusNone,
+	}
+	if voceChatLinked {
+		linkedAt := now
+		localUser.VoceChatUserID = strings.TrimSpace(application.VoceChatUserID)
+		localUser.VoceChatEmail = strings.TrimSpace(application.VoceChatEmail)
+		localUser.VoceChatUsername = strings.TrimSpace(application.Username)
+		localUser.VoceChatLinkedAt = &linkedAt
+		localUser.VoceChatSyncStatus = models.VoceChatSyncStatusLinked
+		localUser.VoceChatLastSyncAt = &now
 	}
 	reviewerID := reviewerUserID
 	note := strings.TrimSpace(reviewNote)
@@ -113,15 +139,24 @@ func ApproveRegistrationApplication(id uint, reviewerUserID uint, reviewNote str
 			return err
 		}
 		createdUser = localUser
-		if err := plainStore.UpsertUserVoceChatPassword(createdUser.ID, createdUser.Username, plainPassword, createdUser.VoceChatEmail, createdUser.VoceChatUserID); err != nil {
-			return err
+		if voceChatLinked {
+			if err := plainStore.UpsertUserVoceChatPassword(createdUser.ID, createdUser.Username, plainPassword, createdUser.VoceChatEmail, createdUser.VoceChatUserID); err != nil {
+				return err
+			}
+		} else {
+			if err := plainStore.UpsertUserLocalFallbackPassword(createdUser.ID, createdUser.Username, plainPassword, "", ""); err != nil {
+				return err
+			}
 		}
 		application.Status = models.RegistrationApplicationStatusApproved
 		application.LocalUserID = &createdUser.ID
 		application.ReviewerUserID = &reviewerID
 		application.ReviewNote = note
 		application.ReviewedAt = &now
-		application.VoceChatSyncStatus = models.VoceChatSyncStatusLinked
+		application.VoceChatSyncStatus = models.VoceChatSyncStatusNone
+		if voceChatLinked {
+			application.VoceChatSyncStatus = models.VoceChatSyncStatusLinked
+		}
 		application.VoceChatSyncError = ""
 		return tx.Save(application).Error
 	})
@@ -174,14 +209,46 @@ func RejectRegistrationApplication(id uint, reviewerUserID uint, reviewNote stri
 	return nil
 }
 
-func ensureRegistrationVoceChatUser(application *models.RegistrationApplication, password string) error {
+func ensureRegistrationVoceChatUser(application *models.RegistrationApplication, password string) (bool, error) {
+	cfg := currentVoceChatConfig()
+	if !cfg.Enabled {
+		application.VoceChatUserID = ""
+		application.VoceChatEmail = ""
+		application.VoceChatSyncStatus = models.VoceChatSyncStatusNone
+		application.VoceChatSyncError = ""
+		_ = repository.UpdateRegistrationApplicationFields(application.ID, map[string]interface{}{
+			"voce_chat_user_id":     "",
+			"voce_chat_email":       "",
+			"voce_chat_sync_status": models.VoceChatSyncStatusNone,
+			"voce_chat_sync_error":  "",
+		})
+		return false, nil
+	}
+	if !cfg.IsReady() {
+		message := "VoceChat 未配置完成，暂不能通过审核"
+		application.VoceChatSyncStatus = models.VoceChatSyncStatusPending
+		application.VoceChatSyncError = message
+		_ = repository.UpdateRegistrationApplicationFields(application.ID, map[string]interface{}{
+			"voce_chat_sync_status": models.VoceChatSyncStatusPending,
+			"voce_chat_sync_error":  message,
+		})
+		return false, newRegistrationApprovalDeferredError(message)
+	}
+
 	if strings.TrimSpace(application.VoceChatUserID) != "" && application.VoceChatSyncStatus == models.VoceChatSyncStatusCreated {
 		exists, err := registrationVoceChatVerify(*application)
 		if err != nil {
-			return fmt.Errorf("校验 VoceChat 预创建用户失败: %w", err)
+			message := fmt.Sprintf("校验 VoceChat 预创建用户失败: %v", err)
+			application.VoceChatSyncStatus = models.VoceChatSyncStatusPending
+			application.VoceChatSyncError = message
+			_ = repository.UpdateRegistrationApplicationFields(application.ID, map[string]interface{}{
+				"voce_chat_sync_status": models.VoceChatSyncStatusPending,
+				"voce_chat_sync_error":  message,
+			})
+			return false, newRegistrationApprovalDeferredError(message)
 		}
 		if exists {
-			return nil
+			return true, nil
 		}
 		application.VoceChatUserID = ""
 		application.VoceChatSyncStatus = models.VoceChatSyncStatusPending
@@ -208,11 +275,19 @@ func ensureRegistrationVoceChatUser(application *models.RegistrationApplication,
 
 	if strings.TrimSpace(application.VoceChatUserID) == "" || application.VoceChatSyncStatus != models.VoceChatSyncStatusCreated {
 		if application.VoceChatSyncError != "" {
-			return fmt.Errorf("VoceChat 账号未创建成功，暂不能通过审核: %s", application.VoceChatSyncError)
+			return false, newRegistrationApprovalDeferredError(fmt.Sprintf("VoceChat 账号未创建成功，暂不能通过审核: %s", application.VoceChatSyncError))
 		}
-		return errors.New("VoceChat 账号未创建成功，暂不能通过审核")
+		return false, newRegistrationApprovalDeferredError("VoceChat 账号未创建成功，暂不能通过审核")
 	}
-	return nil
+	return true, nil
+}
+
+func currentVoceChatConfig() vocechat.Config {
+	config := models.SiteConfig{}
+	if database.DB != nil {
+		_ = database.DB.First(&config).Error
+	}
+	return vocechat.FromSiteConfig(config)
 }
 
 func verifyRegistrationUserWithVoceChat(application models.RegistrationApplication) (bool, error) {

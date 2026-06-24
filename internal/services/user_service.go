@@ -23,6 +23,13 @@ import (
 
 const maxPendingRegistrationApplications = 5
 
+type RegisterResult struct {
+	ApplicationID string `json:"application_id"`
+	Status        string `json:"status"`
+	AutoApproved  bool   `json:"auto_approved"`
+	LocalUserID   *uint  `json:"local_user_id,omitempty"`
+}
+
 type localLoginResult struct {
 	matched        string
 	usedOverride   bool
@@ -150,53 +157,58 @@ func usernameCaseFoldReserved(username string) (bool, error) {
 }
 
 func Register(userdto dto.RegisterDto) error {
+	_, err := RegisterWithResult(userdto)
+	return err
+}
+
+func RegisterWithResult(userdto dto.RegisterDto) (RegisterResult, error) {
 	username := strings.TrimSpace(userdto.Username)
 	if username == "" || userdto.Password == "" {
-		return errors.New(models.UsernameOrPasswordCannotBeEmptyMessage)
+		return RegisterResult{}, errors.New(models.UsernameOrPasswordCannotBeEmptyMessage)
 	}
 	if err := validateRegistrationUsername(username); err != nil {
-		return err
+		return RegisterResult{}, err
 	}
 
 	exists, err := existingUser(username)
 	if err != nil {
-		return errors.New(models.DatabaseErrorMessage)
+		return RegisterResult{}, errors.New(models.DatabaseErrorMessage)
 	}
 	if exists {
-		return errors.New(models.UsernameAlreadyExistsMessage)
+		return RegisterResult{}, errors.New(models.UsernameAlreadyExistsMessage)
 	}
 
 	hasPending, err := repository.HasPendingRegistrationApplication(username)
 	if err != nil {
-		return errors.New(models.DatabaseErrorMessage)
+		return RegisterResult{}, errors.New(models.DatabaseErrorMessage)
 	}
 	if hasPending {
-		return errors.New("该用户名正在审核中")
+		return RegisterResult{}, errors.New("该用户名正在审核中")
 	}
 
 	caseFoldReserved, err := usernameCaseFoldReserved(username)
 	if err != nil {
-		return errors.New(models.DatabaseErrorMessage)
+		return RegisterResult{}, errors.New(models.DatabaseErrorMessage)
 	}
 	if caseFoldReserved {
-		return errors.New(models.UsernameAlreadyExistsMessage)
+		return RegisterResult{}, errors.New(models.UsernameAlreadyExistsMessage)
 	}
 
 	pendingCount, err := repository.CountPendingRegistrationApplications()
 	if err != nil {
-		return errors.New(models.DatabaseErrorMessage)
+		return RegisterResult{}, errors.New(models.DatabaseErrorMessage)
 	}
 	if pendingCount >= maxPendingRegistrationApplications {
-		return errors.New("当前待审核申请已满，请稍后再试")
+		return RegisterResult{}, errors.New("当前待审核申请已满，请稍后再试")
 	}
 
 	hashed := models.HashPassword(userdto.Password)
 	if hashed == "" {
-		return errors.New("密码加密失败")
+		return RegisterResult{}, errors.New("密码加密失败")
 	}
 	applicationID, err := generateRegistrationApplicationID()
 	if err != nil {
-		return errors.New("创建注册申请失败")
+		return RegisterResult{}, errors.New("创建注册申请失败")
 	}
 
 	provision := registrationVoceChatProvision(applicationID, username, userdto.Password)
@@ -209,7 +221,7 @@ func Register(userdto dto.RegisterDto) error {
 
 	plainStore := vocechat.DefaultPlainPasswordStore()
 	if err := plainStore.UpsertApplicationVoceChatPassword(applicationID, username, userdto.Password, provision.Email, provision.UserID); err != nil {
-		return errors.New("创建注册申请失败")
+		return RegisterResult{}, errors.New("创建注册申请失败")
 	}
 
 	application := models.RegistrationApplication{
@@ -224,10 +236,36 @@ func Register(userdto dto.RegisterDto) error {
 	}
 	if err := repository.CreateRegistrationApplication(&application); err != nil {
 		_ = plainStore.DeleteApplicationPassword(applicationID)
-		return errors.New("创建注册申请失败")
+		return RegisterResult{}, errors.New("创建注册申请失败")
 	}
 
-	return nil
+	result := RegisterResult{ApplicationID: application.ApplicationID, Status: application.Status}
+	if autoApproveRegistrationEnabled() {
+		created, err := ApproveRegistrationApplication(application.ID, 0, "系统自动通过审核")
+		if err != nil {
+			if !isRegistrationApprovalDeferred(err) {
+				return result, err
+			}
+			return result, nil
+		}
+		localUserID := created.ID
+		result.Status = models.RegistrationApplicationStatusApproved
+		result.AutoApproved = true
+		result.LocalUserID = &localUserID
+	}
+
+	return result, nil
+}
+
+func autoApproveRegistrationEnabled() bool {
+	if database.DB == nil {
+		return false
+	}
+	var setting models.Setting
+	if err := database.DB.Table("settings").First(&setting).Error; err != nil {
+		return false
+	}
+	return setting.AutoApproveRegistration
 }
 
 func defaultVoceChatPasswordLogin(ctx context.Context, config vocechat.Config, email, password string) (*vocechat.LoginResponse, error) {

@@ -187,7 +187,8 @@ type UserSession struct {
 
 type Setting struct {
 	gorm.Model
-	AllowRegistration bool `gorm:"default:true"`
+	AllowRegistration       bool `gorm:"default:true"`
+	AutoApproveRegistration bool `gorm:"default:false"`
 }
 
 type SiteConfig struct {
