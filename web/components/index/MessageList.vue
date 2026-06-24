@@ -2858,8 +2858,8 @@ onMounted(() => {
   overflow: visible !important;
 }
 
-.search-results-list > .w-full:first-child > .p-0 > .content-container {
-  margin-top: 0;
+.search-results-panel .search-results-list > :first-child > .p-0 > .content-container.content-container {
+  margin-top: 0 !important;
 }
 
 .search-results-list > .w-full > .p-0 > .content-container {
