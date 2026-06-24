@@ -139,7 +139,7 @@ func TestClientSendMarkdownToUserUsesBotAPIKey(t *testing.T) {
 		if r.Header.Get(apiKeyHeader) != "bot-token" {
 			t.Fatalf("%s = %q, want bot-token", apiKeyHeader, r.Header.Get(apiKeyHeader))
 		}
-		if r.Header.Get("Content-Type") != "text/markdown; charset=utf-8" {
+		if r.Header.Get("Content-Type") != "text/markdown" {
 			t.Fatalf("Content-Type = %q", r.Header.Get("Content-Type"))
 		}
 		body, err := io.ReadAll(r.Body)

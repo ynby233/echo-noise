@@ -222,7 +222,7 @@ func (c *Client) SendMarkdownToUser(ctx context.Context, botAPIKey string, uid s
 		return fmt.Errorf("创建 VoceChat Bot 请求失败: %w", err)
 	}
 	req.Header.Set(apiKeyHeader, botAPIKey)
-	req.Header.Set("Content-Type", "text/markdown; charset=utf-8")
+	req.Header.Set("Content-Type", "text/markdown")
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.httpClient.Do(req)
