@@ -183,8 +183,6 @@ RUN if [ "$USE_UPX" = "1" ]; then \
     fi
 
 # 暴露应用端口
-EXPOSE 1314
-EXPOSE 1315
 
 # 启动后端与 MCP（MCP 后台运行，Go 服务为主进程）
 CMD ["/app/noise"]
@@ -203,14 +201,10 @@ RUN apk update && \
     apk add --no-cache nodejs && \
     rm -rf /var/cache/apk/*
 COPY --from=mcp-build /app/mcp/server.bundle.mjs /app/mcp/server.bundle.mjs
-ENV NOTE_HTTP_PORT=1315
-EXPOSE 1314
-EXPOSE 1315
+
 CMD ["sh","-c","node /app/mcp/server.bundle.mjs & exec /app/noise"]
 
 FROM docker.io/library/node:20-alpine AS mcp-final
 WORKDIR /app/mcp
 COPY --from=mcp-build /app/mcp/server.bundle.mjs /app/mcp/server.bundle.mjs
-ENV NOTE_HTTP_PORT=1315
-EXPOSE 1315
 CMD ["node","/app/mcp/server.bundle.mjs"]
