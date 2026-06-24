@@ -17,6 +17,16 @@ type VideoPlaybackState = {
   updatedAt?: number
 }
 
+type VideoStateSyncOptions = {
+  originVideo?: HTMLVideoElement | null
+  syncTime?: boolean
+}
+
+type VideoSurfaceRegisterOptions = {
+  pauseOtherVideos?: boolean
+  source?: string
+}
+
 const firstFrameCache = new Map<string, Promise<string>>()
 const videoSurfaceRegistry = new Map<string, { videos: Set<HTMLVideoElement>; targets: Set<HTMLElement> }>()
 const VIDEO_PLAYBACK_MEMORY_KEY = 'noise-video-playback-state:v1'
@@ -64,7 +74,7 @@ const getVideoState = (source: string): VideoPlaybackState => {
   return key ? (getPlaybackMemory()[key] || {}) : {}
 }
 
-const updateVideoState = (source: string, patch: VideoPlaybackState) => {
+const updateVideoState = (source: string, patch: VideoPlaybackState, options: VideoStateSyncOptions = {}) => {
   const key = normalizeMediaPreviewUrl(source)
   if (!key) return
   const memory = getPlaybackMemory()
@@ -75,7 +85,7 @@ const updateVideoState = (source: string, patch: VideoPlaybackState) => {
   }
   memory[key] = nextState
   setPlaybackMemory(memory)
-  syncRegisteredVideoSurfaces(key, nextState)
+  syncRegisteredVideoSurfaces(key, nextState, options)
 }
 
 export const clearVideoPlaybackMemory = () => {
@@ -160,7 +170,7 @@ export const captureVideoFirstFrameFromSource = (source: string, timeoutMs = 520
 
   firstFrameCache.set(src, promise)
   promise.then((thumb) => {
-    if (thumb) updateVideoState(src, { firstFrame: thumb })
+    if (thumb) updateVideoState(src, { firstFrame: thumb }, { syncTime: false })
     else firstFrameCache.delete(src)
   }).catch(() => firstFrameCache.delete(src))
   return promise
@@ -188,7 +198,7 @@ const recordVideoProgress = (video: HTMLVideoElement, source = getVideoElementSo
     duration: Number.isFinite(duration) ? duration : 0,
     hasPlayback,
     ...(frame ? { currentFrame: frame } : {})
-  })
+  }, { originVideo: video, syncTime: true })
 }
 
 const applyStoredFrameToVideo = (video: HTMLVideoElement, target: HTMLElement, state: VideoPlaybackState) => {
@@ -241,7 +251,7 @@ const getRegisteredSurfaces = (source: string) => {
   return { src, entry }
 }
 
-const syncRegisteredVideoSurfaces = (source: string, state = getVideoState(source)) => {
+const syncRegisteredVideoSurfaces = (source: string, state = getVideoState(source), options: VideoStateSyncOptions = {}) => {
   const src = normalizeMediaPreviewUrl(source)
   if (!src || typeof document === 'undefined') return
   const entry = videoSurfaceRegistry.get(src)
@@ -251,8 +261,8 @@ const syncRegisteredVideoSurfaces = (source: string, state = getVideoState(sourc
       entry.videos.delete(video)
       return
     }
-    if (isImageSource(frame)) video.setAttribute('poster', frame)
-    syncVideoTimeWhenReady(video, state)
+    if (isImageSource(frame) && (video !== options.originVideo || video.paused)) video.setAttribute('poster', frame)
+    if (options.syncTime && video !== options.originVideo && video.paused) syncVideoTimeWhenReady(video, state)
   })
   entry?.targets.forEach((target) => {
     if (!document.contains(target)) {
@@ -263,7 +273,19 @@ const syncRegisteredVideoSurfaces = (source: string, state = getVideoState(sourc
   })
 }
 
-const registerVideoSurface = (source: string, video: HTMLVideoElement | null, targets: Array<HTMLElement | null | undefined>) => {
+const pauseOtherRegisteredVideos = (source: string, currentVideo: HTMLVideoElement | null) => {
+  const src = normalizeMediaPreviewUrl(source)
+  if (!src) return
+  const entry = videoSurfaceRegistry.get(src)
+  entry?.videos.forEach((video) => {
+    if (!video || video === currentVideo || video.paused) return
+    recordVideoProgress(video, src, true)
+    try { video.pause() } catch {}
+    recordVideoProgress(video, src, true)
+  })
+}
+
+const registerVideoSurface = (source: string, video: HTMLVideoElement | null, targets: Array<HTMLElement | null | undefined>, options: VideoSurfaceRegisterOptions = {}) => {
   const registered = getRegisteredSurfaces(source)
   if (!registered) return
   const { src, entry } = registered
@@ -276,15 +298,18 @@ const registerVideoSurface = (source: string, video: HTMLVideoElement | null, ta
     entry.targets.add(target)
     target.dataset.noiseVideoPlaybackSource = src
   })
-  syncRegisteredVideoSurfaces(src, getVideoState(src))
+  if (options.pauseOtherVideos) pauseOtherRegisteredVideos(src, video)
+  syncRegisteredVideoSurfaces(src, getVideoState(src), { syncTime: true })
 }
 
-const bindVideoPlaybackState = (video: HTMLVideoElement, target: HTMLElement, source: string, extraTargets: HTMLElement[] = []) => {
-  registerVideoSurface(source, video, [target, ...extraTargets])
+const bindVideoPlaybackState = (video: HTMLVideoElement, target: HTMLElement, source: string, extraTargets: HTMLElement[] = [], options: VideoSurfaceRegisterOptions = {}) => {
+  registerVideoSurface(source, video, [target, ...extraTargets], options)
+  video.dataset.noiseVideoPlaybackSource = normalizeMediaPreviewUrl(source)
   if (video.dataset.noiseVideoPlaybackBound === 'true') return
   video.dataset.noiseVideoPlaybackBound = 'true'
-  const record = () => recordVideoProgress(video, source, false)
-  const recordWithFrame = () => recordVideoProgress(video, source, true)
+  const getBoundSource = () => video.dataset.noiseVideoPlaybackSource || source
+  const record = () => recordVideoProgress(video, getBoundSource(), false)
+  const recordWithFrame = () => recordVideoProgress(video, getBoundSource(), true)
   let lastFrameCaptureAt = 0
   const recordThrottledFrame = () => {
     record()
@@ -299,7 +324,7 @@ const bindVideoPlaybackState = (video: HTMLVideoElement, target: HTMLElement, so
   video.addEventListener('seeked', recordWithFrame)
   video.addEventListener('ended', recordWithFrame)
   video.addEventListener('loadedmetadata', () => {
-    const state = getVideoState(source)
+    const state = getVideoState(getBoundSource())
     applyStoredFrameToVideo(video, target, state)
     restoreStoredVideoTime(video, state)
   })
@@ -329,7 +354,7 @@ const applyVideoFrameFallback = (slide: any, video: HTMLVideoElement | null, thu
   }
   const trigger = slide?.triggerEl as HTMLElement | undefined
   ;[trigger, slide?.thumbEl, slide?.el?.querySelector?.('.f-thumbs__slide__img')].forEach((item) => applyFrameToTarget(item as HTMLElement | null | undefined, thumb))
-  if (source) updateVideoState(source, { currentFrame: thumb })
+  if (source) updateVideoState(source, { currentFrame: thumb }, { originVideo: video, syncTime: false })
 }
 
 const getSlideContentElement = (slide: any) => {
@@ -542,17 +567,19 @@ export const prepareFancyboxHtml5VideoSlide = (instance: FancyboxLike) => {
   if (!video) return
   const target = (slide.triggerEl || slide.thumbEl || video) as HTMLElement
   const extraTargets = [slide.thumbEl, slide.el?.querySelector?.('.f-thumbs__slide__img')].filter(Boolean) as HTMLElement[]
-  ensureFancyboxVideoThumbnail(video, target, extraTargets)
+  const source = normalizeMediaPreviewUrl(slide.src || slide.triggerEl?.dataset?.src || getVideoElementSource(video))
+  ensureFancyboxVideoThumbnail(video, target, extraTargets, { source, pauseOtherVideos: true })
+  try { video.pause() } catch {}
 }
 
-export const ensureFancyboxVideoThumbnail = (video: HTMLVideoElement, target: HTMLElement = video, extraTargets: HTMLElement[] = []) => {
-  const src = normalizeMediaPreviewUrl(getVideoElementSource(video))
+export const ensureFancyboxVideoThumbnail = (video: HTMLVideoElement, target: HTMLElement = video, extraTargets: HTMLElement[] = [], options: VideoSurfaceRegisterOptions = {}) => {
+  const src = normalizeMediaPreviewUrl(options.source || getVideoElementSource(video))
   if (!src) return
   const apply = (thumb: string, kind: 'first' | 'current' = 'first') => {
     if (!isImageSource(thumb)) return
     ;[target, ...extraTargets].forEach((item) => applyFrameToTarget(item, thumb))
     video.setAttribute('poster', thumb)
-    updateVideoState(src, kind === 'current' ? { currentFrame: thumb } : { firstFrame: thumb })
+    updateVideoState(src, kind === 'current' ? { currentFrame: thumb } : { firstFrame: thumb }, { originVideo: video, syncTime: false })
   }
   const state = getVideoState(src)
   applyStoredFrameToVideo(video, target, state)
@@ -563,8 +590,8 @@ export const ensureFancyboxVideoThumbnail = (video: HTMLVideoElement, target: HT
     const frame = captureVideoFrame(video)
     if (frame) apply(frame, 'current')
   }
-  bindVideoPlaybackState(video, target, src, extraTargets)
-  if (video.readyState >= 1) restoreStoredVideoTime(video, getVideoState(src))
+  bindVideoPlaybackState(video, target, src, extraTargets, options)
+  if (video.readyState >= 1 && video.paused) restoreStoredVideoTime(video, getVideoState(src))
   if (video.readyState >= 2) refresh()
   if (target.dataset.noiseVideoThumbBound === 'true') return
   target.dataset.noiseVideoThumbBound = 'true'
