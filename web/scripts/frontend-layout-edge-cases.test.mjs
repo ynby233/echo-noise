@@ -287,6 +287,7 @@ assert(
     messageList.includes('.search-results-panel.is-dark .search-results-refresh,\n.search-results-panel.is-dark .search-results-back {') &&
     messageList.includes('--nw-action-bg: rgba(51, 65, 85, .96);') &&
     messageList.includes('.search-results-list > .w-full,') &&
+    messageList.includes('.search-results-list > .w-full:first-child > .p-0 > .content-container {\n  margin-top: 0;\n}') &&
     !messageList.includes('max-width: none !important;') &&
     messageList.includes('overflow: visible !important;') &&
     messageList.includes('.search-results-list > .w-full > .p-0 > .content-container {') &&
