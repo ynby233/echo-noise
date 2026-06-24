@@ -1362,7 +1362,7 @@ const deleteMsg = async (id: number) => {
 
 const initFancybox = () => {
   if (window.Fancybox) {
-    const fancyboxOptions = createMediaFancyboxOptions({ carouselInfinite: false })
+    const fancyboxOptions = createMediaFancyboxOptions({ carouselInfinite: false, video: true })
 
     const mdImages = document.querySelectorAll(".markdown-preview img");
     mdImages.forEach((img) => {

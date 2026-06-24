@@ -32,6 +32,8 @@ const videoSurfaceRegistry = new Map<string, { videos: Set<HTMLVideoElement>; ta
 const VIDEO_PLAYBACK_MEMORY_KEY = 'noise-video-playback-state:v1'
 const PLAYBACK_PROGRESS_THRESHOLD = 0.15
 
+const isApiMediaUrlPath = (pathname: string) => pathname.startsWith('/api/images/') || pathname.startsWith('/api/video/')
+
 const getVideoMemoryKey = (source: string) => {
   const normalized = normalizeMediaPreviewUrl(source)
   if (!normalized || typeof window === 'undefined') return normalized
@@ -43,6 +45,26 @@ const getVideoMemoryKey = (source: string) => {
     return normalized
   }
 }
+
+const getVideoMemoryKeyAliases = (source: string) => {
+  const aliases = new Set<string>()
+  const add = (value: string | null | undefined) => {
+    const clean = String(value || '').trim()
+    if (clean) aliases.add(clean)
+  }
+  add(source)
+  add(normalizeMediaPreviewUrl(source))
+  add(getVideoMemoryKey(source))
+  if (typeof window !== 'undefined') {
+    try {
+      const rawUrl = new URL(String(source || '').trim(), window.location.href)
+      if (isApiMediaUrlPath(rawUrl.pathname)) add(`${rawUrl.pathname}${rawUrl.search}`)
+    } catch {}
+  }
+  return Array.from(aliases)
+}
+
+export const getCanonicalVideoPlaybackKey = (source: string) => getVideoMemoryKey(source)
 
 const validRect = (rect: DOMRect | null | undefined) => !!rect && rect.width > 1 && rect.height > 1
 
@@ -56,7 +78,7 @@ export const normalizeMediaPreviewUrl = (src: string) => {
   if (!value || typeof window === 'undefined') return value
   try {
     const url = new URL(value, window.location.href)
-    const isApiMediaPath = url.pathname.startsWith('/api/images/') || url.pathname.startsWith('/api/video/')
+    const isApiMediaPath = isApiMediaUrlPath(url.pathname)
     if (url.origin !== window.location.origin && isApiMediaPath) {
       return `${window.location.origin}${url.pathname}${url.search}${url.hash}`
     }
@@ -85,26 +107,32 @@ const getVideoState = (source: string): VideoPlaybackState => {
   const key = getVideoMemoryKey(source)
   if (!key) return {}
   const memory = getPlaybackMemory()
-  const legacyKey = normalizeMediaPreviewUrl(source)
-  return memory[key] || (legacyKey && legacyKey !== key ? memory[legacyKey] : undefined) || {}
+  return getVideoMemoryKeyAliases(source)
+    .map((alias) => memory[alias])
+    .filter((state): state is VideoPlaybackState => !!state)
+    .sort((a, b) => Number(a.updatedAt || 0) - Number(b.updatedAt || 0))
+    .reduce<VideoPlaybackState>((merged, state) => ({ ...merged, ...state }), {})
 }
 
 const updateVideoState = (source: string, patch: VideoPlaybackState, options: VideoStateSyncOptions = {}) => {
   const key = getVideoMemoryKey(source)
   if (!key) return
   const memory = getPlaybackMemory()
-  const legacyKey = normalizeMediaPreviewUrl(source)
-  const previous = {
-    ...(legacyKey && legacyKey !== key ? (memory[legacyKey] || {}) : {}),
-    ...(memory[key] || {})
-  }
+  const aliases = getVideoMemoryKeyAliases(source)
+  const previous = aliases
+    .map((alias) => memory[alias])
+    .filter((state): state is VideoPlaybackState => !!state)
+    .sort((a, b) => Number(a.updatedAt || 0) - Number(b.updatedAt || 0))
+    .reduce<VideoPlaybackState>((merged, state) => ({ ...merged, ...state }), {})
   const nextState = {
     ...previous,
     ...patch,
     updatedAt: Date.now()
   }
   memory[key] = nextState
-  if (legacyKey && legacyKey !== key) delete memory[legacyKey]
+  aliases.forEach((alias) => {
+    if (alias !== key) delete memory[alias]
+  })
   setPlaybackMemory(memory)
   syncRegisteredVideoSurfaces(key, nextState, options)
 }
@@ -640,8 +668,14 @@ export const ensureFancyboxVideoThumbnail = (video: HTMLVideoElement, target: HT
   captureVideoFirstFrameFromSource(src).then((thumb) => {
     if (!thumb) return
     const latest = getVideoState(src)
+    if (hasRememberedPlayback(latest)) {
+      const rememberedFrame = getStateFrame(latest)
+      if (isImageSource(rememberedFrame)) {
+        ;[target, ...extraTargets].forEach((item) => applyFrameToTarget(item, rememberedFrame))
+        video.setAttribute('poster', rememberedFrame)
+      }
+      return
+    }
     apply(thumb, 'first')
-    if (hasRememberedPlayback(latest)) applyStoredFrameToVideo(video, target, latest)
   }).catch(() => {})
-  try { video.load?.() } catch {}
 }

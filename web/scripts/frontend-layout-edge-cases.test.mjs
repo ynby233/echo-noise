@@ -32,6 +32,10 @@ const mediaFancybox = read('utils/media-fancybox.ts')
 const userStore = read('store/user.ts')
 const floatingCss = read('assets/css/tailwind.css')
 const backendRouter = read('../internal/routers/routers.go')
+const ensureFancyboxVideoThumbnailBody = fancyboxVideoClose.slice(
+  fancyboxVideoClose.indexOf('export const ensureFancyboxVideoThumbnail'),
+  fancyboxVideoClose.indexOf('export const ensureFancyboxVideoThumbnail') + 4000
+)
 
 assert(
   addForm.includes('.editor-toolbar') &&
@@ -428,7 +432,7 @@ assert(
     markdownRenderer.includes('width: min(300px, 100%) !important;') &&
     markdownRenderer.includes('max-width: 300px;') &&
     markdownRenderer.includes('min-width: min(220px, 100%);') &&
-    messageList.includes('createMediaFancyboxOptions({ carouselInfinite: false })') &&
+    messageList.includes('createMediaFancyboxOptions({ carouselInfinite: false, video: true })') &&
     messageList.includes("import { createMediaFancyboxOptions } from '~/utils/media-fancybox'") &&
     /\bImage:\s*\{/.test(mediaFancybox) &&
     !messageList.includes('window.Fancybox.destroy()') &&
@@ -497,14 +501,18 @@ assert(
     fancyboxVideoClose.includes('const videoSurfaceRegistry = new Map<string, { videos: Set<HTMLVideoElement>; targets: Set<HTMLElement> }>()') &&
     fancyboxVideoClose.includes('const getVideoMemoryKey = (source: string) => {') &&
     fancyboxVideoClose.includes("return `${url.pathname}${url.search}`") &&
-    fancyboxVideoClose.includes('const legacyKey = normalizeMediaPreviewUrl(source)') &&
-    fancyboxVideoClose.includes('if (legacyKey && legacyKey !== key) delete memory[legacyKey]') &&
+    fancyboxVideoClose.includes('const getVideoMemoryKeyAliases = (source: string) => {') &&
+    fancyboxVideoClose.includes('export const getCanonicalVideoPlaybackKey = (source: string) => getVideoMemoryKey(source)') &&
+    fancyboxVideoClose.includes('if (isApiMediaUrlPath(rawUrl.pathname)) add(`${rawUrl.pathname}${rawUrl.search}`)') &&
+    fancyboxVideoClose.includes('aliases.forEach((alias) => {') &&
+    fancyboxVideoClose.includes('if (alias !== key) delete memory[alias]') &&
     fancyboxVideoClose.includes('syncRegisteredVideoSurfaces(key, nextState, options)') &&
     fancyboxVideoClose.includes('const hasPlayback = currentTime > PLAYBACK_PROGRESS_THRESHOLD || !video.paused') &&
     fancyboxVideoClose.includes('const frame = captureFrame && hasPlayback ? captureVideoFrame(video) : \'\'') &&
     fancyboxVideoClose.includes('export const clearVideoPlaybackMemory') &&
     fancyboxVideoClose.includes('videoSurfaceRegistry.clear()') &&
     fancyboxVideoClose.includes('updateVideoState(src, { firstFrame: thumb }, { syncTime: false })') &&
+    !ensureFancyboxVideoThumbnailBody.includes('try { video.load?.() } catch {}') &&
     fancyboxVideoClose.includes('const getStateFrame = (state: VideoPlaybackState) => {') &&
     fancyboxVideoClose.includes('type VideoStateSyncOptions = {') &&
     fancyboxVideoClose.includes('originVideo?: HTMLVideoElement | null') &&
@@ -532,6 +540,8 @@ assert(
     fancyboxVideoClose.includes('ensureFancyboxVideoThumbnail(video, target, extraTargets, { source, pauseOtherVideos: true })') &&
     fancyboxVideoClose.includes('if (video.readyState >= 1 && video.paused) restoreStoredVideoTime(video, getVideoState(src))') &&
     fancyboxVideoClose.includes('captureVideoFirstFrameFromSource(src).then((thumb) => {') &&
+    fancyboxVideoClose.includes('if (hasRememberedPlayback(latest)) {') &&
+    fancyboxVideoClose.includes('const rememberedFrame = getStateFrame(latest)') &&
     fancyboxVideoClose.includes('}, source ? 5600 : 1800)') &&
     fancyboxVideoClose.includes('if (source) recordVideoProgress(video, source, true)') &&
     fancyboxVideoClose.includes('finishWithBestFrame()') &&
@@ -540,7 +550,7 @@ assert(
     fancyboxVideoClose.includes('closeWithoutFrame') &&
     vditorEditor.includes("root.querySelectorAll<HTMLVideoElement>('.noise-attachment-render--video video')") &&
     vditorEditor.includes('ensureFancyboxVideoThumbnail(video)') &&
-    fancyboxVideoClose.includes("url.pathname.startsWith('/api/video/')") &&
+    fancyboxVideoClose.includes("const isApiMediaUrlPath = (pathname: string) => pathname.startsWith('/api/images/') || pathname.startsWith('/api/video/')") &&
     fancyboxVideoClose.includes('slide.type !== \'html5video\'') &&
     fancyboxVideoClose.includes('if (root instanceof HTMLVideoElement) return root') &&
     fancyboxVideoClose.includes('captureVideoFrame(video)') &&
@@ -581,6 +591,7 @@ assert(
     mediaFancybox.includes('reveal: composeHandlers(tooltipHandler, videoSlideHandler, on.reveal)') &&
     mediaFancybox.includes('done: composeHandlers(tooltipHandler, videoSlideHandler, on.done)') &&
     mediaFancybox.includes("'Carousel.change': composeHandlers(tooltipHandler, videoSlideHandler, on['Carousel.change'])") &&
+    messageList.includes('createMediaFancyboxOptions({ carouselInfinite: false, video: true })') &&
     userStore.includes('import { clearVideoPlaybackMemory } from "~/utils/fancybox-video-close"') &&
     userStore.includes('const clearUserStatus = (options: { clearVideoPlayback?: boolean } = {}) => {') &&
     userStore.includes('if (options.clearVideoPlayback) clearVideoPlaybackMemory();') &&
