@@ -106,6 +106,7 @@ assert(
 
 assert(
   notificationCenter.includes('class="notification-refresh-button nw-action-btn nw-tooltip-anchor"') &&
+  notificationCenter.includes('class="w-4 h-4" :class="{ \'animate-spin\': loading }"') &&
   notificationCenter.includes('class="notification-text-button nw-action-btn nw-action-btn--label" :disabled="markingAll || unreadCount === 0"') &&
   notificationCenter.includes('class="reply-toggle nw-action-btn nw-action-btn--label"') &&
   notificationCenter.includes('.notification-refresh-button,\n.notification-text-button,\n.reply-toggle {') &&
@@ -230,7 +231,7 @@ assert(
     !messageList.includes('padding: 20px;') &&
     !messageList.includes('--search-panel-frame-line') &&
     !messageList.includes('.search-results-panel::before {') &&
-    messageList.includes('right: 17px;') &&
+    messageList.includes('right: 0;') &&
     messageList.includes('height: 28px;') &&
     messageList.includes('padding: 0 8px;') &&
     messageList.includes('font-size: 12px;') &&

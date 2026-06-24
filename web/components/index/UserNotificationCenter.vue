@@ -7,7 +7,7 @@
           <div v-if="user.isLogin" class="notification-actions">
             <span v-if="unreadCount > 0" class="unread-pill">{{ unreadCount }} 未读</span>
             <button type="button" class="notification-refresh-button nw-action-btn nw-tooltip-anchor" data-tooltip="刷新" aria-label="刷新" :disabled="loading" @click="loadNotifications(true)">
-              <UIcon name="i-mdi-refresh" class="w-4 h-4" />
+              <UIcon name="i-mdi-refresh" class="w-4 h-4" :class="{ 'animate-spin': loading }" />
             </button>
             <button type="button" class="notification-text-button nw-action-btn nw-action-btn--label" :disabled="markingAll || unreadCount === 0" @click="markAllRead">全部已读</button>
           </div>
