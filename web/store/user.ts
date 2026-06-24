@@ -33,12 +33,12 @@ export const useUserStore = defineStore("userStore", () => {
     }
 
     // 清除用户状态
-    const clearUserStatus = () => {
+    const clearUserStatus = (options: { clearVideoPlayback?: boolean } = {}) => {
         status.value = null;
         user.value = null;
         isLogin.value = false;
         token.value = "";
-        clearVideoPlaybackMemory();
+        if (options.clearVideoPlayback) clearVideoPlaybackMemory();
     }
 
     // 注册
@@ -174,7 +174,7 @@ export const useUserStore = defineStore("userStore", () => {
             credentials: 'include'
         });
         
-        clearUserStatus();
+        clearUserStatus({ clearVideoPlayback: true });
         return true;
     }
 

@@ -32,6 +32,18 @@ const videoSurfaceRegistry = new Map<string, { videos: Set<HTMLVideoElement>; ta
 const VIDEO_PLAYBACK_MEMORY_KEY = 'noise-video-playback-state:v1'
 const PLAYBACK_PROGRESS_THRESHOLD = 0.15
 
+const getVideoMemoryKey = (source: string) => {
+  const normalized = normalizeMediaPreviewUrl(source)
+  if (!normalized || typeof window === 'undefined') return normalized
+  try {
+    const url = new URL(normalized, window.location.href)
+    if (url.origin === window.location.origin) return `${url.pathname}${url.search}`
+    return url.href
+  } catch {
+    return normalized
+  }
+}
+
 const validRect = (rect: DOMRect | null | undefined) => !!rect && rect.width > 1 && rect.height > 1
 
 const isImageSource = (src: string | null | undefined) => {
@@ -70,20 +82,29 @@ const setPlaybackMemory = (memory: Record<string, VideoPlaybackState>) => {
 }
 
 const getVideoState = (source: string): VideoPlaybackState => {
-  const key = normalizeMediaPreviewUrl(source)
-  return key ? (getPlaybackMemory()[key] || {}) : {}
+  const key = getVideoMemoryKey(source)
+  if (!key) return {}
+  const memory = getPlaybackMemory()
+  const legacyKey = normalizeMediaPreviewUrl(source)
+  return memory[key] || (legacyKey && legacyKey !== key ? memory[legacyKey] : undefined) || {}
 }
 
 const updateVideoState = (source: string, patch: VideoPlaybackState, options: VideoStateSyncOptions = {}) => {
-  const key = normalizeMediaPreviewUrl(source)
+  const key = getVideoMemoryKey(source)
   if (!key) return
   const memory = getPlaybackMemory()
+  const legacyKey = normalizeMediaPreviewUrl(source)
+  const previous = {
+    ...(legacyKey && legacyKey !== key ? (memory[legacyKey] || {}) : {}),
+    ...(memory[key] || {})
+  }
   const nextState = {
-    ...(memory[key] || {}),
+    ...previous,
     ...patch,
     updatedAt: Date.now()
   }
   memory[key] = nextState
+  if (legacyKey && legacyKey !== key) delete memory[legacyKey]
   setPlaybackMemory(memory)
   syncRegisteredVideoSurfaces(key, nextState, options)
 }
@@ -223,6 +244,8 @@ const getStateFrame = (state: VideoPlaybackState) => {
   return hasRememberedPlayback(state) ? (state.currentFrame || state.firstFrame || '') : (state.firstFrame || '')
 }
 
+export const getVideoPlaybackFrameForSource = (source: string) => getStateFrame(getVideoState(source))
+
 const applyFrameToTarget = (target: HTMLElement | null | undefined, thumb: string) => {
   if (!target || !isImageSource(thumb)) return
   target.dataset.thumbSrc = thumb
@@ -237,11 +260,11 @@ const syncVideoTimeWhenReady = (video: HTMLVideoElement, state: VideoPlaybackSta
     restoreStoredVideoTime(video, state)
     return
   }
-  video.addEventListener('loadedmetadata', () => restoreStoredVideoTime(video, getVideoState(getVideoElementSource(video))), { once: true })
+  video.addEventListener('loadedmetadata', () => restoreStoredVideoTime(video, getVideoState(video.dataset.noiseVideoPlaybackSource || getVideoElementSource(video))), { once: true })
 }
 
 const getRegisteredSurfaces = (source: string) => {
-  const src = normalizeMediaPreviewUrl(source)
+  const src = getVideoMemoryKey(source)
   if (!src) return null
   let entry = videoSurfaceRegistry.get(src)
   if (!entry) {
@@ -252,7 +275,7 @@ const getRegisteredSurfaces = (source: string) => {
 }
 
 const syncRegisteredVideoSurfaces = (source: string, state = getVideoState(source), options: VideoStateSyncOptions = {}) => {
-  const src = normalizeMediaPreviewUrl(source)
+  const src = getVideoMemoryKey(source)
   if (!src || typeof document === 'undefined') return
   const entry = videoSurfaceRegistry.get(src)
   const frame = getStateFrame(state)
@@ -274,7 +297,7 @@ const syncRegisteredVideoSurfaces = (source: string, state = getVideoState(sourc
 }
 
 const pauseOtherRegisteredVideos = (source: string, currentVideo: HTMLVideoElement | null) => {
-  const src = normalizeMediaPreviewUrl(source)
+  const src = getVideoMemoryKey(source)
   if (!src) return
   const entry = videoSurfaceRegistry.get(src)
   entry?.videos.forEach((video) => {
@@ -304,7 +327,7 @@ const registerVideoSurface = (source: string, video: HTMLVideoElement | null, ta
 
 const bindVideoPlaybackState = (video: HTMLVideoElement, target: HTMLElement, source: string, extraTargets: HTMLElement[] = [], options: VideoSurfaceRegisterOptions = {}) => {
   registerVideoSurface(source, video, [target, ...extraTargets], options)
-  video.dataset.noiseVideoPlaybackSource = normalizeMediaPreviewUrl(source)
+  video.dataset.noiseVideoPlaybackSource = getVideoMemoryKey(source) || source
   if (video.dataset.noiseVideoPlaybackBound === 'true') return
   video.dataset.noiseVideoPlaybackBound = 'true'
   const getBoundSource = () => video.dataset.noiseVideoPlaybackSource || source
@@ -460,16 +483,31 @@ const waitForVideoFrameThenClose = (instance: FancyboxLike, slide: any, video: H
   const onReady = () => {
     if (!hasLivePlayback(video) && !hasRememberedPlayback(getVideoState(source))) return
     const thumb = captureVideoFrame(video)
-    if (thumb) finish(thumb)
+    if (thumb) {
+      if (source) recordVideoProgress(video, source, true)
+      finish(thumb)
+    }
+  }
+  const finishWithBestFrame = (fallback = '') => {
+    const frame = getVideoCloseFrame(slide, video, source)
+    finish(frame || fallback)
   }
   const timer = window.setTimeout(() => {
-    finish(getVideoCloseFrame(slide, video, source))
+    finishWithBestFrame()
   }, source ? 5600 : 1800)
   video.addEventListener('loadeddata', onReady)
   video.addEventListener('canplay', onReady)
   video.addEventListener('seeked', onReady)
-  if (source) captureVideoFirstFrameFromSource(source).then(finish).catch(() => finish(getVideoCloseFrame(slide, video, source)))
-  try { video.load?.() } catch {}
+  if (source) {
+    captureVideoFirstFrameFromSource(source)
+      .then((thumb) => {
+        if (!hasLivePlayback(video) && !hasRememberedPlayback(getVideoState(source))) finish(thumb)
+      })
+      .catch(() => finishWithBestFrame())
+  }
+  if (video.readyState < 1 && !hasRememberedPlayback(getVideoState(source))) {
+    try { video.load?.() } catch {}
+  }
   onReady()
 }
 

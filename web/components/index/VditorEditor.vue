@@ -83,7 +83,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from "vue";
 import { positionFloatingMenu, scheduleFloatingMenuPosition } from '~/utils/floating-menu'
-import { captureVideoFirstFrameFromSource, ensureFancyboxVideoThumbnail, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
+import { captureVideoFirstFrameFromSource, ensureFancyboxVideoThumbnail, getVideoPlaybackFrameForSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import Vditor from "vditor";
 import { Fancybox } from "@fancyapps/ui";
@@ -318,7 +318,7 @@ const showAttachmentGallery = async (items: EditorAttachmentInfo[], current: Edi
   const galleryItems = sameType.length ? sameType : [current]
   const startIndex = Math.max(0, galleryItems.findIndex((item) => item.url === current.url && item.name === current.name))
   const thumbs = current.type === 'video'
-    ? await Promise.all(galleryItems.map((item) => getVideoFirstFrameThumbnail(item.url)))
+    ? await Promise.all(galleryItems.map(async (item) => getVideoPlaybackFrameForSource(item.url) || await getVideoFirstFrameThumbnail(item.url)))
     : galleryItems.map((item) => item.url)
   const group = `editor-attachment-${Date.now()}-${Math.random().toString(36).slice(2)}`
   const sourceEl = triggerEl || null

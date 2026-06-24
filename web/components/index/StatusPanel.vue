@@ -4518,11 +4518,11 @@ const handleLogout = async () => {
         if (!response.ok || data.code !== 1) {
             throw new Error(data?.msg || '退出失败')
         }
-        userStore.clearUserStatus()
+        userStore.clearUserStatus({ clearVideoPlayback: true })
         useToast().add({ title: '成功', description: '已退出登录', color: 'green' })
         router.push('/')
     } catch (error: any) {
-        userStore.clearUserStatus()
+        userStore.clearUserStatus({ clearVideoPlayback: true })
         useToast().add({ title: '成功', description: '已退出登录', color: 'green' })
         router.push('/')
     }

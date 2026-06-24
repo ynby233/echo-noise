@@ -24,6 +24,7 @@ const homePage = read('pages/index.vue')
 const builtinComments = read('components/comments/BuiltinComments.vue')
 const infoFeedList = read('components/index/InfoFeedList.vue')
 const markdownRenderer = read('components/index/MarkdownRenderer.vue')
+const statusPanel = read('components/index/StatusPanel.vue')
 const calendarWidget = read('components/widgets/CalendarWidget.vue')
 const mediaUpload = read('utils/media-upload.ts')
 const fancyboxVideoClose = read('utils/fancybox-video-close.ts')
@@ -494,6 +495,10 @@ assert(
     fancyboxVideoClose.includes('const firstFrameCache = new Map<string, Promise<string>>()') &&
     fancyboxVideoClose.includes('VIDEO_PLAYBACK_MEMORY_KEY') &&
     fancyboxVideoClose.includes('const videoSurfaceRegistry = new Map<string, { videos: Set<HTMLVideoElement>; targets: Set<HTMLElement> }>()') &&
+    fancyboxVideoClose.includes('const getVideoMemoryKey = (source: string) => {') &&
+    fancyboxVideoClose.includes("return `${url.pathname}${url.search}`") &&
+    fancyboxVideoClose.includes('const legacyKey = normalizeMediaPreviewUrl(source)') &&
+    fancyboxVideoClose.includes('if (legacyKey && legacyKey !== key) delete memory[legacyKey]') &&
     fancyboxVideoClose.includes('syncRegisteredVideoSurfaces(key, nextState, options)') &&
     fancyboxVideoClose.includes('const hasPlayback = currentTime > PLAYBACK_PROGRESS_THRESHOLD || !video.paused') &&
     fancyboxVideoClose.includes('const frame = captureFrame && hasPlayback ? captureVideoFrame(video) : \'\'') &&
@@ -511,7 +516,7 @@ assert(
     fancyboxVideoClose.includes('const registerVideoSurface = (source: string, video: HTMLVideoElement | null, targets: Array<HTMLElement | null | undefined>, options: VideoSurfaceRegisterOptions = {}) => {') &&
     fancyboxVideoClose.includes('const bindVideoPlaybackState = (video: HTMLVideoElement, target: HTMLElement, source: string, extraTargets: HTMLElement[] = [], options: VideoSurfaceRegisterOptions = {}) => {') &&
     fancyboxVideoClose.includes('registerVideoSurface(source, video, [target, ...extraTargets], options)') &&
-    fancyboxVideoClose.includes('video.dataset.noiseVideoPlaybackSource = normalizeMediaPreviewUrl(source)') &&
+    fancyboxVideoClose.includes('video.dataset.noiseVideoPlaybackSource = getVideoMemoryKey(source) || source') &&
     fancyboxVideoClose.includes('const getBoundSource = () => video.dataset.noiseVideoPlaybackSource || source') &&
     fancyboxVideoClose.includes('const state = getVideoState(getBoundSource())') &&
     fancyboxVideoClose.includes('applyFrameToTarget(target, frame)') &&
@@ -528,7 +533,10 @@ assert(
     fancyboxVideoClose.includes('if (video.readyState >= 1 && video.paused) restoreStoredVideoTime(video, getVideoState(src))') &&
     fancyboxVideoClose.includes('captureVideoFirstFrameFromSource(src).then((thumb) => {') &&
     fancyboxVideoClose.includes('}, source ? 5600 : 1800)') &&
-    fancyboxVideoClose.includes('captureVideoFirstFrameFromSource(source).then(finish).catch(() => finish(getVideoCloseFrame(slide, video, source)))') &&
+    fancyboxVideoClose.includes('if (source) recordVideoProgress(video, source, true)') &&
+    fancyboxVideoClose.includes('finishWithBestFrame()') &&
+    fancyboxVideoClose.includes('if (!hasLivePlayback(video) && !hasRememberedPlayback(getVideoState(source))) finish(thumb)') &&
+    fancyboxVideoClose.includes('if (video.readyState < 1 && !hasRememberedPlayback(getVideoState(source)))') &&
     fancyboxVideoClose.includes('closeWithoutFrame') &&
     vditorEditor.includes("root.querySelectorAll<HTMLVideoElement>('.noise-attachment-render--video video')") &&
     vditorEditor.includes('ensureFancyboxVideoThumbnail(video)') &&
@@ -574,7 +582,10 @@ assert(
     mediaFancybox.includes('done: composeHandlers(tooltipHandler, videoSlideHandler, on.done)') &&
     mediaFancybox.includes("'Carousel.change': composeHandlers(tooltipHandler, videoSlideHandler, on['Carousel.change'])") &&
     userStore.includes('import { clearVideoPlaybackMemory } from "~/utils/fancybox-video-close"') &&
-    userStore.includes('clearVideoPlaybackMemory();') &&
+    userStore.includes('const clearUserStatus = (options: { clearVideoPlayback?: boolean } = {}) => {') &&
+    userStore.includes('if (options.clearVideoPlayback) clearVideoPlaybackMemory();') &&
+    userStore.includes('clearUserStatus({ clearVideoPlayback: true });') &&
+    statusPanel.includes('userStore.clearUserStatus({ clearVideoPlayback: true })') &&
     !markdownRenderer.includes("video.dataset.type = 'video'") &&
     homePage.includes("Fancybox?.bind?.('[data-fancybox]', createMediaFancyboxOptions() as any)") &&
     homePage.includes("import { createMediaFancyboxOptions } from '~/utils/media-fancybox'") &&
