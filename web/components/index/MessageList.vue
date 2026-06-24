@@ -28,10 +28,22 @@
               <div class="search-results-title">搜索</div>
               <div class="search-results-summary">搜索内容：{{ activeFilterContent }}</div>
             </div>
-            <button type="button" class="search-results-back nw-action-btn nw-action-btn--label" @click="resetList">
-              <UIcon name="i-heroicons-x-mark" class="w-4 h-4" />
-              <span>返回完整列表</span>
-            </button>
+            <div class="search-results-actions">
+              <button
+                type="button"
+                class="search-results-refresh nw-action-btn nw-tooltip-anchor"
+                data-tooltip="刷新"
+                aria-label="刷新"
+                :disabled="searchResultsRefreshing || isPageLoading || isDisplayQueryPending"
+                @click="refreshSearchResults"
+              >
+                <UIcon name="i-mdi-refresh" class="w-4 h-4" :class="{ 'animate-spin': searchResultsRefreshing }" />
+              </button>
+              <button type="button" class="search-results-back nw-action-btn nw-action-btn--label" @click="resetList">
+                <UIcon name="i-heroicons-x-mark" class="w-4 h-4" />
+                <span>返回完整列表</span>
+              </button>
+            </div>
           </div>
           <div v-if="props.pageReady && hasActiveFilters && !isPageLoading && !isDisplayQueryPending && displayMessages.length" class="search-results-count">笔记 ({{ filteredResultCount }})</div>
           <div v-if="props.pageReady && hasActiveFilters && (isPageLoading || isDisplayQueryPending || !displayMessages.length)" class="search-results-empty">
@@ -2540,6 +2552,18 @@ const stableDisplayMessages = ref<any[]>([])
 const stableDisplayQueryKey = ref('')
 const currentDisplayQueryKey = computed(() => message.listQueryKey(pageQueryFor(1)))
 const isDisplayQueryPending = computed(() => Boolean(message.currentListQueryKey && message.currentListQueryKey !== currentDisplayQueryKey.value))
+const searchResultsRefreshing = ref(false)
+const refreshSearchResults = async () => {
+  if (searchResultsRefreshing.value || isPageLoading.value || isDisplayQueryPending.value) return
+  searchResultsRefreshing.value = true
+  try {
+    await refreshList()
+  } finally {
+    window.setTimeout(() => {
+      searchResultsRefreshing.value = false
+    }, 300)
+  }
+}
 const buildDisplayMessages = () => {
   const filterPersonal = (items: any[]) => isPersonalTab.value ? items.filter(isCurrentUserMessage) : items
   const base = (message.messages || []).filter((m: any) => !isGuestbookMessage(m));
@@ -2747,10 +2771,17 @@ onMounted(() => {
   overflow-wrap: anywhere;
 }
 
-.search-results-back {
+.search-results-actions {
   position: absolute;
   top: 0;
   right: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-results-refresh,
+.search-results-back {
   min-width: max-content;
   height: 28px;
   min-height: 28px;
@@ -2764,6 +2795,13 @@ onMounted(() => {
   --nw-action-border: rgba(15, 23, 42, .10);
 }
 
+.search-results-refresh {
+  width: 28px;
+  min-width: 28px;
+  padding: 0;
+}
+
+.search-results-panel.is-dark .search-results-refresh,
 .search-results-panel.is-dark .search-results-back {
   --nw-action-bg: rgba(51, 65, 85, .96);
   --nw-action-text: #cbd5e1;
@@ -2849,7 +2887,7 @@ onMounted(() => {
     margin-bottom: 14px;
   }
 
-  .search-results-back {
+  .search-results-actions {
     position: static;
     align-self: center;
   }

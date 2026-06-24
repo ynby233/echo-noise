@@ -177,6 +177,15 @@ assert(
 assert(
   messageList.includes('class="search-results-title">搜索</div>') &&
     messageList.includes('搜索内容：{{ activeFilterContent }}') &&
+    messageList.includes('class="search-results-actions"') &&
+    messageList.includes('class="search-results-refresh nw-action-btn nw-tooltip-anchor"') &&
+    messageList.includes('data-tooltip="刷新"') &&
+    messageList.includes(':disabled="searchResultsRefreshing || isPageLoading || isDisplayQueryPending"') &&
+    messageList.includes('name="i-mdi-refresh" class="w-4 h-4" :class="{ \'animate-spin\': searchResultsRefreshing }"') &&
+    messageList.includes('@click="refreshSearchResults"') &&
+    messageList.includes('const searchResultsRefreshing = ref(false)') &&
+    messageList.includes('const refreshSearchResults = async () => {') &&
+    messageList.includes('window.setTimeout(() => {\n      searchResultsRefreshing.value = false\n    }, 300)') &&
     messageList.includes('class="search-results-back nw-action-btn nw-action-btn--label"') &&
     messageList.includes('>笔记 ({{ filteredResultCount }})</div>') &&
     messageList.includes('v-if="props.pageReady && hasActiveFilters && !isPageLoading && !isDisplayQueryPending && displayMessages.length" class="search-results-count"') &&
@@ -231,12 +240,17 @@ assert(
     !messageList.includes('padding: 20px;') &&
     !messageList.includes('--search-panel-frame-line') &&
     !messageList.includes('.search-results-panel::before {') &&
+    messageList.includes('.search-results-actions {') &&
     messageList.includes('right: 0;') &&
+    messageList.includes('gap: 8px;') &&
+    messageList.includes('.search-results-refresh,\n.search-results-back {') &&
     messageList.includes('height: 28px;') &&
     messageList.includes('padding: 0 8px;') &&
     messageList.includes('font-size: 12px;') &&
     messageList.includes('font-weight: 650;') &&
-    messageList.includes('.search-results-panel.is-dark .search-results-back {') &&
+    messageList.includes('.search-results-refresh {') &&
+    messageList.includes('width: 28px;') &&
+    messageList.includes('.search-results-panel.is-dark .search-results-refresh,\n.search-results-panel.is-dark .search-results-back {') &&
     messageList.includes('--nw-action-bg: rgba(51, 65, 85, .96);') &&
     messageList.includes('.search-results-list > .w-full,') &&
     !messageList.includes('max-width: none !important;') &&
