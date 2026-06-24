@@ -36,6 +36,10 @@ const ensureFancyboxVideoThumbnailBody = fancyboxVideoClose.slice(
   fancyboxVideoClose.indexOf('export const ensureFancyboxVideoThumbnail'),
   fancyboxVideoClose.indexOf('export const ensureFancyboxVideoThumbnail') + 4000
 )
+const prepareFancyboxVideoSlideBody = fancyboxVideoClose.slice(
+  fancyboxVideoClose.indexOf('export const prepareFancyboxHtml5VideoSlide'),
+  fancyboxVideoClose.indexOf('export const ensureFancyboxVideoThumbnail')
+)
 
 assert(
   addForm.includes('.editor-toolbar') &&
@@ -507,12 +511,19 @@ assert(
     fancyboxVideoClose.includes('aliases.forEach((alias) => {') &&
     fancyboxVideoClose.includes('if (alias !== key) delete memory[alias]') &&
     fancyboxVideoClose.includes('syncRegisteredVideoSurfaces(key, nextState, options)') &&
+    fancyboxVideoClose.includes('allowStartReset?: boolean') &&
+    fancyboxVideoClose.includes('const shouldPreserveRememberedProgress = !options.allowStartReset') &&
+    !fancyboxVideoClose.includes('!isImageSource(patch.currentFrame)') &&
     fancyboxVideoClose.includes('const hasPlayback = currentTime > PLAYBACK_PROGRESS_THRESHOLD || !video.paused') &&
     fancyboxVideoClose.includes('const frame = captureFrame && hasPlayback ? captureVideoFrame(video) : \'\'') &&
     fancyboxVideoClose.includes('export const clearVideoPlaybackMemory') &&
     fancyboxVideoClose.includes('videoSurfaceRegistry.clear()') &&
+    fancyboxVideoClose.includes('const persistRegisteredVideoPlayback = () => {') &&
+    fancyboxVideoClose.includes("window.addEventListener('pagehide', persistRegisteredVideoPlayback)") &&
+    fancyboxVideoClose.includes("document.visibilityState === 'hidden'") &&
     fancyboxVideoClose.includes('updateVideoState(src, { firstFrame: thumb }, { syncTime: false })') &&
     !ensureFancyboxVideoThumbnailBody.includes('try { video.load?.() } catch {}') &&
+    !prepareFancyboxVideoSlideBody.includes('try { video.pause() } catch {}') &&
     fancyboxVideoClose.includes('const getStateFrame = (state: VideoPlaybackState) => {') &&
     fancyboxVideoClose.includes('type VideoStateSyncOptions = {') &&
     fancyboxVideoClose.includes('originVideo?: HTMLVideoElement | null') &&
@@ -526,19 +537,23 @@ assert(
     fancyboxVideoClose.includes('registerVideoSurface(source, video, [target, ...extraTargets], options)') &&
     fancyboxVideoClose.includes('video.dataset.noiseVideoPlaybackSource = getVideoMemoryKey(source) || source') &&
     fancyboxVideoClose.includes('const getBoundSource = () => video.dataset.noiseVideoPlaybackSource || source') &&
-    fancyboxVideoClose.includes('const state = getVideoState(getBoundSource())') &&
+    fancyboxVideoClose.includes('const recordResettableFrame = () => recordVideoProgress(video, getBoundSource(), true, true)') &&
+    fancyboxVideoClose.includes('syncVideoTimeWhenReady(video, state, getBoundSource())') &&
     fancyboxVideoClose.includes('applyFrameToTarget(target, frame)') &&
     fancyboxVideoClose.includes('video !== options.originVideo && video.paused') &&
-    fancyboxVideoClose.includes('syncVideoTimeWhenReady(video, state)') &&
+    fancyboxVideoClose.includes('syncVideoTimeWhenReady(video, state, src)') &&
     !fancyboxVideoClose.includes('if (isImageSource(frame)) video.setAttribute(\'poster\', frame)\n    syncVideoTimeWhenReady(video, state)') &&
     fancyboxVideoClose.includes('const getVideoCloseFrame = (slide: any, video: HTMLVideoElement | null, source: string)') &&
     fancyboxVideoClose.includes('if (!hasLivePlayback(video) && !hasRememberedPlayback(getVideoState(source))) return') &&
     fancyboxVideoClose.includes('return state.firstFrame || getSlideImageFallback(slide, video)') &&
+    fancyboxVideoClose.includes('const persistSlideVideoProgress = (slide: any, video: HTMLVideoElement | null') &&
+    fancyboxVideoClose.includes('persistSlideVideoProgress(slide, video, source, true)') &&
     fancyboxVideoClose.includes('bindVideoPlaybackState(video, target, src, extraTargets, options)') &&
     fancyboxVideoClose.includes('const extraTargets = [slide.thumbEl, slide.el?.querySelector?.(\'.f-thumbs__slide__img\')].filter(Boolean) as HTMLElement[]') &&
     fancyboxVideoClose.includes('const source = normalizeMediaPreviewUrl(slide.src || slide.triggerEl?.dataset?.src || getVideoElementSource(video))') &&
     fancyboxVideoClose.includes('ensureFancyboxVideoThumbnail(video, target, extraTargets, { source, pauseOtherVideos: true })') &&
-    fancyboxVideoClose.includes('if (video.readyState >= 1 && video.paused) restoreStoredVideoTime(video, getVideoState(src))') &&
+    fancyboxVideoClose.includes('syncVideoTimeWhenReady(video, getVideoState(source), source)') &&
+    fancyboxVideoClose.includes('syncVideoTimeWhenReady(video, getVideoState(src), src)') &&
     fancyboxVideoClose.includes('captureVideoFirstFrameFromSource(src).then((thumb) => {') &&
     fancyboxVideoClose.includes('if (hasRememberedPlayback(latest)) {') &&
     fancyboxVideoClose.includes('const rememberedFrame = getStateFrame(latest)') &&

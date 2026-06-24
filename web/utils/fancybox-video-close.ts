@@ -20,6 +20,7 @@ type VideoPlaybackState = {
 type VideoStateSyncOptions = {
   originVideo?: HTMLVideoElement | null
   syncTime?: boolean
+  allowStartReset?: boolean
 }
 
 type VideoSurfaceRegisterOptions = {
@@ -124,9 +125,26 @@ const updateVideoState = (source: string, patch: VideoPlaybackState, options: Vi
     .filter((state): state is VideoPlaybackState => !!state)
     .sort((a, b) => Number(a.updatedAt || 0) - Number(b.updatedAt || 0))
     .reduce<VideoPlaybackState>((merged, state) => ({ ...merged, ...state }), {})
+  const patchHasCurrentTime = Object.prototype.hasOwnProperty.call(patch, 'currentTime')
+  const incomingTime = Number(patch.currentTime || 0)
+  const previousTime = Number(previous.currentTime || 0)
+  const shouldPreserveRememberedProgress = !options.allowStartReset &&
+    patchHasCurrentTime &&
+    hasRememberedPlayback(previous) &&
+    Number.isFinite(previousTime) &&
+    previousTime > PLAYBACK_PROGRESS_THRESHOLD &&
+    (!Number.isFinite(incomingTime) || incomingTime <= PLAYBACK_PROGRESS_THRESHOLD)
+  const safePatch = shouldPreserveRememberedProgress
+    ? {
+        ...patch,
+        currentTime: previousTime,
+        hasPlayback: previous.hasPlayback || previousTime > PLAYBACK_PROGRESS_THRESHOLD,
+        ...(isImageSource(previous.currentFrame) ? { currentFrame: previous.currentFrame } : {})
+      }
+    : patch
   const nextState = {
     ...previous,
-    ...patch,
+    ...safePatch,
     updatedAt: Date.now()
   }
   memory[key] = nextState
@@ -235,7 +253,7 @@ export const getVideoElementSource = (video: HTMLVideoElement) => {
   return video.currentSrc || video.getAttribute('src') || video.querySelector('source')?.getAttribute('src') || ''
 }
 
-const recordVideoProgress = (video: HTMLVideoElement, source = getVideoElementSource(video), captureFrame = false) => {
+const recordVideoProgress = (video: HTMLVideoElement, source = getVideoElementSource(video), captureFrame = false, allowStartReset = false) => {
   const src = normalizeMediaPreviewUrl(source)
   if (!src) return
   const currentTime = Number(video.currentTime || 0)
@@ -247,7 +265,7 @@ const recordVideoProgress = (video: HTMLVideoElement, source = getVideoElementSo
     duration: Number.isFinite(duration) ? duration : 0,
     hasPlayback,
     ...(frame ? { currentFrame: frame } : {})
-  }, { originVideo: video, syncTime: true })
+  }, { originVideo: video, syncTime: true, allowStartReset })
 }
 
 const applyStoredFrameToVideo = (video: HTMLVideoElement, target: HTMLElement, state: VideoPlaybackState) => {
@@ -283,12 +301,24 @@ const applyFrameToTarget = (target: HTMLElement | null | undefined, thumb: strin
   if (img) img.src = thumb
 }
 
-const syncVideoTimeWhenReady = (video: HTMLVideoElement, state: VideoPlaybackState) => {
+const syncVideoTimeWhenReady = (video: HTMLVideoElement, state: VideoPlaybackState, source?: string) => {
+  const getLatestState = () => source ? getVideoState(source) : state
+  const apply = () => restoreStoredVideoTime(video, getLatestState())
   if (video.readyState >= 1) {
-    restoreStoredVideoTime(video, state)
+    apply()
     return
   }
-  video.addEventListener('loadedmetadata', () => restoreStoredVideoTime(video, getVideoState(video.dataset.noiseVideoPlaybackSource || getVideoElementSource(video))), { once: true })
+  const marker = source ? getVideoMemoryKey(source) : ''
+  if (marker && video.dataset.noiseVideoRestorePending === marker) return
+  if (marker) video.dataset.noiseVideoRestorePending = marker
+  const onReady = () => {
+    if (marker && video.dataset.noiseVideoRestorePending === marker) delete video.dataset.noiseVideoRestorePending
+    apply()
+  }
+  video.addEventListener('loadedmetadata', onReady, { once: true })
+  video.addEventListener('loadeddata', onReady, { once: true })
+  video.addEventListener('canplay', onReady, { once: true })
+  window.setTimeout(onReady, 160)
 }
 
 const getRegisteredSurfaces = (source: string) => {
@@ -313,7 +343,7 @@ const syncRegisteredVideoSurfaces = (source: string, state = getVideoState(sourc
       return
     }
     if (isImageSource(frame) && (video !== options.originVideo || video.paused)) video.setAttribute('poster', frame)
-    if (options.syncTime && video !== options.originVideo && video.paused) syncVideoTimeWhenReady(video, state)
+    if (options.syncTime && video !== options.originVideo && video.paused) syncVideoTimeWhenReady(video, state, src)
   })
   entry?.targets.forEach((target) => {
     if (!document.contains(target)) {
@@ -336,10 +366,35 @@ const pauseOtherRegisteredVideos = (source: string, currentVideo: HTMLVideoEleme
   })
 }
 
+let videoPlaybackLifecycleBound = false
+
+const persistRegisteredVideoPlayback = () => {
+  if (typeof document === 'undefined') return
+  videoSurfaceRegistry.forEach((entry, source) => {
+    entry.videos.forEach((video) => {
+      if (!document.contains(video)) {
+        entry.videos.delete(video)
+        return
+      }
+      recordVideoProgress(video, video.dataset.noiseVideoPlaybackSource || source, false)
+    })
+  })
+}
+
+const ensureVideoPlaybackLifecyclePersistence = () => {
+  if (videoPlaybackLifecycleBound || typeof window === 'undefined' || typeof document === 'undefined') return
+  videoPlaybackLifecycleBound = true
+  window.addEventListener('pagehide', persistRegisteredVideoPlayback)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') persistRegisteredVideoPlayback()
+  })
+}
+
 const registerVideoSurface = (source: string, video: HTMLVideoElement | null, targets: Array<HTMLElement | null | undefined>, options: VideoSurfaceRegisterOptions = {}) => {
   const registered = getRegisteredSurfaces(source)
   if (!registered) return
   const { src, entry } = registered
+  ensureVideoPlaybackLifecyclePersistence()
   if (video) {
     entry.videos.add(video)
     video.dataset.noiseVideoPlaybackSource = src
@@ -361,6 +416,7 @@ const bindVideoPlaybackState = (video: HTMLVideoElement, target: HTMLElement, so
   const getBoundSource = () => video.dataset.noiseVideoPlaybackSource || source
   const record = () => recordVideoProgress(video, getBoundSource(), false)
   const recordWithFrame = () => recordVideoProgress(video, getBoundSource(), true)
+  const recordResettableFrame = () => recordVideoProgress(video, getBoundSource(), true, true)
   let lastFrameCaptureAt = 0
   const recordThrottledFrame = () => {
     record()
@@ -372,12 +428,12 @@ const bindVideoPlaybackState = (video: HTMLVideoElement, target: HTMLElement, so
   video.addEventListener('play', record)
   video.addEventListener('timeupdate', recordThrottledFrame)
   video.addEventListener('pause', recordWithFrame)
-  video.addEventListener('seeked', recordWithFrame)
-  video.addEventListener('ended', recordWithFrame)
+  video.addEventListener('seeked', recordResettableFrame)
+  video.addEventListener('ended', recordResettableFrame)
   video.addEventListener('loadedmetadata', () => {
     const state = getVideoState(getBoundSource())
     applyStoredFrameToVideo(video, target, state)
-    restoreStoredVideoTime(video, state)
+    syncVideoTimeWhenReady(video, state, getBoundSource())
   })
 }
 
@@ -451,6 +507,11 @@ const getCloseFrameSource = (slide: any, video: HTMLVideoElement | null) => norm
   (video ? getVideoElementSource(video) : '') || slide?.src || slide?.triggerEl?.dataset?.src || ''
 )
 
+const persistSlideVideoProgress = (slide: any, video: HTMLVideoElement | null, source = getCloseFrameSource(slide, video), captureFrame = false) => {
+  if (!video || !source) return
+  recordVideoProgress(video, source, captureFrame)
+}
+
 const hasLivePlayback = (video: HTMLVideoElement | null) => {
   if (!video) return false
   return Number(video.currentTime || 0) > PLAYBACK_PROGRESS_THRESHOLD || !video.paused
@@ -484,6 +545,7 @@ const waitForVideoFrameThenClose = (instance: FancyboxLike, slide: any, video: H
   instance.__noiseVideoClosePending = true
   let done = false
   const source = getCloseFrameSource(slide, video)
+  persistSlideVideoProgress(slide, video, source, true)
   const closeWithoutFrame = () => {
     instance.__noiseVideoCloseAnimated = true
     requestAnimationFrame(() => {
@@ -544,6 +606,9 @@ export const animateFancyboxHtml5VideoClose = (instance: FancyboxLike, event?: E
   if (instance.__noiseVideoCloseAnimated) return
   const slide = instance?.getSlide?.()
   if (!slide || slide.type !== 'html5video') return
+  const video = getSlideVideoElement(slide)
+  const source = getCloseFrameSource(slide, video)
+  persistSlideVideoProgress(slide, video, source, true)
 
   const contentEl = getSlideContentElement(slide)
   const targetEl = getTriggerElement(instance, slide)
@@ -551,8 +616,6 @@ export const animateFancyboxHtml5VideoClose = (instance: FancyboxLike, event?: E
   const targetRect = targetEl?.getBoundingClientRect?.()
   if (!contentEl || !validRect(startRect) || !validRect(targetRect)) return
 
-  const video = getSlideVideoElement(slide)
-  const source = getCloseFrameSource(slide, video)
   const frameSrc = getVideoCloseFrame(slide, video, source)
   if (!frameSrc) return waitForVideoFrameThenClose(instance, slide, video, event)
   applyVideoFrameFallback(slide, video, frameSrc, source)
@@ -635,7 +698,7 @@ export const prepareFancyboxHtml5VideoSlide = (instance: FancyboxLike) => {
   const extraTargets = [slide.thumbEl, slide.el?.querySelector?.('.f-thumbs__slide__img')].filter(Boolean) as HTMLElement[]
   const source = normalizeMediaPreviewUrl(slide.src || slide.triggerEl?.dataset?.src || getVideoElementSource(video))
   ensureFancyboxVideoThumbnail(video, target, extraTargets, { source, pauseOtherVideos: true })
-  try { video.pause() } catch {}
+  syncVideoTimeWhenReady(video, getVideoState(source), source)
 }
 
 export const ensureFancyboxVideoThumbnail = (video: HTMLVideoElement, target: HTMLElement = video, extraTargets: HTMLElement[] = [], options: VideoSurfaceRegisterOptions = {}) => {
@@ -657,7 +720,7 @@ export const ensureFancyboxVideoThumbnail = (video: HTMLVideoElement, target: HT
     if (frame) apply(frame, 'current')
   }
   bindVideoPlaybackState(video, target, src, extraTargets, options)
-  if (video.readyState >= 1 && video.paused) restoreStoredVideoTime(video, getVideoState(src))
+  syncVideoTimeWhenReady(video, getVideoState(src), src)
   if (video.readyState >= 2) refresh()
   if (target.dataset.noiseVideoThumbBound === 'true') return
   target.dataset.noiseVideoThumbBound = 'true'
