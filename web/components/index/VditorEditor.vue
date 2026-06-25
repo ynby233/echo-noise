@@ -82,7 +82,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from "vue";
-import { positionFloatingMenu, scheduleFloatingMenuPosition } from '~/utils/floating-menu'
+import { getFixedCoordinateScale, getFixedRect, positionFloatingMenu, scheduleFloatingMenuPosition } from '~/utils/floating-menu'
 import { captureVideoFirstFrameFromSource, ensureFancyboxVideoThumbnail, getVideoPlaybackFrameForSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import Vditor from "vditor";
@@ -936,12 +936,13 @@ const scheduleTableDeleteHide = (delay: number | Event = 1800) => {
 }
 
 const positionTableDeleteButton = (table: HTMLTableElement) => {
-  const rect = table.getBoundingClientRect()
+  const scale = getFixedCoordinateScale()
+  const rect = getFixedRect(table, scale)
   const size = TABLE_DELETE_BUTTON_SIZE
   tableDeleteButtonStyle.value = {
     position: 'fixed',
-    top: `${Math.max(6, rect.top - size)}px`,
-    left: `${Math.max(6, rect.left - size)}px`,
+    top: `${rect.top - size}px`,
+    left: `${rect.left - size}px`,
     zIndex: '10020'
   }
 }
@@ -2016,6 +2017,7 @@ html.dark .vditor-reset table td {
   box-shadow: 0 1px 2px rgba(154, 52, 18, 0.35);
   cursor: pointer;
   opacity: .96;
+  transform-origin: 100% 100% !important;
 }
 
 .editor-table-delete-button::before,

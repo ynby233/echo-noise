@@ -460,14 +460,19 @@ assert(
     vditorEditor.includes('showTableDeleteButton') &&
     vditorEditor.includes('tableDeleteButtonStyle') &&
     vditorEditor.includes('const TABLE_DELETE_BUTTON_SIZE = 10') &&
-    vditorEditor.includes("top: `${Math.max(6, rect.top - size)}px`") &&
-    vditorEditor.includes("left: `${Math.max(6, rect.left - size)}px`") &&
+    vditorEditor.includes('getFixedCoordinateScale') &&
+    vditorEditor.includes('getFixedRect(table, scale)') &&
+    vditorEditor.includes("top: `${rect.top - size}px`") &&
+    vditorEditor.includes("left: `${rect.left - size}px`") &&
+    !vditorEditor.includes("Math.max(6, rect.top - size)") &&
+    !vditorEditor.includes("Math.max(6, rect.left - size)") &&
     vditorEditor.includes("Teleport to=\"body\"") &&
     vditorEditor.includes('editor-table-delete-button') &&
     vditorEditor.includes('confirm(\'确定要删除该表格吗？\')') &&
     vditorEditor.includes('width: 10px !important;') &&
     vditorEditor.includes('height: 10px !important;') &&
     vditorEditor.includes('place-items: center !important;') &&
+    vditorEditor.includes('transform-origin: 100% 100% !important;') &&
     vditorEditor.includes('background: #f97316 !important;') &&
     vditorEditor.includes('background: #ea580c !important;') &&
     vditorEditor.includes('.editor-table-delete-button::before') &&
