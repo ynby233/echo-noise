@@ -494,7 +494,7 @@ const ensureRenderedTableExpandButton = (wrapper: HTMLElement, table: HTMLTableE
   if (wrapper.querySelector('.noise-rendered-table-expand-button')) return
   const button = document.createElement('button')
   button.type = 'button'
-  button.className = 'noise-rendered-table-expand-button nw-action-btn nw-tooltip-anchor'
+  button.className = 'noise-rendered-table-expand-button editor-table-expand-button nw-action-btn nw-tooltip-anchor'
   button.setAttribute('aria-label', '放大查看表格')
   button.setAttribute('data-tooltip', '放大查看表格')
   button.textContent = '⛶'
@@ -998,16 +998,11 @@ const escapeHtml = (value: string) => String(value || '')
 
 const ATTACHMENT_LINK_REG = /\[(图片附件|视频附件|音频附件)：([^\]]+)\]\(([^)\s]+)\)/g
 
-const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string, compact = false) => {
+const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string) => {
   const url = resolveImageUrl(String(rawUrl || '').trim())
   const safeUrl = escapeHtml(url)
   const safeName = escapeHtml(String(name || '').trim() || '未命名附件')
   if (!url) return ''
-  if (compact) {
-    const type = kindLabel === '图片附件' ? 'image' : (kindLabel === '视频附件' ? 'video' : 'audio')
-    const label = `${escapeHtml(kindLabel)}：${safeName}`
-    return `<a class="noise-attachment-tag noise-attachment-tag--table noise-attachment-tag--${type}" href="${safeUrl}" data-attachment-kind="${type}" data-attachment-url="${safeUrl}" data-attachment-name="${safeName}">${label}</a>`
-  }
   if (kindLabel === '图片附件') {
     return `<p class="noise-attachment-paragraph"><img class="noise-attachment-image" src="${safeUrl}" alt="${safeName}" loading="lazy" decoding="async" /></p>`
   }
@@ -1031,9 +1026,8 @@ const applyAttachmentRenders = () => {
   root.querySelectorAll<HTMLAnchorElement>('a[href]').forEach((anchor) => {
     const info = attachmentInfoFromRenderedAnchor(anchor)
     if (!info) return
-    const compact = !!anchor.closest('td, th')
     const { kindLabel, name, url } = info
-    const html = compact ? buildAttachmentHtml(kindLabel, name, url, true) : buildAttachmentHtml(kindLabel, name, url)
+    const html = buildAttachmentHtml(kindLabel, name, url)
     replaceNodeWithHtml(anchor, html)
   })
 }
@@ -1749,6 +1743,7 @@ watch(() => props.enableGithubCard, () => {
 .markdown-preview .noise-table-scroll {
   max-width: 100%;
   margin: 8px 0;
+  padding-top: 10px;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
@@ -1777,36 +1772,41 @@ watch(() => props.enableGithubCard, () => {
   position: relative;
 }
 
-.noise-rendered-table-expand-button {
+.markdown-preview .noise-table-scroll > .noise-rendered-table-expand-button {
+  box-sizing: border-box;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   position: absolute !important;
-  top: 4px;
-  right: 4px;
-  width: 22px !important;
-  min-width: 22px !important;
-  height: 22px !important;
-  min-height: 22px !important;
+  top: 0;
+  left: 0;
+  width: 10px !important;
+  min-width: 10px !important;
+  height: 10px !important;
+  min-height: 10px !important;
   padding: 0 !important;
-  border-radius: 8px !important;
-  border-color: rgba(148, 163, 184, 0.42) !important;
-  background: rgba(255, 255, 255, 0.92) !important;
+  border-radius: 2px !important;
+  border-color: rgba(148, 163, 184, 0.46) !important;
+  background: rgba(255, 255, 255, 0.96) !important;
   color: rgba(51, 65, 85, 0.96) !important;
-  font-size: 13px !important;
+  font-size: 8px !important;
+  line-height: 1;
   opacity: 0;
-  transform: scale(.94);
-  transform-origin: 100% 0;
-  transition: opacity 150ms ease, transform 150ms ease, background-color 150ms ease;
+  transform: none !important;
+  transform-origin: 0 100% !important;
+  transition: opacity 150ms ease, background-color 150ms ease, border-color 150ms ease, color 150ms ease;
   z-index: 2;
 }
 
 .markdown-preview .noise-table-scroll:hover .noise-rendered-table-expand-button,
 .noise-rendered-table-expand-button:focus-visible {
   opacity: 1;
-  transform: scale(1);
+  transform: none !important;
 }
 
 .markdown-preview.theme-dark .noise-rendered-table-expand-button {
   border-color: rgba(148, 163, 184, 0.38) !important;
-  background: rgba(30, 41, 59, 0.94) !important;
+  background: rgba(30, 41, 59, 0.96) !important;
   color: rgba(226, 232, 240, 0.96) !important;
 }
 

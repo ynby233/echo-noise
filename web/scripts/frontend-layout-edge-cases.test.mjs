@@ -466,6 +466,8 @@ assert(
     vditorEditor.includes('getFixedRect(table, scale)') &&
     vditorEditor.includes("top: `${rect.top - deleteSize}px`") &&
     vditorEditor.includes("left: `${rect.left - deleteSize}px`") &&
+    vditorEditor.includes('const visibleTop = Math.max(0, editorRect?.top ?? 0)') &&
+    vditorEditor.includes('return rect.top >= visibleTop && rect.left >= visibleLeft') &&
     vditorEditor.includes('const TABLE_EXPAND_BUTTON_SIZE = TABLE_DELETE_BUTTON_SIZE') &&
     vditorEditor.includes('tableExpandButtonStyle') &&
     vditorEditor.includes("top: `${rect.top - expandSize}px`") &&
@@ -478,6 +480,8 @@ assert(
     vditorEditor.includes("join('<br />')") &&
     vditorEditor.includes('editorTableScrollPositions') &&
     vditorEditor.includes('return `${block.kind}:${block.start}:${block.end}`') &&
+    vditorEditor.includes('const usedBlocks = new Set<EditorTableSourceBlock>()') &&
+    vditorEditor.includes('sameTableRows(getMarkdownTableRows(candidate.lines), renderedRows)') &&
     !vditorEditor.includes('block.lines.join') &&
     vditorEditor.includes('rememberEditorTableScroll(table)') &&
     vditorEditor.includes('restoreEditorTableScroll(table)') &&
@@ -493,6 +497,10 @@ assert(
     vditorEditor.includes('TABLE_CELL_BREAK_RE') &&
     vditorEditor.includes('replaceTableBreakTextNodes(table)') &&
     vditorEditor.includes('.vditor-container .vditor-reset table.editor-deletable-table') &&
+    vditorEditor.includes('width: max-content;') &&
+    vditorEditor.includes('min-width: 100%;') &&
+    !vditorEditor.includes('.vditor-container .vditor-reset table.editor-deletable-table tr {\n  display: table;') &&
+    !vditorEditor.includes('.vditor-container .vditor-reset table.editor-deletable-table > thead,') &&
     vditorEditor.includes('scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);') &&
     !vditorEditor.includes("Math.max(6, rect.top - size)") &&
     !vditorEditor.includes("Math.max(6, rect.left - size)") &&
@@ -502,6 +510,7 @@ assert(
     vditorEditor.includes('width: 10px !important;') &&
     vditorEditor.includes('height: 10px !important;') &&
     vditorEditor.includes('.editor-table-expand-button') &&
+    vditorEditor.includes('.editor-table-expand-button > span {\n  display: block;\n  line-height: 1;\n  transform: none;\n}') &&
     vditorEditor.includes('background: rgba(255, 255, 255, 0.96) !important;') &&
     vditorEditor.includes('background: rgba(30, 41, 59, 0.96) !important;') &&
     vditorEditor.includes('table-expand-close-icon') &&
@@ -528,13 +537,20 @@ assert(
     markdownRenderer.includes('replaceRenderedTableBreakTextNodes') &&
     markdownRenderer.includes('showRenderedTableExpandDialog') &&
     markdownRenderer.includes('noise-rendered-table-expand-button') &&
-    markdownRenderer.includes('noise-attachment-tag--table') &&
+    markdownRenderer.includes('const html = buildAttachmentHtml(kindLabel, name, url)') &&
+    !markdownRenderer.includes('const compact = false') &&
+    !markdownRenderer.includes('buildAttachmentHtml(kindLabel, name, url, true)') &&
+    !markdownRenderer.includes("const compact = !!anchor.closest('td, th')") &&
     markdownRenderer.includes('a.noise-attachment-tag[data-attachment-kind]') &&
     markdownRenderer.includes('openRenderedTableExpand(table)') &&
     markdownRenderer.includes('initializeMediaViewer(renderedTableExpandBody.value)') &&
     markdownRenderer.includes('rendered-table-expand-dialog') &&
     markdownRenderer.includes('table-expand-close-icon') &&
     markdownRenderer.includes('.markdown-preview .noise-table-scroll') &&
+    markdownRenderer.includes('padding-top: 10px;') &&
+    markdownRenderer.includes('.markdown-preview .noise-table-scroll > .noise-rendered-table-expand-button') &&
+    markdownRenderer.includes('display: inline-flex !important;') &&
+    markdownRenderer.includes('align-items: center !important;') &&
     markdownRenderer.includes('overflow-x: auto;') &&
     markdownRenderer.includes('scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);') &&
     markdownRenderer.includes('width: min(300px, 100%) !important;') &&

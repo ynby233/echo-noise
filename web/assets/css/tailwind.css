@@ -160,12 +160,11 @@ html.dark {
   background: var(--nw-action-bg, rgba(15, 23, 42, 0.06));
   color: var(--nw-action-text, #374151);
   box-shadow: none;
-  transition: background-color .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease;
+  transition: background-color .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease;
 }
 
 .nw-action-btn:hover:not(:disabled),
 .nw-action-btn:focus-visible {
-  transform: translate3d(0, 0, 0) scale(1.06);
   border-color: var(--nw-action-hover-border, var(--nw-floating-hover-border)) !important;
   background: var(--nw-action-hover-bg, var(--nw-floating-hover-bg)) !important;
   color: var(--nw-action-hover-text, var(--nw-action-text, #374151)) !important;
@@ -430,7 +429,7 @@ html.dark .publish-datetime-menu {
 .publish-picker-trigger,
 .floating-icon-btn,
 .floating-action-btn {
-  transition: background-color .18s ease, border-color .18s ease, color .18s ease, transform .18s ease;
+  transition: background-color .18s ease, border-color .18s ease, color .18s ease;
 }
 
 .publish-picker-trigger {
@@ -453,7 +452,6 @@ html.dark .publish-datetime-menu {
 .floating-icon-btn:focus-visible,
 .floating-action-btn:hover,
 .floating-action-btn:focus-visible {
-  transform: translate3d(0, 0, 0) scale(1.06);
   border-color: var(--nw-floating-hover-border);
   background: var(--nw-floating-hover-bg);
   outline: none;
@@ -547,7 +545,7 @@ html.dark .publish-datetime-menu .publish-date-weekdays {
   color: var(--nw-floating-text);
   font-size: 12px;
   line-height: 1;
-  transition: background-color .15s ease, border-color .15s ease, color .15s ease, transform .15s ease;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
 }
 
 .publish-date-day.is-muted { opacity: .38; }
@@ -646,7 +644,6 @@ html.dark .publish-datetime-menu .publish-date-weekdays {
   border-color: var(--nw-floating-hover-border);
   background: var(--nw-floating-hover-bg);
   color: var(--nw-floating-text);
-  transform: translate3d(0, 0, 0) scale(1.06);
   outline: none;
 }
 

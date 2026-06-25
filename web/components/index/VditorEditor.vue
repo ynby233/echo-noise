@@ -769,6 +769,7 @@ const setupAttachmentPreview = () => {
       inserted = true
     }
     if (!inserted) return false
+    if (!syncEditorTableCellDomToSource(cell)) syncEditorTableCellLineBreakToSource(cell)
     emitEditorSoftBreakInput(event)
     return true
   }
@@ -848,7 +849,7 @@ const setupAttachmentPreview = () => {
 
   const repositionVisibleTableDeleteButton = () => {
     if (!showTableDeleteButton.value || !hoveredEditorTable) return
-    if (!root.contains(hoveredEditorTable)) {
+    if (!root.contains(hoveredEditorTable) || !isEditorTableActionVisible(hoveredEditorTable)) {
       hideTableDeleteButton()
       return
     }
@@ -1063,6 +1064,18 @@ const scheduleTableDeleteHide = (delay: number | Event = 1800) => {
   tableDeleteHideTimer = window.setTimeout(() => hideTableDeleteButton(), timeout)
 }
 
+const isEditorTableActionVisible = (table: HTMLTableElement) => {
+  const rect = table.getBoundingClientRect()
+  const width = window.innerWidth || document.documentElement.clientWidth || 0
+  const height = window.innerHeight || document.documentElement.clientHeight || 0
+  const editorRect = editorContainer.value?.getBoundingClientRect()
+  const visibleTop = Math.max(0, editorRect?.top ?? 0)
+  const visibleLeft = Math.max(0, editorRect?.left ?? 0)
+  const visibleRight = Math.min(width, editorRect?.right ?? width)
+  const visibleBottom = Math.min(height, editorRect?.bottom ?? height)
+  return rect.top >= visibleTop && rect.left >= visibleLeft && rect.top < visibleBottom && rect.left < visibleRight
+}
+
 const positionTableDeleteButton = (table: HTMLTableElement) => {
   const scale = getFixedCoordinateScale()
   const rect = getFixedRect(table, scale)
@@ -1084,6 +1097,10 @@ const positionTableDeleteButton = (table: HTMLTableElement) => {
 
 const showTableDeleteForTable = (table: HTMLTableElement) => {
   if (!editorContainer.value?.contains(table)) return
+  if (!isEditorTableActionVisible(table)) {
+    hideTableDeleteButton()
+    return
+  }
   cancelTableDeleteHide()
   hoveredEditorTable = table
   positionTableDeleteButton(table)
@@ -1286,10 +1303,77 @@ const tableBlockFromDataset = (table: HTMLTableElement | null, blocks: EditorTab
   return blocks.find((block) => block.start === start && block.end === end)
 }
 
+type EditorTableCellSourceTarget = {
+  table: HTMLTableElement
+  block: EditorTableSourceBlock
+  lines: string[]
+  lineIndex: number
+  cellIndex: number
+  rowCells: string[]
+}
+
 const getEditorTableBlockForTable = (table: HTMLTableElement | null, preferredIndex = -1) => {
   const value = vditorInstance?.getValue?.() || ''
   const blocks = getEditorTableSourceBlocks(value)
   return tableBlockFromDataset(table, blocks) || findMarkdownTableBlock(blocks, getRenderedTableRows(table), preferredIndex)
+}
+
+const getEditorTableCellSourceTarget = (cell: HTMLTableCellElement | null): EditorTableCellSourceTarget | null => {
+  if (!cell || !vditorInstance) return null
+  const table = cell.closest('table') as HTMLTableElement | null
+  const row = cell.parentElement as HTMLTableRowElement | null
+  if (!table || !row || !editorContainer.value?.contains(table)) return null
+  const rowIndex = row.rowIndex
+  const cellIndex = cell.cellIndex
+  if (rowIndex < 0 || cellIndex < 0) return null
+  const value = vditorInstance.getValue?.() || ''
+  const lines = value.split('\n')
+  const blocks = getEditorTableSourceBlocks(value)
+  const tableIndex = getEditorTables().indexOf(table)
+  const block = tableBlockFromDataset(table, blocks) || findMarkdownTableBlock(blocks, getRenderedTableRows(table), tableIndex)
+  if (!block || block.kind !== 'markdown' || !isMarkdownTableDivider(lines[block.start + 1] || '')) return null
+  const lineIndex = rowIndex === 0 ? block.start : block.start + rowIndex + 1
+  if (lineIndex < block.start || lineIndex >= block.end || !lines[lineIndex]) return null
+  const rowCells = parseEditableMarkdownTableRow(lines[lineIndex])
+  return { table, block, lines, lineIndex, cellIndex, rowCells }
+}
+
+const applyEditorTableCellSourceValue = (cell: HTMLTableCellElement | null, nextText: string) => {
+  const target = getEditorTableCellSourceTarget(cell)
+  if (!target || !vditorInstance) return false
+  const rowCells = [...target.rowCells]
+  while (rowCells.length <= target.cellIndex) rowCells.push('')
+  rowCells[target.cellIndex] = nextText
+  target.lines[target.lineIndex] = formatEditableMarkdownTableRow(rowCells)
+  const nextValue = target.lines.join('\n')
+  rememberEditorTableScroll(target.table)
+  vditorInstance.setValue(nextValue)
+  emit('update:modelValue', nextValue)
+  window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
+  return true
+}
+
+const editorTableCellTextFromDom = (cell: HTMLTableCellElement) => {
+  const clone = cell.cloneNode(true) as HTMLElement
+  clone.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
+  clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')))
+  return String(clone.textContent || '').replace(/\u00a0/g, ' ')
+}
+
+const syncEditorTableCellDomToSource = (cell: HTMLTableCellElement | null) => {
+  const target = getEditorTableCellSourceTarget(cell)
+  if (!target || !cell) return false
+  const current = target.rowCells[target.cellIndex] || ''
+  const nextText = editorTableCellTextFromDom(cell)
+  if (hasAttachmentMarker(current) && !hasAttachmentMarker(nextText)) return false
+  return applyEditorTableCellSourceValue(cell, nextText)
+}
+
+const syncEditorTableCellLineBreakToSource = (cell: HTMLTableCellElement | null) => {
+  const target = getEditorTableCellSourceTarget(cell)
+  if (!target) return false
+  const current = target.rowCells[target.cellIndex] || ''
+  return applyEditorTableCellSourceValue(cell, `${current}\n`)
 }
 
 const editableRowsFromMarkdownBlock = (block: EditorTableSourceBlock) => {
@@ -1450,11 +1534,19 @@ const deleteSelectedEditorTable = () => {
 
 const enhanceEditorTables = (_root: HTMLElement) => {
   const blocks = getEditorTableSourceBlocks(vditorInstance?.getValue?.() || '')
+  const usedBlocks = new Set<EditorTableSourceBlock>()
   getEditorTables().forEach((table, index) => {
     table.classList.add('editor-deletable-table')
     table.dataset.editorTableIndex = String(index)
     replaceTableBreakTextNodes(table)
-    const block = blocks[index]
+    const renderedRows = getRenderedTableRows(table)
+    const datasetBlock = tableBlockFromDataset(table, blocks)
+    let block = datasetBlock && !usedBlocks.has(datasetBlock) ? datasetBlock : undefined
+    if (!block && tableRowsHaveComparableContent(renderedRows)) {
+      block = blocks.find((candidate) => candidate.kind === 'markdown' && !usedBlocks.has(candidate) && sameTableRows(getMarkdownTableRows(candidate.lines), renderedRows))
+    }
+    if (!block) block = blocks.find((candidate) => !usedBlocks.has(candidate))
+    if (block) usedBlocks.add(block)
     const scrollKey = tableScrollKeyFromBlock(block, `index:${index}`)
     table.dataset.editorTableScrollKey = scrollKey
     table.onscroll = () => rememberEditorTableScroll(table)
@@ -1862,6 +1954,14 @@ const insertValueIntoCurrentTableCell = (value: string) => {
     cell = getCurrentEditorTableCell()
   }
   if (!cell) return false
+  if (hasAttachmentMarker(text)) {
+    const target = getEditorTableCellSourceTarget(cell)
+    if (target) {
+      const current = target.rowCells[target.cellIndex] || ''
+      const separator = current && !/\s$/.test(current) ? ' ' : ''
+      return applyEditorTableCellSourceValue(cell, `${current}${separator}${text}`)
+    }
+  }
   const selection = window.getSelection()
   if (!selection || selection.rangeCount === 0) return false
   const currentRange = selection.getRangeAt(0)
@@ -1887,6 +1987,7 @@ const insertValueIntoCurrentTableCell = (value: string) => {
   }
   const editable = cell.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset') as HTMLElement | null
   editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }))
+  syncEditorTableCellDomToSource(cell)
   const updatedSelection = window.getSelection()
   if (updatedSelection && updatedSelection.rangeCount > 0) lastEditorSelectionRange = updatedSelection.getRangeAt(0).cloneRange()
   refreshAttachmentLinksFromEditor()
@@ -2309,18 +2410,14 @@ html.dark .editor-attachment-preview__header,
 
 .vditor-container .vditor-reset table.editor-deletable-table {
   display: block;
+  width: max-content;
+  min-width: 100%;
   max-width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
+  border-collapse: collapse;
   scrollbar-width: thin;
   scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);
-}
-
-.vditor-container .vditor-reset table.editor-deletable-table > thead,
-.vditor-container .vditor-reset table.editor-deletable-table > tbody {
-  display: table;
-  min-width: 100%;
-  border-collapse: collapse;
 }
 
 .vditor-container .vditor-reset table.editor-deletable-table::-webkit-scrollbar {
@@ -2493,8 +2590,9 @@ html.dark .editor-table-delete-button:focus-visible {
 }
 
 .editor-table-expand-button > span {
-  display: inline-block;
-  transform: translateY(-.2px);
+  display: block;
+  line-height: 1;
+  transform: none;
 }
 
 html.dark .editor-table-expand-button {
