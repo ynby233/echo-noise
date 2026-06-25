@@ -78,6 +78,62 @@
       @click.prevent.stop="confirmDeleteHoveredTable"
     />
   </Teleport>
+  <Teleport to="body">
+    <button
+      v-if="showTableDeleteButton"
+      type="button"
+      class="editor-table-expand-button nw-action-btn nw-tooltip-anchor"
+      data-tooltip="放大显示表格"
+      :style="tableExpandButtonStyle"
+      aria-label="放大显示该表格"
+      @pointerenter="cancelTableDeleteHide"
+      @pointerleave="scheduleTableDeleteHide"
+      @mousedown.prevent.stop
+      @click.prevent.stop="openHoveredTableExpand"
+    >
+      <span aria-hidden="true">⛶</span>
+    </button>
+  </Teleport>
+  <Teleport to="body">
+    <div
+      v-if="showTableExpandDialog"
+      :class="['editor-table-expand-overlay', { 'is-dark': props.theme === 'dark', 'is-closing': tableExpandClosing }]"
+      @click.self="closeExpandedTable"
+    >
+      <section class="editor-table-expand-dialog" role="dialog" aria-modal="true" aria-label="放大显示表格" @click.stop>
+        <header class="editor-table-expand-header">
+          <div>
+            <strong>放大显示表格</strong>
+            <span>{{ expandedTableEditable ? '可直接编辑单元格内容' : '当前表格仅可预览' }}</span>
+          </div>
+          <button type="button" class="editor-table-expand-close nw-action-btn nw-tooltip-anchor" data-tooltip="关闭" aria-label="关闭放大表格" @click="closeExpandedTable">
+            ×
+          </button>
+        </header>
+        <div class="editor-table-expand-scroll">
+          <table class="editor-table-expand-table">
+            <tbody>
+              <tr v-for="(row, rowIndex) in expandedTableRows" :key="`expanded-row-${rowIndex}`">
+                <component
+                  :is="rowIndex === 0 ? 'th' : 'td'"
+                  v-for="(_cell, cellIndex) in row"
+                  :key="`expanded-cell-${rowIndex}-${cellIndex}`"
+                >
+                  <textarea
+                    v-model="expandedTableRows[rowIndex][cellIndex]"
+                    :readonly="!expandedTableEditable"
+                    rows="1"
+                    @input="syncExpandedTableToEditor"
+                    @keydown.tab.prevent="focusNextExpandedTableCell(rowIndex, cellIndex, $event.shiftKey)"
+                  />
+                </component>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -118,8 +174,12 @@ let lastEditorSelectionRange: Range | null = null;
 let selectedEditorTable: HTMLTableElement | null = null;
 let selectedEditorTableIndex = -1;
 let hoveredEditorTable: HTMLTableElement | null = null;
+let expandedEditorTableBlock: EditorTableSourceBlock | null = null;
 let tableDeleteHideTimer: number | null = null;
+let tableExpandCloseTimer: number | null = null;
 const TABLE_DELETE_BUTTON_SIZE = 10;
+const TABLE_EXPAND_BUTTON_SIZE = 28;
+const TABLE_CELL_BREAK_RE = /<br\s*\/?\s*>/gi;
 const isReady = ref(false);
 const showHeadingMenu = ref(false);
 const headingMenuRef = ref<HTMLElement | null>(null);
@@ -134,6 +194,11 @@ const tableTrigger = ref<HTMLElement | null>(null);
 const nativeTablePanel = ref<HTMLElement | null>(null);
 const showTableDeleteButton = ref(false);
 const tableDeleteButtonStyle = ref<Record<string, string>>({});
+const tableExpandButtonStyle = ref<Record<string, string>>({});
+const showTableExpandDialog = ref(false);
+const tableExpandClosing = ref(false);
+const expandedTableRows = ref<string[][]>([]);
+const expandedTableEditable = ref(false);
 const TABLE_SIZE_LIMIT = 10
 const tableRows = ref(3);
 const tableCols = ref(3);
@@ -938,11 +1003,18 @@ const scheduleTableDeleteHide = (delay: number | Event = 1800) => {
 const positionTableDeleteButton = (table: HTMLTableElement) => {
   const scale = getFixedCoordinateScale()
   const rect = getFixedRect(table, scale)
-  const size = TABLE_DELETE_BUTTON_SIZE
+  const deleteSize = TABLE_DELETE_BUTTON_SIZE
+  const expandSize = TABLE_EXPAND_BUTTON_SIZE
   tableDeleteButtonStyle.value = {
     position: 'fixed',
-    top: `${rect.top - size}px`,
-    left: `${rect.left - size}px`,
+    top: `${rect.top - deleteSize}px`,
+    left: `${rect.left - deleteSize}px`,
+    zIndex: '10020'
+  }
+  tableExpandButtonStyle.value = {
+    position: 'fixed',
+    top: `${rect.top - expandSize}px`,
+    left: `${rect.right}px`,
     zIndex: '10020'
   }
 }
@@ -974,6 +1046,18 @@ const confirmDeleteHoveredTable = () => {
     return
   }
   hideTableDeleteButton()
+}
+
+const stripTableBreakCode = (value: string) => String(value || '').replace(TABLE_CELL_BREAK_RE, ' ')
+const tableCellSourceToEditorText = (value: string) => String(value || '').replace(TABLE_CELL_BREAK_RE, '\n').replace(/\\\|/g, '|').trim()
+const editorTextToTableCellSource = (value: string) => {
+  const text = String(value || '').replace(/\r\n?/g, '\n')
+  const normalized = text
+    .split('\n')
+    .map((line) => line.replace(/\|/g, '\\|').trim())
+    .join('<br />')
+    .trim()
+  return normalized || ' '
 }
 
 const isMarkdownTableDivider = (line: string) => {
@@ -1014,7 +1098,7 @@ const getEditorTableSourceBlocks = (content: string) => [
   ...getHtmlTableBlocks(content)
 ].sort((left, right) => left.start - right.start)
 
-const normalizeTableMatchText = (text: string) => String(text || '').replace(/\s+/g, ' ').trim()
+const normalizeTableMatchText = (text: string) => String(stripTableBreakCode(text || '')).replace(/\s+/g, ' ').trim()
 
 const getRenderedTableRows = (table: HTMLTableElement | null) => {
   if (!table) return [] as string[][]
@@ -1027,6 +1111,13 @@ const parseMarkdownTableRow = (line: string) => String(line || '')
   .replace(/\|$/, '')
   .split('|')
   .map((cell) => normalizeTableMatchText(cell.replace(/\\\|/g, '|')))
+
+const parseEditableMarkdownTableRow = (line: string) => String(line || '')
+  .trim()
+  .replace(/^\|/, '')
+  .replace(/\|$/, '')
+  .split('|')
+  .map((cell) => tableCellSourceToEditorText(cell))
 
 const getMarkdownTableRows = (lines: string[]) => {
   if (lines.length < 2) return [] as string[][]
@@ -1064,6 +1155,125 @@ const tableBlockFromDataset = (table: HTMLTableElement | null, blocks: EditorTab
   const end = Number(table.dataset.editorTableBlockEnd)
   if (!Number.isFinite(start) || !Number.isFinite(end)) return undefined
   return blocks.find((block) => block.start === start && block.end === end)
+}
+
+const getEditorTableBlockForTable = (table: HTMLTableElement | null, preferredIndex = -1) => {
+  const value = vditorInstance?.getValue?.() || ''
+  const blocks = getEditorTableSourceBlocks(value)
+  return tableBlockFromDataset(table, blocks) || findMarkdownTableBlock(blocks, getRenderedTableRows(table), preferredIndex)
+}
+
+const editableRowsFromMarkdownBlock = (block: EditorTableSourceBlock) => {
+  if (block.kind !== 'markdown' || block.lines.length < 2) return [] as string[][]
+  return [parseEditableMarkdownTableRow(block.lines[0]), ...block.lines.slice(2).map((line) => parseEditableMarkdownTableRow(line))]
+}
+
+const normalizeExpandedTableRows = (rows: string[][]) => {
+  const colCount = Math.max(1, ...rows.map((row) => row.length))
+  return rows.map((row) => Array.from({ length: colCount }, (_, index) => row[index] ?? ''))
+}
+
+const formatEditableMarkdownTableRow = (cells: string[]) => `| ${cells.map(editorTextToTableCellSource).join(' | ')} |`
+
+const formatMarkdownDividerLine = (dividerLine: string, colCount: number) => {
+  const cells = String(dividerLine || '')
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim())
+  const normalized = Array.from({ length: colCount }, (_, index) => /^:?-{3,}:?$/.test(cells[index] || '') ? cells[index] : '---')
+  return `| ${normalized.join(' | ')} |`
+}
+
+const syncExpandedTableToEditor = () => {
+  if (!vditorInstance || !expandedEditorTableBlock || !expandedTableEditable.value) return false
+  const value = vditorInstance.getValue?.() || ''
+  const lines = value.split('\n')
+  const blocks = getEditorTableSourceBlocks(value)
+  const currentBlock = blocks.find((block) => block.start === expandedEditorTableBlock?.start && block.end === expandedEditorTableBlock?.end) || expandedEditorTableBlock
+  if (!currentBlock || currentBlock.kind !== 'markdown' || !isMarkdownTableDivider(lines[currentBlock.start + 1] || '')) return false
+  const rows = normalizeExpandedTableRows(expandedTableRows.value)
+  const colCount = rows[0]?.length || 1
+  const nextBlockLines = [
+    formatEditableMarkdownTableRow(rows[0] || Array.from({ length: colCount }, () => '')),
+    formatMarkdownDividerLine(lines[currentBlock.start + 1] || currentBlock.lines[1] || '', colCount),
+    ...rows.slice(1).map(formatEditableMarkdownTableRow)
+  ]
+  lines.splice(currentBlock.start, currentBlock.end - currentBlock.start, ...nextBlockLines)
+  const nextValue = lines.join('\n')
+  expandedEditorTableBlock = { ...currentBlock, end: currentBlock.start + nextBlockLines.length, lines: nextBlockLines }
+  vditorInstance.setValue(nextValue)
+  emit('update:modelValue', nextValue)
+  window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
+  return true
+}
+
+const focusNextExpandedTableCell = (rowIndex: number, cellIndex: number, reverse = false) => {
+  const cells = Array.from(document.querySelectorAll<HTMLTextAreaElement>('.editor-table-expand-dialog textarea'))
+  const currentIndex = cells.findIndex((cell) => cell === document.activeElement)
+  const fallback = expandedTableRows.value.slice(0, rowIndex).reduce((sum, row) => sum + row.length, 0) + cellIndex
+  const baseIndex = currentIndex >= 0 ? currentIndex : fallback
+  const nextIndex = reverse ? baseIndex - 1 : baseIndex + 1
+  const target = cells[((nextIndex % cells.length) + cells.length) % cells.length]
+  target?.focus()
+  target?.select()
+}
+
+const closeExpandedTable = () => {
+  if (!showTableExpandDialog.value || tableExpandClosing.value) return
+  tableExpandClosing.value = true
+  if (tableExpandCloseTimer !== null) window.clearTimeout(tableExpandCloseTimer)
+  tableExpandCloseTimer = window.setTimeout(() => {
+    showTableExpandDialog.value = false
+    tableExpandClosing.value = false
+    expandedTableRows.value = []
+    expandedTableEditable.value = false
+    expandedEditorTableBlock = null
+    tableExpandCloseTimer = null
+  }, 180)
+}
+
+const openHoveredTableExpand = () => {
+  const table = hoveredEditorTable
+  if (!table || !editorContainer.value?.contains(table)) return
+  const tableIndex = getEditorTables().indexOf(table)
+  const block = getEditorTableBlockForTable(table, tableIndex)
+  const rows = block?.kind === 'markdown' ? editableRowsFromMarkdownBlock(block) : getRenderedTableRows(table)
+  if (!rows.length) return
+  if (tableExpandCloseTimer !== null) {
+    window.clearTimeout(tableExpandCloseTimer)
+    tableExpandCloseTimer = null
+  }
+  expandedTableRows.value = normalizeExpandedTableRows(rows)
+  expandedTableEditable.value = !!block && block.kind === 'markdown'
+  expandedEditorTableBlock = block?.kind === 'markdown' ? block : null
+  tableExpandClosing.value = false
+  showTableExpandDialog.value = true
+  hideTableDeleteButton()
+  nextTick(() => document.querySelector<HTMLTextAreaElement>('.editor-table-expand-dialog textarea')?.focus())
+}
+
+const replaceTableBreakTextNodes = (table: HTMLTableElement) => {
+  table.querySelectorAll('td,th').forEach((cell) => {
+    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        return /<br\s*\/?\s*>/i.test(node.textContent || '') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+      }
+    })
+    const nodes: Text[] = []
+    while (walker.nextNode()) nodes.push(walker.currentNode as Text)
+    nodes.forEach((textNode) => {
+      const parts = String(textNode.textContent || '').split(TABLE_CELL_BREAK_RE)
+      if (parts.length <= 1) return
+      const fragment = document.createDocumentFragment()
+      parts.forEach((part, index) => {
+        if (part) fragment.appendChild(document.createTextNode(part))
+        if (index < parts.length - 1) fragment.appendChild(document.createElement('br'))
+      })
+      textNode.parentNode?.replaceChild(fragment, textNode)
+    })
+  })
 }
 
 const syncEditorAfterDomTableRemoval = (table: HTMLTableElement | null) => {
@@ -1114,6 +1324,7 @@ const enhanceEditorTables = (_root: HTMLElement) => {
   getEditorTables().forEach((table, index) => {
     table.classList.add('editor-deletable-table')
     table.dataset.editorTableIndex = String(index)
+    replaceTableBreakTextNodes(table)
     const block = blocks[index]
     if (block) {
       table.dataset.editorTableBlockStart = String(block.start)
@@ -1450,6 +1661,12 @@ onBeforeUnmount(() => {
       attachmentPreviewCleanup();
       attachmentPreviewCleanup = null;
     }
+    if (tableExpandCloseTimer !== null) {
+      window.clearTimeout(tableExpandCloseTimer)
+      tableExpandCloseTimer = null
+    }
+    showTableExpandDialog.value = false
+    tableExpandClosing.value = false
   } catch (e) {
     console.warn('Vditor destroy error', e);
   }
@@ -1946,6 +2163,50 @@ html.dark .editor-attachment-preview__header,
   border-collapse: collapse;
 }
 
+.vditor-container .vditor-reset table.editor-deletable-table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(249, 115, 22, 0.58) rgba(148, 163, 184, 0.18);
+}
+
+.vditor-container .vditor-reset table.editor-deletable-table > thead,
+.vditor-container .vditor-reset table.editor-deletable-table > tbody {
+  display: table;
+  min-width: 100%;
+  border-collapse: collapse;
+}
+
+.vditor-container .vditor-reset table.editor-deletable-table::-webkit-scrollbar {
+  height: 9px;
+}
+
+.vditor-container .vditor-reset table.editor-deletable-table::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.vditor-container .vditor-reset table.editor-deletable-table::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(249, 115, 22, 0.62);
+}
+
+.vditor-container .vditor-reset table.editor-deletable-table::-webkit-scrollbar-thumb:hover {
+  background: rgba(234, 88, 12, 0.82);
+}
+
+.vditor-container .vditor-reset table.editor-deletable-table th,
+.vditor-container .vditor-reset table.editor-deletable-table td {
+  min-width: 96px;
+  max-width: 320px;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  vertical-align: top;
+}
+
 .vditor-reset table th,
 .vditor-reset table td {
   border: 1px solid rgba(148, 163, 184, 0.55);
@@ -2057,6 +2318,216 @@ html.dark .editor-table-delete-button {
 html.dark .editor-table-delete-button:hover,
 html.dark .editor-table-delete-button:focus-visible {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+.editor-table-expand-button {
+  box-sizing: border-box;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: fixed !important;
+  width: 28px !important;
+  min-width: 28px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 0 !important;
+  border-radius: 9px !important;
+  font-size: 15px;
+  line-height: 1;
+  transform-origin: 0 100% !important;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.14);
+}
+
+.editor-table-expand-button > span {
+  display: inline-block;
+  transform: translateY(-.5px);
+}
+
+html.dark .editor-table-expand-button {
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.36);
+}
+
+.editor-table-expand-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10030;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: rgba(15, 23, 42, 0.38);
+  backdrop-filter: blur(8px) saturate(115%);
+  animation: editorTableOverlayIn 180ms ease both;
+}
+
+.editor-table-expand-overlay.is-closing {
+  animation: editorTableOverlayOut 180ms ease both;
+}
+
+.editor-table-expand-dialog {
+  width: min(1080px, calc(100vw - 56px));
+  max-height: min(82vh, 720px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #111827;
+  box-shadow: 0 26px 70px rgba(15, 23, 42, 0.30);
+  animation: editorTableDialogIn 180ms cubic-bezier(.2, .85, .2, 1) both;
+}
+
+.editor-table-expand-overlay.is-closing .editor-table-expand-dialog {
+  animation: editorTableDialogOut 180ms ease both;
+}
+
+.editor-table-expand-overlay.is-dark .editor-table-expand-dialog {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(15, 23, 42, 0.96);
+  color: #f8fafc;
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.48);
+}
+
+.editor-table-expand-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.20);
+}
+
+.editor-table-expand-header > div {
+  display: grid;
+  gap: 2px;
+}
+
+.editor-table-expand-header strong {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.editor-table-expand-header span {
+  font-size: 12px;
+  color: rgba(71, 85, 105, 0.86);
+}
+
+.editor-table-expand-overlay.is-dark .editor-table-expand-header {
+  border-bottom-color: rgba(255, 255, 255, 0.12);
+}
+
+.editor-table-expand-overlay.is-dark .editor-table-expand-header span {
+  color: rgba(203, 213, 225, 0.78);
+}
+
+.editor-table-expand-close {
+  width: 30px !important;
+  min-width: 30px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 !important;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.editor-table-expand-scroll {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(249, 115, 22, 0.58) rgba(148, 163, 184, 0.18);
+}
+
+.editor-table-expand-scroll::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+.editor-table-expand-scroll::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.editor-table-expand-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(249, 115, 22, 0.62);
+}
+
+.editor-table-expand-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+}
+
+.editor-table-expand-table th,
+.editor-table-expand-table td {
+  min-width: 180px;
+  max-width: 360px;
+  padding: 0;
+  border: 1px solid rgba(148, 163, 184, 0.42);
+  vertical-align: top;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.editor-table-expand-table th {
+  background: rgba(248, 250, 252, 0.98);
+}
+
+.editor-table-expand-overlay.is-dark .editor-table-expand-table th,
+.editor-table-expand-overlay.is-dark .editor-table-expand-table td {
+  border-color: rgba(226, 232, 240, 0.20);
+  background: rgba(30, 41, 59, 0.74);
+}
+
+.editor-table-expand-overlay.is-dark .editor-table-expand-table th {
+  background: rgba(51, 65, 85, 0.82);
+}
+
+.editor-table-expand-table textarea {
+  display: block;
+  width: 100%;
+  min-width: 180px;
+  min-height: 42px;
+  height: auto;
+  padding: 9px 10px;
+  border: 0;
+  outline: none;
+  resize: vertical;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.editor-table-expand-table textarea:focus {
+  box-shadow: inset 0 0 0 2px rgba(249, 115, 22, 0.48);
+}
+
+.editor-table-expand-table textarea[readonly] {
+  cursor: default;
+}
+
+@keyframes editorTableOverlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes editorTableOverlayOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes editorTableDialogIn {
+  from { opacity: 0; transform: translate3d(0, 16px, 0) scale(.92); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@keyframes editorTableDialogOut {
+  from { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+  to { opacity: 0; transform: translate3d(0, 12px, 0) scale(.92); }
 }
 
 html.dark .vditor-hint {

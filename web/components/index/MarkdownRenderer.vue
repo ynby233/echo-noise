@@ -93,6 +93,7 @@ const hasFullImageAttachmentsMarker = (content: string) => {
 }
 const stripFullImageAttachmentsMarker = (content: string) => String(content || '').replace(FULL_IMAGE_ATTACHMENTS_MARKER_RE, '').trimStart()
 const HASHTAG_REG = /(^|[\s(（[{【])#([\p{L}\p{N}_-]+)/gu
+const TABLE_CELL_BREAK_RE = /<br\s*\/?\s*>/gi
 const METING_API_FALLBACKS = [
   'https://meting.soopy.cn/api',
   'https://api.injahow.cn/meting/',
@@ -386,6 +387,47 @@ const scheduleTaskListEnhance = () => {
     taskListEnhanceTimer = null
     enableRenderedTaskLists()
   }, 0)
+}
+
+const replaceRenderedTableBreakTextNodes = (table: HTMLTableElement) => {
+  table.querySelectorAll('td,th').forEach((cell) => {
+    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        return /<br\s*\/?\s*>/i.test(node.textContent || '') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+      }
+    })
+    const nodes: Text[] = []
+    while (walker.nextNode()) nodes.push(walker.currentNode as Text)
+    nodes.forEach((textNode) => {
+      const parts = String(textNode.textContent || '').split(TABLE_CELL_BREAK_RE)
+      if (parts.length <= 1) return
+      const fragment = document.createDocumentFragment()
+      parts.forEach((part, index) => {
+        if (part) fragment.appendChild(document.createTextNode(part))
+        if (index < parts.length - 1) fragment.appendChild(document.createElement('br'))
+      })
+      textNode.parentNode?.replaceChild(fragment, textNode)
+    })
+  })
+}
+
+const enhanceRenderedTables = () => {
+  const root = previewElement.value
+  if (!root) return
+  root.querySelectorAll<HTMLTableElement>('table').forEach((table) => {
+    if (table.closest('.noise-table-scroll')) {
+      replaceRenderedTableBreakTextNodes(table)
+      return
+    }
+    const parent = table.parentElement
+    if (!parent) return
+    const wrapper = document.createElement('div')
+    wrapper.className = 'noise-table-scroll'
+    parent.insertBefore(wrapper, table)
+    wrapper.appendChild(table)
+    table.classList.add('noise-scrollable-table')
+    replaceRenderedTableBreakTextNodes(table)
+  })
 }
 
 const onTaskListClick = (event: Event) => {
@@ -1303,6 +1345,7 @@ const renderMarkdown = async (markdown: string) => {
           applyDouyinVideoLayout()
           applyClickableTags()
           enableRenderedTaskLists()
+          enhanceRenderedTables()
           await nextTick()
           scheduleTaskListEnhance()
           
@@ -1596,6 +1639,50 @@ watch(() => props.enableGithubCard, () => {
 }
 .markdown-preview table thead tr {
   background-color: rgba(223, 226, 229, 0.49) !important;
+}
+
+.markdown-preview .noise-table-scroll {
+  max-width: 100%;
+  margin: 8px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(249, 115, 22, 0.58) rgba(148, 163, 184, 0.18);
+}
+
+.markdown-preview .noise-table-scroll::-webkit-scrollbar {
+  height: 9px;
+}
+
+.markdown-preview .noise-table-scroll::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.markdown-preview .noise-table-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(249, 115, 22, 0.62);
+}
+
+.markdown-preview .noise-table-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(234, 88, 12, 0.82);
+}
+
+.markdown-preview .noise-scrollable-table {
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  border-collapse: collapse;
+}
+
+.markdown-preview .noise-scrollable-table th,
+.markdown-preview .noise-scrollable-table td {
+  min-width: 96px;
+  max-width: 360px;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  vertical-align: top;
 }
 
 .markdown-preview table tbody tr {

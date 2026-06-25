@@ -462,8 +462,22 @@ assert(
     vditorEditor.includes('const TABLE_DELETE_BUTTON_SIZE = 10') &&
     vditorEditor.includes('getFixedCoordinateScale') &&
     vditorEditor.includes('getFixedRect(table, scale)') &&
-    vditorEditor.includes("top: `${rect.top - size}px`") &&
-    vditorEditor.includes("left: `${rect.left - size}px`") &&
+    vditorEditor.includes("top: `${rect.top - deleteSize}px`") &&
+    vditorEditor.includes("left: `${rect.left - deleteSize}px`") &&
+    vditorEditor.includes('const TABLE_EXPAND_BUTTON_SIZE = 28') &&
+    vditorEditor.includes('tableExpandButtonStyle') &&
+    vditorEditor.includes("top: `${rect.top - expandSize}px`") &&
+    vditorEditor.includes("left: `${rect.right}px`") &&
+    vditorEditor.includes('editor-table-expand-button') &&
+    vditorEditor.includes('openHoveredTableExpand') &&
+    vditorEditor.includes('editor-table-expand-overlay') &&
+    vditorEditor.includes('syncExpandedTableToEditor') &&
+    vditorEditor.includes('editableRowsFromMarkdownBlock') &&
+    vditorEditor.includes("join('<br />')") &&
+    vditorEditor.includes('TABLE_CELL_BREAK_RE') &&
+    vditorEditor.includes('replaceTableBreakTextNodes(table)') &&
+    vditorEditor.includes('.vditor-container .vditor-reset table.editor-deletable-table') &&
+    vditorEditor.includes('scrollbar-color: rgba(249, 115, 22, 0.58) rgba(148, 163, 184, 0.18);') &&
     !vditorEditor.includes("Math.max(6, rect.top - size)") &&
     !vditorEditor.includes("Math.max(6, rect.left - size)") &&
     vditorEditor.includes("Teleport to=\"body\"") &&
@@ -488,6 +502,12 @@ assert(
     !vditorEditor.includes('.vditor-reset table.editor-table-selected') &&
     markdownRenderer.includes('.markdown-preview :deep(.noise-attachment-audio)') &&
     markdownRenderer.includes('.markdown-preview :deep(.noise-attachment-audio--table)') &&
+    markdownRenderer.includes('enhanceRenderedTables()') &&
+    markdownRenderer.includes('noise-table-scroll') &&
+    markdownRenderer.includes('noise-scrollable-table') &&
+    markdownRenderer.includes('replaceRenderedTableBreakTextNodes') &&
+    markdownRenderer.includes('.markdown-preview .noise-table-scroll') &&
+    markdownRenderer.includes('overflow-x: auto;') &&
     markdownRenderer.includes('width: min(300px, 100%) !important;') &&
     markdownRenderer.includes('max-width: 300px;') &&
     markdownRenderer.includes('min-width: min(220px, 100%);') &&
