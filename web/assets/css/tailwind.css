@@ -286,7 +286,11 @@ html.dark .nw-action-btn--danger,
 }
 
 .nw-tooltip--fancybox {
-  z-index: 10020;
+  z-index: 10100;
+}
+
+.nw-tooltip--table-overlay {
+  z-index: 10090;
 }
 
 .nw-floating-menu {
@@ -658,7 +662,7 @@ html.dark .publish-datetime-menu .publish-date-weekdays {
   padding: 0 !important;
   transform: none !important;
   transform-origin: center center !important;
-  z-index: 9999 !important;
+  z-index: 10080 !important;
 }
 
 .fancybox__backdrop {

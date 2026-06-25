@@ -107,7 +107,7 @@
             <span>{{ expandedTableEditable ? '可直接编辑单元格内容' : '当前表格仅可预览' }}</span>
           </div>
           <button type="button" class="editor-table-expand-close nw-action-btn nw-tooltip-anchor" data-tooltip="关闭" aria-label="关闭放大表格" @click="closeExpandedTable">
-            ×
+            <span class="table-expand-close-icon" aria-hidden="true"></span>
           </button>
         </header>
         <div class="editor-table-expand-scroll">
@@ -115,7 +115,7 @@
             <tbody>
               <tr v-for="(row, rowIndex) in expandedTableRows" :key="`expanded-row-${rowIndex}`">
                 <component
-                  :is="rowIndex === 0 ? 'th' : 'td'"
+                  :is="'td'"
                   v-for="(_cell, cellIndex) in row"
                   :key="`expanded-cell-${rowIndex}-${cellIndex}`"
                 >
@@ -128,16 +128,19 @@
                     @keydown.tab.prevent="focusNextExpandedTableCell(rowIndex, cellIndex, $event.shiftKey)"
                   />
                   <div v-if="expandedTableCellAttachments(rowIndex, cellIndex).length" class="editor-table-expand-attachments">
-                    <button
+                    <a
                       v-for="attachment in expandedTableCellAttachments(rowIndex, cellIndex)"
                       :key="`${rowIndex}-${cellIndex}-${attachment.type}-${attachment.url}`"
-                      type="button"
-                      class="editor-table-expand-attachment-btn nw-action-btn"
+                      :href="attachment.url"
+                      class="editor-table-expand-attachment-tag editor-attachment-link"
+                      :data-attachment-kind="attachment.type"
+                      :data-attachment-url="attachment.url"
+                      :aria-label="`预览${attachment.title}`"
                       @mousedown.prevent.stop
                       @click.prevent.stop="previewExpandedTableAttachment(attachment, $event)"
                     >
-                      {{ attachment.type === 'image' ? '预览图片' : attachment.type === 'video' ? '预览视频' : '播放音频' }}
-                    </button>
+                      {{ attachment.title }}
+                    </a>
                   </div>
                 </component>
               </tr>
@@ -730,13 +733,25 @@ const setupAttachmentPreview = () => {
   }
 
   const insertEditorTableCellLineBreak = (event: Event) => {
-    const cell = getCurrentEditorTableCell()
+    const cell = getCurrentEditorTableCell(event)
     if (!cell) return false
     const selection = window.getSelection()
-    if (!selection || selection.rangeCount === 0) return false
-    const range = selection.getRangeAt(0)
+    if (!selection) return false
+    if (!selection.rangeCount) {
+      const fallbackRange = document.createRange()
+      fallbackRange.selectNodeContents(cell)
+      fallbackRange.collapse(false)
+      selection.addRange(fallbackRange)
+    }
+    let range = selection.getRangeAt(0)
     const rangeRoot = range.commonAncestorContainer instanceof Element ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement
-    if (!rangeRoot || !cell.contains(rangeRoot)) return false
+    if (!rangeRoot || !cell.contains(rangeRoot)) {
+      range = document.createRange()
+      range.selectNodeContents(cell)
+      range.collapse(false)
+      selection.removeAllRanges()
+      selection.addRange(range)
+    }
     let inserted = false
     try {
       inserted = document.execCommand('insertHTML', false, '<br>')
@@ -1790,21 +1805,32 @@ onBeforeUnmount(() => {
   }
 });
 
-const getEditorTableCellFromRange = (range: Range | null) => {
-  if (!range || !editorContainer.value) return null as HTMLTableCellElement | null
-  const node = range.commonAncestorContainer
-  const element = node instanceof Element ? node : node.parentElement
-  const cell = element?.closest?.('td,th') as HTMLTableCellElement | null
+const getEditorTableCellFromElement = (element: Element | null | undefined) => {
+  if (!element || !editorContainer.value) return null as HTMLTableCellElement | null
+  const cell = element.closest?.('td,th') as HTMLTableCellElement | null
   if (!cell || !editorContainer.value.contains(cell)) return null
   if (cell.closest('.vditor-ir table, .vditor-wysiwyg table, .vditor-reset table')) return cell
   return null
 }
 
-const getCurrentEditorTableCell = () => {
+const getEditorTableCellFromRange = (range: Range | null) => {
+  if (!range || !editorContainer.value) return null as HTMLTableCellElement | null
+  const node = range.commonAncestorContainer
+  const element = node instanceof Element ? node : node.parentElement
+  return getEditorTableCellFromElement(element)
+}
+
+const getEditorTableCellFromEvent = (event?: Event) => {
+  const target = event?.target as Node | null | undefined
+  const element = target instanceof Element ? target : target?.parentElement
+  return getEditorTableCellFromElement(element)
+}
+
+const getCurrentEditorTableCell = (event?: Event) => {
   if (typeof window === 'undefined') return null as HTMLTableCellElement | null
   const selection = window.getSelection()
   const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
-  return getEditorTableCellFromRange(range)
+  return getEditorTableCellFromRange(range) || getEditorTableCellFromEvent(event)
 }
 
 const restoreLastEditorSelection = () => {
@@ -2333,7 +2359,7 @@ html.dark .editor-attachment-preview__header,
 }
 
 .vditor-reset table th {
-  font-weight: 600;
+  font-weight: 400;
 }
 
 html.dark .vditor-container { background-color: #202a36; border: 1px solid rgba(255, 255, 255, 0.16); }
@@ -2502,8 +2528,9 @@ html.dark .editor-table-expand-button:focus-visible {
 }
 
 .editor-table-expand-dialog {
-  width: min(1480px, calc(100vw - 24px));
-  max-height: min(94vh, 960px);
+  width: min(1680px, calc(100vw - 12px));
+  height: min(96vh, 1040px);
+  max-height: calc(100dvh - 12px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
@@ -2559,13 +2586,44 @@ html.dark .editor-table-expand-button:focus-visible {
 }
 
 .editor-table-expand-close {
+  display: grid !important;
+  place-items: center !important;
+  position: relative;
   width: 30px !important;
   min-width: 30px !important;
   height: 30px !important;
   min-height: 30px !important;
   padding: 0 !important;
-  font-size: 18px;
+  font-size: 0;
   line-height: 1;
+}
+
+.table-expand-close-icon {
+  position: relative;
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.table-expand-close-icon::before,
+.table-expand-close-icon::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  transform-origin: center;
+}
+
+.table-expand-close-icon::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.table-expand-close-icon::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
 }
 
 .editor-table-expand-scroll {
@@ -2600,32 +2658,26 @@ html.dark .editor-table-expand-button:focus-visible {
 
 .editor-table-expand-table th,
 .editor-table-expand-table td {
-  min-width: 112px;
-  max-width: 260px;
+  min-width: 72px;
+  max-width: 220px;
   padding: 0;
   border: 1px solid rgba(148, 163, 184, 0.42);
   vertical-align: top;
   background: rgba(255, 255, 255, 0.94);
-}
-
-.editor-table-expand-table th {
-  background: rgba(248, 250, 252, 0.98);
+  font-weight: 400;
 }
 
 .editor-table-expand-overlay.is-dark .editor-table-expand-table th,
 .editor-table-expand-overlay.is-dark .editor-table-expand-table td {
   border-color: rgba(226, 232, 240, 0.20);
   background: rgba(30, 41, 59, 0.74);
-}
-
-.editor-table-expand-overlay.is-dark .editor-table-expand-table th {
-  background: rgba(51, 65, 85, 0.82);
+  font-weight: 400;
 }
 
 .editor-table-expand-table textarea {
   display: block;
   width: 100%;
-  min-width: 112px;
+  min-width: 72px;
   min-height: 42px;
   height: auto;
   padding: 9px 10px;
@@ -2655,12 +2707,38 @@ html.dark .editor-table-expand-button:focus-visible {
   padding: 0 8px 8px;
 }
 
-.editor-table-expand-attachment-btn {
-  min-height: 24px !important;
-  height: 24px !important;
-  padding: 0 8px !important;
-  border-radius: 8px !important;
-  font-size: 11px !important;
+.editor-table-expand-attachment-tag {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid rgba(249, 115, 22, 0.36);
+  border-radius: 8px;
+  background: rgba(249, 115, 22, 0.10);
+  color: #ea580c;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+  text-decoration: none;
+  cursor: zoom-in;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-table-expand-overlay.is-dark .editor-table-expand-attachment-tag {
+  border-color: rgba(251, 146, 60, 0.42);
+  background: rgba(249, 115, 22, 0.18);
+  color: #fed7aa;
+}
+
+.editor-table-expand-attachment-tag:hover,
+.editor-table-expand-attachment-tag:focus-visible {
+  outline: none;
+  border-color: rgba(249, 115, 22, 0.68);
+  background: rgba(249, 115, 22, 0.18);
+  color: #c2410c;
 }
 
 @keyframes editorTableOverlayIn {

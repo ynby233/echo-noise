@@ -409,8 +409,10 @@ assert(
     appVue.includes("el.classList.toggle(FANCYBOX_TOOLTIP_CLASS, !!anchor.closest('.fancybox__container'))") &&
     appVue.includes('tooltipEl.classList.remove(FANCYBOX_TOOLTIP_CLASS)') &&
     floatingCss.includes('.fancybox__container {\n  --fancybox-bg: rgba(0, 0, 0, 0.9);') &&
-    floatingCss.includes('z-index: 9999 !important;') &&
-    floatingCss.includes('.nw-tooltip--fancybox {\n  z-index: 10020;\n}') &&
+    floatingCss.includes('z-index: 10080 !important;') &&
+    floatingCss.includes('.nw-tooltip--fancybox {\n  z-index: 10100;\n}') &&
+    floatingCss.includes('.nw-tooltip--table-overlay {\n  z-index: 10090;\n}') &&
+    appVue.includes("const TABLE_OVERLAY_TOOLTIP_CLASS = 'nw-tooltip--table-overlay'") &&
     mediaFancybox.includes("mainClass: MEDIA_FANCYBOX_MAIN_CLASS") &&
     mediaFancybox.includes('Html = { videoAutoplay: false }') &&
     mediaFancybox.includes("Thumbs: {\n      autoStart: true,\n    }") &&
@@ -480,7 +482,12 @@ assert(
     vditorEditor.includes('rememberEditorTableScroll(table)') &&
     vditorEditor.includes('restoreEditorTableScroll(table)') &&
     vditorEditor.includes('@keydown.enter.exact="insertExpandedTableCellLineBreak(rowIndex, cellIndex, $event)"') &&
+    vditorEditor.includes(':is="\'td\'"') &&
+    vditorEditor.includes('editor-table-expand-attachment-tag editor-attachment-link') &&
+    !vditorEditor.includes('editor-table-expand-attachment-btn') &&
     vditorEditor.includes('if (event.isComposing) return') &&
+    vditorEditor.includes('getCurrentEditorTableCell(event)') &&
+    vditorEditor.includes('range.selectNodeContents(cell)') &&
     vditorEditor.includes("document.execCommand('insertHTML', false, '<br>')") &&
     vditorEditor.includes('previewExpandedTableAttachment') &&
     vditorEditor.includes('TABLE_CELL_BREAK_RE') &&
@@ -497,6 +504,7 @@ assert(
     vditorEditor.includes('.editor-table-expand-button') &&
     vditorEditor.includes('background: rgba(255, 255, 255, 0.96) !important;') &&
     vditorEditor.includes('background: rgba(30, 41, 59, 0.96) !important;') &&
+    vditorEditor.includes('table-expand-close-icon') &&
     vditorEditor.includes('place-items: center !important;') &&
     vditorEditor.includes('transform-origin: 100% 100% !important;') &&
     vditorEditor.includes('background: #f97316 !important;') &&
@@ -520,15 +528,19 @@ assert(
     markdownRenderer.includes('replaceRenderedTableBreakTextNodes') &&
     markdownRenderer.includes('showRenderedTableExpandDialog') &&
     markdownRenderer.includes('noise-rendered-table-expand-button') &&
+    markdownRenderer.includes('noise-attachment-tag--table') &&
+    markdownRenderer.includes('a.noise-attachment-tag[data-attachment-kind]') &&
     markdownRenderer.includes('openRenderedTableExpand(table)') &&
     markdownRenderer.includes('initializeMediaViewer(renderedTableExpandBody.value)') &&
     markdownRenderer.includes('rendered-table-expand-dialog') &&
+    markdownRenderer.includes('table-expand-close-icon') &&
     markdownRenderer.includes('.markdown-preview .noise-table-scroll') &&
     markdownRenderer.includes('overflow-x: auto;') &&
     markdownRenderer.includes('scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);') &&
     markdownRenderer.includes('width: min(300px, 100%) !important;') &&
     markdownRenderer.includes('max-width: 300px;') &&
     markdownRenderer.includes('min-width: min(220px, 100%);') &&
+    markdownRenderer.includes('border: 1px solid rgba(148, 163, 184, 0.42);') &&
     messageList.includes('createMediaFancyboxOptions({ carouselInfinite: false, video: true })') &&
     messageList.includes("import { createMediaFancyboxOptions } from '~/utils/media-fancybox'") &&
     /\bImage:\s*\{/.test(mediaFancybox) &&

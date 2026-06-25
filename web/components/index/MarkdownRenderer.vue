@@ -13,7 +13,7 @@
             <span>可滚动查看表格与附件内容</span>
           </div>
           <button type="button" class="rendered-table-expand-close nw-action-btn nw-tooltip-anchor" data-tooltip="关闭" aria-label="关闭放大表格" @click="closeRenderedTableExpand">
-            ×
+            <span class="table-expand-close-icon" aria-hidden="true"></span>
           </button>
         </header>
         <div ref="renderedTableExpandBody" class="rendered-table-expand-scroll" v-html="renderedTableExpandHtml"></div>
@@ -179,6 +179,15 @@ const initializeMediaViewer = (customRoot?: HTMLElement | null) => {
   const group = customRoot
     ? `markdown-table-media-${Date.now()}-${Math.random().toString(36).slice(2)}`
     : `markdown-media-${props.messageId || 'preview'}`
+  root.querySelectorAll<HTMLAnchorElement>('a.noise-attachment-tag[data-attachment-kind]').forEach((anchor) => {
+    const kind = anchor.dataset.attachmentKind || ''
+    const url = normalizeMediaPreviewUrl(anchor.dataset.attachmentUrl || anchor.getAttribute('href') || '')
+    if (!url || kind === 'audio') return
+    anchor.setAttribute('data-fancybox', anchor.getAttribute('data-fancybox') || group)
+    anchor.setAttribute('href', url)
+    anchor.dataset.src = url
+    if (kind === 'video') anchor.dataset.type = 'html5video'
+  })
   root.querySelectorAll('a[data-fancybox], img, video').forEach((node) => {
     const el = node as HTMLElement
     if (el.closest('.github-card, .video-wrapper, .douyin-video-wrapper, .bilibili-video-wrapper')) return
@@ -453,7 +462,8 @@ const openRenderedTableExpand = async (table: HTMLTableElement) => {
   if (!table) return
   const clone = table.cloneNode(true) as HTMLTableElement
   clone.classList.add('noise-scrollable-table', 'rendered-table-expanded-table')
-  clone.querySelectorAll('button').forEach((button) => button.remove())
+  clone.querySelectorAll('button:not(.noise-rendered-table-expand-button)').forEach((button) => button.remove())
+  clone.querySelectorAll('.noise-rendered-table-expand-button').forEach((button) => button.remove())
   renderedTableExpandHtml.value = clone.outerHTML
   if (renderedTableExpandCloseTimer) {
     clearTimeout(renderedTableExpandCloseTimer)
@@ -994,14 +1004,9 @@ const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string, co
   const safeName = escapeHtml(String(name || '').trim() || '未命名附件')
   if (!url) return ''
   if (compact) {
-    const baseClass = 'noise-attachment-render noise-attachment-render--table'
-    if (kindLabel === '图片附件') {
-      return `<span class="${baseClass} noise-attachment-render--image"><img class="noise-attachment-image" src="${safeUrl}" alt="${safeName}" loading="lazy" decoding="async" /></span>`
-    }
-    if (kindLabel === '视频附件') {
-      return `<span class="${baseClass} noise-attachment-render--video"><video src="${safeUrl}" controls preload="metadata"></video></span>`
-    }
-    return `<audio class="noise-attachment-audio noise-attachment-audio--table" src="${safeUrl}" controls preload="metadata"></audio>`
+    const type = kindLabel === '图片附件' ? 'image' : (kindLabel === '视频附件' ? 'video' : 'audio')
+    const label = `${escapeHtml(kindLabel)}：${safeName}`
+    return `<a class="noise-attachment-tag noise-attachment-tag--table noise-attachment-tag--${type}" href="${safeUrl}" data-attachment-kind="${type}" data-attachment-url="${safeUrl}" data-attachment-name="${safeName}">${label}</a>`
   }
   if (kindLabel === '图片附件') {
     return `<p class="noise-attachment-paragraph"><img class="noise-attachment-image" src="${safeUrl}" alt="${safeName}" loading="lazy" decoding="async" /></p>`
@@ -1734,7 +1739,11 @@ watch(() => props.enableGithubCard, () => {
   text-decoration: underline;
 }
 .markdown-preview table thead tr {
-  background-color: rgba(223, 226, 229, 0.49) !important;
+  background-color: inherit !important;
+}
+
+.markdown-preview table th {
+  font-weight: 400 !important;
 }
 
 .markdown-preview .noise-table-scroll {
@@ -1835,8 +1844,9 @@ watch(() => props.enableGithubCard, () => {
 }
 
 .rendered-table-expand-dialog {
-  width: min(1480px, calc(100vw - 24px));
-  max-height: min(94vh, 960px);
+  width: min(1680px, calc(100vw - 12px));
+  height: min(96vh, 1040px);
+  max-height: calc(100dvh - 12px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
@@ -1874,13 +1884,44 @@ watch(() => props.enableGithubCard, () => {
 .rendered-table-expand-overlay.is-dark .rendered-table-expand-header span { color: rgba(203, 213, 225, 0.78); }
 
 .rendered-table-expand-close {
+  display: grid !important;
+  place-items: center !important;
+  position: relative;
   width: 30px !important;
   min-width: 30px !important;
   height: 30px !important;
   min-height: 30px !important;
   padding: 0 !important;
-  font-size: 18px;
+  font-size: 0;
   line-height: 1;
+}
+
+.table-expand-close-icon {
+  position: relative;
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.table-expand-close-icon::before,
+.table-expand-close-icon::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  transform-origin: center;
+}
+
+.table-expand-close-icon::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.table-expand-close-icon::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
 }
 
 .rendered-table-expand-scroll {
@@ -1906,12 +1947,61 @@ watch(() => props.enableGithubCard, () => {
 
 .rendered-table-expanded-table th,
 .rendered-table-expanded-table td {
-  min-width: 112px;
-  max-width: 260px;
+  min-width: 72px;
+  max-width: 220px;
+  padding: 9px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.42);
+  background: rgba(255, 255, 255, 0.94);
+  color: inherit;
+  font-weight: 400;
   white-space: pre-wrap;
   overflow-wrap: break-word;
   word-break: break-word;
   vertical-align: top;
+}
+
+.rendered-table-expand-overlay.is-dark .rendered-table-expanded-table th,
+.rendered-table-expand-overlay.is-dark .rendered-table-expanded-table td {
+  border-color: rgba(226, 232, 240, 0.20);
+  background: rgba(30, 41, 59, 0.74);
+}
+
+.markdown-preview :deep(.noise-attachment-tag),
+.rendered-table-expand-scroll .noise-attachment-tag {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid rgba(249, 115, 22, 0.36);
+  border-radius: 8px;
+  background: rgba(249, 115, 22, 0.10);
+  color: #ea580c !important;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+  text-decoration: none !important;
+  cursor: zoom-in;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.markdown-preview.theme-dark :deep(.noise-attachment-tag),
+.rendered-table-expand-overlay.is-dark .noise-attachment-tag {
+  border-color: rgba(251, 146, 60, 0.42);
+  background: rgba(249, 115, 22, 0.18);
+  color: #fed7aa !important;
+}
+
+.markdown-preview :deep(.noise-attachment-tag:hover),
+.markdown-preview :deep(.noise-attachment-tag:focus-visible),
+.rendered-table-expand-scroll .noise-attachment-tag:hover,
+.rendered-table-expand-scroll .noise-attachment-tag:focus-visible {
+  outline: none;
+  border-color: rgba(249, 115, 22, 0.68);
+  background: rgba(249, 115, 22, 0.18);
+  color: #c2410c !important;
 }
 
 @keyframes renderedTableOverlayIn { from { opacity: 0; } to { opacity: 1; } }
