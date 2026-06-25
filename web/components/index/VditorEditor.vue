@@ -123,8 +123,8 @@
                     v-model="expandedTableRows[rowIndex][cellIndex]"
                     :readonly="!expandedTableEditable"
                     rows="1"
-                    @input="syncExpandedTableToEditor"
-                    @keydown.enter.exact="insertExpandedTableCellLineBreak(rowIndex, cellIndex, $event)"
+                    @input="onExpandedTableCellInput"
+                    @keydown.enter.stop.prevent="insertExpandedTableCellLineBreak($event)"
                     @keydown.tab.prevent="focusNextExpandedTableCell(rowIndex, cellIndex, $event.shiftKey)"
                   />
                   <div v-if="expandedTableCellAttachments(rowIndex, cellIndex).length" class="editor-table-expand-attachments">
@@ -1195,14 +1195,34 @@ const insertTextIntoTextarea = (textarea: HTMLTextAreaElement, value: string) =>
   textarea.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
-const insertExpandedTableCellLineBreak = (rowIndex: number, cellIndex: number, event: KeyboardEvent) => {
+const insertExpandedTableCellLineBreak = (event: KeyboardEvent) => {
   if (event.isComposing) return
   const textarea = event.target instanceof HTMLTextAreaElement ? event.target : null
   if (!textarea || !expandedTableEditable.value) return
   event.preventDefault()
   event.stopPropagation()
   insertTextIntoTextarea(textarea, '\n')
-  expandedTableRows.value[rowIndex][cellIndex] = textarea.value
+}
+
+const resizeExpandedTableTextarea = (textarea: HTMLTextAreaElement) => {
+  const minHeight = 64
+  const maxHeight = 240
+  textarea.style.height = 'auto'
+  const nextHeight = Math.min(maxHeight, Math.max(minHeight, textarea.scrollHeight))
+  textarea.style.height = `${nextHeight}px`
+  textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden'
+}
+
+const resizeExpandedTableTextareas = () => {
+  if (typeof document === 'undefined') return
+  document.querySelectorAll<HTMLTextAreaElement>('.editor-table-expand-dialog textarea').forEach((textarea) => {
+    resizeExpandedTableTextarea(textarea)
+  })
+}
+
+const onExpandedTableCellInput = (event: Event) => {
+  const textarea = event.target instanceof HTMLTextAreaElement ? event.target : null
+  if (textarea) resizeExpandedTableTextarea(textarea)
   syncExpandedTableToEditor()
 }
 
@@ -1464,7 +1484,10 @@ const openHoveredTableExpand = () => {
   tableExpandClosing.value = false
   showTableExpandDialog.value = true
   hideTableDeleteButton()
-  nextTick(() => document.querySelector<HTMLTextAreaElement>('.editor-table-expand-dialog textarea')?.focus())
+  nextTick(() => {
+    resizeExpandedTableTextareas()
+    document.querySelector<HTMLTextAreaElement>('.editor-table-expand-dialog textarea')?.focus()
+  })
 }
 
 const replaceTableBreakTextNodes = (table: HTMLTableElement) => {
@@ -2627,8 +2650,8 @@ html.dark .editor-table-expand-button:focus-visible {
 
 .editor-table-expand-dialog {
   width: min(1680px, calc(100vw - 12px));
-  height: min(96vh, 1040px);
-  max-height: calc(100dvh - 12px);
+  height: min(calc(100dvh - 24px), 1180px);
+  max-height: calc(100dvh - 24px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
@@ -2776,18 +2799,21 @@ html.dark .editor-table-expand-button:focus-visible {
   display: block;
   width: 100%;
   min-width: 72px;
-  min-height: 42px;
+  min-height: 64px;
+  max-height: 240px;
   height: auto;
   padding: 9px 10px;
   border: 0;
   outline: none;
-  resize: vertical;
+  box-sizing: border-box;
+  resize: none;
   background: transparent;
   color: inherit;
   font: inherit;
   line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: break-word;
+  overflow-y: hidden;
 }
 
 .editor-table-expand-table textarea:focus {
@@ -2808,6 +2834,7 @@ html.dark .editor-table-expand-button:focus-visible {
 .editor-table-expand-attachment-tag {
   display: inline-flex;
   align-items: center;
+  min-width: 0;
   max-width: 100%;
   min-height: 24px;
   padding: 0 8px;
