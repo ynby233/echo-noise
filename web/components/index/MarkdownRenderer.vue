@@ -1,5 +1,25 @@
 <template>
   <div ref="previewElement" class="markdown-preview" :data-task-list-editable="props.taskListEditable ? 'true' : 'false'"></div>
+  <Teleport to="body">
+    <div
+      v-if="showRenderedTableExpandDialog"
+      :class="['rendered-table-expand-overlay', { 'is-dark': renderedTableExpandDark, 'is-closing': renderedTableExpandClosing }]"
+      @click.self="closeRenderedTableExpand"
+    >
+      <section class="rendered-table-expand-dialog" role="dialog" aria-modal="true" aria-label="放大查看表格" @click.stop>
+        <header class="rendered-table-expand-header">
+          <div>
+            <strong>放大查看表格</strong>
+            <span>可滚动查看表格与附件内容</span>
+          </div>
+          <button type="button" class="rendered-table-expand-close nw-action-btn nw-tooltip-anchor" data-tooltip="关闭" aria-label="关闭放大表格" @click="closeRenderedTableExpand">
+            ×
+          </button>
+        </header>
+        <div ref="renderedTableExpandBody" class="rendered-table-expand-scroll" v-html="renderedTableExpandHtml"></div>
+      </section>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -40,6 +60,12 @@ const resolveImageUrl = (path: string) => {
 }
 
 const previewElement = ref<HTMLDivElement | null>(null);
+const renderedTableExpandBody = ref<HTMLDivElement | null>(null);
+const showRenderedTableExpandDialog = ref(false);
+const renderedTableExpandClosing = ref(false);
+const renderedTableExpandHtml = ref('');
+const renderedTableExpandDark = ref(false);
+let renderedTableExpandCloseTimer: ReturnType<typeof setTimeout> | null = null;
 let zoom: any = null;
 let themeClassObserver: MutationObserver | null = null
 let taskListObserver: MutationObserver | null = null
@@ -137,19 +163,22 @@ const applyThemeClass = () => {
   }
   previewElement.value.classList.toggle('theme-dark', !!isDark)
   previewElement.value.classList.toggle('theme-light', !isDark)
+  renderedTableExpandDark.value = !!isDark
 }
 
-const initializeMediaViewer = () => {
-  const root = previewElement.value
+const initializeMediaViewer = (customRoot?: HTMLElement | null) => {
+  const root = customRoot || previewElement.value
   const Fancybox = window.Fancybox
   if (!root || !Fancybox) return
 
-  if (zoom) {
+  if (!customRoot && zoom) {
     try { zoom.detach?.() } catch {}
     zoom = null
   }
 
-  const group = `markdown-media-${props.messageId || 'preview'}`
+  const group = customRoot
+    ? `markdown-table-media-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    : `markdown-media-${props.messageId || 'preview'}`
   root.querySelectorAll('a[data-fancybox], img, video').forEach((node) => {
     const el = node as HTMLElement
     if (el.closest('.github-card, .video-wrapper, .douyin-video-wrapper, .bilibili-video-wrapper')) return
@@ -161,10 +190,19 @@ const initializeMediaViewer = () => {
     }
     if (tag === 'img') {
       const img = el as HTMLImageElement
+      const src = img.currentSrc || img.src || img.getAttribute('src') || ''
+      if (!src) return
       const parent = img.parentElement as HTMLAnchorElement | null
       if (parent?.tagName?.toLowerCase() === 'a') {
         parent.setAttribute('data-fancybox', parent.getAttribute('data-fancybox') || group)
-        if (!parent.getAttribute('href')) parent.setAttribute('href', img.currentSrc || img.src)
+        if (!parent.getAttribute('href')) parent.setAttribute('href', src)
+      } else if (img.parentNode) {
+        const anchor = document.createElement('a')
+        anchor.href = src
+        anchor.setAttribute('data-fancybox', group)
+        anchor.className = 'inline-image-link'
+        img.parentNode.insertBefore(anchor, img)
+        anchor.appendChild(img)
       }
       return
     }
@@ -411,12 +449,65 @@ const replaceRenderedTableBreakTextNodes = (table: HTMLTableElement) => {
   })
 }
 
+const openRenderedTableExpand = async (table: HTMLTableElement) => {
+  if (!table) return
+  const clone = table.cloneNode(true) as HTMLTableElement
+  clone.classList.add('noise-scrollable-table', 'rendered-table-expanded-table')
+  clone.querySelectorAll('button').forEach((button) => button.remove())
+  renderedTableExpandHtml.value = clone.outerHTML
+  if (renderedTableExpandCloseTimer) {
+    clearTimeout(renderedTableExpandCloseTimer)
+    renderedTableExpandCloseTimer = null
+  }
+  renderedTableExpandClosing.value = false
+  showRenderedTableExpandDialog.value = true
+  await nextTick()
+  if (renderedTableExpandBody.value) {
+    renderedTableExpandBody.value.querySelectorAll<HTMLTableElement>('table').forEach((item) => replaceRenderedTableBreakTextNodes(item))
+    initializeMediaViewer(renderedTableExpandBody.value)
+  }
+}
+
+const closeRenderedTableExpand = () => {
+  if (!showRenderedTableExpandDialog.value || renderedTableExpandClosing.value) return
+  renderedTableExpandClosing.value = true
+  if (renderedTableExpandCloseTimer) clearTimeout(renderedTableExpandCloseTimer)
+  renderedTableExpandCloseTimer = setTimeout(() => {
+    showRenderedTableExpandDialog.value = false
+    renderedTableExpandClosing.value = false
+    renderedTableExpandHtml.value = ''
+    renderedTableExpandCloseTimer = null
+  }, 180)
+}
+
+const ensureRenderedTableExpandButton = (wrapper: HTMLElement, table: HTMLTableElement) => {
+  if (wrapper.querySelector('.noise-rendered-table-expand-button')) return
+  const button = document.createElement('button')
+  button.type = 'button'
+  button.className = 'noise-rendered-table-expand-button nw-action-btn nw-tooltip-anchor'
+  button.setAttribute('aria-label', '放大查看表格')
+  button.setAttribute('data-tooltip', '放大查看表格')
+  button.textContent = '⛶'
+  button.addEventListener('mousedown', (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+  })
+  button.addEventListener('click', (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    openRenderedTableExpand(table)
+  })
+  wrapper.appendChild(button)
+}
+
 const enhanceRenderedTables = () => {
   const root = previewElement.value
   if (!root) return
   root.querySelectorAll<HTMLTableElement>('table').forEach((table) => {
-    if (table.closest('.noise-table-scroll')) {
+    const existingWrapper = table.closest<HTMLElement>('.noise-table-scroll')
+    if (existingWrapper) {
       replaceRenderedTableBreakTextNodes(table)
+      ensureRenderedTableExpandButton(existingWrapper, table)
       return
     }
     const parent = table.parentElement
@@ -427,6 +518,7 @@ const enhanceRenderedTables = () => {
     wrapper.appendChild(table)
     table.classList.add('noise-scrollable-table')
     replaceRenderedTableBreakTextNodes(table)
+    ensureRenderedTableExpandButton(wrapper, table)
   })
 }
 
@@ -1454,6 +1546,10 @@ onBeforeUnmount(() => {
     clearTimeout(taskListEnhanceTimer)
     taskListEnhanceTimer = null
   }
+  if (renderedTableExpandCloseTimer) {
+    clearTimeout(renderedTableExpandCloseTimer)
+    renderedTableExpandCloseTimer = null
+  }
   try {
     window.removeEventListener('resize', applyDouyinVideoLayout)
   } catch {}
@@ -1647,7 +1743,7 @@ watch(() => props.enableGithubCard, () => {
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
-  scrollbar-color: rgba(249, 115, 22, 0.58) rgba(148, 163, 184, 0.18);
+  scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);
 }
 
 .markdown-preview .noise-table-scroll::-webkit-scrollbar {
@@ -1661,11 +1757,48 @@ watch(() => props.enableGithubCard, () => {
 
 .markdown-preview .noise-table-scroll::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: rgba(249, 115, 22, 0.62);
+  background: rgba(100, 116, 139, 0.62);
 }
 
 .markdown-preview .noise-table-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(234, 88, 12, 0.82);
+  background: rgba(71, 85, 105, 0.82);
+}
+
+.markdown-preview .noise-table-scroll {
+  position: relative;
+}
+
+.noise-rendered-table-expand-button {
+  position: absolute !important;
+  top: 4px;
+  right: 4px;
+  width: 22px !important;
+  min-width: 22px !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  padding: 0 !important;
+  border-radius: 8px !important;
+  border-color: rgba(148, 163, 184, 0.42) !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+  color: rgba(51, 65, 85, 0.96) !important;
+  font-size: 13px !important;
+  opacity: 0;
+  transform: scale(.94);
+  transform-origin: 100% 0;
+  transition: opacity 150ms ease, transform 150ms ease, background-color 150ms ease;
+  z-index: 2;
+}
+
+.markdown-preview .noise-table-scroll:hover .noise-rendered-table-expand-button,
+.noise-rendered-table-expand-button:focus-visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.markdown-preview.theme-dark .noise-rendered-table-expand-button {
+  border-color: rgba(148, 163, 184, 0.38) !important;
+  background: rgba(30, 41, 59, 0.94) !important;
+  color: rgba(226, 232, 240, 0.96) !important;
 }
 
 .markdown-preview .noise-scrollable-table {
@@ -1677,13 +1810,114 @@ watch(() => props.enableGithubCard, () => {
 
 .markdown-preview .noise-scrollable-table th,
 .markdown-preview .noise-scrollable-table td {
-  min-width: 96px;
-  max-width: 360px;
+  min-width: 88px;
+  max-width: 280px;
   white-space: pre-wrap;
   overflow-wrap: break-word;
   word-break: break-word;
   vertical-align: top;
 }
+
+.rendered-table-expand-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10030;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgba(15, 23, 42, 0.38);
+  backdrop-filter: blur(8px) saturate(115%);
+  animation: renderedTableOverlayIn 180ms ease both;
+}
+
+.rendered-table-expand-overlay.is-closing {
+  animation: renderedTableOverlayOut 180ms ease both;
+}
+
+.rendered-table-expand-dialog {
+  width: min(1480px, calc(100vw - 24px));
+  max-height: min(94vh, 960px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #111827;
+  box-shadow: 0 26px 70px rgba(15, 23, 42, 0.30);
+  animation: renderedTableDialogIn 180ms cubic-bezier(.2, .85, .2, 1) both;
+}
+
+.rendered-table-expand-overlay.is-closing .rendered-table-expand-dialog {
+  animation: renderedTableDialogOut 180ms ease both;
+}
+
+.rendered-table-expand-overlay.is-dark .rendered-table-expand-dialog {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(15, 23, 42, 0.96);
+  color: #f8fafc;
+}
+
+.rendered-table-expand-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.20);
+}
+
+.rendered-table-expand-header > div { display: grid; gap: 2px; }
+.rendered-table-expand-header strong { font-size: 15px; font-weight: 700; }
+.rendered-table-expand-header span { font-size: 12px; color: rgba(71, 85, 105, 0.86); }
+.rendered-table-expand-overlay.is-dark .rendered-table-expand-header { border-bottom-color: rgba(255,255,255,.12); }
+.rendered-table-expand-overlay.is-dark .rendered-table-expand-header span { color: rgba(203, 213, 225, 0.78); }
+
+.rendered-table-expand-close {
+  width: 30px !important;
+  min-width: 30px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 !important;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.rendered-table-expand-scroll {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);
+}
+
+.rendered-table-expand-scroll::-webkit-scrollbar { width: 9px; height: 9px; }
+.rendered-table-expand-scroll::-webkit-scrollbar-track { border-radius: 999px; background: rgba(148, 163, 184, 0.18); }
+.rendered-table-expand-scroll::-webkit-scrollbar-thumb { border-radius: 999px; background: rgba(100, 116, 139, 0.62); }
+.rendered-table-expand-scroll::-webkit-scrollbar-thumb:hover { background: rgba(71, 85, 105, 0.82); }
+
+.rendered-table-expanded-table {
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  border-collapse: collapse;
+}
+
+.rendered-table-expanded-table th,
+.rendered-table-expanded-table td {
+  min-width: 112px;
+  max-width: 260px;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  vertical-align: top;
+}
+
+@keyframes renderedTableOverlayIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes renderedTableOverlayOut { from { opacity: 1; } to { opacity: 0; } }
+@keyframes renderedTableDialogIn { from { opacity: 0; transform: translate3d(0, 16px, 0) scale(.92); } to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); } }
+@keyframes renderedTableDialogOut { from { opacity: 1; transform: translate3d(0, 0, 0) scale(1); } to { opacity: 0; transform: translate3d(0, 12px, 0) scale(.92); } }
 
 .markdown-preview table tbody tr {
   background-color: rgba(232, 232, 237, 0.39) !important;

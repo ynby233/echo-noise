@@ -124,8 +124,21 @@
                     :readonly="!expandedTableEditable"
                     rows="1"
                     @input="syncExpandedTableToEditor"
+                    @keydown.enter.exact="insertExpandedTableCellLineBreak(rowIndex, cellIndex, $event)"
                     @keydown.tab.prevent="focusNextExpandedTableCell(rowIndex, cellIndex, $event.shiftKey)"
                   />
+                  <div v-if="expandedTableCellAttachments(rowIndex, cellIndex).length" class="editor-table-expand-attachments">
+                    <button
+                      v-for="attachment in expandedTableCellAttachments(rowIndex, cellIndex)"
+                      :key="`${rowIndex}-${cellIndex}-${attachment.type}-${attachment.url}`"
+                      type="button"
+                      class="editor-table-expand-attachment-btn nw-action-btn"
+                      @mousedown.prevent.stop
+                      @click.prevent.stop="previewExpandedTableAttachment(attachment, $event)"
+                    >
+                      {{ attachment.type === 'image' ? '预览图片' : attachment.type === 'video' ? '预览视频' : '播放音频' }}
+                    </button>
+                  </div>
                 </component>
               </tr>
             </tbody>
@@ -177,8 +190,9 @@ let hoveredEditorTable: HTMLTableElement | null = null;
 let expandedEditorTableBlock: EditorTableSourceBlock | null = null;
 let tableDeleteHideTimer: number | null = null;
 let tableExpandCloseTimer: number | null = null;
+const editorTableScrollPositions = new Map<string, number>();
 const TABLE_DELETE_BUTTON_SIZE = 10;
-const TABLE_EXPAND_BUTTON_SIZE = 28;
+const TABLE_EXPAND_BUTTON_SIZE = TABLE_DELETE_BUTTON_SIZE;
 const TABLE_CELL_BREAK_RE = /<br\s*\/?\s*>/gi;
 const isReady = ref(false);
 const showHeadingMenu = ref(false);
@@ -705,11 +719,51 @@ const setupAttachmentPreview = () => {
     selection.addRange(range)
   }
 
+  const emitEditorSoftBreakInput = (event: Event) => {
+    const target = getEventElement(event)
+    const editable = target?.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset') as HTMLElement | null
+    editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '\n' }))
+    scheduleRefreshAttachmentLinks()
+    window.setTimeout(() => {
+      if (vditorInstance?.getValue) emit('update:modelValue', vditorInstance.getValue())
+    }, 0)
+  }
+
+  const insertEditorTableCellLineBreak = (event: Event) => {
+    const cell = getCurrentEditorTableCell()
+    if (!cell) return false
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return false
+    const range = selection.getRangeAt(0)
+    const rangeRoot = range.commonAncestorContainer instanceof Element ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement
+    if (!rangeRoot || !cell.contains(rangeRoot)) return false
+    let inserted = false
+    try {
+      inserted = document.execCommand('insertHTML', false, '<br>')
+    } catch {
+      inserted = false
+    }
+    if (!inserted) {
+      range.deleteContents()
+      const br = document.createElement('br')
+      range.insertNode(br)
+      range.setStartAfter(br)
+      range.collapse(true)
+      selection.removeAllRanges()
+      selection.addRange(range)
+      inserted = true
+    }
+    if (!inserted) return false
+    emitEditorSoftBreakInput(event)
+    return true
+  }
+
   const insertEditorSoftLineBreak = (event: Event) => {
     event.preventDefault()
     event.stopPropagation()
     ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
     moveCaretAfterAtomicAttachment()
+    if (insertEditorTableCellLineBreak(event)) return
     let inserted = false
     try {
       inserted = document.execCommand('insertText', false, '\n')
@@ -731,13 +785,7 @@ const setupAttachmentPreview = () => {
       }
     }
     if (!inserted) return
-    const target = getEventElement(event)
-    const editable = target?.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset') as HTMLElement | null
-    editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '\n' }))
-    scheduleRefreshAttachmentLinks()
-    window.setTimeout(() => {
-      if (vditorInstance?.getValue) emit('update:modelValue', vditorInstance.getValue())
-    }, 0)
+    emitEditorSoftBreakInput(event)
   }
 
   const onPlainTextEnterKeydown = (event: KeyboardEvent) => {
@@ -1014,7 +1062,7 @@ const positionTableDeleteButton = (table: HTMLTableElement) => {
   tableExpandButtonStyle.value = {
     position: 'fixed',
     top: `${rect.top - expandSize}px`,
-    left: `${rect.right}px`,
+    left: `${rect.left}px`,
     zIndex: '10020'
   }
 }
@@ -1058,6 +1106,72 @@ const editorTextToTableCellSource = (value: string) => {
     .join('<br />')
     .trim()
   return normalized || ' '
+}
+
+const tableScrollKeyFromBlock = (block?: EditorTableSourceBlock | null, fallback = '') => {
+  if (block) return `${block.kind}:${block.start}:${block.end}`
+  return fallback
+}
+
+const rememberEditorTableScroll = (table: HTMLTableElement) => {
+  const key = table.dataset.editorTableScrollKey || table.dataset.editorTableIndex || ''
+  if (!key) return
+  editorTableScrollPositions.set(key, table.scrollLeft || 0)
+}
+
+const restoreEditorTableScroll = (table: HTMLTableElement) => {
+  const key = table.dataset.editorTableScrollKey || table.dataset.editorTableIndex || ''
+  if (!key) return
+  const left = editorTableScrollPositions.get(key)
+  if (typeof left !== 'number' || left <= 0) return
+  table.scrollLeft = left
+  requestAnimationFrame(() => { table.scrollLeft = left })
+}
+
+const parseAttachmentMarkersFromText = (text: string) => {
+  const items: EditorAttachmentInfo[] = []
+  const source = String(text || '')
+  ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = ATTACHMENT_MARKER_GLOBAL_RE.exec(source))) {
+    const info = normalizeAttachmentInfo(match[1], match[2], match[3])
+    if (info) items.push(info)
+  }
+  return items
+}
+
+const expandedTableCellAttachments = (rowIndex: number, cellIndex: number) => parseAttachmentMarkersFromText(expandedTableRows.value[rowIndex]?.[cellIndex] || '')
+
+const previewExpandedTableAttachment = (attachment: EditorAttachmentInfo, event: MouseEvent) => {
+  const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
+  if (attachment.type === 'audio') {
+    const url = attachment.url
+    window.open(url, '_blank', 'noopener,noreferrer')
+    return
+  }
+  showAttachmentGallery([attachment], attachment, target)
+}
+
+const insertTextIntoTextarea = (textarea: HTMLTextAreaElement, value: string) => {
+  const start = textarea.selectionStart ?? textarea.value.length
+  const end = textarea.selectionEnd ?? start
+  const nextValue = `${textarea.value.slice(0, start)}${value}${textarea.value.slice(end)}`
+  textarea.value = nextValue
+  const nextPos = start + value.length
+  textarea.selectionStart = nextPos
+  textarea.selectionEnd = nextPos
+  textarea.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
+const insertExpandedTableCellLineBreak = (rowIndex: number, cellIndex: number, event: KeyboardEvent) => {
+  if (event.isComposing) return
+  const textarea = event.target instanceof HTMLTextAreaElement ? event.target : null
+  if (!textarea || !expandedTableEditable.value) return
+  event.preventDefault()
+  event.stopPropagation()
+  insertTextIntoTextarea(textarea, '\n')
+  expandedTableRows.value[rowIndex][cellIndex] = textarea.value
+  syncExpandedTableToEditor()
 }
 
 const isMarkdownTableDivider = (line: string) => {
@@ -1326,6 +1440,9 @@ const enhanceEditorTables = (_root: HTMLElement) => {
     table.dataset.editorTableIndex = String(index)
     replaceTableBreakTextNodes(table)
     const block = blocks[index]
+    const scrollKey = tableScrollKeyFromBlock(block, `index:${index}`)
+    table.dataset.editorTableScrollKey = scrollKey
+    table.onscroll = () => rememberEditorTableScroll(table)
     if (block) {
       table.dataset.editorTableBlockStart = String(block.start)
       table.dataset.editorTableBlockEnd = String(block.end)
@@ -1333,6 +1450,7 @@ const enhanceEditorTables = (_root: HTMLElement) => {
       delete table.dataset.editorTableBlockStart
       delete table.dataset.editorTableBlockEnd
     }
+    restoreEditorTableScroll(table)
   })
 }
 
@@ -2169,7 +2287,7 @@ html.dark .editor-attachment-preview__header,
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
-  scrollbar-color: rgba(249, 115, 22, 0.58) rgba(148, 163, 184, 0.18);
+  scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);
 }
 
 .vditor-container .vditor-reset table.editor-deletable-table > thead,
@@ -2190,17 +2308,17 @@ html.dark .editor-attachment-preview__header,
 
 .vditor-container .vditor-reset table.editor-deletable-table::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: rgba(249, 115, 22, 0.62);
+  background: rgba(100, 116, 139, 0.62);
 }
 
 .vditor-container .vditor-reset table.editor-deletable-table::-webkit-scrollbar-thumb:hover {
-  background: rgba(234, 88, 12, 0.82);
+  background: rgba(71, 85, 105, 0.82);
 }
 
 .vditor-container .vditor-reset table.editor-deletable-table th,
 .vditor-container .vditor-reset table.editor-deletable-table td {
-  min-width: 96px;
-  max-width: 320px;
+  min-width: 88px;
+  max-width: 280px;
   white-space: pre-wrap;
   overflow-wrap: break-word;
   word-break: break-word;
@@ -2326,25 +2444,45 @@ html.dark .editor-table-delete-button:focus-visible {
   align-items: center !important;
   justify-content: center !important;
   position: fixed !important;
-  width: 28px !important;
-  min-width: 28px !important;
-  height: 28px !important;
-  min-height: 28px !important;
+  width: 10px !important;
+  min-width: 10px !important;
+  height: 10px !important;
+  min-height: 10px !important;
   padding: 0 !important;
-  border-radius: 9px !important;
-  font-size: 15px;
+  border-radius: 2px !important;
+  border-color: rgba(148, 163, 184, 0.46) !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  color: rgba(51, 65, 85, 0.96) !important;
+  font-size: 8px;
   line-height: 1;
   transform-origin: 0 100% !important;
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.14);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.20);
+}
+
+.editor-table-expand-button:hover,
+.editor-table-expand-button:focus-visible {
+  border-color: rgba(100, 116, 139, 0.62) !important;
+  background: rgba(241, 245, 249, 0.98) !important;
+  color: rgba(15, 23, 42, 0.98) !important;
 }
 
 .editor-table-expand-button > span {
   display: inline-block;
-  transform: translateY(-.5px);
+  transform: translateY(-.2px);
 }
 
 html.dark .editor-table-expand-button {
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.36);
+  border-color: rgba(148, 163, 184, 0.42) !important;
+  background: rgba(30, 41, 59, 0.96) !important;
+  color: rgba(226, 232, 240, 0.96) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.42);
+}
+
+html.dark .editor-table-expand-button:hover,
+html.dark .editor-table-expand-button:focus-visible {
+  border-color: rgba(203, 213, 225, 0.46) !important;
+  background: rgba(51, 65, 85, 0.98) !important;
+  color: #fff !important;
 }
 
 .editor-table-expand-overlay {
@@ -2353,7 +2491,7 @@ html.dark .editor-table-expand-button {
   z-index: 10030;
   display: grid;
   place-items: center;
-  padding: 28px;
+  padding: 12px;
   background: rgba(15, 23, 42, 0.38);
   backdrop-filter: blur(8px) saturate(115%);
   animation: editorTableOverlayIn 180ms ease both;
@@ -2364,8 +2502,8 @@ html.dark .editor-table-expand-button {
 }
 
 .editor-table-expand-dialog {
-  width: min(1080px, calc(100vw - 56px));
-  max-height: min(82vh, 720px);
+  width: min(1480px, calc(100vw - 24px));
+  max-height: min(94vh, 960px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
@@ -2434,9 +2572,9 @@ html.dark .editor-table-expand-button {
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  padding: 16px;
+  padding: 12px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(249, 115, 22, 0.58) rgba(148, 163, 184, 0.18);
+  scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);
 }
 
 .editor-table-expand-scroll::-webkit-scrollbar {
@@ -2451,7 +2589,7 @@ html.dark .editor-table-expand-button {
 
 .editor-table-expand-scroll::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: rgba(249, 115, 22, 0.62);
+  background: rgba(100, 116, 139, 0.62);
 }
 
 .editor-table-expand-table {
@@ -2462,8 +2600,8 @@ html.dark .editor-table-expand-button {
 
 .editor-table-expand-table th,
 .editor-table-expand-table td {
-  min-width: 180px;
-  max-width: 360px;
+  min-width: 112px;
+  max-width: 260px;
   padding: 0;
   border: 1px solid rgba(148, 163, 184, 0.42);
   vertical-align: top;
@@ -2487,7 +2625,7 @@ html.dark .editor-table-expand-button {
 .editor-table-expand-table textarea {
   display: block;
   width: 100%;
-  min-width: 180px;
+  min-width: 112px;
   min-height: 42px;
   height: auto;
   padding: 9px 10px;
@@ -2508,6 +2646,21 @@ html.dark .editor-table-expand-button {
 
 .editor-table-expand-table textarea[readonly] {
   cursor: default;
+}
+
+.editor-table-expand-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 8px 8px;
+}
+
+.editor-table-expand-attachment-btn {
+  min-height: 24px !important;
+  height: 24px !important;
+  padding: 0 8px !important;
+  border-radius: 8px !important;
+  font-size: 11px !important;
 }
 
 @keyframes editorTableOverlayIn {
