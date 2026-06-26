@@ -500,7 +500,15 @@ assert(
     vditorEditor.includes(':value="expandedTableCellEditorText(rowIndex, cellIndex)"') &&
     vditorEditor.includes('@input="updateExpandedTableCellText(rowIndex, cellIndex, $event)"') &&
     !vditorEditor.includes('v-model="expandedTableRows[rowIndex][cellIndex]"') &&
-    vditorEditor.includes('expandedTableEditable.value = !!block') &&
+    vditorEditor.includes('getTabTableBlocks') &&
+    vditorEditor.includes("kind: 'markdown' | 'html' | 'tab'") &&
+    vditorEditor.includes('parseEditableTabTableRow') &&
+    vditorEditor.includes('formatEditableTabTableRow') &&
+    vditorEditor.includes('syncExpandedTableDomToEditor') &&
+    vditorEditor.includes('expandedEditorTableElement') &&
+    vditorEditor.includes('if (!expandedEditorTableBlock) return syncExpandedTableDomToEditor()') &&
+    vditorEditor.includes('expandedTableEditable.value = !!block || !!table') &&
+    !vditorEditor.includes('expandedTableEditable.value = !!block\n') &&
     !vditorEditor.includes('当前表格仅可预览') &&
     vditorEditor.includes('rememberEditorTableScroll(table)') &&
     vditorEditor.includes('restoreEditorTableScroll(table)') &&
