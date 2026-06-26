@@ -966,7 +966,6 @@ const setupAttachmentPreview = () => {
   root.addEventListener('mousedown', preventAttachmentNavigation, true)
   root.addEventListener('click', onAttachmentClick, true)
   root.addEventListener('keydown', onPlainTextEnterKeydown, true)
-  root.addEventListener('beforeinput', onEditorBeforeInput as EventListener, true)
   root.addEventListener('keydown', onAttachmentKeydown, true)
   window.addEventListener('resize', repositionVisibleTableDeleteButton)
   window.addEventListener('scroll', repositionVisibleTableDeleteButton, { passive: true, capture: true })
@@ -1718,6 +1717,38 @@ const editorTableContentTextFromElement = (element: HTMLElement) => {
 
 const editorTableCellTextFromDom = (cell: HTMLTableCellElement) => editorTableContentTextFromElement(cell)
 
+const serializeEditorTableDomAsMarkdown = (table: HTMLTableElement) => {
+  const rows = Array.from(table.rows).map((row) => Array.from(row.cells).map((cell) => editorTableCellTextFromDom(cell as HTMLTableCellElement)))
+  if (!rows.length) return ''
+  const hasVisibleContent = rows.some((row) => row.some((cell) => cell.trim()))
+  if (!hasVisibleContent) return ''
+  const colCount = Math.max(1, ...rows.map((row) => row.length))
+  const normalizedRows = rows.map((row) => Array.from({ length: colCount }, (_, index) => row[index] ?? ''))
+  const header = normalizedRows[0] || []
+  const body = normalizedRows.slice(1)
+  return [
+    formatEditableMarkdownTableRow(header),
+    formatMarkdownDividerLine('', colCount),
+    ...body.map(formatEditableMarkdownTableRow)
+  ].join('\n')
+}
+
+const getEditorDomContentFallback = () => {
+  if (typeof document === 'undefined') return ''
+  const editable = editorContainer.value?.querySelector<HTMLElement>('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset')
+  if (!editable) return ''
+  const clone = editable.cloneNode(true) as HTMLElement
+  clone.querySelectorAll('.editor-table-delete-button, .editor-table-expand-button, .editor-attachment-preview').forEach((node) => node.remove())
+  clone.querySelectorAll('table').forEach((node) => {
+    const table = node as HTMLTableElement
+    const markdown = serializeEditorTableDomAsMarkdown(table)
+    table.replaceWith(document.createTextNode(markdown ? `\n${markdown}\n` : ''))
+  })
+  clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')))
+  const text = normalizeAttachmentSourceText(String(clone.textContent || '').replace(/\u00a0/g, ' ')).trim()
+  return text
+}
+
 const getEditorTableCellPosition = (cell: HTMLTableCellElement | null): PendingEditorTableCellSync | null => {
   const table = cell?.closest('table') as HTMLTableElement | null
   const row = cell?.parentElement as HTMLTableRowElement | null
@@ -1756,11 +1787,12 @@ const markEditorTableCellSourceDirty = (cell: HTMLTableCellElement, text = edito
 
 const getEditorValueWithPendingTableSync = () => {
   const currentValue = vditorInstance?.getValue?.() || ''
-  if (!pendingEditorTableCellSync) return currentValue
+  const fallbackValue = currentValue.trim() ? currentValue : getEditorDomContentFallback()
+  if (!pendingEditorTableCellSync) return fallbackValue || currentValue
   refreshPendingEditorTableCellText()
   const cell = getPendingEditorTableCell()
   const result = buildEditorTableCellSourceValue(cell, pendingEditorTableCellSync.text)
-  return result?.value || currentValue
+  return result?.value || fallbackValue || currentValue
 }
 
 const flushPendingEditorTableCellSourceSync = () => {
@@ -2005,8 +2037,11 @@ const enhanceEditorTables = (_root: HTMLElement) => {
     if (!block && index >= 0 && index < blocks.length && !usedBlocks.has(blocks[index])) block = blocks[index]
     if (!block) block = blocks.find((candidate) => !usedBlocks.has(candidate))
     if (block) usedBlocks.add(block)
-    normalizeEditableHtmlTable(table)
-    removeMarkdownTableDividerRow(table, block || null)
+    // Do not structurally mutate Vditor's live editable table DOM here.
+    // Vditor IR owns the table model; replacing the live thead/th tree or removing
+    // its generated divider row can make getValue() return empty content and can
+    // collapse the table during later typing/publishing. First-row parity is kept
+    // visually through CSS while source/detached HTML paths may still normalize.
     replaceTableBreakTextNodes(table)
     const scrollKey = tableScrollKeyFromBlock(block, `index:${index}`)
     table.dataset.editorTableScrollKey = scrollKey

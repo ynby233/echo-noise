@@ -569,6 +569,9 @@ assert(
     vditorEditor.includes('emit("update:modelValue", getEditorValueWithPendingTableSync())') &&
     vditorEditor.includes("root.addEventListener('focusout', onEditorFocusOut, true)") &&
     vditorEditor.includes('getEditorValueWithPendingTableSync()') &&
+    vditorEditor.includes('getEditorDomContentFallback()') &&
+    vditorEditor.includes('serializeEditorTableDomAsMarkdown(table)') &&
+    vditorEditor.includes('fallbackValue || currentValue') &&
     !/const insertEditorTableCellLineBreak[\s\S]*?dispatchEditorTableDomInput\(table\)[\s\S]*?return true/.test(vditorEditor) &&
     !vditorEditor.includes('scheduleEditorTableCellSourceSync') &&
     !vditorEditor.includes('focusEditorTableCellAt') &&
@@ -577,7 +580,8 @@ assert(
     vditorEditor.includes("const lineBreak = document.createElement('br')") &&
     vditorEditor.includes("const caretNode = document.createTextNode('')") &&
     vditorEditor.includes('normalizeEditableHtmlTable(table)') &&
-    vditorEditor.includes('removeMarkdownTableDividerRow(table, block || null)') &&
+    !vditorEditor.includes('removeMarkdownTableDividerRow(table, block || null)') &&
+    vditorEditor.includes("Vditor IR owns the table model") &&
     vditorEditor.includes('buildMarkdownTable(rows, cols)') &&
     vditorEditor.includes('previewExpandedTableAttachment') &&
     vditorEditor.includes('TABLE_CELL_BREAK_RE') &&
