@@ -497,6 +497,16 @@ assert(
     vditorEditor.includes('stripAttachmentMarkersFromEditorText') &&
     vditorEditor.includes('mergeExpandedCellEditorText') &&
     vditorEditor.includes('editorTextLineToHtmlTableCellSource') &&
+    vditorEditor.includes('const expandedTableDirty = ref(false);') &&
+    vditorEditor.includes('const row = expandedTableRows.value[rowIndex]') &&
+    vditorEditor.includes('expandedTableDirty.value = true') &&
+    !/const updateExpandedTableCellText[\s\S]*?syncExpandedTableToEditor\(\)[\s\S]*?const expandedTableCellAttachments/.test(vditorEditor) &&
+    !/const insertExpandedTableCellLineBreak[\s\S]*?syncExpandedTableToEditor\(\)[\s\S]*?const isMarkdownTableDivider/.test(vditorEditor) &&
+    vditorEditor.includes('if (expandedTableDirty.value && !syncExpandedTableToEditor())') &&
+    vditorEditor.includes('editableRowsFromRenderedTable') &&
+    vditorEditor.includes('htmlTableCellToEditorText(cell as HTMLTableCellElement)') &&
+    vditorEditor.includes('const rows = block ? editableRowsFromTableBlock(block) : editableRowsFromRenderedTable(table)') &&
+    vditorEditor.includes('cell.innerHTML = editorTextToHtmlTableCellSource(value)') &&
     vditorEditor.includes(':value="expandedTableCellEditorText(rowIndex, cellIndex)"') &&
     vditorEditor.includes('@input="updateExpandedTableCellText(rowIndex, cellIndex, $event)"') &&
     !vditorEditor.includes('v-model="expandedTableRows[rowIndex][cellIndex]"') &&

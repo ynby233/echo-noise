@@ -222,6 +222,7 @@ const showTableExpandDialog = ref(false);
 const tableExpandClosing = ref(false);
 const expandedTableRows = ref<string[][]>([]);
 const expandedTableEditable = ref(false);
+const expandedTableDirty = ref(false);
 const TABLE_SIZE_LIMIT = 10
 const tableRows = ref(3);
 const tableCols = ref(3);
@@ -1304,8 +1305,10 @@ const updateExpandedTableCellText = (rowIndex: number, cellIndex: number, event:
   if (!expandedTableEditable.value) return
   const textarea = event.target instanceof HTMLTextAreaElement ? event.target : null
   if (!textarea) return
-  expandedTableRows.value[rowIndex][cellIndex] = mergeExpandedCellEditorText(expandedTableRows.value[rowIndex]?.[cellIndex] || '', textarea.value)
-  syncExpandedTableToEditor()
+  const row = expandedTableRows.value[rowIndex]
+  if (!row) return
+  row[cellIndex] = mergeExpandedCellEditorText(row[cellIndex] || '', textarea.value)
+  expandedTableDirty.value = true
 }
 
 const expandedTableCellAttachments = (rowIndex: number, cellIndex: number) => parseAttachmentMarkersFromText(expandedTableRows.value[rowIndex]?.[cellIndex] || '')
@@ -1355,8 +1358,10 @@ const insertExpandedTableCellLineBreak = (rowIndex: number, cellIndex: number, e
   event.preventDefault()
   event.stopPropagation()
   insertTextIntoTextarea(textarea, '\n')
-  expandedTableRows.value[rowIndex][cellIndex] = mergeExpandedCellEditorText(expandedTableRows.value[rowIndex]?.[cellIndex] || '', textarea.value)
-  syncExpandedTableToEditor()
+  const row = expandedTableRows.value[rowIndex]
+  if (!row) return
+  row[cellIndex] = mergeExpandedCellEditorText(row[cellIndex] || '', textarea.value)
+  expandedTableDirty.value = true
 }
 
 const isMarkdownTableDivider = (line: string) => {
@@ -1426,6 +1431,11 @@ const normalizeTableMatchText = (text: string) => {
 const getRenderedTableRows = (table: HTMLTableElement | null) => {
   if (!table) return [] as string[][]
   return Array.from(table.rows).map((row) => Array.from(row.cells).map((cell) => normalizeTableMatchText(cell.textContent || '')))
+}
+
+const editableRowsFromRenderedTable = (table: HTMLTableElement | null) => {
+  if (!table) return [] as string[][]
+  return Array.from(table.rows).map((row) => Array.from(row.cells).map((cell) => htmlTableCellToEditorText(cell as HTMLTableCellElement)))
 }
 
 const createHtmlTableFromBlock = (block: EditorTableSourceBlock) => {
@@ -1694,13 +1704,7 @@ const formatMarkdownDividerLine = (dividerLine: string, colCount: number) => {
 }
 
 const setEditorTableDomCellText = (cell: HTMLTableCellElement, value: string) => {
-  while (cell.firstChild) cell.removeChild(cell.firstChild)
-  const lines = String(value || '').replace(/\r\n?/g, '\n').split('\n')
-  lines.forEach((line, index) => {
-    if (index > 0) cell.appendChild(document.createElement('br'))
-    if (line) cell.appendChild(document.createTextNode(line))
-  })
-  if (!cell.textContent && !cell.querySelector('br')) cell.appendChild(document.createTextNode('\u00a0'))
+  cell.innerHTML = editorTextToHtmlTableCellSource(value)
 }
 
 const dispatchEditorTableDomInput = (table: HTMLTableElement) => {
@@ -1732,6 +1736,7 @@ const syncExpandedTableDomToEditor = () => {
   })
   replaceTableBreakTextNodes(table)
   dispatchEditorTableDomInput(table)
+  expandedTableDirty.value = false
   return true
 }
 
@@ -1764,6 +1769,7 @@ const syncExpandedTableToEditor = () => {
   vditorInstance.setValue(nextValue)
   emit('update:modelValue', nextValue)
   window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
+  expandedTableDirty.value = false
   return true
 }
 
@@ -1780,6 +1786,10 @@ const focusNextExpandedTableCell = (rowIndex: number, cellIndex: number, reverse
 
 const closeExpandedTable = () => {
   if (!showTableExpandDialog.value || tableExpandClosing.value) return
+  if (expandedTableDirty.value && !syncExpandedTableToEditor()) {
+    window.alert('未能同步放大表格内容，请先复制当前编辑内容后再关闭。')
+    return
+  }
   tableExpandClosing.value = true
   if (tableExpandCloseTimer !== null) window.clearTimeout(tableExpandCloseTimer)
   tableExpandCloseTimer = window.setTimeout(() => {
@@ -1787,6 +1797,7 @@ const closeExpandedTable = () => {
     tableExpandClosing.value = false
     expandedTableRows.value = []
     expandedTableEditable.value = false
+    expandedTableDirty.value = false
     expandedEditorTableBlock = null
     expandedEditorTableElement = null
     tableExpandCloseTimer = null
@@ -1799,7 +1810,7 @@ const openHoveredTableExpand = () => {
   enhanceEditorTables(editorContainer.value)
   const tableIndex = getEditorTables().indexOf(table)
   const block = getEditorTableBlockForTable(table, tableIndex)
-  const rows = block ? editableRowsFromTableBlock(block) : getRenderedTableRows(table)
+  const rows = block ? editableRowsFromTableBlock(block) : editableRowsFromRenderedTable(table)
   if (!rows.length) return
   if (tableExpandCloseTimer !== null) {
     window.clearTimeout(tableExpandCloseTimer)
@@ -1807,6 +1818,7 @@ const openHoveredTableExpand = () => {
   }
   expandedTableRows.value = normalizeExpandedTableRows(rows)
   expandedTableEditable.value = !!block || !!table
+  expandedTableDirty.value = false
   expandedEditorTableBlock = block || null
   expandedEditorTableElement = table
   tableExpandClosing.value = false
@@ -2245,6 +2257,7 @@ onBeforeUnmount(() => {
     }
     showTableExpandDialog.value = false
     tableExpandClosing.value = false
+    expandedTableDirty.value = false
   } catch (e) {
     console.warn('Vditor destroy error', e);
   }
