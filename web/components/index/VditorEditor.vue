@@ -104,7 +104,7 @@
         <header class="editor-table-expand-header">
           <div>
             <strong>放大显示表格</strong>
-            <span>{{ expandedTableEditable ? '可直接编辑单元格内容' : '当前表格仅可预览' }}</span>
+            <span>{{ expandedTableEditable ? '可直接编辑单元格内容' : '正在同步表格内容' }}</span>
           </div>
           <button type="button" class="editor-table-expand-close nw-action-btn nw-tooltip-anchor" data-tooltip="关闭" aria-label="关闭放大表格" @click="closeExpandedTable">
             <span class="table-expand-close-icon" aria-hidden="true"></span>
@@ -133,11 +133,16 @@
                       :key="`${rowIndex}-${cellIndex}-${attachment.type}-${attachment.url}`"
                       :href="attachment.url"
                       class="editor-table-expand-attachment-tag editor-attachment-link"
+                      role="button"
+                      tabindex="0"
+                      draggable="false"
                       :data-attachment-kind="attachment.type"
                       :data-attachment-url="attachment.url"
                       :aria-label="`预览${attachment.title}`"
-                      @mousedown.prevent.stop
+                      @pointerdown.stop
                       @click.prevent.stop="previewExpandedTableAttachment(attachment, $event)"
+                      @keydown.enter.prevent.stop="previewExpandedTableAttachment(attachment, $event)"
+                      @keydown.space.prevent.stop="previewExpandedTableAttachment(attachment, $event)"
                     >
                       {{ attachment.title }}
                     </a>
@@ -801,6 +806,8 @@ const setupAttachmentPreview = () => {
       selection.removeAllRanges()
       selection.addRange(range)
     }
+    const insertedIntoSource = syncEditorTableCellLineBreakToSource(cell)
+    if (insertedIntoSource) return true
     let inserted = false
     try {
       inserted = document.execCommand('insertHTML', false, '<br>')
@@ -818,7 +825,7 @@ const setupAttachmentPreview = () => {
       inserted = true
     }
     if (!inserted) return false
-    if (!syncEditorTableCellDomToSource(cell)) syncEditorTableCellLineBreakToSource(cell)
+    syncEditorTableCellDomToSource(cell)
     emitEditorSoftBreakInput(event)
     return true
   }
@@ -1302,14 +1309,31 @@ const updateExpandedTableCellText = (rowIndex: number, cellIndex: number, event:
 
 const expandedTableCellAttachments = (rowIndex: number, cellIndex: number) => parseAttachmentMarkersFromText(expandedTableRows.value[rowIndex]?.[cellIndex] || '')
 
-const previewExpandedTableAttachment = (attachment: EditorAttachmentInfo, event: MouseEvent) => {
+const expandedTableAttachmentsByType = (type: EditorAttachmentInfo['type']) => {
+  const seen = new Set<string>()
+  const items: EditorAttachmentInfo[] = []
+  expandedTableRows.value.forEach((row) => {
+    row.forEach((cell) => {
+      parseAttachmentMarkersFromText(cell).forEach((item) => {
+        if (item.type !== type) return
+        const key = `${item.type}\n${item.url}\n${item.name}`
+        if (seen.has(key)) return
+        seen.add(key)
+        items.push(item)
+      })
+    })
+  })
+  return items
+}
+
+const previewExpandedTableAttachment = (attachment: EditorAttachmentInfo, event: MouseEvent | KeyboardEvent) => {
   const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
   if (attachment.type === 'audio') {
     const url = attachment.url
     window.open(url, '_blank', 'noopener,noreferrer')
     return
   }
-  showAttachmentGallery([attachment], attachment, target)
+  showAttachmentGallery(expandedTableAttachmentsByType(attachment.type), attachment, target)
 }
 
 const insertTextIntoTextarea = (textarea: HTMLTextAreaElement, value: string) => {
@@ -1446,15 +1470,21 @@ const findMarkdownTableBlock = (
     const matched = blocks.find((block) => sameTableRows(comparableRowsFromTableBlock(block), renderedRows))
     if (matched) return matched
   }
-  return preferredIndex >= 0 ? blocks[preferredIndex] : undefined
+  if (preferredIndex >= 0 && preferredIndex < blocks.length) return blocks[preferredIndex]
+  return blocks.length === 1 ? blocks[0] : undefined
 }
 
 const tableBlockFromDataset = (table: HTMLTableElement | null, blocks: EditorTableSourceBlock[]) => {
   if (!table) return undefined
   const start = Number(table.dataset.editorTableBlockStart)
   const end = Number(table.dataset.editorTableBlockEnd)
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return undefined
-  return blocks.find((block) => block.start === start && block.end === end)
+  const exactBlock = Number.isFinite(start) && Number.isFinite(end)
+    ? blocks.find((block) => block.start === start && block.end === end)
+    : undefined
+  if (exactBlock) return exactBlock
+  const sourceIndex = Number(table.dataset.editorTableSourceIndex)
+  if (Number.isFinite(sourceIndex) && sourceIndex >= 0 && sourceIndex < blocks.length) return blocks[sourceIndex]
+  return undefined
 }
 
 type EditorTableCellSourceTarget = {
@@ -1470,7 +1500,8 @@ type EditorTableCellSourceTarget = {
 const getEditorTableBlockForTable = (table: HTMLTableElement | null, preferredIndex = -1) => {
   const value = vditorInstance?.getValue?.() || ''
   const blocks = getEditorTableSourceBlocks(value)
-  return tableBlockFromDataset(table, blocks) || findMarkdownTableBlock(blocks, getRenderedTableRows(table), preferredIndex)
+  const tableIndex = preferredIndex >= 0 ? preferredIndex : (table ? getEditorTables().indexOf(table) : -1)
+  return tableBlockFromDataset(table, blocks) || findMarkdownTableBlock(blocks, getRenderedTableRows(table), tableIndex)
 }
 
 const getEditorTableCellSourceTarget = (cell: HTMLTableCellElement | null): EditorTableCellSourceTarget | null => {
@@ -1483,9 +1514,8 @@ const getEditorTableCellSourceTarget = (cell: HTMLTableCellElement | null): Edit
   if (rowIndex < 0 || cellIndex < 0) return null
   const value = vditorInstance.getValue?.() || ''
   const lines = value.split('\n')
-  const blocks = getEditorTableSourceBlocks(value)
   const tableIndex = getEditorTables().indexOf(table)
-  const block = tableBlockFromDataset(table, blocks) || findMarkdownTableBlock(blocks, getRenderedTableRows(table), tableIndex)
+  const block = getEditorTableBlockForTable(table, tableIndex)
   if (!block) return null
   if (block.kind === 'html') {
     const sourceRows = editableRowsFromHtmlBlock(block)
@@ -1539,12 +1569,42 @@ const applyEditorTableCellSourceValue = (cell: HTMLTableCellElement | null, next
   return true
 }
 
-const editorTableCellTextFromDom = (cell: HTMLTableCellElement) => {
-  const clone = cell.cloneNode(true) as HTMLElement
+const editorTableContentTextFromElement = (element: HTMLElement) => {
+  const clone = element.cloneNode(true) as HTMLElement
   clone.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
   replaceAttachmentNodesWithSourceText(clone)
   clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')))
   return normalizeAttachmentSourceText(String(clone.textContent || '').replace(/\u00a0/g, ' '))
+}
+
+const editorTableCellTextFromDom = (cell: HTMLTableCellElement) => editorTableContentTextFromElement(cell)
+
+const editorTableTextOffsetForRangePoint = (cell: HTMLTableCellElement, container: Node, offset: number) => {
+  const pointElement = container instanceof Element ? container : container.parentElement
+  if (!pointElement || !cell.contains(pointElement)) return null
+  try {
+    const prefixRange = document.createRange()
+    prefixRange.selectNodeContents(cell)
+    prefixRange.setEnd(container, offset)
+    const holder = document.createElement('div')
+    holder.appendChild(prefixRange.cloneContents())
+    const length = editorTableContentTextFromElement(holder).length
+    prefixRange.detach?.()
+    return length
+  } catch {
+    return null
+  }
+}
+
+const getEditorTableCellSelectionTextRange = (cell: HTMLTableCellElement) => {
+  if (typeof window === 'undefined') return null as [number, number] | null
+  const selection = window.getSelection()
+  if (!selection || selection.rangeCount === 0) return null
+  const range = selection.getRangeAt(0)
+  const start = editorTableTextOffsetForRangePoint(cell, range.startContainer, range.startOffset)
+  const end = editorTableTextOffsetForRangePoint(cell, range.endContainer, range.endOffset)
+  if (start === null || end === null) return null
+  return [Math.min(start, end), Math.max(start, end)]
 }
 
 const syncEditorTableCellDomToSource = (cell: HTMLTableCellElement | null) => {
@@ -1558,9 +1618,14 @@ const syncEditorTableCellDomToSource = (cell: HTMLTableCellElement | null) => {
 
 const syncEditorTableCellLineBreakToSource = (cell: HTMLTableCellElement | null) => {
   const target = getEditorTableCellSourceTarget(cell)
-  if (!target) return false
-  const current = target.rowCells[target.cellIndex] || ''
-  return applyEditorTableCellSourceValue(cell, `${current}\n`)
+  if (!target || !cell) return false
+  const currentSource = target.rowCells[target.cellIndex] || ''
+  const domText = editorTableCellTextFromDom(cell)
+  const baseText = hasAttachmentMarker(currentSource) && !hasAttachmentMarker(domText) ? currentSource : domText
+  const range = getEditorTableCellSelectionTextRange(cell)
+  const start = Math.max(0, Math.min(range?.[0] ?? baseText.length, baseText.length))
+  const end = Math.max(start, Math.min(range?.[1] ?? start, baseText.length))
+  return applyEditorTableCellSourceValue(cell, `${baseText.slice(0, start)}\n${baseText.slice(end)}`)
 }
 
 const editableRowsFromMarkdownBlock = (block: EditorTableSourceBlock) => {
@@ -1647,6 +1712,7 @@ const closeExpandedTable = () => {
 const openHoveredTableExpand = () => {
   const table = hoveredEditorTable
   if (!table || !editorContainer.value?.contains(table)) return
+  enhanceEditorTables(editorContainer.value)
   const tableIndex = getEditorTables().indexOf(table)
   const block = getEditorTableBlockForTable(table, tableIndex)
   const rows = block ? editableRowsFromTableBlock(block) : getRenderedTableRows(table)
@@ -1742,17 +1808,22 @@ const enhanceEditorTables = (_root: HTMLElement) => {
     if (!block && tableRowsHaveComparableContent(renderedRows)) {
       block = blocks.find((candidate) => !usedBlocks.has(candidate) && sameTableRows(comparableRowsFromTableBlock(candidate), renderedRows))
     }
+    if (!block && index >= 0 && index < blocks.length && !usedBlocks.has(blocks[index])) block = blocks[index]
     if (!block) block = blocks.find((candidate) => !usedBlocks.has(candidate))
     if (block) usedBlocks.add(block)
     const scrollKey = tableScrollKeyFromBlock(block, `index:${index}`)
     table.dataset.editorTableScrollKey = scrollKey
     table.onscroll = () => rememberEditorTableScroll(table)
     if (block) {
+      const sourceIndex = blocks.indexOf(block)
       table.dataset.editorTableBlockStart = String(block.start)
       table.dataset.editorTableBlockEnd = String(block.end)
+      if (sourceIndex >= 0) table.dataset.editorTableSourceIndex = String(sourceIndex)
+      else delete table.dataset.editorTableSourceIndex
     } else {
       delete table.dataset.editorTableBlockStart
       delete table.dataset.editorTableBlockEnd
+      delete table.dataset.editorTableSourceIndex
     }
     restoreEditorTableScroll(table)
   })

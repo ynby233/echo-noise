@@ -480,6 +480,10 @@ assert(
     vditorEditor.includes("join('<br />')") &&
     vditorEditor.includes('editorTableScrollPositions') &&
     vditorEditor.includes('return `${block.kind}:${block.start}:${block.end}`') &&
+    vditorEditor.includes('table.dataset.editorTableSourceIndex') &&
+    vditorEditor.includes('return blocks.length === 1 ? blocks[0] : undefined') &&
+    vditorEditor.includes('const tableIndex = preferredIndex >= 0 ? preferredIndex : (table ? getEditorTables().indexOf(table) : -1)') &&
+    vditorEditor.includes('if (!block && index >= 0 && index < blocks.length && !usedBlocks.has(blocks[index])) block = blocks[index]') &&
     vditorEditor.includes('const usedBlocks = new Set<EditorTableSourceBlock>()') &&
     vditorEditor.includes('sameTableRows(comparableRowsFromTableBlock(candidate), renderedRows)') &&
     vditorEditor.includes("block.lines.join('\\n').trim()") &&
@@ -497,17 +501,26 @@ assert(
     vditorEditor.includes('@input="updateExpandedTableCellText(rowIndex, cellIndex, $event)"') &&
     !vditorEditor.includes('v-model="expandedTableRows[rowIndex][cellIndex]"') &&
     vditorEditor.includes('expandedTableEditable.value = !!block') &&
+    !vditorEditor.includes('当前表格仅可预览') &&
     vditorEditor.includes('rememberEditorTableScroll(table)') &&
     vditorEditor.includes('restoreEditorTableScroll(table)') &&
     vditorEditor.includes('@keydown.enter.exact="insertExpandedTableCellLineBreak(rowIndex, cellIndex, $event)"') &&
     vditorEditor.includes(':is="\'td\'"') &&
     vditorEditor.includes('editor-table-expand-attachment-tag editor-attachment-link') &&
+    vditorEditor.includes('role="button"') &&
+    vditorEditor.includes('tabindex="0"') &&
+    vditorEditor.includes('@keydown.enter.prevent.stop="previewExpandedTableAttachment(attachment, $event)"') &&
+    vditorEditor.includes('@keydown.space.prevent.stop="previewExpandedTableAttachment(attachment, $event)"') &&
+    vditorEditor.includes('showAttachmentGallery(expandedTableAttachmentsByType(attachment.type), attachment, target)') &&
     !vditorEditor.includes('editor-table-expand-attachment-btn') &&
     vditorEditor.includes('if (event.isComposing) return') &&
     vditorEditor.includes('getCurrentEditorTableCell(event)') &&
     vditorEditor.includes('if (getCurrentEditorTableCell(event)) return true') &&
     vditorEditor.includes('getCurrentEditorTableCell(event) || anchorElement.closest') &&
     vditorEditor.includes('range.selectNodeContents(cell)') &&
+    vditorEditor.includes('const insertedIntoSource = syncEditorTableCellLineBreakToSource(cell)') &&
+    vditorEditor.includes('if (insertedIntoSource) return true') &&
+    vditorEditor.includes('getEditorTableCellSelectionTextRange') &&
     vditorEditor.includes("document.execCommand('insertHTML', false, '<br>')") &&
     vditorEditor.includes('previewExpandedTableAttachment') &&
     vditorEditor.includes('TABLE_CELL_BREAK_RE') &&
