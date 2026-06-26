@@ -180,6 +180,8 @@ const props = defineProps({
 
 const emit = defineEmits(["update:modelValue", "ready"]);
 
+type PendingEditorTableCellSync = { tableIndex: number; rowIndex: number; cellIndex: number; text: string }
+
 const editorContainer = ref<HTMLElement>();
 let vditorInstance: Vditor | null = null;
 let toolbarEl: HTMLElement | null = null;
@@ -199,6 +201,7 @@ let expandedEditorTableBlock: EditorTableSourceBlock | null = null;
 let expandedEditorTableElement: HTMLTableElement | null = null;
 let tableDeleteHideTimer: number | null = null;
 let tableExpandCloseTimer: number | null = null;
+let pendingEditorTableCellSync: PendingEditorTableCellSync | null = null;
 const editorTableScrollPositions = new Map<string, number>();
 const TABLE_DELETE_BUTTON_SIZE = 10;
 const TABLE_EXPAND_BUTTON_SIZE = TABLE_DELETE_BUTTON_SIZE;
@@ -553,19 +556,76 @@ const setupAttachmentPreview = () => {
   }
 
   const onEditorSelectionChange = () => {
+    flushPendingEditorTableCellSourceSyncIfMoved(getCurrentEditorTableCell())
     captureEditorSelection()
     scheduleCollapseIrAttachmentChrome()
   }
 
   const onEditorSelectionEvent = () => {
+    flushPendingEditorTableCellSourceSyncIfMoved(getCurrentEditorTableCell())
     captureEditorSelection()
     scheduleCollapseIrAttachmentChrome()
   }
 
-  const onEditorInput = () => {
+  const commitEditorTableCellDomEdit = (cell: HTMLTableCellElement) => {
+    markEditorTableCellSourceDirty(cell)
+    captureEditorSelection()
+    scheduleRefreshAttachmentLinks()
+    emit("update:modelValue", getEditorValueWithPendingTableSync())
+  }
+
+  const handleEditorTableBeforeInput = (event: Event) => {
+    const inputEvent = event as InputEvent
+    const cell = getCurrentEditorTableCell(event)
+    if (!cell) return false
+    const inputType = inputEvent.inputType || ''
+    const pastedText = inputType === 'insertFromPaste'
+      ? (inputEvent.dataTransfer?.getData('text/plain') || inputEvent.data || '')
+      : ''
+    const text = inputType === 'insertText' || inputType === 'insertCompositionText'
+      ? (inputEvent.data || '')
+      : pastedText
+    if (!text && inputType !== 'insertLineBreak' && inputType !== 'insertParagraph') return false
+    event.preventDefault()
+    event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    const applied = inputType === 'insertLineBreak' || inputType === 'insertParagraph'
+      ? insertLineBreakIntoCellDom(cell)
+      : insertTextIntoCellDom(cell, text)
+    if (!applied) return true
+    commitEditorTableCellDomEdit(cell)
+    return true
+  }
+
+  const handleEditorTableTextKeydown = (event: KeyboardEvent, cell: HTMLTableCellElement) => {
+    if (event.isComposing || event.altKey || event.ctrlKey || event.metaKey) return false
+    if (event.key.length !== 1) return false
+    event.preventDefault()
+    event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    if (insertTextIntoCellDom(cell, event.key)) commitEditorTableCellDomEdit(cell)
+    return true
+  }
+
+  const onEditorInput = (event: Event) => {
+    const cell = getCurrentEditorTableCell(event)
+    if (cell) {
+      event.stopPropagation()
+      ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+      markEditorTableCellSourceDirty(cell)
+      captureEditorSelection()
+      scheduleRefreshAttachmentLinks()
+      emit("update:modelValue", getEditorValueWithPendingTableSync())
+      return
+    }
+    flushPendingEditorTableCellSourceSyncIfMoved(cell)
     captureEditorSelection()
     if (normalizeEditorAttachmentSource()) return
     scheduleRefreshAttachmentLinks()
+  }
+
+  const onEditorFocusOut = () => {
+    window.setTimeout(() => flushPendingEditorTableCellSourceSyncIfMoved(getCurrentEditorTableCell()), 0)
   }
 
   const refreshAttachmentLinks = () => {
@@ -761,7 +821,7 @@ const setupAttachmentPreview = () => {
     const anchorElement = anchorNode instanceof Element ? anchorNode : anchorNode?.parentElement || getEventElement(event)
     if (!anchorElement || !root.contains(anchorElement)) return false
     if (anchorElement.closest('.vditor-toolbar, .vditor-panel, .vditor-hint, [data-type="code-block"], .vditor-ir__marker--pre')) return false
-    if (getCurrentEditorTableCell(event)) return true
+    if (getCurrentEditorTableCell(event)) return false
     return !!anchorElement.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset')
   }
 
@@ -788,56 +848,11 @@ const setupAttachmentPreview = () => {
     }, 0)
   }
 
-  const insertEditorTableCellLineBreak = (event: Event) => {
-    const cell = getCurrentEditorTableCell(event)
-    if (!cell) return false
-    const selection = window.getSelection()
-    if (!selection) return false
-    if (!selection.rangeCount) {
-      const fallbackRange = document.createRange()
-      fallbackRange.selectNodeContents(cell)
-      fallbackRange.collapse(false)
-      selection.addRange(fallbackRange)
-    }
-    let range = selection.getRangeAt(0)
-    const rangeRoot = range.commonAncestorContainer instanceof Element ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement
-    if (!rangeRoot || !cell.contains(rangeRoot)) {
-      range = document.createRange()
-      range.selectNodeContents(cell)
-      range.collapse(false)
-      selection.removeAllRanges()
-      selection.addRange(range)
-    }
-    const insertedIntoSource = syncEditorTableCellLineBreakToSource(cell)
-    if (insertedIntoSource) return true
-    let inserted = false
-    try {
-      inserted = document.execCommand('insertHTML', false, '<br>')
-    } catch {
-      inserted = false
-    }
-    if (!inserted) {
-      range.deleteContents()
-      const br = document.createElement('br')
-      range.insertNode(br)
-      range.setStartAfter(br)
-      range.collapse(true)
-      selection.removeAllRanges()
-      selection.addRange(range)
-      inserted = true
-    }
-    if (!inserted) return false
-    syncEditorTableCellDomToSource(cell)
-    emitEditorSoftBreakInput(event)
-    return true
-  }
-
   const insertEditorSoftLineBreak = (event: Event) => {
     event.preventDefault()
     event.stopPropagation()
     ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
     moveCaretAfterAtomicAttachment()
-    if (insertEditorTableCellLineBreak(event)) return
     let inserted = false
     try {
       inserted = document.execCommand('insertText', false, '\n')
@@ -863,18 +878,25 @@ const setupAttachmentPreview = () => {
   }
 
   const onPlainTextEnterKeydown = (event: KeyboardEvent) => {
+    const cell = getCurrentEditorTableCell(event)
+    if (cell && handleEditorTableTextKeydown(event, cell)) return
+    if (event.key === 'Enter' && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey && !event.isComposing) {
+      if (cell && insertEditorTableCellLineBreak(event, cell)) return
+    }
     if (!isEditorSoftEnter(event)) return
     insertEditorSoftLineBreak(event)
   }
 
   const onEditorBeforeInput = (event: InputEvent) => {
+    if (handleEditorTableBeforeInput(event)) return
     if (event.inputType !== 'insertParagraph' || event.isComposing) return
     const selection = window.getSelection()
     const anchorNode = selection?.anchorNode || null
     const anchorElement = anchorNode instanceof Element ? anchorNode : anchorNode?.parentElement || getEventElement(event)
     if (!anchorElement || !root.contains(anchorElement)) return
     if (anchorElement.closest('.vditor-toolbar, .vditor-panel, .vditor-hint, [data-type="code-block"], .vditor-ir__marker--pre')) return
-    if (getCurrentEditorTableCell(event) || anchorElement.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset')) {
+    if (getCurrentEditorTableCell(event)) return
+    if (anchorElement.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset')) {
       insertEditorSoftLineBreak(event)
     }
   }
@@ -931,7 +953,9 @@ const setupAttachmentPreview = () => {
   scheduleTableEnhance()
   const previewObserver = new MutationObserver(() => scheduleRefreshAttachmentLinks())
   previewObserver.observe(root, { childList: true, subtree: true })
+  root.addEventListener('beforeinput', onEditorBeforeInput, true)
   root.addEventListener('input', onEditorInput, true)
+  root.addEventListener('focusout', onEditorFocusOut, true)
   root.addEventListener('mouseup', onEditorSelectionEvent, true)
   root.addEventListener('keyup', onEditorSelectionEvent, true)
   document.addEventListener('selectionchange', onEditorSelectionChange, true)
@@ -948,7 +972,9 @@ const setupAttachmentPreview = () => {
   window.addEventListener('scroll', repositionVisibleTableDeleteButton, { passive: true, capture: true })
   attachmentPreviewCleanup = () => {
     previewObserver.disconnect()
+    root.removeEventListener('beforeinput', onEditorBeforeInput, true)
     root.removeEventListener('input', onEditorInput, true)
+    root.removeEventListener('focusout', onEditorFocusOut, true)
     root.removeEventListener('mouseup', onEditorSelectionEvent, true)
     root.removeEventListener('keyup', onEditorSelectionEvent, true)
     document.removeEventListener('selectionchange', onEditorSelectionChange, true)
@@ -1014,7 +1040,7 @@ const editorOptions: IOptions = {
     id: "vue-vditor",
   },
   input: (content: string) => {
-    emit("update:modelValue", content);
+    emit("update:modelValue", pendingEditorTableCellSync ? getEditorValueWithPendingTableSync() : content);
   },
   preview: {
     hljs: {
@@ -1083,8 +1109,10 @@ const buildMarkdownTable = (rows: number, cols: number) => {
 
 const insertTable = (rows: number, cols: number) => {
   if (!vditorInstance) return
+  if (pendingEditorTableCellSync) flushPendingEditorTableCellSourceSync()
   vditorInstance.insertValue(buildMarkdownTable(rows, cols))
   emit('update:modelValue', vditorInstance.getValue?.() || '')
+  scheduleNormalizeEditorTableSource()
   closeTableMenu()
 }
 
@@ -1189,16 +1217,6 @@ const confirmDeleteHoveredTable = () => {
 
 const stripTableBreakCode = (value: string) => String(value || '').replace(TABLE_CELL_BREAK_RE, ' ')
 const tableCellSourceToEditorText = (value: string) => String(value || '').replace(TABLE_CELL_BREAK_RE, '\n').replace(/\\\|/g, '|').trim()
-const editorTextToTableCellSource = (value: string) => {
-  const text = String(value || '').replace(/\r\n?/g, '\n')
-  const normalized = text
-    .split('\n')
-    .map((line) => line.replace(/\|/g, '\\|').trim())
-    .join('<br />')
-    .trim()
-  return normalized || ' '
-}
-
 const escapeTableCellHtml = (value: string) => String(value || '')
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
@@ -1237,6 +1255,26 @@ const editorTextToHtmlTableCellSource = (value: string) => {
   return normalized || '&nbsp;'
 }
 
+const editorTextToMarkdownTableCellSource = (value: string) => {
+  const text = normalizeAttachmentSourceText(String(value || '').replace(/\r\n?/g, '\n'))
+  const normalized = text
+    .split('\n')
+    .map((line) => normalizeAttachmentSourceText(line).replace(/\|/g, '\\|').trim())
+    .join('<br />')
+    .trim()
+  return normalized || ' '
+}
+
+const editorTextToTabTableCellSource = (value: string) => {
+  const text = normalizeAttachmentSourceText(String(value || '').replace(/\r\n?/g, '\n'))
+  const normalized = text
+    .split('\n')
+    .map((line) => normalizeAttachmentSourceText(line).replace(/\t/g, ' ').trim())
+    .join('<br />')
+    .trim()
+  return normalized || ' '
+}
+
 const htmlTableCellToEditorText = (cell: HTMLTableCellElement) => {
   const clone = cell.cloneNode(true) as HTMLElement
   clone.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
@@ -1265,6 +1303,14 @@ const normalizeEditableHtmlTable = (table: HTMLTableElement) => {
     thead.remove()
   }
   replaceTableHeaderCells(table)
+}
+
+const removeMarkdownTableDividerRow = (table: HTMLTableElement, block: EditorTableSourceBlock | null) => {
+  if (block?.kind !== 'markdown') return
+  const expectedRows = editableRowsFromMarkdownBlock(block).length
+  const dividerRow = table.rows[1]
+  if (!dividerRow || table.rows.length !== expectedRows + 1) return
+  dividerRow.remove()
 }
 
 const tableScrollKeyFromBlock = (block?: EditorTableSourceBlock | null, fallback = '') => {
@@ -1575,10 +1621,9 @@ const getEditorTableCellSourceTarget = (cell: HTMLTableCellElement | null): Edit
   return { table, block, lines, lineIndex, rowIndex, cellIndex, rowCells }
 }
 
-const serializeEditableHtmlTableBlock = (block: EditorTableSourceBlock, rows: string[][]) => {
-  const table = createHtmlTableFromBlock(block)
-  if (!table) return null
-  table.querySelectorAll('thead,tbody,tfoot').forEach((section) => section.remove())
+const serializeEditableRowsToHtmlTableBlock = (rows: string[][], sourceTable?: HTMLTableElement | null) => {
+  if (typeof document === 'undefined') return null
+  const table = sourceTable ? sourceTable.cloneNode(false) as HTMLTableElement : document.createElement('table')
   const body = table.createTBody()
   rows.forEach((cells) => {
     const row = body.insertRow()
@@ -1590,28 +1635,75 @@ const serializeEditableHtmlTableBlock = (block: EditorTableSourceBlock, rows: st
   return table.outerHTML.split('\n')
 }
 
-const applyEditorTableCellSourceValue = (cell: HTMLTableCellElement | null, nextText: string) => {
+const serializeEditableHtmlTableBlock = (block: EditorTableSourceBlock, rows: string[][]) => {
+  const table = createHtmlTableFromBlock(block)
+  return serializeEditableRowsToHtmlTableBlock(rows, table)
+}
+
+const formatEditableMarkdownTableRow = (cells: string[]) => `| ${cells.map(editorTextToMarkdownTableCellSource).join(' | ')} |`
+const formatEditableTabTableRow = (cells: string[]) => cells.map(editorTextToTabTableCellSource).join('\t')
+
+const formatMarkdownDividerLine = (dividerLine: string, colCount: number) => {
+  const cells = String(dividerLine || '')
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim())
+  const normalized = Array.from({ length: colCount }, (_, index) => /^:?-{3,}:?$/.test(cells[index] || '') ? cells[index] : '---')
+  return `| ${normalized.join(' | ')} |`
+}
+
+const serializeEditableMarkdownTableBlock = (block: EditorTableSourceBlock, rows: string[][]) => {
+  const normalizedRows = normalizeExpandedTableRows(rows)
+  if (!normalizedRows.length) return [] as string[]
+  const colCount = normalizedRows[0]?.length || 1
+  return [
+    formatEditableMarkdownTableRow(normalizedRows[0] || []),
+    formatMarkdownDividerLine(block.lines[1] || '', colCount),
+    ...normalizedRows.slice(1).map(formatEditableMarkdownTableRow)
+  ]
+}
+
+const serializeEditableTabTableBlock = (rows: string[][]) => normalizeExpandedTableRows(rows).map(formatEditableTabTableRow)
+
+const serializeEditableTableBlock = (block: EditorTableSourceBlock, rows: string[][]) => {
+  if (block.kind === 'html') return serializeEditableHtmlTableBlock(block, rows)
+  if (block.kind === 'tab') return serializeEditableTabTableBlock(rows)
+  return serializeEditableMarkdownTableBlock(block, rows)
+}
+
+const normalizeEditorTableSource = () => false
+
+const scheduleNormalizeEditorTableSource = () => {
+  window.setTimeout(() => {
+    if (editorContainer.value) enhanceEditorTables(editorContainer.value)
+    refreshAttachmentLinksFromEditor()
+  }, 0)
+}
+
+const buildEditorTableCellSourceValue = (cell: HTMLTableCellElement | null, nextText: string) => {
   const target = getEditorTableCellSourceTarget(cell)
-  if (!target || !vditorInstance) return false
+  if (!target) return null
   const rowCells = [...target.rowCells]
   while (rowCells.length <= target.cellIndex) rowCells.push('')
   rowCells[target.cellIndex] = nextText
-  if (target.block.kind === 'html') {
-    const rows = editableRowsFromHtmlBlock(target.block)
-    if (!rows[target.rowIndex]) rows[target.rowIndex] = []
-    rows[target.rowIndex] = rowCells
-    const nextBlockLines = serializeEditableHtmlTableBlock(target.block, rows)
-    if (!nextBlockLines) return false
-    target.lines.splice(target.block.start, target.block.end - target.block.start, ...nextBlockLines)
-  } else if (target.block.kind === 'tab') {
-    target.lines[target.lineIndex] = formatEditableTabTableRow(rowCells)
-  } else {
-    target.lines[target.lineIndex] = formatEditableMarkdownTableRow(rowCells)
-  }
-  const nextValue = target.lines.join('\n')
-  rememberEditorTableScroll(target.table)
-  vditorInstance.setValue(nextValue)
-  emit('update:modelValue', nextValue)
+  const rows = editableRowsFromTableBlock(target.block)
+  if (!rows[target.rowIndex]) rows[target.rowIndex] = []
+  rows[target.rowIndex] = rowCells
+  const nextBlockLines = serializeEditableTableBlock(target.block, rows)
+  if (!nextBlockLines) return null
+  target.lines.splice(target.block.start, target.block.end - target.block.start, ...nextBlockLines)
+  return { table: target.table, value: target.lines.join('\n') }
+}
+
+const applyEditorTableCellSourceValue = (cell: HTMLTableCellElement | null, nextText: string) => {
+  if (!vditorInstance) return false
+  const result = buildEditorTableCellSourceValue(cell, nextText)
+  if (!result) return false
+  rememberEditorTableScroll(result.table)
+  vditorInstance.setValue(result.value)
+  emit('update:modelValue', result.value)
   window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
   return true
 }
@@ -1626,32 +1718,70 @@ const editorTableContentTextFromElement = (element: HTMLElement) => {
 
 const editorTableCellTextFromDom = (cell: HTMLTableCellElement) => editorTableContentTextFromElement(cell)
 
-const editorTableTextOffsetForRangePoint = (cell: HTMLTableCellElement, container: Node, offset: number) => {
-  const pointElement = container instanceof Element ? container : container.parentElement
-  if (!pointElement || !cell.contains(pointElement)) return null
-  try {
-    const prefixRange = document.createRange()
-    prefixRange.selectNodeContents(cell)
-    prefixRange.setEnd(container, offset)
-    const holder = document.createElement('div')
-    holder.appendChild(prefixRange.cloneContents())
-    const length = editorTableContentTextFromElement(holder).length
-    prefixRange.detach?.()
-    return length
-  } catch {
-    return null
-  }
+const getEditorTableCellPosition = (cell: HTMLTableCellElement | null): PendingEditorTableCellSync | null => {
+  const table = cell?.closest('table') as HTMLTableElement | null
+  const row = cell?.parentElement as HTMLTableRowElement | null
+  if (!cell || !table || !row) return null
+  const tableIndex = getEditorTables().indexOf(table)
+  const rowIndex = row.rowIndex
+  const cellIndex = cell.cellIndex
+  if (tableIndex < 0 || rowIndex < 0 || cellIndex < 0) return null
+  return { tableIndex, rowIndex, cellIndex, text: editorTableCellTextFromDom(cell) }
 }
 
-const getEditorTableCellSelectionTextRange = (cell: HTMLTableCellElement) => {
-  if (typeof window === 'undefined') return null as [number, number] | null
-  const selection = window.getSelection()
-  if (!selection || selection.rangeCount === 0) return null
-  const range = selection.getRangeAt(0)
-  const start = editorTableTextOffsetForRangePoint(cell, range.startContainer, range.startOffset)
-  const end = editorTableTextOffsetForRangePoint(cell, range.endContainer, range.endOffset)
-  if (start === null || end === null) return null
-  return [Math.min(start, end), Math.max(start, end)]
+const isSamePendingEditorTableCell = (cell: HTMLTableCellElement | null, pending = pendingEditorTableCellSync) => {
+  if (!cell || !pending) return false
+  const position = getEditorTableCellPosition(cell)
+  return !!position && position.tableIndex === pending.tableIndex && position.rowIndex === pending.rowIndex && position.cellIndex === pending.cellIndex
+}
+
+const getPendingEditorTableCell = (pending = pendingEditorTableCellSync) => {
+  if (!pending) return null as HTMLTableCellElement | null
+  const table = getEditorTables()[pending.tableIndex]
+  return (table?.rows[pending.rowIndex]?.cells[pending.cellIndex] as HTMLTableCellElement | undefined) || null
+}
+
+const refreshPendingEditorTableCellText = (cell?: HTMLTableCellElement | null) => {
+  if (!pendingEditorTableCellSync) return
+  const target = cell && isSamePendingEditorTableCell(cell) ? cell : getPendingEditorTableCell()
+  if (target) pendingEditorTableCellSync.text = editorTableCellTextFromDom(target)
+}
+
+const markEditorTableCellSourceDirty = (cell: HTMLTableCellElement, text = editorTableCellTextFromDom(cell)) => {
+  const position = getEditorTableCellPosition(cell)
+  if (!position) return false
+  pendingEditorTableCellSync = { ...position, text }
+  return true
+}
+
+const getEditorValueWithPendingTableSync = () => {
+  const currentValue = vditorInstance?.getValue?.() || ''
+  if (!pendingEditorTableCellSync) return currentValue
+  refreshPendingEditorTableCellText()
+  const cell = getPendingEditorTableCell()
+  const result = buildEditorTableCellSourceValue(cell, pendingEditorTableCellSync.text)
+  return result?.value || currentValue
+}
+
+const flushPendingEditorTableCellSourceSync = () => {
+  if (!pendingEditorTableCellSync) return true
+  refreshPendingEditorTableCellText()
+  const pending = pendingEditorTableCellSync
+  const cell = getPendingEditorTableCell()
+  if (!cell) return false
+  pendingEditorTableCellSync = null
+  const applied = applyEditorTableCellSourceValue(cell, pending.text)
+  if (!applied) pendingEditorTableCellSync = pending
+  return applied
+}
+
+const flushPendingEditorTableCellSourceSyncIfMoved = (currentCell?: HTMLTableCellElement | null) => {
+  if (!pendingEditorTableCellSync) return true
+  if (currentCell && isSamePendingEditorTableCell(currentCell)) {
+    refreshPendingEditorTableCellText(currentCell)
+    return true
+  }
+  return flushPendingEditorTableCellSourceSync()
 }
 
 const syncEditorTableCellDomToSource = (cell: HTMLTableCellElement | null) => {
@@ -1660,19 +1790,9 @@ const syncEditorTableCellDomToSource = (cell: HTMLTableCellElement | null) => {
   const current = target.rowCells[target.cellIndex] || ''
   const nextText = editorTableCellTextFromDom(cell)
   if (hasAttachmentMarker(current) && !hasAttachmentMarker(nextText)) return false
-  return applyEditorTableCellSourceValue(cell, nextText)
-}
-
-const syncEditorTableCellLineBreakToSource = (cell: HTMLTableCellElement | null) => {
-  const target = getEditorTableCellSourceTarget(cell)
-  if (!target || !cell) return false
-  const currentSource = target.rowCells[target.cellIndex] || ''
-  const domText = editorTableCellTextFromDom(cell)
-  const baseText = hasAttachmentMarker(currentSource) && !hasAttachmentMarker(domText) ? currentSource : domText
-  const range = getEditorTableCellSelectionTextRange(cell)
-  const start = Math.max(0, Math.min(range?.[0] ?? baseText.length, baseText.length))
-  const end = Math.max(start, Math.min(range?.[1] ?? start, baseText.length))
-  return applyEditorTableCellSourceValue(cell, `${baseText.slice(0, start)}\n${baseText.slice(end)}`)
+  const applied = applyEditorTableCellSourceValue(cell, nextText)
+  if (applied && isSamePendingEditorTableCell(cell)) pendingEditorTableCellSync = null
+  return applied
 }
 
 const editableRowsFromMarkdownBlock = (block: EditorTableSourceBlock) => {
@@ -1687,20 +1807,6 @@ const editableRowsFromTableBlock = (block: EditorTableSourceBlock) => block.kind
 const normalizeExpandedTableRows = (rows: string[][]) => {
   const colCount = Math.max(1, ...rows.map((row) => row.length))
   return rows.map((row) => Array.from({ length: colCount }, (_, index) => row[index] ?? ''))
-}
-
-const formatEditableMarkdownTableRow = (cells: string[]) => `| ${cells.map(editorTextToTableCellSource).join(' | ')} |`
-const formatEditableTabTableRow = (cells: string[]) => cells.map((cell) => editorTextToTableCellSource(cell).replace(/\t/g, ' ')).join('\t')
-
-const formatMarkdownDividerLine = (dividerLine: string, colCount: number) => {
-  const cells = String(dividerLine || '')
-    .trim()
-    .replace(/^\|/, '')
-    .replace(/\|$/, '')
-    .split('|')
-    .map((cell) => cell.trim())
-  const normalized = Array.from({ length: colCount }, (_, index) => /^:?-{3,}:?$/.test(cells[index] || '') ? cells[index] : '---')
-  return `| ${normalized.join(' | ')} |`
 }
 
 const setEditorTableDomCellText = (cell: HTMLTableCellElement, value: string) => {
@@ -1749,19 +1855,7 @@ const syncExpandedTableToEditor = () => {
   const currentBlock = blocks.find((block) => block.start === expandedEditorTableBlock?.start && block.end === expandedEditorTableBlock?.end) || expandedEditorTableBlock
   if (!currentBlock) return false
   const rows = normalizeExpandedTableRows(expandedTableRows.value)
-  const colCount = rows[0]?.length || 1
-  let nextBlockLines: string[] | null = null
-  if (currentBlock.kind === 'html') {
-    nextBlockLines = serializeEditableHtmlTableBlock(currentBlock, rows)
-  } else if (currentBlock.kind === 'tab') {
-    nextBlockLines = rows.map(formatEditableTabTableRow)
-  } else if (isMarkdownTableDivider(lines[currentBlock.start + 1] || '')) {
-    nextBlockLines = [
-      formatEditableMarkdownTableRow(rows[0] || Array.from({ length: colCount }, () => '')),
-      formatMarkdownDividerLine(lines[currentBlock.start + 1] || currentBlock.lines[1] || '', colCount),
-      ...rows.slice(1).map(formatEditableMarkdownTableRow)
-    ]
-  }
+  const nextBlockLines = serializeEditableTableBlock(currentBlock, rows)
   if (!nextBlockLines) return false
   lines.splice(currentBlock.start, currentBlock.end - currentBlock.start, ...nextBlockLines)
   const nextValue = lines.join('\n')
@@ -1805,9 +1899,13 @@ const closeExpandedTable = () => {
 }
 
 const openHoveredTableExpand = () => {
-  const table = hoveredEditorTable
+  let table = hoveredEditorTable
   if (!table || !editorContainer.value?.contains(table)) return
+  const preferredIndex = getEditorTables().indexOf(table)
+  flushPendingEditorTableCellSourceSync()
   enhanceEditorTables(editorContainer.value)
+  table = getEditorTables()[preferredIndex] || table
+  if (!table || !editorContainer.value.contains(table)) return
   const tableIndex = getEditorTables().indexOf(table)
   const block = getEditorTableBlockForTable(table, tableIndex)
   const rows = block ? editableRowsFromTableBlock(block) : editableRowsFromRenderedTable(table)
@@ -1898,7 +1996,6 @@ const enhanceEditorTables = (_root: HTMLElement) => {
   getEditorTables().forEach((table, index) => {
     table.classList.add('editor-deletable-table')
     table.dataset.editorTableIndex = String(index)
-    replaceTableBreakTextNodes(table)
     const renderedRows = getRenderedTableRows(table)
     const datasetBlock = tableBlockFromDataset(table, blocks)
     let block = datasetBlock && !usedBlocks.has(datasetBlock) ? datasetBlock : undefined
@@ -1908,6 +2005,9 @@ const enhanceEditorTables = (_root: HTMLElement) => {
     if (!block && index >= 0 && index < blocks.length && !usedBlocks.has(blocks[index])) block = blocks[index]
     if (!block) block = blocks.find((candidate) => !usedBlocks.has(candidate))
     if (block) usedBlocks.add(block)
+    normalizeEditableHtmlTable(table)
+    removeMarkdownTableDividerRow(table, block || null)
+    replaceTableBreakTextNodes(table)
     const scrollKey = tableScrollKeyFromBlock(block, `index:${index}`)
     table.dataset.editorTableScrollKey = scrollKey
     table.onscroll = () => rememberEditorTableScroll(table)
@@ -2023,7 +2123,7 @@ const setupVditorPanelPositioning = () => {
 
   const handleToolbarClick = (event: Event) => {
     const target = event.target instanceof Element ? event.target : null
-    const item = target?.closest('.vditor-toolbar__item') as HTMLElement | null
+    const item = target?.closest('.vditor-toolbar__item, button[data-type], [role="button"][data-type]') as HTMLElement | null
     if (!item || !editorContainer.value?.contains(item)) return
     const isHeading = isHeadingsItem(item)
     const isTable = isTableItem(item)
@@ -2108,6 +2208,7 @@ onMounted(async () => {
       isReady.value = true;
       emit("ready");
       nextTick(() => {
+        scheduleNormalizeEditorTableSource()
         setupFixedToolbar();
         window.setTimeout(setupFixedToolbar, 80);
       });
@@ -2258,6 +2359,7 @@ onBeforeUnmount(() => {
     showTableExpandDialog.value = false
     tableExpandClosing.value = false
     expandedTableDirty.value = false
+    pendingEditorTableCellSync = null
   } catch (e) {
     console.warn('Vditor destroy error', e);
   }
@@ -2289,6 +2391,66 @@ const getCurrentEditorTableCell = (event?: Event) => {
   const selection = window.getSelection()
   const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
   return getEditorTableCellFromRange(range) || getEditorTableCellFromEvent(event)
+}
+
+const insertTextIntoCellDom = (cell: HTMLTableCellElement, text: string) => {
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  if (!selection || !text) return false
+  let range: Range | null = null
+  if (selection.rangeCount) {
+    const currentRange = selection.getRangeAt(0)
+    if (cell.contains(currentRange.commonAncestorContainer)) range = currentRange
+  }
+  if (!range) {
+    range = document.createRange()
+    range.selectNodeContents(cell)
+    range.collapse(false)
+  }
+  range.deleteContents()
+  const textNode = document.createTextNode(text)
+  range.insertNode(textNode)
+  range.setStartAfter(textNode)
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  lastEditorSelectionRange = range.cloneRange()
+  return true
+}
+
+const insertLineBreakIntoCellDom = (cell: HTMLTableCellElement) => {
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  let range: Range | null = null
+  if (selection?.rangeCount) {
+    const currentRange = selection.getRangeAt(0)
+    if (cell.contains(currentRange.commonAncestorContainer)) range = currentRange
+  }
+  if (!range) {
+    range = document.createRange()
+    range.selectNodeContents(cell)
+    range.collapse(false)
+  }
+  range.deleteContents()
+  const lineBreak = document.createElement('br')
+  const caretNode = document.createTextNode('')
+  range.insertNode(lineBreak)
+  lineBreak.after(caretNode)
+  range.setStart(caretNode, 0)
+  range.collapse(true)
+  selection?.removeAllRanges()
+  selection?.addRange(range)
+  lastEditorSelectionRange = range.cloneRange()
+  return true
+}
+
+const insertEditorTableCellLineBreak = (event: KeyboardEvent, cell: HTMLTableCellElement) => {
+  const position = getEditorTableCellPosition(cell)
+  if (!position) return false
+  event.preventDefault()
+  event.stopPropagation()
+  ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+  if (!insertLineBreakIntoCellDom(cell)) return false
+  pendingEditorTableCellSync = { ...position, text: editorTableCellTextFromDom(cell) }
+  return true
 }
 
 const restoreLastEditorSelection = () => {
@@ -2377,6 +2539,7 @@ const insertAttachmentSourceValue = (value: string) => {
 
 defineExpose({
   clear: () => {
+    pendingEditorTableCellSync = null
     if (vditorInstance) {
       vditorInstance.setValue('');
       emit("update:modelValue", '');
@@ -2385,6 +2548,7 @@ defineExpose({
   insertValue: (val: string) => {
     if (vditorInstance) {
       if (insertValueIntoCurrentTableCell(val)) return
+      if (pendingEditorTableCellSync) flushPendingEditorTableCellSourceSync()
       if (insertAttachmentSourceValue(val)) return
       const nextValue = normalizeAttachmentInsertValue(val)
       vditorInstance.insertValue(nextValue);
@@ -2395,9 +2559,10 @@ defineExpose({
     }
   },
   getValue: (): string => {
-    return vditorInstance ? vditorInstance.getValue() : ''
+    return vditorInstance ? getEditorValueWithPendingTableSync() : ''
   },
   setValue: (val: string) => {
+    pendingEditorTableCellSync = null
     if (vditorInstance) {
       vditorInstance.setValue(val)
       emit("update:modelValue", vditorInstance.getValue())
@@ -2821,7 +2986,8 @@ html.dark .editor-attachment-preview__header,
 }
 
 .vditor-reset table th {
-  font-weight: 400;
+  font-weight: 400 !important;
+  text-align: left;
 }
 
 html.dark .vditor-container { background-color: #202a36; border: 1px solid rgba(255, 255, 255, 0.16); }

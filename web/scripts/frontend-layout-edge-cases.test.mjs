@@ -514,6 +514,18 @@ assert(
     vditorEditor.includes("kind: 'markdown' | 'html' | 'tab'") &&
     vditorEditor.includes('parseEditableTabTableRow') &&
     vditorEditor.includes('formatEditableTabTableRow') &&
+    vditorEditor.includes('formatEditableMarkdownTableRow') &&
+    vditorEditor.includes('formatMarkdownDividerLine') &&
+    vditorEditor.includes('serializeEditableTableBlock') &&
+    vditorEditor.includes("if (block.kind === 'html') return serializeEditableHtmlTableBlock(block, rows)") &&
+    vditorEditor.includes("if (block.kind === 'tab') return serializeEditableTabTableBlock(rows)") &&
+    vditorEditor.includes('return serializeEditableMarkdownTableBlock(block, rows)') &&
+    vditorEditor.includes('serializeEditableMarkdownTableBlock') &&
+    vditorEditor.includes('serializeEditableTabTableBlock') &&
+    !vditorEditor.includes('return serializeEditableRowsToHtmlTableBlock(normalizeExpandedTableRows(rows))') &&
+    !vditorEditor.includes('normalizeEditorTableSourceValue') &&
+    !vditorEditor.includes(".filter((block) => block.kind !== 'html')") &&
+    vditorEditor.includes('scheduleNormalizeEditorTableSource()') &&
     vditorEditor.includes('syncExpandedTableDomToEditor') &&
     vditorEditor.includes('expandedEditorTableElement') &&
     vditorEditor.includes('if (!expandedEditorTableBlock) return syncExpandedTableDomToEditor()') &&
@@ -533,13 +545,40 @@ assert(
     !vditorEditor.includes('editor-table-expand-attachment-btn') &&
     vditorEditor.includes('if (event.isComposing) return') &&
     vditorEditor.includes('getCurrentEditorTableCell(event)') &&
-    vditorEditor.includes('if (getCurrentEditorTableCell(event)) return true') &&
-    vditorEditor.includes('getCurrentEditorTableCell(event) || anchorElement.closest') &&
+    vditorEditor.includes('const cell = getCurrentEditorTableCell(event)') &&
+    vditorEditor.includes('insertEditorTableCellLineBreak(event, cell)') &&
+    vditorEditor.includes('insertLineBreakIntoCellDom(cell)') &&
+    vditorEditor.includes('pendingEditorTableCellSync = { ...position, text: editorTableCellTextFromDom(cell) }') &&
+    vditorEditor.includes('pendingEditorTableCellSync') &&
+    vditorEditor.includes('flushPendingEditorTableCellSourceSyncIfMoved(getCurrentEditorTableCell())') &&
+    vditorEditor.includes('const handleEditorTableBeforeInput = (event: Event) =>') &&
+    vditorEditor.includes('if (handleEditorTableBeforeInput(event)) return') &&
+    vditorEditor.includes("inputType === 'insertText'") &&
+    vditorEditor.includes('insertTextIntoCellDom(cell, text)') &&
+    vditorEditor.includes('const handleEditorTableTextKeydown = (event: KeyboardEvent, cell: HTMLTableCellElement) =>') &&
+    vditorEditor.includes('if (event.key.length !== 1) return false') &&
+    vditorEditor.includes('if (cell && handleEditorTableTextKeydown(event, cell)) return') &&
+    vditorEditor.includes("root.addEventListener('beforeinput', onEditorBeforeInput, true)") &&
+    vditorEditor.includes("root.removeEventListener('beforeinput', onEditorBeforeInput, true)") &&
+    vditorEditor.includes('const onEditorInput = (event: Event) =>') &&
+    vditorEditor.includes('if (cell)') &&
+    !vditorEditor.includes('if (!cell || !getEditorTableCellSourceTarget(cell)) return false') &&
+    !vditorEditor.includes('if (!getEditorTableCellSourceTarget(cell)) return false') &&
+    vditorEditor.includes('markEditorTableCellSourceDirty(cell)') &&
+    vditorEditor.includes('stopImmediatePropagation?.()') &&
+    vditorEditor.includes('emit("update:modelValue", getEditorValueWithPendingTableSync())') &&
+    vditorEditor.includes("root.addEventListener('focusout', onEditorFocusOut, true)") &&
+    vditorEditor.includes('getEditorValueWithPendingTableSync()') &&
+    !/const insertEditorTableCellLineBreak[\s\S]*?dispatchEditorTableDomInput\(table\)[\s\S]*?return true/.test(vditorEditor) &&
+    !vditorEditor.includes('scheduleEditorTableCellSourceSync') &&
+    !vditorEditor.includes('focusEditorTableCellAt') &&
+    !vditorEditor.includes('if (!applyEditorTableCellSourceValue(cell, editorTableCellTextFromDom(cell))) return false') &&
     vditorEditor.includes('range.selectNodeContents(cell)') &&
-    vditorEditor.includes('const insertedIntoSource = syncEditorTableCellLineBreakToSource(cell)') &&
-    vditorEditor.includes('if (insertedIntoSource) return true') &&
-    vditorEditor.includes('getEditorTableCellSelectionTextRange') &&
-    vditorEditor.includes("document.execCommand('insertHTML', false, '<br>')") &&
+    vditorEditor.includes("const lineBreak = document.createElement('br')") &&
+    vditorEditor.includes("const caretNode = document.createTextNode('')") &&
+    vditorEditor.includes('normalizeEditableHtmlTable(table)') &&
+    vditorEditor.includes('removeMarkdownTableDividerRow(table, block || null)') &&
+    vditorEditor.includes('buildMarkdownTable(rows, cols)') &&
     vditorEditor.includes('previewExpandedTableAttachment') &&
     vditorEditor.includes('TABLE_CELL_BREAK_RE') &&
     vditorEditor.includes('replaceTableBreakTextNodes(table)') &&
