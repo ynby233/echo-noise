@@ -984,7 +984,6 @@ const setupAttachmentPreview = () => {
     root.removeEventListener('mousedown', preventAttachmentNavigation, true)
     root.removeEventListener('click', onAttachmentClick, true)
     root.removeEventListener('keydown', onPlainTextEnterKeydown, true)
-    root.removeEventListener('beforeinput', onEditorBeforeInput as EventListener, true)
     root.removeEventListener('keydown', onAttachmentKeydown, true)
     window.removeEventListener('resize', repositionVisibleTableDeleteButton)
     window.removeEventListener('scroll', repositionVisibleTableDeleteButton, true)
