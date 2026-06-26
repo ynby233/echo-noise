@@ -552,13 +552,14 @@ assert(
     !markdownRenderer.includes('height: min(96vh, 1040px);') &&
     markdownRenderer.includes('showRenderedTableExpandDialog') &&
     markdownRenderer.includes('noise-rendered-table-expand-button') &&
-    markdownRenderer.includes("anchor.closest('table')") &&
-    markdownRenderer.includes('buildAttachmentTagHtml(kindLabel, name, url)') &&
+    !markdownRenderer.includes("anchor.closest('table')") &&
+    !markdownRenderer.includes('buildAttachmentTagHtml') &&
     markdownRenderer.includes('buildAttachmentHtml(kindLabel, name, url)') &&
     !markdownRenderer.includes('const compact = false') &&
     !markdownRenderer.includes('buildAttachmentHtml(kindLabel, name, url, true)') &&
     !markdownRenderer.includes("const compact = !!anchor.closest('td, th')") &&
     markdownRenderer.includes('a.noise-attachment-tag[data-attachment-kind]') &&
+    !vditorEditor.includes('normalizeEditableHtmlTable(table)\n    replaceTableBreakTextNodes(table)') &&
     markdownRenderer.includes('openRenderedTableExpand(table)') &&
     markdownRenderer.includes('initializeMediaViewer(renderedTableExpandBody.value)') &&
     markdownRenderer.includes('rendered-table-expand-dialog') &&

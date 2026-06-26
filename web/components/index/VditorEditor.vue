@@ -1661,7 +1661,6 @@ const enhanceEditorTables = (_root: HTMLElement) => {
   getEditorTables().forEach((table, index) => {
     table.classList.add('editor-deletable-table')
     table.dataset.editorTableIndex = String(index)
-    normalizeEditableHtmlTable(table)
     replaceTableBreakTextNodes(table)
     const renderedRows = getRenderedTableRows(table)
     const datasetBlock = tableBlockFromDataset(table, blocks)

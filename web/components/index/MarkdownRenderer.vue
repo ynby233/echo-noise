@@ -1029,23 +1029,6 @@ const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string) =>
   return `<audio class="noise-attachment-audio" src="${safeUrl}" controls preload="metadata"></audio>`
 }
 
-const attachmentKindFromLabel = (kindLabel: string) => {
-  if (kindLabel === '图片附件') return 'image'
-  if (kindLabel === '视频附件') return 'video'
-  if (kindLabel === '音频附件') return 'audio'
-  return ''
-}
-
-const buildAttachmentTagHtml = (kindLabel: string, name: string, rawUrl: string) => {
-  const url = resolveImageUrl(String(rawUrl || '').trim())
-  const kind = attachmentKindFromLabel(kindLabel)
-  if (!url || !kind) return ''
-  const safeUrl = escapeHtml(url)
-  const title = `${kindLabel}：${String(name || '').trim() || '未命名附件'}`
-  const safeTitle = escapeHtml(title)
-  return `<a href="${safeUrl}" class="noise-attachment-tag" data-attachment-kind="${kind}" data-attachment-url="${safeUrl}" aria-label="预览${safeTitle}">${safeTitle}</a>`
-}
-
 const attachmentInfoFromRenderedAnchor = (anchor: HTMLAnchorElement) => {
   const label = (anchor.textContent || '').trim()
   const match = label.match(/^(图片附件|视频附件|音频附件)：(.+)$/)
@@ -1061,10 +1044,7 @@ const applyAttachmentRenders = () => {
     const info = attachmentInfoFromRenderedAnchor(anchor)
     if (!info) return
     const { kindLabel, name, url } = info
-    const html = anchor.closest('table')
-      ? buildAttachmentTagHtml(kindLabel, name, url)
-      : buildAttachmentHtml(kindLabel, name, url)
-    replaceNodeWithHtml(anchor, html)
+    replaceNodeWithHtml(anchor, buildAttachmentHtml(kindLabel, name, url))
   })
 }
 
