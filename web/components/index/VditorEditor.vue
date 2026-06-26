@@ -475,6 +475,19 @@ const attachmentInfoFromIrLabel = (label: HTMLElement | null) => {
   return attachmentInfoFromIrNode(node)
 }
 
+const attachmentInfoToMarkdownSource = (info: EditorAttachmentInfo) => `[${info.title}](${info.url})`
+
+const replaceAttachmentNodesWithSourceText = (root: HTMLElement) => {
+  root.querySelectorAll<HTMLElement>('[data-type="a"]').forEach((node) => {
+    const info = attachmentInfoFromIrNode(node)
+    if (info) node.replaceWith(document.createTextNode(attachmentInfoToMarkdownSource(info)))
+  })
+  root.querySelectorAll<HTMLAnchorElement>('a').forEach((anchor) => {
+    const info = attachmentInfoFromAnchor(anchor)
+    if (info) anchor.replaceWith(document.createTextNode(attachmentInfoToMarkdownSource(info)))
+  })
+}
+
 const setupAttachmentPreview = () => {
   const root = editorContainer.value
   if (!root || attachmentPreviewCleanup) return
@@ -1140,6 +1153,53 @@ const editorTextToTableCellSource = (value: string) => {
   return normalized || ' '
 }
 
+const escapeTableCellHtml = (value: string) => String(value || '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/\"/g, '&quot;')
+  .replace(/'/g, '&#39;')
+
+const editorTextToHtmlTableCellSource = (value: string) => {
+  const text = String(value || '').replace(/\r\n?/g, '\n')
+  const normalized = text
+    .split('\n')
+    .map((line) => escapeTableCellHtml(line).trim())
+    .join('<br />')
+    .trim()
+  return normalized || '&nbsp;'
+}
+
+const htmlTableCellToEditorText = (cell: HTMLTableCellElement) => {
+  const clone = cell.cloneNode(true) as HTMLElement
+  clone.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
+  replaceAttachmentNodesWithSourceText(clone)
+  clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')))
+  clone.querySelectorAll('p,div').forEach((block) => {
+    if (block.nextSibling) block.after(document.createTextNode('\n'))
+  })
+  return String(clone.textContent || '').replace(/\u00a0/g, ' ').trim()
+}
+
+const replaceTableHeaderCells = (table: HTMLTableElement) => {
+  table.querySelectorAll('th').forEach((headerCell) => {
+    const cell = document.createElement('td')
+    Array.from(headerCell.attributes).forEach((attr) => cell.setAttribute(attr.name, attr.value))
+    while (headerCell.firstChild) cell.appendChild(headerCell.firstChild)
+    headerCell.replaceWith(cell)
+  })
+}
+
+const normalizeEditableHtmlTable = (table: HTMLTableElement) => {
+  const thead = table.tHead
+  if (thead) {
+    const body = table.tBodies[0] || table.createTBody()
+    Array.from(thead.rows).reverse().forEach((row) => body.insertBefore(row, body.firstChild))
+    thead.remove()
+  }
+  replaceTableHeaderCells(table)
+}
+
 const tableScrollKeyFromBlock = (block?: EditorTableSourceBlock | null, fallback = '') => {
   if (block) return `${block.kind}:${block.start}:${block.end}`
   return fallback
@@ -1251,6 +1311,15 @@ const getRenderedTableRows = (table: HTMLTableElement | null) => {
   return Array.from(table.rows).map((row) => Array.from(row.cells).map((cell) => normalizeTableMatchText(cell.textContent || '')))
 }
 
+const createHtmlTableFromBlock = (block: EditorTableSourceBlock) => {
+  if (block.kind !== 'html' || typeof document === 'undefined') return null
+  const holder = document.createElement('div')
+  holder.innerHTML = block.lines.join('\n').trim()
+  const table = holder.querySelector('table') as HTMLTableElement | null
+  if (table) normalizeEditableHtmlTable(table)
+  return table
+}
+
 const parseMarkdownTableRow = (line: string) => String(line || '')
   .trim()
   .replace(/^\|/, '')
@@ -1272,6 +1341,17 @@ const getMarkdownTableRows = (lines: string[]) => {
   return rows
 }
 
+const editableRowsFromHtmlBlock = (block: EditorTableSourceBlock) => {
+  const table = createHtmlTableFromBlock(block)
+  if (!table) return [] as string[][]
+  return Array.from(table.rows).map((row) => Array.from(row.cells).map((cell) => htmlTableCellToEditorText(cell as HTMLTableCellElement)))
+}
+
+const comparableRowsFromTableBlock = (block: EditorTableSourceBlock) => {
+  const rows = block.kind === 'markdown' ? getMarkdownTableRows(block.lines) : editableRowsFromHtmlBlock(block)
+  return rows.map((row) => row.map((cell) => normalizeTableMatchText(cell)))
+}
+
 const tableRowsHaveComparableContent = (rows: string[][]) => rows.some((row) => row.some((cell) => !!cell))
 
 const sameTableRows = (left: string[][], right: string[][]) => {
@@ -1279,7 +1359,7 @@ const sameTableRows = (left: string[][], right: string[][]) => {
   return left.every((row, rowIndex) => {
     const other = right[rowIndex] || []
     if (row.length !== other.length) return false
-    return row.every((cell, cellIndex) => cell === other[cellIndex])
+    return row.every((cell, cellIndex) => normalizeTableMatchText(cell) === normalizeTableMatchText(other[cellIndex]))
   })
 }
 
@@ -1289,7 +1369,7 @@ const findMarkdownTableBlock = (
   preferredIndex: number
 ) => {
   if (tableRowsHaveComparableContent(renderedRows)) {
-    const matched = blocks.find((block) => block.kind === 'markdown' && sameTableRows(getMarkdownTableRows(block.lines), renderedRows))
+    const matched = blocks.find((block) => sameTableRows(comparableRowsFromTableBlock(block), renderedRows))
     if (matched) return matched
   }
   return preferredIndex >= 0 ? blocks[preferredIndex] : undefined
@@ -1308,6 +1388,7 @@ type EditorTableCellSourceTarget = {
   block: EditorTableSourceBlock
   lines: string[]
   lineIndex: number
+  rowIndex: number
   cellIndex: number
   rowCells: string[]
 }
@@ -1331,11 +1412,33 @@ const getEditorTableCellSourceTarget = (cell: HTMLTableCellElement | null): Edit
   const blocks = getEditorTableSourceBlocks(value)
   const tableIndex = getEditorTables().indexOf(table)
   const block = tableBlockFromDataset(table, blocks) || findMarkdownTableBlock(blocks, getRenderedTableRows(table), tableIndex)
-  if (!block || block.kind !== 'markdown' || !isMarkdownTableDivider(lines[block.start + 1] || '')) return null
+  if (!block) return null
+  if (block.kind === 'html') {
+    const sourceRows = editableRowsFromHtmlBlock(block)
+    const rowCells = sourceRows[rowIndex]
+    if (!rowCells) return null
+    return { table, block, lines, lineIndex: -1, rowIndex, cellIndex, rowCells }
+  }
+  if (!isMarkdownTableDivider(lines[block.start + 1] || '')) return null
   const lineIndex = rowIndex === 0 ? block.start : block.start + rowIndex + 1
   if (lineIndex < block.start || lineIndex >= block.end || !lines[lineIndex]) return null
   const rowCells = parseEditableMarkdownTableRow(lines[lineIndex])
-  return { table, block, lines, lineIndex, cellIndex, rowCells }
+  return { table, block, lines, lineIndex, rowIndex, cellIndex, rowCells }
+}
+
+const serializeEditableHtmlTableBlock = (block: EditorTableSourceBlock, rows: string[][]) => {
+  const table = createHtmlTableFromBlock(block)
+  if (!table) return null
+  table.querySelectorAll('thead,tbody,tfoot').forEach((section) => section.remove())
+  const body = table.createTBody()
+  rows.forEach((cells) => {
+    const row = body.insertRow()
+    cells.forEach((text) => {
+      const targetCell = row.insertCell()
+      targetCell.innerHTML = editorTextToHtmlTableCellSource(text)
+    })
+  })
+  return table.outerHTML.split('\n')
 }
 
 const applyEditorTableCellSourceValue = (cell: HTMLTableCellElement | null, nextText: string) => {
@@ -1344,7 +1447,16 @@ const applyEditorTableCellSourceValue = (cell: HTMLTableCellElement | null, next
   const rowCells = [...target.rowCells]
   while (rowCells.length <= target.cellIndex) rowCells.push('')
   rowCells[target.cellIndex] = nextText
-  target.lines[target.lineIndex] = formatEditableMarkdownTableRow(rowCells)
+  if (target.block.kind === 'html') {
+    const rows = editableRowsFromHtmlBlock(target.block)
+    if (!rows[target.rowIndex]) rows[target.rowIndex] = []
+    rows[target.rowIndex] = rowCells
+    const nextBlockLines = serializeEditableHtmlTableBlock(target.block, rows)
+    if (!nextBlockLines) return false
+    target.lines.splice(target.block.start, target.block.end - target.block.start, ...nextBlockLines)
+  } else {
+    target.lines[target.lineIndex] = formatEditableMarkdownTableRow(rowCells)
+  }
   const nextValue = target.lines.join('\n')
   rememberEditorTableScroll(target.table)
   vditorInstance.setValue(nextValue)
@@ -1356,6 +1468,7 @@ const applyEditorTableCellSourceValue = (cell: HTMLTableCellElement | null, next
 const editorTableCellTextFromDom = (cell: HTMLTableCellElement) => {
   const clone = cell.cloneNode(true) as HTMLElement
   clone.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
+  replaceAttachmentNodesWithSourceText(clone)
   clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')))
   return String(clone.textContent || '').replace(/\u00a0/g, ' ')
 }
@@ -1381,6 +1494,10 @@ const editableRowsFromMarkdownBlock = (block: EditorTableSourceBlock) => {
   return [parseEditableMarkdownTableRow(block.lines[0]), ...block.lines.slice(2).map((line) => parseEditableMarkdownTableRow(line))]
 }
 
+const editableRowsFromTableBlock = (block: EditorTableSourceBlock) => block.kind === 'markdown'
+  ? editableRowsFromMarkdownBlock(block)
+  : editableRowsFromHtmlBlock(block)
+
 const normalizeExpandedTableRows = (rows: string[][]) => {
   const colCount = Math.max(1, ...rows.map((row) => row.length))
   return rows.map((row) => Array.from({ length: colCount }, (_, index) => row[index] ?? ''))
@@ -1405,14 +1522,20 @@ const syncExpandedTableToEditor = () => {
   const lines = value.split('\n')
   const blocks = getEditorTableSourceBlocks(value)
   const currentBlock = blocks.find((block) => block.start === expandedEditorTableBlock?.start && block.end === expandedEditorTableBlock?.end) || expandedEditorTableBlock
-  if (!currentBlock || currentBlock.kind !== 'markdown' || !isMarkdownTableDivider(lines[currentBlock.start + 1] || '')) return false
+  if (!currentBlock) return false
   const rows = normalizeExpandedTableRows(expandedTableRows.value)
   const colCount = rows[0]?.length || 1
-  const nextBlockLines = [
-    formatEditableMarkdownTableRow(rows[0] || Array.from({ length: colCount }, () => '')),
-    formatMarkdownDividerLine(lines[currentBlock.start + 1] || currentBlock.lines[1] || '', colCount),
-    ...rows.slice(1).map(formatEditableMarkdownTableRow)
-  ]
+  let nextBlockLines: string[] | null = null
+  if (currentBlock.kind === 'html') {
+    nextBlockLines = serializeEditableHtmlTableBlock(currentBlock, rows)
+  } else if (isMarkdownTableDivider(lines[currentBlock.start + 1] || '')) {
+    nextBlockLines = [
+      formatEditableMarkdownTableRow(rows[0] || Array.from({ length: colCount }, () => '')),
+      formatMarkdownDividerLine(lines[currentBlock.start + 1] || currentBlock.lines[1] || '', colCount),
+      ...rows.slice(1).map(formatEditableMarkdownTableRow)
+    ]
+  }
+  if (!nextBlockLines) return false
   lines.splice(currentBlock.start, currentBlock.end - currentBlock.start, ...nextBlockLines)
   const nextValue = lines.join('\n')
   expandedEditorTableBlock = { ...currentBlock, end: currentBlock.start + nextBlockLines.length, lines: nextBlockLines }
@@ -1452,15 +1575,15 @@ const openHoveredTableExpand = () => {
   if (!table || !editorContainer.value?.contains(table)) return
   const tableIndex = getEditorTables().indexOf(table)
   const block = getEditorTableBlockForTable(table, tableIndex)
-  const rows = block?.kind === 'markdown' ? editableRowsFromMarkdownBlock(block) : getRenderedTableRows(table)
+  const rows = block ? editableRowsFromTableBlock(block) : getRenderedTableRows(table)
   if (!rows.length) return
   if (tableExpandCloseTimer !== null) {
     window.clearTimeout(tableExpandCloseTimer)
     tableExpandCloseTimer = null
   }
   expandedTableRows.value = normalizeExpandedTableRows(rows)
-  expandedTableEditable.value = !!block && block.kind === 'markdown'
-  expandedEditorTableBlock = block?.kind === 'markdown' ? block : null
+  expandedTableEditable.value = !!block
+  expandedEditorTableBlock = block || null
   tableExpandClosing.value = false
   showTableExpandDialog.value = true
   hideTableDeleteButton()
@@ -1538,12 +1661,13 @@ const enhanceEditorTables = (_root: HTMLElement) => {
   getEditorTables().forEach((table, index) => {
     table.classList.add('editor-deletable-table')
     table.dataset.editorTableIndex = String(index)
+    normalizeEditableHtmlTable(table)
     replaceTableBreakTextNodes(table)
     const renderedRows = getRenderedTableRows(table)
     const datasetBlock = tableBlockFromDataset(table, blocks)
     let block = datasetBlock && !usedBlocks.has(datasetBlock) ? datasetBlock : undefined
     if (!block && tableRowsHaveComparableContent(renderedRows)) {
-      block = blocks.find((candidate) => candidate.kind === 'markdown' && !usedBlocks.has(candidate) && sameTableRows(getMarkdownTableRows(candidate.lines), renderedRows))
+      block = blocks.find((candidate) => !usedBlocks.has(candidate) && sameTableRows(comparableRowsFromTableBlock(candidate), renderedRows))
     }
     if (!block) block = blocks.find((candidate) => !usedBlocks.has(candidate))
     if (block) usedBlocks.add(block)
@@ -1942,7 +2066,6 @@ const restoreLastEditorSelection = () => {
 
 const normalizeTableCellInsertion = (value: string) => String(value || '')
   .replace(/\r?\n+/g, ' ')
-  .replace(/\|/g, '\\|')
   .trim()
 
 const insertValueIntoCurrentTableCell = (value: string) => {
@@ -2626,9 +2749,11 @@ html.dark .editor-table-expand-button:focus-visible {
 }
 
 .editor-table-expand-dialog {
-  width: min(1680px, calc(100vw - 12px));
-  height: min(96vh, 1040px);
-  max-height: calc(100dvh - 12px);
+  width: min(1680px, calc(100vw - 24px));
+  height: min(88vh, 900px);
+  height: min(88dvh, 900px);
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;

@@ -458,9 +458,25 @@ const replaceRenderedTableBreakTextNodes = (table: HTMLTableElement) => {
   })
 }
 
+const normalizeRenderedTableStructure = (table: HTMLTableElement) => {
+  const thead = table.tHead
+  if (thead) {
+    const body = table.tBodies[0] || table.createTBody()
+    Array.from(thead.rows).reverse().forEach((row) => body.insertBefore(row, body.firstChild))
+    thead.remove()
+  }
+  table.querySelectorAll('th').forEach((headerCell) => {
+    const cell = document.createElement('td')
+    Array.from(headerCell.attributes).forEach((attr) => cell.setAttribute(attr.name, attr.value))
+    while (headerCell.firstChild) cell.appendChild(headerCell.firstChild)
+    headerCell.replaceWith(cell)
+  })
+}
+
 const openRenderedTableExpand = async (table: HTMLTableElement) => {
   if (!table) return
   const clone = table.cloneNode(true) as HTMLTableElement
+  normalizeRenderedTableStructure(clone)
   clone.classList.add('noise-scrollable-table', 'rendered-table-expanded-table')
   clone.querySelectorAll('button:not(.noise-rendered-table-expand-button)').forEach((button) => button.remove())
   clone.querySelectorAll('.noise-rendered-table-expand-button').forEach((button) => button.remove())
@@ -514,6 +530,7 @@ const enhanceRenderedTables = () => {
   const root = previewElement.value
   if (!root) return
   root.querySelectorAll<HTMLTableElement>('table').forEach((table) => {
+    normalizeRenderedTableStructure(table)
     const existingWrapper = table.closest<HTMLElement>('.noise-table-scroll')
     if (existingWrapper) {
       replaceRenderedTableBreakTextNodes(table)
@@ -1012,6 +1029,23 @@ const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string) =>
   return `<audio class="noise-attachment-audio" src="${safeUrl}" controls preload="metadata"></audio>`
 }
 
+const attachmentKindFromLabel = (kindLabel: string) => {
+  if (kindLabel === '图片附件') return 'image'
+  if (kindLabel === '视频附件') return 'video'
+  if (kindLabel === '音频附件') return 'audio'
+  return ''
+}
+
+const buildAttachmentTagHtml = (kindLabel: string, name: string, rawUrl: string) => {
+  const url = resolveImageUrl(String(rawUrl || '').trim())
+  const kind = attachmentKindFromLabel(kindLabel)
+  if (!url || !kind) return ''
+  const safeUrl = escapeHtml(url)
+  const title = `${kindLabel}：${String(name || '').trim() || '未命名附件'}`
+  const safeTitle = escapeHtml(title)
+  return `<a href="${safeUrl}" class="noise-attachment-tag" data-attachment-kind="${kind}" data-attachment-url="${safeUrl}" aria-label="预览${safeTitle}">${safeTitle}</a>`
+}
+
 const attachmentInfoFromRenderedAnchor = (anchor: HTMLAnchorElement) => {
   const label = (anchor.textContent || '').trim()
   const match = label.match(/^(图片附件|视频附件|音频附件)：(.+)$/)
@@ -1027,7 +1061,9 @@ const applyAttachmentRenders = () => {
     const info = attachmentInfoFromRenderedAnchor(anchor)
     if (!info) return
     const { kindLabel, name, url } = info
-    const html = buildAttachmentHtml(kindLabel, name, url)
+    const html = anchor.closest('table')
+      ? buildAttachmentTagHtml(kindLabel, name, url)
+      : buildAttachmentHtml(kindLabel, name, url)
     replaceNodeWithHtml(anchor, html)
   })
 }
@@ -1421,6 +1457,7 @@ const renderMarkdown = async (markdown: string) => {
           applyThemeClass();
           const anchors = previewElement.value?.querySelectorAll('a[href]') || [] as any;
           anchors.forEach((a: HTMLAnchorElement) => {
+            if (a.classList.contains('noise-attachment-tag')) return
             const href = a.getAttribute('href') || ''
             if (/\.(mp4|webm|mov|avi)(\?.*)?$/i.test(href)) {
               const v = document.createElement('video')
@@ -1732,13 +1769,6 @@ watch(() => props.enableGithubCard, () => {
   color: #f97316 !important;
   text-decoration: underline;
 }
-.markdown-preview table thead tr {
-  background-color: inherit !important;
-}
-
-.markdown-preview table th {
-  font-weight: 400 !important;
-}
 
 .markdown-preview .noise-table-scroll {
   max-width: 100%;
@@ -1844,9 +1874,11 @@ watch(() => props.enableGithubCard, () => {
 }
 
 .rendered-table-expand-dialog {
-  width: min(1680px, calc(100vw - 12px));
-  height: min(96vh, 1040px);
-  max-height: calc(100dvh - 12px);
+  width: min(1680px, calc(100vw - 24px));
+  height: min(88vh, 900px);
+  height: min(88dvh, 900px);
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
@@ -2229,42 +2261,8 @@ watch(() => props.enableGithubCard, () => {
   margin: 0.35em 0;
 }
 
-.markdown-preview :deep(.noise-attachment-audio--table) {
-  display: inline-block;
-  width: min(260px, 100%) !important;
-  max-width: 260px;
-  margin: 2px 0;
-  vertical-align: middle;
-}
-
 .markdown-preview :deep(.noise-attachment-render--video video) {
   margin: 0;
-}
-
-.markdown-preview :deep(.noise-attachment-render--table) {
-  display: inline-flex;
-  max-width: 100%;
-  margin: 2px 0;
-  vertical-align: middle;
-}
-
-.markdown-preview :deep(td .noise-attachment-render--table),
-.markdown-preview :deep(th .noise-attachment-render--table) {
-  width: min(100%, 260px);
-}
-
-.markdown-preview :deep(.noise-attachment-render--table img),
-.markdown-preview :deep(.noise-attachment-render--table video) {
-  display: block;
-  width: 100%;
-  max-width: 260px;
-  height: auto;
-  border-radius: 6px;
-}
-
-.markdown-preview :deep(.noise-attachment-render--table audio) {
-  width: min(100%, 260px);
-  max-width: 260px;
 }
 
 .markdown-preview :deep(pre) {

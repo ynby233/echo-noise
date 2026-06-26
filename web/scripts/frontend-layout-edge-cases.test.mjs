@@ -481,8 +481,15 @@ assert(
     vditorEditor.includes('editorTableScrollPositions') &&
     vditorEditor.includes('return `${block.kind}:${block.start}:${block.end}`') &&
     vditorEditor.includes('const usedBlocks = new Set<EditorTableSourceBlock>()') &&
-    vditorEditor.includes('sameTableRows(getMarkdownTableRows(candidate.lines), renderedRows)') &&
-    !vditorEditor.includes('block.lines.join') &&
+    vditorEditor.includes('sameTableRows(comparableRowsFromTableBlock(candidate), renderedRows)') &&
+    vditorEditor.includes("block.lines.join('\\n').trim()") &&
+    vditorEditor.includes('normalizeEditableHtmlTable(table)') &&
+    vditorEditor.includes('replaceTableHeaderCells(table)') &&
+    vditorEditor.includes('editableRowsFromHtmlBlock') &&
+    vditorEditor.includes('serializeEditableHtmlTableBlock') &&
+    vditorEditor.includes('replaceAttachmentNodesWithSourceText(clone)') &&
+    vditorEditor.includes('attachmentInfoToMarkdownSource') &&
+    vditorEditor.includes('expandedTableEditable.value = !!block') &&
     vditorEditor.includes('rememberEditorTableScroll(table)') &&
     vditorEditor.includes('restoreEditorTableScroll(table)') &&
     vditorEditor.includes('@keydown.enter.exact="insertExpandedTableCellLineBreak(rowIndex, cellIndex, $event)"') &&
@@ -530,14 +537,24 @@ assert(
     !vditorEditor.includes('editor-table-select-handle') &&
     !vditorEditor.includes('.vditor-reset table.editor-table-selected') &&
     markdownRenderer.includes('.markdown-preview :deep(.noise-attachment-audio)') &&
-    markdownRenderer.includes('.markdown-preview :deep(.noise-attachment-audio--table)') &&
+    !markdownRenderer.includes('.markdown-preview :deep(.noise-attachment-audio--table)') &&
     markdownRenderer.includes('enhanceRenderedTables()') &&
     markdownRenderer.includes('noise-table-scroll') &&
     markdownRenderer.includes('noise-scrollable-table') &&
     markdownRenderer.includes('replaceRenderedTableBreakTextNodes') &&
+    markdownRenderer.includes('normalizeRenderedTableStructure(table)') &&
+    markdownRenderer.includes('normalizeRenderedTableStructure(clone)') &&
+    markdownRenderer.includes('table.querySelectorAll(\'th\')') &&
+    markdownRenderer.includes('thead.remove()') &&
+    vditorEditor.includes('height: min(88dvh, 900px);') &&
+    !vditorEditor.includes('height: min(96vh, 1040px);') &&
+    markdownRenderer.includes('height: min(88dvh, 900px);') &&
+    !markdownRenderer.includes('height: min(96vh, 1040px);') &&
     markdownRenderer.includes('showRenderedTableExpandDialog') &&
     markdownRenderer.includes('noise-rendered-table-expand-button') &&
-    markdownRenderer.includes('const html = buildAttachmentHtml(kindLabel, name, url)') &&
+    markdownRenderer.includes("anchor.closest('table')") &&
+    markdownRenderer.includes('buildAttachmentTagHtml(kindLabel, name, url)') &&
+    markdownRenderer.includes('buildAttachmentHtml(kindLabel, name, url)') &&
     !markdownRenderer.includes('const compact = false') &&
     !markdownRenderer.includes('buildAttachmentHtml(kindLabel, name, url, true)') &&
     !markdownRenderer.includes("const compact = !!anchor.closest('td, th')") &&
