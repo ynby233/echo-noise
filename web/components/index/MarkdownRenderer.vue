@@ -1845,8 +1845,8 @@ watch(() => props.enableGithubCard, () => {
 
 .rendered-table-expand-dialog {
   width: min(1680px, calc(100vw - 12px));
-  height: min(calc(100dvh - 24px), 1180px);
-  max-height: calc(100dvh - 24px);
+  height: min(96vh, 1040px);
+  max-height: calc(100dvh - 12px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
@@ -2009,7 +2009,7 @@ watch(() => props.enableGithubCard, () => {
 @keyframes renderedTableDialogIn { from { opacity: 0; transform: translate3d(0, 16px, 0) scale(.92); } to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); } }
 @keyframes renderedTableDialogOut { from { opacity: 1; transform: translate3d(0, 0, 0) scale(1); } to { opacity: 0; transform: translate3d(0, 12px, 0) scale(.92); } }
 
-.markdown-preview table tr {
+.markdown-preview table tbody tr {
   background-color: rgba(232, 232, 237, 0.39) !important;
 }
 

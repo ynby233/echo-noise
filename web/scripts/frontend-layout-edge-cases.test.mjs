@@ -485,10 +485,7 @@ assert(
     !vditorEditor.includes('block.lines.join') &&
     vditorEditor.includes('rememberEditorTableScroll(table)') &&
     vditorEditor.includes('restoreEditorTableScroll(table)') &&
-    vditorEditor.includes('@input="onExpandedTableCellInput"') &&
-    vditorEditor.includes('@keydown.enter.stop.prevent="insertExpandedTableCellLineBreak($event)"') &&
-    vditorEditor.includes('resizeExpandedTableTextarea(textarea)') &&
-    vditorEditor.includes('resizeExpandedTableTextareas()') &&
+    vditorEditor.includes('@keydown.enter.exact="insertExpandedTableCellLineBreak(rowIndex, cellIndex, $event)"') &&
     vditorEditor.includes(':is="\'td\'"') &&
     vditorEditor.includes('editor-table-expand-attachment-tag editor-attachment-link') &&
     !vditorEditor.includes('editor-table-expand-attachment-btn') &&
