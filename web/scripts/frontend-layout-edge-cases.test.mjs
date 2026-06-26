@@ -553,6 +553,13 @@ assert(
     vditorEditor.includes('flushPendingEditorTableCellSourceSyncIfMoved(getCurrentEditorTableCell())') &&
     vditorEditor.includes('const handleEditorTableBeforeInput = (event: Event) =>') &&
     vditorEditor.includes('if (handleEditorTableBeforeInput(event)) return') &&
+    vditorEditor.includes("inputEvent.isComposing || editorTableCompositionActive || inputType === 'insertCompositionText'") &&
+    vditorEditor.includes("event.key === ' ' || event.code === 'Space'") &&
+    vditorEditor.includes("root.addEventListener('compositionstart', onEditorCompositionStart, true)") &&
+    vditorEditor.includes("root.removeEventListener('compositionend', onEditorCompositionEnd, true)") &&
+    vditorEditor.includes('renderAttachmentMarkersInEditableRoot(cell)') &&
+    vditorEditor.includes("root.querySelectorAll<HTMLElement>('td,th').forEach((cell) => renderAttachmentMarkersInEditableRoot(cell))") &&
+    vditorEditor.includes('createEditorAttachmentAnchor(info)') &&
     vditorEditor.includes("inputType === 'insertText'") &&
     vditorEditor.includes('insertTextIntoCellDom(cell, text)') &&
     vditorEditor.includes('const handleEditorTableTextKeydown = (event: KeyboardEvent, cell: HTMLTableCellElement) =>') &&
@@ -587,8 +594,12 @@ assert(
     vditorEditor.includes('TABLE_CELL_BREAK_RE') &&
     vditorEditor.includes('replaceTableBreakTextNodes(table)') &&
     vditorEditor.includes('.vditor-container .vditor-reset table.editor-deletable-table') &&
+    vditorEditor.includes('box-shadow: inset 1px 0 0 rgba(148, 163, 184, 0.55), inset -1px 0 0 rgba(148, 163, 184, 0.55);') &&
     vditorEditor.includes('width: max-content;') &&
     vditorEditor.includes('min-width: 100%;') &&
+    vditorEditor.includes('.editor-table-expand-table {\n  width: max-content;\n  min-width: 0;') &&
+    vditorEditor.includes('min-width: 48px;') &&
+    vditorEditor.includes('min-width: 44px;') &&
     !vditorEditor.includes('.vditor-container .vditor-reset table.editor-deletable-table tr {\n  display: table;') &&
     !vditorEditor.includes('.vditor-container .vditor-reset table.editor-deletable-table > thead,') &&
     vditorEditor.includes('scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);') &&

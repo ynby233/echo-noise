@@ -202,6 +202,7 @@ let expandedEditorTableElement: HTMLTableElement | null = null;
 let tableDeleteHideTimer: number | null = null;
 let tableExpandCloseTimer: number | null = null;
 let pendingEditorTableCellSync: PendingEditorTableCellSync | null = null;
+let editorTableCompositionActive = false;
 const editorTableScrollPositions = new Map<string, number>();
 const TABLE_DELETE_BUTTON_SIZE = 10;
 const TABLE_EXPAND_BUTTON_SIZE = TABLE_DELETE_BUTTON_SIZE;
@@ -533,6 +534,59 @@ const replaceAttachmentNodesWithSourceText = (root: HTMLElement) => {
   })
 }
 
+const createEditorAttachmentAnchor = (info: EditorAttachmentInfo) => {
+  const anchor = document.createElement('a')
+  anchor.href = info.url
+  anchor.textContent = info.title
+  anchor.className = 'editor-attachment-link'
+  anchor.setAttribute('role', 'button')
+  anchor.setAttribute('aria-label', `预览${info.title}`)
+  anchor.setAttribute('data-attachment-kind', info.type)
+  anchor.setAttribute('data-attachment-url', info.url)
+  anchor.setAttribute('draggable', 'false')
+  anchor.setAttribute('contenteditable', 'false')
+  anchor.style.cursor = 'pointer'
+  return anchor
+}
+
+const renderAttachmentMarkersInEditableRoot = (root: HTMLElement) => {
+  if (typeof document === 'undefined') return false
+  const textNodes: Text[] = []
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const text = node.textContent || ''
+      ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+      if (!ATTACHMENT_MARKER_GLOBAL_RE.test(text)) return NodeFilter.FILTER_REJECT
+      const parent = node.parentElement
+      if (!parent) return NodeFilter.FILTER_REJECT
+      if (parent.closest('a, [data-type="a"], .editor-attachment-preview, textarea, code, [data-type="code-block"], .vditor-ir__marker--pre')) {
+        return NodeFilter.FILTER_REJECT
+      }
+      return NodeFilter.FILTER_ACCEPT
+    }
+  })
+  while (walker.nextNode()) textNodes.push(walker.currentNode as Text)
+  let changed = false
+  textNodes.forEach((textNode) => {
+    const source = textNode.textContent || ''
+    ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+    let match: RegExpExecArray | null
+    let lastIndex = 0
+    const fragment = document.createDocumentFragment()
+    while ((match = ATTACHMENT_MARKER_GLOBAL_RE.exec(source))) {
+      if (match.index > lastIndex) fragment.appendChild(document.createTextNode(source.slice(lastIndex, match.index)))
+      const info = normalizeAttachmentInfo(match[1], match[2], match[3])
+      fragment.appendChild(info ? createEditorAttachmentAnchor(info) : document.createTextNode(match[0]))
+      lastIndex = ATTACHMENT_MARKER_GLOBAL_RE.lastIndex
+    }
+    if (lastIndex === 0) return
+    if (lastIndex < source.length) fragment.appendChild(document.createTextNode(source.slice(lastIndex)))
+    textNode.parentNode?.replaceChild(fragment, textNode)
+    changed = true
+  })
+  return changed
+}
+
 const setupAttachmentPreview = () => {
   const root = editorContainer.value
   if (!root || attachmentPreviewCleanup) return
@@ -568,6 +622,7 @@ const setupAttachmentPreview = () => {
   }
 
   const commitEditorTableCellDomEdit = (cell: HTMLTableCellElement) => {
+    renderAttachmentMarkersInEditableRoot(cell)
     markEditorTableCellSourceDirty(cell)
     captureEditorSelection()
     scheduleRefreshAttachmentLinks()
@@ -579,6 +634,7 @@ const setupAttachmentPreview = () => {
     const cell = getCurrentEditorTableCell(event)
     if (!cell) return false
     const inputType = inputEvent.inputType || ''
+    if (inputEvent.isComposing || editorTableCompositionActive || inputType === 'insertCompositionText') return false
     const pastedText = inputType === 'insertFromPaste'
       ? (inputEvent.dataTransfer?.getData('text/plain') || inputEvent.data || '')
       : ''
@@ -598,7 +654,8 @@ const setupAttachmentPreview = () => {
   }
 
   const handleEditorTableTextKeydown = (event: KeyboardEvent, cell: HTMLTableCellElement) => {
-    if (event.isComposing || event.altKey || event.ctrlKey || event.metaKey) return false
+    if (event.isComposing || editorTableCompositionActive || event.altKey || event.ctrlKey || event.metaKey) return false
+    if (event.key === ' ' || event.code === 'Space' || event.key === 'Process' || event.key === 'Unidentified') return false
     if (event.key.length !== 1) return false
     event.preventDefault()
     event.stopPropagation()
@@ -628,7 +685,18 @@ const setupAttachmentPreview = () => {
     window.setTimeout(() => flushPendingEditorTableCellSourceSyncIfMoved(getCurrentEditorTableCell()), 0)
   }
 
+  const onEditorCompositionStart = () => {
+    editorTableCompositionActive = true
+  }
+
+  const onEditorCompositionEnd = (event: CompositionEvent) => {
+    editorTableCompositionActive = false
+    const cell = getCurrentEditorTableCell(event)
+    if (cell) commitEditorTableCellDomEdit(cell)
+  }
+
   const refreshAttachmentLinks = () => {
+    root.querySelectorAll<HTMLElement>('td,th').forEach((cell) => renderAttachmentMarkersInEditableRoot(cell))
     root.querySelectorAll('a').forEach((node) => {
       const anchor = node as HTMLAnchorElement
       const info = attachmentInfoFromAnchor(anchor)
@@ -955,6 +1023,8 @@ const setupAttachmentPreview = () => {
   previewObserver.observe(root, { childList: true, subtree: true })
   root.addEventListener('beforeinput', onEditorBeforeInput, true)
   root.addEventListener('input', onEditorInput, true)
+  root.addEventListener('compositionstart', onEditorCompositionStart, true)
+  root.addEventListener('compositionend', onEditorCompositionEnd, true)
   root.addEventListener('focusout', onEditorFocusOut, true)
   root.addEventListener('mouseup', onEditorSelectionEvent, true)
   root.addEventListener('keyup', onEditorSelectionEvent, true)
@@ -973,6 +1043,8 @@ const setupAttachmentPreview = () => {
     previewObserver.disconnect()
     root.removeEventListener('beforeinput', onEditorBeforeInput, true)
     root.removeEventListener('input', onEditorInput, true)
+    root.removeEventListener('compositionstart', onEditorCompositionStart, true)
+    root.removeEventListener('compositionend', onEditorCompositionEnd, true)
     root.removeEventListener('focusout', onEditorFocusOut, true)
     root.removeEventListener('mouseup', onEditorSelectionEvent, true)
     root.removeEventListener('keyup', onEditorSelectionEvent, true)
@@ -2973,6 +3045,7 @@ html.dark .editor-attachment-preview__header,
 }
 
 .vditor-container .vditor-reset table.editor-deletable-table {
+  box-sizing: border-box;
   display: block;
   width: max-content;
   min-width: 100%;
@@ -2980,6 +3053,8 @@ html.dark .editor-attachment-preview__header,
   overflow-x: auto;
   overflow-y: hidden;
   border-collapse: collapse;
+  background-clip: padding-box;
+  box-shadow: inset 1px 0 0 rgba(148, 163, 184, 0.55), inset -1px 0 0 rgba(148, 163, 184, 0.55);
   scrollbar-width: thin;
   scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);
 }
@@ -3058,6 +3133,10 @@ html.dark .vditor-toolbar {
 
 html.dark .vditor-reset {
   color: #e9ecef !important;
+}
+
+html.dark .vditor-container .vditor-reset table.editor-deletable-table {
+  box-shadow: inset 1px 0 0 rgba(226, 232, 240, 0.22), inset -1px 0 0 rgba(226, 232, 240, 0.22);
 }
 
 html.dark .vditor-reset table th,
@@ -3317,14 +3396,15 @@ html.dark .editor-table-expand-button:focus-visible {
 
 .editor-table-expand-table {
   width: max-content;
-  min-width: 100%;
+  min-width: 0;
   border-collapse: collapse;
+  table-layout: auto;
 }
 
 .editor-table-expand-table th,
 .editor-table-expand-table td {
-  min-width: 72px;
-  max-width: 220px;
+  min-width: 48px;
+  max-width: 180px;
   padding: 0;
   border: 1px solid rgba(148, 163, 184, 0.42);
   vertical-align: top;
@@ -3342,10 +3422,10 @@ html.dark .editor-table-expand-button:focus-visible {
 .editor-table-expand-table textarea {
   display: block;
   width: 100%;
-  min-width: 72px;
-  min-height: 42px;
+  min-width: 44px;
+  min-height: 38px;
   height: auto;
-  padding: 9px 10px;
+  padding: 7px 8px;
   border: 0;
   outline: none;
   resize: vertical;
