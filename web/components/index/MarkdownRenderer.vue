@@ -2536,7 +2536,8 @@ watch(() => props.enableGithubCard, () => {
   display: block;
 }
 
-.markdown-preview .inline-image-thumb {
+.markdown-preview .inline-image-thumb,
+.rendered-table-expanded-table .inline-image-thumb {
   width: var(--inline-image-thumb-size);
   height: var(--inline-image-thumb-size);
   max-width: 100%;
@@ -2547,13 +2548,16 @@ watch(() => props.enableGithubCard, () => {
 }
 
 .markdown-preview .inline-image-thumb > a,
-.markdown-preview .inline-image-thumb > img {
+.markdown-preview .inline-image-thumb > img,
+.rendered-table-expanded-table .inline-image-thumb > a,
+.rendered-table-expanded-table .inline-image-thumb > img {
   display: block;
   width: 100% !important;
   height: 100% !important;
 }
 
-.markdown-preview .inline-image-thumb img {
+.markdown-preview .inline-image-thumb img,
+.rendered-table-expanded-table .inline-image-thumb img {
   width: 100% !important;
   height: 100% !important;
   min-height: 0 !important;

@@ -489,6 +489,13 @@ assert(
     vditorEditor.includes('serializeEditableHtmlTableBlock') &&
     vditorEditor.includes('replaceAttachmentNodesWithSourceText(clone)') &&
     vditorEditor.includes('attachmentInfoToMarkdownSource') &&
+    vditorEditor.includes('RAW_ATTACHMENT_ANCHOR_RE') &&
+    vditorEditor.includes('stripAttachmentMarkersFromEditorText') &&
+    vditorEditor.includes('mergeExpandedCellEditorText') &&
+    vditorEditor.includes('editorTextLineToHtmlTableCellSource') &&
+    vditorEditor.includes(':value="expandedTableCellEditorText(rowIndex, cellIndex)"') &&
+    vditorEditor.includes('@input="updateExpandedTableCellText(rowIndex, cellIndex, $event)"') &&
+    !vditorEditor.includes('v-model="expandedTableRows[rowIndex][cellIndex]"') &&
     vditorEditor.includes('expandedTableEditable.value = !!block') &&
     vditorEditor.includes('rememberEditorTableScroll(table)') &&
     vditorEditor.includes('restoreEditorTableScroll(table)') &&
@@ -498,6 +505,8 @@ assert(
     !vditorEditor.includes('editor-table-expand-attachment-btn') &&
     vditorEditor.includes('if (event.isComposing) return') &&
     vditorEditor.includes('getCurrentEditorTableCell(event)') &&
+    vditorEditor.includes('if (getCurrentEditorTableCell(event)) return true') &&
+    vditorEditor.includes('getCurrentEditorTableCell(event) || anchorElement.closest') &&
     vditorEditor.includes('range.selectNodeContents(cell)') &&
     vditorEditor.includes("document.execCommand('insertHTML', false, '<br>')") &&
     vditorEditor.includes('previewExpandedTableAttachment') &&
@@ -562,6 +571,8 @@ assert(
     !vditorEditor.includes('normalizeEditableHtmlTable(table)\n    replaceTableBreakTextNodes(table)') &&
     markdownRenderer.includes('openRenderedTableExpand(table)') &&
     markdownRenderer.includes('initializeMediaViewer(renderedTableExpandBody.value)') &&
+    markdownRenderer.includes('.rendered-table-expanded-table .inline-image-thumb') &&
+    markdownRenderer.includes('.rendered-table-expanded-table .inline-image-thumb img') &&
     markdownRenderer.includes('rendered-table-expand-dialog') &&
     markdownRenderer.includes('table-expand-close-icon') &&
     markdownRenderer.includes('.markdown-preview .noise-table-scroll') &&

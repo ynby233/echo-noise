@@ -120,10 +120,10 @@
                   :key="`expanded-cell-${rowIndex}-${cellIndex}`"
                 >
                   <textarea
-                    v-model="expandedTableRows[rowIndex][cellIndex]"
+                    :value="expandedTableCellEditorText(rowIndex, cellIndex)"
                     :readonly="!expandedTableEditable"
                     rows="1"
-                    @input="syncExpandedTableToEditor"
+                    @input="updateExpandedTableCellText(rowIndex, cellIndex, $event)"
                     @keydown.enter.exact="insertExpandedTableCellLineBreak(rowIndex, cellIndex, $event)"
                     @keydown.tab.prevent="focusNextExpandedTableCell(rowIndex, cellIndex, $event.shiftKey)"
                   />
@@ -233,6 +233,7 @@ type EditorAttachmentInfo = { type: 'image' | 'video' | 'audio'; title: string; 
 const ATTACHMENT_MARKER_RE = /\[(图片附件|视频附件|音频附件)：([^\]]+)\]\(([^)\s]+)\)/
 const ATTACHMENT_MARKER_GLOBAL_RE = /\[(图片附件|视频附件|音频附件)：([^\]]+)\]\(([^)\s]+)\)/g
 const ADJACENT_ATTACHMENT_MARKER_RE = /(\[(?:图片附件|视频附件|音频附件)：[^\]]+\]\([^)\s]+\))(\[(?:图片附件|视频附件|音频附件)：[^\]]+\]\([^)\s]+\))/g
+const RAW_ATTACHMENT_ANCHOR_RE = /<a\b[^>]*(?:data-attachment-url|href)=["']([^"']+)["'][^>]*>\s*(图片附件|视频附件|音频附件)：([^<]+?)\s*<\/a>/gi
 const ATTACHMENT_ANCHOR_LABEL_RE = /^(图片附件|视频附件|音频附件)：(.+)$/
 
 const normalizeAttachmentInfo = (kindLabel: string, name: string, url: string): EditorAttachmentInfo | null => {
@@ -251,7 +252,7 @@ const attachmentInfoFromText = (text: string) => {
 
 const hasAttachmentMarker = (value: string) => {
   ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
-  return ATTACHMENT_MARKER_GLOBAL_RE.test(String(value || ''))
+  return ATTACHMENT_MARKER_GLOBAL_RE.test(normalizeAttachmentSourceText(value))
 }
 
 const normalizeAdjacentAttachmentMarkers = (value: string) => String(value || '').replace(ADJACENT_ATTACHMENT_MARKER_RE, '$1 $2')
@@ -476,6 +477,40 @@ const attachmentInfoFromIrLabel = (label: HTMLElement | null) => {
 }
 
 const attachmentInfoToMarkdownSource = (info: EditorAttachmentInfo) => `[${info.title}](${info.url})`
+
+const normalizeAttachmentSourceText = (value: string) => {
+  RAW_ATTACHMENT_ANCHOR_RE.lastIndex = 0
+  return String(value || '').replace(
+    RAW_ATTACHMENT_ANCHOR_RE,
+    (_match, url, kindLabel, name) => {
+      const info = normalizeAttachmentInfo(kindLabel, name, url)
+      return info ? attachmentInfoToMarkdownSource(info) : _match
+    }
+  )
+}
+
+const stripAttachmentMarkersFromEditorText = (value: string) => {
+  const source = normalizeAttachmentSourceText(value).replace(/\r\n?/g, '\n')
+  return source
+    .split('\n')
+    .map((line) => {
+      ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+      const stripped = line
+        .replace(ATTACHMENT_MARKER_GLOBAL_RE, '')
+        .replace(/[ \t]+$/g, '')
+      ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+      return ATTACHMENT_MARKER_GLOBAL_RE.test(line) && !stripped.trim() ? null : stripped
+    })
+    .filter((line): line is string => line !== null)
+    .join('\n')
+}
+
+const mergeExpandedCellEditorText = (currentValue: string, editorText: string) => {
+  const attachments = parseAttachmentMarkersFromText(currentValue).map(attachmentInfoToMarkdownSource)
+  const text = String(editorText || '').replace(/\r\n?/g, '\n')
+  if (!attachments.length) return text
+  return text ? [text, ...attachments].join('\n') : attachments.join('\n')
+}
 
 const replaceAttachmentNodesWithSourceText = (root: HTMLElement) => {
   root.querySelectorAll<HTMLElement>('[data-type="a"]').forEach((node) => {
@@ -719,6 +754,7 @@ const setupAttachmentPreview = () => {
     const anchorElement = anchorNode instanceof Element ? anchorNode : anchorNode?.parentElement || getEventElement(event)
     if (!anchorElement || !root.contains(anchorElement)) return false
     if (anchorElement.closest('.vditor-toolbar, .vditor-panel, .vditor-hint, [data-type="code-block"], .vditor-ir__marker--pre')) return false
+    if (getCurrentEditorTableCell(event)) return true
     return !!anchorElement.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset')
   }
 
@@ -829,8 +865,9 @@ const setupAttachmentPreview = () => {
     const anchorElement = anchorNode instanceof Element ? anchorNode : anchorNode?.parentElement || getEventElement(event)
     if (!anchorElement || !root.contains(anchorElement)) return
     if (anchorElement.closest('.vditor-toolbar, .vditor-panel, .vditor-hint, [data-type="code-block"], .vditor-ir__marker--pre')) return
-    if (!anchorElement.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset')) return
-    insertEditorSoftLineBreak(event)
+    if (getCurrentEditorTableCell(event) || anchorElement.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset')) {
+      insertEditorSoftLineBreak(event)
+    }
   }
 
   const scheduleTableEnhance = () => requestAnimationFrame(() => enhanceEditorTables(root))
@@ -1160,11 +1197,32 @@ const escapeTableCellHtml = (value: string) => String(value || '')
   .replace(/\"/g, '&quot;')
   .replace(/'/g, '&#39;')
 
+const escapeHtmlAttribute = (value: string) => escapeTableCellHtml(value).replace(/`/g, '&#96;')
+
+const editorTextLineToHtmlTableCellSource = (value: string) => {
+  const source = normalizeAttachmentSourceText(value).trim()
+  if (!source) return ''
+  let output = ''
+  let lastIndex = 0
+  ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = ATTACHMENT_MARKER_GLOBAL_RE.exec(source))) {
+    output += escapeTableCellHtml(source.slice(lastIndex, match.index))
+    const info = normalizeAttachmentInfo(match[1], match[2], match[3])
+    output += info
+      ? `<a href="${escapeHtmlAttribute(info.url)}">${escapeTableCellHtml(info.title)}</a>`
+      : escapeTableCellHtml(match[0])
+    lastIndex = ATTACHMENT_MARKER_GLOBAL_RE.lastIndex
+  }
+  output += escapeTableCellHtml(source.slice(lastIndex))
+  return output
+}
+
 const editorTextToHtmlTableCellSource = (value: string) => {
   const text = String(value || '').replace(/\r\n?/g, '\n')
   const normalized = text
     .split('\n')
-    .map((line) => escapeTableCellHtml(line).trim())
+    .map((line) => editorTextLineToHtmlTableCellSource(line))
     .join('<br />')
     .trim()
   return normalized || '&nbsp;'
@@ -1178,7 +1236,7 @@ const htmlTableCellToEditorText = (cell: HTMLTableCellElement) => {
   clone.querySelectorAll('p,div').forEach((block) => {
     if (block.nextSibling) block.after(document.createTextNode('\n'))
   })
-  return String(clone.textContent || '').replace(/\u00a0/g, ' ').trim()
+  return normalizeAttachmentSourceText(String(clone.textContent || '').replace(/\u00a0/g, ' ')).trim()
 }
 
 const replaceTableHeaderCells = (table: HTMLTableElement) => {
@@ -1222,7 +1280,7 @@ const restoreEditorTableScroll = (table: HTMLTableElement) => {
 
 const parseAttachmentMarkersFromText = (text: string) => {
   const items: EditorAttachmentInfo[] = []
-  const source = String(text || '')
+  const source = normalizeAttachmentSourceText(text)
   ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
   let match: RegExpExecArray | null
   while ((match = ATTACHMENT_MARKER_GLOBAL_RE.exec(source))) {
@@ -1230,6 +1288,16 @@ const parseAttachmentMarkersFromText = (text: string) => {
     if (info) items.push(info)
   }
   return items
+}
+
+const expandedTableCellEditorText = (rowIndex: number, cellIndex: number) => stripAttachmentMarkersFromEditorText(expandedTableRows.value[rowIndex]?.[cellIndex] || '')
+
+const updateExpandedTableCellText = (rowIndex: number, cellIndex: number, event: Event) => {
+  if (!expandedTableEditable.value) return
+  const textarea = event.target instanceof HTMLTextAreaElement ? event.target : null
+  if (!textarea) return
+  expandedTableRows.value[rowIndex][cellIndex] = mergeExpandedCellEditorText(expandedTableRows.value[rowIndex]?.[cellIndex] || '', textarea.value)
+  syncExpandedTableToEditor()
 }
 
 const expandedTableCellAttachments = (rowIndex: number, cellIndex: number) => parseAttachmentMarkersFromText(expandedTableRows.value[rowIndex]?.[cellIndex] || '')
@@ -1262,7 +1330,7 @@ const insertExpandedTableCellLineBreak = (rowIndex: number, cellIndex: number, e
   event.preventDefault()
   event.stopPropagation()
   insertTextIntoTextarea(textarea, '\n')
-  expandedTableRows.value[rowIndex][cellIndex] = textarea.value
+  expandedTableRows.value[rowIndex][cellIndex] = mergeExpandedCellEditorText(expandedTableRows.value[rowIndex]?.[cellIndex] || '', textarea.value)
   syncExpandedTableToEditor()
 }
 
@@ -1304,7 +1372,13 @@ const getEditorTableSourceBlocks = (content: string) => [
   ...getHtmlTableBlocks(content)
 ].sort((left, right) => left.start - right.start)
 
-const normalizeTableMatchText = (text: string) => String(stripTableBreakCode(text || '')).replace(/\s+/g, ' ').trim()
+const normalizeTableMatchText = (text: string) => {
+  ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+  return String(stripTableBreakCode(normalizeAttachmentSourceText(text) || ''))
+    .replace(ATTACHMENT_MARKER_GLOBAL_RE, '$1：$2')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
 
 const getRenderedTableRows = (table: HTMLTableElement | null) => {
   if (!table) return [] as string[][]
@@ -1470,7 +1544,7 @@ const editorTableCellTextFromDom = (cell: HTMLTableCellElement) => {
   clone.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
   replaceAttachmentNodesWithSourceText(clone)
   clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')))
-  return String(clone.textContent || '').replace(/\u00a0/g, ' ')
+  return normalizeAttachmentSourceText(String(clone.textContent || '').replace(/\u00a0/g, ' '))
 }
 
 const syncEditorTableCellDomToSource = (cell: HTMLTableCellElement | null) => {
