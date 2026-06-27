@@ -1659,6 +1659,12 @@ const looksLikeMarkdownTableRowFragment = (line: string) => {
   return (trimmed.match(/\|/g) || []).length >= 2
 }
 
+const looksLikeCompleteMarkdownTableRow = (line: string, expected: number) => {
+  const trimmed = String(line || '').trim()
+  if (!trimmed || !trimmed.startsWith('|') || isMarkdownTableDivider(trimmed)) return false
+  return markdownTableRowCellCount(trimmed) >= expected
+}
+
 const hasUnsafeMarkdownTableStructure = (content: string) => {
   const lines = String(content || '').split('\n')
   const blocks = getMarkdownTableBlocks(content)
@@ -1704,7 +1710,7 @@ const repairUnsafeMarkdownTableCellBreaks = (content: string) => {
       let merged = current
       while (markdownTableRowCellCount(merged) < expected && index + 1 < lines.length) {
         const next = lines[index + 1] || ''
-        if (!next.trim() || isMarkdownTableDivider(next)) break
+        if (!next.trim() || isMarkdownTableDivider(next) || looksLikeCompleteMarkdownTableRow(next, expected)) break
         merged = `${merged}<br />${next.trim()}`
         index += 1
       }

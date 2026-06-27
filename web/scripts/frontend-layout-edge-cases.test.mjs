@@ -41,6 +41,64 @@ const prepareFancyboxVideoSlideBody = fancyboxVideoClose.slice(
   fancyboxVideoClose.indexOf('export const ensureFancyboxVideoThumbnail')
 )
 
+const splitRegressionMarkdownTableRowCells = (line) => String(line || '')
+  .trim()
+  .replace(/^\|/, '')
+  .replace(/\|$/, '')
+  .split('|')
+const regressionMarkdownTableRowCellCount = (line) => splitRegressionMarkdownTableRowCells(line).length
+const regressionCollapseMarkdownTableRowCells = (cells, expected) => {
+  if (cells.length < expected) return [...cells, ...Array.from({ length: expected - cells.length }, () => '')]
+  if (cells.length === expected) return cells
+  const overflow = cells.length - expected
+  return [cells.slice(0, overflow + 1).join('|'), ...cells.slice(overflow + 1)]
+}
+const regressionLooksLikeCompleteMarkdownTableRow = (line, expected) => {
+  const trimmed = String(line || '').trim()
+  return Boolean(trimmed && trimmed.startsWith('|') && regressionMarkdownTableRowCellCount(trimmed) >= expected)
+}
+const repairRegressionChineseTableBreaks = (stopAtCompleteRow) => {
+  const lines = [
+    '|   |   |   |',
+    '| --- | --- | --- |',
+    '|   | 一',
+    '二',
+    '三',
+    '四',
+    '五',
+    '六',
+    '七',
+    '八',
+    '九',
+    '十',
+    '|   |   |   |'
+  ]
+  const expected = regressionMarkdownTableRowCellCount(lines[0])
+  const rows = []
+  for (let index = 2; index < lines.length; index += 1) {
+    let merged = lines[index]
+    while (regressionMarkdownTableRowCellCount(merged) < expected && index + 1 < lines.length) {
+      const next = lines[index + 1]
+      if (stopAtCompleteRow && regressionLooksLikeCompleteMarkdownTableRow(next, expected)) break
+      merged = `${merged}<br />${String(next || '').trim()}`
+      index += 1
+    }
+    rows.push(regressionCollapseMarkdownTableRowCells(splitRegressionMarkdownTableRowCells(merged), expected))
+  }
+  return rows
+}
+const legacyChineseTableRows = repairRegressionChineseTableBreaks(false)
+const repairedChineseTableRows = repairRegressionChineseTableBreaks(true)
+
+assert(
+  legacyChineseTableRows[0][0].includes('一<br />二') &&
+    !repairedChineseTableRows[0][0].includes('一<br />二') &&
+    repairedChineseTableRows[0][1].includes('一<br />二<br />三<br />四<br />五<br />六<br />七<br />八<br />九<br />十') &&
+    repairedChineseTableRows[1].length === 3 &&
+    repairedChineseTableRows[1].every((cell) => cell.trim() === ''),
+  'markdown table repair must not merge Chinese multiline cell text into the first column when the next line is already a complete row'
+)
+
 assert(
   addForm.includes('.editor-toolbar') &&
     addForm.includes('position: relative;') &&
