@@ -603,9 +603,13 @@ assert(
     !vditorEditor.includes('border-left-color: rgba(226, 232, 240, 0.22);') &&
     !vditorEditor.includes('border-right-color: rgba(226, 232, 240, 0.22);') &&
     vditorEditor.includes('syncEditorTableScrollEdgeGap(table, root)') &&
+    vditorEditor.includes('const leftGap = Math.max(0, Math.round(tableRect.left - viewportRect.left))') &&
+    vditorEditor.includes('const rightGap = Math.max(0, Math.round(viewportRect.right - tableRect.right))') &&
+    vditorEditor.includes('Math.max(0, leftGap - rightGap)') &&
+    !vditorEditor.includes('Math.max(2, measuredGap)') &&
     vditorEditor.includes("table.style.setProperty('--editor-table-scroll-edge-gap', `${edgeGap}px`)") &&
-    vditorEditor.includes('padding-inline-end: var(--editor-table-scroll-edge-gap, 2px);') &&
-    vditorEditor.includes('scroll-padding-inline-end: var(--editor-table-scroll-edge-gap, 2px);') &&
+    vditorEditor.includes('padding-inline-end: var(--editor-table-scroll-edge-gap, 0px);') &&
+    vditorEditor.includes('scroll-padding-inline-end: var(--editor-table-scroll-edge-gap, 0px);') &&
     !vditorEditor.includes('.vditor-container .vditor-reset table.editor-deletable-table::after') &&
     !vditorEditor.includes('html.dark .vditor-container .vditor-reset table.editor-deletable-table::after') &&
     vditorEditor.includes('width: max-content;') &&
@@ -683,8 +687,8 @@ assert(
     markdownRenderer.includes('table-expand-close-icon') &&
     markdownRenderer.includes('.markdown-preview .noise-table-scroll') &&
     markdownRenderer.includes('padding-top: 10px;') &&
-    markdownRenderer.includes('padding-inline-end: 2px;') &&
-    markdownRenderer.includes('scroll-padding-inline-end: 2px;') &&
+    !markdownRenderer.includes('padding-inline-end: 2px;') &&
+    !markdownRenderer.includes('scroll-padding-inline-end: 2px;') &&
     !markdownRenderer.includes('box-shadow: inset 1px 0 0 rgba(148, 163, 184, 0.42), inset -1px 0 0 rgba(148, 163, 184, 0.42);') &&
     markdownRenderer.includes('.markdown-preview .noise-table-scroll > .noise-rendered-table-expand-button') &&
     markdownRenderer.includes('display: inline-flex !important;') &&

@@ -1801,8 +1801,6 @@ watch(() => props.enableGithubCard, () => {
   max-width: 100%;
   margin: 8px 0;
   padding-top: 10px;
-  padding-inline-end: 2px;
-  scroll-padding-inline-end: 2px;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;

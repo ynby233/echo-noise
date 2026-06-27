@@ -2152,8 +2152,9 @@ const syncEditorTableScrollEdgeGap = (table: HTMLTableElement, root: HTMLElement
   const viewport = table.closest<HTMLElement>('.vditor-reset') || root
   const tableRect = table.getBoundingClientRect()
   const viewportRect = viewport.getBoundingClientRect()
-  const measuredGap = Math.round(tableRect.left - viewportRect.left)
-  const edgeGap = Number.isFinite(measuredGap) ? Math.max(2, measuredGap) : 2
+  const leftGap = Math.max(0, Math.round(tableRect.left - viewportRect.left))
+  const rightGap = Math.max(0, Math.round(viewportRect.right - tableRect.right))
+  const edgeGap = Number.isFinite(leftGap) && Number.isFinite(rightGap) ? Math.max(0, leftGap - rightGap) : 0
   table.style.setProperty('--editor-table-scroll-edge-gap', `${edgeGap}px`)
 }
 
@@ -3119,8 +3120,8 @@ html.dark .editor-attachment-preview__header,
   overflow-x: auto;
   overflow-y: hidden;
   border-collapse: collapse;
-  padding-inline-end: var(--editor-table-scroll-edge-gap, 2px);
-  scroll-padding-inline-end: var(--editor-table-scroll-edge-gap, 2px);
+  padding-inline-end: var(--editor-table-scroll-edge-gap, 0px);
+  scroll-padding-inline-end: var(--editor-table-scroll-edge-gap, 0px);
   scrollbar-width: thin;
   scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);
 }
