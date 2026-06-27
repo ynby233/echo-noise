@@ -573,6 +573,9 @@ assert(
     vditorEditor.includes("root.addEventListener('beforeinput', onEditorBeforeInput, true)") &&
     vditorEditor.includes("root.removeEventListener('beforeinput', onEditorBeforeInput, true)") &&
     vditorEditor.includes('const onEditorInput = (event: Event) =>') &&
+    vditorEditor.includes('const emitSafeValue = () => emit("update:modelValue", getEditorValueWithPendingTableSync())') &&
+    vditorEditor.includes('window.setTimeout(emitSafeValue, 0)') &&
+    vditorEditor.includes('commitEditorTableCellDomEdit(cell)') &&
     vditorEditor.includes('if (cell)') &&
     !vditorEditor.includes('if (!cell || !getEditorTableCellSourceTarget(cell)) return false') &&
     !vditorEditor.includes('if (!getEditorTableCellSourceTarget(cell)) return false') &&
@@ -583,25 +586,73 @@ assert(
     vditorEditor.includes('getEditorValueWithPendingTableSync()') &&
     vditorEditor.includes('getEditorDomContentFallback()') &&
     vditorEditor.includes('serializeEditorTableDomAsMarkdown(table)') &&
+    vditorEditor.includes("const TABLE_CELL_CARET_ANCHOR = '\\u200b'") &&
+    vditorEditor.includes('const TABLE_CELL_CARET_ANCHOR_RE = /\\u200b/g') &&
+    vditorEditor.includes('const stripEditorTableCaretAnchors = (value: string) =>') &&
+    vditorEditor.includes('const caretNode = document.createTextNode(TABLE_CELL_CARET_ANCHOR)') &&
+    vditorEditor.includes('range.setStart(caretNode, caretNode.data.length)') &&
+    vditorEditor.includes('stripEditorTableCaretAnchors(clone.textContent || \'\').replace(/\\u00a0/g, \' \')') &&
+    vditorEditor.includes('const nextValue = getEditorValueWithPendingTableSync()') &&
+    !vditorEditor.includes("const nextValue = vditorInstance?.getValue?.() || ''") &&
+    vditorEditor.includes('let lastEditorTableSelectionRange: Range | null = null') &&
+    vditorEditor.includes('let lastEditorTableSelectionState: { editable: HTMLElement; tableIndex: number; rowIndex: number; cellIndex: number } | null = null') &&
+    vditorEditor.includes('const storeLastEditorTableCell = (cell: HTMLTableCellElement | null | undefined) =>') &&
+    vditorEditor.includes('const storeLastEditorTableSelection = (range: Range) =>') &&
+    vditorEditor.includes('const getStoredEditorTableCell = (editable: HTMLElement | null) =>') &&
+    vditorEditor.includes('const previousEditableDetached = !editorContainer.value?.contains(lastEditorTableSelectionState.editable)') &&
+    vditorEditor.includes('let editorTableDomStabilizeTimer: number | null = null') &&
+    vditorEditor.includes('const stabilizePendingEditorTableCellDom = () =>') &&
+    vditorEditor.includes('const scheduleStabilizePendingEditorTableCellDom = () =>') &&
+    vditorEditor.includes('const TABLE_CELL_BREAK_TEXT_RE = /^<br\\s*\\/?\\s*>$/i') &&
+    vditorEditor.includes('const hasEditorTableBreakCodeMarker = (cell: HTMLTableCellElement) =>') &&
+    vditorEditor.includes('const normalizeEditorTableBreakCodeMarkers = (cell: HTMLTableCellElement) =>') &&
+    vditorEditor.includes('^<code\\b[^>]*>\\s*<br\\s*\\/?\\s*>\\s*<\\/code>$') &&
+    vditorEditor.includes('node.classList.add(\'editor-table-line-break-marker\')') &&
+    vditorEditor.includes('.editor-table-line-break-marker .vditor-ir__marker') &&
+    vditorEditor.includes('clone.querySelectorAll<HTMLElement>(\'[data-type="html-inline"], .vditor-ir__node\')') &&
+    vditorEditor.includes('setEditorTableDomCellText(cell, expectedText, needsCaretAnchor)') &&
+    vditorEditor.includes('scheduleStabilizePendingEditorTableCellDom()') &&
+    !vditorEditor.includes('__editorTableDebug') &&
+    vditorEditor.includes('storeLastEditorTableSelection(range)') &&
+    vditorEditor.includes('storeLastEditorTableCell(cell)') &&
+    vditorEditor.includes('const getEditorEditableFromNode = (node: Node | null | undefined) =>') &&
+    vditorEditor.includes('const currentCell = getEditorTableCellFromRange(range) || getEditorTableCellFromEvent(event)') &&
+    vditorEditor.includes('const pendingCell = getPendingEditorTableCell()') &&
+    vditorEditor.includes('const fallbackCell = lastCell || (pendingCell && getEditorEditableFromNode(pendingCell) === currentEditable ? pendingCell : null)') &&
+    vditorEditor.includes('if (!fallbackCell || getEditorEditableFromNode(fallbackCell) !== currentEditable) return null') &&
     vditorEditor.includes("const MARKDOWN_EMPTY_TABLE_CELL = '&nbsp;'") &&
     vditorEditor.includes('MARKDOWN_EMPTY_TABLE_CELL_RE') &&
     vditorEditor.includes('return normalized || MARKDOWN_EMPTY_TABLE_CELL') &&
+    vditorEditor.includes("replace(/\\|/g, () => '&#124;')") &&
+    vditorEditor.includes('decodeMarkdownTablePipeEntities') &&
     vditorEditor.includes('Array.from({ length: colCount }, () => MARKDOWN_EMPTY_TABLE_CELL)') &&
     vditorEditor.includes('MARKDOWN_EMPTY_TABLE_CELL_RE.test(text) ?') &&
     vditorEditor.includes('if (MARKDOWN_EMPTY_TABLE_CELL_RE.test(source)) return') &&
     !vditorEditor.includes('const hasVisibleContent = rows.some((row) => row.some((cell) => cell.trim()))') &&
     vditorEditor.includes('getEditorValueWithDomTableSync(content)') &&
+    vditorEditor.includes('const nextValue = pendingEditorTableCellSync || getEditorTables().length') &&
+    vditorEditor.includes('if (getEditorTables().length) window.setTimeout(() => emit("update:modelValue", getEditorValueWithPendingTableSync()), 0)') &&
+    vditorEditor.includes('return result?.value || fallbackValue || syncedValue || currentValue') &&
+    !vditorEditor.includes('return fallbackValue || result?.value || syncedValue || currentValue') &&
+    vditorEditor.includes('cache: {') &&
+    vditorEditor.includes('enable: false,') &&
+    vditorEditor.includes("id: \"vue-vditor\"") &&
     vditorEditor.includes('const getEditorValueWithDomTableSync = (sourceValue = vditorInstance?.getValue?.() || \'\') =>') &&
     vditorEditor.includes('tableBlockFromDataset(table, blocks) || findMarkdownTableBlock(blocks, getRenderedTableRows(table), tableIndex)') &&
     vditorEditor.includes('if (!replacements.length) return fallbackValue || sourceValue') &&
-    vditorEditor.includes('fallbackValue || syncedValue || currentValue') &&
+    vditorEditor.includes('if (!pendingEditorTableCellSync) return fallbackValue || syncedValue || currentValue') &&
+    vditorEditor.includes('return syncedValue || fallbackValue') &&
+    !vditorEditor.includes('return fallbackValue || syncedValue\n}') &&
+    vditorEditor.indexOf('const result = buildEditorTableCellSourceValue(cell, pendingEditorTableCellSync.text)') >= 0 &&
+    vditorEditor.indexOf('const result = buildEditorTableCellSourceValue(cell, pendingEditorTableCellSync.text)') < vditorEditor.indexOf('return result?.value || fallbackValue || syncedValue || currentValue') &&
+    !vditorEditor.includes('return fallbackValue || result?.value || syncedValue || currentValue') &&
     !/const insertEditorTableCellLineBreak[\s\S]*?dispatchEditorTableDomInput\(table\)[\s\S]*?return true/.test(vditorEditor) &&
     !vditorEditor.includes('scheduleEditorTableCellSourceSync') &&
     !vditorEditor.includes('focusEditorTableCellAt') &&
     !vditorEditor.includes('if (!applyEditorTableCellSourceValue(cell, editorTableCellTextFromDom(cell))) return false') &&
     vditorEditor.includes('range.selectNodeContents(cell)') &&
     vditorEditor.includes("const lineBreak = document.createElement('br')") &&
-    vditorEditor.includes("const caretNode = document.createTextNode('')") &&
+    vditorEditor.includes("const caretNode = document.createTextNode(TABLE_CELL_CARET_ANCHOR)") &&
     vditorEditor.includes('normalizeEditableHtmlTable(table)') &&
     !vditorEditor.includes('removeMarkdownTableDividerRow(table, block || null)') &&
     vditorEditor.includes("Vditor IR owns the table model") &&

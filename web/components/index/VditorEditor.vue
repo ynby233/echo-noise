@@ -201,6 +201,8 @@ let imagePreviewCleanup: (() => void) | null = null;
 let attachmentPreviewCleanup: (() => void) | null = null;
 let refreshAttachmentLinksFromEditor: () => void = () => {};
 let lastEditorSelectionRange: Range | null = null;
+let lastEditorTableSelectionRange: Range | null = null;
+let lastEditorTableSelectionState: { editable: HTMLElement; tableIndex: number; rowIndex: number; cellIndex: number } | null = null;
 let selectedEditorTable: HTMLTableElement | null = null;
 let selectedEditorTableIndex = -1;
 let hoveredEditorTable: HTMLTableElement | null = null;
@@ -208,12 +210,16 @@ let expandedEditorTableBlock: EditorTableSourceBlock | null = null;
 let expandedEditorTableElement: HTMLTableElement | null = null;
 let tableDeleteHideTimer: number | null = null;
 let tableExpandCloseTimer: number | null = null;
+let editorTableDomStabilizeTimer: number | null = null;
 let pendingEditorTableCellSync: PendingEditorTableCellSync | null = null;
 let editorTableCompositionActive = false;
 const editorTableScrollPositions = new Map<string, number>();
 const TABLE_DELETE_BUTTON_SIZE = 10;
 const TABLE_EXPAND_BUTTON_SIZE = TABLE_DELETE_BUTTON_SIZE;
 const TABLE_CELL_BREAK_RE = /<br\s*\/?\s*>/gi;
+const TABLE_CELL_BREAK_TEXT_RE = /^<br\s*\/?\s*>$/i;
+const TABLE_CELL_CARET_ANCHOR = '\u200b';
+const TABLE_CELL_CARET_ANCHOR_RE = /\u200b/g;
 const MARKDOWN_EMPTY_TABLE_CELL = '&nbsp;';
 const MARKDOWN_EMPTY_TABLE_CELL_RE = /^(?:&nbsp;|&#160;|&#xA0;|\u00a0)$/i;
 const isReady = ref(false);
@@ -650,6 +656,7 @@ const setupAttachmentPreview = () => {
     if (!element || !root.contains(element)) return
     if (!element.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset')) return
     lastEditorSelectionRange = range.cloneRange()
+    storeLastEditorTableSelection(range)
   }
 
   const onEditorSelectionChange = () => {
@@ -668,8 +675,11 @@ const setupAttachmentPreview = () => {
     renderAttachmentMarkersInEditableRoot(cell)
     markEditorTableCellSourceDirty(cell)
     captureEditorSelection()
+    scheduleStabilizePendingEditorTableCellDom()
     scheduleRefreshAttachmentLinks()
-    emit("update:modelValue", getEditorValueWithPendingTableSync())
+    const emitSafeValue = () => emit("update:modelValue", getEditorValueWithPendingTableSync())
+    emitSafeValue()
+    window.setTimeout(emitSafeValue, 0)
   }
 
   const handleEditorTableBeforeInput = (event: Event) => {
@@ -702,10 +712,7 @@ const setupAttachmentPreview = () => {
     if (cell) {
       event.stopPropagation()
       ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
-      markEditorTableCellSourceDirty(cell)
-      captureEditorSelection()
-      scheduleRefreshAttachmentLinks()
-      emit("update:modelValue", getEditorValueWithPendingTableSync())
+      commitEditorTableCellDomEdit(cell)
       return
     }
     flushPendingEditorTableCellSourceSyncIfMoved(cell)
@@ -1051,7 +1058,10 @@ const setupAttachmentPreview = () => {
 
   refreshAttachmentLinks()
   scheduleTableEnhance()
-  const previewObserver = new MutationObserver(() => scheduleRefreshAttachmentLinks())
+  const previewObserver = new MutationObserver(() => {
+    if (pendingEditorTableCellSync) scheduleStabilizePendingEditorTableCellDom()
+    scheduleRefreshAttachmentLinks()
+  })
   previewObserver.observe(root, { childList: true, subtree: true })
   root.addEventListener('beforeinput', onEditorBeforeInput, true)
   root.addEventListener('input', onEditorInput, true)
@@ -1140,11 +1150,17 @@ const editorOptions: IOptions = {
     enable: false,
   },
   cache: {
-    enable: true,
+    // Vditor's native cache stores raw getValue() output before our table serializer can
+    // normalize in-cell line breaks, so persisted drafts must stay in AddForm's safe path.
+    enable: false,
     id: "vue-vditor",
   },
   input: (content: string) => {
-    emit("update:modelValue", pendingEditorTableCellSync ? getEditorValueWithPendingTableSync() : getEditorValueWithDomTableSync(content));
+    const nextValue = pendingEditorTableCellSync || getEditorTables().length
+      ? getEditorValueWithPendingTableSync()
+      : getEditorValueWithDomTableSync(content)
+    emit("update:modelValue", nextValue)
+    if (getEditorTables().length) window.setTimeout(() => emit("update:modelValue", getEditorValueWithPendingTableSync()), 0)
   },
   preview: {
     hljs: {
@@ -1319,9 +1335,11 @@ const confirmDeleteHoveredTable = () => {
   hideTableDeleteButton()
 }
 
-const stripTableBreakCode = (value: string) => String(value || '').replace(TABLE_CELL_BREAK_RE, ' ')
+const stripEditorTableCaretAnchors = (value: string) => String(value || '').replace(TABLE_CELL_CARET_ANCHOR_RE, '')
+const stripTableBreakCode = (value: string) => stripEditorTableCaretAnchors(value).replace(TABLE_CELL_BREAK_RE, ' ')
+const decodeMarkdownTablePipeEntities = (value: string) => String(value || '').replace(/&#(?:124|x7c);|&vert;/gi, '|')
 const tableCellSourceToEditorText = (value: string) => {
-  const text = String(value || '').replace(TABLE_CELL_BREAK_RE, '\n').replace(/\\\|/g, '|').trim()
+  const text = decodeMarkdownTablePipeEntities(stripEditorTableCaretAnchors(value).replace(TABLE_CELL_BREAK_RE, '\n').replace(/\\\|/g, '|')).trim()
   return MARKDOWN_EMPTY_TABLE_CELL_RE.test(text) ? '' : text
 }
 const escapeTableCellHtml = (value: string) => String(value || '')
@@ -1353,7 +1371,7 @@ const editorTextLineToHtmlTableCellSource = (value: string) => {
 }
 
 const editorTextToHtmlTableCellSource = (value: string) => {
-  const text = String(value || '').replace(/\r\n?/g, '\n')
+  const text = stripEditorTableCaretAnchors(value).replace(/\r\n?/g, '\n')
   const normalized = text
     .split('\n')
     .map((line) => editorTextLineToHtmlTableCellSource(line))
@@ -1363,17 +1381,17 @@ const editorTextToHtmlTableCellSource = (value: string) => {
 }
 
 const editorTextToMarkdownTableCellSource = (value: string) => {
-  const text = normalizeAttachmentSourceText(String(value || '').replace(/\r\n?/g, '\n'))
+  const text = normalizeAttachmentSourceText(stripEditorTableCaretAnchors(value).replace(/\r\n?/g, '\n'))
   const normalized = text
     .split('\n')
-    .map((line) => normalizeAttachmentSourceText(line).replace(/\|/g, '\\|').trim())
+    .map((line) => normalizeAttachmentSourceText(line).replace(/\|/g, () => '&#124;').trim())
     .join('<br />')
     .trim()
   return normalized || MARKDOWN_EMPTY_TABLE_CELL
 }
 
 const editorTextToTabTableCellSource = (value: string) => {
-  const text = normalizeAttachmentSourceText(String(value || '').replace(/\r\n?/g, '\n'))
+  const text = normalizeAttachmentSourceText(stripEditorTableCaretAnchors(value).replace(/\r\n?/g, '\n'))
   const normalized = text
     .split('\n')
     .map((line) => normalizeAttachmentSourceText(line).replace(/\t/g, ' ').trim())
@@ -1390,7 +1408,7 @@ const htmlTableCellToEditorText = (cell: HTMLTableCellElement) => {
   clone.querySelectorAll('p,div').forEach((block) => {
     if (block.nextSibling) block.after(document.createTextNode('\n'))
   })
-  return normalizeAttachmentSourceText(String(clone.textContent || '').replace(/\u00a0/g, ' ')).trim()
+  return normalizeAttachmentSourceText(stripEditorTableCaretAnchors(clone.textContent || '').replace(/\u00a0/g, ' ')).trim()
 }
 
 const replaceTableHeaderCells = (table: HTMLTableElement) => {
@@ -1617,7 +1635,7 @@ const parseMarkdownTableRow = (line: string) => String(line || '')
   .replace(/^\|/, '')
   .replace(/\|$/, '')
   .split('|')
-  .map((cell) => normalizeTableMatchText(cell.replace(/\\\|/g, '|')))
+  .map((cell) => normalizeTableMatchText(decodeMarkdownTablePipeEntities(cell.replace(/\\\|/g, '|'))))
 
 const parseEditableMarkdownTableRow = (line: string) => String(line || '')
   .trim()
@@ -1830,12 +1848,31 @@ const applyEditorTableCellSourceValue = (cell: HTMLTableCellElement | null, next
 const editorTableContentTextFromElement = (element: HTMLElement) => {
   const clone = element.cloneNode(true) as HTMLElement
   clone.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
+  clone.querySelectorAll<HTMLElement>('[data-type="html-inline"], .vditor-ir__node').forEach((node) => {
+    if (isEditorTableBreakCodeMarker(node)) node.replaceWith(document.createTextNode('\n'))
+  })
   replaceAttachmentNodesWithSourceText(clone)
   clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')))
-  return normalizeAttachmentSourceText(String(clone.textContent || '').replace(/\u00a0/g, ' '))
+  return normalizeAttachmentSourceText(stripEditorTableCaretAnchors(clone.textContent || '').replace(/\u00a0/g, ' '))
 }
 
 const editorTableCellTextFromDom = (cell: HTMLTableCellElement) => editorTableContentTextFromElement(cell)
+
+const isEditorTableBreakCodeMarker = (node: HTMLElement) => {
+  const text = stripEditorTableCaretAnchors(node.textContent || '').trim()
+  if (TABLE_CELL_BREAK_TEXT_RE.test(text)) return true
+  const html = stripEditorTableCaretAnchors(node.innerHTML || '').trim()
+  return /^<br\s*\/?\s*>$/i.test(html) || /^<code\b[^>]*>\s*<br\s*\/?\s*>\s*<\/code>$/i.test(html)
+}
+
+const normalizeEditorTableBreakCodeMarkers = (cell: HTMLTableCellElement) => {
+  cell.querySelectorAll<HTMLElement>('[data-type="html-inline"], .vditor-ir__node').forEach((node) => {
+    if (isEditorTableBreakCodeMarker(node)) node.classList.add('editor-table-line-break-marker')
+  })
+}
+
+const hasEditorTableBreakCodeMarker = (cell: HTMLTableCellElement) => Array.from(cell.querySelectorAll<HTMLElement>('[data-type="html-inline"], .vditor-ir__node'))
+  .some((node) => isEditorTableBreakCodeMarker(node))
 
 const serializeEditorTableDomAsMarkdown = (table: HTMLTableElement) => {
   const rows = Array.from(table.rows).map((row) => Array.from(row.cells).map((cell) => editorTableCellTextFromDom(cell as HTMLTableCellElement)))
@@ -1889,7 +1926,8 @@ const getEditorValueWithDomTableSync = (sourceValue = vditorInstance?.getValue?.
       if (previous && replacement.end > previous.start) return
       lines.splice(replacement.start, replacement.end - replacement.start, ...replacement.lines)
     })
-  return lines.join('\n')
+  const syncedValue = lines.join('\n')
+  return syncedValue || fallbackValue
 }
 
 const getEditorTableCellPosition = (cell: HTMLTableCellElement | null): PendingEditorTableCellSync | null => {
@@ -1915,6 +1953,53 @@ const getPendingEditorTableCell = (pending = pendingEditorTableCellSync) => {
   return (table?.rows[pending.rowIndex]?.cells[pending.cellIndex] as HTMLTableCellElement | undefined) || null
 }
 
+const placeCaretAtEndOfEditorTableCell = (cell: HTMLTableCellElement | null) => {
+  if (!cell || typeof window === 'undefined') return false
+  const selection = window.getSelection()
+  if (!selection) return false
+  const range = document.createRange()
+  range.selectNodeContents(cell)
+  range.collapse(false)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  lastEditorSelectionRange = range.cloneRange()
+  storeLastEditorTableSelection(range)
+  return true
+}
+
+const stabilizePendingEditorTableCellDom = () => {
+  if (!pendingEditorTableCellSync) return false
+  const cell = getPendingEditorTableCell()
+  if (!cell) return false
+  const expectedText = pendingEditorTableCellSync.text
+  const currentText = editorTableCellTextFromDom(cell)
+  normalizeEditorTableBreakCodeMarkers(cell)
+  if (currentText === expectedText) return true
+  const needsCaretAnchor = /\n$/.test(expectedText)
+  setEditorTableDomCellText(cell, expectedText, needsCaretAnchor)
+  storeLastEditorTableCell(cell)
+  placeCaretAtEndOfEditorTableCell(cell)
+  return true
+}
+
+const scheduleStabilizePendingEditorTableCellDom = () => {
+  if (typeof window === 'undefined') return
+  if (editorTableDomStabilizeTimer !== null) window.clearTimeout(editorTableDomStabilizeTimer)
+  const run = () => {
+    stabilizePendingEditorTableCellDom()
+  }
+  window.requestAnimationFrame(() => {
+    run()
+    window.requestAnimationFrame(run)
+  })
+  window.setTimeout(run, 0)
+  window.setTimeout(run, 48)
+  editorTableDomStabilizeTimer = window.setTimeout(() => {
+    editorTableDomStabilizeTimer = null
+    run()
+  }, 160)
+}
+
 const refreshPendingEditorTableCellText = (cell?: HTMLTableCellElement | null) => {
   if (!pendingEditorTableCellSync) return
   const target = cell && isSamePendingEditorTableCell(cell) ? cell : getPendingEditorTableCell()
@@ -1924,6 +2009,7 @@ const refreshPendingEditorTableCellText = (cell?: HTMLTableCellElement | null) =
 const markEditorTableCellSourceDirty = (cell: HTMLTableCellElement, text = editorTableCellTextFromDom(cell)) => {
   const position = getEditorTableCellPosition(cell)
   if (!position) return false
+  storeLastEditorTableCell(cell)
   pendingEditorTableCellSync = { ...position, text }
   return true
 }
@@ -1967,6 +2053,7 @@ const syncEditorTableCellDomToSource = (cell: HTMLTableCellElement | null) => {
   const nextText = editorTableCellTextFromDom(cell)
   if (hasAttachmentMarker(current) && !hasAttachmentMarker(nextText)) return false
   const applied = applyEditorTableCellSourceValue(cell, nextText)
+  if (applied) storeLastEditorTableCell(cell)
   if (applied && isSamePendingEditorTableCell(cell)) pendingEditorTableCellSync = null
   return applied
 }
@@ -1985,15 +2072,16 @@ const normalizeExpandedTableRows = (rows: string[][]) => {
   return rows.map((row) => Array.from({ length: colCount }, (_, index) => row[index] ?? ''))
 }
 
-const setEditorTableDomCellText = (cell: HTMLTableCellElement, value: string) => {
+const setEditorTableDomCellText = (cell: HTMLTableCellElement, value: string, withCaretAnchor = false) => {
   cell.innerHTML = editorTextToHtmlTableCellSource(value)
+  if (withCaretAnchor) cell.appendChild(document.createTextNode(TABLE_CELL_CARET_ANCHOR))
 }
 
 const dispatchEditorTableDomInput = (table: HTMLTableElement) => {
   const editable = table.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset') as HTMLElement | null
   editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertReplacementText' }))
   window.setTimeout(() => {
-    const nextValue = vditorInstance?.getValue?.() || ''
+    const nextValue = getEditorValueWithPendingTableSync()
     emit('update:modelValue', nextValue)
     refreshAttachmentLinksFromEditor()
     if (editorContainer.value) enhanceEditorTables(editorContainer.value)
@@ -2133,7 +2221,7 @@ const syncEditorAfterDomTableRemoval = (table: HTMLTableElement | null) => {
   removable.remove()
   editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContent' }))
   window.setTimeout(() => {
-    const nextValue = vditorInstance?.getValue?.() || ''
+    const nextValue = getEditorValueWithPendingTableSync()
     emit('update:modelValue', nextValue)
     refreshAttachmentLinksFromEditor()
   }, 0)
@@ -2534,6 +2622,10 @@ onBeforeUnmount(() => {
       fixedCleanup();
       fixedCleanup = null;
     }
+    if (editorTableDomStabilizeTimer !== null) {
+      window.clearTimeout(editorTableDomStabilizeTimer)
+      editorTableDomStabilizeTimer = null
+    }
     if (panelCleanup) {
       panelCleanup();
       panelCleanup = null;
@@ -2554,6 +2646,8 @@ onBeforeUnmount(() => {
     tableExpandClosing.value = false
     expandedTableDirty.value = false
     pendingEditorTableCellSync = null
+    lastEditorTableSelectionRange = null
+    lastEditorTableSelectionState = null
   } catch (e) {
     console.warn('Vditor destroy error', e);
   }
@@ -2585,11 +2679,62 @@ const getEditorTableCellFromEvent = (event?: Event) => {
   return getEditorTableCellFromElement(element)
 }
 
+const EDITOR_EDITABLE_SELECTOR = '.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset'
+
+const getEditorEditableFromNode = (node: Node | null | undefined) => {
+  const element = node instanceof Element ? node : node?.parentElement
+  const editable = element?.closest?.(EDITOR_EDITABLE_SELECTOR) as HTMLElement | null
+  return editable && editorContainer.value?.contains(editable) ? editable : null
+}
+
+const storeLastEditorTableCell = (cell: HTMLTableCellElement | null | undefined) => {
+  const editable = getEditorEditableFromNode(cell)
+  const table = cell?.closest('table') as HTMLTableElement | null
+  if (!cell || !editable || !table) return
+  const tables = Array.from(editable.querySelectorAll('table'))
+  const tableIndex = tables.indexOf(table)
+  if (tableIndex < 0 || !cell.parentElement) return
+  lastEditorTableSelectionState = {
+    editable,
+    tableIndex,
+    rowIndex: (cell.parentElement as HTMLTableRowElement).rowIndex,
+    cellIndex: cell.cellIndex,
+  }
+}
+
+const storeLastEditorTableSelection = (range: Range) => {
+  const cell = getEditorTableCellFromRange(range)
+  storeLastEditorTableCell(cell)
+  if (cell) lastEditorTableSelectionRange = range.cloneRange()
+}
+
+const getStoredEditorTableCell = (editable: HTMLElement | null) => {
+  if (!editable || !lastEditorTableSelectionState) return null as HTMLTableCellElement | null
+  const sameEditable = lastEditorTableSelectionState.editable === editable
+  const previousEditableDetached = !editorContainer.value?.contains(lastEditorTableSelectionState.editable)
+  if (!sameEditable && !previousEditableDetached) return null
+  const table = editable.querySelectorAll<HTMLTableElement>('table')[lastEditorTableSelectionState.tableIndex]
+  const row = table?.rows[lastEditorTableSelectionState.rowIndex]
+  return (row?.cells[lastEditorTableSelectionState.cellIndex] as HTMLTableCellElement | undefined) || null
+}
+
 const getCurrentEditorTableCell = (event?: Event) => {
   if (typeof window === 'undefined') return null as HTMLTableCellElement | null
   const selection = window.getSelection()
   const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
-  return getEditorTableCellFromRange(range) || getEditorTableCellFromEvent(event)
+  const currentCell = getEditorTableCellFromRange(range) || getEditorTableCellFromEvent(event)
+  if (currentCell) return currentCell
+  const eventEditable = getEditorEditableFromNode(event?.target as Node | null | undefined)
+  const rangeEditable = getEditorEditableFromNode(range?.commonAncestorContainer)
+  const currentEditable = eventEditable || rangeEditable
+  const rangeCell = getEditorTableCellFromRange(lastEditorTableSelectionRange)
+  const lastCell = rangeCell && getEditorEditableFromNode(rangeCell) === currentEditable
+    ? rangeCell
+    : getStoredEditorTableCell(currentEditable)
+  const pendingCell = getPendingEditorTableCell()
+  const fallbackCell = lastCell || (pendingCell && getEditorEditableFromNode(pendingCell) === currentEditable ? pendingCell : null)
+  if (!fallbackCell || getEditorEditableFromNode(fallbackCell) !== currentEditable) return null
+  return fallbackCell
 }
 
 const clearEditorTableEmptyPlaceholder = (cell: HTMLTableCellElement) => {
@@ -2623,6 +2768,7 @@ const insertTextIntoCellDom = (cell: HTMLTableCellElement, text: string) => {
   selection.removeAllRanges()
   selection.addRange(range)
   lastEditorSelectionRange = range.cloneRange()
+  storeLastEditorTableSelection(range)
   return true
 }
 
@@ -2636,14 +2782,15 @@ const insertLineBreakIntoCellDom = (cell: HTMLTableCellElement) => {
   }
   range.deleteContents()
   const lineBreak = document.createElement('br')
-  const caretNode = document.createTextNode('')
+  const caretNode = document.createTextNode(TABLE_CELL_CARET_ANCHOR)
   range.insertNode(lineBreak)
   lineBreak.after(caretNode)
-  range.setStart(caretNode, 0)
+  range.setStart(caretNode, caretNode.data.length)
   range.collapse(true)
   selection?.removeAllRanges()
   selection?.addRange(range)
   lastEditorSelectionRange = range.cloneRange()
+  storeLastEditorTableSelection(range)
   return true
 }
 
@@ -2655,20 +2802,32 @@ const insertEditorTableCellLineBreak = (event: KeyboardEvent, cell: HTMLTableCel
   ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
   if (!insertLineBreakIntoCellDom(cell)) return false
   pendingEditorTableCellSync = { ...position, text: editorTableCellTextFromDom(cell) }
+  scheduleStabilizePendingEditorTableCellDom()
   emit("update:modelValue", getEditorValueWithPendingTableSync())
   refreshAttachmentLinksFromEditor()
   return true
 }
 
 const restoreLastEditorSelection = () => {
-  if (typeof window === 'undefined' || !lastEditorSelectionRange || !editorContainer.value) return false
-  const cell = getEditorTableCellFromRange(lastEditorSelectionRange)
+  if (typeof window === 'undefined' || !editorContainer.value || (!lastEditorTableSelectionRange && !lastEditorTableSelectionState)) return false
+  const rangeCell = getEditorTableCellFromRange(lastEditorTableSelectionRange)
+  const cell = rangeCell && getEditorEditableFromNode(rangeCell)
+    ? rangeCell
+    : getStoredEditorTableCell(lastEditorTableSelectionState?.editable || null)
   if (!cell) return false
   const selection = window.getSelection()
   if (!selection) return false
   try {
     selection.removeAllRanges()
-    selection.addRange(lastEditorSelectionRange.cloneRange())
+    if (rangeCell && getEditorEditableFromNode(rangeCell) && lastEditorTableSelectionRange) {
+      selection.addRange(lastEditorTableSelectionRange.cloneRange())
+    } else {
+      const range = document.createRange()
+      range.selectNodeContents(cell)
+      range.collapse(false)
+      selection.addRange(range)
+      lastEditorTableSelectionRange = range.cloneRange()
+    }
     return true
   } catch {
     return false
@@ -2723,9 +2882,12 @@ const insertValueIntoCurrentTableCell = (value: string) => {
   editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }))
   syncEditorTableCellDomToSource(cell)
   const updatedSelection = window.getSelection()
-  if (updatedSelection && updatedSelection.rangeCount > 0) lastEditorSelectionRange = updatedSelection.getRangeAt(0).cloneRange()
+  if (updatedSelection && updatedSelection.rangeCount > 0) {
+    lastEditorSelectionRange = updatedSelection.getRangeAt(0).cloneRange()
+    storeLastEditorTableSelection(updatedSelection.getRangeAt(0))
+  }
   refreshAttachmentLinksFromEditor()
-  window.setTimeout(() => emit("update:modelValue", vditorInstance?.getValue?.() || ''), 0)
+  window.setTimeout(() => emit("update:modelValue", getEditorValueWithPendingTableSync()), 0)
   return true
 }
 
@@ -3194,6 +3356,18 @@ html.dark .editor-attachment-preview__header,
   border: 1px solid rgba(148, 163, 184, 0.55);
   background: rgba(255, 255, 255, 0.95);
   color: #111827;
+}
+
+.vditor-reset table td .editor-table-line-break-marker,
+.vditor-reset table th .editor-table-line-break-marker {
+  display: block !important;
+  min-height: 1em !important;
+  line-height: inherit !important;
+}
+
+.vditor-reset table td .editor-table-line-break-marker .vditor-ir__marker,
+.vditor-reset table th .editor-table-line-break-marker .vditor-ir__marker {
+  display: none !important;
 }
 
 .vditor-reset table th {
