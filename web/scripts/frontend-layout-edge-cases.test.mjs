@@ -596,9 +596,10 @@ assert(
     vditorEditor.includes('replaceTableBreakTextNodes(table)') &&
     vditorEditor.includes('.vditor-container .vditor-reset table.editor-deletable-table') &&
     vditorEditor.includes('box-shadow: inset 1px 0 0 rgba(148, 163, 184, 0.55), inset -1px 0 0 rgba(148, 163, 184, 0.55);') &&
-    vditorEditor.includes('.vditor-container .vditor-reset table.editor-deletable-table::after') &&
-    vditorEditor.includes('right: 0;\n  bottom: 9px;\n  width: 1px;') &&
-    vditorEditor.includes('background: rgba(148, 163, 184, 0.72);') &&
+    vditorEditor.includes('padding-inline-end: 8px;') &&
+    vditorEditor.includes('scroll-padding-inline-end: 8px;') &&
+    !vditorEditor.includes('.vditor-container .vditor-reset table.editor-deletable-table::after') &&
+    !vditorEditor.includes('html.dark .vditor-container .vditor-reset table.editor-deletable-table::after') &&
     vditorEditor.includes('width: max-content;') &&
     vditorEditor.includes('min-width: 100%;') &&
     vditorEditor.includes('.editor-table-expand-table {\n  width: max-content;\n  min-width: 0;') &&

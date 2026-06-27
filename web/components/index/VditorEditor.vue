@@ -3114,20 +3114,10 @@ html.dark .editor-attachment-preview__header,
   outline-offset: -1px;
   background-clip: padding-box;
   box-shadow: inset 1px 0 0 rgba(148, 163, 184, 0.55), inset -1px 0 0 rgba(148, 163, 184, 0.55);
+  padding-inline-end: 8px;
+  scroll-padding-inline-end: 8px;
   scrollbar-width: thin;
   scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);
-}
-
-.vditor-container .vditor-reset table.editor-deletable-table::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 9px;
-  width: 1px;
-  z-index: 2;
-  pointer-events: none;
-  background: rgba(148, 163, 184, 0.72);
 }
 
 .vditor-container .vditor-reset table.editor-deletable-table::-webkit-scrollbar {
@@ -3211,10 +3201,6 @@ html.dark .vditor-container .vditor-reset table.editor-deletable-table {
   border-right-color: rgba(226, 232, 240, 0.22);
   outline-color: rgba(226, 232, 240, 0.14);
   box-shadow: inset 1px 0 0 rgba(226, 232, 240, 0.22), inset -1px 0 0 rgba(226, 232, 240, 0.22);
-}
-
-html.dark .vditor-container .vditor-reset table.editor-deletable-table::after {
-  background: rgba(226, 232, 240, 0.34);
 }
 
 html.dark .vditor-reset table th,
