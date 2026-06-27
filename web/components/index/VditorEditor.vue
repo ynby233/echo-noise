@@ -330,7 +330,7 @@ const normalizeEditorAttachmentSource = () => {
   const normalized = normalizeAdjacentAttachmentMarkers(value)
   if (normalized === value) return false
   vditorInstance.setValue(normalized)
-  emit('update:modelValue', getEditorValueWithPendingTableSync() || normalized)
+  emitEditorValue(normalized)
   window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
   return true
 }
@@ -677,7 +677,7 @@ const setupAttachmentPreview = () => {
     captureEditorSelection()
     scheduleStabilizePendingEditorTableCellDom()
     scheduleRefreshAttachmentLinks()
-    const emitSafeValue = () => emit("update:modelValue", getEditorValueWithPendingTableSync())
+    const emitSafeValue = () => emitEditorValue()
     emitSafeValue()
     window.setTimeout(emitSafeValue, 0)
   }
@@ -717,6 +717,14 @@ const setupAttachmentPreview = () => {
     }
     flushPendingEditorTableCellSourceSyncIfMoved(cell)
     captureEditorSelection()
+    if (getEditorTables().length) {
+      event.stopPropagation()
+      ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+      const emitSafeValue = () => emitEditorValue()
+      emitSafeValue()
+      window.setTimeout(emitSafeValue, 0)
+      return
+    }
     if (normalizeEditorAttachmentSource()) return
     scheduleRefreshAttachmentLinks()
   }
@@ -952,7 +960,7 @@ const setupAttachmentPreview = () => {
     editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '\n' }))
     scheduleRefreshAttachmentLinks()
     window.setTimeout(() => {
-      if (vditorInstance?.getValue) emit('update:modelValue', getEditorValueWithPendingTableSync())
+      if (vditorInstance?.getValue) emitEditorValue()
     }, 0)
   }
 
@@ -1156,11 +1164,16 @@ const editorOptions: IOptions = {
     id: "vue-vditor",
   },
   input: (content: string) => {
-    const nextValue = pendingEditorTableCellSync || getEditorTables().length
-      ? getEditorValueWithPendingTableSync()
-      : getEditorValueWithDomTableSync(content)
-    emit("update:modelValue", nextValue)
-    if (getEditorTables().length) window.setTimeout(() => emit("update:modelValue", getEditorValueWithPendingTableSync()), 0)
+    const needsSafeTableValue = !!pendingEditorTableCellSync || !!getEditorTables().length || hasUnsafeMarkdownTableStructure(content)
+    if (needsSafeTableValue) {
+      const emitSafeValue = () => emitEditorValue()
+      emitSafeValue()
+      window.setTimeout(emitSafeValue, 0)
+      window.setTimeout(emitSafeValue, 48)
+      window.setTimeout(emitSafeValue, 160)
+      return
+    }
+    emitEditorValue(content)
   },
   preview: {
     hljs: {
@@ -1231,12 +1244,33 @@ const insertTable = (rows: number, cols: number) => {
   if (!vditorInstance) return
   if (pendingEditorTableCellSync) flushPendingEditorTableCellSourceSync()
   vditorInstance.insertValue(buildMarkdownTable(rows, cols))
-  emit('update:modelValue', getEditorValueWithPendingTableSync())
+  emitEditorValue()
   scheduleNormalizeEditorTableSource()
   closeTableMenu()
 }
 
-const getEditorTables = () => Array.from(editorContainer.value?.querySelectorAll<HTMLTableElement>('.vditor-reset table') || [])
+const getEditorRootElement = () => {
+  if (editorContainer.value) return editorContainer.value
+  if (typeof document === 'undefined') return null
+  return document.querySelector<HTMLElement>('.editor-box .vditor, .vditor-container.vditor, .vditor')
+}
+
+const isInsideEditorRoot = (node: Node | null) => {
+  const root = getEditorRootElement()
+  return !!node && !!root && root.contains(node)
+}
+
+const getEditorEditableElement = () => {
+  const root = getEditorRootElement()
+  if (!root) return null
+  const candidates = Array.from(root.querySelectorAll<HTMLElement>('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset'))
+  return candidates.find((node) => !!node.querySelector('table'))
+    || candidates.find((node) => node.offsetParent !== null || node.getClientRects().length > 0)
+    || candidates[0]
+    || null
+}
+
+const getEditorTables = () => Array.from(getEditorRootElement()?.querySelectorAll<HTMLTableElement>('.vditor-reset table') || [])
 
 const clearSelectedEditorTable = () => {
   selectedEditorTable?.classList.remove('editor-table-selected')
@@ -1408,7 +1442,7 @@ const htmlTableCellToEditorText = (cell: HTMLTableCellElement) => {
   clone.querySelectorAll('p,div').forEach((block) => {
     if (block.nextSibling) block.after(document.createTextNode('\n'))
   })
-  return normalizeAttachmentSourceText(stripEditorTableCaretAnchors(clone.textContent || '').replace(/\u00a0/g, ' ')).trim()
+  return normalizeAttachmentSourceText(stripEditorTableCaretAnchors(clone.textContent || '').replace(/[\u200b\u200c\ufeff]/g, '').replace(/\u00a0/g, ' ')).trim()
 }
 
 const replaceTableHeaderCells = (table: HTMLTableElement) => {
@@ -1599,6 +1633,90 @@ const getEditorTableSourceBlocks = (content: string) => [
   ...getTabTableBlocks(content)
 ].sort((left, right) => left.start - right.start)
 
+const splitMarkdownTableRowCells = (line: string) => String(line || '')
+  .trim()
+  .replace(/^\|/, '')
+  .replace(/\|$/, '')
+  .split('|')
+
+const markdownTableRowCellCount = (line: string) => splitMarkdownTableRowCells(line).length
+
+const collapseMarkdownTableRowCells = (cells: string[], expected: number) => {
+  if (expected <= 0) return cells
+  if (cells.length < expected) return [...cells, ...Array.from({ length: expected - cells.length }, () => '')]
+  if (cells.length === expected) return cells
+  const overflow = cells.length - expected
+  return [cells.slice(0, overflow + 1).join('|'), ...cells.slice(overflow + 1)]
+}
+
+const editableCellsFromPossiblyBrokenMarkdownTableRow = (line: string, expected: number) =>
+  collapseMarkdownTableRowCells(splitMarkdownTableRowCells(line), expected).map((cell) => tableCellSourceToEditorText(cell))
+
+const looksLikeMarkdownTableRowFragment = (line: string) => {
+  const trimmed = String(line || '').trim()
+  if (!trimmed || isMarkdownTableDivider(trimmed)) return false
+  if (trimmed.startsWith('|') || trimmed.endsWith('|')) return trimmed.includes('|')
+  return (trimmed.match(/\|/g) || []).length >= 2
+}
+
+const hasUnsafeMarkdownTableStructure = (content: string) => {
+  const lines = String(content || '').split('\n')
+  const blocks = getMarkdownTableBlocks(content)
+  const covered = new Set<number>()
+  blocks.forEach((block) => {
+    for (let index = block.start; index < block.end; index += 1) covered.add(index)
+  })
+  if (blocks.length && lines.some((line, index) => !covered.has(index) && looksLikeMarkdownTableRowFragment(line))) return true
+  return blocks.some((block) => {
+    const expected = markdownTableRowCellCount(block.lines[0] || '')
+    if (expected <= 1) return false
+    return block.lines.some((line, index) => {
+      if (index === 1 && isMarkdownTableDivider(line)) return false
+      return markdownTableRowCellCount(line) !== expected
+    })
+  })
+}
+
+const repairUnsafeMarkdownTableCellBreaks = (content: string) => {
+  const lines = String(content || '').split('\n')
+  const output: string[] = []
+  for (let index = 0; index < lines.length; index += 1) {
+    const header = lines[index] || ''
+    const divider = lines[index + 1] || ''
+    if (!header.includes('|') || !isMarkdownTableDivider(divider)) {
+      output.push(header)
+      continue
+    }
+    const expected = markdownTableRowCellCount(header)
+    const safeHeader = formatEditableMarkdownTableRow(editableCellsFromPossiblyBrokenMarkdownTableRow(header, expected))
+    output.push(safeHeader, formatMarkdownDividerLine('', expected))
+    index += 2
+    while (index < lines.length) {
+      const current = lines[index] || ''
+      if (!current.trim()) {
+        output.push(current)
+        break
+      }
+      if (!looksLikeMarkdownTableRowFragment(current) && !current.includes('|')) {
+        index -= 1
+        break
+      }
+      let merged = current
+      while (markdownTableRowCellCount(merged) < expected && index + 1 < lines.length) {
+        const next = lines[index + 1] || ''
+        if (!next.trim() || isMarkdownTableDivider(next)) break
+        merged = `${merged}<br />${next.trim()}`
+        index += 1
+      }
+      output.push(formatEditableMarkdownTableRow(editableCellsFromPossiblyBrokenMarkdownTableRow(merged, expected)))
+      index += 1
+    }
+  }
+  return output.join('\n')
+}
+
+const ensureSafeEditorTableMarkdown = (content: string) => repairUnsafeMarkdownTableCellBreaks(content)
+
 const normalizeTableMatchText = (text: string) => {
   ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
   const source = String(stripTableBreakCode(normalizeAttachmentSourceText(text) || ''))
@@ -1730,7 +1848,7 @@ const getEditorTableCellSourceTarget = (cell: HTMLTableCellElement | null): Edit
   if (!cell || !vditorInstance) return null
   const table = cell.closest('table') as HTMLTableElement | null
   const row = cell.parentElement as HTMLTableRowElement | null
-  if (!table || !row || !editorContainer.value?.contains(table)) return null
+  if (!table || !row || !isInsideEditorRoot(table)) return null
   const rowIndex = row.rowIndex
   const cellIndex = cell.cellIndex
   if (rowIndex < 0 || cellIndex < 0) return null
@@ -1840,7 +1958,7 @@ const applyEditorTableCellSourceValue = (cell: HTMLTableCellElement | null, next
   if (!result) return false
   rememberEditorTableScroll(result.table)
   vditorInstance.setValue(result.value)
-  emit('update:modelValue', result.value)
+  emitEditorValue(result.value)
   window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
   return true
 }
@@ -1853,7 +1971,7 @@ const editorTableContentTextFromElement = (element: HTMLElement) => {
   })
   replaceAttachmentNodesWithSourceText(clone)
   clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')))
-  return normalizeAttachmentSourceText(stripEditorTableCaretAnchors(clone.textContent || '').replace(/\u00a0/g, ' '))
+  return normalizeAttachmentSourceText(stripEditorTableCaretAnchors(clone.textContent || '').replace(/[\u200b\u200c\ufeff]/g, '').replace(/\u00a0/g, ' '))
 }
 
 const editorTableCellTextFromDom = (cell: HTMLTableCellElement) => editorTableContentTextFromElement(cell)
@@ -1890,7 +2008,7 @@ const serializeEditorTableDomAsMarkdown = (table: HTMLTableElement) => {
 
 const getEditorDomContentFallback = () => {
   if (typeof document === 'undefined') return ''
-  const editable = editorContainer.value?.querySelector<HTMLElement>('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset')
+  const editable = getEditorEditableElement()
   if (!editable) return ''
   const clone = editable.cloneNode(true) as HTMLElement
   clone.querySelectorAll('.editor-table-delete-button, .editor-table-expand-button, .editor-attachment-preview').forEach((node) => node.remove())
@@ -1900,13 +2018,31 @@ const getEditorDomContentFallback = () => {
     table.replaceWith(document.createTextNode(markdown ? `\n${markdown}\n` : ''))
   })
   clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')))
-  const text = normalizeAttachmentSourceText(String(clone.textContent || '').replace(/\u00a0/g, ' ')).trim()
+  const text = normalizeAttachmentSourceText(String(clone.textContent || '').replace(/[\u200b\u200c\ufeff]/g, '').replace(/\u00a0/g, ' ')).trim()
   return text
+}
+
+const getEditorVisibleDomTableSafeValue = () => {
+  const fallbackValue = getEditorTables().length ? getEditorDomContentFallback() : ''
+  return fallbackValue || getEditorValueWithPendingTableSync()
+}
+
+const getSafeOutgoingEditorValue = (sourceValue?: string) => {
+  const source = typeof sourceValue === 'string' ? sourceValue : (vditorInstance?.getValue?.() || '')
+  const fallbackValue = getEditorTables().length ? getEditorDomContentFallback() : ''
+  if (fallbackValue) return fallbackValue
+  const syncedValue = getEditorValueWithDomTableSync(source)
+  const repairedValue = ensureSafeEditorTableMarkdown(syncedValue || source)
+  return repairedValue || syncedValue || source
+}
+
+const emitEditorValue = (sourceValue?: string) => {
+  emit("update:modelValue", getSafeOutgoingEditorValue(sourceValue))
 }
 
 const getEditorValueWithDomTableSync = (sourceValue = vditorInstance?.getValue?.() || '') => {
   const tables = getEditorTables()
-  if (!tables.length) return sourceValue
+  if (!tables.length) return ensureSafeEditorTableMarkdown(sourceValue)
   const fallbackValue = getEditorDomContentFallback()
   const blocks = getEditorTableSourceBlocks(sourceValue)
   const replacements: { start: number; end: number; lines: string[] }[] = []
@@ -1927,6 +2063,7 @@ const getEditorValueWithDomTableSync = (sourceValue = vditorInstance?.getValue?.
       lines.splice(replacement.start, replacement.end - replacement.start, ...replacement.lines)
     })
   const syncedValue = lines.join('\n')
+  if (hasUnsafeMarkdownTableStructure(syncedValue)) return fallbackValue || ensureSafeEditorTableMarkdown(syncedValue)
   return syncedValue || fallbackValue
 }
 
@@ -1982,11 +2119,16 @@ const stabilizePendingEditorTableCellDom = () => {
   return true
 }
 
+const emitPendingEditorTableSafeValue = () => {
+  if (!pendingEditorTableCellSync) return
+  emitEditorValue()
+}
+
 const scheduleStabilizePendingEditorTableCellDom = () => {
   if (typeof window === 'undefined') return
   if (editorTableDomStabilizeTimer !== null) window.clearTimeout(editorTableDomStabilizeTimer)
   const run = () => {
-    stabilizePendingEditorTableCellDom()
+    if (stabilizePendingEditorTableCellDom()) emitPendingEditorTableSafeValue()
   }
   window.requestAnimationFrame(() => {
     run()
@@ -2016,13 +2158,19 @@ const markEditorTableCellSourceDirty = (cell: HTMLTableCellElement, text = edito
 
 const getEditorValueWithPendingTableSync = () => {
   const currentValue = vditorInstance?.getValue?.() || ''
+  if (getEditorTables().length) {
+    refreshPendingEditorTableCellText()
+    const fallbackValue = getEditorDomContentFallback()
+    if (fallbackValue) return fallbackValue
+  }
   const syncedValue = getEditorValueWithDomTableSync(currentValue)
   const fallbackValue = syncedValue.trim() ? syncedValue : getEditorDomContentFallback()
   if (!pendingEditorTableCellSync) return fallbackValue || syncedValue || currentValue
   refreshPendingEditorTableCellText()
   const cell = getPendingEditorTableCell()
   const result = buildEditorTableCellSourceValue(cell, pendingEditorTableCellSync.text)
-  return result?.value || fallbackValue || syncedValue || currentValue
+  if (result?.value && !hasUnsafeMarkdownTableStructure(result.value)) return result.value
+  return fallbackValue || result?.value || syncedValue || currentValue
 }
 
 const flushPendingEditorTableCellSourceSync = () => {
@@ -2082,7 +2230,7 @@ const dispatchEditorTableDomInput = (table: HTMLTableElement) => {
   editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertReplacementText' }))
   window.setTimeout(() => {
     const nextValue = getEditorValueWithPendingTableSync()
-    emit('update:modelValue', nextValue)
+    emitEditorValue(nextValue)
     refreshAttachmentLinksFromEditor()
     if (editorContainer.value) enhanceEditorTables(editorContainer.value)
   }, 0)
@@ -2125,7 +2273,7 @@ const syncExpandedTableToEditor = () => {
   const nextValue = lines.join('\n')
   expandedEditorTableBlock = { ...currentBlock, end: currentBlock.start + nextBlockLines.length, lines: nextBlockLines }
   vditorInstance.setValue(nextValue)
-  emit('update:modelValue', nextValue)
+  emitEditorValue(nextValue)
   window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
   expandedTableDirty.value = false
   return true
@@ -2222,7 +2370,7 @@ const syncEditorAfterDomTableRemoval = (table: HTMLTableElement | null) => {
   editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContent' }))
   window.setTimeout(() => {
     const nextValue = getEditorValueWithPendingTableSync()
-    emit('update:modelValue', nextValue)
+    emitEditorValue(nextValue)
     refreshAttachmentLinksFromEditor()
   }, 0)
   clearSelectedEditorTable()
@@ -2243,7 +2391,7 @@ const deleteEditorTable = (table: HTMLTableElement | null, preferredIndex = -1) 
   if (!block) return syncEditorAfterDomTableRemoval(table)
   const nextValue = applyTableSourceDeletion(value, block)
   vditorInstance.setValue(nextValue)
-  emit('update:modelValue', nextValue)
+  emitEditorValue(nextValue)
   clearSelectedEditorTable()
   window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
   return true
@@ -2313,7 +2461,7 @@ const applyHeadingFallback = (option: typeof headingOptions[number]) => {
   const value = vditorInstance.getValue?.() || ''
   if (!value.trim()) {
     vditorInstance.setValue(option.value)
-    emit('update:modelValue', getEditorValueWithPendingTableSync() || option.value)
+    emitEditorValue(option.value)
     return
   }
   const editorRoot = editorContainer.value
@@ -2345,7 +2493,7 @@ const applyHeadingFallback = (option: typeof headingOptions[number]) => {
   lines[lineIndex] = `${option.value}${content || '标题'}`
   const nextValue = lines.join('\n')
   vditorInstance.setValue(nextValue)
-  emit('update:modelValue', getEditorValueWithPendingTableSync() || nextValue)
+  emitEditorValue(nextValue)
 }
 
 const selectHeading = (option: typeof headingOptions[number]) => {
@@ -2803,7 +2951,7 @@ const insertEditorTableCellLineBreak = (event: KeyboardEvent, cell: HTMLTableCel
   if (!insertLineBreakIntoCellDom(cell)) return false
   pendingEditorTableCellSync = { ...position, text: editorTableCellTextFromDom(cell) }
   scheduleStabilizePendingEditorTableCellDom()
-  emit("update:modelValue", getEditorValueWithPendingTableSync())
+  emitEditorValue()
   refreshAttachmentLinksFromEditor()
   return true
 }
@@ -2887,7 +3035,7 @@ const insertValueIntoCurrentTableCell = (value: string) => {
     storeLastEditorTableSelection(updatedSelection.getRangeAt(0))
   }
   refreshAttachmentLinksFromEditor()
-  window.setTimeout(() => emit("update:modelValue", getEditorValueWithPendingTableSync()), 0)
+  window.setTimeout(() => emitEditorValue(), 0)
   return true
 }
 
@@ -2902,7 +3050,7 @@ const insertAttachmentSourceValue = (value: string) => {
   normalizeEditorAttachmentSource()
   refreshAttachmentLinksFromEditor()
   window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
-  emit("update:modelValue", nextValue)
+  emitEditorValue(nextValue)
   return true
 }
 
@@ -2924,7 +3072,7 @@ defineExpose({
       normalizeEditorAttachmentSource()
       refreshAttachmentLinksFromEditor()
       window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
-      emit("update:modelValue", getEditorValueWithPendingTableSync());
+      emitEditorValue();
     }
   },
   getValue: (): string => {
@@ -2934,7 +3082,7 @@ defineExpose({
     pendingEditorTableCellSync = null
     if (vditorInstance) {
       vditorInstance.setValue(val)
-      emit("update:modelValue", getEditorValueWithPendingTableSync())
+      emitEditorValue()
     } else {
       emit("update:modelValue", val || '')
     }

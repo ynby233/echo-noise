@@ -451,16 +451,103 @@ const scrollEditorIntoViewForMobile = async () => {
   } catch {}
 }
 
+const ADD_FORM_MARKDOWN_EMPTY_TABLE_CELL = ' '
+
+const escapeAddFormMarkdownTableCellText = (value: string) => {
+  const normalized = String(value || '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u200b\u200c\ufeff]/g, '')
+    .replace(/\n/g, '<br />')
+    .replace(/\|/g, '&#124;')
+    .trim()
+  return normalized || ADD_FORM_MARKDOWN_EMPTY_TABLE_CELL
+}
+
+const isAddFormTableBreakMarker = (node: HTMLElement) => {
+  const text = String(node.textContent || '').replace(/[\u200b\u200c\ufeff]/g, '').trim()
+  if (/^<br\s*\/?\s*>$/i.test(text)) return true
+  const html = String(node.innerHTML || '').replace(/[\u200b\u200c\ufeff]/g, '').trim()
+  return /^<br\s*\/?\s*>$/i.test(html) || /^<code\b[^>]*>\s*<br\s*\/?\s*>\s*<\/code>$/i.test(html)
+}
+
+const readAddFormTableCellText = (cell: HTMLTableCellElement) => {
+  const clone = cell.cloneNode(true) as HTMLElement
+  clone.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
+  clone.querySelectorAll<HTMLElement>('[data-type="html-inline"], .vditor-ir__node').forEach((node) => {
+    if (isAddFormTableBreakMarker(node)) node.replaceWith(document.createTextNode('\n'))
+  })
+  clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')))
+  return String(clone.textContent || '').replace(/\u00a0/g, ' ')
+}
+
+const formatAddFormMarkdownTableRow = (cells: string[]) => `| ${cells.map(escapeAddFormMarkdownTableCellText).join(' | ')} |`
+
+const formatAddFormMarkdownDividerLine = (colCount: number) => `| ${Array.from({ length: Math.max(1, colCount) }, () => '---').join(' | ')} |`
+
+const serializeAddFormTableDomAsMarkdown = (table: HTMLTableElement) => {
+  const rows = Array.from(table.rows).map((row) => Array.from(row.cells).map((cell) => readAddFormTableCellText(cell as HTMLTableCellElement)))
+  if (!rows.length) return ''
+  const colCount = Math.max(1, ...rows.map((row) => row.length))
+  const normalizedRows = rows.map((row) => Array.from({ length: colCount }, (_, index) => row[index] ?? ''))
+  const header = normalizedRows[0] || []
+  return [
+    formatAddFormMarkdownTableRow(header),
+    formatAddFormMarkdownDividerLine(colCount),
+    ...normalizedRows.slice(1).map(formatAddFormMarkdownTableRow)
+  ].join('\n')
+}
+
+const getAddFormEditorEditableElement = (root: HTMLElement) => {
+  const candidates = Array.from(root.querySelectorAll<HTMLElement>('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset'))
+  return candidates.find((node) => !!node.querySelector('table'))
+    || candidates.find((node) => node.offsetParent !== null || node.getClientRects().length > 0)
+    || candidates[0]
+    || null
+}
+
+const readEditorDomTableSafeContent = () => {
+  if (typeof document === 'undefined') return ''
+  const root = document.querySelector<HTMLElement>('.editor-box .vditor, .vditor-container.vditor, .vditor')
+  if (!root?.querySelector('.vditor-reset table')) return ''
+  const editable = getAddFormEditorEditableElement(root)
+  if (!editable) return ''
+  const clone = editable.cloneNode(true) as HTMLElement
+  clone.querySelectorAll('.editor-table-delete-button, .editor-table-expand-button, .editor-attachment-preview').forEach((node) => node.remove())
+  clone.querySelectorAll('table').forEach((node) => {
+    const markdown = serializeAddFormTableDomAsMarkdown(node as HTMLTableElement)
+    node.replaceWith(document.createTextNode(markdown ? `\n${markdown}\n` : ''))
+  })
+  clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')))
+  return String(clone.textContent || '').replace(/[\u200b\u200c\ufeff]/g, '').replace(/\u00a0/g, ' ').trim()
+}
+
+const readSafeEditorContent = () => {
+  const domTableContent = readEditorDomTableSafeContent()
+  if (domTableContent) return domTableContent
+  try {
+    const val = vditorEditor.value?.getValue?.()
+    if (typeof val === 'string') return val
+  } catch {}
+  return MessageContent.value || ''
+}
+
+const syncContentFromEditor = () => {
+  const val = readSafeEditorContent()
+  if (val !== MessageContent.value) MessageContent.value = val
+  return val
+}
+
 const saveDraft = () => {
   try {
-    const content = (MessageContent.value || '').trim()
+    const editorContent = syncContentFromEditor()
+    const content = (editorContent || '').trim()
     if (!content) {
       localStorage.removeItem(DRAFT_KEY)
       return
     }
     localStorage.setItem(
       DRAFT_KEY,
-      JSON.stringify({ content: MessageContent.value || '', private: !!Private.value, visibility: Visibility.value, notify: !!enableNotify.value, fullImageAttachments: !!fullImageAttachments.value, savedAt: Date.now() })
+      JSON.stringify({ content: editorContent || '', private: !!Private.value, visibility: Visibility.value, notify: !!enableNotify.value, fullImageAttachments: !!fullImageAttachments.value, savedAt: Date.now() })
     )
   } catch {}
 }
@@ -472,13 +559,6 @@ const scheduleDraftSave = () => {
 
 const clearDraft = () => {
   try { localStorage.removeItem(DRAFT_KEY) } catch {}
-}
-
-const syncContentFromEditor = () => {
-  try {
-    const val = vditorEditor.value?.getValue?.()
-    if (typeof val === 'string') MessageContent.value = val
-  } catch {}
 }
 
 const previewProseClass = computed(() => contentTheme.value === 'dark' ? 'prose prose-invert' : 'prose')
@@ -1039,7 +1119,8 @@ watch([MessageContent, fullImageAttachments], ([val]) => {
   scheduleDraftSave()
   if (previewRenderTimer) clearTimeout(previewRenderTimer)
   previewRenderTimer = setTimeout(async () => {
-    const rawValue = String(val || "")
+    const rawValue = String(readSafeEditorContent() || val || "")
+    if (rawValue !== MessageContent.value) MessageContent.value = rawValue
     const keepImagesFullSize = fullImageAttachments.value || hasFullImageAttachmentsMarker(rawValue)
     const previewValue = replaceAttachmentMarkersForPreview(stripFullImageAttachmentsMarker(rawValue))
     const raw = await Vditor.md2html(normalizeInlineImageLinks(previewValue));

@@ -569,11 +569,11 @@ assert(
     vditorEditor.includes('getEditorTableCellFromNode(range.startContainer)') &&
     vditorEditor.includes('getEditorTableCellFromNode(range.endContainer)') &&
     vditorEditor.includes('clearEditorTableEmptyPlaceholder(cell)') &&
-    vditorEditor.includes('emit("update:modelValue", getEditorValueWithPendingTableSync())') &&
+    vditorEditor.includes('const emitEditorValue = (sourceValue?: string) =>') &&
     vditorEditor.includes("root.addEventListener('beforeinput', onEditorBeforeInput, true)") &&
     vditorEditor.includes("root.removeEventListener('beforeinput', onEditorBeforeInput, true)") &&
     vditorEditor.includes('const onEditorInput = (event: Event) =>') &&
-    vditorEditor.includes('const emitSafeValue = () => emit("update:modelValue", getEditorValueWithPendingTableSync())') &&
+    vditorEditor.includes('const emitSafeValue = () => emitEditorValue()') &&
     vditorEditor.includes('window.setTimeout(emitSafeValue, 0)') &&
     vditorEditor.includes('commitEditorTableCellDomEdit(cell)') &&
     vditorEditor.includes('if (cell)') &&
@@ -581,7 +581,7 @@ assert(
     !vditorEditor.includes('if (!getEditorTableCellSourceTarget(cell)) return false') &&
     vditorEditor.includes('markEditorTableCellSourceDirty(cell)') &&
     vditorEditor.includes('stopImmediatePropagation?.()') &&
-    vditorEditor.includes('emit("update:modelValue", getEditorValueWithPendingTableSync())') &&
+    vditorEditor.includes('const emitEditorValue = (sourceValue?: string) =>') &&
     vditorEditor.includes("root.addEventListener('focusout', onEditorFocusOut, true)") &&
     vditorEditor.includes('getEditorValueWithPendingTableSync()') &&
     vditorEditor.includes('getEditorDomContentFallback()') &&
@@ -591,7 +591,7 @@ assert(
     vditorEditor.includes('const stripEditorTableCaretAnchors = (value: string) =>') &&
     vditorEditor.includes('const caretNode = document.createTextNode(TABLE_CELL_CARET_ANCHOR)') &&
     vditorEditor.includes('range.setStart(caretNode, caretNode.data.length)') &&
-    vditorEditor.includes('stripEditorTableCaretAnchors(clone.textContent || \'\').replace(/\\u00a0/g, \' \')') &&
+    vditorEditor.includes("stripEditorTableCaretAnchors(clone.textContent || '').replace(/[\\u200b\\u200c\\ufeff]/g, '').replace(/\\u00a0/g, ' ')") &&
     vditorEditor.includes('const nextValue = getEditorValueWithPendingTableSync()') &&
     !vditorEditor.includes("const nextValue = vditorInstance?.getValue?.() || ''") &&
     vditorEditor.includes('let lastEditorTableSelectionRange: Range | null = null') &&
@@ -603,6 +603,8 @@ assert(
     vditorEditor.includes('let editorTableDomStabilizeTimer: number | null = null') &&
     vditorEditor.includes('const stabilizePendingEditorTableCellDom = () =>') &&
     vditorEditor.includes('const scheduleStabilizePendingEditorTableCellDom = () =>') &&
+    vditorEditor.includes('const emitPendingEditorTableSafeValue = () =>') &&
+    vditorEditor.includes('if (stabilizePendingEditorTableCellDom()) emitPendingEditorTableSafeValue()') &&
     vditorEditor.includes('const TABLE_CELL_BREAK_TEXT_RE = /^<br\\s*\\/?\\s*>$/i') &&
     vditorEditor.includes('const hasEditorTableBreakCodeMarker = (cell: HTMLTableCellElement) =>') &&
     vditorEditor.includes('const normalizeEditorTableBreakCodeMarkers = (cell: HTMLTableCellElement) =>') &&
@@ -625,15 +627,45 @@ assert(
     vditorEditor.includes('return normalized || MARKDOWN_EMPTY_TABLE_CELL') &&
     vditorEditor.includes("replace(/\\|/g, () => '&#124;')") &&
     vditorEditor.includes('decodeMarkdownTablePipeEntities') &&
+    vditorEditor.includes('const getEditorRootElement = () =>') &&
+    vditorEditor.includes('const isInsideEditorRoot = (node: Node | null) =>') &&
+    vditorEditor.includes('const getEditorEditableElement = () =>') &&
+    vditorEditor.includes('if (!table || !row || !isInsideEditorRoot(table)) return null') &&
+    vditorEditor.includes('const editable = getEditorEditableElement()') &&
+    addForm.includes('const readEditorDomTableSafeContent = () =>') &&
+    addForm.includes("root?.querySelector('.vditor-reset table')") &&
+    addForm.includes('serializeAddFormTableDomAsMarkdown(node as HTMLTableElement)') &&
+    addForm.includes("replace(/\\|/g, '&#124;')") &&
+    addForm.indexOf('const domTableContent = readEditorDomTableSafeContent()') >= 0 &&
+    addForm.indexOf('const domTableContent = readEditorDomTableSafeContent()') < addForm.indexOf('const val = vditorEditor.value?.getValue?.()') &&
+    vditorEditor.includes('const getSafeOutgoingEditorValue = (sourceValue?: string) =>') &&
+    vditorEditor.includes('return repairedValue || syncedValue || source') &&
+    vditorEditor.includes('const collapseMarkdownTableRowCells = (cells: string[], expected: number) =>') &&
+    vditorEditor.includes("return [cells.slice(0, overflow + 1).join('|'), ...cells.slice(overflow + 1)]") &&
+    vditorEditor.includes('const hasUnsafeMarkdownTableStructure = (content: string) =>') &&
+    vditorEditor.includes('const looksLikeMarkdownTableRowFragment = (line: string) =>') &&
+    vditorEditor.includes('!covered.has(index) && looksLikeMarkdownTableRowFragment(line)') &&
+    vditorEditor.includes('markdownTableRowCellCount(line) !== expected') &&
+    vditorEditor.includes('if (hasUnsafeMarkdownTableStructure(syncedValue)) return fallbackValue || ensureSafeEditorTableMarkdown(syncedValue)') &&
+    vditorEditor.includes('if (result?.value && !hasUnsafeMarkdownTableStructure(result.value)) return result.value') &&
     vditorEditor.includes('Array.from({ length: colCount }, () => MARKDOWN_EMPTY_TABLE_CELL)') &&
     vditorEditor.includes('MARKDOWN_EMPTY_TABLE_CELL_RE.test(text) ?') &&
     vditorEditor.includes('if (MARKDOWN_EMPTY_TABLE_CELL_RE.test(source)) return') &&
     !vditorEditor.includes('const hasVisibleContent = rows.some((row) => row.some((cell) => cell.trim()))') &&
-    vditorEditor.includes('getEditorValueWithDomTableSync(content)') &&
-    vditorEditor.includes('const nextValue = pendingEditorTableCellSync || getEditorTables().length') &&
-    vditorEditor.includes('if (getEditorTables().length) window.setTimeout(() => emit("update:modelValue", getEditorValueWithPendingTableSync()), 0)') &&
-    vditorEditor.includes('return result?.value || fallbackValue || syncedValue || currentValue') &&
-    !vditorEditor.includes('return fallbackValue || result?.value || syncedValue || currentValue') &&
+    vditorEditor.includes('const needsSafeTableValue = !!pendingEditorTableCellSync || !!getEditorTables().length || hasUnsafeMarkdownTableStructure(content)') &&
+    vditorEditor.includes('if (needsSafeTableValue) {') &&
+    vditorEditor.includes('emitSafeValue()') &&
+    vditorEditor.includes('window.setTimeout(emitSafeValue, 48)') &&
+    vditorEditor.includes('window.setTimeout(emitSafeValue, 160)') &&
+    vditorEditor.includes('return\n    }\n    emitEditorValue(content)') &&
+    !vditorEditor.includes('const nextValue = needsSafeTableValue') &&
+    !vditorEditor.includes('const nextValue = needsSafeTableValue\n      ? getEditorValueWithPendingTableSync()') &&
+    vditorEditor.includes('if (getEditorTables().length) {') &&
+    vditorEditor.includes('const emitSafeValue = () => emitEditorValue()') &&
+    vditorEditor.includes('window.setTimeout(emitSafeValue, 0)') &&
+    vditorEditor.includes('cache: {') &&
+    vditorEditor.includes('return fallbackValue || result?.value || syncedValue || currentValue') &&
+    !vditorEditor.includes('return result?.value || fallbackValue || syncedValue || currentValue') &&
     vditorEditor.includes('cache: {') &&
     vditorEditor.includes('enable: false,') &&
     vditorEditor.includes("id: \"vue-vditor\"") &&
@@ -644,8 +676,9 @@ assert(
     vditorEditor.includes('return syncedValue || fallbackValue') &&
     !vditorEditor.includes('return fallbackValue || syncedValue\n}') &&
     vditorEditor.indexOf('const result = buildEditorTableCellSourceValue(cell, pendingEditorTableCellSync.text)') >= 0 &&
-    vditorEditor.indexOf('const result = buildEditorTableCellSourceValue(cell, pendingEditorTableCellSync.text)') < vditorEditor.indexOf('return result?.value || fallbackValue || syncedValue || currentValue') &&
-    !vditorEditor.includes('return fallbackValue || result?.value || syncedValue || currentValue') &&
+    vditorEditor.indexOf('const result = buildEditorTableCellSourceValue(cell, pendingEditorTableCellSync.text)') < vditorEditor.indexOf('if (result?.value && !hasUnsafeMarkdownTableStructure(result.value)) return result.value') &&
+    vditorEditor.indexOf('if (result?.value && !hasUnsafeMarkdownTableStructure(result.value)) return result.value') < vditorEditor.indexOf('return fallbackValue || result?.value || syncedValue || currentValue') &&
+    !vditorEditor.includes('return result?.value || fallbackValue || syncedValue || currentValue') &&
     !/const insertEditorTableCellLineBreak[\s\S]*?dispatchEditorTableDomInput\(table\)[\s\S]*?return true/.test(vditorEditor) &&
     !vditorEditor.includes('scheduleEditorTableCellSourceSync') &&
     !vditorEditor.includes('focusEditorTableCellAt') &&
