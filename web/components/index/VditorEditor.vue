@@ -3108,9 +3108,6 @@ html.dark .editor-attachment-preview__header,
   overflow-x: auto;
   overflow-y: hidden;
   border-collapse: collapse;
-  border-left: 1px solid rgba(148, 163, 184, 0.55);
-  border-right: 1px solid rgba(148, 163, 184, 0.55);
-  background-clip: padding-box;
   padding-inline-end: 8px;
   scroll-padding-inline-end: 8px;
   scrollbar-width: thin;
@@ -3191,11 +3188,6 @@ html.dark .vditor-toolbar {
 
 html.dark .vditor-reset {
   color: #e9ecef !important;
-}
-
-html.dark .vditor-container .vditor-reset table.editor-deletable-table {
-  border-left-color: rgba(226, 232, 240, 0.22);
-  border-right-color: rgba(226, 232, 240, 0.22);
 }
 
 html.dark .vditor-reset table th,
