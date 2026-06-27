@@ -602,8 +602,10 @@ assert(
     !vditorEditor.includes('border-right: 1px solid rgba(148, 163, 184, 0.55);') &&
     !vditorEditor.includes('border-left-color: rgba(226, 232, 240, 0.22);') &&
     !vditorEditor.includes('border-right-color: rgba(226, 232, 240, 0.22);') &&
-    vditorEditor.includes('padding-inline-end: 8px;') &&
-    vditorEditor.includes('scroll-padding-inline-end: 8px;') &&
+    vditorEditor.includes('syncEditorTableScrollEdgeGap(table, root)') &&
+    vditorEditor.includes("table.style.setProperty('--editor-table-scroll-edge-gap', `${edgeGap}px`)") &&
+    vditorEditor.includes('padding-inline-end: var(--editor-table-scroll-edge-gap, 2px);') &&
+    vditorEditor.includes('scroll-padding-inline-end: var(--editor-table-scroll-edge-gap, 2px);') &&
     !vditorEditor.includes('.vditor-container .vditor-reset table.editor-deletable-table::after') &&
     !vditorEditor.includes('html.dark .vditor-container .vditor-reset table.editor-deletable-table::after') &&
     vditorEditor.includes('width: max-content;') &&
@@ -681,6 +683,9 @@ assert(
     markdownRenderer.includes('table-expand-close-icon') &&
     markdownRenderer.includes('.markdown-preview .noise-table-scroll') &&
     markdownRenderer.includes('padding-top: 10px;') &&
+    markdownRenderer.includes('padding-inline-end: 2px;') &&
+    markdownRenderer.includes('scroll-padding-inline-end: 2px;') &&
+    !markdownRenderer.includes('box-shadow: inset 1px 0 0 rgba(148, 163, 184, 0.42), inset -1px 0 0 rgba(148, 163, 184, 0.42);') &&
     markdownRenderer.includes('.markdown-preview .noise-table-scroll > .noise-rendered-table-expand-button') &&
     markdownRenderer.includes('display: inline-flex !important;') &&
     markdownRenderer.includes('align-items: center !important;') &&

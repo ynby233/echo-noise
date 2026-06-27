@@ -2147,11 +2147,22 @@ const deleteSelectedEditorTable = () => {
   return deleteEditorTable(selectedEditorTable, tableIndex)
 }
 
-const enhanceEditorTables = (_root: HTMLElement) => {
+const syncEditorTableScrollEdgeGap = (table: HTMLTableElement, root: HTMLElement) => {
+  if (typeof window === 'undefined') return
+  const viewport = table.closest<HTMLElement>('.vditor-reset') || root
+  const tableRect = table.getBoundingClientRect()
+  const viewportRect = viewport.getBoundingClientRect()
+  const measuredGap = Math.round(tableRect.left - viewportRect.left)
+  const edgeGap = Number.isFinite(measuredGap) ? Math.max(2, measuredGap) : 2
+  table.style.setProperty('--editor-table-scroll-edge-gap', `${edgeGap}px`)
+}
+
+const enhanceEditorTables = (root: HTMLElement) => {
   const blocks = getEditorTableSourceBlocks(vditorInstance?.getValue?.() || '')
   const usedBlocks = new Set<EditorTableSourceBlock>()
   getEditorTables().forEach((table, index) => {
     table.classList.add('editor-deletable-table')
+    syncEditorTableScrollEdgeGap(table, root)
     table.dataset.editorTableIndex = String(index)
     const renderedRows = getRenderedTableRows(table)
     const datasetBlock = tableBlockFromDataset(table, blocks)
@@ -3108,8 +3119,8 @@ html.dark .editor-attachment-preview__header,
   overflow-x: auto;
   overflow-y: hidden;
   border-collapse: collapse;
-  padding-inline-end: 8px;
-  scroll-padding-inline-end: 8px;
+  padding-inline-end: var(--editor-table-scroll-edge-gap, 2px);
+  scroll-padding-inline-end: var(--editor-table-scroll-edge-gap, 2px);
   scrollbar-width: thin;
   scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);
 }

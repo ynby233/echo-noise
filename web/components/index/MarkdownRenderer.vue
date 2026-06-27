@@ -1801,9 +1801,10 @@ watch(() => props.enableGithubCard, () => {
   max-width: 100%;
   margin: 8px 0;
   padding-top: 10px;
+  padding-inline-end: 2px;
+  scroll-padding-inline-end: 2px;
   overflow-x: auto;
   overflow-y: hidden;
-  box-shadow: inset 1px 0 0 rgba(148, 163, 184, 0.42), inset -1px 0 0 rgba(148, 163, 184, 0.42);
   scrollbar-width: thin;
   scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);
 }
