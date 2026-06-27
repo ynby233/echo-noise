@@ -2154,7 +2154,7 @@ const syncEditorTableScrollEdgeGap = (table: HTMLTableElement, root: HTMLElement
   const viewportRect = viewport.getBoundingClientRect()
   const leftGap = Math.max(0, Math.round(tableRect.left - viewportRect.left))
   const rightGap = Math.max(0, Math.round(viewportRect.right - tableRect.right))
-  const edgeGap = Number.isFinite(leftGap) && Number.isFinite(rightGap) ? Math.max(0, leftGap - rightGap) : 0
+  const edgeGap = Number.isFinite(leftGap) && Number.isFinite(rightGap) ? Math.max(0, leftGap - rightGap) + 1 : 1
   table.style.setProperty('--editor-table-scroll-edge-gap', `${edgeGap}px`)
 }
 

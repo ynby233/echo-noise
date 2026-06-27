@@ -605,7 +605,7 @@ assert(
     vditorEditor.includes('syncEditorTableScrollEdgeGap(table, root)') &&
     vditorEditor.includes('const leftGap = Math.max(0, Math.round(tableRect.left - viewportRect.left))') &&
     vditorEditor.includes('const rightGap = Math.max(0, Math.round(viewportRect.right - tableRect.right))') &&
-    vditorEditor.includes('Math.max(0, leftGap - rightGap)') &&
+    vditorEditor.includes('Math.max(0, leftGap - rightGap) + 1') &&
     !vditorEditor.includes('Math.max(2, measuredGap)') &&
     vditorEditor.includes("table.style.setProperty('--editor-table-scroll-edge-gap', `${edgeGap}px`)") &&
     vditorEditor.includes('padding-inline-end: var(--editor-table-scroll-edge-gap, 0px);') &&
