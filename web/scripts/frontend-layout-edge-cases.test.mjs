@@ -554,7 +554,8 @@ assert(
     vditorEditor.includes('const handleEditorTableBeforeInput = (event: Event) =>') &&
     vditorEditor.includes('if (handleEditorTableBeforeInput(event)) return') &&
     vditorEditor.includes("inputEvent.isComposing || editorTableCompositionActive || inputType === 'insertCompositionText'") &&
-    vditorEditor.includes("event.key === ' ' || event.code === 'Space'") &&
+    !vditorEditor.includes("event.key === ' ' || event.code === 'Space'") &&
+    vditorEditor.includes("event.key === 'Process' || event.key === 'Unidentified'") &&
     vditorEditor.includes("root.addEventListener('compositionstart', onEditorCompositionStart, true)") &&
     vditorEditor.includes("root.removeEventListener('compositionend', onEditorCompositionEnd, true)") &&
     vditorEditor.includes('renderAttachmentMarkersInEditableRoot(cell)') &&
@@ -595,9 +596,17 @@ assert(
     vditorEditor.includes('replaceTableBreakTextNodes(table)') &&
     vditorEditor.includes('.vditor-container .vditor-reset table.editor-deletable-table') &&
     vditorEditor.includes('box-shadow: inset 1px 0 0 rgba(148, 163, 184, 0.55), inset -1px 0 0 rgba(148, 163, 184, 0.55);') &&
+    vditorEditor.includes('.vditor-container .vditor-reset table.editor-deletable-table::after') &&
+    vditorEditor.includes('right: 0;\n  bottom: 9px;\n  width: 1px;') &&
+    vditorEditor.includes('background: rgba(148, 163, 184, 0.72);') &&
     vditorEditor.includes('width: max-content;') &&
     vditorEditor.includes('min-width: 100%;') &&
     vditorEditor.includes('.editor-table-expand-table {\n  width: max-content;\n  min-width: 0;') &&
+    vditorEditor.includes('table-layout: fixed;') &&
+    vditorEditor.includes('expandedTableColumnWidths') &&
+    vditorEditor.includes('calculateAdaptiveTableColumnWidths') &&
+    vditorEditor.includes('EXPANDED_TABLE_MIN_COLUMN_WIDTH = 48') &&
+    vditorEditor.includes('updateExpandedTableAvailableWidth()') &&
     vditorEditor.includes('min-width: 48px;') &&
     vditorEditor.includes('min-width: 44px;') &&
     !vditorEditor.includes('.vditor-container .vditor-reset table.editor-deletable-table tr {\n  display: table;') &&
@@ -656,6 +665,9 @@ assert(
     !vditorEditor.includes('normalizeEditableHtmlTable(table)\n    replaceTableBreakTextNodes(table)') &&
     markdownRenderer.includes('openRenderedTableExpand(table)') &&
     markdownRenderer.includes('initializeMediaViewer(renderedTableExpandBody.value)') &&
+    markdownRenderer.includes('applyAdaptiveRenderedTableColumns(clone, availableWidth)') &&
+    markdownRenderer.includes('adaptiveRenderedTableColumnWidths') &&
+    markdownRenderer.includes('.rendered-table-expanded-table {\n  width: max-content;\n  min-width: 0;') &&
     markdownRenderer.includes('.rendered-table-expanded-table .inline-image-thumb') &&
     markdownRenderer.includes('.rendered-table-expanded-table .inline-image-thumb img') &&
     markdownRenderer.includes('rendered-table-expand-dialog') &&

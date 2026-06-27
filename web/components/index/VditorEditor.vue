@@ -112,6 +112,13 @@
         </header>
         <div class="editor-table-expand-scroll">
           <table class="editor-table-expand-table">
+            <colgroup v-if="expandedTableColumnWidths.length">
+              <col
+                v-for="(width, columnIndex) in expandedTableColumnWidths"
+                :key="`expanded-column-${columnIndex}`"
+                :style="{ width: `${width}px` }"
+              />
+            </colgroup>
             <tbody>
               <tr v-for="(row, rowIndex) in expandedTableRows" :key="`expanded-row-${rowIndex}`">
                 <component
@@ -158,7 +165,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch, nextTick } from "vue";
+import { computed, ref, onMounted, onBeforeUnmount, watch, nextTick } from "vue";
 import { getFixedCoordinateScale, getFixedRect, positionFloatingMenu, scheduleFloatingMenuPosition } from '~/utils/floating-menu'
 import { captureVideoFirstFrameFromSource, ensureFancyboxVideoThumbnail, getVideoPlaybackFrameForSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
@@ -227,6 +234,7 @@ const tableExpandClosing = ref(false);
 const expandedTableRows = ref<string[][]>([]);
 const expandedTableEditable = ref(false);
 const expandedTableDirty = ref(false);
+const expandedTableAvailableWidth = ref(0);
 const TABLE_SIZE_LIMIT = 10
 const tableRows = ref(3);
 const tableCols = ref(3);
@@ -246,6 +254,39 @@ const ATTACHMENT_MARKER_GLOBAL_RE = /!?\[(图片附件|视频附件|音频附件
 const ADJACENT_ATTACHMENT_MARKER_RE = /(!?\[(?:图片附件|视频附件|音频附件)：[^\]]+\]\([^)\s]+\))(!?\[(?:图片附件|视频附件|音频附件)：[^\]]+\]\([^)\s]+\))/g
 const RAW_ATTACHMENT_ANCHOR_RE = /<a\b[^>]*(?:data-attachment-url|href)=["']([^"']+)["'][^>]*>\s*(图片附件|视频附件|音频附件)：([^<]+?)\s*<\/a>/gi
 const ATTACHMENT_ANCHOR_LABEL_RE = /^(图片附件|视频附件|音频附件)：(.+)$/
+const EXPANDED_TABLE_MIN_COLUMN_WIDTH = 48
+const EXPANDED_TABLE_CELL_HORIZONTAL_PADDING = 18
+
+const estimateTableLineWidth = (line: string) => {
+  const text = stripAttachmentMarkersFromEditorText(String(line || '').replace(/\r\n?/g, '\n')) || ' '
+  return Array.from(text).reduce((width, char) => {
+    if (/\s/.test(char)) return width + 4
+    if (/[^\x00-\xff]/.test(char)) return width + 14
+    return width + 7
+  }, EXPANDED_TABLE_CELL_HORIZONTAL_PADDING)
+}
+
+const calculateAdaptiveTableColumnWidths = (rows: string[][], availableWidth: number, minWidth = EXPANDED_TABLE_MIN_COLUMN_WIDTH) => {
+  const columnCount = rows.reduce((max, row) => Math.max(max, row.length), 0)
+  if (!columnCount) return [] as number[]
+  const safeAvailable = Math.max(minWidth * columnCount, Math.floor(availableWidth || 0))
+  const average = safeAvailable / columnCount
+  const natural = Array.from({ length: columnCount }, (_, columnIndex) => {
+    const maxLineWidth = rows.reduce((max, row) => {
+      const value = String(row[columnIndex] || '')
+      const lines = value.replace(/<br\s*\/?\s*>/gi, '\n').split('\n')
+      return Math.max(max, ...lines.map((line) => estimateTableLineWidth(line)))
+    }, minWidth)
+    return Math.max(minWidth, Math.ceil(maxLineWidth))
+  })
+  let widths = natural.map((width) => width <= average ? Math.max(minWidth, width) : width)
+  const total = widths.reduce((sum, width) => sum + width, 0)
+  if (total < safeAvailable) {
+    const extra = (safeAvailable - total) / columnCount
+    widths = widths.map((width) => Math.floor(width + extra))
+  }
+  return widths.map((width) => Math.max(minWidth, Math.ceil(width)))
+}
 
 const normalizeAttachmentInfo = (kindLabel: string, name: string, url: string): EditorAttachmentInfo | null => {
   const href = String(url || '').trim()
@@ -655,7 +696,7 @@ const setupAttachmentPreview = () => {
 
   const handleEditorTableTextKeydown = (event: KeyboardEvent, cell: HTMLTableCellElement) => {
     if (event.isComposing || editorTableCompositionActive || event.altKey || event.ctrlKey || event.metaKey) return false
-    if (event.key === ' ' || event.code === 'Space' || event.key === 'Process' || event.key === 'Unidentified') return false
+    if (event.key === 'Process' || event.key === 'Unidentified') return false
     if (event.key.length !== 1) return false
     event.preventDefault()
     event.stopPropagation()
@@ -1038,6 +1079,7 @@ const setupAttachmentPreview = () => {
   root.addEventListener('keydown', onPlainTextEnterKeydown, true)
   root.addEventListener('keydown', onAttachmentKeydown, true)
   window.addEventListener('resize', repositionVisibleTableDeleteButton)
+  window.addEventListener('resize', updateExpandedTableAvailableWidth)
   window.addEventListener('scroll', repositionVisibleTableDeleteButton, { passive: true, capture: true })
   attachmentPreviewCleanup = () => {
     previewObserver.disconnect()
@@ -1058,6 +1100,7 @@ const setupAttachmentPreview = () => {
     root.removeEventListener('keydown', onPlainTextEnterKeydown, true)
     root.removeEventListener('keydown', onAttachmentKeydown, true)
     window.removeEventListener('resize', repositionVisibleTableDeleteButton)
+    window.removeEventListener('resize', updateExpandedTableAvailableWidth)
     window.removeEventListener('scroll', repositionVisibleTableDeleteButton, true)
     hideTableDeleteButton()
     root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
@@ -1416,6 +1459,14 @@ const parseAttachmentMarkersFromText = (text: string) => {
 }
 
 const expandedTableCellEditorText = (rowIndex: number, cellIndex: number) => stripAttachmentMarkersFromEditorText(expandedTableRows.value[rowIndex]?.[cellIndex] || '')
+const expandedTableColumnWidths = computed(() => calculateAdaptiveTableColumnWidths(expandedTableRows.value, expandedTableAvailableWidth.value))
+
+const updateExpandedTableAvailableWidth = () => {
+  if (typeof window === 'undefined') return
+  const scroll = document.querySelector<HTMLElement>('.editor-table-expand-scroll')
+  const fallback = Math.min(1680, Math.max(320, window.innerWidth - 48)) - 24
+  expandedTableAvailableWidth.value = Math.max(160, Math.floor((scroll?.clientWidth || fallback) - 24))
+}
 
 const updateExpandedTableCellText = (rowIndex: number, cellIndex: number, event: Event) => {
   if (!expandedTableEditable.value) return
@@ -2025,7 +2076,10 @@ const openHoveredTableExpand = () => {
   tableExpandClosing.value = false
   showTableExpandDialog.value = true
   hideTableDeleteButton()
-  nextTick(() => document.querySelector<HTMLTextAreaElement>('.editor-table-expand-dialog textarea')?.focus())
+  nextTick(() => {
+    updateExpandedTableAvailableWidth()
+    document.querySelector<HTMLTextAreaElement>('.editor-table-expand-dialog textarea')?.focus()
+  })
 }
 
 const replaceTableBreakTextNodes = (table: HTMLTableElement) => {
@@ -3045,6 +3099,7 @@ html.dark .editor-attachment-preview__header,
 }
 
 .vditor-container .vditor-reset table.editor-deletable-table {
+  position: relative;
   box-sizing: border-box;
   display: block;
   width: max-content;
@@ -3053,10 +3108,26 @@ html.dark .editor-attachment-preview__header,
   overflow-x: auto;
   overflow-y: hidden;
   border-collapse: collapse;
+  border-left: 1px solid rgba(148, 163, 184, 0.55);
+  border-right: 1px solid rgba(148, 163, 184, 0.55);
+  outline: 1px solid rgba(148, 163, 184, 0.18);
+  outline-offset: -1px;
   background-clip: padding-box;
   box-shadow: inset 1px 0 0 rgba(148, 163, 184, 0.55), inset -1px 0 0 rgba(148, 163, 184, 0.55);
   scrollbar-width: thin;
   scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);
+}
+
+.vditor-container .vditor-reset table.editor-deletable-table::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 9px;
+  width: 1px;
+  z-index: 2;
+  pointer-events: none;
+  background: rgba(148, 163, 184, 0.72);
 }
 
 .vditor-container .vditor-reset table.editor-deletable-table::-webkit-scrollbar {
@@ -3136,7 +3207,14 @@ html.dark .vditor-reset {
 }
 
 html.dark .vditor-container .vditor-reset table.editor-deletable-table {
+  border-left-color: rgba(226, 232, 240, 0.22);
+  border-right-color: rgba(226, 232, 240, 0.22);
+  outline-color: rgba(226, 232, 240, 0.14);
   box-shadow: inset 1px 0 0 rgba(226, 232, 240, 0.22), inset -1px 0 0 rgba(226, 232, 240, 0.22);
+}
+
+html.dark .vditor-container .vditor-reset table.editor-deletable-table::after {
+  background: rgba(226, 232, 240, 0.34);
 }
 
 html.dark .vditor-reset table th,
@@ -3398,7 +3476,7 @@ html.dark .editor-table-expand-button:focus-visible {
   width: max-content;
   min-width: 0;
   border-collapse: collapse;
-  table-layout: auto;
+  table-layout: fixed;
 }
 
 .editor-table-expand-table th,

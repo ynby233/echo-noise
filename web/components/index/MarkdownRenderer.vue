@@ -473,11 +473,58 @@ const normalizeRenderedTableStructure = (table: HTMLTableElement) => {
   })
 }
 
+const estimateRenderedTableLineWidth = (line: string) => {
+  const text = String(line || '') || ' '
+  return Array.from(text).reduce((width, char) => {
+    if (/\s/.test(char)) return width + 4
+    if (/[^\x00-\xff]/.test(char)) return width + 14
+    return width + 7
+  }, 20)
+}
+
+const adaptiveRenderedTableColumnWidths = (table: HTMLTableElement, availableWidth: number, minWidth = 48) => {
+  const rows = Array.from(table.rows)
+  const columnCount = rows.reduce((max, row) => Math.max(max, row.cells.length), 0)
+  if (!columnCount) return [] as number[]
+  const safeAvailable = Math.max(minWidth * columnCount, Math.floor(availableWidth || 0))
+  const average = safeAvailable / columnCount
+  const natural = Array.from({ length: columnCount }, (_, columnIndex) => {
+    const maxLine = rows.reduce((max, row) => {
+      const cell = row.cells[columnIndex]
+      const text = String(cell?.textContent || '').replace(/\u00a0/g, ' ')
+      return Math.max(max, ...text.split('\n').map((line) => estimateRenderedTableLineWidth(line)))
+    }, minWidth)
+    return Math.max(minWidth, Math.ceil(maxLine))
+  })
+  let widths = natural.map((width) => width <= average ? Math.max(minWidth, width) : width)
+  const total = widths.reduce((sum, width) => sum + width, 0)
+  if (total < safeAvailable) {
+    const extra = (safeAvailable - total) / columnCount
+    widths = widths.map((width) => Math.floor(width + extra))
+  }
+  return widths.map((width) => Math.max(minWidth, Math.ceil(width)))
+}
+
+const applyAdaptiveRenderedTableColumns = (table: HTMLTableElement, availableWidth: number) => {
+  const widths = adaptiveRenderedTableColumnWidths(table, availableWidth)
+  if (!widths.length) return
+  table.querySelector('colgroup')?.remove()
+  const colgroup = document.createElement('colgroup')
+  widths.forEach((width) => {
+    const col = document.createElement('col')
+    col.style.width = `${width}px`
+    colgroup.appendChild(col)
+  })
+  table.insertBefore(colgroup, table.firstChild)
+}
+
 const openRenderedTableExpand = async (table: HTMLTableElement) => {
   if (!table) return
   const clone = table.cloneNode(true) as HTMLTableElement
   normalizeRenderedTableStructure(clone)
   clone.classList.add('noise-scrollable-table', 'rendered-table-expanded-table')
+  const availableWidth = Math.min(1680, Math.max(320, window.innerWidth - 48)) - 24
+  applyAdaptiveRenderedTableColumns(clone, availableWidth)
   clone.querySelectorAll('button:not(.noise-rendered-table-expand-button)').forEach((button) => button.remove())
   clone.querySelectorAll('.noise-rendered-table-expand-button').forEach((button) => button.remove())
   renderedTableExpandHtml.value = clone.outerHTML
@@ -1756,6 +1803,7 @@ watch(() => props.enableGithubCard, () => {
   padding-top: 10px;
   overflow-x: auto;
   overflow-y: hidden;
+  box-shadow: inset 1px 0 0 rgba(148, 163, 184, 0.42), inset -1px 0 0 rgba(148, 163, 184, 0.42);
   scrollbar-width: thin;
   scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);
 }
@@ -1952,9 +2000,10 @@ watch(() => props.enableGithubCard, () => {
 
 .rendered-table-expanded-table {
   width: max-content;
-  min-width: 100%;
+  min-width: 0;
   max-width: none;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 .rendered-table-expanded-table th,
