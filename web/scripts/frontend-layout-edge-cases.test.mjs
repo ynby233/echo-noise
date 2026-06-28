@@ -840,6 +840,11 @@ assert(
     vditorEditor.includes('TABLE_CELL_BREAK_RE') &&
     vditorEditor.includes('replaceTableBreakTextNodes(table)') &&
     vditorEditor.includes('.vditor-container .vditor-reset table.editor-deletable-table') &&
+    vditorEditor.includes('const tableRows = Array.from({ length: rowCount }') &&
+    !vditorEditor.includes('rowCount - 1') &&
+    !vditorEditor.includes('table-insert-btn') &&
+    !vditorEditor.includes('插入 {{ tableRows }}') &&
+    vditorEditor.includes("positionFloatingMenu(tableTrigger.value, tableMenuRef.value, tableMenuStyle, 272, 'above-align-left')") &&
     !vditorEditor.includes('box-shadow: inset 1px 0 0 rgba(148, 163, 184, 0.55), inset -1px 0 0 rgba(148, 163, 184, 0.55);') &&
     !vditorEditor.includes('outline: 1px solid rgba(148, 163, 184, 0.18);') &&
     !vditorEditor.includes('outline-color: rgba(226, 232, 240, 0.14);') &&

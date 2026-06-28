@@ -59,9 +59,6 @@
           @click="insertTable(cell.row, cell.col)"
         />
       </div>
-      <button type="button" class="floating-control-option nw-floating-option table-insert-btn" @click="insertTable(tableRows, tableCols)">
-        插入 {{ tableRows }} 行 {{ tableCols }} 列
-      </button>
     </div>
   </Teleport>
   <Teleport to="body">
@@ -1265,7 +1262,7 @@ const closeHeadingMenu = () => {
 }
 
 const positionTableMenu = () => {
-  positionFloatingMenu(tableTrigger.value, tableMenuRef.value, tableMenuStyle, 324, 'above-align-left')
+  positionFloatingMenu(tableTrigger.value, tableMenuRef.value, tableMenuStyle, 272, 'above-align-left')
 }
 
 const closeTableMenu = () => {
@@ -1285,11 +1282,10 @@ const previewTableSize = (rows: number, cols: number) => {
 const buildMarkdownTable = (rows: number, cols: number) => {
   const rowCount = clampTableSize(rows)
   const colCount = clampTableSize(cols)
-  const header = Array.from({ length: colCount }, () => MARKDOWN_EMPTY_TABLE_CELL)
+  const tableRows = Array.from({ length: rowCount }, () => Array.from({ length: colCount }, () => MARKDOWN_EMPTY_TABLE_CELL))
   const divider = Array.from({ length: colCount }, () => '---')
-  const bodyRows = Array.from({ length: Math.max(1, rowCount - 1) }, () => Array.from({ length: colCount }, () => MARKDOWN_EMPTY_TABLE_CELL))
   const formatRow = (cells: string[]) => `| ${cells.join(' | ')} |`
-  return `\n${[formatRow(header), formatRow(divider), ...bodyRows.map(formatRow)].join('\n')}\n`
+  return `\n${[formatRow(tableRows[0] || []), formatRow(divider), ...tableRows.slice(1).map(formatRow)].join('\n')}\n`
 }
 
 const insertTable = (rows: number, cols: number) => {
@@ -4126,11 +4122,11 @@ html.dark .vditor-hint {
   z-index: 5004 !important;
   box-sizing: border-box;
   display: grid !important;
-  gap: 10px !important;
+  gap: 8px !important;
   width: 324px !important;
   min-width: 324px !important;
   max-width: min(324px, calc(100vw - 16px)) !important;
-  padding: 12px 24px !important;
+  padding: 10px 24px 12px !important;
   border: 1px solid var(--nw-floating-border) !important;
   border-radius: 12px !important;
   background: var(--nw-floating-bg) !important;
@@ -4215,12 +4211,6 @@ html.dark .vditor-hint {
   flex: 0 0 24px;
   border-radius: 6px !important;
   padding: 0 !important;
-}
-
-.table-insert-btn {
-  width: 100% !important;
-  justify-content: center !important;
-  min-height: 32px !important;
 }
 
 .vditor-heading-floating-menu.vditor-hint,
