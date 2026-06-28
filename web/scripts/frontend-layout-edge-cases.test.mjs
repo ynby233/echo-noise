@@ -105,12 +105,18 @@ const sourceSlice = (source, start, end) => {
   return from >= 0 && to > from ? source.slice(from, to) : ''
 }
 const vditorSafeValueBody = sourceSlice(vditorEditor, 'const getSafeOutgoingEditorValue', 'const emitEditorValue')
+const vditorTableBeforeInputBody = sourceSlice(vditorEditor, 'const handleEditorTableBeforeInput', 'const onEditorInput')
 const vditorInputBody = sourceSlice(vditorEditor, 'const onEditorInput', 'const onEditorFocusOut')
+const vditorPlainEnterBody = sourceSlice(vditorEditor, 'const onPlainTextEnterKeydown', 'const onEditorBeforeInput')
+const vditorCompositionEndBody = sourceSlice(vditorEditor, 'const onEditorCompositionEnd', 'const refreshAttachmentLinks')
+const vditorApplyTableSourceBody = sourceSlice(vditorEditor, 'const applyEditorTableCellSourceValue', 'const editorTableContentTextFromElement')
 const addFormReadSafeContentBody = sourceSlice(addForm, 'const readSafeEditorContent', 'const syncContentFromEditor')
 const trustedTableSourceIndex = vditorSafeValueBody.indexOf('trustedSource')
 const liveDomFallbackIndex = vditorSafeValueBody.indexOf('getEditorDomContentFallback')
 const addFormEditorValueIndex = addFormReadSafeContentBody.indexOf('vditorEditor.value?.getValue?.()')
 const addFormDomTableFallbackIndex = addFormReadSafeContentBody.indexOf('readEditorDomTableSafeContent()')
+const tableSourceSetValueIndex = vditorApplyTableSourceBody.indexOf('vditorInstance.setValue(result.value)')
+const tableSourceRestoreCellIndex = vditorApplyTableSourceBody.indexOf('getEditorTableCellAtPosition(position)')
 
 assert(
   vditorEditor.includes('const commitEditorTableCellDomEdit = (cell: HTMLTableCellElement, options: { emit?: boolean } = {}) => {') &&
@@ -119,6 +125,47 @@ assert(
     trustedTableSourceIndex >= 0 &&
     liveDomFallbackIndex > trustedTableSourceIndex,
   'editor table IME sync must not emit transient composition DOM or let live DOM fallback override trusted table source'
+)
+
+assert(
+  vditorEditor.includes("const getEditorTableCellAtPosition = (position: Pick<PendingEditorTableCellSync, 'tableIndex' | 'rowIndex' | 'cellIndex'> | null) => {") &&
+    vditorApplyTableSourceBody.includes('options: { restoreCaret?: boolean } = {}') &&
+    tableSourceSetValueIndex >= 0 &&
+    tableSourceRestoreCellIndex > tableSourceSetValueIndex &&
+    vditorCompositionEndBody.includes('const sourcePosition = getEditorTableCellPosition(cell)') &&
+    vditorCompositionEndBody.includes('syncEditorTableCellDomToSource(cell, { restoreCaret: true })') &&
+    vditorCompositionEndBody.includes('getEditorTableCellAtPosition(sourcePosition)') &&
+    !vditorCompositionEndBody.includes('getEditorTableCellAtPosition(sourcePosition) || cell'),
+  'editor table IME compositionend must restore the caret into the rebuilt table cell after source setValue'
+)
+
+assert(
+  vditorTableBeforeInputBody.includes("const isLineBreakInput = inputType === 'insertLineBreak' || inputType === 'insertParagraph'") &&
+    vditorTableBeforeInputBody.includes('inputEvent.isComposing && !isLineBreakInput') &&
+    vditorTableBeforeInputBody.includes('editorTableCompositionCommittedCandidate || editorTableCompositionCandidateSelectedBySpace') &&
+    vditorTableBeforeInputBody.includes('editorTableCompositionActive && isLineBreakInput && hasCompositionLineBreakIntent') &&
+    vditorPlainEnterBody.includes('!editorTableCompositionActive') &&
+    vditorPlainEnterBody.includes("event.code === 'Enter' || event.code === 'NumpadEnter'") &&
+    vditorPlainEnterBody.includes("event.key === ' ' || event.code === 'Space'") &&
+    vditorPlainEnterBody.includes('editorTableCompositionActive && hasCompositionLineBreakIntent && rememberEditorTableCompositionLineBreak(cell)') &&
+    !vditorPlainEnterBody.includes('!event.isComposing') &&
+    vditorCompositionEndBody.includes('applyEditorTableCompositionLineBreak(caretCell)') &&
+    vditorCompositionEndBody.includes('stopEditorTableNativeEvent(event)') &&
+    vditorCompositionEndBody.includes('clearVditorCompositionLock()') &&
+    vditorPlainEnterBody.includes('stopEditorTableNativeEvent(event)') &&
+    vditorEditor.includes('const stopEditorTableNativeEvent = (event: Event) => {') &&
+    vditorEditor.includes('const clearVditorCompositionLock = () => {') &&
+    vditorEditor.includes("document.addEventListener('keydown', onPlainTextEnterKeydown, true)") &&
+    vditorEditor.includes("document.removeEventListener('keydown', onPlainTextEnterKeydown, true)") &&
+    vditorEditor.includes("root.addEventListener('compositionupdate', onEditorCompositionUpdate, true)") &&
+    vditorEditor.includes('let editorTableCompositionCandidateSelectedBySpace = false') &&
+    vditorEditor.includes("document.addEventListener('beforeinput', onEditorBeforeInput, true)") &&
+    vditorEditor.includes("document.removeEventListener('beforeinput', onEditorBeforeInput, true)") &&
+    vditorEditor.includes('let editorTableCompositionLineBreakTarget: EditorTableCellPosition | null = null') &&
+    !vditorEditor.includes('repairEditorTableImeFirstColumn') &&
+    !vditorEditor.includes('editorTableImeMultilineTarget') &&
+    !vditorEditor.includes('scheduleRepairEditorTableImeFirstColumnRuns'),
+  'editor table Enter handling must accept stale Windows IME isComposing flags after compositionend'
 )
 
 assert(
