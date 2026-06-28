@@ -2079,8 +2079,12 @@ const isEditorTableBreakCodeMarker = (node: HTMLElement) => {
 }
 
 const normalizeEditorTableBreakCodeMarkers = (cell: HTMLTableCellElement) => {
+  const replacements: HTMLElement[] = []
   cell.querySelectorAll<HTMLElement>('[data-type="html-inline"], .vditor-ir__node').forEach((node) => {
-    if (isEditorTableBreakCodeMarker(node)) node.classList.add('editor-table-line-break-marker')
+    if (isEditorTableBreakCodeMarker(node)) replacements.push(node)
+  })
+  replacements.forEach((node) => {
+    node.replaceWith(document.createElement('br'))
   })
 }
 
@@ -2546,6 +2550,7 @@ const openHoveredTableExpand = () => {
 
 const replaceTableBreakTextNodes = (table: HTMLTableElement) => {
   table.querySelectorAll('td,th').forEach((cell) => {
+    normalizeEditorTableBreakCodeMarkers(cell as HTMLTableCellElement)
     const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, {
       acceptNode(node) {
         return /<br\s*\/?\s*>/i.test(node.textContent || '') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
@@ -3709,18 +3714,6 @@ html.dark .editor-attachment-preview__header,
   border: 1px solid rgba(148, 163, 184, 0.55);
   background: rgba(255, 255, 255, 0.95);
   color: #111827;
-}
-
-.vditor-reset table td .editor-table-line-break-marker,
-.vditor-reset table th .editor-table-line-break-marker {
-  display: block !important;
-  min-height: 1em !important;
-  line-height: inherit !important;
-}
-
-.vditor-reset table td .editor-table-line-break-marker .vditor-ir__marker,
-.vditor-reset table th .editor-table-line-break-marker .vditor-ir__marker {
-  display: none !important;
 }
 
 .vditor-reset table th {

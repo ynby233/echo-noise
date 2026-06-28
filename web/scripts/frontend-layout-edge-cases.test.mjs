@@ -750,8 +750,9 @@ assert(
     vditorEditor.includes('const hasEditorTableBreakCodeMarker = (cell: HTMLTableCellElement) =>') &&
     vditorEditor.includes('const normalizeEditorTableBreakCodeMarkers = (cell: HTMLTableCellElement) =>') &&
     vditorEditor.includes('^<code\\b[^>]*>\\s*<br\\s*\\/?\\s*>\\s*<\\/code>$') &&
-    vditorEditor.includes('node.classList.add(\'editor-table-line-break-marker\')') &&
-    vditorEditor.includes('.editor-table-line-break-marker .vditor-ir__marker') &&
+    vditorEditor.includes("node.replaceWith(document.createElement('br'))") &&
+    vditorEditor.includes('normalizeEditorTableBreakCodeMarkers(cell as HTMLTableCellElement)') &&
+    !vditorEditor.includes('editor-table-line-break-marker') &&
     vditorEditor.includes('clone.querySelectorAll<HTMLElement>(\'[data-type="html-inline"], .vditor-ir__node\')') &&
     vditorEditor.includes('setEditorTableDomCellText(cell, expectedText, needsCaretAnchor)') &&
     vditorEditor.includes('scheduleStabilizePendingEditorTableCellDom()') &&
