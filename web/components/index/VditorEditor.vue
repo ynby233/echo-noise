@@ -213,6 +213,8 @@ let tableExpandCloseTimer: number | null = null;
 let editorTableDomStabilizeTimer: number | null = null;
 let pendingEditorTableCellSync: PendingEditorTableCellSync | null = null;
 let editorTableCompositionActive = false;
+let editorTableCompositionTarget: PendingEditorTableCellSync | null = null;
+let editorTableCompositionSnapshot: string[][] | null = null;
 const editorTableScrollPositions = new Map<string, number>();
 const TABLE_DELETE_BUTTON_SIZE = 10;
 const TABLE_EXPAND_BUTTON_SIZE = TABLE_DELETE_BUTTON_SIZE;
@@ -733,14 +735,25 @@ const setupAttachmentPreview = () => {
     window.setTimeout(() => flushPendingEditorTableCellSourceSyncIfMoved(getCurrentEditorTableCell()), 0)
   }
 
-  const onEditorCompositionStart = () => {
+  const onEditorCompositionStart = (event: CompositionEvent) => {
     editorTableCompositionActive = true
+    rememberEditorTableCompositionCell(getCurrentEditorTableCell(event))
   }
 
   const onEditorCompositionEnd = (event: CompositionEvent) => {
     editorTableCompositionActive = false
-    const cell = getCurrentEditorTableCell(event)
-    if (cell) commitEditorTableCellDomEdit(cell)
+    const rememberedCell = editorTableCompositionTarget
+      ? (getEditorTables()[editorTableCompositionTarget.tableIndex]?.rows[editorTableCompositionTarget.rowIndex]?.cells[editorTableCompositionTarget.cellIndex] as HTMLTableCellElement | undefined) || null
+      : null
+    const cell = rememberedCell || getCurrentEditorTableCell(event) || getPendingEditorTableCell()
+    if (cell) {
+      cleanupEditorTableCompositionDrift(event.data || '')
+      commitEditorTableCellDomEdit(cell)
+      syncEditorTableCellDomToSource(cell)
+      placeCaretAtEndOfEditorTableCell(cell)
+    }
+    editorTableCompositionTarget = null
+    editorTableCompositionSnapshot = null
   }
 
   const refreshAttachmentLinks = () => {
@@ -954,13 +967,10 @@ const setupAttachmentPreview = () => {
     selection.addRange(range)
   }
 
-  const emitEditorSoftBreakInput = (event: Event) => {
-    const target = getEventElement(event)
-    const editable = target?.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset') as HTMLElement | null
-    editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '\n' }))
+  const emitEditorSoftBreakInput = (_event: Event) => {
     scheduleRefreshAttachmentLinks()
     window.setTimeout(() => {
-      if (vditorInstance?.getValue) emitEditorValue()
+      if (vditorInstance?.getValue) emitEditorValue(getEditorDomContentFallback() || vditorInstance.getValue())
     }, 0)
   }
 
@@ -969,27 +979,19 @@ const setupAttachmentPreview = () => {
     event.stopPropagation()
     ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
     moveCaretAfterAtomicAttachment()
-    let inserted = false
-    try {
-      inserted = document.execCommand('insertText', false, '\n')
-    } catch {
-      inserted = false
-    }
-    if (!inserted) {
-      const selection = window.getSelection()
-      if (selection?.rangeCount) {
-        const range = selection.getRangeAt(0)
-        range.deleteContents()
-        const lineBreak = document.createTextNode('\n')
-        range.insertNode(lineBreak)
-        range.setStartAfter(lineBreak)
-        range.collapse(true)
-        selection.removeAllRanges()
-        selection.addRange(range)
-        inserted = true
-      }
-    }
-    if (!inserted) return
+    const selection = window.getSelection()
+    if (!selection?.rangeCount) return
+    const range = selection.getRangeAt(0)
+    range.deleteContents()
+    const lineBreak = document.createElement('br')
+    const caretNode = document.createTextNode(TABLE_CELL_CARET_ANCHOR)
+    range.insertNode(lineBreak)
+    lineBreak.after(caretNode)
+    range.setStart(caretNode, caretNode.data.length)
+    range.collapse(true)
+    selection.removeAllRanges()
+    selection.addRange(range)
+    lastEditorSelectionRange = range.cloneRange()
     emitEditorSoftBreakInput(event)
   }
 
@@ -2028,6 +2030,11 @@ const getEditorDomContentFallback = () => {
   return text
 }
 
+const hasEditorSoftBreakDom = () => {
+  const editable = getEditorEditableElement()
+  return !!editable?.querySelector('br')
+}
+
 const getEditorVisibleDomTableSafeValue = () => {
   const fallbackValue = getEditorTables().length ? getEditorDomContentFallback() : ''
   return fallbackValue || getEditorValueWithPendingTableSync()
@@ -2035,7 +2042,7 @@ const getEditorVisibleDomTableSafeValue = () => {
 
 const getSafeOutgoingEditorValue = (sourceValue?: string) => {
   const source = typeof sourceValue === 'string' ? sourceValue : (vditorInstance?.getValue?.() || '')
-  const fallbackValue = getEditorTables().length ? getEditorDomContentFallback() : ''
+  const fallbackValue = (getEditorTables().length || hasEditorSoftBreakDom()) ? getEditorDomContentFallback() : ''
   if (fallbackValue) return fallbackValue
   const syncedValue = getEditorValueWithDomTableSync(source)
   const repairedValue = ensureSafeEditorTableMarkdown(syncedValue || source)
@@ -2229,6 +2236,58 @@ const normalizeExpandedTableRows = (rows: string[][]) => {
 const setEditorTableDomCellText = (cell: HTMLTableCellElement, value: string, withCaretAnchor = false) => {
   cell.innerHTML = editorTextToHtmlTableCellSource(value)
   if (withCaretAnchor) cell.appendChild(document.createTextNode(TABLE_CELL_CARET_ANCHOR))
+}
+
+const getEditorTableTextMatrix = (table: HTMLTableElement | null) => table
+  ? Array.from(table.rows).map((row) => Array.from(row.cells).map((cell) => editorTableCellTextFromDom(cell as HTMLTableCellElement)))
+  : []
+
+const rememberEditorTableCompositionCell = (cell: HTMLTableCellElement | null) => {
+  const position = getEditorTableCellPosition(cell)
+  if (!position) {
+    editorTableCompositionTarget = null
+    editorTableCompositionSnapshot = null
+    return
+  }
+  const table = getEditorTables()[position.tableIndex]
+  editorTableCompositionTarget = position
+  editorTableCompositionSnapshot = getEditorTableTextMatrix(table || null)
+  storeLastEditorTableCell(cell)
+}
+
+const isEmptyEditorTableText = (text: string) => !String(text || '').replace(/[\u200b\u200c\ufeff\s]/g, '')
+
+const cleanupEditorTableCompositionDrift = (data = '') => {
+  const targetInfo = editorTableCompositionTarget
+  if (!targetInfo) return false
+  const table = getEditorTables()[targetInfo.tableIndex]
+  const target = table?.rows[targetInfo.rowIndex]?.cells[targetInfo.cellIndex] as HTMLTableCellElement | undefined
+  if (!table || !target) return false
+  const targetText = editorTableCellTextFromDom(target)
+  const normalizedData = String(data || '').trim()
+  const targetLines = targetText.split('\n').map((line) => line.trim()).filter(Boolean)
+  let changed = false
+  Array.from(table.rows).forEach((row, rowIndex) => {
+    Array.from(row.cells).forEach((rawCell, cellIndex) => {
+      const cell = rawCell as HTMLTableCellElement
+      if (rowIndex === targetInfo.rowIndex && cellIndex === targetInfo.cellIndex) return
+      const before = editorTableCompositionSnapshot?.[rowIndex]?.[cellIndex] ?? ''
+      const after = editorTableCellTextFromDom(cell)
+      const afterTrimmed = after.trim()
+      if (!isEmptyEditorTableText(before) || isEmptyEditorTableText(after) || after === before) return
+      const duplicatedCurrentComposition = !!normalizedData && afterTrimmed === normalizedData && targetText.includes(normalizedData)
+      const duplicatedTargetLine = targetLines.includes(afterTrimmed)
+      if (!duplicatedCurrentComposition && !duplicatedTargetLine) return
+      setEditorTableDomCellText(cell, before)
+      changed = true
+    })
+  })
+  if (changed) {
+    markEditorTableCellSourceDirty(target)
+    scheduleStabilizePendingEditorTableCellDom()
+    emitEditorValue()
+  }
+  return changed
 }
 
 const dispatchEditorTableDomInput = (table: HTMLTableElement) => {

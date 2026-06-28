@@ -616,6 +616,14 @@ assert(
     !vditorEditor.includes("event.key === 'Process' || event.key === 'Unidentified'") &&
     vditorEditor.includes("root.addEventListener('compositionstart', onEditorCompositionStart, true)") &&
     vditorEditor.includes("root.removeEventListener('compositionend', onEditorCompositionEnd, true)") &&
+    vditorEditor.includes('let editorTableCompositionTarget: PendingEditorTableCellSync | null = null') &&
+    vditorEditor.includes('const rememberEditorTableCompositionCell = (cell: HTMLTableCellElement | null) =>') &&
+    vditorEditor.includes('const cleanupEditorTableCompositionDrift = (data = \'\') =>') &&
+    vditorEditor.includes('rememberEditorTableCompositionCell(getCurrentEditorTableCell(event))') &&
+    vditorEditor.includes('cleanupEditorTableCompositionDrift(event.data || \'\')') &&
+    vditorEditor.includes('syncEditorTableCellDomToSource(cell)') &&
+    vditorEditor.includes('const duplicatedTargetLine = targetLines.includes(afterTrimmed)') &&
+    vditorEditor.includes('setEditorTableDomCellText(cell, before)') &&
     vditorEditor.includes('renderAttachmentMarkersInEditableRoot(cell)') &&
     vditorEditor.includes("root.querySelectorAll<HTMLElement>('td,th').forEach((cell) => renderAttachmentMarkersInEditableRoot(cell))") &&
     vditorEditor.includes('createEditorAttachmentAnchor(info)') &&
@@ -741,6 +749,11 @@ assert(
     !vditorEditor.includes('scheduleEditorTableCellSourceSync') &&
     !vditorEditor.includes('focusEditorTableCellAt') &&
     !vditorEditor.includes('if (!applyEditorTableCellSourceValue(cell, editorTableCellTextFromDom(cell))) return false') &&
+    !/const insertEditorSoftLineBreak[\s\S]*?document\.execCommand[\s\S]*?emitEditorSoftBreakInput/.test(vditorEditor) &&
+    !vditorEditor.includes("editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '\\n' }))") &&
+    vditorEditor.includes('const hasEditorSoftBreakDom = () =>') &&
+    vditorEditor.includes('(getEditorTables().length || hasEditorSoftBreakDom()) ? getEditorDomContentFallback() : \'\'') &&
+    /const insertEditorSoftLineBreak[\s\S]*?const lineBreak = document\.createElement\('br'\)[\s\S]*?const caretNode = document\.createTextNode\(TABLE_CELL_CARET_ANCHOR\)[\s\S]*?emitEditorSoftBreakInput\(event\)/.test(vditorEditor) &&
     vditorEditor.includes('range.selectNodeContents(cell)') &&
     vditorEditor.includes("const lineBreak = document.createElement('br')") &&
     vditorEditor.includes("const caretNode = document.createTextNode(TABLE_CELL_CARET_ANCHOR)") &&
