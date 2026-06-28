@@ -522,12 +522,12 @@ const readEditorDomTableSafeContent = () => {
 }
 
 const readSafeEditorContent = () => {
-  const domTableContent = readEditorDomTableSafeContent()
-  if (domTableContent) return domTableContent
   try {
     const val = vditorEditor.value?.getValue?.()
     if (typeof val === 'string') return val
   } catch {}
+  const domTableContent = readEditorDomTableSafeContent()
+  if (domTableContent) return domTableContent
   return MessageContent.value || ''
 }
 

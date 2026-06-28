@@ -673,12 +673,13 @@ const setupAttachmentPreview = () => {
     scheduleCollapseIrAttachmentChrome()
   }
 
-  const commitEditorTableCellDomEdit = (cell: HTMLTableCellElement) => {
+  const commitEditorTableCellDomEdit = (cell: HTMLTableCellElement, options: { emit?: boolean } = {}) => {
     renderAttachmentMarkersInEditableRoot(cell)
     markEditorTableCellSourceDirty(cell)
     captureEditorSelection()
     scheduleStabilizePendingEditorTableCellDom()
     scheduleRefreshAttachmentLinks()
+    if (options.emit === false) return
     const emitSafeValue = () => emitEditorValue()
     emitSafeValue()
     window.setTimeout(emitSafeValue, 0)
@@ -714,7 +715,7 @@ const setupAttachmentPreview = () => {
     if (cell) {
       event.stopPropagation()
       ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
-      commitEditorTableCellDomEdit(cell)
+      commitEditorTableCellDomEdit(cell, { emit: !editorTableCompositionActive })
       return
     }
     flushPendingEditorTableCellSourceSyncIfMoved(cell)
@@ -2042,6 +2043,10 @@ const getEditorVisibleDomTableSafeValue = () => {
 
 const getSafeOutgoingEditorValue = (sourceValue?: string) => {
   const source = typeof sourceValue === 'string' ? sourceValue : (vditorInstance?.getValue?.() || '')
+  if (typeof sourceValue === 'string') {
+    const trustedSource = ensureSafeEditorTableMarkdown(source)
+    if (!hasUnsafeMarkdownTableStructure(trustedSource)) return trustedSource
+  }
   const fallbackValue = (getEditorTables().length || hasEditorSoftBreakDom()) ? getEditorDomContentFallback() : ''
   if (fallbackValue) return fallbackValue
   const syncedValue = getEditorValueWithDomTableSync(source)

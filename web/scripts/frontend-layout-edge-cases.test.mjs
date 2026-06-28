@@ -99,6 +99,34 @@ assert(
   'markdown table repair must not merge Chinese multiline cell text into the first column when the next line is already a complete row'
 )
 
+const sourceSlice = (source, start, end) => {
+  const from = source.indexOf(start)
+  const to = source.indexOf(end, from)
+  return from >= 0 && to > from ? source.slice(from, to) : ''
+}
+const vditorSafeValueBody = sourceSlice(vditorEditor, 'const getSafeOutgoingEditorValue', 'const emitEditorValue')
+const vditorInputBody = sourceSlice(vditorEditor, 'const onEditorInput', 'const onEditorFocusOut')
+const addFormReadSafeContentBody = sourceSlice(addForm, 'const readSafeEditorContent', 'const syncContentFromEditor')
+const trustedTableSourceIndex = vditorSafeValueBody.indexOf('trustedSource')
+const liveDomFallbackIndex = vditorSafeValueBody.indexOf('getEditorDomContentFallback')
+const addFormEditorValueIndex = addFormReadSafeContentBody.indexOf('vditorEditor.value?.getValue?.()')
+const addFormDomTableFallbackIndex = addFormReadSafeContentBody.indexOf('readEditorDomTableSafeContent()')
+
+assert(
+  vditorEditor.includes('const commitEditorTableCellDomEdit = (cell: HTMLTableCellElement, options: { emit?: boolean } = {}) => {') &&
+    vditorEditor.includes('if (options.emit === false) return') &&
+    vditorInputBody.includes('commitEditorTableCellDomEdit(cell, { emit: !editorTableCompositionActive })') &&
+    trustedTableSourceIndex >= 0 &&
+    liveDomFallbackIndex > trustedTableSourceIndex,
+  'editor table IME sync must not emit transient composition DOM or let live DOM fallback override trusted table source'
+)
+
+assert(
+  addFormEditorValueIndex >= 0 &&
+    addFormDomTableFallbackIndex > addFormEditorValueIndex,
+  'publish and draft sync must read the editor safe value before falling back to live table DOM'
+)
+
 assert(
   addForm.includes('.editor-toolbar') &&
     addForm.includes('position: relative;') &&
@@ -703,7 +731,7 @@ assert(
     addForm.includes('serializeAddFormTableDomAsMarkdown(node as HTMLTableElement)') &&
     addForm.includes("replace(/\\|/g, '&#124;')") &&
     addForm.indexOf('const domTableContent = readEditorDomTableSafeContent()') >= 0 &&
-    addForm.indexOf('const domTableContent = readEditorDomTableSafeContent()') < addForm.indexOf('const val = vditorEditor.value?.getValue?.()') &&
+    addForm.indexOf('const val = vditorEditor.value?.getValue?.()') < addForm.indexOf('const domTableContent = readEditorDomTableSafeContent()') &&
     vditorEditor.includes('const getSafeOutgoingEditorValue = (sourceValue?: string) =>') &&
     vditorEditor.includes('return repairedValue || syncedValue || source') &&
     vditorEditor.includes('const collapseMarkdownTableRowCells = (cells: string[], expected: number) =>') &&
