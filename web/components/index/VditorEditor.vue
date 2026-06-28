@@ -224,7 +224,7 @@ const TABLE_CELL_BREAK_TEXT_RE = /^<br\s*\/?\s*>$/i;
 const TABLE_CELL_CARET_ANCHOR = '\u200b';
 const TABLE_CELL_CARET_ANCHOR_RE = /\u200b/g;
 const EDITOR_TABLE_COMMITTED_COMPOSITION_RE = /[\u3400-\u9fff\uf900-\ufaff]/;
-const MARKDOWN_EMPTY_TABLE_CELL = '&nbsp;';
+const MARKDOWN_EMPTY_TABLE_CELL = '';
 const MARKDOWN_EMPTY_TABLE_CELL_RE = /^(?:&nbsp;|&#160;|&#xA0;|\u00a0)$/i;
 const isReady = ref(false);
 const showHeadingMenu = ref(false);
@@ -1700,6 +1700,25 @@ const collapseMarkdownTableRowCells = (cells: string[], expected: number) => {
 const editableCellsFromPossiblyBrokenMarkdownTableRow = (line: string, expected: number) =>
   collapseMarkdownTableRowCells(splitMarkdownTableRowCells(line), expected).map((cell) => tableCellSourceToEditorText(cell))
 
+const normalizeMarkdownTableEmptyCellEntities = (content: string) => {
+  const lines = String(content || '').split('\n')
+  const blocks = getMarkdownTableBlocks(content)
+  if (!blocks.length) return content || ''
+  const replacements = blocks
+    .map((block) => {
+      const rows = editableRowsFromMarkdownBlock(block)
+      if (!rows.length) return null
+      const nextLines = serializeEditableMarkdownTableBlock(block, rows)
+      return { start: block.start, end: block.end, lines: nextLines }
+    })
+    .filter((replacement): replacement is { start: number; end: number; lines: string[] } => !!replacement)
+    .sort((left, right) => right.start - left.start)
+  replacements.forEach((replacement) => {
+    lines.splice(replacement.start, replacement.end - replacement.start, ...replacement.lines)
+  })
+  return lines.join('\n')
+}
+
 const looksLikeMarkdownTableRowFragment = (line: string) => {
   const trimmed = String(line || '').trim()
   if (!trimmed || isMarkdownTableDivider(trimmed)) return false
@@ -1769,7 +1788,7 @@ const repairUnsafeMarkdownTableCellBreaks = (content: string) => {
   return output.join('\n')
 }
 
-const ensureSafeEditorTableMarkdown = (content: string) => repairUnsafeMarkdownTableCellBreaks(content)
+const ensureSafeEditorTableMarkdown = (content: string) => normalizeMarkdownTableEmptyCellEntities(repairUnsafeMarkdownTableCellBreaks(content))
 
 const normalizeTableMatchText = (text: string) => {
   ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
@@ -2818,7 +2837,7 @@ onMounted(async () => {
       hljs: { style: props.theme === 'dark' ? 'native' : 'github' }
     },
     after: () => {
-      vditorInstance?.setValue(props.modelValue);
+      vditorInstance?.setValue(ensureSafeEditorTableMarkdown(props.modelValue));
       vditorInstance?.setTheme(props.theme === 'dark' ? 'dark' : 'classic');
       isReady.value = true;
       emit("ready");
@@ -3265,11 +3284,12 @@ defineExpose({
   },
   setValue: (val: string) => {
     pendingEditorTableCellSync = null
+    const safeValue = ensureSafeEditorTableMarkdown(val)
     if (vditorInstance) {
-      vditorInstance.setValue(val)
+      vditorInstance.setValue(safeValue)
       emitEditorValue()
     } else {
-      emit("update:modelValue", val || '')
+      emit("update:modelValue", safeValue || '')
     }
   }
 });

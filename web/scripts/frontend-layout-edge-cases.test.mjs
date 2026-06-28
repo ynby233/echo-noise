@@ -573,14 +573,14 @@ assert(
     vditorEditor.includes('width: min(300px, 100%);') &&
     vditorEditor.includes('TABLE_SIZE_LIMIT = 10') &&
     vditorEditor.includes('Array.from({ length: TABLE_SIZE_LIMIT * TABLE_SIZE_LIMIT }') &&
-    vditorEditor.includes("positionFloatingMenu(tableTrigger.value, tableMenuRef.value, tableMenuStyle, 324, 'above-align-left')") &&
+    vditorEditor.includes("positionFloatingMenu(tableTrigger.value, tableMenuRef.value, tableMenuStyle, 272, 'above-align-left')") &&
     vditorEditor.includes('width: 324px !important;') &&
     vditorEditor.includes('min-width: 324px !important;') &&
     vditorEditor.includes('grid-template-columns: repeat(10, 24px);') &&
     vditorEditor.includes('width: 24px !important;') &&
     !vditorEditor.includes('.vditor-reset table th {\n  background:') &&
     !vditorEditor.includes('html.dark .vditor-reset table th { background:') &&
-    vditorEditor.includes('Array.from({ length: colCount }, () => MARKDOWN_EMPTY_TABLE_CELL)') &&
+    vditorEditor.includes('const tableRows = Array.from({ length: rowCount }') &&
     !vditorEditor.includes('`列 ${index + 1}`') &&
     vditorEditor.includes('getCurrentEditorTableCell') &&
     vditorEditor.includes('normalizeTableCellInsertion') &&
@@ -763,9 +763,12 @@ assert(
     vditorEditor.includes('const pendingCell = getPendingEditorTableCell()') &&
     vditorEditor.includes('const fallbackCell = lastCell || (pendingCell && getEditorEditableFromNode(pendingCell) === currentEditable ? pendingCell : null)') &&
     vditorEditor.includes('if (!fallbackCell || getEditorEditableFromNode(fallbackCell) !== currentEditable) return null') &&
-    vditorEditor.includes("const MARKDOWN_EMPTY_TABLE_CELL = '&nbsp;'") &&
+    vditorEditor.includes("const MARKDOWN_EMPTY_TABLE_CELL = ''") &&
     vditorEditor.includes('MARKDOWN_EMPTY_TABLE_CELL_RE') &&
     vditorEditor.includes('return normalized || MARKDOWN_EMPTY_TABLE_CELL') &&
+    vditorEditor.includes('const normalizeMarkdownTableEmptyCellEntities = (content: string) =>') &&
+    vditorEditor.includes('const ensureSafeEditorTableMarkdown = (content: string) => normalizeMarkdownTableEmptyCellEntities(repairUnsafeMarkdownTableCellBreaks(content))') &&
+    vditorEditor.includes('vditorInstance?.setValue(ensureSafeEditorTableMarkdown(props.modelValue))') &&
     vditorEditor.includes("replace(/\\|/g, () => '&#124;')") &&
     vditorEditor.includes('decodeMarkdownTablePipeEntities') &&
     vditorEditor.includes('const getEditorRootElement = () =>') &&
@@ -789,7 +792,7 @@ assert(
     vditorEditor.includes('markdownTableRowCellCount(line) !== expected') &&
     vditorEditor.includes('if (hasUnsafeMarkdownTableStructure(syncedValue)) return fallbackValue || ensureSafeEditorTableMarkdown(syncedValue)') &&
     vditorEditor.includes('if (result?.value && !hasUnsafeMarkdownTableStructure(result.value)) return result.value') &&
-    vditorEditor.includes('Array.from({ length: colCount }, () => MARKDOWN_EMPTY_TABLE_CELL)') &&
+    vditorEditor.includes('const tableRows = Array.from({ length: rowCount }') &&
     vditorEditor.includes('MARKDOWN_EMPTY_TABLE_CELL_RE.test(text) ?') &&
     vditorEditor.includes('if (MARKDOWN_EMPTY_TABLE_CELL_RE.test(source)) return') &&
     !vditorEditor.includes('const hasVisibleContent = rows.some((row) => row.some((cell) => cell.trim()))') &&
