@@ -69,7 +69,7 @@
         <div v-for="(msg, idx) in displayMessages" :key="msg.id" class="w-full h-auto overflow-hidden flex flex-col justify-between">
 
           <div class="p-0">
-            <div :class="['content-container', innerContainerClass, listThemeClass]" :data-msg-id="msg.id">
+            <div :class="['content-container', innerContainerClass, listThemeClass, { 'is-dark': isContentDark }]" :data-msg-id="msg.id">
               <div class="flex items-center gap-2 mb-1 author-row">
                 <img :src="authorAvatar(msg)" alt="avatar" class="avatar-img w-9 h-9 rounded-full object-cover" @error="authorAvatarOnError($event, msg.username || '匿名')" @mouseenter="showAuthorCard($event, msg)" @mouseleave="hideAuthorCard" @click="toggleAuthorCard($event, msg)" />
                 <div v-if="openAuthorId === msg.id" class="noise-author-card bg-white text-black dark:bg-[var(--home-surface-dark-elevated)] dark:text-white" :style="openAuthorStyle">
@@ -3856,11 +3856,9 @@ onMounted(() => {
 :global(html:not(.dark)) .content-container :deep(.markdown-preview code) { opacity: 1 !important; }
 
 /* 确保所有模式下链接颜色都是蓝色 */
-:global(html:not(.dark)) .content-container :deep(.markdown-preview a:not(.noise-attachment-file)),
-:global(html.dark) .content-container :deep(.markdown-preview a:not(.noise-attachment-file)),
 .content-container :deep(.markdown-preview a:not(.noise-attachment-file)) {
-  color: #0366d6 !important; 
-  text-decoration: none !important; 
+  color: #0366d6 !important;
+  text-decoration: none !important;
   background-color: transparent !important;
   padding: 0 !important;
   border-radius: 0 !important;
@@ -3869,11 +3867,191 @@ onMounted(() => {
   opacity: 1 !important;
   font-weight: 500 !important;
 }
-:global(html:not(.dark)) .content-container :deep(.markdown-preview a:not(.noise-attachment-file):hover),
-:global(html.dark) .content-container :deep(.markdown-preview a:not(.noise-attachment-file):hover),
 .content-container :deep(.markdown-preview a:not(.noise-attachment-file):hover) {
-  color: #1d4ed8 !important; 
-  text-decoration: underline !important; 
+  color: #1d4ed8 !important;
+  text-decoration: underline !important;
+}
+
+.content-container :deep(.markdown-preview .noise-attachment-file) {
+  --file-card-bg: rgba(248, 250, 252, 0.72);
+  --file-card-bg-hover: rgba(248, 250, 252, 0.90);
+  --file-card-border: rgba(148, 163, 184, 0.24);
+  --file-card-border-hover: rgba(148, 163, 184, 0.40);
+  --file-card-icon-bg: rgba(241, 245, 249, 0.82);
+  --file-card-icon: rgba(71, 85, 105, 0.82);
+  --file-card-name: #0f172a;
+  --file-card-meta: #64748b;
+  --file-card-action: rgba(100, 116, 139, 0.66);
+  display: grid !important;
+  grid-template-columns: 52px minmax(0, 1fr) 28px !important;
+  align-items: center !important;
+  gap: 14px !important;
+  width: 100% !important;
+  min-height: 72px !important;
+  max-width: 100% !important;
+  margin: 10px 0 !important;
+  padding: 12px 14px !important;
+  border: 1px solid var(--file-card-border) !important;
+  border-radius: 8px !important;
+  background: var(--file-card-bg) !important;
+  color: inherit !important;
+  text-decoration: none !important;
+  box-shadow: none !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+}
+
+.content-container :deep(.markdown-preview .noise-attachment-file:hover),
+.content-container :deep(.markdown-preview .noise-attachment-file:focus-visible) {
+  border-color: var(--file-card-border-hover) !important;
+  background: var(--file-card-bg-hover) !important;
+  color: inherit !important;
+  text-decoration: none !important;
+  outline: none;
+}
+
+.content-container.is-dark :deep(.markdown-preview .noise-attachment-file) {
+  --file-card-bg: rgba(255, 255, 255, 0.055);
+  --file-card-bg-hover: rgba(255, 255, 255, 0.075);
+  --file-card-border: rgba(255, 255, 255, 0.12);
+  --file-card-border-hover: rgba(255, 255, 255, 0.18);
+  --file-card-icon-bg: rgba(255, 255, 255, 0.055);
+  --file-card-icon: rgba(226, 232, 240, 0.84);
+  --file-card-name: #f8fafc;
+  --file-card-meta: #94a3b8;
+  --file-card-action: rgba(203, 213, 225, 0.70);
+}
+
+.content-container :deep(.markdown-preview .noise-attachment-file__icon) {
+  position: relative;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 52px !important;
+  height: 52px !important;
+  border-radius: 8px !important;
+  background: var(--file-card-icon-bg) !important;
+  color: var(--file-card-icon) !important;
+  flex: 0 0 auto !important;
+}
+
+.content-container :deep(.markdown-preview .noise-attachment-file__icon)::before {
+  content: '';
+  display: block;
+  width: 18px;
+  height: 22px;
+  border: 1.7px solid currentColor;
+  border-radius: 3px;
+  box-sizing: border-box;
+}
+
+.content-container :deep(.markdown-preview .noise-attachment-file__icon)::after {
+  content: '';
+  position: absolute;
+  top: 14px;
+  right: 15px;
+  width: 7px;
+  height: 7px;
+  border-left: 1.7px solid currentColor;
+  border-bottom: 1.7px solid currentColor;
+  background: var(--file-card-icon-bg);
+  transform: rotate(-180deg);
+}
+
+.content-container :deep(.markdown-preview .noise-attachment-file__body) {
+  display: flex !important;
+  min-width: 0 !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  gap: 4px !important;
+}
+
+.content-container :deep(.markdown-preview .noise-attachment-file__name) {
+  display: block !important;
+  min-width: 0 !important;
+  color: var(--file-card-name) !important;
+  font-size: 15px !important;
+  font-weight: 500 !important;
+  line-height: 1.35 !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
+
+.content-container :deep(.markdown-preview .noise-attachment-file__meta) {
+  display: block !important;
+  color: var(--file-card-meta) !important;
+  font-size: 12px !important;
+  line-height: 1.25 !important;
+  text-transform: uppercase !important;
+}
+
+.content-container :deep(.markdown-preview .noise-attachment-file__action) {
+  position: relative;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 28px !important;
+  height: 28px !important;
+  color: var(--file-card-action) !important;
+  flex: 0 0 auto !important;
+}
+
+.content-container :deep(.markdown-preview .noise-attachment-file__action--download)::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-right: 1.8px solid currentColor;
+  border-bottom: 1.8px solid currentColor;
+  transform: translateY(-3px) rotate(45deg);
+  box-sizing: border-box;
+}
+
+.content-container :deep(.markdown-preview .noise-attachment-file__action--download)::after {
+  content: '';
+  position: absolute;
+  bottom: 5px;
+  left: 50%;
+  width: 16px;
+  height: 1.8px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: translateX(-50%);
+}
+
+.content-container :deep(.markdown-preview .noise-attachment-file__action--preview)::before {
+  content: '';
+  width: 19px;
+  height: 12px;
+  border: 1.8px solid currentColor;
+  border-radius: 999px / 70%;
+  box-sizing: border-box;
+}
+
+.content-container :deep(.markdown-preview .noise-attachment-file__action--preview)::after {
+  content: '';
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+@media (max-width: 520px) {
+  .content-container :deep(.markdown-preview .noise-attachment-file) {
+    grid-template-columns: 44px minmax(0, 1fr) 24px !important;
+    gap: 10px !important;
+    min-height: 64px !important;
+    padding: 10px !important;
+  }
+
+  .content-container :deep(.markdown-preview .noise-attachment-file__icon) {
+    width: 44px !important;
+    height: 44px !important;
+  }
+
+  .content-container :deep(.markdown-preview .noise-attachment-file__name) {
+    font-size: 14px !important;
+  }
 }
 
 /* 内容容器内的 GitHub 卡片主题（确保随页面切换） */

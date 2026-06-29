@@ -1262,7 +1262,8 @@ const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string) =>
       : `download="${safeName}"`
     const actionLabel = canPreview ? '打开附件' : '下载附件'
     const meta = escapeHtml(attachmentExtensionLabel(name, url))
-    return `<a class="noise-attachment-file" href="${safeUrl}" ${previewAttrs} aria-label="${actionLabel}：${safeName}"><span class="noise-attachment-file__icon" aria-hidden="true"></span><span class="noise-attachment-file__body"><span class="noise-attachment-file__name">${safeName}</span><span class="noise-attachment-file__meta">${meta}</span></span><span class="noise-attachment-file__action" aria-hidden="true"></span></a>`
+    const actionClass = canPreview ? 'noise-attachment-file__action--preview' : 'noise-attachment-file__action--download'
+    return `<a class="noise-attachment-file ${canPreview ? 'noise-attachment-file--preview' : 'noise-attachment-file--download'}" href="${safeUrl}" ${previewAttrs} aria-label="${actionLabel}：${safeName}"><span class="noise-attachment-file__icon" aria-hidden="true"></span><span class="noise-attachment-file__body"><span class="noise-attachment-file__name">${safeName}</span><span class="noise-attachment-file__meta">${meta}</span></span><span class="noise-attachment-file__action ${actionClass}" aria-hidden="true"></span></a>`
   }
   return `<audio class="noise-attachment-audio" src="${safeUrl}" controls preload="metadata"></audio>`
 }
@@ -2563,60 +2564,72 @@ body.is-resizing-rendered-table-column {
   margin: 0.35em 0;
 }
 
-.markdown-preview :deep(.noise-attachment-file),
+.markdown-preview .noise-attachment-file,
 .rendered-table-expand-scroll .noise-attachment-file {
-  display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) 28px;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  min-height: 72px;
-  max-width: 100%;
-  margin: 10px 0;
-  padding: 12px 14px;
-  border: 1px solid rgba(148, 163, 184, 0.20) !important;
+  --file-card-bg: rgba(248, 250, 252, 0.72);
+  --file-card-bg-hover: rgba(248, 250, 252, 0.90);
+  --file-card-border: rgba(148, 163, 184, 0.24);
+  --file-card-border-hover: rgba(148, 163, 184, 0.40);
+  --file-card-icon-bg: rgba(241, 245, 249, 0.82);
+  --file-card-icon: rgba(71, 85, 105, 0.82);
+  --file-card-name: #0f172a;
+  --file-card-meta: #64748b;
+  --file-card-action: rgba(100, 116, 139, 0.66);
+  display: grid !important;
+  grid-template-columns: 52px minmax(0, 1fr) 28px !important;
+  align-items: center !important;
+  gap: 14px !important;
+  width: 100% !important;
+  min-height: 72px !important;
+  max-width: 100% !important;
+  margin: 10px 0 !important;
+  padding: 12px 14px !important;
+  border: 1px solid var(--file-card-border) !important;
   border-radius: 8px !important;
-  background: rgba(248, 250, 252, 0.66) !important;
+  background: var(--file-card-bg) !important;
   color: inherit !important;
   text-decoration: none !important;
   box-shadow: none !important;
-  box-sizing: border-box;
-  transition: border-color .16s ease, background-color .16s ease, transform .16s ease;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+  cursor: pointer;
+  transition: border-color .16s ease, background-color .16s ease;
 }
 
-.markdown-preview :deep(.noise-attachment-file:hover),
-.markdown-preview :deep(.noise-attachment-file:focus-visible),
+.markdown-preview .noise-attachment-file:hover,
+.markdown-preview .noise-attachment-file:focus-visible,
 .rendered-table-expand-scroll .noise-attachment-file:hover,
 .rendered-table-expand-scroll .noise-attachment-file:focus-visible {
-  border-color: rgba(148, 163, 184, 0.34) !important;
-  background: rgba(248, 250, 252, 0.88) !important;
+  border-color: var(--file-card-border-hover) !important;
+  background: var(--file-card-bg-hover) !important;
   color: inherit !important;
   text-decoration: none !important;
   outline: none;
 }
 
-.markdown-preview :deep(.noise-attachment-file__icon),
+.markdown-preview .noise-attachment-file:focus-visible,
+.rendered-table-expand-scroll .noise-attachment-file:focus-visible {
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.18) !important;
+}
+
+.markdown-preview .noise-attachment-file__icon,
 .rendered-table-expand-scroll .noise-attachment-file__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 8px;
-  background: rgba(241, 245, 249, 0.72);
-  color: rgba(71, 85, 105, 0.82);
-}
-
-.markdown-preview :deep(.noise-attachment-file__icon),
-.markdown-preview :deep(.noise-attachment-file__action),
-.rendered-table-expand-scroll .noise-attachment-file__icon,
-.rendered-table-expand-scroll .noise-attachment-file__action {
   position: relative;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 52px !important;
+  height: 52px !important;
+  border-radius: 8px !important;
+  background: var(--file-card-icon-bg) !important;
+  color: var(--file-card-icon) !important;
+  flex: 0 0 auto !important;
 }
 
-.markdown-preview :deep(.noise-attachment-file__icon)::before,
+.markdown-preview .noise-attachment-file__icon::before,
 .rendered-table-expand-scroll .noise-attachment-file__icon::before {
   content: '';
+  display: block;
   width: 18px;
   height: 22px;
   border: 1.7px solid currentColor;
@@ -2624,22 +2637,64 @@ body.is-resizing-rendered-table-column {
   box-sizing: border-box;
 }
 
-.markdown-preview :deep(.noise-attachment-file__icon)::after,
+.markdown-preview .noise-attachment-file__icon::after,
 .rendered-table-expand-scroll .noise-attachment-file__icon::after {
   content: '';
   position: absolute;
   top: 14px;
-  left: 29px;
+  right: 15px;
   width: 7px;
   height: 7px;
   border-left: 1.7px solid currentColor;
   border-bottom: 1.7px solid currentColor;
+  background: var(--file-card-icon-bg);
   transform: rotate(-180deg);
-  opacity: .78;
 }
 
-.markdown-preview :deep(.noise-attachment-file__action)::before,
-.rendered-table-expand-scroll .noise-attachment-file__action::before {
+.markdown-preview .noise-attachment-file__body,
+.rendered-table-expand-scroll .noise-attachment-file__body {
+  display: flex !important;
+  min-width: 0 !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  gap: 4px !important;
+}
+
+.markdown-preview .noise-attachment-file__name,
+.rendered-table-expand-scroll .noise-attachment-file__name {
+  display: block !important;
+  min-width: 0 !important;
+  color: var(--file-card-name) !important;
+  font-size: 15px !important;
+  font-weight: 500 !important;
+  line-height: 1.35 !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
+
+.markdown-preview .noise-attachment-file__meta,
+.rendered-table-expand-scroll .noise-attachment-file__meta {
+  display: block !important;
+  color: var(--file-card-meta) !important;
+  font-size: 12px !important;
+  line-height: 1.25 !important;
+  text-transform: uppercase !important;
+}
+
+.markdown-preview .noise-attachment-file__action,
+.rendered-table-expand-scroll .noise-attachment-file__action {
+  position: relative;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 28px !important;
+  height: 28px !important;
+  color: var(--file-card-action) !important;
+  flex: 0 0 auto !important;
+}
+
+.markdown-preview .noise-attachment-file__action--download::before,
+.rendered-table-expand-scroll .noise-attachment-file__action--download::before {
   content: '';
   width: 10px;
   height: 10px;
@@ -2649,8 +2704,8 @@ body.is-resizing-rendered-table-column {
   box-sizing: border-box;
 }
 
-.markdown-preview :deep(.noise-attachment-file__action)::after,
-.rendered-table-expand-scroll .noise-attachment-file__action::after {
+.markdown-preview .noise-attachment-file__action--download::after,
+.rendered-table-expand-scroll .noise-attachment-file__action--download::after {
   content: '';
   position: absolute;
   bottom: 5px;
@@ -2662,95 +2717,57 @@ body.is-resizing-rendered-table-column {
   transform: translateX(-50%);
 }
 
-.markdown-preview :deep(.noise-attachment-file__body),
-.rendered-table-expand-scroll .noise-attachment-file__body {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  justify-content: center;
-  gap: 4px;
+.markdown-preview .noise-attachment-file__action--preview::before,
+.rendered-table-expand-scroll .noise-attachment-file__action--preview::before {
+  content: '';
+  width: 19px;
+  height: 12px;
+  border: 1.8px solid currentColor;
+  border-radius: 999px / 70%;
+  box-sizing: border-box;
 }
 
-.markdown-preview :deep(.noise-attachment-file__name),
-.rendered-table-expand-scroll .noise-attachment-file__name {
-  min-width: 0;
-  color: #0f172a;
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+.markdown-preview .noise-attachment-file__action--preview::after,
+.rendered-table-expand-scroll .noise-attachment-file__action--preview::after {
+  content: '';
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
 }
 
-.markdown-preview :deep(.noise-attachment-file__meta),
-.rendered-table-expand-scroll .noise-attachment-file__meta {
-  color: #64748b;
-  font-size: 12px;
-  line-height: 1.25;
-  text-transform: uppercase;
-}
-
-.markdown-preview :deep(.noise-attachment-file__action),
-.rendered-table-expand-scroll .noise-attachment-file__action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: rgba(100, 116, 139, 0.62);
-}
-
-.markdown-preview.theme-dark :deep(.noise-attachment-file),
+.markdown-preview.theme-dark .noise-attachment-file,
 .rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .noise-attachment-file {
-  border-color: rgba(148, 163, 184, 0.20) !important;
-  background: rgba(15, 23, 42, 0.38) !important;
-}
-
-.markdown-preview.theme-dark :deep(.noise-attachment-file:hover),
-.markdown-preview.theme-dark :deep(.noise-attachment-file:focus-visible),
-.rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .noise-attachment-file:hover,
-.rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .noise-attachment-file:focus-visible {
-  border-color: rgba(148, 163, 184, 0.32) !important;
-  background: rgba(30, 41, 59, 0.52) !important;
-}
-
-.markdown-preview.theme-dark :deep(.noise-attachment-file__icon),
-.rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .noise-attachment-file__icon {
-  background: rgba(30, 41, 59, 0.62);
-  color: rgba(226, 232, 240, 0.82);
-}
-
-.markdown-preview.theme-dark :deep(.noise-attachment-file__name),
-.rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .noise-attachment-file__name {
-  color: #f8fafc;
-}
-
-.markdown-preview.theme-dark :deep(.noise-attachment-file__meta),
-.rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .noise-attachment-file__meta {
-  color: #94a3b8;
-}
-
-.markdown-preview.theme-dark :deep(.noise-attachment-file__action),
-.rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .noise-attachment-file__action {
-  color: rgba(203, 213, 225, 0.68);
+  --file-card-bg: rgba(255, 255, 255, 0.055);
+  --file-card-bg-hover: rgba(255, 255, 255, 0.075);
+  --file-card-border: rgba(255, 255, 255, 0.12);
+  --file-card-border-hover: rgba(255, 255, 255, 0.18);
+  --file-card-icon-bg: rgba(255, 255, 255, 0.055);
+  --file-card-icon: rgba(226, 232, 240, 0.84);
+  --file-card-name: #f8fafc;
+  --file-card-meta: #94a3b8;
+  --file-card-action: rgba(203, 213, 225, 0.70);
 }
 
 @media (max-width: 520px) {
-  .markdown-preview :deep(.noise-attachment-file),
+  .markdown-preview .noise-attachment-file,
   .rendered-table-expand-scroll .noise-attachment-file {
-    grid-template-columns: 44px minmax(0, 1fr) 24px;
-    gap: 10px;
-    min-height: 64px;
-    padding: 10px;
+    grid-template-columns: 44px minmax(0, 1fr) 24px !important;
+    gap: 10px !important;
+    min-height: 64px !important;
+    padding: 10px !important;
   }
 
-  .markdown-preview :deep(.noise-attachment-file__icon),
+  .markdown-preview .noise-attachment-file__icon,
   .rendered-table-expand-scroll .noise-attachment-file__icon {
-    width: 44px;
-    height: 44px;
+    width: 44px !important;
+    height: 44px !important;
   }
 
-  .markdown-preview :deep(.noise-attachment-file__name),
+  .markdown-preview .noise-attachment-file__name,
   .rendered-table-expand-scroll .noise-attachment-file__name {
-    font-size: 14px;
+    font-size: 14px !important;
   }
 }
 
