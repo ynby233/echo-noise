@@ -122,6 +122,7 @@
                   :is="'td'"
                   v-for="(_cell, cellIndex) in row"
                   :key="`expanded-cell-${rowIndex}-${cellIndex}`"
+                  :style="{ width: `${expandedTableColumnWidths[cellIndex] || EXPANDED_TABLE_MIN_COLUMN_WIDTH}px` }"
                 >
                   <textarea
                     :value="expandedTableCellEditorText(rowIndex, cellIndex)"
@@ -4052,8 +4053,8 @@ html.dark .editor-table-expand-button:focus-visible {
 
 .editor-table-expand-table th,
 .editor-table-expand-table td {
+  box-sizing: border-box;
   min-width: 48px;
-  max-width: 180px;
   padding: 0;
   border: 1px solid rgba(148, 163, 184, 0.42);
   vertical-align: top;
@@ -4069,6 +4070,7 @@ html.dark .editor-table-expand-button:focus-visible {
 }
 
 .editor-table-expand-table textarea {
+  box-sizing: border-box;
   display: block;
   width: 100%;
   min-width: 44px;

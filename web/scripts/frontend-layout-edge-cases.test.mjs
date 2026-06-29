@@ -890,9 +890,13 @@ assert(
     vditorEditor.includes('.editor-table-expand-table {\n  width: max-content;\n  min-width: 0;') &&
     vditorEditor.includes('table-layout: fixed;') &&
     vditorEditor.includes('expandedTableColumnWidths') &&
+    vditorEditor.includes(':style="{ width: `${expandedTableColumnWidths[cellIndex] || EXPANDED_TABLE_MIN_COLUMN_WIDTH}px` }"') &&
     vditorEditor.includes('calculateAdaptiveTableColumnWidths') &&
     vditorEditor.includes('EXPANDED_TABLE_MIN_COLUMN_WIDTH = 48') &&
     vditorEditor.includes('updateExpandedTableAvailableWidth()') &&
+    vditorEditor.includes('.editor-table-expand-table th,\n.editor-table-expand-table td {\n  box-sizing: border-box;') &&
+    vditorEditor.includes('.editor-table-expand-table textarea {\n  box-sizing: border-box;') &&
+    !vditorEditor.includes('max-width: 180px;') &&
     vditorEditor.includes('min-width: 48px;') &&
     vditorEditor.includes('min-width: 44px;') &&
     !vditorEditor.includes('.vditor-container .vditor-reset table.editor-deletable-table tr {\n  display: table;') &&
