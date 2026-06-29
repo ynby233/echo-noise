@@ -113,6 +113,7 @@ const vditorApplyTableSourceBody = sourceSlice(vditorEditor, 'const applyEditorT
 const addFormReadSafeContentBody = sourceSlice(addForm, 'const readSafeEditorContent', 'const syncContentFromEditor')
 const vditorAdaptiveColumnWidthBody = sourceSlice(vditorEditor, 'const calculateAdaptiveTableColumnWidths', 'const normalizeAttachmentInfo')
 const renderedAdaptiveColumnWidthBody = sourceSlice(markdownRenderer, 'const adaptiveRenderedTableColumnWidths', 'const applyAdaptiveRenderedTableColumns')
+const renderedTableResizeHandlesBody = sourceSlice(markdownRenderer, 'const ensureRenderedTableResizeHandles', 'const openRenderedTableExpand')
 const trustedTableSourceIndex = vditorSafeValueBody.indexOf('trustedSource')
 const liveDomFallbackIndex = vditorSafeValueBody.indexOf('getEditorDomContentFallback')
 const addFormEditorValueIndex = addFormReadSafeContentBody.indexOf('vditorEditor.value?.getValue?.()')
@@ -202,6 +203,32 @@ assert(
     markdownRenderer.includes('.rendered-table-expand-scroll:not(.has-real-horizontal-overflow) {\n  overflow-x: hidden;\n}') &&
     markdownRenderer.includes('.rendered-table-expand-scroll:not(.has-real-vertical-overflow) {\n  overflow-y: hidden;\n}'),
   'expanded table scroll containers must hide only the axis that does not have real overflow'
+)
+
+assert(
+  !vditorEditor.includes('v-if="rowIndex < expandedTableRows.length - 1"') &&
+    !vditorEditor.includes('v-if="cellIndex < row.length - 1"') &&
+    vditorEditor.includes('if (rowIndex < 0 || rowIndex >= expandedTableRows.value.length) return') &&
+    vditorEditor.includes('if (columnIndex < 0 || columnIndex >= expandedTableColumnWidths.value.length) return') &&
+    vditorEditor.includes("'is-table-edge': rowIndex === expandedTableRows.length - 1") &&
+    vditorEditor.includes("'is-table-edge': cellIndex === row.length - 1") &&
+    vditorEditor.includes('.editor-table-expand-row-resize-handle.is-table-edge {\n  bottom: 0;\n}') &&
+    vditorEditor.includes('.editor-table-expand-column-resize-handle.is-table-edge {\n  right: 0;\n}') &&
+    !vditorEditor.includes('rowIndex >= expandedTableRows.value.length - 1') &&
+    !vditorEditor.includes('columnIndex >= expandedTableColumnWidths.value.length - 1'),
+  'editor expanded table resizing must include the bottom row border and right column border without creating handle overflow'
+)
+
+assert(
+  renderedTableResizeHandlesBody.includes("rowHandle.className = 'rendered-table-expand-row-resize-handle'") &&
+    renderedTableResizeHandlesBody.includes("columnHandle.className = 'rendered-table-expand-column-resize-handle'") &&
+    renderedTableResizeHandlesBody.includes("if (rowIndex === rows.length - 1) rowHandle.classList.add('is-table-edge')") &&
+    renderedTableResizeHandlesBody.includes("if (cellIndex === row.cells.length - 1) columnHandle.classList.add('is-table-edge')") &&
+    markdownRenderer.includes('.rendered-table-expand-row-resize-handle.is-table-edge {\n  bottom: 0;\n}') &&
+    markdownRenderer.includes('.rendered-table-expand-column-resize-handle.is-table-edge {\n  right: 0;\n}') &&
+    !renderedTableResizeHandlesBody.includes('rowIndex < rows.length - 1') &&
+    !renderedTableResizeHandlesBody.includes('cellIndex < row.cells.length - 1'),
+  'rendered expanded table resizing must include the bottom row border and right column border without creating handle overflow'
 )
 
 assert(
@@ -1002,8 +1029,8 @@ assert(
     vditorEditor.includes('expandedTableManualColumnWidths') &&
     vditorEditor.includes('startExpandedTableRowResize') &&
     vditorEditor.includes('startExpandedTableColumnResize') &&
-    vditorEditor.includes('rowIndex < expandedTableRows.length - 1') &&
-    vditorEditor.includes('cellIndex < row.length - 1') &&
+    !vditorEditor.includes('rowIndex < expandedTableRows.length - 1') &&
+    !vditorEditor.includes('cellIndex < row.length - 1') &&
     vditorEditor.includes('cursor: row-resize;') &&
     vditorEditor.includes('cursor: col-resize;') &&
     vditorEditor.includes('resize: none;') &&
@@ -1080,8 +1107,8 @@ assert(
     markdownRenderer.includes('applyRenderedTableRowHeights') &&
     markdownRenderer.includes('ensureRenderedTableResizeHandles') &&
     markdownRenderer.includes('startRenderedTableResize') &&
-    markdownRenderer.includes('rowIndex < rows.length - 1') &&
-    markdownRenderer.includes('cellIndex < row.cells.length - 1') &&
+    !markdownRenderer.includes('rowIndex < rows.length - 1') &&
+    !markdownRenderer.includes('cellIndex < row.cells.length - 1') &&
     markdownRenderer.includes('cursor: row-resize;') &&
     markdownRenderer.includes('cursor: col-resize;') &&
     markdownRenderer.includes('.rendered-table-expanded-table {\n  width: max-content;\n  min-width: 0;') &&

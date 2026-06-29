@@ -648,38 +648,37 @@ const ensureRenderedTableResizeHandles = (table: HTMLTableElement, autoRowHeight
   rows.forEach((row, rowIndex) => {
     Array.from(row.cells).forEach((cell, cellIndex) => {
       const cellElement = cell as HTMLElement
-      if (rowIndex < rows.length - 1) {
-        const handle = document.createElement('span')
-        handle.className = 'rendered-table-expand-row-resize-handle'
-        handle.setAttribute('aria-hidden', 'true')
-        handle.addEventListener('pointerdown', (event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          startRenderedTableResize({
-            type: 'row',
-            index: rowIndex,
-            startClient: event.clientY,
-            startSize: Math.max(autoRowHeights[rowIndex] || RENDERED_TABLE_MIN_ROW_HEIGHT, row.getBoundingClientRect().height)
-          }, event)
-        })
-        cellElement.appendChild(handle)
-      }
-      if (cellIndex < row.cells.length - 1) {
-        const handle = document.createElement('span')
-        handle.className = 'rendered-table-expand-column-resize-handle'
-        handle.setAttribute('aria-hidden', 'true')
-        handle.addEventListener('pointerdown', (event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          startRenderedTableResize({
-            type: 'column',
-            index: cellIndex,
-            startClient: event.clientX,
-            startSize: cellElement.getBoundingClientRect().width
-          }, event)
-        })
-        cellElement.appendChild(handle)
-      }
+      const rowHandle = document.createElement('span')
+      rowHandle.className = 'rendered-table-expand-row-resize-handle'
+      if (rowIndex === rows.length - 1) rowHandle.classList.add('is-table-edge')
+      rowHandle.setAttribute('aria-hidden', 'true')
+      rowHandle.addEventListener('pointerdown', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        startRenderedTableResize({
+          type: 'row',
+          index: rowIndex,
+          startClient: event.clientY,
+          startSize: Math.max(autoRowHeights[rowIndex] || RENDERED_TABLE_MIN_ROW_HEIGHT, row.getBoundingClientRect().height)
+        }, event)
+      })
+      cellElement.appendChild(rowHandle)
+
+      const columnHandle = document.createElement('span')
+      columnHandle.className = 'rendered-table-expand-column-resize-handle'
+      if (cellIndex === row.cells.length - 1) columnHandle.classList.add('is-table-edge')
+      columnHandle.setAttribute('aria-hidden', 'true')
+      columnHandle.addEventListener('pointerdown', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        startRenderedTableResize({
+          type: 'column',
+          index: cellIndex,
+          startClient: event.clientX,
+          startSize: cellElement.getBoundingClientRect().width
+        }, event)
+      })
+      cellElement.appendChild(columnHandle)
     })
   })
 }
@@ -2238,6 +2237,14 @@ watch(() => props.enableGithubCard, () => {
   bottom: 0;
   width: 8px;
   cursor: col-resize;
+}
+
+.rendered-table-expand-row-resize-handle.is-table-edge {
+  bottom: 0;
+}
+
+.rendered-table-expand-column-resize-handle.is-table-edge {
+  right: 0;
 }
 
 .rendered-table-expand-row-resize-handle::after,

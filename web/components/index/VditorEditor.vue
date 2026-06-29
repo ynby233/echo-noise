@@ -159,14 +159,12 @@
                     </div>
                   </div>
                   <span
-                    v-if="rowIndex < expandedTableRows.length - 1"
-                    class="editor-table-expand-row-resize-handle"
+                    :class="['editor-table-expand-row-resize-handle', { 'is-table-edge': rowIndex === expandedTableRows.length - 1 }]"
                     aria-hidden="true"
                     @pointerdown.prevent.stop="startExpandedTableRowResize(rowIndex, $event)"
                   ></span>
                   <span
-                    v-if="cellIndex < row.length - 1"
-                    class="editor-table-expand-column-resize-handle"
+                    :class="['editor-table-expand-column-resize-handle', { 'is-table-edge': cellIndex === row.length - 1 }]"
                     aria-hidden="true"
                     @pointerdown.prevent.stop="startExpandedTableColumnResize(cellIndex, $event)"
                   ></span>
@@ -2706,7 +2704,7 @@ const startExpandedTableResize = (drag: ExpandedTableResizeDrag, event: PointerE
 }
 
 const startExpandedTableRowResize = (rowIndex: number, event: PointerEvent) => {
-  if (rowIndex < 0 || rowIndex >= expandedTableRows.value.length - 1) return
+  if (rowIndex < 0 || rowIndex >= expandedTableRows.value.length) return
   startExpandedTableResize({
     type: 'row',
     index: rowIndex,
@@ -2716,7 +2714,7 @@ const startExpandedTableRowResize = (rowIndex: number, event: PointerEvent) => {
 }
 
 const startExpandedTableColumnResize = (columnIndex: number, event: PointerEvent) => {
-  if (columnIndex < 0 || columnIndex >= expandedTableColumnWidths.value.length - 1) return
+  if (columnIndex < 0 || columnIndex >= expandedTableColumnWidths.value.length) return
   startExpandedTableResize({
     type: 'column',
     index: columnIndex,
@@ -4342,6 +4340,14 @@ html.dark .editor-table-expand-button:focus-visible {
   bottom: 0;
   width: 8px;
   cursor: col-resize;
+}
+
+.editor-table-expand-row-resize-handle.is-table-edge {
+  bottom: 0;
+}
+
+.editor-table-expand-column-resize-handle.is-table-edge {
+  right: 0;
 }
 
 .editor-table-expand-row-resize-handle::after,
