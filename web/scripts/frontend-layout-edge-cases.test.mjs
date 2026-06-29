@@ -890,9 +890,24 @@ assert(
     vditorEditor.includes('.editor-table-expand-table {\n  width: max-content;\n  min-width: 0;') &&
     vditorEditor.includes('table-layout: fixed;') &&
     vditorEditor.includes('expandedTableColumnWidths') &&
-    vditorEditor.includes(':style="{ width: `${expandedTableColumnWidths[cellIndex] || EXPANDED_TABLE_MIN_COLUMN_WIDTH}px` }"') &&
+    vditorEditor.includes(':style="{ width: `${expandedTableColumnWidths[cellIndex] || EXPANDED_TABLE_MIN_COLUMN_WIDTH}px`, height: `${expandedTableRowHeight(rowIndex)}px` }"') &&
     vditorEditor.includes('calculateAdaptiveTableColumnWidths') &&
     vditorEditor.includes('EXPANDED_TABLE_MIN_COLUMN_WIDTH = 48') &&
+    vditorEditor.includes('EXPANDED_TABLE_MIN_ROW_HEIGHT = 38') &&
+    vditorEditor.includes('expandedTableAutoRowHeights') &&
+    vditorEditor.includes('measureExpandedTableTextareaContentHeight') &&
+    vditorEditor.includes('measureExpandedTableAutoRowHeights') &&
+    vditorEditor.includes('probe.scrollHeight') &&
+    vditorEditor.includes('expandedTableManualRowHeights') &&
+    vditorEditor.includes('expandedTableManualColumnWidths') &&
+    vditorEditor.includes('startExpandedTableRowResize') &&
+    vditorEditor.includes('startExpandedTableColumnResize') &&
+    vditorEditor.includes('rowIndex < expandedTableRows.length - 1') &&
+    vditorEditor.includes('cellIndex < row.length - 1') &&
+    vditorEditor.includes('cursor: row-resize;') &&
+    vditorEditor.includes('cursor: col-resize;') &&
+    vditorEditor.includes('resize: none;') &&
+    !vditorEditor.includes('resize: vertical;') &&
     vditorEditor.includes('updateExpandedTableAvailableWidth()') &&
     vditorEditor.includes('.editor-table-expand-table th,\n.editor-table-expand-table td {\n  box-sizing: border-box;') &&
     vditorEditor.includes('.editor-table-expand-table textarea {\n  box-sizing: border-box;') &&
