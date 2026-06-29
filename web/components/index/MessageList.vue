@@ -3856,9 +3856,9 @@ onMounted(() => {
 :global(html:not(.dark)) .content-container :deep(.markdown-preview code) { opacity: 1 !important; }
 
 /* 确保所有模式下链接颜色都是蓝色 */
-:global(html:not(.dark)) .content-container :deep(.markdown-preview a),
-:global(html.dark) .content-container :deep(.markdown-preview a),
-.content-container :deep(.markdown-preview a) { 
+:global(html:not(.dark)) .content-container :deep(.markdown-preview a:not(.noise-attachment-file)),
+:global(html.dark) .content-container :deep(.markdown-preview a:not(.noise-attachment-file)),
+.content-container :deep(.markdown-preview a:not(.noise-attachment-file)) {
   color: #0366d6 !important; 
   text-decoration: none !important; 
   background-color: transparent !important;
@@ -3869,9 +3869,9 @@ onMounted(() => {
   opacity: 1 !important;
   font-weight: 500 !important;
 }
-:global(html:not(.dark)) .content-container :deep(.markdown-preview a:hover),
-:global(html.dark) .content-container :deep(.markdown-preview a:hover),
-.content-container :deep(.markdown-preview a:hover) { 
+:global(html:not(.dark)) .content-container :deep(.markdown-preview a:not(.noise-attachment-file):hover),
+:global(html.dark) .content-container :deep(.markdown-preview a:not(.noise-attachment-file):hover),
+.content-container :deep(.markdown-preview a:not(.noise-attachment-file):hover) {
   color: #1d4ed8 !important; 
   text-decoration: underline !important; 
 }

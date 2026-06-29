@@ -1262,7 +1262,7 @@ const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string) =>
       : `download="${safeName}"`
     const actionLabel = canPreview ? '打开附件' : '下载附件'
     const meta = escapeHtml(attachmentExtensionLabel(name, url))
-    return `<a class="noise-attachment-file" href="${safeUrl}" ${previewAttrs} aria-label="${actionLabel}：${safeName}"><span class="noise-attachment-file__icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M7 3.75h7.2L18.25 7.8v12.45H7V3.75Z"></path><path d="M14 3.75V8h4.25"></path></svg></span><span class="noise-attachment-file__body"><span class="noise-attachment-file__name">${safeName}</span><span class="noise-attachment-file__meta">${meta}</span></span><span class="noise-attachment-file__action" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 4v10"></path><path d="m8 10 4 4 4-4"></path><path d="M5 18.5h14"></path></svg></span></a>`
+    return `<a class="noise-attachment-file" href="${safeUrl}" ${previewAttrs} aria-label="${actionLabel}：${safeName}"><span class="noise-attachment-file__icon" aria-hidden="true"></span><span class="noise-attachment-file__body"><span class="noise-attachment-file__name">${safeName}</span><span class="noise-attachment-file__meta">${meta}</span></span><span class="noise-attachment-file__action" aria-hidden="true"></span></a>`
   }
   return `<audio class="noise-attachment-audio" src="${safeUrl}" controls preload="metadata"></audio>`
 }
@@ -2607,18 +2607,59 @@ body.is-resizing-rendered-table-column {
   color: rgba(71, 85, 105, 0.82);
 }
 
-.markdown-preview :deep(.noise-attachment-file__icon svg),
-.markdown-preview :deep(.noise-attachment-file__action svg),
-.rendered-table-expand-scroll .noise-attachment-file__icon svg,
-.rendered-table-expand-scroll .noise-attachment-file__action svg {
-  display: block;
-  width: 22px;
+.markdown-preview :deep(.noise-attachment-file__icon),
+.markdown-preview :deep(.noise-attachment-file__action),
+.rendered-table-expand-scroll .noise-attachment-file__icon,
+.rendered-table-expand-scroll .noise-attachment-file__action {
+  position: relative;
+}
+
+.markdown-preview :deep(.noise-attachment-file__icon)::before,
+.rendered-table-expand-scroll .noise-attachment-file__icon::before {
+  content: '';
+  width: 18px;
   height: 22px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  border: 1.7px solid currentColor;
+  border-radius: 3px;
+  box-sizing: border-box;
+}
+
+.markdown-preview :deep(.noise-attachment-file__icon)::after,
+.rendered-table-expand-scroll .noise-attachment-file__icon::after {
+  content: '';
+  position: absolute;
+  top: 14px;
+  left: 29px;
+  width: 7px;
+  height: 7px;
+  border-left: 1.7px solid currentColor;
+  border-bottom: 1.7px solid currentColor;
+  transform: rotate(-180deg);
+  opacity: .78;
+}
+
+.markdown-preview :deep(.noise-attachment-file__action)::before,
+.rendered-table-expand-scroll .noise-attachment-file__action::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-right: 1.8px solid currentColor;
+  border-bottom: 1.8px solid currentColor;
+  transform: translateY(-3px) rotate(45deg);
+  box-sizing: border-box;
+}
+
+.markdown-preview :deep(.noise-attachment-file__action)::after,
+.rendered-table-expand-scroll .noise-attachment-file__action::after {
+  content: '';
+  position: absolute;
+  bottom: 5px;
+  left: 50%;
+  width: 16px;
+  height: 1.8px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: translateX(-50%);
 }
 
 .markdown-preview :deep(.noise-attachment-file__body),
@@ -2793,7 +2834,7 @@ body.is-resizing-rendered-table-column {
   background-color: rgba(0, 0, 0, 0.05);
 }
 
-.markdown-preview :deep(a) { 
+.markdown-preview :deep(a:not(.noise-attachment-file)) {
   color: #0366d6 !important; 
   text-decoration: none !important; 
   background-color: transparent !important;
@@ -2802,12 +2843,12 @@ body.is-resizing-rendered-table-column {
   border: none !important;
   text-shadow: none !important;
 }
-.markdown-preview :deep(a:hover) { 
+.markdown-preview :deep(a:not(.noise-attachment-file):hover) {
   text-decoration: underline !important; 
   color: #1d4ed8 !important;
 }
-.theme-light.markdown-preview :deep(a),
-.theme-dark.markdown-preview :deep(a) { 
+.theme-light.markdown-preview :deep(a:not(.noise-attachment-file)),
+.theme-dark.markdown-preview :deep(a:not(.noise-attachment-file)) {
   color: #0366d6 !important;
   background-color: transparent !important;
   padding: 0 !important;
@@ -3152,7 +3193,7 @@ body.is-resizing-rendered-table-column {
   text-shadow: none;
 }
 /* 白天模式下内容区链接颜色加深为深橙色 */
-.theme-light.markdown-preview :deep(a) {
+.theme-light.markdown-preview :deep(a:not(.noise-attachment-file)) {
   color: #0366d6;
 }
 /* 图片悬停与盒子效果（与内容样式一致） */
@@ -3190,10 +3231,10 @@ body.is-resizing-rendered-table-column {
   .image-grid-item img:hover { box-shadow: 0 8px 22px rgba(255,255,255,0.12); }
 }
 
-.theme-dark.markdown-preview :deep(a),
-.theme-light.markdown-preview :deep(a),
-:global(html.dark) .markdown-preview :deep(a),
-:global(html:not(.dark)) .markdown-preview :deep(a) {
+.theme-dark.markdown-preview :deep(a:not(.noise-attachment-file)),
+.theme-light.markdown-preview :deep(a:not(.noise-attachment-file)),
+:global(html.dark) .markdown-preview :deep(a:not(.noise-attachment-file)),
+:global(html:not(.dark)) .markdown-preview :deep(a:not(.noise-attachment-file)) {
   color: #0366d6 !important;
 }
 
@@ -3257,7 +3298,7 @@ body.is-resizing-rendered-table-column {
   width: 100%;
   height: 100%;
 }
-.markdown-preview :deep(a) {
+.markdown-preview :deep(a:not(.noise-attachment-file)) {
   background-color: transparent !important;
   padding: 0 !important;
   border-radius: 0 !important;
@@ -3266,11 +3307,11 @@ body.is-resizing-rendered-table-column {
   color: #0366d6 !important;
 }
 
-.theme-dark.markdown-preview :deep(a:hover),
-.theme-light.markdown-preview :deep(a:hover),
-:global(html.dark) .markdown-preview :deep(a:hover),
-:global(html:not(.dark)) .markdown-preview :deep(a:hover),
-.markdown-preview :deep(a:hover) {
+.theme-dark.markdown-preview :deep(a:not(.noise-attachment-file):hover),
+.theme-light.markdown-preview :deep(a:not(.noise-attachment-file):hover),
+:global(html.dark) .markdown-preview :deep(a:not(.noise-attachment-file):hover),
+:global(html:not(.dark)) .markdown-preview :deep(a:not(.noise-attachment-file):hover),
+.markdown-preview :deep(a:not(.noise-attachment-file):hover) {
   color: #1d4ed8 !important;
   text-decoration: underline !important;
 }
