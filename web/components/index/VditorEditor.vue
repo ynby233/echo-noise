@@ -4342,14 +4342,6 @@ html.dark .editor-table-expand-button:focus-visible {
   cursor: col-resize;
 }
 
-.editor-table-expand-row-resize-handle.is-table-edge {
-  bottom: 0;
-}
-
-.editor-table-expand-column-resize-handle.is-table-edge {
-  right: 0;
-}
-
 .editor-table-expand-row-resize-handle::after,
 .editor-table-expand-column-resize-handle::after {
   content: '';
