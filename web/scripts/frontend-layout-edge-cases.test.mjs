@@ -144,6 +144,7 @@ assert(
     vditorTableBeforeInputBody.includes('inputEvent.isComposing && !isLineBreakInput') &&
     vditorTableBeforeInputBody.includes('editorTableCompositionCommittedCandidate || editorTableCompositionCandidateSelectedBySpace') &&
     vditorTableBeforeInputBody.includes('editorTableCompositionActive && isLineBreakInput && hasCompositionLineBreakIntent') &&
+    vditorTableBeforeInputBody.includes('if (isLineBreakInput) return false') &&
     vditorPlainEnterBody.includes('!editorTableCompositionActive') &&
     vditorPlainEnterBody.includes("event.code === 'Enter' || event.code === 'NumpadEnter'") &&
     vditorPlainEnterBody.includes("event.key === ' ' || event.code === 'Space'") &&

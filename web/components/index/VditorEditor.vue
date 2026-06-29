@@ -723,6 +723,7 @@ const setupAttachmentPreview = () => {
       ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
       return true
     }
+    if (isLineBreakInput) return false
     if (editorTableCompositionActive || isCompositionTextInput || (inputEvent.isComposing && !isLineBreakInput)) return false
     const pastedText = inputType === 'insertFromPaste'
       ? (inputEvent.dataTransfer?.getData('text/plain') || inputEvent.data || '')
