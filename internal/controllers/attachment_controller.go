@@ -1,8 +1,11 @@
 package controllers
 
 import (
+	"archive/zip"
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -33,6 +36,16 @@ type BelongItem struct {
 	ID        uint      `json:"id"`
 	CreatedAt time.Time `json:"created_at"`
 	Snippet   string    `json:"snippet"`
+}
+
+type AttachmentZipRequest struct {
+	Items []AttachmentZipItem `json:"items"`
+}
+
+type AttachmentZipItem struct {
+	Type string `json:"type"`
+	Key  string `json:"key"`
+	Name string `json:"name"`
 }
 
 func escapeObjectKeyForURL(key string) string {
@@ -481,6 +494,40 @@ func DeleteOtherAttachment(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": true})
 }
 
+func DownloadAttachmentZip(c *gin.Context) {
+	var req AttachmentZipRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "参数错误"})
+		return
+	}
+	if len(req.Items) == 0 {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "请选择附件"})
+		return
+	}
+	if len(req.Items) > 200 {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "单次最多打包 200 个附件"})
+		return
+	}
+
+	var siteCfg models.SiteConfig
+	_ = database.DB.Table("site_configs").First(&siteCfg).Error
+
+	fileName := fmt.Sprintf("attachments_%s.zip", time.Now().Format("20060102150405"))
+	c.Header("Content-Type", "application/zip")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fileName))
+	c.Header("Cache-Control", "no-cache")
+
+	archive := zip.NewWriter(c.Writer)
+	defer archive.Close()
+
+	usedNames := map[string]int{}
+	for _, item := range req.Items {
+		if err := addAttachmentToZip(archive, siteCfg, item, usedNames); err != nil {
+			continue
+		}
+	}
+}
+
 func pickDir(candidates []string, fallback string) string {
 	for _, d := range candidates {
 		if d == "" {
@@ -492,6 +539,154 @@ func pickDir(candidates []string, fallback string) string {
 		}
 	}
 	return fallback
+}
+
+func addAttachmentToZip(archive *zip.Writer, siteCfg models.SiteConfig, item AttachmentZipItem, usedNames map[string]int) error {
+	if siteCfg.AttachmentStorageEnabled {
+		return addCloudAttachmentToZip(archive, siteCfg, item, usedNames)
+	}
+	return addLocalAttachmentToZip(archive, item, usedNames)
+}
+
+func addLocalAttachmentToZip(archive *zip.Writer, item AttachmentZipItem, usedNames map[string]int) error {
+	dir, folder, ok := localAttachmentDirForType(item.Type)
+	if !ok {
+		return errors.New("unsupported attachment type")
+	}
+	base := filepath.Base(strings.TrimSpace(firstNonEmpty(item.Key, item.Name)))
+	if base == "." || base == string(filepath.Separator) || base == "" {
+		return errors.New("invalid attachment name")
+	}
+	path := filepath.Join(dir, base)
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	zipName := uniqueZipEntryName(filepath.ToSlash(filepath.Join(folder, safeZipEntryBaseName(firstNonEmpty(item.Name, base)))), usedNames)
+	writer, err := archive.Create(zipName)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(writer, file)
+	return err
+}
+
+func addCloudAttachmentToZip(archive *zip.Writer, siteCfg models.SiteConfig, item AttachmentZipItem, usedNames map[string]int) error {
+	client, bucket, _, err := newAttachmentS3Client(siteCfg)
+	if err != nil {
+		return err
+	}
+	key := strings.TrimLeft(strings.TrimSpace(firstNonEmpty(item.Key, item.Name)), "/")
+	if key == "" {
+		return errors.New("invalid attachment key")
+	}
+	obj, err := client.GetObject(context.Background(), &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return err
+	}
+	defer obj.Body.Close()
+
+	_, folder, _ := localAttachmentDirForType(item.Type)
+	if folder == "" {
+		folder = "attachments"
+	}
+	zipName := uniqueZipEntryName(filepath.ToSlash(filepath.Join(folder, safeZipEntryBaseName(firstNonEmpty(item.Name, filepath.Base(key))))), usedNames)
+	writer, err := archive.Create(zipName)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(writer, obj.Body)
+	return err
+}
+
+func localAttachmentDirForType(rawType string) (string, string, bool) {
+	kind := strings.ToLower(strings.TrimSpace(rawType))
+	wd, _ := os.Getwd()
+	exePath, _ := os.Executable()
+	exeDir := filepath.Dir(exePath)
+	switch kind {
+	case "image", "images":
+		sp := strings.TrimRight(config.Config.Upload.SavePath, "/")
+		return pickDir([]string{
+			sp,
+			"./" + sp,
+			filepath.Join(wd, sp),
+			filepath.Join(exeDir, sp),
+			"./data/images",
+			filepath.Join(wd, "data/images"),
+			filepath.Join(exeDir, "data/images"),
+			"/data/images",
+			"/app/data/images",
+		}, "./data/images"), "images", true
+	case "video", "videos":
+		return pickDir([]string{
+			"./data/video",
+			filepath.Join(wd, "data/video"),
+			filepath.Join(exeDir, "data/video"),
+			"/data/video",
+			"/app/data/video",
+		}, "./data/video"), "video", true
+	case "audio", "audios":
+		return pickDir([]string{
+			"./data/audio",
+			filepath.Join(wd, "data/audio"),
+			filepath.Join(exeDir, "data/audio"),
+			"/data/audio",
+			"/app/data/audio",
+		}, "./data/audio"), "audio", true
+	case "other", "others":
+		return pickDir([]string{
+			"./data/attachments",
+			filepath.Join(wd, "data/attachments"),
+			filepath.Join(exeDir, "data/attachments"),
+			"/data/attachments",
+			"/app/data/attachments",
+		}, "./data/attachments"), "other", true
+	default:
+		return "", "", false
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func safeZipEntryBaseName(name string) string {
+	base := filepath.Base(strings.ReplaceAll(strings.TrimSpace(name), "\\", "/"))
+	base = strings.TrimSpace(strings.Map(func(r rune) rune {
+		if r == 0 || r < 32 || r == 127 || r == '/' || r == '\\' {
+			return -1
+		}
+		return r
+	}, base))
+	if base == "" || base == "." {
+		return "attachment"
+	}
+	return base
+}
+
+func uniqueZipEntryName(name string, used map[string]int) string {
+	if name == "" {
+		name = "attachment"
+	}
+	if used[name] == 0 {
+		used[name] = 1
+		return name
+	}
+	used[name]++
+	ext := filepath.Ext(name)
+	stem := strings.TrimSuffix(name, ext)
+	return fmt.Sprintf("%s(%d)%s", stem, used[name], ext)
 }
 
 func normalizePublicBaseURL(raw string) string {

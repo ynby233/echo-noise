@@ -318,6 +318,7 @@ func SetupRouter() *gin.Engine {
 		attachments.GET("/audio/", controllers.ListAudioAttachments)
 		attachments.GET("/other", controllers.ListOtherAttachments)
 		attachments.GET("/other/", controllers.ListOtherAttachments)
+		attachments.POST("/download-zip", middleware.AdminAuthMiddleware(), controllers.DownloadAttachmentZip)
 		attachments.DELETE("/images/*name", middleware.AdminAuthMiddleware(), controllers.DeleteImageAttachment)
 		attachments.DELETE("/video/*name", middleware.AdminAuthMiddleware(), controllers.DeleteVideoAttachment)
 		attachments.DELETE("/audio/*name", middleware.AdminAuthMiddleware(), controllers.DeleteAudioAttachment)
