@@ -10,7 +10,7 @@
         <UButton :loading="loading" color="gray" variant="soft" class="shadow" @click="refresh">刷新</UButton>
       </div>
     </div>
-    <div class="px-4">
+    <div class="px-4 pb-4">
       <div class="flex gap-2 mb-3">
         <UButton :color="activeTab==='images'?'primary':'gray'" variant="soft" @click="activeTab='images'">图片</UButton>
         <UButton :color="activeTab==='videos'?'primary':'gray'" variant="soft" @click="activeTab='videos'">视频</UButton>
