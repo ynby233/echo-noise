@@ -9,10 +9,20 @@ import (
 
 // UploadImage 控制器，调用 service 上传图片
 func UploadImage(c *gin.Context) {
-    result := services.UploadImage(c)
-    if result.Code != 1 {
-        c.JSON(http.StatusInternalServerError, result)
-        return
-    }
-    c.JSON(http.StatusOK, result)
+	result := services.UploadImage(c)
+	if result.Code != 1 {
+		c.JSON(http.StatusInternalServerError, result)
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+// UploadAttachment 控制器，上传通用附件
+func UploadAttachment(c *gin.Context) {
+	result := services.UploadAttachment(c)
+	if result.Code != 1 {
+		c.JSON(http.StatusInternalServerError, result)
+		return
+	}
+	c.JSON(http.StatusOK, result)
 }

@@ -40,3 +40,28 @@ func UploadImage(c *gin.Context) dto.Result[string] {
 
 	return dto.OK(imageURL)
 }
+
+// UploadAttachment 上传通用附件
+func UploadAttachment(c *gin.Context) dto.Result[string] {
+	userID := c.GetUint("user_id")
+	if userID == 0 {
+		return dto.Fail[string]("未登录或登录已过期")
+	}
+
+	_, err := GetUserByID(userID)
+	if err != nil {
+		return dto.Fail[string](err.Error())
+	}
+
+	var siteConfig models.SiteConfig
+	if err := database.DB.Table("site_configs").First(&siteConfig).Error; err != nil {
+		siteConfig = models.SiteConfig{}
+	}
+
+	attachmentURL, err := pkg.UploadFileAttachment(c, &siteConfig)
+	if err != nil {
+		return dto.Fail[string](err.Error())
+	}
+
+	return dto.OK(attachmentURL)
+}

@@ -1062,6 +1062,8 @@ const escapeHtml = (value: string) => String(value || '')
 
 const ATTACHMENT_LINK_REG = /\[(图片附件|视频附件|音频附件)：([^\]]+)\]\(([^)\s]+)\)/g
 
+const browserPreviewableAttachmentUrl = (url: string) => /\.(pdf|txt|text|csv|json|xml|html?)(?:[?#].*)?$/i.test(String(url || ''))
+
 const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string) => {
   const url = resolveImageUrl(String(rawUrl || '').trim())
   const safeUrl = escapeHtml(url)
@@ -1073,6 +1075,12 @@ const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string) =>
   if (kindLabel === '视频附件') {
     return `<div class="noise-attachment-render noise-attachment-render--video"><video src="${safeUrl}" controls preload="metadata" style="width:100%;height:auto"></video></div>`
   }
+  if (kindLabel === '文件附件') {
+    const previewAttrs = browserPreviewableAttachmentUrl(url)
+      ? 'target="_blank" rel="noopener noreferrer"'
+      : 'download'
+    return `<a class="noise-attachment-file" href="${safeUrl}" ${previewAttrs}><span class="noise-attachment-file__kind">附件</span><span class="noise-attachment-file__name">${safeName}</span></a>`
+  }
   return `<audio class="noise-attachment-audio" src="${safeUrl}" controls preload="metadata"></audio>`
 }
 
@@ -1080,6 +1088,8 @@ const attachmentInfoFromRenderedAnchor = (anchor: HTMLAnchorElement) => {
   const label = (anchor.textContent || '').trim()
   const match = label.match(/^(图片附件|视频附件|音频附件)：(.+)$/)
   const href = anchor.getAttribute('href') || ''
+  const fileMatch = label.match(/^文件附件：(.+)$/)
+  if (fileMatch && href) return { kindLabel: '文件附件', name: fileMatch[1], url: href }
   if (!match || !href) return null
   return { kindLabel: match[1], name: match[2], url: href }
 }
@@ -2287,6 +2297,41 @@ watch(() => props.enableGithubCard, () => {
   max-width: 300px;
   min-width: min(220px, 100%);
   margin: 0.35em 0;
+}
+
+.markdown-preview :deep(.noise-attachment-file) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.38);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.82);
+  color: inherit !important;
+  text-decoration: none !important;
+}
+
+.markdown-preview :deep(.noise-attachment-file__kind) {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.markdown-preview :deep(.noise-attachment-file__name) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.markdown-preview.theme-dark :deep(.noise-attachment-file) {
+  border-color: rgba(148, 163, 184, 0.26);
+  background: rgba(15, 23, 42, 0.44);
 }
 
 .markdown-preview :deep(.noise-attachment-render--video video) {

@@ -1,4 +1,5 @@
-type UploadKind = 'image' | 'video' | 'audio'
+export type UploadKind = 'image' | 'video' | 'audio' | 'file'
+type UploadRequestKind = UploadKind | 'auto'
 
 export type UploadMediaProgress = (percent: number, index: number, total: number) => void
 
@@ -11,7 +12,7 @@ export type UploadedMedia = {
 
 type UploadMediaFilesOptions = {
   files: File[]
-  kind: UploadKind
+  kind: UploadRequestKind
   baseApi: string
   token?: string
   onProgress?: UploadMediaProgress
@@ -19,11 +20,12 @@ type UploadMediaFilesOptions = {
 
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo']
 const VIDEO_EXTENSIONS = ['.mp4', '.webm', '.mov', '.avi']
-const AUDIO_TYPES = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-wav']
-const AUDIO_EXTENSIONS = ['.webm', '.ogg', '.mp3', '.m4a', '.wav']
-const MAX_IMAGE_SIZE = 50 * 1024 * 1024
-const MAX_VIDEO_SIZE = 1024 * 1024 * 1024
-const MAX_AUDIO_SIZE = 200 * 1024 * 1024
+const AUDIO_TYPES = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-wav', 'audio/flac', 'audio/x-flac']
+const AUDIO_EXTENSIONS = ['.webm', '.ogg', '.mp3', '.m4a', '.wav', '.flac']
+const MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024 * 1024
+const MAX_IMAGE_SIZE = MAX_ATTACHMENT_SIZE
+const MAX_VIDEO_SIZE = MAX_ATTACHMENT_SIZE
+const MAX_AUDIO_SIZE = MAX_ATTACHMENT_SIZE
 
 export const normalizeCloudObjectURL = (url: string): string => {
   const raw = String(url || '')
@@ -67,7 +69,7 @@ export const resolveUploadedMediaUrl = (url: string, baseApi = '/api'): string =
   return `${origin}${base}${path}`
 }
 
-const ATTACHMENT_LABELS: Record<UploadKind, string> = {
+const ATTACHMENT_LABELS: Record<Exclude<UploadKind, 'file'>, string> = {
   image: '图片附件',
   video: '视频附件',
   audio: '音频附件',
@@ -88,7 +90,7 @@ const sanitizeAttachmentName = (name?: string, url?: string) => {
 }
 
 const createAttachmentMarkdown = (kind: UploadKind, url: string, name?: string): string => {
-  const label = ATTACHMENT_LABELS[kind]
+  const label = kind === 'file' ? '文件附件' : ATTACHMENT_LABELS[kind]
   return `\n[${label}：${sanitizeAttachmentName(name, url)}](${url})\n`
 }
 
@@ -98,6 +100,8 @@ export const createVideoMarkdown = (url: string, name?: string): string => creat
 
 export const createAudioMarkdown = (url: string, name?: string): string => createAttachmentMarkdown('audio', url, name)
 
+export const createFileMarkdown = (url: string, name?: string): string => createAttachmentMarkdown('file', url, name)
+
 const fileExtension = (file: File) => {
   const index = file.name.lastIndexOf('.')
   return index >= 0 ? file.name.slice(index).toLowerCase() : ''
@@ -105,41 +109,56 @@ const fileExtension = (file: File) => {
 
 const baseMimeType = (type: string) => String(type || '').split(';')[0].trim().toLowerCase()
 
+export const detectUploadKind = (file: File): UploadKind => {
+  const ext = fileExtension(file)
+  const mime = baseMimeType(file.type)
+  if (mime.startsWith('image/')) return 'image'
+  if (mime.startsWith('video/') || VIDEO_TYPES.includes(mime) || VIDEO_EXTENSIONS.includes(ext)) return 'video'
+  if (mime.startsWith('audio/') || AUDIO_TYPES.includes(mime) || AUDIO_EXTENSIONS.includes(ext)) return 'audio'
+  return 'file'
+}
+
 export const validateMediaFile = (file: File, kind: UploadKind) => {
+  if (file.size > MAX_ATTACHMENT_SIZE) throw new Error('附件大小不能超过 5GB')
+  if (kind === 'file') return
+
   if (kind === 'image') {
     if (!file.type.startsWith('image/')) {
       throw new Error('仅支持图片文件')
     }
-    if (file.size > MAX_IMAGE_SIZE) throw new Error('图片大小不能超过 50MB')
+    if (file.size > MAX_IMAGE_SIZE) throw new Error('图片大小不能超过 5GB')
     return
   }
 
   const ext = fileExtension(file)
   if (kind === 'audio') {
-    if (!AUDIO_TYPES.includes(baseMimeType(file.type)) || !AUDIO_EXTENSIONS.includes(ext)) {
-      throw new Error('仅支持 WEBM、OGG、MP3、M4A、WAV 格式的音频')
+    if (!AUDIO_TYPES.includes(baseMimeType(file.type)) && !AUDIO_EXTENSIONS.includes(ext)) {
+      throw new Error('仅支持 WEBM、OGG、MP3、M4A、WAV、FLAC 格式的音频')
     }
-    if (file.size > MAX_AUDIO_SIZE) throw new Error('音频不能超过200MB')
+    if (file.size > MAX_AUDIO_SIZE) throw new Error('音频不能超过 5GB')
     return
   }
 
-  if (!VIDEO_TYPES.includes(baseMimeType(file.type)) || !VIDEO_EXTENSIONS.includes(ext)) {
+  if (!VIDEO_TYPES.includes(baseMimeType(file.type)) && !VIDEO_EXTENSIONS.includes(ext)) {
     throw new Error('仅支持 MP4、WEBM、MOV、AVI 格式的视频')
   }
-  if (file.size > MAX_VIDEO_SIZE) throw new Error('视频不能超过1024MB')
+  if (file.size > MAX_VIDEO_SIZE) throw new Error('视频不能超过 5GB')
 }
 
 const endpointFor = (kind: UploadKind) => {
   if (kind === 'image') return '/images/upload'
   if (kind === 'audio') return '/audio/upload'
+  if (kind === 'file') return '/attachments/upload'
   return '/video/upload'
 }
 const fieldFor = (kind: UploadKind) => {
   if (kind === 'image') return 'image'
   if (kind === 'audio') return 'audio'
+  if (kind === 'file') return 'file'
   return 'video'
 }
 const labelFor = (kind: UploadKind) => {
+  if (kind === 'file') return '附件'
   if (kind === 'image') return '图片'
   if (kind === 'audio') return '音频'
   return '视频'
@@ -196,11 +215,12 @@ export const uploadMediaFiles = async ({ files, kind, baseApi, token = '', onPro
   const results: UploadedMedia[] = []
   if (!total) return results
 
-  selected.forEach((file) => validateMediaFile(file, kind))
+  selected.forEach((file) => validateMediaFile(file, kind === 'auto' ? detectUploadKind(file) : kind))
 
   for (let index = 0; index < selected.length; index += 1) {
     const file = selected[index]
-    const rawUrl = await uploadOneMediaFile(file, kind, baseApi, token, (percent) => {
+    const resolvedKind = kind === 'auto' ? detectUploadKind(file) : kind
+    const rawUrl = await uploadOneMediaFile(file, resolvedKind, baseApi, token, (percent) => {
       const aggregate = Math.round(((index + percent / 100) / total) * 99)
       onProgress?.(Math.max(1, Math.min(99, aggregate)), index + 1, total)
     })
@@ -208,7 +228,7 @@ export const uploadMediaFiles = async ({ files, kind, baseApi, token = '', onPro
     results.push({
       rawUrl,
       url,
-      markdown: kind === 'image' ? createImageMarkdown(url, file.name) : (kind === 'audio' ? createAudioMarkdown(url, file.name) : createVideoMarkdown(url, file.name)),
+      markdown: resolvedKind === 'image' ? createImageMarkdown(url, file.name) : (resolvedKind === 'audio' ? createAudioMarkdown(url, file.name) : (resolvedKind === 'file' ? createFileMarkdown(url, file.name) : createVideoMarkdown(url, file.name))),
       file,
     })
   }

@@ -457,10 +457,15 @@ assert(
 
 assert(
   addForm.includes('class="tb-btn nw-action-btn state-toggle-btn full-image-btn') &&
-    addForm.indexOf('<AudioRecorder') < addForm.indexOf('data-tooltip="上传图片"') &&
+    addForm.indexOf('<AudioRecorder') < addForm.indexOf('data-tooltip="上传附件"') &&
     addForm.includes('class="tb-btn nw-action-btn state-toggle-btn notify-btn') &&
-    addForm.indexOf('data-tooltip="上传图片"') < addForm.indexOf('<VideoUpload') &&
-    addForm.indexOf('<VideoUpload') < addForm.indexOf('data-tooltip="图床上传"') &&
+    addForm.includes('@change="addAttachment"') &&
+    addForm.includes("kind: 'auto'") &&
+    addForm.includes('data-tooltip="上传附件"') &&
+    !addForm.includes('data-tooltip="上传图片"') &&
+    !addForm.includes('data-tooltip="上传视频"') &&
+    !addForm.includes('<VideoUpload') &&
+    addForm.indexOf('data-tooltip="上传附件"') < addForm.indexOf('data-tooltip="图床上传"') &&
     addForm.includes(':data-tooltip="`全图显示：${fullImageAttachments ? \'已开启\' : \'已关闭\'}`"') &&
     addForm.includes(':data-tooltip="`推送：${enableNotify ? \'已开启\' : \'已关闭\'}`"') &&
     addForm.includes(":aria-pressed=\"fullImageAttachments\"") &&
@@ -478,7 +483,7 @@ assert(
     markdownRenderer.includes('.markdown-preview :deep(.full-image-attachment img)') &&
     markdownRenderer.includes('height: auto !important;') &&
     markdownRenderer.includes('object-fit: contain !important;'),
-  'publish composer must keep upload image before upload video, expose icon-only full-image and push toggles with current-state tooltips, persist the hidden marker, and render marked image attachments as responsive full images with Fancybox links'
+  'publish composer must expose one attachment upload button before image hosting, use automatic attachment classification, keep icon-only full-image and push toggles with current-state tooltips, persist the hidden marker, and render marked image attachments as responsive full images with Fancybox links'
 )
 
 assert(
@@ -503,7 +508,16 @@ assert(
     mediaUpload.includes("createAttachmentMarkdown('image', url, name)") &&
     mediaUpload.includes("createAttachmentMarkdown('video', url, name)") &&
     mediaUpload.includes("createAttachmentMarkdown('audio', url, name)") &&
+    mediaUpload.includes("createAttachmentMarkdown('file', url, name)") &&
+    mediaUpload.includes("type UploadRequestKind = UploadKind | 'auto'") &&
+    mediaUpload.includes('export const detectUploadKind = (file: File): UploadKind =>') &&
+    mediaUpload.includes("if (kind === 'file') return '/attachments/upload'") &&
+    backendRouter.includes('r.Static("/api/files", attachmentDir)') &&
+    backendRouter.includes('authRoutes.POST("/attachments/upload", controllers.UploadAttachment)') &&
     markdownRenderer.includes('const ATTACHMENT_LINK_REG = /\\[(图片附件|视频附件|音频附件)：([^\\]]+)\\]\\(([^)\\s]+)\\)/g') &&
+    markdownRenderer.includes("if (kindLabel === '文件附件')") &&
+    markdownRenderer.includes('noise-attachment-file') &&
+    markdownRenderer.includes("label.match(/^文件附件：(.+)$/)") &&
     markdownRenderer.includes('buildAttachmentHtml(kindLabel, name, url)') &&
     markdownRenderer.includes('noise-attachment-audio') &&
     !markdownRenderer.includes('noise-attachment-render--audio') &&
@@ -511,11 +525,15 @@ assert(
     markdownRenderer.includes('noise-attachment-paragraph') &&
     markdownRenderer.includes('noise-attachment-image') &&
     addForm.includes('replaceAttachmentMarkersForPreview') &&
+    addForm.includes('replaceFileAttachmentMarkersForPreview') &&
+    addForm.includes('const FILE_ATTACHMENT_LINK_REG = /\\[文件附件：([^\\]]+)\\]\\(([^)\\s]+)\\)/g') &&
     addForm.includes('const ATTACHMENT_LINK_REG = /\\[(图片附件|视频附件|音频附件)：([^\\]]+)\\]\\(([^)\\s]+)\\)/g') &&
     vditorEditor.includes('setupAttachmentPreview()') &&
     vditorEditor.includes('editor-attachment-preview') &&
     vditorEditor.includes('refreshAttachmentLinks') &&
     vditorEditor.includes('editor-attachment-link') &&
+    vditorEditor.includes('openFileAttachment(info)') &&
+    vditorEditor.includes('文件附件') &&
     vditorEditor.includes('attachmentInfoFromIrNode') &&
     vditorEditor.includes('attachmentInfoFromIrLabel') &&
     vditorEditor.includes("root.querySelectorAll('[data-type=\"a\"]')") &&
@@ -686,8 +704,8 @@ assert(
     vditorEditor.includes('flushPendingEditorTableCellSourceSyncIfMoved(getCurrentEditorTableCell())') &&
     vditorEditor.includes('const handleEditorTableBeforeInput = (event: Event) =>') &&
     vditorEditor.includes('if (handleEditorTableBeforeInput(event)) return') &&
-    vditorEditor.includes("inputEvent.isComposing || editorTableCompositionActive || inputType === 'insertCompositionText'") &&
-    !vditorEditor.includes("event.key === ' ' || event.code === 'Space'") &&
+    vditorEditor.includes("inputEvent.isComposing && !isLineBreakInput") &&
+    vditorEditor.includes("event.key === ' ' || event.code === 'Space'") &&
     !vditorEditor.includes("event.key === 'Process' || event.key === 'Unidentified'") &&
     vditorEditor.includes("root.addEventListener('compositionstart', onEditorCompositionStart, true)") &&
     vditorEditor.includes("root.removeEventListener('compositionend', onEditorCompositionEnd, true)") &&
@@ -696,7 +714,7 @@ assert(
     vditorEditor.includes('const cleanupEditorTableCompositionDrift = (data = \'\') =>') &&
     vditorEditor.includes('rememberEditorTableCompositionCell(getCurrentEditorTableCell(event))') &&
     vditorEditor.includes('cleanupEditorTableCompositionDrift(event.data || \'\')') &&
-    vditorEditor.includes('syncEditorTableCellDomToSource(cell)') &&
+    vditorEditor.includes('syncEditorTableCellDomToSource(cell, { restoreCaret: true })') &&
     vditorEditor.includes('const duplicatedTargetLine = targetLines.includes(afterTrimmed)') &&
     vditorEditor.includes('setEditorTableDomCellText(cell, before)') &&
     vditorEditor.includes('renderAttachmentMarkersInEditableRoot(cell)') &&

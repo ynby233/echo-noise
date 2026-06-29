@@ -9,22 +9,16 @@
             id="file-input"
             ref="fileInput"
             type="file"
-            accept="image/*"
             multiple
-            @change="addImage"
+            @change="addAttachment"
             class="hidden"
-            placeholder="选择图片"
+            placeholder="选择附件"
           />
           <AudioRecorder
             @audio-uploaded="handleAudioUploaded"
             @upload-progress="handleAudioUploadProgress"
           />
-          <button type="button" class="tb-btn nw-action-btn nw-tooltip-anchor" data-tooltip="上传图片" aria-label="上传图片" @click="triggerFileInput"><UIcon name="i-mdi-image-plus-outline" class="w-5 h-5" /></button>
-          <!-- 视频上传按钮 -->
-          <VideoUpload
-            @video-uploaded="handleVideoUploaded"
-            @upload-progress="handleVideoUploadProgress"
-          />
+          <button type="button" class="tb-btn nw-action-btn nw-tooltip-anchor" data-tooltip="上传附件" aria-label="上传附件" @click="triggerFileInput"><UIcon name="i-heroicons-paper-clip" class="w-5 h-5" /></button>
           <!-- 新增图床上传按钮 -->
           <button type="button" class="tb-btn nw-action-btn nw-tooltip-anchor" data-tooltip="图床上传" aria-label="图床上传" @click="showImageUploader = true"><UIcon name="i-mdi-cloud-upload-outline" class="w-5 h-5" /></button>
           <button type="button" class="tb-btn nw-action-btn state-toggle-btn full-image-btn nw-tooltip-anchor" :class="{ 'is-enabled': fullImageAttachments }" :data-tooltip="`全图显示：${fullImageAttachments ? '已开启' : '已关闭'}`" :aria-label="`全图显示：${fullImageAttachments ? '已开启' : '已关闭'}`" :aria-pressed="fullImageAttachments" @click="toggleFullImageAttachments">
@@ -266,9 +260,8 @@ import SearchMode from './Searchmode.vue'
 import { useMessageStore } from '~/store/message'
 import { useNotifyStore } from '~/store/notify'
 import AudioRecorder from './AudioRecorder.vue'
-import VideoUpload from './VideoUpload.vue'
 import ImageHostingUploader from '~/components/widgets/ImageHostingUploader.vue'
-import { createAudioMarkdown, createVideoMarkdown, resolveUploadedMediaUrl, uploadMediaFiles } from '~/utils/media-upload'
+import { createAudioMarkdown, resolveUploadedMediaUrl, uploadMediaFiles } from '~/utils/media-upload'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 const props = defineProps<{ wide?: boolean }>()
 const containerClass = computed(() => (props.wide ? 'w-full max-w-none' : 'mx-auto w-full sm:max-w-4xl'))
@@ -310,31 +303,24 @@ const handleImageHostingSuccess = (markdown: string) => {
 const handlePositionUpdate = (newPosition: { x: number; y: number }) => {
   imageUploaderPosition.value = newPosition;
 };
-const videoUploadProgress = ref(0); // 新增进度变量
-const handleVideoUploadProgress = (percent: number) => {
-  videoUploadProgress.value = percent;
-};
 const audioUploadProgress = ref(0)
 const handleAudioUploadProgress = (percent: number) => {
   audioUploadProgress.value = percent
 }
-const imageUploadProgress = ref(0)
+const attachmentUploadProgress = ref(0)
 const activeUploadPercent = computed(() => {
   if (audioUploadProgress.value > 0 && audioUploadProgress.value < 100) return audioUploadProgress.value
-  if (videoUploadProgress.value > 0 && videoUploadProgress.value < 100) return videoUploadProgress.value
-  if (imageUploadProgress.value > 0 && imageUploadProgress.value < 100) return imageUploadProgress.value
+  if (attachmentUploadProgress.value > 0 && attachmentUploadProgress.value < 100) return attachmentUploadProgress.value
   return 0
 })
 const activeUploadKind = computed(() => {
   if (audioUploadProgress.value > 0 && audioUploadProgress.value < 100) return 'audio'
-  if (videoUploadProgress.value > 0 && videoUploadProgress.value < 100) return 'video'
-  if (imageUploadProgress.value > 0 && imageUploadProgress.value < 100) return 'image'
+  if (attachmentUploadProgress.value > 0 && attachmentUploadProgress.value < 100) return 'attachment'
   return ''
 })
 const activeUploadLabel = computed(() => {
   if (activeUploadKind.value === 'audio') return '音频'
-  if (activeUploadKind.value === 'video') return '视频'
-  return '图片'
+  return '附件'
 })
 const showSearchModal = ref(false);
 const emit = defineEmits(['search-result','video-uploaded', 'before-upload', 'upload-progress']);
@@ -863,7 +849,7 @@ const triggerFileInput = () => {
   fileInput.value?.click();
 };
 
-const addImage = async (event: Event) => {
+const addAttachment = async (event: Event) => {
   if (!checkLogin()) return;
   const input = event.target as HTMLInputElement;
   const files = input.files ? Array.from(input.files) : [];
@@ -881,21 +867,21 @@ const addImage = async (event: Event) => {
   try {
     const uploaded = await uploadMediaFiles({
       files,
-      kind: 'image',
+      kind: 'auto',
       baseApi: String(BASE_API || '/api'),
       token: userStore.token || '',
-      onProgress: (percent) => { imageUploadProgress.value = percent }
+      onProgress: (percent) => { attachmentUploadProgress.value = percent }
     })
     if (uploaded.length && vditorEditor.value?.insertValue) {
       vditorEditor.value.insertValue(uploaded.map((item) => item.markdown).join(''))
       syncContentFromEditor()
       focusEditor()
     }
-    imageUploadProgress.value = 100
-    setTimeout(() => { imageUploadProgress.value = 0 }, 400)
+    attachmentUploadProgress.value = 100
+    setTimeout(() => { attachmentUploadProgress.value = 0 }, 400)
     toast.add({
       title: '成功',
-      description: uploaded.length > 1 ? `已上传 ${uploaded.length} 张图片` : '图片上传成功',
+      description: uploaded.length > 1 ? `已上传 ${uploaded.length} 个附件` : '附件上传成功',
       color: 'green',
       timeout: 2000
     });
@@ -903,7 +889,7 @@ const addImage = async (event: Event) => {
     console.error('上传错误:', error);
     toast.add({
       title: '错误',
-      description: error.message || '图片上传失败',
+      description: error.message || '附件上传失败',
       color: 'red',
       timeout: 2000
     });
@@ -911,18 +897,9 @@ const addImage = async (event: Event) => {
     if (fileInput.value) {
       fileInput.value.value = '';
     }
-    if (imageUploadProgress.value !== 0) {
-      setTimeout(() => { imageUploadProgress.value = 0 }, 800)
+    if (attachmentUploadProgress.value !== 0) {
+      setTimeout(() => { attachmentUploadProgress.value = 0 }, 800)
     }
-  }
-};
-
-const handleVideoUploaded = (videoUrl: string) => {
-  const videoTag = createVideoMarkdown(resolveUploadedMediaUrl(videoUrl, String(BASE_API || '/api')))
-  if (vditorEditor.value?.insertValue) {
-    vditorEditor.value.insertValue(videoTag)
-    syncContentFromEditor()
-    focusEditor()
   }
 };
 
@@ -951,6 +928,14 @@ const replaceAttachmentMarkersForPreview = (md: string): string => String(md || 
   if (kind === '图片附件') return `![${safeName}](${safeUrl})`
   if (kind === '视频附件') return `<video src="${safeUrl}" controls preload="metadata" style="width:100%;height:auto"></video>`
   return `<audio src="${safeUrl}" controls preload="metadata"></audio>`
+})
+
+const FILE_ATTACHMENT_LINK_REG = /\[文件附件：([^\]]+)\]\(([^)\s]+)\)/g
+const replaceFileAttachmentMarkersForPreview = (md: string): string => String(md || '').replace(FILE_ATTACHMENT_LINK_REG, (_m, name, url) => {
+  const safeName = escapePreviewAttr(String(name || '').trim() || '未命名附件')
+  const safeUrl = escapePreviewAttr(String(url || '').trim())
+  if (!safeUrl) return _m
+  return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeName}</a>`
 })
 
 const applyImageGridHTML = (html: string, keepImagesFullSize = false) => {
@@ -1122,7 +1107,7 @@ watch([MessageContent, fullImageAttachments], ([val]) => {
     const rawValue = String(readSafeEditorContent() || val || "")
     if (rawValue !== MessageContent.value) MessageContent.value = rawValue
     const keepImagesFullSize = fullImageAttachments.value || hasFullImageAttachmentsMarker(rawValue)
-    const previewValue = replaceAttachmentMarkersForPreview(stripFullImageAttachmentsMarker(rawValue))
+    const previewValue = replaceFileAttachmentMarkersForPreview(replaceAttachmentMarkersForPreview(stripFullImageAttachmentsMarker(rawValue)))
     const raw = await Vditor.md2html(normalizeInlineImageLinks(previewValue));
     MessageContentHtml.value = applyImageGridHTML(raw, keepImagesFullSize);
     nextTick(() => {
@@ -1214,7 +1199,7 @@ const addMessage = async () => {
   if (!MessageContent.value.trim()) {
     toast.add({
       title: '错误',
-      description: '请输入内容或上传图片/视频/音频',
+      description: '请输入内容或上传附件',
       color: 'red',
       timeout: 2000
     });

@@ -163,6 +163,7 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onBeforeUnmount, watch, nextTick } from "vue";
+import { useToast } from '#imports'
 import { getFixedCoordinateScale, getFixedRect, positionFloatingMenu, scheduleFloatingMenuPosition } from '~/utils/floating-menu'
 import { captureVideoFirstFrameFromSource, ensureFancyboxVideoThumbnail, getVideoPlaybackFrameForSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
@@ -183,6 +184,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(["update:modelValue", "ready"]);
+const toast = useToast()
 
 type PendingEditorTableCellSync = { tableIndex: number; rowIndex: number; cellIndex: number; text: string }
 type EditorTableCellPosition = Pick<PendingEditorTableCellSync, 'tableIndex' | 'rowIndex' | 'cellIndex'>
@@ -260,12 +262,12 @@ const headingOptions = [
   { tag: 'h6', value: '###### ', label: '六级标题 <Alt+Ctrl+6>' }
 ];
 
-type EditorAttachmentInfo = { type: 'image' | 'video' | 'audio'; title: string; name: string; url: string }
-const ATTACHMENT_MARKER_RE = /!?\[(图片附件|视频附件|音频附件)：([^\]]+)\]\(([^)\s]+)\)/
-const ATTACHMENT_MARKER_GLOBAL_RE = /!?\[(图片附件|视频附件|音频附件)：([^\]]+)\]\(([^)\s]+)\)/g
-const ADJACENT_ATTACHMENT_MARKER_RE = /(!?\[(?:图片附件|视频附件|音频附件)：[^\]]+\]\([^)\s]+\))(!?\[(?:图片附件|视频附件|音频附件)：[^\]]+\]\([^)\s]+\))/g
-const RAW_ATTACHMENT_ANCHOR_RE = /<a\b[^>]*(?:data-attachment-url|href)=["']([^"']+)["'][^>]*>\s*(图片附件|视频附件|音频附件)：([^<]+?)\s*<\/a>/gi
-const ATTACHMENT_ANCHOR_LABEL_RE = /^(图片附件|视频附件|音频附件)：(.+)$/
+type EditorAttachmentInfo = { type: 'image' | 'video' | 'audio' | 'file'; title: string; name: string; url: string }
+const ATTACHMENT_MARKER_RE = /!?\[(图片附件|视频附件|音频附件|文件附件)：([^\]]+)\]\(([^)\s]+)\)/
+const ATTACHMENT_MARKER_GLOBAL_RE = /!?\[(图片附件|视频附件|音频附件|文件附件)：([^\]]+)\]\(([^)\s]+)\)/g
+const ADJACENT_ATTACHMENT_MARKER_RE = /(!?\[(?:图片附件|视频附件|音频附件|文件附件)：[^\]]+\]\([^)\s]+\))(!?\[(?:图片附件|视频附件|音频附件|文件附件)：[^\]]+\]\([^)\s]+\))/g
+const RAW_ATTACHMENT_ANCHOR_RE = /<a\b[^>]*(?:data-attachment-url|href)=["']([^"']+)["'][^>]*>\s*(图片附件|视频附件|音频附件|文件附件)：([^<]+?)\s*<\/a>/gi
+const ATTACHMENT_ANCHOR_LABEL_RE = /^(图片附件|视频附件|音频附件|文件附件)：(.+)$/
 const EXPANDED_TABLE_MIN_COLUMN_WIDTH = 48
 const EXPANDED_TABLE_CELL_HORIZONTAL_PADDING = 18
 
@@ -303,9 +305,24 @@ const calculateAdaptiveTableColumnWidths = (rows: string[][], availableWidth: nu
 const normalizeAttachmentInfo = (kindLabel: string, name: string, url: string): EditorAttachmentInfo | null => {
   const href = String(url || '').trim()
   if (!href) return null
-  const type = kindLabel === '图片附件' ? 'image' : (kindLabel === '视频附件' ? 'video' : 'audio')
+  const type = kindLabel === '图片附件' ? 'image' : (kindLabel === '视频附件' ? 'video' : (kindLabel === '音频附件' ? 'audio' : 'file'))
   const cleanName = String(name || '').trim() || '未命名附件'
   return { type, title: `${kindLabel}：${cleanName}`, name: cleanName, url: href }
+}
+
+const browserPreviewableAttachmentUrl = (url: string) => /\.(pdf|txt|text|csv|json|xml|html?)(?:[?#].*)?$/i.test(String(url || ''))
+
+const openFileAttachment = (info: EditorAttachmentInfo) => {
+  if (browserPreviewableAttachmentUrl(info.url)) {
+    window.open(info.url, '_blank', 'noopener,noreferrer')
+    return
+  }
+  toast.add({
+    title: '暂不支持预览',
+    description: info.name || '该附件类型无法在浏览器中直接预览',
+    color: 'orange',
+    timeout: 2200,
+  })
 }
 
 const attachmentInfoFromText = (text: string) => {
@@ -354,6 +371,9 @@ const buildAttachmentPreviewHtml = (info: EditorAttachmentInfo) => {
   }
   if (info.type === 'video') {
     return `<div class="noise-attachment-render noise-attachment-render--video"><video src="${safeUrl}" controls preload="metadata" playsinline style="width:100%;height:auto"></video></div>`
+  }
+  if (info.type === 'file') {
+    return `<a class="noise-attachment-file" href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeName}</a>`
   }
   return `<div class="noise-attachment-render noise-attachment-render--audio"><audio src="${safeUrl}" controls preload="metadata"></audio></div>`
 }
@@ -866,6 +886,12 @@ const setupAttachmentPreview = () => {
     if (info.type === 'image' || info.type === 'video') {
       root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
       showAttachmentGallery(getAttachmentInfosByType(info.type), info, target)
+      return
+    }
+
+    if (info.type === 'file') {
+      root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
+      openFileAttachment(info)
       return
     }
 
@@ -1596,6 +1622,10 @@ const previewExpandedTableAttachment = (attachment: EditorAttachmentInfo, event:
   if (attachment.type === 'audio') {
     const url = attachment.url
     window.open(url, '_blank', 'noopener,noreferrer')
+    return
+  }
+  if (attachment.type === 'file') {
+    openFileAttachment(attachment)
     return
   }
   showAttachmentGallery(expandedTableAttachmentsByType(attachment.type), attachment, target)

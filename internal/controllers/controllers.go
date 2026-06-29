@@ -3434,7 +3434,7 @@ func UploadAudio(c *gin.Context) {
 		siteConfig = models.SiteConfig{}
 	}
 
-	allowedMimeTypes := []string{"audio/webm", "audio/ogg", "audio/mpeg", "audio/mp4", "audio/wav", "audio/x-wav"}
+	allowedMimeTypes := []string{"audio/webm", "audio/ogg", "audio/mpeg", "audio/mp4", "audio/wav", "audio/x-wav", "audio/flac", "audio/x-flac"}
 
 	audioURL, err := pkg.UploadAudio(c, allowedMimeTypes, &siteConfig)
 	if err != nil {

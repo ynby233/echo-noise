@@ -133,11 +133,23 @@ func SetupRouter() *gin.Engine {
 		os.MkdirAll(audioDir, 0755)
 	}
 
+	attachmentDir := pickDir([]string{
+		"./data/attachments",
+		filepath.Join(wd, "data/attachments"),
+		filepath.Join(exeDir, "data/attachments"),
+		"/data/attachments",
+		"/app/data/attachments",
+	}, "./data/attachments")
+	if _, err := os.Stat(attachmentDir); os.IsNotExist(err) {
+		os.MkdirAll(attachmentDir, 0755)
+	}
+
 	r.Static("/api/images", imgDir)
 	// 同时支持 /api/video 和 /video，兼容旧版路径和 API 规范
 	r.Static("/api/video", vidDir)
 	r.Static("/video", vidDir)
 	r.Static("/api/audio", audioDir)
+	r.Static("/api/files", attachmentDir)
 	// 常用静态文件已在上方映射
 
 	// API 路由组
@@ -291,8 +303,9 @@ func SetupRouter() *gin.Engine {
 	// 图片上传路由
 	authRoutes.POST("/images/upload", controllers.UploadImage) // 上传图片
 	// 新增：视频上传路由（改为单数 video）
-	authRoutes.POST("/video/upload", controllers.UploadVideo) // 上传视频
-	authRoutes.POST("/audio/upload", controllers.UploadAudio) // 上传音频
+	authRoutes.POST("/video/upload", controllers.UploadVideo)            // 上传视频
+	authRoutes.POST("/audio/upload", controllers.UploadAudio)            // 上传音频
+	authRoutes.POST("/attachments/upload", controllers.UploadAttachment) // 上传通用附件
 
 	// 附件管理路由
 	attachments := authRoutes.Group("/attachments")
@@ -303,9 +316,12 @@ func SetupRouter() *gin.Engine {
 		attachments.GET("/video/", controllers.ListVideoAttachments)
 		attachments.GET("/audio", controllers.ListAudioAttachments)
 		attachments.GET("/audio/", controllers.ListAudioAttachments)
+		attachments.GET("/other", controllers.ListOtherAttachments)
+		attachments.GET("/other/", controllers.ListOtherAttachments)
 		attachments.DELETE("/images/*name", middleware.AdminAuthMiddleware(), controllers.DeleteImageAttachment)
 		attachments.DELETE("/video/*name", middleware.AdminAuthMiddleware(), controllers.DeleteVideoAttachment)
 		attachments.DELETE("/audio/*name", middleware.AdminAuthMiddleware(), controllers.DeleteAudioAttachment)
+		attachments.DELETE("/other/*name", middleware.AdminAuthMiddleware(), controllers.DeleteOtherAttachment)
 	}
 
 	// 用户相关路由

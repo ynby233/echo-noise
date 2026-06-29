@@ -102,7 +102,7 @@ func normalizeUploadExt(ext, fallback string) string {
 func audioUploadExt(filename, contentType string) string {
 	ext := normalizeUploadExt(filepath.Ext(filename), ".webm")
 	switch ext {
-	case ".webm", ".ogg", ".mp3", ".m4a", ".wav":
+	case ".webm", ".ogg", ".mp3", ".m4a", ".wav", ".flac":
 		return ext
 	}
 
@@ -116,6 +116,8 @@ func audioUploadExt(filename, contentType string) string {
 		return ".m4a"
 	case "audio/wav", "audio/x-wav":
 		return ".wav"
+	case "audio/flac", "audio/x-flac":
+		return ".flac"
 	default:
 		return ".webm"
 	}
@@ -259,8 +261,8 @@ func UploadImage(c *gin.Context, allowedExtensions []string, siteConfig *models.
 	}
 
 	// 检查文件大小
-	if file.Size > int64(config.Config.Upload.MaxSize) {
-		return "", errors.New(models.ImageSizeLimitErrorMessage + strconv.Itoa(config.Config.Upload.MaxSize/1024/1024) + "MB")
+	if file.Size > 5*1024*1024*1024 {
+		return "", errors.New(models.ImageSizeLimitErrorMessage + strconv.Itoa(5*1024) + "MB")
 	}
 
 	// 打开文件进行处理
@@ -606,8 +608,8 @@ func UploadVideo(c *gin.Context, allowedExtensions []string, siteConfig *models.
 
 	// 检查文件大小（200MB）
 	// 允许更大的视频上传（默认 1GiB）。如需进一步调整，可在后续引入配置项。
-	if file.Size > 1024*1024*1024 {
-		return "", errors.New("视频大小不能超过1024MB")
+	if file.Size > 5*1024*1024*1024 {
+		return "", errors.New("视频大小不能超过5GB")
 	}
 
 	// 读取文件内容
@@ -769,8 +771,8 @@ func UploadAudio(c *gin.Context, allowedMimeTypes []string, siteConfig *models.S
 		return "", errors.New("不支持的音频类型")
 	}
 
-	if file.Size > 200*1024*1024 {
-		return "", errors.New("音频大小不能超过200MB")
+	if file.Size > 5*1024*1024*1024 {
+		return "", errors.New("音频大小不能超过5GB")
 	}
 
 	srcFile, err := file.Open()
@@ -831,4 +833,86 @@ func UploadAudio(c *gin.Context, allowedMimeTypes []string, siteConfig *models.S
 
 	audioURL := fmt.Sprintf("/api/audio/%s", url.PathEscape(newFileName))
 	return audioURL, nil
+}
+
+func localAttachmentStorageDir(name string) string {
+	dir := filepath.Join(".", "data", name)
+	if _, err := os.Stat("/data"); err == nil {
+		dir = filepath.Join("/data", name)
+	} else if _, err := os.Stat("/app/data"); err == nil {
+		dir = filepath.Join("/app/data", name)
+	}
+	return dir
+}
+
+// UploadFileAttachment uploads non-media attachments and returns the public URL.
+func UploadFileAttachment(c *gin.Context, siteConfig *models.SiteConfig) (string, error) {
+	file, err := c.FormFile("file")
+	if err != nil {
+		return "", errors.New("未上传附件文件")
+	}
+	if file.Size > 5*1024*1024*1024 {
+		return "", errors.New("附件大小不能超过5GB")
+	}
+
+	srcFile, err := file.Open()
+	if err != nil {
+		return "", err
+	}
+	defer srcFile.Close()
+
+	seeker, ok := srcFile.(io.ReadSeeker)
+	if !ok {
+		return "", errors.New("无法读取上传文件")
+	}
+
+	contentType := strings.TrimSpace(file.Header.Get("Content-Type"))
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	ext := normalizeUploadExt(filepath.Ext(file.Filename), ".bin")
+	contentHash, err := attachmentContentHashFromReadSeeker(seeker)
+	if err != nil {
+		return "", err
+	}
+	preferredFileName := safeAttachmentFileName(file.Filename, ext, "attachment")
+
+	if siteConfig != nil && siteConfig.AttachmentStorageEnabled {
+		if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+			return "", err
+		}
+		return UploadAttachmentToCloud(siteConfig, preferredFileName, seeker, contentType, contentHash)
+	}
+
+	attachmentPath := localAttachmentStorageDir("attachments")
+	if err := createImageDirIfNotExist(attachmentPath); err != nil {
+		return "", err
+	}
+
+	newFileName, existed, err := localAttachmentFileNameForContent(attachmentPath, preferredFileName, contentHash)
+	if err != nil {
+		return "", err
+	}
+
+	savePath := filepath.Join(attachmentPath, newFileName)
+	if !existed && !fileExists(savePath) {
+		if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+			return "", err
+		}
+		out, err := os.Create(savePath)
+		if err != nil {
+			return "", errors.New("附件上传失败")
+		}
+		if _, err := io.Copy(out, seeker); err != nil {
+			out.Close()
+			_ = os.Remove(savePath)
+			return "", errors.New("附件上传失败")
+		}
+		if err := out.Close(); err != nil {
+			_ = os.Remove(savePath)
+			return "", errors.New("附件上传失败")
+		}
+	}
+
+	return fmt.Sprintf("/api/files/%s", url.PathEscape(newFileName)), nil
 }
