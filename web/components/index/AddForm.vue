@@ -501,7 +501,7 @@ const readEditorDomTableSafeContent = () => {
   clone.querySelectorAll('.editor-table-delete-button, .editor-table-expand-button, .editor-attachment-preview').forEach((node) => node.remove())
   clone.querySelectorAll('table').forEach((node) => {
     const markdown = serializeAddFormTableDomAsMarkdown(node as HTMLTableElement)
-    node.replaceWith(document.createTextNode(markdown ? `\n${markdown}\n` : ''))
+    node.replaceWith(document.createTextNode(markdown ? `\n${markdown}\n\n` : ''))
   })
   clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')))
   return String(clone.textContent || '').replace(/[\u200b\u200c\ufeff]/g, '').replace(/\u00a0/g, ' ').trim()

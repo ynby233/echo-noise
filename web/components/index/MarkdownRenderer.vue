@@ -122,6 +122,7 @@ const HASHTAG_REG = /(^|[\s(（[{【])#([\p{L}\p{N}_-]+)/gu
 const TABLE_CELL_BREAK_RE = /<br\s*\/?\s*>/gi
 const RENDERED_TABLE_MIN_COLUMN_WIDTH = 48
 const RENDERED_TABLE_MIN_ROW_HEIGHT = 38
+const RENDERED_TABLE_CELL_HORIZONTAL_PADDING = 18
 type RenderedTableResizeDrag = { type: 'row' | 'column'; index: number; startClient: number; startSize: number }
 let renderedTableResizeDrag: RenderedTableResizeDrag | null = null
 let renderedTableManualRowHeights: number[] = []
@@ -485,7 +486,7 @@ const estimateRenderedTableLineWidth = (line: string) => {
     if (/\s/.test(char)) return width + 4
     if (/[^\x00-\xff]/.test(char)) return width + 14
     return width + 7
-  }, 20)
+  }, RENDERED_TABLE_CELL_HORIZONTAL_PADDING)
 }
 
 const adaptiveRenderedTableColumnWidths = (table: HTMLTableElement, availableWidth: number, minWidth = RENDERED_TABLE_MIN_COLUMN_WIDTH) => {
@@ -502,11 +503,18 @@ const adaptiveRenderedTableColumnWidths = (table: HTMLTableElement, availableWid
     }, minWidth)
     return Math.max(minWidth, Math.ceil(maxLine))
   })
-  let widths = natural.map((width) => width <= average ? Math.max(minWidth, width) : width)
+  if (natural.every((width) => width <= average)) {
+    const base = Math.floor(average)
+    const remainder = safeAvailable - base * columnCount
+    return Array.from({ length: columnCount }, (_, index) => base + (index < remainder ? 1 : 0))
+  }
+  let widths = natural.map((width) => Math.max(minWidth, width))
   const total = widths.reduce((sum, width) => sum + width, 0)
   if (total < safeAvailable) {
-    const extra = (safeAvailable - total) / columnCount
-    widths = widths.map((width) => Math.floor(width + extra))
+    const extra = safeAvailable - total
+    const share = Math.floor(extra / columnCount)
+    const remainder = extra - share * columnCount
+    widths = widths.map((width, index) => width + share + (index < remainder ? 1 : 0))
   }
   return widths.map((width) => Math.max(minWidth, Math.ceil(width)))
 }
@@ -2149,6 +2157,7 @@ watch(() => props.enableGithubCard, () => {
   min-height: 0;
   overflow: auto;
   padding: 12px;
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);
 }
@@ -2171,7 +2180,7 @@ watch(() => props.enableGithubCard, () => {
   position: relative;
   box-sizing: border-box;
   min-width: 48px;
-  padding: 9px 10px;
+  padding: 7px 8px;
   border: 1px solid rgba(148, 163, 184, 0.42);
   background: rgba(255, 255, 255, 0.94);
   color: inherit;

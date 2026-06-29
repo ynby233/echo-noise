@@ -319,11 +319,18 @@ const calculateAdaptiveTableColumnWidths = (rows: string[][], availableWidth: nu
     }, minWidth)
     return Math.max(minWidth, Math.ceil(maxLineWidth))
   })
-  let widths = natural.map((width) => width <= average ? Math.max(minWidth, width) : width)
+  if (natural.every((width) => width <= average)) {
+    const base = Math.floor(average)
+    const remainder = safeAvailable - base * columnCount
+    return Array.from({ length: columnCount }, (_, index) => base + (index < remainder ? 1 : 0))
+  }
+  let widths = natural.map((width) => Math.max(minWidth, width))
   const total = widths.reduce((sum, width) => sum + width, 0)
   if (total < safeAvailable) {
-    const extra = (safeAvailable - total) / columnCount
-    widths = widths.map((width) => Math.floor(width + extra))
+    const extra = safeAvailable - total
+    const share = Math.floor(extra / columnCount)
+    const remainder = extra - share * columnCount
+    widths = widths.map((width, index) => width + share + (index < remainder ? 1 : 0))
   }
   return widths.map((width) => Math.max(minWidth, Math.ceil(width)))
 }
@@ -2249,7 +2256,7 @@ const getEditorDomContentFallback = () => {
   clone.querySelectorAll('table').forEach((node) => {
     const table = node as HTMLTableElement
     const markdown = serializeEditorTableDomAsMarkdown(table)
-    table.replaceWith(document.createTextNode(markdown ? `\n${markdown}\n` : ''))
+    table.replaceWith(document.createTextNode(markdown ? `\n${markdown}\n\n` : ''))
   })
   clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')))
   const text = normalizeAttachmentSourceText(String(clone.textContent || '').replace(/[\u200b\u200c\ufeff]/g, '').replace(/\u00a0/g, ' ')).trim()
@@ -4209,6 +4216,7 @@ html.dark .editor-table-expand-button:focus-visible {
   min-height: 0;
   overflow: auto;
   padding: 12px;
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);
 }

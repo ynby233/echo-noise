@@ -111,12 +111,74 @@ const vditorPlainEnterBody = sourceSlice(vditorEditor, 'const onPlainTextEnterKe
 const vditorCompositionEndBody = sourceSlice(vditorEditor, 'const onEditorCompositionEnd', 'const refreshAttachmentLinks')
 const vditorApplyTableSourceBody = sourceSlice(vditorEditor, 'const applyEditorTableCellSourceValue', 'const editorTableContentTextFromElement')
 const addFormReadSafeContentBody = sourceSlice(addForm, 'const readSafeEditorContent', 'const syncContentFromEditor')
+const vditorAdaptiveColumnWidthBody = sourceSlice(vditorEditor, 'const calculateAdaptiveTableColumnWidths', 'const normalizeAttachmentInfo')
+const renderedAdaptiveColumnWidthBody = sourceSlice(markdownRenderer, 'const adaptiveRenderedTableColumnWidths', 'const applyAdaptiveRenderedTableColumns')
 const trustedTableSourceIndex = vditorSafeValueBody.indexOf('trustedSource')
 const liveDomFallbackIndex = vditorSafeValueBody.indexOf('getEditorDomContentFallback')
 const addFormEditorValueIndex = addFormReadSafeContentBody.indexOf('vditorEditor.value?.getValue?.()')
 const addFormDomTableFallbackIndex = addFormReadSafeContentBody.indexOf('readEditorDomTableSafeContent()')
 const tableSourceSetValueIndex = vditorApplyTableSourceBody.indexOf('vditorInstance.setValue(result.value)')
 const tableSourceRestoreCellIndex = vditorApplyTableSourceBody.indexOf('getEditorTableCellAtPosition(position)')
+
+const regressionAdaptiveColumnWidths = (naturalWidths, availableWidth, minWidth = 48) => {
+  const columnCount = naturalWidths.length
+  const safeAvailable = Math.max(minWidth * columnCount, Math.floor(availableWidth || 0))
+  const average = safeAvailable / columnCount
+  const natural = naturalWidths.map((width) => Math.max(minWidth, Math.ceil(width)))
+  if (natural.every((width) => width <= average)) {
+    const base = Math.floor(average)
+    const remainder = safeAvailable - base * columnCount
+    return Array.from({ length: columnCount }, (_, index) => base + (index < remainder ? 1 : 0))
+  }
+  let widths = natural.map((width) => Math.max(minWidth, width))
+  const total = widths.reduce((sum, width) => sum + width, 0)
+  if (total < safeAvailable) {
+    const extra = safeAvailable - total
+    const share = Math.floor(extra / columnCount)
+    const remainder = extra - share * columnCount
+    widths = widths.map((width, index) => width + share + (index < remainder ? 1 : 0))
+  }
+  return widths.map((width) => Math.max(minWidth, Math.ceil(width)))
+}
+
+assert(
+  JSON.stringify(regressionAdaptiveColumnWidths([52, 90, 120], 600)) === JSON.stringify([200, 200, 200]) &&
+    JSON.stringify(regressionAdaptiveColumnWidths([52, 360, 80], 600)) === JSON.stringify([88, 396, 116]) &&
+    JSON.stringify(regressionAdaptiveColumnWidths([52, 900, 80], 600)) === JSON.stringify([52, 900, 80]),
+  'expanded table adaptive width rule must keep all columns equal when every natural width fits the average, only reallocating width when a column exceeds the average'
+)
+
+assert(
+  vditorAdaptiveColumnWidthBody.includes('natural.every((width) => width <= average)') &&
+    renderedAdaptiveColumnWidthBody.includes('natural.every((width) => width <= average)') &&
+    vditorAdaptiveColumnWidthBody.includes('safeAvailable - base * columnCount') &&
+    renderedAdaptiveColumnWidthBody.includes('safeAvailable - base * columnCount') &&
+    vditorAdaptiveColumnWidthBody.includes('index < remainder ? 1 : 0') &&
+    renderedAdaptiveColumnWidthBody.includes('index < remainder ? 1 : 0') &&
+    !vditorAdaptiveColumnWidthBody.includes('width <= average ?') &&
+    !renderedAdaptiveColumnWidthBody.includes('width <= average ?'),
+  'editor and rendered expanded table column width algorithms must both implement the average-first distribution rule'
+)
+
+assert(
+  vditorEditor.includes("table.replaceWith(document.createTextNode(markdown ? `\\n${markdown}\\n\\n` : ''))") &&
+    addForm.includes("node.replaceWith(document.createTextNode(markdown ? `\\n${markdown}\\n\\n` : ''))"),
+  'all table DOM fallback serializers must leave a blank line after markdown tables so following text is not parsed into the first column after publish'
+)
+
+assert(
+  vditorEditor.includes('.editor-table-expand-scroll {\n  min-width: 0;\n  min-height: 0;\n  overflow: auto;\n  padding: 12px;\n  scrollbar-gutter: stable;') &&
+    markdownRenderer.includes('.rendered-table-expand-scroll {\n  min-width: 0;\n  min-height: 0;\n  overflow: auto;\n  padding: 12px;\n  scrollbar-gutter: stable;'),
+  'editor and rendered expanded table scroll containers must reserve stable scrollbar gutter so vertical overflow does not shrink the table width'
+)
+
+assert(
+  markdownRenderer.includes('const RENDERED_TABLE_CELL_HORIZONTAL_PADDING = 18') &&
+    markdownRenderer.includes('}, RENDERED_TABLE_CELL_HORIZONTAL_PADDING)') &&
+    markdownRenderer.includes('  padding: 7px 8px;\n  border: 1px solid rgba(148, 163, 184, 0.42);') &&
+    !markdownRenderer.includes('  padding: 9px 10px;\n  border: 1px solid rgba(148, 163, 184, 0.42);'),
+  'published expanded table cells must use the same horizontal padding and width estimate baseline as the editor expanded table'
+)
 
 assert(
   vditorEditor.includes('const commitEditorTableCellDomEdit = (cell: HTMLTableCellElement, options: { emit?: boolean } = {}) => {') &&
