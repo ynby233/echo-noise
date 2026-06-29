@@ -1235,6 +1235,15 @@ const ATTACHMENT_LINK_REG = /\[(图片附件|视频附件|音频附件)：([^\]]
 
 const browserPreviewableAttachmentUrl = (url: string) => /\.(pdf|txt|text|csv|json|xml|html?)(?:[?#].*)?$/i.test(String(url || ''))
 
+const attachmentExtensionLabel = (name: string, url: string) => {
+  const source = String(name || url || '').split(/[?#]/)[0]
+  const decoded = (() => {
+    try { return decodeURIComponent(source) } catch { return source }
+  })()
+  const match = decoded.match(/\.([a-z0-9]{1,12})$/i)
+  return match ? match[1].toUpperCase() : 'FILE'
+}
+
 const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string) => {
   const url = resolveImageUrl(String(rawUrl || '').trim())
   const safeUrl = escapeHtml(url)
@@ -1247,10 +1256,13 @@ const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string) =>
     return `<div class="noise-attachment-render noise-attachment-render--video"><video src="${safeUrl}" controls preload="metadata" style="width:100%;height:auto"></video></div>`
   }
   if (kindLabel === '文件附件') {
-    const previewAttrs = browserPreviewableAttachmentUrl(url)
+    const canPreview = browserPreviewableAttachmentUrl(url)
+    const previewAttrs = canPreview
       ? 'target="_blank" rel="noopener noreferrer"'
-      : 'download'
-    return `<a class="noise-attachment-file" href="${safeUrl}" ${previewAttrs}><span class="noise-attachment-file__kind">附件</span><span class="noise-attachment-file__name">${safeName}</span></a>`
+      : `download="${safeName}"`
+    const actionLabel = canPreview ? '打开附件' : '下载附件'
+    const meta = escapeHtml(attachmentExtensionLabel(name, url))
+    return `<a class="noise-attachment-file" href="${safeUrl}" ${previewAttrs} aria-label="${actionLabel}：${safeName}"><span class="noise-attachment-file__icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M7 3.75h7.2L18.25 7.8v12.45H7V3.75Z"></path><path d="M14 3.75V8h4.25"></path></svg></span><span class="noise-attachment-file__body"><span class="noise-attachment-file__name">${safeName}</span><span class="noise-attachment-file__meta">${meta}</span></span><span class="noise-attachment-file__action" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 4v10"></path><path d="m8 10 4 4 4-4"></path><path d="M5 18.5h14"></path></svg></span></a>`
   }
   return `<audio class="noise-attachment-audio" src="${safeUrl}" controls preload="metadata"></audio>`
 }
@@ -2551,39 +2563,154 @@ body.is-resizing-rendered-table-column {
   margin: 0.35em 0;
 }
 
-.markdown-preview :deep(.noise-attachment-file) {
-  display: flex;
+.markdown-preview :deep(.noise-attachment-file),
+.rendered-table-expand-scroll .noise-attachment-file {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 28px;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
+  width: 100%;
+  min-height: 72px;
   max-width: 100%;
-  margin: 8px 0;
-  padding: 10px 12px;
-  border: 1px solid rgba(148, 163, 184, 0.38);
-  border-radius: 8px;
-  background: rgba(248, 250, 252, 0.82);
+  margin: 10px 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.20) !important;
+  border-radius: 8px !important;
+  background: rgba(248, 250, 252, 0.66) !important;
   color: inherit !important;
   text-decoration: none !important;
+  box-shadow: none !important;
+  box-sizing: border-box;
+  transition: border-color .16s ease, background-color .16s ease, transform .16s ease;
 }
 
-.markdown-preview :deep(.noise-attachment-file__kind) {
-  flex: 0 0 auto;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: rgba(59, 130, 246, 0.12);
-  color: #2563eb;
-  font-size: 12px;
-  line-height: 1.4;
+.markdown-preview :deep(.noise-attachment-file:hover),
+.markdown-preview :deep(.noise-attachment-file:focus-visible),
+.rendered-table-expand-scroll .noise-attachment-file:hover,
+.rendered-table-expand-scroll .noise-attachment-file:focus-visible {
+  border-color: rgba(148, 163, 184, 0.34) !important;
+  background: rgba(248, 250, 252, 0.88) !important;
+  color: inherit !important;
+  text-decoration: none !important;
+  outline: none;
 }
 
-.markdown-preview :deep(.noise-attachment-file__name) {
+.markdown-preview :deep(.noise-attachment-file__icon),
+.rendered-table-expand-scroll .noise-attachment-file__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  background: rgba(241, 245, 249, 0.72);
+  color: rgba(71, 85, 105, 0.82);
+}
+
+.markdown-preview :deep(.noise-attachment-file__icon svg),
+.markdown-preview :deep(.noise-attachment-file__action svg),
+.rendered-table-expand-scroll .noise-attachment-file__icon svg,
+.rendered-table-expand-scroll .noise-attachment-file__action svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.markdown-preview :deep(.noise-attachment-file__body),
+.rendered-table-expand-scroll .noise-attachment-file__body {
+  display: flex;
   min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+
+.markdown-preview :deep(.noise-attachment-file__name),
+.rendered-table-expand-scroll .noise-attachment-file__name {
+  min-width: 0;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.35;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 
-.markdown-preview.theme-dark :deep(.noise-attachment-file) {
-  border-color: rgba(148, 163, 184, 0.26);
-  background: rgba(15, 23, 42, 0.44);
+.markdown-preview :deep(.noise-attachment-file__meta),
+.rendered-table-expand-scroll .noise-attachment-file__meta {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.markdown-preview :deep(.noise-attachment-file__action),
+.rendered-table-expand-scroll .noise-attachment-file__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(100, 116, 139, 0.62);
+}
+
+.markdown-preview.theme-dark :deep(.noise-attachment-file),
+.rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .noise-attachment-file {
+  border-color: rgba(148, 163, 184, 0.20) !important;
+  background: rgba(15, 23, 42, 0.38) !important;
+}
+
+.markdown-preview.theme-dark :deep(.noise-attachment-file:hover),
+.markdown-preview.theme-dark :deep(.noise-attachment-file:focus-visible),
+.rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .noise-attachment-file:hover,
+.rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .noise-attachment-file:focus-visible {
+  border-color: rgba(148, 163, 184, 0.32) !important;
+  background: rgba(30, 41, 59, 0.52) !important;
+}
+
+.markdown-preview.theme-dark :deep(.noise-attachment-file__icon),
+.rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .noise-attachment-file__icon {
+  background: rgba(30, 41, 59, 0.62);
+  color: rgba(226, 232, 240, 0.82);
+}
+
+.markdown-preview.theme-dark :deep(.noise-attachment-file__name),
+.rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .noise-attachment-file__name {
+  color: #f8fafc;
+}
+
+.markdown-preview.theme-dark :deep(.noise-attachment-file__meta),
+.rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .noise-attachment-file__meta {
+  color: #94a3b8;
+}
+
+.markdown-preview.theme-dark :deep(.noise-attachment-file__action),
+.rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .noise-attachment-file__action {
+  color: rgba(203, 213, 225, 0.68);
+}
+
+@media (max-width: 520px) {
+  .markdown-preview :deep(.noise-attachment-file),
+  .rendered-table-expand-scroll .noise-attachment-file {
+    grid-template-columns: 44px minmax(0, 1fr) 24px;
+    gap: 10px;
+    min-height: 64px;
+    padding: 10px;
+  }
+
+  .markdown-preview :deep(.noise-attachment-file__icon),
+  .rendered-table-expand-scroll .noise-attachment-file__icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .markdown-preview :deep(.noise-attachment-file__name),
+  .rendered-table-expand-scroll .noise-attachment-file__name {
+    font-size: 14px;
+  }
 }
 
 .markdown-preview :deep(.noise-attachment-render--video video) {
