@@ -120,6 +120,12 @@ const hasFullImageAttachmentsMarker = (content: string) => {
 const stripFullImageAttachmentsMarker = (content: string) => String(content || '').replace(FULL_IMAGE_ATTACHMENTS_MARKER_RE, '').trimStart()
 const HASHTAG_REG = /(^|[\s(（[{【])#([\p{L}\p{N}_-]+)/gu
 const TABLE_CELL_BREAK_RE = /<br\s*\/?\s*>/gi
+const RENDERED_TABLE_MIN_COLUMN_WIDTH = 48
+const RENDERED_TABLE_MIN_ROW_HEIGHT = 38
+type RenderedTableResizeDrag = { type: 'row' | 'column'; index: number; startClient: number; startSize: number }
+let renderedTableResizeDrag: RenderedTableResizeDrag | null = null
+let renderedTableManualRowHeights: number[] = []
+let renderedTableManualColumnWidths: number[] = []
 const METING_API_FALLBACKS = [
   'https://meting.soopy.cn/api',
   'https://api.injahow.cn/meting/',
@@ -482,7 +488,7 @@ const estimateRenderedTableLineWidth = (line: string) => {
   }, 20)
 }
 
-const adaptiveRenderedTableColumnWidths = (table: HTMLTableElement, availableWidth: number, minWidth = 48) => {
+const adaptiveRenderedTableColumnWidths = (table: HTMLTableElement, availableWidth: number, minWidth = RENDERED_TABLE_MIN_COLUMN_WIDTH) => {
   const rows = Array.from(table.rows)
   const columnCount = rows.reduce((max, row) => Math.max(max, row.cells.length), 0)
   if (!columnCount) return [] as number[]
@@ -505,8 +511,11 @@ const adaptiveRenderedTableColumnWidths = (table: HTMLTableElement, availableWid
   return widths.map((width) => Math.max(minWidth, Math.ceil(width)))
 }
 
-const applyAdaptiveRenderedTableColumns = (table: HTMLTableElement, availableWidth: number) => {
-  const widths = adaptiveRenderedTableColumnWidths(table, availableWidth)
+const applyAdaptiveRenderedTableColumns = (table: HTMLTableElement, availableWidth: number, manualWidths: number[] = []) => {
+  const widths = adaptiveRenderedTableColumnWidths(table, availableWidth).map((width, index) => Math.max(
+    RENDERED_TABLE_MIN_COLUMN_WIDTH,
+    Math.ceil(manualWidths[index] || width)
+  ))
   if (!widths.length) return
   table.querySelector('colgroup')?.remove()
   const colgroup = document.createElement('colgroup')
@@ -518,13 +527,148 @@ const applyAdaptiveRenderedTableColumns = (table: HTMLTableElement, availableWid
   table.insertBefore(colgroup, table.firstChild)
 }
 
+const measureRenderedTableAutoRowHeights = (table: HTMLTableElement) => {
+  const rows = Array.from(table.rows)
+  const previousRowHeights = rows.map((row) => row.style.height)
+  const previousCellHeights = rows.map((row) => Array.from(row.cells).map((cell) => (cell as HTMLElement).style.height))
+  rows.forEach((row) => {
+    row.style.height = 'auto'
+    Array.from(row.cells).forEach((cell) => { (cell as HTMLElement).style.height = 'auto' })
+  })
+  const heights = rows.map((row) => {
+    const maxCellHeight = Array.from(row.cells).reduce((max, cell) => Math.max(max, Math.ceil((cell as HTMLElement).scrollHeight)), RENDERED_TABLE_MIN_ROW_HEIGHT)
+    return Math.max(RENDERED_TABLE_MIN_ROW_HEIGHT, maxCellHeight)
+  })
+  rows.forEach((row, rowIndex) => {
+    row.style.height = previousRowHeights[rowIndex] || ''
+    Array.from(row.cells).forEach((cell, cellIndex) => {
+      ;(cell as HTMLElement).style.height = previousCellHeights[rowIndex]?.[cellIndex] || ''
+    })
+  })
+  return heights
+}
+
+const applyRenderedTableRowHeights = (table: HTMLTableElement, manualHeights: number[] = []) => {
+  const autoHeights = measureRenderedTableAutoRowHeights(table)
+  Array.from(table.rows).forEach((row, rowIndex) => {
+    const height = Math.max(
+      RENDERED_TABLE_MIN_ROW_HEIGHT,
+      Math.ceil(autoHeights[rowIndex] || 0),
+      Math.ceil(manualHeights[rowIndex] || 0)
+    )
+    row.style.height = `${height}px`
+    Array.from(row.cells).forEach((cell) => { (cell as HTMLElement).style.height = `${height}px` })
+  })
+  return autoHeights
+}
+
+const renderedTableExpandTable = () => renderedTableExpandBody.value?.querySelector<HTMLTableElement>('.rendered-table-expanded-table') || null
+
+const renderedTableExpandAvailableWidth = () => {
+  const scroll = renderedTableExpandBody.value
+  const fallback = Math.min(1680, Math.max(320, window.innerWidth - 48)) - 24
+  return Math.max(160, Math.floor((scroll?.clientWidth || fallback) - 24))
+}
+
+const stopRenderedTableResize = () => {
+  window.removeEventListener('pointermove', onRenderedTableResizeMove, true)
+  window.removeEventListener('pointerup', stopRenderedTableResize, true)
+  window.removeEventListener('pointercancel', stopRenderedTableResize, true)
+  renderedTableResizeDrag = null
+  document.body.classList.remove('is-resizing-rendered-table-row', 'is-resizing-rendered-table-column')
+}
+
+const syncRenderedTableExpandLayout = () => {
+  const table = renderedTableExpandTable()
+  if (!table) return
+  applyAdaptiveRenderedTableColumns(table, renderedTableExpandAvailableWidth(), renderedTableManualColumnWidths)
+  const autoRowHeights = applyRenderedTableRowHeights(table, renderedTableManualRowHeights)
+  ensureRenderedTableResizeHandles(table, autoRowHeights)
+}
+
+const onRenderedTableResizeMove = (event: PointerEvent) => {
+  const drag = renderedTableResizeDrag
+  if (!drag) return
+  const table = renderedTableExpandTable()
+  if (!table) return
+  event.preventDefault()
+  event.stopPropagation()
+  if (drag.type === 'row') {
+    const autoHeights = measureRenderedTableAutoRowHeights(table)
+    const nextHeight = Math.max(
+      autoHeights[drag.index] || RENDERED_TABLE_MIN_ROW_HEIGHT,
+      drag.startSize + event.clientY - drag.startClient
+    )
+    renderedTableManualRowHeights[drag.index] = Math.ceil(nextHeight)
+    syncRenderedTableExpandLayout()
+    return
+  }
+  const nextWidth = Math.max(RENDERED_TABLE_MIN_COLUMN_WIDTH, drag.startSize + event.clientX - drag.startClient)
+  renderedTableManualColumnWidths[drag.index] = Math.ceil(nextWidth)
+  syncRenderedTableExpandLayout()
+}
+
+const startRenderedTableResize = (drag: RenderedTableResizeDrag, event: PointerEvent) => {
+  stopRenderedTableResize()
+  renderedTableResizeDrag = drag
+  document.body.classList.add(drag.type === 'row' ? 'is-resizing-rendered-table-row' : 'is-resizing-rendered-table-column')
+  event.currentTarget instanceof HTMLElement && event.currentTarget.setPointerCapture?.(event.pointerId)
+  window.addEventListener('pointermove', onRenderedTableResizeMove, true)
+  window.addEventListener('pointerup', stopRenderedTableResize, true)
+  window.addEventListener('pointercancel', stopRenderedTableResize, true)
+}
+
+const ensureRenderedTableResizeHandles = (table: HTMLTableElement, autoRowHeights: number[] = []) => {
+  table.querySelectorAll('.rendered-table-expand-row-resize-handle, .rendered-table-expand-column-resize-handle').forEach((handle) => handle.remove())
+  const rows = Array.from(table.rows)
+  rows.forEach((row, rowIndex) => {
+    Array.from(row.cells).forEach((cell, cellIndex) => {
+      const cellElement = cell as HTMLElement
+      if (rowIndex < rows.length - 1) {
+        const handle = document.createElement('span')
+        handle.className = 'rendered-table-expand-row-resize-handle'
+        handle.setAttribute('aria-hidden', 'true')
+        handle.addEventListener('pointerdown', (event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          startRenderedTableResize({
+            type: 'row',
+            index: rowIndex,
+            startClient: event.clientY,
+            startSize: Math.max(autoRowHeights[rowIndex] || RENDERED_TABLE_MIN_ROW_HEIGHT, row.getBoundingClientRect().height)
+          }, event)
+        })
+        cellElement.appendChild(handle)
+      }
+      if (cellIndex < row.cells.length - 1) {
+        const handle = document.createElement('span')
+        handle.className = 'rendered-table-expand-column-resize-handle'
+        handle.setAttribute('aria-hidden', 'true')
+        handle.addEventListener('pointerdown', (event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          startRenderedTableResize({
+            type: 'column',
+            index: cellIndex,
+            startClient: event.clientX,
+            startSize: cellElement.getBoundingClientRect().width
+          }, event)
+        })
+        cellElement.appendChild(handle)
+      }
+    })
+  })
+}
+
 const openRenderedTableExpand = async (table: HTMLTableElement) => {
   if (!table) return
+  renderedTableManualRowHeights = []
+  renderedTableManualColumnWidths = []
   const clone = table.cloneNode(true) as HTMLTableElement
   normalizeRenderedTableStructure(clone)
   clone.classList.add('noise-scrollable-table', 'rendered-table-expanded-table')
   const availableWidth = Math.min(1680, Math.max(320, window.innerWidth - 48)) - 24
-  applyAdaptiveRenderedTableColumns(clone, availableWidth)
+  applyAdaptiveRenderedTableColumns(clone, availableWidth, renderedTableManualColumnWidths)
   clone.querySelectorAll('button:not(.noise-rendered-table-expand-button)').forEach((button) => button.remove())
   clone.querySelectorAll('.noise-rendered-table-expand-button').forEach((button) => button.remove())
   renderedTableExpandHtml.value = clone.outerHTML
@@ -538,6 +682,7 @@ const openRenderedTableExpand = async (table: HTMLTableElement) => {
   if (renderedTableExpandBody.value) {
     renderedTableExpandBody.value.querySelectorAll<HTMLTableElement>('table').forEach((item) => replaceRenderedTableBreakTextNodes(item))
     initializeMediaViewer(renderedTableExpandBody.value)
+    syncRenderedTableExpandLayout()
   }
 }
 
@@ -549,6 +694,9 @@ const closeRenderedTableExpand = () => {
     showRenderedTableExpandDialog.value = false
     renderedTableExpandClosing.value = false
     renderedTableExpandHtml.value = ''
+    renderedTableManualRowHeights = []
+    renderedTableManualColumnWidths = []
+    stopRenderedTableResize()
     renderedTableExpandCloseTimer = null
   }, 180)
 }
@@ -1603,6 +1751,7 @@ onMounted(() => {
   } catch {}
   try {
     window.addEventListener('resize', applyDouyinVideoLayout, { passive: true })
+    window.addEventListener('resize', syncRenderedTableExpandLayout, { passive: true })
   } catch {}
 });
 
@@ -1625,7 +1774,9 @@ onBeforeUnmount(() => {
   }
   try {
     window.removeEventListener('resize', applyDouyinVideoLayout)
+    window.removeEventListener('resize', syncRenderedTableExpandLayout)
   } catch {}
+  stopRenderedTableResize()
   if (themeClassObserver) {
     themeClassObserver.disconnect()
     themeClassObserver = null
@@ -2017,8 +2168,9 @@ watch(() => props.enableGithubCard, () => {
 
 .rendered-table-expanded-table th,
 .rendered-table-expanded-table td {
-  min-width: 72px;
-  max-width: 220px;
+  position: relative;
+  box-sizing: border-box;
+  min-width: 48px;
   padding: 9px 10px;
   border: 1px solid rgba(148, 163, 184, 0.42);
   background: rgba(255, 255, 255, 0.94);
@@ -2028,6 +2180,74 @@ watch(() => props.enableGithubCard, () => {
   overflow-wrap: break-word;
   word-break: break-word;
   vertical-align: top;
+}
+
+.rendered-table-expand-row-resize-handle,
+.rendered-table-expand-column-resize-handle {
+  position: absolute;
+  z-index: 4;
+  display: block;
+  background: transparent;
+  touch-action: none;
+}
+
+.rendered-table-expand-row-resize-handle {
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 8px;
+  cursor: row-resize;
+}
+
+.rendered-table-expand-column-resize-handle {
+  top: 0;
+  right: -4px;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+}
+
+.rendered-table-expand-row-resize-handle::after,
+.rendered-table-expand-column-resize-handle::after {
+  content: '';
+  position: absolute;
+  border-radius: 999px;
+  background: rgba(249, 115, 22, 0.72);
+  opacity: 0;
+  transition: opacity .12s ease;
+}
+
+.rendered-table-expand-row-resize-handle::after {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-50%);
+}
+
+.rendered-table-expand-column-resize-handle::after {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+}
+
+.rendered-table-expand-row-resize-handle:hover::after,
+.rendered-table-expand-row-resize-handle:focus-visible::after,
+.rendered-table-expand-column-resize-handle:hover::after,
+.rendered-table-expand-column-resize-handle:focus-visible::after,
+body.is-resizing-rendered-table-row .rendered-table-expand-row-resize-handle::after,
+body.is-resizing-rendered-table-column .rendered-table-expand-column-resize-handle::after {
+  opacity: 1;
+}
+
+body.is-resizing-rendered-table-row {
+  cursor: row-resize !important;
+}
+
+body.is-resizing-rendered-table-column {
+  cursor: col-resize !important;
 }
 
 .rendered-table-expand-overlay.is-dark .rendered-table-expanded-table th,

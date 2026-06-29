@@ -600,10 +600,16 @@ assert(
     !vditorEditor.includes('.vditor-reset table th {\n  background:') &&
     !vditorEditor.includes('html.dark .vditor-reset table th { background:') &&
     vditorEditor.includes('const tableRows = Array.from({ length: rowCount }') &&
+    vditorEditor.includes("join('\\n')}\\n\\n`") &&
     !vditorEditor.includes('`列 ${index + 1}`') &&
     vditorEditor.includes('getCurrentEditorTableCell') &&
     vditorEditor.includes('normalizeTableCellInsertion') &&
     vditorEditor.includes('insertValueIntoCurrentTableCell') &&
+    vditorEditor.includes('allowStoredFallback?: boolean') &&
+    vditorEditor.includes('if (!options.allowStoredFallback) return null') &&
+    vditorEditor.includes('const shouldRestoreTableSelection = hasAttachmentMarker(text)') &&
+    vditorEditor.includes('getCurrentEditorTableCell(undefined, { allowStoredFallback: shouldRestoreTableSelection })') &&
+    !vditorEditor.includes('if (!cell && restoreLastEditorSelection())') &&
     vditorEditor.includes("range.insertNode(textNode)") &&
     vditorEditor.includes("inputType: 'insertText'") &&
     vditorEditor.includes('if (insertValueIntoCurrentTableCell(val)) return') &&
@@ -970,8 +976,20 @@ assert(
     !vditorEditor.includes('normalizeEditableHtmlTable(table)\n    replaceTableBreakTextNodes(table)') &&
     markdownRenderer.includes('openRenderedTableExpand(table)') &&
     markdownRenderer.includes('initializeMediaViewer(renderedTableExpandBody.value)') &&
-    markdownRenderer.includes('applyAdaptiveRenderedTableColumns(clone, availableWidth)') &&
+    markdownRenderer.includes('applyAdaptiveRenderedTableColumns(clone, availableWidth, renderedTableManualColumnWidths)') &&
     markdownRenderer.includes('adaptiveRenderedTableColumnWidths') &&
+    markdownRenderer.includes('RENDERED_TABLE_MIN_COLUMN_WIDTH = 48') &&
+    markdownRenderer.includes('RENDERED_TABLE_MIN_ROW_HEIGHT = 38') &&
+    markdownRenderer.includes('renderedTableManualRowHeights') &&
+    markdownRenderer.includes('renderedTableManualColumnWidths') &&
+    markdownRenderer.includes('measureRenderedTableAutoRowHeights') &&
+    markdownRenderer.includes('applyRenderedTableRowHeights') &&
+    markdownRenderer.includes('ensureRenderedTableResizeHandles') &&
+    markdownRenderer.includes('startRenderedTableResize') &&
+    markdownRenderer.includes('rowIndex < rows.length - 1') &&
+    markdownRenderer.includes('cellIndex < row.cells.length - 1') &&
+    markdownRenderer.includes('cursor: row-resize;') &&
+    markdownRenderer.includes('cursor: col-resize;') &&
     markdownRenderer.includes('.rendered-table-expanded-table {\n  width: max-content;\n  min-width: 0;') &&
     markdownRenderer.includes('.rendered-table-expanded-table .inline-image-thumb') &&
     markdownRenderer.includes('.rendered-table-expanded-table .inline-image-thumb img') &&

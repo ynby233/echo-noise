@@ -706,7 +706,12 @@ const setupAttachmentPreview = () => {
     if (!element || !root.contains(element)) return
     if (!element.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset')) return
     lastEditorSelectionRange = range.cloneRange()
-    storeLastEditorTableSelection(range)
+    if (getEditorTableCellFromRange(range)) {
+      storeLastEditorTableSelection(range)
+    } else {
+      lastEditorTableSelectionRange = null
+      lastEditorTableSelectionState = null
+    }
   }
 
   const onEditorSelectionChange = () => {
@@ -1338,7 +1343,7 @@ const buildMarkdownTable = (rows: number, cols: number) => {
   const tableRows = Array.from({ length: rowCount }, () => Array.from({ length: colCount }, () => MARKDOWN_EMPTY_TABLE_CELL))
   const divider = Array.from({ length: colCount }, () => '---')
   const formatRow = (cells: string[]) => `| ${cells.join(' | ')} |`
-  return `\n${[formatRow(tableRows[0] || []), formatRow(divider), ...tableRows.slice(1).map(formatRow)].join('\n')}\n`
+  return `\n${[formatRow(tableRows[0] || []), formatRow(divider), ...tableRows.slice(1).map(formatRow)].join('\n')}\n\n`
 }
 
 const insertTable = (rows: number, cols: number) => {
@@ -3283,15 +3288,17 @@ const getStoredEditorTableCell = (editable: HTMLElement | null) => {
   return (row?.cells[lastEditorTableSelectionState.cellIndex] as HTMLTableCellElement | undefined) || null
 }
 
-const getCurrentEditorTableCell = (event?: Event) => {
+const getCurrentEditorTableCell = (event?: Event, options: { allowStoredFallback?: boolean } = {}) => {
   if (typeof window === 'undefined') return null as HTMLTableCellElement | null
   const selection = window.getSelection()
   const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
   const currentCell = getEditorTableCellFromRange(range) || getEditorTableCellFromEvent(event)
   if (currentCell) return currentCell
+  if (!options.allowStoredFallback) return null
   const eventEditable = getEditorEditableFromNode(event?.target as Node | null | undefined)
   const rangeEditable = getEditorEditableFromNode(range?.commonAncestorContainer)
   const currentEditable = eventEditable || rangeEditable
+  if (range && rangeEditable && !getEditorTableCellFromRange(range)) return null
   const rangeCell = getEditorTableCellFromRange(lastEditorTableSelectionRange)
   const lastCell = rangeCell && getEditorEditableFromNode(rangeCell) === currentEditable
     ? rangeCell
@@ -3407,9 +3414,10 @@ const insertValueIntoCurrentTableCell = (value: string) => {
   if (!vditorInstance) return false
   const text = normalizeTableCellInsertion(value)
   if (!text) return false
-  let cell = getCurrentEditorTableCell()
-  if (!cell && restoreLastEditorSelection()) {
-    cell = getCurrentEditorTableCell()
+  const shouldRestoreTableSelection = hasAttachmentMarker(text)
+  let cell = getCurrentEditorTableCell(undefined, { allowStoredFallback: shouldRestoreTableSelection })
+  if (!cell && shouldRestoreTableSelection && restoreLastEditorSelection()) {
+    cell = getCurrentEditorTableCell(undefined, { allowStoredFallback: true })
   }
   if (!cell) return false
   if (hasAttachmentMarker(text)) {
