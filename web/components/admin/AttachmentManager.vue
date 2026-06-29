@@ -39,8 +39,11 @@
       <div v-if="images.length===0" class="text-sm" :class="theme?.mutedText">暂无图片附件</div>
       <div v-else class="attachment-grid">
           <div v-for="item in imagesDisplay" :key="item.name" class="attachment-item-card rounded-lg border p-2" :class="[theme?.border, isSelected('image', item) ? 'attachment-item-selected' : '']" :data-select-key="selectionKey('image', item)">
-            <label class="attachment-select-check" @click.stop @pointerdown.stop>
-              <input type="checkbox" :checked="isSelected('image', item)" aria-label="选择图片附件" @change="toggleSelect('image', item)" />
+            <label class="attachment-select-check" :class="{ 'is-checked': isSelected('image', item) }" @click.stop @pointerdown.stop>
+              <input class="attachment-select-input" type="checkbox" :checked="isSelected('image', item)" aria-label="选择图片附件" @change="toggleSelect('image', item)" />
+              <span class="attachment-check-visual" aria-hidden="true">
+                <UIcon name="i-heroicons-check" class="attachment-check-icon" />
+              </span>
             </label>
             <div class="attachment-item-head">
               <div class="attachment-file-meta">
@@ -81,8 +84,11 @@
         <div v-if="videos.length===0" class="text-sm" :class="theme?.mutedText">暂无视频附件</div>
         <div v-else class="attachment-grid">
           <div v-for="item in videosDisplay" :key="item.name" class="attachment-item-card rounded-lg border p-2" :class="[theme?.border, isSelected('video', item) ? 'attachment-item-selected' : '']" :data-select-key="selectionKey('video', item)">
-            <label class="attachment-select-check" @click.stop @pointerdown.stop>
-              <input type="checkbox" :checked="isSelected('video', item)" aria-label="选择视频附件" @change="toggleSelect('video', item)" />
+            <label class="attachment-select-check" :class="{ 'is-checked': isSelected('video', item) }" @click.stop @pointerdown.stop>
+              <input class="attachment-select-input" type="checkbox" :checked="isSelected('video', item)" aria-label="选择视频附件" @change="toggleSelect('video', item)" />
+              <span class="attachment-check-visual" aria-hidden="true">
+                <UIcon name="i-heroicons-check" class="attachment-check-icon" />
+              </span>
             </label>
             <div class="attachment-item-head">
               <div class="attachment-file-meta">
@@ -123,8 +129,11 @@
         <div v-if="audios.length===0" class="text-sm" :class="theme?.mutedText">暂无音频附件</div>
         <div v-else class="attachment-grid">
           <div v-for="item in audiosDisplay" :key="item.name" class="attachment-item-card rounded-lg border p-2" :class="[theme?.border, isSelected('audio', item) ? 'attachment-item-selected' : '']" :data-select-key="selectionKey('audio', item)">
-            <label class="attachment-select-check" @click.stop @pointerdown.stop>
-              <input type="checkbox" :checked="isSelected('audio', item)" aria-label="选择音频附件" @change="toggleSelect('audio', item)" />
+            <label class="attachment-select-check" :class="{ 'is-checked': isSelected('audio', item) }" @click.stop @pointerdown.stop>
+              <input class="attachment-select-input" type="checkbox" :checked="isSelected('audio', item)" aria-label="选择音频附件" @change="toggleSelect('audio', item)" />
+              <span class="attachment-check-visual" aria-hidden="true">
+                <UIcon name="i-heroicons-check" class="attachment-check-icon" />
+              </span>
             </label>
             <div class="attachment-item-head">
               <div class="attachment-file-meta">
@@ -165,8 +174,11 @@
         <div v-if="others.length===0" class="text-sm" :class="theme?.mutedText">暂无其他附件</div>
         <div v-else class="attachment-grid">
           <div v-for="item in othersDisplay" :key="item.name" class="attachment-item-card rounded-lg border p-2" :class="[theme?.border, isSelected('other', item) ? 'attachment-item-selected' : '']" :data-select-key="selectionKey('other', item)">
-            <label class="attachment-select-check" @click.stop @pointerdown.stop>
-              <input type="checkbox" :checked="isSelected('other', item)" aria-label="选择其他附件" @change="toggleSelect('other', item)" />
+            <label class="attachment-select-check" :class="{ 'is-checked': isSelected('other', item) }" @click.stop @pointerdown.stop>
+              <input class="attachment-select-input" type="checkbox" :checked="isSelected('other', item)" aria-label="选择其他附件" @change="toggleSelect('other', item)" />
+              <span class="attachment-check-visual" aria-hidden="true">
+                <UIcon name="i-heroicons-check" class="attachment-check-icon" />
+              </span>
             </label>
             <div class="attachment-item-head">
               <div class="attachment-file-meta">
@@ -679,17 +691,50 @@ onBeforeUnmount(() => {
   z-index: 2;
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 999px;
-  background: rgba(15, 23, 42, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(134, 144, 156, 0.38);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+  cursor: pointer;
+  transition: background-color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
-.attachment-select-check input {
+.attachment-select-check.is-checked {
+  background: rgba(22, 93, 255, 0.94);
+  border-color: rgba(22, 93, 255, 0.94);
+  box-shadow: 0 0 0 2px rgba(22, 93, 255, 0.16);
+}
+
+.attachment-select-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.attachment-check-visual {
+  display: grid;
+  place-items: center;
   width: 14px;
   height: 14px;
-  cursor: pointer;
+  border-radius: 999px;
+}
+
+.attachment-check-icon {
+  width: 14px;
+  height: 14px;
+  color: #ffffff;
+  opacity: 0;
+  transform: scale(0.75);
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+.attachment-select-check.is-checked .attachment-check-icon {
+  opacity: 1;
+  transform: scale(1);
 }
 
 .attachment-item-head {

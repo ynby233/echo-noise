@@ -1272,8 +1272,6 @@
 
       </div>
       
-      <div class="mx-4 my-2 border-t" :class="theme.border"></div>
-
           <div id="email-section" v-if="isAdmin && isSectionVisible('email')" class="col-span-12">
             <div :class="adminPanelCardClass">
               <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
@@ -3303,9 +3301,10 @@ const adminPanelCardClass = computed(() => ([
   'backdrop-blur-sm transition-colors duration-200'
 ]))
 const adminShellCardClass = computed(() => ([
-  'rounded-xl border shadow-sm',
   theme.value.cardBg,
-  theme.value.border
+  theme.value.border,
+  cardCls,
+  'backdrop-blur-sm transition-colors duration-200'
 ]))
 const adminSectionHeaderClass = computed(() => ([
   'flex items-center justify-between px-4 py-3',
