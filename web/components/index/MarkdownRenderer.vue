@@ -123,6 +123,7 @@ const TABLE_CELL_BREAK_RE = /<br\s*\/?\s*>/gi
 const RENDERED_TABLE_MIN_COLUMN_WIDTH = 48
 const RENDERED_TABLE_MIN_ROW_HEIGHT = 38
 const RENDERED_TABLE_CELL_HORIZONTAL_PADDING = 18
+const RENDERED_TABLE_SCROLL_OVERFLOW_TOLERANCE = 2
 type RenderedTableResizeDrag = { type: 'row' | 'column'; index: number; startClient: number; startSize: number }
 let renderedTableResizeDrag: RenderedTableResizeDrag | null = null
 let renderedTableManualRowHeights: number[] = []
@@ -578,6 +579,20 @@ const renderedTableExpandAvailableWidth = () => {
   return Math.max(160, Math.floor((scroll?.clientWidth || fallback) - 24))
 }
 
+const syncRenderedTableScrollOverflowState = () => {
+  const scroll = renderedTableExpandBody.value
+  if (!scroll) return
+  const horizontalOverflow = scroll.scrollWidth - scroll.clientWidth > RENDERED_TABLE_SCROLL_OVERFLOW_TOLERANCE
+  const verticalOverflow = scroll.scrollHeight - scroll.clientHeight > RENDERED_TABLE_SCROLL_OVERFLOW_TOLERANCE
+  scroll.classList.toggle('has-real-horizontal-overflow', horizontalOverflow)
+  scroll.classList.toggle('has-real-vertical-overflow', verticalOverflow)
+}
+
+const scheduleRenderedTableScrollOverflowState = () => {
+  if (typeof window === 'undefined') return
+  window.requestAnimationFrame(syncRenderedTableScrollOverflowState)
+}
+
 const stopRenderedTableResize = () => {
   window.removeEventListener('pointermove', onRenderedTableResizeMove, true)
   window.removeEventListener('pointerup', stopRenderedTableResize, true)
@@ -592,6 +607,7 @@ const syncRenderedTableExpandLayout = () => {
   applyAdaptiveRenderedTableColumns(table, renderedTableExpandAvailableWidth(), renderedTableManualColumnWidths)
   const autoRowHeights = applyRenderedTableRowHeights(table, renderedTableManualRowHeights)
   ensureRenderedTableResizeHandles(table, autoRowHeights)
+  scheduleRenderedTableScrollOverflowState()
 }
 
 const onRenderedTableResizeMove = (event: PointerEvent) => {
@@ -2160,6 +2176,14 @@ watch(() => props.enableGithubCard, () => {
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);
+}
+
+.rendered-table-expand-scroll:not(.has-real-horizontal-overflow) {
+  overflow-x: hidden;
+}
+
+.rendered-table-expand-scroll:not(.has-real-vertical-overflow) {
+  overflow-y: hidden;
 }
 
 .rendered-table-expand-scroll::-webkit-scrollbar { width: 9px; height: 9px; }

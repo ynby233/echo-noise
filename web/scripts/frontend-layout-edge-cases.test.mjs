@@ -172,6 +172,38 @@ assert(
   'editor and rendered expanded table scroll containers must reserve stable scrollbar gutter so vertical overflow does not shrink the table width'
 )
 
+const regressionHasRealOverflow = (scrollSize, clientSize, tolerance = 2) => scrollSize - clientSize > tolerance
+
+assert(
+  !regressionHasRealOverflow(873, 872) &&
+    !regressionHasRealOverflow(874, 872) &&
+    regressionHasRealOverflow(875, 872) &&
+    regressionHasRealOverflow(900, 872),
+  'expanded table scrollbars must ignore <=2px pseudo overflow while preserving real overflow'
+)
+
+assert(
+  vditorEditor.includes('const EXPANDED_TABLE_SCROLL_OVERFLOW_TOLERANCE = 2') &&
+    markdownRenderer.includes('const RENDERED_TABLE_SCROLL_OVERFLOW_TOLERANCE = 2') &&
+    vditorEditor.includes('scroll.scrollWidth - scroll.clientWidth > EXPANDED_TABLE_SCROLL_OVERFLOW_TOLERANCE') &&
+    vditorEditor.includes('scroll.scrollHeight - scroll.clientHeight > EXPANDED_TABLE_SCROLL_OVERFLOW_TOLERANCE') &&
+    markdownRenderer.includes('scroll.scrollWidth - scroll.clientWidth > RENDERED_TABLE_SCROLL_OVERFLOW_TOLERANCE') &&
+    markdownRenderer.includes('scroll.scrollHeight - scroll.clientHeight > RENDERED_TABLE_SCROLL_OVERFLOW_TOLERANCE') &&
+    vditorEditor.includes("scroll.classList.toggle('has-real-horizontal-overflow', horizontalOverflow)") &&
+    vditorEditor.includes("scroll.classList.toggle('has-real-vertical-overflow', verticalOverflow)") &&
+    markdownRenderer.includes("scroll.classList.toggle('has-real-horizontal-overflow', horizontalOverflow)") &&
+    markdownRenderer.includes("scroll.classList.toggle('has-real-vertical-overflow', verticalOverflow)"),
+  'editor and rendered expanded table scrollbars must be controlled by real horizontal and vertical overflow detection'
+)
+
+assert(
+  vditorEditor.includes('.editor-table-expand-scroll:not(.has-real-horizontal-overflow) {\n  overflow-x: hidden;\n}') &&
+    vditorEditor.includes('.editor-table-expand-scroll:not(.has-real-vertical-overflow) {\n  overflow-y: hidden;\n}') &&
+    markdownRenderer.includes('.rendered-table-expand-scroll:not(.has-real-horizontal-overflow) {\n  overflow-x: hidden;\n}') &&
+    markdownRenderer.includes('.rendered-table-expand-scroll:not(.has-real-vertical-overflow) {\n  overflow-y: hidden;\n}'),
+  'expanded table scroll containers must hide only the axis that does not have real overflow'
+)
+
 assert(
   markdownRenderer.includes('const RENDERED_TABLE_CELL_HORIZONTAL_PADDING = 18') &&
     markdownRenderer.includes('}, RENDERED_TABLE_CELL_HORIZONTAL_PADDING)') &&

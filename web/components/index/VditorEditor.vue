@@ -296,6 +296,7 @@ const ATTACHMENT_ANCHOR_LABEL_RE = /^(图片附件|视频附件|音频附件|文
 const EXPANDED_TABLE_MIN_COLUMN_WIDTH = 48
 const EXPANDED_TABLE_MIN_ROW_HEIGHT = 38
 const EXPANDED_TABLE_CELL_HORIZONTAL_PADDING = 18
+const EXPANDED_TABLE_SCROLL_OVERFLOW_TOLERANCE = 2
 
 const estimateTableLineWidth = (line: string) => {
   const text = stripAttachmentMarkersFromEditorText(String(line || '').replace(/\r\n?/g, '\n')) || ' '
@@ -333,6 +334,21 @@ const calculateAdaptiveTableColumnWidths = (rows: string[][], availableWidth: nu
     widths = widths.map((width, index) => width + share + (index < remainder ? 1 : 0))
   }
   return widths.map((width) => Math.max(minWidth, Math.ceil(width)))
+}
+
+const syncExpandedTableScrollOverflowState = () => {
+  if (typeof document === 'undefined') return
+  const scroll = document.querySelector<HTMLElement>('.editor-table-expand-scroll')
+  if (!scroll) return
+  const horizontalOverflow = scroll.scrollWidth - scroll.clientWidth > EXPANDED_TABLE_SCROLL_OVERFLOW_TOLERANCE
+  const verticalOverflow = scroll.scrollHeight - scroll.clientHeight > EXPANDED_TABLE_SCROLL_OVERFLOW_TOLERANCE
+  scroll.classList.toggle('has-real-horizontal-overflow', horizontalOverflow)
+  scroll.classList.toggle('has-real-vertical-overflow', verticalOverflow)
+}
+
+const scheduleExpandedTableScrollOverflowState = () => {
+  if (typeof window === 'undefined') return
+  window.requestAnimationFrame(syncExpandedTableScrollOverflowState)
 }
 
 const normalizeAttachmentInfo = (kindLabel: string, name: string, url: string): EditorAttachmentInfo | null => {
@@ -1679,6 +1695,7 @@ const measureExpandedTableAutoRowHeights = () => {
     return Math.max(EXPANDED_TABLE_MIN_ROW_HEIGHT, maxCellHeight)
   })
   expandedTableAutoRowHeights.value = heights
+  nextTick(() => scheduleExpandedTableScrollOverflowState())
 }
 
 const scheduleMeasureExpandedTableAutoRowHeights = () => {
@@ -1696,6 +1713,7 @@ const updateExpandedTableAvailableWidth = () => {
   const fallback = Math.min(1680, Math.max(320, window.innerWidth - 48)) - 24
   expandedTableAvailableWidth.value = Math.max(160, Math.floor((scroll?.clientWidth || fallback) - 24))
   scheduleMeasureExpandedTableAutoRowHeights()
+  nextTick(() => scheduleExpandedTableScrollOverflowState())
 }
 
 const updateExpandedTableCellText = (rowIndex: number, cellIndex: number, event: Event) => {
@@ -2665,6 +2683,7 @@ const onExpandedTableResizeMove = (event: PointerEvent) => {
     const heights = [...expandedTableManualRowHeights.value]
     heights[drag.index] = Math.ceil(nextHeight)
     expandedTableManualRowHeights.value = heights
+    scheduleExpandedTableScrollOverflowState()
     return
   }
   const nextWidth = Math.max(EXPANDED_TABLE_MIN_COLUMN_WIDTH, drag.startSize + event.clientX - drag.startClient)
@@ -2672,6 +2691,7 @@ const onExpandedTableResizeMove = (event: PointerEvent) => {
   widths[drag.index] = Math.ceil(nextWidth)
   expandedTableManualColumnWidths.value = widths
   scheduleMeasureExpandedTableAutoRowHeights()
+  scheduleExpandedTableScrollOverflowState()
 }
 
 const startExpandedTableResize = (drag: ExpandedTableResizeDrag, event: PointerEvent) => {
@@ -2759,6 +2779,7 @@ const openHoveredTableExpand = () => {
   nextTick(() => {
     updateExpandedTableAvailableWidth()
     scheduleMeasureExpandedTableAutoRowHeights()
+    scheduleExpandedTableScrollOverflowState()
     document.querySelector<HTMLTextAreaElement>('.editor-table-expand-dialog textarea')?.focus()
   })
 }
@@ -4219,6 +4240,14 @@ html.dark .editor-table-expand-button:focus-visible {
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);
+}
+
+.editor-table-expand-scroll:not(.has-real-horizontal-overflow) {
+  overflow-x: hidden;
+}
+
+.editor-table-expand-scroll:not(.has-real-vertical-overflow) {
+  overflow-y: hidden;
 }
 
 .editor-table-expand-scroll::-webkit-scrollbar {
