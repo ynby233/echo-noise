@@ -1411,7 +1411,10 @@ const attachmentReplacementTarget = (node: HTMLElement, kind: AttachmentKind) =>
     return (node.closest('.noise-attachment-paragraph') || node.closest('.image-grid-item') || node.closest('.single-media') || node.closest('.full-image-attachment') || node) as HTMLElement
   }
   if (kind === 'video') {
-    return (node.closest('.noise-attachment-render') || node) as HTMLElement
+    return (node.closest('.noise-attachment-render') || node.closest('.image-grid-item') || node.closest('.single-media') || node) as HTMLElement
+  }
+  if (kind === 'audio') {
+    return (node.closest('.single-media') || node) as HTMLElement
   }
   return (node.closest('.noise-attachment-file') || node) as HTMLElement
 }
