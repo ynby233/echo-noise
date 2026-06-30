@@ -66,10 +66,14 @@
           <!-- 消息列表 -->
           <div v-if="!props.pageReady || !hasActiveFilters || (!isDisplayQueryPending && displayMessages.length)" :class="props.pageReady && hasActiveFilters ? 'search-results-list' : 'my-4'">
         <!-- 消息列表内容 -->
-        <div v-for="(msg, idx) in displayMessages" :key="msg.id" class="w-full h-auto overflow-hidden flex flex-col justify-between">
+        <div
+          v-for="(msg, idx) in displayMessages"
+          :key="msg.id"
+          :class="['message-list-item w-full h-auto overflow-hidden flex flex-col justify-between', { 'file-attachment-shadow-open': isFileAttachmentShadowOpen(msg.id) }]"
+        >
 
           <div class="p-0">
-            <div :class="['content-container', innerContainerClass, listThemeClass, { 'is-dark': isContentDark }]" :data-msg-id="msg.id">
+            <div :class="['content-container', innerContainerClass, listThemeClass, { 'is-dark': isContentDark, 'file-attachment-shadow-open': isFileAttachmentShadowOpen(msg.id) }]" :data-msg-id="msg.id">
               <div class="flex items-center gap-2 mb-1 author-row">
                 <img :src="authorAvatar(msg)" alt="avatar" class="avatar-img w-9 h-9 rounded-full object-cover" @error="authorAvatarOnError($event, msg.username || '匿名')" @mouseenter="showAuthorCard($event, msg)" @mouseleave="hideAuthorCard" @click="toggleAuthorCard($event, msg)" />
                 <div v-if="openAuthorId === msg.id" class="noise-author-card bg-white text-black dark:bg-[var(--home-surface-dark-elevated)] dark:text-white" :style="openAuthorStyle">
@@ -112,7 +116,7 @@
               <!-- 分隔线 -->
               <div v-if="msg.image_url && msg.content" class="border-t border-gray-600 my-2"></div>
               <!-- 文本内容区域 -->
-              <div class="overflow-y-hidden relative" :class="[{ 'max-h-[700px]': !isExpanded[msg.id] && !hasGrid[msg.id] }, listThemeTextClass]" :style="contentStyle(idx)">
+              <div class="overflow-y-hidden relative" :class="[{ 'max-h-[700px]': !isExpanded[msg.id] && !hasGrid[msg.id], 'file-attachment-shadow-open': isFileAttachmentShadowOpen(msg.id) }, listThemeTextClass]" :style="contentStyle(idx)">
                 <MarkdownRenderer
                   :content="msg.content"
                   :enableGithubCard="siteConfig?.enableGithubCard === true"
@@ -1572,11 +1576,16 @@ const formatDate = (dateString: string) => {
 const isExpanded = ref<{ [key: number]: boolean }>({});
 const shouldShowExpandButton = ref<{ [key: number]: boolean }>({});
 const hasGrid = ref<{ [key: number]: boolean }>({});
+const hasFileAttachment = ref<Record<number, boolean>>({});
 const measuredMessageHeights = ref<Record<number, number>>({});
 
 // 添加展开/折叠切换函数
 const toggleExpand = (msgId: number) => {
   isExpanded.value[msgId] = !isExpanded.value[msgId];
+};
+
+const isFileAttachmentShadowOpen = (msgId: number) => {
+  return !!hasFileAttachment.value[msgId] && !(shouldShowExpandButton.value[msgId] && !isExpanded.value[msgId]);
 };
 
 // 修改检查内容高度的函数
@@ -1606,6 +1615,7 @@ const checkContentHeight = () => {
       } catch {}
       const hasImageGrid = !!measureEl.querySelector('.image-grid');
       hasGrid.value[msg.id] = hasImageGrid;
+      hasFileAttachment.value[msg.id] = !!measureEl.querySelector('.noise-attachment-file');
       if (hasImageGrid) {
         measuredMessageHeights.value[msg.id] = measureEl.scrollHeight;
         shouldShowExpandButton.value[msg.id] = false;
@@ -3583,6 +3593,13 @@ onMounted(() => {
 .content-container .overflow-y-hidden:not(.max-h-\[700px\]) {
   max-height: none;
 }
+
+.message-list-item.file-attachment-shadow-open,
+.content-container.file-attachment-shadow-open,
+.content-container .overflow-y-hidden.file-attachment-shadow-open {
+  overflow: visible !important;
+}
+
 /* 添加页脚固定样式 */
 :deep(.text-center.text-xs.text-gray-400.py-4) {
   margin-top: auto;
