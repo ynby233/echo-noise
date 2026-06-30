@@ -1367,6 +1367,24 @@ const normalizeMusicTheme = (raw: string) => {
   const value = String(raw || 'auto').trim()
   return ['auto', 'light', 'dark'].includes(value) ? value : 'auto'
 }
+const resolveNmpTheme = (_cfg: any = (frontendConfig as any).value || {}) => {
+  if (contentTheme.value === 'dark') return 'dark'
+  if (typeof document !== 'undefined' && document.documentElement.classList.contains('dark')) return 'dark'
+  return 'light'
+}
+const applyNmpTheme = (el?: any, cfg: any = (frontendConfig as any).value || {}, player?: any) => {
+  if (typeof document === 'undefined') return ''
+  const target = el || document.querySelector('.netease-mini-player') as any
+  if (!target) return ''
+  const theme = resolveNmpTheme(cfg)
+  if (target.getAttribute('data-theme') !== theme) target.setAttribute('data-theme', theme)
+  const instance = player || target.neteasePlayer || target._neteasePlayer
+  try { instance?.setTheme?.(theme) } catch {}
+  try {
+    if (instance?.config) instance.config.theme = theme
+  } catch {}
+  return theme
+}
 const shouldShowMusicPlayer = computed(() => {
   const cfg: any = frontendConfig.value || {}
   const source = resolveMusicSource(cfg)
@@ -1478,7 +1496,7 @@ const syncNmpAttributes = (el: any, cfg: any) => {
   el.setAttribute('data-playlist-id', source.playlistId)
   el.setAttribute('data-song-id', source.songId)
   el.setAttribute('data-position', normalizeNmpPosition(cfg.musicPosition || 'bottom-left'))
-  el.setAttribute('data-theme', normalizeMusicTheme(cfg.musicTheme))
+  el.setAttribute('data-theme', resolveNmpTheme(cfg))
   el.setAttribute('data-lyric', cfg.musicLyric ? 'true' : 'false')
   el.setAttribute('data-default-minimized', cfg.musicDefaultMinimized ? 'true' : 'false')
   el.setAttribute('data-embed', cfg.musicEmbed ? 'true' : 'false')
@@ -1609,14 +1627,11 @@ const reconcileMusicPlayer = async (reason = 'state') => {
     observeNmpState(el)
     await syncNmpSource(el, player, source)
 
-    const isDarkNow = document.documentElement.classList.contains('dark')
-    const theme = normalizeMusicTheme(cfg.musicTheme)
-    player.setTheme?.(theme === 'auto' ? (isDarkNow ? 'dark' : 'light') : theme)
+    applyNmpTheme(el, cfg, player)
     try { nmpThemeObserver?.disconnect() } catch {}
     nmpThemeObserver = new MutationObserver(() => {
-      const nowDark = document.documentElement.classList.contains('dark')
-      const nextTheme = normalizeMusicTheme(((frontendConfig as any).value?.musicTheme ?? cfg.musicTheme) || 'auto')
-      try { player.setTheme?.(nextTheme === 'auto' ? (nowDark ? 'dark' : 'light') : nextTheme) } catch {}
+      const nextCfg = (frontendConfig as any).value || cfg
+      applyNmpTheme(el, nextCfg, player)
     })
     nmpThemeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
 
@@ -1782,6 +1797,11 @@ const scheduleMusicPlayerReconcile = (reason = 'state') => {
       if (nmpReconcileRequested) scheduleMusicPlayerReconcile(reason)
     })
 }
+
+watch(() => contentTheme.value, () => {
+  applyNmpTheme()
+  scheduleMusicPlayerReconcile('theme-change')
+}, { flush: 'sync' })
 
 // 移除 meting 兜底依赖，避免显示“请求失败”造成误导
 
