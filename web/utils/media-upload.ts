@@ -22,6 +22,7 @@ const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvi
 const VIDEO_EXTENSIONS = ['.mp4', '.webm', '.mov', '.avi']
 const AUDIO_TYPES = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-wav', 'audio/flac', 'audio/x-flac']
 const AUDIO_EXTENSIONS = ['.webm', '.ogg', '.mp3', '.m4a', '.wav', '.flac']
+const RECORDING_NAME_RE = /录音|(^|[-_\s.])(recording|voice|memo|capture)([-_\s.]|$)/i
 const MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024 * 1024
 const MAX_IMAGE_SIZE = MAX_ATTACHMENT_SIZE
 const MAX_VIDEO_SIZE = MAX_ATTACHMENT_SIZE
@@ -113,8 +114,10 @@ export const detectUploadKind = (file: File): UploadKind => {
   const ext = fileExtension(file)
   const mime = baseMimeType(file.type)
   if (mime.startsWith('image/')) return 'image'
-  if (mime.startsWith('video/') || VIDEO_TYPES.includes(mime) || VIDEO_EXTENSIONS.includes(ext)) return 'video'
-  if (mime.startsWith('audio/') || AUDIO_TYPES.includes(mime) || AUDIO_EXTENSIONS.includes(ext)) return 'audio'
+  if (mime.startsWith('audio/') || AUDIO_TYPES.includes(mime)) return 'audio'
+  if (mime.startsWith('video/') || VIDEO_TYPES.includes(mime)) return 'video'
+  if (AUDIO_EXTENSIONS.includes(ext) && (ext !== '.webm' || RECORDING_NAME_RE.test(file.name))) return 'audio'
+  if (VIDEO_EXTENSIONS.includes(ext)) return 'video'
   return 'file'
 }
 

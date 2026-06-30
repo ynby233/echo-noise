@@ -915,6 +915,22 @@ const handleAudioUploaded = (audioUrl: string) => {
 const INLINE_IMAGE_REG = /!\s*(https?:\/\/[^\s!]+\.(?:png|jpe?g|gif|webp))(?:\?[^\s!]*)?/gi;
 const normalizeInlineImageLinks = (md: string): string => md.replace(INLINE_IMAGE_REG, (m, url) => `![](${url})`);
 const ATTACHMENT_LINK_REG = /\[(图片附件|视频附件|音频附件)：([^\]]+)\]\(([^)\s]+)\)/g
+const RECORDING_NAME_RE = /录音|(^|[-_\s.])(recording|voice|memo|capture)([-_\s.]|$)/i
+const mediaPathFromUrl = (url: string) => {
+  const raw = String(url || '').trim()
+  if (!raw) return ''
+  try { return decodeURIComponent(new URL(raw, typeof window !== 'undefined' ? window.location.href : 'http://local').pathname) }
+  catch {
+    try { return decodeURIComponent(raw.split(/[?#]/)[0]) } catch { return raw.split(/[?#]/)[0] }
+  }
+}
+const previewMediaFileName = (url: string) => mediaPathFromUrl(url).split('/').filter(Boolean).pop() || ''
+const isPreviewAudioAttachment = (name: string, url: string) => {
+  const path = mediaPathFromUrl(url).toLowerCase()
+  if (path.includes('/api/audio/')) return true
+  if (path.includes('/api/video/')) return RECORDING_NAME_RE.test(`${name} ${previewMediaFileName(url)}`)
+  return /\.(webm|ogg|mp3|m4a|wav|flac)(?:[?#].*)?$/i.test(path)
+}
 const escapePreviewAttr = (value: string) => String(value || '')
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
@@ -926,7 +942,7 @@ const replaceAttachmentMarkersForPreview = (md: string): string => String(md || 
   const safeUrl = escapePreviewAttr(String(url || '').trim())
   if (!safeUrl) return _m
   if (kind === '图片附件') return `![${safeName}](${safeUrl})`
-  if (kind === '视频附件') return `<video src="${safeUrl}" controls preload="metadata" style="width:100%;height:auto"></video>`
+  if (kind === '视频附件' && !isPreviewAudioAttachment(name, url)) return `<video src="${safeUrl}" controls preload="metadata" style="width:100%;height:auto"></video>`
   return `<audio src="${safeUrl}" controls preload="metadata"></audio>`
 })
 

@@ -1252,6 +1252,40 @@ const deletedAttachmentText = (kind: AttachmentKind) => {
   return '该文件已被删除'
 }
 
+const mediaPathFromUrl = (url: string) => {
+  const raw = String(url || '').trim()
+  if (!raw) return ''
+  try {
+    return decodeURIComponent(new URL(raw, typeof window !== 'undefined' ? window.location.href : 'http://local').pathname)
+  } catch {
+    try { return decodeURIComponent(raw.split(/[?#]/)[0]) } catch { return raw.split(/[?#]/)[0] }
+  }
+}
+
+const mediaFileNameFromUrl = (url: string) => mediaPathFromUrl(url).split('/').filter(Boolean).pop() || ''
+const RECORDING_NAME_RE = /录音|(^|[-_\s.])(recording|voice|memo|capture)([-_\s.]|$)/i
+const AUDIO_MEDIA_EXT_RE = /\.(webm|ogg|mp3|m4a|wav|flac)(?:[?#].*)?$/i
+const VIDEO_MEDIA_EXT_RE = /\.(mp4|webm|mov|avi)(?:[?#].*)?$/i
+
+const isLikelyRecordingAttachment = (name: string, url: string) => {
+  const source = `${String(name || '')} ${mediaFileNameFromUrl(url)}`
+  return RECORDING_NAME_RE.test(source)
+}
+
+const isAudioAttachmentUrl = (url: string, name = '') => {
+  const path = mediaPathFromUrl(url).toLowerCase()
+  if (path.includes('/api/audio/')) return true
+  if (path.includes('/api/video/')) return isLikelyRecordingAttachment(name, url)
+  return AUDIO_MEDIA_EXT_RE.test(path)
+}
+
+const isVideoAttachmentUrl = (url: string, name = '') => {
+  const path = mediaPathFromUrl(url).toLowerCase()
+  if (isAudioAttachmentUrl(url, name)) return false
+  if (path.includes('/api/video/') || path.includes('/video/')) return VIDEO_MEDIA_EXT_RE.test(path)
+  return /\.(mp4|mov|avi)(?:[?#].*)?$/i.test(path)
+}
+
 const attachmentExtensionLabel = (name: string, url: string) => {
   const source = String(name || url || '').split(/[?#]/)[0]
   const decoded = (() => {
@@ -1265,15 +1299,16 @@ const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string) =>
   const url = resolveImageUrl(String(rawUrl || '').trim())
   const safeUrl = escapeHtml(url)
   const safeName = escapeHtml(String(name || '').trim() || '未命名附件')
-  const kind = attachmentKindFromLabel(kindLabel)
+  const labeledKind = attachmentKindFromLabel(kindLabel)
+  const kind = labeledKind === 'video' && isAudioAttachmentUrl(url, name) ? 'audio' : labeledKind
   if (!url) return ''
-  if (kindLabel === '图片附件') {
+  if (kind === 'image') {
     return `<p class="noise-attachment-paragraph" data-noise-attachment-kind="${kind}" data-noise-attachment-url="${safeUrl}"><img class="noise-attachment-image" src="${safeUrl}" alt="${safeName}" loading="lazy" decoding="async" data-noise-attachment-kind="${kind}" data-noise-attachment-url="${safeUrl}" /></p>`
   }
-  if (kindLabel === '视频附件') {
+  if (kind === 'video') {
     return `<div class="noise-attachment-render noise-attachment-render--video" data-noise-attachment-kind="${kind}" data-noise-attachment-url="${safeUrl}"><video src="${safeUrl}" controls preload="metadata" style="width:100%;height:auto" data-noise-attachment-kind="${kind}" data-noise-attachment-url="${safeUrl}"></video></div>`
   }
-  if (kindLabel === '文件附件') {
+  if (kind === 'file') {
     const canPreview = browserPreviewableAttachmentUrl(url)
     const previewAttrs = canPreview
       ? 'target="_blank" rel="noopener noreferrer"'
@@ -1331,7 +1366,7 @@ const canProbeAttachmentUrl = (url: string) => {
   if (typeof window === 'undefined') return false
   try {
     const parsed = new URL(url, window.location.href)
-    return parsed.origin === window.location.origin
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
   } catch {
     return false
   }
@@ -1362,6 +1397,11 @@ const probeAttachmentDeleted = (url: string) => {
       return false
     }
   })()
+  promise.then((deleted) => {
+    if (!deleted && deletedAttachmentProbeCache.get(key) === promise) {
+      deletedAttachmentProbeCache.delete(key)
+    }
+  })
   deletedAttachmentProbeCache.set(key, promise)
   return promise
 }
@@ -1456,12 +1496,22 @@ const processMediaLinks = (content: string): string => {
       </div>`;
     });
   }
-  // 将裸视频文件链接替换为内联视频标签（先于链接化处理）
-  // 仅匹配前导为空白字符或行首的 URL，避免匹配 HTML 属性中的 URL（如 src="http..."）
+  // 将裸媒体文件链接替换为内联播放器（先于链接化处理）。
+  // 仅匹配前导为空白字符或行首的 URL，避免匹配 HTML 属性中的 URL（如 src="http..."）。
+  const AUDIO_FILE_REG = /(^|[\s>])((?:https?:\/\/|\/api\/audio\/)[^\s<"']+\.(?:webm|ogg|mp3|m4a|wav|flac)(?:\?[^\s<"']*)?)/g;
+  content = content.replace(AUDIO_FILE_REG, (_m, prefix, audioUrl) => {
+    const src = resolveImageUrl(audioUrl);
+    const safeSrc = escapeHtml(src)
+    return `${prefix}<audio class="noise-attachment-audio" src="${safeSrc}" controls preload="metadata" data-noise-attachment-kind="audio" data-noise-attachment-url="${safeSrc}"></audio>`;
+  });
   const VIDEO_FILE_REG = /(^|[\s>])((?:https?:\/\/|\/api\/video\/|\/video\/)[^\s<"']+\.(?:mp4|webm|mov|avi)(?:\?[^\s<"']*)?)/g;
   content = content.replace(VIDEO_FILE_REG, (_m, prefix, videoUrl) => {
     const src = resolveImageUrl(videoUrl);
-    return `${prefix}<video src="${src}" controls preload="metadata" style="width:100%;height:auto"></video>`;
+    const safeSrc = escapeHtml(src)
+    if (isAudioAttachmentUrl(src)) {
+      return `${prefix}<audio class="noise-attachment-audio" src="${safeSrc}" controls preload="metadata" data-noise-attachment-kind="audio" data-noise-attachment-url="${safeSrc}"></audio>`;
+    }
+    return `${prefix}<video src="${safeSrc}" controls preload="metadata" style="width:100%;height:auto" data-noise-attachment-kind="video" data-noise-attachment-url="${safeSrc}"></video>`;
   });
   content = content
     .replace(BILIBILI_REG, (m, bvid) => {
@@ -1792,11 +1842,26 @@ const renderMarkdown = async (markdown: string) => {
           anchors.forEach((a: HTMLAnchorElement) => {
             if (a.classList.contains('noise-attachment-tag')) return
             const href = a.getAttribute('href') || ''
-            if (/\.(mp4|webm|mov|avi)(\?.*)?$/i.test(href)) {
+            if (isAudioAttachmentUrl(href, a.textContent || '')) {
+              const audio = document.createElement('audio')
+              const src = resolveImageUrl(href)
+              audio.className = 'noise-attachment-audio'
+              audio.setAttribute('src', src)
+              audio.setAttribute('controls', 'true')
+              audio.setAttribute('preload', 'metadata')
+              audio.dataset.noiseAttachmentKind = 'audio'
+              audio.dataset.noiseAttachmentUrl = src
+              a.replaceWith(audio)
+              return
+            }
+            if (isVideoAttachmentUrl(href, a.textContent || '')) {
               const v = document.createElement('video')
-              v.setAttribute('src', resolveImageUrl(href))
+              const src = resolveImageUrl(href)
+              v.setAttribute('src', src)
               v.setAttribute('controls', 'true')
               v.setAttribute('preload', 'metadata')
+              v.dataset.noiseAttachmentKind = 'video'
+              v.dataset.noiseAttachmentUrl = src
               v.style.width = '100%'
               v.style.height = 'auto'
               a.replaceWith(v)
@@ -1811,19 +1876,45 @@ const renderMarkdown = async (markdown: string) => {
           scheduleTaskListEnhance()
           
           // Explicitly handle existing video tags (e.g. from raw HTML or markdown)
-          const existingVideos = previewElement.value?.querySelectorAll('video');
-          existingVideos?.forEach((v: HTMLVideoElement) => {
+          const existingVideos = Array.from(previewElement.value?.querySelectorAll('video') || []) as HTMLVideoElement[];
+          existingVideos.forEach((v: HTMLVideoElement) => {
               const src = v.getAttribute('src');
               if (src && !/^https?:\/\//.test(src)) {
                   v.setAttribute('src', resolveImageUrl(src));
               }
+              const resolvedSrc = v.getAttribute('src') || ''
+              if (resolvedSrc && isAudioAttachmentUrl(resolvedSrc, v.getAttribute('aria-label') || v.getAttribute('title') || '')) {
+                  const audio = document.createElement('audio')
+                  audio.className = 'noise-attachment-audio'
+                  audio.setAttribute('src', resolvedSrc)
+                  audio.setAttribute('controls', 'true')
+                  audio.setAttribute('preload', 'metadata')
+                  audio.dataset.noiseAttachmentKind = 'audio'
+                  audio.dataset.noiseAttachmentUrl = resolvedSrc
+                  v.replaceWith(audio)
+                  return
+              }
               if (!v.hasAttribute('controls')) {
                   v.setAttribute('controls', 'true');
+              }
+              if (resolvedSrc && !v.dataset.noiseAttachmentKind && isVideoAttachmentUrl(resolvedSrc)) {
+                  v.dataset.noiseAttachmentKind = 'video'
+                  v.dataset.noiseAttachmentUrl = resolvedSrc
               }
               // Ensure proper sizing to prevent collapse (fixes height="100%" issue)
               v.style.width = '100%';
               v.style.height = 'auto';
               v.style.maxWidth = '100%';
+          });
+          const existingAudios = Array.from(previewElement.value?.querySelectorAll('audio') || []) as HTMLAudioElement[];
+          existingAudios.forEach((audio: HTMLAudioElement) => {
+              const src = audio.getAttribute('src')
+              if (src && !/^https?:\/\//.test(src)) audio.setAttribute('src', resolveImageUrl(src))
+              const resolvedSrc = audio.getAttribute('src') || ''
+              if (resolvedSrc && !audio.dataset.noiseAttachmentKind && isAudioAttachmentUrl(resolvedSrc)) {
+                  audio.dataset.noiseAttachmentKind = 'audio'
+                  audio.dataset.noiseAttachmentUrl = resolvedSrc
+              }
           });
 
           applyDeletedAttachmentPlaceholders();
