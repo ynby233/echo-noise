@@ -583,6 +583,8 @@ assert(
     addForm.includes('class="tb-btn nw-action-btn state-toggle-btn notify-btn') &&
     addForm.includes('@change="addAttachment"') &&
     addForm.includes("kind: 'auto'") &&
+    addForm.includes("return 'attachment'") &&
+    addForm.includes('.upload-progress-fill.attachment') &&
     addForm.includes('data-tooltip="上传附件"') &&
     !addForm.includes('data-tooltip="上传图片"') &&
     !addForm.includes('data-tooltip="上传视频"') &&

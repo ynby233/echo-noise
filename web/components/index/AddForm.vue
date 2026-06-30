@@ -1277,6 +1277,7 @@ html.dark .editor-toolbar :deep(.u-button) { border:none !important; box-shadow:
 .upload-progress-fill.image { background: linear-gradient(90deg, rgba(167,139,250,1), rgba(244,114,182,1)); }
 .upload-progress-fill.video { background: linear-gradient(90deg, rgba(96,165,250,1), rgba(52,211,153,1)); }
 .upload-progress-fill.audio { background: linear-gradient(90deg, rgba(249,115,22,1), rgba(245,158,11,1)); }
+.upload-progress-fill.attachment { background: linear-gradient(90deg, rgba(20,184,166,1), rgba(59,130,246,1)); }
 .upload-progress-text { font-size: 12px; line-height: 1; color: rgba(17,24,39,0.6); min-width: 76px; text-align: right; }
 html.dark .upload-progress-track { background: rgba(255,255,255,0.14); }
 html.dark .upload-progress-text { color: rgba(226,232,240,0.72); }
