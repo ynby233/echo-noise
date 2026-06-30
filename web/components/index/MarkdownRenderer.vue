@@ -2592,7 +2592,7 @@ body.is-resizing-rendered-table-column {
   text-decoration: none !important;
   box-shadow: var(--file-card-shadow) !important;
   box-sizing: border-box !important;
-  overflow: hidden !important;
+  overflow: visible !important;
   cursor: pointer;
   transition: background-color .16s ease;
 }
@@ -2607,13 +2607,6 @@ body.is-resizing-rendered-table-column {
   color: inherit !important;
   text-decoration: none !important;
   outline: none;
-}
-
-.markdown-preview .noise-attachment-file:has(+ .noise-attachment-file),
-.markdown-preview .noise-attachment-file + .noise-attachment-file,
-.rendered-table-expand-scroll .noise-attachment-file:has(+ .noise-attachment-file),
-.rendered-table-expand-scroll .noise-attachment-file + .noise-attachment-file {
-  box-shadow: none !important;
 }
 
 .markdown-preview .noise-attachment-file:focus-visible,

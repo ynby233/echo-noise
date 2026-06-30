@@ -3602,6 +3602,14 @@ onMounted(() => {
   overflow: visible !important;
 }
 
+.content-container.file-attachment-shadow-open :deep(.markdown-preview) {
+  overflow: visible !important;
+}
+
+.content-container.file-attachment-shadow-open :deep(.markdown-preview.vditor-reset) {
+  overflow: visible !important;
+}
+
 /* 添加页脚固定样式 */
 :deep(.text-center.text-xs.text-gray-400.py-4) {
   margin-top: auto;
@@ -3918,7 +3926,7 @@ onMounted(() => {
   text-decoration: none !important;
   box-shadow: var(--file-card-shadow) !important;
   box-sizing: border-box !important;
-  overflow: hidden !important;
+  overflow: visible !important;
   transition: background-color .16s ease;
 }
 
@@ -3929,11 +3937,6 @@ onMounted(() => {
   color: inherit !important;
   text-decoration: none !important;
   outline: none;
-}
-
-.content-container :deep(.markdown-preview .noise-attachment-file:has(+ .noise-attachment-file)),
-.content-container :deep(.markdown-preview .noise-attachment-file + .noise-attachment-file) {
-  box-shadow: none !important;
 }
 
 .content-container.is-dark :deep(.markdown-preview .noise-attachment-file),
