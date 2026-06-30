@@ -3873,30 +3873,32 @@ onMounted(() => {
 }
 
 .content-container :deep(.markdown-preview .noise-attachment-file) {
-  --file-card-bg: rgba(248, 250, 252, 0.72);
-  --file-card-bg-hover: rgba(248, 250, 252, 0.90);
-  --file-card-border: rgba(148, 163, 184, 0.24);
-  --file-card-border-hover: rgba(148, 163, 184, 0.40);
-  --file-card-icon-bg: rgba(241, 245, 249, 0.82);
-  --file-card-icon: rgba(71, 85, 105, 0.82);
-  --file-card-name: #0f172a;
-  --file-card-meta: #64748b;
-  --file-card-action: rgba(100, 116, 139, 0.66);
+  --file-card-bg: #ffffff;
+  --file-card-bg-hover: #ffffff;
+  --file-card-border: rgba(15, 23, 42, 0.10);
+  --file-card-border-hover: rgba(15, 23, 42, 0.14);
+  --file-card-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);
+  --file-card-icon-bg: rgba(15, 23, 42, 0.06);
+  --file-card-icon-border: rgba(15, 23, 42, 0.08);
+  --file-card-icon: #374151;
+  --file-card-name: #111827;
+  --file-card-meta: #6b7280;
+  --file-card-action: #374151;
   display: grid !important;
-  grid-template-columns: 52px minmax(0, 1fr) 28px !important;
+  grid-template-columns: 44px minmax(0, 1fr) 28px !important;
   align-items: center !important;
-  gap: 14px !important;
-  width: 100% !important;
+  gap: 12px !important;
+  width: calc(100% - 24px) !important;
   min-height: 72px !important;
-  max-width: 100% !important;
-  margin: 10px 0 !important;
-  padding: 12px 14px !important;
+  max-width: calc(100% - 24px) !important;
+  margin: 6px 12px !important;
+  padding: 12px !important;
   border: 1px solid var(--file-card-border) !important;
-  border-radius: 8px !important;
+  border-radius: 12px !important;
   background: var(--file-card-bg) !important;
   color: inherit !important;
   text-decoration: none !important;
-  box-shadow: none !important;
+  box-shadow: var(--file-card-shadow) !important;
   box-sizing: border-box !important;
   overflow: hidden !important;
 }
@@ -3911,15 +3913,29 @@ onMounted(() => {
 }
 
 .content-container.is-dark :deep(.markdown-preview .noise-attachment-file) {
-  --file-card-bg: rgba(255, 255, 255, 0.055);
-  --file-card-bg-hover: rgba(255, 255, 255, 0.075);
+  --file-card-bg: rgba(15, 23, 42, 0.52);
+  --file-card-bg-hover: rgba(15, 23, 42, 0.62);
   --file-card-border: rgba(255, 255, 255, 0.12);
   --file-card-border-hover: rgba(255, 255, 255, 0.18);
-  --file-card-icon-bg: rgba(255, 255, 255, 0.055);
-  --file-card-icon: rgba(226, 232, 240, 0.84);
+  --file-card-shadow: 0 16px 32px rgba(2, 6, 23, 0.52);
+  --file-card-icon-bg: rgba(255, 255, 255, 0.06);
+  --file-card-icon-border: rgba(255, 255, 255, 0.12);
+  --file-card-icon: #cbd5e1;
   --file-card-name: #f8fafc;
   --file-card-meta: #94a3b8;
-  --file-card-action: rgba(203, 213, 225, 0.70);
+  --file-card-action: #cbd5e1;
+}
+
+.content-container :deep(.markdown-preview .noise-attachment-file:focus-visible) {
+  box-shadow: var(--file-card-shadow), 0 0 0 2px rgba(249, 115, 22, 0.18) !important;
+}
+
+.content-container :deep(.markdown-preview .noise-attachment-file + p) {
+  margin-top: 0 !important;
+}
+
+.content-container :deep(.markdown-preview p:has(+ .noise-attachment-file)) {
+  margin-bottom: 6px !important;
 }
 
 .content-container :deep(.markdown-preview .noise-attachment-file__icon) {
@@ -3927,9 +3943,10 @@ onMounted(() => {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  width: 52px !important;
-  height: 52px !important;
-  border-radius: 8px !important;
+  width: 44px !important;
+  height: 44px !important;
+  border: 1px solid var(--file-card-icon-border) !important;
+  border-radius: 12px !important;
   background: var(--file-card-icon-bg) !important;
   color: var(--file-card-icon) !important;
   flex: 0 0 auto !important;
@@ -3938,9 +3955,9 @@ onMounted(() => {
 .content-container :deep(.markdown-preview .noise-attachment-file__icon)::before {
   content: '';
   display: block;
-  width: 18px;
-  height: 22px;
-  border: 1.7px solid currentColor;
+  width: 17px;
+  height: 21px;
+  border: 1.6px solid currentColor;
   border-radius: 3px;
   box-sizing: border-box;
 }
@@ -3948,12 +3965,12 @@ onMounted(() => {
 .content-container :deep(.markdown-preview .noise-attachment-file__icon)::after {
   content: '';
   position: absolute;
-  top: 14px;
-  right: 15px;
+  top: 12px;
+  right: 13px;
   width: 7px;
   height: 7px;
-  border-left: 1.7px solid currentColor;
-  border-bottom: 1.7px solid currentColor;
+  border-left: 1.6px solid currentColor;
+  border-bottom: 1.6px solid currentColor;
   background: var(--file-card-icon-bg);
   transform: rotate(-180deg);
 }
@@ -3970,7 +3987,7 @@ onMounted(() => {
   display: block !important;
   min-width: 0 !important;
   color: var(--file-card-name) !important;
-  font-size: 15px !important;
+  font-size: 14px !important;
   font-weight: 500 !important;
   line-height: 1.35 !important;
   overflow-wrap: anywhere !important;
@@ -3981,7 +3998,7 @@ onMounted(() => {
   display: block !important;
   color: var(--file-card-meta) !important;
   font-size: 12px !important;
-  line-height: 1.25 !important;
+  line-height: 1.35 !important;
   text-transform: uppercase !important;
 }
 
@@ -3994,6 +4011,7 @@ onMounted(() => {
   height: 28px !important;
   color: var(--file-card-action) !important;
   flex: 0 0 auto !important;
+  opacity: .78;
 }
 
 .content-container :deep(.markdown-preview .noise-attachment-file__action--download)::before {
@@ -4038,19 +4056,18 @@ onMounted(() => {
 
 @media (max-width: 520px) {
   .content-container :deep(.markdown-preview .noise-attachment-file) {
-    grid-template-columns: 44px minmax(0, 1fr) 24px !important;
+    grid-template-columns: 40px minmax(0, 1fr) 24px !important;
     gap: 10px !important;
     min-height: 64px !important;
     padding: 10px !important;
+    width: calc(100% - 24px) !important;
+    max-width: calc(100% - 24px) !important;
+    margin: 6px 12px !important;
   }
 
   .content-container :deep(.markdown-preview .noise-attachment-file__icon) {
-    width: 44px !important;
-    height: 44px !important;
-  }
-
-  .content-container :deep(.markdown-preview .noise-attachment-file__name) {
-    font-size: 14px !important;
+    width: 40px !important;
+    height: 40px !important;
   }
 }
 
