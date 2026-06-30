@@ -2573,17 +2573,17 @@ body.is-resizing-rendered-table-column {
   --file-card-icon-bg: rgba(15, 23, 42, 0.06);
   --file-card-icon-border: rgba(15, 23, 42, 0.08);
   --file-card-icon: #374151;
-  --file-card-name: #111827;
+  --file-card-name: #000000;
   --file-card-meta: #6b7280;
   --file-card-action: #374151;
   display: grid !important;
   grid-template-columns: 44px minmax(0, 1fr) 28px !important;
   align-items: center !important;
   gap: 12px !important;
-  width: calc(100% - 24px) !important;
+  width: calc(100% - 16px) !important;
   min-height: 72px !important;
-  max-width: calc(100% - 24px) !important;
-  margin: 6px 12px !important;
+  max-width: calc(100% - 16px) !important;
+  margin: 6px 8px !important;
   padding: 12px !important;
   border: 1px solid var(--file-card-border) !important;
   border-radius: 12px !important;
@@ -2679,7 +2679,7 @@ body.is-resizing-rendered-table-column {
   min-width: 0 !important;
   color: var(--file-card-name) !important;
   font-size: 14px !important;
-  font-weight: 500 !important;
+  font-weight: 400 !important;
   line-height: 1.35 !important;
   overflow-wrap: anywhere !important;
   word-break: break-word !important;
@@ -2760,8 +2760,8 @@ body.is-resizing-rendered-table-column {
   --file-card-icon-bg: rgba(255, 255, 255, 0.06);
   --file-card-icon-border: rgba(255, 255, 255, 0.12);
   --file-card-icon: #cbd5e1;
-  --file-card-name: #f8fafc;
-  --file-card-meta: #94a3b8;
+  --file-card-name: #ffffff;
+  --file-card-meta: #9ca3af;
   --file-card-action: #cbd5e1;
 }
 
@@ -2772,9 +2772,9 @@ body.is-resizing-rendered-table-column {
     gap: 10px !important;
     min-height: 64px !important;
     padding: 10px !important;
-    width: calc(100% - 24px) !important;
-    max-width: calc(100% - 24px) !important;
-    margin: 6px 12px !important;
+    width: calc(100% - 16px) !important;
+    max-width: calc(100% - 16px) !important;
+    margin: 6px 8px !important;
   }
 
   .markdown-preview .noise-attachment-file__icon,
