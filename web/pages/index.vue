@@ -9,7 +9,7 @@
         <div :class="['layout-container', gridModeClass]">
       <ClientOnly>
       <div class="left-col" v-if="!isMobile && layoutState!=='single'">
-        <UCard class="sidebar-card" :class="sidebarThemeCard">
+        <UCard class="sidebar-card left-widget-profile-card" :class="sidebarThemeCard">
           <div class="profile-card">
             <div class="avatar-wrap relative nw-tooltip-anchor nw-tooltip-below" data-tooltip="切换背景">
               <img class="avatar-lg" :src="profileAvatar" :alt="profileName" @click="changeBackground" @error="handleAvatarError">
@@ -37,7 +37,7 @@
             </div>
           </div>
         </UCard>
-        <UCard class="sidebar-card no-padding-card mt-2" :class="sidebarThemeCard">
+        <UCard class="sidebar-card no-padding-card mt-2 left-widget-stats-card" :class="sidebarThemeCard">
           <div v-if="isLoggedIn" class="p-0 grid grid-cols-3 gap-2 text-center text-sm">
             <div>
               <div class="font-semibold">{{ profileTotalMessages }}</div>
@@ -57,7 +57,7 @@
             <span>登录后方可查看个人数据统计</span>
           </button>
         </UCard>
-        <UCard v-if="frontendConfig.socialLinksEnabled === true && (frontendConfig.socialLinks || []).length > 0" class="sidebar-card no-padding-card mt-2" :class="sidebarThemeCard">
+        <UCard v-if="frontendConfig.socialLinksEnabled === true && (frontendConfig.socialLinks || []).length > 0" class="sidebar-card no-padding-card mt-2 left-widget-social-card" :class="sidebarThemeCard">
           <div class="social-list" v-if="frontendConfig.socialLinksEnabled === true">
             <a v-for="item in (frontendConfig.socialLinks || [])" :key="item.url || item.name" class="social-item nw-tooltip-anchor" :href="item.url" target="_blank" rel="noopener noreferrer" :data-tooltip="item.name || item.url">
               <template v-if="item.imageURL">
@@ -69,13 +69,13 @@
             </a>
           </div>
         </UCard>
-        <UCard v-if="frontendConfig.timeEnabled" class="sidebar-card no-padding-card mt-2" :class="sidebarThemeCard">
+        <UCard v-if="frontendConfig.timeEnabled" class="sidebar-card no-padding-card mt-2 left-widget-clock-card" :class="sidebarThemeCard">
           <div class="p-0 text-center clock-card">
             <div class="clock-display">{{ formatTime(currentTime) }}</div>
             <div class="clock-date">{{ formatDate(currentTime) }}</div>
           </div>
         </UCard>
-        <UCard v-if="frontendConfig.lifeCountdownEnabled" class="sidebar-card mt-2 life-countdown-card" :class="sidebarThemeCard">
+        <UCard v-if="frontendConfig.lifeCountdownEnabled" class="sidebar-card mt-2 life-countdown-card left-widget-life-card" :class="sidebarThemeCard">
           <div class="life-countdown-wrap">
             <div v-if="lifeCountdown.valid" class="space-y-2">
               <div class="life-countdown-main">
@@ -113,7 +113,7 @@
             </template>
           </div>
         </UCard>
-        <UCard v-if="frontendConfig.hitokotoEnabled" class="sidebar-card mt-2" :class="sidebarThemeCard">
+        <UCard v-if="frontendConfig.hitokotoEnabled" class="sidebar-card mt-2 left-widget-hitokoto-card" :class="sidebarThemeCard">
           <div class="hidden"><span id="hitokoto">正在获取中...</span></div>
           <div class="hitokoto-container mx-auto w-full sm:max-w-2xl px-2">
             <div class="hitokoto-text nw-tooltip-anchor" :data-tooltip="hitokotoText || '正在获取中...'">
@@ -3244,6 +3244,13 @@ white-space: nowrap;  /* 防止换行 */
 .calendar-sidebar-card.no-padding-card :deep(.u-card__body) { padding: 0 !important; }
 .calendar-sidebar-card.no-padding-card :deep(.u-card-header),
 .calendar-sidebar-card.no-padding-card :deep(.u-card__header) { padding: 8px 12px !important; }
+/* Match the visual edge gap measured from the latest-gallery title reference. */
+.left-col > .left-widget-profile-card > div[class*="px-4"][class*="py-5"] { padding-top: 26px !important; padding-bottom: 20px !important; }
+.left-col > .left-widget-stats-card > div[class*="px-4"][class*="py-5"] { padding-top: 22px !important; padding-bottom: 21px !important; }
+.left-col > .left-widget-social-card > div[class*="px-4"][class*="py-5"] { padding-top: 16px !important; padding-bottom: 16px !important; }
+.left-col > .left-widget-clock-card > div[class*="px-4"][class*="py-5"] { padding-top: 12px !important; padding-bottom: 22px !important; }
+.left-col > .left-widget-life-card > div[class*="px-4"][class*="py-5"] { padding-top: 23px !important; padding-bottom: 21px !important; }
+.left-col > .left-widget-hitokoto-card > div[class*="px-4"][class*="py-5"] { padding-top: 11px !important; padding-bottom: 10px !important; }
 html.dark .sidebar-card {
   background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.8) 100%);
   color: var(--home-text-dark);
