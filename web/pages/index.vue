@@ -11,16 +11,16 @@
       <div class="left-col" v-if="!isMobile && layoutState!=='single'">
         <UCard class="sidebar-card left-widget-profile-card" :class="sidebarThemeCard">
           <div class="profile-card">
-            <div class="avatar-wrap relative nw-tooltip-anchor nw-tooltip-below" data-tooltip="切换背景">
-              <img class="avatar-lg" :src="profileAvatar" :alt="profileName" @click="changeBackground" @error="handleAvatarError">
-              <span class="avatar-status" :class="isOnline ? 'bg-green-500' : 'bg-gray-400'"></span>
-            </div>
-            <div class="profile-name text-center">{{ profileName }}</div>
-            <div v-if="isAdmin" class="mt-1">
-              <span class="px-1.5 py-0.5 rounded bg-orange-500 text-white text-[10px]">管理员</span>
-            </div>
-            <div v-else class="mt-1">
-              <span class="px-1.5 py-0.5 rounded bg-blue-500 text-white text-[10px]">{{ isLoggedIn ? '用户' : '访客' }}</span>
+            <div class="profile-head">
+              <button type="button" class="avatar-wrap nw-tooltip-anchor nw-tooltip-below" data-tooltip="进入后台" aria-label="进入后台" @click="openAdmin">
+                <img class="avatar-lg" :src="profileAvatar" :alt="profileName" @error="handleAvatarError">
+                <span class="avatar-status" :class="isOnline ? 'bg-green-500' : 'bg-gray-400'"></span>
+              </button>
+              <div class="profile-identity">
+                <div class="profile-name">{{ profileName }}</div>
+                <span v-if="isAdmin" class="profile-badge profile-badge-admin">管理员</span>
+                <span v-else class="profile-badge profile-badge-user">{{ isLoggedIn ? '用户' : '访客' }}</span>
+              </div>
             </div>
             <div class="profile-desc">{{ profileDesc }}</div>
             <div v-if="!isOnline" class="auth-actions">
@@ -72,7 +72,6 @@
         <UCard v-if="frontendConfig.timeEnabled" class="sidebar-card no-padding-card mt-2 left-widget-clock-card" :class="sidebarThemeCard">
           <div class="p-0 text-center clock-card">
             <div class="clock-display">{{ formatTime(currentTime) }}</div>
-            <div class="clock-date">{{ formatDate(currentTime) }}</div>
           </div>
         </UCard>
         <UCard v-if="frontendConfig.lifeCountdownEnabled" class="sidebar-card mt-2 life-countdown-card left-widget-life-card" :class="sidebarThemeCard">
@@ -2808,7 +2807,6 @@ html:not(.dark) .hero-tab.active {
 .sidebar-title { color: var(--accent, inherit) }
 .clock-card { padding: 0 }
 .clock-display { font-weight: 700; font-size: 1.8rem; letter-spacing: 2px }
-.clock-date { margin-top: 6px; font-size: 0.85rem; opacity: 0.7 }
 .life-countdown-card { overflow: hidden; }
 .life-countdown-wrap { display: flex; flex-direction: column; gap: 8px; }
 .life-countdown-main { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
@@ -3245,10 +3243,10 @@ white-space: nowrap;  /* 防止换行 */
 .calendar-sidebar-card.no-padding-card :deep(.u-card-header),
 .calendar-sidebar-card.no-padding-card :deep(.u-card__header) { padding: 8px 12px !important; }
 /* Match the visual edge gap measured from the latest-gallery title reference. */
-.left-col > .left-widget-profile-card > div[class*="px-4"][class*="py-5"] { padding-top: 26px !important; padding-bottom: 20px !important; }
+.left-col > .left-widget-profile-card > div[class*="px-4"][class*="py-5"] { padding: 14px 0 12px !important; }
 .left-col > .left-widget-stats-card > div[class*="px-4"][class*="py-5"] { padding-top: 22px !important; padding-bottom: 21px !important; }
 .left-col > .left-widget-social-card > div[class*="px-4"][class*="py-5"] { padding-top: 16px !important; padding-bottom: 16px !important; }
-.left-col > .left-widget-clock-card > div[class*="px-4"][class*="py-5"] { padding-top: 12px !important; padding-bottom: 22px !important; }
+.left-col > .left-widget-clock-card > div[class*="px-4"][class*="py-5"] { padding-top: 12px !important; padding-bottom: 12px !important; }
 .left-col > .left-widget-life-card > div[class*="px-4"][class*="py-5"] { padding-top: 23px !important; padding-bottom: 21px !important; }
 .left-col > .left-widget-hitokoto-card > div[class*="px-4"][class*="py-5"] { padding-top: 11px !important; padding-bottom: 10px !important; }
 html.dark .sidebar-card {
@@ -3285,12 +3283,18 @@ html.dark .sidebar-card :where(.bg-white,.bg-gray-50,.bg-gray-100,.bg-gray-700,.
 html.dark .sidebar-card :where(.text-black,.text-gray-900,.text-gray-800) { color: var(--home-text-dark) !important; }
 html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border-gray-600,.border-gray-700) { border-color: var(--home-border-dark) !important; }
 .profile-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  width: 100%;
   padding: 0;
 }
-.auth-actions { margin-top: 6px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.profile-head {
+  --profile-avatar-left: 28px;
+  --profile-avatar-size: 72px;
+  --profile-line-gap: 6px;
+  position: relative;
+  min-height: var(--profile-avatar-size);
+  width: 100%;
+}
+.auth-actions { margin-top: 4px; display: flex; align-items: center; justify-content: center; gap: 10px; }
 .auth-tooltip { position: relative; display: inline-flex; align-items: center; justify-content: center; }
 .auth-btn { width: 36px; height: 36px; padding: 0; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; background: transparent !important; border: none !important; box-shadow: none !important; }
 .auth-btn:hover { background: transparent !important; transform: none !important; }
@@ -3313,8 +3317,8 @@ html.dark .sidebar-card :where(.border,.border-gray-200,.border-gray-300,.border
 html.dark .stats-login-prompt { color: #60a5fa; }
 html.dark .stats-login-prompt:hover { color: #93c5fd; }
 .avatar-lg {
-  width: 72px;
-  height: 72px;
+  width: var(--profile-avatar-size);
+  height: var(--profile-avatar-size);
   border-radius: 50%;
   object-fit: cover;
   border: 2px solid rgba(255,255,255,0.8);
@@ -3323,7 +3327,19 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
 }
 .avatar-lg:hover { transform: none; }
 /* 头像在线状态独立定位 */
-.avatar-wrap { display:inline-block; position:relative; }
+.avatar-wrap {
+  position: absolute;
+  left: var(--profile-avatar-left);
+  top: 0;
+  display: inline-block;
+  width: var(--profile-avatar-size);
+  height: var(--profile-avatar-size);
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  cursor: pointer;
+}
 .avatar-status { position:absolute; right:-2px; top:-2px; width:10px; height:10px; border-radius:9999px; border:2px solid rgba(255,255,255,0.9); }
 /* 桌面登录/注册圆形按钮禁用悬停效果，仅显示 Tooltip */
 .plain-icon-btn { background: transparent !important; transition: none !important; box-shadow: none !important; }
@@ -3332,13 +3348,55 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
 .hitokoto-container { margin: 0; padding: 0; }
 .hitokoto-text { overflow: hidden; white-space: normal; word-break: break-word; overflow-wrap: anywhere; font-size: 14px; font-weight: 500; line-height: 1.45; }
 .profile-name {
-  margin-top: 8px;
+  width: 10em;
+  max-width: 100%;
+  margin: 0;
   font-weight: 600;
+  line-height: 1.45;
+  text-align: center;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.profile-identity {
+  width: calc(100% - var(--profile-avatar-left) - var(--profile-avatar-size));
+  min-height: var(--profile-avatar-size);
+  margin-left: calc(var(--profile-avatar-left) + var(--profile-avatar-size));
+  padding: 0 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--profile-line-gap);
+  box-sizing: border-box;
+}
+.profile-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 18px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+.profile-badge-admin {
+  background: rgb(249, 115, 22);
+}
+.profile-badge-user {
+  background: rgb(59, 130, 246);
 }
 .profile-desc {
-  margin-top: 4px;
+  margin-top: 8px;
+  padding: 0 16px;
   font-size: 0.875rem;
   opacity: 0.8;
+  text-align: center;
 }
 
 /* 确保白天模式下文本颜色是黑色的 */
@@ -3352,9 +3410,6 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
 /* 确保白天模式下时钟颜色是黑色的 */
 :global(html:not(.dark)) .clock-display {
   color: #111827 !important;
-}
-:global(html:not(.dark)) .clock-date {
-  color: #6b7280 !important;
 }
 
 /* 确保白天模式下一言文本颜色是黑色的 */
