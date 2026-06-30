@@ -1,5 +1,5 @@
 <template>
-  <div :class="['feed-list-wrap', wrapThemeClass]">
+  <div ref="feedListRoot" :class="['feed-list-wrap', wrapThemeClass]">
     <div v-if="loading" class="feed-empty feed-loading-text">信息流加载中...</div>
     <div v-else-if="errorText" class="feed-empty">{{ errorText }}</div>
     <div v-else-if="allItems.length === 0" class="feed-empty">暂无信息流内容</div>
@@ -202,6 +202,7 @@ const requestInFlight = ref(false)
 const copiedLink = ref('')
 const copiedTimer = ref<number | null>(null)
 const currentPage = ref(1)
+const feedListRoot = ref<HTMLElement | null>(null)
 const previewOpen = ref(false)
 const previewImageURL = ref('')
 const brokenAvatarSet = ref<Set<string>>(new Set())
@@ -212,6 +213,7 @@ const shouldShowExpandButton = ref<Record<string, boolean>>({})
 const measuredContentHeights = ref<Record<string, number>>({})
 const measureTimer = ref<number | null>(null)
 const measureFrame = ref<number | null>(null)
+const pageTopScrollTimer = ref<number | null>(null)
 const feedSummaryRefs = ref<Record<string, HTMLElement | null>>({})
 const feedResizeObservers = new Map<string, ResizeObserver>()
 const observedFeedMedia = new WeakSet<Element>()
@@ -253,6 +255,51 @@ const pageItems = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return allItems.value.slice(start, start + pageSize.value)
 })
+
+const isScrollableY = (el: HTMLElement | null) => {
+  if (!el || typeof window === 'undefined') return false
+  const style = window.getComputedStyle(el)
+  return /(auto|scroll|overlay)/.test(`${style.overflowY || ''} ${style.overflow || ''}`) && el.scrollHeight > el.clientHeight
+}
+const getAppScrollContainer = (target?: HTMLElement | null) => {
+  if (typeof document === 'undefined') return null as HTMLElement | null
+  const candidates = [
+    target?.closest('.center-col') as HTMLElement | null,
+    target?.closest('.content-wrapper') as HTMLElement | null,
+    document.querySelector('.content-wrapper') as HTMLElement | null,
+    document.querySelector('.center-col') as HTMLElement | null,
+  ]
+  return candidates.find(isScrollableY) || null
+}
+const scrollFeedFirstBlockToTop = async () => {
+  await nextTick()
+  if (typeof window === 'undefined') return
+  if (pageTopScrollTimer.value) {
+    window.clearTimeout(pageTopScrollTimer.value)
+    pageTopScrollTimer.value = null
+  }
+  const target = feedListRoot.value?.querySelector<HTMLElement>('.feed-card') || feedListRoot.value
+  if (!target) return
+  const sc = getAppScrollContainer(target)
+  const targetRect = target.getBoundingClientRect()
+  if (sc) {
+    const scRect = sc.getBoundingClientRect()
+    const nextTop = sc.scrollTop + targetRect.top - scRect.top
+    sc.scrollTo({ top: Math.max(0, nextTop), behavior: 'instant' })
+    pageTopScrollTimer.value = window.setTimeout(() => {
+      pageTopScrollTimer.value = null
+      const rect = target.getBoundingClientRect()
+      const rootRect = sc.getBoundingClientRect()
+      sc.scrollTo({ top: Math.max(0, sc.scrollTop + rect.top - rootRect.top), behavior: 'instant' })
+    }, 120)
+    return
+  }
+  window.scrollTo({
+    top: Math.max(0, (window.scrollY || window.pageYOffset || 0) + targetRect.top),
+    left: window.scrollX || window.pageXOffset || 0,
+    behavior: 'instant',
+  })
+}
 
 const feedKeyOf = (item: FeedItem) => `${String(item.link || '').trim()}|${String(item.title || '').trim()}|${String(item.publishedAt || '').trim()}|${Number(item.timestamp || 0)}`
 
@@ -296,12 +343,14 @@ const goPrevPage = () => {
   if (currentPage.value <= 1) return
   currentPage.value -= 1
   deferMeasure()
+  void scrollFeedFirstBlockToTop()
 }
 
 const goNextPage = () => {
   if (currentPage.value >= totalPages.value) return
   currentPage.value += 1
   deferMeasure()
+  void scrollFeedFirstBlockToTop()
 }
 
 const toggleExpand = (feedId: string) => {
@@ -792,6 +841,10 @@ onUnmounted(() => {
   if (measureFrame.value) {
     window.cancelAnimationFrame(measureFrame.value)
     measureFrame.value = null
+  }
+  if (pageTopScrollTimer.value) {
+    window.clearTimeout(pageTopScrollTimer.value)
+    pageTopScrollTimer.value = null
   }
 })
 </script>

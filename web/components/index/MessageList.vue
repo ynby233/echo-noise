@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div ref="messageListRoot">
     <div class="min-h-screen flex flex-col">
       <!-- 空状态显示 -->
       <div v-if="props.pageReady && !hasActiveFilters && !displayMessages.length" class="text-center text-gray-500 py-8">
@@ -555,6 +555,7 @@ type BuiltinCommentsExpose = {
 }
 const config = useRuntimeConfig()
 const BASE_API = config.public.baseApi || '/api'
+const messageListRoot = ref<HTMLElement | null>(null)
 
 const messageVisibilityOptions: { value: MessageVisibility; label: string; icon: string }[] = [
   { value: 'public', label: '公开', icon: 'i-mdi-earth' },
@@ -747,6 +748,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => { try { io && io.disconnect() } catch {} })
 onBeforeUnmount(() => {
+  clearPageTopScrollSchedule()
   listRefreshSeq += 1
   if (measureFrame !== null) {
     cancelAnimationFrame(measureFrame)
@@ -801,14 +803,52 @@ const getAppScrollContainer = (target?: HTMLElement | null) => {
   ]
   return candidates.find(isScrollableY) || candidates.find(Boolean) || null
 }
-const captureAppScrollTop = () => {
-  const sc = getAppScrollContainer()
-  return { sc, top: sc ? sc.scrollTop : (typeof window !== 'undefined' ? window.scrollY : 0) }
+let pageTopScrollFrame: number | null = null
+let pageTopScrollTimers: ReturnType<typeof setTimeout>[] = []
+const clearPageTopScrollSchedule = () => {
+  if (typeof window !== 'undefined' && pageTopScrollFrame !== null) {
+    window.cancelAnimationFrame(pageTopScrollFrame)
+  }
+  pageTopScrollFrame = null
+  pageTopScrollTimers.forEach((timer) => clearTimeout(timer))
+  pageTopScrollTimers = []
 }
-const restoreAppScrollTop = (snapshot: { sc: HTMLElement | null; top: number }) => {
-  const sc = snapshot.sc && document.contains(snapshot.sc) ? snapshot.sc : getAppScrollContainer()
-  if (sc) sc.scrollTo({ top: snapshot.top, behavior: 'instant' })
-  else window.scrollTo({ top: snapshot.top, behavior: 'instant' })
+const firstCurrentPageBlock = () => {
+  const root = messageListRoot.value
+  return root?.querySelector<HTMLElement>('.message-list-item .content-container') || null
+}
+const scrollElementTopToViewportTop = (target: HTMLElement, behavior: ScrollBehavior = 'instant') => {
+  if (typeof window === 'undefined') return
+  const sc = getAppScrollContainer(target)
+  const targetRect = target.getBoundingClientRect()
+  if (sc && isScrollableY(sc)) {
+    const scRect = sc.getBoundingClientRect()
+    const nextTop = sc.scrollTop + targetRect.top - scRect.top
+    sc.scrollTo({ top: Math.max(0, nextTop), behavior })
+    return
+  }
+  window.scrollTo({
+    top: Math.max(0, (window.scrollY || window.pageYOffset || 0) + targetRect.top),
+    left: window.scrollX || window.pageXOffset || 0,
+    behavior,
+  })
+}
+const alignCurrentPageFirstBlockToTop = (behavior: ScrollBehavior = 'instant') => {
+  const target = firstCurrentPageBlock() || messageListRoot.value
+  if (target) scrollElementTopToViewportTop(target, behavior)
+}
+const scheduleCurrentPageFirstBlockTopScroll = async () => {
+  await nextTick()
+  clearPageTopScrollSchedule()
+  alignCurrentPageFirstBlockToTop('instant')
+  if (typeof window === 'undefined') return
+  pageTopScrollFrame = window.requestAnimationFrame(() => {
+    pageTopScrollFrame = null
+    alignCurrentPageFirstBlockToTop('instant')
+  })
+  pageTopScrollTimers = [80, 220, 420].map((delay) => setTimeout(() => {
+    alignCurrentPageFirstBlockToTop('instant')
+  }, delay))
 }
 const jumpToPage = async () => {
   const page = parseInt(targetPage.value);
@@ -823,7 +863,6 @@ const jumpToPage = async () => {
   }
 
   try {
-    const scrollSnapshot = captureAppScrollTop();
     const result = await fetchListPage(pageQueryFor(page));
 
     if (!applyPageResult(result, page)) {
@@ -831,8 +870,7 @@ const jumpToPage = async () => {
     }
 
     targetPage.value = '';
-    await nextTick();
-    restoreAppScrollTop(scrollSnapshot);
+    await scheduleCurrentPageFirstBlockTopScroll();
   } catch (error) {
     console.error('跳转页面失败:', error);
     useToast().add({
@@ -1876,12 +1914,10 @@ const loadPreviousPage = async () => {
   if (isPageLoading.value || message.page <= 1) return;
   setPageLoading(true);
   try {
-    const scrollSnapshot = captureAppScrollTop();
     const targetPage = message.page - 1;
     const result = await fetchListPage(pageQueryFor(targetPage));
-    if (result) applyPageResult(result, targetPage);
-    await nextTick();
-    restoreAppScrollTop(scrollSnapshot);
+    if (!applyPageResult(result, targetPage)) throw new Error('加载上一页失败');
+    await scheduleCurrentPageFirstBlockTopScroll();
   } catch (error) {
     useToast().add({
       title: '加载失败',
@@ -1897,12 +1933,10 @@ const loadNextPage = async () => {
   if (isPageLoading.value || !message.hasMore) return;
   setPageLoading(true);
   try {
-    const scrollSnapshot = captureAppScrollTop();
     const targetPage = message.page + 1;
     const result = await fetchListPage(pageQueryFor(targetPage));
-    if (result) applyPageResult(result, targetPage);
-    await nextTick();
-    restoreAppScrollTop(scrollSnapshot);
+    if (!applyPageResult(result, targetPage)) throw new Error('加载下一页失败');
+    await scheduleCurrentPageFirstBlockTopScroll();
   } catch (error) {
     useToast().add({
       title: '加载失败',
