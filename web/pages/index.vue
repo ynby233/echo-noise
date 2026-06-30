@@ -1467,12 +1467,12 @@ const applyNmpEdge = (el: any, position: string, minimized: boolean) => {
     el.style.top = 'auto'
   }
 }
-const isNmpMinimized = (el: any) => !!el && (el.classList.contains('minimized') || !!el.querySelector('.minimized'))
+const isNmpMinimized = (el: any) => !!el && el.classList.contains('minimized')
 const syncNmpState = (el: any, cfg: any) => {
   if (!el) return
   const saved = readNmpState()
   const position = normalizeNmpPosition(saved.position || cfg.musicPosition || 'bottom-left')
-  const minimized = typeof saved.minimized === 'boolean' ? saved.minimized : !!cfg.musicDefaultMinimized
+  const minimized = !!cfg.musicDefaultMinimized ? true : (typeof saved.minimized === 'boolean' ? saved.minimized : false)
   el.classList.toggle('minimized', minimized)
   if (minimized) el.setAttribute('data-instant', 'true')
   applyNmpEdge(el, position, minimized)

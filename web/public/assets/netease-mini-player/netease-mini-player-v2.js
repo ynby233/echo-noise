@@ -59,6 +59,7 @@ class NeteaseMiniPlayer {
         this.currentLyricIndex = -1;
         this.showLyrics = this.config.lyric;
         this.cache = new Map();
+        this.userMinimizeIntent = false;
         this.init();
         this.playMode = 'list';
         this.shuffleHistory = [];
@@ -178,8 +179,8 @@ class NeteaseMiniPlayer {
                     }
                 }
             }
-            if (this.config.defaultMinimized && !this.config.embed && this.config.position !== 'static') {
-                this.toggleMinimize();
+            if (this.config.defaultMinimized && !this.config.embed && this.config.position !== 'static' && !this.userMinimizeIntent) {
+                this.setMinimized(true);
             }
         } catch (error) {
             console.error('播放器初始化失败:', error);
@@ -284,7 +285,7 @@ class NeteaseMiniPlayer {
         }
         this.elements.albumCoverContainer.addEventListener('click', () => {
             if (this.element.classList.contains('minimized')) {
-                this.elements.albumCoverContainer.classList.toggle('expanded');
+                this.setMinimized(false, true);
                 return;
             }
             if (this.currentSong && this.currentSong.id) {
@@ -1108,12 +1109,12 @@ class NeteaseMiniPlayer {
             this.elements.loopModeBtn.title = titles[this.playMode];
         }
     }
-    toggleMinimize() {
-        const isCurrentlyMinimized = this.element.classList.contains('minimized');
-        this.isMinimized = isCurrentlyMinimized;
-        if (!isCurrentlyMinimized) {
-            this.element.classList.add('minimized');
-            this.isMinimized = true;
+    setMinimized(minimized, userInitiated = false) {
+        if (userInitiated) this.userMinimizeIntent = true;
+        const shouldMinimize = minimized !== false;
+        this.element.classList.toggle('minimized', shouldMinimize);
+        this.isMinimized = shouldMinimize;
+        if (shouldMinimize) {
             if (this.elements.minimizeBtn) {
                 this.elements.minimizeBtn.classList.add('active');
                 this.elements.minimizeBtn.title = '展开';
@@ -1124,8 +1125,6 @@ class NeteaseMiniPlayer {
             this.element.classList.remove('idle', 'fading-in', 'fading-out', 'docked-left', 'docked-right', 'popping-left', 'popping-right');
             this.startIdleTimer();
         } else {
-            this.element.classList.remove('minimized');
-            this.isMinimized = false;
             if (this.elements.minimizeBtn) {
                 this.elements.minimizeBtn.classList.remove('active');
                 this.elements.minimizeBtn.title = '缩小';
@@ -1139,6 +1138,9 @@ class NeteaseMiniPlayer {
             }
             this.isIdle = false;
         }
+    }
+    toggleMinimize() {
+        this.setMinimized(!this.element.classList.contains('minimized'), true);
     }
     determinePlaylistDirection() {
         const playerRect = this.element.getBoundingClientRect();

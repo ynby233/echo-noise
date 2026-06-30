@@ -54,6 +54,16 @@ const reconcileBody = indexPage.slice(reconcileStart, reconcileEnd)
 
 assert.match(
   indexPage,
+  /const\s+isNmpMinimized\s*=\s*\(el: any\)\s*=>\s*!!el\s*&&\s*el\.classList\.contains\('minimized'\)/,
+  'music minimized detection must only read the root player class, not descendant .minimized classes'
+)
+assert.match(
+  indexPage,
+  /const\s+minimized\s*=\s*!!cfg\.musicDefaultMinimized\s*\?\s*true\s*:\s*\(typeof saved\.minimized === 'boolean' \? saved\.minimized : false\)/,
+  'administrator default-minimized must win over stale saved expanded state'
+)
+assert.match(
+  indexPage,
   /const\s+scheduleMusicPlayerReconcile\s*=\s*\(reason = 'state'\) => \{[\s\S]*?await\s+reconcileMusicPlayer\(reason\)/,
   'all music startup triggers must be funneled through scheduleMusicPlayerReconcile'
 )
@@ -86,6 +96,28 @@ assert.match(
   indexPage,
   /scheduleMusicPlayerReconcile\('mounted'\)[\s\S]*?scheduleMusicPlayerReconcile\('mounted-idle'\)[\s\S]*?scheduleMusicPlayerReconcile\('first-interaction'\)/,
   'mount and first-interaction triggers must use the same music reconciler'
+)
+
+const nmpScript = await readFile(join(webRoot, 'public/assets/netease-mini-player/netease-mini-player-v2.js'), 'utf8')
+assert.match(
+  nmpScript,
+  /setMinimized\(minimized, userInitiated = false\)[\s\S]*?const shouldMinimize = minimized !== false[\s\S]*?this\.element\.classList\.toggle\('minimized', shouldMinimize\)/,
+  'NMP minimized changes must be idempotent so pre-applied default-minimized classes are not toggled open during async init'
+)
+assert.match(
+  nmpScript,
+  /if \(this\.element\.classList\.contains\('minimized'\)\) \{[\s\S]*?this\.setMinimized\(false, true\)[\s\S]*?return/,
+  'clicking the minimized CD must expand the whole music player instead of toggling an unused album-cover state'
+)
+assert.doesNotMatch(
+  nmpScript,
+  /albumCoverContainer\.classList\.toggle\('expanded'\)/,
+  'minimized album clicks must not be swallowed by the unused expanded class'
+)
+assert.match(
+  nmpScript,
+  /if \(this\.config\.defaultMinimized && !this\.config\.embed && this\.config\.position !== 'static' && !this\.userMinimizeIntent\) \{[\s\S]*?this\.setMinimized\(true\)/,
+  'NMP default-minimized startup must set the desired state directly without overriding a user click during async init'
 )
 
 console.log('public music player tests passed')
