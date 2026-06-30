@@ -3931,6 +3931,11 @@ onMounted(() => {
   outline: none;
 }
 
+.content-container :deep(.markdown-preview .noise-attachment-file:has(+ .noise-attachment-file)),
+.content-container :deep(.markdown-preview .noise-attachment-file + .noise-attachment-file) {
+  box-shadow: none !important;
+}
+
 .content-container.is-dark :deep(.markdown-preview .noise-attachment-file),
 .content-container :deep(.markdown-preview.theme-dark .noise-attachment-file) {
   --file-card-bg: rgba(15, 23, 42, 0.52);

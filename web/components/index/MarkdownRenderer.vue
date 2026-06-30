@@ -2609,6 +2609,13 @@ body.is-resizing-rendered-table-column {
   outline: none;
 }
 
+.markdown-preview .noise-attachment-file:has(+ .noise-attachment-file),
+.markdown-preview .noise-attachment-file + .noise-attachment-file,
+.rendered-table-expand-scroll .noise-attachment-file:has(+ .noise-attachment-file),
+.rendered-table-expand-scroll .noise-attachment-file + .noise-attachment-file {
+  box-shadow: none !important;
+}
+
 .markdown-preview .noise-attachment-file:focus-visible,
 .rendered-table-expand-scroll .noise-attachment-file:focus-visible {
   box-shadow: var(--file-card-shadow), 0 0 0 2px rgba(249, 115, 22, 0.18) !important;
