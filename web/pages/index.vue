@@ -12,7 +12,7 @@
         <UCard class="sidebar-card left-widget-profile-card" :class="sidebarThemeCard">
           <div class="profile-card">
             <div class="profile-head">
-              <button type="button" class="avatar-wrap nw-tooltip-anchor nw-tooltip-below" data-tooltip="进入后台" aria-label="进入后台" @click="openAdmin">
+              <button type="button" class="avatar-wrap nw-tooltip-anchor nw-tooltip-below" data-tooltip="后台" aria-label="后台" @click="openAdmin">
                 <img class="avatar-lg" :src="profileAvatar" :alt="profileName" @error="handleAvatarError">
                 <span class="avatar-status" :class="isOnline ? 'bg-green-500' : 'bg-gray-400'"></span>
               </button>
