@@ -1487,8 +1487,8 @@ defineExpose({ load, focusCommentById, replyToCommentById })
   --comment-toolbar-preview-bg: rgba(0, 0, 0, 0.04);
 }
 .builtin-comments.comment-theme-dark,
-:global(html.dark) .builtin-comments,
-:global(.dark) .builtin-comments {
+:global(html.dark .builtin-comments),
+:global(.dark .builtin-comments) {
   --comment-toolbar-bg: rgba(39, 50, 66, 0.68);
   --comment-toolbar-control-bg: rgba(255, 255, 255, 0.06);
   --comment-toolbar-control-hover-bg: rgba(255, 255, 255, 0.12);
@@ -1506,18 +1506,18 @@ defineExpose({ load, focusCommentById, replyToCommentById })
   --nw-floating-selected-border: rgba(251, 146, 60, 0.58);
 }
 .builtin-comments.comment-theme-dark .comment-card-frame,
-:global(html.dark) .builtin-comments .comment-card-frame,
-:global(.dark) .builtin-comments .comment-card-frame {
+:global(html.dark .builtin-comments .comment-card-frame),
+:global(.dark .builtin-comments .comment-card-frame) {
   border-color: rgba(255, 255, 255, .12);
   background: rgba(15, 23, 42, .52);
   box-shadow: 0 16px 32px rgba(2, 6, 23, .52);
 }
 .builtin-comments.comment-theme-dark .comment-load-btn,
-:global(html.dark) .builtin-comments .comment-load-btn,
-:global(.dark) .builtin-comments .comment-load-btn,
+:global(html.dark .builtin-comments .comment-load-btn),
+:global(.dark .builtin-comments .comment-load-btn),
 .builtin-comments.comment-theme-dark .comment-refresh-button,
-:global(html.dark) .builtin-comments .comment-refresh-button,
-:global(.dark) .builtin-comments .comment-refresh-button {
+:global(html.dark .builtin-comments .comment-refresh-button),
+:global(.dark .builtin-comments .comment-refresh-button) {
   --nw-action-bg: rgba(51, 65, 85, .96);
   --nw-action-text: #cbd5e1;
   --nw-action-border: rgba(148, 163, 184, .28);
@@ -1531,23 +1531,23 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 .builtin-comments.comment-theme-dark .comment-tool-btn:hover:not(:disabled),
 .builtin-comments.comment-theme-dark .return-target-btn:hover { transform:translate3d(0,0,0) scale(1.06); background:var(--nw-floating-hover-bg) !important; border-color:var(--nw-floating-hover-border) !important; }
 .builtin-comments.comment-theme-dark .cancel-btn,
-:global(html.dark) .builtin-comments .cancel-btn,
-:global(.dark) .builtin-comments .cancel-btn { background:rgba(255,255,255,0.08) !important; border-color:rgba(255,255,255,0.18) !important; color:#f8fafc !important; }
+:global(html.dark .builtin-comments .cancel-btn),
+:global(.dark .builtin-comments .cancel-btn) { background:rgba(255,255,255,0.08) !important; border-color:rgba(255,255,255,0.18) !important; color:#f8fafc !important; }
 .builtin-comments.comment-theme-dark .cancel-btn:hover,
-:global(html.dark) .builtin-comments .cancel-btn:hover,
-:global(.dark) .builtin-comments .cancel-btn:hover { background:var(--nw-floating-hover-bg) !important; border-color:var(--nw-floating-hover-border) !important; color:#fff !important; }
+:global(html.dark .builtin-comments .cancel-btn:hover),
+:global(.dark .builtin-comments .cancel-btn:hover) { background:var(--nw-floating-hover-bg) !important; border-color:var(--nw-floating-hover-border) !important; color:#fff !important; }
 .builtin-comments.comment-theme-dark .clear-action-btn,
 .builtin-comments.comment-theme-dark .clear-action-btn:hover,
-:global(html.dark) .builtin-comments .clear-action-btn,
-:global(html.dark) .builtin-comments .clear-action-btn:hover,
-:global(.dark) .builtin-comments .clear-action-btn,
-:global(.dark) .builtin-comments .clear-action-btn:hover { border-color:rgba(251,146,60,.72) !important; background:linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)) !important; color:#fff !important; }
+:global(html.dark .builtin-comments .clear-action-btn),
+:global(html.dark .builtin-comments .clear-action-btn:hover),
+:global(.dark .builtin-comments .clear-action-btn),
+:global(.dark .builtin-comments .clear-action-btn:hover) { border-color:rgba(251,146,60,.72) !important; background:linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95)) !important; color:#fff !important; }
 .builtin-comments.comment-theme-dark .submit-btn,
-:global(html.dark) .builtin-comments .submit-btn,
-:global(.dark) .builtin-comments .submit-btn { border-color:rgba(96,165,250,.72) !important; background:#2563eb !important; color:#fff !important; }
+:global(html.dark .builtin-comments .submit-btn),
+:global(.dark .builtin-comments .submit-btn) { border-color:rgba(96,165,250,.72) !important; background:#2563eb !important; color:#fff !important; }
 .builtin-comments.comment-theme-dark .submit-btn:hover:not(:disabled),
-:global(html.dark) .builtin-comments .submit-btn:hover:not(:disabled),
-:global(.dark) .builtin-comments .submit-btn:hover:not(:disabled) { border-color:rgba(147,197,253,.90) !important; background:#1d4ed8 !important; color:#fff !important; }
+:global(html.dark .builtin-comments .submit-btn:hover:not(:disabled)),
+:global(.dark .builtin-comments .submit-btn:hover:not(:disabled)) { border-color:rgba(147,197,253,.90) !important; background:#1d4ed8 !important; color:#fff !important; }
 .builtin-comments.comment-theme-dark .comment-visibility-menu { background:var(--nw-floating-bg) !important; color:var(--nw-floating-text) !important; border-color:var(--nw-floating-border) !important; }
 .main-toolbar { margin-bottom:8px; }
 .edit-toolbar { margin-top:2px; }
@@ -1569,6 +1569,6 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 .comment-media-preview-item { width:var(--inline-image-thumb-size, 96px); height:var(--inline-image-thumb-size, 96px); border-radius:8px; overflow:hidden; display:block; border:1px solid var(--comment-toolbar-preview-border); background:var(--comment-toolbar-preview-bg); }
 .comment-media-preview-item img { width:100%; height:100%; display:block; object-fit:cover; }
 .return-target-btn:hover { transform:translate3d(0,0,0) scale(1.06); border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
-:global(html.dark) .return-target-btn,
-:global(.dark) .return-target-btn { background:var(--comment-toolbar-control-bg); color:var(--comment-toolbar-text); border-color:var(--comment-toolbar-border); }
+:global(html.dark .return-target-btn),
+:global(.dark .return-target-btn) { background:var(--comment-toolbar-control-bg); color:var(--comment-toolbar-text); border-color:var(--comment-toolbar-border); }
 </style>

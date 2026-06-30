@@ -2619,6 +2619,11 @@ body.is-resizing-rendered-table-column {
   margin-top: 0 !important;
 }
 
+.markdown-preview .noise-attachment-file + .noise-attachment-file,
+.rendered-table-expand-scroll .noise-attachment-file + .noise-attachment-file {
+  margin-top: 10px !important;
+}
+
 .markdown-preview p:has(+ .noise-attachment-file),
 .rendered-table-expand-scroll p:has(+ .noise-attachment-file) {
   margin-bottom: 6px !important;

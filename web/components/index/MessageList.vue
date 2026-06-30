@@ -3931,7 +3931,8 @@ onMounted(() => {
   outline: none;
 }
 
-.content-container.is-dark :deep(.markdown-preview .noise-attachment-file) {
+.content-container.is-dark :deep(.markdown-preview .noise-attachment-file),
+.content-container :deep(.markdown-preview.theme-dark .noise-attachment-file) {
   --file-card-bg: rgba(15, 23, 42, 0.52);
   --file-card-bg-hover: rgba(30, 41, 59, 0.68);
   --file-card-border: rgba(255, 255, 255, 0.12);
@@ -3950,6 +3951,10 @@ onMounted(() => {
 
 .content-container :deep(.markdown-preview .noise-attachment-file + p) {
   margin-top: 0 !important;
+}
+
+.content-container :deep(.markdown-preview .noise-attachment-file + .noise-attachment-file) {
+  margin-top: 10px !important;
 }
 
 .content-container :deep(.markdown-preview p:has(+ .noise-attachment-file)) {
