@@ -547,6 +547,7 @@ import BuiltinComments from '../comments/BuiltinComments.vue'
 import { writeClipboardText } from '~/utils/clipboard'
 import { uploadMediaFiles } from '~/utils/media-upload'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
+import { getMessageIdFromRouteHash } from '~/utils/message-route-hash'
 import { useRuntimeConfig } from '#imports'
 import { useToast } from '#ui/composables/useToast'
 type BuiltinCommentsExpose = {
@@ -1669,7 +1670,7 @@ const checkContentHeight = () => {
 watch(() => message.messages, () => {
   hydrateMessageEngagement(message.messages as any[])
   // 如果是单条消息查看模式，不执行滚动
-  if (route.hash.includes('/messages/')) {
+  if (getMessageIdFromRouteHash(route.hash)) {
     return;
   }
   nextTick(() => {
@@ -1702,7 +1703,7 @@ onMounted(async () => {
     await checkApi()
     await fetchGuestbookId()
     // 获取路由中的消息ID
-    const messageId = route.hash.split('/messages/').pop();
+    const messageId = getMessageIdFromRouteHash(route.hash);
     
     loadWalineAssets().catch(() => {})
 
@@ -1736,7 +1737,7 @@ onMounted(async () => {
       }
     } else {
       // 只有在非消息详情页时才加载列表
-      if (!route.hash.includes('/messages/')) {
+      if (!getMessageIdFromRouteHash(route.hash)) {
         const result = await fetchListPage(pageQueryFor(1))
         if (result) applyPageResult(result, 1)
       }
@@ -1788,10 +1789,10 @@ onMounted(async () => {
 
 // 修改路由监听
 watch(() => route.hash, async (newHash) => {
-  const messageId = newHash.split('/messages/').pop();
+  const messageId = getMessageIdFromRouteHash(newHash);
   
   // 如果没有消息ID且不是从消息详情页返回，则保持当前状态，不重新加载
-  if (!messageId && !route.hash.includes('/messages/')) {
+  if (!messageId) {
     // 如果当前已有消息，不做任何操作，保持滚动位置
     if (message.messages && message.messages.length > 0) {
       return;
@@ -1848,7 +1849,7 @@ watch(
     () => currentUsername.value
   ],
   async () => {
-    if (route.hash.includes('/messages/')) return
+    if (getMessageIdFromRouteHash(route.hash)) return
     if (Number(props.targetMessageId || 0) > 0) {
       await focusTargetMessageAndComment()
       return

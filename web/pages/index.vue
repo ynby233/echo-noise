@@ -515,6 +515,7 @@ import FloatingToolSidebar from '~/components/widgets/FloatingToolSidebar.vue'
 import BuiltinComments from '~/components/comments/BuiltinComments.vue'
 import MarkdownRenderer from '~/components/index/MarkdownRenderer.vue'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
+import { getMessageIdFromRouteHash } from '~/utils/message-route-hash'
 import { getRequest } from '~/utils/api'
 import { useToast } from '#ui/composables/useToast'
 import { useUserStore } from '~/store/user'
@@ -1227,10 +1228,9 @@ useHead({
 })
 // 同步路由中的消息ID到 MessageList，用于高亮或定位
 watch(() => route.hash, (newHash) => {
-  const hash = String(newHash || '')
-  if (hash.includes('/messages/')) {
-    const id = hash.split('/messages/').pop()
-    targetMessageId.value = id || null
+  const id = getMessageIdFromRouteHash(newHash)
+  if (id) {
+    targetMessageId.value = id
   } else if (!route.query.message_id) {
     targetMessageId.value = null
   }

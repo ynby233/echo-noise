@@ -136,6 +136,7 @@ export const createMediaFancyboxOptions = (input: MediaFancyboxOptionsInput = {}
     },
     compact: false,
     placeFocusBack: false,
+    Hash: false,
     on: {
       ...on,
       ready: composeHandlers(tooltipHandler, on.ready),
