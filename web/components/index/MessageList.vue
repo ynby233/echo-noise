@@ -142,7 +142,7 @@
                   <UIcon :name="isExpanded[msg.id] ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="w-4 h-4 flex-shrink-0" />
                 </button>
               </div>
-              <div class="border-t border-gray-300 dark:border-gray-700 my-3"></div>
+              <div class="message-divider my-3"></div>
               <div class="message-socialbar">
                 <button class="social-item nw-tooltip-anchor" data-tooltip="点赞" aria-label="点赞" @click="like(msg.id)">
                   <UIcon
@@ -3511,6 +3511,8 @@ onMounted(() => {
 }
 .author-row { line-height: 1.1; position: relative; }
 .message-socialbar { display:flex; align-items:center; gap:12px; padding:0; margin-top:6px; }
+.message-divider { border-top: 1px solid rgba(15, 23, 42, .10); }
+.content-container.is-dark .message-divider { border-top-color: rgba(255, 255, 255, .12); }
 .social-item { display:flex; align-items:center; gap:6px; opacity:.85; cursor:pointer; }
 .social-item:hover { opacity:1; }
 @media (max-width: 640px) {
