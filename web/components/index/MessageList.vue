@@ -3874,10 +3874,11 @@ onMounted(() => {
 
 .content-container :deep(.markdown-preview .noise-attachment-file) {
   --file-card-bg: #ffffff;
-  --file-card-bg-hover: #ffffff;
+  --file-card-bg-hover: #f8fafc;
   --file-card-border: rgba(15, 23, 42, 0.10);
   --file-card-border-hover: rgba(15, 23, 42, 0.14);
-  --file-card-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);
+  --file-card-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  --file-card-shadow-hover: 0 12px 26px rgba(15, 23, 42, 0.10);
   --file-card-icon-bg: rgba(15, 23, 42, 0.06);
   --file-card-icon-border: rgba(15, 23, 42, 0.08);
   --file-card-icon: #374151;
@@ -3901,12 +3902,15 @@ onMounted(() => {
   box-shadow: var(--file-card-shadow) !important;
   box-sizing: border-box !important;
   overflow: hidden !important;
+  transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
 }
 
 .content-container :deep(.markdown-preview .noise-attachment-file:hover),
+.content-container :deep(.markdown-preview .noise-attachment-file:active),
 .content-container :deep(.markdown-preview .noise-attachment-file:focus-visible) {
   border-color: var(--file-card-border-hover) !important;
   background: var(--file-card-bg-hover) !important;
+  box-shadow: var(--file-card-shadow-hover) !important;
   color: inherit !important;
   text-decoration: none !important;
   outline: none;
@@ -3914,10 +3918,11 @@ onMounted(() => {
 
 .content-container.is-dark :deep(.markdown-preview .noise-attachment-file) {
   --file-card-bg: rgba(15, 23, 42, 0.52);
-  --file-card-bg-hover: rgba(15, 23, 42, 0.62);
+  --file-card-bg-hover: rgba(30, 41, 59, 0.68);
   --file-card-border: rgba(255, 255, 255, 0.12);
   --file-card-border-hover: rgba(255, 255, 255, 0.18);
-  --file-card-shadow: 0 16px 32px rgba(2, 6, 23, 0.52);
+  --file-card-shadow: 0 12px 28px rgba(2, 6, 23, 0.38);
+  --file-card-shadow-hover: 0 14px 30px rgba(2, 6, 23, 0.44);
   --file-card-icon-bg: rgba(255, 255, 255, 0.06);
   --file-card-icon-border: rgba(255, 255, 255, 0.12);
   --file-card-icon: #cbd5e1;
@@ -3927,7 +3932,7 @@ onMounted(() => {
 }
 
 .content-container :deep(.markdown-preview .noise-attachment-file:focus-visible) {
-  box-shadow: var(--file-card-shadow), 0 0 0 2px rgba(249, 115, 22, 0.18) !important;
+  box-shadow: var(--file-card-shadow-hover), 0 0 0 2px rgba(249, 115, 22, 0.18) !important;
 }
 
 .content-container :deep(.markdown-preview .noise-attachment-file + p) {
