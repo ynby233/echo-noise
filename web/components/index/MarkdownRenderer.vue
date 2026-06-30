@@ -704,6 +704,7 @@ const openRenderedTableExpand = async (table: HTMLTableElement) => {
   await nextTick()
   if (renderedTableExpandBody.value) {
     renderedTableExpandBody.value.querySelectorAll<HTMLTableElement>('table').forEach((item) => replaceRenderedTableBreakTextNodes(item))
+    applyDeletedAttachmentPlaceholders(renderedTableExpandBody.value)
     initializeMediaViewer(renderedTableExpandBody.value)
     syncRenderedTableExpandLayout()
   }
@@ -1182,6 +1183,7 @@ const applyImageLoadingPlaceholders = () => {
   if (!previewElement.value) return;
   const imgs = Array.from(previewElement.value.querySelectorAll('img')) as HTMLImageElement[];
   imgs.forEach((img) => {
+    if (img.dataset.noiseAttachmentKind) return;
     const container = (img.closest('.image-grid-item') || img.parentElement || previewElement.value) as HTMLElement;
     const needPlaceholder = !img.complete || !(img.naturalWidth && img.naturalHeight);
     if (!needPlaceholder) return;
@@ -1232,8 +1234,23 @@ const escapeHtml = (value: string) => String(value || '')
   .replace(/'/g, '&#39;')
 
 const ATTACHMENT_LINK_REG = /\[(图片附件|视频附件|音频附件)：([^\]]+)\]\(([^)\s]+)\)/g
+type AttachmentKind = 'image' | 'video' | 'audio' | 'file'
 
 const browserPreviewableAttachmentUrl = (url: string) => /\.(pdf|txt|text|csv|json|xml|html?)(?:[?#].*)?$/i.test(String(url || ''))
+
+const attachmentKindFromLabel = (label: string): AttachmentKind => {
+  if (label === '图片附件') return 'image'
+  if (label === '视频附件') return 'video'
+  if (label === '音频附件') return 'audio'
+  return 'file'
+}
+
+const deletedAttachmentText = (kind: AttachmentKind) => {
+  if (kind === 'image') return '该图片已被删除'
+  if (kind === 'video') return '该视频已被删除'
+  if (kind === 'audio') return '该音频已被删除'
+  return '该文件已被删除'
+}
 
 const attachmentExtensionLabel = (name: string, url: string) => {
   const source = String(name || url || '').split(/[?#]/)[0]
@@ -1248,12 +1265,13 @@ const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string) =>
   const url = resolveImageUrl(String(rawUrl || '').trim())
   const safeUrl = escapeHtml(url)
   const safeName = escapeHtml(String(name || '').trim() || '未命名附件')
+  const kind = attachmentKindFromLabel(kindLabel)
   if (!url) return ''
   if (kindLabel === '图片附件') {
-    return `<p class="noise-attachment-paragraph"><img class="noise-attachment-image" src="${safeUrl}" alt="${safeName}" loading="lazy" decoding="async" /></p>`
+    return `<p class="noise-attachment-paragraph" data-noise-attachment-kind="${kind}" data-noise-attachment-url="${safeUrl}"><img class="noise-attachment-image" src="${safeUrl}" alt="${safeName}" loading="lazy" decoding="async" data-noise-attachment-kind="${kind}" data-noise-attachment-url="${safeUrl}" /></p>`
   }
   if (kindLabel === '视频附件') {
-    return `<div class="noise-attachment-render noise-attachment-render--video"><video src="${safeUrl}" controls preload="metadata" style="width:100%;height:auto"></video></div>`
+    return `<div class="noise-attachment-render noise-attachment-render--video" data-noise-attachment-kind="${kind}" data-noise-attachment-url="${safeUrl}"><video src="${safeUrl}" controls preload="metadata" style="width:100%;height:auto" data-noise-attachment-kind="${kind}" data-noise-attachment-url="${safeUrl}"></video></div>`
   }
   if (kindLabel === '文件附件') {
     const canPreview = browserPreviewableAttachmentUrl(url)
@@ -1263,9 +1281,14 @@ const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string) =>
     const actionLabel = canPreview ? '打开附件' : '下载附件'
     const meta = escapeHtml(attachmentExtensionLabel(name, url))
     const actionClass = canPreview ? 'noise-attachment-file__action--preview' : 'noise-attachment-file__action--download'
-    return `<a class="noise-attachment-file ${canPreview ? 'noise-attachment-file--preview' : 'noise-attachment-file--download'}" href="${safeUrl}" ${previewAttrs} aria-label="${actionLabel}：${safeName}"><span class="noise-attachment-file__icon" aria-hidden="true"></span><span class="noise-attachment-file__body"><span class="noise-attachment-file__name">${safeName}</span><span class="noise-attachment-file__meta">${meta}</span></span><span class="noise-attachment-file__action ${actionClass}" aria-hidden="true"></span></a>`
+    return `<a class="noise-attachment-file ${canPreview ? 'noise-attachment-file--preview' : 'noise-attachment-file--download'}" href="${safeUrl}" ${previewAttrs} aria-label="${actionLabel}：${safeName}" data-noise-attachment-kind="${kind}" data-noise-attachment-url="${safeUrl}"><span class="noise-attachment-file__icon" aria-hidden="true"></span><span class="noise-attachment-file__body"><span class="noise-attachment-file__name">${safeName}</span><span class="noise-attachment-file__meta">${meta}</span></span><span class="noise-attachment-file__action ${actionClass}" aria-hidden="true"></span></a>`
   }
-  return `<audio class="noise-attachment-audio" src="${safeUrl}" controls preload="metadata"></audio>`
+  return `<audio class="noise-attachment-audio" src="${safeUrl}" controls preload="metadata" data-noise-attachment-kind="${kind}" data-noise-attachment-url="${safeUrl}"></audio>`
+}
+
+const buildDeletedAttachmentHtml = (kind: AttachmentKind) => {
+  const message = escapeHtml(deletedAttachmentText(kind))
+  return `<div class="noise-attachment-file noise-attachment-file--deleted noise-attachment-file--deleted-${kind}" role="note" aria-label="${message}"><span class="noise-attachment-file__icon" aria-hidden="true"></span><span class="noise-attachment-file__body"><span class="noise-attachment-file__name">${message}</span></span><span class="noise-attachment-file__action noise-attachment-file__action--deleted" aria-hidden="true"></span></div>`
 }
 
 const attachmentInfoFromRenderedAnchor = (anchor: HTMLAnchorElement) => {
@@ -1300,6 +1323,95 @@ const replaceNodeWithHtml = (node: HTMLElement, html: string) => {
     return
   }
   node.replaceWith(next)
+}
+
+const deletedAttachmentProbeCache = new Map<string, Promise<boolean>>()
+
+const canProbeAttachmentUrl = (url: string) => {
+  if (typeof window === 'undefined') return false
+  try {
+    const parsed = new URL(url, window.location.href)
+    return parsed.origin === window.location.origin
+  } catch {
+    return false
+  }
+}
+
+const isDeletedAttachmentStatus = (status: number) => status === 404 || status === 410
+
+const probeAttachmentDeleted = (url: string) => {
+  const raw = String(url || '').trim()
+  if (!raw || !canProbeAttachmentUrl(raw)) return Promise.resolve(false)
+  const key = new URL(raw, window.location.href).toString()
+  const existing = deletedAttachmentProbeCache.get(key)
+  if (existing) return existing
+
+  const promise = (async () => {
+    try {
+      const head = await fetch(key, { method: 'HEAD', cache: 'no-store', credentials: 'same-origin' })
+      if (isDeletedAttachmentStatus(head.status)) return true
+      if (head.status !== 405 && head.status !== 501) return false
+      const partial = await fetch(key, {
+        method: 'GET',
+        headers: { Range: 'bytes=0-0' },
+        cache: 'no-store',
+        credentials: 'same-origin',
+      })
+      return isDeletedAttachmentStatus(partial.status)
+    } catch {
+      return false
+    }
+  })()
+  deletedAttachmentProbeCache.set(key, promise)
+  return promise
+}
+
+const attachmentReplacementTarget = (node: HTMLElement, kind: AttachmentKind) => {
+  if (kind === 'image') {
+    return (node.closest('.noise-attachment-paragraph') || node.closest('.image-grid-item') || node.closest('.single-media') || node.closest('.full-image-attachment') || node) as HTMLElement
+  }
+  if (kind === 'video') {
+    return (node.closest('.noise-attachment-render') || node) as HTMLElement
+  }
+  return (node.closest('.noise-attachment-file') || node) as HTMLElement
+}
+
+const replaceDeletedAttachment = (node: HTMLElement, kind: AttachmentKind) => {
+  const target = attachmentReplacementTarget(node, kind)
+  if (!target || target.classList.contains('noise-attachment-file--deleted')) return
+  replaceNodeWithHtml(target, buildDeletedAttachmentHtml(kind))
+}
+
+const applyDeletedAttachmentPlaceholders = (customRoot?: HTMLElement | null) => {
+  const root = customRoot || previewElement.value
+  if (!root) return
+  const nodes = Array.from(root.querySelectorAll<HTMLElement>(
+    'img.noise-attachment-image[data-noise-attachment-kind][data-noise-attachment-url], video[data-noise-attachment-kind][data-noise-attachment-url], audio[data-noise-attachment-kind][data-noise-attachment-url], a.noise-attachment-file[data-noise-attachment-kind][data-noise-attachment-url]'
+  ))
+
+  nodes.forEach((node) => {
+    if (node.closest('.noise-attachment-file--deleted')) return
+    const kind = String(node.dataset.noiseAttachmentKind || 'file') as AttachmentKind
+    const url = String(node.dataset.noiseAttachmentUrl || '')
+    if (!['image', 'video', 'audio', 'file'].includes(kind) || !url) return
+
+    if (node.dataset.noiseDeletedAttachmentBound !== 'true') {
+      node.dataset.noiseDeletedAttachmentBound = 'true'
+      if (node instanceof HTMLImageElement || node instanceof HTMLVideoElement || node instanceof HTMLAudioElement) {
+        node.addEventListener('error', () => replaceDeletedAttachment(node, kind), { once: true })
+      }
+    }
+
+    if (node instanceof HTMLImageElement && node.complete && !node.naturalWidth) {
+      replaceDeletedAttachment(node, kind)
+      return
+    }
+
+    void probeAttachmentDeleted(url).then((deleted) => {
+      if (!deleted || !node.isConnected || !root.contains(node)) return
+      replaceDeletedAttachment(node, kind)
+    })
+  })
 }
 
 const processMediaLinks = (content: string): string => {
@@ -1714,6 +1826,7 @@ const renderMarkdown = async (markdown: string) => {
               v.style.maxWidth = '100%';
           });
 
+          applyDeletedAttachmentPlaceholders();
           applyImageGrid(keepImagesFullSize);
           applyDouyinVideoLayout()
           setTimeout(() => {
@@ -2612,6 +2725,16 @@ body.is-resizing-rendered-table-column {
 .markdown-preview .noise-attachment-file:focus-visible,
 .rendered-table-expand-scroll .noise-attachment-file:focus-visible {
   box-shadow: var(--file-card-shadow), 0 0 0 2px rgba(249, 115, 22, 0.18) !important;
+}
+
+.markdown-preview .noise-attachment-file--deleted,
+.rendered-table-expand-scroll .noise-attachment-file--deleted {
+  cursor: default;
+}
+
+.markdown-preview .noise-attachment-file--deleted .noise-attachment-file__action,
+.rendered-table-expand-scroll .noise-attachment-file--deleted .noise-attachment-file__action {
+  opacity: 0;
 }
 
 .markdown-preview .noise-attachment-file + p,
