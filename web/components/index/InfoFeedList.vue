@@ -127,6 +127,7 @@
           type="button"
           class="pager-btn nw-action-btn nw-action-btn--label"
           @click="goPrevPage"
+          :disabled="loading"
         >
           <span class="pager-icon-wrap"><UIcon name="i-heroicons-arrow-left" class="w-4 h-4 pager-icon" /></span>
           <span>上一页</span>
@@ -136,13 +137,56 @@
           type="button"
           class="pager-btn nw-action-btn nw-action-btn--label"
           @click="goNextPage"
+          :disabled="loading"
         >
           <span>下一页</span>
           <span class="pager-icon-wrap"><UIcon name="i-heroicons-arrow-right" class="w-4 h-4 pager-icon" /></span>
         </button>
+        <span v-if="loading" class="pager-status-text">加载中...</span>
       </div>
       <div class="pager-jump-group">
-        <span class="pager-page-text">第 {{ currentPage }} / {{ totalPages }} 页</span>
+        <span class="pager-page-text">第</span>
+        <div class="pager-number-control">
+          <input
+            v-model="targetPage"
+            type="text"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            class="pager-page-input"
+            placeholder="#"
+            aria-label="跳转页码"
+            @keyup.enter="jumpToPage"
+          />
+          <div class="pager-stepper" aria-label="页码增减">
+            <button
+              type="button"
+              class="pager-stepper-btn nw-action-btn"
+              aria-label="页码加一"
+              :disabled="loading"
+              @click="adjustTargetPage(1)"
+            >
+              <UIcon name="i-heroicons-chevron-up-20-solid" class="w-3 h-3" />
+            </button>
+            <button
+              type="button"
+              class="pager-stepper-btn nw-action-btn"
+              aria-label="页码减一"
+              :disabled="loading"
+              @click="adjustTargetPage(-1)"
+            >
+              <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
+            </button>
+          </div>
+        </div>
+        <span class="pager-page-text">页 / 共 {{ totalPages }} 页</span>
+        <button
+          type="button"
+          class="pager-jump-btn nw-action-btn nw-action-btn--label"
+          @click="jumpToPage"
+          :disabled="loading"
+        >
+          跳转
+        </button>
       </div>
     </div>
     <UModal v-model="previewOpen">
@@ -202,6 +246,7 @@ const requestInFlight = ref(false)
 const copiedLink = ref('')
 const copiedTimer = ref<number | null>(null)
 const currentPage = ref(1)
+const targetPage = ref('1')
 const feedListRoot = ref<HTMLElement | null>(null)
 const previewOpen = ref(false)
 const previewImageURL = ref('')
@@ -251,6 +296,19 @@ const totalPages = computed(() => {
   const total = Math.ceil(allItems.value.length / pageSize.value)
   return total > 0 ? total : 1
 })
+const syncTargetPageToCurrent = () => {
+  const page = Math.min(Math.max(Number(currentPage.value) || 1, 1), totalPages.value)
+  targetPage.value = String(page)
+}
+const normalizeTargetPage = (fallback = currentPage.value) => {
+  const parsed = Number.parseInt(targetPage.value.trim() || '', 10)
+  const next = Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+  return Math.min(Math.max(next, 1), totalPages.value)
+}
+const adjustTargetPage = (delta: number) => {
+  targetPage.value = String(normalizeTargetPage(currentPage.value) + delta)
+  targetPage.value = String(normalizeTargetPage(currentPage.value))
+}
 const pageItems = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return allItems.value.slice(start, start + pageSize.value)
@@ -339,6 +397,12 @@ const clampPage = () => {
   if (currentPage.value > totalPages.value) currentPage.value = totalPages.value
 }
 
+watch(currentPage, syncTargetPageToCurrent, { immediate: true })
+watch(totalPages, () => {
+  clampPage()
+  syncTargetPageToCurrent()
+})
+
 const goPrevPage = () => {
   if (currentPage.value <= 1) return
   currentPage.value -= 1
@@ -349,6 +413,23 @@ const goPrevPage = () => {
 const goNextPage = () => {
   if (currentPage.value >= totalPages.value) return
   currentPage.value += 1
+  deferMeasure()
+  void scrollFeedFirstBlockToTop()
+}
+
+const jumpToPage = () => {
+  const page = Number.parseInt(targetPage.value.trim() || '', 10)
+  if (!page || page < 1 || page > totalPages.value || loading.value) {
+    useToast().add({
+      title: '页码无效',
+      description: `请输入 1-${totalPages.value} 之间的数字`,
+      color: 'orange',
+      timeout: 2000
+    })
+    return
+  }
+  currentPage.value = page
+  syncTargetPageToCurrent()
   deferMeasure()
   void scrollFeedFirstBlockToTop()
 }
@@ -1310,6 +1391,10 @@ onUnmounted(() => {
   --pager-shell-border: rgba(15, 23, 42, 0.12);
   --pager-shell-text: #334155;
   --pager-shell-muted: #64748b;
+  --pager-input-bg: rgba(255, 255, 255, 0.92);
+  --pager-input-border: rgba(15, 23, 42, 0.16);
+  --pager-input-text: #0f172a;
+  --pager-input-placeholder: rgba(15, 23, 42, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1330,6 +1415,10 @@ onUnmounted(() => {
   --pager-shell-border: rgba(255, 255, 255, 0.16);
   --pager-shell-text: #e2e8f0;
   --pager-shell-muted: #cbd5e1;
+  --pager-input-bg: rgba(17, 24, 39, 0.58);
+  --pager-input-border: rgba(255, 255, 255, 0.18);
+  --pager-input-text: #f8fafc;
+  --pager-input-placeholder: rgba(226, 232, 240, 0.58);
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
 }
 
@@ -1342,14 +1431,17 @@ onUnmounted(() => {
   flex-wrap: wrap;
 }
 
-.pager-btn {
+.pager-btn,
+.pager-jump-btn {
   min-height: 34px;
   padding-inline: 14px;
   font-size: 13px;
   font-weight: 700;
 }
 
-.pager-page-text {
+.pager-page-text,
+.pager-status-text,
+.pager-done-text {
   color: var(--pager-shell-muted);
   font-size: 13px;
   font-weight: 650;
@@ -1368,6 +1460,67 @@ onUnmounted(() => {
 
 .pager-icon {
   line-height: 1;
+}
+
+.pager-number-control {
+  display: inline-flex;
+  align-items: stretch;
+  min-height: 34px;
+  border: 1px solid var(--pager-input-border);
+  border-radius: 12px;
+  background: var(--pager-input-bg);
+  color: var(--pager-input-text);
+  overflow: hidden;
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+
+.pager-number-control:focus-within {
+  border-color: rgba(249, 115, 22, 0.72);
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.18);
+}
+
+.pager-page-input {
+  width: 42px;
+  min-height: 32px;
+  padding: 0 6px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--pager-input-text);
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  appearance: textfield;
+}
+
+.pager-page-input::placeholder {
+  color: var(--pager-input-placeholder);
+}
+
+.pager-stepper {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  width: 24px;
+  border-left: 1px solid var(--pager-input-border);
+}
+
+.pager-stepper-btn {
+  width: 24px;
+  min-width: 24px;
+  height: 16px;
+  min-height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.pager-stepper-btn + .pager-stepper-btn {
+  border-top: 1px solid var(--pager-input-border);
+}
+
+.pager-stepper-btn svg {
+  width: 12px;
+  height: 12px;
 }
 
 @media (max-width: 640px) {

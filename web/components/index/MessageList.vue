@@ -226,7 +226,7 @@
 
         <!-- 页码显示和跳转 -->
         <div class="pager-jump-group">
-          <span class="pager-page-text">第 {{ message.page }} 页</span>
+          <span class="pager-page-text">第</span>
           <div class="pager-number-control">
             <input
               v-model="targetPage"
@@ -259,6 +259,7 @@
               </button>
             </div>
           </div>
+          <span class="pager-page-text">页 / 共 {{ totalPages }} 页</span>
           <button
             type="button"
             class="pager-jump-btn nw-action-btn nw-action-btn--label"
@@ -777,10 +778,14 @@ const like = async (id: number) => {
   }
 }
 
-const targetPage = ref<string>('');
+const targetPage = ref<string>('1');
 const totalPages = computed(() => Math.max(1, Math.ceil(message.total / 15)));
+const syncTargetPageToCurrent = () => {
+  const page = Math.min(Math.max(Number(message.page) || 1, 1), totalPages.value);
+  targetPage.value = String(page);
+};
 const normalizeTargetPage = (fallback = message.page) => {
-  const parsed = Number.parseInt(targetPage.value || '', 10);
+  const parsed = Number.parseInt(targetPage.value.trim() || '', 10);
   const next = Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
   return Math.min(Math.max(next, 1), totalPages.value);
 };
@@ -851,8 +856,8 @@ const scheduleCurrentPageFirstBlockTopScroll = async () => {
   }, delay))
 }
 const jumpToPage = async () => {
-  const page = parseInt(targetPage.value);
-  if (!page || page < 1 || page > totalPages.value || message.loading) {
+  const page = Number.parseInt(targetPage.value.trim() || '', 10);
+  if (!page || page < 1 || page > totalPages.value || isPageLoading.value) {
     useToast().add({
       title: '页码无效',
       description: `请输入 1-${totalPages.value} 之间的数字`,
@@ -869,7 +874,7 @@ const jumpToPage = async () => {
       throw new Error('跳转页面失败');
     }
 
-    targetPage.value = '';
+    syncTargetPageToCurrent();
     await scheduleCurrentPageFirstBlockTopScroll();
   } catch (error) {
     console.error('跳转页面失败:', error);
@@ -1024,6 +1029,8 @@ const checkApi = async () => {
 }
 const { deleteMessage } = useMessage();
 const message = useMessageStore();
+watch(() => message.page, syncTargetPageToCurrent, { immediate: true });
+watch(totalPages, syncTargetPageToCurrent);
 
 const prefetchAuthorProfilesForList = () => {
   const names = Array.from(new Set((message.messages || []).map((m: any) => String(m?.username || '').trim()).filter((n) => !!n)))
