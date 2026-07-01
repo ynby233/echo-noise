@@ -131,9 +131,72 @@
           </div>
           </div>
         </div>
-        <div v-if="hasMore || canCollapseRootComments" class="flex justify-center gap-2">
+        <div v-if="!showCommentPager && (hasMore || canCollapseRootComments)" class="flex justify-center gap-2">
           <button v-if="canCollapseRootComments" type="button" class="comment-load-btn nw-action-btn nw-action-btn--label" @click="collapseRootComments">收回</button>
           <button v-if="hasMore" type="button" class="comment-load-btn nw-action-btn nw-action-btn--label" @click="loadMore">加载更多{{ contextLabel }}</button>
+        </div>
+        <div v-if="showCommentPager" class="pager-shell" :class="{ 'is-dark': isDark }">
+          <div class="pager-nav-group">
+            <button
+              v-if="currentRootPage > 1"
+              type="button"
+              class="pager-btn nw-action-btn nw-action-btn--label"
+              @click="loadPreviousRootPage"
+            >
+              <span class="pager-icon-wrap"><UIcon name="i-heroicons-arrow-left" class="w-4 h-4 pager-icon" /></span>
+              <span>上一页</span>
+            </button>
+            <button
+              v-if="currentRootPage < totalRootPages"
+              type="button"
+              class="pager-btn nw-action-btn nw-action-btn--label"
+              @click="loadNextRootPage"
+            >
+              <span>下一页</span>
+              <span class="pager-icon-wrap"><UIcon name="i-heroicons-arrow-right" class="w-4 h-4 pager-icon" /></span>
+            </button>
+          </div>
+          <div class="pager-jump-group">
+            <span class="pager-page-text">第</span>
+            <div class="pager-number-control">
+              <input
+                v-model="targetRootPage"
+                type="text"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                class="pager-page-input"
+                placeholder="#"
+                aria-label="跳转页码"
+                @keyup.enter="jumpToRootPage"
+              />
+              <div class="pager-stepper" aria-label="页码增减">
+                <button
+                  type="button"
+                  class="pager-stepper-btn nw-action-btn"
+                  aria-label="页码加一"
+                  @click="adjustTargetRootPage(1)"
+                >
+                  <UIcon name="i-heroicons-chevron-up-20-solid" class="w-3 h-3" />
+                </button>
+                <button
+                  type="button"
+                  class="pager-stepper-btn nw-action-btn"
+                  aria-label="页码减一"
+                  @click="adjustTargetRootPage(-1)"
+                >
+                  <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+            <span class="pager-page-text">页 / 共 {{ totalRootPages }} 页</span>
+            <button
+              type="button"
+              class="pager-jump-btn nw-action-btn nw-action-btn--label"
+              @click="jumpToRootPage"
+            >
+              跳转
+            </button>
+          </div>
         </div>
       <div v-if="!props.replyInputOnly && !sortedRootComments.length" class="text-xs mb-4" :class="themeMuted">暂无{{ contextLabel }}</div>
 
@@ -1228,12 +1291,84 @@ const INITIAL_ROOT_VISIBLE = 2
 const INITIAL_CHILDREN_VISIBLE = 3
 
 const visibleCount = ref(INITIAL_ROOT_VISIBLE)
-const visibleRootComments = computed(() => sortedRootComments.value.slice(0, visibleCount.value))
+const currentRootPage = ref(1)
+const targetRootPage = ref('1')
+const rootPageSize = INITIAL_ROOT_VISIBLE
+const showCommentPager = computed(() => contextLabel.value === '留言' && !props.replyInputOnly && sortedRootComments.value.length > 0)
+const totalRootPages = computed(() => Math.max(1, Math.ceil(sortedRootComments.value.length / rootPageSize)))
+const syncTargetRootPageToCurrent = () => {
+  const next = Math.min(Math.max(Number(currentRootPage.value) || 1, 1), totalRootPages.value)
+  targetRootPage.value = String(next)
+}
+const normalizeTargetRootPage = (fallback = currentRootPage.value) => {
+  const parsed = Number.parseInt(targetRootPage.value.trim() || '', 10)
+  const next = Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+  return Math.min(Math.max(next, 1), totalRootPages.value)
+}
+const adjustTargetRootPage = (delta: number) => {
+  targetRootPage.value = String(normalizeTargetRootPage(currentRootPage.value) + delta)
+  targetRootPage.value = String(normalizeTargetRootPage(currentRootPage.value))
+}
+const visibleRootComments = computed(() => {
+  if (showCommentPager.value) {
+    const start = (currentRootPage.value - 1) * rootPageSize
+    return sortedRootComments.value.slice(start, start + rootPageSize)
+  }
+  return sortedRootComments.value.slice(0, visibleCount.value)
+})
 const hasMore = computed(() => sortedRootComments.value.length > visibleCount.value)
 const canCollapseRootComments = computed(() => sortedRootComments.value.length > INITIAL_ROOT_VISIBLE && visibleCount.value > INITIAL_ROOT_VISIBLE)
 const loadMore = () => { visibleCount.value += INITIAL_ROOT_VISIBLE }
 const collapseRootComments = () => { visibleCount.value = INITIAL_ROOT_VISIBLE }
-watch(() => props.messageId, () => { visibleCount.value = INITIAL_ROOT_VISIBLE })
+const clampCurrentRootPage = () => {
+  currentRootPage.value = Math.min(Math.max(Number(currentRootPage.value) || 1, 1), totalRootPages.value)
+}
+const scrollCommentFirstBlockToTop = async () => {
+  await nextTick()
+  const target = rootRef.value?.querySelector<HTMLElement>('.comments-list > .comment-item') || rootRef.value
+  if (target) scrollElementIntoInputContainer(target, 'start', 'instant', 0)
+}
+const loadRootPage = async (nextPage: number) => {
+  const bounded = Math.min(Math.max(Number(nextPage) || 1, 1), totalRootPages.value)
+  if (bounded === currentRootPage.value) {
+    syncTargetRootPageToCurrent()
+    return
+  }
+  currentRootPage.value = bounded
+  syncTargetRootPageToCurrent()
+  await scrollCommentFirstBlockToTop()
+}
+const loadPreviousRootPage = () => {
+  if (currentRootPage.value <= 1) return
+  void loadRootPage(currentRootPage.value - 1)
+}
+const loadNextRootPage = () => {
+  if (currentRootPage.value >= totalRootPages.value) return
+  void loadRootPage(currentRootPage.value + 1)
+}
+const jumpToRootPage = () => {
+  const next = Number.parseInt(targetRootPage.value.trim() || '', 10)
+  if (!next || next < 1 || next > totalRootPages.value) {
+    useToast().add({
+      title: '页码无效',
+      description: `请输入 1-${totalRootPages.value} 之间的数字`,
+      color: 'orange',
+      timeout: 2000
+    })
+    return
+  }
+  void loadRootPage(next)
+}
+watch(() => props.messageId, () => {
+  visibleCount.value = INITIAL_ROOT_VISIBLE
+  currentRootPage.value = 1
+  syncTargetRootPageToCurrent()
+})
+watch(currentRootPage, syncTargetRootPageToCurrent, { immediate: true })
+watch(totalRootPages, () => {
+  clampCurrentRootPage()
+  syncTargetRootPageToCurrent()
+})
 
 const visibleChildrenCount = ref<Record<number, number>>({})
 const visibleChildren = (rootId: number) => {
@@ -1288,7 +1423,14 @@ const revealComment = async (commentId: number) => {
   const rootId = rootIdForComment(commentId)
   if (!rootId) return false
   const rootIndex = sortedRootComments.value.findIndex((item: any) => Number(item.id) === rootId)
-  if (rootIndex >= 0 && visibleCount.value <= rootIndex) visibleCount.value = rootIndex + 1
+  if (rootIndex >= 0) {
+    if (showCommentPager.value) {
+      currentRootPage.value = Math.floor(rootIndex / rootPageSize) + 1
+      syncTargetRootPageToCurrent()
+    } else if (visibleCount.value <= rootIndex) {
+      visibleCount.value = rootIndex + 1
+    }
+  }
   if (Number(target.parent_id || 0) > 0) {
     const children = childrenMap.value[rootId] || []
     const childIndex = children.findIndex((item: any) => Number(item.id) === commentId)
@@ -1440,6 +1582,117 @@ defineExpose({ load, focusCommentById, replyToCommentById })
   --nw-action-text:var(--comment-toolbar-text);
   --nw-action-border:var(--comment-toolbar-border);
 }
+.pager-shell {
+  --pager-shell-bg: rgba(255, 255, 255, 0.85);
+  --pager-shell-border: rgba(15, 23, 42, 0.12);
+  --pager-shell-text: #334155;
+  --pager-shell-muted: #64748b;
+  --pager-input-bg: rgba(255, 255, 255, 0.92);
+  --pager-input-border: rgba(15, 23, 42, 0.16);
+  --pager-input-text: #0f172a;
+  --pager-input-placeholder: rgba(15, 23, 42, 0.45);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:16px;
+  width:100%;
+  margin:16px 0 18px;
+  padding:10px 14px;
+  border:1px solid var(--pager-shell-border);
+  border-radius:999px;
+  background:var(--pager-shell-bg);
+  color:var(--pager-shell-text);
+  box-shadow:0 8px 22px rgba(15,23,42,.10);
+  flex-wrap:wrap;
+}
+.pager-shell.is-dark {
+  --pager-shell-bg: rgba(39, 50, 66, 0.68);
+  --pager-shell-border: rgba(255, 255, 255, 0.16);
+  --pager-shell-text: #e2e8f0;
+  --pager-shell-muted: #cbd5e1;
+  --pager-input-bg: rgba(17, 24, 39, 0.58);
+  --pager-input-border: rgba(255, 255, 255, 0.18);
+  --pager-input-text: #f8fafc;
+  --pager-input-placeholder: rgba(226, 232, 240, 0.58);
+  box-shadow:0 8px 22px rgba(0,0,0,.24);
+}
+.pager-nav-group,
+.pager-jump-group {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.pager-btn,
+.pager-jump-btn {
+  min-height:34px;
+  padding-inline:14px;
+  font-size:13px;
+  font-weight:700;
+}
+.pager-icon-wrap {
+  width:1.35rem;
+  height:1.35rem;
+  border-radius:999px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background:color-mix(in srgb, var(--nw-action-text) 10%, transparent);
+}
+.pager-icon { line-height:1; }
+.pager-page-text {
+  color:var(--pager-shell-muted);
+  font-size:13px;
+  font-weight:650;
+  text-shadow:none;
+}
+.pager-number-control {
+  display:inline-flex;
+  align-items:stretch;
+  min-height:34px;
+  border:1px solid var(--pager-input-border);
+  border-radius:12px;
+  background:var(--pager-input-bg);
+  color:var(--pager-input-text);
+  overflow:hidden;
+  transition:border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+.pager-number-control:focus-within {
+  border-color:rgba(249,115,22,.72);
+  box-shadow:0 0 0 2px rgba(249,115,22,.18);
+}
+.pager-page-input {
+  width:42px;
+  min-height:32px;
+  padding:0 6px;
+  border:0;
+  outline:none;
+  background:transparent;
+  color:var(--pager-input-text);
+  font-size:14px;
+  font-weight:700;
+  text-align:center;
+  appearance:textfield;
+}
+.pager-page-input::placeholder { color:var(--pager-input-placeholder); }
+.pager-stepper {
+  display:grid;
+  grid-template-rows:1fr 1fr;
+  width:24px;
+  border-left:1px solid var(--pager-input-border);
+}
+.pager-stepper-btn {
+  width:24px;
+  min-width:24px;
+  height:16px;
+  min-height:16px;
+  padding:0;
+  border:0;
+  border-radius:0;
+}
+.pager-stepper-btn + .pager-stepper-btn { border-top:1px solid var(--pager-input-border); }
+.pager-stepper-btn svg { width:12px; height:12px; }
 .visibility-picker { display:inline-flex; align-items:center; gap:6px; font-size:12px; }
 .toolbar-control.comment-visibility-picker { position:relative; z-index:5006; }
 .edit-card { display:flex; flex-direction:column; gap:8px; margin:4px 0 6px; }
@@ -1571,4 +1824,14 @@ defineExpose({ load, focusCommentById, replyToCommentById })
 .return-target-btn:hover { transform:translate3d(0,0,0) scale(1.06); border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
 :global(html.dark .return-target-btn),
 :global(.dark .return-target-btn) { background:var(--comment-toolbar-control-bg); color:var(--comment-toolbar-text); border-color:var(--comment-toolbar-border); }
+@media (max-width: 640px) {
+  .pager-shell {
+    border-radius:18px;
+    gap:10px;
+  }
+  .pager-nav-group,
+  .pager-jump-group {
+    width:100%;
+  }
+}
 </style>

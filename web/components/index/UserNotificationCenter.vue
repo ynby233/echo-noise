@@ -115,10 +115,74 @@
         <button type="button" class="notification-text-button nw-action-btn nw-action-btn--label" @click="loadNotifications(false)">重试</button>
       </div>
 
-      <div v-if="items.length < total" class="load-more-row">
-        <button type="button" class="notification-text-button nw-action-btn nw-action-btn--label" :disabled="loadingMore" @click="loadMore">
-          {{ loadingMore ? '加载中' : '加载更多' }}
-        </button>
+      <div v-if="items.length" class="pager-shell" :class="{ 'is-dark': isDark }">
+        <div class="pager-nav-group">
+          <button
+            v-if="page > 1"
+            type="button"
+            class="pager-btn nw-action-btn nw-action-btn--label"
+            :disabled="loading"
+            @click="loadPreviousPage"
+          >
+            <span class="pager-icon-wrap"><UIcon name="i-heroicons-arrow-left" class="w-4 h-4 pager-icon" /></span>
+            <span>上一页</span>
+          </button>
+          <button
+            v-if="page < totalPages"
+            type="button"
+            class="pager-btn nw-action-btn nw-action-btn--label"
+            :disabled="loading"
+            @click="loadNextPage"
+          >
+            <span>下一页</span>
+            <span class="pager-icon-wrap"><UIcon name="i-heroicons-arrow-right" class="w-4 h-4 pager-icon" /></span>
+          </button>
+          <span v-if="loading" class="pager-status-text">加载中...</span>
+        </div>
+        <div class="pager-jump-group">
+          <span class="pager-page-text">第</span>
+          <div class="pager-number-control">
+            <input
+              v-model="targetPage"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              class="pager-page-input"
+              placeholder="#"
+              aria-label="跳转页码"
+              @keyup.enter="jumpToPage"
+            />
+            <div class="pager-stepper" aria-label="页码增减">
+              <button
+                type="button"
+                class="pager-stepper-btn nw-action-btn"
+                aria-label="页码加一"
+                :disabled="loading"
+                @click="adjustTargetPage(1)"
+              >
+                <UIcon name="i-heroicons-chevron-up-20-solid" class="w-3 h-3" />
+              </button>
+              <button
+                type="button"
+                class="pager-stepper-btn nw-action-btn"
+                aria-label="页码减一"
+                :disabled="loading"
+                @click="adjustTargetPage(-1)"
+              >
+                <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+          <span class="pager-page-text">页 / 共 {{ totalPages }} 页</span>
+          <button
+            type="button"
+            class="pager-jump-btn nw-action-btn nw-action-btn--label"
+            :disabled="loading"
+            @click="jumpToPage"
+          >
+            跳转
+          </button>
+        </div>
       </div>
     </div>
   </section>
@@ -130,6 +194,7 @@ import { useUserStore } from '~/store/user'
 import { getRequest, putRequest } from '~/utils/api'
 import { resolveMediaURL } from '~/utils/media-url'
 import BuiltinComments from '~/components/comments/BuiltinComments.vue'
+import { useToast } from '#ui/composables/useToast'
 
 type NotificationActor = {
   id: number
@@ -206,12 +271,13 @@ const items = ref<UserNotification[]>([])
 const feedRef = ref<HTMLElement | null>(null)
 const loading = ref(false)
 const notificationRefreshing = ref(false)
-const loadingMore = ref(false)
 const markingAll = ref(false)
 const loadError = ref('')
 const page = ref(1)
 const pageSize = 20
 const total = ref(0)
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
+const targetPage = ref('1')
 const unreadCount = ref(0)
 const resolvingInitialTarget = ref(false)
 const resolvingRestoreFocus = ref(false)
@@ -226,6 +292,22 @@ const baseApi = computed(() => runtimeConfig.public.baseApi || '/api')
 const setUnreadCount = (count: number) => {
   unreadCount.value = Math.max(0, Number(count || 0))
   emit('unread-change', unreadCount.value)
+}
+
+const syncTargetPageToCurrent = () => {
+  const next = Math.min(Math.max(Number(page.value) || 1, 1), totalPages.value)
+  targetPage.value = String(next)
+}
+
+const normalizeTargetPage = (fallback = page.value) => {
+  const parsed = Number.parseInt(targetPage.value.trim() || '', 10)
+  const next = Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+  return Math.min(Math.max(next, 1), totalPages.value)
+}
+
+const adjustTargetPage = (delta: number) => {
+  targetPage.value = String(normalizeTargetPage(page.value) + delta)
+  targetPage.value = String(normalizeTargetPage(page.value))
 }
 
 const normalizeText = (value?: string | null) => {
@@ -427,17 +509,58 @@ const selectRestoreNotification = async () => {
   return true
 }
 
+const firstNotificationItem = () => {
+  return feedRef.value?.querySelector<HTMLElement>('.notification-feed-item') || null
+}
+
+const scrollNotificationFirstBlockToTop = async () => {
+  await nextTick()
+  const target = firstNotificationItem() || feedRef.value
+  if (!target) return
+  scrollElementTopToAppTop(target)
+}
+
+const scrollElementTopToAppTop = (el: HTMLElement) => {
+  if (typeof document === 'undefined') return
+  const isScrollableTarget = (target: HTMLElement | null) => {
+    if (!target || typeof window === 'undefined') return false
+    const style = window.getComputedStyle(target)
+    return /(auto|scroll|overlay)/.test(`${style.overflowY || ''} ${style.overflow || ''}`) && target.scrollHeight > target.clientHeight
+  }
+  const candidates = [
+    el.closest('.center-col') as HTMLElement | null,
+    el.closest('.content-wrapper') as HTMLElement | null,
+    document.querySelector('.content-wrapper') as HTMLElement | null,
+    document.querySelector('.center-col') as HTMLElement | null,
+  ]
+  const wrapper = candidates.find(isScrollableTarget) || candidates.find(Boolean) || null
+  const rect = el.getBoundingClientRect()
+  if (wrapper) {
+    const wrapperRect = wrapper.getBoundingClientRect()
+    wrapper.scrollTo({ top: Math.max(0, wrapper.scrollTop + rect.top - wrapperRect.top), behavior: 'instant' })
+    return
+  }
+  window.scrollTo({
+    top: Math.max(0, (window.scrollY || window.pageYOffset || 0) + rect.top),
+    left: window.scrollX || window.pageXOffset || 0,
+    behavior: 'instant',
+  })
+}
+
 const resolveInitialTargetAcrossPages = async () => {
   if (!hasInitialTarget() || resolvingInitialTarget.value) return
   resolvingInitialTarget.value = true
+  const startPage = page.value
   try {
     let found = await selectInitialNotification()
-    while (!found && items.value.length < total.value) {
-      const beforeCount = items.value.length
+    while (!found && page.value < totalPages.value) {
       page.value += 1
       await loadNotifications(false, { skipInitialResolve: true })
-      if (items.value.length <= beforeCount) break
       found = await selectInitialNotification()
+    }
+    if (!found && page.value !== startPage) {
+      page.value = startPage
+      await loadNotifications(false, { skipInitialResolve: true, skipRestoreResolve: true })
     }
   } finally {
     resolvingInitialTarget.value = false
@@ -447,14 +570,17 @@ const resolveInitialTargetAcrossPages = async () => {
 const resolveRestoreFocusAcrossPages = async () => {
   if (!restoreFocusId() || resolvingRestoreFocus.value || hasInitialTarget()) return
   resolvingRestoreFocus.value = true
+  const startPage = page.value
   try {
     let found = await selectRestoreNotification()
-    while (!found && items.value.length < total.value) {
-      const beforeCount = items.value.length
+    while (!found && page.value < totalPages.value) {
       page.value += 1
       await loadNotifications(false, { skipInitialResolve: true, skipRestoreResolve: true })
-      if (items.value.length <= beforeCount) break
       found = await selectRestoreNotification()
+    }
+    if (!found && page.value !== startPage) {
+      page.value = startPage
+      await loadNotifications(false, { skipInitialResolve: true, skipRestoreResolve: true })
     }
   } finally {
     resolvingRestoreFocus.value = false
@@ -464,15 +590,17 @@ const resolveRestoreFocusAcrossPages = async () => {
 const loadNotifications = async (reset = false, options: { skipInitialResolve?: boolean, skipRestoreResolve?: boolean } = {}) => {
   if (!user.isLogin) return
   if (reset) page.value = 1
-  loading.value = reset || !items.value.length
+  loading.value = true
   try {
     loadError.value = ''
     const res = await getRequest<NotificationListPayload>('notifications', { page: page.value, pageSize }, { credentials: 'include', silent: true })
     if (res?.code === 1 && res.data) {
       const payload = res.data
       const nextItems = Array.isArray(payload.items) ? payload.items : []
-      items.value = page.value === 1 ? nextItems : [...items.value, ...nextItems]
+      items.value = nextItems
       total.value = Number(payload.total ?? items.value.length)
+      page.value = Math.min(Math.max(Number(payload.page || page.value || 1), 1), totalPages.value)
+      syncTargetPageToCurrent()
       setUnreadCount(Number(payload.unread_count ?? payload.unreadCount ?? 0))
       if (!options.skipInitialResolve) await resolveInitialTargetAcrossPages()
       if (!options.skipRestoreResolve) await resolveRestoreFocusAcrossPages()
@@ -498,15 +626,40 @@ const refreshNotifications = async () => {
   }
 }
 
-const loadMore = async () => {
-  if (loadingMore.value || items.value.length >= total.value) return
-  loadingMore.value = true
-  try {
-    page.value += 1
-    await loadNotifications(false)
-  } finally {
-    loadingMore.value = false
+const loadPage = async (nextPage: number) => {
+  if (loading.value) return
+  const bounded = Math.min(Math.max(Number(nextPage) || 1, 1), totalPages.value)
+  if (bounded === page.value && items.value.length) {
+    syncTargetPageToCurrent()
+    return
   }
+  page.value = bounded
+  await loadNotifications(false, { skipInitialResolve: true, skipRestoreResolve: true })
+  await scrollNotificationFirstBlockToTop()
+}
+
+const loadPreviousPage = () => {
+  if (page.value <= 1) return
+  void loadPage(page.value - 1)
+}
+
+const loadNextPage = () => {
+  if (page.value >= totalPages.value) return
+  void loadPage(page.value + 1)
+}
+
+const jumpToPage = () => {
+  const next = Number.parseInt(targetPage.value.trim() || '', 10)
+  if (!next || next < 1 || next > totalPages.value || loading.value) {
+    useToast().add({
+      title: '页码无效',
+      description: `请输入 1-${totalPages.value} 之间的数字`,
+      color: 'orange',
+      timeout: 2000
+    })
+    return
+  }
+  void loadPage(next)
 }
 
 const markRead = async (item: UserNotification) => {
@@ -566,12 +719,16 @@ watch(() => user.isLogin, (loggedIn) => {
     total.value = 0
     loadError.value = ''
     replyOpenId.value = null
+    page.value = 1
+    syncTargetPageToCurrent()
     clearJumpFeedback()
     setUnreadCount(0)
   }
 })
 
 watch(() => [props.initialMessageId, props.initialCommentId], () => resolveInitialTargetAcrossPages())
+watch(page, syncTargetPageToCurrent, { immediate: true })
+watch(totalPages, syncTargetPageToCurrent)
 
 onMounted(() => loadNotifications(true))
 
@@ -727,7 +884,118 @@ defineExpose({ refresh: () => loadNotifications(true) })
 .notification-feed-error { display:flex; align-items:center; justify-content:center; gap:10px; padding:12px 16px; border:1px solid rgba(248,113,113,.22); border-radius:10px; background:rgba(254,242,242,.78); color:#b91c1c; font-size:13px; }
 :global(.dark) .notification-feed-error,
 .notification-center.notification-theme-dark .notification-feed-error { background:rgba(127,29,29,.22); border-color:rgba(248,113,113,.2); color:#fca5a5; }
-.load-more-row { display:flex; justify-content:center; padding:14px 0 16px; }
+.pager-shell {
+  --pager-shell-bg: rgba(255, 255, 255, 0.85);
+  --pager-shell-border: rgba(15, 23, 42, 0.12);
+  --pager-shell-text: #334155;
+  --pager-shell-muted: #64748b;
+  --pager-input-bg: rgba(255, 255, 255, 0.92);
+  --pager-input-border: rgba(15, 23, 42, 0.16);
+  --pager-input-text: #0f172a;
+  --pager-input-placeholder: rgba(15, 23, 42, 0.45);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:16px;
+  width:100%;
+  margin:16px 0 72px;
+  padding:10px 14px;
+  border:1px solid var(--pager-shell-border);
+  border-radius:999px;
+  background:var(--pager-shell-bg);
+  color:var(--pager-shell-text);
+  box-shadow:0 8px 22px rgba(15,23,42,.10);
+  flex-wrap:wrap;
+}
+.pager-shell.is-dark {
+  --pager-shell-bg: rgba(39, 50, 66, 0.68);
+  --pager-shell-border: rgba(255, 255, 255, 0.16);
+  --pager-shell-text: #e2e8f0;
+  --pager-shell-muted: #cbd5e1;
+  --pager-input-bg: rgba(17, 24, 39, 0.58);
+  --pager-input-border: rgba(255, 255, 255, 0.18);
+  --pager-input-text: #f8fafc;
+  --pager-input-placeholder: rgba(226, 232, 240, 0.58);
+  box-shadow:0 8px 22px rgba(0,0,0,.24);
+}
+.pager-nav-group,
+.pager-jump-group {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.pager-btn,
+.pager-jump-btn {
+  min-height:34px;
+  padding-inline:14px;
+  font-size:13px;
+  font-weight:700;
+}
+.pager-icon-wrap {
+  width:1.35rem;
+  height:1.35rem;
+  border-radius:999px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background:color-mix(in srgb, var(--nw-action-text) 10%, transparent);
+}
+.pager-icon { line-height:1; }
+.pager-page-text,
+.pager-status-text {
+  color:var(--pager-shell-muted);
+  font-size:13px;
+  font-weight:650;
+  text-shadow:none;
+}
+.pager-number-control {
+  display:inline-flex;
+  align-items:stretch;
+  min-height:34px;
+  border:1px solid var(--pager-input-border);
+  border-radius:12px;
+  background:var(--pager-input-bg);
+  color:var(--pager-input-text);
+  overflow:hidden;
+  transition:border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+.pager-number-control:focus-within {
+  border-color:rgba(249,115,22,.72);
+  box-shadow:0 0 0 2px rgba(249,115,22,.18);
+}
+.pager-page-input {
+  width:42px;
+  min-height:32px;
+  padding:0 6px;
+  border:0;
+  outline:none;
+  background:transparent;
+  color:var(--pager-input-text);
+  font-size:14px;
+  font-weight:700;
+  text-align:center;
+  appearance:textfield;
+}
+.pager-page-input::placeholder { color:var(--pager-input-placeholder); }
+.pager-stepper {
+  display:grid;
+  grid-template-rows:1fr 1fr;
+  width:24px;
+  border-left:1px solid var(--pager-input-border);
+}
+.pager-stepper-btn {
+  width:24px;
+  min-width:24px;
+  height:16px;
+  min-height:16px;
+  padding:0;
+  border:0;
+  border-radius:0;
+}
+.pager-stepper-btn + .pager-stepper-btn { border-top:1px solid var(--pager-input-border); }
+.pager-stepper-btn svg { width:12px; height:12px; }
 .spin { animation:notification-spin 1s linear infinite; }
 @keyframes notification-spin { to { transform:rotate(360deg); } }
 @media (max-width: 720px) {
@@ -745,5 +1013,8 @@ defineExpose({ refresh: () => loadNotifications(true) })
   .notification-target-card { padding:10px; }
   .notification-target-image { width:54px; height:54px; flex-basis:54px; }
   .notification-target-jumping { width:100%; justify-content:flex-end; }
+  .pager-shell { border-radius:18px; gap:10px; }
+  .pager-nav-group,
+  .pager-jump-group { width:100%; }
 }
 </style>
