@@ -135,69 +135,6 @@
           <button v-if="canCollapseRootComments" type="button" class="comment-load-btn nw-action-btn nw-action-btn--label" @click="collapseRootComments">收回</button>
           <button v-if="hasMore" type="button" class="comment-load-btn nw-action-btn nw-action-btn--label" @click="loadMore">加载更多{{ contextLabel }}</button>
         </div>
-        <div v-if="showCommentPager" class="pager-shell" :class="{ 'is-dark': isDark }">
-          <div class="pager-nav-group">
-            <button
-              v-if="currentRootPage > 1"
-              type="button"
-              class="pager-btn nw-action-btn nw-action-btn--label"
-              @click="loadPreviousRootPage"
-            >
-              <span class="pager-icon-wrap"><UIcon name="i-heroicons-arrow-left" class="w-4 h-4 pager-icon" /></span>
-              <span>上一页</span>
-            </button>
-            <button
-              v-if="currentRootPage < totalRootPages"
-              type="button"
-              class="pager-btn nw-action-btn nw-action-btn--label"
-              @click="loadNextRootPage"
-            >
-              <span>下一页</span>
-              <span class="pager-icon-wrap"><UIcon name="i-heroicons-arrow-right" class="w-4 h-4 pager-icon" /></span>
-            </button>
-          </div>
-          <div class="pager-jump-group">
-            <span class="pager-page-text">第</span>
-            <div class="pager-number-control">
-              <input
-                v-model="targetRootPage"
-                type="text"
-                inputmode="numeric"
-                pattern="[0-9]*"
-                class="pager-page-input"
-                placeholder="#"
-                aria-label="跳转页码"
-                @keyup.enter="jumpToRootPage"
-              />
-              <div class="pager-stepper" aria-label="页码增减">
-                <button
-                  type="button"
-                  class="pager-stepper-btn nw-action-btn"
-                  aria-label="页码加一"
-                  @click="adjustTargetRootPage(1)"
-                >
-                  <UIcon name="i-heroicons-chevron-up-20-solid" class="w-3 h-3" />
-                </button>
-                <button
-                  type="button"
-                  class="pager-stepper-btn nw-action-btn"
-                  aria-label="页码减一"
-                  @click="adjustTargetRootPage(-1)"
-                >
-                  <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
-                </button>
-              </div>
-            </div>
-            <span class="pager-page-text">页 / 共 {{ totalRootPages }} 页</span>
-            <button
-              type="button"
-              class="pager-jump-btn nw-action-btn nw-action-btn--label"
-              @click="jumpToRootPage"
-            >
-              跳转
-            </button>
-          </div>
-        </div>
       <div v-if="!props.replyInputOnly && !sortedRootComments.length" class="text-xs mb-4" :class="themeMuted">暂无{{ contextLabel }}</div>
 
       <div v-if="formVisible" class="space-y-4 mt-4 md:mt-5">
@@ -248,6 +185,69 @@
       </div>
       <div v-else-if="props.showInput && !enabled" class="text-xs text-center mt-5 mb-3" :class="themeMuted">{{ contextLabel }}功能未开启</div>
       <div v-else-if="props.showInput && enabled && !canComment" class="text-xs text-center mt-5 mb-3" :class="themeMuted">{{ loginRequiredText }}</div>
+      <div v-if="showCommentPager" class="pager-shell" :class="{ 'is-dark': isDark }">
+        <div class="pager-nav-group">
+          <button
+            v-if="currentRootPage > 1"
+            type="button"
+            class="pager-btn nw-action-btn nw-action-btn--label"
+            @click="loadPreviousRootPage"
+          >
+            <span class="pager-icon-wrap"><UIcon name="i-heroicons-arrow-left" class="w-4 h-4 pager-icon" /></span>
+            <span>上一页</span>
+          </button>
+          <button
+            v-if="currentRootPage < totalRootPages"
+            type="button"
+            class="pager-btn nw-action-btn nw-action-btn--label"
+            @click="loadNextRootPage"
+          >
+            <span>下一页</span>
+            <span class="pager-icon-wrap"><UIcon name="i-heroicons-arrow-right" class="w-4 h-4 pager-icon" /></span>
+          </button>
+        </div>
+        <div class="pager-jump-group">
+          <span class="pager-page-text">第</span>
+          <div class="pager-number-control">
+            <input
+              v-model="targetRootPage"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              class="pager-page-input"
+              placeholder="#"
+              aria-label="跳转页码"
+              @keyup.enter="jumpToRootPage"
+            />
+            <div class="pager-stepper" aria-label="页码增减">
+              <button
+                type="button"
+                class="pager-stepper-btn nw-action-btn"
+                aria-label="页码加一"
+                @click="adjustTargetRootPage(1)"
+              >
+                <UIcon name="i-heroicons-chevron-up-20-solid" class="w-3 h-3" />
+              </button>
+              <button
+                type="button"
+                class="pager-stepper-btn nw-action-btn"
+                aria-label="页码减一"
+                @click="adjustTargetRootPage(-1)"
+              >
+                <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+          <span class="pager-page-text">页 / 共 {{ totalRootPages }} 页</span>
+          <button
+            type="button"
+            class="pager-jump-btn nw-action-btn nw-action-btn--label"
+            @click="jumpToRootPage"
+          >
+            跳转
+          </button>
+        </div>
+      </div>
       
   </div>
 
@@ -1630,6 +1630,9 @@ defineExpose({ load, focusCommentById, replyToCommentById })
   padding-inline:14px;
   font-size:13px;
   font-weight:700;
+  --nw-action-bg:var(--comment-toolbar-control-bg);
+  --nw-action-text:var(--comment-toolbar-text);
+  --nw-action-border:var(--comment-toolbar-border);
 }
 .pager-icon-wrap {
   width:1.35rem;

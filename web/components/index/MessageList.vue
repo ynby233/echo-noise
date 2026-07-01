@@ -4312,6 +4312,9 @@ onMounted(() => {
   padding-inline: 14px;
   font-size: 13px;
   font-weight: 700;
+  --nw-action-bg: rgba(15, 23, 42, .06);
+  --nw-action-text: var(--pager-shell-text);
+  --nw-action-border: var(--pager-shell-border);
 }
 .pager-icon-wrap {
   width: 1.35rem;
@@ -4379,6 +4382,12 @@ onMounted(() => {
   border-top: 1px solid var(--pager-input-border);
 }
 .pager-stepper-btn svg { width: 12px; height: 12px; }
+.pager-shell.is-dark .pager-btn,
+.pager-shell.is-dark .pager-jump-btn {
+  --nw-action-bg: rgba(51, 65, 85, .96);
+  --nw-action-text: #cbd5e1;
+  --nw-action-border: rgba(148, 163, 184, .28);
+}
 .pager-done-wrap {
   margin-top: 16px;
   text-align: center;
