@@ -742,14 +742,6 @@ const replaceAttachmentNodesWithSourceText = (root: HTMLElement) => {
 
 const materializeAttachmentMarkersInTableCells = (root: HTMLElement) => {
   if (typeof document === 'undefined') return false
-  let changed = false
-  root.querySelectorAll<HTMLElement>('td,th [data-type="a"]').forEach((node) => {
-    if (node.closest('.editor-attachment-preview, textarea, code, [data-type="code-block"], .vditor-ir__marker--pre')) return
-    const info = attachmentInfoFromIrNode(node)
-    if (!info) return
-    node.replaceWith(createEditorAttachmentLinkElement(info))
-    changed = true
-  })
   const textNodes: Text[] = []
   root.querySelectorAll('td,th').forEach((cell) => {
     const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, {
@@ -767,6 +759,7 @@ const materializeAttachmentMarkersInTableCells = (root: HTMLElement) => {
     })
     while (walker.nextNode()) textNodes.push(walker.currentNode as Text)
   })
+  let changed = false
   textNodes.forEach((textNode) => {
     const source = normalizeAttachmentSourceText(textNode.textContent || '')
     ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0

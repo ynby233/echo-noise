@@ -260,8 +260,14 @@ assert.match(
 
 assert.match(
   editor,
-  /const\s+materializeAttachmentMarkersInTableCells\s*=[\s\S]+?root\.querySelectorAll<HTMLElement>\('td,th \[data-type="a"\]'\)[\s\S]+?attachmentInfoFromIrNode\(node\)[\s\S]+?node\.replaceWith\(createEditorAttachmentLinkElement\(info\)\)[\s\S]+?root\.querySelectorAll\('td,th'\)[\s\S]+?NodeFilter\.SHOW_TEXT[\s\S]+?parent\.closest\('a, \[data-type="a"\], \.editor-attachment-preview, textarea, code, \[data-type="code-block"\], \.vditor-ir__marker--pre'\)[\s\S]+?createEditorAttachmentLinkElement\(info\)/,
-  'live table cells must materialize both Vditor IR attachment nodes and raw attachment markdown into the same attachment-link nodes without touching links, textareas, or code'
+  /const\s+materializeAttachmentMarkersInTableCells\s*=[\s\S]+?root\.querySelectorAll\('td,th'\)[\s\S]+?NodeFilter\.SHOW_TEXT[\s\S]+?parent\.closest\('a, \[data-type="a"\], \.editor-attachment-preview, textarea, code, \[data-type="code-block"\], \.vditor-ir__marker--pre'\)[\s\S]+?createEditorAttachmentLinkElement\(info\)/,
+  'live table cells may materialize raw attachment markdown text, but must not rewrite Vditor native attachment nodes'
+)
+
+assert.doesNotMatch(
+  editor,
+  /querySelectorAll<HTMLElement>\('td,th \[data-type="a"\]'\)[\s\S]+?node\.replaceWith\(createEditorAttachmentLinkElement\(info\)\)/,
+  'table attachment refresh must not use the comma-selector bug that replaces whole td elements with anchors'
 )
 
 assert.match(
