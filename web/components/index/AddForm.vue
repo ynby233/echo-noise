@@ -439,6 +439,7 @@ const clearEditorAttachmentInsertTarget = () => {
 }
 
 const openImageUploader = () => {
+  prepareEditorAttachmentInsert()
   showImageUploader.value = true
 }
 
@@ -870,6 +871,7 @@ const checkLogin = () => {
 };
 
 const triggerFileInput = () => {
+  prepareEditorAttachmentInsert()
   fileInput.value?.click();
 };
 

@@ -225,6 +225,7 @@ let refreshAttachmentLinksFromEditor: () => void = () => {};
 let lastEditorSelectionRange: Range | null = null;
 let lastEditorTableSelectionRange: Range | null = null;
 let lastEditorTableSelectionState: { editable: HTMLElement; tableIndex: number; rowIndex: number; cellIndex: number } | null = null;
+let lastEditorTableSelectionAt = 0;
 let pendingEditorTableAttachmentInsertionTarget: EditorTableAttachmentInsertionTarget | null = null;
 let selectedEditorTable: HTMLTableElement | null = null;
 let selectedEditorTableIndex = -1;
@@ -343,6 +344,7 @@ const EXPANDED_TABLE_MIN_ROW_HEIGHT = 38
 const EXPANDED_TABLE_CELL_HORIZONTAL_PADDING = 18
 const EXPANDED_TABLE_SCROLL_OVERFLOW_TOLERANCE = 2
 const EDITOR_TABLE_ATTACHMENT_INSERT_TARGET_TTL_MS = 2 * 60 * 1000
+const EDITOR_TABLE_ATTACHMENT_CANDIDATE_TTL_MS = 60 * 1000
 
 const estimateTableLineWidth = (line: string) => {
   const text = stripAttachmentMarkersFromEditorText(String(line || '').replace(/\r\n?/g, '\n')) || ' '
@@ -743,8 +745,7 @@ const setupAttachmentPreview = () => {
     if (getEditorTableCellFromRange(range)) {
       storeLastEditorTableSelection(range)
     } else {
-      lastEditorTableSelectionRange = null
-      lastEditorTableSelectionState = null
+      clearStoredEditorTableSelection()
     }
   }
 
@@ -1198,6 +1199,7 @@ const setupAttachmentPreview = () => {
   const onPlainBlankLineMouseDown = (event: MouseEvent) => {
     const block = getPlainEditorBlock(event.target as Node | null)
     if (!isPlainBlankLineBlock(block)) return
+    clearStoredEditorTableSelection()
     event.preventDefault()
     event.stopPropagation()
     ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
@@ -1226,6 +1228,7 @@ const setupAttachmentPreview = () => {
     editorTableCompositionCommitKey = null
     editorTableCompositionCaretTarget = null
     if (placeCaretInPlainEditorVisualBlankLine(event)) {
+      clearStoredEditorTableSelection()
       event.preventDefault()
       event.stopPropagation()
       ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
@@ -4715,12 +4718,17 @@ const getEditorTableCellFromEvent = (event?: Event) => {
   return getEditorTableCellFromElement(element)
 }
 
+const clearStoredEditorTableSelection = () => {
+  lastEditorTableSelectionRange = null
+  lastEditorTableSelectionState = null
+  lastEditorTableSelectionAt = 0
+}
+
 const clearLastEditorTableSelection = () => {
   const selection = typeof window === 'undefined' ? null : window.getSelection()
   selection?.removeAllRanges()
   lastEditorSelectionRange = null
-  lastEditorTableSelectionRange = null
-  lastEditorTableSelectionState = null
+  clearStoredEditorTableSelection()
 }
 
 const clearPreparedEditorAttachmentInsertionTarget = () => {
@@ -4762,6 +4770,7 @@ const storeLastEditorTableCell = (cell: HTMLTableCellElement | null | undefined)
     rowIndex: (cell.parentElement as HTMLTableRowElement).rowIndex,
     cellIndex: cell.cellIndex,
   }
+  lastEditorTableSelectionAt = Date.now()
 }
 
 const storeLastEditorTableSelection = (range: Range) => {
@@ -4787,12 +4796,27 @@ const getActiveEditorTableCellForAttachmentInsertion = () => {
   return getCurrentEditorTableCell(undefined, { allowStoredFallback: false })
 }
 
+const getStoredEditorTableCellForAttachmentInsertion = () => {
+  if (!lastEditorTableSelectionState || Date.now() - lastEditorTableSelectionAt > EDITOR_TABLE_ATTACHMENT_CANDIDATE_TTL_MS) {
+    return null as HTMLTableCellElement | null
+  }
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
+  const rangeEditable = getEditorEditableFromNode(range?.commonAncestorContainer)
+  if (range && rangeEditable && !getEditorTableCellFromRange(range)) return null
+  return getStoredEditorTableCell(lastEditorTableSelectionState.editable)
+}
+
 const prepareEditorAttachmentInsertionTarget = () => {
   clearPreparedEditorAttachmentInsertionTarget()
-  const cell = getActiveEditorTableCellForAttachmentInsertion()
+  const cell = getActiveEditorTableCellForAttachmentInsertion() || getStoredEditorTableCellForAttachmentInsertion()
   const editable = getEditorEditableFromNode(cell)
+  if (!cell || !editable) return false
+  if (inlineEditorTableTextareaState?.cell === cell) {
+    syncInlineEditorTableTextareaToCell({ emit: false, reposition: false })
+  }
   const position = getEditorTableCellPosition(cell)
-  if (!cell || !editable || !position) return false
+  if (!position) return false
   pendingEditorTableAttachmentInsertionTarget = {
     editable,
     tableIndex: position.tableIndex,
@@ -4914,27 +4938,48 @@ const normalizeTableCellInsertion = (value: string) => String(value || '')
   .replace(/[\u200b\u200c\ufeff]/g, '')
   .trim()
 
+const insertAttachmentIntoTableCellDomFallback = (cell: HTMLTableCellElement, text: string) => {
+  const current = editorTableCellTextFromDom(cell)
+  const separator = current && !/\s$/.test(current) ? ' ' : ''
+  const nextText = `${current}${separator}${text}`
+  setEditorTableDomCellText(cell, nextText)
+  markEditorTableCellSourceDirty(cell, nextText)
+  const synced = flushPendingEditorTableCellSourceSync()
+  clearConsumedEditorTableInsertionState()
+  refreshAttachmentLinksFromEditor()
+  window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
+  emitEditorValue()
+  if (!synced) window.setTimeout(() => emitEditorValue(), 0)
+  return true
+}
+
 const insertValueIntoCurrentTableCell = (value: string) => {
   if (!vditorInstance) return false
   const text = normalizeAttachmentSourceText(normalizeTableCellInsertion(value))
   if (!text) return false
   const isAttachmentInsert = hasAttachmentMarker(text)
   const preparedAttachmentCell = isAttachmentInsert ? consumePreparedEditorTableAttachmentCell() : null
-  let cell = getCurrentEditorTableCell(undefined, { allowStoredFallback: false }) || preparedAttachmentCell
+  let cell = isAttachmentInsert
+    ? (preparedAttachmentCell || getCurrentEditorTableCell(undefined, { allowStoredFallback: false }))
+    : getCurrentEditorTableCell(undefined, { allowStoredFallback: false })
   if (!cell) return false
   if (isAttachmentInsert) {
     const target = getEditorTableCellSourceTarget(cell)
     if (target) {
-      const current = target.rowCells[target.cellIndex] || ''
+      const current = isSamePendingEditorTableCell(cell) && pendingEditorTableCellSync
+        ? pendingEditorTableCellSync.text
+        : (target.rowCells[target.cellIndex] || '')
       const separator = current && !/\s$/.test(current) ? ' ' : ''
       const inserted = applyEditorTableCellSourceValue(cell, `${current}${separator}${text}`)
       if (inserted) {
         clearConsumedEditorTableInsertionState()
         refreshAttachmentLinksFromEditor()
         window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
+        return true
       }
-      return inserted
+      return insertAttachmentIntoTableCellDomFallback(cell, text)
     }
+    return insertAttachmentIntoTableCellDomFallback(cell, text)
   }
   const selection = window.getSelection()
   if (!selection || selection.rangeCount === 0) return false

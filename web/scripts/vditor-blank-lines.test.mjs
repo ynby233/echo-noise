@@ -158,13 +158,13 @@ assert.match(
 
 assert.match(
   editor,
-  /const\s+clearLastEditorTableSelection\s*=\s*\(\)\s*=>\s*\{[\s\S]+?lastEditorTableSelectionRange\s*=\s*null[\s\S]+?lastEditorTableSelectionState\s*=\s*null[\s\S]+?\}/,
+  /const\s+clearStoredEditorTableSelection\s*=\s*\(\)\s*=>\s*\{[\s\S]+?lastEditorTableSelectionRange\s*=\s*null[\s\S]+?lastEditorTableSelectionState\s*=\s*null[\s\S]+?lastEditorTableSelectionAt\s*=\s*0[\s\S]+?\}/,
   'table-cell fallback selection must have a single cleanup path'
 )
 
 assert.match(
   editor,
-  /const\s+clearLastEditorTableSelection\s*=\s*\(\)\s*=>\s*\{[\s\S]+?selection\?\.removeAllRanges\(\)[\s\S]+?lastEditorSelectionRange\s*=\s*null[\s\S]+?lastEditorTableSelectionRange\s*=\s*null/,
+  /const\s+clearLastEditorTableSelection\s*=\s*\(\)\s*=>\s*\{[\s\S]+?selection\?\.removeAllRanges\(\)[\s\S]+?lastEditorSelectionRange\s*=\s*null[\s\S]+?clearStoredEditorTableSelection\(\)/,
   'table-cell fallback cleanup must unconditionally drop stale DOM selection left behind by the file picker'
 )
 
@@ -176,8 +176,8 @@ assert.match(
 
 assert.match(
   editor,
-  /const\s+isAttachmentInsert\s*=\s*hasAttachmentMarker\(text\)[\s\S]+?const\s+preparedAttachmentCell\s*=\s*isAttachmentInsert\s*\?\s*consumePreparedEditorTableAttachmentCell\(\)\s*:\s*null[\s\S]+?getCurrentEditorTableCell\(undefined,\s*\{\s*allowStoredFallback:\s*false\s*\}\)\s*\|\|\s*preparedAttachmentCell/,
-  'attachment insertion into a table cell must use a one-shot upload target instead of a stale global table fallback'
+  /const\s+isAttachmentInsert\s*=\s*hasAttachmentMarker\(text\)[\s\S]+?const\s+preparedAttachmentCell\s*=\s*isAttachmentInsert\s*\?\s*consumePreparedEditorTableAttachmentCell\(\)\s*:\s*null[\s\S]+?isAttachmentInsert[\s\S]+?\?\s*\(preparedAttachmentCell\s*\|\|\s*getCurrentEditorTableCell\(undefined,\s*\{\s*allowStoredFallback:\s*false\s*\}\)\)/,
+  'attachment insertion into a table cell must prefer the one-shot upload target over the post-file-picker selection'
 )
 
 assert.match(
@@ -194,6 +194,18 @@ assert.match(
 
 assert.match(
   editor,
+  /const\s+getStoredEditorTableCellForAttachmentInsertion\s*=[\s\S]+?EDITOR_TABLE_ATTACHMENT_CANDIDATE_TTL_MS[\s\S]+?rangeEditable\s*&&\s*!getEditorTableCellFromRange\(range\)[\s\S]+?getStoredEditorTableCell\(lastEditorTableSelectionState\.editable\)[\s\S]+?const\s+prepareEditorAttachmentInsertionTarget\s*=[\s\S]+?getActiveEditorTableCellForAttachmentInsertion\(\)\s*\|\|\s*getStoredEditorTableCellForAttachmentInsertion\(\)/,
+  'upload activation must be able to freeze the last live table cell after toolbar focus has closed the inline editor, without using stale non-table selections'
+)
+
+assert.match(
+  editor,
+  /const\s+insertAttachmentIntoTableCellDomFallback\s*=[\s\S]+?setEditorTableDomCellText\(cell,\s*nextText\)[\s\S]+?markEditorTableCellSourceDirty\(cell,\s*nextText\)[\s\S]+?clearConsumedEditorTableInsertionState\(\)[\s\S]+?if\s*\(!synced\)\s*window\.setTimeout\(\(\)\s*=>\s*emitEditorValue\(\),\s*0\)[\s\S]+?return\s+true/,
+  'if a prepared table target cannot be source-matched immediately, insertion must stay in that cell instead of falling through below the table'
+)
+
+assert.match(
+  editor,
   /prepareAttachmentInsert:\s*\(\)\s*=>\s*prepareEditorAttachmentInsertionTarget\(\)[\s\S]+?clearAttachmentInsertTarget:\s*\(\)\s*=>\s*clearPreparedEditorAttachmentInsertionTarget\(\)/,
   'VditorEditor must expose explicit attachment-target lifecycle hooks for upload controls'
 )
@@ -206,8 +218,20 @@ assert.match(
 
 assert.match(
   addForm,
+  /const\s+triggerFileInput\s*=\s*\(\)\s*=>\s*\{[\s\S]+?prepareEditorAttachmentInsert\(\)[\s\S]+?fileInput\.value\?\.click\(\)/,
+  'the attachment upload click path must also prepare the table target for keyboard activation and browser focus timing differences'
+)
+
+assert.match(
+  addForm,
   /data-tooltip="图床上传"[\s\S]+?@pointerdown="prepareEditorAttachmentInsert"[\s\S]+?@click="openImageUploader"/,
   'image-hosting insertion must use the same explicit attachment target lifecycle as file uploads'
+)
+
+assert.match(
+  addForm,
+  /const\s+openImageUploader\s*=\s*\(\)\s*=>\s*\{[\s\S]+?prepareEditorAttachmentInsert\(\)[\s\S]+?showImageUploader\.value\s*=\s*true/,
+  'the image uploader click path must also prepare the table target before opening the floating uploader'
 )
 
 assert.doesNotMatch(
