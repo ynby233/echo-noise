@@ -176,14 +176,44 @@ assert.match(
 
 assert.match(
   editor,
-  /if\s*\(hasAttachmentMarker\(text\)\)\s*\{[\s\S]+?applyEditorTableCellSourceValue\(cell,\s*`\$\{current\}\$\{separator\}\$\{text\}`\)[\s\S]+?clearConsumedEditorTableInsertionState\(\)[\s\S]+?refreshAttachmentLinksFromEditor\(\)/,
-  'attachment insertion into a table cell must consume the stored table target instead of trapping future uploads'
+  /const\s+isAttachmentInsert\s*=\s*hasAttachmentMarker\(text\)[\s\S]+?const\s+preparedAttachmentCell\s*=\s*isAttachmentInsert\s*\?\s*consumePreparedEditorTableAttachmentCell\(\)\s*:\s*null[\s\S]+?getCurrentEditorTableCell\(undefined,\s*\{\s*allowStoredFallback:\s*false\s*\}\)\s*\|\|\s*preparedAttachmentCell/,
+  'attachment insertion into a table cell must use a one-shot upload target instead of a stale global table fallback'
 )
 
 assert.match(
   editor,
   /const\s+insertAttachmentSourceValue\s*=[\s\S]+?vditorInstance\.setValue\(nextValue\)[\s\S]+?clearConsumedEditorTableInsertionState\(\)/,
   'attachment insertion outside tables must clear stale table fallback before appending to the editor body'
+)
+
+assert.match(
+  editor,
+  /const\s+prepareEditorAttachmentInsertionTarget\s*=[\s\S]+?pendingEditorTableAttachmentInsertionTarget\s*=\s*\{[\s\S]+?expiresAt:\s*Date\.now\(\)\s*\+\s*EDITOR_TABLE_ATTACHMENT_INSERT_TARGET_TTL_MS[\s\S]+?const\s+consumePreparedEditorTableAttachmentCell\s*=/,
+  'file-picker table insertion must be tied to an explicit short-lived target captured before the picker opens'
+)
+
+assert.match(
+  editor,
+  /prepareAttachmentInsert:\s*\(\)\s*=>\s*prepareEditorAttachmentInsertionTarget\(\)[\s\S]+?clearAttachmentInsertTarget:\s*\(\)\s*=>\s*clearPreparedEditorAttachmentInsertionTarget\(\)/,
+  'VditorEditor must expose explicit attachment-target lifecycle hooks for upload controls'
+)
+
+assert.match(
+  addForm,
+  /data-tooltip="上传附件"[\s\S]+?@pointerdown="prepareEditorAttachmentInsert"[\s\S]+?@click="triggerFileInput"/,
+  'the attachment upload button must capture the editor target on real pointerdown before the file picker steals focus'
+)
+
+assert.match(
+  addForm,
+  /data-tooltip="图床上传"[\s\S]+?@pointerdown="prepareEditorAttachmentInsert"[\s\S]+?@click="openImageUploader"/,
+  'image-hosting insertion must use the same explicit attachment target lifecycle as file uploads'
+)
+
+assert.doesNotMatch(
+  editor,
+  /restoreLastEditorSelection/,
+  'programmatic attachment insertion must not resurrect arbitrary historical table selections'
 )
 
 assert.match(
@@ -200,20 +230,26 @@ assert.match(
 
 assert.match(
   editor,
-  /const\s+editorAttachmentInfoToHtmlTableAnchor\s*=[\s\S]+?class="editor-attachment-link"[\s\S]+?data-attachment-kind="\$\{safeKind\}"[\s\S]+?data-attachment-url="\$\{safeUrl\}"[\s\S]+?editorTextLineToHtmlTableCellSource[\s\S]+?editorAttachmentInfoToHtmlTableAnchor\(info\)/,
-  'HTML table attachment serialization must produce an attachment-equivalent anchor instead of a bare link'
+  /const\s+editorAttachmentInfoToHtmlTableAnchor\s*=[\s\S]+?class="vditor-ir__link editor-attachment-link"[\s\S]+?role="button"[\s\S]+?data-attachment-kind="\$\{safeKind\}"[\s\S]+?data-attachment-url="\$\{safeUrl\}"[\s\S]+?editorTextLineToHtmlTableCellSource[\s\S]+?editorAttachmentInfoToHtmlTableAnchor\(info\)/,
+  'HTML table attachment serialization must produce a Vditor-link-equivalent attachment anchor instead of a bare link'
 )
 
 assert.match(
   editor,
-  /\.vditor-container\s+\.editor-attachment-link\s*\{[\s\S]+?text-decoration:\s*none;[\s\S]+?overflow-wrap:\s*anywhere;[\s\S]+?word-break:\s*break-word;/,
-  'HTML-table attachment anchors must share marker-like visual treatment instead of looking like raw links'
+  /\.vditor-container\s+\.editor-attachment-link\s*\{[\s\S]+?color:\s*var\(--ir-bracket-color,\s*#0000ff\);[\s\S]+?text-decoration:\s*underline;[\s\S]+?overflow-wrap:\s*anywhere;[\s\S]+?word-break:\s*break-word;/,
+  'HTML-table attachment anchors must share Vditor marker-like link styling instead of plain inherited text'
 )
 
 assert.doesNotMatch(
   editor,
   /querySelectorAll<HTMLElement>\('td,th'\)\.forEach\(\(cell\)\s*=>\s*renderAttachmentMarkersInEditableRoot\(cell\)\)/,
   'table cells must keep Vditor native attachment link nodes instead of being rewritten to plain custom anchors'
+)
+
+assert.doesNotMatch(
+  editor,
+  /const\s+(?:createEditorAttachmentAnchor|renderAttachmentMarkersInEditableRoot)\s*=/,
+  'dead custom attachment anchor renderers must stay removed so table attachments use one canonical visual path'
 )
 
 assert.match(

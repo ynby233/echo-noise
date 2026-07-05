@@ -18,9 +18,9 @@
             @audio-uploaded="handleAudioUploaded"
             @upload-progress="handleAudioUploadProgress"
           />
-          <button type="button" class="tb-btn nw-action-btn nw-tooltip-anchor" data-tooltip="上传附件" aria-label="上传附件" @click="triggerFileInput"><UIcon name="i-heroicons-paper-clip" class="w-5 h-5" /></button>
+          <button type="button" class="tb-btn nw-action-btn nw-tooltip-anchor" data-tooltip="上传附件" aria-label="上传附件" @pointerdown="prepareEditorAttachmentInsert" @click="triggerFileInput"><UIcon name="i-heroicons-paper-clip" class="w-5 h-5" /></button>
           <!-- 新增图床上传按钮 -->
-          <button type="button" class="tb-btn nw-action-btn nw-tooltip-anchor" data-tooltip="图床上传" aria-label="图床上传" @click="showImageUploader = true"><UIcon name="i-mdi-cloud-upload-outline" class="w-5 h-5" /></button>
+          <button type="button" class="tb-btn nw-action-btn nw-tooltip-anchor" data-tooltip="图床上传" aria-label="图床上传" @pointerdown="prepareEditorAttachmentInsert" @click="openImageUploader"><UIcon name="i-mdi-cloud-upload-outline" class="w-5 h-5" /></button>
           <button type="button" class="tb-btn nw-action-btn state-toggle-btn full-image-btn nw-tooltip-anchor" :class="{ 'is-enabled': fullImageAttachments }" :data-tooltip="`全图显示：${fullImageAttachments ? '已开启' : '已关闭'}`" :aria-label="`全图显示：${fullImageAttachments ? '已开启' : '已关闭'}`" :aria-pressed="fullImageAttachments" @click="toggleFullImageAttachments">
             <UIcon :name="fullImageAttachments ? 'i-mdi-image-size-select-actual' : 'i-mdi-image-size-select-large'" class="w-5 h-5" />
           </button>
@@ -91,7 +91,7 @@
   <ImageHostingUploader
   v-if="showImageUploader"
   :position="imageUploaderPosition"
-  @close="showImageUploader = false"
+  @close="closeImageUploader"
   @upload-success="handleImageHostingSuccess"
   @update:position="handlePositionUpdate"
 />
@@ -298,6 +298,8 @@ const handleImageHostingSuccess = (markdown: string) => {
     vditorEditor.value.insertValue(markdown)
     focusEditor()
     syncContentFromEditor()
+  } else {
+    clearEditorAttachmentInsertTarget()
   }
   showImageUploader.value = false
 }
@@ -422,6 +424,27 @@ const focusEditor = async () => {
     await nextTick()
     vditorEditor.value?.focus?.()
   } catch {}
+}
+
+const prepareEditorAttachmentInsert = () => {
+  try {
+    vditorEditor.value?.prepareAttachmentInsert?.()
+  } catch {}
+}
+
+const clearEditorAttachmentInsertTarget = () => {
+  try {
+    vditorEditor.value?.clearAttachmentInsertTarget?.()
+  } catch {}
+}
+
+const openImageUploader = () => {
+  showImageUploader.value = true
+}
+
+const closeImageUploader = () => {
+  showImageUploader.value = false
+  clearEditorAttachmentInsertTarget()
 }
 
 const scrollEditorIntoViewForMobile = async () => {
@@ -856,6 +879,7 @@ const addAttachment = async (event: Event) => {
   const files = input.files ? Array.from(input.files) : [];
 
   if (!files.length) {
+    clearEditorAttachmentInsertTarget()
     toast.add({
       title: '错误',
       description: '没有选择文件',
@@ -877,6 +901,8 @@ const addAttachment = async (event: Event) => {
       vditorEditor.value.insertValue(uploaded.map((item) => item.markdown).join(''))
       syncContentFromEditor()
       focusEditor()
+    } else {
+      clearEditorAttachmentInsertTarget()
     }
     attachmentUploadProgress.value = 100
     setTimeout(() => { attachmentUploadProgress.value = 0 }, 400)
@@ -887,6 +913,7 @@ const addAttachment = async (event: Event) => {
       timeout: 2000
     });
   } catch (error: any) {
+    clearEditorAttachmentInsertTarget()
     console.error('上传错误:', error);
     toast.add({
       title: '错误',

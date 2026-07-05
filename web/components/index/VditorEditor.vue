@@ -208,6 +208,7 @@ type PendingEditorTableCellSync = { tableIndex: number; rowIndex: number; cellIn
 type EditorTableCellPosition = Pick<PendingEditorTableCellSync, 'tableIndex' | 'rowIndex' | 'cellIndex'>
 type EditorTableCompositionCommitKey = EditorTableCellPosition & { key: 'Space' | 'Enter'; expiresAt: number }
 type EditorTableCompositionCaretTarget = EditorTableCellPosition & { offset: number; expiresAt: number }
+type EditorTableAttachmentInsertionTarget = EditorTableCellPosition & { editable: HTMLElement; expiresAt: number }
 type ExpandedTableResizeDrag = { type: 'row' | 'column'; index: number; startClient: number; startSize: number }
 
 const editorContainer = ref<HTMLElement>();
@@ -224,6 +225,7 @@ let refreshAttachmentLinksFromEditor: () => void = () => {};
 let lastEditorSelectionRange: Range | null = null;
 let lastEditorTableSelectionRange: Range | null = null;
 let lastEditorTableSelectionState: { editable: HTMLElement; tableIndex: number; rowIndex: number; cellIndex: number } | null = null;
+let pendingEditorTableAttachmentInsertionTarget: EditorTableAttachmentInsertionTarget | null = null;
 let selectedEditorTable: HTMLTableElement | null = null;
 let selectedEditorTableIndex = -1;
 let hoveredEditorTable: HTMLTableElement | null = null;
@@ -340,6 +342,7 @@ const EXPANDED_TABLE_MIN_COLUMN_WIDTH = 48
 const EXPANDED_TABLE_MIN_ROW_HEIGHT = 38
 const EXPANDED_TABLE_CELL_HORIZONTAL_PADDING = 18
 const EXPANDED_TABLE_SCROLL_OVERFLOW_TOLERANCE = 2
+const EDITOR_TABLE_ATTACHMENT_INSERT_TARGET_TTL_MS = 2 * 60 * 1000
 
 const estimateTableLineWidth = (line: string) => {
   const text = stripAttachmentMarkersFromEditorText(String(line || '').replace(/\r\n?/g, '\n')) || ' '
@@ -717,59 +720,6 @@ const replaceAttachmentNodesWithSourceText = (root: HTMLElement) => {
   })
 }
 
-const createEditorAttachmentAnchor = (info: EditorAttachmentInfo) => {
-  const anchor = document.createElement('a')
-  anchor.href = info.url
-  anchor.textContent = info.title
-  anchor.className = 'editor-attachment-link'
-  anchor.setAttribute('role', 'button')
-  anchor.setAttribute('aria-label', `预览${info.title}`)
-  anchor.setAttribute('data-attachment-kind', info.type)
-  anchor.setAttribute('data-attachment-url', info.url)
-  anchor.setAttribute('draggable', 'false')
-  anchor.setAttribute('contenteditable', 'false')
-  anchor.style.cursor = 'pointer'
-  return anchor
-}
-
-const renderAttachmentMarkersInEditableRoot = (root: HTMLElement) => {
-  if (typeof document === 'undefined') return false
-  const textNodes: Text[] = []
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode(node) {
-      const text = node.textContent || ''
-      ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
-      if (!ATTACHMENT_MARKER_GLOBAL_RE.test(text)) return NodeFilter.FILTER_REJECT
-      const parent = node.parentElement
-      if (!parent) return NodeFilter.FILTER_REJECT
-      if (parent.closest('a, [data-type="a"], .editor-attachment-preview, textarea, code, [data-type="code-block"], .vditor-ir__marker--pre')) {
-        return NodeFilter.FILTER_REJECT
-      }
-      return NodeFilter.FILTER_ACCEPT
-    }
-  })
-  while (walker.nextNode()) textNodes.push(walker.currentNode as Text)
-  let changed = false
-  textNodes.forEach((textNode) => {
-    const source = textNode.textContent || ''
-    ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
-    let match: RegExpExecArray | null
-    let lastIndex = 0
-    const fragment = document.createDocumentFragment()
-    while ((match = ATTACHMENT_MARKER_GLOBAL_RE.exec(source))) {
-      if (match.index > lastIndex) fragment.appendChild(document.createTextNode(source.slice(lastIndex, match.index)))
-      const info = normalizeAttachmentInfo(match[1], match[2], match[3])
-      fragment.appendChild(info ? createEditorAttachmentAnchor(info) : document.createTextNode(match[0]))
-      lastIndex = ATTACHMENT_MARKER_GLOBAL_RE.lastIndex
-    }
-    if (lastIndex === 0) return
-    if (lastIndex < source.length) fragment.appendChild(document.createTextNode(source.slice(lastIndex)))
-    textNode.parentNode?.replaceChild(fragment, textNode)
-    changed = true
-  })
-  return changed
-}
-
 const setupAttachmentPreview = () => {
   const root = editorContainer.value
   if (!root || attachmentPreviewCleanup) return
@@ -953,6 +903,7 @@ const setupAttachmentPreview = () => {
       const anchor = node as HTMLAnchorElement
       const info = attachmentInfoFromAnchor(anchor)
       anchor.classList.toggle('editor-attachment-link', !!info)
+      anchor.classList.toggle('vditor-ir__link', !!info)
       if (!info) {
         anchor.style.cursor = ''
         anchor.removeAttribute('role')
@@ -2238,7 +2189,7 @@ const editorAttachmentInfoToHtmlTableAnchor = (info: EditorAttachmentInfo) => {
   const safeUrl = escapeHtmlAttribute(info.url)
   const safeTitle = escapeTableCellHtml(info.title)
   const safeKind = escapeHtmlAttribute(info.type)
-  return `<a href="${safeUrl}" class="editor-attachment-link" data-attachment-kind="${safeKind}" data-attachment-url="${safeUrl}" draggable="false">${safeTitle}</a>`
+  return `<a href="${safeUrl}" class="vditor-ir__link editor-attachment-link" role="button" data-attachment-kind="${safeKind}" data-attachment-url="${safeUrl}" draggable="false">${safeTitle}</a>`
 }
 
 const editorTextLineToHtmlTableCellSource = (value: string) => {
@@ -4730,6 +4681,7 @@ onBeforeUnmount(() => {
     editorTableCompositionCommitKey = null
     editorTableCompositionCaretTarget = null
     editorTableCompositionSettlingUntil = 0
+    pendingEditorTableAttachmentInsertionTarget = null
     lastEditorTableSelectionRange = null
     lastEditorTableSelectionState = null
   } catch (e) {
@@ -4771,6 +4723,10 @@ const clearLastEditorTableSelection = () => {
   lastEditorTableSelectionState = null
 }
 
+const clearPreparedEditorAttachmentInsertionTarget = () => {
+  pendingEditorTableAttachmentInsertionTarget = null
+}
+
 const clearConsumedEditorTableInsertionState = () => {
   closeInlineEditorTableTextarea()
   pendingEditorTableCellSync = null
@@ -4781,6 +4737,7 @@ const clearConsumedEditorTableInsertionState = () => {
   editorTableCompositionStartPrefix = ''
   editorTableCompositionCommitKey = null
   editorTableCompositionCaretTarget = null
+  clearPreparedEditorAttachmentInsertionTarget()
   clearLastEditorTableSelection()
 }
 
@@ -4821,6 +4778,42 @@ const getStoredEditorTableCell = (editable: HTMLElement | null) => {
   const table = editable.querySelectorAll<HTMLTableElement>('table')[lastEditorTableSelectionState.tableIndex]
   const row = table?.rows[lastEditorTableSelectionState.rowIndex]
   return (row?.cells[lastEditorTableSelectionState.cellIndex] as HTMLTableCellElement | undefined) || null
+}
+
+const getActiveEditorTableCellForAttachmentInsertion = () => {
+  if (inlineEditorTableTextareaState?.cell && editorContainer.value?.contains(inlineEditorTableTextareaState.cell)) {
+    return inlineEditorTableTextareaState.cell
+  }
+  return getCurrentEditorTableCell(undefined, { allowStoredFallback: false })
+}
+
+const prepareEditorAttachmentInsertionTarget = () => {
+  clearPreparedEditorAttachmentInsertionTarget()
+  const cell = getActiveEditorTableCellForAttachmentInsertion()
+  const editable = getEditorEditableFromNode(cell)
+  const position = getEditorTableCellPosition(cell)
+  if (!cell || !editable || !position) return false
+  pendingEditorTableAttachmentInsertionTarget = {
+    editable,
+    tableIndex: position.tableIndex,
+    rowIndex: position.rowIndex,
+    cellIndex: position.cellIndex,
+    expiresAt: Date.now() + EDITOR_TABLE_ATTACHMENT_INSERT_TARGET_TTL_MS,
+  }
+  storeLastEditorTableCell(cell)
+  return true
+}
+
+const consumePreparedEditorTableAttachmentCell = () => {
+  const target = pendingEditorTableAttachmentInsertionTarget
+  pendingEditorTableAttachmentInsertionTarget = null
+  if (!target || Date.now() > target.expiresAt || !editorContainer.value?.contains(target.editable)) {
+    return null as HTMLTableCellElement | null
+  }
+  const table = target.editable.querySelectorAll<HTMLTableElement>('table')[target.tableIndex]
+  const cell = table?.rows[target.rowIndex]?.cells[target.cellIndex] as HTMLTableCellElement | undefined
+  if (!cell || getEditorEditableFromNode(cell) !== target.editable) return null
+  return cell
 }
 
 const getCurrentEditorTableCell = (event?: Event, options: { allowStoredFallback?: boolean } = {}) => {
@@ -4916,32 +4909,6 @@ const insertEditorTableCellLineBreak = (event: KeyboardEvent, cell: HTMLTableCel
   return true
 }
 
-const restoreLastEditorSelection = () => {
-  if (typeof window === 'undefined' || !editorContainer.value || (!lastEditorTableSelectionRange && !lastEditorTableSelectionState)) return false
-  const rangeCell = getEditorTableCellFromRange(lastEditorTableSelectionRange)
-  const cell = rangeCell && getEditorEditableFromNode(rangeCell)
-    ? rangeCell
-    : getStoredEditorTableCell(lastEditorTableSelectionState?.editable || null)
-  if (!cell) return false
-  const selection = window.getSelection()
-  if (!selection) return false
-  try {
-    selection.removeAllRanges()
-    if (rangeCell && getEditorEditableFromNode(rangeCell) && lastEditorTableSelectionRange) {
-      selection.addRange(lastEditorTableSelectionRange.cloneRange())
-    } else {
-      const range = document.createRange()
-      range.selectNodeContents(cell)
-      range.collapse(false)
-      selection.addRange(range)
-      lastEditorTableSelectionRange = range.cloneRange()
-    }
-    return true
-  } catch {
-    return false
-  }
-}
-
 const normalizeTableCellInsertion = (value: string) => String(value || '')
   .replace(/\r?\n+/g, ' ')
   .replace(/[\u200b\u200c\ufeff]/g, '')
@@ -4951,13 +4918,11 @@ const insertValueIntoCurrentTableCell = (value: string) => {
   if (!vditorInstance) return false
   const text = normalizeAttachmentSourceText(normalizeTableCellInsertion(value))
   if (!text) return false
-  const shouldRestoreTableSelection = hasAttachmentMarker(text)
-  let cell = getCurrentEditorTableCell(undefined, { allowStoredFallback: shouldRestoreTableSelection })
-  if (!cell && shouldRestoreTableSelection && restoreLastEditorSelection()) {
-    cell = getCurrentEditorTableCell(undefined, { allowStoredFallback: true })
-  }
+  const isAttachmentInsert = hasAttachmentMarker(text)
+  const preparedAttachmentCell = isAttachmentInsert ? consumePreparedEditorTableAttachmentCell() : null
+  let cell = getCurrentEditorTableCell(undefined, { allowStoredFallback: false }) || preparedAttachmentCell
   if (!cell) return false
-  if (hasAttachmentMarker(text)) {
+  if (isAttachmentInsert) {
     const target = getEditorTableCellSourceTarget(cell)
     if (target) {
       const current = target.rowCells[target.cellIndex] || ''
@@ -5026,6 +4991,7 @@ const insertAttachmentSourceValue = (value: string) => {
 defineExpose({
   clear: () => {
     pendingEditorTableCellSync = null
+    pendingEditorTableAttachmentInsertionTarget = null
     editorTableCompositionActive = false
     editorTableCompositionTarget = null
     editorTableCompositionCommitKey = null
@@ -5034,6 +5000,11 @@ defineExpose({
       vditorInstance.setValue('');
       emit("update:modelValue", '');
     }
+  },
+  prepareAttachmentInsert: () => prepareEditorAttachmentInsertionTarget(),
+  clearAttachmentInsertTarget: () => clearPreparedEditorAttachmentInsertionTarget(),
+  focus: () => {
+    getEditorEditableElement()?.focus({ preventScroll: true })
   },
   insertValue: (val: string) => {
     if (vditorInstance) {
@@ -5053,6 +5024,7 @@ defineExpose({
   },
   setValue: (val: string) => {
     pendingEditorTableCellSync = null
+    pendingEditorTableAttachmentInsertionTarget = null
     editorTableCompositionActive = false
     editorTableCompositionTarget = null
     editorTableCompositionCommitKey = null
@@ -5094,9 +5066,11 @@ watch(() => props.theme, (newTheme) => {
 }
 
 .vditor-container .editor-attachment-link {
-  display: inline-block;
+  display: inline;
   max-width: 100%;
-  text-decoration: none;
+  color: var(--ir-bracket-color, #0000ff);
+  text-decoration: underline;
+  text-underline-offset: 2px;
   overflow-wrap: anywhere;
   word-break: break-word;
   -webkit-user-drag: none;
