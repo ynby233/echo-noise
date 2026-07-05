@@ -86,14 +86,20 @@ assert.match(
 
 assert.match(
   editor,
-  /block\.classList\.contains\('vditor-preserved-blank-line'\)[\s\S]+?rawText\.replace\(\/\\u00a0\/g,\s*' '\)/,
+  /block\.classList\.contains\('vditor-preserved-blank-line'\)[\s\S]+?return\s+MARKDOWN_BLANK_LINE_SENTINEL[\s\S]+?rawText\.replace\(\/\\u00a0\/g,\s*' '\)/,
   'plain text block serialization must not save Vditor caret NBSP as normal text'
 )
 
 assert.match(
   editor,
-  /pieces\.join\('\\n'\)/,
-  'plain editor blocks must serialize as logical lines, not paragraph-separated double lines'
+  /const\s+serializePlainEditorLinesAsMarkdown\s*=[\s\S]+?appendPreservedBlankLine[\s\S]+?MARKDOWN_BLANK_LINE_SENTINEL/,
+  'plain editor blank-line blocks must serialize as explicit sentinel paragraphs so preview keeps the same visual count'
+)
+
+assert.match(
+  editor,
+  /return\s+serializePlainEditorLinesAsMarkdown\(pieces\)/,
+  'plain editor blocks must serialize through the line model, not paragraph-separated double lines'
 )
 
 assert.match(
@@ -110,8 +116,32 @@ assert.match(
 
 assert.match(
   editor,
-  /const\s+insertPlainEditorPastedTextWithBlankLines\s*=[\s\S]+?encodeMarkdownExtraBlankLines\(pastedText\)[\s\S]+?materializeEditorPreservedBlankLineBlocks\(root\)/,
-  'pasting text with multiple blank lines must encode and materialize those blank lines before Vditor can collapse them'
+  /const\s+TABLE_CELL_BREAK_PLACEHOLDER\s*=\s*'%%NW_TABLE_BR%%'[\s\S]+?const\s+TABLE_CELL_BREAK_SOURCE_RE\s*=/,
+  'table cell logical line breaks need a non-HTML placeholder for insertValue paths'
+)
+
+assert.match(
+  editor,
+  /const\s+encodePlainEditorPasteValue\s*=[\s\S]+?getMarkdownTableBlocks\(source\)[\s\S]+?block\.lines\.map\(\(line\)\s*=>\s*line\.replace\(TABLE_CELL_BREAK_RE,\s*TABLE_CELL_BREAK_PLACEHOLDER\)\)[\s\S]+?encodeMarkdownExtraBlankLines/,
+  'pasting mixed prose and tables must preserve prose blank lines without letting table cell <br> content split the table'
+)
+
+assert.match(
+  editor,
+  /options\.blockBoundary\s*&&\s*output\s*&&\s*!output\.endsWith\('\\n'\)\)\s*output\s*\+=\s*'\\n'/,
+  'pasted table blocks must keep a real block boundary so following prose is not absorbed as a table row'
+)
+
+assert.match(
+  editor,
+  /acceptNode\(node\)[\s\S]+?\(\?:<br\\s\*\\\/\?\\s\*>|\%\%NW_TABLE_BR\%\%\)/,
+  'table break text-node replacement must scan both raw <br> text and paste placeholders'
+)
+
+assert.match(
+  editor,
+  /const\s+insertPlainEditorPastedTextWithBlankLines\s*=[\s\S]+?encodePlainEditorPasteValue\(pastedText\)[\s\S]+?materializeEditorPreservedBlankLineBlocks\(root\)/,
+  'pasting text with multiple blank lines must normalize and materialize those blank lines before Vditor can collapse them'
 )
 
 assert.match(
@@ -324,8 +354,20 @@ assert.match(
 
 assert.match(
   editor,
-  /const\s+htmlTableCellToEditorText\s*=[\s\S]{0,520}?return\s+normalizeEditorTableCellTextEdges\(clone\.textContent\s*\|\|\s*''\)/,
+  /const\s+htmlTableCellToEditorText\s*=[\s\S]+?startsWithBreak[\s\S]+?endsWithBreak[\s\S]+?if\s*\(text\s*&&\s*startsWithBreak[\s\S]+?if\s*\(text\s*&&\s*endsWithBreak[\s\S]+?return\s+text/,
   'expanded rendered table cells must preserve leading and trailing blank lines when opened for editing'
+)
+
+assert.match(
+  editor,
+  /const\s+mergeRenderedTableCellEdgeBreaks\s*=[\s\S]+?countEdgeLineBreaks[\s\S]+?const\s+mergeRenderedTableEdgeBreaks\s*=/,
+  'expanded table source rows must be merged with rendered edge breaks so source drift cannot erase visual blank lines'
+)
+
+assert.match(
+  tableExpandHandler,
+  /const\s+renderedRows\s*=\s*editableRowsFromRenderedTable\(table\)[\s\S]+?mergeRenderedTableEdgeBreaks\(editableRowsFromTableBlock\(block\),\s*renderedRows\)/,
+  'opening expanded tables must retain rendered leading/trailing cell blank lines even when Vditor source has drifted'
 )
 
 assert.match(

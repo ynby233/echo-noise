@@ -285,6 +285,8 @@ const TABLE_EXPAND_BUTTON_SIZE = TABLE_DELETE_BUTTON_SIZE;
 const INLINE_TABLE_CELL_BOTTOM_EDGE_SHIELD_MIN_PX = 8;
 const INLINE_TABLE_CELL_EDGE_GUARD_PX = 8;
 const TABLE_CELL_BREAK_RE = /<br\s*\/?\s*>/gi;
+const TABLE_CELL_BREAK_PLACEHOLDER = '%%NW_TABLE_BR%%';
+const TABLE_CELL_BREAK_SOURCE_RE = /(?:<br\s*\/?\s*>|%%NW_TABLE_BR%%)/gi;
 const TABLE_CELL_BREAK_TEXT_RE = /^<br\s*\/?\s*>$/i;
 const TABLE_CELL_CARET_ANCHOR = '\u200b';
 const TABLE_CELL_CARET_ANCHOR_RE = /\u200b/g;
@@ -1187,9 +1189,29 @@ const setupAttachmentPreview = () => {
     return clearPlainBlankLineForInput(block!)
   }
 
+  const encodePlainEditorPasteValue = (pastedText: string) => {
+    const source = String(pastedText || '').replace(/\r\n?/g, '\n')
+    const tableBlocks = getMarkdownTableBlocks(source)
+    if (!tableBlocks.length) return encodeMarkdownExtraBlankLines(source)
+    const sourceLines = source.split('\n')
+    let cursor = 0
+    let output = ''
+    const append = (value: string, options: { blockBoundary?: boolean } = {}) => {
+      if (!value) return
+      if (options.blockBoundary && output && !output.endsWith('\n')) output += '\n'
+      output += value
+    }
+    tableBlocks.forEach((block) => {
+      append(encodeMarkdownExtraBlankLines(sourceLines.slice(cursor, block.start).join('\n')))
+      append(block.lines.map((line) => line.replace(TABLE_CELL_BREAK_RE, TABLE_CELL_BREAK_PLACEHOLDER)).join('\n'), { blockBoundary: true })
+      cursor = block.end
+    })
+    append(encodeMarkdownExtraBlankLines(sourceLines.slice(cursor).join('\n')), { blockBoundary: true })
+    return output
+  }
+
   const insertPlainEditorPastedTextWithBlankLines = (event: Event, pastedText: string) => {
     if (!/\n{3,}/.test(pastedText.replace(/\r\n?/g, '\n'))) return false
-    if (/(^|\n)\s*\|.+\|\s*(\n|$)/.test(pastedText)) return false
     const anchorElement = getEventElement(event)
     if (!anchorElement || !root.contains(anchorElement)) return false
     if (anchorElement.closest('.vditor-toolbar, .vditor-panel, .vditor-hint, table, [data-type="code-block"], .vditor-ir__marker--pre')) return false
@@ -1197,7 +1219,7 @@ const setupAttachmentPreview = () => {
     event.preventDefault()
     event.stopPropagation()
     ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
-    vditorInstance.insertValue(encodeMarkdownExtraBlankLines(pastedText))
+    vditorInstance.insertValue(encodePlainEditorPasteValue(pastedText))
     window.setTimeout(() => {
       materializeEditorPreservedBlankLineBlocks(root)
       enhanceEditorTables(root)
@@ -2181,7 +2203,7 @@ const confirmDeleteHoveredTable = () => {
 }
 
 const stripEditorTableCaretAnchors = (value: string) => String(value || '').replace(TABLE_CELL_CARET_ANCHOR_RE, '')
-const stripTableBreakCode = (value: string) => stripEditorTableCaretAnchors(value).replace(TABLE_CELL_BREAK_RE, ' ')
+const stripTableBreakCode = (value: string) => stripEditorTableCaretAnchors(value).replace(TABLE_CELL_BREAK_SOURCE_RE, ' ')
 const decodeMarkdownTablePipeEntities = (value: string) => String(value || '').replace(/&#(?:124|x7c);|&vert;/gi, '|')
 const stripOuterTableCellHorizontalPadding = (value: string) => String(value || '').replace(/^[ \t]+|[ \t]+$/g, '')
 const normalizeEditorTableCellTextEdges = (value: string) => {
@@ -2195,7 +2217,7 @@ const normalizeEditorTableCellTextEdges = (value: string) => {
   return text
 }
 const tableCellSourceToEditorText = (value: string) => {
-  const text = decodeMarkdownTablePipeEntities(String(value || '').replace(TABLE_CELL_BREAK_RE, '\n').replace(/\\\|/g, '|'))
+  const text = decodeMarkdownTablePipeEntities(String(value || '').replace(TABLE_CELL_BREAK_SOURCE_RE, '\n').replace(/\\\|/g, '|'))
   return normalizeEditorTableCellTextEdges(text)
 }
 const escapeTableCellHtml = (value: string) => String(value || '')
@@ -2260,11 +2282,16 @@ const htmlTableCellToEditorText = (cell: HTMLTableCellElement) => {
   const clone = cell.cloneNode(true) as HTMLElement
   clone.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
   replaceAttachmentNodesWithSourceText(clone)
+  const startsWithBreak = /^\s*<br\s*\/?\s*>/i.test(clone.innerHTML || '')
+  const endsWithBreak = /<br\s*\/?\s*>\s*$/i.test(clone.innerHTML || '')
   clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')))
   clone.querySelectorAll('p,div').forEach((block) => {
     if (block.nextSibling) block.after(document.createTextNode('\n'))
   })
-  return normalizeEditorTableCellTextEdges(clone.textContent || '')
+  let text = normalizeEditorTableCellTextEdges(clone.textContent || '')
+  if (text && startsWithBreak && !text.startsWith('\n')) text = `\n${text}`
+  if (text && endsWithBreak && !text.endsWith('\n')) text = `${text}\n`
+  return text
 }
 
 const replaceTableHeaderCells = (table: HTMLTableElement) => {
@@ -2665,6 +2692,26 @@ const editableRowsFromRenderedTable = (table: HTMLTableElement | null) => {
   return Array.from(table.rows).map((row) => Array.from(row.cells).map((cell) => htmlTableCellToEditorText(cell as HTMLTableCellElement)))
 }
 
+const countEdgeLineBreaks = (value: string, edge: 'start' | 'end') => {
+  const match = edge === 'start' ? String(value || '').match(/^\n+/) : String(value || '').match(/\n+$/)
+  return match?.[0].length || 0
+}
+
+const mergeRenderedTableCellEdgeBreaks = (sourceText: string, renderedText: string) => {
+  const source = String(sourceText || '')
+  const rendered = String(renderedText || '')
+  if (!rendered) return source
+  const sourceCore = source.replace(/^\n+|\n+$/g, '')
+  const renderedCore = rendered.replace(/^\n+|\n+$/g, '')
+  if (normalizeTableMatchText(sourceCore) !== normalizeTableMatchText(renderedCore)) return source
+  const leading = Math.max(countEdgeLineBreaks(source, 'start'), countEdgeLineBreaks(rendered, 'start'))
+  const trailing = Math.max(countEdgeLineBreaks(source, 'end'), countEdgeLineBreaks(rendered, 'end'))
+  return `${'\n'.repeat(leading)}${sourceCore}${'\n'.repeat(trailing)}`
+}
+
+const mergeRenderedTableEdgeBreaks = (sourceRows: string[][], renderedRows: string[][]) =>
+  sourceRows.map((row, rowIndex) => row.map((cell, cellIndex) => mergeRenderedTableCellEdgeBreaks(cell, renderedRows[rowIndex]?.[cellIndex] || '')))
+
 const createHtmlTableFromBlock = (block: EditorTableSourceBlock) => {
   if (block.kind !== 'html' || typeof document === 'undefined') return null
   const holder = document.createElement('div')
@@ -2963,8 +3010,26 @@ const serializePlainEditorBlockText = (block: Element) => {
   clone.querySelectorAll('.editor-table-delete-button, .editor-table-expand-button, .editor-attachment-preview').forEach((node) => node.remove())
   clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')))
   const rawText = String(clone.textContent || '').replace(/[\u200b\u200c\ufeff]/g, '')
-  if (block.classList.contains('vditor-preserved-blank-line') || (rawText.includes(MARKDOWN_BLANK_LINE_SENTINEL) && isMarkdownBlankLineSentinel(rawText))) return ''
+  if (block.classList.contains('vditor-preserved-blank-line') || (rawText.includes(MARKDOWN_BLANK_LINE_SENTINEL) && isMarkdownBlankLineSentinel(rawText))) return MARKDOWN_BLANK_LINE_SENTINEL
   return normalizeAttachmentSourceText(rawText.replace(/\u00a0/g, ' ')).replace(/[ \t]+$/g, '')
+}
+
+const serializePlainEditorLinesAsMarkdown = (lines: string[]) => {
+  let output = ''
+  const appendText = (line: string) => {
+    if (!output) output = line
+    else output += `${output.endsWith('\n\n') ? '' : '\n'}${line}`
+  }
+  const appendPreservedBlankLine = () => {
+    output = output.replace(/\n+$/g, '')
+    if (output) output += '\n\n'
+    output += `${MARKDOWN_BLANK_LINE_SENTINEL}\n\n`
+  }
+  lines.forEach((line) => {
+    if (line === MARKDOWN_BLANK_LINE_SENTINEL || line === '') appendPreservedBlankLine()
+    else appendText(line)
+  })
+  return output.replace(/^\n+|\n+$/g, '')
 }
 
 const serializePlainEditorDomAsMarkdown = (editable: HTMLElement) => {
@@ -2977,7 +3042,7 @@ const serializePlainEditorDomAsMarkdown = (editable: HTMLElement) => {
     const text = String(node.textContent || '').replace(/[\u200b\u200c\ufeff]/g, '').replace(/\u00a0/g, ' ')
     if (text) pieces.push(normalizeAttachmentSourceText(text))
   })
-  return encodeMarkdownExtraBlankLines(pieces.join('\n')).replace(/^\n+|\n+$/g, '')
+  return serializePlainEditorLinesAsMarkdown(pieces)
 }
 
 const serializeEditorDomAsMarkdown = (editable: HTMLElement) => {
@@ -2985,7 +3050,7 @@ const serializeEditorDomAsMarkdown = (editable: HTMLElement) => {
   let plainLines: string[] = []
   const flushPlainLines = () => {
     if (!plainLines.length) return
-    const text = encodeMarkdownExtraBlankLines(plainLines.join('\n')).replace(/^\n+|\n+$/g, '')
+    const text = serializePlainEditorLinesAsMarkdown(plainLines)
     if (text) segments.push(text)
     plainLines = []
   }
@@ -4138,7 +4203,8 @@ const openHoveredTableExpand = () => {
   if (!table || !editorContainer.value.contains(table)) return
   const tableIndex = getEditorTables().indexOf(table)
   const block = getEditorTableBlockForTable(table, tableIndex)
-  const rows = block ? editableRowsFromTableBlock(block) : editableRowsFromRenderedTable(table)
+  const renderedRows = editableRowsFromRenderedTable(table)
+  const rows = block ? mergeRenderedTableEdgeBreaks(editableRowsFromTableBlock(block), renderedRows) : renderedRows
   if (!rows.length) return
   if (tableExpandCloseTimer !== null) {
     window.clearTimeout(tableExpandCloseTimer)
@@ -4168,13 +4234,13 @@ const replaceTableBreakTextNodes = (table: HTMLTableElement) => {
     normalizeEditorTableBreakCodeMarkers(cell as HTMLTableCellElement)
     const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, {
       acceptNode(node) {
-        return /<br\s*\/?\s*>/i.test(node.textContent || '') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+        return /(?:<br\s*\/?\s*>|%%NW_TABLE_BR%%)/i.test(node.textContent || '') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
       }
     })
     const nodes: Text[] = []
     while (walker.nextNode()) nodes.push(walker.currentNode as Text)
     nodes.forEach((textNode) => {
-      const parts = String(textNode.textContent || '').split(TABLE_CELL_BREAK_RE)
+      const parts = String(textNode.textContent || '').split(TABLE_CELL_BREAK_SOURCE_RE)
       if (parts.length <= 1) return
       const fragment = document.createDocumentFragment()
       parts.forEach((part, index) => {
