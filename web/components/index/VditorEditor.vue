@@ -660,6 +660,24 @@ const attachmentInfoFromIrLabel = (label: HTMLElement | null) => {
 
 const attachmentInfoToMarkdownSource = (info: EditorAttachmentInfo) => `[${info.title}](${info.url})`
 
+const applyEditorAttachmentLinkAttributes = (anchor: HTMLAnchorElement, info: EditorAttachmentInfo) => {
+  anchor.href = info.url
+  anchor.textContent = info.title
+  anchor.className = 'vditor-ir__link editor-attachment-link'
+  anchor.setAttribute('role', 'button')
+  anchor.setAttribute('aria-label', `预览${info.title}`)
+  anchor.setAttribute('data-attachment-kind', info.type)
+  anchor.setAttribute('data-attachment-url', info.url)
+  anchor.setAttribute('draggable', 'false')
+  anchor.style.cursor = 'pointer'
+  return anchor
+}
+
+const createEditorAttachmentLinkElement = (info: EditorAttachmentInfo) => {
+  const anchor = document.createElement('a')
+  return applyEditorAttachmentLinkAttributes(anchor, info)
+}
+
 const normalizeAttachmentSourceText = (value: string) => {
   RAW_ATTACHMENT_ANCHOR_RE.lastIndex = 0
   const normalizedAnchors = String(value || '').replace(
@@ -720,6 +738,53 @@ const replaceAttachmentNodesWithSourceText = (root: HTMLElement) => {
     const info = attachmentInfoFromAnchor(anchor)
     if (info) anchor.replaceWith(document.createTextNode(attachmentInfoToMarkdownSource(info)))
   })
+}
+
+const materializeAttachmentMarkersInTableCells = (root: HTMLElement) => {
+  if (typeof document === 'undefined') return false
+  let changed = false
+  root.querySelectorAll<HTMLElement>('td,th [data-type="a"]').forEach((node) => {
+    if (node.closest('.editor-attachment-preview, textarea, code, [data-type="code-block"], .vditor-ir__marker--pre')) return
+    const info = attachmentInfoFromIrNode(node)
+    if (!info) return
+    node.replaceWith(createEditorAttachmentLinkElement(info))
+    changed = true
+  })
+  const textNodes: Text[] = []
+  root.querySelectorAll('td,th').forEach((cell) => {
+    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const text = node.textContent || ''
+        ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+        if (!ATTACHMENT_MARKER_GLOBAL_RE.test(text)) return NodeFilter.FILTER_REJECT
+        const parent = node.parentElement
+        if (!parent) return NodeFilter.FILTER_REJECT
+        if (parent.closest('a, [data-type="a"], .editor-attachment-preview, textarea, code, [data-type="code-block"], .vditor-ir__marker--pre')) {
+          return NodeFilter.FILTER_REJECT
+        }
+        return NodeFilter.FILTER_ACCEPT
+      }
+    })
+    while (walker.nextNode()) textNodes.push(walker.currentNode as Text)
+  })
+  textNodes.forEach((textNode) => {
+    const source = normalizeAttachmentSourceText(textNode.textContent || '')
+    ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+    let match: RegExpExecArray | null
+    let lastIndex = 0
+    const fragment = document.createDocumentFragment()
+    while ((match = ATTACHMENT_MARKER_GLOBAL_RE.exec(source))) {
+      if (match.index > lastIndex) fragment.appendChild(document.createTextNode(source.slice(lastIndex, match.index)))
+      const info = normalizeAttachmentInfo(match[1], match[2], match[3])
+      fragment.appendChild(info ? createEditorAttachmentLinkElement(info) : document.createTextNode(match[0]))
+      lastIndex = ATTACHMENT_MARKER_GLOBAL_RE.lastIndex
+    }
+    if (lastIndex === 0) return
+    if (lastIndex < source.length) fragment.appendChild(document.createTextNode(source.slice(lastIndex)))
+    textNode.parentNode?.replaceChild(fragment, textNode)
+    changed = true
+  })
+  return changed
 }
 
 const setupAttachmentPreview = () => {
@@ -900,6 +965,7 @@ const setupAttachmentPreview = () => {
 
   const refreshAttachmentLinks = () => {
     materializeEditorPreservedBlankLineBlocks(root)
+    materializeAttachmentMarkersInTableCells(root)
     root.querySelectorAll('a').forEach((node) => {
       const anchor = node as HTMLAnchorElement
       const info = attachmentInfoFromAnchor(anchor)
@@ -2195,8 +2261,9 @@ const editorAttachmentInfoToHtmlTableAnchor = (info: EditorAttachmentInfo) => {
   return `<a href="${safeUrl}" class="vditor-ir__link editor-attachment-link" role="button" data-attachment-kind="${safeKind}" data-attachment-url="${safeUrl}" draggable="false">${safeTitle}</a>`
 }
 
-const editorTextLineToHtmlTableCellSource = (value: string) => {
-  const source = normalizeAttachmentSourceText(value).trim()
+const editorTextLineToAttachmentAwareTableCellHtml = (value: string, options: { trim?: boolean } = {}) => {
+  const normalizedSource = normalizeAttachmentSourceText(value)
+  const source = options.trim ? normalizedSource.trim() : normalizedSource
   if (!source) return ''
   let output = ''
   let lastIndex = 0
@@ -2214,6 +2281,8 @@ const editorTextLineToHtmlTableCellSource = (value: string) => {
   return output
 }
 
+const editorTextLineToHtmlTableCellSource = (value: string) => editorTextLineToAttachmentAwareTableCellHtml(value, { trim: true })
+
 const editorTextToHtmlTableCellSource = (value: string) => {
   const text = stripEditorTableCaretAnchors(value).replace(/\r\n?/g, '\n')
   const normalized = text
@@ -2228,7 +2297,7 @@ const editorTextToDomTableCellHtml = (value: string) => {
   const text = normalizeAttachmentSourceText(stripEditorTableCaretAnchors(value).replace(/\r\n?/g, '\n'))
   const normalized = text
     .split('\n')
-    .map((line) => escapeTableCellHtml(line))
+    .map((line) => editorTextLineToAttachmentAwareTableCellHtml(line))
     .join('<br />')
   return normalized || '&nbsp;'
 }

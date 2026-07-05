@@ -254,8 +254,20 @@ assert.match(
 
 assert.match(
   editor,
-  /const\s+editorAttachmentInfoToHtmlTableAnchor\s*=[\s\S]+?class="vditor-ir__link editor-attachment-link"[\s\S]+?role="button"[\s\S]+?data-attachment-kind="\$\{safeKind\}"[\s\S]+?data-attachment-url="\$\{safeUrl\}"[\s\S]+?editorTextLineToHtmlTableCellSource[\s\S]+?editorAttachmentInfoToHtmlTableAnchor\(info\)/,
+  /const\s+editorAttachmentInfoToHtmlTableAnchor\s*=[\s\S]+?class="vditor-ir__link editor-attachment-link"[\s\S]+?role="button"[\s\S]+?data-attachment-kind="\$\{safeKind\}"[\s\S]+?data-attachment-url="\$\{safeUrl\}"[\s\S]+?const\s+editorTextLineToAttachmentAwareTableCellHtml\s*=[\s\S]+?editorAttachmentInfoToHtmlTableAnchor\(info\)[\s\S]+?const\s+editorTextLineToHtmlTableCellSource\s*=/,
   'HTML table attachment serialization must produce a Vditor-link-equivalent attachment anchor instead of a bare link'
+)
+
+assert.match(
+  editor,
+  /const\s+materializeAttachmentMarkersInTableCells\s*=[\s\S]+?root\.querySelectorAll<HTMLElement>\('td,th \[data-type="a"\]'\)[\s\S]+?attachmentInfoFromIrNode\(node\)[\s\S]+?node\.replaceWith\(createEditorAttachmentLinkElement\(info\)\)[\s\S]+?root\.querySelectorAll\('td,th'\)[\s\S]+?NodeFilter\.SHOW_TEXT[\s\S]+?parent\.closest\('a, \[data-type="a"\], \.editor-attachment-preview, textarea, code, \[data-type="code-block"\], \.vditor-ir__marker--pre'\)[\s\S]+?createEditorAttachmentLinkElement\(info\)/,
+  'live table cells must materialize both Vditor IR attachment nodes and raw attachment markdown into the same attachment-link nodes without touching links, textareas, or code'
+)
+
+assert.match(
+  editor,
+  /const\s+refreshAttachmentLinks\s*=\s*\(\)\s*=>\s*\{[\s\S]+?materializeEditorPreservedBlankLineBlocks\(root\)[\s\S]+?materializeAttachmentMarkersInTableCells\(root\)[\s\S]+?root\.querySelectorAll\('a'\)/,
+  'attachment refresh must normalize newly inserted table-cell markers before classing existing anchors'
 )
 
 assert.match(
@@ -267,7 +279,7 @@ assert.match(
 assert.doesNotMatch(
   editor,
   /querySelectorAll<HTMLElement>\('td,th'\)\.forEach\(\(cell\)\s*=>\s*renderAttachmentMarkersInEditableRoot\(cell\)\)/,
-  'table cells must keep Vditor native attachment link nodes instead of being rewritten to plain custom anchors'
+  'table cells must not use the old broad custom marker renderer'
 )
 
 assert.doesNotMatch(
@@ -278,8 +290,8 @@ assert.doesNotMatch(
 
 assert.match(
   editor,
-  /const\s+editorTextToDomTableCellHtml\s*=[\s\S]+?escapeTableCellHtml\(line\)[\s\S]+?const\s+setEditorTableDomCellText\s*=[\s\S]+?cell\.innerHTML\s*=\s*editorTextToDomTableCellHtml\(value\)/,
-  'live table-cell DOM mirrors must not reuse HTML-table source serialization that turns attachments into custom anchors'
+  /const\s+editorTextToDomTableCellHtml\s*=[\s\S]+?editorTextLineToAttachmentAwareTableCellHtml\(line\)[\s\S]+?const\s+setEditorTableDomCellText\s*=[\s\S]+?cell\.innerHTML\s*=\s*editorTextToDomTableCellHtml\(value\)/,
+  'live table-cell DOM mirrors must render attachment markers as attachment links immediately instead of waiting for a refresh'
 )
 
 assert.match(
