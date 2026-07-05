@@ -24,6 +24,7 @@
     "test:frontend-layout": "node scripts/frontend-layout-edge-cases.test.mjs",
     "test:access-log": "node scripts/access-log.test.mjs",
     "test:public-music-player": "node scripts/public-music-player.test.mjs",
+    "test:vditor-blank-lines": "node scripts/vditor-blank-lines.test.mjs",
     "postinstall": "nuxt prepare"
   },
   "dependencies": {

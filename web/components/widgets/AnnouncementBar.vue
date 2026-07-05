@@ -50,8 +50,8 @@ watch(() => props.text, () => nextTick(measure))
 :global(html.dark) .announcement-text { color: var(--title-color, #f3f4f6); }
 :global(html:not(.dark)) .announcement-text { color: var(--title-color, #111827); }
 /* 强制公告文本随标题色变化 */
-:deep(.markdown-preview) { display: inline; white-space: nowrap; color: var(--title-color) !important; }
-:deep(.markdown-preview p) { display: inline; margin: 0; color: var(--title-color) !important; }
+:deep(.markdown-preview) { display: inline; white-space: nowrap !important; color: var(--title-color) !important; }
+:deep(.markdown-preview p) { display: inline; margin: 0; white-space: nowrap !important; color: var(--title-color) !important; }
 :deep(.markdown-preview h1),
 :deep(.markdown-preview h2),
 :deep(.markdown-preview h3),

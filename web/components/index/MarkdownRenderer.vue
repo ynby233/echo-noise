@@ -28,6 +28,7 @@ import { useRuntimeConfig } from '#imports';
 import { useMessageStore } from '~/store/message';
 import { ensureFancyboxVideoThumbnail, getVideoElementSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
+import { encodeMarkdownExtraBlankLines } from '~/utils/markdown-blank-lines'
 import Vditor from 'vditor';
 
 // 定义正则表达式
@@ -1787,7 +1788,7 @@ const renderMarkdown = async (markdown: string) => {
 
     // 先处理媒体链接
     const keepImagesFullSize = hasFullImageAttachmentsMarker(markdown ?? '')
-    const renderContent = stripFullImageAttachmentsMarker(markdown ?? '')
+    const renderContent = encodeMarkdownExtraBlankLines(stripFullImageAttachmentsMarker(markdown ?? ''))
     const processedContent = processMediaLinks(renderContent);
 
     // 将裸露的 URL 转为可点击链接（新标签页打开）
@@ -2177,6 +2178,7 @@ watch(() => props.enableGithubCard, () => {
 .markdown-preview p {
   margin: 6px 0 !important;
   line-height: 1.6;
+  white-space: pre-wrap;
 }
 .clickable-tag {
   color: #fb923c !important;

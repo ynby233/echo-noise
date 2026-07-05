@@ -263,6 +263,7 @@ import AudioRecorder from './AudioRecorder.vue'
 import ImageHostingUploader from '~/components/widgets/ImageHostingUploader.vue'
 import { createAudioMarkdown, resolveUploadedMediaUrl, uploadMediaFiles } from '~/utils/media-upload'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
+import { encodeMarkdownExtraBlankLines } from '~/utils/markdown-blank-lines'
 const props = defineProps<{ wide?: boolean }>()
 const containerClass = computed(() => (props.wide ? 'w-full max-w-none' : 'mx-auto w-full sm:max-w-4xl'))
 const isEditorLoading = ref(true)
@@ -288,7 +289,7 @@ const toggleFullImageAttachments = () => {
   fullImageAttachments.value = !fullImageAttachments.value
 }
 const buildPublishContent = (content: string) => {
-  const clean = stripFullImageAttachmentsMarker(content).trim()
+  const clean = encodeMarkdownExtraBlankLines(stripFullImageAttachmentsMarker(content)).trim()
   return fullImageAttachments.value ? `${FULL_IMAGE_ATTACHMENTS_MARKER}\n${clean}` : clean
 }
 // 处理图床上传成功，插入编辑器
@@ -1123,7 +1124,7 @@ watch([MessageContent, fullImageAttachments], ([val]) => {
     const rawValue = String(readSafeEditorContent() || val || "")
     if (rawValue !== MessageContent.value) MessageContent.value = rawValue
     const keepImagesFullSize = fullImageAttachments.value || hasFullImageAttachmentsMarker(rawValue)
-    const previewValue = replaceFileAttachmentMarkersForPreview(replaceAttachmentMarkersForPreview(stripFullImageAttachmentsMarker(rawValue)))
+    const previewValue = replaceFileAttachmentMarkersForPreview(replaceAttachmentMarkersForPreview(encodeMarkdownExtraBlankLines(stripFullImageAttachmentsMarker(rawValue))))
     const raw = await Vditor.md2html(normalizeInlineImageLinks(previewValue));
     MessageContentHtml.value = applyImageGridHTML(raw, keepImagesFullSize);
     nextTick(() => {
