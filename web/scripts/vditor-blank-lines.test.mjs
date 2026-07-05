@@ -8,11 +8,13 @@ const webRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const jiti = createJiti(import.meta.url)
 const {
   MARKDOWN_BLANK_LINE_SENTINEL,
+  MARKDOWN_PRESERVED_BLANK_LINE_CLASS,
   encodeMarkdownExtraBlankLines,
   isMarkdownBlankLineSentinel,
 } = await jiti.import(join(webRoot, 'utils/markdown-blank-lines.ts'))
 
 assert.equal(MARKDOWN_BLANK_LINE_SENTINEL, '\u00a0')
+assert.equal(MARKDOWN_PRESERVED_BLANK_LINE_CLASS, 'markdown-preserved-blank-line')
 assert.equal(isMarkdownBlankLineSentinel('\u00a0'), true)
 assert.equal(isMarkdownBlankLineSentinel('\u200b\u00a0'), true)
 assert.equal(isMarkdownBlankLineSentinel('x'), false)
@@ -104,6 +106,24 @@ assert.match(
   editor,
   /const\s+handlePlainEditorBackspaceAtLineBoundary\s*=/,
   'preserved blank-line deletion must be handled as line-model editing instead of native paragraph merging'
+)
+
+assert.match(
+  editor,
+  /const\s+insertPlainEditorPastedTextWithBlankLines\s*=[\s\S]+?encodeMarkdownExtraBlankLines\(pastedText\)[\s\S]+?materializeEditorPreservedBlankLineBlocks\(root\)/,
+  'pasting text with multiple blank lines must encode and materialize those blank lines before Vditor can collapse them'
+)
+
+assert.match(
+  editor,
+  /if\s*\(handlePlainEditorPasteWithBlankLines\(event\)\)\s*return/,
+  'plain paste blank-line preservation must run before the generic blank-line input cleanup'
+)
+
+assert.match(
+  editor,
+  /document\.addEventListener\('paste',\s*onEditorPaste,\s*true\)[\s\S]+?root\.addEventListener\('paste',\s*onEditorPaste,\s*true\)/,
+  'plain paste blank-line preservation must catch real clipboard paste events before Vditor handles them'
 )
 
 assert.match(
@@ -252,8 +272,26 @@ assert.match(
 
 assert.match(
   editor,
-  /textarea\.style\.background\s*=\s*'transparent'[\s\S]{0,220}?applyInlineEditorTextareaStyle\(textarea,\s*state\.editorStyle\)/,
+  /textarea\.style\.background\s*=\s*'transparent'[\s\S]{0,260}?applyInlineEditorTextareaCellBoxStyle\(textarea,\s*state\)/,
   'inline table textarea must not cover the cell with an opaque block and must render with the original text color'
+)
+
+assert.match(
+  editor,
+  /const\s+applyInlineEditorTextareaCellBoxStyle\s*=[\s\S]+?borderTopWidth[\s\S]+?borderRightWidth[\s\S]+?borderBottomWidth[\s\S]+?borderLeftWidth/,
+  'inline table textarea text origin must include cell borders so editing does not visually twitch by one border pixel'
+)
+
+assert.match(
+  editor,
+  /textarea\.style\.background\s*=\s*'transparent'[\s\S]{0,260}?applyInlineEditorTextareaCellBoxStyle\(textarea,\s*state\)/,
+  'inline table textarea positioning must use the border-compensated cell text box style'
+)
+
+assert.match(
+  editor,
+  /textarea\.style\.visibility\s*=\s*'hidden'[\s\S]{0,260}?positionInlineEditorTableTextarea\(\)[\s\S]{0,260}?cell\.classList\.add\('editor-inline-table-cell-editing'\)[\s\S]{0,180}?textarea\.style\.visibility\s*=\s*'visible'/,
+  'inline table cell text must be hidden only after the textarea is positioned to avoid enter-edit flicker'
 )
 
 assert.match(
@@ -270,6 +308,36 @@ assert.match(
   tableExpandHandler,
   /closeInlineEditorTableTextarea\(\)[\s\S]{0,180}?flushPendingEditorTableCellSourceSync\(\)/,
   'opening the expanded table must first close and commit the inline table textarea before reading rows'
+)
+
+assert.match(
+  editor,
+  /const\s+normalizeEditorTableCellTextEdges\s*=[\s\S]+?stripOuterTableCellHorizontalPadding[\s\S]+?text\.includes\('\\n'\)[\s\S]+?return text/,
+  'table-cell source normalization must preserve leading and trailing logical blank lines instead of trimming them away'
+)
+
+assert.match(
+  editor,
+  /const\s+tableCellSourceToEditorText\s*=[\s\S]{0,260}?return\s+normalizeEditorTableCellTextEdges\(text\)/,
+  'expanded markdown table cells must preserve leading and trailing blank lines when opened for editing'
+)
+
+assert.match(
+  editor,
+  /const\s+htmlTableCellToEditorText\s*=[\s\S]{0,520}?return\s+normalizeEditorTableCellTextEdges\(clone\.textContent\s*\|\|\s*''\)/,
+  'expanded rendered table cells must preserve leading and trailing blank lines when opened for editing'
+)
+
+assert.match(
+  editor,
+  /const\s+inlineEditorTextareaEdgeGuard[^=]*=[\s\S]+?INLINE_TABLE_CELL_EDGE_GUARD_PX[\s\S]+?const\s+inlineEditorTextareaGuardedClientY[^=]*=[\s\S]+?Math\.max\(minY,\s*Math\.min\(maxY,\s*event\.clientY\)\)/,
+  'inline table caret mapping must exclude the cell edge band from valid caret hit testing'
+)
+
+assert.match(
+  editor,
+  /const\s+inlineEditorTextareaLineFromPoint\s*=[\s\S]+?inlineEditorTextareaGuardedClientY\(event,\s*metrics\)[\s\S]+?rawLine/,
+  'initial and subsequent table-cell clicks must use guarded Y coordinates instead of raw border-edge clicks'
 )
 
 assert.doesNotMatch(
@@ -345,9 +413,45 @@ assert.match(
 )
 
 assert.match(
+  addForm,
+  /markMarkdownPreservedBlankLineElements\(root\)/,
+  'composer preview must materialize encoded blank-line sentinels into visible blank-line blocks'
+)
+
+assert.match(
   renderer,
   /encodeMarkdownExtraBlankLines\(stripFullImageAttachmentsMarker\(markdown\s*\?\?\s*''\)\)/,
   'published markdown rendering must pass through the shared blank-line encoder'
+)
+
+assert.match(
+  renderer,
+  /markMarkdownPreservedBlankLineElements\(previewElement\.value\)/,
+  'published markdown rendering must materialize encoded blank-line sentinels into visible blank-line blocks'
+)
+
+assert.match(
+  editor,
+  /materializeEditorPreservedBlankLineBlocks\(root\)/,
+  'editor DOM must materialize encoded blank-line sentinels so edit and preview views stay visually consistent'
+)
+
+assert.match(
+  editor,
+  /markMarkdownPreservedBlankLineElements\(holder\)/,
+  'Vditor preview transform must materialize encoded blank-line sentinels'
+)
+
+assert.match(
+  editor,
+  /const\s+syncEditorDomToVditorValueForPreview\s*=[\s\S]+?getEditorVisibleDomTableSafeValue\(\)[\s\S]+?vditorInstance\.setValue\(nextValue\)/,
+  'Vditor toolbar preview must sync the DOM-preserved editor value before rendering preview'
+)
+
+assert.match(
+  editor,
+  /isPreviewItem\(item\)[\s\S]{0,120}?syncEditorDomToVditorValueForPreview\(\)/,
+  'clicking the Vditor preview toolbar button must run the safe preview sync'
 )
 
 assert.match(

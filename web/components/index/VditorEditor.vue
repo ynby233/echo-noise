@@ -184,7 +184,7 @@ import { useToast } from '#imports'
 import { getFixedCoordinateScale, getFixedRect, positionFloatingMenu, scheduleFloatingMenuPosition } from '~/utils/floating-menu'
 import { captureVideoFirstFrameFromSource, ensureFancyboxVideoThumbnail, getVideoPlaybackFrameForSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
-import { MARKDOWN_BLANK_LINE_SENTINEL, encodeMarkdownExtraBlankLines, isMarkdownBlankLineSentinel } from '~/utils/markdown-blank-lines'
+import { MARKDOWN_BLANK_LINE_SENTINEL, encodeMarkdownExtraBlankLines, isMarkdownBlankLineSentinel, markMarkdownPreservedBlankLineElements } from '~/utils/markdown-blank-lines'
 import Vditor from "vditor";
 import { Fancybox } from "@fancyapps/ui";
 import "@fancyapps/ui/dist/fancybox/fancybox.css";
@@ -283,6 +283,7 @@ let expandedTableRowHeightMeasureTimer: number | null = null;
 const TABLE_DELETE_BUTTON_SIZE = 10;
 const TABLE_EXPAND_BUTTON_SIZE = TABLE_DELETE_BUTTON_SIZE;
 const INLINE_TABLE_CELL_BOTTOM_EDGE_SHIELD_MIN_PX = 8;
+const INLINE_TABLE_CELL_EDGE_GUARD_PX = 8;
 const TABLE_CELL_BREAK_RE = /<br\s*\/?\s*>/gi;
 const TABLE_CELL_BREAK_TEXT_RE = /^<br\s*\/?\s*>$/i;
 const TABLE_CELL_CARET_ANCHOR = '\u200b';
@@ -471,6 +472,7 @@ const transformAttachmentPreviewHtml = (html: string) => {
   if (typeof document === 'undefined' || !html) return html
   const holder = document.createElement('div')
   holder.innerHTML = html
+  markMarkdownPreservedBlankLineElements(holder)
   holder.querySelectorAll('a').forEach((node) => {
     const anchor = node as HTMLAnchorElement
     const info = attachmentInfoFromAnchor(anchor)
@@ -683,6 +685,15 @@ const mergeExpandedCellEditorText = (currentValue: string, editorText: string) =
   const text = String(editorText || '').replace(/\r\n?/g, '\n')
   if (!attachments.length) return text
   return text ? [text, ...attachments].join('\n') : attachments.join('\n')
+}
+
+const materializeEditorPreservedBlankLineBlocks = (root: HTMLElement) => {
+  root.querySelectorAll<HTMLElement>('p[data-block], div[data-block]').forEach((block) => {
+    if (block.closest('table, [data-type="code-block"], .vditor-ir__marker--pre')) return
+    const rawText = block.textContent || ''
+    if (!rawText.includes(MARKDOWN_BLANK_LINE_SENTINEL) || !isMarkdownBlankLineSentinel(rawText)) return
+    setPlainBlankLineBlock(block)
+  })
 }
 
 const replaceAttachmentNodesWithSourceText = (root: HTMLElement) => {
@@ -929,6 +940,7 @@ const setupAttachmentPreview = () => {
   }
 
   const refreshAttachmentLinks = () => {
+    materializeEditorPreservedBlankLineBlocks(root)
     root.querySelectorAll<HTMLElement>('td,th').forEach((cell) => renderAttachmentMarkersInEditableRoot(cell))
     root.querySelectorAll('a').forEach((node) => {
       const anchor = node as HTMLAnchorElement
@@ -1175,6 +1187,36 @@ const setupAttachmentPreview = () => {
     return clearPlainBlankLineForInput(block!)
   }
 
+  const insertPlainEditorPastedTextWithBlankLines = (event: Event, pastedText: string) => {
+    if (!/\n{3,}/.test(pastedText.replace(/\r\n?/g, '\n'))) return false
+    if (/(^|\n)\s*\|.+\|\s*(\n|$)/.test(pastedText)) return false
+    const anchorElement = getEventElement(event)
+    if (!anchorElement || !root.contains(anchorElement)) return false
+    if (anchorElement.closest('.vditor-toolbar, .vditor-panel, .vditor-hint, table, [data-type="code-block"], .vditor-ir__marker--pre')) return false
+    if (!vditorInstance?.insertValue) return false
+    event.preventDefault()
+    event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    vditorInstance.insertValue(encodeMarkdownExtraBlankLines(pastedText))
+    window.setTimeout(() => {
+      materializeEditorPreservedBlankLineBlocks(root)
+      enhanceEditorTables(root)
+      emitEditorValue()
+    }, 0)
+    return true
+  }
+
+  const handlePlainEditorPasteWithBlankLines = (event: InputEvent) => {
+    if (event.inputType !== 'insertFromPaste') return false
+    const pastedText = event.dataTransfer?.getData('text/plain') || event.data || ''
+    return insertPlainEditorPastedTextWithBlankLines(event, pastedText)
+  }
+
+  const onEditorPaste = (event: ClipboardEvent) => {
+    const pastedText = event.clipboardData?.getData('text/plain') || ''
+    insertPlainEditorPastedTextWithBlankLines(event, pastedText)
+  }
+
   const onPlainBlankLineMouseDown = (event: MouseEvent) => {
     const block = getPlainEditorBlock(event.target as Node | null)
     if (!isPlainBlankLineBlock(block)) return
@@ -1255,6 +1297,7 @@ const setupAttachmentPreview = () => {
 
   const onEditorBeforeInput = (event: InputEvent) => {
     if (handleEditorTableBeforeInput(event)) return
+    if (handlePlainEditorPasteWithBlankLines(event)) return
     if (/^(insertText|insertCompositionText|insertFromPaste)$/.test(event.inputType || '')) {
       preparePlainBlankLineInput(event)
       return
@@ -1328,6 +1371,8 @@ const setupAttachmentPreview = () => {
   previewObserver.observe(root, { childList: true, subtree: true })
   document.addEventListener('beforeinput', onEditorBeforeInput, true)
   root.addEventListener('beforeinput', onEditorBeforeInput, true)
+  document.addEventListener('paste', onEditorPaste, true)
+  root.addEventListener('paste', onEditorPaste, true)
   root.addEventListener('input', onEditorInput, true)
   root.addEventListener('compositionstart', onEditorCompositionStart, true)
   root.addEventListener('compositionupdate', onEditorCompositionUpdate, true)
@@ -1357,6 +1402,8 @@ const setupAttachmentPreview = () => {
     previewObserver.disconnect()
     document.removeEventListener('beforeinput', onEditorBeforeInput, true)
     root.removeEventListener('beforeinput', onEditorBeforeInput, true)
+    document.removeEventListener('paste', onEditorPaste, true)
+    root.removeEventListener('paste', onEditorPaste, true)
     root.removeEventListener('input', onEditorInput, true)
     root.removeEventListener('compositionstart', onEditorCompositionStart, true)
     root.removeEventListener('compositionupdate', onEditorCompositionUpdate, true)
@@ -2136,9 +2183,20 @@ const confirmDeleteHoveredTable = () => {
 const stripEditorTableCaretAnchors = (value: string) => String(value || '').replace(TABLE_CELL_CARET_ANCHOR_RE, '')
 const stripTableBreakCode = (value: string) => stripEditorTableCaretAnchors(value).replace(TABLE_CELL_BREAK_RE, ' ')
 const decodeMarkdownTablePipeEntities = (value: string) => String(value || '').replace(/&#(?:124|x7c);|&vert;/gi, '|')
+const stripOuterTableCellHorizontalPadding = (value: string) => String(value || '').replace(/^[ \t]+|[ \t]+$/g, '')
+const normalizeEditorTableCellTextEdges = (value: string) => {
+  const text = stripOuterTableCellHorizontalPadding(
+    normalizeAttachmentSourceText(stripEditorTableCaretAnchors(value).replace(/\r\n?/g, '\n'))
+      .replace(/[\u200b\u200c\ufeff]/g, '')
+      .replace(/\u00a0/g, ' ')
+  )
+  if (MARKDOWN_EMPTY_TABLE_CELL_RE.test(text.trim())) return ''
+  if (!text.includes('\n') && text.trim() === '') return ''
+  return text
+}
 const tableCellSourceToEditorText = (value: string) => {
-  const text = decodeMarkdownTablePipeEntities(stripEditorTableCaretAnchors(value).replace(TABLE_CELL_BREAK_RE, '\n').replace(/\\\|/g, '|')).trim()
-  return MARKDOWN_EMPTY_TABLE_CELL_RE.test(text) ? '' : text
+  const text = decodeMarkdownTablePipeEntities(String(value || '').replace(TABLE_CELL_BREAK_RE, '\n').replace(/\\\|/g, '|'))
+  return normalizeEditorTableCellTextEdges(text)
 }
 const escapeTableCellHtml = (value: string) => String(value || '')
   .replace(/&/g, '&amp;')
@@ -2206,7 +2264,7 @@ const htmlTableCellToEditorText = (cell: HTMLTableCellElement) => {
   clone.querySelectorAll('p,div').forEach((block) => {
     if (block.nextSibling) block.after(document.createTextNode('\n'))
   })
-  return normalizeAttachmentSourceText(stripEditorTableCaretAnchors(clone.textContent || '').replace(/[\u200b\u200c\ufeff]/g, '').replace(/\u00a0/g, ' ')).trim()
+  return normalizeEditorTableCellTextEdges(clone.textContent || '')
 }
 
 const replaceTableHeaderCells = (table: HTMLTableElement) => {
@@ -3003,6 +3061,23 @@ const emitEditorValue = (sourceValue?: string) => {
   emit("update:modelValue", getSafeOutgoingEditorValue(sourceValue))
 }
 
+const syncEditorDomToVditorValueForPreview = () => {
+  if (!vditorInstance?.getValue || !vditorInstance?.setValue) return false
+  closeInlineEditorTableTextarea()
+  flushPendingEditorTableCellSourceSync()
+  const domValue = getEditorVisibleDomTableSafeValue()
+  const nextValue = ensureSafeEditorTableMarkdown(encodeMarkdownExtraBlankLines(domValue || vditorInstance.getValue()))
+  if (!nextValue || nextValue === vditorInstance.getValue()) return false
+  vditorInstance.setValue(nextValue)
+  emitEditorValue(nextValue)
+  window.setTimeout(() => {
+    if (!editorContainer.value) return
+    materializeEditorPreservedBlankLineBlocks(editorContainer.value)
+    enhanceEditorTables(editorContainer.value)
+  }, 0)
+  return true
+}
+
 const getEditorValueWithDomTableSync = (sourceValue = vditorInstance?.getValue?.() || '') => {
   const tables = getEditorTables()
   if (!tables.length) return ensureSafeEditorTableMarkdown(sourceValue)
@@ -3199,6 +3274,16 @@ const applyInlineEditorTextareaStyle = (target: HTMLElement, style: InlineEditor
   if (style.tabSize) target.style.tabSize = style.tabSize
 }
 
+const applyInlineEditorTextareaCellBoxStyle = (target: HTMLElement, state: NonNullable<typeof inlineEditorTableTextareaState>) => {
+  applyInlineEditorTextareaStyle(target, state.editorStyle)
+  const cellStyle = window.getComputedStyle(state.cell)
+  const paddingTop = parseEditorCssPixelValue(cellStyle.paddingTop) + parseEditorCssPixelValue(cellStyle.borderTopWidth)
+  const paddingRight = parseEditorCssPixelValue(cellStyle.paddingRight) + parseEditorCssPixelValue(cellStyle.borderRightWidth)
+  const paddingBottom = parseEditorCssPixelValue(cellStyle.paddingBottom) + parseEditorCssPixelValue(cellStyle.borderBottomWidth)
+  const paddingLeft = parseEditorCssPixelValue(cellStyle.paddingLeft) + parseEditorCssPixelValue(cellStyle.borderLeftWidth)
+  target.style.padding = `${paddingTop}px ${paddingRight}px ${paddingBottom}px ${paddingLeft}px`
+}
+
 const copyInlineEditorTextareaFontStyles = (target: HTMLElement, source: HTMLElement) => {
   applyInlineEditorTextareaStyle(target, captureInlineEditorTextareaStyle(source))
 }
@@ -3295,12 +3380,27 @@ const inlineEditorTextareaVerticalMetrics = (textarea: HTMLTextAreaElement) => {
   }
 }
 
+const inlineEditorTextareaEdgeGuard = (metrics: ReturnType<typeof inlineEditorTextareaVerticalMetrics>) =>
+  Math.max(0, Math.min(INLINE_TABLE_CELL_EDGE_GUARD_PX, metrics.rect.height / 2 - 1))
+
+const inlineEditorTextareaGuardedClientY = (
+  event: MouseEvent,
+  metrics: ReturnType<typeof inlineEditorTextareaVerticalMetrics>
+) => {
+  const guard = inlineEditorTextareaEdgeGuard(metrics)
+  if (guard <= 0) return event.clientY
+  const minY = metrics.rect.top + guard
+  const maxY = Math.max(minY, metrics.rect.bottom - guard - metrics.lineHeight / 2)
+  return Math.max(minY, Math.min(maxY, event.clientY))
+}
+
 const inlineEditorTextareaLineFromPoint = (
   textarea: HTMLTextAreaElement,
   event: MouseEvent,
   metrics = inlineEditorTextareaVerticalMetrics(textarea)
 ) => {
-  const rawLine = Math.floor((event.clientY - metrics.rect.top - metrics.paddingTop) / metrics.lineHeight)
+  const guardedY = inlineEditorTextareaGuardedClientY(event, metrics)
+  const rawLine = Math.floor((guardedY - metrics.rect.top - metrics.paddingTop) / metrics.lineHeight)
   return Math.max(0, Math.min(metrics.maxLine, rawLine))
 }
 
@@ -3326,7 +3426,7 @@ const inlineEditorTextareaCaretFromPoint = (
     return { value, offset: value.length }
   }
   const targetX = event.clientX - textareaRect.left
-  const targetY = Math.min(event.clientY, metrics.shieldTop - 0.5) - textareaRect.top
+  const targetY = Math.min(inlineEditorTextareaGuardedClientY(event, metrics), metrics.shieldTop - 0.5) - textareaRect.top
   const candidates = measureInlineEditorTextareaCaretCandidates(textarea, baseText)
   const best = candidates.reduce((current, candidate) => {
     const currentScore = Math.abs((current.top + current.height / 2) - targetY) * 1000 + Math.abs(current.left - targetX)
@@ -3401,7 +3501,7 @@ const positionInlineEditorTableTextarea = (options: { fitContent?: boolean } = {
   textarea.style.overflow = 'hidden'
   textarea.style.background = 'transparent'
   textarea.style.boxShadow = 'none'
-  applyInlineEditorTextareaStyle(textarea, state.editorStyle)
+  applyInlineEditorTextareaCellBoxStyle(textarea, state)
   if (options.fitContent !== false) resizeInlineEditorTableTextareaToContent()
   else positionInlineEditorTableTextareaBottomShield()
   return true
@@ -3581,15 +3681,17 @@ const openInlineEditorTableCellTextarea = (cell: HTMLTableCellElement, event?: M
     },
     editorStyle,
   }
-  cell.classList.add('editor-inline-table-cell-editing')
-  cell.style.color = 'transparent'
-  cell.style.caretColor = 'transparent'
-  cell.style.textShadow = 'none'
   storeLastEditorTableCell(cell)
+  textarea.style.visibility = 'hidden'
   textarea.value = baseText
   positionInlineEditorTableTextarea()
   const caret = inlineEditorTextareaCaretFromPoint(textarea, cell, baseText, event)
   textarea.value = caret.value
+  cell.classList.add('editor-inline-table-cell-editing')
+  cell.style.color = 'transparent'
+  cell.style.caretColor = 'transparent'
+  cell.style.textShadow = 'none'
+  textarea.style.visibility = 'visible'
   textarea.focus({ preventScroll: true })
   textarea.setSelectionRange(caret.offset, caret.offset)
   return true
@@ -4246,6 +4348,13 @@ const setupVditorPanelPositioning = () => {
     return type === 'table' || /表格|Table/i.test(label)
   }
 
+  const isPreviewItem = (item: HTMLElement | null) => {
+    const action = toolbarAction(item)
+    const type = action?.getAttribute('data-type') || ''
+    const label = action?.getAttribute('aria-label') || action?.getAttribute('title') || ''
+    return type === 'preview' || /预览|Preview/i.test(label)
+  }
+
   const openHeadingMenu = async (item: HTMLElement) => {
     headingTrigger.value = item
     nativeHeadingPanel.value = item.querySelector<HTMLElement>('.vditor-hint, .vditor-panel')
@@ -4277,6 +4386,10 @@ const setupVditorPanelPositioning = () => {
     const target = event.target instanceof Element ? event.target : null
     const item = target?.closest('.vditor-toolbar__item, button[data-type], [role="button"][data-type]') as HTMLElement | null
     if (!item || !editorContainer.value?.contains(item)) return
+    if (isPreviewItem(item)) {
+      syncEditorDomToVditorValueForPreview()
+      return
+    }
     const isHeading = isHeadingsItem(item)
     const isTable = isTableItem(item)
     if (!isHeading && !isTable) return
@@ -5168,6 +5281,12 @@ html.dark .editor-attachment-preview__header,
 .vditor-container .vditor-preserved-blank-line {
   margin-block: 0 !important;
   min-height: 1.5em;
+}
+
+.vditor-container .vditor-preview .markdown-preserved-blank-line {
+  min-height: 1.5em;
+  margin-block: 0 !important;
+  white-space: pre-wrap;
 }
 
 .vditor-container .vditor-ir pre.vditor-reset:empty::before,

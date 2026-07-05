@@ -1,4 +1,5 @@
 export const MARKDOWN_BLANK_LINE_SENTINEL = '\u00a0'
+export const MARKDOWN_PRESERVED_BLANK_LINE_CLASS = 'markdown-preserved-blank-line'
 
 export const isMarkdownBlankLineSentinel = (value: string) => {
   return String(value || '').replace(/[\u200b\u200c\ufeff]/g, '').replace(/\u00a0/g, ' ').trim() === ''
@@ -56,4 +57,16 @@ export const encodeMarkdownExtraBlankLines = (value: string) => {
   }
   flushPlainChunk()
   return result
+}
+
+export const markMarkdownPreservedBlankLineElements = (root: ParentNode | null | undefined) => {
+  if (!root || typeof root.querySelectorAll !== 'function') return
+  root.querySelectorAll<HTMLElement>('p, div').forEach((element) => {
+    if (element.closest('pre, code, table')) return
+    const text = element.textContent || ''
+    if (!text.includes(MARKDOWN_BLANK_LINE_SENTINEL) || !isMarkdownBlankLineSentinel(text)) return
+    element.classList.add(MARKDOWN_PRESERVED_BLANK_LINE_CLASS)
+    element.setAttribute('data-markdown-preserved-blank-line', 'true')
+    element.textContent = MARKDOWN_BLANK_LINE_SENTINEL
+  })
 }

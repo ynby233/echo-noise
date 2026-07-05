@@ -28,7 +28,7 @@ import { useRuntimeConfig } from '#imports';
 import { useMessageStore } from '~/store/message';
 import { ensureFancyboxVideoThumbnail, getVideoElementSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
-import { encodeMarkdownExtraBlankLines } from '~/utils/markdown-blank-lines'
+import { encodeMarkdownExtraBlankLines, markMarkdownPreservedBlankLineElements } from '~/utils/markdown-blank-lines'
 import Vditor from 'vditor';
 
 // 定义正则表达式
@@ -1840,6 +1840,7 @@ const renderMarkdown = async (markdown: string) => {
               link.setAttribute('rel', 'noopener noreferrer');
             }
           });
+          markMarkdownPreservedBlankLineElements(previewElement.value)
           applyAttachmentRenders()
           applyThemeClass();
           const anchors = previewElement.value?.querySelectorAll('a[href]') || [] as any;
@@ -2178,6 +2179,12 @@ watch(() => props.enableGithubCard, () => {
 .markdown-preview p {
   margin: 6px 0 !important;
   line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.markdown-preview .markdown-preserved-blank-line {
+  min-height: 1.6em;
+  margin: 0 !important;
   white-space: pre-wrap;
 }
 .clickable-tag {

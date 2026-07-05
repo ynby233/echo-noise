@@ -263,7 +263,7 @@ import AudioRecorder from './AudioRecorder.vue'
 import ImageHostingUploader from '~/components/widgets/ImageHostingUploader.vue'
 import { createAudioMarkdown, resolveUploadedMediaUrl, uploadMediaFiles } from '~/utils/media-upload'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
-import { encodeMarkdownExtraBlankLines } from '~/utils/markdown-blank-lines'
+import { encodeMarkdownExtraBlankLines, markMarkdownPreservedBlankLineElements } from '~/utils/markdown-blank-lines'
 const props = defineProps<{ wide?: boolean }>()
 const containerClass = computed(() => (props.wide ? 'w-full max-w-none' : 'mx-auto w-full sm:max-w-4xl'))
 const isEditorLoading = ref(true)
@@ -1130,6 +1130,7 @@ watch([MessageContent, fullImageAttachments], ([val]) => {
     nextTick(() => {
       const roots = document.querySelectorAll('.editor-preview');
       roots.forEach((root) => {
+        markMarkdownPreservedBlankLineElements(root)
         root.querySelectorAll('.image-grid-item img').forEach((imgEl) => {
           const img = imgEl as HTMLImageElement;
           const parent = img.parentElement as HTMLElement;
@@ -1299,6 +1300,11 @@ html.dark .editor-toolbar :deep(.u-button) { border:none !important; box-shadow:
 html.dark .upload-progress-track { background: rgba(255,255,255,0.14); }
 html.dark .upload-progress-text { color: rgba(226,232,240,0.72); }
 .editor-preview p { margin: 0.5rem 0; }
+.editor-preview .markdown-preserved-blank-line {
+  min-height: 1.5em;
+  margin: 0 !important;
+  white-space: pre-wrap;
+}
 .editor-preview img { margin: 0.4rem 0; }
 .editor-preview .inline-image-thumb {
   width: var(--inline-image-thumb-size);
