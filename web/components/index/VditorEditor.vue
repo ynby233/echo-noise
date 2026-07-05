@@ -803,12 +803,11 @@ const setupAttachmentPreview = () => {
     scheduleCollapseIrAttachmentChrome()
   }
 
-  const commitEditorTableCellDomEdit = (cell: HTMLTableCellElement, options: { emit?: boolean; stabilize?: boolean; renderAttachments?: boolean } = {}) => {
-    if (options.renderAttachments !== false) renderAttachmentMarkersInEditableRoot(cell)
+  const commitEditorTableCellDomEdit = (cell: HTMLTableCellElement, options: { emit?: boolean; stabilize?: boolean } = {}) => {
     markEditorTableCellSourceDirty(cell)
     captureEditorSelection()
     if (options.stabilize !== false) scheduleStabilizePendingEditorTableCellDom()
-    if (options.renderAttachments !== false) scheduleRefreshAttachmentLinks()
+    scheduleRefreshAttachmentLinks()
     if (options.emit === false) return
     const emitSafeValue = () => emitEditorValue()
     emitSafeValue()
@@ -865,7 +864,6 @@ const setupAttachmentPreview = () => {
       commitEditorTableCellDomEdit(cell, {
         emit: !editorTableCompositionActive,
         stabilize: !editorTableCompositionActive,
-        renderAttachments: !editorTableCompositionActive,
       })
       return
     }
@@ -943,7 +941,6 @@ const setupAttachmentPreview = () => {
 
   const refreshAttachmentLinks = () => {
     materializeEditorPreservedBlankLineBlocks(root)
-    root.querySelectorAll<HTMLElement>('td,th').forEach((cell) => renderAttachmentMarkersInEditableRoot(cell))
     root.querySelectorAll('a').forEach((node) => {
       const anchor = node as HTMLAnchorElement
       const info = attachmentInfoFromAnchor(anchor)
@@ -2255,6 +2252,15 @@ const editorTextToHtmlTableCellSource = (value: string) => {
     .map((line) => editorTextLineToHtmlTableCellSource(line))
     .join('<br />')
     .trim()
+  return normalized || '&nbsp;'
+}
+
+const editorTextToDomTableCellHtml = (value: string) => {
+  const text = normalizeAttachmentSourceText(stripEditorTableCaretAnchors(value).replace(/\r\n?/g, '\n'))
+  const normalized = text
+    .split('\n')
+    .map((line) => escapeTableCellHtml(line))
+    .join('<br />')
   return normalized || '&nbsp;'
 }
 
@@ -3856,7 +3862,7 @@ const clearVditorCompositionLock = () => {
 }
 
 const setEditorTableDomCellText = (cell: HTMLTableCellElement, value: string, withCaretAnchor = false) => {
-  cell.innerHTML = editorTextToHtmlTableCellSource(value)
+  cell.innerHTML = editorTextToDomTableCellHtml(value)
   if (withCaretAnchor) cell.appendChild(createEditorTableCaretAnchorNode())
 }
 
@@ -4742,6 +4748,14 @@ const getEditorTableCellFromEvent = (event?: Event) => {
   return getEditorTableCellFromElement(element)
 }
 
+const clearLastEditorTableSelection = () => {
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
+  if (getEditorTableCellFromRange(range)) selection?.removeAllRanges()
+  lastEditorTableSelectionRange = null
+  lastEditorTableSelectionState = null
+}
+
 const EDITOR_EDITABLE_SELECTOR = '.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset'
 
 const getEditorEditableFromNode = (node: Node | null | undefined) => {
@@ -4919,7 +4933,13 @@ const insertValueIntoCurrentTableCell = (value: string) => {
     if (target) {
       const current = target.rowCells[target.cellIndex] || ''
       const separator = current && !/\s$/.test(current) ? ' ' : ''
-      return applyEditorTableCellSourceValue(cell, `${current}${separator}${text}`, { restoreCaret: true })
+      const inserted = applyEditorTableCellSourceValue(cell, `${current}${separator}${text}`)
+      if (inserted) {
+        clearLastEditorTableSelection()
+        refreshAttachmentLinksFromEditor()
+        window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
+      }
+      return inserted
     }
   }
   const selection = window.getSelection()
@@ -4966,6 +4986,7 @@ const insertAttachmentSourceValue = (value: string) => {
   const base = currentValue.replace(/\s+$/g, '')
   const nextValue = base ? `${base}\n\n${normalized}` : normalized
   vditorInstance.setValue(nextValue)
+  clearLastEditorTableSelection()
   normalizeEditorAttachmentSource()
   refreshAttachmentLinksFromEditor()
   window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)

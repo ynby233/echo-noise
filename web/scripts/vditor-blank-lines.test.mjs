@@ -158,6 +158,42 @@ assert.match(
 
 assert.match(
   editor,
+  /const\s+clearLastEditorTableSelection\s*=\s*\(\)\s*=>\s*\{[\s\S]+?lastEditorTableSelectionRange\s*=\s*null[\s\S]+?lastEditorTableSelectionState\s*=\s*null[\s\S]+?\}/,
+  'table-cell fallback selection must have a single cleanup path'
+)
+
+assert.match(
+  editor,
+  /const\s+clearLastEditorTableSelection\s*=\s*\(\)\s*=>\s*\{[\s\S]+?getEditorTableCellFromRange\(range\)[\s\S]+?selection\?\.removeAllRanges\(\)[\s\S]+?lastEditorTableSelectionRange\s*=\s*null/,
+  'table-cell fallback cleanup must also drop a stale DOM selection left behind by the file picker'
+)
+
+assert.match(
+  editor,
+  /if\s*\(hasAttachmentMarker\(text\)\)\s*\{[\s\S]+?applyEditorTableCellSourceValue\(cell,\s*`\$\{current\}\$\{separator\}\$\{text\}`\)[\s\S]+?clearLastEditorTableSelection\(\)[\s\S]+?refreshAttachmentLinksFromEditor\(\)/,
+  'attachment insertion into a table cell must consume the stored table target instead of trapping future uploads'
+)
+
+assert.match(
+  editor,
+  /const\s+insertAttachmentSourceValue\s*=[\s\S]+?vditorInstance\.setValue\(nextValue\)[\s\S]+?clearLastEditorTableSelection\(\)/,
+  'attachment insertion outside tables must clear stale table fallback before appending to the editor body'
+)
+
+assert.doesNotMatch(
+  editor,
+  /querySelectorAll<HTMLElement>\('td,th'\)\.forEach\(\(cell\)\s*=>\s*renderAttachmentMarkersInEditableRoot\(cell\)\)/,
+  'table cells must keep Vditor native attachment link nodes instead of being rewritten to plain custom anchors'
+)
+
+assert.match(
+  editor,
+  /const\s+editorTextToDomTableCellHtml\s*=[\s\S]+?escapeTableCellHtml\(line\)[\s\S]+?const\s+setEditorTableDomCellText\s*=[\s\S]+?cell\.innerHTML\s*=\s*editorTextToDomTableCellHtml\(value\)/,
+  'live table-cell DOM mirrors must not reuse HTML-table source serialization that turns attachments into custom anchors'
+)
+
+assert.match(
+  editor,
   /const\s+handleEditorTableBackspaceAtLineBoundary\s*=/,
   'table-cell Backspace at line boundaries must stay inside the current cell'
 )
@@ -420,8 +456,14 @@ assert.match(
 
 assert.match(
   editor,
-  /commitEditorTableCellDomEdit\(cell,\s*\{[\s\S]{0,180}?stabilize:\s*!editorTableCompositionActive[\s\S]{0,120}?renderAttachments:\s*!editorTableCompositionActive/,
-  'table-cell IME input must not rerender or stabilize the live cell DOM before compositionend'
+  /commitEditorTableCellDomEdit\(cell,\s*\{[\s\S]{0,180}?stabilize:\s*!editorTableCompositionActive[\s\S]{0,120}?\}\)/,
+  'table-cell IME input must not stabilize the live cell DOM before compositionend'
+)
+
+assert.doesNotMatch(
+  editor,
+  /renderAttachments:\s*!editorTableCompositionActive/,
+  'table-cell IME input must not request custom attachment rerendering that bypasses Vditor native link nodes'
 )
 
 assert.match(
