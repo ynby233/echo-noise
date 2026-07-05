@@ -431,7 +431,7 @@ const hasAttachmentMarker = (value: string) => {
 const normalizeAdjacentAttachmentMarkers = (value: string) => String(value || '').replace(ADJACENT_ATTACHMENT_MARKER_RE, '$1 $2')
 
 const normalizeAttachmentInsertValue = (value: string) => {
-  const raw = String(value || '')
+  const raw = normalizeAttachmentSourceText(String(value || ''))
   if (!hasAttachmentMarker(raw)) return raw
   const normalized = normalizeAdjacentAttachmentMarkers(raw.trim())
   return `\n\n${normalized}\n\n`
@@ -657,9 +657,17 @@ const attachmentInfoToMarkdownSource = (info: EditorAttachmentInfo) => `[${info.
 
 const normalizeAttachmentSourceText = (value: string) => {
   RAW_ATTACHMENT_ANCHOR_RE.lastIndex = 0
-  return String(value || '').replace(
+  const normalizedAnchors = String(value || '').replace(
     RAW_ATTACHMENT_ANCHOR_RE,
     (_match, url, kindLabel, name) => {
+      const info = normalizeAttachmentInfo(kindLabel, name, url)
+      return info ? attachmentInfoToMarkdownSource(info) : _match
+    }
+  )
+  ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+  return normalizedAnchors.replace(
+    ATTACHMENT_MARKER_GLOBAL_RE,
+    (_match, kindLabel, name, url) => {
       const info = normalizeAttachmentInfo(kindLabel, name, url)
       return info ? attachmentInfoToMarkdownSource(info) : _match
     }
@@ -2226,6 +2234,13 @@ const escapeTableCellHtml = (value: string) => String(value || '')
 
 const escapeHtmlAttribute = (value: string) => escapeTableCellHtml(value).replace(/`/g, '&#96;')
 
+const editorAttachmentInfoToHtmlTableAnchor = (info: EditorAttachmentInfo) => {
+  const safeUrl = escapeHtmlAttribute(info.url)
+  const safeTitle = escapeTableCellHtml(info.title)
+  const safeKind = escapeHtmlAttribute(info.type)
+  return `<a href="${safeUrl}" class="editor-attachment-link" data-attachment-kind="${safeKind}" data-attachment-url="${safeUrl}" draggable="false">${safeTitle}</a>`
+}
+
 const editorTextLineToHtmlTableCellSource = (value: string) => {
   const source = normalizeAttachmentSourceText(value).trim()
   if (!source) return ''
@@ -2237,7 +2252,7 @@ const editorTextLineToHtmlTableCellSource = (value: string) => {
     output += escapeTableCellHtml(source.slice(lastIndex, match.index))
     const info = normalizeAttachmentInfo(match[1], match[2], match[3])
     output += info
-      ? `<a href="${escapeHtmlAttribute(info.url)}">${escapeTableCellHtml(info.title)}</a>`
+      ? editorAttachmentInfoToHtmlTableAnchor(info)
       : escapeTableCellHtml(match[0])
     lastIndex = ATTACHMENT_MARKER_GLOBAL_RE.lastIndex
   }
@@ -4750,10 +4765,23 @@ const getEditorTableCellFromEvent = (event?: Event) => {
 
 const clearLastEditorTableSelection = () => {
   const selection = typeof window === 'undefined' ? null : window.getSelection()
-  const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
-  if (getEditorTableCellFromRange(range)) selection?.removeAllRanges()
+  selection?.removeAllRanges()
+  lastEditorSelectionRange = null
   lastEditorTableSelectionRange = null
   lastEditorTableSelectionState = null
+}
+
+const clearConsumedEditorTableInsertionState = () => {
+  closeInlineEditorTableTextarea()
+  pendingEditorTableCellSync = null
+  editorTableCompositionActive = false
+  editorTableCompositionTarget = null
+  editorTableCompositionSnapshot = null
+  editorTableCompositionStartText = ''
+  editorTableCompositionStartPrefix = ''
+  editorTableCompositionCommitKey = null
+  editorTableCompositionCaretTarget = null
+  clearLastEditorTableSelection()
 }
 
 const EDITOR_EDITABLE_SELECTOR = '.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset'
@@ -4916,11 +4944,12 @@ const restoreLastEditorSelection = () => {
 
 const normalizeTableCellInsertion = (value: string) => String(value || '')
   .replace(/\r?\n+/g, ' ')
+  .replace(/[\u200b\u200c\ufeff]/g, '')
   .trim()
 
 const insertValueIntoCurrentTableCell = (value: string) => {
   if (!vditorInstance) return false
-  const text = normalizeTableCellInsertion(value)
+  const text = normalizeAttachmentSourceText(normalizeTableCellInsertion(value))
   if (!text) return false
   const shouldRestoreTableSelection = hasAttachmentMarker(text)
   let cell = getCurrentEditorTableCell(undefined, { allowStoredFallback: shouldRestoreTableSelection })
@@ -4935,7 +4964,7 @@ const insertValueIntoCurrentTableCell = (value: string) => {
       const separator = current && !/\s$/.test(current) ? ' ' : ''
       const inserted = applyEditorTableCellSourceValue(cell, `${current}${separator}${text}`)
       if (inserted) {
-        clearLastEditorTableSelection()
+        clearConsumedEditorTableInsertionState()
         refreshAttachmentLinksFromEditor()
         window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
       }
@@ -4986,7 +5015,7 @@ const insertAttachmentSourceValue = (value: string) => {
   const base = currentValue.replace(/\s+$/g, '')
   const nextValue = base ? `${base}\n\n${normalized}` : normalized
   vditorInstance.setValue(nextValue)
-  clearLastEditorTableSelection()
+  clearConsumedEditorTableInsertionState()
   normalizeEditorAttachmentSource()
   refreshAttachmentLinksFromEditor()
   window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
@@ -5065,8 +5094,11 @@ watch(() => props.theme, (newTheme) => {
 }
 
 .vditor-container .editor-attachment-link {
-  text-decoration-style: dotted;
-  text-underline-offset: 3px;
+  display: inline-block;
+  max-width: 100%;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   -webkit-user-drag: none;
   pointer-events: auto;
 }

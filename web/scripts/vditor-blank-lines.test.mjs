@@ -164,20 +164,50 @@ assert.match(
 
 assert.match(
   editor,
-  /const\s+clearLastEditorTableSelection\s*=\s*\(\)\s*=>\s*\{[\s\S]+?getEditorTableCellFromRange\(range\)[\s\S]+?selection\?\.removeAllRanges\(\)[\s\S]+?lastEditorTableSelectionRange\s*=\s*null/,
-  'table-cell fallback cleanup must also drop a stale DOM selection left behind by the file picker'
+  /const\s+clearLastEditorTableSelection\s*=\s*\(\)\s*=>\s*\{[\s\S]+?selection\?\.removeAllRanges\(\)[\s\S]+?lastEditorSelectionRange\s*=\s*null[\s\S]+?lastEditorTableSelectionRange\s*=\s*null/,
+  'table-cell fallback cleanup must unconditionally drop stale DOM selection left behind by the file picker'
 )
 
 assert.match(
   editor,
-  /if\s*\(hasAttachmentMarker\(text\)\)\s*\{[\s\S]+?applyEditorTableCellSourceValue\(cell,\s*`\$\{current\}\$\{separator\}\$\{text\}`\)[\s\S]+?clearLastEditorTableSelection\(\)[\s\S]+?refreshAttachmentLinksFromEditor\(\)/,
+  /const\s+clearConsumedEditorTableInsertionState\s*=\s*\(\)\s*=>\s*\{[\s\S]+?closeInlineEditorTableTextarea\(\)[\s\S]+?pendingEditorTableCellSync\s*=\s*null[\s\S]+?editorTableCompositionTarget\s*=\s*null[\s\S]+?clearLastEditorTableSelection\(\)/,
+  'programmatic attachment insertion must consume pending table edit and selection state in one cleanup path'
+)
+
+assert.match(
+  editor,
+  /if\s*\(hasAttachmentMarker\(text\)\)\s*\{[\s\S]+?applyEditorTableCellSourceValue\(cell,\s*`\$\{current\}\$\{separator\}\$\{text\}`\)[\s\S]+?clearConsumedEditorTableInsertionState\(\)[\s\S]+?refreshAttachmentLinksFromEditor\(\)/,
   'attachment insertion into a table cell must consume the stored table target instead of trapping future uploads'
 )
 
 assert.match(
   editor,
-  /const\s+insertAttachmentSourceValue\s*=[\s\S]+?vditorInstance\.setValue\(nextValue\)[\s\S]+?clearLastEditorTableSelection\(\)/,
+  /const\s+insertAttachmentSourceValue\s*=[\s\S]+?vditorInstance\.setValue\(nextValue\)[\s\S]+?clearConsumedEditorTableInsertionState\(\)/,
   'attachment insertion outside tables must clear stale table fallback before appending to the editor body'
+)
+
+assert.match(
+  editor,
+  /const\s+normalizeAttachmentSourceText\s*=[\s\S]+?ATTACHMENT_MARKER_GLOBAL_RE\.lastIndex\s*=\s*0[\s\S]+?normalizedAnchors\.replace\([\s\S]+?ATTACHMENT_MARKER_GLOBAL_RE[\s\S]+?attachmentInfoToMarkdownSource\(info\)/,
+  'attachment source normalization must canonicalize image-style ![] attachment markers to link-style attachment markers'
+)
+
+assert.match(
+  editor,
+  /const\s+normalizeAttachmentInsertValue\s*=[\s\S]+?const\s+raw\s*=\s*normalizeAttachmentSourceText\(String\(value\s*\|\|\s*''\)\)/,
+  'programmatic attachment insertion must normalize attachment markers before choosing table or body insertion'
+)
+
+assert.match(
+  editor,
+  /const\s+editorAttachmentInfoToHtmlTableAnchor\s*=[\s\S]+?class="editor-attachment-link"[\s\S]+?data-attachment-kind="\$\{safeKind\}"[\s\S]+?data-attachment-url="\$\{safeUrl\}"[\s\S]+?editorTextLineToHtmlTableCellSource[\s\S]+?editorAttachmentInfoToHtmlTableAnchor\(info\)/,
+  'HTML table attachment serialization must produce an attachment-equivalent anchor instead of a bare link'
+)
+
+assert.match(
+  editor,
+  /\.vditor-container\s+\.editor-attachment-link\s*\{[\s\S]+?text-decoration:\s*none;[\s\S]+?overflow-wrap:\s*anywhere;[\s\S]+?word-break:\s*break-word;/,
+  'HTML-table attachment anchors must share marker-like visual treatment instead of looking like raw links'
 )
 
 assert.doesNotMatch(
