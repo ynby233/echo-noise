@@ -176,6 +176,18 @@ assert.match(
 
 assert.match(
   editor,
+  /const\s+clearConsumedEditorTableAttachmentTargetState\s*=\s*\(\)\s*=>\s*\{[\s\S]+?closeInlineEditorTableTextarea\(\)[\s\S]+?pendingEditorTableCellSync\s*=\s*null[\s\S]+?clearPreparedEditorAttachmentInsertionTarget\(\)[\s\S]+?clearLastEditorTableSelection\(\)[\s\S]+?\}/,
+  'table attachment insertion must consume stale upload targets and pending table sync state after emitting the safe source'
+)
+
+assert.match(
+  editor,
+  /const\s+syncInlineEditorTableTextareaToCell\s*=[\s\S]+?markEditorTableCellSourceDirty\(state\.cell,\s*value\)[\s\S]+?state\.dirty\s*=\s*false[\s\S]+?return\s+true/,
+  'syncing the inline table textarea before opening the file picker must mark it clean so closing it cannot overwrite an uploaded attachment'
+)
+
+assert.match(
+  editor,
   /const\s+isAttachmentInsert\s*=\s*hasAttachmentMarker\(text\)[\s\S]+?const\s+preparedAttachmentCell\s*=\s*isAttachmentInsert\s*\?\s*consumePreparedEditorTableAttachmentCell\(\)\s*:\s*null[\s\S]+?isAttachmentInsert[\s\S]+?\?\s*\(preparedAttachmentCell\s*\|\|\s*getCurrentEditorTableCell\(undefined,\s*\{\s*allowStoredFallback:\s*false\s*\}\)\)/,
   'attachment insertion into a table cell must prefer the one-shot upload target over the post-file-picker selection'
 )
@@ -194,14 +206,56 @@ assert.match(
 
 assert.match(
   editor,
-  /const\s+getStoredEditorTableCellForAttachmentInsertion\s*=[\s\S]+?EDITOR_TABLE_ATTACHMENT_CANDIDATE_TTL_MS[\s\S]+?rangeEditable\s*&&\s*!getEditorTableCellFromRange\(range\)[\s\S]+?getStoredEditorTableCell\(lastEditorTableSelectionState\.editable\)[\s\S]+?const\s+prepareEditorAttachmentInsertionTarget\s*=[\s\S]+?getActiveEditorTableCellForAttachmentInsertion\(\)\s*\|\|\s*getStoredEditorTableCellForAttachmentInsertion\(\)/,
-  'upload activation must be able to freeze the last live table cell after toolbar focus has closed the inline editor, without using stale non-table selections'
+  /const\s+prepareEditorAttachmentInsertionTarget\s*=[\s\S]+?clearPreparedEditorAttachmentInsertionTarget\(\)[\s\S]+?const\s+cell\s*=\s*getActiveEditorTableCellForAttachmentInsertion\(\)[\s\S]+?pendingEditorTableAttachmentInsertionTarget\s*=\s*\{/,
+  'upload activation must freeze only the current live table cell, not resurrect a historical table selection'
+)
+
+assert.doesNotMatch(
+  editor,
+  /getStoredEditorTableCellForAttachmentInsertion|EDITOR_TABLE_ATTACHMENT_CANDIDATE_TTL_MS|getActiveEditorTableCellForAttachmentInsertion\(\)\s*\|\|\s*getStoredEditorTableCell/,
+  'attachment upload target preparation must not fall back to stale table-cell history after the user moved out of the table'
 )
 
 assert.match(
   editor,
-  /const\s+insertAttachmentIntoTableCellDomFallback\s*=[\s\S]+?setEditorTableDomCellText\(cell,\s*nextText\)[\s\S]+?markEditorTableCellSourceDirty\(cell,\s*nextText\)[\s\S]+?clearConsumedEditorTableInsertionState\(\)[\s\S]+?if\s*\(!synced\)\s*window\.setTimeout\(\(\)\s*=>\s*emitEditorValue\(\),\s*0\)[\s\S]+?return\s+true/,
-  'if a prepared table target cannot be source-matched immediately, insertion must stay in that cell instead of falling through below the table'
+  /const\s+insertAttachmentIntoTableCellWithoutVditorReset\s*=[\s\S]+?setEditorTableDomCellText\(cell,\s*nextText\)[\s\S]+?markEditorTableCellSourceDirty\(cell,\s*nextText\)[\s\S]+?buildEditorTableCellSourceValue\(cell,\s*nextText\)[\s\S]+?clearConsumedEditorTableAttachmentTargetState\(\)[\s\S]+?emitKnownEditorSourceValue\(result\.value\)[\s\S]+?return\s+true/,
+  'table attachment upload insertion must update the target cell and emitted source without calling Vditor setValue'
+)
+
+const tableAttachmentInsertHelper = editor.match(/const\s+insertAttachmentIntoTableCellWithoutVditorReset\s*=[\s\S]+?\n}\n\nconst\s+insertValueIntoCurrentTableCell/)
+assert.ok(tableAttachmentInsertHelper, 'table attachment insertion helper must exist')
+assert.doesNotMatch(
+  tableAttachmentInsertHelper[0],
+  /flushPendingEditorTableCellSourceSync|applyEditorTableCellSourceValue|vditorInstance\.setValue/,
+  'table attachment insertion helper must not flush through Vditor source APIs or force a full rerender'
+)
+
+assert.doesNotMatch(
+  editor,
+  /if\s*\(isAttachmentInsert\)\s*\{[\s\S]+?applyEditorTableCellSourceValue\(cell,/,
+  'table attachment insertion must not call applyEditorTableCellSourceValue because that forces a full Vditor rerender after uploads'
+)
+
+assert.match(
+  editor,
+  /const\s+insertAttachmentSourceValue\s*=[\s\S]+?const\s+currentValue\s*=\s*getEditorValueWithPendingTableSync\(\)\s*\|\|\s*getRawVditorValue\(\)[\s\S]+?vditorInstance\.setValue\(nextValue\)/,
+  'attachments inserted after a table edit must append to the safe DOM-synced editor value, not stale raw Vditor content'
+)
+
+assert.match(
+  editor,
+  /const\s+getRawVditorValue\s*=\s*\(\)\s*=>\s*\{[\s\S]+?try\s*\{[\s\S]+?vditorInstance\?\.getValue\?\.\(\)[\s\S]+?\}\s*catch\s*\{[\s\S]+?return\s+''[\s\S]+?\}/,
+  'table enhancement and attachment insertion must tolerate Vditor lifecycle timing where getValue can throw before the internal editor is ready'
+)
+
+const exposedInsertValue = editor.match(/insertValue:\s*\(val:\s*string\)\s*=>\s*\{[\s\S]+?\r?\n\s+\},\r?\n\s+getValue:/)
+assert.ok(exposedInsertValue, 'VditorEditor exposed insertValue method must exist')
+const exposedInsertValueSource = exposedInsertValue[0]
+const attachmentBodyInsertIndex = exposedInsertValueSource.indexOf('insertAttachmentSourceValue(nextValue)')
+const pendingFlushIndex = exposedInsertValueSource.indexOf('flushPendingEditorTableCellSourceSync()')
+assert.ok(
+  attachmentBodyInsertIndex >= 0 && (pendingFlushIndex < 0 || attachmentBodyInsertIndex < pendingFlushIndex),
+  'attachment insertion outside a table must use the DOM-synced value before any pending table flush can force a full Vditor rerender'
 )
 
 assert.match(
@@ -218,8 +272,14 @@ assert.match(
 
 assert.match(
   addForm,
-  /const\s+triggerFileInput\s*=\s*\(\)\s*=>\s*\{[\s\S]+?prepareEditorAttachmentInsert\(\)[\s\S]+?fileInput\.value\?\.click\(\)/,
-  'the attachment upload click path must also prepare the table target for keyboard activation and browser focus timing differences'
+  /let\s+lastAttachmentPointerPrepareAt\s*=\s*0[\s\S]+?const\s+prepareEditorAttachmentInsert\s*=\s*\(event\?:\s*Event\)\s*=>\s*\{[\s\S]+?event\?\.type\s*===\s*'pointerdown'[\s\S]+?lastAttachmentPointerPrepareAt\s*=\s*Date\.now\(\)[\s\S]+?const\s+hasRecentPointerAttachmentPrepare\s*=\s*\(\)\s*=>\s*Date\.now\(\)\s*-\s*lastAttachmentPointerPrepareAt\s*<\s*800/,
+  'the upload controls must remember pointerdown preparation so the click handler cannot overwrite it with a stale table target'
+)
+
+assert.match(
+  addForm,
+  /const\s+triggerFileInput\s*=\s*\(event\?:\s*Event\)\s*=>\s*\{[\s\S]+?if\s*\(!hasRecentPointerAttachmentPrepare\(\)\)\s*prepareEditorAttachmentInsert\(event\)[\s\S]+?fileInput\.value\?\.click\(\)/,
+  'the attachment upload click path must prepare only for keyboard activation, not duplicate pointer activation after focus has moved to the button'
 )
 
 assert.match(
@@ -230,8 +290,20 @@ assert.match(
 
 assert.match(
   addForm,
-  /const\s+openImageUploader\s*=\s*\(\)\s*=>\s*\{[\s\S]+?prepareEditorAttachmentInsert\(\)[\s\S]+?showImageUploader\.value\s*=\s*true/,
-  'the image uploader click path must also prepare the table target before opening the floating uploader'
+  /const\s+openImageUploader\s*=\s*\(event\?:\s*Event\)\s*=>\s*\{[\s\S]+?if\s*\(!hasRecentPointerAttachmentPrepare\(\)\)\s*prepareEditorAttachmentInsert\(event\)[\s\S]+?showImageUploader\.value\s*=\s*true/,
+  'the image uploader click path must share the same keyboard-only fallback instead of duplicating pointer target preparation'
+)
+
+assert.match(
+  addForm,
+  /const\s+replaceAddFormAttachmentNodesWithSource\s*=[\s\S]+?addFormAttachmentMarkdownFromElement\(node\)[\s\S]+?node\.replaceWith\(document\.createTextNode\(markdown\)\)[\s\S]+?const\s+readAddFormTableCellText\s*=[\s\S]+?replaceAddFormAttachmentNodesWithSource\(clone\)/,
+  'AddForm DOM fallback serialization must preserve table attachment URLs instead of degrading them to plain labels'
+)
+
+assert.match(
+  addForm,
+  /Vditor\.md2html\(normalizeInlineImageLinks\(previewValue\),\s*\{\s*mode:\s*contentTheme\.value\s*===\s*'dark'\s*\?\s*'dark'\s*:\s*'light'\s*\}\)/,
+  'AddForm preview rendering must pass an options object because Vditor md2html reads options.cdn internally'
 )
 
 assert.doesNotMatch(
@@ -254,14 +326,36 @@ assert.match(
 
 assert.match(
   editor,
-  /const\s+editorAttachmentInfoToHtmlTableAnchor\s*=[\s\S]+?class="vditor-ir__link editor-attachment-link"[\s\S]+?role="button"[\s\S]+?data-attachment-kind="\$\{safeKind\}"[\s\S]+?data-attachment-url="\$\{safeUrl\}"[\s\S]+?const\s+editorTextLineToAttachmentAwareTableCellHtml\s*=[\s\S]+?editorAttachmentInfoToHtmlTableAnchor\(info\)[\s\S]+?const\s+editorTextLineToHtmlTableCellSource\s*=/,
-  'HTML table attachment serialization must produce a Vditor-link-equivalent attachment anchor instead of a bare link'
+  /const\s+editorAttachmentInfoToHtmlTableIrNode\s*=[\s\S]+?data-type="a"[\s\S]+?class="vditor-ir__node editor-attachment-node"[\s\S]+?class="vditor-ir__link editor-attachment-link"[\s\S]+?data-attachment-kind="\$\{safeKind\}"[\s\S]+?data-attachment-url="\$\{safeUrl\}"[\s\S]+?const\s+editorTextLineToAttachmentAwareTableCellHtml\s*=[\s\S]+?editorAttachmentInfoToHtmlTableIrNode\(info\)[\s\S]+?const\s+editorTextLineToHtmlTableCellSource\s*=/,
+  'HTML table attachment serialization must produce a Vditor native IR attachment node instead of a plain anchor'
 )
 
 assert.match(
   editor,
   /const\s+materializeAttachmentMarkersInTableCells\s*=[\s\S]+?root\.querySelectorAll\('td,th'\)[\s\S]+?NodeFilter\.SHOW_TEXT[\s\S]+?parent\.closest\('a, \[data-type="a"\], \.editor-attachment-preview, textarea, code, \[data-type="code-block"\], \.vditor-ir__marker--pre'\)[\s\S]+?createEditorAttachmentLinkElement\(info\)/,
   'live table cells may materialize raw attachment markdown text, but must not rewrite Vditor native attachment nodes'
+)
+
+assert.match(
+  editor,
+  /const\s+createEditorAttachmentLinkElement\s*=[\s\S]+?document\.createElement\('span'\)[\s\S]+?node\.setAttribute\('data-type',\s*'a'\)[\s\S]+?node\.className\s*=\s*'vditor-ir__node editor-attachment-node'[\s\S]+?label\.className\s*=\s*'vditor-ir__link editor-attachment-link'/,
+  'live table-cell marker materialization must create the same Vditor IR attachment node shape as existing rendered links'
+)
+
+const liveAttachmentFactory = editor.match(/const\s+createEditorAttachmentLinkElement\s*=[\s\S]+?\n}\n\nconst\s+normalizeAttachmentSourceText/)
+assert.ok(liveAttachmentFactory, 'live attachment factory must exist')
+assert.doesNotMatch(
+  liveAttachmentFactory[0],
+  /document\.createElement\('a'\)/,
+  'live table-cell attachment materialization must not create plain anchor nodes'
+)
+
+const htmlAttachmentFactory = editor.match(/const\s+editorAttachmentInfoToHtmlTableIrNode\s*=[\s\S]+?\n}\n\nconst\s+editorTextLineToAttachmentAwareTableCellHtml/)
+assert.ok(htmlAttachmentFactory, 'HTML table attachment factory must exist')
+assert.doesNotMatch(
+  htmlAttachmentFactory[0],
+  /<a\b|href=/,
+  'HTML table-cell attachment serialization must not create plain anchors'
 )
 
 assert.doesNotMatch(

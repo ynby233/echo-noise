@@ -344,7 +344,6 @@ const EXPANDED_TABLE_MIN_ROW_HEIGHT = 38
 const EXPANDED_TABLE_CELL_HORIZONTAL_PADDING = 18
 const EXPANDED_TABLE_SCROLL_OVERFLOW_TOLERANCE = 2
 const EDITOR_TABLE_ATTACHMENT_INSERT_TARGET_TTL_MS = 2 * 60 * 1000
-const EDITOR_TABLE_ATTACHMENT_CANDIDATE_TTL_MS = 60 * 1000
 
 const estimateTableLineWidth = (line: string) => {
   const text = stripAttachmentMarkersFromEditorText(String(line || '').replace(/\r\n?/g, '\n')) || ' '
@@ -660,22 +659,40 @@ const attachmentInfoFromIrLabel = (label: HTMLElement | null) => {
 
 const attachmentInfoToMarkdownSource = (info: EditorAttachmentInfo) => `[${info.title}](${info.url})`
 
-const applyEditorAttachmentLinkAttributes = (anchor: HTMLAnchorElement, info: EditorAttachmentInfo) => {
-  anchor.href = info.url
-  anchor.textContent = info.title
-  anchor.className = 'vditor-ir__link editor-attachment-link'
-  anchor.setAttribute('role', 'button')
-  anchor.setAttribute('aria-label', `预览${info.title}`)
-  anchor.setAttribute('data-attachment-kind', info.type)
-  anchor.setAttribute('data-attachment-url', info.url)
-  anchor.setAttribute('draggable', 'false')
-  anchor.style.cursor = 'pointer'
-  return anchor
-}
-
 const createEditorAttachmentLinkElement = (info: EditorAttachmentInfo) => {
-  const anchor = document.createElement('a')
-  return applyEditorAttachmentLinkAttributes(anchor, info)
+  const node = document.createElement('span')
+  node.setAttribute('data-type', 'a')
+  node.className = 'vditor-ir__node editor-attachment-node'
+  node.setAttribute('contenteditable', 'false')
+  node.setAttribute('data-attachment-kind', info.type)
+  node.setAttribute('data-attachment-url', info.url)
+  node.setAttribute('aria-label', `预览${info.title}`)
+
+  const appendMarker = (className: string, text: string) => {
+    const marker = document.createElement('span')
+    marker.className = `vditor-ir__marker ${className}`
+    marker.textContent = text
+    node.appendChild(marker)
+  }
+
+  appendMarker('vditor-ir__marker--bracket', '[')
+
+  const label = document.createElement('span')
+  label.className = 'vditor-ir__link editor-attachment-link'
+  label.textContent = info.title
+  label.setAttribute('role', 'button')
+  label.setAttribute('aria-label', `预览${info.title}`)
+  label.setAttribute('data-attachment-kind', info.type)
+  label.setAttribute('data-attachment-url', info.url)
+  label.style.cursor = 'pointer'
+  node.appendChild(label)
+
+  appendMarker('vditor-ir__marker--bracket', ']')
+  appendMarker('vditor-ir__marker--paren', '(')
+  appendMarker('vditor-ir__marker--link', info.url)
+  appendMarker('vditor-ir__marker--paren', ')')
+
+  return node
 }
 
 const normalizeAttachmentSourceText = (value: string) => {
@@ -2247,11 +2264,12 @@ const escapeTableCellHtml = (value: string) => String(value || '')
 
 const escapeHtmlAttribute = (value: string) => escapeTableCellHtml(value).replace(/`/g, '&#96;')
 
-const editorAttachmentInfoToHtmlTableAnchor = (info: EditorAttachmentInfo) => {
+const editorAttachmentInfoToHtmlTableIrNode = (info: EditorAttachmentInfo) => {
   const safeUrl = escapeHtmlAttribute(info.url)
   const safeTitle = escapeTableCellHtml(info.title)
   const safeKind = escapeHtmlAttribute(info.type)
-  return `<a href="${safeUrl}" class="vditor-ir__link editor-attachment-link" role="button" data-attachment-kind="${safeKind}" data-attachment-url="${safeUrl}" draggable="false">${safeTitle}</a>`
+  const safeAria = escapeHtmlAttribute(`预览${info.title}`)
+  return `<span data-type="a" class="vditor-ir__node editor-attachment-node" contenteditable="false" data-attachment-kind="${safeKind}" data-attachment-url="${safeUrl}" aria-label="${safeAria}"><span class="vditor-ir__marker vditor-ir__marker--bracket">[</span><span class="vditor-ir__link editor-attachment-link" role="button" aria-label="${safeAria}" data-attachment-kind="${safeKind}" data-attachment-url="${safeUrl}" style="cursor: pointer;">${safeTitle}</span><span class="vditor-ir__marker vditor-ir__marker--bracket">]</span><span class="vditor-ir__marker vditor-ir__marker--paren">(</span><span class="vditor-ir__marker vditor-ir__marker--link">${safeUrl}</span><span class="vditor-ir__marker vditor-ir__marker--paren">)</span></span>`
 }
 
 const editorTextLineToAttachmentAwareTableCellHtml = (value: string, options: { trim?: boolean } = {}) => {
@@ -2266,7 +2284,7 @@ const editorTextLineToAttachmentAwareTableCellHtml = (value: string, options: { 
     output += escapeTableCellHtml(source.slice(lastIndex, match.index))
     const info = normalizeAttachmentInfo(match[1], match[2], match[3])
     output += info
-      ? editorAttachmentInfoToHtmlTableAnchor(info)
+      ? editorAttachmentInfoToHtmlTableIrNode(info)
       : escapeTableCellHtml(match[0])
     lastIndex = ATTACHMENT_MARKER_GLOBAL_RE.lastIndex
   }
@@ -2847,8 +2865,16 @@ type EditorTableCellSourceTarget = {
   rowCells: string[]
 }
 
+const getRawVditorValue = () => {
+  try {
+    return vditorInstance?.getValue?.() || ''
+  } catch {
+    return ''
+  }
+}
+
 const getEditorTableBlockForTable = (table: HTMLTableElement | null, preferredIndex = -1) => {
-  const value = vditorInstance?.getValue?.() || ''
+  const value = getRawVditorValue()
   const blocks = getEditorTableSourceBlocks(value)
   const tableIndex = preferredIndex >= 0 ? preferredIndex : (table ? getEditorTables().indexOf(table) : -1)
   return tableBlockFromDataset(table, blocks) || findMarkdownTableBlock(blocks, getRenderedTableRows(table), tableIndex)
@@ -2862,7 +2888,7 @@ const getEditorTableCellSourceTarget = (cell: HTMLTableCellElement | null): Edit
   const rowIndex = row.rowIndex
   const cellIndex = cell.cellIndex
   if (rowIndex < 0 || cellIndex < 0) return null
-  const value = vditorInstance.getValue?.() || ''
+  const value = getRawVditorValue()
   const lines = value.split('\n')
   const tableIndex = getEditorTables().indexOf(table)
   const block = getEditorTableBlockForTable(table, tableIndex)
@@ -3146,7 +3172,7 @@ const getEditorVisibleDomTableSafeValue = () => {
 }
 
 const getSafeOutgoingEditorValue = (sourceValue?: string) => {
-  const source = typeof sourceValue === 'string' ? sourceValue : (vditorInstance?.getValue?.() || '')
+  const source = typeof sourceValue === 'string' ? sourceValue : getRawVditorValue()
   const needsDomFallback = getEditorTables().length || hasEditorSoftBreakDom() || hasEditorPlainBlockDom()
   if (typeof sourceValue === 'string' && !needsDomFallback) {
     const trustedSource = ensureSafeEditorTableMarkdown(encodeMarkdownExtraBlankLines(source))
@@ -3161,6 +3187,16 @@ const getSafeOutgoingEditorValue = (sourceValue?: string) => {
 
 const emitEditorValue = (sourceValue?: string) => {
   emit("update:modelValue", getSafeOutgoingEditorValue(sourceValue))
+}
+
+const emitKnownEditorSourceValue = (sourceValue: string) => {
+  const safeValue = ensureSafeEditorTableMarkdown(encodeMarkdownExtraBlankLines(sourceValue))
+  if (!hasUnsafeMarkdownTableStructure(safeValue)) {
+    emit("update:modelValue", safeValue)
+    return true
+  }
+  emitEditorValue(sourceValue)
+  return false
 }
 
 const syncEditorDomToVditorValueForPreview = () => {
@@ -3180,7 +3216,7 @@ const syncEditorDomToVditorValueForPreview = () => {
   return true
 }
 
-const getEditorValueWithDomTableSync = (sourceValue = vditorInstance?.getValue?.() || '') => {
+const getEditorValueWithDomTableSync = (sourceValue = getRawVditorValue()) => {
   const tables = getEditorTables()
   if (!tables.length) return ensureSafeEditorTableMarkdown(sourceValue)
   const fallbackValue = getEditorDomContentFallback()
@@ -3663,6 +3699,7 @@ const syncInlineEditorTableTextareaToCell = (options: { emit?: boolean; repositi
   const value = textarea.value
   setEditorTableDomCellText(state.cell, value, /\n$/.test(value))
   markEditorTableCellSourceDirty(state.cell, value)
+  state.dirty = false
   if (options.emit !== false) emitEditorValue()
   if (options.reposition !== false) positionInlineEditorTableTextarea()
   return true
@@ -3800,7 +3837,7 @@ const openInlineEditorTableCellTextarea = (cell: HTMLTableCellElement, event?: M
 }
 
 const getEditorValueWithPendingTableSync = () => {
-  const currentValue = vditorInstance?.getValue?.() || ''
+  const currentValue = getRawVditorValue()
   if (getEditorTables().length) {
     refreshPendingEditorTableCellText()
     const fallbackValue = getEditorDomContentFallback()
@@ -4109,7 +4146,7 @@ const syncExpandedTableDomToEditor = () => {
 const syncExpandedTableToEditor = () => {
   if (!vditorInstance || !expandedTableEditable.value) return false
   if (!expandedEditorTableBlock) return syncExpandedTableDomToEditor()
-  const value = vditorInstance.getValue?.() || ''
+  const value = getRawVditorValue()
   const lines = value.split('\n')
   const blocks = getEditorTableSourceBlocks(value)
   const currentBlock = blocks.find((block) => block.start === expandedEditorTableBlock?.start && block.end === expandedEditorTableBlock?.end) || expandedEditorTableBlock
@@ -4312,7 +4349,7 @@ const applyTableSourceDeletion = (value: string, block: EditorTableSourceBlock) 
 
 const deleteEditorTable = (table: HTMLTableElement | null, preferredIndex = -1) => {
   if (!vditorInstance) return false
-  const value = vditorInstance.getValue?.() || ''
+  const value = getRawVditorValue()
   const blocks = getEditorTableSourceBlocks(value)
   const block = tableBlockFromDataset(table, blocks) || findMarkdownTableBlock(blocks, getRenderedTableRows(table), preferredIndex)
   if (!block) return syncEditorAfterDomTableRemoval(table)
@@ -4344,7 +4381,7 @@ const syncEditorTableScrollEdgeGap = (table: HTMLTableElement, root: HTMLElement
 }
 
 const enhanceEditorTables = (root: HTMLElement) => {
-  const blocks = getEditorTableSourceBlocks(vditorInstance?.getValue?.() || '')
+  const blocks = getEditorTableSourceBlocks(getRawVditorValue())
   const usedBlocks = new Set<EditorTableSourceBlock>()
   getEditorTables().forEach((table, index) => {
     table.classList.add('editor-deletable-table')
@@ -4385,7 +4422,7 @@ const enhanceEditorTables = (root: HTMLElement) => {
 
 const applyHeadingFallback = (option: typeof headingOptions[number]) => {
   if (!vditorInstance) return
-  const value = vditorInstance.getValue?.() || ''
+  const value = getRawVditorValue()
   if (!value.trim()) {
     vditorInstance.setValue(option.value)
     emitEditorValue(option.value)
@@ -4811,6 +4848,20 @@ const clearConsumedEditorTableInsertionState = () => {
   clearLastEditorTableSelection()
 }
 
+const clearConsumedEditorTableAttachmentTargetState = () => {
+  closeInlineEditorTableTextarea()
+  pendingEditorTableCellSync = null
+  editorTableCompositionActive = false
+  editorTableCompositionTarget = null
+  editorTableCompositionSnapshot = null
+  editorTableCompositionStartText = ''
+  editorTableCompositionStartPrefix = ''
+  editorTableCompositionCommitKey = null
+  editorTableCompositionCaretTarget = null
+  clearPreparedEditorAttachmentInsertionTarget()
+  clearLastEditorTableSelection()
+}
+
 const EDITOR_EDITABLE_SELECTOR = '.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset'
 
 const getEditorEditableFromNode = (node: Node | null | undefined) => {
@@ -4858,20 +4909,9 @@ const getActiveEditorTableCellForAttachmentInsertion = () => {
   return getCurrentEditorTableCell(undefined, { allowStoredFallback: false })
 }
 
-const getStoredEditorTableCellForAttachmentInsertion = () => {
-  if (!lastEditorTableSelectionState || Date.now() - lastEditorTableSelectionAt > EDITOR_TABLE_ATTACHMENT_CANDIDATE_TTL_MS) {
-    return null as HTMLTableCellElement | null
-  }
-  const selection = typeof window === 'undefined' ? null : window.getSelection()
-  const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
-  const rangeEditable = getEditorEditableFromNode(range?.commonAncestorContainer)
-  if (range && rangeEditable && !getEditorTableCellFromRange(range)) return null
-  return getStoredEditorTableCell(lastEditorTableSelectionState.editable)
-}
-
 const prepareEditorAttachmentInsertionTarget = () => {
   clearPreparedEditorAttachmentInsertionTarget()
-  const cell = getActiveEditorTableCellForAttachmentInsertion() || getStoredEditorTableCellForAttachmentInsertion()
+  const cell = getActiveEditorTableCellForAttachmentInsertion()
   const editable = getEditorEditableFromNode(cell)
   if (!cell || !editable) return false
   if (inlineEditorTableTextareaState?.cell === cell) {
@@ -5000,18 +5040,24 @@ const normalizeTableCellInsertion = (value: string) => String(value || '')
   .replace(/[\u200b\u200c\ufeff]/g, '')
   .trim()
 
-const insertAttachmentIntoTableCellDomFallback = (cell: HTMLTableCellElement, text: string) => {
-  const current = editorTableCellTextFromDom(cell)
+const insertAttachmentIntoTableCellWithoutVditorReset = (cell: HTMLTableCellElement, text: string) => {
+  const current = isSamePendingEditorTableCell(cell) && pendingEditorTableCellSync
+    ? pendingEditorTableCellSync.text
+    : editorTableCellTextFromDom(cell)
   const separator = current && !/\s$/.test(current) ? ' ' : ''
   const nextText = `${current}${separator}${text}`
   setEditorTableDomCellText(cell, nextText)
   markEditorTableCellSourceDirty(cell, nextText)
-  const synced = flushPendingEditorTableCellSourceSync()
-  clearConsumedEditorTableInsertionState()
+  const result = buildEditorTableCellSourceValue(cell, nextText)
+  clearConsumedEditorTableAttachmentTargetState()
   refreshAttachmentLinksFromEditor()
   window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
-  emitEditorValue()
-  if (!synced) window.setTimeout(() => emitEditorValue(), 0)
+  if (result?.value && !hasUnsafeMarkdownTableStructure(result.value)) {
+    emitKnownEditorSourceValue(result.value)
+  } else {
+    emitEditorValue()
+    window.setTimeout(() => emitEditorValue(), 0)
+  }
   return true
 }
 
@@ -5026,22 +5072,7 @@ const insertValueIntoCurrentTableCell = (value: string) => {
     : getCurrentEditorTableCell(undefined, { allowStoredFallback: false })
   if (!cell) return false
   if (isAttachmentInsert) {
-    const target = getEditorTableCellSourceTarget(cell)
-    if (target) {
-      const current = isSamePendingEditorTableCell(cell) && pendingEditorTableCellSync
-        ? pendingEditorTableCellSync.text
-        : (target.rowCells[target.cellIndex] || '')
-      const separator = current && !/\s$/.test(current) ? ' ' : ''
-      const inserted = applyEditorTableCellSourceValue(cell, `${current}${separator}${text}`)
-      if (inserted) {
-        clearConsumedEditorTableInsertionState()
-        refreshAttachmentLinksFromEditor()
-        window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
-        return true
-      }
-      return insertAttachmentIntoTableCellDomFallback(cell, text)
-    }
-    return insertAttachmentIntoTableCellDomFallback(cell, text)
+    return insertAttachmentIntoTableCellWithoutVditorReset(cell, text)
   }
   const selection = window.getSelection()
   if (!selection || selection.rangeCount === 0) return false
@@ -5083,7 +5114,7 @@ const insertAttachmentSourceValue = (value: string) => {
   if (!vditorInstance || !hasAttachmentMarker(value)) return false
   const normalized = normalizeAttachmentInsertValue(value).trim()
   if (!normalized) return false
-  const currentValue = vditorInstance.getValue?.() || ''
+  const currentValue = getEditorValueWithPendingTableSync() || getRawVditorValue()
   const base = currentValue.replace(/\s+$/g, '')
   const nextValue = base ? `${base}\n\n${normalized}` : normalized
   vditorInstance.setValue(nextValue)
@@ -5115,10 +5146,10 @@ defineExpose({
   },
   insertValue: (val: string) => {
     if (vditorInstance) {
-      if (insertValueIntoCurrentTableCell(val)) return
-      if (pendingEditorTableCellSync) flushPendingEditorTableCellSourceSync()
-      if (insertAttachmentSourceValue(val)) return
       const nextValue = normalizeAttachmentInsertValue(val)
+      if (insertValueIntoCurrentTableCell(nextValue)) return
+      if (hasAttachmentMarker(nextValue) && insertAttachmentSourceValue(nextValue)) return
+      if (pendingEditorTableCellSync) flushPendingEditorTableCellSourceSync()
       vditorInstance.insertValue(nextValue);
       normalizeEditorAttachmentSource()
       refreshAttachmentLinksFromEditor()

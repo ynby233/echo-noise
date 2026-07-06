@@ -426,11 +426,16 @@ const focusEditor = async () => {
   } catch {}
 }
 
-const prepareEditorAttachmentInsert = () => {
+let lastAttachmentPointerPrepareAt = 0
+
+const prepareEditorAttachmentInsert = (event?: Event) => {
   try {
+    if (event?.type === 'pointerdown') lastAttachmentPointerPrepareAt = Date.now()
     vditorEditor.value?.prepareAttachmentInsert?.()
   } catch {}
 }
+
+const hasRecentPointerAttachmentPrepare = () => Date.now() - lastAttachmentPointerPrepareAt < 800
 
 const clearEditorAttachmentInsertTarget = () => {
   try {
@@ -438,8 +443,8 @@ const clearEditorAttachmentInsertTarget = () => {
   } catch {}
 }
 
-const openImageUploader = () => {
-  prepareEditorAttachmentInsert()
+const openImageUploader = (event?: Event) => {
+  if (!hasRecentPointerAttachmentPrepare()) prepareEditorAttachmentInsert(event)
   showImageUploader.value = true
 }
 
@@ -481,9 +486,35 @@ const isAddFormTableBreakMarker = (node: HTMLElement) => {
   return /^<br\s*\/?\s*>$/i.test(html) || /^<code\b[^>]*>\s*<br\s*\/?\s*>\s*<\/code>$/i.test(html)
 }
 
+const ADD_FORM_ATTACHMENT_LABEL_RE = /^(图片附件|视频附件|音频附件|文件附件)：.+/
+
+const addFormAttachmentMarkdownFromElement = (node: HTMLElement) => {
+  const label = (
+    node.querySelector<HTMLElement>('.vditor-ir__link.editor-attachment-link, .vditor-ir__link')?.textContent
+    || node.textContent
+    || ''
+  ).trim()
+  const url = (
+    node.getAttribute('data-attachment-url')
+    || node.getAttribute('href')
+    || node.querySelector<HTMLElement>('.vditor-ir__marker--link')?.textContent
+    || ''
+  ).trim()
+  if (!label || !url || !ADD_FORM_ATTACHMENT_LABEL_RE.test(label)) return ''
+  return `[${label}](${url})`
+}
+
+const replaceAddFormAttachmentNodesWithSource = (root: HTMLElement) => {
+  root.querySelectorAll<HTMLElement>('[data-type="a"], a.editor-attachment-link, a[data-attachment-url]').forEach((node) => {
+    const markdown = addFormAttachmentMarkdownFromElement(node)
+    if (markdown) node.replaceWith(document.createTextNode(markdown))
+  })
+}
+
 const readAddFormTableCellText = (cell: HTMLTableCellElement) => {
   const clone = cell.cloneNode(true) as HTMLElement
   clone.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
+  replaceAddFormAttachmentNodesWithSource(clone)
   clone.querySelectorAll<HTMLElement>('[data-type="html-inline"], .vditor-ir__node').forEach((node) => {
     if (isAddFormTableBreakMarker(node)) node.replaceWith(document.createTextNode('\n'))
   })
@@ -870,8 +901,8 @@ const checkLogin = () => {
   return true;
 };
 
-const triggerFileInput = () => {
-  prepareEditorAttachmentInsert()
+const triggerFileInput = (event?: Event) => {
+  if (!hasRecentPointerAttachmentPrepare()) prepareEditorAttachmentInsert(event)
   fileInput.value?.click();
 };
 
@@ -1154,7 +1185,7 @@ watch([MessageContent, fullImageAttachments], ([val]) => {
     if (rawValue !== MessageContent.value) MessageContent.value = rawValue
     const keepImagesFullSize = fullImageAttachments.value || hasFullImageAttachmentsMarker(rawValue)
     const previewValue = replaceFileAttachmentMarkersForPreview(replaceAttachmentMarkersForPreview(encodeMarkdownExtraBlankLines(stripFullImageAttachmentsMarker(rawValue))))
-    const raw = await Vditor.md2html(normalizeInlineImageLinks(previewValue));
+    const raw = await Vditor.md2html(normalizeInlineImageLinks(previewValue), { mode: contentTheme.value === 'dark' ? 'dark' : 'light' });
     MessageContentHtml.value = applyImageGridHTML(raw, keepImagesFullSize);
     nextTick(() => {
       const roots = document.querySelectorAll('.editor-preview');
