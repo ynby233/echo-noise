@@ -659,42 +659,6 @@ const attachmentInfoFromIrLabel = (label: HTMLElement | null) => {
 
 const attachmentInfoToMarkdownSource = (info: EditorAttachmentInfo) => `[${info.title}](${info.url})`
 
-const createEditorAttachmentLinkElement = (info: EditorAttachmentInfo) => {
-  const node = document.createElement('span')
-  node.setAttribute('data-type', 'a')
-  node.className = 'vditor-ir__node editor-attachment-node'
-  node.setAttribute('contenteditable', 'false')
-  node.setAttribute('data-attachment-kind', info.type)
-  node.setAttribute('data-attachment-url', info.url)
-  node.setAttribute('aria-label', `预览${info.title}`)
-
-  const appendMarker = (className: string, text: string) => {
-    const marker = document.createElement('span')
-    marker.className = `vditor-ir__marker ${className}`
-    marker.textContent = text
-    node.appendChild(marker)
-  }
-
-  appendMarker('vditor-ir__marker--bracket', '[')
-
-  const label = document.createElement('span')
-  label.className = 'vditor-ir__link editor-attachment-link'
-  label.textContent = info.title
-  label.setAttribute('role', 'button')
-  label.setAttribute('aria-label', `预览${info.title}`)
-  label.setAttribute('data-attachment-kind', info.type)
-  label.setAttribute('data-attachment-url', info.url)
-  label.style.cursor = 'pointer'
-  node.appendChild(label)
-
-  appendMarker('vditor-ir__marker--bracket', ']')
-  appendMarker('vditor-ir__marker--paren', '(')
-  appendMarker('vditor-ir__marker--link', info.url)
-  appendMarker('vditor-ir__marker--paren', ')')
-
-  return node
-}
-
 const normalizeAttachmentSourceText = (value: string) => {
   RAW_ATTACHMENT_ANCHOR_RE.lastIndex = 0
   const normalizedAnchors = String(value || '').replace(
@@ -758,43 +722,10 @@ const replaceAttachmentNodesWithSourceText = (root: HTMLElement) => {
 }
 
 const materializeAttachmentMarkersInTableCells = (root: HTMLElement) => {
-  if (typeof document === 'undefined') return false
-  const textNodes: Text[] = []
   root.querySelectorAll('td,th').forEach((cell) => {
-    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, {
-      acceptNode(node) {
-        const text = node.textContent || ''
-        ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
-        if (!ATTACHMENT_MARKER_GLOBAL_RE.test(text)) return NodeFilter.FILTER_REJECT
-        const parent = node.parentElement
-        if (!parent) return NodeFilter.FILTER_REJECT
-        if (parent.closest('a, [data-type="a"], .editor-attachment-preview, textarea, code, [data-type="code-block"], .vditor-ir__marker--pre')) {
-          return NodeFilter.FILTER_REJECT
-        }
-        return NodeFilter.FILTER_ACCEPT
-      }
-    })
-    while (walker.nextNode()) textNodes.push(walker.currentNode as Text)
+    cell.querySelectorAll<HTMLElement>('.editor-attachment-preview').forEach((node) => node.remove())
   })
-  let changed = false
-  textNodes.forEach((textNode) => {
-    const source = normalizeAttachmentSourceText(textNode.textContent || '')
-    ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
-    let match: RegExpExecArray | null
-    let lastIndex = 0
-    const fragment = document.createDocumentFragment()
-    while ((match = ATTACHMENT_MARKER_GLOBAL_RE.exec(source))) {
-      if (match.index > lastIndex) fragment.appendChild(document.createTextNode(source.slice(lastIndex, match.index)))
-      const info = normalizeAttachmentInfo(match[1], match[2], match[3])
-      fragment.appendChild(info ? createEditorAttachmentLinkElement(info) : document.createTextNode(match[0]))
-      lastIndex = ATTACHMENT_MARKER_GLOBAL_RE.lastIndex
-    }
-    if (lastIndex === 0) return
-    if (lastIndex < source.length) fragment.appendChild(document.createTextNode(source.slice(lastIndex)))
-    textNode.parentNode?.replaceChild(fragment, textNode)
-    changed = true
-  })
-  return changed
+  return false
 }
 
 const setupAttachmentPreview = () => {
@@ -2267,34 +2198,10 @@ const escapeTableCellHtml = (value: string) => String(value || '')
   .replace(/\"/g, '&quot;')
   .replace(/'/g, '&#39;')
 
-const escapeHtmlAttribute = (value: string) => escapeTableCellHtml(value).replace(/`/g, '&#96;')
-
-const editorAttachmentInfoToHtmlTableIrNode = (info: EditorAttachmentInfo) => {
-  const safeUrl = escapeHtmlAttribute(info.url)
-  const safeTitle = escapeTableCellHtml(info.title)
-  const safeKind = escapeHtmlAttribute(info.type)
-  const safeAria = escapeHtmlAttribute(`预览${info.title}`)
-  return `<span data-type="a" class="vditor-ir__node editor-attachment-node" contenteditable="false" data-attachment-kind="${safeKind}" data-attachment-url="${safeUrl}" aria-label="${safeAria}"><span class="vditor-ir__marker vditor-ir__marker--bracket">[</span><span class="vditor-ir__link editor-attachment-link" role="button" aria-label="${safeAria}" data-attachment-kind="${safeKind}" data-attachment-url="${safeUrl}" style="cursor: pointer;">${safeTitle}</span><span class="vditor-ir__marker vditor-ir__marker--bracket">]</span><span class="vditor-ir__marker vditor-ir__marker--paren">(</span><span class="vditor-ir__marker vditor-ir__marker--link">${safeUrl}</span><span class="vditor-ir__marker vditor-ir__marker--paren">)</span></span>`
-}
-
 const editorTextLineToAttachmentAwareTableCellHtml = (value: string, options: { trim?: boolean } = {}) => {
   const normalizedSource = normalizeAttachmentSourceText(value)
   const source = options.trim ? normalizedSource.trim() : normalizedSource
-  if (!source) return ''
-  let output = ''
-  let lastIndex = 0
-  ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
-  let match: RegExpExecArray | null
-  while ((match = ATTACHMENT_MARKER_GLOBAL_RE.exec(source))) {
-    output += escapeTableCellHtml(source.slice(lastIndex, match.index))
-    const info = normalizeAttachmentInfo(match[1], match[2], match[3])
-    output += info
-      ? editorAttachmentInfoToHtmlTableIrNode(info)
-      : escapeTableCellHtml(match[0])
-    lastIndex = ATTACHMENT_MARKER_GLOBAL_RE.lastIndex
-  }
-  output += escapeTableCellHtml(source.slice(lastIndex))
-  return output
+  return source ? escapeTableCellHtml(source) : ''
 }
 
 const editorTextLineToHtmlTableCellSource = (value: string) => editorTextLineToAttachmentAwareTableCellHtml(value, { trim: true })

@@ -326,36 +326,26 @@ assert.match(
 
 assert.match(
   editor,
-  /const\s+editorAttachmentInfoToHtmlTableIrNode\s*=[\s\S]+?data-type="a"[\s\S]+?class="vditor-ir__node editor-attachment-node"[\s\S]+?class="vditor-ir__link editor-attachment-link"[\s\S]+?data-attachment-kind="\$\{safeKind\}"[\s\S]+?data-attachment-url="\$\{safeUrl\}"[\s\S]+?const\s+editorTextLineToAttachmentAwareTableCellHtml\s*=[\s\S]+?editorAttachmentInfoToHtmlTableIrNode\(info\)[\s\S]+?const\s+editorTextLineToHtmlTableCellSource\s*=/,
-  'HTML table attachment serialization must produce a Vditor native IR attachment node instead of a plain anchor'
+  /const\s+editorTextLineToAttachmentAwareTableCellHtml\s*=[\s\S]+?const\s+normalizedSource\s*=\s*normalizeAttachmentSourceText\(value\)[\s\S]+?return\s+source\s*\?\s*escapeTableCellHtml\(source\)\s*:\s*''[\s\S]+?const\s+editorTextLineToHtmlTableCellSource\s*=/,
+  'table attachment serialization must keep attachment markdown as escaped source text instead of creating Vditor IR nodes'
 )
 
 assert.match(
   editor,
-  /const\s+materializeAttachmentMarkersInTableCells\s*=[\s\S]+?root\.querySelectorAll\('td,th'\)[\s\S]+?NodeFilter\.SHOW_TEXT[\s\S]+?parent\.closest\('a, \[data-type="a"\], \.editor-attachment-preview, textarea, code, \[data-type="code-block"\], \.vditor-ir__marker--pre'\)[\s\S]+?createEditorAttachmentLinkElement\(info\)/,
-  'live table cells may materialize raw attachment markdown text, but must not rewrite Vditor native attachment nodes'
+  /const\s+materializeAttachmentMarkersInTableCells\s*=[\s\S]+?root\.querySelectorAll\('td,th'\)[\s\S]+?\.editor-attachment-preview[\s\S]+?return\s+false[\s\S]+?const\s+setupAttachmentPreview\s*=/,
+  'live table cells must leave raw attachment markers as text and only remove stale attachment previews'
 )
 
-assert.match(
+assert.doesNotMatch(
   editor,
-  /const\s+createEditorAttachmentLinkElement\s*=[\s\S]+?document\.createElement\('span'\)[\s\S]+?node\.setAttribute\('data-type',\s*'a'\)[\s\S]+?node\.className\s*=\s*'vditor-ir__node editor-attachment-node'[\s\S]+?label\.className\s*=\s*'vditor-ir__link editor-attachment-link'/,
-  'live table-cell marker materialization must create the same Vditor IR attachment node shape as existing rendered links'
+  /const\s+materializeAttachmentMarkersInTableCells\s*=[\s\S]+?NodeFilter\.SHOW_TEXT[\s\S]+?createEditorAttachmentLinkElement\(info\)/,
+  'table-cell attachment refresh must not materialize raw markers into Vditor IR nodes'
 )
 
-const liveAttachmentFactory = editor.match(/const\s+createEditorAttachmentLinkElement\s*=[\s\S]+?\n}\n\nconst\s+normalizeAttachmentSourceText/)
-assert.ok(liveAttachmentFactory, 'live attachment factory must exist')
 assert.doesNotMatch(
-  liveAttachmentFactory[0],
-  /document\.createElement\('a'\)/,
-  'live table-cell attachment materialization must not create plain anchor nodes'
-)
-
-const htmlAttachmentFactory = editor.match(/const\s+editorAttachmentInfoToHtmlTableIrNode\s*=[\s\S]+?\n}\n\nconst\s+editorTextLineToAttachmentAwareTableCellHtml/)
-assert.ok(htmlAttachmentFactory, 'HTML table attachment factory must exist')
-assert.doesNotMatch(
-  htmlAttachmentFactory[0],
-  /<a\b|href=/,
-  'HTML table-cell attachment serialization must not create plain anchors'
+  editor.match(/const\s+editorTextLineToAttachmentAwareTableCellHtml\s*=[\s\S]+?\n}\n\nconst\s+editorTextLineToHtmlTableCellSource/)?.[0] || '',
+  /editorAttachmentInfoToHtmlTableIrNode|createEditorAttachmentLinkElement|<a\b|href=/,
+  'table-cell attachment serialization must not create anchors or Vditor IR attachment nodes'
 )
 
 assert.doesNotMatch(
@@ -367,7 +357,7 @@ assert.doesNotMatch(
 assert.match(
   editor,
   /const\s+refreshAttachmentLinks\s*=\s*\(\)\s*=>\s*\{[\s\S]+?materializeEditorPreservedBlankLineBlocks\(root\)[\s\S]+?materializeAttachmentMarkersInTableCells\(root\)[\s\S]+?root\.querySelectorAll\('a'\)/,
-  'attachment refresh must normalize newly inserted table-cell markers before classing existing anchors'
+  'attachment refresh must clean stale table attachment previews before classing existing anchors'
 )
 
 assert.match(
@@ -391,7 +381,7 @@ assert.doesNotMatch(
 assert.match(
   editor,
   /const\s+editorTextToDomTableCellHtml\s*=[\s\S]+?editorTextLineToAttachmentAwareTableCellHtml\(line\)[\s\S]+?const\s+setEditorTableDomCellText\s*=[\s\S]+?cell\.innerHTML\s*=\s*editorTextToDomTableCellHtml\(value\)/,
-  'live table-cell DOM mirrors must render attachment markers as attachment links immediately instead of waiting for a refresh'
+  'live table-cell DOM mirrors must render attachment markers as inert markdown text'
 )
 
 assert.match(
