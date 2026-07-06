@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const root = resolve(process.cwd())
-const read = (path) => readFileSync(resolve(root, path), 'utf8')
+const read = (path) => readFileSync(resolve(root, path), 'utf8').replace(/\r\n?/g, '\n')
 const assert = (condition, message) => {
   if (!condition) {
     console.error(message)
@@ -240,11 +240,12 @@ assert(
 )
 
 assert(
-  vditorEditor.includes('const commitEditorTableCellDomEdit = (cell: HTMLTableCellElement, options: { emit?: boolean } = {}) => {') &&
+  vditorEditor.includes('const commitEditorTableCellDomEdit = (cell: HTMLTableCellElement, options: { emit?: boolean; stabilize?: boolean } = {}) => {') &&
     vditorEditor.includes('if (options.emit === false) return') &&
-    vditorInputBody.includes('commitEditorTableCellDomEdit(cell, { emit: !editorTableCompositionActive })') &&
+    vditorInputBody.includes('commitEditorTableCellDomEdit(cell, {\n        emit: !editorTableCompositionActive,\n        stabilize: !editorTableCompositionActive,\n      })') &&
     trustedTableSourceIndex >= 0 &&
-    liveDomFallbackIndex > trustedTableSourceIndex,
+    liveDomFallbackIndex > trustedTableSourceIndex &&
+    !vditorSafeValueBody.includes("typeof sourceValue === 'string' && !needsDomFallback"),
   'editor table IME sync must not emit transient composition DOM or let live DOM fallback override trusted table source'
 )
 
@@ -263,27 +264,30 @@ assert(
 assert(
   vditorTableBeforeInputBody.includes("const isLineBreakInput = inputType === 'insertLineBreak' || inputType === 'insertParagraph'") &&
     vditorTableBeforeInputBody.includes('inputEvent.isComposing && !isLineBreakInput') &&
-    vditorTableBeforeInputBody.includes('editorTableCompositionCommittedCandidate || editorTableCompositionCandidateSelectedBySpace') &&
-    vditorTableBeforeInputBody.includes('editorTableCompositionActive && isLineBreakInput && hasCompositionLineBreakIntent') &&
+    vditorTableBeforeInputBody.includes('shouldSuppressEditorTableCompositionCommitArtifact(cell, inputType, text)') &&
     vditorTableBeforeInputBody.includes('if (isLineBreakInput) return false') &&
     vditorPlainEnterBody.includes('!editorTableCompositionActive') &&
     vditorPlainEnterBody.includes("event.code === 'Enter' || event.code === 'NumpadEnter'") &&
     vditorPlainEnterBody.includes("event.key === ' ' || event.code === 'Space'") &&
-    vditorPlainEnterBody.includes('editorTableCompositionActive && hasCompositionLineBreakIntent && rememberEditorTableCompositionLineBreak(cell)') &&
+    vditorPlainEnterBody.includes("rememberEditorTableCompositionCommitKey(cell, 'Space')") &&
+    vditorPlainEnterBody.includes("rememberEditorTableCompositionCommitKey(cell, 'Enter')") &&
+    vditorPlainEnterBody.includes('!editorTableCompositionActive && cell && insertEditorTableCellLineBreak(event, cell)') &&
     !vditorPlainEnterBody.includes('!event.isComposing') &&
-    vditorCompositionEndBody.includes('applyEditorTableCompositionLineBreak(caretCell)') &&
+    vditorCompositionEndBody.includes('syncEditorTableCellDomToSource(cell, { restoreCaret: true })') &&
+    vditorCompositionEndBody.includes('scheduleRestoreEditorTableCompositionCaret()') &&
     vditorCompositionEndBody.includes('stopEditorTableNativeEvent(event)') &&
     vditorCompositionEndBody.includes('clearVditorCompositionLock()') &&
-    vditorPlainEnterBody.includes('stopEditorTableNativeEvent(event)') &&
+    vditorPlainEnterBody.includes('stopEditorTablePropagation(event)') &&
     vditorEditor.includes('const stopEditorTableNativeEvent = (event: Event) => {') &&
     vditorEditor.includes('const clearVditorCompositionLock = () => {') &&
     vditorEditor.includes("document.addEventListener('keydown', onPlainTextEnterKeydown, true)") &&
     vditorEditor.includes("document.removeEventListener('keydown', onPlainTextEnterKeydown, true)") &&
     vditorEditor.includes("root.addEventListener('compositionupdate', onEditorCompositionUpdate, true)") &&
-    vditorEditor.includes('let editorTableCompositionCandidateSelectedBySpace = false') &&
+    vditorEditor.includes('let editorTableCompositionCommitKey: EditorTableCompositionCommitKey | null = null') &&
     vditorEditor.includes("document.addEventListener('beforeinput', onEditorBeforeInput, true)") &&
     vditorEditor.includes("document.removeEventListener('beforeinput', onEditorBeforeInput, true)") &&
-    vditorEditor.includes('let editorTableCompositionLineBreakTarget: EditorTableCellPosition | null = null') &&
+    vditorEditor.includes("const isSpaceArtifact = commitKey.key === 'Space'") &&
+    vditorEditor.includes("const isEnterArtifact = commitKey.key === 'Enter'") &&
     !vditorEditor.includes('repairEditorTableImeFirstColumn') &&
     !vditorEditor.includes('editorTableImeMultilineTarget') &&
     !vditorEditor.includes('scheduleRepairEditorTableImeFirstColumnRuns'),
@@ -730,8 +734,15 @@ assert(
     vditorEditor.includes('insertValueIntoCurrentTableCell') &&
     vditorEditor.includes('allowStoredFallback?: boolean') &&
     vditorEditor.includes('if (!options.allowStoredFallback) return null') &&
-    vditorEditor.includes('const shouldRestoreTableSelection = hasAttachmentMarker(text)') &&
-    vditorEditor.includes('getCurrentEditorTableCell(undefined, { allowStoredFallback: shouldRestoreTableSelection })') &&
+    vditorEditor.includes('prepareEditorAttachmentInsertionTarget') &&
+    vditorEditor.includes('consumePreparedEditorTableAttachmentCell') &&
+    vditorEditor.includes('const preparedAttachmentCell = isAttachmentInsert ? consumePreparedEditorTableAttachmentCell() : null') &&
+    vditorEditor.includes('? (preparedAttachmentCell || getCurrentEditorTableCell(undefined, { allowStoredFallback: false }))') &&
+    vditorEditor.includes('vditorInstance.insertValue(nextValue)') &&
+    vditorEditor.includes('if (hasAttachmentMarker(nextValue)) clearPreparedEditorAttachmentInsertionTarget()') &&
+    !vditorEditor.includes('const insertAttachmentSourceValue =') &&
+    !vditorEditor.includes('const shouldRestoreTableSelection = hasAttachmentMarker(text)') &&
+    !vditorEditor.includes('getCurrentEditorTableCell(undefined, { allowStoredFallback: shouldRestoreTableSelection })') &&
     !vditorEditor.includes('if (!cell && restoreLastEditorSelection())') &&
     vditorEditor.includes("range.insertNode(textNode)") &&
     vditorEditor.includes("inputType: 'insertText'") &&

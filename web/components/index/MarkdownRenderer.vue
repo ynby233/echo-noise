@@ -2468,6 +2468,14 @@ watch(() => props.enableGithubCard, () => {
   cursor: col-resize;
 }
 
+.rendered-table-expand-row-resize-handle.is-table-edge {
+  bottom: 0;
+}
+
+.rendered-table-expand-column-resize-handle.is-table-edge {
+  right: 0;
+}
+
 .rendered-table-expand-row-resize-handle::after,
 .rendered-table-expand-column-resize-handle::after {
   content: '';

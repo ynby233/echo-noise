@@ -959,11 +959,14 @@ const setupAttachmentPreview = () => {
       : null
     const cell = rememberedCell || getCurrentEditorTableCell(event) || getPendingEditorTableCell()
     if (cell) {
+      const sourcePosition = getEditorTableCellPosition(cell)
       stopEditorTableNativeEvent(event)
       clearVditorCompositionLock()
       cleanupEditorTableCompositionDrift(event.data || '')
-      commitEditorTableCellDomEdit(cell)
       rememberEditorTableCompositionCaretTarget(cell, event.data || '')
+      const synced = syncEditorTableCellDomToSource(cell, { restoreCaret: true })
+      const caretCell = getEditorTableCellAtPosition(sourcePosition)
+      if (!synced) commitEditorTableCellDomEdit(caretCell || cell)
       markEditorTableCompositionSettling()
       scheduleRestoreEditorTableCompositionCaret()
     }
@@ -1435,6 +1438,7 @@ const setupAttachmentPreview = () => {
   root.addEventListener('compositionupdate', onEditorCompositionUpdate, true)
   root.addEventListener('compositionend', onEditorCompositionEnd, true)
   root.addEventListener('focusout', onEditorFocusOut, true)
+  document.addEventListener('mousedown', closeInlineEditorTableTextareaOnExternalMouseDown, true)
   root.addEventListener('mousedown', onEditorTableMouseDown, true)
   root.addEventListener('mousedown', onPlainBlankLineMouseDown, true)
   root.addEventListener('mousedown', onPlainEditorBlankAreaMouseDown, true)
@@ -1466,6 +1470,7 @@ const setupAttachmentPreview = () => {
     root.removeEventListener('compositionupdate', onEditorCompositionUpdate, true)
     root.removeEventListener('compositionend', onEditorCompositionEnd, true)
     root.removeEventListener('focusout', onEditorFocusOut, true)
+    document.removeEventListener('mousedown', closeInlineEditorTableTextareaOnExternalMouseDown, true)
     root.removeEventListener('mousedown', onEditorTableMouseDown, true)
     root.removeEventListener('mousedown', onPlainBlankLineMouseDown, true)
     root.removeEventListener('mousedown', onPlainEditorBlankAreaMouseDown, true)
@@ -3134,7 +3139,7 @@ const serializeEditorDomAsMarkdown = (editable: HTMLElement) => {
       clone.querySelectorAll('.editor-table-delete-button, .editor-table-expand-button, .editor-attachment-preview').forEach((control) => control.remove())
       clone.querySelectorAll('table').forEach((table) => {
         const markdown = serializeEditorTableDomAsMarkdown(table as HTMLTableElement)
-        table.replaceWith(document.createTextNode(markdown ? `\n${markdown}\n` : ''))
+        table.replaceWith(document.createTextNode(markdown ? `\n${markdown}\n\n` : ''))
       })
       const text = normalizeAttachmentSourceText(String(clone.textContent || '').replace(/[\u200b\u200c\ufeff]/g, '').replace(/\u00a0/g, ' ')).trim()
       if (text) segments.push(text)
@@ -3173,11 +3178,11 @@ const getEditorVisibleDomTableSafeValue = () => {
 
 const getSafeOutgoingEditorValue = (sourceValue?: string) => {
   const source = typeof sourceValue === 'string' ? sourceValue : getRawVditorValue()
-  const needsDomFallback = getEditorTables().length || hasEditorSoftBreakDom() || hasEditorPlainBlockDom()
-  if (typeof sourceValue === 'string' && !needsDomFallback) {
+  if (typeof sourceValue === 'string') {
     const trustedSource = ensureSafeEditorTableMarkdown(encodeMarkdownExtraBlankLines(source))
     if (!hasUnsafeMarkdownTableStructure(trustedSource)) return trustedSource
   }
+  const needsDomFallback = getEditorTables().length || hasEditorSoftBreakDom() || hasEditorPlainBlockDom()
   const fallbackValue = needsDomFallback ? getEditorDomContentFallback() : ''
   if (fallbackValue) return fallbackValue
   const syncedValue = getEditorValueWithDomTableSync(source)
@@ -3766,6 +3771,18 @@ const onInlineEditorTextareaMouseDown = (event: MouseEvent) => {
   if (!textarea || event.button !== 0 || !inlineEditorTextareaIsBottomShieldPoint(textarea, event)) return
   event.preventDefault()
   setInlineEditorTextareaCaretFromMouseEvent(event)
+}
+
+const closeInlineEditorTableTextareaOnExternalMouseDown = (event: MouseEvent) => {
+  const textarea = inlineEditorTableTextarea
+  const state = inlineEditorTableTextareaState
+  if (!textarea || !state || event.button !== 0) return
+  const target = event.target as Node | null
+  const element = target instanceof Element ? target : target?.parentElement
+  if (getInlineEditorTableTextareaElement(target)) return
+  if (element?.closest?.('.editor-inline-table-cell-bottom-shield')) return
+  if (target && state.cell.contains(target)) return
+  closeInlineEditorTableTextarea()
 }
 
 const stopInlineEditorTextareaEventPropagation = (event: Event) => {
@@ -5110,22 +5127,6 @@ const insertValueIntoCurrentTableCell = (value: string) => {
   return true
 }
 
-const insertAttachmentSourceValue = (value: string) => {
-  if (!vditorInstance || !hasAttachmentMarker(value)) return false
-  const normalized = normalizeAttachmentInsertValue(value).trim()
-  if (!normalized) return false
-  const currentValue = getEditorValueWithPendingTableSync() || getRawVditorValue()
-  const base = currentValue.replace(/\s+$/g, '')
-  const nextValue = base ? `${base}\n\n${normalized}` : normalized
-  vditorInstance.setValue(nextValue)
-  clearConsumedEditorTableInsertionState()
-  normalizeEditorAttachmentSource()
-  refreshAttachmentLinksFromEditor()
-  window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
-  emitEditorValue(nextValue)
-  return true
-}
-
 defineExpose({
   clear: () => {
     pendingEditorTableCellSync = null
@@ -5148,9 +5149,9 @@ defineExpose({
     if (vditorInstance) {
       const nextValue = normalizeAttachmentInsertValue(val)
       if (insertValueIntoCurrentTableCell(nextValue)) return
-      if (hasAttachmentMarker(nextValue) && insertAttachmentSourceValue(nextValue)) return
       if (pendingEditorTableCellSync) flushPendingEditorTableCellSourceSync()
       vditorInstance.insertValue(nextValue);
+      if (hasAttachmentMarker(nextValue)) clearPreparedEditorAttachmentInsertionTarget()
       normalizeEditorAttachmentSource()
       refreshAttachmentLinksFromEditor()
       window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
@@ -6000,6 +6001,14 @@ html.dark .editor-table-expand-button:focus-visible {
   bottom: 0;
   width: 8px;
   cursor: col-resize;
+}
+
+.editor-table-expand-row-resize-handle.is-table-edge {
+  bottom: 0;
+}
+
+.editor-table-expand-column-resize-handle.is-table-edge {
+  right: 0;
 }
 
 .editor-table-expand-row-resize-handle::after,

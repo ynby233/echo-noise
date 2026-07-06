@@ -194,8 +194,8 @@ assert.match(
 
 assert.match(
   editor,
-  /const\s+insertAttachmentSourceValue\s*=[\s\S]+?vditorInstance\.setValue\(nextValue\)[\s\S]+?clearConsumedEditorTableInsertionState\(\)/,
-  'attachment insertion outside tables must clear stale table fallback before appending to the editor body'
+  /insertValue:\s*\(val:\s*string\)\s*=>\s*\{[\s\S]+?if\s*\(insertValueIntoCurrentTableCell\(nextValue\)\)\s*return[\s\S]+?vditorInstance\.insertValue\(nextValue\)[\s\S]+?if\s*\(hasAttachmentMarker\(nextValue\)\)\s*clearPreparedEditorAttachmentInsertionTarget\(\)[\s\S]+?emitEditorValue\(\)/,
+  'attachment insertion outside tables must respect the current editor caret and clear stale table upload targets'
 )
 
 assert.match(
@@ -238,8 +238,8 @@ assert.doesNotMatch(
 
 assert.match(
   editor,
-  /const\s+insertAttachmentSourceValue\s*=[\s\S]+?const\s+currentValue\s*=\s*getEditorValueWithPendingTableSync\(\)\s*\|\|\s*getRawVditorValue\(\)[\s\S]+?vditorInstance\.setValue\(nextValue\)/,
-  'attachments inserted after a table edit must append to the safe DOM-synced editor value, not stale raw Vditor content'
+  /insertValue:\s*\(val:\s*string\)\s*=>\s*\{[\s\S]+?if\s*\(insertValueIntoCurrentTableCell\(nextValue\)\)\s*return[\s\S]+?if\s*\(pendingEditorTableCellSync\)\s*flushPendingEditorTableCellSourceSync\(\)[\s\S]+?vditorInstance\.insertValue\(nextValue\)/,
+  'attachments inserted outside a table after a table edit must flush pending table sync before using the current Vditor caret'
 )
 
 assert.match(
@@ -251,11 +251,11 @@ assert.match(
 const exposedInsertValue = editor.match(/insertValue:\s*\(val:\s*string\)\s*=>\s*\{[\s\S]+?\r?\n\s+\},\r?\n\s+getValue:/)
 assert.ok(exposedInsertValue, 'VditorEditor exposed insertValue method must exist')
 const exposedInsertValueSource = exposedInsertValue[0]
-const attachmentBodyInsertIndex = exposedInsertValueSource.indexOf('insertAttachmentSourceValue(nextValue)')
 const pendingFlushIndex = exposedInsertValueSource.indexOf('flushPendingEditorTableCellSourceSync()')
+const nativeInsertIndex = exposedInsertValueSource.indexOf('vditorInstance.insertValue(nextValue)')
 assert.ok(
-  attachmentBodyInsertIndex >= 0 && (pendingFlushIndex < 0 || attachmentBodyInsertIndex < pendingFlushIndex),
-  'attachment insertion outside a table must use the DOM-synced value before any pending table flush can force a full Vditor rerender'
+  pendingFlushIndex >= 0 && nativeInsertIndex > pendingFlushIndex,
+  'attachment insertion outside a table must flush pending table source before native insertion at the current caret'
 )
 
 assert.match(
@@ -566,6 +566,18 @@ assert.match(
   editor,
   /if\s*\(textarea\s*&&\s*state\?\.dirty\)\s*syncInlineEditorTableTextareaToCell\(\{\s*reposition:\s*false\s*\}\)/,
   'inline table textarea must commit pending text when editing closes'
+)
+
+assert.match(
+  editor,
+  /const\s+closeInlineEditorTableTextareaOnExternalMouseDown\s*=[\s\S]+?getInlineEditorTableTextareaElement\(target\)[\s\S]+?editor-inline-table-cell-bottom-shield[\s\S]+?state\.cell\.contains\(target\)[\s\S]+?closeInlineEditorTableTextarea\(\)/,
+  'clicking outside the inline table textarea must close it so later typing or uploads use the newly clicked caret'
+)
+
+assert.ok(
+  editor.includes("document.addEventListener('mousedown', closeInlineEditorTableTextareaOnExternalMouseDown, true)") &&
+    editor.includes("document.removeEventListener('mousedown', closeInlineEditorTableTextareaOnExternalMouseDown, true)"),
+  'external inline table textarea closer must be registered and cleaned up with the editor listeners'
 )
 
 const tableExpandStart = editor.indexOf('const openHoveredTableExpand =')
