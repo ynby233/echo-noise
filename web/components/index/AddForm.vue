@@ -77,13 +77,6 @@
       </div>
     </div>
 
-  <!-- 内容预览区域 - 仅在有内容时显示 -->
-  <div v-if="MessageContentHtml" class="mx-auto w-full sm:max-w-4xl mt-4 preview-card">
-    <div :class="[previewProseClass, 'max-w-none editor-preview']">
-      <div v-html="MessageContentHtml"></div>
-    </div>
-  </div>
-
   <SearchMode 
     v-model="showSearchModal" 
     @search-result="handleSearchResult" 
@@ -253,8 +246,6 @@ import { useMessage } from "~/composables/useMessage";
 import { useUserStore } from '~/store/user'
 import { Fancybox } from '@fancyapps/ui'
 import '@fancyapps/ui/dist/fancybox/fancybox.css'
-import Vditor from 'vditor'
-import 'vditor/dist/index.css'
 const VditorEditor = defineAsyncComponent(() => import('./VditorEditor.vue'))
 import SearchMode from './Searchmode.vue'
 import { useMessageStore } from '~/store/message'
@@ -263,7 +254,7 @@ import AudioRecorder from './AudioRecorder.vue'
 import ImageHostingUploader from '~/components/widgets/ImageHostingUploader.vue'
 import { createAudioMarkdown, resolveUploadedMediaUrl, uploadMediaFiles } from '~/utils/media-upload'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
-import { encodeMarkdownExtraBlankLines, markMarkdownPreservedBlankLineElements } from '~/utils/markdown-blank-lines'
+import { encodeMarkdownExtraBlankLines } from '~/utils/markdown-blank-lines'
 const props = defineProps<{ wide?: boolean }>()
 const containerClass = computed(() => (props.wide ? 'w-full max-w-none' : 'mx-auto w-full sm:max-w-4xl'))
 const isEditorLoading = ref(true)
@@ -606,8 +597,6 @@ const scheduleDraftSave = () => {
 const clearDraft = () => {
   try { localStorage.removeItem(DRAFT_KEY) } catch {}
 }
-
-const previewProseClass = computed(() => contentTheme.value === 'dark' ? 'prose prose-invert' : 'prose')
 
 const notifyStore = useNotifyStore()
 const enableNotify = ref(false)
@@ -1181,37 +1170,11 @@ watch(Visibility, (value) => {
   scheduleDraftSave()
 })
 
-watch([MessageContent, fullImageAttachments], ([val]) => {
+watch([MessageContent, fullImageAttachments], () => {
   scheduleDraftSave()
   if (previewRenderTimer) clearTimeout(previewRenderTimer)
-  previewRenderTimer = setTimeout(async () => {
-    const rawValue = String(readSafeEditorContent() || val || "")
-    if (rawValue !== MessageContent.value) MessageContent.value = rawValue
-    const keepImagesFullSize = fullImageAttachments.value || hasFullImageAttachmentsMarker(rawValue)
-    const previewValue = replaceFileAttachmentMarkersForPreview(replaceAttachmentMarkersForPreview(encodeMarkdownExtraBlankLines(stripFullImageAttachmentsMarker(rawValue))))
-    const raw = await Vditor.md2html(normalizeInlineImageLinks(previewValue), { mode: contentTheme.value === 'dark' ? 'dark' : 'light' });
-    MessageContentHtml.value = applyImageGridHTML(raw, keepImagesFullSize);
-    nextTick(() => {
-      const roots = document.querySelectorAll('.editor-preview');
-      roots.forEach((root) => {
-        markMarkdownPreservedBlankLineElements(root)
-        root.querySelectorAll('.image-grid-item img').forEach((imgEl) => {
-          const img = imgEl as HTMLImageElement;
-          const parent = img.parentElement as HTMLElement;
-          const setAR = () => {
-            const w = img.naturalWidth;
-            const h = img.naturalHeight;
-            parent.classList.remove('ar-169', 'ar-34', 'ar-11');
-            if (w > h) parent.classList.add('ar-169');
-            else if (h > w) parent.classList.add('ar-34');
-            else parent.classList.add('ar-11');
-          };
-          if (img.complete && img.naturalWidth && img.naturalHeight) setAR();
-          else img.addEventListener('load', setAR, { once: true });
-        });
-      });
-    });
-  }, 220)
+  previewRenderTimer = null
+  MessageContentHtml.value = ''
 });
 
 watch(() => userStore.isLogin, (newLoginState) => {
@@ -1342,7 +1305,6 @@ const addMessage = async () => {
 .floating-control-option:focus-visible { outline: none; border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
 .floating-control-option.is-selected { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }
 .tb-sep { width:1px; height:24px; background: rgba(0,0,0,0.12); margin: 0 2px; }
-.preview-card { backdrop-filter: blur(8px); background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 8px; color:#111827; }
 html.dark .editor-box { background: var(--home-surface-dark, #202a36); border: 1px solid rgba(255,255,255,0.16); color:#fff; }
 html.dark .editor-toolbar { background: rgba(39, 50, 66, 0.68); backdrop-filter: saturate(1.1) blur(6px); }
 html.dark .state-toggle-btn { --nw-action-hover-border: rgba(255,255,255,0.22); --nw-action-hover-bg: rgba(255,255,255,0.12); --nw-action-hover-text: #f8fafc; }
@@ -1350,7 +1312,6 @@ html.dark .state-toggle-btn.is-enabled { --nw-action-border: rgba(251,146,60,0.4
 html.dark .visibility-select { background: transparent; border: 0; color: inherit; }
 :global(html.dark) .tb-sep { background: rgba(255,255,255,0.12); }
 
-html.dark .preview-card { background: rgba(39, 50, 66, 0.68); border: 1px solid rgba(255,255,255,0.18); color:#fff; }
 .editor-toolbar :deep(.u-button) { border:none !important; box-shadow:none !important; background: transparent !important; color:#374151 !important; }
 html.dark .editor-toolbar :deep(.u-button) { border:none !important; box-shadow:none !important; background: rgba(255,255,255,0.06) !important; color:#cbd5e1 !important; }
 .upload-progress { flex-basis: 100%; order: 10; display: flex; align-items: center; gap: 10px; pointer-events: none; padding: 0 4px; margin-top: 6px; }

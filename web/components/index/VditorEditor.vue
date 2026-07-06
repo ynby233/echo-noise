@@ -5222,28 +5222,29 @@ watch(() => props.theme, (newTheme) => {
 }
 
 .vditor-container .editor-table-attachment-marker {
-  display: inline-flex;
-  align-items: center;
-  max-width: 100%;
-  padding: 1px 6px;
-  border: 1px solid rgba(37, 99, 235, 0.32);
-  border-radius: 6px;
-  background: rgba(37, 99, 235, 0.08);
-  color: #1d4ed8;
-  line-height: 1.55;
-  text-decoration: none;
+  display: inline;
+  max-width: none;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ir-bracket-color, #0000ff);
+  line-height: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
   vertical-align: baseline;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
   user-select: none;
+  cursor: pointer;
 }
 
 html.dark .vditor-container .editor-table-attachment-marker,
 .vditor--dark .editor-table-attachment-marker {
-  border-color: rgba(96, 165, 250, 0.42);
-  background: rgba(96, 165, 250, 0.14);
-  color: #93c5fd;
+  border-color: transparent;
+  background: transparent;
+  color: var(--ir-bracket-color, #93c5fd);
 }
 
 .vditor-container .editor-attachment-node {
@@ -6132,44 +6133,52 @@ body.is-resizing-expanded-table-column {
 }
 
 .editor-table-expand-attachments {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  display: block;
   padding: 0 8px 8px;
 }
 
+.editor-table-expand-attachment-tag + .editor-table-expand-attachment-tag {
+  margin-left: 4px;
+}
+
 .editor-table-expand-attachment-tag {
-  display: inline-flex;
-  align-items: center;
-  max-width: 100%;
-  min-height: 24px;
-  padding: 0 8px;
-  border: 1px solid rgba(249, 115, 22, 0.36);
-  border-radius: 8px;
-  background: rgba(249, 115, 22, 0.10);
-  color: #ea580c;
-  font-size: 11px;
-  font-weight: 650;
-  line-height: 1;
-  text-decoration: none;
+  display: inline;
+  max-width: none;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ir-bracket-color, #0000ff);
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
   cursor: zoom-in;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
   white-space: nowrap;
+  word-break: normal;
+  overflow-wrap: normal;
 }
 
 .editor-table-expand-overlay.is-dark .editor-table-expand-attachment-tag {
-  border-color: rgba(251, 146, 60, 0.42);
-  background: rgba(249, 115, 22, 0.18);
-  color: #fed7aa;
+  border-color: transparent;
+  background: transparent;
+  color: var(--ir-bracket-color, #93c5fd);
 }
 
 .editor-table-expand-attachment-tag:hover,
 .editor-table-expand-attachment-tag:focus-visible {
   outline: none;
-  border-color: rgba(249, 115, 22, 0.68);
-  background: rgba(249, 115, 22, 0.18);
-  color: #c2410c;
+  color: var(--ir-bracket-color, #0000ff);
+  text-decoration-thickness: 2px;
+}
+
+.editor-table-expand-overlay.is-dark .editor-table-expand-attachment-tag:hover,
+.editor-table-expand-overlay.is-dark .editor-table-expand-attachment-tag:focus-visible {
+  color: var(--ir-bracket-color, #93c5fd);
 }
 
 @keyframes editorTableOverlayIn {

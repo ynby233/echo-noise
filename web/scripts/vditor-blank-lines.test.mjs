@@ -300,10 +300,16 @@ assert.match(
   'AddForm DOM fallback serialization must preserve table attachment URLs instead of degrading them to plain labels'
 )
 
+assert.doesNotMatch(
+  addForm,
+  /preview-card|Vditor\.md2html|from 'vditor'/,
+  'AddForm composer must not render a live preview card or run Vditor.md2html while editing/uploading attachments'
+)
+
 assert.match(
   addForm,
-  /Vditor\.md2html\(normalizeInlineImageLinks\(previewValue\),\s*\{\s*mode:\s*contentTheme\.value\s*===\s*'dark'\s*\?\s*'dark'\s*:\s*'light'\s*\}\)/,
-  'AddForm preview rendering must pass an options object because Vditor md2html reads options.cdn internally'
+  /watch\(\[MessageContent,\s*fullImageAttachments\],\s*\(\)\s*=>\s*\{[\s\S]+?scheduleDraftSave\(\)[\s\S]+?MessageContentHtml\.value\s*=\s*''[\s\S]+?\}\);/,
+  'AddForm content watcher must only save draft state and keep the removed preview output empty'
 )
 
 assert.doesNotMatch(
@@ -694,16 +700,10 @@ assert.match(
   'published content must pass through the shared blank-line encoder'
 )
 
-assert.match(
+assert.doesNotMatch(
   addForm,
-  /encodeMarkdownExtraBlankLines\(stripFullImageAttachmentsMarker\(rawValue\)\)/,
-  'composer preview must pass through the shared blank-line encoder'
-)
-
-assert.match(
-  addForm,
-  /markMarkdownPreservedBlankLineElements\(root\)/,
-  'composer preview must materialize encoded blank-line sentinels into visible blank-line blocks'
+  /rawValue|markMarkdownPreservedBlankLineElements/,
+  'composer preview was removed, so blank-line preview materialization must not run while editing'
 )
 
 assert.match(

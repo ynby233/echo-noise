@@ -16,6 +16,7 @@ const audioRecorder = read('components/index/AudioRecorder.vue')
 const vditorEditor = read('components/index/VditorEditor.vue')
 const messageList = read('components/index/MessageList.vue')
 const messageStore = read('store/message.ts')
+const notificationWidget = read('components/widgets/Notification.vue')
 const notificationCenter = read('components/index/UserNotificationCenter.vue')
 const searchMode = read('components/index/Searchmode.vue')
 const authLogin = read('pages/auth/login.vue')
@@ -298,6 +299,48 @@ assert(
   addFormEditorValueIndex >= 0 &&
     addFormDomTableFallbackIndex > addFormEditorValueIndex,
   'publish and draft sync must read the editor safe value before falling back to live table DOM'
+)
+
+assert(
+  !addForm.includes('preview-card') &&
+    !addForm.includes('Vditor.md2html') &&
+    !addForm.includes("from 'vditor'") &&
+    /watch\(\[MessageContent,\s*fullImageAttachments\],\s*\(\)\s*=>\s*\{[\s\S]+?scheduleDraftSave\(\)[\s\S]+?MessageContentHtml\.value\s*=\s*''[\s\S]+?\}\);/.test(addForm),
+  'composer editing must not show or compute the removed live preview card while attachments upload'
+)
+
+assert(
+  notificationWidget.includes('<UNotifications class="noise-notifications" />') &&
+    notificationWidget.includes('.noise-notifications') &&
+    notificationWidget.includes('z-index: 10080 !important;'),
+  'global notifications must render above expanded table overlays'
+)
+
+const tableMarkerCss = vditorEditor.match(/\.vditor-container \.editor-table-attachment-marker \{[\s\S]*?\n\}/)?.[0] || ''
+const expandedAttachmentListCss = vditorEditor.match(/\.editor-table-expand-attachments \{[\s\S]*?\n\}/)?.[0] || ''
+const expandedAttachmentTagCss = vditorEditor.match(/^\.editor-table-expand-attachment-tag \{[\s\S]*?\n\}/m)?.[0] || ''
+
+assert(
+  tableMarkerCss.includes('display: inline;') &&
+    tableMarkerCss.includes('border: 0;') &&
+    tableMarkerCss.includes('background: transparent;') &&
+    tableMarkerCss.includes('text-decoration: underline;') &&
+    tableMarkerCss.includes('white-space: nowrap;') &&
+    !tableMarkerCss.includes('inline-flex') &&
+    !tableMarkerCss.includes('rgba(37, 99, 235'),
+  'table-cell attachment markers must keep the normal editor attachment link styling without a custom pill'
+)
+
+assert(
+  expandedAttachmentListCss.includes('display: block;') &&
+    expandedAttachmentTagCss.includes('display: inline;') &&
+    expandedAttachmentTagCss.includes('border: 0;') &&
+    expandedAttachmentTagCss.includes('background: transparent;') &&
+    expandedAttachmentTagCss.includes('text-decoration: underline;') &&
+    expandedAttachmentTagCss.includes('white-space: nowrap;') &&
+    !expandedAttachmentTagCss.includes('inline-flex') &&
+    !expandedAttachmentTagCss.includes('rgba(249, 115, 22'),
+  'expanded-table attachment tags must match normal editor attachment link styling instead of orange pills'
 )
 
 assert(
