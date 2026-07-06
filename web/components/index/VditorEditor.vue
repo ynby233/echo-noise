@@ -659,6 +659,26 @@ const attachmentInfoFromIrLabel = (label: HTMLElement | null) => {
 
 const attachmentInfoToMarkdownSource = (info: EditorAttachmentInfo) => `[${info.title}](${info.url})`
 
+const createEditorTableAttachmentMarkerElement = (info: EditorAttachmentInfo) => {
+  const marker = document.createElement('span')
+  marker.className = 'editor-table-attachment-marker editor-attachment-link'
+  marker.setAttribute('contenteditable', 'false')
+  marker.setAttribute('role', 'button')
+  marker.setAttribute('tabindex', '0')
+  marker.setAttribute('aria-label', `预览${info.title}`)
+  marker.setAttribute('data-attachment-kind', info.type)
+  marker.setAttribute('data-attachment-url', info.url)
+  marker.setAttribute('data-attachment-source', attachmentInfoToMarkdownSource(info))
+  marker.textContent = info.title
+  return marker
+}
+
+const attachmentInfoFromTableMarker = (marker: HTMLElement | null) => {
+  if (!marker?.classList.contains('editor-table-attachment-marker')) return null
+  const source = marker.getAttribute('data-attachment-source') || ''
+  return attachmentInfoFromText(source)
+}
+
 const normalizeAttachmentSourceText = (value: string) => {
   RAW_ATTACHMENT_ANCHOR_RE.lastIndex = 0
   const normalizedAnchors = String(value || '').replace(
@@ -711,6 +731,10 @@ const materializeEditorPreservedBlankLineBlocks = (root: HTMLElement) => {
 }
 
 const replaceAttachmentNodesWithSourceText = (root: HTMLElement) => {
+  root.querySelectorAll<HTMLElement>('.editor-table-attachment-marker').forEach((marker) => {
+    const info = attachmentInfoFromTableMarker(marker)
+    if (info) marker.replaceWith(document.createTextNode(attachmentInfoToMarkdownSource(info)))
+  })
   root.querySelectorAll<HTMLElement>('[data-type="a"]').forEach((node) => {
     const info = attachmentInfoFromIrNode(node)
     if (info) node.replaceWith(document.createTextNode(attachmentInfoToMarkdownSource(info)))
@@ -722,10 +746,54 @@ const replaceAttachmentNodesWithSourceText = (root: HTMLElement) => {
 }
 
 const materializeAttachmentMarkersInTableCells = (root: HTMLElement) => {
+  if (typeof document === 'undefined') return false
+  let changed = false
   root.querySelectorAll('td,th').forEach((cell) => {
     cell.querySelectorAll<HTMLElement>('.editor-attachment-preview').forEach((node) => node.remove())
+    cell.querySelectorAll<HTMLElement>('[data-type="a"], a').forEach((node) => {
+      if (node.closest('.editor-table-attachment-marker')) return
+      const info = node.matches('[data-type="a"]')
+        ? attachmentInfoFromIrNode(node)
+        : attachmentInfoFromAnchor(node as HTMLAnchorElement)
+      if (!info) return
+      node.replaceWith(createEditorTableAttachmentMarkerElement(info))
+      changed = true
+    })
+
+    const textNodes: Text[] = []
+    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const text = node.textContent || ''
+        ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+        if (!ATTACHMENT_MARKER_GLOBAL_RE.test(text)) return NodeFilter.FILTER_REJECT
+        const parent = node.parentElement
+        if (!parent) return NodeFilter.FILTER_REJECT
+        if (parent.closest('.editor-table-attachment-marker, a, [data-type="a"], .editor-attachment-preview, textarea, code, [data-type="code-block"], .vditor-ir__marker--pre')) {
+          return NodeFilter.FILTER_REJECT
+        }
+        return NodeFilter.FILTER_ACCEPT
+      }
+    })
+    while (walker.nextNode()) textNodes.push(walker.currentNode as Text)
+    textNodes.forEach((textNode) => {
+      const source = normalizeAttachmentSourceText(textNode.textContent || '')
+      ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+      let match: RegExpExecArray | null
+      let lastIndex = 0
+      const fragment = document.createDocumentFragment()
+      while ((match = ATTACHMENT_MARKER_GLOBAL_RE.exec(source))) {
+        if (match.index > lastIndex) fragment.appendChild(document.createTextNode(source.slice(lastIndex, match.index)))
+        const info = normalizeAttachmentInfo(match[1], match[2], match[3])
+        fragment.appendChild(info ? createEditorTableAttachmentMarkerElement(info) : document.createTextNode(match[0]))
+        lastIndex = ATTACHMENT_MARKER_GLOBAL_RE.lastIndex
+      }
+      if (lastIndex === 0) return
+      if (lastIndex < source.length) fragment.appendChild(document.createTextNode(source.slice(lastIndex)))
+      textNode.parentNode?.replaceChild(fragment, textNode)
+      changed = true
+    })
   })
-  return false
+  return changed
 }
 
 const setupAttachmentPreview = () => {
@@ -1023,6 +1091,12 @@ const setupAttachmentPreview = () => {
     const target = getEventElement(event) as HTMLElement | null
     if (!target || !root.contains(target)) return null
 
+    const tableMarker = target.closest<HTMLElement>('.editor-table-attachment-marker')
+    if (tableMarker && root.contains(tableMarker)) {
+      const markerInfo = attachmentInfoFromTableMarker(tableMarker)
+      if (markerInfo) return { target: tableMarker, info: markerInfo }
+    }
+
     const markerNode = target.closest<HTMLElement>('[data-type="a"].editor-attachment-node')
     if (markerNode && root.contains(markerNode)) {
       const markerInfo = attachmentInfoFromIrNode(markerNode)
@@ -1066,6 +1140,7 @@ const setupAttachmentPreview = () => {
     }
     root.querySelectorAll('a.editor-attachment-link').forEach((node) => pushInfo(attachmentInfoFromAnchor(node as HTMLAnchorElement)))
     root.querySelectorAll('[data-type="a"].editor-attachment-node').forEach((node) => pushInfo(attachmentInfoFromIrNode(node as HTMLElement)))
+    root.querySelectorAll('.editor-table-attachment-marker').forEach((node) => pushInfo(attachmentInfoFromTableMarker(node as HTMLElement)))
     return items
   }
 
@@ -2198,10 +2273,33 @@ const escapeTableCellHtml = (value: string) => String(value || '')
   .replace(/\"/g, '&quot;')
   .replace(/'/g, '&#39;')
 
+const escapeHtmlAttribute = (value: string) => escapeTableCellHtml(value).replace(/`/g, '&#96;')
+
+const editorAttachmentInfoToTableMarkerHtml = (info: EditorAttachmentInfo) => {
+  const safeType = escapeHtmlAttribute(info.type)
+  const safeUrl = escapeHtmlAttribute(info.url)
+  const safeSource = escapeHtmlAttribute(attachmentInfoToMarkdownSource(info))
+  const safeTitle = escapeTableCellHtml(info.title)
+  const safeAria = escapeHtmlAttribute(`预览${info.title}`)
+  return `<span class="editor-table-attachment-marker editor-attachment-link" contenteditable="false" role="button" tabindex="0" aria-label="${safeAria}" data-attachment-kind="${safeType}" data-attachment-url="${safeUrl}" data-attachment-source="${safeSource}">${safeTitle}</span>`
+}
+
 const editorTextLineToAttachmentAwareTableCellHtml = (value: string, options: { trim?: boolean } = {}) => {
   const normalizedSource = normalizeAttachmentSourceText(value)
   const source = options.trim ? normalizedSource.trim() : normalizedSource
-  return source ? escapeTableCellHtml(source) : ''
+  if (!source) return ''
+  let output = ''
+  let lastIndex = 0
+  ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = ATTACHMENT_MARKER_GLOBAL_RE.exec(source))) {
+    output += escapeTableCellHtml(source.slice(lastIndex, match.index))
+    const info = normalizeAttachmentInfo(match[1], match[2], match[3])
+    output += info ? editorAttachmentInfoToTableMarkerHtml(info) : escapeTableCellHtml(match[0])
+    lastIndex = ATTACHMENT_MARKER_GLOBAL_RE.lastIndex
+  }
+  output += escapeTableCellHtml(source.slice(lastIndex))
+  return output
 }
 
 const editorTextLineToHtmlTableCellSource = (value: string) => editorTextLineToAttachmentAwareTableCellHtml(value, { trim: true })
@@ -5121,6 +5219,31 @@ watch(() => props.theme, (newTheme) => {
   word-break: break-word;
   -webkit-user-drag: none;
   pointer-events: auto;
+}
+
+.vditor-container .editor-table-attachment-marker {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 1px 6px;
+  border: 1px solid rgba(37, 99, 235, 0.32);
+  border-radius: 6px;
+  background: rgba(37, 99, 235, 0.08);
+  color: #1d4ed8;
+  line-height: 1.55;
+  text-decoration: none;
+  vertical-align: baseline;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  user-select: none;
+}
+
+html.dark .vditor-container .editor-table-attachment-marker,
+.vditor--dark .editor-table-attachment-marker {
+  border-color: rgba(96, 165, 250, 0.42);
+  background: rgba(96, 165, 250, 0.14);
+  color: #93c5fd;
 }
 
 .vditor-container .editor-attachment-node {

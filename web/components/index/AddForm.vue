@@ -505,6 +505,10 @@ const addFormAttachmentMarkdownFromElement = (node: HTMLElement) => {
 }
 
 const replaceAddFormAttachmentNodesWithSource = (root: HTMLElement) => {
+  root.querySelectorAll<HTMLElement>('.editor-table-attachment-marker').forEach((node) => {
+    const markdown = node.getAttribute('data-attachment-source') || ''
+    if (markdown) node.replaceWith(document.createTextNode(markdown))
+  })
   root.querySelectorAll<HTMLElement>('[data-type="a"], a.editor-attachment-link, a[data-attachment-url]').forEach((node) => {
     const markdown = addFormAttachmentMarkdownFromElement(node)
     if (markdown) node.replaceWith(document.createTextNode(markdown))
