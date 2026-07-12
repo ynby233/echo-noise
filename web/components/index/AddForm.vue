@@ -11,6 +11,7 @@
             type="file"
             multiple
             @change="addAttachment"
+            @cancel="clearEditorAttachmentInsertTarget"
             class="hidden"
             placeholder="选择附件"
           />
@@ -288,7 +289,6 @@ const handleImageHostingSuccess = (markdown: string) => {
   if (vditorEditor.value?.insertValue) {
     vditorEditor.value.insertValue(markdown)
     focusEditor()
-    syncContentFromEditor()
   } else {
     clearEditorAttachmentInsertTarget()
   }
@@ -900,7 +900,10 @@ const triggerFileInput = (event?: Event) => {
 };
 
 const addAttachment = async (event: Event) => {
-  if (!checkLogin()) return;
+  if (!checkLogin()) {
+    clearEditorAttachmentInsertTarget()
+    return
+  }
   const input = event.target as HTMLInputElement;
   const files = input.files ? Array.from(input.files) : [];
 
@@ -925,7 +928,6 @@ const addAttachment = async (event: Event) => {
     })
     if (uploaded.length && vditorEditor.value?.insertValue) {
       vditorEditor.value.insertValue(uploaded.map((item) => item.markdown).join(''))
-      syncContentFromEditor()
       focusEditor()
     } else {
       clearEditorAttachmentInsertTarget()
@@ -961,7 +963,6 @@ const handleAudioUploaded = (audioUrl: string) => {
   const audioTag = createAudioMarkdown(resolveUploadedMediaUrl(audioUrl, String(BASE_API || '/api')))
   if (vditorEditor.value?.insertValue) {
     vditorEditor.value.insertValue(audioTag)
-    syncContentFromEditor()
     focusEditor()
   }
 };

@@ -1,40 +1,77 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
+import {
+  insertEditorValueFallback,
+  replaceTableSourceLine,
+  resolveTableAttachmentTarget,
+} from '../utils/vditor-table-attachment.ts'
 
-const sourcePath = fileURLToPath(new URL('../components/index/VditorEditor.vue', import.meta.url))
-const source = await readFile(sourcePath, 'utf8')
+const attachment = '[文件附件：report.pdf](/api/files/report.pdf)'
+const calls = []
+const route = insertEditorValueFallback({
+  insertMD: (value) => calls.push(['insertMD', value]),
+  insertValue: (value) => calls.push(['insertValue', value]),
+}, attachment, true)
 
-const insertion = source.match(
-  /const insertAttachmentIntoTableCellWithoutVditorReset[\s\S]*?\n}\n\nconst insertValueIntoCurrentTableCell/
-)
-assert.ok(insertion, '应能找到表格附件插入路径')
+assert.equal(route, 'attachment-markdown', '附件回退必须使用 Markdown 插入路径')
+assert.deepEqual(calls, [['insertMD', attachment]], '附件 Markdown 绝不能进入 Vditor.insertValue')
+calls.length = 0
+const plainRoute = insertEditorValueFallback({
+  insertMD: (value) => calls.push(['insertMD', value]),
+  insertValue: (value) => calls.push(['insertValue', value]),
+}, '普通文本', false)
+assert.equal(plainRoute, 'value')
+assert.deepEqual(calls, [['insertValue', '普通文本']], '非附件插入必须保留 Vditor 原有路径')
 
-const insertionSource = insertion[0]
-assert.match(
-  insertionSource,
-  /refreshAttachmentLinksInTableCellFromEditor\(cell\)/,
-  '表格附件插入必须只刷新目标单元格'
+const editable = { connected: true }
+const target = { editable, tableIndex: 2, rowIndex: 3, cellIndex: 4 }
+const resolved = resolveTableAttachmentTarget(
+  target,
+  (candidate) => candidate.connected,
+  (candidate) => `${candidate.tableIndex}:${candidate.rowIndex}:${candidate.cellIndex}`
 )
-assert.doesNotMatch(
-  insertionSource,
-  /refreshAttachmentLinksFromEditor\(\)/,
-  '表格附件插入不得触发全编辑器附件扫描'
-)
-assert.doesNotMatch(
-  insertionSource,
-  /setTimeout\(\(\) => refreshAttachmentLinksFromEditor\(\), 0\)/,
-  '表格附件插入不得重复排入全编辑器附件扫描'
-)
-
-const inputStart = source.indexOf('input: (content: string) => {')
-const inputEnd = source.indexOf('preview:', inputStart)
-assert.ok(inputStart >= 0 && inputEnd > inputStart, '应能找到 Vditor input 回调')
-const input = source.slice(inputStart, inputEnd)
-assert.doesNotMatch(
-  input,
-  /window\.setTimeout\(emitSafeValue, (48|160)\)/,
-  '表格输入不得安排多轮延迟全量序列化'
+assert.equal(resolved, '2:3:4', '已捕获的表格目标必须由上传生命周期管理，不能因耗时而过期')
+assert.equal(
+  resolveTableAttachmentTarget(target, () => false, () => 'unexpected'),
+  null,
+  '编辑器 DOM 已销毁时不能复用捕获目标'
 )
 
-console.log('vditor table attachment performance regression: passed')
+const sourceLines = Array.from({ length: 20_000 }, (_, index) => `row-${index}`)
+const changedLine = '| cell | [文件附件：report.pdf](/api/files/report.pdf) |'
+const nextLines = replaceTableSourceLine(sourceLines, 12_345, changedLine)
+assert.ok(nextLines, '合法表格行必须能更新')
+assert.equal(nextLines[12_345], changedLine)
+assert.equal(sourceLines[12_345], 'row-12345', '单行更新不能修改输入源')
+assert.equal(
+  nextLines.reduce((count, line, index) => count + Number(line !== sourceLines[index]), 0),
+  1,
+  'Markdown 表格附件插入只能重写目标行'
+)
+
+const editorPath = fileURLToPath(new URL('../components/index/VditorEditor.vue', import.meta.url))
+const addFormPath = fileURLToPath(new URL('../components/index/AddForm.vue', import.meta.url))
+const [editor, addForm] = await Promise.all([
+  readFile(editorPath, 'utf8'),
+  readFile(addFormPath, 'utf8'),
+])
+
+assert.match(editor, /insertEditorValueFallback\(vditorInstance, nextValue, hasAttachmentMarker\(nextValue\)\)/, '组件必须使用已测试的插入路由')
+assert.doesNotMatch(editor, /EDITOR_TABLE_ATTACHMENT_INSERT_TARGET_TTL_MS|expiresAt:\s*Date\.now\(\)\s*\+\s*EDITOR_TABLE_ATTACHMENT/, '附件目标不能保留时间失效逻辑')
+assert.doesNotMatch(editor, /\[DEBUG-|debugRawInsertValue|debugSafeInsertValue/, '诊断代码必须清理')
+const tableInsertStart = editor.indexOf('const insertAttachmentIntoTableCellWithoutVditorReset =')
+const tableInsertEnd = editor.indexOf('const insertValueIntoCurrentTableCell =', tableInsertStart)
+const tableInsert = editor.slice(tableInsertStart, tableInsertEnd)
+assert.doesNotMatch(tableInsert, /hasUnsafeMarkdownTableStructure\(/, '已知表格源只能在 emitKnownEditorSourceValue 中校验一次')
+assert.match(addForm, /@cancel="clearEditorAttachmentInsertTarget"/, '文件选择器取消时必须显式清理捕获目标')
+
+for (const handler of ['handleImageHostingSuccess', 'addAttachment', 'handleAudioUploaded']) {
+  const start = addForm.indexOf(`const ${handler} =`)
+  assert.ok(start >= 0, `应能找到 ${handler}`)
+  const nextHandler = addForm.indexOf('\nconst ', start + 8)
+  const source = addForm.slice(start, nextHandler >= 0 ? nextHandler : undefined)
+  assert.doesNotMatch(source, /syncContentFromEditor\(\)/, `${handler} 上传成功后不能同步全量读取 Vditor`)
+}
+
+console.log('vditor table attachment regression tests passed')

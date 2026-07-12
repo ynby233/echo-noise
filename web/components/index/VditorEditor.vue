@@ -185,6 +185,7 @@ import { getFixedCoordinateScale, getFixedRect, positionFloatingMenu, scheduleFl
 import { captureVideoFirstFrameFromSource, ensureFancyboxVideoThumbnail, getVideoPlaybackFrameForSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { MARKDOWN_BLANK_LINE_SENTINEL, encodeMarkdownExtraBlankLines, isMarkdownBlankLineSentinel, markMarkdownPreservedBlankLineElements } from '~/utils/markdown-blank-lines'
+import { insertEditorValueFallback, replaceTableSourceLine, resolveTableAttachmentTarget, type TableAttachmentTarget } from '~/utils/vditor-table-attachment'
 import Vditor from "vditor";
 import { Fancybox } from "@fancyapps/ui";
 import "@fancyapps/ui/dist/fancybox/fancybox.css";
@@ -208,7 +209,7 @@ type PendingEditorTableCellSync = { tableIndex: number; rowIndex: number; cellIn
 type EditorTableCellPosition = Pick<PendingEditorTableCellSync, 'tableIndex' | 'rowIndex' | 'cellIndex'>
 type EditorTableCompositionCommitKey = EditorTableCellPosition & { key: 'Space' | 'Enter'; expiresAt: number }
 type EditorTableCompositionCaretTarget = EditorTableCellPosition & { offset: number; expiresAt: number }
-type EditorTableAttachmentInsertionTarget = EditorTableCellPosition & { editable: HTMLElement; expiresAt: number }
+type EditorTableAttachmentInsertionTarget = TableAttachmentTarget<HTMLElement>
 type ExpandedTableResizeDrag = { type: 'row' | 'column'; index: number; startClient: number; startSize: number }
 
 const editorContainer = ref<HTMLElement>();
@@ -345,8 +346,6 @@ const EXPANDED_TABLE_MIN_COLUMN_WIDTH = 48
 const EXPANDED_TABLE_MIN_ROW_HEIGHT = 38
 const EXPANDED_TABLE_CELL_HORIZONTAL_PADDING = 18
 const EXPANDED_TABLE_SCROLL_OVERFLOW_TOLERANCE = 2
-const EDITOR_TABLE_ATTACHMENT_INSERT_TARGET_TTL_MS = 2 * 60 * 1000
-
 const estimateTableLineWidth = (line: string) => {
   const text = stripAttachmentMarkersFromEditorText(String(line || '').replace(/\r\n?/g, '\n')) || ' '
   return Array.from(text).reduce((width, char) => {
@@ -2902,9 +2901,12 @@ const getRawVditorValue = () => {
   }
 }
 
-const getEditorTableBlockForTable = (table: HTMLTableElement | null, preferredIndex = -1) => {
-  const value = getRawVditorValue()
-  const blocks = getEditorTableSourceBlocks(value)
+const getEditorTableBlockForTable = (
+  table: HTMLTableElement | null,
+  preferredIndex = -1,
+  sourceBlocks?: EditorTableSourceBlock[]
+) => {
+  const blocks = sourceBlocks || getEditorTableSourceBlocks(getRawVditorValue())
   const tableIndex = preferredIndex >= 0 ? preferredIndex : (table ? getEditorTables().indexOf(table) : -1)
   return tableBlockFromDataset(table, blocks) || findMarkdownTableBlock(blocks, getRenderedTableRows(table), tableIndex)
 }
@@ -2919,8 +2921,9 @@ const getEditorTableCellSourceTarget = (cell: HTMLTableCellElement | null): Edit
   if (rowIndex < 0 || cellIndex < 0) return null
   const value = getRawVditorValue()
   const lines = value.split('\n')
+  const blocks = getEditorTableSourceBlocks(value)
   const tableIndex = getEditorTables().indexOf(table)
-  const block = getEditorTableBlockForTable(table, tableIndex)
+  const block = getEditorTableBlockForTable(table, tableIndex, blocks)
   if (!block) return null
   if (block.kind === 'html') {
     const sourceRows = editableRowsFromHtmlBlock(block)
@@ -3008,6 +3011,13 @@ const buildEditorTableCellSourceValue = (cell: HTMLTableCellElement | null, next
   const rowCells = [...target.rowCells]
   while (rowCells.length <= target.cellIndex) rowCells.push('')
   rowCells[target.cellIndex] = nextText
+  if (target.block.kind !== 'html') {
+    const nextLine = target.block.kind === 'tab'
+      ? formatEditableTabTableRow(rowCells)
+      : formatEditableMarkdownTableRow(rowCells)
+    const lines = replaceTableSourceLine(target.lines, target.lineIndex, nextLine)
+    return lines ? { table: target.table, value: lines.join('\n') } : null
+  }
   const rows = editableRowsFromTableBlock(target.block)
   if (!rows[target.rowIndex]) rows[target.rowIndex] = []
   rows[target.rowIndex] = rowCells
@@ -4965,7 +4975,6 @@ const prepareEditorAttachmentInsertionTarget = () => {
     tableIndex: position.tableIndex,
     rowIndex: position.rowIndex,
     cellIndex: position.cellIndex,
-    expiresAt: Date.now() + EDITOR_TABLE_ATTACHMENT_INSERT_TARGET_TTL_MS,
   }
   storeLastEditorTableCell(cell)
   return true
@@ -4974,13 +4983,15 @@ const prepareEditorAttachmentInsertionTarget = () => {
 const consumePreparedEditorTableAttachmentCell = () => {
   const target = pendingEditorTableAttachmentInsertionTarget
   pendingEditorTableAttachmentInsertionTarget = null
-  if (!target || Date.now() > target.expiresAt || !editorContainer.value?.contains(target.editable)) {
-    return null as HTMLTableCellElement | null
-  }
-  const table = target.editable.querySelectorAll<HTMLTableElement>('table')[target.tableIndex]
-  const cell = table?.rows[target.rowIndex]?.cells[target.cellIndex] as HTMLTableCellElement | undefined
-  if (!cell || getEditorEditableFromNode(cell) !== target.editable) return null
-  return cell
+  return resolveTableAttachmentTarget(
+    target,
+    (editable) => !!editorContainer.value?.contains(editable),
+    (stored) => {
+      const table = stored.editable.querySelectorAll<HTMLTableElement>('table')[stored.tableIndex]
+      const cell = table?.rows[stored.rowIndex]?.cells[stored.cellIndex] as HTMLTableCellElement | undefined
+      return cell && getEditorEditableFromNode(cell) === stored.editable ? cell : null
+    }
+  )
 }
 
 const getCurrentEditorTableCell = (event?: Event, options: { allowStoredFallback?: boolean } = {}) => {
@@ -5093,8 +5104,9 @@ const insertAttachmentIntoTableCellWithoutVditorReset = (cell: HTMLTableCellElem
   const result = buildEditorTableCellSourceValue(cell, nextText)
   clearConsumedEditorTableAttachmentTargetState()
   refreshAttachmentLinksInTableCellFromEditor(cell)
-  if (result?.value && !hasUnsafeMarkdownTableStructure(result.value)) {
-    emitKnownEditorSourceValue(result.value)
+  if (result?.value) {
+    const emitted = emitKnownEditorSourceValue(result.value)
+    if (!emitted) window.setTimeout(() => emitEditorValue(), 0)
   } else {
     emitEditorValue()
     window.setTimeout(() => emitEditorValue(), 0)
@@ -5174,7 +5186,7 @@ defineExpose({
       const nextValue = normalizeAttachmentInsertValue(val)
       if (insertValueIntoCurrentTableCell(nextValue)) return
       if (pendingEditorTableCellSync) flushPendingEditorTableCellSourceSync()
-      vditorInstance.insertValue(nextValue);
+      insertEditorValueFallback(vditorInstance, nextValue, hasAttachmentMarker(nextValue));
       if (hasAttachmentMarker(nextValue)) clearPreparedEditorAttachmentInsertionTarget()
       normalizeEditorAttachmentSource()
       refreshAttachmentLinksFromEditor()

@@ -194,14 +194,14 @@ assert.match(
 
 assert.match(
   editor,
-  /insertValue:\s*\(val:\s*string\)\s*=>\s*\{[\s\S]+?if\s*\(insertValueIntoCurrentTableCell\(nextValue\)\)\s*return[\s\S]+?vditorInstance\.insertValue\(nextValue\)[\s\S]+?if\s*\(hasAttachmentMarker\(nextValue\)\)\s*clearPreparedEditorAttachmentInsertionTarget\(\)[\s\S]+?emitEditorValue\(\)/,
-  'attachment insertion outside tables must respect the current editor caret and clear stale table upload targets'
+  /insertValue:\s*\(val:\s*string\)\s*=>\s*\{[\s\S]+?if\s*\(insertValueIntoCurrentTableCell\(nextValue\)\)\s*return[\s\S]+?insertEditorValueFallback\(vditorInstance,\s*nextValue,\s*hasAttachmentMarker\(nextValue\)\)[\s\S]+?if\s*\(hasAttachmentMarker\(nextValue\)\)\s*clearPreparedEditorAttachmentInsertionTarget\(\)[\s\S]+?emitEditorValue\(\)/,
+  'attachment insertion outside tables must use the tested Markdown-aware fallback and clear stale table upload targets'
 )
 
-assert.match(
+assert.doesNotMatch(
   editor,
-  /const\s+prepareEditorAttachmentInsertionTarget\s*=[\s\S]+?pendingEditorTableAttachmentInsertionTarget\s*=\s*\{[\s\S]+?expiresAt:\s*Date\.now\(\)\s*\+\s*EDITOR_TABLE_ATTACHMENT_INSERT_TARGET_TTL_MS[\s\S]+?const\s+consumePreparedEditorTableAttachmentCell\s*=/,
-  'file-picker table insertion must be tied to an explicit short-lived target captured before the picker opens'
+  /EDITOR_TABLE_ATTACHMENT_INSERT_TARGET_TTL_MS|expiresAt:\s*Date\.now\(\)\s*\+\s*EDITOR_TABLE_ATTACHMENT/,
+  'file-picker table insertion target must survive long uploads and be cleared by explicit lifecycle events'
 )
 
 assert.match(
@@ -222,7 +222,7 @@ assert.match(
   'table attachment upload insertion must update the target cell and emitted source without calling Vditor setValue'
 )
 
-const tableAttachmentInsertHelper = editor.match(/const\s+insertAttachmentIntoTableCellWithoutVditorReset\s*=[\s\S]+?\n}\n\nconst\s+insertValueIntoCurrentTableCell/)
+const tableAttachmentInsertHelper = editor.match(/const\s+insertAttachmentIntoTableCellWithoutVditorReset\s*=[\s\S]+?\r?\n}\r?\n\r?\nconst\s+insertValueIntoCurrentTableCell/)
 assert.ok(tableAttachmentInsertHelper, 'table attachment insertion helper must exist')
 assert.doesNotMatch(
   tableAttachmentInsertHelper[0],
@@ -238,8 +238,8 @@ assert.doesNotMatch(
 
 assert.match(
   editor,
-  /insertValue:\s*\(val:\s*string\)\s*=>\s*\{[\s\S]+?if\s*\(insertValueIntoCurrentTableCell\(nextValue\)\)\s*return[\s\S]+?if\s*\(pendingEditorTableCellSync\)\s*flushPendingEditorTableCellSourceSync\(\)[\s\S]+?vditorInstance\.insertValue\(nextValue\)/,
-  'attachments inserted outside a table after a table edit must flush pending table sync before using the current Vditor caret'
+  /insertValue:\s*\(val:\s*string\)\s*=>\s*\{[\s\S]+?if\s*\(insertValueIntoCurrentTableCell\(nextValue\)\)\s*return[\s\S]+?if\s*\(pendingEditorTableCellSync\)\s*flushPendingEditorTableCellSourceSync\(\)[\s\S]+?insertEditorValueFallback\(vditorInstance,\s*nextValue,\s*hasAttachmentMarker\(nextValue\)\)/,
+  'attachments inserted outside a table after a table edit must flush pending table sync before using the Markdown-aware fallback'
 )
 
 assert.match(
@@ -252,10 +252,10 @@ const exposedInsertValue = editor.match(/insertValue:\s*\(val:\s*string\)\s*=>\s
 assert.ok(exposedInsertValue, 'VditorEditor exposed insertValue method must exist')
 const exposedInsertValueSource = exposedInsertValue[0]
 const pendingFlushIndex = exposedInsertValueSource.indexOf('flushPendingEditorTableCellSourceSync()')
-const nativeInsertIndex = exposedInsertValueSource.indexOf('vditorInstance.insertValue(nextValue)')
+const fallbackInsertIndex = exposedInsertValueSource.indexOf('insertEditorValueFallback(vditorInstance, nextValue, hasAttachmentMarker(nextValue))')
 assert.ok(
-  pendingFlushIndex >= 0 && nativeInsertIndex > pendingFlushIndex,
-  'attachment insertion outside a table must flush pending table source before native insertion at the current caret'
+  pendingFlushIndex >= 0 && fallbackInsertIndex > pendingFlushIndex,
+  'attachment insertion outside a table must flush pending table source before the Markdown-aware fallback at the current caret'
 )
 
 assert.match(
