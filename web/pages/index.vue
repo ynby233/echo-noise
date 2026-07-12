@@ -5,7 +5,7 @@
       <div class="loading-text">加载中...</div>
     </div>
     <div ref="contentWrapper" class="content-wrapper gpu-accelerated">
-      <UContainer class="container-fixed py-2 pb-4 my-4">
+      <UContainer class="container-fixed pt-2 pb-0 mt-4 mb-0">
         <div :class="['layout-container', gridModeClass]">
       <ClientOnly>
       <div class="left-col" v-if="!isMobile && layoutState!=='single'">
@@ -2544,7 +2544,7 @@ const lifeCountdown = computed(() => {
   --home-accent-warn: #f59e0b;
   --home-radius-card: 12px;
   --home-radius-panel: 16px;
-  --home-page-bottom-reserve: calc(96px + env(safe-area-inset-bottom, 0px));
+  --home-page-bottom-reserve: calc(128px + env(safe-area-inset-bottom, 0px));
   --home-widget-border-color: rgba(15, 23, 42, 0.12);
   --home-widget-shadow: var(--home-shadow-light);
 }

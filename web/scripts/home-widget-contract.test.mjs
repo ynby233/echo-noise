@@ -48,6 +48,16 @@ assert.match(
   /grid-column:\s*1\s*\/\s*-1;[\s\S]*height:\s*var\(--home-page-bottom-reserve\);/,
   '页面底部安全留白必须成为跨越三栏的真实网格行，保证侧栏在页面末尾继续停驻'
 )
+assert.match(
+  homePage,
+  /<UContainer class="container-fixed pt-2 pb-0 mt-4 mb-0">/,
+  '三栏外层不能保留底部 padding 或 margin，否则 sticky 侧栏仍会在页面末尾被向上推走'
+)
+assert.match(
+  homePage,
+  /--home-page-bottom-reserve:\s*calc\(128px \+ env\(safe-area-inset-bottom, 0px\)\);/,
+  '原有的 96px 页面留白和容器底部 32px 间距必须完整迁移到三栏内部占位行'
+)
 
 const sidebarCardStyle = homePage.match(/\.sidebar-card\s*\{([^{}]*)\}/s)?.[1] || ''
 const darkThemeVariables = homePage.match(/html\.dark\s*\{([^{}]*)\}/s)?.[1] || ''
