@@ -662,6 +662,11 @@ const jumpToPage = () => {
   void loadPage(next)
 }
 
+const goToPage = (nextPage: string | number) => {
+  targetPage.value = String(nextPage)
+  jumpToPage()
+}
+
 const markRead = async (item: UserNotification) => {
   if (item.read) return
   const res = await putRequest<any>(`notifications/read/${item.id}`, {}, { credentials: 'include', silent: true })
@@ -736,7 +741,22 @@ onBeforeUnmount(() => {
   clearJumpFeedback()
 })
 
-defineExpose({ refresh: () => loadNotifications(true) })
+const sidebarPagerState = computed(() => ({
+  visible: items.value.length > 0,
+  currentPage: page.value,
+  totalPages: totalPages.value,
+  loading: loading.value,
+  canPrevious: !loading.value && page.value > 1,
+  canNext: !loading.value && page.value < totalPages.value
+}))
+
+defineExpose({
+  refresh: () => loadNotifications(true),
+  sidebarPagerState,
+  previousPage: loadPreviousPage,
+  nextPage: loadNextPage,
+  goToPage
+})
 </script>
 
 <style scoped>

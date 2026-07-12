@@ -70,6 +70,19 @@
             </a>
           </div>
         </UCard>
+        <UCard v-if="activeSidebarPager.visible" class="sidebar-card no-padding-card mt-2 left-widget-pager-card" :class="sidebarThemeCard">
+          <HomeSidebarPager
+            :key="activeTab"
+            :current-page="activeSidebarPager.currentPage"
+            :total-pages="activeSidebarPager.totalPages"
+            :loading="activeSidebarPager.loading"
+            :can-previous="activeSidebarPager.canPrevious"
+            :can-next="activeSidebarPager.canNext"
+            @previous="handleSidebarPagerPrevious"
+            @next="handleSidebarPagerNext"
+            @jump="handleSidebarPagerJump"
+          />
+        </UCard>
         <UCard v-if="frontendConfig.timeEnabled" class="sidebar-card no-padding-card mt-2 left-widget-clock-card" :class="sidebarThemeCard">
           <div class="p-0 text-center clock-card">
             <div class="clock-display">{{ formatTime(currentTime) }}</div>
@@ -188,6 +201,7 @@
               </div>
               <div class="feed-page-content">
                 <InfoFeedList
+                  ref="infoFeedList"
                   :layout-state="layoutState"
                   :limit="Number(frontendConfig.feedLimit) > 0 ? Number(frontendConfig.feedLimit) : undefined"
                   :refresh-seconds="Number(frontendConfig.feedRefreshSeconds || 7200)"
@@ -212,6 +226,7 @@
           <div v-else-if="activeTab==='notifications'" class="notification-page">
             <UCard class="search-card mb-3" :ui="{ body: { padding: 'p-5 md:p-6' } }">
               <UserNotificationCenter
+                ref="notificationCenter"
                 :site-config="frontendConfig"
                 :initial-message-id="notificationTargetMessageId ?? undefined"
                 :initial-comment-id="notificationTargetCommentId ?? undefined"
@@ -514,6 +529,7 @@ import SearchMode from '~/components/index/Searchmode.vue' // 导入 SearchMode 
 import TagList from '~/components/index/TagList.vue'
 import InfoFeedList from '@/components/index/InfoFeedList.vue'
 import UserNotificationCenter from '@/components/index/UserNotificationCenter.vue'
+import HomeSidebarPager from '@/components/index/HomeSidebarPager.vue'
 import AnnouncementBar from '~/components/widgets/AnnouncementBar.vue'
 import FloatingToolSidebar from '~/components/widgets/FloatingToolSidebar.vue'
 import BuiltinComments from '~/components/comments/BuiltinComments.vue'
@@ -633,10 +649,24 @@ const centerTabs = computed(() => {
 
 
 // 添加 messageList ref
-type MessageListExpose = ComponentPublicInstance & {
+type HomePagerState = {
+  visible: boolean
+  currentPage: number
+  totalPages: number
+  loading: boolean
+  canPrevious: boolean
+  canNext: boolean
+}
+type HomePagerController = ComponentPublicInstance & {
+  sidebarPagerState: HomePagerState
+  previousPage: () => void | Promise<void>
+  nextPage: () => void | Promise<void>
+  goToPage: (page: string | number) => void | Promise<void>
+}
+type MessageListExpose = HomePagerController & {
   refreshList: () => Promise<void>
 }
-type CommentThreadExpose = ComponentPublicInstance & {
+type CommentThreadExpose = HomePagerController & {
   focusCommentById: (commentId: number) => Promise<boolean>
 }
 type NotificationJumpItem = {
@@ -650,7 +680,28 @@ type NotificationJumpItem = {
   message?: { id?: number | null; content?: string | null; is_guestbook?: boolean } | null
 }
 const messageList = ref<MessageListExpose | null>(null)
+const infoFeedList = ref<HomePagerController | null>(null)
 const guestbookCommentsRef = ref<CommentThreadExpose | null>(null)
+const notificationCenter = ref<HomePagerController | null>(null)
+const emptySidebarPager: HomePagerState = {
+  visible: false,
+  currentPage: 1,
+  totalPages: 1,
+  loading: false,
+  canPrevious: false,
+  canNext: false
+}
+const activeSidebarPagerController = computed<HomePagerController | null>(() => {
+  if (activeTab.value === 'feed') return infoFeedList.value
+  if (activeTab.value === 'comment') return guestbookCommentsRef.value
+  if (activeTab.value === 'notifications') return notificationCenter.value
+  if (activeTab.value === 'latest' || activeTab.value === 'personal') return messageList.value
+  return null
+})
+const activeSidebarPager = computed<HomePagerState>(() => activeSidebarPagerController.value?.sidebarPagerState || emptySidebarPager)
+const handleSidebarPagerPrevious = () => activeSidebarPagerController.value?.previousPage()
+const handleSidebarPagerNext = () => activeSidebarPagerController.value?.nextPage()
+const handleSidebarPagerJump = (page: string) => activeSidebarPagerController.value?.goToPage(page)
 // 搜索模态的开关
 const showSearchModal = ref(false)
 const showAuthModal = ref(false)
@@ -3343,6 +3394,7 @@ white-space: nowrap;  /* 防止换行 */
 .left-col > .left-widget-profile-card > div[class*="px-4"][class*="py-5"] { padding: 14px 0 12px !important; }
 .left-col > .left-widget-stats-card > div[class*="px-4"][class*="py-5"] { padding-top: 22px !important; padding-bottom: 21px !important; }
 .left-col > .left-widget-social-card > div[class*="px-4"][class*="py-5"] { padding-top: 16px !important; padding-bottom: 16px !important; }
+.left-col > .left-widget-pager-card > div[class*="px-4"][class*="py-5"] { padding: 9px 10px !important; }
 .left-col > .left-widget-clock-card > div[class*="px-4"][class*="py-5"] { padding-top: 12px !important; padding-bottom: 12px !important; }
 .left-col > .left-widget-life-card > div[class*="px-4"][class*="py-5"] { padding-top: 23px !important; padding-bottom: 21px !important; }
 .left-col > .left-widget-hitokoto-card > div[class*="px-4"][class*="py-5"] { padding-top: 11px !important; padding-bottom: 10px !important; }

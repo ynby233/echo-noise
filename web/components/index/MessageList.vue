@@ -2674,8 +2674,26 @@ const showPager = computed(() => {
   return !isPageLoading.value && displayMessages.value.length > 0
 })
 
+const sidebarPagerState = computed(() => ({
+  visible: showPager.value,
+  currentPage: Math.max(1, Number(message.page) || 1),
+  totalPages: totalPages.value,
+  loading: isPageLoading.value,
+  canPrevious: !isPageLoading.value && message.page > 1,
+  canNext: !isPageLoading.value && !!message.hasMore
+}))
+
+const goToPage = async (page: string | number) => {
+  targetPage.value = String(page)
+  await jumpToPage()
+}
+
 defineExpose({
-  refreshList
+  refreshList,
+  sidebarPagerState,
+  previousPage: loadPreviousPage,
+  nextPage: loadNextPage,
+  goToPage
 });
 const onCommentCountUpdated = (e: any) => {
   try {

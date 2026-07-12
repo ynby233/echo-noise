@@ -434,6 +434,11 @@ const jumpToPage = () => {
   void scrollFeedFirstBlockToTop()
 }
 
+const goToPage = (page: string | number) => {
+  targetPage.value = String(page)
+  jumpToPage()
+}
+
 const toggleExpand = (feedId: string) => {
   hasUserToggled.value[feedId] = true
   isExpanded.value[feedId] = !isExpanded.value[feedId]
@@ -900,6 +905,22 @@ watch(() => props.layoutState, () => {
 
 watch(pageItems, () => {
   deferMeasure()
+})
+
+const sidebarPagerState = computed(() => ({
+  visible: !errorText.value && allItems.value.length > 0,
+  currentPage: currentPage.value,
+  totalPages: totalPages.value,
+  loading: loading.value,
+  canPrevious: !loading.value && currentPage.value > 1,
+  canNext: !loading.value && currentPage.value < totalPages.value
+}))
+
+defineExpose({
+  sidebarPagerState,
+  previousPage: goPrevPage,
+  nextPage: goNextPage,
+  goToPage
 })
 
 onMounted(() => {

@@ -1359,6 +1359,10 @@ const jumpToRootPage = () => {
   }
   void loadRootPage(next)
 }
+const goToPage = (page: string | number) => {
+  targetRootPage.value = String(page)
+  jumpToRootPage()
+}
 watch(() => props.messageId, () => {
   visibleCount.value = INITIAL_ROOT_VISIBLE
   currentRootPage.value = 1
@@ -1493,7 +1497,24 @@ watch(() => [props.replyCommentId, canComment.value, props.replyInputOnly], () =
   applyReplyInputTarget()
 }, { immediate: true })
 
-defineExpose({ load, focusCommentById, replyToCommentById })
+const sidebarPagerState = computed(() => ({
+  visible: showCommentPager.value,
+  currentPage: currentRootPage.value,
+  totalPages: totalRootPages.value,
+  loading: false,
+  canPrevious: currentRootPage.value > 1,
+  canNext: currentRootPage.value < totalRootPages.value
+}))
+
+defineExpose({
+  load,
+  focusCommentById,
+  replyToCommentById,
+  sidebarPagerState,
+  previousPage: loadPreviousRootPage,
+  nextPage: loadNextRootPage,
+  goToPage
+})
 </script>
 
 <style scoped>
