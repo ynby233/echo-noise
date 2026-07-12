@@ -8,7 +8,8 @@
       <UContainer class="container-fixed pt-2 pb-0 mt-4 mb-0">
         <div :class="['layout-container', gridModeClass]">
       <ClientOnly>
-      <div ref="leftCol" :style="leftSidebarPositionStyle" class="left-col" v-if="!isMobile && layoutState!=='single'">
+      <div ref="leftColSlot" class="sidebar-slot sidebar-slot-left" v-if="!isMobile && layoutState!=='single'">
+      <div :style="leftSidebarFixedStyle" class="left-col">
         <UCard class="sidebar-card left-widget-profile-card" :class="sidebarThemeCard">
           <div class="profile-card">
             <div class="profile-head">
@@ -163,6 +164,7 @@
         
         </div>
       </div>
+      </div>
       </ClientOnly>
       <div ref="centerCol" class="center-col">
         <div :class="centerContainerClass">
@@ -254,7 +256,8 @@
         </div>
       </div>
       <ClientOnly>
-      <div ref="rightCol" :style="rightSidebarPositionStyle" class="right-col space-y-2" v-if="!isMobile && layoutState==='three'">
+      <div ref="rightColSlot" class="sidebar-slot sidebar-slot-right" v-if="!isMobile && layoutState==='three'">
+      <div :style="rightSidebarFixedStyle" class="right-col space-y-2">
         <UCard v-if="frontendConfig.announcementEnabled && (frontendConfig.announcementText || '').trim() !== ''" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
           <AnnouncementBar :text="frontendConfig.announcementText || '欢迎访问我的说说笔记！'" />
         </UCard>
@@ -297,6 +300,7 @@
         
         
         
+      </div>
       </div>
       </ClientOnly>
     </div>
@@ -1114,87 +1118,77 @@ const toggleThemeGlobal = () => {
 }
 
 const contentWrapper = ref<HTMLElement | null>(null)
-const leftCol = ref<HTMLElement | null>(null)
-const rightCol = ref<HTMLElement | null>(null)
-const leftSidebarCorrection = ref(0)
-const rightSidebarCorrection = ref(0)
-const leftSidebarPositionStyle = computed(() => (
-  leftSidebarCorrection.value > 0
-    ? { transform: `translate3d(0, ${leftSidebarCorrection.value}px, 0)` }
-    : undefined
-))
-const rightSidebarPositionStyle = computed(() => (
-  rightSidebarCorrection.value > 0
-    ? { transform: `translate3d(0, ${rightSidebarCorrection.value}px, 0)` }
-    : undefined
-))
+// Zero-height grid slots preserve the column layout and provide horizontal geometry.
+// The fixed sidebars are never repositioned during scrolling; only resize/layout changes update them.
+const leftColSlot = ref<HTMLElement | null>(null)
+const rightColSlot = ref<HTMLElement | null>(null)
+const leftSidebarFixedStyle = ref<Record<string, string>>({ visibility: 'hidden' })
+const rightSidebarFixedStyle = ref<Record<string, string>>({ visibility: 'hidden' })
 
-// A sticky element taller than the viewport is pulled upward by its grid parent's
-// bottom edge. Measure that browser-applied clamp without the existing transform,
-// then cancel only the clamp so the column remains part of the main scroll flow.
-const getSidebarStickyCorrection = (el: HTMLElement | null, appliedCorrection: number) => {
-  if (!el) return 0
-  const unclampedTop = el.getBoundingClientRect().top - appliedCorrection
-  return Math.max(0, -unclampedTop)
+const getSidebarFixedStyle = (slot: HTMLElement | null): Record<string, string> => {
+  if (!slot) return { visibility: 'hidden' }
+  const rect = slot.getBoundingClientRect()
+  if (rect.width <= 0) return { visibility: 'hidden' }
+  const scale = rect.width / slot.offsetWidth
+  return {
+    left: `${rect.left / scale}px`,
+    width: `${rect.width / scale}px`,
+    visibility: 'visible',
+  }
 }
 
-const resetSidebarStickyCorrection = () => {
-  leftSidebarCorrection.value = 0
-  rightSidebarCorrection.value = 0
-}
-
-let sidebarStickyFrame = 0
-const updateSidebarStickyCorrection = () => {
-  sidebarStickyFrame = 0
+const updateSidebarFixedGeometry = () => {
   if (typeof window === 'undefined' || isMobile.value || layoutState.value === 'single') {
-    resetSidebarStickyCorrection()
+    leftSidebarFixedStyle.value = { visibility: 'hidden' }
+    rightSidebarFixedStyle.value = { visibility: 'hidden' }
     return
   }
-  const nextLeft = getSidebarStickyCorrection(leftCol.value, leftSidebarCorrection.value)
-  const nextRight = layoutState.value === 'three'
-    ? getSidebarStickyCorrection(rightCol.value, rightSidebarCorrection.value)
-    : 0
-  if (Math.abs(nextLeft - leftSidebarCorrection.value) > 0.1) leftSidebarCorrection.value = nextLeft
-  if (Math.abs(nextRight - rightSidebarCorrection.value) > 0.1) rightSidebarCorrection.value = nextRight
+  leftSidebarFixedStyle.value = getSidebarFixedStyle(leftColSlot.value)
+  rightSidebarFixedStyle.value = layoutState.value === 'three'
+    ? getSidebarFixedStyle(rightColSlot.value)
+    : { visibility: 'hidden' }
 }
 
-const scheduleSidebarStickyCorrection = () => {
-  if (typeof window === 'undefined' || sidebarStickyFrame) return
-  sidebarStickyFrame = window.requestAnimationFrame(updateSidebarStickyCorrection)
+let sidebarGeometryFrame = 0
+const scheduleSidebarFixedGeometry = () => {
+  if (typeof window === 'undefined' || sidebarGeometryFrame) return
+  sidebarGeometryFrame = window.requestAnimationFrame(() => {
+    sidebarGeometryFrame = 0
+    updateSidebarFixedGeometry()
+  })
 }
 
-let sidebarResizeObserver: ResizeObserver | null = null
-const bindSidebarResizeObserver = () => {
-  sidebarResizeObserver?.disconnect()
-  sidebarResizeObserver = null
+let sidebarSlotResizeObserver: ResizeObserver | null = null
+const bindSidebarSlotResizeObserver = () => {
+  sidebarSlotResizeObserver?.disconnect()
+  sidebarSlotResizeObserver = null
   if (typeof ResizeObserver === 'undefined') return
-  sidebarResizeObserver = new ResizeObserver(scheduleSidebarStickyCorrection)
-  if (leftCol.value) sidebarResizeObserver.observe(leftCol.value)
-  if (rightCol.value) sidebarResizeObserver.observe(rightCol.value)
+  sidebarSlotResizeObserver = new ResizeObserver(scheduleSidebarFixedGeometry)
+  if (leftColSlot.value) sidebarSlotResizeObserver.observe(leftColSlot.value)
+  if (rightColSlot.value) sidebarSlotResizeObserver.observe(rightColSlot.value)
 }
 
 watch(() => [layoutState.value, isMobile.value], () => {
   nextTick(() => {
-    resetSidebarStickyCorrection()
-    bindSidebarResizeObserver()
-    scheduleSidebarStickyCorrection()
+    bindSidebarSlotResizeObserver()
+    updateSidebarFixedGeometry()
   })
 })
 
 onMounted(() => {
-  window.addEventListener('resize', scheduleSidebarStickyCorrection, { passive: true })
-  window.visualViewport?.addEventListener('resize', scheduleSidebarStickyCorrection, { passive: true })
+  window.addEventListener('resize', scheduleSidebarFixedGeometry, { passive: true })
+  window.visualViewport?.addEventListener('resize', scheduleSidebarFixedGeometry, { passive: true })
   nextTick(() => {
-    bindSidebarResizeObserver()
-    scheduleSidebarStickyCorrection()
+    bindSidebarSlotResizeObserver()
+    updateSidebarFixedGeometry()
   })
 })
 
 onUnmounted(() => {
-  if (sidebarStickyFrame) window.cancelAnimationFrame(sidebarStickyFrame)
-  sidebarResizeObserver?.disconnect()
-  window.removeEventListener('resize', scheduleSidebarStickyCorrection)
-  window.visualViewport?.removeEventListener('resize', scheduleSidebarStickyCorrection)
+  if (sidebarGeometryFrame) window.cancelAnimationFrame(sidebarGeometryFrame)
+  sidebarSlotResizeObserver?.disconnect()
+  window.removeEventListener('resize', scheduleSidebarFixedGeometry)
+  window.visualViewport?.removeEventListener('resize', scheduleSidebarFixedGeometry)
 })
 
 const scrollToTop = () => {
@@ -1255,16 +1249,12 @@ const updateScrollState = () => {
   isAtBottom.value = el.clientHeight + y >= max - 2
 }
 let scrollStateCleanup: (() => void) | null = null
-const handleMainScroll = () => {
-  updateScrollState()
-  scheduleSidebarStickyCorrection()
-}
 const bindScrollStateListener = () => {
   scrollStateCleanup?.()
   const el = getMainScrollElement()
   if (!el) return
-  el.addEventListener('scroll', handleMainScroll, { passive: true })
-  scrollStateCleanup = () => el.removeEventListener('scroll', handleMainScroll)
+  el.addEventListener('scroll', updateScrollState, { passive: true })
+  scrollStateCleanup = () => el.removeEventListener('scroll', updateScrollState)
 }
 onMounted(() => {
   nextTick(() => {
@@ -3236,7 +3226,8 @@ white-space: nowrap;  /* 防止换行 */
   height: var(--home-page-bottom-reserve);
   pointer-events: none;
 }
-.left-col, .right-col { position: sticky; top: 0; align-self: start; height: fit-content; width: 100%; min-width: 0; box-sizing: border-box; }
+.sidebar-slot { align-self: start; width: 100%; min-width: 0; height: 0; }
+.left-col, .right-col { position: fixed !important; top: 0; height: fit-content; width: 100%; min-width: 0; box-sizing: border-box; z-index: 20; }
 .right-col > * {
   width: 100%;
   min-width: 0;

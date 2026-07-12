@@ -21,6 +21,8 @@ const rightColumnStyle = homePage.slice(
 const contentWrapperStyle = homePage.match(/\.content-wrapper\s*\{([^{}]*)\}/s)?.[1] || ''
 const layoutContainerStyle = homePage.match(/\.layout-container\s*\{([^{}]*)\}/s)?.[1] || ''
 const layoutReserveStyle = homePage.match(/\.layout-container::after\s*\{([^{}]*)\}/s)?.[1] || ''
+const sidebarSlotStyle = homePage.match(/\.sidebar-slot\s*\{([^{}]*)\}/s)?.[1] || ''
+const sidebarColumnStyle = homePage.match(/\.left-col,\s*\.right-col\s*\{([^{}]*)\}/s)?.[1] || ''
 
 assert.ok(rightColumnStyle, '应能找到右侧小组件栏样式')
 assert.doesNotMatch(
@@ -60,28 +62,37 @@ assert.match(
 )
 assert.match(
   homePage,
-  /<div ref="leftCol"[^>]*:style="leftSidebarPositionStyle"[^>]*class="left-col"/,
-  '左侧栏必须能校正 sticky 在矮视口末尾产生的父容器底部夹紧位移'
+  /<div ref="leftColSlot" class="sidebar-slot sidebar-slot-left"[^>]*>[\s\S]*?<div :style="leftSidebarFixedStyle" class="left-col">/,
+  '左侧栏必须位于不参与页面高度的网格槽中，并从首帧固定在视口位置'
 )
 assert.match(
   homePage,
-  /<div ref="rightCol"[^>]*:style="rightSidebarPositionStyle"[^>]*class="right-col space-y-2"/,
-  '右侧栏必须能校正 sticky 在矮视口末尾产生的父容器底部夹紧位移'
+  /<div ref="rightColSlot" class="sidebar-slot sidebar-slot-right"[^>]*>[\s\S]*?<div :style="rightSidebarFixedStyle" class="right-col space-y-2">/,
+  '右侧栏必须位于不参与页面高度的网格槽中，并从首帧固定在视口位置'
 )
 assert.match(
-  homePage,
-  /const unclampedTop = el\.getBoundingClientRect\(\)\.top - appliedCorrection[\s\S]*Math\.max\(0, -unclampedTop\)/,
-  '侧栏高于视口时必须抵消实际 sticky 夹紧量，而不能再依赖固定像素留白'
+  sidebarSlotStyle,
+  /height:\s*0;/,
+  '侧栏网格槽不能用组件自身高度撑长正文页的滚动范围'
 )
 assert.match(
-  homePage,
-  /visualViewport\?\.addEventListener\('resize', scheduleSidebarStickyCorrection/,
-  'iPad Safari 可视视口高度变化后必须重新测量侧栏夹紧量'
+  sidebarColumnStyle,
+  /position:\s*fixed\s*!important;[\s\S]*top:\s*0;/,
+  '左右侧栏必须从下滑开始前就固定，不能先 sticky 位移再做事后校正'
+)
+const sidebarPositioningSource = homePage.slice(
+  homePage.indexOf('const leftColSlot'),
+  homePage.indexOf('const scrollToTop')
+)
+assert.doesNotMatch(
+  sidebarPositioningSource,
+  /(?:translate3d|StickyCorrection|addEventListener\('scroll')/,
+  '侧栏定位不能再依赖滚动过程中的 transform 或逐帧校正，否则 Safari 弹性超滚会造成抽搐和无限空白'
 )
 assert.match(
-  homePage,
-  /const handleMainScroll = \(\) => \{[\s\S]*?updateScrollState\(\)[\s\S]*?scheduleSidebarStickyCorrection\(\)[\s\S]*?addEventListener\('scroll', handleMainScroll/,
-  '每次页面整体滚动后都必须按浏览器实际 sticky 位置更新夹紧校正'
+  sidebarPositioningSource,
+  /const scale = rect\.width \/ slot\.offsetWidth[\s\S]*left:\s*`\$\{rect\.left \/ scale\}px`[\s\S]*width:\s*`\$\{rect\.width \/ scale\}px`/,
+  '侧栏只允许在布局或视口尺寸变化时读取网格槽横向几何，并必须抵消桌面端页面 zoom 后再写入 fixed 坐标'
 )
 
 const sidebarCardStyle = homePage.match(/\.sidebar-card\s*\{([^{}]*)\}/s)?.[1] || ''
