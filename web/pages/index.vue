@@ -9,7 +9,7 @@
         <div :class="['layout-container', gridModeClass]">
       <ClientOnly>
       <div ref="leftColSlot" class="sidebar-slot sidebar-slot-left" v-if="!isMobile && layoutState!=='single'">
-      <div :style="leftSidebarFixedStyle" class="left-col">
+      <div :class="{ 'is-viewport-pinned': isSidebarPinned }" :style="leftSidebarStyle" class="left-col">
         <UCard class="sidebar-card left-widget-profile-card" :class="sidebarThemeCard">
           <div class="profile-card">
             <div class="profile-head">
@@ -257,7 +257,7 @@
       </div>
       <ClientOnly>
       <div ref="rightColSlot" class="sidebar-slot sidebar-slot-right" v-if="!isMobile && layoutState==='three'">
-      <div :style="rightSidebarFixedStyle" class="right-col space-y-2">
+      <div :class="{ 'is-viewport-pinned': isSidebarPinned }" :style="rightSidebarStyle" class="right-col space-y-2">
         <UCard v-if="frontendConfig.announcementEnabled && (frontendConfig.announcementText || '').trim() !== ''" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
           <AnnouncementBar :text="frontendConfig.announcementText || '欢迎访问我的说说笔记！'" />
         </UCard>
@@ -1124,6 +1124,24 @@ const leftColSlot = ref<HTMLElement | null>(null)
 const rightColSlot = ref<HTMLElement | null>(null)
 const leftSidebarFixedStyle = ref<Record<string, string>>({ visibility: 'hidden' })
 const rightSidebarFixedStyle = ref<Record<string, string>>({ visibility: 'hidden' })
+const isSidebarPinned = ref(false)
+const sidebarPinThreshold = ref(Number.POSITIVE_INFINITY)
+const unpinnedSidebarStyle: Record<string, string> = {
+  left: '0px',
+  width: '100%',
+  visibility: 'visible',
+}
+const leftSidebarStyle = computed<Record<string, string>>(() => (
+  isSidebarPinned.value ? leftSidebarFixedStyle.value : unpinnedSidebarStyle
+))
+const rightSidebarStyle = computed<Record<string, string>>(() => (
+  isSidebarPinned.value ? rightSidebarFixedStyle.value : unpinnedSidebarStyle
+))
+
+const updateSidebarPinnedState = () => {
+  const scroller = getMainScrollElement()
+  isSidebarPinned.value = !!scroller && scroller.scrollTop >= sidebarPinThreshold.value
+}
 
 const getSidebarFixedStyle = (slot: HTMLElement | null): Record<string, string> => {
   if (!slot) return { visibility: 'hidden' }
@@ -1141,12 +1159,21 @@ const updateSidebarFixedGeometry = () => {
   if (typeof window === 'undefined' || isMobile.value || layoutState.value === 'single') {
     leftSidebarFixedStyle.value = { visibility: 'hidden' }
     rightSidebarFixedStyle.value = { visibility: 'hidden' }
+    sidebarPinThreshold.value = Number.POSITIVE_INFINITY
+    isSidebarPinned.value = false
     return
   }
   leftSidebarFixedStyle.value = getSidebarFixedStyle(leftColSlot.value)
   rightSidebarFixedStyle.value = layoutState.value === 'three'
     ? getSidebarFixedStyle(rightColSlot.value)
     : { visibility: 'hidden' }
+  const slot = leftColSlot.value || rightColSlot.value
+  const scroller = getMainScrollElement()
+  if (!slot || !scroller) return
+  const rect = slot.getBoundingClientRect()
+  const scale = rect.width / slot.offsetWidth
+  sidebarPinThreshold.value = rect.top / scale + scroller.scrollTop
+  updateSidebarPinnedState()
 }
 
 let sidebarGeometryFrame = 0
@@ -1249,12 +1276,16 @@ const updateScrollState = () => {
   isAtBottom.value = el.clientHeight + y >= max - 2
 }
 let scrollStateCleanup: (() => void) | null = null
+const handleMainScroll = () => {
+  updateScrollState()
+  updateSidebarPinnedState()
+}
 const bindScrollStateListener = () => {
   scrollStateCleanup?.()
   const el = getMainScrollElement()
   if (!el) return
-  el.addEventListener('scroll', updateScrollState, { passive: true })
-  scrollStateCleanup = () => el.removeEventListener('scroll', updateScrollState)
+  el.addEventListener('scroll', handleMainScroll, { passive: true })
+  scrollStateCleanup = () => el.removeEventListener('scroll', handleMainScroll)
 }
 onMounted(() => {
   nextTick(() => {
@@ -3226,8 +3257,9 @@ white-space: nowrap;  /* 防止换行 */
   height: var(--home-page-bottom-reserve);
   pointer-events: none;
 }
-.sidebar-slot { align-self: start; width: 100%; min-width: 0; height: 0; }
-.left-col, .right-col { position: fixed !important; top: 0; height: fit-content; width: 100%; min-width: 0; box-sizing: border-box; z-index: 20; }
+.sidebar-slot { position: relative; align-self: start; width: 100%; min-width: 0; height: 0; }
+.left-col, .right-col { position: absolute !important; top: 0; left: 0; height: fit-content; width: 100%; min-width: 0; box-sizing: border-box; z-index: 20; }
+.left-col.is-viewport-pinned, .right-col.is-viewport-pinned { position: fixed !important; top: 0; }
 .right-col > * {
   width: 100%;
   min-width: 0;

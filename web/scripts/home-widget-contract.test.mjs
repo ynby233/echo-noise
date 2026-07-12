@@ -23,6 +23,7 @@ const layoutContainerStyle = homePage.match(/\.layout-container\s*\{([^{}]*)\}/s
 const layoutReserveStyle = homePage.match(/\.layout-container::after\s*\{([^{}]*)\}/s)?.[1] || ''
 const sidebarSlotStyle = homePage.match(/\.sidebar-slot\s*\{([^{}]*)\}/s)?.[1] || ''
 const sidebarColumnStyle = homePage.match(/\.left-col,\s*\.right-col\s*\{([^{}]*)\}/s)?.[1] || ''
+const pinnedSidebarStyle = homePage.match(/\.left-col\.is-viewport-pinned,\s*\.right-col\.is-viewport-pinned\s*\{([^{}]*)\}/s)?.[1] || ''
 
 assert.ok(rightColumnStyle, '应能找到右侧小组件栏样式')
 assert.doesNotMatch(
@@ -62,13 +63,13 @@ assert.match(
 )
 assert.match(
   homePage,
-  /<div ref="leftColSlot" class="sidebar-slot sidebar-slot-left"[^>]*>[\s\S]*?<div :style="leftSidebarFixedStyle" class="left-col">/,
-  '左侧栏必须位于不参与页面高度的网格槽中，并从首帧固定在视口位置'
+  /<div ref="leftColSlot" class="sidebar-slot sidebar-slot-left"[^>]*>[\s\S]*?<div :class="\{ 'is-viewport-pinned': isSidebarPinned \}" :style="leftSidebarStyle" class="left-col">/,
+  '左侧栏必须先与头图一起位于网格槽，达到视口顶部后再进入固定状态'
 )
 assert.match(
   homePage,
-  /<div ref="rightColSlot" class="sidebar-slot sidebar-slot-right"[^>]*>[\s\S]*?<div :style="rightSidebarFixedStyle" class="right-col space-y-2">/,
-  '右侧栏必须位于不参与页面高度的网格槽中，并从首帧固定在视口位置'
+  /<div ref="rightColSlot" class="sidebar-slot sidebar-slot-right"[^>]*>[\s\S]*?<div :class="\{ 'is-viewport-pinned': isSidebarPinned \}" :style="rightSidebarStyle" class="right-col space-y-2">/,
+  '右侧栏必须先与头图一起位于网格槽，达到视口顶部后再进入固定状态'
 )
 assert.match(
   sidebarSlotStyle,
@@ -77,8 +78,13 @@ assert.match(
 )
 assert.match(
   sidebarColumnStyle,
+  /position:\s*absolute\s*!important;[\s\S]*top:\s*0;/,
+  '页面顶部时左右侧栏必须跟随网格槽，与中间头图保持相同顶部位置'
+)
+assert.match(
+  pinnedSidebarStyle,
   /position:\s*fixed\s*!important;[\s\S]*top:\s*0;/,
-  '左右侧栏必须从下滑开始前就固定，不能先 sticky 位移再做事后校正'
+  '侧栏到达视口顶部后必须切换为固定定位，并保持该位置'
 )
 const sidebarPositioningSource = homePage.slice(
   homePage.indexOf('const leftColSlot'),
@@ -93,6 +99,16 @@ assert.match(
   sidebarPositioningSource,
   /const scale = rect\.width \/ slot\.offsetWidth[\s\S]*left:\s*`\$\{rect\.left \/ scale\}px`[\s\S]*width:\s*`\$\{rect\.width \/ scale\}px`/,
   '侧栏只允许在布局或视口尺寸变化时读取网格槽横向几何，并必须抵消桌面端页面 zoom 后再写入 fixed 坐标'
+)
+assert.match(
+  sidebarPositioningSource,
+  /sidebarPinThreshold\.value = rect\.top \/ scale \+ scroller\.scrollTop/,
+  '固定阈值必须来自网格槽原始顶部，页面缩放后仍与中间头图同步'
+)
+assert.match(
+  homePage,
+  /const handleMainScroll = \(\) => \{[\s\S]*?updateScrollState\(\)[\s\S]*?updateSidebarPinnedState\(\)[\s\S]*?addEventListener\('scroll', handleMainScroll/,
+  '滚动过程中只允许切换是否已到达固定阈值，不能重新测量或校正位置'
 )
 
 const sidebarCardStyle = homePage.match(/\.sidebar-card\s*\{([^{}]*)\}/s)?.[1] || ''
