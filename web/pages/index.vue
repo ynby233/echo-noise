@@ -1203,8 +1203,8 @@ const handleScrollClick = () => {
 const isDark = computed(() => contentTheme.value === 'dark')
 const sidebarThemeCard = computed(() => (
   isDark.value
-    ? 'bg-[#1f2630] text-white border border-white/15'
-    : 'bg-white text-black border border-black/10'
+    ? 'bg-[#1f2630] text-white'
+    : 'bg-white text-black'
 ))
 const scrollButtonClass = computed(() => (
   isDark.value
@@ -2544,6 +2544,12 @@ const lifeCountdown = computed(() => {
   --home-accent-warn: #f59e0b;
   --home-radius-card: 12px;
   --home-radius-panel: 16px;
+  --home-widget-border-color: rgba(15, 23, 42, 0.12);
+  --home-widget-shadow: var(--home-shadow-light);
+}
+html.dark {
+  --home-widget-border-color: var(--home-border-dark);
+  --home-widget-shadow: 0 10px 24px rgba(2, 6, 23, 0.4);
 }
 html, body {
   margin: 0;
@@ -3137,14 +3143,6 @@ white-space: nowrap;  /* 防止换行 */
 }
 .layout-container { --sidebar-width: 320px; --grid-gap: 16px; width: 100%; min-width: 0; }
 .left-col, .right-col { position: sticky; top: 0; align-self: start; height: fit-content; width: 100%; min-width: 0; box-sizing: border-box; }
-.right-col {
-  max-height: calc(100vh - 24px);
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-gutter: stable;
-}
 .right-col > * {
   width: 100%;
   min-width: 0;
@@ -3157,10 +3155,10 @@ white-space: nowrap;  /* 防止换行 */
   border-radius: var(--home-radius-card);
   background: var(--home-surface-light);
   color: var(--home-text-light);
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--home-widget-border-color) !important;
+  box-shadow: var(--home-widget-shadow) !important;
 }
 .right-col .sidebar-card {
-  box-shadow: none !important;
   transform: none !important;
   transition: border-color .16s ease, background-color .16s ease, color .16s ease, box-shadow .16s ease !important;
 }
@@ -3199,26 +3197,8 @@ white-space: nowrap;  /* 防止换行 */
   position: relative;
   overflow-x: hidden;
 }
-@media screen and (min-width: 769px) {
-  :global(html.dark) .left-col,
-  :global(html.dark) .center-col,
-  :global(html.dark) .right-col {
-    overflow-y: auto;
-  }
-}
-@media screen and (max-width: 768px) {
-  :global(html.dark) .left-col,
-  :global(html.dark) .center-col,
-  :global(html.dark) .right-col {
-    overflow-y: hidden;
-  }
-}
 :global(html.dark) .center-col {
   background: linear-gradient(180deg, rgba(30, 41, 59, 0.38) 0%, rgba(15, 23, 42, 0.7) 100%);
-}
-:global(html.dark) .right-col {
-  overflow-x: hidden;
-  overflow-y: auto;
 }
 :global(html.dark) .left-col::before,
 :global(html.dark) .center-col::before,
@@ -3252,25 +3232,12 @@ white-space: nowrap;  /* 防止换行 */
 html.dark .sidebar-card {
   background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.8) 100%);
   color: var(--home-text-dark);
-  border: 1px solid var(--home-border-dark);
-  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.4);
   backdrop-filter: blur(8px) saturate(118%);
   -webkit-backdrop-filter: blur(8px) saturate(118%);
   transition: border-color .16s ease, background-color .16s ease, color .16s ease, box-shadow .16s ease;
 }
 html.dark .sidebar-card:hover {
   transform: none;
-  border-color: var(--home-border-dark);
-  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.4);
-}
-html.dark .right-col .sidebar-card {
-  box-shadow: none !important;
-  transform: none !important;
-  transition: border-color .16s ease, background-color .16s ease, color .16s ease, box-shadow .16s ease !important;
-}
-html.dark .right-col .sidebar-card:hover {
-  box-shadow: none !important;
-  transform: none !important;
 }
 html.dark .search-card {
   background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.82) 100%);

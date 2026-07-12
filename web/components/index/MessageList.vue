@@ -122,6 +122,7 @@
                   :enableGithubCard="siteConfig?.enableGithubCard === true"
                   :message-id="Number(msg.id)"
                   :task-list-editable="canEditMessageTasks(msg)"
+                  :inherit-font="true"
                   @tagClick="handleTagClick"
                   @rendered="checkContentHeight"
                   link-target="_blank"

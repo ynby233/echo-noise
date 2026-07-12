@@ -12,6 +12,7 @@
     "test:comment-avatar": "node scripts/comment-avatar-fallback.test.mjs",
     "test:comment-input-scroll": "node scripts/comment-input-scroll.test.mjs",
     "test:home-stats": "node scripts/home-stats.test.mjs",
+    "test:home-widget": "node scripts/home-widget-contract.test.mjs",
     "test:heatmap-scope": "node scripts/heatmap-scope.test.mjs",
     "test:admin-comments": "node scripts/admin-comments-panel.test.mjs",
     "test:login-audit": "node scripts/login-audit.test.mjs",
