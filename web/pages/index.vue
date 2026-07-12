@@ -75,7 +75,7 @@
             <div class="clock-display">{{ formatTime(currentTime) }}</div>
           </div>
         </UCard>
-        <UCard v-if="frontendConfig.lifeCountdownEnabled" class="sidebar-card mt-2 life-countdown-card left-widget-life-card" :class="sidebarThemeCard">
+        <UCard v-if="isLoggedIn && frontendConfig.lifeCountdownEnabled" class="sidebar-card mt-2 life-countdown-card left-widget-life-card" :class="sidebarThemeCard">
           <div class="life-countdown-wrap">
             <div v-if="lifeCountdown.valid" class="space-y-2">
               <div class="life-countdown-main">

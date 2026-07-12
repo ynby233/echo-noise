@@ -118,6 +118,12 @@ const sidebarThemeCardSource = homePage.slice(
   homePage.indexOf('const scrollButtonClass = computed')
 )
 
+assert.match(
+  homePage,
+  /<UCard\s+v-if="isLoggedIn\s*&&\s*frontendConfig\.lifeCountdownEnabled"[^>]*\bleft-widget-life-card\b/,
+  '访客必须始终隐藏人生倒计时，登录用户仍按账户配置决定是否显示'
+)
+
 assert.match(sidebarCardStyle, /border:\s*1px solid var\(--home-widget-border-color\)\s*!important;/)
 assert.match(sidebarCardStyle, /box-shadow:\s*var\(--home-widget-shadow\)\s*!important;/)
 assert.match(
