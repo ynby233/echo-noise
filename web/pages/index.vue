@@ -8,7 +8,7 @@
       <UContainer class="container-fixed pt-2 pb-0 mt-4 mb-0">
         <div :class="['layout-container', gridModeClass]">
       <ClientOnly>
-      <div class="left-col" v-if="!isMobile && layoutState!=='single'">
+      <div ref="leftCol" :style="leftSidebarPositionStyle" class="left-col" v-if="!isMobile && layoutState!=='single'">
         <UCard class="sidebar-card left-widget-profile-card" :class="sidebarThemeCard">
           <div class="profile-card">
             <div class="profile-head">
@@ -254,7 +254,7 @@
         </div>
       </div>
       <ClientOnly>
-      <div class="right-col space-y-2" v-if="!isMobile && layoutState==='three'">
+      <div ref="rightCol" :style="rightSidebarPositionStyle" class="right-col space-y-2" v-if="!isMobile && layoutState==='three'">
         <UCard v-if="frontendConfig.announcementEnabled && (frontendConfig.announcementText || '').trim() !== ''" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
           <AnnouncementBar :text="frontendConfig.announcementText || '欢迎访问我的说说笔记！'" />
         </UCard>
@@ -1114,6 +1114,89 @@ const toggleThemeGlobal = () => {
 }
 
 const contentWrapper = ref<HTMLElement | null>(null)
+const leftCol = ref<HTMLElement | null>(null)
+const rightCol = ref<HTMLElement | null>(null)
+const leftSidebarCorrection = ref(0)
+const rightSidebarCorrection = ref(0)
+const leftSidebarPositionStyle = computed(() => (
+  leftSidebarCorrection.value > 0
+    ? { transform: `translate3d(0, ${leftSidebarCorrection.value}px, 0)` }
+    : undefined
+))
+const rightSidebarPositionStyle = computed(() => (
+  rightSidebarCorrection.value > 0
+    ? { transform: `translate3d(0, ${rightSidebarCorrection.value}px, 0)` }
+    : undefined
+))
+
+// A sticky element taller than the viewport is pulled upward by its grid parent's
+// bottom edge. Measure that browser-applied clamp without the existing transform,
+// then cancel only the clamp so the column remains part of the main scroll flow.
+const getSidebarStickyCorrection = (el: HTMLElement | null, appliedCorrection: number) => {
+  if (!el) return 0
+  const unclampedTop = el.getBoundingClientRect().top - appliedCorrection
+  return Math.max(0, -unclampedTop)
+}
+
+const resetSidebarStickyCorrection = () => {
+  leftSidebarCorrection.value = 0
+  rightSidebarCorrection.value = 0
+}
+
+let sidebarStickyFrame = 0
+const updateSidebarStickyCorrection = () => {
+  sidebarStickyFrame = 0
+  if (typeof window === 'undefined' || isMobile.value || layoutState.value === 'single') {
+    resetSidebarStickyCorrection()
+    return
+  }
+  const nextLeft = getSidebarStickyCorrection(leftCol.value, leftSidebarCorrection.value)
+  const nextRight = layoutState.value === 'three'
+    ? getSidebarStickyCorrection(rightCol.value, rightSidebarCorrection.value)
+    : 0
+  if (Math.abs(nextLeft - leftSidebarCorrection.value) > 0.1) leftSidebarCorrection.value = nextLeft
+  if (Math.abs(nextRight - rightSidebarCorrection.value) > 0.1) rightSidebarCorrection.value = nextRight
+}
+
+const scheduleSidebarStickyCorrection = () => {
+  if (typeof window === 'undefined' || sidebarStickyFrame) return
+  sidebarStickyFrame = window.requestAnimationFrame(updateSidebarStickyCorrection)
+}
+
+let sidebarResizeObserver: ResizeObserver | null = null
+const bindSidebarResizeObserver = () => {
+  sidebarResizeObserver?.disconnect()
+  sidebarResizeObserver = null
+  if (typeof ResizeObserver === 'undefined') return
+  sidebarResizeObserver = new ResizeObserver(scheduleSidebarStickyCorrection)
+  if (leftCol.value) sidebarResizeObserver.observe(leftCol.value)
+  if (rightCol.value) sidebarResizeObserver.observe(rightCol.value)
+}
+
+watch(() => [layoutState.value, isMobile.value], () => {
+  nextTick(() => {
+    resetSidebarStickyCorrection()
+    bindSidebarResizeObserver()
+    scheduleSidebarStickyCorrection()
+  })
+})
+
+onMounted(() => {
+  window.addEventListener('resize', scheduleSidebarStickyCorrection, { passive: true })
+  window.visualViewport?.addEventListener('resize', scheduleSidebarStickyCorrection, { passive: true })
+  nextTick(() => {
+    bindSidebarResizeObserver()
+    scheduleSidebarStickyCorrection()
+  })
+})
+
+onUnmounted(() => {
+  if (sidebarStickyFrame) window.cancelAnimationFrame(sidebarStickyFrame)
+  sidebarResizeObserver?.disconnect()
+  window.removeEventListener('resize', scheduleSidebarStickyCorrection)
+  window.visualViewport?.removeEventListener('resize', scheduleSidebarStickyCorrection)
+})
+
 const scrollToTop = () => {
   const el = getMainScrollElement()
   if (el) el.scrollTo({ top: 0, behavior: 'smooth' })
@@ -1172,12 +1255,16 @@ const updateScrollState = () => {
   isAtBottom.value = el.clientHeight + y >= max - 2
 }
 let scrollStateCleanup: (() => void) | null = null
+const handleMainScroll = () => {
+  updateScrollState()
+  scheduleSidebarStickyCorrection()
+}
 const bindScrollStateListener = () => {
   scrollStateCleanup?.()
   const el = getMainScrollElement()
   if (!el) return
-  el.addEventListener('scroll', updateScrollState, { passive: true })
-  scrollStateCleanup = () => el.removeEventListener('scroll', updateScrollState)
+  el.addEventListener('scroll', handleMainScroll, { passive: true })
+  scrollStateCleanup = () => el.removeEventListener('scroll', handleMainScroll)
 }
 onMounted(() => {
   nextTick(() => {

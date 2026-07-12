@@ -58,6 +58,31 @@ assert.match(
   /--home-page-bottom-reserve:\s*calc\(128px \+ env\(safe-area-inset-bottom, 0px\)\);/,
   '原有的 96px 页面留白和容器底部 32px 间距必须完整迁移到三栏内部占位行'
 )
+assert.match(
+  homePage,
+  /<div ref="leftCol"[^>]*:style="leftSidebarPositionStyle"[^>]*class="left-col"/,
+  '左侧栏必须能校正 sticky 在矮视口末尾产生的父容器底部夹紧位移'
+)
+assert.match(
+  homePage,
+  /<div ref="rightCol"[^>]*:style="rightSidebarPositionStyle"[^>]*class="right-col space-y-2"/,
+  '右侧栏必须能校正 sticky 在矮视口末尾产生的父容器底部夹紧位移'
+)
+assert.match(
+  homePage,
+  /const unclampedTop = el\.getBoundingClientRect\(\)\.top - appliedCorrection[\s\S]*Math\.max\(0, -unclampedTop\)/,
+  '侧栏高于视口时必须抵消实际 sticky 夹紧量，而不能再依赖固定像素留白'
+)
+assert.match(
+  homePage,
+  /visualViewport\?\.addEventListener\('resize', scheduleSidebarStickyCorrection/,
+  'iPad Safari 可视视口高度变化后必须重新测量侧栏夹紧量'
+)
+assert.match(
+  homePage,
+  /const handleMainScroll = \(\) => \{[\s\S]*?updateScrollState\(\)[\s\S]*?scheduleSidebarStickyCorrection\(\)[\s\S]*?addEventListener\('scroll', handleMainScroll/,
+  '每次页面整体滚动后都必须按浏览器实际 sticky 位置更新夹紧校正'
+)
 
 const sidebarCardStyle = homePage.match(/\.sidebar-card\s*\{([^{}]*)\}/s)?.[1] || ''
 const darkThemeVariables = homePage.match(/html\.dark\s*\{([^{}]*)\}/s)?.[1] || ''
