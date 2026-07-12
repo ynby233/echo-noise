@@ -338,7 +338,7 @@ assert.match(
 
 assert.match(
   editor,
-  /const\s+materializeAttachmentMarkersInTableCells\s*=[\s\S]+?root\.querySelectorAll\('td,th'\)[\s\S]+?\.editor-attachment-preview[\s\S]+?createEditorTableAttachmentMarkerElement\(info\)[\s\S]+?NodeFilter\.SHOW_TEXT[\s\S]+?createEditorTableAttachmentMarkerElement\(info\)[\s\S]+?return\s+changed[\s\S]+?const\s+setupAttachmentPreview\s*=/,
+  /const\s+materializeAttachmentMarkersInTableCells\s*=[\s\S]+?root\.matches\('td,th'\)[\s\S]+?root\.querySelectorAll\('td,th'\)[\s\S]+?\.editor-attachment-preview[\s\S]+?createEditorTableAttachmentMarkerElement\(info\)[\s\S]+?NodeFilter\.SHOW_TEXT[\s\S]+?createEditorTableAttachmentMarkerElement\(info\)[\s\S]+?return\s+changed[\s\S]+?const\s+setupAttachmentPreview\s*=/,
   'live table cells must convert raw or Vditor-rendered attachment links into inert table markers'
 )
 
@@ -362,7 +362,7 @@ assert.doesNotMatch(
 
 assert.match(
   editor,
-  /const\s+refreshAttachmentLinks\s*=\s*\(\)\s*=>\s*\{[\s\S]+?materializeEditorPreservedBlankLineBlocks\(root\)[\s\S]+?materializeAttachmentMarkersInTableCells\(root\)[\s\S]+?root\.querySelectorAll\('a'\)/,
+  /const\s+refreshAttachmentLinks\s*=\s*\(scope:\s*HTMLElement\s*=\s*root\)\s*=>\s*\{[\s\S]+?scope\s*===\s*root\)\s*materializeEditorPreservedBlankLineBlocks\(root\)[\s\S]+?materializeAttachmentMarkersInTableCells\(scope\)[\s\S]+?scope\.querySelectorAll\('a'\)/,
   'attachment refresh must clean stale table attachment previews before classing existing anchors'
 )
 

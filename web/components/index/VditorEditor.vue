@@ -222,6 +222,8 @@ let panelCleanup: (() => void) | null = null;
 let imagePreviewCleanup: (() => void) | null = null;
 let attachmentPreviewCleanup: (() => void) | null = null;
 let refreshAttachmentLinksFromEditor: () => void = () => {};
+let refreshAttachmentLinksInTableCellFromEditor: (cell: HTMLTableCellElement) => void = () => {};
+let markEditorTableAttachmentMutationHandled: (cell: HTMLTableCellElement) => void = () => {};
 let lastEditorSelectionRange: Range | null = null;
 let lastEditorTableSelectionRange: Range | null = null;
 let lastEditorTableSelectionState: { editable: HTMLElement; tableIndex: number; rowIndex: number; cellIndex: number } | null = null;
@@ -748,7 +750,8 @@ const replaceAttachmentNodesWithSourceText = (root: HTMLElement) => {
 const materializeAttachmentMarkersInTableCells = (root: HTMLElement) => {
   if (typeof document === 'undefined') return false
   let changed = false
-  root.querySelectorAll('td,th').forEach((cell) => {
+  const cells = root.matches('td,th') ? [root] : Array.from(root.querySelectorAll('td,th'))
+  cells.forEach((cell) => {
     cell.querySelectorAll<HTMLElement>('.editor-attachment-preview').forEach((node) => node.remove())
     cell.querySelectorAll<HTMLElement>('[data-type="a"], a').forEach((node) => {
       if (node.closest('.editor-table-attachment-marker')) return
@@ -975,10 +978,10 @@ const setupAttachmentPreview = () => {
     editorTableCompositionStartPrefix = ''
   }
 
-  const refreshAttachmentLinks = () => {
-    materializeEditorPreservedBlankLineBlocks(root)
-    materializeAttachmentMarkersInTableCells(root)
-    root.querySelectorAll('a').forEach((node) => {
+  const refreshAttachmentLinks = (scope: HTMLElement = root) => {
+    if (scope === root) materializeEditorPreservedBlankLineBlocks(root)
+    materializeAttachmentMarkersInTableCells(scope)
+    scope.querySelectorAll('a').forEach((node) => {
       const anchor = node as HTMLAnchorElement
       const info = attachmentInfoFromAnchor(anchor)
       anchor.classList.toggle('editor-attachment-link', !!info)
@@ -1000,7 +1003,7 @@ const setupAttachmentPreview = () => {
       anchor.style.cursor = 'pointer'
     })
 
-    root.querySelectorAll('[data-type="a"]').forEach((node) => {
+    scope.querySelectorAll('[data-type="a"]').forEach((node) => {
       const marker = node as HTMLElement
       const label = marker.querySelector<HTMLElement>('.vditor-ir__link')
       const info = attachmentInfoFromIrNode(marker)
@@ -1034,7 +1037,7 @@ const setupAttachmentPreview = () => {
       label.style.cursor = 'pointer'
     })
 
-    root.querySelectorAll<HTMLVideoElement>('.noise-attachment-render--video video').forEach((video) => {
+    scope.querySelectorAll<HTMLVideoElement>('.noise-attachment-render--video video').forEach((video) => {
       ensureFancyboxVideoThumbnail(video)
     })
   }
@@ -1417,6 +1420,15 @@ const setupAttachmentPreview = () => {
   }
 
   let refreshQueued = false
+  const locallyHandledAttachmentMutationCells = new Set<HTMLTableCellElement>()
+  const tableCellFromMutationTarget = (target: Node) => {
+    const element = target instanceof Element ? target : target.parentElement
+    return element?.closest<HTMLTableCellElement>('td,th') || null
+  }
+  const markTableAttachmentMutationHandled = (cell: HTMLTableCellElement) => {
+    locallyHandledAttachmentMutationCells.add(cell)
+    requestAnimationFrame(() => locallyHandledAttachmentMutationCells.delete(cell))
+  }
   const scheduleRefreshAttachmentLinks = () => {
     if (refreshQueued) return
     refreshQueued = true
@@ -1427,10 +1439,17 @@ const setupAttachmentPreview = () => {
     })
   }
   refreshAttachmentLinksFromEditor = scheduleRefreshAttachmentLinks
+  refreshAttachmentLinksInTableCellFromEditor = (cell) => refreshAttachmentLinks(cell)
+  markEditorTableAttachmentMutationHandled = markTableAttachmentMutationHandled
 
   refreshAttachmentLinks()
   scheduleTableEnhance()
-  const previewObserver = new MutationObserver(() => {
+  const previewObserver = new MutationObserver((records) => {
+    const onlyLocallyHandledTableAttachmentMutations = records.length > 0 && records.every((record) => {
+      const cell = tableCellFromMutationTarget(record.target)
+      return !!cell && locallyHandledAttachmentMutationCells.has(cell)
+    })
+    if (onlyLocallyHandledTableAttachmentMutations) return
     if (pendingEditorTableCellSync) scheduleStabilizePendingEditorTableCellDom()
     scheduleRefreshAttachmentLinks()
   })
@@ -1501,6 +1520,8 @@ const setupAttachmentPreview = () => {
     closeInlineEditorTableTextarea()
     root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
     refreshAttachmentLinksFromEditor = () => {}
+    refreshAttachmentLinksInTableCellFromEditor = () => {}
+    markEditorTableAttachmentMutationHandled = () => {}
     attachmentPreviewCleanup = null
   }
 }
@@ -1556,8 +1577,6 @@ const editorOptions: IOptions = {
       const emitSafeValue = () => emitEditorValue()
       emitSafeValue()
       window.setTimeout(emitSafeValue, 0)
-      window.setTimeout(emitSafeValue, 48)
-      window.setTimeout(emitSafeValue, 160)
       return
     }
     emitEditorValue(content)
@@ -5068,12 +5087,12 @@ const insertAttachmentIntoTableCellWithoutVditorReset = (cell: HTMLTableCellElem
     : editorTableCellTextFromDom(cell)
   const separator = current && !/\s$/.test(current) ? ' ' : ''
   const nextText = `${current}${separator}${text}`
+  markEditorTableAttachmentMutationHandled(cell)
   setEditorTableDomCellText(cell, nextText)
   markEditorTableCellSourceDirty(cell, nextText)
   const result = buildEditorTableCellSourceValue(cell, nextText)
   clearConsumedEditorTableAttachmentTargetState()
-  refreshAttachmentLinksFromEditor()
-  window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
+  refreshAttachmentLinksInTableCellFromEditor(cell)
   if (result?.value && !hasUnsafeMarkdownTableStructure(result.value)) {
     emitKnownEditorSourceValue(result.value)
   } else {

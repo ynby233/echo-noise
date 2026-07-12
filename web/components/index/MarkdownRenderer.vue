@@ -1,5 +1,5 @@
 <template>
-  <div ref="previewElement" class="markdown-preview" :data-task-list-editable="props.taskListEditable ? 'true' : 'false'"></div>
+  <div ref="previewElement" :class="['markdown-preview', { 'markdown-preview--inherit-font': props.inheritFont }]" :data-task-list-editable="props.taskListEditable ? 'true' : 'false'"></div>
   <Teleport to="body">
     <div
       v-if="showRenderedTableExpandDialog"
@@ -103,6 +103,10 @@ const props = defineProps({
     default: 0,
   },
   taskListEditable: {
+    type: Boolean,
+    default: false,
+  },
+  inheritFont: {
     type: Boolean,
     default: false,
   },
@@ -2118,6 +2122,14 @@ watch(() => props.enableGithubCard, () => {
 .markdown-preview {
   font-family: "LXGW WenKai Screen";
   line-height: 1.6;
+}
+
+.markdown-preview--inherit-font,
+.markdown-preview--inherit-font .vditor-reset,
+.markdown-preview--inherit-font .vditor-reset p,
+.markdown-preview--inherit-font .vditor-reset span,
+.markdown-preview--inherit-font .vditor-reset a {
+  font-family: inherit !important;
 }
 
 .markdown-preview[data-task-list-editable="false"] input[type="checkbox"] {

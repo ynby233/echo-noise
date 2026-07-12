@@ -116,7 +116,7 @@
           <div class="hidden"><span id="hitokoto">正在获取中...</span></div>
           <div class="hitokoto-container mx-auto w-full sm:max-w-2xl px-2">
             <div class="hitokoto-text nw-tooltip-anchor" :data-tooltip="hitokotoText || '正在获取中...'">
-              <MarkdownRenderer :content="hitokotoText || '正在获取中...'" :enableGithubCard="false" />
+              <MarkdownRenderer :content="hitokotoText || '正在获取中...'" :enableGithubCard="false" :inheritFont="true" />
             </div>
           </div>
         </UCard>

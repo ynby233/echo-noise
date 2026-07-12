@@ -5,10 +5,10 @@
       <div class="announcement-text nw-tooltip-anchor" ref="textContainer" :data-tooltip="text">
         <div class="marquee animate" ref="marquee" :style="{ '--distance': distance + 'px', animationDuration: duration + 's' }">
           <div class="marquee-item" ref="firstItem">
-            <MarkdownRenderer :content="text" :enableGithubCard="false" />
+            <MarkdownRenderer :content="text" :enableGithubCard="false" :inheritFont="true" />
           </div>
           <div class="marquee-item">
-            <MarkdownRenderer :content="text" :enableGithubCard="false" />
+            <MarkdownRenderer :content="text" :enableGithubCard="false" :inheritFont="true" />
           </div>
         </div>
       </div>
