@@ -18,6 +18,9 @@ const rightColumnStyle = homePage.slice(
   homePage.indexOf('.right-col {'),
   homePage.indexOf('.right-col > * {')
 )
+const contentWrapperStyle = homePage.match(/\.content-wrapper\s*\{([^{}]*)\}/s)?.[1] || ''
+const layoutContainerStyle = homePage.match(/\.layout-container\s*\{([^{}]*)\}/s)?.[1] || ''
+const layoutReserveStyle = homePage.match(/\.layout-container::after\s*\{([^{}]*)\}/s)?.[1] || ''
 
 assert.ok(rightColumnStyle, '应能找到右侧小组件栏样式')
 assert.doesNotMatch(
@@ -30,8 +33,24 @@ assert.doesNotMatch(
   /:global\(html\.dark\)[^{}]*\.right-col\s*\{[^{}]*overflow-y\s*:\s*(?:auto|scroll)/s,
   '暗色模式不能重新启用右侧小组件栏的独立纵向滚动'
 )
+assert.doesNotMatch(
+  contentWrapperStyle,
+  /(?:^|\n)\s*padding-bottom\s*:/,
+  '页面底部安全留白不能位于 sticky 侧栏父容器之外，否则滚到底时会把整列组件向上推走'
+)
+assert.doesNotMatch(
+  layoutContainerStyle,
+  /(?:^|\n)\s*padding-bottom\s*:/,
+  '网格 padding 不会延长 sticky 的内容约束边界，不能用它承载页面末尾留白'
+)
+assert.match(
+  layoutReserveStyle,
+  /grid-column:\s*1\s*\/\s*-1;[\s\S]*height:\s*var\(--home-page-bottom-reserve\);/,
+  '页面底部安全留白必须成为跨越三栏的真实网格行，保证侧栏在页面末尾继续停驻'
+)
 
 const sidebarCardStyle = homePage.match(/\.sidebar-card\s*\{([^{}]*)\}/s)?.[1] || ''
+const darkThemeVariables = homePage.match(/html\.dark\s*\{([^{}]*)\}/s)?.[1] || ''
 const sidebarThemeCardSource = homePage.slice(
   homePage.indexOf('const sidebarThemeCard = computed'),
   homePage.indexOf('const scrollButtonClass = computed')
@@ -39,6 +58,16 @@ const sidebarThemeCardSource = homePage.slice(
 
 assert.match(sidebarCardStyle, /border:\s*1px solid var\(--home-widget-border-color\)\s*!important;/)
 assert.match(sidebarCardStyle, /box-shadow:\s*var\(--home-widget-shadow\)\s*!important;/)
+assert.match(
+  darkThemeVariables,
+  /--home-widget-shadow:\s*none;/,
+  '暗色小组件必须取消会在半透明上边框外形成黑色横线的投影'
+)
+assert.match(
+  darkThemeVariables,
+  /--home-widget-border-color:\s*rgb\(100,\s*116,\s*139\);/,
+  '暗色小组件必须使用不透明的统一边框色，避免同一透明色在渐变四周合成出不同颜色'
+)
 assert.doesNotMatch(
   sidebarThemeCardSource,
   /\bborder(?:-[^\s'"`]+)?\b/,

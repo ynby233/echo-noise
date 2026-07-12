@@ -2544,12 +2544,13 @@ const lifeCountdown = computed(() => {
   --home-accent-warn: #f59e0b;
   --home-radius-card: 12px;
   --home-radius-panel: 16px;
+  --home-page-bottom-reserve: calc(96px + env(safe-area-inset-bottom, 0px));
   --home-widget-border-color: rgba(15, 23, 42, 0.12);
   --home-widget-shadow: var(--home-shadow-light);
 }
 html.dark {
-  --home-widget-border-color: var(--home-border-dark);
-  --home-widget-shadow: 0 10px 24px rgba(2, 6, 23, 0.4);
+  --home-widget-border-color: rgb(100, 116, 139);
+  --home-widget-shadow: none;
 }
 html, body {
   margin: 0;
@@ -2641,7 +2642,6 @@ html, body {
   min-height: 100dvh;
   overflow-y: auto;
   box-sizing: border-box;
-  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
   scroll-padding-bottom: calc(160px + env(safe-area-inset-bottom, 0px));
   z-index: 1;
   pointer-events: auto;
@@ -3142,6 +3142,13 @@ white-space: nowrap;  /* 防止换行 */
   display: block;
 }
 .layout-container { --sidebar-width: 320px; --grid-gap: 16px; width: 100%; min-width: 0; }
+.layout-container::after {
+  content: '';
+  display: block;
+  grid-column: 1 / -1;
+  height: var(--home-page-bottom-reserve);
+  pointer-events: none;
+}
 .left-col, .right-col { position: sticky; top: 0; align-self: start; height: fit-content; width: 100%; min-width: 0; box-sizing: border-box; }
 .right-col > * {
   width: 100%;
