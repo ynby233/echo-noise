@@ -70,14 +70,15 @@
             </a>
           </div>
         </UCard>
-        <UCard v-if="activeSidebarPager.visible" class="sidebar-card no-padding-card mt-2 left-widget-pager-card" :class="sidebarThemeCard">
+        <UCard class="sidebar-card no-padding-card mt-2 left-widget-pager-card" :class="sidebarThemeCard">
           <HomeSidebarPager
-            :key="activeTab"
+            :context-key="activeTab"
             :current-page="activeSidebarPager.currentPage"
             :total-pages="activeSidebarPager.totalPages"
             :loading="activeSidebarPager.loading"
             :can-previous="activeSidebarPager.canPrevious"
             :can-next="activeSidebarPager.canNext"
+            :disabled="!isSidebarPagerInteractive"
             @previous="handleSidebarPagerPrevious"
             @next="handleSidebarPagerNext"
             @jump="handleSidebarPagerJump"
@@ -536,10 +537,10 @@ import BuiltinComments from '~/components/comments/BuiltinComments.vue'
 import MarkdownRenderer from '~/components/index/MarkdownRenderer.vue'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { getMessageIdFromRouteHash } from '~/utils/message-route-hash'
-import { getRequest } from '~/utils/api'
+import { getRequest, postRequest } from '~/utils/api'
 import { useToast } from '#ui/composables/useToast'
 import { useUserStore } from '~/store/user'
-import type { Tag } from '~/types/models'
+import type { PageQueryResult, Tag } from '~/types/models'
 const router = useRouter()
 const route = useRoute()
 const baseApi = useRuntimeConfig().public.baseApi || '/api'
@@ -683,14 +684,7 @@ const messageList = ref<MessageListExpose | null>(null)
 const infoFeedList = ref<HomePagerController | null>(null)
 const guestbookCommentsRef = ref<CommentThreadExpose | null>(null)
 const notificationCenter = ref<HomePagerController | null>(null)
-const emptySidebarPager: HomePagerState = {
-  visible: false,
-  currentPage: 1,
-  totalPages: 1,
-  loading: false,
-  canPrevious: false,
-  canNext: false
-}
+const latestTotalPages = ref(1)
 const activeSidebarPagerController = computed<HomePagerController | null>(() => {
   if (activeTab.value === 'feed') return infoFeedList.value
   if (activeTab.value === 'comment') return guestbookCommentsRef.value
@@ -698,10 +692,39 @@ const activeSidebarPagerController = computed<HomePagerController | null>(() => 
   if (activeTab.value === 'latest' || activeTab.value === 'personal') return messageList.value
   return null
 })
-const activeSidebarPager = computed<HomePagerState>(() => activeSidebarPagerController.value?.sidebarPagerState || emptySidebarPager)
-const handleSidebarPagerPrevious = () => activeSidebarPagerController.value?.previousPage()
-const handleSidebarPagerNext = () => activeSidebarPagerController.value?.nextPage()
-const handleSidebarPagerJump = (page: string) => activeSidebarPagerController.value?.goToPage(page)
+const activeSidebarPagerState = computed<HomePagerState | null>(() => activeSidebarPagerController.value?.sidebarPagerState || null)
+const isSidebarPagerInteractive = computed(() => activeSidebarPagerState.value?.visible === true)
+const disabledSidebarPager = computed<HomePagerState>(() => ({
+  visible: true,
+  currentPage: 0,
+  totalPages: latestTotalPages.value,
+  loading: false,
+  canPrevious: false,
+  canNext: false
+}))
+const activeSidebarPager = computed<HomePagerState>(() => isSidebarPagerInteractive.value
+  ? (activeSidebarPagerState.value as HomePagerState)
+  : disabledSidebarPager.value)
+const handleSidebarPagerPrevious = () => {
+  if (isSidebarPagerInteractive.value) activeSidebarPagerController.value?.previousPage()
+}
+const handleSidebarPagerNext = () => {
+  if (isSidebarPagerInteractive.value) activeSidebarPagerController.value?.nextPage()
+}
+const handleSidebarPagerJump = (page: string) => {
+  if (isSidebarPagerInteractive.value) activeSidebarPagerController.value?.goToPage(page)
+}
+watch(() => [
+  activeTab.value,
+  messageList.value?.sidebarPagerState?.totalPages,
+  selectedCalendarDate.value,
+  searchKeyword.value,
+  selectedTag.value
+], ([tab, pages, date, keyword, tag]) => {
+  if (tab !== 'latest' || date || keyword || tag) return
+  const next = Number(pages)
+  if (Number.isFinite(next) && next > 0) latestTotalPages.value = Math.max(1, Math.floor(next))
+})
 // 搜索模态的开关
 const showSearchModal = ref(false)
 const showAuthModal = ref(false)
@@ -932,6 +955,18 @@ const handleSearchResult = async (keyword: string) => {
 }
 // 留言板目标消息ID（默认取最新公开消息）
 const guestbookMessageId = ref<number | null>(null)
+let latestTotalRequestSeq = 0
+const loadLatestTotalPages = async () => {
+  const requestId = ++latestTotalRequestSeq
+  const res = await postRequest<PageQueryResult>('messages/page', {
+    page: 1,
+    pageSize: 15,
+    excludeId: guestbookMessageId.value || undefined
+  }, { credentials: 'include', silent: true })
+  if (requestId !== latestTotalRequestSeq || res?.code !== 1) return
+  const total = Math.max(0, Number(res.data?.total || 0))
+  latestTotalPages.value = Math.max(1, Math.ceil(total / 15))
+}
 const loadGuestbookTarget = async () => {
   try {
     const res = await fetch((useRuntimeConfig().public.baseApi || '/api') + '/guestbook/message', {
@@ -945,7 +980,10 @@ const loadGuestbookTarget = async () => {
   } catch { guestbookMessageId.value = null }
 }
 watch(() => activeTab.value, (k) => { if (k === 'comment' && !guestbookMessageId.value) loadGuestbookTarget() })
-onMounted(() => { loadGuestbookTarget() })
+onMounted(async () => {
+  await loadGuestbookTarget()
+  if (!isSidebarPagerInteractive.value) await loadLatestTotalPages()
+})
 
 
 const userStore = useUserStore()
@@ -1040,6 +1078,7 @@ const openNotificationCenter = async () => {
 watch(isLoggedIn, (loggedIn) => {
   if (loggedIn) loadNotificationUnreadCount()
   else notificationUnreadCount.value = 0
+  if (guestbookMessageId.value) void loadLatestTotalPages()
 }, { immediate: true })
 
 type ProfileHomeStats = {

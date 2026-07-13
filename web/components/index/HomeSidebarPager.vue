@@ -5,7 +5,7 @@
       class="home-sidebar-pager__nav nw-action-btn"
       aria-label="上一页"
       title="上一页"
-      :disabled="loading || !canPrevious"
+      :disabled="disabled || loading || !canPrevious"
       @click="emit('previous')"
     >
       <UIcon name="i-heroicons-arrow-left" class="home-sidebar-pager__nav-icon" />
@@ -21,20 +21,20 @@
           pattern="[0-9]*"
           class="home-sidebar-pager__input"
           aria-label="侧栏跳转页码"
-          :disabled="loading"
+          :disabled="disabled || loading"
           @keyup.enter="submitTargetPage"
         />
         <div class="home-sidebar-pager__stepper" aria-label="侧栏页码增减">
-          <button type="button" class="home-sidebar-pager__step" aria-label="页码加一" :disabled="loading" @click="adjustTargetPage(1)">
+          <button type="button" class="home-sidebar-pager__step nw-action-btn" aria-label="页码加一" :disabled="disabled || loading" @click="adjustTargetPage(1)">
             <UIcon name="i-heroicons-chevron-up-20-solid" />
           </button>
-          <button type="button" class="home-sidebar-pager__step" aria-label="页码减一" :disabled="loading" @click="adjustTargetPage(-1)">
+          <button type="button" class="home-sidebar-pager__step nw-action-btn" aria-label="页码减一" :disabled="disabled || loading" @click="adjustTargetPage(-1)">
             <UIcon name="i-heroicons-chevron-down-20-solid" />
           </button>
         </div>
       </div>
       <span class="home-sidebar-pager__text">页 / 共 {{ totalPages }} 页</span>
-      <button type="button" class="home-sidebar-pager__jump nw-action-btn nw-action-btn--label" :disabled="loading" @click="submitTargetPage">
+      <button type="button" class="home-sidebar-pager__jump nw-action-btn" :disabled="disabled || loading" @click="submitTargetPage">
         跳转
       </button>
     </div>
@@ -44,7 +44,7 @@
       class="home-sidebar-pager__nav nw-action-btn"
       aria-label="下一页"
       title="下一页"
-      :disabled="loading || !canNext"
+      :disabled="disabled || loading || !canNext"
       @click="emit('next')"
     >
       <UIcon name="i-heroicons-arrow-right" class="home-sidebar-pager__nav-icon" />
@@ -58,6 +58,8 @@ import { ref, watch } from 'vue'
 const props = defineProps<{
   currentPage: number
   totalPages: number
+  contextKey?: string
+  disabled?: boolean
   loading?: boolean
   canPrevious?: boolean
   canNext?: boolean
@@ -69,10 +71,10 @@ const emit = defineEmits<{
   (event: 'jump', page: string): void
 }>()
 
-const targetPage = ref(String(props.currentPage || 1))
+const targetPage = ref(String(Number.isFinite(Number(props.currentPage)) ? Number(props.currentPage) : 0))
 
-watch(() => props.currentPage, (page) => {
-  targetPage.value = String(page || 1)
+watch(() => [props.currentPage, props.contextKey], ([page]) => {
+  targetPage.value = String(Number.isFinite(Number(page)) ? Number(page) : 0)
 }, { immediate: true })
 
 const normalizedTargetPage = () => {
@@ -137,10 +139,13 @@ const submitTargetPage = () => emit('jump', targetPage.value)
 }
 
 .home-sidebar-pager__jump {
-  min-height: 28px;
-  padding: 0 7px;
-  border-radius: 9px;
-  font-size: 11px;
+  width: 36px;
+  min-width: 36px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0 4px;
+  border-radius: 7px;
+  font-size: 10px;
   line-height: 1;
   font-weight: 700;
 }
@@ -204,6 +209,23 @@ const submitTargetPage = () => emit('jump', targetPage.value)
   background: transparent;
   color: inherit;
   opacity: .72;
+  --nw-action-hover-border: transparent;
+  --nw-action-hover-bg: rgba(249, 115, 22, .14);
+  --nw-action-hover-text: #f97316;
+  transition: color .15s ease, background-color .15s ease, opacity .15s ease;
+}
+
+.home-sidebar-pager__step:not(:disabled):hover {
+  color: #f97316;
+  background: rgba(249, 115, 22, .14);
+  opacity: 1;
+}
+
+.home-sidebar-pager__step:not(:disabled):focus-visible {
+  color: #f97316;
+  background: rgba(249, 115, 22, .14);
+  opacity: 1;
+  outline: none;
 }
 
 .home-sidebar-pager__step + .home-sidebar-pager__step {
