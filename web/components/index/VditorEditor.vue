@@ -3736,7 +3736,8 @@ const syncInlineEditorTableTextareaToCell = (options: { emit?: boolean; repositi
   const state = inlineEditorTableTextareaState
   if (!textarea || !state || !editorContainer.value?.contains(state.cell)) return false
   const value = textarea.value
-  setEditorTableDomCellText(state.cell, value, /\n$/.test(value))
+  // The input path already mirrors this value into the live cell. Rewriting it again while
+  // closing the textarea races Vditor's renderer with our pending-cell stabilizer.
   markEditorTableCellSourceDirty(state.cell, value)
   state.dirty = false
   if (options.emit !== false) emitEditorValue()
@@ -4965,9 +4966,8 @@ const prepareEditorAttachmentInsertionTarget = () => {
   const cell = getActiveEditorTableCellForAttachmentInsertion()
   const editable = getEditorEditableFromNode(cell)
   if (!cell || !editable) return false
-  if (inlineEditorTableTextareaState?.cell === cell) {
-    syncInlineEditorTableTextareaToCell({ emit: false, reposition: false })
-  }
+  // Target capture must stay read-only: mutating the cell here can start an observer feedback
+  // loop before the native file picker has even returned.
   const position = getEditorTableCellPosition(cell)
   if (!position) return false
   pendingEditorTableAttachmentInsertionTarget = {
