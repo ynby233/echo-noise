@@ -53,8 +53,12 @@ assert.ok((sidebarPager.match(/:disabled="disabled \|\| loading/g) || []).length
 assert.match(sidebarPager, /\.home-sidebar-pager__jump\s*\{[^}]*width:\s*36px;[^}]*height:\s*28px;/, '跳转按钮必须保持紧凑宽度，并与两侧翻页按钮、数字输入组统一为 28px 高')
 assert.match(sidebarPager, /\.home-sidebar-pager__nav\s*\{[^}]*height:\s*28px;/, '两侧翻页按钮高度必须保持 28px')
 assert.match(sidebarPager, /\.home-sidebar-pager__number-control\s*\{[^}]*height:\s*28px;/, '数字输入组高度必须保持 28px')
-assert.match(sidebarPager, /\.home-sidebar-pager__step:not\(:disabled\):hover\s*\{[\s\S]*?color:\s*#f97316;[\s\S]*?background:/, '页码上下微调按钮在亮暗模式下悬浮时都必须显示橙色反馈')
 assert.equal((sidebarPager.match(/class="home-sidebar-pager__step nw-action-btn"/g) || []).length, 2, '两个页码微调键必须复用全站交互按钮体系')
-assert.match(sidebarPager, /--nw-action-hover-text:\s*#f97316;/, '微调键在亮暗模式下都必须覆盖为橙色悬浮前景')
+assert.match(messageList, /\.pager-stepper-btn\s*\{[^}]*width:\s*24px;[^}]*height:\s*16px;[^}]*border-radius:\s*0;/, '页面底部分页微调键是左侧微调键的尺寸与圆角基准')
+const sidebarStepRule = sidebarPager.match(/\.home-sidebar-pager__step\s*\{([\s\S]*?)\n\}/)?.[1] || ''
+assert.match(sidebarStepRule, /border:\s*0;/, '左侧微调键必须保持与页面底部分页栏一致的无外框结构')
+assert.match(sidebarStepRule, /border-radius:\s*0;/, '左侧微调键必须与页面底部分页栏一致地取消单键圆角')
+assert.doesNotMatch(sidebarPager, /\.home-sidebar-pager__step:not\(:disabled\):(hover|focus-visible)/, '左侧微调键不得再用局部亮暗悬浮规则覆盖底部分页栏的全站按钮状态')
+assert.doesNotMatch(sidebarStepRule, /(?:background|color|opacity|--nw-action-hover-)/, '左侧微调键必须继承全站亮暗与悬浮变量，不能固定为另一套颜色或透明度')
 
 console.log('home sidebar pager contract checks passed')

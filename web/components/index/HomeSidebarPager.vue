@@ -197,35 +197,13 @@ const submitTargetPage = () => emit('jump', targetPage.value)
 }
 
 .home-sidebar-pager__step {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   width: 13px;
   min-width: 13px;
   height: 13px;
   min-height: 13px;
   padding: 0;
   border: 0;
-  background: transparent;
-  color: inherit;
-  opacity: .72;
-  --nw-action-hover-border: transparent;
-  --nw-action-hover-bg: rgba(249, 115, 22, .14);
-  --nw-action-hover-text: #f97316;
-  transition: color .15s ease, background-color .15s ease, opacity .15s ease;
-}
-
-.home-sidebar-pager__step:not(:disabled):hover {
-  color: #f97316;
-  background: rgba(249, 115, 22, .14);
-  opacity: 1;
-}
-
-.home-sidebar-pager__step:not(:disabled):focus-visible {
-  color: #f97316;
-  background: rgba(249, 115, 22, .14);
-  opacity: 1;
-  outline: none;
+  border-radius: 0;
 }
 
 .home-sidebar-pager__step + .home-sidebar-pager__step {
