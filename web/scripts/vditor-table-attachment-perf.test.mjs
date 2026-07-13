@@ -25,7 +25,7 @@ assert.equal(plainRoute, 'value')
 assert.deepEqual(calls, [['insertValue', '普通文本']], '非附件插入必须保留 Vditor 原有路径')
 
 const editable = { connected: true }
-const target = { editable, tableIndex: 2, rowIndex: 3, cellIndex: 4 }
+const target = { editable, tableIndex: 2, rowIndex: 3, cellIndex: 4, offset: 9 }
 const resolved = resolveTableAttachmentTarget(
   target,
   (candidate) => candidate.connected,

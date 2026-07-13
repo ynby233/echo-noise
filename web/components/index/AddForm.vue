@@ -18,6 +18,8 @@
           <AudioRecorder
             @audio-uploaded="handleAudioUploaded"
             @upload-progress="handleAudioUploadProgress"
+            @prepare-insert="prepareEditorAttachmentInsert"
+            @insert-cancelled="clearEditorAttachmentInsertTarget"
           />
           <button type="button" class="tb-btn nw-action-btn nw-tooltip-anchor" data-tooltip="上传附件" aria-label="上传附件" @pointerdown="prepareEditorAttachmentInsert" @click="triggerFileInput"><UIcon name="i-heroicons-paper-clip" class="w-5 h-5" /></button>
           <!-- 新增图床上传按钮 -->

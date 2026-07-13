@@ -185,7 +185,7 @@ import { getFixedCoordinateScale, getFixedRect, positionFloatingMenu, scheduleFl
 import { captureVideoFirstFrameFromSource, ensureFancyboxVideoThumbnail, getVideoPlaybackFrameForSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { MARKDOWN_BLANK_LINE_SENTINEL, encodeMarkdownExtraBlankLines, isMarkdownBlankLineSentinel, markMarkdownPreservedBlankLineElements } from '~/utils/markdown-blank-lines'
-import { insertEditorValueFallback, replaceTableSourceLine, resolveTableAttachmentTarget, type TableAttachmentTarget } from '~/utils/vditor-table-attachment'
+import { getFixedEditorClipInsets, insertEditorValueFallback, insertTableCellAtomicValue, replaceTableSourceLine, resolveTableAttachmentTarget, type TableAttachmentTarget } from '~/utils/vditor-table-attachment'
 import Vditor from "vditor";
 import { Fancybox } from "@fancyapps/ui";
 import "@fancyapps/ui/dist/fancybox/fancybox.css";
@@ -248,7 +248,6 @@ let editorTableCompositionCommitKey: EditorTableCompositionCommitKey | null = nu
 let editorTableCompositionCaretTarget: EditorTableCompositionCaretTarget | null = null;
 let editorTableCompositionSettlingUntil = 0;
 let inlineEditorTableTextarea: HTMLTextAreaElement | null = null;
-let inlineEditorTableTextareaBottomShield: HTMLDivElement | null = null;
 type InlineEditorTableTextareaStyleSnapshot = {
   color: string;
   fontFamily: string;
@@ -268,9 +267,8 @@ type InlineEditorTableTextareaStyleSnapshot = {
   wordBreak: string;
   wordSpacing: string;
 };
-let inlineEditorTableTextareaState: {
+type InlineEditorTableCellOverlayState = {
   cell: HTMLTableCellElement;
-  baseText: string;
   minCellHeight: number;
   dirty: boolean;
   editorHeight: number;
@@ -282,13 +280,16 @@ let inlineEditorTableTextareaState: {
     textShadow: string;
   };
   editorStyle: InlineEditorTableTextareaStyleSnapshot;
-} | null = null;
+};
+let inlineEditorTableTextareaState: (InlineEditorTableCellOverlayState & { baseText: string }) | null = null;
+let inlineEditorTableAtomicEditor: HTMLDivElement | null = null;
+let inlineEditorTableAtomicEditorState: InlineEditorTableCellOverlayState | null = null;
+let inlineEditorTableScrollCleanup: (() => void) | null = null;
 const editorTableScrollPositions = new Map<string, number>();
 let expandedTableResizeDrag: ExpandedTableResizeDrag | null = null;
 let expandedTableRowHeightMeasureTimer: number | null = null;
 const TABLE_DELETE_BUTTON_SIZE = 10;
 const TABLE_EXPAND_BUTTON_SIZE = TABLE_DELETE_BUTTON_SIZE;
-const INLINE_TABLE_CELL_BOTTOM_EDGE_SHIELD_MIN_PX = 8;
 const INLINE_TABLE_CELL_EDGE_GUARD_PX = 8;
 const TABLE_CELL_BREAK_RE = /<br\s*\/?\s*>/gi;
 const TABLE_CELL_BREAK_PLACEHOLDER = '%%NW_TABLE_BR%%';
@@ -433,7 +434,15 @@ const hasAttachmentMarker = (value: string) => {
   return ATTACHMENT_MARKER_GLOBAL_RE.test(normalizeAttachmentSourceText(value))
 }
 
-const normalizeAdjacentAttachmentMarkers = (value: string) => String(value || '').replace(ADJACENT_ATTACHMENT_MARKER_RE, '$1 $2')
+const normalizeAdjacentAttachmentMarkers = (value: string) => {
+  let normalized = String(value || '')
+  let previous = ''
+  while (normalized !== previous) {
+    previous = normalized
+    normalized = normalized.replace(ADJACENT_ATTACHMENT_MARKER_RE, '$1 $2')
+  }
+  return normalized
+}
 
 const normalizeAttachmentInsertValue = (value: string) => {
   const raw = normalizeAttachmentSourceText(String(value || ''))
@@ -827,6 +836,7 @@ const setupAttachmentPreview = () => {
 
   const onEditorSelectionChange = () => {
     if (document.activeElement === inlineEditorTableTextarea) return
+    if (inlineEditorTableAtomicEditor?.contains(document.activeElement)) return
     flushPendingEditorTableCellSourceSyncIfMoved(getCurrentEditorTableCell())
     captureEditorSelection()
     scheduleCollapseIrAttachmentChrome()
@@ -1170,6 +1180,27 @@ const setupAttachmentPreview = () => {
   }
 
   const onAttachmentKeydown = (event: KeyboardEvent) => {
+    if (event.key === 'Backspace' || event.key === 'Delete') {
+      const hit = attachmentTargetFromEvent(event)
+      const marker = hit?.target.closest<HTMLElement>('.editor-table-attachment-marker') || null
+      const cell = marker?.closest<HTMLTableCellElement>('td,th') || null
+      if (!marker || !cell || !root.contains(cell)) return
+      const markerStart = document.createRange()
+      markerStart.setStartBefore(marker)
+      markerStart.collapse(true)
+      const offset = editorTableRangeSourceOffset(cell, markerStart)
+      event.preventDefault()
+      event.stopPropagation()
+      ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+      markEditorTableAttachmentMutationHandled(cell)
+      marker.remove()
+      const nextText = editorTableCellTextFromDom(cell)
+      setEditorTableDomCellText(cell, nextText)
+      markEditorTableCellSourceDirty(cell, nextText)
+      placeCaretAtEditorTableSourceOffset(cell, offset)
+      commitEditorTableCellDomEdit(cell)
+      return
+    }
     if (event.key !== 'Enter' && event.key !== ' ') return
     const hit = attachmentTargetFromEvent(event)
     if (!hit) return
@@ -1297,11 +1328,19 @@ const setupAttachmentPreview = () => {
   const onEditorTableMouseDown = (event: MouseEvent) => {
     const targetNode = event.target as Node | null
     const target = targetNode instanceof Element ? targetNode : targetNode?.parentElement
-    if (target?.closest('a, button, .editor-attachment-preview')) return
+    if (target?.closest('a, button, .editor-attachment-preview, .editor-table-attachment-marker')) return
     const cell = getEditorTableCellFromEvent(event)
     if (!cell) return
     editorTableCompositionCommitKey = null
     editorTableCompositionCaretTarget = null
+    if (cell.querySelector('.editor-table-attachment-marker')) {
+      if (openInlineEditorTableAtomicEditor(cell, event)) {
+        event.preventDefault()
+        event.stopPropagation()
+        ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+      }
+      return
+    }
     if (openInlineEditorTableCellTextarea(cell, event)) {
       event.preventDefault()
       event.stopPropagation()
@@ -1336,7 +1375,7 @@ const setupAttachmentPreview = () => {
 
   const onPlainTextEnterKeydown = (event: KeyboardEvent) => {
     if (isInlineEditorTableTextareaEvent(event)) {
-      event.stopPropagation()
+      onInlineEditorTableTextareaKeydown(event)
       return
     }
     if (handleEditorBackspaceKeydown(event)) return
@@ -1480,9 +1519,9 @@ const setupAttachmentPreview = () => {
   root.addEventListener('keydown', onAttachmentKeydown, true)
   window.addEventListener('resize', repositionVisibleTableDeleteButton)
   window.addEventListener('resize', updateExpandedTableAvailableWidth)
-  window.addEventListener('resize', repositionInlineEditorTableTextarea)
+  window.addEventListener('resize', repositionInlineEditorTableEditors)
   window.addEventListener('scroll', repositionVisibleTableDeleteButton, { passive: true, capture: true })
-  window.addEventListener('scroll', repositionInlineEditorTableTextarea, { passive: true, capture: true })
+  window.addEventListener('scroll', repositionInlineEditorTableEditors, { passive: true, capture: true })
   attachmentPreviewCleanup = () => {
     previewObserver.disconnect()
     document.removeEventListener('beforeinput', onEditorBeforeInput, true)
@@ -1512,11 +1551,12 @@ const setupAttachmentPreview = () => {
     root.removeEventListener('keydown', onAttachmentKeydown, true)
     window.removeEventListener('resize', repositionVisibleTableDeleteButton)
     window.removeEventListener('resize', updateExpandedTableAvailableWidth)
-    window.removeEventListener('resize', repositionInlineEditorTableTextarea)
+    window.removeEventListener('resize', repositionInlineEditorTableEditors)
     window.removeEventListener('scroll', repositionVisibleTableDeleteButton, true)
-    window.removeEventListener('scroll', repositionInlineEditorTableTextarea, true)
+    window.removeEventListener('scroll', repositionInlineEditorTableEditors, true)
     hideTableDeleteButton()
     closeInlineEditorTableTextarea()
+    closeInlineEditorTableAtomicEditor()
     root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
     refreshAttachmentLinksFromEditor = () => {}
     refreshAttachmentLinksInTableCellFromEditor = () => {}
@@ -3073,6 +3113,194 @@ const editorTableContentTextFromElement = (element: HTMLElement) => {
 
 const editorTableCellTextFromDom = (cell: HTMLTableCellElement) => editorTableContentTextFromElement(cell)
 
+const editorTableRangeSourceOffset = (cell: HTMLTableCellElement, range: Range | null) => {
+  if (!range || !cell.contains(range.startContainer)) return editorTableCellTextFromDom(cell).length
+  const prefix = range.cloneRange()
+  try {
+    prefix.selectNodeContents(cell)
+    prefix.setEnd(range.startContainer, range.startOffset)
+  } catch {
+    return editorTableCellTextFromDom(cell).length
+  }
+  const holder = document.createElement('div')
+  holder.appendChild(prefix.cloneContents())
+  return editorTableContentTextFromElement(holder).length
+}
+
+const getEditorTableCellInsertionOffset = (cell: HTMLTableCellElement) => {
+  if (inlineEditorTableAtomicEditorState?.cell === cell && inlineEditorTableAtomicEditor) {
+    return getInlineEditorTableAtomicInsertionOffset()
+  }
+  if (inlineEditorTableTextareaState?.cell === cell && inlineEditorTableTextarea) {
+    return Math.max(0, inlineEditorTableTextarea.selectionStart || 0)
+  }
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  const range = selection?.rangeCount ? selection.getRangeAt(0) : null
+  return editorTableRangeSourceOffset(cell, range)
+}
+
+type EditorTableSourceUnit = { node: Node; length: number; atomic: boolean }
+
+const editorTableTextNodeSourceValue = (node: Text) => String(node.data || '')
+  .replace(/[\u200b\u200c\ufeff]/g, '')
+  .replace(/\u00a0/g, ' ')
+
+const collectEditorTableSourceUnits = (root: Node, output: EditorTableSourceUnit[] = []) => {
+  Array.from(root.childNodes).forEach((node) => {
+    if (node instanceof Text) {
+      const length = editorTableTextNodeSourceValue(node).length
+      if (length) output.push({ node, length, atomic: false })
+      return
+    }
+    if (!(node instanceof HTMLElement)) return
+    if (node.classList.contains('editor-attachment-preview')) return
+    if (node.classList.contains('editor-table-attachment-marker')) {
+      const source = node.getAttribute('data-attachment-source') || ''
+      output.push({ node, length: Math.max(1, source.length), atomic: true })
+      return
+    }
+    if (node.tagName === 'BR') {
+      output.push({ node, length: 1, atomic: true })
+      return
+    }
+    collectEditorTableSourceUnits(node, output)
+  })
+  return output
+}
+
+const rawTextOffsetForEditorSourceOffset = (node: Text, requestedOffset: number) => {
+  const target = Math.max(0, requestedOffset)
+  let sourceOffset = 0
+  for (let index = 0; index < node.data.length; index += 1) {
+    if (!/[\u200b\u200c\ufeff]/.test(node.data[index] || '')) sourceOffset += 1
+    if (sourceOffset >= target) return index + 1
+  }
+  return node.data.length
+}
+
+const placeCaretAtEditorTableSourceOffset = (cell: HTMLTableCellElement, requestedOffset: number) => {
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  if (!selection) return false
+  const sourceLength = editorTableCellTextFromDom(cell).length
+  let remaining = Math.max(0, Math.min(sourceLength, requestedOffset))
+  const units = collectEditorTableSourceUnits(cell)
+  const range = document.createRange()
+  let placed = false
+  for (const unit of units) {
+    if (remaining === 0) {
+      range.setStartBefore(unit.node)
+      placed = true
+      break
+    }
+    if (remaining < unit.length) {
+      if (unit.node instanceof Text && !unit.atomic) {
+        range.setStart(unit.node, rawTextOffsetForEditorSourceOffset(unit.node, remaining))
+      } else if (remaining < unit.length / 2) {
+        range.setStartBefore(unit.node)
+      } else {
+        range.setStartAfter(unit.node)
+      }
+      placed = true
+      break
+    }
+    remaining -= unit.length
+    if (remaining === 0) {
+      range.setStartAfter(unit.node)
+      placed = true
+      break
+    }
+  }
+  if (!placed) {
+    range.selectNodeContents(cell)
+    range.collapse(false)
+  } else {
+    range.collapse(true)
+  }
+  getEditorEditableFromNode(cell)?.focus({ preventScroll: true })
+  selection.removeAllRanges()
+  selection.addRange(range)
+  lastEditorSelectionRange = range.cloneRange()
+  storeLastEditorTableSelection(range)
+  return true
+}
+
+type EditorTableDomCaretCandidate = {
+  offset: number
+  left: number
+  top: number
+  bottom: number
+  height: number
+}
+
+const editorTableRangeCaretCandidate = (range: Range, offset: number, fallbackHeight: number): EditorTableDomCaretCandidate | null => {
+  const rect = range.getBoundingClientRect()
+  const clientRect = Array.from(range.getClientRects())[0] || rect
+  if (!Number.isFinite(clientRect.left) || !Number.isFinite(clientRect.top)) return null
+  return {
+    offset,
+    left: clientRect.left,
+    top: clientRect.top,
+    bottom: clientRect.bottom || clientRect.top + fallbackHeight,
+    height: clientRect.height || fallbackHeight,
+  }
+}
+
+const editorTableDomCaretCandidates = (cell: HTMLElement) => {
+  const lineHeight = getEditorElementLineHeight(cell)
+  const candidates: EditorTableDomCaretCandidate[] = []
+  let sourceOffset = 0
+  collectEditorTableSourceUnits(cell).forEach((unit) => {
+    if (unit.node instanceof Text && !unit.atomic) {
+      let localSourceOffset = 0
+      for (let rawOffset = 0; rawOffset <= unit.node.data.length; rawOffset += 1) {
+        if (rawOffset > 0 && !/[\u200b\u200c\ufeff]/.test(unit.node.data[rawOffset - 1] || '')) localSourceOffset += 1
+        const range = document.createRange()
+        range.setStart(unit.node, rawOffset)
+        range.collapse(true)
+        const candidate = editorTableRangeCaretCandidate(range, sourceOffset + localSourceOffset, lineHeight)
+        if (candidate) candidates.push(candidate)
+      }
+      sourceOffset += unit.length
+      return
+    }
+
+    const element = unit.node as HTMLElement
+    const rects = Array.from(element.getClientRects())
+    const firstRect = rects[0] || element.getBoundingClientRect()
+    const lastRect = rects[rects.length - 1] || firstRect
+    candidates.push({
+      offset: sourceOffset,
+      left: firstRect.left,
+      top: firstRect.top,
+      bottom: firstRect.bottom,
+      height: firstRect.height || lineHeight,
+    })
+    sourceOffset += unit.length
+    candidates.push({
+      offset: sourceOffset,
+      left: lastRect.right,
+      top: lastRect.top,
+      bottom: lastRect.bottom,
+      height: lastRect.height || lineHeight,
+    })
+  })
+  if (!candidates.length) {
+    const rect = cell.getBoundingClientRect()
+    candidates.push({ offset: 0, left: rect.left, top: rect.top, bottom: rect.top + lineHeight, height: lineHeight })
+  }
+  return candidates
+}
+
+const editorTableDomCaretOffsetFromPoint = (cell: HTMLElement, event: MouseEvent) => {
+  const candidates = editorTableDomCaretCandidates(cell)
+  const best = candidates.reduce((current, candidate) => {
+    const currentScore = Math.abs((current.top + current.height / 2) - event.clientY) * 1000 + Math.abs(current.left - event.clientX)
+    const candidateScore = Math.abs((candidate.top + candidate.height / 2) - event.clientY) * 1000 + Math.abs(candidate.left - event.clientX)
+    return candidateScore < currentScore ? candidate : current
+  }, candidates[0]!)
+  return best.offset
+}
+
 const isEditorTableBreakCodeMarker = (node: HTMLElement) => {
   const text = stripEditorTableCaretAnchors(node.textContent || '').trim()
   if (TABLE_CELL_BREAK_TEXT_RE.test(text)) return true
@@ -3241,6 +3469,7 @@ const emitKnownEditorSourceValue = (sourceValue: string) => {
 const syncEditorDomToVditorValueForPreview = () => {
   if (!vditorInstance?.getValue || !vditorInstance?.setValue) return false
   closeInlineEditorTableTextarea()
+  closeInlineEditorTableAtomicEditor()
   flushPendingEditorTableCellSourceSync()
   const domValue = getEditorVisibleDomTableSafeValue()
   const nextValue = ensureSafeEditorTableMarkdown(encodeMarkdownExtraBlankLines(domValue || vditorInstance.getValue()))
@@ -3312,6 +3541,9 @@ const getPendingEditorTableCell = (pending = pendingEditorTableCellSync) => {
 }
 
 const inlineEditorTableTextareaTextForCell = (cell: HTMLTableCellElement | null | undefined) => {
+  if (cell && inlineEditorTableAtomicEditor && inlineEditorTableAtomicEditorState?.cell === cell) {
+    return inlineEditorTableAtomicSourceValue()
+  }
   if (!cell || !inlineEditorTableTextarea || inlineEditorTableTextareaState?.cell !== cell) return null
   return inlineEditorTableTextarea.value
 }
@@ -3451,7 +3683,7 @@ const applyInlineEditorTextareaStyle = (target: HTMLElement, style: InlineEditor
   if (style.tabSize) target.style.tabSize = style.tabSize
 }
 
-const applyInlineEditorTextareaCellBoxStyle = (target: HTMLElement, state: NonNullable<typeof inlineEditorTableTextareaState>) => {
+const applyInlineEditorTextareaCellBoxStyle = (target: HTMLElement, state: InlineEditorTableCellOverlayState) => {
   applyInlineEditorTextareaStyle(target, state.editorStyle)
   const cellStyle = window.getComputedStyle(state.cell)
   const paddingTop = parseEditorCssPixelValue(cellStyle.paddingTop) + parseEditorCssPixelValue(cellStyle.borderTopWidth)
@@ -3508,17 +3740,6 @@ const measureInlineEditorTextareaCaretCandidates = (textarea: HTMLTextAreaElemen
   })
 }
 
-const inlineEditorTextareaRenderedLineCount = (textarea: HTMLTextAreaElement, value: string) => {
-  const style = window.getComputedStyle(textarea)
-  const lineHeight = getEditorElementLineHeight(textarea)
-  const paddingTop = Number.parseFloat(style.paddingTop || '') || 0
-  const lines = new Set<number>()
-  measureInlineEditorTextareaCaretCandidates(textarea, value).forEach((candidate) => {
-    lines.add(Math.max(0, Math.round((candidate.top - paddingTop) / lineHeight)))
-  })
-  return Math.max(1, lines.size)
-}
-
 const parseEditorCssPixelValue = (value: string | null | undefined) => {
   const parsed = Number.parseFloat(value || '')
   return Number.isFinite(parsed) ? parsed : 0
@@ -3542,18 +3763,11 @@ const inlineEditorTextareaVerticalMetrics = (textarea: HTMLTextAreaElement) => {
   const lineHeight = getEditorElementLineHeight(textarea)
   const paddingTop = parseEditorCssPixelValue(style.paddingTop)
   const paddingBottom = parseEditorCssPixelValue(style.paddingBottom)
-  const visualLineCount = Math.max(1, Math.floor(Math.max(0, rect.height - paddingTop - paddingBottom) / lineHeight))
-  const lineAreaBottom = rect.top + paddingTop + visualLineCount * lineHeight
-  const shieldHeight = Math.min(rect.height, Math.max(INLINE_TABLE_CELL_BOTTOM_EDGE_SHIELD_MIN_PX, rect.bottom - lineAreaBottom))
   return {
     rect,
     lineHeight,
     paddingTop,
     paddingBottom,
-    visualLineCount,
-    maxLine: visualLineCount - 1,
-    shieldTop: Math.max(rect.top, rect.bottom - shieldHeight),
-    shieldHeight,
   }
 }
 
@@ -3571,39 +3785,17 @@ const inlineEditorTextareaGuardedClientY = (
   return Math.max(minY, Math.min(maxY, event.clientY))
 }
 
-const inlineEditorTextareaLineFromPoint = (
-  textarea: HTMLTextAreaElement,
-  event: MouseEvent,
-  metrics = inlineEditorTextareaVerticalMetrics(textarea)
-) => {
-  const guardedY = inlineEditorTextareaGuardedClientY(event, metrics)
-  const rawLine = Math.floor((guardedY - metrics.rect.top - metrics.paddingTop) / metrics.lineHeight)
-  return Math.max(0, Math.min(metrics.maxLine, rawLine))
-}
-
-const inlineEditorTextareaIsBottomShieldPoint = (textarea: HTMLTextAreaElement, event: MouseEvent) => {
-  const metrics = inlineEditorTextareaVerticalMetrics(textarea)
-  return event.clientY >= metrics.shieldTop
-}
-
 const inlineEditorTextareaCaretFromPoint = (
   textarea: HTMLTextAreaElement,
-  cell: HTMLTableCellElement,
   baseText: string,
   event?: MouseEvent
 ) => {
   if (!event) return { value: baseText, offset: baseText.length }
   const metrics = inlineEditorTextareaVerticalMetrics(textarea)
   const { rect: textareaRect, lineHeight } = metrics
-  const targetLine = inlineEditorTextareaLineFromPoint(textarea, event, metrics)
-  if (!baseText && targetLine <= 0) return { value: '', offset: 0 }
-  const renderedLineCount = inlineEditorTextareaRenderedLineCount(textarea, baseText)
-  if (targetLine >= renderedLineCount) {
-    const value = `${baseText}${'\n'.repeat(targetLine - renderedLineCount + 1)}`
-    return { value, offset: value.length }
-  }
+  if (!baseText) return { value: '', offset: 0 }
   const targetX = event.clientX - textareaRect.left
-  const targetY = Math.min(inlineEditorTextareaGuardedClientY(event, metrics), metrics.shieldTop - 0.5) - textareaRect.top
+  const targetY = inlineEditorTextareaGuardedClientY(event, metrics) - textareaRect.top
   const candidates = measureInlineEditorTextareaCaretCandidates(textarea, baseText)
   const best = candidates.reduce((current, candidate) => {
     const currentScore = Math.abs((current.top + current.height / 2) - targetY) * 1000 + Math.abs(current.left - targetX)
@@ -3613,49 +3805,6 @@ const inlineEditorTextareaCaretFromPoint = (
   return { value: baseText, offset: Math.max(0, Math.min(baseText.length, best.offset)) }
 }
 
-const stopInlineEditorTableTextareaBottomShieldEvent = (event: Event) => {
-  event.preventDefault()
-  event.stopPropagation()
-  ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
-  inlineEditorTableTextarea?.focus({ preventScroll: true })
-}
-
-const ensureInlineEditorTableTextareaBottomShield = () => {
-  if (inlineEditorTableTextareaBottomShield) return inlineEditorTableTextareaBottomShield
-  const shield = document.createElement('div')
-  shield.className = 'editor-inline-table-cell-bottom-shield'
-  ;['pointerdown', 'mousedown', 'mouseup', 'click', 'dblclick'].forEach((eventName) => {
-    shield.addEventListener(eventName, stopInlineEditorTableTextareaBottomShieldEvent)
-  })
-  document.body.appendChild(shield)
-  inlineEditorTableTextareaBottomShield = shield
-  return shield
-}
-
-const removeInlineEditorTableTextareaBottomShield = () => {
-  inlineEditorTableTextareaBottomShield?.remove()
-  inlineEditorTableTextareaBottomShield = null
-}
-
-const positionInlineEditorTableTextareaBottomShield = () => {
-  const textarea = inlineEditorTableTextarea
-  const state = inlineEditorTableTextareaState
-  if (!textarea || !state || !editorContainer.value?.contains(state.cell)) {
-    removeInlineEditorTableTextareaBottomShield()
-    return false
-  }
-  const metrics = inlineEditorTextareaVerticalMetrics(textarea)
-  const shield = ensureInlineEditorTableTextareaBottomShield()
-  shield.style.position = 'fixed'
-  shield.style.zIndex = '10025'
-  shield.style.display = metrics.shieldHeight > 0 ? 'block' : 'none'
-  shield.style.left = `${metrics.rect.left}px`
-  shield.style.top = `${metrics.shieldTop}px`
-  shield.style.width = `${Math.max(1, metrics.rect.width)}px`
-  shield.style.height = `${Math.max(0, metrics.shieldHeight)}px`
-  return true
-}
-
 const positionInlineEditorTableTextarea = (options: { fitContent?: boolean } = {}) => {
   const textarea = inlineEditorTableTextarea
   const state = inlineEditorTableTextareaState
@@ -3663,6 +3812,13 @@ const positionInlineEditorTableTextarea = (options: { fitContent?: boolean } = {
   const cell = state.cell
   const scale = getFixedCoordinateScale()
   const rect = getFixedRect(cell, scale)
+  const editorHeight = Math.max(1, state.editorHeight || rect.height)
+  const table = cell.closest('table') as HTMLTableElement | null
+  const tableRect = table ? getFixedRect(table, scale) : rect
+  const clip = getFixedEditorClipInsets(
+    { left: rect.left, top: rect.top, right: rect.left + rect.width, bottom: rect.top + editorHeight },
+    { left: tableRect.left, top: tableRect.top, right: tableRect.left + tableRect.width, bottom: tableRect.top + tableRect.height }
+  )
   textarea.style.position = 'fixed'
   textarea.style.zIndex = '10024'
   textarea.style.boxSizing = 'border-box'
@@ -3670,7 +3826,7 @@ const positionInlineEditorTableTextarea = (options: { fitContent?: boolean } = {
   textarea.style.left = `${rect.left}px`
   textarea.style.top = `${rect.top}px`
   textarea.style.width = `${Math.max(1, rect.width)}px`
-  textarea.style.height = `${Math.max(1, state.editorHeight || rect.height)}px`
+  textarea.style.height = `${editorHeight}px`
   textarea.style.margin = '0'
   textarea.style.border = '0'
   textarea.style.outline = 'none'
@@ -3678,13 +3834,15 @@ const positionInlineEditorTableTextarea = (options: { fitContent?: boolean } = {
   textarea.style.overflow = 'hidden'
   textarea.style.background = 'transparent'
   textarea.style.boxShadow = 'none'
+  textarea.style.clipPath = `inset(${clip.top}px ${clip.right}px ${clip.bottom}px ${clip.left}px)`
+  textarea.style.pointerEvents = clip.visible ? 'auto' : 'none'
+  textarea.style.visibility = clip.visible ? 'visible' : 'hidden'
   applyInlineEditorTextareaCellBoxStyle(textarea, state)
   if (options.fitContent !== false) resizeInlineEditorTableTextareaToContent()
-  else positionInlineEditorTableTextareaBottomShield()
   return true
 }
 
-const restoreInlineEditorTableTextareaCellLayout = (state: NonNullable<typeof inlineEditorTableTextareaState>) => {
+const restoreInlineEditorTableTextareaCellLayout = (state: InlineEditorTableCellOverlayState) => {
   state.cell.style.height = state.restoreStyle.height
   state.cell.style.minHeight = state.restoreStyle.minHeight
 }
@@ -3723,12 +3881,7 @@ const resizeInlineEditorTableTextareaToContent = () => {
   state.editorHeight = nextEditorHeight
   textarea.style.height = `${nextEditorHeight}px`
   if (changed) positionInlineEditorTableTextarea({ fitContent: false })
-  else positionInlineEditorTableTextareaBottomShield()
   return true
-}
-
-const repositionInlineEditorTableTextarea = () => {
-  positionInlineEditorTableTextarea()
 }
 
 const syncInlineEditorTableTextareaToCell = (options: { emit?: boolean; reposition?: boolean } = {}) => {
@@ -3755,6 +3908,7 @@ const scheduleInlineEditorTableTextareaSync = () => {
 const closeInlineEditorTableTextarea = () => {
   const textarea = inlineEditorTableTextarea
   const state = inlineEditorTableTextareaState
+  const hadEditor = !!textarea || !!state
   if (textarea && state?.dirty) syncInlineEditorTableTextareaToCell({ reposition: false })
   if (state) {
     state.cell.classList.remove('editor-inline-table-cell-editing')
@@ -3765,7 +3919,10 @@ const closeInlineEditorTableTextarea = () => {
     state.cell.style.textShadow = state.restoreStyle.textShadow
   }
   textarea?.remove()
-  removeInlineEditorTableTextareaBottomShield()
+  if (hadEditor) {
+    inlineEditorTableScrollCleanup?.()
+    inlineEditorTableScrollCleanup = null
+  }
   inlineEditorTableTextarea = null
   inlineEditorTableTextareaState = null
 }
@@ -3788,7 +3945,7 @@ const setInlineEditorTextareaCaretFromMouseEvent = (event: MouseEvent) => {
   const textarea = inlineEditorTableTextarea
   const state = inlineEditorTableTextareaState
   if (!textarea || !state || !editorContainer.value?.contains(state.cell)) return false
-  const caret = inlineEditorTextareaCaretFromPoint(textarea, state.cell, textarea.value, event)
+  const caret = inlineEditorTextareaCaretFromPoint(textarea, textarea.value, event)
   if (textarea.value !== caret.value) {
     textarea.value = caret.value
     state.dirty = true
@@ -3803,21 +3960,24 @@ const setInlineEditorTextareaCaretFromMouseEvent = (event: MouseEvent) => {
 const onInlineEditorTextareaMouseDown = (event: MouseEvent) => {
   event.stopPropagation()
   const textarea = getInlineEditorTableTextareaElement(event.target as Node | null | undefined)
-  if (!textarea || event.button !== 0 || !inlineEditorTextareaIsBottomShieldPoint(textarea, event)) return
+  if (!textarea || event.button !== 0) return
   event.preventDefault()
   setInlineEditorTextareaCaretFromMouseEvent(event)
 }
 
 const closeInlineEditorTableTextareaOnExternalMouseDown = (event: MouseEvent) => {
   const textarea = inlineEditorTableTextarea
-  const state = inlineEditorTableTextareaState
-  if (!textarea || !state || event.button !== 0) return
+  const textareaState = inlineEditorTableTextareaState
+  const atomicEditor = inlineEditorTableAtomicEditor
+  const atomicState = inlineEditorTableAtomicEditorState
+  if ((!textarea || !textareaState) && (!atomicEditor || !atomicState)) return
+  if (event.button !== 0) return
   const target = event.target as Node | null
-  const element = target instanceof Element ? target : target?.parentElement
   if (getInlineEditorTableTextareaElement(target)) return
-  if (element?.closest?.('.editor-inline-table-cell-bottom-shield')) return
-  if (target && state.cell.contains(target)) return
+  if (target && atomicEditor?.contains(target)) return
+  if (target && (textareaState?.cell.contains(target) || atomicState?.cell.contains(target))) return
   closeInlineEditorTableTextarea()
+  closeInlineEditorTableAtomicEditor()
 }
 
 const stopInlineEditorTextareaEventPropagation = (event: Event) => {
@@ -3851,6 +4011,7 @@ const ensureInlineEditorTableTextarea = () => {
 
 const openInlineEditorTableCellTextarea = (cell: HTMLTableCellElement, event?: MouseEvent) => {
   if (!editorContainer.value?.contains(cell)) return false
+  closeInlineEditorTableAtomicEditor()
   if (inlineEditorTableTextareaState?.cell !== cell) closeInlineEditorTableTextarea()
   const textarea = ensureInlineEditorTableTextarea()
   const baseText = inlineEditorTableCellBaseText(cell)
@@ -3876,16 +4037,346 @@ const openInlineEditorTableCellTextarea = (cell: HTMLTableCellElement, event?: M
   textarea.style.visibility = 'hidden'
   textarea.value = baseText
   positionInlineEditorTableTextarea()
-  const caret = inlineEditorTextareaCaretFromPoint(textarea, cell, baseText, event)
+  const caret = inlineEditorTextareaCaretFromPoint(textarea, baseText, event)
   textarea.value = caret.value
   cell.classList.add('editor-inline-table-cell-editing')
   cell.style.color = 'transparent'
   cell.style.caretColor = 'transparent'
   cell.style.textShadow = 'none'
-  textarea.style.visibility = 'visible'
+  textarea.style.visibility = textarea.style.pointerEvents === 'none' ? 'hidden' : 'visible'
   textarea.focus({ preventScroll: true })
   textarea.setSelectionRange(caret.offset, caret.offset)
+  bindInlineEditorTableScroll(cell)
+  window.requestAnimationFrame(() => positionInlineEditorTableTextarea())
+  window.setTimeout(() => positionInlineEditorTableTextarea(), 0)
   return true
+}
+
+const inlineEditorTableAtomicSourceValue = () => {
+  const editor = inlineEditorTableAtomicEditor
+  return editor ? editorTableContentTextFromElement(editor) : ''
+}
+
+const placeCaretAtInlineEditorTableAtomicOffset = (requestedOffset: number) => {
+  const editor = inlineEditorTableAtomicEditor
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  if (!editor || !selection) return false
+  const sourceLength = inlineEditorTableAtomicSourceValue().length
+  let remaining = Math.max(0, Math.min(sourceLength, requestedOffset))
+  const units = collectEditorTableSourceUnits(editor)
+  const range = document.createRange()
+  let placed = false
+  for (const unit of units) {
+    if (remaining === 0) {
+      range.setStartBefore(unit.node)
+      placed = true
+      break
+    }
+    if (remaining < unit.length) {
+      if (unit.node instanceof Text && !unit.atomic) {
+        range.setStart(unit.node, rawTextOffsetForEditorSourceOffset(unit.node, remaining))
+      } else if (remaining < unit.length / 2) {
+        range.setStartBefore(unit.node)
+      } else {
+        range.setStartAfter(unit.node)
+      }
+      placed = true
+      break
+    }
+    remaining -= unit.length
+    if (remaining === 0) {
+      range.setStartAfter(unit.node)
+      placed = true
+      break
+    }
+  }
+  if (!placed) {
+    range.selectNodeContents(editor)
+    range.collapse(false)
+  } else {
+    range.collapse(true)
+  }
+  editor.focus({ preventScroll: true })
+  selection.removeAllRanges()
+  selection.addRange(range)
+  return true
+}
+
+const getInlineEditorTableAtomicInsertionOffset = () => {
+  const editor = inlineEditorTableAtomicEditor
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  const range = selection?.rangeCount ? selection.getRangeAt(0) : null
+  if (!editor || !range || !editor.contains(range.startContainer)) return inlineEditorTableAtomicSourceValue().length
+  const prefix = range.cloneRange()
+  try {
+    prefix.selectNodeContents(editor)
+    prefix.setEnd(range.startContainer, range.startOffset)
+  } catch {
+    return inlineEditorTableAtomicSourceValue().length
+  }
+  const holder = document.createElement('div')
+  holder.appendChild(prefix.cloneContents())
+  return editorTableContentTextFromElement(holder).length
+}
+
+const positionInlineEditorTableAtomicEditor = (options: { fitContent?: boolean } = {}) => {
+  const editor = inlineEditorTableAtomicEditor
+  const state = inlineEditorTableAtomicEditorState
+  if (!editor || !state || !editorContainer.value?.contains(state.cell)) return false
+  const scale = getFixedCoordinateScale()
+  const rect = getFixedRect(state.cell, scale)
+  const editorHeight = Math.max(1, state.editorHeight || rect.height)
+  const table = state.cell.closest('table') as HTMLTableElement | null
+  const tableRect = table ? getFixedRect(table, scale) : rect
+  const clip = getFixedEditorClipInsets(
+    { left: rect.left, top: rect.top, right: rect.left + rect.width, bottom: rect.top + editorHeight },
+    { left: tableRect.left, top: tableRect.top, right: tableRect.left + tableRect.width, bottom: tableRect.top + tableRect.height }
+  )
+  editor.style.position = 'fixed'
+  editor.style.zIndex = '10024'
+  editor.style.boxSizing = 'border-box'
+  editor.style.display = 'block'
+  editor.style.left = `${rect.left}px`
+  editor.style.top = `${rect.top}px`
+  editor.style.width = `${Math.max(1, rect.width)}px`
+  editor.style.height = `${editorHeight}px`
+  editor.style.minHeight = `${Math.max(1, state.minCellHeight)}px`
+  editor.style.margin = '0'
+  editor.style.border = '0'
+  editor.style.outline = 'none'
+  editor.style.overflow = 'hidden'
+  editor.style.background = 'transparent'
+  editor.style.boxShadow = 'none'
+  editor.style.whiteSpace = 'pre-wrap'
+  editor.style.clipPath = `inset(${clip.top}px ${clip.right}px ${clip.bottom}px ${clip.left}px)`
+  editor.style.pointerEvents = clip.visible ? 'auto' : 'none'
+  editor.style.visibility = clip.visible ? 'visible' : 'hidden'
+  applyInlineEditorTextareaCellBoxStyle(editor, state)
+  if (options.fitContent !== false) resizeInlineEditorTableAtomicEditorToContent()
+  return true
+}
+
+const mirrorInlineEditorTableAtomicEditorToCell = () => {
+  const editor = inlineEditorTableAtomicEditor
+  const state = inlineEditorTableAtomicEditorState
+  if (!editor || !state || !editorContainer.value?.contains(state.cell)) return false
+  const value = inlineEditorTableAtomicSourceValue()
+  restoreInlineEditorTableTextareaCellLayout(state)
+  markEditorTableAttachmentMutationHandled(state.cell)
+  setEditorTableDomCellText(state.cell, value, /\n$/.test(value))
+  markEditorTableCellSourceDirty(state.cell, value)
+  return true
+}
+
+const resizeInlineEditorTableAtomicEditorToContent = () => {
+  const editor = inlineEditorTableAtomicEditor
+  const state = inlineEditorTableAtomicEditorState
+  if (!editor || !state || !editorContainer.value?.contains(state.cell)) return false
+  if (state.dirty) mirrorInlineEditorTableAtomicEditorToCell()
+  const minHeight = Math.max(1, state.minCellHeight)
+  editor.style.height = `${minHeight}px`
+  const scrollHeight = editor.scrollHeight || 0
+  let rect = getFixedRect(state.cell, getFixedCoordinateScale())
+  const requiredHeight = Math.max(minHeight, scrollHeight, rect.height)
+  if (requiredHeight > rect.height + 0.5) {
+    state.cell.style.height = `${requiredHeight}px`
+    state.cell.style.minHeight = `${requiredHeight}px`
+    rect = getFixedRect(state.cell, getFixedCoordinateScale())
+  } else {
+    restoreInlineEditorTableTextareaCellLayout(state)
+    rect = getFixedRect(state.cell, getFixedCoordinateScale())
+  }
+  const nextEditorHeight = Math.max(1, requiredHeight, rect.height)
+  const changed = Math.abs((state.editorHeight || 0) - nextEditorHeight) > 0.5
+  state.editorHeight = nextEditorHeight
+  editor.style.height = `${nextEditorHeight}px`
+  if (changed) positionInlineEditorTableAtomicEditor({ fitContent: false })
+  return true
+}
+
+const syncInlineEditorTableAtomicEditorToCell = (options: { emit?: boolean } = {}) => {
+  const state = inlineEditorTableAtomicEditorState
+  if (!state || !mirrorInlineEditorTableAtomicEditorToCell()) return false
+  state.dirty = false
+  if (options.emit !== false) emitEditorValue()
+  return true
+}
+
+const closeInlineEditorTableAtomicEditor = () => {
+  const editor = inlineEditorTableAtomicEditor
+  const state = inlineEditorTableAtomicEditorState
+  const hadEditor = !!editor || !!state
+  if (editor && state?.dirty) syncInlineEditorTableAtomicEditorToCell()
+  if (state) {
+    state.cell.classList.remove('editor-inline-table-cell-editing')
+    state.cell.style.color = state.restoreStyle.color
+    state.cell.style.caretColor = state.restoreStyle.caretColor
+    state.cell.style.height = state.restoreStyle.height
+    state.cell.style.minHeight = state.restoreStyle.minHeight
+    state.cell.style.textShadow = state.restoreStyle.textShadow
+  }
+  editor?.remove()
+  if (hadEditor) {
+    inlineEditorTableScrollCleanup?.()
+    inlineEditorTableScrollCleanup = null
+  }
+  inlineEditorTableAtomicEditor = null
+  inlineEditorTableAtomicEditorState = null
+}
+
+const onInlineEditorTableAtomicInput = () => {
+  if (!inlineEditorTableAtomicEditorState) return
+  inlineEditorTableAtomicEditorState.dirty = true
+  resizeInlineEditorTableAtomicEditorToContent()
+}
+
+const insertInlineEditorTableAtomicLineBreak = () => {
+  const editor = inlineEditorTableAtomicEditor
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  const range = selection?.rangeCount ? selection.getRangeAt(0) : null
+  if (!editor || !selection || !range || !editor.contains(range.startContainer)) return false
+  range.deleteContents()
+  const br = document.createElement('br')
+  const caret = document.createTextNode(TABLE_CELL_CARET_ANCHOR)
+  range.insertNode(br)
+  br.after(caret)
+  range.setStart(caret, caret.data.length)
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  onInlineEditorTableAtomicInput()
+  return true
+}
+
+const onInlineEditorTableAtomicKeydown = (event: KeyboardEvent) => {
+  event.stopPropagation()
+  if (event.key === 'Backspace' || event.key === 'Delete') {
+    const editor = inlineEditorTableAtomicEditor
+    const marker = event.target instanceof Element ? event.target.closest<HTMLElement>('.editor-table-attachment-marker') : null
+    if (editor && marker && editor.contains(marker)) {
+      const prefix = document.createRange()
+      prefix.selectNodeContents(editor)
+      prefix.setEndBefore(marker)
+      const holder = document.createElement('div')
+      holder.appendChild(prefix.cloneContents())
+      const offset = editorTableContentTextFromElement(holder).length
+      event.preventDefault()
+      marker.remove()
+      onInlineEditorTableAtomicInput()
+      placeCaretAtInlineEditorTableAtomicOffset(offset)
+      return
+    }
+  }
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeInlineEditorTableAtomicEditor()
+    return
+  }
+  if (event.key === 'Enter' && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey && !event.isComposing) {
+    event.preventDefault()
+    insertInlineEditorTableAtomicLineBreak()
+  }
+}
+
+const onInlineEditorTableAtomicMarkerMouseDown = (event: MouseEvent) => {
+  const target = event.target instanceof Element ? event.target.closest('.editor-table-attachment-marker') : null
+  if (!target) return
+  event.preventDefault()
+  event.stopPropagation()
+  ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+}
+
+const onInlineEditorTableAtomicMarkerClick = (event: MouseEvent) => {
+  const editor = inlineEditorTableAtomicEditor
+  const state = inlineEditorTableAtomicEditorState
+  const target = event.target instanceof Element ? event.target.closest<HTMLElement>('.editor-table-attachment-marker') : null
+  if (!editor || !state || !target) return
+  event.preventDefault()
+  event.stopPropagation()
+  const source = target.getAttribute('data-attachment-source') || ''
+  const original = Array.from(state.cell.querySelectorAll<HTMLElement>('.editor-table-attachment-marker'))
+    .find((marker) => marker.getAttribute('data-attachment-source') === source)
+  original?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }))
+}
+
+const ensureInlineEditorTableAtomicEditor = () => {
+  if (inlineEditorTableAtomicEditor) return inlineEditorTableAtomicEditor
+  const editor = document.createElement('div')
+  editor.className = 'editor-inline-table-cell-atomic-editor'
+  editor.contentEditable = 'true'
+  editor.spellcheck = false
+  editor.setAttribute('role', 'textbox')
+  editor.setAttribute('aria-multiline', 'true')
+  editor.addEventListener('input', onInlineEditorTableAtomicInput)
+  editor.addEventListener('keydown', onInlineEditorTableAtomicKeydown)
+  editor.addEventListener('mousedown', onInlineEditorTableAtomicMarkerMouseDown)
+  editor.addEventListener('click', onInlineEditorTableAtomicMarkerClick)
+  editor.addEventListener('blur', () => window.setTimeout(() => {
+    if (document.activeElement !== inlineEditorTableAtomicEditor && !inlineEditorTableAtomicEditor?.contains(document.activeElement)) {
+      closeInlineEditorTableAtomicEditor()
+    }
+  }, 0))
+  document.body.appendChild(editor)
+  inlineEditorTableAtomicEditor = editor
+  return editor
+}
+
+const openInlineEditorTableAtomicEditor = (cell: HTMLTableCellElement, event?: MouseEvent) => {
+  if (!editorContainer.value?.contains(cell)) return false
+  closeInlineEditorTableTextarea()
+  if (inlineEditorTableAtomicEditorState?.cell !== cell) closeInlineEditorTableAtomicEditor()
+  const editor = ensureInlineEditorTableAtomicEditor()
+  const editorStyle = captureInlineEditorTextareaStyle(cell)
+  const cellHeight = Math.max(1, getFixedRect(cell, getFixedCoordinateScale()).height)
+  inlineEditorTableAtomicEditorState = {
+    cell,
+    minCellHeight: inlineEditorTableCellMinimumHeight(cell),
+    dirty: false,
+    editorHeight: cellHeight,
+    restoreStyle: {
+      color: cell.style.color,
+      caretColor: cell.style.caretColor,
+      height: cell.style.height,
+      minHeight: cell.style.minHeight,
+      textShadow: cell.style.textShadow,
+    },
+    editorStyle,
+  }
+  storeLastEditorTableCell(cell)
+  editor.style.visibility = 'hidden'
+  editor.innerHTML = cell.innerHTML
+  positionInlineEditorTableAtomicEditor()
+  const offset = event ? editorTableDomCaretOffsetFromPoint(editor, event) : inlineEditorTableAtomicSourceValue().length
+  cell.classList.add('editor-inline-table-cell-editing')
+  cell.style.color = 'transparent'
+  cell.style.caretColor = 'transparent'
+  cell.style.textShadow = 'none'
+  editor.style.visibility = editor.style.pointerEvents === 'none' ? 'hidden' : 'visible'
+  placeCaretAtInlineEditorTableAtomicOffset(offset)
+  bindInlineEditorTableScroll(cell)
+  window.requestAnimationFrame(() => positionInlineEditorTableAtomicEditor())
+  window.setTimeout(() => positionInlineEditorTableAtomicEditor(), 0)
+  return true
+}
+
+const bindInlineEditorTableScroll = (cell: HTMLTableCellElement) => {
+  inlineEditorTableScrollCleanup?.()
+  const table = cell.closest('table') as HTMLTableElement | null
+  if (!table) {
+    inlineEditorTableScrollCleanup = null
+    return
+  }
+  const reposition = () => {
+    positionInlineEditorTableTextarea()
+    positionInlineEditorTableAtomicEditor()
+  }
+  table.addEventListener('scroll', reposition, { passive: true })
+  inlineEditorTableScrollCleanup = () => table.removeEventListener('scroll', reposition)
+}
+
+const repositionInlineEditorTableEditors = () => {
+  positionInlineEditorTableTextarea()
+  positionInlineEditorTableAtomicEditor()
 }
 
 const getEditorValueWithPendingTableSync = () => {
@@ -4323,6 +4814,7 @@ const openHoveredTableExpand = () => {
   if (!table || !editorContainer.value?.contains(table)) return
   const preferredIndex = getEditorTables().indexOf(table)
   closeInlineEditorTableTextarea()
+  closeInlineEditorTableAtomicEditor()
   flushPendingEditorTableCellSourceSync()
   enhanceEditorTables(editorContainer.value)
   table = getEditorTables()[preferredIndex] || table
@@ -4814,6 +5306,7 @@ onBeforeUnmount(() => {
       attachmentPreviewCleanup = null;
     }
     closeInlineEditorTableTextarea()
+    closeInlineEditorTableAtomicEditor()
     if (tableExpandCloseTimer !== null) {
       window.clearTimeout(tableExpandCloseTimer)
       tableExpandCloseTimer = null
@@ -4888,6 +5381,7 @@ const clearPreparedEditorAttachmentInsertionTarget = () => {
 
 const clearConsumedEditorTableInsertionState = () => {
   closeInlineEditorTableTextarea()
+  closeInlineEditorTableAtomicEditor()
   pendingEditorTableCellSync = null
   editorTableCompositionActive = false
   editorTableCompositionTarget = null
@@ -4902,6 +5396,7 @@ const clearConsumedEditorTableInsertionState = () => {
 
 const clearConsumedEditorTableAttachmentTargetState = () => {
   closeInlineEditorTableTextarea()
+  closeInlineEditorTableAtomicEditor()
   pendingEditorTableCellSync = null
   editorTableCompositionActive = false
   editorTableCompositionTarget = null
@@ -4955,6 +5450,9 @@ const getStoredEditorTableCell = (editable: HTMLElement | null) => {
 }
 
 const getActiveEditorTableCellForAttachmentInsertion = () => {
+  if (inlineEditorTableAtomicEditorState?.cell && editorContainer.value?.contains(inlineEditorTableAtomicEditorState.cell)) {
+    return inlineEditorTableAtomicEditorState.cell
+  }
   if (inlineEditorTableTextareaState?.cell && editorContainer.value?.contains(inlineEditorTableTextareaState.cell)) {
     return inlineEditorTableTextareaState.cell
   }
@@ -4975,6 +5473,7 @@ const prepareEditorAttachmentInsertionTarget = () => {
     tableIndex: position.tableIndex,
     rowIndex: position.rowIndex,
     cellIndex: position.cellIndex,
+    offset: getEditorTableCellInsertionOffset(cell),
   }
   storeLastEditorTableCell(cell)
   return true
@@ -4989,7 +5488,9 @@ const consumePreparedEditorTableAttachmentCell = () => {
     (stored) => {
       const table = stored.editable.querySelectorAll<HTMLTableElement>('table')[stored.tableIndex]
       const cell = table?.rows[stored.rowIndex]?.cells[stored.cellIndex] as HTMLTableCellElement | undefined
-      return cell && getEditorEditableFromNode(cell) === stored.editable ? cell : null
+      return cell && getEditorEditableFromNode(cell) === stored.editable
+        ? { cell, offset: stored.offset }
+        : null
     }
   )
 }
@@ -5092,17 +5593,17 @@ const normalizeTableCellInsertion = (value: string) => String(value || '')
   .replace(/[\u200b\u200c\ufeff]/g, '')
   .trim()
 
-const insertAttachmentIntoTableCellWithoutVditorReset = (cell: HTMLTableCellElement, text: string) => {
+const insertAttachmentIntoTableCellWithoutVditorReset = (cell: HTMLTableCellElement, text: string, offset: number) => {
   const current = isSamePendingEditorTableCell(cell) && pendingEditorTableCellSync
     ? pendingEditorTableCellSync.text
     : editorTableCellTextFromDom(cell)
-  const separator = current && !/\s$/.test(current) ? ' ' : ''
-  const nextText = `${current}${separator}${text}`
+  const insertion = insertTableCellAtomicValue(current, text, offset)
   markEditorTableAttachmentMutationHandled(cell)
-  setEditorTableDomCellText(cell, nextText)
-  markEditorTableCellSourceDirty(cell, nextText)
-  const result = buildEditorTableCellSourceValue(cell, nextText)
   clearConsumedEditorTableAttachmentTargetState()
+  setEditorTableDomCellText(cell, insertion.value)
+  markEditorTableCellSourceDirty(cell, insertion.value)
+  const result = buildEditorTableCellSourceValue(cell, insertion.value)
+  placeCaretAtEditorTableSourceOffset(cell, insertion.caretOffset)
   refreshAttachmentLinksInTableCellFromEditor(cell)
   if (result?.value) {
     const emitted = emitKnownEditorSourceValue(result.value)
@@ -5119,13 +5620,14 @@ const insertValueIntoCurrentTableCell = (value: string) => {
   const text = normalizeAttachmentSourceText(normalizeTableCellInsertion(value))
   if (!text) return false
   const isAttachmentInsert = hasAttachmentMarker(text)
-  const preparedAttachmentCell = isAttachmentInsert ? consumePreparedEditorTableAttachmentCell() : null
+  const preparedAttachmentTarget = isAttachmentInsert ? consumePreparedEditorTableAttachmentCell() : null
   let cell = isAttachmentInsert
-    ? (preparedAttachmentCell || getCurrentEditorTableCell(undefined, { allowStoredFallback: false }))
+    ? (preparedAttachmentTarget?.cell || getCurrentEditorTableCell(undefined, { allowStoredFallback: false }))
     : getCurrentEditorTableCell(undefined, { allowStoredFallback: false })
   if (!cell) return false
   if (isAttachmentInsert) {
-    return insertAttachmentIntoTableCellWithoutVditorReset(cell, text)
+    const offset = preparedAttachmentTarget?.offset ?? getEditorTableCellInsertionOffset(cell)
+    return insertAttachmentIntoTableCellWithoutVditorReset(cell, text, offset)
   }
   const selection = window.getSelection()
   if (!selection || selection.rangeCount === 0) return false
@@ -5165,6 +5667,8 @@ const insertValueIntoCurrentTableCell = (value: string) => {
 
 defineExpose({
   clear: () => {
+    closeInlineEditorTableTextarea()
+    closeInlineEditorTableAtomicEditor()
     pendingEditorTableCellSync = null
     pendingEditorTableAttachmentInsertionTarget = null
     editorTableCompositionActive = false
@@ -5179,6 +5683,14 @@ defineExpose({
   prepareAttachmentInsert: () => prepareEditorAttachmentInsertionTarget(),
   clearAttachmentInsertTarget: () => clearPreparedEditorAttachmentInsertionTarget(),
   focus: () => {
+    if (inlineEditorTableAtomicEditor) {
+      inlineEditorTableAtomicEditor.focus({ preventScroll: true })
+      return
+    }
+    if (inlineEditorTableTextarea) {
+      inlineEditorTableTextarea.focus({ preventScroll: true })
+      return
+    }
     getEditorEditableElement()?.focus({ preventScroll: true })
   },
   insertValue: (val: string) => {
@@ -5198,6 +5710,8 @@ defineExpose({
     return vditorInstance ? getEditorValueWithPendingTableSync() : ''
   },
   setValue: (val: string) => {
+    closeInlineEditorTableTextarea()
+    closeInlineEditorTableAtomicEditor()
     pendingEditorTableCellSync = null
     pendingEditorTableAttachmentInsertionTarget = null
     editorTableCompositionActive = false
@@ -5254,7 +5768,7 @@ watch(() => props.theme, (newTheme) => {
 
 .vditor-container .editor-table-attachment-marker {
   display: inline;
-  max-width: none;
+  max-width: 100%;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -5264,9 +5778,9 @@ watch(() => props.theme, (newTheme) => {
   text-decoration: underline;
   text-underline-offset: 2px;
   vertical-align: baseline;
-  white-space: nowrap;
-  overflow-wrap: normal;
-  word-break: normal;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   user-select: none;
   cursor: pointer;
 }
@@ -6124,7 +6638,7 @@ body.is-resizing-expanded-table-column {
   cursor: default;
 }
 
-:global(.editor-inline-table-cell-textarea) {
+.editor-inline-table-cell-textarea {
   position: fixed;
   z-index: 10024;
   box-sizing: border-box;
@@ -6143,24 +6657,58 @@ body.is-resizing-expanded-table-column {
   box-shadow: none;
 }
 
-:global(.editor-inline-table-cell-bottom-shield) {
+.editor-inline-table-cell-atomic-editor {
   position: fixed;
-  z-index: 10025;
-  display: none;
+  z-index: 10024;
+  box-sizing: border-box;
+  display: block;
   min-width: 1px;
-  min-height: 0;
+  min-height: 1px;
   margin: 0;
+  border: 0;
+  outline: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  caret-color: auto;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.editor-inline-table-cell-atomic-editor .editor-table-attachment-marker {
+  display: inline;
+  max-width: 100%;
   padding: 0;
   border: 0;
   background: transparent;
-  cursor: default;
-  pointer-events: auto;
+  color: var(--ir-bracket-color, #0000ff);
+  line-height: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  vertical-align: baseline;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  user-select: none;
+  cursor: pointer;
+}
+
+html.dark .editor-inline-table-cell-atomic-editor .editor-table-attachment-marker {
+  color: var(--ir-bracket-color, #93c5fd);
 }
 
 .vditor-container :deep(td.editor-inline-table-cell-editing),
 .vditor-container :deep(th.editor-inline-table-cell-editing) {
   color: transparent !important;
   caret-color: transparent !important;
+}
+
+.vditor-container :deep(td.editor-inline-table-cell-editing .editor-table-attachment-marker),
+.vditor-container :deep(th.editor-inline-table-cell-editing .editor-table-attachment-marker) {
+  color: transparent !important;
+  text-decoration-color: transparent !important;
+  pointer-events: none !important;
 }
 
 .editor-table-expand-attachments {

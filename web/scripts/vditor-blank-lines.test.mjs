@@ -176,7 +176,7 @@ assert.match(
 
 assert.match(
   editor,
-  /const\s+clearConsumedEditorTableAttachmentTargetState\s*=\s*\(\)\s*=>\s*\{[\s\S]+?closeInlineEditorTableTextarea\(\)[\s\S]+?pendingEditorTableCellSync\s*=\s*null[\s\S]+?clearPreparedEditorAttachmentInsertionTarget\(\)[\s\S]+?clearLastEditorTableSelection\(\)[\s\S]+?\}/,
+  /const\s+clearConsumedEditorTableAttachmentTargetState\s*=\s*\(\)\s*=>\s*\{[\s\S]+?closeInlineEditorTableTextarea\(\)[\s\S]+?closeInlineEditorTableAtomicEditor\(\)[\s\S]+?pendingEditorTableCellSync\s*=\s*null[\s\S]+?clearPreparedEditorAttachmentInsertionTarget\(\)[\s\S]+?clearLastEditorTableSelection\(\)[\s\S]+?\}/,
   'table attachment insertion must consume stale upload targets and pending table sync state after emitting the safe source'
 )
 
@@ -188,8 +188,8 @@ assert.match(
 
 assert.match(
   editor,
-  /const\s+isAttachmentInsert\s*=\s*hasAttachmentMarker\(text\)[\s\S]+?const\s+preparedAttachmentCell\s*=\s*isAttachmentInsert\s*\?\s*consumePreparedEditorTableAttachmentCell\(\)\s*:\s*null[\s\S]+?isAttachmentInsert[\s\S]+?\?\s*\(preparedAttachmentCell\s*\|\|\s*getCurrentEditorTableCell\(undefined,\s*\{\s*allowStoredFallback:\s*false\s*\}\)\)/,
-  'attachment insertion into a table cell must prefer the one-shot upload target over the post-file-picker selection'
+  /const\s+isAttachmentInsert\s*=\s*hasAttachmentMarker\(text\)[\s\S]+?const\s+preparedAttachmentTarget\s*=\s*isAttachmentInsert\s*\?\s*consumePreparedEditorTableAttachmentCell\(\)\s*:\s*null[\s\S]+?preparedAttachmentTarget\?\.cell\s*\|\|\s*getCurrentEditorTableCell\(undefined,\s*\{\s*allowStoredFallback:\s*false\s*\}\)[\s\S]+?preparedAttachmentTarget\?\.offset\s*\?\?\s*getEditorTableCellInsertionOffset\(cell\)/,
+  'attachment insertion must preserve both the one-shot cell and its captured atomic source offset'
 )
 
 assert.match(
@@ -218,8 +218,8 @@ assert.doesNotMatch(
 
 assert.match(
   editor,
-  /const\s+insertAttachmentIntoTableCellWithoutVditorReset\s*=[\s\S]+?setEditorTableDomCellText\(cell,\s*nextText\)[\s\S]+?markEditorTableCellSourceDirty\(cell,\s*nextText\)[\s\S]+?buildEditorTableCellSourceValue\(cell,\s*nextText\)[\s\S]+?clearConsumedEditorTableAttachmentTargetState\(\)[\s\S]+?emitKnownEditorSourceValue\(result\.value\)[\s\S]+?return\s+true/,
-  'table attachment upload insertion must update the target cell and emitted source without calling Vditor setValue'
+  /const\s+insertAttachmentIntoTableCellWithoutVditorReset\s*=[\s\S]+?insertTableCellAtomicValue\(current,\s*text,\s*offset\)[\s\S]+?clearConsumedEditorTableAttachmentTargetState\(\)[\s\S]+?setEditorTableDomCellText\(cell,\s*insertion\.value\)[\s\S]+?placeCaretAtEditorTableSourceOffset\(cell,\s*insertion\.caretOffset\)[\s\S]+?emitKnownEditorSourceValue\(result\.value\)[\s\S]+?return\s+true/,
+  'table attachment upload insertion must use the captured caret and restore it after the atomic token'
 )
 
 const tableAttachmentInsertHelper = editor.match(/const\s+insertAttachmentIntoTableCellWithoutVditorReset\s*=[\s\S]+?\r?\n}\r?\n\r?\nconst\s+insertValueIntoCurrentTableCell/)
@@ -398,8 +398,8 @@ assert.match(
 
 assert.match(
   editor,
-  /const\s+openInlineEditorTableCellTextarea\s*=[\s\S]+?const\s+textarea\s*=\s*ensureInlineEditorTableTextarea\(\)[\s\S]+?inlineEditorTextareaCaretFromPoint\(textarea,\s*cell,\s*baseText,\s*event\)/,
-  'inline table-cell clicks must enter the textarea editing model used for stable caret and IME behavior'
+  /const\s+openInlineEditorTableCellTextarea\s*=[\s\S]+?const\s+textarea\s*=\s*ensureInlineEditorTableTextarea\(\)[\s\S]+?inlineEditorTextareaCaretFromPoint\(textarea,\s*baseText,\s*event\)/,
+  'plain table cells must retain the textarea editing model used for stable caret and IME behavior'
 )
 
 const tableMouseDownStart = editor.indexOf('const onEditorTableMouseDown =')
@@ -408,8 +408,8 @@ const tableMouseDownHandler = editor.slice(tableMouseDownStart, tableMouseDownEn
 
 assert.match(
   tableMouseDownHandler,
-  /openInlineEditorTableCellTextarea\(cell,\s*event\)/,
-  'table-cell mousedown must open the inline textarea editor instead of relying on contenteditable caret placement'
+  /cell\.querySelector\('\.editor-table-attachment-marker'\)[\s\S]+?openInlineEditorTableAtomicEditor\(cell,\s*event\)[\s\S]+?openInlineEditorTableCellTextarea\(cell,\s*event\)/,
+  'attachment cells must use the structured atomic editor while plain cells keep the textarea path'
 )
 
 assert.doesNotMatch(
@@ -424,46 +424,28 @@ assert.match(
   'native textarea beforeinput must bypass the Vditor table contenteditable input shim'
 )
 
-assert.match(
+assert.doesNotMatch(
   editor,
-  /targetLine\s*>=\s*renderedLineCount[\s\S]{0,260}?targetLine\s*-\s*renderedLineCount\s*\+\s*1/,
-  'clicking a visual blank row must create only virtual textarea newlines before real input commits them'
+  /targetLine\s*>=\s*renderedLineCount|editor-inline-table-cell-bottom-shield|INLINE_TABLE_CELL_BOTTOM_EDGE_SHIELD_MIN_PX/,
+  'pointer placement must never synthesize newlines or depend on a seam-covering patch element'
 )
 
 assert.match(
   editor,
-  /INLINE_TABLE_CELL_BOTTOM_EDGE_SHIELD_MIN_PX/,
-  'inline table caret mapping must reserve a bottom shield so clicks cannot land in the cell border seam'
+  /const\s+inlineEditorTextareaCaretFromPoint\s*=[\s\S]+?measureInlineEditorTextareaCaretCandidates\(textarea,\s*baseText\)[\s\S]+?candidateScore\s*<\s*currentScore[\s\S]+?value:\s*baseText/,
+  'plain-cell pointer placement must select an existing rendered caret candidate without changing the value'
 )
 
 assert.match(
   editor,
-  /const\s+ensureInlineEditorTableTextareaBottomShield\s*=[\s\S]+?editor-inline-table-cell-bottom-shield[\s\S]+?const\s+positionInlineEditorTableTextareaBottomShield\s*=[\s\S]+?metrics\.shieldTop[\s\S]+?metrics\.shieldHeight/,
-  'inline table editing must place a real pointer shield over the bottom seam instead of relying on native textarea hit testing'
-)
-
-assert.match(
-  editor,
-  /const\s+stopInlineEditorTableTextareaBottomShieldEvent\s*=[\s\S]+?event\.preventDefault\(\)[\s\S]+?event\.stopPropagation\(\)/,
-  'the bottom shield must intercept pointer events before the textarea can move the caret into the seam'
-)
-
-assert.match(
-  editor,
-  /const\s+inlineEditorTextareaLineFromPoint\s*=[\s\S]+?Math\.min\(metrics\.maxLine,\s*rawLine\)/,
-  'initial table-cell clicks must clamp vertical caret placement to fully available visual lines'
-)
-
-assert.match(
-  editor,
-  /if\s*\(!baseText\s*&&\s*targetLine\s*<=\s*0\)\s*return\s*\{\s*value:\s*'',\s*offset:\s*0\s*\}/,
-  'clicking the first visual line of an empty table cell must place the textarea caret at offset 0'
+  /const\s+openInlineEditorTableAtomicEditor\s*=[\s\S]+?editor\.innerHTML\s*=\s*cell\.innerHTML[\s\S]+?positionInlineEditorTableAtomicEditor\(\)[\s\S]+?placeCaretAtInlineEditorTableAtomicOffset\(offset\)/,
+  'attachment cells must edit a structured clone that retains non-editable attachment nodes'
 )
 
 assert.match(
   editor,
   /inlineEditorTableTextareaState\s*=\s*\{[\s\S]{0,900}?dirty:\s*false[\s\S]{0,900}?textarea\.value\s*=\s*caret\.value/,
-  'opening the inline table textarea may add virtual blank rows but must not mark the cell dirty'
+  'opening a plain-cell textarea must not mark the cell dirty or manufacture content'
 )
 
 assert.match(
@@ -536,7 +518,7 @@ assert.match(
 
 assert.match(
   editor,
-  /textarea\.style\.background\s*=\s*'transparent'[\s\S]{0,260}?applyInlineEditorTextareaCellBoxStyle\(textarea,\s*state\)/,
+  /textarea\.style\.background\s*=\s*'transparent'[\s\S]{0,700}?applyInlineEditorTextareaCellBoxStyle\(textarea,\s*state\)/,
   'inline table textarea must not cover the cell with an opaque block and must render with the original text color'
 )
 
@@ -548,14 +530,14 @@ assert.match(
 
 assert.match(
   editor,
-  /textarea\.style\.background\s*=\s*'transparent'[\s\S]{0,260}?applyInlineEditorTextareaCellBoxStyle\(textarea,\s*state\)/,
+  /textarea\.style\.background\s*=\s*'transparent'[\s\S]{0,700}?applyInlineEditorTextareaCellBoxStyle\(textarea,\s*state\)/,
   'inline table textarea positioning must use the border-compensated cell text box style'
 )
 
 assert.match(
   editor,
-  /textarea\.style\.visibility\s*=\s*'hidden'[\s\S]{0,260}?positionInlineEditorTableTextarea\(\)[\s\S]{0,260}?cell\.classList\.add\('editor-inline-table-cell-editing'\)[\s\S]{0,180}?textarea\.style\.visibility\s*=\s*'visible'/,
-  'inline table cell text must be hidden only after the textarea is positioned to avoid enter-edit flicker'
+  /textarea\.style\.visibility\s*=\s*'hidden'[\s\S]{0,260}?positionInlineEditorTableTextarea\(\)[\s\S]{0,260}?cell\.classList\.add\('editor-inline-table-cell-editing'\)[\s\S]{0,220}?textarea\.style\.visibility\s*=\s*textarea\.style\.pointerEvents\s*===\s*'none'\s*\?\s*'hidden'\s*:\s*'visible'/,
+  'inline table cell text must be shown only when its clipped editor remains visible'
 )
 
 assert.match(
@@ -566,8 +548,8 @@ assert.match(
 
 assert.match(
   editor,
-  /const\s+closeInlineEditorTableTextareaOnExternalMouseDown\s*=[\s\S]+?getInlineEditorTableTextareaElement\(target\)[\s\S]+?editor-inline-table-cell-bottom-shield[\s\S]+?state\.cell\.contains\(target\)[\s\S]+?closeInlineEditorTableTextarea\(\)/,
-  'clicking outside the inline table textarea must close it so later typing or uploads use the newly clicked caret'
+  /const\s+closeInlineEditorTableTextareaOnExternalMouseDown\s*=[\s\S]+?getInlineEditorTableTextareaElement\(target\)[\s\S]+?atomicEditor\?\.contains\(target\)[\s\S]+?textareaState\?\.cell\.contains\(target\)[\s\S]+?atomicState\?\.cell\.contains\(target\)[\s\S]+?closeInlineEditorTableTextarea\(\)[\s\S]+?closeInlineEditorTableAtomicEditor\(\)/,
+  'clicking outside either inline table editor must close it so later typing or uploads use the new caret'
 )
 
 assert.ok(
@@ -582,8 +564,8 @@ const tableExpandHandler = editor.slice(tableExpandStart, tableExpandEnd)
 
 assert.match(
   tableExpandHandler,
-  /closeInlineEditorTableTextarea\(\)[\s\S]{0,180}?flushPendingEditorTableCellSourceSync\(\)/,
-  'opening the expanded table must first close and commit the inline table textarea before reading rows'
+  /closeInlineEditorTableTextarea\(\)[\s\S]{0,100}?closeInlineEditorTableAtomicEditor\(\)[\s\S]{0,180}?flushPendingEditorTableCellSourceSync\(\)/,
+  'opening the expanded table must first close and commit both inline cell editors before reading rows'
 )
 
 assert.match(
@@ -624,8 +606,14 @@ assert.match(
 
 assert.match(
   editor,
-  /const\s+inlineEditorTextareaLineFromPoint\s*=[\s\S]+?inlineEditorTextareaGuardedClientY\(event,\s*metrics\)[\s\S]+?rawLine/,
-  'initial and subsequent table-cell clicks must use guarded Y coordinates instead of raw border-edge clicks'
+  /const\s+inlineEditorTextareaCaretFromPoint\s*=[\s\S]+?inlineEditorTextareaGuardedClientY\(event,\s*metrics\)[\s\S]+?measureInlineEditorTextareaCaretCandidates/,
+  'plain-cell pointer placement must use guarded Y coordinates and existing caret candidates'
+)
+
+assert.match(
+  editor,
+  /getFixedEditorClipInsets\([\s\S]+?clipPath\s*=\s*`inset\(\$\{clip\.top\}px \$\{clip\.right\}px \$\{clip\.bottom\}px \$\{clip\.left\}px\)`/,
+  'fixed inline cell editors must be clipped to the horizontally visible table rectangle'
 )
 
 assert.doesNotMatch(

@@ -9,6 +9,7 @@
       aria-label="录音"
       :aria-expanded="showMenu"
       aria-haspopup="dialog"
+      @pointerdown="prepareRecordingInsertTarget"
       @click="toggleRecorder"
     >
       <UIcon :name="isRecording || isPaused ? 'i-mdi-record-rec' : 'i-mdi-microphone-outline'" class="w-5 h-5" />
@@ -59,7 +60,7 @@ const MAX_RECORDING_MS = 10 * 60 * 1000
 const SPECTRUM_BARS = 32
 const spectrumLevels = new Float32Array(SPECTRUM_BARS)
 
-const emit = defineEmits(['audio-uploaded', 'upload-progress'])
+const emit = defineEmits(['audio-uploaded', 'upload-progress', 'prepare-insert', 'insert-cancelled'])
 const toast = useToast()
 const userStore = useUserStore()
 const BASE_API = useRuntimeConfig().public.baseApi || '/api'
@@ -89,6 +90,10 @@ let chunks: Blob[] = []
 
 const canPause = computed(() => (isRecording.value || isPaused.value) && !!recorder && !isProcessing.value)
 const canStop = computed(() => (isRecording.value || isPaused.value) && !!recorder && !isProcessing.value)
+const prepareRecordingInsertTarget = () => {
+  if (showMenu.value || isRecording.value || isPaused.value || isProcessing.value) return
+  emit('prepare-insert')
+}
 const elapsedText = computed(() => {
   const seconds = Math.floor(elapsedMs.value / 1000)
   const min = Math.floor(seconds / 60)
@@ -234,10 +239,12 @@ const cleanupRecording = () => {
 
 const startRecording = async () => {
   if (!userStore.isLogin) {
+    emit('insert-cancelled')
     toast.add({ title: '提示', description: '请登录后操作', color: 'orange', timeout: 2000 })
     return
   }
   if (typeof window !== 'undefined' && window.isSecureContext === false) {
+    emit('insert-cancelled')
     toast.add({
       title: '无法录音',
       description: '录音需要 HTTPS 安全访问；当前 HTTP 地址下浏览器不会开放麦克风。请通过 HTTPS 域名或 localhost 访问后再试。',
@@ -247,6 +254,7 @@ const startRecording = async () => {
     return
   }
   if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+    emit('insert-cancelled')
     toast.add({ title: '无法录音', description: '当前浏览器不支持网页录音，或浏览器未开放麦克风接口。', color: 'red' })
     return
   }
@@ -281,6 +289,7 @@ const startRecording = async () => {
   } catch (error: any) {
     cleanupRecording()
     showMenu.value = false
+    emit('insert-cancelled')
     toast.add({ title: '无法录音', description: error?.message || '无法访问麦克风', color: 'red' })
   }
 }
@@ -321,6 +330,7 @@ const cancelRecording = () => {
   cleanupRecording()
   showMenu.value = false
   emit('upload-progress', 0)
+  emit('insert-cancelled')
 }
 
 const stopRecorder = () => new Promise<Blob>((resolve, reject) => {
@@ -351,10 +361,12 @@ const stopAndUpload = async () => {
       onProgress: (percent) => emit('upload-progress', percent)
     })
     uploaded.forEach((item) => emit('audio-uploaded', item.rawUrl))
+    if (!uploaded.length) emit('insert-cancelled')
     emit('upload-progress', 100)
     toast.add({ title: '成功', description: '录音上传成功', color: 'green' })
     showMenu.value = false
   } catch (error: any) {
+    emit('insert-cancelled')
     toast.add({ title: '错误', description: error?.message || '录音上传失败', color: 'red' })
   } finally {
     isProcessing.value = false

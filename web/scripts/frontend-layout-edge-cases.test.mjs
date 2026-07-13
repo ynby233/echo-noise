@@ -325,10 +325,13 @@ assert(
     tableMarkerCss.includes('border: 0;') &&
     tableMarkerCss.includes('background: transparent;') &&
     tableMarkerCss.includes('text-decoration: underline;') &&
-    tableMarkerCss.includes('white-space: nowrap;') &&
+    tableMarkerCss.includes('max-width: 100%;') &&
+    tableMarkerCss.includes('white-space: normal;') &&
+    tableMarkerCss.includes('overflow-wrap: anywhere;') &&
+    tableMarkerCss.includes('word-break: break-word;') &&
     !tableMarkerCss.includes('inline-flex') &&
     !tableMarkerCss.includes('rgba(37, 99, 235'),
-  'table-cell attachment markers must keep the normal editor attachment link styling without a custom pill'
+  'table-cell attachment markers must keep normal link styling while wrapping inside the cell'
 )
 
 assert(
