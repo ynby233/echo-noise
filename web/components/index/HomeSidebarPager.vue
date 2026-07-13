@@ -141,11 +141,11 @@ const submitTargetPage = () => emit('jump', targetPage.value)
 .home-sidebar-pager__jump {
   width: 36px;
   min-width: 36px;
-  height: 24px;
-  min-height: 24px;
+  height: 28px;
+  min-height: 28px;
   padding: 0 4px;
-  border-radius: 7px;
-  font-size: 10px;
+  border-radius: 9px;
+  font-size: 11px;
   line-height: 1;
   font-weight: 700;
 }
