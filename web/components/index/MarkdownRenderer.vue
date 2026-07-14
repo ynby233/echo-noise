@@ -655,7 +655,6 @@ const startRenderedTableResize = (drag: RenderedTableResizeDrag, event: PointerE
   window.addEventListener('pointermove', onRenderedTableResizeMove, true)
   window.addEventListener('pointerup', stopRenderedTableResize, true)
   window.addEventListener('pointercancel', stopRenderedTableResize, true)
-  onRenderedTableResizeMove(event)
 }
 
 const ensureRenderedTableResizeHandles = (table: HTMLTableElement, autoRowHeights: number[] = []) => {
@@ -667,7 +666,6 @@ const ensureRenderedTableResizeHandles = (table: HTMLTableElement, autoRowHeight
       const rowHandle = document.createElement('span')
       rowHandle.className = 'rendered-table-expand-row-resize-handle'
       rowHandle.dataset.resizeIndex = String(rowIndex)
-      if (rowIndex === rows.length - 1) rowHandle.classList.add('is-table-edge')
       rowHandle.setAttribute('aria-hidden', 'true')
       rowHandle.addEventListener('pointerdown', (event) => {
         event.preventDefault()
@@ -675,7 +673,7 @@ const ensureRenderedTableResizeHandles = (table: HTMLTableElement, autoRowHeight
         startRenderedTableResize({
           type: 'row',
           index: rowIndex,
-          startClient: cellElement.getBoundingClientRect().bottom,
+          startClient: event.clientY,
           startSize: Math.max(autoRowHeights[rowIndex] || RENDERED_TABLE_MIN_ROW_HEIGHT, row.getBoundingClientRect().height)
         }, event)
       })
@@ -684,7 +682,6 @@ const ensureRenderedTableResizeHandles = (table: HTMLTableElement, autoRowHeight
       const columnHandle = document.createElement('span')
       columnHandle.className = 'rendered-table-expand-column-resize-handle'
       columnHandle.dataset.resizeIndex = String(cellIndex)
-      if (cellIndex === row.cells.length - 1) columnHandle.classList.add('is-table-edge')
       columnHandle.setAttribute('aria-hidden', 'true')
       columnHandle.addEventListener('pointerdown', (event) => {
         event.preventDefault()
@@ -692,7 +689,7 @@ const ensureRenderedTableResizeHandles = (table: HTMLTableElement, autoRowHeight
         startRenderedTableResize({
           type: 'column',
           index: cellIndex,
-          startClient: cellElement.getBoundingClientRect().right,
+          startClient: event.clientX,
           startSize: cellElement.getBoundingClientRect().width
         }, event)
       })
@@ -2480,33 +2477,17 @@ watch(() => props.enableGithubCard, () => {
 .rendered-table-expand-row-resize-handle {
   left: 0;
   right: 0;
-  bottom: -4px;
-  height: 8px;
+  bottom: -1px;
+  height: 2px;
   cursor: row-resize;
 }
 
 .rendered-table-expand-column-resize-handle {
   top: 0;
-  right: -4px;
+  right: -1px;
   bottom: 0;
-  width: 8px;
+  width: 2px;
   cursor: col-resize;
-}
-
-.rendered-table-expand-row-resize-handle.is-table-edge {
-  bottom: 0;
-}
-
-.rendered-table-expand-column-resize-handle.is-table-edge {
-  right: 0;
-}
-
-.rendered-table-expand-row-resize-handle.is-table-edge::after {
-  top: 100%;
-}
-
-.rendered-table-expand-column-resize-handle.is-table-edge::after {
-  left: 100%;
 }
 
 .rendered-table-expand-row-resize-handle::after,
@@ -2520,19 +2501,13 @@ watch(() => props.enableGithubCard, () => {
 }
 
 .rendered-table-expand-row-resize-handle::after {
-  left: 0;
-  right: 0;
-  top: 50%;
+  inset: 0;
   height: 2px;
-  transform: translateY(-50%);
 }
 
 .rendered-table-expand-column-resize-handle::after {
-  top: 0;
-  bottom: 0;
-  left: 50%;
+  inset: 0;
   width: 2px;
-  transform: translateX(-50%);
 }
 
 .rendered-table-expand-row-resize-handle:hover::after,

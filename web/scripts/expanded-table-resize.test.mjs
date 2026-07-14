@@ -9,19 +9,42 @@ const [editor, renderer] = await Promise.all([
   readFile(rendererPath, 'utf8'),
 ])
 
+const sourceBetween = (source, startMarker, endMarker) => {
+  const start = source.indexOf(startMarker)
+  const end = source.indexOf(endMarker, start + startMarker.length)
+  assert.notEqual(start, -1, `missing start marker: ${startMarker}`)
+  assert.notEqual(end, -1, `missing end marker: ${endMarker}`)
+  return source.slice(start, end)
+}
+
 for (const [name, source, prefix, bodyPrefix] of [
   ['editor', editor, 'editor-table-expand', 'expanded-table'],
   ['published', renderer, 'rendered-table-expand', 'rendered-table'],
 ]) {
   assert.match(
     source,
-    new RegExp(`\\.${prefix}-row-resize-handle\\.is-table-edge::after\\s*\\{[\\s\\S]*?top:\\s*100%`),
-    `${name} bottom-edge guide must be centered on the visible table border while its hit target stays inside`
+    new RegExp(`\\.${prefix}-row-resize-handle\\s*\\{[\\s\\S]*?bottom:\\s*-1px;[\\s\\S]*?height:\\s*2px;[\\s\\S]*?cursor:\\s*row-resize`),
+    `${name} row hit target must be the same two-pixel line centered on the real border`
   )
   assert.match(
     source,
-    new RegExp(`\\.${prefix}-column-resize-handle\\.is-table-edge::after\\s*\\{[\\s\\S]*?left:\\s*100%`),
-    `${name} right-edge guide must be centered on the visible table border while its hit target stays inside`
+    new RegExp(`\\.${prefix}-column-resize-handle\\s*\\{[\\s\\S]*?right:\\s*-1px;[\\s\\S]*?width:\\s*2px;[\\s\\S]*?cursor:\\s*col-resize`),
+    `${name} column hit target must be the same two-pixel line centered on the real border`
+  )
+  assert.doesNotMatch(
+    source,
+    new RegExp(`\\.${prefix}-(?:row|column)-resize-handle\\.is-table-edge(?:\\s*|::after\\s*)\\{`),
+    `${name} outer borders must use the same centered geometry as internal borders`
+  )
+  assert.match(
+    source,
+    new RegExp(`\\.${prefix}-row-resize-handle::after\\s*\\{[\\s\\S]*?inset:\\s*0;`),
+    `${name} visible row guide must exactly cover its hit target`
+  )
+  assert.match(
+    source,
+    new RegExp(`\\.${prefix}-column-resize-handle::after\\s*\\{[\\s\\S]*?inset:\\s*0;`),
+    `${name} visible column guide must exactly cover its hit target`
   )
   assert.match(
     source,
@@ -57,8 +80,13 @@ assert.match(
 )
 assert.match(
   editor,
-  /startClient:\s*cell\?\.getBoundingClientRect\(\)\.bottom[\s\S]*?startClient:\s*cell\?\.getBoundingClientRect\(\)\.right/,
-  'editor drag math must start from the real cell border rather than the interior pointer hit position'
+  /startClient:\s*event\.clientY[\s\S]*?startClient:\s*event\.clientX/,
+  'editor drag math must start from the exact pointer-down coordinates'
+)
+assert.doesNotMatch(
+  sourceBetween(editor, 'const startExpandedTableResize', 'const startExpandedTableRowResize'),
+  /onExpandedTableResizeMove\(event\)/,
+  'editor pointer-down must not resize before the first real pointer move'
 )
 assert.match(
   renderer,
@@ -77,8 +105,13 @@ assert.match(
 )
 assert.match(
   renderer,
-  /startClient:\s*cellElement\.getBoundingClientRect\(\)\.bottom[\s\S]*?startClient:\s*cellElement\.getBoundingClientRect\(\)\.right/,
-  'published drag math must start from the real cell border rather than the interior pointer hit position'
+  /startClient:\s*event\.clientY[\s\S]*?startClient:\s*event\.clientX/,
+  'published drag math must start from the exact pointer-down coordinates'
+)
+assert.doesNotMatch(
+  sourceBetween(renderer, 'const startRenderedTableResize', 'const ensureRenderedTableResizeHandles'),
+  /onRenderedTableResizeMove\(event\)/,
+  'published pointer-down must not resize before the first real pointer move'
 )
 
 console.log('expanded table resize geometry tests passed')
