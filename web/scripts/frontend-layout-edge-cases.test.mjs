@@ -215,6 +215,8 @@ assert(
     vditorEditor.includes("'is-table-edge': cellIndex === row.length - 1") &&
     vditorEditor.includes('.editor-table-expand-row-resize-handle.is-table-edge {\n  bottom: 0;\n}') &&
     vditorEditor.includes('.editor-table-expand-column-resize-handle.is-table-edge {\n  right: 0;\n}') &&
+    vditorEditor.includes('.editor-table-expand-row-resize-handle.is-table-edge::after {\n  top: 100%;\n}') &&
+    vditorEditor.includes('.editor-table-expand-column-resize-handle.is-table-edge::after {\n  left: 100%;\n}') &&
     !vditorEditor.includes('rowIndex >= expandedTableRows.value.length - 1') &&
     !vditorEditor.includes('columnIndex >= expandedTableColumnWidths.value.length - 1'),
   'editor expanded table resizing must include the bottom row border and right column border without creating handle overflow'
@@ -227,6 +229,8 @@ assert(
     renderedTableResizeHandlesBody.includes("if (cellIndex === row.cells.length - 1) columnHandle.classList.add('is-table-edge')") &&
     markdownRenderer.includes('.rendered-table-expand-row-resize-handle.is-table-edge {\n  bottom: 0;\n}') &&
     markdownRenderer.includes('.rendered-table-expand-column-resize-handle.is-table-edge {\n  right: 0;\n}') &&
+    markdownRenderer.includes('.rendered-table-expand-row-resize-handle.is-table-edge::after {\n  top: 100%;\n}') &&
+    markdownRenderer.includes('.rendered-table-expand-column-resize-handle.is-table-edge::after {\n  left: 100%;\n}') &&
     !renderedTableResizeHandlesBody.includes('rowIndex < rows.length - 1') &&
     !renderedTableResizeHandlesBody.includes('cellIndex < row.cells.length - 1'),
   'rendered expanded table resizing must include the bottom row border and right column border without creating handle overflow'

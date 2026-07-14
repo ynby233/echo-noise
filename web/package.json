@@ -29,6 +29,7 @@
     "test:vditor-blank-lines": "node scripts/vditor-blank-lines.test.mjs",
     "test:vditor-table-attachment-perf": "node scripts/vditor-table-attachment-perf.test.mjs",
     "test:vditor-table-attachment-atomic": "node scripts/vditor-table-attachment-atomic.test.mjs",
+    "test:expanded-table-resize": "node scripts/expanded-table-resize.test.mjs",
     "postinstall": "nuxt prepare"
   },
   "dependencies": {

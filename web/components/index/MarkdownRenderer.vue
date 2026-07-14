@@ -602,18 +602,22 @@ const stopRenderedTableResize = () => {
   window.removeEventListener('pointermove', onRenderedTableResizeMove, true)
   window.removeEventListener('pointerup', stopRenderedTableResize, true)
   window.removeEventListener('pointercancel', stopRenderedTableResize, true)
+  renderedTableExpandTable()?.querySelectorAll('.rendered-table-expand-row-resize-handle.is-resizing, .rendered-table-expand-column-resize-handle.is-resizing')
+    .forEach((handle) => handle.classList.remove('is-resizing'))
   renderedTableResizeDrag = null
   document.body.classList.remove('is-resizing-rendered-table-row', 'is-resizing-rendered-table-column')
 }
 
-const syncRenderedTableExpandLayout = () => {
+const syncRenderedTableExpandLayout = (options: { rebuildHandles?: boolean } = {}) => {
   const table = renderedTableExpandTable()
   if (!table) return
   applyAdaptiveRenderedTableColumns(table, renderedTableExpandAvailableWidth(), renderedTableManualColumnWidths)
   const autoRowHeights = applyRenderedTableRowHeights(table, renderedTableManualRowHeights)
-  ensureRenderedTableResizeHandles(table, autoRowHeights)
+  if (options.rebuildHandles !== false) ensureRenderedTableResizeHandles(table, autoRowHeights)
   scheduleRenderedTableScrollOverflowState()
 }
+
+const onRenderedTableExpandViewportResize = () => syncRenderedTableExpandLayout()
 
 const onRenderedTableResizeMove = (event: PointerEvent) => {
   const drag = renderedTableResizeDrag
@@ -629,22 +633,29 @@ const onRenderedTableResizeMove = (event: PointerEvent) => {
       drag.startSize + event.clientY - drag.startClient
     )
     renderedTableManualRowHeights[drag.index] = Math.ceil(nextHeight)
-    syncRenderedTableExpandLayout()
+    syncRenderedTableExpandLayout({ rebuildHandles: false })
     return
   }
   const nextWidth = Math.max(RENDERED_TABLE_MIN_COLUMN_WIDTH, drag.startSize + event.clientX - drag.startClient)
   renderedTableManualColumnWidths[drag.index] = Math.ceil(nextWidth)
-  syncRenderedTableExpandLayout()
+  syncRenderedTableExpandLayout({ rebuildHandles: false })
 }
 
 const startRenderedTableResize = (drag: RenderedTableResizeDrag, event: PointerEvent) => {
   stopRenderedTableResize()
   renderedTableResizeDrag = drag
+  const table = renderedTableExpandTable()
+  const handleClass = drag.type === 'row'
+    ? 'rendered-table-expand-row-resize-handle'
+    : 'rendered-table-expand-column-resize-handle'
+  table?.querySelectorAll(`.${handleClass}[data-resize-index="${drag.index}"]`)
+    .forEach((handle) => handle.classList.add('is-resizing'))
   document.body.classList.add(drag.type === 'row' ? 'is-resizing-rendered-table-row' : 'is-resizing-rendered-table-column')
   event.currentTarget instanceof HTMLElement && event.currentTarget.setPointerCapture?.(event.pointerId)
   window.addEventListener('pointermove', onRenderedTableResizeMove, true)
   window.addEventListener('pointerup', stopRenderedTableResize, true)
   window.addEventListener('pointercancel', stopRenderedTableResize, true)
+  onRenderedTableResizeMove(event)
 }
 
 const ensureRenderedTableResizeHandles = (table: HTMLTableElement, autoRowHeights: number[] = []) => {
@@ -655,6 +666,7 @@ const ensureRenderedTableResizeHandles = (table: HTMLTableElement, autoRowHeight
       const cellElement = cell as HTMLElement
       const rowHandle = document.createElement('span')
       rowHandle.className = 'rendered-table-expand-row-resize-handle'
+      rowHandle.dataset.resizeIndex = String(rowIndex)
       if (rowIndex === rows.length - 1) rowHandle.classList.add('is-table-edge')
       rowHandle.setAttribute('aria-hidden', 'true')
       rowHandle.addEventListener('pointerdown', (event) => {
@@ -663,7 +675,7 @@ const ensureRenderedTableResizeHandles = (table: HTMLTableElement, autoRowHeight
         startRenderedTableResize({
           type: 'row',
           index: rowIndex,
-          startClient: event.clientY,
+          startClient: cellElement.getBoundingClientRect().bottom,
           startSize: Math.max(autoRowHeights[rowIndex] || RENDERED_TABLE_MIN_ROW_HEIGHT, row.getBoundingClientRect().height)
         }, event)
       })
@@ -671,6 +683,7 @@ const ensureRenderedTableResizeHandles = (table: HTMLTableElement, autoRowHeight
 
       const columnHandle = document.createElement('span')
       columnHandle.className = 'rendered-table-expand-column-resize-handle'
+      columnHandle.dataset.resizeIndex = String(cellIndex)
       if (cellIndex === row.cells.length - 1) columnHandle.classList.add('is-table-edge')
       columnHandle.setAttribute('aria-hidden', 'true')
       columnHandle.addEventListener('pointerdown', (event) => {
@@ -679,7 +692,7 @@ const ensureRenderedTableResizeHandles = (table: HTMLTableElement, autoRowHeight
         startRenderedTableResize({
           type: 'column',
           index: cellIndex,
-          startClient: event.clientX,
+          startClient: cellElement.getBoundingClientRect().right,
           startSize: cellElement.getBoundingClientRect().width
         }, event)
       })
@@ -2000,7 +2013,7 @@ onMounted(() => {
   } catch {}
   try {
     window.addEventListener('resize', applyDouyinVideoLayout, { passive: true })
-    window.addEventListener('resize', syncRenderedTableExpandLayout, { passive: true })
+    window.addEventListener('resize', onRenderedTableExpandViewportResize, { passive: true })
   } catch {}
 });
 
@@ -2023,7 +2036,7 @@ onBeforeUnmount(() => {
   }
   try {
     window.removeEventListener('resize', applyDouyinVideoLayout)
-    window.removeEventListener('resize', syncRenderedTableExpandLayout)
+    window.removeEventListener('resize', onRenderedTableExpandViewportResize)
   } catch {}
   stopRenderedTableResize()
   if (themeClassObserver) {
@@ -2488,6 +2501,14 @@ watch(() => props.enableGithubCard, () => {
   right: 0;
 }
 
+.rendered-table-expand-row-resize-handle.is-table-edge::after {
+  top: 100%;
+}
+
+.rendered-table-expand-column-resize-handle.is-table-edge::after {
+  left: 100%;
+}
+
 .rendered-table-expand-row-resize-handle::after,
 .rendered-table-expand-column-resize-handle::after {
   content: '';
@@ -2518,17 +2539,21 @@ watch(() => props.enableGithubCard, () => {
 .rendered-table-expand-row-resize-handle:focus-visible::after,
 .rendered-table-expand-column-resize-handle:hover::after,
 .rendered-table-expand-column-resize-handle:focus-visible::after,
-body.is-resizing-rendered-table-row .rendered-table-expand-row-resize-handle::after,
-body.is-resizing-rendered-table-column .rendered-table-expand-column-resize-handle::after {
+.rendered-table-expand-row-resize-handle.is-resizing::after,
+.rendered-table-expand-column-resize-handle.is-resizing::after {
   opacity: 1;
 }
 
-body.is-resizing-rendered-table-row {
+body.is-resizing-rendered-table-row,
+body.is-resizing-rendered-table-row * {
   cursor: row-resize !important;
+  user-select: none !important;
 }
 
-body.is-resizing-rendered-table-column {
+body.is-resizing-rendered-table-column,
+body.is-resizing-rendered-table-column * {
   cursor: col-resize !important;
+  user-select: none !important;
 }
 
 .rendered-table-expand-overlay.is-dark .rendered-table-expanded-table th,

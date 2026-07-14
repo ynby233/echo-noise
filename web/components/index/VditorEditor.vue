@@ -159,12 +159,18 @@
                     </div>
                   </div>
                   <span
-                    :class="['editor-table-expand-row-resize-handle', { 'is-table-edge': rowIndex === expandedTableRows.length - 1 }]"
+                    :class="['editor-table-expand-row-resize-handle', {
+                      'is-table-edge': rowIndex === expandedTableRows.length - 1,
+                      'is-resizing': expandedTableActiveResize?.type === 'row' && expandedTableActiveResize.index === rowIndex,
+                    }]"
                     aria-hidden="true"
                     @pointerdown.prevent.stop="startExpandedTableRowResize(rowIndex, $event)"
                   ></span>
                   <span
-                    :class="['editor-table-expand-column-resize-handle', { 'is-table-edge': cellIndex === row.length - 1 }]"
+                    :class="['editor-table-expand-column-resize-handle', {
+                      'is-table-edge': cellIndex === row.length - 1,
+                      'is-resizing': expandedTableActiveResize?.type === 'column' && expandedTableActiveResize.index === cellIndex,
+                    }]"
                     aria-hidden="true"
                     @pointerdown.prevent.stop="startExpandedTableColumnResize(cellIndex, $event)"
                   ></span>
@@ -287,6 +293,7 @@ let inlineEditorTableAtomicEditorState: InlineEditorTableCellOverlayState | null
 let inlineEditorTableScrollCleanup: (() => void) | null = null;
 const editorTableScrollPositions = new Map<string, number>();
 let expandedTableResizeDrag: ExpandedTableResizeDrag | null = null;
+const expandedTableActiveResize = ref<Pick<ExpandedTableResizeDrag, 'type' | 'index'> | null>(null);
 let expandedTableRowHeightMeasureTimer: number | null = null;
 const TABLE_DELETE_BUTTON_SIZE = 10;
 const TABLE_EXPAND_BUTTON_SIZE = TABLE_DELETE_BUTTON_SIZE;
@@ -4725,6 +4732,7 @@ const stopExpandedTableResize = () => {
     window.removeEventListener('pointercancel', stopExpandedTableResize, true)
   }
   expandedTableResizeDrag = null
+  expandedTableActiveResize.value = null
   if (typeof document !== 'undefined') {
     document.body.classList.remove('is-resizing-expanded-table-row', 'is-resizing-expanded-table-column')
   }
@@ -4758,29 +4766,33 @@ const startExpandedTableResize = (drag: ExpandedTableResizeDrag, event: PointerE
   if (typeof window === 'undefined') return
   stopExpandedTableResize()
   expandedTableResizeDrag = drag
+  expandedTableActiveResize.value = { type: drag.type, index: drag.index }
   document.body.classList.add(drag.type === 'row' ? 'is-resizing-expanded-table-row' : 'is-resizing-expanded-table-column')
   event.currentTarget instanceof HTMLElement && event.currentTarget.setPointerCapture?.(event.pointerId)
   window.addEventListener('pointermove', onExpandedTableResizeMove, true)
   window.addEventListener('pointerup', stopExpandedTableResize, true)
   window.addEventListener('pointercancel', stopExpandedTableResize, true)
+  onExpandedTableResizeMove(event)
 }
 
 const startExpandedTableRowResize = (rowIndex: number, event: PointerEvent) => {
   if (rowIndex < 0 || rowIndex >= expandedTableRows.value.length) return
+  const cell = event.currentTarget instanceof HTMLElement ? event.currentTarget.closest('td,th') : null
   startExpandedTableResize({
     type: 'row',
     index: rowIndex,
-    startClient: event.clientY,
+    startClient: cell?.getBoundingClientRect().bottom ?? event.clientY,
     startSize: expandedTableRowHeight(rowIndex)
   }, event)
 }
 
 const startExpandedTableColumnResize = (columnIndex: number, event: PointerEvent) => {
   if (columnIndex < 0 || columnIndex >= expandedTableColumnWidths.value.length) return
+  const cell = event.currentTarget instanceof HTMLElement ? event.currentTarget.closest('td,th') : null
   startExpandedTableResize({
     type: 'column',
     index: columnIndex,
-    startClient: event.clientX,
+    startClient: cell?.getBoundingClientRect().right ?? event.clientX,
     startSize: expandedTableColumnWidths.value[columnIndex] || EXPANDED_TABLE_MIN_COLUMN_WIDTH
   }, event)
 }
@@ -6587,6 +6599,14 @@ html.dark .editor-table-expand-button:focus-visible {
   right: 0;
 }
 
+.editor-table-expand-row-resize-handle.is-table-edge::after {
+  top: 100%;
+}
+
+.editor-table-expand-column-resize-handle.is-table-edge::after {
+  left: 100%;
+}
+
 .editor-table-expand-row-resize-handle::after,
 .editor-table-expand-column-resize-handle::after {
   content: '';
@@ -6617,17 +6637,21 @@ html.dark .editor-table-expand-button:focus-visible {
 .editor-table-expand-row-resize-handle:focus-visible::after,
 .editor-table-expand-column-resize-handle:hover::after,
 .editor-table-expand-column-resize-handle:focus-visible::after,
-body.is-resizing-expanded-table-row .editor-table-expand-row-resize-handle::after,
-body.is-resizing-expanded-table-column .editor-table-expand-column-resize-handle::after {
+.editor-table-expand-row-resize-handle.is-resizing::after,
+.editor-table-expand-column-resize-handle.is-resizing::after {
   opacity: 1;
 }
 
-body.is-resizing-expanded-table-row {
+body.is-resizing-expanded-table-row,
+body.is-resizing-expanded-table-row * {
   cursor: row-resize !important;
+  user-select: none !important;
 }
 
-body.is-resizing-expanded-table-column {
+body.is-resizing-expanded-table-column,
+body.is-resizing-expanded-table-column * {
   cursor: col-resize !important;
+  user-select: none !important;
 }
 
 .editor-table-expand-table textarea:focus {
