@@ -6575,7 +6575,7 @@ html.dark .editor-table-expand-button:focus-visible {
   right: 0;
   bottom: -1px;
   height: 2px;
-  cursor: row-resize;
+  cursor: var(--table-row-resize-cursor);
 }
 
 .editor-table-expand-column-resize-handle {
@@ -6583,7 +6583,7 @@ html.dark .editor-table-expand-button:focus-visible {
   right: -1px;
   bottom: 0;
   width: 2px;
-  cursor: col-resize;
+  cursor: var(--table-column-resize-cursor);
 }
 
 .editor-table-expand-row-resize-handle::after,
@@ -6617,13 +6617,13 @@ html.dark .editor-table-expand-button:focus-visible {
 
 body.is-resizing-expanded-table-row,
 body.is-resizing-expanded-table-row * {
-  cursor: row-resize !important;
+  cursor: var(--table-row-resize-cursor) !important;
   user-select: none !important;
 }
 
 body.is-resizing-expanded-table-column,
 body.is-resizing-expanded-table-column * {
-  cursor: col-resize !important;
+  cursor: var(--table-column-resize-cursor) !important;
   user-select: none !important;
 }
 

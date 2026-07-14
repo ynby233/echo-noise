@@ -4,9 +4,23 @@ import { fileURLToPath } from 'node:url'
 
 const editorPath = fileURLToPath(new URL('../components/index/VditorEditor.vue', import.meta.url))
 const rendererPath = fileURLToPath(new URL('../components/index/MarkdownRenderer.vue', import.meta.url))
-const [editor, renderer] = await Promise.all([
+const globalCssPath = fileURLToPath(new URL('../assets/css/tailwind.css', import.meta.url))
+const rowCursorPath = fileURLToPath(new URL('../public/cursors/table-row-resize.svg', import.meta.url))
+const columnCursorPath = fileURLToPath(new URL('../public/cursors/table-column-resize.svg', import.meta.url))
+const readOptionalFile = async (path) => {
+  try {
+    return await readFile(path, 'utf8')
+  } catch (error) {
+    if (error?.code === 'ENOENT') return ''
+    throw error
+  }
+}
+const [editor, renderer, globalCss, rowCursor, columnCursor] = await Promise.all([
   readFile(editorPath, 'utf8'),
   readFile(rendererPath, 'utf8'),
+  readFile(globalCssPath, 'utf8'),
+  readOptionalFile(rowCursorPath),
+  readOptionalFile(columnCursorPath),
 ])
 
 const sourceBetween = (source, startMarker, endMarker) => {
@@ -23,12 +37,12 @@ for (const [name, source, prefix, bodyPrefix] of [
 ]) {
   assert.match(
     source,
-    new RegExp(`\\.${prefix}-row-resize-handle\\s*\\{[\\s\\S]*?bottom:\\s*-1px;[\\s\\S]*?height:\\s*2px;[\\s\\S]*?cursor:\\s*row-resize`),
+    new RegExp(`\\.${prefix}-row-resize-handle\\s*\\{[\\s\\S]*?bottom:\\s*-1px;[\\s\\S]*?height:\\s*2px;[\\s\\S]*?cursor:\\s*var\\(--table-row-resize-cursor\\)`),
     `${name} row hit target must be the same two-pixel line centered on the real border`
   )
   assert.match(
     source,
-    new RegExp(`\\.${prefix}-column-resize-handle\\s*\\{[\\s\\S]*?right:\\s*-1px;[\\s\\S]*?width:\\s*2px;[\\s\\S]*?cursor:\\s*col-resize`),
+    new RegExp(`\\.${prefix}-column-resize-handle\\s*\\{[\\s\\S]*?right:\\s*-1px;[\\s\\S]*?width:\\s*2px;[\\s\\S]*?cursor:\\s*var\\(--table-column-resize-cursor\\)`),
     `${name} column hit target must be the same two-pixel line centered on the real border`
   )
   assert.doesNotMatch(
@@ -58,15 +72,30 @@ for (const [name, source, prefix, bodyPrefix] of [
   )
   assert.match(
     source,
-    new RegExp(`body\\.is-resizing-${bodyPrefix}-row,\\s*body\\.is-resizing-${bodyPrefix}-row \\*[\\s\\S]*?cursor:\\s*row-resize\\s*!important`),
-    `${name} row drag cursor must override text cursors under the pointer`
+    new RegExp(`body\\.is-resizing-${bodyPrefix}-row,\\s*body\\.is-resizing-${bodyPrefix}-row \\*[\\s\\S]*?cursor:\\s*var\\(--table-row-resize-cursor\\)\\s*!important`),
+    `${name} row drag must preserve the same explicit cursor hotspot under the pointer`
   )
   assert.match(
     source,
-    new RegExp(`body\\.is-resizing-${bodyPrefix}-column,\\s*body\\.is-resizing-${bodyPrefix}-column \\*[\\s\\S]*?cursor:\\s*col-resize\\s*!important`),
-    `${name} column drag cursor must override text cursors under the pointer`
+    new RegExp(`body\\.is-resizing-${bodyPrefix}-column,\\s*body\\.is-resizing-${bodyPrefix}-column \\*[\\s\\S]*?cursor:\\s*var\\(--table-column-resize-cursor\\)\\s*!important`),
+    `${name} column drag must preserve the same explicit cursor hotspot under the pointer`
   )
 }
+
+assert.match(
+  globalCss,
+  /--table-row-resize-cursor:\s*url\(['"]\/cursors\/table-row-resize\.svg['"]\)\s*16\s+16,\s*row-resize;/,
+  'row resize cursor must declare a platform-independent hotspot at the artwork center'
+)
+assert.match(
+  globalCss,
+  /--table-column-resize-cursor:\s*url\(['"]\/cursors\/table-column-resize\.svg['"]\)\s*16\s+16,\s*col-resize;/,
+  'column resize cursor must declare a platform-independent hotspot at the artwork center'
+)
+assert.match(rowCursor, /viewBox="0 0 32 32"/, 'row cursor artwork must use the 32px coordinate system matched by its 16px hotspot')
+assert.match(rowCursor, /d="M8 16H24"/, 'row cursor artwork must visibly cross its hotspot on the horizontal border axis')
+assert.match(columnCursor, /viewBox="0 0 32 32"/, 'column cursor artwork must use the 32px coordinate system matched by its 16px hotspot')
+assert.match(columnCursor, /d="M16 8V24"/, 'column cursor artwork must visibly cross its hotspot on the vertical border axis')
 
 assert.match(
   editor,

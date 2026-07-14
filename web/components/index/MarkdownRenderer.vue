@@ -2479,7 +2479,7 @@ watch(() => props.enableGithubCard, () => {
   right: 0;
   bottom: -1px;
   height: 2px;
-  cursor: row-resize;
+  cursor: var(--table-row-resize-cursor);
 }
 
 .rendered-table-expand-column-resize-handle {
@@ -2487,7 +2487,7 @@ watch(() => props.enableGithubCard, () => {
   right: -1px;
   bottom: 0;
   width: 2px;
-  cursor: col-resize;
+  cursor: var(--table-column-resize-cursor);
 }
 
 .rendered-table-expand-row-resize-handle::after,
@@ -2521,13 +2521,13 @@ watch(() => props.enableGithubCard, () => {
 
 body.is-resizing-rendered-table-row,
 body.is-resizing-rendered-table-row * {
-  cursor: row-resize !important;
+  cursor: var(--table-row-resize-cursor) !important;
   user-select: none !important;
 }
 
 body.is-resizing-rendered-table-column,
 body.is-resizing-rendered-table-column * {
-  cursor: col-resize !important;
+  cursor: var(--table-column-resize-cursor) !important;
   user-select: none !important;
 }
 
