@@ -214,7 +214,16 @@ type EditorTableCellPosition = Pick<PendingEditorTableCellSync, 'tableIndex' | '
 type EditorTableCompositionCommitKey = EditorTableCellPosition & { key: 'Space' | 'Enter'; expiresAt: number }
 type EditorTableCompositionCaretTarget = EditorTableCellPosition & { offset: number; expiresAt: number }
 type EditorTableAttachmentInsertionTarget = TableAttachmentTarget<HTMLElement>
-type ExpandedTableResizeDrag = { type: 'row' | 'column'; index: number; startClient: number; startSize: number }
+type ExpandedTableResizeDrag = {
+  type: 'row' | 'column'
+  index: number
+  startClient: number
+  startSize: number
+  minSize: number
+  previousManualRowHeights: number[]
+  previousManualColumnWidths: number[]
+}
+type ExpandedTableResizeStart = Omit<ExpandedTableResizeDrag, 'previousManualRowHeights' | 'previousManualColumnWidths'>
 
 const editorContainer = ref<HTMLElement>();
 let vditorInstance: Vditor | null = null;
@@ -293,6 +302,7 @@ const editorTableScrollPositions = new Map<string, number>();
 let expandedTableResizeDrag: ExpandedTableResizeDrag | null = null;
 const expandedTableActiveResize = ref<Pick<ExpandedTableResizeDrag, 'type' | 'index'> | null>(null);
 let expandedTableRowHeightMeasureTimer: number | null = null;
+let expandedTableScrollOverflowFrame: number | null = null;
 const TABLE_DELETE_BUTTON_SIZE = 10;
 const TABLE_EXPAND_BUTTON_SIZE = TABLE_DELETE_BUTTON_SIZE;
 const INLINE_TABLE_CELL_EDGE_GUARD_PX = 8;
@@ -402,7 +412,11 @@ const syncExpandedTableScrollOverflowState = () => {
 
 const scheduleExpandedTableScrollOverflowState = () => {
   if (typeof window === 'undefined') return
-  window.requestAnimationFrame(syncExpandedTableScrollOverflowState)
+  if (expandedTableScrollOverflowFrame !== null) return
+  expandedTableScrollOverflowFrame = window.requestAnimationFrame(() => {
+    expandedTableScrollOverflowFrame = null
+    syncExpandedTableScrollOverflowState()
+  })
 }
 
 const normalizeAttachmentInfo = (kindLabel: string, name: string, url: string): EditorAttachmentInfo | null => {
@@ -2483,15 +2497,20 @@ const parseAttachmentMarkersFromText = (text: string) => {
 
 const expandedTableCellEditorText = (rowIndex: number, cellIndex: number) => stripAttachmentMarkersFromEditorText(expandedTableRows.value[rowIndex]?.[cellIndex] || '')
 const expandedTableBaseColumnWidths = computed(() => calculateAdaptiveTableColumnWidths(expandedTableRows.value, expandedTableAvailableWidth.value))
-const expandedTableColumnWidths = computed(() => expandedTableBaseColumnWidths.value.map((width, index) => Math.max(
-  EXPANDED_TABLE_MIN_COLUMN_WIDTH,
-  Math.ceil(expandedTableManualColumnWidths.value[index] || width)
-)))
-const expandedTableRowHeights = computed(() => expandedTableRows.value.map((_, index) => Math.max(
-  EXPANDED_TABLE_MIN_ROW_HEIGHT,
-  Math.ceil(expandedTableAutoRowHeights.value[index] || 0),
-  Math.ceil(expandedTableManualRowHeights.value[index] || 0)
-)))
+const expandedTableColumnWidths = computed(() => expandedTableBaseColumnWidths.value.map((width, index) => {
+  const manualWidth = expandedTableManualColumnWidths.value[index]
+  return Math.max(
+    EXPANDED_TABLE_MIN_COLUMN_WIDTH,
+    Number.isFinite(manualWidth) ? manualWidth : Math.ceil(width)
+  )
+}))
+const expandedTableRowHeights = computed(() => expandedTableRows.value.map((_, index) => {
+  const manualHeight = expandedTableManualRowHeights.value[index]
+  return Math.max(
+    EXPANDED_TABLE_MIN_ROW_HEIGHT,
+    Number.isFinite(manualHeight) ? manualHeight : Math.ceil(expandedTableAutoRowHeights.value[index] || 0)
+  )
+}))
 const expandedTableRowHeight = (rowIndex: number) => expandedTableRowHeights.value[rowIndex] || EXPANDED_TABLE_MIN_ROW_HEIGHT
 
 const measureExpandedTableTextareaContentHeight = (textarea: HTMLTextAreaElement) => {
@@ -4723,17 +4742,54 @@ const focusNextExpandedTableCell = (rowIndex: number, cellIndex: number, reverse
   target?.select()
 }
 
+const freezeExpandedTableResizeLayout = () => {
+  if (typeof document === 'undefined') return { columnWidths: [] as number[], rowHeights: [] as number[] }
+  const table = document.querySelector<HTMLTableElement>('.editor-table-expand-table')
+  const firstRow = table?.rows[0]
+  const columnWidths = firstRow
+    ? Array.from(firstRow.cells).map((cell) => cell.getBoundingClientRect().width)
+    : [...expandedTableColumnWidths.value]
+  const rowHeights = table
+    ? Array.from(table.rows).map((row) => {
+        const styledHeight = Number.parseFloat(row.style.height)
+        return Number.isFinite(styledHeight) && styledHeight > 0 ? styledHeight : row.getBoundingClientRect().height
+      })
+    : [...expandedTableRowHeights.value]
+  expandedTableManualColumnWidths.value = columnWidths
+  expandedTableManualRowHeights.value = rowHeights
+  return { columnWidths, rowHeights }
+}
+
 const stopExpandedTableResize = () => {
+  const drag = expandedTableResizeDrag
   if (typeof window !== 'undefined') {
     window.removeEventListener('pointermove', onExpandedTableResizeMove, true)
     window.removeEventListener('pointerup', stopExpandedTableResize, true)
     window.removeEventListener('pointercancel', stopExpandedTableResize, true)
+  }
+  if (drag) {
+    const resizedRowHeight = expandedTableManualRowHeights.value[drag.index]
+    const resizedColumnWidth = expandedTableManualColumnWidths.value[drag.index]
+    expandedTableManualRowHeights.value = [...drag.previousManualRowHeights]
+    expandedTableManualColumnWidths.value = [...drag.previousManualColumnWidths]
+    if (drag.type === 'row' && Number.isFinite(resizedRowHeight)) {
+      const heights = [...expandedTableManualRowHeights.value]
+      heights[drag.index] = resizedRowHeight
+      expandedTableManualRowHeights.value = heights
+    }
+    if (drag.type === 'column' && Number.isFinite(resizedColumnWidth)) {
+      const widths = [...expandedTableManualColumnWidths.value]
+      widths[drag.index] = resizedColumnWidth
+      expandedTableManualColumnWidths.value = widths
+    }
   }
   expandedTableResizeDrag = null
   expandedTableActiveResize.value = null
   if (typeof document !== 'undefined') {
     document.body.classList.remove('is-resizing-expanded-table-row', 'is-resizing-expanded-table-column')
   }
+  if (drag?.type === 'column') scheduleMeasureExpandedTableAutoRowHeights()
+  scheduleExpandedTableScrollOverflowState()
 }
 
 const onExpandedTableResizeMove = (event: PointerEvent) => {
@@ -4742,28 +4798,34 @@ const onExpandedTableResizeMove = (event: PointerEvent) => {
   event.preventDefault()
   event.stopPropagation()
   if (drag.type === 'row') {
-    const nextHeight = Math.max(
-      expandedTableAutoRowHeights.value[drag.index] || EXPANDED_TABLE_MIN_ROW_HEIGHT,
-      drag.startSize + event.clientY - drag.startClient
-    )
+    const nextHeight = Math.max(drag.minSize, drag.startSize + event.clientY - drag.startClient)
     const heights = [...expandedTableManualRowHeights.value]
-    heights[drag.index] = Math.ceil(nextHeight)
+    heights[drag.index] = nextHeight
     expandedTableManualRowHeights.value = heights
     scheduleExpandedTableScrollOverflowState()
     return
   }
-  const nextWidth = Math.max(EXPANDED_TABLE_MIN_COLUMN_WIDTH, drag.startSize + event.clientX - drag.startClient)
+  const nextWidth = Math.max(drag.minSize, drag.startSize + event.clientX - drag.startClient)
   const widths = [...expandedTableManualColumnWidths.value]
-  widths[drag.index] = Math.ceil(nextWidth)
+  widths[drag.index] = nextWidth
   expandedTableManualColumnWidths.value = widths
-  scheduleMeasureExpandedTableAutoRowHeights()
   scheduleExpandedTableScrollOverflowState()
 }
 
-const startExpandedTableResize = (drag: ExpandedTableResizeDrag, event: PointerEvent) => {
+const startExpandedTableResize = (drag: ExpandedTableResizeStart, event: PointerEvent) => {
   if (typeof window === 'undefined') return
   stopExpandedTableResize()
-  expandedTableResizeDrag = drag
+  const previousManualRowHeights = [...expandedTableManualRowHeights.value]
+  const previousManualColumnWidths = [...expandedTableManualColumnWidths.value]
+  const frozen = freezeExpandedTableResizeLayout()
+  expandedTableResizeDrag = {
+    ...drag,
+    startSize: drag.type === 'row'
+      ? frozen.rowHeights[drag.index] || drag.startSize
+      : frozen.columnWidths[drag.index] || drag.startSize,
+    previousManualRowHeights,
+    previousManualColumnWidths,
+  }
   expandedTableActiveResize.value = { type: drag.type, index: drag.index }
   document.body.classList.add(drag.type === 'row' ? 'is-resizing-expanded-table-row' : 'is-resizing-expanded-table-column')
   event.currentTarget instanceof HTMLElement && event.currentTarget.setPointerCapture?.(event.pointerId)
@@ -4778,7 +4840,8 @@ const startExpandedTableRowResize = (rowIndex: number, event: PointerEvent) => {
     type: 'row',
     index: rowIndex,
     startClient: event.clientY,
-    startSize: expandedTableRowHeight(rowIndex)
+    startSize: expandedTableRowHeight(rowIndex),
+    minSize: Math.max(EXPANDED_TABLE_MIN_ROW_HEIGHT, expandedTableAutoRowHeights.value[rowIndex] || 0),
   }, event)
 }
 
@@ -4788,7 +4851,8 @@ const startExpandedTableColumnResize = (columnIndex: number, event: PointerEvent
     type: 'column',
     index: columnIndex,
     startClient: event.clientX,
-    startSize: expandedTableColumnWidths.value[columnIndex] || EXPANDED_TABLE_MIN_COLUMN_WIDTH
+    startSize: expandedTableColumnWidths.value[columnIndex] || EXPANDED_TABLE_MIN_COLUMN_WIDTH,
+    minSize: EXPANDED_TABLE_MIN_COLUMN_WIDTH,
   }, event)
 }
 
@@ -5323,6 +5387,10 @@ onBeforeUnmount(() => {
       expandedTableRowHeightMeasureTimer = null
     }
     stopExpandedTableResize()
+    if (expandedTableScrollOverflowFrame !== null) {
+      window.cancelAnimationFrame(expandedTableScrollOverflowFrame)
+      expandedTableScrollOverflowFrame = null
+    }
     showTableExpandDialog.value = false
     tableExpandClosing.value = false
     expandedTableDirty.value = false
@@ -6573,16 +6641,16 @@ html.dark .editor-table-expand-button:focus-visible {
 .editor-table-expand-row-resize-handle {
   left: 0;
   right: 0;
-  bottom: -1px;
-  height: 2px;
+  bottom: -0.5px;
+  height: 1px;
   cursor: var(--table-row-resize-cursor);
 }
 
 .editor-table-expand-column-resize-handle {
   top: 0;
-  right: -1px;
+  right: -0.5px;
   bottom: 0;
-  width: 2px;
+  width: 1px;
   cursor: var(--table-column-resize-cursor);
 }
 
@@ -6768,13 +6836,13 @@ html.dark .editor-inline-table-cell-atomic-editor .editor-table-attachment-marke
 }
 
 @keyframes editorTableDialogIn {
-  from { opacity: 0; transform: translate3d(0, 16px, 0) scale(.92); }
-  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes editorTableDialogOut {
-  from { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
-  to { opacity: 0; transform: translate3d(0, 12px, 0) scale(.92); }
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 html.dark .vditor-hint {

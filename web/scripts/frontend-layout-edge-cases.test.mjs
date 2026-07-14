@@ -211,8 +211,8 @@ assert(
     !vditorEditor.includes('v-if="cellIndex < row.length - 1"') &&
     vditorEditor.includes('if (rowIndex < 0 || rowIndex >= expandedTableRows.value.length) return') &&
     vditorEditor.includes('if (columnIndex < 0 || columnIndex >= expandedTableColumnWidths.value.length) return') &&
-    vditorEditor.includes('.editor-table-expand-row-resize-handle {\n  left: 0;\n  right: 0;\n  bottom: -1px;\n  height: 2px;') &&
-    vditorEditor.includes('.editor-table-expand-column-resize-handle {\n  top: 0;\n  right: -1px;\n  bottom: 0;\n  width: 2px;') &&
+    vditorEditor.includes('.editor-table-expand-row-resize-handle {\n  left: 0;\n  right: 0;\n  bottom: -0.5px;\n  height: 1px;') &&
+    vditorEditor.includes('.editor-table-expand-column-resize-handle {\n  top: 0;\n  right: -0.5px;\n  bottom: 0;\n  width: 1px;') &&
     !vditorEditor.includes('.editor-table-expand-row-resize-handle.is-table-edge') &&
     !vditorEditor.includes('.editor-table-expand-column-resize-handle.is-table-edge') &&
     !vditorEditor.includes('rowIndex >= expandedTableRows.value.length - 1') &&
@@ -223,8 +223,8 @@ assert(
 assert(
   renderedTableResizeHandlesBody.includes("rowHandle.className = 'rendered-table-expand-row-resize-handle'") &&
     renderedTableResizeHandlesBody.includes("columnHandle.className = 'rendered-table-expand-column-resize-handle'") &&
-    markdownRenderer.includes('.rendered-table-expand-row-resize-handle {\n  left: 0;\n  right: 0;\n  bottom: -1px;\n  height: 2px;') &&
-    markdownRenderer.includes('.rendered-table-expand-column-resize-handle {\n  top: 0;\n  right: -1px;\n  bottom: 0;\n  width: 2px;') &&
+    markdownRenderer.includes('.rendered-table-expand-row-resize-handle {\n  left: 0;\n  right: 0;\n  bottom: -0.5px;\n  height: 1px;') &&
+    markdownRenderer.includes('.rendered-table-expand-column-resize-handle {\n  top: 0;\n  right: -0.5px;\n  bottom: 0;\n  width: 1px;') &&
     !renderedTableResizeHandlesBody.includes("classList.add('is-table-edge')") &&
     !markdownRenderer.includes('.rendered-table-expand-row-resize-handle.is-table-edge') &&
     !markdownRenderer.includes('.rendered-table-expand-column-resize-handle.is-table-edge') &&

@@ -37,13 +37,13 @@ for (const [name, source, prefix, bodyPrefix] of [
 ]) {
   assert.match(
     source,
-    new RegExp(`\\.${prefix}-row-resize-handle\\s*\\{[\\s\\S]*?bottom:\\s*-1px;[\\s\\S]*?height:\\s*2px;[\\s\\S]*?cursor:\\s*var\\(--table-row-resize-cursor\\)`),
-    `${name} row hit target must be the same two-pixel line centered on the real border`
+    new RegExp(`\\.${prefix}-row-resize-handle\\s*\\{[\\s\\S]*?bottom:\\s*-0\\.5px;[\\s\\S]*?height:\\s*1px;[\\s\\S]*?cursor:\\s*var\\(--table-row-resize-cursor\\)`),
+    `${name} row hit target must be the exact one-pixel border line`
   )
   assert.match(
     source,
-    new RegExp(`\\.${prefix}-column-resize-handle\\s*\\{[\\s\\S]*?right:\\s*-1px;[\\s\\S]*?width:\\s*2px;[\\s\\S]*?cursor:\\s*var\\(--table-column-resize-cursor\\)`),
-    `${name} column hit target must be the same two-pixel line centered on the real border`
+    new RegExp(`\\.${prefix}-column-resize-handle\\s*\\{[\\s\\S]*?right:\\s*-0\\.5px;[\\s\\S]*?width:\\s*1px;[\\s\\S]*?cursor:\\s*var\\(--table-column-resize-cursor\\)`),
+    `${name} column hit target must be the exact one-pixel border line`
   )
   assert.doesNotMatch(
     source,
@@ -117,6 +117,22 @@ assert.doesNotMatch(
   /onExpandedTableResizeMove\(event\)/,
   'editor pointer-down must not resize before the first real pointer move'
 )
+const editorResizeMove = sourceBetween(editor, 'const onExpandedTableResizeMove', 'const startExpandedTableResize')
+assert.doesNotMatch(
+  editorResizeMove,
+  /Math\.ceil|scheduleMeasureExpandedTableAutoRowHeights/,
+  'editor pointer moves must preserve sub-pixel pointer geometry and defer content measurement until drag end'
+)
+assert.match(
+  editor,
+  /const freezeExpandedTableResizeLayout[\s\S]*?getBoundingClientRect\(\)\.width[\s\S]*?getBoundingClientRect\(\)\.height/,
+  'editor pointer-down must freeze the actual rendered columns and rows before dragging'
+)
+assert.match(
+  editor,
+  /previousManualRowHeights[\s\S]*?previousManualColumnWidths[\s\S]*?resizedRowHeight[\s\S]*?resizedColumnWidth/,
+  'editor drag snapshots must stay transient and commit only the resized track'
+)
 assert.match(
   renderer,
   /dataset\.resizeIndex\s*=\s*String\(rowIndex\)[\s\S]*?dataset\.resizeIndex\s*=\s*String\(cellIndex\)/,
@@ -127,10 +143,36 @@ assert.match(
   /querySelectorAll\(`\.\$\{handleClass\}\[data-resize-index="\$\{drag\.index\}"\]`\)[\s\S]*?classList\.add\('is-resizing'\)/,
   'published resize session must highlight all segments belonging to only the active line index'
 )
+const publishedResizeMove = sourceBetween(renderer, 'const onRenderedTableResizeMove', 'const startRenderedTableResize')
+assert.doesNotMatch(
+  publishedResizeMove,
+  /syncRenderedTableExpandLayout|measureRenderedTableAutoRowHeights|applyAdaptiveRenderedTableColumns|applyRenderedTableRowHeights|Math\.ceil/,
+  'published pointer moves must update only the target track without any full-table measurement or rounding'
+)
+assert.match(
+  publishedResizeMove,
+  /table\.rows\[drag\.index\][\s\S]*?row\.style\.height/,
+  'published row pointer moves must directly update only the target row'
+)
+assert.match(
+  publishedResizeMove,
+  /querySelectorAll<HTMLTableColElement>\('colgroup col'\)[\s\S]*?column\.style\.width/,
+  'published column pointer moves must directly update only the target col'
+)
 assert.match(
   renderer,
-  /syncRenderedTableExpandLayout\(\{\s*rebuildHandles:\s*false\s*\}\)/,
-  'published dragging must preserve the active handle line instead of rebuilding every handle on each pointer move'
+  /const freezeRenderedTableResizeLayout[\s\S]*?getBoundingClientRect\(\)\.width[\s\S]*?getBoundingClientRect\(\)\.height/,
+  'published pointer-down must freeze the actual rendered columns and rows before dragging'
+)
+assert.match(
+  renderer,
+  /startBoundary[\s\S]*?desiredBoundary[\s\S]*?correction/,
+  'published drag math must use the target border coordinate as the source of truth'
+)
+assert.match(
+  renderer,
+  /previousManualRowHeights[\s\S]*?previousManualColumnWidths[\s\S]*?resizedRowHeight[\s\S]*?resizedColumnWidth/,
+  'published drag snapshots must stay transient and commit only the resized track'
 )
 assert.match(
   renderer,
@@ -142,5 +184,13 @@ assert.doesNotMatch(
   /onRenderedTableResizeMove\(event\)/,
   'published pointer-down must not resize before the first real pointer move'
 )
+
+for (const [name, source, keyframePrefix] of [
+  ['editor', editor, 'editorTableDialog'],
+  ['published', renderer, 'renderedTableDialog'],
+]) {
+  const openAnimation = sourceBetween(source, `@keyframes ${keyframePrefix}In`, `@keyframes ${keyframePrefix}Out`)
+  assert.doesNotMatch(openAnimation, /transform\s*:/, `${name} draggable dialog must not animate its coordinate system while becoming interactive`)
+}
 
 console.log('expanded table resize geometry tests passed')

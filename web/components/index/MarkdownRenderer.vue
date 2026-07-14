@@ -67,6 +67,7 @@ const renderedTableExpandClosing = ref(false);
 const renderedTableExpandHtml = ref('');
 const renderedTableExpandDark = ref(false);
 let renderedTableExpandCloseTimer: ReturnType<typeof setTimeout> | null = null;
+let renderedTableScrollOverflowFrame: number | null = null
 let zoom: any = null;
 let themeClassObserver: MutationObserver | null = null
 let taskListObserver: MutationObserver | null = null
@@ -129,7 +130,17 @@ const RENDERED_TABLE_MIN_COLUMN_WIDTH = 48
 const RENDERED_TABLE_MIN_ROW_HEIGHT = 38
 const RENDERED_TABLE_CELL_HORIZONTAL_PADDING = 18
 const RENDERED_TABLE_SCROLL_OVERFLOW_TOLERANCE = 2
-type RenderedTableResizeDrag = { type: 'row' | 'column'; index: number; startClient: number; startSize: number }
+type RenderedTableResizeDrag = {
+  type: 'row' | 'column'
+  index: number
+  startClient: number
+  startBoundary: number
+  startSize: number
+  minSize: number
+  previousManualRowHeights: number[]
+  previousManualColumnWidths: number[]
+}
+type RenderedTableResizeStart = Omit<RenderedTableResizeDrag, 'previousManualRowHeights' | 'previousManualColumnWidths'>
 let renderedTableResizeDrag: RenderedTableResizeDrag | null = null
 let renderedTableManualRowHeights: number[] = []
 let renderedTableManualColumnWidths: number[] = []
@@ -595,17 +606,57 @@ const syncRenderedTableScrollOverflowState = () => {
 
 const scheduleRenderedTableScrollOverflowState = () => {
   if (typeof window === 'undefined') return
-  window.requestAnimationFrame(syncRenderedTableScrollOverflowState)
+  if (renderedTableScrollOverflowFrame !== null) return
+  renderedTableScrollOverflowFrame = window.requestAnimationFrame(() => {
+    renderedTableScrollOverflowFrame = null
+    syncRenderedTableScrollOverflowState()
+  })
+}
+
+const freezeRenderedTableResizeLayout = (table: HTMLTableElement) => {
+  const firstRow = table.rows[0]
+  const columnWidths = firstRow
+    ? Array.from(firstRow.cells).map((cell) => cell.getBoundingClientRect().width)
+    : []
+  const columns = Array.from(table.querySelectorAll<HTMLTableColElement>('colgroup col'))
+  columnWidths.forEach((width, index) => {
+    const column = columns[index]
+    if (column) column.style.width = `${width}px`
+  })
+  const rowHeights = Array.from(table.rows).map((row) => {
+    const styledHeight = Number.parseFloat(row.style.height)
+    return Number.isFinite(styledHeight) && styledHeight > 0 ? styledHeight : row.getBoundingClientRect().height
+  })
+  Array.from(table.rows).forEach((row, rowIndex) => {
+    const height = rowHeights[rowIndex]
+    row.style.height = `${height}px`
+    Array.from(row.cells).forEach((cell) => { (cell as HTMLElement).style.height = `${height}px` })
+  })
+  renderedTableManualColumnWidths = columnWidths
+  renderedTableManualRowHeights = rowHeights
+  return { columnWidths, rowHeights }
 }
 
 const stopRenderedTableResize = () => {
+  const drag = renderedTableResizeDrag
   window.removeEventListener('pointermove', onRenderedTableResizeMove, true)
   window.removeEventListener('pointerup', stopRenderedTableResize, true)
   window.removeEventListener('pointercancel', stopRenderedTableResize, true)
-  renderedTableExpandTable()?.querySelectorAll('.rendered-table-expand-row-resize-handle.is-resizing, .rendered-table-expand-column-resize-handle.is-resizing')
+  const table = renderedTableExpandTable()
+  table?.querySelectorAll('.rendered-table-expand-row-resize-handle.is-resizing, .rendered-table-expand-column-resize-handle.is-resizing')
     .forEach((handle) => handle.classList.remove('is-resizing'))
+  if (drag) {
+    const resizedRowHeight = renderedTableManualRowHeights[drag.index]
+    const resizedColumnWidth = renderedTableManualColumnWidths[drag.index]
+    renderedTableManualRowHeights = [...drag.previousManualRowHeights]
+    renderedTableManualColumnWidths = [...drag.previousManualColumnWidths]
+    if (drag.type === 'row' && Number.isFinite(resizedRowHeight)) renderedTableManualRowHeights[drag.index] = resizedRowHeight
+    if (drag.type === 'column' && Number.isFinite(resizedColumnWidth)) renderedTableManualColumnWidths[drag.index] = resizedColumnWidth
+  }
   renderedTableResizeDrag = null
   document.body.classList.remove('is-resizing-rendered-table-row', 'is-resizing-rendered-table-column')
+  if (table && drag?.type === 'column') applyRenderedTableRowHeights(table, renderedTableManualRowHeights)
+  scheduleRenderedTableScrollOverflowState()
 }
 
 const syncRenderedTableExpandLayout = (options: { rebuildHandles?: boolean } = {}) => {
@@ -627,24 +678,63 @@ const onRenderedTableResizeMove = (event: PointerEvent) => {
   event.preventDefault()
   event.stopPropagation()
   if (drag.type === 'row') {
-    const autoHeights = measureRenderedTableAutoRowHeights(table)
-    const nextHeight = Math.max(
-      autoHeights[drag.index] || RENDERED_TABLE_MIN_ROW_HEIGHT,
-      drag.startSize + event.clientY - drag.startClient
-    )
-    renderedTableManualRowHeights[drag.index] = Math.ceil(nextHeight)
-    syncRenderedTableExpandLayout({ rebuildHandles: false })
+    const desiredBoundary = drag.startBoundary + event.clientY - drag.startClient
+    let nextHeight = Math.max(drag.minSize, drag.startSize + event.clientY - drag.startClient)
+    renderedTableManualRowHeights[drag.index] = nextHeight
+    const row = table.rows[drag.index]
+    if (row) {
+      row.style.height = `${nextHeight}px`
+      Array.from(row.cells).forEach((cell) => { (cell as HTMLElement).style.height = `${nextHeight}px` })
+      const activeHandle = table.querySelector<HTMLElement>(`.rendered-table-expand-row-resize-handle.is-resizing[data-resize-index="${drag.index}"]`)
+      if (activeHandle) {
+        const rect = activeHandle.getBoundingClientRect()
+        const correction = desiredBoundary - (rect.top + rect.height / 2)
+        if (Math.abs(correction) > 0.01) {
+          nextHeight = Math.max(drag.minSize, nextHeight + correction)
+          renderedTableManualRowHeights[drag.index] = nextHeight
+          row.style.height = `${nextHeight}px`
+          Array.from(row.cells).forEach((cell) => { (cell as HTMLElement).style.height = `${nextHeight}px` })
+        }
+      }
+    }
+    scheduleRenderedTableScrollOverflowState()
     return
   }
-  const nextWidth = Math.max(RENDERED_TABLE_MIN_COLUMN_WIDTH, drag.startSize + event.clientX - drag.startClient)
-  renderedTableManualColumnWidths[drag.index] = Math.ceil(nextWidth)
-  syncRenderedTableExpandLayout({ rebuildHandles: false })
+  const desiredBoundary = drag.startBoundary + event.clientX - drag.startClient
+  let nextWidth = Math.max(drag.minSize, drag.startSize + event.clientX - drag.startClient)
+  renderedTableManualColumnWidths[drag.index] = nextWidth
+  const column = Array.from(table.querySelectorAll<HTMLTableColElement>('colgroup col'))[drag.index]
+  if (column) {
+    column.style.width = `${nextWidth}px`
+    const activeHandle = table.querySelector<HTMLElement>(`.rendered-table-expand-column-resize-handle.is-resizing[data-resize-index="${drag.index}"]`)
+    if (activeHandle) {
+      const rect = activeHandle.getBoundingClientRect()
+      const correction = desiredBoundary - (rect.left + rect.width / 2)
+      if (Math.abs(correction) > 0.01) {
+        nextWidth = Math.max(drag.minSize, nextWidth + correction)
+        renderedTableManualColumnWidths[drag.index] = nextWidth
+        column.style.width = `${nextWidth}px`
+      }
+    }
+  }
+  scheduleRenderedTableScrollOverflowState()
 }
 
-const startRenderedTableResize = (drag: RenderedTableResizeDrag, event: PointerEvent) => {
+const startRenderedTableResize = (drag: RenderedTableResizeStart, event: PointerEvent) => {
   stopRenderedTableResize()
-  renderedTableResizeDrag = drag
   const table = renderedTableExpandTable()
+  if (!table) return
+  const previousManualRowHeights = [...renderedTableManualRowHeights]
+  const previousManualColumnWidths = [...renderedTableManualColumnWidths]
+  const frozen = freezeRenderedTableResizeLayout(table)
+  renderedTableResizeDrag = {
+    ...drag,
+    startSize: drag.type === 'row'
+      ? frozen.rowHeights[drag.index] || drag.startSize
+      : frozen.columnWidths[drag.index] || drag.startSize,
+    previousManualRowHeights,
+    previousManualColumnWidths,
+  }
   const handleClass = drag.type === 'row'
     ? 'rendered-table-expand-row-resize-handle'
     : 'rendered-table-expand-column-resize-handle'
@@ -674,7 +764,12 @@ const ensureRenderedTableResizeHandles = (table: HTMLTableElement, autoRowHeight
           type: 'row',
           index: rowIndex,
           startClient: event.clientY,
-          startSize: Math.max(autoRowHeights[rowIndex] || RENDERED_TABLE_MIN_ROW_HEIGHT, row.getBoundingClientRect().height)
+          startBoundary: (() => {
+            const rect = rowHandle.getBoundingClientRect()
+            return rect.top + rect.height / 2
+          })(),
+          startSize: row.getBoundingClientRect().height,
+          minSize: Math.max(RENDERED_TABLE_MIN_ROW_HEIGHT, autoRowHeights[rowIndex] || 0),
         }, event)
       })
       cellElement.appendChild(rowHandle)
@@ -690,7 +785,12 @@ const ensureRenderedTableResizeHandles = (table: HTMLTableElement, autoRowHeight
           type: 'column',
           index: cellIndex,
           startClient: event.clientX,
-          startSize: cellElement.getBoundingClientRect().width
+          startBoundary: (() => {
+            const rect = columnHandle.getBoundingClientRect()
+            return rect.left + rect.width / 2
+          })(),
+          startSize: cellElement.getBoundingClientRect().width,
+          minSize: RENDERED_TABLE_MIN_COLUMN_WIDTH,
         }, event)
       })
       cellElement.appendChild(columnHandle)
@@ -2036,6 +2136,10 @@ onBeforeUnmount(() => {
     window.removeEventListener('resize', onRenderedTableExpandViewportResize)
   } catch {}
   stopRenderedTableResize()
+  if (renderedTableScrollOverflowFrame !== null) {
+    window.cancelAnimationFrame(renderedTableScrollOverflowFrame)
+    renderedTableScrollOverflowFrame = null
+  }
   if (themeClassObserver) {
     themeClassObserver.disconnect()
     themeClassObserver = null
@@ -2477,16 +2581,16 @@ watch(() => props.enableGithubCard, () => {
 .rendered-table-expand-row-resize-handle {
   left: 0;
   right: 0;
-  bottom: -1px;
-  height: 2px;
+  bottom: -0.5px;
+  height: 1px;
   cursor: var(--table-row-resize-cursor);
 }
 
 .rendered-table-expand-column-resize-handle {
   top: 0;
-  right: -1px;
+  right: -0.5px;
   bottom: 0;
-  width: 2px;
+  width: 1px;
   cursor: var(--table-column-resize-cursor);
 }
 
@@ -2577,8 +2681,8 @@ body.is-resizing-rendered-table-column * {
 
 @keyframes renderedTableOverlayIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes renderedTableOverlayOut { from { opacity: 1; } to { opacity: 0; } }
-@keyframes renderedTableDialogIn { from { opacity: 0; transform: translate3d(0, 16px, 0) scale(.92); } to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); } }
-@keyframes renderedTableDialogOut { from { opacity: 1; transform: translate3d(0, 0, 0) scale(1); } to { opacity: 0; transform: translate3d(0, 12px, 0) scale(.92); } }
+@keyframes renderedTableDialogIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes renderedTableDialogOut { from { opacity: 1; } to { opacity: 0; } }
 
 .markdown-preview table tbody tr {
   background-color: rgba(232, 232, 237, 0.39) !important;
