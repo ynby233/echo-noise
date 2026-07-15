@@ -4,8 +4,8 @@
 
 :root {
   --inline-image-thumb-size: 96px;
-  --table-row-resize-cursor: url('/cursors/table-row-resize.svg') 16 16, row-resize;
-  --table-column-resize-cursor: url('/cursors/table-column-resize.svg') 16 16, col-resize;
+  --table-row-resize-cursor: row-resize;
+  --table-column-resize-cursor: col-resize;
   --nw-tooltip-bg: rgba(255, 255, 255, 0.96);
   --nw-tooltip-text: #111827;
   --nw-tooltip-border: rgba(15, 23, 42, 0.14);

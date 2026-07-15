@@ -190,6 +190,7 @@ import { captureVideoFirstFrameFromSource, ensureFancyboxVideoThumbnail, getVide
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { MARKDOWN_BLANK_LINE_SENTINEL, encodeMarkdownExtraBlankLines, isMarkdownBlankLineSentinel, markMarkdownPreservedBlankLineElements } from '~/utils/markdown-blank-lines'
 import { getFixedEditorClipInsets, insertEditorValueFallback, insertTableCellAtomicValue, replaceTableSourceLine, resolveTableAttachmentTarget, type TableAttachmentTarget } from '~/utils/vditor-table-attachment'
+import { resolveTableTrackResize, resolveTableTrailingScrollReserve, type TableTrackResizeSession } from '~/utils/table-resize-session'
 import Vditor from "vditor";
 import { Fancybox } from "@fancyapps/ui";
 import "@fancyapps/ui/dist/fancybox/fancybox.css";
@@ -214,16 +215,13 @@ type EditorTableCellPosition = Pick<PendingEditorTableCellSync, 'tableIndex' | '
 type EditorTableCompositionCommitKey = EditorTableCellPosition & { key: 'Space' | 'Enter'; expiresAt: number }
 type EditorTableCompositionCaretTarget = EditorTableCellPosition & { offset: number; expiresAt: number }
 type EditorTableAttachmentInsertionTarget = TableAttachmentTarget<HTMLElement>
-type ExpandedTableResizeDrag = {
+type ExpandedTableResizeDrag = TableTrackResizeSession & {
   type: 'row' | 'column'
   index: number
-  startClient: number
-  startSize: number
-  minSize: number
-  previousManualRowHeights: number[]
-  previousManualColumnWidths: number[]
+  active: boolean
+  startTrailingScrollReserve: number
 }
-type ExpandedTableResizeStart = Omit<ExpandedTableResizeDrag, 'previousManualRowHeights' | 'previousManualColumnWidths'>
+type ExpandedTableResizeStart = Omit<ExpandedTableResizeDrag, 'active' | 'startTrailingScrollReserve'>
 
 const editorContainer = ref<HTMLElement>();
 let vditorInstance: Vditor | null = null;
@@ -4742,24 +4740,6 @@ const focusNextExpandedTableCell = (rowIndex: number, cellIndex: number, reverse
   target?.select()
 }
 
-const freezeExpandedTableResizeLayout = () => {
-  if (typeof document === 'undefined') return { columnWidths: [] as number[], rowHeights: [] as number[] }
-  const table = document.querySelector<HTMLTableElement>('.editor-table-expand-table')
-  const firstRow = table?.rows[0]
-  const columnWidths = firstRow
-    ? Array.from(firstRow.cells).map((cell) => cell.getBoundingClientRect().width)
-    : [...expandedTableColumnWidths.value]
-  const rowHeights = table
-    ? Array.from(table.rows).map((row) => {
-        const styledHeight = Number.parseFloat(row.style.height)
-        return Number.isFinite(styledHeight) && styledHeight > 0 ? styledHeight : row.getBoundingClientRect().height
-      })
-    : [...expandedTableRowHeights.value]
-  expandedTableManualColumnWidths.value = columnWidths
-  expandedTableManualRowHeights.value = rowHeights
-  return { columnWidths, rowHeights }
-}
-
 const stopExpandedTableResize = () => {
   const drag = expandedTableResizeDrag
   if (typeof window !== 'undefined') {
@@ -4767,28 +4747,12 @@ const stopExpandedTableResize = () => {
     window.removeEventListener('pointerup', stopExpandedTableResize, true)
     window.removeEventListener('pointercancel', stopExpandedTableResize, true)
   }
-  if (drag) {
-    const resizedRowHeight = expandedTableManualRowHeights.value[drag.index]
-    const resizedColumnWidth = expandedTableManualColumnWidths.value[drag.index]
-    expandedTableManualRowHeights.value = [...drag.previousManualRowHeights]
-    expandedTableManualColumnWidths.value = [...drag.previousManualColumnWidths]
-    if (drag.type === 'row' && Number.isFinite(resizedRowHeight)) {
-      const heights = [...expandedTableManualRowHeights.value]
-      heights[drag.index] = resizedRowHeight
-      expandedTableManualRowHeights.value = heights
-    }
-    if (drag.type === 'column' && Number.isFinite(resizedColumnWidth)) {
-      const widths = [...expandedTableManualColumnWidths.value]
-      widths[drag.index] = resizedColumnWidth
-      expandedTableManualColumnWidths.value = widths
-    }
-  }
   expandedTableResizeDrag = null
   expandedTableActiveResize.value = null
   if (typeof document !== 'undefined') {
     document.body.classList.remove('is-resizing-expanded-table-row', 'is-resizing-expanded-table-column')
   }
-  if (drag?.type === 'column') scheduleMeasureExpandedTableAutoRowHeights()
+  if (drag?.type === 'column' && drag.active) scheduleMeasureExpandedTableAutoRowHeights()
   scheduleExpandedTableScrollOverflowState()
 }
 
@@ -4797,34 +4761,38 @@ const onExpandedTableResizeMove = (event: PointerEvent) => {
   if (!drag) return
   event.preventDefault()
   event.stopPropagation()
+  const pointer = drag.type === 'row' ? event.clientY : event.clientX
+  const resolved = resolveTableTrackResize(drag, pointer, drag.active)
+  drag.active = resolved.active
+  if (!resolved.active) return
   if (drag.type === 'row') {
-    const nextHeight = Math.max(drag.minSize, drag.startSize + event.clientY - drag.startClient)
+    const nextHeight = resolved.size
     const heights = [...expandedTableManualRowHeights.value]
     heights[drag.index] = nextHeight
     expandedTableManualRowHeights.value = heights
+    const table = document.querySelector<HTMLTableElement>('.editor-table-expand-table')
+    if (table) table.style.marginBottom = `${resolveTableTrailingScrollReserve(drag.startTrailingScrollReserve, drag.startSize, nextHeight)}px`
     scheduleExpandedTableScrollOverflowState()
     return
   }
-  const nextWidth = Math.max(drag.minSize, drag.startSize + event.clientX - drag.startClient)
+  const nextWidth = resolved.size
   const widths = [...expandedTableManualColumnWidths.value]
   widths[drag.index] = nextWidth
   expandedTableManualColumnWidths.value = widths
+  const table = document.querySelector<HTMLTableElement>('.editor-table-expand-table')
+  if (table) table.style.marginRight = `${resolveTableTrailingScrollReserve(drag.startTrailingScrollReserve, drag.startSize, nextWidth)}px`
   scheduleExpandedTableScrollOverflowState()
 }
 
 const startExpandedTableResize = (drag: ExpandedTableResizeStart, event: PointerEvent) => {
   if (typeof window === 'undefined') return
   stopExpandedTableResize()
-  const previousManualRowHeights = [...expandedTableManualRowHeights.value]
-  const previousManualColumnWidths = [...expandedTableManualColumnWidths.value]
-  const frozen = freezeExpandedTableResizeLayout()
+  const table = document.querySelector<HTMLTableElement>('.editor-table-expand-table')
+  const startTrailingScrollReserve = Number.parseFloat(drag.type === 'row' ? table?.style.marginBottom || '' : table?.style.marginRight || '')
   expandedTableResizeDrag = {
     ...drag,
-    startSize: drag.type === 'row'
-      ? frozen.rowHeights[drag.index] || drag.startSize
-      : frozen.columnWidths[drag.index] || drag.startSize,
-    previousManualRowHeights,
-    previousManualColumnWidths,
+    active: false,
+    startTrailingScrollReserve: Number.isFinite(startTrailingScrollReserve) ? startTrailingScrollReserve : 0,
   }
   expandedTableActiveResize.value = { type: drag.type, index: drag.index }
   document.body.classList.add(drag.type === 'row' ? 'is-resizing-expanded-table-row' : 'is-resizing-expanded-table-column')
@@ -4839,7 +4807,12 @@ const startExpandedTableRowResize = (rowIndex: number, event: PointerEvent) => {
   startExpandedTableResize({
     type: 'row',
     index: rowIndex,
-    startClient: event.clientY,
+    startPointer: event.clientY,
+    startBoundary: (() => {
+      const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
+      const rect = target?.getBoundingClientRect()
+      return rect ? rect.top + rect.height / 2 : event.clientY
+    })(),
     startSize: expandedTableRowHeight(rowIndex),
     minSize: Math.max(EXPANDED_TABLE_MIN_ROW_HEIGHT, expandedTableAutoRowHeights.value[rowIndex] || 0),
   }, event)
@@ -4850,8 +4823,13 @@ const startExpandedTableColumnResize = (columnIndex: number, event: PointerEvent
   startExpandedTableResize({
     type: 'column',
     index: columnIndex,
-    startClient: event.clientX,
-    startSize: expandedTableColumnWidths.value[columnIndex] || EXPANDED_TABLE_MIN_COLUMN_WIDTH,
+    startPointer: event.clientX,
+    startBoundary: (() => {
+      const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
+      const rect = target?.getBoundingClientRect()
+      return rect ? rect.left + rect.width / 2 : event.clientX
+    })(),
+    startSize: document.querySelector<HTMLTableElement>('.editor-table-expand-table')?.rows[0]?.cells[columnIndex]?.getBoundingClientRect().width || expandedTableColumnWidths.value[columnIndex] || EXPANDED_TABLE_MIN_COLUMN_WIDTH,
     minSize: EXPANDED_TABLE_MIN_COLUMN_WIDTH,
   }, event)
 }

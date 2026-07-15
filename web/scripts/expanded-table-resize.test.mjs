@@ -5,22 +5,10 @@ import { fileURLToPath } from 'node:url'
 const editorPath = fileURLToPath(new URL('../components/index/VditorEditor.vue', import.meta.url))
 const rendererPath = fileURLToPath(new URL('../components/index/MarkdownRenderer.vue', import.meta.url))
 const globalCssPath = fileURLToPath(new URL('../assets/css/tailwind.css', import.meta.url))
-const rowCursorPath = fileURLToPath(new URL('../public/cursors/table-row-resize.svg', import.meta.url))
-const columnCursorPath = fileURLToPath(new URL('../public/cursors/table-column-resize.svg', import.meta.url))
-const readOptionalFile = async (path) => {
-  try {
-    return await readFile(path, 'utf8')
-  } catch (error) {
-    if (error?.code === 'ENOENT') return ''
-    throw error
-  }
-}
-const [editor, renderer, globalCss, rowCursor, columnCursor] = await Promise.all([
+const [editor, renderer, globalCss] = await Promise.all([
   readFile(editorPath, 'utf8'),
   readFile(rendererPath, 'utf8'),
   readFile(globalCssPath, 'utf8'),
-  readOptionalFile(rowCursorPath),
-  readOptionalFile(columnCursorPath),
 ])
 
 const sourceBetween = (source, startMarker, endMarker) => {
@@ -73,29 +61,25 @@ for (const [name, source, prefix, bodyPrefix] of [
   assert.match(
     source,
     new RegExp(`body\\.is-resizing-${bodyPrefix}-row,\\s*body\\.is-resizing-${bodyPrefix}-row \\*[\\s\\S]*?cursor:\\s*var\\(--table-row-resize-cursor\\)\\s*!important`),
-    `${name} row drag must preserve the same explicit cursor hotspot under the pointer`
+    `${name} row drag must preserve the native row-resize cursor under the pointer`
   )
   assert.match(
     source,
     new RegExp(`body\\.is-resizing-${bodyPrefix}-column,\\s*body\\.is-resizing-${bodyPrefix}-column \\*[\\s\\S]*?cursor:\\s*var\\(--table-column-resize-cursor\\)\\s*!important`),
-    `${name} column drag must preserve the same explicit cursor hotspot under the pointer`
+    `${name} column drag must preserve the native column-resize cursor under the pointer`
   )
 }
 
 assert.match(
   globalCss,
-  /--table-row-resize-cursor:\s*url\(['"]\/cursors\/table-row-resize\.svg['"]\)\s*16\s+16,\s*row-resize;/,
-  'row resize cursor must declare a platform-independent hotspot at the artwork center'
+  /--table-row-resize-cursor:\s*row-resize;/,
+  'row resizing must use the platform-native DPI-aware cursor'
 )
 assert.match(
   globalCss,
-  /--table-column-resize-cursor:\s*url\(['"]\/cursors\/table-column-resize\.svg['"]\)\s*16\s+16,\s*col-resize;/,
-  'column resize cursor must declare a platform-independent hotspot at the artwork center'
+  /--table-column-resize-cursor:\s*col-resize;/,
+  'column resizing must use the platform-native DPI-aware cursor'
 )
-assert.match(rowCursor, /viewBox="0 0 32 32"/, 'row cursor artwork must use the 32px coordinate system matched by its 16px hotspot')
-assert.match(rowCursor, /d="M8 16H24"/, 'row cursor artwork must visibly cross its hotspot on the horizontal border axis')
-assert.match(columnCursor, /viewBox="0 0 32 32"/, 'column cursor artwork must use the 32px coordinate system matched by its 16px hotspot')
-assert.match(columnCursor, /d="M16 8V24"/, 'column cursor artwork must visibly cross its hotspot on the vertical border axis')
 
 assert.match(
   editor,
@@ -109,8 +93,13 @@ assert.match(
 )
 assert.match(
   editor,
-  /startClient:\s*event\.clientY[\s\S]*?startClient:\s*event\.clientX/,
+  /startPointer:\s*event\.clientY[\s\S]*?startPointer:\s*event\.clientX/,
   'editor drag math must start from the exact pointer-down coordinates'
+)
+assert.match(
+  sourceBetween(editor, 'const startExpandedTableRowResize', 'const startExpandedTableColumnResize'),
+  /startBoundary:[\s\S]*?getBoundingClientRect\(\)[\s\S]*?startSize:\s*expandedTableRowHeight\(rowIndex\)/,
+  'editor row dragging must anchor to the rendered border but resize from the authored track height without adding collapsed-border thickness twice'
 )
 assert.doesNotMatch(
   sourceBetween(editor, 'const startExpandedTableResize', 'const startExpandedTableRowResize'),
@@ -123,15 +112,20 @@ assert.doesNotMatch(
   /Math\.ceil|scheduleMeasureExpandedTableAutoRowHeights/,
   'editor pointer moves must preserve sub-pixel pointer geometry and defer content measurement until drag end'
 )
-assert.match(
+assert.doesNotMatch(
   editor,
-  /const freezeExpandedTableResizeLayout[\s\S]*?getBoundingClientRect\(\)\.width[\s\S]*?getBoundingClientRect\(\)\.height/,
-  'editor pointer-down must freeze the actual rendered columns and rows before dragging'
+  /freezeExpandedTableResizeLayout|previousManualRowHeights|previousManualColumnWidths/,
+  'editor pointer-down must not rewrite unrelated tracks or create a whole-table freeze snapshot'
 )
 assert.match(
   editor,
-  /previousManualRowHeights[\s\S]*?previousManualColumnWidths[\s\S]*?resizedRowHeight[\s\S]*?resizedColumnWidth/,
-  'editor drag snapshots must stay transient and commit only the resized track'
+  /resolveTableTrackResize\([\s\S]*?drag\.active\s*=\s*resolved\.active/,
+  'editor dragging must use the shared actual-boundary resize contract'
+)
+assert.match(
+  editorResizeMove,
+  /resolveTableTrailingScrollReserve\(drag\.startTrailingScrollReserve,\s*drag\.startSize,\s*nextHeight\)[\s\S]*?resolveTableTrailingScrollReserve\(drag\.startTrailingScrollReserve,\s*drag\.startSize,\s*nextWidth\)/,
+  'editor resizing must preserve trailing scroll range for both rows and columns'
 )
 assert.match(
   renderer,
@@ -159,24 +153,25 @@ assert.match(
   /querySelectorAll<HTMLTableColElement>\('colgroup col'\)[\s\S]*?column\.style\.width/,
   'published column pointer moves must directly update only the target col'
 )
-assert.match(
+assert.doesNotMatch(
   renderer,
-  /const freezeRenderedTableResizeLayout[\s\S]*?getBoundingClientRect\(\)\.width[\s\S]*?getBoundingClientRect\(\)\.height/,
-  'published pointer-down must freeze the actual rendered columns and rows before dragging'
+  /freezeRenderedTableResizeLayout|previousManualRowHeights|previousManualColumnWidths/,
+  'published pointer-down must not rewrite unrelated tracks or create a whole-table freeze snapshot'
 )
 assert.match(
   renderer,
-  /startBoundary[\s\S]*?desiredBoundary[\s\S]*?correction/,
-  'published drag math must use the target border coordinate as the source of truth'
+  /resolveTableTrackResize\([\s\S]*?drag\.active\s*=\s*resolved\.active/,
+  'published dragging must use the shared actual-boundary resize contract'
 )
 assert.match(
-  renderer,
-  /previousManualRowHeights[\s\S]*?previousManualColumnWidths[\s\S]*?resizedRowHeight[\s\S]*?resizedColumnWidth/,
-  'published drag snapshots must stay transient and commit only the resized track'
+  publishedResizeMove,
+  /resolveTableTrailingScrollReserve\(drag\.startTrailingScrollReserve,\s*drag\.startSize,\s*nextHeight\)[\s\S]*?resolveTableTrailingScrollReserve\(drag\.startTrailingScrollReserve,\s*drag\.startSize,\s*nextWidth\)/,
+  'published resizing must preserve trailing scroll range for both rows and columns'
 )
+assert.match(renderer, /drag\?\.type\s*===\s*'column'\s*&&\s*drag\.active/, 'published release-time row measurement must run only after an actual column resize')
 assert.match(
   renderer,
-  /startClient:\s*event\.clientY[\s\S]*?startClient:\s*event\.clientX/,
+  /startPointer:\s*event\.clientY[\s\S]*?startPointer:\s*event\.clientX/,
   'published drag math must start from the exact pointer-down coordinates'
 )
 assert.doesNotMatch(

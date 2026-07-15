@@ -29,6 +29,7 @@ import { useMessageStore } from '~/store/message';
 import { ensureFancyboxVideoThumbnail, getVideoElementSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { encodeMarkdownExtraBlankLines, markMarkdownPreservedBlankLineElements } from '~/utils/markdown-blank-lines'
+import { resolveTableTrackResize, resolveTableTrailingScrollReserve, type TableTrackResizeSession } from '~/utils/table-resize-session'
 import Vditor from 'vditor';
 
 // 定义正则表达式
@@ -130,17 +131,13 @@ const RENDERED_TABLE_MIN_COLUMN_WIDTH = 48
 const RENDERED_TABLE_MIN_ROW_HEIGHT = 38
 const RENDERED_TABLE_CELL_HORIZONTAL_PADDING = 18
 const RENDERED_TABLE_SCROLL_OVERFLOW_TOLERANCE = 2
-type RenderedTableResizeDrag = {
+type RenderedTableResizeDrag = TableTrackResizeSession & {
   type: 'row' | 'column'
   index: number
-  startClient: number
-  startBoundary: number
-  startSize: number
-  minSize: number
-  previousManualRowHeights: number[]
-  previousManualColumnWidths: number[]
+  active: boolean
+  startTrailingScrollReserve: number
 }
-type RenderedTableResizeStart = Omit<RenderedTableResizeDrag, 'previousManualRowHeights' | 'previousManualColumnWidths'>
+type RenderedTableResizeStart = Omit<RenderedTableResizeDrag, 'active' | 'startTrailingScrollReserve'>
 let renderedTableResizeDrag: RenderedTableResizeDrag | null = null
 let renderedTableManualRowHeights: number[] = []
 let renderedTableManualColumnWidths: number[] = []
@@ -613,30 +610,6 @@ const scheduleRenderedTableScrollOverflowState = () => {
   })
 }
 
-const freezeRenderedTableResizeLayout = (table: HTMLTableElement) => {
-  const firstRow = table.rows[0]
-  const columnWidths = firstRow
-    ? Array.from(firstRow.cells).map((cell) => cell.getBoundingClientRect().width)
-    : []
-  const columns = Array.from(table.querySelectorAll<HTMLTableColElement>('colgroup col'))
-  columnWidths.forEach((width, index) => {
-    const column = columns[index]
-    if (column) column.style.width = `${width}px`
-  })
-  const rowHeights = Array.from(table.rows).map((row) => {
-    const styledHeight = Number.parseFloat(row.style.height)
-    return Number.isFinite(styledHeight) && styledHeight > 0 ? styledHeight : row.getBoundingClientRect().height
-  })
-  Array.from(table.rows).forEach((row, rowIndex) => {
-    const height = rowHeights[rowIndex]
-    row.style.height = `${height}px`
-    Array.from(row.cells).forEach((cell) => { (cell as HTMLElement).style.height = `${height}px` })
-  })
-  renderedTableManualColumnWidths = columnWidths
-  renderedTableManualRowHeights = rowHeights
-  return { columnWidths, rowHeights }
-}
-
 const stopRenderedTableResize = () => {
   const drag = renderedTableResizeDrag
   window.removeEventListener('pointermove', onRenderedTableResizeMove, true)
@@ -645,17 +618,16 @@ const stopRenderedTableResize = () => {
   const table = renderedTableExpandTable()
   table?.querySelectorAll('.rendered-table-expand-row-resize-handle.is-resizing, .rendered-table-expand-column-resize-handle.is-resizing')
     .forEach((handle) => handle.classList.remove('is-resizing'))
-  if (drag) {
-    const resizedRowHeight = renderedTableManualRowHeights[drag.index]
-    const resizedColumnWidth = renderedTableManualColumnWidths[drag.index]
-    renderedTableManualRowHeights = [...drag.previousManualRowHeights]
-    renderedTableManualColumnWidths = [...drag.previousManualColumnWidths]
-    if (drag.type === 'row' && Number.isFinite(resizedRowHeight)) renderedTableManualRowHeights[drag.index] = resizedRowHeight
-    if (drag.type === 'column' && Number.isFinite(resizedColumnWidth)) renderedTableManualColumnWidths[drag.index] = resizedColumnWidth
-  }
   renderedTableResizeDrag = null
   document.body.classList.remove('is-resizing-rendered-table-row', 'is-resizing-rendered-table-column')
-  if (table && drag?.type === 'column') applyRenderedTableRowHeights(table, renderedTableManualRowHeights)
+  if (table && drag?.type === 'column' && drag.active) {
+    Array.from(table.rows).forEach((row, rowIndex) => {
+      const manualHeight = renderedTableManualRowHeights[rowIndex]
+      const height = Number.isFinite(manualHeight) ? `${manualHeight}px` : ''
+      row.style.height = height
+      Array.from(row.cells).forEach((cell) => { (cell as HTMLElement).style.height = height })
+    })
+  }
   scheduleRenderedTableScrollOverflowState()
 }
 
@@ -677,45 +649,28 @@ const onRenderedTableResizeMove = (event: PointerEvent) => {
   if (!table) return
   event.preventDefault()
   event.stopPropagation()
+  const pointer = drag.type === 'row' ? event.clientY : event.clientX
+  const resolved = resolveTableTrackResize(drag, pointer, drag.active)
+  drag.active = resolved.active
+  if (!resolved.active) return
   if (drag.type === 'row') {
-    const desiredBoundary = drag.startBoundary + event.clientY - drag.startClient
-    let nextHeight = Math.max(drag.minSize, drag.startSize + event.clientY - drag.startClient)
+    const nextHeight = resolved.size
     renderedTableManualRowHeights[drag.index] = nextHeight
     const row = table.rows[drag.index]
     if (row) {
       row.style.height = `${nextHeight}px`
       Array.from(row.cells).forEach((cell) => { (cell as HTMLElement).style.height = `${nextHeight}px` })
-      const activeHandle = table.querySelector<HTMLElement>(`.rendered-table-expand-row-resize-handle.is-resizing[data-resize-index="${drag.index}"]`)
-      if (activeHandle) {
-        const rect = activeHandle.getBoundingClientRect()
-        const correction = desiredBoundary - (rect.top + rect.height / 2)
-        if (Math.abs(correction) > 0.01) {
-          nextHeight = Math.max(drag.minSize, nextHeight + correction)
-          renderedTableManualRowHeights[drag.index] = nextHeight
-          row.style.height = `${nextHeight}px`
-          Array.from(row.cells).forEach((cell) => { (cell as HTMLElement).style.height = `${nextHeight}px` })
-        }
-      }
+      table.style.marginBottom = `${resolveTableTrailingScrollReserve(drag.startTrailingScrollReserve, drag.startSize, nextHeight)}px`
     }
     scheduleRenderedTableScrollOverflowState()
     return
   }
-  const desiredBoundary = drag.startBoundary + event.clientX - drag.startClient
-  let nextWidth = Math.max(drag.minSize, drag.startSize + event.clientX - drag.startClient)
+  const nextWidth = resolved.size
   renderedTableManualColumnWidths[drag.index] = nextWidth
   const column = Array.from(table.querySelectorAll<HTMLTableColElement>('colgroup col'))[drag.index]
   if (column) {
     column.style.width = `${nextWidth}px`
-    const activeHandle = table.querySelector<HTMLElement>(`.rendered-table-expand-column-resize-handle.is-resizing[data-resize-index="${drag.index}"]`)
-    if (activeHandle) {
-      const rect = activeHandle.getBoundingClientRect()
-      const correction = desiredBoundary - (rect.left + rect.width / 2)
-      if (Math.abs(correction) > 0.01) {
-        nextWidth = Math.max(drag.minSize, nextWidth + correction)
-        renderedTableManualColumnWidths[drag.index] = nextWidth
-        column.style.width = `${nextWidth}px`
-      }
-    }
+    table.style.marginRight = `${resolveTableTrailingScrollReserve(drag.startTrailingScrollReserve, drag.startSize, nextWidth)}px`
   }
   scheduleRenderedTableScrollOverflowState()
 }
@@ -724,16 +679,11 @@ const startRenderedTableResize = (drag: RenderedTableResizeStart, event: Pointer
   stopRenderedTableResize()
   const table = renderedTableExpandTable()
   if (!table) return
-  const previousManualRowHeights = [...renderedTableManualRowHeights]
-  const previousManualColumnWidths = [...renderedTableManualColumnWidths]
-  const frozen = freezeRenderedTableResizeLayout(table)
+  const startTrailingScrollReserve = Number.parseFloat(drag.type === 'row' ? table.style.marginBottom : table.style.marginRight)
   renderedTableResizeDrag = {
     ...drag,
-    startSize: drag.type === 'row'
-      ? frozen.rowHeights[drag.index] || drag.startSize
-      : frozen.columnWidths[drag.index] || drag.startSize,
-    previousManualRowHeights,
-    previousManualColumnWidths,
+    active: false,
+    startTrailingScrollReserve: Number.isFinite(startTrailingScrollReserve) ? startTrailingScrollReserve : 0,
   }
   const handleClass = drag.type === 'row'
     ? 'rendered-table-expand-row-resize-handle'
@@ -763,7 +713,7 @@ const ensureRenderedTableResizeHandles = (table: HTMLTableElement, autoRowHeight
         startRenderedTableResize({
           type: 'row',
           index: rowIndex,
-          startClient: event.clientY,
+          startPointer: event.clientY,
           startBoundary: (() => {
             const rect = rowHandle.getBoundingClientRect()
             return rect.top + rect.height / 2
@@ -784,7 +734,7 @@ const ensureRenderedTableResizeHandles = (table: HTMLTableElement, autoRowHeight
         startRenderedTableResize({
           type: 'column',
           index: cellIndex,
-          startClient: event.clientX,
+          startPointer: event.clientX,
           startBoundary: (() => {
             const rect = columnHandle.getBoundingClientRect()
             return rect.left + rect.width / 2
