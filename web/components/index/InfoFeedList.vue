@@ -7,7 +7,7 @@
       <article
         v-for="item in pageItems"
         :key="`${item.link}-${item.timestamp}`"
-        :class="['feed-card', listThemeClass, contentTheme === 'dark' ? 'feed-card-dark' : 'feed-card-light']"
+        :class="['feed-card', listThemeClass, contentTheme === 'dark' ? 'feed-card-dark' : 'feed-card-light', { 'feed-card-attachment-shadow-open': hasFileAttachment(item) }]"
       >
         <div class="feed-card-head author-row">
           <div class="feed-source-user">
@@ -823,6 +823,8 @@ const getDisplayRaw = (item: FeedItem) => {
   return text
 }
 
+const hasFileAttachment = (item: FeedItem) => /\[文件附件：[^\]]+\]\([^)]+\)/.test(getDisplayRaw(item))
+
 const isRSSItem = (item: FeedItem) => String(item.type || '').toLowerCase() === 'rss'
 
 const hasInlineMediaInContent = (item: FeedItem) => {
@@ -1015,6 +1017,14 @@ onUnmounted(() => {
 
 .feed-card + .feed-card {
   margin-top: 0 !important;
+}
+
+.feed-card-attachment-shadow-open {
+  overflow: visible !important;
+}
+
+.feed-card-attachment-shadow-open .feed-summary-markdown :deep(.markdown-preview.vditor-reset) {
+  overflow: visible !important;
 }
 
 .feed-card-light {

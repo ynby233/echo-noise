@@ -60,4 +60,22 @@ assert.match(
   'information-feed attachment shadows must remain visible outside the summary body unless a collapsed-content mask is active'
 )
 
+assert.match(
+  feed,
+  /'feed-card-attachment-shadow-open':\s*hasFileAttachment\(item\)/,
+  'information-feed cards containing file attachments must opt into the complete shadow overflow path'
+)
+
+assert.match(
+  feed,
+  /const\s+hasFileAttachment\s*=\s*\(item:\s*FeedItem\)\s*=>[\s\S]*?文件附件/,
+  'information-feed attachment shadow handling must be driven by the rendered file-attachment marker'
+)
+
+assert.match(
+  feed,
+  /\.feed-card-attachment-shadow-open\s*\{[\s\S]*?overflow:\s*visible\s*!important;[\s\S]*?\}[\s\S]*?\.feed-card-attachment-shadow-open \.feed-summary-markdown :deep\(\.markdown-preview\.vditor-reset\)\s*\{[\s\S]*?overflow:\s*visible\s*!important;/,
+  'information-feed file attachments must not be clipped by either the Markdown root or the outer feed card'
+)
+
 console.log('shared attachment visual checks passed')
