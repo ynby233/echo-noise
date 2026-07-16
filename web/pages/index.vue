@@ -3756,6 +3756,7 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
 :global(html.dark) .ad-overlay-box a { color: var(--home-accent-warn) !important; text-decoration:none; }
 
 /* 播放器：贴边与层级优化 */
+.netease-mini-player { font-family: inherit !important; }
 .netease-mini-player[data-position="bottom-left"] { left: 8px !important; }
 .netease-mini-player[data-position="bottom-right"] { right: 8px !important; }
 .netease-mini-player[data-position="top-left"] { left: 8px !important; }

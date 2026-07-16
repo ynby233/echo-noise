@@ -45,6 +45,11 @@ assert.doesNotMatch(
   /\bis(Login|LoggedIn|Admin|Online)\b|userStore|auth|token/i,
   'guest music visibility must not depend on login, admin, token, or auth state'
 )
+assert.match(
+  indexPage,
+  /\.netease-mini-player\s*\{\s*font-family:\s*inherit\s*!important;\s*\}/,
+  'the music player must inherit the site typeface instead of using its bundled system-font stack'
+)
 
 const reconcileStart = indexPage.indexOf('const reconcileMusicPlayer = async (reason = \'state\') => {')
 const reconcileEnd = indexPage.indexOf('const dedupeStrings', reconcileStart)
