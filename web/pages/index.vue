@@ -231,6 +231,80 @@
                 />
               </div>
             </UCard>
+            <div
+              v-if="feedPagerState.visible"
+              class="pager-shell feed-page-pager"
+              :class="{ 'is-dark': isDark }"
+            >
+              <div class="pager-nav-group">
+                <button
+                  v-if="feedPagerState.canPrevious"
+                  type="button"
+                  class="pager-btn nw-action-btn nw-action-btn--label"
+                  :disabled="feedPagerState.loading"
+                  @click="infoFeedList?.previousPage()"
+                >
+                  <span class="pager-icon-wrap"><UIcon name="i-heroicons-arrow-left" class="w-4 h-4 pager-icon" /></span>
+                  <span>上一页</span>
+                </button>
+                <button
+                  v-if="feedPagerState.canNext"
+                  type="button"
+                  class="pager-btn nw-action-btn nw-action-btn--label"
+                  :disabled="feedPagerState.loading"
+                  @click="infoFeedList?.nextPage()"
+                >
+                  <span>下一页</span>
+                  <span class="pager-icon-wrap"><UIcon name="i-heroicons-arrow-right" class="w-4 h-4 pager-icon" /></span>
+                </button>
+                <span v-if="feedPagerState.loading" class="pager-status-text">加载中...</span>
+              </div>
+              <div class="pager-jump-group">
+                <span class="pager-page-text">第</span>
+                <div class="pager-number-control">
+                  <input
+                    :value="feedPagerState.targetPage"
+                    type="text"
+                    inputmode="numeric"
+                    pattern="[0-9]*"
+                    class="pager-page-input"
+                    placeholder="#"
+                    aria-label="跳转页码"
+                    @input="setFeedTargetPage"
+                    @keyup.enter="infoFeedList?.jumpToTargetPage()"
+                  />
+                  <div class="pager-stepper" aria-label="页码增减">
+                    <button
+                      type="button"
+                      class="pager-stepper-btn nw-action-btn"
+                      aria-label="页码加一"
+                      :disabled="feedPagerState.loading"
+                      @click="infoFeedList?.adjustTargetPage(1)"
+                    >
+                      <UIcon name="i-heroicons-chevron-up-20-solid" class="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      class="pager-stepper-btn nw-action-btn"
+                      aria-label="页码减一"
+                      :disabled="feedPagerState.loading"
+                      @click="infoFeedList?.adjustTargetPage(-1)"
+                    >
+                      <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+                <span class="pager-page-text">页 / 共 {{ feedPagerState.totalPages }} 页</span>
+                <button
+                  type="button"
+                  class="pager-jump-btn nw-action-btn nw-action-btn--label"
+                  :disabled="feedPagerState.loading"
+                  @click="infoFeedList?.jumpToTargetPage()"
+                >
+                  跳转
+                </button>
+              </div>
+            </div>
           </div>
           <div v-else-if="activeTab==='comment'" class="comment-page">
             <UCard class="search-card mb-3" :ui="{ body: { padding: 'p-5 md:p-6' } }">
@@ -688,6 +762,10 @@ type MessageListExpose = HomePagerController & {
 }
 type InfoFeedListExpose = HomePagerController & {
   refreshFeed: () => Promise<void>
+  footerPagerState: HomePagerState & { targetPage: string }
+  setTargetPage: (page: string) => void
+  adjustTargetPage: (delta: number) => void
+  jumpToTargetPage: () => void
 }
 type CommentThreadExpose = HomePagerController & {
   focusCommentById: (commentId: number) => Promise<boolean>
@@ -716,6 +794,19 @@ const activeSidebarPagerController = computed<HomePagerController | null>(() => 
 })
 const activeSidebarPagerState = computed<HomePagerState | null>(() => activeSidebarPagerController.value?.sidebarPagerState || null)
 const isFeedLoading = computed(() => infoFeedList.value?.sidebarPagerState.loading === true)
+const feedPagerState = computed<HomePagerState & { targetPage: string }>(() => infoFeedList.value?.footerPagerState || {
+  visible: false,
+  currentPage: 1,
+  totalPages: 1,
+  targetPage: '1',
+  loading: false,
+  canPrevious: false,
+  canNext: false,
+})
+const setFeedTargetPage = (event: Event) => {
+  const input = event.currentTarget as HTMLInputElement | null
+  infoFeedList.value?.setTargetPage(input?.value || '')
+}
 const refreshInfoFeed = async () => {
   if (feedRefreshing.value || isFeedLoading.value) return
   feedRefreshing.value = true

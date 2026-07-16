@@ -38,6 +38,7 @@
                 :content="getDisplayRaw(item)"
                 :enable-github-card="enableGithubCard"
                 :theme-mode="contentTheme"
+                :inherit-font="true"
                 @rendered="deferMeasure"
               />
             </div>
@@ -90,105 +91,30 @@
             <span>{{ item.link ? getLinkHost(item.link) : '-' }}</span>
           </div>
           <div class="feed-actions">
-            <UTooltip text="阅读原文" :popper="{ placement: 'top' }">
-              <a
-                v-if="item.link"
-                class="feed-icon-btn"
-                :href="item.link"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="阅读原文"
-              >
-                <UIcon name="i-heroicons-arrow-top-right-on-square" class="w-4 h-4" />
-              </a>
-            </UTooltip>
-            <UTooltip :text="copiedLink === item.link ? '已复制' : '复制链接'" :popper="{ placement: 'top' }">
-              <button
-                v-if="item.link"
-                type="button"
-                :class="['feed-icon-btn', copiedLink === item.link ? 'is-success' : '']"
-                :aria-label="copiedLink === item.link ? '已复制链接' : '复制链接'"
-                @click="copyLink(item.link)"
-              >
-                <UIcon :name="copiedLink === item.link ? 'i-heroicons-check' : 'i-heroicons-clipboard-document'" class="w-4 h-4" />
-              </button>
-            </UTooltip>
+            <a
+              v-if="item.link"
+              class="feed-icon-btn nw-action-btn nw-tooltip-anchor"
+              :href="item.link"
+              target="_blank"
+              rel="noopener noreferrer"
+              data-tooltip="阅读原文"
+              aria-label="阅读原文"
+            >
+              <UIcon name="i-heroicons-arrow-top-right-on-square" class="w-4 h-4" />
+            </a>
+            <button
+              v-if="item.link"
+              type="button"
+              :class="['feed-icon-btn nw-action-btn nw-tooltip-anchor', copiedLink === item.link ? 'is-success' : '']"
+              :data-tooltip="copiedLink === item.link ? '已复制' : '复制链接'"
+              :aria-label="copiedLink === item.link ? '已复制链接' : '复制链接'"
+              @click="copyLink(item.link)"
+            >
+              <UIcon :name="copiedLink === item.link ? 'i-heroicons-check' : 'i-heroicons-clipboard-document'" class="w-4 h-4" />
+            </button>
           </div>
         </div>
       </article>
-    </div>
-    <div
-      v-if="!loading && !errorText && allItems.length > 0"
-      class="pager-shell"
-      :class="{ 'is-dark': contentTheme === 'dark' }"
-    >
-      <div class="pager-nav-group">
-        <button
-          v-if="currentPage > 1"
-          type="button"
-          class="pager-btn nw-action-btn nw-action-btn--label"
-          @click="goPrevPage"
-          :disabled="loading"
-        >
-          <span class="pager-icon-wrap"><UIcon name="i-heroicons-arrow-left" class="w-4 h-4 pager-icon" /></span>
-          <span>上一页</span>
-        </button>
-        <button
-          v-if="currentPage < totalPages"
-          type="button"
-          class="pager-btn nw-action-btn nw-action-btn--label"
-          @click="goNextPage"
-          :disabled="loading"
-        >
-          <span>下一页</span>
-          <span class="pager-icon-wrap"><UIcon name="i-heroicons-arrow-right" class="w-4 h-4 pager-icon" /></span>
-        </button>
-        <span v-if="loading" class="pager-status-text">加载中...</span>
-      </div>
-      <div class="pager-jump-group">
-        <span class="pager-page-text">第</span>
-        <div class="pager-number-control">
-          <input
-            v-model="targetPage"
-            type="text"
-            inputmode="numeric"
-            pattern="[0-9]*"
-            class="pager-page-input"
-            placeholder="#"
-            aria-label="跳转页码"
-            @keyup.enter="jumpToPage"
-          />
-          <div class="pager-stepper" aria-label="页码增减">
-            <button
-              type="button"
-              class="pager-stepper-btn nw-action-btn"
-              aria-label="页码加一"
-              :disabled="loading"
-              @click="adjustTargetPage(1)"
-            >
-              <UIcon name="i-heroicons-chevron-up-20-solid" class="w-3 h-3" />
-            </button>
-            <button
-              type="button"
-              class="pager-stepper-btn nw-action-btn"
-              aria-label="页码减一"
-              :disabled="loading"
-              @click="adjustTargetPage(-1)"
-            >
-              <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
-            </button>
-          </div>
-        </div>
-        <span class="pager-page-text">页 / 共 {{ totalPages }} 页</span>
-        <button
-          type="button"
-          class="pager-jump-btn nw-action-btn nw-action-btn--label"
-          @click="jumpToPage"
-          :disabled="loading"
-        >
-          跳转
-        </button>
-      </div>
     </div>
     <UModal v-model="previewOpen">
       <div class="feed-preview-modal">
@@ -433,6 +359,9 @@ const jumpToPage = () => {
   syncTargetPageToCurrent()
   deferMeasure()
   void scrollFeedFirstBlockToTop()
+}
+const setTargetPage = (value: string) => {
+  targetPage.value = String(value ?? '')
 }
 
 const goToPage = (page: string | number) => {
@@ -809,9 +738,9 @@ const getDisplayRaw = (item: FeedItem) => {
     return text
   }
 
-  // Note：仅做轻量首行去重，避免“标题+第一行同文”重复。
+  // Note：标题通常由正文派生；保留正文原貌，避免普通文本被降级成标题回退。
   if (isNoteItem(item)) {
-    return dedupeTitleFromFirstLine(text, item.title || '')
+    return text
   }
 
   // Mastodon：保留原始正文（含 CW/卡片文本/标签），避免误裁剪造成信息丢失。
@@ -857,6 +786,7 @@ const shouldShowStandaloneImage = (item: FeedItem) => {
 const shouldShowTitle = (item: FeedItem) => {
   const title = normalizeContent(item.title || '')
   if (!title) return false
+  if (isNoteItem(item)) return false
   // RSS 一直展示标题；其他源在正文为空时展示标题，避免空白卡片。
   if (isRSSItem(item)) return true
   return !getDisplayRaw(item)
@@ -918,12 +848,25 @@ const sidebarPagerState = computed(() => ({
   canPrevious: !loading.value && currentPage.value > 1,
   canNext: !loading.value && currentPage.value < totalPages.value
 }))
+const footerPagerState = computed(() => ({
+  visible: !errorText.value && allItems.value.length > 0,
+  currentPage: currentPage.value,
+  totalPages: totalPages.value,
+  targetPage: targetPage.value,
+  loading: loading.value,
+  canPrevious: !loading.value && currentPage.value > 1,
+  canNext: !loading.value && currentPage.value < totalPages.value,
+}))
 
 defineExpose({
   sidebarPagerState,
+  footerPagerState,
   previousPage: goPrevPage,
   nextPage: goNextPage,
   goToPage,
+  setTargetPage,
+  adjustTargetPage,
+  jumpToTargetPage: jumpToPage,
   refreshFeed: loadFeed
 })
 
@@ -1116,8 +1059,8 @@ onUnmounted(() => {
 }
 
 .feed-summary-markdown :deep(.markdown-preview) {
-  font-size: 15px;
-  line-height: 1.7;
+  font-size: 16px;
+  line-height: 1.6;
 }
 
 .feed-wrap-light .feed-summary-markdown :deep(.markdown-preview),
@@ -1398,223 +1341,20 @@ onUnmounted(() => {
 }
 
 .feed-icon-btn {
-  width: 30px;
-  height: 30px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(100, 116, 139, 0.35);
-  color: #334155;
-  background: transparent;
-  transition: transform .12s ease, box-shadow .12s ease, color .12s ease, border-color .12s ease, background-color .12s ease;
-  cursor: pointer;
-}
-
-.feed-icon-btn:hover {
-  transform: translate3d(0, 0, 0) scale(1.06);
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.16);
-  color: #0f172a;
-  background: rgba(15, 23, 42, 0.04);
-}
-
-.feed-icon-btn:focus-visible {
-  outline: 2px solid rgba(14, 165, 233, 0.65);
-  outline-offset: 1px;
-}
-
-.feed-icon-btn:active {
-  transform: scale(0.96);
+  padding: 0;
+  text-decoration: none;
 }
 
 .feed-icon-btn.is-success {
-  border-color: rgba(34, 197, 94, 0.48);
-  color: #16a34a;
-  background: rgba(34, 197, 94, 0.1);
-}
-
-.pager-shell {
-  --pager-shell-bg: rgba(255, 255, 255, 0.85);
-  --pager-shell-border: rgba(15, 23, 42, 0.12);
-  --pager-shell-text: #334155;
-  --pager-shell-muted: #64748b;
-  --pager-input-bg: rgba(255, 255, 255, 0.92);
-  --pager-input-border: rgba(15, 23, 42, 0.16);
-  --pager-input-text: #0f172a;
-  --pager-input-placeholder: rgba(15, 23, 42, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  width: 100%;
-  margin: 16px 0 72px;
-  padding: 10px 14px;
-  border: 1px solid var(--pager-shell-border);
-  border-radius: 999px;
-  background: var(--pager-shell-bg);
-  color: var(--pager-shell-text);
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.10);
-  flex-wrap: wrap;
-}
-
-.pager-shell.is-dark {
-  --pager-shell-bg: rgba(39, 50, 66, 0.68);
-  --pager-shell-border: rgba(255, 255, 255, 0.16);
-  --pager-shell-text: #e2e8f0;
-  --pager-shell-muted: #cbd5e1;
-  --pager-input-bg: rgba(17, 24, 39, 0.58);
-  --pager-input-border: rgba(255, 255, 255, 0.18);
-  --pager-input-text: #f8fafc;
-  --pager-input-placeholder: rgba(226, 232, 240, 0.58);
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
-}
-
-.pager-nav-group,
-.pager-jump-group {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.pager-btn,
-.pager-jump-btn {
-  min-height: 34px;
-  padding-inline: 14px;
-  font-size: 13px;
-  font-weight: 700;
-  --nw-action-bg: rgba(15, 23, 42, .06);
-  --nw-action-text: var(--pager-shell-text);
-  --nw-action-border: var(--pager-shell-border);
-}
-
-.pager-page-text,
-.pager-status-text,
-.pager-done-text {
-  color: var(--pager-shell-muted);
-  font-size: 13px;
-  font-weight: 650;
-  text-shadow: none;
-}
-
-.pager-icon-wrap {
-  width: 1.35rem;
-  height: 1.35rem;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: color-mix(in srgb, var(--nw-action-text) 10%, transparent);
-}
-
-.pager-icon {
-  line-height: 1;
-}
-
-.pager-number-control {
-  display: inline-flex;
-  align-items: stretch;
-  min-height: 34px;
-  border: 1px solid var(--pager-input-border);
-  border-radius: 12px;
-  background: var(--pager-input-bg);
-  color: var(--pager-input-text);
-  overflow: hidden;
-  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
-}
-
-.pager-number-control:focus-within {
-  border-color: rgba(249, 115, 22, 0.72);
-  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.18);
-}
-
-.pager-page-input {
-  width: 42px;
-  min-height: 32px;
-  padding: 0 6px;
-  border: 0;
-  outline: none;
-  background: transparent;
-  color: var(--pager-input-text);
-  font-size: 14px;
-  font-weight: 700;
-  text-align: center;
-  appearance: textfield;
-}
-
-.pager-page-input::placeholder {
-  color: var(--pager-input-placeholder);
-}
-
-.pager-stepper {
-  display: grid;
-  grid-template-rows: 1fr 1fr;
-  width: 24px;
-  border-left: 1px solid var(--pager-input-border);
-}
-
-.pager-stepper-btn {
-  width: 24px;
-  min-width: 24px;
-  height: 16px;
-  min-height: 16px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-}
-
-.pager-stepper-btn + .pager-stepper-btn {
-  border-top: 1px solid var(--pager-input-border);
-}
-
-.pager-stepper-btn svg {
-  width: 12px;
-  height: 12px;
-}
-.pager-shell.is-dark .pager-btn,
-.pager-shell.is-dark .pager-jump-btn {
-  --nw-action-bg: rgba(51, 65, 85, .96);
-  --nw-action-text: #cbd5e1;
-  --nw-action-border: rgba(148, 163, 184, .28);
-}
-
-@media (max-width: 640px) {
-  .pager-shell {
-    border-radius: 18px;
-    gap: 10px;
-  }
-
-  .pager-nav-group,
-  .pager-jump-group {
-    width: 100%;
-  }
-}
-
-:global(html.dark) .feed-icon-btn {
-  border-color: rgba(255, 255, 255, 0.48);
-  color: #fff;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-:global(html.dark) .feed-icon-btn:hover {
-  box-shadow: 0 8px 18px rgba(255, 255, 255, 0.2);
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.14);
-}
-
-.feed-card-dark .feed-icon-btn,
-.feed-card-dark .feed-icon-btn :deep(svg),
-.feed-card-dark .feed-icon-btn :deep(path),
-.feed-card-dark .feed-icon-btn :deep(i),
-.feed-card-dark .feed-icon-btn :deep(span) {
-  color: #fff !important;
+  --nw-action-border: rgba(34, 197, 94, 0.48);
+  --nw-action-text: #16a34a;
+  --nw-action-bg: rgba(34, 197, 94, 0.1);
 }
 
 :global(html.dark) .feed-icon-btn.is-success {
-  border-color: rgba(74, 222, 128, 0.52);
-  color: #86efac;
-  background: rgba(34, 197, 94, 0.14);
+  --nw-action-border: rgba(74, 222, 128, 0.52);
+  --nw-action-text: #86efac;
+  --nw-action-bg: rgba(34, 197, 94, 0.14);
 }
 
 @media (max-width: 1024px) {

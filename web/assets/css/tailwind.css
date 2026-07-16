@@ -365,6 +365,166 @@ html.dark .nw-action-btn--danger,
   --nw-action-hover-text: #fff;
 }
 
+/* 首页内容列表共用的底部分页栏。分页栏必须位于内容大面板之外。 */
+.pager-shell {
+  --pager-shell-bg: rgba(255, 255, 255, 0.85);
+  --pager-shell-border: rgba(15, 23, 42, 0.12);
+  --pager-shell-text: #334155;
+  --pager-shell-muted: #64748b;
+  --pager-input-bg: rgba(255, 255, 255, 0.92);
+  --pager-input-border: rgba(15, 23, 42, 0.16);
+  --pager-input-text: #0f172a;
+  --pager-input-placeholder: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+  margin: 16px 0 72px;
+  padding: 10px 14px;
+  border: 1px solid var(--pager-shell-border);
+  border-radius: 999px;
+  background: var(--pager-shell-bg);
+  color: var(--pager-shell-text);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.10);
+  flex-wrap: wrap;
+}
+
+.pager-shell.is-dark {
+  --pager-shell-bg: rgba(39, 50, 66, 0.68);
+  --pager-shell-border: rgba(255, 255, 255, 0.16);
+  --pager-shell-text: #e2e8f0;
+  --pager-shell-muted: #cbd5e1;
+  --pager-input-bg: rgba(17, 24, 39, 0.58);
+  --pager-input-border: rgba(255, 255, 255, 0.18);
+  --pager-input-text: #f8fafc;
+  --pager-input-placeholder: rgba(226, 232, 240, 0.58);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
+}
+
+.pager-nav-group,
+.pager-jump-group {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pager-btn,
+.pager-jump-btn {
+  min-height: 34px;
+  padding-inline: 14px;
+  font-size: 13px;
+  font-weight: 700;
+  --nw-action-bg: rgba(15, 23, 42, .06);
+  --nw-action-text: var(--pager-shell-text);
+  --nw-action-border: var(--pager-shell-border);
+}
+
+.pager-page-text,
+.pager-status-text,
+.pager-done-text {
+  color: var(--pager-shell-muted);
+  font-size: 13px;
+  font-weight: 650;
+  text-shadow: none;
+}
+
+.pager-icon-wrap {
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--nw-action-text) 10%, transparent);
+}
+
+.pager-icon {
+  line-height: 1;
+}
+
+.pager-number-control {
+  display: inline-flex;
+  align-items: stretch;
+  min-height: 34px;
+  border: 1px solid var(--pager-input-border);
+  border-radius: 12px;
+  background: var(--pager-input-bg);
+  color: var(--pager-input-text);
+  overflow: hidden;
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+
+.pager-number-control:focus-within {
+  border-color: rgba(249, 115, 22, 0.72);
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.18);
+}
+
+.pager-page-input {
+  width: 42px;
+  min-height: 32px;
+  padding: 0 6px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--pager-input-text);
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  appearance: textfield;
+}
+
+.pager-page-input::placeholder {
+  color: var(--pager-input-placeholder);
+}
+
+.pager-stepper {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  width: 24px;
+  border-left: 1px solid var(--pager-input-border);
+}
+
+.pager-stepper-btn {
+  width: 24px;
+  min-width: 24px;
+  height: 16px;
+  min-height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.pager-stepper-btn + .pager-stepper-btn {
+  border-top: 1px solid var(--pager-input-border);
+}
+
+.pager-stepper-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.pager-shell.is-dark .pager-btn,
+.pager-shell.is-dark .pager-jump-btn {
+  --nw-action-bg: rgba(51, 65, 85, .96);
+  --nw-action-text: #cbd5e1;
+  --nw-action-border: rgba(148, 163, 184, .28);
+}
+
+@media (max-width: 640px) {
+  .pager-shell {
+    border-radius: 18px;
+    gap: 10px;
+  }
+
+  .pager-nav-group,
+  .pager-jump-group {
+    width: 100%;
+  }
+}
+
 .nw-tooltip {
   position: fixed;
   z-index: 5006;

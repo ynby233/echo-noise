@@ -8,8 +8,9 @@ const messageListPath = fileURLToPath(new URL('../components/index/MessageList.v
 const infoFeedPath = fileURLToPath(new URL('../components/index/InfoFeedList.vue', import.meta.url))
 const commentsPath = fileURLToPath(new URL('../components/comments/BuiltinComments.vue', import.meta.url))
 const notificationsPath = fileURLToPath(new URL('../components/index/UserNotificationCenter.vue', import.meta.url))
-const sources = await Promise.all([homePath, sidebarPagerPath, messageListPath, infoFeedPath, commentsPath, notificationsPath].map((path) => readFile(path, 'utf8')))
-const [homePage, sidebarPager, messageList, infoFeed, comments, notifications] = sources.map((source) => source.replace(/\r\n?/g, '\n'))
+const sharedCssPath = fileURLToPath(new URL('../assets/css/tailwind.css', import.meta.url))
+const sources = await Promise.all([homePath, sidebarPagerPath, messageListPath, infoFeedPath, commentsPath, notificationsPath, sharedCssPath].map((path) => readFile(path, 'utf8')))
+const [homePage, sidebarPager, messageList, infoFeed, comments, notifications, sharedCss] = sources.map((source) => source.replace(/\r\n?/g, '\n'))
 
 const socialCardIndex = homePage.indexOf('left-widget-social-card')
 const sidebarPagerIndex = homePage.indexOf('<HomeSidebarPager')
@@ -54,7 +55,7 @@ assert.match(sidebarPager, /\.home-sidebar-pager__jump\s*\{[^}]*width:\s*36px;[^
 assert.match(sidebarPager, /\.home-sidebar-pager__nav\s*\{[^}]*height:\s*28px;/, '两侧翻页按钮高度必须保持 28px')
 assert.match(sidebarPager, /\.home-sidebar-pager__number-control\s*\{[^}]*height:\s*28px;/, '数字输入组高度必须保持 28px')
 assert.equal((sidebarPager.match(/class="home-sidebar-pager__step nw-action-btn"/g) || []).length, 2, '两个页码微调键必须复用全站交互按钮体系')
-assert.match(messageList, /\.pager-stepper-btn\s*\{[^}]*width:\s*24px;[^}]*height:\s*16px;[^}]*border-radius:\s*0;/, '页面底部分页微调键是左侧微调键的尺寸与圆角基准')
+assert.match(sharedCss, /\.pager-stepper-btn\s*\{[^}]*width:\s*24px;[^}]*height:\s*16px;[^}]*border-radius:\s*0;/, '页面底部分页微调键是左侧微调键的尺寸与圆角基准')
 const sidebarStepRule = sidebarPager.match(/\.home-sidebar-pager__step\s*\{([\s\S]*?)\n\}/)?.[1] || ''
 assert.match(sidebarStepRule, /border:\s*0;/, '左侧微调键必须保持与页面底部分页栏一致的无外框结构')
 assert.match(sidebarStepRule, /border-radius:\s*0;/, '左侧微调键必须与页面底部分页栏一致地取消单键圆角')

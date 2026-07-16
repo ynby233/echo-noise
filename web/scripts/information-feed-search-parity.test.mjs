@@ -78,4 +78,51 @@ assert.match(feed, /\.feed-card-light \{[\s\S]*?background: rgba\(255, 255, 255,
 assert.match(feed, /\.feed-card-dark \{[\s\S]*?background: rgba\(15, 23, 42, \.52\) !important;[\s\S]*?border: 1px solid rgba\(255, 255, 255, \.12\);[\s\S]*?box-shadow: 0 16px 32px rgba\(2, 6, 23, \.52\) !important;/)
 assert.match(feed, /\.feed-empty \{[\s\S]*?min-height: 260px;[\s\S]*?padding: 42px 12px 34px;[\s\S]*?color: #9ca3af;/)
 
+assert.doesNotMatch(feed, /<UTooltip\b/, 'feed actions must use the shared tooltip system instead of Nuxt UI tooltips')
+assert.match(
+  feed,
+  /class="feed-icon-btn nw-action-btn nw-tooltip-anchor"[\s\S]*?data-tooltip="[^\"]+"[\s\S]*?aria-label="[^\"]*"/,
+  'the original-link action must use the shared button and tooltip contracts',
+)
+assert.match(
+  feed,
+  /:class="\['feed-icon-btn nw-action-btn nw-tooltip-anchor',[\s\S]*?:data-tooltip="copiedLink === item\.link/,
+  'the copy-link action must use the shared button and tooltip contracts',
+)
+
+assert.doesNotMatch(
+  feed,
+  /class="pager-shell"/,
+  'the information-feed pager must not render inside the feed panel component',
+)
+assert.match(
+  home,
+  /<\/UCard>\s*<div\s+v-if="feedPagerState\.visible"\s+class="pager-shell feed-page-pager"/,
+  'the information-feed pager must be a sibling after the large feed panel',
+)
+assert.match(sharedCss, /\.pager-shell \{[\s\S]*?border-radius: 999px;/, 'bottom pager visuals must be shared globally')
+assert.doesNotMatch(feed, /\.pager-shell \{/, 'feed pagination must not keep a component-local visual copy')
+assert.doesNotMatch(messages, /\.pager-shell \{/, 'search pagination must not keep a component-local visual copy')
+
+assert.match(
+  feed,
+  /if \(isNoteItem\(item\)\) \{\s*return text\s*\}/,
+  'note items must preserve their original body text instead of deduplicating it into a title',
+)
+assert.match(
+  feed,
+  /if \(isNoteItem\(item\)\) return false[\s\S]*?if \(isRSSItem\(item\)\) return true/,
+  'note item titles must render through the normal body typography, not the feed heading style',
+)
+assert.match(
+  feed,
+  /<MarkdownRenderer[\s\S]*?:content="getDisplayRaw\(item\)"[\s\S]*?:inherit-font="true"/,
+  'feed note bodies must inherit the same typography family as published notes',
+)
+assert.match(
+  feed,
+  /\.feed-summary-markdown :deep\(\.markdown-preview\) \{[\s\S]*?font-size: 16px;[\s\S]*?line-height: 1\.6;/,
+  'feed body text must match the published-note 16px/1.6 body rhythm',
+)
+
 console.log('information feed/search visual parity contract passed')
