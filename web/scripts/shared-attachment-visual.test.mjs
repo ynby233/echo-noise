@@ -78,4 +78,10 @@ assert.match(
   'information-feed file attachments must not be clipped by either the Markdown root or the outer feed card'
 )
 
+assert.match(
+  feed,
+  /\.feed-card-attachment-shadow-open\s*\{[^}]*min-width:\s*0\s*;/,
+  'information-feed attachment cards must remain shrinkable inside the center column when their shadows are visible'
+)
+
 console.log('shared attachment visual checks passed')

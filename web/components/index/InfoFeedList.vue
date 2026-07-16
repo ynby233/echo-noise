@@ -1020,6 +1020,7 @@ onUnmounted(() => {
 }
 
 .feed-card-attachment-shadow-open {
+  min-width: 0;
   overflow: visible !important;
 }
 
