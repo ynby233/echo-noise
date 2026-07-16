@@ -923,7 +923,8 @@ defineExpose({
   sidebarPagerState,
   previousPage: goPrevPage,
   nextPage: goNextPage,
-  goToPage
+  goToPage,
+  refreshFeed: loadFeed
 })
 
 onMounted(() => {
@@ -962,34 +963,38 @@ onUnmounted(() => {
 }
 
 .feed-empty {
-  padding: 24px 0;
+  display: flex;
+  min-height: 260px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 42px 12px 34px;
   text-align: center;
-  opacity: 0.95;
-  color: #f8fafc;
+  color: #9ca3af;
 }
 
 .feed-loading-text {
-  color: #f8fafc !important;
+  color: #9ca3af !important;
 }
 
 .feed-wrap-light .feed-empty {
-  color: #0f172a;
+  color: #9ca3af;
 }
 
 .feed-wrap-dark .feed-empty {
-  color: #f8fafc;
+  color: #cbd5e1;
 }
 
-.feed-wrap-light .feed-loading-text,
 .feed-wrap-dark .feed-loading-text {
-  color: #f8fafc !important;
+  color: #cbd5e1 !important;
 }
 
 .feed-grid {
   display: grid;
-  gap: 14px !important;
+  gap: 12px !important;
   background: transparent !important;
-  row-gap: 14px !important;
+  row-gap: 12px !important;
   align-items: start;
 }
 
@@ -1029,12 +1034,19 @@ onUnmounted(() => {
 }
 
 .feed-card-light {
-  border: 1px solid rgba(15, 23, 42, 0.14);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, .72) !important;
+  background-color: rgba(255, 255, 255, .72) !important;
+  background-image: none !important;
+  border: 1px solid rgba(15, 23, 42, .10);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, .12) !important;
 }
 
 .feed-card-dark {
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(15, 23, 42, .52) !important;
+  background-color: rgba(15, 23, 42, .52) !important;
+  background-image: none !important;
+  border: 1px solid rgba(255, 255, 255, .12);
+  box-shadow: 0 16px 32px rgba(2, 6, 23, .52) !important;
 }
 
 .feed-card-head {

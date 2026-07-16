@@ -195,10 +195,28 @@
             </div>
           </div>
           <div v-if="activeTab==='feed'" class="feed-page">
-            <UCard class="search-card feed-shell-card mb-3" :ui="{ body: { padding: 'p-0' } }">
-              <div :class="['feed-page-head', isDark ? 'feed-page-head-dark' : 'feed-page-head-light']">
-                <div class="card-title text-center text-black dark:text-white">{{ feedPageTitleText }}</div>
-                <div class="section-subtitle">{{ feedPageDescriptionText }}</div>
+            <UCard :class="['search-card', 'feed-shell-card', 'nw-content-panel-surface', 'mb-3', { 'is-dark': isDark }]" :ui="{ body: { padding: 'p-5 md:p-6' } }">
+              <div class="nw-content-panel-head">
+                <div class="nw-content-panel-heading">
+                  <div class="nw-content-panel-title">{{ feedPageTitleText }}</div>
+                  <div class="nw-content-panel-summary">{{ feedPageDescriptionText }}</div>
+                </div>
+              </div>
+              <div class="nw-content-panel-toolbar">
+                <div v-if="feedResultCount > 0" class="nw-content-panel-count">内容 ({{ feedResultCount }})</div>
+                <div v-else class="nw-content-panel-count nw-content-panel-count-placeholder" aria-hidden="true"></div>
+                <div class="nw-content-panel-actions">
+                  <button
+                    type="button"
+                    class="feed-results-refresh nw-content-panel-action nw-content-panel-action--icon nw-action-btn nw-tooltip-anchor"
+                    data-tooltip="刷新"
+                    aria-label="刷新信息流"
+                    :disabled="feedRefreshing || isFeedLoading"
+                    @click="refreshInfoFeed"
+                  >
+                    <UIcon name="i-mdi-refresh" class="w-4 h-4" :class="{ 'animate-spin': feedRefreshing }" />
+                  </button>
+                </div>
               </div>
               <div class="feed-page-content">
                 <InfoFeedList
@@ -625,6 +643,7 @@ watch(() => activeTab.value, (tab) => {
   if (tab !== 'latest' && tab !== 'personal') clearMessageFilters()
 })
 const feedResultCount = ref(0)
+const feedRefreshing = ref(false)
 const isFeedEnabled = computed(() => frontendConfig.value?.feedEnabled === true)
 const feedEnableGithubCard = computed(() => frontendConfig.value?.enableGithubCard === true)
 const feedPageTitleText = computed(() => {
@@ -633,8 +652,8 @@ const feedPageTitleText = computed(() => {
 })
 const feedPageDescriptionText = computed(() => {
   const raw = String(frontendConfig.value?.feedPageDescription || '').trim()
-  const tpl = raw || '聚合综合内容信息源内容，当前结果 {count} 条'
-  return tpl.replace(/\{count\}/g, String(feedResultCount.value))
+  const text = raw || '聚合综合内容信息源内容'
+  return text.replace(/\s*[，,]\s*当前结果\s*(?:\{count\}|\d+)\s*条\s*$/u, '').trim() || '聚合综合内容信息源内容'
 })
 const centerTabs = computed(() => {
   const tabs = [
@@ -667,6 +686,9 @@ type HomePagerController = ComponentPublicInstance & {
 type MessageListExpose = HomePagerController & {
   refreshList: () => Promise<void>
 }
+type InfoFeedListExpose = HomePagerController & {
+  refreshFeed: () => Promise<void>
+}
 type CommentThreadExpose = HomePagerController & {
   focusCommentById: (commentId: number) => Promise<boolean>
 }
@@ -681,7 +703,7 @@ type NotificationJumpItem = {
   message?: { id?: number | null; content?: string | null; is_guestbook?: boolean } | null
 }
 const messageList = ref<MessageListExpose | null>(null)
-const infoFeedList = ref<HomePagerController | null>(null)
+const infoFeedList = ref<InfoFeedListExpose | null>(null)
 const guestbookCommentsRef = ref<CommentThreadExpose | null>(null)
 const notificationCenter = ref<HomePagerController | null>(null)
 const latestTotalPages = ref(1)
@@ -693,6 +715,18 @@ const activeSidebarPagerController = computed<HomePagerController | null>(() => 
   return null
 })
 const activeSidebarPagerState = computed<HomePagerState | null>(() => activeSidebarPagerController.value?.sidebarPagerState || null)
+const isFeedLoading = computed(() => infoFeedList.value?.sidebarPagerState.loading === true)
+const refreshInfoFeed = async () => {
+  if (feedRefreshing.value || isFeedLoading.value) return
+  feedRefreshing.value = true
+  try {
+    await infoFeedList.value?.refreshFeed()
+  } finally {
+    window.setTimeout(() => {
+      feedRefreshing.value = false
+    }, 300)
+  }
+}
 const isSidebarPagerInteractive = computed(() => activeSidebarPagerState.value?.visible === true)
 const disabledSidebarPager = computed<HomePagerState>(() => ({
   visible: true,
@@ -2144,7 +2178,7 @@ const headerImageStyle = computed(() => ({
   rssFaviconURL: '/favicon.ico',
   feedEnabled: false,
   feedPageTitle: '实时聚合内容动态',
-  feedPageDescription: '聚合综合内容信息源内容，当前结果 {count} 条',
+  feedPageDescription: '聚合综合内容信息源内容',
   feedLimit: 100,
   feedRefreshSeconds: 7200,
   feedSources: [] as Array<{ type: string; group?: string; name?: string; url: string; enabled?: boolean; visible?: boolean }>,
@@ -3602,33 +3636,17 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
 }
 
 .feed-shell-card {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-.feed-shell-card :deep(.u-card-body),
-.feed-shell-card :deep(.u-card__body) {
-  padding: 0 !important;
-  background: transparent !important;
-}
-.feed-page-head {
-  padding: 14px 16px 12px;
-  border-radius: var(--home-radius-panel);
-}
-.feed-page-head-light {
-  border: 1px solid rgba(15, 23, 42, 0.14);
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
-}
-.feed-page-head-dark {
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: var(--home-surface-dark);
-  box-shadow: none;
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  overflow: visible;
 }
 .feed-page-content {
-  margin-top: 10px;
+  box-sizing: border-box;
+  width: calc(100% + 2rem + 2px);
+  max-width: calc(56rem + 2px);
+  margin: 0 calc(-1rem - 1px);
+  overflow: visible;
 }
 .card-title { font-weight: 700; font-size: 18px; margin-bottom: 14px; padding: 0; border-radius: 0; display: block; }
 .section-subtitle { text-align: center; font-size: 13px; opacity: 0.8; margin-top: 2px; margin-bottom: 16px; line-height: 1.7; }

@@ -509,11 +509,11 @@ assert(
 )
 
 assert(
-  messageList.includes('class="search-results-title">搜索</div>') &&
+  messageList.includes('class="search-results-title nw-content-panel-title">搜索</div>') &&
     messageList.includes('搜索内容：{{ activeFilterContent }}') &&
-    messageList.includes('class="search-results-board-head"') &&
-    messageList.includes('class="search-results-actions"') &&
-    messageList.includes('class="search-results-refresh nw-action-btn nw-tooltip-anchor"') &&
+    messageList.includes('class="search-results-board-head nw-content-panel-toolbar"') &&
+    messageList.includes('class="search-results-actions nw-content-panel-actions"') &&
+    messageList.includes('class="search-results-refresh nw-content-panel-action nw-content-panel-action--icon nw-action-btn nw-tooltip-anchor"') &&
     messageList.includes('data-tooltip="刷新"') &&
     messageList.includes(':disabled="searchResultsRefreshing || isPageLoading || isDisplayQueryPending"') &&
     messageList.includes('name="i-mdi-refresh" class="w-4 h-4" :class="{ \'animate-spin\': searchResultsRefreshing }"') &&
@@ -521,10 +521,10 @@ assert(
     messageList.includes('const searchResultsRefreshing = ref(false)') &&
     messageList.includes('const refreshSearchResults = async () => {') &&
     messageList.includes('window.setTimeout(() => {\n      searchResultsRefreshing.value = false\n    }, 300)') &&
-    messageList.includes('class="search-results-back nw-action-btn nw-action-btn--label"') &&
+    messageList.includes('class="search-results-back nw-content-panel-action nw-action-btn nw-action-btn--label"') &&
     messageList.includes('笔记 ({{ filteredResultCount }})') &&
     messageList.includes('v-if="!isPageLoading && !isDisplayQueryPending && displayMessages.length"') &&
-    messageList.includes('class="search-results-count search-results-count-placeholder" aria-hidden="true"') &&
+    messageList.includes('class="search-results-count nw-content-panel-count nw-content-panel-count-placeholder search-results-count-placeholder" aria-hidden="true"') &&
     messageList.includes('v-if="props.pageReady && hasActiveFilters && (isPageLoading || isDisplayQueryPending || !displayMessages.length)" class="search-results-empty"') &&
     messageList.includes('v-if="isPageLoading || isDisplayQueryPending"') &&
     messageList.includes('v-if="!props.pageReady || !hasActiveFilters || (!isDisplayQueryPending && displayMessages.length)"') &&
@@ -546,7 +546,7 @@ assert(
     messageList.includes('class="search-results-empty-icon"') &&
     messageList.includes(":is=\"props.pageReady && hasActiveFilters ? resolveComponent('UCard') : 'div'\"") &&
     messageList.includes("import { resolveComponent } from 'vue'") &&
-    messageList.includes("['search-card', 'search-results-panel', 'mb-3', { 'is-dark': isContentDark }]") &&
+    messageList.includes("['search-card', 'search-results-panel', 'nw-content-panel-surface', 'mb-3', { 'is-dark': isContentDark }]") &&
     messageList.includes("ui: { body: { padding: 'p-5 md:p-6' } }") &&
     messageList.includes("props.pageReady && hasActiveFilters ? 'search-results-list' : 'my-4'") &&
     messageList.includes('.search-results-list {') &&

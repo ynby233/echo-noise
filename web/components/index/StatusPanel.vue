@@ -876,8 +876,8 @@
                             <UInput v-model="frontendConfig.feedPageTitle" placeholder="实时聚合内容动态" />
                           </div>
                           <div>
-                            <div class="text-xs mb-1" :class="theme.mutedText">信息流页面介绍（支持 {count} 占位）</div>
-                            <UInput v-model="frontendConfig.feedPageDescription" placeholder="聚合综合内容信息源内容，当前结果 {count} 条" />
+                            <div class="text-xs mb-1" :class="theme.mutedText">信息流页面介绍</div>
+                            <UInput v-model="frontendConfig.feedPageDescription" placeholder="聚合综合内容信息源内容" />
                           </div>
                           <div>
                             <div class="text-xs mb-1" :class="theme.mutedText">最大抓取条数（留空显示全部，单独设置时为 1-100）</div>
@@ -5077,7 +5077,7 @@ const configFieldHints: Record<string, string> = {
   aboutMarkdown: '关于页正文内容，支持 Markdown。',
   loginExpireDays: '登录态过期时间，支持天数和小时组合，普通用户过期后需重新登录。',
   feedPageTitle: '首页信息流 Tab 的标题文案。',
-  feedPageDescription: '首页信息流 Tab 的介绍文案，支持 {count} 占位符。'
+  feedPageDescription: '首页信息流 Tab 的介绍文案。'
 }
 const switchConfigKeySet = new Set([
   'enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled',
@@ -5287,7 +5287,7 @@ const frontendConfig = reactive<FrontendConfig>({
     musicJsCdnURL: '',
     feedEnabled: false,
     feedPageTitle: '实时聚合内容动态',
-    feedPageDescription: '聚合综合内容信息源内容，当前结果 {count} 条',
+    feedPageDescription: '聚合综合内容信息源内容',
     feedLimit: 100,
     feedRefreshSeconds: 7200,
     feedSources: [] as Array<{ type: string; group?: string; name?: string; url: string; enabled?: boolean; visible?: boolean }>,

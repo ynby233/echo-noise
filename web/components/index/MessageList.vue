@@ -20,27 +20,27 @@
       <div :class="outerContainerClass">
         <component
           :is="props.pageReady && hasActiveFilters ? resolveComponent('UCard') : 'div'"
-          :class="props.pageReady && hasActiveFilters ? ['search-card', 'search-results-panel', 'mb-3', { 'is-dark': isContentDark }] : ''"
+          :class="props.pageReady && hasActiveFilters ? ['search-card', 'search-results-panel', 'nw-content-panel-surface', 'mb-3', { 'is-dark': isContentDark }] : ''"
           v-bind="props.pageReady && hasActiveFilters ? { ui: { body: { padding: 'p-5 md:p-6' } } } : {}"
         >
-          <div v-if="props.pageReady && hasActiveFilters" class="search-results-head">
-            <div class="search-results-heading">
-              <div class="search-results-title">搜索</div>
-              <div class="search-results-summary">搜索内容：{{ activeFilterContent }}</div>
+          <div v-if="props.pageReady && hasActiveFilters" class="search-results-head nw-content-panel-head">
+            <div class="search-results-heading nw-content-panel-heading">
+              <div class="search-results-title nw-content-panel-title">搜索</div>
+              <div class="search-results-summary nw-content-panel-summary">搜索内容：{{ activeFilterContent }}</div>
             </div>
           </div>
-          <div v-if="props.pageReady && hasActiveFilters" class="search-results-board-head">
+          <div v-if="props.pageReady && hasActiveFilters" class="search-results-board-head nw-content-panel-toolbar">
             <div
               v-if="!isPageLoading && !isDisplayQueryPending && displayMessages.length"
-              class="search-results-count"
+              class="search-results-count nw-content-panel-count"
             >
               笔记 ({{ filteredResultCount }})
             </div>
-            <div v-else class="search-results-count search-results-count-placeholder" aria-hidden="true"></div>
-            <div class="search-results-actions">
+            <div v-else class="search-results-count nw-content-panel-count nw-content-panel-count-placeholder search-results-count-placeholder" aria-hidden="true"></div>
+            <div class="search-results-actions nw-content-panel-actions">
               <button
                 type="button"
-                class="search-results-refresh nw-action-btn nw-tooltip-anchor"
+                class="search-results-refresh nw-content-panel-action nw-content-panel-action--icon nw-action-btn nw-tooltip-anchor"
                 data-tooltip="刷新"
                 aria-label="刷新"
                 :disabled="searchResultsRefreshing || isPageLoading || isDisplayQueryPending"
@@ -48,7 +48,7 @@
               >
                 <UIcon name="i-mdi-refresh" class="w-4 h-4" :class="{ 'animate-spin': searchResultsRefreshing }" />
               </button>
-              <button type="button" class="search-results-back nw-action-btn nw-action-btn--label" @click="resetList">
+              <button type="button" class="search-results-back nw-content-panel-action nw-action-btn nw-action-btn--label" @click="resetList">
                 <UIcon name="i-heroicons-x-mark" class="w-4 h-4" />
                 <span>返回完整列表</span>
               </button>
