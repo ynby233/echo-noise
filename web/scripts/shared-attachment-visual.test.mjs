@@ -42,4 +42,22 @@ assert.match(
   'information-feed link styling must explicitly exclude attachment cards'
 )
 
+assert.doesNotMatch(
+  feed,
+  /class="feed-summary-body overflow-y-hidden relative"/,
+  'information-feed summaries must not clip attachment shadows when the content is not collapsed'
+)
+
+assert.match(
+  feed,
+  /'feed-summary-body--clipped':\s*shouldShowExpandButton\[getFeedItemId\(item\)\]\s*&&\s*!isExpanded\[getFeedItemId\(item\)\]/,
+  'information-feed summaries must clip overflow only while their content is actually collapsed'
+)
+
+assert.match(
+  feed,
+  /\.feed-summary-body\s*\{[\s\S]*?overflow:\s*visible;[\s\S]*?\}[\s\S]*?\.feed-summary-body--clipped\s*\{[\s\S]*?overflow-y:\s*hidden;/,
+  'information-feed attachment shadows must remain visible outside the summary body unless a collapsed-content mask is active'
+)
+
 console.log('shared attachment visual checks passed')

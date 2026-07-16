@@ -29,7 +29,8 @@
         <div v-if="getDisplayRaw(item)" class="feed-summary-block content-container" :data-feed-id="getFeedItemId(item)">
           <div
             :ref="(el) => setFeedSummaryRef(getFeedItemId(item), el)"
-            class="feed-summary-body overflow-y-hidden relative"
+            class="feed-summary-body relative"
+            :class="{ 'feed-summary-body--clipped': shouldShowExpandButton[getFeedItemId(item)] && !isExpanded[getFeedItemId(item)] }"
             :style="shouldShowExpandButton[getFeedItemId(item)] && !isExpanded[getFeedItemId(item)] ? { maxHeight: `${collapsedContentHeight}px` } : undefined"
           >
             <div class="feed-summary-markdown feed-summary-measure">
@@ -1172,8 +1173,13 @@ onUnmounted(() => {
 }
 
 .feed-summary-body {
+  overflow: visible;
   transition: none;
   z-index: 1;
+}
+
+.feed-summary-body--clipped {
+  overflow-y: hidden;
 }
 
 .expand-toggle-btn {
