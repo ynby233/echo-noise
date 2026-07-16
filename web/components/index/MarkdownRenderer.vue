@@ -2183,18 +2183,44 @@ watch(() => props.enableGithubCard, () => {
 </script>
 
 <style>
-.markdown-preview {
-  font-family: "LXGW WenKai Screen";
+.markdown-preview,
+.markdown-preview.vditor-reset,
+.markdown-preview .vditor-reset {
+  font-family: "LXGW WenKai Screen" !important;
   line-height: 1.6;
 }
 
-.markdown-preview--inherit-font,
-.markdown-preview--inherit-font .vditor-reset,
-.markdown-preview--inherit-font .vditor-reset p,
-.markdown-preview--inherit-font .vditor-reset span,
-.markdown-preview--inherit-font .vditor-reset a {
+.markdown-preview :where(h1, h2, h3, h4, h5, h6, p, li, blockquote, figcaption, caption, td, th, a, span, strong, em, del, mark, small, label, button, input, textarea, select, option) {
   font-family: inherit !important;
 }
+
+.markdown-preview--inherit-font,
+.markdown-preview--inherit-font.vditor-reset,
+.markdown-preview--inherit-font .vditor-reset,
+.markdown-preview--inherit-font :where(h1, h2, h3, h4, h5, h6, p, li, blockquote, figcaption, caption, td, th, a, span, strong, em, del, mark, small, label, button, input, textarea, select, option) {
+  font-family: inherit !important;
+}
+
+.markdown-preview.vditor-reset :where(h1, h2, h3, h4, h5, h6),
+.markdown-preview .vditor-reset :where(h1, h2, h3, h4, h5, h6) {
+  margin-top: 24px !important;
+  margin-bottom: 16px !important;
+  font-weight: 600 !important;
+  line-height: 1.25 !important;
+}
+
+.markdown-preview.vditor-reset h1,
+.markdown-preview .vditor-reset h1 { font-size: 1.75em !important; }
+.markdown-preview.vditor-reset h2,
+.markdown-preview .vditor-reset h2 { font-size: 1.55em !important; }
+.markdown-preview.vditor-reset h3,
+.markdown-preview .vditor-reset h3 { font-size: 1.38em !important; }
+.markdown-preview.vditor-reset h4,
+.markdown-preview .vditor-reset h4 { font-size: 1.25em !important; }
+.markdown-preview.vditor-reset h5,
+.markdown-preview .vditor-reset h5 { font-size: 1.13em !important; }
+.markdown-preview.vditor-reset h6,
+.markdown-preview .vditor-reset h6 { font-size: 1em !important; }
 
 .markdown-preview[data-task-list-editable="false"] input[type="checkbox"] {
   pointer-events: none !important;
@@ -2863,6 +2889,7 @@ body.is-resizing-rendered-table-column * {
   --file-card-icon-bg: rgba(15, 23, 42, 0.06);
   --file-card-icon-border: rgba(15, 23, 42, 0.08);
   --file-card-icon: #374151;
+  --file-card-text: #111111;
   --file-card-name: #000000;
   --file-card-meta: #6b7280;
   --file-card-action: #374151;
@@ -2878,7 +2905,11 @@ body.is-resizing-rendered-table-column * {
   border: 1px solid var(--file-card-border) !important;
   border-radius: 12px !important;
   background: var(--file-card-bg) !important;
-  color: inherit !important;
+  color: var(--file-card-text) !important;
+  font-family: inherit !important;
+  font-size: 16px !important;
+  font-weight: 400 !important;
+  line-height: 1.6 !important;
   text-decoration: none !important;
   box-shadow: var(--file-card-shadow) !important;
   box-sizing: border-box !important;
@@ -3065,6 +3096,7 @@ body.is-resizing-rendered-table-column * {
   --file-card-icon-bg: rgba(255, 255, 255, 0.06);
   --file-card-icon-border: rgba(255, 255, 255, 0.12);
   --file-card-icon: #cbd5e1;
+  --file-card-text: #ffffff;
   --file-card-name: #ffffff;
   --file-card-meta: #9ca3af;
   --file-card-action: #cbd5e1;

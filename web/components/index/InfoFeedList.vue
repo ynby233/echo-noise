@@ -1100,7 +1100,6 @@ onUnmounted(() => {
 .feed-wrap-light .feed-summary-markdown :deep(.markdown-preview .vditor-reset),
 .feed-wrap-light .feed-summary-markdown :deep(.markdown-preview p),
 .feed-wrap-light .feed-summary-markdown :deep(.markdown-preview li),
-.feed-wrap-light .feed-summary-markdown :deep(.markdown-preview span),
 .feed-wrap-light .feed-summary-markdown :deep(.markdown-preview code),
 .feed-wrap-light .feed-summary-markdown :deep(.markdown-preview blockquote) {
   color: #0f172a !important;
@@ -1111,7 +1110,6 @@ onUnmounted(() => {
 .feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview .vditor-reset),
 .feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview p),
 .feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview li),
-.feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview span),
 .feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview code),
 .feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview blockquote) {
   color: #f8fafc !important;
@@ -1120,8 +1118,7 @@ onUnmounted(() => {
 
 .feed-card-dark .feed-summary-markdown :deep(.markdown-preview),
 .feed-card-dark .feed-summary-markdown :deep(.markdown-preview p),
-.feed-card-dark .feed-summary-markdown :deep(.markdown-preview li),
-.feed-card-dark .feed-summary-markdown :deep(.markdown-preview span) {
+.feed-card-dark .feed-summary-markdown :deep(.markdown-preview li) {
   color: #f8fafc !important;
 }
 
@@ -1130,31 +1127,31 @@ onUnmounted(() => {
   text-shadow: none !important;
 }
 
-.feed-wrap-light .feed-summary-markdown :deep(.markdown-preview a),
-.feed-wrap-light .feed-summary-markdown :deep(.markdown-preview a span),
-.feed-wrap-light .feed-summary-markdown :deep(.markdown-preview .vditor-reset a) {
+.feed-wrap-light .feed-summary-markdown :deep(.markdown-preview a:not(.noise-attachment-file)),
+.feed-wrap-light .feed-summary-markdown :deep(.markdown-preview a:not(.noise-attachment-file) span),
+.feed-wrap-light .feed-summary-markdown :deep(.markdown-preview .vditor-reset a:not(.noise-attachment-file)) {
   color: #2563eb !important;
   text-decoration: underline !important;
   text-underline-offset: 2px;
 }
 
-.feed-wrap-light .feed-summary-markdown :deep(.markdown-preview a:hover),
-.feed-wrap-light .feed-summary-markdown :deep(.markdown-preview a:hover span),
-.feed-wrap-light .feed-summary-markdown :deep(.markdown-preview .vditor-reset a:hover) {
+.feed-wrap-light .feed-summary-markdown :deep(.markdown-preview a:not(.noise-attachment-file):hover),
+.feed-wrap-light .feed-summary-markdown :deep(.markdown-preview a:not(.noise-attachment-file):hover span),
+.feed-wrap-light .feed-summary-markdown :deep(.markdown-preview .vditor-reset a:not(.noise-attachment-file):hover) {
   color: #1d4ed8 !important;
 }
 
-.feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview a),
-.feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview a span),
-.feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview .vditor-reset a) {
+.feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview a:not(.noise-attachment-file)),
+.feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview a:not(.noise-attachment-file) span),
+.feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview .vditor-reset a:not(.noise-attachment-file)) {
   color: #60a5fa !important;
   text-decoration: underline !important;
   text-underline-offset: 2px;
 }
 
-.feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview a:hover),
-.feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview a:hover span),
-.feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview .vditor-reset a:hover) {
+.feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview a:not(.noise-attachment-file):hover),
+.feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview a:not(.noise-attachment-file):hover span),
+.feed-wrap-dark .feed-summary-markdown :deep(.markdown-preview .vditor-reset a:not(.noise-attachment-file):hover) {
   color: #93c5fd !important;
 }
 
