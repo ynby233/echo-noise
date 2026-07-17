@@ -4,7 +4,7 @@
       ref="triggerRef"
       type="button"
       class="tb-btn nw-action-btn nw-tooltip-anchor"
-      :class="{ 'is-recording': isRecording || isPaused || isProcessing }"
+      :class="{ 'is-recording': isRecording || isPaused || isProcessing || isNamingRecording }"
       data-tooltip="录音"
       aria-label="录音"
       :aria-expanded="showMenu"
@@ -34,22 +34,46 @@
           <span class="audio-recorder-time">{{ elapsedText }}</span>
         </div>
 
-        <canvas ref="canvasRef" class="audio-recorder-spectrum" width="260" height="44" aria-hidden="true" />
+        <canvas v-if="!isNamingRecording" ref="canvasRef" class="audio-recorder-spectrum" width="260" height="44" aria-hidden="true" />
 
-        <div class="audio-recorder-actions">
+        <div v-if="!isNamingRecording" class="audio-recorder-actions">
           <button type="button" class="floating-action-btn cancel-action-btn nw-action-btn nw-action-btn--label nw-action-btn--danger" :disabled="isProcessing" @click="cancelRecording">取消</button>
           <button type="button" class="floating-action-btn cancel-action-btn nw-action-btn nw-action-btn--label" :disabled="!canPause" @click="togglePause">
             {{ isPaused ? '继续' : '暂停' }}
           </button>
-          <button type="button" class="floating-action-btn clear-action-btn nw-action-btn nw-action-btn--label nw-action-btn--danger" :disabled="!canStop" @click="stopAndUpload">停止</button>
+          <button type="button" class="floating-action-btn clear-action-btn nw-action-btn nw-action-btn--label nw-action-btn--danger" :disabled="!canStop" @click="stopAndPrepare">停止</button>
         </div>
+
+        <form v-else class="audio-recording-name-form" @submit.prevent="submitRecording">
+          <label class="audio-recording-name-label" for="audio-recording-name">录音文件名</label>
+          <input
+            id="audio-recording-name"
+            ref="recordingNameInputRef"
+            v-model="recordingName"
+            type="text"
+            class="audio-recording-name-input"
+            maxlength="128"
+            autocomplete="off"
+            spellcheck="false"
+            aria-label="录音文件名"
+            placeholder="输入录音文件名"
+            :disabled="isProcessing"
+            @keydown.esc.prevent="cancelPreparedRecording"
+          />
+          <div class="audio-recorder-actions audio-recording-name-actions">
+            <button type="button" class="floating-action-btn cancel-action-btn nw-action-btn nw-action-btn--label" :disabled="isProcessing" @click="cancelPreparedRecording">取消</button>
+            <button type="submit" class="floating-action-btn nw-action-btn nw-action-btn--label nw-action-btn--primary" :disabled="!canSubmitRecording">
+              {{ isProcessing ? '提交中...' : '提交' }}
+            </button>
+          </div>
+        </form>
       </div>
     </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, inject, nextTick, onBeforeUnmount, ref } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, ref, shallowRef } from 'vue'
 import type { Ref } from 'vue'
 import { useToast } from '#imports'
 import { useUserStore } from '~/store/user'
@@ -70,11 +94,16 @@ const contentTheme = computed(() => contentThemeRef.value || 'light')
 const triggerRef = ref<HTMLElement | null>(null)
 const menuRef = ref<HTMLElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+const recordingNameInputRef = ref<HTMLInputElement | null>(null)
 const menuStyle = ref<Record<string, string>>({})
 const showMenu = ref(false)
 const isRecording = ref(false)
 const isPaused = ref(false)
 const isProcessing = ref(false)
+const isNamingRecording = ref(false)
+const recordingName = ref('')
+const pendingRecordingType = ref('')
+const pendingRecordingBlob = shallowRef<Blob | null>(null)
 const elapsedMs = ref(0)
 
 let recorder: MediaRecorder | null = null
@@ -91,7 +120,7 @@ let chunks: Blob[] = []
 const canPause = computed(() => (isRecording.value || isPaused.value) && !!recorder && !isProcessing.value)
 const canStop = computed(() => (isRecording.value || isPaused.value) && !!recorder && !isProcessing.value)
 const prepareRecordingInsertTarget = () => {
-  if (showMenu.value || isRecording.value || isPaused.value || isProcessing.value) return
+  if (showMenu.value || isRecording.value || isPaused.value || isProcessing.value || isNamingRecording.value) return
   emit('prepare-insert')
 }
 const elapsedText = computed(() => {
@@ -101,7 +130,8 @@ const elapsedText = computed(() => {
   return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')} / 10:00`
 })
 const statusText = computed(() => {
-  if (isProcessing.value) return '正在上传'
+  if (isNamingRecording.value) return '新建录音'
+  if (isProcessing.value) return '正在处理'
   if (isPaused.value) return '已暂停'
   if (isRecording.value) return '正在录音'
   return '准备录音'
@@ -139,11 +169,27 @@ const recordingFileName = (type: string) => {
   return `录音-${stamp}-${userPart}.${ext}`
 }
 
+const normalizeRecordingFileName = (value: unknown, type: string) => {
+  const ext = audioExtension(type || 'audio/webm')
+  let name = String(value || '')
+    .trim()
+    .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/[.\s]+$/g, '')
+  if (!name) return ''
+  name = name.replace(/\.[a-z0-9]{1,8}$/i, '').replace(/[.\s]+$/g, '')
+  if (!name) return ''
+  return `${name.slice(0, 119)}.${ext}`
+}
+
+const normalizedRecordingName = computed(() => normalizeRecordingFileName(recordingName.value, pendingRecordingType.value))
+const canSubmitRecording = computed(() => !!pendingRecordingBlob.value && normalizedRecordingName.value !== '' && !isProcessing.value)
+
 const positionMenu = () => positionFloatingMenu(triggerRef.value, menuRef.value, menuStyle, 292, 'above-align-left')
 
 const updateElapsed = () => {
   if (isRecording.value) elapsedMs.value = accumulatedMs + Math.max(0, Date.now() - startedAt)
-  if (elapsedMs.value >= MAX_RECORDING_MS) stopAndUpload()
+  if (elapsedMs.value >= MAX_RECORDING_MS) void stopAndPrepare()
 }
 
 const startTimer = () => {
@@ -295,7 +341,7 @@ const startRecording = async () => {
 }
 
 const toggleRecorder = () => {
-  if (showMenu.value && (isRecording.value || isPaused.value || isProcessing.value)) {
+  if (showMenu.value && (isRecording.value || isPaused.value || isProcessing.value || isNamingRecording.value)) {
     nextTick(() => scheduleFloatingMenuPosition(positionMenu))
     return
   }
@@ -323,6 +369,10 @@ const togglePause = () => {
 }
 
 const cancelRecording = () => {
+  if (isNamingRecording.value) {
+    cancelPreparedRecording()
+    return
+  }
   if (recorder && recorder.state !== 'inactive') {
     recorder.onstop = null
     recorder.stop()
@@ -344,7 +394,22 @@ const stopRecorder = () => new Promise<Blob>((resolve, reject) => {
   if (recorder.state !== 'inactive') recorder.stop()
 })
 
-const stopAndUpload = async () => {
+const clearPreparedRecording = () => {
+  pendingRecordingBlob.value = null
+  pendingRecordingType.value = ''
+  recordingName.value = ''
+  isNamingRecording.value = false
+}
+
+const cancelPreparedRecording = () => {
+  if (isProcessing.value) return
+  clearPreparedRecording()
+  showMenu.value = false
+  emit('upload-progress', 0)
+  emit('insert-cancelled')
+}
+
+const stopAndPrepare = async () => {
   if (!recorder || isProcessing.value) return
   try {
     isProcessing.value = true
@@ -352,7 +417,37 @@ const stopAndUpload = async () => {
     stopTimer()
     const blob = await stopRecorder()
     const type = blob.type || 'audio/webm'
-    const file = new File([blob], recordingFileName(type), { type })
+    recordingName.value = recordingFileName(type)
+    pendingRecordingType.value = type
+    pendingRecordingBlob.value = blob
+    cleanupRecording()
+    isNamingRecording.value = true
+    isProcessing.value = false
+    await nextTick()
+    scheduleFloatingMenuPosition(positionMenu)
+    recordingNameInputRef.value?.focus()
+    recordingNameInputRef.value?.select()
+  } catch (error: any) {
+    cleanupRecording()
+    showMenu.value = false
+    emit('insert-cancelled')
+    toast.add({ title: '错误', description: error?.message || '录音处理失败', color: 'red' })
+  } finally {
+    isProcessing.value = false
+  }
+}
+
+const submitRecording = async () => {
+  const blob = pendingRecordingBlob.value
+  if (!canSubmitRecording.value || !blob) {
+    recordingNameInputRef.value?.focus()
+    return
+  }
+  const fileName = normalizedRecordingName.value
+  const type = pendingRecordingType.value || blob.type || 'audio/webm'
+  try {
+    isProcessing.value = true
+    const file = new File([blob], fileName, { type })
     const uploaded = await uploadMediaFiles({
       files: [file],
       kind: 'audio',
@@ -360,17 +455,16 @@ const stopAndUpload = async () => {
       token: userStore.token || '',
       onProgress: (percent) => emit('upload-progress', percent)
     })
+    if (!uploaded.length) throw new Error('录音上传失败')
     uploaded.forEach((item) => emit('audio-uploaded', item.rawUrl))
-    if (!uploaded.length) emit('insert-cancelled')
     emit('upload-progress', 100)
     toast.add({ title: '成功', description: '录音上传成功', color: 'green' })
+    clearPreparedRecording()
     showMenu.value = false
   } catch (error: any) {
-    emit('insert-cancelled')
     toast.add({ title: '错误', description: error?.message || '录音上传失败', color: 'red' })
   } finally {
     isProcessing.value = false
-    cleanupRecording()
     setTimeout(() => emit('upload-progress', 0), 400)
   }
 }
@@ -446,12 +540,42 @@ onBeforeUnmount(() => {
   background: rgba(148,163,184,0.12);
 }
 .audio-recorder-menu.is-dark .audio-recorder-spectrum { background: rgba(15,23,42,0.3); }
+.audio-recording-name-form {
+  display: grid;
+  gap: 8px;
+}
+.audio-recording-name-label {
+  color: var(--nw-floating-muted-text, rgba(100,116,139,0.82));
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.audio-recording-name-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--nw-floating-border);
+  border-radius: 10px;
+  background: var(--nw-picker-button-bg);
+  color: inherit;
+  font-size: 13px;
+  line-height: 1;
+}
+.audio-recording-name-input:focus,
+.audio-recording-name-input:focus-visible {
+  border-color: rgba(59,130,246,.72);
+  box-shadow: 0 0 0 3px rgba(59,130,246,.14);
+  outline: none;
+}
+.audio-recording-name-input:disabled { opacity: .62; cursor: not-allowed; }
 .audio-recorder-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 10px;
 }
+.audio-recording-name-actions { margin-top: 2px; }
 .audio-recorder-actions button:disabled { opacity: .45; cursor: not-allowed; }
 html.dark .tb-btn.is-recording {
   --nw-action-border: rgba(251,146,60,0.46);

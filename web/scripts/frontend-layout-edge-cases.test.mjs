@@ -1394,8 +1394,9 @@ assert(
     audioRecorder.includes('const recordingFileName = (type: string) => {') &&
     audioRecorder.includes('const userPart = safeNameSegment(user?.userid ?? user?.id ?? user?.username ?? \'user\')') &&
     !audioRecorder.includes('Math.random().toString(36).slice(2, 8)') &&
-    audioRecorder.includes('new File([blob], recordingFileName(type), { type })'),
-  'recorded audio filenames must include date and user identity, without an unnecessary random suffix'
+    audioRecorder.includes('recordingName.value = recordingFileName(type)') &&
+    audioRecorder.includes('const file = new File([blob], fileName, { type })'),
+  'recorded audio filenames must default to date and user identity, then upload only after naming confirmation'
 )
 
 assert(
