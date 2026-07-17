@@ -45,7 +45,7 @@
         </div>
 
         <form v-else class="audio-recording-name-form" @submit.prevent="submitRecording">
-          <label class="audio-recording-name-label" for="audio-recording-name">录音文件名</label>
+          <label class="audio-recording-name-label" for="audio-recording-name">录音名称</label>
           <input
             id="audio-recording-name"
             ref="recordingNameInputRef"
@@ -55,14 +55,14 @@
             maxlength="128"
             autocomplete="off"
             spellcheck="false"
-            aria-label="录音文件名"
-            placeholder="输入录音文件名"
+            aria-label="录音名称"
+            placeholder="输入录音名称"
             :disabled="isProcessing"
             @keydown.esc.prevent="cancelPreparedRecording"
           />
           <div class="audio-recorder-actions audio-recording-name-actions">
-            <button type="button" class="floating-action-btn cancel-action-btn nw-action-btn nw-action-btn--label" :disabled="isProcessing" @click="cancelPreparedRecording">取消</button>
-            <button type="submit" class="floating-action-btn nw-action-btn nw-action-btn--label nw-action-btn--primary" :disabled="!canSubmitRecording">
+            <button type="button" class="nw-action-btn nw-action-btn--label" :disabled="isProcessing" @click="cancelPreparedRecording">取消</button>
+            <button type="submit" class="nw-action-btn nw-action-btn--label nw-action-btn--primary" :disabled="!canSubmitRecording">
               {{ isProcessing ? '提交中...' : '提交' }}
             </button>
           </div>
@@ -77,6 +77,7 @@ import { computed, inject, nextTick, onBeforeUnmount, ref, shallowRef } from 'vu
 import type { Ref } from 'vue'
 import { useToast } from '#imports'
 import { useUserStore } from '~/store/user'
+import { normalizeRecordingFileName } from '~/utils/audio-recording-name'
 import { positionFloatingMenu, scheduleFloatingMenuPosition } from '~/utils/floating-menu'
 import { uploadMediaFiles } from '~/utils/media-upload'
 
@@ -142,19 +143,12 @@ const pickMimeType = () => {
   return candidates.find((type) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) || ''
 }
 
-const audioExtension = (type: string) => {
-  if (type.includes('ogg')) return 'ogg'
-  if (type.includes('mp4')) return 'm4a'
-  return 'webm'
-}
-
 const safeNameSegment = (value: unknown, fallback = 'user') => String(value || fallback)
   .replace(/[\\/:*?"<>|\s]+/g, '-')
   .replace(/^-+|-+$/g, '')
   .slice(0, 32) || fallback
 
-const recordingFileName = (type: string) => {
-  const ext = audioExtension(type)
+const recordingFileStem = () => {
   const started = new Date(recordingStartedAt || Date.now())
   const stamp = [
     started.getFullYear(),
@@ -166,20 +160,7 @@ const recordingFileName = (type: string) => {
   ].join('-')
   const user = userStore.user as any
   const userPart = safeNameSegment(user?.userid ?? user?.id ?? user?.username ?? 'user')
-  return `录音-${stamp}-${userPart}.${ext}`
-}
-
-const normalizeRecordingFileName = (value: unknown, type: string) => {
-  const ext = audioExtension(type || 'audio/webm')
-  let name = String(value || '')
-    .trim()
-    .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-')
-    .replace(/\s+/g, ' ')
-    .replace(/[.\s]+$/g, '')
-  if (!name) return ''
-  name = name.replace(/\.[a-z0-9]{1,8}$/i, '').replace(/[.\s]+$/g, '')
-  if (!name) return ''
-  return `${name.slice(0, 119)}.${ext}`
+  return `录音-${stamp}-${userPart}`
 }
 
 const normalizedRecordingName = computed(() => normalizeRecordingFileName(recordingName.value, pendingRecordingType.value))
@@ -417,7 +398,7 @@ const stopAndPrepare = async () => {
     stopTimer()
     const blob = await stopRecorder()
     const type = blob.type || 'audio/webm'
-    recordingName.value = recordingFileName(type)
+    recordingName.value = recordingFileStem()
     pendingRecordingType.value = type
     pendingRecordingBlob.value = blob
     cleanupRecording()
@@ -576,7 +557,6 @@ onBeforeUnmount(() => {
   margin-top: 10px;
 }
 .audio-recording-name-actions { margin-top: 2px; }
-.audio-recorder-actions button:disabled { opacity: .45; cursor: not-allowed; }
 html.dark .tb-btn.is-recording {
   --nw-action-border: rgba(251,146,60,0.46);
   --nw-action-bg: rgba(249,115,22,0.26);
