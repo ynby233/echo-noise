@@ -41,7 +41,7 @@ assert.match(
 
 assert.match(
   messageList,
-  /watch\(\(\) => route\.hash,\s*async\s*\(newHash\) => \{[\s\S]*?const\s+messageId\s*=\s*getMessageIdFromRouteHash\(newHash\)[\s\S]*?if\s*\(!messageId\)\s*\{/,
+  /watch\(\(\) => route\.hash,\s*async\s*\(newHash, oldHash\) => \{[\s\S]*?const\s+messageId\s*=\s*getMessageIdFromRouteHash\(newHash\)[\s\S]*?if\s*\(!messageId\)\s*\{/,
   'hash watcher must refresh the list for stale media hashes instead of fetching them as message ids'
 )
 

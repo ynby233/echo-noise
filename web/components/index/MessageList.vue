@@ -1834,11 +1834,16 @@ onMounted(async () => {
 });
 
 // 修改路由监听
-watch(() => route.hash, async (newHash) => {
+watch(() => route.hash, async (newHash, oldHash) => {
   const messageId = getMessageIdFromRouteHash(newHash);
   
   // 如果没有消息ID且不是从消息详情页返回，则保持当前状态，不重新加载
   if (!messageId) {
+    if (getMessageIdFromRouteHash(oldHash)) {
+      await refreshList()
+      expandedCommentsMap.value = {}
+      return
+    }
     // 如果当前已有消息，不做任何操作，保持滚动位置
     if (message.messages && message.messages.length > 0) {
       return;

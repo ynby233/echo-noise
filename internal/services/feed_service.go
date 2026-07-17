@@ -28,6 +28,7 @@ type InfoFeedSource struct {
 	URL     string `json:"url"`
 	Enabled bool   `json:"enabled"`
 	Visible bool   `json:"visible"`
+	Local   bool   `json:"-"`
 }
 
 type InfoFeedItem struct {
@@ -133,6 +134,19 @@ func LoadInfoFeedItems(limit int) ([]InfoFeedItem, error) {
 	return items, nil
 }
 
+// RefreshInfoFeedItems fetches every configured source immediately, replaces the
+// shared snapshot, and returns the refreshed items to the caller.
+func RefreshInfoFeedItems(limit int) ([]InfoFeedItem, error) {
+	items, err := refreshInfoFeedSnapshotItems()
+	if limit > 100 {
+		limit = 100
+	}
+	if limit > 0 && len(items) > limit {
+		items = items[:limit]
+	}
+	return cloneInfoFeedItems(items), err
+}
+
 // StartInfoFeedAutoRefresh 启动/重建信息流后台定时刷新任务。
 func StartInfoFeedAutoRefresh() {
 	enabled, _, _, err := GetInfoFeedConfig()
@@ -211,14 +225,9 @@ func writeInfoFeedSnapshot(items []InfoFeedItem, fetchErr error, updatedAt time.
 }
 
 func refreshInfoFeedSnapshot() {
-	feedRefreshMu.Lock()
-	defer feedRefreshMu.Unlock()
-
-	baseURL := resolveSchedulerBaseURL()
-	items, err := loadInfoFeedItemsFromSources(baseURL, 0)
+	items, err := refreshInfoFeedSnapshotItems()
 	if err != nil && len(items) == 0 {
 		log.Printf("信息流后台刷新失败: %v", err)
-		writeInfoFeedSnapshot([]InfoFeedItem{}, err, time.Now())
 		return
 	}
 	if err != nil {
@@ -226,7 +235,16 @@ func refreshInfoFeedSnapshot() {
 	} else {
 		log.Printf("信息流后台刷新成功: %d 条", len(items))
 	}
+}
+
+func refreshInfoFeedSnapshotItems() ([]InfoFeedItem, error) {
+	feedRefreshMu.Lock()
+	defer feedRefreshMu.Unlock()
+
+	baseURL := resolveSchedulerBaseURL()
+	items, err := loadInfoFeedItemsFromSources(baseURL, 0)
 	writeInfoFeedSnapshot(items, err, time.Now())
+	return cloneInfoFeedItems(items), err
 }
 
 func resolveSchedulerBaseURL() string {
@@ -291,6 +309,7 @@ func loadInfoFeedItemsFromSources(baseURL string, limit int) ([]InfoFeedItem, er
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			source.Local = isLocalInfoFeedSource(baseURL, source.URL)
 			source.URL = resolveSourceURL(baseURL, source.URL)
 			var items []InfoFeedItem
 			var ferr error
@@ -316,6 +335,13 @@ func loadInfoFeedItemsFromSources(baseURL string, limit int) ([]InfoFeedItem, er
 					} else if ferr == nil {
 						ferr = autoErr
 					}
+				}
+			}
+			if source.Local {
+				for i := range items {
+					items[i].Link = localInfoFeedURLPath(items[i].Link, source.URL)
+					items[i].ImageURL = localInfoFeedURLPath(items[i].ImageURL, source.URL)
+					items[i].AvatarURL = localInfoFeedURLPath(items[i].AvatarURL, source.URL)
 				}
 			}
 			mu.Lock()
@@ -624,10 +650,14 @@ func fetchNoteSource(client *http.Client, source InfoFeedSource, limit int) ([]I
 			readStringByKeys(m, "url", "link", "permalink"),
 			readStringByKeys(m, "message_url", "messageUrl"),
 		))
-		if link == "" && id > 0 {
+		if source.Local && id > 0 {
+			link = fmt.Sprintf("/#/messages/%d", id)
+		} else if link == "" && id > 0 {
 			link = strings.TrimSpace(fmt.Sprintf("%s/#/messages/%d", base, id))
 		}
-		link = resolveRelativeURL(base, link)
+		if !source.Local {
+			link = resolveRelativeURL(base, link)
+		}
 		if link == "" {
 			continue
 		}
@@ -2379,4 +2409,60 @@ func resolveSourceURL(baseURL, raw string) string {
 		return base.ResolveReference(ref).String()
 	}
 	return u
+}
+
+func isLocalInfoFeedSource(baseURL, raw string) bool {
+	candidate := strings.TrimSpace(raw)
+	if candidate == "" {
+		return false
+	}
+	if !isHTTPURL(candidate) {
+		return strings.HasPrefix(candidate, "/")
+	}
+
+	parsed, err := url.Parse(candidate)
+	if err != nil || parsed == nil {
+		return false
+	}
+	hostname := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
+	if hostname == "localhost" || hostname == "127.0.0.1" || hostname == "::1" {
+		return true
+	}
+
+	base, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil || base == nil {
+		return false
+	}
+	return strings.EqualFold(parsed.Host, base.Host)
+}
+
+func localInfoFeedURLPath(raw, sourceURL string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" || !isHTTPURL(value) {
+		return value
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed == nil {
+		return value
+	}
+	source, err := url.Parse(strings.TrimSpace(sourceURL))
+	if err != nil || source == nil {
+		return value
+	}
+	hostname := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
+	loopback := hostname == "localhost" || hostname == "127.0.0.1" || hostname == "::1"
+	if !loopback && !strings.EqualFold(parsed.Host, source.Host) {
+		return value
+	}
+	path := parsed.EscapedPath()
+	if path == "" {
+		path = "/"
+	}
+	if parsed.RawQuery != "" {
+		path += "?" + parsed.RawQuery
+	}
+	if parsed.Fragment != "" {
+		path += "#" + parsed.EscapedFragment()
+	}
+	return path
 }

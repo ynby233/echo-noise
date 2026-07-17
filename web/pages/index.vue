@@ -693,10 +693,16 @@ const selectedCalendarDate = ref('')
 const searchKeyword = ref('')
 const selectedTag = ref('')
 const frontendConfig = ref<any>({})
+const clearMessageRouteHash = async () => {
+  if (!getMessageIdFromRouteHash(route.hash)) return false
+  await router.replace({ path: route.path, query: { ...route.query }, hash: '' })
+  return true
+}
 const calendarMessageDate = computed(() => (activeTab.value === 'latest' || activeTab.value === 'personal') ? selectedCalendarDate.value : '')
 const messageSearchKeyword = computed(() => (activeTab.value === 'latest' || activeTab.value === 'personal') ? searchKeyword.value : '')
 const messageSelectedTag = computed(() => (activeTab.value === 'latest' || activeTab.value === 'personal') ? selectedTag.value : '')
 const handleCalendarDateSelect = async (date: string) => {
+  await clearMessageRouteHash()
   await runCenterNavigationReset(() => {
     ensureMessageTab()
     selectedCalendarDate.value = /^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) ? date : ''
@@ -1004,6 +1010,7 @@ const runCenterNavigationReset = async (mutate: () => void) => {
   resetContentScrollInstant()
 }
 const switchActiveTab = async (tab: string, options: { resetScroll?: boolean } = {}) => {
+  await clearMessageRouteHash()
   if (tab === activeTab.value) return
   if (options.resetScroll) {
     await runCenterNavigationReset(() => { activeTab.value = tab })
@@ -1072,6 +1079,7 @@ const ensureMessageTab = () => {
 
 // 添加搜索结果处理函数
 const handleSearchResult = async (keyword: string) => {
+  await clearMessageRouteHash()
   await runCenterNavigationReset(() => {
     ensureMessageTab()
     searchKeyword.value = String(keyword || '').trim()
@@ -2726,6 +2734,7 @@ onMounted(() => {
 const handleTagClick = async (tag: string) => {
   const normalizedTag = String(tag || '').trim().replace(/^#/, '')
   if (!normalizedTag) return
+  await clearMessageRouteHash()
   await runCenterNavigationReset(() => {
     ensureMessageTab()
     selectedTag.value = selectedTag.value === normalizedTag ? '' : normalizedTag

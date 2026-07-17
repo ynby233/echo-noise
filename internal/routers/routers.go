@@ -167,6 +167,7 @@ func SetupRouter() *gin.Engine {
 	api.GET("/frontend/config", controllers.GetFrontendConfig)
 	api.GET("/settings", controllers.GetFrontendConfig)
 	api.GET("/feed/items", controllers.GetInfoFeedItems)
+	api.POST("/feed/refresh", controllers.RefreshInfoFeedItems)
 	api.POST("/login", controllers.Login)
 	api.POST("/register", controllers.Register)
 	api.GET("/status", controllers.GetStatus)

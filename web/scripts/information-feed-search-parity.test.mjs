@@ -37,7 +37,7 @@ assert.match(home, /name="i-mdi-refresh" class="w-4 h-4" :class="\{ 'animate-spi
 assert.match(home, /const feedRefreshing = ref\(false\)/)
 assert.match(home, /const isFeedLoading = computed\(\(\) => infoFeedList\.value\?\.sidebarPagerState\.loading === true\)/)
 assert.match(home, /const refreshInfoFeed = async \(\) => \{[\s\S]*?if \(feedRefreshing\.value \|\| isFeedLoading\.value\) return[\s\S]*?await infoFeedList\.value\?\.refreshFeed\(\)[\s\S]*?feedRefreshing\.value = false[\s\S]*?\}, 300\)/)
-assert.match(feed, /refreshFeed: loadFeed/)
+assert.match(feed, /refreshFeed: \(\) => loadFeed\(\{ force: true \}\)/)
 
 assert.match(home, /const text = raw \|\| '聚合综合内容信息源内容'/)
 assert.match(home, /text\.replace\(\/\\s\*\[，,\]\\s\*当前结果/)
@@ -86,7 +86,7 @@ assert.match(
 )
 assert.match(
   feed,
-  /:class="\['feed-icon-btn nw-action-btn nw-tooltip-anchor',[\s\S]*?:data-tooltip="copiedLink === item\.link/,
+  /:class="\['feed-icon-btn nw-action-btn nw-tooltip-anchor',[\s\S]*?:data-tooltip="copiedLink === resolvedItemLink\(item\)/,
   'the copy-link action must use the shared button and tooltip contracts',
 )
 

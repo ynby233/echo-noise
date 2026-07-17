@@ -86,7 +86,7 @@
           </button>
         </div>
         <div class="feed-footer">
-          <div class="feed-domain nw-tooltip-anchor" :data-tooltip="item.link || ''">
+          <div class="feed-domain nw-tooltip-anchor" :data-tooltip="resolvedItemLink(item)">
             <UIcon name="i-heroicons-link" class="w-4 h-4 opacity-70" />
             <span>{{ item.link ? getLinkHost(item.link) : '-' }}</span>
           </div>
@@ -94,7 +94,7 @@
             <a
               v-if="item.link"
               class="feed-icon-btn nw-action-btn nw-tooltip-anchor"
-              :href="item.link"
+              :href="resolvedItemLink(item)"
               target="_blank"
               rel="noopener noreferrer"
               data-tooltip="阅读原文"
@@ -105,12 +105,12 @@
             <button
               v-if="item.link"
               type="button"
-              :class="['feed-icon-btn nw-action-btn nw-tooltip-anchor', copiedLink === item.link ? 'is-success' : '']"
-              :data-tooltip="copiedLink === item.link ? '已复制' : '复制链接'"
-              :aria-label="copiedLink === item.link ? '已复制链接' : '复制链接'"
-              @click="copyLink(item.link)"
+              :class="['feed-icon-btn nw-action-btn nw-tooltip-anchor', copiedLink === resolvedItemLink(item) ? 'is-success' : '']"
+              :data-tooltip="copiedLink === resolvedItemLink(item) ? '已复制' : '复制链接'"
+              :aria-label="copiedLink === resolvedItemLink(item) ? '已复制链接' : '复制链接'"
+              @click="copyLink(resolvedItemLink(item))"
             >
-              <UIcon :name="copiedLink === item.link ? 'i-heroicons-check' : 'i-heroicons-clipboard-document'" class="w-4 h-4" />
+              <UIcon :name="copiedLink === resolvedItemLink(item) ? 'i-heroicons-check' : 'i-heroicons-clipboard-document'" class="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -134,6 +134,7 @@ import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from '
 // @ts-ignore Vetur 对 .vue 默认导出识别不稳定，这里与项目内其他组件保持一致
 import MarkdownRenderer from "~/components/index/MarkdownRenderer.vue";
 import { writeClipboardText } from '~/utils/clipboard'
+import { getInfoFeedLinkHost, resolveInfoFeedLink } from '~/utils/info-feed-link'
 
 const FEED_CACHE_PREFIX = 'ech0-noise:feed-cache:v1'
 const feedMemoryCache = new Map<string, { ts: number; items: FeedItem[] }>()
@@ -170,6 +171,7 @@ const loading = ref(false)
 const allItems = ref<FeedItem[]>([])
 const errorText = ref('')
 const requestInFlight = ref(false)
+let activeFeedRequest: Promise<void> | null = null
 const copiedLink = ref('')
 const copiedTimer = ref<number | null>(null)
 const currentPage = ref(1)
@@ -202,6 +204,7 @@ const gridClass = computed(() => {
 
 // 与 MessageList 同源的内容主题，保证卡片背景一致
 const contentTheme = inject('contentTheme', ref<string>(typeof window !== 'undefined' ? (localStorage.getItem('contentTheme') || 'dark') : 'dark'))
+const browserOrigin = computed(() => typeof window !== 'undefined' ? window.location.origin : '')
 const listThemeClass = computed(() => contentTheme.value === 'dark' ? 'bg-[var(--home-surface-dark)] text-white' : 'bg-white text-black')
 const wrapThemeClass = computed(() => contentTheme.value === 'dark' ? 'feed-wrap-dark' : 'feed-wrap-light')
 const enableGithubCard = computed(() => props.enableGithubCard === true)
@@ -522,39 +525,52 @@ const persistFeedCache = (items: FeedItem[]) => {
   } catch {}
 }
 
-const loadFeed = async () => {
-  if (requestInFlight.value) return
-  requestInFlight.value = true
-  const hasVisibleItems = allItems.value.length > 0
-  loading.value = !hasVisibleItems
-  errorText.value = ''
+const loadFeed = async (options: { force?: boolean } = {}) => {
+  if (activeFeedRequest) {
+    if (!options.force) return activeFeedRequest
+    await activeFeedRequest
+  }
+  const request = (async () => {
+    requestInFlight.value = true
+    const hasVisibleItems = allItems.value.length > 0
+    loading.value = !hasVisibleItems
+    errorText.value = ''
+    try {
+      const limit = maxItems.value
+      const apiBase = String(props.baseApi || '/api').replace(/\/$/, '')
+      const query = typeof limit === 'number' ? `?limit=${limit}` : ''
+      const endpoint = options.force ? '/feed/refresh' : '/feed/items'
+      const resp = await fetch(`${apiBase}${endpoint}${query}`, {
+        method: options.force ? 'POST' : 'GET',
+        credentials: 'include',
+        headers: { Accept: 'application/json' }
+      })
+      const data = await resp.json()
+      if (data?.code !== 1) {
+        throw new Error(data?.msg || '加载失败')
+      }
+      const list = Array.isArray(data?.data?.items)
+        ? data.data.items
+        : (Array.isArray(data?.data) ? data.data : [])
+      applyFeedItems(list)
+      persistFeedCache(list)
+    } catch (err: any) {
+      errorText.value = err?.message || '信息流加载失败'
+      if (!allItems.value.length) {
+        allItems.value = []
+        currentPage.value = 1
+        emit('count-change', 0)
+      }
+    } finally {
+      loading.value = false
+      requestInFlight.value = false
+    }
+  })()
+  activeFeedRequest = request
   try {
-    const limit = maxItems.value
-    const apiBase = String(props.baseApi || '/api').replace(/\/$/, '')
-    const query = typeof limit === 'number' ? `?limit=${limit}` : ''
-    const resp = await fetch(`${apiBase}/feed/items${query}`, {
-      credentials: 'include',
-      headers: { Accept: 'application/json' }
-    })
-    const data = await resp.json()
-    if (data?.code !== 1) {
-      throw new Error(data?.msg || '加载失败')
-    }
-    const list = Array.isArray(data?.data?.items)
-      ? data.data.items
-      : (Array.isArray(data?.data) ? data.data : [])
-    applyFeedItems(list)
-    persistFeedCache(list)
-  } catch (err: any) {
-    errorText.value = err?.message || '信息流加载失败'
-    if (!allItems.value.length) {
-      allItems.value = []
-      currentPage.value = 1
-      emit('count-change', 0)
-    }
+    await request
   } finally {
-    loading.value = false
-    requestInFlight.value = false
+    if (activeFeedRequest === request) activeFeedRequest = null
   }
 }
 
@@ -594,12 +610,10 @@ const formatDate = (item: FeedItem) => {
 const getLinkHost = (url: string) => {
   const raw = String(url || '').trim()
   if (!raw) return '打开原文'
-  try {
-    return new URL(raw).host
-  } catch {
-    return raw
-  }
+  return getInfoFeedLinkHost(raw, browserOrigin.value)
 }
+
+const resolvedItemLink = (item: FeedItem) => resolveInfoFeedLink(item.link, browserOrigin.value)
 
 const isBuiltinSourceName = (name: string) => {
   const normalized = String(name || '').trim().toLowerCase()
@@ -867,7 +881,7 @@ defineExpose({
   setTargetPage,
   adjustTargetPage,
   jumpToTargetPage: jumpToPage,
-  refreshFeed: loadFeed
+  refreshFeed: () => loadFeed({ force: true })
 })
 
 onMounted(() => {
