@@ -283,20 +283,11 @@
   <UModal v-model="showEditModal" :ui="{ width: 'sm:max-w-3xl' }">
     <div class="edit-modal-shell" :class="{ 'is-dark': isContentDark }">
       <input
-        ref="editImageInputRef"
+        ref="editAttachmentInputRef"
         type="file"
-        accept="image/*"
         multiple
         class="hidden"
-        @change="handleEditMediaChange($event, 'image')"
-      />
-      <input
-        ref="editVideoInputRef"
-        type="file"
-        accept="video/*"
-        multiple
-        class="hidden"
-        @change="handleEditMediaChange($event, 'video')"
+        @change="handleEditAttachmentChange"
       />
 
       <div class="edit-modal-header">
@@ -322,22 +313,12 @@
             <button
               type="button"
               class="tb-btn edit-media-button nw-action-btn nw-tooltip-anchor"
-              data-tooltip="上传图片"
-              aria-label="上传图片"
+              data-tooltip="上传附件"
+              aria-label="上传附件"
               :disabled="isEditUploading"
-              @click="triggerEditMediaInput('image')"
+              @click="triggerEditAttachmentInput"
             >
-              <UIcon :name="editUploadKind === 'image' ? 'i-mdi-loading' : 'i-mdi-image-plus-outline'" class="w-5 h-5" :class="{ 'edit-spin': editUploadKind === 'image' }" />
-            </button>
-            <button
-              type="button"
-              class="tb-btn edit-media-button nw-action-btn nw-tooltip-anchor"
-              data-tooltip="上传视频"
-              aria-label="上传视频"
-              :disabled="isEditUploading"
-              @click="triggerEditMediaInput('video')"
-            >
-              <UIcon :name="editUploadKind === 'video' ? 'i-mdi-loading' : 'i-mdi-video-plus-outline'" class="w-5 h-5" :class="{ 'edit-spin': editUploadKind === 'video' }" />
+              <UIcon :name="editUploadKind === 'attachment' ? 'i-mdi-loading' : 'i-heroicons-paper-clip'" class="w-5 h-5" :class="{ 'edit-spin': editUploadKind === 'attachment' }" />
             </button>
             <div ref="editVisibilityControlRef" class="visibility-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :data-tooltip="`可见范围：${editVisibilityLabel}`">
               <UIcon :name="editVisibilityIcon" class="w-5 h-5" />
@@ -2015,10 +1996,9 @@ const editingVisibility = ref<MessageVisibility>('public');
 const editingPublishedAtInput = ref('');
 const isSaving = ref(false);
 const editTextareaRef = ref<any>(null);
-const editImageInputRef = ref<HTMLInputElement | null>(null);
-const editVideoInputRef = ref<HTMLInputElement | null>(null);
+const editAttachmentInputRef = ref<HTMLInputElement | null>(null);
 const editUploadProgress = ref(0);
-const editUploadKind = ref<'image' | 'video' | ''>('');
+const editUploadKind = ref<'attachment' | ''>('');
 const editUploadLabel = ref('');
 const isEditUploading = computed(() => editUploadProgress.value > 0);
 const editVisibilityLabel = computed(() => messageVisibilityLabel(editingVisibility.value));
@@ -2412,28 +2392,27 @@ const resetEditUploadState = () => {
   }, 400)
 }
 
-const triggerEditMediaInput = (kind: 'image' | 'video') => {
+const triggerEditAttachmentInput = () => {
   if (!userStore.isLogin) {
     useToast().add({ title: '提示', description: '请登录后操作', color: 'orange', timeout: 2000 })
     return
   }
   if (isEditUploading.value) return
-  if (kind === 'image') editImageInputRef.value?.click()
-  else editVideoInputRef.value?.click()
+  editAttachmentInputRef.value?.click()
 }
 
-const handleEditMediaChange = async (event: Event, kind: 'image' | 'video') => {
+const handleEditAttachmentChange = async (event: Event) => {
   const input = event.target as HTMLInputElement
   const files = input.files ? Array.from(input.files) : []
   if (!files.length) return
-  editUploadKind.value = kind
-  editUploadLabel.value = kind === 'image' ? '图片上传中' : '视频上传中'
+  editUploadKind.value = 'attachment'
+  editUploadLabel.value = '附件上传中'
   editUploadProgress.value = 1
 
   try {
     const uploaded = await uploadMediaFiles({
       files,
-      kind,
+      kind: 'auto',
       baseApi: String(BASE_API || '/api'),
       token: userStore.token || '',
       onProgress: (percent) => { editUploadProgress.value = percent }
@@ -2444,16 +2423,14 @@ const handleEditMediaChange = async (event: Event, kind: 'image' | 'video') => {
     editUploadProgress.value = 100
     useToast().add({
       title: '成功',
-      description: kind === 'image'
-        ? (uploaded.length > 1 ? `已上传 ${uploaded.length} 张图片` : '图片上传成功')
-        : (uploaded.length > 1 ? `已上传 ${uploaded.length} 个视频` : '视频上传成功'),
+      description: uploaded.length > 1 ? `已上传 ${uploaded.length} 个附件` : '附件上传成功',
       color: 'green',
       timeout: 2000
     })
   } catch (error: any) {
     useToast().add({
       title: '错误',
-      description: error?.message || (kind === 'image' ? '图片上传失败' : '视频上传失败'),
+      description: error?.message || '附件上传失败',
       color: 'red',
       timeout: 2000
     })
