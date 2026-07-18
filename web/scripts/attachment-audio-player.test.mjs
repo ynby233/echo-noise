@@ -94,8 +94,13 @@ assert.match(
 assert.match(playerStyle, /\.noise-attachment-audio__play\s*\{[\s\S]*?--nw-action-hover-text:\s*var\(--audio-control-text\);/)
 assert.match(
   playerStyle,
-  /\.noise-attachment-audio__svg\s*\{[\s\S]*?width:\s*14px;[\s\S]*?height:\s*14px;/,
-  'filled playback and volume icons must stay optically compact inside their 36px controls',
+  /\.noise-attachment-audio \.noise-attachment-audio__svg\s*\{[\s\S]*?width:\s*14px;[\s\S]*?height:\s*14px;/,
+  'player icon sizing must outrank the shared vditor-reset svg auto-size rule',
+)
+assert.match(
+  playerStyle,
+  /\.noise-attachment-audio \.noise-attachment-audio__speed-chevron\s*\{[\s\S]*?width:\s*12px;[\s\S]*?height:\s*12px;/,
+  'the compact speed chevron must outrank the shared vditor-reset svg auto-size rule',
 )
 assert.doesNotMatch(
   playerStyle,

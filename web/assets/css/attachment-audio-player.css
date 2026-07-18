@@ -119,7 +119,7 @@
   outline-offset: 2px;
 }
 
-.noise-attachment-audio__svg {
+.noise-attachment-audio .noise-attachment-audio__svg {
   display: block;
   width: 14px;
   height: 14px;
@@ -218,7 +218,7 @@
   white-space: nowrap;
 }
 
-.noise-attachment-audio__speed-chevron {
+.noise-attachment-audio .noise-attachment-audio__speed-chevron {
   width: 12px;
   height: 12px;
   flex: 0 0 auto;
