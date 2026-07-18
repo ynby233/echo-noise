@@ -123,16 +123,82 @@ const createElement = <K extends keyof HTMLElementTagNameMap>(tag: K, className 
   return element
 }
 
-const createIcon = (kind: 'play' | 'volume') => {
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), Math.max(min, max))
+
+const positionFloatingMenu = (
+  trigger: HTMLElement,
+  menu: HTMLElement,
+  styleRef: { value: Record<string, string> },
+  minWidth = 120,
+  placement: 'above-right' = 'above-right',
+) => {
+  const zoom = Number.parseFloat(window.getComputedStyle(document.body).zoom || '1')
+  const scale = Number.isFinite(zoom) && zoom > 0 ? zoom : 1
+  const rawRect = trigger.getBoundingClientRect()
+  const viewport = window.visualViewport
+  const viewportLeft = (viewport?.offsetLeft || 0) / scale
+  const viewportTop = (viewport?.offsetTop || 0) / scale
+  const viewportWidth = (viewport?.width || window.innerWidth) / scale
+  const viewportHeight = (viewport?.height || window.innerHeight) / scale
+  const rect = {
+    left: (rawRect.left + (viewport?.offsetLeft || 0)) / scale,
+    right: (rawRect.right + (viewport?.offsetLeft || 0)) / scale,
+    top: (rawRect.top + (viewport?.offsetTop || 0)) / scale,
+    bottom: (rawRect.bottom + (viewport?.offsetTop || 0)) / scale,
+    width: rawRect.width / scale,
+  }
+  const menuWidth = Math.max(menu.offsetWidth || minWidth, minWidth, rect.width)
+  const menuHeight = menu.offsetHeight || 180
+  const pad = 8
+  const gap = 4
+  const minLeft = viewportLeft + pad
+  const maxLeft = Math.max(minLeft, viewportLeft + viewportWidth - menuWidth - pad)
+  const minTop = viewportTop + pad
+  const maxTop = Math.max(minTop, viewportTop + viewportHeight - menuHeight - pad)
+  const idealLeft = placement === 'above-right' ? rect.right - menuWidth : rect.left
+  const aboveTop = rect.top - menuHeight - gap
+  const belowTop = rect.bottom + gap
+  styleRef.value = {
+    position: 'fixed',
+    left: `${clamp(idealLeft, minLeft, maxLeft)}px`,
+    top: `${clamp(aboveTop >= minTop ? aboveTop : belowTop, minTop, maxTop)}px`,
+    right: 'auto',
+    bottom: 'auto',
+    transform: 'none',
+    minWidth: `${Math.max(minWidth, rect.width)}px`,
+  }
+}
+
+const scheduleFloatingMenuPosition = (positioner: () => void) => {
+  positioner()
+  window.requestAnimationFrame(() => {
+    positioner()
+    window.requestAnimationFrame(positioner)
+  })
+}
+
+type ProjectIconKind = 'play' | 'pause' | 'volume' | 'muted' | 'chevron-down'
+
+const PROJECT_ICON_PATHS: Record<ProjectIconKind, string> = {
+  play: 'M8 5.14v14l11-7z',
+  pause: 'M14 19h4V5h-4M6 19h4V5H6z',
+  volume: 'M14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.84-5 6.7v2.07c4-.91 7-4.49 7-8.77s-3-7.86-7-8.77M16.5 12c0-1.77-1-3.29-2.5-4.03V16c1.5-.71 2.5-2.24 2.5-4M3 9v6h4l5 5V4L7 9z',
+  muted: 'M12 4L9.91 6.09L12 8.18M4.27 3L3 4.27L7.73 9H3v6h4l5 5v-6.73l4.25 4.26c-.67.51-1.42.93-2.25 1.17v2.07c1.38-.32 2.63-.95 3.68-1.81L19.73 21L21 19.73l-9-9M19 12c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.9 8.9 0 0 0 21 12c0-4.28-3-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71m-2.5 0c0-1.77-1-3.29-2.5-4.03v2.21l2.45 2.45c.05-.2.05-.42.05-.63',
+  'chevron-down': 'M7.41 8.58L12 13.17l4.59-4.59L18 10l-6 6l-6-6z',
+}
+
+const setProjectIcon = (icon: SVGSVGElement, kind: ProjectIconKind) => {
+  icon.querySelector('path')?.setAttribute('d', PROJECT_ICON_PATHS[kind])
+}
+
+const createIcon = (kind: ProjectIconKind) => {
   const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
   icon.setAttribute('viewBox', '0 0 24 24')
   icon.setAttribute('aria-hidden', 'true')
   icon.classList.add('noise-attachment-audio__svg')
   const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
   path.setAttribute('fill', 'currentColor')
-  path.setAttribute('d', kind === 'play'
-    ? 'M8 5.6v12.8c0 .78.86 1.26 1.53.85l10.2-6.4a1 1 0 0 0 0-1.7l-10.2-6.4A1 1 0 0 0 8 5.6Z'
-    : 'M4 9v6h4l5 4V5L8 9H4Zm11.5.12v5.76a4 4 0 0 0 0-5.76Zm0-3.46v2.06a6.5 6.5 0 0 1 0 8.56v2.06a8.5 8.5 0 0 0 0-12.68Z')
+  path.setAttribute('d', PROJECT_ICON_PATHS[kind])
   icon.appendChild(path)
   return icon
 }
@@ -166,7 +232,8 @@ const mountAudioPlayer = (root: HTMLElement) => {
   const information = createElement('div', 'noise-attachment-audio__information')
   const nameElement = createElement('div', 'noise-attachment-audio__name')
   nameElement.textContent = name
-  nameElement.title = name
+  nameElement.classList.add('nw-tooltip-anchor')
+  nameElement.dataset.tooltip = name
   const meta = createElement('div', 'noise-attachment-audio__meta')
   const formatElement = createElement('span', 'noise-attachment-audio__format')
   formatElement.textContent = format
@@ -177,14 +244,16 @@ const mountAudioPlayer = (root: HTMLElement) => {
   sizeElement.textContent = initialSize === null ? '大小读取中' : formatAudioFileSize(initialSize)
   const statusElement = createElement('span', 'noise-attachment-audio__status')
   meta.append(formatElement, separator, sizeElement, statusElement)
-  information.append(nameElement, meta)
+  information.append(nameElement)
 
   const playButton = createElement('button', 'noise-attachment-audio__play')
+  playButton.classList.add('nw-action-btn', 'nw-tooltip-anchor')
   playButton.type = 'button'
   playButton.setAttribute('aria-label', '播放')
-  playButton.title = '播放'
-  playButton.appendChild(createIcon('play'))
-  header.append(information, playButton)
+  playButton.dataset.tooltip = '播放'
+  const playIcon = createIcon('play')
+  playButton.appendChild(playIcon)
+  header.append(information)
 
   const seek = createElement('input', 'noise-attachment-audio__range noise-attachment-audio__seek')
   seek.type = 'range'
@@ -193,33 +262,55 @@ const mountAudioPlayer = (root: HTMLElement) => {
   seek.step = '0.01'
   seek.value = '0'
   seek.setAttribute('aria-label', '音频播放进度')
+  seek.classList.add('nw-tooltip-anchor')
+  seek.dataset.tooltip = '播放进度'
   setRangeProgress(seek, 0)
 
   const footer = createElement('div', 'noise-attachment-audio__footer')
+  const footerMeta = createElement('div', 'noise-attachment-audio__footer-meta')
   const time = createElement('span', 'noise-attachment-audio__time')
   time.textContent = '0:00 / 0:00'
+  footerMeta.append(time, meta)
 
   const tools = createElement('div', 'noise-attachment-audio__tools')
-  const speedLabel = createElement('label', 'noise-attachment-audio__speed')
-  const speedText = createElement('span', 'noise-attachment-audio__sr-only')
-  speedText.textContent = '播放速度'
-  const speed = createElement('select', 'noise-attachment-audio__speed-select')
-  speed.setAttribute('aria-label', '播放速度')
+  const speedTrigger = createElement('button', 'noise-attachment-audio__speed-trigger')
+  speedTrigger.classList.add('nw-action-btn', 'nw-action-btn--label', 'nw-tooltip-anchor')
+  speedTrigger.type = 'button'
+  speedTrigger.setAttribute('aria-label', '播放速度')
+  speedTrigger.setAttribute('aria-haspopup', 'listbox')
+  speedTrigger.setAttribute('aria-expanded', 'false')
+  speedTrigger.dataset.tooltip = '播放速度：1x'
+  const speedValue = createElement('span', 'noise-attachment-audio__speed-value')
+  speedValue.textContent = '1x'
+  const speedChevron = createIcon('chevron-down')
+  speedChevron.classList.add('noise-attachment-audio__speed-chevron')
+  speedTrigger.append(speedValue, speedChevron)
+
+  const speedMenu = createElement('div')
+  speedMenu.className = 'noise-attachment-audio__speed-menu floating-control-menu visibility-floating-menu nw-floating-menu'
+  speedMenu.setAttribute('role', 'listbox')
+  speedMenu.setAttribute('aria-label', '播放速度选项')
+  const speedMenuStyle = { value: {} as Record<string, string> }
+  const speedOptions = new Map<number, HTMLButtonElement>()
   AUDIO_PLAYBACK_RATES.forEach((rate) => {
-    const option = createElement('option')
-    option.value = String(rate)
+    const option = createElement('button', 'floating-control-option nw-floating-option noise-attachment-audio__speed-option')
+    option.type = 'button'
+    option.setAttribute('role', 'option')
+    option.dataset.rate = String(rate)
+    option.setAttribute('aria-selected', rate === 1 ? 'true' : 'false')
     option.textContent = `${rate}x`
-    option.selected = rate === 1
-    speed.appendChild(option)
+    speedMenu.appendChild(option)
+    speedOptions.set(rate, option)
   })
-  speedLabel.append(speedText, speed)
 
   const volumeGroup = createElement('div', 'noise-attachment-audio__volume')
   const muteButton = createElement('button', 'noise-attachment-audio__mute')
+  muteButton.classList.add('nw-action-btn', 'nw-tooltip-anchor')
   muteButton.type = 'button'
   muteButton.setAttribute('aria-label', '静音')
-  muteButton.title = '静音'
-  muteButton.appendChild(createIcon('volume'))
+  muteButton.dataset.tooltip = '静音'
+  const volumeIcon = createIcon('volume')
+  muteButton.appendChild(volumeIcon)
   const volume = createElement('input', 'noise-attachment-audio__range noise-attachment-audio__volume-range')
   volume.type = 'range'
   volume.min = '0'
@@ -227,15 +318,18 @@ const mountAudioPlayer = (root: HTMLElement) => {
   volume.step = '0.01'
   volume.value = '1'
   volume.setAttribute('aria-label', '音量')
+  volume.classList.add('nw-tooltip-anchor')
+  volume.dataset.tooltip = '调整音量'
   setRangeProgress(volume, 1)
   volumeGroup.append(muteButton, volume)
-  tools.append(speedLabel, volumeGroup)
-  footer.append(time, tools)
+  tools.append(speedTrigger, volumeGroup)
+  footer.append(footerMeta, playButton, tools)
   root.append(audio, header, seek, footer)
 
   let previousVolume = 1
   let durationRecoveryTimer: ReturnType<typeof setTimeout> | null = null
   let durationRecoveryPending = false
+  let speedMenuOpen = false
   const updateDuration = () => {
     const duration = Number.isFinite(audio.duration) ? audio.duration : 0
     const currentTime = duration > 0 && Number.isFinite(audio.currentTime) ? Math.min(audio.currentTime, duration) : 0
@@ -281,7 +375,8 @@ const mountAudioPlayer = (root: HTMLElement) => {
       statusElement.textContent = ''
     }
     playButton.setAttribute('aria-label', playing ? '暂停' : '播放')
-    playButton.title = playing ? '暂停' : '播放'
+    playButton.dataset.tooltip = playing ? '暂停' : '播放'
+    setProjectIcon(playIcon, playing ? 'pause' : 'play')
   }
   const updateVolume = () => {
     const effectiveVolume = audio.muted ? 0 : audio.volume
@@ -289,7 +384,87 @@ const mountAudioPlayer = (root: HTMLElement) => {
     setRangeProgress(volume, effectiveVolume)
     root.classList.toggle('is-muted', effectiveVolume === 0)
     muteButton.setAttribute('aria-label', effectiveVolume === 0 ? '恢复音量' : '静音')
-    muteButton.title = effectiveVolume === 0 ? '恢复音量' : '静音'
+    muteButton.dataset.tooltip = effectiveVolume === 0 ? '恢复音量' : '静音'
+    setProjectIcon(volumeIcon, effectiveVolume === 0 ? 'muted' : 'volume')
+  }
+  const updateSpeedState = () => {
+    const rate = Number(audio.playbackRate) || 1
+    speedValue.textContent = `${rate}x`
+    speedTrigger.dataset.tooltip = `播放速度：${rate}x`
+    speedOptions.forEach((option, optionRate) => {
+      const selected = optionRate === rate
+      option.classList.toggle('is-selected', selected)
+      option.setAttribute('aria-selected', selected ? 'true' : 'false')
+    })
+  }
+  const playerUsesDarkTheme = () => document.documentElement.classList.contains('dark')
+    || !!root.closest('.theme-dark, .vditor--dark, .is-dark')
+  const positionSpeedMenu = () => {
+    if (!speedMenuOpen) return
+    positionFloatingMenu(speedTrigger, speedMenu, speedMenuStyle, 106, 'above-right')
+    Object.assign(speedMenu.style, speedMenuStyle.value)
+  }
+  const setSpeedMenuOpen = (open: boolean, focusSelected = false) => {
+    if (speedMenuOpen === open) return
+    speedMenuOpen = open
+    speedTrigger.setAttribute('aria-expanded', open ? 'true' : 'false')
+    speedTrigger.classList.toggle('is-open', open)
+    if (!open) {
+      speedMenu.remove()
+      return
+    }
+    speedMenu.classList.toggle('is-dark', playerUsesDarkTheme())
+    document.body.appendChild(speedMenu)
+    scheduleFloatingMenuPosition(positionSpeedMenu)
+    if (focusSelected) {
+      window.requestAnimationFrame(() => (speedOptions.get(audio.playbackRate) || speedOptions.get(1))?.focus())
+    }
+  }
+  const toggleSpeedMenu = () => setSpeedMenuOpen(!speedMenuOpen)
+  const onSpeedTriggerKeydown = (event: KeyboardEvent) => {
+    if (event.key !== 'ArrowDown') return
+    event.preventDefault()
+    setSpeedMenuOpen(true, true)
+  }
+  const onSpeedMenuClick = (event: MouseEvent) => {
+    const option = event.target instanceof Element
+      ? event.target.closest<HTMLButtonElement>('.noise-attachment-audio__speed-option[data-rate]')
+      : null
+    if (!option || !speedMenu.contains(option)) return
+    const rate = Number(option.dataset.rate)
+    if (!AUDIO_PLAYBACK_RATES.includes(rate as typeof AUDIO_PLAYBACK_RATES[number])) return
+    audio.playbackRate = rate
+    updateSpeedState()
+    setSpeedMenuOpen(false)
+    speedTrigger.focus()
+  }
+  const onSpeedMenuKeydown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      setSpeedMenuOpen(false)
+      speedTrigger.focus()
+      return
+    }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+    event.preventDefault()
+    const options = Array.from(speedOptions.values())
+    const currentIndex = options.indexOf(document.activeElement as HTMLButtonElement)
+    const nextIndex = event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? options.length - 1
+        : event.key === 'ArrowUp'
+          ? (currentIndex <= 0 ? options.length - 1 : currentIndex - 1)
+          : (currentIndex + 1) % options.length
+    options[nextIndex]?.focus()
+  }
+  const onDocumentMouseDown = (event: MouseEvent) => {
+    const target = event.target as Node | null
+    if (!target || speedTrigger.contains(target) || speedMenu.contains(target)) return
+    setSpeedMenuOpen(false)
+  }
+  const onSpeedMenuViewportChange = () => {
+    if (speedMenuOpen) positionSpeedMenu()
   }
   const togglePlayback = async () => {
     try {
@@ -304,10 +479,6 @@ const mountAudioPlayer = (root: HTMLElement) => {
     const nextTime = Number(seek.value)
     if (Number.isFinite(nextTime)) audio.currentTime = nextTime
     updateDuration()
-  }
-  const onSpeed = () => {
-    const nextRate = Number(speed.value)
-    if (AUDIO_PLAYBACK_RATES.includes(nextRate as typeof AUDIO_PLAYBACK_RATES[number])) audio.playbackRate = nextRate
   }
   const onVolume = () => {
     const nextVolume = Math.max(0, Math.min(1, Number(volume.value)))
@@ -333,7 +504,10 @@ const mountAudioPlayer = (root: HTMLElement) => {
 
   playButton.addEventListener('click', togglePlayback)
   seek.addEventListener('input', onSeek)
-  speed.addEventListener('change', onSpeed)
+  speedTrigger.addEventListener('click', toggleSpeedMenu)
+  speedTrigger.addEventListener('keydown', onSpeedTriggerKeydown)
+  speedMenu.addEventListener('click', onSpeedMenuClick)
+  speedMenu.addEventListener('keydown', onSpeedMenuKeydown)
   volume.addEventListener('input', onVolume)
   muteButton.addEventListener('click', toggleMute)
   audio.addEventListener('loadedmetadata', onLoadedMetadata)
@@ -343,7 +517,14 @@ const mountAudioPlayer = (root: HTMLElement) => {
   audio.addEventListener('pause', updatePlaying)
   audio.addEventListener('ended', updatePlaying)
   audio.addEventListener('volumechange', updateVolume)
+  audio.addEventListener('ratechange', updateSpeedState)
   audio.addEventListener('error', onError)
+  document.addEventListener('mousedown', onDocumentMouseDown, true)
+  window.addEventListener('resize', onSpeedMenuViewportChange, { passive: true })
+  window.addEventListener('scroll', onSpeedMenuViewportChange, { passive: true, capture: true })
+  window.visualViewport?.addEventListener('resize', onSpeedMenuViewportChange)
+  window.visualViewport?.addEventListener('scroll', onSpeedMenuViewportChange)
+  updateSpeedState()
 
   if (initialSize === null) {
     void probeAudioFileSize(src).then((size) => {
@@ -361,7 +542,10 @@ const mountAudioPlayer = (root: HTMLElement) => {
     audio.removeEventListener('timeupdate', finishDurationRecovery)
     playButton.removeEventListener('click', togglePlayback)
     seek.removeEventListener('input', onSeek)
-    speed.removeEventListener('change', onSpeed)
+    speedTrigger.removeEventListener('click', toggleSpeedMenu)
+    speedTrigger.removeEventListener('keydown', onSpeedTriggerKeydown)
+    speedMenu.removeEventListener('click', onSpeedMenuClick)
+    speedMenu.removeEventListener('keydown', onSpeedMenuKeydown)
     volume.removeEventListener('input', onVolume)
     muteButton.removeEventListener('click', toggleMute)
     audio.removeEventListener('loadedmetadata', onLoadedMetadata)
@@ -371,7 +555,14 @@ const mountAudioPlayer = (root: HTMLElement) => {
     audio.removeEventListener('pause', updatePlaying)
     audio.removeEventListener('ended', updatePlaying)
     audio.removeEventListener('volumechange', updateVolume)
+    audio.removeEventListener('ratechange', updateSpeedState)
     audio.removeEventListener('error', onError)
+    document.removeEventListener('mousedown', onDocumentMouseDown, true)
+    window.removeEventListener('resize', onSpeedMenuViewportChange)
+    window.removeEventListener('scroll', onSpeedMenuViewportChange, true)
+    window.visualViewport?.removeEventListener('resize', onSpeedMenuViewportChange)
+    window.visualViewport?.removeEventListener('scroll', onSpeedMenuViewportChange)
+    setSpeedMenuOpen(false)
     root.dataset.noiseAudioMounted = 'false'
     playerCleanup.delete(root)
   }
