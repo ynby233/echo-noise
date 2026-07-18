@@ -21,6 +21,7 @@
     "test:auth-recovery": "node scripts/auth-recovery-sync.test.mjs",
     "test:message-visibility": "node scripts/message-visibility.test.mjs",
     "test:message-edit-attachment": "node scripts/message-edit-attachment.test.mjs",
+    "test:composer-toolbar-state": "node scripts/composer-toolbar-state.test.mjs",
     "test:notification-jump": "node scripts/notification-jump-target.test.mjs",
     "test:media-viewer-hash": "node scripts/media-viewer-hash-refresh.test.mjs",
     "test:music-player-theme": "node scripts/music-player-theme-sync.test.mjs",

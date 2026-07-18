@@ -310,6 +310,12 @@
 
         <div class="edit-toolbar">
           <div class="edit-toolbar-left">
+            <AudioRecorder
+              @audio-uploaded="handleEditAudioUploaded"
+              @upload-progress="handleEditAudioUploadProgress"
+              @prepare-insert="prepareEditAudioInsert"
+              @insert-cancelled="clearEditAudioInsertTarget"
+            />
             <button
               type="button"
               class="tb-btn edit-media-button nw-action-btn nw-tooltip-anchor"
@@ -525,10 +531,11 @@ import { resolveComponent } from 'vue'
 import { useMessageStore } from "~/store/message";
 import { useUserStore } from "~/store/user";
 import MarkdownRenderer from "~/components/index/MarkdownRenderer.vue";
+import AudioRecorder from './AudioRecorder.vue'
 import type { MessageVisibility } from '~/types/models'
 import BuiltinComments from '../comments/BuiltinComments.vue'
 import { writeClipboardText } from '~/utils/clipboard'
-import { uploadMediaFiles } from '~/utils/media-upload'
+import { createAudioMarkdown, resolveUploadedMediaUrl, uploadMediaFiles } from '~/utils/media-upload'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { getMessageIdFromRouteHash } from '~/utils/message-route-hash'
 import { useRuntimeConfig } from '#imports'
@@ -1997,8 +2004,10 @@ const editingPublishedAtInput = ref('');
 const isSaving = ref(false);
 const editTextareaRef = ref<any>(null);
 const editAttachmentInputRef = ref<HTMLInputElement | null>(null);
+type EditInsertTarget = { start: number; end: number };
+const editAudioInsertTarget = ref<EditInsertTarget | null>(null);
 const editUploadProgress = ref(0);
-const editUploadKind = ref<'attachment' | ''>('');
+const editUploadKind = ref<'audio' | 'attachment' | ''>('');
 const editUploadLabel = ref('');
 const isEditUploading = computed(() => editUploadProgress.value > 0);
 const editVisibilityLabel = computed(() => messageVisibilityLabel(editingVisibility.value));
@@ -2352,7 +2361,10 @@ onBeforeUnmount(() => {
   } catch {}
 });
 watch(showEditModal, (visible) => {
-  if (!visible) closeEditFloatingMenus();
+  if (!visible) {
+    closeEditFloatingMenus();
+    clearEditAudioInsertTarget();
+  }
 });
 
 const getEditTextareaElement = (): HTMLTextAreaElement | null => {
@@ -2364,14 +2376,31 @@ const getEditTextareaElement = (): HTMLTextAreaElement | null => {
   return direct?.querySelector?.('textarea') || null
 }
 
-const insertEditingMarkdown = async (markdown: string) => {
+const prepareEditAudioInsert = () => {
+  const textarea = getEditTextareaElement()
+  const contentLength = editingContent.value.length
+  const start = Math.max(0, Math.min(contentLength, Number(textarea?.selectionStart ?? contentLength)))
+  const end = Math.max(start, Math.min(contentLength, Number(textarea?.selectionEnd ?? start)))
+  editAudioInsertTarget.value = { start, end }
+}
+
+const clearEditAudioInsertTarget = () => {
+  editAudioInsertTarget.value = null
+}
+
+const insertEditingMarkdown = async (markdown: string, preparedTarget: EditInsertTarget | null = null) => {
   const textarea = getEditTextareaElement()
   if (!textarea) {
     editingContent.value += markdown
     return
   }
-  const start = Number(textarea.selectionStart ?? editingContent.value.length)
-  const end = Number(textarea.selectionEnd ?? start)
+  const contentLength = editingContent.value.length
+  const start = preparedTarget
+    ? Math.max(0, Math.min(contentLength, preparedTarget.start))
+    : Number(textarea.selectionStart ?? contentLength)
+  const end = preparedTarget
+    ? Math.max(start, Math.min(contentLength, preparedTarget.end))
+    : Number(textarea.selectionEnd ?? start)
   const before = editingContent.value.slice(0, start)
   const after = editingContent.value.slice(end)
   editingContent.value = `${before}${markdown}${after}`
@@ -2381,6 +2410,24 @@ const insertEditingMarkdown = async (markdown: string) => {
     const nextCursor = start + markdown.length
     nextTextarea.focus()
     nextTextarea.setSelectionRange(nextCursor, nextCursor)
+  }
+}
+
+const handleEditAudioUploaded = async (audioUrl: string) => {
+  const audioMarkdown = createAudioMarkdown(resolveUploadedMediaUrl(audioUrl, String(BASE_API || '/api')))
+  const preparedTarget = editAudioInsertTarget.value
+  clearEditAudioInsertTarget()
+  await insertEditingMarkdown(audioMarkdown, preparedTarget)
+}
+
+const handleEditAudioUploadProgress = (percent: number) => {
+  editUploadProgress.value = percent
+  if (percent > 0) {
+    editUploadKind.value = 'audio'
+    editUploadLabel.value = '音频上传中'
+  } else if (editUploadKind.value === 'audio') {
+    editUploadKind.value = ''
+    editUploadLabel.value = ''
   }
 }
 

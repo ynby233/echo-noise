@@ -1289,7 +1289,6 @@ const addMessage = async () => {
 .editor-toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:6px; padding:6px; border-radius:12px; background: rgba(255,255,255,0.85); flex-wrap: wrap; overflow: visible; position: relative; z-index: 95; backdrop-filter: saturate(1.1) blur(6px); }
 .toolbar-left, .toolbar-right { display:flex; align-items:center; gap:8px; flex-wrap: wrap; }
 .tb-btn { padding: 0; }
-.state-toggle-btn { --nw-action-hover-border: rgba(15,23,42,0.16); --nw-action-hover-bg: rgba(15,23,42,0.1); --nw-action-hover-text: #111827; }
 .state-toggle-btn.is-enabled { --nw-action-border: rgba(249,115,22,0.42); --nw-action-bg: rgba(249,115,22,0.18); --nw-action-text: #c2410c; --nw-action-hover-border: rgba(249,115,22,0.58); --nw-action-hover-bg: rgba(249,115,22,0.24); --nw-action-hover-text: #9a3412; }
 .publish-time-control { max-width: min(210px, calc(100vw - 32px)); }
 .visibility-control { width: max-content; }
@@ -1310,7 +1309,6 @@ const addMessage = async () => {
 .tb-sep { width:1px; height:24px; background: rgba(0,0,0,0.12); margin: 0 2px; }
 html.dark .editor-box { background: var(--home-surface-dark, #202a36); border: 1px solid rgba(255,255,255,0.16); color:#fff; }
 html.dark .editor-toolbar { background: rgba(39, 50, 66, 0.68); backdrop-filter: saturate(1.1) blur(6px); }
-html.dark .state-toggle-btn { --nw-action-hover-border: rgba(255,255,255,0.22); --nw-action-hover-bg: rgba(255,255,255,0.12); --nw-action-hover-text: #f8fafc; }
 html.dark .state-toggle-btn.is-enabled { --nw-action-border: rgba(251,146,60,0.46); --nw-action-bg: rgba(249,115,22,0.26); --nw-action-text: #fed7aa; --nw-action-hover-border: rgba(251,146,60,0.66); --nw-action-hover-bg: rgba(249,115,22,0.34); --nw-action-hover-text: #fff7ed; }
 html.dark .visibility-select { background: transparent; border: 0; color: inherit; }
 :global(html.dark) .tb-sep { background: rgba(255,255,255,0.12); }
