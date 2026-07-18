@@ -121,8 +121,8 @@
 
 .noise-attachment-audio__svg {
   display: block;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   pointer-events: none;
 }
 
@@ -223,11 +223,6 @@
   height: 12px;
   flex: 0 0 auto;
   opacity: 0.72;
-  transition: transform 0.16s ease;
-}
-
-.noise-attachment-audio__speed-trigger.is-open .noise-attachment-audio__speed-chevron {
-  transform: rotate(180deg);
 }
 
 .noise-attachment-audio__speed-menu {

@@ -94,8 +94,13 @@ assert.match(
 assert.match(playerStyle, /\.noise-attachment-audio__play\s*\{[\s\S]*?--nw-action-hover-text:\s*var\(--audio-control-text\);/)
 assert.match(
   playerStyle,
-  /\.noise-attachment-audio__svg\s*\{[\s\S]*?width:\s*16px;[\s\S]*?height:\s*16px;/,
-  'playback and volume icons must stay visually compact inside their 36px controls',
+  /\.noise-attachment-audio__svg\s*\{[\s\S]*?width:\s*14px;[\s\S]*?height:\s*14px;/,
+  'filled playback and volume icons must stay optically compact inside their 36px controls',
+)
+assert.doesNotMatch(
+  playerStyle,
+  /\.noise-attachment-audio__speed-trigger\.is-open \.noise-attachment-audio__speed-chevron\s*\{[\s\S]*?transform:\s*rotate\(/,
+  'the speed chevron must remain fixed like the visibility and publish-time controls',
 )
 assert.match(
   playerStyle,
