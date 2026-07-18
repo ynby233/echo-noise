@@ -121,12 +121,13 @@
 
 .noise-attachment-audio__svg {
   display: block;
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   pointer-events: none;
 }
 
-.noise-attachment-audio.is-playing .noise-attachment-audio__play {
+.noise-attachment-audio.is-playing .noise-attachment-audio__play,
+.noise-attachment-audio.is-muted .noise-attachment-audio__mute {
   --nw-action-border: rgba(249, 115, 22, 0.42);
   --nw-action-bg: rgba(249, 115, 22, 0.18);
   --nw-action-text: #c2410c;
@@ -231,6 +232,8 @@
 
 .noise-attachment-audio__speed-menu {
   display: grid;
+  width: 66px;
+  min-width: 66px;
   gap: 4px;
   padding: 8px;
   backdrop-filter: blur(10px);
@@ -238,8 +241,11 @@
 }
 
 .noise-attachment-audio__speed-option {
-  justify-content: flex-start;
+  justify-content: center;
   width: 100%;
+  padding-left: 0;
+  padding-right: 0;
+  text-align: center;
 }
 
 .noise-attachment-audio__volume {
@@ -248,11 +254,6 @@
 
 .noise-attachment-audio__volume-range {
   width: 72px;
-}
-
-.noise-attachment-audio.is-muted .noise-attachment-audio__mute {
-  color: var(--audio-card-muted) !important;
-  opacity: 0.72;
 }
 
 .noise-attachment-audio.has-error {
@@ -278,7 +279,8 @@
   color: #fca5a5 !important;
 }
 
-:where(html.dark, .theme-dark, .vditor--dark, .is-dark) .noise-attachment-audio.is-playing .noise-attachment-audio__play {
+:where(html.dark, .theme-dark, .vditor--dark, .is-dark) .noise-attachment-audio.is-playing .noise-attachment-audio__play,
+:where(html.dark, .theme-dark, .vditor--dark, .is-dark) .noise-attachment-audio.is-muted .noise-attachment-audio__mute {
   --nw-action-border: rgba(251, 146, 60, 0.46);
   --nw-action-bg: rgba(249, 115, 22, 0.26);
   --nw-action-text: #fed7aa;

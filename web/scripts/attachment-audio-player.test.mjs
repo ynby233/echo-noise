@@ -74,15 +74,39 @@ assert.match(playerSource, /muteButton\.classList\.add\('nw-action-btn', 'nw-too
 assert.doesNotMatch(playerSource, /\.title\s*=/, 'native title tooltips must not bypass the shared tooltip system')
 assert.doesNotMatch(playerSource, /createElement\('select'/, 'playback speed must use the project floating submenu instead of a native select')
 assert.match(playerSource, /speedMenu\.className = 'noise-attachment-audio__speed-menu floating-control-menu visibility-floating-menu nw-floating-menu'/)
-assert.match(playerSource, /positionFloatingMenu\(speedTrigger, speedMenu, speedMenuStyle, 106, 'above-right'\)/)
+assert.match(playerSource, /positionFloatingMenu\(speedTrigger, speedMenu, speedMenuStyle, 66, 'above-right'\)/)
 assert.match(
   playerStyle,
   /\.noise-attachment-audio__speed-trigger\s*\{[\s\S]*?gap:\s*3px;[\s\S]*?padding:\s*0 8px;/,
   'the speed trigger text and chevron spacing must match the visibility and publish-time triggers',
 )
 assert.match(playerStyle, /\.noise-attachment-audio__speed-value\s*\{[\s\S]*?white-space:\s*nowrap;/)
+assert.match(
+  playerStyle,
+  /\.noise-attachment-audio__speed-menu\s*\{[\s\S]*?width:\s*66px;[\s\S]*?min-width:\s*66px;/,
+  'the playback speed menu must match the 66px trigger width',
+)
+assert.match(
+  playerStyle,
+  /\.noise-attachment-audio__speed-option\s*\{[\s\S]*?justify-content:\s*center;[\s\S]*?width:\s*100%;[\s\S]*?padding-left:\s*0;[\s\S]*?padding-right:\s*0;[\s\S]*?text-align:\s*center;/,
+  'playback speed options must remain horizontally centered in the narrow menu',
+)
 assert.match(playerStyle, /\.noise-attachment-audio__play\s*\{[\s\S]*?--nw-action-hover-text:\s*var\(--audio-control-text\);/)
-assert.match(playerStyle, /\.noise-attachment-audio\.is-playing \.noise-attachment-audio__play\s*\{[\s\S]*?--nw-action-hover-text:\s*#fff;/)
+assert.match(
+  playerStyle,
+  /\.noise-attachment-audio__svg\s*\{[\s\S]*?width:\s*16px;[\s\S]*?height:\s*16px;/,
+  'playback and volume icons must stay visually compact inside their 36px controls',
+)
+assert.match(
+  playerStyle,
+  /\.noise-attachment-audio\.is-playing \.noise-attachment-audio__play,\s*\.noise-attachment-audio\.is-muted \.noise-attachment-audio__mute\s*\{[\s\S]*?--nw-action-hover-text:\s*#fff;/,
+  'muted volume controls must share the playing control active state',
+)
+assert.match(
+  playerStyle,
+  /:where\(html\.dark,[^}]+?\.noise-attachment-audio\.is-playing \.noise-attachment-audio__play,\s*:where\(html\.dark,[^}]+?\.noise-attachment-audio\.is-muted \.noise-attachment-audio__mute\s*\{[\s\S]*?--nw-action-hover-text:\s*#fff;/,
+  'muted volume controls must share the playing control active state in dark themes',
+)
 assert.match(playerSource, /volume:\s*'M14 3\.23v2\.06c2\.89\.86 5 3\.54 5 6\.71/)
 assert.match(playerSource, /muted:\s*'M12 4L9\.91 6\.09L12 8\.18/)
 assert.match(playerSource, /setProjectIcon\(volumeIcon, effectiveVolume === 0 \? 'muted' : 'volume'\)/)
