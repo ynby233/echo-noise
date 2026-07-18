@@ -766,7 +766,7 @@ const getDisplayRaw = (item: FeedItem) => {
   return text
 }
 
-const hasFileAttachment = (item: FeedItem) => /\[文件附件：[^\]]+\]\([^)]+\)/.test(getDisplayRaw(item))
+const hasFileAttachment = (item: FeedItem) => /\[(?:文件附件|音频附件)：[^\]]+\]\([^)]+\)/.test(getDisplayRaw(item))
 
 const isRSSItem = (item: FeedItem) => String(item.type || '').toLowerCase() === 'rss'
 

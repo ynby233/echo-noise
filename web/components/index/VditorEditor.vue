@@ -188,6 +188,7 @@ import { useToast } from '#imports'
 import { getFixedCoordinateScale, getFixedRect, positionFloatingMenu, scheduleFloatingMenuPosition } from '~/utils/floating-menu'
 import { captureVideoFirstFrameFromSource, ensureFancyboxVideoThumbnail, getVideoPlaybackFrameForSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
+import { buildAttachmentAudioPlaceholderHtml, destroyAttachmentAudioPlayers, enhanceAttachmentAudioPlayers } from '~/utils/attachment-audio-player'
 import { MARKDOWN_BLANK_LINE_SENTINEL, encodeMarkdownExtraBlankLines, isMarkdownBlankLineSentinel, markMarkdownPreservedBlankLineElements } from '~/utils/markdown-blank-lines'
 import { getFixedEditorClipInsets, insertEditorValueFallback, insertTableCellAtomicValue, replaceTableSourceLine, resolveTableAttachmentTarget, type TableAttachmentTarget } from '~/utils/vditor-table-attachment'
 import { resolveTableTrackResize, resolveTableTrailingScrollReserve, type TableTrackResizeSession } from '~/utils/table-resize-session'
@@ -498,7 +499,7 @@ const buildAttachmentPreviewHtml = (info: EditorAttachmentInfo) => {
   if (info.type === 'file') {
     return `<a class="noise-attachment-file" href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeName}</a>`
   }
-  return `<div class="noise-attachment-render noise-attachment-render--audio"><audio src="${safeUrl}" controls preload="metadata"></audio></div>`
+  return buildAttachmentAudioPlaceholderHtml({ src: info.url, name: info.name })
 }
 
 const transformAttachmentPreviewHtml = (html: string) => {
@@ -777,7 +778,10 @@ const materializeAttachmentMarkersInTableCells = (root: HTMLElement) => {
   let changed = false
   const cells = root.matches('td,th') ? [root] : Array.from(root.querySelectorAll('td,th'))
   cells.forEach((cell) => {
-    cell.querySelectorAll<HTMLElement>('.editor-attachment-preview').forEach((node) => node.remove())
+    cell.querySelectorAll<HTMLElement>('.editor-attachment-preview').forEach((node) => {
+      destroyAttachmentAudioPlayers(node)
+      node.remove()
+    })
     cell.querySelectorAll<HTMLElement>('[data-type="a"], a').forEach((node) => {
       if (node.closest('.editor-table-attachment-marker')) return
       const info = node.matches('[data-type="a"]')
@@ -1066,12 +1070,22 @@ const setupAttachmentPreview = () => {
     scope.querySelectorAll<HTMLVideoElement>('.noise-attachment-render--video video').forEach((video) => {
       ensureFancyboxVideoThumbnail(video)
     })
+    enhanceAttachmentAudioPlayers(scope)
+  }
+
+  const removeAttachmentPreview = (preview: Element) => {
+    destroyAttachmentAudioPlayers(preview)
+    preview.remove()
+  }
+
+  const removeAttachmentPreviews = () => {
+    root.querySelectorAll('.editor-attachment-preview').forEach(removeAttachmentPreview)
   }
 
   const closeSiblingPreview = (block: HTMLElement) => {
     const next = block.nextElementSibling as HTMLElement | null
     if (next?.classList.contains('editor-attachment-preview')) {
-      next.remove()
+      removeAttachmentPreview(next)
       return true
     }
     return false
@@ -1085,34 +1099,26 @@ const setupAttachmentPreview = () => {
     if (!info || !block || !root.contains(block)) return
 
     if (info.type === 'image' || info.type === 'video') {
-      root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
+      removeAttachmentPreviews()
       showAttachmentGallery(getAttachmentInfosByType(info.type), info, target)
       return
     }
 
     if (info.type === 'file') {
-      root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
+      removeAttachmentPreviews()
       openFileAttachment(info)
       return
     }
 
     if (closeSiblingPreview(block)) return
 
-    root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
+    removeAttachmentPreviews()
     const preview = document.createElement('div')
     preview.className = `editor-attachment-preview editor-attachment-preview--${info.type}`
     preview.setAttribute('contenteditable', 'false')
 
-    const header = document.createElement('div')
-    header.className = 'editor-attachment-preview__header'
-    header.textContent = info.title
-    preview.appendChild(header)
-
-    const audio = document.createElement('audio')
-    audio.src = info.url
-    audio.controls = true
-    audio.preload = 'metadata'
-    preview.appendChild(audio)
+    preview.innerHTML = buildAttachmentAudioPlaceholderHtml({ src: info.url, name: info.name })
+    enhanceAttachmentAudioPlayers(preview)
     block.insertAdjacentElement('afterend', preview)
   }
 
@@ -1574,7 +1580,7 @@ const setupAttachmentPreview = () => {
     hideTableDeleteButton()
     closeInlineEditorTableTextarea()
     closeInlineEditorTableAtomicEditor()
-    root.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
+    removeAttachmentPreviews()
     refreshAttachmentLinksFromEditor = () => {}
     refreshAttachmentLinksInTableCellFromEditor = () => {}
     markEditorTableAttachmentMutationHandled = () => {}
@@ -2611,11 +2617,32 @@ const expandedTableAttachmentsByType = (type: EditorAttachmentInfo['type']) => {
   return items
 }
 
+const removeExpandedTableAudioPreview = () => {
+  if (typeof document === 'undefined') return
+  const preview = document.querySelector<HTMLElement>('.editor-expanded-audio-preview')
+  if (!preview) return
+  destroyAttachmentAudioPlayers(preview)
+  preview.remove()
+}
+
 const previewExpandedTableAttachment = (attachment: EditorAttachmentInfo, event: MouseEvent | KeyboardEvent) => {
   const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
   if (attachment.type === 'audio') {
-    const url = attachment.url
-    window.open(url, '_blank', 'noopener,noreferrer')
+    const current = document.querySelector<HTMLElement>('.editor-expanded-audio-preview')
+    if (current?.dataset.audioUrl === attachment.url) {
+      removeExpandedTableAudioPreview()
+      return
+    }
+    removeExpandedTableAudioPreview()
+    const dialog = target?.closest<HTMLElement>('.editor-table-expand-dialog')
+    const header = dialog?.querySelector<HTMLElement>('.editor-table-expand-header')
+    if (!dialog || !header) return
+    const preview = document.createElement('div')
+    preview.className = 'editor-expanded-audio-preview'
+    preview.dataset.audioUrl = attachment.url
+    preview.innerHTML = buildAttachmentAudioPlaceholderHtml({ src: attachment.url, name: attachment.name })
+    header.insertAdjacentElement('afterend', preview)
+    enhanceAttachmentAudioPlayers(preview)
     return
   }
   if (attachment.type === 'file') {
@@ -4840,6 +4867,7 @@ const closeExpandedTable = () => {
     window.alert('未能同步放大表格内容，请先复制当前编辑内容后再关闭。')
     return
   }
+  removeExpandedTableAudioPreview()
   tableExpandClosing.value = true
   if (tableExpandCloseTimer !== null) window.clearTimeout(tableExpandCloseTimer)
   tableExpandCloseTimer = window.setTimeout(() => {
@@ -5330,6 +5358,8 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   try {
+    removeExpandedTableAudioPreview()
+    if (editorContainer.value) destroyAttachmentAudioPlayers(editorContainer.value)
     if (vditorInstance) {
       vditorInstance.destroy();
       vditorInstance = null;

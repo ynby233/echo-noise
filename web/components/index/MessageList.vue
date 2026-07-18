@@ -1650,7 +1650,7 @@ const checkContentHeight = () => {
       } catch {}
       const hasImageGrid = !!measureEl.querySelector('.image-grid');
       hasGrid.value[msg.id] = hasImageGrid;
-      hasFileAttachment.value[msg.id] = !!measureEl.querySelector('.noise-attachment-file');
+      hasFileAttachment.value[msg.id] = !!measureEl.querySelector('.noise-attachment-file, .noise-attachment-audio');
       if (hasImageGrid) {
         measuredMessageHeights.value[msg.id] = measureEl.scrollHeight;
         shouldShowExpandButton.value[msg.id] = false;
@@ -3958,12 +3958,12 @@ onMounted(() => {
 }
 :global(html:not(.dark)) .content-container :deep(.markdown-preview) { color: #111 !important; }
 :global(html.dark) .content-container :deep(.markdown-preview) { color: #fff !important; }
-:global(html:not(.dark)) .content-container :deep(.markdown-preview *:not(pre):not(code):not(.noise-attachment-file):not(.noise-attachment-file *)) {
+:global(html:not(.dark)) .content-container :deep(.markdown-preview *:not(pre):not(code):not(.noise-attachment-file):not(.noise-attachment-file *):not(.noise-attachment-audio):not(.noise-attachment-audio *)) {
   color: #111 !important;
   opacity: 1 !important;
 }
 /* 彻底取消白天模式灰度，所有元素不透明 */
-:global(html:not(.dark)) .content-container :deep(.markdown-preview *:not(.noise-attachment-file):not(.noise-attachment-file *)) { opacity: 1 !important; }
+:global(html:not(.dark)) .content-container :deep(.markdown-preview *:not(.noise-attachment-file):not(.noise-attachment-file *):not(.noise-attachment-audio):not(.noise-attachment-audio *)) { opacity: 1 !important; }
 :global(html:not(.dark)) .content-container :deep(.markdown-preview p),
 :global(html:not(.dark)) .content-container :deep(.markdown-preview li),
 :global(html:not(.dark)) .content-container :deep(.markdown-preview span),

@@ -75,6 +75,7 @@ export default defineNuxtConfig({
   ],
   css: [
     '@/assets/fonts/result.css',
+    '@/assets/css/attachment-audio-player.css',
   ],
   colorMode: {
     preference: 'light'

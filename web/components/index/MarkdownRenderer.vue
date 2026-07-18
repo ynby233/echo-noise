@@ -28,6 +28,7 @@ import { useRuntimeConfig } from '#imports';
 import { useMessageStore } from '~/store/message';
 import { ensureFancyboxVideoThumbnail, getVideoElementSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
+import { buildAttachmentAudioPlaceholderHtml, destroyAttachmentAudioPlayers, enhanceAttachmentAudioPlayers } from '~/utils/attachment-audio-player'
 import { encodeMarkdownExtraBlankLines, markMarkdownPreservedBlankLineElements } from '~/utils/markdown-blank-lines'
 import { resolveTableTrackResize, resolveTableTrailingScrollReserve, type TableTrackResizeSession } from '~/utils/table-resize-session'
 import Vditor from 'vditor';
@@ -769,6 +770,7 @@ const openRenderedTableExpand = async (table: HTMLTableElement) => {
   await nextTick()
   if (renderedTableExpandBody.value) {
     renderedTableExpandBody.value.querySelectorAll<HTMLTableElement>('table').forEach((item) => replaceRenderedTableBreakTextNodes(item))
+    enhanceAttachmentAudioPlayers(renderedTableExpandBody.value)
     applyDeletedAttachmentPlaceholders(renderedTableExpandBody.value)
     initializeMediaViewer(renderedTableExpandBody.value)
     syncRenderedTableExpandLayout()
@@ -777,6 +779,7 @@ const openRenderedTableExpand = async (table: HTMLTableElement) => {
 
 const closeRenderedTableExpand = () => {
   if (!showRenderedTableExpandDialog.value || renderedTableExpandClosing.value) return
+  if (renderedTableExpandBody.value) destroyAttachmentAudioPlayers(renderedTableExpandBody.value)
   renderedTableExpandClosing.value = true
   if (renderedTableExpandCloseTimer) clearTimeout(renderedTableExpandCloseTimer)
   renderedTableExpandCloseTimer = setTimeout(() => {
@@ -1383,7 +1386,7 @@ const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string) =>
     const actionClass = canPreview ? 'noise-attachment-file__action--preview' : 'noise-attachment-file__action--download'
     return `<a class="noise-attachment-file ${canPreview ? 'noise-attachment-file--preview' : 'noise-attachment-file--download'}" href="${safeUrl}" ${previewAttrs} aria-label="${actionLabel}：${safeName}" data-noise-attachment-kind="${kind}" data-noise-attachment-url="${safeUrl}"><span class="noise-attachment-file__icon" aria-hidden="true"></span><span class="noise-attachment-file__body"><span class="noise-attachment-file__name">${safeName}</span><span class="noise-attachment-file__meta">${meta}</span></span><span class="noise-attachment-file__action ${actionClass}" aria-hidden="true"></span></a>`
   }
-  return `<audio class="noise-attachment-audio" src="${safeUrl}" controls preload="metadata" data-noise-attachment-kind="${kind}" data-noise-attachment-url="${safeUrl}"></audio>`
+  return buildAttachmentAudioPlaceholderHtml({ src: url, name })
 }
 
 const buildDeletedAttachmentHtml = (kind: AttachmentKind) => {
@@ -1479,7 +1482,7 @@ const attachmentReplacementTarget = (node: HTMLElement, kind: AttachmentKind) =>
     return (node.closest('.noise-attachment-render') || node.closest('.image-grid-item') || node.closest('.single-media') || node) as HTMLElement
   }
   if (kind === 'audio') {
-    return (node.closest('.single-media') || node) as HTMLElement
+    return (node.closest('.noise-attachment-audio') || node.closest('.single-media') || node) as HTMLElement
   }
   return (node.closest('.noise-attachment-file') || node) as HTMLElement
 }
@@ -1569,15 +1572,14 @@ const processMediaLinks = (content: string): string => {
   const AUDIO_FILE_REG = /(^|[\s>])((?:https?:\/\/|\/api\/audio\/)[^\s<"']+\.(?:webm|ogg|mp3|m4a|wav|flac)(?:\?[^\s<"']*)?)/g;
   content = content.replace(AUDIO_FILE_REG, (_m, prefix, audioUrl) => {
     const src = resolveImageUrl(audioUrl);
-    const safeSrc = escapeHtml(src)
-    return `${prefix}<audio class="noise-attachment-audio" src="${safeSrc}" controls preload="metadata" data-noise-attachment-kind="audio" data-noise-attachment-url="${safeSrc}"></audio>`;
+    return `${prefix}${buildAttachmentAudioPlaceholderHtml({ src })}`;
   });
   const VIDEO_FILE_REG = /(^|[\s>])((?:https?:\/\/|\/api\/video\/|\/video\/)[^\s<"']+\.(?:mp4|webm|mov|avi)(?:\?[^\s<"']*)?)/g;
   content = content.replace(VIDEO_FILE_REG, (_m, prefix, videoUrl) => {
     const src = resolveImageUrl(videoUrl);
     const safeSrc = escapeHtml(src)
     if (isAudioAttachmentUrl(src)) {
-      return `${prefix}<audio class="noise-attachment-audio" src="${safeSrc}" controls preload="metadata" data-noise-attachment-kind="audio" data-noise-attachment-url="${safeSrc}"></audio>`;
+      return `${prefix}${buildAttachmentAudioPlaceholderHtml({ src })}`;
     }
     return `${prefix}<video src="${safeSrc}" controls preload="metadata" style="width:100%;height:auto" data-noise-attachment-kind="video" data-noise-attachment-url="${safeSrc}"></video>`;
   });
@@ -1830,6 +1832,7 @@ const applyDouyinVideoLayout = () => {
 }
 const renderMarkdown = async (markdown: string) => {
   if (!previewElement.value) return;
+  destroyAttachmentAudioPlayers(previewElement.value)
 
   const renderPlainFallback = (raw: string) => {
     if (!previewElement.value) return
@@ -1912,15 +1915,8 @@ const renderMarkdown = async (markdown: string) => {
             if (a.classList.contains('noise-attachment-tag')) return
             const href = a.getAttribute('href') || ''
             if (isAudioAttachmentUrl(href, a.textContent || '')) {
-              const audio = document.createElement('audio')
               const src = resolveImageUrl(href)
-              audio.className = 'noise-attachment-audio'
-              audio.setAttribute('src', src)
-              audio.setAttribute('controls', 'true')
-              audio.setAttribute('preload', 'metadata')
-              audio.dataset.noiseAttachmentKind = 'audio'
-              audio.dataset.noiseAttachmentUrl = src
-              a.replaceWith(audio)
+              replaceNodeWithHtml(a, buildAttachmentAudioPlaceholderHtml({ src, name: a.textContent || '' }))
               return
             }
             if (isVideoAttachmentUrl(href, a.textContent || '')) {
@@ -1953,14 +1949,10 @@ const renderMarkdown = async (markdown: string) => {
               }
               const resolvedSrc = v.getAttribute('src') || ''
               if (resolvedSrc && isAudioAttachmentUrl(resolvedSrc, v.getAttribute('aria-label') || v.getAttribute('title') || '')) {
-                  const audio = document.createElement('audio')
-                  audio.className = 'noise-attachment-audio'
-                  audio.setAttribute('src', resolvedSrc)
-                  audio.setAttribute('controls', 'true')
-                  audio.setAttribute('preload', 'metadata')
-                  audio.dataset.noiseAttachmentKind = 'audio'
-                  audio.dataset.noiseAttachmentUrl = resolvedSrc
-                  v.replaceWith(audio)
+                  replaceNodeWithHtml(v, buildAttachmentAudioPlaceholderHtml({
+                    src: resolvedSrc,
+                    name: v.getAttribute('aria-label') || v.getAttribute('title') || '',
+                  }))
                   return
               }
               if (!v.hasAttribute('controls')) {
@@ -1986,6 +1978,7 @@ const renderMarkdown = async (markdown: string) => {
               }
           });
 
+          if (previewElement.value) enhanceAttachmentAudioPlayers(previewElement.value)
           applyDeletedAttachmentPlaceholders();
           applyImageGrid(keepImagesFullSize);
           applyDouyinVideoLayout()
@@ -2066,6 +2059,8 @@ onMounted(() => {
 
 
 onBeforeUnmount(() => {
+  if (previewElement.value) destroyAttachmentAudioPlayers(previewElement.value)
+  if (renderedTableExpandBody.value) destroyAttachmentAudioPlayers(renderedTableExpandBody.value)
   if (zoom) {
     zoom.detach();
     zoom = null;
@@ -2870,14 +2865,6 @@ body.is-resizing-rendered-table-column * {
   max-width: 100%;
   height: auto;
   border-radius: 8px;
-}
-
-.markdown-preview :deep(.noise-attachment-audio) {
-  display: block;
-  width: min(300px, 100%) !important;
-  max-width: 300px;
-  min-width: min(220px, 100%);
-  margin: 0.35em 0;
 }
 
 .markdown-preview .noise-attachment-file,
