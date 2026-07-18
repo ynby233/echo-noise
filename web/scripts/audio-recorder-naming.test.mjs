@@ -20,14 +20,35 @@ assert.match(
 )
 assert.match(
   recorder,
-  /class="nw-action-btn nw-action-btn--label"[\s\S]*?@click="cancelPreparedRecording"[\s\S]*?>取消<\/button>/,
-  'naming cancellation must use the ordinary action-button template',
+  /class="audio-recorder-action audio-recorder-action--cancel nw-action-btn nw-action-btn--label"[\s\S]*?@click="cancelPreparedRecording"[\s\S]*?>取消<\/button>/,
+  'naming cancellation must share the recorder cancel button contract',
 )
 assert.match(
   recorder,
-  /type="submit"[\s\S]*?class="nw-action-btn nw-action-btn--label nw-action-btn--primary"[\s\S]*?:disabled="!canSubmitRecording"[\s\S]*?>[\s\S]*?提交/,
+  /type="submit"[\s\S]*?class="audio-recorder-action nw-action-btn nw-action-btn--label nw-action-btn--primary"[\s\S]*?:disabled="!canSubmitRecording"[\s\S]*?>[\s\S]*?提交/,
   'recording submission must use the shared blue save/submit button template',
 )
+assert.match(
+  recorder,
+  /class="audio-recorder-action audio-recorder-action--cancel nw-action-btn nw-action-btn--label"[\s\S]*?@click="cancelRecording">取消<\/button>/,
+  'active recording cancellation must use the same ordinary button and orange-red hover contract',
+)
+assert.match(
+  recorder,
+  /class="audio-recorder-action nw-action-btn nw-action-btn--label"[\s\S]*?@click="togglePause"/,
+  'pause must inherit the ordinary action-button background in both themes',
+)
+assert.match(
+  recorder,
+  /\.audio-recorder-action \{[\s\S]*?min-width: 64px;[\s\S]*?height: 32px;[\s\S]*?padding: 0 12px;[\s\S]*?border-radius: 10px;[\s\S]*?font-size: 13px;[\s\S]*?font-weight: 650;[\s\S]*?line-height: 1;/,
+  'recording and naming actions must share one size and typography contract',
+)
+assert.match(
+  recorder,
+  /\.audio-recorder-action--cancel \{[\s\S]*?--nw-action-hover-border: rgba\(234,88,12,\.95\);[\s\S]*?--nw-action-hover-bg: linear-gradient\(135deg, rgba\(251,146,60,\.95\), rgba\(234,88,12,\.95\)\);[\s\S]*?--nw-action-hover-text: #fff;/,
+  'both cancel actions must become bright orange-red only on hover or keyboard focus',
+)
+assert.doesNotMatch(recorder, /floating-action-btn|cancel-action-btn|clear-action-btn/)
 
 assert.match(
   recorder,

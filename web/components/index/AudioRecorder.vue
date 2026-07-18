@@ -37,11 +37,11 @@
         <canvas v-if="!isNamingRecording" ref="canvasRef" class="audio-recorder-spectrum" width="260" height="44" aria-hidden="true" />
 
         <div v-if="!isNamingRecording" class="audio-recorder-actions">
-          <button type="button" class="floating-action-btn cancel-action-btn nw-action-btn nw-action-btn--label nw-action-btn--danger" :disabled="isProcessing" @click="cancelRecording">取消</button>
-          <button type="button" class="floating-action-btn cancel-action-btn nw-action-btn nw-action-btn--label" :disabled="!canPause" @click="togglePause">
+          <button type="button" class="audio-recorder-action audio-recorder-action--cancel nw-action-btn nw-action-btn--label" :disabled="isProcessing" @click="cancelRecording">取消</button>
+          <button type="button" class="audio-recorder-action nw-action-btn nw-action-btn--label" :disabled="!canPause" @click="togglePause">
             {{ isPaused ? '继续' : '暂停' }}
           </button>
-          <button type="button" class="floating-action-btn clear-action-btn nw-action-btn nw-action-btn--label nw-action-btn--danger" :disabled="!canStop" @click="stopAndPrepare">停止</button>
+          <button type="button" class="audio-recorder-action nw-action-btn nw-action-btn--label nw-action-btn--danger" :disabled="!canStop" @click="stopAndPrepare">停止</button>
         </div>
 
         <form v-else class="audio-recording-name-form" @submit.prevent="submitRecording">
@@ -61,8 +61,8 @@
             @keydown.esc.prevent="cancelPreparedRecording"
           />
           <div class="audio-recorder-actions audio-recording-name-actions">
-            <button type="button" class="nw-action-btn nw-action-btn--label" :disabled="isProcessing" @click="cancelPreparedRecording">取消</button>
-            <button type="submit" class="nw-action-btn nw-action-btn--label nw-action-btn--primary" :disabled="!canSubmitRecording">
+            <button type="button" class="audio-recorder-action audio-recorder-action--cancel nw-action-btn nw-action-btn--label" :disabled="isProcessing" @click="cancelPreparedRecording">取消</button>
+            <button type="submit" class="audio-recorder-action nw-action-btn nw-action-btn--label nw-action-btn--primary" :disabled="!canSubmitRecording">
               {{ isProcessing ? '提交中...' : '提交' }}
             </button>
           </div>
@@ -555,6 +555,24 @@ onBeforeUnmount(() => {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 10px;
+}
+.audio-recorder-action {
+  min-width: 64px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1;
+}
+.audio-recorder-action--cancel {
+  --nw-action-hover-border: rgba(234,88,12,.95);
+  --nw-action-hover-bg: linear-gradient(135deg, rgba(251,146,60,.95), rgba(234,88,12,.95));
+  --nw-action-hover-text: #fff;
+}
+.audio-recorder-action--cancel:hover:not(:disabled),
+.audio-recorder-action--cancel:focus-visible {
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.18);
 }
 .audio-recording-name-actions { margin-top: 2px; }
 html.dark .tb-btn.is-recording {
