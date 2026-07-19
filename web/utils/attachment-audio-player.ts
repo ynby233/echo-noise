@@ -401,7 +401,7 @@ const mountAudioPlayer = (root: HTMLElement) => {
     || !!root.closest('.theme-dark, .vditor--dark, .is-dark')
   const positionSpeedMenu = () => {
     if (!speedMenuOpen) return
-    positionFloatingMenu(speedTrigger, speedMenu, speedMenuStyle, 66, 'above-right')
+    positionFloatingMenu(speedTrigger, speedMenu, speedMenuStyle, 50, 'above-right')
     Object.assign(speedMenu.style, speedMenuStyle.value)
   }
   const setSpeedMenuOpen = (open: boolean, focusSelected = false) => {

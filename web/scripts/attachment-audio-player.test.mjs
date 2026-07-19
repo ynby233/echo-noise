@@ -74,27 +74,31 @@ assert.match(playerSource, /muteButton\.classList\.add\('nw-action-btn', 'nw-too
 assert.doesNotMatch(playerSource, /\.title\s*=/, 'native title tooltips must not bypass the shared tooltip system')
 assert.doesNotMatch(playerSource, /createElement\('select'/, 'playback speed must use the project floating submenu instead of a native select')
 assert.match(playerSource, /speedMenu\.className = 'noise-attachment-audio__speed-menu floating-control-menu visibility-floating-menu nw-floating-menu'/)
-assert.match(playerSource, /positionFloatingMenu\(speedTrigger, speedMenu, speedMenuStyle, 66, 'above-right'\)/)
+assert.match(playerSource, /positionFloatingMenu\(speedTrigger, speedMenu, speedMenuStyle, 50, 'above-right'\)/)
 assert.match(
   playerStyle,
-  /\.noise-attachment-audio__speed-trigger\s*\{[\s\S]*?gap:\s*3px;[\s\S]*?padding:\s*0 8px;/,
-  'the speed trigger text and chevron spacing must match the visibility and publish-time triggers',
-)
-assert.match(playerStyle, /\.noise-attachment-audio__speed-value\s*\{[\s\S]*?white-space:\s*nowrap;/)
-assert.match(
-  playerStyle,
-  /\.noise-attachment-audio__speed-menu\s*\{[\s\S]*?width:\s*66px;[\s\S]*?min-width:\s*66px;/,
-  'the playback speed menu must match the 66px trigger width',
+  /\.noise-attachment-audio__speed-trigger\s*\{[\s\S]*?min-width:\s*50px;[\s\S]*?gap:\s*3px;[\s\S]*?padding:\s*0 10px;[\s\S]*?justify-content:\s*flex-start;/,
+  'the speed trigger must use the same horizontal inset and minimum text-chevron gap as the reference controls',
 )
 assert.match(
   playerStyle,
-  /\.noise-attachment-audio__speed-option\s*\{[\s\S]*?justify-content:\s*center;[\s\S]*?width:\s*100%;[\s\S]*?padding-left:\s*0;[\s\S]*?padding-right:\s*0;[\s\S]*?text-align:\s*center;/,
+  /\.noise-attachment-audio__speed-value\s*\{[\s\S]*?font-size:\s*12px;[\s\S]*?font-weight:\s*400;[\s\S]*?line-height:\s*18px;[\s\S]*?white-space:\s*nowrap;/,
+  'the active speed text must match the visibility and publish-time trigger typography',
+)
+assert.match(
+  playerStyle,
+  /\.noise-attachment-audio__speed-menu\s*\{[\s\S]*?width:\s*50px;[\s\S]*?min-width:\s*50px;/,
+  'the playback speed menu must follow the compact trigger width',
+)
+assert.match(
+  playerStyle,
+  /\.noise-attachment-audio__speed-option\s*\{[\s\S]*?justify-content:\s*center;[\s\S]*?width:\s*100%;[\s\S]*?padding-left:\s*0;[\s\S]*?padding-right:\s*0;[\s\S]*?font-size:\s*12px;[\s\S]*?font-weight:\s*400;[\s\S]*?line-height:\s*18px;[\s\S]*?text-align:\s*center;/,
   'playback speed options must remain horizontally centered in the narrow menu',
 )
 assert.match(playerStyle, /\.noise-attachment-audio__play\s*\{[\s\S]*?--nw-action-hover-text:\s*var\(--audio-control-text\);/)
 assert.match(
   playerStyle,
-  /\.noise-attachment-audio \.noise-attachment-audio__svg\s*\{[\s\S]*?width:\s*14px;[\s\S]*?height:\s*14px;/,
+  /\.noise-attachment-audio \.noise-attachment-audio__svg\s*\{[\s\S]*?width:\s*16px;[\s\S]*?height:\s*16px;/,
   'player icon sizing must outrank the shared vditor-reset svg auto-size rule',
 )
 assert.match(

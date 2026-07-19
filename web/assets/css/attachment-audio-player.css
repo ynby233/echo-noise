@@ -121,8 +121,8 @@
 
 .noise-attachment-audio .noise-attachment-audio__svg {
   display: block;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   pointer-events: none;
 }
 
@@ -200,10 +200,11 @@
 
 .noise-attachment-audio__speed-trigger {
   width: auto;
-  min-width: 66px;
+  min-width: 50px;
   height: 36px;
   gap: 3px;
-  padding: 0 8px;
+  padding: 0 10px;
+  justify-content: flex-start;
   --nw-action-bg: var(--audio-control-bg);
   --nw-action-border: var(--audio-control-border);
   --nw-action-text: var(--audio-control-text);
@@ -212,8 +213,8 @@
 .noise-attachment-audio__speed-value {
   min-width: 0;
   font-size: 12px;
-  font-weight: 650;
-  line-height: 1;
+  font-weight: 400;
+  line-height: 18px;
   text-align: left;
   white-space: nowrap;
 }
@@ -227,8 +228,8 @@
 
 .noise-attachment-audio__speed-menu {
   display: grid;
-  width: 66px;
-  min-width: 66px;
+  width: 50px;
+  min-width: 50px;
   gap: 4px;
   padding: 8px;
   backdrop-filter: blur(10px);
@@ -240,6 +241,9 @@
   width: 100%;
   padding-left: 0;
   padding-right: 0;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
   text-align: center;
 }
 
