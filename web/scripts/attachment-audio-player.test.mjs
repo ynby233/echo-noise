@@ -108,6 +108,16 @@ assert.match(
 )
 assert.match(
   playerStyle,
+  /\.noise-attachment-audio__play \.noise-attachment-audio__svg path\s*\{[\s\S]*?transform-box:\s*fill-box;[\s\S]*?transform-origin:\s*center;[\s\S]*?transform:\s*scale\(1\.5\);/,
+  'play and pause paths must be optically scaled to match the toolbar icon geometry',
+)
+assert.match(
+  playerStyle,
+  /\.noise-attachment-audio__mute \.noise-attachment-audio__svg path\s*\{[\s\S]*?transform-box:\s*fill-box;[\s\S]*?transform-origin:\s*center;[\s\S]*?transform:\s*scale\(1\.2\);/,
+  'volume and mute paths must be optically scaled to match the toolbar icon geometry',
+)
+assert.match(
+  playerStyle,
   /\.noise-attachment-audio \.noise-attachment-audio__speed-chevron\s*\{[\s\S]*?width:\s*12px;[\s\S]*?height:\s*12px;/,
   'the compact speed chevron must outrank the shared vditor-reset svg auto-size rule',
 )

@@ -126,6 +126,18 @@
   pointer-events: none;
 }
 
+.noise-attachment-audio__play .noise-attachment-audio__svg path {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(1.5);
+}
+
+.noise-attachment-audio__mute .noise-attachment-audio__svg path {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(1.2);
+}
+
 .noise-attachment-audio.is-playing .noise-attachment-audio__play,
 .noise-attachment-audio.is-muted .noise-attachment-audio__mute {
   --nw-action-border: rgba(249, 115, 22, 0.42);
