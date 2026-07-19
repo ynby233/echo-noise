@@ -92,13 +92,18 @@ assert.match(
 )
 assert.match(
   playerStyle,
-  /\.noise-attachment-audio__speed-option\s*\{[\s\S]*?justify-content:\s*center;[\s\S]*?width:\s*100%;[\s\S]*?padding-left:\s*0;[\s\S]*?padding-right:\s*0;[\s\S]*?font-size:\s*12px;[\s\S]*?font-weight:\s*400;[\s\S]*?line-height:\s*18px;[\s\S]*?text-align:\s*center;/,
+  /\.noise-attachment-audio__speed-option\s*\{[\s\S]*?justify-content:\s*center;[\s\S]*?width:\s*100%;[\s\S]*?padding-left:\s*0;[\s\S]*?padding-right:\s*0;[\s\S]*?text-align:\s*center;/,
   'playback speed options must remain horizontally centered in the narrow menu',
+)
+assert.doesNotMatch(
+  playerStyle,
+  /\.noise-attachment-audio__speed-option\s*\{[^}]*?(?:font-size|font-weight|line-height):/,
+  'playback speed options must inherit the shared floating-option typography used by visibility choices',
 )
 assert.match(playerStyle, /\.noise-attachment-audio__play\s*\{[\s\S]*?--nw-action-hover-text:\s*var\(--audio-control-text\);/)
 assert.match(
   playerStyle,
-  /\.noise-attachment-audio \.noise-attachment-audio__svg\s*\{[\s\S]*?width:\s*16px;[\s\S]*?height:\s*16px;/,
+  /\.noise-attachment-audio \.noise-attachment-audio__svg\s*\{[\s\S]*?width:\s*18px;[\s\S]*?height:\s*18px;/,
   'player icon sizing must outrank the shared vditor-reset svg auto-size rule',
 )
 assert.match(
