@@ -143,4 +143,58 @@ assert.match(playerSource, /nameElement\.dataset\.tooltip = name/)
 assert.match(playerSource, /seek\.dataset\.tooltip = '播放进度'/)
 assert.match(playerSource, /volume\.dataset\.tooltip = '调整音量'/)
 
+assert.match(
+  playerSource,
+  /player\.closest\('td,th'\)/,
+  'audio placeholders inside table cells must be routed away from the inline full player',
+)
+assert.match(playerSource, /noise-table-audio-trigger/, 'published table audio must render as an interactive attachment marker')
+assert.match(playerSource, /export const toggleAttachmentAudioPopover/, 'all table surfaces must share one anchored audio popover controller')
+assert.match(playerSource, /export const closeAttachmentAudioPopover/, 'hosts must be able to close the shared table audio popover during teardown')
+assert.match(playerSource, /document\.body\.appendChild\(popover\)/, 'the table audio player must escape table layout by mounting under document.body')
+assert.match(playerSource, /new ResizeObserver/, 'the table audio popover must follow user-driven column width changes')
+assert.match(playerSource, /new MutationObserver/, 'the table audio popover must close when its anchor is removed')
+assert.match(playerSource, /window\.addEventListener\('scroll',[\s\S]*?capture:\s*true/, 'the popover must follow scrolling table ancestors')
+assert.match(
+  playerSource,
+  /target\.closest\([\s\S]*?editor-table-expand-column-resize-handle[\s\S]*?rendered-table-expand-column-resize-handle/,
+  'column resizing must not dismiss the active table audio popover before it can reposition',
+)
+assert.match(playerSource, /event\.key === 'Escape'[\s\S]*?closeAttachmentAudioPopover/, 'Escape must close the table audio popover')
+assert.match(
+  editor,
+  /target\.closest<HTMLTableCellElement>\('td,th'\)[\s\S]*?toggleAttachmentAudioPopover\(target,/,
+  'normal Vditor table audio markers must open the shared popover at the marker',
+)
+assert.match(
+  editor,
+  /previewExpandedTableAttachment[\s\S]*?attachment\.type === 'audio'[\s\S]*?toggleAttachmentAudioPopover\(target,/,
+  'expanded Vditor table audio markers must open the same shared popover at the marker',
+)
+assert.doesNotMatch(
+  editor,
+  /header\.insertAdjacentElement\('afterend', preview\)/,
+  'expanded table audio must never be inserted below the dialog header',
+)
+assert.match(
+  renderer,
+  /button:not\(\.noise-rendered-table-expand-button\):not\(\.noise-table-audio-trigger\)/,
+  'expanded published tables must preserve cloned audio marker buttons',
+)
+assert.match(
+  playerStyle,
+  /\.noise-table-audio-trigger\s*\{[\s\S]*?box-sizing:\s*border-box;[\s\S]*?width:\s*100%;[\s\S]*?max-width:\s*100%;[\s\S]*?min-width:\s*0;/,
+  'table audio markers must remain within freely resized cell widths',
+)
+assert.match(
+  playerStyle,
+  /\.noise-table-audio-trigger__name\s*\{[\s\S]*?overflow:\s*hidden;[\s\S]*?text-overflow:\s*ellipsis;[\s\S]*?white-space:\s*nowrap;/,
+  'long audio names must truncate instead of widening table columns',
+)
+assert.match(
+  playerStyle,
+  /\.noise-table-audio-popover\s*\{[\s\S]*?position:\s*fixed;[\s\S]*?width:\s*min\(720px, calc\(100vw - 24px\)\);[\s\S]*?z-index:\s*10060;/,
+  'the full player must float above table dialogs with viewport-bounded width',
+)
+
 console.log('attachment audio player checks passed')

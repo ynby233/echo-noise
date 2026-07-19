@@ -1,6 +1,6 @@
 export const AUDIO_PLAYBACK_RATES = [0.5, 1, 1.25, 1.5, 1.75, 2, 3] as const
 
-type AttachmentAudioPlaceholderOptions = {
+export type AttachmentAudioPlaceholderOptions = {
   src: string
   name?: string
   size?: number | null
@@ -9,6 +9,7 @@ type AttachmentAudioPlaceholderOptions = {
 type PlayerCleanup = () => void
 
 const playerCleanup = new WeakMap<HTMLElement, PlayerCleanup>()
+const tableTriggerCleanup = new WeakMap<HTMLElement, PlayerCleanup>()
 const audioSizeCache = new Map<string, Promise<number | null>>()
 
 const escapeHtmlAttribute = (value: string) => String(value || '')
@@ -575,6 +576,244 @@ const nodesMatching = <T extends Element>(root: ParentNode, selector: string) =>
   return nodes
 }
 
+type ActiveAttachmentAudioPopover = {
+  anchor: HTMLElement
+  popover: HTMLElement
+  player: HTMLElement
+  positionFrame: number | null
+  cleanup: PlayerCleanup[]
+}
+
+let activeAttachmentAudioPopover: ActiveAttachmentAudioPopover | null = null
+
+const attachmentAudioPopoverUsesDarkTheme = (anchor: HTMLElement) => (
+  document.documentElement.classList.contains('dark')
+  || !!anchor.closest('.theme-dark, .vditor--dark, .is-dark, .editor-table-expand-overlay.is-dark, .rendered-table-expand-overlay.is-dark')
+)
+
+const positionAttachmentAudioPopover = (state: ActiveAttachmentAudioPopover) => {
+  if (activeAttachmentAudioPopover !== state) return
+  if (!state.anchor.isConnected) {
+    closeAttachmentAudioPopover()
+    return
+  }
+
+  const zoom = Number.parseFloat(window.getComputedStyle(document.body).zoom || '1')
+  const scale = Number.isFinite(zoom) && zoom > 0 ? zoom : 1
+  const viewport = window.visualViewport
+  const viewportOffsetLeft = viewport?.offsetLeft || 0
+  const viewportOffsetTop = viewport?.offsetTop || 0
+  const viewportLeft = viewportOffsetLeft / scale
+  const viewportTop = viewportOffsetTop / scale
+  const viewportWidth = (viewport?.width || window.innerWidth) / scale
+  const viewportHeight = (viewport?.height || window.innerHeight) / scale
+  const anchorRect = state.anchor.getBoundingClientRect()
+  const anchorLeft = (anchorRect.left + viewportOffsetLeft) / scale
+  const anchorTop = (anchorRect.top + viewportOffsetTop) / scale
+  const anchorBottom = (anchorRect.bottom + viewportOffsetTop) / scale
+  const popoverWidth = state.popover.offsetWidth || Math.min(720, Math.max(280, viewportWidth - 24))
+  const popoverHeight = state.popover.offsetHeight || 112
+  const edge = 12
+  const gap = 8
+  const minLeft = viewportLeft + edge
+  const maxLeft = Math.max(minLeft, viewportLeft + viewportWidth - popoverWidth - edge)
+  const minTop = viewportTop + edge
+  const maxTop = Math.max(minTop, viewportTop + viewportHeight - popoverHeight - edge)
+  const belowTop = anchorBottom + gap
+  const aboveTop = anchorTop - popoverHeight - gap
+  const fitsBelow = belowTop + popoverHeight <= viewportTop + viewportHeight - edge
+  const fitsAbove = aboveTop >= minTop
+  const placement = fitsBelow ? 'below' : fitsAbove ? 'above' : 'viewport'
+  const top = fitsBelow ? belowTop : fitsAbove ? aboveTop : clamp(belowTop, minTop, maxTop)
+
+  state.popover.style.left = `${clamp(anchorLeft, minLeft, maxLeft)}px`
+  state.popover.style.top = `${top}px`
+  state.popover.dataset.placement = placement
+}
+
+const scheduleAttachmentAudioPopoverPosition = (state: ActiveAttachmentAudioPopover) => {
+  if (activeAttachmentAudioPopover !== state || state.positionFrame !== null) return
+  state.positionFrame = window.requestAnimationFrame(() => {
+    state.positionFrame = null
+    positionAttachmentAudioPopover(state)
+  })
+}
+
+export const closeAttachmentAudioPopover = () => {
+  const state = activeAttachmentAudioPopover
+  if (!state) return
+  activeAttachmentAudioPopover = null
+  if (state.positionFrame !== null) window.cancelAnimationFrame(state.positionFrame)
+  state.positionFrame = null
+  state.anchor.setAttribute('aria-expanded', 'false')
+  state.cleanup.splice(0).forEach((cleanup) => cleanup())
+  playerCleanup.get(state.player)?.()
+  state.popover.remove()
+}
+
+export const toggleAttachmentAudioPopover = (
+  anchor: HTMLElement,
+  { src, name = '', size = null }: AttachmentAudioPlaceholderOptions,
+) => {
+  if (typeof document === 'undefined' || !anchor?.isConnected) return
+  const normalizedSrc = String(src || '').trim()
+  if (!normalizedSrc) return
+  if (activeAttachmentAudioPopover?.anchor === anchor
+    && activeAttachmentAudioPopover.player.dataset.audioSrc === normalizedSrc) {
+    closeAttachmentAudioPopover()
+    return
+  }
+
+  closeAttachmentAudioPopover()
+  const popover = createElement('div', 'noise-table-audio-popover')
+  popover.classList.toggle('is-dark', attachmentAudioPopoverUsesDarkTheme(anchor))
+  popover.setAttribute('role', 'dialog')
+  popover.setAttribute('aria-label', `音频预览：${audioFileName(normalizedSrc, name)}`)
+  popover.innerHTML = buildAttachmentAudioPlaceholderHtml({ src: normalizedSrc, name, size })
+  const player = popover.querySelector<HTMLElement>('[data-noise-audio-player]')
+  if (!player) return
+
+  document.body.appendChild(popover)
+  mountAudioPlayer(player)
+  anchor.setAttribute('aria-haspopup', 'dialog')
+  anchor.setAttribute('aria-expanded', 'true')
+
+  const state: ActiveAttachmentAudioPopover = {
+    anchor,
+    popover,
+    player,
+    positionFrame: null,
+    cleanup: [],
+  }
+  activeAttachmentAudioPopover = state
+
+  const onDocumentMouseDown = (event: MouseEvent) => {
+    const target = event.target as Node | null
+    if (!target || state.anchor.contains(target) || state.popover.contains(target)) return
+    if (target instanceof Element && target.closest(
+      '.editor-table-expand-row-resize-handle, .editor-table-expand-column-resize-handle, .rendered-table-expand-row-resize-handle, .rendered-table-expand-column-resize-handle',
+    )) return
+    closeAttachmentAudioPopover()
+  }
+  const onDocumentKeydown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape' && activeAttachmentAudioPopover === state) {
+      event.preventDefault()
+      closeAttachmentAudioPopover()
+      state.anchor.focus()
+    }
+  }
+  const onViewportChange = () => scheduleAttachmentAudioPopoverPosition(state)
+  document.addEventListener('mousedown', onDocumentMouseDown, true)
+  document.addEventListener('keydown', onDocumentKeydown, true)
+  window.addEventListener('resize', onViewportChange, { passive: true })
+  window.addEventListener('scroll', onViewportChange, { passive: true, capture: true })
+  window.visualViewport?.addEventListener('resize', onViewportChange)
+  window.visualViewport?.addEventListener('scroll', onViewportChange)
+  state.cleanup.push(
+    () => document.removeEventListener('mousedown', onDocumentMouseDown, true),
+    () => document.removeEventListener('keydown', onDocumentKeydown, true),
+    () => window.removeEventListener('resize', onViewportChange),
+    () => window.removeEventListener('scroll', onViewportChange, true),
+    () => window.visualViewport?.removeEventListener('resize', onViewportChange),
+    () => window.visualViewport?.removeEventListener('scroll', onViewportChange),
+  )
+
+  if (typeof ResizeObserver !== 'undefined') {
+    const resizeObserver = new ResizeObserver(onViewportChange)
+    resizeObserver.observe(anchor)
+    const cell = anchor.closest<HTMLElement>('td,th')
+    if (cell && cell !== anchor) resizeObserver.observe(cell)
+    resizeObserver.observe(popover)
+    state.cleanup.push(() => resizeObserver.disconnect())
+  }
+  if (typeof MutationObserver !== 'undefined') {
+    const mutationObserver = new MutationObserver(() => {
+      if (!anchor.isConnected) closeAttachmentAudioPopover()
+    })
+    mutationObserver.observe(document.body, { childList: true, subtree: true })
+    state.cleanup.push(() => mutationObserver.disconnect())
+  }
+
+  positionAttachmentAudioPopover(state)
+  scheduleFloatingMenuPosition(() => positionAttachmentAudioPopover(state))
+}
+
+const mountTableAudioTrigger = (trigger: HTMLButtonElement) => {
+  if (trigger.dataset.noiseTableAudioMounted === 'true' && tableTriggerCleanup.has(trigger)) return
+  const src = String(trigger.dataset.audioSrc || trigger.dataset.noiseAttachmentUrl || '').trim()
+  if (!src) return
+  const name = audioFileName(src, trigger.dataset.audioName || '')
+  const knownSize = Number(trigger.dataset.audioSize)
+  const size = Number.isFinite(knownSize) && knownSize >= 0 ? knownSize : null
+  const sizeElement = trigger.querySelector<HTMLElement>('.noise-table-audio-trigger__size')
+
+  trigger.dataset.noiseTableAudioMounted = 'true'
+  trigger.setAttribute('aria-haspopup', 'dialog')
+  trigger.setAttribute('aria-expanded', 'false')
+  trigger.setAttribute('aria-label', `预览音频附件：${name}`)
+  const onMouseDown = (event: MouseEvent) => event.stopPropagation()
+  const onClick = (event: MouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    toggleAttachmentAudioPopover(trigger, { src, name, size })
+  }
+  trigger.addEventListener('mousedown', onMouseDown)
+  trigger.addEventListener('click', onClick)
+
+  if (size === null && sizeElement) {
+    void probeAudioFileSize(src).then((resolvedSize) => {
+      if (!trigger.isConnected || trigger.dataset.noiseTableAudioMounted !== 'true') return
+      sizeElement.textContent = formatAudioFileSize(resolvedSize)
+    })
+  }
+
+  const cleanup = () => {
+    trigger.removeEventListener('mousedown', onMouseDown)
+    trigger.removeEventListener('click', onClick)
+    trigger.dataset.noiseTableAudioMounted = 'false'
+    tableTriggerCleanup.delete(trigger)
+  }
+  tableTriggerCleanup.set(trigger, cleanup)
+}
+
+const replaceTableAudioPlaceholder = (player: HTMLElement) => {
+  const src = String(player.dataset.audioSrc || player.dataset.noiseAttachmentUrl || '').trim()
+  if (!src) return
+  const name = audioFileName(src, player.dataset.audioName || '')
+  const knownSize = Number(player.dataset.audioSize)
+  const size = Number.isFinite(knownSize) && knownSize >= 0 ? knownSize : null
+  const trigger = createElement('button', 'noise-table-audio-trigger noise-attachment-file noise-attachment-file--preview')
+  trigger.type = 'button'
+  trigger.dataset.audioSrc = src
+  trigger.dataset.audioName = name
+  trigger.dataset.noiseAttachmentKind = 'audio'
+  trigger.dataset.noiseAttachmentUrl = src
+  if (size !== null) trigger.dataset.audioSize = String(size)
+
+  const icon = createElement('span', 'noise-attachment-file__icon noise-table-audio-trigger__icon')
+  const iconSvg = createIcon('volume')
+  iconSvg.classList.add('noise-table-audio-trigger__svg')
+  icon.appendChild(iconSvg)
+  const body = createElement('span', 'noise-attachment-file__body noise-table-audio-trigger__body')
+  const nameElement = createElement('span', 'noise-attachment-file__name noise-table-audio-trigger__name')
+  nameElement.textContent = name
+  const meta = createElement('span', 'noise-attachment-file__meta noise-table-audio-trigger__meta')
+  const format = createElement('span', 'noise-table-audio-trigger__format')
+  format.textContent = audioFormatLabel(src, name)
+  const separator = createElement('span', 'noise-table-audio-trigger__separator')
+  separator.textContent = ' · '
+  separator.setAttribute('aria-hidden', 'true')
+  const sizeElement = createElement('span', 'noise-table-audio-trigger__size')
+  sizeElement.textContent = size === null ? '大小读取中' : formatAudioFileSize(size)
+  meta.append(format, separator, sizeElement)
+  body.append(nameElement, meta)
+  const action = createElement('span', 'noise-attachment-file__action noise-attachment-file__action--preview')
+  action.setAttribute('aria-hidden', 'true')
+  trigger.append(icon, body, action)
+  player.replaceWith(trigger)
+  mountTableAudioTrigger(trigger)
+}
+
 export const enhanceAttachmentAudioPlayers = (root: ParentNode) => {
   if (typeof document === 'undefined') return
   nodesMatching<HTMLAudioElement>(root, 'audio').forEach((audio) => {
@@ -590,9 +829,19 @@ export const enhanceAttachmentAudioPlayers = (root: ParentNode) => {
     placeholder.dataset.noiseAttachmentUrl = src
     audio.replaceWith(placeholder)
   })
-  nodesMatching<HTMLElement>(root, '[data-noise-audio-player]').forEach(mountAudioPlayer)
+  nodesMatching<HTMLElement>(root, '[data-noise-audio-player]').forEach((player) => {
+    if (player.closest('td,th')) replaceTableAudioPlaceholder(player)
+    else mountAudioPlayer(player)
+  })
+  nodesMatching<HTMLButtonElement>(root, '.noise-table-audio-trigger').forEach(mountTableAudioTrigger)
 }
 
 export const destroyAttachmentAudioPlayers = (root: ParentNode) => {
   nodesMatching<HTMLElement>(root, '[data-noise-audio-player]').forEach((player) => playerCleanup.get(player)?.())
+  nodesMatching<HTMLElement>(root, '.noise-table-audio-trigger').forEach((trigger) => tableTriggerCleanup.get(trigger)?.())
+  if (activeAttachmentAudioPopover
+    && (root === activeAttachmentAudioPopover.anchor
+      || (root instanceof Node && root.contains(activeAttachmentAudioPopover.anchor)))) {
+    closeAttachmentAudioPopover()
+  }
 }

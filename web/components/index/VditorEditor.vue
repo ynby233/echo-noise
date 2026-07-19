@@ -188,7 +188,7 @@ import { useToast } from '#imports'
 import { getFixedCoordinateScale, getFixedRect, positionFloatingMenu, scheduleFloatingMenuPosition } from '~/utils/floating-menu'
 import { captureVideoFirstFrameFromSource, ensureFancyboxVideoThumbnail, getVideoPlaybackFrameForSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
-import { buildAttachmentAudioPlaceholderHtml, destroyAttachmentAudioPlayers, enhanceAttachmentAudioPlayers } from '~/utils/attachment-audio-player'
+import { buildAttachmentAudioPlaceholderHtml, closeAttachmentAudioPopover, destroyAttachmentAudioPlayers, enhanceAttachmentAudioPlayers, toggleAttachmentAudioPopover } from '~/utils/attachment-audio-player'
 import { MARKDOWN_BLANK_LINE_SENTINEL, encodeMarkdownExtraBlankLines, isMarkdownBlankLineSentinel, markMarkdownPreservedBlankLineElements } from '~/utils/markdown-blank-lines'
 import { getFixedEditorClipInsets, insertEditorValueFallback, insertTableCellAtomicValue, replaceTableSourceLine, resolveTableAttachmentTarget, type TableAttachmentTarget } from '~/utils/vditor-table-attachment'
 import { resolveTableTrackResize, resolveTableTrailingScrollReserve, type TableTrackResizeSession } from '~/utils/table-resize-session'
@@ -1094,9 +1094,19 @@ const setupAttachmentPreview = () => {
   const toggleAttachmentPreview = (target: HTMLElement, fallbackInfo?: EditorAttachmentInfo | null) => {
     const anchor = target.closest('a.editor-attachment-link') as HTMLAnchorElement | null
     const markerNode = target.closest<HTMLElement>('[data-type="a"].editor-attachment-node')
-    const block = (target.closest('p, li') || markerNode?.closest('p, li') || target.closest('pre.vditor-reset, .vditor-ir__node, pre') || anchor?.closest('pre.vditor-reset, .vditor-ir__node, p, li, pre') || target.parentElement) as HTMLElement | null
     const info = attachmentInfoFromAnchor(anchor) || attachmentInfoFromIrLabel(target) || fallbackInfo
-    if (!info || !block || !root.contains(block)) return
+    if (!info) return
+
+    const tableCell = target.closest<HTMLTableCellElement>('td,th')
+    if (info.type === 'audio' && tableCell && root.contains(tableCell)) {
+      removeAttachmentPreviews()
+      toggleAttachmentAudioPopover(target, { src: info.url, name: info.name })
+      return
+    }
+
+    closeAttachmentAudioPopover()
+    const block = (target.closest('p, li') || markerNode?.closest('p, li') || target.closest('pre.vditor-reset, .vditor-ir__node, pre') || anchor?.closest('pre.vditor-reset, .vditor-ir__node, p, li, pre') || target.parentElement) as HTMLElement | null
+    if (!block || !root.contains(block)) return
 
     if (info.type === 'image' || info.type === 'video') {
       removeAttachmentPreviews()
@@ -2618,31 +2628,14 @@ const expandedTableAttachmentsByType = (type: EditorAttachmentInfo['type']) => {
 }
 
 const removeExpandedTableAudioPreview = () => {
-  if (typeof document === 'undefined') return
-  const preview = document.querySelector<HTMLElement>('.editor-expanded-audio-preview')
-  if (!preview) return
-  destroyAttachmentAudioPlayers(preview)
-  preview.remove()
+  closeAttachmentAudioPopover()
 }
 
 const previewExpandedTableAttachment = (attachment: EditorAttachmentInfo, event: MouseEvent | KeyboardEvent) => {
   const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
   if (attachment.type === 'audio') {
-    const current = document.querySelector<HTMLElement>('.editor-expanded-audio-preview')
-    if (current?.dataset.audioUrl === attachment.url) {
-      removeExpandedTableAudioPreview()
-      return
-    }
-    removeExpandedTableAudioPreview()
-    const dialog = target?.closest<HTMLElement>('.editor-table-expand-dialog')
-    const header = dialog?.querySelector<HTMLElement>('.editor-table-expand-header')
-    if (!dialog || !header) return
-    const preview = document.createElement('div')
-    preview.className = 'editor-expanded-audio-preview'
-    preview.dataset.audioUrl = attachment.url
-    preview.innerHTML = buildAttachmentAudioPlaceholderHtml({ src: attachment.url, name: attachment.name })
-    header.insertAdjacentElement('afterend', preview)
-    enhanceAttachmentAudioPlayers(preview)
+    if (!target) return
+    toggleAttachmentAudioPopover(target, { src: attachment.url, name: attachment.name })
     return
   }
   if (attachment.type === 'file') {

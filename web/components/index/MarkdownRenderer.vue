@@ -758,7 +758,7 @@ const openRenderedTableExpand = async (table: HTMLTableElement) => {
   clone.classList.add('noise-scrollable-table', 'rendered-table-expanded-table')
   const availableWidth = Math.min(1680, Math.max(320, window.innerWidth - 48)) - 24
   applyAdaptiveRenderedTableColumns(clone, availableWidth, renderedTableManualColumnWidths)
-  clone.querySelectorAll('button:not(.noise-rendered-table-expand-button)').forEach((button) => button.remove())
+  clone.querySelectorAll('button:not(.noise-rendered-table-expand-button):not(.noise-table-audio-trigger)').forEach((button) => button.remove())
   clone.querySelectorAll('.noise-rendered-table-expand-button').forEach((button) => button.remove())
   renderedTableExpandHtml.value = clone.outerHTML
   if (renderedTableExpandCloseTimer) {
