@@ -608,7 +608,7 @@ const positionAttachmentAudioPopover = (state: ActiveAttachmentAudioPopover) => 
   const viewportWidth = (viewport?.width || window.innerWidth) / scale
   const viewportHeight = (viewport?.height || window.innerHeight) / scale
   const anchorRect = state.anchor.getBoundingClientRect()
-  const anchorLeft = (anchorRect.left + viewportOffsetLeft) / scale
+  const anchorCenter = (anchorRect.left + anchorRect.width / 2 + viewportOffsetLeft) / scale
   const anchorTop = (anchorRect.top + viewportOffsetTop) / scale
   const anchorBottom = (anchorRect.bottom + viewportOffsetTop) / scale
   const popoverWidth = state.popover.offsetWidth || Math.min(720, Math.max(280, viewportWidth - 24))
@@ -626,7 +626,7 @@ const positionAttachmentAudioPopover = (state: ActiveAttachmentAudioPopover) => 
   const placement = fitsBelow ? 'below' : fitsAbove ? 'above' : 'viewport'
   const top = fitsBelow ? belowTop : fitsAbove ? aboveTop : clamp(belowTop, minTop, maxTop)
 
-  state.popover.style.left = `${clamp(anchorLeft, minLeft, maxLeft)}px`
+  state.popover.style.left = `${clamp(anchorCenter - popoverWidth / 2, minLeft, maxLeft)}px`
   state.popover.style.top = `${top}px`
   state.popover.dataset.placement = placement
 }

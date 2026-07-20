@@ -196,5 +196,30 @@ assert.match(
   /\.noise-table-audio-popover\s*\{[\s\S]*?position:\s*fixed;[\s\S]*?width:\s*min\(720px, calc\(100vw - 24px\)\);[\s\S]*?z-index:\s*10060;/,
   'the full player must float above table dialogs with viewport-bounded width',
 )
+assert.match(
+  playerStyle,
+  /\.noise-table-audio-trigger \.noise-table-audio-trigger__svg\s*\{[\s\S]*?width:\s*18px;[\s\S]*?height:\s*18px;/,
+  'the table attachment speaker must outrank Vditor svg auto-sizing and match the player control icon box',
+)
+assert.match(
+  playerStyle,
+  /\.noise-table-audio-trigger__svg path\s*\{[\s\S]*?transform-box:\s*fill-box;[\s\S]*?transform-origin:\s*center;[\s\S]*?transform:\s*scale\(1\.2\);/,
+  'the table attachment speaker path must use the same optical scale as the player volume icon',
+)
+assert.match(
+  playerSource,
+  /const anchorCenter = [\s\S]*?anchorRect\.width \/ 2[\s\S]*?anchorCenter - popoverWidth \/ 2/,
+  'the audio popover must align its center to the attachment marker center before viewport clamping',
+)
+assert.match(
+  playerStyle,
+  /--audio-control-bg:\s*#f3f4f6;[\s\S]*?:where\(html\.dark,[^}]+?\.noise-attachment-audio\s*\{[\s\S]*?--audio-card-bg:\s*#202a36;[\s\S]*?--audio-control-bg:\s*#2b3645;/,
+  'audio player surfaces must use opaque fills in both light and dark themes',
+)
+assert.match(
+  playerStyle,
+  /\.noise-table-audio-trigger\s*\{[\s\S]*?--file-card-icon-bg:\s*#f3f4f6;[\s\S]*?:where\(html\.dark,[^}]+?\.noise-table-audio-trigger\s*\{[\s\S]*?--file-card-bg:\s*#202a36;[\s\S]*?--file-card-icon-bg:\s*#2b3645;/,
+  'table audio markers must use opaque fills in both light and dark themes',
+)
 
 console.log('attachment audio player checks passed')

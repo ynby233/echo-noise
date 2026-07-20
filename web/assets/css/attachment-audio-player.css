@@ -4,12 +4,12 @@
   --audio-card-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);
   --audio-card-text: #111827;
   --audio-card-muted: #6b7280;
-  --audio-control-bg: rgba(15, 23, 42, 0.055);
+  --audio-control-bg: #f3f4f6;
   --audio-control-border: rgba(15, 23, 42, 0.08);
   --audio-control-text: #374151;
-  --audio-track: rgba(15, 23, 42, 0.1);
+  --audio-track: #e5e7eb;
   --audio-accent: #ea580c;
-  --audio-accent-soft: rgba(249, 115, 22, 0.16);
+  --audio-accent-soft: #ffedd5;
   box-sizing: border-box;
   display: grid;
   width: calc(100% - 16px);
@@ -141,10 +141,10 @@
 .noise-attachment-audio.is-playing .noise-attachment-audio__play,
 .noise-attachment-audio.is-muted .noise-attachment-audio__mute {
   --nw-action-border: rgba(249, 115, 22, 0.42);
-  --nw-action-bg: rgba(249, 115, 22, 0.18);
+  --nw-action-bg: #ffedd5;
   --nw-action-text: #c2410c;
   --nw-action-hover-border: rgba(249, 115, 22, 0.58);
-  --nw-action-hover-bg: rgba(249, 115, 22, 0.28);
+  --nw-action-hover-bg: #fed7aa;
   --nw-action-hover-text: #fff;
 }
 
@@ -270,17 +270,17 @@
 }
 
 :where(html.dark, .theme-dark, .vditor--dark, .is-dark) .noise-attachment-audio {
-  --audio-card-bg: rgba(15, 23, 42, 0.52);
+  --audio-card-bg: #202a36;
   --audio-card-border: rgba(255, 255, 255, 0.12);
   --audio-card-shadow: 0 16px 32px rgba(2, 6, 23, 0.52);
   --audio-card-text: #fff;
   --audio-card-muted: #9ca3af;
-  --audio-control-bg: rgba(255, 255, 255, 0.065);
+  --audio-control-bg: #2b3645;
   --audio-control-border: rgba(255, 255, 255, 0.12);
   --audio-control-text: #cbd5e1;
-  --audio-track: rgba(255, 255, 255, 0.14);
+  --audio-track: #475569;
   --audio-accent: #fb923c;
-  --audio-accent-soft: rgba(249, 115, 22, 0.22);
+  --audio-accent-soft: #431407;
 }
 
 :where(html.dark, .theme-dark, .vditor--dark, .is-dark) .noise-attachment-audio__status {
@@ -290,10 +290,10 @@
 :where(html.dark, .theme-dark, .vditor--dark, .is-dark) .noise-attachment-audio.is-playing .noise-attachment-audio__play,
 :where(html.dark, .theme-dark, .vditor--dark, .is-dark) .noise-attachment-audio.is-muted .noise-attachment-audio__mute {
   --nw-action-border: rgba(251, 146, 60, 0.46);
-  --nw-action-bg: rgba(249, 115, 22, 0.26);
+  --nw-action-bg: #7c2d12;
   --nw-action-text: #fed7aa;
   --nw-action-hover-border: rgba(251, 146, 60, 0.66);
-  --nw-action-hover-bg: rgba(249, 115, 22, 0.36);
+  --nw-action-hover-bg: #9a3412;
   --nw-action-hover-text: #fff;
 }
 
@@ -309,7 +309,7 @@
   --file-card-bg-hover: #f8fafc;
   --file-card-border: rgba(15, 23, 42, 0.1);
   --file-card-shadow: 0 10px 24px rgba(15, 23, 42, 0.1);
-  --file-card-icon-bg: rgba(15, 23, 42, 0.06);
+  --file-card-icon-bg: #f3f4f6;
   --file-card-icon-border: rgba(15, 23, 42, 0.08);
   --file-card-icon: #374151;
   --file-card-name: #111827;
@@ -351,6 +351,9 @@
 .markdown-preview th .noise-table-audio-trigger.noise-attachment-file,
 .rendered-table-expand-scroll td .noise-table-audio-trigger.noise-attachment-file,
 .rendered-table-expand-scroll th .noise-table-audio-trigger.noise-attachment-file {
+  --file-card-bg: #fff;
+  --file-card-bg-hover: #f8fafc;
+  --file-card-icon-bg: #f3f4f6;
   grid-template-columns: 32px minmax(0, 1fr) 20px !important;
   gap: 6px !important;
   width: 100% !important;
@@ -377,11 +380,17 @@
   display: none !important;
 }
 
-.noise-table-audio-trigger__svg {
+.noise-table-audio-trigger .noise-table-audio-trigger__svg {
   display: block;
   width: 18px;
   height: 18px;
   pointer-events: none;
+}
+
+.noise-table-audio-trigger__svg path {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(1.2);
 }
 
 .noise-table-audio-trigger__icon {
@@ -438,15 +447,22 @@
 }
 
 :where(html.dark, .theme-dark, .vditor--dark, .is-dark) .noise-table-audio-trigger {
-  --file-card-bg: rgba(15, 23, 42, 0.52);
-  --file-card-bg-hover: rgba(30, 41, 59, 0.68);
+  --file-card-bg: #202a36;
+  --file-card-bg-hover: #283444;
   --file-card-border: rgba(255, 255, 255, 0.12);
   --file-card-shadow: 0 12px 26px rgba(2, 6, 23, 0.42);
-  --file-card-icon-bg: rgba(255, 255, 255, 0.06);
+  --file-card-icon-bg: #2b3645;
   --file-card-icon-border: rgba(255, 255, 255, 0.12);
   --file-card-icon: #cbd5e1;
   --file-card-name: #fff;
   --file-card-meta: #9ca3af;
+}
+
+.markdown-preview.theme-dark .noise-table-audio-trigger.noise-attachment-file,
+.rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .noise-table-audio-trigger.noise-attachment-file {
+  --file-card-bg: #202a36;
+  --file-card-bg-hover: #283444;
+  --file-card-icon-bg: #2b3645;
 }
 
 .markdown-preview .noise-table-audio-trigger .noise-attachment-file__action,
