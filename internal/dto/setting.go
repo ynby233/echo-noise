@@ -11,6 +11,8 @@ type SettingDto struct {
 	SmtpPort                 *int                   `json:"smtpPort"`
 	SmtpUser                 *string                `json:"smtpUser"`
 	SmtpPass                 *string                `json:"smtpPass"`
+	ClearSmtpUser            *bool                  `json:"clearSmtpUser"`
+	ClearSmtpPass            *bool                  `json:"clearSmtpPass"`
 	SmtpFrom                 *string                `json:"smtpFrom"`
 	SmtpEncryption           *string                `json:"smtpEncryption"`
 	SmtpTLS                  *bool                  `json:"smtpTLS"`

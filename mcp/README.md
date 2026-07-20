@@ -737,3 +737,8 @@ await client.callTool({ name: '删除', input: { id: '123' } })
 
 - `stdio` 用于握手与完整交互；为避免容器端口冲突，第二实例设置 `NOTE_HTTP_PORT=0`。
 - `sse` 用于事件订阅与握手展示，不承担完整 MCP 交互。需要调用工具时使用 HTTP 或 `stdio`。
+# Visibility
+
+`publish` and `update` accept `visibility: public | users | contacts | private`. The MCP server also sends the legacy `private` field for compatibility. If `visibility` is omitted, `private=true` maps to `private`; otherwise the legacy MCP default remains `public`.
+
+Authenticated read tools use `NOTE_TOKEN` or `NOTE_SESSION`, including page, search, tag, message, status, calendar, and config reads.

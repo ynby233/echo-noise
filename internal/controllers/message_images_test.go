@@ -1,13 +1,143 @@
 package controllers
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/gin-contrib/sessions"
+	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/internal/models"
 )
+
+func TestBearerTokenIdentifiesOrdinaryViewerAcrossMessageReads(t *testing.T) {
+	db, r, owner, _ := setupCommentAccountTest(t)
+	owner.Token = "ordinary-read-token"
+	if err := db.Model(&owner).Update("token", owner.Token).Error; err != nil {
+		t.Fatalf("update owner token: %v", err)
+	}
+	messages := []models.Message{
+		{Content: "owner users", UserID: owner.ID, Visibility: "users", Private: true},
+		{Content: "owner contacts", UserID: owner.ID, Visibility: "contacts", Private: true},
+		{Content: "owner private", UserID: owner.ID, Visibility: "private", Private: true},
+	}
+	for i := range messages {
+		if err := db.Create(&messages[i]).Error; err != nil {
+			t.Fatalf("create %s message: %v", messages[i].Visibility, err)
+		}
+	}
+	r.GET("/messages/:id", GetMessage)
+	r.POST("/messages/page", GetMessagesByPage)
+
+	for _, message := range messages {
+		req := httptest.NewRequest(http.MethodGet, "/messages/"+strconvFormatUint(message.ID), nil)
+		req.Header.Set("Authorization", "Bearer "+owner.Token)
+		response := httptest.NewRecorder()
+		r.ServeHTTP(response, req)
+		var payload struct {
+			Code int             `json:"code"`
+			Data json.RawMessage `json:"data"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("decode %s detail response: %v", message.Visibility, err)
+		}
+		var returned models.Message
+		if payload.Code == 1 {
+			_ = json.Unmarshal(payload.Data, &returned)
+		}
+		if payload.Code != 1 || returned.ID != message.ID {
+			t.Fatalf("ordinary token could not read own %s message: %s", message.Visibility, response.Body.String())
+		}
+	}
+
+	body := bytes.NewBufferString(`{"page":1,"pageSize":100}`)
+	req := httptest.NewRequest(http.MethodPost, "/messages/page", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+owner.Token)
+	response := httptest.NewRecorder()
+	r.ServeHTTP(response, req)
+	var pagePayload struct {
+		Code int `json:"code"`
+		Data struct {
+			Items []models.Message `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &pagePayload); err != nil {
+		t.Fatalf("decode page response: %v", err)
+	}
+	seen := map[string]bool{}
+	for _, message := range pagePayload.Data.Items {
+		seen[message.Visibility] = true
+	}
+	for _, visibility := range []string{"users", "contacts", "private"} {
+		if !seen[visibility] {
+			t.Fatalf("ordinary token page omitted own %s message: %s", visibility, response.Body.String())
+		}
+	}
+}
+
+func TestCurrentReadUserRejectsExpiredSessionAndFallsBackToBearer(t *testing.T) {
+	db, r, owner, _ := setupCommentAccountTest(t)
+	owner.Token = "expired-session-bearer"
+	if err := db.Model(&owner).Update("token", owner.Token).Error; err != nil {
+		t.Fatalf("update owner token: %v", err)
+	}
+
+	r.GET("/seed-expired", func(c *gin.Context) {
+		session := sessions.Default(c)
+		session.Set("user_id", owner.ID)
+		session.Set("username", owner.Username)
+		session.Set("is_admin", false)
+		session.Set("login_expire_at", time.Now().Add(-time.Hour).Unix())
+		if err := session.Save(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.Status(http.StatusNoContent)
+	})
+	r.GET("/read-identity", func(c *gin.Context) {
+		user, ok := currentReadUser(c)
+		c.JSON(http.StatusOK, gin.H{"authenticated": ok, "user_id": user.ID})
+	})
+
+	seed := httptest.NewRecorder()
+	r.ServeHTTP(seed, httptest.NewRequest(http.MethodGet, "/seed-expired", nil))
+	if seed.Code != http.StatusNoContent {
+		t.Fatalf("seed expired session: %d %s", seed.Code, seed.Body.String())
+	}
+	cookies := seed.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatal("seed expired session did not return a cookie")
+	}
+
+	request := func(token string) map[string]any {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/read-identity", nil)
+		for _, cookie := range cookies {
+			req.AddCookie(cookie)
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		response := httptest.NewRecorder()
+		r.ServeHTTP(response, req)
+		var payload map[string]any
+		if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("decode read identity response: %v", err)
+		}
+		return payload
+	}
+
+	if payload := request(""); payload["authenticated"] != false || payload["user_id"] != float64(0) {
+		t.Fatalf("expired session remained authenticated: %#v", payload)
+	}
+	if payload := request(owner.Token); payload["authenticated"] != true || payload["user_id"] != float64(owner.ID) {
+		t.Fatalf("bearer fallback did not identify viewer after session expiry: %#v", payload)
+	}
+}
 
 func TestGetAllImagesScopesPrivateMessagesByViewer(t *testing.T) {
 	db, r, owner, _ := setupCommentAccountTest(t)

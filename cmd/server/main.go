@@ -87,6 +87,24 @@ func main() {
 	// 设置路由
 	r := routers.SetupRouter()
 
+	// Migrate historical public cloud-attachment URLs in the background. The
+	// job is retry-safe and intentionally does not delay server availability.
+	go func() {
+		run := func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
+			defer cancel()
+			if err := services.MigrateLegacyCloudAttachments(ctx); err != nil {
+				log.Printf("历史云附件安全迁移暂未完成，将自动重试: %v", err)
+			}
+		}
+		run()
+		ticker := time.NewTicker(6 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			run()
+		}
+	}()
+
 	// 创建HTTP服务器
 	srv := &http.Server{
 		Addr:         config.Config.Server.Host + ":" + config.Config.Server.Port,

@@ -3,6 +3,7 @@ package vocechat
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -24,7 +25,7 @@ func TestPlainPasswordStoreUpsertDeleteAndPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat password store: %v", err)
 	}
-	if got := info.Mode().Perm(); got != 0600 {
+	if got := info.Mode().Perm(); runtime.GOOS != "windows" && got != 0600 {
 		t.Fatalf("password store permissions = %o, want 600", got)
 	}
 

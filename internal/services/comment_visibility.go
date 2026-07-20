@@ -135,7 +135,7 @@ func CanViewCommentInThread(message models.Message, comment models.Comment, comm
 		return false
 	}
 	messageVisibility := StoredMessageVisibility(message)
-	if messageVisibility == MessageVisibilityPrivate || messageVisibility == MessageVisibilityContacts {
+	if messageVisibility == MessageVisibilityPrivate {
 		return hasViewer && viewerID == message.UserID
 	}
 
@@ -158,7 +158,24 @@ func CanViewCommentInThread(message models.Message, comment models.Comment, comm
 			return true
 		case "users":
 			return hasViewer
-		case "contacts", "private":
+		case "contacts":
+			if !hasViewer {
+				return false
+			}
+			if messageVisibility == MessageVisibilityContacts {
+				return true
+			}
+			if viewerID == message.UserID {
+				return true
+			}
+			if comment.UserID != nil && *comment.UserID == viewerID {
+				return true
+			}
+			if comment.UserID != nil && CanViewVoceChatContactAudience(*comment.UserID, viewerID) {
+				return true
+			}
+			return parent != nil && parent.UserID != nil && *parent.UserID == viewerID
+		case "private":
 			if !hasViewer {
 				return false
 			}
@@ -179,7 +196,21 @@ func CanViewCommentInThread(message models.Message, comment models.Comment, comm
 		return true
 	case "users":
 		return hasViewer
-	case "contacts", "private":
+	case "contacts":
+		if !hasViewer {
+			return false
+		}
+		if messageVisibility == MessageVisibilityContacts {
+			return true
+		}
+		if viewerID == message.UserID {
+			return true
+		}
+		if comment.UserID != nil && *comment.UserID == viewerID {
+			return true
+		}
+		return comment.UserID != nil && CanViewVoceChatContactAudience(*comment.UserID, viewerID)
+	case "private":
 		if !hasViewer {
 			return false
 		}

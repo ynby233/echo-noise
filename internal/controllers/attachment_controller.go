@@ -18,9 +18,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/rcy1314/echo-noise/config"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
+	"gorm.io/gorm"
 )
 
 type AttachmentInfo struct {
@@ -368,6 +370,10 @@ func DeleteImageAttachment(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "删除失败"})
 		return
 	}
+	if err := deleteLocalAttachmentGrants("image", base); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "文件已删除，但授权记录清理失败"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": true})
 }
 
@@ -407,6 +413,10 @@ func DeleteVideoAttachment(c *gin.Context) {
 	}
 	if err := os.Remove(p); err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "删除失败"})
+		return
+	}
+	if err := deleteLocalAttachmentGrants("video", base); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "文件已删除，但授权记录清理失败"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": true})
@@ -450,6 +460,10 @@ func DeleteAudioAttachment(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "删除失败"})
 		return
 	}
+	if err := deleteLocalAttachmentGrants("audio", base); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "文件已删除，但授权记录清理失败"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": true})
 }
 
@@ -491,7 +505,15 @@ func DeleteOtherAttachment(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "删除失败"})
 		return
 	}
+	if err := deleteLocalAttachmentGrants("file", base); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "文件已删除，但授权记录清理失败"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": true})
+}
+
+func deleteLocalAttachmentGrants(kind string, name string) error {
+	return database.DB.Where("kind = ? AND name = ?", kind, name).Delete(&models.LocalAttachmentGrant{}).Error
 }
 
 func DownloadAttachmentZip(c *gin.Context) {
@@ -798,13 +820,7 @@ func listCloudAttachments(siteCfg models.SiteConfig, keep func(name string) bool
 	if err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(publicBaseURL) == "" {
-		return []AttachmentInfo{}, nil
-	}
 	origin, prefix := splitPublicBaseURL(publicBaseURL)
-	if strings.TrimSpace(origin) == "" {
-		return []AttachmentInfo{}, nil
-	}
 
 	var messages []models.Message
 	database.DB.Select("id", "content", "image_url", "created_at").Order("created_at DESC").Find(&messages)
@@ -832,16 +848,16 @@ func listCloudAttachments(siteCfg models.SiteConfig, keep func(name string) bool
 			}
 			// 兼容历史对象：PublicBaseURL 可能带有 path 前缀（如 /note），但对象 key 未必包含该前缀。
 			// 如果 key 不带 prefix，则在生成展示 URL 时补齐 prefix；但 Key 字段仍返回真实对象 key（用于删除）。
-			keyForURL := cleanKey
-			if prefix != "" && !strings.HasPrefix(cleanKey, prefix+"/") {
-				keyForURL = prefix + "/" + cleanKey
+			record, err := ensureCloudAttachmentObject(cleanKey, name, "")
+			if err != nil {
+				return nil, err
 			}
-			urlPath := origin + "/" + escapeObjectKeyForURL(keyForURL)
+			urlPath := "/api/cloud-attachments/" + record.PublicID + "/" + url.PathEscape(name)
 			modAt := time.Time{}
 			if obj.LastModified != nil {
 				modAt = *obj.LastModified
 			}
-			belongs := findBelongsCloud(messages, cleanKey, origin, prefix)
+			belongs := findBelongsCloud(messages, cleanKey, origin, prefix, record.PublicID)
 			out = append(out, AttachmentInfo{
 				Key:        cleanKey,
 				Name:       name,
@@ -860,7 +876,7 @@ func listCloudAttachments(siteCfg models.SiteConfig, keep func(name string) bool
 	return out, nil
 }
 
-func findBelongsCloud(messages []models.Message, key string, origin string, prefix string) []BelongItem {
+func findBelongsCloud(messages []models.Message, key string, origin string, prefix string, publicID string) []BelongItem {
 	var out []BelongItem
 	cleanKey := strings.TrimLeft(key, "/")
 	url1 := origin + "/" + escapeObjectKeyForURL(cleanKey)
@@ -870,15 +886,16 @@ func findBelongsCloud(messages []models.Message, key string, origin string, pref
 	}
 	needle3 := "/" + cleanKey
 	needle4 := "/" + url.PathEscape(cleanKey)
+	proxyNeedle := "/api/cloud-attachments/" + publicID + "/"
 
 	for _, m := range messages {
 		has := false
-		if strings.Contains(m.Content, url1) || (url2 != "" && strings.Contains(m.Content, url2)) ||
+		if strings.Contains(m.Content, proxyNeedle) || strings.Contains(m.Content, url1) || (url2 != "" && strings.Contains(m.Content, url2)) ||
 			strings.Contains(m.Content, needle3) || strings.Contains(m.Content, needle4) {
 			has = true
 		}
 		if !has {
-			if strings.Contains(m.ImageURL, url1) || (url2 != "" && strings.Contains(m.ImageURL, url2)) ||
+			if strings.Contains(m.ImageURL, proxyNeedle) || strings.Contains(m.ImageURL, url1) || (url2 != "" && strings.Contains(m.ImageURL, url2)) ||
 				strings.Contains(m.ImageURL, needle3) || strings.Contains(m.ImageURL, needle4) {
 				has = true
 			}
@@ -894,15 +911,50 @@ func findBelongsCloud(messages []models.Message, key string, origin string, pref
 	return out
 }
 
+func ensureCloudAttachmentObject(key string, originalName string, contentType string) (models.CloudAttachmentObject, error) {
+	var object models.CloudAttachmentObject
+	if err := database.DB.Where("object_key = ?", key).First(&object).Error; err == nil && object.ID != 0 {
+		return object, nil
+	}
+	object = models.CloudAttachmentObject{
+		PublicID:     uuid.NewString(),
+		ObjectKey:    key,
+		OriginalName: originalName,
+		ContentType:  contentType,
+	}
+	if err := database.DB.Create(&object).Error; err != nil {
+		return models.CloudAttachmentObject{}, err
+	}
+	return object, nil
+}
+
 func deleteCloudAttachment(siteCfg models.SiteConfig, key string) error {
 	cli, bucket, _, err := newAttachmentS3Client(siteCfg)
 	if err != nil {
 		return err
 	}
 	cleanKey := strings.TrimLeft(key, "/")
+	var mappings []models.CloudAttachmentObject
+	if err := database.DB.Where("object_key = ?", cleanKey).Find(&mappings).Error; err != nil {
+		return err
+	}
 	_, err = cli.DeleteObject(context.Background(), &s3.DeleteObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(cleanKey),
 	})
+	if err == nil {
+		err = database.DB.Transaction(func(tx *gorm.DB) error {
+			publicIDs := make([]string, 0, len(mappings))
+			for _, mapping := range mappings {
+				publicIDs = append(publicIDs, mapping.PublicID)
+			}
+			if len(publicIDs) > 0 {
+				if err := tx.Where("kind = ? AND name IN ?", "cloud", publicIDs).Delete(&models.LocalAttachmentGrant{}).Error; err != nil {
+					return err
+				}
+			}
+			return tx.Where("object_key = ?", cleanKey).Delete(&models.CloudAttachmentObject{}).Error
+		})
+	}
 	return err
 }

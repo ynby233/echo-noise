@@ -576,3 +576,8 @@ curl -N "$MCP_BASE_URL/mcp/sse"
 - MCP 说明：`mcp/README.md`
 - API 路由：`internal/routers/routers.go`
 - MCP 服务入口：`mcp/server.js`
+# 可见范围约定
+
+发布或更新内容时优先显式传入 `visibility`：`public`（公开）、`users`（登录用户）、`contacts`（VoceChat 联系人）、`private`（仅自己）。同时发送兼容字段 `private = visibility !== "public"`。未指定时沿用调用面的既有默认值；MCP 和浏览器扩展默认公开，网页发布器默认登录用户可见。
+
+读取消息、分页、搜索、标签、日历、状态和配置时，如果已有 Token 或 Session，必须携带认证信息，不能以匿名身份读取后误判内容不存在。

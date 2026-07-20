@@ -89,11 +89,80 @@ func checkUser(c *gin.Context) (*models.User, error) {
 }
 
 func currentMessageViewer(c *gin.Context) (*uint, bool) {
-	if uid, ok := commentAuthUserID(c); ok {
-		id := uid
-		return &id, commentAuthIsAdmin(c)
+	if user, ok := currentReadUser(c); ok {
+		id := user.ID
+		return &id, user.IsAdmin
 	}
 	return nil, false
+}
+
+// currentReadUser resolves identity for public read endpoints. Session/context
+// identity wins; a valid Bearer token is a read-only fallback and is not copied
+// into Gin context, so it cannot accidentally authorize session-protected writes.
+func currentReadUser(c *gin.Context) (models.User, bool) {
+	if value, exists := c.Get("user_id"); exists {
+		uid, ok := commentUint(value)
+		if !ok || uid == 0 {
+			return models.User{}, false
+		}
+		if user, err := services.GetUserByID(uid); err == nil && user != nil && user.ID != 0 {
+			return *user, true
+		}
+	}
+
+	session := sessions.Default(c)
+	if uid, ok := commentUint(session.Get("user_id")); ok && uid > 0 {
+		if user, err := services.GetUserByID(uid); err == nil && user != nil && user.ID != 0 {
+			expireAt := parseReadSessionExpireAt(session.Get("login_expire_at"))
+			if !user.IsAdmin && expireAt > 0 && time.Now().Unix() > expireAt {
+				session.Clear()
+				_ = session.Save()
+			} else {
+				return *user, true
+			}
+		}
+	}
+
+	parts := strings.Fields(strings.TrimSpace(c.GetHeader("Authorization")))
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return models.User{}, false
+	}
+	token := strings.TrimSpace(parts[1])
+	if token == "" || strings.EqualFold(token, "null") {
+		return models.User{}, false
+	}
+	db, err := database.GetDB()
+	if err != nil {
+		return models.User{}, false
+	}
+	var user models.User
+	if err := db.Where("token = ? AND token <> ''", token).First(&user).Error; err != nil || user.ID == 0 {
+		return models.User{}, false
+	}
+	return user, true
+}
+
+func parseReadSessionExpireAt(value interface{}) int64 {
+	switch expireAt := value.(type) {
+	case int64:
+		return expireAt
+	case int:
+		return int64(expireAt)
+	case uint:
+		return int64(expireAt)
+	case uint64:
+		if expireAt > uint64(^uint64(0)>>1) {
+			return 0
+		}
+		return int64(expireAt)
+	case float64:
+		return int64(expireAt)
+	case string:
+		parsed, _ := strconv.ParseInt(strings.TrimSpace(expireAt), 10, 64)
+		return parsed
+	default:
+		return 0
+	}
 }
 
 const (
@@ -493,6 +562,10 @@ func GetMessagesByPage(c *gin.Context) {
 	}
 
 	// 作者筛选（可选）
+	if currentUserID == nil {
+		currentUserID, isAdmin = currentMessageViewer(c)
+	}
+
 	var authorID *uint
 	if aid := c.Query("authorId"); aid != "" {
 		if v, err := strconv.ParseUint(aid, 10, 64); err == nil {
@@ -545,8 +618,12 @@ func GetMessagesByPage(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.OK(pageQueryResult, models.GetMessagesByPageSuccess))
 }
 func GetStatus(c *gin.Context) {
-	currentUserID, _ := commentAuthUserID(c)
-	status, err := services.GetStatus(currentUserID)
+	currentUserID, _ := currentMessageViewer(c)
+	viewerID := uint(0)
+	if currentUserID != nil {
+		viewerID = *currentUserID
+	}
+	status, err := services.GetStatus(viewerID)
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string](models.GetStatusFailMessage))
 		return
@@ -840,6 +917,8 @@ func hasAdminOnlySettingFields(setting dto.SettingDto) bool {
 		setting.SmtpPort != nil ||
 		setting.SmtpUser != nil ||
 		setting.SmtpPass != nil ||
+		setting.ClearSmtpUser != nil ||
+		setting.ClearSmtpPass != nil ||
 		setting.SmtpFrom != nil ||
 		setting.SmtpEncryption != nil ||
 		setting.SmtpTLS != nil ||
@@ -936,6 +1015,14 @@ func UpdateSetting(c *gin.Context) {
 		settingMap["smtpPass"] = *setting.SmtpPass
 		hasSiteConfigUpdate = true
 	}
+	if setting.ClearSmtpUser != nil {
+		settingMap["clearSmtpUser"] = *setting.ClearSmtpUser
+		hasSiteConfigUpdate = true
+	}
+	if setting.ClearSmtpPass != nil {
+		settingMap["clearSmtpPass"] = *setting.ClearSmtpPass
+		hasSiteConfigUpdate = true
+	}
 	if setting.SmtpFrom != nil {
 		settingMap["smtpFrom"] = *setting.SmtpFrom
 		hasSiteConfigUpdate = true
@@ -987,13 +1074,22 @@ func UpdateSetting(c *gin.Context) {
 		return
 	}
 
+	if setting.AttachmentStorageEnabled != nil || setting.AttachmentStorageConfig != nil {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
+			defer cancel()
+			if err := services.MigrateLegacyCloudAttachments(ctx); err != nil {
+				log.Printf("历史云附件安全迁移暂未完成，将自动重试: %v", err)
+			}
+		}()
+	}
 	c.JSON(http.StatusOK, dto.OK[any](nil, models.UpdateSettingSuccessMessage))
 }
 
 func GetFrontendConfig(c *gin.Context) {
 	viewerUserID := uint(0)
-	if userID, ok := commentAuthUserID(c); ok {
-		viewerUserID = userID
+	if user, ok := currentReadUser(c); ok {
+		viewerUserID = user.ID
 	}
 
 	config, err := services.GetFrontendConfig(viewerUserID)
@@ -1503,8 +1599,10 @@ func GetComments(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取评论失败"})
 		return
 	}
-	viewerID, hasViewer := commentAuthUserID(c)
-	isAdmin := commentAuthIsAdmin(c)
+	viewerID, hasViewer, isAdmin := uint(0), false, false
+	if user, ok := currentReadUser(c); ok {
+		viewerID, hasViewer, isAdmin = user.ID, true, user.IsAdmin
+	}
 	commentMap := services.CommentMap(comments)
 	visibleComments := make([]models.Comment, 0, len(comments))
 	for _, comment := range comments {
@@ -1570,8 +1668,10 @@ func GetCommentCounts(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取评论数量失败"})
 		return
 	}
-	viewerID, hasViewer := commentAuthUserID(c)
-	isAdmin := commentAuthIsAdmin(c)
+	viewerID, hasViewer, isAdmin := uint(0), false, false
+	if user, ok := currentReadUser(c); ok {
+		viewerID, hasViewer, isAdmin = user.ID, true, user.IsAdmin
+	}
 	counts := make(map[uint]int64)
 	for _, comment := range comments {
 		if comment.ParentID != nil {
@@ -1678,11 +1778,15 @@ func PostComment(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "评论可见范围不能宽于当前笔记"})
 		return
 	}
-	if (messageVisibility == services.MessageVisibilityPrivate || messageVisibility == services.MessageVisibilityContacts) && currentUser.ID != message.UserID {
-		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "受限帖子仅作者可评论或回复"})
+	if messageVisibility == services.MessageVisibilityPrivate && currentUser.ID != message.UserID {
+		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "私密帖子仅作者可评论或回复"})
 		return
 	}
 	viewerIDForMessage := currentUser.ID
+	if messageVisibility == services.MessageVisibilityContacts && !services.CanInteractWithMessage(message, &viewerIDForMessage) {
+		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限评论该内容"})
+		return
+	}
 	if !services.CanViewMessage(message, &viewerIDForMessage, commentAuthIsAdmin(c)) {
 		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限评论该内容"})
 		return
@@ -2294,12 +2398,7 @@ func ToggleMessageLike(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": map[string]interface{}{"liked": liked, "like_count": count}})
 }
 func GetMessagesCalendar(c *gin.Context) {
-	var currentUserID *uint
-	isAdmin := false
-	if uid, ok := commentAuthUserID(c); ok {
-		currentUserID = &uid
-		isAdmin = commentAuthIsAdmin(c)
-	}
+	currentUserID, isAdmin := currentMessageViewer(c)
 
 	var authorID *uint
 	if aid := strings.TrimSpace(c.Query("authorId")); aid != "" {
@@ -4079,7 +4178,8 @@ func computeUpgradeInfo() (bool, string, string, error) {
 	ch := make(chan result, 3)
 	go func() {
 		var v struct {
-			Name, LastUpdated string `json:"name" json:"last_updated"`
+			Name        string `json:"name"`
+			LastUpdated string `json:"last_updated"`
 		}
 		if get("https://hub.docker.com/v2/repositories/noise233/echo-noise/tags/latest", &v) == nil && strings.TrimSpace(v.LastUpdated) != "" {
 			ch <- result{true, tagInfo{v.Name, v.LastUpdated}}
@@ -4090,7 +4190,8 @@ func computeUpgradeInfo() (bool, string, string, error) {
 	go func() {
 		var v struct {
 			Results []struct {
-				Name, LastUpdated string `json:"name" json:"last_updated"`
+				Name        string `json:"name"`
+				LastUpdated string `json:"last_updated"`
 			} `json:"results"`
 		}
 		if get("https://hub.docker.com/v2/repositories/noise233/echo-noise/tags?page_size=1&ordering=last_updated", &v) == nil && len(v.Results) > 0 && strings.TrimSpace(v.Results[0].LastUpdated) != "" {
@@ -4102,7 +4203,8 @@ func computeUpgradeInfo() (bool, string, string, error) {
 	}()
 	go func() {
 		var v struct {
-			TagName, PublishedAt string `json:"tag_name" json:"published_at"`
+			TagName     string `json:"tag_name"`
+			PublishedAt string `json:"published_at"`
 		}
 		if get("https://api.github.com/repos/noise233/echo-noise/releases/latest", &v) == nil && strings.TrimSpace(v.PublishedAt) != "" {
 			ch <- result{true, tagInfo{v.TagName, v.PublishedAt}}
@@ -4147,7 +4249,8 @@ func computeUpgradeInfo() (bool, string, string, error) {
 		if resp, err := client.Get("https://hub.docker.com/v2/repositories/noise233/echo-noise/tags/" + cur); err == nil {
 			defer resp.Body.Close()
 			var curTag struct {
-				Name, LastUpdated string `json:"name" json:"last_updated"`
+				Name        string `json:"name"`
+				LastUpdated string `json:"last_updated"`
 			}
 			if json.NewDecoder(resp.Body).Decode(&curTag) == nil {
 				curUpdated = strings.TrimSpace(curTag.LastUpdated)

@@ -169,6 +169,83 @@ func TestFrontendConfigExposesVoceChatStatusWithoutSecrets(t *testing.T) {
 	}
 }
 
+func TestFrontendConfigNeverReturnsCredentialsAndBlankSavePreservesThem(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	admin := mustCreateUser(t, models.User{Username: "admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+	member := mustCreateUser(t, models.User{Username: "member", Password: models.HashPassword("member"), Token: models.GenerateToken(32)})
+	secrets := models.SiteConfig{
+		GithubClientSecret:         "github-secret",
+		StorageAccessKey:           "backup-access",
+		StorageSecretKey:           "backup-secret",
+		AttachmentStorageAccessKey: "attachment-access",
+		AttachmentStorageSecretKey: "attachment-secret",
+		SmtpEnabled:                true,
+		SmtpHost:                   "smtp.example.test",
+		SmtpPort:                   465,
+		SmtpUser:                   "smtp-user",
+		SmtpPass:                   "smtp-secret",
+		SmtpEncryption:             "ssl",
+	}
+	if err := db.Create(&secrets).Error; err != nil {
+		t.Fatalf("create site config: %v", err)
+	}
+
+	for _, viewerID := range []uint{0, member.ID, admin.ID} {
+		config, err := GetFrontendConfig(viewerID)
+		if err != nil {
+			t.Fatalf("get frontend config for viewer %d: %v", viewerID, err)
+		}
+		frontend := config["frontendSettings"].(map[string]interface{})
+		storage := config["storageConfig"].(map[string]interface{})
+		attachments := config["attachmentStorageConfig"].(map[string]interface{})
+		for key, got := range map[string]interface{}{
+			"githubClientSecret":  frontend["githubClientSecret"],
+			"storageAccessKey":    storage["accessKey"],
+			"storageSecretKey":    storage["secretKey"],
+			"attachmentAccessKey": attachments["accessKey"],
+			"attachmentSecretKey": attachments["secretKey"],
+			"smtpUser":            config["smtpUser"],
+			"smtpPass":            config["smtpPass"],
+		} {
+			if got != "" {
+				t.Fatalf("viewer %d received %s = %#v", viewerID, key, got)
+			}
+		}
+		wantConfigured := viewerID == admin.ID
+		if got := frontend["githubClientSecretConfigured"]; got != wantConfigured {
+			t.Fatalf("viewer %d github configured flag = %#v, want %v", viewerID, got, wantConfigured)
+		}
+		if got := storage["accessKeyConfigured"]; got != wantConfigured {
+			t.Fatalf("viewer %d backup access configured flag = %#v, want %v", viewerID, got, wantConfigured)
+		}
+		if got := attachments["secretKeyConfigured"]; got != wantConfigured {
+			t.Fatalf("viewer %d attachment secret configured flag = %#v, want %v", viewerID, got, wantConfigured)
+		}
+		if got := config["smtpPassConfigured"]; got != wantConfigured {
+			t.Fatalf("viewer %d smtp configured flag = %#v, want %v", viewerID, got, wantConfigured)
+		}
+	}
+
+	if err := UpdateFrontendSetting(admin.ID, map[string]interface{}{
+		"frontendSettings":        map[string]interface{}{"githubClientSecret": ""},
+		"storageConfig":           map[string]interface{}{"accessKey": "", "secretKey": ""},
+		"attachmentStorageConfig": map[string]interface{}{"accessKey": "", "secretKey": ""},
+		"smtpUser":                "",
+		"smtpPass":                "",
+	}); err != nil {
+		t.Fatalf("save sanitized config: %v", err)
+	}
+	var saved models.SiteConfig
+	if err := db.First(&saved, secrets.ID).Error; err != nil {
+		t.Fatalf("reload site config: %v", err)
+	}
+	if saved.GithubClientSecret != "github-secret" || saved.StorageAccessKey != "backup-access" || saved.StorageSecretKey != "backup-secret" ||
+		saved.AttachmentStorageAccessKey != "attachment-access" || saved.AttachmentStorageSecretKey != "attachment-secret" ||
+		saved.SmtpUser != "smtp-user" || saved.SmtpPass != "smtp-secret" {
+		t.Fatalf("blank sanitized save overwrote credentials: %#v", saved)
+	}
+}
+
 func TestApplyVoceChatConfigRejectsAdminDisplayNameWhenPasswordLoginIsUsed(t *testing.T) {
 	config := &models.SiteConfig{}
 	err := applyVoceChatConfigUpdate(config, map[string]interface{}{

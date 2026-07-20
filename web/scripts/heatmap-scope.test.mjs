@@ -12,7 +12,7 @@ const messageService = await readFile(join(repoRoot, 'internal/services/message_
 
 assert.match(
   heatmap,
-  /defineProps<\{\s*activeTab\?:\s*string\s*\}>\(\)/,
+  /defineProps<\{\s*activeTab\?:\s*string;\s*compact\?:\s*boolean\s*\}>\(\)/,
   'heatmap must accept the active tab so it can distinguish latest and personal scopes'
 )
 assert.match(
@@ -46,13 +46,13 @@ assert.doesNotMatch(
   'heatmap must not call the unscoped calendar endpoint directly'
 )
 
-const heatmapInstances = indexPage.match(/<HeatmapWidget\s+:active-tab="activeTab"\s*\/>/g) || []
+const heatmapInstances = indexPage.match(/<HeatmapWidget\b(?=[^>]*:active-tab="activeTab")[^>]*\/>/g) || []
 assert.equal(heatmapInstances.length, 3, 'all home-page heatmap instances must receive activeTab')
-assert.doesNotMatch(indexPage, /<HeatmapWidget\s*\/>/, 'home page must not keep unscoped heatmap instances')
+assert.doesNotMatch(indexPage, /<HeatmapWidget\b(?![^>]*:active-tab="activeTab")[^>]*\/>/, 'home page must not keep unscoped heatmap instances')
 
 assert.match(
   calendarController,
-  /commentAuthUserID\(c\)[\s\S]*?commentAuthIsAdmin\(c\)[\s\S]*?c\.Query\("authorId"\)[\s\S]*?GetMessagesGroupByDate\(currentUserID,\s*isAdmin,\s*authorID\)/,
+  /currentUserID,\s*isAdmin\s*:=\s*currentMessageViewer\(c\)[\s\S]*?c\.Query\("authorId"\)[\s\S]*?GetMessagesGroupByDate\(currentUserID,\s*isAdmin,\s*authorID\)/,
   'calendar controller must pass viewer and author scope to the service'
 )
 assert.match(

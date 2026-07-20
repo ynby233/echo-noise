@@ -404,7 +404,7 @@ func TestVoceChatContactCacheAllowsContactsVisibility(t *testing.T) {
 		if apiKey != "alice-token" {
 			t.Fatalf("contacts api key = %q", apiKey)
 		}
-		return []vocechat.UserContact{{TargetUID: 202}}, nil
+		return []vocechat.UserContact{voceChatContactWithStatus(202, vocechat.ContactStatusAdded)}, nil
 	})
 
 	bobID := bob.ID
@@ -427,6 +427,46 @@ func TestVoceChatContactCacheAllowsContactsVisibility(t *testing.T) {
 	charlieID := charlie.ID
 	if _, err := GetMessageByIDForViewer(message.ID, &charlieID, false); err == nil {
 		t.Fatalf("non-contact viewer should not access contacts detail")
+	}
+}
+
+func TestVoceChatContactCacheOnlyGrantsAddedContactsVisibility(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	storePath := filepath.Join(t.TempDir(), "plain-passwords.db")
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
+	enableVoceChatContactsForTest(t)
+
+	alice := mustCreateUser(t, models.User{Username: "status_alice", Password: models.HashPassword("alice"), Token: models.GenerateToken(32), VoceChatEmail: "alice@vc.com", VoceChatUserID: "101"})
+	added := mustCreateUser(t, models.User{Username: "status_added", Password: models.HashPassword("added"), Token: models.GenerateToken(32), VoceChatEmail: "added@vc.com", VoceChatUserID: "202"})
+	blocked := mustCreateUser(t, models.User{Username: "status_blocked", Password: models.HashPassword("blocked"), Token: models.GenerateToken(32), VoceChatEmail: "blocked@vc.com", VoceChatUserID: "303"})
+	if err := vocechat.NewPlainPasswordStore(storePath).UpsertUserVoceChatPassword(alice.ID, alice.Username, "alice-vc-password", alice.VoceChatEmail, alice.VoceChatUserID); err != nil {
+		t.Fatalf("seed author plain password: %v", err)
+	}
+	message := models.Message{Content: "status-filtered contacts", Username: alice.Username, UserID: alice.ID, Visibility: MessageVisibilityContacts}
+	if err := ApplyMessageVisibilityForSave(&message); err != nil {
+		t.Fatalf("apply contacts visibility: %v", err)
+	}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatalf("create contacts message: %v", err)
+	}
+
+	stubVoceChatPasswordLogin(t, func(context.Context, vocechat.Config, string, string) (*vocechat.LoginResponse, error) {
+		return &vocechat.LoginResponse{Token: "alice-token"}, nil
+	})
+	stubVoceChatListContacts(t, func(context.Context, vocechat.Config, string) ([]vocechat.UserContact, error) {
+		return []vocechat.UserContact{
+			voceChatContactWithStatus(202, vocechat.ContactStatusAdded),
+			voceChatContactWithStatus(303, vocechat.ContactStatusBlocked),
+		}, nil
+	})
+
+	addedID := added.ID
+	if _, err := GetMessageByIDForViewer(message.ID, &addedID, false); err != nil {
+		t.Fatalf("added contact should see contacts message: %v", err)
+	}
+	blockedID := blocked.ID
+	if _, err := GetMessageByIDForViewer(message.ID, &blockedID, false); err == nil {
+		t.Fatalf("blocked contact must not see contacts message")
 	}
 }
 
@@ -458,7 +498,7 @@ func TestVoceChatContactCacheUsesConfiguredAdminForSysAdminAuthor(t *testing.T) 
 		if apiKey != "admin-token" {
 			t.Fatalf("contacts api key = %q", apiKey)
 		}
-		return []vocechat.UserContact{{TargetUID: 202}}, nil
+		return []vocechat.UserContact{voceChatContactWithStatus(202, vocechat.ContactStatusAdded)}, nil
 	})
 
 	bobID := bob.ID
@@ -646,6 +686,12 @@ func stubVoceChatListContacts(t *testing.T, fn voceChatListContactsFunc) {
 	original := voceChatListContacts
 	voceChatListContacts = fn
 	t.Cleanup(func() { voceChatListContacts = original })
+}
+
+func voceChatContactWithStatus(uid int64, status string) vocechat.UserContact {
+	contact := vocechat.UserContact{TargetUID: uid}
+	contact.ContactInfo.Status = status
+	return contact
 }
 
 func sameStringSlice(a []string, b []string) bool {

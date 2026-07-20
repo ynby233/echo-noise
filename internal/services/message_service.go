@@ -130,9 +130,34 @@ func CanViewMessage(message models.Message, userID *uint, isAdmin bool) bool {
 	}
 }
 
+func canViewFreshVoceChatContact(authorID uint, viewerID uint) bool {
+	if authorID == 0 || viewerID == 0 {
+		return false
+	}
+	ok, err := repository.IsFreshVoceChatContact(authorID, viewerID, time.Now().UTC())
+	return err == nil && ok
+}
+
+func CanViewVoceChatContactAudience(authorID uint, viewerID uint) bool {
+	if authorID == 0 || viewerID == 0 {
+		return false
+	}
+	if authorID == viewerID {
+		return true
+	}
+	if !voceChatContactsVisibilityEnabled() {
+		return false
+	}
+	_ = EnsureVoceChatContactCacheForAuthor(authorID)
+	return canViewFreshVoceChatContact(authorID, viewerID)
+}
+
 func CanInteractWithMessage(message models.Message, userID *uint) bool {
-	if userID != nil && *userID != 0 && message.UserID != *userID && StoredMessageVisibility(message) == MessageVisibilityContacts {
-		_ = EnsureVoceChatContactCacheForAuthor(message.UserID)
+	if userID == nil || *userID == 0 {
+		return false
+	}
+	if StoredMessageVisibility(message) == MessageVisibilityContacts {
+		return CanViewVoceChatContactAudience(message.UserID, *userID)
 	}
 	return CanViewMessage(message, userID, false)
 }
@@ -592,7 +617,12 @@ func UpdateMessage(messageID uint, content *string, private *bool, visibility *s
 	if createdAt != nil {
 		message.CreatedAt = *createdAt
 	}
-	if err := database.DB.Save(message).Error; err != nil {
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(message).Error; err != nil {
+			return err
+		}
+		return models.SyncLocalAttachmentGrants(tx, message)
+	}); err != nil {
 		return nil, fmt.Errorf("更新消息失败: %v", err)
 	}
 	return message, nil

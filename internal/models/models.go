@@ -21,7 +21,7 @@ type UserStatus struct {
 	IsAdmin                     bool   `json:"is_admin"`
 	AvatarURL                   string `json:"avatar_url,omitempty"`
 	VoceChatEmail               string `json:"voce_chat_email,omitempty"`
-	VoceChatNotificationEnabled bool   `json:"voce_chat_notification_enabled"`
+	VoceChatNotificationEnabled *bool  `json:"voce_chat_notification_enabled,omitempty"`
 	Status                      Status `json:"status"`
 }
 
@@ -38,6 +38,33 @@ type Message struct {
 	Pinned     bool      `gorm:"default:false" json:"pinned"`
 	LikeCount  int       `gorm:"default:0" json:"like_count"`
 	Liked      bool      `gorm:"-" json:"liked"`
+}
+
+type CloudAttachmentObject struct {
+	ID                   uint      `gorm:"primaryKey" json:"id"`
+	PublicID             string    `gorm:"type:varchar(64);not null;uniqueIndex" json:"public_id"`
+	ObjectKey            string    `gorm:"type:varchar(1024);not null;uniqueIndex" json:"-"`
+	OriginalName         string    `gorm:"type:varchar(255);not null" json:"original_name"`
+	ContentType          string    `gorm:"type:varchar(191)" json:"content_type"`
+	ContentHash          string    `gorm:"type:varchar(64);index" json:"-"`
+	LegacyObjectKey      string    `gorm:"type:varchar(1024);index" json:"-"`
+	LegacyCleanupPending bool      `gorm:"default:false;index" json:"-"`
+	CreatedAt            time.Time `json:"created_at"`
+	UpdatedAt            time.Time `json:"updated_at"`
+}
+
+// LocalAttachmentGrant persists the last visibility under which a message
+// referenced a local file. Records intentionally survive message deletion or
+// reference removal so formerly restricted files cannot become public again.
+type LocalAttachmentGrant struct {
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	Kind        string    `gorm:"type:varchar(20);not null;uniqueIndex:idx_local_attachment_grant" json:"kind"`
+	Name        string    `gorm:"type:varchar(255);not null;uniqueIndex:idx_local_attachment_grant" json:"name"`
+	MessageID   uint      `gorm:"not null;uniqueIndex:idx_local_attachment_grant;index" json:"message_id"`
+	OwnerUserID uint      `gorm:"not null;index" json:"owner_user_id"`
+	Visibility  string    `gorm:"type:varchar(20);not null;default:private;index" json:"visibility"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // MessageLike 点赞记录（用于幂等与取消点赞）

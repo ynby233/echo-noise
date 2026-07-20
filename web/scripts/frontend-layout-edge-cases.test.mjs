@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const root = resolve(process.cwd())
+const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const read = (path) => readFileSync(resolve(root, path), 'utf8').replace(/\r\n?/g, '\n')
 const assert = (condition, message) => {
   if (!condition) {
@@ -32,6 +33,7 @@ const fancyboxVideoClose = read('utils/fancybox-video-close.ts')
 const mediaFancybox = read('utils/media-fancybox.ts')
 const userStore = read('store/user.ts')
 const floatingCss = read('assets/css/tailwind.css')
+const attachmentAudioCss = read('assets/css/attachment-audio-player.css')
 const backendRouter = read('../internal/routers/routers.go')
 const ensureFancyboxVideoThumbnailBody = fancyboxVideoClose.slice(
   fancyboxVideoClose.indexOf('export const ensureFancyboxVideoThumbnail'),
@@ -450,8 +452,8 @@ assert(
     builtinComments.includes('.comment-refresh-button {') &&
     builtinComments.includes('--nw-action-bg:var(--comment-toolbar-control-bg);') &&
     builtinComments.includes('.builtin-comments.comment-theme-dark .comment-refresh-button,') &&
-    builtinComments.includes(':global(html.dark) .builtin-comments .comment-refresh-button,') &&
-    builtinComments.includes(':global(.dark) .builtin-comments .comment-refresh-button {') &&
+    builtinComments.includes(':global(html.dark .builtin-comments .comment-refresh-button),') &&
+    builtinComments.includes(':global(.dark .builtin-comments .comment-refresh-button) {') &&
     builtinComments.includes('--nw-action-bg: rgba(51, 65, 85, .96);'),
   'guestbook comments must expose the same spinning refresh action button as search and notifications'
 )
@@ -497,11 +499,12 @@ assert(
 )
 
 assert(
-  homePage.includes('rounded bg-blue-500 text-white text-[10px]">{{ isLoggedIn ? \'用户\' : \'访客\' }}</span>') &&
+  homePage.includes('class="profile-badge profile-badge-user">{{ isLoggedIn ? \'用户\' : \'访客\' }}</span>') &&
+    homePage.includes('.profile-badge-user {\n  background: rgb(59, 130, 246);') &&
     homePage.includes('<UButton variant="ghost" color="blue" class="auth-btn" aria-label="登录"') &&
     homePage.includes('.stats-login-prompt:hover { color: #2563eb; }') &&
     homePage.includes('html.dark .stats-login-prompt { color: #60a5fa; }') &&
-    !homePage.includes('rounded bg-indigo-500 text-white text-[10px]">{{ isLoggedIn ? \'用户\' : \'访客\' }}</span>') &&
+    !homePage.includes('.profile-badge-user {\n  background: rgb(99, 102, 241);') &&
     !homePage.includes('<UButton variant="ghost" color="indigo" class="auth-btn" aria-label="登录"') &&
     !homePage.includes('color: rgba(79, 70, 229, 0.92);') &&
     !homePage.includes('.stats-login-prompt:hover { color: #4338ca; }'),
@@ -553,8 +556,8 @@ assert(
     messageList.includes('width: calc(100% + 2rem + 2px);') &&
     messageList.includes('max-width: calc(56rem + 2px);') &&
     messageList.includes('margin: 0 calc(-1rem - 1px);') &&
-    messageList.includes("class=\"w-full h-auto overflow-hidden flex flex-col justify-between\"") &&
-    messageList.includes("['content-container', innerContainerClass, listThemeClass]") &&
+    messageList.includes("'message-list-item w-full h-auto overflow-hidden flex flex-col justify-between'") &&
+    messageList.includes("['content-container', innerContainerClass, listThemeClass, { 'is-dark': isContentDark") &&
     !messageList.includes('search-result-note-card') &&
     !messageList.includes('search-result-note-frame') &&
     !messageList.includes('search-result-note-frame--bounded') &&
@@ -622,7 +625,7 @@ assert(
     messageList.includes('line-height: 20px;') &&
     !messageList.includes('.content-container.search-result-note-card') &&
     !messageList.includes('.search-results-panel.is-dark .content-container.search-result-note-card') &&
-    !messageList.includes('background: rgba(255, 255, 255, 0.72);') &&
+    messageList.includes('background: rgba(255, 255, 255, .72) !important;') &&
     !messageList.includes('class="date-filter-bar"') &&
     !messageList.includes('筛选结果：'),
   'filtered search results must keep guestbook/notification-aligned panel width, spacing, count typography, original note width, direct note-card framing, and empty state without a 0-count heading'
@@ -648,7 +651,7 @@ assert(
     addForm.includes("const FULL_IMAGE_ATTACHMENTS_MARKER = '<!-- noise-full-image-attachments -->'") &&
     addForm.includes('fullImageAttachments: !!fullImageAttachments.value') &&
     addForm.includes('content: buildPublishContent(MessageContent.value)') &&
-    addForm.includes("applyImageGridHTML(raw, keepImagesFullSize)") &&
+    addForm.includes('const applyImageGridHTML = (html: string, keepImagesFullSize = false) => {') &&
     addForm.includes('.editor-preview :deep(.full-image-attachment img)') &&
     markdownRenderer.includes('const FULL_IMAGE_ATTACHMENTS_MARKER_RE = /<!--\\s*noise-full-image-attachments\\s*-->\\s*/gi') &&
     markdownRenderer.includes('const keepImagesFullSize = hasFullImageAttachmentsMarker(markdown ?? \'\')') &&
@@ -668,7 +671,7 @@ assert(
   audioRecorder.includes("positionFloatingMenu(triggerRef.value, menuRef.value, menuStyle, 292, 'above-align-left')") &&
   audioRecorder.includes("const canPause = computed(() => (isRecording.value || isPaused.value) && !!recorder && !isProcessing.value)") &&
   audioRecorder.includes("const canStop = computed(() => (isRecording.value || isPaused.value) && !!recorder && !isProcessing.value)") &&
-  audioRecorder.includes('class="floating-action-btn clear-action-btn nw-action-btn nw-action-btn--label nw-action-btn--danger"') &&
+  audioRecorder.includes('class="audio-recorder-action nw-action-btn nw-action-btn--label nw-action-btn--danger"') &&
   audioRecorder.includes('analyser.getByteTimeDomainData(raw)') &&
   audioRecorder.includes('spectrumLevels[i] = spectrumLevels[i] * 0.68 + target * 0.32') &&
   audioRecorder.includes('drawRoundRect(x, y, barWidth, barHeight, 999)') &&
@@ -687,10 +690,10 @@ assert(
     mediaUpload.includes("type UploadRequestKind = UploadKind | 'auto'") &&
     mediaUpload.includes('export const detectUploadKind = (file: File): UploadKind =>') &&
     mediaUpload.includes("if (kind === 'file') return '/attachments/upload'") &&
-    backendRouter.includes('r.Static("/api/files", attachmentDir)') &&
+    backendRouter.includes('registerLocalAttachmentRoute(r, "/api/files", "file", attachmentDir)') &&
     backendRouter.includes('authRoutes.POST("/attachments/upload", controllers.UploadAttachment)') &&
     markdownRenderer.includes('const ATTACHMENT_LINK_REG = /\\[(图片附件|视频附件|音频附件)：([^\\]]+)\\]\\(([^)\\s]+)\\)/g') &&
-    markdownRenderer.includes("if (kindLabel === '文件附件')") &&
+    markdownRenderer.includes("const fileMatch = label.match(/^文件附件：(.+)$/)") &&
     markdownRenderer.includes('noise-attachment-file') &&
     markdownRenderer.includes("label.match(/^文件附件：(.+)$/)") &&
     markdownRenderer.includes('buildAttachmentHtml(kindLabel, name, url)') &&
@@ -711,7 +714,7 @@ assert(
     vditorEditor.includes('文件附件') &&
     vditorEditor.includes('attachmentInfoFromIrNode') &&
     vditorEditor.includes('attachmentInfoFromIrLabel') &&
-    vditorEditor.includes("root.querySelectorAll('[data-type=\"a\"]')") &&
+    vditorEditor.includes("root.querySelectorAll<HTMLElement>('[data-type=\"a\"]')") &&
     vditorEditor.includes("target.closest<HTMLElement>('.vditor-ir__link.editor-attachment-link')") &&
     vditorEditor.includes("target.closest('a.editor-attachment-link')") &&
     vditorEditor.includes('showAttachmentGallery(getAttachmentInfosByType(info.type), info, target)') &&
@@ -783,9 +786,9 @@ assert(
     vditorEditor.includes('if (!options.allowStoredFallback) return null') &&
     vditorEditor.includes('prepareEditorAttachmentInsertionTarget') &&
     vditorEditor.includes('consumePreparedEditorTableAttachmentCell') &&
-    vditorEditor.includes('const preparedAttachmentCell = isAttachmentInsert ? consumePreparedEditorTableAttachmentCell() : null') &&
-    vditorEditor.includes('? (preparedAttachmentCell || getCurrentEditorTableCell(undefined, { allowStoredFallback: false }))') &&
-    vditorEditor.includes('vditorInstance.insertValue(nextValue)') &&
+    vditorEditor.includes('const preparedAttachmentTarget = isAttachmentInsert ? consumePreparedEditorTableAttachmentCell() : null') &&
+    vditorEditor.includes('? (preparedAttachmentTarget?.cell || getCurrentEditorTableCell(undefined, { allowStoredFallback: false }))') &&
+    vditorEditor.includes('insertEditorValueFallback(vditorInstance, nextValue, hasAttachmentMarker(nextValue))') &&
     vditorEditor.includes('if (hasAttachmentMarker(nextValue)) clearPreparedEditorAttachmentInsertionTarget()') &&
     !vditorEditor.includes('const insertAttachmentSourceValue =') &&
     !vditorEditor.includes('const shouldRestoreTableSelection = hasAttachmentMarker(text)') &&
@@ -793,7 +796,7 @@ assert(
     !vditorEditor.includes('if (!cell && restoreLastEditorSelection())') &&
     vditorEditor.includes("range.insertNode(textNode)") &&
     vditorEditor.includes("inputType: 'insertText'") &&
-    vditorEditor.includes('if (insertValueIntoCurrentTableCell(val)) return') &&
+    vditorEditor.includes('if (insertValueIntoCurrentTableCell(nextValue)) return') &&
     vditorEditor.includes('enhanceEditorTables(root)') &&
     vditorEditor.includes('deleteEditorTable(table, tableIndex)') &&
     vditorEditor.includes('findMarkdownTableBlock') &&
@@ -844,8 +847,8 @@ assert(
     vditorEditor.includes('if (expandedTableDirty.value && !syncExpandedTableToEditor())') &&
     vditorEditor.includes('editableRowsFromRenderedTable') &&
     vditorEditor.includes('htmlTableCellToEditorText(cell as HTMLTableCellElement)') &&
-    vditorEditor.includes('const rows = block ? editableRowsFromTableBlock(block) : editableRowsFromRenderedTable(table)') &&
-    vditorEditor.includes('cell.innerHTML = editorTextToHtmlTableCellSource(value)') &&
+    vditorEditor.includes('const rows = block ? mergeRenderedTableEdgeBreaks(editableRowsFromTableBlock(block), renderedRows) : renderedRows') &&
+    vditorEditor.includes('targetCell.innerHTML = editorTextToHtmlTableCellSource(text)') &&
     vditorEditor.includes(':value="expandedTableCellEditorText(rowIndex, cellIndex)"') &&
     vditorEditor.includes('@input="updateExpandedTableCellText(rowIndex, cellIndex, $event)"') &&
     !vditorEditor.includes('v-model="expandedTableRows[rowIndex][cellIndex]"') &&
@@ -900,14 +903,15 @@ assert(
     vditorEditor.includes('let editorTableCompositionTarget: PendingEditorTableCellSync | null = null') &&
     vditorEditor.includes('const rememberEditorTableCompositionCell = (cell: HTMLTableCellElement | null) =>') &&
     vditorEditor.includes('const cleanupEditorTableCompositionDrift = (data = \'\') =>') &&
-    vditorEditor.includes('rememberEditorTableCompositionCell(getCurrentEditorTableCell(event))') &&
+    vditorEditor.includes('const compositionCell = getCurrentEditorTableCell(event)') &&
+    vditorEditor.includes('rememberEditorTableCompositionCell(compositionCell)') &&
     vditorEditor.includes('cleanupEditorTableCompositionDrift(event.data || \'\')') &&
     vditorEditor.includes('syncEditorTableCellDomToSource(cell, { restoreCaret: true })') &&
     vditorEditor.includes('const duplicatedTargetLine = targetLines.includes(afterTrimmed)') &&
     vditorEditor.includes('setEditorTableDomCellText(cell, before)') &&
-    vditorEditor.includes('renderAttachmentMarkersInEditableRoot(cell)') &&
-    vditorEditor.includes("root.querySelectorAll<HTMLElement>('td,th').forEach((cell) => renderAttachmentMarkersInEditableRoot(cell))") &&
-    vditorEditor.includes('createEditorAttachmentAnchor(info)') &&
+    vditorEditor.includes('cell.innerHTML = editorTextToDomTableCellHtml(value)') &&
+    vditorEditor.includes('editorTextToDomTableCellHtml') &&
+    vditorEditor.includes('const editorAttachmentInfoToTableMarkerHtml = (info: EditorAttachmentInfo) => {') &&
     vditorEditor.includes("inputType === 'insertText'") &&
     vditorEditor.includes('insertTextIntoCellDom(cell, text)') &&
     !vditorEditor.includes('const handleEditorTableTextKeydown = (event: KeyboardEvent, cell: HTMLTableCellElement) =>') &&
@@ -936,8 +940,8 @@ assert(
     vditorEditor.includes("const TABLE_CELL_CARET_ANCHOR = '\\u200b'") &&
     vditorEditor.includes('const TABLE_CELL_CARET_ANCHOR_RE = /\\u200b/g') &&
     vditorEditor.includes('const stripEditorTableCaretAnchors = (value: string) =>') &&
-    vditorEditor.includes('const caretNode = document.createTextNode(TABLE_CELL_CARET_ANCHOR)') &&
-    vditorEditor.includes('range.setStart(caretNode, caretNode.data.length)') &&
+    vditorEditor.includes('const caretNode = createEditorTableCaretAnchorNode()') &&
+    vditorEditor.includes('range.setStart(caretNode, 0)') &&
     vditorEditor.includes("stripEditorTableCaretAnchors(clone.textContent || '').replace(/[\\u200b\\u200c\\ufeff]/g, '').replace(/\\u00a0/g, ' ')") &&
     vditorEditor.includes('const nextValue = getEditorValueWithPendingTableSync()') &&
     !vditorEditor.includes("const nextValue = vditorInstance?.getValue?.() || ''") &&
@@ -975,7 +979,7 @@ assert(
     vditorEditor.includes('return normalized || MARKDOWN_EMPTY_TABLE_CELL') &&
     vditorEditor.includes('const normalizeMarkdownTableEmptyCellEntities = (content: string) =>') &&
     vditorEditor.includes('const ensureSafeEditorTableMarkdown = (content: string) => normalizeMarkdownTableEmptyCellEntities(repairUnsafeMarkdownTableCellBreaks(content))') &&
-    vditorEditor.includes('vditorInstance?.setValue(ensureSafeEditorTableMarkdown(props.modelValue))') &&
+    vditorEditor.includes('vditorInstance?.setValue(ensureSafeEditorTableMarkdown(encodeMarkdownExtraBlankLines(props.modelValue)))') &&
     vditorEditor.includes("replace(/\\|/g, () => '&#124;')") &&
     vditorEditor.includes('decodeMarkdownTablePipeEntities') &&
     vditorEditor.includes('const getEditorRootElement = () =>') &&
@@ -1000,14 +1004,13 @@ assert(
     vditorEditor.includes('if (hasUnsafeMarkdownTableStructure(syncedValue)) return fallbackValue || ensureSafeEditorTableMarkdown(syncedValue)') &&
     vditorEditor.includes('if (result?.value && !hasUnsafeMarkdownTableStructure(result.value)) return result.value') &&
     vditorEditor.includes('const tableRows = Array.from({ length: rowCount }') &&
-    vditorEditor.includes('MARKDOWN_EMPTY_TABLE_CELL_RE.test(text) ?') &&
-    vditorEditor.includes('if (MARKDOWN_EMPTY_TABLE_CELL_RE.test(source)) return') &&
+    vditorEditor.includes("if (MARKDOWN_EMPTY_TABLE_CELL_RE.test(text.trim())) return ''") &&
+    vditorEditor.includes("if (MARKDOWN_EMPTY_TABLE_CELL_RE.test(source)) return ''") &&
     !vditorEditor.includes('const hasVisibleContent = rows.some((row) => row.some((cell) => cell.trim()))') &&
     vditorEditor.includes('const needsSafeTableValue = !!pendingEditorTableCellSync || !!getEditorTables().length || hasUnsafeMarkdownTableStructure(content)') &&
     vditorEditor.includes('if (needsSafeTableValue) {') &&
     vditorEditor.includes('emitSafeValue()') &&
-    vditorEditor.includes('window.setTimeout(emitSafeValue, 48)') &&
-    vditorEditor.includes('window.setTimeout(emitSafeValue, 160)') &&
+    vditorEditor.includes('window.setTimeout(emitSafeValue, 0)') &&
     vditorEditor.includes('return\n    }\n    emitEditorValue(content)') &&
     !vditorEditor.includes('const nextValue = needsSafeTableValue') &&
     !vditorEditor.includes('const nextValue = needsSafeTableValue\n      ? getEditorValueWithPendingTableSync()') &&
@@ -1020,7 +1023,7 @@ assert(
     vditorEditor.includes('cache: {') &&
     vditorEditor.includes('enable: false,') &&
     vditorEditor.includes("id: \"vue-vditor\"") &&
-    vditorEditor.includes('const getEditorValueWithDomTableSync = (sourceValue = vditorInstance?.getValue?.() || \'\') =>') &&
+    vditorEditor.includes('const getEditorValueWithDomTableSync = (sourceValue = getRawVditorValue()) =>') &&
     vditorEditor.includes('tableBlockFromDataset(table, blocks) || findMarkdownTableBlock(blocks, getRenderedTableRows(table), tableIndex)') &&
     vditorEditor.includes('if (!replacements.length) return fallbackValue || sourceValue') &&
     vditorEditor.includes('if (!pendingEditorTableCellSync) return fallbackValue || syncedValue || currentValue') &&
@@ -1037,11 +1040,11 @@ assert(
     !/const insertEditorSoftLineBreak[\s\S]*?document\.execCommand[\s\S]*?emitEditorSoftBreakInput/.test(vditorEditor) &&
     !vditorEditor.includes("editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '\\n' }))") &&
     vditorEditor.includes('const hasEditorSoftBreakDom = () =>') &&
-    vditorEditor.includes('(getEditorTables().length || hasEditorSoftBreakDom()) ? getEditorDomContentFallback() : \'\'') &&
-    /const insertEditorSoftLineBreak[\s\S]*?const lineBreak = document\.createElement\('br'\)[\s\S]*?const caretNode = document\.createTextNode\(TABLE_CELL_CARET_ANCHOR\)[\s\S]*?emitEditorSoftBreakInput\(event\)/.test(vditorEditor) &&
+    vditorEditor.includes('const needsDomFallback = getEditorTables().length || hasEditorSoftBreakDom() || hasEditorPlainBlockDom()') &&
+    /const insertEditorSoftLineBreak[\s\S]*?isPlainBlankLineBlock\(block\)[\s\S]*?insertPreservedBlankLineAfter\(block!\)[\s\S]*?emitEditorSoftBreakInput\(event\)/.test(vditorEditor) &&
     vditorEditor.includes('range.selectNodeContents(cell)') &&
     vditorEditor.includes("const lineBreak = document.createElement('br')") &&
-    vditorEditor.includes("const caretNode = document.createTextNode(TABLE_CELL_CARET_ANCHOR)") &&
+    vditorEditor.includes('const caretNode = createEditorTableCaretAnchorNode()') &&
     vditorEditor.includes('normalizeEditableHtmlTable(table)') &&
     !vditorEditor.includes('removeMarkdownTableDividerRow(table, block || null)') &&
     vditorEditor.includes("Vditor IR owns the table model") &&
@@ -1091,8 +1094,8 @@ assert(
     vditorEditor.includes('startExpandedTableColumnResize') &&
     !vditorEditor.includes('rowIndex < expandedTableRows.length - 1') &&
     !vditorEditor.includes('cellIndex < row.length - 1') &&
-    vditorEditor.includes('cursor: row-resize;') &&
-    vditorEditor.includes('cursor: col-resize;') &&
+    vditorEditor.includes('cursor: var(--table-row-resize-cursor);') &&
+    vditorEditor.includes('cursor: var(--table-column-resize-cursor);') &&
     vditorEditor.includes('resize: none;') &&
     !vditorEditor.includes('resize: vertical;') &&
     vditorEditor.includes('updateExpandedTableAvailableWidth()') &&
@@ -1131,8 +1134,8 @@ assert(
     vditorEditor.includes("root.addEventListener('pointerout', onTablePointerOut, true)") &&
     !vditorEditor.includes('editor-table-select-handle') &&
     !vditorEditor.includes('.vditor-reset table.editor-table-selected') &&
-    markdownRenderer.includes('.markdown-preview :deep(.noise-attachment-audio)') &&
-    !markdownRenderer.includes('.markdown-preview :deep(.noise-attachment-audio--table)') &&
+    attachmentAudioCss.includes('.noise-attachment-audio {') &&
+    !attachmentAudioCss.includes('.noise-attachment-audio--table') &&
     markdownRenderer.includes('enhanceRenderedTables()') &&
     markdownRenderer.includes('noise-table-scroll') &&
     markdownRenderer.includes('noise-scrollable-table') &&
@@ -1169,8 +1172,8 @@ assert(
     markdownRenderer.includes('startRenderedTableResize') &&
     !markdownRenderer.includes('rowIndex < rows.length - 1') &&
     !markdownRenderer.includes('cellIndex < row.cells.length - 1') &&
-    markdownRenderer.includes('cursor: row-resize;') &&
-    markdownRenderer.includes('cursor: col-resize;') &&
+    markdownRenderer.includes('cursor: var(--table-row-resize-cursor);') &&
+    markdownRenderer.includes('cursor: var(--table-column-resize-cursor);') &&
     markdownRenderer.includes('.rendered-table-expanded-table {\n  width: max-content;\n  min-width: 0;') &&
     markdownRenderer.includes('.rendered-table-expanded-table .inline-image-thumb') &&
     markdownRenderer.includes('.rendered-table-expanded-table .inline-image-thumb img') &&
@@ -1186,9 +1189,9 @@ assert(
     markdownRenderer.includes('align-items: center !important;') &&
     markdownRenderer.includes('overflow-x: auto;') &&
     markdownRenderer.includes('scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);') &&
-    markdownRenderer.includes('width: min(300px, 100%) !important;') &&
-    markdownRenderer.includes('max-width: 300px;') &&
-    markdownRenderer.includes('min-width: min(220px, 100%);') &&
+    markdownRenderer.includes('class="noise-attachment-render noise-attachment-render--video"') &&
+    markdownRenderer.includes('style="width:100%;height:auto"') &&
+    markdownRenderer.includes('.markdown-preview :deep(.noise-attachment-render--video video)') &&
     markdownRenderer.includes('border: 1px solid rgba(148, 163, 184, 0.42);') &&
     messageList.includes('createMediaFancyboxOptions({ carouselInfinite: false, video: true })') &&
     messageList.includes("import { createMediaFancyboxOptions } from '~/utils/media-fancybox'") &&
@@ -1225,7 +1228,7 @@ assert(
     vditorEditor.includes('scheduleCollapseIrAttachmentChrome') &&
     vditorEditor.includes('scheduleRefreshAttachmentLinks') &&
     vditorEditor.includes('normalizeAttachmentInsertValue') &&
-    vditorEditor.includes('insertAttachmentSourceValue') &&
+    vditorEditor.includes('insertEditorValueFallback') &&
     vditorEditor.includes('normalizeEditorAttachmentSource') &&
     vditorEditor.includes('normalizeAdjacentAttachmentMarkers') &&
     vditorEditor.includes('ADJACENT_ATTACHMENT_MARKER_RE') &&
@@ -1317,7 +1320,7 @@ assert(
     fancyboxVideoClose.includes('if (!hasLivePlayback(video) && !hasRememberedPlayback(getVideoState(source))) finish(thumb)') &&
     fancyboxVideoClose.includes('if (video.readyState < 1 && !hasRememberedPlayback(getVideoState(source)))') &&
     fancyboxVideoClose.includes('closeWithoutFrame') &&
-    vditorEditor.includes("root.querySelectorAll<HTMLVideoElement>('.noise-attachment-render--video video')") &&
+    vditorEditor.includes("scope.querySelectorAll<HTMLVideoElement>('.noise-attachment-render--video video')") &&
     vditorEditor.includes('ensureFancyboxVideoThumbnail(video)') &&
     fancyboxVideoClose.includes("const isApiMediaUrlPath = (pathname: string) => pathname.startsWith('/api/images/') || pathname.startsWith('/api/video/')") &&
     fancyboxVideoClose.includes('slide.type !== \'html5video\'') &&
@@ -1414,19 +1417,20 @@ assert(
 )
 
 assert(
-  messageList.includes('margin: 16px 0 72px;') &&
-    infoFeedList.includes('class="pager-btn nw-action-btn nw-action-btn--label"') &&
-    infoFeedList.includes('class="pager-nav-group"') &&
-    infoFeedList.includes('class="pager-jump-group"') &&
-    infoFeedList.includes('class="pager-page-text"') &&
-    infoFeedList.includes(":class=\"{ 'is-dark': contentTheme === 'dark' }\"") &&
-    infoFeedList.includes('border-radius: 999px;') &&
-    infoFeedList.includes('margin: 16px 0 72px;') &&
-    infoFeedList.includes('box-shadow: 0 8px 22px rgba(15, 23, 42, 0.10);') &&
+  messageList.includes('class="pager-shell"') &&
+    homePage.includes('class="pager-shell feed-page-pager"') &&
+    homePage.includes('class="pager-btn nw-action-btn nw-action-btn--label"') &&
+    homePage.includes('class="pager-nav-group"') &&
+    homePage.includes('class="pager-jump-group"') &&
+    homePage.includes('class="pager-page-text"') &&
+    homePage.includes(":class=\"{ 'is-dark': isDark }\"") &&
+    floatingCss.includes('border-radius: 999px;') &&
+    floatingCss.includes('margin: 16px 0 72px;') &&
+    floatingCss.includes('box-shadow: 0 8px 22px rgba(15, 23, 42, 0.10);') &&
     !infoFeedList.includes('class="pager-main"') &&
     !infoFeedList.includes('class="pager-meta"') &&
     !infoFeedList.includes('<UButton\n          v-if="currentPage') &&
-    homePage.includes('padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));') &&
+    homePage.includes('padding-bottom: calc(0.5rem + 32px + env(safe-area-inset-bottom, 0px));') &&
     homePage.includes('scroll-padding-bottom: calc(160px + env(safe-area-inset-bottom, 0px));'),
   'pagination must keep explicit bottom clearance from the browser viewport and the info feed pager must use the same shared shell/action-button template as notes'
 )
@@ -1518,7 +1522,9 @@ assert(
   homePage.includes('transition: background-color .15s ease, border-color .15s ease, color .15s ease;') &&
     homePage.includes('.layout-container.grid-3 {\n  display: grid;\n  grid-template-columns: var(--sidebar-width, 320px) minmax(0, 1fr) var(--sidebar-width, 320px);') &&
     homePage.includes('.layout-container.grid-2 {\n  display: grid;\n  grid-template-columns: var(--sidebar-width, 320px) minmax(0, 1fr);') &&
-    homePage.includes('.left-col, .right-col { position: sticky; top: 0; align-self: start; height: fit-content; width: 100%; min-width: 0; box-sizing: border-box; }') &&
+    homePage.includes('.sidebar-slot { position: relative; align-self: start; width: 100%; min-width: 0; height: 0; }') &&
+    homePage.includes('.left-col, .right-col { position: absolute !important; top: 0; left: 0; height: fit-content; width: 100%; min-width: 0; box-sizing: border-box; z-index: 20; }') &&
+    homePage.includes('.left-col.is-viewport-pinned, .right-col.is-viewport-pinned { position: fixed !important; top: 0; }') &&
     homePage.includes('scrollbar-gutter: stable;') &&
     homePage.includes('.right-col > * {\n  width: 100%;\n  min-width: 0;\n  box-sizing: border-box;\n}') &&
     calendarWidget.includes('.calendar-widget {\n  width: 100%;\n  min-width: 0;\n  box-sizing: border-box;') &&

@@ -63,6 +63,15 @@
           </button>
         </div>
         <div class="toolbar-right">
+          <label class="visibility-control" title="内容可见范围">
+            <span class="sr-only">可见范围</span>
+            <select id="visibilitySelect" aria-label="内容可见范围">
+              <option value="public">公开</option>
+              <option value="users">登录用户</option>
+              <option value="contacts">联系人</option>
+              <option value="private">仅自己</option>
+            </select>
+          </label>
           <label class="notify-toggle" title="是否触发站内已启用的推送渠道">
             <input id="notifyToggle" type="checkbox">
             <span class="notify-toggle-icon" aria-hidden="true">
@@ -114,6 +123,7 @@
 
   <script src="js/easymde.min.js"></script>
   <script src="js/marked.min.js"></script>
+  <script src="js/visibility.js"></script>
   <script src="js/popup.js"></script>
 </body>
 </html>

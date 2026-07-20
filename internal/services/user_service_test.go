@@ -30,6 +30,16 @@ func setupUserServiceTestDB(t *testing.T) *gorm.DB {
 	if err := models.MigrateDB(db); err != nil {
 		t.Fatalf("migrate test db: %v", err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get test sql db: %v", err)
+	}
+	t.Cleanup(func() {
+		repository.ClearUserCache()
+		database.DB = nil
+		models.SetDB(nil)
+		_ = sqlDB.Close()
+	})
 
 	database.DB = db
 	models.SetDB(db)
@@ -856,7 +866,7 @@ func TestGetStatusIncludesUserAvatarURLs(t *testing.T) {
 		Token:     models.GenerateToken(32),
 		AvatarURL: "https://example.com/admin-avatar.png",
 	})
-	mustCreateUser(t, models.User{
+	alice := mustCreateUser(t, models.User{
 		Username:      "alice",
 		Password:      models.HashPassword("alice"),
 		Token:         models.GenerateToken(32),
@@ -881,8 +891,71 @@ func TestGetStatusIncludesUserAvatarURLs(t *testing.T) {
 	if avatars["alice"] != "/api/images/alice.png" {
 		t.Fatalf("alice avatar missing from status, got %q", avatars["alice"])
 	}
-	if voceChatEmails["alice"] != "alice@vc.com" {
-		t.Fatalf("alice vc email missing from status, got %q", voceChatEmails["alice"])
+	if voceChatEmails["alice"] != "" {
+		t.Fatalf("anonymous status leaked alice vc email %q", voceChatEmails["alice"])
+	}
+
+	aliceStatus, err := GetStatus(alice.ID)
+	if err != nil {
+		t.Fatalf("get alice status: %v", err)
+	}
+	for _, user := range aliceStatus.Users {
+		if user.Username == "alice" && user.VoceChatEmail != "alice@vc.com" {
+			t.Fatalf("alice should see own vc email, got %q", user.VoceChatEmail)
+		}
+		if user.Username == "admin" && user.VoceChatEmail != "" {
+			t.Fatalf("alice should not see admin vc email, got %q", user.VoceChatEmail)
+		}
+	}
+}
+
+func TestGetStatusCountsOnlyCommentsVisibleToViewer(t *testing.T) {
+	setupUserServiceTestDB(t)
+
+	admin := mustCreateUser(t, models.User{Username: "admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+	alice := mustCreateUser(t, models.User{Username: "alice", Password: models.HashPassword("alice"), Token: models.GenerateToken(32)})
+	bob := mustCreateUser(t, models.User{Username: "bob", Password: models.HashPassword("bob"), Token: models.GenerateToken(32)})
+	publicMessage := models.Message{Content: "public", UserID: alice.ID, Visibility: MessageVisibilityPublic}
+	privateMessage := models.Message{Content: "private", UserID: bob.ID, Visibility: MessageVisibilityPrivate, Private: true}
+	for _, message := range []*models.Message{&publicMessage, &privateMessage} {
+		if err := database.DB.Create(message).Error; err != nil {
+			t.Fatalf("create message: %v", err)
+		}
+	}
+	publicRoot := models.Comment{MessageID: publicMessage.ID, UserID: &bob.ID, Content: "public root", Visibility: "public"}
+	privateRoot := models.Comment{MessageID: publicMessage.ID, UserID: &bob.ID, Content: "private root", Visibility: "private"}
+	privateMessageRoot := models.Comment{MessageID: privateMessage.ID, UserID: &bob.ID, Content: "private message root", Visibility: "private"}
+	for _, comment := range []*models.Comment{&publicRoot, &privateRoot, &privateMessageRoot} {
+		if err := database.DB.Create(comment).Error; err != nil {
+			t.Fatalf("create comment: %v", err)
+		}
+	}
+	parentID := publicRoot.ID
+	publicReply := models.Comment{MessageID: publicMessage.ID, UserID: &alice.ID, ParentID: &parentID, Content: "public reply", Visibility: "public"}
+	if err := database.DB.Create(&publicReply).Error; err != nil {
+		t.Fatalf("create reply: %v", err)
+	}
+
+	anonymous, err := GetStatus(0)
+	if err != nil {
+		t.Fatalf("get anonymous status: %v", err)
+	}
+	if anonymous.TotalComments != 1 || anonymous.TotalReplies != 1 {
+		t.Fatalf("anonymous counts = comments %d replies %d, want 1/1", anonymous.TotalComments, anonymous.TotalReplies)
+	}
+	aliceStatus, err := GetStatus(alice.ID)
+	if err != nil {
+		t.Fatalf("get alice status: %v", err)
+	}
+	if aliceStatus.TotalComments != 2 || aliceStatus.TotalReplies != 1 {
+		t.Fatalf("alice counts = comments %d replies %d, want 2/1", aliceStatus.TotalComments, aliceStatus.TotalReplies)
+	}
+	adminStatus, err := GetStatus(admin.ID)
+	if err != nil {
+		t.Fatalf("get admin status: %v", err)
+	}
+	if adminStatus.TotalComments != 3 || adminStatus.TotalReplies != 1 {
+		t.Fatalf("admin counts = comments %d replies %d, want 3/1", adminStatus.TotalComments, adminStatus.TotalReplies)
 	}
 }
 

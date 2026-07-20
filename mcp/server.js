@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import http from 'http'
 import { EventEmitter } from 'events'
-import { parse } from 'url'
+import { parse, pathToFileURL } from 'url'
 import { z } from 'zod'
 
 const host = String(process.env.NOTE_HOST || 'http://localhost:1314').trim().replace(/^`+|`+$/g, '')
@@ -11,6 +11,7 @@ let session = process.env.NOTE_SESSION || ''
 
 const s = new McpServer({ name: 'ech0-noise-mcp', version: '0.1.0' })
 const bus = new EventEmitter()
+const isMainModule = Boolean(process.argv[1]) && import.meta.url === pathToFileURL(process.argv[1]).href
 
 const authHeaders = () => {
   const h = { 'Content-Type': 'application/json' }
@@ -27,7 +28,7 @@ async function searchTool(args) {
     const fmt = String(args.format || '').toLowerCase()
     if (!q) {
       const url = `${host}/api/messages/page?page=${page}&pageSize=${pageSize}`
-      const r = await fetch(url)
+      const r = await fetch(url, { headers: authHeaders() })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const j = await r.json()
       const arr = (j && j.data && Array.isArray(j.data.items)) ? j.data.items : (Array.isArray(j.items) ? j.items : [])
@@ -56,7 +57,7 @@ async function searchTool(args) {
     if (q.startsWith('#')) {
       const tag = encodeURIComponent(q.slice(1))
       const url = `${host}/api/messages/tags/${tag}?page=${page}&pageSize=${pageSize}`
-      const r = await fetch(url)
+      const r = await fetch(url, { headers: authHeaders() })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const j = await r.json()
       const arr = (j && j.data && Array.isArray(j.data.items)) ? j.data.items : (Array.isArray(j.items) ? j.items : [])
@@ -83,7 +84,7 @@ async function searchTool(args) {
       return { content: [{ type: 'text', text }] }
     }
     const url = `${host}/api/messages/search?keyword=${encodeURIComponent(q)}&page=${page}&pageSize=${pageSize}`
-    const r = await fetch(url)
+    const r = await fetch(url, { headers: authHeaders() })
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
     const j = await r.json()
     const arr = (j && j.data && Array.isArray(j.data.items)) ? j.data.items : (Array.isArray(j.items) ? j.items : [])
@@ -120,7 +121,7 @@ async function pageTool(args) {
     const pageSize = Number(args.pageSize || args.page_size || 10)
     const fmt = String(args.format || '').toLowerCase()
     const url = `${host}/api/messages/page?page=${page}&pageSize=${pageSize}`
-    const r = await fetch(url)
+    const r = await fetch(url, { headers: authHeaders() })
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
     const j = await r.json()
     const arr = (j && j.data && Array.isArray(j.data.items)) ? j.data.items : (Array.isArray(j.items) ? j.items : [])
@@ -153,20 +154,20 @@ async function pageTool(args) {
 
 async function getTool(args) {
   const id = String(args.id)
-  const r = await fetch(`${host}/api/messages/${id}`)
+  const r = await fetch(`${host}/api/messages/${id}`, { headers: authHeaders() })
   const j = await r.json()
   return { content: [{ type: 'text', text: JSON.stringify(j) }] }
 }
 
 async function publishTool(args) {
-  const priv = Boolean(args.private || false)
+  const visibility = normalizeVisibility(args.visibility, args.private)
   const typeRaw = String(args.type || 'text').toLowerCase()
   const type = ['text','markdown','image','multipart','md'].includes(typeRaw) ? (typeRaw === 'md' ? 'markdown' : typeRaw) : 'text'
   const contentRaw = typeof args.content === 'string' ? args.content : (args.content ? JSON.stringify(args.content) : '')
   const content = String(contentRaw || '').trim()
   const images = Array.isArray(args.images) ? args.images.map(String) : []
   const image = args.image ? String(args.image) : (args.imageURL ? String(args.imageURL) : (images[0] || ''))
-  const body = { type, private: priv }
+  const body = { type, visibility, private: visibility !== 'public' }
   if (content) body.content = content
   if (type === 'image' || type === 'multipart') {
     if (images.length) body.images = images
@@ -189,7 +190,7 @@ async function deleteTool(args) {
     }
     try {
       const url = `${host}/api/messages/search?keyword=${encodeURIComponent(kw)}&page=1&pageSize=1`
-      const r = await fetch(url)
+      const r = await fetch(url, { headers: authHeaders() })
       const j = await r.json().catch(() => ({}))
       const arr = (j && j.data && Array.isArray(j.data.items)) ? j.data.items : (Array.isArray(j.items) ? j.items : [])
       const first = Array.isArray(arr) && arr[0]
@@ -289,9 +290,17 @@ async function deleteTool(args) {
 
 async function updateTool(args) {
   const id = String(args.id)
-  const content = String(args.content || '')
-  const body = { content }
-  if (!session) {
+  const body = {}
+  if (typeof args.content !== 'undefined') body.content = String(args.content)
+  if (typeof args.visibility !== 'undefined' || typeof args.private !== 'undefined') {
+    const visibility = normalizeVisibility(args.visibility, args.private)
+    body.visibility = visibility
+    body.private = visibility !== 'public'
+  }
+  if (!Object.keys(body).length) {
+    return { content: [{ type: 'text', text: JSON.stringify({ error: 'content or visibility is required' }) }] }
+  }
+  if (!session && !token) {
     const text = authMessage('need_session')
     return { content: [{ type: 'text', text }] }
   }
@@ -366,19 +375,19 @@ async function settingsTool(args) {
 }
 
 async function statusTool() {
-  const r = await fetch(`${host}/api/status`)
+  const r = await fetch(`${host}/api/status`, { headers: authHeaders() })
   const j = await r.json()
   return { content: [{ type: 'text', text: JSON.stringify(j) }] }
 }
 
 async function calendarTool() {
-  const r = await fetch(`${host}/api/messages/calendar`)
+  const r = await fetch(`${host}/api/messages/calendar`, { headers: authHeaders() })
   const j = await r.json()
   return { content: [{ type: 'text', text: JSON.stringify(j) }] }
 }
 
 async function configTool() {
-  const r = await fetch(`${host}/api/frontend/config`)
+  const r = await fetch(`${host}/api/frontend/config`, { headers: authHeaders() })
   const j = await r.json()
   return { content: [{ type: 'text', text: JSON.stringify(j) }] }
 }
@@ -404,7 +413,7 @@ async function tokenTool() {
 }
 
 async function rssTool() {
-  const r = await fetch(`${host}/rss`)
+  const r = await fetch(`${host}/rss`, { headers: authHeaders() })
   const t = await r.text()
   return { content: [{ type: 'text', text: t }] }
 }
@@ -467,19 +476,27 @@ const pageSchema = z.object({ page: z.number().optional(), pageSize: z.number().
 const deleteSchema = z.object({ id: z.string().optional(), keyword: z.string().optional(), content: z.string().optional() })
 const idSchema = z.object({ id: z.string() })
 const anyJson = z.any()
+const visibilitySchema = z.enum(['public', 'users', 'contacts', 'private'])
+function normalizeVisibility(value, legacyPrivate) {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (['public', 'users', 'contacts', 'private'].includes(normalized)) return normalized
+  return legacyPrivate === true ? 'private' : 'public'
+}
 const publishSchema = z.object({
   content: anyJson.optional(),
   type: z.string().optional(),
   private: z.boolean().optional(),
+  visibility: visibilitySchema.optional(),
   image: z.string().optional(),
   images: z.array(z.string()).optional(),
   imageURL: z.string().optional()
 })
-const updateSchema = z.object({ id: z.string(), content: z.string() })
+const updateSchema = z.object({ id: z.string(), content: z.string().optional(), private: z.boolean().optional(), visibility: visibilitySchema.optional() })
 const loginSchema = z.object({ username: z.string(), password: z.string() })
 const pinSchema = z.object({ id: z.string(), pinned: z.boolean() })
 const settingsSchema = z.object({ allowRegistration: z.boolean().optional(), frontendSettings: z.any().optional() })
 
+if (isMainModule) {
 s.registerTool('search', { description: '搜索消息：默认输出为人类可读文本；若需原始 JSON 传入 format=json。触发查询参数时必须调用本工具，只输出解析后的中文/多语言列表，不展示工具调用日志或未渲染标签。', inputSchema: searchSchema }, wrap('search', (args) => searchTool({ ...args, keyword: args.keyword || args.query || '' })))
 s.registerTool('页面', { description: '分页列表：触发 page/pageSize 参数时必须调用本工具', inputSchema: pageSchema }, wrap('页面', pageTool))
 s.registerTool('消息', { description: '获取消息详情：传入 id 时必须调用本工具', inputSchema: idSchema }, wrap('消息', getTool))
@@ -657,3 +674,6 @@ if (httpPort) {
   })
   srv.listen(httpPort)
 }
+}
+
+export { normalizeVisibility, publishTool, updateTool }

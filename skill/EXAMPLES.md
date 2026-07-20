@@ -361,3 +361,18 @@ curl "$MCP_BASE_URL/mcp/tools"
 
 - 先查询详情确认目标
 - 优先改用登录会话再执行
+# 四态发布与更新示例
+
+```json
+{"tool":"publish","input":{"type":"markdown","content":"# 成员笔记","visibility":"users"}}
+```
+
+```json
+{"tool":"publish","input":{"content":"联系人笔记","visibility":"contacts"}}
+```
+
+```json
+{"tool":"update","input":{"id":"123","visibility":"private"}}
+```
+
+兼容旧调用：未传 `visibility` 且 `private=true` 时按 `private`；两者都未传时 MCP 与浏览器扩展仍按 `public`。

@@ -162,13 +162,17 @@ func queueUserNotificationPush(notificationID uint) {
 }
 
 func sendUserNotificationToVoceChat(ctx context.Context, notificationID uint) error {
+	db, err := database.GetDB()
+	if err != nil {
+		return err
+	}
 	var notification models.UserNotification
-	if err := database.DB.First(&notification, notificationID).Error; err != nil {
+	if err := db.First(&notification, notificationID).Error; err != nil {
 		return err
 	}
 
 	var recipient models.User
-	if err := database.DB.Select("id, username, is_admin, voce_chat_user_id, voce_chat_notification_enabled").First(&recipient, notification.RecipientUserID).Error; err != nil {
+	if err := db.Select("id, username, is_admin, voce_chat_user_id, voce_chat_notification_enabled").First(&recipient, notification.RecipientUserID).Error; err != nil {
 		return err
 	}
 	if !recipient.VoceChatNotificationEnabled {
@@ -176,7 +180,7 @@ func sendUserNotificationToVoceChat(ctx context.Context, notificationID uint) er
 	}
 
 	var siteConfig models.SiteConfig
-	if err := database.DB.First(&siteConfig).Error; err != nil {
+	if err := db.First(&siteConfig).Error; err != nil {
 		return err
 	}
 	vcConfig := vocechat.FromSiteConfig(siteConfig)

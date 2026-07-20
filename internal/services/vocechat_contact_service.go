@@ -150,6 +150,9 @@ func replaceVoceChatContactCacheFromRemote(author *models.User, contacts []vocec
 	vcIDs := make([]string, 0, len(contacts))
 	seen := make(map[string]struct{}, len(contacts))
 	for _, contact := range contacts {
+		if !strings.EqualFold(strings.TrimSpace(contact.ContactInfo.Status), vocechat.ContactStatusAdded) {
+			continue
+		}
 		uid := contact.TargetUID
 		if uid <= 0 {
 			uid = contact.TargetInfo.UID

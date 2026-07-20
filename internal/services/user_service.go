@@ -712,22 +712,6 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 		return models.Status{}, errors.New(models.UserNotFoundMessage)
 	}
 
-	var users []models.UserStatus
-	allusers, err := repository.GetAllUsers()
-	if err != nil {
-		return models.Status{}, errors.New(models.GetAllUsersFailMessage)
-	}
-	for _, user := range allusers {
-		users = append(users, models.UserStatus{
-			ID:                          user.ID,
-			Username:                    user.Username,
-			IsAdmin:                     user.IsAdmin,
-			AvatarURL:                   strings.TrimSpace(user.AvatarURL),
-			VoceChatEmail:               strings.TrimSpace(user.VoceChatEmail),
-			VoceChatNotificationEnabled: user.VoceChatNotificationEnabled,
-		})
-	}
-
 	status := models.Status{}
 
 	var currentUser models.User
@@ -739,6 +723,26 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 			viewerUserID = &id
 			isAdmin = currentUser.IsAdmin
 		}
+	}
+
+	var users []models.UserStatus
+	allusers, err := repository.GetAllUsers()
+	if err != nil {
+		return models.Status{}, errors.New(models.GetAllUsersFailMessage)
+	}
+	for _, user := range allusers {
+		item := models.UserStatus{
+			ID:        user.ID,
+			Username:  user.Username,
+			IsAdmin:   user.IsAdmin,
+			AvatarURL: strings.TrimSpace(user.AvatarURL),
+		}
+		if isAdmin || currentUserID == user.ID {
+			notificationEnabled := user.VoceChatNotificationEnabled
+			item.VoceChatEmail = strings.TrimSpace(user.VoceChatEmail)
+			item.VoceChatNotificationEnabled = &notificationEnabled
+		}
+		users = append(users, item)
 	}
 
 	var total int64
@@ -755,13 +759,8 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 		return status, errors.New(models.GetAllMessagesFailMessage)
 	}
 
-	var totalComments int64
-	if err := database.DB.Model(&models.Comment{}).Where("parent_id IS NULL").Count(&totalComments).Error; err != nil {
-		return status, errors.New(models.GetStatusFailMessage)
-	}
-
-	var totalReplies int64
-	if err := database.DB.Model(&models.Comment{}).Where("parent_id IS NOT NULL").Count(&totalReplies).Error; err != nil {
+	totalComments, totalReplies, err := countVisibleCommentStats(viewerUserID, isAdmin)
+	if err != nil {
 		return status, errors.New(models.GetStatusFailMessage)
 	}
 
@@ -783,6 +782,58 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 	}
 
 	return status, nil
+}
+
+func countVisibleCommentStats(viewerUserID *uint, isAdmin bool) (int64, int64, error) {
+	var messages []models.Message
+	messageQuery := ApplyMessageVisibilityScope(
+		database.DB.Model(&models.Message{}).Select("id", "user_id", "private", "visibility"),
+		viewerUserID,
+		isAdmin,
+	)
+	if err := messageQuery.Find(&messages).Error; err != nil {
+		return 0, 0, err
+	}
+	if len(messages) == 0 {
+		return 0, 0, nil
+	}
+
+	messageIDs := make([]uint, 0, len(messages))
+	messageMap := make(map[uint]models.Message, len(messages))
+	for _, message := range messages {
+		messageIDs = append(messageIDs, message.ID)
+		messageMap[message.ID] = message
+	}
+	var comments []models.Comment
+	if err := database.DB.Where("message_id IN ?", messageIDs).Order("created_at ASC, id ASC").Find(&comments).Error; err != nil {
+		return 0, 0, err
+	}
+	commentsByMessage := make(map[uint][]models.Comment)
+	for _, comment := range comments {
+		commentsByMessage[comment.MessageID] = append(commentsByMessage[comment.MessageID], comment)
+	}
+
+	viewerID := uint(0)
+	hasViewer := viewerUserID != nil && *viewerUserID != 0
+	if hasViewer {
+		viewerID = *viewerUserID
+	}
+	var totalComments, totalReplies int64
+	for messageID, messageComments := range commentsByMessage {
+		message := messageMap[messageID]
+		commentMap := CommentMap(messageComments)
+		for _, comment := range messageComments {
+			if !CanViewCommentInThread(message, comment, commentMap, viewerID, hasViewer, isAdmin) {
+				continue
+			}
+			if comment.ParentID == nil {
+				totalComments++
+			} else {
+				totalReplies++
+			}
+		}
+	}
+	return totalComments, totalReplies, nil
 }
 
 func countReceivedCommentStats(userID uint) (int64, int64, error) {

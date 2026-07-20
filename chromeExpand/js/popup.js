@@ -10,6 +10,7 @@ const linkBtn = document.getElementById("linkBtn");
 const imageBtn = document.getElementById("imageBtn");
 const clearBtn = document.getElementById("clearBtn");
 const notifyToggle = document.getElementById("notifyToggle");
+const visibilitySelect = document.getElementById("visibilitySelect");
 const resultContainer = document.getElementById("resultContainer");
 const closeResultBtn = document.getElementById("closeResultBtn");
 const previewContent = document.getElementById("previewContent");
@@ -88,6 +89,9 @@ function setupEventListeners() {
   imageBtn.addEventListener("click", insertImage);
   clearBtn.addEventListener("click", clearEditorContent);
   sendBtn.addEventListener("click", sendMessage);
+  visibilitySelect?.addEventListener("change", () => {
+    chrome.storage.sync.set({ messageVisibility: visibilitySelect.value || "public" });
+  });
   closeResultBtn.addEventListener("click", () => resultContainer.classList.add("hidden"));
   viewLink.addEventListener("click", (event) => {
     const href = viewLink.getAttribute("href");
@@ -100,9 +104,10 @@ function setupEventListeners() {
 }
 
 async function loadSettings() {
-  const { siteUrl = "", apiToken = "" } = await chrome.storage.sync.get(["siteUrl", "apiToken"]);
+  const { siteUrl = "", apiToken = "", messageVisibility = "public" } = await chrome.storage.sync.get(["siteUrl", "apiToken", "messageVisibility"]);
   siteUrlInput.value = siteUrl;
   apiTokenInput.value = apiToken;
+  if (visibilitySelect) visibilitySelect.value = EchoNoiseVisibility.normalizeVisibility(messageVisibility);
   await syncNotifySetting(siteUrl);
 }
 
@@ -289,7 +294,8 @@ async function sendMessage() {
 
   try {
     const shouldNotify = Boolean(notifyToggle?.checked);
-    const payload = { content, private: false, notify: shouldNotify, username: "" };
+    const visibility = EchoNoiseVisibility.normalizeVisibility(visibilitySelect?.value);
+    const payload = EchoNoiseVisibility.buildPublishPayload(content, visibility, { notify: shouldNotify, username: "" });
     let response = await fetch(joinSiteUrl(siteUrl, "/api/token/messages"), {
       method: "POST",
       headers: {
@@ -303,7 +309,7 @@ async function sendMessage() {
       response = await fetch(joinSiteUrl(siteUrl, "/api/messages"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, private: false, notify: shouldNotify }),
+        body: JSON.stringify(EchoNoiseVisibility.buildPublishPayload(content, visibility, { notify: shouldNotify })),
         credentials: "include"
       });
     }

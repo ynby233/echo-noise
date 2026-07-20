@@ -737,3 +737,16 @@ await client.callTool({ name: '删除', input: { id: '123' } })
 
 - `stdio` 用于握手与完整交互；为避免容器端口冲突，第二实例设置 `NOTE_HTTP_PORT=0`。
 - `sse` 用于事件订阅与握手展示，不承担完整 MCP 交互。需要调用工具时使用 HTTP 或 `stdio`。
+# 内容可见范围
+
+`publish` 和 `update` 支持 `visibility`：`public`、`users`、`contacts`、`private`。MCP 会同时发送兼容字段 `private`（仅 `public` 为 `false`）。未传 `visibility` 时，`private=true` 兼容映射为 `private`，否则保持旧版默认 `public`。
+
+```json
+{"tool":"publish","input":{"content":"联系人内容","visibility":"contacts"}}
+```
+
+```json
+{"tool":"update","input":{"id":"123","visibility":"users"}}
+```
+
+配置 `NOTE_TOKEN` 或 `NOTE_SESSION` 后，分页、搜索、标签、详情、状态、日历和前端配置等读取工具也会携带认证信息，因此可读取当前账号有权查看的受限内容。

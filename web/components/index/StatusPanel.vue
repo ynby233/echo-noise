@@ -1311,12 +1311,20 @@
                     </div>
                     <div class="md:col-span-1"></div>
                     <div>
-                      <div class="text-sm mb-2" :class="theme.text">用户名</div>
-                      <UInput v-model="smtp.user" placeholder="通常与发件地址一致" />
+                      <div class="flex items-center justify-between gap-2 mb-2">
+                        <div class="text-sm" :class="theme.text">用户名</div>
+                        <span class="text-xs" :class="smtp.clearUser ? 'text-red-500' : (smtp.userConfigured ? 'text-green-500' : theme.mutedText)">{{ smtp.clearUser ? '待清除' : (smtp.userConfigured ? '已配置' : '未配置') }}</span>
+                      </div>
+                      <UInput v-model="smtp.user" :disabled="smtp.clearUser" :placeholder="smtp.userConfigured ? '已配置；留空将保持不变' : '通常与发件地址一致'" @update:model-value="smtp.clearUser = false" />
+                      <UButton v-if="smtp.userConfigured" class="mt-2" size="xs" :color="smtp.clearUser ? 'gray' : 'red'" variant="soft" @click="smtp.clearUser = !smtp.clearUser; smtp.user = ''">{{ smtp.clearUser ? '取消清除' : '清除现有用户名' }}</UButton>
                     </div>
                     <div>
-                      <div class="text-sm mb-2" :class="theme.text">密码</div>
-                      <UInput v-model="smtp.pass" :type="showSmtpPass ? 'text' : 'password'" placeholder="邮箱或应用专用密码" />
+                      <div class="flex items-center justify-between gap-2 mb-2">
+                        <div class="text-sm" :class="theme.text">密码</div>
+                        <span class="text-xs" :class="smtp.clearPass ? 'text-red-500' : (smtp.passConfigured ? 'text-green-500' : theme.mutedText)">{{ smtp.clearPass ? '待清除' : (smtp.passConfigured ? '已配置' : '未配置') }}</span>
+                      </div>
+                      <UInput v-model="smtp.pass" :disabled="smtp.clearPass" :type="showSmtpPass ? 'text' : 'password'" :placeholder="smtp.passConfigured ? '已配置；留空将保持不变' : '邮箱或应用专用密码'" @update:model-value="smtp.clearPass = false" />
+                      <UButton v-if="smtp.passConfigured" class="mt-2" size="xs" :color="smtp.clearPass ? 'gray' : 'red'" variant="soft" @click="smtp.clearPass = !smtp.clearPass; smtp.pass = ''">{{ smtp.clearPass ? '取消清除' : '清除现有密码' }}</UButton>
                     </div>
                   </div>
                   <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mt-2 gap-2" :class="theme.mutedText">
@@ -1831,8 +1839,29 @@
                     <UInput v-model="frontendConfig.githubClientId" placeholder="GitHub OAuth App Client ID" :disabled="!frontendConfig.githubOAuthEnabled" />
                   </div>
                   <div>
-                    <div class="text-sm mb-2" :class="theme.text">Client Secret</div>
-                    <UInput v-model="frontendConfig.githubClientSecret" type="password" placeholder="GitHub OAuth App Client Secret" :disabled="!frontendConfig.githubOAuthEnabled" />
+                    <div class="flex items-center justify-between gap-2 mb-2">
+                      <div class="text-sm" :class="theme.text">Client Secret</div>
+                      <span class="text-xs" :class="frontendConfig.clearGithubClientSecret ? 'text-red-500' : (frontendConfig.githubClientSecretConfigured ? 'text-green-500' : theme.mutedText)">
+                        {{ frontendConfig.clearGithubClientSecret ? '待清除' : (frontendConfig.githubClientSecretConfigured ? '已配置' : '未配置') }}
+                      </span>
+                    </div>
+                    <UInput
+                      v-model="frontendConfig.githubClientSecret"
+                      type="password"
+                      :placeholder="frontendConfig.githubClientSecretConfigured ? '已配置；留空将保持不变' : 'GitHub OAuth App Client Secret'"
+                      :disabled="!frontendConfig.githubOAuthEnabled || frontendConfig.clearGithubClientSecret"
+                      @update:model-value="frontendConfig.clearGithubClientSecret = false"
+                    />
+                    <UButton
+                      v-if="frontendConfig.githubClientSecretConfigured"
+                      class="mt-2"
+                      size="xs"
+                      :color="frontendConfig.clearGithubClientSecret ? 'gray' : 'red'"
+                      variant="soft"
+                      @click="frontendConfig.clearGithubClientSecret = !frontendConfig.clearGithubClientSecret; frontendConfig.githubClientSecret = ''"
+                    >
+                      {{ frontendConfig.clearGithubClientSecret ? '取消清除' : '清除现有 Secret' }}
+                    </UButton>
                   </div>
                   <div class="md:col-span-2">
                     <div class="text-sm mb-2" :class="theme.text">回调地址</div>
@@ -1913,12 +1942,20 @@
                         <UInput v-model="attachmentStorageConfig.bucket" placeholder="bucket 名称" />
                       </div>
                       <div>
-                        <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">Access Key</label>
-                        <UInput v-model="attachmentStorageConfig.accessKey" />
+                        <div class="flex items-center justify-between gap-2 mb-1">
+                          <label class="text-xs sm:text-sm" :class="theme.mutedText">Access Key</label>
+                          <span class="text-xs" :class="attachmentStorageConfig.clearAccessKey ? 'text-red-500' : (attachmentStorageConfig.accessKeyConfigured ? 'text-green-500' : theme.mutedText)">{{ attachmentStorageConfig.clearAccessKey ? '待清除' : (attachmentStorageConfig.accessKeyConfigured ? '已配置' : '未配置') }}</span>
+                        </div>
+                        <UInput v-model="attachmentStorageConfig.accessKey" :disabled="attachmentStorageConfig.clearAccessKey" :placeholder="attachmentStorageConfig.accessKeyConfigured ? '已配置；留空将保持不变' : ''" @update:model-value="attachmentStorageConfig.clearAccessKey = false" />
+                        <UButton v-if="attachmentStorageConfig.accessKeyConfigured" class="mt-2" size="xs" :color="attachmentStorageConfig.clearAccessKey ? 'gray' : 'red'" variant="soft" @click="attachmentStorageConfig.clearAccessKey = !attachmentStorageConfig.clearAccessKey; attachmentStorageConfig.accessKey = ''">{{ attachmentStorageConfig.clearAccessKey ? '取消清除' : '清除现有 Access Key' }}</UButton>
                       </div>
                       <div>
-                        <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">Secret Key</label>
-                        <UInput v-model="attachmentStorageConfig.secretKey" type="password" />
+                        <div class="flex items-center justify-between gap-2 mb-1">
+                          <label class="text-xs sm:text-sm" :class="theme.mutedText">Secret Key</label>
+                          <span class="text-xs" :class="attachmentStorageConfig.clearSecretKey ? 'text-red-500' : (attachmentStorageConfig.secretKeyConfigured ? 'text-green-500' : theme.mutedText)">{{ attachmentStorageConfig.clearSecretKey ? '待清除' : (attachmentStorageConfig.secretKeyConfigured ? '已配置' : '未配置') }}</span>
+                        </div>
+                        <UInput v-model="attachmentStorageConfig.secretKey" type="password" :disabled="attachmentStorageConfig.clearSecretKey" :placeholder="attachmentStorageConfig.secretKeyConfigured ? '已配置；留空将保持不变' : ''" @update:model-value="attachmentStorageConfig.clearSecretKey = false" />
+                        <UButton v-if="attachmentStorageConfig.secretKeyConfigured" class="mt-2" size="xs" :color="attachmentStorageConfig.clearSecretKey ? 'gray' : 'red'" variant="soft" @click="attachmentStorageConfig.clearSecretKey = !attachmentStorageConfig.clearSecretKey; attachmentStorageConfig.secretKey = ''">{{ attachmentStorageConfig.clearSecretKey ? '取消清除' : '清除现有 Secret Key' }}</UButton>
                       </div>
                       <div class="flex items-center gap-2" v-if="attachmentStorageConfig.provider === 's3'">
                         <span class="text-xs sm:text-sm" :class="theme.mutedText">使用路径风格地址</span>
@@ -1985,12 +2022,20 @@
                         <UInput v-model="storageConfig.bucket" placeholder="bucket 名称" />
                       </div>
                       <div>
-                        <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">Access Key</label>
-                        <UInput v-model="storageConfig.accessKey" />
+                        <div class="flex items-center justify-between gap-2 mb-1">
+                          <label class="text-xs sm:text-sm" :class="theme.mutedText">Access Key</label>
+                          <span class="text-xs" :class="storageConfig.clearAccessKey ? 'text-red-500' : (storageConfig.accessKeyConfigured ? 'text-green-500' : theme.mutedText)">{{ storageConfig.clearAccessKey ? '待清除' : (storageConfig.accessKeyConfigured ? '已配置' : '未配置') }}</span>
+                        </div>
+                        <UInput v-model="storageConfig.accessKey" :disabled="storageConfig.clearAccessKey" :placeholder="storageConfig.accessKeyConfigured ? '已配置；留空将保持不变' : ''" @update:model-value="storageConfig.clearAccessKey = false" />
+                        <UButton v-if="storageConfig.accessKeyConfigured" class="mt-2" size="xs" :color="storageConfig.clearAccessKey ? 'gray' : 'red'" variant="soft" @click="storageConfig.clearAccessKey = !storageConfig.clearAccessKey; storageConfig.accessKey = ''">{{ storageConfig.clearAccessKey ? '取消清除' : '清除现有 Access Key' }}</UButton>
                       </div>
                       <div>
-                        <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">Secret Key</label>
-                        <UInput v-model="storageConfig.secretKey" type="password" />
+                        <div class="flex items-center justify-between gap-2 mb-1">
+                          <label class="text-xs sm:text-sm" :class="theme.mutedText">Secret Key</label>
+                          <span class="text-xs" :class="storageConfig.clearSecretKey ? 'text-red-500' : (storageConfig.secretKeyConfigured ? 'text-green-500' : theme.mutedText)">{{ storageConfig.clearSecretKey ? '待清除' : (storageConfig.secretKeyConfigured ? '已配置' : '未配置') }}</span>
+                        </div>
+                        <UInput v-model="storageConfig.secretKey" type="password" :disabled="storageConfig.clearSecretKey" :placeholder="storageConfig.secretKeyConfigured ? '已配置；留空将保持不变' : ''" @update:model-value="storageConfig.clearSecretKey = false" />
+                        <UButton v-if="storageConfig.secretKeyConfigured" class="mt-2" size="xs" :color="storageConfig.clearSecretKey ? 'gray' : 'red'" variant="soft" @click="storageConfig.clearSecretKey = !storageConfig.clearSecretKey; storageConfig.secretKey = ''">{{ storageConfig.clearSecretKey ? '取消清除' : '清除现有 Secret Key' }}</UButton>
                       </div>
                       <div class="flex items-center gap-2" v-if="storageConfig.provider === 's3'">
                         <span class="text-xs sm:text-sm" :class="theme.mutedText">使用路径风格地址</span>
@@ -4038,7 +4083,21 @@ const fetchNotifyConfig = async () => {
      await saveConfigItem('notifyEnabled')
    }
  )
-const smtp = reactive({ enabled: false, driver: 'smtp', host: '', port: '', user: '', pass: '', from: '', tls: false, encryption: 'tls' })
+const smtp = reactive({
+  enabled: false,
+  driver: 'smtp',
+  host: '',
+  port: '',
+  user: '',
+  pass: '',
+  from: '',
+  tls: false,
+  encryption: 'tls',
+  userConfigured: false,
+  passConfigured: false,
+  clearUser: false,
+  clearPass: false
+})
 const showSmtpPass = ref(false)
 const loadSmtp = async () => {
   try {
@@ -4051,6 +4110,10 @@ const loadSmtp = async () => {
       smtp.port = (cfg.smtpPort ?? '').toString()
       smtp.user = cfg.smtpUser || ''
       smtp.pass = cfg.smtpPass || ''
+      smtp.userConfigured = !!cfg.smtpUserConfigured
+      smtp.passConfigured = !!cfg.smtpPassConfigured
+      smtp.clearUser = false
+      smtp.clearPass = false
       smtp.from = cfg.smtpFrom || ''
       smtp.tls = !!cfg.smtpTLS
       smtp.encryption = (cfg.smtpEncryption || (smtp.tls ? 'tls' : 'ssl'))
@@ -4068,11 +4131,14 @@ const saveSmtp = async () => {
     payload.smtpPort = parseInt(smtp.port || '0') || 0
     payload.smtpUser = smtp.user
     payload.smtpPass = smtp.pass
+    payload.clearSmtpUser = smtp.clearUser
+    payload.clearSmtpPass = smtp.clearPass
     payload.smtpFrom = smtp.from
     payload.smtpEncryption = smtp.encryption
     payload.smtpTLS = smtp.encryption === 'tls'
     const res = await putRequest<any>('settings', payload, { credentials: 'include' })
     if (res && res.code === 1) {
+      await loadSmtp()
       useToast().add({ title: res?.msg || '已保存', color: 'green' })
     } else {
       throw new Error(res?.msg || '保存失败')
@@ -4279,7 +4345,9 @@ const testingSmtp = ref(false)
 const testSmtp = async () => {
   try {
     const to = (smtp.from || smtp.user || '').trim()
-    if (!to || !smtp.host || !smtp.port || !smtp.user || !smtp.pass || !smtp.encryption) {
+    const hasUser = (!!smtp.user || smtp.userConfigured) && !smtp.clearUser
+    const hasPass = (!!smtp.pass || smtp.passConfigured) && !smtp.clearPass
+    if (!to || !smtp.host || !smtp.port || !hasUser || !hasPass || !smtp.encryption) {
       throw new Error('请完整填写地址、主机、端口、加密协议、用户名和密码')
     }
     testingSmtp.value = true
@@ -5173,6 +5241,8 @@ interface FrontendConfig {
     githubOAuthEnabled: boolean;
     githubClientId: string;
     githubClientSecret: string;
+    githubClientSecretConfigured: boolean;
+    clearGithubClientSecret: boolean;
     githubCallbackURL: string;
     notifyEnabled: boolean;
     enableGithubCard: boolean;
@@ -5260,6 +5330,8 @@ const frontendConfig = reactive<FrontendConfig>({
   githubOAuthEnabled: false,
   githubClientId: '',
   githubClientSecret: '',
+  githubClientSecretConfigured: false,
+  clearGithubClientSecret: false,
   githubCallbackURL: '',
   notifyEnabled: false,
     enableGithubCard: false,
@@ -6751,6 +6823,7 @@ const saveGithubOAuthConfig = async () => {
         githubOAuthEnabled: !!(frontendConfig as any).githubOAuthEnabled,
         githubClientId: String((frontendConfig as any).githubClientId || ''),
         githubClientSecret: String((frontendConfig as any).githubClientSecret || ''),
+        clearGithubClientSecret: !!(frontendConfig as any).clearGithubClientSecret,
         githubCallbackURL: String((frontendConfig as any).githubCallbackURL || '')
       }
     }
@@ -6762,6 +6835,7 @@ const saveGithubOAuthConfig = async () => {
     })
     const data = await response.json()
     if (response.ok && data.code === 1) {
+      ;(frontendConfig as any).clearGithubClientSecret = false
       await fetchConfig()
       useToast().add({ title: '保存成功', description: 'GitHub 登录配置已保存', color: 'green' })
     } else {
@@ -7063,6 +7137,10 @@ const storageConfig = reactive({
   bucket: '',
   accessKey: '',
   secretKey: '',
+  accessKeyConfigured: false,
+  secretKeyConfigured: false,
+  clearAccessKey: false,
+  clearSecretKey: false,
   usePathStyle: true,
   publicBaseURL: '',
   syncRole: 'primary'
@@ -7113,6 +7191,10 @@ const loadStorageConfig = async () => {
       storageConfig.bucket = sc.bucket || ''
       storageConfig.accessKey = sc.accessKey || ''
       storageConfig.secretKey = sc.secretKey || ''
+      storageConfig.accessKeyConfigured = !!sc.accessKeyConfigured
+      storageConfig.secretKeyConfigured = !!sc.secretKeyConfigured
+      storageConfig.clearAccessKey = false
+      storageConfig.clearSecretKey = false
       storageConfig.usePathStyle = !!sc.usePathStyle
       storageConfig.publicBaseURL = sc.publicBaseURL || ''
       storageConfig.syncRole = sc.syncRole || 'primary'
@@ -7166,6 +7248,7 @@ const saveStorageConfig = async () => {
     const res = await fetch(`${baseApi}/settings`, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     const data = await res.json()
     if (data?.code === 1) {
+      await loadStorageConfig()
       useToast().add({ title: '已保存数据库存储配置', color: 'green' })
     } else {
       throw new Error(data?.msg || '保存失败')
@@ -7206,6 +7289,10 @@ const attachmentStorageConfig = reactive({
   bucket: '',
   accessKey: '',
   secretKey: '',
+  accessKeyConfigured: false,
+  secretKeyConfigured: false,
+  clearAccessKey: false,
+  clearSecretKey: false,
   usePathStyle: true,
   publicBaseURL: '',
   enableCompression: false,
@@ -7235,6 +7322,10 @@ const loadAttachmentStorageConfig = async () => {
       attachmentStorageConfig.bucket = sc.bucket || ''
       attachmentStorageConfig.accessKey = sc.accessKey || ''
       attachmentStorageConfig.secretKey = sc.secretKey || ''
+      attachmentStorageConfig.accessKeyConfigured = !!sc.accessKeyConfigured
+      attachmentStorageConfig.secretKeyConfigured = !!sc.secretKeyConfigured
+      attachmentStorageConfig.clearAccessKey = false
+      attachmentStorageConfig.clearSecretKey = false
       attachmentStorageConfig.usePathStyle = !!sc.usePathStyle
       attachmentStorageConfig.publicBaseURL = sc.publicBaseURL || ''
       attachmentStorageConfig.enableCompression = !!sc.enableCompression
@@ -7261,6 +7352,7 @@ const saveAttachmentStorageConfig = async () => {
     const res = await fetch(`${baseApi}/settings`, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     const data = await res.json()
     if (data?.code === 1) {
+      await loadAttachmentStorageConfig()
       useToast().add({ title: '已保存附件存储配置', description: attachmentStorageConfig.enableCompression ? '附件压缩已开启' : '附件压缩已关闭', color: 'green' })
     } else {
       throw new Error(data?.msg || '保存失败')

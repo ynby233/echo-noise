@@ -6,6 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/glebarez/sqlite"
+	"github.com/rcy1314/echo-noise/internal/database"
+	"github.com/rcy1314/echo-noise/internal/models"
+	"gorm.io/gorm"
 )
 
 func TestAttachmentContentHashFromBytesIsStable(t *testing.T) {
@@ -69,6 +74,46 @@ func TestLocalAttachmentFileNameForContentSequencesNameConflict(t *testing.T) {
 	}
 	if existed || name != "photo(1).png" {
 		t.Fatalf("expected sequenced filename, got name=%q existed=%v", name, existed)
+	}
+}
+
+func TestRestrictedLocalAttachmentDeduplicationUsesAnIsolatedFileName(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	if err := db.AutoMigrate(&models.LocalAttachmentGrant{}); err != nil {
+		t.Fatalf("migrate local attachment grants: %v", err)
+	}
+	database.DB = db
+	t.Cleanup(func() { database.DB = nil })
+	if err := db.Create(&models.LocalAttachmentGrant{
+		Kind:        "file",
+		Name:        "existing.pdf",
+		MessageID:   1,
+		OwnerUserID: 7,
+		Visibility:  "private",
+	}).Error; err != nil {
+		t.Fatalf("create restricted grant: %v", err)
+	}
+
+	name, existed, err := isolateRestrictedLocalAttachmentReuse("file", "report.pdf", "existing.pdf", true)
+	if err != nil {
+		t.Fatalf("isolate restricted duplicate: %v", err)
+	}
+	if existed || name == "existing.pdf" || filepath.Ext(name) != ".pdf" {
+		t.Fatalf("restricted duplicate result = name %q existed %v", name, existed)
+	}
+
+	if err := db.Model(&models.LocalAttachmentGrant{}).Where("kind = ? AND name = ?", "file", "existing.pdf").Update("visibility", "public").Error; err != nil {
+		t.Fatalf("make existing grant public: %v", err)
+	}
+	name, existed, err = isolateRestrictedLocalAttachmentReuse("file", "report.pdf", "existing.pdf", true)
+	if err != nil {
+		t.Fatalf("reuse public duplicate: %v", err)
+	}
+	if !existed || name != "existing.pdf" {
+		t.Fatalf("public duplicate result = name %q existed %v", name, existed)
 	}
 }
 

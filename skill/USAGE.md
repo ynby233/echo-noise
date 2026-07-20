@@ -699,3 +699,12 @@ Authorization: Bearer <你的Token>
 ### 可以只保留这一份 skill 吗
 
 可以，这就是单一综合 skill 方案，文档只是配套说明，不是多 skill 拆分。
+# 四态可见范围
+
+API/MCP 发布示例：
+
+```json
+{"content":"仅联系人可见","visibility":"contacts","private":true}
+```
+
+可选值为 `public`、`users`、`contacts`、`private`。更新接口允许只修改 `visibility`。使用 Token 读取时请在所有读取请求中携带 `Authorization: Bearer <token>`。

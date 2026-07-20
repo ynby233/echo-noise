@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
@@ -28,7 +29,7 @@ func setupCommentAccountTest(t *testing.T) (*gorm.DB, *gin.Engine, models.User, 
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}
-	if err := db.AutoMigrate(&models.User{}, &models.Message{}, &models.MessageLike{}, &models.Comment{}, &models.SiteConfig{}, &models.VoceChatContactCache{}); err != nil {
+	if err := db.AutoMigrate(&models.User{}, &models.Message{}, &models.MessageLike{}, &models.Comment{}, &models.UserNotification{}, &models.SiteConfig{}, &models.VoceChatContactCache{}, &models.LocalAttachmentGrant{}); err != nil {
 		t.Fatalf("migrate test db: %v", err)
 	}
 	repository.ClearUserCache()
@@ -164,6 +165,114 @@ func contentsOfComments(list []models.Comment) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func seedVoceChatContactAudience(t *testing.T, db *gorm.DB, authorID, contactID uint) {
+	t.Helper()
+	if err := db.Create(&models.SiteConfig{
+		VoceChatEnabled:         true,
+		VoceChatBaseURL:         "https://vc.example.test",
+		VoceChatAdminUsername:   "admin@vc.test",
+		VoceChatAdminPassword:   "secret",
+		VoceChatContactsEnabled: true,
+	}).Error; err != nil {
+		t.Fatalf("enable contact visibility: %v", err)
+	}
+	now := time.Now().UTC()
+	if err := db.Create(&models.VoceChatContactCache{
+		UserID:         authorID,
+		ContactUserID:  contactID,
+		Source:         "test",
+		SyncedAt:       now,
+		ExpiresAt:      now.Add(time.Hour),
+		LastSyncStatus: models.VoceChatContactSyncStatusOK,
+	}).Error; err != nil {
+		t.Fatalf("seed contact audience: %v", err)
+	}
+}
+
+func TestContactsMessageAudienceCanReadAndPostComments(t *testing.T) {
+	db, r, author, message := setupCommentAccountTest(t)
+	contact := models.User{Username: "contact", Password: ""}
+	if err := db.Create(&contact).Error; err != nil {
+		t.Fatalf("create contact: %v", err)
+	}
+	message.Visibility = "contacts"
+	message.Private = true
+	if err := db.Save(&message).Error; err != nil {
+		t.Fatalf("save contacts message: %v", err)
+	}
+	seedVoceChatContactAudience(t, db, author.ID, contact.ID)
+	existing := createTestComment(t, db, message.ID, &author, "author contacts comment", "contacts", nil)
+
+	r.Use(func(c *gin.Context) {
+		c.Set("user_id", contact.ID)
+		c.Set("is_admin", false)
+		c.Next()
+	})
+	r.GET("/messages/:id/comments", GetComments)
+	r.POST("/messages/:id/comments", PostComment)
+
+	req := httptest.NewRequest(http.MethodGet, "/messages/"+strconvFormatUint(message.ID)+"/comments", nil)
+	getResponse := httptest.NewRecorder()
+	r.ServeHTTP(getResponse, req)
+	comments := decodeCommentListResponse(t, getResponse)
+	if len(comments) != 1 || comments[0].ID != existing.ID {
+		t.Fatalf("contact visible comments = %#v, want author contacts comment", comments)
+	}
+
+	postResponse := performCommentRequest(r, message.ID, map[string]any{
+		"content":    "contact reply",
+		"visibility": "contacts",
+	})
+	if postResponse.Code != http.StatusOK {
+		t.Fatalf("contact post status = %d: %s", postResponse.Code, postResponse.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(postResponse.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode contact post: %v", err)
+	}
+	if payload["code"] != float64(1) {
+		t.Fatalf("contact post failed: %s", postResponse.Body.String())
+	}
+}
+
+func TestContactCommentOnPublicMessageUsesCommentAuthorAudience(t *testing.T) {
+	db, r, _, message := setupCommentAccountTest(t)
+	commentAuthor := models.User{Username: "comment-author", Password: ""}
+	contact := models.User{Username: "comment-contact", Password: ""}
+	outsider := models.User{Username: "comment-outsider", Password: ""}
+	for _, user := range []*models.User{&commentAuthor, &contact, &outsider} {
+		if err := db.Create(user).Error; err != nil {
+			t.Fatalf("create user %s: %v", user.Username, err)
+		}
+	}
+	seedVoceChatContactAudience(t, db, commentAuthor.ID, contact.ID)
+	existing := createTestComment(t, db, message.ID, &commentAuthor, "contact audience comment", "contacts", nil)
+
+	r.Use(func(c *gin.Context) {
+		if raw := c.GetHeader("X-Test-User-ID"); raw != "" {
+			id, _ := strconv.ParseUint(raw, 10, 64)
+			c.Set("user_id", uint(id))
+		}
+		c.Next()
+	})
+	r.GET("/messages/:id/comments", GetComments)
+
+	request := func(userID uint) []models.Comment {
+		req := httptest.NewRequest(http.MethodGet, "/messages/"+strconvFormatUint(message.ID)+"/comments", nil)
+		req.Header.Set("X-Test-User-ID", strconvFormatUint(userID))
+		response := httptest.NewRecorder()
+		r.ServeHTTP(response, req)
+		return decodeCommentListResponse(t, response)
+	}
+
+	if got := request(contact.ID); len(got) != 1 || got[0].ID != existing.ID {
+		t.Fatalf("comment author's contact should see contacts comment, got %#v", got)
+	}
+	if got := request(outsider.ID); len(got) != 0 {
+		t.Fatalf("outsider should not see contacts comment, got %#v", got)
+	}
 }
 
 func TestPostCommentRequiresAccount(t *testing.T) {
@@ -538,6 +647,10 @@ func TestGetCommentsFiltersVisibility(t *testing.T) {
 	if err := db.Create(&other).Error; err != nil {
 		t.Fatalf("create other user: %v", err)
 	}
+	admin := models.User{Username: "comment-admin", Password: "", IsAdmin: true}
+	if err := db.Create(&admin).Error; err != nil {
+		t.Fatalf("create admin user: %v", err)
+	}
 	r.Use(func(c *gin.Context) {
 		if raw := c.GetHeader("X-Test-User-ID"); raw != "" {
 			id, _ := strconv.ParseUint(raw, 10, 64)
@@ -582,7 +695,7 @@ func TestGetCommentsFiltersVisibility(t *testing.T) {
 	if got := contentsOfComments(request(owner.ID, false)); len(got) != 4 {
 		t.Fatalf("owner should see all own comments, got %#v", got)
 	}
-	if got := contentsOfComments(request(other.ID, true)); len(got) != 4 {
+	if got := contentsOfComments(request(admin.ID, true)); len(got) != 4 {
 		t.Fatalf("admin should see all comments, got %#v", got)
 	}
 }

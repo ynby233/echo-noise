@@ -14,6 +14,29 @@ import (
 	"github.com/rcy1314/echo-noise/pkg"
 )
 
+func registerLocalAttachmentRoute(r *gin.Engine, route string, kind string, dir string) {
+	handler := controllers.ServeLocalAttachment(kind, dir)
+	r.GET(route+"/*name", handler)
+	r.HEAD(route+"/*name", handler)
+}
+
+func registerAttachmentManagementRoutes(authRoutes *gin.RouterGroup) {
+	attachments := authRoutes.Group("/attachments")
+	attachments.GET("/images", middleware.AdminAuthMiddleware(), controllers.ListImageAttachments)
+	attachments.GET("/images/", middleware.AdminAuthMiddleware(), controllers.ListImageAttachments)
+	attachments.GET("/video", middleware.AdminAuthMiddleware(), controllers.ListVideoAttachments)
+	attachments.GET("/video/", middleware.AdminAuthMiddleware(), controllers.ListVideoAttachments)
+	attachments.GET("/audio", middleware.AdminAuthMiddleware(), controllers.ListAudioAttachments)
+	attachments.GET("/audio/", middleware.AdminAuthMiddleware(), controllers.ListAudioAttachments)
+	attachments.GET("/other", middleware.AdminAuthMiddleware(), controllers.ListOtherAttachments)
+	attachments.GET("/other/", middleware.AdminAuthMiddleware(), controllers.ListOtherAttachments)
+	attachments.POST("/download-zip", middleware.AdminAuthMiddleware(), controllers.DownloadAttachmentZip)
+	attachments.DELETE("/images/*name", middleware.AdminAuthMiddleware(), controllers.DeleteImageAttachment)
+	attachments.DELETE("/video/*name", middleware.AdminAuthMiddleware(), controllers.DeleteVideoAttachment)
+	attachments.DELETE("/audio/*name", middleware.AdminAuthMiddleware(), controllers.DeleteAudioAttachment)
+	attachments.DELETE("/other/*name", middleware.AdminAuthMiddleware(), controllers.DeleteOtherAttachment)
+}
+
 func SetupRouter() *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -144,12 +167,14 @@ func SetupRouter() *gin.Engine {
 		os.MkdirAll(attachmentDir, 0755)
 	}
 
-	r.Static("/api/images", imgDir)
+	registerLocalAttachmentRoute(r, "/api/images", "image", imgDir)
 	// 同时支持 /api/video 和 /video，兼容旧版路径和 API 规范
-	r.Static("/api/video", vidDir)
-	r.Static("/video", vidDir)
-	r.Static("/api/audio", audioDir)
-	r.Static("/api/files", attachmentDir)
+	registerLocalAttachmentRoute(r, "/api/video", "video", vidDir)
+	registerLocalAttachmentRoute(r, "/video", "video", vidDir)
+	registerLocalAttachmentRoute(r, "/api/audio", "audio", audioDir)
+	registerLocalAttachmentRoute(r, "/api/files", "file", attachmentDir)
+	r.GET("/api/cloud-attachments/:id/*name", controllers.ServeCloudAttachment)
+	r.HEAD("/api/cloud-attachments/:id/*name", controllers.ServeCloudAttachment)
 	// 常用静态文件已在上方映射
 
 	// API 路由组
@@ -309,22 +334,7 @@ func SetupRouter() *gin.Engine {
 	authRoutes.POST("/attachments/upload", controllers.UploadAttachment) // 上传通用附件
 
 	// 附件管理路由
-	attachments := authRoutes.Group("/attachments")
-	{
-		attachments.GET("/images", controllers.ListImageAttachments)
-		attachments.GET("/images/", controllers.ListImageAttachments)
-		attachments.GET("/video", controllers.ListVideoAttachments)
-		attachments.GET("/video/", controllers.ListVideoAttachments)
-		attachments.GET("/audio", controllers.ListAudioAttachments)
-		attachments.GET("/audio/", controllers.ListAudioAttachments)
-		attachments.GET("/other", controllers.ListOtherAttachments)
-		attachments.GET("/other/", controllers.ListOtherAttachments)
-		attachments.POST("/download-zip", middleware.AdminAuthMiddleware(), controllers.DownloadAttachmentZip)
-		attachments.DELETE("/images/*name", middleware.AdminAuthMiddleware(), controllers.DeleteImageAttachment)
-		attachments.DELETE("/video/*name", middleware.AdminAuthMiddleware(), controllers.DeleteVideoAttachment)
-		attachments.DELETE("/audio/*name", middleware.AdminAuthMiddleware(), controllers.DeleteAudioAttachment)
-		attachments.DELETE("/other/*name", middleware.AdminAuthMiddleware(), controllers.DeleteOtherAttachment)
-	}
+	registerAttachmentManagementRoutes(authRoutes)
 
 	// 用户相关路由
 	user := authRoutes.Group("/user")

@@ -36,7 +36,7 @@ assert.match(
   'home stats should exclude guestbook/about/friend-link system messages'
 )
 
-const statsCardStart = indexPage.indexOf('<UCard class="sidebar-card no-padding-card mt-2" :class="sidebarThemeCard">')
+const statsCardStart = indexPage.indexOf('<UCard class="sidebar-card no-padding-card mt-2 left-widget-stats-card" :class="sidebarThemeCard">')
 assert.notEqual(statsCardStart, -1, 'home page must keep the left stats card')
 const statsCardEnd = indexPage.indexOf('</UCard>', statsCardStart)
 assert.notEqual(statsCardEnd, -1, 'home stats card must have a closing card tag')

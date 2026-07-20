@@ -116,6 +116,11 @@ type UserContact struct {
 	} `json:"contact_info"`
 }
 
+const (
+	ContactStatusAdded   = "added"
+	ContactStatusBlocked = "blocked"
+)
+
 type UserConflict struct {
 	Reason string `json:"reason"`
 }

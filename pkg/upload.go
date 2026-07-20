@@ -23,9 +23,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/nfnt/resize"
 	"github.com/rcy1314/echo-noise/config"
+	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
+	"gorm.io/gorm"
 )
 
 func escapeObjectKeyForURL(key string) string {
@@ -241,6 +244,36 @@ func localAttachmentFileNameForContent(dir, preferredName, contentHash string) (
 	}
 }
 
+func isolateRestrictedLocalAttachmentReuse(kind, preferredName, existingName string, existed bool) (string, bool, error) {
+	if !existed {
+		return existingName, false, nil
+	}
+	db, err := database.GetDB()
+	if err != nil {
+		return "", false, err
+	}
+	var grantCount int64
+	if err := db.Model(&models.LocalAttachmentGrant{}).
+		Where("kind = ? AND name = ?", kind, existingName).
+		Count(&grantCount).Error; err != nil {
+		return "", false, err
+	}
+	if grantCount == 0 {
+		return existingName, true, nil
+	}
+	var publicGrantCount int64
+	if err := db.Model(&models.LocalAttachmentGrant{}).
+		Where("kind = ? AND name = ? AND visibility = ?", kind, existingName, "public").
+		Count(&publicGrantCount).Error; err != nil {
+		return "", false, err
+	}
+	if publicGrantCount > 0 {
+		return existingName, true, nil
+	}
+	extension := normalizeUploadExt(filepath.Ext(preferredName), filepath.Ext(existingName))
+	return uuid.NewString() + extension, false, nil
+}
+
 func fileExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
@@ -337,6 +370,10 @@ func UploadImage(c *gin.Context, allowedExtensions []string, siteConfig *models.
 	if err != nil {
 		return "", err
 	}
+	newFileName, existed, err = isolateRestrictedLocalAttachmentReuse("image", preferredFileName, newFileName, existed)
+	if err != nil {
+		return "", err
+	}
 
 	// 保存文件到指定目录；相同内容已经存在时直接复用。
 	savePath := filepath.Join(config.Config.Upload.SavePath, newFileName)
@@ -387,6 +424,47 @@ func UploadAttachmentToCloud(cfg *models.SiteConfig, preferredFileName string, c
 		o.UsePathStyle = cfg.AttachmentStorageUsePathStyle
 	})
 
+	db, dbErr := database.GetDB()
+	if dbErr != nil {
+		return "", dbErr
+	}
+	if contentHash != "" {
+		var existing models.CloudAttachmentObject
+		if err := db.Where("content_hash = ?", contentHash).Order("id ASC").First(&existing).Error; err == nil {
+			exists, sameContent, verifyErr := cloudObjectMatchesContentHash(context.TODO(), client, cfg.AttachmentStorageBucket, existing.ObjectKey, contentHash, false)
+			if verifyErr != nil {
+				return "", verifyErr
+			}
+			var grantCount int64
+			var publicGrantCount int64
+			if err := db.Model(&models.LocalAttachmentGrant{}).Where("kind = ? AND name = ?", "cloud", existing.PublicID).Count(&grantCount).Error; err != nil {
+				return "", err
+			}
+			if grantCount > 0 {
+				if err := db.Model(&models.LocalAttachmentGrant{}).
+					Where("kind = ? AND name = ? AND visibility = ?", "cloud", existing.PublicID, "public").
+					Count(&publicGrantCount).Error; err != nil {
+					return "", err
+				}
+			}
+			if exists && sameContent && (grantCount == 0 || publicGrantCount > 0) {
+				return fmt.Sprintf("/api/cloud-attachments/%s/%s", existing.PublicID, url.PathEscape(existing.OriginalName)), nil
+			}
+			if !exists {
+				if err := db.Transaction(func(tx *gorm.DB) error {
+					if err := tx.Where("kind = ? AND name = ?", "cloud", existing.PublicID).Delete(&models.LocalAttachmentGrant{}).Error; err != nil {
+						return err
+					}
+					return tx.Delete(&existing).Error
+				}); err != nil {
+					return "", err
+				}
+			}
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", err
+		}
+	}
+
 	var contentLength int64
 	if _, err := content.Seek(0, io.SeekStart); err == nil {
 		if n, err := content.Seek(0, io.SeekEnd); err == nil {
@@ -395,52 +473,12 @@ func UploadAttachmentToCloud(cfg *models.SiteConfig, preferredFileName string, c
 		content.Seek(0, io.SeekStart)
 	}
 
-	origin, prefix := splitPublicBaseURL(cfg.AttachmentStoragePublicBaseURL)
-	keyForName := func(name string) string {
-		key := strings.TrimLeft(name, "/")
-		if prefix != "" && !strings.HasPrefix(key, prefix+"/") {
-			key = prefix + "/" + key
-		}
-		return key
-	}
-
-	// 构建返回 URL
-	buildPublicURL := func(cleanKey string) (string, error) {
-		if strings.TrimSpace(cfg.AttachmentStoragePublicBaseURL) != "" {
-			if origin == "" {
-				return "", errors.New("请在设置中配置云存储公共访问域名(PublicBaseURL)")
-			}
-			keyForURL := strings.TrimLeft(cleanKey, "/")
-			if prefix != "" && !strings.HasPrefix(keyForURL, prefix+"/") {
-				keyForURL = prefix + "/" + keyForURL
-			}
-			return fmt.Sprintf("%s/%s", origin, escapeObjectKeyForURL(keyForURL)), nil
-		}
-
-		return "", errors.New("请在设置中配置云存储公共访问域名(PublicBaseURL)")
-	}
-
-	if existingKey, ok, err := findCloudAttachmentByContentHash(context.TODO(), client, cfg.AttachmentStorageBucket, contentHash); err != nil {
-		return "", err
-	} else if ok {
-		return buildPublicURL(existingKey)
-	}
-
-	var key string
-	for i := 0; ; i++ {
-		candidateName := sequencedAttachmentFileName(preferredFileName, i)
-		candidateKey := keyForName(candidateName)
-		exists, sameContent, err := cloudObjectMatchesContentHash(context.TODO(), client, cfg.AttachmentStorageBucket, candidateKey, contentHash, true)
-		if err != nil {
-			return "", err
-		}
-		if sameContent {
-			return buildPublicURL(candidateKey)
-		}
-		if !exists {
-			key = candidateKey
-			break
-		}
+	_, prefix := splitPublicBaseURL(cfg.AttachmentStoragePublicBaseURL)
+	storageID := uuid.NewString()
+	publicID := uuid.NewString()
+	key := storageID + "/" + strings.TrimLeft(preferredFileName, "/")
+	if prefix != "" {
+		key = prefix + "/" + key
 	}
 
 	if _, err := content.Seek(0, io.SeekStart); err != nil {
@@ -467,7 +505,18 @@ func UploadAttachmentToCloud(cfg *models.SiteConfig, preferredFileName string, c
 		return "", fmt.Errorf("上传到云存储失败: %v", err)
 	}
 
-	return buildPublicURL(key)
+	record := models.CloudAttachmentObject{
+		PublicID:     publicID,
+		ObjectKey:    key,
+		OriginalName: preferredFileName,
+		ContentType:  contentType,
+		ContentHash:  contentHash,
+	}
+	if dbErr := db.Create(&record).Error; dbErr != nil {
+		_, _ = client.DeleteObject(context.TODO(), &s3.DeleteObjectInput{Bucket: aws.String(cfg.AttachmentStorageBucket), Key: aws.String(key)})
+		return "", dbErr
+	}
+	return fmt.Sprintf("/api/cloud-attachments/%s/%s", publicID, url.PathEscape(preferredFileName)), nil
 }
 
 func findCloudAttachmentByContentHash(ctx context.Context, client *s3.Client, bucket, contentHash string) (string, bool, error) {
@@ -716,6 +765,10 @@ func UploadVideo(c *gin.Context, allowedExtensions []string, siteConfig *models.
 	if err != nil {
 		return "", err
 	}
+	newFileName, existed, err = isolateRestrictedLocalAttachmentReuse("video", preferredFileName, newFileName, existed)
+	if err != nil {
+		return "", err
+	}
 
 	savePath := filepath.Join(videoPath, newFileName)
 	if !existed && !fileExists(savePath) {
@@ -810,6 +863,10 @@ func UploadAudio(c *gin.Context, allowedMimeTypes []string, siteConfig *models.S
 	if err != nil {
 		return "", err
 	}
+	newFileName, existed, err = isolateRestrictedLocalAttachmentReuse("audio", preferredFileName, newFileName, existed)
+	if err != nil {
+		return "", err
+	}
 
 	savePath := filepath.Join(audioPath, newFileName)
 	if !existed && !fileExists(savePath) {
@@ -890,6 +947,10 @@ func UploadFileAttachment(c *gin.Context, siteConfig *models.SiteConfig) (string
 	}
 
 	newFileName, existed, err := localAttachmentFileNameForContent(attachmentPath, preferredFileName, contentHash)
+	if err != nil {
+		return "", err
+	}
+	newFileName, existed, err = isolateRestrictedLocalAttachmentReuse("file", preferredFileName, newFileName, existed)
 	if err != nil {
 		return "", err
 	}

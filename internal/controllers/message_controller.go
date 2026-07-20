@@ -11,7 +11,6 @@ import (
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/services"
-	"gorm.io/gorm"
 )
 
 var (
@@ -204,7 +203,7 @@ func GetAllImages(c *gin.Context) {
 
 	var messages []models.Message
 	q := db.Select("id", "content", "image_url", "created_at", "private", "visibility", "user_id").Order("created_at DESC")
-	viewerID, hasViewer, isAdmin := resolveImageViewer(c, db)
+	viewerID, hasViewer, isAdmin := resolveImageViewer(c)
 	var currentUserID *uint
 	if hasViewer {
 		id := viewerID
@@ -247,22 +246,11 @@ func GetAllImages(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": allImages})
 }
 
-func resolveImageViewer(c *gin.Context, db *gorm.DB) (uint, bool, bool) {
-	if userID, ok := commentAuthUserID(c); ok {
-		return userID, true, commentAuthIsAdmin(c)
+func resolveImageViewer(c *gin.Context) (uint, bool, bool) {
+	if user, ok := currentReadUser(c); ok {
+		return user.ID, true, user.IsAdmin
 	}
-
-	token := strings.TrimSpace(c.GetHeader("Authorization"))
-	token = strings.TrimSpace(strings.TrimPrefix(token, "Bearer "))
-	if token == "" || strings.EqualFold(token, "null") {
-		return 0, false, false
-	}
-
-	var user models.User
-	if err := db.Where("token = ?", token).First(&user).Error; err != nil || user.ID == 0 {
-		return 0, false, false
-	}
-	return user.ID, true, user.IsAdmin
+	return 0, false, false
 }
 
 // GetMessagePage 处理消息详情页请求

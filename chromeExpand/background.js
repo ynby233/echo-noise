@@ -4,12 +4,15 @@ const CAPTURE_MENU_ID = "capture-site-info";
 chrome.runtime.onInstalled.addListener(async () => {
   console.log("说说笔记扩展已安装");
 
-  const result = await chrome.storage.sync.get(["siteUrl", "apiToken"]);
+  const result = await chrome.storage.sync.get(["siteUrl", "apiToken", "messageVisibility"]);
   if (!result.siteUrl) {
     await chrome.storage.sync.set({ siteUrl: "" });
   }
   if (!result.apiToken) {
     await chrome.storage.sync.set({ apiToken: "" });
+  }
+  if (!["public", "users", "contacts", "private"].includes(result.messageVisibility)) {
+    await chrome.storage.sync.set({ messageVisibility: "public" });
   }
 
   chrome.contextMenus.create({

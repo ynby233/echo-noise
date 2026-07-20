@@ -961,9 +961,11 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 	}
 	rssMemberIDsForViewer := []uint{}
 	rssAvailableMembersForViewer := []map[string]interface{}{}
+	viewerIsAdmin := false
 	if viewerUserID > 0 {
 		var viewer models.User
 		if err := db.Select("id, is_admin").First(&viewer, viewerUserID).Error; err == nil && viewer.IsAdmin {
+			viewerIsAdmin = true
 			rssMemberIDsForViewer = rssConfig.MemberIDs
 			rssAvailableMembersForViewer = rssConfig.AvailableMembers
 		}
@@ -1025,10 +1027,11 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 			"welcomeDescription": choose(config.WelcomeDescription, getDefaultConfig()["frontendSettings"].(map[string]interface{})["welcomeDescription"].(string)),
 			"welcomeUseAdmin":    config.WelcomeUseAdmin,
 			// GitHub OAuth
-			"githubOAuthEnabled": config.GithubOAuthEnabled,
-			"githubClientId":     config.GithubClientId,
-			"githubClientSecret": config.GithubClientSecret,
-			"githubCallbackURL":  config.GithubCallbackURL,
+			"githubOAuthEnabled":           config.GithubOAuthEnabled,
+			"githubClientId":               config.GithubClientId,
+			"githubClientSecret":           "",
+			"githubClientSecretConfigured": viewerIsAdmin && strings.TrimSpace(config.GithubClientSecret) != "",
+			"githubCallbackURL":            config.GithubCallbackURL,
 			// PWA 设置
 			"pwaEnabled":     config.PwaEnabled,
 			"pwaTitle":       choose(config.PwaTitle, config.SiteTitle),
@@ -1084,14 +1087,16 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 		"voceChatConfig": vocechat.PublicConfigFromSiteConfig(config, viewerUserID == models.PrimaryAdminUserID),
 		"storageEnabled": config.StorageEnabled,
 		"storageConfig": map[string]interface{}{
-			"provider":      choose(config.StorageProvider, ""),
-			"endpoint":      choose(config.StorageEndpoint, ""),
-			"region":        choose(config.StorageRegion, ""),
-			"bucket":        choose(config.StorageBucket, ""),
-			"accessKey":     choose(config.StorageAccessKey, ""),
-			"secretKey":     choose(config.StorageSecretKey, ""),
-			"usePathStyle":  config.StorageUsePathStyle,
-			"publicBaseURL": choose(config.StoragePublicBaseURL, ""),
+			"provider":            choose(config.StorageProvider, ""),
+			"endpoint":            choose(config.StorageEndpoint, ""),
+			"region":              choose(config.StorageRegion, ""),
+			"bucket":              choose(config.StorageBucket, ""),
+			"accessKey":           "",
+			"secretKey":           "",
+			"accessKeyConfigured": viewerIsAdmin && strings.TrimSpace(config.StorageAccessKey) != "",
+			"secretKeyConfigured": viewerIsAdmin && strings.TrimSpace(config.StorageSecretKey) != "",
+			"usePathStyle":        config.StorageUsePathStyle,
+			"publicBaseURL":       choose(config.StoragePublicBaseURL, ""),
 			"syncRole": func() string {
 				if config.StorageSyncRole == "" {
 					return "primary"
@@ -1117,26 +1122,30 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 		},
 		"attachmentStorageEnabled": config.AttachmentStorageEnabled,
 		"attachmentStorageConfig": map[string]interface{}{
-			"provider":          choose(config.AttachmentStorageProvider, ""),
-			"endpoint":          choose(config.AttachmentStorageEndpoint, ""),
-			"region":            choose(config.AttachmentStorageRegion, ""),
-			"bucket":            choose(config.AttachmentStorageBucket, ""),
-			"accessKey":         choose(config.AttachmentStorageAccessKey, ""),
-			"secretKey":         choose(config.AttachmentStorageSecretKey, ""),
-			"usePathStyle":      config.AttachmentStorageUsePathStyle,
-			"publicBaseURL":     choose(config.AttachmentStoragePublicBaseURL, ""),
-			"enableCompression": config.EnableCompression,
-			"ffmpegInstalled":   pkg.CheckFFmpegInstalled(),
+			"provider":            choose(config.AttachmentStorageProvider, ""),
+			"endpoint":            choose(config.AttachmentStorageEndpoint, ""),
+			"region":              choose(config.AttachmentStorageRegion, ""),
+			"bucket":              choose(config.AttachmentStorageBucket, ""),
+			"accessKey":           "",
+			"secretKey":           "",
+			"accessKeyConfigured": viewerIsAdmin && strings.TrimSpace(config.AttachmentStorageAccessKey) != "",
+			"secretKeyConfigured": viewerIsAdmin && strings.TrimSpace(config.AttachmentStorageSecretKey) != "",
+			"usePathStyle":        config.AttachmentStorageUsePathStyle,
+			"publicBaseURL":       choose(config.AttachmentStoragePublicBaseURL, ""),
+			"enableCompression":   config.EnableCompression,
+			"ffmpegInstalled":     pkg.CheckFFmpegInstalled(),
 		},
-		"smtpEnabled":    config.SmtpEnabled,
-		"smtpDriver":     config.SmtpDriver,
-		"smtpHost":       config.SmtpHost,
-		"smtpPort":       config.SmtpPort,
-		"smtpUser":       config.SmtpUser,
-		"smtpPass":       config.SmtpPass,
-		"smtpFrom":       config.SmtpFrom,
-		"smtpEncryption": config.SmtpEncryption,
-		"smtpTLS":        config.SmtpTLS,
+		"smtpEnabled":        config.SmtpEnabled,
+		"smtpDriver":         config.SmtpDriver,
+		"smtpHost":           config.SmtpHost,
+		"smtpPort":           config.SmtpPort,
+		"smtpUser":           "",
+		"smtpPass":           "",
+		"smtpUserConfigured": viewerIsAdmin && strings.TrimSpace(config.SmtpUser) != "",
+		"smtpPassConfigured": viewerIsAdmin && strings.TrimSpace(config.SmtpPass) != "",
+		"smtpFrom":           config.SmtpFrom,
+		"smtpEncryption":     config.SmtpEncryption,
+		"smtpTLS":            config.SmtpTLS,
 	}
 	return configMap, nil
 }
@@ -1614,9 +1623,7 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	if v, ok := frontendSettings["githubClientId"].(string); ok {
 		config.GithubClientId = v
 	}
-	if v, ok := frontendSettings["githubClientSecret"].(string); ok {
-		config.GithubClientSecret = v
-	}
+	applySensitiveStringSetting(frontendSettings, "githubClientSecret", "clearGithubClientSecret", &config.GithubClientSecret)
 	if v, ok := frontendSettings["githubCallbackURL"].(string); ok {
 		config.GithubCallbackURL = v
 	}
@@ -1718,12 +1725,8 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 		if v, ok := sc["bucket"].(string); ok {
 			config.StorageBucket = v
 		}
-		if v, ok := sc["accessKey"].(string); ok {
-			config.StorageAccessKey = v
-		}
-		if v, ok := sc["secretKey"].(string); ok {
-			config.StorageSecretKey = v
-		}
+		applySensitiveStringSetting(sc, "accessKey", "clearAccessKey", &config.StorageAccessKey)
+		applySensitiveStringSetting(sc, "secretKey", "clearSecretKey", &config.StorageSecretKey)
 		if v, ok := sc["usePathStyle"].(bool); ok {
 			config.StorageUsePathStyle = v
 		}
@@ -1809,12 +1812,8 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 		if v, ok := sc["bucket"].(string); ok {
 			config.AttachmentStorageBucket = v
 		}
-		if v, ok := sc["accessKey"].(string); ok {
-			config.AttachmentStorageAccessKey = v
-		}
-		if v, ok := sc["secretKey"].(string); ok {
-			config.AttachmentStorageSecretKey = v
-		}
+		applySensitiveStringSetting(sc, "accessKey", "clearAccessKey", &config.AttachmentStorageAccessKey)
+		applySensitiveStringSetting(sc, "secretKey", "clearSecretKey", &config.AttachmentStorageSecretKey)
 		if v, ok := sc["usePathStyle"].(bool); ok {
 			config.AttachmentStorageUsePathStyle = v
 		}
@@ -1862,12 +1861,8 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 			config.SmtpPort = p
 		}
 	}
-	if v, ok := settingMap["smtpUser"].(string); ok {
-		config.SmtpUser = v
-	}
-	if v, ok := settingMap["smtpPass"].(string); ok {
-		config.SmtpPass = v
-	}
+	applySensitiveStringSetting(settingMap, "smtpUser", "clearSmtpUser", &config.SmtpUser)
+	applySensitiveStringSetting(settingMap, "smtpPass", "clearSmtpPass", &config.SmtpPass)
 	if v, ok := settingMap["smtpFrom"].(string); ok {
 		config.SmtpFrom = v
 	}

@@ -54,7 +54,7 @@ assert.match(
 )
 assert.match(
   addForm,
-  /JSON\.stringify\(\{ content: MessageContent\.value \|\| '', private: !!Private\.value, visibility: Visibility\.value/,
+  /JSON\.stringify\(\{ content: editorContent \|\| '', private: !!Private\.value, visibility: Visibility\.value/,
   'publish drafts must persist visibility as well as the legacy private flag'
 )
 assert.match(
