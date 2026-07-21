@@ -129,6 +129,9 @@ const stripFullImageAttachmentsMarker = (content: string) => String(content || '
 const HASHTAG_REG = /(^|[\s(（[{【])#([\p{L}\p{N}_-]+)/gu
 const TABLE_CELL_BREAK_RE = /<br\s*\/?\s*>/gi
 const RENDERED_TABLE_MIN_COLUMN_WIDTH = 48
+const RENDERED_TABLE_ATTACHMENT_CARD_WIDTH = 280
+const RENDERED_TABLE_ATTACHMENT_VIDEO_WIDTH = 240
+const RENDERED_TABLE_ATTACHMENT_IMAGE_WIDTH = 200
 const RENDERED_TABLE_MIN_ROW_HEIGHT = 38
 const RENDERED_TABLE_CELL_HORIZONTAL_PADDING = 18
 const RENDERED_TABLE_SCROLL_OVERFLOW_TOLERANCE = 2
@@ -504,6 +507,21 @@ const estimateRenderedTableLineWidth = (line: string) => {
   }, RENDERED_TABLE_CELL_HORIZONTAL_PADDING)
 }
 
+const estimateRenderedTableCellAttachmentWidth = (cell: HTMLTableCellElement | undefined) => {
+  if (!cell) return 0
+  let width = 0
+  if (cell.querySelector('.noise-attachment-file, .noise-attachment-audio, [data-noise-audio-player], .noise-table-audio-trigger')) {
+    width = Math.max(width, RENDERED_TABLE_ATTACHMENT_CARD_WIDTH)
+  }
+  if (cell.querySelector('.noise-attachment-render--video, video')) {
+    width = Math.max(width, RENDERED_TABLE_ATTACHMENT_VIDEO_WIDTH)
+  }
+  if (cell.querySelector('.noise-attachment-paragraph, .noise-attachment-image, img')) {
+    width = Math.max(width, RENDERED_TABLE_ATTACHMENT_IMAGE_WIDTH)
+  }
+  return width
+}
+
 const adaptiveRenderedTableColumnWidths = (table: HTMLTableElement, availableWidth: number, minWidth = RENDERED_TABLE_MIN_COLUMN_WIDTH) => {
   const rows = Array.from(table.rows)
   const columnCount = rows.reduce((max, row) => Math.max(max, row.cells.length), 0)
@@ -514,7 +532,9 @@ const adaptiveRenderedTableColumnWidths = (table: HTMLTableElement, availableWid
     const maxLine = rows.reduce((max, row) => {
       const cell = row.cells[columnIndex]
       const text = String(cell?.textContent || '').replace(/\u00a0/g, ' ')
-      return Math.max(max, ...text.split('\n').map((line) => estimateRenderedTableLineWidth(line)))
+      const textWidth = Math.max(...text.split('\n').map((line) => estimateRenderedTableLineWidth(line)))
+      const attachmentWidth = estimateRenderedTableCellAttachmentWidth(cell)
+      return Math.max(max, textWidth, attachmentWidth)
     }, minWidth)
     return Math.max(minWidth, Math.ceil(maxLine))
   })

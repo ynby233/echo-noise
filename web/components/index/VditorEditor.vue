@@ -6602,6 +6602,7 @@ html.dark .editor-table-expand-button:focus-visible {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  min-width: 0;
   min-height: 38px;
 }
 
@@ -6788,6 +6789,7 @@ html.dark .editor-inline-table-cell-atomic-editor .editor-table-attachment-marke
 
 .editor-table-expand-attachments {
   display: block;
+  min-width: 0;
   padding: 0 8px 8px;
 }
 
@@ -6796,8 +6798,8 @@ html.dark .editor-inline-table-cell-atomic-editor .editor-table-attachment-marke
 }
 
 .editor-table-expand-attachment-tag {
-  display: inline;
-  max-width: none;
+  display: inline-block;
+  max-width: 100%;
   min-height: 0;
   padding: 0;
   border: 0;
@@ -6810,8 +6812,8 @@ html.dark .editor-inline-table-cell-atomic-editor .editor-table-attachment-marke
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: zoom-in;
-  overflow: visible;
-  text-overflow: clip;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
   word-break: normal;
   overflow-wrap: normal;
