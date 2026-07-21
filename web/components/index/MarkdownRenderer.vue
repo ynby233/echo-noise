@@ -30,7 +30,7 @@ import { ensureFancyboxVideoThumbnail, getVideoElementSource, normalizeMediaPrev
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { buildAttachmentAudioPlaceholderHtml, destroyAttachmentAudioPlayers, enhanceAttachmentAudioPlayers } from '~/utils/attachment-audio-player'
 import { encodeMarkdownExtraBlankLines, markMarkdownPreservedBlankLineElements } from '~/utils/markdown-blank-lines'
-import { applyTableTrackSize, resolveTableTrackResize, resolveTableTrailingScrollReserve, type TableTrackResizeSession } from '~/utils/table-resize-session'
+import { applyTableTrackSize, getTableResizeZoomScale, resolveTableTrackResize, resolveTableTrailingScrollReserve, type TableTrackResizeSession } from '~/utils/table-resize-session'
 import Vditor from 'vditor';
 
 // 定义正则表达式
@@ -645,7 +645,8 @@ const onRenderedTableResizeMove = (event: PointerEvent) => {
   if (!table) return
   event.preventDefault()
   event.stopPropagation()
-  const pointer = drag.type === 'row' ? event.clientY : event.clientX
+  const scale = drag.scale || 1
+  const pointer = (drag.type === 'row' ? event.clientY : event.clientX) / scale
   const resolved = resolveTableTrackResize(drag, pointer, drag.active)
   drag.active = resolved.active
   if (!resolved.active) return
@@ -699,12 +700,14 @@ const ensureRenderedTableResizeHandles = (table: HTMLTableElement, autoRowHeight
       rowHandle.addEventListener('pointerdown', (event) => {
         event.preventDefault()
         event.stopPropagation()
+        const scale = getTableResizeZoomScale()
         startRenderedTableResize({
           type: 'row',
           index: rowIndex,
-          startPointer: event.clientY,
-          startSize: row.getBoundingClientRect().height,
+          startPointer: event.clientY / scale,
+          startSize: row.getBoundingClientRect().height / scale,
           minSize: Math.max(RENDERED_TABLE_MIN_ROW_HEIGHT, autoRowHeights[rowIndex] || 0),
+          scale,
         }, event)
       })
       cellElement.appendChild(rowHandle)
@@ -716,12 +719,14 @@ const ensureRenderedTableResizeHandles = (table: HTMLTableElement, autoRowHeight
       columnHandle.addEventListener('pointerdown', (event) => {
         event.preventDefault()
         event.stopPropagation()
+        const scale = getTableResizeZoomScale()
         startRenderedTableResize({
           type: 'column',
           index: cellIndex,
-          startPointer: event.clientX,
-          startSize: cellElement.getBoundingClientRect().width,
+          startPointer: event.clientX / scale,
+          startSize: cellElement.getBoundingClientRect().width / scale,
           minSize: RENDERED_TABLE_MIN_COLUMN_WIDTH,
+          scale,
         }, event)
       })
       cellElement.appendChild(columnHandle)

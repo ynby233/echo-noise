@@ -70,4 +70,27 @@ assert.equal(resolveTableTrailingScrollReserve(0, 78, 58), 20, 'shrinking a colu
 assert.equal(resolveTableTrailingScrollReserve(20, 78, 88), 10, 'growing a column must consume an existing trailing scroll reserve')
 assert.equal(resolveTableTrailingScrollReserve(20, 78, 108), 0, 'growth beyond the reserve must expand the real scroll range')
 
+// Regression: body { zoom } must not break 1:1 pointer tracking.
+// getBoundingClientRect()/clientX are post-zoom (visual) px, while style.width is pre-zoom (CSS) px.
+// Call sites normalize by dividing visual px by the zoom scale, so the rendered edge must track the pointer 1:1.
+for (const zoom of [1, 1.1, 1.25, 0.9090909091]) {
+  const startVisualSize = 150.7
+  const startVisualPointer = 264.7
+  const pointerVisualDelta = 40
+  const session = {
+    startPointer: startVisualPointer / zoom,
+    startSize: startVisualSize / zoom,
+    minSize: 48,
+    scale: zoom,
+  }
+  const movedPointerVisual = startVisualPointer + pointerVisualDelta
+  const resolved = resolveTableTrackResize(session, movedPointerVisual / zoom, true)
+  const renderedSize = resolved.size * zoom
+  const renderedDelta = renderedSize - startVisualSize
+  assert.ok(
+    Math.abs(renderedDelta - pointerVisualDelta) < 1e-6,
+    `under body zoom ${zoom} the rendered resize edge must follow the pointer 1:1 (got ${renderedDelta} for a ${pointerVisualDelta}px drag)`
+  )
+}
+
 console.log('table resize session tests passed')

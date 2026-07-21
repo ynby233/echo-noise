@@ -191,7 +191,7 @@ import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { buildAttachmentAudioPlaceholderHtml, closeAttachmentAudioPopover, destroyAttachmentAudioPlayers, enhanceAttachmentAudioPlayers, toggleAttachmentAudioPopover } from '~/utils/attachment-audio-player'
 import { MARKDOWN_BLANK_LINE_SENTINEL, encodeMarkdownExtraBlankLines, isMarkdownBlankLineSentinel, markMarkdownPreservedBlankLineElements } from '~/utils/markdown-blank-lines'
 import { getFixedEditorClipInsets, insertEditorValueFallback, insertTableCellAtomicValue, replaceTableSourceLine, resolveTableAttachmentTarget, type TableAttachmentTarget } from '~/utils/vditor-table-attachment'
-import { applyTableTrackSize, resolveTableTrackResize, resolveTableTrailingScrollReserve, type TableTrackResizeSession } from '~/utils/table-resize-session'
+import { applyTableTrackSize, getTableResizeZoomScale, resolveTableTrackResize, resolveTableTrailingScrollReserve, type TableTrackResizeSession } from '~/utils/table-resize-session'
 import Vditor from "vditor";
 import { Fancybox } from "@fancyapps/ui";
 import "@fancyapps/ui/dist/fancybox/fancybox.css";
@@ -4781,7 +4781,8 @@ const onExpandedTableResizeMove = (event: PointerEvent) => {
   if (!drag) return
   event.preventDefault()
   event.stopPropagation()
-  const pointer = drag.type === 'row' ? event.clientY : event.clientX
+  const scale = drag.scale || 1
+  const pointer = (drag.type === 'row' ? event.clientY : event.clientX) / scale
   const resolved = resolveTableTrackResize(drag, pointer, drag.active)
   drag.active = resolved.active
   if (!resolved.active) return
@@ -4830,23 +4831,29 @@ const startExpandedTableResize = (drag: ExpandedTableResizeStart, event: Pointer
 
 const startExpandedTableRowResize = (rowIndex: number, event: PointerEvent) => {
   if (rowIndex < 0 || rowIndex >= expandedTableRows.value.length) return
+  const scale = getTableResizeZoomScale()
   startExpandedTableResize({
     type: 'row',
     index: rowIndex,
-    startPointer: event.clientY,
+    startPointer: event.clientY / scale,
     startSize: expandedTableRowHeight(rowIndex),
     minSize: Math.max(EXPANDED_TABLE_MIN_ROW_HEIGHT, expandedTableAutoRowHeights.value[rowIndex] || 0),
+    scale,
   }, event)
 }
 
 const startExpandedTableColumnResize = (columnIndex: number, event: PointerEvent) => {
   if (columnIndex < 0 || columnIndex >= expandedTableColumnWidths.value.length) return
+  const scale = getTableResizeZoomScale()
+  const measuredColumnWidth = document.querySelector<HTMLTableElement>('.editor-table-expand-table')?.rows[0]?.cells[columnIndex]?.getBoundingClientRect().width
+  const startSize = measuredColumnWidth ? measuredColumnWidth / scale : (expandedTableColumnWidths.value[columnIndex] || EXPANDED_TABLE_MIN_COLUMN_WIDTH)
   startExpandedTableResize({
     type: 'column',
     index: columnIndex,
-    startPointer: event.clientX,
-    startSize: document.querySelector<HTMLTableElement>('.editor-table-expand-table')?.rows[0]?.cells[columnIndex]?.getBoundingClientRect().width || expandedTableColumnWidths.value[columnIndex] || EXPANDED_TABLE_MIN_COLUMN_WIDTH,
+    startPointer: event.clientX / scale,
+    startSize,
     minSize: EXPANDED_TABLE_MIN_COLUMN_WIDTH,
+    scale,
   }, event)
 }
 

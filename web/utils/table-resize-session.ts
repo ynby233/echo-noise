@@ -2,11 +2,18 @@ export type TableTrackResizeSession = {
   startPointer: number
   startSize: number
   minSize: number
+  scale?: number
 }
 
 export type TableTrackResizeResult = {
   active: boolean
   size: number
+}
+
+export const getTableResizeZoomScale = () => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return 1
+  const zoom = Number.parseFloat(window.getComputedStyle(document.body).zoom || '1')
+  return Number.isFinite(zoom) && zoom > 0 ? zoom : 1
 }
 
 export const TABLE_RESIZE_ACTIVATION_DISTANCE = 1
