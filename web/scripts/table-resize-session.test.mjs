@@ -1,37 +1,69 @@
 import assert from 'node:assert/strict'
-import { resolveTableTrackResize, resolveTableTrailingScrollReserve } from '../utils/table-resize-session.ts'
+import { applyTableTrackSize, resolveTableTrackResize, resolveTableTrailingScrollReserve } from '../utils/table-resize-session.ts'
 
-const fractionalBoundary = {
-  startPointer: 560,
-  startBoundary: 559.6,
+const fractionalSession = {
+  startPointer: 562.4,
   startSize: 316.8,
   minSize: 48,
 }
 
 assert.deepEqual(
-  resolveTableTrackResize(fractionalBoundary, 560, false),
+  resolveTableTrackResize(fractionalSession, 562.4, false),
   { active: false, size: 316.8 },
   'pointer-down jitter at the same client coordinate must not mutate table geometry'
 )
 
 assert.deepEqual(
-  resolveTableTrackResize(fractionalBoundary, 560.5, false),
+  resolveTableTrackResize(fractionalSession, 562.9, false),
   { active: false, size: 316.8 },
   'sub-threshold movement must not turn a long press into a resize'
 )
 
-const moved = resolveTableTrackResize(fractionalBoundary, 600, false)
-assert.equal(moved.active, true, 'a real drag must activate the resize session')
-assert.ok(Math.abs(moved.size - 357.2) < 1e-9, 'active resizing must target the pointer from the actual fractional border coordinate')
+const firstMoved = resolveTableTrackResize(fractionalSession, 563.4, false)
+assert.equal(firstMoved.active, true, 'the first real pointer movement must activate the resize session')
+assert.ok(
+  Math.abs(firstMoved.size - 317.8) < 1e-9,
+  'the first active movement must change the track only by the pointer delta without snapping to the pointer-down offset'
+)
 
-const returned = resolveTableTrackResize(fractionalBoundary, 560, true)
+const moved = resolveTableTrackResize(fractionalSession, 602.4, true)
+assert.equal(moved.active, true, 'a real drag must activate the resize session')
+assert.ok(Math.abs(moved.size - 356.8) < 1e-9, 'active resizing must preserve the exact pointer displacement')
+
+const returned = resolveTableTrackResize(fractionalSession, 562.4, true)
 assert.equal(returned.active, true, 'an activated resize session must stay active')
-assert.ok(Math.abs(returned.size - 317.2) < 1e-9, 'returning to the initial pointer coordinate must keep the border under the pointer')
+assert.ok(Math.abs(returned.size - 316.8) < 1e-9, 'returning to the initial pointer coordinate must restore the exact initial size')
 
 assert.deepEqual(
-  resolveTableTrackResize({ ...fractionalBoundary, startBoundary: 600, startSize: 48 }, 520, true),
+  resolveTableTrackResize({ ...fractionalSession, startSize: 48 }, 520, true),
   { active: true, size: 48 },
   'minimum track size must clamp the resolved size'
+)
+
+const makeCell = () => ({ style: {} })
+const columns = [{ style: {} }, { style: {} }]
+const table = {
+  rows: [
+    { style: {}, cells: [makeCell(), makeCell()] },
+    { style: {}, cells: [makeCell(), makeCell()] },
+  ],
+  querySelectorAll: (selector) => selector === 'colgroup col' ? columns : [],
+}
+
+applyTableTrackSize(table, 'row', 1, 72.5)
+assert.equal(table.rows[1].style.height, '72.5px', 'row writes must update the real row synchronously')
+assert.deepEqual(
+  table.rows[1].cells.map((cell) => cell.style.height),
+  ['72.5px', '72.5px'],
+  'row writes must keep every cell border on the same synchronous track'
+)
+
+applyTableTrackSize(table, 'column', 1, 133.25)
+assert.equal(columns[1].style.width, '133.25px', 'column writes must update the real col synchronously')
+assert.deepEqual(
+  table.rows.map((row) => row.cells[1].style.width),
+  ['133.25px', '133.25px'],
+  'column writes must keep every cell border on the same synchronous track'
 )
 
 assert.equal(resolveTableTrailingScrollReserve(0, 78, 58), 20, 'shrinking a column must preserve the removed width as trailing scroll range')

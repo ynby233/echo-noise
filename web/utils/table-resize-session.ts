@@ -1,6 +1,5 @@
 export type TableTrackResizeSession = {
   startPointer: number
-  startBoundary: number
   startSize: number
   minSize: number
 }
@@ -21,8 +20,36 @@ export const resolveTableTrackResize = (
   if (!active) return { active: false, size: session.startSize }
   return {
     active: true,
-    size: Math.max(session.minSize, session.startSize + pointer - session.startBoundary),
+    size: Math.max(session.minSize, session.startSize + pointer - session.startPointer),
   }
+}
+
+export type TableTrackAxis = 'row' | 'column'
+
+export const applyTableTrackSize = (
+  table: HTMLTableElement,
+  axis: TableTrackAxis,
+  index: number,
+  size: number,
+) => {
+  if (!Number.isFinite(size) || index < 0) return
+  const value = `${size}px`
+  if (axis === 'row') {
+    const row = table.rows[index]
+    if (!row) return
+    row.style.height = value
+    Array.from(row.cells).forEach((cell) => {
+      cell.style.height = value
+    })
+    return
+  }
+
+  const column = Array.from(table.querySelectorAll<HTMLTableColElement>('colgroup col'))[index]
+  if (column) column.style.width = value
+  Array.from(table.rows).forEach((row) => {
+    const cell = row.cells[index]
+    if (cell) cell.style.width = value
+  })
 }
 
 export const resolveTableTrailingScrollReserve = (

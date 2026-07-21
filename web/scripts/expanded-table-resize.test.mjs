@@ -40,13 +40,13 @@ for (const [name, source, prefix, bodyPrefix] of [
   )
   assert.match(
     source,
-    new RegExp(`\\.${prefix}-row-resize-handle::after\\s*\\{[\\s\\S]*?inset:\\s*0;`),
-    `${name} visible row guide must exactly cover its hit target`
+    new RegExp(`\\.${prefix}-row-resize-handle::after\\s*\\{[\\s\\S]*?top:\\s*50%;[\\s\\S]*?height:\\s*2px;[\\s\\S]*?transform:\\s*translateY\\(-50%\\)`),
+    `${name} visible row guide must be centered on its hit target`
   )
   assert.match(
     source,
-    new RegExp(`\\.${prefix}-column-resize-handle::after\\s*\\{[\\s\\S]*?inset:\\s*0;`),
-    `${name} visible column guide must exactly cover its hit target`
+    new RegExp(`\\.${prefix}-column-resize-handle::after\\s*\\{[\\s\\S]*?left:\\s*50%;[\\s\\S]*?width:\\s*2px;[\\s\\S]*?transform:\\s*translateX\\(-50%\\)`),
+    `${name} visible column guide must be centered on its hit target`
   )
   assert.match(
     source,
@@ -98,8 +98,13 @@ assert.match(
 )
 assert.match(
   sourceBetween(editor, 'const startExpandedTableRowResize', 'const startExpandedTableColumnResize'),
-  /startBoundary:[\s\S]*?getBoundingClientRect\(\)[\s\S]*?startSize:\s*expandedTableRowHeight\(rowIndex\)/,
-  'editor row dragging must anchor to the rendered border but resize from the authored track height without adding collapsed-border thickness twice'
+  /startPointer:\s*event\.clientY[\s\S]*?startSize:\s*expandedTableRowHeight\(rowIndex\)/,
+  'editor row dragging must start from the exact pointer and authored track height without adding collapsed-border thickness twice'
+)
+assert.doesNotMatch(
+  editor,
+  /startBoundary/,
+  'editor drag sessions must not mix the pointer-down offset into later pointer displacement'
 )
 assert.doesNotMatch(
   sourceBetween(editor, 'const startExpandedTableResize', 'const startExpandedTableRowResize'),
@@ -120,7 +125,12 @@ assert.doesNotMatch(
 assert.match(
   editor,
   /resolveTableTrackResize\([\s\S]*?drag\.active\s*=\s*resolved\.active/,
-  'editor dragging must use the shared actual-boundary resize contract'
+  'editor dragging must use the shared pointer-displacement resize contract'
+)
+assert.match(
+  editorResizeMove,
+  /applyTableTrackSize\(table,\s*'row',\s*drag\.index,\s*nextHeight\)[\s\S]*?applyTableTrackSize\(table,\s*'column',\s*drag\.index,\s*nextWidth\)/,
+  'editor pointer moves must synchronously update the real row or column track in the same event'
 )
 assert.match(
   editorResizeMove,
@@ -143,16 +153,6 @@ assert.doesNotMatch(
   /syncRenderedTableExpandLayout|measureRenderedTableAutoRowHeights|applyAdaptiveRenderedTableColumns|applyRenderedTableRowHeights|Math\.ceil/,
   'published pointer moves must update only the target track without any full-table measurement or rounding'
 )
-assert.match(
-  publishedResizeMove,
-  /table\.rows\[drag\.index\][\s\S]*?row\.style\.height/,
-  'published row pointer moves must directly update only the target row'
-)
-assert.match(
-  publishedResizeMove,
-  /querySelectorAll<HTMLTableColElement>\('colgroup col'\)[\s\S]*?column\.style\.width/,
-  'published column pointer moves must directly update only the target col'
-)
 assert.doesNotMatch(
   renderer,
   /freezeRenderedTableResizeLayout|previousManualRowHeights|previousManualColumnWidths/,
@@ -161,7 +161,12 @@ assert.doesNotMatch(
 assert.match(
   renderer,
   /resolveTableTrackResize\([\s\S]*?drag\.active\s*=\s*resolved\.active/,
-  'published dragging must use the shared actual-boundary resize contract'
+  'published dragging must use the shared pointer-displacement resize contract'
+)
+assert.match(
+  publishedResizeMove,
+  /applyTableTrackSize\(table,\s*'row',\s*drag\.index,\s*nextHeight\)[\s\S]*?applyTableTrackSize\(table,\s*'column',\s*drag\.index,\s*nextWidth\)/,
+  'published pointer moves must use the same synchronous real-track writer as the editor'
 )
 assert.match(
   publishedResizeMove,
@@ -170,9 +175,19 @@ assert.match(
 )
 assert.match(renderer, /drag\?\.type\s*===\s*'column'\s*&&\s*drag\.active/, 'published release-time row measurement must run only after an actual column resize')
 assert.match(
+  sourceBetween(renderer, 'const stopRenderedTableResize', 'const syncRenderedTableExpandLayout'),
+  /applyRenderedTableRowHeights\(table,\s*renderedTableManualRowHeights\)/,
+  'published column release must reapply canonical automatic and manual row heights instead of clearing row geometry'
+)
+assert.match(
   renderer,
   /startPointer:\s*event\.clientY[\s\S]*?startPointer:\s*event\.clientX/,
   'published drag math must start from the exact pointer-down coordinates'
+)
+assert.doesNotMatch(
+  renderer,
+  /startBoundary/,
+  'published drag sessions must not mix the pointer-down offset into later pointer displacement'
 )
 assert.doesNotMatch(
   sourceBetween(renderer, 'const startRenderedTableResize', 'const ensureRenderedTableResizeHandles'),

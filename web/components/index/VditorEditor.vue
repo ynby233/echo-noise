@@ -191,7 +191,7 @@ import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { buildAttachmentAudioPlaceholderHtml, closeAttachmentAudioPopover, destroyAttachmentAudioPlayers, enhanceAttachmentAudioPlayers, toggleAttachmentAudioPopover } from '~/utils/attachment-audio-player'
 import { MARKDOWN_BLANK_LINE_SENTINEL, encodeMarkdownExtraBlankLines, isMarkdownBlankLineSentinel, markMarkdownPreservedBlankLineElements } from '~/utils/markdown-blank-lines'
 import { getFixedEditorClipInsets, insertEditorValueFallback, insertTableCellAtomicValue, replaceTableSourceLine, resolveTableAttachmentTarget, type TableAttachmentTarget } from '~/utils/vditor-table-attachment'
-import { resolveTableTrackResize, resolveTableTrailingScrollReserve, type TableTrackResizeSession } from '~/utils/table-resize-session'
+import { applyTableTrackSize, resolveTableTrackResize, resolveTableTrailingScrollReserve, type TableTrackResizeSession } from '~/utils/table-resize-session'
 import Vditor from "vditor";
 import { Fancybox } from "@fancyapps/ui";
 import "@fancyapps/ui/dist/fancybox/fancybox.css";
@@ -4791,7 +4791,10 @@ const onExpandedTableResizeMove = (event: PointerEvent) => {
     heights[drag.index] = nextHeight
     expandedTableManualRowHeights.value = heights
     const table = document.querySelector<HTMLTableElement>('.editor-table-expand-table')
-    if (table) table.style.marginBottom = `${resolveTableTrailingScrollReserve(drag.startTrailingScrollReserve, drag.startSize, nextHeight)}px`
+    if (table) {
+      applyTableTrackSize(table, 'row', drag.index, nextHeight)
+      table.style.marginBottom = `${resolveTableTrailingScrollReserve(drag.startTrailingScrollReserve, drag.startSize, nextHeight)}px`
+    }
     scheduleExpandedTableScrollOverflowState()
     return
   }
@@ -4800,7 +4803,10 @@ const onExpandedTableResizeMove = (event: PointerEvent) => {
   widths[drag.index] = nextWidth
   expandedTableManualColumnWidths.value = widths
   const table = document.querySelector<HTMLTableElement>('.editor-table-expand-table')
-  if (table) table.style.marginRight = `${resolveTableTrailingScrollReserve(drag.startTrailingScrollReserve, drag.startSize, nextWidth)}px`
+  if (table) {
+    applyTableTrackSize(table, 'column', drag.index, nextWidth)
+    table.style.marginRight = `${resolveTableTrailingScrollReserve(drag.startTrailingScrollReserve, drag.startSize, nextWidth)}px`
+  }
   scheduleExpandedTableScrollOverflowState()
 }
 
@@ -4828,11 +4834,6 @@ const startExpandedTableRowResize = (rowIndex: number, event: PointerEvent) => {
     type: 'row',
     index: rowIndex,
     startPointer: event.clientY,
-    startBoundary: (() => {
-      const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
-      const rect = target?.getBoundingClientRect()
-      return rect ? rect.top + rect.height / 2 : event.clientY
-    })(),
     startSize: expandedTableRowHeight(rowIndex),
     minSize: Math.max(EXPANDED_TABLE_MIN_ROW_HEIGHT, expandedTableAutoRowHeights.value[rowIndex] || 0),
   }, event)
@@ -4844,11 +4845,6 @@ const startExpandedTableColumnResize = (columnIndex: number, event: PointerEvent
     type: 'column',
     index: columnIndex,
     startPointer: event.clientX,
-    startBoundary: (() => {
-      const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
-      const rect = target?.getBoundingClientRect()
-      return rect ? rect.left + rect.width / 2 : event.clientX
-    })(),
     startSize: document.querySelector<HTMLTableElement>('.editor-table-expand-table')?.rows[0]?.cells[columnIndex]?.getBoundingClientRect().width || expandedTableColumnWidths.value[columnIndex] || EXPANDED_TABLE_MIN_COLUMN_WIDTH,
     minSize: EXPANDED_TABLE_MIN_COLUMN_WIDTH,
   }, event)
@@ -6666,13 +6662,19 @@ html.dark .editor-table-expand-button:focus-visible {
 }
 
 .editor-table-expand-row-resize-handle::after {
-  inset: 0;
+  left: 0;
+  right: 0;
+  top: 50%;
   height: 2px;
+  transform: translateY(-50%);
 }
 
 .editor-table-expand-column-resize-handle::after {
-  inset: 0;
+  top: 0;
+  bottom: 0;
+  left: 50%;
   width: 2px;
+  transform: translateX(-50%);
 }
 
 .editor-table-expand-row-resize-handle:hover::after,

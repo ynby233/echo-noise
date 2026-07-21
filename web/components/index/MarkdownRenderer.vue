@@ -30,7 +30,7 @@ import { ensureFancyboxVideoThumbnail, getVideoElementSource, normalizeMediaPrev
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { buildAttachmentAudioPlaceholderHtml, destroyAttachmentAudioPlayers, enhanceAttachmentAudioPlayers } from '~/utils/attachment-audio-player'
 import { encodeMarkdownExtraBlankLines, markMarkdownPreservedBlankLineElements } from '~/utils/markdown-blank-lines'
-import { resolveTableTrackResize, resolveTableTrailingScrollReserve, type TableTrackResizeSession } from '~/utils/table-resize-session'
+import { applyTableTrackSize, resolveTableTrackResize, resolveTableTrailingScrollReserve, type TableTrackResizeSession } from '~/utils/table-resize-session'
 import Vditor from 'vditor';
 
 // 定义正则表达式
@@ -622,12 +622,7 @@ const stopRenderedTableResize = () => {
   renderedTableResizeDrag = null
   document.body.classList.remove('is-resizing-rendered-table-row', 'is-resizing-rendered-table-column')
   if (table && drag?.type === 'column' && drag.active) {
-    Array.from(table.rows).forEach((row, rowIndex) => {
-      const manualHeight = renderedTableManualRowHeights[rowIndex]
-      const height = Number.isFinite(manualHeight) ? `${manualHeight}px` : ''
-      row.style.height = height
-      Array.from(row.cells).forEach((cell) => { (cell as HTMLElement).style.height = height })
-    })
+    applyRenderedTableRowHeights(table, renderedTableManualRowHeights)
   }
   scheduleRenderedTableScrollOverflowState()
 }
@@ -657,22 +652,15 @@ const onRenderedTableResizeMove = (event: PointerEvent) => {
   if (drag.type === 'row') {
     const nextHeight = resolved.size
     renderedTableManualRowHeights[drag.index] = nextHeight
-    const row = table.rows[drag.index]
-    if (row) {
-      row.style.height = `${nextHeight}px`
-      Array.from(row.cells).forEach((cell) => { (cell as HTMLElement).style.height = `${nextHeight}px` })
-      table.style.marginBottom = `${resolveTableTrailingScrollReserve(drag.startTrailingScrollReserve, drag.startSize, nextHeight)}px`
-    }
+    applyTableTrackSize(table, 'row', drag.index, nextHeight)
+    table.style.marginBottom = `${resolveTableTrailingScrollReserve(drag.startTrailingScrollReserve, drag.startSize, nextHeight)}px`
     scheduleRenderedTableScrollOverflowState()
     return
   }
   const nextWidth = resolved.size
   renderedTableManualColumnWidths[drag.index] = nextWidth
-  const column = Array.from(table.querySelectorAll<HTMLTableColElement>('colgroup col'))[drag.index]
-  if (column) {
-    column.style.width = `${nextWidth}px`
-    table.style.marginRight = `${resolveTableTrailingScrollReserve(drag.startTrailingScrollReserve, drag.startSize, nextWidth)}px`
-  }
+  applyTableTrackSize(table, 'column', drag.index, nextWidth)
+  table.style.marginRight = `${resolveTableTrailingScrollReserve(drag.startTrailingScrollReserve, drag.startSize, nextWidth)}px`
   scheduleRenderedTableScrollOverflowState()
 }
 
@@ -715,10 +703,6 @@ const ensureRenderedTableResizeHandles = (table: HTMLTableElement, autoRowHeight
           type: 'row',
           index: rowIndex,
           startPointer: event.clientY,
-          startBoundary: (() => {
-            const rect = rowHandle.getBoundingClientRect()
-            return rect.top + rect.height / 2
-          })(),
           startSize: row.getBoundingClientRect().height,
           minSize: Math.max(RENDERED_TABLE_MIN_ROW_HEIGHT, autoRowHeights[rowIndex] || 0),
         }, event)
@@ -736,10 +720,6 @@ const ensureRenderedTableResizeHandles = (table: HTMLTableElement, autoRowHeight
           type: 'column',
           index: cellIndex,
           startPointer: event.clientX,
-          startBoundary: (() => {
-            const rect = columnHandle.getBoundingClientRect()
-            return rect.left + rect.width / 2
-          })(),
           startSize: cellElement.getBoundingClientRect().width,
           minSize: RENDERED_TABLE_MIN_COLUMN_WIDTH,
         }, event)
@@ -2576,13 +2556,19 @@ watch(() => props.enableGithubCard, () => {
 }
 
 .rendered-table-expand-row-resize-handle::after {
-  inset: 0;
+  left: 0;
+  right: 0;
+  top: 50%;
   height: 2px;
+  transform: translateY(-50%);
 }
 
 .rendered-table-expand-column-resize-handle::after {
-  inset: 0;
+  top: 0;
+  bottom: 0;
+  left: 50%;
   width: 2px;
+  transform: translateX(-50%);
 }
 
 .rendered-table-expand-row-resize-handle:hover::after,
