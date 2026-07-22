@@ -6,6 +6,15 @@ export const resolveMediaURL = (baseApi: string, raw: string) => {
   const base = String(baseApi || '/api').replace(/\/+$/, '') || '/api'
   const path = value.startsWith('/') ? value : `/${value}`
 
+  const legacyApiMediaPrefixes = ['/images/', '/video/', '/audio/', '/files/', '/attachments/', '/cloud-attachments/']
+  const isLegacyApiMediaPath = legacyApiMediaPrefixes.some((prefix) => path.startsWith(prefix))
+
+  // Root-relative site assets (for example /favicon.svg) already address the
+  // web origin. Only legacy media paths without /api need the API base added.
+  if (value.startsWith('/') && !path.startsWith('/api/') && !isLegacyApiMediaPath) {
+    return path
+  }
+
   // 后端上传接口返回的是 /api/images/...；当前前端 baseApi 默认也是 /api。
   // 避免拼成 /api/api/images/... 导致真实账号头像 404 后回落到随机头像。
   if (path.startsWith('/api/') && base.endsWith('/api')) {

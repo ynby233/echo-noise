@@ -536,6 +536,7 @@ import type { MessageVisibility } from '~/types/models'
 import BuiltinComments from '../comments/BuiltinComments.vue'
 import { writeClipboardText } from '~/utils/clipboard'
 import { createAudioMarkdown, resolveUploadedMediaUrl, uploadMediaFiles } from '~/utils/media-upload'
+import { resolveMediaURL } from '~/utils/media-url'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { getMessageIdFromRouteHash } from '~/utils/message-route-hash'
 import { useRuntimeConfig } from '#imports'
@@ -568,24 +569,7 @@ const messageVisibilityRequiresPrivate = (value: MessageVisibility) => value !==
 const messageVisibilityLabel = (value: any) => messageVisibilityOptions.find((option) => option.value === normalizeMessageVisibility(value))?.label || '公开'
 const messageVisibilityIcon = (value: any) => messageVisibilityOptions.find((option) => option.value === normalizeMessageVisibility(value))?.icon || 'i-mdi-earth'
 
-const resolveMediaUrl = (s: string) => {
-  if (!s) return ''
-  if (/^https?:\/\//i.test(s)) return s
-  
-  const base = (BASE_API || '').replace(/\/$/, '')
-  const path = String(s || '')
-  const p = path.startsWith('/') ? path : `/${path}`
-
-  // 特殊处理: 如果路径以 /api/ 开头且 base 以 /api 结尾，避免重复
-  if (p.startsWith('/api/') && base.endsWith('/api')) {
-    return `${base.substring(0, base.length - 4)}${p}`
-  }
-  
-  // 如果路径以 /images/ 或 /video/ 开头，且 base 包含 /api，可能需要注意
-  // 但通常 /images/ 是相对于 /api 的? 不，gin router 是 /api/images
-  
-  return `${base}${p}`
-}
+const resolveMediaUrl = (s: string) => resolveMediaURL(BASE_API, s)
 
 const messageImageAR = ref<Record<number, string>>({})
 const onMessageImageLoad = (id: number, e: Event) => {
@@ -617,7 +601,9 @@ const authorAvatar = (msg: any) => {
 const authorAvatarOnError = (e: Event, seed: string) => {
   const img = e.target as HTMLImageElement
   const fallback = resolveMediaUrl(String(((props.siteConfig as any)?.avatarURL || (props.siteConfig as any)?.rssFaviconURL || '/favicon.svg')).trim())
-  if (img) img.src = fallback
+  if (!img || !fallback) return
+  const fallbackURL = new URL(fallback, window.location.href).href
+  if (img.src !== fallbackURL) img.src = fallback
 }
 // 主题切换改为纯 CSS（html.dark）控制，避免组件重渲染导致媒体刷新
 
