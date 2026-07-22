@@ -64,7 +64,7 @@ export const buildAttachmentAudioPlaceholderHtml = ({ src, name = '', size = nul
   const safeSrc = escapeHtmlAttribute(String(src || '').trim())
   const safeName = escapeHtmlAttribute(audioFileName(src, name))
   const sizeAttribute = Number.isFinite(size) && Number(size) >= 0 ? ` data-audio-size="${Number(size)}"` : ''
-  return `<div class="noise-attachment-audio" data-noise-audio-player data-audio-src="${safeSrc}" data-audio-name="${safeName}"${sizeAttribute} data-noise-attachment-kind="audio" data-noise-attachment-url="${safeSrc}"></div>`
+  return `<div class="site-attachment-audio" data-site-audio-player data-audio-src="${safeSrc}" data-audio-name="${safeName}"${sizeAttribute} data-site-attachment-kind="audio" data-site-attachment-url="${safeSrc}"></div>`
 }
 
 const responseSize = (response: Response) => {
@@ -196,7 +196,7 @@ const createIcon = (kind: ProjectIconKind) => {
   const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
   icon.setAttribute('viewBox', '0 0 24 24')
   icon.setAttribute('aria-hidden', 'true')
-  icon.classList.add('noise-attachment-audio__svg')
+  icon.classList.add('site-attachment-audio__svg')
   const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
   path.setAttribute('fill', 'currentColor')
   path.setAttribute('d', PROJECT_ICON_PATHS[kind])
@@ -223,31 +223,31 @@ const mountAudioPlayer = (root: HTMLElement) => {
   root.setAttribute('role', 'group')
   root.setAttribute('aria-label', `音频附件：${name}`)
 
-  const audio = createElement('audio', 'noise-attachment-audio__native')
+  const audio = createElement('audio', 'site-attachment-audio__native')
   audio.src = src
   audio.preload = 'metadata'
   audio.dataset.noiseAttachmentKind = 'audio'
   audio.dataset.noiseAttachmentUrl = src
 
-  const header = createElement('div', 'noise-attachment-audio__header')
-  const information = createElement('div', 'noise-attachment-audio__information')
-  const nameElement = createElement('div', 'noise-attachment-audio__name')
+  const header = createElement('div', 'site-attachment-audio__header')
+  const information = createElement('div', 'site-attachment-audio__information')
+  const nameElement = createElement('div', 'site-attachment-audio__name')
   nameElement.textContent = name
   nameElement.classList.add('nw-tooltip-anchor')
   nameElement.dataset.tooltip = name
-  const meta = createElement('div', 'noise-attachment-audio__meta')
-  const formatElement = createElement('span', 'noise-attachment-audio__format')
+  const meta = createElement('div', 'site-attachment-audio__meta')
+  const formatElement = createElement('span', 'site-attachment-audio__format')
   formatElement.textContent = format
-  const separator = createElement('span', 'noise-attachment-audio__meta-separator')
+  const separator = createElement('span', 'site-attachment-audio__meta-separator')
   separator.textContent = '·'
   separator.setAttribute('aria-hidden', 'true')
-  const sizeElement = createElement('span', 'noise-attachment-audio__size')
+  const sizeElement = createElement('span', 'site-attachment-audio__size')
   sizeElement.textContent = initialSize === null ? '大小读取中' : formatAudioFileSize(initialSize)
-  const statusElement = createElement('span', 'noise-attachment-audio__status')
+  const statusElement = createElement('span', 'site-attachment-audio__status')
   meta.append(formatElement, separator, sizeElement, statusElement)
   information.append(nameElement)
 
-  const playButton = createElement('button', 'noise-attachment-audio__play')
+  const playButton = createElement('button', 'site-attachment-audio__play')
   playButton.classList.add('nw-action-btn', 'nw-tooltip-anchor')
   playButton.type = 'button'
   playButton.setAttribute('aria-label', '播放')
@@ -256,7 +256,7 @@ const mountAudioPlayer = (root: HTMLElement) => {
   playButton.appendChild(playIcon)
   header.append(information)
 
-  const seek = createElement('input', 'noise-attachment-audio__range noise-attachment-audio__seek')
+  const seek = createElement('input', 'site-attachment-audio__range site-attachment-audio__seek')
   seek.type = 'range'
   seek.min = '0'
   seek.max = '0'
@@ -267,34 +267,34 @@ const mountAudioPlayer = (root: HTMLElement) => {
   seek.dataset.tooltip = '播放进度'
   setRangeProgress(seek, 0)
 
-  const footer = createElement('div', 'noise-attachment-audio__footer')
-  const footerMeta = createElement('div', 'noise-attachment-audio__footer-meta')
-  const time = createElement('span', 'noise-attachment-audio__time')
+  const footer = createElement('div', 'site-attachment-audio__footer')
+  const footerMeta = createElement('div', 'site-attachment-audio__footer-meta')
+  const time = createElement('span', 'site-attachment-audio__time')
   time.textContent = '0:00 / 0:00'
   footerMeta.append(time, meta)
 
-  const tools = createElement('div', 'noise-attachment-audio__tools')
-  const speedTrigger = createElement('button', 'noise-attachment-audio__speed-trigger')
+  const tools = createElement('div', 'site-attachment-audio__tools')
+  const speedTrigger = createElement('button', 'site-attachment-audio__speed-trigger')
   speedTrigger.classList.add('nw-action-btn', 'nw-action-btn--label', 'nw-tooltip-anchor')
   speedTrigger.type = 'button'
   speedTrigger.setAttribute('aria-label', '播放速度')
   speedTrigger.setAttribute('aria-haspopup', 'listbox')
   speedTrigger.setAttribute('aria-expanded', 'false')
   speedTrigger.dataset.tooltip = '播放速度：1x'
-  const speedValue = createElement('span', 'noise-attachment-audio__speed-value')
+  const speedValue = createElement('span', 'site-attachment-audio__speed-value')
   speedValue.textContent = '1x'
   const speedChevron = createIcon('chevron-down')
-  speedChevron.classList.add('noise-attachment-audio__speed-chevron')
+  speedChevron.classList.add('site-attachment-audio__speed-chevron')
   speedTrigger.append(speedValue, speedChevron)
 
   const speedMenu = createElement('div')
-  speedMenu.className = 'noise-attachment-audio__speed-menu floating-control-menu visibility-floating-menu nw-floating-menu'
+  speedMenu.className = 'site-attachment-audio__speed-menu floating-control-menu visibility-floating-menu nw-floating-menu'
   speedMenu.setAttribute('role', 'listbox')
   speedMenu.setAttribute('aria-label', '播放速度选项')
   const speedMenuStyle = { value: {} as Record<string, string> }
   const speedOptions = new Map<number, HTMLButtonElement>()
   AUDIO_PLAYBACK_RATES.forEach((rate) => {
-    const option = createElement('button', 'floating-control-option nw-floating-option noise-attachment-audio__speed-option')
+    const option = createElement('button', 'floating-control-option nw-floating-option site-attachment-audio__speed-option')
     option.type = 'button'
     option.setAttribute('role', 'option')
     option.dataset.rate = String(rate)
@@ -304,15 +304,15 @@ const mountAudioPlayer = (root: HTMLElement) => {
     speedOptions.set(rate, option)
   })
 
-  const volumeGroup = createElement('div', 'noise-attachment-audio__volume')
-  const muteButton = createElement('button', 'noise-attachment-audio__mute')
+  const volumeGroup = createElement('div', 'site-attachment-audio__volume')
+  const muteButton = createElement('button', 'site-attachment-audio__mute')
   muteButton.classList.add('nw-action-btn', 'nw-tooltip-anchor')
   muteButton.type = 'button'
   muteButton.setAttribute('aria-label', '静音')
   muteButton.dataset.tooltip = '静音'
   const volumeIcon = createIcon('volume')
   muteButton.appendChild(volumeIcon)
-  const volume = createElement('input', 'noise-attachment-audio__range noise-attachment-audio__volume-range')
+  const volume = createElement('input', 'site-attachment-audio__range site-attachment-audio__volume-range')
   volume.type = 'range'
   volume.min = '0'
   volume.max = '1'
@@ -429,7 +429,7 @@ const mountAudioPlayer = (root: HTMLElement) => {
   }
   const onSpeedMenuClick = (event: MouseEvent) => {
     const option = event.target instanceof Element
-      ? event.target.closest<HTMLButtonElement>('.noise-attachment-audio__speed-option[data-rate]')
+      ? event.target.closest<HTMLButtonElement>('.site-attachment-audio__speed-option[data-rate]')
       : null
     if (!option || !speedMenu.contains(option)) return
     const rate = Number(option.dataset.rate)
@@ -665,12 +665,12 @@ export const toggleAttachmentAudioPopover = (
   }
 
   closeAttachmentAudioPopover()
-  const popover = createElement('div', 'noise-table-audio-popover')
+  const popover = createElement('div', 'site-table-audio-popover')
   popover.classList.toggle('is-dark', attachmentAudioPopoverUsesDarkTheme(anchor))
   popover.setAttribute('role', 'dialog')
   popover.setAttribute('aria-label', `音频预览：${audioFileName(normalizedSrc, name)}`)
   popover.innerHTML = buildAttachmentAudioPlaceholderHtml({ src: normalizedSrc, name, size })
-  const player = popover.querySelector<HTMLElement>('[data-noise-audio-player]')
+  const player = popover.querySelector<HTMLElement>('[data-site-audio-player]')
   if (!player) return
 
   document.body.appendChild(popover)
@@ -745,7 +745,7 @@ const mountTableAudioTrigger = (trigger: HTMLButtonElement) => {
   const name = audioFileName(src, trigger.dataset.audioName || '')
   const knownSize = Number(trigger.dataset.audioSize)
   const size = Number.isFinite(knownSize) && knownSize >= 0 ? knownSize : null
-  const sizeElement = trigger.querySelector<HTMLElement>('.noise-table-audio-trigger__size')
+  const sizeElement = trigger.querySelector<HTMLElement>('.site-table-audio-trigger__size')
 
   trigger.dataset.noiseTableAudioMounted = 'true'
   trigger.setAttribute('aria-haspopup', 'dialog')
@@ -782,7 +782,7 @@ const replaceTableAudioPlaceholder = (player: HTMLElement) => {
   const name = audioFileName(src, player.dataset.audioName || '')
   const knownSize = Number(player.dataset.audioSize)
   const size = Number.isFinite(knownSize) && knownSize >= 0 ? knownSize : null
-  const trigger = createElement('button', 'noise-table-audio-trigger noise-attachment-file noise-attachment-file--preview')
+  const trigger = createElement('button', 'site-table-audio-trigger site-attachment-file site-attachment-file--preview')
   trigger.type = 'button'
   trigger.dataset.audioSrc = src
   trigger.dataset.audioName = name
@@ -790,24 +790,24 @@ const replaceTableAudioPlaceholder = (player: HTMLElement) => {
   trigger.dataset.noiseAttachmentUrl = src
   if (size !== null) trigger.dataset.audioSize = String(size)
 
-  const icon = createElement('span', 'noise-attachment-file__icon noise-table-audio-trigger__icon')
+  const icon = createElement('span', 'site-attachment-file__icon site-table-audio-trigger__icon')
   const iconSvg = createIcon('volume')
-  iconSvg.classList.add('noise-table-audio-trigger__svg')
+  iconSvg.classList.add('site-table-audio-trigger__svg')
   icon.appendChild(iconSvg)
-  const body = createElement('span', 'noise-attachment-file__body noise-table-audio-trigger__body')
-  const nameElement = createElement('span', 'noise-attachment-file__name noise-table-audio-trigger__name')
+  const body = createElement('span', 'site-attachment-file__body site-table-audio-trigger__body')
+  const nameElement = createElement('span', 'site-attachment-file__name site-table-audio-trigger__name')
   nameElement.textContent = name
-  const meta = createElement('span', 'noise-attachment-file__meta noise-table-audio-trigger__meta')
-  const format = createElement('span', 'noise-table-audio-trigger__format')
+  const meta = createElement('span', 'site-attachment-file__meta site-table-audio-trigger__meta')
+  const format = createElement('span', 'site-table-audio-trigger__format')
   format.textContent = audioFormatLabel(src, name)
-  const separator = createElement('span', 'noise-table-audio-trigger__separator')
+  const separator = createElement('span', 'site-table-audio-trigger__separator')
   separator.textContent = ' · '
   separator.setAttribute('aria-hidden', 'true')
-  const sizeElement = createElement('span', 'noise-table-audio-trigger__size')
+  const sizeElement = createElement('span', 'site-table-audio-trigger__size')
   sizeElement.textContent = size === null ? '大小读取中' : formatAudioFileSize(size)
   meta.append(format, separator, sizeElement)
   body.append(nameElement, meta)
-  const action = createElement('span', 'noise-attachment-file__action noise-attachment-file__action--preview')
+  const action = createElement('span', 'site-attachment-file__action site-attachment-file__action--preview')
   action.setAttribute('aria-hidden', 'true')
   trigger.append(icon, body, action)
   player.replaceWith(trigger)
@@ -817,9 +817,9 @@ const replaceTableAudioPlaceholder = (player: HTMLElement) => {
 export const enhanceAttachmentAudioPlayers = (root: ParentNode) => {
   if (typeof document === 'undefined') return
   nodesMatching<HTMLAudioElement>(root, 'audio').forEach((audio) => {
-    if (audio.closest('[data-noise-audio-player]')) return
+    if (audio.closest('[data-site-audio-player]')) return
     if (audio.closest('.aplayer, meting-js, .netease-mini-player')) return
-    const placeholder = createElement('div', 'noise-attachment-audio')
+    const placeholder = createElement('div', 'site-attachment-audio')
     const src = audio.currentSrc || audio.getAttribute('src') || audio.querySelector<HTMLSourceElement>('source[src]')?.getAttribute('src') || ''
     if (!src) return
     placeholder.dataset.noiseAudioPlayer = ''
@@ -829,16 +829,16 @@ export const enhanceAttachmentAudioPlayers = (root: ParentNode) => {
     placeholder.dataset.noiseAttachmentUrl = src
     audio.replaceWith(placeholder)
   })
-  nodesMatching<HTMLElement>(root, '[data-noise-audio-player]').forEach((player) => {
+  nodesMatching<HTMLElement>(root, '[data-site-audio-player]').forEach((player) => {
     if (player.closest('td,th')) replaceTableAudioPlaceholder(player)
     else mountAudioPlayer(player)
   })
-  nodesMatching<HTMLButtonElement>(root, '.noise-table-audio-trigger').forEach(mountTableAudioTrigger)
+  nodesMatching<HTMLButtonElement>(root, '.site-table-audio-trigger').forEach(mountTableAudioTrigger)
 }
 
 export const destroyAttachmentAudioPlayers = (root: ParentNode) => {
-  nodesMatching<HTMLElement>(root, '[data-noise-audio-player]').forEach((player) => playerCleanup.get(player)?.())
-  nodesMatching<HTMLElement>(root, '.noise-table-audio-trigger').forEach((trigger) => tableTriggerCleanup.get(trigger)?.())
+  nodesMatching<HTMLElement>(root, '[data-site-audio-player]').forEach((player) => playerCleanup.get(player)?.())
+  nodesMatching<HTMLElement>(root, '.site-table-audio-trigger').forEach((trigger) => tableTriggerCleanup.get(trigger)?.())
   if (activeAttachmentAudioPopover
     && (root === activeAttachmentAudioPopover.anchor
       || (root instanceof Node && root.contains(activeAttachmentAudioPopover.anchor)))) {

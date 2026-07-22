@@ -491,13 +491,13 @@ const buildAttachmentPreviewHtml = (info: EditorAttachmentInfo) => {
   const safeUrl = escapeAttachmentHtmlAttr(info.url)
   const safeName = escapeAttachmentHtmlAttr(info.name)
   if (info.type === 'image') {
-    return `<img class="noise-attachment-image" src="${safeUrl}" alt="${safeName}" loading="lazy" decoding="async" />`
+    return `<img class="site-attachment-image" src="${safeUrl}" alt="${safeName}" loading="lazy" decoding="async" />`
   }
   if (info.type === 'video') {
-    return `<div class="noise-attachment-render noise-attachment-render--video"><video src="${safeUrl}" controls preload="metadata" playsinline style="width:100%;height:auto"></video></div>`
+    return `<div class="site-attachment-render site-attachment-render--video"><video src="${safeUrl}" controls preload="metadata" playsinline style="width:100%;height:auto"></video></div>`
   }
   if (info.type === 'file') {
-    return `<a class="noise-attachment-file" href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeName}</a>`
+    return `<a class="site-attachment-file" href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeName}</a>`
   }
   return buildAttachmentAudioPlaceholderHtml({ src: info.url, name: info.name })
 }
@@ -1067,7 +1067,7 @@ const setupAttachmentPreview = () => {
       label.style.cursor = 'pointer'
     })
 
-    scope.querySelectorAll<HTMLVideoElement>('.noise-attachment-render--video video').forEach((video) => {
+    scope.querySelectorAll<HTMLVideoElement>('.site-attachment-render--video video').forEach((video) => {
       ensureFancyboxVideoThumbnail(video)
     })
     enhanceAttachmentAudioPlayers(scope)

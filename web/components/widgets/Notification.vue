@@ -1,9 +1,9 @@
 <template>
-  <UNotifications class="noise-notifications" />
+  <UNotifications class="site-notifications" />
 </template>
 
 <style>
-.noise-notifications {
+.site-notifications {
   z-index: 10080 !important;
 }
 </style>

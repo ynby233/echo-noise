@@ -23,6 +23,8 @@ const forbiddenTokens = [
   'Echo-Noise',
   'echo-noise',
   's2.loli.net',
+  'noise-full-image-attachments',
+  'noise-',
 ]
 
 const textExtensions = new Set([
@@ -40,11 +42,13 @@ const collectTextFiles = (target) => {
 }
 
 const runtimeSources = [
+  join(webRoot, 'assets'),
   join(webRoot, 'components'),
   join(webRoot, 'pages'),
   join(webRoot, 'plugins'),
   join(webRoot, 'public'),
   join(webRoot, 'server'),
+  join(webRoot, 'utils'),
   join(webRoot, 'nuxt.config.ts'),
 ]
 

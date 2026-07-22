@@ -76,13 +76,13 @@
             <div :class="['content-container', innerContainerClass, listThemeClass, { 'is-dark': isContentDark, 'file-attachment-shadow-open': isFileAttachmentShadowOpen(msg.id) }]" :data-msg-id="msg.id">
               <div class="flex items-center gap-2 mb-1 author-row">
                 <img :src="authorAvatar(msg)" alt="avatar" class="avatar-img w-9 h-9 rounded-full object-cover" @error="authorAvatarOnError($event, msg.username || '匿名')" @mouseenter="showAuthorCard($event, msg)" @mouseleave="hideAuthorCard" @click="toggleAuthorCard($event, msg)" />
-                <div v-if="openAuthorId === msg.id" class="noise-author-card bg-white text-black dark:bg-[var(--home-surface-dark-elevated)] dark:text-white" :style="openAuthorStyle">
-                  <div class="noise-author-card-header">
+                <div v-if="openAuthorId === msg.id" class="site-author-card bg-white text-black dark:bg-[var(--home-surface-dark-elevated)] dark:text-white" :style="openAuthorStyle">
+                  <div class="site-author-card-header">
                     <img :src="authorProfileAvatar(msg)" class="avatar-img w-10 h-10 rounded-full object-cover" />
                     <div class="font-semibold leading-tight text-[14px]">{{ msg.username }}</div>
                   </div>
-                  <div class="noise-author-card-body">
-                    <div class="noise-author-card-sign"><span :class="['noise-author-card-scroll', { 'center': !authorSignShouldScroll(msg) }]">{{ authorProfileDesc(msg) }}</span></div>
+                  <div class="site-author-card-body">
+                    <div class="site-author-card-sign"><span :class="['site-author-card-scroll', { 'center': !authorSignShouldScroll(msg) }]">{{ authorProfileDesc(msg) }}</span></div>
                     <div class="author-card-muted text-[12px] whitespace-nowrap">笔记 {{ authorProfileCount(msg) }}</div>
                   </div>
                 </div>
@@ -1650,7 +1650,7 @@ const checkContentHeight = () => {
       } catch {}
       const hasImageGrid = !!measureEl.querySelector('.image-grid');
       hasGrid.value[msg.id] = hasImageGrid;
-      hasFileAttachment.value[msg.id] = !!measureEl.querySelector('.noise-attachment-file, .noise-attachment-audio');
+      hasFileAttachment.value[msg.id] = !!measureEl.querySelector('.site-attachment-file, .site-attachment-audio');
       if (hasImageGrid) {
         measuredMessageHeights.value[msg.id] = measureEl.scrollHeight;
         shouldShowExpandButton.value[msg.id] = false;
@@ -3958,12 +3958,12 @@ onMounted(() => {
 }
 :global(html:not(.dark)) .content-container :deep(.markdown-preview) { color: #111 !important; }
 :global(html.dark) .content-container :deep(.markdown-preview) { color: #fff !important; }
-:global(html:not(.dark)) .content-container :deep(.markdown-preview *:not(pre):not(code):not(.noise-attachment-file):not(.noise-attachment-file *):not(.noise-attachment-audio):not(.noise-attachment-audio *)) {
+:global(html:not(.dark)) .content-container :deep(.markdown-preview *:not(pre):not(code):not(.site-attachment-file):not(.site-attachment-file *):not(.site-attachment-audio):not(.site-attachment-audio *)) {
   color: #111 !important;
   opacity: 1 !important;
 }
 /* 彻底取消白天模式灰度，所有元素不透明 */
-:global(html:not(.dark)) .content-container :deep(.markdown-preview *:not(.noise-attachment-file):not(.noise-attachment-file *):not(.noise-attachment-audio):not(.noise-attachment-audio *)) { opacity: 1 !important; }
+:global(html:not(.dark)) .content-container :deep(.markdown-preview *:not(.site-attachment-file):not(.site-attachment-file *):not(.site-attachment-audio):not(.site-attachment-audio *)) { opacity: 1 !important; }
 :global(html:not(.dark)) .content-container :deep(.markdown-preview p),
 :global(html:not(.dark)) .content-container :deep(.markdown-preview li),
 :global(html:not(.dark)) .content-container :deep(.markdown-preview span),
@@ -3973,7 +3973,7 @@ onMounted(() => {
 :global(html:not(.dark)) .content-container :deep(.markdown-preview code) { opacity: 1 !important; }
 
 /* 确保所有模式下链接颜色都是蓝色 */
-.content-container :deep(.markdown-preview a:not(.noise-attachment-file)) {
+.content-container :deep(.markdown-preview a:not(.site-attachment-file)) {
   color: #0366d6 !important;
   text-decoration: none !important;
   background-color: transparent !important;
@@ -3984,7 +3984,7 @@ onMounted(() => {
   opacity: 1 !important;
   font-weight: 500 !important;
 }
-.content-container :deep(.markdown-preview a:not(.noise-attachment-file):hover) {
+.content-container :deep(.markdown-preview a:not(.site-attachment-file):hover) {
   color: #1d4ed8 !important;
   text-decoration: underline !important;
 }
@@ -4095,20 +4095,20 @@ onMounted(() => {
 }
 
 /* 作者悬停卡片 */
-.noise-author-card { position: absolute; top: -28px; left: 36px; z-index: 2147483647; border-radius: 12px; padding: 10px 12px; min-width: 300px; box-shadow: 0 8px 24px rgba(0,0,0,0.25); border: 1px solid rgba(0,0,0,0.08); transform: translate3d(0,0,0); isolation: isolate; backdrop-filter: none; -webkit-backdrop-filter: none; overflow: visible; }
-.noise-author-card::after { content: ''; position: absolute; left: -10px; top: 27px; width: 0; height: 0; border-top: 10px solid transparent; border-bottom: 10px solid transparent; z-index: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.25)); }
-:global(html.dark) .noise-author-card { --home-surface-dark-elevated: rgb(15, 24, 39); background: var(--home-surface-dark-elevated) !important; border-color: rgba(255,255,255,0.14); box-shadow: 0 10px 24px rgba(0,0,0,0.38); }
-:global(html.dark) .noise-author-card::after { border-right: 8px solid var(--home-surface-dark-elevated); }
-:global(html:not(.dark)) .noise-author-card::after { border-right: 8px solid #ffffff; }
-.noise-author-card-header { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; pointer-events: auto; }
-.noise-author-card-body { display: flex; gap: 10px; align-items: center; justify-content: flex-end; }
-.noise-author-card-sign { overflow: hidden; font-size: 12px; line-height: 16px; white-space: nowrap; flex: 1; text-align: center; }
-.noise-author-card-scroll { display: inline-block; white-space: nowrap; will-change: transform; animation: author-sign-scroll 12s linear infinite; }
-.noise-author-card-scroll.center { animation: none; }
+.site-author-card { position: absolute; top: -28px; left: 36px; z-index: 2147483647; border-radius: 12px; padding: 10px 12px; min-width: 300px; box-shadow: 0 8px 24px rgba(0,0,0,0.25); border: 1px solid rgba(0,0,0,0.08); transform: translate3d(0,0,0); isolation: isolate; backdrop-filter: none; -webkit-backdrop-filter: none; overflow: visible; }
+.site-author-card::after { content: ''; position: absolute; left: -10px; top: 27px; width: 0; height: 0; border-top: 10px solid transparent; border-bottom: 10px solid transparent; z-index: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.25)); }
+:global(html.dark) .site-author-card { --home-surface-dark-elevated: rgb(15, 24, 39); background: var(--home-surface-dark-elevated) !important; border-color: rgba(255,255,255,0.14); box-shadow: 0 10px 24px rgba(0,0,0,0.38); }
+:global(html.dark) .site-author-card::after { border-right: 8px solid var(--home-surface-dark-elevated); }
+:global(html:not(.dark)) .site-author-card::after { border-right: 8px solid #ffffff; }
+.site-author-card-header { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; pointer-events: auto; }
+.site-author-card-body { display: flex; gap: 10px; align-items: center; justify-content: flex-end; }
+.site-author-card-sign { overflow: hidden; font-size: 12px; line-height: 16px; white-space: nowrap; flex: 1; text-align: center; }
+.site-author-card-scroll { display: inline-block; white-space: nowrap; will-change: transform; animation: author-sign-scroll 12s linear infinite; }
+.site-author-card-scroll.center { animation: none; }
 .author-card-muted { color: #7a7f85 }
 @keyframes author-sign-scroll { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
 .author-card-muted { color: #7a7f85 }
-@media (max-width: 640px) { .noise-author-card { position: fixed; left: 12px; right: 12px; top: auto; bottom: auto; min-width: auto; z-index: 2147483647; } .noise-author-card::after { display: none; } }
+@media (max-width: 640px) { .site-author-card { position: fixed; left: 12px; right: 12px; top: auto; bottom: auto; min-width: auto; z-index: 2147483647; } .site-author-card::after { display: none; } }
 .pager-done-wrap {
   margin-top: 16px;
   text-align: center;

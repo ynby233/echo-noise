@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const tmp = await mkdtemp(join(tmpdir(), 'echo-noise-api-auth-'))
+const tmp = await mkdtemp(join(tmpdir(), 'echo-site-api-auth-'))
 const outfile = join(tmp, 'api-bundle.mjs')
 
 await build({

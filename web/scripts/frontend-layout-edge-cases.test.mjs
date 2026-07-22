@@ -313,8 +313,8 @@ assert(
 )
 
 assert(
-  notificationWidget.includes('<UNotifications class="noise-notifications" />') &&
-    notificationWidget.includes('.noise-notifications') &&
+  notificationWidget.includes('<UNotifications class="site-notifications" />') &&
+    notificationWidget.includes('.site-notifications') &&
     notificationWidget.includes('z-index: 10080 !important;'),
   'global notifications must render above expanded table overlays'
 )
@@ -648,12 +648,12 @@ assert(
     addForm.includes(':data-tooltip="`推送：${enableNotify ? \'已开启\' : \'已关闭\'}`"') &&
     addForm.includes(":aria-pressed=\"fullImageAttachments\"") &&
     addForm.includes(":aria-pressed=\"enableNotify\"") &&
-    addForm.includes("const FULL_IMAGE_ATTACHMENTS_MARKER = '<!-- noise-full-image-attachments -->'") &&
+    addForm.includes("const FULL_IMAGE_ATTACHMENTS_MARKER = '<!-- full-image-attachments -->'") &&
     addForm.includes('fullImageAttachments: !!fullImageAttachments.value') &&
     addForm.includes('content: buildPublishContent(MessageContent.value)') &&
     addForm.includes('const applyImageGridHTML = (html: string, keepImagesFullSize = false) => {') &&
     addForm.includes('.editor-preview :deep(.full-image-attachment img)') &&
-    markdownRenderer.includes('const FULL_IMAGE_ATTACHMENTS_MARKER_RE = /<!--\\s*noise-full-image-attachments\\s*-->\\s*/gi') &&
+    markdownRenderer.includes('const FULL_IMAGE_ATTACHMENTS_MARKER_RE = /<!--\\s*full-image-attachments\\s*-->\\s*/gi') &&
     markdownRenderer.includes('const keepImagesFullSize = hasFullImageAttachmentsMarker(markdown ?? \'\')') &&
     markdownRenderer.includes("wrapper.className = 'full-image-attachment'") &&
     markdownRenderer.includes('wrapper.appendChild(ensureImageAnchor(node, group))') &&
@@ -694,14 +694,14 @@ assert(
     backendRouter.includes('authRoutes.POST("/attachments/upload", controllers.UploadAttachment)') &&
     markdownRenderer.includes('const ATTACHMENT_LINK_REG = /\\[(图片附件|视频附件|音频附件)：([^\\]]+)\\]\\(([^)\\s]+)\\)/g') &&
     markdownRenderer.includes("const fileMatch = label.match(/^文件附件：(.+)$/)") &&
-    markdownRenderer.includes('noise-attachment-file') &&
+    markdownRenderer.includes('site-attachment-file') &&
     markdownRenderer.includes("label.match(/^文件附件：(.+)$/)") &&
     markdownRenderer.includes('buildAttachmentHtml(kindLabel, name, url)') &&
-    markdownRenderer.includes('noise-attachment-audio') &&
-    !markdownRenderer.includes('noise-attachment-render--audio') &&
-    markdownRenderer.includes('noise-attachment-render--video') &&
-    markdownRenderer.includes('noise-attachment-paragraph') &&
-    markdownRenderer.includes('noise-attachment-image') &&
+    markdownRenderer.includes('site-attachment-audio') &&
+    !markdownRenderer.includes('site-attachment-render--audio') &&
+    markdownRenderer.includes('site-attachment-render--video') &&
+    markdownRenderer.includes('site-attachment-paragraph') &&
+    markdownRenderer.includes('site-attachment-image') &&
     addForm.includes('replaceAttachmentMarkersForPreview') &&
     addForm.includes('replaceFileAttachmentMarkersForPreview') &&
     addForm.includes('const FILE_ATTACHMENT_LINK_REG = /\\[文件附件：([^\\]]+)\\]\\(([^)\\s]+)\\)/g') &&
@@ -765,7 +765,7 @@ assert(
     !vditorEditor.includes('editor-attachment-video-fancybox') &&
     !vditorEditor.includes("type: 'video'") &&
     !vditorEditor.includes("backdropClick: 'close'") &&
-    !vditorEditor.includes('.noise-media-fancybox .fancybox__toolbar') &&
+    !vditorEditor.includes('.site-media-fancybox .fancybox__toolbar') &&
     vditorEditor.includes('width: min(300px, 100%);') &&
     vditorEditor.includes('TABLE_SIZE_LIMIT = 10') &&
     vditorEditor.includes('Array.from({ length: TABLE_SIZE_LIMIT * TABLE_SIZE_LIMIT }') &&
@@ -1134,11 +1134,11 @@ assert(
     vditorEditor.includes("root.addEventListener('pointerout', onTablePointerOut, true)") &&
     !vditorEditor.includes('editor-table-select-handle') &&
     !vditorEditor.includes('.vditor-reset table.editor-table-selected') &&
-    attachmentAudioCss.includes('.noise-attachment-audio {') &&
-    !attachmentAudioCss.includes('.noise-attachment-audio--table') &&
+    attachmentAudioCss.includes('.site-attachment-audio {') &&
+    !attachmentAudioCss.includes('.site-attachment-audio--table') &&
     markdownRenderer.includes('enhanceRenderedTables()') &&
-    markdownRenderer.includes('noise-table-scroll') &&
-    markdownRenderer.includes('noise-scrollable-table') &&
+    markdownRenderer.includes('site-table-scroll') &&
+    markdownRenderer.includes('site-scrollable-table') &&
     markdownRenderer.includes('replaceRenderedTableBreakTextNodes') &&
     markdownRenderer.includes('normalizeRenderedTableStructure(table)') &&
     markdownRenderer.includes('normalizeRenderedTableStructure(clone)') &&
@@ -1149,14 +1149,14 @@ assert(
     markdownRenderer.includes('height: min(88dvh, 900px);') &&
     !markdownRenderer.includes('height: min(96vh, 1040px);') &&
     markdownRenderer.includes('showRenderedTableExpandDialog') &&
-    markdownRenderer.includes('noise-rendered-table-expand-button') &&
+    markdownRenderer.includes('site-rendered-table-expand-button') &&
     !markdownRenderer.includes("anchor.closest('table')") &&
     !markdownRenderer.includes('buildAttachmentTagHtml') &&
     markdownRenderer.includes('buildAttachmentHtml(kindLabel, name, url)') &&
     !markdownRenderer.includes('const compact = false') &&
     !markdownRenderer.includes('buildAttachmentHtml(kindLabel, name, url, true)') &&
     !markdownRenderer.includes("const compact = !!anchor.closest('td, th')") &&
-    markdownRenderer.includes('a.noise-attachment-tag[data-attachment-kind]') &&
+    markdownRenderer.includes('a.site-attachment-tag[data-attachment-kind]') &&
     !vditorEditor.includes('normalizeEditableHtmlTable(table)\n    replaceTableBreakTextNodes(table)') &&
     markdownRenderer.includes('openRenderedTableExpand(table)') &&
     markdownRenderer.includes('initializeMediaViewer(renderedTableExpandBody.value)') &&
@@ -1179,19 +1179,19 @@ assert(
     markdownRenderer.includes('.rendered-table-expanded-table .inline-image-thumb img') &&
     markdownRenderer.includes('rendered-table-expand-dialog') &&
     markdownRenderer.includes('table-expand-close-icon') &&
-    markdownRenderer.includes('.markdown-preview .noise-table-scroll') &&
+    markdownRenderer.includes('.markdown-preview .site-table-scroll') &&
     markdownRenderer.includes('padding-top: 10px;') &&
     !markdownRenderer.includes('padding-inline-end: 2px;') &&
     !markdownRenderer.includes('scroll-padding-inline-end: 2px;') &&
     !markdownRenderer.includes('box-shadow: inset 1px 0 0 rgba(148, 163, 184, 0.42), inset -1px 0 0 rgba(148, 163, 184, 0.42);') &&
-    markdownRenderer.includes('.markdown-preview .noise-table-scroll > .noise-rendered-table-expand-button') &&
+    markdownRenderer.includes('.markdown-preview .site-table-scroll > .site-rendered-table-expand-button') &&
     markdownRenderer.includes('display: inline-flex !important;') &&
     markdownRenderer.includes('align-items: center !important;') &&
     markdownRenderer.includes('overflow-x: auto;') &&
     markdownRenderer.includes('scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);') &&
-    markdownRenderer.includes('class="noise-attachment-render noise-attachment-render--video"') &&
+    markdownRenderer.includes('class="site-attachment-render site-attachment-render--video"') &&
     markdownRenderer.includes('style="width:100%;height:auto"') &&
-    markdownRenderer.includes('.markdown-preview :deep(.noise-attachment-render--video video)') &&
+    markdownRenderer.includes('.markdown-preview :deep(.site-attachment-render--video video)') &&
     markdownRenderer.includes('border: 1px solid rgba(148, 163, 184, 0.42);') &&
     messageList.includes('createMediaFancyboxOptions({ carouselInfinite: false, video: true })') &&
     messageList.includes("import { createMediaFancyboxOptions } from '~/utils/media-fancybox'") &&
@@ -1202,20 +1202,20 @@ assert(
     !addForm.includes('Fancybox.destroy()') &&
     addForm.includes('Fancybox.unbind?.(\'[data-fancybox]\')') &&
     addForm.includes("import { createMediaFancyboxOptions } from '~/utils/media-fancybox'") &&
-    !messageList.includes(':deep(.noise-media-fancybox .fancybox__toolbar)') &&
-    !vditorEditor.includes('.noise-media-fancybox .fancybox__toolbar') &&
-    !homePage.includes('.noise-media-fancybox .fancybox__toolbar') &&
+    !messageList.includes(':deep(.site-media-fancybox .fancybox__toolbar)') &&
+    !vditorEditor.includes('.site-media-fancybox .fancybox__toolbar') &&
+    !homePage.includes('.site-media-fancybox .fancybox__toolbar') &&
     !floatingCss.includes('Fancybox thumbnail state shared by the built-in image viewer and attachment previews') &&
     !floatingCss.includes('.fancybox__thumbs .f-thumbs__slide,') &&
     !floatingCss.includes('transform: scale(0.92);') &&
-    homePage.includes('.noise-media-fancybox .f-thumbs__slide {\n  overflow: visible;\n}') &&
-    homePage.includes('.noise-media-fancybox .f-thumbs__slide__button {\n  transition: transform 180ms ease, opacity 180ms ease;\n  transform-origin: center;\n}') &&
-    homePage.includes('.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button {\n  transform: scale(1.12);\n}') &&
-    homePage.includes('.noise-media-fancybox .f-thumbs__slide__button::after {\n  display: none;\n}') &&
-    !messageList.includes(':deep(.noise-media-fancybox .f-thumbs__slide') &&
-    !vditorEditor.includes('.noise-media-fancybox .f-thumbs__slide') &&
-    !messageList.includes(':deep(.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button::after)') &&
-    !vditorEditor.includes('.noise-media-fancybox .f-thumbs__slide .f-thumbs__slide__button::after') &&
+    homePage.includes('.site-media-fancybox .f-thumbs__slide {\n  overflow: visible;\n}') &&
+    homePage.includes('.site-media-fancybox .f-thumbs__slide__button {\n  transition: transform 180ms ease, opacity 180ms ease;\n  transform-origin: center;\n}') &&
+    homePage.includes('.site-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button {\n  transform: scale(1.12);\n}') &&
+    homePage.includes('.site-media-fancybox .f-thumbs__slide__button::after {\n  display: none;\n}') &&
+    !messageList.includes(':deep(.site-media-fancybox .f-thumbs__slide') &&
+    !vditorEditor.includes('.site-media-fancybox .f-thumbs__slide') &&
+    !messageList.includes(':deep(.site-media-fancybox .f-thumbs__slide .f-thumbs__slide__button::after)') &&
+    !vditorEditor.includes('.site-media-fancybox .f-thumbs__slide .f-thumbs__slide__button::after') &&
     vditorEditor.includes('triggerEl?: HTMLElement | null') &&
     vditorEditor.includes('createFancyboxProxyNode(item, thumbs[index] || item.url, sourceEl, group)') &&
     !vditorEditor.includes('isCurrent: boolean') &&
@@ -1223,7 +1223,7 @@ assert(
     vditorEditor.includes('Fancybox.fromNodes(nodes, viewerOptions as any)') &&
     !vditorEditor.includes('thumbEl: sourceThumb') &&
     !vditorEditor.includes('Fancybox.show(slides as any, viewerOptions as any)') &&
-    !messageList.includes(':deep(.noise-media-fancybox .fancybox__infobar)') &&
+    !messageList.includes(':deep(.site-media-fancybox .fancybox__infobar)') &&
     vditorEditor.includes('collapseIrAttachmentChrome') &&
     vditorEditor.includes('scheduleCollapseIrAttachmentChrome') &&
     vditorEditor.includes('scheduleRefreshAttachmentLinks') &&
@@ -1320,7 +1320,7 @@ assert(
     fancyboxVideoClose.includes('if (!hasLivePlayback(video) && !hasRememberedPlayback(getVideoState(source))) finish(thumb)') &&
     fancyboxVideoClose.includes('if (video.readyState < 1 && !hasRememberedPlayback(getVideoState(source)))') &&
     fancyboxVideoClose.includes('closeWithoutFrame') &&
-    vditorEditor.includes("scope.querySelectorAll<HTMLVideoElement>('.noise-attachment-render--video video')") &&
+    vditorEditor.includes("scope.querySelectorAll<HTMLVideoElement>('.site-attachment-render--video video')") &&
     vditorEditor.includes('ensureFancyboxVideoThumbnail(video)') &&
     fancyboxVideoClose.includes("const isApiMediaUrlPath = (pathname: string) => pathname.startsWith('/api/images/') || pathname.startsWith('/api/video/')") &&
     fancyboxVideoClose.includes('slide.type !== \'html5video\'') &&

@@ -1,7 +1,7 @@
 import { zh_CN } from '@fancyapps/ui/l10n/Fancybox/zh_CN'
 import { animateFancyboxHtml5VideoClose, prepareFancyboxHtml5VideoSlide } from './fancybox-video-close'
 
-export const MEDIA_FANCYBOX_MAIN_CLASS = 'noise-media-fancybox'
+export const MEDIA_FANCYBOX_MAIN_CLASS = 'site-media-fancybox'
 
 const projectFancyboxL10n = {
   ...zh_CN,

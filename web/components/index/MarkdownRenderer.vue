@@ -120,7 +120,7 @@ const taskUpdateInFlight = new Set<number>()
 const renderedTaskContent = ref(props.content)
 
 const contentTheme = inject('contentTheme') as any
-const FULL_IMAGE_ATTACHMENTS_MARKER_RE = /<!--\s*noise-full-image-attachments\s*-->\s*/gi
+const FULL_IMAGE_ATTACHMENTS_MARKER_RE = /<!--\s*full-image-attachments\s*-->\s*/gi
 const hasFullImageAttachmentsMarker = (content: string) => {
   FULL_IMAGE_ATTACHMENTS_MARKER_RE.lastIndex = 0
   return FULL_IMAGE_ATTACHMENTS_MARKER_RE.test(String(content || ''))
@@ -204,7 +204,7 @@ const initializeMediaViewer = (customRoot?: HTMLElement | null) => {
   const group = customRoot
     ? `markdown-table-media-${Date.now()}-${Math.random().toString(36).slice(2)}`
     : `markdown-media-${props.messageId || 'preview'}`
-  root.querySelectorAll<HTMLAnchorElement>('a.noise-attachment-tag[data-attachment-kind]').forEach((anchor) => {
+  root.querySelectorAll<HTMLAnchorElement>('a.site-attachment-tag[data-attachment-kind]').forEach((anchor) => {
     const kind = anchor.dataset.attachmentKind || ''
     const url = normalizeMediaPreviewUrl(anchor.dataset.attachmentUrl || anchor.getAttribute('href') || '')
     if (!url || kind === 'audio') return
@@ -510,13 +510,13 @@ const estimateRenderedTableLineWidth = (line: string) => {
 const estimateRenderedTableCellAttachmentWidth = (cell: HTMLTableCellElement | undefined) => {
   if (!cell) return 0
   let width = 0
-  if (cell.querySelector('.noise-attachment-file, .noise-attachment-audio, [data-noise-audio-player], .noise-table-audio-trigger')) {
+  if (cell.querySelector('.site-attachment-file, .site-attachment-audio, [data-site-audio-player], .site-table-audio-trigger')) {
     width = Math.max(width, RENDERED_TABLE_ATTACHMENT_CARD_WIDTH)
   }
-  if (cell.querySelector('.noise-attachment-render--video, video')) {
+  if (cell.querySelector('.site-attachment-render--video, video')) {
     width = Math.max(width, RENDERED_TABLE_ATTACHMENT_VIDEO_WIDTH)
   }
-  if (cell.querySelector('.noise-attachment-paragraph, .noise-attachment-image, img')) {
+  if (cell.querySelector('.site-attachment-paragraph, .site-attachment-image, img')) {
     width = Math.max(width, RENDERED_TABLE_ATTACHMENT_IMAGE_WIDTH)
   }
   return width
@@ -760,11 +760,11 @@ const openRenderedTableExpand = async (table: HTMLTableElement) => {
   renderedTableManualColumnWidths = []
   const clone = table.cloneNode(true) as HTMLTableElement
   normalizeRenderedTableStructure(clone)
-  clone.classList.add('noise-scrollable-table', 'rendered-table-expanded-table')
+  clone.classList.add('site-scrollable-table', 'rendered-table-expanded-table')
   const availableWidth = Math.min(1680, Math.max(320, window.innerWidth - 48)) - 24
   applyAdaptiveRenderedTableColumns(clone, availableWidth, renderedTableManualColumnWidths)
-  clone.querySelectorAll('button:not(.noise-rendered-table-expand-button):not(.noise-table-audio-trigger)').forEach((button) => button.remove())
-  clone.querySelectorAll('.noise-rendered-table-expand-button').forEach((button) => button.remove())
+  clone.querySelectorAll('button:not(.site-rendered-table-expand-button):not(.site-table-audio-trigger)').forEach((button) => button.remove())
+  clone.querySelectorAll('.site-rendered-table-expand-button').forEach((button) => button.remove())
   renderedTableExpandHtml.value = clone.outerHTML
   if (renderedTableExpandCloseTimer) {
     clearTimeout(renderedTableExpandCloseTimer)
@@ -799,10 +799,10 @@ const closeRenderedTableExpand = () => {
 }
 
 const ensureRenderedTableExpandButton = (wrapper: HTMLElement, table: HTMLTableElement) => {
-  if (wrapper.querySelector('.noise-rendered-table-expand-button')) return
+  if (wrapper.querySelector('.site-rendered-table-expand-button')) return
   const button = document.createElement('button')
   button.type = 'button'
-  button.className = 'noise-rendered-table-expand-button editor-table-expand-button nw-action-btn nw-tooltip-anchor'
+  button.className = 'site-rendered-table-expand-button editor-table-expand-button nw-action-btn nw-tooltip-anchor'
   button.setAttribute('aria-label', '放大查看表格')
   button.setAttribute('data-tooltip', '放大查看表格')
   button.textContent = '⛶'
@@ -823,7 +823,7 @@ const enhanceRenderedTables = () => {
   if (!root) return
   root.querySelectorAll<HTMLTableElement>('table').forEach((table) => {
     normalizeRenderedTableStructure(table)
-    const existingWrapper = table.closest<HTMLElement>('.noise-table-scroll')
+    const existingWrapper = table.closest<HTMLElement>('.site-table-scroll')
     if (existingWrapper) {
       replaceRenderedTableBreakTextNodes(table)
       ensureRenderedTableExpandButton(existingWrapper, table)
@@ -832,10 +832,10 @@ const enhanceRenderedTables = () => {
     const parent = table.parentElement
     if (!parent) return
     const wrapper = document.createElement('div')
-    wrapper.className = 'noise-table-scroll'
+    wrapper.className = 'site-table-scroll'
     parent.insertBefore(wrapper, table)
     wrapper.appendChild(table)
-    table.classList.add('noise-scrollable-table')
+    table.classList.add('site-scrollable-table')
     replaceRenderedTableBreakTextNodes(table)
     ensureRenderedTableExpandButton(wrapper, table)
   })
@@ -1376,10 +1376,10 @@ const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string) =>
   const kind = labeledKind === 'video' && isAudioAttachmentUrl(url, name) ? 'audio' : labeledKind
   if (!url) return ''
   if (kind === 'image') {
-    return `<p class="noise-attachment-paragraph" data-noise-attachment-kind="${kind}" data-noise-attachment-url="${safeUrl}"><img class="noise-attachment-image" src="${safeUrl}" alt="${safeName}" loading="lazy" decoding="async" data-noise-attachment-kind="${kind}" data-noise-attachment-url="${safeUrl}" /></p>`
+    return `<p class="site-attachment-paragraph" data-site-attachment-kind="${kind}" data-site-attachment-url="${safeUrl}"><img class="site-attachment-image" src="${safeUrl}" alt="${safeName}" loading="lazy" decoding="async" data-site-attachment-kind="${kind}" data-site-attachment-url="${safeUrl}" /></p>`
   }
   if (kind === 'video') {
-    return `<div class="noise-attachment-render noise-attachment-render--video" data-noise-attachment-kind="${kind}" data-noise-attachment-url="${safeUrl}"><video src="${safeUrl}" controls preload="metadata" style="width:100%;height:auto" data-noise-attachment-kind="${kind}" data-noise-attachment-url="${safeUrl}"></video></div>`
+    return `<div class="site-attachment-render site-attachment-render--video" data-site-attachment-kind="${kind}" data-site-attachment-url="${safeUrl}"><video src="${safeUrl}" controls preload="metadata" style="width:100%;height:auto" data-site-attachment-kind="${kind}" data-site-attachment-url="${safeUrl}"></video></div>`
   }
   if (kind === 'file') {
     const canPreview = browserPreviewableAttachmentUrl(url)
@@ -1388,15 +1388,15 @@ const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string) =>
       : `download="${safeName}"`
     const actionLabel = canPreview ? '打开附件' : '下载附件'
     const meta = escapeHtml(attachmentExtensionLabel(name, url))
-    const actionClass = canPreview ? 'noise-attachment-file__action--preview' : 'noise-attachment-file__action--download'
-    return `<a class="noise-attachment-file ${canPreview ? 'noise-attachment-file--preview' : 'noise-attachment-file--download'}" href="${safeUrl}" ${previewAttrs} aria-label="${actionLabel}：${safeName}" data-noise-attachment-kind="${kind}" data-noise-attachment-url="${safeUrl}"><span class="noise-attachment-file__icon" aria-hidden="true"></span><span class="noise-attachment-file__body"><span class="noise-attachment-file__name">${safeName}</span><span class="noise-attachment-file__meta">${meta}</span></span><span class="noise-attachment-file__action ${actionClass}" aria-hidden="true"></span></a>`
+    const actionClass = canPreview ? 'site-attachment-file__action--preview' : 'site-attachment-file__action--download'
+    return `<a class="site-attachment-file ${canPreview ? 'site-attachment-file--preview' : 'site-attachment-file--download'}" href="${safeUrl}" ${previewAttrs} aria-label="${actionLabel}：${safeName}" data-site-attachment-kind="${kind}" data-site-attachment-url="${safeUrl}"><span class="site-attachment-file__icon" aria-hidden="true"></span><span class="site-attachment-file__body"><span class="site-attachment-file__name">${safeName}</span><span class="site-attachment-file__meta">${meta}</span></span><span class="site-attachment-file__action ${actionClass}" aria-hidden="true"></span></a>`
   }
   return buildAttachmentAudioPlaceholderHtml({ src: url, name })
 }
 
 const buildDeletedAttachmentHtml = (kind: AttachmentKind) => {
   const message = escapeHtml(deletedAttachmentText(kind))
-  return `<div class="noise-attachment-file noise-attachment-file--deleted noise-attachment-file--deleted-${kind}" role="note" aria-label="${message}"><span class="noise-attachment-file__icon" aria-hidden="true"></span><span class="noise-attachment-file__body"><span class="noise-attachment-file__name">${message}</span></span><span class="noise-attachment-file__action noise-attachment-file__action--deleted" aria-hidden="true"></span></div>`
+  return `<div class="site-attachment-file site-attachment-file--deleted site-attachment-file--deleted-${kind}" role="note" aria-label="${message}"><span class="site-attachment-file__icon" aria-hidden="true"></span><span class="site-attachment-file__body"><span class="site-attachment-file__name">${message}</span></span><span class="site-attachment-file__action site-attachment-file__action--deleted" aria-hidden="true"></span></div>`
 }
 
 const attachmentInfoFromRenderedAnchor = (anchor: HTMLAnchorElement) => {
@@ -1481,20 +1481,20 @@ const probeAttachmentDeleted = (url: string) => {
 
 const attachmentReplacementTarget = (node: HTMLElement, kind: AttachmentKind) => {
   if (kind === 'image') {
-    return (node.closest('.noise-attachment-paragraph') || node.closest('.image-grid-item') || node.closest('.single-media') || node.closest('.full-image-attachment') || node) as HTMLElement
+    return (node.closest('.site-attachment-paragraph') || node.closest('.image-grid-item') || node.closest('.single-media') || node.closest('.full-image-attachment') || node) as HTMLElement
   }
   if (kind === 'video') {
-    return (node.closest('.noise-attachment-render') || node.closest('.image-grid-item') || node.closest('.single-media') || node) as HTMLElement
+    return (node.closest('.site-attachment-render') || node.closest('.image-grid-item') || node.closest('.single-media') || node) as HTMLElement
   }
   if (kind === 'audio') {
-    return (node.closest('.noise-attachment-audio') || node.closest('.single-media') || node) as HTMLElement
+    return (node.closest('.site-attachment-audio') || node.closest('.single-media') || node) as HTMLElement
   }
-  return (node.closest('.noise-attachment-file') || node) as HTMLElement
+  return (node.closest('.site-attachment-file') || node) as HTMLElement
 }
 
 const replaceDeletedAttachment = (node: HTMLElement, kind: AttachmentKind) => {
   const target = attachmentReplacementTarget(node, kind)
-  if (!target || target.classList.contains('noise-attachment-file--deleted')) return
+  if (!target || target.classList.contains('site-attachment-file--deleted')) return
   replaceNodeWithHtml(target, buildDeletedAttachmentHtml(kind))
 }
 
@@ -1502,11 +1502,11 @@ const applyDeletedAttachmentPlaceholders = (customRoot?: HTMLElement | null) => 
   const root = customRoot || previewElement.value
   if (!root) return
   const nodes = Array.from(root.querySelectorAll<HTMLElement>(
-    'img.noise-attachment-image[data-noise-attachment-kind][data-noise-attachment-url], video[data-noise-attachment-kind][data-noise-attachment-url], audio[data-noise-attachment-kind][data-noise-attachment-url], a.noise-attachment-file[data-noise-attachment-kind][data-noise-attachment-url]'
+    'img.site-attachment-image[data-site-attachment-kind][data-site-attachment-url], video[data-site-attachment-kind][data-site-attachment-url], audio[data-site-attachment-kind][data-site-attachment-url], a.site-attachment-file[data-site-attachment-kind][data-site-attachment-url]'
   ))
 
   nodes.forEach((node) => {
-    if (node.closest('.noise-attachment-file--deleted')) return
+    if (node.closest('.site-attachment-file--deleted')) return
     const kind = String(node.dataset.noiseAttachmentKind || 'file') as AttachmentKind
     const url = String(node.dataset.noiseAttachmentUrl || '')
     if (!['image', 'video', 'audio', 'file'].includes(kind) || !url) return
@@ -1586,7 +1586,7 @@ const processMediaLinks = (content: string): string => {
     if (isAudioAttachmentUrl(src)) {
       return `${prefix}${buildAttachmentAudioPlaceholderHtml({ src })}`;
     }
-    return `${prefix}<video src="${safeSrc}" controls preload="metadata" style="width:100%;height:auto" data-noise-attachment-kind="video" data-noise-attachment-url="${safeSrc}"></video>`;
+    return `${prefix}<video src="${safeSrc}" controls preload="metadata" style="width:100%;height:auto" data-site-attachment-kind="video" data-site-attachment-url="${safeSrc}"></video>`;
   });
   content = content
     .replace(BILIBILI_REG, (m, bvid) => {
@@ -1917,7 +1917,7 @@ const renderMarkdown = async (markdown: string) => {
           applyThemeClass();
           const anchors = previewElement.value?.querySelectorAll('a[href]') || [] as any;
           anchors.forEach((a: HTMLAnchorElement) => {
-            if (a.classList.contains('noise-attachment-tag')) return
+            if (a.classList.contains('site-attachment-tag')) return
             const href = a.getAttribute('href') || ''
             if (isAudioAttachmentUrl(href, a.textContent || '')) {
               const src = resolveImageUrl(href)
@@ -2312,7 +2312,7 @@ watch(() => props.enableGithubCard, () => {
   text-decoration: underline;
 }
 
-.markdown-preview .noise-table-scroll {
+.markdown-preview .site-table-scroll {
   max-width: 100%;
   margin: 8px 0;
   padding-top: 10px;
@@ -2322,29 +2322,29 @@ watch(() => props.enableGithubCard, () => {
   scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);
 }
 
-.markdown-preview .noise-table-scroll::-webkit-scrollbar {
+.markdown-preview .site-table-scroll::-webkit-scrollbar {
   height: 9px;
 }
 
-.markdown-preview .noise-table-scroll::-webkit-scrollbar-track {
+.markdown-preview .site-table-scroll::-webkit-scrollbar-track {
   border-radius: 999px;
   background: rgba(148, 163, 184, 0.18);
 }
 
-.markdown-preview .noise-table-scroll::-webkit-scrollbar-thumb {
+.markdown-preview .site-table-scroll::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background: rgba(100, 116, 139, 0.62);
 }
 
-.markdown-preview .noise-table-scroll::-webkit-scrollbar-thumb:hover {
+.markdown-preview .site-table-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(71, 85, 105, 0.82);
 }
 
-.markdown-preview .noise-table-scroll {
+.markdown-preview .site-table-scroll {
   position: relative;
 }
 
-.markdown-preview .noise-table-scroll > .noise-rendered-table-expand-button {
+.markdown-preview .site-table-scroll > .site-rendered-table-expand-button {
   box-sizing: border-box;
   display: inline-flex !important;
   align-items: center !important;
@@ -2370,27 +2370,27 @@ watch(() => props.enableGithubCard, () => {
   z-index: 2;
 }
 
-.markdown-preview .noise-table-scroll:hover .noise-rendered-table-expand-button,
-.noise-rendered-table-expand-button:focus-visible {
+.markdown-preview .site-table-scroll:hover .site-rendered-table-expand-button,
+.site-rendered-table-expand-button:focus-visible {
   opacity: 1;
   transform: none !important;
 }
 
-.markdown-preview.theme-dark .noise-rendered-table-expand-button {
+.markdown-preview.theme-dark .site-rendered-table-expand-button {
   border-color: rgba(148, 163, 184, 0.38) !important;
   background: rgba(30, 41, 59, 0.96) !important;
   color: rgba(226, 232, 240, 0.96) !important;
 }
 
-.markdown-preview .noise-scrollable-table {
+.markdown-preview .site-scrollable-table {
   width: max-content;
   min-width: 100%;
   max-width: none;
   border-collapse: collapse;
 }
 
-.markdown-preview .noise-scrollable-table th,
-.markdown-preview .noise-scrollable-table td {
+.markdown-preview .site-scrollable-table th,
+.markdown-preview .site-scrollable-table td {
   min-width: 88px;
   max-width: 280px;
   white-space: pre-wrap;
@@ -2623,8 +2623,8 @@ body.is-resizing-rendered-table-column * {
   background: rgba(30, 41, 59, 0.74);
 }
 
-.markdown-preview :deep(.noise-attachment-tag),
-.rendered-table-expand-scroll .noise-attachment-tag {
+.markdown-preview :deep(.site-attachment-tag),
+.rendered-table-expand-scroll .site-attachment-tag {
   display: inline-flex;
   align-items: center;
   max-width: 100%;
@@ -2644,17 +2644,17 @@ body.is-resizing-rendered-table-column * {
   white-space: nowrap;
 }
 
-.markdown-preview.theme-dark :deep(.noise-attachment-tag),
-.rendered-table-expand-overlay.is-dark .noise-attachment-tag {
+.markdown-preview.theme-dark :deep(.site-attachment-tag),
+.rendered-table-expand-overlay.is-dark .site-attachment-tag {
   border-color: rgba(251, 146, 60, 0.42);
   background: rgba(249, 115, 22, 0.18);
   color: #fed7aa !important;
 }
 
-.markdown-preview :deep(.noise-attachment-tag:hover),
-.markdown-preview :deep(.noise-attachment-tag:focus-visible),
-.rendered-table-expand-scroll .noise-attachment-tag:hover,
-.rendered-table-expand-scroll .noise-attachment-tag:focus-visible {
+.markdown-preview :deep(.site-attachment-tag:hover),
+.markdown-preview :deep(.site-attachment-tag:focus-visible),
+.rendered-table-expand-scroll .site-attachment-tag:hover,
+.rendered-table-expand-scroll .site-attachment-tag:focus-visible {
   outline: none;
   border-color: rgba(249, 115, 22, 0.68);
   background: rgba(249, 115, 22, 0.18);
@@ -2861,25 +2861,25 @@ body.is-resizing-rendered-table-column * {
   margin: 0.4em 0;
 }
 
-.markdown-preview :deep(.noise-attachment-render) {
+.markdown-preview :deep(.site-attachment-render) {
   display: block;
   margin: 0.45em 0;
 }
 
-.markdown-preview :deep(.noise-attachment-render--image) {
+.markdown-preview :deep(.site-attachment-render--image) {
   width: fit-content;
   max-width: 100%;
 }
 
-.markdown-preview :deep(.noise-attachment-render--image img) {
+.markdown-preview :deep(.site-attachment-render--image img) {
   display: block;
   max-width: 100%;
   height: auto;
   border-radius: 8px;
 }
 
-.markdown-preview .noise-attachment-file,
-.rendered-table-expand-scroll .noise-attachment-file {
+.markdown-preview .site-attachment-file,
+.rendered-table-expand-scroll .site-attachment-file {
   --file-card-bg: #ffffff;
   --file-card-bg-hover: #f8fafc;
   --file-card-border: rgba(15, 23, 42, 0.10);
@@ -2916,50 +2916,50 @@ body.is-resizing-rendered-table-column * {
   transition: background-color .16s ease;
 }
 
-.markdown-preview .noise-attachment-file:hover,
-.markdown-preview .noise-attachment-file:active,
-.markdown-preview .noise-attachment-file:focus-visible,
-.rendered-table-expand-scroll .noise-attachment-file:hover,
-.rendered-table-expand-scroll .noise-attachment-file:active,
-.rendered-table-expand-scroll .noise-attachment-file:focus-visible {
+.markdown-preview .site-attachment-file:hover,
+.markdown-preview .site-attachment-file:active,
+.markdown-preview .site-attachment-file:focus-visible,
+.rendered-table-expand-scroll .site-attachment-file:hover,
+.rendered-table-expand-scroll .site-attachment-file:active,
+.rendered-table-expand-scroll .site-attachment-file:focus-visible {
   background: var(--file-card-bg-hover) !important;
   color: inherit !important;
   text-decoration: none !important;
   outline: none;
 }
 
-.markdown-preview .noise-attachment-file:focus-visible,
-.rendered-table-expand-scroll .noise-attachment-file:focus-visible {
+.markdown-preview .site-attachment-file:focus-visible,
+.rendered-table-expand-scroll .site-attachment-file:focus-visible {
   box-shadow: var(--file-card-shadow), 0 0 0 2px rgba(249, 115, 22, 0.18) !important;
 }
 
-.markdown-preview .noise-attachment-file--deleted,
-.rendered-table-expand-scroll .noise-attachment-file--deleted {
+.markdown-preview .site-attachment-file--deleted,
+.rendered-table-expand-scroll .site-attachment-file--deleted {
   cursor: default;
 }
 
-.markdown-preview .noise-attachment-file--deleted .noise-attachment-file__action,
-.rendered-table-expand-scroll .noise-attachment-file--deleted .noise-attachment-file__action {
+.markdown-preview .site-attachment-file--deleted .site-attachment-file__action,
+.rendered-table-expand-scroll .site-attachment-file--deleted .site-attachment-file__action {
   opacity: 0;
 }
 
-.markdown-preview .noise-attachment-file + p,
-.rendered-table-expand-scroll .noise-attachment-file + p {
+.markdown-preview .site-attachment-file + p,
+.rendered-table-expand-scroll .site-attachment-file + p {
   margin-top: 0 !important;
 }
 
-.markdown-preview .noise-attachment-file + .noise-attachment-file,
-.rendered-table-expand-scroll .noise-attachment-file + .noise-attachment-file {
+.markdown-preview .site-attachment-file + .site-attachment-file,
+.rendered-table-expand-scroll .site-attachment-file + .site-attachment-file {
   margin-top: 10px !important;
 }
 
-.markdown-preview p:has(+ .noise-attachment-file),
-.rendered-table-expand-scroll p:has(+ .noise-attachment-file) {
+.markdown-preview p:has(+ .site-attachment-file),
+.rendered-table-expand-scroll p:has(+ .site-attachment-file) {
   margin-bottom: 6px !important;
 }
 
-.markdown-preview .noise-attachment-file__icon,
-.rendered-table-expand-scroll .noise-attachment-file__icon {
+.markdown-preview .site-attachment-file__icon,
+.rendered-table-expand-scroll .site-attachment-file__icon {
   position: relative;
   display: inline-flex !important;
   align-items: center !important;
@@ -2973,8 +2973,8 @@ body.is-resizing-rendered-table-column * {
   flex: 0 0 auto !important;
 }
 
-.markdown-preview .noise-attachment-file__icon::before,
-.rendered-table-expand-scroll .noise-attachment-file__icon::before {
+.markdown-preview .site-attachment-file__icon::before,
+.rendered-table-expand-scroll .site-attachment-file__icon::before {
   content: '';
   display: block;
   width: 17px;
@@ -2984,8 +2984,8 @@ body.is-resizing-rendered-table-column * {
   box-sizing: border-box;
 }
 
-.markdown-preview .noise-attachment-file__icon::after,
-.rendered-table-expand-scroll .noise-attachment-file__icon::after {
+.markdown-preview .site-attachment-file__icon::after,
+.rendered-table-expand-scroll .site-attachment-file__icon::after {
   content: '';
   position: absolute;
   top: 12px;
@@ -2998,8 +2998,8 @@ body.is-resizing-rendered-table-column * {
   transform: rotate(-180deg);
 }
 
-.markdown-preview .noise-attachment-file__body,
-.rendered-table-expand-scroll .noise-attachment-file__body {
+.markdown-preview .site-attachment-file__body,
+.rendered-table-expand-scroll .site-attachment-file__body {
   display: flex !important;
   min-width: 0 !important;
   flex-direction: column !important;
@@ -3007,8 +3007,8 @@ body.is-resizing-rendered-table-column * {
   gap: 4px !important;
 }
 
-.markdown-preview .noise-attachment-file__name,
-.rendered-table-expand-scroll .noise-attachment-file__name {
+.markdown-preview .site-attachment-file__name,
+.rendered-table-expand-scroll .site-attachment-file__name {
   display: block !important;
   min-width: 0 !important;
   color: var(--file-card-name) !important;
@@ -3019,8 +3019,8 @@ body.is-resizing-rendered-table-column * {
   word-break: break-word !important;
 }
 
-.markdown-preview .noise-attachment-file__meta,
-.rendered-table-expand-scroll .noise-attachment-file__meta {
+.markdown-preview .site-attachment-file__meta,
+.rendered-table-expand-scroll .site-attachment-file__meta {
   display: block !important;
   color: var(--file-card-meta) !important;
   font-size: 12px !important;
@@ -3028,8 +3028,8 @@ body.is-resizing-rendered-table-column * {
   text-transform: uppercase !important;
 }
 
-.markdown-preview .noise-attachment-file__action,
-.rendered-table-expand-scroll .noise-attachment-file__action {
+.markdown-preview .site-attachment-file__action,
+.rendered-table-expand-scroll .site-attachment-file__action {
   position: relative;
   display: inline-flex !important;
   align-items: center !important;
@@ -3041,8 +3041,8 @@ body.is-resizing-rendered-table-column * {
   opacity: .78;
 }
 
-.markdown-preview .noise-attachment-file__action--download::before,
-.rendered-table-expand-scroll .noise-attachment-file__action--download::before {
+.markdown-preview .site-attachment-file__action--download::before,
+.rendered-table-expand-scroll .site-attachment-file__action--download::before {
   content: '';
   width: 10px;
   height: 10px;
@@ -3052,8 +3052,8 @@ body.is-resizing-rendered-table-column * {
   box-sizing: border-box;
 }
 
-.markdown-preview .noise-attachment-file__action--download::after,
-.rendered-table-expand-scroll .noise-attachment-file__action--download::after {
+.markdown-preview .site-attachment-file__action--download::after,
+.rendered-table-expand-scroll .site-attachment-file__action--download::after {
   content: '';
   position: absolute;
   bottom: 5px;
@@ -3065,8 +3065,8 @@ body.is-resizing-rendered-table-column * {
   transform: translateX(-50%);
 }
 
-.markdown-preview .noise-attachment-file__action--preview::before,
-.rendered-table-expand-scroll .noise-attachment-file__action--preview::before {
+.markdown-preview .site-attachment-file__action--preview::before,
+.rendered-table-expand-scroll .site-attachment-file__action--preview::before {
   content: '';
   width: 19px;
   height: 12px;
@@ -3075,8 +3075,8 @@ body.is-resizing-rendered-table-column * {
   box-sizing: border-box;
 }
 
-.markdown-preview .noise-attachment-file__action--preview::after,
-.rendered-table-expand-scroll .noise-attachment-file__action--preview::after {
+.markdown-preview .site-attachment-file__action--preview::after,
+.rendered-table-expand-scroll .site-attachment-file__action--preview::after {
   content: '';
   position: absolute;
   width: 5px;
@@ -3085,8 +3085,8 @@ body.is-resizing-rendered-table-column * {
   background: currentColor;
 }
 
-.markdown-preview.theme-dark .noise-attachment-file,
-.rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .noise-attachment-file {
+.markdown-preview.theme-dark .site-attachment-file,
+.rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .site-attachment-file {
   --file-card-bg: rgba(15, 23, 42, 0.52);
   --file-card-bg-hover: rgba(30, 41, 59, 0.68);
   --file-card-border: rgba(255, 255, 255, 0.12);
@@ -3101,8 +3101,8 @@ body.is-resizing-rendered-table-column * {
 }
 
 @media (max-width: 520px) {
-  .markdown-preview .noise-attachment-file,
-  .rendered-table-expand-scroll .noise-attachment-file {
+  .markdown-preview .site-attachment-file,
+  .rendered-table-expand-scroll .site-attachment-file {
     grid-template-columns: 40px minmax(0, 1fr) 24px !important;
     gap: 10px !important;
     min-height: 64px !important;
@@ -3112,14 +3112,14 @@ body.is-resizing-rendered-table-column * {
     margin: 6px 8px !important;
   }
 
-  .markdown-preview .noise-attachment-file__icon,
-  .rendered-table-expand-scroll .noise-attachment-file__icon {
+  .markdown-preview .site-attachment-file__icon,
+  .rendered-table-expand-scroll .site-attachment-file__icon {
     width: 40px !important;
     height: 40px !important;
   }
 }
 
-.markdown-preview :deep(.noise-attachment-render--video video) {
+.markdown-preview :deep(.site-attachment-render--video video) {
   margin: 0;
 }
 
@@ -3199,7 +3199,7 @@ body.is-resizing-rendered-table-column * {
   background-color: rgba(0, 0, 0, 0.05);
 }
 
-.markdown-preview :deep(a:not(.noise-attachment-file)) {
+.markdown-preview :deep(a:not(.site-attachment-file)) {
   color: #0366d6 !important; 
   text-decoration: none !important; 
   background-color: transparent !important;
@@ -3208,12 +3208,12 @@ body.is-resizing-rendered-table-column * {
   border: none !important;
   text-shadow: none !important;
 }
-.markdown-preview :deep(a:not(.noise-attachment-file):hover) {
+.markdown-preview :deep(a:not(.site-attachment-file):hover) {
   text-decoration: underline !important; 
   color: #1d4ed8 !important;
 }
-.theme-light.markdown-preview :deep(a:not(.noise-attachment-file)),
-.theme-dark.markdown-preview :deep(a:not(.noise-attachment-file)) {
+.theme-light.markdown-preview :deep(a:not(.site-attachment-file)),
+.theme-dark.markdown-preview :deep(a:not(.site-attachment-file)) {
   color: #0366d6 !important;
   background-color: transparent !important;
   padding: 0 !important;
@@ -3558,7 +3558,7 @@ body.is-resizing-rendered-table-column * {
   text-shadow: none;
 }
 /* 白天模式下内容区链接颜色加深为深橙色 */
-.theme-light.markdown-preview :deep(a:not(.noise-attachment-file)) {
+.theme-light.markdown-preview :deep(a:not(.site-attachment-file)) {
   color: #0366d6;
 }
 /* 图片悬停与盒子效果（与内容样式一致） */
@@ -3596,10 +3596,10 @@ body.is-resizing-rendered-table-column * {
   .image-grid-item img:hover { box-shadow: 0 8px 22px rgba(255,255,255,0.12); }
 }
 
-.theme-dark.markdown-preview :deep(a:not(.noise-attachment-file)),
-.theme-light.markdown-preview :deep(a:not(.noise-attachment-file)),
-:global(html.dark) .markdown-preview :deep(a:not(.noise-attachment-file)),
-:global(html:not(.dark)) .markdown-preview :deep(a:not(.noise-attachment-file)) {
+.theme-dark.markdown-preview :deep(a:not(.site-attachment-file)),
+.theme-light.markdown-preview :deep(a:not(.site-attachment-file)),
+:global(html.dark) .markdown-preview :deep(a:not(.site-attachment-file)),
+:global(html:not(.dark)) .markdown-preview :deep(a:not(.site-attachment-file)) {
   color: #0366d6 !important;
 }
 
@@ -3663,7 +3663,7 @@ body.is-resizing-rendered-table-column * {
   width: 100%;
   height: 100%;
 }
-.markdown-preview :deep(a:not(.noise-attachment-file)) {
+.markdown-preview :deep(a:not(.site-attachment-file)) {
   background-color: transparent !important;
   padding: 0 !important;
   border-radius: 0 !important;
@@ -3672,11 +3672,11 @@ body.is-resizing-rendered-table-column * {
   color: #0366d6 !important;
 }
 
-.theme-dark.markdown-preview :deep(a:not(.noise-attachment-file):hover),
-.theme-light.markdown-preview :deep(a:not(.noise-attachment-file):hover),
-:global(html.dark) .markdown-preview :deep(a:not(.noise-attachment-file):hover),
-:global(html:not(.dark)) .markdown-preview :deep(a:not(.noise-attachment-file):hover),
-.markdown-preview :deep(a:not(.noise-attachment-file):hover) {
+.theme-dark.markdown-preview :deep(a:not(.site-attachment-file):hover),
+.theme-light.markdown-preview :deep(a:not(.site-attachment-file):hover),
+:global(html.dark) .markdown-preview :deep(a:not(.site-attachment-file):hover),
+:global(html:not(.dark)) .markdown-preview :deep(a:not(.site-attachment-file):hover),
+.markdown-preview :deep(a:not(.site-attachment-file):hover) {
   color: #1d4ed8 !important;
   text-decoration: underline !important;
 }

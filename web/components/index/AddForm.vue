@@ -271,8 +271,8 @@ const onEditorReady = async () => {
 }
 const showImageUploader = ref(false)
 const imageUploaderPosition = ref({ x: 400, y: 320 }) // 可根据实际调整
-const FULL_IMAGE_ATTACHMENTS_MARKER = '<!-- noise-full-image-attachments -->'
-const FULL_IMAGE_ATTACHMENTS_MARKER_RE = /<!--\s*noise-full-image-attachments\s*-->\s*/gi
+const FULL_IMAGE_ATTACHMENTS_MARKER = '<!-- full-image-attachments -->'
+const FULL_IMAGE_ATTACHMENTS_MARKER_RE = /<!--\s*full-image-attachments\s*-->\s*/gi
 const hasFullImageAttachmentsMarker = (content: string) => {
   FULL_IMAGE_ATTACHMENTS_MARKER_RE.lastIndex = 0
   return FULL_IMAGE_ATTACHMENTS_MARKER_RE.test(String(content || ''))

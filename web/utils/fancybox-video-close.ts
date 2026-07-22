@@ -30,7 +30,7 @@ type VideoSurfaceRegisterOptions = {
 
 const firstFrameCache = new Map<string, Promise<string>>()
 const videoSurfaceRegistry = new Map<string, { videos: Set<HTMLVideoElement>; targets: Set<HTMLElement> }>()
-const VIDEO_PLAYBACK_MEMORY_KEY = 'noise-video-playback-state:v1'
+const VIDEO_PLAYBACK_MEMORY_KEY = 'site-video-playback-state:v1'
 const PLAYBACK_PROGRESS_THRESHOLD = 0.15
 
 const isApiMediaUrlPath = (pathname: string) => pathname.startsWith('/api/images/') || pathname.startsWith('/api/video/')

@@ -26,7 +26,7 @@ func TestVoceChatNotificationFallbackDoesNotExposeLegacyBranding(t *testing.T) {
 	}
 }
 
-func TestScrubTraceableLocalAPIURLsPreservesFunctionAndUnrelatedLinks(t *testing.T) {
+func TestScrubTraceableLocalURLsPreservesFunctionAndUnrelatedLinks(t *testing.T) {
 	tests := []struct {
 		name        string
 		input       string
@@ -52,18 +52,24 @@ func TestScrubTraceableLocalAPIURLsPreservesFunctionAndUnrelatedLinks(t *testing
 			wantChanged: false,
 		},
 		{
-			name:        "non API page on branded host is preserved",
+			name:        "non API page on echo branded host becomes relative",
 			input:       `https://echo-noise.example.com/about`,
-			want:        `https://echo-noise.example.com/about`,
-			wantChanged: false,
+			want:        `/about`,
+			wantChanged: true,
+		},
+		{
+			name:        "legacy project API host becomes relative",
+			input:       `https://www.noisework.cn/api/files/a.txt`,
+			want:        `/api/files/a.txt`,
+			wantChanged: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, changed := scrubTraceableLocalAPIURLs(tt.input)
+			got, changed := scrubTraceableLocalURLs(tt.input)
 			if got != tt.want || changed != tt.wantChanged {
-				t.Fatalf("scrubTraceableLocalAPIURLs(%q) = (%q, %v), want (%q, %v)", tt.input, got, changed, tt.want, tt.wantChanged)
+				t.Fatalf("scrubTraceableLocalURLs(%q) = (%q, %v), want (%q, %v)", tt.input, got, changed, tt.want, tt.wantChanged)
 			}
 		})
 	}
@@ -174,7 +180,7 @@ func TestScrubPersistedLegacyPublicBrandingMigratesOnlyKnownDefaults(t *testing.
 		t.Fatalf("create custom image message: %v", err)
 	}
 	brandedMessage := models.Message{
-		Content:  `[文件](https://echo-noise.example.com:20714/api/files/a%20b.txt)`,
+		Content:  legacyFullImageMarker + "\n\n[文件](https://echo-noise.example.com:20714/api/files/a%20b.txt)",
 		ImageURL: `https://echo-noise.example.com:20714/api/images/a.png?size=large`,
 		Username: user.Username,
 		UserID:   user.ID,
@@ -189,6 +195,14 @@ func TestScrubPersistedLegacyPublicBrandingMigratesOnlyKnownDefaults(t *testing.
 	}
 	if err := db.Create(&customExternalMessage).Error; err != nil {
 		t.Fatalf("create custom external message: %v", err)
+	}
+	legacyAPIHostMessage := models.Message{
+		Content:  `https://www.noisework.cn/api/files/legacy.txt`,
+		Username: user.Username,
+		UserID:   user.ID,
+	}
+	if err := db.Create(&legacyAPIHostMessage).Error; err != nil {
+		t.Fatalf("create legacy API host message: %v", err)
 	}
 	brandedComment := models.Comment{
 		MessageID: brandedMessage.ID,
@@ -263,7 +277,7 @@ func TestScrubPersistedLegacyPublicBrandingMigratesOnlyKnownDefaults(t *testing.
 	if err := db.First(&gotBrandedMessage, brandedMessage.ID).Error; err != nil {
 		t.Fatalf("reload branded message: %v", err)
 	}
-	if gotBrandedMessage.Content != `[文件](/api/files/a%20b.txt)` || gotBrandedMessage.ImageURL != `/api/images/a.png?size=large` {
+	if gotBrandedMessage.Content != neutralFullImageMarker+"\n\n[文件](/api/files/a%20b.txt)" || gotBrandedMessage.ImageURL != `/api/images/a.png?size=large` {
 		t.Fatalf("branded message URLs not made relative: %#v", gotBrandedMessage)
 	}
 	var gotCustomExternalMessage models.Message
@@ -272,6 +286,13 @@ func TestScrubPersistedLegacyPublicBrandingMigratesOnlyKnownDefaults(t *testing.
 	}
 	if gotCustomExternalMessage.Content != customExternalMessage.Content {
 		t.Fatalf("unrelated external URL changed: %q", gotCustomExternalMessage.Content)
+	}
+	var gotLegacyAPIHostMessage models.Message
+	if err := db.First(&gotLegacyAPIHostMessage, legacyAPIHostMessage.ID).Error; err != nil {
+		t.Fatalf("reload legacy API host message: %v", err)
+	}
+	if gotLegacyAPIHostMessage.Content != `/api/files/legacy.txt` {
+		t.Fatalf("legacy API host message URL not made relative: %q", gotLegacyAPIHostMessage.Content)
 	}
 	var gotBrandedComment models.Comment
 	if err := db.First(&gotBrandedComment, brandedComment.ID).Error; err != nil {

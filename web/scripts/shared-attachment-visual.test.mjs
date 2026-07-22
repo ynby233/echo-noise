@@ -14,19 +14,19 @@ const [renderer, messages, feed] = await Promise.all([
 
 assert.match(
   renderer,
-  /\.markdown-preview \.noise-attachment-file,[\s\S]*?grid-template-columns:\s*44px minmax\(0, 1fr\) 28px\s*!important;[\s\S]*?border-radius:\s*12px\s*!important;[\s\S]*?color:\s*var\(--file-card-text\)\s*!important;[\s\S]*?font-size:\s*16px\s*!important;[\s\S]*?line-height:\s*1\.6\s*!important;[\s\S]*?box-shadow:\s*var\(--file-card-shadow\)\s*!important;/,
+  /\.markdown-preview \.site-attachment-file,[\s\S]*?grid-template-columns:\s*44px minmax\(0, 1fr\) 28px\s*!important;[\s\S]*?border-radius:\s*12px\s*!important;[\s\S]*?color:\s*var\(--file-card-text\)\s*!important;[\s\S]*?font-size:\s*16px\s*!important;[\s\S]*?line-height:\s*1\.6\s*!important;[\s\S]*?box-shadow:\s*var\(--file-card-shadow\)\s*!important;/,
   'the shared Markdown renderer must own the attachment-card visual contract'
 )
 
 assert.doesNotMatch(
   messages,
-  /\.content-container :deep\(\.markdown-preview \.noise-attachment-file(?:__|\)|:|\s)/,
+  /\.content-container :deep\(\.markdown-preview \.site-attachment-file(?:__|\)|:|\s)/,
   'note cards must not duplicate or override the shared attachment-card visual contract'
 )
 
 assert.match(
   messages,
-  /\.markdown-preview \*:not\(pre\):not\(code\):not\(\.noise-attachment-file\):not\(\.noise-attachment-file \*\)/,
+  /\.markdown-preview \*:not\(pre\):not\(code\):not\(\.site-attachment-file\):not\(\.site-attachment-file \*\)/,
   'note-wide Markdown color overrides must leave attachment cards to the shared renderer'
 )
 
@@ -38,7 +38,7 @@ assert.doesNotMatch(
 
 assert.match(
   feed,
-  /\.markdown-preview a:not\(\.noise-attachment-file\)/,
+  /\.markdown-preview a:not\(\.site-attachment-file\)/,
   'information-feed link styling must explicitly exclude attachment cards'
 )
 

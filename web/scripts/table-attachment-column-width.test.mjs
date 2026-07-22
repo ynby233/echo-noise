@@ -49,7 +49,7 @@ assert.match(
 )
 assert.match(
   renderer,
-  /const estimateRenderedTableCellAttachmentWidth = \(cell: HTMLTableCellElement \| undefined\) => \{[\s\S]*?noise-attachment-file[\s\S]*?noise-attachment-audio[\s\S]*?RENDERED_TABLE_ATTACHMENT_CARD_WIDTH[\s\S]*?noise-attachment-render--video[\s\S]*?RENDERED_TABLE_ATTACHMENT_VIDEO_WIDTH[\s\S]*?noise-attachment-image[\s\S]*?RENDERED_TABLE_ATTACHMENT_IMAGE_WIDTH[\s\S]*?\}/,
+  /const estimateRenderedTableCellAttachmentWidth = \(cell: HTMLTableCellElement \| undefined\) => \{[\s\S]*?site-attachment-file[\s\S]*?site-attachment-audio[\s\S]*?RENDERED_TABLE_ATTACHMENT_CARD_WIDTH[\s\S]*?site-attachment-render--video[\s\S]*?RENDERED_TABLE_ATTACHMENT_VIDEO_WIDTH[\s\S]*?site-attachment-image[\s\S]*?RENDERED_TABLE_ATTACHMENT_IMAGE_WIDTH[\s\S]*?\}/,
   '附件块宽度探测必须覆盖文件卡/音频、视频、图片三类占位块'
 )
 assert.match(

@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const tmp = await mkdtemp(join(tmpdir(), 'echo-noise-media-url-'))
+const tmp = await mkdtemp(join(tmpdir(), 'echo-site-media-url-'))
 const outfile = join(tmp, 'media-url-bundle.mjs')
 
 await build({

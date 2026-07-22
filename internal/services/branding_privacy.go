@@ -20,6 +20,8 @@ const (
 	neutralAnnouncement    = "欢迎访问！"
 	neutralAvatarURL       = "/favicon.svg"
 	legacyDefaultAvatarURL = "https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png"
+	legacyFullImageMarker  = "<!-- noise-full-image-attachments -->"
+	neutralFullImageMarker = "<!-- full-image-attachments -->"
 	legacyWelcomeMessage   = "欢迎来到说说笔记！默认用户名及密码均为admin，记得到后台页修改你的用户名或密码,密码带有加强设置，如需简单密码可在用户管理面板中展开后重置密码"
 	neutralWelcomeMessage  = "欢迎来到你的个人站点！默认用户名及密码均为admin，记得到后台页修改你的用户名或密码,密码带有加强设置，如需简单密码可在用户管理面板中展开后重置密码"
 )
@@ -51,15 +53,20 @@ func containsLegacyPublicBranding(value string) bool {
 	return false
 }
 
-// scrubTraceableLocalAPIURLs keeps local attachment and API links functional
-// while removing branded hostnames that can reveal the project source. Only
-// absolute URLs with an /api/ path are rewritten; unrelated external links are
-// preserved exactly as entered by the user.
-func scrubTraceableLocalAPIURLs(value string) (string, bool) {
+// scrubTraceableLocalURLs keeps same-site links functional while removing
+// branded hostnames that can reveal the project source. Echo-branded hosts are
+// always made relative; other legacy hosts are changed only for /api/ paths.
+func scrubTraceableLocalURLs(value string) (string, bool) {
 	changed := false
 	scrubbed := absolutePublicURLPattern.ReplaceAllStringFunc(value, func(raw string) string {
 		parsed, err := url.Parse(raw)
-		if err != nil || !strings.HasPrefix(parsed.EscapedPath(), "/api/") || !containsLegacyPublicBranding(parsed.Hostname()) {
+		if err != nil {
+			return raw
+		}
+		host := strings.ToLower(parsed.Hostname())
+		isEchoHost := strings.Contains(host, "echo-noise") || strings.Contains(host, "ech0-noise")
+		isLegacyAPIHost := strings.HasPrefix(parsed.EscapedPath(), "/api/") && containsLegacyPublicBranding(host)
+		if !isEchoHost && !isLegacyAPIHost {
 			return raw
 		}
 		replacement := parsed.RequestURI()
@@ -72,6 +79,15 @@ func scrubTraceableLocalAPIURLs(value string) (string, bool) {
 		changed = true
 		return replacement
 	})
+	return scrubbed, changed
+}
+
+func scrubTraceableMessageContent(value string) (string, bool) {
+	scrubbed, changed := scrubTraceableLocalURLs(value)
+	if strings.Contains(scrubbed, legacyFullImageMarker) {
+		scrubbed = strings.ReplaceAll(scrubbed, legacyFullImageMarker, neutralFullImageMarker)
+		changed = true
+	}
 	return scrubbed, changed
 }
 
@@ -352,16 +368,17 @@ func scrubPersistedLegacyPublicBranding(db *gorm.DB) error {
 
 		var messages []models.Message
 		if err := tx.Select("id", "content", "image_url").
-			Where("content LIKE ? OR image_url LIKE ?", "%://%/api/%", "%://%/api/%").
+			Where("content LIKE ? OR content LIKE ? OR content LIKE ? OR content LIKE ? OR image_url LIKE ? OR image_url LIKE ? OR image_url LIKE ?",
+				"%noise-full-image-attachments%", "%://%/api/%", "%echo-noise%", "%ech0-noise%", "%://%/api/%", "%echo-noise%", "%ech0-noise%").
 			Find(&messages).Error; err != nil {
 			return err
 		}
 		for _, message := range messages {
 			updates := map[string]interface{}{}
-			if content, changed := scrubTraceableLocalAPIURLs(message.Content); changed {
+			if content, changed := scrubTraceableMessageContent(message.Content); changed {
 				updates["content"] = content
 			}
-			if imageURL, changed := scrubTraceableLocalAPIURLs(message.ImageURL); changed {
+			if imageURL, changed := scrubTraceableLocalURLs(message.ImageURL); changed {
 				updates["image_url"] = imageURL
 			}
 			if len(updates) > 0 {
@@ -372,11 +389,11 @@ func scrubPersistedLegacyPublicBranding(db *gorm.DB) error {
 		}
 
 		var comments []models.Comment
-		if err := tx.Select("id", "content").Where("content LIKE ?", "%://%/api/%").Find(&comments).Error; err != nil {
+		if err := tx.Select("id", "content").Where("content LIKE ? OR content LIKE ? OR content LIKE ?", "%://%/api/%", "%echo-noise%", "%ech0-noise%").Find(&comments).Error; err != nil {
 			return err
 		}
 		for _, comment := range comments {
-			if content, changed := scrubTraceableLocalAPIURLs(comment.Content); changed {
+			if content, changed := scrubTraceableLocalURLs(comment.Content); changed {
 				if err := tx.Model(&models.Comment{}).Where("id = ?", comment.ID).Update("content", content).Error; err != nil {
 					return err
 				}

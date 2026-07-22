@@ -3793,20 +3793,20 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
   .layout-container { --sidebar-width: 280px; --grid-gap: 16px; }
 }
 
-.noise-media-fancybox .f-thumbs__slide {
+.site-media-fancybox .f-thumbs__slide {
   overflow: visible;
 }
 
-.noise-media-fancybox .f-thumbs__slide__button {
+.site-media-fancybox .f-thumbs__slide__button {
   transition: transform 180ms ease, opacity 180ms ease;
   transform-origin: center;
 }
 
-.noise-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button {
+.site-media-fancybox .f-thumbs__slide.is-nav-selected .f-thumbs__slide__button {
   transform: scale(1.12);
 }
 
-.noise-media-fancybox .f-thumbs__slide__button::after {
+.site-media-fancybox .f-thumbs__slide__button::after {
   display: none;
 }
 </style>

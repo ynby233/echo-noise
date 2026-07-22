@@ -34,8 +34,8 @@ const placeholder = buildAttachmentAudioPlaceholderHtml({
   name: 'voice-note.webm',
   size: 30208,
 })
-assert.match(placeholder, /class="noise-attachment-audio"/)
-assert.match(placeholder, /data-noise-audio-player/)
+assert.match(placeholder, /class="site-attachment-audio"/)
+assert.match(placeholder, /data-site-audio-player/)
 assert.match(placeholder, /data-audio-name="voice-note\.webm"/)
 assert.match(placeholder, /data-audio-size="30208"/)
 assert.match(placeholder, /x=1&amp;y=2/)
@@ -51,21 +51,21 @@ const [renderer, editor, nuxtConfig, messageList, playerSource, playerStyle] = a
 
 assert.match(renderer, /buildAttachmentAudioPlaceholderHtml/)
 assert.match(renderer, /enhanceAttachmentAudioPlayers/)
-assert.doesNotMatch(renderer, /class="noise-attachment-audio"[^>]*\scontrols(?:\s|>)/)
+assert.doesNotMatch(renderer, /class="site-attachment-audio"[^>]*\scontrols(?:\s|>)/)
 assert.match(editor, /buildAttachmentAudioPlaceholderHtml/)
 assert.match(editor, /enhanceAttachmentAudioPlayers/)
 assert.match(nuxtConfig, /attachment-audio-player\.css/)
-assert.match(messageList, /\.noise-attachment-audio/)
+assert.match(messageList, /\.site-attachment-audio/)
 assert.match(playerSource, /recoverUnboundedDuration[\s\S]*?Number\.MAX_SAFE_INTEGER/)
 assert.match(playerSource, /finishDurationRecovery[\s\S]*?audio\.currentTime = 0/)
 assert.match(
   playerStyle,
-  /\.noise-attachment-audio\s*\{[\s\S]*?width:\s*calc\(100% - 16px\);[\s\S]*?max-width:\s*calc\(100% - 16px\);/,
+  /\.site-attachment-audio\s*\{[\s\S]*?width:\s*calc\(100% - 16px\);[\s\S]*?max-width:\s*calc\(100% - 16px\);/,
   'audio cards must use the same full attachment-block width contract as file cards',
 )
 assert.match(
   playerStyle,
-  /\.noise-attachment-audio__footer\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) 36px minmax\(0, 1fr\);/,
+  /\.site-attachment-audio__footer\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) 36px minmax\(0, 1fr\);/,
   'the compact footer must keep the 36px play button centered between two flexible sides',
 )
 assert.match(playerSource, /footerMeta\.append\(time, meta\)/)
@@ -73,67 +73,67 @@ assert.match(playerSource, /playButton\.classList\.add\('nw-action-btn', 'nw-too
 assert.match(playerSource, /muteButton\.classList\.add\('nw-action-btn', 'nw-tooltip-anchor'\)/)
 assert.doesNotMatch(playerSource, /\.title\s*=/, 'native title tooltips must not bypass the shared tooltip system')
 assert.doesNotMatch(playerSource, /createElement\('select'/, 'playback speed must use the project floating submenu instead of a native select')
-assert.match(playerSource, /speedMenu\.className = 'noise-attachment-audio__speed-menu floating-control-menu visibility-floating-menu nw-floating-menu'/)
+assert.match(playerSource, /speedMenu\.className = 'site-attachment-audio__speed-menu floating-control-menu visibility-floating-menu nw-floating-menu'/)
 assert.match(playerSource, /positionFloatingMenu\(speedTrigger, speedMenu, speedMenuStyle, 50, 'above-right'\)/)
 assert.match(
   playerStyle,
-  /\.noise-attachment-audio__speed-trigger\s*\{[\s\S]*?min-width:\s*50px;[\s\S]*?gap:\s*3px;[\s\S]*?padding:\s*0 10px;[\s\S]*?justify-content:\s*flex-start;/,
+  /\.site-attachment-audio__speed-trigger\s*\{[\s\S]*?min-width:\s*50px;[\s\S]*?gap:\s*3px;[\s\S]*?padding:\s*0 10px;[\s\S]*?justify-content:\s*flex-start;/,
   'the speed trigger must use the same horizontal inset and minimum text-chevron gap as the reference controls',
 )
 assert.match(
   playerStyle,
-  /\.noise-attachment-audio__speed-value\s*\{[\s\S]*?font-size:\s*12px;[\s\S]*?font-weight:\s*400;[\s\S]*?line-height:\s*18px;[\s\S]*?white-space:\s*nowrap;/,
+  /\.site-attachment-audio__speed-value\s*\{[\s\S]*?font-size:\s*12px;[\s\S]*?font-weight:\s*400;[\s\S]*?line-height:\s*18px;[\s\S]*?white-space:\s*nowrap;/,
   'the active speed text must match the visibility and publish-time trigger typography',
 )
 assert.match(
   playerStyle,
-  /\.noise-attachment-audio__speed-menu\s*\{[\s\S]*?width:\s*50px;[\s\S]*?min-width:\s*50px;/,
+  /\.site-attachment-audio__speed-menu\s*\{[\s\S]*?width:\s*50px;[\s\S]*?min-width:\s*50px;/,
   'the playback speed menu must follow the compact trigger width',
 )
 assert.match(
   playerStyle,
-  /\.noise-attachment-audio__speed-option\s*\{[\s\S]*?justify-content:\s*center;[\s\S]*?width:\s*100%;[\s\S]*?padding-left:\s*0;[\s\S]*?padding-right:\s*0;[\s\S]*?text-align:\s*center;/,
+  /\.site-attachment-audio__speed-option\s*\{[\s\S]*?justify-content:\s*center;[\s\S]*?width:\s*100%;[\s\S]*?padding-left:\s*0;[\s\S]*?padding-right:\s*0;[\s\S]*?text-align:\s*center;/,
   'playback speed options must remain horizontally centered in the narrow menu',
 )
 assert.doesNotMatch(
   playerStyle,
-  /\.noise-attachment-audio__speed-option\s*\{[^}]*?(?:font-size|font-weight|line-height):/,
+  /\.site-attachment-audio__speed-option\s*\{[^}]*?(?:font-size|font-weight|line-height):/,
   'playback speed options must inherit the shared floating-option typography used by visibility choices',
 )
-assert.match(playerStyle, /\.noise-attachment-audio__play\s*\{[\s\S]*?--nw-action-hover-text:\s*var\(--audio-control-text\);/)
+assert.match(playerStyle, /\.site-attachment-audio__play\s*\{[\s\S]*?--nw-action-hover-text:\s*var\(--audio-control-text\);/)
 assert.match(
   playerStyle,
-  /\.noise-attachment-audio \.noise-attachment-audio__svg\s*\{[\s\S]*?width:\s*18px;[\s\S]*?height:\s*18px;/,
+  /\.site-attachment-audio \.site-attachment-audio__svg\s*\{[\s\S]*?width:\s*18px;[\s\S]*?height:\s*18px;/,
   'player icon sizing must outrank the shared vditor-reset svg auto-size rule',
 )
 assert.match(
   playerStyle,
-  /\.noise-attachment-audio__play \.noise-attachment-audio__svg path\s*\{[\s\S]*?transform-box:\s*fill-box;[\s\S]*?transform-origin:\s*center;[\s\S]*?transform:\s*scale\(1\.5\);/,
+  /\.site-attachment-audio__play \.site-attachment-audio__svg path\s*\{[\s\S]*?transform-box:\s*fill-box;[\s\S]*?transform-origin:\s*center;[\s\S]*?transform:\s*scale\(1\.5\);/,
   'play and pause paths must be optically scaled to match the toolbar icon geometry',
 )
 assert.match(
   playerStyle,
-  /\.noise-attachment-audio__mute \.noise-attachment-audio__svg path\s*\{[\s\S]*?transform-box:\s*fill-box;[\s\S]*?transform-origin:\s*center;[\s\S]*?transform:\s*scale\(1\.2\);/,
+  /\.site-attachment-audio__mute \.site-attachment-audio__svg path\s*\{[\s\S]*?transform-box:\s*fill-box;[\s\S]*?transform-origin:\s*center;[\s\S]*?transform:\s*scale\(1\.2\);/,
   'volume and mute paths must be optically scaled to match the toolbar icon geometry',
 )
 assert.match(
   playerStyle,
-  /\.noise-attachment-audio \.noise-attachment-audio__speed-chevron\s*\{[\s\S]*?width:\s*12px;[\s\S]*?height:\s*12px;/,
+  /\.site-attachment-audio \.site-attachment-audio__speed-chevron\s*\{[\s\S]*?width:\s*12px;[\s\S]*?height:\s*12px;/,
   'the compact speed chevron must outrank the shared vditor-reset svg auto-size rule',
 )
 assert.doesNotMatch(
   playerStyle,
-  /\.noise-attachment-audio__speed-trigger\.is-open \.noise-attachment-audio__speed-chevron\s*\{[\s\S]*?transform:\s*rotate\(/,
+  /\.site-attachment-audio__speed-trigger\.is-open \.site-attachment-audio__speed-chevron\s*\{[\s\S]*?transform:\s*rotate\(/,
   'the speed chevron must remain fixed like the visibility and publish-time controls',
 )
 assert.match(
   playerStyle,
-  /\.noise-attachment-audio\.is-playing \.noise-attachment-audio__play,\s*\.noise-attachment-audio\.is-muted \.noise-attachment-audio__mute\s*\{[\s\S]*?--nw-action-hover-text:\s*#fff;/,
+  /\.site-attachment-audio\.is-playing \.site-attachment-audio__play,\s*\.site-attachment-audio\.is-muted \.site-attachment-audio__mute\s*\{[\s\S]*?--nw-action-hover-text:\s*#fff;/,
   'muted volume controls must share the playing control active state',
 )
 assert.match(
   playerStyle,
-  /:where\(html\.dark,[^}]+?\.noise-attachment-audio\.is-playing \.noise-attachment-audio__play,\s*:where\(html\.dark,[^}]+?\.noise-attachment-audio\.is-muted \.noise-attachment-audio__mute\s*\{[\s\S]*?--nw-action-hover-text:\s*#fff;/,
+  /:where\(html\.dark,[^}]+?\.site-attachment-audio\.is-playing \.site-attachment-audio__play,\s*:where\(html\.dark,[^}]+?\.site-attachment-audio\.is-muted \.site-attachment-audio__mute\s*\{[\s\S]*?--nw-action-hover-text:\s*#fff;/,
   'muted volume controls must share the playing control active state in dark themes',
 )
 assert.match(playerSource, /volume:\s*'M14 3\.23v2\.06c2\.89\.86 5 3\.54 5 6\.71/)
@@ -148,7 +148,7 @@ assert.match(
   /player\.closest\('td,th'\)/,
   'audio placeholders inside table cells must be routed away from the inline full player',
 )
-assert.match(playerSource, /noise-table-audio-trigger/, 'published table audio must render as an interactive attachment marker')
+assert.match(playerSource, /site-table-audio-trigger/, 'published table audio must render as an interactive attachment marker')
 assert.match(playerSource, /export const toggleAttachmentAudioPopover/, 'all table surfaces must share one anchored audio popover controller')
 assert.match(playerSource, /export const closeAttachmentAudioPopover/, 'hosts must be able to close the shared table audio popover during teardown')
 assert.match(playerSource, /document\.body\.appendChild\(popover\)/, 'the table audio player must escape table layout by mounting under document.body')
@@ -178,32 +178,32 @@ assert.doesNotMatch(
 )
 assert.match(
   renderer,
-  /button:not\(\.noise-rendered-table-expand-button\):not\(\.noise-table-audio-trigger\)/,
+  /button:not\(\.site-rendered-table-expand-button\):not\(\.site-table-audio-trigger\)/,
   'expanded published tables must preserve cloned audio marker buttons',
 )
 assert.match(
   playerStyle,
-  /\.noise-table-audio-trigger\s*\{[\s\S]*?box-sizing:\s*border-box;[\s\S]*?width:\s*100%;[\s\S]*?max-width:\s*100%;[\s\S]*?min-width:\s*0;/,
+  /\.site-table-audio-trigger\s*\{[\s\S]*?box-sizing:\s*border-box;[\s\S]*?width:\s*100%;[\s\S]*?max-width:\s*100%;[\s\S]*?min-width:\s*0;/,
   'table audio markers must remain within freely resized cell widths',
 )
 assert.match(
   playerStyle,
-  /\.noise-table-audio-trigger__name\s*\{[\s\S]*?overflow:\s*hidden;[\s\S]*?text-overflow:\s*ellipsis;[\s\S]*?white-space:\s*nowrap;/,
+  /\.site-table-audio-trigger__name\s*\{[\s\S]*?overflow:\s*hidden;[\s\S]*?text-overflow:\s*ellipsis;[\s\S]*?white-space:\s*nowrap;/,
   'long audio names must truncate instead of widening table columns',
 )
 assert.match(
   playerStyle,
-  /\.noise-table-audio-popover\s*\{[\s\S]*?position:\s*fixed;[\s\S]*?width:\s*min\(720px, calc\(100vw - 24px\)\);[\s\S]*?z-index:\s*10060;/,
+  /\.site-table-audio-popover\s*\{[\s\S]*?position:\s*fixed;[\s\S]*?width:\s*min\(720px, calc\(100vw - 24px\)\);[\s\S]*?z-index:\s*10060;/,
   'the full player must float above table dialogs with viewport-bounded width',
 )
 assert.match(
   playerStyle,
-  /\.noise-table-audio-trigger \.noise-table-audio-trigger__svg\s*\{[\s\S]*?width:\s*18px;[\s\S]*?height:\s*18px;/,
+  /\.site-table-audio-trigger \.site-table-audio-trigger__svg\s*\{[\s\S]*?width:\s*18px;[\s\S]*?height:\s*18px;/,
   'the table attachment speaker must outrank Vditor svg auto-sizing and match the player control icon box',
 )
 assert.match(
   playerStyle,
-  /\.noise-table-audio-trigger__svg path\s*\{[\s\S]*?transform-box:\s*fill-box;[\s\S]*?transform-origin:\s*center;[\s\S]*?transform:\s*scale\(1\.2\);/,
+  /\.site-table-audio-trigger__svg path\s*\{[\s\S]*?transform-box:\s*fill-box;[\s\S]*?transform-origin:\s*center;[\s\S]*?transform:\s*scale\(1\.2\);/,
   'the table attachment speaker path must use the same optical scale as the player volume icon',
 )
 assert.match(
@@ -213,12 +213,12 @@ assert.match(
 )
 assert.match(
   playerStyle,
-  /--audio-control-bg:\s*#f3f4f6;[\s\S]*?:where\(html\.dark,[^}]+?\.noise-attachment-audio\s*\{[\s\S]*?--audio-card-bg:\s*#202a36;[\s\S]*?--audio-control-bg:\s*#2b3645;/,
+  /--audio-control-bg:\s*#f3f4f6;[\s\S]*?:where\(html\.dark,[^}]+?\.site-attachment-audio\s*\{[\s\S]*?--audio-card-bg:\s*#202a36;[\s\S]*?--audio-control-bg:\s*#2b3645;/,
   'audio player surfaces must use opaque fills in both light and dark themes',
 )
 assert.match(
   playerStyle,
-  /\.noise-table-audio-trigger\s*\{[\s\S]*?--file-card-icon-bg:\s*#f3f4f6;[\s\S]*?:where\(html\.dark,[^}]+?\.noise-table-audio-trigger\s*\{[\s\S]*?--file-card-bg:\s*#202a36;[\s\S]*?--file-card-icon-bg:\s*#2b3645;/,
+  /\.site-table-audio-trigger\s*\{[\s\S]*?--file-card-icon-bg:\s*#f3f4f6;[\s\S]*?:where\(html\.dark,[^}]+?\.site-table-audio-trigger\s*\{[\s\S]*?--file-card-bg:\s*#202a36;[\s\S]*?--file-card-icon-bg:\s*#2b3645;/,
   'table audio markers must use opaque fills in both light and dark themes',
 )
 
