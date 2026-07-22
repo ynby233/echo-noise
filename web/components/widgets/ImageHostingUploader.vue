@@ -78,7 +78,7 @@
         <UInput 
           v-if="enableCDN"
           v-model="cdnDomain" 
-          placeholder="输入CDN域名 (如: jsd.cdn.noisework.cn)" 
+          placeholder="输入CDN域名 (如: cdn.example.com)"
           size="sm"
         />
       </div>

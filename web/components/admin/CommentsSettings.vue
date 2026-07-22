@@ -5,7 +5,7 @@
         <div :class="theme?.text || textCls">开启“邮件通知”后，可配置站点链接地址、主题前缀、发件显示名、文本/HTML 模板，并实时预览。</div>
       </div>
       <div v-if="local.commentSystem === 'builtin' && !!props.config?.commentEmailEnabled" class="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <UInput v-model="local.commentEmailSiteURL" :ui="{base: theme?.text}" placeholder="站点链接地址（用于邮件中的 {url} 基础） 如 https://note.noisework.cn" />
+        <UInput v-model="local.commentEmailSiteURL" :ui="{base: theme?.text}" placeholder="站点链接地址（用于邮件中的 {url} 基础） 如 https://example.com" />
         <UInput v-model="local.commentEmailReplyName" :ui="{base: theme?.text}" placeholder="邮件发件显示名（回复通知）" />
         <UInput v-model="local.commentEmailAdminPrefix" :ui="{base: theme?.text}" placeholder="管理员通知主题前缀（可选）" />
         <UInput v-model="local.commentEmailReplyPrefix" :ui="{base: theme?.text}" placeholder="回复通知主题前缀（可选）" />

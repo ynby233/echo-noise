@@ -137,7 +137,7 @@
         </UCard>
         <div v-if="layoutState==='two'" class="mt-2 space-y-3">
           <UCard v-if="frontendConfig.announcementEnabled && (frontendConfig.announcementText || '').trim() !== ''" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
-            <AnnouncementBar :text="frontendConfig.announcementText || '欢迎访问我的说说笔记！'" />
+            <AnnouncementBar :text="frontendConfig.announcementText || '欢迎访问！'" />
           </UCard>
           <UCard class="sidebar-card no-padding-card" :class="sidebarThemeCard">
             <div class="hot-tags-block">
@@ -184,7 +184,7 @@
         <div :class="centerContainerClass">
           <div class="moments-header">
             <div class="header-image" :style="headerImageStyle">
-              <h1 class="header-title" :style="activeHeaderTextStyle.title">{{ (frontendConfig.siteTitle || '说说笔记') }}</h1>
+              <h1 class="header-title" :style="activeHeaderTextStyle.title">{{ (frontendConfig.siteTitle || '个人站点') }}</h1>
               <div class="header-subtitle" :style="activeHeaderTextStyle.subtitle">{{ frontendConfig.subtitleText || '' }}</div>
               <div class="hero-tabs">
                 <button v-for="t in centerTabs" :key="t.key" :class="['hero-tab', activeTab===t.key ? 'active' : '']" @click="switchActiveTab(t.key, { resetScroll: true })">
@@ -367,7 +367,7 @@
       <div ref="rightColSlot" class="sidebar-slot sidebar-slot-right" v-if="!isMobile && layoutState==='three'">
       <div :class="{ 'is-viewport-pinned': isSidebarPinned }" :style="rightSidebarStyle" class="right-col space-y-2">
         <UCard v-if="frontendConfig.announcementEnabled && (frontendConfig.announcementText || '').trim() !== ''" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
-          <AnnouncementBar :text="frontendConfig.announcementText || '欢迎访问我的说说笔记！'" />
+          <AnnouncementBar :text="frontendConfig.announcementText || '欢迎访问！'" />
         </UCard>
         <UCard class="sidebar-card no-padding-card" :class="sidebarThemeCard">
           <div class="hot-tags-block">
@@ -414,7 +414,7 @@
     </div>
     <div v-if="false">
       <UCard v-if="frontendConfig.announcementEnabled && (frontendConfig.announcementText || '').trim() !== ''" class="mx-auto sm:max-w-2xl mb-3 sidebar-card">
-        <AnnouncementBar :text="frontendConfig.announcementText || '欢迎访问我的说说笔记！'" />
+        <AnnouncementBar :text="frontendConfig.announcementText || '欢迎访问！'" />
       </UCard>
       <UCard class="mx-auto sm:max-w-2xl mb-3 sidebar-card">
         <div>
@@ -1668,12 +1668,12 @@ Object.assign(frontendConfig.value, {
   // 左栏广告
   leftAdEnabled: true,
     leftAdImageURL: `https://picsum.photos/seed/${Math.random().toString(36).slice(2)}/640/640`,
-    leftAdLinkURL: 'https://note.noisework.cn',
+    leftAdLinkURL: '',
     leftAdDescription: '示例广告（单条配置）',
     leftAds: [
-      { imageURL: `https://picsum.photos/seed/${Math.random().toString(36).slice(2)}/640/640`, linkURL: 'https://note.noisework.cn', description: '写作与记录，开启灵感之旅' },
-      { imageURL: `https://picsum.photos/seed/${Math.random().toString(36).slice(2)}/640/640`, linkURL: 'https://noisework.cn', description: '探索新主题与小工具' },
-      { imageURL: `https://picsum.photos/seed/${Math.random().toString(36).slice(2)}/640/640`, linkURL: 'https://github.com', description: '开源项目，欢迎 Star' },
+      { imageURL: `https://picsum.photos/seed/${Math.random().toString(36).slice(2)}/640/640`, linkURL: '', description: '写作与记录' },
+      { imageURL: `https://picsum.photos/seed/${Math.random().toString(36).slice(2)}/640/640`, linkURL: '', description: '探索新主题与小工具' },
+      { imageURL: `https://picsum.photos/seed/${Math.random().toString(36).slice(2)}/640/640`, linkURL: '', description: '记录日常内容' },
     ],
   leftAdsIntervalMs: 4000
 })
@@ -2257,23 +2257,23 @@ const headerImageStyle = computed(() => ({
 
 // 首先添加默认配置对象
   const defaultConfig = {
-    siteTitle: '说说笔记',
+    siteTitle: '个人站点',
     subtitleText: '欢迎访问，点击头像可更换封面背景！',
     avatarURL: 'https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png',
-    username: 'Noise',
-    description: '执迷不悟',
+    username: '站长',
+    description: '欢迎访问',
     // 系统欢迎组件（未登录时显示）
     welcomeAvatarURL: 'https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png',
-    welcomeName: 'Noise',
-    welcomeDescription: '执迷不悟',
+    welcomeName: '站长',
+    welcomeDescription: '欢迎访问',
     welcomeUseAdmin: true,
     backgrounds: [
       normalizeHeaderBackground('https://s2.loli.net/2025/03/26/d7iyuPYA8cRqD1K.jpg'),
     ],
-    pageFooterHTML: '<div class="text-center text-xs text-gray-400 py-4">来自<a href="https://www.noisework.cn" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:text-orange-500">Noise</a> 使用<a href="https://github.com/rcy1314/echo-noise" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:text-orange-500">Ech0-Noise</a>发布</div>',
-    rssTitle: 'Noise的说说笔记',
-  rssDescription: '一个说说笔记~',
-  rssAuthorName: 'Noise',
+    pageFooterHTML: '',
+    rssTitle: '个人内容订阅',
+  rssDescription: '个人内容更新',
+  rssAuthorName: '站长',
   rssFaviconURL: '/favicon.ico',
   feedEnabled: false,
   feedPageTitle: '实时聚合内容动态',
@@ -2293,7 +2293,7 @@ const headerImageStyle = computed(() => ({
     pwaDescription: '',
     pwaIconURL: '',
     homeLayoutDefault: 'three',
-    announcementText: '欢迎访问我的说说笔记！',
+    announcementText: '欢迎访问！',
     announcementEnabled: true,
     hitokotoEnabled: true,
     // 评论系统默认值
@@ -2314,12 +2314,7 @@ const headerImageStyle = computed(() => ({
     musicHideOnMobile: true,
     musicCssCdnURL: '',
     musicJsCdnURL: '',
-  socialLinks: [
-      { name: 'TG', url: 'https://tg.noisework.cn', icon: 'i-mdi-near-me' },
-      { name: 'X', url: 'https://x.com/liangwenhao3', icon: 'i-mdi-twitter' },
-      { name: '主页', url: 'https://www.noisework.cn/', icon: 'i-mdi-home' },
-      { name: '博客', url: 'https://www.noiseblogs.top/', icon: 'i-mdi-notebook' }
-  ],
+  socialLinks: [],
   socialLinksEnabled: true,
     calendarEnabled: true,
     timeEnabled: true,
@@ -2329,9 +2324,9 @@ const headerImageStyle = computed(() => ({
     // 左栏广告（完全后端驱动，无前端默认）
     leftAdEnabled: true,
     leftAds: [
-      { imageURL: `https://picsum.photos/seed/${Math.random().toString(36).slice(2)}/640/640`, linkURL: 'https://note.noisework.cn', description: '写作与记录，开启灵感之旅' },
-      { imageURL: `https://picsum.photos/seed/${Math.random().toString(36).slice(2)}/640/640`, linkURL: 'https://noisework.cn', description: '探索新主题与小工具' },
-      { imageURL: `https://picsum.photos/seed/${Math.random().toString(36).slice(2)}/640/640`, linkURL: 'https://github.com', description: '开源项目，欢迎 Star' }
+      { imageURL: `https://picsum.photos/seed/${Math.random().toString(36).slice(2)}/640/640`, linkURL: '', description: '写作与记录' },
+      { imageURL: `https://picsum.photos/seed/${Math.random().toString(36).slice(2)}/640/640`, linkURL: '', description: '探索新主题与小工具' },
+      { imageURL: `https://picsum.photos/seed/${Math.random().toString(36).slice(2)}/640/640`, linkURL: '', description: '记录日常内容' }
     ],
     leftAdsIntervalMs: 4000
   };
@@ -2533,7 +2528,7 @@ const changeBackground = async () => {
 }
 // 定义页面元数据
 definePageMeta({
-  title: '说说笔记'
+  title: '个人站点'
 })
 
 // 设置动态标题
@@ -2543,7 +2538,7 @@ const scheduleHeadUpdate = () => {
   headUpdateTimer = setTimeout(() => updateTitle(), 100)
 }
 const updateTitle = () => {
-  const title = (frontendConfig.value.pwaTitle || frontendConfig.value.siteTitle || '说说笔记').trim()
+  const title = (frontendConfig.value.pwaTitle || frontendConfig.value.siteTitle || '个人站点').trim()
   const icon = (frontendConfig.value.rssFaviconURL || '/favicon.ico').trim()
   const pwaIcon = (
     frontendConfig.value.pwaIconURL && frontendConfig.value.pwaIconURL.trim() !== ''

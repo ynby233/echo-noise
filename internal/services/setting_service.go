@@ -125,9 +125,9 @@ func defaultRSSConfigValues() RSSConfig {
 	return RSSConfig{
 		Enabled:     false,
 		MemberIDs:   []uint{},
-		Title:       "Noise的说说笔记",
-		Description: "一个说说笔记~",
-		AuthorName:  "Noise",
+		Title:       neutralRSSTitle,
+		Description: neutralRSSDescription,
+		AuthorName:  neutralOwnerName,
 		FaviconURL:  "/favicon-32x32.png",
 	}
 }
@@ -797,6 +797,7 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 	if err := db.Table("site_configs").First(&config).Error; err != nil {
 		return getDefaultConfig(), nil
 	}
+	scrubLegacySiteConfigValues(&config)
 
 	// 新增：读取Setting表的AllowRegistration
 	var setting models.Setting
@@ -854,7 +855,7 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 	normalizedLinks := make([]map[string]string, 0, len(friendLinks))
 	for _, fl := range friendLinks {
 		link := strings.TrimSpace(fl.Link)
-		if link == "" {
+		if link == "" || containsLegacyPublicBranding(link) {
 			continue
 		}
 		normalizedLinks = append(normalizedLinks, map[string]string{
@@ -1041,7 +1042,7 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 			"defaultContentTheme": choose(config.ContentThemeDefault, "dark"),
 			"homeLayoutDefault":   choose(config.HomeLayoutDefault, "three"),
 			// 公告栏
-			"announcementText":    choose(config.AnnouncementText, "欢迎访问我的说说笔记！"),
+			"announcementText":    choose(config.AnnouncementText, neutralAnnouncement),
 			"announcementEnabled": config.AnnouncementEnabled,
 			// 音乐播放器
 			"musicEnabled":          config.MusicEnabled,
@@ -1944,17 +1945,17 @@ func getDefaultConfig() map[string]interface{} {
 		"allowRegistration":       true,
 		"autoApproveRegistration": false,
 		"frontendSettings": map[string]interface{}{
-			"siteTitle":           "Noise的说说笔记",
+			"siteTitle":           neutralSiteTitle,
 			"subtitleText":        "欢迎访问，点击头像可更换封面背景！",
 			"avatarURL":           "https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png",
-			"username":            "Noise",
-			"description":         "执迷不悟",
+			"username":            neutralOwnerName,
+			"description":         neutralDescription,
 			"notifyEnabled":       false,
 			"backgrounds":         defaultHeaderImages(),
-			"pageFooterHTML":      `<div class="text-center text-xs text-gray-400 py-4">来自<a href="https://www.noisework.cn" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:text-orange-500">Noise</a> 使用<a href="https://github.com/rcy1314/echo-noise" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:text-orange-500">Ech0-Noise</a>发布</div>`,
-			"rssTitle":            "Noise的说说笔记",
-			"rssDescription":      "一个说说笔记~",
-			"rssAuthorName":       "Noise",
+			"pageFooterHTML":      "",
+			"rssTitle":            neutralRSSTitle,
+			"rssDescription":      neutralRSSDescription,
+			"rssAuthorName":       neutralOwnerName,
 			"rssFaviconURL":       "/favicon-32x32.png",
 			"rssEnabled":          false,
 			"rssMemberIDs":        []uint{},
@@ -1962,12 +1963,9 @@ func getDefaultConfig() map[string]interface{} {
 			"walineServerURL":     "请前往waline官网https://waline.js.org查看部署配置",
 			"enableGithubCard":    false,
 			// 页面文案与关于页内容
-			"linksTitle":       "友情链接",
-			"linksDescription": "推荐站点和朋友们的主页",
-			"friendLinks": []map[string]string{
-				{"title": "NoiseWork", "link": "https://www.noisework.cn/", "icon": "i-mdi-home", "description": "个人主页与作品集合"},
-				{"title": "NoiseBlogs", "link": "https://www.noiseblogs.top/", "icon": "i-mdi-notebook", "description": "技术随笔与学习记录"},
-			},
+			"linksTitle":                  "友情链接",
+			"linksDescription":            "推荐站点和朋友们的主页",
+			"friendLinks":                 []map[string]string{},
 			"commentPageTitle":            "留言",
 			"commentPageDescription":      "欢迎留下你的看法",
 			"notificationPageTitle":       "通知",
@@ -1987,8 +1985,8 @@ func getDefaultConfig() map[string]interface{} {
 			},
 			// 系统欢迎组件默认参数
 			"welcomeAvatarURL":           "https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png",
-			"welcomeName":                "Noise",
-			"welcomeDescription":         "执迷不悟",
+			"welcomeName":                neutralOwnerName,
+			"welcomeDescription":         neutralDescription,
 			"welcomeUseAdmin":            true,
 			"githubOAuthEnabled":         false,
 			"githubClientId":             "",
@@ -1996,11 +1994,11 @@ func getDefaultConfig() map[string]interface{} {
 			"githubCallbackURL":          "",
 			"pwaEnabled":                 true,
 			"pwaTitle":                   "",
-			"pwaDescription":             "",
+			"pwaDescription":             neutralPwaDescription,
 			"pwaIconURL":                 "",
 			"defaultContentTheme":        "light",
 			"homeLayoutDefault":          "three",
-			"announcementText":           "欢迎访问我的说说笔记！",
+			"announcementText":           neutralAnnouncement,
 			"announcementEnabled":        true,
 			"musicEnabled":               false,
 			"musicPlaylistId":            "",
@@ -2026,19 +2024,14 @@ func getDefaultConfig() map[string]interface{} {
 			// 广告默认参数（多广告位）
 			"leftAdEnabled": true,
 			"leftAds": []map[string]string{
-				{"imageURL": "https://picsum.photos/seed/ad-1/640/640", "linkURL": "https://note.noisework.cn", "description": "写作与记录，开启灵感之旅"},
-				{"imageURL": "https://picsum.photos/seed/ad-2/640/640", "linkURL": "https://noisework.cn", "description": "探索新主题与小工具"},
-				{"imageURL": "https://picsum.photos/seed/ad-3/640/640", "linkURL": "https://github.com", "description": "开源项目，欢迎 Star"},
+				{"imageURL": "https://picsum.photos/seed/ad-1/640/640", "linkURL": "", "description": "写作与记录"},
+				{"imageURL": "https://picsum.photos/seed/ad-2/640/640", "linkURL": "", "description": "探索新主题与小工具"},
+				{"imageURL": "https://picsum.photos/seed/ad-3/640/640", "linkURL": "", "description": "记录日常内容"},
 			},
 			"leftAdsIntervalMs": 4000,
 			// 社交链接默认
 			"socialLinksEnabled": true,
-			"socialLinks": []map[string]string{
-				{"name": "GitHub", "url": "https://github.com/rcy1314", "icon": "i-mdi-github"},
-				{"name": "X", "url": "https://x.com/liangwenhao3", "icon": "i-mdi-twitter"},
-				{"name": "主页", "url": "https://www.noisework.cn/", "icon": "i-mdi-home"},
-				{"name": "博客", "url": "https://www.noiseblogs.top/", "icon": "i-mdi-notebook"},
-			},
+			"socialLinks":        []map[string]string{},
 		},
 		"voceChatConfig": vocechat.DefaultPublicConfig(),
 		"storageEnabled": false,

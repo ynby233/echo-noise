@@ -136,7 +136,7 @@ import MarkdownRenderer from "~/components/index/MarkdownRenderer.vue";
 import { writeClipboardText } from '~/utils/clipboard'
 import { getInfoFeedLinkHost, resolveInfoFeedLink } from '~/utils/info-feed-link'
 
-const FEED_CACHE_PREFIX = 'ech0-noise:feed-cache:v1'
+const FEED_CACHE_PREFIX = 'site:feed-cache:v2'
 const feedMemoryCache = new Map<string, { ts: number; items: FeedItem[] }>()
 
 type FeedItem = {
@@ -617,7 +617,7 @@ const resolvedItemLink = (item: FeedItem) => resolveInfoFeedLink(item.link, brow
 
 const isBuiltinSourceName = (name: string) => {
   const normalized = String(name || '').trim().toLowerCase()
-  return ['ech0', '同部署项目', '说说笔记', '本项目api', '本项目 api', 'memos', 'mastodon', '信息流'].includes(normalized)
+  return ['ech0', '同部署项目', '本项目api', '本项目 api', 'memos', 'mastodon', '信息流'].includes(normalized)
 }
 
 const getDisplayName = (item: FeedItem) => {

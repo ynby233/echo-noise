@@ -237,7 +237,7 @@ func resolveNotificationRecipientVoceChatUserID(ctx context.Context, client *voc
 func buildVoceChatNotificationMarkdown(siteConfig models.SiteConfig, notification models.UserNotification) string {
 	siteTitle := strings.TrimSpace(siteConfig.SiteTitle)
 	if siteTitle == "" {
-		siteTitle = "Echo Noise"
+		siteTitle = neutralSiteTitle
 	}
 	actorName := notificationActorName(notification.ActorUserID)
 	title := userNotificationPushTitle(notification.Type, actorName)

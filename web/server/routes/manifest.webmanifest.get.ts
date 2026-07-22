@@ -3,7 +3,7 @@ import { send, setHeader } from 'h3'
 export default defineEventHandler((event) => {
   setHeader(event, 'Content-Type', 'application/manifest+json; charset=utf-8')
   const manifest = {
-    name: '说说笔记',
+    name: '个人站点',
     short_name: '说说',
     start_url: '/',
     display: 'standalone',

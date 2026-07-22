@@ -50,7 +50,7 @@ export default defineNuxtPlugin(() => {
     pwaEnabled = enabled
     configLoaded = true
     
-    const title = (fs.pwaTitle || fs.siteTitle || '说说笔记').trim()
+    const title = (fs.pwaTitle || fs.siteTitle || '个人站点').trim()
     const icon = (fs.pwaIconURL || '/favicon.svg')
     const description = (fs.pwaDescription || fs.description || '').trim()
 

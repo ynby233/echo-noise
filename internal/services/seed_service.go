@@ -25,19 +25,19 @@ func SeedDefaultData() error {
 		defaultBg := defaultHeaderImagesJSON()
 
 		defaultConfig := models.SiteConfig{
-			SiteTitle:                   "说说笔记",
+			SiteTitle:                   neutralSiteTitle,
 			SubtitleText:                "欢迎访问！",
 			AvatarURL:                   "https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png",
-			Username:                    "Noise",
-			Description:                 "执迷不悟",
+			Username:                    neutralOwnerName,
+			Description:                 neutralDescription,
 			Backgrounds:                 defaultBg,
-			PageFooterHTML:              `<div class="text-center text-xs text-gray-400 py-4">来自<a href="https://www.noisework.cn" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:text-orange-500">Noise</a> 使用<a href="https://github.com/rcy1314/echo-noise" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:text-orange-500">Ech0-Noise</a>发布</div>`,
-			RSSTitle:                    "说说笔记",
-			RSSDescription:              "一个说说笔记~",
-			RSSAuthorName:               "Noise",
+			PageFooterHTML:              "",
+			RSSTitle:                    neutralRSSTitle,
+			RSSDescription:              neutralRSSDescription,
+			RSSAuthorName:               neutralOwnerName,
 			RSSFaviconURL:               "/favicon.svg",
 			WalineServerURL:             "请前往waline官网https://waline.js.org查看部署配置",
-			AnnouncementText:            "欢迎访问我的说说笔记！",
+			AnnouncementText:            neutralAnnouncement,
 			AnnouncementEnabled:         true,
 			CommentPageTitle:            "留言",
 			CommentPageDescription:      "欢迎留下你的看法",
@@ -54,18 +54,18 @@ func SeedDefaultData() error {
 			LifeExpectancyYears:         80,
 			// 广告默认参数
 			LeftAdEnabled:     true,
-			LeftAds:           `[{"imageURL":"https://picsum.photos/seed/ad-1/640/640","linkURL":"https://note.noisework.cn","description":"写作与记录，开启灵感之旅"},{"imageURL":"https://picsum.photos/seed/ad-2/640/640","linkURL":"https://noisework.cn","description":"探索新主题与小工具"},{"imageURL":"https://picsum.photos/seed/ad-3/640/640","linkURL":"https://github.com","description":"开源项目，欢迎 Star"}]`,
+			LeftAds:           `[{"imageURL":"https://picsum.photos/seed/ad-1/640/640","linkURL":"","description":"写作与记录"},{"imageURL":"https://picsum.photos/seed/ad-2/640/640","linkURL":"","description":"探索新主题与小工具"},{"imageURL":"https://picsum.photos/seed/ad-3/640/640","linkURL":"","description":"记录日常内容"}]`,
 			LeftAdsIntervalMs: 4000,
 			LoginExpireDays:   3,
 			// 社交链接默认
 			SocialLinksEnabled:  true,
-			SocialLinks:         `[{"name":"TG","url":"https://tg.noisework.cn","icon":"i-mdi-near-me"},{"name":"X","url":"https://x.com/liangwenhao3","icon":"i-mdi-twitter"},{"name":"主页","url":"https://www.noisework.cn/","icon":"i-mdi-home"},{"name":"博客","url":"https://www.noiseblogs.top/","icon":"i-mdi-notebook"}]`,
+			SocialLinks:         `[]`,
 			FeedPageTitle:       "实时聚合内容动态",
 			FeedPageDescription: "聚合综合内容信息源内容，当前结果 {count} 条",
 			// PWA defaults
 			PwaEnabled:        true,
-			PwaTitle:          "说说笔记",
-			PwaDescription:    "一个丰富的个人说说笔记",
+			PwaTitle:          neutralSiteTitle,
+			PwaDescription:    neutralPwaDescription,
 			HomeLayoutDefault: "three",
 			// Cloud Storage Defaults
 			StorageEnabled:           false,
@@ -175,7 +175,7 @@ func SeedDefaultData() error {
 
 		messages := []models.Message{
 			{
-				Content:   "欢迎来到说说笔记！默认用户名及密码均为admin，记得到后台页修改你的用户名或密码,密码带有加强设置，如需简单密码可在用户管理面板中展开后重置密码",
+				Content:   neutralWelcomeMessage,
 				UserID:    uid,
 				Username:  admin.Username,
 				CreatedAt: time.Now(),
@@ -212,6 +212,9 @@ func SeedDefaultData() error {
 	}
 
 	if err := collapseLegacyDefaultBackgrounds(db); err != nil {
+		return err
+	}
+	if err := scrubPersistedLegacyPublicBranding(db); err != nil {
 		return err
 	}
 

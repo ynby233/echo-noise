@@ -1,7 +1,7 @@
 {
-  "name": "说说笔记",
-  "short_name": "说说笔记",
-  "description": "轻博客风格说说笔记",
+  "name": "个人站点",
+  "short_name": "站点",
+  "description": "个人内容与记录",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

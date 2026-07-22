@@ -15,9 +15,7 @@ export default defineNuxtConfig({
         { rel: 'dns-prefetch', href: 'https://cdn.jsdelivr.net' },
         { rel: 'preconnect', href: 'https://unpkg.com', crossorigin: '' },
         { rel: 'dns-prefetch', href: 'https://unpkg.com' },
-        { rel: 'preconnect', href: 'https://www.noisework.cn' },
-        { rel: 'dns-prefetch', href: 'https://www.noisework.cn' },
-        { rel: 'stylesheet', href: 'https://www.noisework.cn/css/APlayer.min.css' },
+        { rel: 'stylesheet', href: 'https://cdn.jsdelivr.net/npm/aplayer@1.10.1/dist/APlayer.min.css' },
         { rel: 'stylesheet', href: 'https://unpkg.com/@waline/client@v3/dist/waline.css' },
         { rel: 'stylesheet', href: 'https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0/dist/fancybox/fancybox.css' },
         { rel: 'icon', href: '/favicon.svg' },
@@ -44,7 +42,7 @@ export default defineNuxtConfig({
       meta: [
         { name: "viewport", content: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" }
       ],
-      title: '说说笔记'
+      title: '个人站点'
     }
   },
   compatibilityDate: '2024-11-01',

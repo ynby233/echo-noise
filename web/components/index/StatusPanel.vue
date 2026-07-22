@@ -585,7 +585,7 @@
   <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <label :class="[theme.mutedText, 'text-sm mb-1 block']">PWA 标题</label>
-                      <UInput v-model="frontendConfig.pwaTitle" :placeholder="frontendConfig.siteTitle || '说说笔记'" />
+                      <UInput v-model="frontendConfig.pwaTitle" :placeholder="frontendConfig.siteTitle || '个人站点'" />
                     </div>
                     <div>
                       <label :class="[theme.mutedText, 'text-sm mb-1 block']">PWA 图标</label>
@@ -890,7 +890,7 @@
                           </div>
                         </div>
                         <div class="rounded-xl border p-3 space-y-3" :class="theme.border">
-                          <div class="text-xs" :class="theme.mutedText">支持可视化分组管理，支持 `rss`、`说说笔记(本项目 API)`、`ech0`、`memos`、`mastodon` 类型源。</div>
+                          <div class="text-xs" :class="theme.mutedText">支持可视化分组管理，支持 `rss`、`本项目 API`、`ech0`、`memos`、`mastodon` 类型源。</div>
                           <div class="flex flex-col lg:flex-row gap-2 lg:items-center lg:justify-between">
                             <div class="flex items-center gap-2 w-full lg:w-auto">
                               <UInput v-model="feedGroupDraft" placeholder="输入新分组名" class="w-full lg:w-56" />
@@ -961,7 +961,7 @@
                             </div>
                           </div>
                         </div>
-                        <div class="text-xs" :class="theme.mutedText">`rss` 用于 RSS/Atom；`说说笔记` 为本项目 API（/api/messages/page）；其余类型按平台接口抓取。</div>
+                        <div class="text-xs" :class="theme.mutedText">`rss` 用于 RSS/Atom；`本项目 API` 读取 /api/messages/page；其余类型按平台接口抓取。</div>
                         <div class="flex justify-end">
                           <UButton color="primary" class="shadow" @click="saveInfoFeedConfig">保存信息流配置</UButton>
                         </div>
@@ -987,7 +987,7 @@
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div>
                             <label class="text-sm mb-1 block" :class="theme.mutedText">订阅标题</label>
-                            <UInput v-model="frontendConfig.rssTitle" placeholder="Noise的说说笔记" />
+                            <UInput v-model="frontendConfig.rssTitle" placeholder="个人内容订阅" />
                           </div>
                           <div>
                             <label class="text-sm mb-1 block" :class="theme.mutedText">作者名称</label>
@@ -999,7 +999,7 @@
                           </div>
                           <div>
                             <label class="text-sm mb-1 block" :class="theme.mutedText">订阅描述</label>
-                            <UInput v-model="frontendConfig.rssDescription" placeholder="一个说说笔记~" />
+                            <UInput v-model="frontendConfig.rssDescription" placeholder="个人内容更新" />
                           </div>
                         </div>
 
@@ -5372,12 +5372,12 @@ const frontendConfig = reactive<FrontendConfig>({
     lifeExpectancyYears: '',
     leftAdEnabled: true,
     leftAdImageURL: 'https://picsum.photos/seed/single-ad/640/640',
-    leftAdLinkURL: 'https://note.noisework.cn',
+    leftAdLinkURL: '',
     leftAdDescription: '示例广告（单条配置）',
     leftAds: [
-      { imageURL: 'https://picsum.photos/seed/ad-1/640/640', linkURL: 'https://note.noisework.cn', description: '写作与记录，开启灵感之旅' },
-      { imageURL: 'https://picsum.photos/seed/ad-2/640/640', linkURL: 'https://noisework.cn', description: '探索新主题与小工具' },
-      { imageURL: 'https://picsum.photos/seed/ad-3/640/640', linkURL: 'https://github.com', description: '开源项目，欢迎 Star' },
+      { imageURL: 'https://picsum.photos/seed/ad-1/640/640', linkURL: '', description: '写作与记录' },
+      { imageURL: 'https://picsum.photos/seed/ad-2/640/640', linkURL: '', description: '探索新主题与小工具' },
+      { imageURL: 'https://picsum.photos/seed/ad-3/640/640', linkURL: '', description: '记录日常内容' },
     ] as Array<{ imageURL: string, linkURL: string, description: string }>,
     leftAdsIntervalMs: 4000,
 })
@@ -5415,7 +5415,7 @@ const editItem = reactive<Record<string, boolean>>({
 
 // 更新默认配置
 const defaultConfig: Record<string, any> = {
-    siteTitle: '说说笔记',
+    siteTitle: '个人站点',
     subtitleText: '欢迎访问，点击头像可更换封面背景！',
     avatarURL: '',
     welcomeName: '',
@@ -5426,10 +5426,10 @@ const defaultConfig: Record<string, any> = {
     backgrounds: [
         normalizeHeaderBackground("https://s2.loli.net/2025/03/26/d7iyuPYA8cRqD1K.jpg"),
     ],
-    pageFooterHTML: `<div class="text-center text-xs text-gray-400 py-4">来自<a href="https://www.noisework.cn" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:text-orange-500">Noise</a> 使用<a href="https://github.com/rcy1314/echo-noise" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:text-orange-500">Ech0-Noise</a>发布</div>`,
-    rssTitle: 'Noise的说说笔记',
-    rssDescription: '一个说说笔记~',
-    rssAuthorName: 'Noise',
+    pageFooterHTML: '',
+    rssTitle: '个人内容订阅',
+    rssDescription: '个人内容更新',
+    rssAuthorName: '站长',
     rssFaviconURL: '/favicon-32x32.png',
     rssEnabled: false,
     rssMemberIDs: [] as number[],
@@ -5479,26 +5479,21 @@ const defaultConfig: Record<string, any> = {
     // 广告位默认数据
     leftAdEnabled: true,
     leftAdImageURL: 'https://picsum.photos/seed/single-ad/640/640',
-    leftAdLinkURL: 'https://note.noisework.cn',
+    leftAdLinkURL: '',
     leftAdDescription: '示例广告（单条配置）',
     leftAds: [
-      { imageURL: 'https://picsum.photos/seed/ad-1/640/640', linkURL: 'https://note.noisework.cn', description: '写作与记录，开启灵感之旅' },
-      { imageURL: 'https://picsum.photos/seed/ad-2/640/640', linkURL: 'https://noisework.cn', description: '探索新主题与小工具' },
-      { imageURL: 'https://picsum.photos/seed/ad-3/640/640', linkURL: 'https://github.com', description: '开源项目，欢迎 Star' },
+      { imageURL: 'https://picsum.photos/seed/ad-1/640/640', linkURL: '', description: '写作与记录' },
+      { imageURL: 'https://picsum.photos/seed/ad-2/640/640', linkURL: '', description: '探索新主题与小工具' },
+      { imageURL: 'https://picsum.photos/seed/ad-3/640/640', linkURL: '', description: '记录日常内容' },
     ],
     leftAdsIntervalMs: 4000,
 
     // 社交链接默认数据
     socialLinksEnabled: true,
-    socialLinks: [
-      { name: 'TG', url: 'https://tg.noisework.cn', icon: 'i-mdi-near-me' },
-      { name: 'X', url: 'https://x.com/liangwenhao3', icon: 'i-mdi-twitter' },
-      { name: '主页', url: 'https://www.noisework.cn/', icon: 'i-mdi-home' },
-      { name: '博客', url: 'https://www.noiseblogs.top/', icon: 'i-mdi-notebook' }
-    ]
+    socialLinks: []
 }
 
-type FeedSourceType = 'rss' | '说说笔记' | 'ech0' | 'memos' | 'mastodon'
+type FeedSourceType = 'rss' | 'note' | 'ech0' | 'memos' | 'mastodon'
 
 type FeedSourceEntry = {
   type: FeedSourceType
@@ -5511,7 +5506,7 @@ type FeedSourceEntry = {
 
 const feedTypeOptions = [
   { label: 'RSS 源', value: 'rss' },
-  { label: '说说笔记', value: '说说笔记' },
+  { label: '本项目 API', value: 'note' },
   { label: 'Ech0', value: 'ech0' },
   { label: 'Memos', value: 'memos' },
   { label: 'Mastodon', value: 'mastodon' }
@@ -5523,7 +5518,7 @@ const normalizeFeedSourceType = (raw: any): FeedSourceType => {
     candidate = candidate.value ?? candidate.type ?? candidate.label ?? ''
   }
   const t = String(candidate || 'rss').trim().toLowerCase()
-  if (t === 'note' || t === 'custom' || t === '说说笔记' || t === '本项目api' || t === '本项目 api') return '说说笔记'
+  if (t === 'note' || t === 'custom' || t === '本项目api' || t === '本项目 api') return 'note'
   if (t === 'ech0') return 'ech0'
   if (t === 'memos') return 'memos'
   if (t === 'mastodon') return 'mastodon'
@@ -5905,7 +5900,7 @@ const exportFeedSources = (format: 'json' | 'opml' | 'txt') => {
     }).join('\n      ')
     return `<outline text="${xmlEscape(group)}" title="${xmlEscape(group)}">\n      ${children}\n    </outline>`
   }).join('\n    ')
-  const opml = `<?xml version="1.0" encoding="UTF-8"?>\n<opml version="2.0">\n  <head>\n    <title>Echo-Noise Feed Sources</title>\n  </head>\n  <body>\n    ${outlines}\n  </body>\n</opml>\n`
+  const opml = `<?xml version="1.0" encoding="UTF-8"?>\n<opml version="2.0">\n  <head>\n    <title>Feed Sources</title>\n  </head>\n  <body>\n    ${outlines}\n  </body>\n</opml>\n`
   downloadFile(`info-feed-sources-${stamp}.opml`, opml, 'text/xml;charset=utf-8')
 }
 
@@ -6057,7 +6052,7 @@ const fetchConfig = async () => {
             }
 
             // 自动应用到页面 Head（标题、描述、图标）
-            const title = (frontendConfig.pwaTitle || frontendConfig.siteTitle || '说说笔记').trim()
+            const title = (frontendConfig.pwaTitle || frontendConfig.siteTitle || '个人站点').trim()
             const icon = (frontendConfig.rssFaviconURL || '/favicon.ico').trim()
             const description = (frontendConfig.pwaDescription || '').trim()
             const enabled = !!frontendConfig.pwaEnabled
@@ -6749,7 +6744,7 @@ const resetMusicConfig = () => {
 const resetAdsConfig = () => {
   ;(frontendConfig as any).leftAdEnabled = true
   ;(frontendConfig as any).leftAdImageURL = 'https://picsum.photos/seed/single-ad/640/640'
-  ;(frontendConfig as any).leftAdLinkURL = 'https://note.noisework.cn'
+  ;(frontendConfig as any).leftAdLinkURL = ''
   ;(frontendConfig as any).leftAdDescription = '示例广告（单条配置）'
   const def = (defaultConfig as any)
   const arr = Array.isArray(def.leftAds) ? def.leftAds : []
@@ -6847,7 +6842,7 @@ const saveGithubOAuthConfig = async () => {
 }
 
 const applyPWAConfig = () => {
-  const title = (frontendConfig.pwaTitle || frontendConfig.siteTitle || '说说笔记')
+  const title = (frontendConfig.pwaTitle || frontendConfig.siteTitle || '个人站点')
   const icon = (frontendConfig.rssFaviconURL || '/favicon.ico')
   const description = (frontendConfig.pwaDescription || frontendConfig.description || '')
   const enabled = !!frontendConfig.pwaEnabled

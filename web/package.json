@@ -29,6 +29,7 @@
     "test:feed-search-parity": "node scripts/information-feed-search-parity.test.mjs",
     "test:access-log": "node scripts/access-log.test.mjs",
     "test:public-music-player": "node scripts/public-music-player.test.mjs",
+    "test:public-branding": "node scripts/public-branding-exposure.test.mjs",
     "test:attachment-audio-player": "node scripts/attachment-audio-player.test.mjs",
     "test:vditor-blank-lines": "node scripts/vditor-blank-lines.test.mjs",
     "test:vditor-table-attachment-perf": "node scripts/vditor-table-attachment-perf.test.mjs",

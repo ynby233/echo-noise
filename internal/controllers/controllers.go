@@ -2114,7 +2114,7 @@ func GetWebManifest(c *gin.Context) {
 	if v, ok := fs["pwaEnabled"].(bool); ok {
 		pwaEnabled = v
 	}
-	title := "说说笔记"
+	title := "个人站点"
 	description := ""
 	// 站点默认图标使用 SVG
 	siteIcon := "/favicon.svg"
@@ -2127,7 +2127,7 @@ func GetWebManifest(c *gin.Context) {
 			description = v
 		}
 	}
-	if title == "说说笔记" {
+	if title == "个人站点" {
 		if v, ok := fs["siteTitle"].(string); ok && v != "" {
 			title = v
 		}
@@ -2605,7 +2605,7 @@ func CheckVersion(c *gin.Context) {
 		if cur == "" {
 			cur = "latest"
 		}
-		c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"hasUpdate": false, "lastUpdateTime": time.Now().Format(time.RFC3339), "currentTag": cur}})
+		c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"hasUpdate": false, "lastUpdateTime": time.Now().Format(time.RFC3339), "currentTag": publicVersionLabel()}})
 		return
 	}
 	cur := strings.TrimSpace(os.Getenv("ECHO_NOISE_VERSION"))
@@ -2660,46 +2660,19 @@ func CheckVersion(c *gin.Context) {
 	} else {
 		hasUpdate = true
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"hasUpdate": hasUpdate, "lastUpdateTime": latest.LastUpdated, "currentTag": cur}})
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"hasUpdate": hasUpdate, "lastUpdateTime": latest.LastUpdated, "currentTag": publicVersionLabel()}})
 }
 
-// 获取当前运行版本（优先读取容器环境变量或镜像标签）
+func publicVersionLabel() string {
+	return "installed"
+}
+
+// 获取公开运行版本。真实镜像标签仅供服务端升级逻辑使用，避免向匿名请求暴露构建提交。
 func GetVersion(c *gin.Context) {
-	v := strings.TrimSpace(os.Getenv("ECHO_NOISE_VERSION"))
-	if v == "" {
-		v = strings.TrimSpace(os.Getenv("APP_VERSION"))
-	}
-	if v == "" {
-		v = strings.TrimSpace(os.Getenv("IMAGE_TAG"))
-	}
-	if v == "" {
-		v = "latest"
-	}
-	if strings.ToLower(v) == "latest" {
-		client := &http.Client{Timeout: 5 * time.Second}
-		var resp struct {
-			Results []struct {
-				Name        string `json:"name"`
-				LastUpdated string `json:"last_updated"`
-			} `json:"results"`
-		}
-		req, err := http.NewRequest("GET", "https://hub.docker.com/v2/repositories/noise233/echo-noise/tags?page_size=1&ordering=last_updated", nil)
-		if err == nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			req = req.WithContext(ctx)
-			if r, e := client.Do(req); e == nil {
-				defer r.Body.Close()
-				if json.NewDecoder(r.Body).Decode(&resp) == nil && len(resp.Results) > 0 && strings.TrimSpace(resp.Results[0].Name) != "" {
-					v = strings.TrimSpace(resp.Results[0].Name)
-				}
-			}
-		}
-	}
 	c.JSON(http.StatusOK, gin.H{
 		"code": 1,
 		"data": gin.H{
-			"version": v,
+			"version": publicVersionLabel(),
 		},
 	})
 }
