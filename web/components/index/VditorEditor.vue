@@ -6837,6 +6837,14 @@ html.dark .editor-inline-table-cell-atomic-editor .editor-table-attachment-marke
   color: var(--ir-bracket-color, #93c5fd);
 }
 
+.editor-table-expand-scroll .editor-attachment-link {
+  display: inline-block !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
 @keyframes editorTableOverlayIn {
   from { opacity: 0; }
   to { opacity: 1; }

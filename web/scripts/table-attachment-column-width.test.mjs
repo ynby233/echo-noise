@@ -12,8 +12,8 @@ const [editor, renderer] = await Promise.all([
 // 编辑器侧：放大表格中的附件标记必须允许列宽缩小并对超长标记做省略截断。
 assert.match(
   editor,
-  /\.editor-table-expand-attachment-tag \{[\s\S]*?max-width: 100%;[\s\S]*?overflow: hidden;[\s\S]*?text-overflow: ellipsis;[\s\S]*?white-space: nowrap;[\s\S]*?\}/,
-  '附件标记必须可截断：列宽缩小时超长标记后半省略，而不是撑宽列宽'
+  /\.editor-table-expand-scroll \.editor-attachment-link \{[\s\S]*?display: inline-block !important;[\s\S]*?overflow: hidden !important;[\s\S]*?text-overflow: ellipsis !important;[\s\S]*?white-space: nowrap !important;[\s\S]*?\}/,
+  '放大表格滚动容器内的附件链接必须用高优先级规则强制截断，覆盖 vditor-container 的 inline 覆盖'
 )
 assert.doesNotMatch(
   editor,
