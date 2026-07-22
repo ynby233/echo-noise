@@ -26,6 +26,49 @@ func TestVoceChatNotificationFallbackDoesNotExposeLegacyBranding(t *testing.T) {
 	}
 }
 
+func TestScrubTraceableLocalAPIURLsPreservesFunctionAndUnrelatedLinks(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		want        string
+		wantChanged bool
+	}{
+		{
+			name:        "branded attachment URL becomes relative",
+			input:       `[文件](https://echo-noise.example.com:20714/api/files/a%20b.txt)`,
+			want:        `[文件](/api/files/a%20b.txt)`,
+			wantChanged: true,
+		},
+		{
+			name:        "query and fragment are preserved",
+			input:       `https://ech0-noise.example.com/api/images/a.png?size=large#preview`,
+			want:        `/api/images/a.png?size=large#preview`,
+			wantChanged: true,
+		},
+		{
+			name:        "unrelated API host is preserved",
+			input:       `https://files.example.com/api/files/a.txt`,
+			want:        `https://files.example.com/api/files/a.txt`,
+			wantChanged: false,
+		},
+		{
+			name:        "non API page on branded host is preserved",
+			input:       `https://echo-noise.example.com/about`,
+			want:        `https://echo-noise.example.com/about`,
+			wantChanged: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, changed := scrubTraceableLocalAPIURLs(tt.input)
+			if got != tt.want || changed != tt.wantChanged {
+				t.Fatalf("scrubTraceableLocalAPIURLs(%q) = (%q, %v), want (%q, %v)", tt.input, got, changed, tt.want, tt.wantChanged)
+			}
+		})
+	}
+}
+
 func TestScrubLegacySiteConfigValuesPreservesCustomSettings(t *testing.T) {
 	config := models.SiteConfig{
 		SiteTitle:          "我的站点",
@@ -130,6 +173,30 @@ func TestScrubPersistedLegacyPublicBrandingMigratesOnlyKnownDefaults(t *testing.
 	if err := db.Create(&customImageMessage).Error; err != nil {
 		t.Fatalf("create custom image message: %v", err)
 	}
+	brandedMessage := models.Message{
+		Content:  `[文件](https://echo-noise.example.com:20714/api/files/a%20b.txt)`,
+		ImageURL: `https://echo-noise.example.com:20714/api/images/a.png?size=large`,
+		Username: user.Username,
+		UserID:   user.ID,
+	}
+	if err := db.Create(&brandedMessage).Error; err != nil {
+		t.Fatalf("create branded message: %v", err)
+	}
+	customExternalMessage := models.Message{
+		Content:  `https://files.example.com/api/files/a.txt`,
+		Username: user.Username,
+		UserID:   user.ID,
+	}
+	if err := db.Create(&customExternalMessage).Error; err != nil {
+		t.Fatalf("create custom external message: %v", err)
+	}
+	brandedComment := models.Comment{
+		MessageID: brandedMessage.ID,
+		Content:   `查看 https://echo-noise.example.com/api/files/comment.txt`,
+	}
+	if err := db.Create(&brandedComment).Error; err != nil {
+		t.Fatalf("create branded comment: %v", err)
+	}
 
 	if err := scrubPersistedLegacyPublicBranding(db); err != nil {
 		t.Fatalf("scrub persisted branding: %v", err)
@@ -190,6 +257,28 @@ func TestScrubPersistedLegacyPublicBrandingMigratesOnlyKnownDefaults(t *testing.
 	}
 	if gotCustomImage.ImageURL != customImageMessage.ImageURL {
 		t.Fatalf("custom image changed: %q", gotCustomImage.ImageURL)
+	}
+
+	var gotBrandedMessage models.Message
+	if err := db.First(&gotBrandedMessage, brandedMessage.ID).Error; err != nil {
+		t.Fatalf("reload branded message: %v", err)
+	}
+	if gotBrandedMessage.Content != `[文件](/api/files/a%20b.txt)` || gotBrandedMessage.ImageURL != `/api/images/a.png?size=large` {
+		t.Fatalf("branded message URLs not made relative: %#v", gotBrandedMessage)
+	}
+	var gotCustomExternalMessage models.Message
+	if err := db.First(&gotCustomExternalMessage, customExternalMessage.ID).Error; err != nil {
+		t.Fatalf("reload custom external message: %v", err)
+	}
+	if gotCustomExternalMessage.Content != customExternalMessage.Content {
+		t.Fatalf("unrelated external URL changed: %q", gotCustomExternalMessage.Content)
+	}
+	var gotBrandedComment models.Comment
+	if err := db.First(&gotBrandedComment, brandedComment.ID).Error; err != nil {
+		t.Fatalf("reload branded comment: %v", err)
+	}
+	if gotBrandedComment.Content != `查看 /api/files/comment.txt` {
+		t.Fatalf("branded comment URL not made relative: %q", gotBrandedComment.Content)
 	}
 }
 

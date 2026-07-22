@@ -2,6 +2,8 @@ package services
 
 import (
 	"encoding/json"
+	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/rcy1314/echo-noise/internal/models"
@@ -37,6 +39,8 @@ var legacyPublicBrandingTokens = []string{
 	"echo-noise",
 }
 
+var absolutePublicURLPattern = regexp.MustCompile(`(?i)https?://[^\s<>"')\]]+`)
+
 func containsLegacyPublicBranding(value string) bool {
 	lower := strings.ToLower(value)
 	for _, token := range legacyPublicBrandingTokens {
@@ -45,6 +49,30 @@ func containsLegacyPublicBranding(value string) bool {
 		}
 	}
 	return false
+}
+
+// scrubTraceableLocalAPIURLs keeps local attachment and API links functional
+// while removing branded hostnames that can reveal the project source. Only
+// absolute URLs with an /api/ path are rewritten; unrelated external links are
+// preserved exactly as entered by the user.
+func scrubTraceableLocalAPIURLs(value string) (string, bool) {
+	changed := false
+	scrubbed := absolutePublicURLPattern.ReplaceAllStringFunc(value, func(raw string) string {
+		parsed, err := url.Parse(raw)
+		if err != nil || !strings.HasPrefix(parsed.EscapedPath(), "/api/") || !containsLegacyPublicBranding(parsed.Hostname()) {
+			return raw
+		}
+		replacement := parsed.RequestURI()
+		if parsed.Fragment != "" {
+			replacement += "#" + parsed.EscapedFragment()
+		}
+		if replacement == "" {
+			return raw
+		}
+		changed = true
+		return replacement
+	})
+	return scrubbed, changed
 }
 
 func replaceExact(value *string, replacements map[string]string) bool {
@@ -319,6 +347,39 @@ func scrubPersistedLegacyPublicBranding(db *gorm.DB) error {
 				Where("content = ? AND image_url = ?", content, imageURL).
 				Update("image_url", "").Error; err != nil {
 				return err
+			}
+		}
+
+		var messages []models.Message
+		if err := tx.Select("id", "content", "image_url").
+			Where("content LIKE ? OR image_url LIKE ?", "%://%/api/%", "%://%/api/%").
+			Find(&messages).Error; err != nil {
+			return err
+		}
+		for _, message := range messages {
+			updates := map[string]interface{}{}
+			if content, changed := scrubTraceableLocalAPIURLs(message.Content); changed {
+				updates["content"] = content
+			}
+			if imageURL, changed := scrubTraceableLocalAPIURLs(message.ImageURL); changed {
+				updates["image_url"] = imageURL
+			}
+			if len(updates) > 0 {
+				if err := tx.Model(&models.Message{}).Where("id = ?", message.ID).Updates(updates).Error; err != nil {
+					return err
+				}
+			}
+		}
+
+		var comments []models.Comment
+		if err := tx.Select("id", "content").Where("content LIKE ?", "%://%/api/%").Find(&comments).Error; err != nil {
+			return err
+		}
+		for _, comment := range comments {
+			if content, changed := scrubTraceableLocalAPIURLs(comment.Content); changed {
+				if err := tx.Model(&models.Comment{}).Where("id = ?", comment.ID).Update("content", content).Error; err != nil {
+					return err
+				}
 			}
 		}
 
