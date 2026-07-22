@@ -1258,7 +1258,7 @@ const profileName = computed(() => {
   const wname = String((frontendConfig.value as any)?.welcomeName || '').trim()
   return wname || '匿名'
 })
-const fallbackAvatarURL = 'https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png'
+const fallbackAvatarURL = '/favicon.svg'
 const adminWelcome = ref<any>(null)
 
 const profileAvatar = computed(() => {
@@ -2259,16 +2259,16 @@ const headerImageStyle = computed(() => ({
   const defaultConfig = {
     siteTitle: '个人站点',
     subtitleText: '欢迎访问，点击头像可更换封面背景！',
-    avatarURL: 'https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png',
+    avatarURL: '/favicon.svg',
     username: '站长',
     description: '欢迎访问',
     // 系统欢迎组件（未登录时显示）
-    welcomeAvatarURL: 'https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png',
+    welcomeAvatarURL: '/favicon.svg',
     welcomeName: '站长',
     welcomeDescription: '欢迎访问',
     welcomeUseAdmin: true,
     backgrounds: [
-      normalizeHeaderBackground('https://s2.loli.net/2025/03/26/d7iyuPYA8cRqD1K.jpg'),
+      normalizeHeaderBackground('https://picsum.photos/1600/500'),
     ],
     pageFooterHTML: '',
     rssTitle: '个人内容订阅',

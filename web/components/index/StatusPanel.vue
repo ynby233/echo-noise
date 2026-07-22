@@ -5424,7 +5424,7 @@ const defaultConfig: Record<string, any> = {
     welcomeUseAdmin: false,
     
     backgrounds: [
-        normalizeHeaderBackground("https://s2.loli.net/2025/03/26/d7iyuPYA8cRqD1K.jpg"),
+        normalizeHeaderBackground("https://picsum.photos/1600/500"),
     ],
     pageFooterHTML: '',
     rssTitle: '个人内容订阅',

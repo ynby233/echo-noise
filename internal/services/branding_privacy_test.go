@@ -40,6 +40,9 @@ func TestScrubLegacySiteConfigValuesPreservesCustomSettings(t *testing.T) {
 		AnnouncementText:   "欢迎访问我的说说笔记！",
 		WelcomeName:        "Noise",
 		WelcomeDescription: "执迷不悟",
+		AvatarURL:          legacyDefaultAvatarURL,
+		WelcomeAvatarURL:   legacyDefaultAvatarURL,
+		Backgrounds:        `["https://s2.loli.net/2025/03/26/d7iyuPYA8cRqD1K.jpg","https://example.com/custom.jpg"]`,
 		SocialLinks:        `[{"name":"主页","url":"https://www.noisework.cn/","icon":"home"},{"name":"自定义","url":"https://example.com","icon":"link"}]`,
 		LeftAds:            `[{"imageURL":"https://picsum.photos/seed/ad/640/640","linkURL":"https://note.noisework.cn","description":"示例"}]`,
 		FeedSources:        `[{"type":"说说笔记","name":"说说笔记","url":"/api/messages/page","enabled":true,"visible":true}]`,
@@ -54,6 +57,9 @@ func TestScrubLegacySiteConfigValuesPreservesCustomSettings(t *testing.T) {
 	if !strings.Contains(config.SocialLinks, "https://example.com") {
 		t.Fatalf("custom social link removed: %s", config.SocialLinks)
 	}
+	if !strings.Contains(config.Backgrounds, "https://example.com/custom.jpg") {
+		t.Fatalf("custom background removed: %s", config.Backgrounds)
+	}
 	assertNoLegacyPublicBranding(t, strings.Join([]string{
 		config.Username,
 		config.Description,
@@ -66,6 +72,9 @@ func TestScrubLegacySiteConfigValuesPreservesCustomSettings(t *testing.T) {
 		config.AnnouncementText,
 		config.WelcomeName,
 		config.WelcomeDescription,
+		config.AvatarURL,
+		config.WelcomeAvatarURL,
+		config.Backgrounds,
 		config.SocialLinks,
 		config.LeftAds,
 		config.FeedSources,
@@ -80,6 +89,9 @@ func TestScrubPersistedLegacyPublicBrandingMigratesOnlyKnownDefaults(t *testing.
 		PageFooterHTML:   `<a href="https://github.com/rcy1314/echo-noise">legacy</a>`,
 		SocialLinks:      `[{"name":"legacy","url":"https://www.noisework.cn/"},{"name":"custom","url":"https://example.com"}]`,
 		AnnouncementText: "欢迎访问我的说说笔记！",
+		AvatarURL:        legacyDefaultAvatarURL,
+		WelcomeAvatarURL: legacyDefaultAvatarURL,
+		Backgrounds:      `["https://s2.loli.net/2025/03/26/d7iyuPYA8cRqD1K.jpg"]`,
 	}
 	if err := db.Create(&legacy).Error; err != nil {
 		t.Fatalf("create legacy config: %v", err)
@@ -92,9 +104,31 @@ func TestScrubPersistedLegacyPublicBrandingMigratesOnlyKnownDefaults(t *testing.
 			t.Fatalf("create friend link: %v", err)
 		}
 	}
-	message := models.Message{Content: legacyWelcomeMessage, Username: "admin", UserID: 1}
+	user := models.User{Username: "legacy-admin", AvatarURL: legacyDefaultAvatarURL}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatalf("create legacy user: %v", err)
+	}
+	message := models.Message{Content: legacyWelcomeMessage, Username: user.Username, UserID: user.ID}
 	if err := db.Create(&message).Error; err != nil {
 		t.Fatalf("create legacy message: %v", err)
+	}
+	legacyImageMessage := models.Message{
+		Content:  "探索未知的世界。 #Travel",
+		ImageURL: "https://s2.loli.net/2025/04/05/EnakPbZJjpGxRTw.jpg",
+		Username: user.Username,
+		UserID:   user.ID,
+	}
+	if err := db.Create(&legacyImageMessage).Error; err != nil {
+		t.Fatalf("create legacy image message: %v", err)
+	}
+	customImageMessage := models.Message{
+		Content:  "自定义内容",
+		ImageURL: legacyImageMessage.ImageURL,
+		Username: user.Username,
+		UserID:   user.ID,
+	}
+	if err := db.Create(&customImageMessage).Error; err != nil {
+		t.Fatalf("create custom image message: %v", err)
 	}
 
 	if err := scrubPersistedLegacyPublicBranding(db); err != nil {
@@ -111,6 +145,9 @@ func TestScrubPersistedLegacyPublicBrandingMigratesOnlyKnownDefaults(t *testing.
 		gotConfig.PageFooterHTML,
 		gotConfig.SocialLinks,
 		gotConfig.AnnouncementText,
+		gotConfig.AvatarURL,
+		gotConfig.WelcomeAvatarURL,
+		gotConfig.Backgrounds,
 	}, "\n"))
 	if !strings.Contains(gotConfig.SocialLinks, "https://example.com") {
 		t.Fatalf("custom social link removed: %s", gotConfig.SocialLinks)
@@ -131,6 +168,29 @@ func TestScrubPersistedLegacyPublicBrandingMigratesOnlyKnownDefaults(t *testing.
 	if gotMessage.Content != neutralWelcomeMessage {
 		t.Fatalf("legacy welcome message not migrated: %q", gotMessage.Content)
 	}
+
+	var gotUser models.User
+	if err := db.First(&gotUser, user.ID).Error; err != nil {
+		t.Fatalf("reload user: %v", err)
+	}
+	if gotUser.AvatarURL != neutralAvatarURL {
+		t.Fatalf("legacy avatar not migrated: %q", gotUser.AvatarURL)
+	}
+
+	var gotLegacyImage models.Message
+	if err := db.First(&gotLegacyImage, legacyImageMessage.ID).Error; err != nil {
+		t.Fatalf("reload legacy image message: %v", err)
+	}
+	if gotLegacyImage.ImageURL != "" {
+		t.Fatalf("legacy sample image not cleared: %q", gotLegacyImage.ImageURL)
+	}
+	var gotCustomImage models.Message
+	if err := db.First(&gotCustomImage, customImageMessage.ID).Error; err != nil {
+		t.Fatalf("reload custom image message: %v", err)
+	}
+	if gotCustomImage.ImageURL != customImageMessage.ImageURL {
+		t.Fatalf("custom image changed: %q", gotCustomImage.ImageURL)
+	}
 }
 
 func assertNoLegacyPublicBranding(t *testing.T, value string) {
@@ -145,6 +205,7 @@ func assertNoLegacyPublicBranding(t *testing.T, value string) {
 		"liangwenhao3",
 		"Ech0-Noise",
 		"Echo-Noise",
+		"s2.loli.net",
 	} {
 		if strings.Contains(strings.ToLower(value), strings.ToLower(token)) {
 			t.Fatalf("public value contains legacy token %q: %s", token, value)

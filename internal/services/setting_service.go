@@ -44,7 +44,7 @@ var lifeCountdownSettingKeys = map[string]struct{}{
 	"lifeExpectancyYears":    {},
 }
 
-const defaultHeaderImageURL = "https://s2.loli.net/2025/03/26/d7iyuPYA8cRqD1K.jpg"
+const defaultHeaderImageURL = "https://picsum.photos/1600/500"
 
 const (
 	defaultLoginExpireDays  = 3
@@ -93,6 +93,7 @@ func parsePositiveIntSetting(raw interface{}) (int, bool) {
 }
 
 var legacyDefaultHeaderImageURLs = map[string]struct{}{
+	"https://s2.loli.net/2025/03/26/d7iyuPYA8cRqD1K.jpg": {},
 	"https://s2.loli.net/2025/03/27/KJ1trnU2ksbFEYM.jpg": {},
 	"https://s2.loli.net/2025/03/27/MZqaLczCvwjSmW7.jpg": {},
 	"https://s2.loli.net/2025/03/27/UMijKXwJ9yTqSeE.jpg": {},
@@ -1947,7 +1948,7 @@ func getDefaultConfig() map[string]interface{} {
 		"frontendSettings": map[string]interface{}{
 			"siteTitle":           neutralSiteTitle,
 			"subtitleText":        "欢迎访问，点击头像可更换封面背景！",
-			"avatarURL":           "https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png",
+			"avatarURL":           neutralAvatarURL,
 			"username":            neutralOwnerName,
 			"description":         neutralDescription,
 			"notifyEnabled":       false,
@@ -1984,7 +1985,7 @@ func getDefaultConfig() map[string]interface{} {
 				{"type": "rss", "group": "默认分组", "name": "站点 RSS", "url": "/rss", "enabled": true, "visible": true},
 			},
 			// 系统欢迎组件默认参数
-			"welcomeAvatarURL":           "https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png",
+			"welcomeAvatarURL":           neutralAvatarURL,
 			"welcomeName":                neutralOwnerName,
 			"welcomeDescription":         neutralDescription,
 			"welcomeUseAdmin":            true,

@@ -27,7 +27,7 @@ func SeedDefaultData() error {
 		defaultConfig := models.SiteConfig{
 			SiteTitle:                   neutralSiteTitle,
 			SubtitleText:                "欢迎访问！",
-			AvatarURL:                   "https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png",
+			AvatarURL:                   neutralAvatarURL,
 			Username:                    neutralOwnerName,
 			Description:                 neutralDescription,
 			Backgrounds:                 defaultBg,
@@ -127,7 +127,7 @@ func SeedDefaultData() error {
 				IsAdmin:       true,
 				Token:         models.GenerateToken(32),
 				Description:   "欢迎访问",
-				AvatarURL:     "https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png",
+				AvatarURL:     neutralAvatarURL,
 				Email:         "",
 				EmailVerified: true,
 			}
@@ -184,14 +184,12 @@ func SeedDefaultData() error {
 				Content:   "这里有一些关于自己的美好记录。 #日记 #示例",
 				UserID:    uid,
 				Username:  admin.Username,
-				ImageURL:  "https://s2.loli.net/2025/12/16/nsROlxQD5EPZq6h.jpg",
 				CreatedAt: time.Now().Add(-1 * time.Hour),
 			},
 			{
 				Content:   "探索未知的世界。 #Travel",
 				UserID:    uid,
 				Username:  admin.Username,
-				ImageURL:  "https://s2.loli.net/2025/04/05/EnakPbZJjpGxRTw.jpg",
 				CreatedAt: time.Now().Add(-2 * time.Hour),
 			},
 			{

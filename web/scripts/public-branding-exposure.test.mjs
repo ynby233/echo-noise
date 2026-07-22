@@ -22,6 +22,7 @@ const forbiddenTokens = [
   'Ech0-Noise',
   'Echo-Noise',
   'echo-noise',
+  's2.loli.net',
 ]
 
 const textExtensions = new Set([

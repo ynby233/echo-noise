@@ -9,15 +9,17 @@ import (
 )
 
 const (
-	neutralSiteTitle      = "个人站点"
-	neutralOwnerName      = "站长"
-	neutralDescription    = "欢迎访问"
-	neutralRSSTitle       = "个人内容订阅"
-	neutralRSSDescription = "个人内容更新"
-	neutralPwaDescription = "个人内容与记录"
-	neutralAnnouncement   = "欢迎访问！"
-	legacyWelcomeMessage  = "欢迎来到说说笔记！默认用户名及密码均为admin，记得到后台页修改你的用户名或密码,密码带有加强设置，如需简单密码可在用户管理面板中展开后重置密码"
-	neutralWelcomeMessage = "欢迎来到你的个人站点！默认用户名及密码均为admin，记得到后台页修改你的用户名或密码,密码带有加强设置，如需简单密码可在用户管理面板中展开后重置密码"
+	neutralSiteTitle       = "个人站点"
+	neutralOwnerName       = "站长"
+	neutralDescription     = "欢迎访问"
+	neutralRSSTitle        = "个人内容订阅"
+	neutralRSSDescription  = "个人内容更新"
+	neutralPwaDescription  = "个人内容与记录"
+	neutralAnnouncement    = "欢迎访问！"
+	neutralAvatarURL       = "/favicon.svg"
+	legacyDefaultAvatarURL = "https://s2.loli.net/2025/03/24/HnSXKvibAQlosIW.png"
+	legacyWelcomeMessage   = "欢迎来到说说笔记！默认用户名及密码均为admin，记得到后台页修改你的用户名或密码,密码带有加强设置，如需简单密码可在用户管理面板中展开后重置密码"
+	neutralWelcomeMessage  = "欢迎来到你的个人站点！默认用户名及密码均为admin，记得到后台页修改你的用户名或密码,密码带有加强设置，如需简单密码可在用户管理面板中展开后重置密码"
 )
 
 var legacyPublicBrandingTokens = []string{
@@ -95,6 +97,12 @@ func scrubLegacySiteConfigValues(config *models.SiteConfig) bool {
 		&config.WelcomeDescription: {
 			"执迷不悟": neutralDescription,
 		},
+		&config.AvatarURL: {
+			legacyDefaultAvatarURL: neutralAvatarURL,
+		},
+		&config.WelcomeAvatarURL: {
+			legacyDefaultAvatarURL: neutralAvatarURL,
+		},
 	} {
 		changed = replaceExact(field, replacements) || changed
 	}
@@ -116,8 +124,51 @@ func scrubLegacySiteConfigValues(config *models.SiteConfig) bool {
 		config.FeedSources = scrubbed
 		changed = true
 	}
+	if scrubbed, updated := scrubLegacyBackgrounds(config.Backgrounds); updated {
+		config.Backgrounds = scrubbed
+		changed = true
+	}
 
 	return changed
+}
+
+func scrubLegacyBackgrounds(raw string) (string, bool) {
+	if strings.TrimSpace(raw) == "" {
+		return raw, false
+	}
+	var entries []interface{}
+	if err := json.Unmarshal([]byte(raw), &entries); err != nil {
+		return raw, false
+	}
+	changed := false
+	for index, entry := range entries {
+		switch value := entry.(type) {
+		case string:
+			if _, legacy := legacyDefaultHeaderImageURLs[strings.TrimSpace(value)]; legacy && value != defaultHeaderImageURL {
+				entries[index] = defaultHeaderImageURL
+				changed = true
+			}
+		case map[string]interface{}:
+			for _, key := range []string{"url", "URL"} {
+				url, ok := value[key].(string)
+				if !ok {
+					continue
+				}
+				if _, legacy := legacyDefaultHeaderImageURLs[strings.TrimSpace(url)]; legacy && url != defaultHeaderImageURL {
+					value[key] = defaultHeaderImageURL
+					changed = true
+				}
+			}
+		}
+	}
+	if !changed {
+		return raw, false
+	}
+	encoded, err := json.Marshal(entries)
+	if err != nil {
+		return raw, false
+	}
+	return string(encoded), true
 }
 
 func scrubLegacyLinkList(raw string) (string, bool) {
@@ -252,6 +303,23 @@ func scrubPersistedLegacyPublicBranding(db *gorm.DB) error {
 			Where("content = ?", legacyWelcomeMessage).
 			Update("content", neutralWelcomeMessage).Error; err != nil {
 			return err
+		}
+
+		if err := tx.Model(&models.User{}).
+			Where("avatar_url = ?", legacyDefaultAvatarURL).
+			Update("avatar_url", neutralAvatarURL).Error; err != nil {
+			return err
+		}
+
+		for content, imageURL := range map[string]string{
+			"这里有一些关于自己的美好记录。 #日记 #示例": "https://s2.loli.net/2025/12/16/nsROlxQD5EPZq6h.jpg",
+			"探索未知的世界。 #Travel":        "https://s2.loli.net/2025/04/05/EnakPbZJjpGxRTw.jpg",
+		} {
+			if err := tx.Model(&models.Message{}).
+				Where("content = ? AND image_url = ?", content, imageURL).
+				Update("image_url", "").Error; err != nil {
+				return err
+			}
 		}
 
 		return nil
