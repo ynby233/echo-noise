@@ -20,18 +20,21 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/rcy1314/echo-noise/config"
+	attachmentregistry "github.com/rcy1314/echo-noise/internal/attachments"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"gorm.io/gorm"
 )
 
 type AttachmentInfo struct {
-	Key        string       `json:"key"`
-	Name       string       `json:"name"`
-	URL        string       `json:"url"`
-	Size       int64        `json:"size"`
-	ModifiedAt time.Time    `json:"modified_at"`
-	Belongs    []BelongItem `json:"belongs"`
+	Key            string       `json:"key"`
+	LogicalID      string       `json:"logical_id,omitempty"`
+	Name           string       `json:"name"`
+	URL            string       `json:"url"`
+	Size           int64        `json:"size"`
+	ModifiedAt     time.Time    `json:"modified_at"`
+	Belongs        []BelongItem `json:"belongs"`
+	ReferenceCount int64        `json:"reference_count,omitempty"`
 }
 
 type BelongItem struct {
@@ -45,9 +48,10 @@ type AttachmentZipRequest struct {
 }
 
 type AttachmentZipItem struct {
-	Type string `json:"type"`
-	Key  string `json:"key"`
-	Name string `json:"name"`
+	Type      string `json:"type"`
+	Key       string `json:"key"`
+	Name      string `json:"name"`
+	LogicalID string `json:"logical_id"`
 }
 
 func escapeObjectKeyForURL(key string) string {
@@ -110,16 +114,19 @@ func ListImageAttachments(c *gin.Context) {
 		"/data/images",
 		"/app/data/images",
 	}, "./data/images")
-	entries, err := os.ReadDir(dir)
+	var messages []models.Message
+	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Order("created_at DESC").Find(&messages)
+
+	list, err := listRegisteredAttachments("image", "local", messages)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []AttachmentInfo{}})
 		return
 	}
-
-	var messages []models.Message
-	database.DB.Select("id", "content", "image_url", "created_at").Order("created_at DESC").Find(&messages)
-
-	var list []AttachmentInfo
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "data": list})
+		return
+	}
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
@@ -136,6 +143,51 @@ func ListImageAttachments(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": list})
+}
+
+func listRegisteredAttachments(kind, backend string, messages []models.Message) ([]AttachmentInfo, error) {
+	db, err := database.GetDB()
+	if err != nil {
+		return nil, err
+	}
+	resolved, err := attachmentregistry.NewRegistry(db).List(kind, backend)
+	if err != nil {
+		return nil, err
+	}
+	counts := make(map[uint]int64, len(resolved))
+	out := make([]AttachmentInfo, 0, len(resolved))
+	for _, item := range resolved {
+		if _, ok := counts[item.Blob.ID]; !ok {
+			var count int64
+			if err := db.Model(&models.AttachmentReference{}).Where("blob_id = ?", item.Blob.ID).Count(&count).Error; err != nil {
+				return nil, err
+			}
+			counts[item.Blob.ID] = count
+		}
+		needle := attachmentReferenceURLPrefix(item.Reference.Kind, backend, item.Reference.PublicID)
+		belongs := make([]BelongItem, 0)
+		for _, message := range messages {
+			if message.UserID != item.Reference.OwnerUserID || (!strings.Contains(message.Content, needle) && !strings.Contains(message.ImageURL, needle)) {
+				continue
+			}
+			snippet := message.Content
+			if len(snippet) > 80 {
+				snippet = snippet[:80]
+			}
+			belongs = append(belongs, BelongItem{ID: message.ID, CreatedAt: message.CreatedAt, Snippet: snippet})
+		}
+		out = append(out, AttachmentInfo{
+			Key:            item.Reference.PublicID,
+			LogicalID:      item.Reference.PublicID,
+			Name:           item.Reference.OriginalName,
+			URL:            attachmentregistry.ReferenceURL(item.Reference, backend),
+			Size:           item.Blob.Size,
+			ModifiedAt:     item.Reference.CreatedAt,
+			Belongs:        belongs,
+			ReferenceCount: counts[item.Blob.ID],
+		})
+	}
+	return out, nil
 }
 
 func ListVideoAttachments(c *gin.Context) {
@@ -163,16 +215,18 @@ func ListVideoAttachments(c *gin.Context) {
 		"/data/video",
 		"/app/data/video",
 	}, "./data/video")
-	entries, err := os.ReadDir(dir)
+	var messages []models.Message
+	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Order("created_at DESC").Find(&messages)
+	list, err := listRegisteredAttachments("video", "local", messages)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []AttachmentInfo{}})
 		return
 	}
-
-	var messages []models.Message
-	database.DB.Select("id", "content", "image_url", "created_at").Order("created_at DESC").Find(&messages)
-
-	var list []AttachmentInfo
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "data": list})
+		return
+	}
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
@@ -216,16 +270,18 @@ func ListAudioAttachments(c *gin.Context) {
 		"/data/audio",
 		"/app/data/audio",
 	}, "./data/audio")
-	entries, err := os.ReadDir(dir)
+	var messages []models.Message
+	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Order("created_at DESC").Find(&messages)
+	list, err := listRegisteredAttachments("audio", "local", messages)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []AttachmentInfo{}})
 		return
 	}
-
-	var messages []models.Message
-	database.DB.Select("id", "content", "image_url", "created_at").Order("created_at DESC").Find(&messages)
-
-	var list []AttachmentInfo
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "data": list})
+		return
+	}
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
@@ -269,16 +325,18 @@ func ListOtherAttachments(c *gin.Context) {
 		"/data/attachments",
 		"/app/data/attachments",
 	}, "./data/attachments")
-	entries, err := os.ReadDir(dir)
+	var messages []models.Message
+	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Order("created_at DESC").Find(&messages)
+	list, err := listRegisteredAttachments("file", "local", messages)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []AttachmentInfo{}})
 		return
 	}
-
-	var messages []models.Message
-	database.DB.Select("id", "content", "image_url", "created_at").Order("created_at DESC").Find(&messages)
-
-	var list []AttachmentInfo
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "data": list})
+		return
+	}
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
@@ -516,6 +574,46 @@ func deleteLocalAttachmentGrants(kind string, name string) error {
 	return database.DB.Where("kind = ? AND name = ?", kind, name).Delete(&models.LocalAttachmentGrant{}).Error
 }
 
+func DeleteAttachmentReference(c *gin.Context) {
+	publicID := strings.TrimSpace(c.Param("id"))
+	db, err := database.GetDB()
+	if err != nil || publicID == "" {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "附件不存在"})
+		return
+	}
+	registry := attachmentregistry.NewRegistry(db)
+	resolved, err := registry.Resolve(publicID)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "附件不存在"})
+		return
+	}
+	var store attachmentregistry.BlobStore
+	if resolved.Blob.StorageBackend == "local" {
+		store = attachmentregistry.NewLocalStore(attachmentregistry.DefaultLocalRoot())
+	} else if resolved.Blob.StorageBackend == "cloud" {
+		var siteCfg models.SiteConfig
+		if err := db.Table("site_configs").First(&siteCfg).Error; err != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "云存储配置不可用"})
+			return
+		}
+		client, bucket, _, err := newAttachmentS3Client(siteCfg)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "云存储配置不可用"})
+			return
+		}
+		_, prefix := splitPublicBaseURL(siteCfg.AttachmentStoragePublicBaseURL)
+		store = attachmentregistry.NewS3Store(client, bucket, prefix)
+	} else {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "不支持的附件存储类型"})
+		return
+	}
+	if err := registry.DeleteReference(c.Request.Context(), store, publicID); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "删除失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": true})
+}
+
 func DownloadAttachmentZip(c *gin.Context) {
 	var req AttachmentZipRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -564,10 +662,63 @@ func pickDir(candidates []string, fallback string) string {
 }
 
 func addAttachmentToZip(archive *zip.Writer, siteCfg models.SiteConfig, item AttachmentZipItem, usedNames map[string]int) error {
+	if strings.TrimSpace(item.LogicalID) != "" {
+		return addRegisteredAttachmentToZip(archive, siteCfg, item, usedNames)
+	}
 	if siteCfg.AttachmentStorageEnabled {
 		return addCloudAttachmentToZip(archive, siteCfg, item, usedNames)
 	}
 	return addLocalAttachmentToZip(archive, item, usedNames)
+}
+
+func addRegisteredAttachmentToZip(archive *zip.Writer, siteCfg models.SiteConfig, item AttachmentZipItem, usedNames map[string]int) error {
+	db, err := database.GetDB()
+	if err != nil {
+		return err
+	}
+	resolved, err := attachmentregistry.NewRegistry(db).Resolve(strings.TrimSpace(item.LogicalID))
+	if err != nil {
+		return err
+	}
+	wantedKind := strings.ToLower(strings.TrimSpace(item.Type))
+	if wantedKind == "other" {
+		wantedKind = "file"
+	}
+	if wantedKind != resolved.Reference.Kind {
+		return errors.New("attachment type mismatch")
+	}
+	_, folder, _ := localAttachmentDirForType(item.Type)
+	if folder == "" {
+		folder = "attachments"
+	}
+	var reader io.ReadCloser
+	if resolved.Blob.StorageBackend == "local" {
+		file, _, err := attachmentregistry.NewLocalStore(attachmentregistry.DefaultLocalRoot()).Open(resolved.Blob.StorageKey)
+		if err != nil {
+			return err
+		}
+		reader = file
+	} else if resolved.Blob.StorageBackend == "cloud" {
+		client, bucket, _, err := newAttachmentS3Client(siteCfg)
+		if err != nil {
+			return err
+		}
+		obj, err := client.GetObject(context.Background(), &s3.GetObjectInput{Bucket: aws.String(bucket), Key: aws.String(resolved.Blob.StorageKey)})
+		if err != nil {
+			return err
+		}
+		reader = obj.Body
+	} else {
+		return errors.New("unsupported attachment backend")
+	}
+	defer reader.Close()
+	zipName := uniqueZipEntryName(filepath.ToSlash(filepath.Join(folder, safeZipEntryBaseName(resolved.Reference.OriginalName))), usedNames)
+	writer, err := archive.Create(zipName)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(writer, reader)
+	return err
 }
 
 func addLocalAttachmentToZip(archive *zip.Writer, item AttachmentZipItem, usedNames map[string]int) error {
@@ -823,9 +974,28 @@ func listCloudAttachments(siteCfg models.SiteConfig, keep func(name string) bool
 	origin, prefix := splitPublicBaseURL(publicBaseURL)
 
 	var messages []models.Message
-	database.DB.Select("id", "content", "image_url", "created_at").Order("created_at DESC").Find(&messages)
+	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Order("created_at DESC").Find(&messages)
 
 	var out []AttachmentInfo
+	for _, kind := range []string{"image", "video", "audio", "file"} {
+		registered, err := listRegisteredAttachments(kind, "cloud", messages)
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range registered {
+			if keep(item.Name) {
+				out = append(out, item)
+			}
+		}
+	}
+	var registeredBlobs []models.AttachmentBlob
+	if err := database.DB.Where("storage_backend = ?", "cloud").Find(&registeredBlobs).Error; err != nil {
+		return nil, err
+	}
+	registeredKeys := make(map[string]struct{}, len(registeredBlobs))
+	for _, blob := range registeredBlobs {
+		registeredKeys[strings.TrimLeft(blob.StorageKey, "/")] = struct{}{}
+	}
 	var token *string
 	for {
 		resp, err := cli.ListObjectsV2(context.Background(), &s3.ListObjectsV2Input{
@@ -842,6 +1012,9 @@ func listCloudAttachments(siteCfg models.SiteConfig, keep func(name string) bool
 				continue
 			}
 			cleanKey := strings.TrimLeft(key, "/")
+			if _, registered := registeredKeys[cleanKey]; registered {
+				continue
+			}
 			name := filepath.Base(cleanKey)
 			if !keep(name) {
 				continue

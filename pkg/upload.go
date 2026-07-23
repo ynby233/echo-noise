@@ -21,15 +21,31 @@ import (
 	awscfg "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/smithy-go"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/nfnt/resize"
-	"github.com/rcy1314/echo-noise/config"
+	attachmentregistry "github.com/rcy1314/echo-noise/internal/attachments"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
-	"gorm.io/gorm"
 )
+
+func storeAttachmentReference(ctx context.Context, store attachmentregistry.BlobStore, kind string, ownerUserID uint, originalName, contentType, contentHash string, size int64, content io.ReadSeeker) (string, error) {
+	db, err := database.GetDB()
+	if err != nil {
+		return "", err
+	}
+	reference, err := attachmentregistry.NewRegistry(db).Create(ctx, store, attachmentregistry.CreateInput{
+		Kind:         kind,
+		OwnerUserID:  ownerUserID,
+		OriginalName: originalName,
+		ContentType:  contentType,
+		ContentHash:  contentHash,
+		Size:         size,
+	}, content)
+	if err != nil {
+		return "", err
+	}
+	return attachmentregistry.ReferenceURL(reference, store.ID()), nil
+}
 
 func escapeObjectKeyForURL(key string) string {
 	s := strings.TrimLeft(key, "/")
@@ -126,8 +142,6 @@ func audioUploadExt(filename, contentType string) string {
 	}
 }
 
-const attachmentSHA256MetadataKey = "sha256"
-
 func attachmentContentHashFromBytes(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
@@ -190,93 +204,6 @@ func safeAttachmentFileName(originalName, ext, fallbackStem string) string {
 		stem = fallbackStem
 	}
 	return stem + normalizedExt
-}
-
-func sequencedAttachmentFileName(name string, index int) string {
-	if index <= 0 {
-		return name
-	}
-	ext := filepath.Ext(name)
-	stem := strings.TrimSuffix(name, ext)
-	return fmt.Sprintf("%s(%d)%s", stem, index, ext)
-}
-
-func localFileMatchesContentHash(path, contentHash string) bool {
-	if contentHash == "" {
-		return false
-	}
-	existingHash, err := attachmentContentHashFromPath(path)
-	return err == nil && existingHash == contentHash
-}
-
-func localAttachmentFileNameForContent(dir, preferredName, contentHash string) (string, bool, error) {
-	if contentHash != "" {
-		entries, err := os.ReadDir(dir)
-		if err != nil && !os.IsNotExist(err) {
-			return "", false, err
-		}
-		for _, entry := range entries {
-			if entry.IsDir() {
-				continue
-			}
-			if localFileMatchesContentHash(filepath.Join(dir, entry.Name()), contentHash) {
-				return entry.Name(), true, nil
-			}
-		}
-	}
-
-	for i := 0; ; i++ {
-		candidate := sequencedAttachmentFileName(preferredName, i)
-		p := filepath.Join(dir, candidate)
-		info, err := os.Stat(p)
-		if os.IsNotExist(err) {
-			return candidate, false, nil
-		}
-		if err != nil {
-			return "", false, err
-		}
-		if info.IsDir() {
-			continue
-		}
-		if localFileMatchesContentHash(p, contentHash) {
-			return candidate, true, nil
-		}
-	}
-}
-
-func isolateRestrictedLocalAttachmentReuse(kind, preferredName, existingName string, existed bool) (string, bool, error) {
-	if !existed {
-		return existingName, false, nil
-	}
-	db, err := database.GetDB()
-	if err != nil {
-		return "", false, err
-	}
-	var grantCount int64
-	if err := db.Model(&models.LocalAttachmentGrant{}).
-		Where("kind = ? AND name = ?", kind, existingName).
-		Count(&grantCount).Error; err != nil {
-		return "", false, err
-	}
-	if grantCount == 0 {
-		return existingName, true, nil
-	}
-	var publicGrantCount int64
-	if err := db.Model(&models.LocalAttachmentGrant{}).
-		Where("kind = ? AND name = ? AND visibility = ?", kind, existingName, "public").
-		Count(&publicGrantCount).Error; err != nil {
-		return "", false, err
-	}
-	if publicGrantCount > 0 {
-		return existingName, true, nil
-	}
-	extension := normalizeUploadExt(filepath.Ext(preferredName), filepath.Ext(existingName))
-	return uuid.NewString() + extension, false, nil
-}
-
-func fileExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
 }
 
 // UploadImage 上传图片并返回图片的URL
@@ -357,39 +284,17 @@ func UploadImage(c *gin.Context, allowedExtensions []string, siteConfig *models.
 
 	// 检查是否启用了附件云存储
 	if siteConfig != nil && siteConfig.AttachmentStorageEnabled {
-		return UploadAttachmentToCloud(siteConfig, preferredFileName, bytes.NewReader(fileData), contentType, contentHash)
+		return UploadAttachmentToCloud(siteConfig, "image", c.GetUint("user_id"), preferredFileName, bytes.NewReader(fileData), contentType, contentHash)
 	}
-
-	// 本地存储逻辑
-	// 创建存储图片的目录（如果没有的话）
-	if err := createImageDirIfNotExist(config.Config.Upload.SavePath); err != nil {
-		return "", err
+	ownerUserID := c.GetUint("user_id")
+	if ownerUserID == 0 {
+		return "", errors.New("未登录或登录已过期")
 	}
-
-	newFileName, existed, err := localAttachmentFileNameForContent(config.Config.Upload.SavePath, preferredFileName, contentHash)
-	if err != nil {
-		return "", err
-	}
-	newFileName, existed, err = isolateRestrictedLocalAttachmentReuse("image", preferredFileName, newFileName, existed)
-	if err != nil {
-		return "", err
-	}
-
-	// 保存文件到指定目录；相同内容已经存在时直接复用。
-	savePath := filepath.Join(config.Config.Upload.SavePath, newFileName)
-	if !existed && !fileExists(savePath) {
-		if err := os.WriteFile(savePath, fileData, 0644); err != nil {
-			return "", errors.New(models.ImageUploadErrorMessage)
-		}
-	}
-
-	// 返回图片的 URL
-	imageURL := fmt.Sprintf("/api/images/%s", url.PathEscape(newFileName))
-	return imageURL, nil
+	return storeAttachmentReference(c.Request.Context(), attachmentregistry.NewLocalStore(attachmentregistry.DefaultLocalRoot()), "image", ownerUserID, preferredFileName, contentType, contentHash, int64(len(fileData)), bytes.NewReader(fileData))
 }
 
 // UploadAttachmentToCloud 上传附件到云存储
-func UploadAttachmentToCloud(cfg *models.SiteConfig, preferredFileName string, content io.ReadSeeker, contentType string, contentHash string) (string, error) {
+func UploadAttachmentToCloud(cfg *models.SiteConfig, kind string, ownerUserID uint, preferredFileName string, content io.ReadSeeker, contentType string, contentHash string) (string, error) {
 	if cfg.AttachmentStorageBucket == "" || cfg.AttachmentStorageAccessKey == "" || cfg.AttachmentStorageSecretKey == "" || cfg.AttachmentStorageEndpoint == "" {
 		return "", errors.New("附件云存储配置不完整")
 	}
@@ -423,189 +328,19 @@ func UploadAttachmentToCloud(cfg *models.SiteConfig, preferredFileName string, c
 	client := s3.NewFromConfig(awsConfig, func(o *s3.Options) {
 		o.UsePathStyle = cfg.AttachmentStorageUsePathStyle
 	})
-
-	db, dbErr := database.GetDB()
-	if dbErr != nil {
-		return "", dbErr
+	if ownerUserID == 0 {
+		return "", errors.New("未登录或登录已过期")
 	}
-	if contentHash != "" {
-		var existing models.CloudAttachmentObject
-		if err := db.Where("content_hash = ?", contentHash).Order("id ASC").First(&existing).Error; err == nil {
-			exists, sameContent, verifyErr := cloudObjectMatchesContentHash(context.TODO(), client, cfg.AttachmentStorageBucket, existing.ObjectKey, contentHash, false)
-			if verifyErr != nil {
-				return "", verifyErr
-			}
-			var grantCount int64
-			var publicGrantCount int64
-			if err := db.Model(&models.LocalAttachmentGrant{}).Where("kind = ? AND name = ?", "cloud", existing.PublicID).Count(&grantCount).Error; err != nil {
-				return "", err
-			}
-			if grantCount > 0 {
-				if err := db.Model(&models.LocalAttachmentGrant{}).
-					Where("kind = ? AND name = ? AND visibility = ?", "cloud", existing.PublicID, "public").
-					Count(&publicGrantCount).Error; err != nil {
-					return "", err
-				}
-			}
-			if exists && sameContent && (grantCount == 0 || publicGrantCount > 0) {
-				return fmt.Sprintf("/api/cloud-attachments/%s/%s", existing.PublicID, url.PathEscape(existing.OriginalName)), nil
-			}
-			if !exists {
-				if err := db.Transaction(func(tx *gorm.DB) error {
-					if err := tx.Where("kind = ? AND name = ?", "cloud", existing.PublicID).Delete(&models.LocalAttachmentGrant{}).Error; err != nil {
-						return err
-					}
-					return tx.Delete(&existing).Error
-				}); err != nil {
-					return "", err
-				}
-			}
-		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return "", err
-		}
-	}
-
-	var contentLength int64
+	var referenceSize int64
 	if _, err := content.Seek(0, io.SeekStart); err == nil {
 		if n, err := content.Seek(0, io.SeekEnd); err == nil {
-			contentLength = n
+			referenceSize = n
 		}
-		content.Seek(0, io.SeekStart)
+		_, _ = content.Seek(0, io.SeekStart)
 	}
-
-	_, prefix := splitPublicBaseURL(cfg.AttachmentStoragePublicBaseURL)
-	storageID := uuid.NewString()
-	publicID := uuid.NewString()
-	key := storageID + "/" + strings.TrimLeft(preferredFileName, "/")
-	if prefix != "" {
-		key = prefix + "/" + key
-	}
-
-	if _, err := content.Seek(0, io.SeekStart); err != nil {
-		return "", err
-	}
-
-	// 上传文件
-	_, err = client.PutObject(context.TODO(), &s3.PutObjectInput{
-		Bucket:      aws.String(cfg.AttachmentStorageBucket),
-		Key:         aws.String(key),
-		Body:        content,
-		ContentType: aws.String(contentType),
-		Metadata: map[string]string{
-			attachmentSHA256MetadataKey: contentHash,
-		},
-		ContentLength: func() *int64 {
-			if contentLength > 0 {
-				return aws.Int64(contentLength)
-			}
-			return nil
-		}(),
-	})
-	if err != nil {
-		return "", fmt.Errorf("上传到云存储失败: %v", err)
-	}
-
-	record := models.CloudAttachmentObject{
-		PublicID:     publicID,
-		ObjectKey:    key,
-		OriginalName: preferredFileName,
-		ContentType:  contentType,
-		ContentHash:  contentHash,
-	}
-	if dbErr := db.Create(&record).Error; dbErr != nil {
-		_, _ = client.DeleteObject(context.TODO(), &s3.DeleteObjectInput{Bucket: aws.String(cfg.AttachmentStorageBucket), Key: aws.String(key)})
-		return "", dbErr
-	}
-	return fmt.Sprintf("/api/cloud-attachments/%s/%s", publicID, url.PathEscape(preferredFileName)), nil
-}
-
-func findCloudAttachmentByContentHash(ctx context.Context, client *s3.Client, bucket, contentHash string) (string, bool, error) {
-	if contentHash == "" {
-		return "", false, nil
-	}
-	var token *string
-	for {
-		resp, err := client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-			Bucket:            aws.String(bucket),
-			ContinuationToken: token,
-			MaxKeys:           aws.Int32(1000),
-		})
-		if err != nil {
-			return "", false, err
-		}
-		for _, obj := range resp.Contents {
-			key := strings.TrimLeft(aws.ToString(obj.Key), "/")
-			if key == "" {
-				continue
-			}
-			_, sameContent, err := cloudObjectMatchesContentHash(ctx, client, bucket, key, contentHash, false)
-			if err != nil {
-				return "", false, err
-			}
-			if sameContent {
-				return key, true, nil
-			}
-		}
-		if aws.ToBool(resp.IsTruncated) && resp.NextContinuationToken != nil && aws.ToString(resp.NextContinuationToken) != "" {
-			token = resp.NextContinuationToken
-			continue
-		}
-		break
-	}
-	return "", false, nil
-}
-
-func cloudObjectMatchesContentHash(ctx context.Context, client *s3.Client, bucket, key, contentHash string, allowBodyHash bool) (bool, bool, error) {
-	head, err := client.HeadObject(ctx, &s3.HeadObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
-	})
-	if err != nil {
-		if isS3NotFound(err) {
-			return false, false, nil
-		}
-		return false, false, err
-	}
-	if contentHash != "" {
-		legacyName := filepath.Base(strings.TrimLeft(key, "/"))
-		if strings.TrimSuffix(legacyName, filepath.Ext(legacyName)) == contentHash {
-			return true, true, nil
-		}
-		for k, v := range head.Metadata {
-			if strings.EqualFold(k, attachmentSHA256MetadataKey) && strings.EqualFold(strings.TrimSpace(v), contentHash) {
-				return true, true, nil
-			}
-		}
-	}
-	if allowBodyHash && contentHash != "" {
-		obj, err := client.GetObject(ctx, &s3.GetObjectInput{
-			Bucket: aws.String(bucket),
-			Key:    aws.String(key),
-		})
-		if err != nil {
-			if isS3NotFound(err) {
-				return false, false, nil
-			}
-			return true, false, err
-		}
-		defer obj.Body.Close()
-		existingHash, err := attachmentContentHashFromReader(obj.Body)
-		if err != nil {
-			return true, false, err
-		}
-		return true, existingHash == contentHash, nil
-	}
-	return true, false, nil
-}
-
-func isS3NotFound(err error) bool {
-	var apiErr smithy.APIError
-	if errors.As(err, &apiErr) {
-		code := strings.ToLower(apiErr.ErrorCode())
-		return code == "notfound" || code == "nosuchkey" || code == "404"
-	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "notfound") || strings.Contains(msg, "not found") || strings.Contains(msg, "nosuchkey") || strings.Contains(msg, "status code: 404")
+	_, blobPrefix := splitPublicBaseURL(cfg.AttachmentStoragePublicBaseURL)
+	store := attachmentregistry.NewS3Store(client, cfg.AttachmentStorageBucket, blobPrefix)
+	return storeAttachmentReference(context.Background(), store, kind, ownerUserID, preferredFileName, contentType, contentHash, referenceSize, content)
 }
 
 // 检查文件类型是否合法
@@ -629,16 +364,6 @@ func isAllowedType(contentType string, allowedTypes []string) bool {
 func isAllowedImageType(contentType string, allowedTypes []string) bool {
 	contentType = strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
 	return isAllowedType(contentType, allowedTypes) || strings.HasPrefix(contentType, "image/")
-}
-
-// 创建存储图片的目录
-func createImageDirIfNotExist(imagePath string) error {
-	if _, err := os.Stat(imagePath); os.IsNotExist(err) {
-		if err := os.MkdirAll(imagePath, os.ModePerm); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // UploadVideo 上传视频并返回视频的URL
@@ -735,13 +460,13 @@ func UploadVideo(c *gin.Context, allowedExtensions []string, siteConfig *models.
 			if _, err := f.Seek(0, io.SeekStart); err != nil {
 				return "", err
 			}
-			return UploadAttachmentToCloud(siteConfig, preferredFileName, f, contentType, contentHash)
+			return UploadAttachmentToCloud(siteConfig, "video", c.GetUint("user_id"), preferredFileName, f, contentType, contentHash)
 		}
 		if seeker, ok := srcFile.(io.ReadSeeker); ok {
 			if _, err := seeker.Seek(0, io.SeekStart); err != nil {
 				return "", err
 			}
-			return UploadAttachmentToCloud(siteConfig, preferredFileName, seeker, contentType, contentHash)
+			return UploadAttachmentToCloud(siteConfig, "video", c.GetUint("user_id"), preferredFileName, seeker, contentType, contentHash)
 		}
 		return "", errors.New("无法读取上传文件")
 	}
@@ -750,66 +475,24 @@ func UploadVideo(c *gin.Context, allowedExtensions []string, siteConfig *models.
 	// 创建存储视频的目录
 	// 本地存储逻辑
 	// 确定视频存储路径，优先级：/data/video > /app/data/video > ./data/video
-	videoPath := "./data/video"
-	if _, err := os.Stat("/data"); err == nil {
-		videoPath = "/data/video"
-	} else if _, err := os.Stat("/app/data"); err == nil {
-		videoPath = "/app/data/video"
+	ownerUserID := c.GetUint("user_id")
+	if ownerUserID == 0 {
+		return "", errors.New("未登录或登录已过期")
 	}
-
-	if err := createImageDirIfNotExist(videoPath); err != nil {
-		return "", err
-	}
-
-	newFileName, existed, err := localAttachmentFileNameForContent(videoPath, preferredFileName, contentHash)
-	if err != nil {
-		return "", err
-	}
-	newFileName, existed, err = isolateRestrictedLocalAttachmentReuse("video", preferredFileName, newFileName, existed)
-	if err != nil {
-		return "", err
-	}
-
-	savePath := filepath.Join(videoPath, newFileName)
-	if !existed && !fileExists(savePath) {
-		if uploadPath != "" {
-			in, err := os.Open(uploadPath)
-			if err != nil {
-				return "", err
-			}
-			defer in.Close()
-			out, err := os.Create(savePath)
-			if err != nil {
-				return "", err
-			}
-			if _, err := io.Copy(out, in); err != nil {
-				out.Close()
-				_ = os.Remove(savePath)
-				return "", errors.New("视频上传失败")
-			}
-			if err := out.Close(); err != nil {
-				_ = os.Remove(savePath)
-				return "", errors.New("视频上传失败")
-			}
-		} else {
-			out, err := os.Create(savePath)
-			if err != nil {
-				return "", errors.New("视频上传失败")
-			}
-			if _, err := io.Copy(out, srcFile); err != nil {
-				out.Close()
-				_ = os.Remove(savePath)
-				return "", errors.New("视频上传失败")
-			}
-			if err := out.Close(); err != nil {
-				_ = os.Remove(savePath)
-				return "", errors.New("视频上传失败")
-			}
+	var localContent io.ReadSeeker = srcFile
+	contentSize := file.Size
+	if uploadPath != "" {
+		compressed, err := os.Open(uploadPath)
+		if err != nil {
+			return "", err
+		}
+		defer compressed.Close()
+		localContent = compressed
+		if info, err := compressed.Stat(); err == nil {
+			contentSize = info.Size()
 		}
 	}
-
-	videoURL := fmt.Sprintf("/api/video/%s", url.PathEscape(newFileName))
-	return videoURL, nil
+	return storeAttachmentReference(c.Request.Context(), attachmentregistry.NewLocalStore(attachmentregistry.DefaultLocalRoot()), "video", ownerUserID, preferredFileName, contentType, contentHash, contentSize, localContent)
 }
 
 // UploadAudio 上传音频并返回音频的URL
@@ -845,61 +528,14 @@ func UploadAudio(c *gin.Context, allowedMimeTypes []string, siteConfig *models.S
 		if _, err := srcFile.Seek(0, io.SeekStart); err != nil {
 			return "", err
 		}
-		return UploadAttachmentToCloud(siteConfig, preferredFileName, srcFile, contentType, contentHash)
+		return UploadAttachmentToCloud(siteConfig, "audio", c.GetUint("user_id"), preferredFileName, srcFile, contentType, contentHash)
 	}
 
-	audioPath := "./data/audio"
-	if _, err := os.Stat("/data"); err == nil {
-		audioPath = "/data/audio"
-	} else if _, err := os.Stat("/app/data"); err == nil {
-		audioPath = "/app/data/audio"
+	ownerUserID := c.GetUint("user_id")
+	if ownerUserID == 0 {
+		return "", errors.New("未登录或登录已过期")
 	}
-
-	if err := createImageDirIfNotExist(audioPath); err != nil {
-		return "", err
-	}
-
-	newFileName, existed, err := localAttachmentFileNameForContent(audioPath, preferredFileName, contentHash)
-	if err != nil {
-		return "", err
-	}
-	newFileName, existed, err = isolateRestrictedLocalAttachmentReuse("audio", preferredFileName, newFileName, existed)
-	if err != nil {
-		return "", err
-	}
-
-	savePath := filepath.Join(audioPath, newFileName)
-	if !existed && !fileExists(savePath) {
-		if _, err := srcFile.Seek(0, io.SeekStart); err != nil {
-			return "", err
-		}
-		out, err := os.Create(savePath)
-		if err != nil {
-			return "", errors.New("音频上传失败")
-		}
-		if _, err := io.Copy(out, srcFile); err != nil {
-			out.Close()
-			_ = os.Remove(savePath)
-			return "", errors.New("音频上传失败")
-		}
-		if err := out.Close(); err != nil {
-			_ = os.Remove(savePath)
-			return "", errors.New("音频上传失败")
-		}
-	}
-
-	audioURL := fmt.Sprintf("/api/audio/%s", url.PathEscape(newFileName))
-	return audioURL, nil
-}
-
-func localAttachmentStorageDir(name string) string {
-	dir := filepath.Join(".", "data", name)
-	if _, err := os.Stat("/data"); err == nil {
-		dir = filepath.Join("/data", name)
-	} else if _, err := os.Stat("/app/data"); err == nil {
-		dir = filepath.Join("/app/data", name)
-	}
-	return dir
+	return storeAttachmentReference(c.Request.Context(), attachmentregistry.NewLocalStore(attachmentregistry.DefaultLocalRoot()), "audio", ownerUserID, preferredFileName, contentType, contentHash, file.Size, srcFile)
 }
 
 // UploadFileAttachment uploads non-media attachments and returns the public URL.
@@ -938,42 +574,12 @@ func UploadFileAttachment(c *gin.Context, siteConfig *models.SiteConfig) (string
 		if _, err := seeker.Seek(0, io.SeekStart); err != nil {
 			return "", err
 		}
-		return UploadAttachmentToCloud(siteConfig, preferredFileName, seeker, contentType, contentHash)
+		return UploadAttachmentToCloud(siteConfig, "file", c.GetUint("user_id"), preferredFileName, seeker, contentType, contentHash)
 	}
 
-	attachmentPath := localAttachmentStorageDir("attachments")
-	if err := createImageDirIfNotExist(attachmentPath); err != nil {
-		return "", err
+	ownerUserID := c.GetUint("user_id")
+	if ownerUserID == 0 {
+		return "", errors.New("未登录或登录已过期")
 	}
-
-	newFileName, existed, err := localAttachmentFileNameForContent(attachmentPath, preferredFileName, contentHash)
-	if err != nil {
-		return "", err
-	}
-	newFileName, existed, err = isolateRestrictedLocalAttachmentReuse("file", preferredFileName, newFileName, existed)
-	if err != nil {
-		return "", err
-	}
-
-	savePath := filepath.Join(attachmentPath, newFileName)
-	if !existed && !fileExists(savePath) {
-		if _, err := seeker.Seek(0, io.SeekStart); err != nil {
-			return "", err
-		}
-		out, err := os.Create(savePath)
-		if err != nil {
-			return "", errors.New("附件上传失败")
-		}
-		if _, err := io.Copy(out, seeker); err != nil {
-			out.Close()
-			_ = os.Remove(savePath)
-			return "", errors.New("附件上传失败")
-		}
-		if err := out.Close(); err != nil {
-			_ = os.Remove(savePath)
-			return "", errors.New("附件上传失败")
-		}
-	}
-
-	return fmt.Sprintf("/api/files/%s", url.PathEscape(newFileName)), nil
+	return storeAttachmentReference(c.Request.Context(), attachmentregistry.NewLocalStore(attachmentregistry.DefaultLocalRoot()), "file", ownerUserID, preferredFileName, contentType, contentHash, file.Size, seeker)
 }

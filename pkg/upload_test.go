@@ -2,16 +2,47 @@ package pkg
 
 import (
 	"bytes"
-	"os"
-	"path/filepath"
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/glebarez/sqlite"
+	attachmentregistry "github.com/rcy1314/echo-noise/internal/attachments"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"gorm.io/gorm"
 )
+
+func TestStoreAttachmentReferenceReturnsSeparateCompatibleURLsAndOneBlob(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	if err := db.AutoMigrate(&models.AttachmentBlob{}, &models.AttachmentReference{}); err != nil {
+		t.Fatalf("migrate attachment registry: %v", err)
+	}
+	database.DB = db
+	t.Cleanup(func() { database.DB = nil })
+
+	content := []byte("same json bytes")
+	contentHash := attachmentContentHashFromBytes(content)
+	store := attachmentregistry.NewLocalStore(t.TempDir())
+	first, err := storeAttachmentReference(context.Background(), store, "file", 7, "auth.json", "application/json", contentHash, int64(len(content)), bytes.NewReader(content))
+	if err != nil {
+		t.Fatalf("store first attachment: %v", err)
+	}
+	second, err := storeAttachmentReference(context.Background(), store, "file", 7, "auth.json", "application/json", contentHash, int64(len(content)), bytes.NewReader(content))
+	if err != nil {
+		t.Fatalf("store second attachment: %v", err)
+	}
+	if first == second || !strings.HasPrefix(first, "/api/files/refs/") || !strings.HasSuffix(first, "/auth.json") || !strings.HasSuffix(second, "/auth.json") {
+		t.Fatalf("controlled attachment URLs = %q and %q", first, second)
+	}
+	var blobCount int64
+	if err := db.Model(&models.AttachmentBlob{}).Count(&blobCount).Error; err != nil || blobCount != 1 {
+		t.Fatalf("blob count = %d, err = %v", blobCount, err)
+	}
+}
 
 func TestAttachmentContentHashFromBytesIsStable(t *testing.T) {
 	first := attachmentContentHashFromBytes([]byte("same file"))
@@ -43,77 +74,6 @@ func TestSafeAttachmentFileNameKeepsOriginalStem(t *testing.T) {
 	name := safeAttachmentFileName(`C:\uploads\假期照片.PNG`, ".png", "image")
 	if name != "假期照片.png" {
 		t.Fatalf("expected original stem with normalized extension, got %q", name)
-	}
-}
-
-func TestLocalAttachmentFileNameForContentDeduplicatesExistingFile(t *testing.T) {
-	dir := t.TempDir()
-	content := []byte("same file")
-	if err := os.WriteFile(filepath.Join(dir, "already-here.png"), content, 0644); err != nil {
-		t.Fatalf("write fixture: %v", err)
-	}
-
-	name, existed, err := localAttachmentFileNameForContent(dir, "upload.png", attachmentContentHashFromBytes(content))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !existed || name != "already-here.png" {
-		t.Fatalf("expected to reuse existing file, got name=%q existed=%v", name, existed)
-	}
-}
-
-func TestLocalAttachmentFileNameForContentSequencesNameConflict(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "photo.png"), []byte("different file"), 0644); err != nil {
-		t.Fatalf("write fixture: %v", err)
-	}
-
-	name, existed, err := localAttachmentFileNameForContent(dir, "photo.png", attachmentContentHashFromBytes([]byte("new file")))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if existed || name != "photo(1).png" {
-		t.Fatalf("expected sequenced filename, got name=%q existed=%v", name, existed)
-	}
-}
-
-func TestRestrictedLocalAttachmentDeduplicationUsesAnIsolatedFileName(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open database: %v", err)
-	}
-	if err := db.AutoMigrate(&models.LocalAttachmentGrant{}); err != nil {
-		t.Fatalf("migrate local attachment grants: %v", err)
-	}
-	database.DB = db
-	t.Cleanup(func() { database.DB = nil })
-	if err := db.Create(&models.LocalAttachmentGrant{
-		Kind:        "file",
-		Name:        "existing.pdf",
-		MessageID:   1,
-		OwnerUserID: 7,
-		Visibility:  "private",
-	}).Error; err != nil {
-		t.Fatalf("create restricted grant: %v", err)
-	}
-
-	name, existed, err := isolateRestrictedLocalAttachmentReuse("file", "report.pdf", "existing.pdf", true)
-	if err != nil {
-		t.Fatalf("isolate restricted duplicate: %v", err)
-	}
-	if existed || name == "existing.pdf" || filepath.Ext(name) != ".pdf" {
-		t.Fatalf("restricted duplicate result = name %q existed %v", name, existed)
-	}
-
-	if err := db.Model(&models.LocalAttachmentGrant{}).Where("kind = ? AND name = ?", "file", "existing.pdf").Update("visibility", "public").Error; err != nil {
-		t.Fatalf("make existing grant public: %v", err)
-	}
-	name, existed, err = isolateRestrictedLocalAttachmentReuse("file", "report.pdf", "existing.pdf", true)
-	if err != nil {
-		t.Fatalf("reuse public duplicate: %v", err)
-	}
-	if !existed || name != "existing.pdf" {
-		t.Fatalf("public duplicate result = name %q existed %v", name, existed)
 	}
 }
 

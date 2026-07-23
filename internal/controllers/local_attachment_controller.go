@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	attachmentregistry "github.com/rcy1314/echo-noise/internal/attachments"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/services"
@@ -17,9 +18,17 @@ import (
 // every message that references the file. Unreferenced files remain available
 // for upload previews, avatars, backgrounds, and other pre-existing site assets.
 func ServeLocalAttachment(kind string, root string) gin.HandlerFunc {
+	return serveLocalAttachment(kind, root, attachmentregistry.DefaultLocalRoot())
+}
+
+func serveLocalAttachment(kind string, root string, blobRoot string) gin.HandlerFunc {
 	rootAbs, _ := filepath.Abs(root)
 	return func(c *gin.Context) {
 		rawName := strings.TrimPrefix(c.Param("name"), "/")
+		if strings.HasPrefix(rawName, "refs/") {
+			serveLocalAttachmentReference(c, kind, blobRoot, rawName)
+			return
+		}
 		name, err := url.PathUnescape(rawName)
 		if err != nil || name == "" || name != filepath.Base(name) || strings.ContainsAny(name, `/\`) {
 			c.Status(http.StatusNotFound)

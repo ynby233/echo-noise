@@ -31,6 +31,7 @@ func registerAttachmentManagementRoutes(authRoutes *gin.RouterGroup) {
 	attachments.GET("/other", middleware.AdminAuthMiddleware(), controllers.ListOtherAttachments)
 	attachments.GET("/other/", middleware.AdminAuthMiddleware(), controllers.ListOtherAttachments)
 	attachments.POST("/download-zip", middleware.AdminAuthMiddleware(), controllers.DownloadAttachmentZip)
+	attachments.DELETE("/references/:id", middleware.AdminAuthMiddleware(), controllers.DeleteAttachmentReference)
 	attachments.DELETE("/images/*name", middleware.AdminAuthMiddleware(), controllers.DeleteImageAttachment)
 	attachments.DELETE("/video/*name", middleware.AdminAuthMiddleware(), controllers.DeleteVideoAttachment)
 	attachments.DELETE("/audio/*name", middleware.AdminAuthMiddleware(), controllers.DeleteAudioAttachment)

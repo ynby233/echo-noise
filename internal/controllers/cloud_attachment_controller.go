@@ -22,6 +22,9 @@ func ServeCloudAttachment(c *gin.Context) {
 		c.Status(http.StatusNotFound)
 		return
 	}
+	if tryServeCloudAttachmentReference(c, publicID) {
+		return
+	}
 	db, err := database.GetDB()
 	if err != nil {
 		c.Status(http.StatusServiceUnavailable)

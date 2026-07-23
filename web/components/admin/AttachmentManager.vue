@@ -38,7 +38,7 @@
       <div v-if="activeTab==='images'">
       <div v-if="images.length===0" class="text-sm" :class="theme?.mutedText">暂无图片附件</div>
       <div v-else class="attachment-grid">
-          <div v-for="item in imagesDisplay" :key="item.name" class="attachment-item-card rounded-lg border p-2" :class="[theme?.border, isSelected('image', item) ? 'attachment-item-selected' : '']" :data-select-key="selectionKey('image', item)">
+          <div v-for="item in imagesDisplay" :key="itemIdentity(item)" class="attachment-item-card rounded-lg border p-2" :class="[theme?.border, isSelected('image', item) ? 'attachment-item-selected' : '']" :data-select-key="selectionKey('image', item)">
             <label class="attachment-select-check" :class="{ 'is-checked': isSelected('image', item) }" @click.stop @pointerdown.stop>
               <input class="attachment-select-input" type="checkbox" :checked="isSelected('image', item)" aria-label="选择图片附件" @change="toggleSelect('image', item)" />
               <span class="attachment-check-visual" aria-hidden="true">
@@ -49,6 +49,8 @@
               <div class="attachment-file-meta">
                 <div class="attachment-file-name text-xs" :class="theme?.text">{{ item.name }}</div>
                 <div class="attachment-file-submeta text-xs" :class="theme?.mutedText">{{ formatSize(item.size) }} · {{ formatDate(item.modified_at) }}</div>
+                <div v-if="item.logical_id" class="attachment-logical-id text-[10px]" :class="theme?.mutedText">附件 ID：{{ item.logical_id }}</div>
+                <div v-if="item.reference_count > 1" class="text-[10px]" :class="theme?.mutedText">物理内容由 {{ item.reference_count }} 个逻辑附件共享</div>
               </div>
               <div class="attachment-actions">
                 <UButton size="xs" icon="i-heroicons-arrow-down-tray" color="gray" variant="soft" title="下载" aria-label="下载" @click="downloadAttachment(item)" />
@@ -83,7 +85,7 @@
       <div v-else-if="activeTab==='videos'">
         <div v-if="videos.length===0" class="text-sm" :class="theme?.mutedText">暂无视频附件</div>
         <div v-else class="attachment-grid">
-          <div v-for="item in videosDisplay" :key="item.name" class="attachment-item-card rounded-lg border p-2" :class="[theme?.border, isSelected('video', item) ? 'attachment-item-selected' : '']" :data-select-key="selectionKey('video', item)">
+          <div v-for="item in videosDisplay" :key="itemIdentity(item)" class="attachment-item-card rounded-lg border p-2" :class="[theme?.border, isSelected('video', item) ? 'attachment-item-selected' : '']" :data-select-key="selectionKey('video', item)">
             <label class="attachment-select-check" :class="{ 'is-checked': isSelected('video', item) }" @click.stop @pointerdown.stop>
               <input class="attachment-select-input" type="checkbox" :checked="isSelected('video', item)" aria-label="选择视频附件" @change="toggleSelect('video', item)" />
               <span class="attachment-check-visual" aria-hidden="true">
@@ -94,6 +96,8 @@
               <div class="attachment-file-meta">
                 <div class="attachment-file-name text-xs" :class="theme?.text">{{ item.name }}</div>
                 <div class="attachment-file-submeta text-xs" :class="theme?.mutedText">{{ formatSize(item.size) }} · {{ formatDate(item.modified_at) }}</div>
+                <div v-if="item.logical_id" class="attachment-logical-id text-[10px]" :class="theme?.mutedText">附件 ID：{{ item.logical_id }}</div>
+                <div v-if="item.reference_count > 1" class="text-[10px]" :class="theme?.mutedText">物理内容由 {{ item.reference_count }} 个逻辑附件共享</div>
               </div>
               <div class="attachment-actions">
                 <UButton size="xs" icon="i-heroicons-arrow-down-tray" color="gray" variant="soft" title="下载" aria-label="下载" @click="downloadAttachment(item)" />
@@ -128,7 +132,7 @@
       <div v-else-if="activeTab==='audios'">
         <div v-if="audios.length===0" class="text-sm" :class="theme?.mutedText">暂无音频附件</div>
         <div v-else class="attachment-grid">
-          <div v-for="item in audiosDisplay" :key="item.name" class="attachment-item-card rounded-lg border p-2" :class="[theme?.border, isSelected('audio', item) ? 'attachment-item-selected' : '']" :data-select-key="selectionKey('audio', item)">
+          <div v-for="item in audiosDisplay" :key="itemIdentity(item)" class="attachment-item-card rounded-lg border p-2" :class="[theme?.border, isSelected('audio', item) ? 'attachment-item-selected' : '']" :data-select-key="selectionKey('audio', item)">
             <label class="attachment-select-check" :class="{ 'is-checked': isSelected('audio', item) }" @click.stop @pointerdown.stop>
               <input class="attachment-select-input" type="checkbox" :checked="isSelected('audio', item)" aria-label="选择音频附件" @change="toggleSelect('audio', item)" />
               <span class="attachment-check-visual" aria-hidden="true">
@@ -139,6 +143,8 @@
               <div class="attachment-file-meta">
                 <div class="attachment-file-name text-xs" :class="theme?.text">{{ item.name }}</div>
                 <div class="attachment-file-submeta text-xs" :class="theme?.mutedText">{{ formatSize(item.size) }} · {{ formatDate(item.modified_at) }}</div>
+                <div v-if="item.logical_id" class="attachment-logical-id text-[10px]" :class="theme?.mutedText">附件 ID：{{ item.logical_id }}</div>
+                <div v-if="item.reference_count > 1" class="text-[10px]" :class="theme?.mutedText">物理内容由 {{ item.reference_count }} 个逻辑附件共享</div>
               </div>
               <div class="attachment-actions">
                 <UButton size="xs" icon="i-heroicons-arrow-down-tray" color="gray" variant="soft" title="下载" aria-label="下载" @click="downloadAttachment(item)" />
@@ -173,7 +179,7 @@
       <div v-else>
         <div v-if="others.length===0" class="text-sm" :class="theme?.mutedText">暂无其他附件</div>
         <div v-else class="attachment-grid">
-          <div v-for="item in othersDisplay" :key="item.name" class="attachment-item-card rounded-lg border p-2" :class="[theme?.border, isSelected('other', item) ? 'attachment-item-selected' : '']" :data-select-key="selectionKey('other', item)">
+          <div v-for="item in othersDisplay" :key="itemIdentity(item)" class="attachment-item-card rounded-lg border p-2" :class="[theme?.border, isSelected('other', item) ? 'attachment-item-selected' : '']" :data-select-key="selectionKey('other', item)">
             <label class="attachment-select-check" :class="{ 'is-checked': isSelected('other', item) }" @click.stop @pointerdown.stop>
               <input class="attachment-select-input" type="checkbox" :checked="isSelected('other', item)" aria-label="选择其他附件" @change="toggleSelect('other', item)" />
               <span class="attachment-check-visual" aria-hidden="true">
@@ -184,6 +190,8 @@
               <div class="attachment-file-meta">
                 <div class="attachment-file-name text-xs" :class="theme?.text">{{ item.name }}</div>
                 <div class="attachment-file-submeta text-xs" :class="theme?.mutedText">{{ formatSize(item.size) }} · {{ formatDate(item.modified_at) }}</div>
+                <div v-if="item.logical_id" class="attachment-logical-id text-[10px]" :class="theme?.mutedText">附件 ID：{{ item.logical_id }}</div>
+                <div v-if="item.reference_count > 1" class="text-[10px]" :class="theme?.mutedText">物理内容由 {{ item.reference_count }} 个逻辑附件共享</div>
               </div>
               <div class="attachment-actions">
                 <UButton size="xs" icon="i-heroicons-arrow-down-tray" color="gray" variant="soft" title="下载" aria-label="下载" @click="downloadAttachment(item)" />
@@ -304,7 +312,8 @@ const kindLabel = (kind: AttachmentKind) => {
   return '视频'
 }
 
-const itemKeyValue = (item: any) => String(item?.key || item?.name || '')
+const itemIdentity = (item: any) => String(item?.logical_id || item?.key || item?.name || '')
+const itemKeyValue = (item: any) => itemIdentity(item)
 const selectionKey = (kind: AttachmentKind, item: any) => `${kind}:${itemKeyValue(item)}`
 const isSelected = (kind: AttachmentKind, item: any) => !!selected.value[selectionKey(kind, item)]
 const setSelected = (key: string, value: boolean) => {
@@ -360,8 +369,11 @@ const formatDate = (s: string | Date) => {
   return d.toLocaleString()
 }
 
-const isExpanded = (item: any) => !!expanded.value[item.name]
-const toggleExpand = (item: any) => { expanded.value[item.name] = !expanded.value[item.name] }
+const isExpanded = (item: any) => !!expanded.value[itemIdentity(item)]
+const toggleExpand = (item: any) => {
+  const key = itemIdentity(item)
+  expanded.value[key] = !expanded.value[key]
+}
 
 const toTime = (it: any) => {
   const raw = it?.modified_at ?? it?.modifiedAt ?? it?.updated_at ?? it?.updatedAt ?? it?.created_at ?? it?.createdAt
@@ -421,6 +433,13 @@ const openDelete = (type: AttachmentKind, item: any) => {
 }
 const deleteTypeLabel = computed(() => kindLabel(deleteType.value))
 const deleteOneAttachment = async (kind: AttachmentKind, item: any) => {
+  if (item?.logical_id) {
+    const url = `${baseApi}/attachments/references/${encodeURIComponent(item.logical_id)}`
+    const resp = await fetch(url, { method: 'DELETE', credentials: 'include', headers: authHeaders.value as any })
+    const js = await resp.json().catch(() => null)
+    if (!resp.ok || !js || js.code !== 1) throw new Error(js?.msg || '删除失败')
+    return
+  }
   const key = item?.key || item?.name
   const url = `${baseApi}/attachments/${endpointForKind(kind)}/${encodeURIComponent(key)}`
   const resp = await fetch(url, { method: 'DELETE', credentials: 'include', headers: authHeaders.value as any })
@@ -485,7 +504,8 @@ const downloadSelectedZip = async () => {
         items: items.map((entry) => ({
           type: entry.kind,
           key: itemKeyValue(entry.item),
-          name: entry.item?.name || itemKeyValue(entry.item)
+          name: entry.item?.name || itemKeyValue(entry.item),
+          logical_id: entry.item?.logical_id || ''
         }))
       })
     })
@@ -648,6 +668,11 @@ onBeforeUnmount(() => {
   position: relative;
   min-height: 32px;
   touch-action: pan-y;
+}
+
+.attachment-logical-id {
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .attachment-selection-surface.is-selecting {

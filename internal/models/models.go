@@ -53,6 +53,35 @@ type CloudAttachmentObject struct {
 	UpdatedAt            time.Time `json:"updated_at"`
 }
 
+// AttachmentBlob is one physical object addressed by its content hash. Access
+// is never granted through this record directly; callers must resolve an
+// AttachmentReference first.
+type AttachmentBlob struct {
+	ID             uint      `gorm:"primaryKey" json:"id"`
+	StorageBackend string    `gorm:"type:varchar(64);not null;uniqueIndex:idx_attachment_blob_backend_hash" json:"storage_backend"`
+	StorageKey     string    `gorm:"type:varchar(1024);not null;uniqueIndex" json:"-"`
+	ContentHash    string    `gorm:"type:varchar(64);not null;uniqueIndex:idx_attachment_blob_backend_hash" json:"-"`
+	Size           int64     `gorm:"not null;default:0" json:"size"`
+	ContentType    string    `gorm:"type:varchar(191)" json:"content_type"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+// AttachmentReference is the logical attachment shown to users and admins.
+// Multiple references may safely share one AttachmentBlob while retaining
+// separate opaque ids, owners, and original names.
+type AttachmentReference struct {
+	ID           uint           `gorm:"primaryKey" json:"id"`
+	PublicID     string         `gorm:"type:varchar(64);not null;uniqueIndex" json:"public_id"`
+	BlobID       uint           `gorm:"not null;index" json:"blob_id"`
+	OwnerUserID  uint           `gorm:"not null;index" json:"owner_user_id"`
+	Kind         string         `gorm:"type:varchar(20);not null;index" json:"kind"`
+	OriginalName string         `gorm:"type:varchar(255);not null" json:"original_name"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	Blob         AttachmentBlob `gorm:"constraint:OnUpdate:CASCADE,OnDelete:RESTRICT;foreignKey:BlobID" json:"-"`
+}
+
 // LocalAttachmentGrant persists the last visibility under which a message
 // referenced a local file. Records intentionally survive message deletion or
 // reference removal so formerly restricted files cannot become public again.

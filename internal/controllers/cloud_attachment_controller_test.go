@@ -12,7 +12,7 @@ import (
 
 func TestServeCloudAttachmentUsesOpaqueMappingAndMessageVisibility(t *testing.T) {
 	db, r, owner, _ := setupCommentAccountTest(t)
-	if err := db.AutoMigrate(&models.CloudAttachmentObject{}); err != nil {
+	if err := db.AutoMigrate(&models.CloudAttachmentObject{}, &models.AttachmentBlob{}, &models.AttachmentReference{}); err != nil {
 		t.Fatalf("migrate cloud mapping: %v", err)
 	}
 	owner.Token = "cloud-owner-token"
@@ -134,5 +134,58 @@ func TestServeCloudAttachmentUsesOpaqueMappingAndMessageVisibility(t *testing.T)
 	}
 	if got := request(http.MethodGet, owner.Token, ""); got.Code != http.StatusOK {
 		t.Fatalf("disabling new cloud uploads broke an existing controlled attachment: %d", got.Code)
+	}
+}
+
+func TestServeCloudAttachmentReferenceResolvesSharedBlobBehindLogicalID(t *testing.T) {
+	db, r, owner, _ := setupCommentAccountTest(t)
+	if err := db.AutoMigrate(&models.AttachmentBlob{}, &models.AttachmentReference{}, &models.CloudAttachmentObject{}); err != nil {
+		t.Fatalf("migrate attachment registry: %v", err)
+	}
+
+	const body = "shared cloud blob"
+	storage := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if !strings.Contains(req.URL.Path, "/bucket/attachment-blobs/sha256/aa/aaaaaaaa") {
+			t.Fatalf("unexpected storage path %q", req.URL.Path)
+		}
+		w.Header().Set("Content-Type", "text/plain")
+		w.Header().Set("Content-Length", "17")
+		w.WriteHeader(http.StatusOK)
+		if req.Method != http.MethodHead {
+			_, _ = w.Write([]byte(body))
+		}
+	}))
+	defer storage.Close()
+	if err := db.Create(&models.SiteConfig{
+		AttachmentStorageEnabled:      true,
+		AttachmentStorageProvider:     "r2",
+		AttachmentStorageEndpoint:     storage.URL,
+		AttachmentStorageRegion:       "auto",
+		AttachmentStorageBucket:       "bucket",
+		AttachmentStorageAccessKey:    "access",
+		AttachmentStorageSecretKey:    "secret",
+		AttachmentStorageUsePathStyle: true,
+	}).Error; err != nil {
+		t.Fatalf("create attachment storage config: %v", err)
+	}
+	blob := models.AttachmentBlob{StorageBackend: "cloud", StorageKey: "attachment-blobs/sha256/aa/aaaaaaaa", ContentHash: strings.Repeat("a", 64), Size: int64(len(body)), ContentType: "text/plain"}
+	if err := db.Create(&blob).Error; err != nil {
+		t.Fatalf("create cloud blob: %v", err)
+	}
+	reference := models.AttachmentReference{PublicID: "logical-cloud-id", BlobID: blob.ID, OwnerUserID: owner.ID, Kind: "file", OriginalName: "auth.json"}
+	if err := db.Create(&reference).Error; err != nil {
+		t.Fatalf("create cloud reference: %v", err)
+	}
+	message := models.Message{Content: "[auth](/api/cloud-attachments/logical-cloud-id/auth.json)", UserID: owner.ID, Visibility: "public"}
+	if err := services.CreateMessage(&message); err != nil {
+		t.Fatalf("create public message: %v", err)
+	}
+	r.GET("/api/cloud-attachments/:id/*name", ServeCloudAttachment)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cloud-attachments/logical-cloud-id/auth.json", nil)
+	response := httptest.NewRecorder()
+	r.ServeHTTP(response, req)
+	if response.Code != http.StatusOK || response.Body.String() != body {
+		t.Fatalf("cloud logical reference response = %d %q", response.Code, response.Body.String())
 	}
 }

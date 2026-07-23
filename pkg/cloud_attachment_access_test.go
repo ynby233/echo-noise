@@ -13,12 +13,12 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestUploadAttachmentToCloudReturnsOpaqueControlledURL(t *testing.T) {
+func TestUploadAttachmentToCloudCreatesSeparateReferencesForOneObject(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}
-	if err := db.AutoMigrate(&models.CloudAttachmentObject{}, &models.LocalAttachmentGrant{}); err != nil {
+	if err := db.AutoMigrate(&models.CloudAttachmentObject{}, &models.AttachmentBlob{}, &models.AttachmentReference{}, &models.LocalAttachmentGrant{}); err != nil {
 		t.Fatalf("migrate cloud attachment mapping: %v", err)
 	}
 	database.DB = db
@@ -58,7 +58,7 @@ func TestUploadAttachmentToCloudReturnsOpaqueControlledURL(t *testing.T) {
 		AttachmentStoragePublicBaseURL: "https://public.example.test/note",
 	}
 	content := bytes.NewReader([]byte("opaque cloud attachment"))
-	url, err := UploadAttachmentToCloud(cfg, "report.txt", content, "text/plain", "")
+	url, err := UploadAttachmentToCloud(cfg, "file", 7, "report.txt", content, "text/plain", "")
 	if err != nil {
 		t.Fatalf("upload cloud attachment: %v", err)
 	}
@@ -66,32 +66,39 @@ func TestUploadAttachmentToCloudReturnsOpaqueControlledURL(t *testing.T) {
 		t.Fatalf("upload returned uncontrolled URL %q", url)
 	}
 
-	var object models.CloudAttachmentObject
-	if err := db.First(&object).Error; err != nil {
-		t.Fatalf("load cloud attachment mapping: %v", err)
+	var firstReference models.AttachmentReference
+	if err := db.Order("id ASC").First(&firstReference).Error; err != nil {
+		t.Fatalf("load cloud attachment reference: %v", err)
 	}
-	if object.PublicID == "" || object.ObjectKey == "" || object.OriginalName != "report.txt" {
-		t.Fatalf("invalid mapping: %#v", object)
+	var object models.AttachmentBlob
+	if err := db.First(&object, firstReference.BlobID).Error; err != nil {
+		t.Fatalf("load cloud attachment blob: %v", err)
 	}
-	if !strings.Contains(url, object.PublicID) || strings.Contains(url, object.ObjectKey) {
-		t.Fatalf("controlled URL %q exposes or omits mapping %#v", url, object)
+	if firstReference.PublicID == "" || firstReference.OriginalName != "report.txt" || object.StorageKey == "" {
+		t.Fatalf("invalid reference/blob: %#v %#v", firstReference, object)
 	}
-	if !strings.Contains(uploadedPath, object.ObjectKey) || strings.Contains(uploadedPath, object.PublicID) {
-		t.Fatalf("storage path %q should contain only opaque object key, mapping %#v", uploadedPath, object)
+	if !strings.Contains(url, firstReference.PublicID) || strings.Contains(url, object.StorageKey) {
+		t.Fatalf("controlled URL %q exposes or omits reference/blob %#v %#v", url, firstReference, object)
+	}
+	if !strings.Contains(uploadedPath, object.StorageKey) || strings.Contains(uploadedPath, firstReference.PublicID) {
+		t.Fatalf("storage path %q should contain only blob key, reference/blob %#v %#v", uploadedPath, firstReference, object)
 	}
 
-	duplicateURL, err := UploadAttachmentToCloud(cfg, "renamed-report.txt", bytes.NewReader([]byte("opaque cloud attachment")), "text/plain", "")
+	duplicateURL, err := UploadAttachmentToCloud(cfg, "file", 7, "renamed-report.txt", bytes.NewReader([]byte("opaque cloud attachment")), "text/plain", "")
 	if err != nil {
 		t.Fatalf("deduplicate controlled cloud attachment: %v", err)
 	}
-	if duplicateURL != url {
-		t.Fatalf("duplicate upload URL = %q, want existing controlled URL %q", duplicateURL, url)
+	if duplicateURL == url || !strings.HasSuffix(duplicateURL, "/renamed-report.txt") {
+		t.Fatalf("duplicate upload URL = %q, first URL %q", duplicateURL, url)
 	}
 	if putCount != 1 {
 		t.Fatalf("duplicate controlled upload issued %d PUT requests, want 1", putCount)
 	}
 	var count int64
-	if err := db.Model(&models.CloudAttachmentObject{}).Count(&count).Error; err != nil || count != 1 {
-		t.Fatalf("cloud mapping count = %d, err = %v", count, err)
+	if err := db.Model(&models.AttachmentBlob{}).Count(&count).Error; err != nil || count != 1 {
+		t.Fatalf("cloud blob count = %d, err = %v", count, err)
+	}
+	if err := db.Model(&models.AttachmentReference{}).Count(&count).Error; err != nil || count != 2 {
+		t.Fatalf("cloud reference count = %d, err = %v", count, err)
 	}
 }
