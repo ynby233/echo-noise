@@ -2977,13 +2977,19 @@ body.is-resizing-rendered-table-column * {
 }
 
 .markdown-preview .image-grid-item.site-attachment-failure,
-.rendered-table-expand-scroll .image-grid-item.site-attachment-failure,
-.markdown-preview .single-media.site-attachment-failure,
-.rendered-table-expand-scroll .single-media.site-attachment-failure {
+.rendered-table-expand-scroll .image-grid-item.site-attachment-failure {
   width: 100%;
   min-height: 100%;
   max-width: 100%;
   margin: 0;
+}
+
+.markdown-preview .single-media.site-attachment-failure,
+.rendered-table-expand-scroll .single-media.site-attachment-failure {
+  width: calc(100% - 16px);
+  min-height: 100%;
+  max-width: calc(100% - 16px);
+  margin: 8px;
 }
 
 .markdown-preview .site-attachment-failure__content,

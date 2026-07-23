@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 const webRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const renderer = await readFile(join(webRoot, 'components/index/MarkdownRenderer.vue'), 'utf8')
+const messageList = await readFile(join(webRoot, 'components/index/MessageList.vue'), 'utf8')
 
 assert.match(
   renderer,
@@ -66,6 +67,21 @@ assert.ok(
 assert.ok(
   videoFailureWithPosterCss.includes('background: #17191d;'),
   'a video failure with a poster must retain the dark player surface behind its cover and scrim',
+)
+
+const singleVisualFailureCss = renderer.match(/\.markdown-preview \.single-media\.site-attachment-failure,\s*\n\.rendered-table-expand-scroll \.single-media\.site-attachment-failure \{[\s\S]*?\n\}/)?.[0] || ''
+
+assert.ok(
+  singleVisualFailureCss.includes('width: calc(100% - 16px);') &&
+    singleVisualFailureCss.includes('max-width: calc(100% - 16px);') &&
+    singleVisualFailureCss.includes('margin: 8px;'),
+  'a standalone failed image or video must keep an inset card gutter so its rounded corners and shadow form one complete placeholder',
+)
+
+assert.match(
+  messageList,
+  /querySelector\('\.site-attachment-file, \.site-attachment-audio, \.site-attachment-failure'\)/,
+  'failed image and video placeholders must open the message overflow path so their card shadows are not clipped',
 )
 
 assert.match(

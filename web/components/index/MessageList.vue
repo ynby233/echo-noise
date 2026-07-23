@@ -1636,7 +1636,7 @@ const checkContentHeight = () => {
       } catch {}
       const hasImageGrid = !!measureEl.querySelector('.image-grid');
       hasGrid.value[msg.id] = hasImageGrid;
-      hasFileAttachment.value[msg.id] = !!measureEl.querySelector('.site-attachment-file, .site-attachment-audio');
+      hasFileAttachment.value[msg.id] = !!measureEl.querySelector('.site-attachment-file, .site-attachment-audio, .site-attachment-failure');
       if (hasImageGrid) {
         measuredMessageHeights.value[msg.id] = measureEl.scrollHeight;
         shouldShowExpandButton.value[msg.id] = false;
