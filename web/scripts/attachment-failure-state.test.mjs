@@ -54,6 +54,20 @@ assert.match(
   'deleted videos must render a dedicated video failure state',
 )
 
+const videoFailureCss = renderer.match(/\.markdown-preview \.site-attachment-failure--video,\s*\n\.rendered-table-expand-scroll \.site-attachment-failure--video \{[\s\S]*?\n\}/)?.[0] || ''
+const videoFailureWithPosterCss = renderer.match(/\.markdown-preview \.site-attachment-failure--video\.site-attachment-failure--with-poster,\s*\n\.rendered-table-expand-scroll \.site-attachment-failure--video\.site-attachment-failure--with-poster \{[\s\S]*?\n\}/)?.[0] || ''
+
+assert.ok(
+  videoFailureCss.includes('min-height: clamp(190px, 42vw, 420px);') &&
+    !videoFailureCss.includes('background: #17191d;'),
+  'a video failure without a poster must inherit the shared warm failure surface instead of looking like an empty black player',
+)
+
+assert.ok(
+  videoFailureWithPosterCss.includes('background: #17191d;'),
+  'a video failure with a poster must retain the dark player surface behind its cover and scrim',
+)
+
 assert.match(
   renderer,
   /getVideoPlaybackFrameForSource\(url\)/,

@@ -3072,7 +3072,6 @@ body.is-resizing-rendered-table-column * {
 .markdown-preview .site-attachment-failure--video,
 .rendered-table-expand-scroll .site-attachment-failure--video {
   min-height: clamp(190px, 42vw, 420px);
-  background: #17191d;
 }
 
 .markdown-preview .site-attachment-failure__poster,
@@ -3102,6 +3101,7 @@ body.is-resizing-rendered-table-column * {
 .rendered-table-expand-scroll .site-attachment-failure--video.site-attachment-failure--with-poster {
   place-items: end start;
   border-color: rgba(255, 255, 255, 0.16);
+  background: #17191d;
 }
 
 .markdown-preview .site-attachment-failure--with-poster .site-attachment-failure__scrim,
