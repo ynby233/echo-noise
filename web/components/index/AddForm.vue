@@ -27,7 +27,7 @@
           <button type="button" class="tb-btn nw-action-btn state-toggle-btn full-image-btn nw-tooltip-anchor" :class="{ 'is-enabled': fullImageAttachments }" :data-tooltip="`全图显示：${fullImageAttachments ? '已开启' : '已关闭'}`" :aria-label="`全图显示：${fullImageAttachments ? '已开启' : '已关闭'}`" :aria-pressed="fullImageAttachments" @click="toggleFullImageAttachments">
             <UIcon :name="fullImageAttachments ? 'i-mdi-image-size-select-actual' : 'i-mdi-image-size-select-large'" class="w-5 h-5" />
           </button>
-          <button type="button" class="tb-btn nw-action-btn state-toggle-btn notify-btn nw-tooltip-anchor" :class="{ 'is-enabled': enableNotify }" :data-tooltip="`推送：${enableNotify ? '已开启' : '已关闭'}`" :aria-label="`推送：${enableNotify ? '已开启' : '已关闭'}`" :aria-pressed="enableNotify" @click="toggleNotify">
+          <button v-if="canNotify" type="button" class="tb-btn nw-action-btn state-toggle-btn notify-btn nw-tooltip-anchor" :class="{ 'is-enabled': enableNotify }" :data-tooltip="`推送：${enableNotify ? '已开启' : '已关闭'}`" :aria-label="`推送：${enableNotify ? '已开启' : '已关闭'}`" :aria-pressed="enableNotify" @click="toggleNotify">
             <UIcon :name="enableNotify ? 'i-mdi-bell-ring-outline' : 'i-mdi-bell-outline'" class="w-5 h-5" />
           </button>
           <div ref="visibilityControlRef" class="visibility-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :data-tooltip="`可见范围：${visibilityLabel}`">
@@ -586,7 +586,7 @@ const saveDraft = () => {
     }
     localStorage.setItem(
       DRAFT_KEY,
-      JSON.stringify({ content: editorContent || '', private: !!Private.value, visibility: Visibility.value, notify: !!enableNotify.value, fullImageAttachments: !!fullImageAttachments.value, savedAt: Date.now() })
+      JSON.stringify({ content: editorContent || '', private: !!Private.value, visibility: Visibility.value, notify: canNotify.value && enableNotify.value, fullImageAttachments: !!fullImageAttachments.value, savedAt: Date.now() })
     )
   } catch {}
 }
@@ -619,10 +619,11 @@ const clearForm = () => {
 };
 
 const userStore = useUserStore();
-const canSetPublishTime = computed(() => {
+const canNotify = computed(() => {
   const user = userStore.user as any
   return !!(user?.is_admin || user?.IsAdmin)
 })
+const canSetPublishTime = computed(() => canNotify.value)
 
 const datetimeLocalToISO = (value: string) => {
   const raw = String(value || '').trim()
@@ -1180,8 +1181,8 @@ watch([MessageContent, fullImageAttachments], () => {
   MessageContentHtml.value = ''
 });
 
-watch(() => userStore.isLogin, (newLoginState) => {
-  if (newLoginState) enableNotify.value = false;
+watch(() => [userStore.isLogin, canNotify.value], () => {
+  if (!canNotify.value) enableNotify.value = false;
 }, { immediate: true });
 
 onMounted(async () => {
@@ -1212,7 +1213,7 @@ onMounted(async () => {
         const editorContent = stripFullImageAttachmentsMarker(draftContent)
         MessageContent.value = editorContent
         Visibility.value = normalizeMessageVisibility(draft?.visibility, typeof draft?.private === 'boolean' ? draft.private : Visibility.value === 'private')
-        if (typeof draft?.notify === 'boolean') enableNotify.value = draft.notify
+        if (canNotify.value && typeof draft?.notify === 'boolean') enableNotify.value = draft.notify
         vditorEditor.value?.setValue?.(editorContent)
         toast.add({ title: '草稿已恢复', description: '已自动恢复上次未发布内容', color: 'green', timeout: 2000 })
       }
@@ -1237,6 +1238,7 @@ onBeforeUnmount(() => {
   window.visualViewport?.removeEventListener('scroll', handleFloatingMenuViewportChange)
 });
 const toggleNotify = () => {
+  if (!canNotify.value) return
   enableNotify.value = !enableNotify.value;
 };
 
@@ -1259,7 +1261,7 @@ const addMessage = async () => {
     content: buildPublishContent(MessageContent.value),
     private: Private.value,
     visibility: Visibility.value,
-    notify: enableNotify.value,
+    notify: canNotify.value && enableNotify.value,
   };
   const publishTime = canSetPublishTime.value ? datetimeLocalToISO(PublishedAtInput.value) : ''
   if (publishTime) {

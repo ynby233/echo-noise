@@ -44,6 +44,10 @@ var lifeCountdownSettingKeys = map[string]struct{}{
 	"lifeExpectancyYears":    {},
 }
 
+var userFrontendPreferenceSettingKeys = map[string]struct{}{
+	"hitokotoEnabled": {},
+}
+
 const defaultHeaderImageURL = "https://picsum.photos/1600/500"
 
 const (
@@ -436,6 +440,30 @@ func IsLifeCountdownSettingsOnly(frontendSettings map[string]interface{}) bool {
 	return true
 }
 
+func HasUserFrontendPreferenceSettings(frontendSettings map[string]interface{}) bool {
+	for key := range userFrontendPreferenceSettingKeys {
+		if _, ok := frontendSettings[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func IsUserFrontendSettingsOnly(frontendSettings map[string]interface{}) bool {
+	if len(frontendSettings) == 0 {
+		return false
+	}
+	for key := range frontendSettings {
+		if _, ok := lifeCountdownSettingKeys[key]; ok {
+			continue
+		}
+		if _, ok := userFrontendPreferenceSettingKeys[key]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 func StripLifeCountdownSettings(frontendSettings map[string]interface{}) map[string]interface{} {
 	stripped := make(map[string]interface{}, len(frontendSettings))
 	for key, value := range frontendSettings {
@@ -490,6 +518,36 @@ func UpdateUserLifeCountdownConfig(userID uint, frontendSettings map[string]inte
 		return db.Create(&config).Error
 	}
 	return db.Save(&config).Error
+}
+
+func UpdateUserFrontendPreferenceConfig(userID uint, frontendSettings map[string]interface{}) error {
+	if userID == 0 || !HasUserFrontendPreferenceSettings(frontendSettings) {
+		return nil
+	}
+
+	db, err := database.GetDB()
+	if err != nil {
+		return err
+	}
+
+	value, ok := parseBoolSetting(frontendSettings["hitokotoEnabled"])
+	if !ok {
+		return fmt.Errorf("随机一言开关格式无效")
+	}
+
+	var preference models.UserFrontendPreference
+	err = db.Where("user_id = ?", userID).First(&preference).Error
+	if err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return err
+		}
+		preference = models.UserFrontendPreference{UserID: userID}
+	}
+	preference.HitokotoEnabled = &value
+	if preference.ID == 0 {
+		return db.Create(&preference).Error
+	}
+	return db.Save(&preference).Error
 }
 
 func parseBoolSetting(value interface{}) (bool, bool) {
@@ -782,6 +840,23 @@ func resolveLifeCountdownSettings(db *gorm.DB, viewerUserID uint, siteConfig mod
 	return lifeCountdownSettings{}
 }
 
+func resolveHitokotoEnabled(db *gorm.DB, viewerUserID uint, siteConfig models.SiteConfig) bool {
+	if viewerUserID == 0 {
+		return siteConfig.HitokotoEnabled
+	}
+
+	var viewer models.User
+	if err := db.Select("id, is_admin").First(&viewer, viewerUserID).Error; err != nil || viewer.IsAdmin {
+		return siteConfig.HitokotoEnabled
+	}
+
+	var preference models.UserFrontendPreference
+	if err := db.Where("user_id = ?", viewerUserID).First(&preference).Error; err == nil && preference.HitokotoEnabled != nil {
+		return *preference.HitokotoEnabled
+	}
+	return siteConfig.HitokotoEnabled
+}
+
 // GetFrontendConfig 获取前端配置
 func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 	viewerUserID := uint(0)
@@ -957,6 +1032,7 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 	}
 
 	lifeCountdown := resolveLifeCountdownSettings(db, viewerUserID, config)
+	hitokotoEnabled := resolveHitokotoEnabled(db, viewerUserID, config)
 	rssConfig, err := buildRSSConfig(db, config)
 	if err != nil {
 		rssConfig = defaultRSSConfigValues()
@@ -1067,7 +1143,7 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 			// 扩展组件开关
 			"calendarEnabled":        config.CalendarEnabled,
 			"timeEnabled":            config.TimeEnabled,
-			"hitokotoEnabled":        config.HitokotoEnabled,
+			"hitokotoEnabled":        hitokotoEnabled,
 			"lifeCountdownEnabled":   lifeCountdown.Enabled,
 			"lifeCountdownBirthDate": choose(lifeCountdown.BirthDate, ""),
 			"lifeExpectancyYears": func() int {

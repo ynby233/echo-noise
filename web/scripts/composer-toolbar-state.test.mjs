@@ -14,13 +14,16 @@ const darkInactiveToggleRule = addForm.match(/^html\.dark \.state-toggle-btn \{[
 assert(
   addForm.includes('state-toggle-btn full-image-btn') &&
     addForm.includes('state-toggle-btn notify-btn') &&
+    /<button\s+v-if="canNotify"[^>]*state-toggle-btn notify-btn/.test(addForm) &&
+    /const canNotify = computed\(\(\) =>[\s\S]*?is_admin[\s\S]*?IsAdmin/.test(addForm) &&
+    /notify:\s*canNotify\.value && enableNotify\.value/.test(addForm) &&
     sharedStyles.includes('--nw-action-hover-bg: rgba(249, 115, 22, 0.12);') &&
     sharedStyles.includes('--nw-action-hover-text: #9a3412;') &&
     !inactiveToggleRule.includes('--nw-action-hover-') &&
     !darkInactiveToggleRule.includes('--nw-action-hover-') &&
     /^\.state-toggle-btn\.is-enabled \{/m.test(addForm) &&
     /^html\.dark \.state-toggle-btn\.is-enabled \{/m.test(addForm),
-  'inactive full-image and notification toggles must inherit the ordinary orange hover while enabled-state styling remains explicit'
+  'the notification toggle must be admin-only while shared toggle hover and enabled-state styling remain intact'
 )
 
 console.log('composer toolbar state tests passed')

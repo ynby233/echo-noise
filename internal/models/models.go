@@ -523,6 +523,12 @@ type UserLifeCountdownConfig struct {
 	LifeExpectancyYears int    `json:"lifeExpectancyYears" gorm:"default:0"`
 }
 
+type UserFrontendPreference struct {
+	gorm.Model
+	UserID          uint  `json:"user_id" gorm:"uniqueIndex;not null"`
+	HitokotoEnabled *bool `json:"hitokotoEnabled"`
+}
+
 type FriendLink struct {
 	ID          uint      `gorm:"primaryKey" json:"id"`
 	Title       string    `gorm:"type:varchar(100)" json:"title"`

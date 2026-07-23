@@ -60,7 +60,7 @@
             <div class="comment-footer">
               <span class="comment-time">{{ formatCommentTime(c.created_at) }}</span>
               <span class="comment-replies">回复 {{ repliesCount(c.id) }}</span>
-              <span class="comment-visibility nw-tooltip-anchor" :data-tooltip="`可见范围：${visibilityTag(c.visibility).label}`" :aria-label="`可见范围：${visibilityTag(c.visibility).label}`">
+              <span v-if="canShowCommentVisibility(c)" class="comment-visibility nw-tooltip-anchor" :data-tooltip="`可见范围：${visibilityTag(c.visibility).label}`" :aria-label="`可见范围：${visibilityTag(c.visibility).label}`">
                 <UIcon :name="visibilityTag(c.visibility).icon" class="w-4 h-4" />
               </span>
             </div>
@@ -112,7 +112,7 @@
                   <div v-else class="comment-content" :class="themeText"><MarkdownRenderer :content="child.content" /></div>
                   <div class="comment-footer">
                     <span class="comment-time">{{ formatCommentTime(child.created_at) }}</span>
-                    <span class="comment-visibility nw-tooltip-anchor" :data-tooltip="`可见范围：${visibilityTag(child.visibility).label}`" :aria-label="`可见范围：${visibilityTag(child.visibility).label}`">
+                    <span v-if="canShowCommentVisibility(child)" class="comment-visibility nw-tooltip-anchor" :data-tooltip="`可见范围：${visibilityTag(child.visibility).label}`" :aria-label="`可见范围：${visibilityTag(child.visibility).label}`">
                       <UIcon :name="visibilityTag(child.visibility).icon" class="w-4 h-4" />
                     </span>
                   </div>
@@ -314,6 +314,7 @@ import { getRequest, postRequest, putRequest, deleteRequest } from '~/utils/api'
 import { resolveMediaURL } from '~/utils/media-url'
 import { useUserStore } from '~/store/user'
 import { uploadMediaFiles } from '~/utils/media-upload'
+import { shouldShowVisibilityBadge } from '~/utils/visibility-badge'
 
 type CommentEditorTarget = 'content' | 'edit'
 
@@ -336,8 +337,8 @@ const isSubmitting = ref(false)
 const replyTo = ref<number | null>(null)
 const deleteId = ref<number | null>(null)
 const user = useUserStore()
-const isAdmin = computed(() => !!(user.user as any)?.is_admin)
-const currentUserId = computed(() => Number((user.user as any)?.userid || (user.user as any)?.id || (user.user as any)?.ID || 0))
+const isAdmin = computed(() => !!((user.user as any)?.is_admin || (user.user as any)?.IsAdmin))
+const currentUserId = computed(() => Number((user.user as any)?.userid || (user.user as any)?.id || (user.user as any)?.user_id || (user.user as any)?.ID || 0))
 const visibilityOptions = [
   { value: 'public', label: '公开', icon: 'i-mdi-earth' },
   { value: 'users', label: '成员', icon: 'i-mdi-account-group-outline' },
@@ -374,6 +375,12 @@ const visibilityOptionFor = (v: any) => visibilityOptions.find((opt) => opt.valu
 const visibilityTag = (v: any) => visibilityOptionFor(v)
 const commentOwnerId = (c: any) => Number(c?.user_id || c?.UserID || c?.user?.id || c?.user?.ID || c?.user?.user_id || 0)
 const canManageComment = (c: any) => isAdmin.value || (!!currentUserId.value && commentOwnerId(c) === currentUserId.value)
+const canShowCommentVisibility = (c: any) => shouldShowVisibilityBadge({
+  visibility: c?.visibility,
+  isAdmin: isAdmin.value,
+  isAuthenticated: user.isLogin,
+  isOwner: !!currentUserId.value && commentOwnerId(c) === currentUserId.value,
+})
 const selectedVisibility = ref(messageVisibilityLimit.value)
 const openCommentVisibilityMenu = ref<string | null>(null)
 const commentVisibilityMenuRef = ref<HTMLElement | null>(null)

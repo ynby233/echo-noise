@@ -1245,3 +1245,52 @@ func TestGetFrontendConfigUsesViewerScopedLifeCountdown(t *testing.T) {
 	}
 	assertLifeCountdownFrontendSettings(t, lifeCountdownFrontendSettings(t, admin.ID), true, "1970-01-02", 90)
 }
+
+func hitokotoEnabledForViewer(t *testing.T, viewerUserID uint) bool {
+	t.Helper()
+	settings := lifeCountdownFrontendSettings(t, viewerUserID)
+	enabled, ok := settings["hitokotoEnabled"].(bool)
+	if !ok {
+		t.Fatalf("hitokotoEnabled has type %T", settings["hitokotoEnabled"])
+	}
+	return enabled
+}
+
+func TestGetFrontendConfigUsesViewerScopedHitokotoPreference(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	admin := mustCreateUser(t, models.User{Username: "admin-hitokoto", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+	alice := mustCreateUser(t, models.User{Username: "alice-hitokoto", Password: models.HashPassword("alice"), Token: models.GenerateToken(32)})
+
+	if err := db.Create(&models.Setting{AllowRegistration: true}).Error; err != nil {
+		t.Fatalf("create setting: %v", err)
+	}
+	if err := db.Create(&models.SiteConfig{SiteTitle: "Test Site", HitokotoEnabled: true, CommentEmailAdminNotifyAll: true}).Error; err != nil {
+		t.Fatalf("create site config: %v", err)
+	}
+
+	if !hitokotoEnabledForViewer(t, 0) || !hitokotoEnabledForViewer(t, admin.ID) || !hitokotoEnabledForViewer(t, alice.ID) {
+		t.Fatal("site daily quote setting should be the default for guests, admins, and users without an override")
+	}
+	if err := UpdateUserFrontendPreferenceConfig(alice.ID, map[string]interface{}{"hitokotoEnabled": false}); err != nil {
+		t.Fatalf("save alice daily quote preference: %v", err)
+	}
+	if hitokotoEnabledForViewer(t, alice.ID) {
+		t.Fatal("alice daily quote preference should disable only alice's home widget")
+	}
+	if !hitokotoEnabledForViewer(t, 0) || !hitokotoEnabledForViewer(t, admin.ID) {
+		t.Fatal("alice preference must not change guest or admin daily quote visibility")
+	}
+
+	if err := db.Model(&models.SiteConfig{}).Where("1 = 1").Update("hitokoto_enabled", false).Error; err != nil {
+		t.Fatalf("disable site daily quote: %v", err)
+	}
+	if err := UpdateUserFrontendPreferenceConfig(alice.ID, map[string]interface{}{"hitokotoEnabled": true}); err != nil {
+		t.Fatalf("enable alice daily quote preference: %v", err)
+	}
+	if !hitokotoEnabledForViewer(t, alice.ID) {
+		t.Fatal("alice should be able to enable daily quote even when the site default is disabled")
+	}
+	if hitokotoEnabledForViewer(t, 0) || hitokotoEnabledForViewer(t, admin.ID) {
+		t.Fatal("site default should remain disabled for guests and admins")
+	}
+}

@@ -425,12 +425,12 @@
             </div>
           </div>
 
-          <div id="site-section" v-if="(isAdmin && isSiteSectionPage) || isSectionVisible('life-countdown')" class="col-span-12">
+          <div id="site-section" v-if="(isAdmin && isSiteSectionPage) || isSectionVisible('life-countdown') || (!isAdmin && isSectionVisible('hitokoto'))" class="col-span-12">
           <div :class="adminShellCardClass">
             <div :class="adminSectionHeaderClass">
               <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                <UIcon :name="isSectionVisible('life-countdown') && !isAdmin ? 'i-heroicons-heart' : 'i-heroicons-cog-6-tooth'" class="w-5 h-5" />
-                <span>{{ isSectionVisible('life-countdown') && !isAdmin ? '人生倒计时' : '网站配置' }}</span>
+                <UIcon :name="!isAdmin && isSectionVisible('life-countdown') ? 'i-heroicons-heart' : !isAdmin && isSectionVisible('hitokoto') ? 'i-heroicons-sparkles' : 'i-heroicons-cog-6-tooth'" class="w-5 h-5" />
+                <span>{{ !isAdmin && isSectionVisible('life-countdown') ? '人生倒计时' : !isAdmin && isSectionVisible('hitokoto') ? '随机一言' : '网站配置' }}</span>
               </div>
             </div>
             <div class="px-4 pb-4 space-y-4">
@@ -1057,7 +1057,7 @@
                     </div>
                     <div class="px-4 pb-4">
                       <div class="rounded-lg p-4" :class="theme.subtleBg">
-                        <div class="text-sm" :class="theme.mutedText">开启后，首页左栏广告位下方显示随机一言</div>
+                        <div class="text-sm" :class="theme.mutedText">{{ isAdmin ? '开启后，首页左栏广告位下方显示随机一言' : '仅控制当前账号访问首页时是否显示随机一言，不影响访客和其他成员。' }}</div>
                       </div>
                     </div>
                   </div>
@@ -2475,6 +2475,11 @@ type AdminSectionKey =
 const activeSection = ref<AdminSectionKey>('dashboard')
 type AdminNavItem = { key: AdminSectionKey, label: string, icon: string }
 type AdminNavGroup = { key: string, label: string, icon: string, items: AdminNavItem[] }
+const userStore = useUserStore()
+const isAdmin = computed(() => {
+    const u: any = userStore.user
+    return !!(userStore.isLogin && u && (u.is_admin || u.IsAdmin))
+})
 const adminNavGroups = computed<AdminNavGroup[]>(() => {
   const groups: AdminNavGroup[] = [
     {
@@ -2549,6 +2554,7 @@ const adminNavGroups = computed<AdminNavGroup[]>(() => {
     ...overviewGroup,
     items: [
       ...overviewGroup.items,
+      { key: 'hitokoto', label: '随机一言', icon: 'i-heroicons-sparkles' },
       { key: 'life-countdown', label: '人生倒计时', icon: 'i-heroicons-heart' }
     ]
   }]
@@ -3551,7 +3557,6 @@ const checkVoceChatHealth = async () => {
   }
 }
 
-const userStore = useUserStore()
 const { login, register, logout } = useUser()
 const router = useRouter()
 const userToken = ref('')
@@ -4076,13 +4081,6 @@ const fetchNotifyConfig = async () => {
 
  onMounted(fetchNotifyConfig)
 
- watch(
-   () => !!(frontendConfig as any).notifyEnabled,
-   async (next, prev) => {
-     if (next === prev) return
-     await saveConfigItem('notifyEnabled')
-   }
- )
 const smtp = reactive({
   enabled: false,
   driver: 'smtp',
@@ -4617,10 +4615,6 @@ const onAvatarImgError = (e: Event) => {
 }
 // 状态变量
 const isLogin = computed(() => userStore?.isLogin ?? false)
-const isAdmin = computed(() => {
-    const u: any = userStore.user
-    return !!(userStore.isLogin && u && (u.is_admin || u.IsAdmin))
-})
 const currentUserId = computed(() => {
   const u: any = userStore.user
   const id = Number(u?.id ?? u?.ID ?? 0)
@@ -5381,6 +5375,14 @@ const frontendConfig = reactive<FrontendConfig>({
     ] as Array<{ imageURL: string, linkURL: string, description: string }>,
     leftAdsIntervalMs: 4000,
 })
+
+watch(
+  () => !!(frontendConfig as any).notifyEnabled,
+  async (next, prev) => {
+    if (next === prev) return
+    await saveConfigItem('notifyEnabled')
+  }
+)
 
 // GitHub 链接卡片解析开关的双向绑定（与 frontendConfig.enableGithubCard 同步）
 const githubCardEnabled = computed({

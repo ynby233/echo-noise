@@ -24,7 +24,7 @@
       </button>
 
       <div class="home-sidebar-pager__controls">
-        <span class="home-sidebar-pager__text">第</span>
+        <span class="home-sidebar-pager__text home-sidebar-pager__text--prefix">第</span>
         <div class="home-sidebar-pager__number-control">
           <input
             v-model="targetPage"
@@ -45,7 +45,8 @@
             </button>
           </div>
         </div>
-        <span class="home-sidebar-pager__text">页 / 共 {{ totalPages }} 页</span>
+        <span class="home-sidebar-pager__text home-sidebar-pager__text--full">页 / 共 {{ totalPages }} 页</span>
+        <span class="home-sidebar-pager__text home-sidebar-pager__text--compact">/ {{ totalPages }}</span>
         <button type="button" class="home-sidebar-pager__jump nw-action-btn" :disabled="disabled || loading" @click="submitTargetPage">
           跳转
         </button>
@@ -135,7 +136,7 @@ const submitTargetPage = () => emit('jump', targetPage.value)
 
 .home-sidebar-pager__main {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) 24px;
+  grid-template-columns: 28px minmax(0, 1fr) 28px;
   align-items: center;
   gap: 3px;
   min-width: 0;
@@ -178,17 +179,17 @@ const submitTargetPage = () => emit('jump', targetPage.value)
 }
 
 .home-sidebar-pager__scroll {
-  width: 24px;
-  min-width: 24px;
+  width: 28px;
+  min-width: 28px;
   height: 28px;
   min-height: 28px;
   padding: 0;
-  border-radius: 8px;
+  border-radius: 9px;
 }
 
 .home-sidebar-pager__scroll-icon {
-  width: 13px;
-  height: 13px;
+  width: 15px;
+  height: 15px;
 }
 
 .home-sidebar-pager__jump {
@@ -209,6 +210,10 @@ const submitTargetPage = () => emit('jump', targetPage.value)
   line-height: 1;
   font-weight: 650;
   opacity: .78;
+}
+
+.home-sidebar-pager__text--compact {
+  display: none;
 }
 
 .home-sidebar-pager__number-control {
@@ -275,22 +280,20 @@ const submitTargetPage = () => emit('jump', targetPage.value)
 }
 
 @container (max-width: 285px) {
-  .home-sidebar-pager__main {
-    grid-template-columns: 13px minmax(0, 1fr) 13px;
-    gap: 0;
+  .home-sidebar-pager__controls {
+    gap: 3px;
   }
 
-  .home-sidebar-pager__scroll {
-    width: 13px;
-    min-width: 13px;
-    border: 0;
-    border-radius: 5px;
-    background: transparent;
+  .home-sidebar-pager__text--prefix {
+    display: none;
   }
 
-  .home-sidebar-pager__scroll-icon {
-    width: 9px;
-    height: 9px;
+  .home-sidebar-pager__text--full {
+    display: none;
+  }
+
+  .home-sidebar-pager__text--compact {
+    display: inline;
   }
 }
 

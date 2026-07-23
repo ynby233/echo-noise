@@ -93,7 +93,7 @@
                   </div>
                 </div>
                 <div class="ml-auto flex items-center gap-2 text-xs opacity-80">
-                  <span class="visibility-indicator nw-tooltip-anchor" :data-tooltip="messageVisibilityLabel(messageVisibility(msg))" :aria-label="messageVisibilityLabel(messageVisibility(msg))">
+                  <span v-if="shouldShowMessageVisibility(msg)" class="visibility-indicator nw-tooltip-anchor" :data-tooltip="messageVisibilityLabel(messageVisibility(msg))" :aria-label="messageVisibilityLabel(messageVisibility(msg))">
                     <UIcon :name="messageVisibilityIcon(messageVisibility(msg))" class="w-4 h-4" />
                   </span>
                   <UIcon v-if="msg.pinned" name="i-mdi-pin" class="w-4 h-4" />
@@ -539,6 +539,7 @@ import { createAudioMarkdown, resolveUploadedMediaUrl, uploadMediaFiles } from '
 import { resolveMediaURL } from '~/utils/media-url'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { getMessageIdFromRouteHash } from '~/utils/message-route-hash'
+import { shouldShowVisibilityBadge } from '~/utils/visibility-badge'
 import { useRuntimeConfig } from '#imports'
 import { useToast } from '#ui/composables/useToast'
 type BuiltinCommentsExpose = {
@@ -1324,6 +1325,12 @@ const loadTargetMessagePage = async (id: number) => {
     if (currentUserId.value && msgUserId) return msgUserId === currentUserId.value
     return !!currentUsername.value && String(msg?.username || msg?.author || '').trim() === currentUsername.value
   }
+  const shouldShowMessageVisibility = (msg: any) => shouldShowVisibilityBadge({
+    visibility: messageVisibility(msg),
+    isAdmin: currentUserIsAdmin.value,
+    isAuthenticated: isLogin.value,
+    isOwner: isCurrentUserMessage(msg),
+  })
   const canEditMessageTasks = (msg: any) => userStore.isLogin && (currentUserIsAdmin.value || isCurrentUserMessage(msg))
   const isContentEmpty = (m: any) => {
     const img = String(m?.image_url || '').trim()

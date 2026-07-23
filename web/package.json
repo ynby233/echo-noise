@@ -20,6 +20,8 @@
     "test:login-expire": "node scripts/login-expire.test.mjs",
     "test:auth-recovery": "node scripts/auth-recovery-sync.test.mjs",
     "test:message-visibility": "node scripts/message-visibility.test.mjs",
+    "test:visibility-badges": "node scripts/visibility-badge-policy.test.mjs",
+    "test:user-interface-preferences": "node scripts/user-interface-preferences.test.mjs",
     "test:message-edit-attachment": "node scripts/message-edit-attachment.test.mjs",
     "test:composer-toolbar-state": "node scripts/composer-toolbar-state.test.mjs",
     "test:notification-jump": "node scripts/notification-jump-target.test.mjs",

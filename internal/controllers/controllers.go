@@ -944,12 +944,16 @@ func UpdateSetting(c *gin.Context) {
 
 	frontendSettings := setting.FrontendSettings
 	if !user.IsAdmin {
-		if hasAdminOnlySettingFields(setting) || frontendSettings == nil || !services.IsLifeCountdownSettingsOnly(frontendSettings) {
+		if hasAdminOnlySettingFields(setting) || frontendSettings == nil || !services.IsUserFrontendSettingsOnly(frontendSettings) {
 			c.JSON(http.StatusOK, dto.Fail[string]("需要管理员权限"))
 			return
 		}
 		if err := services.UpdateUserLifeCountdownConfig(user.ID, frontendSettings); err != nil {
 			c.JSON(http.StatusOK, dto.Fail[string]("保存人生倒计时配置失败: "+err.Error()))
+			return
+		}
+		if err := services.UpdateUserFrontendPreferenceConfig(user.ID, frontendSettings); err != nil {
+			c.JSON(http.StatusOK, dto.Fail[string]("保存个人界面配置失败: "+err.Error()))
 			return
 		}
 		c.JSON(http.StatusOK, dto.OK[any](nil, models.UpdateSettingSuccessMessage))
@@ -3235,12 +3239,12 @@ func PostMessage(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.Fail[string]("未授权访问"))
 		return
 	}
+	user, err := services.GetUserByID(userID.(uint))
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string]("获取用户信息失败"))
+		return
+	}
 	if createdAt != nil {
-		user, err := services.GetUserByID(userID.(uint))
-		if err != nil {
-			c.JSON(http.StatusOK, dto.Fail[string]("获取用户信息失败"))
-			return
-		}
 		if !user.IsAdmin {
 			c.JSON(http.StatusOK, dto.Fail[string]("仅管理员可以指定发布时间"))
 			return
@@ -3269,20 +3273,10 @@ func PostMessage(c *gin.Context) {
 	var siteCfg models.SiteConfig
 	_ = database.DB.Table("site_configs").First(&siteCfg).Error
 
-	// 推送策略：
-	// - session（编辑器/后台页面会话）发布：保持原有语义，只有显式 notify=true 才推送
-	// - token（API/扩展/MCP）发布：当后台推送总开关开启时自动推送（忽略客户端 notify 字段）
-	shouldNotify := false
-	if siteCfg.NotifyEnabled {
-		via, _ := c.Get("auth_via")
-		viaStr, _ := via.(string)
-		if viaStr == "token" {
-			shouldNotify = true
-		} else {
-			// session 或未标记：保持原逻辑，必须显式 notify=true
-			shouldNotify = (request.Notify != nil && *request.Notify)
-		}
-	}
+	// 推送策略仅对管理员生效：会话发布需显式 notify=true，管理员 token 发布跟随总开关自动推送。
+	via, _ := c.Get("auth_via")
+	viaStr, _ := via.(string)
+	shouldNotify := shouldNotifyPublishedMessage(siteCfg.NotifyEnabled, user.IsAdmin, viaStr, request.Notify)
 
 	if shouldNotify {
 		notifyConfig := models.GetNotifyConfig()
@@ -3469,6 +3463,16 @@ func PostMessage(c *gin.Context) {
 
 	// 即时模式触发云同步（防抖）
 	syncmanager.Trigger()
+}
+
+func shouldNotifyPublishedMessage(siteEnabled bool, isAdmin bool, authVia string, requested *bool) bool {
+	if !siteEnabled || !isAdmin {
+		return false
+	}
+	if authVia == "token" {
+		return true
+	}
+	return requested != nil && *requested
 }
 
 // 上传视频
