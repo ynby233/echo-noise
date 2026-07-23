@@ -31,6 +31,7 @@ import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { buildAttachmentAudioPlaceholderHtml, destroyAttachmentAudioPlayers, enhanceAttachmentAudioPlayers } from '~/utils/attachment-audio-player'
 import { encodeMarkdownExtraBlankLines, markMarkdownPreservedBlankLineElements } from '~/utils/markdown-blank-lines'
 import { applyTableTrackSize, getTableResizeZoomScale, resolveTableTrackResize, resolveTableTrailingScrollReserve, type TableTrackResizeSession } from '~/utils/table-resize-session'
+import { isManagedAttachmentURL, resolveManagedAttachmentURL, resolveMediaURL } from '~/utils/media-url'
 import Vditor from 'vditor';
 
 // 定义正则表达式
@@ -49,18 +50,8 @@ const emit = defineEmits(['tagClick', 'rendered'])
 const config = useRuntimeConfig();
 const BASE_API = config.public.baseApi || '/api';
 
-const resolveImageUrl = (path: string) => {
-  if (!path) return '';
-  if (/^https?:\/\//.test(path)) return path;
-  
-  const base = String(BASE_API).replace(/\/$/, '');
-  const p = path.startsWith('/') ? path : `/${path}`;
-  
-  if (p.startsWith('/api/') && base.endsWith('/api')) {
-      return `${base.substring(0, base.length - 4)}${p}`;
-  }
-  return `${base}${p}`;
-}
+const resolveImageUrl = (path: string) => resolveMediaURL(String(BASE_API || '/api'), path)
+const resolveAttachmentUrl = (path: string) => resolveManagedAttachmentURL(String(BASE_API || '/api'), path)
 
 const previewElement = ref<HTMLDivElement | null>(null);
 const renderedTableExpandBody = ref<HTMLDivElement | null>(null);
@@ -1384,7 +1375,7 @@ const attachmentExtensionLabel = (name: string, url: string) => {
 }
 
 const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string) => {
-  const url = resolveImageUrl(String(rawUrl || '').trim())
+  const url = resolveManagedAttachmentURL(String(BASE_API || '/api'), String(rawUrl || '').trim())
   const safeUrl = escapeHtml(url)
   const safeName = escapeHtml(String(name || '').trim() || '未命名附件')
   const labeledKind = attachmentKindFromLabel(kindLabel)
@@ -1452,10 +1443,12 @@ const replaceNodeWithHtml = (node: HTMLElement, html: string) => {
 const deletedAttachmentProbeCache = new Map<string, Promise<boolean>>()
 
 const canProbeAttachmentUrl = (url: string) => {
-  if (typeof window === 'undefined') return false
+  if (typeof window === 'undefined' || !isManagedAttachmentURL(url)) return false
   try {
     const parsed = new URL(url, window.location.href)
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+    const trustedAttachmentOrigins = new Set([window.location.origin])
+    trustedAttachmentOrigins.add(new URL(String(BASE_API || '/api'), window.location.origin).origin)
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && trustedAttachmentOrigins.has(parsed.origin)
   } catch {
     return false
   }
@@ -1472,14 +1465,14 @@ const probeAttachmentDeleted = (url: string) => {
 
   const promise = (async () => {
     try {
-      const head = await fetch(key, { method: 'HEAD', cache: 'no-store', credentials: 'same-origin' })
+      const head = await fetch(key, { method: 'HEAD', cache: 'no-store', credentials: 'include' })
       if (isDeletedAttachmentStatus(head.status)) return true
       if (head.status !== 405 && head.status !== 501) return false
       const partial = await fetch(key, {
         method: 'GET',
         headers: { Range: 'bytes=0-0' },
         cache: 'no-store',
-        credentials: 'same-origin',
+        credentials: 'include',
       })
       return isDeletedAttachmentStatus(partial.status)
     } catch {
@@ -1970,8 +1963,8 @@ const renderMarkdown = async (markdown: string) => {
           const images = previewElement.value?.querySelectorAll('img');
           images?.forEach(img => {
              const src = img.getAttribute('src');
-             if (src && !/^https?:\/\//.test(src)) {
-                 img.src = resolveImageUrl(src);
+             if (src) {
+                 img.src = isManagedAttachmentURL(src) ? resolveAttachmentUrl(src) : resolveImageUrl(src);
              }
           });
           const links = previewElement.value?.querySelectorAll('a');
@@ -1989,13 +1982,13 @@ const renderMarkdown = async (markdown: string) => {
             if (a.classList.contains('site-attachment-tag')) return
             const href = a.getAttribute('href') || ''
             if (isAudioAttachmentUrl(href, a.textContent || '')) {
-              const src = resolveImageUrl(href)
+              const src = resolveAttachmentUrl(href)
               replaceNodeWithHtml(a, buildAttachmentAudioPlaceholderHtml({ src, name: a.textContent || '' }))
               return
             }
             if (isVideoAttachmentUrl(href, a.textContent || '')) {
               const v = document.createElement('video')
-              const src = resolveImageUrl(href)
+              const src = resolveAttachmentUrl(href)
               v.setAttribute('src', src)
               v.setAttribute('controls', 'true')
               v.setAttribute('preload', 'metadata')
@@ -2018,8 +2011,8 @@ const renderMarkdown = async (markdown: string) => {
           const existingVideos = Array.from(previewElement.value?.querySelectorAll('video') || []) as HTMLVideoElement[];
           existingVideos.forEach((v: HTMLVideoElement) => {
               const src = v.getAttribute('src');
-              if (src && !/^https?:\/\//.test(src)) {
-                  v.setAttribute('src', resolveImageUrl(src));
+              if (src) {
+                  v.setAttribute('src', isManagedAttachmentURL(src) ? resolveAttachmentUrl(src) : resolveImageUrl(src));
               }
               const resolvedSrc = v.getAttribute('src') || ''
               if (resolvedSrc && isAudioAttachmentUrl(resolvedSrc, v.getAttribute('aria-label') || v.getAttribute('title') || '')) {
@@ -2044,7 +2037,7 @@ const renderMarkdown = async (markdown: string) => {
           const existingAudios = Array.from(previewElement.value?.querySelectorAll('audio') || []) as HTMLAudioElement[];
           existingAudios.forEach((audio: HTMLAudioElement) => {
               const src = audio.getAttribute('src')
-              if (src && !/^https?:\/\//.test(src)) audio.setAttribute('src', resolveImageUrl(src))
+              if (src) audio.setAttribute('src', isManagedAttachmentURL(src) ? resolveAttachmentUrl(src) : resolveImageUrl(src))
               const resolvedSrc = audio.getAttribute('src') || ''
               if (resolvedSrc && !audio.dataset.noiseAttachmentKind && isAudioAttachmentUrl(resolvedSrc)) {
                   audio.dataset.noiseAttachmentKind = 'audio'

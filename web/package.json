@@ -32,6 +32,7 @@
     "test:public-branding": "node scripts/public-branding-exposure.test.mjs",
     "test:attachment-audio-player": "node scripts/attachment-audio-player.test.mjs",
     "test:attachment-failure-state": "node scripts/attachment-failure-state.test.mjs",
+    "test:attachment-url-portability": "node scripts/attachment-url-portability.test.mjs",
     "test:vditor-blank-lines": "node scripts/vditor-blank-lines.test.mjs",
     "test:vditor-table-attachment-perf": "node scripts/vditor-table-attachment-perf.test.mjs",
     "test:vditor-table-attachment-atomic": "node scripts/vditor-table-attachment-atomic.test.mjs",

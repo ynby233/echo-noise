@@ -1,3 +1,24 @@
+const MANAGED_ATTACHMENT_PATH_RE = /(?:^|\/)(?:api\/)?(?:images|video|audio|files|attachments|cloud-attachments)\//i
+const ABSOLUTE_MANAGED_ATTACHMENT_PATH_RE = /(?:^|\/)api\/(?:images|video|audio|files|attachments|cloud-attachments)\//i
+
+const managedAttachmentPath = (raw: string) => {
+  const value = String(raw || '').trim()
+  if (!value || value.startsWith('data:') || value.startsWith('blob:')) return ''
+  try {
+    const parsed = new URL(value, 'http://managed-attachment.invalid')
+    const absolute = /^(?:https?:)?\/\//i.test(value)
+    const match = (absolute ? ABSOLUTE_MANAGED_ATTACHMENT_PATH_RE : MANAGED_ATTACHMENT_PATH_RE).exec(parsed.pathname)
+    if (!match || match.index < 0) return ''
+    const start = match.index + (match[0].startsWith('/') ? 1 : 0)
+    const path = `/${parsed.pathname.slice(start).replace(/^\/+/, '')}`
+    return `${path}${parsed.search}${parsed.hash}`
+  } catch {
+    return ''
+  }
+}
+
+export const isManagedAttachmentURL = (raw: string) => !!managedAttachmentPath(raw)
+
 export const resolveMediaURL = (baseApi: string, raw: string) => {
   const value = String(raw || '').trim()
   if (!value) return ''
@@ -22,4 +43,15 @@ export const resolveMediaURL = (baseApi: string, raw: string) => {
   }
 
   return `${base}${path}`
+}
+
+// Attachment references belong to this deployment, not to the host name that
+// happened to be active when a note was published. Convert both current and
+// legacy absolute attachment URLs back to their canonical API path, then let
+// the configured API base decide the runtime origin and optional path prefix.
+export const resolveManagedAttachmentURL = (baseApi: string, raw: string) => {
+  const value = String(raw || '').trim()
+  if (!value) return ''
+  const portablePath = managedAttachmentPath(value)
+  return resolveMediaURL(baseApi, portablePath || value)
 }

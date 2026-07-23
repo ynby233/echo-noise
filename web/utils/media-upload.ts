@@ -1,3 +1,5 @@
+import { resolveManagedAttachmentURL } from './media-url'
+
 export type UploadKind = 'image' | 'video' | 'audio' | 'file'
 type UploadRequestKind = UploadKind | 'auto'
 
@@ -47,27 +49,7 @@ export const normalizeCloudObjectURL = (url: string): string => {
 export const resolveUploadedMediaUrl = (url: string, baseApi = '/api'): string => {
   const raw = String(url || '').trim()
   if (!raw) return ''
-  if (/^https?:\/\//i.test(raw)) return normalizeCloudObjectURL(raw)
-
-  const path = raw.startsWith('/') ? raw : `/${raw}`
-  const base = String(baseApi || '/api').replace(/\/$/, '') || '/api'
-
-  if (/^https?:\/\//i.test(base)) {
-    try {
-      const parsed = new URL(base)
-      const basePath = parsed.pathname.replace(/\/$/, '')
-      const origin = `${parsed.protocol}//${parsed.host}`
-      if (basePath && path.startsWith(`${basePath}/`)) return `${origin}${path}`
-      if (path.startsWith('/api/')) return `${origin}${path}`
-      return `${origin}${basePath}${path}`
-    } catch {
-      return `${base}${path}`
-    }
-  }
-
-  const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  if (base && path.startsWith(`${base}/`)) return `${origin}${path}`
-  return `${origin}${base}${path}`
+  return resolveManagedAttachmentURL(baseApi, normalizeCloudObjectURL(raw))
 }
 
 const ATTACHMENT_LABELS: Record<Exclude<UploadKind, 'file'>, string> = {
