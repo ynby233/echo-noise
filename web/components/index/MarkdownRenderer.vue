@@ -26,7 +26,7 @@
 import { nextTick, onMounted, ref, watch, onBeforeUnmount, inject } from 'vue';
 import { useRuntimeConfig } from '#imports';
 import { useMessageStore } from '~/store/message';
-import { ensureFancyboxVideoThumbnail, getVideoElementSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
+import { ensureFancyboxVideoThumbnail, getVideoElementSource, getVideoPlaybackFrameForSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { buildAttachmentAudioPlaceholderHtml, destroyAttachmentAudioPlayers, enhanceAttachmentAudioPlayers } from '~/utils/attachment-audio-player'
 import { encodeMarkdownExtraBlankLines, markMarkdownPreservedBlankLineElements } from '~/utils/markdown-blank-lines'
@@ -1256,7 +1256,7 @@ const applyImageLoadingPlaceholders = () => {
   if (!previewElement.value) return;
   const imgs = Array.from(previewElement.value.querySelectorAll('img')) as HTMLImageElement[];
   imgs.forEach((img) => {
-    if (img.dataset.noiseAttachmentKind) return;
+    if (img.dataset.siteAttachmentKind || img.dataset.noiseAttachmentKind) return;
     const container = (img.closest('.image-grid-item') || img.parentElement || previewElement.value) as HTMLElement;
     const needPlaceholder = !img.complete || !(img.naturalWidth && img.naturalHeight);
     if (!needPlaceholder) return;
@@ -1323,6 +1323,21 @@ const deletedAttachmentText = (kind: AttachmentKind) => {
   if (kind === 'video') return '该视频已被删除'
   if (kind === 'audio') return '该音频已被删除'
   return '该文件已被删除'
+}
+
+const attachmentFailureTitle = (kind: AttachmentKind) => {
+  if (kind === 'image') return '图片加载失败'
+  if (kind === 'video') return '视频播放失败'
+  if (kind === 'audio') return '音频无法播放'
+  return '附件加载失败'
+}
+
+const attachmentFailureDetail = (kind: AttachmentKind, deleted: boolean) => {
+  if (deleted) return deletedAttachmentText(kind)
+  if (kind === 'image') return '图片可能已被删除或暂时无法访问'
+  if (kind === 'video') return '视频可能已被删除或暂时无法访问'
+  if (kind === 'audio') return '音频可能已被删除或暂时无法访问'
+  return '文件可能已被删除或暂时无法访问'
 }
 
 const mediaPathFromUrl = (url: string) => {
@@ -1394,9 +1409,10 @@ const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string) =>
   return buildAttachmentAudioPlaceholderHtml({ src: url, name })
 }
 
-const buildDeletedAttachmentHtml = (kind: AttachmentKind) => {
-  const message = escapeHtml(deletedAttachmentText(kind))
-  return `<div class="site-attachment-file site-attachment-file--deleted site-attachment-file--deleted-${kind}" role="note" aria-label="${message}"><span class="site-attachment-file__icon" aria-hidden="true"></span><span class="site-attachment-file__body"><span class="site-attachment-file__name">${message}</span></span><span class="site-attachment-file__action site-attachment-file__action--deleted" aria-hidden="true"></span></div>`
+const buildDeletedAttachmentHtml = (kind: AttachmentKind, deleted: boolean) => {
+  const title = escapeHtml(attachmentFailureTitle(kind))
+  const detail = escapeHtml(attachmentFailureDetail(kind, deleted))
+  return `<div class="site-attachment-file site-attachment-file--deleted site-attachment-file--deleted-${kind}" role="note" aria-label="${title}：${detail}"><span class="site-attachment-file__icon" aria-hidden="true"></span><span class="site-attachment-file__body"><span class="site-attachment-file__name">${title}</span><span class="site-attachment-file__meta">${detail}</span></span><span class="site-attachment-file__action site-attachment-file__action--deleted" aria-hidden="true"></span></div>`
 }
 
 const attachmentInfoFromRenderedAnchor = (anchor: HTMLAnchorElement) => {
@@ -1492,40 +1508,93 @@ const attachmentReplacementTarget = (node: HTMLElement, kind: AttachmentKind) =>
   return (node.closest('.site-attachment-file') || node) as HTMLElement
 }
 
-const replaceDeletedAttachment = (node: HTMLElement, kind: AttachmentKind) => {
+const videoPosterForFailure = (node: HTMLElement, url: string) => {
+  if (!(node instanceof HTMLVideoElement)) return ''
+  return [
+    node.getAttribute('poster'),
+    node.poster,
+    node.parentElement?.dataset.poster,
+    node.parentElement?.dataset.thumbSrc,
+    getVideoPlaybackFrameForSource(url),
+  ].map((value) => String(value || '').trim()).find(Boolean) || ''
+}
+
+const buildMediaAttachmentFailureContent = (kind: 'image' | 'video', deleted: boolean, poster = '') => {
+  const title = escapeHtml(attachmentFailureTitle(kind))
+  const detail = escapeHtml(attachmentFailureDetail(kind, deleted))
+  const posterHtml = poster
+    ? `<img class="site-attachment-failure__poster" src="${escapeHtml(poster)}" alt="" aria-hidden="true" />`
+    : ''
+  return `${posterHtml}<span class="site-attachment-failure__scrim" aria-hidden="true"></span><span class="site-attachment-failure__content"><span class="site-attachment-failure__icon" aria-hidden="true"></span><strong class="site-attachment-failure__title">${title}</strong><span class="site-attachment-failure__detail">${detail}</span></span>`
+}
+
+const renderMediaAttachmentFailure = (node: HTMLElement, kind: 'image' | 'video', deleted: boolean, url: string) => {
+  let target = attachmentReplacementTarget(node, kind)
+  if (target instanceof HTMLImageElement || target instanceof HTMLVideoElement || target instanceof HTMLAudioElement) {
+    const replacement = document.createElement('div')
+    replacement.className = kind === 'video' ? 'site-attachment-render site-attachment-render--video' : 'site-attachment-paragraph'
+    target.replaceWith(replacement)
+    target = replacement
+  }
+
+  const poster = kind === 'video' ? videoPosterForFailure(node, url) : ''
+  const title = attachmentFailureTitle(kind)
+  const detail = attachmentFailureDetail(kind, deleted)
+  target.classList.add('site-attachment-failure', `site-attachment-failure--${kind}`)
+  target.classList.toggle('site-attachment-failure--with-poster', !!poster)
+  target.setAttribute('role', 'note')
+  target.setAttribute('aria-label', `${title}：${detail}`)
+  target.innerHTML = buildMediaAttachmentFailureContent(kind, deleted, poster)
+
+  const posterImage = target.querySelector<HTMLImageElement>('.site-attachment-failure__poster')
+  if (posterImage) {
+    const discardBrokenPoster = () => {
+      posterImage.remove()
+      target.classList.remove('site-attachment-failure--with-poster')
+    }
+    posterImage.addEventListener('error', discardBrokenPoster, { once: true })
+    if (posterImage.complete && !posterImage.naturalWidth) discardBrokenPoster()
+  }
+}
+
+const renderAttachmentFailure = (node: HTMLElement, kind: AttachmentKind, deleted: boolean, url: string) => {
   const target = attachmentReplacementTarget(node, kind)
-  if (!target || target.classList.contains('site-attachment-file--deleted')) return
-  replaceNodeWithHtml(target, buildDeletedAttachmentHtml(kind))
+  if (!target || target.classList.contains('site-attachment-file--deleted') || target.classList.contains('site-attachment-failure')) return
+  if (kind === 'image' || kind === 'video') {
+    renderMediaAttachmentFailure(node, kind, deleted, url)
+    return
+  }
+  replaceNodeWithHtml(target, buildDeletedAttachmentHtml(kind, deleted))
 }
 
 const applyDeletedAttachmentPlaceholders = (customRoot?: HTMLElement | null) => {
   const root = customRoot || previewElement.value
   if (!root) return
   const nodes = Array.from(root.querySelectorAll<HTMLElement>(
-    'img.site-attachment-image[data-site-attachment-kind][data-site-attachment-url], video[data-site-attachment-kind][data-site-attachment-url], audio[data-site-attachment-kind][data-site-attachment-url], a.site-attachment-file[data-site-attachment-kind][data-site-attachment-url]'
+    '[data-site-attachment-kind][data-site-attachment-url], [data-noise-attachment-kind][data-noise-attachment-url]'
   ))
 
   nodes.forEach((node) => {
     if (node.closest('.site-attachment-file--deleted')) return
-    const kind = String(node.dataset.noiseAttachmentKind || 'file') as AttachmentKind
-    const url = String(node.dataset.noiseAttachmentUrl || '')
+    const kind = String(node.dataset.siteAttachmentKind || node.dataset.noiseAttachmentKind || 'file') as AttachmentKind
+    const url = String(node.dataset.siteAttachmentUrl || node.dataset.noiseAttachmentUrl || '')
     if (!['image', 'video', 'audio', 'file'].includes(kind) || !url) return
 
     if (node.dataset.noiseDeletedAttachmentBound !== 'true') {
       node.dataset.noiseDeletedAttachmentBound = 'true'
       if (node instanceof HTMLImageElement || node instanceof HTMLVideoElement || node instanceof HTMLAudioElement) {
-        node.addEventListener('error', () => replaceDeletedAttachment(node, kind), { once: true })
+        node.addEventListener('error', () => renderAttachmentFailure(node, kind, false, url), { once: true })
       }
     }
 
     if (node instanceof HTMLImageElement && node.complete && !node.naturalWidth) {
-      replaceDeletedAttachment(node, kind)
+      renderAttachmentFailure(node, kind, false, url)
       return
     }
 
     void probeAttachmentDeleted(url).then((deleted) => {
       if (!deleted || !node.isConnected || !root.contains(node)) return
-      replaceDeletedAttachment(node, kind)
+      renderAttachmentFailure(node, kind, true, url)
     })
   })
 }
@@ -2878,6 +2947,224 @@ body.is-resizing-rendered-table-column * {
   border-radius: 8px;
 }
 
+.markdown-preview .site-attachment-failure,
+.rendered-table-expand-scroll .site-attachment-failure {
+  --attachment-failure-bg: #fffaf7;
+  --attachment-failure-border: rgba(194, 65, 12, 0.18);
+  --attachment-failure-icon-bg: rgba(234, 88, 12, 0.10);
+  --attachment-failure-icon: #c2410c;
+  --attachment-failure-title: #7c2d12;
+  --attachment-failure-detail: #9a3412;
+  position: relative;
+  display: grid;
+  width: calc(100% - 16px);
+  min-height: 176px;
+  max-width: calc(100% - 16px);
+  margin: 8px;
+  overflow: hidden;
+  place-items: center;
+  border: 1px solid var(--attachment-failure-border);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 50% 20%, rgba(249, 115, 22, 0.08), transparent 52%),
+    var(--attachment-failure-bg);
+  box-sizing: border-box;
+  box-shadow: 0 10px 24px rgba(124, 45, 18, 0.08);
+}
+
+.markdown-preview.theme-dark .site-attachment-failure,
+.rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .site-attachment-failure {
+  --attachment-failure-bg: #241d1a;
+  --attachment-failure-border: rgba(251, 146, 60, 0.22);
+  --attachment-failure-icon-bg: rgba(251, 146, 60, 0.13);
+  --attachment-failure-icon: #fb923c;
+  --attachment-failure-title: #fed7aa;
+  --attachment-failure-detail: #fdba74;
+  box-shadow: 0 14px 30px rgba(2, 6, 23, 0.34);
+}
+
+.markdown-preview .image-grid-item.site-attachment-failure,
+.rendered-table-expand-scroll .image-grid-item.site-attachment-failure,
+.markdown-preview .single-media.site-attachment-failure,
+.rendered-table-expand-scroll .single-media.site-attachment-failure {
+  width: 100%;
+  min-height: 100%;
+  max-width: 100%;
+  margin: 0;
+}
+
+.markdown-preview .site-attachment-failure__content,
+.rendered-table-expand-scroll .site-attachment-failure__content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  max-width: min(88%, 420px);
+  padding: 24px;
+  align-items: center;
+  flex-direction: column;
+  color: var(--attachment-failure-title);
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.markdown-preview .site-attachment-failure__icon,
+.rendered-table-expand-scroll .site-attachment-failure__icon {
+  position: relative;
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 12px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--attachment-failure-icon) 22%, transparent);
+  border-radius: 14px;
+  background: var(--attachment-failure-icon-bg);
+  color: var(--attachment-failure-icon);
+  box-sizing: border-box;
+}
+
+.markdown-preview .site-attachment-failure--image .site-attachment-failure__icon::before,
+.rendered-table-expand-scroll .site-attachment-failure--image .site-attachment-failure__icon::before {
+  content: '';
+  width: 20px;
+  height: 16px;
+  border: 1.8px solid currentColor;
+  border-radius: 3px;
+  box-sizing: border-box;
+}
+
+.markdown-preview .site-attachment-failure--image .site-attachment-failure__icon::after,
+.rendered-table-expand-scroll .site-attachment-failure--image .site-attachment-failure__icon::after {
+  content: '';
+  position: absolute;
+  left: 13px;
+  bottom: 13px;
+  width: 12px;
+  height: 8px;
+  border-left: 1.8px solid currentColor;
+  border-top: 1.8px solid currentColor;
+  transform: rotate(45deg) skew(-8deg, -8deg);
+  transform-origin: center;
+}
+
+.markdown-preview .site-attachment-failure--video .site-attachment-failure__icon::before,
+.rendered-table-expand-scroll .site-attachment-failure--video .site-attachment-failure__icon::before {
+  content: '';
+  width: 0;
+  height: 0;
+  margin-left: 3px;
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+  border-left: 13px solid currentColor;
+}
+
+.markdown-preview .site-attachment-failure__title,
+.rendered-table-expand-scroll .site-attachment-failure__title {
+  display: block;
+  color: var(--attachment-failure-title);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.markdown-preview .site-attachment-failure__detail,
+.rendered-table-expand-scroll .site-attachment-failure__detail {
+  display: block;
+  margin-top: 5px;
+  color: var(--attachment-failure-detail);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.markdown-preview .site-attachment-failure--video,
+.rendered-table-expand-scroll .site-attachment-failure--video {
+  min-height: clamp(190px, 42vw, 420px);
+  background: #17191d;
+}
+
+.markdown-preview .site-attachment-failure__poster,
+.rendered-table-expand-scroll .site-attachment-failure__poster {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: none !important;
+  filter: saturate(0.82) brightness(0.76);
+  box-shadow: none !important;
+}
+
+.markdown-preview .site-attachment-failure__scrim,
+.rendered-table-expand-scroll .site-attachment-failure__scrim {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  display: none;
+  background: linear-gradient(180deg, rgba(2, 6, 23, 0.10) 16%, rgba(2, 6, 23, 0.82) 100%);
+}
+
+.markdown-preview .site-attachment-failure--video.site-attachment-failure--with-poster,
+.rendered-table-expand-scroll .site-attachment-failure--video.site-attachment-failure--with-poster {
+  place-items: end start;
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.markdown-preview .site-attachment-failure--with-poster .site-attachment-failure__scrim,
+.rendered-table-expand-scroll .site-attachment-failure--with-poster .site-attachment-failure__scrim {
+  display: block;
+}
+
+.markdown-preview .site-attachment-failure--with-poster .site-attachment-failure__content,
+.rendered-table-expand-scroll .site-attachment-failure--with-poster .site-attachment-failure__content {
+  max-width: 100%;
+  padding: 22px;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.markdown-preview .site-attachment-failure--with-poster .site-attachment-failure__icon,
+.rendered-table-expand-scroll .site-attachment-failure--with-poster .site-attachment-failure__icon {
+  width: 38px;
+  height: 38px;
+  margin-bottom: 10px;
+  border-color: rgba(255, 255, 255, 0.20);
+  background: rgba(15, 23, 42, 0.62);
+  color: #ffffff;
+  backdrop-filter: blur(8px);
+}
+
+.markdown-preview .site-attachment-failure--with-poster .site-attachment-failure__title,
+.rendered-table-expand-scroll .site-attachment-failure--with-poster .site-attachment-failure__title {
+  color: #ffffff;
+}
+
+.markdown-preview .site-attachment-failure--with-poster .site-attachment-failure__detail,
+.rendered-table-expand-scroll .site-attachment-failure--with-poster .site-attachment-failure__detail {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+@media (max-width: 520px) {
+  .markdown-preview .image-grid > .image-grid-item.site-attachment-failure,
+  .rendered-table-expand-scroll .image-grid > .image-grid-item.site-attachment-failure {
+    grid-column: 1 / -1;
+    min-height: 164px;
+    aspect-ratio: 16 / 9 !important;
+  }
+
+  .markdown-preview .site-attachment-failure__content,
+  .rendered-table-expand-scroll .site-attachment-failure__content {
+    max-width: 94%;
+    padding: 16px;
+  }
+
+  .markdown-preview .site-attachment-failure--with-poster .site-attachment-failure__content,
+  .rendered-table-expand-scroll .site-attachment-failure--with-poster .site-attachment-failure__content {
+    padding: 16px;
+  }
+}
+
 .markdown-preview .site-attachment-file,
 .rendered-table-expand-scroll .site-attachment-file {
   --file-card-bg: #ffffff;
@@ -2935,12 +3222,33 @@ body.is-resizing-rendered-table-column * {
 
 .markdown-preview .site-attachment-file--deleted,
 .rendered-table-expand-scroll .site-attachment-file--deleted {
+  --file-card-bg: #fffaf7;
+  --file-card-bg-hover: #fffaf7;
+  --file-card-border: rgba(194, 65, 12, 0.18);
+  --file-card-icon-bg: rgba(234, 88, 12, 0.10);
+  --file-card-icon-border: rgba(194, 65, 12, 0.16);
+  --file-card-icon: #c2410c;
+  --file-card-name: #7c2d12;
+  --file-card-meta: #9a3412;
+  --file-card-action: #c2410c;
   cursor: default;
 }
 
 .markdown-preview .site-attachment-file--deleted .site-attachment-file__action,
 .rendered-table-expand-scroll .site-attachment-file--deleted .site-attachment-file__action {
-  opacity: 0;
+  width: 24px !important;
+  height: 24px !important;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  opacity: .72;
+}
+
+.markdown-preview .site-attachment-file--deleted .site-attachment-file__action::before,
+.rendered-table-expand-scroll .site-attachment-file--deleted .site-attachment-file__action::before {
+  content: '!';
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .markdown-preview .site-attachment-file + p,
@@ -3098,6 +3406,19 @@ body.is-resizing-rendered-table-column * {
   --file-card-name: #ffffff;
   --file-card-meta: #9ca3af;
   --file-card-action: #cbd5e1;
+}
+
+.markdown-preview.theme-dark .site-attachment-file--deleted,
+.rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .site-attachment-file--deleted {
+  --file-card-bg: #241d1a;
+  --file-card-bg-hover: #241d1a;
+  --file-card-border: rgba(251, 146, 60, 0.22);
+  --file-card-icon-bg: rgba(251, 146, 60, 0.13);
+  --file-card-icon-border: rgba(251, 146, 60, 0.20);
+  --file-card-icon: #fb923c;
+  --file-card-name: #fed7aa;
+  --file-card-meta: #fdba74;
+  --file-card-action: #fb923c;
 }
 
 @media (max-width: 520px) {
