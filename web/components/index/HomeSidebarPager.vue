@@ -12,30 +12,54 @@
     </button>
 
     <div class="home-sidebar-pager__main">
-      <span class="home-sidebar-pager__text">第</span>
-      <div class="home-sidebar-pager__number-control">
-        <input
-          v-model="targetPage"
-          type="text"
-          inputmode="numeric"
-          pattern="[0-9]*"
-          class="home-sidebar-pager__input"
-          aria-label="侧栏跳转页码"
-          :disabled="disabled || loading"
-          @keyup.enter="submitTargetPage"
-        />
-        <div class="home-sidebar-pager__stepper" aria-label="侧栏页码增减">
-          <button type="button" class="home-sidebar-pager__step nw-action-btn" aria-label="页码加一" :disabled="disabled || loading" @click="adjustTargetPage(1)">
-            <UIcon name="i-heroicons-chevron-up-20-solid" />
-          </button>
-          <button type="button" class="home-sidebar-pager__step nw-action-btn" aria-label="页码减一" :disabled="disabled || loading" @click="adjustTargetPage(-1)">
-            <UIcon name="i-heroicons-chevron-down-20-solid" />
-          </button>
+      <button
+        type="button"
+        class="home-sidebar-pager__scroll nw-action-btn"
+        aria-label="返回页首"
+        title="返回页首"
+        :disabled="!canScrollTop"
+        @click="emit('scroll-top')"
+      >
+        <UIcon name="i-heroicons-arrow-up" class="home-sidebar-pager__scroll-icon" />
+      </button>
+
+      <div class="home-sidebar-pager__controls">
+        <span class="home-sidebar-pager__text">第</span>
+        <div class="home-sidebar-pager__number-control">
+          <input
+            v-model="targetPage"
+            type="text"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            class="home-sidebar-pager__input"
+            aria-label="侧栏跳转页码"
+            :disabled="disabled || loading"
+            @keyup.enter="submitTargetPage"
+          />
+          <div class="home-sidebar-pager__stepper" aria-label="侧栏页码增减">
+            <button type="button" class="home-sidebar-pager__step nw-action-btn" aria-label="页码加一" :disabled="disabled || loading" @click="adjustTargetPage(1)">
+              <UIcon name="i-heroicons-chevron-up-20-solid" />
+            </button>
+            <button type="button" class="home-sidebar-pager__step nw-action-btn" aria-label="页码减一" :disabled="disabled || loading" @click="adjustTargetPage(-1)">
+              <UIcon name="i-heroicons-chevron-down-20-solid" />
+            </button>
+          </div>
         </div>
+        <span class="home-sidebar-pager__text">页 / 共 {{ totalPages }} 页</span>
+        <button type="button" class="home-sidebar-pager__jump nw-action-btn" :disabled="disabled || loading" @click="submitTargetPage">
+          跳转
+        </button>
       </div>
-      <span class="home-sidebar-pager__text">页 / 共 {{ totalPages }} 页</span>
-      <button type="button" class="home-sidebar-pager__jump nw-action-btn" :disabled="disabled || loading" @click="submitTargetPage">
-        跳转
+
+      <button
+        type="button"
+        class="home-sidebar-pager__scroll nw-action-btn"
+        aria-label="返回页尾"
+        title="返回页尾"
+        :disabled="!canScrollBottom"
+        @click="emit('scroll-bottom')"
+      >
+        <UIcon name="i-heroicons-arrow-down" class="home-sidebar-pager__scroll-icon" />
       </button>
     </div>
 
@@ -63,12 +87,16 @@ const props = defineProps<{
   loading?: boolean
   canPrevious?: boolean
   canNext?: boolean
+  canScrollTop?: boolean
+  canScrollBottom?: boolean
 }>()
 
 const emit = defineEmits<{
   (event: 'previous'): void
   (event: 'next'): void
   (event: 'jump', page: string): void
+  (event: 'scroll-top'): void
+  (event: 'scroll-bottom'): void
 }>()
 
 const targetPage = ref(String(Number.isFinite(Number(props.currentPage)) ? Number(props.currentPage) : 0))
@@ -102,9 +130,19 @@ const submitTargetPage = () => emit('jump', targetPage.value)
   white-space: nowrap;
   color: inherit;
   font-family: inherit;
+  container-type: inline-size;
 }
 
 .home-sidebar-pager__main {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.home-sidebar-pager__controls {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -114,6 +152,7 @@ const submitTargetPage = () => emit('jump', targetPage.value)
 }
 
 .home-sidebar-pager__nav,
+.home-sidebar-pager__scroll,
 .home-sidebar-pager__jump {
   display: inline-flex;
   align-items: center;
@@ -136,6 +175,20 @@ const submitTargetPage = () => emit('jump', targetPage.value)
 .home-sidebar-pager__nav-icon {
   width: 15px;
   height: 15px;
+}
+
+.home-sidebar-pager__scroll {
+  width: 24px;
+  min-width: 24px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: 8px;
+}
+
+.home-sidebar-pager__scroll-icon {
+  width: 13px;
+  height: 13px;
 }
 
 .home-sidebar-pager__jump {
@@ -219,6 +272,26 @@ const submitTargetPage = () => emit('jump', targetPage.value)
 .home-sidebar-pager input:disabled {
   cursor: not-allowed;
   opacity: .38;
+}
+
+@container (max-width: 285px) {
+  .home-sidebar-pager__main {
+    grid-template-columns: 13px minmax(0, 1fr) 13px;
+    gap: 0;
+  }
+
+  .home-sidebar-pager__scroll {
+    width: 13px;
+    min-width: 13px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+  }
+
+  .home-sidebar-pager__scroll-icon {
+    width: 9px;
+    height: 9px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

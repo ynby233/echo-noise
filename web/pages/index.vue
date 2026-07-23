@@ -78,10 +78,14 @@
             :loading="activeSidebarPager.loading"
             :can-previous="activeSidebarPager.canPrevious"
             :can-next="activeSidebarPager.canNext"
+            :can-scroll-top="!isAtTop"
+            :can-scroll-bottom="!isAtBottom"
             :disabled="!isSidebarPagerInteractive"
             @previous="handleSidebarPagerPrevious"
             @next="handleSidebarPagerNext"
             @jump="handleSidebarPagerJump"
+            @scroll-top="scrollToTop"
+            @scroll-bottom="scrollToBottom"
           />
         </UCard>
         <UCard v-if="frontendConfig.timeEnabled" class="sidebar-card no-padding-card mt-2 left-widget-clock-card" :class="sidebarThemeCard">
