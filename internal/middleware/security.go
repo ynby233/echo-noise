@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 	"regexp"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/internal/dto"
 	"github.com/rcy1314/echo-noise/internal/models"
+	"gorm.io/gorm"
 )
 
 func getAutoBanConfig() models.SecurityConfig {
@@ -85,12 +87,19 @@ func recordAndMaybeAutoBan(ip string) {
 
 	// upsert ban
 	var existing models.SecurityIPBan
-	if err := db.Where("ip = ?", ip).First(&existing).Error; err == nil {
+	err := db.Where("ip = ?", ip).First(&existing).Error
+	if err == nil {
 		existing.Reason = "auto-ban"
 		existing.Until = until
-		_ = db.Save(&existing).Error
+		if err := db.Save(&existing).Error; err != nil {
+			return
+		}
+	} else if errors.Is(err, gorm.ErrRecordNotFound) {
+		if err := db.Create(&models.SecurityIPBan{IP: ip, Reason: "auto-ban", Until: until}).Error; err != nil {
+			return
+		}
 	} else {
-		_ = db.Create(&models.SecurityIPBan{IP: ip, Reason: "auto-ban", Until: until}).Error
+		return
 	}
 
 	// 立刻让 banCache 生效
@@ -133,6 +142,27 @@ var (
 		regexp.MustCompile(`(?i)^/(actuator|swagger|swagger-ui|v2/api-docs)(/|$)`),
 	}
 )
+
+// InvalidateIPBanCache makes a successful manual ban or unban visible on the
+// next request instead of waiting for a stale positive or negative cache item.
+func InvalidateIPBanCache(ip string) {
+	ip = strings.TrimSpace(ip)
+	if ip == "" {
+		return
+	}
+	banMu.Lock()
+	delete(banCache, ip)
+	banMu.Unlock()
+}
+
+// InvalidateAutoBanConfigCache makes an administrator's saved policy visible
+// without waiting for the short configuration cache to expire.
+func InvalidateAutoBanConfigCache() {
+	autoCfgMu.Lock()
+	autoCfg = nil
+	autoCfgExp = time.Time{}
+	autoCfgMu.Unlock()
+}
 
 func isLocalIP(ip string) bool {
 	ip = strings.TrimSpace(ip)
@@ -249,7 +279,10 @@ func isSuspiciousPath(path string) bool {
 		"/api/video",
 	}
 	for _, p := range allowPrefixes {
-		if strings.HasPrefix(path, p) {
+		if strings.HasSuffix(p, "/") && strings.HasPrefix(path, p) {
+			return false
+		}
+		if !strings.HasSuffix(p, "/") && (path == p || strings.HasPrefix(path, p+"/")) {
 			return false
 		}
 	}

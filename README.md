@@ -357,11 +357,15 @@ docker run -d \
 > TZ=Asia/Shanghai
 > ACCESS_LOG=false
 > SESSION_SECRET=请替换为至少32位随机字符串
+> # 仅在明确经过反向代理时填写代理 IP/CIDR，多个值用逗号分隔
+> # TRUSTED_PROXIES=172.18.0.1/32
 > DB_TYPE=sqlite
 > DB_PATH=/app/data/noise.db
 > NOTE_HOST=http://localhost:1314
 > NOTE_HTTP_PORT=1315
 > ```
+>
+> `TRUSTED_PROXIES` 默认留空，此时不会信任客户端提供的 `X-Forwarded-For`/`X-Real-IP`。只有确认请求经过反向代理时才填写该代理的 IP 或 CIDR；不要配置 `0.0.0.0/0` 或 `::/0`。
 >
 > `runtime.env` 只能固定环境变量，不能固定数据卷映射；数据卷仍需在 `docker run`、docker-compose 或图形化容器面板中配置。环境变量优先级上，`runtime.env` 会覆盖镜像默认 ENV 与面板中同名变量。`runtime.env.example` 只是模板，不会被自动加载；已有 `runtime.env` 和 `config.yaml` 不会被覆盖。若 `/app/config` 是空挂载目录，容器会在首次启动时自动写入默认 `config.yaml` 与 `runtime.env.example`。
 >

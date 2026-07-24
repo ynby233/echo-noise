@@ -1,13 +1,16 @@
 package controllers
 
 import (
+	"errors"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/internal/dto"
+	"github.com/rcy1314/echo-noise/internal/middleware"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"gorm.io/gorm"
 )
@@ -277,6 +280,27 @@ type banReq struct {
 	Minutes int    `json:"minutes"`
 }
 
+func normalizeSecurityIP(value string) (string, error) {
+	addr, err := netip.ParseAddr(strings.TrimSpace(value))
+	if err != nil || addr.Zone() != "" {
+		return "", errors.New("IP格式无效")
+	}
+	addr = addr.Unmap()
+	return addr.String(), nil
+}
+
+func normalizeBannableIP(value string) (string, error) {
+	normalized, err := normalizeSecurityIP(value)
+	if err != nil {
+		return "", err
+	}
+	addr := netip.MustParseAddr(normalized)
+	if !addr.IsGlobalUnicast() || addr.IsPrivate() || addr.IsLoopback() {
+		return "", errors.New("不能封禁本机或内网IP")
+	}
+	return normalized, nil
+}
+
 func cleanupExpiredBans(db *gorm.DB) {
 	if db == nil {
 		return
@@ -303,13 +327,9 @@ func AddIPBan(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.Fail[any]("参数错误"))
 		return
 	}
-	ip := strings.TrimSpace(req.IP)
-	if ip == "" {
-		c.JSON(http.StatusOK, dto.Fail[any]("IP不能为空"))
-		return
-	}
-	if ip == "127.0.0.1" || ip == "::1" {
-		c.JSON(http.StatusOK, dto.Fail[any]("禁止封禁本机IP"))
+	ip, err := normalizeBannableIP(req.IP)
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[any](err.Error()))
 		return
 	}
 
@@ -331,29 +351,47 @@ func AddIPBan(c *gin.Context) {
 	if err := db.Where("ip = ?", ip).First(&existing).Error; err == nil {
 		existing.Reason = ban.Reason
 		existing.Until = ban.Until
-		_ = db.Save(&existing).Error
+		if err := db.Save(&existing).Error; err != nil {
+			c.JSON(http.StatusOK, dto.Fail[any]("保存封禁失败"))
+			return
+		}
+		middleware.InvalidateIPBanCache(ip)
 		c.JSON(http.StatusOK, dto.OK(existing, "已封禁"))
+		return
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusOK, dto.Fail[any]("查询封禁状态失败"))
 		return
 	}
 	if err := db.Create(&ban).Error; err != nil {
-		c.JSON(http.StatusOK, dto.Fail[any](err.Error()))
+		c.JSON(http.StatusOK, dto.Fail[any]("保存封禁失败"))
 		return
 	}
+	middleware.InvalidateIPBanCache(ip)
 	c.JSON(http.StatusOK, dto.OK(ban, "已封禁"))
 }
 
 func RemoveIPBan(c *gin.Context) {
-	ip := strings.TrimSpace(c.Query("ip"))
-	if ip == "" {
-		c.JSON(http.StatusOK, dto.Fail[any]("ip不能为空"))
+	rawIP := strings.TrimSpace(c.Query("ip"))
+	if rawIP == "" {
+		c.JSON(http.StatusOK, dto.Fail[any]("IP不能为空"))
 		return
+	}
+	ips := []string{rawIP}
+	if normalized, err := normalizeSecurityIP(rawIP); err == nil && normalized != rawIP {
+		ips = append(ips, normalized)
 	}
 	db := models.GetDB()
 	if db == nil {
 		c.JSON(http.StatusOK, dto.OK[any](nil, "已解封"))
 		return
 	}
-	_ = db.Where("ip = ?", ip).Delete(&models.SecurityIPBan{}).Error
+	if err := db.Where("ip IN ?", ips).Delete(&models.SecurityIPBan{}).Error; err != nil {
+		c.JSON(http.StatusOK, dto.Fail[any]("解除封禁失败"))
+		return
+	}
+	for _, ip := range ips {
+		middleware.InvalidateIPBanCache(ip)
+	}
 	c.JSON(http.StatusOK, dto.OK[any](nil, "已解封"))
 }
 
@@ -365,8 +403,15 @@ func GetSecurityConfig(c *gin.Context) {
 	}
 	var cfg models.SecurityConfig
 	if err := db.Order("id asc").First(&cfg).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusOK, dto.Fail[any]("读取安全配置失败"))
+			return
+		}
 		cfg = models.SecurityConfig{AutoBanEnabled: false, AutoBanWindowSeconds: 600, AutoBanThreshold: 10, AutoBanMinutes: 60, AccessLogEnabled: false, SiteVisitLogEnabled: false}
-		_ = db.Create(&cfg).Error
+		if err := db.Create(&cfg).Error; err != nil {
+			c.JSON(http.StatusOK, dto.Fail[any]("初始化安全配置失败"))
+			return
+		}
 	}
 	c.JSON(http.StatusOK, dto.OK(cfg, "ok"))
 }
@@ -412,6 +457,10 @@ func UpdateSecurityConfig(c *gin.Context) {
 	}
 	var cfg models.SecurityConfig
 	if err := db.Order("id asc").First(&cfg).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusOK, dto.Fail[any]("读取安全配置失败"))
+			return
+		}
 		cfg = models.SecurityConfig{}
 	}
 	cfg.AutoBanEnabled = req.AutoBanEnabled
@@ -421,9 +470,16 @@ func UpdateSecurityConfig(c *gin.Context) {
 	cfg.AccessLogEnabled = req.AccessLogEnabled
 	cfg.SiteVisitLogEnabled = req.SiteVisitLogEnabled
 	if cfg.ID == 0 {
-		_ = db.Create(&cfg).Error
+		if err := db.Create(&cfg).Error; err != nil {
+			c.JSON(http.StatusOK, dto.Fail[any]("保存安全配置失败"))
+			return
+		}
 	} else {
-		_ = db.Save(&cfg).Error
+		if err := db.Save(&cfg).Error; err != nil {
+			c.JSON(http.StatusOK, dto.Fail[any]("保存安全配置失败"))
+			return
+		}
 	}
+	middleware.InvalidateAutoBanConfigCache()
 	c.JSON(http.StatusOK, dto.OK(cfg, "已保存"))
 }

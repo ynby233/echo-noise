@@ -1,6 +1,7 @@
 package routers
 
 import (
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -40,6 +41,7 @@ func registerAttachmentManagementRoutes(authRoutes *gin.RouterGroup) {
 
 func SetupRouter() *gin.Engine {
 	r := gin.New()
+	configureTrustedProxies(r)
 	r.Use(gin.Recovery())
 	if enableAccessLog() {
 		r.Use(gin.Logger())
@@ -454,6 +456,29 @@ func SetupRouter() *gin.Engine {
 	})
 
 	return r
+}
+
+func configureTrustedProxies(r *gin.Engine) {
+	raw := strings.TrimSpace(os.Getenv("TRUSTED_PROXIES"))
+	if raw == "" {
+		_ = r.SetTrustedProxies(nil)
+		return
+	}
+
+	proxies := make([]string, 0)
+	for _, value := range strings.Split(raw, ",") {
+		if value = strings.TrimSpace(value); value != "" {
+			proxies = append(proxies, value)
+		}
+	}
+	if len(proxies) == 0 {
+		_ = r.SetTrustedProxies(nil)
+		return
+	}
+	if err := r.SetTrustedProxies(proxies); err != nil {
+		_ = r.SetTrustedProxies(nil)
+		log.Printf("TRUSTED_PROXIES 配置无效，已禁用代理转发头信任: %v", err)
+	}
 }
 
 func enableAccessLog() bool {
