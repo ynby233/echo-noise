@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,6 +14,40 @@ import (
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/services"
 )
+
+func TestServeAttachmentReferenceAllowsAnonymousPublicSiteConfigUsage(t *testing.T) {
+	db, r, owner, _ := setupCommentAccountTest(t)
+	if err := db.AutoMigrate(&models.AttachmentBlob{}, &models.AttachmentReference{}); err != nil {
+		t.Fatalf("migrate attachment registry: %v", err)
+	}
+	content := []byte("public advertisement image")
+	sum := sha256.Sum256(content)
+	store := attachmentregistry.NewLocalStore(t.TempDir())
+	reference, err := attachmentregistry.NewRegistry(db).Create(context.Background(), store, attachmentregistry.CreateInput{
+		Kind:         "image",
+		OwnerUserID:  owner.ID,
+		OriginalName: "advertisement.webp",
+		ContentType:  "image/webp",
+		ContentHash:  hex.EncodeToString(sum[:]),
+		Size:         int64(len(content)),
+	}, bytes.NewReader(content))
+	if err != nil {
+		t.Fatalf("create image reference: %v", err)
+	}
+	path := attachmentregistry.ReferenceURL(reference, "local")
+	ads, _ := json.Marshal([]map[string]string{{"imageURL": path}})
+	if err := db.Create(&models.SiteConfig{LeftAds: string(ads)}).Error; err != nil {
+		t.Fatalf("create site config: %v", err)
+	}
+
+	r.GET("/api/images/*name", serveLocalAttachment("image", t.TempDir(), store.Root()))
+	request := httptest.NewRequest(http.MethodGet, path, nil)
+	response := httptest.NewRecorder()
+	r.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || response.Body.String() != string(content) {
+		t.Fatalf("anonymous site-config attachment response = %d %q", response.Code, response.Body.String())
+	}
+}
 
 func TestServeAttachmentReferenceUsesOwningMessagesInsteadOfSharedBlobIdentity(t *testing.T) {
 	db, r, owner, publicMessage := setupCommentAccountTest(t)

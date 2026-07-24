@@ -114,7 +114,7 @@
         
 
         
-        <UCard v-if="frontendConfig.leftAdEnabled && leftAds.length > 0" class="sidebar-card mt-2" :class="sidebarThemeCard">
+        <UCard v-if="frontendConfig.leftAdEnabled && leftAds.length > 0" class="sidebar-card mt-2 left-widget-ad-card" :class="sidebarThemeCard">
           <div>
             <AdCarousel :ads="leftAds" :interval-ms="frontendConfig.leftAdsIntervalMs" />
           </div>
@@ -123,7 +123,7 @@
           <div class="hidden"><span id="hitokoto">正在获取中...</span></div>
           <div class="hitokoto-container mx-auto w-full sm:max-w-2xl px-2">
             <div class="hitokoto-text nw-tooltip-anchor" :data-tooltip="hitokotoText || '正在获取中...'">
-              <MarkdownRenderer :content="hitokotoText || '正在获取中...'" :enableGithubCard="false" :inheritFont="true" />
+              {{ hitokotoText || '正在获取中...' }}
             </div>
           </div>
         </UCard>
@@ -3495,6 +3495,7 @@ white-space: nowrap;  /* 防止换行 */
 .left-col > .left-widget-pager-card > div[class*="px-4"][class*="py-5"] { padding: 9px 10px !important; }
 .left-col > .left-widget-clock-card > div[class*="px-4"][class*="py-5"] { padding-top: 12px !important; padding-bottom: 12px !important; }
 .left-col > .left-widget-life-card > div[class*="px-4"][class*="py-5"] { padding-top: 23px !important; padding-bottom: 21px !important; }
+.left-col > .left-widget-ad-card > div[class*="px-4"][class*="py-5"] { padding: 6px 14px !important; }
 .left-col > .left-widget-hitokoto-card > div[class*="px-4"][class*="py-5"] { padding-top: 11px !important; padding-bottom: 10px !important; }
 html.dark .sidebar-card {
   background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.8) 100%);

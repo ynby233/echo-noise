@@ -73,6 +73,9 @@ func canReadAttachmentReference(c *gin.Context, reference models.AttachmentRefer
 	if err != nil {
 		return false, false, err
 	}
+	if reference.Kind == "image" && isPublicSiteImageReference(reference, backend) {
+		return true, true, nil
+	}
 	viewerID, isAdmin := currentMessageViewer(c)
 	if isAdmin {
 		public := false
@@ -98,6 +101,16 @@ func canReadAttachmentReference(c *gin.Context, reference models.AttachmentRefer
 		}
 	}
 	return allowed, publiclyReferenced, nil
+}
+
+func isPublicSiteImageReference(reference models.AttachmentReference, backend string) bool {
+	needle := attachmentReferenceURLPrefix(reference.Kind, backend, reference.PublicID)
+	for _, usage := range loadPublicSiteImageAttachmentUsages() {
+		if strings.Contains(usage.URL, needle) {
+			return true
+		}
+	}
+	return false
 }
 
 func messagesReferencingAttachmentReference(reference models.AttachmentReference, backend string) ([]models.Message, error) {

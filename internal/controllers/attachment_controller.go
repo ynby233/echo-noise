@@ -105,7 +105,11 @@ func loadImageAttachmentUsages() []imageAttachmentUsage {
 			}
 		}
 	}
+	return append(usages, loadPublicSiteImageAttachmentUsages()...)
+}
 
+func loadPublicSiteImageAttachmentUsages() []imageAttachmentUsage {
+	usages := make([]imageAttachmentUsage, 0)
 	var site models.SiteConfig
 	if err := database.DB.Table("site_configs").First(&site).Error; err != nil {
 		return usages

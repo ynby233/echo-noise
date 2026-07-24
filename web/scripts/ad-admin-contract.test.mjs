@@ -8,6 +8,8 @@ const [source, cropper] = await Promise.all([
 
 assert.match(cropper, /role="alert"/, '裁切失败时应在弹窗内给出可访问的错误提示')
 assert.match(cropper, /catch \(error: any\)/, '裁切异常不应只抛给控制台')
+assert.match(cropper, /:ui="\{ width: 'sm:max-w-2xl' \}"/, '裁切面板与 UModal 容器宽度应一致，不能横向溢出')
+assert.match(cropper, /min="1"\s+max="3"/, '裁切缩放应从铺满裁切框的 100% 开始，避免缩小后出现空白边')
 
 assert.match(source, /\{ key: 'site-ads', label: '广告'/, '后台导航应统一命名为“广告”')
 assert.doesNotMatch(source, />左侧广告模块</, '广告面板不应继续使用旧标题')

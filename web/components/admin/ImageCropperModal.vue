@@ -1,9 +1,9 @@
 <template>
-  <UModal :model-value="modelValue" @update:model-value="setOpen">
+  <UModal :model-value="modelValue" :ui="{ width: 'sm:max-w-2xl' }" @update:model-value="setOpen">
     <div class="image-cropper-panel p-4 sm:p-5">
       <div class="mb-3">
         <h3 class="text-base font-semibold">{{ title }}</h3>
-        <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">拖动图片调整位置，使用滑块缩放；框内内容即为最终图片。</p>
+        <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">拖动图片调整位置，使用滑块缩放；100% 为完整覆盖裁切框的最小比例。</p>
       </div>
       <div
         ref="viewportRef"
@@ -194,7 +194,7 @@ onBeforeUnmount(() => resizeObserver?.disconnect())
 </script>
 
 <style scoped>
-.image-cropper-panel { width: min(92vw, 600px); }
+.image-cropper-panel { width: 100%; max-width: 100%; box-sizing: border-box; }
 .image-cropper-viewport {
   width: 100%;
   position: relative;
