@@ -63,12 +63,12 @@
               <div v-if="isExpanded(item)" class="mt-2 rounded p-2" :class="theme?.subtleBg">
                 <div v-if="!item.belongs?.length" class="text-xs" :class="theme?.mutedText">无关联内容</div>
                 <div v-else class="space-y-2">
-                  <div v-for="b in item.belongs" :key="b.id" class="text-xs" :class="theme?.text">
+                  <div v-for="(b, index) in item.belongs" :key="associationIdentity(b, index)" class="text-xs" :class="theme?.text">
                     <div class="flex items-center gap-2">
-                      <span class="px-2 py-1 rounded text-[10px]" :class="theme?.subtleBg">#{{ b.id }}</span>
-                      <span :class="theme?.mutedText">{{ formatDate(b.created_at) }}</span>
+                      <span class="px-2 py-1 rounded text-[10px]" :class="theme?.subtleBg">{{ associationLabel(b) }}</span>
+                      <span v-if="hasAssociationDate(b.created_at)" :class="theme?.mutedText">{{ formatDate(b.created_at) }}</span>
                     </div>
-                    <div class="mt-1 line-clamp-2" :class="theme?.mutedText">{{ b.snippet }}</div>
+                    <div v-if="associationSnippet(b)" class="mt-1 line-clamp-2" :class="theme?.mutedText">{{ associationSnippet(b) }}</div>
                   </div>
                 </div>
               </div>
@@ -110,12 +110,12 @@
               <div v-if="isExpanded(item)" class="mt-2 rounded p-2" :class="theme?.subtleBg">
                 <div v-if="!item.belongs?.length" class="text-xs" :class="theme?.mutedText">无关联内容</div>
                 <div v-else class="space-y-2">
-                  <div v-for="b in item.belongs" :key="b.id" class="text-xs" :class="theme?.text">
+                  <div v-for="(b, index) in item.belongs" :key="associationIdentity(b, index)" class="text-xs" :class="theme?.text">
                     <div class="flex items-center gap-2">
-                      <span class="px-2 py-1 rounded text-[10px]" :class="theme?.subtleBg">#{{ b.id }}</span>
-                      <span :class="theme?.mutedText">{{ formatDate(b.created_at) }}</span>
+                      <span class="px-2 py-1 rounded text-[10px]" :class="theme?.subtleBg">{{ associationLabel(b) }}</span>
+                      <span v-if="hasAssociationDate(b.created_at)" :class="theme?.mutedText">{{ formatDate(b.created_at) }}</span>
                     </div>
-                    <div class="mt-1 line-clamp-2" :class="theme?.mutedText">{{ b.snippet }}</div>
+                    <div v-if="associationSnippet(b)" class="mt-1 line-clamp-2" :class="theme?.mutedText">{{ associationSnippet(b) }}</div>
                   </div>
                 </div>
               </div>
@@ -157,12 +157,12 @@
               <div v-if="isExpanded(item)" class="mt-2 rounded p-2" :class="theme?.subtleBg">
                 <div v-if="!item.belongs?.length" class="text-xs" :class="theme?.mutedText">无关联内容</div>
                 <div v-else class="space-y-2">
-                  <div v-for="b in item.belongs" :key="b.id" class="text-xs" :class="theme?.text">
+                  <div v-for="(b, index) in item.belongs" :key="associationIdentity(b, index)" class="text-xs" :class="theme?.text">
                     <div class="flex items-center gap-2">
-                      <span class="px-2 py-1 rounded text-[10px]" :class="theme?.subtleBg">#{{ b.id }}</span>
-                      <span :class="theme?.mutedText">{{ formatDate(b.created_at) }}</span>
+                      <span class="px-2 py-1 rounded text-[10px]" :class="theme?.subtleBg">{{ associationLabel(b) }}</span>
+                      <span v-if="hasAssociationDate(b.created_at)" :class="theme?.mutedText">{{ formatDate(b.created_at) }}</span>
                     </div>
-                    <div class="mt-1 line-clamp-2" :class="theme?.mutedText">{{ b.snippet }}</div>
+                    <div v-if="associationSnippet(b)" class="mt-1 line-clamp-2" :class="theme?.mutedText">{{ associationSnippet(b) }}</div>
                   </div>
                 </div>
               </div>
@@ -207,12 +207,12 @@
               <div v-if="isExpanded(item)" class="mt-2 rounded p-2" :class="theme?.subtleBg">
                 <div v-if="!item.belongs?.length" class="text-xs" :class="theme?.mutedText">无关联内容</div>
                 <div v-else class="space-y-2">
-                  <div v-for="b in item.belongs" :key="b.id" class="text-xs" :class="theme?.text">
+                  <div v-for="(b, index) in item.belongs" :key="associationIdentity(b, index)" class="text-xs" :class="theme?.text">
                     <div class="flex items-center gap-2">
-                      <span class="px-2 py-1 rounded text-[10px]" :class="theme?.subtleBg">#{{ b.id }}</span>
-                      <span :class="theme?.mutedText">{{ formatDate(b.created_at) }}</span>
+                      <span class="px-2 py-1 rounded text-[10px]" :class="theme?.subtleBg">{{ associationLabel(b) }}</span>
+                      <span v-if="hasAssociationDate(b.created_at)" :class="theme?.mutedText">{{ formatDate(b.created_at) }}</span>
                     </div>
-                    <div class="mt-1 line-clamp-2" :class="theme?.mutedText">{{ b.snippet }}</div>
+                    <div v-if="associationSnippet(b)" class="mt-1 line-clamp-2" :class="theme?.mutedText">{{ associationSnippet(b) }}</div>
                   </div>
                 </div>
               </div>
@@ -368,6 +368,26 @@ const formatDate = (s: string | Date) => {
   const d = new Date(s)
   return d.toLocaleString()
 }
+const hasAssociationDate = (value: unknown) => {
+  if (!value) return false
+  const timestamp = new Date(value as string | Date).getTime()
+  return Number.isFinite(timestamp) && timestamp > 0
+}
+const associationLabel = (belong: any) => {
+  const label = String(belong?.label || '').trim()
+  if (label) return label
+  return belong?.id ? `笔记 #${belong.id}` : '关联内容'
+}
+const associationSnippet = (belong: any) => {
+  const snippet = String(belong?.snippet || '').trim()
+  return snippet && snippet !== associationLabel(belong) ? snippet : ''
+}
+const associationIdentity = (belong: any, index: number) => [
+  String(belong?.kind || 'message'),
+  String(belong?.id || 0),
+  associationLabel(belong),
+  String(index),
+].join(':')
 
 const isExpanded = (item: any) => !!expanded.value[itemIdentity(item)]
 const toggleExpand = (item: any) => {

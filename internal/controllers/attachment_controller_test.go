@@ -90,6 +90,75 @@ func TestListOtherAttachmentsShowsSameOriginalNameAsSeparateLogicalReferences(t 
 	}
 }
 
+func TestListImageAttachmentsShowsSiteAndAvatarAssociations(t *testing.T) {
+	db, r, owner, _ := setupCommentAccountTest(t)
+	if err := db.AutoMigrate(&models.AttachmentBlob{}, &models.AttachmentReference{}); err != nil {
+		t.Fatalf("migrate attachment registry: %v", err)
+	}
+	content := []byte("shared site image")
+	sum := sha256.Sum256(content)
+	store := attachmentregistry.NewLocalStore(t.TempDir())
+	reference, err := attachmentregistry.NewRegistry(db).Create(context.Background(), store, attachmentregistry.CreateInput{
+		Kind:         "image",
+		OwnerUserID:  owner.ID,
+		OriginalName: "site-image.png",
+		ContentType:  "image/png",
+		ContentHash:  hex.EncodeToString(sum[:]),
+		Size:         int64(len(content)),
+	}, bytes.NewReader(content))
+	if err != nil {
+		t.Fatalf("create image reference: %v", err)
+	}
+	imageURL := attachmentregistry.ReferenceURL(reference, "local")
+	owner.AvatarURL = imageURL
+	if err := db.Save(&owner).Error; err != nil {
+		t.Fatalf("save user avatar: %v", err)
+	}
+	backgrounds, _ := json.Marshal([]map[string]string{{"url": imageURL}})
+	ads, _ := json.Marshal([]map[string]string{{"imageURL": imageURL}})
+	if err := db.Create(&models.SiteConfig{
+		AvatarURL:        imageURL,
+		WelcomeAvatarURL: imageURL,
+		Backgrounds:      string(backgrounds),
+		LeftAds:          string(ads),
+	}).Error; err != nil {
+		t.Fatalf("create site config: %v", err)
+	}
+
+	r.GET("/api/attachments/images", ListImageAttachments)
+	req := httptest.NewRequest(http.MethodGet, "/api/attachments/images", nil)
+	response := httptest.NewRecorder()
+	r.ServeHTTP(response, req)
+	var payload struct {
+		Code int `json:"code"`
+		Data []struct {
+			LogicalID string `json:"logical_id"`
+			Belongs   []struct {
+				Kind  string `json:"kind"`
+				Label string `json:"label"`
+			} `json:"belongs"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode image list response: %v", err)
+	}
+	var kinds map[string]string
+	for _, item := range payload.Data {
+		if item.LogicalID != reference.PublicID {
+			continue
+		}
+		kinds = make(map[string]string, len(item.Belongs))
+		for _, belong := range item.Belongs {
+			kinds[belong.Kind] = belong.Label
+		}
+	}
+	for _, kind := range []string{"user_avatar", "site_avatar", "welcome_avatar", "header_background", "advertisement"} {
+		if kinds[kind] == "" {
+			t.Fatalf("association %q missing from %#v", kind, kinds)
+		}
+	}
+}
+
 func TestDeleteAttachmentReferenceDoesNotBreakAnotherLogicalReference(t *testing.T) {
 	db, r, owner, _ := setupCommentAccountTest(t)
 	if err := db.AutoMigrate(&models.AttachmentBlob{}, &models.AttachmentReference{}); err != nil {

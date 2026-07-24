@@ -774,7 +774,7 @@
                     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                       <div class="font-semibold flex items-center gap-2" :class="theme.text">
                         <UIcon name="i-heroicons-megaphone" class="w-5 h-5" />
-                        <span>左侧广告模块</span>
+                        <span>广告</span>
                       </div>
                       <div class="flex flex-wrap items-center gap-3">
                         <span class="text-sm" :class="theme.mutedText">状态</span>
@@ -796,15 +796,36 @@
                                   <UButton size="xs" color="red" variant="soft" @click="frontendConfig.leftAds.splice(i, 1)">删除</UButton>
                                 </div>
                               </div>
-                              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <UInput v-model="ad.imageURL" placeholder="海报图片 URL" />
+                              <div class="grid grid-cols-1 md:grid-cols-[180px_minmax(0,1fr)] gap-3">
+                                <button type="button" class="admin-ad-preview" @click="previewImage(resolveAdImageURL(baseApi, ad.imageURL))">
+                                  <img v-if="ad.imageURL" :src="resolveAdImageURL(baseApi, ad.imageURL)" alt="广告图片预览" />
+                                  <span v-else :class="theme.mutedText">暂无图片</span>
+                                </button>
+                                <div class="space-y-3 min-w-0">
+                                  <UInput v-model="ad.imageURL" placeholder="海报图片 URL" class="w-full" />
+                                  <div class="flex flex-wrap gap-2">
+                                    <UButton size="xs" color="indigo" variant="soft" icon="i-heroicons-cloud-arrow-up" :loading="adImageUploading && adCropIndex === i" @click="chooseAdImage(i)">上传并裁切</UButton>
+                                    <UButton size="xs" color="gray" variant="soft" icon="i-heroicons-eye" :disabled="!ad.imageURL" @click="previewImage(resolveAdImageURL(baseApi, ad.imageURL))">预览</UButton>
+                                  </div>
+                                  <p class="text-xs" :class="theme.mutedText">推荐使用 16:9 图片；上传后可拖动和缩放裁切。</p>
+                                </div>
                                 <UInput v-model="ad.linkURL" placeholder="跳转链接" />
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  <label class="admin-bg-style-control">
+                                    <span :class="theme.mutedText">文字颜色</span>
+                                    <input v-model="ad.textColor" type="color" class="admin-bg-color-input" />
+                                  </label>
+                                  <label class="admin-bg-style-control">
+                                    <span :class="theme.mutedText">文字显示</span>
+                                    <USelect v-model="ad.textDisplayMode" :options="[{ label: '悬浮时显示', value: 'hover' }, { label: '常驻显示', value: 'always' }]" />
+                                  </label>
+                                </div>
                                 <UTextarea v-model="ad.description" placeholder="描述文本（可选）" class="md:col-span-2" />
                               </div>
                             </div>
                             <div class="flex items-center justify-between">
                               <div class="flex items-center gap-2">
-                                <UButton size="sm" color="indigo" variant="soft" class="shadow" @click="frontendConfig.leftAds.push({ imageURL: '', linkURL: '', description: '' })">新增广告</UButton>
+                                <UButton size="sm" color="indigo" variant="soft" class="shadow" @click="frontendConfig.leftAds.push(makeEmptyAdConfig())">新增广告</UButton>
                                 <UButton size="sm" color="indigo" variant="soft" class="shadow" @click="resetAdsConfig">重置为默认</UButton>
                               </div>
                               <div class="flex items-center gap-2">
@@ -2389,6 +2410,15 @@
                 </UForm>
             </div> 
         </UModal>
+        <ImageCropperModal
+          v-model="adCropOpen"
+          :src="adCropSource"
+          title="裁切广告图片"
+          :aspect-ratio="16 / 9"
+          :output-width="1280"
+          @confirm="uploadCroppedAdImage"
+        />
+        <input ref="adImageInput" type="file" accept="image/*" class="hidden" @change="onAdImageSelected" />
         <UModal v-model="showBgPreview">
           <div class="p-2">
             <img :src="bgPreviewUrl" class="max-h-[70vh] w-auto mx-auto rounded" />
@@ -2416,8 +2446,10 @@ import NotifyPanel from './NotifyPanel.vue'
  
 import CommentsSettings from '~/components/admin/CommentsSettings.vue'
 import AttachmentManager from '~/components/admin/AttachmentManager.vue'
+import ImageCropperModal from '~/components/admin/ImageCropperModal.vue'
 import { getRequest, putRequest, postRequest, deleteRequest } from '~/utils/api'
 import { writeClipboardText } from '~/utils/clipboard'
+import { makeEmptyAdConfig, normalizeAdConfigs, resolveAdImageURL, type AdConfig } from '~/utils/ad-config'
 import { useRuntimeConfig, useHead, useRouter } from '#imports'
 const formatShanghai = (s: string) => {
   try {
@@ -2467,7 +2499,7 @@ const adminNavGroups = computed<AdminNavGroup[]>(() => {
         { key: 'site-register', label: '注册配置', icon: 'i-heroicons-user-plus' },
         { key: 'site-pwa', label: 'PWA 模式', icon: 'i-heroicons-rocket-launch' },
         { key: 'site-announcement', label: '公告栏', icon: 'i-heroicons-megaphone' },
-        { key: 'site-ads', label: '左侧广告', icon: 'i-heroicons-photo' },
+        { key: 'site-ads', label: '广告', icon: 'i-heroicons-photo' },
         { key: 'site-feed', label: '信息流', icon: 'i-heroicons-rss' },
         { key: 'site-rss', label: 'RSS 订阅', icon: 'i-heroicons-rss' },
         { key: 'hitokoto', label: '随机一言', icon: 'i-heroicons-sparkles' },
@@ -4543,6 +4575,70 @@ const editMode = ref(false)
 const avatarInput = ref<HTMLInputElement | null>(null)
 const bgFileInput = ref<HTMLInputElement | null>(null)
 const siteAvatarInput = ref<HTMLInputElement | null>(null)
+const adImageInput = ref<HTMLInputElement | null>(null)
+const adCropOpen = ref(false)
+const adCropSource = ref('')
+const adCropIndex = ref(-1)
+const adCropOriginalName = ref('advertisement')
+const adImageUploading = ref(false)
+
+const releaseAdCropSource = () => {
+  if (adCropSource.value.startsWith('blob:')) URL.revokeObjectURL(adCropSource.value)
+  adCropSource.value = ''
+}
+const chooseAdImage = (index: number) => {
+  adCropIndex.value = index
+  adImageInput.value?.click()
+}
+const onAdImageSelected = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  if (!file.type.startsWith('image/')) {
+    useToast().add({ title: '上传失败', description: '请选择图片文件', color: 'red' })
+    input.value = ''
+    return
+  }
+  releaseAdCropSource()
+  adCropOriginalName.value = file.name.replace(/\.[^.]+$/, '') || 'advertisement'
+  adCropSource.value = URL.createObjectURL(file)
+  adCropOpen.value = true
+}
+const uploadCroppedAdImage = async (blob: Blob) => {
+  const index = adCropIndex.value
+  if (!frontendConfig.leftAds[index] || adImageUploading.value) return
+  adImageUploading.value = true
+  try {
+    const file = new File([blob], `${adCropOriginalName.value}-cropped.webp`, { type: 'image/webp' })
+    const formData = new FormData()
+    formData.append('image', file)
+    const response = await fetch(`${baseApi}/images/upload`, { method: 'POST', credentials: 'include', body: formData })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok || data?.code !== 1 || !data?.data) throw new Error(data?.msg || '上传失败')
+    frontendConfig.leftAds[index].imageURL = String(data.data).trim()
+    frontendConfig.leftAds = normalizeAdConfigs(frontendConfig.leftAds)
+    await saveConfigFields({ leftAds: frontendConfig.leftAds })
+    await fetchConfig()
+    window.dispatchEvent(new Event('frontend-config-updated'))
+    useToast().add({ title: '成功', description: '广告图片已上传并保存', color: 'green' })
+    adCropOpen.value = false
+  } catch (error: any) {
+    useToast().add({ title: '广告图片上传失败', description: error?.message || '请稍后重试', color: 'red' })
+  } finally {
+    adImageUploading.value = false
+    if (adImageInput.value) adImageInput.value.value = ''
+  }
+}
+watch(adCropOpen, (open) => {
+  if (!open) {
+    releaseAdCropSource()
+    if (!adImageUploading.value) {
+      adCropIndex.value = -1
+      if (adImageInput.value) adImageInput.value.value = ''
+    }
+  }
+})
+onUnmounted(releaseAdCropSource)
 const avatarFile = ref<File | null>(null)
 const avatarUploading = ref(false)
 const avatarApplyingDefault = ref(false)
@@ -5188,7 +5284,7 @@ interface FrontendConfig {
     leftAdImageURL: string;
     leftAdLinkURL: string;
     leftAdDescription: string;
-    leftAds: Array<{ imageURL: string, linkURL: string, description: string }>;
+    leftAds: AdConfig[];
     leftAdsIntervalMs: number;
     welcomeAvatarURL: string;
     welcomeName: string;
@@ -5278,11 +5374,11 @@ const frontendConfig = reactive<FrontendConfig>({
     leftAdImageURL: 'https://picsum.photos/seed/single-ad/640/640',
     leftAdLinkURL: '',
     leftAdDescription: '示例广告（单条配置）',
-    leftAds: [
+    leftAds: normalizeAdConfigs([
       { imageURL: 'https://picsum.photos/seed/ad-1/640/640', linkURL: '', description: '写作与记录' },
       { imageURL: 'https://picsum.photos/seed/ad-2/640/640', linkURL: '', description: '探索新主题与小工具' },
       { imageURL: 'https://picsum.photos/seed/ad-3/640/640', linkURL: '', description: '记录日常内容' },
-    ] as Array<{ imageURL: string, linkURL: string, description: string }>,
+    ]),
     leftAdsIntervalMs: 4000,
 })
 
@@ -5393,11 +5489,11 @@ const defaultConfig: Record<string, any> = {
     leftAdImageURL: 'https://picsum.photos/seed/single-ad/640/640',
     leftAdLinkURL: '',
     leftAdDescription: '示例广告（单条配置）',
-    leftAds: [
+    leftAds: normalizeAdConfigs([
       { imageURL: 'https://picsum.photos/seed/ad-1/640/640', linkURL: '', description: '写作与记录' },
       { imageURL: 'https://picsum.photos/seed/ad-2/640/640', linkURL: '', description: '探索新主题与小工具' },
       { imageURL: 'https://picsum.photos/seed/ad-3/640/640', linkURL: '', description: '记录日常内容' },
-    ],
+    ]),
     leftAdsIntervalMs: 4000,
 
     // 社交链接默认数据
@@ -5903,9 +5999,9 @@ const fetchConfig = async () => {
                 } else if (key === 'leftAds') {
                     const arr = settings[key];
                     if (Array.isArray(arr)) {
-                        frontendConfig[key] = [...arr];
+                        frontendConfig[key] = normalizeAdConfigs(arr);
                     } else {
-                        frontendConfig[key] = [...(defaultConfig.leftAds || [])];
+                        frontendConfig[key] = normalizeAdConfigs(defaultConfig.leftAds);
                     }
                 } else if (key === 'feedSources') {
                     const arr = settings[key];
@@ -6033,11 +6129,7 @@ const saveConfigItem = async (key: string) => {
         }
         // 特殊处理广告位数组：过滤空条目并裁剪字段
         if (key === 'leftAds') {
-            const cleaned = (frontendConfig.leftAds || []).map((ad: any) => ({
-                imageURL: String(ad?.imageURL || '').trim(),
-                linkURL: String(ad?.linkURL || '').trim(),
-                description: String(ad?.description || '').trim()
-            })).filter((ad: any) => ad.imageURL !== '');
+            const cleaned = normalizeAdConfigs(frontendConfig.leftAds)
             frontendConfig.leftAds = cleaned;
         }
         if (key === 'feed') {
@@ -6183,15 +6275,7 @@ const saveConfig = async () => {
       : ''
     const cleanedBackgrounds = normalizeHeaderBackgrounds(frontendConfig.backgrounds)
 
-    const cleanedLeftAds = Array.isArray((frontendConfig as any).leftAds)
-      ? (frontendConfig as any).leftAds
-          .map((ad: any) => ({
-            imageURL: String(ad?.imageURL || '').trim(),
-            linkURL: String(ad?.linkURL || '').trim(),
-            description: String(ad?.description || '').trim(),
-          }))
-          .filter((ad: any) => ad.imageURL !== '')
-      : []
+    const cleanedLeftAds = normalizeAdConfigs((frontendConfig as any).leftAds)
 
     const cleanedSocialLinks = Array.isArray((frontendConfig as any).socialLinks)
       ? (frontendConfig as any).socialLinks
@@ -6659,12 +6743,7 @@ const resetAdsConfig = () => {
   ;(frontendConfig as any).leftAdLinkURL = ''
   ;(frontendConfig as any).leftAdDescription = '示例广告（单条配置）'
   const def = (defaultConfig as any)
-  const arr = Array.isArray(def.leftAds) ? def.leftAds : []
-  ;(frontendConfig as any).leftAds = arr.map((x: any) => ({
-    imageURL: String(x?.imageURL || ''),
-    linkURL: String(x?.linkURL || ''),
-    description: String(x?.description || '')
-  }))
+  ;(frontendConfig as any).leftAds = normalizeAdConfigs(def.leftAds)
   ;(frontendConfig as any).leftAdsIntervalMs = Number(def.leftAdsIntervalMs || 4000)
 }
 
@@ -7729,6 +7808,28 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   flex-direction: column;
   gap: 6px;
   font-size: 12px;
+}
+.admin-ad-preview {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  align-self: start;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 10px;
+  border: 1px solid rgba(134, 144, 156, 0.35);
+  background: rgba(15, 23, 42, 0.08);
+}
+.admin-ad-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: rgba(15, 23, 42, 0.18);
+}
+.admin-ad-preview:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
 }
 .admin-bg-color-input {
   width: 100%;

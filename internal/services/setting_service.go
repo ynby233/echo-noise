@@ -51,6 +51,11 @@ var userFrontendPreferenceSettingKeys = map[string]struct{}{
 const defaultHeaderImageURL = "https://picsum.photos/1600/500"
 
 const (
+	defaultAdTextColor       = "#ffffff"
+	defaultAdTextDisplayMode = "hover"
+)
+
+const (
 	defaultLoginExpireDays  = 3
 	defaultLoginExpireHours = 0
 	maxLoginExpireDays      = 31
@@ -417,6 +422,57 @@ func normalizeHeaderBackgrounds(raw interface{}) []models.HeaderBackground {
 		return defaultHeaderBackgroundConfigs()
 	}
 	return backgrounds
+}
+
+func normalizeAdTextColor(raw interface{}) string {
+	value := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", raw)))
+	if len(value) != 7 || value[0] != '#' {
+		return defaultAdTextColor
+	}
+	for _, char := range value[1:] {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+			return defaultAdTextColor
+		}
+	}
+	return value
+}
+
+func normalizeAdTextDisplayMode(raw interface{}) string {
+	if strings.EqualFold(strings.TrimSpace(fmt.Sprintf("%v", raw)), "always") {
+		return "always"
+	}
+	return defaultAdTextDisplayMode
+}
+
+func normalizeLeftAds(raw interface{}) []map[string]string {
+	var items []map[string]interface{}
+	switch value := raw.(type) {
+	case string:
+		if strings.TrimSpace(value) == "" || json.Unmarshal([]byte(value), &items) != nil {
+			return []map[string]string{}
+		}
+	default:
+		encoded, err := json.Marshal(value)
+		if err != nil || json.Unmarshal(encoded, &items) != nil {
+			return []map[string]string{}
+		}
+	}
+
+	normalized := make([]map[string]string, 0, len(items))
+	for _, item := range items {
+		imageURL := strings.TrimSpace(fmt.Sprintf("%v", pickAny(item, "imageURL", "ImageURL")))
+		if imageURL == "" || imageURL == "<nil>" {
+			continue
+		}
+		normalized = append(normalized, map[string]string{
+			"imageURL":        imageURL,
+			"linkURL":         strings.TrimSpace(fmt.Sprintf("%v", pickAny(item, "linkURL", "LinkURL"))),
+			"description":     strings.TrimSpace(fmt.Sprintf("%v", pickAny(item, "description", "Description"))),
+			"textColor":       normalizeAdTextColor(pickAny(item, "textColor", "TextColor")),
+			"textDisplayMode": normalizeAdTextDisplayMode(pickAny(item, "textDisplayMode", "TextDisplayMode")),
+		})
+	}
+	return normalized
 }
 
 func HasLifeCountdownSettings(frontendSettings map[string]interface{}) bool {
@@ -890,39 +946,10 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 		dbType = "sqlite"
 	}
 
-	var leftAdsListRaw []map[string]interface{}
-	if strings.TrimSpace(config.LeftAds) != "" {
-		_ = json.Unmarshal([]byte(config.LeftAds), &leftAdsListRaw)
-	}
-	normalizedAds := make([]map[string]string, 0, len(leftAdsListRaw))
-	for _, m := range leftAdsListRaw {
-		img := strings.TrimSpace(fmt.Sprintf("%v", pickAny(m, "imageURL", "ImageURL")))
-		link := strings.TrimSpace(fmt.Sprintf("%v", pickAny(m, "linkURL", "LinkURL")))
-		desc := strings.TrimSpace(fmt.Sprintf("%v", pickAny(m, "description", "Description")))
-		if img == "" {
-			continue
-		}
-		normalizedAds = append(normalizedAds, map[string]string{
-			"imageURL":    img,
-			"linkURL":     link,
-			"description": desc,
-		})
-	}
+	normalizedAds := normalizeLeftAds(config.LeftAds)
 	if len(normalizedAds) == 0 {
 		if defFrontend, ok := getDefaultConfig()["frontendSettings"].(map[string]interface{}); ok {
-			if defAds, ok := defFrontend["leftAds"].([]map[string]string); ok {
-				normalizedAds = append(normalizedAds, defAds...)
-			} else if defAds2, ok := defFrontend["leftAds"].([]map[string]interface{}); ok {
-				for _, m := range defAds2 {
-					img := strings.TrimSpace(fmt.Sprintf("%v", pickAny(m, "imageURL", "ImageURL")))
-					if img == "" {
-						continue
-					}
-					link := strings.TrimSpace(fmt.Sprintf("%v", pickAny(m, "linkURL", "LinkURL")))
-					desc := strings.TrimSpace(fmt.Sprintf("%v", pickAny(m, "description", "Description")))
-					normalizedAds = append(normalizedAds, map[string]string{"imageURL": img, "linkURL": link, "description": desc})
-				}
-			}
+			normalizedAds = normalizeLeftAds(defFrontend["leftAds"])
 		}
 	}
 
@@ -1434,29 +1461,8 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 		}
 	}
 	// 多广告列表
-	if arr, ok := frontendSettings["leftAds"].([]interface{}); ok {
-		list := make([]map[string]string, 0, len(arr))
-		for _, it := range arr {
-			m, ok := it.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			img := strings.TrimSpace(fmt.Sprintf("%v", m["imageURL"]))
-			if img == "" {
-				continue
-			}
-			link := strings.TrimSpace(fmt.Sprintf("%v", m["linkURL"]))
-			desc := strings.TrimSpace(fmt.Sprintf("%v", m["description"]))
-			list = append(list, map[string]string{
-				"imageURL":    img,
-				"linkURL":     link,
-				"description": desc,
-			})
-		}
-		bs, _ := json.Marshal(list)
-		config.LeftAds = string(bs)
-	} else if arr2, ok := frontendSettings["leftAds"].([]map[string]string); ok {
-		bs, _ := json.Marshal(arr2)
+	if rawAds, ok := frontendSettings["leftAds"]; ok {
+		bs, _ := json.Marshal(normalizeLeftAds(rawAds))
 		config.LeftAds = string(bs)
 	}
 
@@ -2101,9 +2107,9 @@ func getDefaultConfig() map[string]interface{} {
 			// 广告默认参数（多广告位）
 			"leftAdEnabled": true,
 			"leftAds": []map[string]string{
-				{"imageURL": "https://picsum.photos/seed/ad-1/640/640", "linkURL": "", "description": "写作与记录"},
-				{"imageURL": "https://picsum.photos/seed/ad-2/640/640", "linkURL": "", "description": "探索新主题与小工具"},
-				{"imageURL": "https://picsum.photos/seed/ad-3/640/640", "linkURL": "", "description": "记录日常内容"},
+				{"imageURL": "https://picsum.photos/seed/ad-1/640/640", "linkURL": "", "description": "写作与记录", "textColor": defaultAdTextColor, "textDisplayMode": defaultAdTextDisplayMode},
+				{"imageURL": "https://picsum.photos/seed/ad-2/640/640", "linkURL": "", "description": "探索新主题与小工具", "textColor": defaultAdTextColor, "textDisplayMode": defaultAdTextDisplayMode},
+				{"imageURL": "https://picsum.photos/seed/ad-3/640/640", "linkURL": "", "description": "记录日常内容", "textColor": defaultAdTextColor, "textDisplayMode": defaultAdTextDisplayMode},
 			},
 			"leftAdsIntervalMs": 4000,
 			// 社交链接默认

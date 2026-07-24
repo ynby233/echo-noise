@@ -70,6 +70,59 @@ func TestShouldCollapseLegacyBackgrounds(t *testing.T) {
 	}
 }
 
+func TestFrontendAdsPreservePresentationSettings(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	admin := mustCreateUser(t, models.User{Username: "ads-admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+	if err := db.Create(&models.SiteConfig{}).Error; err != nil {
+		t.Fatalf("create site config: %v", err)
+	}
+
+	if err := UpdateFrontendSetting(admin.ID, map[string]interface{}{
+		"frontendSettings": map[string]interface{}{
+			"leftAds": []interface{}{
+				map[string]interface{}{
+					"imageURL":        "/api/images/refs/ad-one/banner.png",
+					"linkURL":         "https://example.com/one",
+					"description":     "常驻广告",
+					"textColor":       "#12ABef",
+					"textDisplayMode": "always",
+				},
+				map[string]interface{}{"imageURL": "/legacy-ad.png"},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("save frontend ads: %v", err)
+	}
+
+	config, err := GetFrontendConfig()
+	if err != nil {
+		t.Fatalf("get frontend config: %v", err)
+	}
+	settings := config["frontendSettings"].(map[string]interface{})
+	ads := settings["leftAds"].([]map[string]string)
+	if len(ads) != 2 {
+		t.Fatalf("leftAds = %#v, want two ads", ads)
+	}
+	if got := ads[0]["textColor"]; got != "#12abef" {
+		t.Fatalf("textColor = %q, want normalized #12abef", got)
+	}
+	if got := ads[0]["textDisplayMode"]; got != "always" {
+		t.Fatalf("textDisplayMode = %q, want always", got)
+	}
+	if got := ads[1]["linkURL"]; got != "" {
+		t.Fatalf("legacy linkURL = %q, want blank", got)
+	}
+	if got := ads[1]["description"]; got != "" {
+		t.Fatalf("legacy description = %q, want blank", got)
+	}
+	if got := ads[1]["textColor"]; got != "#ffffff" {
+		t.Fatalf("legacy textColor = %q, want #ffffff", got)
+	}
+	if got := ads[1]["textDisplayMode"]; got != "hover" {
+		t.Fatalf("legacy textDisplayMode = %q, want hover", got)
+	}
+}
+
 func TestRSSConfigDefaultsToAdminMembersAndHidesMemberListFromPublic(t *testing.T) {
 	db := setupUserServiceTestDB(t)
 	admin := mustCreateUser(t, models.User{Username: "admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})

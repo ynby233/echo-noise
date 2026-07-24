@@ -3,6 +3,7 @@ package controllers
 import (
 	"archive/zip"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -41,6 +42,16 @@ type BelongItem struct {
 	ID        uint      `json:"id"`
 	CreatedAt time.Time `json:"created_at"`
 	Snippet   string    `json:"snippet"`
+	Kind      string    `json:"kind,omitempty"`
+	Label     string    `json:"label,omitempty"`
+}
+
+type imageAttachmentUsage struct {
+	URL       string
+	Kind      string
+	Label     string
+	ID        uint
+	CreatedAt time.Time
 }
 
 type AttachmentZipRequest struct {
@@ -84,7 +95,68 @@ func splitPublicBaseURL(raw string) (string, string) {
 	return origin, prefix
 }
 
+func loadImageAttachmentUsages() []imageAttachmentUsage {
+	usages := make([]imageAttachmentUsage, 0)
+	var users []models.User
+	if err := database.DB.Select("id", "username", "avatar_url").Where("avatar_url <> ?", "").Find(&users).Error; err == nil {
+		for _, user := range users {
+			if value := strings.TrimSpace(user.AvatarURL); value != "" {
+				usages = append(usages, imageAttachmentUsage{URL: value, Kind: "user_avatar", Label: "用户头像：" + user.Username, ID: user.ID})
+			}
+		}
+	}
+
+	var site models.SiteConfig
+	if err := database.DB.Table("site_configs").First(&site).Error; err != nil {
+		return usages
+	}
+	appendSiteUsage := func(raw, kind, label string) {
+		if value := strings.TrimSpace(raw); value != "" {
+			usages = append(usages, imageAttachmentUsage{URL: value, Kind: kind, Label: label, CreatedAt: site.UpdatedAt})
+		}
+	}
+	appendSiteUsage(site.AvatarURL, "site_avatar", "站点头像")
+	appendSiteUsage(site.WelcomeAvatarURL, "welcome_avatar", "欢迎组件头像")
+	appendSiteUsage(site.RSSFaviconURL, "rss_icon", "RSS 图标")
+	appendSiteUsage(site.PwaIconURL, "pwa_icon", "PWA 图标")
+	for index, background := range site.GetBackgroundsConfig() {
+		appendSiteUsage(background.URL, "header_background", fmt.Sprintf("头部图 #%d", index+1))
+	}
+	var ads []map[string]interface{}
+	if json.Unmarshal([]byte(site.LeftAds), &ads) == nil {
+		for index, ad := range ads {
+			imageURL, _ := ad["imageURL"].(string)
+			appendSiteUsage(imageURL, "advertisement", fmt.Sprintf("广告 #%d", index+1))
+		}
+	}
+	return usages
+}
+
+func appendImageUsageBelongs(belongs []BelongItem, usages []imageAttachmentUsage, needles ...string) []BelongItem {
+	for _, usage := range usages {
+		matched := false
+		for _, needle := range needles {
+			if needle != "" && strings.Contains(usage.URL, needle) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
+		belongs = append(belongs, BelongItem{
+			ID:        usage.ID,
+			CreatedAt: usage.CreatedAt,
+			Snippet:   usage.Label,
+			Kind:      usage.Kind,
+			Label:     usage.Label,
+		})
+	}
+	return belongs
+}
+
 func ListImageAttachments(c *gin.Context) {
+	imageUsages := loadImageAttachmentUsages()
 	var siteCfg models.SiteConfig
 	_ = database.DB.Table("site_configs").First(&siteCfg).Error
 	if siteCfg.AttachmentStorageEnabled {
@@ -117,7 +189,7 @@ func ListImageAttachments(c *gin.Context) {
 	var messages []models.Message
 	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Order("created_at DESC").Find(&messages)
 
-	list, err := listRegisteredAttachments("image", "local", messages)
+	list, err := listRegisteredAttachments("image", "local", messages, imageUsages)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []AttachmentInfo{}})
 		return
@@ -139,13 +211,14 @@ func ListImageAttachments(c *gin.Context) {
 		}
 		urlPath := "/api/images/" + url.PathEscape(name)
 		belongs := findBelongs(messages, name, "/images/", "/api/images/")
+		belongs = appendImageUsageBelongs(belongs, imageUsages, "/images/"+name, "/api/images/"+name, "/images/"+url.PathEscape(name), "/api/images/"+url.PathEscape(name))
 		list = append(list, AttachmentInfo{Key: name, Name: name, URL: urlPath, Size: fi.Size(), ModifiedAt: fi.ModTime(), Belongs: belongs})
 	}
 
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": list})
 }
 
-func listRegisteredAttachments(kind, backend string, messages []models.Message) ([]AttachmentInfo, error) {
+func listRegisteredAttachments(kind, backend string, messages []models.Message, suppliedImageUsages ...[]imageAttachmentUsage) ([]AttachmentInfo, error) {
 	db, err := database.GetDB()
 	if err != nil {
 		return nil, err
@@ -156,6 +229,14 @@ func listRegisteredAttachments(kind, backend string, messages []models.Message) 
 	}
 	counts := make(map[uint]int64, len(resolved))
 	out := make([]AttachmentInfo, 0, len(resolved))
+	var imageUsages []imageAttachmentUsage
+	if kind == "image" {
+		if len(suppliedImageUsages) > 0 {
+			imageUsages = suppliedImageUsages[0]
+		} else {
+			imageUsages = loadImageAttachmentUsages()
+		}
+	}
 	for _, item := range resolved {
 		if _, ok := counts[item.Blob.ID]; !ok {
 			var count int64
@@ -174,8 +255,9 @@ func listRegisteredAttachments(kind, backend string, messages []models.Message) 
 			if len(snippet) > 80 {
 				snippet = snippet[:80]
 			}
-			belongs = append(belongs, BelongItem{ID: message.ID, CreatedAt: message.CreatedAt, Snippet: snippet})
+			belongs = append(belongs, BelongItem{ID: message.ID, CreatedAt: message.CreatedAt, Snippet: snippet, Kind: "message", Label: fmt.Sprintf("笔记 #%d", message.ID)})
 		}
+		belongs = appendImageUsageBelongs(belongs, imageUsages, needle)
 		out = append(out, AttachmentInfo{
 			Key:            item.Reference.PublicID,
 			LogicalID:      item.Reference.PublicID,
@@ -379,7 +461,7 @@ func findBelongs(messages []models.Message, name string, prefixes ...string) []B
 			if len(snip) > 80 {
 				snip = snip[:80]
 			}
-			out = append(out, BelongItem{ID: m.ID, CreatedAt: m.CreatedAt, Snippet: snip})
+			out = append(out, BelongItem{ID: m.ID, CreatedAt: m.CreatedAt, Snippet: snip, Kind: "message", Label: fmt.Sprintf("笔记 #%d", m.ID)})
 		}
 	}
 	return out
@@ -975,10 +1057,11 @@ func listCloudAttachments(siteCfg models.SiteConfig, keep func(name string) bool
 
 	var messages []models.Message
 	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Order("created_at DESC").Find(&messages)
+	imageUsages := loadImageAttachmentUsages()
 
 	var out []AttachmentInfo
 	for _, kind := range []string{"image", "video", "audio", "file"} {
-		registered, err := listRegisteredAttachments(kind, "cloud", messages)
+		registered, err := listRegisteredAttachments(kind, "cloud", messages, imageUsages)
 		if err != nil {
 			return nil, err
 		}
@@ -1031,6 +1114,12 @@ func listCloudAttachments(siteCfg models.SiteConfig, keep func(name string) bool
 				modAt = *obj.LastModified
 			}
 			belongs := findBelongsCloud(messages, cleanKey, origin, prefix, record.PublicID)
+			belongs = appendImageUsageBelongs(belongs, imageUsages,
+				"/api/cloud-attachments/"+record.PublicID+"/",
+				origin+"/"+escapeObjectKeyForURL(cleanKey),
+				"/"+cleanKey,
+				"/"+url.PathEscape(cleanKey),
+			)
 			out = append(out, AttachmentInfo{
 				Key:        cleanKey,
 				Name:       name,
@@ -1078,7 +1167,7 @@ func findBelongsCloud(messages []models.Message, key string, origin string, pref
 			if len(snip) > 80 {
 				snip = snip[:80]
 			}
-			out = append(out, BelongItem{ID: m.ID, CreatedAt: m.CreatedAt, Snippet: snip})
+			out = append(out, BelongItem{ID: m.ID, CreatedAt: m.CreatedAt, Snippet: snip, Kind: "message", Label: fmt.Sprintf("笔记 #%d", m.ID)})
 		}
 	}
 	return out

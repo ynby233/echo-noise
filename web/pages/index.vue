@@ -116,19 +116,7 @@
         
         <UCard v-if="frontendConfig.leftAdEnabled && leftAds.length > 0" class="sidebar-card mt-2" :class="sidebarThemeCard">
           <div>
-            <template v-if="leftAds.length > 0">
-              <div class="relative">
-                <a :href="(currentAd.linkURL || '#')" target="_blank" rel="noopener noreferrer" class="block ad-wrap group rounded-lg overflow-hidden" :style="{ '--ad-bg': `url(${imgSrc(currentAd.imageURL)})` }">
-                <img :src="imgSrc(currentAd.imageURL)" alt="ad" class="ad-image w-full object-cover transition duration-200 rounded-lg" loading="lazy" decoding="async" />
-                  <div class="ad-overlay">
-                    <div class="ad-overlay-box transition-colors duration-200" :class="[isDark ? '' : 'group-hover:text-orange-500']">{{ (currentAd.description || '').trim() || '广告' }}</div>
-                  </div>
-                </a>
-                <div v-if="leftAds.length > 1" class="absolute bottom-2 left-0 right-0 flex justify-center gap-2">
-                  <button v-for="(ad, i) in leftAds" :key="i" @click="switchAd(Number(i))" class="w-2 h-2 rounded-full" :class="Number(i) === adIndex ? 'bg-white' : 'bg-white/40'" aria-label="switch-ad"></button>
-                </div>
-              </div>
-            </template>
+            <AdCarousel :ads="leftAds" :interval-ms="frontendConfig.leftAdsIntervalMs" />
           </div>
         </UCard>
         <UCard v-if="frontendConfig.hitokotoEnabled" class="sidebar-card mt-2 left-widget-hitokoto-card" :class="sidebarThemeCard">
@@ -445,20 +433,7 @@
           <span>广而告之</span>
         </div>
         <div class="mt-2">
-          <template v-if="leftAds.length > 0">
-            <div class="relative">
-              <a :href="(currentAd.linkURL || '#')" target="_blank" rel="noopener noreferrer" class="block ad-wrap" :style="{ '--ad-bg': `url(${imgSrc(currentAd.imageURL)})` }">
-                <img :src="imgSrc(currentAd.imageURL)" alt="ad" class="ad-image w-full rounded-md object-cover transition duration-200" loading="lazy" decoding="async" />
-                <div class="ad-overlay">
-                  <div class="ad-overlay-box">{{ (currentAd.description || '').trim() || '广告' }}</div>
-                </div>
-              </a>
-              <div v-if="leftAds.length > 1" class="absolute bottom-2 left-0 right-0 flex justify-center gap-2">
-                <button v-for="(ad, i) in leftAds" :key="i" @click="switchAd(Number(i))" class="w-2 h-2 rounded-full" :class="Number(i) === adIndex ? 'bg-white' : 'bg-white/40'" aria-label="switch-ad"></button>
-              </div>
-            </div>
-            
-          </template>
+          <AdCarousel :ads="leftAds" :interval-ms="frontendConfig.leftAdsIntervalMs" />
         </div>
       </UCard>
       <TagList 
@@ -628,10 +603,12 @@ import InfoFeedList from '@/components/index/InfoFeedList.vue'
 import UserNotificationCenter from '@/components/index/UserNotificationCenter.vue'
 import HomeSidebarPager from '@/components/index/HomeSidebarPager.vue'
 import AnnouncementBar from '~/components/widgets/AnnouncementBar.vue'
+import AdCarousel from '~/components/widgets/AdCarousel.vue'
 import FloatingToolSidebar from '~/components/widgets/FloatingToolSidebar.vue'
 import BuiltinComments from '~/components/comments/BuiltinComments.vue'
 import MarkdownRenderer from '~/components/index/MarkdownRenderer.vue'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
+import { normalizeAdConfigs } from '~/utils/ad-config'
 import { getMessageIdFromRouteHash } from '~/utils/message-route-hash'
 import { getRequest, postRequest } from '~/utils/api'
 import { useToast } from '#ui/composables/useToast'
@@ -2652,69 +2629,18 @@ const imageSrc = (img: any) => {
 
 const leftAds = computed(() => {
   const arr = Array.isArray((frontendConfig.value as any).leftAds) ? (frontendConfig.value as any).leftAds : []
-  const cleaned = arr
-    .map((ad: any) => ({
-      imageURL: String(ad?.imageURL || '').trim(),
-      linkURL: String(ad?.linkURL || '').trim(),
-      description: String(ad?.description || '').trim(),
-    }))
-    .filter((ad: any) => ad.imageURL !== '')
+  const cleaned = normalizeAdConfigs(arr)
 
   if (cleaned.length > 0) return cleaned
 
   const singleImageURL = String((frontendConfig.value as any).leftAdImageURL || '').trim()
   if (!singleImageURL) return []
-  return [{
+  return normalizeAdConfigs([{
     imageURL: singleImageURL,
     linkURL: String((frontendConfig.value as any).leftAdLinkURL || '').trim(),
     description: String((frontendConfig.value as any).leftAdDescription || '').trim(),
-  }]
+  }])
 })
-const imgSrc = (raw: string) => {
-  const base = useRuntimeConfig().public.baseApi || '/api'
-  const s = String(raw || '').trim()
-  return s.startsWith('http') ? s : (s ? `${base}${s}` : '')
-}
-const adIndex = ref(0)
-const currentAd = computed(() => leftAds.value[Math.max(0, Math.min(adIndex.value, leftAds.value.length - 1))] || { imageURL: '', linkURL: '', description: '' })
-let adTimer: any
-const preloadAdImage = (ad: any): Promise<boolean> => {
-  return new Promise((resolve) => {
-    try {
-      const url = imgSrc(ad?.imageURL || '')
-      if (!url) return resolve(false)
-      const img = new Image()
-      img.src = url
-      img.onload = () => resolve(true)
-      img.onerror = () => resolve(false)
-    } catch { resolve(false) }
-  })
-}
-const switchAd = async (i: number) => {
-  const target = leftAds.value[Math.max(0, Math.min(i, leftAds.value.length - 1))]
-  if (!target) return
-  const ok = await preloadAdImage(target)
-  if (ok) adIndex.value = leftAds.value.indexOf(target)
-}
-const advanceAd = async () => {
-  if (leftAds.value.length <= 1) return
-  const nextIdx = (adIndex.value + 1) % leftAds.value.length
-  const next = leftAds.value[nextIdx]
-  const ok = await preloadAdImage(next)
-  if (ok) adIndex.value = nextIdx
-}
-const restartAdTimer = () => {
-  if (adTimer) { clearInterval(adTimer); adTimer = null }
-  const interval = Number((frontendConfig.value as any)?.leftAdsIntervalMs ?? 5000)
-  if (leftAds.value.length > 1) {
-    adTimer = setInterval(() => { advanceAd() }, Math.max(1000, interval))
-  }
-}
-onMounted(() => { restartAdTimer() })
-watch([leftAds, () => (frontendConfig.value as any)?.leftAdsIntervalMs], () => {
-  restartAdTimer()
-}, { immediate: true })
-onUnmounted(() => { if (adTimer) clearInterval(adTimer) })
 
 // 绑定 Fancybox 以支持推荐图集预览
 onMounted(() => {
@@ -3863,14 +3789,6 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
   .recommend-image-box:hover { box-shadow: 0 8px 22px rgba(255,255,255,0.12); }
 }
 
-.ad-wrap { position: relative; aspect-ratio: var(--ad-aspect, 1 / 1); }
-.ad-image { width: 100%; height: 100%; object-fit: contain; transition: filter .12s ease, transform .12s ease; }
-.ad-wrap::before { content: ""; position: absolute; inset: 0; background-image: var(--ad-bg); background-size: cover; background-position: center; filter: blur(12px) brightness(0.95); transform: scale(1.05); }
-.ad-wrap > .ad-image { position: relative; z-index: 1; }
-.ad-overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; opacity:0; transition: opacity .12s ease; pointer-events:none; z-index: 2; }
-.ad-overlay-box { max-width: 90%; max-height: 70%; overflow-y: auto; padding: 8px 10px; border-radius: 10px; font-size: 14px; line-height: 1.5; word-break: break-word; overflow-wrap: anywhere; }
-:global(html.dark) .ad-overlay-box { background: var(--home-surface-dark); color: var(--home-accent-warn) !important; border: 1px solid var(--home-border-dark-soft); box-shadow: var(--home-shadow-float-dark); }
-:global(html.dark) .ad-overlay-box a { color: var(--home-accent-warn) !important; text-decoration:none; }
 
 /* 播放器：贴边与层级优化 */
 .netease-mini-player { font-family: inherit !important; }
@@ -3896,10 +3814,6 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
   .netease-mini-player[data-position="top-left"],
   .netease-mini-player[data-position="top-right"] { z-index: 2001 !important; }
 }
-:global(html:not(.dark)) .ad-overlay-box { background: var(--home-surface-light); color: var(--home-accent-warn) !important; border: 1px solid var(--home-border-light); box-shadow: var(--home-shadow-float-light); }
-:global(html:not(.dark)) .ad-overlay-box a { color: var(--home-accent-warn) !important; text-decoration:none; }
-.ad-wrap:hover .ad-overlay { opacity:1; }
-.ad-wrap:hover .ad-image { filter: contrast(0.95) brightness(0.9); }
 .scroll-images { aspect-ratio: 1.525 / 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding-inline: 0; scrollbar-width: thin; }
 @supports (height: 1cqw) {
   .scroll-images { aspect-ratio: auto; height: calc(66.6667cqw - 2.5px); }

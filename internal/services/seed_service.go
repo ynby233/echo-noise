@@ -54,7 +54,7 @@ func SeedDefaultData() error {
 			LifeExpectancyYears:         80,
 			// 广告默认参数
 			LeftAdEnabled:     true,
-			LeftAds:           `[{"imageURL":"https://picsum.photos/seed/ad-1/640/640","linkURL":"","description":"写作与记录"},{"imageURL":"https://picsum.photos/seed/ad-2/640/640","linkURL":"","description":"探索新主题与小工具"},{"imageURL":"https://picsum.photos/seed/ad-3/640/640","linkURL":"","description":"记录日常内容"}]`,
+			LeftAds:           `[{"imageURL":"https://picsum.photos/seed/ad-1/640/640","linkURL":"","description":"写作与记录","textColor":"#ffffff","textDisplayMode":"hover"},{"imageURL":"https://picsum.photos/seed/ad-2/640/640","linkURL":"","description":"探索新主题与小工具","textColor":"#ffffff","textDisplayMode":"hover"},{"imageURL":"https://picsum.photos/seed/ad-3/640/640","linkURL":"","description":"记录日常内容","textColor":"#ffffff","textDisplayMode":"hover"}]`,
 			LeftAdsIntervalMs: 4000,
 			LoginExpireDays:   3,
 			// 社交链接默认
