@@ -139,11 +139,16 @@ export interface Status {
     sys_admin_id: number;
     users: UserStatus[];
     total_messages: number;
+    personal_messages?: number;
     total_users?: number;
     total_comments?: number;
     total_replies?: number;
+    total_guestbook?: number;
+    received_likes?: number;
     received_comments?: number;
     received_replies?: number;
+    received_guestbook?: number;
+    auto_ban_enabled?: boolean;
     messages?: Message[];  // 添加消息列表字段
     total?: number;        // 添加总数字段
     items?: Message[];     // 添加与后端返回结构匹配的字段

@@ -115,91 +115,56 @@
                   <span>仪表盘</span>
                 </div>
               </div>
-              <div class="px-4 pb-4 space-y-4">
-                <div class="admin-dashboard-grid">
-                  <div class="admin-dashboard-stat" :class="theme.subtleBg">
-                    <div class="admin-dashboard-stat-title" :class="theme.mutedText"><UIcon name="i-heroicons-document-text" class="w-4 h-4" />内容总数</div>
-                    <div class="admin-dashboard-stat-value" :class="theme.text">{{ dashboardStats.messageCount }}</div>
+              <div class="admin-dashboard-content">
+                <section class="admin-dashboard-group" aria-labelledby="dashboard-interaction-title">
+                  <div id="dashboard-interaction-title" class="admin-dashboard-group-title" :class="theme.text">
+                    <UIcon name="i-heroicons-hand-thumb-up" class="w-4 h-4" />
+                    <span>互动统计</span>
                   </div>
-                  <div class="admin-dashboard-stat" :class="theme.subtleBg">
-                    <div class="admin-dashboard-stat-title" :class="theme.mutedText"><UIcon name="i-heroicons-chat-bubble-left-right" class="w-4 h-4" />收到评论</div>
-                    <div class="admin-dashboard-stat-value" :class="theme.text">{{ dashboardStats.receivedCommentCount }}</div>
-                  </div>
-                  <div class="admin-dashboard-stat" :class="theme.subtleBg">
-                    <div class="admin-dashboard-stat-title" :class="theme.mutedText"><UIcon name="i-heroicons-arrow-uturn-left" class="w-4 h-4" />收到回复</div>
-                    <div class="admin-dashboard-stat-value" :class="theme.text">{{ dashboardStats.receivedReplyCount }}</div>
-                  </div>
-                  <div class="admin-dashboard-stat" :class="theme.subtleBg">
-                    <div class="admin-dashboard-stat-title" :class="theme.mutedText"><UIcon name="i-heroicons-inbox-arrow-down" class="w-4 h-4" />收到互动</div>
-                    <div class="admin-dashboard-stat-value" :class="theme.text">{{ dashboardStats.receivedFeedbackCount }}</div>
-                  </div>
-                </div>
-                <div class="admin-dashboard-grid admin-dashboard-panels-grid">
-                  <div class="admin-dashboard-panel" :class="theme.subtleBg">
-                    <div class="admin-dashboard-panel-title" :class="theme.mutedText"><UIcon name="i-heroicons-presentation-chart-line" class="w-4 h-4" />运营概览</div>
-                    <div class="admin-dashboard-insight-grid">
-                      <div v-for="item in dashboardInsightCards" :key="item.label" class="admin-dashboard-insight-card">
-                        <div class="admin-dashboard-insight-heading" :class="theme.mutedText">
-                          <UIcon :name="item.icon" class="w-4 h-4" />
-                          <span>{{ item.label }}</span>
-                        </div>
-                        <div class="admin-dashboard-insight-value" :class="theme.text">{{ item.value }}</div>
-                        <div class="admin-dashboard-insight-desc" :class="theme.mutedText">{{ item.desc }}</div>
+                  <div
+                    class="admin-dashboard-interaction-grid"
+                    :class="isAdmin ? 'admin-dashboard-interaction-grid--admin' : 'admin-dashboard-interaction-grid--user'"
+                  >
+                    <div v-for="item in dashboardInteractionCards" :key="item.label" class="admin-dashboard-metric-card" :class="theme.subtleBg">
+                      <div class="admin-dashboard-card-label" :class="theme.mutedText">
+                        <UIcon :name="item.icon" class="w-4 h-4" />
+                        <span>{{ item.label }}</span>
                       </div>
-                    </div>
-                    <div class="admin-dashboard-mini-grid">
-                      <div v-for="item in dashboardOverviewCards" :key="item.label" class="admin-dashboard-mini-card">
-                        <div class="admin-dashboard-mini-label" :class="theme.mutedText">{{ item.label }}</div>
-                        <div class="admin-dashboard-mini-value" :class="theme.text">{{ item.value }}</div>
-                        <div class="admin-dashboard-mini-desc" :class="theme.mutedText">{{ item.desc }}</div>
-                      </div>
+                      <div class="admin-dashboard-metric-value" :class="theme.text">{{ item.value }}</div>
                     </div>
                   </div>
-                  <div class="admin-dashboard-panel" :class="theme.subtleBg">
-                    <div class="admin-dashboard-panel-title" :class="theme.mutedText"><UIcon name="i-heroicons-calendar-days" class="w-4 h-4" />日历时间</div>
-                    <div class="admin-dashboard-time" :class="theme.text">{{ dashboardNowText }}</div>
-                    <div class="admin-dashboard-date" :class="theme.mutedText">{{ dashboardDateText }}</div>
-                    <div class="admin-calendar-shell">
-                      <div class="admin-calendar-title" :class="theme.text">{{ dashboardCalendarMonthText }}</div>
-                      <div class="admin-calendar-weekdays">
-                        <div v-for="weekday in dashboardWeekdays" :key="weekday" class="admin-calendar-weekday" :class="theme.mutedText">{{ weekday }}</div>
+                </section>
+
+                <section v-if="isAdmin" class="admin-dashboard-group" aria-labelledby="dashboard-operation-title">
+                  <div id="dashboard-operation-title" class="admin-dashboard-group-title" :class="theme.text">
+                    <UIcon name="i-heroicons-presentation-chart-line" class="w-4 h-4" />
+                    <span>运营概览</span>
+                  </div>
+                  <div class="admin-dashboard-operation-grid">
+                    <div v-for="item in dashboardOperationCards" :key="item.label" class="admin-dashboard-detail-card" :class="theme.subtleBg">
+                      <div class="admin-dashboard-card-label" :class="theme.mutedText">
+                        <UIcon :name="item.icon" class="w-4 h-4" />
+                        <span>{{ item.label }}</span>
                       </div>
-                      <div class="admin-calendar-grid">
-                        <div
-                          v-for="cell in dashboardCalendarCells"
-                          :key="cell.key"
-                          class="admin-calendar-cell"
-                          :class="[
-                            cell.isCurrentMonth ? theme.text : theme.mutedText,
-                            cell.isToday ? 'admin-calendar-cell-today' : '',
-                            !cell.isCurrentMonth ? 'admin-calendar-cell-out' : ''
-                          ]"
-                        >
-                          {{ cell.day }}
-                        </div>
-                      </div>
+                      <div class="admin-dashboard-detail-value" :class="theme.text">{{ item.value }}</div>
+                      <div class="admin-dashboard-card-desc" :class="theme.mutedText">{{ item.desc }}</div>
                     </div>
                   </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div id="system-section" v-if="isSectionVisible('dashboard')" class="col-span-12">
-            <div :class="adminShellCardClass">
-              <div :class="adminSectionHeaderClass">
-                <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                  <UIcon name="i-heroicons-cpu-chip" class="w-5 h-5" />
+                </section>
+
+                <section class="admin-dashboard-group" aria-labelledby="dashboard-system-title">
+                  <div id="dashboard-system-title" class="admin-dashboard-group-title" :class="theme.text">
+                    <UIcon name="i-heroicons-cpu-chip" class="w-4 h-4" />
                   <span>系统信息</span>
-                </div>
-              </div>
-              <div class="px-4 pb-4">
-                <div class="admin-system-summary-grid">
-                  <div v-for="item in systemSummaryItems" :key="item.label" class="admin-system-summary-card" :class="theme.subtleBg">
-                    <div class="admin-system-summary-label" :class="theme.mutedText">{{ item.label }}</div>
-                    <div class="admin-system-summary-value" :class="theme.text">{{ item.value }}</div>
-                    <div class="admin-system-summary-desc" :class="theme.mutedText">{{ item.desc }}</div>
                   </div>
-                </div>
+                  <div class="admin-system-summary-grid">
+                    <div v-for="item in systemSummaryItems" :key="item.label" class="admin-dashboard-detail-card" :class="theme.subtleBg">
+                      <div class="admin-dashboard-card-label" :class="theme.mutedText">{{ item.label }}</div>
+                      <div class="admin-dashboard-detail-value" :class="theme.text">{{ item.value }}</div>
+                      <div class="admin-dashboard-card-desc" :class="theme.mutedText">{{ item.desc }}</div>
+                    </div>
+                  </div>
+                </section>
               </div>
             </div>
           </div>
@@ -2839,158 +2804,103 @@ const toCount = (v: any) => {
 const dashboardStats = computed(() => {
   const status: any = userStore?.status || {}
   const messageCount = toCount(status.total_messages ?? status.totalMessages ?? userMessagesCount.value)
+  const personalMessageCount = toCount(status.personal_messages ?? status.personalMessages ?? userMessagesCount.value)
   const totalUserCount = toCount(status.total_users ?? status.totalUsers ?? status.users_count ?? status.users?.length)
   const totalCommentCount = toCount(status.total_comments ?? status.totalComments ?? status.comments_count)
   const totalReplyCount = toCount(status.total_replies ?? status.totalReplies ?? status.replies_count)
+  const totalGuestbookCount = toCount(status.total_guestbook ?? status.totalGuestbook)
+  const receivedLikeCount = toCount(status.received_likes ?? status.receivedLikes)
   const receivedCommentCount = toCount(status.received_comments ?? status.receivedComments)
   const receivedReplyCount = toCount(status.received_replies ?? status.receivedReplies)
+  const receivedGuestbookCount = toCount(status.received_guestbook ?? status.receivedGuestbook)
   return {
     messageCount,
+    personalMessageCount,
     totalUserCount,
     totalCommentCount,
     totalReplyCount,
+    totalGuestbookCount,
+    receivedLikeCount,
     receivedCommentCount,
     receivedReplyCount,
-    receivedFeedbackCount: receivedCommentCount + receivedReplyCount,
-    totalFeedbackCount: totalCommentCount + totalReplyCount,
+    receivedGuestbookCount,
   }
 })
 const sidebarNoteCountLabel = computed(() => (isAdmin.value ? '全站笔记' : '我的笔记'))
-const dashboardInsightCards = computed(() => {
+const dashboardInteractionCards = computed(() => {
+  const stats = dashboardStats.value
+  const interactionCards = [
+    {
+      label: '收到点赞',
+      value: stats.receivedLikeCount,
+      icon: 'i-heroicons-hand-thumb-up'
+    },
+    {
+      label: '收到评论',
+      value: stats.receivedCommentCount,
+      icon: 'i-heroicons-chat-bubble-left-right'
+    },
+    {
+      label: '收到回复',
+      value: stats.receivedReplyCount,
+      icon: 'i-heroicons-arrow-uturn-left'
+    },
+  ]
+  if (isAdmin.value) {
+    interactionCards.push({
+      label: '收到留言',
+      value: stats.receivedGuestbookCount,
+      icon: 'i-heroicons-inbox-arrow-down'
+    })
+  }
+  return interactionCards
+})
+const dashboardOperationCards = computed(() => {
   const stats = dashboardStats.value
   return [
     {
-      label: '内容口径',
-      value: isAdmin.value ? '全站内容' : '我的内容',
-      desc: `${stats.messageCount} 条笔记纳入当前后台统计`,
+      label: '笔记总数',
+      value: `${stats.messageCount} 条`,
+      desc: '全站笔记总数',
       icon: 'i-heroicons-document-text'
     },
     {
-      label: '收到互动',
-      value: `${stats.receivedFeedbackCount} 条`,
-      desc: `评论 ${stats.receivedCommentCount} / 回复 ${stats.receivedReplyCount}`,
-      icon: 'i-heroicons-inbox-arrow-down'
-    },
-    {
       label: '全站反馈',
-      value: `${stats.totalFeedbackCount} 条`,
-      desc: `评论 ${stats.totalCommentCount} / 回复 ${stats.totalReplyCount}`,
-      icon: 'i-heroicons-chat-bubble-left-right'
+      value: `${stats.totalCommentCount + stats.totalReplyCount + stats.totalGuestbookCount} 条`,
+      desc: `评论 ${stats.totalCommentCount} / 回复 ${stats.totalReplyCount} / 留言 ${stats.totalGuestbookCount}`,
+      icon: 'i-heroicons-chat-bubble-left-ellipsis'
     },
     {
       label: '用户与注册',
       value: `${stats.totalUserCount} 个用户`,
       desc: registerEnabled.value ? '当前允许新用户注册' : '当前仅允许已有用户登录',
       icon: 'i-heroicons-users'
-    }
-  ]
-})
-const dashboardOverviewCards = computed(() => {
-  const loginName = isLogin.value ? (userStore.user?.username || '已登录') : '未登录'
-  return [
-    {
-      label: '系统信息',
-      value: versionInfo.currentVersion || '最新',
-      desc: versionInfo.hasUpdate && versionInfo.latestVersion ? `发现更新 ${versionInfo.latestVersion}` : '当前版本状态'
-    },
-    {
-      label: '当前用户',
-      value: loginName,
-      desc: isAdmin.value ? '管理员权限已启用' : '普通账户视图'
     },
     {
       label: '存储方案',
       value: storageEnabled.value ? '云端' : '本地',
-      desc: storageEnabled.value ? '已接入对象存储' : '使用本地磁盘'
-    },
-    {
-      label: '功能开关',
-      value: `${[
-        frontendConfig.pwaEnabled,
-        frontendConfig.commentEnabled,
-        registerEnabled.value,
-        frontendConfig.notifyEnabled
-      ].filter(Boolean).length}/4`,
-      desc: 'PWA / 评论 / 注册 / 通知'
+      desc: storageEnabled.value ? '已接入对象存储' : '使用本地磁盘',
+      icon: 'i-heroicons-circle-stack'
     }
   ]
 })
 const systemSummaryItems = computed(() => {
-  const adminName = userStore?.status?.username || '未设置'
+  const status: any = userStore?.status || {}
+  const adminName = status.username || '未设置'
   const loginName = isLogin.value ? (userStore.user?.username || '已登录') : '未登录'
-  const totalMessages = `${dashboardStats.value.messageCount} 条`
+  const personalMessages = `${dashboardStats.value.personalMessageCount} 条`
   const versionText = versionInfo.currentVersion || '最新'
   const registerText = registerEnabled.value ? '开放注册' : '关闭注册'
-  const securityText = securityConfig.autoBanEnabled ? '自动封禁中' : '手动防护'
+  const autoBanEnabled = !!(status.auto_ban_enabled ?? status.autoBanEnabled ?? securityConfig.autoBanEnabled)
+  const securityText = autoBanEnabled ? '自动封禁中' : '手动防护'
   return [
     { label: '系统管理员', value: adminName, desc: '后台默认管理账号' },
-    { label: '当前用户', value: loginName, desc: isAdmin.value ? '拥有管理员权限' : '普通账户视图' },
-    { label: '笔记总数', value: totalMessages, desc: isAdmin.value ? '当前站点内容规模' : '当前账户内容规模' },
+    { label: '当前用户', value: loginName, desc: isAdmin.value ? '拥有管理员权限' : '拥有普通用户权限' },
+    { label: '个人笔记', value: personalMessages, desc: '当前账户所发布的笔记总数' },
     { label: '系统版本', value: versionText, desc: versionInfo.hasUpdate && versionInfo.latestVersion ? `可更新到 ${versionInfo.latestVersion}` : '当前版本状态正常' },
     { label: '注册状态', value: registerText, desc: registerEnabled.value ? '允许新用户创建账户' : '仅限已有账户登录' },
-    { label: '安全策略', value: securityText, desc: securityConfig.autoBanEnabled ? `阈值 ${securityConfig.autoBanThreshold} 次` : '可在下方安全面板配置' }
+    { label: '安全策略', value: securityText, desc: autoBanEnabled ? '系统已启用自动封禁' : (isAdmin.value ? '可在下方安全面板配置' : '系统使用手动防护') }
   ]
-})
-const dashboardNowText = computed(() => new Intl.DateTimeFormat('zh-CN', {
-  hour12: false,
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  second: '2-digit'
-}).format(dashboardNow.value))
-const dashboardDateText = computed(() => new Intl.DateTimeFormat('zh-CN', {
-  weekday: 'long',
-  timeZone: 'Asia/Shanghai'
-}).format(dashboardNow.value))
-const dashboardWeekdays = ['一', '二', '三', '四', '五', '六', '日']
-const dashboardCalendarMonthText = computed(() => new Intl.DateTimeFormat('zh-CN', {
-  year: 'numeric',
-  month: 'long',
-  timeZone: 'Asia/Shanghai'
-}).format(dashboardNow.value))
-const dashboardCalendarCells = computed(() => {
-  const now = dashboardNow.value
-  const year = now.getFullYear()
-  const month = now.getMonth()
-  const firstDay = new Date(year, month, 1)
-  const startOffset = (firstDay.getDay() + 6) % 7
-  const monthDays = new Date(year, month + 1, 0).getDate()
-  const prevMonthDays = new Date(year, month, 0).getDate()
-  const cells: Array<{ key: string; day: number; isCurrentMonth: boolean; isToday: boolean }> = []
-  for (let i = 0; i < 42; i++) {
-    const dayIndex = i - startOffset + 1
-    let day = dayIndex
-    let dateYear = year
-    let dateMonth = month
-    let isCurrentMonth = true
-    if (dayIndex <= 0) {
-      day = prevMonthDays + dayIndex
-      dateMonth = month - 1
-      if (dateMonth < 0) {
-        dateMonth = 11
-        dateYear -= 1
-      }
-      isCurrentMonth = false
-    } else if (dayIndex > monthDays) {
-      day = dayIndex - monthDays
-      dateMonth = month + 1
-      if (dateMonth > 11) {
-        dateMonth = 0
-        dateYear += 1
-      }
-      isCurrentMonth = false
-    }
-    const isToday = dateYear === now.getFullYear() && dateMonth === now.getMonth() && day === now.getDate()
-    cells.push({
-      key: `${dateYear}-${dateMonth + 1}-${day}-${i}`,
-      day,
-      isCurrentMonth,
-      isToday
-    })
-  }
-  return cells
 })
 const lifePreview = computed(() => {
   const birthRaw = String((frontendConfig as any).lifeCountdownBirthDate || '').trim()
@@ -3919,7 +3829,7 @@ const saveSecurityConfig = async () => {
     const res: any = await putRequest<any>('security/config', payload, { credentials: 'include' })
     if (res && res.code === 1) {
       useToast().add({ title: res?.msg || '已保存', color: 'green' })
-      await refreshSecurity()
+      await Promise.all([refreshSecurity(), userStore.getStatus(true)])
     } else {
       throw new Error(res?.msg || '保存失败')
     }
@@ -7651,50 +7561,81 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   background: #165dff;
   color: #ffffff;
 }
-.admin-dashboard-grid {
+.admin-dashboard-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 16px 16px;
+}
+.admin-dashboard-group {
+  min-width: 0;
+}
+.admin-dashboard-group + .admin-dashboard-group {
+  padding-top: 12px;
+  border-top: 1px solid rgba(229, 230, 235, 0.18);
+}
+.admin-dashboard-group-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.admin-dashboard-group-title::before {
+  width: 3px;
+  height: 14px;
+  border-radius: 999px;
+  background: #165dff;
+  content: '';
+}
+.admin-dashboard-interaction-grid,
+.admin-dashboard-operation-grid,
+.admin-system-summary-grid {
   display: grid;
   grid-template-columns: repeat(1, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
 }
-.admin-dashboard-stat,
-.admin-dashboard-panel,
-.admin-system-summary-card,
+.admin-dashboard-metric-card,
+.admin-dashboard-detail-card,
 .life-preview-shell,
 .admin-bg-item {
-  border-radius: 8px;
   border: 1px solid rgba(229, 230, 235, 0.18);
-  transition: all 0.2s ease;
+  border-radius: 8px;
 }
-.admin-dashboard-stat,
-.admin-dashboard-panel {
-  padding: 12px;
+.admin-dashboard-metric-card {
+  min-height: 72px;
+  padding: 10px 12px;
 }
-.admin-dashboard-stat:hover,
-.admin-dashboard-panel:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--admin-shadow-hover);
+.admin-dashboard-detail-card {
+  min-height: 76px;
+  padding: 10px 12px;
 }
-.admin-dashboard-stat-title,
-.admin-dashboard-panel-title,
-.admin-system-summary-label {
+.admin-dashboard-card-label {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  margin-bottom: 8px;
+  line-height: 1.2;
 }
-.admin-dashboard-stat-value {
-  font-size: 28px;
+.admin-dashboard-metric-value {
+  margin-top: 7px;
+  font-size: 25px;
   font-weight: 700;
-  line-height: 1.1;
+  line-height: 1;
 }
-.admin-dashboard-time {
-  font-size: 24px;
+.admin-dashboard-detail-value {
+  margin-top: 5px;
+  font-size: 18px;
   font-weight: 700;
+  line-height: 1.15;
+  word-break: break-word;
 }
-.admin-dashboard-date {
-  margin-top: 6px;
-  font-size: 12px;
+.admin-dashboard-card-desc {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.35;
 }
 .life-preview-track {
   height: 8px;
@@ -7707,110 +7648,20 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   border-radius: 999px;
   background: linear-gradient(90deg, #165dff, #4080ff);
 }
-.admin-dashboard-insight-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px;
-}
-.admin-dashboard-insight-card {
-  min-height: 96px;
-  border-radius: 8px;
-  border: 1px solid rgba(229, 230, 235, 0.18);
-  padding: 12px;
-}
-.admin-dashboard-insight-heading {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
-}
-.admin-dashboard-insight-value {
-  margin-top: 10px;
-  font-size: 22px;
-  font-weight: 700;
-  line-height: 1.15;
-  word-break: break-word;
-}
-.admin-dashboard-insight-desc {
-  margin-top: 5px;
-  font-size: 12px;
-  line-height: 1.45;
-}
-.admin-dashboard-mini-grid,
-.admin-system-summary-grid,
 .life-preview-grid {
   display: grid;
   grid-template-columns: repeat(1, minmax(0, 1fr));
   gap: 10px;
 }
-.admin-dashboard-mini-grid {
-  margin-top: 12px;
-}
-.admin-dashboard-mini-card {
-  border-radius: 8px;
-  border: 1px solid rgba(229, 230, 235, 0.18);
-  padding: 10px 12px;
-}
-.admin-dashboard-mini-label,
 .life-preview-label {
   font-size: 11px;
 }
-.admin-dashboard-mini-value,
-.life-preview-value,
-.admin-system-summary-value {
+.life-preview-value {
   margin-top: 4px;
   font-size: 18px;
   font-weight: 700;
   line-height: 1.2;
   word-break: break-word;
-}
-.admin-system-summary-card {
-  padding: 14px;
-}
-.admin-system-summary-desc,
-.admin-dashboard-mini-desc {
-  margin-top: 4px;
-  font-size: 12px;
-  line-height: 1.5;
-}
-.admin-calendar-shell {
-  margin-top: 12px;
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(229, 230, 235, 0.2);
-}
-.admin-calendar-title {
-  font-size: 13px;
-  font-weight: 700;
-  margin-bottom: 8px;
-}
-.admin-calendar-weekdays,
-.admin-calendar-grid {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 4px;
-}
-.admin-calendar-weekday {
-  text-align: center;
-  font-size: 11px;
-  font-weight: 600;
-}
-.admin-calendar-cell {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  min-height: 28px;
-  font-size: 12px;
-  border: 1px solid rgba(229, 230, 235, 0.25);
-}
-.admin-calendar-cell-out {
-  opacity: 0.45;
-}
-.admin-calendar-cell-today {
-  border-color: #165dff;
-  box-shadow: 0 0 0 1px rgba(22, 93, 255, 0.32);
 }
 .life-preview-shell,
 .admin-bg-item {
@@ -8045,27 +7896,29 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
     padding-right: 10px !important;
     padding-bottom: calc(10px + env(safe-area-inset-bottom)) !important;
   }
-  .admin-dashboard-stat-value {
-    font-size: 24px;
+  .admin-dashboard-content {
+    padding-right: 10px;
+    padding-bottom: 10px;
+    padding-left: 10px;
+  }
+  .admin-dashboard-metric-value {
+    font-size: 22px;
   }
 }
 @media (min-width: 768px) {
-  .admin-dashboard-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .admin-dashboard-mini-grid,
+  .admin-dashboard-interaction-grid,
+  .admin-dashboard-operation-grid,
   .admin-system-summary-grid,
   .life-preview-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (min-width: 1024px) {
-  .admin-dashboard-grid {
+  .admin-dashboard-interaction-grid--admin,
+  .admin-dashboard-operation-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
-  .admin-dashboard-grid + .admin-dashboard-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+  .admin-dashboard-interaction-grid--user,
   .admin-system-summary-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }

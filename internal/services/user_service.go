@@ -750,16 +750,18 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 	if viewerUserID != nil && !isAdmin {
 		messageQuery = messageQuery.Where("user_id = ?", *viewerUserID)
 	}
-	if err := messageQuery.
-		Where("content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ?",
-			"%#guestbook%", "%#留言%", "%留言板%",
-			"%#友链%", "%友情链接%",
-			"%#关于%", "%关于本站%").
-		Count(&total).Error; err != nil {
+	if err := excludeDashboardSpecialMessages(messageQuery).Count(&total).Error; err != nil {
 		return status, errors.New(models.GetAllMessagesFailMessage)
 	}
+	var personalMessages int64
+	if currentUser.ID != 0 {
+		if err := excludeDashboardSpecialMessages(database.DB.Model(&models.Message{}).Where("user_id = ?", currentUser.ID)).
+			Count(&personalMessages).Error; err != nil {
+			return status, errors.New(models.GetAllMessagesFailMessage)
+		}
+	}
 
-	totalComments, totalReplies, err := countVisibleCommentStats(viewerUserID, isAdmin)
+	totalComments, totalReplies, totalGuestbook, err := countVisibleCommentStats(viewerUserID, isAdmin)
 	if err != nil {
 		return status, errors.New(models.GetStatusFailMessage)
 	}
@@ -768,34 +770,60 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 	status.Username = sysuser.Username
 	status.Users = users
 	status.TotalMessages = int(total)
+	status.PersonalMessages = int(personalMessages)
 	status.TotalUsers = len(users)
 	status.TotalComments = int(totalComments)
 	status.TotalReplies = int(totalReplies)
+	status.TotalGuestbook = int(totalGuestbook)
 
 	if currentUser.ID != 0 {
-		receivedComments, receivedReplies, err := countReceivedCommentStats(currentUser.ID)
+		receivedLikes, receivedComments, receivedReplies, receivedGuestbook, err := countReceivedInteractionStats(currentUser.ID, isAdmin)
 		if err != nil {
 			return status, errors.New(models.GetStatusFailMessage)
 		}
+		status.ReceivedLikes = int(receivedLikes)
 		status.ReceivedComments = int(receivedComments)
 		status.ReceivedReplies = int(receivedReplies)
+		status.ReceivedGuestbook = int(receivedGuestbook)
+
+		autoBanEnabled := false
+		var securityConfig models.SecurityConfig
+		if err := database.DB.Order("id asc").First(&securityConfig).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return status, errors.New(models.GetStatusFailMessage)
+		} else if err == nil {
+			autoBanEnabled = securityConfig.AutoBanEnabled
+		}
+		status.AutoBanEnabled = &autoBanEnabled
 	}
 
 	return status, nil
 }
 
-func countVisibleCommentStats(viewerUserID *uint, isAdmin bool) (int64, int64, error) {
+func excludeDashboardSpecialMessages(query *gorm.DB) *gorm.DB {
+	return query.Where(
+		"messages.content NOT LIKE ? AND messages.content NOT LIKE ? AND messages.content NOT LIKE ? AND messages.content NOT LIKE ? AND messages.content NOT LIKE ? AND messages.content NOT LIKE ? AND messages.content NOT LIKE ?",
+		"%#guestbook%", "%#留言%", "%留言板%",
+		"%#友链%", "%友情链接%",
+		"%#关于%", "%关于本站%",
+	)
+}
+
+func isGuestbookDashboardMessage(content string) bool {
+	return strings.Contains(content, "#guestbook") || strings.Contains(content, "#留言") || strings.Contains(content, "留言板")
+}
+
+func countVisibleCommentStats(viewerUserID *uint, isAdmin bool) (int64, int64, int64, error) {
 	var messages []models.Message
 	messageQuery := ApplyMessageVisibilityScope(
-		database.DB.Model(&models.Message{}).Select("id", "user_id", "private", "visibility"),
+		database.DB.Model(&models.Message{}).Select("id", "user_id", "private", "visibility", "content"),
 		viewerUserID,
 		isAdmin,
 	)
 	if err := messageQuery.Find(&messages).Error; err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 	if len(messages) == 0 {
-		return 0, 0, nil
+		return 0, 0, 0, nil
 	}
 
 	messageIDs := make([]uint, 0, len(messages))
@@ -806,7 +834,7 @@ func countVisibleCommentStats(viewerUserID *uint, isAdmin bool) (int64, int64, e
 	}
 	var comments []models.Comment
 	if err := database.DB.Where("message_id IN ?", messageIDs).Order("created_at ASC, id ASC").Find(&comments).Error; err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 	commentsByMessage := make(map[uint][]models.Comment)
 	for _, comment := range comments {
@@ -818,33 +846,45 @@ func countVisibleCommentStats(viewerUserID *uint, isAdmin bool) (int64, int64, e
 	if hasViewer {
 		viewerID = *viewerUserID
 	}
-	var totalComments, totalReplies int64
+	var totalComments, totalReplies, totalGuestbook int64
 	for messageID, messageComments := range commentsByMessage {
 		message := messageMap[messageID]
+		isGuestbook := isGuestbookDashboardMessage(message.Content)
 		commentMap := CommentMap(messageComments)
 		for _, comment := range messageComments {
 			if !CanViewCommentInThread(message, comment, commentMap, viewerID, hasViewer, isAdmin) {
 				continue
 			}
-			if comment.ParentID == nil {
+			if comment.ParentID == nil && isGuestbook {
+				totalGuestbook++
+			} else if comment.ParentID == nil {
 				totalComments++
 			} else {
 				totalReplies++
 			}
 		}
 	}
-	return totalComments, totalReplies, nil
+	return totalComments, totalReplies, totalGuestbook, nil
 }
 
-func countReceivedCommentStats(userID uint) (int64, int64, error) {
+func countReceivedInteractionStats(userID uint, isAdmin bool) (int64, int64, int64, int64, error) {
+	var receivedLikes int64
+	likeQuery := database.DB.Model(&models.MessageLike{}).
+		Joins("JOIN messages ON messages.id = message_likes.message_id").
+		Where("messages.user_id = ?", userID).
+		Where("(message_likes.user_id IS NULL OR message_likes.user_id <> ?)", userID)
+	if err := excludeDashboardSpecialMessages(likeQuery).Count(&receivedLikes).Error; err != nil {
+		return 0, 0, 0, 0, err
+	}
+
 	var receivedComments int64
-	if err := database.DB.Model(&models.Comment{}).
+	commentQuery := database.DB.Model(&models.Comment{}).
 		Joins("JOIN messages ON messages.id = comments.message_id").
 		Where("messages.user_id = ?", userID).
 		Where("comments.parent_id IS NULL").
-		Where("(comments.user_id IS NULL OR comments.user_id <> ?)", userID).
-		Count(&receivedComments).Error; err != nil {
-		return 0, 0, err
+		Where("(comments.user_id IS NULL OR comments.user_id <> ?)", userID)
+	if err := excludeDashboardSpecialMessages(commentQuery).Count(&receivedComments).Error; err != nil {
+		return 0, 0, 0, 0, err
 	}
 
 	var receivedReplies int64
@@ -853,10 +893,22 @@ func countReceivedCommentStats(userID uint) (int64, int64, error) {
 		Where("parent_comments.user_id = ?", userID).
 		Where("(comments.user_id IS NULL OR comments.user_id <> ?)", userID).
 		Count(&receivedReplies).Error; err != nil {
-		return 0, 0, err
+		return 0, 0, 0, 0, err
 	}
 
-	return receivedComments, receivedReplies, nil
+	var receivedGuestbook int64
+	if isAdmin {
+		if err := database.DB.Model(&models.Comment{}).
+			Joins("JOIN messages ON messages.id = comments.message_id").
+			Where("comments.parent_id IS NULL").
+			Where("(comments.user_id IS NULL OR comments.user_id <> ?)", userID).
+			Where("(messages.content LIKE ? OR messages.content LIKE ? OR messages.content LIKE ?)", "%#guestbook%", "%#留言%", "%留言板%").
+			Count(&receivedGuestbook).Error; err != nil {
+			return 0, 0, 0, 0, err
+		}
+	}
+
+	return receivedLikes, receivedComments, receivedReplies, receivedGuestbook, nil
 }
 
 func GetUserByID(userID uint) (*models.User, error) {

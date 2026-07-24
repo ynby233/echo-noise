@@ -1032,6 +1032,92 @@ func TestGetStatusUsesViewerScopedDashboardCounts(t *testing.T) {
 	}
 }
 
+func TestGetStatusSeparatesDashboardMetricsAndSharesSecuritySummary(t *testing.T) {
+	setupUserServiceTestDB(t)
+
+	admin := mustCreateUser(t, models.User{Username: "admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+	alice := mustCreateUser(t, models.User{Username: "alice", Password: models.HashPassword("alice"), Token: models.GenerateToken(32)})
+	bob := mustCreateUser(t, models.User{Username: "bob", Password: models.HashPassword("bob"), Token: models.GenerateToken(32)})
+
+	adminNote := models.Message{Content: "admin note", UserID: admin.ID, Username: admin.Username, Visibility: MessageVisibilityPublic}
+	aliceNote := models.Message{Content: "alice note", UserID: alice.ID, Username: alice.Username, Visibility: MessageVisibilityPublic}
+	bobNote := models.Message{Content: "bob note", UserID: bob.ID, Username: bob.Username, Visibility: MessageVisibilityPublic}
+	guestbook := models.Message{Content: "留言板\n\n#留言 #guestbook", UserID: admin.ID, Username: admin.Username, Visibility: MessageVisibilityPublic}
+	for _, message := range []*models.Message{&adminNote, &aliceNote, &bobNote, &guestbook} {
+		if err := database.DB.Create(message).Error; err != nil {
+			t.Fatalf("create message: %v", err)
+		}
+	}
+
+	for _, like := range []*models.MessageLike{
+		{MessageID: aliceNote.ID, UserID: &bob.ID},
+		{MessageID: aliceNote.ID, UserID: &alice.ID},
+		{MessageID: adminNote.ID, UserID: &bob.ID},
+		{MessageID: guestbook.ID, UserID: &bob.ID},
+	} {
+		if err := database.DB.Create(like).Error; err != nil {
+			t.Fatalf("create like: %v", err)
+		}
+	}
+
+	bobComment := models.Comment{MessageID: aliceNote.ID, UserID: &bob.ID, Content: "bob comment", Visibility: "public"}
+	aliceSelfComment := models.Comment{MessageID: aliceNote.ID, UserID: &alice.ID, Content: "self comment", Visibility: "public"}
+	aliceParent := models.Comment{MessageID: bobNote.ID, UserID: &alice.ID, Content: "alice parent", Visibility: "public"}
+	for _, comment := range []*models.Comment{&bobComment, &aliceSelfComment, &aliceParent} {
+		if err := database.DB.Create(comment).Error; err != nil {
+			t.Fatalf("create comment: %v", err)
+		}
+	}
+	parentID := aliceParent.ID
+	bobReply := models.Comment{MessageID: bobNote.ID, UserID: &bob.ID, ParentID: &parentID, Content: "bob reply", Visibility: "public"}
+	if err := database.DB.Create(&bobReply).Error; err != nil {
+		t.Fatalf("create reply: %v", err)
+	}
+	for _, entry := range []*models.Comment{
+		{MessageID: guestbook.ID, UserID: &bob.ID, Content: "bob guestbook", Visibility: "public"},
+		{MessageID: guestbook.ID, UserID: &alice.ID, Content: "alice guestbook", Visibility: "public"},
+		{MessageID: guestbook.ID, UserID: &admin.ID, Content: "admin guestbook", Visibility: "public"},
+	} {
+		if err := database.DB.Create(entry).Error; err != nil {
+			t.Fatalf("create guestbook entry: %v", err)
+		}
+	}
+	if err := database.DB.Create(&models.SecurityConfig{AutoBanEnabled: true, AutoBanThreshold: 7}).Error; err != nil {
+		t.Fatalf("create security config: %v", err)
+	}
+
+	aliceStatus, err := GetStatus(alice.ID)
+	if err != nil {
+		t.Fatalf("get alice status: %v", err)
+	}
+	if aliceStatus.TotalMessages != 1 || aliceStatus.PersonalMessages != 1 {
+		t.Fatalf("alice note counts = total %d personal %d, want 1/1", aliceStatus.TotalMessages, aliceStatus.PersonalMessages)
+	}
+	if aliceStatus.ReceivedLikes != 1 || aliceStatus.ReceivedComments != 1 || aliceStatus.ReceivedReplies != 1 || aliceStatus.ReceivedGuestbook != 0 {
+		t.Fatalf("alice interactions = likes %d comments %d replies %d guestbook %d, want 1/1/1/0", aliceStatus.ReceivedLikes, aliceStatus.ReceivedComments, aliceStatus.ReceivedReplies, aliceStatus.ReceivedGuestbook)
+	}
+	if aliceStatus.AutoBanEnabled == nil || !*aliceStatus.AutoBanEnabled {
+		t.Fatalf("ordinary user should receive enabled auto-ban summary, got %#v", aliceStatus.AutoBanEnabled)
+	}
+
+	adminStatus, err := GetStatus(admin.ID)
+	if err != nil {
+		t.Fatalf("get admin status: %v", err)
+	}
+	if adminStatus.TotalMessages != 3 || adminStatus.PersonalMessages != 1 {
+		t.Fatalf("admin note counts = total %d personal %d, want 3/1", adminStatus.TotalMessages, adminStatus.PersonalMessages)
+	}
+	if adminStatus.TotalComments != 3 || adminStatus.TotalReplies != 1 || adminStatus.TotalGuestbook != 3 {
+		t.Fatalf("admin feedback = comments %d replies %d guestbook %d, want 3/1/3", adminStatus.TotalComments, adminStatus.TotalReplies, adminStatus.TotalGuestbook)
+	}
+	if adminStatus.ReceivedLikes != 1 || adminStatus.ReceivedGuestbook != 2 {
+		t.Fatalf("admin interactions = likes %d guestbook %d, want 1/2", adminStatus.ReceivedLikes, adminStatus.ReceivedGuestbook)
+	}
+	if adminStatus.AutoBanEnabled == nil || !*adminStatus.AutoBanEnabled {
+		t.Fatalf("admin should receive enabled auto-ban summary, got %#v", adminStatus.AutoBanEnabled)
+	}
+}
+
 func TestCreateUserNotificationsFollowRecipientRules(t *testing.T) {
 	setupUserServiceTestDB(t)
 
