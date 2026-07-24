@@ -74,6 +74,7 @@ export default defineNuxtConfig({
   css: [
     '@/assets/fonts/result.css',
     '@/assets/css/attachment-audio-player.css',
+    '@/assets/css/markdown-line-spacing.css',
   ],
   colorMode: {
     preference: 'light'

@@ -189,7 +189,7 @@ import { getFixedCoordinateScale, getFixedRect, positionFloatingMenu, scheduleFl
 import { captureVideoFirstFrameFromSource, ensureFancyboxVideoThumbnail, getVideoPlaybackFrameForSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { buildAttachmentAudioPlaceholderHtml, closeAttachmentAudioPopover, destroyAttachmentAudioPlayers, enhanceAttachmentAudioPlayers, toggleAttachmentAudioPopover } from '~/utils/attachment-audio-player'
-import { MARKDOWN_BLANK_LINE_SENTINEL, encodeMarkdownExtraBlankLines, isMarkdownBlankLineSentinel, markMarkdownPreservedBlankLineElements } from '~/utils/markdown-blank-lines'
+import { MARKDOWN_BLANK_LINE_SENTINEL, encodeMarkdownExtraBlankLines, isMarkdownBlankLineSentinel, markMarkdownPreservedBlankLineElements, serializeMarkdownEditorBlocks } from '~/utils/markdown-blank-lines'
 import { getFixedEditorClipInsets, insertEditorValueFallback, insertTableCellAtomicValue, replaceTableSourceLine, resolveTableAttachmentTarget, type TableAttachmentTarget } from '~/utils/vditor-table-attachment'
 import { applyTableTrackSize, getTableResizeZoomScale, resolveTableTrackResize, resolveTableTrailingScrollReserve, type TableTrackResizeSession } from '~/utils/table-resize-session'
 import Vditor from "vditor";
@@ -750,10 +750,14 @@ const mergeExpandedCellEditorText = (currentValue: string, editorText: string) =
 }
 
 const materializeEditorPreservedBlankLineBlocks = (root: HTMLElement) => {
+  const encodedSource = vditorInstance?.getValue?.() || ''
+  let remainingEncodedBlankLines = encodedSource.split(MARKDOWN_BLANK_LINE_SENTINEL).length - 1
   root.querySelectorAll<HTMLElement>('p[data-block], div[data-block]').forEach((block) => {
     if (block.closest('table, [data-type="code-block"], .vditor-ir__marker--pre')) return
     const rawText = block.textContent || ''
     if (!rawText.includes(MARKDOWN_BLANK_LINE_SENTINEL) || !isMarkdownBlankLineSentinel(rawText)) return
+    if (remainingEncodedBlankLines <= 0) return
+    remainingEncodedBlankLines -= 1
     setPlainBlankLineBlock(block)
   })
 }
@@ -1259,11 +1263,43 @@ const setupAttachmentPreview = () => {
     return isPlainBlankLineBlock(block)
   }
 
+  const isEditorPlainLineEnter = (event: KeyboardEvent) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return false
+    const block = currentPlainEditorBlock(event)
+    const anchorElement = block || getEventElement(event)
+    if (!anchorElement || !root.contains(anchorElement)) return false
+    if (anchorElement.closest('.vditor-toolbar, .vditor-panel, .vditor-hint, [data-type="code-block"], .vditor-ir__marker--pre')) return false
+    if (getCurrentEditorTableCell(event)) return false
+    return !!block
+  }
+
   const emitEditorSoftBreakInput = (_event: Event) => {
     scheduleRefreshAttachmentLinks()
     window.setTimeout(() => {
       if (vditorInstance?.getValue) emitEditorValue(getEditorDomContentFallback() || vditorInstance.getValue())
     }, 0)
+  }
+
+  const insertEditorPlainLineBreak = (event: Event) => {
+    const block = currentPlainEditorBlock(event)
+    const selection = window.getSelection()
+    if (!block || isPlainBlankLineBlock(block) || !selection?.rangeCount) return false
+    event.preventDefault()
+    event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    const range = selection.getRangeAt(0)
+    range.deleteContents()
+    const lineBreak = document.createElement('br')
+    const caretNode = document.createTextNode(PRESERVED_BLANK_LINE_DOM_ANCHOR)
+    range.insertNode(lineBreak)
+    lineBreak.after(caretNode)
+    range.setStart(caretNode, caretNode.data.length)
+    range.collapse(true)
+    selection.removeAllRanges()
+    selection.addRange(range)
+    lastEditorSelectionRange = range.cloneRange()
+    emitEditorSoftBreakInput(event)
+    return true
   }
 
   const insertEditorSoftLineBreak = (event: Event) => {
@@ -1431,8 +1467,12 @@ const setupAttachmentPreview = () => {
       if (!editorTableCompositionActive && cell && insertEditorTableCellLineBreak(event, cell)) return
     }
     if (insertEditorLeadingBlankLine(event)) return
-    if (!isEditorBlankLineEnter(event)) return
-    insertEditorSoftLineBreak(event)
+    if (isEditorBlankLineEnter(event)) {
+      insertEditorSoftLineBreak(event)
+      return
+    }
+    if (!isEditorPlainLineEnter(event)) return
+    insertEditorPlainLineBreak(event)
   }
 
   const onEditorBeforeInput = (event: InputEvent) => {
@@ -3386,24 +3426,6 @@ const serializePlainEditorBlockText = (block: Element) => {
   return normalizeAttachmentSourceText(rawText.replace(/\u00a0/g, ' ')).replace(/[ \t]+$/g, '')
 }
 
-const serializePlainEditorLinesAsMarkdown = (lines: string[]) => {
-  let output = ''
-  const appendText = (line: string) => {
-    if (!output) output = line
-    else output += `${output.endsWith('\n\n') ? '' : '\n'}${line}`
-  }
-  const appendPreservedBlankLine = () => {
-    output = output.replace(/\n+$/g, '')
-    if (output) output += '\n\n'
-    output += `${MARKDOWN_BLANK_LINE_SENTINEL}\n\n`
-  }
-  lines.forEach((line) => {
-    if (line === MARKDOWN_BLANK_LINE_SENTINEL || line === '') appendPreservedBlankLine()
-    else appendText(line)
-  })
-  return output.replace(/^\n+|\n+$/g, '')
-}
-
 const serializePlainEditorDomAsMarkdown = (editable: HTMLElement) => {
   const pieces: string[] = []
   Array.from(editable.childNodes).forEach((node) => {
@@ -3414,7 +3436,7 @@ const serializePlainEditorDomAsMarkdown = (editable: HTMLElement) => {
     const text = String(node.textContent || '').replace(/[\u200b\u200c\ufeff]/g, '').replace(/\u00a0/g, ' ')
     if (text) pieces.push(normalizeAttachmentSourceText(text))
   })
-  return serializePlainEditorLinesAsMarkdown(pieces)
+  return serializeMarkdownEditorBlocks(pieces)
 }
 
 const serializeEditorDomAsMarkdown = (editable: HTMLElement) => {
@@ -3422,7 +3444,7 @@ const serializeEditorDomAsMarkdown = (editable: HTMLElement) => {
   let plainLines: string[] = []
   const flushPlainLines = () => {
     if (!plainLines.length) return
-    const text = serializePlainEditorLinesAsMarkdown(plainLines)
+    const text = serializeMarkdownEditorBlocks(plainLines)
     if (text) segments.push(text)
     plainLines = []
   }
@@ -3476,7 +3498,8 @@ const hasEditorPlainBlockDom = () => {
 }
 
 const getEditorVisibleDomTableSafeValue = () => {
-  const fallbackValue = getEditorTables().length ? getEditorDomContentFallback() : ''
+  const needsDomFallback = getEditorTables().length || hasEditorSoftBreakDom() || hasEditorPlainBlockDom()
+  const fallbackValue = needsDomFallback ? getEditorDomContentFallback() : ''
   return fallbackValue || getEditorValueWithPendingTableSync()
 }
 
@@ -5786,7 +5809,7 @@ defineExpose({
     }
   },
   getValue: (): string => {
-    return vditorInstance ? getEditorValueWithPendingTableSync() : ''
+    return vditorInstance ? getSafeOutgoingEditorValue() : ''
   },
   setValue: (val: string) => {
     closeInlineEditorTableTextarea()

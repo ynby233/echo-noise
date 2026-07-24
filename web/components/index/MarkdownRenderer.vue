@@ -2340,17 +2340,6 @@ watch(() => props.enableGithubCard, () => {
 .builtin-comments .markdown-preview.theme-dark a { color: #60a5fa !important; text-decoration: none; }
 .builtin-comments .markdown-preview.theme-dark a:hover { text-decoration: underline; }
 
-.markdown-preview p {
-  margin: 6px 0 !important;
-  line-height: 1.6;
-  white-space: pre-wrap;
-}
-
-.markdown-preview .markdown-preserved-blank-line {
-  min-height: 1.6em;
-  margin: 0 !important;
-  white-space: pre-wrap;
-}
 .clickable-tag {
   color: #fb923c !important;
   cursor: pointer;

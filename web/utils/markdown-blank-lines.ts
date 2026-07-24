@@ -59,6 +59,31 @@ export const encodeMarkdownExtraBlankLines = (value: string) => {
   return result
 }
 
+export const serializeMarkdownEditorBlocks = (blocks: string[]) => {
+  let output = ''
+  const appendTextBlock = (value: string) => {
+    if (!output) {
+      output = value
+      return
+    }
+    const separator = output.endsWith('\n\n') ? '' : output.endsWith('\n') ? '\n' : '\n\n'
+    output += `${separator}${value}`
+  }
+  const appendPreservedBlankLine = () => {
+    output = output.replace(/\n+$/g, '')
+    if (output) output += '\n\n'
+    output += `${MARKDOWN_BLANK_LINE_SENTINEL}\n\n`
+  }
+
+  blocks.forEach((block) => {
+    const value = String(block ?? '')
+    if (value === MARKDOWN_BLANK_LINE_SENTINEL || value === '') appendPreservedBlankLine()
+    else appendTextBlock(value)
+  })
+
+  return output.replace(/^\n+|\n+$/g, '')
+}
+
 export const markMarkdownPreservedBlankLineElements = (root: ParentNode | null | undefined) => {
   if (!root || typeof root.querySelectorAll !== 'function') return
   root.querySelectorAll<HTMLElement>('p, div').forEach((element) => {

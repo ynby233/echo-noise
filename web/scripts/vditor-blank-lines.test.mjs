@@ -11,6 +11,7 @@ const {
   MARKDOWN_PRESERVED_BLANK_LINE_CLASS,
   encodeMarkdownExtraBlankLines,
   isMarkdownBlankLineSentinel,
+  serializeMarkdownEditorBlocks,
 } = await jiti.import(join(webRoot, 'utils/markdown-blank-lines.ts'))
 
 assert.equal(MARKDOWN_BLANK_LINE_SENTINEL, '\u00a0')
@@ -18,6 +19,24 @@ assert.equal(MARKDOWN_PRESERVED_BLANK_LINE_CLASS, 'markdown-preserved-blank-line
 assert.equal(isMarkdownBlankLineSentinel('\u00a0'), true)
 assert.equal(isMarkdownBlankLineSentinel('\u200b\u00a0'), true)
 assert.equal(isMarkdownBlankLineSentinel('x'), false)
+
+assert.equal(
+  serializeMarkdownEditorBlocks(['first line\nsecond line']),
+  'first line\nsecond line',
+  'one Enter inside an editor block must stay one Markdown line break'
+)
+
+assert.equal(
+  serializeMarkdownEditorBlocks(['first line\n\nthird line']),
+  'first line\n\nthird line',
+  'two controlled Enters inside an editor block must stay two Markdown line breaks'
+)
+
+assert.equal(
+  serializeMarkdownEditorBlocks(['first paragraph', 'second paragraph']),
+  'first paragraph\n\nsecond paragraph',
+  'a Vditor paragraph boundary must stay a two-line Markdown separation'
+)
 
 assert.equal(
   encodeMarkdownExtraBlankLines('A\n\n\nB'),
@@ -53,6 +72,38 @@ const editor = await readFile(join(webRoot, 'components/index/VditorEditor.vue')
 const addForm = await readFile(join(webRoot, 'components/index/AddForm.vue'), 'utf8')
 const renderer = await readFile(join(webRoot, 'components/index/MarkdownRenderer.vue'), 'utf8')
 const announcement = await readFile(join(webRoot, 'components/widgets/AnnouncementBar.vue'), 'utf8')
+const lineSpacingCss = await readFile(join(webRoot, 'assets/css/markdown-line-spacing.css'), 'utf8')
+const nuxtConfig = await readFile(join(webRoot, 'nuxt.config.ts'), 'utf8')
+
+assert.match(
+  nuxtConfig,
+  /['"]@\/assets\/css\/markdown-line-spacing\.css['"]/,
+  'the shared line-spacing contract must load globally for editor and rendered Markdown surfaces'
+)
+
+assert.match(
+  lineSpacingCss,
+  /\.vditor-container \.vditor-ir pre\.vditor-reset > :is\(p, div\)\[data-block\]:not\(\.vditor-preserved-blank-line\)\s*\+\s*:is\(p, div\)\[data-block\][\s\S]*?margin-block-start:\s*1\.5em\s*!important/,
+  'Vditor paragraph blocks must expose exactly one editor line between two-line breaks'
+)
+
+assert.match(
+  lineSpacingCss,
+  /\.markdown-preview > p,[\s\S]*?\.vditor-container \.vditor-preview \.vditor-reset > p\s*\{[\s\S]*?margin-block:\s*0\s*!important;[\s\S]*?line-height:\s*1\.6;[\s\S]*?white-space:\s*normal;/,
+  'rendered Markdown paragraphs must collapse the source newline after a generated br and remove incidental margins'
+)
+
+assert.match(
+  lineSpacingCss,
+  /\.markdown-preview > p:not\(\.markdown-preserved-blank-line\)\s*\+\s*p,[\s\S]*?\.vditor-container \.vditor-preview \.vditor-reset > p:not\(\.markdown-preserved-blank-line\)\s*\+\s*p\s*\{[\s\S]*?margin-block-start:\s*1\.6em\s*!important/,
+  'two Markdown line breaks must render as exactly one empty rendered line on every preview surface'
+)
+
+assert.doesNotMatch(
+  renderer,
+  /\.markdown-preview p\s*\{[\s\S]{0,120}?margin:\s*6px 0\s*!important/,
+  'the published renderer must not override the shared line-count spacing contract'
+)
 
 assert.match(
   editor,
@@ -92,14 +143,14 @@ assert.match(
 
 assert.match(
   editor,
-  /const\s+serializePlainEditorLinesAsMarkdown\s*=[\s\S]+?appendPreservedBlankLine[\s\S]+?MARKDOWN_BLANK_LINE_SENTINEL/,
-  'plain editor blank-line blocks must serialize as explicit sentinel paragraphs so preview keeps the same visual count'
+  /import\s*\{[^}]*serializeMarkdownEditorBlocks[^}]*\}\s*from\s*['"]~\/utils\/markdown-blank-lines['"]/,
+  'the editor must use the shared Markdown block serializer instead of maintaining a second line model'
 )
 
 assert.match(
   editor,
-  /return\s+serializePlainEditorLinesAsMarkdown\(pieces\)/,
-  'plain editor blocks must serialize through the line model, not paragraph-separated double lines'
+  /return\s+serializeMarkdownEditorBlocks\(pieces\)/,
+  'plain editor DOM must preserve Vditor paragraph boundaries through the shared line model'
 )
 
 assert.match(
@@ -683,6 +734,24 @@ assert.match(
 )
 
 assert.match(
+  editor,
+  /const\s+isEditorPlainLineEnter\s*=[\s\S]+?return\s+!!block/,
+  'ordinary prose Enter must be recognized independently from Vditor paragraph splitting'
+)
+
+assert.match(
+  editor,
+  /const\s+insertEditorPlainLineBreak\s*=[\s\S]+?document\.createElement\('br'\)[\s\S]+?PRESERVED_BLANK_LINE_DOM_ANCHOR[\s\S]+?emitEditorSoftBreakInput\(event\)/,
+  'ordinary prose Enter must insert one controlled visual and Markdown line break'
+)
+
+assert.match(
+  editor,
+  /if\s*\(isEditorBlankLineEnter\(event\)\)\s*\{[\s\S]{0,100}?insertEditorSoftLineBreak\(event\)[\s\S]{0,100}?return[\s\S]{0,160}?if\s*\(!isEditorPlainLineEnter\(event\)\)\s*return[\s\S]{0,100}?insertEditorPlainLineBreak\(event\)/,
+  'each ordinary Enter must use the controlled line path while encoded blank blocks keep their dedicated path'
+)
+
+assert.match(
   addForm,
   /encodeMarkdownExtraBlankLines\(stripFullImageAttachmentsMarker\(content\)\)\.trim\(\)/,
   'published content must pass through the shared blank-line encoder'
@@ -708,8 +777,8 @@ assert.match(
 
 assert.match(
   editor,
-  /materializeEditorPreservedBlankLineBlocks\(root\)/,
-  'editor DOM must materialize encoded blank-line sentinels so edit and preview views stay visually consistent'
+  /const\s+materializeEditorPreservedBlankLineBlocks\s*=[\s\S]+?vditorInstance\?\.getValue\?\.\(\)[\s\S]+?remainingEncodedBlankLines[\s\S]+?if\s*\(remainingEncodedBlankLines\s*<=\s*0\)\s*return[\s\S]+?setPlainBlankLineBlock\(block\)/,
+  'editor DOM must materialize only source-encoded blank lines, not Vditor NBSP placeholder blocks'
 )
 
 assert.match(
@@ -722,6 +791,22 @@ assert.match(
   editor,
   /const\s+syncEditorDomToVditorValueForPreview\s*=[\s\S]+?getEditorVisibleDomTableSafeValue\(\)[\s\S]+?vditorInstance\.setValue\(nextValue\)/,
   'Vditor toolbar preview must sync the DOM-preserved editor value before rendering preview'
+)
+
+const visibleValueStart = editor.indexOf('const getEditorVisibleDomTableSafeValue =')
+const visibleValueEnd = editor.indexOf('const getSafeOutgoingEditorValue =', visibleValueStart)
+const visibleValueImplementation = editor.slice(visibleValueStart, visibleValueEnd)
+
+assert.match(
+  visibleValueImplementation,
+  /getEditorTables\(\)\.length\s*\|\|\s*hasEditorSoftBreakDom\(\)\s*\|\|\s*hasEditorPlainBlockDom\(\)/,
+  'toolbar preview must read the visible line DOM for prose breaks as well as tables'
+)
+
+assert.match(
+  editor,
+  /getValue:\s*\(\):\s*string\s*=>\s*\{\s*return\s+vditorInstance\s*\?\s*getSafeOutgoingEditorValue\(\)\s*:\s*''\s*\}/,
+  'the public getValue interface used by publish and drafts must return the safe visible line model'
 )
 
 assert.match(
