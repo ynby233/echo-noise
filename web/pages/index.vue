@@ -114,7 +114,7 @@
         
 
         
-        <UCard v-if="frontendConfig.leftAdEnabled && leftAds.length > 0" class="sidebar-card mt-2 left-widget-ad-card" :class="sidebarThemeCard">
+        <UCard v-if="frontendConfig.leftAdEnabled && leftAds.length > 0" class="sidebar-card mt-2 left-widget-promo-card" :class="sidebarThemeCard">
           <div>
             <AdCarousel :ads="leftAds" :interval-ms="frontendConfig.leftAdsIntervalMs" />
           </div>
@@ -3495,7 +3495,7 @@ white-space: nowrap;  /* 防止换行 */
 .left-col > .left-widget-pager-card > div[class*="px-4"][class*="py-5"] { padding: 9px 10px !important; }
 .left-col > .left-widget-clock-card > div[class*="px-4"][class*="py-5"] { padding-top: 12px !important; padding-bottom: 12px !important; }
 .left-col > .left-widget-life-card > div[class*="px-4"][class*="py-5"] { padding-top: 23px !important; padding-bottom: 21px !important; }
-.left-col > .left-widget-ad-card > div[class*="px-4"][class*="py-5"] { padding: 6px 14px !important; }
+.left-col > .left-widget-promo-card > div[class*="px-4"][class*="py-5"] { padding: 6px 14px !important; }
 .left-col > .left-widget-hitokoto-card > div[class*="px-4"][class*="py-5"] { padding-top: 11px !important; padding-bottom: 10px !important; }
 html.dark .sidebar-card {
   background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.8) 100%);
@@ -3773,14 +3773,14 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
   filter: saturate(1.06) contrast(1.02);
 }
 .right-col .recommend-image-box,
-.right-col .ad-image {
+.right-col .promo-image {
   transition: filter .12s ease, opacity .12s ease !important;
 }
-.right-col :where(.avatar-lg, .auth-btn, .social-item, .calendar-card button, .recommend-image-box, .ad-image) {
+.right-col :where(.avatar-lg, .auth-btn, .social-item, .calendar-card button, .recommend-image-box, .promo-image) {
   transform: none !important;
 }
 .right-col .recommend-image-box:hover,
-.right-col .ad-wrap:hover .ad-image {
+.right-col .promo-frame:hover .promo-image {
   transform: none !important;
   box-shadow: none !important;
   filter: none !important;

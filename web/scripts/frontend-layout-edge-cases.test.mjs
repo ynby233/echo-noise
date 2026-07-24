@@ -1531,7 +1531,7 @@ assert(
     homePage.includes('.auth-btn:hover { background: transparent !important; transform: none !important; }') &&
     homePage.includes('.avatar-lg:hover { transform: none; }') &&
     homePage.includes('.social-item:hover { transform: none; transition: none; }') &&
-    homePage.includes('.right-col :where(.avatar-lg, .auth-btn, .social-item, .calendar-card button, .recommend-image-box, .ad-image)') &&
+    homePage.includes('.right-col :where(.avatar-lg, .auth-btn, .social-item, .calendar-card button, .recommend-image-box, .promo-image)') &&
     homePage.includes('.right-col :deep(*:hover),') &&
     homePage.includes('transition-property: background-color, border-color, color, opacity, box-shadow, filter !important;') &&
     infoFeedList.includes('.expand-toggle-btn:hover {\n  transform: none;\n}') &&
