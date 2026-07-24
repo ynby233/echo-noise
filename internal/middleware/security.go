@@ -302,12 +302,6 @@ func SecurityMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := c.ClientIP()
 
-		// 白名单机制：如果是本地 IP，则直接放行，不记录攻击日志，也不检查是否被 ban
-		if isLocalIP(ip) {
-			c.Next()
-			return
-		}
-
 		if isBannedIP(ip) {
 			c.JSON(http.StatusForbidden, dto.Fail[any]("禁止访问"))
 			c.Abort()

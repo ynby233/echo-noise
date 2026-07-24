@@ -1,6 +1,12 @@
 package middleware
 
-import "testing"
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/gin-gonic/gin"
+)
 
 func TestSuspiciousPathKeepsAPIBoundaryExact(t *testing.T) {
 	tests := []struct {
@@ -19,5 +25,21 @@ func TestSuspiciousPathKeepsAPIBoundaryExact(t *testing.T) {
 				t.Fatalf("isSuspiciousPath(%q) = %v, want %v", tt.path, got, tt.suspicious)
 			}
 		})
+	}
+}
+
+func TestPrivatePeerStillGetsSuspiciousPathProtection(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(SecurityMiddleware())
+	r.GET("/.env", func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	req := httptest.NewRequest(http.MethodGet, "/.env", nil)
+	req.RemoteAddr = "172.18.0.1:4321"
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("private proxy peer must not bypass suspicious path protection, got %d", w.Code)
 	}
 }
