@@ -61,15 +61,15 @@ export const encodeMarkdownExtraBlankLines = (value: string) => {
 
 export const serializeMarkdownEditorBlocks = (blocks: string[]) => {
   let output = ''
-  const appendTextBlock = (value: string) => {
-    if (!output) {
-      output = value
-      return
-    }
-    const separator = output.endsWith('\n\n') ? '' : output.endsWith('\n') ? '\n' : '\n\n'
-    output += `${separator}${value}`
+  let plainBlocks: string[] = []
+  const flushPlainBlocks = () => {
+    if (!plainBlocks.length) return
+    const value = plainBlocks.join('\n')
+    output += `${output && !output.endsWith('\n') ? '\n' : ''}${value}`
+    plainBlocks = []
   }
   const appendPreservedBlankLine = () => {
+    flushPlainBlocks()
     output = output.replace(/\n+$/g, '')
     if (output) output += '\n\n'
     output += `${MARKDOWN_BLANK_LINE_SENTINEL}\n\n`
@@ -77,9 +77,10 @@ export const serializeMarkdownEditorBlocks = (blocks: string[]) => {
 
   blocks.forEach((block) => {
     const value = String(block ?? '')
-    if (value === MARKDOWN_BLANK_LINE_SENTINEL || value === '') appendPreservedBlankLine()
-    else appendTextBlock(value)
+    if (value === MARKDOWN_BLANK_LINE_SENTINEL) appendPreservedBlankLine()
+    else plainBlocks.push(value)
   })
+  flushPlainBlocks()
 
   return output.replace(/^\n+|\n+$/g, '')
 }

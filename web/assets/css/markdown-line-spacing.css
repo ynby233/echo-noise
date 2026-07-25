@@ -1,10 +1,3 @@
-.vditor-container .vditor-ir pre.vditor-reset > :is(p, div)[data-block]:not(.vditor-preserved-blank-line)
-  + :is(p, div)[data-block],
-.vditor-container .vditor-wysiwyg .vditor-reset > :is(p, div)[data-block]:not(.vditor-preserved-blank-line)
-  + :is(p, div)[data-block] {
-  margin-block-start: 1.5em !important;
-}
-
 .markdown-preview > p,
 .vditor-container .vditor-preview .vditor-reset > p {
   margin-block: 0 !important;

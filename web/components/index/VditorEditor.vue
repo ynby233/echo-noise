@@ -252,6 +252,7 @@ let tableExpandCloseTimer: number | null = null;
 let editorTableDomStabilizeTimer: number | null = null;
 let pendingEditorTableCellSync: PendingEditorTableCellSync | null = null;
 let editorTableCompositionActive = false;
+let editorPlainCompositionActive = false;
 let editorTableCompositionTarget: PendingEditorTableCellSync | null = null;
 let editorTableCompositionSnapshot: string[][] | null = null;
 let editorTableCompositionStartText = '';
@@ -312,6 +313,7 @@ const TABLE_CELL_BREAK_TEXT_RE = /^<br\s*\/?\s*>$/i;
 const TABLE_CELL_CARET_ANCHOR = '\u200b';
 const TABLE_CELL_CARET_ANCHOR_RE = /\u200b/g;
 const PRESERVED_BLANK_LINE_DOM_ANCHOR = '\u200b';
+const PLAIN_EMPTY_LINE_CLASS = 'vditor-plain-empty-line';
 const MARKDOWN_EMPTY_TABLE_CELL = '';
 const MARKDOWN_EMPTY_TABLE_CELL_RE = /^(?:&nbsp;|&#160;|&#xA0;|\u00a0)$/i;
 const isReady = ref(false);
@@ -750,7 +752,7 @@ const mergeExpandedCellEditorText = (currentValue: string, editorText: string) =
 }
 
 const materializeEditorPreservedBlankLineBlocks = (root: HTMLElement) => {
-  const encodedSource = vditorInstance?.getValue?.() || ''
+  const encodedSource = getRawVditorValue()
   let remainingEncodedBlankLines = encodedSource.split(MARKDOWN_BLANK_LINE_SENTINEL).length - 1
   root.querySelectorAll<HTMLElement>('p[data-block], div[data-block]').forEach((block) => {
     if (block.closest('table, [data-type="code-block"], .vditor-ir__marker--pre')) return
@@ -952,6 +954,7 @@ const setupAttachmentPreview = () => {
   }
 
   const onEditorFocusOut = () => {
+    editorPlainCompositionActive = false
     window.setTimeout(() => flushPendingEditorTableCellSourceSyncIfMoved(getCurrentEditorTableCell()), 0)
   }
 
@@ -962,9 +965,11 @@ const setupAttachmentPreview = () => {
     }
     const compositionCell = getCurrentEditorTableCell(event)
     if (!compositionCell) {
+      editorPlainCompositionActive = true
       preparePlainBlankLineInput(event)
       return
     }
+    editorPlainCompositionActive = false
     editorTableCompositionActive = true
     editorTableCompositionCommitKey = null
     editorTableCompositionCaretTarget = null
@@ -989,6 +994,7 @@ const setupAttachmentPreview = () => {
       event.stopPropagation()
       return
     }
+    editorPlainCompositionActive = false
     editorTableCompositionActive = false
     const rememberedCell = editorTableCompositionTarget
       ? (getEditorTables()[editorTableCompositionTarget.tableIndex]?.rows[editorTableCompositionTarget.rowIndex]?.cells[editorTableCompositionTarget.cellIndex] as HTMLTableCellElement | undefined) || null
@@ -1254,7 +1260,7 @@ const setupAttachmentPreview = () => {
   }
 
   const isEditorBlankLineEnter = (event: KeyboardEvent) => {
-    if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return false
+    if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || editorPlainCompositionActive) return false
     const block = currentPlainEditorBlock(event)
     const anchorElement = block || getEventElement(event)
     if (!anchorElement || !root.contains(anchorElement)) return false
@@ -1264,7 +1270,7 @@ const setupAttachmentPreview = () => {
   }
 
   const isEditorPlainLineEnter = (event: KeyboardEvent) => {
-    if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return false
+    if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || editorPlainCompositionActive) return false
     const block = currentPlainEditorBlock(event)
     const anchorElement = block || getEventElement(event)
     if (!anchorElement || !root.contains(anchorElement)) return false
@@ -1302,20 +1308,44 @@ const setupAttachmentPreview = () => {
     return true
   }
 
+  const commitEditorPlainEmptyLine = (event: Event) => {
+    const block = currentPlainEditorBlock(event)
+    const selection = window.getSelection()
+    if (!block || !selection?.rangeCount || !selection.isCollapsed) return false
+    const anchorNode = selection.anchorNode
+    if (!(anchorNode instanceof Text) || anchorNode.previousSibling instanceof HTMLBRElement === false) return false
+    if (String(anchorNode.textContent || '').replace(/[\u200b\u200c\ufeff]/g, '') !== '') return false
+    event.preventDefault()
+    event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    anchorNode.previousSibling.remove()
+    anchorNode.remove()
+    const emptyLine = document.createElement(block.tagName.toLowerCase())
+    emptyLine.setAttribute('data-block', block.getAttribute('data-block') || '0')
+    setPlainEmptyLineBlock(emptyLine)
+    const nextBlock = createPlainEditableBlock(block)
+    block.after(emptyLine, nextBlock)
+    placeCaretInPlainBlock(nextBlock)
+    emitEditorSoftBreakInput(event)
+    return true
+  }
+
   const insertEditorSoftLineBreak = (event: Event) => {
     const block = currentPlainEditorBlock(event)
     if (!isPlainBlankLineBlock(block)) return false
     event.preventDefault()
     event.stopPropagation()
     ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
-    setPlainBlankLineBlock(block!)
-    insertPreservedBlankLineAfter(block!)
+    setPlainEmptyLineBlock(block!)
+    const nextBlock = createPlainEditableBlock(block!)
+    block!.after(nextBlock)
+    placeCaretInPlainBlock(nextBlock)
     emitEditorSoftBreakInput(event)
     return true
   }
 
   const insertEditorLeadingBlankLine = (event: KeyboardEvent) => {
-    if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.isComposing || editorTableCompositionActive) return false
+    if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || editorPlainCompositionActive || editorTableCompositionActive) return false
     const block = currentPlainEditorBlock(event)
     if (!block || isPlainBlankLineBlock(block) || !isCaretAtStartOfPlainBlock(block)) return false
     event.preventDefault()
@@ -1390,7 +1420,8 @@ const setupAttachmentPreview = () => {
     event.preventDefault()
     event.stopPropagation()
     ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
-    setPlainBlankLineBlock(block!)
+    if (block!.classList.contains(PLAIN_EMPTY_LINE_CLASS)) setPlainEmptyLineBlock(block!)
+    else setPlainBlankLineBlock(block!)
     placeCaretInPlainBlock(block!)
   }
 
@@ -1466,6 +1497,7 @@ const setupAttachmentPreview = () => {
       }
       if (!editorTableCompositionActive && cell && insertEditorTableCellLineBreak(event, cell)) return
     }
+    if (commitEditorPlainEmptyLine(event)) return
     if (insertEditorLeadingBlankLine(event)) return
     if (isEditorBlankLineEnter(event)) {
       insertEditorSoftLineBreak(event)
@@ -1482,7 +1514,7 @@ const setupAttachmentPreview = () => {
       preparePlainBlankLineInput(event)
       return
     }
-    if (event.inputType !== 'insertParagraph' || event.isComposing) return
+    if (event.inputType !== 'insertParagraph' || editorPlainCompositionActive) return
     const selection = window.getSelection()
     const anchorNode = selection?.anchorNode || null
     const anchorElement = anchorNode instanceof Element ? anchorNode : anchorNode?.parentElement || getEventElement(event)
@@ -1810,7 +1842,22 @@ const isPlainBlankLineBlock = (block: HTMLElement | null | undefined) => {
 const setPlainBlankLineBlock = (block: HTMLElement) => {
   block.innerHTML = ''
   block.appendChild(document.createTextNode(PRESERVED_BLANK_LINE_DOM_ANCHOR))
+  block.classList.remove(PLAIN_EMPTY_LINE_CLASS)
   block.classList.add('vditor-preserved-blank-line')
+}
+
+const setPlainEmptyLineBlock = (block: HTMLElement) => {
+  block.innerHTML = ''
+  block.appendChild(document.createTextNode(PRESERVED_BLANK_LINE_DOM_ANCHOR))
+  block.classList.remove('vditor-preserved-blank-line')
+  block.classList.add(PLAIN_EMPTY_LINE_CLASS)
+}
+
+const createPlainEditableBlock = (reference: HTMLElement) => {
+  const block = document.createElement(reference.tagName.toLowerCase())
+  block.setAttribute('data-block', reference.getAttribute('data-block') || '0')
+  block.appendChild(document.createTextNode(PRESERVED_BLANK_LINE_DOM_ANCHOR))
+  return block
 }
 
 const placeCaretInPlainBlock = (block: HTMLElement, atEnd = false) => {
@@ -1827,15 +1874,6 @@ const placeCaretInPlainBlock = (block: HTMLElement, atEnd = false) => {
   selection.addRange(range)
   lastEditorSelectionRange = range.cloneRange()
   return true
-}
-
-const insertPreservedBlankLineAfter = (block: HTMLElement) => {
-  const nextBlock = document.createElement(block.tagName.toLowerCase())
-  nextBlock.setAttribute('data-block', block.getAttribute('data-block') || '0')
-  setPlainBlankLineBlock(nextBlock)
-  block.after(nextBlock)
-  placeCaretInPlainBlock(nextBlock)
-  return nextBlock
 }
 
 const insertPreservedBlankLineBefore = (block: HTMLElement) => {
@@ -1908,6 +1946,7 @@ const clearPlainBlankLineForInput = (block: HTMLElement) => {
   if (!isPlainBlankLineBlock(block)) return false
   block.innerHTML = ''
   block.classList.remove('vditor-preserved-blank-line')
+  block.classList.remove(PLAIN_EMPTY_LINE_CLASS)
   placeCaretInPlainBlock(block)
   return true
 }
@@ -3422,6 +3461,7 @@ const serializePlainEditorBlockText = (block: Element) => {
   clone.querySelectorAll('.editor-table-delete-button, .editor-table-expand-button, .editor-attachment-preview').forEach((node) => node.remove())
   clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')))
   const rawText = String(clone.textContent || '').replace(/[\u200b\u200c\ufeff]/g, '')
+  if (block.classList.contains(PLAIN_EMPTY_LINE_CLASS)) return ''
   if (block.classList.contains('vditor-preserved-blank-line') || (rawText.includes(MARKDOWN_BLANK_LINE_SENTINEL) && isMarkdownBlankLineSentinel(rawText))) return MARKDOWN_BLANK_LINE_SENTINEL
   return normalizeAttachmentSourceText(rawText.replace(/\u00a0/g, ' ')).replace(/[ \t]+$/g, '')
 }
@@ -3487,7 +3527,7 @@ const getEditorDomContentFallback = () => {
 
 const hasEditorSoftBreakDom = () => {
   const editable = getEditorEditableElement()
-  return !!editable?.querySelector('br, .vditor-preserved-blank-line')
+  return !!editable?.querySelector(`br, .vditor-preserved-blank-line, .${PLAIN_EMPTY_LINE_CLASS}`)
 }
 
 const hasEditorPlainBlockDom = () => {
@@ -5423,6 +5463,7 @@ onBeforeUnmount(() => {
     expandedTableDirty.value = false
     pendingEditorTableCellSync = null
     editorTableCompositionActive = false
+    editorPlainCompositionActive = false
     editorTableCompositionTarget = null
     editorTableCompositionSnapshot = null
     editorTableCompositionStartText = ''
@@ -5486,6 +5527,7 @@ const clearConsumedEditorTableInsertionState = () => {
   closeInlineEditorTableAtomicEditor()
   pendingEditorTableCellSync = null
   editorTableCompositionActive = false
+  editorPlainCompositionActive = false
   editorTableCompositionTarget = null
   editorTableCompositionSnapshot = null
   editorTableCompositionStartText = ''
@@ -5501,6 +5543,7 @@ const clearConsumedEditorTableAttachmentTargetState = () => {
   closeInlineEditorTableAtomicEditor()
   pendingEditorTableCellSync = null
   editorTableCompositionActive = false
+  editorPlainCompositionActive = false
   editorTableCompositionTarget = null
   editorTableCompositionSnapshot = null
   editorTableCompositionStartText = ''
@@ -5774,6 +5817,7 @@ defineExpose({
     pendingEditorTableCellSync = null
     pendingEditorTableAttachmentInsertionTarget = null
     editorTableCompositionActive = false
+    editorPlainCompositionActive = false
     editorTableCompositionTarget = null
     editorTableCompositionCommitKey = null
     editorTableCompositionCaretTarget = null
@@ -5817,6 +5861,7 @@ defineExpose({
     pendingEditorTableCellSync = null
     pendingEditorTableAttachmentInsertionTarget = null
     editorTableCompositionActive = false
+    editorPlainCompositionActive = false
     editorTableCompositionTarget = null
     editorTableCompositionCommitKey = null
     editorTableCompositionCaretTarget = null
@@ -6188,7 +6233,8 @@ html.dark .editor-attachment-preview__header,
   min-height: 1.5em;
 }
 
-.vditor-container .vditor-preserved-blank-line {
+.vditor-container .vditor-preserved-blank-line,
+.vditor-container .vditor-plain-empty-line {
   margin-block: 0 !important;
   min-height: 1.5em;
 }

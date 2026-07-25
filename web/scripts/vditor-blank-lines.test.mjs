@@ -34,8 +34,26 @@ assert.equal(
 
 assert.equal(
   serializeMarkdownEditorBlocks(['first paragraph', 'second paragraph']),
-  'first paragraph\n\nsecond paragraph',
-  'a Vditor paragraph boundary must stay a two-line Markdown separation'
+  'first paragraph\nsecond paragraph',
+  'adjacent Vditor text blocks from one Enter must stay one Markdown line break'
+)
+
+assert.equal(
+  serializeMarkdownEditorBlocks(['first line', '', 'third line']),
+  'first line\n\nthird line',
+  'one native empty Vditor block from two Enters must stay one empty Markdown line'
+)
+
+assert.equal(
+  serializeMarkdownEditorBlocks(['first line', '', '', 'fourth line']),
+  'first line\n\n\nfourth line',
+  'native Vditor blocks must preserve the exact Enter count beyond two Enters'
+)
+
+assert.equal(
+  serializeMarkdownEditorBlocks(['first line', MARKDOWN_BLANK_LINE_SENTINEL, 'fourth line']),
+  `first line\n\n${MARKDOWN_BLANK_LINE_SENTINEL}\n\nfourth line`,
+  'encoded preserved blank-line blocks must remain distinct from native empty blocks'
 )
 
 assert.equal(
@@ -81,10 +99,10 @@ assert.match(
   'the shared line-spacing contract must load globally for editor and rendered Markdown surfaces'
 )
 
-assert.match(
+assert.doesNotMatch(
   lineSpacingCss,
-  /\.vditor-container \.vditor-ir pre\.vditor-reset > :is\(p, div\)\[data-block\]:not\(\.vditor-preserved-blank-line\)\s*\+\s*:is\(p, div\)\[data-block\][\s\S]*?margin-block-start:\s*1\.5em\s*!important/,
-  'Vditor paragraph blocks must expose exactly one editor line between two-line breaks'
+  /\.vditor-container \.vditor-(?:ir|wysiwyg)[\s\S]*?\[data-block\][\s\S]*?\+\s*:is\(p, div\)\[data-block\][\s\S]*?margin-block-start:/,
+  'adjacent Vditor text blocks must not gain an extra visible line of margin'
 )
 
 assert.match(
@@ -139,6 +157,12 @@ assert.match(
   editor,
   /block\.classList\.contains\('vditor-preserved-blank-line'\)[\s\S]+?return\s+MARKDOWN_BLANK_LINE_SENTINEL[\s\S]+?rawText\.replace\(\/\\u00a0\/g,\s*' '\)/,
   'plain text block serialization must not save Vditor caret NBSP as normal text'
+)
+
+assert.match(
+  editor,
+  /const\s+PLAIN_EMPTY_LINE_CLASS\s*=\s*'vditor-plain-empty-line'[\s\S]+?block\.classList\.contains\(PLAIN_EMPTY_LINE_CLASS\)[\s\S]{0,80}?return\s+''/,
+  'a committed user empty line must serialize as one ordinary empty Markdown line, not as a sentinel paragraph'
 )
 
 assert.match(
@@ -741,8 +765,47 @@ assert.match(
 
 assert.match(
   editor,
+  /let\s+editorPlainCompositionActive\s*=\s*false/,
+  'plain editor Enter handling must track the real IME composition lifecycle'
+)
+
+assert.match(
+  editor,
+  /const\s+onEditorCompositionStart\s*=[\s\S]+?if\s*\(!compositionCell\)\s*\{[\s\S]{0,160}?editorPlainCompositionActive\s*=\s*true[\s\S]{0,160}?preparePlainBlankLineInput\(event\)[\s\S]{0,80}?return[\s\S]+?const\s+onEditorCompositionEnd\s*=[\s\S]{0,240}?editorPlainCompositionActive\s*=\s*false/,
+  'plain composition lifecycle must start and end independently from table composition state'
+)
+
+assert.match(
+  editor,
+  /const\s+isEditorBlankLineEnter\s*=[\s\S]{0,240}?editorPlainCompositionActive[\s\S]+?const\s+isEditorPlainLineEnter\s*=[\s\S]{0,240}?editorPlainCompositionActive/,
+  'plain Enter decisions must use the real composition lifecycle for both empty and text blocks'
+)
+
+const plainEnterDecisionStart = editor.indexOf('const isEditorBlankLineEnter =')
+const plainEnterDecisionEnd = editor.indexOf('const emitEditorSoftBreakInput =', plainEnterDecisionStart)
+const plainEnterDecisions = editor.slice(plainEnterDecisionStart, plainEnterDecisionEnd)
+assert.doesNotMatch(
+  plainEnterDecisions,
+  /event\.isComposing/,
+  'a stale KeyboardEvent isComposing flag must not bypass plain Enter after compositionend'
+)
+
+assert.match(
+  editor,
+  /const\s+insertEditorLeadingBlankLine\s*=[\s\S]{0,260}?editorPlainCompositionActive[\s\S]+?if\s*\(event\.inputType\s*!==\s*'insertParagraph'\s*\|\|\s*editorPlainCompositionActive\)\s*return/,
+  'leading and beforeinput Enter fallbacks must share the plain composition lifecycle'
+)
+
+assert.match(
+  editor,
   /const\s+insertEditorPlainLineBreak\s*=[\s\S]+?document\.createElement\('br'\)[\s\S]+?PRESERVED_BLANK_LINE_DOM_ANCHOR[\s\S]+?emitEditorSoftBreakInput\(event\)/,
   'ordinary prose Enter must insert one controlled visual and Markdown line break'
+)
+
+assert.match(
+  editor,
+  /const\s+commitEditorPlainEmptyLine\s*=[\s\S]+?previousSibling\s+instanceof\s+HTMLBRElement[\s\S]+?setPlainEmptyLineBlock\([\s\S]+?createPlainEditableBlock\([\s\S]+?emitEditorSoftBreakInput\(event\)[\s\S]+?if\s*\(commitEditorPlainEmptyLine\(event\)\)\s*return/,
+  'a repeated Enter must commit a logical empty block before later Vditor input normalization'
 )
 
 assert.match(
@@ -777,8 +840,8 @@ assert.match(
 
 assert.match(
   editor,
-  /const\s+materializeEditorPreservedBlankLineBlocks\s*=[\s\S]+?vditorInstance\?\.getValue\?\.\(\)[\s\S]+?remainingEncodedBlankLines[\s\S]+?if\s*\(remainingEncodedBlankLines\s*<=\s*0\)\s*return[\s\S]+?setPlainBlankLineBlock\(block\)/,
-  'editor DOM must materialize only source-encoded blank lines, not Vditor NBSP placeholder blocks'
+  /const\s+materializeEditorPreservedBlankLineBlocks\s*=[\s\S]+?getRawVditorValue\(\)[\s\S]+?remainingEncodedBlankLines[\s\S]+?if\s*\(remainingEncodedBlankLines\s*<=\s*0\)\s*return[\s\S]+?setPlainBlankLineBlock\(block\)/,
+  'editor setup must read source safely before materializing only source-encoded blank lines'
 )
 
 assert.match(
