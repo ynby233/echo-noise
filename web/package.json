@@ -15,6 +15,7 @@
     "test:comment-avatar": "node scripts/comment-avatar-fallback.test.mjs",
     "test:comment-input-scroll": "node scripts/comment-input-scroll.test.mjs",
     "test:home-stats": "node scripts/home-stats.test.mjs",
+    "test:home-gallery-missing": "node scripts/home-gallery-missing-attachment.test.mjs",
     "test:home-widget": "node scripts/home-widget-contract.test.mjs",
     "test:home-sidebar-content": "node scripts/home-sidebar-content-sync.test.mjs",
     "test:home-sidebar-pager": "node scripts/home-sidebar-pager-contract.test.mjs",

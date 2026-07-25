@@ -175,21 +175,8 @@ func ListImageAttachments(c *gin.Context) {
 		return
 	}
 
-	wd, _ := os.Getwd()
-	exePath, _ := os.Executable()
-	exeDir := filepath.Dir(exePath)
-	sp := strings.TrimRight(config.Config.Upload.SavePath, "/")
-	dir := pickDir([]string{
-		sp,
-		"./" + sp,
-		filepath.Join(wd, sp),
-		filepath.Join(exeDir, sp),
-		"./data/images",
-		filepath.Join(wd, "data/images"),
-		filepath.Join(exeDir, "data/images"),
-		"/data/images",
-		"/app/data/images",
-	}, "./data/images")
+	dir := localImageDir()
+
 	var messages []models.Message
 	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Order("created_at DESC").Find(&messages)
 
@@ -490,21 +477,8 @@ func DeleteImageAttachment(c *gin.Context) {
 		return
 	}
 
-	wd, _ := os.Getwd()
-	exePath, _ := os.Executable()
-	exeDir := filepath.Dir(exePath)
-	sp := strings.TrimRight(config.Config.Upload.SavePath, "/")
-	imgDir := pickDir([]string{
-		sp,
-		"./" + sp,
-		filepath.Join(wd, sp),
-		filepath.Join(exeDir, sp),
-		"./data/images",
-		filepath.Join(wd, "data/images"),
-		filepath.Join(exeDir, "data/images"),
-		"/data/images",
-		"/app/data/images",
-	}, "./data/images")
+	imgDir := localImageDir()
+
 	p := filepath.Join(imgDir, base)
 	if _, err := os.Stat(p); err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "文件不存在"})

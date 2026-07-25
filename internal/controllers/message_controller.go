@@ -73,7 +73,7 @@ func GetCurrentUserHomeStats(c *gin.Context) {
 
 	tagSet := make(map[string]struct{})
 	totalMessages := 0
-	totalImages := 0
+	imageURLs := make([]string, 0, len(messages))
 	for _, msg := range messages {
 		if isHomeStatsExcludedMessage(msg.Content) {
 			continue
@@ -83,13 +83,23 @@ func GetCurrentUserHomeStats(c *gin.Context) {
 			tagSet[tag] = struct{}{}
 		}
 		if strings.TrimSpace(msg.ImageURL) != "" {
-			totalImages++
+			imageURLs = append(imageURLs, msg.ImageURL)
 		}
 		for _, match := range markdownImageRegexp.FindAllStringSubmatch(msg.Content, -1) {
 			if len(match) > 1 && strings.TrimSpace(match[1]) != "" {
-				totalImages++
+				imageURLs = append(imageURLs, match[1])
 			}
 		}
+	}
+
+	// 与最新图集保持同一口径：附件已被删除的图片不再计入，避免统计数虚高。
+	availability := newImageAvailability(imageURLs)
+	totalImages := 0
+	for _, imageURL := range imageURLs {
+		if !availability.Has(imageURL) {
+			continue
+		}
+		totalImages++
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -221,10 +231,10 @@ func GetAllImages(c *gin.Context) {
 		CreatedAt time.Time `json:"created_at"`
 	}
 
-	var allImages []ImageInfo
+	candidates := make([]ImageInfo, 0, len(messages))
 	for _, msg := range messages {
 		if msg.ImageURL != "" {
-			allImages = append(allImages, ImageInfo{
+			candidates = append(candidates, ImageInfo{
 				ID:        msg.ID,
 				ImageURL:  msg.ImageURL,
 				CreatedAt: msg.CreatedAt,
@@ -234,13 +244,27 @@ func GetAllImages(c *gin.Context) {
 		matches := markdownImageRegexp.FindAllStringSubmatch(msg.Content, -1)
 		for _, match := range matches {
 			if len(match) > 1 {
-				allImages = append(allImages, ImageInfo{
+				candidates = append(candidates, ImageInfo{
 					ID:        msg.ID,
 					ImageURL:  match[1],
 					CreatedAt: msg.CreatedAt,
 				})
 			}
 		}
+	}
+
+	// 附件已被删除的图片不再返回，避免图集出现无法加载的占位图并让计数虚高。
+	candidateURLs := make([]string, 0, len(candidates))
+	for _, image := range candidates {
+		candidateURLs = append(candidateURLs, image.ImageURL)
+	}
+	availability := newImageAvailability(candidateURLs)
+	allImages := make([]ImageInfo, 0, len(candidates))
+	for _, image := range candidates {
+		if !availability.Has(image.ImageURL) {
+			continue
+		}
+		allImages = append(allImages, image)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": allImages})
