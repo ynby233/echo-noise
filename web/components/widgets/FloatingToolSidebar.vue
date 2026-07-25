@@ -33,6 +33,11 @@
       <span v-if="notificationUnreadCount > 0" class="notification-badge">{{ badgeText }}</span>
       <span class="btn-label">通知</span>
     </button>
+    <button v-show="!collapsed" class="tool-btn nw-action-btn" aria-label="公告" @click="$emit('open-announcements')">
+      <UIcon name="i-heroicons-megaphone" class="w-6 h-6" />
+      <span v-if="announcementUnreadCount > 0" class="notification-badge">{{ announcementBadgeText }}</span>
+      <span class="btn-label">公告</span>
+    </button>
     <button v-show="!collapsed" class="tool-btn nw-action-btn" aria-label="后台" @click="$emit('open-admin')">
       <UIcon name="i-mdi-server-outline" class="w-6 h-6" />
       <span class="btn-label">后台</span>
@@ -41,7 +46,7 @@
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{ contentTheme?: string; layoutIcon?: string; notificationUnreadCount?: number }>()
+const props = defineProps<{ contentTheme?: string; layoutIcon?: string; notificationUnreadCount?: number; announcementUnreadCount?: number }>()
 defineEmits<{
   (event: 'toggle-layout'): void
   (event: 'search'): void
@@ -49,10 +54,13 @@ defineEmits<{
   (event: 'toggle-theme'): void
   (event: 'open-comment'): void
   (event: 'open-notifications'): void
+  (event: 'open-announcements'): void
   (event: 'open-admin'): void
 }>()
 const notificationUnreadCount = computed(() => Math.max(0, Number(props.notificationUnreadCount || 0)))
 const badgeText = computed(() => notificationUnreadCount.value > 99 ? '99+' : String(notificationUnreadCount.value))
+const announcementUnreadCount = computed(() => Math.max(0, Number(props.announcementUnreadCount || 0)))
+const announcementBadgeText = computed(() => announcementUnreadCount.value > 99 ? '99+' : String(announcementUnreadCount.value))
 const isDark = computed(() => props.contentTheme === 'dark')
 const themeIcon = computed(() => (props.contentTheme === 'dark' ? 'i-mdi-weather-night' : 'i-mdi-white-balance-sunny'))
 const layoutIconProp = computed(() => props.layoutIcon || 'i-mdi-view-grid')
@@ -186,5 +194,18 @@ const toggleCollapsed = () => {
 @media (min-width: 1025px) {
   .floating-sidebar.fs-light .btn-label, .floating-sidebar.fs-dark .btn-label { right: calc(100% + 8px); left: auto; }
 }
-@media (max-width: 640px) { .floating-sidebar { bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); } }
+@media (max-width: 640px) {
+  .floating-sidebar {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+    gap: clamp(2px, .6vw, 4px);
+    padding: 4px;
+  }
+  .tool-btn {
+    width: clamp(32px, 9.23vw, 40px);
+    height: clamp(32px, 9.23vw, 40px);
+    min-width: clamp(32px, 9.23vw, 40px);
+    min-height: clamp(32px, 9.23vw, 40px);
+    flex-basis: clamp(32px, 9.23vw, 40px);
+  }
+}
 </style>

@@ -1,0 +1,61 @@
+import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
+
+const sidebarPath = fileURLToPath(new URL('../components/widgets/FloatingToolSidebar.vue', import.meta.url))
+const centerPath = fileURLToPath(new URL('../components/index/AnnouncementCenter.vue', import.meta.url))
+const modalPath = fileURLToPath(new URL('../components/index/AnnouncementModal.vue', import.meta.url))
+const homePath = fileURLToPath(new URL('../pages/index.vue', import.meta.url))
+const managerPath = fileURLToPath(new URL('../components/admin/AdminAnnouncementManager.vue', import.meta.url))
+const statusPanelPath = fileURLToPath(new URL('../components/index/StatusPanel.vue', import.meta.url))
+const [sidebar, center, modal, home, manager, statusPanel] = (await Promise.all([
+  readFile(sidebarPath, 'utf8'), readFile(centerPath, 'utf8'), readFile(modalPath, 'utf8'), readFile(homePath, 'utf8'), readFile(managerPath, 'utf8'), readFile(statusPanelPath, 'utf8')
+])).map((source) => source.replace(/\r\n?/g, '\n'))
+
+const notificationIndex = sidebar.indexOf("$emit('open-notifications')")
+const announcementIndex = sidebar.indexOf("$emit('open-announcements')")
+const adminIndex = sidebar.indexOf("$emit('open-admin')")
+assert.ok(notificationIndex >= 0 && announcementIndex > notificationIndex && adminIndex > announcementIndex, '公告按钮必须位于通知下方、后台上方')
+assert.match(sidebar, /announcementUnreadCount[^\n]*number/)
+assert.match(sidebar, /announcementUnreadCount\s*>\s*0/)
+assert.match(sidebar, /@media \(max-width:\s*640px\)[\s\S]*width:\s*clamp\(32px,\s*9\.23vw,\s*40px\)/)
+
+assert.match(center, /getRequest<AnnouncementListPayload>\('announcements'/)
+assert.match(center, /putRequest.*announcements\/.*\/read/)
+assert.match(center, /putRequest.*announcements\/read-all/)
+assert.match(center, /announcementPageTitle/)
+assert.match(center, /announcementPageDescription/)
+assert.match(center, /defineExpose\(\{[\s\S]*sidebarPagerState/)
+assert.doesNotMatch(center, /reply|jumpToTarget|BuiltinComments/)
+
+assert.match(modal, /getRequest<UnreadAnnouncementPayload>\('announcements\/unread'/)
+assert.match(modal, /第 \{\{ currentIndex \+ 1 \}\} 条 \/ 共 \{\{ snapshotTotal \}\} 条/)
+assert.match(modal, /remainingCount\s*>\s*1[\s\S]*全部已读/)
+assert.match(modal, /isLast[\s\S]*阅读完毕/)
+assert.match(modal, /:prevent-close="true"/)
+assert.match(modal, /announcements\/read-all/)
+
+assert.match(home, /activeTab==='announcements'[\s\S]*<AnnouncementCenter/)
+assert.match(home, /<AnnouncementModal[\s\S]*@unread-change="handleAnnouncementUnreadChange"/)
+assert.match(home, /:announcement-unread-count="announcementUnreadCount"/)
+assert.match(home, /@open-announcements="openAnnouncementCenter"/)
+assert.match(home, /'notifications', 'announcements', 'about'/)
+assert.match(home, /activeTab\.value === 'announcements'[\s\S]*announcementCenter\.value/)
+
+assert.match(manager, /admin\/announcements/)
+assert.match(manager, /batch-delete/)
+assert.match(manager, /selectedIds/)
+assert.match(manager, /selectAllDeletable/)
+assert.match(manager, /重新通知/)
+assert.match(manager, /VoceChat 不会重复推送/)
+assert.match(manager, /公告推送/)
+assert.match(manager, /retry-push/)
+assert.match(manager, /持久化投递任务/)
+assert.match(manager, /item\.status === 'published' && \(item\.push_summary\?\.failed/)
+assert.match(statusPanel, /import AdminAnnouncementManager/)
+assert.match(statusPanel, /<AdminAnnouncementManager/)
+assert.match(statusPanel, /key: 'site-announcement', label: '公告'/)
+assert.match(statusPanel, /announcementPageTitle: '公告页面标题'/)
+assert.match(statusPanel, /announcementPageDescription: '公告页面说明'/)
+
+console.log('announcement user experience contract passed')

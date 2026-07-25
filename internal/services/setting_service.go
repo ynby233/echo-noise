@@ -1116,6 +1116,8 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 			"commentPageDescription":      choose(config.CommentPageDescription, getDefaultConfig()["frontendSettings"].(map[string]interface{})["commentPageDescription"].(string)),
 			"notificationPageTitle":       choose(config.NotificationPageTitle, getDefaultConfig()["frontendSettings"].(map[string]interface{})["notificationPageTitle"].(string)),
 			"notificationPageDescription": choose(config.NotificationPageDescription, getDefaultConfig()["frontendSettings"].(map[string]interface{})["notificationPageDescription"].(string)),
+			"announcementPageTitle":       choose(config.AnnouncementPageTitle, getDefaultConfig()["frontendSettings"].(map[string]interface{})["announcementPageTitle"].(string)),
+			"announcementPageDescription": choose(config.AnnouncementPageDescription, getDefaultConfig()["frontendSettings"].(map[string]interface{})["announcementPageDescription"].(string)),
 			"aboutPageTitle":              choose(config.AboutPageTitle, getDefaultConfig()["frontendSettings"].(map[string]interface{})["aboutPageTitle"].(string)),
 			"aboutPageDescription":        choose(config.AboutPageDescription, getDefaultConfig()["frontendSettings"].(map[string]interface{})["aboutPageDescription"].(string)),
 			"aboutMarkdown":               choose(config.AboutMarkdown, getDefaultConfig()["frontendSettings"].(map[string]interface{})["aboutMarkdown"].(string)),
@@ -1368,6 +1370,12 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	}
 	if v, ok := frontendSettings["notificationPageDescription"].(string); ok {
 		config.NotificationPageDescription = v
+	}
+	if v, ok := frontendSettings["announcementPageTitle"].(string); ok {
+		config.AnnouncementPageTitle = v
+	}
+	if v, ok := frontendSettings["announcementPageDescription"].(string); ok {
+		config.AnnouncementPageDescription = v
 	}
 	if v, ok := frontendSettings["aboutPageTitle"].(string); ok {
 		config.AboutPageTitle = v
@@ -2053,6 +2061,8 @@ func getDefaultConfig() map[string]interface{} {
 			"commentPageDescription":      "欢迎留下你的看法",
 			"notificationPageTitle":       "通知",
 			"notificationPageDescription": "欢迎彼此间互相交流",
+			"announcementPageTitle":       "公告",
+			"announcementPageDescription": "查看站点发布的最新公告",
 			"aboutPageTitle":              "关于本站",
 			"aboutPageDescription":        "这里是站点的介绍与说明",
 			"aboutMarkdown":               "# 关于我\n\n这里是一个默认的个人简介示例：\n\n- 喜欢记录与分享\n- 热爱开源与学习\n- 持续打磨产品体验\n\n欢迎通过友链或留言与我交流！",

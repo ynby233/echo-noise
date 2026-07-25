@@ -194,6 +194,10 @@ func SetupRouter() *gin.Engine {
 	api.GET("", controllers.GetStatus)
 	api.GET("/frontend/config", controllers.GetFrontendConfig)
 	api.GET("/settings", controllers.GetFrontendConfig)
+	api.GET("/announcements", controllers.ListAnnouncements)
+	api.GET("/announcements/unread", controllers.GetUnreadAnnouncements)
+	api.PUT("/announcements/read-all", controllers.MarkAllAnnouncementsRead)
+	api.PUT("/announcements/:id/read", controllers.MarkAnnouncementRead)
 	api.GET("/feed/items", controllers.GetInfoFeedItems)
 	api.POST("/feed/refresh", controllers.RefreshInfoFeedItems)
 	api.POST("/login", controllers.Login)
@@ -286,6 +290,20 @@ func SetupRouter() *gin.Engine {
 		notifications.GET("/unread-count", controllers.GetUserNotificationUnreadCount)
 		notifications.PUT("/read-all", controllers.MarkAllUserNotificationsRead)
 		notifications.PUT("/read/:id", controllers.MarkUserNotificationRead)
+	}
+
+	announcementAdmin := authRoutes.Group("/admin/announcements")
+	announcementAdmin.Use(middleware.AdminAuthMiddleware())
+	{
+		announcementAdmin.GET("", controllers.ListAdminAnnouncements)
+		announcementAdmin.POST("", controllers.CreateAnnouncement)
+		announcementAdmin.PUT("/:id", controllers.UpdateAnnouncement)
+		announcementAdmin.POST("/:id/publish", controllers.PublishAnnouncement)
+		announcementAdmin.POST("/:id/withdraw", controllers.WithdrawAnnouncement)
+		announcementAdmin.DELETE("/:id", controllers.DeleteAnnouncement)
+		announcementAdmin.POST("/batch-delete", controllers.BatchDeleteAnnouncements)
+		announcementAdmin.GET("/:id/push-summary", controllers.GetAnnouncementPushSummary)
+		announcementAdmin.POST("/:id/retry-push", controllers.RetryAnnouncementPush)
 	}
 
 	email := authRoutes.Group("/email")

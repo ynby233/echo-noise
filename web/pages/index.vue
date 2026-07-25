@@ -322,6 +322,15 @@
               />
             </UCard>
           </div>
+          <div v-else-if="activeTab==='announcements'" class="announcement-page">
+            <UCard class="search-card mb-3" :ui="{ body: { padding: 'p-5 md:p-6' } }">
+              <AnnouncementCenter
+                ref="announcementCenter"
+                :site-config="frontendConfig"
+                @unread-change="handleAnnouncementUnreadChange"
+              />
+            </UCard>
+          </div>
           <div v-else-if="activeTab==='about'" class="about-page">
             <UCard class="search-card mb-3" :ui="{ body: { padding: 'p-6' } }">
               <div class="card-title text-center text-black dark:text-white">{{ frontendConfig.aboutPageTitle || '关于本站' }}</div>
@@ -448,18 +457,21 @@
       </div>
       </UContainer>
   <Notification />
+  <AnnouncementModal ref="announcementModal" @unread-change="handleAnnouncementUnreadChange" />
   <!-- 添加搜索模态框组件 -->
   <SearchMode v-model="showSearchModal" @search-result="handleSearchResult" />
   <FloatingToolSidebar 
     :content-theme="contentTheme"
     :layout-icon="layoutIcon"
     :notification-unread-count="notificationUnreadCount"
+    :announcement-unread-count="announcementUnreadCount"
     @search="showSearchModal = true"
     @switch-background="changeBackground"
     @toggle-theme="toggleThemeGlobal"
     @toggle-layout="cycleLayout"
     @open-comment="openCommentBoard"
     @open-notifications="openNotificationCenter"
+    @open-announcements="openAnnouncementCenter"
     @open-admin="openAdmin"
   />
   <UModal v-model="showAuthModal" :ui="{ width: 'sm:max-w-md', container: 'items-center', base: 'backdrop-blur-sm', background: 'bg-transparent dark:bg-transparent', shadow: 'shadow-none', rounded: 'rounded-none' }">
@@ -601,6 +613,8 @@ import SearchMode from '~/components/index/Searchmode.vue' // 导入 SearchMode 
 import TagList from '~/components/index/TagList.vue'
 import InfoFeedList from '@/components/index/InfoFeedList.vue'
 import UserNotificationCenter from '@/components/index/UserNotificationCenter.vue'
+import AnnouncementCenter from '@/components/index/AnnouncementCenter.vue'
+import AnnouncementModal from '@/components/index/AnnouncementModal.vue'
 import HomeSidebarPager from '@/components/index/HomeSidebarPager.vue'
 import AnnouncementBar from '~/components/widgets/AnnouncementBar.vue'
 import AdCarousel from '~/components/widgets/AdCarousel.vue'
@@ -668,6 +682,7 @@ const activeTab = ref('latest')
 const notificationTargetMessageId = ref<number | null>(null)
 const notificationTargetCommentId = ref<number | null>(null)
 const notificationUnreadCount = ref(0)
+const announcementUnreadCount = ref(0)
 const notificationReturnPending = ref(false)
 const notificationReturnFocusId = ref<number | null>(null)
 const selectedCalendarDate = ref('')
@@ -767,15 +782,20 @@ type NotificationJumpItem = {
   target_comment_id?: number | null
   message?: { id?: number | null; content?: string | null; is_guestbook?: boolean } | null
 }
+type AnnouncementCenterExpose = HomePagerController & { refresh: () => void | Promise<void> }
+type AnnouncementModalExpose = { refresh: () => void | Promise<void> }
 const messageList = ref<MessageListExpose | null>(null)
 const infoFeedList = ref<InfoFeedListExpose | null>(null)
 const guestbookCommentsRef = ref<CommentThreadExpose | null>(null)
 const notificationCenter = ref<HomePagerController | null>(null)
+const announcementCenter = ref<AnnouncementCenterExpose | null>(null)
+const announcementModal = ref<AnnouncementModalExpose | null>(null)
 const latestTotalPages = ref(1)
 const activeSidebarPagerController = computed<HomePagerController | null>(() => {
   if (activeTab.value === 'feed') return infoFeedList.value
   if (activeTab.value === 'comment') return guestbookCommentsRef.value
   if (activeTab.value === 'notifications') return notificationCenter.value
+  if (activeTab.value === 'announcements') return announcementCenter.value
   if (activeTab.value === 'latest' || activeTab.value === 'personal') return messageList.value
   return null
 })
@@ -1044,7 +1064,7 @@ const parseRouteNumber = (value: unknown) => {
 }
 const applyRouteTargets = () => {
   const tab = String(route.query.tab || '').trim()
-  if (['latest', 'personal', 'feed', 'comment', 'notifications', 'about'].includes(tab)) {
+  if (['latest', 'personal', 'feed', 'comment', 'notifications', 'announcements', 'about'].includes(tab)) {
     activeTab.value = tab
   }
   const messageId = parseRouteNumber(route.query.message_id)
@@ -1106,6 +1126,10 @@ const isOnline = computed(() => !!(userStore.user))
 
 const handleNotificationUnreadChange = (count: number) => {
   notificationUnreadCount.value = Math.max(0, Number(count || 0))
+}
+
+const handleAnnouncementUnreadChange = (count: number) => {
+  announcementUnreadCount.value = Math.max(0, Number(count || 0))
 }
 
 const focusGuestbookNotificationComment = async (commentId: number) => {
@@ -1189,10 +1213,19 @@ const openNotificationCenter = async () => {
   } catch {}
 }
 
-watch(isLoggedIn, (loggedIn) => {
+const openAnnouncementCenter = async () => {
+  await switchActiveTab('announcements', { resetScroll: true })
+  await nextTick()
+  await announcementCenter.value?.refresh?.()
+}
+
+watch(isLoggedIn, async (loggedIn) => {
   if (loggedIn) loadNotificationUnreadCount()
   else notificationUnreadCount.value = 0
   if (guestbookMessageId.value) void loadLatestTotalPages()
+  await nextTick()
+  await announcementModal.value?.refresh?.()
+  if (activeTab.value === 'announcements') await announcementCenter.value?.refresh?.()
 }, { immediate: true })
 
 type ProfileHomeStats = {
@@ -1613,6 +1646,8 @@ Object.assign(frontendConfig.value, {
   commentPageDescription: '',
   notificationPageTitle: '',
   notificationPageDescription: '',
+  announcementPageTitle: '',
+  announcementPageDescription: '',
   aboutPageTitle: '',
   aboutPageDescription: '',
   aboutMarkdown: '',

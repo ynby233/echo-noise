@@ -24,6 +24,30 @@ func TestDefaultHeaderImagesOnlyContainsSelectedImage(t *testing.T) {
 	}
 }
 
+func TestAnnouncementPageMetadataCanBeSavedAndReadFromFrontendConfig(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	admin := mustCreateUser(t, models.User{Username: "announcement-config-admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+	if err := db.Create(&models.SiteConfig{}).Error; err != nil {
+		t.Fatalf("create site config: %v", err)
+	}
+	if err := UpdateFrontendSetting(admin.ID, map[string]interface{}{
+		"frontendSettings": map[string]interface{}{
+			"announcementPageTitle":       "站点公告",
+			"announcementPageDescription": "这里集中展示站点公告",
+		},
+	}); err != nil {
+		t.Fatalf("save announcement page metadata: %v", err)
+	}
+	config, err := GetFrontendConfig()
+	if err != nil {
+		t.Fatalf("get frontend config: %v", err)
+	}
+	settings := config["frontendSettings"].(map[string]interface{})
+	if settings["announcementPageTitle"] != "站点公告" || settings["announcementPageDescription"] != "这里集中展示站点公告" {
+		t.Fatalf("announcement metadata = %#v", settings)
+	}
+}
+
 func TestShouldCollapseLegacyBackgrounds(t *testing.T) {
 	tests := []struct {
 		name        string

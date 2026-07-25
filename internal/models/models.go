@@ -402,6 +402,8 @@ type SiteConfig struct {
 	CommentPageDescription      string `gorm:"type:varchar(191)"`
 	NotificationPageTitle       string `gorm:"type:varchar(100)"`
 	NotificationPageDescription string `gorm:"type:varchar(191)"`
+	AnnouncementPageTitle       string `gorm:"type:varchar(100)"`
+	AnnouncementPageDescription string `gorm:"type:varchar(191)"`
 	AboutPageTitle              string `gorm:"type:varchar(100)"`
 	AboutPageDescription        string `gorm:"type:varchar(191)"`
 	AboutMarkdown               string `gorm:"type:text"`

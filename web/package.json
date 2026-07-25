@@ -30,6 +30,7 @@
     "test:message-edit-attachment": "node scripts/message-edit-attachment.test.mjs",
     "test:composer-toolbar-state": "node scripts/composer-toolbar-state.test.mjs",
     "test:notification-jump": "node scripts/notification-jump-target.test.mjs",
+    "test:announcement": "node scripts/announcement-feature.test.mjs",
     "test:media-viewer-hash": "node scripts/media-viewer-hash-refresh.test.mjs",
     "test:music-player-theme": "node scripts/music-player-theme-sync.test.mjs",
     "test:frontend-layout": "node scripts/frontend-layout-edge-cases.test.mjs",

@@ -60,6 +60,9 @@ func main() {
 	if err := services.SeedDefaultData(); err != nil {
 		log.Printf("初始化默认数据警告: %v", err)
 	}
+	workerCtx, cancelWorkers := context.WithCancel(context.Background())
+	defer cancelWorkers()
+	services.StartAnnouncementPushDispatcher(workerCtx, database.DB)
 
 	// 读取站点配置并应用到自动同步管理器（确保定时/即时模式在启动后即生效）
 	func() {
@@ -145,6 +148,7 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	log.Println("正在关闭服务器...")
+	cancelWorkers()
 
 	// 设置关闭超时时间
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
