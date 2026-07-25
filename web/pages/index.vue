@@ -186,7 +186,7 @@
               </div>
             </div>
           </div>
-          <div v-if="activeTab==='feed'" class="feed-page">
+          <div v-if="activeTab==='feed'" :class="['feed-page', { 'feed-page-wide': layoutState==='two' }]">
             <UCard :class="['search-card', 'feed-shell-card', 'nw-content-panel-surface', 'mb-3', { 'is-dark': isDark }]" :ui="{ body: { padding: 'p-5 md:p-6' } }">
               <div class="nw-content-panel-head">
                 <div class="nw-content-panel-heading">
@@ -3673,6 +3673,10 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
   max-width: calc(56rem + 2px);
   margin: 0 calc(-1rem - 1px);
   overflow: visible;
+}
+.feed-page-wide .feed-page-content,
+.feed-page-wide .nw-content-panel-toolbar {
+  max-width: none;
 }
 .card-title { font-weight: 700; font-size: 18px; margin-bottom: 14px; padding: 0; border-radius: 0; display: block; }
 .section-subtitle { text-align: center; font-size: 13px; opacity: 0.8; margin-top: 2px; margin-bottom: 16px; line-height: 1.7; }
