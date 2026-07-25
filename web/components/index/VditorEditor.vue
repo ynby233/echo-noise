@@ -1308,7 +1308,8 @@ const setupAttachmentPreview = () => {
     return true
   }
 
-  const commitEditorPlainEmptyLine = (event: Event) => {
+  const commitEditorPlainEmptyLine = (event: KeyboardEvent) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || editorPlainCompositionActive) return false
     const block = currentPlainEditorBlock(event)
     const selection = window.getSelection()
     if (!block || !selection?.rangeCount || !selection.isCollapsed) return false
