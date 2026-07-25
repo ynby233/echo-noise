@@ -157,8 +157,8 @@
               <div class="text-xs opacity-70 mb-2">最新图集（{{ recommendedImages.length }}）</div>
               <div class="scroll-images">
                 <div class="recommend-grid">
-                  <a v-for="img in recommendedImages" :key="img.id || img" :href="imageSrc(img)" data-fancybox="recommend-gallery" class="block">
-                    <img :src="imageSrc(img)" class="recommend-image-box" loading="lazy" alt="recommend" @error="handleRecommendImageError(img)" />
+                  <a v-for="(img, index) in recommendedImages" :key="recommendImageKey(img, index)" :href="imageSrc(img)" data-fancybox="recommend-gallery" class="block">
+                    <img :src="imageSrc(img)" class="recommend-image-box" loading="lazy" alt="recommend" />
                   </a>
                 </div>
               </div>
@@ -396,8 +396,8 @@
             <div class="text-xs opacity-70 mb-2">最新图集（{{ recommendedImages.length }}）</div>
             <div class="scroll-images">
               <div class="recommend-grid">
-                <a v-for="img in recommendedImages" :key="img.id || img" :href="imageSrc(img)" data-fancybox="recommend-gallery" class="block">
-                  <img :src="imageSrc(img)" class="recommend-image-box" loading="lazy" alt="recommend" @error="handleRecommendImageError(img)" />
+                <a v-for="(img, index) in recommendedImages" :key="recommendImageKey(img, index)" :href="imageSrc(img)" data-fancybox="recommend-gallery" class="block">
+                  <img :src="imageSrc(img)" class="recommend-image-box" loading="lazy" alt="recommend" />
                 </a>
               </div>
             </div>
@@ -426,8 +426,8 @@
           <div class="text-xs opacity-70 mb-2">推荐图集</div>
           <div class="scroll-images">
             <div class="recommend-grid">
-              <a v-for="img in recommendedImages" :key="img.id || img" :href="imageSrc(img)" data-fancybox="recommend-gallery" class="block">
-                <img :src="imageSrc(img)" class="recommend-image-box" loading="lazy" alt="recommend" @error="handleRecommendImageError(img)" />
+              <a v-for="(img, index) in recommendedImages" :key="recommendImageKey(img, index)" :href="imageSrc(img)" data-fancybox="recommend-gallery" class="block">
+                <img :src="imageSrc(img)" class="recommend-image-box" loading="lazy" alt="recommend" />
               </a>
             </div>
           </div>
@@ -2643,14 +2643,10 @@ const fetchTags = async () => {
 // 图片与状态
 const images = ref<any[]>([])
 const status = ref<any>(null)
-const brokenImageSrcs = ref<string[]>([])
 const fetchImages = async () => {
   try {
     const r = await getRequest<any>('messages/images', undefined, { credentials: 'include' })
-    if (r && r.code === 1 && Array.isArray(r.data)) {
-      brokenImageSrcs.value = []
-      images.value = r.data
-    }
+    if (r && r.code === 1 && Array.isArray(r.data)) images.value = r.data
   } catch {}
 }
 const fetchStatus = async () => {
@@ -2685,18 +2681,15 @@ const tagsCount = computed(() => {
   const excluded = ['留言', 'guestbook']
   return arr.filter((t: any) => !excluded.includes(String(t?.name || '').toLowerCase())).length
 })
-const recommendedImages = computed(() => images.value.filter((img: any) => !brokenImageSrcs.value.includes(imageSrc(img))).slice(0, 60))
+const recommendedImages = computed(() => images.value.slice(0, 60))
 const imageSrc = (img: any) => {
   const url = typeof img === 'string' ? img : (img?.image_url || img?.url)
   const base = useRuntimeConfig().public.baseApi || '/api'
   return url?.startsWith('http') ? url : `${base}${url}`
 }
-// 附件已被删除但仍被引用时，直接从图集中移除，不留下损坏占位图。
-const handleRecommendImageError = (img: any) => {
-  const src = imageSrc(img)
-  if (!src || brokenImageSrcs.value.includes(src)) return
-  brokenImageSrcs.value = [...brokenImageSrcs.value, src]
-}
+// 同一条笔记可引用多张图、同一张图也可被多条笔记引用，key 必须按条目唯一，
+// 否则 Vue 无法正确 patch 列表，会残留或错位节点。
+const recommendImageKey = (img: any, index: number) => `${index}:${imageSrc(img)}`
 
 const leftAds = computed(() => {
   const arr = Array.isArray((frontendConfig.value as any).leftAds) ? (frontendConfig.value as any).leftAds : []

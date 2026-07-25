@@ -35,25 +35,35 @@ assert.match(
   'blank image urls can never render and must be dropped'
 )
 
-const galleryBlocks = indexPage.match(/<img :src="imageSrc\(img\)" class="recommend-image-box"[^>]*>/g) || []
-assert.ok(galleryBlocks.length >= 1, 'home page must keep gallery image tags')
-for (const tag of galleryBlocks) {
+const galleryAnchors = indexPage.match(/<a v-for="\(img, index\) in recommendedImages"[^>]*>/g) || []
+assert.equal(galleryAnchors.length, 3, 'home page must keep all three gallery anchor blocks')
+for (const tag of galleryAnchors) {
   assert.match(
     tag,
-    /@error="handleRecommendImageError\(img\)"/,
-    `gallery image must hide itself on load failure: ${tag}`
+    /:key="recommendImageKey\(img, index\)"/,
+    `gallery entries must use a per-entry unique key: ${tag}`
   )
 }
+assert.doesNotMatch(
+  indexPage,
+  /:key="img\.id \|\| img"/,
+  'gallery must not key by message id: one note can contribute several images'
+)
 
 assert.match(
   indexPage,
-  /const recommendedImages = computed\(\(\) => images\.value\.filter\(\(img: any\) => !brokenImageSrcs\.value\.includes\(imageSrc\(img\)\)\)\.slice\(0, 60\)\)/,
-  'gallery count must exclude images that failed to load'
+  /const recommendedImages = computed\(\(\) => images\.value\.slice\(0, 60\)\)/,
+  'gallery count must come straight from the server list, not from client-side load failures'
 )
-assert.match(
+assert.doesNotMatch(
   indexPage,
-  /brokenImageSrcs\.value = \[\][\s\S]*?images\.value = r\.data/,
-  'refetching the gallery must reset the broken-image list'
+  /brokenImageSrcs/,
+  'a client-side broken-url filter drops every duplicate of one transient failure and desyncs the count'
+)
+assert.doesNotMatch(
+  indexPage,
+  /@error="handleRecommendImageError/,
+  'gallery must not mutate its own list from img error events'
 )
 
 console.log('home gallery missing attachment tests passed')
