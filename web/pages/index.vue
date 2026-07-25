@@ -3518,11 +3518,11 @@ white-space: nowrap;  /* 防止换行 */
 .left-col > .left-widget-profile-card > div[class*="px-4"][class*="py-5"] { padding: 14px 0 12px !important; }
 .left-col > .left-widget-stats-card > div[class*="px-4"][class*="py-5"] { padding-top: 22px !important; padding-bottom: 21px !important; }
 .left-col > .left-widget-social-card > div[class*="px-4"][class*="py-5"] { padding-top: 16px !important; padding-bottom: 16px !important; }
-.left-col > .left-widget-pager-card > div[class*="px-4"][class*="py-5"] { padding: 9px 10px !important; }
+.left-col > .left-widget-pager-card > div[class*="px-4"][class*="py-5"] { padding: 12px 10px !important; }
 .left-col > .left-widget-clock-card > div[class*="px-4"][class*="py-5"] { padding-top: 12px !important; padding-bottom: 12px !important; }
 .left-col > .left-widget-life-card > div[class*="px-4"][class*="py-5"] { padding-top: 23px !important; padding-bottom: 21px !important; }
 .left-col > .left-widget-promo-card > div[class*="px-4"][class*="py-5"] { padding: 6px 14px !important; }
-.left-col > .left-widget-hitokoto-card > div[class*="px-4"][class*="py-5"] { padding-top: 11px !important; padding-bottom: 10px !important; }
+.left-col > .left-widget-hitokoto-card > div[class*="px-4"][class*="py-5"] { padding-top: 12px !important; padding-bottom: 12px !important; }
 html.dark .sidebar-card {
   background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.8) 100%);
   color: var(--home-text-dark);
@@ -3607,7 +3607,7 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
 .plain-icon-btn:hover { background: transparent !important; transform: none !important; box-shadow: none !important; }
 /* 随机一言文本容器：无图标、自动换行显示全文 */
 .hitokoto-container { margin: 0; padding: 0; }
-.hitokoto-text { overflow: hidden; white-space: normal; word-break: break-word; overflow-wrap: anywhere; font-size: 14px; font-weight: 500; line-height: 1.25; }
+.hitokoto-text { overflow: hidden; white-space: normal; word-break: break-word; overflow-wrap: anywhere; font-size: 16px; font-weight: 500; line-height: 1.6; }
 .profile-name {
   width: 10em;
   max-width: 100%;
