@@ -3607,7 +3607,7 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
 .plain-icon-btn:hover { background: transparent !important; transform: none !important; box-shadow: none !important; }
 /* 随机一言文本容器：无图标、自动换行显示全文 */
 .hitokoto-container { margin: 0; padding: 0; }
-.hitokoto-text { overflow: hidden; white-space: normal; word-break: break-word; overflow-wrap: anywhere; font-size: 14px; font-weight: 500; line-height: 1.45; }
+.hitokoto-text { overflow: hidden; white-space: normal; word-break: break-word; overflow-wrap: anywhere; font-size: 14px; font-weight: 500; line-height: 1.25; }
 .profile-name {
   width: 10em;
   max-width: 100%;
@@ -3673,9 +3673,12 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
   color: #111827 !important;
 }
 
-/* 确保白天模式下一言文本颜色是黑色的 */
+/* 随机一言文本与公告栏一致：跟随标题色，亮暗模式各自回退 */
+:global(html.dark) .hitokoto-text {
+  color: var(--title-color, #f3f4f6) !important;
+}
 :global(html:not(.dark)) .hitokoto-text {
-  color: #111827 !important;
+  color: var(--title-color, #111827) !important;
 }
 .social-list { display:flex; flex-wrap:wrap; gap:10px; padding:0; justify-content:center; align-items:center; }
 .social-item { position:relative; display:inline-flex; align-items:center; justify-content:center; width: clamp(28px, 6vw, 36px); height: clamp(28px, 6vw, 36px); border-radius:8px; }
