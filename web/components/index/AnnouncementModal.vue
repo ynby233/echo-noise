@@ -1,39 +1,32 @@
 <template>
-  <UModal v-model="open" :prevent-close="true" :ui="{ width: 'sm:max-w-2xl', container: 'items-center' }">
-    <UCard v-if="current" class="announcement-modal-card" :ui="{ body: { padding: 'p-0' }, header: { padding: 'p-0' }, footer: { padding: 'p-0' } }">
+  <UModal
+    v-model="open"
+    :prevent-close="true"
+    :ui="{ width: 'sm:max-w-2xl', container: 'items-center', base: 'backdrop-blur-sm', background: 'bg-transparent dark:bg-transparent', shadow: 'shadow-none', rounded: 'rounded-none' }"
+  >
+    <UCard v-if="current" class="nw-modal-card" :ui="{ rounded: 'rounded-none', ring: 'ring-0', shadow: 'shadow-none' }">
       <template #header>
-        <div class="modal-progress-head">
-          <div class="progress-copy">
-            <span class="progress-label">第 {{ currentIndex + 1 }} 条 / 共 {{ snapshotTotal }} 条</span>
-            <time>{{ formatDate(current.published_at || current.created_at) }}</time>
-          </div>
-          <div class="progress-track" aria-hidden="true">
-            <div class="progress-fill" :style="{ width: `${progressPercent}%` }"></div>
-          </div>
+        <div class="flex items-center justify-between gap-3">
+          <h3 class="modal-heading">
+            <UIcon name="i-heroicons-megaphone" class="modal-heading-icon" />
+            <span>{{ current.title }}</span>
+          </h3>
+          <span class="modal-progress-pill">第 {{ currentIndex + 1 }} 条 / 共 {{ snapshotTotal }} 条</span>
         </div>
+        <div class="modal-time">{{ formatTime(current.published_at || current.created_at) }}</div>
       </template>
 
-      <article class="modal-announcement">
-        <div class="modal-title-row">
-          <UIcon name="i-heroicons-megaphone" class="w-6 h-6" />
-          <h2>{{ current.title }}</h2>
-        </div>
-        <div class="modal-content-scroll">
-          <MarkdownRenderer :content="current.content" />
-        </div>
-        <p v-if="actionError" class="modal-error" role="alert">{{ actionError }}</p>
-      </article>
+      <div class="modal-content-scroll">
+        <MarkdownRenderer :content="current.content" />
+      </div>
+      <p v-if="actionError" class="modal-error" role="alert">{{ actionError }}</p>
 
       <template #footer>
-        <div class="modal-actions">
-          <button v-if="remainingCount > 1" type="button" class="secondary-action nw-action-btn nw-action-btn--label" :disabled="acting" @click="markAllRead">
-            全部已读
-          </button>
-          <button type="button" class="primary-action" :disabled="acting" @click="advance">
-            <UIcon v-if="acting" name="i-mdi-loading" class="w-4 h-4 animate-spin" />
-            <span>{{ isLast ? '阅读完毕' : '下一条' }}</span>
-            <UIcon v-if="!isLast && !acting" name="i-heroicons-arrow-right" class="w-4 h-4" />
-          </button>
+        <div class="modal-footer-actions">
+          <UButton v-if="remainingCount > 1" variant="soft" color="gray" :disabled="acting" @click="markAllRead">全部已读</UButton>
+          <UButton color="orange" :loading="acting" :trailing-icon="isLast ? undefined : 'i-heroicons-arrow-right'" @click="advance">
+            {{ isLast ? '阅读完毕' : '下一条' }}
+          </UButton>
         </div>
       </template>
     </UCard>
@@ -68,7 +61,6 @@ const actionError = ref('')
 const current = computed(() => items.value[currentIndex.value] || null)
 const remainingCount = computed(() => Math.max(0, snapshotTotal.value - currentIndex.value))
 const isLast = computed(() => currentIndex.value >= snapshotTotal.value - 1)
-const progressPercent = computed(() => snapshotTotal.value > 0 ? ((currentIndex.value + 1) / snapshotTotal.value) * 100 : 0)
 
 const loadUnreadAnnouncements = async () => {
   actionError.value = ''
@@ -128,11 +120,15 @@ const markAllRead = async () => {
   }
 }
 
-const formatDate = (value?: string) => {
+const formatTime = (value?: string) => {
   if (!value) return ''
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(date)
+  if (Number.isNaN(date.getTime())) return ''
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hour = String(date.getHours()).padStart(2, '0')
+  const minute = String(date.getMinutes()).padStart(2, '0')
+  return `${month}月${day}日${hour}:${minute}`
 }
 
 defineExpose({ refresh: loadUnreadAnnouncements })
@@ -140,30 +136,19 @@ onMounted(loadUnreadAnnouncements)
 </script>
 
 <style scoped>
-.announcement-modal-card { overflow:hidden; border-radius:20px; }
-.modal-progress-head { padding:18px 20px 0; }
-.progress-copy { display:flex; align-items:center; justify-content:space-between; gap:12px; color:#64748b; font-size:.75rem; font-variant-numeric:tabular-nums; }
-.progress-label { color:#4f46e5; font-weight:800; letter-spacing:.04em; }
-.progress-track { height:4px; margin-top:13px; overflow:hidden; border-radius:999px; background:rgba(100,116,139,.16); }
-.progress-fill { height:100%; border-radius:inherit; background:linear-gradient(90deg,#6366f1,#f97316); transition:width .2s ease; }
-.modal-announcement { padding:20px; }
-.modal-title-row { display:flex; align-items:flex-start; gap:10px; color:#f97316; }
-.modal-title-row h2 { margin:0; color:#172033; font-size:1.35rem; line-height:1.35; font-weight:780; }
-:global(.dark) .modal-title-row h2 { color:#f1f5f9; }
-.modal-content-scroll { max-height:min(56vh,560px); margin-top:18px; overflow-y:auto; overscroll-behavior:contain; padding-right:6px; }
-.modal-error { margin:14px 0 0; padding:9px 11px; border-radius:10px; background:#fef2f2; color:#b91c1c; font-size:.82rem; }
-.modal-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:16px 20px 20px; border-top:1px solid rgba(100,116,139,.15); }
-.modal-actions > :only-child { grid-column:1 / -1; }
-.secondary-action,.primary-action { min-height:42px; border-radius:11px; display:inline-flex; align-items:center; justify-content:center; gap:7px; font-weight:700; }
-.primary-action { border:1px solid rgba(79,70,229,.45); background:linear-gradient(135deg,#4f46e5,#6366f1); color:white; box-shadow:0 8px 18px rgba(79,70,229,.24); }
-.primary-action:hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 10px 22px rgba(79,70,229,.3); }
-.primary-action:disabled,.secondary-action:disabled { opacity:.55; cursor:not-allowed; }
+.modal-heading { display:flex; align-items:center; gap:8px; min-width:0; margin:0; font-size:1.25rem; font-weight:600; line-height:1.4; word-break:break-word; }
+.modal-heading-icon { width:1.25rem; height:1.25rem; flex:none; color:#f97316; }
+.modal-progress-pill { flex:none; padding:2px 10px; border-radius:999px; background:rgba(15,23,42,.06); font-size:12px; font-weight:650; font-variant-numeric:tabular-nums; opacity:.9; }
+:global(.dark) .modal-progress-pill { background:rgba(255,255,255,.10); }
+.modal-time { margin-top:6px; font-size:12px; line-height:1.25; opacity:.7; }
+.modal-content-scroll { max-height:min(56vh,560px); overflow-y:auto; overscroll-behavior:contain; padding-right:6px; }
+.modal-error { margin:14px 0 0; padding:9px 11px; border-radius:10px; background:rgba(254,242,242,.9); color:#b91c1c; font-size:13px; }
+:global(.dark) .modal-error { background:rgba(127,29,29,.24); color:#fca5a5; }
+.modal-footer-actions { display:flex; align-items:center; justify-content:flex-end; gap:8px; flex-wrap:wrap; }
 @media (max-width:560px) {
-  .modal-progress-head,.modal-announcement { padding-left:15px; padding-right:15px; }
-  .progress-copy { align-items:flex-start; flex-direction:column; gap:3px; }
+  .modal-heading { font-size:1.1rem; }
   .modal-content-scroll { max-height:50vh; }
-  .modal-actions { grid-template-columns:1fr; padding:13px 15px 16px; }
-  .modal-actions > * { grid-column:1; }
+  .modal-footer-actions { justify-content:stretch; }
+  .modal-footer-actions > * { flex:1 1 auto; justify-content:center; }
 }
-@media (prefers-reduced-motion:reduce) { .progress-fill,.primary-action { transition:none; } }
 </style>

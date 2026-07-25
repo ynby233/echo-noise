@@ -1,108 +1,115 @@
 <template>
-  <section class="admin-announcement-manager" :class="{ 'is-dark': isDark }">
-    <div class="manager-heading">
-      <div>
-        <h3>公告管理</h3>
-        <p>创建草稿，确认内容后发布；已发布公告需先撤回才能删除。</p>
+  <div class="rounded-xl border shadow-sm backdrop-blur-sm transition-colors duration-200" :class="[theme?.cardBg, theme?.border]">
+    <div class="px-4 py-3 flex items-center justify-between gap-2">
+      <div class="font-semibold flex items-center gap-2" :class="theme?.text">
+        <UIcon name="i-heroicons-megaphone" class="w-5 h-5" />
+        <span>公告管理</span>
+        <UBadge color="gray" size="xs" variant="soft">共 {{ total }} 条</UBadge>
       </div>
-      <button type="button" class="icon-action nw-action-btn nw-tooltip-anchor" data-tooltip="刷新" aria-label="刷新公告管理列表" :disabled="loading" @click="loadAnnouncements">
-        <UIcon name="i-mdi-refresh" class="w-4 h-4" :class="{ 'animate-spin': loading }" />
-      </button>
+      <UButton :loading="loading" color="gray" variant="soft" class="shadow" @click="loadAnnouncements">刷新</UButton>
     </div>
 
-    <div class="draft-composer">
-      <div class="composer-title">新建公告草稿</div>
-      <UInput v-model="draft.title" maxlength="100" placeholder="公告标题" />
-      <UTextarea v-model="draft.content" :rows="5" placeholder="公告正文，支持 Markdown" />
-      <div class="composer-footer">
-        <span>{{ draft.title.trim().length }}/100</span>
-        <UButton color="primary" :loading="creating" :disabled="!canCreate" @click="createDraft">保存草稿</UButton>
-      </div>
-    </div>
+    <div class="px-4 pb-4">
+      <p class="text-xs mb-3" :class="theme?.mutedText">创建草稿，确认内容后发布；已发布公告需先撤回才能删除。</p>
 
-    <div class="list-toolbar">
-      <div class="filter-row">
-        <USelect v-model="statusFilter" :options="statusOptions" class="w-36" @change="changeFilter" />
-        <span class="total-copy">共 {{ total }} 条</span>
-      </div>
-      <div class="bulk-row">
-        <label class="select-all-control" :class="{ disabled: deletableItems.length === 0 }">
-          <input type="checkbox" :checked="allDeletableSelected" :disabled="deletableItems.length === 0" @change="selectAllDeletable" />
-          <span>全选可删除项</span>
-        </label>
-        <UButton color="red" variant="soft" size="sm" :loading="deletingBatch" :disabled="selectedIds.length === 0" @click="batchDelete">
-          批量删除（{{ selectedIds.length }}）
-        </UButton>
-      </div>
-    </div>
-
-    <div v-if="loading && !items.length" class="manager-empty">正在加载公告…</div>
-    <div v-else-if="!items.length" class="manager-empty">当前筛选下暂无公告，可先创建草稿。</div>
-    <div v-else class="announcement-admin-list">
-      <article v-for="item in items" :key="item.id" class="admin-announcement-card">
-        <div class="selection-column">
-          <input
-            type="checkbox"
-            :checked="selectedIds.includes(item.id)"
-            :disabled="!isDeletable(item)"
-            :aria-label="`选择公告 ${item.title}`"
-            @change="toggleSelected(item.id)"
-          />
+      <div class="rounded-lg p-3 mb-3" :class="theme?.subtleBg">
+        <div class="text-sm mb-2" :class="theme?.mutedText">新建公告草稿</div>
+        <UInput v-model="draft.title" maxlength="100" placeholder="公告标题" class="mb-2" />
+        <UTextarea v-model="draft.content" :rows="5" placeholder="公告正文，支持 Markdown" class="w-full mb-2" />
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span class="text-xs" :class="theme?.mutedText">{{ draft.title.trim().length }}/100</span>
+          <UButton color="primary" class="shadow" :loading="creating" :disabled="!canCreate" @click="createDraft">保存草稿</UButton>
         </div>
-        <div class="announcement-card-main">
-          <div class="card-title-row">
-            <div class="title-and-status">
-              <h4>{{ item.title }}</h4>
-              <span class="status-badge" :class="`status-${item.status}`">{{ statusLabel(item.status) }}</span>
-              <span v-if="item.revision > 1" class="revision-badge">修订 {{ item.revision }}</span>
+      </div>
+
+      <div class="announcement-batch-toolbar rounded-lg border px-3 py-2 mb-3" :class="[theme?.border, theme?.subtleBg]">
+        <div class="flex items-center gap-2 flex-wrap">
+          <USelect v-model="statusFilter" :options="statusOptions" class="w-32" @change="changeFilter" />
+          <span class="text-xs" :class="theme?.mutedText">已选择 {{ selectedIds.length }} 条</span>
+        </div>
+        <div class="announcement-batch-actions">
+          <UButton size="xs" color="gray" variant="soft" icon="i-heroicons-check-circle" :disabled="deletableItems.length === 0" @click="selectAllDeletable">
+            {{ allDeletableSelected ? '取消全选' : '全选可删除项' }}
+          </UButton>
+          <UButton size="xs" color="red" variant="soft" icon="i-heroicons-trash" :loading="deletingBatch" :disabled="selectedIds.length === 0" @click="batchDelete">
+            批量删除（{{ selectedIds.length }}）
+          </UButton>
+        </div>
+      </div>
+
+      <div v-if="loading && !items.length" class="text-sm" :class="theme?.mutedText">正在加载公告…</div>
+      <div v-else-if="!items.length" class="text-sm" :class="theme?.mutedText">当前筛选下暂无公告，可先创建草稿。</div>
+      <div v-else class="announcement-admin-list">
+        <div v-for="item in items" :key="item.id" class="announcement-item-card rounded-lg border p-3" :class="[theme?.border, selectedIds.includes(item.id) ? 'announcement-item-selected' : '']">
+          <label class="announcement-select-check" :class="{ 'is-disabled': !isDeletable(item) }">
+            <input
+              type="checkbox"
+              :checked="selectedIds.includes(item.id)"
+              :disabled="!isDeletable(item)"
+              :aria-label="`选择公告 ${item.title}`"
+              @change="toggleSelected(item.id)"
+            />
+            <span class="text-xs" :class="theme?.mutedText">选择</span>
+          </label>
+          <div class="announcement-card-main">
+            <div class="announcement-card-head">
+              <div class="flex items-center gap-2 flex-wrap min-w-0">
+                <div class="announcement-card-title text-sm font-semibold" :class="theme?.text">{{ item.title }}</div>
+                <UBadge :color="statusColor(item.status)" size="xs" variant="soft">{{ statusLabel(item.status) }}</UBadge>
+                <UBadge v-if="item.revision > 1" color="blue" size="xs" variant="soft">修订 {{ item.revision }}</UBadge>
+              </div>
+              <div class="text-xs whitespace-nowrap" :class="theme?.mutedText">{{ formatDate(item.updated_at) }}</div>
             </div>
-            <time>{{ formatDate(item.updated_at) }}</time>
-          </div>
-          <p class="content-preview">{{ excerpt(item.content) }}</p>
+            <p class="text-xs mt-2 leading-relaxed" :class="theme?.mutedText">{{ excerpt(item.content) }}</p>
 
-          <div v-if="item.push_enabled" class="push-summary">
-            <span class="push-summary-label"><UIcon name="i-mdi-message-fast-outline" class="w-4 h-4" />VoceChat 投递</span>
-            <span>待发送 {{ item.push_summary?.pending || 0 }}</span>
-            <span>发送中 {{ item.push_summary?.processing || 0 }}</span>
-            <span class="push-success">成功 {{ item.push_summary?.sent || 0 }}</span>
-            <span>跳过 {{ item.push_summary?.skipped || 0 }}</span>
-            <span :class="{ 'push-failed': (item.push_summary?.failed || 0) > 0 }">失败 {{ item.push_summary?.failed || 0 }}</span>
-            <button v-if="item.status === 'published' && (item.push_summary?.failed || 0) > 0" type="button" class="retry-button" @click="retryFailedPush(item)">重试失败项</button>
-          </div>
+            <div v-if="item.push_enabled" class="announcement-push-summary rounded p-2 mt-2" :class="theme?.subtleBg">
+              <span class="announcement-push-label text-xs" :class="theme?.text">
+                <UIcon name="i-mdi-message-fast-outline" class="w-4 h-4" />VoceChat 投递
+              </span>
+              <span class="text-xs" :class="theme?.mutedText">待发送 {{ item.push_summary?.pending || 0 }}</span>
+              <span class="text-xs" :class="theme?.mutedText">发送中 {{ item.push_summary?.processing || 0 }}</span>
+              <span class="text-xs text-emerald-500">成功 {{ item.push_summary?.sent || 0 }}</span>
+              <span class="text-xs" :class="theme?.mutedText">跳过 {{ item.push_summary?.skipped || 0 }}</span>
+              <span class="text-xs" :class="(item.push_summary?.failed || 0) > 0 ? 'text-red-500 font-semibold' : theme?.mutedText">失败 {{ item.push_summary?.failed || 0 }}</span>
+              <UButton v-if="item.status === 'published' && (item.push_summary?.failed || 0) > 0" size="xs" color="red" variant="soft" @click="retryFailedPush(item)">重试失败项</UButton>
+            </div>
 
-          <div class="card-actions">
-            <UButton size="xs" color="indigo" variant="soft" @click="openEdit(item)">编辑</UButton>
-            <UButton v-if="item.status === 'draft'" size="xs" color="green" variant="soft" @click="openPublish(item)">发布</UButton>
-            <UButton v-else-if="item.status === 'published'" size="xs" color="orange" variant="soft" @click="withdraw(item)">撤回</UButton>
-            <UButton v-else-if="item.status === 'withdrawn'" size="xs" color="green" variant="soft" @click="openPublish(item)">恢复发布</UButton>
-            <UButton v-if="isDeletable(item)" size="xs" color="red" variant="soft" @click="deleteOne(item)">删除</UButton>
+            <div class="announcement-card-actions mt-2">
+              <UButton size="xs" color="gray" variant="soft" icon="i-heroicons-pencil-square" @click="openEdit(item)">编辑</UButton>
+              <UButton v-if="item.status === 'draft'" size="xs" color="green" variant="soft" icon="i-heroicons-paper-airplane" @click="openPublish(item)">发布</UButton>
+              <UButton v-else-if="item.status === 'published'" size="xs" color="orange" variant="soft" icon="i-heroicons-arrow-uturn-left" @click="withdraw(item)">撤回</UButton>
+              <UButton v-else-if="item.status === 'withdrawn'" size="xs" color="green" variant="soft" icon="i-heroicons-paper-airplane" @click="openPublish(item)">恢复发布</UButton>
+              <UButton v-if="isDeletable(item)" size="xs" color="red" variant="soft" icon="i-heroicons-trash" @click="deleteOne(item)">删除</UButton>
+            </div>
           </div>
         </div>
-      </article>
-    </div>
+      </div>
 
-    <div v-if="totalPages > 1" class="manager-pager">
-      <UButton size="xs" variant="soft" :disabled="page <= 1 || loading" @click="goPage(page - 1)">上一页</UButton>
-      <span>第 {{ page }} / {{ totalPages }} 页</span>
-      <UButton size="xs" variant="soft" :disabled="page >= totalPages || loading" @click="goPage(page + 1)">下一页</UButton>
+      <div v-if="totalPages > 1" class="flex items-center justify-center gap-3 mt-3">
+        <UButton size="xs" color="gray" variant="soft" :disabled="page <= 1 || loading" @click="goPage(page - 1)">上一页</UButton>
+        <span class="text-xs" :class="theme?.mutedText">第 {{ page }} / {{ totalPages }} 页</span>
+        <UButton size="xs" color="gray" variant="soft" :disabled="page >= totalPages || loading" @click="goPage(page + 1)">下一页</UButton>
+      </div>
     </div>
 
     <UModal v-model="editOpen" :ui="{ width: 'sm:max-w-2xl' }">
-      <UCard>
-        <template #header><h3 class="modal-heading">编辑公告</h3></template>
-        <div class="modal-form">
+      <UCard :class="theme?.cardBg">
+        <template #header>
+          <div class="font-semibold" :class="theme?.text">编辑公告</div>
+        </template>
+        <div class="flex flex-col gap-3">
           <UInput v-model="editForm.title" maxlength="100" placeholder="公告标题" />
           <UTextarea v-model="editForm.content" :rows="10" placeholder="公告正文，支持 Markdown" />
-          <label v-if="editingItem?.status === 'published'" class="renotify-control">
+          <label v-if="editingItem?.status === 'published'" class="announcement-toggle-control rounded-lg border p-3" :class="[theme?.border, theme?.subtleBg]">
             <UToggle v-model="editForm.renotify" />
             <span>
-              <strong>重新通知</strong>
-              <small>开启后，该公告会在站内重新标记为未读；VoceChat 不会重复推送。</small>
+              <strong class="text-sm" :class="theme?.text">重新通知</strong>
+              <small class="text-xs" :class="theme?.mutedText">开启后，该公告会在站内重新标记为未读；VoceChat 不会重复推送。</small>
             </span>
           </label>
         </div>
         <template #footer>
-          <div class="modal-footer-actions">
+          <div class="flex items-center justify-end gap-2">
             <UButton variant="soft" color="gray" @click="editOpen=false">取消</UButton>
             <UButton color="primary" :loading="savingEdit" @click="saveEdit">保存修改</UButton>
           </div>
@@ -111,31 +118,33 @@
     </UModal>
 
     <UModal v-model="publishOpen" :ui="{ width: 'sm:max-w-lg' }">
-      <UCard>
-        <template #header><h3 class="modal-heading">{{ publishingItem?.status === 'withdrawn' ? '恢复发布公告' : '发布公告' }}</h3></template>
-        <div class="publish-confirmation">
-          <p>{{ publishingItem?.status === 'withdrawn'
+      <UCard :class="theme?.cardBg">
+        <template #header>
+          <div class="font-semibold" :class="theme?.text">{{ publishingItem?.status === 'withdrawn' ? '恢复发布公告' : '发布公告' }}</div>
+        </template>
+        <div class="flex flex-col gap-3">
+          <p class="text-sm" :class="theme?.text">{{ publishingItem?.status === 'withdrawn'
             ? `确认恢复发布“${publishingItem?.title}”吗？恢复后仅重新公开，不改变原有已读状态。`
             : `确认发布“${publishingItem?.title}”吗？发布后会立即进入前台未读公告。`
           }}</p>
-          <label v-if="publishingItem?.status === 'draft'" class="renotify-control">
+          <label v-if="publishingItem?.status === 'draft'" class="announcement-toggle-control rounded-lg border p-3" :class="[theme?.border, theme?.subtleBg]">
             <UToggle v-model="publishPushEnabled" />
             <span>
-              <strong>公告推送</strong>
-              <small>向所有已开启“接收 VoceChat 推送”的用户建立持久化投递任务。</small>
+              <strong class="text-sm" :class="theme?.text">公告推送</strong>
+              <small class="text-xs" :class="theme?.mutedText">向所有已开启“接收 VoceChat 推送”的用户建立持久化投递任务。</small>
             </span>
           </label>
-          <p v-else class="restore-note">恢复发布不会重置已读状态，也不会重复发送 VoceChat。</p>
+          <p v-else class="text-xs" :class="theme?.mutedText">恢复发布不会重置已读状态，也不会重复发送 VoceChat。</p>
         </div>
         <template #footer>
-          <div class="modal-footer-actions">
+          <div class="flex items-center justify-end gap-2">
             <UButton variant="soft" color="gray" @click="publishOpen=false">取消</UButton>
             <UButton color="green" :loading="publishing" @click="publish">确认发布</UButton>
           </div>
         </template>
       </UCard>
     </UModal>
-  </section>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -159,7 +168,7 @@ type AdminAnnouncement = {
 }
 type AdminAnnouncementListPayload = { items?: AdminAnnouncement[]; page?: number; page_size?: number; total?: number }
 
-defineProps<{ isDark?: boolean }>()
+defineProps<{ theme?: Record<string, string> }>()
 const toast = useToast()
 const items = ref<AdminAnnouncement[]>([])
 const page = ref(1)
@@ -319,6 +328,12 @@ const retryFailedPush = async (item: AdminAnnouncement) => {
 }
 
 const statusLabel = (status: string) => ({ draft: '草稿', published: '已发布', withdrawn: '已撤回' }[status] || status)
+type StatusBadgeColor = 'gray' | 'green' | 'orange'
+const statusColor = (status: string): StatusBadgeColor => {
+  if (status === 'published') return 'green'
+  if (status === 'withdrawn') return 'orange'
+  return 'gray'
+}
 const excerpt = (content: string) => String(content || '').replace(/\s+/g, ' ').trim().slice(0, 160)
 const formatDate = (value?: string) => {
   if (!value) return ''
@@ -329,58 +344,63 @@ onMounted(loadAnnouncements)
 </script>
 
 <style scoped>
-.admin-announcement-manager { display:flex; flex-direction:column; gap:14px; color:#1e293b; }
-.admin-announcement-manager.is-dark { color:#e2e8f0; }
-.manager-heading,.list-toolbar,.composer-footer,.card-title-row,.card-actions,.modal-footer-actions { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-.manager-heading h3,.modal-heading { margin:0; font-size:1.05rem; font-weight:750; }
-.manager-heading p { margin:4px 0 0; color:#64748b; font-size:.78rem; }
-.is-dark .manager-heading p { color:#94a3b8; }
-.icon-action { width:34px; height:34px; display:inline-flex; align-items:center; justify-content:center; border-radius:9px; }
-.draft-composer { display:flex; flex-direction:column; gap:10px; padding:14px; border:1px solid rgba(99,102,241,.22); border-radius:14px; background:rgba(99,102,241,.055); }
-.composer-title { font-size:.88rem; font-weight:720; color:#4f46e5; }
-.composer-footer { color:#64748b; font-size:.72rem; }
-.list-toolbar { padding:11px 12px; border:1px solid rgba(100,116,139,.18); border-radius:12px; background:rgba(248,250,252,.72); }
-.is-dark .list-toolbar { background:rgba(15,23,42,.3); }
-.filter-row,.bulk-row,.select-all-control,.title-and-status,.push-summary { display:flex; align-items:center; gap:9px; }
-.total-copy,.select-all-control { color:#64748b; font-size:.76rem; }
-.select-all-control { cursor:pointer; }
-.select-all-control.disabled { opacity:.55; cursor:not-allowed; }
-.announcement-admin-list { display:flex; flex-direction:column; gap:9px; }
-.admin-announcement-card { display:grid; grid-template-columns:28px minmax(0,1fr); gap:8px; padding:14px; border:1px solid rgba(100,116,139,.18); border-radius:14px; background:rgba(255,255,255,.7); }
-.is-dark .admin-announcement-card { background:rgba(15,23,42,.35); border-color:rgba(148,163,184,.18); }
-.selection-column { padding-top:3px; }
+.announcement-batch-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.announcement-batch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.announcement-admin-list { display:flex; flex-direction:column; gap:8px; }
+
+.announcement-item-card {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+
+.announcement-item-selected {
+  border-color: rgba(99, 102, 241, 0.9) !important;
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.45);
+}
+
+.announcement-select-check { display:inline-flex; align-items:center; gap:5px; flex-direction:column; padding-top:2px; cursor:pointer; }
+.announcement-select-check.is-disabled { opacity:.5; cursor:not-allowed; }
 .announcement-card-main { min-width:0; }
-.card-title-row h4 { margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.95rem; }
-.card-title-row time { flex:none; color:#7c889b; font-size:.7rem; font-variant-numeric:tabular-nums; }
-.status-badge,.revision-badge { padding:2px 7px; border-radius:999px; font-size:.65rem; font-weight:750; }
-.status-draft { background:#e2e8f0; color:#475569; }
-.status-published { background:#dcfce7; color:#15803d; }
-.status-withdrawn { background:#ffedd5; color:#c2410c; }
-.revision-badge { background:#e0e7ff; color:#4338ca; }
-.content-preview { margin:9px 0; color:#64748b; font-size:.8rem; line-height:1.55; }
-.is-dark .content-preview { color:#a6b2c3; }
-.push-summary { flex-wrap:wrap; margin:9px 0; padding:8px 10px; border-radius:10px; background:rgba(15,23,42,.045); color:#64748b; font-size:.69rem; }
-.is-dark .push-summary { background:rgba(2,6,23,.35); color:#a8b3c4; }
-.push-summary-label { display:inline-flex; align-items:center; gap:5px; color:#4f46e5; font-weight:750; }
-.push-success { color:#15803d; }
-.push-failed { color:#dc2626; font-weight:750; }
-.retry-button { border:0; padding:2px 6px; border-radius:6px; background:#fee2e2; color:#b91c1c; font-weight:700; }
-.card-actions { justify-content:flex-end; flex-wrap:wrap; }
-.manager-empty { padding:40px 18px; border:1px dashed rgba(100,116,139,.25); border-radius:14px; text-align:center; color:#64748b; font-size:.85rem; }
-.manager-pager { display:flex; align-items:center; justify-content:center; gap:12px; color:#64748b; font-size:.75rem; }
-.modal-form,.publish-confirmation { display:flex; flex-direction:column; gap:12px; }
-.renotify-control { display:flex; align-items:flex-start; gap:11px; padding:12px; border:1px solid rgba(99,102,241,.2); border-radius:12px; background:rgba(99,102,241,.05); }
-.renotify-control span { display:flex; flex-direction:column; gap:3px; }
-.renotify-control strong { font-size:.84rem; }
-.renotify-control small,.restore-note { color:#64748b; font-size:.74rem; line-height:1.45; }
-.modal-footer-actions { justify-content:flex-end; }
-@media (max-width:680px) {
-  .manager-heading,.list-toolbar,.card-title-row { align-items:flex-start; flex-direction:column; }
-  .manager-heading .icon-action { align-self:flex-end; margin-top:-40px; }
-  .list-toolbar,.filter-row,.bulk-row { width:100%; }
-  .bulk-row { justify-content:space-between; flex-wrap:wrap; }
-  .card-title-row time { margin-top:3px; }
-  .title-and-status { flex-wrap:wrap; }
-  .admin-announcement-card { grid-template-columns:24px minmax(0,1fr); padding:12px 10px; }
+.announcement-card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.announcement-card-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.announcement-card-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px; }
+.announcement-push-summary { display:flex; align-items:center; flex-wrap:wrap; gap:9px; }
+.announcement-push-label { display:inline-flex; align-items:center; gap:5px; font-weight:600; }
+.announcement-toggle-control { display:flex; align-items:flex-start; gap:11px; }
+.announcement-toggle-control span { display:flex; flex-direction:column; gap:3px; }
+@media (max-width: 520px) {
+  .announcement-batch-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .announcement-batch-actions {
+    justify-content: flex-start;
+  }
+
+  .announcement-card-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .announcement-card-title { white-space:normal; }
+  .announcement-card-actions { justify-content:flex-start; }
 }
 </style>

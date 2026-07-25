@@ -3388,6 +3388,12 @@ white-space: nowrap;  /* 防止换行 */
   gap: 10px;
   z-index: 1000;
 }
+/* 窄屏下底部工具栏居中后会横向撑到右下角，返回页首/页尾按钮需抬到工具栏上方避免重叠误触。 */
+@media (max-width: 520px) {
+  .scroll-buttons {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 16px + clamp(32px, 9.23vw, 40px) + 8px + 12px);
+  }
+}
 .scroll-button {
   width: 2.25rem;
   min-width: 2.25rem;

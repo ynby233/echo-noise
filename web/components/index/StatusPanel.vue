@@ -584,7 +584,7 @@
                   </div>
                 </div>
                 <div v-if="isSectionVisible('site-announcement')" class="mt-4">
-                  <AdminAnnouncementManager :is-dark="panelTheme !== 'light'" />
+                  <AdminAnnouncementManager :theme="theme" />
                 </div>
                 <div id="site-music-legacy-section" class="hidden" />
                 <div id="site-music-section" v-if="isSectionVisible('site-music')" class="col-span-12 mt-4">
