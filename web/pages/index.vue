@@ -2451,6 +2451,7 @@ const isLoaded = ref(false)
 const imageLoading = ref(false)
 const nextImage = ref('')
 const isCrossfading = ref(false)
+const BACKGROUND_SWITCH_TIMEOUT_MS = 6000
 // 添加图片预加载函数
 const preloadImages = async (images: HeaderBackgroundInput[] | string[]) => {
   const urls = normalizeHeaderBackgrounds(images).map((item) => item.url)
@@ -2481,20 +2482,41 @@ onUnmounted(() => {
     window.removeEventListener('frontend-config-updated', fetchConfig);
 });
 // 优化背景切换函数
+const pickNextBackground = (
+  list: HeaderBackgroundConfig[],
+  currentUrl: string
+): HeaderBackgroundConfig | null => {
+  if (!list.length) return null
+  const candidates = list.filter((item) => item.url !== currentUrl)
+  const pool = candidates.length > 0 ? candidates : []
+  if (!pool.length) return null
+  return pool[Math.floor(Math.random() * pool.length)] || null
+}
 const changeBackground = async () => {
   if (imageLoading.value) return
   imageLoading.value = true
 
   const list = normalizeHeaderBackgrounds(frontendConfig.value.backgrounds || [])
-  if (!list.length) { imageLoading.value = false; return }
-  const newIndex = Math.floor(Math.random() * list.length)
-  const newBackground = list[newIndex]
-  const newImage = newBackground.url
-  if (!newImage || newImage === currentImage.value) { imageLoading.value = false; return }
+  const newBackground = pickNextBackground(list, currentImage.value)
+  const newImage = newBackground?.url || ''
+  if (!newBackground || !newImage) { imageLoading.value = false; return }
+
+  let settled = false
+  const releaseTimer = window.setTimeout(() => {
+    if (settled) return
+    settled = true
+    imageLoading.value = false
+  }, BACKGROUND_SWITCH_TIMEOUT_MS)
+  const finish = () => {
+    window.clearTimeout(releaseTimer)
+    settled = true
+  }
 
   const img = new Image()
   img.src = newImage
   img.onload = () => {
+    if (settled) return
+    finish()
     nextImage.value = newImage
     isCrossfading.value = true
     setTimeout(() => {
@@ -2505,7 +2527,11 @@ const changeBackground = async () => {
       imageLoading.value = false
     }, 260)
   }
-  img.onerror = () => { imageLoading.value = false }
+  img.onerror = () => {
+    if (settled) return
+    finish()
+    imageLoading.value = false
+  }
 }
 // 定义页面元数据
 definePageMeta({

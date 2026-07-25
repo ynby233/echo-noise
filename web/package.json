@@ -33,6 +33,7 @@
     "test:media-viewer-hash": "node scripts/media-viewer-hash-refresh.test.mjs",
     "test:music-player-theme": "node scripts/music-player-theme-sync.test.mjs",
     "test:frontend-layout": "node scripts/frontend-layout-edge-cases.test.mjs",
+    "test:home-background-switch": "node scripts/home-background-switch.test.mjs",
     "test:feed-search-parity": "node scripts/information-feed-search-parity.test.mjs",
     "test:access-log": "node scripts/access-log.test.mjs",
     "test:public-music-player": "node scripts/public-music-player.test.mjs",
