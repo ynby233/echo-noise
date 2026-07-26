@@ -142,6 +142,49 @@ assert.ok(
   'a standalone failed image or video must keep an inset card gutter so its rounded corners and shadow form one complete placeholder',
 )
 
+assert.ok(
+  singleVisualFailureCss.includes('height: auto;'),
+  'a placeholder that takes over the single-media wrapper must reset height, or the inline image thumbnail keeps its fixed 96px box and clips the placeholder',
+)
+
+assert.ok(
+  !singleVisualFailureCss.includes('min-height: 100%'),
+  'the single-media placeholder must not use a percentage min-height: the wrapper parent is auto-height, so it collapses and overrides the 176px floor and the video clamp',
+)
+
+assert.match(
+  renderer,
+  /const MEDIA_GEOMETRY_CLASSES = \['inline-image-thumb', 'ar-11', 'ar-169', 'ar-34'\] as const/,
+  'the geometry classes that only serve displayable media must be named in one place',
+)
+
+assert.match(
+  renderer,
+  /target\.classList\.remove\(\.\.\.MEDIA_GEOMETRY_CLASSES\)\s*\n\s*target\.classList\.add\('site-attachment-failure'/,
+  'taking over a media wrapper must drop the thumbnail/aspect-ratio geometry before the placeholder classes land, otherwise the icon and both text lines get clipped',
+)
+
+assert.match(
+  messageList,
+  /'edit-preview-surface--shadow-open': editPreviewHasAttachmentCard/,
+  'the edit preview must switch out of its scroll-clipping box when the draft contains attachment cards',
+)
+
+assert.match(
+  messageList,
+  /const editPreviewHasAttachmentCard = computed\(\(\) => EDIT_ATTACHMENT_MARKER_RE\.test\(editingContent\.value\)\)/,
+  'the edit preview attachment check must derive from the draft content itself rather than a DOM probe',
+)
+
+const editPreviewShadowCss = messageList.match(/\.edit-preview-surface--shadow-open \{[\s\S]*?\n\}/)?.[0] || ''
+
+assert.ok(
+  editPreviewShadowCss.includes('overflow: visible;') &&
+    editPreviewShadowCss.includes('max-height: none;') &&
+    /padding: 18px 14px 48px;/.test(editPreviewShadowCss),
+  'the edit preview must hand off clipping and keep room for the card shadows so they match the published note',
+)
+
 assert.match(
   messageList,
   /querySelector\('\.site-attachment-file, \.site-attachment-audio, \.site-attachment-failure'\)/,

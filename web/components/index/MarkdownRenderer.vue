@@ -1468,6 +1468,11 @@ const probeAttachmentDeleted = (url: string) => {
   return promise
 }
 
+// 失败占位块会直接接管媒体包装层，而这些类只为"能正常显示的媒体"服务：
+// inline-image-thumb 固定 96px 见方，ar-* 强制宽高比，两者都会把占位块的图标+双行文案裁掉。
+// 占位块不是缩略图，所以接管时必须先卸掉这套几何，否则它拿不到自己的 min-height。
+const MEDIA_GEOMETRY_CLASSES = ['inline-image-thumb', 'ar-11', 'ar-169', 'ar-34'] as const
+
 const attachmentReplacementTarget = (node: HTMLElement, kind: AttachmentKind) => {
   if (kind === 'image') {
     return (node.closest('.site-attachment-paragraph') || node.closest('.image-grid-item') || node.closest('.single-media') || node.closest('.full-image-attachment') || node) as HTMLElement
@@ -1513,6 +1518,7 @@ const renderMediaAttachmentFailure = (node: HTMLElement, kind: 'image' | 'video'
   const poster = kind === 'video' ? videoPosterForFailure(node, url) : ''
   const title = attachmentFailureTitle(kind)
   const detail = attachmentFailureDetail(kind, deleted)
+  target.classList.remove(...MEDIA_GEOMETRY_CLASSES)
   target.classList.add('site-attachment-failure', `site-attachment-failure--${kind}`)
   target.classList.toggle('site-attachment-failure--with-poster', !!poster)
   target.setAttribute('role', 'note')
@@ -2926,10 +2932,16 @@ body.is-resizing-rendered-table-column * {
   margin: 0;
 }
 
+/*
+ * 占位块长在 .single-media 包装层上时，height 必须显式复位：
+ * 该包装层可能带 inline-image-thumb 的固定 96px，导致占位块内容被 overflow:hidden 裁断。
+ * 这里也不能用 min-height:100%——父级是 auto 高度，百分比会退化成 0，
+ * 反而盖掉基础规则的 176px 与视频的 clamp() 下限。
+ */
 .markdown-preview .single-media.site-attachment-failure,
 .rendered-table-expand-scroll .single-media.site-attachment-failure {
   width: calc(100% - 16px);
-  min-height: 100%;
+  height: auto;
   max-width: calc(100% - 16px);
   margin: 8px;
 }

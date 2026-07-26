@@ -361,7 +361,7 @@
 
         <div class="edit-preview-block">
           <div class="edit-preview-title">预览</div>
-          <div class="edit-preview-surface">
+          <div :class="['edit-preview-surface', { 'edit-preview-surface--shadow-open': editPreviewHasAttachmentCard }]">
             <MarkdownRenderer :content="editingContent" :enableGithubCard="siteConfig?.enableGithubCard === true" />
           </div>
         </div>
@@ -1995,6 +1995,11 @@ const editingMessage = ref<any | null>(null);
 const editingVisibility = ref<MessageVisibility>('public');
 const editingPublishedAtInput = ref('');
 const isSaving = ref(false);
+// 附件标记会渲染成带外阴影的卡片/占位块（含已删除附件的失败占位块）。
+// 预览面板默认是 300px 的滚动裁剪盒，会把这些阴影贴边切掉，
+// 与正文里 file-attachment-shadow-open 放开裁剪后的观感不一致，所以这里做同样的判定。
+const EDIT_ATTACHMENT_MARKER_RE = /\[(?:图片|视频|音频|文件)附件：/;
+const editPreviewHasAttachmentCard = computed(() => EDIT_ATTACHMENT_MARKER_RE.test(editingContent.value));
 const editTextareaRef = ref<any>(null);
 const editAttachmentInputRef = ref<HTMLInputElement | null>(null);
 type EditInsertTarget = { start: number; end: number };
@@ -3325,6 +3330,19 @@ onMounted(() => {
   border-radius: 10px;
   background: var(--edit-control);
   color: var(--edit-text);
+}
+
+/*
+ * 附件卡片与失败占位块的阴影向下最多外扩 48px（offset 16 + blur 32），向上 16px（blur - offset）。
+ * 预览面板一旦是滚动裁剪盒，这些阴影就会被贴边切掉，
+ * 而笔记正文侧是靠 file-attachment-shadow-open 放开裁剪的。
+ * 为了两边观感一致，这里同样交出裁剪权：滚动由 .edit-modal-body 承担，
+ * 上下按实际外扩量留白，让首尾卡片的阴影有地方落。
+ */
+.edit-preview-surface--shadow-open {
+  max-height: none;
+  overflow: visible;
+  padding: 18px 14px 48px;
 }
 
 .edit-modal-footer {
