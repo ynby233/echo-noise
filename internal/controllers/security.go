@@ -250,6 +250,10 @@ func ClearAccessLogs(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.OK[any](nil, "已清空"))
 		return
 	}
+	if err := middleware.FlushAccessLogs(c.Request.Context()); err != nil {
+		c.JSON(http.StatusOK, dto.Fail[any]("等待访问日志写入失败"))
+		return
+	}
 	_ = db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.SecurityAccessLog{}).Error
 	c.JSON(http.StatusOK, dto.OK[any](nil, "已清空"))
 }
@@ -258,6 +262,10 @@ func ClearSiteVisits(c *gin.Context) {
 	db := models.GetDB()
 	if db == nil {
 		c.JSON(http.StatusOK, dto.OK[any](nil, "已清空"))
+		return
+	}
+	if err := middleware.FlushAccessLogs(c.Request.Context()); err != nil {
+		c.JSON(http.StatusOK, dto.Fail[any]("等待站点访问日志写入失败"))
 		return
 	}
 	_ = db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.SecuritySiteVisitLog{}).Error
@@ -481,5 +489,6 @@ func UpdateSecurityConfig(c *gin.Context) {
 		}
 	}
 	middleware.InvalidateAutoBanConfigCache()
+	middleware.InvalidateAccessLogConfigCache()
 	c.JSON(http.StatusOK, dto.OK(cfg, "已保存"))
 }

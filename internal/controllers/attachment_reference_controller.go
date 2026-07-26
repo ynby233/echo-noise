@@ -61,10 +61,7 @@ func serveLocalAttachmentReference(c *gin.Context, kind, blobRoot, rawPath strin
 		return
 	}
 	defer file.Close()
-	if resolved.Blob.ContentType != "" {
-		c.Header("Content-Type", resolved.Blob.ContentType)
-	}
-	c.Header("X-Content-Type-Options", "nosniff")
+	applyAttachmentSecurityHeaders(c, resolved.Reference.OriginalName, resolved.Blob.ContentType)
 	http.ServeContent(c.Writer, c.Request, resolved.Reference.OriginalName, info.ModTime(), file)
 }
 
@@ -191,8 +188,6 @@ func tryServeCloudAttachmentReference(c *gin.Context, publicID string) bool {
 		c.Header("Cache-Control", "private, no-store")
 		c.Header("Vary", "Cookie, Authorization")
 	}
-	c.Header("X-Content-Type-Options", "nosniff")
-
 	var cfg models.SiteConfig
 	if err := db.Table("site_configs").First(&cfg).Error; err != nil {
 		c.Status(http.StatusNotFound)

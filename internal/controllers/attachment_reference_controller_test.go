@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	attachmentregistry "github.com/rcy1314/echo-noise/internal/attachments"
@@ -46,6 +47,56 @@ func TestServeAttachmentReferenceAllowsAnonymousPublicSiteConfigUsage(t *testing
 	r.ServeHTTP(response, request)
 	if response.Code != http.StatusOK || response.Body.String() != string(content) {
 		t.Fatalf("anonymous site-config attachment response = %d %q", response.Code, response.Body.String())
+	}
+	if disposition := response.Header().Get("Content-Disposition"); !strings.HasPrefix(disposition, "attachment;") {
+		t.Fatalf("site-config attachment disposition = %q, want forced download", disposition)
+	}
+	if csp := response.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'none'") || !strings.Contains(csp, "sandbox") {
+		t.Fatalf("site-config attachment CSP = %q", csp)
+	}
+}
+
+func TestServeAttachmentReferenceNeutralizesStoredActiveContent(t *testing.T) {
+	db, r, owner, _ := setupCommentAccountTest(t)
+	if err := db.AutoMigrate(&models.AttachmentBlob{}, &models.AttachmentReference{}); err != nil {
+		t.Fatalf("migrate attachment registry: %v", err)
+	}
+	content := []byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(document.domain)</script></svg>`)
+	sum := sha256.Sum256(content)
+	store := attachmentregistry.NewLocalStore(t.TempDir())
+	reference, err := attachmentregistry.NewRegistry(db).Create(context.Background(), store, attachmentregistry.CreateInput{
+		Kind:         "image",
+		OwnerUserID:  owner.ID,
+		OriginalName: "payload.svg",
+		ContentType:  "image/svg+xml",
+		ContentHash:  hex.EncodeToString(sum[:]),
+		Size:         int64(len(content)),
+	}, bytes.NewReader(content))
+	if err != nil {
+		t.Fatalf("create active attachment reference: %v", err)
+	}
+	path := attachmentregistry.ReferenceURL(reference, "local")
+	ads, _ := json.Marshal([]map[string]string{{"imageURL": path}})
+	if err := db.Create(&models.SiteConfig{LeftAds: string(ads)}).Error; err != nil {
+		t.Fatalf("create site config: %v", err)
+	}
+
+	r.GET("/api/images/*name", serveLocalAttachment("image", t.TempDir(), store.Root()))
+	request := httptest.NewRequest(http.MethodGet, path, nil)
+	response := httptest.NewRecorder()
+	r.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK || response.Body.String() != string(content) {
+		t.Fatalf("active attachment response = %d %q", response.Code, response.Body.String())
+	}
+	if contentType := response.Header().Get("Content-Type"); contentType != "application/octet-stream" {
+		t.Fatalf("active attachment content type = %q", contentType)
+	}
+	if disposition := response.Header().Get("Content-Disposition"); !strings.HasPrefix(disposition, "attachment;") {
+		t.Fatalf("active attachment disposition = %q", disposition)
+	}
+	if csp := response.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'none'") || !strings.Contains(csp, "sandbox") {
+		t.Fatalf("active attachment CSP = %q", csp)
 	}
 }
 

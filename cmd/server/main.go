@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/config"
 	"github.com/rcy1314/echo-noise/internal/database"
+	"github.com/rcy1314/echo-noise/internal/middleware"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/repository"
 	"github.com/rcy1314/echo-noise/internal/routers"
@@ -154,19 +155,20 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// 关闭数据库连接
-	sqlDB, err := database.DB.DB()
-	if err != nil {
-		log.Printf("获取数据库实例失败: %v\n", err)
-	} else {
-		if err := sqlDB.Close(); err != nil {
-			log.Printf("数据库关闭错误: %v\n", err)
-		}
-	}
-
 	// 优雅关闭服务器
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Printf("服务器关闭错误: %v\n", err)
+	}
+	if err := middleware.FlushAccessLogs(ctx); err != nil {
+		log.Printf("访问日志刷新错误: %v\n", err)
+	}
+
+	// 所有请求和异步日志都已结束后再关闭数据库连接。
+	sqlDB, err := database.DB.DB()
+	if err != nil {
+		log.Printf("获取数据库实例失败: %v\n", err)
+	} else if err := sqlDB.Close(); err != nil {
+		log.Printf("数据库关闭错误: %v\n", err)
 	}
 
 	log.Println("服务器已关闭")

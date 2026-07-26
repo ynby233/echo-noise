@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -25,6 +26,7 @@ func TestAccessLogMiddlewareDisabledByDefault(t *testing.T) {
 	})
 
 	performAccessLogRequest(r, http.MethodGet, "/api/messages/page", "198.51.100.7:1234", "access-agent")
+	flushAccessLogWrites(t)
 	var count int64
 	if err := db.Model(&models.SecurityAccessLog{}).Count(&count).Error; err != nil {
 		t.Fatalf("count access logs: %v", err)
@@ -36,7 +38,9 @@ func TestAccessLogMiddlewareDisabledByDefault(t *testing.T) {
 	if err := db.Create(&models.SecurityConfig{AccessLogEnabled: true}).Error; err != nil {
 		t.Fatalf("enable access logs: %v", err)
 	}
+	middleware.InvalidateAccessLogConfigCache()
 	performAccessLogRequest(r, http.MethodGet, "/api/messages/page", "198.51.100.7:1234", "access-agent")
+	flushAccessLogWrites(t)
 	if err := db.Model(&models.SecurityAccessLog{}).Count(&count).Error; err != nil {
 		t.Fatalf("count access logs after enabling: %v", err)
 	}
@@ -67,6 +71,7 @@ func TestAccessLogMiddlewareRecordsDynamicRequestWithUser(t *testing.T) {
 
 	performAccessLogRequest(r, http.MethodGet, "/api/messages/page", "198.51.100.7:1234", "access-agent")
 	performAccessLogRequest(r, http.MethodGet, "/_nuxt/app.js", "198.51.100.8:1234", "static-agent")
+	flushAccessLogWrites(t)
 
 	var logs []models.SecurityAccessLog
 	if err := db.Find(&logs).Error; err != nil {
@@ -162,6 +167,7 @@ func TestSiteVisitMiddlewareRecordsHomepageOnly(t *testing.T) {
 
 	performAccessLogRequestWithAccept(r, http.MethodGet, "/", "198.51.100.7:1234", "visit-agent", "text/html")
 	performAccessLogRequestWithAccept(r, http.MethodGet, "/api/messages/page", "198.51.100.8:1234", "api-agent", "text/html")
+	flushAccessLogWrites(t)
 
 	var siteVisits []models.SecuritySiteVisitLog
 	if err := db.Find(&siteVisits).Error; err != nil {
@@ -239,6 +245,15 @@ func TestGetSiteVisitsFiltersAndClears(t *testing.T) {
 
 func performAccessLogRequest(r http.Handler, method string, path string, remoteAddr string, userAgent string) *httptest.ResponseRecorder {
 	return performAccessLogRequestWithAccept(r, method, path, remoteAddr, userAgent, "")
+}
+
+func flushAccessLogWrites(t *testing.T) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := middleware.FlushAccessLogs(ctx); err != nil {
+		t.Fatalf("flush access logs: %v", err)
+	}
 }
 
 func performAccessLogRequestWithAccept(r http.Handler, method string, path string, remoteAddr string, userAgent string, accept string) *httptest.ResponseRecorder {

@@ -1,18 +1,52 @@
 package middleware
 
 import (
+	"context"
+	"log"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/internal/models"
+	"gorm.io/gorm"
+)
+
+const (
+	accessLogConfigTTL     = 5 * time.Second
+	accessLogBatchInterval = 100 * time.Millisecond
+	accessLogBatchSize     = 100
+	accessLogQueueSize     = 4096
+)
+
+var accessLogConfigCache = struct {
+	sync.Mutex
+	db               *gorm.DB
+	expiresAt        time.Time
+	accessLogEnabled bool
+	siteVisitEnabled bool
+}{}
+
+type accessLogQueueItem struct {
+	db        *gorm.DB
+	accessLog *models.SecurityAccessLog
+	siteVisit *models.SecuritySiteVisitLog
+	flush     chan error
+}
+
+var (
+	accessLogQueueOnce sync.Once
+	accessLogQueue     chan accessLogQueueItem
+	droppedAccessLogs  atomic.Uint64
 )
 
 func AccessLogMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		recordAccess := !shouldSkipAccessLog(c.Request.Method, c.Request.URL.Path) && isAccessLogEnabled()
-		recordSiteVisit := shouldRecordSiteVisitRequest(c) && isSiteVisitLogEnabled()
+		accessEnabled, siteVisitEnabled := accessLogSettings()
+		recordAccess := accessEnabled && !shouldSkipAccessLog(c.Request.Method, c.Request.URL.Path)
+		recordSiteVisit := siteVisitEnabled && shouldRecordSiteVisitRequest(c)
 		if !recordAccess && !recordSiteVisit {
 			c.Next()
 			return
@@ -29,28 +63,38 @@ func AccessLogMiddleware() gin.HandlerFunc {
 	}
 }
 
-func isAccessLogEnabled() bool {
+func accessLogSettings() (bool, bool) {
 	db := models.GetDB()
 	if db == nil {
-		return false
+		return false, false
+	}
+	now := time.Now()
+	accessLogConfigCache.Lock()
+	defer accessLogConfigCache.Unlock()
+	if accessLogConfigCache.db == db && now.Before(accessLogConfigCache.expiresAt) {
+		return accessLogConfigCache.accessLogEnabled, accessLogConfigCache.siteVisitEnabled
 	}
 	var cfg models.SecurityConfig
-	if err := db.Select("access_log_enabled").Order("id asc").First(&cfg).Error; err != nil {
-		return false
+	accessEnabled := false
+	siteVisitEnabled := false
+	if err := db.Select("access_log_enabled", "site_visit_log_enabled").Order("id asc").First(&cfg).Error; err == nil {
+		accessEnabled = cfg.AccessLogEnabled
+		siteVisitEnabled = cfg.SiteVisitLogEnabled
 	}
-	return cfg.AccessLogEnabled
+	accessLogConfigCache.db = db
+	accessLogConfigCache.expiresAt = now.Add(accessLogConfigTTL)
+	accessLogConfigCache.accessLogEnabled = accessEnabled
+	accessLogConfigCache.siteVisitEnabled = siteVisitEnabled
+	return accessEnabled, siteVisitEnabled
 }
 
-func isSiteVisitLogEnabled() bool {
-	db := models.GetDB()
-	if db == nil {
-		return false
-	}
-	var cfg models.SecurityConfig
-	if err := db.Select("site_visit_log_enabled").Order("id asc").First(&cfg).Error; err != nil {
-		return false
-	}
-	return cfg.SiteVisitLogEnabled
+func InvalidateAccessLogConfigCache() {
+	accessLogConfigCache.Lock()
+	accessLogConfigCache.db = nil
+	accessLogConfigCache.expiresAt = time.Time{}
+	accessLogConfigCache.accessLogEnabled = false
+	accessLogConfigCache.siteVisitEnabled = false
+	accessLogConfigCache.Unlock()
 }
 
 func shouldSkipAccessLog(method string, path string) bool {
@@ -159,7 +203,7 @@ func recordAccessLog(c *gin.Context, duration time.Duration) {
 		Referer:    trimLogField(c.GetHeader("Referer"), 2048),
 		DurationMS: duration.Milliseconds(),
 	}
-	_ = db.Create(&log).Error
+	enqueueAccessLog(accessLogQueueItem{db: db, accessLog: &log})
 }
 
 func recordSiteVisitLog(c *gin.Context) {
@@ -176,7 +220,106 @@ func recordSiteVisitLog(c *gin.Context) {
 		UserAgent: trimLogField(c.GetHeader("User-Agent"), 2048),
 		Referer:   trimLogField(c.GetHeader("Referer"), 2048),
 	}
-	_ = db.Create(&log).Error
+	enqueueAccessLog(accessLogQueueItem{db: db, siteVisit: &log})
+}
+
+func enqueueAccessLog(item accessLogQueueItem) {
+	queue := ensureAccessLogQueue()
+	select {
+	case queue <- item:
+	default:
+		dropped := droppedAccessLogs.Add(1)
+		if dropped == 1 || dropped%1000 == 0 {
+			log.Printf("访问日志异步队列已满，累计丢弃 %d 条日志", dropped)
+		}
+	}
+}
+
+func ensureAccessLogQueue() chan accessLogQueueItem {
+	accessLogQueueOnce.Do(func() {
+		accessLogQueue = make(chan accessLogQueueItem, accessLogQueueSize)
+		go runAccessLogWriter(accessLogQueue)
+	})
+	return accessLogQueue
+}
+
+func runAccessLogWriter(queue <-chan accessLogQueueItem) {
+	ticker := time.NewTicker(accessLogBatchInterval)
+	defer ticker.Stop()
+	batch := make([]accessLogQueueItem, 0, accessLogBatchSize)
+	flush := func() error {
+		err := writeAccessLogBatch(batch)
+		batch = batch[:0]
+		return err
+	}
+	for {
+		select {
+		case item := <-queue:
+			if item.flush != nil {
+				item.flush <- flush()
+				continue
+			}
+			batch = append(batch, item)
+			if len(batch) >= accessLogBatchSize {
+				if err := flush(); err != nil {
+					log.Printf("批量写入访问日志失败: %v", err)
+				}
+			}
+		case <-ticker.C:
+			if len(batch) > 0 {
+				if err := flush(); err != nil {
+					log.Printf("批量写入访问日志失败: %v", err)
+				}
+			}
+		}
+	}
+}
+
+func writeAccessLogBatch(batch []accessLogQueueItem) error {
+	if len(batch) == 0 {
+		return nil
+	}
+	accessByDB := make(map[*gorm.DB][]models.SecurityAccessLog)
+	visitsByDB := make(map[*gorm.DB][]models.SecuritySiteVisitLog)
+	for _, item := range batch {
+		if item.db == nil {
+			continue
+		}
+		if item.accessLog != nil {
+			accessByDB[item.db] = append(accessByDB[item.db], *item.accessLog)
+		}
+		if item.siteVisit != nil {
+			visitsByDB[item.db] = append(visitsByDB[item.db], *item.siteVisit)
+		}
+	}
+	var firstErr error
+	for db, logs := range accessByDB {
+		if err := db.CreateInBatches(&logs, accessLogBatchSize).Error; err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	for db, visits := range visitsByDB {
+		if err := db.CreateInBatches(&visits, accessLogBatchSize).Error; err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+func FlushAccessLogs(ctx context.Context) error {
+	done := make(chan error, 1)
+	item := accessLogQueueItem{flush: done}
+	select {
+	case ensureAccessLogQueue() <- item:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func resolveAccessLogUser(c *gin.Context) (uint, string, bool) {

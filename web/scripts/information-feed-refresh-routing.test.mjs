@@ -33,7 +33,16 @@ const [feed, home, messageList, routerSource] = await Promise.all([
   read('../internal/routers/routers.go'),
 ])
 
-assert.match(routerSource, /api\.POST\("\/feed\/refresh", controllers\.RefreshInfoFeedItems\)/)
+assert.match(
+  routerSource,
+  /api\.POST\("\/feed\/refresh", middleware\.SessionAuthMiddleware\(\), middleware\.AdminAuthMiddleware\(\), controllers\.RefreshInfoFeedItems\)/,
+  'manual source refresh must require an authenticated administrator',
+)
+assert.match(
+  home,
+  /<button\s+v-if="isAdmin"[\s\S]*?aria-label="刷新信息流"[\s\S]*?@click="refreshInfoFeed"/,
+  'the upstream-refresh action must only be shown to administrators',
+)
 assert.match(
   feed,
   /const loadFeed = async \(options: \{ force\?: boolean \} = \{\}\)[\s\S]*?options\.force \? '\/feed\/refresh' : '\/feed\/items'[\s\S]*?method: options\.force \? 'POST' : 'GET'/,

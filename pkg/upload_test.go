@@ -3,15 +3,71 @@ package pkg
 import (
 	"bytes"
 	"context"
+	"mime/multipart"
+	"net/http"
+	"net/http/httptest"
+	"net/textproto"
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	attachmentregistry "github.com/rcy1314/echo-noise/internal/attachments"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"gorm.io/gorm"
 )
+
+func TestUploadImageRejectsSpoofedRasterMimeForSVG(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Chdir(t.TempDir())
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	if err := db.AutoMigrate(&models.AttachmentBlob{}, &models.AttachmentReference{}); err != nil {
+		t.Fatalf("migrate attachment registry: %v", err)
+	}
+	database.DB = db
+	models.SetDB(db)
+	t.Cleanup(func() {
+		database.DB = nil
+		models.SetDB(nil)
+	})
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	header := make(textproto.MIMEHeader)
+	header.Set("Content-Disposition", `form-data; name="image"; filename="payload.svg"`)
+	header.Set("Content-Type", "image/png")
+	part, err := writer.CreatePart(header)
+	if err != nil {
+		t.Fatalf("create multipart image: %v", err)
+	}
+	_, _ = part.Write([]byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(document.domain)</script></svg>`))
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close multipart body: %v", err)
+	}
+
+	r := gin.New()
+	r.POST("/upload", func(c *gin.Context) {
+		c.Set("user_id", uint(7))
+		url, err := UploadImage(c, []string{"image/*"}, nil)
+		if err != nil {
+			c.String(http.StatusBadRequest, err.Error())
+			return
+		}
+		c.String(http.StatusOK, url)
+	})
+	req := httptest.NewRequest(http.MethodPost, "/upload", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	response := httptest.NewRecorder()
+	r.ServeHTTP(response, req)
+
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), models.NotSupportedImageTypeMessage) {
+		t.Fatalf("spoofed SVG upload response = %d %q", response.Code, response.Body.String())
+	}
+}
 
 func TestStoreAttachmentReferenceReturnsSeparateCompatibleURLsAndOneBlob(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -77,9 +133,12 @@ func TestSafeAttachmentFileNameKeepsOriginalStem(t *testing.T) {
 	}
 }
 
-func TestIsAllowedImageTypeAcceptsImageWildcard(t *testing.T) {
-	if !isAllowedImageType("image/avif", []string{"image/jpeg"}) {
-		t.Fatal("expected image/* fallback to accept avif")
+func TestIsAllowedImageTypeRejectsActiveImageContentEvenWithWildcard(t *testing.T) {
+	if !isAllowedImageType("image/avif", []string{"image/*"}) {
+		t.Fatal("expected safe image subtype to remain accepted by configured wildcard")
+	}
+	if isAllowedImageType("image/svg+xml", []string{"image/*"}) {
+		t.Fatal("expected active SVG content to be rejected despite configured wildcard")
 	}
 	if isAllowedImageType("video/mp4", []string{"image/*"}) {
 		t.Fatal("expected non-image mime type to be rejected")

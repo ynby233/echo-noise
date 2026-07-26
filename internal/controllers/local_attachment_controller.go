@@ -105,6 +105,7 @@ func serveLocalAttachment(kind string, root string, blobRoot string) gin.Handler
 		} else {
 			c.Header("Cache-Control", "public, max-age=3600")
 		}
+		applyAttachmentSecurityHeaders(c, name, sniffAttachmentContentType(file))
 		http.ServeContent(c.Writer, c.Request, name, info.ModTime(), file)
 	}
 }

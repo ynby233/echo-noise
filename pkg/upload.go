@@ -11,6 +11,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -265,6 +266,11 @@ func UploadImage(c *gin.Context, allowedExtensions []string, siteConfig *models.
 		buf.ReadFrom(srcFile)
 		fileData = buf.Bytes()
 	}
+	detectedContentType := strings.ToLower(strings.TrimSpace(strings.Split(http.DetectContentType(fileData), ";")[0]))
+	if !isAllowedImageType(detectedContentType, allowedExtensions) {
+		return "", errors.New(models.NotSupportedImageTypeMessage)
+	}
+	contentType = detectedContentType
 
 	// 获取原始文件名和扩展名
 	ext := normalizeUploadExt(filepath.Ext(file.Filename), ".img")
@@ -273,6 +279,11 @@ func UploadImage(c *gin.Context, allowedExtensions []string, siteConfig *models.
 	if siteConfig != nil && siteConfig.EnableCompression {
 		if compressedData, err := CompressImageWithFFmpeg(fileData, ext); err == nil {
 			fileData = compressedData
+			detectedContentType = strings.ToLower(strings.TrimSpace(strings.Split(http.DetectContentType(fileData), ";")[0]))
+			if !isAllowedImageType(detectedContentType, allowedExtensions) {
+				return "", errors.New(models.NotSupportedImageTypeMessage)
+			}
+			contentType = detectedContentType
 		} else {
 			// 压缩失败不影响主流程，回退原图上传
 			_ = err
@@ -363,7 +374,19 @@ func isAllowedType(contentType string, allowedTypes []string) bool {
 
 func isAllowedImageType(contentType string, allowedTypes []string) bool {
 	contentType = strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
-	return isAllowedType(contentType, allowedTypes) || strings.HasPrefix(contentType, "image/")
+	if !isSafeRasterImageType(contentType) {
+		return false
+	}
+	return isAllowedType(contentType, allowedTypes)
+}
+
+func isSafeRasterImageType(contentType string) bool {
+	switch strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0])) {
+	case "image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp", "image/avif", "image/bmp", "image/x-icon", "image/vnd.microsoft.icon":
+		return true
+	default:
+		return false
+	}
 }
 
 // UploadVideo 上传视频并返回视频的URL

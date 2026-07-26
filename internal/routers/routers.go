@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-contrib/cors"
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/config"
 	"github.com/rcy1314/echo-noise/internal/controllers"
@@ -43,6 +44,7 @@ func SetupRouter() *gin.Engine {
 	r := gin.New()
 	configureTrustedProxies(r)
 	r.Use(gin.Recovery())
+	r.Use(middleware.SecurityHeadersMiddleware())
 	if enableAccessLog() {
 		r.Use(gin.Logger())
 	}
@@ -67,6 +69,15 @@ func SetupRouter() *gin.Engine {
 		}
 		c.Next()
 	})
+	r.Use(staticResponseHeadersMiddleware())
+	r.Use(gzip.Gzip(gzip.DefaultCompression, gzip.WithExcludedPaths([]string{
+		"/api/images/",
+		"/api/video/",
+		"/video/",
+		"/api/audio/",
+		"/api/files/",
+		"/api/cloud-attachments/",
+	})))
 
 	// 安全防护：拦截敏感路径扫描（不影响正常 API/静态资源/MCP）
 	r.Use(middleware.SecurityMiddleware())
@@ -199,7 +210,7 @@ func SetupRouter() *gin.Engine {
 	api.PUT("/announcements/read-all", controllers.MarkAllAnnouncementsRead)
 	api.PUT("/announcements/:id/read", controllers.MarkAnnouncementRead)
 	api.GET("/feed/items", controllers.GetInfoFeedItems)
-	api.POST("/feed/refresh", controllers.RefreshInfoFeedItems)
+	api.POST("/feed/refresh", middleware.SessionAuthMiddleware(), middleware.AdminAuthMiddleware(), controllers.RefreshInfoFeedItems)
 	api.POST("/login", controllers.Login)
 	api.POST("/register", controllers.Register)
 	api.GET("/status", controllers.GetStatus)
@@ -413,26 +424,6 @@ func SetupRouter() *gin.Engine {
 	r.Static("/_nuxt", "./public/_nuxt")
 	r.Static("/assets", "./public/assets")
 
-	// 静态文件与 Manifest 头部处理
-	r.Use(func(c *gin.Context) {
-		p := c.Request.URL.Path
-		// 先设置 manifest 的 MIME，静态中间件将复用已有头部
-		if p == "/manifest.webmanifest" || p == "/manifest.json" {
-			c.Header("Content-Type", "application/manifest+json; charset=utf-8")
-			c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
-		}
-		c.Next()
-		// 对指纹化静态资源启用长缓存
-		if strings.HasPrefix(p, "/_nuxt/") || strings.HasPrefix(p, "/assets/") ||
-			strings.HasPrefix(p, "/favicon") || strings.HasPrefix(p, "/android-chrome") {
-			c.Header("Cache-Control", "public, max-age=31536000, immutable")
-		}
-		if p == "/sw.js" {
-			// Service Worker 需避免长缓存，确保更新及时生效
-			c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
-		}
-	})
-
 	r.Use(func(c *gin.Context) {
 		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
 			c.Next()
@@ -474,6 +465,23 @@ func SetupRouter() *gin.Engine {
 	})
 
 	return r
+}
+
+func staticResponseHeadersMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		path := c.Request.URL.Path
+		switch {
+		case path == "/manifest.webmanifest" || path == "/manifest.json":
+			c.Header("Content-Type", "application/manifest+json; charset=utf-8")
+			c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+		case path == "/sw.js":
+			c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+		case strings.HasPrefix(path, "/_nuxt/") || strings.HasPrefix(path, "/assets/") ||
+			strings.HasPrefix(path, "/favicon") || strings.HasPrefix(path, "/android-chrome"):
+			c.Header("Cache-Control", "public, max-age=31536000, immutable")
+		}
+		c.Next()
+	}
 }
 
 func configureTrustedProxies(r *gin.Engine) {

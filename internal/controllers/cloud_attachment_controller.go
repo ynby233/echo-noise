@@ -3,7 +3,6 @@ package controllers
 import (
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -135,9 +134,7 @@ func applyCloudAttachmentHeaders(c *gin.Context, object models.CloudAttachmentOb
 	if strings.TrimSpace(contentType) == "" {
 		contentType = object.ContentType
 	}
-	if contentType != "" {
-		c.Header("Content-Type", contentType)
-	}
+	applyAttachmentSecurityHeaders(c, object.OriginalName, contentType)
 	if contentLength >= 0 {
 		c.Header("Content-Length", strconv.FormatInt(contentLength, 10))
 	}
@@ -151,7 +148,6 @@ func applyCloudAttachmentHeaders(c *gin.Context, object models.CloudAttachmentOb
 		c.Header("Content-Range", contentRange)
 	}
 	c.Header("Accept-Ranges", "bytes")
-	c.Header("Content-Disposition", `inline; filename*=UTF-8''`+url.PathEscape(object.OriginalName))
 }
 
 func messagesReferencingCloudAttachment(object models.CloudAttachmentObject) ([]models.Message, error) {

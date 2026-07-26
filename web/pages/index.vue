@@ -206,6 +206,7 @@
                 <div v-else class="nw-content-panel-count nw-content-panel-count-placeholder" aria-hidden="true"></div>
                 <div class="nw-content-panel-actions">
                   <button
+                    v-if="isAdmin"
                     type="button"
                     class="feed-results-refresh nw-content-panel-action nw-content-panel-action--icon nw-action-btn nw-tooltip-anchor"
                     data-tooltip="刷新"
