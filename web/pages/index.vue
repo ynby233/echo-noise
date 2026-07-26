@@ -157,8 +157,15 @@
               <div class="text-xs opacity-70 mb-2">最新图集（{{ recommendedImages.length }}）</div>
               <div class="scroll-images">
                 <div class="recommend-grid">
-                  <a v-for="(img, index) in recommendedImages" :key="recommendImageKey(img, index)" :href="imageSrc(img)" data-fancybox="recommend-gallery" class="block">
-                    <img :src="imageSrc(img)" class="recommend-image-box" loading="lazy" alt="recommend" />
+                  <a v-for="(img, index) in recommendedImages" :key="recommendImageKey(img, index)" :href="isRecommendImageFailed(img, index) ? undefined : imageSrc(img)" :data-fancybox="isRecommendImageFailed(img, index) ? undefined : 'recommend-gallery'" class="block">
+                    <span v-if="isRecommendImageFailed(img, index)" class="site-attachment-failure site-attachment-failure--image site-attachment-failure--compact" role="note" :aria-label="recommendImageFailureLabel">
+                      <span class="site-attachment-failure__content">
+                        <span class="site-attachment-failure__icon" aria-hidden="true"></span>
+                        <strong class="site-attachment-failure__title">{{ recommendImageFailureTitle }}</strong>
+                        <span class="site-attachment-failure__detail">{{ recommendImageFailureDetail }}</span>
+                      </span>
+                    </span>
+                    <img v-else :src="imageSrc(img)" class="recommend-image-box" loading="lazy" alt="recommend" @error="markRecommendImageFailed(img, index)" />
                   </a>
                 </div>
               </div>
@@ -396,8 +403,15 @@
             <div class="text-xs opacity-70 mb-2">最新图集（{{ recommendedImages.length }}）</div>
             <div class="scroll-images">
               <div class="recommend-grid">
-                <a v-for="(img, index) in recommendedImages" :key="recommendImageKey(img, index)" :href="imageSrc(img)" data-fancybox="recommend-gallery" class="block">
-                  <img :src="imageSrc(img)" class="recommend-image-box" loading="lazy" alt="recommend" />
+                <a v-for="(img, index) in recommendedImages" :key="recommendImageKey(img, index)" :href="isRecommendImageFailed(img, index) ? undefined : imageSrc(img)" :data-fancybox="isRecommendImageFailed(img, index) ? undefined : 'recommend-gallery'" class="block">
+                  <span v-if="isRecommendImageFailed(img, index)" class="site-attachment-failure site-attachment-failure--image site-attachment-failure--compact" role="note" :aria-label="recommendImageFailureLabel">
+                    <span class="site-attachment-failure__content">
+                      <span class="site-attachment-failure__icon" aria-hidden="true"></span>
+                      <strong class="site-attachment-failure__title">{{ recommendImageFailureTitle }}</strong>
+                      <span class="site-attachment-failure__detail">{{ recommendImageFailureDetail }}</span>
+                    </span>
+                  </span>
+                  <img v-else :src="imageSrc(img)" class="recommend-image-box" loading="lazy" alt="recommend" @error="markRecommendImageFailed(img, index)" />
                 </a>
               </div>
             </div>
@@ -426,8 +440,15 @@
           <div class="text-xs opacity-70 mb-2">推荐图集</div>
           <div class="scroll-images">
             <div class="recommend-grid">
-              <a v-for="(img, index) in recommendedImages" :key="recommendImageKey(img, index)" :href="imageSrc(img)" data-fancybox="recommend-gallery" class="block">
-                <img :src="imageSrc(img)" class="recommend-image-box" loading="lazy" alt="recommend" />
+              <a v-for="(img, index) in recommendedImages" :key="recommendImageKey(img, index)" :href="isRecommendImageFailed(img, index) ? undefined : imageSrc(img)" :data-fancybox="isRecommendImageFailed(img, index) ? undefined : 'recommend-gallery'" class="block">
+                <span v-if="isRecommendImageFailed(img, index)" class="site-attachment-failure site-attachment-failure--image site-attachment-failure--compact" role="note" :aria-label="recommendImageFailureLabel">
+                  <span class="site-attachment-failure__content">
+                    <span class="site-attachment-failure__icon" aria-hidden="true"></span>
+                    <strong class="site-attachment-failure__title">{{ recommendImageFailureTitle }}</strong>
+                    <span class="site-attachment-failure__detail">{{ recommendImageFailureDetail }}</span>
+                  </span>
+                </span>
+                <img v-else :src="imageSrc(img)" class="recommend-image-box" loading="lazy" alt="recommend" @error="markRecommendImageFailed(img, index)" />
               </a>
             </div>
           </div>
@@ -625,6 +646,7 @@ import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { normalizeAdConfigs } from '~/utils/ad-config'
 import { getMessageIdFromRouteHash } from '~/utils/message-route-hash'
 import { getRequest, postRequest } from '~/utils/api'
+import { attachmentFailureAriaLabel, attachmentFailureDetail, attachmentFailureTitle } from '~/utils/attachment-failure'
 import { useToast } from '#ui/composables/useToast'
 import { useUserStore } from '~/store/user'
 import type { PageQueryResult, Tag } from '~/types/models'
@@ -2646,7 +2668,11 @@ const status = ref<any>(null)
 const fetchImages = async () => {
   try {
     const r = await getRequest<any>('messages/images', undefined, { credentials: 'include' })
-    if (r && r.code === 1 && Array.isArray(r.data)) images.value = r.data
+    if (r && r.code === 1 && Array.isArray(r.data)) {
+      images.value = r.data
+      // 列表换了一批，旧的失败记录必须清空，否则新图会沿用上一批的失败位置。
+      if (failedRecommendKeys.value.size > 0) failedRecommendKeys.value = new Set()
+    }
   } catch {}
 }
 const fetchStatus = async () => {
@@ -2690,6 +2716,22 @@ const imageSrc = (img: any) => {
 // 同一条笔记可引用多张图、同一张图也可被多条笔记引用，key 必须按条目唯一，
 // 否则 Vue 无法正确 patch 列表，会残留或错位节点。
 const recommendImageKey = (img: any, index: number) => `${index}:${imageSrc(img)}`
+
+// 缩略图瞬时加载失败只影响该格子的渲染分支：既不改 recommendedImages，也不改标题计数，
+// 否则一次网络抖动会连带删掉同一张图的其它引用（见 home-gallery-missing-attachment 契约）。
+// 按 recommendImageKey 逐条目记录，不能按 URL，否则重复图会级联。
+const failedRecommendKeys = ref<Set<string>>(new Set())
+const recommendImageFailureTitle = attachmentFailureTitle('image')
+const recommendImageFailureDetail = attachmentFailureDetail('image', false)
+const recommendImageFailureLabel = attachmentFailureAriaLabel('image')
+const isRecommendImageFailed = (img: any, index: number) => failedRecommendKeys.value.has(recommendImageKey(img, index))
+const markRecommendImageFailed = (img: any, index: number) => {
+  const key = recommendImageKey(img, index)
+  if (failedRecommendKeys.value.has(key)) return
+  const next = new Set(failedRecommendKeys.value)
+  next.add(key)
+  failedRecommendKeys.value = next
+}
 
 const leftAds = computed(() => {
   const arr = Array.isArray((frontendConfig.value as any).leftAds) ? (frontendConfig.value as any).leftAds : []

@@ -62,8 +62,40 @@ assert.doesNotMatch(
 )
 assert.doesNotMatch(
   indexPage,
-  /@error="handleRecommendImageError/,
+  /(images|recommendedImages)\.value\s*=\s*[^\n]*filter[^\n]*(fail|broken|error)/i,
   'gallery must not mutate its own list from img error events'
+)
+
+const failureHandler = indexPage.match(/const markRecommendImageFailed = \(img: any, index: number\) => \{[\s\S]*?\n\}/)?.[0] || ''
+assert.ok(
+  failureHandler.includes('recommendImageKey(img, index)') &&
+    !/images\.value|recommendedImages/.test(failureHandler),
+  'a transient thumbnail failure must only be recorded per entry, never applied to the gallery list itself'
+)
+assert.match(
+  indexPage,
+  /images\.value = r\.data\n\s*\/\/[^\n]*\n\s*if \(failedRecommendKeys\.value\.size > 0\) failedRecommendKeys\.value = new Set\(\)/,
+  'a refreshed gallery list must clear stale per-entry failure marks so new images are not hidden'
+)
+
+const galleryPlaceholders = indexPage.match(/<span v-if="isRecommendImageFailed\(img, index\)"[^>]*>/g) || []
+assert.equal(galleryPlaceholders.length, 3, 'every gallery block must render the shared failure placeholder')
+for (const tag of galleryPlaceholders) {
+  assert.match(
+    tag,
+    /class="site-attachment-failure site-attachment-failure--image site-attachment-failure--compact"/,
+    `gallery failures must reuse the shared note placeholder template in its compact variant: ${tag}`
+  )
+}
+assert.match(
+  indexPage,
+  /<img v-else :src="imageSrc\(img\)" class="recommend-image-box" loading="lazy" alt="recommend" @error="markRecommendImageFailed\(img, index\)" \/>/,
+  'a failed thumbnail must be swapped for the placeholder in place, keeping the surrounding cell intact'
+)
+assert.match(
+  indexPage,
+  /最新图集（\{\{ recommendedImages\.length \}\}）/,
+  'the gallery heading must keep counting the server list even while some thumbnails fail to load'
 )
 
 console.log('home gallery missing attachment tests passed')

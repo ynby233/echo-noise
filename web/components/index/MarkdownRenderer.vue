@@ -32,6 +32,7 @@ import { buildAttachmentAudioPlaceholderHtml, destroyAttachmentAudioPlayers, enh
 import { encodeMarkdownExtraBlankLines, markMarkdownPreservedBlankLineElements } from '~/utils/markdown-blank-lines'
 import { applyTableTrackSize, getTableResizeZoomScale, resolveTableTrackResize, resolveTableTrailingScrollReserve, type TableTrackResizeSession } from '~/utils/table-resize-session'
 import { isManagedAttachmentURL, resolveManagedAttachmentURL, resolveMediaURL } from '~/utils/media-url'
+import { attachmentFailureDetail, attachmentFailureTitle, type AttachmentFailureKind } from '~/utils/attachment-failure'
 import Vditor from 'vditor';
 
 // 定义正则表达式
@@ -1298,7 +1299,7 @@ const escapeHtml = (value: string) => String(value || '')
   .replace(/'/g, '&#39;')
 
 const ATTACHMENT_LINK_REG = /\[(图片附件|视频附件|音频附件)：([^\]]+)\]\(([^)\s]+)\)/g
-type AttachmentKind = 'image' | 'video' | 'audio' | 'file'
+type AttachmentKind = AttachmentFailureKind
 
 const browserPreviewableAttachmentUrl = (url: string) => /\.(pdf|txt|text|csv|json|xml|html?)(?:[?#].*)?$/i.test(String(url || ''))
 
@@ -1309,27 +1310,6 @@ const attachmentKindFromLabel = (label: string): AttachmentKind => {
   return 'file'
 }
 
-const deletedAttachmentText = (kind: AttachmentKind) => {
-  if (kind === 'image') return '该图片已被删除'
-  if (kind === 'video') return '该视频已被删除'
-  if (kind === 'audio') return '该音频已被删除'
-  return '该文件已被删除'
-}
-
-const attachmentFailureTitle = (kind: AttachmentKind) => {
-  if (kind === 'image') return '图片加载失败'
-  if (kind === 'video') return '视频播放失败'
-  if (kind === 'audio') return '音频无法播放'
-  return '附件加载失败'
-}
-
-const attachmentFailureDetail = (kind: AttachmentKind, deleted: boolean) => {
-  if (deleted) return deletedAttachmentText(kind)
-  if (kind === 'image') return '图片可能已被删除或暂时无法访问'
-  if (kind === 'video') return '视频可能已被删除或暂时无法访问'
-  if (kind === 'audio') return '音频可能已被删除或暂时无法访问'
-  return '文件可能已被删除或暂时无法访问'
-}
 
 const mediaPathFromUrl = (url: string) => {
   const raw = String(url || '').trim()
@@ -2929,40 +2909,13 @@ body.is-resizing-rendered-table-column * {
   border-radius: 8px;
 }
 
+/* 视觉令牌与内部结构统一由 assets/css/attachment-failure.css 提供，这里只补正文里的尺寸。 */
 .markdown-preview .site-attachment-failure,
 .rendered-table-expand-scroll .site-attachment-failure {
-  --attachment-failure-bg: #fffaf7;
-  --attachment-failure-border: rgba(194, 65, 12, 0.18);
-  --attachment-failure-icon-bg: rgba(234, 88, 12, 0.10);
-  --attachment-failure-icon: #c2410c;
-  --attachment-failure-title: #7c2d12;
-  --attachment-failure-detail: #9a3412;
-  position: relative;
-  display: grid;
   width: calc(100% - 16px);
   min-height: 176px;
   max-width: calc(100% - 16px);
   margin: 8px;
-  overflow: hidden;
-  place-items: center;
-  border: 1px solid var(--attachment-failure-border);
-  border-radius: 12px;
-  background:
-    radial-gradient(circle at 50% 20%, rgba(249, 115, 22, 0.08), transparent 52%),
-    var(--attachment-failure-bg);
-  box-sizing: border-box;
-  box-shadow: 0 10px 24px rgba(124, 45, 18, 0.08);
-}
-
-.markdown-preview.theme-dark .site-attachment-failure,
-.rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .site-attachment-failure {
-  --attachment-failure-bg: #241d1a;
-  --attachment-failure-border: rgba(251, 146, 60, 0.22);
-  --attachment-failure-icon-bg: rgba(251, 146, 60, 0.13);
-  --attachment-failure-icon: #fb923c;
-  --attachment-failure-title: #fed7aa;
-  --attachment-failure-detail: #fdba74;
-  box-shadow: 0 14px 30px rgba(2, 6, 23, 0.34);
 }
 
 .markdown-preview .image-grid-item.site-attachment-failure,
@@ -2979,89 +2932,6 @@ body.is-resizing-rendered-table-column * {
   min-height: 100%;
   max-width: calc(100% - 16px);
   margin: 8px;
-}
-
-.markdown-preview .site-attachment-failure__content,
-.rendered-table-expand-scroll .site-attachment-failure__content {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  max-width: min(88%, 420px);
-  padding: 24px;
-  align-items: center;
-  flex-direction: column;
-  color: var(--attachment-failure-title);
-  text-align: center;
-  box-sizing: border-box;
-}
-
-.markdown-preview .site-attachment-failure__icon,
-.rendered-table-expand-scroll .site-attachment-failure__icon {
-  position: relative;
-  display: inline-flex;
-  width: 44px;
-  height: 44px;
-  margin-bottom: 12px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid color-mix(in srgb, var(--attachment-failure-icon) 22%, transparent);
-  border-radius: 14px;
-  background: var(--attachment-failure-icon-bg);
-  color: var(--attachment-failure-icon);
-  box-sizing: border-box;
-}
-
-.markdown-preview .site-attachment-failure--image .site-attachment-failure__icon::before,
-.rendered-table-expand-scroll .site-attachment-failure--image .site-attachment-failure__icon::before {
-  content: '';
-  width: 20px;
-  height: 16px;
-  border: 1.8px solid currentColor;
-  border-radius: 3px;
-  box-sizing: border-box;
-}
-
-.markdown-preview .site-attachment-failure--image .site-attachment-failure__icon::after,
-.rendered-table-expand-scroll .site-attachment-failure--image .site-attachment-failure__icon::after {
-  content: '';
-  position: absolute;
-  left: 13px;
-  bottom: 13px;
-  width: 12px;
-  height: 8px;
-  border-left: 1.8px solid currentColor;
-  border-top: 1.8px solid currentColor;
-  transform: rotate(45deg) skew(-8deg, -8deg);
-  transform-origin: center;
-}
-
-.markdown-preview .site-attachment-failure--video .site-attachment-failure__icon::before,
-.rendered-table-expand-scroll .site-attachment-failure--video .site-attachment-failure__icon::before {
-  content: '';
-  width: 0;
-  height: 0;
-  margin-left: 3px;
-  border-top: 8px solid transparent;
-  border-bottom: 8px solid transparent;
-  border-left: 13px solid currentColor;
-}
-
-.markdown-preview .site-attachment-failure__title,
-.rendered-table-expand-scroll .site-attachment-failure__title {
-  display: block;
-  color: var(--attachment-failure-title);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.4;
-}
-
-.markdown-preview .site-attachment-failure__detail,
-.rendered-table-expand-scroll .site-attachment-failure__detail {
-  display: block;
-  margin-top: 5px;
-  color: var(--attachment-failure-detail);
-  font-size: 12px;
-  line-height: 1.5;
 }
 
 .markdown-preview .site-attachment-failure--video,
@@ -3141,8 +3011,8 @@ body.is-resizing-rendered-table-column * {
     aspect-ratio: 16 / 9 !important;
   }
 
-  .markdown-preview .site-attachment-failure__content,
-  .rendered-table-expand-scroll .site-attachment-failure__content {
+  .markdown-preview .site-attachment-failure .site-attachment-failure__content,
+  .rendered-table-expand-scroll .site-attachment-failure .site-attachment-failure__content {
     max-width: 94%;
     padding: 16px;
   }
