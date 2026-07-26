@@ -9,26 +9,26 @@ const [editor, renderer] = await Promise.all([
   readFile(rendererPath, 'utf8'),
 ])
 
-// 编辑器侧：放大表格中的附件标记必须允许列宽缩小并对超长标记做省略截断。
+// 编辑器侧：放大表格的附件标记必须内联在原文位置，标签长度受限（超长文件名中间省略、保留后缀），且允许列宽收缩而不撑宽列。
 assert.match(
   editor,
-  /\.editor-table-expand-scroll \.editor-attachment-link \{[\s\S]*?display: inline-block !important;[\s\S]*?overflow: hidden !important;[\s\S]*?text-overflow: ellipsis !important;[\s\S]*?white-space: nowrap !important;[\s\S]*?\}/,
-  '放大表格滚动容器内的附件链接必须用高优先级规则强制截断，覆盖 vditor-container 的 inline 覆盖'
+  /\.editor-table-expand-cell-editor \.editor-table-attachment-marker \{[\s\S]*?display: inline;[\s\S]*?max-width: 100%;[\s\S]*?white-space: normal;[\s\S]*?overflow-wrap: anywhere;[\s\S]*?\}/,
+  '放大表格的附件标记必须内联渲染并允许换行，才能与普通编辑器内的单元格呈现一致'
 )
 assert.doesNotMatch(
   editor,
-  /\.editor-table-expand-attachment-tag \{[\s\S]*?overflow: visible;[\s\S]*?\}/,
-  '附件标记不得再使用 overflow: visible 溢出撑宽单元格'
+  /\.editor-table-expand-scroll \.editor-attachment-link \{/,
+  '放大表格不得再用 nowrap + 省略号的整块附件链接规则覆盖内联标记'
 )
 assert.match(
   editor,
   /\.editor-table-expand-cell \{[\s\S]*?min-width: 0;[\s\S]*?\}/,
-  '放大表格单元格必须允许收缩，附件标记才能真正被列宽截断'
+  '放大表格单元格必须允许收缩，附件标记才能真正随列宽换行'
 )
 assert.match(
   editor,
-  /\.editor-table-expand-attachments \{[\s\S]*?min-width: 0;[\s\S]*?\}/,
-  '附件容器必须允许收缩，避免其撑住列宽'
+  /\.editor-table-expand-cell-editor \{[\s\S]*?min-width: 0;[\s\S]*?\}/,
+  '内联单元格编辑器必须允许收缩，避免其撑住列宽'
 )
 
 // 渲染器侧：发布后的放大表格预览，含附件占位块的列必须像文字一样获得自然宽度下限，避免卡片被压扁。

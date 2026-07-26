@@ -320,8 +320,8 @@ assert(
 )
 
 const tableMarkerCss = vditorEditor.match(/\.vditor-container \.editor-table-attachment-marker \{[\s\S]*?\n\}/)?.[0] || ''
-const expandedAttachmentListCss = vditorEditor.match(/\.editor-table-expand-attachments \{[\s\S]*?\n\}/)?.[0] || ''
-const expandedAttachmentTagCss = vditorEditor.match(/^\.editor-table-expand-attachment-tag \{[\s\S]*?\n\}/m)?.[0] || ''
+const expandedCellEditorCss = vditorEditor.match(/^\.editor-table-expand-cell-editor \{[\s\S]*?\n\}/m)?.[0] || ''
+const expandedMarkerCss = vditorEditor.match(/^\.editor-table-expand-cell-editor \.editor-table-attachment-marker \{[\s\S]*?\n\}/m)?.[0] || ''
 
 assert(
   tableMarkerCss.includes('display: inline;') &&
@@ -338,15 +338,19 @@ assert(
 )
 
 assert(
-  expandedAttachmentListCss.includes('display: block;') &&
-    expandedAttachmentTagCss.includes('display: inline;') &&
-    expandedAttachmentTagCss.includes('border: 0;') &&
-    expandedAttachmentTagCss.includes('background: transparent;') &&
-    expandedAttachmentTagCss.includes('text-decoration: underline;') &&
-    expandedAttachmentTagCss.includes('white-space: nowrap;') &&
-    !expandedAttachmentTagCss.includes('inline-flex') &&
-    !expandedAttachmentTagCss.includes('rgba(249, 115, 22'),
-  'expanded-table attachment tags must match normal editor attachment link styling instead of orange pills'
+  expandedMarkerCss.includes('display: inline;') &&
+    expandedMarkerCss.includes('border: 0;') &&
+    expandedMarkerCss.includes('background: transparent;') &&
+    expandedMarkerCss.includes('text-decoration: underline;') &&
+    expandedMarkerCss.includes('vertical-align: baseline;') &&
+    expandedMarkerCss.includes('white-space: normal;') &&
+    expandedMarkerCss.includes('overflow-wrap: anywhere;') &&
+    !expandedMarkerCss.includes('inline-flex') &&
+    !expandedMarkerCss.includes('white-space: nowrap;') &&
+    !expandedMarkerCss.includes('rgba(249, 115, 22') &&
+    !vditorEditor.includes('.editor-table-expand-attachments') &&
+    !vditorEditor.includes('editor-table-expand-attachment-tag'),
+  'expanded-table attachment markers must stay inline in source order like the normal editor, never a separate stacked list'
 )
 
 assert(
@@ -837,19 +841,25 @@ assert(
     vditorEditor.includes('attachmentInfoToMarkdownSource') &&
     vditorEditor.includes('RAW_ATTACHMENT_ANCHOR_RE') &&
     vditorEditor.includes('stripAttachmentMarkersFromEditorText') &&
-    vditorEditor.includes('mergeExpandedCellEditorText') &&
+    !vditorEditor.includes('mergeExpandedCellEditorText') &&
     vditorEditor.includes('editorTextLineToHtmlTableCellSource') &&
     vditorEditor.includes('const expandedTableDirty = ref(false);') &&
     vditorEditor.includes('const row = expandedTableRows.value[rowIndex]') &&
     vditorEditor.includes('expandedTableDirty.value = true') &&
-    !/const updateExpandedTableCellText[\s\S]*?syncExpandedTableToEditor\(\)[\s\S]*?const expandedTableCellAttachments/.test(vditorEditor) &&
+    !vditorEditor.includes('const expandedTableCellAttachments') &&
     !/const insertExpandedTableCellLineBreak[\s\S]*?syncExpandedTableToEditor\(\)[\s\S]*?const isMarkdownTableDivider/.test(vditorEditor) &&
     vditorEditor.includes('if (expandedTableDirty.value && !syncExpandedTableToEditor())') &&
     vditorEditor.includes('editableRowsFromRenderedTable') &&
     vditorEditor.includes('htmlTableCellToEditorText(cell as HTMLTableCellElement)') &&
     vditorEditor.includes('const rows = block ? mergeRenderedTableEdgeBreaks(editableRowsFromTableBlock(block), renderedRows) : renderedRows') &&
     vditorEditor.includes('targetCell.innerHTML = editorTextToHtmlTableCellSource(text)') &&
-    vditorEditor.includes(':value="expandedTableCellEditorText(rowIndex, cellIndex)"') &&
+    vditorEditor.includes('class="editor-table-expand-cell-editor"') &&
+    vditorEditor.includes(':ref="(el) => registerExpandedTableCellEditor(el, rowIndex, cellIndex)"') &&
+    vditorEditor.includes("editor.innerHTML = expandedTableCellEditorHtml(rowIndex, cellIndex)") &&
+    vditorEditor.includes("const html = editorTextToDomTableCellHtml(value)") &&
+    vditorEditor.includes("row[cellIndex] = editorTableContentTextFromElement(editor)") &&
+    !vditorEditor.includes('expandedTableCellEditorText') &&
+    !vditorEditor.includes('<textarea') &&
     vditorEditor.includes('@input="updateExpandedTableCellText(rowIndex, cellIndex, $event)"') &&
     !vditorEditor.includes('v-model="expandedTableRows[rowIndex][cellIndex]"') &&
     vditorEditor.includes('getTabTableBlocks') &&
@@ -878,11 +888,11 @@ assert(
     vditorEditor.includes('restoreEditorTableScroll(table)') &&
     vditorEditor.includes('@keydown.enter.exact="insertExpandedTableCellLineBreak(rowIndex, cellIndex, $event)"') &&
     vditorEditor.includes(':is="\'td\'"') &&
-    vditorEditor.includes('editor-table-expand-attachment-tag editor-attachment-link') &&
+    vditorEditor.includes('activateExpandedTableCellMarker(marker)') &&
     vditorEditor.includes('role="button"') &&
     vditorEditor.includes('tabindex="0"') &&
-    vditorEditor.includes('@keydown.enter.prevent.stop="previewExpandedTableAttachment(attachment, $event)"') &&
-    vditorEditor.includes('@keydown.space.prevent.stop="previewExpandedTableAttachment(attachment, $event)"') &&
+    vditorEditor.includes('@click="onExpandedTableCellMarkerClick"') &&
+    vditorEditor.includes('@keydown.space="onExpandedTableCellMarkerKeyActivate"') &&
     vditorEditor.includes('showAttachmentGallery(expandedTableAttachmentsByType(attachment.type), attachment, target)') &&
     !vditorEditor.includes('editor-table-expand-attachment-btn') &&
     vditorEditor.includes('if (event.isComposing) return') &&
@@ -1041,7 +1051,7 @@ assert(
     !vditorEditor.includes("editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '\\n' }))") &&
     vditorEditor.includes('const hasEditorSoftBreakDom = () =>') &&
     vditorEditor.includes('const needsDomFallback = getEditorTables().length || hasEditorSoftBreakDom() || hasEditorPlainBlockDom()') &&
-    /const insertEditorSoftLineBreak[\s\S]*?isPlainBlankLineBlock\(block\)[\s\S]*?insertPreservedBlankLineAfter\(block!\)[\s\S]*?emitEditorSoftBreakInput\(event\)/.test(vditorEditor) &&
+    /const insertEditorSoftLineBreak[\s\S]*?isPlainBlankLineBlock\(block\)[\s\S]*?setPlainEmptyLineBlock\(block!\)[\s\S]*?createPlainEditableBlock\(block!\)[\s\S]*?emitEditorSoftBreakInput\(event\)/.test(vditorEditor) &&
     vditorEditor.includes('range.selectNodeContents(cell)') &&
     vditorEditor.includes("const lineBreak = document.createElement('br')") &&
     vditorEditor.includes('const caretNode = createEditorTableCaretAnchorNode()') &&
@@ -1085,7 +1095,7 @@ assert(
     vditorEditor.includes('EXPANDED_TABLE_MIN_COLUMN_WIDTH = 48') &&
     vditorEditor.includes('EXPANDED_TABLE_MIN_ROW_HEIGHT = 38') &&
     vditorEditor.includes('expandedTableAutoRowHeights') &&
-    vditorEditor.includes('measureExpandedTableTextareaContentHeight') &&
+    vditorEditor.includes('measureExpandedTableCellContentHeight') &&
     vditorEditor.includes('measureExpandedTableAutoRowHeights') &&
     vditorEditor.includes('probe.scrollHeight') &&
     vditorEditor.includes('expandedTableManualRowHeights') &&
@@ -1100,10 +1110,10 @@ assert(
     !vditorEditor.includes('resize: vertical;') &&
     vditorEditor.includes('updateExpandedTableAvailableWidth()') &&
     vditorEditor.includes('.editor-table-expand-table th,\n.editor-table-expand-table td {\n  box-sizing: border-box;') &&
-    vditorEditor.includes('.editor-table-expand-table textarea {\n  box-sizing: border-box;') &&
+    vditorEditor.includes('.editor-table-expand-cell-editor {\n  box-sizing: border-box;') &&
     !vditorEditor.includes('max-width: 180px;') &&
     vditorEditor.includes('min-width: 48px;') &&
-    vditorEditor.includes('min-width: 44px;') &&
+    expandedCellEditorCss.includes('min-width: 0;') &&
     !vditorEditor.includes('.vditor-container .vditor-reset table.editor-deletable-table tr {\n  display: table;') &&
     !vditorEditor.includes('.vditor-container .vditor-reset table.editor-deletable-table > thead,') &&
     vditorEditor.includes('scrollbar-color: rgba(100, 116, 139, 0.62) rgba(148, 163, 184, 0.18);') &&

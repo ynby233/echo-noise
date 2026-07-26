@@ -50,6 +50,7 @@
     "test:expanded-table-resize": "node scripts/expanded-table-resize.test.mjs",
     "test:table-resize-session": "node scripts/table-resize-session.test.mjs",
     "test:table-attachment-column-width": "node scripts/table-attachment-column-width.test.mjs",
+    "test:expanded-table-attachment-inline-order": "node scripts/expanded-table-attachment-inline-order.test.mjs",
     "postinstall": "nuxt prepare"
   },
   "dependencies": {

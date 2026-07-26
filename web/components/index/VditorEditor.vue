@@ -119,44 +119,34 @@
             <tbody>
               <tr
                 v-for="(row, rowIndex) in expandedTableRows"
-                :key="`expanded-row-${rowIndex}`"
+                :key="`expanded-row-${expandedTableCellEditorRenderKey}-${rowIndex}`"
                 :style="{ height: `${expandedTableRowHeight(rowIndex)}px` }"
               >
                 <component
                   :is="'td'"
                   v-for="(_cell, cellIndex) in row"
-                  :key="`expanded-cell-${rowIndex}-${cellIndex}`"
+                  :key="`expanded-cell-${expandedTableCellEditorRenderKey}-${rowIndex}-${cellIndex}`"
                   :style="{ width: `${expandedTableColumnWidths[cellIndex] || EXPANDED_TABLE_MIN_COLUMN_WIDTH}px`, height: `${expandedTableRowHeight(rowIndex)}px` }"
                 >
                   <div class="editor-table-expand-cell" :style="{ height: `${expandedTableRowHeight(rowIndex)}px` }">
-                    <textarea
-                      :value="expandedTableCellEditorText(rowIndex, cellIndex)"
-                      :readonly="!expandedTableEditable"
-                      rows="1"
+                    <div
+                      :ref="(el) => registerExpandedTableCellEditor(el, rowIndex, cellIndex)"
+                      class="editor-table-expand-cell-editor"
+                      :contenteditable="expandedTableEditable ? 'true' : 'false'"
+                      role="textbox"
+                      aria-multiline="true"
+                      spellcheck="false"
+                      :data-expanded-row="rowIndex"
+                      :data-expanded-cell="cellIndex"
                       @input="updateExpandedTableCellText(rowIndex, cellIndex, $event)"
                       @keydown.enter.exact="insertExpandedTableCellLineBreak(rowIndex, cellIndex, $event)"
                       @keydown.tab.prevent="focusNextExpandedTableCell(rowIndex, cellIndex, $event.shiftKey)"
+                      @keydown.delete="removeExpandedTableCellAttachmentMarker(rowIndex, cellIndex, $event)"
+                      @paste.prevent="pasteIntoExpandedTableCell(rowIndex, cellIndex, $event)"
+                      @mousedown="onExpandedTableCellMarkerPointerDown"
+                      @click="onExpandedTableCellMarkerClick"
+                      @keydown.space="onExpandedTableCellMarkerKeyActivate"
                     />
-                    <div v-if="expandedTableCellAttachments(rowIndex, cellIndex).length" class="editor-table-expand-attachments">
-                      <a
-                        v-for="attachment in expandedTableCellAttachments(rowIndex, cellIndex)"
-                        :key="`${rowIndex}-${cellIndex}-${attachment.type}-${attachment.url}`"
-                        :href="attachment.url"
-                        class="editor-table-expand-attachment-tag editor-attachment-link"
-                        role="button"
-                        tabindex="0"
-                        draggable="false"
-                        :data-attachment-kind="attachment.type"
-                        :data-attachment-url="attachment.url"
-                        :aria-label="`预览${attachment.title}`"
-                        @pointerdown.stop
-                        @click.prevent.stop="previewExpandedTableAttachment(attachment, $event)"
-                        @keydown.enter.prevent.stop="previewExpandedTableAttachment(attachment, $event)"
-                        @keydown.space.prevent.stop="previewExpandedTableAttachment(attachment, $event)"
-                      >
-                        {{ attachment.title }}
-                      </a>
-                    </div>
                   </div>
                   <span
                     :class="['editor-table-expand-row-resize-handle', {
@@ -340,6 +330,7 @@ const expandedTableAvailableWidth = ref(0);
 const expandedTableAutoRowHeights = ref<number[]>([]);
 const expandedTableManualRowHeights = ref<number[]>([]);
 const expandedTableManualColumnWidths = ref<number[]>([]);
+const expandedTableCellEditorRenderKey = ref(0);
 const TABLE_SIZE_LIMIT = 10
 const tableRows = ref(3);
 const tableCols = ref(3);
@@ -364,7 +355,7 @@ const EXPANDED_TABLE_MIN_ROW_HEIGHT = 38
 const EXPANDED_TABLE_CELL_HORIZONTAL_PADDING = 18
 const EXPANDED_TABLE_SCROLL_OVERFLOW_TOLERANCE = 2
 const estimateTableLineWidth = (line: string) => {
-  const text = stripAttachmentMarkersFromEditorText(String(line || '').replace(/\r\n?/g, '\n')) || ' '
+  const text = attachmentMarkersToDisplayTitleText(String(line || '').replace(/\r\n?/g, '\n')) || ' '
   return Array.from(text).reduce((width, char) => {
     if (/\s/.test(char)) return width + 4
     if (/[^\x00-\xff]/.test(char)) return width + 14
@@ -689,6 +680,41 @@ const attachmentInfoFromIrLabel = (label: HTMLElement | null) => {
 
 const attachmentInfoToMarkdownSource = (info: EditorAttachmentInfo) => `[${info.title}](${info.url})`
 
+const ATTACHMENT_MARKER_MAX_NAME_LENGTH = 24
+const ATTACHMENT_MARKER_ELLIPSIS = '…'
+
+const truncateAttachmentDisplayName = (name: string) => {
+  const value = String(name || '')
+  const chars = Array.from(value)
+  if (chars.length <= ATTACHMENT_MARKER_MAX_NAME_LENGTH) return value
+  const dotIndex = value.lastIndexOf('.')
+  const rawExtension = dotIndex > 0 ? value.slice(dotIndex) : ''
+  const extension = Array.from(rawExtension).length <= 12 ? rawExtension : ''
+  const headLength = Math.max(1, ATTACHMENT_MARKER_MAX_NAME_LENGTH - Array.from(extension).length - 1)
+  return chars.slice(0, headLength).join('') + ATTACHMENT_MARKER_ELLIPSIS + extension
+}
+
+const attachmentMarkerKindLabel = (info: EditorAttachmentInfo) => (
+  info.title.endsWith(info.name) ? info.title.slice(0, info.title.length - info.name.length) : ''
+)
+
+const attachmentMarkerDisplayTitle = (info: EditorAttachmentInfo) => {
+  const displayName = truncateAttachmentDisplayName(info.name)
+  if (displayName === info.name) return info.title
+  const prefix = attachmentMarkerKindLabel(info)
+  return prefix ? `${prefix}${displayName}` : displayName
+}
+
+const attachmentMarkersToDisplayTitleText = (value: string) => {
+  ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+  const replaced = String(value || '').replace(ATTACHMENT_MARKER_GLOBAL_RE, (match, kindLabel, name, url) => {
+    const info = normalizeAttachmentInfo(kindLabel, name, url)
+    return info ? attachmentMarkerDisplayTitle(info) : match
+  })
+  ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+  return replaced
+}
+
 const createEditorTableAttachmentMarkerElement = (info: EditorAttachmentInfo) => {
   const marker = document.createElement('span')
   marker.className = 'editor-table-attachment-marker editor-attachment-link'
@@ -699,7 +725,8 @@ const createEditorTableAttachmentMarkerElement = (info: EditorAttachmentInfo) =>
   marker.setAttribute('data-attachment-kind', info.type)
   marker.setAttribute('data-attachment-url', info.url)
   marker.setAttribute('data-attachment-source', attachmentInfoToMarkdownSource(info))
-  marker.textContent = info.title
+  marker.title = info.title
+  marker.textContent = attachmentMarkerDisplayTitle(info)
   return marker
 }
 
@@ -742,13 +769,6 @@ const stripAttachmentMarkersFromEditorText = (value: string) => {
     })
     .filter((line): line is string => line !== null)
     .join('\n')
-}
-
-const mergeExpandedCellEditorText = (currentValue: string, editorText: string) => {
-  const attachments = parseAttachmentMarkersFromText(currentValue).map(attachmentInfoToMarkdownSource)
-  const text = String(editorText || '').replace(/\r\n?/g, '\n')
-  if (!attachments.length) return text
-  return text ? [text, ...attachments].join('\n') : attachments.join('\n')
 }
 
 const materializeEditorPreservedBlankLineBlocks = (root: HTMLElement) => {
@@ -2450,9 +2470,10 @@ const editorAttachmentInfoToTableMarkerHtml = (info: EditorAttachmentInfo) => {
   const safeType = escapeHtmlAttribute(info.type)
   const safeUrl = escapeHtmlAttribute(info.url)
   const safeSource = escapeHtmlAttribute(attachmentInfoToMarkdownSource(info))
-  const safeTitle = escapeTableCellHtml(info.title)
+  const safeTitle = escapeTableCellHtml(attachmentMarkerDisplayTitle(info))
+  const safeFullTitle = escapeHtmlAttribute(info.title)
   const safeAria = escapeHtmlAttribute(`预览${info.title}`)
-  return `<span class="editor-table-attachment-marker editor-attachment-link" contenteditable="false" role="button" tabindex="0" aria-label="${safeAria}" data-attachment-kind="${safeType}" data-attachment-url="${safeUrl}" data-attachment-source="${safeSource}">${safeTitle}</span>`
+  return `<span class="editor-table-attachment-marker editor-attachment-link" contenteditable="false" role="button" tabindex="0" aria-label="${safeAria}" title="${safeFullTitle}" data-attachment-kind="${safeType}" data-attachment-url="${safeUrl}" data-attachment-source="${safeSource}">${safeTitle}</span>`
 }
 
 const editorTextLineToAttachmentAwareTableCellHtml = (value: string, options: { trim?: boolean } = {}) => {
@@ -2589,7 +2610,50 @@ const parseAttachmentMarkersFromText = (text: string) => {
   return items
 }
 
-const expandedTableCellEditorText = (rowIndex: number, cellIndex: number) => stripAttachmentMarkersFromEditorText(expandedTableRows.value[rowIndex]?.[cellIndex] || '')
+const expandedTableCellEditorHtml = (rowIndex: number, cellIndex: number) => {
+  const value = expandedTableRows.value[rowIndex]?.[cellIndex] || ''
+  if (!value) return ''
+  const html = editorTextToDomTableCellHtml(value)
+  return html === '&nbsp;' ? '' : html
+}
+
+const expandedTableCellEditorElements = () => (typeof document === 'undefined'
+  ? []
+  : Array.from(document.querySelectorAll<HTMLElement>('.editor-table-expand-dialog .editor-table-expand-cell-editor')))
+
+const renderExpandedTableCellEditor = (editor: HTMLElement, rowIndex: number, cellIndex: number) => {
+  editor.innerHTML = expandedTableCellEditorHtml(rowIndex, cellIndex)
+  editor.dataset.expandedRendered = '1'
+}
+
+const registerExpandedTableCellEditor = (el: unknown, rowIndex: number, cellIndex: number) => {
+  if (!(el instanceof HTMLElement)) return
+  if (el.dataset.expandedRendered === '1') return
+  renderExpandedTableCellEditor(el, rowIndex, cellIndex)
+}
+
+const refreshExpandedTableCellEditors = () => {
+  expandedTableCellEditorElements().forEach((editor) => {
+    const rowIndex = Number(editor.dataset.expandedRow)
+    const cellIndex = Number(editor.dataset.expandedCell)
+    if (!Number.isFinite(rowIndex) || !Number.isFinite(cellIndex)) return
+    if (editor === document.activeElement) return
+    renderExpandedTableCellEditor(editor, rowIndex, cellIndex)
+  })
+}
+
+const expandedTableCellEditorFromEvent = (event: Event) => {
+  const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
+  return target?.classList.contains('editor-table-expand-cell-editor') ? target : null
+}
+
+const commitExpandedTableCellEditor = (editor: HTMLElement, rowIndex: number, cellIndex: number) => {
+  const row = expandedTableRows.value[rowIndex]
+  if (!row) return
+  row[cellIndex] = editorTableContentTextFromElement(editor)
+  expandedTableDirty.value = true
+  nextTick(() => scheduleMeasureExpandedTableAutoRowHeights())
+}
 const expandedTableBaseColumnWidths = computed(() => calculateAdaptiveTableColumnWidths(expandedTableRows.value, expandedTableAvailableWidth.value))
 const expandedTableColumnWidths = computed(() => expandedTableBaseColumnWidths.value.map((width, index) => {
   const manualWidth = expandedTableManualColumnWidths.value[index]
@@ -2607,13 +2671,13 @@ const expandedTableRowHeights = computed(() => expandedTableRows.value.map((_, i
 }))
 const expandedTableRowHeight = (rowIndex: number) => expandedTableRowHeights.value[rowIndex] || EXPANDED_TABLE_MIN_ROW_HEIGHT
 
-const measureExpandedTableTextareaContentHeight = (textarea: HTMLTextAreaElement) => {
+const measureExpandedTableCellContentHeight = (editor: HTMLElement) => {
   if (typeof document === 'undefined') return EXPANDED_TABLE_MIN_ROW_HEIGHT
-  const rect = textarea.getBoundingClientRect()
-  const styles = window.getComputedStyle(textarea)
-  const probe = document.createElement('textarea')
-  probe.value = textarea.value
-  probe.rows = 1
+  const rect = editor.getBoundingClientRect()
+  const styles = window.getComputedStyle(editor)
+  const probe = document.createElement('div')
+  probe.className = 'editor-table-expand-cell-editor'
+  probe.innerHTML = editor.innerHTML
   probe.setAttribute('aria-hidden', 'true')
   probe.style.position = 'fixed'
   probe.style.left = '-10000px'
@@ -2632,11 +2696,11 @@ const measureExpandedTableTextareaContentHeight = (textarea: HTMLTextAreaElement
   probe.style.overflowWrap = styles.overflowWrap
   probe.style.wordBreak = styles.wordBreak
   probe.style.visibility = 'hidden'
-  probe.style.overflow = 'hidden'
-  probe.style.resize = 'none'
+  probe.style.overflow = 'visible'
   probe.style.pointerEvents = 'none'
+  probe.setAttribute('contenteditable', 'false')
   document.body.appendChild(probe)
-  const height = Math.ceil(probe.scrollHeight)
+  const height = Math.ceil(Math.max(probe.scrollHeight, probe.getBoundingClientRect().height))
   probe.remove()
   return Math.max(EXPANDED_TABLE_MIN_ROW_HEIGHT, height)
 }
@@ -2647,11 +2711,9 @@ const measureExpandedTableAutoRowHeights = () => {
   const heights = rows.map((row) => {
     const cells = Array.from(row.cells)
     const maxCellHeight = cells.reduce((max, cell) => {
-      const textarea = cell.querySelector<HTMLTextAreaElement>('textarea')
-      const attachments = cell.querySelector<HTMLElement>('.editor-table-expand-attachments')
-      const textareaHeight = textarea ? measureExpandedTableTextareaContentHeight(textarea) : EXPANDED_TABLE_MIN_ROW_HEIGHT
-      const attachmentHeight = attachments ? Math.ceil(attachments.offsetHeight) : 0
-      return Math.max(max, textareaHeight + attachmentHeight)
+      const editor = cell.querySelector<HTMLElement>('.editor-table-expand-cell-editor')
+      const editorHeight = editor ? measureExpandedTableCellContentHeight(editor) : EXPANDED_TABLE_MIN_ROW_HEIGHT
+      return Math.max(max, editorHeight)
     }, EXPANDED_TABLE_MIN_ROW_HEIGHT)
     return Math.max(EXPANDED_TABLE_MIN_ROW_HEIGHT, maxCellHeight)
   })
@@ -2679,16 +2741,10 @@ const updateExpandedTableAvailableWidth = () => {
 
 const updateExpandedTableCellText = (rowIndex: number, cellIndex: number, event: Event) => {
   if (!expandedTableEditable.value) return
-  const textarea = event.target instanceof HTMLTextAreaElement ? event.target : null
-  if (!textarea) return
-  const row = expandedTableRows.value[rowIndex]
-  if (!row) return
-  row[cellIndex] = mergeExpandedCellEditorText(row[cellIndex] || '', textarea.value)
-  expandedTableDirty.value = true
-  nextTick(() => scheduleMeasureExpandedTableAutoRowHeights())
+  const editor = expandedTableCellEditorFromEvent(event)
+  if (!editor) return
+  commitExpandedTableCellEditor(editor, rowIndex, cellIndex)
 }
-
-const expandedTableCellAttachments = (rowIndex: number, cellIndex: number) => parseAttachmentMarkersFromText(expandedTableRows.value[rowIndex]?.[cellIndex] || '')
 
 const expandedTableAttachmentsByType = (type: EditorAttachmentInfo['type']) => {
   const seen = new Set<string>()
@@ -2711,8 +2767,7 @@ const removeExpandedTableAudioPreview = () => {
   closeAttachmentAudioPopover()
 }
 
-const previewExpandedTableAttachment = (attachment: EditorAttachmentInfo, event: MouseEvent | KeyboardEvent) => {
-  const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
+const previewExpandedTableAttachment = (attachment: EditorAttachmentInfo, target: HTMLElement | null) => {
   if (attachment.type === 'audio') {
     if (!target) return
     toggleAttachmentAudioPopover(target, { src: attachment.url, name: attachment.name })
@@ -2725,29 +2780,149 @@ const previewExpandedTableAttachment = (attachment: EditorAttachmentInfo, event:
   showAttachmentGallery(expandedTableAttachmentsByType(attachment.type), attachment, target)
 }
 
-const insertTextIntoTextarea = (textarea: HTMLTextAreaElement, value: string) => {
-  const start = textarea.selectionStart ?? textarea.value.length
-  const end = textarea.selectionEnd ?? start
-  const nextValue = `${textarea.value.slice(0, start)}${value}${textarea.value.slice(end)}`
-  textarea.value = nextValue
-  const nextPos = start + value.length
-  textarea.selectionStart = nextPos
-  textarea.selectionEnd = nextPos
-  textarea.dispatchEvent(new Event('input', { bubbles: true }))
+const placeCaretAtExpandedTableCellOffset = (editor: HTMLElement, requestedOffset: number) => {
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  if (!selection) return false
+  const sourceLength = editorTableContentTextFromElement(editor).length
+  let remaining = Math.max(0, Math.min(sourceLength, requestedOffset))
+  const units = collectEditorTableSourceUnits(editor)
+  const range = document.createRange()
+  let placed = false
+  for (const unit of units) {
+    if (remaining === 0) {
+      range.setStartBefore(unit.node)
+      placed = true
+      break
+    }
+    if (remaining < unit.length) {
+      if (unit.node instanceof Text && !unit.atomic) {
+        range.setStart(unit.node, rawTextOffsetForEditorSourceOffset(unit.node, remaining))
+      } else if (remaining < unit.length / 2) {
+        range.setStartBefore(unit.node)
+      } else {
+        range.setStartAfter(unit.node)
+      }
+      placed = true
+      break
+    }
+    remaining -= unit.length
+    if (remaining === 0) {
+      range.setStartAfter(unit.node)
+      placed = true
+      break
+    }
+  }
+  if (!placed) {
+    range.selectNodeContents(editor)
+    range.collapse(false)
+  } else {
+    range.collapse(true)
+  }
+  editor.focus({ preventScroll: true })
+  selection.removeAllRanges()
+  selection.addRange(range)
+  return true
 }
 
 const insertExpandedTableCellLineBreak = (rowIndex: number, cellIndex: number, event: KeyboardEvent) => {
   if (event.isComposing) return
-  const textarea = event.target instanceof HTMLTextAreaElement ? event.target : null
-  if (!textarea || !expandedTableEditable.value) return
+  const editor = expandedTableCellEditorFromEvent(event)
+  if (!editor) return
+  const focusedMarker = event.target instanceof Element ? event.target.closest<HTMLElement>('.editor-table-attachment-marker') : null
+  if (focusedMarker && editor.contains(focusedMarker)) {
+    event.preventDefault()
+    event.stopPropagation()
+    activateExpandedTableCellMarker(focusedMarker)
+    return
+  }
+  if (!expandedTableEditable.value) return
   event.preventDefault()
   event.stopPropagation()
-  insertTextIntoTextarea(textarea, '\n')
-  const row = expandedTableRows.value[rowIndex]
-  if (!row) return
-  row[cellIndex] = mergeExpandedCellEditorText(row[cellIndex] || '', textarea.value)
-  expandedTableDirty.value = true
-  nextTick(() => scheduleMeasureExpandedTableAutoRowHeights())
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  const range = selection?.rangeCount ? selection.getRangeAt(0) : null
+  if (!selection || !range || !editor.contains(range.startContainer)) return
+  range.deleteContents()
+  const br = document.createElement('br')
+  const caret = document.createTextNode(TABLE_CELL_CARET_ANCHOR)
+  range.insertNode(br)
+  br.after(caret)
+  range.setStart(caret, caret.data.length)
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  commitExpandedTableCellEditor(editor, rowIndex, cellIndex)
+}
+
+const removeExpandedTableCellAttachmentMarker = (rowIndex: number, cellIndex: number, event: KeyboardEvent) => {
+  if (!expandedTableEditable.value) return
+  const editor = expandedTableCellEditorFromEvent(event)
+  const marker = event.target instanceof Element ? event.target.closest<HTMLElement>('.editor-table-attachment-marker') : null
+  if (!editor || !marker || !editor.contains(marker)) return
+  const prefix = document.createRange()
+  prefix.selectNodeContents(editor)
+  prefix.setEndBefore(marker)
+  const holder = document.createElement('div')
+  holder.appendChild(prefix.cloneContents())
+  const offset = editorTableContentTextFromElement(holder).length
+  event.preventDefault()
+  event.stopPropagation()
+  marker.remove()
+  commitExpandedTableCellEditor(editor, rowIndex, cellIndex)
+  placeCaretAtExpandedTableCellOffset(editor, offset)
+}
+
+const pasteIntoExpandedTableCell = (rowIndex: number, cellIndex: number, event: ClipboardEvent) => {
+  if (!expandedTableEditable.value) return
+  const editor = expandedTableCellEditorFromEvent(event)
+  if (!editor) return
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  const range = selection?.rangeCount ? selection.getRangeAt(0) : null
+  if (!selection || !range || !editor.contains(range.startContainer)) return
+  const text = (event.clipboardData?.getData('text/plain') || '').replace(/\r\n?/g, '\n')
+  range.deleteContents()
+  const fragment = document.createDocumentFragment()
+  text.split('\n').forEach((line, index) => {
+    if (index > 0) fragment.appendChild(document.createElement('br'))
+    if (line) fragment.appendChild(document.createTextNode(line))
+  })
+  const caret = document.createTextNode(TABLE_CELL_CARET_ANCHOR)
+  fragment.appendChild(caret)
+  range.insertNode(fragment)
+  range.setStart(caret, caret.data.length)
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  commitExpandedTableCellEditor(editor, rowIndex, cellIndex)
+}
+
+const activateExpandedTableCellMarker = (marker: HTMLElement) => {
+  const info = attachmentInfoFromTableMarker(marker)
+  if (!info) return false
+  previewExpandedTableAttachment(info, marker)
+  return true
+}
+
+const onExpandedTableCellMarkerPointerDown = (event: MouseEvent) => {
+  const marker = event.target instanceof Element ? event.target.closest<HTMLElement>('.editor-table-attachment-marker') : null
+  if (!marker) return
+  event.preventDefault()
+  event.stopPropagation()
+}
+
+const onExpandedTableCellMarkerClick = (event: MouseEvent) => {
+  const marker = event.target instanceof Element ? event.target.closest<HTMLElement>('.editor-table-attachment-marker') : null
+  if (!marker) return
+  event.preventDefault()
+  event.stopPropagation()
+  activateExpandedTableCellMarker(marker)
+}
+
+const onExpandedTableCellMarkerKeyActivate = (event: KeyboardEvent) => {
+  const marker = event.target instanceof Element ? event.target.closest<HTMLElement>('.editor-table-attachment-marker') : null
+  if (!marker) return
+  event.preventDefault()
+  event.stopPropagation()
+  activateExpandedTableCellMarker(marker)
 }
 
 const isMarkdownTableDivider = (line: string) => {
@@ -4814,14 +4989,16 @@ const syncExpandedTableToEditor = () => {
 }
 
 const focusNextExpandedTableCell = (rowIndex: number, cellIndex: number, reverse = false) => {
-  const cells = Array.from(document.querySelectorAll<HTMLTextAreaElement>('.editor-table-expand-dialog textarea'))
+  const cells = expandedTableCellEditorElements()
+  if (!cells.length) return
   const currentIndex = cells.findIndex((cell) => cell === document.activeElement)
   const fallback = expandedTableRows.value.slice(0, rowIndex).reduce((sum, row) => sum + row.length, 0) + cellIndex
   const baseIndex = currentIndex >= 0 ? currentIndex : fallback
   const nextIndex = reverse ? baseIndex - 1 : baseIndex + 1
   const target = cells[((nextIndex % cells.length) + cells.length) % cells.length]
-  target?.focus()
-  target?.select()
+  if (!target) return
+  target.focus({ preventScroll: true })
+  placeCaretAtExpandedTableCellOffset(target, editorTableContentTextFromElement(target).length)
 }
 
 const stopExpandedTableResize = () => {
@@ -4974,13 +5151,15 @@ const openHoveredTableExpand = () => {
   expandedEditorTableBlock = block || null
   expandedEditorTableElement = table
   tableExpandClosing.value = false
+  expandedTableCellEditorRenderKey.value += 1
   showTableExpandDialog.value = true
   hideTableDeleteButton()
   nextTick(() => {
+    refreshExpandedTableCellEditors()
     updateExpandedTableAvailableWidth()
     scheduleMeasureExpandedTableAutoRowHeights()
     scheduleExpandedTableScrollOverflowState()
-    document.querySelector<HTMLTextAreaElement>('.editor-table-expand-dialog textarea')?.focus()
+    expandedTableCellEditorElements()[0]?.focus({ preventScroll: true })
   })
 }
 
@@ -6683,12 +6862,12 @@ html.dark .editor-table-expand-button:focus-visible {
   font-weight: 400;
 }
 
-.editor-table-expand-table textarea {
+.editor-table-expand-cell-editor {
   box-sizing: border-box;
   display: block;
   width: 100%;
   flex: 1 1 auto;
-  min-width: 44px;
+  min-width: 0;
   min-height: 38px;
   height: 100%;
   padding: 7px 8px;
@@ -6702,6 +6881,8 @@ html.dark .editor-table-expand-button:focus-visible {
   line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: break-word;
+  word-break: break-word;
+  caret-color: auto;
 }
 
 .editor-table-expand-row-resize-handle,
@@ -6776,11 +6957,11 @@ body.is-resizing-expanded-table-column * {
   user-select: none !important;
 }
 
-.editor-table-expand-table textarea:focus {
+.editor-table-expand-cell-editor:focus {
   box-shadow: inset 0 0 0 2px rgba(249, 115, 22, 0.48);
 }
 
-.editor-table-expand-table textarea[readonly] {
+.editor-table-expand-cell-editor[contenteditable="false"] {
   cursor: default;
 }
 
@@ -6857,62 +7038,34 @@ html.dark .editor-inline-table-cell-atomic-editor .editor-table-attachment-marke
   pointer-events: none !important;
 }
 
-.editor-table-expand-attachments {
-  display: block;
-  min-width: 0;
-  padding: 0 8px 8px;
-}
-
-.editor-table-expand-attachment-tag + .editor-table-expand-attachment-tag {
-  margin-left: 4px;
-}
-
-.editor-table-expand-attachment-tag {
-  display: inline-block;
+.editor-table-expand-cell-editor .editor-table-attachment-marker {
+  display: inline;
   max-width: 100%;
-  min-height: 0;
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: var(--ir-bracket-color, #0000ff);
-  font-size: inherit;
-  font-weight: inherit;
+  font: inherit;
   line-height: inherit;
   text-decoration: underline;
   text-underline-offset: 2px;
-  cursor: zoom-in;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  word-break: normal;
-  overflow-wrap: normal;
+  vertical-align: baseline;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  user-select: none;
+  cursor: pointer;
 }
 
-.editor-table-expand-overlay.is-dark .editor-table-expand-attachment-tag {
-  border-color: transparent;
-  background: transparent;
+.editor-table-expand-overlay.is-dark .editor-table-expand-cell-editor .editor-table-attachment-marker {
   color: var(--ir-bracket-color, #93c5fd);
 }
 
-.editor-table-expand-attachment-tag:hover,
-.editor-table-expand-attachment-tag:focus-visible {
+.editor-table-expand-cell-editor .editor-table-attachment-marker:hover,
+.editor-table-expand-cell-editor .editor-table-attachment-marker:focus-visible {
   outline: none;
-  color: var(--ir-bracket-color, #0000ff);
   text-decoration-thickness: 2px;
-}
-
-.editor-table-expand-overlay.is-dark .editor-table-expand-attachment-tag:hover,
-.editor-table-expand-overlay.is-dark .editor-table-expand-attachment-tag:focus-visible {
-  color: var(--ir-bracket-color, #93c5fd);
-}
-
-.editor-table-expand-scroll .editor-attachment-link {
-  display: inline-block !important;
-  max-width: 100% !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
 }
 
 @keyframes editorTableOverlayIn {
