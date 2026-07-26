@@ -237,6 +237,21 @@
     <UModal v-model="confirmOpen">
       <UCard :class="theme?.cardBg">
         <div class="text-sm" :class="theme?.text">确定删除该{{ deleteTypeLabel }}附件吗？此操作不可恢复。</div>
+        <div v-if="deleteReferences.length > 0" class="attachment-delete-warning mt-3" role="alert">
+          <div class="attachment-delete-warning__title">
+            <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 shrink-0" aria-hidden="true" />
+            <span>{{ deleteReferenceSummary }}</span>
+          </div>
+          <div class="attachment-delete-warning__detail">删除后这些内容里的附件会变成「已被删除」占位块，正文不会自动修改。</div>
+          <ul class="attachment-delete-warning__list">
+            <li v-for="(ref, index) in deleteReferencesPreview" :key="associationIdentity(ref, index)">
+              {{ ref.label || `笔记 #${ref.id}` }}
+            </li>
+            <li v-if="deleteReferences.length > deleteReferencesPreview.length" class="attachment-delete-warning__more">
+              还有 {{ deleteReferences.length - deleteReferencesPreview.length }} 处未列出
+            </li>
+          </ul>
+        </div>
         <div class="flex justify-end gap-2 mt-3">
           <UButton color="gray" variant="soft" @click="confirmOpen=false">取消</UButton>
           <UButton color="red" :loading="deleting" @click="doDelete">确认删除</UButton>
@@ -450,6 +465,13 @@ const openDelete = (type: AttachmentKind, item: any) => {
   confirmOpen.value = true
 }
 const deleteTypeLabel = computed(() => kindLabel(deleteType.value))
+// 引用信息由后端 belongs 下发（每条笔记/使用位置一项）。删除附件不会改写正文，
+// 所以必须先让管理员看到会有多少处内容因此出现「已被删除」占位块。
+const attachmentReferences = (item: any) => Array.isArray(item?.belongs) ? item.belongs : []
+const REFERENCE_PREVIEW_LIMIT = 5
+const deleteReferences = computed(() => attachmentReferences(deleteItem.value))
+const deleteReferencesPreview = computed(() => deleteReferences.value.slice(0, REFERENCE_PREVIEW_LIMIT))
+const deleteReferenceSummary = computed(() => `该附件正被 ${deleteReferences.value.length} 处内容引用`)
 const deleteOneAttachment = async (kind: AttachmentKind, item: any) => {
   if (item?.logical_id) {
     const url = `${baseApi}/attachments/references/${encodeURIComponent(item.logical_id)}`
@@ -484,7 +506,12 @@ const doDelete = async () => {
 const batchDelete = async () => {
   const items = selectedItems.value
   if (items.length === 0) return
-  if (typeof window !== 'undefined' && !window.confirm(`确定删除已选择的 ${items.length} 个附件吗？此操作不可恢复。`)) return
+  const referencedItems = items.filter((entry) => attachmentReferences(entry.item).length > 0)
+  const referenceTotal = referencedItems.reduce((sum, entry) => sum + attachmentReferences(entry.item).length, 0)
+  const warning = referenceTotal > 0
+    ? `\n\n其中 ${referencedItems.length} 个附件正被 ${referenceTotal} 处内容引用，删除后这些位置会变成「已被删除」占位块，正文不会自动修改。`
+    : ''
+  if (typeof window !== 'undefined' && !window.confirm(`确定删除已选择的 ${items.length} 个附件吗？此操作不可恢复。${warning}`)) return
   try {
     batchDeleting.value = true
     let failed = 0
@@ -691,6 +718,60 @@ onBeforeUnmount(() => {
 .attachment-logical-id {
   overflow-wrap: anywhere;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/*
+ * 删除确认里的引用提醒。沿用附件失败占位块的同一套暖色告警语汇（令牌化 + 亮暗双套），
+ * 因为两者说的是同一件事：这个位置的附件已经/即将不存在。
+ */
+.attachment-delete-warning {
+  --attachment-warning-bg: #fffaf7;
+  --attachment-warning-border: rgba(194, 65, 12, 0.18);
+  --attachment-warning-title: #7c2d12;
+  --attachment-warning-detail: #9a3412;
+  padding: 10px 12px;
+  border: 1px solid var(--attachment-warning-border);
+  border-radius: 10px;
+  background: var(--attachment-warning-bg);
+  box-sizing: border-box;
+}
+
+:where(html.dark, .theme-dark, .is-dark) .attachment-delete-warning {
+  --attachment-warning-bg: #241d1a;
+  --attachment-warning-border: rgba(251, 146, 60, 0.22);
+  --attachment-warning-title: #fed7aa;
+  --attachment-warning-detail: #fdba74;
+}
+
+.attachment-delete-warning__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--attachment-warning-title);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.attachment-delete-warning__detail {
+  margin-top: 4px;
+  color: var(--attachment-warning-detail);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.attachment-delete-warning__list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--attachment-warning-detail);
+  font-size: 12px;
+  line-height: 1.6;
+  list-style: disc;
+}
+
+.attachment-delete-warning__more {
+  list-style: none;
+  margin-left: -18px;
+  opacity: 0.85;
 }
 
 .attachment-selection-surface.is-selecting {

@@ -427,51 +427,6 @@
       </div>
       </ClientOnly>
     </div>
-    <div v-if="false">
-      <UCard v-if="frontendConfig.announcementEnabled && (frontendConfig.announcementText || '').trim() !== ''" class="mx-auto sm:max-w-2xl mb-3 sidebar-card">
-        <AnnouncementBar :text="frontendConfig.announcementText || '欢迎访问！'" />
-      </UCard>
-      <UCard class="mx-auto sm:max-w-2xl mb-3 sidebar-card">
-        <div>
-          <div class="text-xs opacity-70 mb-2">热门话题</div>
-          <div class="flex flex-wrap gap-2 mb-3">
-            <button v-for="t in popularTags" :key="t.name" class="px-2 py-1 rounded text-xs border opacity-80 hover:opacity-100" @click="handleTagClick(t.name)">#{{ t.name }}<span class="ml-1 opacity-60">{{ t.count }}</span></button>
-          </div>
-          <div class="text-xs opacity-70 mb-2">推荐图集</div>
-          <div class="scroll-images">
-            <div class="recommend-grid">
-              <a v-for="(img, index) in recommendedImages" :key="recommendImageKey(img, index)" :href="isRecommendImageFailed(img, index) ? undefined : imageSrc(img)" :data-fancybox="isRecommendImageFailed(img, index) ? undefined : 'recommend-gallery'" class="block">
-                <span v-if="isRecommendImageFailed(img, index)" class="site-attachment-failure site-attachment-failure--image site-attachment-failure--compact" role="note" :aria-label="recommendImageFailureLabel">
-                  <span class="site-attachment-failure__content">
-                    <span class="site-attachment-failure__icon" aria-hidden="true"></span>
-                    <strong class="site-attachment-failure__title">{{ recommendImageFailureTitle }}</strong>
-                    <span class="site-attachment-failure__detail">{{ recommendImageFailureDetail }}</span>
-                  </span>
-                </span>
-                <img v-else :src="imageSrc(img)" class="recommend-image-box" loading="lazy" alt="recommend" @error="markRecommendImageFailed(img, index)" />
-              </a>
-            </div>
-          </div>
-        </div>
-      </UCard>
-      <div class="mx-auto sm:max-w-2xl mb-4">
-        <HeatmapWidget :active-tab="activeTab" compact />
-      </div>
-      <UCard v-if="frontendConfig.leftAdEnabled && leftAds.length > 0" class="mx-auto sm:max-w-2xl mb-3 sidebar-card">
-        <div class="sidebar-title flex items-center gap-2">
-          <UIcon name="i-heroicons-megaphone" class="w-4 h-4" />
-          <span>广而告之</span>
-        </div>
-        <div class="mt-2">
-          <AdCarousel :ads="leftAds" :interval-ms="frontendConfig.leftAdsIntervalMs" />
-        </div>
-      </UCard>
-      <TagList 
-        v-if="tags && tags.length > 0"
-        :tags="tags"
-        @tagClick="handleTagClick"
-      />
-    </div>
       <!-- 音乐播放器容器（浮动或嵌入） -->
       <div v-if="shouldShowMusicPlayer" class="music-player-wrapper">
         <div class="netease-mini-player"></div>

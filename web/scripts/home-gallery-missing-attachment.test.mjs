@@ -35,8 +35,14 @@ assert.match(
   'blank image urls can never render and must be dropped'
 )
 
+assert.doesNotMatch(
+  indexPage,
+  /<div v-if="false">/,
+  'never park a dead copy of the gallery behind v-if="false": it forces every gallery change to be made in a block that can never render'
+)
+
 const galleryAnchors = indexPage.match(/<a v-for="\(img, index\) in recommendedImages"[^>]*>/g) || []
-assert.equal(galleryAnchors.length, 3, 'home page must keep all three gallery anchor blocks')
+assert.equal(galleryAnchors.length, 2, 'home page must keep both live gallery anchor blocks')
 for (const tag of galleryAnchors) {
   assert.match(
     tag,
@@ -79,7 +85,7 @@ assert.match(
 )
 
 const galleryPlaceholders = indexPage.match(/<span v-if="isRecommendImageFailed\(img, index\)"[^>]*>/g) || []
-assert.equal(galleryPlaceholders.length, 3, 'every gallery block must render the shared failure placeholder')
+assert.equal(galleryPlaceholders.length, 2, 'every gallery block must render the shared failure placeholder')
 for (const tag of galleryPlaceholders) {
   assert.match(
     tag,

@@ -47,7 +47,7 @@ assert.doesNotMatch(
 )
 
 const heatmapInstances = indexPage.match(/<HeatmapWidget\b(?=[^>]*:active-tab="activeTab")[^>]*\/>/g) || []
-assert.equal(heatmapInstances.length, 3, 'all home-page heatmap instances must receive activeTab')
+assert.equal(heatmapInstances.length, 2, 'all home-page heatmap instances must receive activeTab')
 assert.doesNotMatch(indexPage, /<HeatmapWidget\b(?![^>]*:active-tab="activeTab")[^>]*\/>/, 'home page must not keep unscoped heatmap instances')
 
 assert.match(
