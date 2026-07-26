@@ -311,7 +311,7 @@ import { positionFloatingMenu, scheduleFloatingMenuPosition } from '~/utils/floa
 import MarkdownRenderer from '~/components/index/MarkdownRenderer.vue'
 import { useToast } from '#ui/composables/useToast'
 import { getRequest, postRequest, putRequest, deleteRequest } from '~/utils/api'
-import { resolveMediaURL } from '~/utils/media-url'
+import { resolveManagedAttachmentURL } from '~/utils/media-url'
 import { useUserStore } from '~/store/user'
 import { uploadMediaFiles } from '~/utils/media-upload'
 import { shouldShowVisibilityBadge } from '~/utils/visibility-badge'
@@ -413,7 +413,7 @@ const rootCardClass = computed(() => 'comment-card-frame comment-card-root')
 const childCardClass = computed(() => 'comment-card-frame comment-card-child')
 const textareaClass = computed(() => (isDark.value ? `w-full px-3 py-2 bg-[rgba(24,28,32,0.95)] text-white border border-blue-500 focus:border-blue-400 rounded-md ring-0 outline-none` : `w-full px-3 py-2 bg-white text-black border border-blue-500 focus:border-blue-600 rounded-md ring-0 outline-none`))
 const BASE_API = useRuntimeConfig().public.baseApi || '/api'
-const normalizeMediaURL = (raw: string) => resolveMediaURL(BASE_API, raw)
+const normalizeMediaURL = (raw: string) => resolveManagedAttachmentURL(BASE_API, raw)
 const extractImagePreviewUrls = (markdown: string) => {
   const urls = new Set<string>()
   const pattern = /!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g

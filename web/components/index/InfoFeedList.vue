@@ -135,6 +135,7 @@ import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from '
 import MarkdownRenderer from "~/components/index/MarkdownRenderer.vue";
 import { writeClipboardText } from '~/utils/clipboard'
 import { getInfoFeedLinkHost, resolveInfoFeedLink } from '~/utils/info-feed-link'
+import { resolveManagedAttachmentURL } from '~/utils/media-url'
 
 const FEED_CACHE_PREFIX = 'site:feed-cache:v2'
 const feedMemoryCache = new Map<string, { ts: number; items: FeedItem[] }>()
@@ -635,8 +636,9 @@ const getAvatarUrl = (item: FeedItem) => {
   if (isRSSItem(item)) return ''
   const raw = String(item.avatarURL || '').trim()
   if (!raw) return ''
+  // 失败标记按原始值记账，避免归一化后同一头像换 origin 就丢掉已知的失败状态。
   if (brokenAvatarSet.value.has(raw)) return ''
-  return raw
+  return resolveManagedAttachmentURL(String(props.baseApi || '/api'), raw)
 }
 
 const markAvatarBroken = (item: FeedItem) => {

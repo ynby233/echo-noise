@@ -11,9 +11,9 @@ const outfile = join(tmp, 'media-url-bundle.mjs')
 const messageList = await readFile(join(root, 'components/index/MessageList.vue'), 'utf8')
 
 assert.ok(
-  messageList.includes("import { resolveMediaURL } from '~/utils/media-url'") &&
-    messageList.includes('const resolveMediaUrl = (s: string) => resolveMediaURL(BASE_API, s)'),
-  'message list avatars must use the shared media URL resolver instead of a divergent local copy'
+  messageList.includes("import { resolveManagedAttachmentURL } from '~/utils/media-url'") &&
+    messageList.includes('const resolveMediaUrl = (s: string) => resolveManagedAttachmentURL(BASE_API, s)'),
+  'message list avatars must use the shared portability resolver instead of a divergent local copy'
 )
 
 await build({

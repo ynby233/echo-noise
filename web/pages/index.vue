@@ -647,6 +647,7 @@ import { normalizeAdConfigs } from '~/utils/ad-config'
 import { getMessageIdFromRouteHash } from '~/utils/message-route-hash'
 import { getRequest, postRequest } from '~/utils/api'
 import { attachmentFailureAriaLabel, attachmentFailureDetail, attachmentFailureTitle } from '~/utils/attachment-failure'
+import { resolveManagedAttachmentURL } from '~/utils/media-url'
 import { useToast } from '#ui/composables/useToast'
 import { useUserStore } from '~/store/user'
 import type { PageQueryResult, Tag } from '~/types/models'
@@ -1301,14 +1302,8 @@ const profileAvatar = computed(() => {
   const u = userStore.user as any
   const raw = String(u?.avatar_url || u?.AvatarURL || '').trim()
   const base = useRuntimeConfig().public.baseApi || '/api'
-  const pick = (s: string) => {
-    if (!s) return ''
-    const b = (base || '').replace(/\/$/, '')
-    if (/^https?:\/\//i.test(s)) return s
-    if (s.startsWith('/images/')) return `${b}${s}`
-    if (s.startsWith('/')) return s
-    return `${b}/${s.replace(/^\//, '')}`
-  }
+  // 头像同样可能存着旧主机名的受管附件地址，交给统一解析器跟随当前 origin。
+  const pick = (s: string) => resolveManagedAttachmentURL(base, s)
   if (raw) {
     return pick(raw)
   }
@@ -1627,12 +1622,14 @@ const clampOpacity = (value: any) => {
 }
 
 const normalizeHeaderBackground = (value: HeaderBackgroundInput): HeaderBackgroundConfig => {
+  // 背景图是首屏最大面积的元素，存量配置里可能留着旧主机名的受管附件地址，
+  // 必须在这里跟随当前 origin；picsum 之类的外链由解析器原样放过。
   if (typeof value === 'string') {
-    return { url: value.trim(), ...defaultHeaderTextStyle }
+    return { url: resolveManagedAttachmentURL(baseApi, value), ...defaultHeaderTextStyle }
   }
   const item = value && typeof value === 'object' ? value : {}
   return {
-    url: String((item as any).url || '').trim(),
+    url: resolveManagedAttachmentURL(baseApi, String((item as any).url || '')),
     titleColor: String((item as any).titleColor || defaultHeaderTextStyle.titleColor).trim(),
     titleOpacity: clampOpacity((item as any).titleOpacity ?? defaultHeaderTextStyle.titleOpacity),
     subtitleColor: String((item as any).subtitleColor || defaultHeaderTextStyle.subtitleColor).trim(),
@@ -2708,10 +2705,12 @@ const tagsCount = computed(() => {
   return arr.filter((t: any) => !excluded.includes(String(t?.name || '').toLowerCase())).length
 })
 const recommendedImages = computed(() => images.value.slice(0, 60))
+// 受管附件地址必须跟随当前站点 origin：历史数据里存过 http://<旧IP>:<旧端口>/api/images/...，
+// 原样透传会让 <img> 变成跨站请求，SameSite=Lax 的会话 Cookie 被浏览器拦下，
+// 私有笔记的图片随即 404 并画出失败占位块。外链由 resolveManagedAttachmentURL 原样放过。
 const imageSrc = (img: any) => {
   const url = typeof img === 'string' ? img : (img?.image_url || img?.url)
-  const base = useRuntimeConfig().public.baseApi || '/api'
-  return url?.startsWith('http') ? url : `${base}${url}`
+  return resolveManagedAttachmentURL(baseApi, String(url || ''))
 }
 // 同一条笔记可引用多张图、同一张图也可被多条笔记引用，key 必须按条目唯一，
 // 否则 Vue 无法正确 patch 列表，会残留或错位节点。

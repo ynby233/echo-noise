@@ -90,6 +90,64 @@ try {
     'trusted attachment probes must carry the authenticated session for both HEAD and Range fallback requests',
   )
 
+  // 受管附件的每个读取入口都必须走共享解析器。手写 startsWith('http') 会把历史
+  // 绝对地址原样透传，换域名或换 IP 后 <img> 变成跨站请求，SameSite=Lax 会话
+  // Cookie 被浏览器拦下，私有笔记的图片就整片变成失败占位块。
+  const managedReaders = [
+    ['pages/index.vue', 'the home gallery, avatars, and header backgrounds'],
+    ['components/index/StatusPanel.vue', 'the admin media previews and background list'],
+    ['components/admin/AttachmentManager.vue', 'the attachment manager previews and downloads'],
+    ['components/index/MessageList.vue', 'the message images and avatars'],
+    ['components/comments/BuiltinComments.vue', 'the comment avatars'],
+    ['components/index/UserNotificationCenter.vue', 'the notification actor avatars'],
+    ['components/index/InfoFeedList.vue', 'the information feed avatars'],
+    ['components/index/MarkdownRenderer.vue', 'the note body media sources'],
+  ]
+
+  for (const [relativePath, description] of managedReaders) {
+    const source = await readFile(join(webRoot, relativePath), 'utf8')
+    assert.match(
+      source,
+      /import \{[^}]*resolveManagedAttachmentURL[^}]*\} from '~\/utils\/media-url'/,
+      `${relativePath} must resolve managed attachments through the shared portability resolver for ${description}`,
+    )
+    assert.doesNotMatch(
+      source,
+      /startsWith\('http'\)\s*\?/,
+      `${relativePath} must not hand-roll a startsWith('http') passthrough that pins ${description} to a stale host`,
+    )
+  }
+
+  // 上传写入侧必须存站点无关的地址，否则脏数据会再次进入配置与笔记。
+  const statusPanel = await readFile(join(webRoot, 'components/index/StatusPanel.vue'), 'utf8')
+  assert.match(
+    statusPanel,
+    /import \{[^}]*resolveUploadedMediaUrl[^}]*\} from '~\/utils\/media-upload'/,
+    'admin uploads must persist attachment URLs through the shared upload resolver',
+  )
+  assert.equal(
+    (statusPanel.match(/resolveUploadedMediaUrl\(/g) || []).length >= 2,
+    true,
+    'both the site avatar upload and the header background upload must persist host-independent URLs',
+  )
+
+  // 背景图归一化在后台与前台各有一份实现，两份都要跟随当前 origin，否则预览与线上会各自失效。
+  const homePage = await readFile(join(webRoot, 'pages/index.vue'), 'utf8')
+  for (const [label, source] of [['pages/index.vue', homePage], ['components/index/StatusPanel.vue', statusPanel]]) {
+    assert.match(
+      source,
+      /const normalizeHeaderBackground[\s\S]{0,400}?resolveManagedAttachmentURL\(/,
+      `${label} must normalize header background URLs so they follow the current site origin`,
+    )
+  }
+
+  // 外链必须保持原样：默认配置里就带着 picsum 这类第三方背景图。
+  assert.equal(
+    mediaUrl.resolveManagedAttachmentURL('/api', 'https://picsum.photos/1600/500'),
+    'https://picsum.photos/1600/500',
+    'external header backgrounds must never be rewritten as local attachments',
+  )
+
   console.log('attachment URL portability checks passed')
 } finally {
   delete globalThis.window

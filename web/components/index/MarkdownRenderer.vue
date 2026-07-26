@@ -31,7 +31,7 @@ import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { buildAttachmentAudioPlaceholderHtml, destroyAttachmentAudioPlayers, enhanceAttachmentAudioPlayers } from '~/utils/attachment-audio-player'
 import { encodeMarkdownExtraBlankLines, markMarkdownPreservedBlankLineElements } from '~/utils/markdown-blank-lines'
 import { applyTableTrackSize, getTableResizeZoomScale, resolveTableTrackResize, resolveTableTrailingScrollReserve, type TableTrackResizeSession } from '~/utils/table-resize-session'
-import { isManagedAttachmentURL, resolveManagedAttachmentURL, resolveMediaURL } from '~/utils/media-url'
+import { isManagedAttachmentURL, resolveManagedAttachmentURL } from '~/utils/media-url'
 import { attachmentFailureDetail, attachmentFailureTitle, type AttachmentFailureKind } from '~/utils/attachment-failure'
 import Vditor from 'vditor';
 
@@ -51,7 +51,7 @@ const emit = defineEmits(['tagClick', 'rendered'])
 const config = useRuntimeConfig();
 const BASE_API = config.public.baseApi || '/api';
 
-const resolveImageUrl = (path: string) => resolveMediaURL(String(BASE_API || '/api'), path)
+const resolveImageUrl = (path: string) => resolveManagedAttachmentURL(String(BASE_API || '/api'), path)
 const resolveAttachmentUrl = (path: string) => resolveManagedAttachmentURL(String(BASE_API || '/api'), path)
 
 const previewElement = ref<HTMLDivElement | null>(null);

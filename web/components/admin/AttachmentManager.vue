@@ -250,6 +250,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useToast } from '#imports'
 import { useUserStore } from '~/store/user'
+import { resolveManagedAttachmentURL } from '~/utils/media-url'
 
 const props = defineProps<{ theme?: Record<string, string>, isCloud?: boolean }>()
 
@@ -351,12 +352,9 @@ const selectAllActive = () => {
   selected.value = next
 }
 
-const fullURL = (u: string) => {
-  const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  if (u.startsWith('http')) return u
-  if (u.startsWith('/api')) return origin + u
-  return origin + u
-}
+// 附件管理器不再拼接 window.location.origin：受管附件统一走同源相对路径，
+// 既让预览跟随当前 IP/域名，也让 a[download] 保持同源（跨源会被浏览器忽略 download）。
+const fullURL = (u: string) => resolveManagedAttachmentURL(baseApi, u)
 
 const formatSize = (n: number) => {
   if (n < 1024) return `${n} B`

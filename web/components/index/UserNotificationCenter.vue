@@ -192,7 +192,7 @@
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useUserStore } from '~/store/user'
 import { getRequest, putRequest } from '~/utils/api'
-import { resolveMediaURL } from '~/utils/media-url'
+import { resolveManagedAttachmentURL } from '~/utils/media-url'
 import BuiltinComments from '~/components/comments/BuiltinComments.vue'
 import { useToast } from '#ui/composables/useToast'
 
@@ -367,7 +367,7 @@ const targetAriaLabel = (item: UserNotification) => {
 
 const targetImage = (item: UserNotification) => {
   const raw = String(item.message?.image_url || '').trim()
-  return raw ? resolveMediaURL(baseApi.value, raw) : ''
+  return raw ? resolveManagedAttachmentURL(baseApi.value, raw) : ''
 }
 
 const parseTargetUrlNumber = (item: UserNotification, key: 'message_id' | 'comment_id') => {
@@ -433,9 +433,9 @@ const genericAvatar = () => {
 
 const actorAvatar = (item: UserNotification) => {
   const raw = String(item.actor?.avatar_url || '').trim()
-  if (raw) return resolveMediaURL(baseApi.value, raw)
+  if (raw) return resolveManagedAttachmentURL(baseApi.value, raw)
   const siteAvatar = String(props.siteConfig?.avatarURL || '').trim()
-  return siteAvatar ? resolveMediaURL(baseApi.value, siteAvatar) : genericAvatar()
+  return siteAvatar ? resolveManagedAttachmentURL(baseApi.value, siteAvatar) : genericAvatar()
 }
 
 const onAvatarError = (event: Event) => {

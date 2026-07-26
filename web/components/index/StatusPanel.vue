@@ -2453,6 +2453,8 @@ import ImageCropperModal from '~/components/admin/ImageCropperModal.vue'
 import AdminAnnouncementManager from '~/components/admin/AdminAnnouncementManager.vue'
 import { getRequest, putRequest, postRequest, deleteRequest } from '~/utils/api'
 import { writeClipboardText } from '~/utils/clipboard'
+import { resolveManagedAttachmentURL } from '~/utils/media-url'
+import { resolveUploadedMediaUrl } from '~/utils/media-upload'
 import { makeEmptyAdConfig, normalizeAdConfigs, resolveAdImageURL, type AdConfig } from '~/utils/ad-config'
 import { useRuntimeConfig, useHead, useRouter } from '#imports'
 const formatShanghai = (s: string) => {
@@ -2967,15 +2969,8 @@ const genericGrayAvatar = (size = 64) => {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 64 64"><rect width="64" height="64" rx="32" fill="#9ca3af"/><circle cx="32" cy="24" r="12" fill="#e5e7eb"/><path d="M16 52c0-10 8-18 16-18s16 8 16 18" fill="#e5e7eb"/></svg>`
   return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg)
 }
-const resolveAdminMediaURL = (raw: string) => {
-  const s = String(raw || '').trim()
-  if (!s) return ''
-  if (/^https?:\/\//i.test(s)) return s
-  if (s.startsWith('/api/')) return s
-  if (s.startsWith('/images/')) return `${String(baseApi || '/api').replace(/\/$/, '')}${s}`
-  if (s.startsWith('/')) return s
-  return `${String(baseApi || '/api').replace(/\/$/, '')}/${s.replace(/^\//, '')}`
-}
+// 后台预览与前台渲染必须得到同一个地址，否则改了 IP 或换成域名后两边会各自失效。
+const resolveAdminMediaURL = (raw: string) => resolveManagedAttachmentURL(baseApi, raw)
 const siteDefaultAvatar = computed(() => {
   return resolveAdminMediaURL(String((frontendConfig as any)?.avatarURL || '')) ||
     resolveAdminMediaURL(String((frontendConfig as any)?.rssFaviconURL || '/favicon.svg')) ||
@@ -5011,7 +5006,7 @@ const saveAvatarLink = async () => {
     if (!u) throw new Error('请填写头像链接')
     if (!/^https?:\/\//i.test(u) && !u.startsWith('/api')) throw new Error('链接需以 http 或 /api 开头')
     avatarUploadingLink.value = true
-    localPreview.value = u.startsWith('http') ? u : `${baseApi}${u}`
+    localPreview.value = resolveManagedAttachmentURL(baseApi, u)
     const res = await putRequest<any>('user/update', { avatar_url: u }, { credentials: 'include' })
     if (!res || res.code !== 1) throw new Error(res?.msg || '保存失败')
     await userStore.getUser()
@@ -5026,8 +5021,7 @@ const saveAvatarLink = async () => {
 watch(avatarLink, (val: any) => {
   const u = String(val || '').trim()
   if (!u) { localPreview.value = ''; return }
-  if (/^https?:\/\//i.test(u)) localPreview.value = u
-  else if (u.startsWith('/api')) localPreview.value = `${baseApi}${u}`
+  localPreview.value = resolveManagedAttachmentURL(baseApi, u)
 })
 
 const startDrag = (e: any) => {
@@ -5196,12 +5190,14 @@ const clampOpacity = (value: any) => {
 }
 
 const normalizeHeaderBackground = (value: HeaderBackgroundInput): HeaderBackgroundConfig => {
+  // 与 pages/index.vue 的同名实现保持一致：受管附件地址剥掉旧主机名，
+  // 保存时写回站点无关的相对路径，读取时跟随当前 origin。
   if (typeof value === 'string') {
-    return { url: value.trim(), ...defaultHeaderTextStyle }
+    return { url: resolveManagedAttachmentURL(baseApi, value), ...defaultHeaderTextStyle }
   }
   const item = value && typeof value === 'object' ? value : {}
   return {
-    url: String((item as any).url || '').trim(),
+    url: resolveManagedAttachmentURL(baseApi, String((item as any).url || '')),
     titleColor: String((item as any).titleColor || defaultHeaderTextStyle.titleColor).trim(),
     titleOpacity: clampOpacity((item as any).titleOpacity ?? defaultHeaderTextStyle.titleOpacity),
     subtitleColor: String((item as any).subtitleColor || defaultHeaderTextStyle.subtitleColor).trim(),
@@ -6438,7 +6434,7 @@ const applyWelcomeAdmin = async () => {
       const raw = String(admin?.avatar_url || admin?.AvatarURL || '').trim()
       const desc = String(admin?.description || '').trim()
       ;(frontendConfig as any).welcomeName = name || (frontendConfig as any).welcomeName || ''
-      ;(frontendConfig as any).welcomeAvatarURL = raw ? (raw.startsWith('http') ? raw : `${base}${raw}`) : ((frontendConfig as any).welcomeAvatarURL || '')
+      ;(frontendConfig as any).welcomeAvatarURL = raw ? resolveManagedAttachmentURL(base, raw) : ((frontendConfig as any).welcomeAvatarURL || '')
       ;(frontendConfig as any).welcomeDescription = desc || (frontendConfig as any).welcomeDescription || ''
       ;(frontendConfig as any).welcomeUseAdmin = true
       useToast().add({ title: '已填充管理员信息', color: 'green' })
@@ -6469,7 +6465,7 @@ const handleSiteAvatarUpload = async (event: Event) => {
         const js = await resp.json().catch(() => ({}))
         if (!resp.ok || js.code !== 1 || !js.data) throw new Error(js?.msg || '上传失败')
         const raw = String(js.data || '')
-        const imageUrl = raw.startsWith('http') ? raw : (raw.startsWith('/api') ? raw : `/api${raw}`)
+        const imageUrl = resolveUploadedMediaUrl(raw, baseApi)
         ;(frontendConfig as any).avatarURL = imageUrl
         await saveConfigItem('avatarURL')
         useToast().add({ title: '成功', description: '站点头像已更新', color: 'green' })
@@ -6920,7 +6916,7 @@ const handleFileUpload = async (event: Event) => {
         throw new Error(data?.msg || '上传失败')
       }
       const imageUrl = String(data.data || '').trim()
-      const finalUrl = imageUrl.startsWith('http') || imageUrl.startsWith('/api/') ? imageUrl : `/api${imageUrl}`
+      const finalUrl = resolveUploadedMediaUrl(imageUrl, baseApi)
       const newBackgrounds = [...frontendConfig.backgrounds, normalizeHeaderBackground(finalUrl)]
       frontendConfig.backgrounds = newBackgrounds
       await saveConfigItem('backgrounds')

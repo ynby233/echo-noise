@@ -536,7 +536,7 @@ import type { MessageVisibility } from '~/types/models'
 import BuiltinComments from '../comments/BuiltinComments.vue'
 import { writeClipboardText } from '~/utils/clipboard'
 import { createAudioMarkdown, resolveUploadedMediaUrl, uploadMediaFiles } from '~/utils/media-upload'
-import { resolveMediaURL } from '~/utils/media-url'
+import { resolveManagedAttachmentURL } from '~/utils/media-url'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { getMessageIdFromRouteHash } from '~/utils/message-route-hash'
 import { shouldShowVisibilityBadge } from '~/utils/visibility-badge'
@@ -570,7 +570,7 @@ const messageVisibilityRequiresPrivate = (value: MessageVisibility) => value !==
 const messageVisibilityLabel = (value: any) => messageVisibilityOptions.find((option) => option.value === normalizeMessageVisibility(value))?.label || '公开'
 const messageVisibilityIcon = (value: any) => messageVisibilityOptions.find((option) => option.value === normalizeMessageVisibility(value))?.icon || 'i-mdi-earth'
 
-const resolveMediaUrl = (s: string) => resolveMediaURL(BASE_API, s)
+const resolveMediaUrl = (s: string) => resolveManagedAttachmentURL(BASE_API, s)
 
 const messageImageAR = ref<Record<number, string>>({})
 const onMessageImageLoad = (id: number, e: Event) => {
