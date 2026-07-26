@@ -65,7 +65,7 @@
             加载中...
           </span>
           <button type="button" class="tb-btn nw-action-btn nw-action-btn--danger danger nw-tooltip-anchor" data-tooltip="清除" aria-label="清除" @click="clearForm"><UIcon name="i-heroicons-trash" class="w-5 h-5" /></button>
-          <button type="button" class="tb-btn nw-action-btn nw-action-btn--primary primary nw-tooltip-anchor" data-tooltip="发布" aria-label="发布" @click="addMessage"><UIcon name="i-mdi-send" class="w-5 h-5" /></button>
+          <button type="button" class="tb-btn nw-action-btn nw-action-btn--primary primary nw-tooltip-anchor" :class="{ 'is-publishing': isPublishing }" :data-tooltip="isPublishing ? '发布中…' : '发布'" :aria-label="isPublishing ? '发布中' : '发布'" :aria-busy="isPublishing" :disabled="isPublishing" @click="addMessage"><UIcon :name="isPublishing ? 'i-mdi-loading' : 'i-mdi-send'" class="w-5 h-5" :class="{ 'publish-spin': isPublishing }" /></button>
         </div>
         <div v-if="activeUploadPercent > 0 && activeUploadPercent < 100" class="upload-progress">
           <div class="upload-progress-track">
@@ -1242,7 +1242,13 @@ const toggleNotify = () => {
   enableNotify.value = !enableNotify.value;
 };
 
+// 发布必须串行：一次点击的整条链路（同步编辑器内容 -> POST /messages -> 清空草稿）都是异步的，
+// 这期间按钮仍然可点，而后端对"同一用户 + 同一内容"没有幂等约束，连点几次就会真的建出几条
+// 一样的笔记。这里用一个飞行中标记锁住入口，再配合按钮 disabled，把连点收敛成一次发布。
+const isPublishing = ref(false);
+
 const addMessage = async () => {
+  if (isPublishing.value) return;
   if (!checkLogin()) return;
   syncContentFromEditor()
 
@@ -1268,6 +1274,7 @@ const addMessage = async () => {
     message.created_at = publishTime
   }
 
+  isPublishing.value = true;
   try {
     const response = await save(message);
     if (response) {
@@ -1282,11 +1289,17 @@ const addMessage = async () => {
       color: 'red',
       timeout: 2000
     });
+  } finally {
+    isPublishing.value = false;
   }
 };
 </script>
 
 <style scoped>
+/* 发布中：按钮禁用态由共用的 .nw-action-btn:disabled 提供，这里只补一个转圈反馈。 */
+.publish-spin { animation: add-form-publish-spin 1s linear infinite; }
+@keyframes add-form-publish-spin { to { transform: rotate(360deg); } }
+
 .editor-box { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 10px 24px rgba(0,0,0,.08); padding: 8px; color:#111827; }
 .editor-toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:6px; padding:6px; border-radius:12px; background: rgba(255,255,255,0.85); flex-wrap: wrap; overflow: visible; position: relative; z-index: 95; backdrop-filter: saturate(1.1) blur(6px); }
 .toolbar-left, .toolbar-right { display:flex; align-items:center; gap:8px; flex-wrap: wrap; }

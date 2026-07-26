@@ -1301,7 +1301,11 @@ const escapeHtml = (value: string) => String(value || '')
 const ATTACHMENT_LINK_REG = /\[(图片附件|视频附件|音频附件)：([^\]]+)\]\(([^)\s]+)\)/g
 type AttachmentKind = AttachmentFailureKind
 
-const browserPreviewableAttachmentUrl = (url: string) => /\.(pdf|txt|text|csv|json|xml|html?)(?:[?#].*)?$/i.test(String(url || ''))
+// 能不能在浏览器里直接看，取决于后端给的 Content-Disposition。
+// 后端只对纯文本族（text/plain、text/csv、application/json）发 inline，其余一律 attachment，
+// 所以这里的扩展名必须与之对齐：写多了会把"打开"图标挂在实际只会下载的文件上。
+// 详见 internal/controllers/attachment_security.go 的 inlineViewableAttachmentContentTypes。
+const browserPreviewableAttachmentUrl = (url: string) => /\.(txt|text|csv|json)(?:[?#].*)?$/i.test(String(url || ''))
 
 const attachmentKindFromLabel = (label: string): AttachmentKind => {
   if (label === '图片附件') return 'image'
@@ -2231,6 +2235,16 @@ watch(() => props.enableGithubCard, () => {
 </script>
 
 <style>
+/*
+ * Vditor.preview() 会给容器打上 .vditor-reset，而 vditor/dist/index.css 里 .vditor-reset 带
+ * overflow:auto。滚动容器一律在 padding box 处裁剪，附件卡片与失败占位块的外阴影因此被贴边切掉；
+ * 收起态与编辑弹窗预览框这类“外层已放开裁剪”的场景也救不回来，因为裁剪就发生在这一层。
+ * 正文预览自身没有滚动需求（宽表格由 .site-scrollable-table 自己承担），所以在源头复位。
+ */
+.markdown-preview.vditor-reset {
+  overflow: visible;
+}
+
 .markdown-preview,
 .markdown-preview.vditor-reset,
 .markdown-preview .vditor-reset {
@@ -3204,6 +3218,34 @@ body.is-resizing-rendered-table-column * {
   font-size: 12px !important;
   line-height: 1.35 !important;
   text-transform: uppercase !important;
+}
+
+/*
+ * 已删除附件的卡片（音频/其他文件）与图片、视频的失败占位块讲的是同一件事，文案排版必须一致。
+ * 卡片默认的 __name/__meta 是为"文件名 + 扩展名"设计的（14px/400、扩展名大写），
+ * 用在失败文案上就会比 .site-attachment-failure__title/__detail 更小更轻。
+ * 这里对齐 assets/css/attachment-failure.css 里的同一套排版令牌：标题 15px/600、
+ * 说明 12px 且间距 5px，并去掉只对扩展名有意义的 uppercase。
+ */
+.markdown-preview .site-attachment-file--deleted .site-attachment-file__body,
+.rendered-table-expand-scroll .site-attachment-file--deleted .site-attachment-file__body {
+  gap: 0 !important;
+}
+
+.markdown-preview .site-attachment-file--deleted .site-attachment-file__name,
+.rendered-table-expand-scroll .site-attachment-file--deleted .site-attachment-file__name {
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  line-height: 1.4 !important;
+}
+
+.markdown-preview .site-attachment-file--deleted .site-attachment-file__meta,
+.rendered-table-expand-scroll .site-attachment-file--deleted .site-attachment-file__meta {
+  margin-top: 5px !important;
+  font-size: 12px !important;
+  font-weight: 400 !important;
+  line-height: 1.5 !important;
+  text-transform: none !important;
 }
 
 .markdown-preview .site-attachment-file__action,

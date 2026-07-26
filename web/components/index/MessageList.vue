@@ -73,7 +73,7 @@
         >
 
           <div class="p-0">
-            <div :class="['content-container', innerContainerClass, listThemeClass, { 'is-dark': isContentDark, 'file-attachment-shadow-open': isFileAttachmentShadowOpen(msg.id) }]" :data-msg-id="msg.id">
+            <div :class="['content-container', innerContainerClass, listThemeClass, { 'is-dark': isContentDark, 'file-attachment-shadow-open': isFileAttachmentShadowOpen(msg.id), 'file-attachment-shadow-clip': isFileAttachmentShadowClipped(msg.id) }]" :data-msg-id="msg.id">
               <div class="flex items-center gap-2 mb-1 author-row">
                 <img :src="authorAvatar(msg)" alt="avatar" class="avatar-img w-9 h-9 rounded-full object-cover" @error="authorAvatarOnError($event, msg.username || '匿名')" @mouseenter="showAuthorCard($event, msg)" @mouseleave="hideAuthorCard" @click="toggleAuthorCard($event, msg)" />
                 <div v-if="openAuthorId === msg.id" class="site-author-card bg-white text-black dark:bg-[var(--home-surface-dark-elevated)] dark:text-white" :style="openAuthorStyle">
@@ -116,7 +116,7 @@
               <!-- 分隔线 -->
               <div v-if="msg.image_url && msg.content" class="border-t border-gray-600 my-2"></div>
               <!-- 文本内容区域 -->
-              <div class="overflow-y-hidden relative" :class="[{ 'max-h-[700px]': !isExpanded[msg.id] && !hasGrid[msg.id], 'file-attachment-shadow-open': isFileAttachmentShadowOpen(msg.id) }, listThemeTextClass]" :style="contentStyle(idx)">
+              <div class="overflow-y-hidden relative" :class="[{ 'max-h-[700px]': !isExpanded[msg.id] && !hasGrid[msg.id], 'file-attachment-shadow-open': isFileAttachmentShadowOpen(msg.id), 'file-attachment-shadow-clip': isFileAttachmentShadowClipped(msg.id) }, listThemeTextClass]" :style="contentStyle(idx)">
                 <MarkdownRenderer
                   :content="msg.content"
                   :enableGithubCard="siteConfig?.enableGithubCard === true"
@@ -1614,6 +1614,13 @@ const toggleExpand = (msgId: number) => {
 
 const isFileAttachmentShadowOpen = (msgId: number) => {
   return !!hasFileAttachment.value[msgId] && !(shouldShowExpandButton.value[msgId] && !isExpanded.value[msgId]);
+};
+
+// 收起态必须保留纵向裁剪（max-height 折叠靠它生效），但 CSS 规定同级 overflow 只要有一轴是
+// hidden，另一轴的 visible 就会被降级成 auto——于是横向也变成滚动容器，附件卡片/失败占位块的
+// 外阴影被贴边切掉。这里单独标出"收起且含附件卡片"的情形，交给 CSS 用 clip + clip-margin 只裁纵向。
+const isFileAttachmentShadowClipped = (msgId: number) => {
+  return !!hasFileAttachment.value[msgId] && !!shouldShowExpandButton.value[msgId] && !isExpanded.value[msgId];
 };
 
 // 修改检查内容高度的函数
@@ -3709,6 +3716,26 @@ onMounted(() => {
 
 .content-container.file-attachment-shadow-open :deep(.markdown-preview.vditor-reset) {
   overflow: visible !important;
+}
+
+/*
+ * 收起态：纵向必须继续裁剪（max-height 折叠靠它生效），横向本不需要裁剪。
+ * 但 CSS 规定同级两轴的 overflow 不能一边非 visible、一边 visible/clip：
+ * visible 会被算成 auto，clip 会被算成 hidden（clip-margin 一并失效）。
+ * 所以这里不去改 overflow，而是把裁剪盒本身向左右各外扩 16px（附件卡片与失败占位块的
+ * 最大阴影 blur 为 32px，左右外扩量即 16px），再用等量 padding 把内容还原回原位；
+ * box-sizing 是 border-box，max-height 不受影响，折叠行为保持不变。
+ */
+.content-container .overflow-y-hidden.file-attachment-shadow-clip {
+  margin-left: -16px;
+  margin-right: -16px;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+.content-container.file-attachment-shadow-clip :deep(.markdown-preview),
+.content-container.file-attachment-shadow-clip :deep(.markdown-preview.vditor-reset) {
+  overflow: visible;
 }
 
 /* 添加页脚固定样式 */

@@ -209,4 +209,73 @@ assert.match(
   'deleted ordinary files must render an explicit unavailable file card',
 )
 
+
+const vditorResetOverflowRule = renderer.match(/\n\.markdown-preview\.vditor-reset \{[\s\S]*?\n\}/)?.[0] || ''
+
+assert.match(
+  vditorResetOverflowRule,
+  /overflow: visible;/,
+  'Vditor.preview() stamps .vditor-reset with overflow:auto, so the preview clips card shadows at its own padding box unless that is reset at the source',
+)
+
+assert.match(
+  messageList,
+  /const isFileAttachmentShadowClipped = \(msgId: number\) => \{\s*\n\s*return !!hasFileAttachment\.value\[msgId\] && !!shouldShowExpandButton\.value\[msgId\] && !isExpanded\.value\[msgId\];/,
+  'the collapsed-and-clipped case must be derived on its own, it is exactly the inverse of the already-open shadow case',
+)
+
+assert.ok(
+  /'file-attachment-shadow-clip': isFileAttachmentShadowClipped\(msg\.id\)/.test(messageList) &&
+    messageList.match(/'file-attachment-shadow-clip': isFileAttachmentShadowClipped\(msg\.id\)/g)?.length === 2,
+  'both the content container and the max-height clipping box must know they are in the collapsed-with-attachment state',
+)
+
+const shadowClipCss = messageList.match(/\.content-container \.overflow-y-hidden\.file-attachment-shadow-clip \{[\s\S]*?\n\}/)?.[0] || ''
+
+assert.ok(
+  /margin-left: -16px;/.test(shadowClipCss) &&
+    /margin-right: -16px;/.test(shadowClipCss) &&
+    /padding-left: 16px;/.test(shadowClipCss) &&
+    /padding-right: 16px;/.test(shadowClipCss),
+  'a box that clips one axis cannot keep the other axis visible or clipped, so the collapsed box must be widened by the shadow blur radius and the content pushed back with equal padding',
+)
+
+assert.ok(
+  !/overflow-x:\s*(clip|visible)/.test(shadowClipCss),
+  'reaching for overflow-x here is the trap: next to overflow-y:hidden it is computed as hidden/auto and overflow-clip-margin stops applying',
+)
+
+const deletedFileNameRule = renderer.match(/\.markdown-preview \.site-attachment-file--deleted \.site-attachment-file__name,[\s\S]*?\n\}/)?.[0] || ''
+const deletedFileMetaRule = renderer.match(/\.markdown-preview \.site-attachment-file--deleted \.site-attachment-file__meta,[\s\S]*?\n\}/)?.[0] || ''
+const failureTitleRule = sharedCss.match(/\.site-attachment-failure \.site-attachment-failure__title \{[\s\S]*?\n\}/)?.[0] || ''
+const failureDetailRule = sharedCss.match(/\.site-attachment-failure \.site-attachment-failure__detail \{[\s\S]*?\n\}/)?.[0] || ''
+
+const typography = (rule) => ({
+  fontSize: rule.match(/font-size: (\d+px)/)?.[1] || '',
+  fontWeight: rule.match(/font-weight: (\d+)/)?.[1] || '',
+  lineHeight: rule.match(/line-height: ([\d.]+)/)?.[1] || '',
+})
+
+assert.deepEqual(
+  typography(deletedFileNameRule),
+  { ...typography(failureTitleRule), fontWeight: '600' },
+  'the deleted audio/file headline must read exactly like the image/video failure headline, the file-name typography it inherits is a size smaller',
+)
+
+assert.deepEqual(
+  typography(deletedFileMetaRule).fontSize,
+  typography(failureDetailRule).fontSize,
+  'the explanatory second line must match the image/video failure detail size',
+)
+
+assert.ok(
+  /margin-top: 5px/.test(deletedFileMetaRule) && /margin-top: 5px/.test(failureDetailRule),
+  'both placeholders must space their second line identically',
+)
+
+assert.match(
+  deletedFileMetaRule,
+  /text-transform: none/,
+  'the uppercase treatment only makes sense for a file extension, on a failure sentence it looks like a different component',
+)
 console.log('attachment failure state checks passed')
