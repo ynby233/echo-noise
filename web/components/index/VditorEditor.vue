@@ -1966,6 +1966,16 @@ const isCaretAtStartOfPlainBlock = (block: HTMLElement) => {
   return prefixText === ''
 }
 
+const clearStalePlainBlankLineMarkers = () => {
+  const editable = getEditorEditableElement()
+  if (!editable) return
+  editable.querySelectorAll<HTMLElement>(`.vditor-preserved-blank-line, .${PLAIN_EMPTY_LINE_CLASS}`).forEach((block) => {
+    if (isPlainBlankLineBlock(block)) return
+    block.classList.remove('vditor-preserved-blank-line')
+    block.classList.remove(PLAIN_EMPTY_LINE_CLASS)
+  })
+}
+
 const clearPlainBlankLineForInput = (block: HTMLElement) => {
   if (!isPlainBlankLineBlock(block)) return false
   block.innerHTML = ''
@@ -3640,8 +3650,9 @@ const serializePlainEditorBlockText = (block: Element) => {
   clone.querySelectorAll('.editor-table-delete-button, .editor-table-expand-button, .editor-attachment-preview').forEach((node) => node.remove())
   clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')))
   const rawText = String(clone.textContent || '').replace(/[\u200b\u200c\ufeff]/g, '')
-  if (block.classList.contains(PLAIN_EMPTY_LINE_CLASS)) return ''
-  if (block.classList.contains('vditor-preserved-blank-line') || (rawText.includes(MARKDOWN_BLANK_LINE_SENTINEL) && isMarkdownBlankLineSentinel(rawText))) return MARKDOWN_BLANK_LINE_SENTINEL
+  const isBlankLineDom = isMarkdownBlankLineSentinel(rawText)
+  if (isBlankLineDom && block.classList.contains(PLAIN_EMPTY_LINE_CLASS)) return ''
+  if (isBlankLineDom && (block.classList.contains('vditor-preserved-blank-line') || rawText.includes(MARKDOWN_BLANK_LINE_SENTINEL))) return MARKDOWN_BLANK_LINE_SENTINEL
   return normalizeAttachmentSourceText(rawText.replace(/\u00a0/g, ' ')).replace(/[ \t]+$/g, '')
 }
 
@@ -6003,6 +6014,7 @@ const insertNormalizedEditorValue = (nextValue: string) => {
   if (insertValueIntoCurrentTableCell(nextValue)) return true
   if (pendingEditorTableCellSync) flushPendingEditorTableCellSourceSync()
   insertEditorValueFallback(vditorInstance, nextValue, hasAttachmentMarker(nextValue))
+  clearStalePlainBlankLineMarkers()
   if (hasAttachmentMarker(nextValue)) clearPreparedEditorAttachmentInsertionTarget()
   normalizeEditorAttachmentSource()
   refreshAttachmentLinksFromEditor()
