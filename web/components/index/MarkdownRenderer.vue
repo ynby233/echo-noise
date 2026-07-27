@@ -33,6 +33,7 @@ import { encodeMarkdownExtraBlankLines, markMarkdownPreservedBlankLineElements }
 import { applyTableTrackSize, getTableResizeZoomScale, resolveTableTrackResize, resolveTableTrailingScrollReserve, type TableTrackResizeSession } from '~/utils/table-resize-session'
 import { isManagedAttachmentURL, resolveManagedAttachmentURL } from '~/utils/media-url'
 import { attachmentFailureDetail, attachmentFailureTitle, type AttachmentFailureKind } from '~/utils/attachment-failure'
+import { isBrowserPreviewableAttachmentUrl } from '~/utils/attachment-preview'
 import Vditor from 'vditor';
 
 // 定义正则表达式
@@ -1301,12 +1302,6 @@ const escapeHtml = (value: string) => String(value || '')
 const ATTACHMENT_LINK_REG = /\[(图片附件|视频附件|音频附件)：([^\]]+)\]\(([^)\s]+)\)/g
 type AttachmentKind = AttachmentFailureKind
 
-// 能不能在浏览器里直接看，取决于后端给的 Content-Disposition。
-// 后端只对纯文本族（text/plain、text/csv、application/json）发 inline，其余一律 attachment，
-// 所以这里的扩展名必须与之对齐：写多了会把"打开"图标挂在实际只会下载的文件上。
-// 详见 internal/controllers/attachment_security.go 的 inlineViewableAttachmentContentTypes。
-const browserPreviewableAttachmentUrl = (url: string) => /\.(txt|text|csv|json)(?:[?#].*)?$/i.test(String(url || ''))
-
 const attachmentKindFromLabel = (label: string): AttachmentKind => {
   if (label === '图片附件') return 'image'
   if (label === '视频附件') return 'video'
@@ -1372,7 +1367,7 @@ const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string) =>
     return `<div class="site-attachment-render site-attachment-render--video" data-site-attachment-kind="${kind}" data-site-attachment-url="${safeUrl}"><video src="${safeUrl}" controls preload="metadata" style="width:100%;height:auto" data-site-attachment-kind="${kind}" data-site-attachment-url="${safeUrl}"></video></div>`
   }
   if (kind === 'file') {
-    const canPreview = browserPreviewableAttachmentUrl(url)
+    const canPreview = isBrowserPreviewableAttachmentUrl(url)
     const previewAttrs = canPreview
       ? 'target="_blank" rel="noopener noreferrer"'
       : `download="${safeName}"`

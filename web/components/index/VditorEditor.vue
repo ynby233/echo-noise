@@ -182,6 +182,7 @@ import { buildAttachmentAudioPlaceholderHtml, closeAttachmentAudioPopover, destr
 import { MARKDOWN_BLANK_LINE_SENTINEL, encodeMarkdownExtraBlankLines, isMarkdownBlankLineSentinel, markMarkdownPreservedBlankLineElements, serializeMarkdownEditorBlocks } from '~/utils/markdown-blank-lines'
 import { getFixedEditorClipInsets, insertEditorValueFallback, insertTableCellAtomicValue, replaceTableSourceLine, resolveTableAttachmentTarget, type TableAttachmentTarget } from '~/utils/vditor-table-attachment'
 import { applyTableTrackSize, getTableResizeZoomScale, resolveTableTrackResize, resolveTableTrailingScrollReserve, type TableTrackResizeSession } from '~/utils/table-resize-session'
+import { isBrowserPreviewableAttachmentUrl } from '~/utils/attachment-preview'
 import Vditor from "vditor";
 import { Fancybox } from "@fancyapps/ui";
 import "@fancyapps/ui/dist/fancybox/fancybox.css";
@@ -419,19 +420,19 @@ const normalizeAttachmentInfo = (kindLabel: string, name: string, url: string): 
   return { type, title: `${kindLabel}：${cleanName}`, name: cleanName, url: href }
 }
 
-const browserPreviewableAttachmentUrl = (url: string) => /\.(pdf|txt|text|csv|json|xml|html?)(?:[?#].*)?$/i.test(String(url || ''))
-
 const openFileAttachment = (info: EditorAttachmentInfo) => {
-  if (browserPreviewableAttachmentUrl(info.url)) {
+  if (isBrowserPreviewableAttachmentUrl(info.url)) {
     window.open(info.url, '_blank', 'noopener,noreferrer')
     return
   }
-  toast.add({
-    title: '暂不支持预览',
-    description: info.name || '该附件类型无法在浏览器中直接预览',
-    color: 'orange',
-    timeout: 2200,
-  })
+  const link = document.createElement('a')
+  link.href = info.url
+  link.download = info.name || '附件'
+  link.rel = 'noopener noreferrer'
+  link.style.display = 'none'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
 }
 
 const attachmentInfoFromText = (text: string) => {

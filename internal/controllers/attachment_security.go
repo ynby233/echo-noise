@@ -11,20 +11,20 @@ import (
 
 const attachmentContentSecurityPolicy = "default-src 'none'; sandbox"
 
-// 允许浏览器直接打开查看、不强制弹下载框的类型。
-// 收敛条件有两条，缺一不可：
-//  1. 经 safeAttachmentContentType 归一后仍是纯文本族。html/svg/xml 以及任何未列入白名单的类型
-//     都会被压成 application/octet-stream，配合 X-Content-Type-Options: nosniff，
-//     浏览器不会把响应体当 HTML 解析，同源存储型 XSS 因此不成立。
-//  2. 浏览器原生就能渲染，不需要放宽 CSP 的 sandbox。
+// 允许浏览器尝试直接打开、不强制弹下载框的安全类型。
+// 这不是浏览器能力表：inline 只表示服务端允许内联，最终显示内置阅读器、交给系统应用还是
+// 回退下载，仍由浏览器决定。白名单只回答“即使内联解释，是否仍在可接受的安全边界内”。
 //
-// 其余类型（图片、音视频、PDF、归档、Office 文档等）继续走 attachment：
-// 图片与音视频在页面里由 <img>/<video>/<audio> 内联渲染，不受 disposition 影响；
-// PDF 依赖浏览器内置阅读器，而阅读器与 CSP sandbox 的相容性无法在当前环境验证，先不改。
+// html/svg/xml 以及任何未列入 safeAttachmentContentType 的类型都会被压成
+// application/octet-stream；配合 X-Content-Type-Options: nosniff 和 sandbox CSP，浏览器不会
+// 把响应体提升为同源主动内容。PDF 保留 application/pdf，并继续使用同一套 nosniff + sandbox
+// 安全头；支持内置阅读器的浏览器可直接查看，不支持的浏览器自行选择下载或外部应用。
+// 图片与音视频仍由页面里的 <img>/<video>/<audio> 内联渲染，不需要改变直接导航时的下载语义。
 var inlineViewableAttachmentContentTypes = map[string]struct{}{
 	"text/plain":       {},
 	"text/csv":         {},
 	"application/json": {},
+	"application/pdf":  {},
 }
 
 func attachmentContentDisposition(contentType string) string {

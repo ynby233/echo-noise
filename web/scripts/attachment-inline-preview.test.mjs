@@ -6,17 +6,19 @@ import { fileURLToPath } from 'node:url'
 const webRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const repoRoot = dirname(webRoot)
 const renderer = await readFile(join(webRoot, 'components/index/MarkdownRenderer.vue'), 'utf8')
+const editor = await readFile(join(webRoot, 'components/index/VditorEditor.vue'), 'utf8')
+const previewPolicy = await readFile(join(webRoot, 'utils/attachment-preview.ts'), 'utf8')
 const attachmentSecurity = await readFile(join(repoRoot, 'internal/controllers/attachment_security.go'), 'utf8')
 
 const inlineWhitelist = attachmentSecurity.match(/var inlineViewableAttachmentContentTypes = map\[string\]struct\{\}\{[\s\S]*?\n\}/)?.[0] || ''
+const inlineContentTypes = [...inlineWhitelist.matchAll(/"([^"]+)"/g)].map((match) => match[1]).sort()
 
 assert.ok(inlineWhitelist, 'the backend must name the inline-viewable content types in one place')
 
-assert.ok(
-  inlineWhitelist.includes('"text/plain"') &&
-    inlineWhitelist.includes('"text/csv"') &&
-    inlineWhitelist.includes('"application/json"'),
-  'plain text, csv and json must open in the browser instead of forcing a download box',
+assert.deepEqual(
+  inlineContentTypes,
+  ['application/json', 'application/pdf', 'text/csv', 'text/plain'],
+  'the backend inline permission list must stay limited to the safe text family and pdf',
 )
 
 assert.ok(
@@ -41,31 +43,44 @@ assert.match(
 assert.ok(
   attachmentSecurity.includes('c.Header("Content-Security-Policy", attachmentContentSecurityPolicy)') &&
     attachmentSecurity.includes('c.Header("X-Content-Type-Options", "nosniff")'),
-  'serving text inline must not cost the sandbox CSP or the nosniff guard',
+  'serving an attachment inline must not cost the sandbox CSP or the nosniff guard',
 )
 
-const previewableMatcher = renderer.match(/const browserPreviewableAttachmentUrl = \(url: string\) => \/([^/]+)\//)?.[1] || ''
+const previewPatternSource = previewPolicy.match(/BROWSER_PREVIEWABLE_ATTACHMENT_URL_RE = \/(.+)\/i/)?.[1] || ''
+assert.ok(previewPatternSource, 'the frontend must name its browser-preview extension policy in one place')
+const previewPattern = new RegExp(previewPatternSource, 'i')
 
-assert.ok(previewableMatcher, 'the renderer must decide previewability from a single extension matcher')
+for (const url of ['/api/files/report.pdf', '/api/files/NOTE.TXT?raw=1', '/api/files/table.csv#top', '/api/files/data.json']) {
+  assert.ok(previewPattern.test(url), `${url} must advertise the open-in-browser action`)
+}
+for (const url of ['/api/files/page.html', '/api/files/vector.svg', '/api/files/data.xml', '/api/files/archive.zip', '/api/files/unknown']) {
+  assert.ok(!previewPattern.test(url), `${url} must keep the download action`)
+}
 
 assert.ok(
-  /txt/.test(previewableMatcher) &&
-    /csv/.test(previewableMatcher) &&
-    /json/.test(previewableMatcher),
-  'the extensions the backend serves inline must render as an open-in-browser link',
-)
-
-assert.ok(
-  !/pdf/.test(previewableMatcher) &&
-    !/html/.test(previewableMatcher) &&
-    !/xml/.test(previewableMatcher),
-  'extensions the backend still sends as attachment must not advertise an open action the browser cannot honour',
+  renderer.includes("import { isBrowserPreviewableAttachmentUrl } from '~/utils/attachment-preview'") &&
+    editor.includes("import { isBrowserPreviewableAttachmentUrl } from '~/utils/attachment-preview'") &&
+    !renderer.includes('const browserPreviewableAttachmentUrl') &&
+    !editor.includes('const browserPreviewableAttachmentUrl'),
+  'published notes and the editor must share one preview policy instead of drifting local extension lists',
 )
 
 assert.match(
   renderer,
-  /const canPreview = browserPreviewableAttachmentUrl\(url\)[\s\S]*?target="_blank" rel="noopener noreferrer"[\s\S]*?download="\$\{safeName\}"/,
+  /const canPreview = isBrowserPreviewableAttachmentUrl\(url\)[\s\S]*?target="_blank" rel="noopener noreferrer"[\s\S]*?download="\$\{safeName\}"/,
   'previewable files must open in a new tab while the rest keep the download attribute',
+)
+
+assert.match(
+  editor,
+  /if \(isBrowserPreviewableAttachmentUrl\(info\.url\)\) \{\s*\n\s*window\.open\(info\.url, '_blank', 'noopener,noreferrer'\)/,
+  'the editor must use the shared policy when deciding whether to open a file attachment',
+)
+
+assert.match(
+  editor,
+  /const link = document\.createElement\('a'\)[\s\S]*?link\.download = info\.name \|\| '附件'[\s\S]*?link\.click\(\)[\s\S]*?link\.remove\(\)/,
+  'the editor must fall back to a real download for attachment types that are not safe to preview',
 )
 
 assert.match(
