@@ -3,6 +3,8 @@ package controllers
 import (
 	"archive/zip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,6 +32,7 @@ import (
 type AttachmentInfo struct {
 	Key            string       `json:"key"`
 	LogicalID      string       `json:"logical_id,omitempty"`
+	GroupID        string       `json:"group_id,omitempty"`
 	Name           string       `json:"name"`
 	URL            string       `json:"url"`
 	Size           int64        `json:"size"`
@@ -252,6 +255,7 @@ func listRegisteredAttachments(kind, backend string, messages []models.Message, 
 		out = append(out, AttachmentInfo{
 			Key:            item.Reference.PublicID,
 			LogicalID:      item.Reference.PublicID,
+			GroupID:        attachmentGroupID(item.Blob),
 			Name:           item.Reference.OriginalName,
 			URL:            attachmentregistry.ReferenceURL(item.Reference, backend),
 			Size:           item.Blob.Size,
@@ -647,24 +651,9 @@ func DeleteAttachmentReference(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "附件不存在"})
 		return
 	}
-	var store attachmentregistry.BlobStore
-	if resolved.Blob.StorageBackend == "local" {
-		store = attachmentregistry.NewLocalStore(attachmentregistry.DefaultLocalRoot())
-	} else if resolved.Blob.StorageBackend == "cloud" {
-		var siteCfg models.SiteConfig
-		if err := db.Table("site_configs").First(&siteCfg).Error; err != nil {
-			c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "云存储配置不可用"})
-			return
-		}
-		client, bucket, _, err := newAttachmentS3Client(siteCfg)
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "云存储配置不可用"})
-			return
-		}
-		_, prefix := splitPublicBaseURL(siteCfg.AttachmentStoragePublicBaseURL)
-		store = attachmentregistry.NewS3Store(client, bucket, prefix)
-	} else {
-		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "不支持的附件存储类型"})
+	store, err := attachmentBlobStore(db, resolved.Blob.StorageBackend)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": err.Error()})
 		return
 	}
 	if err := registry.DeleteReference(c.Request.Context(), store, publicID); err != nil {
@@ -672,6 +661,168 @@ func DeleteAttachmentReference(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": true})
+}
+
+// attachmentGroupID identifies the physical content behind a logical
+// attachment without leaking the raw content hash to the browser. References
+// sharing one blob share this id, which is what lets the admin UI fold
+// duplicates into a single card instead of scattering them across the list.
+func attachmentGroupID(blob models.AttachmentBlob) string {
+	if strings.TrimSpace(blob.ContentHash) == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte("attachment-group\x00" + blob.StorageBackend + "\x00" + blob.ContentHash))
+	return hex.EncodeToString(sum[:])[:32]
+}
+
+// attachmentBlobStore resolves the storage seam for a blob backend so the
+// single, batch, and purge delete paths cannot drift apart.
+func attachmentBlobStore(db *gorm.DB, backend string) (attachmentregistry.BlobStore, error) {
+	switch backend {
+	case "local":
+		return attachmentregistry.NewLocalStore(attachmentregistry.DefaultLocalRoot()), nil
+	case "cloud":
+		var siteCfg models.SiteConfig
+		if err := db.Table("site_configs").First(&siteCfg).Error; err != nil {
+			return nil, errors.New("云存储配置不可用")
+		}
+		client, bucket, _, err := newAttachmentS3Client(siteCfg)
+		if err != nil {
+			return nil, errors.New("云存储配置不可用")
+		}
+		_, prefix := splitPublicBaseURL(siteCfg.AttachmentStoragePublicBaseURL)
+		return attachmentregistry.NewS3Store(client, bucket, prefix), nil
+	default:
+		return nil, errors.New("不支持的附件存储类型")
+	}
+}
+
+type AttachmentReferenceBatchRequest struct {
+	LogicalIDs []string `json:"logical_ids"`
+}
+
+type AttachmentReferenceBatchResult struct {
+	ReferencesDeleted int      `json:"references_deleted"`
+	FilesPurged       int      `json:"files_purged"`
+	Failed            int      `json:"failed"`
+	Errors            []string `json:"errors,omitempty"`
+}
+
+func normalizeAttachmentLogicalIDs(raw []string) []string {
+	seen := make(map[string]struct{}, len(raw))
+	out := make([]string, 0, len(raw))
+	for _, value := range raw {
+		id := strings.TrimSpace(value)
+		if id == "" {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
+}
+
+// DeleteAttachmentReferencesBatch removes several logical references in one
+// request. Selections may mix references of the same file with references of
+// entirely different files; each id is resolved independently so a partial
+// failure never blocks the rest.
+func DeleteAttachmentReferencesBatch(c *gin.Context) {
+	var req AttachmentReferenceBatchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "参数错误"})
+		return
+	}
+	logicalIDs := normalizeAttachmentLogicalIDs(req.LogicalIDs)
+	if len(logicalIDs) == 0 {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "未选择附件"})
+		return
+	}
+	db, err := database.GetDB()
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "数据库不可用"})
+		return
+	}
+	registry := attachmentregistry.NewRegistry(db)
+	result := AttachmentReferenceBatchResult{}
+	for _, publicID := range logicalIDs {
+		resolved, err := registry.Resolve(publicID)
+		if err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, publicID+"：附件不存在")
+			continue
+		}
+		store, err := attachmentBlobStore(db, resolved.Blob.StorageBackend)
+		if err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, publicID+"："+err.Error())
+			continue
+		}
+		if err := registry.DeleteReference(c.Request.Context(), store, publicID); err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, publicID+"：删除失败")
+			continue
+		}
+		result.ReferencesDeleted++
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": result})
+}
+
+// PurgeAttachmentBlobsBatch deletes the physical files behind the selected
+// logical references together with every remaining reference to them. Ids that
+// resolve to the same blob collapse into one purge, so selecting any subset of
+// a shared file is enough to clear it from disk.
+func PurgeAttachmentBlobsBatch(c *gin.Context) {
+	var req AttachmentReferenceBatchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "参数错误"})
+		return
+	}
+	logicalIDs := normalizeAttachmentLogicalIDs(req.LogicalIDs)
+	if len(logicalIDs) == 0 {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "未选择附件"})
+		return
+	}
+	db, err := database.GetDB()
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "数据库不可用"})
+		return
+	}
+	registry := attachmentregistry.NewRegistry(db)
+	result := AttachmentReferenceBatchResult{}
+	purgedBlobs := make(map[uint]struct{}, len(logicalIDs))
+	for _, publicID := range logicalIDs {
+		resolved, err := registry.Resolve(publicID)
+		if err != nil {
+			// A sibling purge in this same request already removed it.
+			continue
+		}
+		if _, done := purgedBlobs[resolved.Blob.ID]; done {
+			continue
+		}
+		store, err := attachmentBlobStore(db, resolved.Blob.StorageBackend)
+		if err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, publicID+"："+err.Error())
+			continue
+		}
+		removed, err := registry.PurgeBlob(c.Request.Context(), store, publicID)
+		if err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, publicID+"：删除失败")
+			continue
+		}
+		purgedBlobs[resolved.Blob.ID] = struct{}{}
+		result.FilesPurged++
+		result.ReferencesDeleted += removed
+	}
+	if result.FilesPurged == 0 && result.Failed == 0 {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "附件不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": result})
 }
 
 func DownloadAttachmentZip(c *gin.Context) {

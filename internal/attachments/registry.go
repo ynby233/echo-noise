@@ -251,6 +251,51 @@ func (r *Registry) DeleteReference(ctx context.Context, store BlobStore, publicI
 	return nil
 }
 
+// PurgeBlob removes every logical reference that shares the blob behind
+// publicID and then deletes the physical object. Admins clearing disk space
+// should not have to hunt down each reference by hand, so the whole group is
+// resolved server-side under the same lock that guards uploads and deletes.
+// It reports how many references were removed.
+func (r *Registry) PurgeBlob(ctx context.Context, store BlobStore, publicID string) (int, error) {
+	if r == nil || r.db == nil || store == nil || strings.TrimSpace(publicID) == "" {
+		return 0, errInvalidCreate
+	}
+
+	registryMu.Lock()
+	defer registryMu.Unlock()
+
+	var reference models.AttachmentReference
+	if err := r.db.Where("public_id = ?", strings.TrimSpace(publicID)).First(&reference).Error; err != nil {
+		return 0, err
+	}
+	var blob models.AttachmentBlob
+	if err := r.db.First(&blob, reference.BlobID).Error; err != nil {
+		return 0, err
+	}
+	if blob.StorageBackend != store.ID() {
+		return 0, errors.New("attachment storage backend mismatch")
+	}
+
+	removed := int64(0)
+	if err := r.db.Transaction(func(tx *gorm.DB) error {
+		result := tx.Where("blob_id = ?", blob.ID).Delete(&models.AttachmentReference{})
+		if result.Error != nil {
+			return result.Error
+		}
+		removed = result.RowsAffected
+		return nil
+	}); err != nil {
+		return 0, err
+	}
+	if err := store.Delete(ctx, blob.StorageKey); err != nil {
+		// The blob row stays registered so the orphaned object can be reused by
+		// the next upload of identical content instead of leaking silently.
+		return int(removed), nil
+	}
+	_ = r.db.Delete(&blob).Error
+	return int(removed), nil
+}
+
 type LocalStore struct {
 	root string
 }
