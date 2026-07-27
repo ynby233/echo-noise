@@ -269,8 +269,14 @@ assert.match(
 
 assert.match(
   editor,
-  /insertValue:\s*\(val:\s*string\)\s*=>\s*\{[\s\S]+?if\s*\(insertValueIntoCurrentTableCell\(nextValue\)\)\s*return[\s\S]+?insertEditorValueFallback\(vditorInstance,\s*nextValue,\s*hasAttachmentMarker\(nextValue\)\)[\s\S]+?if\s*\(hasAttachmentMarker\(nextValue\)\)\s*clearPreparedEditorAttachmentInsertionTarget\(\)[\s\S]+?emitEditorValue\(\)/,
+  /const\s+insertNormalizedEditorValue\s*=[\s\S]+?if\s*\(insertValueIntoCurrentTableCell\(nextValue\)\)\s*return\s+true[\s\S]+?insertEditorValueFallback\(vditorInstance,\s*nextValue,\s*hasAttachmentMarker\(nextValue\)\)[\s\S]+?if\s*\(hasAttachmentMarker\(nextValue\)\)\s*clearPreparedEditorAttachmentInsertionTarget\(\)[\s\S]+?emitEditorValue\(\)/,
   'attachment insertion outside tables must use the tested Markdown-aware fallback and clear stale table upload targets'
+)
+
+assert.match(
+  editor,
+  /insertValue:\s*\(val:\s*string\)\s*=>\s*\{\s*insertNormalizedEditorValue\(normalizeAttachmentInsertValue\(val\)\)\s*\}/,
+  'the exposed insertion API must normalize values before entering the ready-aware insertion path'
 )
 
 assert.doesNotMatch(
@@ -313,7 +319,7 @@ assert.doesNotMatch(
 
 assert.match(
   editor,
-  /insertValue:\s*\(val:\s*string\)\s*=>\s*\{[\s\S]+?if\s*\(insertValueIntoCurrentTableCell\(nextValue\)\)\s*return[\s\S]+?if\s*\(pendingEditorTableCellSync\)\s*flushPendingEditorTableCellSourceSync\(\)[\s\S]+?insertEditorValueFallback\(vditorInstance,\s*nextValue,\s*hasAttachmentMarker\(nextValue\)\)/,
+  /const\s+insertNormalizedEditorValue\s*=[\s\S]+?if\s*\(insertValueIntoCurrentTableCell\(nextValue\)\)\s*return\s+true[\s\S]+?if\s*\(pendingEditorTableCellSync\)\s*flushPendingEditorTableCellSourceSync\(\)[\s\S]+?insertEditorValueFallback\(vditorInstance,\s*nextValue,\s*hasAttachmentMarker\(nextValue\)\)/,
   'attachments inserted outside a table after a table edit must flush pending table sync before using the Markdown-aware fallback'
 )
 
@@ -323,11 +329,11 @@ assert.match(
   'table enhancement and attachment insertion must tolerate Vditor lifecycle timing where getValue can throw before the internal editor is ready'
 )
 
-const exposedInsertValue = editor.match(/insertValue:\s*\(val:\s*string\)\s*=>\s*\{[\s\S]+?\r?\n\s+\},\r?\n\s+getValue:/)
-assert.ok(exposedInsertValue, 'VditorEditor exposed insertValue method must exist')
-const exposedInsertValueSource = exposedInsertValue[0]
-const pendingFlushIndex = exposedInsertValueSource.indexOf('flushPendingEditorTableCellSourceSync()')
-const fallbackInsertIndex = exposedInsertValueSource.indexOf('insertEditorValueFallback(vditorInstance, nextValue, hasAttachmentMarker(nextValue))')
+const normalizedInsertValue = editor.match(/const\s+insertNormalizedEditorValue\s*=[\s\S]+?\r?\n}\r?\n\r?\ndefineExpose/)
+assert.ok(normalizedInsertValue, 'VditorEditor ready-aware insertion helper must exist')
+const normalizedInsertValueSource = normalizedInsertValue[0]
+const pendingFlushIndex = normalizedInsertValueSource.indexOf('flushPendingEditorTableCellSourceSync()')
+const fallbackInsertIndex = normalizedInsertValueSource.indexOf('insertEditorValueFallback(vditorInstance, nextValue, hasAttachmentMarker(nextValue))')
 assert.ok(
   pendingFlushIndex >= 0 && fallbackInsertIndex > pendingFlushIndex,
   'attachment insertion outside a table must flush pending table source before the Markdown-aware fallback at the current caret'

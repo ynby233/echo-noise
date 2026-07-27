@@ -34,8 +34,8 @@ assert.match(
 const publishButton = addForm.match(/<button[^>]*nw-action-btn--primary[^>]*>[\s\S]*?<\/button>/)?.[0] || ''
 
 assert.ok(
-  publishButton.includes(':disabled="isPublishing"') && publishButton.includes(':aria-busy="isPublishing"'),
-  'the publish button must be disabled and announced as busy while publishing, so double clicks cannot reach the handler at all',
+  publishButton.includes(':disabled="isPublishing || isEditorLoading"') && publishButton.includes(':aria-busy="isPublishing"'),
+  'the publish button must stay disabled until the editor is ready and remain disabled while publishing',
 )
 
 assert.ok(

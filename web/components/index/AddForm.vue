@@ -65,7 +65,7 @@
             加载中...
           </span>
           <button type="button" class="tb-btn nw-action-btn nw-action-btn--danger danger nw-tooltip-anchor" data-tooltip="清除" aria-label="清除" @click="clearForm"><UIcon name="i-heroicons-trash" class="w-5 h-5" /></button>
-          <button type="button" class="tb-btn nw-action-btn nw-action-btn--primary primary nw-tooltip-anchor" :class="{ 'is-publishing': isPublishing }" :data-tooltip="isPublishing ? '发布中…' : '发布'" :aria-label="isPublishing ? '发布中' : '发布'" :aria-busy="isPublishing" :disabled="isPublishing" @click="addMessage"><UIcon :name="isPublishing ? 'i-mdi-loading' : 'i-mdi-send'" class="w-5 h-5" :class="{ 'publish-spin': isPublishing }" /></button>
+          <button type="button" class="tb-btn nw-action-btn nw-action-btn--primary primary nw-tooltip-anchor" :class="{ 'is-publishing': isPublishing }" :data-tooltip="isPublishing ? '发布中…' : '发布'" :aria-label="isPublishing ? '发布中' : '发布'" :aria-busy="isPublishing" :disabled="isPublishing || isEditorLoading" @click="addMessage"><UIcon :name="isPublishing ? 'i-mdi-loading' : 'i-mdi-send'" class="w-5 h-5" :class="{ 'publish-spin': isPublishing }" /></button>
         </div>
         <div v-if="activeUploadPercent > 0 && activeUploadPercent < 100" class="upload-progress">
           <div class="upload-progress-track">

@@ -183,6 +183,7 @@ import { MARKDOWN_BLANK_LINE_SENTINEL, encodeMarkdownExtraBlankLines, isMarkdown
 import { getFixedEditorClipInsets, insertEditorValueFallback, insertTableCellAtomicValue, replaceTableSourceLine, resolveTableAttachmentTarget, type TableAttachmentTarget } from '~/utils/vditor-table-attachment'
 import { applyTableTrackSize, getTableResizeZoomScale, resolveTableTrackResize, resolveTableTrailingScrollReserve, type TableTrackResizeSession } from '~/utils/table-resize-session'
 import { isBrowserPreviewableAttachmentUrl } from '~/utils/attachment-preview'
+import { createPreReadyEditorInsertBuffer } from '~/utils/editor-insert-buffer.mjs'
 import Vditor from "vditor";
 import { Fancybox } from "@fancyapps/ui";
 import "@fancyapps/ui/dist/fancybox/fancybox.css";
@@ -308,6 +309,7 @@ const PLAIN_EMPTY_LINE_CLASS = 'vditor-plain-empty-line';
 const MARKDOWN_EMPTY_TABLE_CELL = '';
 const MARKDOWN_EMPTY_TABLE_CELL_RE = /^(?:&nbsp;|&#160;|&#xA0;|\u00a0)$/i;
 const isReady = ref(false);
+const preReadyEditorInsertBuffer = createPreReadyEditorInsertBuffer();
 const showHeadingMenu = ref(false);
 const headingMenuRef = ref<HTMLElement | null>(null);
 const headingMenuStyle = ref<Record<string, string>>({});
@@ -5472,6 +5474,7 @@ onMounted(async () => {
       vditorInstance?.setValue(ensureSafeEditorTableMarkdown(encodeMarkdownExtraBlankLines(props.modelValue)));
       vditorInstance?.setTheme(props.theme === 'dark' ? 'dark' : 'classic');
       isReady.value = true;
+      preReadyEditorInsertBuffer.drain(insertNormalizedEditorValue)
       emit("ready");
       nextTick(() => {
         scheduleNormalizeEditorTableSource()
@@ -5597,6 +5600,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  preReadyEditorInsertBuffer.clear()
   try {
     removeExpandedTableAudioPreview()
     if (editorContainer.value) destroyAttachmentAudioPlayers(editorContainer.value)
@@ -5991,8 +5995,25 @@ const insertValueIntoCurrentTableCell = (value: string) => {
   return true
 }
 
+const insertNormalizedEditorValue = (nextValue: string) => {
+  if (!vditorInstance || !isReady.value) {
+    preReadyEditorInsertBuffer.push(nextValue)
+    return false
+  }
+  if (insertValueIntoCurrentTableCell(nextValue)) return true
+  if (pendingEditorTableCellSync) flushPendingEditorTableCellSourceSync()
+  insertEditorValueFallback(vditorInstance, nextValue, hasAttachmentMarker(nextValue))
+  if (hasAttachmentMarker(nextValue)) clearPreparedEditorAttachmentInsertionTarget()
+  normalizeEditorAttachmentSource()
+  refreshAttachmentLinksFromEditor()
+  window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
+  emitEditorValue()
+  return true
+}
+
 defineExpose({
   clear: () => {
+    preReadyEditorInsertBuffer.clear()
     closeInlineEditorTableTextarea()
     closeInlineEditorTableAtomicEditor()
     pendingEditorTableCellSync = null
@@ -6021,17 +6042,7 @@ defineExpose({
     getEditorEditableElement()?.focus({ preventScroll: true })
   },
   insertValue: (val: string) => {
-    if (vditorInstance) {
-      const nextValue = normalizeAttachmentInsertValue(val)
-      if (insertValueIntoCurrentTableCell(nextValue)) return
-      if (pendingEditorTableCellSync) flushPendingEditorTableCellSourceSync()
-      insertEditorValueFallback(vditorInstance, nextValue, hasAttachmentMarker(nextValue));
-      if (hasAttachmentMarker(nextValue)) clearPreparedEditorAttachmentInsertionTarget()
-      normalizeEditorAttachmentSource()
-      refreshAttachmentLinksFromEditor()
-      window.setTimeout(() => refreshAttachmentLinksFromEditor(), 0)
-      emitEditorValue();
-    }
+    insertNormalizedEditorValue(normalizeAttachmentInsertValue(val))
   },
   getValue: (): string => {
     return vditorInstance ? getSafeOutgoingEditorValue() : ''
