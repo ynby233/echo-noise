@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -40,6 +41,13 @@ type userNotificationCommentResponse struct {
 	CreatedAt time.Time                      `json:"created_at"`
 }
 
+const (
+	userNotificationTargetStatusAvailable      = "available"
+	userNotificationTargetStatusLoadError      = "load_error"
+	userNotificationTargetStatusMessageDeleted = "message_deleted"
+	userNotificationTargetStatusUnavailable    = "unavailable"
+)
+
 type userNotificationResponse struct {
 	ID              uint                             `json:"id"`
 	Type            string                           `json:"type"`
@@ -52,6 +60,7 @@ type userNotificationResponse struct {
 	Message         *userNotificationMessageResponse `json:"message,omitempty"`
 	Comment         *userNotificationCommentResponse `json:"comment,omitempty"`
 	ParentComment   *userNotificationCommentResponse `json:"parent_comment,omitempty"`
+	TargetStatus    string                           `json:"target_status"`
 	TargetTab       string                           `json:"target_tab"`
 	TargetURL       string                           `json:"target_url"`
 	Read            bool                             `json:"read"`
@@ -121,6 +130,23 @@ func notificationMessageResponse(message models.Message) userNotificationMessage
 	}
 }
 
+func notificationUnavailableResponse(notification models.UserNotification, users map[uint]models.User, targetStatus string) userNotificationResponse {
+	return userNotificationResponse{
+		ID:              notification.ID,
+		Type:            notification.Type,
+		RecipientUserID: notification.RecipientUserID,
+		ActorUserID:     notification.ActorUserID,
+		Actor:           notificationActorForUserID(notification.ActorUserID, users),
+		MessageID:       notification.MessageID,
+		CommentID:       notification.CommentID,
+		ParentCommentID: notification.ParentCommentID,
+		TargetStatus:    targetStatus,
+		Read:            notification.ReadAt != nil,
+		ReadAt:          notification.ReadAt,
+		CreatedAt:       notification.CreatedAt,
+	}
+}
+
 func notificationTarget(message models.Message, commentID *uint, notificationType string) (string, string) {
 	tab := "latest"
 	if isGuestbookMessage(message) && notificationType == models.UserNotificationTypeGuestbook {
@@ -156,6 +182,7 @@ func buildVisibleUserNotifications(notifications []models.UserNotification, view
 	}
 
 	messageMap := map[uint]models.Message{}
+	messageLoadFailed := false
 	messageIDs = uniqueNotificationIDs(messageIDs)
 	if len(messageIDs) > 0 {
 		var messages []models.Message
@@ -163,14 +190,21 @@ func buildVisibleUserNotifications(notifications []models.UserNotification, view
 			for _, message := range messages {
 				messageMap[message.ID] = message
 			}
+		} else {
+			log.Printf("加载通知关联笔记失败: %v", err)
+			messageLoadFailed = true
 		}
 	}
 
 	commentMap := map[uint]models.Comment{}
+	commentLoadFailed := false
 	if len(messageIDs) > 0 {
 		var comments []models.Comment
 		if err := db.Where("message_id IN ?", messageIDs).Find(&comments).Error; err == nil {
 			commentMap = services.CommentMap(comments)
+		} else {
+			log.Printf("加载通知关联评论失败: %v", err)
+			commentLoadFailed = true
 		}
 	}
 
@@ -195,6 +229,7 @@ func buildVisibleUserNotifications(notifications []models.UserNotification, view
 	}
 
 	activeLikePairs := map[string]bool{}
+	likeLoadFailed := false
 	likeMessageIDs = uniqueNotificationIDs(likeMessageIDs)
 	likeActorIDs = uniqueNotificationIDs(likeActorIDs)
 	if len(likeMessageIDs) > 0 && len(likeActorIDs) > 0 {
@@ -205,6 +240,9 @@ func buildVisibleUserNotifications(notifications []models.UserNotification, view
 					activeLikePairs[notificationPairKey(like.MessageID, *like.UserID)] = true
 				}
 			}
+		} else {
+			log.Printf("加载通知关联点赞失败: %v", err)
+			likeLoadFailed = true
 		}
 	}
 
@@ -212,8 +250,29 @@ func buildVisibleUserNotifications(notifications []models.UserNotification, view
 	items := make([]userNotificationResponse, 0, len(notifications))
 	for _, notification := range notifications {
 		messageID := notificationPtrValue(notification.MessageID)
+		if messageLoadFailed {
+			items = append(items, notificationUnavailableResponse(notification, users, userNotificationTargetStatusLoadError))
+			continue
+		}
+		if messageID == 0 {
+			items = append(items, notificationUnavailableResponse(notification, users, userNotificationTargetStatusUnavailable))
+			continue
+		}
 		message, ok := messageMap[messageID]
-		if !ok || !services.CanViewMessage(message, &viewerIDPtr, isAdmin) {
+		if !ok {
+			items = append(items, notificationUnavailableResponse(notification, users, userNotificationTargetStatusMessageDeleted))
+			continue
+		}
+		if !services.CanViewMessage(message, &viewerIDPtr, isAdmin) {
+			items = append(items, notificationUnavailableResponse(notification, users, userNotificationTargetStatusUnavailable))
+			continue
+		}
+		if commentLoadFailed && notification.Type != models.UserNotificationTypeLike {
+			items = append(items, notificationUnavailableResponse(notification, users, userNotificationTargetStatusLoadError))
+			continue
+		}
+		if likeLoadFailed && notification.Type == models.UserNotificationTypeLike {
+			items = append(items, notificationUnavailableResponse(notification, users, userNotificationTargetStatusLoadError))
 			continue
 		}
 
@@ -276,6 +335,10 @@ func buildVisibleUserNotifications(notifications []models.UserNotification, view
 			valid = false
 		}
 		if !valid {
+			if notification.Type == models.UserNotificationTypeLike {
+				continue
+			}
+			items = append(items, notificationUnavailableResponse(notification, users, userNotificationTargetStatusUnavailable))
 			continue
 		}
 
@@ -293,6 +356,7 @@ func buildVisibleUserNotifications(notifications []models.UserNotification, view
 			Message:         &messageSummary,
 			Comment:         commentResponse,
 			ParentComment:   parentCommentResponse,
+			TargetStatus:    userNotificationTargetStatusAvailable,
 			TargetTab:       targetTab,
 			TargetURL:       targetURL,
 			Read:            notification.ReadAt != nil,

@@ -74,6 +74,23 @@
             <p v-if="actorContent(item)" class="notification-actor-content">{{ actorContent(item) }}</p>
 
             <button
+              v-if="isTargetUnavailable(item)"
+              type="button"
+              class="notification-target-card notification-target-card--unavailable"
+              :aria-label="unavailableTitle(item)"
+              @click="markUnavailableRead(item)"
+            >
+              <span class="notification-unavailable-icon" aria-hidden="true">
+                <UIcon name="i-mdi-link-off" />
+              </span>
+              <span class="notification-unavailable-copy">
+                <strong class="notification-unavailable-title">{{ unavailableTitle(item) }}</strong>
+                <span class="notification-unavailable-detail">{{ unavailableDetail(item) }}</span>
+              </span>
+            </button>
+
+            <button
+              v-else
               type="button"
               class="notification-target-card"
               :class="{ jumping: jumpingId === item.id }"
@@ -220,6 +237,8 @@ type NotificationComment = {
   parent_id?: number | null
 }
 
+type NotificationTargetStatus = 'available' | 'message_deleted' | 'unavailable' | 'load_error'
+
 type UserNotification = {
   id: number
   type: 'comment' | 'reply' | 'guestbook' | 'like' | string
@@ -231,6 +250,7 @@ type UserNotification = {
   message?: NotificationMessage | null
   comment?: NotificationComment | null
   parent_comment?: NotificationComment | null
+  target_status?: NotificationTargetStatus
   target_tab?: string
   target_url?: string
   read: boolean
@@ -335,8 +355,23 @@ const messageOwnerName = (item: UserNotification) => {
 }
 
 const actorContent = (item: UserNotification) => {
+  if (isTargetUnavailable(item)) return ''
   if (item.type === 'like' || item.type === 'guestbook') return ''
   return truncate(item.comment?.content || '', 160)
+}
+
+const isTargetUnavailable = (item: UserNotification) => {
+  return Boolean(item.target_status && item.target_status !== 'available')
+}
+
+const unavailableTitle = (item: UserNotification) => {
+  return item.target_status === 'message_deleted' ? '原始笔记已被删除' : '关联内容暂不可用'
+}
+
+const unavailableDetail = (item: UserNotification) => {
+  if (item.target_status === 'message_deleted') return '这条通知对应的笔记已不存在，无法继续查看。'
+  if (item.target_status === 'load_error') return '暂时无法加载关联内容，请稍后重试。'
+  return '暂时无法查看这条通知对应的内容。'
 }
 
 const targetText = (item: UserNotification) => {
@@ -401,7 +436,7 @@ const replyCommentAuthor = (item: UserNotification) => {
 }
 
 const canReply = (item: UserNotification) => {
-  return item.type !== 'like' && replyCommentId(item) > 0 && targetMessageId(item) > 0
+  return !isTargetUnavailable(item) && item.type !== 'like' && replyCommentId(item) > 0 && targetMessageId(item) > 0
 }
 const jumpPayload = (item: UserNotification): NotificationJumpPayload => ({
   ...item,
@@ -676,6 +711,10 @@ const markRead = async (item: UserNotification) => {
   }
 }
 
+const markUnavailableRead = async (item: UserNotification) => {
+  await markRead(item)
+}
+
 const markAllRead = async () => {
   if (markingAll.value || unreadCount.value === 0) return
   markingAll.value = true
@@ -691,6 +730,10 @@ const markAllRead = async () => {
 }
 
 const jumpToTarget = async (item: UserNotification) => {
+  if (isTargetUnavailable(item)) {
+    await markUnavailableRead(item)
+    return
+  }
   if (jumpingId.value === item.id) return
   clearJumpFeedback()
   jumpingId.value = item.id
@@ -885,6 +928,13 @@ defineExpose({
 .notification-target-card { width:100%; margin-top:10px; padding:10px 12px; border:1px solid var(--notice-border); border-radius:12px; background:var(--notice-input); color:var(--notice-text); display:flex; align-items:center; flex-wrap:wrap; gap:10px; text-align:left; cursor:pointer; transition:background-color .16s ease, border-color .16s ease, opacity .16s ease; }
 .notification-target-card:hover { border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
 .notification-target-card.jumping { cursor:wait; opacity:.88; transform:none; }
+.notification-target-card--unavailable { position:relative; flex-wrap:nowrap; cursor:pointer; border-color:var(--notice-border); background:var(--notice-input); }
+.notification-target-card--unavailable::before { content:''; align-self:stretch; width:3px; min-height:44px; flex:0 0 3px; border-radius:999px; background:var(--notice-muted); opacity:.48; }
+.notification-target-card--unavailable:hover { border-color:var(--notice-border); background:var(--notice-card-hover); }
+.notification-unavailable-icon { width:34px; height:34px; flex:0 0 34px; display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--notice-border); border-radius:10px; background:var(--notice-card); color:var(--notice-muted); font-size:18px; }
+.notification-unavailable-copy { min-width:0; display:flex; flex:1; flex-direction:column; gap:3px; }
+.notification-unavailable-title { color:var(--notice-strong); font-size:14px; font-weight:650; line-height:1.45; }
+.notification-unavailable-detail { color:var(--notice-muted); font-size:12px; font-weight:400; line-height:1.55; }
 .notification-target-image { width:54px; height:54px; flex:0 0 54px; object-fit:cover; border-radius:10px; background:var(--notice-card); border:1px solid var(--notice-border); }
 .notification-target-text { min-width:0; flex:1 1 160px; font-size:14px; line-height:1.58; word-break:break-word; }
 .target-owner { color:var(--notice-link); font-weight:700; }
