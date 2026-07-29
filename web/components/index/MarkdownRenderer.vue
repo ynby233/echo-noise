@@ -1249,7 +1249,7 @@ const applyImageLoadingPlaceholders = () => {
   if (!previewElement.value) return;
   const imgs = Array.from(previewElement.value.querySelectorAll('img')) as HTMLImageElement[];
   imgs.forEach((img) => {
-    if (img.dataset.siteAttachmentKind || img.dataset.noiseAttachmentKind) return;
+    if (img.dataset.siteAttachmentKind) return;
     const container = (img.closest('.image-grid-item') || img.parentElement || previewElement.value) as HTMLElement;
     const needPlaceholder = !img.complete || !(img.naturalWidth && img.naturalHeight);
     if (!needPlaceholder) return;
@@ -1549,17 +1549,17 @@ const applyDeletedAttachmentPlaceholders = (customRoot?: HTMLElement | null) => 
   const root = customRoot || previewElement.value
   if (!root) return
   const nodes = Array.from(root.querySelectorAll<HTMLElement>(
-    '[data-site-attachment-kind][data-site-attachment-url], [data-noise-attachment-kind][data-noise-attachment-url]'
+    '[data-site-attachment-kind][data-site-attachment-url]'
   ))
 
   nodes.forEach((node) => {
     if (node.closest('.site-attachment-file--deleted')) return
-    const kind = String(node.dataset.siteAttachmentKind || node.dataset.noiseAttachmentKind || 'file') as AttachmentKind
-    const url = String(node.dataset.siteAttachmentUrl || node.dataset.noiseAttachmentUrl || '')
+    const kind = String(node.dataset.siteAttachmentKind || 'file') as AttachmentKind
+    const url = String(node.dataset.siteAttachmentUrl || '')
     if (!['image', 'video', 'audio', 'file'].includes(kind) || !url) return
 
-    if (node.dataset.noiseDeletedAttachmentBound !== 'true') {
-      node.dataset.noiseDeletedAttachmentBound = 'true'
+    if (node.dataset.siteDeletedAttachmentBound !== 'true') {
+      node.dataset.siteDeletedAttachmentBound = 'true'
       if (node instanceof HTMLImageElement || node instanceof HTMLVideoElement || node instanceof HTMLAudioElement) {
         node.addEventListener('error', () => renderAttachmentFailure(node, kind, false, url), { once: true })
       }
@@ -1977,8 +1977,8 @@ const renderMarkdown = async (markdown: string) => {
               v.setAttribute('src', src)
               v.setAttribute('controls', 'true')
               v.setAttribute('preload', 'metadata')
-              v.dataset.noiseAttachmentKind = 'video'
-              v.dataset.noiseAttachmentUrl = src
+              v.dataset.siteAttachmentKind = 'video'
+              v.dataset.siteAttachmentUrl = src
               v.style.width = '100%'
               v.style.height = 'auto'
               a.replaceWith(v)
@@ -2010,9 +2010,9 @@ const renderMarkdown = async (markdown: string) => {
               if (!v.hasAttribute('controls')) {
                   v.setAttribute('controls', 'true');
               }
-              if (resolvedSrc && !v.dataset.noiseAttachmentKind && isVideoAttachmentUrl(resolvedSrc)) {
-                  v.dataset.noiseAttachmentKind = 'video'
-                  v.dataset.noiseAttachmentUrl = resolvedSrc
+              if (resolvedSrc && !v.dataset.siteAttachmentKind && isVideoAttachmentUrl(resolvedSrc)) {
+                  v.dataset.siteAttachmentKind = 'video'
+                  v.dataset.siteAttachmentUrl = resolvedSrc
               }
               // Ensure proper sizing to prevent collapse (fixes height="100%" issue)
               v.style.width = '100%';
@@ -2024,9 +2024,9 @@ const renderMarkdown = async (markdown: string) => {
               const src = audio.getAttribute('src')
               if (src) audio.setAttribute('src', isManagedAttachmentURL(src) ? resolveAttachmentUrl(src) : resolveImageUrl(src))
               const resolvedSrc = audio.getAttribute('src') || ''
-              if (resolvedSrc && !audio.dataset.noiseAttachmentKind && isAudioAttachmentUrl(resolvedSrc)) {
-                  audio.dataset.noiseAttachmentKind = 'audio'
-                  audio.dataset.noiseAttachmentUrl = resolvedSrc
+              if (resolvedSrc && !audio.dataset.siteAttachmentKind && isAudioAttachmentUrl(resolvedSrc)) {
+                  audio.dataset.siteAttachmentKind = 'audio'
+                  audio.dataset.siteAttachmentUrl = resolvedSrc
               }
           });
 

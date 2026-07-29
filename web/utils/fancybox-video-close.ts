@@ -3,9 +3,9 @@ type FancyboxLike = {
   close?: () => void
   container?: HTMLElement | null
   options?: Record<string, any>
-  __noiseVideoCloseAnimated?: boolean
-  __noiseVideoClosePending?: boolean
-  __noiseVideoCloseRetrying?: boolean
+  __siteVideoCloseAnimated?: boolean
+  __siteVideoClosePending?: boolean
+  __siteVideoCloseRetrying?: boolean
 }
 
 type VideoPlaybackState = {
@@ -309,10 +309,10 @@ const syncVideoTimeWhenReady = (video: HTMLVideoElement, state: VideoPlaybackSta
     return
   }
   const marker = source ? getVideoMemoryKey(source) : ''
-  if (marker && video.dataset.noiseVideoRestorePending === marker) return
-  if (marker) video.dataset.noiseVideoRestorePending = marker
+  if (marker && video.dataset.siteVideoRestorePending === marker) return
+  if (marker) video.dataset.siteVideoRestorePending = marker
   const onReady = () => {
-    if (marker && video.dataset.noiseVideoRestorePending === marker) delete video.dataset.noiseVideoRestorePending
+    if (marker && video.dataset.siteVideoRestorePending === marker) delete video.dataset.siteVideoRestorePending
     apply()
   }
   video.addEventListener('loadedmetadata', onReady, { once: true })
@@ -376,7 +376,7 @@ const persistRegisteredVideoPlayback = () => {
         entry.videos.delete(video)
         return
       }
-      recordVideoProgress(video, video.dataset.noiseVideoPlaybackSource || source, false)
+      recordVideoProgress(video, video.dataset.siteVideoPlaybackSource || source, false)
     })
   })
 }
@@ -397,12 +397,12 @@ const registerVideoSurface = (source: string, video: HTMLVideoElement | null, ta
   ensureVideoPlaybackLifecyclePersistence()
   if (video) {
     entry.videos.add(video)
-    video.dataset.noiseVideoPlaybackSource = src
+    video.dataset.siteVideoPlaybackSource = src
   }
   targets.forEach((target) => {
     if (!target) return
     entry.targets.add(target)
-    target.dataset.noiseVideoPlaybackSource = src
+    target.dataset.siteVideoPlaybackSource = src
   })
   if (options.pauseOtherVideos) pauseOtherRegisteredVideos(src, video)
   syncRegisteredVideoSurfaces(src, getVideoState(src), { syncTime: true })
@@ -410,10 +410,10 @@ const registerVideoSurface = (source: string, video: HTMLVideoElement | null, ta
 
 const bindVideoPlaybackState = (video: HTMLVideoElement, target: HTMLElement, source: string, extraTargets: HTMLElement[] = [], options: VideoSurfaceRegisterOptions = {}) => {
   registerVideoSurface(source, video, [target, ...extraTargets], options)
-  video.dataset.noiseVideoPlaybackSource = getVideoMemoryKey(source) || source
-  if (video.dataset.noiseVideoPlaybackBound === 'true') return
-  video.dataset.noiseVideoPlaybackBound = 'true'
-  const getBoundSource = () => video.dataset.noiseVideoPlaybackSource || source
+  video.dataset.siteVideoPlaybackSource = getVideoMemoryKey(source) || source
+  if (video.dataset.siteVideoPlaybackBound === 'true') return
+  video.dataset.siteVideoPlaybackBound = 'true'
+  const getBoundSource = () => video.dataset.siteVideoPlaybackSource || source
   const record = () => recordVideoProgress(video, getBoundSource(), false)
   const recordWithFrame = () => recordVideoProgress(video, getBoundSource(), true)
   const recordResettableFrame = () => recordVideoProgress(video, getBoundSource(), true, true)
@@ -541,13 +541,13 @@ const getVideoCloseFrame = (slide: any, video: HTMLVideoElement | null, source: 
 
 const waitForVideoFrameThenClose = (instance: FancyboxLike, slide: any, video: HTMLVideoElement | null, event?: Event) => {
   if (event?.type === 'shouldClose') event.preventDefault()
-  if (!video || event?.type !== 'shouldClose' || instance.__noiseVideoClosePending) return
-  instance.__noiseVideoClosePending = true
+  if (!video || event?.type !== 'shouldClose' || instance.__siteVideoClosePending) return
+  instance.__siteVideoClosePending = true
   let done = false
   const source = getCloseFrameSource(slide, video)
   persistSlideVideoProgress(slide, video, source, true)
   const closeWithoutFrame = () => {
-    instance.__noiseVideoCloseAnimated = true
+    instance.__siteVideoCloseAnimated = true
     requestAnimationFrame(() => {
       instance.close?.()
     })
@@ -559,15 +559,15 @@ const waitForVideoFrameThenClose = (instance: FancyboxLike, slide: any, video: H
     video.removeEventListener('loadeddata', onReady)
     video.removeEventListener('canplay', onReady)
     video.removeEventListener('seeked', onReady)
-    instance.__noiseVideoClosePending = false
+    instance.__siteVideoClosePending = false
     if (!thumb) {
       closeWithoutFrame()
       return
     }
     applyVideoFrameFallback(slide, video, thumb, source)
-    instance.__noiseVideoCloseRetrying = true
+    instance.__siteVideoCloseRetrying = true
     requestAnimationFrame(() => {
-      try { instance.close?.() } finally { instance.__noiseVideoCloseRetrying = false }
+      try { instance.close?.() } finally { instance.__siteVideoCloseRetrying = false }
     })
   }
   const onReady = () => {
@@ -603,7 +603,7 @@ const waitForVideoFrameThenClose = (instance: FancyboxLike, slide: any, video: H
 
 export const animateFancyboxHtml5VideoClose = (instance: FancyboxLike, event?: Event) => {
   if (typeof document === 'undefined') return
-  if (instance.__noiseVideoCloseAnimated) return
+  if (instance.__siteVideoCloseAnimated) return
   const slide = instance?.getSlide?.()
   if (!slide || slide.type !== 'html5video') return
   const video = getSlideVideoElement(slide)
@@ -619,7 +619,7 @@ export const animateFancyboxHtml5VideoClose = (instance: FancyboxLike, event?: E
   const frameSrc = getVideoCloseFrame(slide, video, source)
   if (!frameSrc) return waitForVideoFrameThenClose(instance, slide, video, event)
   applyVideoFrameFallback(slide, video, frameSrc, source)
-  instance.__noiseVideoCloseAnimated = true
+  instance.__siteVideoCloseAnimated = true
 
   const overlay = document.createElement('img')
   overlay.src = frameSrc
@@ -722,8 +722,8 @@ export const ensureFancyboxVideoThumbnail = (video: HTMLVideoElement, target: HT
   bindVideoPlaybackState(video, target, src, extraTargets, options)
   syncVideoTimeWhenReady(video, getVideoState(src), src)
   if (video.readyState >= 2) refresh()
-  if (target.dataset.noiseVideoThumbBound === 'true') return
-  target.dataset.noiseVideoThumbBound = 'true'
+  if (target.dataset.siteVideoThumbBound === 'true') return
+  target.dataset.siteVideoThumbBound = 'true'
   const onReady = () => refresh()
   video.preload = 'auto'
   video.addEventListener('loadeddata', onReady)

@@ -210,15 +210,15 @@ const setRangeProgress = (input: HTMLInputElement, ratio: number) => {
 }
 
 const mountAudioPlayer = (root: HTMLElement) => {
-  if (root.dataset.noiseAudioMounted === 'true' && playerCleanup.has(root)) return
-  const src = String(root.dataset.audioSrc || root.dataset.noiseAttachmentUrl || '').trim()
+  if (root.dataset.siteAudioMounted === 'true' && playerCleanup.has(root)) return
+  const src = String(root.dataset.audioSrc || root.dataset.siteAttachmentUrl || '').trim()
   if (!src) return
   const name = audioFileName(src, root.dataset.audioName || '')
   const format = audioFormatLabel(src, name)
   const knownSize = Number(root.dataset.audioSize)
   const initialSize = Number.isFinite(knownSize) && knownSize >= 0 ? knownSize : null
 
-  root.dataset.noiseAudioMounted = 'true'
+  root.dataset.siteAudioMounted = 'true'
   root.replaceChildren()
   root.setAttribute('role', 'group')
   root.setAttribute('aria-label', `音频附件：${name}`)
@@ -226,8 +226,8 @@ const mountAudioPlayer = (root: HTMLElement) => {
   const audio = createElement('audio', 'site-attachment-audio__native')
   audio.src = src
   audio.preload = 'metadata'
-  audio.dataset.noiseAttachmentKind = 'audio'
-  audio.dataset.noiseAttachmentUrl = src
+  audio.dataset.siteAttachmentKind = 'audio'
+  audio.dataset.siteAttachmentUrl = src
 
   const header = createElement('div', 'site-attachment-audio__header')
   const information = createElement('div', 'site-attachment-audio__information')
@@ -529,7 +529,7 @@ const mountAudioPlayer = (root: HTMLElement) => {
 
   if (initialSize === null) {
     void probeAudioFileSize(src).then((size) => {
-      if (root.dataset.noiseAudioMounted !== 'true') return
+      if (root.dataset.siteAudioMounted !== 'true') return
       sizeElement.textContent = formatAudioFileSize(size)
     })
   }
@@ -564,7 +564,7 @@ const mountAudioPlayer = (root: HTMLElement) => {
     window.visualViewport?.removeEventListener('resize', onSpeedMenuViewportChange)
     window.visualViewport?.removeEventListener('scroll', onSpeedMenuViewportChange)
     setSpeedMenuOpen(false)
-    root.dataset.noiseAudioMounted = 'false'
+    root.dataset.siteAudioMounted = 'false'
     playerCleanup.delete(root)
   }
   playerCleanup.set(root, cleanup)
@@ -739,15 +739,15 @@ export const toggleAttachmentAudioPopover = (
 }
 
 const mountTableAudioTrigger = (trigger: HTMLButtonElement) => {
-  if (trigger.dataset.noiseTableAudioMounted === 'true' && tableTriggerCleanup.has(trigger)) return
-  const src = String(trigger.dataset.audioSrc || trigger.dataset.noiseAttachmentUrl || '').trim()
+  if (trigger.dataset.siteTableAudioMounted === 'true' && tableTriggerCleanup.has(trigger)) return
+  const src = String(trigger.dataset.audioSrc || trigger.dataset.siteAttachmentUrl || '').trim()
   if (!src) return
   const name = audioFileName(src, trigger.dataset.audioName || '')
   const knownSize = Number(trigger.dataset.audioSize)
   const size = Number.isFinite(knownSize) && knownSize >= 0 ? knownSize : null
   const sizeElement = trigger.querySelector<HTMLElement>('.site-table-audio-trigger__size')
 
-  trigger.dataset.noiseTableAudioMounted = 'true'
+  trigger.dataset.siteTableAudioMounted = 'true'
   trigger.setAttribute('aria-haspopup', 'dialog')
   trigger.setAttribute('aria-expanded', 'false')
   trigger.setAttribute('aria-label', `预览音频附件：${name}`)
@@ -762,7 +762,7 @@ const mountTableAudioTrigger = (trigger: HTMLButtonElement) => {
 
   if (size === null && sizeElement) {
     void probeAudioFileSize(src).then((resolvedSize) => {
-      if (!trigger.isConnected || trigger.dataset.noiseTableAudioMounted !== 'true') return
+      if (!trigger.isConnected || trigger.dataset.siteTableAudioMounted !== 'true') return
       sizeElement.textContent = formatAudioFileSize(resolvedSize)
     })
   }
@@ -770,14 +770,14 @@ const mountTableAudioTrigger = (trigger: HTMLButtonElement) => {
   const cleanup = () => {
     trigger.removeEventListener('mousedown', onMouseDown)
     trigger.removeEventListener('click', onClick)
-    trigger.dataset.noiseTableAudioMounted = 'false'
+    trigger.dataset.siteTableAudioMounted = 'false'
     tableTriggerCleanup.delete(trigger)
   }
   tableTriggerCleanup.set(trigger, cleanup)
 }
 
 const replaceTableAudioPlaceholder = (player: HTMLElement) => {
-  const src = String(player.dataset.audioSrc || player.dataset.noiseAttachmentUrl || '').trim()
+  const src = String(player.dataset.audioSrc || player.dataset.siteAttachmentUrl || '').trim()
   if (!src) return
   const name = audioFileName(src, player.dataset.audioName || '')
   const knownSize = Number(player.dataset.audioSize)
@@ -786,8 +786,8 @@ const replaceTableAudioPlaceholder = (player: HTMLElement) => {
   trigger.type = 'button'
   trigger.dataset.audioSrc = src
   trigger.dataset.audioName = name
-  trigger.dataset.noiseAttachmentKind = 'audio'
-  trigger.dataset.noiseAttachmentUrl = src
+  trigger.dataset.siteAttachmentKind = 'audio'
+  trigger.dataset.siteAttachmentUrl = src
   if (size !== null) trigger.dataset.audioSize = String(size)
 
   const icon = createElement('span', 'site-attachment-file__icon site-table-audio-trigger__icon')
@@ -822,11 +822,11 @@ export const enhanceAttachmentAudioPlayers = (root: ParentNode) => {
     const placeholder = createElement('div', 'site-attachment-audio')
     const src = audio.currentSrc || audio.getAttribute('src') || audio.querySelector<HTMLSourceElement>('source[src]')?.getAttribute('src') || ''
     if (!src) return
-    placeholder.dataset.noiseAudioPlayer = ''
+    placeholder.dataset.siteAudioPlayer = ''
     placeholder.dataset.audioSrc = src
     placeholder.dataset.audioName = audio.dataset.audioName || audio.getAttribute('title') || audio.getAttribute('aria-label') || audioFileName(src)
-    placeholder.dataset.noiseAttachmentKind = 'audio'
-    placeholder.dataset.noiseAttachmentUrl = src
+    placeholder.dataset.siteAttachmentKind = 'audio'
+    placeholder.dataset.siteAttachmentUrl = src
     audio.replaceWith(placeholder)
   })
   nodesMatching<HTMLElement>(root, '[data-site-audio-player]').forEach((player) => {

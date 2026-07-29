@@ -1302,8 +1302,8 @@ assert(
     fancyboxVideoClose.includes('const registerVideoSurface = (source: string, video: HTMLVideoElement | null, targets: Array<HTMLElement | null | undefined>, options: VideoSurfaceRegisterOptions = {}) => {') &&
     fancyboxVideoClose.includes('const bindVideoPlaybackState = (video: HTMLVideoElement, target: HTMLElement, source: string, extraTargets: HTMLElement[] = [], options: VideoSurfaceRegisterOptions = {}) => {') &&
     fancyboxVideoClose.includes('registerVideoSurface(source, video, [target, ...extraTargets], options)') &&
-    fancyboxVideoClose.includes('video.dataset.noiseVideoPlaybackSource = getVideoMemoryKey(source) || source') &&
-    fancyboxVideoClose.includes('const getBoundSource = () => video.dataset.noiseVideoPlaybackSource || source') &&
+    fancyboxVideoClose.includes('video.dataset.siteVideoPlaybackSource = getVideoMemoryKey(source) || source') &&
+    fancyboxVideoClose.includes('const getBoundSource = () => video.dataset.siteVideoPlaybackSource || source') &&
     fancyboxVideoClose.includes('const recordResettableFrame = () => recordVideoProgress(video, getBoundSource(), true, true)') &&
     fancyboxVideoClose.includes('syncVideoTimeWhenReady(video, state, getBoundSource())') &&
     fancyboxVideoClose.includes('applyFrameToTarget(target, frame)') &&
@@ -1343,7 +1343,7 @@ assert(
     fancyboxVideoClose.includes('applyVideoFrameFallback(slide, video, frameSrc, source)') &&
     fancyboxVideoClose.includes("video.addEventListener('loadeddata', onReady)") &&
     fancyboxVideoClose.includes("video.addEventListener('canplay', onReady)") &&
-    fancyboxVideoClose.includes('requestAnimationFrame(() => {\n      try { instance.close?.() } finally { instance.__noiseVideoCloseRetrying = false }\n    })') &&
+    fancyboxVideoClose.includes('requestAnimationFrame(() => {\n      try { instance.close?.() } finally { instance.__siteVideoCloseRetrying = false }\n    })') &&
     fancyboxVideoClose.includes('const containRect = (sourceRect: DOMRect, targetRect: DOMRect) => {') &&
     fancyboxVideoClose.includes('const finalRect = containRect(startRect!, targetRect!)') &&
     fancyboxVideoClose.includes("transition: 'transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 280ms cubic-bezier(0.22, 1, 0.36, 1)'") &&

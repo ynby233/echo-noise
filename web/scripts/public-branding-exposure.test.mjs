@@ -25,6 +25,8 @@ const forbiddenTokens = [
   's2.loli.net',
   'noise-full-image-attachments',
   'noise-',
+  'dataset.noise',
+  '__noise',
 ]
 
 const textExtensions = new Set([

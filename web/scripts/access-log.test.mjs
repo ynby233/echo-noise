@@ -30,7 +30,7 @@ assert.match(
 assert.match(migrate, /SecurityAccessLog\{\},\s*&SecuritySiteVisitLog\{\}/, 'access log and site visit models must be migrated with security models')
 assert.match(
   middleware,
-  /func\s+AccessLogMiddleware\(\)\s+gin\.HandlerFunc[\s\S]*?recordAccess\s*:=\s*![\s\S]*?isAccessLogEnabled\(\)[\s\S]*?recordSiteVisit\s*:=\s*shouldRecordSiteVisitRequest\(c\)\s*&&\s*isSiteVisitLogEnabled\(\)[\s\S]*?recordAccessLog\(c,\s*time\.Since\(start\)\)[\s\S]*?recordSiteVisitLog\(c\)/,
+  /func\s+AccessLogMiddleware\(\)\s+gin\.HandlerFunc[\s\S]*?accessEnabled,\s*siteVisitEnabled\s*:=\s*accessLogSettings\(\)[\s\S]*?recordAccess\s*:=\s*accessEnabled\s*&&\s*!shouldSkipAccessLog\(c\.Request\.Method,\s*c\.Request\.URL\.Path\)[\s\S]*?recordSiteVisit\s*:=\s*siteVisitEnabled\s*&&\s*shouldRecordSiteVisitRequest\(c\)[\s\S]*?recordAccessLog\(c,\s*time\.Since\(start\)\)[\s\S]*?recordSiteVisitLog\(c\)/,
   'access log middleware must independently record full request logs and homepage site visits when each switch is enabled'
 )
 assert.match(middleware, /strings\.EqualFold\(method,\s*"OPTIONS"\)/, 'access log middleware must skip preflight requests')

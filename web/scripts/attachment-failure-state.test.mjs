@@ -18,19 +18,19 @@ assert.match(
 
 assert.match(
   renderer,
-  /const kind = String\(node\.dataset\.siteAttachmentKind \|\| node\.dataset\.noiseAttachmentKind \|\| 'file'\) as AttachmentKind/,
+  /const kind = String\(node\.dataset\.siteAttachmentKind \|\| 'file'\) as AttachmentKind/,
   'failure detection must read data-site-attachment-kind through the matching DOMStringMap key',
 )
 
 assert.match(
   renderer,
-  /const url = String\(node\.dataset\.siteAttachmentUrl \|\| node\.dataset\.noiseAttachmentUrl \|\| ''\)/,
+  /const url = String\(node\.dataset\.siteAttachmentUrl \|\| ''\)/,
   'failure detection must read data-site-attachment-url through the matching DOMStringMap key',
 )
 
 assert.match(
   renderer,
-  /if \(img\.dataset\.siteAttachmentKind \|\| img\.dataset\.noiseAttachmentKind\) return/,
+  /if \(img\.dataset\.siteAttachmentKind\) return/,
   'attachment images must not also receive the legacy generic image error placeholder',
 )
 
