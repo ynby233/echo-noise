@@ -17,7 +17,7 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-func TestFeedRefreshRequiresAdministrator(t *testing.T) {
+func TestFeedRefreshIsPublic(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("ACCESS_LOG", "false")
 	t.Setenv("SESSION_SECRET", "feed-refresh-route-test-secret")
@@ -91,11 +91,11 @@ func TestFeedRefreshRequiresAdministrator(t *testing.T) {
 		return response
 	}
 
-	if response := requestRefresh(nil); response.Code != http.StatusUnauthorized {
-		t.Fatalf("anonymous feed refresh status = %d, want 401: %s", response.Code, response.Body.String())
+	if response := requestRefresh(nil); response.Code != http.StatusOK {
+		t.Fatalf("anonymous feed refresh status = %d, want 200: %s", response.Code, response.Body.String())
 	}
-	if response := requestRefresh(cookiesFor("member")); response.Code != http.StatusForbidden {
-		t.Fatalf("ordinary feed refresh status = %d, want 403: %s", response.Code, response.Body.String())
+	if response := requestRefresh(cookiesFor("member")); response.Code != http.StatusOK {
+		t.Fatalf("ordinary feed refresh status = %d, want 200: %s", response.Code, response.Body.String())
 	}
 	if response := requestRefresh(cookiesFor("admin")); response.Code != http.StatusOK {
 		t.Fatalf("admin feed refresh status = %d, want 200: %s", response.Code, response.Body.String())

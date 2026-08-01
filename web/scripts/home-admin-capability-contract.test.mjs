@@ -26,6 +26,5 @@ assert.match(messageList, /if \(!canPin\(msg\)\) return/, 'pin command must reta
 assert.match(addForm, /useAdminCapabilities\(\)/, 'publish controls must consume the shared capability module')
 assert.match(addForm, /const canNotify = computed\(\(\) => can\('notifications\.manage'\)\)/, 'publish notification control must require notifications.manage')
 assert.match(addForm, /const canSetPublishTime = computed\(\(\) => can\('notes\.change_publish_time'\)\)/, 'custom publish time must require notes.change_publish_time')
-assert.match(homePage, /useAdminCapabilities\(\)/, 'feed refresh must consume the shared capability module')
-assert.match(homePage, /v-if="can\('feed\.manage'\)"/, 'feed refresh button must require feed.manage')
-assert.match(homePage, /const refreshInfoFeed = async \(\) => \{[\s\S]*?if \(!can\('feed\.manage'\)\) return/, 'feed refresh command must retain the same client-side guard as its button')
+assert.doesNotMatch(homePage, /v-if="can\('feed\.manage'\)"/, 'feed refresh must be available to every visitor')
+assert.doesNotMatch(homePage, /const refreshInfoFeed = async \(\) => \{[\s\S]*?if \(!can\('feed\.manage'\)\) return/, 'public feed refresh must not retain an administrator-only client guard')

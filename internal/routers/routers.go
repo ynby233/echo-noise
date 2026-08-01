@@ -235,7 +235,7 @@ func SetupRouter() *gin.Engine {
 	api.PUT("/announcements/read-all", controllers.MarkAllAnnouncementsRead)
 	api.PUT("/announcements/:id/read", controllers.MarkAnnouncementRead)
 	api.GET("/feed/items", controllers.GetInfoFeedItems)
-	api.POST("/feed/refresh", middleware.SessionAuthMiddleware(), middleware.RequireCapability(authorization.CapabilityFeedManage), controllers.RefreshInfoFeedItems)
+	api.POST("/feed/refresh", controllers.RefreshPublicInfoFeedItems)
 	api.POST("/login", controllers.Login)
 	api.POST("/register", controllers.Register)
 	api.GET("/status", controllers.GetStatus)

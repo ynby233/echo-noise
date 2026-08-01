@@ -206,7 +206,6 @@
                 <div v-else class="nw-content-panel-count nw-content-panel-count-placeholder" aria-hidden="true"></div>
                 <div class="nw-content-panel-actions">
                   <button
-                    v-if="can('feed.manage')"
                     type="button"
                     class="feed-results-refresh nw-content-panel-action nw-content-panel-action--icon nw-action-btn nw-tooltip-anchor"
                     data-tooltip="刷新"
@@ -795,8 +794,7 @@ const setFeedTargetPage = (event: Event) => {
   infoFeedList.value?.setTargetPage(input?.value || '')
 }
 const refreshInfoFeed = async () => {
-  if (!can('feed.manage')) return
-  if (feedRefreshing.value || isFeedLoading.value) return
+	if (feedRefreshing.value || isFeedLoading.value) return
   feedRefreshing.value = true
   try {
     await infoFeedList.value?.refreshFeed()

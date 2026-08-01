@@ -77,3 +77,19 @@ func TestRefreshInfoFeedItemsReplacesSnapshotAndKeepsLocalMessageLinksRelative(t
 		t.Fatalf("refreshed snapshot = %#v", latest)
 	}
 }
+
+func TestRefreshPublicInfoFeedItemsReusesRecentSnapshot(t *testing.T) {
+	previous := readInfoFeedSnapshot()
+	t.Cleanup(func() {
+		writeInfoFeedSnapshot(previous.items, previous.err, previous.updatedAt)
+	})
+
+	writeInfoFeedSnapshot([]InfoFeedItem{{Title: "cached public item"}}, nil, time.Now())
+	items, err := RefreshPublicInfoFeedItems(0)
+	if err != nil {
+		t.Fatalf("public refresh with a recent snapshot: %v", err)
+	}
+	if len(items) != 1 || items[0].Title != "cached public item" {
+		t.Fatalf("public refresh must reuse the recent shared snapshot, got %#v", items)
+	}
+}

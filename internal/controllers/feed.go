@@ -31,6 +31,19 @@ func RefreshInfoFeedItems(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.OK(items, "ok"))
 }
 
+// RefreshPublicInfoFeedItems lets visitors request a current feed snapshot.
+// The service reuses a recent shared snapshot so public clicks do not amplify
+// outbound source requests.
+func RefreshPublicInfoFeedItems(c *gin.Context) {
+	items, err := services.RefreshPublicInfoFeedItems(parseInfoFeedLimit(c))
+	if err != nil && len(items) == 0 {
+		c.JSON(http.StatusOK, dto.Fail[string]("刷新信息流失败: "+err.Error()))
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, dto.OK(items, "ok"))
+}
+
 func parseInfoFeedLimit(c *gin.Context) int {
 	limit := 0
 	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {

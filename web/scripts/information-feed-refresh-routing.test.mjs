@@ -35,13 +35,13 @@ const [feed, home, messageList, routerSource] = await Promise.all([
 
 assert.match(
   routerSource,
-  /api\.POST\("\/feed\/refresh", middleware\.SessionAuthMiddleware\(\), middleware\.(?:AdminAuthMiddleware\(\)|RequireCapability\(authorization\.CapabilityFeedManage\)), controllers\.RefreshInfoFeedItems\)/,
-  'manual source refresh must require authenticated capability authorization',
+  /api\.POST\("\/feed\/refresh", controllers\.RefreshPublicInfoFeedItems\)/,
+  'manual source refresh must be callable without a session or delegated capability',
 )
-assert.match(
+assert.doesNotMatch(
   home,
   /<button\s+v-if="isAdmin"[\s\S]*?aria-label="刷新信息流"[\s\S]*?@click="refreshInfoFeed"/,
-  'the upstream-refresh action must only be shown to administrators',
+  'the upstream-refresh action must not be hidden behind an administrator-only condition',
 )
 assert.match(
   feed,

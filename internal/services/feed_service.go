@@ -82,6 +82,7 @@ var (
 const (
 	infoFeedCacheTTL           = 90 * time.Second
 	infoFeedUnlimitedFetchSize = 500
+	infoFeedPublicRefreshTTL   = 15 * time.Second
 )
 
 func GetInfoFeedConfig() (bool, int, []InfoFeedSource, error) {
@@ -138,6 +139,21 @@ func LoadInfoFeedItems(limit int) ([]InfoFeedItem, error) {
 // shared snapshot, and returns the refreshed items to the caller.
 func RefreshInfoFeedItems(limit int) ([]InfoFeedItem, error) {
 	items, err := refreshInfoFeedSnapshotItems()
+	if limit > 100 {
+		limit = 100
+	}
+	if limit > 0 && len(items) > limit {
+		items = items[:limit]
+	}
+	return cloneInfoFeedItems(items), err
+}
+
+// RefreshPublicInfoFeedItems returns the current shared snapshot when it was
+// refreshed recently; otherwise it performs one source refresh. This keeps the
+// public refresh button responsive without allowing visitors to amplify source
+// traffic through repeated POST requests.
+func RefreshPublicInfoFeedItems(limit int) ([]InfoFeedItem, error) {
+	items, err := refreshInfoFeedSnapshotItemsWithin(infoFeedPublicRefreshTTL)
 	if limit > 100 {
 		limit = 100
 	}
@@ -238,8 +254,18 @@ func refreshInfoFeedSnapshot() {
 }
 
 func refreshInfoFeedSnapshotItems() ([]InfoFeedItem, error) {
+	return refreshInfoFeedSnapshotItemsWithin(0)
+}
+
+func refreshInfoFeedSnapshotItemsWithin(reuseWithin time.Duration) ([]InfoFeedItem, error) {
 	feedRefreshMu.Lock()
 	defer feedRefreshMu.Unlock()
+	if reuseWithin > 0 {
+		snapshot := readInfoFeedSnapshot()
+		if !snapshot.updatedAt.IsZero() && time.Since(snapshot.updatedAt) < reuseWithin {
+			return cloneInfoFeedItems(snapshot.items), snapshot.err
+		}
+	}
 
 	baseURL := resolveSchedulerBaseURL()
 	items, err := loadInfoFeedItemsFromSources(baseURL, 0)
