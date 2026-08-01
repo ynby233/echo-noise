@@ -85,13 +85,13 @@ assert.match(
 )
 assert.match(
   messageList,
-  /const visibilityChanged = nextVisibility !== messageVisibility\(currentMsg\)[\s\S]*!contentChanged && !publishTimeChanged && !visibilityChanged/,
-  'edit saving must allow visibility-only changes'
+  /const canUpdateVisibility = canChangeVisibility\(currentMsg\)[\s\S]*const visibilityChanged = canUpdateVisibility && nextVisibility !== messageVisibility\(currentMsg\)[\s\S]*!contentChanged && !publishTimeChanged && !visibilityChanged/,
+  'edit saving must allow visibility-only changes only when the actor can change visibility'
 )
 assert.match(
   messageList,
-  /visibility:\s*nextVisibility,[\s\S]*private:\s*messageVisibilityRequiresPrivate\(nextVisibility\)/,
-  'edit payload must send both visibility and legacy private fields'
+  /if \(canUpdateVisibility\) \{[\s\S]*payload\.visibility = nextVisibility[\s\S]*payload\.private = messageVisibilityRequiresPrivate\(nextVisibility\)/,
+  'edit payload must send visibility fields only when the actor may change visibility'
 )
 assert.match(
   messageList,

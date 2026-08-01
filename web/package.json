@@ -23,6 +23,7 @@
     "test:admin-comments": "node scripts/admin-comments-panel.test.mjs",
     "test:admin-dashboard": "node scripts/admin-dashboard-contract.test.mjs",
     "test:admin-authorization": "node scripts/admin-authorization-contract.test.mjs",
+    "test:home-admin-capabilities": "node scripts/home-admin-capability-contract.test.mjs",
     "test:login-audit": "node scripts/login-audit.test.mjs",
     "test:login-expire": "node scripts/login-expire.test.mjs",
     "test:auth-recovery": "node scripts/auth-recovery-sync.test.mjs",

@@ -247,6 +247,7 @@ import { clamp, getFixedCoordinateScale, getFixedRect, getFixedViewport, positio
 import type { MessageToSave, MessageVisibility } from "~/types/models";
 import { useMessage } from "~/composables/useMessage";
 import { useUserStore } from '~/store/user'
+import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 import { Fancybox } from '@fancyapps/ui'
 import '@fancyapps/ui/dist/fancybox/fancybox.css'
 const VditorEditor = defineAsyncComponent(() => import('./VditorEditor.vue'))
@@ -619,11 +620,9 @@ const clearForm = () => {
 };
 
 const userStore = useUserStore();
-const canNotify = computed(() => {
-  const user = userStore.user as any
-  return !!(user?.is_admin || user?.IsAdmin)
-})
-const canSetPublishTime = computed(() => canNotify.value)
+const { can, refreshCapabilities } = useAdminCapabilities()
+const canNotify = computed(() => can('notifications.manage'))
+const canSetPublishTime = computed(() => can('notes.change_publish_time'))
 
 const datetimeLocalToISO = (value: string) => {
   const raw = String(value || '').trim()
@@ -1186,6 +1185,7 @@ watch(() => [userStore.isLogin, canNotify.value], () => {
 }, { immediate: true });
 
 onMounted(async () => {
+  void refreshCapabilities()
   Fancybox.bind("[data-fancybox]", createMediaFancyboxOptions({ video: true }) as any);
   document.addEventListener('mousedown', handleFloatingMenuPointerDown)
   window.addEventListener('resize', handleFloatingMenuViewportChange)

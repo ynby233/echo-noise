@@ -1517,8 +1517,8 @@ assert(
     messageList.includes(':task-list-editable="canEditMessageTasks(msg)"') &&
     messageList.includes(':message-id="Number(msg.id)"') &&
     messageList.includes('const canEditMessageTasks = (msg: any) =>') &&
-    messageList.includes('userStore.isLogin && (currentUserIsAdmin.value || isCurrentUserMessage(msg))'),
-  'published markdown task lists must persist checkbox changes through the message update API and only allow authors/admins to interact'
+    messageList.includes("isCurrentUserMessage(msg) || canManageOtherMessage(msg, 'notes.edit')"),
+  'published markdown task lists must persist checkbox changes through the message update API and only allow authors or delegated administrators with notes.edit to interact'
 )
 
 assert(

@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"gorm.io/gorm"
@@ -25,7 +26,7 @@ func setupMessagePublishTimeTest(t *testing.T) (*gorm.DB, *gin.Engine, *uint) {
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}
-	if err := db.AutoMigrate(&models.User{}, &models.Message{}, &models.Comment{}, &models.SiteConfig{}); err != nil {
+	if err := db.AutoMigrate(&models.User{}, &models.Message{}, &models.Comment{}, &models.SiteConfig{}, &models.AdminCapabilityGrant{}, &models.AdminAuditLog{}, &models.AdminAuditConfig{}); err != nil {
 		t.Fatalf("migrate test db: %v", err)
 	}
 	database.DB = db
@@ -40,11 +41,14 @@ func setupMessagePublishTimeTest(t *testing.T) (*gorm.DB, *gin.Engine, *uint) {
 	r.Use(func(c *gin.Context) {
 		if currentUserID != 0 {
 			c.Set("user_id", currentUserID)
+			c.Set("auth_via", "session")
 		}
 		c.Next()
 	})
 	r.POST("/messages", PostMessage)
 	r.PUT("/messages/:id", UpdateMessage)
+	r.PUT("/messages/:id/pin", UpdateMessagePinned)
+	r.DELETE("/messages/:id", DeleteMessage)
 	return db, r, &currentUserID
 }
 
@@ -204,5 +208,73 @@ func TestRegularUserCannotUpdateOwnMessageCreatedAt(t *testing.T) {
 	}
 	if !unchanged.CreatedAt.Equal(originalAt) {
 		t.Fatalf("created_at changed unexpectedly from %s to %s", originalAt.Format(time.RFC3339), unchanged.CreatedAt.Format(time.RFC3339))
+	}
+}
+
+func TestDelegatedMessageMutationAuditsSuccessAndPrimaryContentDenial(t *testing.T) {
+	db, r, currentUserID := setupMessagePublishTimeTest(t)
+	primary := models.User{ID: models.PrimaryAdminUserID, Username: "primary", IsAdmin: true}
+	delegated := models.User{ID: 1601, Username: "delegated", IsAdmin: true}
+	owner := models.User{ID: 1602, Username: "owner"}
+	for _, user := range []*models.User{&primary, &delegated, &owner} {
+		if err := db.Create(user).Error; err != nil {
+			t.Fatalf("create user %s: %v", user.Username, err)
+		}
+	}
+	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityNotesEdit}); err != nil {
+		t.Fatalf("grant delegated editor: %v", err)
+	}
+	ordinaryMessage := models.Message{Content: "ordinary", UserID: owner.ID}
+	primaryMessage := models.Message{Content: "primary", UserID: primary.ID}
+	if err := db.Create(&ordinaryMessage).Error; err != nil {
+		t.Fatalf("create ordinary message: %v", err)
+	}
+	if err := db.Create(&primaryMessage).Error; err != nil {
+		t.Fatalf("create primary message: %v", err)
+	}
+	*currentUserID = delegated.ID
+
+	allowed := performMessageJSONRequest(r, http.MethodPut, "/messages/"+strconv.FormatUint(uint64(ordinaryMessage.ID), 10), map[string]any{"content": "delegated update"})
+	assertMessageResponseCode(t, allowed, http.StatusOK, 1)
+	denied := performMessageJSONRequest(r, http.MethodPut, "/messages/"+strconv.FormatUint(uint64(primaryMessage.ID), 10), map[string]any{"content": "forbidden"})
+	assertMessageResponseCode(t, denied, http.StatusForbidden, 0)
+
+	var records []models.AdminAuditLog
+	if err := db.Where("actor_user_id = ? AND capability = ?", delegated.ID, authorization.CapabilityNotesEdit).Order("id ASC").Find(&records).Error; err != nil {
+		t.Fatalf("load message mutation audits: %v", err)
+	}
+	if len(records) != 2 {
+		t.Fatalf("expected success and denied message mutation audit records, got %#v", records)
+	}
+	if records[0].Result != "success" || records[0].TargetID != strconv.FormatUint(uint64(ordinaryMessage.ID), 10) {
+		t.Fatalf("unexpected success audit: %#v", records[0])
+	}
+	if records[1].Result != "denied" || records[1].TargetID != strconv.FormatUint(uint64(primaryMessage.ID), 10) {
+		t.Fatalf("unexpected denial audit: %#v", records[1])
+	}
+}
+
+func TestDelegatedAdministratorCannotRequestPublishNotificationWithoutCapability(t *testing.T) {
+	db, r, currentUserID := setupMessagePublishTimeTest(t)
+	primary := models.User{ID: models.PrimaryAdminUserID, Username: "primary", IsAdmin: true}
+	delegated := models.User{ID: 1701, Username: "delegated", IsAdmin: true}
+	for _, user := range []*models.User{&primary, &delegated} {
+		if err := db.Create(user).Error; err != nil {
+			t.Fatalf("create user %s: %v", user.Username, err)
+		}
+	}
+	if err := db.Create(&models.SiteConfig{NotifyEnabled: true}).Error; err != nil {
+		t.Fatalf("enable publish notifications: %v", err)
+	}
+	*currentUserID = delegated.ID
+
+	w := performMessageJSONRequest(r, http.MethodPost, "/messages", map[string]any{"content": "notification bypass", "notify": true})
+	assertMessageResponseCode(t, w, http.StatusForbidden, 0)
+	var count int64
+	if err := db.Model(&models.Message{}).Where("content = ?", "notification bypass").Count(&count).Error; err != nil {
+		t.Fatalf("count messages: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("unauthorized notification request must not publish a message")
 	}
 }

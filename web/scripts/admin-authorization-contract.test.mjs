@@ -2,13 +2,15 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
 const panel = await readFile(new URL('../components/index/StatusPanel.vue', import.meta.url), 'utf8')
+const capabilities = await readFile(new URL('../composables/useAdminCapabilities.ts', import.meta.url), 'utf8')
 const center = await readFile(new URL('../components/admin/AuthorizationCenter.vue', import.meta.url), 'utf8')
 const audit = await readFile(new URL('../components/admin/AuditLogPanel.vue', import.meta.url), 'utf8')
 
-assert.match(panel, /admin\/authorization\/me/)
+assert.match(capabilities, /admin\/authorization\/me/)
+assert.match(panel, /useAdminCapabilities\(\)/)
 assert.match(panel, /isPrimaryAdmin/)
 assert.match(panel, /canViewAdminAudit/)
-assert.match(panel, /const can = \(capability: string\) => isPrimaryAdmin\.value \|\| adminCapabilities\.value\.includes\(capability\)/)
+assert.match(capabilities, /const can = \(capability: string\) => isPrimaryAdmin\.value \|\|/)
 assert.match(panel, /const canSection = \(section: AdminSectionKey\)/)
 assert.match(panel, /items: group\.items\.filter\(\(item\) => canSection\(item\.key\)\)/)
 assert.match(panel, /'admin-audit': 'audit\.view'/)

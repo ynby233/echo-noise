@@ -2458,6 +2458,7 @@ import { writeClipboardText } from '~/utils/clipboard'
 import { resolveManagedAttachmentURL } from '~/utils/media-url'
 import { resolveUploadedMediaUrl } from '~/utils/media-upload'
 import { makeEmptyAdConfig, normalizeAdConfigs, resolveAdImageURL, type AdConfig } from '~/utils/ad-config'
+import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 import { useRuntimeConfig, useHead, useRouter } from '#imports'
 const formatShanghai = (s: string) => {
   try {
@@ -2485,9 +2486,8 @@ const isAdmin = computed(() => {
     const u: any = userStore.user
     return !!(userStore.isLogin && u && (u.is_admin || u.IsAdmin))
 })
-const adminCapabilities = ref<string[]>([])
-const canViewAdminAudit = computed(() => isPrimaryAdmin.value || adminCapabilities.value.includes('audit.view'))
-const can = (capability: string) => isPrimaryAdmin.value || adminCapabilities.value.includes(capability)
+const { capabilities: adminCapabilities, isPrimaryAdmin, can, refreshCapabilities: loadAdminCapabilities } = useAdminCapabilities()
+const canViewAdminAudit = computed(() => can('audit.view'))
 const sectionCapabilities: Partial<Record<AdminSectionKey, string>> = {
   site: 'site_settings.view', 'site-configs': 'site_settings.view', 'site-default-theme': 'site_settings.view',
   'site-register': 'site_settings.view', 'site-pwa': 'site_settings.view', 'site-ads': 'site_settings.view',
@@ -2503,14 +2503,6 @@ const canSection = (section: AdminSectionKey) => {
   if (!isAdmin.value) return section === 'dashboard' || section === 'user' || section === 'hitokoto' || section === 'life-countdown'
   const capability = sectionCapabilities[section]
   return !capability || can(capability)
-}
-const loadAdminCapabilities = async () => {
-  if (!isAdmin.value) { adminCapabilities.value = []; return }
-  try {
-    const response = await fetch('/api/admin/authorization/me', { credentials: 'include' })
-    const body = await response.json().catch(() => ({}))
-    adminCapabilities.value = response.ok && body?.code === 1 ? (body.data?.capabilities || []) : []
-  } catch { adminCapabilities.value = [] }
 }
 const adminNavGroups = computed<AdminNavGroup[]>(() => {
   const groups: AdminNavGroup[] = [
@@ -4583,7 +4575,6 @@ const currentUserId = computed(() => {
   const id = Number(u?.id ?? u?.ID ?? 0)
   return Number.isFinite(id) ? id : 0
 })
-const isPrimaryAdmin = computed(() => isAdmin.value && currentUserId.value === 1)
 const canManageVoceChatConfig = computed(() => isPrimaryAdmin.value)
 const registeredVoceChatEmail = computed(() => {
   const userVoceEmail = String((userStore.user as any)?.voce_chat_email || (userStore.user as any)?.VoceChatEmail || '').trim()

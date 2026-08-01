@@ -206,7 +206,7 @@
                 <div v-else class="nw-content-panel-count nw-content-panel-count-placeholder" aria-hidden="true"></div>
                 <div class="nw-content-panel-actions">
                   <button
-                    v-if="isAdmin"
+                    v-if="can('feed.manage')"
                     type="button"
                     class="feed-results-refresh nw-content-panel-action nw-content-panel-action--icon nw-action-btn nw-tooltip-anchor"
                     data-tooltip="刷新"
@@ -606,6 +606,7 @@ import { attachmentFailureAriaLabel, attachmentFailureDetail, attachmentFailureT
 import { resolveManagedAttachmentURL } from '~/utils/media-url'
 import { useToast } from '#ui/composables/useToast'
 import { useUserStore } from '~/store/user'
+import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 import type { PageQueryResult, Tag } from '~/types/models'
 const router = useRouter()
 const route = useRoute()
@@ -794,6 +795,7 @@ const setFeedTargetPage = (event: Event) => {
   infoFeedList.value?.setTargetPage(input?.value || '')
 }
 const refreshInfoFeed = async () => {
+  if (!can('feed.manage')) return
   if (feedRefreshing.value || isFeedLoading.value) return
   feedRefreshing.value = true
   try {
@@ -1100,6 +1102,8 @@ onMounted(async () => {
 
 
 const userStore = useUserStore()
+const { can, refreshCapabilities } = useAdminCapabilities()
+onMounted(() => { void refreshCapabilities() })
 const isLoggedIn = computed(() => !!(userStore.isLogin && userStore.user))
 const isOnline = computed(() => !!(userStore.user))
 

@@ -170,9 +170,9 @@
                   <div class="message-toolbox overlay" v-show="openToolboxId === msg.id">
                     <div class="tool-icons">
                       <button v-if="canPin(msg)" type="button" class="tool-icon nw-action-btn nw-tooltip-anchor" :data-tooltip="(msg.pinned ? '取消置顶' : '置顶内容')" @click="togglePin(msg)"><UIcon :name="msg.pinned ? 'i-mdi-pin' : 'i-mdi-pin-outline'" /></button>
-                      <button v-if="isLogin" type="button" class="tool-icon nw-action-btn nw-tooltip-anchor" data-tooltip="编辑" @click="editMessage(msg)"><UIcon name="i-mdi-pencil-outline" /></button>
+                      <button v-if="canEdit(msg)" type="button" class="tool-icon nw-action-btn nw-tooltip-anchor" data-tooltip="编辑" @click="editMessage(msg)"><UIcon name="i-mdi-pencil-outline" /></button>
                       <button type="button" class="tool-icon nw-action-btn nw-tooltip-anchor" data-tooltip="复制" @click="copyContent(msg.content)"><UIcon name="i-mdi-content-copy" /></button>
-                      <button v-if="isLogin" type="button" class="tool-icon nw-action-btn nw-action-btn--danger nw-tooltip-anchor" data-tooltip="删除" @click="deleteMsg(msg.id)"><UIcon name="i-mdi-close-octagon-outline" /></button>
+                      <button v-if="canDelete(msg)" type="button" class="tool-icon nw-action-btn nw-action-btn--danger nw-tooltip-anchor" data-tooltip="删除" @click="deleteMsg(msg)"><UIcon name="i-mdi-close-octagon-outline" /></button>
                   </div>
                   </div>
                 </div>
@@ -326,7 +326,7 @@
             >
               <UIcon :name="editUploadKind === 'attachment' ? 'i-mdi-loading' : 'i-heroicons-paper-clip'" class="w-5 h-5" :class="{ 'edit-spin': editUploadKind === 'attachment' }" />
             </button>
-            <div ref="editVisibilityControlRef" class="visibility-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :data-tooltip="`可见范围：${editVisibilityLabel}`">
+            <div v-if="canChangeVisibility(editingMessage)" ref="editVisibilityControlRef" class="visibility-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :data-tooltip="`可见范围：${editVisibilityLabel}`">
               <UIcon :name="editVisibilityIcon" class="w-5 h-5" />
               <button
                 type="button"
@@ -540,6 +540,7 @@ import { resolveManagedAttachmentURL } from '~/utils/media-url'
 import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { getMessageIdFromRouteHash } from '~/utils/message-route-hash'
 import { shouldShowVisibilityBadge } from '~/utils/visibility-badge'
+import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 import { useRuntimeConfig } from '#imports'
 import { useToast } from '#ui/composables/useToast'
 type BuiltinCommentsExpose = {
@@ -1279,6 +1280,7 @@ const loadTargetMessagePage = async (id: number) => {
   }
 
   const userStore = useUserStore();
+  const { can, refreshCapabilities } = useAdminCapabilities()
   const isLogin = computed(() => userStore.isLogin);
   const isPersonalTab = computed(() => props.activeTab === 'personal')
   const isPersonalGuest = computed(() => isPersonalTab.value && !userStore.isLogin)
@@ -1331,7 +1333,9 @@ const loadTargetMessagePage = async (id: number) => {
     isAuthenticated: isLogin.value,
     isOwner: isCurrentUserMessage(msg),
   })
-  const canEditMessageTasks = (msg: any) => userStore.isLogin && (currentUserIsAdmin.value || isCurrentUserMessage(msg))
+  const isPrimaryOwnedMessage = (msg: any) => Number(msg?.user_id || msg?.userId || msg?.UserID || 0) === 1
+  const canManageOtherMessage = (msg: any, capability: string) => isLogin.value && !isCurrentUserMessage(msg) && !isPrimaryOwnedMessage(msg) && can(capability)
+  const canEditMessageTasks = (msg: any) => isCurrentUserMessage(msg) || canManageOtherMessage(msg, 'notes.edit')
   const isContentEmpty = (m: any) => {
     const img = String(m?.image_url || '').trim()
     const c0 = String(m?.content || '')
@@ -1390,7 +1394,10 @@ const resetList = async () => {
   emit('clear-filters')
 };
 
-const deleteMsg = async (id: number) => {
+const deleteMsg = async (msg: any) => {
+  if (!canDelete(msg)) return
+  const id = Number(msg?.id || 0)
+  if (!id) return
   const confirmDelete = confirm("确定要删除这条消息吗？");
   if (confirmDelete) {
     try {
@@ -1522,28 +1529,15 @@ const handleCancel = (msgId: number, payload?: { empty?: boolean }) => {
   commentRefreshKey.value[msgId] = (commentRefreshKey.value[msgId] || 0) + 1
 }
 
-// 置顶权限：作者或管理员
-  const canPin = (msg: any) => {
-  if (!isLogin.value) return false;
-  const user = userStore.user as any;
-  if (!user) return false;
-  const isAdmin = !!(user.IsAdmin || user.is_admin);
-  const isAuthor = (user.ID || user.userid) === msg.user_id;
-  return isAdmin || isAuthor;
-  };
-
-  const canEdit = (msg: any) => {
-    if (!isLogin.value) return false;
-    const user = userStore.user as any;
-    if (!user) return false;
-    const isAdmin = !!(user.IsAdmin || user.is_admin);
-    const isAuthor = (user.ID || user.userid) === msg.user_id;
-    return isAdmin || isAuthor;
-  };
+const canPin = (msg: any) => isCurrentUserMessage(msg) || canManageOtherMessage(msg, 'notes.pin_global')
+const canEdit = (msg: any) => isCurrentUserMessage(msg) || canManageOtherMessage(msg, 'notes.edit')
+const canDelete = (msg: any) => isCurrentUserMessage(msg) || canManageOtherMessage(msg, 'notes.delete_permanently')
+const canChangeVisibility = (msg: any) => isCurrentUserMessage(msg) || canManageOtherMessage(msg, 'notes.change_visibility')
 
 const pinnedTopItems = ref<any[]>([]);
 
   const togglePin = async (msg: any) => {
+  if (!canPin(msg)) return
   try {
     const next = !msg.pinned;
     const res = await message.setPinned(msg.id, next);
@@ -2508,9 +2502,9 @@ const datetimeLocalToISO = (value: string) => {
 }
 
 const canEditPublishTime = (msg: any) => {
-  if (!msg || !currentUserIsAdmin.value || !currentUserId.value) return false
-  const authorId = Number(msg?.user_id || msg?.userId || msg?.UserID || 0)
-  return authorId === currentUserId.value
+  if (!msg) return false
+  if (isCurrentUserMessage(msg)) return currentUserIsAdmin.value && can('notes.change_publish_time')
+  return canManageOtherMessage(msg, 'notes.change_publish_time')
 }
 
 const sortMessagesByCreatedAt = () => {
@@ -2531,6 +2525,7 @@ const applyEditedMessage = (id: number, updated: any) => {
 }
 
 const editMessage = (msg: any) => {
+  if (!canEdit(msg)) return
   editingMessageId.value = msg.id;
   editingMessage.value = msg;
   editingVisibility.value = messageVisibility(msg);
@@ -2564,6 +2559,7 @@ const saveEditedMessage = async () => {
     processedContent = processedContent.replace(/\n*<!-- 附件图片\(编辑时可删除\) -->\n!\[附件图片\]\(.*?\)\n<!-- 附件图片结束 -->\n*/g, '');
     
     const originalPublishTime = toDatetimeLocalValue(currentMsg.created_at)
+    const canUpdateVisibility = canChangeVisibility(currentMsg)
     const canUpdatePublishTime = canEditPublishTime(currentMsg)
     const nextCreatedAt = canUpdatePublishTime ? datetimeLocalToISO(editingPublishedAtInput.value) : ''
     if (canUpdatePublishTime && editingPublishedAtInput.value && !nextCreatedAt) {
@@ -2577,7 +2573,7 @@ const saveEditedMessage = async () => {
     const publishTimeChanged = canUpdatePublishTime && !!nextCreatedAt && editingPublishedAtInput.value !== originalPublishTime
     const contentChanged = processedContent !== currentMsg.content
     const nextVisibility = normalizeMessageVisibility(editingVisibility.value, !!currentMsg.private)
-    const visibilityChanged = nextVisibility !== messageVisibility(currentMsg)
+    const visibilityChanged = canUpdateVisibility && nextVisibility !== messageVisibility(currentMsg)
 
     // 检查内容、发布时间或可见范围是否有修改
     if (!contentChanged && !publishTimeChanged && !visibilityChanged) {
@@ -2592,9 +2588,11 @@ const saveEditedMessage = async () => {
     }
     const payload: any = {
       content: processedContent,
-      image_url: currentMsg.image_url,
-      visibility: nextVisibility,
-      private: messageVisibilityRequiresPrivate(nextVisibility)
+      image_url: currentMsg.image_url
+    }
+    if (canUpdateVisibility) {
+      payload.visibility = nextVisibility
+      payload.private = messageVisibilityRequiresPrivate(nextVisibility)
     }
     if (publishTimeChanged) {
       payload.created_at = nextCreatedAt
@@ -2771,6 +2769,7 @@ const preloadImage = (src: string): Promise<HTMLImageElement> => {
 const prefetchSentinel = ref<HTMLElement | null>(null)
 let prefetchObservedPage = 0
 onMounted(() => {
+  void refreshCapabilities()
   try {
     const io2 = new IntersectionObserver((entries) => {
       entries.forEach(async (entry) => {

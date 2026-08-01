@@ -97,6 +97,35 @@ func currentMessageViewer(c *gin.Context) (*uint, bool) {
 	return nil, false
 }
 
+func messageMutationAuditRecord(c *gin.Context, actorID uint, capability authorization.Capability, action, result, summary string, message *models.Message) models.AdminAuditLog {
+	ownerID := message.UserID
+	return models.AdminAuditLog{
+		ActorUserID:       actorID,
+		Capability:        string(capability),
+		Module:            "notes",
+		Action:            action,
+		TargetType:        "message",
+		TargetID:          fmt.Sprint(message.ID),
+		TargetOwnerUserID: &ownerID,
+		Result:            result,
+		Summary:           summary,
+		IP:                c.ClientIP(),
+		UserAgent:         c.GetHeader("User-Agent"),
+		AuthVia:           c.GetString("auth_via"),
+	}
+}
+
+func writeMessageMutationDeniedAudit(c *gin.Context, authorizer *authorization.Authorizer, actorID uint, capability authorization.Capability, action string, message *models.Message) {
+	if decision := authorizer.Authorize(actorID, capability, nil); decision.Reason == authorization.DenialNotAdministrator {
+		return
+	}
+	authorizer.WriteDeniedBestEffort(messageMutationAuditRecord(c, actorID, capability, action, "denied", "capability request denied", message))
+}
+
+func writeMessageMutationSuccessAudit(c *gin.Context, authorizer *authorization.Authorizer, actorID uint, capability authorization.Capability, action string, message *models.Message) error {
+	return authorizer.WriteAudit(messageMutationAuditRecord(c, actorID, capability, action, "success", "message mutation completed", message))
+}
+
 // currentReadUser resolves identity for public read endpoints. Session/context
 // identity wins; a valid Bearer token is a read-only fallback and is not copied
 // into Gin context, so it cannot accidentally authorize session-protected writes.
@@ -704,7 +733,9 @@ func DeleteMessage(c *gin.Context) {
 		return
 	}
 	if message.UserID != actorID {
-		if decision := authorization.New(db).Authorize(actorID, authorization.CapabilityNotesDelete, &message.UserID); !decision.Allowed {
+		authorizer := authorization.New(db)
+		if decision := authorizer.Authorize(actorID, authorization.CapabilityNotesDelete, &message.UserID); !decision.Allowed {
+			writeMessageMutationDeniedAudit(c, authorizer, actorID, authorization.CapabilityNotesDelete, "delete", &message)
 			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权删除此消息"})
 			return
 		}
@@ -714,11 +745,16 @@ func DeleteMessage(c *gin.Context) {
 			return
 		}
 		if primaryComments > 0 {
+			writeMessageMutationDeniedAudit(c, authorizer, actorID, authorization.CapabilityNotesDelete, "delete", &message)
 			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "消息包含受保护内容，不能删除"})
 			return
 		}
 		if err := services.DeleteMessageByAdmin(uint(messageID)); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+			return
+		}
+		if err := writeMessageMutationSuccessAudit(c, authorizer, actorID, authorization.CapabilityNotesDelete, "delete", &message); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "写入管理员审计失败"})
 			return
 		}
 	} else if err := services.DeleteMessage(uint(messageID), actorID); err != nil {
@@ -2294,7 +2330,9 @@ func UpdateMessage(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "授权服务不可用"})
 			return
 		}
-		if !authorization.New(db).Authorize(actorID, authorization.CapabilityNotesPublishTime, &message.UserID).Allowed {
+		authorizer := authorization.New(db)
+		if !authorizer.Authorize(actorID, authorization.CapabilityNotesPublishTime, &message.UserID).Allowed {
+			writeMessageMutationDeniedAudit(c, authorizer, actorID, authorization.CapabilityNotesPublishTime, "update", message)
 			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限调整发布时间"})
 			return
 		}
@@ -2307,14 +2345,17 @@ func UpdateMessage(c *gin.Context) {
 		}
 		authorizer := authorization.New(db)
 		if req.Content != nil && !authorizer.Authorize(actorID, authorization.CapabilityNotesEdit, &message.UserID).Allowed {
+			writeMessageMutationDeniedAudit(c, authorizer, actorID, authorization.CapabilityNotesEdit, "update", message)
 			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限修改此消息"})
 			return
 		}
 		if (req.Private != nil || req.Visibility != nil) && !authorizer.Authorize(actorID, authorization.CapabilityNotesVisibility, &message.UserID).Allowed {
+			writeMessageMutationDeniedAudit(c, authorizer, actorID, authorization.CapabilityNotesVisibility, "update", message)
 			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限调整可见范围"})
 			return
 		}
 		if createdAt != nil && !authorizer.Authorize(actorID, authorization.CapabilityNotesPublishTime, &message.UserID).Allowed {
+			writeMessageMutationDeniedAudit(c, authorizer, actorID, authorization.CapabilityNotesPublishTime, "update", message)
 			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限调整发布时间"})
 			return
 		}
@@ -2324,6 +2365,23 @@ func UpdateMessage(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
 		return
+	}
+	if message.UserID != actorID {
+		db, dbErr := database.GetDB()
+		if dbErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "授权服务不可用"})
+			return
+		}
+		capability := authorization.CapabilityNotesEdit
+		if req.Content == nil && (req.Private != nil || req.Visibility != nil) {
+			capability = authorization.CapabilityNotesVisibility
+		} else if req.Content == nil && createdAt != nil {
+			capability = authorization.CapabilityNotesPublishTime
+		}
+		if err := writeMessageMutationSuccessAudit(c, authorization.New(db), actorID, capability, "update", message); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "写入管理员审计失败"})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "更新成功", "data": updated})
@@ -2382,6 +2440,7 @@ func UpdateMessagePinned(c *gin.Context) {
 			return
 		}
 		if !authorization.New(db).Authorize(actorID, authorization.CapabilityNotesPinGlobal, &message.UserID).Allowed {
+			writeMessageMutationDeniedAudit(c, authorization.New(db), actorID, authorization.CapabilityNotesPinGlobal, "pin", message)
 			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限操作该消息"})
 			return
 		}
@@ -2391,6 +2450,17 @@ func UpdateMessagePinned(c *gin.Context) {
 	if err := services.UpdateMessagePinned(uint(messageID), req.Pinned); err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": err.Error()})
 		return
+	}
+	if message.UserID != actorID {
+		db, dbErr := database.GetDB()
+		if dbErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "授权服务不可用"})
+			return
+		}
+		if err := writeMessageMutationSuccessAudit(c, authorization.New(db), actorID, authorization.CapabilityNotesPinGlobal, "pin", message); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "写入管理员审计失败"})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "更新成功"})
@@ -3300,6 +3370,18 @@ func PostMessage(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.Fail[string]("获取用户信息失败"))
 		return
 	}
+	var siteCfg models.SiteConfig
+	_ = database.DB.Table("site_configs").First(&siteCfg).Error
+	viaStr := c.GetString("auth_via")
+	shouldNotify := shouldNotifyPublishedMessage(siteCfg.NotifyEnabled, user.IsAdmin, viaStr, request.Notify)
+	if shouldNotify {
+		actorID, ok := commentUint(userID)
+		db, dbErr := database.GetDB()
+		if !ok || dbErr != nil || !authorization.New(db).Authorize(actorID, authorization.CapabilityNotificationsManage, nil).Allowed {
+			c.JSON(http.StatusForbidden, dto.Fail[string]("无权限发送发布通知"))
+			return
+		}
+	}
 	if createdAt != nil {
 		actorID, ok := commentUint(userID)
 		db, dbErr := database.GetDB()
@@ -3326,16 +3408,7 @@ func PostMessage(c *gin.Context) {
 		return
 	}
 
-	// 处理推送逻辑
-	// 后台推送总开关：SiteConfig.NotifyEnabled
-	var siteCfg models.SiteConfig
-	_ = database.DB.Table("site_configs").First(&siteCfg).Error
-
 	// 推送策略仅对管理员生效：会话发布需显式 notify=true，管理员 token 发布跟随总开关自动推送。
-	via, _ := c.Get("auth_via")
-	viaStr, _ := via.(string)
-	shouldNotify := shouldNotifyPublishedMessage(siteCfg.NotifyEnabled, user.IsAdmin, viaStr, request.Notify)
-
 	if shouldNotify {
 		notifyConfig := models.GetNotifyConfig()
 		if notifyConfig != nil {
