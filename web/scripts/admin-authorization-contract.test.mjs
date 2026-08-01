@@ -31,4 +31,9 @@ assert.match(audit, /start/)
 assert.match(audit, /end/)
 assert.match(audit, /loadDetail/)
 assert.match(audit, /admin\/audit-config/)
+assert.match(
+  panel,
+  /\.admin-form-shell\s*:deep\(input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\)\),[\s\S]*?min-height:\s*38px/,
+  'the admin form field rule must exclude checkboxes and radios so delegated-capability controls stay square and clickable'
+)
 assert.doesNotMatch(center + audit, /echo-noise\s*\/\s*说说笔记/i)

@@ -7977,7 +7977,7 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 .admin-root :deep(.u-button) {
   border-radius: 6px !important;
 }
-.admin-form-shell :deep(input),
+.admin-form-shell :deep(input:not([type="checkbox"]):not([type="radio"])),
 .admin-form-shell :deep(textarea),
 .admin-form-shell :deep(select) {
   border-radius: 6px !important;
@@ -7989,13 +7989,13 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 .admin-form-shell :deep(textarea) {
   min-height: 120px;
 }
-.admin-form-shell :deep(input:focus),
+.admin-form-shell :deep(input:not([type="checkbox"]):not([type="radio"]):focus),
 .admin-form-shell :deep(textarea:focus),
 .admin-form-shell :deep(select:focus) {
   box-shadow: 0 0 0 2px rgba(22, 93, 255, 0.2) !important;
   border-color: rgba(22, 93, 255, 0.55) !important;
 }
-.admin-root.dark .admin-form-shell :deep(input),
+.admin-root.dark .admin-form-shell :deep(input:not([type="checkbox"]):not([type="radio"])),
 .admin-root.dark .admin-form-shell :deep(textarea),
 .admin-root.dark .admin-form-shell :deep(select) {
   background: rgba(255, 255, 255, 0.06) !important;
