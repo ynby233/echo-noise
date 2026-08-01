@@ -391,7 +391,7 @@
           </div>
 
           <div id="authorization-section" v-if="isPrimaryAdmin && isSectionVisible('authorization')" class="col-span-12"><AdminAuthorizationCenter /></div>
-          <div id="admin-audit-section" v-if="canViewAdminAudit && isSectionVisible('admin-audit')" class="col-span-12"><AdminAuditLogPanel /></div>
+          <div id="admin-audit-section" v-if="canViewAdminAudit && isSectionVisible('admin-audit')" class="col-span-12"><AdminAuditLogPanel :is-primary-admin="isPrimaryAdmin" /></div>
           <div id="site-section" v-if="(isAdmin && isSiteSectionPage) || isSectionVisible('life-countdown') || (!isAdmin && isSectionVisible('hitokoto'))" class="col-span-12">
           <div :class="adminShellCardClass">
             <div :class="adminSectionHeaderClass">
@@ -4042,7 +4042,7 @@ const fetchNotifyConfig = async () => {
     }
 }
 
- onMounted(fetchNotifyConfig)
+onMounted(() => { if (can('notifications.view')) fetchNotifyConfig() })
 
 const smtp = reactive({
   enabled: false,

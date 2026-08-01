@@ -231,3 +231,46 @@ func GetAdminAuditLog(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, dto.OK(log, "获取管理员审计详情成功"))
 }
+
+func GetAdminAuditConfig(c *gin.Context) {
+	if _, err := requirePrimaryAdmin(c); err != nil {
+		c.JSON(http.StatusForbidden, dto.Fail[any](err.Error()))
+		return
+	}
+	db, err := database.GetDB()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, dto.Fail[any]("审计服务不可用"))
+		return
+	}
+	config := models.AdminAuditConfig{ID: 1, Enabled: true}
+	if err := db.First(&config, 1).Error; err != nil && err != gorm.ErrRecordNotFound {
+		c.JSON(http.StatusInternalServerError, dto.Fail[any]("读取审计设置失败"))
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK(gin.H{"enabled": config.Enabled}, "获取审计设置成功"))
+}
+
+func UpdateAdminAuditConfig(c *gin.Context) {
+	actorID, err := requirePrimaryAdmin(c)
+	if err != nil {
+		c.JSON(http.StatusForbidden, dto.Fail[any](err.Error()))
+		return
+	}
+	var request struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil || request.Enabled == nil {
+		c.JSON(http.StatusBadRequest, dto.Fail[any]("审计设置参数错误"))
+		return
+	}
+	db, err := database.GetDB()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, dto.Fail[any]("审计服务不可用"))
+		return
+	}
+	if err := authorization.New(db).SetAuditEnabled(actorID, *request.Enabled); err != nil {
+		c.JSON(http.StatusInternalServerError, dto.Fail[any]("保存审计设置失败"))
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK(gin.H{"enabled": *request.Enabled}, "保存审计设置成功"))
+}

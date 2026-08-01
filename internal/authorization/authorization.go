@@ -233,7 +233,16 @@ func (a *Authorizer) SetAuditEnabled(actorID uint, enabled bool) error {
 	if actorID != models.PrimaryAdminUserID {
 		return errors.New("only primary administrator may change audit logging")
 	}
-	return a.db.Save(&models.AdminAuditConfig{ID: 1, Enabled: enabled}).Error
+	return a.db.Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&models.AdminAuditConfig{}).Where("id = ?", 1).Update("enabled", enabled)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 0 {
+			return nil
+		}
+		return tx.Model(&models.AdminAuditConfig{}).Create(map[string]interface{}{"id": 1, "enabled": enabled}).Error
+	})
 }
 func (a *Authorizer) WriteAudit(record models.AdminAuditLog) error { return a.writeAudit(a.db, record) }
 func (a *Authorizer) WriteDeniedBestEffort(record models.AdminAuditLog) {
