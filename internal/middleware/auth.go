@@ -180,6 +180,21 @@ func RequireCapability(capability authorization.Capability) gin.HandlerFunc {
 			return
 		}
 		ctx.Next()
+		if ctx.IsAborted() || ctx.Request.Method == http.MethodGet || ctx.Request.Method == http.MethodHead || ctx.Request.Method == http.MethodOptions {
+			return
+		}
+		definition, _ := authorization.DefinitionFor(capability)
+		result := "success"
+		summary := "administrative write completed"
+		if ctx.Writer.Status() >= http.StatusBadRequest {
+			result = "failure"
+			summary = "administrative write failed"
+		}
+		authorizer.WriteDeniedBestEffort(models.AdminAuditLog{
+			ActorUserID: actorID, Capability: string(capability), Module: definition.Module,
+			Action: ctx.Request.Method, TargetType: "route", TargetID: ctx.FullPath(),
+			Result: result, Summary: summary, IP: ctx.ClientIP(), UserAgent: ctx.GetHeader("User-Agent"), AuthVia: ctx.GetString("auth_via"),
+		})
 	}
 }
 

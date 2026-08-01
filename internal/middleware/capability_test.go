@@ -60,3 +60,42 @@ func TestRequireCapabilityRejectsDelegatedAdministratorImmediatelyAfterRevocatio
 		t.Fatalf("denied audit count=%d err=%v", denied, err)
 	}
 }
+
+func TestRequireCapabilityWritesSuccessfulAdministrativeMutationAudit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	if err := db.AutoMigrate(&models.User{}, &models.AdminCapabilityGrant{}, &models.AdminAuditLog{}, &models.AdminAuditConfig{}); err != nil {
+		t.Fatalf("migrate database: %v", err)
+	}
+	database.DB = db
+	t.Cleanup(func() { database.DB = nil })
+	primary := models.User{ID: models.PrimaryAdminUserID, Username: "primary", IsAdmin: true}
+	delegated := models.User{Username: "delegated", IsAdmin: true}
+	if err := db.Create(&primary).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&delegated).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityFeedManage}); err != nil {
+		t.Fatal(err)
+	}
+
+	r := gin.New()
+	r.POST("/refresh", func(c *gin.Context) { c.Set("user_id", delegated.ID); c.Set("auth_via", "session") }, RequireCapability(authorization.CapabilityFeedManage), func(c *gin.Context) { c.Status(http.StatusNoContent) })
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/refresh", nil))
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("write request status=%d", w.Code)
+	}
+	var record models.AdminAuditLog
+	if err := db.Where("capability = ? AND result = ?", authorization.CapabilityFeedManage, "success").First(&record).Error; err != nil {
+		t.Fatalf("successful audit record: %v", err)
+	}
+	if record.AuthVia != "session" || record.TargetID != "/refresh" {
+		t.Fatalf("unexpected audit record: %#v", record)
+	}
+}

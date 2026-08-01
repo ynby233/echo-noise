@@ -81,8 +81,8 @@ assert.match(
 
 assert.match(
   component,
-  /id="login-audits-section"\s+v-if="isAdmin && isSectionVisible\('login-audits'\)"/,
-  'login audit page must render only in the administrator backend section'
+  /id="login-audits-section"\s+v-if="canSection\('login-audits'\) && isSectionVisible\('login-audits'\)"/,
+  'login audit page must render only for an administrator granted login-audit view capability'
 )
 
 assert.match(

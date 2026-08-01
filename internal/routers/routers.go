@@ -276,8 +276,8 @@ func SetupRouter() *gin.Engine {
 	authRoutes.GET("/users/me/stats", controllers.GetCurrentUserHomeStats)
 	// 版本更新（管理员）
 	authRoutes.POST("/version/update", middleware.RequireCapability(authorization.CapabilityVersionUpdate), controllers.UpdateVersion)
-	authRoutes.GET("/version/update/stream", controllers.UpdateVersionStream)
-	authRoutes.POST("/version/static-sync", controllers.SyncStatic)
+	authRoutes.GET("/version/update/stream", middleware.RequireCapability(authorization.CapabilityVersionUpdate), controllers.UpdateVersionStream)
+	authRoutes.POST("/version/static-sync", middleware.RequireCapability(authorization.CapabilityVersionUpdate), controllers.SyncStatic)
 	// 静态资源同步已移除，版本升级统一走容器镜像
 
 	// 添加 token 认证的路由组
@@ -288,7 +288,7 @@ func SetupRouter() *gin.Engine {
 		tokenAuth.PUT("/messages/:id", controllers.UpdateMessage)
 		tokenAuth.PUT("/messages/:id/pin", controllers.UpdateMessagePinned)
 		tokenAuth.DELETE("/messages/:id", controllers.DeleteMessage)
-		tokenAuth.PUT("/settings", controllers.UpdateSetting)
+		tokenAuth.PUT("/settings", middleware.RequireCapability(authorization.CapabilitySiteSettingsManage), controllers.UpdateSetting)
 	}
 	// 需要鉴权的消息操作路由
 	messages := authRoutes.Group("/messages")
@@ -312,10 +312,10 @@ func SetupRouter() *gin.Engine {
 	// 添加推送配置路由
 	notify := authRoutes.Group("/notify")
 	{
-		notify.POST("/test", controllers.TestNotify)        // 测试推送
-		notify.POST("/send", controllers.SendNotify)        // 新增：实际推送路由
-		notify.GET("/config", controllers.GetNotifyConfig)  // 获取配置
-		notify.PUT("/config", controllers.SaveNotifyConfig) // 保存配置
+		notify.POST("/test", middleware.RequireCapability(authorization.CapabilityNotificationsManage), controllers.TestNotify)
+		notify.POST("/send", middleware.RequireCapability(authorization.CapabilityNotificationsManage), controllers.SendNotify)
+		notify.GET("/config", middleware.RequireCapability(authorization.CapabilityNotificationsView), controllers.GetNotifyConfig)
+		notify.PUT("/config", middleware.RequireCapability(authorization.CapabilityNotificationsManage), controllers.SaveNotifyConfig)
 	}
 
 	// 站内通知路由
@@ -343,26 +343,26 @@ func SetupRouter() *gin.Engine {
 
 	email := authRoutes.Group("/email")
 	{
-		email.POST("/test", controllers.EmailTest)
+		email.POST("/test", middleware.RequireCapability(authorization.CapabilityEmailManage), controllers.EmailTest)
 	}
 
 	// 数据库备份相关路由
 	backup := authRoutes.Group("/backup")
 	{
-		backup.GET("/download", controllers.HandleBackupDownload)
-		backup.POST("/restore", controllers.HandleBackupRestore)
-		backup.POST("/storage/upload", controllers.HandleBackupUploadToURL)
-		backup.POST("/storage/restore", controllers.HandleBackupRestoreFromURL)
-		backup.POST("/storage/presign/upload", controllers.HandleBackupPresignUpload)
-		backup.POST("/storage/presign/download", controllers.HandleBackupPresignDownload)
-		backup.POST("/storage/sync-confirm", controllers.HandleBackupSyncConfirm)
-		backup.POST("/storage/sync-now", controllers.HandleBackupSyncNow)
+		backup.GET("/download", middleware.RequireCapability(authorization.CapabilityDatabaseBackup), controllers.HandleBackupDownload)
+		backup.POST("/restore", middleware.RequireCapability(authorization.CapabilityDatabaseRestore), controllers.HandleBackupRestore)
+		backup.POST("/storage/upload", middleware.RequireCapability(authorization.CapabilityDatabaseBackup), controllers.HandleBackupUploadToURL)
+		backup.POST("/storage/restore", middleware.RequireCapability(authorization.CapabilityDatabaseRestore), controllers.HandleBackupRestoreFromURL)
+		backup.POST("/storage/presign/upload", middleware.RequireCapability(authorization.CapabilityDatabaseBackup), controllers.HandleBackupPresignUpload)
+		backup.POST("/storage/presign/download", middleware.RequireCapability(authorization.CapabilityDatabaseRestore), controllers.HandleBackupPresignDownload)
+		backup.POST("/storage/sync-confirm", middleware.RequireCapability(authorization.CapabilityStorageManage), controllers.HandleBackupSyncConfirm)
+		backup.POST("/storage/sync-now", middleware.RequireCapability(authorization.CapabilityStorageManage), controllers.HandleBackupSyncNow)
 	}
 
 	// 系统设置相关路由
 	settings := authRoutes.Group("/settings")
 	{
-		settings.POST("/reset-defaults", controllers.ResetDefaultData)
+		settings.POST("/reset-defaults", middleware.RequireCapability(authorization.CapabilitySiteSettingsManage), controllers.ResetDefaultData)
 	}
 
 	// 安全记录（管理员）
@@ -420,13 +420,13 @@ func SetupRouter() *gin.Engine {
 	}
 
 	// 设置路由
-	authRoutes.PUT("/settings", controllers.UpdateSetting)
-	authRoutes.POST("/settings/vocechat/health", middleware.AdminAuthMiddleware(), controllers.CheckVoceChatHealth)
+	authRoutes.PUT("/settings", middleware.RequireCapability(authorization.CapabilitySiteSettingsManage), controllers.UpdateSetting)
+	authRoutes.POST("/settings/vocechat/health", middleware.RequireCapability(authorization.CapabilityAuthorizationManage), controllers.CheckVoceChatHealth)
 	// 友链申请管理（管理员）
-	authRoutes.GET("/friend-links/apply", controllers.ListFriendLinkApplications)
-	authRoutes.DELETE("/friend-links/apply", controllers.ClearFriendLinkApplications)
-	authRoutes.DELETE("/friend-links/apply/:id", controllers.DeleteFriendLinkApplication)
-	authRoutes.PUT("/friend-links/:id/audit", controllers.AuditFriendLink)
+	authRoutes.GET("/friend-links/apply", middleware.RequireCapability(authorization.CapabilitySiteSettingsView), controllers.ListFriendLinkApplications)
+	authRoutes.DELETE("/friend-links/apply", middleware.RequireCapability(authorization.CapabilitySiteSettingsManage), controllers.ClearFriendLinkApplications)
+	authRoutes.DELETE("/friend-links/apply/:id", middleware.RequireCapability(authorization.CapabilitySiteSettingsManage), controllers.DeleteFriendLinkApplication)
+	authRoutes.PUT("/friend-links/:id/audit", middleware.RequireCapability(authorization.CapabilitySiteSettingsManage), controllers.AuditFriendLink)
 
 	// 显式 /status 返回 SPA 入口，避免目录重定向影响
 	r.GET("/status", func(c *gin.Context) {

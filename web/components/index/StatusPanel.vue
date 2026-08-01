@@ -41,7 +41,7 @@
           <div class="text-xs text-slate-400">当前版本: {{ versionInfo.currentVersion || '最新' }}</div>
           <div class="mt-2 flex items-center gap-2">
             <UButton size="xs" color="indigo" variant="soft" :loading="versionInfo.checking" class="shadow-md" @click="checkVersion">{{ versionInfo.checking ? '检测中...' : '检查版本发布时间' }}</UButton>
-            <UButton v-if="isAdmin" size="xs" color="orange" variant="solid" class="shadow-md" :loading="updatingVersion" @click="updateVersion">更新升级</UButton>
+            <UButton v-if="can('version.update')" size="xs" color="orange" variant="solid" class="shadow-md" :loading="updatingVersion" @click="updateVersion">更新升级</UButton>
           </div>
           <div v-if="versionInfo.hasUpdate" class="mt-2 text-orange-400 flex items-center gap-2">
             <UIcon name="i-heroicons-arrow-up-circle" class="w-4 h-4" />
@@ -1173,7 +1173,7 @@
             </div>
           </div>
           
-          <div id="comments-section" class="col-span-12" v-if="isAdmin && isSectionVisible('comments')">
+          <div id="comments-section" class="col-span-12" v-if="canSection('comments') && isSectionVisible('comments')">
             <div :class="adminPanelCardClass">
               <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-4 sm:gap-0">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -1263,7 +1263,7 @@
 
       </div>
       
-          <div id="email-section" v-if="isAdmin && isSectionVisible('email')" class="col-span-12">
+          <div id="email-section" v-if="canSection('email') && isSectionVisible('email')" class="col-span-12">
             <div :class="adminPanelCardClass">
               <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -1331,7 +1331,7 @@
             </div>
           </div>
 
-          <div id="registration-review-section" v-if="isAdmin && isSectionVisible('registration-review')" class="col-span-12">
+          <div id="registration-review-section" v-if="canSection('registration-review') && isSectionVisible('registration-review')" class="col-span-12">
             <div :class="adminPanelCardClass">
               <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -1396,7 +1396,7 @@
             </div>
           </div>
 
-          <div id="admin-users-section" v-if="isAdmin && isSectionVisible('admin-users')" class="col-span-12">
+          <div id="admin-users-section" v-if="canSection('admin-users') && isSectionVisible('admin-users')" class="col-span-12">
             <div :class="adminPanelCardClass">
               <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -1484,7 +1484,7 @@
             </UCard>
           </UModal>
 
-          <div id="access-logs-section" v-if="isAdmin && isSectionVisible('access-logs')" class="col-span-12">
+          <div id="access-logs-section" v-if="canSection('access-logs') && isSectionVisible('access-logs')" class="col-span-12">
             <div :class="adminShellCardClass">
               <div :class="adminSectionHeaderClass">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -1596,7 +1596,7 @@
             </div>
           </div>
 
-          <div id="site-visits-section" v-if="isAdmin && isSectionVisible('site-visits')" class="col-span-12">
+          <div id="site-visits-section" v-if="canSection('site-visits') && isSectionVisible('site-visits')" class="col-span-12">
             <div :class="adminShellCardClass">
               <div :class="adminSectionHeaderClass">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -1696,7 +1696,7 @@
             </div>
           </div>
 
-          <div id="login-audits-section" v-if="isAdmin && isSectionVisible('login-audits')" class="col-span-12">
+          <div id="login-audits-section" v-if="canSection('login-audits') && isSectionVisible('login-audits')" class="col-span-12">
             <div :class="adminShellCardClass">
               <div :class="adminSectionHeaderClass">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -1786,7 +1786,7 @@
             </div>
           </div>
 
-          <div id="notify-section" v-if="isAdmin && isSectionVisible('notify')" class="col-span-12">
+          <div id="notify-section" v-if="canSection('notify') && isSectionVisible('notify')" class="col-span-12">
             <div :class="adminShellCardClass">
               <div :class="adminSectionHeaderClass">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -1869,13 +1869,13 @@
             </div>
           </div>
 
-          <div id="attachments-section" v-if="isAdmin && isSectionVisible('attachments')" class="col-span-12">
+          <div id="attachments-section" v-if="canSection('attachments') && isSectionVisible('attachments')" class="col-span-12">
             <div :class="adminShellCardClass">
               <AttachmentManager :theme="theme" :is-cloud="attachmentStorageEnabled" />
             </div>
           </div>
 
-          <div id="attachment-storage-section" v-if="isAdmin && isSectionVisible('storage')" class="col-span-12">
+          <div id="attachment-storage-section" v-if="canSection('storage') && isSectionVisible('storage')" class="col-span-12">
             <div :class="adminShellCardClass">
               <div class="px-4 py-3 font-semibold flex items-center gap-2" :class="theme.text">
                 <UIcon name="i-heroicons-cloud" class="w-5 h-5 text-indigo-300" />
@@ -1968,7 +1968,7 @@
             </div>
           </div>
 
-          <div id="storage-section" v-if="isAdmin && isSectionVisible('storage')" class="col-span-12">
+          <div id="storage-section" v-if="canSection('storage') && isSectionVisible('storage')" class="col-span-12">
             <div :class="adminShellCardClass">
               <div class="px-4 py-3 font-semibold flex items-center gap-2" :class="theme.text">
                 <UIcon name="i-heroicons-cloud" class="w-5 h-5 text-indigo-300" />
@@ -2097,7 +2097,7 @@
             </div>
           </div>
 
-          <div id="db-section" v-if="isAdmin && isSectionVisible('db')" class="col-span-12">
+          <div id="db-section" v-if="canSection('db') && isSectionVisible('db')" class="col-span-12">
             <div :class="adminShellCardClass">
               <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-4 py-3">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -2127,7 +2127,7 @@
               </div>
             </div>
           </div>
-          <div id="version-section" v-if="isAdmin && isSectionVisible('version')" class="col-span-12">
+          <div id="version-section" v-if="canSection('version') && isSectionVisible('version')" class="col-span-12">
             <div :class="adminShellCardClass">
               <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-4 py-3">
                 <div class="font-semibold mb-0 flex items-center gap-2" :class="theme.text">
@@ -2150,8 +2150,8 @@
                   <div class="mt-3 space-y-3">
                     <div class="flex items-center gap-2">
                       <UButton :loading="versionInfo.checking" color="indigo" variant="soft" class="shadow" @click="checkVersion">{{ versionInfo.checking ? '检测中...' : '检查更新' }}</UButton>
-                      <UButton v-if="isAdmin" :loading="updatingVersion" color="orange" variant="solid" class="shadow" @click="updateVersion">更新升级</UButton>
-                      <UButton v-if="isAdmin && runtimeInfo.staticSyncAvailable" :loading="syncingStatic" color="blue" variant="soft" class="shadow" @click="syncStatic">同步静态资源</UButton>
+                      <UButton v-if="can('version.update')" :loading="updatingVersion" color="orange" variant="solid" class="shadow" @click="updateVersion">更新升级</UButton>
+                      <UButton v-if="can('version.update') && runtimeInfo.staticSyncAvailable" :loading="syncingStatic" color="blue" variant="soft" class="shadow" @click="syncStatic">同步静态资源</UButton>
                     </div>
                     <div v-if="updatingVersion" class="space-y-2">
                       <UProgress :value="upgradeProgress" color="orange" />
@@ -2164,7 +2164,7 @@
             </div>
           </div>
 
-          <div id="security-section" v-if="isAdmin && isSectionVisible('security')" class="col-span-12">
+          <div id="security-section" v-if="canSection('security') && isSectionVisible('security')" class="col-span-12">
             <div :class="adminShellCardClass">
               <div :class="adminSectionHeaderClass">
                 <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -2487,6 +2487,23 @@ const isAdmin = computed(() => {
 })
 const adminCapabilities = ref<string[]>([])
 const canViewAdminAudit = computed(() => isPrimaryAdmin.value || adminCapabilities.value.includes('audit.view'))
+const can = (capability: string) => isPrimaryAdmin.value || adminCapabilities.value.includes(capability)
+const sectionCapabilities: Partial<Record<AdminSectionKey, string>> = {
+  site: 'site_settings.view', 'site-configs': 'site_settings.view', 'site-default-theme': 'site_settings.view',
+  'site-register': 'site_settings.view', 'site-pwa': 'site_settings.view', 'site-ads': 'site_settings.view',
+  'site-social-links': 'site_settings.view', 'site-github-card': 'site_settings.view', 'site-github-login': 'site_settings.view',
+  'site-music': 'site_settings.view', comments: 'comments.view', email: 'email.view', notify: 'notifications.view',
+  'site-announcement': 'announcements.view', 'site-feed': 'feed.view', 'site-rss': 'rss.view',
+  'admin-users': 'users.view', 'registration-review': 'registration.view', 'access-logs': 'access_logs.view',
+  'site-visits': 'site_visits.view', 'login-audits': 'login_audits.view', security: 'security.view',
+  attachments: 'attachments.view', storage: 'storage.view', db: 'database.view', version: 'version.view',
+  authorization: 'authorization.manage', 'admin-audit': 'audit.view'
+}
+const canSection = (section: AdminSectionKey) => {
+  if (!isAdmin.value) return section === 'dashboard' || section === 'user' || section === 'hitokoto' || section === 'life-countdown'
+  const capability = sectionCapabilities[section]
+  return !capability || can(capability)
+}
 const loadAdminCapabilities = async () => {
   if (!isAdmin.value) { adminCapabilities.value = []; return }
   try {
@@ -2566,6 +2583,8 @@ const adminNavGroups = computed<AdminNavGroup[]>(() => {
     }
   ]
   if (isAdmin.value) return groups
+    .map((group) => ({ ...group, items: group.items.filter((item) => canSection(item.key)) }))
+    .filter((group) => group.items.length > 0)
   const overviewGroup = groups.find((g) => g.key === 'overview')!
   return [{
     ...overviewGroup,
@@ -3009,11 +3028,11 @@ const setActive = async (name: AdminSectionKey, evt?: MouseEvent) => {
   activeSection.value = name
   const groupKey = sectionGroupMap.value[name]
   if (groupKey) openOnlyGroup(groupKey)
-  if (name === 'storage') {
+  if (name === 'storage' && can('storage.view')) {
     loadAttachmentStorageConfig()
     loadStorageConfig()
   }
-  if (name === 'registration-review') {
+  if (name === 'registration-review' && can('registration.view')) {
     refreshRegistrationApplications()
   }
   try {
@@ -3060,8 +3079,6 @@ const onAdminHashChange = () => {
 }
 
 onMounted(() => {
-	loadAdminCapabilities()
-  loadStorageConfig()
   sidebarOpen.value = window.innerWidth >= 768
   window.addEventListener('resize', syncSidebarViewport, { passive: true })
   window.addEventListener('hashchange', onAdminHashChange)
@@ -3884,46 +3901,36 @@ const saveSecurityConfig = async () => {
   }
 }
 
-onMounted(async () => {
-  if (isAdmin.value) {
-    await refreshSecurity()
-    if (activeSection.value === 'access-logs') {
-      await refreshUsers()
-      await refreshAccessLogs()
-    }
-    if (activeSection.value === 'site-visits') {
-      await refreshUsers()
-      await refreshSiteVisits()
-    }
-    if (activeSection.value === 'login-audits') await refreshLoginAudits()
+const refreshPermittedAdminData = async () => {
+  if (!isAdmin.value) return
+  if (can('security.view')) await refreshSecurity()
+  if (activeSection.value === 'access-logs' && can('access_logs.view')) {
+    if (can('users.view')) await refreshUsers()
+    await refreshAccessLogs()
   }
-})
+  if (activeSection.value === 'site-visits' && can('site_visits.view')) {
+    if (can('users.view')) await refreshUsers()
+    await refreshSiteVisits()
+  }
+  if (activeSection.value === 'login-audits' && can('login_audits.view')) await refreshLoginAudits()
+}
+
+onMounted(refreshPermittedAdminData)
 
 watch(() => isAdmin.value, async (v) => {
-  if (v) {
-    await refreshSecurity()
-    if (activeSection.value === 'access-logs') {
-      await refreshUsers()
-      await refreshAccessLogs()
-    }
-    if (activeSection.value === 'site-visits') {
-      await refreshUsers()
-      await refreshSiteVisits()
-    }
-    if (activeSection.value === 'login-audits') await refreshLoginAudits()
-  }
+  if (v) await refreshPermittedAdminData()
 })
 
 watch(() => activeSection.value, async (section) => {
-  if (section === 'access-logs' && isAdmin.value) {
-    await refreshUsers()
+  if (section === 'access-logs' && can('access_logs.view')) {
+    if (can('users.view')) await refreshUsers()
     await refreshAccessLogs()
   }
-  if (section === 'site-visits' && isAdmin.value) {
-    await refreshUsers()
+  if (section === 'site-visits' && can('site_visits.view')) {
+    if (can('users.view')) await refreshUsers()
     await refreshSiteVisits()
   }
-  if (section === 'login-audits' && isAdmin.value) await refreshLoginAudits()
+  if (section === 'login-audits' && can('login_audits.view')) await refreshLoginAudits()
 })
 
 const clearAttackLogs = async () => {
@@ -7058,6 +7065,8 @@ onMounted(async () => {
         });
     } finally {
         isLoading.value = false;
+        await loadAdminCapabilities();
+        await refreshPermittedAdminData();
         await nextTick();
         await restoreSectionFromHash();
     }
