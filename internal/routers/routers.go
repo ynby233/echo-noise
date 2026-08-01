@@ -11,10 +11,31 @@ import (
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/config"
+	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/controllers"
 	"github.com/rcy1314/echo-noise/internal/middleware"
 	"github.com/rcy1314/echo-noise/pkg"
 )
+
+func registerAdminAuthorizationRoutes(authRoutes *gin.RouterGroup) {
+	authRoutes.GET("/admin/authorization/me", middleware.AdminAuthMiddleware(), controllers.AuthorizationMe)
+
+	authorizationRoutes := authRoutes.Group("/admin/authorization")
+	authorizationRoutes.Use(middleware.RequireCapability(authorization.CapabilityAuthorizationManage))
+	{
+		authorizationRoutes.GET("/catalog", controllers.AuthorizationCatalog)
+		authorizationRoutes.GET("/admins", controllers.ListAuthorizationAdmins)
+		authorizationRoutes.GET("/admins/:id", controllers.GetAuthorizationAdmin)
+		authorizationRoutes.PUT("/admins/:id", controllers.ReplaceAuthorizationAdminGrants)
+	}
+
+	auditRoutes := authRoutes.Group("/admin/audit-logs")
+	auditRoutes.Use(middleware.RequireCapability(authorization.CapabilityAuditView))
+	{
+		auditRoutes.GET("", controllers.ListAdminAuditLogs)
+		auditRoutes.GET("/:id", controllers.GetAdminAuditLog)
+	}
+}
 
 func registerLocalAttachmentRoute(r *gin.Engine, route string, kind string, dir string) {
 	handler := controllers.ServeLocalAttachment(kind, dir)
@@ -24,22 +45,22 @@ func registerLocalAttachmentRoute(r *gin.Engine, route string, kind string, dir 
 
 func registerAttachmentManagementRoutes(authRoutes *gin.RouterGroup) {
 	attachments := authRoutes.Group("/attachments")
-	attachments.GET("/images", middleware.AdminAuthMiddleware(), controllers.ListImageAttachments)
-	attachments.GET("/images/", middleware.AdminAuthMiddleware(), controllers.ListImageAttachments)
-	attachments.GET("/video", middleware.AdminAuthMiddleware(), controllers.ListVideoAttachments)
-	attachments.GET("/video/", middleware.AdminAuthMiddleware(), controllers.ListVideoAttachments)
-	attachments.GET("/audio", middleware.AdminAuthMiddleware(), controllers.ListAudioAttachments)
-	attachments.GET("/audio/", middleware.AdminAuthMiddleware(), controllers.ListAudioAttachments)
-	attachments.GET("/other", middleware.AdminAuthMiddleware(), controllers.ListOtherAttachments)
-	attachments.GET("/other/", middleware.AdminAuthMiddleware(), controllers.ListOtherAttachments)
-	attachments.POST("/download-zip", middleware.AdminAuthMiddleware(), controllers.DownloadAttachmentZip)
-	attachments.DELETE("/references/:id", middleware.AdminAuthMiddleware(), controllers.DeleteAttachmentReference)
-	attachments.POST("/references/batch-delete", middleware.AdminAuthMiddleware(), controllers.DeleteAttachmentReferencesBatch)
-	attachments.POST("/references/batch-purge", middleware.AdminAuthMiddleware(), controllers.PurgeAttachmentBlobsBatch)
-	attachments.DELETE("/images/*name", middleware.AdminAuthMiddleware(), controllers.DeleteImageAttachment)
-	attachments.DELETE("/video/*name", middleware.AdminAuthMiddleware(), controllers.DeleteVideoAttachment)
-	attachments.DELETE("/audio/*name", middleware.AdminAuthMiddleware(), controllers.DeleteAudioAttachment)
-	attachments.DELETE("/other/*name", middleware.AdminAuthMiddleware(), controllers.DeleteOtherAttachment)
+	attachments.GET("/images", middleware.RequireCapability(authorization.CapabilityAttachmentsView), controllers.ListImageAttachments)
+	attachments.GET("/images/", middleware.RequireCapability(authorization.CapabilityAttachmentsView), controllers.ListImageAttachments)
+	attachments.GET("/video", middleware.RequireCapability(authorization.CapabilityAttachmentsView), controllers.ListVideoAttachments)
+	attachments.GET("/video/", middleware.RequireCapability(authorization.CapabilityAttachmentsView), controllers.ListVideoAttachments)
+	attachments.GET("/audio", middleware.RequireCapability(authorization.CapabilityAttachmentsView), controllers.ListAudioAttachments)
+	attachments.GET("/audio/", middleware.RequireCapability(authorization.CapabilityAttachmentsView), controllers.ListAudioAttachments)
+	attachments.GET("/other", middleware.RequireCapability(authorization.CapabilityAttachmentsView), controllers.ListOtherAttachments)
+	attachments.GET("/other/", middleware.RequireCapability(authorization.CapabilityAttachmentsView), controllers.ListOtherAttachments)
+	attachments.POST("/download-zip", middleware.RequireCapability(authorization.CapabilityAttachmentsDownload), controllers.DownloadAttachmentZip)
+	attachments.DELETE("/references/:id", middleware.RequireCapability(authorization.CapabilityAttachmentsDeleteReference), controllers.DeleteAttachmentReference)
+	attachments.POST("/references/batch-delete", middleware.RequireCapability(authorization.CapabilityAttachmentsDeleteReference), controllers.DeleteAttachmentReferencesBatch)
+	attachments.POST("/references/batch-purge", middleware.RequireCapability(authorization.CapabilityAttachmentsPurgeBlob), controllers.PurgeAttachmentBlobsBatch)
+	attachments.DELETE("/images/*name", middleware.RequireCapability(authorization.CapabilityAttachmentsDeleteReference), controllers.DeleteImageAttachment)
+	attachments.DELETE("/video/*name", middleware.RequireCapability(authorization.CapabilityAttachmentsDeleteReference), controllers.DeleteVideoAttachment)
+	attachments.DELETE("/audio/*name", middleware.RequireCapability(authorization.CapabilityAttachmentsDeleteReference), controllers.DeleteAudioAttachment)
+	attachments.DELETE("/other/*name", middleware.RequireCapability(authorization.CapabilityAttachmentsDeleteReference), controllers.DeleteOtherAttachment)
 }
 
 func SetupRouter() *gin.Engine {
@@ -212,7 +233,7 @@ func SetupRouter() *gin.Engine {
 	api.PUT("/announcements/read-all", controllers.MarkAllAnnouncementsRead)
 	api.PUT("/announcements/:id/read", controllers.MarkAnnouncementRead)
 	api.GET("/feed/items", controllers.GetInfoFeedItems)
-	api.POST("/feed/refresh", middleware.SessionAuthMiddleware(), middleware.AdminAuthMiddleware(), controllers.RefreshInfoFeedItems)
+	api.POST("/feed/refresh", middleware.SessionAuthMiddleware(), middleware.RequireCapability(authorization.CapabilityFeedManage), controllers.RefreshInfoFeedItems)
 	api.POST("/login", controllers.Login)
 	api.POST("/register", controllers.Register)
 	api.GET("/status", controllers.GetStatus)
@@ -251,9 +272,10 @@ func SetupRouter() *gin.Engine {
 	// 需要鉴权的路由
 	authRoutes := api.Group("")
 	authRoutes.Use(middleware.SessionAuthMiddleware())
+	registerAdminAuthorizationRoutes(authRoutes)
 	authRoutes.GET("/users/me/stats", controllers.GetCurrentUserHomeStats)
 	// 版本更新（管理员）
-	authRoutes.POST("/version/update", controllers.UpdateVersion)
+	authRoutes.POST("/version/update", middleware.RequireCapability(authorization.CapabilityVersionUpdate), controllers.UpdateVersion)
 	authRoutes.GET("/version/update/stream", controllers.UpdateVersionStream)
 	authRoutes.POST("/version/static-sync", controllers.SyncStatic)
 	// 静态资源同步已移除，版本升级统一走容器镜像
@@ -282,7 +304,7 @@ func SetupRouter() *gin.Engine {
 	api.POST("/messages/comments/counts", controllers.GetCommentCounts)
 	api.POST("/messages/:id/comments", controllers.PostComment)
 	// 管理员评论列表（提供公共路径，附加会话中间件以注入用户上下文）
-	api.GET("/comments", middleware.SessionAuthMiddleware(), controllers.ListComments)
+	api.GET("/comments", middleware.SessionAuthMiddleware(), middleware.RequireCapability(authorization.CapabilityCommentsView), controllers.ListComments)
 	// 评论更新/删除：管理员可管理全部，普通用户可管理自己发布的内容
 	authRoutes.PUT("/messages/:id/comments/:cid", controllers.UpdateComment)
 	authRoutes.DELETE("/messages/:id/comments/:cid", controllers.DeleteComment)
@@ -306,15 +328,15 @@ func SetupRouter() *gin.Engine {
 	}
 
 	announcementAdmin := authRoutes.Group("/admin/announcements")
-	announcementAdmin.Use(middleware.AdminAuthMiddleware())
+	announcementAdmin.Use(middleware.RequireCapability(authorization.CapabilityAnnouncementsView))
 	{
 		announcementAdmin.GET("", controllers.ListAdminAnnouncements)
-		announcementAdmin.POST("", controllers.CreateAnnouncement)
-		announcementAdmin.PUT("/:id", controllers.UpdateAnnouncement)
-		announcementAdmin.POST("/:id/publish", controllers.PublishAnnouncement)
-		announcementAdmin.POST("/:id/withdraw", controllers.WithdrawAnnouncement)
-		announcementAdmin.DELETE("/:id", controllers.DeleteAnnouncement)
-		announcementAdmin.POST("/batch-delete", controllers.BatchDeleteAnnouncements)
+		announcementAdmin.POST("", middleware.RequireCapability(authorization.CapabilityAnnouncementsManage), controllers.CreateAnnouncement)
+		announcementAdmin.PUT("/:id", middleware.RequireCapability(authorization.CapabilityAnnouncementsManage), controllers.UpdateAnnouncement)
+		announcementAdmin.POST("/:id/publish", middleware.RequireCapability(authorization.CapabilityAnnouncementsPush), controllers.PublishAnnouncement)
+		announcementAdmin.POST("/:id/withdraw", middleware.RequireCapability(authorization.CapabilityAnnouncementsManage), controllers.WithdrawAnnouncement)
+		announcementAdmin.DELETE("/:id", middleware.RequireCapability(authorization.CapabilityAnnouncementsManage), controllers.DeleteAnnouncement)
+		announcementAdmin.POST("/batch-delete", middleware.RequireCapability(authorization.CapabilityAnnouncementsManage), controllers.BatchDeleteAnnouncements)
 		announcementAdmin.GET("/:id/push-summary", controllers.GetAnnouncementPushSummary)
 		announcementAdmin.POST("/:id/retry-push", controllers.RetryAnnouncementPush)
 	}
@@ -346,18 +368,18 @@ func SetupRouter() *gin.Engine {
 	// 安全记录（管理员）
 	security := authRoutes.Group("/security")
 	{
-		security.GET("/attacks", middleware.AdminAuthMiddleware(), controllers.GetAttackRecords)
-		security.DELETE("/attacks", middleware.AdminAuthMiddleware(), controllers.ClearAttackRecords)
-		security.GET("/access-logs", middleware.AdminAuthMiddleware(), controllers.GetAccessLogs)
-		security.DELETE("/access-logs", middleware.AdminAuthMiddleware(), controllers.ClearAccessLogs)
-		security.GET("/site-visits", middleware.AdminAuthMiddleware(), controllers.GetSiteVisits)
-		security.DELETE("/site-visits", middleware.AdminAuthMiddleware(), controllers.ClearSiteVisits)
-		security.GET("/login-audits", middleware.AdminAuthMiddleware(), controllers.GetLoginAudits)
-		security.GET("/bans", middleware.AdminAuthMiddleware(), controllers.GetIPBans)
-		security.POST("/bans", middleware.AdminAuthMiddleware(), controllers.AddIPBan)
-		security.DELETE("/bans", middleware.AdminAuthMiddleware(), controllers.RemoveIPBan)
-		security.GET("/config", middleware.AdminAuthMiddleware(), controllers.GetSecurityConfig)
-		security.PUT("/config", middleware.AdminAuthMiddleware(), controllers.UpdateSecurityConfig)
+		security.GET("/attacks", middleware.RequireCapability(authorization.CapabilitySecurityView), controllers.GetAttackRecords)
+		security.DELETE("/attacks", middleware.RequireCapability(authorization.CapabilitySecurityClearLogs), controllers.ClearAttackRecords)
+		security.GET("/access-logs", middleware.RequireCapability(authorization.CapabilityAccessLogsView), controllers.GetAccessLogs)
+		security.DELETE("/access-logs", middleware.RequireCapability(authorization.CapabilityAccessLogsClear), controllers.ClearAccessLogs)
+		security.GET("/site-visits", middleware.RequireCapability(authorization.CapabilitySiteVisitsView), controllers.GetSiteVisits)
+		security.DELETE("/site-visits", middleware.RequireCapability(authorization.CapabilitySiteVisitsClear), controllers.ClearSiteVisits)
+		security.GET("/login-audits", middleware.RequireCapability(authorization.CapabilityLoginAuditsView), controllers.GetLoginAudits)
+		security.GET("/bans", middleware.RequireCapability(authorization.CapabilitySecurityView), controllers.GetIPBans)
+		security.POST("/bans", middleware.RequireCapability(authorization.CapabilitySecurityManage), controllers.AddIPBan)
+		security.DELETE("/bans", middleware.RequireCapability(authorization.CapabilitySecurityManage), controllers.RemoveIPBan)
+		security.GET("/config", middleware.RequireCapability(authorization.CapabilitySecurityView), controllers.GetSecurityConfig)
+		security.PUT("/config", middleware.RequireCapability(authorization.CapabilitySecurityManage), controllers.UpdateSecurityConfig)
 	}
 
 	// 图片上传路由
@@ -376,10 +398,10 @@ func SetupRouter() *gin.Engine {
 		user.GET("", controllers.GetUserInfo)
 		user.PUT("/change_password", controllers.ChangePassword)
 		user.PUT("/update", controllers.UpdateUser)
-		user.PUT("/admin", controllers.UpdateUserAdmin)
-		user.DELETE("", controllers.DeleteUser)
+		user.PUT("/admin", middleware.RequireCapability(authorization.CapabilityAdminRolesManage), controllers.UpdateUserAdmin)
+		user.DELETE("", middleware.RequireCapability(authorization.CapabilityUsersDelete), controllers.DeleteUser)
 		user.POST("/logout", controllers.Logout) // 添加退出登录路由
-		user.POST("/reset_password", controllers.AdminResetPassword)
+		user.POST("/reset_password", middleware.RequireCapability(authorization.CapabilityUsersResetPassword), controllers.AdminResetPassword)
 		// 添加 Token 相关路由
 		user.GET("/token", controllers.GetUserToken)
 		user.POST("/token/regenerate", controllers.RegenerateUserToken)
@@ -392,9 +414,9 @@ func SetupRouter() *gin.Engine {
 	// 注册申请管理（管理员）
 	registration := authRoutes.Group("/registration")
 	{
-		registration.GET("/applications", middleware.AdminAuthMiddleware(), controllers.ListRegistrationApplications)
-		registration.PUT("/applications/:id/approve", middleware.AdminAuthMiddleware(), controllers.ApproveRegistrationApplication)
-		registration.PUT("/applications/:id/reject", middleware.AdminAuthMiddleware(), controllers.RejectRegistrationApplication)
+		registration.GET("/applications", middleware.RequireCapability(authorization.CapabilityRegistrationView), controllers.ListRegistrationApplications)
+		registration.PUT("/applications/:id/approve", middleware.RequireCapability(authorization.CapabilityRegistrationReview), controllers.ApproveRegistrationApplication)
+		registration.PUT("/applications/:id/reject", middleware.RequireCapability(authorization.CapabilityRegistrationReview), controllers.RejectRegistrationApplication)
 	}
 
 	// 设置路由

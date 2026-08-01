@@ -3,6 +3,7 @@ package middleware
 import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/dto"
 	"github.com/rcy1314/echo-noise/internal/models"
@@ -127,15 +128,6 @@ func parseSessionExpireAt(v interface{}) int64 {
 
 func AdminAuthMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		// 优先使用上游中间件写入的上下文
-		if v, ok := ctx.Get("is_admin"); ok {
-			if b, ok := v.(bool); ok && b {
-				ctx.Next()
-				return
-			}
-		}
-
-		// 其次尝试根据 user_id 实时查询，避免只信任 session 中布尔位
 		if v, ok := ctx.Get("user_id"); ok {
 			if uid, ok := toUint(v); ok {
 				db, err := database.GetDB()
@@ -150,15 +142,44 @@ func AdminAuthMiddleware() gin.HandlerFunc {
 			}
 		}
 
-		// 最后兼容旧逻辑
-		session := sessions.Default(ctx)
-		if b, ok := session.Get("is_admin").(bool); ok && b {
-			ctx.Next()
-			return
-		}
-
 		ctx.JSON(http.StatusForbidden, dto.Fail[any]("需要管理员权限"))
 		ctx.Abort()
+	}
+}
+
+// RequireCapability checks the current database state on every request. It
+// deliberately does not trust a session or bearer-token is_admin snapshot, so
+// a revoked grant cannot survive until login expiry.
+func RequireCapability(capability authorization.Capability) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		value, exists := ctx.Get("user_id")
+		actorID, ok := toUint(value)
+		if !exists || !ok || actorID == 0 {
+			ctx.JSON(http.StatusUnauthorized, dto.Fail[any]("未登录"))
+			ctx.Abort()
+			return
+		}
+		db, err := database.GetDB()
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, dto.Fail[any]("授权服务不可用"))
+			ctx.Abort()
+			return
+		}
+		authorizer := authorization.New(db)
+		decision := authorizer.Authorize(actorID, capability, nil)
+		if !decision.Allowed {
+			definition, _ := authorization.DefinitionFor(capability)
+			authorizer.WriteDeniedBestEffort(models.AdminAuditLog{
+				ActorUserID: actorID, Capability: string(capability), Module: definition.Module,
+				Action: ctx.Request.Method, TargetType: "route", TargetID: ctx.FullPath(),
+				Result: "denied", Summary: "capability request denied", Reason: string(decision.Reason),
+				IP: ctx.ClientIP(), UserAgent: ctx.GetHeader("User-Agent"), AuthVia: ctx.GetString("auth_via"),
+			})
+			ctx.JSON(http.StatusForbidden, dto.Fail[any]("无权执行此操作"))
+			ctx.Abort()
+			return
+		}
+		ctx.Next()
 	}
 }
 

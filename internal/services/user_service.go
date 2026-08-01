@@ -1080,6 +1080,12 @@ func ChangePasswordWithOld(user *models.User, old string, new string) error {
 }
 
 func UpdateUserAdmin(userID uint, currentUserID uint) error {
+	if currentUserID != models.PrimaryAdminUserID {
+		return errors.New("仅 1 号管理员可以变更管理员身份")
+	}
+	if userID == models.PrimaryAdminUserID {
+		return errors.New("不能变更 1 号管理员身份")
+	}
 	user, err := repository.GetUserByID(userID)
 	if err != nil {
 		return err
@@ -1098,11 +1104,22 @@ func UpdateUserAdmin(userID uint, currentUserID uint) error {
 			return fmt.Errorf("系统至少保留一位管理员")
 		}
 	}
-	user.IsAdmin = !user.IsAdmin
-	if err := repository.UpdateUser(user); err != nil {
-		return err
-	}
-	return nil
+	return database.DB.Transaction(func(tx *gorm.DB) error {
+		var fresh models.User
+		if err := tx.First(&fresh, userID).Error; err != nil {
+			return err
+		}
+		fresh.IsAdmin = !fresh.IsAdmin
+		if err := tx.Save(&fresh).Error; err != nil {
+			return err
+		}
+		if !fresh.IsAdmin {
+			if err := tx.Where("user_id = ?", fresh.ID).Delete(&models.AdminCapabilityGrant{}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func GetUserByUsername(username string) (*models.User, error) {

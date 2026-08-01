@@ -10,6 +10,7 @@ import (
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/middleware"
 	"github.com/rcy1314/echo-noise/internal/models"
@@ -25,7 +26,7 @@ func TestAttachmentManagementListsRequireAdminSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open test database: %v", err)
 	}
-	if err := db.AutoMigrate(&models.User{}, &models.Message{}, &models.SiteConfig{}); err != nil {
+	if err := db.AutoMigrate(&models.User{}, &models.Message{}, &models.SiteConfig{}, &models.AdminCapabilityGrant{}, &models.AdminAuditLog{}, &models.AdminAuditConfig{}); err != nil {
 		t.Fatalf("migrate test database: %v", err)
 	}
 	database.DB = db
@@ -35,13 +36,20 @@ func TestAttachmentManagementListsRequireAdminSession(t *testing.T) {
 		models.SetDB(nil)
 	})
 
+	primary := models.User{ID: models.PrimaryAdminUserID, Username: "primary", Token: "primary-token", IsAdmin: true}
 	ordinary := models.User{Username: "member", Token: "member-token"}
 	admin := models.User{Username: "admin", Token: "admin-token", IsAdmin: true}
+	if err := db.Create(&primary).Error; err != nil {
+		t.Fatalf("create primary admin: %v", err)
+	}
 	if err := db.Create(&ordinary).Error; err != nil {
 		t.Fatalf("create ordinary user: %v", err)
 	}
 	if err := db.Create(&admin).Error; err != nil {
 		t.Fatalf("create admin user: %v", err)
+	}
+	if err := authorization.New(db).ReplaceGrants(primary.ID, admin.ID, []authorization.Capability{authorization.CapabilityAttachmentsView}); err != nil {
+		t.Fatalf("grant attachment view: %v", err)
 	}
 
 	r := gin.New()

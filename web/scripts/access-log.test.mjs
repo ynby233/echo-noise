@@ -43,23 +43,23 @@ assert.match(
 )
 assert.match(
   router,
-  /security\.GET\("\/access-logs",\s*middleware\.AdminAuthMiddleware\(\),\s*controllers\.GetAccessLogs\)/,
-  'access log list endpoint must require admin auth'
+  /security\.GET\("\/access-logs",\s*middleware\.(?:AdminAuthMiddleware\(\)|RequireCapability\(authorization\.CapabilityAccessLogsView\)),\s*controllers\.GetAccessLogs\)/,
+  'access log list endpoint must require capability authentication'
 )
 assert.match(
   router,
-  /security\.DELETE\("\/access-logs",\s*middleware\.AdminAuthMiddleware\(\),\s*controllers\.ClearAccessLogs\)/,
-  'access log clear endpoint must require admin auth'
+  /security\.DELETE\("\/access-logs",\s*middleware\.(?:AdminAuthMiddleware\(\)|RequireCapability\(authorization\.CapabilityAccessLogsClear\)),\s*controllers\.ClearAccessLogs\)/,
+  'access log clear endpoint must require capability authentication'
 )
 assert.match(
   router,
-  /security\.GET\("\/site-visits",\s*middleware\.AdminAuthMiddleware\(\),\s*controllers\.GetSiteVisits\)/,
-  'site visit list endpoint must require admin auth'
+  /security\.GET\("\/site-visits",\s*middleware\.(?:AdminAuthMiddleware\(\)|RequireCapability\(authorization\.CapabilitySiteVisitsView\)),\s*controllers\.GetSiteVisits\)/,
+  'site visit list endpoint must require capability authentication'
 )
 assert.match(
   router,
-  /security\.DELETE\("\/site-visits",\s*middleware\.AdminAuthMiddleware\(\),\s*controllers\.ClearSiteVisits\)/,
-  'site visit clear endpoint must require admin auth'
+  /security\.DELETE\("\/site-visits",\s*middleware\.(?:AdminAuthMiddleware\(\)|RequireCapability\(authorization\.CapabilitySiteVisitsClear\)),\s*controllers\.ClearSiteVisits\)/,
+  'site visit clear endpoint must require capability authentication'
 )
 assert.match(securityController, /func\s+GetAccessLogs\(c \*gin\.Context\)/, 'access log controller must expose list operation')
 for (const filter of ['ip', 'username', 'method', 'path', 'status', 'startDate', 'endDate', 'user_ids']) {

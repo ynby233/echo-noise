@@ -390,6 +390,8 @@
             </div>
           </div>
 
+          <div id="authorization-section" v-if="isPrimaryAdmin && isSectionVisible('authorization')" class="col-span-12"><AdminAuthorizationCenter /></div>
+          <div id="admin-audit-section" v-if="canViewAdminAudit && isSectionVisible('admin-audit')" class="col-span-12"><AdminAuditLogPanel /></div>
           <div id="site-section" v-if="(isAdmin && isSiteSectionPage) || isSectionVisible('life-countdown') || (!isAdmin && isSectionVisible('hitokoto'))" class="col-span-12">
           <div :class="adminShellCardClass">
             <div :class="adminSectionHeaderClass">
@@ -2474,7 +2476,7 @@ type AdminSectionKey =
   'site-register' | 'site-pwa' | 'site-github-card' | 'site-github-login' | 'site-announcement' | 'site-music' |
   'site-default-theme' | 'site-social-links' | 'site-ads' | 'site-feed' | 'site-rss' | 'hitokoto' | 'life-countdown' |
   'site-configs' | 'comments' | 'email' | 'admin-users' | 'registration-review' |
-  'storage'
+  'storage' | 'authorization' | 'admin-audit'
 const activeSection = ref<AdminSectionKey>('dashboard')
 type AdminNavItem = { key: AdminSectionKey, label: string, icon: string }
 type AdminNavGroup = { key: string, label: string, icon: string, items: AdminNavItem[] }
@@ -2483,6 +2485,16 @@ const isAdmin = computed(() => {
     const u: any = userStore.user
     return !!(userStore.isLogin && u && (u.is_admin || u.IsAdmin))
 })
+const adminCapabilities = ref<string[]>([])
+const canViewAdminAudit = computed(() => isPrimaryAdmin.value || adminCapabilities.value.includes('audit.view'))
+const loadAdminCapabilities = async () => {
+  if (!isAdmin.value) { adminCapabilities.value = []; return }
+  try {
+    const response = await fetch('/api/admin/authorization/me', { credentials: 'include' })
+    const body = await response.json().catch(() => ({}))
+    adminCapabilities.value = response.ok && body?.code === 1 ? (body.data?.capabilities || []) : []
+  } catch { adminCapabilities.value = [] }
+}
 const adminNavGroups = computed<AdminNavGroup[]>(() => {
   const groups: AdminNavGroup[] = [
     {
@@ -2536,6 +2548,8 @@ const adminNavGroups = computed<AdminNavGroup[]>(() => {
         { key: 'access-logs', label: '访问日志', icon: 'i-heroicons-eye' },
         { key: 'site-visits', label: '站点访问', icon: 'i-heroicons-home' },
         { key: 'login-audits', label: '登录审计', icon: 'i-heroicons-clipboard-document-check' },
+        ...(isPrimaryAdmin.value ? [{ key: 'authorization' as AdminSectionKey, label: '管理员授权', icon: 'i-heroicons-key' }] : []),
+        ...(canViewAdminAudit.value ? [{ key: 'admin-audit' as AdminSectionKey, label: '管理员审计', icon: 'i-heroicons-clipboard-document-list' }] : []),
         { key: 'security', label: '安全防护', icon: 'i-heroicons-shield-exclamation' }
       ] as Array<{ key: AdminSectionKey, label: string, icon: string }>
     },
@@ -3046,6 +3060,7 @@ const onAdminHashChange = () => {
 }
 
 onMounted(() => {
+	loadAdminCapabilities()
   loadStorageConfig()
   sidebarOpen.value = window.innerWidth >= 768
   window.addEventListener('resize', syncSidebarViewport, { passive: true })

@@ -22,6 +22,7 @@ import (
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/dto"
 	"github.com/rcy1314/echo-noise/internal/models"
@@ -687,28 +688,42 @@ func DeleteMessage(c *gin.Context) {
 		return
 	}
 
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusOK, dto.Fail[string]("未授权访问"))
+	actorID, ok := commentAuthUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, dto.Fail[string]("未授权访问"))
 		return
 	}
-
-	user, err := services.GetUserByID(userID.(uint))
+	db, err := database.GetDB()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
 		return
 	}
-
-	if !user.IsAdmin {
-		if err := services.DeleteMessage(uint(messageID), userID.(uint)); err != nil {
+	var message models.Message
+	if err := db.First(&message, uint(messageID)).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
+		return
+	}
+	if message.UserID != actorID {
+		if decision := authorization.New(db).Authorize(actorID, authorization.CapabilityNotesDelete, &message.UserID); !decision.Allowed {
+			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权删除此消息"})
+			return
+		}
+		var primaryComments int64
+		if err := db.Model(&models.Comment{}).Where("message_id = ? AND user_id = ?", message.ID, models.PrimaryAdminUserID).Count(&primaryComments).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
 			return
 		}
-	} else {
+		if primaryComments > 0 {
+			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "消息包含受保护内容，不能删除"})
+			return
+		}
 		if err := services.DeleteMessageByAdmin(uint(messageID)); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
 			return
 		}
+	} else if err := services.DeleteMessage(uint(messageID), actorID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "删除成功"})
@@ -782,14 +797,22 @@ func checkAdmin(c *gin.Context) (uint, error) {
 	if !exists {
 		return 0, fmt.Errorf("未授权访问")
 	}
-	user, err := services.GetUserByID(userID.(uint))
+	id, ok := commentUint(userID)
+	if !ok || id == 0 {
+		return 0, fmt.Errorf("未授权访问")
+	}
+	db, err := database.GetDB()
 	if err != nil {
+		return 0, err
+	}
+	var user models.User
+	if err := db.Select("id,is_admin").First(&user, id).Error; err != nil {
 		return 0, err
 	}
 	if !user.IsAdmin {
 		return 0, fmt.Errorf("需要管理员权限")
 	}
-	return userID.(uint), nil
+	return id, nil
 }
 
 func requirePrimaryAdmin(c *gin.Context) (uint, error) {
@@ -804,7 +827,7 @@ func requirePrimaryAdmin(c *gin.Context) (uint, error) {
 }
 
 func UpdateUserAdmin(c *gin.Context) {
-	_, err := checkAdmin(c)
+	_, err := requirePrimaryAdmin(c)
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
 		return
@@ -1547,12 +1570,19 @@ func canViewComment(message models.Message, comment models.Comment, commentMap m
 	return services.CanViewCommentInThread(message, comment, commentMap, viewerID, hasViewer, isAdmin)
 }
 
-func canManageComment(c *gin.Context, comment models.Comment) bool {
-	if commentAuthIsAdmin(c) {
+func canManageComment(c *gin.Context, comment models.Comment, capability authorization.Capability) bool {
+	userID, ok := commentAuthUserID(c)
+	if !ok {
+		return false
+	}
+	if comment.UserID != nil && *comment.UserID == userID {
 		return true
 	}
-	userID, ok := commentAuthUserID(c)
-	return ok && comment.UserID != nil && *comment.UserID == userID
+	db, err := database.GetDB()
+	if err != nil {
+		return false
+	}
+	return authorization.New(db).Authorize(userID, capability, comment.UserID).Allowed
 }
 
 func commentUint(v any) (uint, bool) {
@@ -1958,7 +1988,7 @@ func UpdateComment(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "评论不存在"})
 		return
 	}
-	if !canManageComment(c, cm) {
+	if !canManageComment(c, cm, authorization.CapabilityCommentsEdit) {
 		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限"})
 		return
 	}
@@ -2036,7 +2066,7 @@ func DeleteComment(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "评论不存在"})
 		return
 	}
-	if !canManageComment(c, cm) {
+	if !canManageComment(c, cm, authorization.CapabilityCommentsDelete) {
 		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限"})
 		return
 	}
@@ -2246,13 +2276,6 @@ func UpdateMessage(c *gin.Context) {
 		return
 	}
 
-	// 获取用户信息
-	user, err := services.GetUserByID(userID.(uint))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取用户信息失败"})
-		return
-	}
-
 	// 检查消息所有权或管理员权限
 	message, err := services.GetMessageByID(uint(messageID), true)
 	if err != nil {
@@ -2260,13 +2283,41 @@ func UpdateMessage(c *gin.Context) {
 		return
 	}
 
-	if !user.IsAdmin && message.UserID != userID.(uint) {
-		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限修改此消息"})
+	actorID, ok := commentUint(userID)
+	if !ok || actorID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "未授权访问"})
 		return
 	}
-	if createdAt != nil && (!user.IsAdmin || message.UserID != userID.(uint)) {
-		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "仅管理员可以修改自己发布内容的发布时间"})
-		return
+	if createdAt != nil {
+		db, err := database.GetDB()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "授权服务不可用"})
+			return
+		}
+		if !authorization.New(db).Authorize(actorID, authorization.CapabilityNotesPublishTime, &message.UserID).Allowed {
+			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限调整发布时间"})
+			return
+		}
+	}
+	if message.UserID != actorID {
+		db, err := database.GetDB()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "授权服务不可用"})
+			return
+		}
+		authorizer := authorization.New(db)
+		if req.Content != nil && !authorizer.Authorize(actorID, authorization.CapabilityNotesEdit, &message.UserID).Allowed {
+			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限修改此消息"})
+			return
+		}
+		if (req.Private != nil || req.Visibility != nil) && !authorizer.Authorize(actorID, authorization.CapabilityNotesVisibility, &message.UserID).Allowed {
+			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限调整可见范围"})
+			return
+		}
+		if createdAt != nil && !authorizer.Authorize(actorID, authorization.CapabilityNotesPublishTime, &message.UserID).Allowed {
+			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限调整发布时间"})
+			return
+		}
 	}
 
 	updated, err := services.UpdateMessage(uint(messageID), req.Content, req.Private, req.Visibility, createdAt)
@@ -2312,13 +2363,6 @@ func UpdateMessagePinned(c *gin.Context) {
 		return
 	}
 
-	// 获取用户信息
-	user, err := services.GetUserByID(userID.(uint))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取用户信息失败"})
-		return
-	}
-
 	// 获取消息并校验权限
 	message, err := services.GetMessageByID(uint(messageID), true)
 	if err != nil {
@@ -2326,9 +2370,21 @@ func UpdateMessagePinned(c *gin.Context) {
 		return
 	}
 
-	if !user.IsAdmin && message.UserID != userID.(uint) {
-		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限操作该消息"})
+	actorID, ok := commentUint(userID)
+	if !ok || actorID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "未授权访问"})
 		return
+	}
+	if message.UserID != actorID {
+		db, err := database.GetDB()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "授权服务不可用"})
+			return
+		}
+		if !authorization.New(db).Authorize(actorID, authorization.CapabilityNotesPinGlobal, &message.UserID).Allowed {
+			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限操作该消息"})
+			return
+		}
 	}
 
 	// 更新置顶状态
@@ -3245,7 +3301,9 @@ func PostMessage(c *gin.Context) {
 		return
 	}
 	if createdAt != nil {
-		if !user.IsAdmin {
+		actorID, ok := commentUint(userID)
+		db, dbErr := database.GetDB()
+		if !ok || dbErr != nil || !authorization.New(db).Authorize(actorID, authorization.CapabilityNotesPublishTime, nil).Allowed {
 			c.JSON(http.StatusOK, dto.Fail[string]("仅管理员可以指定发布时间"))
 			return
 		}
@@ -4083,6 +4141,14 @@ func DeleteUser(c *gin.Context) {
 	// 至少保留一位管理员：当删除目标是管理员时检查数量
 	target, err := repository.GetUserByID(uint(id))
 	if err == nil && target.IsAdmin {
+		if target.ID == models.PrimaryAdminUserID {
+			c.JSON(http.StatusForbidden, dto.Fail[string]("不能删除 1 号管理员"))
+			return
+		}
+		if currentID != models.PrimaryAdminUserID {
+			c.JSON(http.StatusForbidden, dto.Fail[string]("仅 1 号管理员可以删除管理员账号"))
+			return
+		}
 		cnt, err := repository.CountAdmins()
 		if err != nil {
 			c.JSON(http.StatusOK, dto.Fail[string]("校验管理员数量失败"))
@@ -4102,7 +4168,7 @@ func DeleteUser(c *gin.Context) {
 
 // 管理员重置任意用户密码
 func AdminResetPassword(c *gin.Context) {
-	_, err := checkAdmin(c)
+	currentID, err := checkAdmin(c)
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
 		return
@@ -4118,6 +4184,14 @@ func AdminResetPassword(c *gin.Context) {
 	user, err := services.GetUserByID(req.ID)
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string](models.UserNotFoundMessage))
+		return
+	}
+	if user.IsAdmin && currentID != models.PrimaryAdminUserID {
+		c.JSON(http.StatusForbidden, dto.Fail[string]("仅 1 号管理员可以重置管理员账号密码"))
+		return
+	}
+	if user.ID == models.PrimaryAdminUserID {
+		c.JSON(http.StatusForbidden, dto.Fail[string]("不能通过管理员功能重置 1 号管理员密码"))
 		return
 	}
 	if err := services.ChangePassword(user, dto.UserInfoDto{Password: req.Password}); err != nil {

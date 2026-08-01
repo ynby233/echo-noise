@@ -35,8 +35,8 @@ const [feed, home, messageList, routerSource] = await Promise.all([
 
 assert.match(
   routerSource,
-  /api\.POST\("\/feed\/refresh", middleware\.SessionAuthMiddleware\(\), middleware\.AdminAuthMiddleware\(\), controllers\.RefreshInfoFeedItems\)/,
-  'manual source refresh must require an authenticated administrator',
+  /api\.POST\("\/feed\/refresh", middleware\.SessionAuthMiddleware\(\), middleware\.(?:AdminAuthMiddleware\(\)|RequireCapability\(authorization\.CapabilityFeedManage\)), controllers\.RefreshInfoFeedItems\)/,
+  'manual source refresh must require authenticated capability authorization',
 )
 assert.match(
   home,

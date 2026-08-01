@@ -76,7 +76,7 @@ func assertMessageResponseCode(t *testing.T, w *httptest.ResponseRecorder, expec
 
 func TestAdminCanSetCreatedAtWhenPostingMessage(t *testing.T) {
 	db, r, currentUserID := setupMessagePublishTimeTest(t)
-	admin := models.User{ID: 1101, Username: "admin", IsAdmin: true}
+	admin := models.User{ID: models.PrimaryAdminUserID, Username: "admin", IsAdmin: true}
 	if err := db.Create(&admin).Error; err != nil {
 		t.Fatalf("create admin: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestRegularUserCannotSetCreatedAtWhenPostingMessage(t *testing.T) {
 
 func TestAdminCanUpdateOwnMessageCreatedAt(t *testing.T) {
 	db, r, currentUserID := setupMessagePublishTimeTest(t)
-	admin := models.User{ID: 1301, Username: "admin", IsAdmin: true}
+	admin := models.User{ID: models.PrimaryAdminUserID, Username: "admin", IsAdmin: true}
 	if err := db.Create(&admin).Error; err != nil {
 		t.Fatalf("create admin: %v", err)
 	}

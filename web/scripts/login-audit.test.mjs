@@ -63,8 +63,8 @@ assert.match(
 
 assert.match(
   routes,
-  /security\.GET\("\/login-audits",\s*middleware\.AdminAuthMiddleware\(\),\s*controllers\.GetLoginAudits\)/,
-  'login audit API must live under the existing admin-protected security route group'
+  /security\.GET\("\/login-audits",\s*middleware\.(?:AdminAuthMiddleware\(\)|RequireCapability\(authorization\.CapabilityLoginAuditsView\)),\s*controllers\.GetLoginAudits\)/,
+  'login audit API must live under the existing capability-protected security route group'
 )
 
 assert.match(
