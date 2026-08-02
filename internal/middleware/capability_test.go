@@ -80,22 +80,22 @@ func TestRequireCapabilityWritesSuccessfulAdministrativeMutationAudit(t *testing
 	if err := db.Create(&delegated).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityFeedManage}); err != nil {
+	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityCommentsEdit}); err != nil {
 		t.Fatal(err)
 	}
 
 	r := gin.New()
-	r.POST("/refresh", func(c *gin.Context) { c.Set("user_id", delegated.ID); c.Set("auth_via", "session") }, RequireCapability(authorization.CapabilityFeedManage), func(c *gin.Context) { c.Status(http.StatusNoContent) })
+	r.POST("/comments/42", func(c *gin.Context) { c.Set("user_id", delegated.ID); c.Set("auth_via", "session") }, RequireCapability(authorization.CapabilityCommentsEdit), func(c *gin.Context) { c.Status(http.StatusNoContent) })
 	w := httptest.NewRecorder()
-	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/refresh", nil))
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/comments/42", nil))
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("write request status=%d", w.Code)
 	}
 	var record models.AdminAuditLog
-	if err := db.Where("capability = ? AND result = ?", authorization.CapabilityFeedManage, "success").First(&record).Error; err != nil {
+	if err := db.Where("capability = ? AND result = ?", authorization.CapabilityCommentsEdit, "success").First(&record).Error; err != nil {
 		t.Fatalf("successful audit record: %v", err)
 	}
-	if record.AuthVia != "session" || record.TargetID != "/refresh" {
+	if record.AuthVia != "session" || record.TargetID != "/comments/42" {
 		t.Fatalf("unexpected audit record: %#v", record)
 	}
 }

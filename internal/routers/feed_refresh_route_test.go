@@ -9,7 +9,6 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
-	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/middleware"
 	"github.com/rcy1314/echo-noise/internal/models"
@@ -29,20 +28,13 @@ func TestFeedRefreshIsPublic(t *testing.T) {
 	if err := db.AutoMigrate(&models.User{}, &models.SecurityConfig{}, &models.AdminCapabilityGrant{}, &models.AdminAuditLog{}, &models.AdminAuditConfig{}); err != nil {
 		t.Fatalf("migrate route test database: %v", err)
 	}
-	primary := models.User{ID: models.PrimaryAdminUserID, Username: "primary", IsAdmin: true}
 	ordinary := models.User{Username: "member"}
 	admin := models.User{Username: "admin", IsAdmin: true}
-	if err := db.Create(&primary).Error; err != nil {
-		t.Fatalf("create primary admin: %v", err)
-	}
 	if err := db.Create(&ordinary).Error; err != nil {
 		t.Fatalf("create ordinary user: %v", err)
 	}
 	if err := db.Create(&admin).Error; err != nil {
 		t.Fatalf("create admin user: %v", err)
-	}
-	if err := authorization.New(db).ReplaceGrants(primary.ID, admin.ID, []authorization.Capability{authorization.CapabilityFeedManage}); err != nil {
-		t.Fatalf("grant feed management: %v", err)
 	}
 	database.DB = db
 	models.SetDB(db)

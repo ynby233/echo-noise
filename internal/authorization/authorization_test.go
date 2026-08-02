@@ -83,3 +83,28 @@ func TestReplaceGrantsRejectsPrimaryAndOrdinaryTargetsAndUnknownCapability(t *te
 		t.Fatal("unknown capability must be rejected")
 	}
 }
+
+func TestCatalogExcludesRetiredUserManageAndFeedRefreshCapabilities(t *testing.T) {
+	for _, capability := range []Capability{"users.manage", "feed.manage"} {
+		if _, exists := DefinitionFor(capability); exists {
+			t.Fatalf("retired capability %q must not appear in the authorization catalog", capability)
+		}
+	}
+}
+
+func TestCapabilitiesForOmitsRetiredGrants(t *testing.T) {
+	db, authorizer, _, delegated, _ := setupAuthorizerTest(t)
+	for _, capability := range []string{"users.manage", "feed.manage"} {
+		if err := db.Create(&models.AdminCapabilityGrant{UserID: delegated.ID, Capability: capability, GrantedByUserID: models.PrimaryAdminUserID}).Error; err != nil {
+			t.Fatalf("create retired grant fixture %q: %v", capability, err)
+		}
+	}
+
+	capabilities, err := authorizer.CapabilitiesFor(delegated.ID)
+	if err != nil {
+		t.Fatalf("load delegated capabilities: %v", err)
+	}
+	if len(capabilities) != 0 {
+		t.Fatalf("retired grants must not be returned in the active capability snapshot: %#v", capabilities)
+	}
+}

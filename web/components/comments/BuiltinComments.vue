@@ -66,8 +66,8 @@
             </div>
             <div class="comment-actions">
               <button class="action-btn" @click="startReply(c.id, commentAuthorName(c))">回复</button>
-              <button v-if="canManageComment(c)" class="action-btn" @click="startEdit(c)">编辑</button>
-              <button v-if="canManageComment(c)" class="action-btn delete-action-btn" @click="confirmDelete(c.id)">删除</button>
+              <button v-if="canEditComment(c)" class="action-btn" @click="startEdit(c)">编辑</button>
+              <button v-if="canDeleteComment(c)" class="action-btn delete-action-btn" @click="confirmDelete(c.id)">删除</button>
             </div>
             <div v-if="childrenMap[c.id]?.length" class="mt-2 replies-list">
               <div v-for="child in visibleChildren(c.id)" :key="child.id" class="comment-item child" :class="childCardClass" :data-comment-id="child.id">
@@ -118,8 +118,8 @@
                   </div>
                   <div class="comment-actions">
                     <button class="action-btn" @click="startReply(child.id, commentAuthorName(child))">回复</button>
-                    <button v-if="canManageComment(child)" class="action-btn" @click="startEdit(child)">编辑</button>
-                    <button v-if="canManageComment(child)" class="action-btn delete-action-btn" @click="confirmDelete(child.id)">删除</button>
+                    <button v-if="canEditComment(child)" class="action-btn" @click="startEdit(child)">编辑</button>
+                    <button v-if="canDeleteComment(child)" class="action-btn delete-action-btn" @click="confirmDelete(child.id)">删除</button>
                   </div>
                 </div>
               </div>
@@ -313,6 +313,7 @@ import { useToast } from '#ui/composables/useToast'
 import { getRequest, postRequest, putRequest, deleteRequest } from '~/utils/api'
 import { resolveManagedAttachmentURL } from '~/utils/media-url'
 import { useUserStore } from '~/store/user'
+import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 import { uploadMediaFiles } from '~/utils/media-upload'
 import { shouldShowVisibilityBadge } from '~/utils/visibility-badge'
 
@@ -339,6 +340,7 @@ const deleteId = ref<number | null>(null)
 const user = useUserStore()
 const isAdmin = computed(() => !!((user.user as any)?.is_admin || (user.user as any)?.IsAdmin))
 const currentUserId = computed(() => Number((user.user as any)?.userid || (user.user as any)?.id || (user.user as any)?.user_id || (user.user as any)?.ID || 0))
+const { can } = useAdminCapabilities()
 const visibilityOptions = [
   { value: 'public', label: '公开', icon: 'i-mdi-earth' },
   { value: 'users', label: '成员', icon: 'i-mdi-account-group-outline' },
@@ -374,7 +376,10 @@ const clampVisibilityToLimit = (value: any, limit?: any) => {
 const visibilityOptionFor = (v: any) => visibilityOptions.find((opt) => opt.value === normalizeVisibility(v)) || visibilityOptions[0]
 const visibilityTag = (v: any) => visibilityOptionFor(v)
 const commentOwnerId = (c: any) => Number(c?.user_id || c?.UserID || c?.user?.id || c?.user?.ID || c?.user?.user_id || 0)
-const canManageComment = (c: any) => isAdmin.value || (!!currentUserId.value && commentOwnerId(c) === currentUserId.value)
+const isCommentOwner = (c: any) => !!currentUserId.value && commentOwnerId(c) === currentUserId.value
+const isPrimaryAdminComment = (c: any) => commentOwnerId(c) === 1
+const canEditComment = (c: any) => isCommentOwner(c) || (!isPrimaryAdminComment(c) && can('comments.edit'))
+const canDeleteComment = (c: any) => isCommentOwner(c) || (!isPrimaryAdminComment(c) && can('comments.delete'))
 const canShowCommentVisibility = (c: any) => shouldShowVisibilityBadge({
   visibility: c?.visibility,
   isAdmin: isAdmin.value,
@@ -808,7 +813,7 @@ const startReply = (id: number, authorName: string) => {
 }
 
 const startEdit = (c: any) => {
-  if (!canManageComment(c)) {
+  if (!canEditComment(c)) {
     useToast().add({ title: '没有权限编辑该内容', color: 'orange' })
     return
   }
