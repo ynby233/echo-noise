@@ -133,7 +133,7 @@ func auditModuleDescription(module string, capability string) string {
 		case "notifications":
 			return "通知设置"
 		default:
-			return strings.TrimSuffix(definition.Label, "查看")
+			return strings.TrimPrefix(definition.Label, "查看")
 		}
 	}
 	labels := map[string]string{

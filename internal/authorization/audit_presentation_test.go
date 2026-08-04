@@ -6,6 +6,20 @@ import (
 	"github.com/rcy1314/echo-noise/internal/models"
 )
 
+func TestPresentAuditDoesNotDuplicateReadVerbForAuditCapability(t *testing.T) {
+	presentation := PresentAudit(models.AdminAuditLog{
+		Capability: string(CapabilityAuditView),
+		Module:     "audit",
+		Action:     "GET",
+		Result:     "denied",
+		Reason:     string(DenialMissingGrant),
+	})
+
+	if got, want := presentation.OperationDescription, "尝试查看管理员审计"; got != want {
+		t.Fatalf("operation=%q, want %q", got, want)
+	}
+}
+
 func TestPresentAuditExplainsGlobalPinDenialInChinese(t *testing.T) {
 	presentation := PresentAudit(models.AdminAuditLog{
 		ActorUsername: "ceshi",
