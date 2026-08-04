@@ -31,6 +31,17 @@ assert.match(audit, /start/)
 assert.match(audit, /end/)
 assert.match(audit, /loadDetail/)
 assert.match(audit, /admin\/audit-config/)
+assert.match(audit, /operation_description/)
+assert.match(audit, /result_description/)
+assert.match(audit, /reason_description/)
+assert.match(audit, /const buildAuditQuery/)
+assert.match(audit, /buildAuditQuery\(true\)/)
+assert.match(audit, /buildAuditQuery\(false\)/)
+assert.match(audit, /admin\/audit-logs\/export/)
+assert.match(audit, /exporting/)
+assert.match(audit, /Content-Disposition/)
+assert.match(audit, /导出当前筛选结果/)
+assert.match(audit, /导出审计失败/)
 assert.match(
   panel,
   /\.admin-form-shell\s*:deep\(input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\)\),[\s\S]*?min-height:\s*38px/,

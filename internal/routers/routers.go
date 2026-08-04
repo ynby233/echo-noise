@@ -35,6 +35,7 @@ func registerAdminAuthorizationRoutes(authRoutes *gin.RouterGroup) {
 	auditRoutes.Use(middleware.RequireCapability(authorization.CapabilityAuditView))
 	{
 		auditRoutes.GET("", controllers.ListAdminAuditLogs)
+		auditRoutes.GET("/export", controllers.ExportAdminAuditLogs)
 		auditRoutes.GET("/:id", controllers.GetAdminAuditLog)
 	}
 }

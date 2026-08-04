@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/rcy1314/echo-noise/internal/models"
 	"gorm.io/gorm"
@@ -103,6 +104,8 @@ type Decision struct {
 	Reason  DenialReason
 }
 type Authorizer struct{ db *gorm.DB }
+
+const auditDeniedReadDedupWindow = 60 * time.Second
 
 func New(db *gorm.DB) *Authorizer { return &Authorizer{db: db} }
 func Catalog() []Definition       { return append([]Definition(nil), catalog...) }
@@ -282,5 +285,32 @@ func (a *Authorizer) writeAudit(db *gorm.DB, record models.AdminAuditLog) error 
 	if record.Result != "success" && record.Result != "denied" && record.Result != "failure" {
 		return errors.New("invalid audit result")
 	}
+	if duplicate, err := shouldSkipDuplicateDeniedRead(db, record); err != nil {
+		return err
+	} else if duplicate {
+		return nil
+	}
 	return db.Create(&record).Error
+}
+
+func shouldSkipDuplicateDeniedRead(db *gorm.DB, record models.AdminAuditLog) (bool, error) {
+	if record.Result != "denied" || !isAuditReadMethod(record.Action) {
+		return false, nil
+	}
+	var count int64
+	query := db.Model(&models.AdminAuditLog{}).
+		Where("result = ?", "denied").
+		Where("actor_user_id = ?", record.ActorUserID).
+		Where("capability = ?", record.Capability).
+		Where("module = ?", record.Module).
+		Where("action = ?", record.Action).
+		Where("target_type = ?", record.TargetType).
+		Where("target_id = ?", record.TargetID).
+		Where("reason = ?", record.Reason).
+		Where("auth_via = ?", record.AuthVia).
+		Where("created_at >= ?", time.Now().Add(-auditDeniedReadDedupWindow))
+	if err := query.Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }

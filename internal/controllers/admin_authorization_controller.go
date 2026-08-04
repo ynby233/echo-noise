@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/internal/authorization"
@@ -143,6 +142,11 @@ func ListAdminAuditLogs(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, dto.Fail[any]("审计服务不可用"))
 		return
 	}
+	filters, err := parseAdminAuditFilters(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, dto.Fail[any](err.Error()))
+		return
+	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	if page < 1 {
 		page = 1
@@ -154,39 +158,7 @@ func ListAdminAuditLogs(c *gin.Context) {
 	if pageSize > 100 {
 		pageSize = 100
 	}
-	query := db.Model(&models.AdminAuditLog{})
-	for _, filter := range []struct{ column, value string }{{"module", c.Query("module")}, {"action", c.Query("action")}, {"result", c.Query("result")}, {"target_type", c.Query("target_type")}, {"target_id", c.Query("target_id")}} {
-		if value := strings.TrimSpace(filter.value); value != "" {
-			query = query.Where(filter.column+" = ?", value)
-		}
-	}
-	if raw := strings.TrimSpace(c.Query("actor_user_id")); raw != "" {
-		if id, err := strconv.ParseUint(raw, 10, 64); err == nil {
-			query = query.Where("actor_user_id = ?", uint(id))
-		} else {
-			c.JSON(http.StatusBadRequest, dto.Fail[any]("操作人参数错误"))
-			return
-		}
-	}
-	if raw := strings.TrimSpace(c.Query("start")); raw != "" {
-		if value, err := time.Parse(time.RFC3339, raw); err == nil {
-			query = query.Where("created_at >= ?", value)
-		} else {
-			c.JSON(http.StatusBadRequest, dto.Fail[any]("开始时间参数错误"))
-			return
-		}
-	}
-	if raw := strings.TrimSpace(c.Query("end")); raw != "" {
-		if value, err := time.Parse(time.RFC3339, raw); err == nil {
-			query = query.Where("created_at <= ?", value)
-		} else {
-			c.JSON(http.StatusBadRequest, dto.Fail[any]("结束时间参数错误"))
-			return
-		}
-	}
-	if keyword := strings.TrimSpace(c.Query("q")); keyword != "" {
-		query = query.Where("summary LIKE ? OR reason LIKE ? OR target_id LIKE ?", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
-	}
+	query := applyAdminAuditFilters(db.Model(&models.AdminAuditLog{}), filters)
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, dto.Fail[any]("查询审计失败"))
@@ -197,7 +169,7 @@ func ListAdminAuditLogs(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, dto.Fail[any]("查询审计失败"))
 		return
 	}
-	c.JSON(http.StatusOK, dto.OK(gin.H{"items": logs, "page": page, "page_size": pageSize, "total": total}, "获取管理员审计成功"))
+	c.JSON(http.StatusOK, dto.OK(gin.H{"items": presentAdminAuditLogs(logs), "page": page, "page_size": pageSize, "total": total}, "获取管理员审计成功"))
 }
 
 func GetAdminAuditLog(c *gin.Context) {
@@ -229,7 +201,7 @@ func GetAdminAuditLog(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, dto.Fail[any]("写入审计失败"))
 		return
 	}
-	c.JSON(http.StatusOK, dto.OK(log, "获取管理员审计详情成功"))
+	c.JSON(http.StatusOK, dto.OK(presentAdminAuditLog(log), "获取管理员审计详情成功"))
 }
 
 func GetAdminAuditConfig(c *gin.Context) {

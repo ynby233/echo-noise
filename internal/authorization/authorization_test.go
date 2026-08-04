@@ -1,7 +1,9 @@
 package authorization
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"github.com/rcy1314/echo-noise/internal/models"
@@ -106,5 +108,91 @@ func TestCapabilitiesForOmitsRetiredGrants(t *testing.T) {
 	}
 	if len(capabilities) != 0 {
 		t.Fatalf("retired grants must not be returned in the active capability snapshot: %#v", capabilities)
+	}
+}
+
+func TestWriteAuditDeduplicatesIdenticalDeniedReadRequestsWithinWindow(t *testing.T) {
+	db, authorizer, _, delegated, _ := setupAuthorizerTest(t)
+	record := models.AdminAuditLog{
+		ActorUserID: delegated.ID, Capability: string(CapabilitySecurityView), Module: "security",
+		Action: "GET", TargetType: "route", TargetID: "/security", Result: "denied",
+		Summary: "capability request denied", Reason: string(DenialMissingGrant), AuthVia: "session",
+	}
+	if err := authorizer.WriteAudit(record); err != nil {
+		t.Fatalf("write first denied read audit: %v", err)
+	}
+	if err := authorizer.WriteAudit(record); err != nil {
+		t.Fatalf("write duplicate denied read audit: %v", err)
+	}
+	var count int64
+	if err := db.Model(&models.AdminAuditLog{}).Where("actor_user_id = ?", delegated.ID).Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("duplicate denied read should be suppressed, got %d records", count)
+	}
+
+	var existing models.AdminAuditLog
+	if err := db.Where("actor_user_id = ?", delegated.ID).First(&existing).Error; err != nil {
+		t.Fatalf("load denied read audit: %v", err)
+	}
+	if err := db.Model(&existing).Update("created_at", time.Now().Add(-auditDeniedReadDedupWindow-time.Second)).Error; err != nil {
+		t.Fatalf("age denied read audit: %v", err)
+	}
+	if err := authorizer.WriteAudit(record); err != nil {
+		t.Fatalf("write post-window denied read audit: %v", err)
+	}
+	if err := db.Model(&models.AdminAuditLog{}).Where("actor_user_id = ?", delegated.ID).Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 {
+		t.Fatalf("post-window denied read should be retained, got %d records", count)
+	}
+}
+
+func TestWriteAuditDoesNotDeduplicateDifferentOrMutatingAuditRequests(t *testing.T) {
+	db, authorizer, _, delegated, ordinary := setupAuthorizerTest(t)
+	base := models.AdminAuditLog{
+		ActorUserID: delegated.ID, Capability: string(CapabilitySecurityView), Module: "security",
+		Action: "GET", TargetType: "route", Result: "denied",
+		Summary: "capability request denied", Reason: string(DenialMissingGrant), AuthVia: "session",
+	}
+	cases := []struct {
+		name   string
+		mutate func(*models.AdminAuditLog, *models.AdminAuditLog)
+	}{
+		{name: "different capability", mutate: func(first, second *models.AdminAuditLog) {
+			second.Capability = string(CapabilityNotificationsView)
+			second.Module = "notifications"
+		}},
+		{name: "different route", mutate: func(first, second *models.AdminAuditLog) { second.TargetID = "/other-route" }},
+		{name: "different reason", mutate: func(first, second *models.AdminAuditLog) { second.Reason = string(DenialProtectedContent) }},
+		{name: "different actor", mutate: func(first, second *models.AdminAuditLog) { second.ActorUserID = ordinary.ID }},
+		{name: "different auth source", mutate: func(first, second *models.AdminAuditLog) { second.AuthVia = "token" }},
+		{name: "post mutation", mutate: func(first, second *models.AdminAuditLog) { first.Action = "POST"; second.Action = "POST" }},
+		{name: "success result", mutate: func(first, second *models.AdminAuditLog) { first.Result = "success"; second.Result = "success" }},
+		{name: "failure result", mutate: func(first, second *models.AdminAuditLog) { first.Result = "failure"; second.Result = "failure" }},
+	}
+	for index, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			first := base
+			second := base
+			first.TargetID = fmt.Sprintf("/audit-case-%d", index)
+			second.TargetID = first.TargetID
+			tt.mutate(&first, &second)
+			if err := authorizer.WriteAudit(first); err != nil {
+				t.Fatalf("write first audit: %v", err)
+			}
+			if err := authorizer.WriteAudit(second); err != nil {
+				t.Fatalf("write second audit: %v", err)
+			}
+		})
+	}
+	var count int64
+	if err := db.Model(&models.AdminAuditLog{}).Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != int64(len(cases)*2) {
+		t.Fatalf("different or mutating requests must remain auditable, got %d records", count)
 	}
 }
