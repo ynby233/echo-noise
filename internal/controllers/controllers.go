@@ -1636,7 +1636,11 @@ func canManageComment(c *gin.Context, comment models.Comment, capability authori
 	if err != nil {
 		return false
 	}
-	return authorization.New(db).Authorize(userID, capability, comment.UserID).Allowed
+	decision := authorization.New(db).Authorize(userID, capability, comment.UserID)
+	if !decision.Allowed && decision.Reason != authorization.DenialNotAdministrator {
+		authorization.New(db).WriteDeniedBestEffort(commentMutationAuditRecord(c, userID, capability, "mutation", "denied", "comment mutation denied", string(decision.Reason), &comment))
+	}
+	return decision.Allowed
 }
 
 func commentUint(v any) (uint, bool) {
@@ -2096,7 +2100,7 @@ func UpdateComment(c *gin.Context) {
 	}
 	cm.Content = req.Content
 	cm.Visibility = visibility
-	if err := db.Save(&cm).Error; err != nil {
+	if err := persistCommentMutation(c, db, &cm, authorization.CapabilityCommentsEdit, "edit", false); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "更新失败"})
 		return
 	}
@@ -2124,7 +2128,7 @@ func DeleteComment(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限"})
 		return
 	}
-	if err := db.Delete(&cm).Error; err != nil {
+	if err := persistCommentMutation(c, db, &cm, authorization.CapabilityCommentsDelete, "delete", true); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "删除失败"})
 		return
 	}

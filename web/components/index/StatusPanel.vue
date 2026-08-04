@@ -2459,6 +2459,7 @@ import { resolveManagedAttachmentURL } from '~/utils/media-url'
 import { resolveUploadedMediaUrl } from '~/utils/media-upload'
 import { makeEmptyAdConfig, normalizeAdConfigs, resolveAdImageURL, type AdConfig } from '~/utils/ad-config'
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
+import adminSectionCapabilities from '~/config/admin-section-capabilities.json'
 import { useRuntimeConfig, useHead, useRouter } from '#imports'
 const formatShanghai = (s: string) => {
   try {
@@ -2488,17 +2489,7 @@ const isAdmin = computed(() => {
 })
 const { capabilities: adminCapabilities, isPrimaryAdmin, can, refreshCapabilities: loadAdminCapabilities } = useAdminCapabilities()
 const canViewAdminAudit = computed(() => can('audit.view'))
-const sectionCapabilities: Partial<Record<AdminSectionKey, string>> = {
-  site: 'site_settings.view', 'site-configs': 'site_settings.view', 'site-default-theme': 'site_settings.view',
-  'site-register': 'site_settings.view', 'site-pwa': 'site_settings.view', 'site-ads': 'site_settings.view',
-  'site-social-links': 'site_settings.view', 'site-github-card': 'site_settings.view', 'site-github-login': 'site_settings.view',
-  'site-music': 'site_settings.view', comments: 'comments.view', email: 'email.view', notify: 'notifications.view',
-  'site-announcement': 'announcements.view', 'site-feed': 'feed.view', 'site-rss': 'rss.view',
-  'admin-users': 'users.view', 'registration-review': 'registration.view', 'access-logs': 'access_logs.view',
-  'site-visits': 'site_visits.view', 'login-audits': 'login_audits.view', security: 'security.view',
-  attachments: 'attachments.view', storage: 'storage.view', db: 'database.view', version: 'version.view',
-  authorization: 'authorization.manage', 'admin-audit': 'audit.view'
-}
+const sectionCapabilities: Partial<Record<AdminSectionKey, string>> = adminSectionCapabilities
 const canSection = (section: AdminSectionKey) => {
   if (!isAdmin.value) return section === 'dashboard' || section === 'user' || section === 'hitokoto' || section === 'life-countdown'
   const capability = sectionCapabilities[section]

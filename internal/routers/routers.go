@@ -345,7 +345,7 @@ func SetupRouter() *gin.Engine {
 		announcementAdmin.DELETE("/:id", middleware.RequireCapability(authorization.CapabilityAnnouncementsManage), controllers.DeleteAnnouncement)
 		announcementAdmin.POST("/batch-delete", middleware.RequireCapability(authorization.CapabilityAnnouncementsManage), controllers.BatchDeleteAnnouncements)
 		announcementAdmin.GET("/:id/push-summary", controllers.GetAnnouncementPushSummary)
-		announcementAdmin.POST("/:id/retry-push", controllers.RetryAnnouncementPush)
+		announcementAdmin.POST("/:id/retry-push", middleware.RequireCapability(authorization.CapabilityAnnouncementsPush), controllers.RetryAnnouncementPush)
 	}
 
 	email := authRoutes.Group("/email")

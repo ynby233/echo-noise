@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 
 const panel = await readFile(new URL('../components/index/StatusPanel.vue', import.meta.url), 'utf8')
 const capabilities = await readFile(new URL('../composables/useAdminCapabilities.ts', import.meta.url), 'utf8')
+const sectionCapabilities = JSON.parse(await readFile(new URL('../config/admin-section-capabilities.json', import.meta.url), 'utf8'))
 const center = await readFile(new URL('../components/admin/AuthorizationCenter.vue', import.meta.url), 'utf8')
 const audit = await readFile(new URL('../components/admin/AuditLogPanel.vue', import.meta.url), 'utf8')
 
@@ -13,7 +14,7 @@ assert.match(panel, /canViewAdminAudit/)
 assert.match(capabilities, /const can = \(capability: string\) => isPrimaryAdmin\.value \|\|/)
 assert.match(panel, /const canSection = \(section: AdminSectionKey\)/)
 assert.match(panel, /items: group\.items\.filter\(\(item\) => canSection\(item\.key\)\)/)
-assert.match(panel, /'admin-audit': 'audit\.view'/)
+assert.equal(sectionCapabilities['admin-audit'], 'audit.view')
 assert.match(panel, /if \(can\('security\.view'\)\) await refreshSecurity\(\)/)
 assert.match(panel, /section === 'access-logs' && can\('access_logs\.view'\)/)
 assert.match(panel, /section === 'site-visits' && can\('site_visits\.view'\)/)

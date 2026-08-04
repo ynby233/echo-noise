@@ -40,6 +40,70 @@ func TestAuthorizePrimaryAdminImplicitlyHasEveryCapability(t *testing.T) {
 	}
 }
 
+func TestCatalogAuthorizationMatrixCoversEveryCapability(t *testing.T) {
+	for _, definition := range Catalog() {
+		definition := definition
+		t.Run(string(definition.Capability), func(t *testing.T) {
+			db, authorizer, primary, delegated, ordinary := setupAuthorizerTest(t)
+
+			if decision := authorizer.Authorize(primary.ID, definition.Capability, nil); !decision.Allowed {
+				t.Fatalf("primary administrator must be allowed: %#v", decision)
+			}
+			if decision := authorizer.Authorize(delegated.ID, definition.Capability, nil); decision.Allowed {
+				t.Fatalf("delegated administrator without grant must be denied: %#v", decision)
+			}
+			if decision := authorizer.Authorize(ordinary.ID, definition.Capability, nil); decision.Allowed {
+				t.Fatalf("ordinary user must be denied: %#v", decision)
+			}
+
+			if definition.Grantable {
+				if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, []Capability{definition.Capability}); err != nil {
+					t.Fatalf("grant %s: %v", definition.Capability, err)
+				}
+				if decision := authorizer.Authorize(delegated.ID, definition.Capability, nil); !decision.Allowed {
+					t.Fatalf("delegated administrator with grant must be allowed: %#v", decision)
+				}
+				if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, nil); err != nil {
+					t.Fatalf("revoke %s: %v", definition.Capability, err)
+				}
+				if decision := authorizer.Authorize(delegated.ID, definition.Capability, nil); decision.Allowed {
+					t.Fatalf("revocation must apply immediately: %#v", decision)
+				}
+			} else {
+				if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, []Capability{definition.Capability}); err == nil {
+					t.Fatalf("primary-only capability must not be grantable: %s", definition.Capability)
+				}
+				if err := db.Create(&models.AdminCapabilityGrant{
+					UserID: delegated.ID, Capability: string(definition.Capability), GrantedByUserID: primary.ID,
+				}).Error; err != nil {
+					t.Fatalf("create dirty grant fixture: %v", err)
+				}
+				if decision := authorizer.Authorize(delegated.ID, definition.Capability, nil); decision.Allowed {
+					t.Fatalf("dirty primary-only grant must not authorize: %#v", decision)
+				}
+				capabilities, err := authorizer.CapabilitiesFor(delegated.ID)
+				if err != nil {
+					t.Fatalf("read delegated capabilities: %v", err)
+				}
+				for _, capability := range capabilities {
+					if capability == definition.Capability {
+						t.Fatalf("dirty primary-only grant must not appear in capability snapshot: %#v", capabilities)
+					}
+				}
+			}
+
+			if err := db.Create(&models.AdminCapabilityGrant{
+				UserID: ordinary.ID, Capability: string(definition.Capability), GrantedByUserID: primary.ID,
+			}).Error; err != nil {
+				t.Fatalf("create ordinary-user dirty grant fixture: %v", err)
+			}
+			if decision := authorizer.Authorize(ordinary.ID, definition.Capability, nil); decision.Allowed {
+				t.Fatalf("ordinary-user dirty grant must not authorize: %#v", decision)
+			}
+		})
+	}
+}
+
 func TestAuthorizeDelegatedAdminRequiresGrantAndRevocationAppliesImmediately(t *testing.T) {
 	_, authorizer, primary, delegated, _ := setupAuthorizerTest(t)
 
@@ -73,6 +137,54 @@ func TestAuthorizeProtectsPrimaryAdminContentFromDelegatedMutation(t *testing.T)
 	}
 }
 
+func TestAuthorizeTargetOwnerMatrixPreservesProtectedContentBoundary(t *testing.T) {
+	mutationCapabilities := []Capability{
+		CapabilityCommentsEdit,
+		CapabilityCommentsDelete,
+		CapabilityNotesEdit,
+		CapabilityNotesVisibility,
+		CapabilityNotesPublishTime,
+		CapabilityNotesPinGlobal,
+		CapabilityNotesTrash,
+		CapabilityNotesRestore,
+		CapabilityNotesDelete,
+	}
+	for _, capability := range mutationCapabilities {
+		capability := capability
+		t.Run(string(capability), func(t *testing.T) {
+			_, authorizer, primary, delegated, ordinary := setupAuthorizerTest(t)
+			if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, []Capability{capability}); err != nil {
+				t.Fatalf("grant %s: %v", capability, err)
+			}
+			if decision := authorizer.Authorize(delegated.ID, capability, &ordinary.ID); !decision.Allowed {
+				t.Fatalf("delegated administrator must manage ordinary target: %#v", decision)
+			}
+			if decision := authorizer.Authorize(delegated.ID, capability, &delegated.ID); !decision.Allowed {
+				t.Fatalf("delegated administrator must manage own target: %#v", decision)
+			}
+			if decision := authorizer.Authorize(delegated.ID, capability, &primary.ID); decision.Allowed || decision.Reason != DenialProtectedContent {
+				t.Fatalf("delegated administrator must not mutate primary-owned target: %#v", decision)
+			}
+			if decision := authorizer.Authorize(primary.ID, capability, &primary.ID); !decision.Allowed {
+				t.Fatalf("primary administrator must retain protected-target access: %#v", decision)
+			}
+		})
+	}
+
+	for _, capability := range []Capability{CapabilityCommentsView, CapabilityNotesView} {
+		capability := capability
+		t.Run(string(capability)+"_does_not_block_read", func(t *testing.T) {
+			_, authorizer, primary, delegated, _ := setupAuthorizerTest(t)
+			if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, []Capability{capability}); err != nil {
+				t.Fatalf("grant %s: %v", capability, err)
+			}
+			if decision := authorizer.Authorize(delegated.ID, capability, &primary.ID); !decision.Allowed {
+				t.Fatalf("read capability must allow viewing primary-owned target: %#v", decision)
+			}
+		})
+	}
+}
+
 func TestReplaceGrantsRejectsPrimaryAndOrdinaryTargetsAndUnknownCapability(t *testing.T) {
 	_, authorizer, primary, _, ordinary := setupAuthorizerTest(t)
 	if err := authorizer.ReplaceGrants(primary.ID, primary.ID, []Capability{CapabilityAuditView}); err == nil {
@@ -83,6 +195,58 @@ func TestReplaceGrantsRejectsPrimaryAndOrdinaryTargetsAndUnknownCapability(t *te
 	}
 	if err := authorizer.ReplaceGrants(primary.ID, ordinary.ID, []Capability{"unknown.capability"}); err == nil {
 		t.Fatal("unknown capability must be rejected")
+	}
+}
+
+func TestReplaceGrantsIsIdempotentAndDoesNotAffectAnotherAdministrator(t *testing.T) {
+	db, authorizer, primary, delegated, _ := setupAuthorizerTest(t)
+	other := models.User{Username: "other-delegated", IsAdmin: true}
+	if err := db.Create(&other).Error; err != nil {
+		t.Fatalf("create other delegated administrator: %v", err)
+	}
+	wanted := []Capability{CapabilityCommentsView, CapabilityAuditView, CapabilityCommentsView}
+	if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, wanted); err != nil {
+		t.Fatalf("replace delegated grants: %v", err)
+	}
+	if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, wanted); err != nil {
+		t.Fatalf("repeat delegated grants: %v", err)
+	}
+	if err := authorizer.ReplaceGrants(primary.ID, other.ID, []Capability{CapabilityCommentsView}); err != nil {
+		t.Fatalf("replace other delegated grants: %v", err)
+	}
+
+	got, err := authorizer.CapabilitiesFor(delegated.ID)
+	if err != nil {
+		t.Fatalf("read delegated grants: %v", err)
+	}
+	want := []Capability{CapabilityAuditView, CapabilityCommentsView}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("delegated capabilities=%v, want %v", got, want)
+	}
+	otherGot, err := authorizer.CapabilitiesFor(other.ID)
+	if err != nil {
+		t.Fatalf("read other delegated grants: %v", err)
+	}
+	if fmt.Sprint(otherGot) != fmt.Sprint([]Capability{CapabilityCommentsView}) {
+		t.Fatalf("other delegated capabilities=%v", otherGot)
+	}
+	var count int64
+	if err := db.Model(&models.AdminCapabilityGrant{}).Where("user_id = ?", delegated.ID).Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != int64(len(want)) {
+		t.Fatalf("idempotent replace created %d grants, want %d", count, len(want))
+	}
+}
+
+func TestAdminCapabilityGrantHasUniqueUserCapabilityKey(t *testing.T) {
+	db, _, primary, delegated, _ := setupAuthorizerTest(t)
+	grant := models.AdminCapabilityGrant{UserID: delegated.ID, Capability: string(CapabilityAuditView), GrantedByUserID: primary.ID}
+	if err := db.Create(&grant).Error; err != nil {
+		t.Fatalf("create first grant: %v", err)
+	}
+	if err := db.Create(&models.AdminCapabilityGrant{UserID: delegated.ID, Capability: string(CapabilityAuditView), GrantedByUserID: primary.ID}).Error; err == nil {
+		t.Fatal("duplicate user/capability grant must be rejected")
 	}
 }
 

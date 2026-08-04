@@ -24,6 +24,7 @@
     "test:comment-capability-visibility": "node scripts/comment-capability-visibility.test.mjs",
     "test:admin-dashboard": "node scripts/admin-dashboard-contract.test.mjs",
     "test:admin-authorization": "node scripts/admin-authorization-contract.test.mjs",
+    "test:admin-capability-map": "node scripts/admin-capability-map-contract.test.mjs",
     "test:home-admin-capabilities": "node scripts/home-admin-capability-contract.test.mjs",
     "test:message-pin-scope": "node scripts/message-pin-scope-contract.test.mjs",
     "test:login-audit": "node scripts/login-audit.test.mjs",

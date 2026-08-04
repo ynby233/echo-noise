@@ -95,6 +95,7 @@ const (
 	DenialNone              DenialReason = ""
 	DenialNotAdministrator  DenialReason = "not_administrator"
 	DenialMissingGrant      DenialReason = "missing_grant"
+	DenialNotGrantable      DenialReason = "not_grantable"
 	DenialProtectedContent  DenialReason = "protected_content"
 	DenialUnknownCapability DenialReason = "unknown_capability"
 )
@@ -129,6 +130,9 @@ func (a *Authorizer) Authorize(actorID uint, capability Capability, targetOwnerU
 	}
 	if actor.ID == models.PrimaryAdminUserID {
 		return Decision{Allowed: true}
+	}
+	if !definition.Grantable {
+		return Decision{Reason: DenialNotGrantable}
 	}
 	var grants int64
 	if err := a.db.Model(&models.AdminCapabilityGrant{}).Where("user_id = ? AND capability = ?", actor.ID, capability).Count(&grants).Error; err != nil || grants != 1 {
@@ -170,7 +174,7 @@ func (a *Authorizer) CapabilitiesFor(actorID uint) ([]Capability, error) {
 	out := make([]Capability, 0, len(grants))
 	for _, grant := range grants {
 		capability := Capability(grant.Capability)
-		if _, known := DefinitionFor(capability); known {
+		if definition, known := DefinitionFor(capability); known && definition.Grantable {
 			out = append(out, capability)
 		}
 	}
