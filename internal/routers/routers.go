@@ -289,6 +289,8 @@ func SetupRouter() *gin.Engine {
 		tokenAuth.POST("/messages", controllers.PostMessage)
 		tokenAuth.PUT("/messages/:id", controllers.UpdateMessage)
 		tokenAuth.PUT("/messages/:id/pin", controllers.UpdateMessagePinned)
+		tokenAuth.PUT("/messages/:id/pin/global", controllers.UpdateMessageGlobalPin)
+		tokenAuth.PUT("/messages/:id/pin/personal", controllers.UpdateMessagePersonalPin)
 		tokenAuth.DELETE("/messages/:id", controllers.DeleteMessage)
 		tokenAuth.PUT("/settings", middleware.RequireCapability(authorization.CapabilitySiteSettingsManage), controllers.UpdateSetting)
 	}
@@ -298,6 +300,8 @@ func SetupRouter() *gin.Engine {
 		messages.POST("", controllers.PostMessage)
 		messages.PUT("/:id", controllers.UpdateMessage)
 		messages.PUT("/:id/pin", controllers.UpdateMessagePinned)
+		messages.PUT("/:id/pin/global", controllers.UpdateMessageGlobalPin)
+		messages.PUT("/:id/pin/personal", controllers.UpdateMessagePersonalPin)
 		messages.DELETE("/:id", controllers.DeleteMessage)
 	}
 

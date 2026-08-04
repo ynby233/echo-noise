@@ -249,6 +249,9 @@ func (a *Authorizer) WriteAudit(record models.AdminAuditLog) error { return a.wr
 func (a *Authorizer) WriteDeniedBestEffort(record models.AdminAuditLog) {
 	_ = a.writeAudit(a.db, record)
 }
+func (a *Authorizer) WriteAuditBestEffort(record models.AdminAuditLog) {
+	_ = a.writeAudit(a.db, record)
+}
 func (a *Authorizer) writeAudit(db *gorm.DB, record models.AdminAuditLog) error {
 	if record.ActorUserID == 0 {
 		return errors.New("audit actor is required")

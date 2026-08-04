@@ -15,6 +15,7 @@ export interface Message {
     visibility?: MessageVisibility;
     created_at: string;
     pinned?: boolean;
+    personal_pinned?: boolean;
     notify?: boolean;
     like_count?: number;
     liked?: boolean;
@@ -38,6 +39,7 @@ export interface PageQuery {
     date?: string;
     keyword?: string;
     tag?: string;
+    pinScope?: 'latest' | 'personal';
     excludeId?: number;
 }
 

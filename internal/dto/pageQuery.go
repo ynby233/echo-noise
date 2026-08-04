@@ -12,6 +12,7 @@ type PageQueryDto struct {
 	Date      string  `json:"date,omitempty"`
 	Keyword   string  `json:"keyword,omitempty"`
 	Tag       string  `json:"tag,omitempty"`
+	PinScope  string  `json:"pinScope,omitempty"`
 	ExcludeID *uint   `json:"excludeId,omitempty"`
 }
 
@@ -28,6 +29,7 @@ type MessagePageLocateDto struct {
 	Date      string  `json:"date,omitempty"`
 	Keyword   string  `json:"keyword,omitempty"`
 	Tag       string  `json:"tag,omitempty"`
+	PinScope  string  `json:"pinScope,omitempty"`
 	ExcludeID *uint   `json:"excludeId,omitempty"`
 }
 

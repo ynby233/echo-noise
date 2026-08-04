@@ -27,6 +27,7 @@ export const useMessageStore = defineStore("messageStore", () => {
     date: query.date ?? "",
     keyword: query.keyword ?? "",
     tag: query.tag ?? "",
+    pinScope: query.pinScope ?? "latest",
     excludeId: query.excludeId ?? null,
   })
 
@@ -242,6 +243,7 @@ const locateMessagePage = async (query: PageQuery & { messageId: number }) => {
       date: query.date,
       keyword: query.keyword,
       tag: query.tag,
+      pinScope: query.pinScope,
       excludeId: query.excludeId,
     }, {
       credentials: 'include',
@@ -363,9 +365,9 @@ const locateMessagePage = async (query: PageQuery & { messageId: number }) => {
   };
 
   // 切换置顶状态
-  const setPinned = async (id: number, pinned: boolean) => {
+  const setPin = async (id: number, pinned: boolean, pinScope: 'latest' | 'personal') => {
     try {
-      const response = await putRequest<any>(`messages/${id}/pin`, { pinned }, {
+      const response = await putRequest<any>(`messages/${id}/pin/${pinScope === 'personal' ? 'personal' : 'global'}`, { pinned }, {
         credentials: 'include'
       });
       if (!response || response.code !== 1) {
@@ -377,17 +379,6 @@ const locateMessagePage = async (query: PageQuery & { messageId: number }) => {
           timeout: 2000,
         });
         return null;
-      }
-      const index = messages.value.findIndex(msg => msg.id === id);
-      if (index !== -1) {
-        messages.value[index] = { ...messages.value[index], pinned } as any;
-        // 置顶状态改变后，按照 pinned + created_at 重新排序当前列表
-        messages.value = [...messages.value].sort((a, b) => {
-          const pa = (a as any).pinned ? 1 : 0;
-          const pb = (b as any).pinned ? 1 : 0;
-          if (pa !== pb) return pb - pa;
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-        });
       }
       return response;
     } catch (error) {
@@ -605,7 +596,7 @@ const createMessage = async (message: Message) => {
   deleteMessage,
   updateMessage,
   setPrivate,
-  setPinned,
+  setPin,
   getMessageById,
   getSiteConfig,
   updateSiteConfig,

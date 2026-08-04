@@ -233,7 +233,7 @@ func TestGetMessagesByPageFiltersByShanghaiDate(t *testing.T) {
 	}
 
 	date := "2026-01-02"
-	result, err := GetMessagesByPage(1, 10, nil, false, nil, nil, &date, nil, nil, nil)
+	result, err := GetMessagesByPage(1, 10, nil, false, nil, nil, &date, nil, nil, MessagePinScopeLatest, nil)
 	if err != nil {
 		t.Fatalf("get messages by date: %v", err)
 	}
@@ -259,21 +259,21 @@ func TestGetMessagesByPageCombinesDateKeywordAndTag(t *testing.T) {
 	date := "2026-06-06"
 	keyword := "工作记录"
 	tag := "总结"
-	result, err := GetMessagesByPage(1, 10, nil, false, nil, nil, &date, &keyword, &tag, nil)
+	result, err := GetMessagesByPage(1, 10, nil, false, nil, nil, &date, &keyword, &tag, MessagePinScopeLatest, nil)
 	if err != nil {
 		t.Fatalf("get messages by combined filters: %v", err)
 	}
 	if result.Total != 1 || len(result.Items) != 1 || result.Items[0].Content != "#总结 工作记录 命中" {
 		t.Fatalf("combined filtered result = total %d items %#v, want only exact hit", result.Total, result.Items)
 	}
-	location, err := LocateMessagePage(messages[0].ID, 10, nil, false, nil, nil, &date, &keyword, &tag, nil)
+	location, err := LocateMessagePage(messages[0].ID, 10, nil, false, nil, nil, &date, &keyword, &tag, MessagePinScopeLatest, nil)
 	if err != nil {
 		t.Fatalf("locate message by combined filters: %v", err)
 	}
 	if location.Page != 1 || location.Total != 1 {
 		t.Fatalf("combined filter location = page %d total %d, want page 1 total 1", location.Page, location.Total)
 	}
-	if _, err := LocateMessagePage(messages[3].ID, 10, nil, false, nil, nil, &date, &keyword, &tag, nil); err == nil {
+	if _, err := LocateMessagePage(messages[3].ID, 10, nil, false, nil, nil, &date, &keyword, &tag, MessagePinScopeLatest, nil); err == nil {
 		t.Fatalf("expected similar but non-exact tag to be unavailable to locate")
 	}
 }
@@ -291,7 +291,7 @@ func TestGetMessagesByPageAndLocateRespectExcludeID(t *testing.T) {
 	}
 
 	excludeID := exclude.ID
-	result, err := GetMessagesByPage(1, 10, nil, false, nil, nil, nil, nil, nil, &excludeID)
+	result, err := GetMessagesByPage(1, 10, nil, false, nil, nil, nil, nil, nil, MessagePinScopeLatest, &excludeID)
 	if err != nil {
 		t.Fatalf("query page with exclude id: %v", err)
 	}
@@ -299,14 +299,14 @@ func TestGetMessagesByPageAndLocateRespectExcludeID(t *testing.T) {
 		t.Fatalf("exclude filtered result = total %d items %#v, want only keep", result.Total, result.Items)
 	}
 
-	location, err := LocateMessagePage(keep.ID, 10, nil, false, nil, nil, nil, nil, nil, &excludeID)
+	location, err := LocateMessagePage(keep.ID, 10, nil, false, nil, nil, nil, nil, nil, MessagePinScopeLatest, &excludeID)
 	if err != nil {
 		t.Fatalf("locate keep with exclude id: %v", err)
 	}
 	if location.Page != 1 || location.Total != 1 {
 		t.Fatalf("location = page %d total %d, want page 1 total 1", location.Page, location.Total)
 	}
-	if _, err := LocateMessagePage(exclude.ID, 10, nil, false, nil, nil, nil, nil, nil, &excludeID); err == nil {
+	if _, err := LocateMessagePage(exclude.ID, 10, nil, false, nil, nil, nil, nil, nil, MessagePinScopeLatest, &excludeID); err == nil {
 		t.Fatalf("expected excluded message to be unavailable to locate")
 	}
 }
@@ -329,7 +329,7 @@ func TestGetMessagesByPageReturnsViewerLikedState(t *testing.T) {
 		t.Fatalf("create message like: %v", err)
 	}
 
-	result, err := GetMessagesByPage(1, 10, &viewerID, false, nil, nil, nil, nil, nil, nil)
+	result, err := GetMessagesByPage(1, 10, &viewerID, false, nil, nil, nil, nil, nil, MessagePinScopeLatest, nil)
 	if err != nil {
 		t.Fatalf("query page: %v", err)
 	}

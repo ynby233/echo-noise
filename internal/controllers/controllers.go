@@ -493,9 +493,18 @@ func LocateMessagePage(c *gin.Context) {
 	} else {
 		request.Tag = strings.TrimPrefix(strings.TrimSpace(request.Tag), "#")
 	}
+	if pinScope := strings.TrimSpace(c.Query("pinScope")); pinScope != "" {
+		request.PinScope = pinScope
+	} else {
+		request.PinScope = strings.TrimSpace(request.PinScope)
+	}
 
 	currentUserID, isAdmin := currentMessageViewer(c)
-	location, err := services.LocateMessagePage(request.MessageID, request.PageSize, currentUserID, isAdmin, request.AuthorID, request.Username, &request.Date, &request.Keyword, &request.Tag, request.ExcludeID)
+	if strings.EqualFold(request.PinScope, services.MessagePinScopePersonal) && (currentUserID == nil || request.AuthorID == nil || *currentUserID != *request.AuthorID) {
+		c.JSON(http.StatusForbidden, dto.Fail[string]("个人作用域仅允许查询当前用户的笔记"))
+		return
+	}
+	location, err := services.LocateMessagePage(request.MessageID, request.PageSize, currentUserID, isAdmin, request.AuthorID, request.Username, &request.Date, &request.Keyword, &request.Tag, request.PinScope, request.ExcludeID)
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
 		return
@@ -638,8 +647,17 @@ func GetMessagesByPage(c *gin.Context) {
 	} else {
 		pageRequest.Tag = strings.TrimPrefix(strings.TrimSpace(pageRequest.Tag), "#")
 	}
+	if pinScope := strings.TrimSpace(c.Query("pinScope")); pinScope != "" {
+		pageRequest.PinScope = pinScope
+	} else {
+		pageRequest.PinScope = strings.TrimSpace(pageRequest.PinScope)
+	}
+	if strings.EqualFold(pageRequest.PinScope, services.MessagePinScopePersonal) && (currentUserID == nil || authorID == nil || *currentUserID != *authorID) {
+		c.JSON(http.StatusForbidden, dto.Fail[string]("个人作用域仅允许查询当前用户的笔记"))
+		return
+	}
 
-	pageQueryResult, err := services.GetMessagesByPage(page, pageSize, currentUserID, isAdmin, authorID, username, &pageRequest.Date, &pageRequest.Keyword, &pageRequest.Tag, pageRequest.ExcludeID)
+	pageQueryResult, err := services.GetMessagesByPage(page, pageSize, currentUserID, isAdmin, authorID, username, &pageRequest.Date, &pageRequest.Keyword, &pageRequest.Tag, pageRequest.PinScope, pageRequest.ExcludeID)
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
 		return
@@ -2392,78 +2410,9 @@ func UpdateMessage(c *gin.Context) {
 
 // 更新消息置顶状态
 func UpdateMessagePinned(c *gin.Context) {
-	id := c.Param("id")
-	if id == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "消息ID不能为空"})
-		return
-	}
-
-	// 身份校验
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "未授权访问"})
-		return
-	}
-
-	// 请求体
-	var req struct {
-		Pinned bool `json:"pinned"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "请求参数错误"})
-		return
-	}
-
-	// 解析ID
-	messageID, err := strconv.ParseUint(id, 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "无效的消息ID"})
-		return
-	}
-
-	// 获取消息并校验权限
-	message, err := services.GetMessageByID(uint(messageID), true)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
-		return
-	}
-
-	actorID, ok := commentUint(userID)
-	if !ok || actorID == 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "未授权访问"})
-		return
-	}
-	if message.UserID != actorID {
-		db, err := database.GetDB()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "授权服务不可用"})
-			return
-		}
-		if !authorization.New(db).Authorize(actorID, authorization.CapabilityNotesPinGlobal, &message.UserID).Allowed {
-			writeMessageMutationDeniedAudit(c, authorization.New(db), actorID, authorization.CapabilityNotesPinGlobal, "pin", message)
-			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限操作该消息"})
-			return
-		}
-	}
-
-	// 更新置顶状态
-	if err := services.UpdateMessagePinned(uint(messageID), req.Pinned); err != nil {
-		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": err.Error()})
-		return
-	}
-	if message.UserID != actorID {
-		db, dbErr := database.GetDB()
-		if dbErr != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "授权服务不可用"})
-			return
-		}
-		if err := writeMessageMutationSuccessAudit(c, authorization.New(db), actorID, authorization.CapabilityNotesPinGlobal, "pin", message); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "写入管理员审计失败"})
-			return
-		}
-	}
-
-	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "更新成功"})
+	// Compatibility alias: the legacy route is still a global-pin operation,
+	// so it must pass the same administrator authorization and audit path.
+	UpdateMessageGlobalPin(c)
 }
 
 // 点赞接口：POST /api/messages/:id/like

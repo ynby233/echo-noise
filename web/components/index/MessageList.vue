@@ -96,7 +96,7 @@
                   <span v-if="shouldShowMessageVisibility(msg)" class="visibility-indicator nw-tooltip-anchor" :data-tooltip="messageVisibilityLabel(messageVisibility(msg))" :aria-label="messageVisibilityLabel(messageVisibility(msg))">
                     <UIcon :name="messageVisibilityIcon(messageVisibility(msg))" class="w-4 h-4" />
                   </span>
-                  <UIcon v-if="msg.pinned" name="i-mdi-pin" class="w-4 h-4" />
+                  <UIcon v-if="pinActive(msg)" name="i-mdi-pin" class="w-4 h-4 nw-tooltip-anchor" :data-tooltip="pinStatusLabel()" :aria-label="pinStatusLabel()" />
                 </div>
               </div>
               
@@ -168,8 +168,9 @@
                     <UIcon name="i-heroicons-ellipsis-horizontal" style="font-size: 16px; line-height: 1;" />
                   </UButton>
                   <div class="message-toolbox overlay" v-show="openToolboxId === msg.id">
-                    <div class="tool-icons">
-                      <button v-if="canPin(msg)" type="button" class="tool-icon nw-action-btn nw-tooltip-anchor" :data-tooltip="(msg.pinned ? '取消置顶' : '置顶内容')" @click="togglePin(msg)"><UIcon :name="msg.pinned ? 'i-mdi-pin' : 'i-mdi-pin-outline'" /></button>
+                      <div class="tool-icons">
+                        <button v-if="canPin(msg)" type="button" class="tool-icon nw-action-btn nw-tooltip-anchor" :data-tooltip="pinTooltip(msg)" :aria-label="pinTooltip(msg)" @click="togglePin(msg)"><UIcon :name="pinActive(msg) ? 'i-mdi-pin' : 'i-mdi-pin-outline'" /></button>
+                        <span v-else-if="pinActive(msg)" class="tool-icon nw-tooltip-anchor" :data-tooltip="pinStatusLabel()" :aria-label="pinStatusLabel()"><UIcon name="i-mdi-pin" /></span>
                       <button v-if="canEdit(msg)" type="button" class="tool-icon nw-action-btn nw-tooltip-anchor" data-tooltip="编辑" @click="editMessage(msg)"><UIcon name="i-mdi-pencil-outline" /></button>
                       <button type="button" class="tool-icon nw-action-btn nw-tooltip-anchor" data-tooltip="复制" @click="copyContent(msg.content)"><UIcon name="i-mdi-content-copy" /></button>
                       <button v-if="canDelete(msg)" type="button" class="tool-icon nw-action-btn nw-action-btn--danger nw-tooltip-anchor" data-tooltip="删除" @click="deleteMsg(msg)"><UIcon name="i-mdi-close-octagon-outline" /></button>
@@ -1310,7 +1311,7 @@ const loadTargetMessagePage = async (id: number) => {
     return total
   })
   const pageQueryFor = (pageNumber: number) => {
-    const query: any = { page: pageNumber, pageSize: 15 }
+    const query: any = { page: pageNumber, pageSize: 15, pinScope: pinScope.value }
     if (guestbookId.value) query.excludeId = guestbookId.value
     if (isPersonalTab.value && currentUserId.value) query.authorId = currentUserId.value
     if (/^\d{4}-\d{2}-\d{2}$/.test(String(props.calendarDate || ''))) query.date = props.calendarDate
@@ -1529,27 +1530,27 @@ const handleCancel = (msgId: number, payload?: { empty?: boolean }) => {
   commentRefreshKey.value[msgId] = (commentRefreshKey.value[msgId] || 0) + 1
 }
 
-const canPin = (msg: any) => isCurrentUserMessage(msg) || canManageOtherMessage(msg, 'notes.pin_global')
+const pinScope = computed<'latest' | 'personal'>(() => isPersonalTab.value ? 'personal' : 'latest')
+const pinActive = (msg: any) => pinScope.value === 'personal' ? !!msg?.personal_pinned : !!msg?.pinned
+const pinStatusLabel = () => pinScope.value === 'personal' ? '个人置顶内容' : '全站置顶内容'
+const pinTooltip = (msg: any) => {
+  if (pinScope.value === 'personal') return pinActive(msg) ? '取消个人置顶' : '个人置顶'
+  return pinActive(msg) ? '取消全站置顶' : '全站置顶'
+}
+const canGlobalPin = (msg: any) => isLogin.value && can('notes.pin_global') && (isCurrentUserMessage(msg) || !isPrimaryOwnedMessage(msg))
+const canPin = (msg: any) => pinScope.value === 'personal' ? isCurrentUserMessage(msg) : canGlobalPin(msg)
 const canEdit = (msg: any) => isCurrentUserMessage(msg) || canManageOtherMessage(msg, 'notes.edit')
 const canDelete = (msg: any) => isCurrentUserMessage(msg) || canManageOtherMessage(msg, 'notes.delete_permanently')
 const canChangeVisibility = (msg: any) => isCurrentUserMessage(msg) || canManageOtherMessage(msg, 'notes.change_visibility')
 
-const pinnedTopItems = ref<any[]>([]);
-
-  const togglePin = async (msg: any) => {
+const togglePin = async (msg: any) => {
   if (!canPin(msg)) return
   try {
-    const next = !msg.pinned;
-    const res = await message.setPinned(msg.id, next);
+    const next = !pinActive(msg);
+    const res = await message.setPin(msg.id, next, pinScope.value);
     if (res) {
-      if (next) {
-        if (!pinnedTopItems.value.some((m: any) => m.id === msg.id)) {
-          pinnedTopItems.value = [msg, ...pinnedTopItems.value];
-        }
-      } else {
-        pinnedTopItems.value = pinnedTopItems.value.filter((m: any) => m.id !== msg.id);
-      }
-      useToast().add({ title: next ? '已置顶' : '已取消置顶', color: 'green', timeout: 1500 });
+      await refreshList()
+      useToast().add({ title: next ? (pinScope.value === 'personal' ? '已设为个人置顶' : '已设为全站置顶') : (pinScope.value === 'personal' ? '已取消个人置顶' : '已取消全站置顶'), color: 'green', timeout: 1500 });
     }
   } catch (e) {
     useToast().add({ title: '操作失败', color: 'red', timeout: 2000 });
@@ -1947,11 +1948,6 @@ watch(
   () => message.messages,
   async () => {
     try {
-      if (message.page === 1) {
-        const pins = (message.messages || []).filter((m: any) => m.pinned && !isGuestbookMessage(m));
-        const unique = pins.filter((m: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.id === m.id) === i);
-        pinnedTopItems.value = unique;
-      }
       await nextTick();
       observeContainers();
       await nextTick();
@@ -2507,21 +2503,9 @@ const canEditPublishTime = (msg: any) => {
   return canManageOtherMessage(msg, 'notes.change_publish_time')
 }
 
-const sortMessagesByCreatedAt = () => {
-  const byTimeDesc = (a: any, b: any) => new Date(b?.created_at || 0).getTime() - new Date(a?.created_at || 0).getTime()
-  const pinned = (message.messages || []).filter((m: any) => m.pinned)
-  const rest = (message.messages || []).filter((m: any) => !m.pinned).sort(byTimeDesc)
-  message.messages = [...pinned, ...rest]
-}
-
 const applyEditedMessage = (id: number, updated: any) => {
-  const apply = (items: any[]) => {
-    const idx = items.findIndex((msg: any) => msg.id === id)
-    if (idx !== -1) items[idx] = { ...items[idx], ...updated }
-  }
-  apply(message.messages as any[])
-  apply(pinnedTopItems.value as any[])
-  sortMessagesByCreatedAt()
+  const idx = message.messages.findIndex((msg: any) => msg.id === id)
+  if (idx !== -1) message.messages[idx] = { ...message.messages[idx], ...updated }
 }
 
 const editMessage = (msg: any) => {
@@ -2657,31 +2641,25 @@ const refreshSearchResults = async () => {
     }, 300)
   }
 }
-const buildDisplayMessages = () => {
-  const filterPersonal = (items: any[]) => isPersonalTab.value ? items.filter(isCurrentUserMessage) : items
-  const base = (message.messages || []).filter((m: any) => !isGuestbookMessage(m));
-  const pinned = (pinnedTopItems.value || []).filter((m: any) => !isGuestbookMessage(m));
-  if (!pinned.length) return filterPersonal(base)
-  const rest = base.filter((m: any) => !pinned.some((p: any) => p.id === m.id));
-  return filterPersonal([...pinned, ...rest])
+const getServerDisplayMessages = () => {
+  return (message.messages || []).filter((m: any) => !isGuestbookMessage(m))
 }
 
 // displayMessages 使用统一分页结果；筛选条件由 pageQueryFor 传给后端
 const displayMessages = computed(() => {
   if (isDisplayQueryPending.value) return []
   if (isPageLoading.value && stableDisplayQueryKey.value === currentDisplayQueryKey.value && stableDisplayMessages.value.length) return stableDisplayMessages.value
-  return buildDisplayMessages()
+  return getServerDisplayMessages()
 })
 
 const syncStableDisplayMessages = () => {
-  stableDisplayMessages.value = buildDisplayMessages()
+  stableDisplayMessages.value = getServerDisplayMessages()
   stableDisplayQueryKey.value = currentDisplayQueryKey.value
 }
 
 watch(
   [
     () => message.messages,
-    () => pinnedTopItems.value,
     () => guestbookId.value,
     () => props.activeTab,
     () => props.calendarDate,
