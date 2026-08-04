@@ -69,9 +69,10 @@ func TestGlobalAndPersonalPinPermissionsAndAudits(t *testing.T) {
 		}
 	}
 	ownerMessage := models.Message{Content: "owner note", UserID: owner.ID, Username: owner.Username, Visibility: "public"}
+	privateMessage := models.Message{Content: "private owner note", UserID: owner.ID, Username: owner.Username, Visibility: "private", Private: true}
 	primaryMessage := models.Message{Content: "primary note", UserID: primary.ID, Username: primary.Username, Visibility: "public"}
 	delegatedMessage := models.Message{Content: "delegated note", UserID: delegated.ID, Username: delegated.Username, Visibility: "public"}
-	for _, message := range []*models.Message{&ownerMessage, &primaryMessage, &delegatedMessage} {
+	for _, message := range []*models.Message{&ownerMessage, &privateMessage, &primaryMessage, &delegatedMessage} {
 		if err := db.Create(message).Error; err != nil {
 			t.Fatalf("create message: %v", err)
 		}
@@ -94,12 +95,19 @@ func TestGlobalAndPersonalPinPermissionsAndAudits(t *testing.T) {
 	}
 	delegatedAllowed := performMessageJSONRequest(r, http.MethodPut, "/messages/"+strconv.FormatUint(uint64(ownerMessage.ID), 10)+"/pin/global", map[string]any{"pinned": true})
 	assertMessageResponseCode(t, delegatedAllowed, http.StatusOK, 1)
+	delegatedPrivate := performMessageJSONRequest(r, http.MethodPut, "/messages/"+strconv.FormatUint(uint64(privateMessage.ID), 10)+"/pin/global", map[string]any{"pinned": true})
+	assertMessageResponseCode(t, delegatedPrivate, http.StatusForbidden, 0)
+	if !strings.Contains(delegatedPrivate.Body.String(), "按正常可见性不可见") {
+		t.Fatalf("private global pin rejection must explain the visibility boundary: %s", delegatedPrivate.Body.String())
+	}
 	delegatedProtected := performMessageJSONRequest(r, http.MethodPut, "/messages/"+strconv.FormatUint(uint64(primaryMessage.ID), 10)+"/pin/global", map[string]any{"pinned": true})
 	assertMessageResponseCode(t, delegatedProtected, http.StatusForbidden, 0)
 
 	*currentUserID = primary.ID
 	primaryAllowed := performMessageJSONRequest(r, http.MethodPut, "/messages/"+strconv.FormatUint(uint64(primaryMessage.ID), 10)+"/pin/global", map[string]any{"pinned": true})
 	assertMessageResponseCode(t, primaryAllowed, http.StatusOK, 1)
+	primaryPrivate := performMessageJSONRequest(r, http.MethodPut, "/messages/"+strconv.FormatUint(uint64(privateMessage.ID), 10)+"/pin/global", map[string]any{"pinned": true})
+	assertMessageResponseCode(t, primaryPrivate, http.StatusForbidden, 0)
 	primaryPersonal := performMessageJSONRequest(r, http.MethodPut, "/messages/"+strconv.FormatUint(uint64(primaryMessage.ID), 10)+"/pin/personal", map[string]any{"pinned": true})
 	assertMessageResponseCode(t, primaryPersonal, http.StatusOK, 1)
 
@@ -107,7 +115,7 @@ func TestGlobalAndPersonalPinPermissionsAndAudits(t *testing.T) {
 	if err := db.Where("capability = ? AND action IN ?", authorization.CapabilityNotesPinGlobal, []string{"set_global_pin", "unset_global_pin"}).Order("id ASC").Find(&globalAudits).Error; err != nil {
 		t.Fatalf("load global pin audits: %v", err)
 	}
-	if len(globalAudits) != 5 {
+	if len(globalAudits) != 7 {
 		t.Fatalf("expected denied and successful global pin audits, got %#v", globalAudits)
 	}
 	for _, audit := range globalAudits {

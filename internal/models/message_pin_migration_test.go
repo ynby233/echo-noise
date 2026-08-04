@@ -33,7 +33,8 @@ func TestMigrateDBPreservesHistoricalGlobalPinAndDefaultsPersonalPinFalse(t *tes
 	if err := db.AutoMigrate(&legacyPinMessage{}); err != nil {
 		t.Fatalf("create legacy messages table: %v", err)
 	}
-	if err := db.Create(&legacyPinMessage{Content: "legacy", Username: "owner", Visibility: "public", UserID: 42, Pinned: true}).Error; err != nil {
+	legacyCreatedAt := time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)
+	if err := db.Create(&legacyPinMessage{Content: "legacy", Username: "owner", Visibility: "public", UserID: 42, CreatedAt: legacyCreatedAt, Pinned: true}).Error; err != nil {
 		t.Fatalf("insert legacy pinned message: %v", err)
 	}
 
@@ -42,6 +43,9 @@ func TestMigrateDBPreservesHistoricalGlobalPinAndDefaultsPersonalPinFalse(t *tes
 	}
 	if !db.Migrator().HasColumn(&Message{}, "personal_pinned") {
 		t.Fatal("migration did not add personal_pinned")
+	}
+	if !db.Migrator().HasColumn(&Message{}, "pinned_at") || !db.Migrator().HasColumn(&Message{}, "personal_pinned_at") {
+		t.Fatal("migration did not add pin timestamps")
 	}
 	if !db.Migrator().HasIndex(&Message{}, "idx_msg_global_pin_order") || !db.Migrator().HasIndex(&Message{}, "idx_msg_personal_pin_order") {
 		t.Fatal("migration did not create both pin ordering indexes")
@@ -56,6 +60,12 @@ func TestMigrateDBPreservesHistoricalGlobalPinAndDefaultsPersonalPinFalse(t *tes
 	}
 	if legacy.PersonalPinned {
 		t.Fatal("historical messages must default personal_pinned to false")
+	}
+	if legacy.PinnedAt == nil || !legacy.PinnedAt.Equal(legacyCreatedAt) {
+		t.Fatalf("historical global pin must use created_at as its deterministic timestamp fallback: %#v", legacy.PinnedAt)
+	}
+	if legacy.PersonalPinnedAt != nil {
+		t.Fatalf("historical personal pin must remain unset: %#v", legacy.PersonalPinnedAt)
 	}
 
 	newMessage := Message{Content: "new", UserID: 42, Visibility: "public"}

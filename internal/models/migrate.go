@@ -60,6 +60,20 @@ func MigrateDB(db *gorm.DB) error {
 			return err
 		}
 
+		// Historical pin records did not retain the time of the pin operation.
+		// Use created_at as a deterministic fallback; new mutations write their
+		// own timestamps.
+		if err := tx.Model(&Message{}).
+			Where("pinned = ? AND pinned_at IS NULL", true).
+			Update("pinned_at", gorm.Expr("created_at")).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&Message{}).
+			Where("personal_pinned = ? AND personal_pinned_at IS NULL", true).
+			Update("personal_pinned_at", gorm.Expr("created_at")).Error; err != nil {
+			return err
+		}
+
 		var messages []Message
 		if err := tx.Find(&messages).Error; err != nil {
 			return err

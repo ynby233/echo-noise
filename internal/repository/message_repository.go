@@ -15,11 +15,11 @@ func GetAllMessages(showPrivate bool) ([]models.Message, error) {
 
 	// 是否将私密内容也查询出来（置顶优先）
 	if showPrivate {
-		if err := database.DB.Order("pinned DESC, created_at DESC").Find(&messages).Error; err != nil {
+		if err := database.DB.Order("pinned DESC, CASE WHEN pinned_at IS NULL THEN 1 ELSE 0 END ASC, pinned_at DESC, created_at DESC, id DESC").Find(&messages).Error; err != nil {
 			return nil, err
 		}
 	} else {
-		if err := database.DB.Where("private = ? AND (visibility = ? OR visibility = ? OR visibility IS NULL)", false, "public", "").Order("pinned DESC, created_at DESC").Find(&messages).Error; err != nil {
+		if err := database.DB.Where("private = ? AND (visibility = ? OR visibility = ? OR visibility IS NULL)", false, "public", "").Order("pinned DESC, CASE WHEN pinned_at IS NULL THEN 1 ELSE 0 END ASC, pinned_at DESC, created_at DESC, id DESC").Find(&messages).Error; err != nil {
 			return nil, err
 		}
 	}
@@ -33,7 +33,7 @@ func GetPublicMessagesByUserIDs(userIDs []uint) ([]models.Message, error) {
 		return messages, nil
 	}
 
-	if err := database.DB.Where("private = ? AND (visibility = ? OR visibility = ? OR visibility IS NULL) AND user_id IN ?", false, "public", "", userIDs).Order("pinned DESC, created_at DESC").Find(&messages).Error; err != nil {
+	if err := database.DB.Where("private = ? AND (visibility = ? OR visibility = ? OR visibility IS NULL) AND user_id IN ?", false, "public", "", userIDs).Order("pinned DESC, CASE WHEN pinned_at IS NULL THEN 1 ELSE 0 END ASC, pinned_at DESC, created_at DESC, id DESC").Find(&messages).Error; err != nil {
 		return nil, err
 	}
 

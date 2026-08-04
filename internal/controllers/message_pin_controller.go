@@ -104,6 +104,15 @@ func UpdateMessageGlobalPin(c *gin.Context) {
 		return
 	}
 
+	// Admin list queries intentionally include restricted notes so that the
+	// admin can manage the full dataset. Pinning must still respect the
+	// visibility the actor would have as an ordinary logged-in viewer.
+	if !services.CanViewMessage(*message, &actorID, false) {
+		writeGlobalPinAuditBestEffort(c, db, actorID, action, "denied", "global pin target is outside actor visibility", message, message.Pinned, message.Pinned)
+		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "不能置顶当前账号按正常可见性不可见的笔记"})
+		return
+	}
+
 	before := message.Pinned
 	var updated models.Message
 	err = db.Transaction(func(tx *gorm.DB) error {

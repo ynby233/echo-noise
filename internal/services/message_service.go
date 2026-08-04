@@ -197,7 +197,7 @@ func GetAllMessages(showPrivate bool) ([]models.Message, error) {
 func GetAllMessagesForViewer(userID *uint, isAdmin bool) ([]models.Message, error) {
 	var messages []models.Message
 	query := ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), userID, isAdmin)
-	if err := query.Order("pinned DESC, created_at DESC").Find(&messages).Error; err != nil {
+	if err := query.Order(messagePinOrder(MessagePinScopeLatest)).Find(&messages).Error; err != nil {
 		return nil, fmt.Errorf("获取消息失败: %v", err)
 	}
 	applyMessageLikedState(messages, userID)
@@ -299,9 +299,9 @@ func normalizeMessagePinScope(pinScope string) (string, error) {
 
 func messagePinOrder(pinScope string) string {
 	if pinScope == MessagePinScopePersonal {
-		return "personal_pinned DESC, created_at DESC, id DESC"
+		return "personal_pinned DESC, CASE WHEN personal_pinned_at IS NULL THEN 1 ELSE 0 END ASC, personal_pinned_at DESC, created_at DESC, id DESC"
 	}
-	return "pinned DESC, created_at DESC, id DESC"
+	return "pinned DESC, CASE WHEN pinned_at IS NULL THEN 1 ELSE 0 END ASC, pinned_at DESC, created_at DESC, id DESC"
 }
 
 func messagePageBaseQuery(userID *uint, isAdmin bool, authorID *uint, username *string, date *string, keyword *string, tag *string, pinScope string, excludeID *uint) (*gorm.DB, error) {
@@ -438,40 +438,34 @@ func LocateMessagePage(messageID uint, pageSize int, userID *uint, isAdmin bool,
 		}, nil
 	}
 
-	totalQuery, err := messagePageBaseQuery(userID, isAdmin, authorID, username, date, keyword, tag, normalizedPinScope, excludeID)
+	candidateQuery, err := messagePageBaseQuery(userID, isAdmin, authorID, username, date, keyword, tag, normalizedPinScope, excludeID)
 	if err != nil {
 		return dto.MessagePageLocateResult{}, err
 	}
-	var total int64
-	if err := totalQuery.Count(&total).Error; err != nil {
+	var candidates []models.Message
+	if err := candidateQuery.Order(messagePinOrder(normalizedPinScope)).Find(&candidates).Error; err != nil {
 		return dto.MessagePageLocateResult{}, err
 	}
-
-	beforeQuery, err := messagePageBaseQuery(userID, isAdmin, authorID, username, date, keyword, tag, normalizedPinScope, excludeID)
-	if err != nil {
-		return dto.MessagePageLocateResult{}, err
+	targetIndex := -1
+	total := 0
+	for _, candidate := range candidates {
+		if tag != nil && strings.TrimSpace(*tag) != "" && !messageMatchesTag(candidate.Content, *tag) {
+			continue
+		}
+		if candidate.ID == target.ID {
+			targetIndex = total
+		}
+		total++
 	}
-	pinColumn := "pinned"
-	targetPinned := target.Pinned
-	if normalizedPinScope == MessagePinScopePersonal {
-		pinColumn = "personal_pinned"
-		targetPinned = target.PersonalPinned
-	}
-	if targetPinned {
-		beforeQuery = beforeQuery.Where(pinColumn+" = ? AND (created_at > ? OR (created_at = ? AND id > ?))", true, target.CreatedAt, target.CreatedAt, target.ID)
-	} else {
-		beforeQuery = beforeQuery.Where(pinColumn+" = ? OR ("+pinColumn+" = ? AND (created_at > ? OR (created_at = ? AND id > ?)))", true, false, target.CreatedAt, target.CreatedAt, target.ID)
-	}
-	var before int64
-	if err := beforeQuery.Count(&before).Error; err != nil {
-		return dto.MessagePageLocateResult{}, err
+	if targetIndex < 0 {
+		return dto.MessagePageLocateResult{}, errors.New(models.MessageNotFoundMessage)
 	}
 
 	return dto.MessagePageLocateResult{
 		MessageID: messageID,
-		Page:      int(before/int64(pageSize)) + 1,
+		Page:      targetIndex/pageSize + 1,
 		PageSize:  pageSize,
-		Total:     total,
+		Total:     int64(total),
 	}, nil
 }
 
@@ -684,6 +678,13 @@ func SetGlobalPin(db *gorm.DB, messageID uint, pinned bool) error {
 		return fmt.Errorf("读取消息失败: %v", err)
 	}
 	result := db.Model(&models.Message{}).Where("id = ?", messageID).Update("pinned", pinned)
+	if result.Error == nil {
+		if pinned {
+			result = db.Model(&models.Message{}).Where("id = ?", messageID).Update("pinned_at", time.Now().UTC())
+		} else {
+			result = db.Exec("UPDATE messages SET pinned_at = NULL WHERE id = ?", messageID)
+		}
+	}
 	if result.Error != nil {
 		return fmt.Errorf("更新全站置顶状态失败: %v", result.Error)
 	}
@@ -703,6 +704,13 @@ func SetPersonalPin(db *gorm.DB, messageID uint, pinned bool) error {
 		return fmt.Errorf("读取消息失败: %v", err)
 	}
 	result := db.Model(&models.Message{}).Where("id = ?", messageID).Update("personal_pinned", pinned)
+	if result.Error == nil {
+		if pinned {
+			result = db.Model(&models.Message{}).Where("id = ?", messageID).Update("personal_pinned_at", time.Now().UTC())
+		} else {
+			result = db.Exec("UPDATE messages SET personal_pinned_at = NULL WHERE id = ?", messageID)
+		}
+	}
 	if result.Error != nil {
 		return fmt.Errorf("更新个人置顶状态失败: %v", result.Error)
 	}
