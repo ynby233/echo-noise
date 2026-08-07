@@ -9,6 +9,9 @@ import (
 
 func TestEnsureGuestbookRepairsLegacyOwnerAndIgnoresDecoy(t *testing.T) {
 	db := setupUserServiceTestDB(t)
+	if !models.IsCanonicalGuestbookContent("留言板\n\n#guestbook") {
+		t.Fatal("the historical title plus #guestbook marker must remain migratable")
+	}
 	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "guestbook-owner", IsAdmin: true})
 	legacyOwner := mustCreateUser(t, models.User{Username: "legacy-owner", IsAdmin: true})
 	decoy := models.Message{Content: "普通笔记：我在留言板记录今天的安排", UserID: legacyOwner.ID, Visibility: MessageVisibilityPublic}

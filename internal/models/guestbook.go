@@ -19,17 +19,15 @@ func IsCanonicalGuestbookContent(content string) bool {
 		return false
 	}
 	hasGuestbookTag := false
-	hasChineseTag := false
 	for _, line := range lines {
 		switch strings.TrimSpace(strings.ToLower(line)) {
 		case "#guestbook":
 			hasGuestbookTag = true
-		case "#留言":
-			hasChineseTag = true
 		case "#留言 #guestbook", "#guestbook #留言":
-			hasChineseTag = true
 			hasGuestbookTag = true
 		}
 	}
-	return hasGuestbookTag && hasChineseTag
+	// Older installations used only the #guestbook line; the exact title
+	// plus that standalone system tag is still a strict, migratable marker.
+	return hasGuestbookTag
 }
