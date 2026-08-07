@@ -78,6 +78,38 @@ func MigrateDB(db *gorm.DB) error {
 		if err := tx.Find(&messages).Error; err != nil {
 			return err
 		}
+
+		// Freeze the canonical guestbook marker during migration. Existing
+		// deployments only had a content-string convention, so recognize the
+		// narrow historical marker once, keep the lowest-ID candidate, and
+		// repair only that system row's logical owner to user 1.
+		var canonicalGuestbook *Message
+		for index := range messages {
+			if !messages[index].IsGuestbook && !IsCanonicalGuestbookContent(messages[index].Content) {
+				continue
+			}
+			if canonicalGuestbook == nil || messages[index].ID < canonicalGuestbook.ID {
+				candidate := messages[index]
+				canonicalGuestbook = &candidate
+			}
+		}
+		if canonicalGuestbook != nil {
+			if err := tx.Model(&Message{}).Where("is_guestbook = ?", true).Update("is_guestbook", false).Error; err != nil {
+				return err
+			}
+			username := ""
+			var primary User
+			if err := tx.Select("id", "username").First(&primary, PrimaryAdminUserID).Error; err == nil {
+				username = primary.Username
+			}
+			if err := tx.Model(&Message{}).Where("id = ?", canonicalGuestbook.ID).Updates(map[string]interface{}{
+				"is_guestbook": true,
+				"user_id":      PrimaryAdminUserID,
+				"username":     username,
+			}).Error; err != nil {
+				return err
+			}
+		}
 		for index := range messages {
 			if err := SyncLocalAttachmentGrants(tx, &messages[index]); err != nil {
 				return fmt.Errorf("backfill local attachment visibility for message %d: %w", messages[index].ID, err)

@@ -137,28 +137,9 @@ func SeedDefaultData() error {
 		}
 	}
 
-	// 3. 初始化留言板 (如果不存在)
-	var msg models.Message
-	if err := db.Where("content LIKE ?", "%#guestbook%").First(&msg).Error; err != nil {
-		// 查找管理员ID
-		var admin models.User
-		db.Where("is_admin = ?", true).First(&admin)
-		uid := admin.ID
-		if uid == 0 {
-			uid = 1 // Fallback
-		}
-
-		guestbook := models.Message{
-			Content:   "留言板\n\n此条用于承载全站留言，不会参与普通内容展示。\n\n#留言 #guestbook",
-			UserID:    uid,
-			Username:  admin.Username,
-			Private:   false,
-			Pinned:    false,
-			CreatedAt: time.Now(),
-		}
-		if err := db.Create(&guestbook).Error; err != nil {
-			return fmt.Errorf("初始化留言板失败: %v", err)
-		}
+	// 3. 初始化并修复规范留言板：逻辑所有者始终是 1 号管理员。
+	if _, err := EnsureGuestbook(db); err != nil {
+		return fmt.Errorf("初始化留言板失败: %v", err)
 	}
 
 	// 4. 初始化默认演示消息

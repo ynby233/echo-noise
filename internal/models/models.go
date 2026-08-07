@@ -33,6 +33,7 @@ type Message struct {
 	Private          bool       `gorm:"default:false" json:"private"`
 	Visibility       string     `gorm:"type:varchar(20);not null;default:public;index" json:"visibility"`
 	UserID           uint       `gorm:"not null;index;index:idx_msg_personal_pin_order,priority:1" json:"user_id"`
+	IsGuestbook      bool       `gorm:"default:false;index" json:"-"`
 	CreatedAt        time.Time  `gorm:"index:idx_msg_global_pin_order,priority:2;index:idx_msg_personal_pin_order,priority:3" json:"created_at"`
 	Notify           bool       `gorm:"default:false" json:"notify"` // 新增推送通知字段
 	Pinned           bool       `gorm:"default:false;index:idx_msg_global_pin_order,priority:1" json:"pinned"`

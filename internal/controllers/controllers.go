@@ -652,8 +652,8 @@ func GetUserProfile(c *gin.Context) {
 	currentUserID, isAdmin := currentMessageViewer(c)
 	q := services.ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), currentUserID, isAdmin).
 		Where("user_id = ?", user.ID).
-		Where("content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ?",
-			"%#guestbook%", "%#留言%", "%留言板%",
+		Where(services.GuestbookSQLPredicate("messages.is_guestbook")).
+		Where("content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ?",
 			"%#友链%", "%友情链接%",
 			"%#关于%", "%关于本站%")
 	if err := q.Count(&total).Error; err != nil {
@@ -1548,8 +1548,7 @@ func effectiveCommentVisibilityForMessage(visibility string, messageVisibility s
 }
 
 func isGuestbookMessage(message models.Message) bool {
-	content := strings.ToLower(strings.TrimSpace(message.Content))
-	return strings.Contains(content, "#guestbook") || strings.Contains(content, "#留言") || strings.Contains(content, "留言板")
+	return services.IsGuestbookMessage(message)
 }
 
 func canViewComment(message models.Message, comment models.Comment, commentMap map[uint]models.Comment, viewerID uint, hasViewer bool, isAdmin bool) bool {
@@ -1735,32 +1734,12 @@ func GetCommentCounts(c *gin.Context) {
 // GetGuestbookMessageID 获取或创建用于留言板的独立消息ID
 func GetGuestbookMessageID(c *gin.Context) {
 	db, _ := database.GetDB()
-	var msg models.Message
-	if err := db.Where("private = ? AND (visibility = ? OR visibility = ? OR visibility IS NULL)", false, services.MessageVisibilityPublic, "").
-		Where("content LIKE ? OR content LIKE ? OR content LIKE ?",
-			"%#留言%", "%#guestbook%", "%留言板%").
-		Order("created_at ASC").First(&msg).Error; err == nil && msg.ID != 0 {
-		c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"id": msg.ID}})
-		return
-	}
-	var admin models.User
-	_ = db.Where("is_admin = ?", true).Order("id ASC").First(&admin).Error
-	uid := uint(1)
-	if admin.ID != 0 {
-		uid = admin.ID
-	}
-	content := "留言板\n\n此条用于承载全站留言，不会参与普通内容展示。\n\n#留言 #guestbook"
-	var existing models.Message
-	if err := db.Where("user_id = ? AND private = ? AND (visibility = ? OR visibility = ? OR visibility IS NULL) AND content LIKE ?", uid, false, services.MessageVisibilityPublic, "", "%#guestbook%").First(&existing).Error; err == nil && existing.ID != 0 {
-		c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"id": existing.ID}})
-		return
-	}
-	msg = models.Message{Content: content, UserID: uid, Private: false, Visibility: services.MessageVisibilityPublic, Pinned: false}
-	if err := db.Create(&msg).Error; err != nil || msg.ID == 0 {
+	descriptor, err := services.EnsureGuestbook(db)
+	if err != nil || descriptor.MessageID == 0 {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "初始化留言板失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"id": msg.ID}})
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"id": descriptor.MessageID}})
 }
 
 // 提交评论（内置评论系统）

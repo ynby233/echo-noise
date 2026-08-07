@@ -1042,7 +1042,7 @@ func TestGetStatusSeparatesDashboardMetricsAndSharesSecuritySummary(t *testing.T
 	adminNote := models.Message{Content: "admin note", UserID: admin.ID, Username: admin.Username, Visibility: MessageVisibilityPublic}
 	aliceNote := models.Message{Content: "alice note", UserID: alice.ID, Username: alice.Username, Visibility: MessageVisibilityPublic}
 	bobNote := models.Message{Content: "bob note", UserID: bob.ID, Username: bob.Username, Visibility: MessageVisibilityPublic}
-	guestbook := models.Message{Content: "留言板\n\n#留言 #guestbook", UserID: admin.ID, Username: admin.Username, Visibility: MessageVisibilityPublic}
+	guestbook := models.Message{Content: models.CanonicalGuestbookContent, UserID: admin.ID, Username: admin.Username, Visibility: MessageVisibilityPublic, IsGuestbook: true}
 	for _, message := range []*models.Message{&adminNote, &aliceNote, &bobNote, &guestbook} {
 		if err := database.DB.Create(message).Error; err != nil {
 			t.Fatalf("create message: %v", err)
@@ -1128,7 +1128,7 @@ func TestCreateUserNotificationsFollowRecipientRules(t *testing.T) {
 
 	aliceMessage := models.Message{Content: "alice message", UserID: alice.ID, Username: alice.Username}
 	bobMessage := models.Message{Content: "bob message", UserID: bob.ID, Username: bob.Username}
-	guestbookMessage := models.Message{Content: "#guestbook 留言板", UserID: alice.ID, Username: alice.Username}
+	guestbookMessage := models.Message{Content: models.CanonicalGuestbookContent, UserID: alice.ID, Username: alice.Username}
 	for _, message := range []*models.Message{&aliceMessage, &bobMessage, &guestbookMessage} {
 		if err := database.DB.Create(message).Error; err != nil {
 			t.Fatalf("create message: %v", err)
@@ -1174,6 +1174,9 @@ func TestCreateUserNotificationsFollowRecipientRules(t *testing.T) {
 			t.Fatalf("create guestbook notification: %v", err)
 		}
 	}
+	if err := CreateNotificationsForComment(guestbookMessage, bobGuestbookComment, nil); err != nil {
+		t.Fatalf("dedupe guestbook notification: %v", err)
+	}
 
 	if err := CreateNotificationForLike(aliceMessage.ID, bob.ID); err != nil {
 		t.Fatalf("create like notification: %v", err)
@@ -1198,7 +1201,7 @@ func TestCreateUserNotificationsFollowRecipientRules(t *testing.T) {
 	assertNotificationCount(alice.ID, models.UserNotificationTypeLike, 1)
 	assertNotificationCount(bob.ID, models.UserNotificationTypeReply, 0)
 	assertNotificationCount(admin.ID, models.UserNotificationTypeGuestbook, 1)
-	assertNotificationCount(adminTwo.ID, models.UserNotificationTypeGuestbook, 2)
+	assertNotificationCount(adminTwo.ID, models.UserNotificationTypeGuestbook, 0)
 }
 
 func TestCommentThreadVisibilityFollowsAncestorRestrictions(t *testing.T) {

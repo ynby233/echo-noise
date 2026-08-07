@@ -44,9 +44,7 @@ func messageHasTag(content string, tag string) bool {
 }
 
 func isHomeStatsExcludedMessage(content string) bool {
-	lowerContent := strings.ToLower(content)
-	return strings.Contains(lowerContent, "#guestbook") ||
-		strings.Contains(content, "#留言") ||
+	return services.IsGuestbookMessage(models.Message{Content: content}) ||
 		strings.Contains(content, "关于本站") ||
 		strings.Contains(content, "友情链接")
 }

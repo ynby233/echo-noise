@@ -15,11 +15,6 @@ import (
 	"gorm.io/gorm"
 )
 
-func isGuestbookNotificationMessage(message models.Message) bool {
-	content := strings.ToLower(strings.TrimSpace(message.Content))
-	return strings.Contains(content, "#guestbook") || strings.Contains(content, "#留言") || strings.Contains(content, "留言板")
-}
-
 func createUserNotification(recipientUserID uint, actorUserID *uint, notificationType string, messageID *uint, commentID *uint, parentCommentID *uint) error {
 	if recipientUserID == 0 {
 		return nil
@@ -95,18 +90,20 @@ func CreateNotificationsForComment(message models.Message, comment models.Commen
 		commentMap[parent.ID] = *parent
 	}
 
-	if isGuestbookNotificationMessage(message) && comment.ParentID == nil {
-		var admins []models.User
-		if err := database.DB.Select("id").Where("is_admin = ?", true).Find(&admins).Error; err != nil {
-			return err
+	if IsGuestbookMessage(message) && comment.ParentID == nil {
+		if actorID == GuestbookRecipientID() {
+			return nil
 		}
-		for _, admin := range admins {
-			if admin.ID == 0 || admin.ID == actorID {
-				continue
-			}
-			if err := createUserNotification(admin.ID, &actorID, models.UserNotificationTypeGuestbook, &messageID, &commentID, nil); err != nil {
-				return err
-			}
+		var existing models.UserNotification
+		result := database.DB.Where("recipient_user_id = ? AND type = ? AND message_id = ? AND comment_id = ?", GuestbookRecipientID(), models.UserNotificationTypeGuestbook, messageID, commentID).Limit(1).Find(&existing)
+		if result.Error != nil {
+			return result.Error
+		}
+		if existing.ID != 0 {
+			return nil
+		}
+		if err := createUserNotification(GuestbookRecipientID(), &actorID, models.UserNotificationTypeGuestbook, &messageID, &commentID, nil); err != nil {
+			return err
 		}
 		return nil
 	}

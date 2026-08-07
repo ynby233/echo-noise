@@ -800,25 +800,25 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 }
 
 func excludeDashboardSpecialMessages(query *gorm.DB) *gorm.DB {
+	if descriptor, err := ResolveGuestbook(database.DB); err == nil && descriptor.MessageID != 0 {
+		query = query.Where("messages.id <> ?", descriptor.MessageID)
+	} else {
+		query = query.Where(GuestbookSQLPredicate("messages.is_guestbook"))
+	}
 	return query.Where(
-		"messages.content NOT LIKE ? AND messages.content NOT LIKE ? AND messages.content NOT LIKE ? AND messages.content NOT LIKE ? AND messages.content NOT LIKE ? AND messages.content NOT LIKE ? AND messages.content NOT LIKE ?",
-		"%#guestbook%", "%#留言%", "%留言板%",
+		"messages.content NOT LIKE ? AND messages.content NOT LIKE ? AND messages.content NOT LIKE ? AND messages.content NOT LIKE ?",
 		"%#友链%", "%友情链接%",
 		"%#关于%", "%关于本站%",
 	)
 }
 
-func isGuestbookDashboardMessage(content string) bool {
-	return strings.Contains(content, "#guestbook") || strings.Contains(content, "#留言") || strings.Contains(content, "留言板")
-}
-
-func countVisibleCommentStats(viewerUserID *uint, isAdmin bool) (int64, int64, int64, error) {
+func countVisibleCommentStats(viewerUserID *uint, _ bool) (int64, int64, int64, error) {
+	scope, err := ResolveContentReadScope(database.DB, viewerUserID)
+	if err != nil {
+		return 0, 0, 0, err
+	}
 	var messages []models.Message
-	messageQuery := ApplyMessageVisibilityScope(
-		database.DB.Model(&models.Message{}).Select("id", "user_id", "private", "visibility", "content"),
-		viewerUserID,
-		isAdmin,
-	)
+	messageQuery := scope.ApplyMessageVisibility(database.DB.Model(&models.Message{}).Select("id", "user_id", "private", "visibility", "content", "is_guestbook"))
 	if err := messageQuery.Find(&messages).Error; err != nil {
 		return 0, 0, 0, err
 	}
@@ -841,18 +841,13 @@ func countVisibleCommentStats(viewerUserID *uint, isAdmin bool) (int64, int64, i
 		commentsByMessage[comment.MessageID] = append(commentsByMessage[comment.MessageID], comment)
 	}
 
-	viewerID := uint(0)
-	hasViewer := viewerUserID != nil && *viewerUserID != 0
-	if hasViewer {
-		viewerID = *viewerUserID
-	}
 	var totalComments, totalReplies, totalGuestbook int64
 	for messageID, messageComments := range commentsByMessage {
 		message := messageMap[messageID]
-		isGuestbook := isGuestbookDashboardMessage(message.Content)
+		isGuestbook := IsGuestbookMessage(message)
 		commentMap := CommentMap(messageComments)
 		for _, comment := range messageComments {
-			if !CanViewCommentInThread(message, comment, commentMap, viewerID, hasViewer, isAdmin) {
+			if !scope.CanReadComment(message, comment, commentMap) {
 				continue
 			}
 			if comment.ParentID == nil && isGuestbook {
@@ -867,7 +862,7 @@ func countVisibleCommentStats(viewerUserID *uint, isAdmin bool) (int64, int64, i
 	return totalComments, totalReplies, totalGuestbook, nil
 }
 
-func countReceivedInteractionStats(userID uint, isAdmin bool) (int64, int64, int64, int64, error) {
+func countReceivedInteractionStats(userID uint, _ bool) (int64, int64, int64, int64, error) {
 	var receivedLikes int64
 	likeQuery := database.DB.Model(&models.MessageLike{}).
 		Joins("JOIN messages ON messages.id = message_likes.message_id").
@@ -897,12 +892,19 @@ func countReceivedInteractionStats(userID uint, isAdmin bool) (int64, int64, int
 	}
 
 	var receivedGuestbook int64
-	if isAdmin {
+	if userID == GuestbookRecipientID() {
+		descriptor, resolveErr := ResolveGuestbook(database.DB)
+		if resolveErr != nil && !errors.Is(resolveErr, gorm.ErrRecordNotFound) {
+			return 0, 0, 0, 0, resolveErr
+		}
+		if descriptor.MessageID == 0 {
+			return receivedLikes, receivedComments, receivedReplies, 0, nil
+		}
 		if err := database.DB.Model(&models.Comment{}).
 			Joins("JOIN messages ON messages.id = comments.message_id").
 			Where("comments.parent_id IS NULL").
 			Where("(comments.user_id IS NULL OR comments.user_id <> ?)", userID).
-			Where("(messages.content LIKE ? OR messages.content LIKE ? OR messages.content LIKE ?)", "%#guestbook%", "%#留言%", "%留言板%").
+			Where("comments.message_id = ?", descriptor.MessageID).
 			Count(&receivedGuestbook).Error; err != nil {
 			return 0, 0, 0, 0, err
 		}

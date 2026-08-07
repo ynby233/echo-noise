@@ -123,7 +123,7 @@
                   </div>
                   <div
                     class="admin-dashboard-interaction-grid"
-                    :class="isAdmin ? 'admin-dashboard-interaction-grid--admin' : 'admin-dashboard-interaction-grid--user'"
+                    :class="isPrimaryAdmin ? 'admin-dashboard-interaction-grid--admin' : 'admin-dashboard-interaction-grid--user'"
                   >
                     <div v-for="item in dashboardInteractionCards" :key="item.label" class="admin-dashboard-metric-card" :class="theme.subtleBg">
                       <div class="admin-dashboard-card-label" :class="theme.mutedText">
@@ -2900,7 +2900,7 @@ const dashboardInteractionCards = computed(() => {
       icon: 'i-heroicons-arrow-uturn-left'
     },
   ]
-  if (isAdmin.value) {
+  if (isPrimaryAdmin.value) {
     interactionCards.push({
       label: '收到留言',
       value: stats.receivedGuestbookCount,

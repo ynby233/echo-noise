@@ -8,6 +8,7 @@ const webRoot = join(repoRoot, 'web')
 const indexPage = await readFile(join(webRoot, 'pages/index.vue'), 'utf8')
 const router = await readFile(join(repoRoot, 'internal/routers/routers.go'), 'utf8')
 const controller = await readFile(join(repoRoot, 'internal/controllers/message_controller.go'), 'utf8')
+const guestbook = await readFile(join(repoRoot, 'internal/services/guestbook.go'), 'utf8')
 
 assert.match(
   router,
@@ -32,8 +33,13 @@ assert.match(
 )
 assert.match(
   controller,
-  /isHomeStatsExcludedMessage[\s\S]*#guestbook[\s\S]*#留言[\s\S]*关于本站[\s\S]*友情链接/,
-  'home stats should exclude guestbook/about/friend-link system messages'
+  /isHomeStatsExcludedMessage[\s\S]*services\.IsGuestbookMessage[\s\S]*关于本站[\s\S]*友情链接/,
+  'home stats should use the centralized guestbook marker and exclude about/friend-link system messages'
+)
+assert.match(
+  guestbook,
+  /models\.IsCanonicalGuestbookContent\(message\.Content\)/,
+  'guestbook detection must use the strict canonical marker instead of arbitrary body text'
 )
 
 const statsCardStart = indexPage.indexOf('<UCard class="sidebar-card no-padding-card mt-2 left-widget-stats-card" :class="sidebarThemeCard">')

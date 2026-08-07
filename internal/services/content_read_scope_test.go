@@ -171,6 +171,58 @@ func TestContentReadScopeSeparatesHiddenCommentReadsFromReplies(t *testing.T) {
 	}
 }
 
+func TestGuestbookReadIgnoresDelegatedHiddenContentCapability(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "guestbook-primary", IsAdmin: true})
+	delegated := mustCreateUser(t, models.User{Username: "guestbook-delegated", IsAdmin: true})
+	delegatedWithHidden := mustCreateUser(t, models.User{Username: "guestbook-hidden", IsAdmin: true})
+	ordinary := mustCreateUser(t, models.User{Username: "guestbook-ordinary"})
+	if err := authorization.New(db).ReplaceGrants(primary.ID, delegatedWithHidden.ID, []authorization.Capability{authorization.CapabilityContentViewHidden}); err != nil {
+		t.Fatalf("grant hidden-content read: %v", err)
+	}
+	guestbook := models.Message{Content: models.CanonicalGuestbookContent, UserID: primary.ID, IsGuestbook: true, Visibility: MessageVisibilityPublic}
+	ordinaryID := ordinary.ID
+	delegatedID := delegated.ID
+	delegatedWithHiddenID := delegatedWithHidden.ID
+	primaryID := primary.ID
+	comments := []models.Comment{
+		{ID: 401, MessageID: 1, UserID: &ordinaryID, Content: "ordinary private", Visibility: "private"},
+		{ID: 402, MessageID: 1, UserID: &delegatedID, Content: "delegated private", Visibility: "private"},
+		{ID: 403, MessageID: 1, UserID: &primaryID, Content: "primary private", Visibility: "private"},
+		{ID: 404, MessageID: 1, UserID: &delegatedWithHiddenID, Content: "hidden delegated private", Visibility: "private"},
+	}
+	commentMap := CommentMap(comments)
+
+	withoutHidden, err := ResolveContentReadScope(db, &delegated.ID)
+	if err != nil {
+		t.Fatalf("resolve delegated scope: %v", err)
+	}
+	withHidden, err := ResolveContentReadScope(db, &delegatedWithHidden.ID)
+	if err != nil {
+		t.Fatalf("resolve hidden delegated scope: %v", err)
+	}
+	primaryScope, err := ResolveContentReadScope(db, &primary.ID)
+	if err != nil {
+		t.Fatalf("resolve primary scope: %v", err)
+	}
+	for _, scope := range []ContentReadScope{withoutHidden, withHidden} {
+		if scope.CanReadComment(guestbook, comments[0], commentMap) {
+			t.Fatal("delegated administrators must not read another user's hidden guestbook entry")
+		}
+	}
+	if !withoutHidden.CanReadComment(guestbook, comments[1], commentMap) || !withHidden.CanReadComment(guestbook, comments[3], commentMap) {
+		t.Fatal("delegated administrators must retain their own private guestbook visibility")
+	}
+	if withoutHidden.CanReadComment(guestbook, comments[2], commentMap) || withHidden.CanReadComment(guestbook, comments[2], commentMap) {
+		t.Fatal("delegated administrators must not read primary-admin hidden guestbook entries")
+	}
+	for _, comment := range comments {
+		if !primaryScope.CanReadComment(guestbook, comment, commentMap) {
+			t.Fatalf("primary administrator must read all guestbook entries, comment=%d", comment.ID)
+		}
+	}
+}
+
 func TestAuthorizeMessageMutationRequiresReadScopeActionGrantAndProtection(t *testing.T) {
 	db := setupUserServiceTestDB(t)
 	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "mutation-primary", IsAdmin: true})

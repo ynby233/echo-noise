@@ -1101,16 +1101,29 @@ func TestReplyCannotBroadenParentVisibility(t *testing.T) {
 }
 
 func TestGuestbookFollowsCommentVisibilityRules(t *testing.T) {
-	db, r, _, _ := setupCommentAccountTest(t)
-	admin := models.User{Username: "admin", Password: "", IsAdmin: true}
+	db, r, primaryUser, _ := setupCommentAccountTest(t)
+	if err := db.AutoMigrate(&models.AdminAuditConfig{}, &models.AdminAuditLog{}); err != nil {
+		t.Fatalf("migrate authorization audit models: %v", err)
+	}
+	admin := primaryUser
+	admin.Username = "admin"
+	admin.IsAdmin = true
+	if err := db.Model(&models.User{}).Where("id = ?", admin.ID).Updates(map[string]interface{}{"username": admin.Username, "is_admin": true}).Error; err != nil {
+		t.Fatalf("promote primary test user: %v", err)
+	}
 	visitor := models.User{Username: "bob", Password: ""}
 	outsider := models.User{Username: "charlie", Password: ""}
-	for _, u := range []*models.User{&admin, &visitor, &outsider} {
+	delegated := models.User{Username: "delegated", Password: "", IsAdmin: true}
+	delegatedWithHidden := models.User{Username: "delegated-hidden", Password: "", IsAdmin: true}
+	for _, u := range []*models.User{&visitor, &outsider, &delegated, &delegatedWithHidden} {
 		if err := db.Create(u).Error; err != nil {
 			t.Fatalf("create user %s: %v", u.Username, err)
 		}
 	}
-	guestbook := models.Message{Content: "留言板\n\n#留言 #guestbook", UserID: admin.ID}
+	if err := authorization.New(db).ReplaceGrants(admin.ID, delegatedWithHidden.ID, []authorization.Capability{authorization.CapabilityContentViewHidden}); err != nil {
+		t.Fatalf("grant hidden-content read: %v", err)
+	}
+	guestbook := models.Message{Content: models.CanonicalGuestbookContent, UserID: admin.ID, IsGuestbook: true}
 	if err := db.Create(&guestbook).Error; err != nil {
 		t.Fatalf("create guestbook: %v", err)
 	}
@@ -1155,6 +1168,12 @@ func TestGuestbookFollowsCommentVisibilityRules(t *testing.T) {
 	}
 	if got := contentsOfComments(request(admin.ID, true)); len(got) != 3 {
 		t.Fatalf("admin should see all guestbook entries, got %#v", got)
+	}
+	if got := contentsOfComments(request(delegated.ID, true)); len(got) != 2 || got[0] != "public-entry" || got[1] != "users-entry" {
+		t.Fatalf("delegated admin should follow normal guestbook visibility, got %#v", got)
+	}
+	if got := contentsOfComments(request(delegatedWithHidden.ID, true)); len(got) != 2 || got[0] != "public-entry" || got[1] != "users-entry" {
+		t.Fatalf("delegated hidden-content reader must not widen guestbook visibility, got %#v", got)
 	}
 
 	payload, _ := json.Marshal(map[string]any{

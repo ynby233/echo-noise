@@ -1045,9 +1045,7 @@ const guestbookId = ref<number | null>(null)
 const targetListReady = ref(false)
 const isGuestbookMessage = (m: any) => {
   if (!m) return false
-  if (guestbookId.value && m.id === guestbookId.value) return true
-  const text = String(m.content || '').toLowerCase()
-  return /#guestbook|#留言|留言板/.test(text)
+  return !!guestbookId.value && m.id === guestbookId.value
 }
 const fetchGuestbookId = async () => {
   try {

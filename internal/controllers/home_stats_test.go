@@ -24,7 +24,7 @@ func TestGetCurrentUserHomeStatsScopesToCurrentUser(t *testing.T) {
 	messages := []models.Message{
 		{Content: "alice public #life #daily ![md](/alice-md.png)", ImageURL: "/alice-field.png", UserID: alice.ID, Username: alice.Username},
 		{Content: "alice private #secret", ImageURL: "/alice-private.png", UserID: alice.ID, Username: alice.Username, Private: true},
-		{Content: "#guestbook #hidden ![hidden](/hidden.png)", ImageURL: "/hidden-field.png", UserID: alice.ID, Username: alice.Username},
+		{Content: models.CanonicalGuestbookContent, ImageURL: "/hidden-field.png", UserID: alice.ID, Username: alice.Username, IsGuestbook: true},
 		{Content: "bob admin #life #admin", ImageURL: "/bob-field.png", UserID: bob.ID, Username: bob.Username},
 	}
 	for _, msg := range messages {

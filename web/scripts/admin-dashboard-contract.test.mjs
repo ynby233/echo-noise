@@ -15,9 +15,10 @@ assert(
     component.includes("label: '收到回复'") &&
     component.includes("label: '收到留言'") &&
     component.includes("receivedGuestbookCount") &&
-    component.includes("isAdmin.value ?") &&
+    component.includes("isPrimaryAdmin ?") &&
+    component.includes("if (isPrimaryAdmin.value)") &&
     component.includes("interactionCards.push"),
-  'dashboard interaction section must show likes/comments/replies and add guestbook only for administrators'
+  'dashboard interaction section must show likes/comments/replies and add guestbook only for the primary administrator'
 )
 
 assert(
