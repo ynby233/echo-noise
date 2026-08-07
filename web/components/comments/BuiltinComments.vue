@@ -65,7 +65,7 @@
               </span>
             </div>
             <div class="comment-actions">
-              <button class="action-btn" @click="startReply(c.id, commentAuthorName(c))">回复</button>
+              <button v-if="canReplyToComment(c)" class="action-btn" @click="startReply(c.id, commentAuthorName(c))">回复</button>
               <button v-if="canEditComment(c)" class="action-btn" @click="startEdit(c)">编辑</button>
               <button v-if="canDeleteComment(c)" class="action-btn delete-action-btn" @click="confirmDelete(c.id)">删除</button>
             </div>
@@ -117,7 +117,7 @@
                     </span>
                   </div>
                   <div class="comment-actions">
-                    <button class="action-btn" @click="startReply(child.id, commentAuthorName(child))">回复</button>
+                    <button v-if="canReplyToComment(child)" class="action-btn" @click="startReply(child.id, commentAuthorName(child))">回复</button>
                     <button v-if="canEditComment(child)" class="action-btn" @click="startEdit(child)">编辑</button>
                     <button v-if="canDeleteComment(child)" class="action-btn delete-action-btn" @click="confirmDelete(child.id)">删除</button>
                   </div>
@@ -319,7 +319,7 @@ import { shouldShowVisibilityBadge } from '~/utils/visibility-badge'
 
 type CommentEditorTarget = 'content' | 'edit'
 
-const props = defineProps<{ messageId: number, siteConfig: any, showInput?: boolean, contextLabel?: string, autoScrollInput?: boolean, messageVisibility?: string, replyInputOnly?: boolean, replyCommentId?: number | null, replyCommentAuthor?: string | null }>()
+const props = defineProps<{ messageId: number, siteConfig: any, showInput?: boolean, contextLabel?: string, autoScrollInput?: boolean, messageVisibility?: string, canInteract?: boolean, replyInputOnly?: boolean, replyCommentId?: number | null, replyCommentAuthor?: string | null }>()
 const emit = defineEmits(['cancel'])
 const contextLabel = computed(() => String(props.contextLabel || '评论').trim() || '评论')
 const showCommentRefreshButton = computed(() => contextLabel.value === '留言' && !props.replyInputOnly)
@@ -400,8 +400,9 @@ const enabled = computed(() => {
   return !!(s && (s.commentEnabled === true || s.commentEnabled === 'true'))
 })
 const canComment = computed(() => {
-  return enabled.value && user.isLogin
+  return enabled.value && user.isLogin && props.canInteract !== false
 })
+const canReplyToComment = (comment: any) => canComment.value && comment?.can_interact === true
 // 使用原始 textarea 输入框
 
 // 主题注入，严格跟随页面当前模式
@@ -492,6 +493,11 @@ const dispatchCommentCount = () => {
 }
 const load = async () => {
   try {
+    let list: any[] | null = null
+    try {
+      const primary = await getRequest<any>(`messages/${props.messageId}/comments`, undefined, { credentials: 'include', silent: true })
+      if (primary?.code === 1 && Array.isArray(primary.data)) list = primary.data
+    } catch {}
     const tryFetch = async (url: string) => {
       const resp = await fetch(url, { credentials: 'include', headers: { 'Accept': 'application/json' } })
       if (!resp || !resp.ok) return null
@@ -506,12 +512,14 @@ const load = async () => {
       `http://localhost:1315/api/messages/${props.messageId}/comments`,
       `http://127.0.0.1:1315/api/messages/${props.messageId}/comments`
     ]
-    let list: any[] = []
-    for (const u of urls) {
-      const data = await tryFetch(u)
-      if (data && data.length >= 0) {
-        list = data
-        if (list.length > 0) break
+    if (list === null) {
+      list = []
+      for (const u of urls) {
+        const data = await tryFetch(u)
+        if (Array.isArray(data)) {
+          list = data
+          if (data.length > 0) break
+        }
       }
     }
     comments.value = (list || []).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
@@ -796,6 +804,7 @@ const reopenInput = () => {
 }
 
 const startReply = (id: number, authorName: string) => {
+  if (!canReplyToComment(byId.value[id])) return
   if (!user.isLogin) {
     useToast().add({ title: '请登录后回复', color: 'orange' })
     return

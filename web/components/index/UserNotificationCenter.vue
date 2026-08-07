@@ -113,6 +113,7 @@
                 :key="`notification-reply-thread-${item.id}-${replyCommentId(item) || 0}`"
                 :message-id="targetMessageId(item)"
                 :message-visibility="item.message?.visibility"
+                :can-interact="item.message?.can_interact === true"
                 :site-config="props.siteConfig"
                 :show-input="true"
                 :reply-input-only="true"
@@ -227,6 +228,7 @@ type NotificationMessage = {
   user_id?: number
   username?: string
   is_guestbook?: boolean
+  can_interact?: boolean
 }
 
 type NotificationComment = {
@@ -436,7 +438,7 @@ const replyCommentAuthor = (item: UserNotification) => {
 }
 
 const canReply = (item: UserNotification) => {
-  return !isTargetUnavailable(item) && item.type !== 'like' && replyCommentId(item) > 0 && targetMessageId(item) > 0
+  return !isTargetUnavailable(item) && item.message?.can_interact === true && item.type !== 'like' && replyCommentId(item) > 0 && targetMessageId(item) > 0
 }
 const jumpPayload = (item: UserNotification): NotificationJumpPayload => ({
   ...item,

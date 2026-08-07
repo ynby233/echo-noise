@@ -46,4 +46,25 @@ assert.doesNotMatch(
   'binary admin status must not expose cross-author comment mutation controls'
 )
 
+assert.match(
+  component,
+  /return enabled\.value && user\.isLogin && props\.canInteract !== false/,
+  'comment and reply inputs must be hidden when the server marks the message non-interactable'
+)
+assert.match(
+  component,
+  /const\s+canReplyToComment\s*=\s*\(comment:\s*any\)\s*=>\s*canComment\.value\s*&&\s*comment\?\.can_interact\s*===\s*true/,
+  'reply buttons must consume the server-authoritative per-comment interaction decision'
+)
+assert.match(
+  component,
+  /<button\s+v-if="canReplyToComment\(c\)"[^>]*>回复<\/button>/,
+  'root-comment reply button must be hidden for normally hidden comments'
+)
+assert.match(
+  component,
+  /<button\s+v-if="canReplyToComment\(child\)"[^>]*>回复<\/button>/,
+  'nested reply button must be hidden for normally hidden comments'
+)
+
 console.log('comment capability visibility contract passed')

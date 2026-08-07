@@ -72,6 +72,7 @@ const handleHttpStatusError = <T>(status: any, msg?: string, options?: { silent?
     }
     if (normalizedStatus === 403) {
         const forbiddenMsg = msg || '当前账号没有权限执行此操作'
+        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') window.dispatchEvent(new Event('admin-capabilities-invalidated'))
         if (!shouldSuppressToast(options)) {
             useToast().add({ title: '没有权限', description: forbiddenMsg, color: 'orange', timeout: 2000 })
         }

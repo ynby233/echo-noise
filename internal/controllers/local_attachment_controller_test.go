@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/services"
 )
@@ -21,6 +22,9 @@ func TestServeLocalAttachmentEnforcesMessageVisibilityAndPreservesHTTPMediaSeman
 	admin := models.User{Username: "attachment-admin", Password: "", Token: "attachment-admin-token", IsAdmin: true}
 	if err := db.Create(&admin).Error; err != nil {
 		t.Fatalf("create admin: %v", err)
+	}
+	if err := db.Create(&models.AdminCapabilityGrant{UserID: admin.ID, Capability: string(authorization.CapabilityContentViewHidden), GrantedByUserID: models.PrimaryAdminUserID}).Error; err != nil {
+		t.Fatalf("grant hidden content read: %v", err)
 	}
 
 	dir := t.TempDir()
@@ -89,7 +93,7 @@ func TestServeLocalAttachmentEnforcesMessageVisibilityAndPreservesHTTPMediaSeman
 	if got := request(http.MethodGet, "/api/files/private.txt", "invalid", ""); got.Code != http.StatusNotFound {
 		t.Fatalf("invalid token private attachment status = %d, want 404", got.Code)
 	}
-	for _, token := range []string{owner.Token, admin.Token} {
+	for _, token := range []string{owner.Token} {
 		got := request(http.MethodGet, "/api/files/private.txt", token, "")
 		if got.Code != http.StatusOK || got.Body.String() != "private attachment" {
 			t.Fatalf("authorized private attachment for %s = %d %q", token, got.Code, got.Body.String())
@@ -97,6 +101,9 @@ func TestServeLocalAttachmentEnforcesMessageVisibilityAndPreservesHTTPMediaSeman
 		if got.Header().Get("Cache-Control") != "private, no-store" || !strings.Contains(got.Header().Get("Vary"), "Authorization") {
 			t.Fatalf("private cache headers = Cache-Control %q Vary %q", got.Header().Get("Cache-Control"), got.Header().Get("Vary"))
 		}
+	}
+	if got := request(http.MethodGet, "/api/files/private.txt", admin.Token, ""); got.Code != http.StatusNotFound {
+		t.Fatalf("delegated admin must not read primary-owned private attachment, got %d", got.Code)
 	}
 	if got := request(http.MethodHead, "/api/files/private.txt", owner.Token, ""); got.Code != http.StatusOK || got.Body.Len() != 0 {
 		t.Fatalf("private HEAD response = %d body bytes %d", got.Code, got.Body.Len())
@@ -124,7 +131,7 @@ func TestServeLocalAttachmentEnforcesMessageVisibilityAndPreservesHTTPMediaSeman
 	if got := request(http.MethodGet, "/api/files/private.txt", "", ""); got.Code != http.StatusNotFound {
 		t.Fatalf("deleted private message attachment became public: %d", got.Code)
 	}
-	if got := request(http.MethodGet, "/api/files/private.txt", admin.Token, ""); got.Code != http.StatusOK {
-		t.Fatalf("admin lost deleted private attachment snapshot: %d", got.Code)
+	if got := request(http.MethodGet, "/api/files/private.txt", admin.Token, ""); got.Code != http.StatusNotFound {
+		t.Fatalf("delegated admin must not read primary-owned deleted attachment snapshot: %d", got.Code)
 	}
 }

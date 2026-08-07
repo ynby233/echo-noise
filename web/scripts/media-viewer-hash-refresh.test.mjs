@@ -35,7 +35,7 @@ assert.doesNotMatch(
 
 assert.match(
   messageList,
-  /const\s+messageId\s*=\s*getMessageIdFromRouteHash\(route\.hash\)[\s\S]*?if\s*\(messageId\)\s*\{[\s\S]*?fetch\(`\$\{BASE_API\}\/messages\/\$\{messageId\}`/,
+  /const\s+messageId\s*=\s*getMessageIdFromRouteHash\(route\.hash\)[\s\S]*?if\s*\(messageId\)\s*\{[\s\S]*?(?:fetch\(`\$\{BASE_API\}\/messages\/\$\{messageId\}`|getRequest<any>\(`messages\/\$\{messageId\}`)/,
   'initial load must fetch a single message only when the hash is a strict message hash'
 )
 

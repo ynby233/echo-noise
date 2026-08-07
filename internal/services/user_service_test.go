@@ -955,7 +955,7 @@ func TestGetStatusCountsOnlyCommentsVisibleToViewer(t *testing.T) {
 		t.Fatalf("get admin status: %v", err)
 	}
 	if adminStatus.TotalComments != 3 || adminStatus.TotalReplies != 1 {
-		t.Fatalf("admin counts = comments %d replies %d, want 3/1", adminStatus.TotalComments, adminStatus.TotalReplies)
+		t.Fatalf("primary admin counts = comments %d replies %d, want 3/1", adminStatus.TotalComments, adminStatus.TotalReplies)
 	}
 }
 

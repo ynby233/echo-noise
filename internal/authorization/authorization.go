@@ -67,6 +67,8 @@ const (
 	CapabilityNotesTrash                 Capability = "notes.trash"
 	CapabilityNotesRestore               Capability = "notes.restore"
 	CapabilityNotesDelete                Capability = "notes.delete_permanently"
+	CapabilityContentViewHidden          Capability = "content.view_hidden"
+	CapabilityNotesRecycleBinView        Capability = "notes.recycle_bin.view"
 )
 
 type Definition struct {
@@ -87,17 +89,20 @@ var catalog = []Definition{
 	{CapabilitySecurityView, "security", "查看安全策略", true}, {CapabilitySecurityManage, "security", "管理安全策略", true}, {CapabilitySecurityClearLogs, "security", "清理攻击记录", true}, {CapabilityAccessLogsView, "access_logs", "查看访问日志", true}, {CapabilityAccessLogsClear, "access_logs", "清理访问日志", true}, {CapabilitySiteVisitsView, "site_visits", "查看访客记录", true}, {CapabilitySiteVisitsClear, "site_visits", "清理访客记录", true}, {CapabilityLoginAuditsView, "login_audits", "查看登录审计", true},
 	{CapabilitySiteSettingsView, "site", "查看站点设置", true}, {CapabilitySiteSettingsManage, "site", "管理站点设置", true}, {CapabilityAnnouncementsView, "announcements", "查看公告", true}, {CapabilityAnnouncementsManage, "announcements", "管理公告", true}, {CapabilityAnnouncementsPush, "announcements", "推送公告", true}, {CapabilityFeedView, "feed", "查看信息流", true}, {CapabilityRSSView, "rss", "查看 RSS", true}, {CapabilityRSSManage, "rss", "管理 RSS", true}, {CapabilityNotificationsView, "notifications", "查看通知设置", true}, {CapabilityNotificationsManage, "notifications", "管理通知设置", true}, {CapabilityEmailView, "email", "查看邮件设置", true}, {CapabilityEmailManage, "email", "管理邮件设置", true},
 	{CapabilityNotesView, "notes", "查看笔记", true}, {CapabilityNotesEdit, "notes", "编辑笔记", true}, {CapabilityNotesVisibility, "notes", "调整笔记可见范围", true}, {CapabilityNotesPublishTime, "notes", "调整笔记发布时间", true}, {CapabilityNotesPinGlobal, "notes", "全站置顶笔记", true}, {CapabilityNotesTrash, "notes", "移入笔记回收站", true}, {CapabilityNotesRestore, "notes", "恢复笔记", true}, {CapabilityNotesDelete, "notes", "永久删除笔记", true},
+	{CapabilityContentViewHidden, "content", "查看隐藏内容", true}, {CapabilityNotesRecycleBinView, "notes", "查看回收站", true},
 }
 
 type DenialReason string
 
 const (
-	DenialNone              DenialReason = ""
-	DenialNotAdministrator  DenialReason = "not_administrator"
-	DenialMissingGrant      DenialReason = "missing_grant"
-	DenialNotGrantable      DenialReason = "not_grantable"
-	DenialProtectedContent  DenialReason = "protected_content"
-	DenialUnknownCapability DenialReason = "unknown_capability"
+	DenialNone                DenialReason = ""
+	DenialNotAdministrator    DenialReason = "not_administrator"
+	DenialMissingGrant        DenialReason = "missing_grant"
+	DenialNotGrantable        DenialReason = "not_grantable"
+	DenialProtectedContent    DenialReason = "protected_content"
+	DenialContentNotReadable  DenialReason = "content_not_readable"
+	DenialMissingPrerequisite DenialReason = "missing_prerequisite"
+	DenialUnknownCapability   DenialReason = "unknown_capability"
 )
 
 type Decision struct {
@@ -146,7 +151,7 @@ func (a *Authorizer) Authorize(actorID uint, capability Capability, targetOwnerU
 
 func isMutation(capability Capability) bool {
 	switch capability {
-	case CapabilityCommentsView, CapabilityAttachmentsView, CapabilityAttachmentsDownload, CapabilityUsersView, CapabilityRegistrationView, CapabilityStorageView, CapabilityDatabaseView, CapabilityVersionView, CapabilitySecurityView, CapabilityAccessLogsView, CapabilitySiteVisitsView, CapabilityLoginAuditsView, CapabilitySiteSettingsView, CapabilityAnnouncementsView, CapabilityFeedView, CapabilityRSSView, CapabilityNotificationsView, CapabilityEmailView, CapabilityNotesView, CapabilityAuditView:
+	case CapabilityCommentsView, CapabilityAttachmentsView, CapabilityAttachmentsDownload, CapabilityUsersView, CapabilityRegistrationView, CapabilityStorageView, CapabilityDatabaseView, CapabilityVersionView, CapabilitySecurityView, CapabilityAccessLogsView, CapabilitySiteVisitsView, CapabilityLoginAuditsView, CapabilitySiteSettingsView, CapabilityAnnouncementsView, CapabilityFeedView, CapabilityRSSView, CapabilityNotificationsView, CapabilityEmailView, CapabilityNotesView, CapabilityAuditView, CapabilityContentViewHidden, CapabilityNotesRecycleBinView:
 		return false
 	}
 	return true

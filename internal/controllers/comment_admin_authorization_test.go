@@ -1,13 +1,70 @@
 package controllers
 
 import (
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/models"
 )
+
+func TestAdminCommentListUsesHiddenContentReadScope(t *testing.T) {
+	db, r, primary, message := setupCommentAccountTest(t)
+	if err := db.AutoMigrate(&models.AdminAuditLog{}, &models.AdminAuditConfig{}); err != nil {
+		t.Fatalf("migrate authorization models: %v", err)
+	}
+	primary.IsAdmin = true
+	if err := db.Save(&primary).Error; err != nil {
+		t.Fatalf("promote primary fixture: %v", err)
+	}
+	delegated := models.User{Username: "list-delegated", IsAdmin: true}
+	ordinary := models.User{Username: "list-ordinary"}
+	for _, user := range []*models.User{&delegated, &ordinary} {
+		if err := db.Create(user).Error; err != nil {
+			t.Fatalf("create %s: %v", user.Username, err)
+		}
+	}
+	createTestComment(t, db, message.ID, &ordinary, "ordinary hidden", "private", nil)
+	createTestComment(t, db, message.ID, &primary, "primary hidden", "private", nil)
+
+	r.Use(func(c *gin.Context) {
+		c.Set("user_id", delegated.ID)
+		c.Set("is_admin", true)
+		c.Next()
+	})
+	r.GET("/comments", ListComments)
+	requestTotal := func() int64 {
+		request := httptest.NewRequest(http.MethodGet, "/comments", nil)
+		response := httptest.NewRecorder()
+		r.ServeHTTP(response, request)
+		if response.Code != http.StatusOK {
+			t.Fatalf("list comments status=%d body=%s", response.Code, response.Body.String())
+		}
+		var body struct {
+			Code int `json:"code"`
+			Data struct {
+				Total int64 `json:"total"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode list comments: %v", err)
+		}
+		return body.Data.Total
+	}
+
+	if got := requestTotal(); got != 0 {
+		t.Fatalf("delegated admin without hidden read must not count hidden comments, got %d", got)
+	}
+	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityCommentsView, authorization.CapabilityContentViewHidden}); err != nil {
+		t.Fatalf("grant comment list and hidden read: %v", err)
+	}
+	if got := requestTotal(); got != 1 {
+		t.Fatalf("hidden read must reveal ordinary hidden comment but not primary hidden comment, got %d", got)
+	}
+}
 
 func TestDelegatedCommentMutationsUseCapabilityProtectionAndSilentAdminAudit(t *testing.T) {
 	db, r, primary, message := setupCommentAccountTest(t)

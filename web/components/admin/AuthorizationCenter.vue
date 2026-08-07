@@ -12,17 +12,19 @@
 </template>
 
 <script setup lang="ts">
+import { getRequest, putRequest } from '~/utils/api'
+
 type Definition = { capability: string, module: string, label: string, grantable: boolean }
 type Admin = { id: number, username: string }
 const admins = ref<Admin[]>([]), catalog = ref<Definition[]>([]), selectedID = ref<number | null>(null), saved = ref<string[]>([]), selected = ref<string[]>([]), loading = ref(true), saving = ref(false), message = ref(''), messageError = ref(false)
 const selectedCapabilities = computed(() => new Set(selected.value))
 const dirty = computed(() => [...selected.value].sort().join('\n') !== [...saved.value].sort().join('\n'))
 const groups = computed(() => { const map = new Map<string, Definition[]>(); for (const item of catalog.value) map.set(item.module, [...(map.get(item.module) || []), item]); return [...map.entries()].map(([module, items]) => ({ module, items, grantable: items.filter(item => item.grantable) })) })
-const responseData = async (response: Response) => { const body = await response.json().catch(() => ({})); if (!response.ok || body?.code !== 1) throw new Error(body?.msg || '请求失败'); return body.data }
-const load = async () => { loading.value = true; try { const [adminsData, catalogData] = await Promise.all([fetch('/api/admin/authorization/admins', { credentials: 'include' }).then(responseData), fetch('/api/admin/authorization/catalog', { credentials: 'include' }).then(responseData)]); admins.value = adminsData || []; catalog.value = catalogData || [] } catch (error: any) { message.value = error.message || '加载授权中心失败'; messageError.value = true } finally { loading.value = false } }
-const selectAdmin = async (id: number) => { selectedID.value = id; message.value = ''; try { const data = await fetch(`/api/admin/authorization/admins/${id}`, { credentials: 'include' }).then(responseData); saved.value = data.capabilities || []; selected.value = [...saved.value] } catch (error: any) { message.value = error.message || '加载授权失败'; messageError.value = true } }
+const responseData = (body: any) => { if (body?.code !== 1) throw new Error(body?.msg || '请求失败'); return body.data }
+const load = async () => { loading.value = true; try { const [adminsData, catalogData] = await Promise.all([getRequest('admin/authorization/admins', undefined, { credentials: 'include', silent: true }).then(responseData), getRequest('admin/authorization/catalog', undefined, { credentials: 'include', silent: true }).then(responseData)]); admins.value = adminsData || []; catalog.value = catalogData || [] } catch (error: any) { message.value = error.message || '加载授权中心失败'; messageError.value = true } finally { loading.value = false } }
+const selectAdmin = async (id: number) => { selectedID.value = id; message.value = ''; try { const data = responseData(await getRequest(`admin/authorization/admins/${id}`, undefined, { credentials: 'include', silent: true })); saved.value = data.capabilities || []; selected.value = [...saved.value] } catch (error: any) { message.value = error.message || '加载授权失败'; messageError.value = true } }
 const toggle = (capability: string, enabled: boolean) => { selected.value = enabled ? [...new Set([...selected.value, capability])] : selected.value.filter(item => item !== capability) }
 const toggleGroup = (group: { grantable: Definition[] }, enabled: boolean) => { const capabilities = new Set(selected.value); for (const item of group.grantable) enabled ? capabilities.add(item.capability) : capabilities.delete(item.capability); selected.value = [...capabilities] }
-const save = async () => { if (!selectedID.value) return; saving.value = true; message.value = ''; try { await fetch(`/api/admin/authorization/admins/${selectedID.value}`, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ capabilities: selected.value }) }).then(responseData); saved.value = [...selected.value]; message.value = '授权已保存' } catch (error: any) { message.value = error.message || '保存授权失败'; messageError.value = true } finally { saving.value = false } }
+const save = async () => { if (!selectedID.value) return; saving.value = true; message.value = ''; try { responseData(await putRequest(`admin/authorization/admins/${selectedID.value}`, { capabilities: selected.value }, { credentials: 'include', silent: true })); saved.value = [...selected.value]; message.value = '授权已保存' } catch (error: any) { message.value = error.message || '保存授权失败'; messageError.value = true } finally { saving.value = false } }
 onMounted(load)
 </script>

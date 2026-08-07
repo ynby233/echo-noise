@@ -104,10 +104,7 @@ func StoredMessageVisibility(message models.Message) string {
 	return visibility
 }
 
-func CanViewMessage(message models.Message, userID *uint, isAdmin bool) bool {
-	if isAdmin {
-		return true
-	}
+func CanViewMessageNormally(message models.Message, userID *uint) bool {
 	if userID != nil && *userID != 0 && message.UserID == *userID {
 		return true
 	}
@@ -130,6 +127,11 @@ func CanViewMessage(message models.Message, userID *uint, isAdmin bool) bool {
 	default:
 		return false
 	}
+}
+
+func CanViewMessage(message models.Message, userID *uint, _ bool) bool {
+	scope, err := ResolveContentReadScope(database.DB, userID)
+	return err == nil && scope.CanReadMessage(message)
 }
 
 func canViewFreshVoceChatContact(authorID uint, viewerID uint) bool {
@@ -155,30 +157,16 @@ func CanViewVoceChatContactAudience(authorID uint, viewerID uint) bool {
 }
 
 func CanInteractWithMessage(message models.Message, userID *uint) bool {
-	if userID == nil || *userID == 0 {
-		return false
-	}
-	if StoredMessageVisibility(message) == MessageVisibilityContacts {
-		return CanViewVoceChatContactAudience(message.UserID, *userID)
-	}
-	return CanViewMessage(message, userID, false)
+	scope, err := ResolveContentReadScope(database.DB, userID)
+	return err == nil && scope.CanInteractWithMessage(message)
 }
 
-func ApplyMessageVisibilityScope(query *gorm.DB, userID *uint, isAdmin bool) *gorm.DB {
-	if isAdmin {
-		return query
+func ApplyMessageVisibilityScope(query *gorm.DB, userID *uint, _ bool) *gorm.DB {
+	scope, err := ResolveContentReadScope(database.DB, userID)
+	if err != nil {
+		return query.Where("1 = 0")
 	}
-	publicSQL := "(private = ? AND (visibility = ? OR visibility = ? OR visibility IS NULL))"
-	if userID != nil && *userID != 0 {
-		if voceChatContactsVisibilityEnabled() {
-			EnsureVoceChatContactCachesForViewer(userID, isAdmin)
-			now := time.Now().UTC()
-			contactsSQL := "(visibility = ? AND EXISTS (SELECT 1 FROM voce_chat_contact_caches AS vcc WHERE vcc.user_id = messages.user_id AND vcc.contact_user_id = ? AND vcc.last_sync_status = ? AND vcc.expires_at > ?))"
-			return query.Where("(user_id = ? OR "+publicSQL+" OR visibility = ? OR "+contactsSQL+")", *userID, false, MessageVisibilityPublic, "", MessageVisibilityUsers, MessageVisibilityContacts, *userID, models.VoceChatContactSyncStatusOK, now)
-		}
-		return query.Where("(user_id = ? OR "+publicSQL+" OR visibility = ?)", *userID, false, MessageVisibilityPublic, "", MessageVisibilityUsers)
-	}
-	return query.Where(publicSQL, false, MessageVisibilityPublic, "")
+	return scope.ApplyMessageVisibility(query)
 }
 
 func voceChatContactsVisibilityEnabled() bool {
@@ -200,8 +188,18 @@ func GetAllMessagesForViewer(userID *uint, isAdmin bool) ([]models.Message, erro
 	if err := query.Order(messagePinOrder(MessagePinScopeLatest)).Find(&messages).Error; err != nil {
 		return nil, fmt.Errorf("获取消息失败: %v", err)
 	}
-	applyMessageLikedState(messages, userID)
+	ApplyMessageViewerState(messages, userID)
 	return messages, nil
+}
+
+func ApplyMessageViewerState(messages []models.Message, userID *uint) {
+	scope, err := ResolveContentReadScope(database.DB, userID)
+	if err == nil {
+		for index := range messages {
+			messages[index].CanInteract = scope.CanInteractWithMessage(messages[index])
+		}
+	}
+	applyMessageLikedState(messages, userID)
 }
 
 func applyMessageLikedState(messages []models.Message, userID *uint) {
@@ -272,6 +270,10 @@ func GetMessageByIDForViewer(id uint, userID *uint, isAdmin bool) (*models.Messa
 		if err := database.DB.Model(&models.MessageLike{}).Where("user_id = ? AND message_id = ?", *userID, message.ID).Count(&count).Error; err == nil {
 			message.Liked = count > 0
 		}
+	}
+	scope, scopeErr := ResolveContentReadScope(database.DB, userID)
+	if scopeErr == nil {
+		message.CanInteract = scope.CanInteractWithMessage(*message)
 	}
 	return message, nil
 }
@@ -374,7 +376,7 @@ func GetMessagesByPage(page, pageSize int, userID *uint, isAdmin bool, authorID 
 		} else {
 			messages = []models.Message{}
 		}
-		applyMessageLikedState(messages, userID)
+		ApplyMessageViewerState(messages, userID)
 		return dto.PageQueryResult{Total: total, Items: messages}, nil
 	}
 	if err := q.Count(&total).Error; err != nil {
@@ -383,7 +385,7 @@ func GetMessagesByPage(page, pageSize int, userID *uint, isAdmin bool, authorID 
 	if err := q.Limit(pageSize).Offset(offset).Order(messagePinOrder(normalizedPinScope)).Find(&messages).Error; err != nil {
 		return dto.PageQueryResult{}, err
 	}
-	applyMessageLikedState(messages, userID)
+	ApplyMessageViewerState(messages, userID)
 
 	return dto.PageQueryResult{Total: total, Items: messages}, nil
 }
@@ -891,6 +893,7 @@ func SearchMessages(keyword string, page, pageSize int, userID *uint, isAdmin bo
 	if err != nil {
 		return dto.PageQueryResult{}, err
 	}
+	ApplyMessageViewerState(messages, userID)
 
 	// 确保返回的数据结构符合前端期望
 	return dto.PageQueryResult{

@@ -73,16 +73,14 @@ func canReadAttachmentReference(c *gin.Context, reference models.AttachmentRefer
 	if reference.Kind == "image" && isPublicSiteImageReference(reference, backend) {
 		return true, true, nil
 	}
-	viewerID, isAdmin := currentMessageViewer(c)
-	if isAdmin {
-		public := false
-		for _, message := range messages {
-			if services.StoredMessageVisibility(message) == services.MessageVisibilityPublic {
-				public = true
-				break
-			}
-		}
-		return true, public, nil
+	viewerID, _ := currentMessageViewer(c)
+	db, err := database.GetDB()
+	if err != nil {
+		return false, false, err
+	}
+	scope, err := services.ResolveContentReadScope(db, viewerID)
+	if err != nil {
+		return false, false, err
 	}
 	if len(messages) == 0 {
 		return viewerID != nil && *viewerID == reference.OwnerUserID, false, nil
@@ -93,7 +91,7 @@ func canReadAttachmentReference(c *gin.Context, reference models.AttachmentRefer
 		if services.StoredMessageVisibility(message) == services.MessageVisibilityPublic {
 			publiclyReferenced = true
 		}
-		if services.CanViewMessage(message, viewerID, false) {
+		if scope.CanReadMessage(message) {
 			allowed = true
 		}
 	}

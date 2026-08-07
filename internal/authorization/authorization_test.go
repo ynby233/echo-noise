@@ -185,6 +185,25 @@ func TestAuthorizeTargetOwnerMatrixPreservesProtectedContentBoundary(t *testing.
 	}
 }
 
+func TestHiddenContentAndRecycleBinViewCapabilitiesAreGrantableReads(t *testing.T) {
+	for _, capability := range []Capability{CapabilityContentViewHidden, CapabilityNotesRecycleBinView} {
+		capability := capability
+		t.Run(string(capability), func(t *testing.T) {
+			_, authorizer, primary, delegated, _ := setupAuthorizerTest(t)
+			definition, ok := DefinitionFor(capability)
+			if !ok || !definition.Grantable {
+				t.Fatalf("read capability must be present and grantable: %#v, %v", definition, ok)
+			}
+			if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, []Capability{capability}); err != nil {
+				t.Fatalf("grant %s: %v", capability, err)
+			}
+			if decision := authorizer.Authorize(delegated.ID, capability, &primary.ID); !decision.Allowed {
+				t.Fatalf("read capability must not be classified as a protected mutation: %#v", decision)
+			}
+		})
+	}
+}
+
 func TestReplaceGrantsRejectsPrimaryAndOrdinaryTargetsAndUnknownCapability(t *testing.T) {
 	_, authorizer, primary, _, ordinary := setupAuthorizerTest(t)
 	if err := authorizer.ReplaceGrants(primary.ID, primary.ID, []Capability{CapabilityAuditView}); err == nil {

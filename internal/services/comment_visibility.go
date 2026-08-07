@@ -122,16 +122,36 @@ func EffectiveCommentVisibilityInThread(comment models.Comment, messageVisibilit
 	return visibility
 }
 
-func CanViewCommentInThread(message models.Message, comment models.Comment, commentMap map[uint]models.Comment, viewerID uint, hasViewer bool, isAdmin bool) bool {
-	if isAdmin {
+func (scope ContentReadScope) CanReadComment(message models.Message, comment models.Comment, commentMap map[uint]models.Comment) bool {
+	if !scope.CanReadMessage(message) {
+		return false
+	}
+	if scope.canViewCommentInThread(message, comment, commentMap) {
 		return true
 	}
-	var currentUserID *uint
-	if hasViewer {
-		id := viewerID
-		currentUserID = &id
+	if scope.primaryAdmin {
+		return true
 	}
-	if !CanViewMessage(message, currentUserID, false) {
+	if !scope.administrator || !scope.viewHidden {
+		return false
+	}
+	if comment.UserID != nil && *comment.UserID == models.PrimaryAdminUserID {
+		return false
+	}
+	if comment.ParentID != nil {
+		parent, ok := commentMap[*comment.ParentID]
+		return ok && scope.CanReadComment(message, parent, commentMap)
+	}
+	return true
+}
+
+func (scope ContentReadScope) CanInteractWithComment(message models.Message, comment models.Comment, commentMap map[uint]models.Comment) bool {
+	return scope.hasActor && scope.canReadMessageNormally(message) && scope.canViewCommentInThread(message, comment, commentMap)
+}
+
+func (scope ContentReadScope) canViewCommentInThread(message models.Message, comment models.Comment, commentMap map[uint]models.Comment) bool {
+	viewerID, hasViewer := scope.ActorID()
+	if !scope.CanReadMessage(message) {
 		return false
 	}
 	messageVisibility := StoredMessageVisibility(message)
@@ -145,7 +165,7 @@ func CanViewCommentInThread(message models.Message, comment models.Comment, comm
 		if !ok {
 			return false
 		}
-		if !CanViewCommentInThread(message, loaded, commentMap, viewerID, hasViewer, false) {
+		if !scope.canViewCommentInThread(message, loaded, commentMap) {
 			return false
 		}
 		parent = &loaded
@@ -221,6 +241,15 @@ func CanViewCommentInThread(message models.Message, comment models.Comment, comm
 	default:
 		return false
 	}
+}
+
+func CanViewCommentInThread(message models.Message, comment models.Comment, commentMap map[uint]models.Comment, viewerID uint, hasViewer bool, _ bool) bool {
+	var actorID *uint
+	if hasViewer && viewerID != 0 {
+		actorID = &viewerID
+	}
+	scope, err := ResolveContentReadScope(database.DB, actorID)
+	return err == nil && scope.CanReadComment(message, comment, commentMap)
 }
 
 func CanUserViewCommentInThread(message models.Message, comment models.Comment, viewerID uint) bool {

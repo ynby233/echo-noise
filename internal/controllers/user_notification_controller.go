@@ -29,6 +29,7 @@ type userNotificationMessageResponse struct {
 	UserID      uint      `json:"user_id"`
 	CreatedAt   time.Time `json:"created_at"`
 	IsGuestbook bool      `json:"is_guestbook"`
+	CanInteract bool      `json:"can_interact"`
 }
 
 type userNotificationCommentResponse struct {
@@ -118,7 +119,7 @@ func notificationCommentResponse(comment models.Comment, users map[uint]models.U
 	}
 }
 
-func notificationMessageResponse(message models.Message) userNotificationMessageResponse {
+func notificationMessageResponse(message models.Message, canInteract bool) userNotificationMessageResponse {
 	return userNotificationMessageResponse{
 		ID:          message.ID,
 		Content:     message.Content,
@@ -127,6 +128,7 @@ func notificationMessageResponse(message models.Message) userNotificationMessage
 		UserID:      message.UserID,
 		CreatedAt:   message.CreatedAt,
 		IsGuestbook: isGuestbookMessage(message),
+		CanInteract: canInteract,
 	}
 }
 
@@ -343,7 +345,7 @@ func buildVisibleUserNotifications(notifications []models.UserNotification, view
 		}
 
 		targetTab, targetURL := notificationTarget(message, notification.CommentID, notification.Type)
-		messageSummary := notificationMessageResponse(message)
+		messageSummary := notificationMessageResponse(message, services.CanInteractWithMessage(message, &viewerIDPtr))
 		items = append(items, userNotificationResponse{
 			ID:              notification.ID,
 			Type:            notification.Type,

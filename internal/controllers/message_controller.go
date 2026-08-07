@@ -145,6 +145,7 @@ func GetMessagesByTag(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []models.Message{}})
 		return
 	}
+	services.ApplyMessageViewerState(messages, currentUserID)
 
 	// 使用统一标签提取逻辑进行精确匹配
 	var filteredMessages []models.Message
@@ -289,7 +290,7 @@ func GetMessagePage(c *gin.Context) {
 	currentUserID, isAdmin := currentMessageViewer(c)
 	message, err := services.GetMessagePage(uint(messageID), currentUserID, isAdmin)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
 		return
 	}
 

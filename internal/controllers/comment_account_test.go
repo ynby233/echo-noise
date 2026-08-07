@@ -14,6 +14,7 @@ import (
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/repository"
@@ -29,7 +30,7 @@ func setupCommentAccountTest(t *testing.T) (*gorm.DB, *gin.Engine, models.User, 
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}
-	if err := db.AutoMigrate(&models.User{}, &models.Message{}, &models.MessageLike{}, &models.Comment{}, &models.UserNotification{}, &models.SiteConfig{}, &models.VoceChatContactCache{}, &models.LocalAttachmentGrant{}); err != nil {
+	if err := db.AutoMigrate(&models.User{}, &models.Message{}, &models.MessageLike{}, &models.Comment{}, &models.UserNotification{}, &models.SiteConfig{}, &models.VoceChatContactCache{}, &models.LocalAttachmentGrant{}, &models.AdminCapabilityGrant{}); err != nil {
 		t.Fatalf("migrate test db: %v", err)
 	}
 	repository.ClearUserCache()
@@ -695,7 +696,7 @@ func TestGetCommentsFiltersVisibility(t *testing.T) {
 	if got := contentsOfComments(request(owner.ID, false)); len(got) != 4 {
 		t.Fatalf("owner should see all own comments, got %#v", got)
 	}
-	if got := contentsOfComments(request(admin.ID, true)); len(got) != 4 {
+	if got := contentsOfComments(request(admin.ID, true)); len(got) != 2 {
 		t.Fatalf("admin should see all comments, got %#v", got)
 	}
 }
@@ -712,6 +713,9 @@ func TestPrivateCommentVisibilityMatchesNewRules(t *testing.T) {
 	}
 	privateComment := createTestComment(t, db, msg.ID, &commenter, "private-comment", "private", nil)
 	_ = privateComment
+	if err := db.Create(&models.AdminCapabilityGrant{UserID: admin.ID, Capability: string(authorization.CapabilityContentViewHidden), GrantedByUserID: models.PrimaryAdminUserID}).Error; err != nil {
+		t.Fatalf("grant hidden content read: %v", err)
+	}
 
 	r.Use(func(c *gin.Context) {
 		if raw := c.GetHeader("X-Test-User-ID"); raw != "" {
@@ -807,8 +811,8 @@ func TestReplyVisibilityMatchesNewRules(t *testing.T) {
 	if got := contentsOfComments(request(replyAuthor.ID, false)); len(got) != 0 {
 		t.Fatalf("reply author should not see reply under hidden private parent, got %#v", got)
 	}
-	if got := contentsOfComments(request(admin.ID, true)); len(got) != 2 {
-		t.Fatalf("admin should see private reply chain, got %#v", got)
+	if got := contentsOfComments(request(admin.ID, true)); len(got) != 0 {
+		t.Fatalf("delegated admin without hidden-content grant must not see private reply chain, got %#v", got)
 	}
 }
 
@@ -969,7 +973,7 @@ func TestReplyVisibilityDoesNotOutliveParentVisibility(t *testing.T) {
 	if got := contentsOfComments(request(parentAuthor.ID, false)); len(got) != 4 {
 		t.Fatalf("parent author should see both parents and replies, got %#v", got)
 	}
-	if got := contentsOfComments(request(admin.ID, true)); len(got) != 4 {
+	if got := contentsOfComments(request(admin.ID, true)); len(got) != 2 {
 		t.Fatalf("admin should see all parents and replies, got %#v", got)
 	}
 }
@@ -1027,7 +1031,7 @@ func TestCommentCountsFollowVisibilityRules(t *testing.T) {
 	if got := request(postAuthor.ID, false)[msg.ID]; got != 3 {
 		t.Fatalf("post author should count all visible comments on own post, got %d", got)
 	}
-	if got := request(admin.ID, true)[msg.ID]; got != 3 {
+	if got := request(admin.ID, true)[msg.ID]; got != 2 {
 		t.Fatalf("admin should count all comments, got %d", got)
 	}
 }
@@ -1245,7 +1249,7 @@ func TestAdminCannotCommentPrivateMessage(t *testing.T) {
 		"content":    "admin-comment",
 		"visibility": "private",
 	})
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("expected 403 when admin comments private message, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 when admin cannot read private message, got %d: %s", w.Code, w.Body.String())
 	}
 }

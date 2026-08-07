@@ -107,7 +107,18 @@ func UpdateMessageGlobalPin(c *gin.Context) {
 	// Admin list queries intentionally include restricted notes so that the
 	// admin can manage the full dataset. Pinning must still respect the
 	// visibility the actor would have as an ordinary logged-in viewer.
-	if !services.CanViewMessage(*message, &actorID, false) {
+	scope, scopeErr := services.ResolveContentReadScope(db, &actorID)
+	if scopeErr != nil {
+		writeGlobalPinAuditBestEffort(c, db, actorID, action, "failure", "global pin visibility check failed", message, message.Pinned, message.Pinned)
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "授权服务不可用"})
+		return
+	}
+	if !scope.CanReadMessage(*message) {
+		writeGlobalPinAuditBestEffort(c, db, actorID, action, "denied", "global pin target is outside actor read scope", message, message.Pinned, message.Pinned)
+		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
+		return
+	}
+	if !scope.CanInteractWithMessage(*message) {
 		writeGlobalPinAuditBestEffort(c, db, actorID, action, "denied", "global pin target is outside actor visibility", message, message.Pinned, message.Pinned)
 		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "不能置顶当前账号按正常可见性不可见的笔记"})
 		return

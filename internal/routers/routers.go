@@ -293,6 +293,9 @@ func SetupRouter() *gin.Engine {
 		tokenAuth.PUT("/messages/:id/pin/global", controllers.UpdateMessageGlobalPin)
 		tokenAuth.PUT("/messages/:id/pin/personal", controllers.UpdateMessagePersonalPin)
 		tokenAuth.DELETE("/messages/:id", controllers.DeleteMessage)
+		tokenAuth.POST("/messages/:id/comments", controllers.PostComment)
+		tokenAuth.PUT("/messages/:id/comments/:cid", controllers.UpdateComment)
+		tokenAuth.DELETE("/messages/:id/comments/:cid", controllers.DeleteComment)
 		tokenAuth.PUT("/settings", middleware.RequireCapability(authorization.CapabilitySiteSettingsManage), controllers.UpdateSetting)
 	}
 	// 需要鉴权的消息操作路由

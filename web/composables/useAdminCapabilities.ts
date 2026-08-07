@@ -1,10 +1,12 @@
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useUserStore } from '~/store/user'
+import { getRequest } from '~/utils/api'
 
 const capabilities = ref<string[]>([])
 const snapshotUserID = ref(0)
 let refreshInFlight: Promise<void> | null = null
 let refreshUserID = 0
+let invalidationListenerInstalled = false
 
 const currentUserID = (user: any) => Number(user?.userid || user?.id || user?.ID || user?.user_id || 0)
 
@@ -31,10 +33,9 @@ export const useAdminCapabilities = () => {
     refreshUserID = requestedUserID
     refreshInFlight = (async () => {
       try {
-        const response = await fetch('/api/admin/authorization/me', { credentials: 'include' })
-        const body = await response.json().catch(() => ({}))
+        const body: any = await getRequest('admin/authorization/me', undefined, { credentials: 'include', silent: true })
         if (currentUserID(userStore.user) !== requestedUserID) return
-        capabilities.value = response.ok && body?.code === 1 ? (body.data?.capabilities || []) : []
+        capabilities.value = body?.code === 1 ? (body.data?.capabilities || []) : []
         snapshotUserID.value = requestedUserID
       } catch {
         if (currentUserID(userStore.user) === requestedUserID) {
@@ -48,6 +49,22 @@ export const useAdminCapabilities = () => {
 
     return refreshInFlight
   }
+
+  if (typeof window !== 'undefined' && !invalidationListenerInstalled) {
+    window.addEventListener('admin-capabilities-invalidated', () => {
+      capabilities.value = []
+      snapshotUserID.value = 0
+    })
+    invalidationListenerInstalled = true
+  }
+  watch([userID, isAdmin], ([nextUserID, nextIsAdmin], previous) => {
+    const previousUserID = Number(previous?.[0] || 0)
+    if (!nextIsAdmin || !nextUserID || nextUserID !== previousUserID) {
+      capabilities.value = []
+      snapshotUserID.value = 0
+    }
+    if (nextIsAdmin && nextUserID) void refreshCapabilities()
+  }, { immediate: true })
 
   return { capabilities, isPrimaryAdmin, can, refreshCapabilities }
 }

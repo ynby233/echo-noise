@@ -145,7 +145,7 @@
               </div>
               <div class="message-divider my-3"></div>
               <div class="message-socialbar">
-                <button class="social-item nw-tooltip-anchor" data-tooltip="点赞" aria-label="点赞" @click="like(msg.id)">
+                <button v-if="canInteractWithMessage(msg)" class="social-item nw-tooltip-anchor" data-tooltip="点赞" aria-label="点赞" @click="like(msg.id)">
                   <UIcon
                     :name="(likedMap[msg.id] ? 'i-mdi-heart' : 'i-mdi-heart-outline')"
                     class="social-icon"
@@ -153,7 +153,7 @@
                   />
                   <span :class="['opacity-80', isMobile ? 'text-xs' : 'text-sm']">{{ likesMap[msg.id] ?? (msg.like_count || 0) }}</span>
                 </button>
-                <button v-if="!isGuestbookMessage(msg)" class="social-item nw-tooltip-anchor" data-tooltip="评论" aria-label="评论" @click="toggleComment(msg.id)">
+                <button v-if="!isGuestbookMessage(msg) && canInteractWithMessage(msg)" class="social-item nw-tooltip-anchor" data-tooltip="评论" aria-label="评论" @click="toggleComment(msg.id)">
                   <UIcon name="i-mdi-comment-outline" class="social-icon" />
                   <span :class="['opacity-80', isMobile ? 'text-xs' : 'text-sm']">{{ commentCountMap[msg.id] || 0 }}</span>
                 </button>
@@ -185,6 +185,7 @@
                   :ref="builtinCommentsRefFor(msg.id)"
                   :message-id="msg.id"
                   :message-visibility="msg.visibility"
+                  :can-interact="canInteractWithMessage(msg)"
                   :site-config="siteConfig"
                   :show-input="activeCommentId === msg.id"
                   auto-scroll-input
@@ -542,6 +543,7 @@ import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { getMessageIdFromRouteHash } from '~/utils/message-route-hash'
 import { shouldShowVisibilityBadge } from '~/utils/visibility-badge'
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
+import { getRequest, postRequest } from '~/utils/api'
 import { useRuntimeConfig } from '#imports'
 import { useToast } from '#ui/composables/useToast'
 type BuiltinCommentsExpose = {
@@ -659,14 +661,8 @@ const hydrateMessageEngagement = (items: any[]) => {
 const fetchCommentCountsBatch = async (ids: number[]) => {
   if (!ids.length) return
   try {
-    const resp = await fetch(`${BASE_API}/messages/comments/counts`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ ids })
-    })
-    if (!resp.ok) return
-    const js = await resp.json()
+    const js = await postRequest<any>('messages/comments/counts', { ids }, { credentials: 'include', silent: true })
+    if (js?.code !== 1) return
     const arr = Array.isArray(js?.data) ? js.data : []
     arr.forEach((row: any) => {
       const id = Number(row?.id || 0)
@@ -743,10 +739,11 @@ const like = async (id: number) => {
     useToast().add({ title: '请先登录后再点赞', color: 'orange', timeout: 2000 })
     return
   }
+  const target = getMessageById(id)
+  if (!canInteractWithMessage(target)) return
   try {
-    const resp = await fetch(`${BASE_API}/messages/${id}/like/toggle`, { method: 'POST', credentials: 'include', headers: { 'Accept': 'application/json' } })
-    const js = await resp.json().catch(() => ({}))
-    if (!resp.ok || js?.code === 0) throw new Error(js?.msg || '点赞失败')
+    const js = await postRequest<any>(`messages/${id}/like/toggle`, {}, { credentials: 'include' })
+    if (js?.code !== 1) throw new Error(js?.msg || '点赞失败')
     const count = js?.data?.like_count ?? (likesMap.value[id] || 0)
     const liked = !!js?.data?.liked
     likesMap.value[id] = count
@@ -1335,6 +1332,7 @@ const loadTargetMessagePage = async (id: number) => {
     isOwner: isCurrentUserMessage(msg),
   })
   const isPrimaryOwnedMessage = (msg: any) => Number(msg?.user_id || msg?.userId || msg?.UserID || 0) === 1
+  const canInteractWithMessage = (msg: any) => msg?.can_interact === true
   const canManageOtherMessage = (msg: any, capability: string) => isLogin.value && !isCurrentUserMessage(msg) && !isPrimaryOwnedMessage(msg) && can(capability)
   const canEditMessageTasks = (msg: any) => isCurrentUserMessage(msg) || canManageOtherMessage(msg, 'notes.edit')
   const isContentEmpty = (m: any) => {
@@ -1537,10 +1535,10 @@ const pinTooltip = (msg: any) => {
   if (pinScope.value === 'personal') return pinActive(msg) ? '取消个人置顶' : '个人置顶'
   return pinActive(msg) ? '取消全站置顶' : '全站置顶'
 }
-const canGlobalPin = (msg: any) => isLogin.value && can('notes.pin_global') && (isCurrentUserMessage(msg) || !isPrimaryOwnedMessage(msg))
+const canGlobalPin = (msg: any) => isLogin.value && canInteractWithMessage(msg) && can('notes.pin_global') && (isCurrentUserMessage(msg) || !isPrimaryOwnedMessage(msg))
 const canPin = (msg: any) => pinScope.value === 'personal' ? isCurrentUserMessage(msg) : canGlobalPin(msg)
 const canEdit = (msg: any) => isCurrentUserMessage(msg) || canManageOtherMessage(msg, 'notes.edit')
-const canDelete = (msg: any) => isCurrentUserMessage(msg) || canManageOtherMessage(msg, 'notes.delete_permanently')
+const canDelete = (msg: any) => isCurrentUserMessage(msg) || canManageOtherMessage(msg, 'notes.trash')
 const canChangeVisibility = (msg: any) => isCurrentUserMessage(msg) || canManageOtherMessage(msg, 'notes.change_visibility')
 
 const togglePin = async (msg: any) => {
@@ -1738,14 +1736,7 @@ onMounted(async () => {
 
     // 根据是否有消息ID来决定加载方式
     if (messageId) {
-    const response = await fetch(`${BASE_API}/messages/${messageId}`, {
-      credentials: 'include',
-      headers: {
-        'Accept': 'application/json'
-      }
-    });
-    if (!response.ok) throw new Error('消息加载失败');
-    const data = await response.json();
+    const data = await getRequest<any>(`messages/${messageId}`, undefined, { credentials: 'include' });
     if (data.code === 1 && data.data) {
       const item = data.data
       if (!isGuestbookMessage(item)) {
@@ -1839,14 +1830,7 @@ watch(() => route.hash, async (newHash, oldHash) => {
   }
   
   try {
-    const response = await fetch(`${BASE_API}/messages/${messageId}`, {
-      credentials: 'include',
-      headers: {
-        'Accept': 'application/json'
-      }
-    });
-    if (!response.ok) throw new Error('消息加载失败');
-    const data = await response.json();
+    const data = await getRequest<any>(`messages/${messageId}`, undefined, { credentials: 'include' });
     if (data.code === 1 && data.data) {
           message.messages = isGuestbookMessage(data.data) ? [] : [data.data];
           message.hasMore = false;

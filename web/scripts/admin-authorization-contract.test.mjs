@@ -8,6 +8,10 @@ const center = await readFile(new URL('../components/admin/AuthorizationCenter.v
 const audit = await readFile(new URL('../components/admin/AuditLogPanel.vue', import.meta.url), 'utf8')
 
 assert.match(capabilities, /admin\/authorization\/me/)
+assert.match(capabilities, /getRequest\('admin\/authorization\/me'/, 'capability snapshots must use the shared Bearer-aware request adapter')
+assert.doesNotMatch(center, /\bfetch\(/, 'the authorization center must not use a session-only bare fetch path')
+assert.match(center, /getRequest\('admin\/authorization\/catalog'/)
+assert.match(center, /putRequest\(`admin\/authorization\/admins\/\$\{selectedID\.value\}`/)
 assert.match(panel, /useAdminCapabilities\(\)/)
 assert.match(panel, /isPrimaryAdmin/)
 assert.match(panel, /canViewAdminAudit/)

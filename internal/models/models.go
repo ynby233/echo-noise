@@ -41,6 +41,7 @@ type Message struct {
 	PersonalPinnedAt *time.Time `gorm:"index" json:"-"`
 	LikeCount        int        `gorm:"default:0" json:"like_count"`
 	Liked            bool       `gorm:"-" json:"liked"`
+	CanInteract      bool       `gorm:"-" json:"can_interact"`
 }
 
 type CloudAttachmentObject struct {
@@ -115,15 +116,16 @@ type CommentUserInfo struct {
 }
 
 type Comment struct {
-	ID         uint             `gorm:"primaryKey" json:"id"`
-	MessageID  uint             `gorm:"index;not null" json:"message_id"`
-	UserID     *uint            `gorm:"index" json:"user_id,omitempty"`
-	User       *CommentUserInfo `gorm:"-" json:"user,omitempty"`
-	Content    string           `gorm:"type:text;not null" json:"content"`
-	Visibility string           `gorm:"type:varchar(20);not null;default:public;index" json:"visibility"`
-	ParentID   *uint            `json:"parent_id"`
-	CreatedAt  time.Time        `json:"created_at"`
-	UpdatedAt  time.Time        `json:"updated_at"`
+	ID          uint             `gorm:"primaryKey" json:"id"`
+	MessageID   uint             `gorm:"index;not null" json:"message_id"`
+	UserID      *uint            `gorm:"index" json:"user_id,omitempty"`
+	User        *CommentUserInfo `gorm:"-" json:"user,omitempty"`
+	CanInteract bool             `gorm:"-" json:"can_interact"`
+	Content     string           `gorm:"type:text;not null" json:"content"`
+	Visibility  string           `gorm:"type:varchar(20);not null;default:public;index" json:"visibility"`
+	ParentID    *uint            `json:"parent_id"`
+	CreatedAt   time.Time        `json:"created_at"`
+	UpdatedAt   time.Time        `json:"updated_at"`
 }
 
 const (

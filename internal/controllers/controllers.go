@@ -542,69 +542,11 @@ func GetMessagesByPage(c *gin.Context) {
 		pageSize = 10
 	}
 
-	// 检查权限并传递用户上下文
-	var currentUserID *uint
-	isAdmin := false
-	// 优先从上下文获取（由中间件设置）
-	if uid, exists := c.Get("user_id"); exists {
-		u, err := services.GetUserByID(uid.(uint))
-		if err == nil {
-			id := u.ID
-			currentUserID = &id
-			isAdmin = u.IsAdmin
-		}
-	} else {
-		// 兼容未使用鉴权中间件的场景：从 session 获取
-		session := sessions.Default(c)
-		if v := session.Get("user_id"); v != nil {
-			switch val := v.(type) {
-			case uint:
-				id := val
-				currentUserID = &id
-			case int:
-				id := uint(val)
-				currentUserID = &id
-			case int64:
-				id := uint(val)
-				currentUserID = &id
-			case float64:
-				id := uint(val)
-				currentUserID = &id
-			case string:
-				if parsed, err := strconv.ParseUint(val, 10, 64); err == nil {
-					id := uint(parsed)
-					currentUserID = &id
-				}
-			}
-		}
-		if v := session.Get("is_admin"); v != nil {
-			switch val := v.(type) {
-			case bool:
-				isAdmin = val
-			case int:
-				isAdmin = val != 0
-			case int64:
-				isAdmin = val != 0
-			case float64:
-				isAdmin = val != 0
-			case string:
-				isAdmin = val == "true" || val == "1"
-			}
-		}
-		// 如果仅拿到 user_id，则再查一次用户，确保 isAdmin
-		if currentUserID != nil && !isAdmin {
-			u, err := services.GetUserByID(*currentUserID)
-			if err == nil {
-				isAdmin = u.IsAdmin
-			}
-		}
-	}
+	// Session、Bearer 与 Token 路由统一通过同一个实时身份解析器，
+	// 避免过期 Session 抢占有效 Bearer 身份。
+	currentUserID, isAdmin := currentMessageViewer(c)
 
 	// 作者筛选（可选）
-	if currentUserID == nil {
-		currentUserID, isAdmin = currentMessageViewer(c)
-	}
-
 	var authorID *uint
 	if aid := c.Query("authorId"); aid != "" {
 		if v, err := strconv.ParseUint(aid, 10, 64); err == nil {
@@ -752,9 +694,13 @@ func DeleteMessage(c *gin.Context) {
 	}
 	if message.UserID != actorID {
 		authorizer := authorization.New(db)
-		if decision := authorizer.Authorize(actorID, authorization.CapabilityNotesDelete, &message.UserID); !decision.Allowed {
-			writeMessageMutationDeniedAudit(c, authorizer, actorID, authorization.CapabilityNotesDelete, "delete", &message)
-			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权删除此消息"})
+		if decision := services.AuthorizeMessageMutation(db, actorID, message, authorization.CapabilityNotesTrash); !decision.Allowed {
+			writeMessageMutationDeniedAudit(c, authorizer, actorID, authorization.CapabilityNotesTrash, "trash", &message)
+			if decision.Reason == authorization.DenialContentNotReadable {
+				c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
+			} else {
+				c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权删除此消息"})
+			}
 			return
 		}
 		var primaryComments int64
@@ -763,15 +709,15 @@ func DeleteMessage(c *gin.Context) {
 			return
 		}
 		if primaryComments > 0 {
-			writeMessageMutationDeniedAudit(c, authorizer, actorID, authorization.CapabilityNotesDelete, "delete", &message)
-			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "消息包含受保护内容，不能删除"})
+			writeMessageMutationDeniedAudit(c, authorizer, actorID, authorization.CapabilityNotesTrash, "trash", &message)
+			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权删除此消息"})
 			return
 		}
 		if err := services.DeleteMessageByAdmin(uint(messageID)); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
 			return
 		}
-		if err := writeMessageMutationSuccessAudit(c, authorizer, actorID, authorization.CapabilityNotesDelete, "delete", &message); err != nil {
+		if err := writeMessageMutationSuccessAudit(c, authorizer, actorID, authorization.CapabilityNotesTrash, "trash", &message); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "写入管理员审计失败"})
 			return
 		}
@@ -1559,29 +1505,15 @@ func AuditFriendLink(c *gin.Context) {
 
 // 评论账号鉴权：兼容当前登录逻辑写入的 user_id session，保留中间件注入上下文的可能性。
 func commentAuthUserID(c *gin.Context) (uint, bool) {
-	if v, ok := c.Get("user_id"); ok {
-		if id, ok := commentUint(v); ok && id > 0 {
-			return id, true
-		}
-	}
-	session := sessions.Default(c)
-	if id, ok := commentUint(session.Get("user_id")); ok && id > 0 {
-		return id, true
+	if user, ok := currentReadUser(c); ok {
+		return user.ID, true
 	}
 	return 0, false
 }
 
 func commentAuthIsAdmin(c *gin.Context) bool {
-	if v, ok := c.Get("is_admin"); ok {
-		if b, ok := v.(bool); ok && b {
-			return true
-		}
-	}
-	session := sessions.Default(c)
-	if b, ok := session.Get("is_admin").(bool); ok && b {
-		return true
-	}
-	return false
+	user, ok := currentReadUser(c)
+	return ok && user.IsAdmin
 }
 
 func normalizeCommentVisibility(value string) (string, bool) {
@@ -1624,23 +1556,23 @@ func canViewComment(message models.Message, comment models.Comment, commentMap m
 	return services.CanViewCommentInThread(message, comment, commentMap, viewerID, hasViewer, isAdmin)
 }
 
-func canManageComment(c *gin.Context, comment models.Comment, capability authorization.Capability) bool {
+func authorizeCommentMutation(c *gin.Context, message models.Message, comment models.Comment, commentMap map[uint]models.Comment, capability authorization.Capability) authorization.Decision {
 	userID, ok := commentAuthUserID(c)
 	if !ok {
-		return false
+		return authorization.Decision{Reason: authorization.DenialNotAdministrator}
 	}
 	if comment.UserID != nil && *comment.UserID == userID {
-		return true
+		return authorization.Decision{Allowed: true}
 	}
 	db, err := database.GetDB()
 	if err != nil {
-		return false
+		return authorization.Decision{Reason: authorization.DenialContentNotReadable}
 	}
-	decision := authorization.New(db).Authorize(userID, capability, comment.UserID)
+	decision := services.AuthorizeCommentMutation(db, userID, message, comment, commentMap, capability)
 	if !decision.Allowed && decision.Reason != authorization.DenialNotAdministrator {
 		authorization.New(db).WriteDeniedBestEffort(commentMutationAuditRecord(c, userID, capability, "mutation", "denied", "comment mutation denied", string(decision.Reason), &comment))
 	}
-	return decision.Allowed
+	return decision
 }
 
 func commentUint(v any) (uint, bool) {
@@ -1691,14 +1623,21 @@ func GetComments(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取评论失败"})
 		return
 	}
-	viewerID, hasViewer, isAdmin := uint(0), false, false
+	var actorID *uint
 	if user, ok := currentReadUser(c); ok {
-		viewerID, hasViewer, isAdmin = user.ID, true, user.IsAdmin
+		id := user.ID
+		actorID = &id
+	}
+	scope, scopeErr := services.ResolveContentReadScope(db, actorID)
+	if scopeErr != nil || !scope.CanReadMessage(message) {
+		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
+		return
 	}
 	commentMap := services.CommentMap(comments)
 	visibleComments := make([]models.Comment, 0, len(comments))
 	for _, comment := range comments {
-		if canViewComment(message, comment, commentMap, viewerID, hasViewer, isAdmin) {
+		if scope.CanReadComment(message, comment, commentMap) {
+			comment.CanInteract = scope.CanInteractWithComment(message, comment, commentMap)
 			visibleComments = append(visibleComments, comment)
 		}
 	}
@@ -1760,11 +1699,18 @@ func GetCommentCounts(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取评论数量失败"})
 		return
 	}
-	viewerID, hasViewer, isAdmin := uint(0), false, false
+	var actorID *uint
 	if user, ok := currentReadUser(c); ok {
-		viewerID, hasViewer, isAdmin = user.ID, true, user.IsAdmin
+		id := user.ID
+		actorID = &id
+	}
+	scope, scopeErr := services.ResolveContentReadScope(db, actorID)
+	if scopeErr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取评论数量失败"})
+		return
 	}
 	counts := make(map[uint]int64)
+	commentMap := services.CommentMap(comments)
 	for _, comment := range comments {
 		if comment.ParentID != nil {
 			continue
@@ -1773,7 +1719,7 @@ func GetCommentCounts(c *gin.Context) {
 		if !ok {
 			continue
 		}
-		if canViewComment(message, comment, nil, viewerID, hasViewer, isAdmin) {
+		if scope.CanReadComment(message, comment, commentMap) {
 			counts[comment.MessageID]++
 		}
 	}
@@ -1805,7 +1751,7 @@ func GetGuestbookMessageID(c *gin.Context) {
 	}
 	content := "留言板\n\n此条用于承载全站留言，不会参与普通内容展示。\n\n#留言 #guestbook"
 	var existing models.Message
-	if err := db.Where("user_id = ? AND content LIKE ?", uid, "%#guestbook%").First(&existing).Error; err == nil && existing.ID != 0 {
+	if err := db.Where("user_id = ? AND private = ? AND (visibility = ? OR visibility = ? OR visibility IS NULL) AND content LIKE ?", uid, false, services.MessageVisibilityPublic, "", "%#guestbook%").First(&existing).Error; err == nil && existing.ID != 0 {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"id": existing.ID}})
 		return
 	}
@@ -1860,6 +1806,20 @@ func PostComment(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "账号不存在或已失效"})
 		return
 	}
+	viewerID := currentUser.ID
+	scope, scopeErr := services.ResolveContentReadScope(db, &viewerID)
+	if scopeErr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "授权服务不可用"})
+		return
+	}
+	if !scope.CanReadMessage(message) {
+		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
+		return
+	}
+	if !scope.CanInteractWithMessage(message) {
+		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限评论该内容"})
+		return
+	}
 	messageVisibility := services.StoredMessageVisibility(message)
 	visibility, ok := normalizeRequestedCommentVisibility(req.Visibility, messageVisibility)
 	if !ok {
@@ -1868,19 +1828,6 @@ func PostComment(c *gin.Context) {
 	}
 	if !commentVisibilityAllowedForMessage(visibility, messageVisibility) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "评论可见范围不能宽于当前笔记"})
-		return
-	}
-	if messageVisibility == services.MessageVisibilityPrivate && currentUser.ID != message.UserID {
-		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "私密帖子仅作者可评论或回复"})
-		return
-	}
-	viewerIDForMessage := currentUser.ID
-	if messageVisibility == services.MessageVisibilityContacts && !services.CanInteractWithMessage(message, &viewerIDForMessage) {
-		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限评论该内容"})
-		return
-	}
-	if !services.CanViewMessage(message, &viewerIDForMessage, commentAuthIsAdmin(c)) {
-		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限评论该内容"})
 		return
 	}
 	var notificationParent *models.Comment
@@ -1897,7 +1844,7 @@ func PostComment(c *gin.Context) {
 			return
 		}
 		commentMap[parent.ID] = parent
-		if !canViewComment(message, parent, commentMap, currentUser.ID, true, commentAuthIsAdmin(c)) {
+		if !scope.CanInteractWithComment(message, parent, commentMap) {
 			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限回复该内容"})
 			return
 		}
@@ -2046,13 +1993,23 @@ func UpdateComment(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "评论不存在"})
 		return
 	}
-	if !canManageComment(c, cm, authorization.CapabilityCommentsEdit) {
-		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限"})
-		return
-	}
 	var message models.Message
 	if err := db.First(&message, uint(msgID)).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
+		return
+	}
+	commentMap, err := services.LoadCommentMapForMessage(uint(msgID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取评论失败"})
+		return
+	}
+	decision := authorizeCommentMutation(c, message, cm, commentMap, authorization.CapabilityCommentsEdit)
+	if !decision.Allowed {
+		if decision.Reason == authorization.DenialContentNotReadable {
+			c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "评论不存在"})
+		} else {
+			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限"})
+		}
 		return
 	}
 	messageVisibility := services.StoredMessageVisibility(message)
@@ -2081,11 +2038,6 @@ func UpdateComment(c *gin.Context) {
 	if cm.ParentID != nil {
 		var parent models.Comment
 		if err := db.First(&parent, *cm.ParentID).Error; err == nil {
-			commentMap, err := services.LoadCommentMapForMessage(uint(msgID))
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取评论失败"})
-				return
-			}
 			commentMap[parent.ID] = parent
 			parentVisibility := services.EffectiveCommentVisibilityInThread(parent, messageVisibility, commentMap)
 			if commentVisibilityRank(visibility) > commentVisibilityRank(parentVisibility) {
@@ -2124,8 +2076,23 @@ func DeleteComment(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "评论不存在"})
 		return
 	}
-	if !canManageComment(c, cm, authorization.CapabilityCommentsDelete) {
-		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限"})
+	var message models.Message
+	if err := db.First(&message, uint(msgID)).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
+		return
+	}
+	commentMap, err := services.LoadCommentMapForMessage(uint(msgID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取评论失败"})
+		return
+	}
+	decision := authorizeCommentMutation(c, message, cm, commentMap, authorization.CapabilityCommentsDelete)
+	if !decision.Allowed {
+		if decision.Reason == authorization.DenialContentNotReadable {
+			c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "评论不存在"})
+		} else {
+			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限"})
+		}
 		return
 	}
 	if err := persistCommentMutation(c, db, &cm, authorization.CapabilityCommentsDelete, "delete", true); err != nil {
@@ -2137,7 +2104,7 @@ func DeleteComment(c *gin.Context) {
 
 // 列出所有内置评论（管理员，支持搜索与分页）
 func ListComments(c *gin.Context) {
-	_, err := checkAdmin(c)
+	actor, err := checkAdmin(c)
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
 		return
@@ -2152,21 +2119,75 @@ func ListComments(c *gin.Context) {
 		pageSize = 30
 	}
 	db, _ := database.GetDB()
+	actorID := actor
+	scope, err := services.ResolveContentReadScope(db, &actorID)
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string]("查询失败"))
+		return
+	}
 	tx := db.Model(&models.Comment{}).Joins("LEFT JOIN users ON users.id = comments.user_id")
 	if q != "" {
 		like := "%" + q + "%"
 		tx = tx.Where("comments.content LIKE ? OR users.username LIKE ?", like, like)
 	}
-	var total int64
-	if err := tx.Count(&total).Error; err != nil {
+	var candidates []models.Comment
+	if err := tx.Select("comments.*").Order("comments.created_at DESC").Find(&candidates).Error; err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string]("查询失败"))
 		return
 	}
-	var list []models.Comment
-	if err := tx.Select("comments.*").Order("comments.created_at DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&list).Error; err != nil {
-		c.JSON(http.StatusOK, dto.Fail[string]("查询失败"))
-		return
+	messageIDs := make([]uint, 0)
+	seenMessageIDs := make(map[uint]struct{})
+	for _, comment := range candidates {
+		if _, exists := seenMessageIDs[comment.MessageID]; exists {
+			continue
+		}
+		seenMessageIDs[comment.MessageID] = struct{}{}
+		messageIDs = append(messageIDs, comment.MessageID)
 	}
+	var messages []models.Message
+	if len(messageIDs) > 0 {
+		if err := db.Where("id IN ?", messageIDs).Find(&messages).Error; err != nil {
+			c.JSON(http.StatusOK, dto.Fail[string]("查询失败"))
+			return
+		}
+	}
+	messageByID := make(map[uint]models.Message, len(messages))
+	commentMaps := make(map[uint]map[uint]models.Comment, len(messages))
+	for _, message := range messages {
+		messageByID[message.ID] = message
+	}
+	if len(messageIDs) > 0 {
+		var threadComments []models.Comment
+		if err := db.Where("message_id IN ?", messageIDs).Find(&threadComments).Error; err != nil {
+			c.JSON(http.StatusOK, dto.Fail[string]("查询失败"))
+			return
+		}
+		commentsByMessage := make(map[uint][]models.Comment)
+		for _, comment := range threadComments {
+			commentsByMessage[comment.MessageID] = append(commentsByMessage[comment.MessageID], comment)
+		}
+		for messageID, comments := range commentsByMessage {
+			commentMaps[messageID] = services.CommentMap(comments)
+		}
+	}
+	visible := make([]models.Comment, 0, len(candidates))
+	for _, comment := range candidates {
+		message, exists := messageByID[comment.MessageID]
+		if exists && scope.CanReadComment(message, comment, commentMaps[comment.MessageID]) {
+			comment.CanInteract = scope.CanInteractWithComment(message, comment, commentMaps[comment.MessageID])
+			visible = append(visible, comment)
+		}
+	}
+	total := int64(len(visible))
+	start := (page - 1) * pageSize
+	if start > len(visible) {
+		start = len(visible)
+	}
+	end := start + pageSize
+	if end > len(visible) {
+		end = len(visible)
+	}
+	list := visible[start:end]
 	userIDs := make([]uint, 0)
 	for _, item := range list {
 		if item.UserID != nil {
@@ -2346,39 +2367,34 @@ func UpdateMessage(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "未授权访问"})
 		return
 	}
-	if createdAt != nil {
-		db, err := database.GetDB()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "授权服务不可用"})
-			return
+	db, err := database.GetDB()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "授权服务不可用"})
+		return
+	}
+	authorizer := authorization.New(db)
+	requireMutation := func(capability authorization.Capability, messageText string) bool {
+		if decision := services.AuthorizeMessageMutation(db, actorID, *message, capability); !decision.Allowed {
+			writeMessageMutationDeniedAudit(c, authorizer, actorID, capability, "update", message)
+			if decision.Reason == authorization.DenialContentNotReadable {
+				c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
+			} else {
+				c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": messageText})
+			}
+			return false
 		}
-		authorizer := authorization.New(db)
-		if !authorizer.Authorize(actorID, authorization.CapabilityNotesPublishTime, &message.UserID).Allowed {
-			writeMessageMutationDeniedAudit(c, authorizer, actorID, authorization.CapabilityNotesPublishTime, "update", message)
-			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限调整发布时间"})
+		return true
+	}
+	if createdAt != nil {
+		if !requireMutation(authorization.CapabilityNotesPublishTime, "无权限调整发布时间") {
 			return
 		}
 	}
 	if message.UserID != actorID {
-		db, err := database.GetDB()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "授权服务不可用"})
+		if req.Content != nil && !requireMutation(authorization.CapabilityNotesEdit, "无权限修改此消息") {
 			return
 		}
-		authorizer := authorization.New(db)
-		if req.Content != nil && !authorizer.Authorize(actorID, authorization.CapabilityNotesEdit, &message.UserID).Allowed {
-			writeMessageMutationDeniedAudit(c, authorizer, actorID, authorization.CapabilityNotesEdit, "update", message)
-			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限修改此消息"})
-			return
-		}
-		if (req.Private != nil || req.Visibility != nil) && !authorizer.Authorize(actorID, authorization.CapabilityNotesVisibility, &message.UserID).Allowed {
-			writeMessageMutationDeniedAudit(c, authorizer, actorID, authorization.CapabilityNotesVisibility, "update", message)
-			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限调整可见范围"})
-			return
-		}
-		if createdAt != nil && !authorizer.Authorize(actorID, authorization.CapabilityNotesPublishTime, &message.UserID).Allowed {
-			writeMessageMutationDeniedAudit(c, authorizer, actorID, authorization.CapabilityNotesPublishTime, "update", message)
-			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限调整发布时间"})
+		if (req.Private != nil || req.Visibility != nil) && !requireMutation(authorization.CapabilityNotesVisibility, "无权限调整可见范围") {
 			return
 		}
 	}
@@ -2389,18 +2405,13 @@ func UpdateMessage(c *gin.Context) {
 		return
 	}
 	if message.UserID != actorID {
-		db, dbErr := database.GetDB()
-		if dbErr != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "授权服务不可用"})
-			return
-		}
 		capability := authorization.CapabilityNotesEdit
 		if req.Content == nil && (req.Private != nil || req.Visibility != nil) {
 			capability = authorization.CapabilityNotesVisibility
 		} else if req.Content == nil && createdAt != nil {
 			capability = authorization.CapabilityNotesPublishTime
 		}
-		if err := writeMessageMutationSuccessAudit(c, authorization.New(db), actorID, capability, "update", message); err != nil {
+		if err := writeMessageMutationSuccessAudit(c, authorizer, actorID, capability, "update", message); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "写入管理员审计失败"})
 			return
 		}

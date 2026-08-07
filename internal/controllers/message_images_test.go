@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/models"
 )
 
@@ -139,6 +140,70 @@ func TestCurrentReadUserRejectsExpiredSessionAndFallsBackToBearer(t *testing.T) 
 	}
 }
 
+func TestMessagesPageUsesBearerAfterExpiredSession(t *testing.T) {
+	db, r, sessionUser, _ := setupCommentAccountTest(t)
+	bearerUser := models.User{Username: "bearer-page-user", Token: "bearer-page-token"}
+	if err := db.Create(&bearerUser).Error; err != nil {
+		t.Fatalf("create bearer user: %v", err)
+	}
+	sessionPrivate := models.Message{Content: "expired-session-private", UserID: sessionUser.ID, Visibility: "private", Private: true}
+	bearerPrivate := models.Message{Content: "bearer-private", UserID: bearerUser.ID, Visibility: "private", Private: true}
+	if err := db.Create(&sessionPrivate).Error; err != nil {
+		t.Fatalf("create session-private message: %v", err)
+	}
+	if err := db.Create(&bearerPrivate).Error; err != nil {
+		t.Fatalf("create bearer-private message: %v", err)
+	}
+	r.GET("/seed-expired-page", func(c *gin.Context) {
+		session := sessions.Default(c)
+		session.Set("user_id", sessionUser.ID)
+		session.Set("login_expire_at", time.Now().Add(-time.Hour).Unix())
+		if err := session.Save(); err != nil {
+			c.Status(http.StatusInternalServerError)
+			return
+		}
+		c.Status(http.StatusNoContent)
+	})
+	r.POST("/messages/page", GetMessagesByPage)
+	seed := httptest.NewRecorder()
+	r.ServeHTTP(seed, httptest.NewRequest(http.MethodGet, "/seed-expired-page", nil))
+	if seed.Code != http.StatusNoContent {
+		t.Fatalf("seed expired page session status=%d body=%s", seed.Code, seed.Body.String())
+	}
+
+	request := httptest.NewRequest(http.MethodPost, "/messages/page", bytes.NewBufferString(`{"page":1,"pageSize":100}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+bearerUser.Token)
+	for _, cookie := range seed.Result().Cookies() {
+		request.AddCookie(cookie)
+	}
+	response := httptest.NewRecorder()
+	r.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("messages page status=%d body=%s", response.Code, response.Body.String())
+	}
+	var payload struct {
+		Code int `json:"code"`
+		Data struct {
+			Items []models.Message `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode messages page: %v", err)
+	}
+	if payload.Code != 1 {
+		t.Fatalf("messages page failed: %s", response.Body.String())
+	}
+	seenBearer, seenExpiredSession := false, false
+	for _, message := range payload.Data.Items {
+		seenBearer = seenBearer || message.ID == bearerPrivate.ID
+		seenExpiredSession = seenExpiredSession || message.ID == sessionPrivate.ID
+	}
+	if !seenBearer || seenExpiredSession {
+		t.Fatalf("expired session identity leaked into page result: bearer=%v expired_session=%v body=%s", seenBearer, seenExpiredSession, response.Body.String())
+	}
+}
+
 func TestGetAllImagesScopesPrivateMessagesByViewer(t *testing.T) {
 	db, r, owner, _ := setupCommentAccountTest(t)
 	r.GET("/messages/images", GetAllImages)
@@ -155,6 +220,9 @@ func TestGetAllImagesScopesPrivateMessagesByViewer(t *testing.T) {
 	if err := db.Create(&admin).Error; err != nil {
 		t.Fatalf("create admin: %v", err)
 	}
+	if err := db.Create(&models.AdminCapabilityGrant{UserID: admin.ID, Capability: string(authorization.CapabilityContentViewHidden), GrantedByUserID: models.PrimaryAdminUserID}).Error; err != nil {
+		t.Fatalf("grant hidden content read: %v", err)
+	}
 
 	messages := []models.Message{
 		{Content: "public markdown ![public](/public-md.png)", ImageURL: "/public-field.png", UserID: owner.ID, Username: owner.Username, Private: false},
@@ -170,7 +238,7 @@ func TestGetAllImagesScopesPrivateMessagesByViewer(t *testing.T) {
 	assertImages(t, performImagesRequest(r, ""), []string{"/public-field.png", "/public-md.png"})
 	assertImages(t, performImagesRequest(r, "owner-token"), []string{"/public-field.png", "/public-md.png", "/owner-private-field.png", "/owner-private-md.png"})
 	assertImages(t, performImagesRequest(r, "bob-token"), []string{"/public-field.png", "/public-md.png", "/viewer-private-field.png", "/viewer-private-md.png"})
-	assertImages(t, performImagesRequest(r, "admin-token"), []string{"/public-field.png", "/public-md.png", "/owner-private-field.png", "/owner-private-md.png", "/viewer-private-field.png", "/viewer-private-md.png"})
+	assertImages(t, performImagesRequest(r, "admin-token"), []string{"/public-field.png", "/public-md.png", "/viewer-private-field.png", "/viewer-private-md.png"})
 }
 
 func performImagesRequest(r http.Handler, token string) *httptest.ResponseRecorder {
