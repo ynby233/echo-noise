@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -1028,21 +1029,30 @@ func DownloadAttachmentZip(c *gin.Context) {
 	var siteCfg models.SiteConfig
 	_ = database.DB.Table("site_configs").First(&siteCfg).Error
 
-	fileName := fmt.Sprintf("attachments_%s.zip", time.Now().Format("20060102150405"))
-	c.Header("Content-Type", "application/zip")
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fileName))
-	c.Header("Cache-Control", "no-cache")
-
-	archive := zip.NewWriter(c.Writer)
-	defer archive.Close()
-
+	var archiveBuffer bytes.Buffer
+	archive := zip.NewWriter(&archiveBuffer)
 	usedNames := map[string]int{}
+	added := 0
 	viewerID, _ := currentMessageViewer(c)
 	for _, item := range req.Items {
 		if err := addAttachmentToZip(archive, siteCfg, viewerID, item, usedNames); err != nil {
 			continue
 		}
+		added++
 	}
+	if err := archive.Close(); err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	if added == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "attachment not found"})
+		return
+	}
+	fileName := fmt.Sprintf("attachments_%s.zip", time.Now().Format("20060102150405"))
+	c.Header("Content-Type", "application/zip")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fileName))
+	c.Header("Cache-Control", "no-cache")
+	c.Data(http.StatusOK, "application/zip", archiveBuffer.Bytes())
 }
 
 func pickDir(candidates []string, fallback string) string {
@@ -1077,14 +1087,12 @@ func addRegisteredAttachmentToZip(archive *zip.Writer, siteCfg models.SiteConfig
 	if err != nil {
 		return err
 	}
-	if viewerID != nil {
-		sources, visibilityErr := services.VisibleAttachmentSources(db, viewerID, resolved.Reference, resolved.Blob.StorageBackend)
-		if visibilityErr != nil {
-			return visibilityErr
-		}
-		if len(sources) == 0 && *viewerID != models.PrimaryAdminUserID && *viewerID != resolved.Reference.OwnerUserID {
-			return errors.New("attachment not found")
-		}
+	sources, visibilityErr := services.VisibleAttachmentSources(db, viewerID, resolved.Reference, resolved.Blob.StorageBackend)
+	if visibilityErr != nil {
+		return visibilityErr
+	}
+	if len(sources) == 0 && (viewerID == nil || (*viewerID != models.PrimaryAdminUserID && *viewerID != resolved.Reference.OwnerUserID)) {
+		return errors.New("attachment not found")
 	}
 	wantedKind := strings.ToLower(strings.TrimSpace(item.Type))
 	if wantedKind == "other" {

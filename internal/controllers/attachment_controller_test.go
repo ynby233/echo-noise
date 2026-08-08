@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -8,6 +9,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	attachmentregistry "github.com/rcy1314/echo-noise/internal/attachments"
@@ -203,5 +205,137 @@ func TestDeleteAttachmentReferenceDoesNotBreakAnotherLogicalReference(t *testing
 	var count int64
 	if err := db.Model(&models.AttachmentBlob{}).Count(&count).Error; err != nil || count != 0 {
 		t.Fatalf("blob count after final delete = %d err=%v", count, err)
+	}
+}
+
+func TestPurgeAttachmentBlobsBatchIsViewerScopedForSharedBlob(t *testing.T) {
+	db, r, owner, publicMessage := setupCommentAccountTest(t)
+	if err := db.AutoMigrate(&models.AttachmentBlob{}, &models.AttachmentReference{}); err != nil {
+		t.Fatalf("migrate attachment registry: %v", err)
+	}
+	owner.IsAdmin = true
+	if err := db.Save(&owner).Error; err != nil {
+		t.Fatalf("promote primary user: %v", err)
+	}
+	delegated := models.User{Username: "delegated", IsAdmin: true, Token: "delegated-purge-token"}
+	if err := db.Create(&delegated).Error; err != nil {
+		t.Fatalf("create delegated user: %v", err)
+	}
+	t.Setenv("ATTACHMENT_BLOB_ROOT", t.TempDir())
+	content := []byte("shared scoped purge bytes")
+	sum := sha256.Sum256(content)
+	input := attachmentregistry.CreateInput{Kind: "file", OwnerUserID: owner.ID, OriginalName: "visible.txt", ContentType: "text/plain", ContentHash: hex.EncodeToString(sum[:]), Size: int64(len(content))}
+	store := attachmentregistry.NewLocalStore(attachmentregistry.DefaultLocalRoot())
+	registry := attachmentregistry.NewRegistry(db)
+	visible, err := registry.Create(context.Background(), store, input, bytes.NewReader(content))
+	if err != nil {
+		t.Fatalf("create visible reference: %v", err)
+	}
+	input.OwnerUserID = models.PrimaryAdminUserID
+	input.OriginalName = "hidden.txt"
+	hidden, err := registry.Create(context.Background(), store, input, bytes.NewReader(content))
+	if err != nil {
+		t.Fatalf("create hidden reference: %v", err)
+	}
+	publicMessage.Content = attachmentregistry.ReferenceURL(visible, "local")
+	publicMessage.Visibility = "public"
+	if err := db.Save(&publicMessage).Error; err != nil {
+		t.Fatalf("save visible message: %v", err)
+	}
+	hiddenMessage := models.Message{Content: attachmentregistry.ReferenceURL(hidden, "local"), UserID: models.PrimaryAdminUserID, Visibility: "private", Private: true}
+	if err := db.Create(&hiddenMessage).Error; err != nil {
+		t.Fatalf("create hidden message: %v", err)
+	}
+	r.POST("/api/attachments/references/batch-purge", PurgeAttachmentBlobsBatch)
+	payload := `{"logical_ids":["` + visible.PublicID + `"]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/attachments/references/batch-purge", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+delegated.Token)
+	response := httptest.NewRecorder()
+	r.ServeHTTP(response, req)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"code":1`) {
+		t.Fatalf("scoped purge response = %d %s", response.Code, response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), hidden.PublicID) {
+		t.Fatalf("scoped purge leaked hidden reference: %s", response.Body.String())
+	}
+	if _, err := registry.Resolve(visible.PublicID); err == nil {
+		t.Fatal("visible reference survived scoped purge")
+	}
+	resolvedHidden, err := registry.Resolve(hidden.PublicID)
+	if err != nil {
+		t.Fatalf("hidden reference was removed: %v", err)
+	}
+	if exists, err := store.Exists(context.Background(), resolvedHidden.Blob.StorageKey); err != nil || !exists {
+		t.Fatalf("shared blob exists=%v err=%v", exists, err)
+	}
+}
+
+func TestDownloadAttachmentZipOmitsHiddenSharedReference(t *testing.T) {
+	db, r, owner, publicMessage := setupCommentAccountTest(t)
+	if err := db.AutoMigrate(&models.AttachmentBlob{}, &models.AttachmentReference{}); err != nil {
+		t.Fatalf("migrate attachment registry: %v", err)
+	}
+	owner.IsAdmin = true
+	if err := db.Save(&owner).Error; err != nil {
+		t.Fatalf("promote primary user: %v", err)
+	}
+	delegated := models.User{Username: "delegated-zip", IsAdmin: true, Token: "delegated-zip-token"}
+	if err := db.Create(&delegated).Error; err != nil {
+		t.Fatalf("create delegated user: %v", err)
+	}
+	t.Setenv("ATTACHMENT_BLOB_ROOT", t.TempDir())
+	content := []byte("shared zip bytes")
+	sum := sha256.Sum256(content)
+	input := attachmentregistry.CreateInput{Kind: "file", OwnerUserID: models.PrimaryAdminUserID, OriginalName: "visible.txt", ContentType: "text/plain", ContentHash: hex.EncodeToString(sum[:]), Size: int64(len(content))}
+	store := attachmentregistry.NewLocalStore(attachmentregistry.DefaultLocalRoot())
+	registry := attachmentregistry.NewRegistry(db)
+	visible, err := registry.Create(context.Background(), store, input, bytes.NewReader(content))
+	if err != nil {
+		t.Fatalf("create visible reference: %v", err)
+	}
+	input.OriginalName = "hidden.txt"
+	hidden, err := registry.Create(context.Background(), store, input, bytes.NewReader(content))
+	if err != nil {
+		t.Fatalf("create hidden reference: %v", err)
+	}
+	publicMessage.Content = attachmentregistry.ReferenceURL(visible, "local")
+	publicMessage.Visibility = "public"
+	if err := db.Save(&publicMessage).Error; err != nil {
+		t.Fatalf("save visible message: %v", err)
+	}
+	hiddenMessage := models.Message{Content: attachmentregistry.ReferenceURL(hidden, "local"), UserID: models.PrimaryAdminUserID, Visibility: "private", Private: true}
+	if err := db.Create(&hiddenMessage).Error; err != nil {
+		t.Fatalf("create hidden message: %v", err)
+	}
+	r.POST("/api/attachments/download-zip", DownloadAttachmentZip)
+	payload := `{"items":[{"type":"other","logical_id":"` + visible.PublicID + `"},{"type":"other","logical_id":"` + hidden.PublicID + `"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/attachments/download-zip", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+delegated.Token)
+	response := httptest.NewRecorder()
+	r.ServeHTTP(response, req)
+	if response.Code != http.StatusOK || response.Header().Get("Content-Type") != "application/zip" {
+		t.Fatalf("zip response = %d %s", response.Code, response.Body.String())
+	}
+	archive, err := zip.NewReader(bytes.NewReader(response.Body.Bytes()), int64(response.Body.Len()))
+	if err != nil {
+		t.Fatalf("open zip: %v", err)
+	}
+	if len(archive.File) != 1 || archive.File[0].Name != "other/visible.txt" {
+		t.Fatalf("zip entries = %#v", archive.File)
+	}
+	if strings.Contains(string(response.Body.Bytes()), "hidden.txt") {
+		t.Fatal("zip leaked hidden reference name")
+	}
+
+	hiddenOnly := `{"items":[{"type":"other","logical_id":"` + hidden.PublicID + `"}]}`
+	hiddenReq := httptest.NewRequest(http.MethodPost, "/api/attachments/download-zip", strings.NewReader(hiddenOnly))
+	hiddenReq.Header.Set("Content-Type", "application/json")
+	hiddenReq.Header.Set("Authorization", "Bearer "+delegated.Token)
+	hiddenResponse := httptest.NewRecorder()
+	r.ServeHTTP(hiddenResponse, hiddenReq)
+	if hiddenResponse.Code != http.StatusNotFound || strings.Contains(hiddenResponse.Body.String(), hidden.PublicID) {
+		t.Fatalf("hidden-only zip response = %d %s", hiddenResponse.Code, hiddenResponse.Body.String())
 	}
 }
