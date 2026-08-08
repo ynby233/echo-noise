@@ -16,7 +16,6 @@ export default defineNuxtConfig({
         { rel: 'preconnect', href: 'https://unpkg.com', crossorigin: '' },
         { rel: 'dns-prefetch', href: 'https://unpkg.com' },
         { rel: 'stylesheet', href: 'https://cdn.jsdelivr.net/npm/aplayer@1.10.1/dist/APlayer.min.css' },
-        { rel: 'stylesheet', href: 'https://unpkg.com/@waline/client@v3/dist/waline.css' },
         { rel: 'stylesheet', href: 'https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0/dist/fancybox/fancybox.css' },
         { rel: 'icon', href: '/favicon.svg' },
         { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
@@ -26,11 +25,6 @@ export default defineNuxtConfig({
         { src: 'https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js', tagPosition: 'bodyClose', defer: true },
         { src: 'https://cdn.jsdelivr.net/npm/aplayer@1.10.1/dist/APlayer.min.js', tagPosition: 'bodyClose', defer: true },
         { src: 'https://cdn.jsdelivr.net/npm/meting@2.0.1/dist/Meting.min.js', tagPosition: 'bodyClose', defer: true },
-        { 
-          src: 'https://unpkg.com/@waline/client@v3/dist/waline.js',
-          tagPosition: 'bodyClose',
-          defer: true
-        },
         { 
           src: 'https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0/dist/fancybox/fancybox.umd.js',
           tagPosition: 'bodyClose',

@@ -36,7 +36,6 @@ func SeedDefaultData() error {
 			RSSDescription:              neutralRSSDescription,
 			RSSAuthorName:               neutralOwnerName,
 			RSSFaviconURL:               "/favicon.svg",
-			WalineServerURL:             "请前往waline官网https://waline.js.org查看部署配置",
 			AnnouncementText:            neutralAnnouncement,
 			AnnouncementEnabled:         true,
 			CommentPageTitle:            "留言",

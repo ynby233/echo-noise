@@ -14,6 +14,50 @@ import (
 	"github.com/rcy1314/echo-noise/internal/models"
 )
 
+func TestNormalizeCommentSystemAlwaysUsesBuiltin(t *testing.T) {
+	for _, raw := range []string{"", "builtin", "waline", "none", "other", "unknown"} {
+		if got := NormalizeCommentSystem(raw); got != BuiltinCommentSystem {
+			t.Fatalf("NormalizeCommentSystem(%q) = %q, want %q", raw, got, BuiltinCommentSystem)
+		}
+	}
+}
+
+func TestFrontendConfigHidesLegacyCommentURLAndIgnoresLegacySubmission(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	admin := mustCreateUser(t, models.User{Username: "comment-config-admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+	if err := db.Create(&models.SiteConfig{CommentSystem: "waline"}).Error; err != nil {
+		t.Fatalf("create site config: %v", err)
+	}
+
+	config, err := GetFrontendConfig(admin.ID)
+	if err != nil {
+		t.Fatalf("get frontend config: %v", err)
+	}
+	settings := config["frontendSettings"].(map[string]interface{})
+	if _, ok := settings["walineServerURL"]; ok {
+		t.Fatal("frontend config must not expose walineServerURL")
+	}
+	if got := settings["commentSystem"]; got != BuiltinCommentSystem {
+		t.Fatalf("frontend commentSystem = %#v, want %q", got, BuiltinCommentSystem)
+	}
+
+	if err := UpdateFrontendSetting(admin.ID, map[string]interface{}{
+		"frontendSettings": map[string]interface{}{
+			"walineServerURL": "https://legacy.example.invalid",
+			"commentSystem":   "waline",
+		},
+	}); err != nil {
+		t.Fatalf("save legacy comment settings: %v", err)
+	}
+	var persisted models.SiteConfig
+	if err := db.First(&persisted).Error; err != nil {
+		t.Fatalf("read site config: %v", err)
+	}
+	if got := persisted.CommentSystem; got != BuiltinCommentSystem {
+		t.Fatalf("persisted comment system = %q, want %q", got, BuiltinCommentSystem)
+	}
+}
+
 func TestDefaultHeaderImagesOnlyContainsSelectedImage(t *testing.T) {
 	images := defaultHeaderImages()
 	if len(images) != 1 {

@@ -180,7 +180,7 @@
               </div>
               <div v-if="(expandedCommentsMap[msg.id] || activeCommentId === msg.id) && isCommentEnabled && !isGuestbookMessage(msg)" :id="`comment-container-${msg.id}`" class="mt-2" style="position: relative;">
                 <BuiltinComments
-                  v-if="isBuiltin && apiReachable"
+                  v-if="apiReachable"
                   :key="(commentRefreshKey[msg.id] || 0)"
                   :ref="builtinCommentsRefFor(msg.id)"
                   :message-id="msg.id"
@@ -191,7 +191,6 @@
                   auto-scroll-input
                   @cancel="handleCancel(msg.id, $event)"
                 />
-                <div v-else-if="useWaline && apiReachable" :id="`waline-${msg.id}`"></div>
               </div>
             </div>
           </div>
@@ -670,7 +669,7 @@ const fetchCommentCountsBatch = async (ids: number[]) => {
       if (!id) return
       commentCountMap.value[id] = count
       fetchedCommentIds.value[id] = true
-      if (isBuiltin.value && count > 0) expandedCommentsMap.value[id] = true
+      if (count > 0) expandedCommentsMap.value[id] = true
     })
   } catch {}
 }
@@ -923,9 +922,6 @@ const isContentDark = computed(() => contentTheme.value === 'dark')
 const listThemeClass = computed(() => isContentDark.value ? 'bg-[var(--home-surface-dark)] text-white' : 'bg-white text-black')
 const listThemeTextClass = computed(() => isContentDark.value ? 'text-white' : 'text-black')
 const gradientClass = computed(() => isContentDark.value ? 'from-[var(--home-surface-dark)] via-[rgba(32,42,54,0.82)] to-transparent' : 'from-[rgba(255,255,255,1)] via-[rgba(255,255,255,0.8)] to-transparent')
-const useWaline = computed(() => {
-  return false
-})
 const authorProfiles = ref<Record<string, any>>({})
 const openAuthorId = ref<number | null>(null)
 const openAuthorStyle = ref<Record<string, string>>({})
@@ -1037,9 +1033,6 @@ const focusBuiltinTargetComment = async (messageId: number, commentId: number) =
 const isCommentEnabled = computed(() => {
   const v: any = (props.siteConfig as any)?.commentEnabled
   return v === true || v === 'true'
-})
-const isBuiltin = computed(() => {
-  return true
 })
 const guestbookId = ref<number | null>(null)
 const targetListReady = ref(false)
@@ -1487,34 +1480,8 @@ const toggleComment = async (msgId: number) => {
   activeCommentId.value = msgId
   commentRefreshKey.value[msgId] = (commentRefreshKey.value[msgId] || 0) + 1;
   expandedCommentsMap.value[msgId] = true;
-  if ((props.siteConfig?.commentSystem || 'waline') === 'builtin') {
-    await nextTick();
-    window.dispatchEvent(new Event(`refresh-comments-${msgId}`));
-    return;
-  }
-  if (useWaline.value) {
-    await loadWalineAssets();
-    if (!window.Waline) return;
-    const el = document.querySelector(`#waline-${msgId}`);
-    if (el) {
-      window.Waline.init({
-        el: `#waline-${msgId}`,
-        serverURL: props.siteConfig.walineServerURL,
-        path: `messages/${msgId}`,
-        reaction: false,
-        pageview: true,
-        search: false,
-        wordLimit: 200,
-        pageSize: 5,
-        emoji: ["https://unpkg.com/@waline/emojis@1.2.0/tieba"],
-        imageUploader: false,
-        copyright: false,
-        dark: 'html[class="dark"]',
-      });
-    } else {
-      console.error(`评论容器 #waline-${msgId} 未找到`);
-    }
-  }
+  await nextTick();
+  window.dispatchEvent(new Event(`refresh-comments-${msgId}`));
 };
 
 const handleCancel = (msgId: number, payload?: { empty?: boolean }) => {
@@ -1705,23 +1672,6 @@ watch(() => message.messages, () => {
 }, { deep: true });
 // 添加路由相关
 const route = useRoute();
-const loadWalineAssets = async () => {
-  if (useWaline.value && !window.Waline) {
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = "https://unpkg.com/@waline/client@v2/dist/waline.css";
-    document.head.appendChild(link);
-
-    await new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = "https://unpkg.com/@waline/client@v2/dist/waline.js";
-      script.crossOrigin = "anonymous";
-      script.onload = resolve;
-      script.onerror = reject;
-      document.head.appendChild(script);
-    });
-  }
-}
 onMounted(async () => {
   try {
     setPageLoading(true)
@@ -1730,8 +1680,6 @@ onMounted(async () => {
     // 获取路由中的消息ID
     const messageId = getMessageIdFromRouteHash(route.hash);
     
-    loadWalineAssets().catch(() => {})
-
     // 根据是否有消息ID来决定加载方式
     if (messageId) {
     const data = await getRequest<any>(`messages/${messageId}`, undefined, { credentials: 'include' });
@@ -1780,7 +1728,7 @@ onMounted(async () => {
           }
           const count = js && Array.isArray(js.data) ? js.data.length : 0;
           commentCountMap.value[m.id] = count;
-          if (isBuiltin.value && count > 0) expandedCommentsMap.value[m.id] = true;
+          if (count > 0) expandedCommentsMap.value[m.id] = true;
       } catch {}
     });
     await Promise.allSettled(tasks);

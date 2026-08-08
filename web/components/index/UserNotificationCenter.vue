@@ -944,7 +944,7 @@ defineExpose({
 .notification-target-jumping-icon { width:14px; height:14px; animation:notification-spin 1s linear infinite; }
 .inline-reply-box { margin-top:12px; padding-top:12px; border-top:1px solid var(--notice-border); }
 .inline-reply-box :deep(.builtin-comments) { color:var(--notice-text); }
-.inline-reply-box :deep(.waline-wrapper) { padding-left:0; padding-right:0; background:transparent !important; }
+.inline-reply-box :deep(.comment-wrapper) { padding-left:0; padding-right:0; background:transparent !important; }
 .inline-reply-box :deep(.reply-input-only) { padding-top:0; padding-bottom:0; }
 .inline-reply-box :deep(.reply-input-only .space-y-4) { margin-top:0; }
 .inline-reply-box :deep(.reply-input-only .comment-input-card) { padding:10px; border:1px solid var(--notice-border); border-radius:12px; background:var(--notice-input); }

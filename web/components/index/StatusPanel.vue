@@ -1202,8 +1202,8 @@
                   </div>
               </div>
                 <div class="px-4 pb-4">
-                <CommentsSettings :config="frontendConfig" :theme="theme" @update:config="updateCommentsConfig" @comment-system-changed="uiCommentSystem = $event" />
-                <div v-if="isAdmin && frontendConfig.commentEnabled && String(uiCommentSystem || frontendConfig.commentSystem).toLowerCase() === 'builtin'" class="mt-4 rounded-lg p-3" :class="theme.subtleBg">
+                <CommentsSettings :config="frontendConfig" :theme="theme" @update:config="updateCommentsConfig" />
+                <div v-if="isAdmin && frontendConfig.commentEnabled" class="mt-4 rounded-lg p-3" :class="theme.subtleBg">
                   <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-2">
                     <UInput v-model="commentSearch" placeholder="搜索评论内容或用户名" class="flex-1" />
                     <div class="flex items-center gap-2">
@@ -5243,9 +5243,7 @@ interface FrontendConfig {
     aboutPageTitle: string;
     aboutPageDescription: string;
     aboutMarkdown: string;
-    walineServerURL: string;
     commentEnabled: boolean;
-    commentSystem: string;
     commentEmailEnabled: boolean;
     commentLoginRequired: boolean;
     githubOAuthEnabled: boolean;
@@ -5333,9 +5331,7 @@ const frontendConfig = reactive<FrontendConfig>({
     aboutPageTitle: '',
     aboutPageDescription: '',
     aboutMarkdown: '',
-    walineServerURL: '',
     commentEnabled: true,
-    commentSystem: 'builtin',
     commentEmailEnabled: false,
     commentEmailAdminNotifyAll: true,
   commentLoginRequired: true,
@@ -5422,7 +5418,6 @@ const editItem = reactive<Record<string, boolean>>({
     subtitleText: false,
     backgrounds: false,
     pageFooterHTML: false,
-    walineServerURL: false,
     socialLinks: false,
     
     commentPageTitle: false,
@@ -5457,7 +5452,6 @@ const defaultConfig: Record<string, any> = {
     rssMemberIDs: [] as number[],
     hitokotoEnabled: true,
     commentEnabled: true,
-    commentSystem: 'builtin',
     commentEmailEnabled: false,
     commentLoginRequired: false,
     enableGithubCard: false,
@@ -5498,7 +5492,6 @@ const defaultConfig: Record<string, any> = {
     aboutPageTitle: '关于本站',
     aboutPageDescription: '这里是站点的介绍与说明',
     aboutMarkdown: '# 关于我\n\n这里是一个默认的个人简介示例：\n\n- 喜欢记录与分享\n- 热爱开源与学习\n- 持续打磨产品体验\n\n欢迎留言与我交流！',
-    walineServerURL: '请前往waline官网https://waline.js.org查看部署配置',
     
     // 广告位默认数据
     leftAdEnabled: true,
@@ -6485,7 +6478,6 @@ const saveCommentConfig = async () => {
     const payload = {
       frontendSettings: {
         commentEnabled: !!frontendConfig.commentEnabled,
-        commentSystem: 'builtin',
         commentEmailEnabled: !!frontendConfig.commentEmailEnabled,
         commentEmailAdminNotifyAll: !!frontendConfig.commentEmailAdminNotifyAll,
         commentLoginRequired: !!frontendConfig.commentLoginRequired
@@ -6539,7 +6531,6 @@ const readExpandedComments = () => {
   }
 }
 const expandedCommentsMap = ref<Record<number, boolean>>(readExpandedComments())
-const uiCommentSystem = ref('builtin')
 const formatDate = (v: any) => {
   try {
     if (!v) return ''
@@ -6656,12 +6647,6 @@ const doAdminDelete = async () => {
   resetAdminDeleteConfirm()
 }
 
-watch(() => String((frontendConfig as any).commentSystem || '').toLowerCase(), (sys: string) => {
-  uiCommentSystem.value = sys
-  if (sys !== 'builtin') {
-    showAdminComments.value = false
-  }
-})
 watch(() => !!(frontendConfig as any).commentEnabled, (enabled: boolean) => {
   if (!enabled) {
     showAdminComments.value = false

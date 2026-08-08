@@ -1215,8 +1215,7 @@ curl -X POST http://localhost:8080/api/user/token/regenerate \
         "rssTitle": "RSS标题",
         "rssDescription": "RSS描述",
         "rssAuthorName": "RSS作者",
-        "rssFaviconURL": "RSS图标URL",
-        "walineServerURL": "评论系统URL"
+        "rssFaviconURL": "RSS图标URL"
     }
 }
 ```
@@ -1227,6 +1226,8 @@ curl -X PUT http://localhost:8080/api/settings \
      -H "Cookie: session=xxx" \
      -d '{"allowRegistration":true,"frontendSettings":{"siteTitle":"我的网站"}}'
 ```
+
+评论系统说明：旧版本的外部评论配置不再使用，当前统一使用内置评论；旧配置字段会被忽略，不会重新启用外部请求。
 
 ### 5. 备份相关接口
 
@@ -1978,7 +1979,6 @@ exports.actions = [{
             domId: '#note',
             authorId: '1',         // 或者 username: 'Noise'
             username: ''           // 二选一即可
-            commentServer: 'https://yoursite.com', // 修改为你的评论服务器地址
             sourceName: '「说说笔记」' // 添加来源名称配置
         };
 ```
@@ -1992,8 +1992,6 @@ exports.actions = [{
 - limit ：每页加载条数。
 
 - domId ：小组件挂载容器选择器，需要与页面中的容器匹配。
-
-- commentServer ：Waline 评论服务地址。
 
 - sourceName ：卡片底部“来源”文案。
 

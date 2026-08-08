@@ -62,6 +62,15 @@ const (
 	maxLoginExpireHours     = 24
 )
 
+// BuiltinCommentSystem is the only supported comment implementation. Legacy
+// values are accepted only for database/client compatibility and always
+// normalize to this value before they reach business logic or the browser.
+const BuiltinCommentSystem = "builtin"
+
+func NormalizeCommentSystem(_ string) string {
+	return BuiltinCommentSystem
+}
+
 func normalizeLoginExpireConfig(days int, hours int) (int, int) {
 	if days < 0 {
 		days = 0
@@ -930,6 +939,7 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 		return getDefaultConfig(), nil
 	}
 	scrubLegacySiteConfigValues(&config)
+	config.CommentSystem = NormalizeCommentSystem(config.CommentSystem)
 
 	// 新增：读取Setting表的AllowRegistration
 	var setting models.Setting
@@ -1096,7 +1106,6 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 			"rssEnabled":          rssConfig.Enabled,
 			"rssMemberIDs":        rssMemberIDsForViewer,
 			"rssAvailableMembers": rssAvailableMembersForViewer,
-			"walineServerURL":     config.WalineServerURL,
 			"enableGithubCard":    config.EnableGithubCard,
 			"notifyEnabled":       config.NotifyEnabled,
 			// 页面文案与关于页内容
@@ -1165,7 +1174,7 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 			"musicJsCdnURL":         choose(config.MusicJsCdnURL, ""),
 			// 评论系统
 			"commentEnabled":             config.CommentEnabled,
-			"commentSystem":              choose(config.CommentSystem, "builtin"),
+			"commentSystem":              BuiltinCommentSystem,
 			"commentEmailEnabled":        config.CommentEmailEnabled,
 			"commentEmailAdminNotifyAll": config.CommentEmailAdminNotifyAll,
 			"commentLoginRequired":       config.CommentLoginRequired,
@@ -1342,9 +1351,6 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	}
 	if strings.TrimSpace(config.RSSMemberIDs) == "[]" {
 		config.RSSEnabled = false
-	}
-	if v, ok := frontendSettings["walineServerURL"].(string); ok {
-		config.WalineServerURL = v
 	}
 	// 页面文案与关于页内容
 	if v, ok := frontendSettings["linksTitle"].(string); ok {
@@ -1676,9 +1682,7 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	if v, ok := frontendSettings["musicJsCdnURL"].(string); ok {
 		config.MusicJsCdnURL = v
 	}
-	if v, ok := frontendSettings["commentSystem"].(string); ok {
-		config.CommentSystem = v
-	}
+	config.CommentSystem = NormalizeCommentSystem(config.CommentSystem)
 	if vb, ok := frontendSettings["commentLoginRequired"].(bool); ok {
 		config.CommentLoginRequired = vb
 	} else if vs, ok := frontendSettings["commentLoginRequired"].(string); ok {
@@ -2051,7 +2055,6 @@ func getDefaultConfig() map[string]interface{} {
 			"rssEnabled":          false,
 			"rssMemberIDs":        []uint{},
 			"rssAvailableMembers": []map[string]interface{}{},
-			"walineServerURL":     "请前往waline官网https://waline.js.org查看部署配置",
 			"enableGithubCard":    false,
 			// 页面文案与关于页内容
 			"linksTitle":                  "友情链接",
@@ -2106,7 +2109,7 @@ func getDefaultConfig() map[string]interface{} {
 			"musicCssCdnURL":             "",
 			"musicJsCdnURL":              "",
 			"commentEnabled":             true,
-			"commentSystem":              "builtin",
+			"commentSystem":              BuiltinCommentSystem,
 			"commentEmailEnabled":        false,
 			"commentEmailAdminNotifyAll": true,
 			"commentLoginRequired":       false,

@@ -1640,7 +1640,6 @@ Object.assign(frontendConfig.value, {
     hitokotoEnabled: true,
     // 评论系统
     commentEnabled: true,
-    commentSystem: 'builtin',
     commentEmailEnabled: false,
     commentLoginRequired: false,
     // 音乐配置
@@ -2291,7 +2290,6 @@ const headerImageStyle = computed(() => ({
     hitokotoEnabled: true,
     // 评论系统默认值
     commentEnabled: true,
-    commentSystem: 'builtin',
     commentEmailEnabled: false,
     commentLoginRequired: false,
     // 音乐默认配置

@@ -1,7 +1,7 @@
 <template>
   <div ref="rootRef" class="builtin-comments" :class="{ 'comment-theme-dark': isDark }">
     <input ref="commentImageInput" type="file" accept="image/*" multiple class="hidden" @change="handleCommentImageInputChange" />
-  <div class="waline-wrapper px-2 py-2 rounded-lg" :class="[themeBg, { 'reply-input-only': props.replyInputOnly }]">
+  <div class="comment-wrapper px-2 py-2 rounded-lg" :class="[themeBg, { 'reply-input-only': props.replyInputOnly }]">
       <div v-if="!props.replyInputOnly" class="comment-list-head" :class="themeText">
         <div class="comment-list-title">{{ contextLabel }} ({{ rootCommentTotal }})</div>
         <button
@@ -1553,8 +1553,8 @@ defineExpose({
 </script>
 
 <style scoped>
-.builtin-comments, .waline-wrapper { width: 100%; }
-.waline-wrapper { display:block; width:100%; max-width:none; }
+.builtin-comments, .comment-wrapper { width: 100%; }
+.comment-wrapper { display:block; width:100%; max-width:none; }
 .comment-list-head { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:28px; margin-bottom:8px; }
 .comment-list-title { min-width:0; font-size:14px; line-height:1.4; }
 .comment-refresh-button {

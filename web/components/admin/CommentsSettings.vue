@@ -1,10 +1,10 @@
 <template>
   <div id="site-comments-section" class="flex flex-wrap items-center rounded-lg p-3 justify-between gap-3" :class="theme?.subtleBg || subtleBg">
     <div class="flex flex-col gap-3 w-full">
-      <div v-if="local.commentSystem === 'builtin' && !props.config?.commentEmailEnabled" class="rounded border p-3" :class="theme?.border">
+      <div v-if="!props.config?.commentEmailEnabled" class="rounded border p-3" :class="theme?.border">
         <div :class="theme?.text || textCls">开启“邮件通知”后，可配置站点链接地址、主题前缀、发件显示名、文本/HTML 模板，并实时预览。</div>
       </div>
-      <div v-if="local.commentSystem === 'builtin' && !!props.config?.commentEmailEnabled" class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div v-if="!!props.config?.commentEmailEnabled" class="grid grid-cols-1 md:grid-cols-3 gap-3">
         <UInput v-model="local.commentEmailSiteURL" :ui="{base: theme?.text}" placeholder="站点链接地址（用于邮件中的 {url} 基础） 如 https://example.com" />
         <UInput v-model="local.commentEmailReplyName" :ui="{base: theme?.text}" placeholder="邮件发件显示名（回复通知）" />
         <UInput v-model="local.commentEmailAdminPrefix" :ui="{base: theme?.text}" placeholder="管理员通知主题前缀（可选）" />
@@ -32,12 +32,10 @@ import { reactive, watch, computed } from 'vue'
 import { useToast } from '#imports'
 
 const props = defineProps<{ config: any, theme?: Record<string, string> }>()
-const emit = defineEmits<{ (e: 'update:config', v: any): void, (e: 'comment-system-changed', v: string): void }>()
+const emit = defineEmits<{ (e: 'update:config', v: any): void }>()
 
 const local = reactive({
   commentEnabled: false,
-  commentSystem: 'builtin',
-  walineServerURL: '',
   commentEmailEnabled: false,
   commentEmailReplyName: '',
   commentEmailAdminPrefix: '',
@@ -52,7 +50,6 @@ const local = reactive({
 watch(() => props.config, (v: any) => {
   if (!v) return
   local.commentEnabled = !!v.commentEnabled
-  local.commentSystem = 'builtin'
   local.commentEmailEnabled = !!v.commentEmailEnabled
   local.commentEmailReplyName = String(v.commentEmailReplyName || '')
   local.commentEmailAdminPrefix = String(v.commentEmailAdminPrefix || '')
@@ -64,14 +61,6 @@ watch(() => props.config, (v: any) => {
   local.commentEmailAdminTemplateHTML = String(v.commentEmailAdminTemplateHTML || '')
 }, { immediate: true, deep: true })
 
-watch(() => local.commentSystem, (v) => {
-  const sys = String(v || '').toLowerCase()
-  if (sys === 'builtin') {
-    local.walineServerURL = ''
-  }
-  emit('comment-system-changed', sys)
-})
-
 const subtleBg = computed(() => 'bg-gray-800')
 const mutedText = computed(() => 'text-slate-400')
 const textCls = computed(() => 'text-white')
@@ -81,7 +70,6 @@ const textCls = computed(() => 'text-white')
       const payload = {
         frontendSettings: {
         commentEnabled: !!props.config?.commentEnabled,
-        commentSystem: 'builtin',
         commentEmailEnabled: !!props.config?.commentEmailEnabled,
         commentEmailReplyName: String(local.commentEmailReplyName || ''),
         commentEmailAdminPrefix: String(local.commentEmailAdminPrefix || ''),

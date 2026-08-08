@@ -273,7 +273,6 @@ type SiteConfig struct {
 	RSSFaviconURL    string `gorm:"type:varchar(191)"`
 	RSSEnabled       bool   `gorm:"default:false"`
 	RSSMemberIDs     string `gorm:"type:text"`
-	WalineServerURL  string `gorm:"type:varchar(191)"`
 	EnableGithubCard bool   `gorm:"default:false"`
 	// 推送模块总开关（与具体推送渠道配置解耦）
 	NotifyEnabled bool `gorm:"default:false"`
@@ -370,7 +369,7 @@ type SiteConfig struct {
 	MusicJsCdnURL         string `gorm:"type:varchar(255)"`
 	// 评论系统配置
 	CommentEnabled                bool   `gorm:"default:true"`
-	CommentSystem                 string `gorm:"type:varchar(20)"` // builtin/waline/none/other
+	CommentSystem                 string `gorm:"type:varchar(20)"` // legacy storage field; runtime is always builtin
 	CommentEmailEnabled           bool   `gorm:"default:false"`
 	CommentEmailAdminNotifyAll    bool   `gorm:"default:true;not null" json:"commentEmailAdminNotifyAll"`
 	CommentLoginRequired          bool   `gorm:"default:true"`
