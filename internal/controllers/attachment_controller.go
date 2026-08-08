@@ -26,6 +26,7 @@ import (
 	attachmentregistry "github.com/rcy1314/echo-noise/internal/attachments"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
+	"github.com/rcy1314/echo-noise/internal/services"
 	"gorm.io/gorm"
 )
 
@@ -167,7 +168,8 @@ func ListImageAttachments(c *gin.Context) {
 	var siteCfg models.SiteConfig
 	_ = database.DB.Table("site_configs").First(&siteCfg).Error
 	if siteCfg.AttachmentStorageEnabled {
-		list, err := listCloudAttachments(siteCfg, func(name string) bool {
+		viewerID, _ := currentMessageViewer(c)
+		list, err := listCloudAttachments(siteCfg, viewerID, func(name string) bool {
 			return isImageExt(name)
 		})
 		if err != nil {
@@ -183,7 +185,8 @@ func ListImageAttachments(c *gin.Context) {
 	var messages []models.Message
 	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Order("created_at DESC").Find(&messages)
 
-	list, err := listRegisteredAttachments("image", "local", messages, imageUsages)
+	viewerID, _ := currentMessageViewer(c)
+	list, err := listRegisteredAttachmentsForViewer("image", "local", viewerID, messages, imageUsages)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []AttachmentInfo{}})
 		return
@@ -204,7 +207,10 @@ func ListImageAttachments(c *gin.Context) {
 			continue
 		}
 		urlPath := "/api/images/" + url.PathEscape(name)
-		belongs := findBelongs(messages, name, "/images/", "/api/images/")
+		belongs, visible := legacyAttachmentBelongsForViewer(viewerID, "image", name, messages)
+		if !visible {
+			continue
+		}
 		belongs = appendImageUsageBelongs(belongs, imageUsages, "/images/"+name, "/api/images/"+name, "/images/"+url.PathEscape(name), "/api/images/"+url.PathEscape(name))
 		list = append(list, AttachmentInfo{Key: name, Name: name, URL: urlPath, Size: fi.Size(), ModifiedAt: fi.ModTime(), Belongs: belongs})
 	}
@@ -213,6 +219,10 @@ func ListImageAttachments(c *gin.Context) {
 }
 
 func listRegisteredAttachments(kind, backend string, messages []models.Message, suppliedImageUsages ...[]imageAttachmentUsage) ([]AttachmentInfo, error) {
+	return listRegisteredAttachmentsForViewer(kind, backend, nil, messages, suppliedImageUsages...)
+}
+
+func listRegisteredAttachmentsForViewer(kind, backend string, actorID *uint, messages []models.Message, suppliedImageUsages ...[]imageAttachmentUsage) ([]AttachmentInfo, error) {
 	db, err := database.GetDB()
 	if err != nil {
 		return nil, err
@@ -221,7 +231,6 @@ func listRegisteredAttachments(kind, backend string, messages []models.Message, 
 	if err != nil {
 		return nil, err
 	}
-	counts := make(map[uint]int64, len(resolved))
 	out := make([]AttachmentInfo, 0, len(resolved))
 	var imageUsages []imageAttachmentUsage
 	if kind == "image" {
@@ -232,24 +241,46 @@ func listRegisteredAttachments(kind, backend string, messages []models.Message, 
 		}
 	}
 	for _, item := range resolved {
-		if _, ok := counts[item.Blob.ID]; !ok {
-			var count int64
-			if err := db.Model(&models.AttachmentReference{}).Where("blob_id = ?", item.Blob.ID).Count(&count).Error; err != nil {
-				return nil, err
+		visibleSources, err := services.VisibleAttachmentSources(db, actorID, item.Reference, backend)
+		if err != nil {
+			return nil, err
+		}
+		if len(visibleSources) == 0 {
+			if actorID == nil {
+				needle := attachmentReferenceURLPrefix(item.Reference.Kind, backend, item.Reference.PublicID)
+				for _, message := range messages {
+					if message.UserID == item.Reference.OwnerUserID && (strings.Contains(message.Content, needle) || strings.Contains(message.ImageURL, needle)) {
+						visibleSources = append(visibleSources, services.AttachmentSource{SourceType: "message", SourceID: message.ID, MessageID: message.ID, OwnerUserID: message.UserID, Message: message})
+					}
+				}
 			}
-			counts[item.Blob.ID] = count
+			// Unreferenced logical uploads remain visible only to their owner or
+			// the primary administrator; hidden references are never inferred.
+			if actorID != nil && *actorID != models.PrimaryAdminUserID && *actorID != item.Reference.OwnerUserID {
+				continue
+			}
 		}
 		needle := attachmentReferenceURLPrefix(item.Reference.Kind, backend, item.Reference.PublicID)
 		belongs := make([]BelongItem, 0)
-		for _, message := range messages {
-			if message.UserID != item.Reference.OwnerUserID || (!strings.Contains(message.Content, needle) && !strings.Contains(message.ImageURL, needle)) {
-				continue
+		for _, source := range visibleSources {
+			snippet := source.Message.Content
+			if source.Comment != nil {
+				snippet = source.Comment.Content
 			}
-			snippet := message.Content
 			if len(snippet) > 80 {
 				snippet = snippet[:80]
 			}
-			belongs = append(belongs, BelongItem{ID: message.ID, CreatedAt: message.CreatedAt, Snippet: snippet, Kind: "message", Label: fmt.Sprintf("笔记 #%d", message.ID)})
+			label := fmt.Sprintf("笔记 #%d", source.MessageID)
+			if source.SourceType == "comment" {
+				label = fmt.Sprintf("评论 #%d", source.SourceID)
+			}
+			if source.SourceType == "reply" {
+				label = fmt.Sprintf("回复 #%d", source.SourceID)
+			}
+			if source.SourceType == "guestbook" {
+				label = fmt.Sprintf("留言 #%d", source.SourceID)
+			}
+			belongs = append(belongs, BelongItem{ID: source.SourceID, CreatedAt: source.Message.CreatedAt, Snippet: snippet, Kind: source.SourceType, Label: label})
 		}
 		belongs = appendImageUsageBelongs(belongs, imageUsages, needle)
 		out = append(out, AttachmentInfo{
@@ -261,17 +292,40 @@ func listRegisteredAttachments(kind, backend string, messages []models.Message, 
 			Size:           item.Blob.Size,
 			ModifiedAt:     item.Reference.CreatedAt,
 			Belongs:        belongs,
-			ReferenceCount: counts[item.Blob.ID],
+			ReferenceCount: visibleReferenceCount(db, actorID, item.Blob.ID, backend),
 		})
 	}
 	return out, nil
+}
+
+func visibleReferenceCount(db *gorm.DB, actorID *uint, blobID uint, backend string) int64 {
+	var refs []models.AttachmentReference
+	if db == nil || db.Where("blob_id = ?", blobID).Find(&refs).Error != nil {
+		return 0
+	}
+	var count int64
+	for _, ref := range refs {
+		if actorID == nil {
+			count++
+			continue
+		}
+		sources, err := services.VisibleAttachmentSources(db, actorID, ref, backend)
+		if err != nil {
+			continue
+		}
+		if len(sources) > 0 || actorID == nil || *actorID == models.PrimaryAdminUserID || *actorID == ref.OwnerUserID {
+			count++
+		}
+	}
+	return count
 }
 
 func ListVideoAttachments(c *gin.Context) {
 	var siteCfg models.SiteConfig
 	_ = database.DB.Table("site_configs").First(&siteCfg).Error
 	if siteCfg.AttachmentStorageEnabled {
-		list, err := listCloudAttachments(siteCfg, func(name string) bool {
+		viewerID, _ := currentMessageViewer(c)
+		list, err := listCloudAttachments(siteCfg, viewerID, func(name string) bool {
 			return isVideoExt(name)
 		})
 		if err != nil {
@@ -294,7 +348,8 @@ func ListVideoAttachments(c *gin.Context) {
 	}, "./data/video")
 	var messages []models.Message
 	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Order("created_at DESC").Find(&messages)
-	list, err := listRegisteredAttachments("video", "local", messages)
+	viewerID, _ := currentMessageViewer(c)
+	list, err := listRegisteredAttachmentsForViewer("video", "local", viewerID, messages)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []AttachmentInfo{}})
 		return
@@ -315,7 +370,10 @@ func ListVideoAttachments(c *gin.Context) {
 			continue
 		}
 		urlPath := "/video/" + url.PathEscape(name)
-		belongs := findBelongs(messages, name, "/video/", "/api/video/")
+		belongs, visible := legacyAttachmentBelongsForViewer(viewerID, "video", name, messages)
+		if !visible {
+			continue
+		}
 		list = append(list, AttachmentInfo{Key: name, Name: name, URL: urlPath, Size: fi.Size(), ModifiedAt: fi.ModTime(), Belongs: belongs})
 	}
 
@@ -326,7 +384,8 @@ func ListAudioAttachments(c *gin.Context) {
 	var siteCfg models.SiteConfig
 	_ = database.DB.Table("site_configs").First(&siteCfg).Error
 	if siteCfg.AttachmentStorageEnabled {
-		list, err := listCloudAttachments(siteCfg, func(name string) bool {
+		viewerID, _ := currentMessageViewer(c)
+		list, err := listCloudAttachments(siteCfg, viewerID, func(name string) bool {
 			return isAudioExt(name)
 		})
 		if err != nil {
@@ -349,7 +408,8 @@ func ListAudioAttachments(c *gin.Context) {
 	}, "./data/audio")
 	var messages []models.Message
 	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Order("created_at DESC").Find(&messages)
-	list, err := listRegisteredAttachments("audio", "local", messages)
+	viewerID, _ := currentMessageViewer(c)
+	list, err := listRegisteredAttachmentsForViewer("audio", "local", viewerID, messages)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []AttachmentInfo{}})
 		return
@@ -370,7 +430,10 @@ func ListAudioAttachments(c *gin.Context) {
 			continue
 		}
 		urlPath := "/api/audio/" + url.PathEscape(name)
-		belongs := findBelongs(messages, name, "/audio/", "/api/audio/")
+		belongs, visible := legacyAttachmentBelongsForViewer(viewerID, "audio", name, messages)
+		if !visible {
+			continue
+		}
 		list = append(list, AttachmentInfo{Key: name, Name: name, URL: urlPath, Size: fi.Size(), ModifiedAt: fi.ModTime(), Belongs: belongs})
 	}
 
@@ -381,7 +444,8 @@ func ListOtherAttachments(c *gin.Context) {
 	var siteCfg models.SiteConfig
 	_ = database.DB.Table("site_configs").First(&siteCfg).Error
 	if siteCfg.AttachmentStorageEnabled {
-		list, err := listCloudAttachments(siteCfg, func(name string) bool {
+		viewerID, _ := currentMessageViewer(c)
+		list, err := listCloudAttachments(siteCfg, viewerID, func(name string) bool {
 			return !isImageExt(name) && !isVideoExt(name) && !isAudioExt(name)
 		})
 		if err != nil {
@@ -404,7 +468,8 @@ func ListOtherAttachments(c *gin.Context) {
 	}, "./data/attachments")
 	var messages []models.Message
 	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Order("created_at DESC").Find(&messages)
-	list, err := listRegisteredAttachments("file", "local", messages)
+	viewerID, _ := currentMessageViewer(c)
+	list, err := listRegisteredAttachmentsForViewer("file", "local", viewerID, messages)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []AttachmentInfo{}})
 		return
@@ -425,7 +490,10 @@ func ListOtherAttachments(c *gin.Context) {
 			continue
 		}
 		urlPath := "/api/files/" + url.PathEscape(name)
-		belongs := findBelongs(messages, name, "/files/", "/api/files/", "/attachments/", "/api/attachments/")
+		belongs, visible := legacyAttachmentBelongsForViewer(viewerID, "file", name, messages)
+		if !visible {
+			continue
+		}
 		list = append(list, AttachmentInfo{Key: name, Name: name, URL: urlPath, Size: fi.Size(), ModifiedAt: fi.ModTime(), Belongs: belongs})
 	}
 
@@ -462,9 +530,52 @@ func findBelongs(messages []models.Message, name string, prefixes ...string) []B
 	return out
 }
 
+func legacyAttachmentBelongsForViewer(actorID *uint, kind, name string, messages []models.Message) ([]BelongItem, bool) {
+	db, err := database.GetDB()
+	if err != nil {
+		return nil, false
+	}
+	sources, err := services.VisibleLegacyAttachmentSources(db, actorID, kind, name)
+	if err != nil {
+		return nil, false
+	}
+	if actorID != nil && len(sources) == 0 {
+		return nil, false
+	}
+	if actorID == nil {
+		return findBelongs(messages, name, "/images/", "/api/images/", "/video/", "/api/video/", "/audio/", "/api/audio/", "/files/", "/api/files/", "/attachments/", "/api/attachments/"), true
+	}
+	belongs := make([]BelongItem, 0, len(sources))
+	for _, source := range sources {
+		snippet := source.Message.Content
+		if source.Comment != nil {
+			snippet = source.Comment.Content
+		}
+		if len(snippet) > 80 {
+			snippet = snippet[:80]
+		}
+		label := fmt.Sprintf("笔记 #%d", source.MessageID)
+		if source.SourceType == "comment" {
+			label = fmt.Sprintf("评论 #%d", source.SourceID)
+		}
+		if source.SourceType == "reply" {
+			label = fmt.Sprintf("回复 #%d", source.SourceID)
+		}
+		if source.SourceType == "guestbook" {
+			label = fmt.Sprintf("留言 #%d", source.SourceID)
+		}
+		belongs = append(belongs, BelongItem{ID: source.SourceID, CreatedAt: source.Message.CreatedAt, Snippet: snippet, Kind: source.SourceType, Label: label})
+	}
+	return belongs, true
+}
+
 func DeleteImageAttachment(c *gin.Context) {
 	name := c.Param("name")
 	base := filepath.Base(name)
+	if !legacyAttachmentVisibleToActor(c, "image", base) {
+		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "文件不存在"})
+		return
+	}
 
 	var siteCfg models.SiteConfig
 	_ = database.DB.Table("site_configs").First(&siteCfg).Error
@@ -502,6 +613,10 @@ func DeleteImageAttachment(c *gin.Context) {
 func DeleteVideoAttachment(c *gin.Context) {
 	name := c.Param("name")
 	base := filepath.Base(name)
+	if !legacyAttachmentVisibleToActor(c, "video", base) {
+		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "文件不存在"})
+		return
+	}
 
 	var siteCfg models.SiteConfig
 	_ = database.DB.Table("site_configs").First(&siteCfg).Error
@@ -547,6 +662,10 @@ func DeleteVideoAttachment(c *gin.Context) {
 func DeleteAudioAttachment(c *gin.Context) {
 	name := c.Param("name")
 	base := filepath.Base(name)
+	if !legacyAttachmentVisibleToActor(c, "audio", base) {
+		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "文件不存在"})
+		return
+	}
 
 	var siteCfg models.SiteConfig
 	_ = database.DB.Table("site_configs").First(&siteCfg).Error
@@ -592,6 +711,10 @@ func DeleteAudioAttachment(c *gin.Context) {
 func DeleteOtherAttachment(c *gin.Context) {
 	name := c.Param("name")
 	base := filepath.Base(name)
+	if !legacyAttachmentVisibleToActor(c, "file", base) {
+		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "文件不存在"})
+		return
+	}
 
 	var siteCfg models.SiteConfig
 	_ = database.DB.Table("site_configs").First(&siteCfg).Error
@@ -651,6 +774,10 @@ func DeleteAttachmentReference(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "附件不存在"})
 		return
 	}
+	if !attachmentReferenceVisibleToActor(c, resolved.Reference, resolved.Blob.StorageBackend) {
+		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "附件不存在"})
+		return
+	}
 	store, err := attachmentBlobStore(db, resolved.Blob.StorageBackend)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": err.Error()})
@@ -661,6 +788,48 @@ func DeleteAttachmentReference(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": true})
+}
+
+func attachmentReferenceVisibleToActor(c *gin.Context, reference models.AttachmentReference, backend string) bool {
+	db, err := database.GetDB()
+	if err != nil {
+		return false
+	}
+	actorID, _ := currentMessageViewer(c)
+	if actorID == nil {
+		return true // direct controller tests/legacy callers; authenticated routes always set an actor
+	}
+	sources, err := services.VisibleAttachmentSources(db, actorID, reference, backend)
+	if err != nil {
+		return false
+	}
+	if len(sources) > 0 {
+		return true
+	}
+	return actorID != nil && (*actorID == models.PrimaryAdminUserID || *actorID == reference.OwnerUserID)
+}
+
+func legacyAttachmentVisibleToActor(c *gin.Context, kind, name string) bool {
+	actorID, _ := currentMessageViewer(c)
+	if actorID == nil {
+		return true
+	}
+	db, err := database.GetDB()
+	if err != nil {
+		return false
+	}
+	sources, err := services.VisibleLegacyAttachmentSources(db, actorID, kind, name)
+	return err == nil && len(sources) > 0
+}
+
+func visibleReferenceIDsForActor(c *gin.Context, refs []models.AttachmentReference, backend string) []uint {
+	ids := make([]uint, 0, len(refs))
+	for _, ref := range refs {
+		if attachmentReferenceVisibleToActor(c, ref, backend) {
+			ids = append(ids, ref.ID)
+		}
+	}
+	return ids
 }
 
 // attachmentGroupID identifies the physical content behind a logical
@@ -754,6 +923,11 @@ func DeleteAttachmentReferencesBatch(c *gin.Context) {
 			result.Errors = append(result.Errors, publicID+"：附件不存在")
 			continue
 		}
+		if !attachmentReferenceVisibleToActor(c, resolved.Reference, resolved.Blob.StorageBackend) {
+			result.Failed++
+			result.Errors = append(result.Errors, publicID+"：附件不存在")
+			continue
+		}
 		store, err := attachmentBlobStore(db, resolved.Blob.StorageBackend)
 		if err != nil {
 			result.Failed++
@@ -802,13 +976,24 @@ func PurgeAttachmentBlobsBatch(c *gin.Context) {
 		if _, done := purgedBlobs[resolved.Blob.ID]; done {
 			continue
 		}
+		if !attachmentReferenceVisibleToActor(c, resolved.Reference, resolved.Blob.StorageBackend) {
+			result.Failed++
+			result.Errors = append(result.Errors, publicID+"：附件不存在")
+			continue
+		}
 		store, err := attachmentBlobStore(db, resolved.Blob.StorageBackend)
 		if err != nil {
 			result.Failed++
 			result.Errors = append(result.Errors, publicID+"："+err.Error())
 			continue
 		}
-		removed, err := registry.PurgeBlob(c.Request.Context(), store, publicID)
+		var siblings []models.AttachmentReference
+		if err := db.Where("blob_id = ?", resolved.Blob.ID).Find(&siblings).Error; err != nil {
+			result.Failed++
+			continue
+		}
+		visibleIDs := visibleReferenceIDsForActor(c, siblings, resolved.Blob.StorageBackend)
+		removed, _, err := registry.PurgeBlobScoped(c.Request.Context(), store, publicID, visibleIDs)
 		if err != nil {
 			result.Failed++
 			result.Errors = append(result.Errors, publicID+"：删除失败")
@@ -852,8 +1037,9 @@ func DownloadAttachmentZip(c *gin.Context) {
 	defer archive.Close()
 
 	usedNames := map[string]int{}
+	viewerID, _ := currentMessageViewer(c)
 	for _, item := range req.Items {
-		if err := addAttachmentToZip(archive, siteCfg, item, usedNames); err != nil {
+		if err := addAttachmentToZip(archive, siteCfg, viewerID, item, usedNames); err != nil {
 			continue
 		}
 	}
@@ -872,9 +1058,9 @@ func pickDir(candidates []string, fallback string) string {
 	return fallback
 }
 
-func addAttachmentToZip(archive *zip.Writer, siteCfg models.SiteConfig, item AttachmentZipItem, usedNames map[string]int) error {
+func addAttachmentToZip(archive *zip.Writer, siteCfg models.SiteConfig, viewerID *uint, item AttachmentZipItem, usedNames map[string]int) error {
 	if strings.TrimSpace(item.LogicalID) != "" {
-		return addRegisteredAttachmentToZip(archive, siteCfg, item, usedNames)
+		return addRegisteredAttachmentToZip(archive, siteCfg, viewerID, item, usedNames)
 	}
 	if siteCfg.AttachmentStorageEnabled {
 		return addCloudAttachmentToZip(archive, siteCfg, item, usedNames)
@@ -882,7 +1068,7 @@ func addAttachmentToZip(archive *zip.Writer, siteCfg models.SiteConfig, item Att
 	return addLocalAttachmentToZip(archive, item, usedNames)
 }
 
-func addRegisteredAttachmentToZip(archive *zip.Writer, siteCfg models.SiteConfig, item AttachmentZipItem, usedNames map[string]int) error {
+func addRegisteredAttachmentToZip(archive *zip.Writer, siteCfg models.SiteConfig, viewerID *uint, item AttachmentZipItem, usedNames map[string]int) error {
 	db, err := database.GetDB()
 	if err != nil {
 		return err
@@ -890,6 +1076,15 @@ func addRegisteredAttachmentToZip(archive *zip.Writer, siteCfg models.SiteConfig
 	resolved, err := attachmentregistry.NewRegistry(db).Resolve(strings.TrimSpace(item.LogicalID))
 	if err != nil {
 		return err
+	}
+	if viewerID != nil {
+		sources, visibilityErr := services.VisibleAttachmentSources(db, viewerID, resolved.Reference, resolved.Blob.StorageBackend)
+		if visibilityErr != nil {
+			return visibilityErr
+		}
+		if len(sources) == 0 && *viewerID != models.PrimaryAdminUserID && *viewerID != resolved.Reference.OwnerUserID {
+			return errors.New("attachment not found")
+		}
 	}
 	wantedKind := strings.ToLower(strings.TrimSpace(item.Type))
 	if wantedKind == "other" {
@@ -1177,7 +1372,7 @@ func isAudioExt(name string) bool {
 	}
 }
 
-func listCloudAttachments(siteCfg models.SiteConfig, keep func(name string) bool) ([]AttachmentInfo, error) {
+func listCloudAttachments(siteCfg models.SiteConfig, actorID *uint, keep func(name string) bool) ([]AttachmentInfo, error) {
 	cli, bucket, publicBaseURL, err := newAttachmentS3Client(siteCfg)
 	if err != nil {
 		return nil, err
@@ -1190,7 +1385,7 @@ func listCloudAttachments(siteCfg models.SiteConfig, keep func(name string) bool
 
 	var out []AttachmentInfo
 	for _, kind := range []string{"image", "video", "audio", "file"} {
-		registered, err := listRegisteredAttachments(kind, "cloud", messages, imageUsages)
+		registered, err := listRegisteredAttachmentsForViewer(kind, "cloud", actorID, messages, imageUsages)
 		if err != nil {
 			return nil, err
 		}
@@ -1237,12 +1432,42 @@ func listCloudAttachments(siteCfg models.SiteConfig, keep func(name string) bool
 			if err != nil {
 				return nil, err
 			}
+			visibleSources, sourceErr := services.VisibleLegacyAttachmentSources(database.DB, actorID, "cloud", record.PublicID)
+			if sourceErr != nil {
+				return nil, sourceErr
+			}
+			if actorID != nil && len(visibleSources) == 0 {
+				continue
+			}
 			urlPath := "/api/cloud-attachments/" + record.PublicID + "/" + url.PathEscape(name)
 			modAt := time.Time{}
 			if obj.LastModified != nil {
 				modAt = *obj.LastModified
 			}
 			belongs := findBelongsCloud(messages, cleanKey, origin, prefix, record.PublicID)
+			if actorID != nil {
+				belongs = make([]BelongItem, 0, len(visibleSources))
+				for _, source := range visibleSources {
+					snippet := source.Message.Content
+					if source.Comment != nil {
+						snippet = source.Comment.Content
+					}
+					if len(snippet) > 80 {
+						snippet = snippet[:80]
+					}
+					label := fmt.Sprintf("笔记 #%d", source.MessageID)
+					if source.SourceType == "comment" {
+						label = fmt.Sprintf("评论 #%d", source.SourceID)
+					}
+					if source.SourceType == "reply" {
+						label = fmt.Sprintf("回复 #%d", source.SourceID)
+					}
+					if source.SourceType == "guestbook" {
+						label = fmt.Sprintf("留言 #%d", source.SourceID)
+					}
+					belongs = append(belongs, BelongItem{ID: source.SourceID, CreatedAt: source.Message.CreatedAt, Snippet: snippet, Kind: source.SourceType, Label: label})
+				}
+			}
 			belongs = appendImageUsageBelongs(belongs, imageUsages,
 				"/api/cloud-attachments/"+record.PublicID+"/",
 				origin+"/"+escapeObjectKeyForURL(cleanKey),

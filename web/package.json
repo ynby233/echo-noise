@@ -54,6 +54,7 @@
     "test:attachment-url-portability": "node scripts/attachment-url-portability.test.mjs",
     "test:attachment-associations": "node scripts/attachment-association-contract.test.mjs",
     "test:attachment-manager-references": "node scripts/attachment-manager-logical-references.test.mjs",
+    "test:attachment-visibility-capability": "node scripts/attachment-visibility-capability-contract.test.mjs",
     "test:vditor-blank-lines": "node scripts/vditor-blank-lines.test.mjs",
     "test:vditor-table-attachment-perf": "node scripts/vditor-table-attachment-perf.test.mjs",
     "test:vditor-table-attachment-atomic": "node scripts/vditor-table-attachment-atomic.test.mjs",

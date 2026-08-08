@@ -296,6 +296,60 @@ func (r *Registry) PurgeBlob(ctx context.Context, store BlobStore, publicID stri
 	return int(removed), nil
 }
 
+// PurgeBlobScoped removes only the logical references supplied by the caller.
+// The physical blob is deleted only when no references remain at all.  This is
+// the primitive used by viewer-scoped administrator purge; it intentionally
+// does not reveal or enumerate references outside the caller's visibility.
+func (r *Registry) PurgeBlobScoped(ctx context.Context, store BlobStore, publicID string, referenceIDs []uint) (int, bool, error) {
+	if r == nil || r.db == nil || store == nil || strings.TrimSpace(publicID) == "" {
+		return 0, false, errInvalidCreate
+	}
+	registryMu.Lock()
+	defer registryMu.Unlock()
+	var reference models.AttachmentReference
+	if err := r.db.Where("public_id = ?", strings.TrimSpace(publicID)).First(&reference).Error; err != nil {
+		return 0, false, err
+	}
+	var blob models.AttachmentBlob
+	if err := r.db.First(&blob, reference.BlobID).Error; err != nil {
+		return 0, false, err
+	}
+	if blob.StorageBackend != store.ID() {
+		return 0, false, errors.New("attachment storage backend mismatch")
+	}
+	allowed := make(map[uint]struct{}, len(referenceIDs))
+	for _, id := range referenceIDs {
+		if id != 0 {
+			allowed[id] = struct{}{}
+		}
+	}
+	removed := int64(0)
+	if err := r.db.Transaction(func(tx *gorm.DB) error {
+		if len(allowed) > 0 {
+			result := tx.Where("blob_id = ? AND id IN ?", blob.ID, referenceIDs).Delete(&models.AttachmentReference{})
+			if result.Error != nil {
+				return result.Error
+			}
+			removed = result.RowsAffected
+		}
+		return nil
+	}); err != nil {
+		return 0, false, err
+	}
+	var remaining int64
+	if err := r.db.Model(&models.AttachmentReference{}).Where("blob_id = ?", blob.ID).Count(&remaining).Error; err != nil {
+		return int(removed), false, err
+	}
+	if remaining > 0 {
+		return int(removed), false, nil
+	}
+	if err := store.Delete(ctx, blob.StorageKey); err != nil {
+		return int(removed), false, nil
+	}
+	_ = r.db.Delete(&blob).Error
+	return int(removed), true, nil
+}
+
 type LocalStore struct {
 	root string
 }

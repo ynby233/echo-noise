@@ -66,10 +66,6 @@ func serveLocalAttachmentReference(c *gin.Context, kind, blobRoot, rawPath strin
 }
 
 func canReadAttachmentReference(c *gin.Context, reference models.AttachmentReference, backend string) (bool, bool, error) {
-	messages, err := messagesReferencingAttachmentReference(reference, backend)
-	if err != nil {
-		return false, false, err
-	}
 	if reference.Kind == "image" && isPublicSiteImageReference(reference, backend) {
 		return true, true, nil
 	}
@@ -78,24 +74,23 @@ func canReadAttachmentReference(c *gin.Context, reference models.AttachmentRefer
 	if err != nil {
 		return false, false, err
 	}
-	scope, err := services.ResolveContentReadScope(db, viewerID)
+	visible, err := services.VisibleAttachmentSources(db, viewerID, reference, backend)
 	if err != nil {
 		return false, false, err
 	}
-	if len(messages) == 0 {
+	if len(visible) == 0 {
 		return viewerID != nil && *viewerID == reference.OwnerUserID, false, nil
 	}
 	publiclyReferenced := false
-	allowed := false
-	for _, message := range messages {
-		if services.StoredMessageVisibility(message) == services.MessageVisibilityPublic {
+	for _, source := range visible {
+		if source.SourceType == "message" && services.StoredMessageVisibility(source.Message) == services.MessageVisibilityPublic {
 			publiclyReferenced = true
 		}
-		if scope.CanReadMessage(message) {
-			allowed = true
+		if source.Comment != nil && source.Visibility == "public" && services.StoredMessageVisibility(source.Message) == services.MessageVisibilityPublic {
+			publiclyReferenced = true
 		}
 	}
-	return allowed, publiclyReferenced, nil
+	return len(visible) > 0, publiclyReferenced, nil
 }
 
 func isPublicSiteImageReference(reference models.AttachmentReference, backend string) bool {

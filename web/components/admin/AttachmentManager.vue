@@ -51,9 +51,9 @@
         <div class="attachment-batch-actions">
           <UButton size="xs" color="gray" variant="soft" icon="i-heroicons-check-circle" @click="selectAllActive">全选当前分类</UButton>
           <UButton size="xs" color="gray" variant="soft" icon="i-heroicons-x-mark" :disabled="selectedCount===0" @click="clearSelection">取消选择</UButton>
-          <UButton size="xs" color="primary" variant="soft" icon="i-heroicons-archive-box-arrow-down" :loading="zipDownloading" :disabled="selectedCount===0" @click="downloadSelectedZip">打包下载</UButton>
-          <UButton size="xs" color="orange" variant="soft" icon="i-heroicons-scissors" :loading="batchDeleting" :disabled="selectedCount===0" @click="batchDelete">删除所选引用</UButton>
-          <UButton size="xs" color="red" variant="soft" icon="i-heroicons-trash" :disabled="selectedCount===0" @click="openPurgeSelected">彻底删除所选文件</UButton>
+          <UButton v-if="canDownload" size="xs" color="primary" variant="soft" icon="i-heroicons-archive-box-arrow-down" :loading="zipDownloading" :disabled="selectedCount===0" @click="downloadSelectedZip">打包下载</UButton>
+          <UButton v-if="canDeleteReference" size="xs" color="orange" variant="soft" icon="i-heroicons-scissors" :loading="batchDeleting" :disabled="selectedCount===0" @click="batchDelete">删除所选引用</UButton>
+          <UButton v-if="canPurgeBlob" size="xs" color="red" variant="soft" icon="i-heroicons-trash" :disabled="selectedCount===0" @click="openPurgeSelected">彻底删除所选文件</UButton>
         </div>
       </div>      <div
         ref="selectionSurface"
@@ -94,8 +94,8 @@
                 </div>
               </div>
               <div class="attachment-actions">
-                <UButton size="xs" icon="i-heroicons-arrow-down-tray" color="gray" variant="soft" title="下载" aria-label="下载" @click="downloadAttachment(group.primary)" />
-                <UButton size="xs" icon="i-heroicons-fire" color="red" variant="soft" :title="`彻底删除文件（含 ${group.referenceCount} 个逻辑附件）`" :aria-label="`彻底删除文件（含 ${group.referenceCount} 个逻辑附件）`" @click="openPurgeGroup(group)" />
+                <UButton v-if="canDownload" size="xs" icon="i-heroicons-arrow-down-tray" color="gray" variant="soft" title="下载" aria-label="下载" @click="downloadAttachment(group.primary)" />
+                <UButton v-if="canPurgeBlob" size="xs" icon="i-heroicons-fire" color="red" variant="soft" :title="`彻底删除文件（含 ${group.referenceCount} 个逻辑附件）`" :aria-label="`彻底删除文件（含 ${group.referenceCount} 个逻辑附件）`" @click="openPurgeGroup(group)" />
               </div>
             </div>
             <img v-if="group.kind === 'image'" :src="fullURL(group.primary.url)" class="attachment-preview mt-2 rounded w-full object-contain bg-black/20" loading="lazy" />
@@ -126,7 +126,7 @@
                   <div v-if="item.logical_id" class="attachment-logical-id text-[10px]" :class="theme?.mutedText">附件 ID：{{ item.logical_id }}</div>
                   <div class="text-[10px]" :class="theme?.mutedText">{{ referenceUsageLabel(item) }}</div>
                 </div>
-                <UButton
+                <UButton v-if="canDeleteReference"
                   size="2xs"
                   icon="i-heroicons-trash"
                   color="orange"
@@ -201,7 +201,7 @@
             <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 shrink-0" aria-hidden="true" />
             <span>{{ purgeSummary }}</span>
           </div>
-          <div class="attachment-delete-warning__detail">磁盘上的文件会被移除，指向它的全部逻辑附件会一并删除，这些内容里的附件会变成「已被删除」占位块，正文不会自动修改。</div>
+          <div class="attachment-delete-warning__detail">会清理当前可见范围内的逻辑附件；物理文件会在没有剩余引用时自动清理。这些内容里的附件会变成「已被删除」占位块，正文不会自动修改。</div>
           <ul class="attachment-delete-warning__list">
             <li v-for="group in purgeGroupsPreview" :key="group.id">
               {{ group.name }}（{{ group.referenceCount }} 个逻辑附件）
@@ -224,6 +224,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useToast } from '#imports'
 import { useUserStore } from '~/store/user'
 import { resolveManagedAttachmentURL } from '~/utils/media-url'
+import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 
 const props = defineProps<{ theme?: Record<string, string>, isCloud?: boolean }>()
 
@@ -284,6 +285,10 @@ let selectionSnapshot: Record<string, true> = {}
 
 const baseApi = useRuntimeConfig().public.baseApi || '/api'
 const userStore = useUserStore()
+const { can } = useAdminCapabilities()
+const canDownload = computed(() => can('attachments.download'))
+const canDeleteReference = computed(() => can('attachments.delete_reference'))
+const canPurgeBlob = computed(() => can('attachments.purge_blob'))
 const authHeaders = computed(() => {
   const t = String((userStore as any)?.token || '').trim()
   if (!t || t === 'null') return {}

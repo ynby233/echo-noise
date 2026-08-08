@@ -93,6 +93,21 @@ func serveLocalAttachment(kind string, root string, blobRoot string) gin.Handler
 				allowed = true
 			}
 		}
+		if viewerID != nil {
+			if visibleSources, sourceErr := services.VisibleLegacyAttachmentSources(database.DB, viewerID, kind, name); sourceErr == nil {
+				if len(visibleSources) > 0 {
+					allowed = true
+				}
+				for _, source := range visibleSources {
+					if source.SourceType == "message" && services.StoredMessageVisibility(source.Message) == services.MessageVisibilityPublic {
+						publiclyReferenced = true
+					}
+					if source.Comment != nil && source.Visibility == "public" && services.StoredMessageVisibility(source.Message) == services.MessageVisibilityPublic {
+						publiclyReferenced = true
+					}
+				}
+			}
+		}
 		if !allowed {
 			c.Header("Cache-Control", "private, no-store")
 			c.Header("Vary", "Cookie, Authorization")
