@@ -184,7 +184,8 @@
         <button class="submit-btn comment-reopen-btn" :class="submitBtnClass" @click="reopenInput">写{{ contextLabel }}</button>
       </div>
       <div v-else-if="props.showInput && !enabled" class="text-xs text-center mt-5 mb-3" :class="themeMuted">{{ contextLabel }}功能未开启</div>
-      <div v-else-if="props.showInput && enabled && !canComment" class="text-xs text-center mt-5 mb-3" :class="themeMuted">{{ loginRequiredText }}</div>
+      <div v-else-if="props.showInput && enabled && guestbookAuthPending" class="text-xs text-center mt-5 mb-3" :class="themeMuted">正在检查登录状态...</div>
+      <div v-else-if="showLoginRequired" class="text-xs text-center mt-5 mb-3" :class="themeMuted">{{ loginRequiredText }}</div>
       <div v-if="showCommentPager" class="pager-shell" :class="{ 'is-dark': isDark }">
         <div class="pager-nav-group">
           <button
@@ -402,6 +403,17 @@ const enabled = computed(() => {
 const canComment = computed(() => {
   return enabled.value && user.isLogin && props.canInteract !== false
 })
+const guestbookAuthPending = ref(false)
+const showLoginRequired = computed(() => props.showInput && enabled.value && !guestbookAuthPending.value && !canComment.value)
+const ensureGuestbookAuth = async () => {
+  if (contextLabel.value !== '留言' || !props.showInput || user.isLogin) return
+  guestbookAuthPending.value = true
+  try {
+    await user.getUser()
+  } finally {
+    guestbookAuthPending.value = false
+  }
+}
 const canReplyToComment = (comment: any) => canComment.value && comment?.can_interact === true
 // 使用原始 textarea 输入框
 
@@ -734,6 +746,7 @@ const restoreInputScroll = () => {
 }
 watch(() => props.showInput, (v) => {
   if (!v) return
+  void ensureGuestbookAuth()
   hiddenByCancel.value = false
   if (!props.autoScrollInput) return
   captureInputRestoreScroll()
@@ -742,6 +755,7 @@ watch(() => props.showInput, (v) => {
 })
 
 onMounted(() => {
+  void ensureGuestbookAuth()
   if (props.showInput && props.autoScrollInput) {
     captureInputRestoreScroll()
     pendingInputScroll.value = true
