@@ -79,3 +79,93 @@ func TestVisibleAttachmentSourcesCoversMessageCommentReplyAndGuestbook(t *testin
 		t.Fatalf("primary should see the complete guestbook thread: %#v", sources)
 	}
 }
+
+func TestVisibleLegacyAttachmentSourcesScansDiscussionWhenParentHasNoAttachment(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&models.User{}, &models.Message{}, &models.Comment{}, &models.AdminCapabilityGrant{}); err != nil {
+		t.Fatal(err)
+	}
+	owner := models.User{ID: 2, Username: "owner"}
+	if err := db.Create(&owner).Error; err != nil {
+		t.Fatal(err)
+	}
+	message := models.Message{ID: 10, UserID: owner.ID, Content: "parent without attachment", Visibility: "public"}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatal(err)
+	}
+	comment := models.Comment{ID: 11, MessageID: message.ID, UserID: &owner.ID, Content: "comment /api/files/comment-only.txt", Visibility: "public"}
+	if err := db.Create(&comment).Error; err != nil {
+		t.Fatal(err)
+	}
+	reply := models.Comment{ID: 12, MessageID: message.ID, UserID: &owner.ID, ParentID: &comment.ID, Content: "reply /api/files/reply-only.txt", Visibility: "public"}
+	if err := db.Create(&reply).Error; err != nil {
+		t.Fatal(err)
+	}
+	sources, err := VisibleLegacyAttachmentSources(db, nil, "file", "comment-only.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sources) != 1 || sources[0].SourceType != "comment" || sources[0].SourceID != comment.ID {
+		t.Fatalf("comment-only source = %#v", sources)
+	}
+	sources, err = VisibleLegacyAttachmentSources(db, nil, "file", "reply-only.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sources) != 1 || sources[0].SourceType != "reply" || sources[0].SourceID != reply.ID {
+		t.Fatalf("reply-only source = %#v", sources)
+	}
+}
+
+func TestVisibleLegacyAttachmentSourcesMatchesHistoricalCloudURL(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&models.User{}, &models.Message{}, &models.Comment{}, &models.CloudAttachmentObject{}, &models.SiteConfig{}); err != nil {
+		t.Fatal(err)
+	}
+	owner := models.User{ID: 2, Username: "owner"}
+	if err := db.Create(&owner).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.SiteConfig{AttachmentStoragePublicBaseURL: "https://public.example.test/note"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	object := models.CloudAttachmentObject{PublicID: "cloud-public-id", ObjectKey: "note/legacy/report.txt", LegacyObjectKey: "note/legacy/report.txt", OriginalName: "report.txt"}
+	if err := db.Create(&object).Error; err != nil {
+		t.Fatal(err)
+	}
+	message := models.Message{ID: 10, UserID: owner.ID, Content: "cloud parent", Visibility: "public"}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatal(err)
+	}
+	comment := models.Comment{ID: 11, MessageID: message.ID, UserID: &owner.ID, Content: "legacy https://public.example.test/note/legacy/report.txt", Visibility: "private"}
+	if err := db.Create(&comment).Error; err != nil {
+		t.Fatal(err)
+	}
+	sources, err := VisibleLegacyAttachmentSources(db, nil, "cloud", object.PublicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sources) != 1 || sources[0].SourceType != "comment" || sources[0].SourceID != comment.ID {
+		t.Fatalf("historical cloud source = %#v", sources)
+	}
+	visible, err := VisibleLegacyAttachmentSourcesForViewer(db, nil, "cloud", object.PublicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(visible) != 0 {
+		t.Fatalf("anonymous viewer saw hidden historical cloud source = %#v", visible)
+	}
+	visible, err = VisibleLegacyAttachmentSourcesForViewer(db, &owner.ID, "cloud", object.PublicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(visible) != 1 {
+		t.Fatalf("owner could not see hidden historical cloud source = %#v", visible)
+	}
+}

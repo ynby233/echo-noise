@@ -31,6 +31,11 @@ type legacyCloudAttachmentReference struct {
 	OldURLs      []string
 }
 
+type legacyCloudAttachmentDocument struct {
+	Message *models.Message
+	Comment *models.Comment
+}
+
 var legacyCloudAttachmentMigrationMu sync.Mutex
 
 // MigrateLegacyCloudAttachments replaces historical public-bucket URLs with
@@ -112,12 +117,25 @@ func migrateLegacyCloudAttachmentsWithClient(ctx context.Context, db *gorm.DB, c
 	if err := db.Find(&messages).Error; err != nil {
 		return errors.Join(append(migrationErrors, err)...)
 	}
-	references, prefix, err := collectLegacyCloudAttachmentReferences(messages, cfg.AttachmentStoragePublicBaseURL)
+	var comments []models.Comment
+	if db.Migrator().HasTable(&models.Comment{}) {
+		if err := db.Find(&comments).Error; err != nil {
+			return errors.Join(append(migrationErrors, err)...)
+		}
+	}
+	documents := make([]legacyCloudAttachmentDocument, 0, len(messages)+len(comments))
+	for index := range messages {
+		documents = append(documents, legacyCloudAttachmentDocument{Message: &messages[index]})
+	}
+	for index := range comments {
+		documents = append(documents, legacyCloudAttachmentDocument{Comment: &comments[index]})
+	}
+	references, prefix, err := collectLegacyCloudAttachmentReferencesFromDocuments(documents, cfg.AttachmentStoragePublicBaseURL)
 	if err != nil {
 		return errors.Join(append(migrationErrors, err)...)
 	}
 	for _, reference := range references {
-		if err := migrateLegacyCloudAttachmentReference(ctx, db, client, bucket, prefix, reference, messages); err != nil {
+		if err := migrateLegacyCloudAttachmentReferenceDocuments(ctx, db, client, bucket, prefix, reference, documents); err != nil {
 			migrationErrors = append(migrationErrors, err)
 		}
 	}
@@ -156,6 +174,22 @@ func migrateLegacyCloudAttachmentReference(
 	reference legacyCloudAttachmentReference,
 	messages []models.Message,
 ) error {
+	documents := make([]legacyCloudAttachmentDocument, 0, len(messages))
+	for index := range messages {
+		documents = append(documents, legacyCloudAttachmentDocument{Message: &messages[index]})
+	}
+	return migrateLegacyCloudAttachmentReferenceDocuments(ctx, db, client, bucket, prefix, reference, documents)
+}
+
+func migrateLegacyCloudAttachmentReferenceDocuments(
+	ctx context.Context,
+	db *gorm.DB,
+	client legacyCloudAttachmentS3API,
+	bucket string,
+	prefix string,
+	reference legacyCloudAttachmentReference,
+	documents []legacyCloudAttachmentDocument,
+) error {
 	var object models.CloudAttachmentObject
 	err := db.Where("legacy_object_key = ?", reference.ObjectKey).First(&object).Error
 	createdNewObject := false
@@ -193,24 +227,40 @@ func migrateLegacyCloudAttachmentReference(
 				return err
 			}
 		}
-		for _, message := range messages {
-			var current models.Message
-			if err := tx.Select("id", "content", "image_url", "user_id", "private", "visibility").First(&current, message.ID).Error; err != nil {
-				return err
-			}
-			content := replaceLegacyCloudAttachmentURLs(current.Content, reference.OldURLs, controlledURL)
-			imageURL := replaceLegacyCloudAttachmentURLs(current.ImageURL, reference.OldURLs, controlledURL)
-			if content == current.Content && imageURL == current.ImageURL {
+		for _, document := range documents {
+			if document.Message != nil {
+				var current models.Message
+				if err := tx.Select("id", "content", "image_url", "user_id", "private", "visibility").First(&current, document.Message.ID).Error; err != nil {
+					return err
+				}
+				content := replaceLegacyCloudAttachmentURLs(current.Content, reference.OldURLs, controlledURL)
+				imageURL := replaceLegacyCloudAttachmentURLs(current.ImageURL, reference.OldURLs, controlledURL)
+				if content == current.Content && imageURL == current.ImageURL {
+					continue
+				}
+				if err := tx.Model(&models.Message{}).Where("id = ?", current.ID).
+					Updates(map[string]interface{}{"content": content, "image_url": imageURL}).Error; err != nil {
+					return err
+				}
+				current.Content = content
+				current.ImageURL = imageURL
+				if err := models.SyncLocalAttachmentGrants(tx, &current); err != nil {
+					return err
+				}
 				continue
 			}
-			if err := tx.Model(&models.Message{}).Where("id = ?", message.ID).
-				Updates(map[string]interface{}{"content": content, "image_url": imageURL}).Error; err != nil {
-				return err
-			}
-			current.Content = content
-			current.ImageURL = imageURL
-			if err := models.SyncLocalAttachmentGrants(tx, &current); err != nil {
-				return err
+			if document.Comment != nil {
+				var current models.Comment
+				if err := tx.Select("id", "content").First(&current, document.Comment.ID).Error; err != nil {
+					return err
+				}
+				content := replaceLegacyCloudAttachmentURLs(current.Content, reference.OldURLs, controlledURL)
+				if content == current.Content {
+					continue
+				}
+				if err := tx.Model(&models.Comment{}).Where("id = ?", current.ID).Update("content", content).Error; err != nil {
+					return err
+				}
 			}
 		}
 		return nil
@@ -240,6 +290,14 @@ func replaceLegacyCloudAttachmentURLs(value string, oldURLs []string, controlled
 }
 
 func collectLegacyCloudAttachmentReferences(messages []models.Message, publicBaseURL string) ([]legacyCloudAttachmentReference, string, error) {
+	documents := make([]legacyCloudAttachmentDocument, 0, len(messages))
+	for index := range messages {
+		documents = append(documents, legacyCloudAttachmentDocument{Message: &messages[index]})
+	}
+	return collectLegacyCloudAttachmentReferencesFromDocuments(documents, publicBaseURL)
+}
+
+func collectLegacyCloudAttachmentReferencesFromDocuments(documents []legacyCloudAttachmentDocument, publicBaseURL string) ([]legacyCloudAttachmentReference, string, error) {
 	base, parsedBase, err := normalizeLegacyCloudAttachmentPublicBaseURL(publicBaseURL)
 	if err != nil || base == "" {
 		return nil, "", err
@@ -250,8 +308,17 @@ func collectLegacyCloudAttachmentReferences(messages []models.Message, publicBas
 	}
 	byKey := make(map[string]*legacyCloudAttachmentReference)
 	order := make([]string, 0)
-	for _, message := range messages {
-		for _, source := range []string{message.Content, message.ImageURL} {
+	for _, document := range documents {
+		if document.Message == nil && document.Comment == nil {
+			continue
+		}
+		contents := []string{}
+		if document.Message != nil {
+			contents = []string{document.Message.Content, document.Message.ImageURL}
+		} else {
+			contents = []string{document.Comment.Content}
+		}
+		for _, source := range contents {
 			offset := 0
 			needle := base + "/"
 			for offset < len(source) {

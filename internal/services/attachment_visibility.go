@@ -165,9 +165,15 @@ func VisibleLegacyAttachmentSources(db *gorm.DB, actorID *uint, kind, name strin
 	for _, c := range comments {
 		commentsByMessage[c.MessageID] = append(commentsByMessage[c.MessageID], c)
 	}
+	cloudNeedles := legacyCloudAttachmentNeedles(db, name)
 	match := func(content string) bool {
 		if kind == "cloud" {
-			return strings.Contains(content, "/api/cloud-attachments/"+name+"/")
+			for _, needle := range cloudNeedles {
+				if strings.Contains(content, needle) {
+					return true
+				}
+			}
+			return false
 		}
 		for _, ref := range models.ExtractLocalAttachmentReferences(models.Message{Content: content}) {
 			if ref.Kind == kind && ref.Name == name {
@@ -178,10 +184,12 @@ func VisibleLegacyAttachmentSources(db *gorm.DB, actorID *uint, kind, name strin
 	}
 	all := make([]AttachmentSource, 0)
 	for _, message := range messages {
-		if !match(message.Content) && !match(message.ImageURL) {
-			continue
+		// Scan the note and its discussion independently. A note without an
+		// attachment can still own comment/reply attachments, so the parent
+		// match must never short-circuit the child scan.
+		if match(message.Content) || match(message.ImageURL) {
+			all = append(all, AttachmentSource{SourceType: "message", SourceID: message.ID, MessageID: message.ID, OwnerUserID: message.UserID, Visibility: StoredMessageVisibility(message), Message: message})
 		}
-		all = append(all, AttachmentSource{SourceType: "message", SourceID: message.ID, MessageID: message.ID, OwnerUserID: message.UserID, Visibility: StoredMessageVisibility(message), Message: message})
 		thread := commentsByMessage[message.ID]
 		commentMap := CommentMap(thread)
 		for i := range thread {
@@ -214,4 +222,76 @@ func VisibleLegacyAttachmentSources(db *gorm.DB, actorID *uint, kind, name strin
 		}
 	}
 	return visible, nil
+}
+
+// VisibleLegacyAttachmentSourcesForViewer is the transport-safe variant for
+// legacy file URLs. Unlike the administration compatibility scanner, it always
+// applies ContentReadScope, including for anonymous viewers.
+func VisibleLegacyAttachmentSourcesForViewer(db *gorm.DB, actorID *uint, kind, name string) ([]AttachmentSource, error) {
+	all, err := VisibleLegacyAttachmentSources(db, nil, kind, name)
+	if err != nil {
+		return nil, err
+	}
+	visible := make([]AttachmentSource, 0, len(all))
+	for _, source := range all {
+		ok, err := AttachmentSourceVisible(db, actorID, source)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			visible = append(visible, source)
+		}
+	}
+	return visible, nil
+}
+
+// legacyCloudAttachmentNeedles covers both the managed application URL and
+// historical public-bucket URLs. The latter are constrained to the configured
+// public base and the object's persisted key; arbitrary external URLs never
+// become attachment sources.
+func legacyCloudAttachmentNeedles(db *gorm.DB, publicID string) []string {
+	publicID = strings.TrimSpace(publicID)
+	if publicID == "" {
+		return nil
+	}
+	needles := []string{"/api/cloud-attachments/" + publicID + "/"}
+	var object models.CloudAttachmentObject
+	if db != nil && db.Migrator().HasTable(&models.CloudAttachmentObject{}) && db.Where("public_id = ?", publicID).First(&object).Error == nil {
+		var cfg models.SiteConfig
+		if db.Table("site_configs").First(&cfg).Error == nil {
+			base := strings.TrimRight(strings.TrimSpace(cfg.AttachmentStoragePublicBaseURL), "/")
+			if base != "" {
+				basePath := ""
+				if parsed, err := url.Parse(base); err == nil {
+					basePath = strings.Trim(parsed.EscapedPath(), "/")
+				}
+				for _, key := range []string{object.ObjectKey, object.LegacyObjectKey} {
+					key = strings.TrimLeft(strings.TrimSpace(key), "/")
+					if key == "" {
+						continue
+					}
+					relativeKey := strings.TrimPrefix(key, basePath+"/")
+					needles = append(needles, base+"/"+relativeKey)
+					needles = append(needles, base+"/"+url.PathEscape(relativeKey))
+				}
+			}
+		}
+	}
+	return dedupeStrings(needles)
+}
+
+func dedupeStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }

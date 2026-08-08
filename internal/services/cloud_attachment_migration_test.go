@@ -51,7 +51,7 @@ func TestLegacyCloudAttachmentMigrationRewritesURLsAndRetriesPublicObjectCleanup
 	if err != nil {
 		t.Fatalf("open test database: %v", err)
 	}
-	if err := db.AutoMigrate(&models.Message{}, &models.CloudAttachmentObject{}, &models.LocalAttachmentGrant{}); err != nil {
+	if err := db.AutoMigrate(&models.Message{}, &models.Comment{}, &models.CloudAttachmentObject{}, &models.LocalAttachmentGrant{}); err != nil {
 		t.Fatalf("migrate test database: %v", err)
 	}
 	cfg := models.SiteConfig{
@@ -70,6 +70,10 @@ func TestLegacyCloudAttachmentMigrationRewritesURLsAndRetriesPublicObjectCleanup
 	}
 	if err := db.Create(&message).Error; err != nil {
 		t.Fatalf("create legacy message: %v", err)
+	}
+	comment := models.Comment{MessageID: message.ID, Content: "legacy comment " + oldURL, Visibility: "private"}
+	if err := db.Create(&comment).Error; err != nil {
+		t.Fatalf("create legacy comment: %v", err)
 	}
 	client := &legacyCloudMigrationS3Mock{
 		bucket:         cfg.AttachmentStorageBucket,
@@ -97,6 +101,12 @@ func TestLegacyCloudAttachmentMigrationRewritesURLsAndRetriesPublicObjectCleanup
 	if strings.Contains(message.Content, oldURL) || strings.Contains(message.ImageURL, oldURL) ||
 		!strings.Contains(message.Content, controlledURL) || message.ImageURL != controlledURL {
 		t.Fatalf("message URLs were not rewritten: content=%q image=%q", message.Content, message.ImageURL)
+	}
+	if err := db.First(&comment, comment.ID).Error; err != nil {
+		t.Fatalf("reload migrated comment: %v", err)
+	}
+	if strings.Contains(comment.Content, oldURL) || !strings.Contains(comment.Content, controlledURL) {
+		t.Fatalf("comment URL was not rewritten: content=%q", comment.Content)
 	}
 	var grant models.LocalAttachmentGrant
 	if err := db.Where("kind = ? AND name = ? AND message_id = ?", "cloud", object.PublicID, message.ID).First(&grant).Error; err != nil {

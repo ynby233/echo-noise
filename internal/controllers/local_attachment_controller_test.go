@@ -135,3 +135,49 @@ func TestServeLocalAttachmentEnforcesMessageVisibilityAndPreservesHTTPMediaSeman
 		t.Fatalf("delegated admin must not read primary-owned deleted attachment snapshot: %d", got.Code)
 	}
 }
+
+func TestServeLocalAttachmentDoesNotExposeHiddenCommentOnlyReference(t *testing.T) {
+	db, r, owner, message := setupCommentAccountTest(t)
+	owner.Token = "comment-attachment-owner-token"
+	if err := db.Model(&owner).Update("token", owner.Token).Error; err != nil {
+		t.Fatalf("update owner token: %v", err)
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "comment-only.txt"), []byte("comment attachment"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	comment := models.Comment{MessageID: message.ID, UserID: &owner.ID, Content: "hidden /api/files/comment-only.txt", Visibility: "private"}
+	if err := db.Create(&comment).Error; err != nil {
+		t.Fatalf("create comment: %v", err)
+	}
+	handler := ServeLocalAttachment("file", dir)
+	r.GET("/api/files/*name", handler)
+	request := func(token string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/api/files/comment-only.txt", nil)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		response := httptest.NewRecorder()
+		r.ServeHTTP(response, req)
+		return response
+	}
+	if got := request(""); got.Code != http.StatusNotFound {
+		t.Fatalf("anonymous hidden comment attachment status = %d, want 404", got.Code)
+	}
+	if got := request(owner.Token); got.Code != http.StatusOK || got.Body.String() != "comment attachment" {
+		t.Fatalf("owner hidden comment attachment = %d %q", got.Code, got.Body.String())
+	}
+	publicComment := models.Comment{MessageID: message.ID, UserID: &owner.ID, Content: "public /api/files/public-comment-only.txt", Visibility: "public"}
+	if err := db.Create(&publicComment).Error; err != nil {
+		t.Fatalf("create public comment: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "public-comment-only.txt"), []byte("public comment attachment"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/files/public-comment-only.txt", nil)
+	response := httptest.NewRecorder()
+	r.ServeHTTP(response, req)
+	if response.Code != http.StatusOK || response.Body.String() != "public comment attachment" {
+		t.Fatalf("anonymous public comment attachment = %d %q", response.Code, response.Body.String())
+	}
+}

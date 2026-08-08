@@ -101,4 +101,10 @@ func TestAttachmentManagementListsRequireAdminSession(t *testing.T) {
 	if response := request(cookiesFor("admin")); response.Code != http.StatusOK {
 		t.Fatalf("admin attachment list status = %d, want 200: %s", response.Code, response.Body.String())
 	}
+	legacyDelete := httptest.NewRequest(http.MethodDelete, "/api/attachments/images/legacy.txt", nil)
+	legacyDeleteResponse := httptest.NewRecorder()
+	r.ServeHTTP(legacyDeleteResponse, legacyDelete)
+	if legacyDeleteResponse.Code != http.StatusNotFound {
+		t.Fatalf("legacy filename delete status = %d, want 404", legacyDeleteResponse.Code)
+	}
 }

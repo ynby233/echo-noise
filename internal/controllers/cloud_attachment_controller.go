@@ -75,18 +75,20 @@ func ServeCloudAttachment(c *gin.Context) {
 			allowed = true
 		}
 	}
-	if viewerID != nil {
-		if visibleSources, sourceErr := services.VisibleLegacyAttachmentSources(db, viewerID, "cloud", object.PublicID); sourceErr == nil {
-			if len(visibleSources) > 0 {
-				allowed = true
+	legacySources, legacyErr := services.VisibleLegacyAttachmentSources(db, nil, "cloud", object.PublicID)
+	if legacyErr == nil && len(legacySources) > 0 {
+		allowed = false
+	}
+	if visibleSources, sourceErr := services.VisibleLegacyAttachmentSourcesForViewer(db, viewerID, "cloud", object.PublicID); sourceErr == nil {
+		if len(visibleSources) > 0 {
+			allowed = true
+		}
+		for _, source := range visibleSources {
+			if source.SourceType == "message" && services.StoredMessageVisibility(source.Message) == services.MessageVisibilityPublic {
+				publiclyReferenced = true
 			}
-			for _, source := range visibleSources {
-				if source.SourceType == "message" && services.StoredMessageVisibility(source.Message) == services.MessageVisibilityPublic {
-					publiclyReferenced = true
-				}
-				if source.Comment != nil && source.Visibility == "public" && services.StoredMessageVisibility(source.Message) == services.MessageVisibilityPublic {
-					publiclyReferenced = true
-				}
+			if source.Comment != nil && source.Visibility == "public" && services.StoredMessageVisibility(source.Message) == services.MessageVisibilityPublic {
+				publiclyReferenced = true
 			}
 		}
 	}

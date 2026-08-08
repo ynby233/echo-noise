@@ -60,10 +60,6 @@ func registerAttachmentManagementRoutes(authRoutes *gin.RouterGroup) {
 	attachments.DELETE("/references/:id", middleware.RequireCapability(authorization.CapabilityAttachmentsDeleteReference), controllers.DeleteAttachmentReference)
 	attachments.POST("/references/batch-delete", middleware.RequireCapability(authorization.CapabilityAttachmentsDeleteReference), controllers.DeleteAttachmentReferencesBatch)
 	attachments.POST("/references/batch-purge", middleware.RequireCapability(authorization.CapabilityAttachmentsPurgeBlob), controllers.PurgeAttachmentBlobsBatch)
-	attachments.DELETE("/images/*name", middleware.RequireCapability(authorization.CapabilityAttachmentsDeleteReference), controllers.DeleteImageAttachment)
-	attachments.DELETE("/video/*name", middleware.RequireCapability(authorization.CapabilityAttachmentsDeleteReference), controllers.DeleteVideoAttachment)
-	attachments.DELETE("/audio/*name", middleware.RequireCapability(authorization.CapabilityAttachmentsDeleteReference), controllers.DeleteAudioAttachment)
-	attachments.DELETE("/other/*name", middleware.RequireCapability(authorization.CapabilityAttachmentsDeleteReference), controllers.DeleteOtherAttachment)
 }
 
 func SetupRouter() *gin.Engine {
