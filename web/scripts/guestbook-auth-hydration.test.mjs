@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const component = await readFile(join(root, 'components/comments/BuiltinComments.vue'), 'utf8')
+const homePage = await readFile(join(root, 'pages/index.vue'), 'utf8')
 
 assert.match(
   component,
@@ -30,6 +31,11 @@ assert.match(
   component,
   /onMounted\(\(\)\s*=>\s*\{[\s\S]*?void\s+ensureGuestbookAuth\(\)/,
   'guestbook authentication hydration must start when the comment component mounts'
+)
+assert.match(
+  homePage,
+  /<BuiltinComments\s+v-if="guestbookMessageId"[\s\S]*?:show-input="true"[\s\S]*?:can-interact="true"[\s\S]*context-label="留言"/,
+  'the guestbook page must explicitly enable interaction because canInteract is a Boolean prop'
 )
 
 console.log('guestbook auth hydration contract passed')

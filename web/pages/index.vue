@@ -310,7 +310,7 @@
               <div class="card-title text-center mb-4 text-black dark:text-white">{{ frontendConfig.commentPageTitle || '留言' }}</div>
               <div v-if="(frontendConfig.commentPageDescription || '').trim() !== ''" class="section-subtitle comment-subtitle">{{ frontendConfig.commentPageDescription }}</div>
               <div class="max-w-3xl mx-auto comment-board-wrap">
-                <BuiltinComments v-if="guestbookMessageId" ref="guestbookCommentsRef" :message-id="guestbookMessageId" :site-config="frontendConfig" :show-input="true" context-label="留言" />
+                <BuiltinComments v-if="guestbookMessageId" ref="guestbookCommentsRef" :message-id="guestbookMessageId" :site-config="frontendConfig" :show-input="true" :can-interact="true" context-label="留言" />
                 <div v-else class="text-sm opacity-70">正在准备留言板...</div>
               </div>
             </UCard>
