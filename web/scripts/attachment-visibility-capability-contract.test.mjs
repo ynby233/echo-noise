@@ -18,4 +18,7 @@ assert.match(manager, /can\('attachments\.delete_reference'\)/)
 assert.match(manager, /can\('attachments\.purge_blob'\)/)
 assert.match(controller, /VisibleAttachmentSources/)
 assert.match(controller, /PurgeBlobScoped/)
+for (const field of ['source_type', 'source_id', 'message_id', 'comment_id', 'parent_comment_id']) {
+  assert.match(controller, new RegExp(`json:\"${field}`), `${field} must be serialised in attachment provenance`)
+}
 console.log('attachment visibility capability checks passed')

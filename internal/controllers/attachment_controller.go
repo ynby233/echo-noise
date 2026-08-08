@@ -43,11 +43,18 @@ type AttachmentInfo struct {
 }
 
 type BelongItem struct {
-	ID        uint      `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	Snippet   string    `json:"snippet"`
-	Kind      string    `json:"kind,omitempty"`
-	Label     string    `json:"label,omitempty"`
+	ID              uint      `json:"id"`
+	CreatedAt       time.Time `json:"created_at"`
+	Snippet         string    `json:"snippet"`
+	Kind            string    `json:"kind,omitempty"`
+	Label           string    `json:"label,omitempty"`
+	SourceType      string    `json:"source_type,omitempty"`
+	SourceID        uint      `json:"source_id,omitempty"`
+	MessageID       uint      `json:"message_id,omitempty"`
+	CommentID       *uint     `json:"comment_id,omitempty"`
+	ParentCommentID *uint     `json:"parent_comment_id,omitempty"`
+	OwnerUserID     uint      `json:"owner_user_id,omitempty"`
+	Visibility      string    `json:"visibility,omitempty"`
 }
 
 type imageAttachmentUsage struct {
@@ -263,24 +270,7 @@ func listRegisteredAttachmentsForViewer(kind, backend string, actorID *uint, mes
 		needle := attachmentReferenceURLPrefix(item.Reference.Kind, backend, item.Reference.PublicID)
 		belongs := make([]BelongItem, 0)
 		for _, source := range visibleSources {
-			snippet := source.Message.Content
-			if source.Comment != nil {
-				snippet = source.Comment.Content
-			}
-			if len(snippet) > 80 {
-				snippet = snippet[:80]
-			}
-			label := fmt.Sprintf("笔记 #%d", source.MessageID)
-			if source.SourceType == "comment" {
-				label = fmt.Sprintf("评论 #%d", source.SourceID)
-			}
-			if source.SourceType == "reply" {
-				label = fmt.Sprintf("回复 #%d", source.SourceID)
-			}
-			if source.SourceType == "guestbook" {
-				label = fmt.Sprintf("留言 #%d", source.SourceID)
-			}
-			belongs = append(belongs, BelongItem{ID: source.SourceID, CreatedAt: source.Message.CreatedAt, Snippet: snippet, Kind: source.SourceType, Label: label})
+			belongs = append(belongs, belongItemFromAttachmentSource(source))
 		}
 		belongs = appendImageUsageBelongs(belongs, imageUsages, needle)
 		out = append(out, AttachmentInfo{
@@ -524,7 +514,7 @@ func findBelongs(messages []models.Message, name string, prefixes ...string) []B
 			if len(snip) > 80 {
 				snip = snip[:80]
 			}
-			out = append(out, BelongItem{ID: m.ID, CreatedAt: m.CreatedAt, Snippet: snip, Kind: "message", Label: fmt.Sprintf("笔记 #%d", m.ID)})
+			out = append(out, BelongItem{ID: m.ID, CreatedAt: m.CreatedAt, Snippet: snip, Kind: "message", Label: fmt.Sprintf("笔记 #%d", m.ID), SourceType: "message", SourceID: m.ID, MessageID: m.ID, OwnerUserID: m.UserID, Visibility: services.StoredMessageVisibility(m)})
 		}
 	}
 	return out
@@ -547,26 +537,36 @@ func legacyAttachmentBelongsForViewer(actorID *uint, kind, name string, messages
 	}
 	belongs := make([]BelongItem, 0, len(sources))
 	for _, source := range sources {
-		snippet := source.Message.Content
-		if source.Comment != nil {
-			snippet = source.Comment.Content
-		}
-		if len(snippet) > 80 {
-			snippet = snippet[:80]
-		}
-		label := fmt.Sprintf("笔记 #%d", source.MessageID)
-		if source.SourceType == "comment" {
-			label = fmt.Sprintf("评论 #%d", source.SourceID)
-		}
-		if source.SourceType == "reply" {
-			label = fmt.Sprintf("回复 #%d", source.SourceID)
-		}
-		if source.SourceType == "guestbook" {
-			label = fmt.Sprintf("留言 #%d", source.SourceID)
-		}
-		belongs = append(belongs, BelongItem{ID: source.SourceID, CreatedAt: source.Message.CreatedAt, Snippet: snippet, Kind: source.SourceType, Label: label})
+		belongs = append(belongs, belongItemFromAttachmentSource(source))
 	}
 	return belongs, true
+}
+
+func belongItemFromAttachmentSource(source services.AttachmentSource) BelongItem {
+	snippet := source.Message.Content
+	if source.Comment != nil {
+		snippet = source.Comment.Content
+	}
+	if len(snippet) > 80 {
+		snippet = snippet[:80]
+	}
+	label := fmt.Sprintf("笔记 #%d", source.MessageID)
+	if source.SourceType == "comment" {
+		label = fmt.Sprintf("评论 #%d", source.SourceID)
+	}
+	if source.SourceType == "reply" {
+		label = fmt.Sprintf("回复 #%d", source.SourceID)
+	}
+	if source.SourceType == "guestbook" {
+		label = fmt.Sprintf("留言 #%d", source.SourceID)
+	}
+	return BelongItem{
+		ID: source.SourceID, CreatedAt: source.Message.CreatedAt, Snippet: snippet,
+		Kind: source.SourceType, Label: label, SourceType: source.SourceType,
+		SourceID: source.SourceID, MessageID: source.MessageID, CommentID: source.CommentID,
+		ParentCommentID: source.ParentCommentID, OwnerUserID: source.OwnerUserID,
+		Visibility: source.Visibility,
+	}
 }
 
 func DeleteImageAttachment(c *gin.Context) {
@@ -1448,24 +1448,7 @@ func listCloudAttachments(siteCfg models.SiteConfig, actorID *uint, keep func(na
 			if actorID != nil {
 				belongs = make([]BelongItem, 0, len(visibleSources))
 				for _, source := range visibleSources {
-					snippet := source.Message.Content
-					if source.Comment != nil {
-						snippet = source.Comment.Content
-					}
-					if len(snippet) > 80 {
-						snippet = snippet[:80]
-					}
-					label := fmt.Sprintf("笔记 #%d", source.MessageID)
-					if source.SourceType == "comment" {
-						label = fmt.Sprintf("评论 #%d", source.SourceID)
-					}
-					if source.SourceType == "reply" {
-						label = fmt.Sprintf("回复 #%d", source.SourceID)
-					}
-					if source.SourceType == "guestbook" {
-						label = fmt.Sprintf("留言 #%d", source.SourceID)
-					}
-					belongs = append(belongs, BelongItem{ID: source.SourceID, CreatedAt: source.Message.CreatedAt, Snippet: snippet, Kind: source.SourceType, Label: label})
+					belongs = append(belongs, belongItemFromAttachmentSource(source))
 				}
 			}
 			belongs = appendImageUsageBelongs(belongs, imageUsages,
@@ -1521,7 +1504,7 @@ func findBelongsCloud(messages []models.Message, key string, origin string, pref
 			if len(snip) > 80 {
 				snip = snip[:80]
 			}
-			out = append(out, BelongItem{ID: m.ID, CreatedAt: m.CreatedAt, Snippet: snip, Kind: "message", Label: fmt.Sprintf("笔记 #%d", m.ID)})
+			out = append(out, BelongItem{ID: m.ID, CreatedAt: m.CreatedAt, Snippet: snip, Kind: "message", Label: fmt.Sprintf("笔记 #%d", m.ID), SourceType: "message", SourceID: m.ID, MessageID: m.ID, OwnerUserID: m.UserID, Visibility: services.StoredMessageVisibility(m)})
 		}
 	}
 	return out
