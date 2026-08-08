@@ -72,12 +72,12 @@
             class="attachment-item-card rounded-lg border p-2"
             :class="[theme?.border, isGroupFullySelected(group) ? 'attachment-item-selected' : '']"
           >
-            <label class="attachment-select-check" :class="{ 'is-checked': isGroupFullySelected(group) }" @click.stop @pointerdown.stop>
+            <label v-if="managedReferences(group).length > 0" class="attachment-select-check" :class="{ 'is-checked': isGroupFullySelected(group) }" @click.stop @pointerdown.stop>
               <input
                 class="attachment-select-input"
                 type="checkbox"
                 :checked="isGroupFullySelected(group)"
-                :aria-label="`选择该文件的全部 ${group.references.length} 个逻辑附件`"
+                :aria-label="`选择该文件的全部 ${managedReferences(group).length} 个逻辑附件`"
                 @change="toggleGroupSelect(group)"
               />
               <span class="attachment-check-visual" aria-hidden="true">
@@ -95,7 +95,7 @@
               </div>
               <div class="attachment-actions">
                 <UButton v-if="canDownload" size="xs" icon="i-heroicons-arrow-down-tray" color="gray" variant="soft" title="下载" aria-label="下载" @click="downloadAttachment(group.primary)" />
-                <UButton v-if="canPurgeBlob" size="xs" icon="i-heroicons-fire" color="red" variant="soft" :title="`彻底删除文件（含 ${group.referenceCount} 个逻辑附件）`" :aria-label="`彻底删除文件（含 ${group.referenceCount} 个逻辑附件）`" @click="openPurgeGroup(group)" />
+                <UButton v-if="canPurgeBlob && managedReferences(group).length > 0" size="xs" icon="i-heroicons-fire" color="red" variant="soft" :title="`彻底删除文件（含 ${group.referenceCount} 个逻辑附件）`" :aria-label="`彻底删除文件（含 ${group.referenceCount} 个逻辑附件）`" @click="openPurgeGroup(group)" />
               </div>
             </div>
             <img v-if="group.kind === 'image'" :src="fullURL(group.primary.url)" class="attachment-preview mt-2 rounded w-full object-contain bg-black/20" loading="lazy" />
@@ -111,9 +111,9 @@
                 :key="itemIdentity(item)"
                 class="attachment-reference-row"
                 :class="[theme?.subtleBg, isSelected(group.kind, item) ? 'is-selected' : '']"
-                :data-select-key="selectionKey(group.kind, item)"
+                :data-select-key="item?.logical_id ? selectionKey(group.kind, item) : undefined"
               >
-                <label class="attachment-reference-check" @click.stop @pointerdown.stop>
+                <label v-if="item?.logical_id" class="attachment-reference-check" @click.stop @pointerdown.stop>
                   <input
                     class="attachment-reference-input"
                     type="checkbox"
@@ -126,7 +126,7 @@
                   <div v-if="item.logical_id" class="attachment-logical-id text-[10px]" :class="theme?.mutedText">附件 ID：{{ item.logical_id }}</div>
                   <div class="text-[10px]" :class="theme?.mutedText">{{ referenceUsageLabel(item) }}</div>
                 </div>
-                <UButton v-if="canDeleteReference"
+                <UButton v-if="canDeleteReference && item?.logical_id"
                   size="2xs"
                   icon="i-heroicons-trash"
                   color="orange"
@@ -302,13 +302,6 @@ const tabKind: Record<AttachmentTab, AttachmentKind> = {
   others: 'other'
 }
 
-const endpointForKind = (kind: AttachmentKind) => {
-  if (kind === 'image') return 'images'
-  if (kind === 'audio') return 'audio'
-  if (kind === 'other') return 'other'
-  return 'video'
-}
-
 const kindLabel = (kind: AttachmentKind) => {
   if (kind === 'image') return '图片'
   if (kind === 'audio') return '音频'
@@ -319,7 +312,8 @@ const kindLabel = (kind: AttachmentKind) => {
 const itemIdentity = (item: any) => String(item?.logical_id || item?.key || item?.name || '')
 const itemKeyValue = (item: any) => itemIdentity(item)
 const selectionKey = (kind: AttachmentKind, item: any) => `${kind}:${itemKeyValue(item)}`
-const isSelected = (kind: AttachmentKind, item: any) => !!selected.value[selectionKey(kind, item)]
+const isSelected = (kind: AttachmentKind, item: any) => !!item?.logical_id && !!selected.value[selectionKey(kind, item)]
+const managedReferences = (group: AttachmentGroup) => group.references.filter((item: any) => !!item?.logical_id)
 const setSelected = (key: string, value: boolean) => {
   const next = { ...selected.value }
   if (value) next[key] = true
@@ -496,11 +490,11 @@ watch([filterKeyword, filterExtension, filterShareState, filterDateFrom, filterD
   groupsVisible.value = { ...groupsVisible.value, [activeTab.value]: GROUP_PAGE_SIZE }
 })
 
-const isGroupFullySelected = (group: AttachmentGroup) => group.references.length > 0 && group.references.every((item) => isSelected(group.kind, item))
+const isGroupFullySelected = (group: AttachmentGroup) => managedReferences(group).length > 0 && managedReferences(group).every((item) => isSelected(group.kind, item))
 const toggleGroupSelect = (group: AttachmentGroup) => {
   const shouldSelect = !isGroupFullySelected(group)
   const next = { ...selected.value }
-  for (const item of group.references) {
+  for (const item of managedReferences(group)) {
     const key = selectionKey(group.kind, item)
     if (shouldSelect) next[key] = true
     else delete next[key]
@@ -518,13 +512,13 @@ const allEntries = computed<AttachmentEntry[]>(() => [
   ...audios.value.map((item) => ({ kind: 'audio' as AttachmentKind, item, key: selectionKey('audio', item) })),
   ...others.value.map((item) => ({ kind: 'other' as AttachmentKind, item, key: selectionKey('other', item) }))
 ])
-const selectedItems = computed(() => allEntries.value.filter((entry) => !!selected.value[entry.key]))
+const selectedItems = computed(() => allEntries.value.filter((entry) => !!entry.item?.logical_id && !!selected.value[entry.key]))
 const selectedCount = computed(() => selectedItems.value.length)
 const selectedGroupCount = computed(() => new Set(selectedItems.value.map((entry) => `${entry.kind}:${groupKeyOf(entry.item)}`)).size)
 const selectAllActive = () => {
   const next = { ...selected.value }
   for (const group of activeGroups.value) {
-    for (const item of group.references) next[selectionKey(group.kind, item)] = true
+    for (const item of managedReferences(group)) next[selectionKey(group.kind, item)] = true
   }
   selected.value = next
 }
@@ -625,16 +619,9 @@ const REFERENCE_PREVIEW_LIMIT = 5
 const deleteReferences = computed(() => attachmentReferences(deleteItem.value))
 const deleteReferencesPreview = computed(() => deleteReferences.value.slice(0, REFERENCE_PREVIEW_LIMIT))
 const deleteReferenceSummary = computed(() => `该附件正被 ${deleteReferences.value.length} 处内容引用`)
-const deleteOneAttachment = async (kind: AttachmentKind, item: any) => {
-  if (item?.logical_id) {
-    const url = `${baseApi}/attachments/references/${encodeURIComponent(item.logical_id)}`
-    const resp = await fetch(url, { method: 'DELETE', credentials: 'include', headers: authHeaders.value as any })
-    const js = await resp.json().catch(() => null)
-    if (!resp.ok || !js || js.code !== 1) throw new Error(js?.msg || '删除失败')
-    return
-  }
-  const key = item?.key || item?.name
-  const url = `${baseApi}/attachments/${endpointForKind(kind)}/${encodeURIComponent(key)}`
+const deleteOneAttachment = async (item: any) => {
+  if (!item?.logical_id) throw new Error('附件引用不可管理')
+  const url = `${baseApi}/attachments/references/${encodeURIComponent(item.logical_id)}`
   const resp = await fetch(url, { method: 'DELETE', credentials: 'include', headers: authHeaders.value as any })
   const js = await resp.json().catch(() => null)
   if (!resp.ok || !js || js.code !== 1) throw new Error(js?.msg || '删除失败')
@@ -643,7 +630,7 @@ const doDelete = async () => {
   if (!deleteItem.value) return
   try {
     deleting.value = true
-    await deleteOneAttachment(deleteType.value, deleteItem.value)
+    await deleteOneAttachment(deleteItem.value)
     setSelected(selectionKey(deleteType.value, deleteItem.value), false)
     useToast().add({ title: '已删除', color: 'green' })
     confirmOpen.value = false
@@ -680,18 +667,10 @@ const batchDelete = async () => {
   try {
     batchDeleting.value = true
     const registered = items.filter((entry) => !!entry.item?.logical_id)
-    const legacy = items.filter((entry) => !entry.item?.logical_id)
     let failed = 0
     if (registered.length > 0) {
       const result = await postLogicalIDs('batch-delete', registered.map((entry) => String(entry.item.logical_id)))
       failed += Number(result?.failed || 0)
-    }
-    for (const entry of legacy) {
-      try {
-        await deleteOneAttachment(entry.kind, entry.item)
-      } catch {
-        failed++
-      }
     }
     if (failed > 0) {
       useToast().add({ title: '部分附件删除失败', description: `失败 ${failed} 个，已刷新列表。`, color: 'orange' })
@@ -750,7 +729,6 @@ const doPurge = async () => {
   const groups = purgeGroups.value
   if (groups.length === 0) return
   const registered = groups.map((group) => group.references.find((item: any) => !!item?.logical_id)).filter(Boolean)
-  const legacyGroups = groups.filter((group) => !group.references.some((item: any) => !!item?.logical_id))
   try {
     purging.value = true
     let failed = 0
@@ -761,17 +739,6 @@ const doPurge = async () => {
       failed += Number(result?.failed || 0)
       filesPurged += Number(result?.files_purged || 0)
       referencesDeleted += Number(result?.references_deleted || 0)
-    }
-    for (const group of legacyGroups) {
-      for (const item of group.references) {
-        try {
-          await deleteOneAttachment(group.kind, item)
-          referencesDeleted++
-        } catch {
-          failed++
-        }
-      }
-      filesPurged++
     }
     if (failed > 0) {
       useToast().add({ title: '部分文件删除失败', description: `失败 ${failed} 个，已刷新列表。`, color: 'orange' })

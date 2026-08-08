@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"archive/zip"
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -14,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -75,6 +75,14 @@ type AttachmentZipItem struct {
 	Key       string `json:"key"`
 	Name      string `json:"name"`
 	LogicalID string `json:"logical_id"`
+}
+
+const defaultAttachmentZipMaxBytes int64 = 2 * 1024 * 1024 * 1024
+
+type preparedAttachmentZipEntry struct {
+	Reference models.AttachmentReference
+	Blob      models.AttachmentBlob
+	ZipName   string
 }
 
 func escapeObjectKeyForURL(key string) string {
@@ -1026,33 +1034,49 @@ func DownloadAttachmentZip(c *gin.Context) {
 		return
 	}
 
-	var siteCfg models.SiteConfig
-	_ = database.DB.Table("site_configs").First(&siteCfg).Error
-
-	var archiveBuffer bytes.Buffer
-	archive := zip.NewWriter(&archiveBuffer)
-	usedNames := map[string]int{}
-	added := 0
-	viewerID, _ := currentMessageViewer(c)
-	for _, item := range req.Items {
-		if err := addAttachmentToZip(archive, siteCfg, viewerID, item, usedNames); err != nil {
-			continue
-		}
-		added++
-	}
-	if err := archive.Close(); err != nil {
+	db, err := database.GetDB()
+	if err != nil {
 		c.Status(http.StatusInternalServerError)
 		return
 	}
-	if added == 0 {
+	var siteCfg models.SiteConfig
+	_ = db.Table("site_configs").First(&siteCfg).Error
+
+	usedNames := map[string]int{}
+	viewerID, _ := currentMessageViewer(c)
+	entries := make([]preparedAttachmentZipEntry, 0, len(req.Items))
+	var totalSize int64
+	maxBytes := attachmentZipMaxBytes()
+	for _, item := range req.Items {
+		entry, err := prepareAttachmentZipEntry(c.Request.Context(), db, viewerID, item, usedNames)
+		if err != nil {
+			continue
+		}
+		if entry.Blob.Size > maxBytes-totalSize {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"code": 0, "msg": "打包附件总大小超过限制"})
+			return
+		}
+		totalSize += entry.Blob.Size
+		entries = append(entries, entry)
+	}
+	if len(entries) == 0 {
 		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "attachment not found"})
 		return
 	}
+
 	fileName := fmt.Sprintf("attachments_%s.zip", time.Now().Format("20060102150405"))
 	c.Header("Content-Type", "application/zip")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fileName))
 	c.Header("Cache-Control", "no-cache")
-	c.Data(http.StatusOK, "application/zip", archiveBuffer.Bytes())
+	c.Status(http.StatusOK)
+	archive := zip.NewWriter(c.Writer)
+	for _, entry := range entries {
+		if err := writePreparedAttachmentZipEntry(c.Request.Context(), archive, siteCfg, entry); err != nil {
+			_ = archive.Close()
+			return
+		}
+	}
+	_ = archive.Close()
 }
 
 func pickDir(candidates []string, fallback string) string {
@@ -1068,56 +1092,77 @@ func pickDir(candidates []string, fallback string) string {
 	return fallback
 }
 
-func addAttachmentToZip(archive *zip.Writer, siteCfg models.SiteConfig, viewerID *uint, item AttachmentZipItem, usedNames map[string]int) error {
-	if strings.TrimSpace(item.LogicalID) != "" {
-		return addRegisteredAttachmentToZip(archive, siteCfg, viewerID, item, usedNames)
+func attachmentZipMaxBytes() int64 {
+	configured := strings.TrimSpace(os.Getenv("ATTACHMENT_ZIP_MAX_BYTES"))
+	if configured == "" {
+		return defaultAttachmentZipMaxBytes
 	}
-	if siteCfg.AttachmentStorageEnabled {
-		return addCloudAttachmentToZip(archive, siteCfg, item, usedNames)
+	value, err := strconv.ParseInt(configured, 10, 64)
+	if err != nil || value <= 0 {
+		return defaultAttachmentZipMaxBytes
 	}
-	return addLocalAttachmentToZip(archive, item, usedNames)
+	return value
 }
 
-func addRegisteredAttachmentToZip(archive *zip.Writer, siteCfg models.SiteConfig, viewerID *uint, item AttachmentZipItem, usedNames map[string]int) error {
-	db, err := database.GetDB()
-	if err != nil {
-		return err
+func prepareAttachmentZipEntry(ctx context.Context, db *gorm.DB, viewerID *uint, item AttachmentZipItem, usedNames map[string]int) (preparedAttachmentZipEntry, error) {
+	logicalID := strings.TrimSpace(item.LogicalID)
+	if logicalID == "" {
+		return preparedAttachmentZipEntry{}, errors.New("logical attachment id is required")
 	}
-	resolved, err := attachmentregistry.NewRegistry(db).Resolve(strings.TrimSpace(item.LogicalID))
+	resolved, err := attachmentregistry.NewRegistry(db).Resolve(logicalID)
 	if err != nil {
-		return err
+		return preparedAttachmentZipEntry{}, err
 	}
 	sources, visibilityErr := services.VisibleAttachmentSources(db, viewerID, resolved.Reference, resolved.Blob.StorageBackend)
 	if visibilityErr != nil {
-		return visibilityErr
+		return preparedAttachmentZipEntry{}, visibilityErr
 	}
 	if len(sources) == 0 && (viewerID == nil || (*viewerID != models.PrimaryAdminUserID && *viewerID != resolved.Reference.OwnerUserID)) {
-		return errors.New("attachment not found")
+		return preparedAttachmentZipEntry{}, errors.New("attachment not found")
 	}
 	wantedKind := strings.ToLower(strings.TrimSpace(item.Type))
 	if wantedKind == "other" {
 		wantedKind = "file"
 	}
 	if wantedKind != resolved.Reference.Kind {
-		return errors.New("attachment type mismatch")
+		return preparedAttachmentZipEntry{}, errors.New("attachment type mismatch")
+	}
+	if resolved.Blob.Size < 0 {
+		return preparedAttachmentZipEntry{}, errors.New("invalid attachment size")
+	}
+	store, err := attachmentBlobStore(db, resolved.Blob.StorageBackend)
+	if err != nil {
+		return preparedAttachmentZipEntry{}, err
+	}
+	exists, err := store.Exists(ctx, resolved.Blob.StorageKey)
+	if err != nil || !exists {
+		if err == nil {
+			err = os.ErrNotExist
+		}
+		return preparedAttachmentZipEntry{}, err
 	}
 	_, folder, _ := localAttachmentDirForType(item.Type)
 	if folder == "" {
 		folder = "attachments"
 	}
+	zipName := uniqueZipEntryName(filepath.ToSlash(filepath.Join(folder, safeZipEntryBaseName(resolved.Reference.OriginalName))), usedNames)
+	return preparedAttachmentZipEntry{Reference: resolved.Reference, Blob: resolved.Blob, ZipName: zipName}, nil
+}
+
+func writePreparedAttachmentZipEntry(ctx context.Context, archive *zip.Writer, siteCfg models.SiteConfig, entry preparedAttachmentZipEntry) error {
 	var reader io.ReadCloser
-	if resolved.Blob.StorageBackend == "local" {
-		file, _, err := attachmentregistry.NewLocalStore(attachmentregistry.DefaultLocalRoot()).Open(resolved.Blob.StorageKey)
+	if entry.Blob.StorageBackend == "local" {
+		file, _, err := attachmentregistry.NewLocalStore(attachmentregistry.DefaultLocalRoot()).Open(entry.Blob.StorageKey)
 		if err != nil {
 			return err
 		}
 		reader = file
-	} else if resolved.Blob.StorageBackend == "cloud" {
+	} else if entry.Blob.StorageBackend == "cloud" {
 		client, bucket, _, err := newAttachmentS3Client(siteCfg)
 		if err != nil {
 			return err
 		}
-		obj, err := client.GetObject(context.Background(), &s3.GetObjectInput{Bucket: aws.String(bucket), Key: aws.String(resolved.Blob.StorageKey)})
+		obj, err := client.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(bucket), Key: aws.String(entry.Blob.StorageKey)})
 		if err != nil {
 			return err
 		}
@@ -1126,68 +1171,11 @@ func addRegisteredAttachmentToZip(archive *zip.Writer, siteCfg models.SiteConfig
 		return errors.New("unsupported attachment backend")
 	}
 	defer reader.Close()
-	zipName := uniqueZipEntryName(filepath.ToSlash(filepath.Join(folder, safeZipEntryBaseName(resolved.Reference.OriginalName))), usedNames)
-	writer, err := archive.Create(zipName)
+	writer, err := archive.Create(entry.ZipName)
 	if err != nil {
 		return err
 	}
 	_, err = io.Copy(writer, reader)
-	return err
-}
-
-func addLocalAttachmentToZip(archive *zip.Writer, item AttachmentZipItem, usedNames map[string]int) error {
-	dir, folder, ok := localAttachmentDirForType(item.Type)
-	if !ok {
-		return errors.New("unsupported attachment type")
-	}
-	base := filepath.Base(strings.TrimSpace(firstNonEmpty(item.Key, item.Name)))
-	if base == "." || base == string(filepath.Separator) || base == "" {
-		return errors.New("invalid attachment name")
-	}
-	path := filepath.Join(dir, base)
-	file, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	zipName := uniqueZipEntryName(filepath.ToSlash(filepath.Join(folder, safeZipEntryBaseName(firstNonEmpty(item.Name, base)))), usedNames)
-	writer, err := archive.Create(zipName)
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(writer, file)
-	return err
-}
-
-func addCloudAttachmentToZip(archive *zip.Writer, siteCfg models.SiteConfig, item AttachmentZipItem, usedNames map[string]int) error {
-	client, bucket, _, err := newAttachmentS3Client(siteCfg)
-	if err != nil {
-		return err
-	}
-	key := strings.TrimLeft(strings.TrimSpace(firstNonEmpty(item.Key, item.Name)), "/")
-	if key == "" {
-		return errors.New("invalid attachment key")
-	}
-	obj, err := client.GetObject(context.Background(), &s3.GetObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
-	})
-	if err != nil {
-		return err
-	}
-	defer obj.Body.Close()
-
-	_, folder, _ := localAttachmentDirForType(item.Type)
-	if folder == "" {
-		folder = "attachments"
-	}
-	zipName := uniqueZipEntryName(filepath.ToSlash(filepath.Join(folder, safeZipEntryBaseName(firstNonEmpty(item.Name, filepath.Base(key))))), usedNames)
-	writer, err := archive.Create(zipName)
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(writer, obj.Body)
 	return err
 }
 
@@ -1237,15 +1225,6 @@ func localAttachmentDirForType(rawType string) (string, string, bool) {
 	default:
 		return "", "", false
 	}
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
 }
 
 func safeZipEntryBaseName(name string) string {

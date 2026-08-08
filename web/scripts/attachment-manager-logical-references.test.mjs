@@ -8,5 +8,8 @@ assert.match(source, /附件 ID[：:]\s*\{\{\s*item\.logical_id\s*\}\}/, 'attach
 assert.match(source, /attachments\/references\/\$\{encodeURIComponent\(item\.logical_id\)\}/, 'logical references must use the reference-only delete endpoint')
 assert.match(source, /logical_id:\s*entry\.item\?\.logical_id/, 'zip downloads must identify logical references explicitly')
 assert.match(source, /const itemIdentity = \(item: any\).*logical_id/s, 'same-name cards must use logical identity for selection and expansion')
+assert.doesNotMatch(source, /attachments\/\$\{endpointForKind\(kind\)\}/, 'removed filename-delete routes must not remain reachable from the manager')
+assert.doesNotMatch(source, /legacyGroups|const legacy\s*=/, 'batch actions must not retain dead legacy deletion branches')
+assert.match(source, /item\?\.logical_id/, 'management actions must be limited to registered logical attachments')
 
 console.log('attachment manager logical-reference checks passed')

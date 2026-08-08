@@ -338,4 +338,15 @@ func TestDownloadAttachmentZipOmitsHiddenSharedReference(t *testing.T) {
 	if hiddenResponse.Code != http.StatusNotFound || strings.Contains(hiddenResponse.Body.String(), hidden.PublicID) {
 		t.Fatalf("hidden-only zip response = %d %s", hiddenResponse.Code, hiddenResponse.Body.String())
 	}
+
+	t.Setenv("ATTACHMENT_ZIP_MAX_BYTES", "4")
+	tooLarge := `{"items":[{"type":"other","logical_id":"` + visible.PublicID + `"}]}`
+	tooLargeReq := httptest.NewRequest(http.MethodPost, "/api/attachments/download-zip", strings.NewReader(tooLarge))
+	tooLargeReq.Header.Set("Content-Type", "application/json")
+	tooLargeReq.Header.Set("Authorization", "Bearer "+delegated.Token)
+	tooLargeResponse := httptest.NewRecorder()
+	r.ServeHTTP(tooLargeResponse, tooLargeReq)
+	if tooLargeResponse.Code != http.StatusRequestEntityTooLarge || strings.Contains(tooLargeResponse.Body.String(), visible.PublicID) {
+		t.Fatalf("oversized zip response = %d %s", tooLargeResponse.Code, tooLargeResponse.Body.String())
+	}
 }
