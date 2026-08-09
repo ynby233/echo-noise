@@ -123,6 +123,21 @@ func writeMessageMutationDeniedAudit(c *gin.Context, authorizer *authorization.A
 	authorizer.WriteDeniedBestEffort(messageMutationAuditRecord(c, actorID, capability, action, "denied", "capability request denied", message))
 }
 
+func writeMessageMutationDeniedAuditForError(c *gin.Context, authorizer *authorization.Authorizer, actorID uint, capability authorization.Capability, action string, message *models.Message, cause error) {
+	if decision := authorizer.Authorize(actorID, capability, nil); decision.Reason == authorization.DenialNotAdministrator {
+		return
+	}
+	if errors.Is(cause, services.ErrMessageNotVisible) || errors.Is(cause, services.ErrMessageProtected) {
+		record := messageMutationAuditRecord(c, actorID, capability, action, "denied", "capability request denied", &models.Message{})
+		record.TargetType = "message"
+		record.TargetID = ""
+		record.TargetOwnerUserID = nil
+		authorizer.WriteDeniedBestEffort(record)
+		return
+	}
+	writeMessageMutationDeniedAudit(c, authorizer, actorID, capability, action, message)
+}
+
 func writeMessageMutationSuccessAudit(c *gin.Context, authorizer *authorization.Authorizer, actorID uint, capability authorization.Capability, action string, message *models.Message) error {
 	return authorizer.WriteAudit(messageMutationAuditRecord(c, actorID, capability, action, "success", "message mutation completed", message))
 }
@@ -697,7 +712,7 @@ func DeleteMessage(c *gin.Context) {
 	isOwner := message.UserID == actorID
 	if err := services.TrashMessage(db, actorID, uint(messageID), "author request"); err != nil {
 		if !isOwner {
-			writeMessageMutationDeniedAudit(c, authorizer, actorID, authorization.CapabilityNotesTrash, "trash", &message)
+			writeMessageMutationDeniedAuditForError(c, authorizer, actorID, authorization.CapabilityNotesTrash, "trash", &message, err)
 		}
 		switch {
 		case errors.Is(err, services.ErrMessageNotVisible), errors.Is(err, services.ErrMessageProtected), errors.Is(err, services.ErrMessageNotFound):

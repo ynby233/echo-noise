@@ -100,7 +100,7 @@ import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 
 const props = defineProps<{ recycleBin?: boolean; theme?: any }>()
 const toast = useToast()
-const { can } = useAdminCapabilities()
+const { can, refreshCapabilities } = useAdminCapabilities()
 const canTrash = computed(() => can('notes.trash'))
 const canRestore = computed(() => can('notes.restore'))
 const canPermanentlyDelete = computed(() => can('notes.delete_permanently'))
@@ -125,7 +125,9 @@ const visibilityOptions = [
   { label: '私密', value: 'private' }
 ]
 const booleanOptions = (label: string) => [{ label: `${label}：全部`, value: '' }, { label: `${label}：是`, value: 'true' }, { label: `${label}：否`, value: 'false' }]
-const sortOptions = [{ label: '最新创建', value: '' }, { label: '最早创建', value: 'oldest' }, { label: '置顶优先', value: 'pinned' }]
+const sortOptions = computed(() => props.recycleBin
+  ? [{ label: '最新删除', value: 'deleted_desc' }, { label: '最早删除', value: 'deleted_asc' }, { label: '最新创建', value: 'created_desc' }, { label: '最早创建', value: 'created_asc' }]
+  : [{ label: '最新创建', value: 'created_desc' }, { label: '最早创建', value: 'created_asc' }, { label: '置顶优先', value: 'pinned' }])
 const endpoint = computed(() => props.recycleBin ? 'admin/recycle-bin' : 'admin/notes')
 const allSelected = computed(() => rows.value.length > 0 && rows.value.every((row) => selected.value.includes(row.id)))
 
@@ -138,11 +140,20 @@ const oneLine = (value: any) => String(value || '').replace(/\s+/g, ' ').trim().
 const visibilityLabel = (value: string) => visibilityOptions.find((item) => item.value === value)?.label || value || '公开'
 const query = () => ({ page: page.value, pageSize, keyword: filters.keyword, id: filters.id, authorId: filters.authorId, username: filters.username, tag: filters.tag, visibility: filters.visibility, createdFrom: filters.createdFrom, createdTo: filters.createdTo, pinned: filters.pinned, hasAttachment: filters.hasAttachment, sort: filters.sort })
 
+const permissionChanged = async () => {
+  selected.value = []
+  detailId.value = null
+  await refreshCapabilities()
+  toast.add({ title: '权限已变化', description: '当前权限已变化，请刷新页面', color: 'orange' })
+  await load()
+}
 const load = async () => {
   loading.value = true
   try {
     const response = await getRequest<any>(endpoint.value, query(), { silent: true })
-    if (response?.code === 1) {
+    if (response?.status === 403) {
+      await permissionChanged()
+    } else if (response?.code === 1) {
       rows.value = Array.isArray(response.data?.items) ? response.data.items : []
       total.value = Number(response.data?.total || 0)
       selected.value = selected.value.filter((id) => rows.value.some((row) => row.id === id))
@@ -165,7 +176,9 @@ const runAction = async (request: () => Promise<any>) => {
   actionLoading.value = true
   try {
     const response = await request()
-    if (response?.code === 1) {
+    if (response?.status === 403) {
+      await permissionChanged()
+    } else if (response?.code === 1) {
       const result = response.data || {}
       const succeeded = Number(result.succeeded || 0)
       const failed = Number(result.failed || 0)

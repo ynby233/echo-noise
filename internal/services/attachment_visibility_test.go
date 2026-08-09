@@ -211,3 +211,43 @@ func TestVisibleLegacyAttachmentSourcesMatchesHistoricalCloudURL(t *testing.T) {
 		t.Fatalf("owner could not see hidden historical cloud source = %#v", visible)
 	}
 }
+
+func TestVisibleRecycleBinLegacyAttachmentSourcesExcludesActiveSources(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&models.User{}, &models.Message{}, &models.Comment{}, &models.AdminCapabilityGrant{}, &models.AdminAuditLog{}, &models.AdminAuditConfig{}); err != nil {
+		t.Fatal(err)
+	}
+	primary := models.User{ID: 1, Username: "primary", IsAdmin: true}
+	owner := models.User{ID: 2, Username: "owner"}
+	for _, u := range []*models.User{&primary, &owner} {
+		if err := db.Create(u).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	deletedAt := time.Now().UTC()
+	deleted := models.Message{ID: 10, UserID: owner.ID, Content: "[file](/api/files/old.txt)", Visibility: "public", DeletedAt: &deletedAt}
+	active := models.Message{ID: 11, UserID: owner.ID, Content: "[file](/api/files/active.txt)", Visibility: "public"}
+	if err := db.Create(&deleted).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&active).Error; err != nil {
+		t.Fatal(err)
+	}
+	sources, err := VisibleRecycleBinLegacyAttachmentSources(db, &primary.ID, "file", "active.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sources) != 0 {
+		t.Fatalf("active source leaked into recycle context: %#v", sources)
+	}
+	sources, err = VisibleRecycleBinLegacyAttachmentSources(db, &primary.ID, "file", "old.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sources) != 1 || sources[0].MessageID != deleted.ID {
+		t.Fatalf("deleted source missing: %#v", sources)
+	}
+}

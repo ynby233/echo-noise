@@ -76,7 +76,7 @@ const handleHttpStatusError = <T>(status: any, msg?: string, options?: { silent?
         if (!shouldSuppressToast(options)) {
             useToast().add({ title: '没有权限', description: forbiddenMsg, color: 'orange', timeout: 2000 })
         }
-        return { code: 0, msg: forbiddenMsg, data: null } as any as Response<T>
+        return { code: 0, status: 403, msg: forbiddenMsg, data: null } as any as Response<T>
     }
     return null
 }

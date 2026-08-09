@@ -199,11 +199,17 @@ func ListImageAttachments(c *gin.Context) {
 
 	dir := localImageDir()
 
-	var messages []models.Message
-	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Where("deleted_at IS NULL").Order("created_at DESC").Find(&messages)
-
 	viewerID, _ := currentMessageViewer(c)
-	list, err := listRegisteredAttachmentsForViewerContext("image", "local", viewerID, messages, c.Query("recycleBin") == "true", imageUsages)
+	recycleBin := c.Query("recycleBin") == "true"
+	var messages []models.Message
+	messageQuery := database.DB.Select("id", "content", "image_url", "user_id", "created_at")
+	if recycleBin {
+		messageQuery = messageQuery.Where("deleted_at IS NOT NULL")
+	} else {
+		messageQuery = messageQuery.Where("deleted_at IS NULL")
+	}
+	messageQuery.Order("created_at DESC").Find(&messages)
+	list, err := listRegisteredAttachmentsForViewerContext("image", "local", viewerID, messages, recycleBin, imageUsages)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []AttachmentInfo{}})
 		return
@@ -224,7 +230,7 @@ func ListImageAttachments(c *gin.Context) {
 			continue
 		}
 		urlPath := "/api/images/" + url.PathEscape(name)
-		belongs, visible := legacyAttachmentBelongsForViewer(viewerID, "image", name, messages)
+		belongs, visible := legacyAttachmentBelongsForViewerContext(viewerID, "image", name, recycleBin)
 		if !visible {
 			continue
 		}
@@ -366,10 +372,17 @@ func ListVideoAttachments(c *gin.Context) {
 		"/data/video",
 		"/app/data/video",
 	}, "./data/video")
-	var messages []models.Message
-	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Where("deleted_at IS NULL").Order("created_at DESC").Find(&messages)
 	viewerID, _ := currentMessageViewer(c)
-	list, err := listRegisteredAttachmentsForViewerContext("video", "local", viewerID, messages, c.Query("recycleBin") == "true")
+	recycleBin := c.Query("recycleBin") == "true"
+	var messages []models.Message
+	messageQuery := database.DB.Select("id", "content", "image_url", "user_id", "created_at")
+	if recycleBin {
+		messageQuery = messageQuery.Where("deleted_at IS NOT NULL")
+	} else {
+		messageQuery = messageQuery.Where("deleted_at IS NULL")
+	}
+	messageQuery.Order("created_at DESC").Find(&messages)
+	list, err := listRegisteredAttachmentsForViewerContext("video", "local", viewerID, messages, recycleBin)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []AttachmentInfo{}})
 		return
@@ -390,7 +403,7 @@ func ListVideoAttachments(c *gin.Context) {
 			continue
 		}
 		urlPath := "/video/" + url.PathEscape(name)
-		belongs, visible := legacyAttachmentBelongsForViewer(viewerID, "video", name, messages)
+		belongs, visible := legacyAttachmentBelongsForViewerContext(viewerID, "video", name, recycleBin)
 		if !visible {
 			continue
 		}
@@ -426,10 +439,17 @@ func ListAudioAttachments(c *gin.Context) {
 		"/data/audio",
 		"/app/data/audio",
 	}, "./data/audio")
-	var messages []models.Message
-	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Where("deleted_at IS NULL").Order("created_at DESC").Find(&messages)
 	viewerID, _ := currentMessageViewer(c)
-	list, err := listRegisteredAttachmentsForViewerContext("audio", "local", viewerID, messages, c.Query("recycleBin") == "true")
+	recycleBin := c.Query("recycleBin") == "true"
+	var messages []models.Message
+	messageQuery := database.DB.Select("id", "content", "image_url", "user_id", "created_at")
+	if recycleBin {
+		messageQuery = messageQuery.Where("deleted_at IS NOT NULL")
+	} else {
+		messageQuery = messageQuery.Where("deleted_at IS NULL")
+	}
+	messageQuery.Order("created_at DESC").Find(&messages)
+	list, err := listRegisteredAttachmentsForViewerContext("audio", "local", viewerID, messages, recycleBin)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []AttachmentInfo{}})
 		return
@@ -450,7 +470,7 @@ func ListAudioAttachments(c *gin.Context) {
 			continue
 		}
 		urlPath := "/api/audio/" + url.PathEscape(name)
-		belongs, visible := legacyAttachmentBelongsForViewer(viewerID, "audio", name, messages)
+		belongs, visible := legacyAttachmentBelongsForViewerContext(viewerID, "audio", name, recycleBin)
 		if !visible {
 			continue
 		}
@@ -486,10 +506,17 @@ func ListOtherAttachments(c *gin.Context) {
 		"/data/attachments",
 		"/app/data/attachments",
 	}, "./data/attachments")
-	var messages []models.Message
-	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Where("deleted_at IS NULL").Order("created_at DESC").Find(&messages)
 	viewerID, _ := currentMessageViewer(c)
-	list, err := listRegisteredAttachmentsForViewerContext("file", "local", viewerID, messages, c.Query("recycleBin") == "true")
+	recycleBin := c.Query("recycleBin") == "true"
+	var messages []models.Message
+	messageQuery := database.DB.Select("id", "content", "image_url", "user_id", "created_at")
+	if recycleBin {
+		messageQuery = messageQuery.Where("deleted_at IS NOT NULL")
+	} else {
+		messageQuery = messageQuery.Where("deleted_at IS NULL")
+	}
+	messageQuery.Order("created_at DESC").Find(&messages)
+	list, err := listRegisteredAttachmentsForViewerContext("file", "local", viewerID, messages, recycleBin)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []AttachmentInfo{}})
 		return
@@ -510,7 +537,7 @@ func ListOtherAttachments(c *gin.Context) {
 			continue
 		}
 		urlPath := "/api/files/" + url.PathEscape(name)
-		belongs, visible := legacyAttachmentBelongsForViewer(viewerID, "file", name, messages)
+		belongs, visible := legacyAttachmentBelongsForViewerContext(viewerID, "file", name, recycleBin)
 		if !visible {
 			continue
 		}
@@ -551,11 +578,20 @@ func findBelongs(messages []models.Message, name string, prefixes ...string) []B
 }
 
 func legacyAttachmentBelongsForViewer(actorID *uint, kind, name string, messages []models.Message) ([]BelongItem, bool) {
+	return legacyAttachmentBelongsForViewerContext(actorID, kind, name, false)
+}
+
+func legacyAttachmentBelongsForViewerContext(actorID *uint, kind, name string, recycleBin bool) ([]BelongItem, bool) {
 	db, err := database.GetDB()
 	if err != nil {
 		return nil, false
 	}
-	sources, err := services.VisibleLegacyAttachmentSources(db, actorID, kind, name)
+	var sources []services.AttachmentSource
+	if recycleBin {
+		sources, err = services.VisibleRecycleBinLegacyAttachmentSources(db, actorID, kind, name)
+	} else {
+		sources, err = services.VisibleLegacyAttachmentSources(db, actorID, kind, name)
+	}
 	if err != nil {
 		return nil, false
 	}
@@ -563,7 +599,10 @@ func legacyAttachmentBelongsForViewer(actorID *uint, kind, name string, messages
 		return nil, false
 	}
 	if actorID == nil {
-		return findBelongs(messages, name, "/images/", "/api/images/", "/video/", "/api/video/", "/audio/", "/api/audio/", "/files/", "/api/files/", "/attachments/", "/api/attachments/"), true
+		if recycleBin {
+			return nil, false
+		}
+		return findBelongs(nil, name, "/images/", "/api/images/", "/video/", "/api/video/", "/audio/", "/api/audio/", "/files/", "/api/files/", "/attachments/", "/api/attachments/"), true
 	}
 	belongs := make([]BelongItem, 0, len(sources))
 	for _, source := range sources {

@@ -167,7 +167,7 @@ func TrashAdminNote(c *gin.Context) {
 	if err := services.TrashMessageWithAudit(db, actorID, uint(id), reason, func(tx *gorm.DB) error {
 		return authorization.New(tx).WriteAudit(auditRecord)
 	}); err != nil {
-		writeMessageMutationDeniedAudit(c, authorization.New(db), actorID, authorization.CapabilityNotesTrash, "trash", &message)
+		writeMessageMutationDeniedAuditForError(c, authorization.New(db), actorID, authorization.CapabilityNotesTrash, "trash", &message, err)
 		writeNoteLifecycleError(c, err)
 		return
 	}
@@ -242,7 +242,7 @@ func RestoreAdminRecycleBinNote(c *gin.Context) {
 	if err := services.RestoreMessageWithAudit(db, actorID, uint(id), func(tx *gorm.DB) error {
 		return authorization.New(tx).WriteAudit(auditRecord)
 	}); err != nil {
-		writeMessageMutationDeniedAudit(c, authorization.New(db), actorID, authorization.CapabilityNotesRestore, "restore", &message)
+		writeMessageMutationDeniedAuditForError(c, authorization.New(db), actorID, authorization.CapabilityNotesRestore, "restore", &message, err)
 		writeNoteLifecycleError(c, err)
 		return
 	}
@@ -274,7 +274,7 @@ func PermanentlyDeleteAdminRecycleBinNote(c *gin.Context) {
 	if err := services.PermanentlyDeleteMessageWithAudit(db, actorID, uint(id), "manual permanent deletion", func(tx *gorm.DB) error {
 		return authorization.New(tx).WriteAudit(auditRecord)
 	}); err != nil {
-		writeMessageMutationDeniedAudit(c, authorization.New(db), actorID, authorization.CapabilityNotesDelete, "permanent_delete", &message)
+		writeMessageMutationDeniedAuditForError(c, authorization.New(db), actorID, authorization.CapabilityNotesDelete, "permanent_delete", &message, err)
 		writeNoteLifecycleError(c, err)
 		return
 	}
@@ -352,7 +352,7 @@ func runNoteLifecycleBatch(c *gin.Context, action string) {
 			continue
 		}
 		if messageErr == nil {
-			writeMessageMutationDeniedAudit(c, authorization.New(db), actorID, capability, actionName, &message)
+			writeMessageMutationDeniedAuditForError(c, authorization.New(db), actorID, capability, actionName, &message, itemErr)
 		}
 		result.Failed++
 		if errors.Is(itemErr, services.ErrMessageNotVisible) || errors.Is(itemErr, services.ErrMessageProtected) || errors.Is(itemErr, services.ErrMessageNotAuthorized) {

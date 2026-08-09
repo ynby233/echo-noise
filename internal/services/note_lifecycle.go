@@ -362,12 +362,16 @@ func ListRecycleBinMessages(db *gorm.DB, actorID uint, filter NoteManagementFilt
 func noteManagementOrder(sort string, recycleBin bool) string {
 	if recycleBin {
 		switch strings.TrimSpace(sort) {
-		case "oldest":
+		case "deleted_asc", "oldest":
 			return "messages.deleted_at ASC, messages.id ASC"
+		case "deleted_desc":
+			return "messages.deleted_at DESC, messages.id DESC"
 		case "created_desc":
 			return "messages.created_at DESC, messages.id DESC"
 		case "created_asc":
 			return "messages.created_at ASC, messages.id ASC"
+		case "pinned":
+			return "messages.deleted_at DESC, messages.id DESC"
 		default:
 			return "messages.deleted_at DESC, messages.id DESC"
 		}

@@ -213,11 +213,34 @@ func AttachmentReferenceURLName(raw string) string {
 // VisibleLegacyAttachmentSources applies the same source model to pre-registry
 // local/cloud URLs whose logical identity is a filename or cloud public id.
 func VisibleLegacyAttachmentSources(db *gorm.DB, actorID *uint, kind, name string) ([]AttachmentSource, error) {
+	return visibleLegacyAttachmentSourcesContext(db, actorID, kind, name, false)
+}
+
+// VisibleRecycleBinLegacyAttachmentSources is the explicit deleted-content
+// context for pre-registry local URLs. It never falls back to owner visibility
+// and only considers deleted note sources.
+func VisibleRecycleBinLegacyAttachmentSources(db *gorm.DB, actorID *uint, kind, name string) ([]AttachmentSource, error) {
+	if db == nil || actorID == nil || *actorID == 0 {
+		return nil, fmt.Errorf("recycle-bin attachment context requires an actor")
+	}
+	if decision := authorization.New(db).Authorize(*actorID, authorization.CapabilityNotesRecycleBinView, nil); !decision.Allowed {
+		return nil, errors.New("recycle-bin attachment access denied")
+	}
+	return visibleLegacyAttachmentSourcesContext(db, actorID, kind, name, true)
+}
+
+func visibleLegacyAttachmentSourcesContext(db *gorm.DB, actorID *uint, kind, name string, recycleBin bool) ([]AttachmentSource, error) {
 	if db == nil {
 		return nil, fmt.Errorf("attachment visibility database is unavailable")
 	}
 	var messages []models.Message
-	if err := db.Where("deleted_at IS NULL").Find(&messages).Error; err != nil {
+	messageQuery := db
+	if recycleBin {
+		messageQuery = messageQuery.Where("deleted_at IS NOT NULL")
+	} else {
+		messageQuery = messageQuery.Where("deleted_at IS NULL")
+	}
+	if err := messageQuery.Find(&messages).Error; err != nil {
 		return nil, err
 	}
 	var comments []models.Comment
@@ -247,6 +270,15 @@ func VisibleLegacyAttachmentSources(db *gorm.DB, actorID *uint, kind, name strin
 	}
 	all := make([]AttachmentSource, 0)
 	for _, message := range messages {
+		if recycleBin {
+			scope, err := ResolveContentReadScope(db, actorID)
+			if err != nil {
+				return nil, err
+			}
+			if !scope.CanReadMessageInRecycleBin(message) {
+				continue
+			}
+		}
 		// Scan the note and its discussion independently. A note without an
 		// attachment can still own comment/reply attachments, so the parent
 		// match must never short-circuit the child scan.
@@ -260,6 +292,15 @@ func VisibleLegacyAttachmentSources(db *gorm.DB, actorID *uint, kind, name strin
 			if !match(comment.Content) {
 				continue
 			}
+			if recycleBin {
+				scope, err := ResolveContentReadScope(db, actorID)
+				if err != nil {
+					return nil, err
+				}
+				if !scope.CanReadComment(message, comment, commentMap) {
+					continue
+				}
+			}
 			t := "comment"
 			if comment.ParentID != nil {
 				t = "reply"
@@ -271,7 +312,7 @@ func VisibleLegacyAttachmentSources(db *gorm.DB, actorID *uint, kind, name strin
 			all = append(all, AttachmentSource{SourceType: t, SourceID: comment.ID, MessageID: message.ID, CommentID: &cid, ParentCommentID: comment.ParentID, OwnerUserID: commentOwner(comment, message.UserID), Visibility: EffectiveCommentVisibilityInThread(comment, StoredMessageVisibility(message), commentMap), Message: message, Comment: &comment})
 		}
 	}
-	if actorID == nil {
+	if actorID == nil || recycleBin {
 		return all, nil
 	}
 	visible := make([]AttachmentSource, 0, len(all))
