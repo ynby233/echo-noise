@@ -5,12 +5,14 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/services"
+	"gorm.io/gorm"
 )
 
 type noteLifecycleBatchRequest struct {
@@ -43,6 +45,22 @@ func parseNoteManagementFilter(c *gin.Context) services.NoteManagementFilter {
 		Username:   strings.TrimSpace(c.Query("username")),
 		Visibility: strings.TrimSpace(c.Query("visibility")),
 		Tag:        strings.TrimPrefix(strings.TrimSpace(c.Query("tag")), "#"),
+		Sort:       strings.TrimSpace(c.Query("sort")),
+	}
+	if value, err := time.Parse("2006-01-02", strings.TrimSpace(c.Query("createdFrom"))); err == nil {
+		filter.CreatedFrom = &value
+	}
+	if value, err := time.Parse("2006-01-02", strings.TrimSpace(c.Query("createdTo"))); err == nil {
+		end := value.Add(24 * time.Hour)
+		filter.CreatedTo = &end
+	}
+	if value := strings.TrimSpace(c.Query("pinned")); value == "true" || value == "false" {
+		parsed := value == "true"
+		filter.Pinned = &parsed
+	}
+	if value := strings.TrimSpace(c.Query("hasAttachment")); value == "true" || value == "false" {
+		parsed := value == "true"
+		filter.HasAttachment = &parsed
 	}
 	if page, err := strconv.Atoi(c.Query("page")); err == nil {
 		filter.Page = page
@@ -145,13 +163,12 @@ func TrashAdminNote(c *gin.Context) {
 		writeNoteLifecycleError(c, services.ErrMessageNotFound)
 		return
 	}
-	if err := services.TrashMessage(db, actorID, uint(id), reason); err != nil {
+	auditRecord := messageMutationAuditRecord(c, actorID, authorization.CapabilityNotesTrash, "trash", "success", "message mutation completed", &message)
+	if err := services.TrashMessageWithAudit(db, actorID, uint(id), reason, func(tx *gorm.DB) error {
+		return authorization.New(tx).WriteAudit(auditRecord)
+	}); err != nil {
 		writeMessageMutationDeniedAudit(c, authorization.New(db), actorID, authorization.CapabilityNotesTrash, "trash", &message)
 		writeNoteLifecycleError(c, err)
-		return
-	}
-	if err := writeMessageMutationSuccessAudit(c, authorization.New(db), actorID, authorization.CapabilityNotesTrash, "trash", &message); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "写入管理员审计失败"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "删除成功"})
@@ -221,13 +238,12 @@ func RestoreAdminRecycleBinNote(c *gin.Context) {
 		writeNoteLifecycleError(c, services.ErrMessageNotFound)
 		return
 	}
-	if err := services.RestoreMessage(db, actorID, uint(id)); err != nil {
+	auditRecord := messageMutationAuditRecord(c, actorID, authorization.CapabilityNotesRestore, "restore", "success", "message mutation completed", &message)
+	if err := services.RestoreMessageWithAudit(db, actorID, uint(id), func(tx *gorm.DB) error {
+		return authorization.New(tx).WriteAudit(auditRecord)
+	}); err != nil {
 		writeMessageMutationDeniedAudit(c, authorization.New(db), actorID, authorization.CapabilityNotesRestore, "restore", &message)
 		writeNoteLifecycleError(c, err)
-		return
-	}
-	if err := writeMessageMutationSuccessAudit(c, authorization.New(db), actorID, authorization.CapabilityNotesRestore, "restore", &message); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "写入管理员审计失败"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "恢复成功"})
@@ -254,13 +270,12 @@ func PermanentlyDeleteAdminRecycleBinNote(c *gin.Context) {
 		writeNoteLifecycleError(c, services.ErrMessageNotFound)
 		return
 	}
-	if err := services.PermanentlyDeleteMessage(db, actorID, uint(id), "manual permanent deletion"); err != nil {
+	auditRecord := messageMutationAuditRecord(c, actorID, authorization.CapabilityNotesDelete, "permanent_delete", "success", "message mutation completed", &message)
+	if err := services.PermanentlyDeleteMessageWithAudit(db, actorID, uint(id), "manual permanent deletion", func(tx *gorm.DB) error {
+		return authorization.New(tx).WriteAudit(auditRecord)
+	}); err != nil {
 		writeMessageMutationDeniedAudit(c, authorization.New(db), actorID, authorization.CapabilityNotesDelete, "permanent_delete", &message)
 		writeNoteLifecycleError(c, err)
-		return
-	}
-	if err := writeMessageMutationSuccessAudit(c, authorization.New(db), actorID, authorization.CapabilityNotesDelete, "permanent_delete", &message); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "写入管理员审计失败"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "永久删除成功"})
@@ -292,30 +307,43 @@ func runNoteLifecycleBatch(c *gin.Context, action string) {
 		var message models.Message
 		messageErr := db.First(&message, id).Error
 		var itemErr error
+		capability := authorization.CapabilityNotesTrash
+		actionName := "trash"
+		if action == "restore" {
+			capability = authorization.CapabilityNotesRestore
+			actionName = "restore"
+		} else if action == "permanent-delete" {
+			capability = authorization.CapabilityNotesDelete
+			actionName = "permanent_delete"
+		}
+		var auditRecord models.AdminAuditLog
+		if messageErr == nil {
+			auditRecord = messageMutationAuditRecord(c, actorID, capability, actionName, "success", "message mutation completed", &message)
+		}
 		switch action {
 		case "trash":
-			itemErr = services.TrashMessage(db, actorID, id, req.Reason)
+			itemErr = services.TrashMessageWithAudit(db, actorID, id, req.Reason, func(tx *gorm.DB) error {
+				if messageErr != nil {
+					return nil
+				}
+				return authorization.New(tx).WriteAudit(auditRecord)
+			})
 		case "restore":
-			itemErr = services.RestoreMessage(db, actorID, id)
+			itemErr = services.RestoreMessageWithAudit(db, actorID, id, func(tx *gorm.DB) error {
+				if messageErr != nil {
+					return nil
+				}
+				return authorization.New(tx).WriteAudit(auditRecord)
+			})
 		case "permanent-delete":
-			itemErr = services.PermanentlyDeleteMessage(db, actorID, id, req.Reason)
+			itemErr = services.PermanentlyDeleteMessageWithAudit(db, actorID, id, req.Reason, func(tx *gorm.DB) error {
+				if messageErr != nil {
+					return nil
+				}
+				return authorization.New(tx).WriteAudit(auditRecord)
+			})
 		}
 		if itemErr == nil {
-			if messageErr == nil {
-				capability := authorization.CapabilityNotesTrash
-				actionName := "trash"
-				switch action {
-				case "restore":
-					capability = authorization.CapabilityNotesRestore
-					actionName = "restore"
-				case "permanent-delete":
-					capability = authorization.CapabilityNotesDelete
-					actionName = "permanent_delete"
-				}
-				if auditErr := writeMessageMutationSuccessAudit(c, authorization.New(db), actorID, capability, actionName, &message); auditErr != nil {
-					itemErr = auditErr
-				}
-			}
 		}
 		if itemErr == nil {
 			idCopy := id
@@ -324,16 +352,6 @@ func runNoteLifecycleBatch(c *gin.Context, action string) {
 			continue
 		}
 		if messageErr == nil {
-			capability := authorization.CapabilityNotesTrash
-			actionName := "trash"
-			switch action {
-			case "restore":
-				capability = authorization.CapabilityNotesRestore
-				actionName = "restore"
-			case "permanent-delete":
-				capability = authorization.CapabilityNotesDelete
-				actionName = "permanent_delete"
-			}
 			writeMessageMutationDeniedAudit(c, authorization.New(db), actorID, capability, actionName, &message)
 		}
 		result.Failed++

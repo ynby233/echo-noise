@@ -25,6 +25,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rcy1314/echo-noise/config"
 	attachmentregistry "github.com/rcy1314/echo-noise/internal/attachments"
+	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/services"
@@ -202,7 +203,7 @@ func ListImageAttachments(c *gin.Context) {
 	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Where("deleted_at IS NULL").Order("created_at DESC").Find(&messages)
 
 	viewerID, _ := currentMessageViewer(c)
-	list, err := listRegisteredAttachmentsForViewer("image", "local", viewerID, messages, imageUsages)
+	list, err := listRegisteredAttachmentsForViewerContext("image", "local", viewerID, messages, c.Query("recycleBin") == "true", imageUsages)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []AttachmentInfo{}})
 		return
@@ -239,9 +240,21 @@ func listRegisteredAttachments(kind, backend string, messages []models.Message, 
 }
 
 func listRegisteredAttachmentsForViewer(kind, backend string, actorID *uint, messages []models.Message, suppliedImageUsages ...[]imageAttachmentUsage) ([]AttachmentInfo, error) {
+	return listRegisteredAttachmentsForViewerContext(kind, backend, actorID, messages, false, suppliedImageUsages...)
+}
+
+func listRegisteredAttachmentsForViewerContext(kind, backend string, actorID *uint, messages []models.Message, recycleBin bool, suppliedImageUsages ...[]imageAttachmentUsage) ([]AttachmentInfo, error) {
 	db, err := database.GetDB()
 	if err != nil {
 		return nil, err
+	}
+	if recycleBin {
+		if actorID == nil {
+			return nil, errors.New("recycle-bin attachment context requires authentication")
+		}
+		if decision := authorization.New(db).Authorize(*actorID, authorization.CapabilityNotesRecycleBinView, nil); !decision.Allowed {
+			return nil, errors.New("recycle-bin attachment access denied")
+		}
 	}
 	resolved, err := attachmentregistry.NewRegistry(db).List(kind, backend)
 	if err != nil {
@@ -257,11 +270,19 @@ func listRegisteredAttachmentsForViewer(kind, backend string, actorID *uint, mes
 		}
 	}
 	for _, item := range resolved {
-		visibleSources, err := services.VisibleAttachmentSources(db, actorID, item.Reference, backend)
+		var visibleSources []services.AttachmentSource
+		if recycleBin {
+			visibleSources, err = services.VisibleRecycleBinAttachmentSources(db, actorID, item.Reference, backend)
+		} else {
+			visibleSources, err = services.VisibleAttachmentSources(db, actorID, item.Reference, backend)
+		}
 		if err != nil {
 			return nil, err
 		}
 		if len(visibleSources) == 0 {
+			if recycleBin {
+				continue
+			}
 			if actorID == nil {
 				needle := attachmentReferenceURLPrefix(item.Reference.Kind, backend, item.Reference.PublicID)
 				for _, message := range messages {
@@ -348,7 +369,7 @@ func ListVideoAttachments(c *gin.Context) {
 	var messages []models.Message
 	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Where("deleted_at IS NULL").Order("created_at DESC").Find(&messages)
 	viewerID, _ := currentMessageViewer(c)
-	list, err := listRegisteredAttachmentsForViewer("video", "local", viewerID, messages)
+	list, err := listRegisteredAttachmentsForViewerContext("video", "local", viewerID, messages, c.Query("recycleBin") == "true")
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []AttachmentInfo{}})
 		return
@@ -408,7 +429,7 @@ func ListAudioAttachments(c *gin.Context) {
 	var messages []models.Message
 	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Where("deleted_at IS NULL").Order("created_at DESC").Find(&messages)
 	viewerID, _ := currentMessageViewer(c)
-	list, err := listRegisteredAttachmentsForViewer("audio", "local", viewerID, messages)
+	list, err := listRegisteredAttachmentsForViewerContext("audio", "local", viewerID, messages, c.Query("recycleBin") == "true")
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []AttachmentInfo{}})
 		return
@@ -468,7 +489,7 @@ func ListOtherAttachments(c *gin.Context) {
 	var messages []models.Message
 	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Where("deleted_at IS NULL").Order("created_at DESC").Find(&messages)
 	viewerID, _ := currentMessageViewer(c)
-	list, err := listRegisteredAttachmentsForViewer("file", "local", viewerID, messages)
+	list, err := listRegisteredAttachmentsForViewerContext("file", "local", viewerID, messages, c.Query("recycleBin") == "true")
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []AttachmentInfo{}})
 		return

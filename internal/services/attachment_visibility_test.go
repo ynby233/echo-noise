@@ -2,18 +2,60 @@ package services
 
 import (
 	"testing"
+	"time"
 
 	"github.com/glebarez/sqlite"
+	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"gorm.io/gorm"
 )
+
+func TestVisibleRecycleBinAttachmentSourcesRequiresViewAndHiddenCapabilities(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&models.User{}, &models.Message{}, &models.Comment{}, &models.AdminCapabilityGrant{}, &models.AdminAuditLog{}, &models.AdminAuditConfig{}); err != nil {
+		t.Fatal(err)
+	}
+	primary := models.User{ID: models.PrimaryAdminUserID, Username: "primary", IsAdmin: true}
+	owner := models.User{ID: 2, Username: "owner"}
+	delegated := models.User{ID: 3, Username: "delegated", IsAdmin: true}
+	for _, user := range []*models.User{&primary, &owner, &delegated} {
+		if err := db.Create(user).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	now := time.Now().UTC()
+	message := models.Message{UserID: owner.ID, Visibility: MessageVisibilityPrivate, Private: true, DeletedAt: &now, Content: "[file](/api/files/refs/recycle-ref/file.txt)"}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatal(err)
+	}
+	ref := models.AttachmentReference{PublicID: "recycle-ref", OwnerUserID: owner.ID, Kind: "file"}
+	if _, err := VisibleRecycleBinAttachmentSources(db, &delegated.ID, ref, "local"); err == nil {
+		t.Fatal("missing recycle-bin capability must fail")
+	}
+	authorizer := authorization.New(db)
+	if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityNotesRecycleBinView}); err != nil {
+		t.Fatal(err)
+	}
+	if sources, err := VisibleRecycleBinAttachmentSources(db, &delegated.ID, ref, "local"); err != nil || len(sources) != 0 {
+		t.Fatalf("hidden source leaked: %#v err=%v", sources, err)
+	}
+	if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityNotesRecycleBinView, authorization.CapabilityContentViewHidden}); err != nil {
+		t.Fatal(err)
+	}
+	if sources, err := VisibleRecycleBinAttachmentSources(db, &delegated.ID, ref, "local"); err != nil || len(sources) != 1 {
+		t.Fatalf("authorized recycle source missing: %#v err=%v", sources, err)
+	}
+}
 
 func TestVisibleAttachmentSourcesCoversMessageCommentReplyAndGuestbook(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.User{}, &models.Message{}, &models.Comment{}, &models.AdminCapabilityGrant{}); err != nil {
+	if err := db.AutoMigrate(&models.User{}, &models.Message{}, &models.Comment{}, &models.AdminCapabilityGrant{}, &models.AdminAuditLog{}, &models.AdminAuditConfig{}); err != nil {
 		t.Fatal(err)
 	}
 	primary := models.User{ID: 1, Username: "primary", IsAdmin: true}

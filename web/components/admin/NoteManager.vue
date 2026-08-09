@@ -20,7 +20,14 @@
       <UInput v-model="filters.keyword" placeholder="正文关键词" @keyup.enter="load" />
       <UInput v-model="filters.id" type="number" placeholder="精确笔记 ID" @keyup.enter="load" />
       <UInput v-model="filters.authorId" type="number" placeholder="作者 ID" @keyup.enter="load" />
+      <UInput v-model="filters.username" placeholder="作者用户名" @keyup.enter="load" />
+      <UInput v-model="filters.tag" placeholder="标签（不含 #）" @keyup.enter="load" />
       <USelect v-model="filters.visibility" :options="visibilityOptions" @change="load" />
+      <UInput v-model="filters.createdFrom" type="date" aria-label="创建起始日期" @change="load" />
+      <UInput v-model="filters.createdTo" type="date" aria-label="创建结束日期" @change="load" />
+      <USelect v-model="filters.pinned" :options="booleanOptions('全站置顶')" @change="load" />
+      <USelect v-model="filters.hasAttachment" :options="booleanOptions('附件')" @change="load" />
+      <USelect v-model="filters.sort" :options="sortOptions" @change="load" />
     </div>
 
     <div class="overflow-x-auto rounded-lg border" :class="theme?.border || 'border-slate-200 dark:border-slate-700'">
@@ -52,6 +59,12 @@
               <td class="px-3 py-2 align-top whitespace-nowrap">{{ formatDate(recycleBin ? row.deleted_at : row.created_at) }}</td>
               <td class="px-3 py-2 text-right align-top whitespace-nowrap">
                 <UButton size="xs" variant="ghost" color="gray" @click="toggleDetail(row.id)">{{ detailId === row.id ? '收起' : '详情' }}</UButton>
+                <template v-if="!recycleBin && !row.is_guestbook">
+                  <UButton v-if="canEdit" size="xs" variant="ghost" color="primary" :loading="actionLoading" @click="editOne(row)">编辑</UButton>
+                  <UButton v-if="canChangeVisibility" size="xs" variant="ghost" color="primary" :loading="actionLoading" @click="changeVisibilityOne(row)">可见性</UButton>
+                  <UButton v-if="canChangePublishTime" size="xs" variant="ghost" color="primary" :loading="actionLoading" @click="changePublishTimeOne(row)">发布时间</UButton>
+                  <UButton v-if="canPinGlobal" size="xs" variant="ghost" color="primary" :loading="actionLoading" @click="toggleGlobalPinOne(row)">{{ row.pinned ? '取消全站置顶' : '全站置顶' }}</UButton>
+                </template>
                 <UButton v-if="!recycleBin && !row.is_guestbook && canTrash" size="xs" variant="ghost" color="orange" :loading="actionLoading" @click="trashOne(row.id)">移入回收站</UButton>
                 <UButton v-if="recycleBin && !row.is_guestbook && canRestore" size="xs" variant="ghost" color="green" :loading="actionLoading" @click="restoreOne(row.id)">恢复</UButton>
                 <UButton v-if="recycleBin && !row.is_guestbook && canPermanentlyDelete" size="xs" variant="ghost" color="red" :loading="actionLoading" @click="permanentDeleteOne(row.id)">永久删除</UButton>
@@ -82,7 +95,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { deleteRequest, getRequest, postRequest } from '~/utils/api'
+import { deleteRequest, getRequest, postRequest, putRequest } from '~/utils/api'
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 
 const props = defineProps<{ recycleBin?: boolean; theme?: any }>()
@@ -91,6 +104,10 @@ const { can } = useAdminCapabilities()
 const canTrash = computed(() => can('notes.trash'))
 const canRestore = computed(() => can('notes.restore'))
 const canPermanentlyDelete = computed(() => can('notes.delete_permanently'))
+const canEdit = computed(() => can('notes.edit'))
+const canChangeVisibility = computed(() => can('notes.change_visibility'))
+const canChangePublishTime = computed(() => can('notes.change_publish_time'))
+const canPinGlobal = computed(() => can('notes.pin_global'))
 const loading = ref(false)
 const actionLoading = ref(false)
 const rows = ref<any[]>([])
@@ -99,7 +116,7 @@ const detailId = ref<number | null>(null)
 const page = ref(1)
 const pageSize = 20
 const total = ref(0)
-const filters = reactive({ keyword: '', id: '', authorId: '', visibility: '' })
+const filters = reactive({ keyword: '', id: '', authorId: '', username: '', tag: '', visibility: '', createdFrom: '', createdTo: '', pinned: '', hasAttachment: '', sort: '' })
 const visibilityOptions = [
   { label: '全部可见性', value: '' },
   { label: '公开', value: 'public' },
@@ -107,6 +124,8 @@ const visibilityOptions = [
   { label: '联系人', value: 'contacts' },
   { label: '私密', value: 'private' }
 ]
+const booleanOptions = (label: string) => [{ label: `${label}：全部`, value: '' }, { label: `${label}：是`, value: 'true' }, { label: `${label}：否`, value: 'false' }]
+const sortOptions = [{ label: '最新创建', value: '' }, { label: '最早创建', value: 'oldest' }, { label: '置顶优先', value: 'pinned' }]
 const endpoint = computed(() => props.recycleBin ? 'admin/recycle-bin' : 'admin/notes')
 const allSelected = computed(() => rows.value.length > 0 && rows.value.every((row) => selected.value.includes(row.id)))
 
@@ -117,7 +136,7 @@ const formatDate = (value: any) => {
 }
 const oneLine = (value: any) => String(value || '').replace(/\s+/g, ' ').trim().slice(0, 120)
 const visibilityLabel = (value: string) => visibilityOptions.find((item) => item.value === value)?.label || value || '公开'
-const query = () => ({ page: page.value, pageSize, keyword: filters.keyword, id: filters.id, authorId: filters.authorId, visibility: filters.visibility })
+const query = () => ({ page: page.value, pageSize, keyword: filters.keyword, id: filters.id, authorId: filters.authorId, username: filters.username, tag: filters.tag, visibility: filters.visibility, createdFrom: filters.createdFrom, createdTo: filters.createdTo, pinned: filters.pinned, hasAttachment: filters.hasAttachment, sort: filters.sort })
 
 const load = async () => {
   loading.value = true
@@ -167,6 +186,28 @@ const restoreOne = (id: number) => runAction(() => postRequest(`admin/recycle-bi
 const permanentDeleteOne = (id: number) => {
   if (!confirmPermanent(1)) return
   return runAction(() => deleteRequest(`admin/recycle-bin/${id}`, undefined, { silent: true }))
+}
+const editOne = (row: any) => {
+  if (typeof window === 'undefined' || !canEdit.value) return
+  const content = window.prompt('编辑笔记正文（留空表示空正文）', String(row.content || ''))
+  if (content === null) return
+  return runAction(() => putRequest(`admin/notes/${row.id}`, { content }, { silent: true }))
+}
+const changeVisibilityOne = (row: any) => {
+  if (typeof window === 'undefined' || !canChangeVisibility.value) return
+  const visibility = window.prompt('输入可见性：public / users / contacts / private', String(row.visibility || 'public'))
+  if (!visibility) return
+  return runAction(() => putRequest(`admin/notes/${row.id}/visibility`, { visibility, private: visibility === 'private' }, { silent: true }))
+}
+const changePublishTimeOne = (row: any) => {
+  if (typeof window === 'undefined' || !canChangePublishTime.value) return
+  const createdAt = window.prompt('输入发布时间（ISO 8601），取消则不修改', String(row.created_at || ''))
+  if (!createdAt) return
+  return runAction(() => putRequest(`admin/notes/${row.id}/publish-time`, { created_at: createdAt }, { silent: true }))
+}
+const toggleGlobalPinOne = (row: any) => {
+  if (!canPinGlobal.value) return
+  return runAction(() => putRequest(`admin/notes/${row.id}/pin/global`, { pinned: !row.pinned }, { silent: true }))
 }
 const batchTrash = () => runAction(() => postRequest('admin/notes/batch-trash', { ids: selected.value, reason: 'admin batch request' }, { silent: true }))
 const batchRestore = () => runAction(() => postRequest('admin/recycle-bin/batch-restore', { ids: selected.value }, { silent: true }))

@@ -8,6 +8,7 @@ import (
 	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
+	"gorm.io/gorm"
 )
 
 func TestNoteLifecycleTrashRestoreIsMutuallyExclusive(t *testing.T) {
@@ -63,6 +64,26 @@ func TestNoteLifecycleTrashRestoreIsMutuallyExclusive(t *testing.T) {
 	}
 	if err := RestoreMessage(db, primary.ID, message.ID); !errors.Is(err, ErrMessageNotTrashed) {
 		t.Fatalf("duplicate restore error = %v, want %v", err, ErrMessageNotTrashed)
+	}
+}
+
+func TestLifecycleMutationRollsBackWhenSuccessAuditFails(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	author := mustCreateUser(t, models.User{Username: "audit-rollback-author"})
+	message := models.Message{Content: "audit rollback", Username: author.Username, UserID: author.ID, Visibility: MessageVisibilityPublic}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatalf("create message: %v", err)
+	}
+	auditErr := errors.New("audit write failed")
+	if err := TrashMessageWithAudit(db, author.ID, message.ID, "test", func(*gorm.DB) error { return auditErr }); !errors.Is(err, auditErr) {
+		t.Fatalf("expected audit error, got %v", err)
+	}
+	var stored models.Message
+	if err := db.First(&stored, message.ID).Error; err != nil {
+		t.Fatalf("reload message: %v", err)
+	}
+	if stored.DeletedAt != nil {
+		t.Fatalf("message changed despite audit rollback: %#v", stored)
 	}
 }
 

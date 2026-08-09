@@ -1,10 +1,12 @@
 package services
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 
+	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"gorm.io/gorm"
 )
@@ -135,6 +137,67 @@ func VisibleAttachmentSources(db *gorm.DB, actorID *uint, reference models.Attac
 		}
 	}
 	return visible, nil
+}
+
+// VisibleRecycleBinAttachmentSources is restricted to an explicit recycle-bin
+// context. It includes deleted messages only when the actor's independent
+// recycle-bin capability and hidden-content/primary-admin protections allow
+// that source; normal attachment listing must continue using the function
+// above.
+func VisibleRecycleBinAttachmentSources(db *gorm.DB, actorID *uint, reference models.AttachmentReference, backend string) ([]AttachmentSource, error) {
+	if db == nil || actorID == nil || *actorID == 0 {
+		return nil, fmt.Errorf("recycle-bin attachment context requires an actor")
+	}
+	if decision := authorization.New(db).Authorize(*actorID, authorization.CapabilityNotesRecycleBinView, &reference.OwnerUserID); !decision.Allowed {
+		return nil, errors.New("recycle-bin attachment access denied")
+	}
+	scope, err := ResolveContentReadScope(db, actorID)
+	if err != nil {
+		return nil, err
+	}
+	var messages []models.Message
+	if err := db.Where("deleted_at IS NOT NULL").Find(&messages).Error; err != nil {
+		return nil, err
+	}
+	var comments []models.Comment
+	if err := db.Find(&comments).Error; err != nil {
+		return nil, err
+	}
+	needle := attachmentURLNeedle(reference, backend)
+	contains := func(value string) bool {
+		return strings.Contains(value, needle) || strings.Contains(value, strings.TrimSpace(reference.PublicID))
+	}
+	byMessage := make(map[uint][]models.Comment)
+	for _, comment := range comments {
+		byMessage[comment.MessageID] = append(byMessage[comment.MessageID], comment)
+	}
+	out := make([]AttachmentSource, 0)
+	for _, message := range messages {
+		if !scope.CanReadMessageInRecycleBin(message) {
+			continue
+		}
+		if message.UserID == reference.OwnerUserID && (contains(message.Content) || contains(message.ImageURL)) {
+			out = append(out, AttachmentSource{SourceType: "message", SourceID: message.ID, MessageID: message.ID, OwnerUserID: message.UserID, Visibility: StoredMessageVisibility(message), Message: message})
+		}
+		thread := byMessage[message.ID]
+		commentMap := CommentMap(thread)
+		for i := range thread {
+			comment := thread[i]
+			if !contains(comment.Content) || !scope.CanReadComment(message, comment, commentMap) {
+				continue
+			}
+			cid := comment.ID
+			typeName := "comment"
+			if comment.ParentID != nil {
+				typeName = "reply"
+			}
+			if IsGuestbookMessage(message) {
+				typeName = "guestbook"
+			}
+			out = append(out, AttachmentSource{SourceType: typeName, SourceID: comment.ID, MessageID: message.ID, CommentID: &cid, ParentCommentID: comment.ParentID, OwnerUserID: commentOwner(comment, message.UserID), Visibility: EffectiveCommentVisibilityInThread(comment, StoredMessageVisibility(message), commentMap), Message: message, Comment: &comment})
+		}
+	}
+	return out, nil
 }
 
 // AttachmentReferenceURLName is shared by tests and legacy scanners when

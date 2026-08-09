@@ -20,14 +20,19 @@ var (
 )
 
 type NoteManagementFilter struct {
-	Page       int
-	PageSize   int
-	Keyword    string
-	MessageID  *uint
-	AuthorID   *uint
-	Username   string
-	Visibility string
-	Tag        string
+	Page          int
+	PageSize      int
+	Keyword       string
+	MessageID     *uint
+	AuthorID      *uint
+	Username      string
+	Visibility    string
+	Tag           string
+	CreatedFrom   *time.Time
+	CreatedTo     *time.Time
+	Pinned        *bool
+	HasAttachment *bool
+	Sort          string
 }
 
 type NoteManagementItem struct {
@@ -108,6 +113,12 @@ func ensureLifecycleActorCanRead(db *gorm.DB, actorID uint, message models.Messa
 // TrashMessage is the single state transition used by author and administrator
 // deletion paths. It never removes the Message row or its related data.
 func TrashMessage(db *gorm.DB, actorID, messageID uint, reason string) error {
+	return TrashMessageWithAudit(db, actorID, messageID, reason, nil)
+}
+
+// TrashMessageWithAudit atomically commits the lifecycle transition and an
+// optional success-audit callback on the same transaction.
+func TrashMessageWithAudit(db *gorm.DB, actorID, messageID uint, reason string, audit func(*gorm.DB) error) error {
 	message, err := loadMessageForLifecycle(db, messageID)
 	if err != nil {
 		return err
@@ -152,11 +163,20 @@ func TrashMessage(db *gorm.DB, actorID, messageID uint, reason string) error {
 		if result.RowsAffected != 1 {
 			return ErrMessageAlreadyTrashed
 		}
+		if audit != nil {
+			if err := audit(tx); err != nil {
+				return err
+			}
+		}
 		return nil
 	})
 }
 
 func RestoreMessage(db *gorm.DB, actorID, messageID uint) error {
+	return RestoreMessageWithAudit(db, actorID, messageID, nil)
+}
+
+func RestoreMessageWithAudit(db *gorm.DB, actorID, messageID uint, audit func(*gorm.DB) error) error {
 	message, err := loadMessageForLifecycle(db, messageID)
 	if err != nil {
 		return err
@@ -185,11 +205,20 @@ func RestoreMessage(db *gorm.DB, actorID, messageID uint) error {
 		if result.RowsAffected != 1 {
 			return ErrMessageNotTrashed
 		}
+		if audit != nil {
+			if err := audit(tx); err != nil {
+				return err
+			}
+		}
 		return nil
 	})
 }
 
 func PermanentlyDeleteMessage(db *gorm.DB, actorID, messageID uint, reason string) error {
+	return PermanentlyDeleteMessageWithAudit(db, actorID, messageID, reason, nil)
+}
+
+func PermanentlyDeleteMessageWithAudit(db *gorm.DB, actorID, messageID uint, reason string, audit func(*gorm.DB) error) error {
 	message, err := loadMessageForLifecycle(db, messageID)
 	if err != nil {
 		return err
@@ -210,10 +239,13 @@ func PermanentlyDeleteMessage(db *gorm.DB, actorID, messageID uint, reason strin
 		return ErrMessageNotAuthorized
 	}
 	return db.Transaction(func(tx *gorm.DB) error {
-		// Preserve attachment references, physical blobs, durable local grants,
-		// and notification history. Workline 4 intentionally keeps local grants
-		// after message deletion, and its registry has no per-message reference
-		// removal primitive that would be safe for a shared logical reference.
+		var comments []models.Comment
+		if err := tx.Where("message_id = ?", messageID).Find(&comments).Error; err != nil {
+			return err
+		}
+		if err := RemoveUnreferencedMessageAttachmentReferences(tx, messageID, message, comments); err != nil {
+			return err
+		}
 		if err := tx.Where("message_id = ?", messageID).Delete(&models.Comment{}).Error; err != nil {
 			return err
 		}
@@ -226,6 +258,11 @@ func PermanentlyDeleteMessage(db *gorm.DB, actorID, messageID uint, reason strin
 		}
 		if result.RowsAffected != 1 {
 			return ErrMessageNotTrashed
+		}
+		if audit != nil {
+			if err := audit(tx); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -259,6 +296,22 @@ func buildNoteManagementQuery(db *gorm.DB, actorID uint, filter NoteManagementFi
 	if strings.TrimSpace(filter.Tag) != "" {
 		query = query.Where("messages.content LIKE ?", "%#"+strings.TrimPrefix(strings.TrimSpace(filter.Tag), "#")+"%")
 	}
+	if filter.CreatedFrom != nil {
+		query = query.Where("messages.created_at >= ?", *filter.CreatedFrom)
+	}
+	if filter.CreatedTo != nil {
+		query = query.Where("messages.created_at < ?", *filter.CreatedTo)
+	}
+	if filter.Pinned != nil {
+		query = query.Where("messages.pinned = ?", *filter.Pinned)
+	}
+	if filter.HasAttachment != nil {
+		if *filter.HasAttachment {
+			query = query.Where("(messages.image_url <> '' OR messages.content LIKE '%/api/%attachments/%' OR messages.content LIKE '%/api/%/refs/%')")
+		} else {
+			query = query.Where("messages.image_url = '' AND messages.content NOT LIKE '%/api/%attachments/%' AND messages.content NOT LIKE '%/api/%/refs/%'")
+		}
+	}
 	return query, nil
 }
 
@@ -273,7 +326,8 @@ func ListNoteManagementMessages(db *gorm.DB, actorID uint, filter NoteManagement
 		return NoteManagementPageResult{}, err
 	}
 	var messages []models.Message
-	if err := query.Order("messages.created_at DESC, messages.id DESC").Limit(filter.PageSize).Offset((filter.Page - 1) * filter.PageSize).Find(&messages).Error; err != nil {
+	order := noteManagementOrder(filter.Sort, false)
+	if err := query.Order(order).Limit(filter.PageSize).Offset((filter.Page - 1) * filter.PageSize).Find(&messages).Error; err != nil {
 		return NoteManagementPageResult{}, err
 	}
 	ApplyMessageViewerState(messages, &actorID)
@@ -295,7 +349,7 @@ func ListRecycleBinMessages(db *gorm.DB, actorID uint, filter NoteManagementFilt
 		return NoteManagementPageResult{}, err
 	}
 	var messages []models.Message
-	if err := query.Order("messages.deleted_at DESC, messages.id DESC").Limit(filter.PageSize).Offset((filter.Page - 1) * filter.PageSize).Find(&messages).Error; err != nil {
+	if err := query.Order(noteManagementOrder(filter.Sort, true)).Limit(filter.PageSize).Offset((filter.Page - 1) * filter.PageSize).Find(&messages).Error; err != nil {
 		return NoteManagementPageResult{}, err
 	}
 	items := make([]NoteManagementItem, 0, len(messages))
@@ -303,6 +357,29 @@ func ListRecycleBinMessages(db *gorm.DB, actorID uint, filter NoteManagementFilt
 		items = append(items, noteManagementItem(message))
 	}
 	return NoteManagementPageResult{Total: total, Items: items}, nil
+}
+
+func noteManagementOrder(sort string, recycleBin bool) string {
+	if recycleBin {
+		switch strings.TrimSpace(sort) {
+		case "oldest":
+			return "messages.deleted_at ASC, messages.id ASC"
+		case "created_desc":
+			return "messages.created_at DESC, messages.id DESC"
+		case "created_asc":
+			return "messages.created_at ASC, messages.id ASC"
+		default:
+			return "messages.deleted_at DESC, messages.id DESC"
+		}
+	}
+	switch strings.TrimSpace(sort) {
+	case "oldest":
+		return "messages.created_at ASC, messages.id ASC"
+	case "pinned":
+		return "messages.pinned DESC, messages.pinned_at DESC, messages.created_at DESC, messages.id DESC"
+	default:
+		return "messages.created_at DESC, messages.id DESC"
+	}
 }
 
 func GetRecycleBinMessageForViewer(db *gorm.DB, actorID, messageID uint) (*NoteManagementItem, error) {

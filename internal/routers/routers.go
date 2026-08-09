@@ -505,6 +505,10 @@ func registerNoteManagementRoutes(group *gin.RouterGroup) {
 	{
 		notes.GET("", controllers.ListAdminNotes)
 		notes.GET("/:id", controllers.GetAdminNote)
+		notes.PUT("/:id", middleware.RequireCapability(authorization.CapabilityNotesEdit), controllers.UpdateMessage)
+		notes.PUT("/:id/visibility", middleware.RequireCapability(authorization.CapabilityNotesVisibility), controllers.UpdateMessage)
+		notes.PUT("/:id/publish-time", middleware.RequireCapability(authorization.CapabilityNotesPublishTime), controllers.UpdateMessage)
+		notes.PUT("/:id/pin/global", middleware.RequireCapability(authorization.CapabilityNotesPinGlobal), controllers.UpdateMessageGlobalPin)
 		notes.POST("/:id/trash", middleware.RequireCapability(authorization.CapabilityNotesTrash), controllers.TrashAdminNote)
 		notes.POST("/batch-trash", middleware.RequireCapability(authorization.CapabilityNotesTrash), controllers.BatchTrashAdminNotes)
 	}
