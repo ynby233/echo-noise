@@ -23,7 +23,7 @@ assert.doesNotMatch(
 
 assert.match(
   controller,
-  /Where\("user_id = \?",\s*user\.ID\)/,
+  /Where\("[^"]*user_id = \?",\s*user\.ID\)/,
   'personal stats must query messages scoped to the current user id'
 )
 assert.match(

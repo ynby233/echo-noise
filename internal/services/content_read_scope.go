@@ -69,6 +69,9 @@ func (scope ContentReadScope) CanViewHiddenContent() bool {
 }
 
 func AuthorizeMessageMutation(db *gorm.DB, actorID uint, message models.Message, capability authorization.Capability) authorization.Decision {
+	if message.DeletedAt != nil {
+		return authorization.Decision{Reason: authorization.DenialContentNotReadable}
+	}
 	scope, err := ResolveContentReadScope(db, &actorID)
 	if err != nil || !scope.CanReadMessage(message) {
 		return authorization.Decision{Reason: authorization.DenialContentNotReadable}
@@ -93,6 +96,20 @@ func AuthorizeRecycleBinMutation(db *gorm.DB, actorID, targetOwnerID uint, capab
 }
 
 func (scope ContentReadScope) CanReadMessage(message models.Message) bool {
+	if message.DeletedAt != nil {
+		return false
+	}
+	return scope.canReadMessage(message)
+}
+
+// CanReadMessageInRecycleBin applies the original visibility rules while
+// allowing a caller that is already in the recycle-bin context to inspect a
+// trashed row. It never grants ordinary front-end access to deleted content.
+func (scope ContentReadScope) CanReadMessageInRecycleBin(message models.Message) bool {
+	return scope.canReadMessage(message)
+}
+
+func (scope ContentReadScope) canReadMessage(message models.Message) bool {
 	if scope.canReadMessageNormally(message) {
 		return true
 	}
@@ -103,6 +120,9 @@ func (scope ContentReadScope) CanReadMessage(message models.Message) bool {
 }
 
 func (scope ContentReadScope) CanInteractWithMessage(message models.Message) bool {
+	if message.DeletedAt != nil {
+		return false
+	}
 	return scope.hasActor && scope.canReadMessageNormally(message)
 }
 
@@ -125,6 +145,10 @@ func (scope ContentReadScope) canReadMessageNormally(message models.Message) boo
 }
 
 func (scope ContentReadScope) ApplyMessageVisibility(query *gorm.DB) *gorm.DB {
+	return scope.ApplyMessageVisibilityIncludingDeleted(query).Where("messages.deleted_at IS NULL")
+}
+
+func (scope ContentReadScope) ApplyMessageVisibilityIncludingDeleted(query *gorm.DB) *gorm.DB {
 	if scope.primaryAdmin {
 		return query
 	}

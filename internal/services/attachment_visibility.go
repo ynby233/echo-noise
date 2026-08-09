@@ -36,7 +36,7 @@ func LoadAttachmentSources(db *gorm.DB, reference models.AttachmentReference, ba
 		return nil, nil
 	}
 	var messages []models.Message
-	if err := db.Find(&messages).Error; err != nil {
+	if err := db.Where("deleted_at IS NULL").Find(&messages).Error; err != nil {
 		return nil, err
 	}
 	var comments []models.Comment
@@ -154,7 +154,7 @@ func VisibleLegacyAttachmentSources(db *gorm.DB, actorID *uint, kind, name strin
 		return nil, fmt.Errorf("attachment visibility database is unavailable")
 	}
 	var messages []models.Message
-	if err := db.Find(&messages).Error; err != nil {
+	if err := db.Where("deleted_at IS NULL").Find(&messages).Error; err != nil {
 		return nil, err
 	}
 	var comments []models.Comment

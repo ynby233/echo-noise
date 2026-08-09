@@ -199,7 +199,7 @@ func ListImageAttachments(c *gin.Context) {
 	dir := localImageDir()
 
 	var messages []models.Message
-	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Order("created_at DESC").Find(&messages)
+	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Where("deleted_at IS NULL").Order("created_at DESC").Find(&messages)
 
 	viewerID, _ := currentMessageViewer(c)
 	list, err := listRegisteredAttachmentsForViewer("image", "local", viewerID, messages, imageUsages)
@@ -346,7 +346,7 @@ func ListVideoAttachments(c *gin.Context) {
 		"/app/data/video",
 	}, "./data/video")
 	var messages []models.Message
-	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Order("created_at DESC").Find(&messages)
+	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Where("deleted_at IS NULL").Order("created_at DESC").Find(&messages)
 	viewerID, _ := currentMessageViewer(c)
 	list, err := listRegisteredAttachmentsForViewer("video", "local", viewerID, messages)
 	if err != nil {
@@ -406,7 +406,7 @@ func ListAudioAttachments(c *gin.Context) {
 		"/app/data/audio",
 	}, "./data/audio")
 	var messages []models.Message
-	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Order("created_at DESC").Find(&messages)
+	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Where("deleted_at IS NULL").Order("created_at DESC").Find(&messages)
 	viewerID, _ := currentMessageViewer(c)
 	list, err := listRegisteredAttachmentsForViewer("audio", "local", viewerID, messages)
 	if err != nil {
@@ -466,7 +466,7 @@ func ListOtherAttachments(c *gin.Context) {
 		"/app/data/attachments",
 	}, "./data/attachments")
 	var messages []models.Message
-	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Order("created_at DESC").Find(&messages)
+	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Where("deleted_at IS NULL").Order("created_at DESC").Find(&messages)
 	viewerID, _ := currentMessageViewer(c)
 	list, err := listRegisteredAttachmentsForViewer("file", "local", viewerID, messages)
 	if err != nil {
@@ -1367,7 +1367,7 @@ func listCloudAttachments(siteCfg models.SiteConfig, actorID *uint, keep func(na
 	origin, prefix := splitPublicBaseURL(publicBaseURL)
 
 	var messages []models.Message
-	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Order("created_at DESC").Find(&messages)
+	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Where("deleted_at IS NULL").Order("created_at DESC").Find(&messages)
 	imageUsages := loadImageAttachmentUsages()
 
 	var out []AttachmentInfo

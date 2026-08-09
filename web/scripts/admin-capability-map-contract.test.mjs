@@ -16,7 +16,7 @@ for (const section of sections) {
 }
 for (const [section, capability] of Object.entries(map)) {
   assert.match(section, /^[a-z][a-z0-9-]*$/, `invalid admin section key ${section}`)
-  assert.match(capability, /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/, `invalid capability mapping for ${section}`)
+  assert.match(capability, /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/, `invalid capability mapping for ${section}`)
 }
 
 const declaredCapabilities = new Set(

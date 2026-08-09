@@ -15,11 +15,11 @@ func GetAllMessages(showPrivate bool) ([]models.Message, error) {
 
 	// 是否将私密内容也查询出来（置顶优先）
 	if showPrivate {
-		if err := database.DB.Order("pinned DESC, CASE WHEN pinned_at IS NULL THEN 1 ELSE 0 END ASC, pinned_at DESC, created_at DESC, id DESC").Find(&messages).Error; err != nil {
+		if err := database.DB.Where("deleted_at IS NULL").Order("pinned DESC, CASE WHEN pinned_at IS NULL THEN 1 ELSE 0 END ASC, pinned_at DESC, created_at DESC, id DESC").Find(&messages).Error; err != nil {
 			return nil, err
 		}
 	} else {
-		if err := database.DB.Where("private = ? AND (visibility = ? OR visibility = ? OR visibility IS NULL)", false, "public", "").Order("pinned DESC, CASE WHEN pinned_at IS NULL THEN 1 ELSE 0 END ASC, pinned_at DESC, created_at DESC, id DESC").Find(&messages).Error; err != nil {
+		if err := database.DB.Where("deleted_at IS NULL AND private = ? AND (visibility = ? OR visibility = ? OR visibility IS NULL)", false, "public", "").Order("pinned DESC, CASE WHEN pinned_at IS NULL THEN 1 ELSE 0 END ASC, pinned_at DESC, created_at DESC, id DESC").Find(&messages).Error; err != nil {
 			return nil, err
 		}
 	}
@@ -33,7 +33,7 @@ func GetPublicMessagesByUserIDs(userIDs []uint) ([]models.Message, error) {
 		return messages, nil
 	}
 
-	if err := database.DB.Where("private = ? AND (visibility = ? OR visibility = ? OR visibility IS NULL) AND user_id IN ?", false, "public", "", userIDs).Order("pinned DESC, CASE WHEN pinned_at IS NULL THEN 1 ELSE 0 END ASC, pinned_at DESC, created_at DESC, id DESC").Find(&messages).Error; err != nil {
+	if err := database.DB.Where("deleted_at IS NULL AND private = ? AND (visibility = ? OR visibility = ? OR visibility IS NULL) AND user_id IN ?", false, "public", "", userIDs).Order("pinned DESC, CASE WHEN pinned_at IS NULL THEN 1 ELSE 0 END ASC, pinned_at DESC, created_at DESC, id DESC").Find(&messages).Error; err != nil {
 		return nil, err
 	}
 
@@ -83,36 +83,10 @@ func CreateMessage(message *models.Message) error {
 	})
 }
 
-// DeleteMessage 根据 ID 删除留言
-// 级联删除关联的内置评论
+// DeleteMessage is retained as a hard-delete compatibility symbol only to
+// prevent legacy callers from bypassing the note lifecycle actor checks.
 func DeleteMessage(id uint) error {
-	tx := database.DB.Begin()
-	var existing models.Message
-	if err := tx.First(&existing, id).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-	if err := models.SyncLocalAttachmentGrants(tx, &existing); err != nil {
-		tx.Rollback()
-		return err
-	}
-	// 先删除关联评论
-	if err := tx.Where("message_id = ?", id).Delete(&models.Comment{}).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-	// 再删除消息本身
-	var message models.Message
-	result := tx.Delete(&message, id)
-	if result.Error != nil {
-		tx.Rollback()
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		tx.Rollback()
-		return gorm.ErrRecordNotFound
-	}
-	return tx.Commit().Error
+	return errors.New("message deletion requires an actor and note lifecycle service")
 }
 
 // UpdateMessageContent 更新留言内容
@@ -168,7 +142,7 @@ func UpdateMessageContent(id uint, content string) error {
 // GetTotalMessages 获取消息总数
 func GetTotalMessages() (int64, error) {
 	var count int64
-	if err := database.DB.Model(&models.Message{}).Count(&count).Error; err != nil {
+	if err := database.DB.Model(&models.Message{}).Where("deleted_at IS NULL").Count(&count).Error; err != nil {
 		return 0, err
 	}
 	return count, nil

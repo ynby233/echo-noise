@@ -489,23 +489,13 @@ func CreateMessage(message *models.Message) error {
 
 // DeleteMessage 根据 ID 删除笔记
 func DeleteMessage(id uint, userID uint) error {
-	// 获取笔记信息
-	message, err := repository.GetMessageByID(id, true)
-	if err != nil {
-		return err
-	}
-
-	// 验证是否为笔记作者
-	if message.UserID != userID {
-		return fmt.Errorf("无权删除他人的笔记")
-	}
-
-	return repository.DeleteMessage(id)
+	return TrashMessage(database.DB, userID, id, "author request")
 }
 
-// DeleteMessageByAdmin 管理员删除笔记（无需验证作者）
+// DeleteMessageByAdmin is retained only as a non-destructive compatibility
+// symbol. Administrator deletion must go through TrashMessage with an actor ID.
 func DeleteMessageByAdmin(id uint) error {
-	return repository.DeleteMessage(id)
+	return fmt.Errorf("administrator deletion requires actor identity for recycle-bin lifecycle")
 }
 
 func GenerateRSS(c *gin.Context) (string, error) {

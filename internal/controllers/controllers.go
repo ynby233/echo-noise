@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -692,38 +693,29 @@ func DeleteMessage(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
 		return
 	}
-	if message.UserID != actorID {
-		authorizer := authorization.New(db)
-		if decision := services.AuthorizeMessageMutation(db, actorID, message, authorization.CapabilityNotesTrash); !decision.Allowed {
+	authorizer := authorization.New(db)
+	isOwner := message.UserID == actorID
+	if err := services.TrashMessage(db, actorID, uint(messageID), "author request"); err != nil {
+		if !isOwner {
 			writeMessageMutationDeniedAudit(c, authorizer, actorID, authorization.CapabilityNotesTrash, "trash", &message)
-			if decision.Reason == authorization.DenialContentNotReadable {
-				c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
-			} else {
-				c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权删除此消息"})
-			}
-			return
 		}
-		var primaryComments int64
-		if err := db.Model(&models.Comment{}).Where("message_id = ? AND user_id = ?", message.ID, models.PrimaryAdminUserID).Count(&primaryComments).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
-			return
-		}
-		if primaryComments > 0 {
-			writeMessageMutationDeniedAudit(c, authorizer, actorID, authorization.CapabilityNotesTrash, "trash", &message)
+		switch {
+		case errors.Is(err, services.ErrMessageNotVisible), errors.Is(err, services.ErrMessageProtected), errors.Is(err, services.ErrMessageNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
+		case errors.Is(err, services.ErrMessageNotAuthorized):
 			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权删除此消息"})
-			return
+		case errors.Is(err, services.ErrMessageAlreadyTrashed):
+			c.JSON(http.StatusConflict, gin.H{"code": 0, "msg": "消息状态不允许执行此操作"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "删除失败"})
 		}
-		if err := services.DeleteMessageByAdmin(uint(messageID)); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
-			return
-		}
+		return
+	}
+	if !isOwner {
 		if err := writeMessageMutationSuccessAudit(c, authorizer, actorID, authorization.CapabilityNotesTrash, "trash", &message); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "写入管理员审计失败"})
 			return
 		}
-	} else if err := services.DeleteMessage(uint(messageID), actorID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
-		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "删除成功"})

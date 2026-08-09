@@ -755,7 +755,7 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 	}
 	var personalMessages int64
 	if currentUser.ID != 0 {
-		if err := excludeDashboardSpecialMessages(database.DB.Model(&models.Message{}).Where("user_id = ?", currentUser.ID)).
+		if err := excludeDashboardSpecialMessages(database.DB.Model(&models.Message{}).Where("deleted_at IS NULL AND user_id = ?", currentUser.ID)).
 			Count(&personalMessages).Error; err != nil {
 			return status, errors.New(models.GetAllMessagesFailMessage)
 		}
@@ -866,6 +866,7 @@ func countReceivedInteractionStats(userID uint, _ bool) (int64, int64, int64, in
 	var receivedLikes int64
 	likeQuery := database.DB.Model(&models.MessageLike{}).
 		Joins("JOIN messages ON messages.id = message_likes.message_id").
+		Where("messages.deleted_at IS NULL").
 		Where("messages.user_id = ?", userID).
 		Where("(message_likes.user_id IS NULL OR message_likes.user_id <> ?)", userID)
 	if err := excludeDashboardSpecialMessages(likeQuery).Count(&receivedLikes).Error; err != nil {
@@ -875,6 +876,7 @@ func countReceivedInteractionStats(userID uint, _ bool) (int64, int64, int64, in
 	var receivedComments int64
 	commentQuery := database.DB.Model(&models.Comment{}).
 		Joins("JOIN messages ON messages.id = comments.message_id").
+		Where("messages.deleted_at IS NULL").
 		Where("messages.user_id = ?", userID).
 		Where("comments.parent_id IS NULL").
 		Where("(comments.user_id IS NULL OR comments.user_id <> ?)", userID)
@@ -884,7 +886,9 @@ func countReceivedInteractionStats(userID uint, _ bool) (int64, int64, int64, in
 
 	var receivedReplies int64
 	if err := database.DB.Model(&models.Comment{}).
+		Joins("JOIN messages ON messages.id = comments.message_id").
 		Joins("JOIN comments AS parent_comments ON parent_comments.id = comments.parent_id").
+		Where("messages.deleted_at IS NULL").
 		Where("parent_comments.user_id = ?", userID).
 		Where("(comments.user_id IS NULL OR comments.user_id <> ?)", userID).
 		Count(&receivedReplies).Error; err != nil {
@@ -902,6 +906,7 @@ func countReceivedInteractionStats(userID uint, _ bool) (int64, int64, int64, in
 		}
 		if err := database.DB.Model(&models.Comment{}).
 			Joins("JOIN messages ON messages.id = comments.message_id").
+			Where("messages.deleted_at IS NULL").
 			Where("comments.parent_id IS NULL").
 			Where("(comments.user_id IS NULL OR comments.user_id <> ?)", userID).
 			Where("comments.message_id = ?", descriptor.MessageID).

@@ -1173,6 +1173,17 @@
             </div>
           </div>
           
+          <div id="notes-section" class="col-span-12" v-if="canSection('notes') && isSectionVisible('notes')">
+            <div :class="adminPanelCardClass">
+              <NoteManager :theme="theme" />
+            </div>
+          </div>
+          <div id="recycle-bin-section" class="col-span-12" v-if="canSection('recycle-bin') && isSectionVisible('recycle-bin')">
+            <div :class="adminPanelCardClass">
+              <NoteManager :theme="theme" recycle-bin />
+            </div>
+          </div>
+
           <div id="comments-section" class="col-span-12" v-if="canSection('comments') && isSectionVisible('comments')">
             <div :class="adminPanelCardClass">
               <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-4 sm:gap-0">
@@ -2451,6 +2462,7 @@ import NotifyPanel from './NotifyPanel.vue'
  
 import CommentsSettings from '~/components/admin/CommentsSettings.vue'
 import AttachmentManager from '~/components/admin/AttachmentManager.vue'
+import NoteManager from '~/components/admin/NoteManager.vue'
 import ImageCropperModal from '~/components/admin/ImageCropperModal.vue'
 import AdminAnnouncementManager from '~/components/admin/AdminAnnouncementManager.vue'
 import { getRequest, putRequest, postRequest, deleteRequest } from '~/utils/api'
@@ -2478,7 +2490,7 @@ type AdminSectionKey =
   'site-register' | 'site-pwa' | 'site-github-card' | 'site-github-login' | 'site-announcement' | 'site-music' |
   'site-default-theme' | 'site-social-links' | 'site-ads' | 'site-feed' | 'site-rss' | 'hitokoto' | 'life-countdown' |
   'site-configs' | 'comments' | 'email' | 'admin-users' | 'registration-review' |
-  'storage' | 'authorization' | 'admin-audit'
+  'storage' | 'authorization' | 'admin-audit' | 'notes' | 'recycle-bin'
 const activeSection = ref<AdminSectionKey>('dashboard')
 type AdminNavItem = { key: AdminSectionKey, label: string, icon: string }
 type AdminNavGroup = { key: string, label: string, icon: string, items: AdminNavItem[] }
@@ -2531,6 +2543,8 @@ const adminNavGroups = computed<AdminNavGroup[]>(() => {
       icon: 'i-heroicons-puzzle-piece',
       items: [
         { key: 'comments', label: '评论系统', icon: 'i-heroicons-chat-bubble-left-right' },
+        { key: 'notes', label: '笔记管理', icon: 'i-heroicons-document-text' },
+        { key: 'recycle-bin', label: '笔记回收站', icon: 'i-heroicons-trash' },
         { key: 'site-github-card', label: 'GitHub 卡片', icon: 'i-mdi-github' },
         { key: 'site-github-login', label: 'GitHub 登录', icon: 'i-mdi-github' },
         { key: 'site-music', label: '音乐配置', icon: 'i-heroicons-musical-note' },

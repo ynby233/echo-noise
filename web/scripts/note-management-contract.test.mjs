@@ -1,0 +1,46 @@
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
+const read = (file) => fs.readFileSync(path.join(root, file), 'utf8')
+
+const model = read('internal/models/models.go')
+const lifecycle = read('internal/services/note_lifecycle.go')
+const scope = read('internal/services/content_read_scope.go')
+const controllers = read('internal/controllers/note_management_controller.go')
+const routers = read('internal/routers/routers.go')
+const manager = read('web/components/admin/NoteManager.vue')
+const panel = read('web/components/index/StatusPanel.vue')
+const capabilities = JSON.parse(read('web/config/admin-section-capabilities.json'))
+
+assert.match(model, /DeletedAt\s+\*time\.Time/)
+assert.match(model, /DeletedByUserID\s+\*uint/)
+assert.match(model, /DeletedReason\s+string/)
+assert.match(lifecycle, /func TrashMessage\(/)
+assert.match(lifecycle, /func RestoreMessage\(/)
+assert.match(lifecycle, /func PermanentlyDeleteMessage\(/)
+assert.match(lifecycle, /deleted_at IS NOT NULL/)
+assert.doesNotMatch(lifecycle, /PurgeBlob|DeleteReference/)
+assert.doesNotMatch(lifecycle, /UserNotification/)
+assert.match(scope, /ApplyMessageVisibilityIncludingDeleted/)
+assert.match(scope, /deleted_at IS NULL/)
+assert.match(controllers, /func ListAdminNotes\(/)
+assert.match(controllers, /func ListAdminRecycleBin\(/)
+assert.match(controllers, /func BatchPermanentDeleteAdminRecycleBin\(/)
+assert.match(routers, /CapabilityNotesView/)
+assert.match(routers, /CapabilityNotesRecycleBinView/)
+assert.match(routers, /BatchPermanentDeleteAdminRecycleBin/)
+assert.equal(capabilities.notes, 'notes.view')
+assert.equal(capabilities['recycle-bin'], 'notes.recycle_bin.view')
+assert.match(manager, /明确勾选/)
+assert.match(manager, /永久删除所选/)
+assert.match(manager, /admin\/recycle-bin/)
+assert.match(manager, /can\('notes\.trash'\)/)
+assert.match(manager, /can\('notes\.restore'\)/)
+assert.match(manager, /can\('notes\.delete_permanently'\)/)
+assert.match(panel, /NoteManager/)
+assert.match(panel, /recycle-bin/)
+
+console.log('note management contract tests passed')

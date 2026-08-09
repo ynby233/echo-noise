@@ -64,7 +64,7 @@ func GetCurrentUserHomeStats(c *gin.Context) {
 	}
 
 	var messages []models.Message
-	if err := db.Select("id", "content", "image_url", "user_id").Where("user_id = ?", user.ID).Find(&messages).Error; err != nil {
+	if err := db.Select("id", "content", "image_url", "user_id").Where("deleted_at IS NULL AND user_id = ?", user.ID).Find(&messages).Error; err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "获取个人统计失败", "data": gin.H{}})
 		return
 	}

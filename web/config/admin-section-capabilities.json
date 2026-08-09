@@ -10,6 +10,8 @@
   "site-github-login": "site_settings.view",
   "site-music": "site_settings.view",
   "comments": "comments.view",
+  "notes": "notes.view",
+  "recycle-bin": "notes.recycle_bin.view",
   "email": "email.view",
   "notify": "notifications.view",
   "site-announcement": "announcements.view",

@@ -272,6 +272,7 @@ func SetupRouter() *gin.Engine {
 	authRoutes := api.Group("")
 	authRoutes.Use(middleware.SessionAuthMiddleware())
 	registerAdminAuthorizationRoutes(authRoutes)
+	registerNoteManagementRoutes(authRoutes)
 	authRoutes.GET("/users/me/stats", controllers.GetCurrentUserHomeStats)
 	// 版本更新（管理员）
 	authRoutes.POST("/version/update", middleware.RequireCapability(authorization.CapabilityVersionUpdate), controllers.UpdateVersion)
@@ -282,6 +283,7 @@ func SetupRouter() *gin.Engine {
 	// 添加 token 认证的路由组
 	tokenAuth := api.Group("/token")
 	tokenAuth.Use(middleware.TokenAuthMiddleware()) // 使用 TokenAuthMiddleware
+	registerNoteManagementRoutes(tokenAuth)
 	{
 		tokenAuth.POST("/messages", controllers.PostMessage)
 		tokenAuth.PUT("/messages/:id", controllers.UpdateMessage)
@@ -495,6 +497,27 @@ func SetupRouter() *gin.Engine {
 	})
 
 	return r
+}
+
+func registerNoteManagementRoutes(group *gin.RouterGroup) {
+	notes := group.Group("/admin/notes")
+	notes.Use(middleware.RequireCapability(authorization.CapabilityNotesView))
+	{
+		notes.GET("", controllers.ListAdminNotes)
+		notes.GET("/:id", controllers.GetAdminNote)
+		notes.POST("/:id/trash", middleware.RequireCapability(authorization.CapabilityNotesTrash), controllers.TrashAdminNote)
+		notes.POST("/batch-trash", middleware.RequireCapability(authorization.CapabilityNotesTrash), controllers.BatchTrashAdminNotes)
+	}
+	recycleBin := group.Group("/admin/recycle-bin")
+	recycleBin.Use(middleware.RequireCapability(authorization.CapabilityNotesRecycleBinView))
+	{
+		recycleBin.GET("", controllers.ListAdminRecycleBin)
+		recycleBin.GET("/:id", controllers.GetAdminRecycleBinNote)
+		recycleBin.POST("/:id/restore", middleware.RequireCapability(authorization.CapabilityNotesRestore), controllers.RestoreAdminRecycleBinNote)
+		recycleBin.POST("/batch-restore", middleware.RequireCapability(authorization.CapabilityNotesRestore), controllers.BatchRestoreAdminRecycleBin)
+		recycleBin.DELETE("/:id", middleware.RequireCapability(authorization.CapabilityNotesDelete), controllers.PermanentlyDeleteAdminRecycleBinNote)
+		recycleBin.POST("/batch-permanent-delete", middleware.RequireCapability(authorization.CapabilityNotesDelete), controllers.BatchPermanentDeleteAdminRecycleBin)
+	}
 }
 
 func staticResponseHeadersMiddleware() gin.HandlerFunc {
