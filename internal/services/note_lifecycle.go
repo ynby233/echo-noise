@@ -115,9 +115,6 @@ func TrashMessage(db *gorm.DB, actorID, messageID uint, reason string) error {
 	if IsGuestbookMessage(message) {
 		return ErrMessageProtected
 	}
-	if message.DeletedAt != nil {
-		return ErrMessageAlreadyTrashed
-	}
 	if actorID != message.UserID {
 		if err := ensureLifecycleActorCanRead(db, actorID, message, false); err != nil {
 			return err
@@ -138,6 +135,9 @@ func TrashMessage(db *gorm.DB, actorID, messageID uint, reason string) error {
 		if primaryComments > 0 {
 			return ErrMessageProtected
 		}
+	}
+	if message.DeletedAt != nil {
+		return ErrMessageAlreadyTrashed
 	}
 	deletedAt := time.Now().UTC()
 	deletedBy := actorID
@@ -161,14 +161,14 @@ func RestoreMessage(db *gorm.DB, actorID, messageID uint) error {
 	if err != nil {
 		return err
 	}
-	if message.DeletedAt == nil {
-		return ErrMessageNotTrashed
-	}
 	if IsGuestbookMessage(message) {
 		return ErrMessageProtected
 	}
 	if err := ensureLifecycleActorCanRead(db, actorID, message, true); err != nil {
 		return err
+	}
+	if message.DeletedAt == nil {
+		return ErrMessageNotTrashed
 	}
 	if decision := AuthorizeRecycleBinMutation(db, actorID, message.UserID, authorization.CapabilityNotesRestore); !decision.Allowed {
 		if decision.Reason == authorization.DenialProtectedContent {
@@ -194,14 +194,14 @@ func PermanentlyDeleteMessage(db *gorm.DB, actorID, messageID uint, reason strin
 	if err != nil {
 		return err
 	}
-	if message.DeletedAt == nil {
-		return ErrMessageNotTrashed
-	}
 	if IsGuestbookMessage(message) {
 		return ErrMessageProtected
 	}
 	if err := ensureLifecycleActorCanRead(db, actorID, message, true); err != nil {
 		return err
+	}
+	if message.DeletedAt == nil {
+		return ErrMessageNotTrashed
 	}
 	if decision := AuthorizeRecycleBinMutation(db, actorID, message.UserID, authorization.CapabilityNotesDelete); !decision.Allowed {
 		if decision.Reason == authorization.DenialProtectedContent {

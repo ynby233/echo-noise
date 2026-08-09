@@ -95,6 +95,10 @@ func UpdateMessageGlobalPin(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
 		return
 	}
+	if message.DeletedAt != nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在或不可用"})
+		return
+	}
 
 	action := globalPinAction(request.Pinned)
 	decision := authorization.New(db).Authorize(actorID, authorization.CapabilityNotesPinGlobal, &message.UserID)
@@ -161,6 +165,10 @@ func UpdateMessagePersonalPin(c *gin.Context) {
 	}
 	if message.UserID != actorID {
 		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "只能操作自己的笔记"})
+		return
+	}
+	if message.DeletedAt != nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在或不可用"})
 		return
 	}
 	db, err := database.GetDB()

@@ -156,7 +156,7 @@ func TestBuildUserNotificationsKeepsMissingMessageLikeAsDeletedPlaceholder(t *te
 	if len(items) != 1 {
 		t.Fatalf("expected the notification to remain visible, got %d items", len(items))
 	}
-	if items[0].TargetStatus != userNotificationTargetStatusMessageDeleted {
+	if items[0].TargetStatus != userNotificationTargetStatusUnavailable {
 		t.Fatalf("expected deleted-message placeholder, got %q", items[0].TargetStatus)
 	}
 	if items[0].Message != nil || items[0].Comment != nil || items[0].ParentComment != nil {
@@ -271,7 +271,7 @@ func TestBuildUserNotificationsUsesDeletedMessagePlaceholderAcrossNotificationTy
 		t.Fatalf("expected all missing-message notifications to remain visible, got %d", len(items))
 	}
 	for _, item := range items {
-		if item.TargetStatus != userNotificationTargetStatusMessageDeleted {
+		if item.TargetStatus != userNotificationTargetStatusUnavailable {
 			t.Fatalf("expected deleted-message placeholder for %s, got %q", item.Type, item.TargetStatus)
 		}
 	}

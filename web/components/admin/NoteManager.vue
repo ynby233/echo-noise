@@ -147,7 +147,14 @@ const runAction = async (request: () => Promise<any>) => {
   try {
     const response = await request()
     if (response?.code === 1) {
-      toast.add({ title: '操作完成', description: response.msg || '已完成', color: 'green' })
+      const result = response.data || {}
+      const succeeded = Number(result.succeeded || 0)
+      const failed = Number(result.failed || 0)
+      const failures = Array.isArray(result.items) ? result.items.filter((item: any) => !item?.ok) : []
+      const detail = failed > 0
+        ? `成功 ${succeeded} 项，失败 ${failed} 项${failures.length ? `：${failures.map((item: any) => item.reason || '操作失败').join('；')}` : ''}`
+        : (response.msg || '操作完成')
+      toast.add({ title: failed > 0 ? '部分操作未完成' : '操作完成', description: detail, color: failed > 0 ? 'orange' : 'green' })
       clearSelection()
       await load()
     }

@@ -43,10 +43,9 @@ type userNotificationCommentResponse struct {
 }
 
 const (
-	userNotificationTargetStatusAvailable      = "available"
-	userNotificationTargetStatusLoadError      = "load_error"
-	userNotificationTargetStatusMessageDeleted = "message_deleted"
-	userNotificationTargetStatusUnavailable    = "unavailable"
+	userNotificationTargetStatusAvailable   = "available"
+	userNotificationTargetStatusLoadError   = "load_error"
+	userNotificationTargetStatusUnavailable = "unavailable"
 )
 
 type userNotificationResponse struct {
@@ -262,7 +261,7 @@ func buildVisibleUserNotifications(notifications []models.UserNotification, view
 		}
 		message, ok := messageMap[messageID]
 		if !ok {
-			items = append(items, notificationUnavailableResponse(notification, users, userNotificationTargetStatusMessageDeleted))
+			items = append(items, notificationUnavailableResponse(notification, users, userNotificationTargetStatusUnavailable))
 			continue
 		}
 		if !services.CanViewMessage(message, &viewerIDPtr, isAdmin) {

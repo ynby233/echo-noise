@@ -8,12 +8,10 @@ const source = await readFile(join(root, 'components/index/UserNotificationCente
 
 assert.match(
   source,
-  /type\s+NotificationTargetStatus\s*=\s*'available'\s*\|\s*'message_deleted'\s*\|\s*'unavailable'\s*\|\s*'load_error'/,
+  /type\s+NotificationTargetStatus\s*=\s*'available'\s*\|\s*'unavailable'\s*\|\s*'load_error'/,
   'notification items should use the backend target status instead of guessing from missing content'
 )
 
-assert.match(source, /原始笔记已被删除/, 'deleted messages should use the explicit deleted-note title')
-assert.match(source, /这条通知对应的笔记已不存在，无法继续查看。/, 'deleted messages should explain that navigation is unavailable')
 assert.match(source, /关联内容暂不可用/, 'comment, reply, guestbook, and permission failures should share a neutral title')
 assert.match(source, /暂时无法查看这条通知对应的内容。/, 'content unavailability should not disclose deletion or permission details')
 assert.match(source, /暂时无法加载关联内容，请稍后重试。/, 'technical failures should explicitly suggest retrying later')

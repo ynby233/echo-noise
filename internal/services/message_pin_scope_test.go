@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -141,6 +142,27 @@ func TestSetPinMaintainsPinTimestampsAndClearsThemOnUnpin(t *testing.T) {
 	}
 	if second.PersonalPinned || second.PersonalPinnedAt != nil {
 		t.Fatalf("unsetting personal pin must clear its timestamp: %#v", second)
+	}
+}
+
+func TestSetPinRejectsRecycledMessages(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.AutoMigrate(&models.Message{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	deletedAt := time.Now().UTC()
+	message := models.Message{Content: "recycled", UserID: 42, Visibility: MessageVisibilityPublic, DeletedAt: &deletedAt}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := SetGlobalPin(db, message.ID, true); !errors.Is(err, ErrMessageNotVisible) {
+		t.Fatalf("global pin must reject recycled message, got %v", err)
+	}
+	if err := SetPersonalPin(db, message.ID, true); !errors.Is(err, ErrMessageNotVisible) {
+		t.Fatalf("personal pin must reject recycled message, got %v", err)
 	}
 }
 

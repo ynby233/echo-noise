@@ -239,7 +239,7 @@ type NotificationComment = {
   parent_id?: number | null
 }
 
-type NotificationTargetStatus = 'available' | 'message_deleted' | 'unavailable' | 'load_error'
+type NotificationTargetStatus = 'available' | 'unavailable' | 'load_error'
 
 type UserNotification = {
   id: number
@@ -367,11 +367,10 @@ const isTargetUnavailable = (item: UserNotification) => {
 }
 
 const unavailableTitle = (item: UserNotification) => {
-  return item.target_status === 'message_deleted' ? '原始笔记已被删除' : '关联内容暂不可用'
+  return '关联内容暂不可用'
 }
 
 const unavailableDetail = (item: UserNotification) => {
-  if (item.target_status === 'message_deleted') return '这条通知对应的笔记已不存在，无法继续查看。'
   if (item.target_status === 'load_error') return '暂时无法加载关联内容，请稍后重试。'
   return '暂时无法查看这条通知对应的内容。'
 }

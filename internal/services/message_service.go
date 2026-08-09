@@ -663,13 +663,16 @@ func SetGlobalPin(db *gorm.DB, messageID uint, pinned bool) error {
 		return fmt.Errorf("数据库未初始化")
 	}
 	var message models.Message
-	if err := db.Select("id").First(&message, messageID).Error; err != nil {
+	if err := db.Select("id", "deleted_at").First(&message, messageID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return fmt.Errorf("消息不存在")
 		}
 		return fmt.Errorf("读取消息失败: %v", err)
 	}
-	result := db.Model(&models.Message{}).Where("id = ?", messageID).Update("pinned", pinned)
+	if message.DeletedAt != nil {
+		return ErrMessageNotVisible
+	}
+	result := db.Model(&models.Message{}).Where("id = ? AND deleted_at IS NULL", messageID).Update("pinned", pinned)
 	if result.Error == nil {
 		if pinned {
 			result = db.Model(&models.Message{}).Where("id = ?", messageID).Update("pinned_at", time.Now().UTC())
@@ -689,13 +692,16 @@ func SetPersonalPin(db *gorm.DB, messageID uint, pinned bool) error {
 		return fmt.Errorf("数据库未初始化")
 	}
 	var message models.Message
-	if err := db.Select("id").First(&message, messageID).Error; err != nil {
+	if err := db.Select("id", "deleted_at").First(&message, messageID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return fmt.Errorf("消息不存在")
 		}
 		return fmt.Errorf("读取消息失败: %v", err)
 	}
-	result := db.Model(&models.Message{}).Where("id = ?", messageID).Update("personal_pinned", pinned)
+	if message.DeletedAt != nil {
+		return ErrMessageNotVisible
+	}
+	result := db.Model(&models.Message{}).Where("id = ? AND deleted_at IS NULL", messageID).Update("personal_pinned", pinned)
 	if result.Error == nil {
 		if pinned {
 			result = db.Model(&models.Message{}).Where("id = ?", messageID).Update("personal_pinned_at", time.Now().UTC())
