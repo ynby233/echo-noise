@@ -7,6 +7,7 @@
         <UBadge :color="isCloud ? 'green' : 'gray'" size="xs" variant="soft">{{ isCloud ? '云端' : '本地' }}</UBadge>
       </div>
       <div class="flex items-center gap-2">
+        <UButton v-if="canRecycleBinView" size="xs" :color="showRecycleBin ? 'primary' : 'gray'" variant="soft" @click="showRecycleBin = !showRecycleBin; refresh()">{{ showRecycleBin ? '仅回收站来源' : '查看回收站来源' }}</UButton>
         <UButton :loading="loading" color="gray" variant="soft" class="shadow" @click="refresh">刷新</UButton>
       </div>
     </div>
@@ -289,6 +290,9 @@ const { can } = useAdminCapabilities()
 const canDownload = computed(() => can('attachments.download'))
 const canDeleteReference = computed(() => can('attachments.delete_reference'))
 const canPurgeBlob = computed(() => can('attachments.purge_blob'))
+const canRecycleBinView = computed(() => can('notes.recycle_bin.view'))
+const showRecycleBin = ref(false)
+const attachmentQuery = computed(() => showRecycleBin.value ? '?recycleBin=true' : '')
 const authHeaders = computed(() => {
   const t = String((userStore as any)?.token || '').trim()
   if (!t || t === 'null') return {}
@@ -564,25 +568,25 @@ const toggleExpand = (item: any) => {
 }
 
 const fetchImages = async () => {
-  const resp = await fetch(`${baseApi}/attachments/images`, { credentials: 'include', headers: authHeaders.value as any })
+  const resp = await fetch(`${baseApi}/attachments/images${attachmentQuery.value}`, { credentials: 'include', headers: authHeaders.value as any })
   const js = await resp.json().catch(() => null)
   const arr = (js && js.code === 1 && Array.isArray(js.data)) ? js.data : []
   images.value = sortNewestFirst(arr).filter((it: any) => /\.(png|jpe?g|gif|webp)$/i.test(String(it.name || '')))
 }
 const fetchVideos = async () => {
-  const resp = await fetch(`${baseApi}/attachments/video`, { credentials: 'include', headers: authHeaders.value as any })
+  const resp = await fetch(`${baseApi}/attachments/video${attachmentQuery.value}`, { credentials: 'include', headers: authHeaders.value as any })
   const js = await resp.json().catch(() => null)
   const arr = (js && js.code === 1 && Array.isArray(js.data)) ? js.data : []
   videos.value = sortNewestFirst(arr).filter((it: any) => /\.(mp4|webm|mov|avi)$/i.test(String(it.name || '')))
 }
 const fetchAudios = async () => {
-  const resp = await fetch(`${baseApi}/attachments/audio`, { credentials: 'include', headers: authHeaders.value as any })
+  const resp = await fetch(`${baseApi}/attachments/audio${attachmentQuery.value}`, { credentials: 'include', headers: authHeaders.value as any })
   const js = await resp.json().catch(() => null)
   const arr = (js && js.code === 1 && Array.isArray(js.data)) ? js.data : []
   audios.value = sortNewestFirst(arr).filter((it: any) => /\.(webm|ogg|mp3|m4a|wav|flac)$/i.test(String(it.name || '')))
 }
 const fetchOthers = async () => {
-  const resp = await fetch(`${baseApi}/attachments/other`, { credentials: 'include', headers: authHeaders.value as any })
+  const resp = await fetch(`${baseApi}/attachments/other${attachmentQuery.value}`, { credentials: 'include', headers: authHeaders.value as any })
   const js = await resp.json().catch(() => null)
   const arr = (js && js.code === 1 && Array.isArray(js.data)) ? js.data : []
   others.value = sortNewestFirst(arr)

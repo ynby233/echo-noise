@@ -186,7 +186,7 @@ func ListImageAttachments(c *gin.Context) {
 	_ = database.DB.Table("site_configs").First(&siteCfg).Error
 	if siteCfg.AttachmentStorageEnabled {
 		viewerID, _ := currentMessageViewer(c)
-		list, err := listCloudAttachments(siteCfg, viewerID, func(name string) bool {
+		list, err := listCloudAttachments(siteCfg, viewerID, c.Query("recycleBin") == "true", func(name string) bool {
 			return isImageExt(name)
 		})
 		if err != nil {
@@ -345,7 +345,7 @@ func ListVideoAttachments(c *gin.Context) {
 	_ = database.DB.Table("site_configs").First(&siteCfg).Error
 	if siteCfg.AttachmentStorageEnabled {
 		viewerID, _ := currentMessageViewer(c)
-		list, err := listCloudAttachments(siteCfg, viewerID, func(name string) bool {
+		list, err := listCloudAttachments(siteCfg, viewerID, c.Query("recycleBin") == "true", func(name string) bool {
 			return isVideoExt(name)
 		})
 		if err != nil {
@@ -405,7 +405,7 @@ func ListAudioAttachments(c *gin.Context) {
 	_ = database.DB.Table("site_configs").First(&siteCfg).Error
 	if siteCfg.AttachmentStorageEnabled {
 		viewerID, _ := currentMessageViewer(c)
-		list, err := listCloudAttachments(siteCfg, viewerID, func(name string) bool {
+		list, err := listCloudAttachments(siteCfg, viewerID, c.Query("recycleBin") == "true", func(name string) bool {
 			return isAudioExt(name)
 		})
 		if err != nil {
@@ -465,7 +465,7 @@ func ListOtherAttachments(c *gin.Context) {
 	_ = database.DB.Table("site_configs").First(&siteCfg).Error
 	if siteCfg.AttachmentStorageEnabled {
 		viewerID, _ := currentMessageViewer(c)
-		list, err := listCloudAttachments(siteCfg, viewerID, func(name string) bool {
+		list, err := listCloudAttachments(siteCfg, viewerID, c.Query("recycleBin") == "true", func(name string) bool {
 			return !isImageExt(name) && !isVideoExt(name) && !isAudioExt(name)
 		})
 		if err != nil {
@@ -1380,7 +1380,7 @@ func isAudioExt(name string) bool {
 	}
 }
 
-func listCloudAttachments(siteCfg models.SiteConfig, actorID *uint, keep func(name string) bool) ([]AttachmentInfo, error) {
+func listCloudAttachments(siteCfg models.SiteConfig, actorID *uint, recycleBin bool, keep func(name string) bool) ([]AttachmentInfo, error) {
 	cli, bucket, publicBaseURL, err := newAttachmentS3Client(siteCfg)
 	if err != nil {
 		return nil, err
@@ -1388,12 +1388,18 @@ func listCloudAttachments(siteCfg models.SiteConfig, actorID *uint, keep func(na
 	origin, prefix := splitPublicBaseURL(publicBaseURL)
 
 	var messages []models.Message
-	database.DB.Select("id", "content", "image_url", "user_id", "created_at").Where("deleted_at IS NULL").Order("created_at DESC").Find(&messages)
+	messageQuery := database.DB.Select("id", "content", "image_url", "user_id", "created_at", "deleted_at")
+	if recycleBin {
+		messageQuery = messageQuery.Where("deleted_at IS NOT NULL")
+	} else {
+		messageQuery = messageQuery.Where("deleted_at IS NULL")
+	}
+	messageQuery.Order("created_at DESC").Find(&messages)
 	imageUsages := loadImageAttachmentUsages()
 
 	var out []AttachmentInfo
 	for _, kind := range []string{"image", "video", "audio", "file"} {
-		registered, err := listRegisteredAttachmentsForViewer(kind, "cloud", actorID, messages, imageUsages)
+		registered, err := listRegisteredAttachmentsForViewerContext(kind, "cloud", actorID, messages, recycleBin, imageUsages)
 		if err != nil {
 			return nil, err
 		}
@@ -1422,6 +1428,9 @@ func listCloudAttachments(siteCfg models.SiteConfig, actorID *uint, keep func(na
 			return nil, err
 		}
 		for _, obj := range resp.Contents {
+			if recycleBin {
+				continue
+			}
 			key := aws.ToString(obj.Key)
 			if key == "" {
 				continue
