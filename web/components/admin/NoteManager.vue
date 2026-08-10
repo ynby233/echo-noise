@@ -94,7 +94,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { deleteRequest, getRequest, postRequest, putRequest } from '~/utils/api'
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 import { createNoteManagerPermissionHandler } from '~/utils/note-manager-permission'
@@ -151,6 +151,7 @@ const permissionChanged = createNoteManagerPermissionHandler({
   refreshCapabilities,
   notify: () => toast.add({ title: '权限已变化', description: '当前权限已变化，请刷新页面', color: 'orange' })
 })
+const resetPermissionGuard = () => permissionChanged.reset()
 const load = async () => {
   loading.value = true
   try {
@@ -170,6 +171,11 @@ const load = async () => {
     loading.value = false
   }
 }
+onMounted(() => {
+  window.addEventListener('admin-capabilities-invalidated', resetPermissionGuard)
+  void load()
+})
+onBeforeUnmount(() => window.removeEventListener('admin-capabilities-invalidated', resetPermissionGuard))
 const clearSelection = () => { selected.value = [] }
 const toggleAll = () => {
   selected.value = allSelected.value ? [] : rows.value.map((row) => row.id)
@@ -233,5 +239,4 @@ const batchPermanentDelete = () => {
   return runAction(() => postRequest('admin/recycle-bin/batch-permanent-delete', { ids: selected.value, reason: 'admin batch request' }, { silent: true }))
 }
 watch(() => props.recycleBin, () => { page.value = 1; clearSelection(); load() })
-onMounted(load)
 </script>

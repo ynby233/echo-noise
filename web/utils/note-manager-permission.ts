@@ -6,17 +6,28 @@ export interface NoteManagerPermissionHandlerOptions {
 
 export function createNoteManagerPermissionHandler(options: NoteManagerPermissionHandlerOptions) {
   let refreshPromise: Promise<unknown> | null = null
+  let refreshStarted = false
   let notified = false
 
-  return async () => {
+  const handler = async () => {
     options.clearState()
-    if (!refreshPromise) {
-      refreshPromise = Promise.resolve(options.refreshCapabilities()).catch(() => undefined)
+    if (!refreshStarted) {
+      refreshStarted = true
+      refreshPromise = Promise.resolve(options.refreshCapabilities()).catch(() => undefined).finally(() => {
+        refreshPromise = null
+      })
     }
-    await refreshPromise
+    if (refreshPromise) await refreshPromise
     if (!notified) {
       notified = true
       options.notify()
     }
   }
+
+  handler.reset = () => {
+    refreshPromise = null
+    refreshStarted = false
+    notified = false
+  }
+  return handler
 }

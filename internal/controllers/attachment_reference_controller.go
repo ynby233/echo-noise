@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gin-gonic/gin"
 	attachmentregistry "github.com/rcy1314/echo-noise/internal/attachments"
+	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/services"
@@ -44,6 +45,17 @@ func serveLocalAttachmentReference(c *gin.Context, kind, blobRoot, rawPath strin
 		return
 	}
 	if !allowed {
+		c.Header("Cache-Control", "private, no-store")
+		c.Header("Vary", "Cookie, Authorization")
+		c.Status(http.StatusNotFound)
+		return
+	}
+	canDownload, err := canDownloadAttachmentReference(c)
+	if err != nil {
+		c.Status(http.StatusServiceUnavailable)
+		return
+	}
+	if !canDownload {
 		c.Header("Cache-Control", "private, no-store")
 		c.Header("Vary", "Cookie, Authorization")
 		c.Status(http.StatusNotFound)
@@ -91,6 +103,22 @@ func canReadAttachmentReference(c *gin.Context, reference models.AttachmentRefer
 		}
 	}
 	return len(visible) > 0, publiclyReferenced, nil
+}
+
+// Registered attachment URLs are downloads for delegated administrators. Keep
+// ordinary users and the primary administrator on their existing read path,
+// while requiring the explicit download capability for every HTTP method.
+func canDownloadAttachmentReference(c *gin.Context) (bool, error) {
+	viewerID, isAdmin := currentMessageViewer(c)
+	if !isAdmin || viewerID == nil {
+		return true, nil
+	}
+	db, err := database.GetDB()
+	if err != nil {
+		return false, err
+	}
+	decision := authorization.New(db).Authorize(*viewerID, authorization.CapabilityAttachmentsDownload, nil)
+	return decision.Allowed, nil
 }
 
 func isPublicSiteImageReference(reference models.AttachmentReference, backend string) bool {
@@ -170,6 +198,17 @@ func tryServeCloudAttachmentReference(c *gin.Context, publicID string) bool {
 		return true
 	}
 	if !allowed {
+		c.Header("Cache-Control", "private, no-store")
+		c.Header("Vary", "Cookie, Authorization")
+		c.Status(http.StatusNotFound)
+		return true
+	}
+	canDownload, err := canDownloadAttachmentReference(c)
+	if err != nil {
+		c.Status(http.StatusServiceUnavailable)
+		return true
+	}
+	if !canDownload {
 		c.Header("Cache-Control", "private, no-store")
 		c.Header("Vary", "Cookie, Authorization")
 		c.Status(http.StatusNotFound)

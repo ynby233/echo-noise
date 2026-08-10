@@ -11,10 +11,63 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	attachmentregistry "github.com/rcy1314/echo-noise/internal/attachments"
+	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/services"
 )
+
+func TestServeAttachmentReferenceRequiresDownloadCapabilityForDelegatedAdmins(t *testing.T) {
+	db, r, owner, message := setupCommentAccountTest(t)
+	if err := db.AutoMigrate(&models.AttachmentBlob{}, &models.AttachmentReference{}); err != nil {
+		t.Fatalf("migrate attachment registry: %v", err)
+	}
+	admin := models.User{Username: "delegated-download-admin", IsAdmin: true}
+	if err := db.Create(&admin).Error; err != nil {
+		t.Fatalf("create delegated admin: %v", err)
+	}
+	content := []byte("registered attachment bytes")
+	sum := sha256.Sum256(content)
+	store := attachmentregistry.NewLocalStore(t.TempDir())
+	reference, err := attachmentregistry.NewRegistry(db).Create(context.Background(), store, attachmentregistry.CreateInput{
+		Kind: "file", OwnerUserID: owner.ID, OriginalName: "download.txt", ContentType: "text/plain",
+		ContentHash: hex.EncodeToString(sum[:]), Size: int64(len(content)),
+	}, bytes.NewReader(content))
+	if err != nil {
+		t.Fatalf("create attachment reference: %v", err)
+	}
+	message.Content = "[download](/api/files/refs/" + reference.PublicID + "/download.txt)"
+	message.Visibility = "public"
+	if err := db.Save(&message).Error; err != nil {
+		t.Fatalf("save public message: %v", err)
+	}
+	handler := serveLocalAttachment("file", t.TempDir(), store.Root())
+	r.GET("/api/files/*name", func(c *gin.Context) { c.Set("user_id", admin.ID); handler(c) })
+	r.HEAD("/api/files/*name", func(c *gin.Context) { c.Set("user_id", admin.ID); handler(c) })
+	path := "/api/files/refs/" + reference.PublicID + "/download.txt"
+	for _, method := range []string{http.MethodGet, http.MethodHead} {
+		req := httptest.NewRequest(method, path, nil)
+		if method == http.MethodGet {
+			req.Header.Set("Range", "bytes=0-3")
+		}
+		resp := httptest.NewRecorder()
+		r.ServeHTTP(resp, req)
+		if resp.Code != http.StatusNotFound {
+			t.Fatalf("%s without download capability = %d, want 404", method, resp.Code)
+		}
+	}
+	if err := db.Create(&models.AdminCapabilityGrant{UserID: admin.ID, Capability: string(authorization.CapabilityAttachmentsDownload), GrantedByUserID: models.PrimaryAdminUserID}).Error; err != nil {
+		t.Fatalf("grant download capability: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("Range", "bytes=0-3")
+	resp := httptest.NewRecorder()
+	r.ServeHTTP(resp, req)
+	if resp.Code != http.StatusPartialContent || resp.Body.String() != string(content[:4]) {
+		t.Fatalf("authorized range response = %d %q", resp.Code, resp.Body.String())
+	}
+}
 
 func TestServeAttachmentReferenceAllowsAnonymousPublicSiteConfigUsage(t *testing.T) {
 	db, r, owner, _ := setupCommentAccountTest(t)
