@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/models"
+	"github.com/rcy1314/echo-noise/internal/services"
 	"gorm.io/gorm"
 )
 
@@ -119,8 +120,62 @@ func sanitizeAdminAuditLog(log models.AdminAuditLog) models.AdminAuditLog {
 	return log
 }
 
+func redactInvisibleMessageAuditTarget(log models.AdminAuditLog) models.AdminAuditLog {
+	log.TargetID = ""
+	log.TargetOwnerUserID = nil
+	log.Summary = "message mutation target unavailable"
+	log.ChangesJSON = ""
+	log.Reason = ""
+	return log
+}
+
+func messageAuditTargetVisibleToViewer(db *gorm.DB, viewerID uint, targetID string) bool {
+	if viewerID == 0 || viewerID == models.PrimaryAdminUserID {
+		return true
+	}
+	id, err := strconv.ParseUint(strings.TrimSpace(targetID), 10, 64)
+	if err != nil || id == 0 {
+		return false
+	}
+	var message models.Message
+	if err := db.First(&message, uint(id)).Error; err != nil {
+		return false
+	}
+	scope, err := services.ResolveContentReadScope(db, &viewerID)
+	return err == nil && scope.CanReadMessage(message)
+}
+
+func sanitizeAdminAuditLogForViewer(db *gorm.DB, viewerID uint, log models.AdminAuditLog) models.AdminAuditLog {
+	log = sanitizeAdminAuditLog(log)
+	if viewerID != 0 && viewerID != models.PrimaryAdminUserID && log.Module == "notes" && log.TargetType == "message" && log.TargetID != "" && !messageAuditTargetVisibleToViewer(db, viewerID, log.TargetID) {
+		return redactInvisibleMessageAuditTarget(log)
+	}
+	return log
+}
+
+func applyAdminAuditViewerVisibility(query *gorm.DB, db *gorm.DB, viewerID uint, filters adminAuditFilters) *gorm.DB {
+	if viewerID == 0 || viewerID == models.PrimaryAdminUserID {
+		return query
+	}
+	targetID := strings.TrimSpace(filters.TargetID)
+	if targetID == "" {
+		if parsed, err := strconv.ParseUint(strings.TrimSpace(filters.Keyword), 10, 64); err == nil && parsed > 0 {
+			targetID = strconv.FormatUint(parsed, 10)
+		}
+	}
+	if targetID != "" && !messageAuditTargetVisibleToViewer(db, viewerID, targetID) {
+		return query.Where("target_type <> ?", "message")
+	}
+	return query
+}
+
 func presentAdminAuditLog(log models.AdminAuditLog) adminAuditLogView {
 	log = sanitizeAdminAuditLog(log)
+	return adminAuditLogView{AdminAuditLog: log, AuditPresentation: authorization.PresentAudit(log)}
+}
+
+func presentAdminAuditLogForViewer(db *gorm.DB, viewerID uint, log models.AdminAuditLog) adminAuditLogView {
+	log = sanitizeAdminAuditLogForViewer(db, viewerID, log)
 	return adminAuditLogView{AdminAuditLog: log, AuditPresentation: authorization.PresentAudit(log)}
 }
 
@@ -128,6 +183,14 @@ func presentAdminAuditLogs(logs []models.AdminAuditLog) []adminAuditLogView {
 	views := make([]adminAuditLogView, 0, len(logs))
 	for _, log := range logs {
 		views = append(views, presentAdminAuditLog(log))
+	}
+	return views
+}
+
+func presentAdminAuditLogsForViewer(db *gorm.DB, viewerID uint, logs []models.AdminAuditLog) []adminAuditLogView {
+	views := make([]adminAuditLogView, 0, len(logs))
+	for _, log := range logs {
+		views = append(views, presentAdminAuditLogForViewer(db, viewerID, log))
 	}
 	return views
 }

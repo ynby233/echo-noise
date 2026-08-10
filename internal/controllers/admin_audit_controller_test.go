@@ -266,3 +266,81 @@ func TestAuditListDetailAndExportRedactInvisibleMessageDenials(t *testing.T) {
 		}
 	}
 }
+
+func TestDelegatedAuditViewRedactsInvisibleMessageSuccessTarget(t *testing.T) {
+	db, primary := setupAdminAuditControllerTest(t)
+	if err := db.AutoMigrate(&models.Message{}); err != nil {
+		t.Fatal(err)
+	}
+	delegated := models.User{ID: 9091, Username: "delegated", IsAdmin: true}
+	if err := db.Create(&delegated).Error; err != nil {
+		t.Fatal(err)
+	}
+	message := models.Message{Content: "hidden primary audit target", UserID: primary.ID, Visibility: "private", Private: true}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatal(err)
+	}
+	log := models.AdminAuditLog{
+		ActorUserID: primary.ID, ActorUsername: primary.Username, ActorIsPrimary: true,
+		Capability: string(authorization.CapabilityNotesTrash), Module: "notes", Action: "trash",
+		TargetType: "message", TargetID: fmt.Sprint(message.ID), TargetOwnerUserID: &primary.ID,
+		Result: "success", Summary: "message mutation completed",
+	}
+	if err := db.Create(&log).Error; err != nil {
+		t.Fatal(err)
+	}
+	r := gin.New()
+	r.Use(func(c *gin.Context) { c.Set("user_id", delegated.ID); c.Next() })
+	r.GET("/audit", ListAdminAuditLogs)
+	r.GET("/audit/:id", GetAdminAuditLog)
+	r.GET("/audit/export", ExportAdminAuditLogs)
+
+	list := httptest.NewRecorder()
+	r.ServeHTTP(list, httptest.NewRequest(http.MethodGet, "/audit?module=notes", nil))
+	var listBody struct {
+		Data struct {
+			Items []models.AdminAuditLog `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(list.Body.Bytes(), &listBody); err != nil {
+		t.Fatal(err)
+	}
+	if len(listBody.Data.Items) != 1 {
+		t.Fatalf("unexpected delegated audit list: %s", list.Body.String())
+	}
+	if listBody.Data.Items[0].TargetID != "" || listBody.Data.Items[0].TargetOwnerUserID != nil {
+		t.Fatalf("delegated audit list leaked invisible success target: %#v", listBody.Data.Items[0])
+	}
+
+	filtered := httptest.NewRecorder()
+	r.ServeHTTP(filtered, httptest.NewRequest(http.MethodGet, "/audit?target_id="+fmt.Sprint(message.ID), nil))
+	var filteredBody struct {
+		Data struct {
+			Total int `json:"total"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(filtered.Body.Bytes(), &filteredBody); err != nil {
+		t.Fatal(err)
+	}
+	if filteredBody.Data.Total != 0 {
+		t.Fatalf("delegated target filter exposed hidden success audit: %s", filtered.Body.String())
+	}
+
+	detail := httptest.NewRecorder()
+	r.ServeHTTP(detail, httptest.NewRequest(http.MethodGet, "/audit/"+fmt.Sprint(log.ID), nil))
+	var detailBody struct {
+		Data models.AdminAuditLog `json:"data"`
+	}
+	if err := json.Unmarshal(detail.Body.Bytes(), &detailBody); err != nil {
+		t.Fatal(err)
+	}
+	if detailBody.Data.TargetID != "" || detailBody.Data.TargetOwnerUserID != nil {
+		t.Fatalf("delegated audit detail leaked invisible success target: %#v", detailBody.Data)
+	}
+
+	export := httptest.NewRecorder()
+	r.ServeHTTP(export, httptest.NewRequest(http.MethodGet, "/audit/export?module=notes", nil))
+	if strings.Contains(export.Body.String(), ","+fmt.Sprint(message.ID)+",") {
+		t.Fatalf("delegated audit export leaked invisible success target: %s", export.Body.String())
+	}
+}

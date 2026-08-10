@@ -137,6 +137,7 @@ func authorizationTarget(c *gin.Context) (models.User, *gorm.DB, bool) {
 }
 
 func ListAdminAuditLogs(c *gin.Context) {
+	viewerID, _ := authorizationActorID(c)
 	db, err := database.GetDB()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.Fail[any]("审计服务不可用"))
@@ -158,7 +159,7 @@ func ListAdminAuditLogs(c *gin.Context) {
 	if pageSize > 100 {
 		pageSize = 100
 	}
-	query := applyAdminAuditFilters(db.Model(&models.AdminAuditLog{}), filters)
+	query := applyAdminAuditViewerVisibility(applyAdminAuditFilters(db.Model(&models.AdminAuditLog{}), filters), db, viewerID, filters)
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, dto.Fail[any]("查询审计失败"))
@@ -169,7 +170,7 @@ func ListAdminAuditLogs(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, dto.Fail[any]("查询审计失败"))
 		return
 	}
-	c.JSON(http.StatusOK, dto.OK(gin.H{"items": presentAdminAuditLogs(logs), "page": page, "page_size": pageSize, "total": total}, "获取管理员审计成功"))
+	c.JSON(http.StatusOK, dto.OK(gin.H{"items": presentAdminAuditLogsForViewer(db, viewerID, logs), "page": page, "page_size": pageSize, "total": total}, "获取管理员审计成功"))
 }
 
 func GetAdminAuditLog(c *gin.Context) {
@@ -201,7 +202,7 @@ func GetAdminAuditLog(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, dto.Fail[any]("写入审计失败"))
 		return
 	}
-	c.JSON(http.StatusOK, dto.OK(presentAdminAuditLog(log), "获取管理员审计详情成功"))
+	c.JSON(http.StatusOK, dto.OK(presentAdminAuditLogForViewer(db, actorID, log), "获取管理员审计详情成功"))
 }
 
 func GetAdminAuditConfig(c *gin.Context) {

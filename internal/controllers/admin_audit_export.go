@@ -15,6 +15,7 @@ import (
 )
 
 func ExportAdminAuditLogs(c *gin.Context) {
+	viewerID, _ := authorizationActorID(c)
 	db, err := database.GetDB()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.Fail[any]("审计服务不可用"))
@@ -25,7 +26,7 @@ func ExportAdminAuditLogs(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, dto.Fail[any](err.Error()))
 		return
 	}
-	rows, err := applyAdminAuditFilters(db.Model(&models.AdminAuditLog{}), filters).
+	rows, err := applyAdminAuditViewerVisibility(applyAdminAuditFilters(db.Model(&models.AdminAuditLog{}), filters), db, viewerID, filters).
 		Order("created_at DESC, id DESC").Rows()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.Fail[any]("导出审计失败"))
@@ -54,7 +55,7 @@ func ExportAdminAuditLogs(c *gin.Context) {
 			c.Error(err)
 			return
 		}
-		log = sanitizeAdminAuditLog(log)
+		log = sanitizeAdminAuditLogForViewer(db, viewerID, log)
 		presentation := authorization.PresentAudit(log)
 		if err := writer.Write([]string{
 			formatAuditExportTime(log.CreatedAt),
