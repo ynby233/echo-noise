@@ -97,6 +97,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { deleteRequest, getRequest, postRequest, putRequest } from '~/utils/api'
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
+import { createNoteManagerPermissionHandler } from '~/utils/note-manager-permission'
 
 const props = defineProps<{ recycleBin?: boolean; theme?: any }>()
 const toast = useToast()
@@ -140,13 +141,16 @@ const oneLine = (value: any) => String(value || '').replace(/\s+/g, ' ').trim().
 const visibilityLabel = (value: string) => visibilityOptions.find((item) => item.value === value)?.label || value || '公开'
 const query = () => ({ page: page.value, pageSize, keyword: filters.keyword, id: filters.id, authorId: filters.authorId, username: filters.username, tag: filters.tag, visibility: filters.visibility, createdFrom: filters.createdFrom, createdTo: filters.createdTo, pinned: filters.pinned, hasAttachment: filters.hasAttachment, sort: filters.sort })
 
-const permissionChanged = async () => {
-  selected.value = []
-  detailId.value = null
-  await refreshCapabilities()
-  toast.add({ title: '权限已变化', description: '当前权限已变化，请刷新页面', color: 'orange' })
-  await load()
-}
+const permissionChanged = createNoteManagerPermissionHandler({
+  clearState: () => {
+    rows.value = []
+    total.value = 0
+    selected.value = []
+    detailId.value = null
+  },
+  refreshCapabilities,
+  notify: () => toast.add({ title: '权限已变化', description: '当前权限已变化，请刷新页面', color: 'orange' })
+})
 const load = async () => {
   loading.value = true
   try {

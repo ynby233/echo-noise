@@ -119,11 +119,23 @@ func TestGlobalAndPersonalPinPermissionsAndAudits(t *testing.T) {
 		t.Fatalf("expected denied and successful global pin audits, got %#v", globalAudits)
 	}
 	for _, audit := range globalAudits {
+		if audit.TargetID == "" {
+			continue
+		}
 		if audit.ChangesJSON == "" || !json.Valid([]byte(audit.ChangesJSON)) {
 			t.Fatalf("global pin audit must contain valid changes JSON: %#v", audit)
 		}
 		if strings.Contains(audit.ChangesJSON, "content") || strings.Contains(audit.ChangesJSON, "owner note") {
 			t.Fatalf("global pin audit must not contain message content: %#v", audit)
+		}
+	}
+	for _, index := range []int{3, 4, 6} {
+		audit := globalAudits[index]
+		if audit.TargetID != "" || audit.TargetOwnerUserID != nil {
+			t.Fatalf("invisible global pin denial leaked target identity: %#v", audit)
+		}
+		if audit.Summary != "capability request denied" {
+			t.Fatalf("invisible global pin denial leaked a specific failure summary: %#v", audit)
 		}
 	}
 

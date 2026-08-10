@@ -54,6 +54,7 @@ func ExportAdminAuditLogs(c *gin.Context) {
 			c.Error(err)
 			return
 		}
+		log = sanitizeAdminAuditLog(log)
 		presentation := authorization.PresentAudit(log)
 		if err := writer.Write([]string{
 			formatAuditExportTime(log.CreatedAt),

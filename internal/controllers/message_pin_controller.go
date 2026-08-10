@@ -61,11 +61,21 @@ func globalPinAuditRecord(c *gin.Context, actorID uint, action, result, summary 
 	return record
 }
 
-func writeGlobalPinAuditBestEffort(c *gin.Context, db *gorm.DB, actorID uint, action, result, summary string, message *models.Message, before, after bool) {
+func writeGlobalPinAuditBestEffort(c *gin.Context, db *gorm.DB, actorID uint, action, result, summary string, message *models.Message, before, after bool, reason authorization.DenialReason) {
 	if db == nil {
 		return
 	}
-	authorization.New(db).WriteAuditBestEffort(globalPinAuditRecord(c, actorID, action, result, summary, message, before, after))
+	record := globalPinAuditRecord(c, actorID, action, result, summary, message, before, after)
+	if reason != authorization.DenialNone {
+		record.Reason = string(reason)
+		if reason == authorization.DenialContentNotReadable || reason == authorization.DenialProtectedContent || reason == authorization.DenialNotAdministrator {
+			record.TargetID = ""
+			record.TargetOwnerUserID = nil
+			record.Summary = "capability request denied"
+			record.ChangesJSON = ""
+		}
+	}
+	authorization.New(db).WriteAuditBestEffort(record)
 }
 
 func pinStateData(message *models.Message) gin.H {
@@ -103,7 +113,7 @@ func UpdateMessageGlobalPin(c *gin.Context) {
 	action := globalPinAction(request.Pinned)
 	decision := authorization.New(db).Authorize(actorID, authorization.CapabilityNotesPinGlobal, &message.UserID)
 	if !decision.Allowed {
-		writeGlobalPinAuditBestEffort(c, db, actorID, action, "denied", "global pin request denied", message, message.Pinned, message.Pinned)
+		writeGlobalPinAuditBestEffort(c, db, actorID, action, "denied", "global pin request denied", message, message.Pinned, message.Pinned, decision.Reason)
 		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限操作该消息"})
 		return
 	}
@@ -113,17 +123,17 @@ func UpdateMessageGlobalPin(c *gin.Context) {
 	// visibility the actor would have as an ordinary logged-in viewer.
 	scope, scopeErr := services.ResolveContentReadScope(db, &actorID)
 	if scopeErr != nil {
-		writeGlobalPinAuditBestEffort(c, db, actorID, action, "failure", "global pin visibility check failed", message, message.Pinned, message.Pinned)
+		writeGlobalPinAuditBestEffort(c, db, actorID, action, "failure", "global pin visibility check failed", message, message.Pinned, message.Pinned, authorization.DenialContentNotReadable)
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "授权服务不可用"})
 		return
 	}
 	if !scope.CanReadMessage(*message) {
-		writeGlobalPinAuditBestEffort(c, db, actorID, action, "denied", "global pin target is outside actor read scope", message, message.Pinned, message.Pinned)
+		writeGlobalPinAuditBestEffort(c, db, actorID, action, "denied", "global pin target is outside actor read scope", message, message.Pinned, message.Pinned, authorization.DenialContentNotReadable)
 		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
 		return
 	}
 	if !scope.CanInteractWithMessage(*message) {
-		writeGlobalPinAuditBestEffort(c, db, actorID, action, "denied", "global pin target is outside actor visibility", message, message.Pinned, message.Pinned)
+		writeGlobalPinAuditBestEffort(c, db, actorID, action, "denied", "global pin target is outside actor visibility", message, message.Pinned, message.Pinned, authorization.DenialContentNotReadable)
 		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "不能置顶当前账号按正常可见性不可见的笔记"})
 		return
 	}
@@ -140,7 +150,7 @@ func UpdateMessageGlobalPin(c *gin.Context) {
 		return authorization.New(tx).WriteAudit(globalPinAuditRecord(c, actorID, action, "success", "global pin mutation completed", &updated, before, updated.Pinned))
 	})
 	if err != nil {
-		writeGlobalPinAuditBestEffort(c, db, actorID, action, "failure", "global pin mutation failed", message, before, before)
+		writeGlobalPinAuditBestEffort(c, db, actorID, action, "failure", "global pin mutation failed", message, before, before, authorization.DenialNone)
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
 		return
 	}

@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"gorm.io/gorm"
@@ -95,7 +96,7 @@ func TestExportAdminAuditLogsStreamsAllFilteredRowsAsUtf8BOMCSV(t *testing.T) {
 		{
 			ActorUserID: primary.ID, ActorUsername: primary.Username, ActorIsPrimary: true,
 			Capability: "notes.pin_global", Module: "notes", Action: "set_global_pin",
-			TargetType: "message", TargetID: "60", Result: "failure",
+			TargetType: "message", TargetID: "60", Result: "failure", Reason: string(authorization.DenialMissingGrant),
 			Summary: "token=secret-value global pin failure", IP: "198.51.100.5", UserAgent: "another-secret-agent",
 		},
 		{
@@ -190,5 +191,78 @@ func TestGetAdminAuditLogIncludesChinesePresentation(t *testing.T) {
 	}
 	if body.Data.OperationDescription != "已取消笔记 #59的全站置顶" || body.Data.ResultDescription != "成功" || body.Data.Module != "notes" {
 		t.Fatalf("unexpected detail presentation: %#v", body)
+	}
+}
+
+func TestAuditListDetailAndExportRedactInvisibleMessageDenials(t *testing.T) {
+	db, primary := setupAdminAuditControllerTest(t)
+	ownerID := uint(9090)
+	log := models.AdminAuditLog{
+		ActorUserID: primary.ID, ActorUsername: primary.Username, ActorIsPrimary: true,
+		Capability: string(authorization.CapabilityNotesEdit), Module: "notes", Action: "update",
+		TargetType: "message", TargetID: "4242", TargetOwnerUserID: &ownerID,
+		Result: "denied", Reason: string(authorization.DenialContentNotReadable),
+		Summary: "private body visibility=private author=secret",
+	}
+	if err := db.Create(&log).Error; err != nil {
+		t.Fatal(err)
+	}
+	r := gin.New()
+	r.Use(func(c *gin.Context) { c.Set("user_id", primary.ID); c.Next() })
+	r.GET("/audit", ListAdminAuditLogs)
+	r.GET("/audit/:id", GetAdminAuditLog)
+	r.GET("/audit/export", ExportAdminAuditLogs)
+
+	list := httptest.NewRecorder()
+	r.ServeHTTP(list, httptest.NewRequest(http.MethodGet, "/audit?module=notes", nil))
+	var listBody struct {
+		Data struct {
+			Items []models.AdminAuditLog `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(list.Body.Bytes(), &listBody); err != nil {
+		t.Fatal(err)
+	}
+	if len(listBody.Data.Items) != 1 {
+		t.Fatalf("unexpected list response: %s", list.Body.String())
+	}
+	assertRedactedAudit := func(label string, audit models.AdminAuditLog) {
+		t.Helper()
+		if audit.TargetID != "" || audit.TargetOwnerUserID != nil || audit.Summary != "capability request denied" {
+			t.Fatalf("%s leaked invisible target data: %#v", label, audit)
+		}
+	}
+	assertRedactedAudit("list", listBody.Data.Items[0])
+	filtered := httptest.NewRecorder()
+	r.ServeHTTP(filtered, httptest.NewRequest(http.MethodGet, "/audit?target_id=4242", nil))
+	var filteredBody struct {
+		Data struct {
+			Total int `json:"total"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(filtered.Body.Bytes(), &filteredBody); err != nil {
+		t.Fatal(err)
+	}
+	if filteredBody.Data.Total != 0 {
+		t.Fatalf("target-id filtering exposed a redacted denial through total: %s", filtered.Body.String())
+	}
+
+	detail := httptest.NewRecorder()
+	r.ServeHTTP(detail, httptest.NewRequest(http.MethodGet, "/audit/"+fmt.Sprint(log.ID), nil))
+	var detailBody struct {
+		Data models.AdminAuditLog `json:"data"`
+	}
+	if err := json.Unmarshal(detail.Body.Bytes(), &detailBody); err != nil {
+		t.Fatal(err)
+	}
+	assertRedactedAudit("detail", detailBody.Data)
+
+	export := httptest.NewRecorder()
+	r.ServeHTTP(export, httptest.NewRequest(http.MethodGet, "/audit/export?module=notes", nil))
+	exported := export.Body.String()
+	for _, secret := range []string{"4242", "9090", "private body", "visibility=private", "author=secret"} {
+		if strings.Contains(exported, secret) {
+			t.Fatalf("export leaked %q: %s", secret, exported)
+		}
 	}
 }

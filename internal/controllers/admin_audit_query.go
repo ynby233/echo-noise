@@ -73,11 +73,13 @@ func applyAdminAuditFilters(query *gorm.DB, filters adminAuditFilters) *gorm.DB 
 		{column: "action", value: filters.Action},
 		{column: "result", value: filters.Result},
 		{column: "target_type", value: filters.TargetType},
-		{column: "target_id", value: filters.TargetID},
 	} {
 		if filter.value != "" {
 			query = query.Where(filter.column+" = ?", filter.value)
 		}
+	}
+	if filters.TargetID != "" {
+		query = query.Where("target_id = ? AND (module != 'notes' OR target_type != 'message' OR result NOT IN ('denied', 'failure') OR reason = ?)", filters.TargetID, string(authorization.DenialMissingGrant))
 	}
 	if filters.ActorUserID != nil {
 		query = query.Where("actor_user_id = ?", *filters.ActorUserID)
@@ -90,7 +92,7 @@ func applyAdminAuditFilters(query *gorm.DB, filters adminAuditFilters) *gorm.DB 
 	}
 	if filters.Keyword != "" {
 		keyword := "%" + filters.Keyword + "%"
-		query = query.Where("(summary LIKE ? OR reason LIKE ? OR target_id LIKE ?)", keyword, keyword, keyword)
+		query = query.Where("(module != 'notes' OR target_type != 'message' OR result NOT IN ('denied', 'failure') OR reason = ?) AND (summary LIKE ? OR reason LIKE ? OR target_id LIKE ?)", string(authorization.DenialMissingGrant), keyword, keyword, keyword)
 	}
 	return query
 }
@@ -100,7 +102,25 @@ type adminAuditLogView struct {
 	authorization.AuditPresentation
 }
 
+func sanitizeAdminAuditLog(log models.AdminAuditLog) models.AdminAuditLog {
+	if log.Module != "notes" || log.TargetType != "message" || (log.Result != "denied" && log.Result != "failure") {
+		return log
+	}
+	// Denied message mutations are not a safe way to identify content. Keep
+	// target identity only for an explicit, visible missing-grant denial;
+	// legacy rows without a reason are redacted defensively as well.
+	if log.Reason == string(authorization.DenialMissingGrant) {
+		return log
+	}
+	log.TargetID = ""
+	log.TargetOwnerUserID = nil
+	log.Summary = "capability request denied"
+	log.ChangesJSON = ""
+	return log
+}
+
 func presentAdminAuditLog(log models.AdminAuditLog) adminAuditLogView {
+	log = sanitizeAdminAuditLog(log)
 	return adminAuditLogView{AdminAuditLog: log, AuditPresentation: authorization.PresentAudit(log)}
 }
 

@@ -249,7 +249,7 @@ func TestDelegatedMessageMutationAuditsSuccessAndPrimaryContentDenial(t *testing
 	if records[0].Result != "success" || records[0].TargetID != strconv.FormatUint(uint64(ordinaryMessage.ID), 10) {
 		t.Fatalf("unexpected success audit: %#v", records[0])
 	}
-	if records[1].Result != "denied" || records[1].TargetID != strconv.FormatUint(uint64(primaryMessage.ID), 10) {
+	if records[1].Result != "denied" || records[1].TargetID != "" || records[1].TargetOwnerUserID != nil || records[1].Reason != string(authorization.DenialProtectedContent) {
 		t.Fatalf("unexpected denial audit: %#v", records[1])
 	}
 }

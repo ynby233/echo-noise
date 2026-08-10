@@ -116,23 +116,43 @@ func messageMutationAuditRecord(c *gin.Context, actorID uint, capability authori
 	}
 }
 
+func messageMutationDeniedAuditRecord(c *gin.Context, actorID uint, capability authorization.Capability, action string, message *models.Message, reason authorization.DenialReason) models.AdminAuditLog {
+	record := messageMutationAuditRecord(c, actorID, capability, action, "denied", "capability request denied", message)
+	if reason != authorization.DenialNone {
+		record.Reason = string(reason)
+	}
+	if reason == authorization.DenialContentNotReadable || reason == authorization.DenialProtectedContent {
+		record.TargetID = ""
+		record.TargetOwnerUserID = nil
+	}
+	return record
+}
+
 func writeMessageMutationDeniedAudit(c *gin.Context, authorizer *authorization.Authorizer, actorID uint, capability authorization.Capability, action string, message *models.Message) {
-	if decision := authorizer.Authorize(actorID, capability, nil); decision.Reason == authorization.DenialNotAdministrator {
+	decision := authorizer.Authorize(actorID, capability, nil)
+	if decision.Reason == authorization.DenialNotAdministrator {
 		return
 	}
-	authorizer.WriteDeniedBestEffort(messageMutationAuditRecord(c, actorID, capability, action, "denied", "capability request denied", message))
+	authorizer.WriteDeniedBestEffort(messageMutationDeniedAuditRecord(c, actorID, capability, action, message, decision.Reason))
+}
+
+func writeMessageMutationDeniedAuditForDecision(c *gin.Context, authorizer *authorization.Authorizer, actorID uint, capability authorization.Capability, action string, message *models.Message, decision authorization.Decision) {
+	if decision.Reason == authorization.DenialNotAdministrator {
+		return
+	}
+	authorizer.WriteDeniedBestEffort(messageMutationDeniedAuditRecord(c, actorID, capability, action, message, decision.Reason))
 }
 
 func writeMessageMutationDeniedAuditForError(c *gin.Context, authorizer *authorization.Authorizer, actorID uint, capability authorization.Capability, action string, message *models.Message, cause error) {
 	if decision := authorizer.Authorize(actorID, capability, nil); decision.Reason == authorization.DenialNotAdministrator {
 		return
 	}
-	if errors.Is(cause, services.ErrMessageNotVisible) || errors.Is(cause, services.ErrMessageProtected) {
-		record := messageMutationAuditRecord(c, actorID, capability, action, "denied", "capability request denied", &models.Message{})
-		record.TargetType = "message"
-		record.TargetID = ""
-		record.TargetOwnerUserID = nil
-		authorizer.WriteDeniedBestEffort(record)
+	if errors.Is(cause, services.ErrMessageNotVisible) {
+		authorizer.WriteDeniedBestEffort(messageMutationDeniedAuditRecord(c, actorID, capability, action, message, authorization.DenialContentNotReadable))
+		return
+	}
+	if errors.Is(cause, services.ErrMessageProtected) {
+		authorizer.WriteDeniedBestEffort(messageMutationDeniedAuditRecord(c, actorID, capability, action, message, authorization.DenialProtectedContent))
 		return
 	}
 	writeMessageMutationDeniedAudit(c, authorizer, actorID, capability, action, message)
@@ -2361,7 +2381,7 @@ func UpdateMessage(c *gin.Context) {
 	authorizer := authorization.New(db)
 	requireMutation := func(capability authorization.Capability, messageText string) bool {
 		if decision := services.AuthorizeMessageMutation(db, actorID, *message, capability); !decision.Allowed {
-			writeMessageMutationDeniedAudit(c, authorizer, actorID, capability, "update", message)
+			writeMessageMutationDeniedAuditForDecision(c, authorizer, actorID, capability, "update", message, decision)
 			if decision.Reason == authorization.DenialContentNotReadable {
 				c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
 			} else {
