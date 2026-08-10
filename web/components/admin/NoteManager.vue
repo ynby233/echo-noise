@@ -151,7 +151,15 @@ const permissionChanged = createNoteManagerPermissionHandler({
   refreshCapabilities,
   notify: () => toast.add({ title: '权限已变化', description: '当前权限已变化，请刷新页面', color: 'orange' })
 })
-const resetPermissionGuard = () => permissionChanged.reset()
+let resetScheduled = false
+const resetPermissionGuard = () => {
+  if (resetScheduled) return
+  resetScheduled = true
+  queueMicrotask(() => {
+    resetScheduled = false
+    permissionChanged.reset()
+  })
+}
 const load = async () => {
   loading.value = true
   try {
