@@ -10,6 +10,8 @@ let refreshGeneration = -1
 let capabilityGeneration = 0
 let invalidationListenerInstalled = false
 let identityWatcherInstalled = false
+let invalidationScheduled = false
+let invalidationRefreshInFlight = false
 
 const currentUserID = (user: any) => Number(user?.userid || user?.id || user?.ID || user?.user_id || 0)
 
@@ -59,10 +61,17 @@ export const useAdminCapabilities = () => {
 
   if (typeof window !== 'undefined' && !invalidationListenerInstalled) {
     window.addEventListener('admin-capabilities-invalidated', () => {
-      capabilityGeneration += 1
-      capabilities.value = []
-      snapshotUserID.value = 0
-      void refreshCapabilities()
+      if (invalidationScheduled || invalidationRefreshInFlight) return
+      invalidationScheduled = true
+      queueMicrotask(() => {
+        invalidationScheduled = false
+        if (invalidationRefreshInFlight) return
+        invalidationRefreshInFlight = true
+        capabilityGeneration += 1
+        capabilities.value = []
+        snapshotUserID.value = 0
+        void refreshCapabilities().finally(() => { invalidationRefreshInFlight = false })
+      })
     })
     invalidationListenerInstalled = true
   }

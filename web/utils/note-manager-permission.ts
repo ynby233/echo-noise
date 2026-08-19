@@ -4,7 +4,7 @@ export interface NoteManagerPermissionHandlerOptions {
   notify: () => void
 }
 
-export function createNoteManagerPermissionHandler(options: NoteManagerPermissionHandlerOptions) {
+export function createAdminModulePermissionHandler(options: NoteManagerPermissionHandlerOptions) {
   let refreshPromise: Promise<unknown> | null = null
   let refreshStarted = false
   let notified = false
@@ -31,3 +31,5 @@ export function createNoteManagerPermissionHandler(options: NoteManagerPermissio
   }
   return handler
 }
+
+export const createNoteManagerPermissionHandler = createAdminModulePermissionHandler

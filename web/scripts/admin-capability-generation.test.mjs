@@ -34,6 +34,8 @@ assert.equal(first.can('notes.view'), true, 'mounting a second consumer must not
 assert.equal(pending.length, 0, 'mounting a second consumer must not refetch an already-ready snapshot')
 
 listeners.get('admin-capabilities-invalidated')()
+listeners.get('admin-capabilities-invalidated')()
+await Promise.resolve()
 assert.equal(first.can('notes.view'), false, 'invalidation must not retain a stale granted capability')
 assert.equal(first.isLoading.value, true, 'invalidation must expose an explicit loading state')
 assert.equal(pending.length, 1, 'invalidation must refresh the server-authoritative snapshot')

@@ -226,6 +226,8 @@ import { useToast } from '#imports'
 import { useUserStore } from '~/store/user'
 import { resolveManagedAttachmentURL } from '~/utils/media-url'
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
+import { getRequest } from '~/utils/api'
+import { createAdminModulePermissionHandler } from '~/utils/note-manager-permission'
 
 const props = defineProps<{ theme?: Record<string, string>, isCloud?: boolean }>()
 
@@ -286,7 +288,7 @@ let selectionSnapshot: Record<string, true> = {}
 
 const baseApi = useRuntimeConfig().public.baseApi || '/api'
 const userStore = useUserStore()
-const { can } = useAdminCapabilities()
+const { can, refreshCapabilities } = useAdminCapabilities()
 const canDownload = computed(() => can('attachments.download'))
 const canDeleteReference = computed(() => can('attachments.delete_reference'))
 const canPurgeBlob = computed(() => can('attachments.purge_blob'))
@@ -298,6 +300,31 @@ const authHeaders = computed(() => {
   if (!t || t === 'null') return {}
   return { Authorization: `Bearer ${t}` }
 })
+
+const clearAttachmentState = () => {
+  images.value = []
+  videos.value = []
+  audios.value = []
+  others.value = []
+  selected.value = {}
+  expanded.value = {}
+  purgeGroups.value = []
+  groupsVisible.value = { images: GROUP_PAGE_SIZE, videos: GROUP_PAGE_SIZE, audios: GROUP_PAGE_SIZE, others: GROUP_PAGE_SIZE }
+}
+const permissionChanged = createAdminModulePermissionHandler({
+  clearState: clearAttachmentState,
+  refreshCapabilities,
+  notify: () => useToast().add({ title: '权限已变化', description: '当前权限已变化，请刷新页面', color: 'orange' })
+})
+let resetScheduled = false
+const resetPermissionGuard = () => {
+  if (resetScheduled) return
+  resetScheduled = true
+  queueMicrotask(() => {
+    resetScheduled = false
+    permissionChanged.reset()
+  })
+}
 
 const tabKind: Record<AttachmentTab, AttachmentKind> = {
   images: 'image',
@@ -568,39 +595,46 @@ const toggleExpand = (item: any) => {
 }
 
 const fetchImages = async () => {
-  const resp = await fetch(`${baseApi}/attachments/images${attachmentQuery.value}`, { credentials: 'include', headers: authHeaders.value as any })
-  const js = await resp.json().catch(() => null)
-  const arr = (js && js.code === 1 && Array.isArray(js.data)) ? js.data : []
+  const response = await getRequest<any>(`attachments/images${attachmentQuery.value}`, undefined, { credentials: 'include', silent: true })
+  const arr = (response?.code === 1 && Array.isArray(response.data)) ? response.data : []
   images.value = sortNewestFirst(arr).filter((it: any) => /\.(png|jpe?g|gif|webp)$/i.test(String(it.name || '')))
+  return response
 }
 const fetchVideos = async () => {
-  const resp = await fetch(`${baseApi}/attachments/video${attachmentQuery.value}`, { credentials: 'include', headers: authHeaders.value as any })
-  const js = await resp.json().catch(() => null)
-  const arr = (js && js.code === 1 && Array.isArray(js.data)) ? js.data : []
+  const response = await getRequest<any>(`attachments/video${attachmentQuery.value}`, undefined, { credentials: 'include', silent: true })
+  const arr = (response?.code === 1 && Array.isArray(response.data)) ? response.data : []
   videos.value = sortNewestFirst(arr).filter((it: any) => /\.(mp4|webm|mov|avi)$/i.test(String(it.name || '')))
+  return response
 }
 const fetchAudios = async () => {
-  const resp = await fetch(`${baseApi}/attachments/audio${attachmentQuery.value}`, { credentials: 'include', headers: authHeaders.value as any })
-  const js = await resp.json().catch(() => null)
-  const arr = (js && js.code === 1 && Array.isArray(js.data)) ? js.data : []
+  const response = await getRequest<any>(`attachments/audio${attachmentQuery.value}`, undefined, { credentials: 'include', silent: true })
+  const arr = (response?.code === 1 && Array.isArray(response.data)) ? response.data : []
   audios.value = sortNewestFirst(arr).filter((it: any) => /\.(webm|ogg|mp3|m4a|wav|flac)$/i.test(String(it.name || '')))
+  return response
 }
 const fetchOthers = async () => {
-  const resp = await fetch(`${baseApi}/attachments/other${attachmentQuery.value}`, { credentials: 'include', headers: authHeaders.value as any })
-  const js = await resp.json().catch(() => null)
-  const arr = (js && js.code === 1 && Array.isArray(js.data)) ? js.data : []
+  const response = await getRequest<any>(`attachments/other${attachmentQuery.value}`, undefined, { credentials: 'include', silent: true })
+  const arr = (response?.code === 1 && Array.isArray(response.data)) ? response.data : []
   others.value = sortNewestFirst(arr)
+  return response
 }
 const refresh = async () => {
   try {
     loading.value = true
-    await Promise.all([fetchImages(), fetchVideos(), fetchAudios(), fetchOthers()])
+    const responses = await Promise.all([fetchImages(), fetchVideos(), fetchAudios(), fetchOthers()])
+    if (responses.some((response) => response?.status === 403)) {
+      await permissionChanged()
+      return
+    }
     groupsVisible.value = { images: GROUP_PAGE_SIZE, videos: GROUP_PAGE_SIZE, audios: GROUP_PAGE_SIZE, others: GROUP_PAGE_SIZE }
   } finally {
     loading.value = false
   }
 }
-onMounted(refresh)
+onMounted(() => {
+  window.addEventListener('admin-capabilities-invalidated', resetPermissionGuard)
+  void refresh()
+})
 
 const openDelete = (type: AttachmentKind, item: any, group?: AttachmentGroup) => {
   deleteType.value = type
@@ -901,6 +935,7 @@ const downloadAttachment = (item: any) => {
 const theme = computed(() => props.theme || {})
 
 onBeforeUnmount(() => {
+  window.removeEventListener('admin-capabilities-invalidated', resetPermissionGuard)
   cancelAreaSelect()
 })
 </script>
