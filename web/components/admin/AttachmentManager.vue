@@ -618,18 +618,24 @@ const fetchOthers = async () => {
   others.value = sortNewestFirst(arr)
   return response
 }
-const refresh = async () => {
-  try {
-    loading.value = true
-    const responses = await Promise.all([fetchImages(), fetchVideos(), fetchAudios(), fetchOthers()])
-    if (responses.some((response) => response?.status === 403)) {
-      await permissionChanged()
-      return
+let refreshInFlight: Promise<void> | null = null
+const refresh = () => {
+  if (refreshInFlight) return refreshInFlight
+  refreshInFlight = (async () => {
+    try {
+      loading.value = true
+      const responses = await Promise.all([fetchImages(), fetchVideos(), fetchAudios(), fetchOthers()])
+      if (responses.some((response) => response?.status === 403)) {
+        await permissionChanged()
+        return
+      }
+      groupsVisible.value = { images: GROUP_PAGE_SIZE, videos: GROUP_PAGE_SIZE, audios: GROUP_PAGE_SIZE, others: GROUP_PAGE_SIZE }
+    } finally {
+      loading.value = false
+      refreshInFlight = null
     }
-    groupsVisible.value = { images: GROUP_PAGE_SIZE, videos: GROUP_PAGE_SIZE, audios: GROUP_PAGE_SIZE, others: GROUP_PAGE_SIZE }
-  } finally {
-    loading.value = false
-  }
+  })()
+  return refreshInFlight
 }
 onMounted(() => {
   window.addEventListener('admin-capabilities-invalidated', resetPermissionGuard)

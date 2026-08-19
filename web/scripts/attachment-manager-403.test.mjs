@@ -12,5 +12,7 @@ for (const endpoint of ['images', 'video', 'audio', 'other']) {
 assert.match(manager, /const clearAttachmentState = \(\) => \{[\s\S]*?images\.value = \[\][\s\S]*?videos\.value = \[\][\s\S]*?audios\.value = \[\][\s\S]*?others\.value = \[\][\s\S]*?selected\.value = \{\}/, 'revocation must clear cached attachment rows and selection')
 assert.match(manager, /responses\.some\(\(response\) => response\?\.status === 403\)[\s\S]*?await permissionChanged\(\)/, 'one refresh generation must coalesce list 403s into one permission transition')
 assert.match(manager, /admin-capabilities-invalidated/, 'a later permission generation must reset the one-shot guard')
+assert.match(manager, /let refreshInFlight: Promise<void> \| null = null/, 'attachment refresh must have a single-flight guard')
+assert.match(manager, /if \(refreshInFlight\) return refreshInFlight/, 'a manual refresh must reuse the initial in-flight load')
 
 console.log('attachment manager 403 tests passed')
