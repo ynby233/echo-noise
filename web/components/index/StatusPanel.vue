@@ -83,6 +83,12 @@
           <div class="col-span-12">
             <h1 class="text-xl md:text-2xl font-bold text-left md:hidden" :class="theme.text">系统管理面板</h1>
           </div>
+          <div v-if="adminCapabilitiesLoading" id="admin-capabilities-loading" class="col-span-12" :class="adminShellCardClass">
+            <div class="px-4 py-6 flex items-center justify-center gap-2" :class="theme.mutedText">
+              <UIcon name="i-heroicons-arrow-path" class="w-5 h-5 animate-spin" />
+              <span>正在加载管理权限…</span>
+            </div>
+          </div>
           <div v-if="isSectionVisible('dashboard')" class="col-span-12">
             <div :class="adminPanelCardClass">
               <div class="px-4 py-3 flex items-center justify-between">
@@ -2471,6 +2477,7 @@ import { resolveManagedAttachmentURL } from '~/utils/media-url'
 import { resolveUploadedMediaUrl } from '~/utils/media-upload'
 import { makeEmptyAdConfig, normalizeAdConfigs, resolveAdImageURL, type AdConfig } from '~/utils/ad-config'
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
+import { resolveAccessibleAdminSection } from '~/utils/admin-section-access'
 import adminSectionCapabilities from '~/config/admin-section-capabilities.json'
 import { useRuntimeConfig, useHead, useRouter } from '#imports'
 const formatShanghai = (s: string) => {
@@ -2499,7 +2506,7 @@ const isAdmin = computed(() => {
     const u: any = userStore.user
     return !!(userStore.isLogin && u && (u.is_admin || u.IsAdmin))
 })
-const { capabilities: adminCapabilities, isPrimaryAdmin, can, refreshCapabilities: loadAdminCapabilities } = useAdminCapabilities()
+const { capabilities: adminCapabilities, isPrimaryAdmin, isReady: adminCapabilitiesReady, isLoading: adminCapabilitiesLoading, can, refreshCapabilities: loadAdminCapabilities } = useAdminCapabilities()
 const canViewAdminAudit = computed(() => can('audit.view'))
 const sectionCapabilities: Partial<Record<AdminSectionKey, string>> = adminSectionCapabilities
 const canSection = (section: AdminSectionKey) => {
@@ -2618,6 +2625,7 @@ const sectionGroupMap = computed(() => {
   }
   return map
 })
+const accessibleSectionKeys = computed(() => adminNavGroups.value.flatMap((group) => group.items.map((item) => item.key)))
 const siteSectionKeys: AdminSectionKey[] = [
   'site',
   'site-register',
@@ -3045,6 +3053,12 @@ const setActive = async (name: AdminSectionKey, evt?: MouseEvent) => {
   } catch {}
   if (typeof window !== 'undefined' && window.innerWidth < 768) sidebarOpen.value = false
 }
+
+watch([adminCapabilitiesReady, accessibleSectionKeys], ([ready, keys]) => {
+  if (!isAdmin.value || !ready) return
+  const nextSection = resolveAccessibleAdminSection(activeSection.value, keys, 'dashboard')
+  if (nextSection !== activeSection.value) void setActive(nextSection)
+})
 
 const resolveSectionFromHash = (rawHash: string): AdminSectionKey | null => {
   const decoded = decodeURIComponent(String(rawHash || '')).replace(/^#/, '').trim()

@@ -6,7 +6,10 @@ const capabilities = ref<string[]>([])
 const snapshotUserID = ref(0)
 let refreshInFlight: Promise<void> | null = null
 let refreshUserID = 0
+let refreshGeneration = -1
+let capabilityGeneration = 0
 let invalidationListenerInstalled = false
+let identityWatcherInstalled = false
 
 const currentUserID = (user: any) => Number(user?.userid || user?.id || user?.ID || user?.user_id || 0)
 
@@ -19,32 +22,36 @@ export const useAdminCapabilities = () => {
   const userID = computed(() => currentUserID(userStore.user))
   const isPrimaryAdmin = computed(() => isAdmin.value && userID.value === 1)
   const hasCurrentSnapshot = computed(() => snapshotUserID.value === userID.value)
+  const isReady = computed(() => !isAdmin.value || isPrimaryAdmin.value || hasCurrentSnapshot.value)
+  const isLoading = computed(() => isAdmin.value && !isPrimaryAdmin.value && !hasCurrentSnapshot.value)
   const can = (capability: string) => isPrimaryAdmin.value || (hasCurrentSnapshot.value && capabilities.value.includes(capability))
 
   const refreshCapabilities = async () => {
     const requestedUserID = userID.value
+    const requestedGeneration = capabilityGeneration
     if (!isAdmin.value || !requestedUserID) {
       capabilities.value = []
       snapshotUserID.value = 0
       return
     }
-    if (refreshInFlight && refreshUserID === requestedUserID) return refreshInFlight
+    if (refreshInFlight && refreshUserID === requestedUserID && refreshGeneration === requestedGeneration) return refreshInFlight
 
     refreshUserID = requestedUserID
+    refreshGeneration = requestedGeneration
     refreshInFlight = (async () => {
       try {
         const body: any = await getRequest('admin/authorization/me', undefined, { credentials: 'include', silent: true })
-        if (currentUserID(userStore.user) !== requestedUserID) return
+        if (currentUserID(userStore.user) !== requestedUserID || capabilityGeneration !== requestedGeneration) return
         capabilities.value = body?.code === 1 ? (body.data?.capabilities || []) : []
         snapshotUserID.value = requestedUserID
       } catch {
-        if (currentUserID(userStore.user) === requestedUserID) {
+        if (currentUserID(userStore.user) === requestedUserID && capabilityGeneration === requestedGeneration) {
           capabilities.value = []
           snapshotUserID.value = requestedUserID
         }
       }
     })().finally(() => {
-      if (refreshUserID === requestedUserID) refreshInFlight = null
+      if (refreshUserID === requestedUserID && refreshGeneration === requestedGeneration) refreshInFlight = null
     })
 
     return refreshInFlight
@@ -52,19 +59,25 @@ export const useAdminCapabilities = () => {
 
   if (typeof window !== 'undefined' && !invalidationListenerInstalled) {
     window.addEventListener('admin-capabilities-invalidated', () => {
+      capabilityGeneration += 1
       capabilities.value = []
       snapshotUserID.value = 0
+      void refreshCapabilities()
     })
     invalidationListenerInstalled = true
   }
-  watch([userID, isAdmin], ([nextUserID, nextIsAdmin], previous) => {
-    const previousUserID = Number(previous?.[0] || 0)
-    if (!nextIsAdmin || !nextUserID || nextUserID !== previousUserID) {
-      capabilities.value = []
-      snapshotUserID.value = 0
-    }
-    if (nextIsAdmin && nextUserID) void refreshCapabilities()
-  }, { immediate: true })
+  if (!identityWatcherInstalled) {
+    watch([userID, isAdmin], ([nextUserID, nextIsAdmin], previous) => {
+      const previousUserID = Number(previous?.[0] || 0)
+      if (!nextIsAdmin || !nextUserID || (previousUserID > 0 && nextUserID !== previousUserID) || (snapshotUserID.value > 0 && snapshotUserID.value !== nextUserID)) {
+        capabilityGeneration += 1
+        capabilities.value = []
+        snapshotUserID.value = 0
+      }
+      if (nextIsAdmin && nextUserID && snapshotUserID.value !== nextUserID) void refreshCapabilities()
+    }, { immediate: true })
+    identityWatcherInstalled = true
+  }
 
-  return { capabilities, isPrimaryAdmin, can, refreshCapabilities }
+  return { capabilities, isPrimaryAdmin, isReady, isLoading, can, refreshCapabilities }
 }
