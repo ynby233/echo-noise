@@ -4,7 +4,7 @@
       <div>
         <h2 class="text-lg font-semibold">{{ recycleBin ? '笔记回收站' : '笔记管理' }}</h2>
         <p class="text-xs mt-1" :class="theme?.mutedText || 'text-slate-500'">
-          {{ recycleBin ? '仅在回收站上下文恢复或永久删除；普通列表不会显示回收站笔记。' : '先明确勾选笔记，再移入回收站。不会因为筛选条件自动操作全部结果。' }}
+          {{ recycleBin ? '仅在回收站上下文恢复或永久删除；普通列表不会显示回收站笔记。' : '可勾选当前页笔记，或主动选择当前筛选结果后移入回收站；筛选条件本身不会自动触发操作。' }}
         </p>
       </div>
       <div class="flex items-center gap-2">
@@ -103,6 +103,7 @@
 </template>
 
 <script setup lang="ts">
+import { runConfirmedFilteredLifecycle } from '~/utils/note-lifecycle-confirmation'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { deleteRequest, getRequest, postRequest, putRequest } from '~/utils/api'
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
@@ -228,7 +229,11 @@ const runAction = async (request: () => Promise<any>) => {
       toast.add({ title: failed > 0 ? '部分操作未完成' : '操作完成', description: detail, color: failed > 0 ? 'orange' : 'green' })
       clearSelection()
       await load()
+    } else {
+      toast.add({ title: '操作失败', description: response?.msg || '请缩小筛选范围后重试；如问题持续，请稍后再试', color: 'red' })
     }
+  } catch (error: any) {
+    toast.add({ title: '操作失败', description: error?.data?.msg || error?.message || '请缩小筛选范围后重试；如问题持续，请稍后再试', color: 'red' })
   } finally {
     actionLoading.value = false
   }
@@ -267,12 +272,10 @@ const batchPermanentDelete = () => {
   if (!confirmPermanent(selected.value.length)) return
   return runAction(() => postRequest('admin/recycle-bin/batch-permanent-delete', { ids: selected.value, reason: 'admin batch request' }, { silent: true }))
 }
-const batchFiltered = () => runAction(() => postRequest('admin/notes/batch-trash-filtered', { filter: query(), reason: 'filtered batch request' }, { silent: true }))
-const batchFilteredRestore = () => runAction(() => postRequest('admin/recycle-bin/batch-restore-filtered', { filter: query() }, { silent: true }))
-const batchFilteredPermanentDelete = () => {
-  if (!confirmPermanent(total.value)) return
-  return runAction(() => postRequest('admin/recycle-bin/batch-permanent-delete-filtered', { filter: query(), reason: 'filtered batch request' }, { silent: true }))
-}
+const confirmInBrowser = (message: string) => typeof window === 'undefined' || window.confirm(message)
+const batchFiltered = () => runConfirmedFilteredLifecycle('trash', total.value, confirmInBrowser, () => runAction(() => postRequest('admin/notes/batch-trash-filtered', { filter: query(), reason: 'filtered batch request' }, { silent: true })))
+const batchFilteredRestore = () => runConfirmedFilteredLifecycle('restore', total.value, confirmInBrowser, () => runAction(() => postRequest('admin/recycle-bin/batch-restore-filtered', { filter: query() }, { silent: true })))
+const batchFilteredPermanentDelete = () => runConfirmedFilteredLifecycle('permanent-delete', total.value, confirmInBrowser, () => runAction(() => postRequest('admin/recycle-bin/batch-permanent-delete-filtered', { filter: query(), reason: 'filtered batch request' }, { silent: true })))
 const loadRetentionSettings = async () => {
   const auth = await getRequest<any>('admin/authorization/me', undefined, { silent: true })
   isPrimaryAdmin.value = auth?.code === 1 && auth?.data?.is_primary_admin === true

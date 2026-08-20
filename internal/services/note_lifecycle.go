@@ -61,7 +61,9 @@ type NoteManagementPageResult struct {
 
 // BatchNoteLifecycleByFilter re-evaluates the supplied filter inside the
 // request's current authorization scope, avoiding a client-supplied ID list.
-const noteLifecycleFilterBatchLimit = 1000
+// The transaction provides the click-time snapshot while the ID cursor keeps
+// memory bounded and prevents mutations in earlier batches from skipping rows.
+const noteLifecycleFilterPageSize = 200
 
 type NoteManagementBatchItem struct {
 	ID     uint   `json:"id"`
@@ -70,70 +72,95 @@ type NoteManagementBatchItem struct {
 }
 
 func BatchNoteLifecycleByFilter(db *gorm.DB, actorID uint, filter NoteManagementFilter, recycleBin bool, action string, reason string) (NoteManagementBatchResult, error) {
-	query, err := buildNoteManagementQuery(db, actorID, filter, recycleBin)
-	if err != nil {
-		return NoteManagementBatchResult{}, err
+	if db == nil {
+		return NoteManagementBatchResult{}, errors.New("database is nil")
 	}
-	var ids []uint
-	var total int64
-	if err := query.Count(&total).Error; err != nil {
-		return NoteManagementBatchResult{}, err
+	if action != "trash" && action != "restore" && action != "permanent-delete" {
+		return NoteManagementBatchResult{}, errors.New("invalid lifecycle action")
 	}
-	if total > noteLifecycleFilterBatchLimit {
-		return NoteManagementBatchResult{}, fmt.Errorf("filtered lifecycle result exceeds %d items", noteLifecycleFilterBatchLimit)
-	}
-	if err := query.Order(noteManagementOrder(filter.Sort, recycleBin)).Limit(noteLifecycleFilterBatchLimit).Pluck("messages.id", &ids).Error; err != nil {
-		return NoteManagementBatchResult{}, err
-	}
-	result := NoteManagementBatchResult{Total: len(ids), Items: make([]NoteManagementBatchItem, 0, len(ids))}
-	for _, id := range ids {
-		var message models.Message
-		messageErr := db.First(&message, id).Error
-		var itemErr error
-		capability := authorization.CapabilityNotesTrash
-		actionName := "trash"
-		if action == "restore" {
-			capability = authorization.CapabilityNotesRestore
-			actionName = "restore"
-		} else if action == "permanent-delete" {
-			capability = authorization.CapabilityNotesDelete
-			actionName = "permanent_delete"
+	result := NoteManagementBatchResult{Items: make([]NoteManagementBatchItem, 0)}
+	err := db.Transaction(func(tx *gorm.DB) error {
+		query, err := buildNoteManagementQuery(tx, actorID, filter, recycleBin)
+		if err != nil {
+			return err
 		}
-		writeAudit := func(tx *gorm.DB) error {
-			return authorization.New(tx).WriteAudit(models.AdminAuditLog{ActorUserID: actorID, Capability: string(capability), Module: "notes", Action: actionName, TargetType: "message", TargetID: fmt.Sprint(id), TargetOwnerUserID: func() *uint {
-				if messageErr != nil {
-					return nil
+		var total int64
+		if err := query.Count(&total).Error; err != nil {
+			return err
+		}
+		result.Total = int(total)
+		result.Items = make([]NoteManagementBatchItem, 0, result.Total)
+		var cursor uint
+		for {
+			pageQuery, err := buildNoteManagementQuery(tx, actorID, filter, recycleBin)
+			if err != nil {
+				return err
+			}
+			var ids []uint
+			if err := pageQuery.Where("messages.id > ?", cursor).Order("messages.id ASC").Limit(noteLifecycleFilterPageSize).Pluck("messages.id", &ids).Error; err != nil {
+				return err
+			}
+			if len(ids) == 0 {
+				break
+			}
+			for _, id := range ids {
+				cursor = id
+				var message models.Message
+				messageErr := tx.First(&message, id).Error
+				var itemErr error
+				capability := authorization.CapabilityNotesTrash
+				actionName := "trash"
+				if action == "restore" {
+					capability = authorization.CapabilityNotesRestore
+					actionName = "restore"
+				} else if action == "permanent-delete" {
+					capability = authorization.CapabilityNotesDelete
+					actionName = "permanent_delete"
 				}
-				owner := message.UserID
-				return &owner
-			}(), Result: "success", Summary: "message mutation completed", Reason: reason})
+				writeAudit := func(tx *gorm.DB) error {
+					return authorization.New(tx).WriteAudit(models.AdminAuditLog{ActorUserID: actorID, Capability: string(capability), Module: "notes", Action: actionName, TargetType: "message", TargetID: fmt.Sprint(id), TargetOwnerUserID: func() *uint {
+						if messageErr != nil {
+							return nil
+						}
+						owner := message.UserID
+						return &owner
+					}(), Result: "success", Summary: "message mutation completed", Reason: reason})
+				}
+				switch action {
+				case "trash":
+					itemErr = TrashMessageWithAudit(tx, actorID, id, reason, writeAudit)
+				case "restore":
+					itemErr = RestoreMessageWithAudit(tx, actorID, id, writeAudit)
+				case "permanent-delete":
+					itemErr = PermanentlyDeleteMessageWithAudit(tx, actorID, id, reason, writeAudit)
+				}
+				result.Processed++
+				if itemErr == nil {
+					result.Succeeded++
+					result.Items = append(result.Items, NoteManagementBatchItem{ID: id, OK: true})
+				} else {
+					result.Failed++
+					result.Failures = append(result.Failures, id)
+					reason := "笔记状态不允许执行此操作"
+					if errors.Is(itemErr, ErrMessageNotVisible) || errors.Is(itemErr, ErrMessageProtected) || errors.Is(itemErr, ErrMessageNotAuthorized) {
+						reason = "操作失败"
+					}
+					result.Items = append(result.Items, NoteManagementBatchItem{ID: id, OK: false, Reason: reason})
+				}
+			}
 		}
-		switch action {
-		case "trash":
-			itemErr = TrashMessageWithAudit(db, actorID, id, reason, writeAudit)
-		case "restore":
-			itemErr = RestoreMessageWithAudit(db, actorID, id, writeAudit)
-		case "permanent-delete":
-			itemErr = PermanentlyDeleteMessageWithAudit(db, actorID, id, reason, writeAudit)
-		default:
-			itemErr = errors.New("invalid lifecycle action")
-		}
-		if itemErr == nil {
-			result.Succeeded++
-			result.Items = append(result.Items, NoteManagementBatchItem{ID: id, OK: true})
-		} else {
-			result.Failed++
-			result.Failures = append(result.Failures, id)
-			result.Items = append(result.Items, NoteManagementBatchItem{ID: id, OK: false, Reason: itemErr.Error()})
-		}
-	}
-	return result, nil
+		return nil
+	})
+	return result, err
 }
 
 type NoteManagementBatchResult struct {
 	Total     int                       `json:"total"`
+	Processed int                       `json:"processed"`
 	Succeeded int                       `json:"succeeded"`
 	Failed    int                       `json:"failed"`
+	Skipped   int                       `json:"skipped"`
+	HasMore   bool                      `json:"has_more"`
 	Failures  []uint                    `json:"failures,omitempty"`
 	Items     []NoteManagementBatchItem `json:"items"`
 }
@@ -373,27 +400,46 @@ func RunRecycleBinAutoCleanup(db *gorm.DB, now time.Time) (succeeded, failed, sk
 		return 0, 0, 0, nil
 	}
 	cutoff := now.UTC().AddDate(0, 0, -cfg.RecycleBinRetentionDays)
-	var messages []models.Message
-	if err = db.Where("deleted_at IS NOT NULL AND deleted_at <= ?", cutoff).Order("deleted_at ASC, id ASC").Limit(1000).Find(&messages).Error; err != nil {
+	var protectedGuestbooks int64
+	if err = db.Model(&models.Message{}).Where("deleted_at IS NOT NULL AND deleted_at <= ? AND is_guestbook = ?", cutoff, true).Count(&protectedGuestbooks).Error; err != nil {
 		return
 	}
-	for _, message := range messages {
-		if IsGuestbookMessage(message) {
-			skipped++
-			continue
+	skipped = int(protectedGuestbooks)
+	const pageSize = 250
+	var cursorDeletedAt time.Time
+	var cursorID uint
+	for {
+		query := db.Where("deleted_at IS NOT NULL AND deleted_at <= ? AND is_guestbook = ?", cutoff, false)
+		if !cursorDeletedAt.IsZero() {
+			query = query.Where("deleted_at > ? OR (deleted_at = ? AND id > ?)", cursorDeletedAt, cursorDeletedAt, cursorID)
 		}
-		itemErr := db.Transaction(func(tx *gorm.DB) error {
-			if err := permanentlyDeleteMessageInTx(tx, message); err != nil {
-				return err
+		var messages []models.Message
+		if err = query.Order("deleted_at ASC, id ASC").Limit(pageSize).Find(&messages).Error; err != nil {
+			return
+		}
+		if len(messages) == 0 {
+			break
+		}
+		for _, message := range messages {
+			cursorDeletedAt = message.DeletedAt.UTC()
+			cursorID = message.ID
+			if IsGuestbookMessage(message) {
+				skipped++
+				continue
 			}
-			return authorization.New(tx).WriteAudit(models.AdminAuditLog{ActorUserID: models.PrimaryAdminUserID, Capability: string(authorization.CapabilityNotesDelete), Module: "notes", Action: "auto_permanent_delete", TargetType: "message", TargetID: fmt.Sprint(message.ID), TargetOwnerUserID: &message.UserID, Result: "success", Summary: "system recycle-bin retention cleanup"})
-		})
-		if itemErr != nil {
-			failed++
-			_ = authorization.New(db).WriteAudit(models.AdminAuditLog{ActorUserID: models.PrimaryAdminUserID, Capability: string(authorization.CapabilityNotesDelete), Module: "notes", Action: "auto_permanent_delete", TargetType: "message", TargetID: fmt.Sprint(message.ID), TargetOwnerUserID: &message.UserID, Result: "failure", Summary: "system recycle-bin retention cleanup failed", Reason: itemErr.Error()})
-			continue
+			itemErr := db.Transaction(func(tx *gorm.DB) error {
+				if err := permanentlyDeleteMessageInTx(tx, message); err != nil {
+					return err
+				}
+				return authorization.New(tx).WriteAudit(models.AdminAuditLog{ActorUserID: models.PrimaryAdminUserID, Capability: string(authorization.CapabilityNotesDelete), Module: "notes", Action: "auto_permanent_delete", TargetType: "message", TargetID: fmt.Sprint(message.ID), TargetOwnerUserID: &message.UserID, Result: "success", Summary: "system recycle-bin retention cleanup"})
+			})
+			if itemErr != nil {
+				failed++
+				_ = authorization.New(db).WriteAudit(models.AdminAuditLog{ActorUserID: models.PrimaryAdminUserID, Capability: string(authorization.CapabilityNotesDelete), Module: "notes", Action: "auto_permanent_delete", TargetType: "message", TargetID: fmt.Sprint(message.ID), TargetOwnerUserID: &message.UserID, Result: "failure", Summary: "system recycle-bin retention cleanup failed", Reason: itemErr.Error()})
+				continue
+			}
+			succeeded++
 		}
-		succeeded++
 	}
 	return
 }

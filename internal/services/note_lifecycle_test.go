@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -123,6 +124,149 @@ func TestRunRecycleBinAutoCleanupIncludesPrimaryNotesAndLeavesGuestbook(t *testi
 	}
 }
 
+func TestRunRecycleBinAutoCleanupProcessesMoreThanOneThousandExpiredNotes(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "auto-large-primary", IsAdmin: true})
+	if err := db.Create(&models.SiteConfig{RecycleBinRetentionDays: 7}).Error; err != nil {
+		t.Fatal(err)
+	}
+	deletedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	guestbook := models.Message{Content: models.CanonicalGuestbookContent, Username: primary.Username, UserID: primary.ID, Visibility: MessageVisibilityPublic, IsGuestbook: true, DeletedAt: &deletedAt}
+	if err := db.Create(&guestbook).Error; err != nil {
+		t.Fatal(err)
+	}
+	messages := make([]models.Message, 1001)
+	for i := range messages {
+		messages[i] = models.Message{Content: "expired large batch", Username: primary.Username, UserID: primary.ID, Visibility: MessageVisibilityPublic, DeletedAt: &deletedAt}
+	}
+	if err := db.CreateInBatches(&messages, 200).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	succeeded, failed, skipped, err := RunRecycleBinAutoCleanup(db, deletedAt.AddDate(0, 0, 8))
+	if err != nil || succeeded != 1001 || failed != 0 || skipped != 1 {
+		t.Fatalf("cleanup = %d,%d,%d,%v", succeeded, failed, skipped, err)
+	}
+	var remaining int64
+	if err := db.Unscoped().Model(&models.Message{}).Where("deleted_at IS NOT NULL").Count(&remaining).Error; err != nil {
+		t.Fatal(err)
+	}
+	if remaining != 1 {
+		t.Fatalf("remaining expired notes = %d, want only guestbook", remaining)
+	}
+}
+
+func TestRunRecycleBinAutoCleanupCardinalitiesAndCutoff(t *testing.T) {
+	for _, count := range []int{0, 1, 1000} {
+		t.Run(fmt.Sprintf("count_%d", count), func(t *testing.T) {
+			db := setupUserServiceTestDB(t)
+			primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: fmt.Sprintf("auto-count-%d", count), IsAdmin: true})
+			if err := db.Create(&models.SiteConfig{RecycleBinRetentionDays: 7}).Error; err != nil {
+				t.Fatal(err)
+			}
+			deletedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+			messages := make([]models.Message, count)
+			for i := range messages {
+				messages[i] = models.Message{Content: "cleanup cardinality", Username: primary.Username, UserID: primary.ID, Visibility: MessageVisibilityPublic, DeletedAt: &deletedAt}
+			}
+			if count > 0 {
+				if err := db.CreateInBatches(&messages, 200).Error; err != nil {
+					t.Fatal(err)
+				}
+			}
+			succeeded, failed, skipped, err := RunRecycleBinAutoCleanup(db, deletedAt.AddDate(0, 0, 7))
+			if err != nil || succeeded != count || failed != 0 || skipped != 0 {
+				t.Fatalf("cleanup = %d,%d,%d,%v", succeeded, failed, skipped, err)
+			}
+		})
+	}
+
+	t.Run("cutoff boundary and never", func(t *testing.T) {
+		db := setupUserServiceTestDB(t)
+		primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "auto-cutoff-primary", IsAdmin: true})
+		cfg := models.SiteConfig{RecycleBinRetentionDays: 7}
+		if err := db.Create(&cfg).Error; err != nil {
+			t.Fatal(err)
+		}
+		now := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
+		cutoff := now.AddDate(0, 0, -7)
+		before, equal, after := cutoff.Add(-time.Nanosecond), cutoff, cutoff.Add(time.Nanosecond)
+		messages := []models.Message{
+			{Content: "before cutoff", Username: primary.Username, UserID: primary.ID, Visibility: MessageVisibilityPublic, DeletedAt: &before},
+			{Content: "equal cutoff", Username: primary.Username, UserID: primary.ID, Visibility: MessageVisibilityPublic, DeletedAt: &equal},
+			{Content: "after cutoff", Username: primary.Username, UserID: primary.ID, Visibility: MessageVisibilityPublic, DeletedAt: &after},
+		}
+		if err := db.Create(&messages).Error; err != nil {
+			t.Fatal(err)
+		}
+		succeeded, failed, skipped, err := RunRecycleBinAutoCleanup(db, now)
+		if err != nil || succeeded != 2 || failed != 0 || skipped != 0 {
+			t.Fatalf("boundary cleanup = %d,%d,%d,%v", succeeded, failed, skipped, err)
+		}
+		if err := db.Model(&models.SiteConfig{}).Where("id = ?", cfg.ID).Update("recycle_bin_retention_days", 0).Error; err != nil {
+			t.Fatal(err)
+		}
+		if succeeded, failed, skipped, err = RunRecycleBinAutoCleanup(db, now.AddDate(0, 0, 365)); err != nil || succeeded != 0 || failed != 0 || skipped != 0 {
+			t.Fatalf("never cleanup = %d,%d,%d,%v", succeeded, failed, skipped, err)
+		}
+		var retained models.Message
+		if err := db.Unscoped().First(&retained, messages[2].ID).Error; err != nil || retained.DeletedAt == nil {
+			t.Fatalf("after-cutoff note should remain, err=%v row=%#v", err, retained)
+		}
+	})
+}
+
+func TestRunRecycleBinAutoCleanupIsolatesFailureAndRetriesItNextRun(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "auto-retry-primary", IsAdmin: true})
+	if err := db.Create(&models.SiteConfig{RecycleBinRetentionDays: 7}).Error; err != nil {
+		t.Fatal(err)
+	}
+	deletedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	messages := make([]models.Message, 1001)
+	for i := range messages {
+		content := "expired retry batch"
+		if i == 10 {
+			content = "expired forced failure"
+		}
+		messages[i] = models.Message{Content: content, Username: primary.Username, UserID: primary.ID, Visibility: MessageVisibilityPublic, DeletedAt: &deletedAt}
+	}
+	if err := db.CreateInBatches(&messages, 200).Error; err != nil {
+		t.Fatal(err)
+	}
+	failedID := messages[10].ID
+	if err := db.Exec(`CREATE TRIGGER fail_one_expired_note BEFORE DELETE ON messages
+		WHEN OLD.id = ` + fmt.Sprint(failedID) + ` BEGIN SELECT RAISE(FAIL, 'forced cleanup failure'); END`).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	succeeded, failed, skipped, err := RunRecycleBinAutoCleanup(db, deletedAt.AddDate(0, 0, 8))
+	if err != nil || succeeded != 1000 || failed != 1 || skipped != 0 {
+		t.Fatalf("first cleanup = %d,%d,%d,%v", succeeded, failed, skipped, err)
+	}
+	var retained models.Message
+	if err := db.Unscoped().First(&retained, failedID).Error; err != nil || retained.DeletedAt == nil {
+		t.Fatalf("failed note should remain for retry, err=%v row=%#v", err, retained)
+	}
+	var failureAudit int64
+	if err := db.Model(&models.AdminAuditLog{}).Where("action = ? AND target_id = ? AND result = ?", "auto_permanent_delete", fmt.Sprint(failedID), "failure").Count(&failureAudit).Error; err != nil {
+		t.Fatal(err)
+	}
+	if failureAudit != 1 {
+		t.Fatalf("failure audit count = %d, want 1", failureAudit)
+	}
+	if err := db.Exec("DROP TRIGGER fail_one_expired_note").Error; err != nil {
+		t.Fatal(err)
+	}
+	succeeded, failed, skipped, err = RunRecycleBinAutoCleanup(db, deletedAt.AddDate(0, 0, 8))
+	if err != nil || succeeded != 1 || failed != 0 || skipped != 0 {
+		t.Fatalf("retry cleanup = %d,%d,%d,%v", succeeded, failed, skipped, err)
+	}
+	if err := db.Unscoped().First(&models.Message{}, failedID).Error; !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("failed note was not deleted on retry: %v", err)
+	}
+}
+
 func TestBatchNoteLifecycleByFilterRebuildsScopeAcrossPages(t *testing.T) {
 	db := setupUserServiceTestDB(t)
 	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "filtered-primary", IsAdmin: true})
@@ -145,6 +289,91 @@ func TestBatchNoteLifecycleByFilterRebuildsScopeAcrossPages(t *testing.T) {
 	}
 	if trashed != 25 {
 		t.Fatalf("trashed=%d, want 25", trashed)
+	}
+}
+
+func TestBatchNoteLifecycleByFilterProcessesMoreThanOneThousandMatches(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "filtered-large-primary", IsAdmin: true})
+	messages := make([]models.Message, 1001)
+	for i := range messages {
+		messages[i] = models.Message{Content: "filtered-large-target", Username: primary.Username, UserID: primary.ID, Visibility: MessageVisibilityPublic}
+	}
+	if err := db.CreateInBatches(&messages, 200).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := BatchNoteLifecycleByFilter(db, primary.ID, NoteManagementFilter{Keyword: "filtered-large-target"}, false, "trash", "filtered large test")
+	if err != nil {
+		t.Fatalf("filtered batch returned an error: %v", err)
+	}
+	if result.Total != 1001 || result.Succeeded != 1001 || result.Failed != 0 || len(result.Items) != 1001 {
+		t.Fatalf("filtered batch result=%#v", result)
+	}
+}
+
+func TestBatchNoteLifecycleByFilterCardinalities(t *testing.T) {
+	for _, count := range []int{0, 1, 20, 21, 1000} {
+		t.Run(fmt.Sprintf("count_%d", count), func(t *testing.T) {
+			db := setupUserServiceTestDB(t)
+			primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: fmt.Sprintf("filtered-count-%d", count), IsAdmin: true})
+			messages := make([]models.Message, count)
+			for i := range messages {
+				messages[i] = models.Message{Content: "filtered-cardinality-target", Username: primary.Username, UserID: primary.ID, Visibility: MessageVisibilityPublic}
+			}
+			if count > 0 {
+				if err := db.CreateInBatches(&messages, 200).Error; err != nil {
+					t.Fatal(err)
+				}
+			}
+			result, err := BatchNoteLifecycleByFilter(db, primary.ID, NoteManagementFilter{Keyword: "filtered-cardinality-target"}, false, "trash", "cardinality test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.Total != count || result.Processed != count || result.Succeeded != count || result.Failed != 0 || len(result.Items) != count {
+				t.Fatalf("filtered batch result=%#v", result)
+			}
+		})
+	}
+}
+
+func TestBatchNoteLifecycleByFilterRechecksRevokedCapabilityPerItem(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "filtered-revoke-primary", IsAdmin: true})
+	delegated := mustCreateUser(t, models.User{Username: "filtered-revoke-delegated", IsAdmin: true})
+	author := mustCreateUser(t, models.User{Username: "filtered-revoke-author"})
+	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityNotesTrash}); err != nil {
+		t.Fatal(err)
+	}
+	messages := []models.Message{
+		{Content: "filtered-revoke-target", Username: author.Username, UserID: author.ID, Visibility: MessageVisibilityPublic},
+		{Content: "filtered-revoke-target", Username: author.Username, UserID: author.ID, Visibility: MessageVisibilityPublic},
+	}
+	if err := db.Create(&messages).Error; err != nil {
+		t.Fatal(err)
+	}
+	revoked := false
+	if err := db.Callback().Update().After("gorm:update").Register("test:revoke_note_trash", func(tx *gorm.DB) {
+		if revoked || tx.Statement.Table != "messages" {
+			return
+		}
+		revoked = true
+		if err := tx.Session(&gorm.Session{NewDB: true}).Exec("DELETE FROM admin_capability_grants WHERE user_id = ? AND capability = ?", delegated.ID, authorization.CapabilityNotesTrash).Error; err != nil {
+			tx.AddError(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := BatchNoteLifecycleByFilter(db, delegated.ID, NoteManagementFilter{Keyword: "filtered-revoke-target"}, false, "trash", "filtered revoke test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Total != 2 || result.Processed != 2 || result.Succeeded != 1 || result.Failed != 1 {
+		t.Fatalf("filtered revoke result=%#v", result)
+	}
+	if len(result.Items) != 2 || result.Items[1].Reason != "操作失败" {
+		t.Fatalf("filtered revoke items=%#v", result.Items)
 	}
 }
 

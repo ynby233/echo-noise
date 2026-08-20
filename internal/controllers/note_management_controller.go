@@ -37,6 +37,14 @@ type noteLifecycleBatchResult struct {
 	Items     []noteLifecycleBatchItem `json:"items"`
 }
 
+func filteredLifecycleString(filter map[string]interface{}, key string) string {
+	value, ok := filter[key]
+	if !ok || value == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(value))
+}
+
 func noteManagementActor(c *gin.Context) (uint, bool) {
 	user, ok := currentReadUser(c)
 	return user.ID, ok && user.ID != 0 && user.IsAdmin
@@ -387,27 +395,27 @@ func BatchFilteredNoteLifecycle(c *gin.Context, action string) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "无效筛选条件"})
 		return
 	}
-	filter := services.NoteManagementFilter{Page: 1, PageSize: 1000, Keyword: strings.TrimSpace(fmt.Sprint(req.Filter["keyword"])), Username: strings.TrimSpace(fmt.Sprint(req.Filter["username"])), Tag: strings.TrimPrefix(strings.TrimSpace(fmt.Sprint(req.Filter["tag"])), "#"), Visibility: strings.TrimSpace(fmt.Sprint(req.Filter["visibility"])), Sort: strings.TrimSpace(fmt.Sprint(req.Filter["sort"]))}
-	if id, _ := strconv.ParseUint(fmt.Sprint(req.Filter["id"]), 10, 64); id > 0 {
+	filter := services.NoteManagementFilter{Page: 1, PageSize: 1000, Keyword: filteredLifecycleString(req.Filter, "keyword"), Username: filteredLifecycleString(req.Filter, "username"), Tag: strings.TrimPrefix(filteredLifecycleString(req.Filter, "tag"), "#"), Visibility: filteredLifecycleString(req.Filter, "visibility"), Sort: filteredLifecycleString(req.Filter, "sort")}
+	if id, _ := strconv.ParseUint(filteredLifecycleString(req.Filter, "id"), 10, 64); id > 0 {
 		v := uint(id)
 		filter.MessageID = &v
 	}
-	if id, _ := strconv.ParseUint(fmt.Sprint(req.Filter["authorId"]), 10, 64); id > 0 {
+	if id, _ := strconv.ParseUint(filteredLifecycleString(req.Filter, "authorId"), 10, 64); id > 0 {
 		v := uint(id)
 		filter.AuthorID = &v
 	}
-	if v := strings.TrimSpace(fmt.Sprint(req.Filter["pinned"])); v == "true" || v == "false" {
+	if v := filteredLifecycleString(req.Filter, "pinned"); v == "true" || v == "false" {
 		b := v == "true"
 		filter.Pinned = &b
 	}
-	if v := strings.TrimSpace(fmt.Sprint(req.Filter["hasAttachment"])); v == "true" || v == "false" {
+	if v := filteredLifecycleString(req.Filter, "hasAttachment"); v == "true" || v == "false" {
 		b := v == "true"
 		filter.HasAttachment = &b
 	}
-	if value, err := time.Parse("2006-01-02", strings.TrimSpace(fmt.Sprint(req.Filter["createdFrom"]))); err == nil {
+	if value, err := time.Parse("2006-01-02", filteredLifecycleString(req.Filter, "createdFrom")); err == nil {
 		filter.CreatedFrom = &value
 	}
-	if value, err := time.Parse("2006-01-02", strings.TrimSpace(fmt.Sprint(req.Filter["createdTo"]))); err == nil {
+	if value, err := time.Parse("2006-01-02", filteredLifecycleString(req.Filter, "createdTo")); err == nil {
 		end := value.Add(24 * time.Hour)
 		filter.CreatedTo = &end
 	}
