@@ -123,6 +123,31 @@ func TestRunRecycleBinAutoCleanupIncludesPrimaryNotesAndLeavesGuestbook(t *testi
 	}
 }
 
+func TestBatchNoteLifecycleByFilterRebuildsScopeAcrossPages(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "filtered-primary", IsAdmin: true})
+	for i := 0; i < 25; i++ {
+		message := models.Message{Content: "cross-page-filter-target", Username: primary.Username, UserID: primary.ID, Visibility: MessageVisibilityPublic}
+		if err := db.Create(&message).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	result, err := BatchNoteLifecycleByFilter(db, primary.ID, NoteManagementFilter{Keyword: "cross-page-filter-target", Sort: "created_asc"}, false, "trash", "filtered test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Total != 25 || result.Succeeded != 25 || result.Failed != 0 || len(result.Items) != 25 {
+		t.Fatalf("filtered batch result=%#v", result)
+	}
+	var trashed int64
+	if err := db.Unscoped().Model(&models.Message{}).Where("deleted_at IS NOT NULL").Count(&trashed).Error; err != nil {
+		t.Fatal(err)
+	}
+	if trashed != 25 {
+		t.Fatalf("trashed=%d, want 25", trashed)
+	}
+}
+
 func TestLifecycleMutationRollsBackWhenSuccessAuditFails(t *testing.T) {
 	db := setupUserServiceTestDB(t)
 	author := mustCreateUser(t, models.User{Username: "audit-rollback-author"})
