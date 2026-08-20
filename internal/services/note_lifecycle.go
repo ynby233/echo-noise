@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -56,6 +57,47 @@ type NoteManagementItem struct {
 type NoteManagementPageResult struct {
 	Total int64                `json:"total"`
 	Items []NoteManagementItem `json:"items"`
+}
+
+// BatchNoteLifecycleByFilter re-evaluates the supplied filter inside the
+// request's current authorization scope, avoiding a client-supplied ID list.
+func BatchNoteLifecycleByFilter(db *gorm.DB, actorID uint, filter NoteManagementFilter, recycleBin bool, action string, reason string) (NoteManagementBatchResult, error) {
+	query, err := buildNoteManagementQuery(db, actorID, filter, recycleBin)
+	if err != nil {
+		return NoteManagementBatchResult{}, err
+	}
+	var ids []uint
+	if err := query.Order(noteManagementOrder(filter.Sort, recycleBin)).Limit(10000).Pluck("messages.id", &ids).Error; err != nil {
+		return NoteManagementBatchResult{}, err
+	}
+	result := NoteManagementBatchResult{Total: len(ids)}
+	for _, id := range ids {
+		var itemErr error
+		switch action {
+		case "trash":
+			itemErr = TrashMessage(db, actorID, id, reason)
+		case "restore":
+			itemErr = RestoreMessage(db, actorID, id)
+		case "permanent-delete":
+			itemErr = PermanentlyDeleteMessage(db, actorID, id, reason)
+		default:
+			itemErr = errors.New("invalid lifecycle action")
+		}
+		if itemErr == nil {
+			result.Succeeded++
+		} else {
+			result.Failed++
+			result.Failures = append(result.Failures, id)
+		}
+	}
+	return result, nil
+}
+
+type NoteManagementBatchResult struct {
+	Total     int    `json:"total"`
+	Succeeded int    `json:"succeeded"`
+	Failed    int    `json:"failed"`
+	Failures  []uint `json:"failures,omitempty"`
 }
 
 func noteManagementItem(message models.Message) NoteManagementItem {
@@ -239,25 +281,8 @@ func PermanentlyDeleteMessageWithAudit(db *gorm.DB, actorID, messageID uint, rea
 		return ErrMessageNotAuthorized
 	}
 	return db.Transaction(func(tx *gorm.DB) error {
-		var comments []models.Comment
-		if err := tx.Where("message_id = ?", messageID).Find(&comments).Error; err != nil {
+		if err := permanentlyDeleteMessageInTx(tx, message); err != nil {
 			return err
-		}
-		if err := RemoveUnreferencedMessageAttachmentReferences(tx, messageID, message, comments); err != nil {
-			return err
-		}
-		if err := tx.Where("message_id = ?", messageID).Delete(&models.Comment{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("message_id = ?", messageID).Delete(&models.MessageLike{}).Error; err != nil {
-			return err
-		}
-		result := tx.Where("id = ? AND deleted_at IS NOT NULL", messageID).Delete(&models.Message{})
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected != 1 {
-			return ErrMessageNotTrashed
 		}
 		if audit != nil {
 			if err := audit(tx); err != nil {
@@ -266,6 +291,73 @@ func PermanentlyDeleteMessageWithAudit(db *gorm.DB, actorID, messageID uint, rea
 		}
 		return nil
 	})
+}
+
+// permanentlyDeleteMessageInTx is the shared destructive lifecycle. Callers
+// must perform their own authorization before entering the transaction.
+func permanentlyDeleteMessageInTx(tx *gorm.DB, message models.Message) error {
+	var comments []models.Comment
+	if err := tx.Where("message_id = ?", message.ID).Find(&comments).Error; err != nil {
+		return err
+	}
+	if err := RemoveUnreferencedMessageAttachmentReferences(tx, message.ID, message, comments); err != nil {
+		return err
+	}
+	if err := tx.Where("message_id = ?", message.ID).Delete(&models.Comment{}).Error; err != nil {
+		return err
+	}
+	if err := tx.Where("message_id = ?", message.ID).Delete(&models.MessageLike{}).Error; err != nil {
+		return err
+	}
+	result := tx.Where("id = ? AND deleted_at IS NOT NULL", message.ID).Delete(&models.Message{})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return ErrMessageNotTrashed
+	}
+	return nil
+}
+
+// RunRecycleBinAutoCleanup permanently deletes all ordinary notes whose
+// deleted_at is older than the configured retention period. It deliberately
+// bypasses delegated-admin authorization: this is a system retention policy,
+// but still reuses the exact attachment/comment/like deletion transaction.
+func RunRecycleBinAutoCleanup(db *gorm.DB, now time.Time) (succeeded, failed, skipped int, err error) {
+	if db == nil {
+		return 0, 0, 0, errors.New("database is nil")
+	}
+	var cfg models.SiteConfig
+	if err = db.Table("site_configs").First(&cfg).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return
+	}
+	if cfg.RecycleBinRetentionDays == 0 {
+		return 0, 0, 0, nil
+	}
+	cutoff := now.UTC().AddDate(0, 0, -cfg.RecycleBinRetentionDays)
+	var messages []models.Message
+	if err = db.Where("deleted_at IS NOT NULL AND deleted_at <= ?", cutoff).Order("deleted_at ASC, id ASC").Limit(1000).Find(&messages).Error; err != nil {
+		return
+	}
+	for _, message := range messages {
+		if IsGuestbookMessage(message) {
+			skipped++
+			continue
+		}
+		itemErr := db.Transaction(func(tx *gorm.DB) error {
+			if err := permanentlyDeleteMessageInTx(tx, message); err != nil {
+				return err
+			}
+			return authorization.New(tx).WriteAudit(models.AdminAuditLog{ActorUserID: models.PrimaryAdminUserID, Capability: string(authorization.CapabilityNotesDelete), Module: "notes", Action: "auto_permanent_delete", TargetType: "message", TargetID: fmt.Sprint(message.ID), TargetOwnerUserID: &message.UserID, Result: "success", Summary: "recycle bin retention cleanup"})
+		})
+		if itemErr != nil {
+			failed++
+			_ = authorization.New(db).WriteAudit(models.AdminAuditLog{ActorUserID: models.PrimaryAdminUserID, Capability: string(authorization.CapabilityNotesDelete), Module: "notes", Action: "auto_permanent_delete", TargetType: "message", TargetID: fmt.Sprint(message.ID), TargetOwnerUserID: &message.UserID, Result: "failure", Summary: "recycle bin retention cleanup failed", Reason: itemErr.Error()})
+			continue
+		}
+		succeeded++
+	}
+	return
 }
 
 func buildNoteManagementQuery(db *gorm.DB, actorID uint, filter NoteManagementFilter, recycleBin bool) (*gorm.DB, error) {

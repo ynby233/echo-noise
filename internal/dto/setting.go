@@ -20,5 +20,6 @@ type SettingDto struct {
 	StorageConfig            map[string]interface{} `json:"storageConfig"`
 	AttachmentStorageEnabled *bool                  `json:"attachmentStorageEnabled"`
 	AttachmentStorageConfig  map[string]interface{} `json:"attachmentStorageConfig"`
+	RecycleBinRetentionDays  *int                   `json:"recycleBinRetentionDays"`
 	VoceChatConfig           map[string]interface{} `json:"voceChatConfig"`
 }

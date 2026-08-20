@@ -11,8 +11,11 @@
         <UButton size="xs" color="gray" variant="soft" :loading="loading" @click="load">刷新</UButton>
         <UButton v-if="selected.length" size="xs" color="primary" variant="soft" @click="clearSelection">清除选择</UButton>
         <UButton v-if="selected.length && !recycleBin && canTrash" size="xs" color="orange" :loading="actionLoading" @click="batchTrash">移入回收站</UButton>
+        <UButton v-if="total && !recycleBin && canTrash" size="xs" color="orange" variant="soft" :loading="actionLoading" @click="batchFiltered">全选当前筛选结果并移入回收站</UButton>
         <UButton v-if="selected.length && recycleBin && canRestore" size="xs" color="green" :loading="actionLoading" @click="batchRestore">恢复所选</UButton>
         <UButton v-if="selected.length && recycleBin && canPermanentlyDelete" size="xs" color="red" :loading="actionLoading" @click="batchPermanentDelete">永久删除所选</UButton>
+        <UButton v-if="total && recycleBin && canRestore" size="xs" color="green" variant="soft" :loading="actionLoading" @click="batchFilteredRestore">全选当前筛选结果并恢复</UButton>
+        <UButton v-if="total && recycleBin && canPermanentlyDelete" size="xs" color="red" variant="soft" :loading="actionLoading" @click="batchFilteredPermanentDelete">全选当前筛选结果并永久删除</UButton>
       </div>
     </div>
 
@@ -245,6 +248,12 @@ const batchRestore = () => runAction(() => postRequest('admin/recycle-bin/batch-
 const batchPermanentDelete = () => {
   if (!confirmPermanent(selected.value.length)) return
   return runAction(() => postRequest('admin/recycle-bin/batch-permanent-delete', { ids: selected.value, reason: 'admin batch request' }, { silent: true }))
+}
+const batchFiltered = () => runAction(() => postRequest('admin/notes/batch-trash-filtered', { filter: query(), reason: 'filtered batch request' }, { silent: true }))
+const batchFilteredRestore = () => runAction(() => postRequest('admin/recycle-bin/batch-restore-filtered', { filter: query() }, { silent: true }))
+const batchFilteredPermanentDelete = () => {
+  if (!confirmPermanent(total.value)) return
+  return runAction(() => postRequest('admin/recycle-bin/batch-permanent-delete-filtered', { filter: query(), reason: 'filtered batch request' }, { silent: true }))
 }
 watch(() => props.recycleBin, () => { page.value = 1; clearSelection(); load() })
 </script>

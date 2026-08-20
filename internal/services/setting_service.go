@@ -1237,6 +1237,12 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 			}(),
 		},
 		"attachmentStorageEnabled": config.AttachmentStorageEnabled,
+		"recycleBinRetentionDays": func() int {
+			if viewerUserID == models.PrimaryAdminUserID {
+				return config.RecycleBinRetentionDays
+			}
+			return 0
+		}(),
 		"attachmentStorageConfig": map[string]interface{}{
 			"provider":            choose(config.AttachmentStorageProvider, ""),
 			"endpoint":            choose(config.AttachmentStorageEndpoint, ""),
@@ -1798,6 +1804,11 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	if v, ok := settingMap["storageEnabled"].(bool); ok {
 		config.StorageEnabled = v
 	}
+	if v, ok := settingMap["recycleBinRetentionDays"].(int); ok {
+		config.RecycleBinRetentionDays = v
+	} else if v, ok := settingMap["recycleBinRetentionDays"].(float64); ok {
+		config.RecycleBinRetentionDays = int(v)
+	}
 	if sc, ok := settingMap["storageConfig"].(map[string]interface{}); ok {
 		if pv, ok := sc["provider"].(string); ok {
 			config.StorageProvider = pv
@@ -2146,6 +2157,7 @@ func getDefaultConfig() map[string]interface{} {
 			"syncIntervalMinute": 15,
 		},
 		"attachmentStorageEnabled": false,
+		"recycleBinRetentionDays":  0,
 		"attachmentStorageConfig": map[string]interface{}{
 			"provider":          "",
 			"endpoint":          "",

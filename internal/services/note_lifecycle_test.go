@@ -67,6 +67,34 @@ func TestNoteLifecycleTrashRestoreIsMutuallyExclusive(t *testing.T) {
 	}
 }
 
+func TestRunRecycleBinAutoCleanupUsesDeletedAtAndSystemIdentity(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "auto-primary", IsAdmin: true})
+	author := mustCreateUser(t, models.User{Username: "auto-author"})
+	if err := db.Create(&models.SiteConfig{RecycleBinRetentionDays: 7}).Error; err != nil {
+		t.Fatal(err)
+	}
+	old := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	m := models.Message{Content: "expired", Username: author.Username, UserID: author.ID, Visibility: MessageVisibilityPublic, DeletedAt: &old}
+	if err := db.Create(&m).Error; err != nil {
+		t.Fatal(err)
+	}
+	newer := old.AddDate(0, 0, 8)
+	if succeeded, failed, skipped, err := RunRecycleBinAutoCleanup(db, newer); err != nil || succeeded != 1 || failed != 0 || skipped != 0 {
+		t.Fatalf("cleanup = %d,%d,%d,%v", succeeded, failed, skipped, err)
+	}
+	if err := db.Unscoped().First(&models.Message{}, m.ID).Error; !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("expired message still exists: %v", err)
+	}
+	var audit models.AdminAuditLog
+	if err := db.Where("action = ? AND target_id = ?", "auto_permanent_delete", m.ID).First(&audit).Error; err != nil {
+		t.Fatal(err)
+	}
+	if audit.ActorUserID != primary.ID || audit.Result != "success" {
+		t.Fatalf("audit = %#v", audit)
+	}
+}
+
 func TestLifecycleMutationRollsBackWhenSuccessAuditFails(t *testing.T) {
 	db := setupUserServiceTestDB(t)
 	author := mustCreateUser(t, models.User{Username: "audit-rollback-author"})

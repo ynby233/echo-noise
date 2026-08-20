@@ -511,6 +511,7 @@ func registerNoteManagementRoutes(group *gin.RouterGroup) {
 		notes.PUT("/:id/pin/global", middleware.RequireCapability(authorization.CapabilityNotesPinGlobal), controllers.UpdateMessageGlobalPin)
 		notes.POST("/:id/trash", middleware.RequireCapability(authorization.CapabilityNotesTrash), controllers.TrashAdminNote)
 		notes.POST("/batch-trash", middleware.RequireCapability(authorization.CapabilityNotesTrash), controllers.BatchTrashAdminNotes)
+		notes.POST("/batch-trash-filtered", middleware.RequireCapability(authorization.CapabilityNotesTrash), controllers.BatchFilteredTrash)
 	}
 	recycleBin := group.Group("/admin/recycle-bin")
 	recycleBin.Use(middleware.RequireCapability(authorization.CapabilityNotesRecycleBinView))
@@ -519,8 +520,10 @@ func registerNoteManagementRoutes(group *gin.RouterGroup) {
 		recycleBin.GET("/:id", controllers.GetAdminRecycleBinNote)
 		recycleBin.POST("/:id/restore", middleware.RequireCapability(authorization.CapabilityNotesRestore), controllers.RestoreAdminRecycleBinNote)
 		recycleBin.POST("/batch-restore", middleware.RequireCapability(authorization.CapabilityNotesRestore), controllers.BatchRestoreAdminRecycleBin)
+		recycleBin.POST("/batch-restore-filtered", middleware.RequireCapability(authorization.CapabilityNotesRestore), controllers.BatchFilteredRestore)
 		recycleBin.DELETE("/:id", middleware.RequireCapability(authorization.CapabilityNotesDelete), controllers.PermanentlyDeleteAdminRecycleBinNote)
 		recycleBin.POST("/batch-permanent-delete", middleware.RequireCapability(authorization.CapabilityNotesDelete), controllers.BatchPermanentDeleteAdminRecycleBin)
+		recycleBin.POST("/batch-permanent-delete-filtered", middleware.RequireCapability(authorization.CapabilityNotesDelete), controllers.BatchFilteredPermanentDelete)
 	}
 }
 

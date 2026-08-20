@@ -64,6 +64,31 @@ func main() {
 	workerCtx, cancelWorkers := context.WithCancel(context.Background())
 	defer cancelWorkers()
 	services.StartAnnouncementPushDispatcher(workerCtx, database.DB)
+	// Recycle-bin retention is a system policy, independent of any delegated
+	// administrator. Run once at startup and retry on each daily tick.
+	go func() {
+		run := func() {
+			succeeded, failed, skipped, err := services.RunRecycleBinAutoCleanup(database.DB, time.Now().UTC())
+			if err != nil {
+				log.Printf("回收站自动清理失败: %v", err)
+				return
+			}
+			if succeeded > 0 || failed > 0 || skipped > 0 {
+				log.Printf("回收站自动清理完成: 成功=%d 失败=%d 跳过=%d", succeeded, failed, skipped)
+			}
+		}
+		run()
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				run()
+			case <-workerCtx.Done():
+				return
+			}
+		}
+	}()
 
 	// 读取站点配置并应用到自动同步管理器（确保定时/即时模式在启动后即生效）
 	func() {

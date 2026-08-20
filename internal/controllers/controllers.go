@@ -1026,6 +1026,19 @@ func UpdateSetting(c *gin.Context) {
 
 	settingMap := map[string]interface{}{}
 	hasSiteConfigUpdate := false
+	if setting.RecycleBinRetentionDays != nil {
+		if user.ID != models.PrimaryAdminUserID {
+			c.JSON(http.StatusOK, dto.Fail[string]("仅 1 号管理员可管理回收站自动清理"))
+			return
+		}
+		allowed := map[int]bool{0: true, 7: true, 30: true, 90: true, 180: true, 365: true}
+		if !allowed[*setting.RecycleBinRetentionDays] {
+			c.JSON(http.StatusOK, dto.Fail[string]("回收站保留期限无效"))
+			return
+		}
+		settingMap["recycleBinRetentionDays"] = *setting.RecycleBinRetentionDays
+		hasSiteConfigUpdate = true
+	}
 	if frontendSettings != nil {
 		if services.HasLifeCountdownSettings(frontendSettings) {
 			if err := services.UpdateUserLifeCountdownConfig(user.ID, frontendSettings); err != nil {

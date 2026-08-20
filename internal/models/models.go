@@ -290,15 +290,18 @@ type SiteConfig struct {
 	AnnouncementText    string `gorm:"type:varchar(191)"`
 	AnnouncementEnabled bool   `gorm:"default:true"`
 	Version             int    `json:"version"`
-	SmtpEnabled         bool   `gorm:"default:false" json:"smtpEnabled"`
-	SmtpDriver          string `gorm:"type:varchar(50)" json:"smtpDriver"`
-	SmtpHost            string `gorm:"type:varchar(191)" json:"smtpHost"`
-	SmtpPort            int    `json:"smtpPort"`
-	SmtpUser            string `gorm:"type:varchar(191)" json:"smtpUser"`
-	SmtpPass            string `gorm:"type:varchar(191)" json:"smtpPass"`
-	SmtpFrom            string `gorm:"type:varchar(191)" json:"smtpFrom"`
-	SmtpEncryption      string `gorm:"type:varchar(20)" json:"smtpEncryption"`
-	SmtpTLS             bool   `gorm:"default:false" json:"smtpTLS"`
+	// RecycleBinRetentionDays controls automatic permanent deletion of notes.
+	// Zero disables automatic cleanup; supported values are 7, 30, 90, 180 and 365.
+	RecycleBinRetentionDays int    `gorm:"default:0" json:"recycleBinRetentionDays"`
+	SmtpEnabled             bool   `gorm:"default:false" json:"smtpEnabled"`
+	SmtpDriver              string `gorm:"type:varchar(50)" json:"smtpDriver"`
+	SmtpHost                string `gorm:"type:varchar(191)" json:"smtpHost"`
+	SmtpPort                int    `json:"smtpPort"`
+	SmtpUser                string `gorm:"type:varchar(191)" json:"smtpUser"`
+	SmtpPass                string `gorm:"type:varchar(191)" json:"smtpPass"`
+	SmtpFrom                string `gorm:"type:varchar(191)" json:"smtpFrom"`
+	SmtpEncryption          string `gorm:"type:varchar(20)" json:"smtpEncryption"`
+	SmtpTLS                 bool   `gorm:"default:false" json:"smtpTLS"`
 	// GitHub OAuth
 	GithubOAuthEnabled bool   `gorm:"default:false"`
 	GithubClientId     string `gorm:"type:varchar(191)"`

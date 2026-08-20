@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -18,6 +19,10 @@ import (
 type noteLifecycleBatchRequest struct {
 	IDs    []uint `json:"ids"`
 	Reason string `json:"reason"`
+}
+type noteLifecycleFilteredRequest struct {
+	Filter map[string]interface{} `json:"filter"`
+	Reason string                 `json:"reason"`
 }
 
 type noteLifecycleBatchItem struct {
@@ -370,3 +375,47 @@ func BatchRestoreAdminRecycleBin(c *gin.Context) { runNoteLifecycleBatch(c, "res
 func BatchPermanentDeleteAdminRecycleBin(c *gin.Context) {
 	runNoteLifecycleBatch(c, "permanent-delete")
 }
+
+func BatchFilteredNoteLifecycle(c *gin.Context, action string) {
+	actorID, ok := noteManagementActor(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "未授权访问"})
+		return
+	}
+	var req noteLifecycleFilteredRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "无效筛选条件"})
+		return
+	}
+	filter := services.NoteManagementFilter{Page: 1, PageSize: 10000, Keyword: strings.TrimSpace(fmt.Sprint(req.Filter["keyword"])), Username: strings.TrimSpace(fmt.Sprint(req.Filter["username"])), Tag: strings.TrimPrefix(strings.TrimSpace(fmt.Sprint(req.Filter["tag"])), "#"), Visibility: strings.TrimSpace(fmt.Sprint(req.Filter["visibility"])), Sort: strings.TrimSpace(fmt.Sprint(req.Filter["sort"]))}
+	if id, _ := strconv.ParseUint(fmt.Sprint(req.Filter["id"]), 10, 64); id > 0 {
+		v := uint(id)
+		filter.MessageID = &v
+	}
+	if id, _ := strconv.ParseUint(fmt.Sprint(req.Filter["authorId"]), 10, 64); id > 0 {
+		v := uint(id)
+		filter.AuthorID = &v
+	}
+	if v := strings.TrimSpace(fmt.Sprint(req.Filter["pinned"])); v == "true" || v == "false" {
+		b := v == "true"
+		filter.Pinned = &b
+	}
+	if v := strings.TrimSpace(fmt.Sprint(req.Filter["hasAttachment"])); v == "true" || v == "false" {
+		b := v == "true"
+		filter.HasAttachment = &b
+	}
+	db, err := database.GetDB()
+	if err != nil {
+		writeNoteLifecycleError(c, err)
+		return
+	}
+	result, err := services.BatchNoteLifecycleByFilter(db, actorID, filter, action != "trash", action, req.Reason)
+	if err != nil {
+		writeNoteLifecycleError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "批量操作完成", "data": result})
+}
+func BatchFilteredTrash(c *gin.Context)           { BatchFilteredNoteLifecycle(c, "trash") }
+func BatchFilteredRestore(c *gin.Context)         { BatchFilteredNoteLifecycle(c, "restore") }
+func BatchFilteredPermanentDelete(c *gin.Context) { BatchFilteredNoteLifecycle(c, "permanent-delete") }
