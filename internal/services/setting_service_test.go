@@ -471,7 +471,8 @@ func TestCheckVoceChatHealthDoesNotBindLocalSysAdmin(t *testing.T) {
 
 func TestCheckVoceChatHealthRecordsFailure(t *testing.T) {
 	db := setupUserServiceTestDB(t)
-	mustCreateUser(t, models.User{Username: "sys-admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+	admin := mustCreateUser(t, models.User{Username: "sys-admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+	delegated := mustCreateUser(t, models.User{Username: "delegated-admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
 
 	if err := db.Create(&models.SiteConfig{
 		VoceChatEnabled: true,
@@ -489,6 +490,32 @@ func TestCheckVoceChatHealthRecordsFailure(t *testing.T) {
 	}
 	if got, ok := publicConfig["lastHealthError"].(string); !ok || !strings.Contains(got, "管理员凭据未配置") {
 		t.Fatalf("lastHealthError = %#v, want missing credential error", publicConfig["lastHealthError"])
+	}
+
+	publicFrontendConfig, err := GetFrontendConfig()
+	if err != nil {
+		t.Fatalf("get public frontend config: %v", err)
+	}
+	publicVoceConfig := publicFrontendConfig["voceChatConfig"].(map[string]interface{})
+	if got := publicVoceConfig["lastHealthError"]; got != "" {
+		t.Fatalf("public lastHealthError = %#v, want redacted", got)
+	}
+	delegatedFrontendConfig, err := GetFrontendConfig(delegated.ID)
+	if err != nil {
+		t.Fatalf("get delegated frontend config: %v", err)
+	}
+	delegatedVoceConfig := delegatedFrontendConfig["voceChatConfig"].(map[string]interface{})
+	if got := delegatedVoceConfig["lastHealthError"]; got != "" {
+		t.Fatalf("delegated lastHealthError = %#v, want redacted", got)
+	}
+
+	primaryFrontendConfig, err := GetFrontendConfig(admin.ID)
+	if err != nil {
+		t.Fatalf("get primary frontend config: %v", err)
+	}
+	primaryVoceConfig := primaryFrontendConfig["voceChatConfig"].(map[string]interface{})
+	if got, ok := primaryVoceConfig["lastHealthError"].(string); !ok || !strings.Contains(got, "管理员凭据未配置") {
+		t.Fatalf("primary lastHealthError = %#v, want diagnostic", primaryVoceConfig["lastHealthError"])
 	}
 }
 

@@ -86,8 +86,10 @@ func (c Config) IsNotificationReady() bool {
 func PublicConfigFromSiteConfig(config models.SiteConfig, includeAdminUsername ...bool) map[string]interface{} {
 	cfg := FromSiteConfig(config)
 	adminUsernameConfiguredValue := ""
+	lastHealthError := ""
 	if len(includeAdminUsername) > 0 && includeAdminUsername[0] {
 		adminUsernameConfiguredValue = strings.TrimSpace(cfg.AdminUsername)
+		lastHealthError = strings.TrimSpace(config.VoceChatLastHealthError)
 	}
 	return map[string]interface{}{
 		"enabled":                      cfg.Enabled,
@@ -104,7 +106,7 @@ func PublicConfigFromSiteConfig(config models.SiteConfig, includeAdminUsername .
 		"contactsEnabled":              cfg.ContactsEnabled,
 		"contactsCacheTTLSeconds":      cfg.ContactsCacheTTLSeconds,
 		"lastHealthStatus":             strings.TrimSpace(config.VoceChatLastHealthStatus),
-		"lastHealthError":              strings.TrimSpace(config.VoceChatLastHealthError),
+		"lastHealthError":              lastHealthError,
 		"lastHealthCheckAt": func() string {
 			if config.VoceChatLastHealthCheckAt == nil {
 				return ""

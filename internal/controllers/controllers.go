@@ -886,7 +886,7 @@ type registrationApplicationReviewRequest struct {
 }
 
 func ListRegistrationApplications(c *gin.Context) {
-	_, err := checkAdmin(c)
+	viewerUserID, err := checkAdmin(c)
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
 		return
@@ -895,7 +895,7 @@ func ListRegistrationApplications(c *gin.Context) {
 	status := strings.TrimSpace(c.Query("status"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
-	result, err := services.ListRegistrationApplications(status, limit, offset)
+	result, err := services.ListRegistrationApplicationsForViewer(viewerUserID, status, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string]("获取注册申请失败: "+err.Error()))
 		return

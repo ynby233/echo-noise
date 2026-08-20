@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/rcy1314/echo-noise/internal/dto"
@@ -10,6 +11,39 @@ import (
 	"github.com/rcy1314/echo-noise/internal/repository"
 	"github.com/rcy1314/echo-noise/internal/vocechat"
 )
+
+func TestListRegistrationApplicationsRedactsSyncErrorForDelegatedViewer(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	primary := mustCreateUser(t, models.User{Username: "primary-admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+	delegated := mustCreateUser(t, models.User{Username: "delegated-admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+	if err := db.Create(&models.RegistrationApplication{
+		ApplicationID:      "redaction-test",
+		Username:           "candidate",
+		Status:             models.RegistrationApplicationStatusPending,
+		VoceChatUserID:     "vc-42",
+		VoceChatEmail:      "candidate@vc.example",
+		VoceChatSyncStatus: models.VoceChatSyncStatusFailed,
+		VoceChatSyncError:  "upstream secret diagnostic",
+	}).Error; err != nil {
+		t.Fatalf("create registration application: %v", err)
+	}
+
+	delegatedResult, err := ListRegistrationApplicationsForViewer(delegated.ID, "", 20, 0)
+	if err != nil {
+		t.Fatalf("list delegated applications: %v", err)
+	}
+	if len(delegatedResult.Items) != 1 || delegatedResult.Items[0].VoceChatSyncError != "" {
+		t.Fatalf("delegated view = %#v, want redacted sync error", delegatedResult.Items)
+	}
+
+	primaryResult, err := ListRegistrationApplicationsForViewer(primary.ID, "", 20, 0)
+	if err != nil {
+		t.Fatalf("list primary applications: %v", err)
+	}
+	if len(primaryResult.Items) != 1 || !strings.Contains(primaryResult.Items[0].VoceChatSyncError, "upstream secret diagnostic") {
+		t.Fatalf("primary view = %#v, want diagnostic", primaryResult.Items)
+	}
+}
 
 func setRegistrationProvisionForTest(t *testing.T, fn registrationVoceChatProvisionFunc) {
 	t.Helper()

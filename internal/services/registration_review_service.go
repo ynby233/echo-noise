@@ -67,13 +67,22 @@ func isRegistrationApprovalDeferred(err error) bool {
 }
 
 func ListRegistrationApplications(status string, limit int, offset int) (RegistrationApplicationListResult, error) {
+	return ListRegistrationApplicationsForViewer(0, status, limit, offset)
+}
+
+// ListRegistrationApplicationsForViewer redacts detailed VoceChat sync errors
+// unless the viewer is the primary administrator. The status and identifiers
+// remain available to authorized registration reviewers, while raw upstream
+// diagnostics stay restricted to the primary administrator.
+func ListRegistrationApplicationsForViewer(viewerUserID uint, status string, limit int, offset int) (RegistrationApplicationListResult, error) {
 	applications, total, err := repository.ListRegistrationApplications(status, limit, offset)
 	if err != nil {
 		return RegistrationApplicationListResult{}, err
 	}
+	includeSyncError := viewerUserID == models.PrimaryAdminUserID
 	views := make([]RegistrationApplicationView, 0, len(applications))
 	for _, application := range applications {
-		views = append(views, buildRegistrationApplicationView(application))
+		views = append(views, buildRegistrationApplicationView(application, includeSyncError))
 	}
 	return RegistrationApplicationListResult{Items: views, Total: total}, nil
 }
@@ -352,8 +361,8 @@ func deleteRegistrationUserWithVoceChat(application models.RegistrationApplicati
 	return client.DeleteUser(ctx, apiKey, uid)
 }
 
-func buildRegistrationApplicationView(application models.RegistrationApplication) RegistrationApplicationView {
-	return RegistrationApplicationView{
+func buildRegistrationApplicationView(application models.RegistrationApplication, includeSyncError bool) RegistrationApplicationView {
+	view := RegistrationApplicationView{
 		ID:                 application.ID,
 		ApplicationID:      application.ApplicationID,
 		Username:           application.Username,
@@ -361,7 +370,6 @@ func buildRegistrationApplicationView(application models.RegistrationApplication
 		VoceChatUserID:     application.VoceChatUserID,
 		VoceChatEmail:      application.VoceChatEmail,
 		VoceChatSyncStatus: application.VoceChatSyncStatus,
-		VoceChatSyncError:  application.VoceChatSyncError,
 		LocalUserID:        application.LocalUserID,
 		ReviewerUserID:     application.ReviewerUserID,
 		ReviewNote:         application.ReviewNote,
@@ -369,4 +377,8 @@ func buildRegistrationApplicationView(application models.RegistrationApplication
 		CreatedAt:          application.CreatedAt,
 		UpdatedAt:          application.UpdatedAt,
 	}
+	if includeSyncError {
+		view.VoceChatSyncError = application.VoceChatSyncError
+	}
+	return view
 }
