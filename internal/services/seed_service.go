@@ -43,7 +43,6 @@ func SeedDefaultData() error {
 			NotificationPageTitle:       "通知",
 			NotificationPageDescription: "欢迎彼此间互相交流",
 			CommentEnabled:              true,
-			CommentSystem:               "builtin",
 			CommentLoginRequired:        true,
 			CalendarEnabled:             true,
 			TimeEnabled:                 true,

@@ -10,7 +10,6 @@ const settingDTO = await readFile(join(repoRoot, 'internal/dto/setting.go'), 'ut
 const settingController = await readFile(join(repoRoot, 'internal/controllers/controllers.go'), 'utf8')
 
 for (const configuredFlag of [
-  'githubClientSecretConfigured',
   'smtpUserConfigured',
   'smtpPassConfigured',
   'accessKeyConfigured',
@@ -20,7 +19,6 @@ for (const configuredFlag of [
 }
 
 for (const clearFlag of [
-  'clearGithubClientSecret',
   'clearSmtpUser',
   'clearSmtpPass',
   'clearAccessKey',
@@ -30,7 +28,7 @@ for (const clearFlag of [
 }
 
 assert.match(statusPanel, /已配置；留空将保持不变/, 'redacted credentials must explain blank-save preservation')
-assert.match(statusPanel, /清除现有 Secret/, 'GitHub and storage secrets must have an explicit clear action')
+assert.match(statusPanel, /清除现有 Secret/, 'storage secrets must have an explicit clear action')
 assert.match(statusPanel, /清除现有用户名/, 'SMTP username must have an explicit clear action')
 assert.match(statusPanel, /清除现有密码/, 'SMTP password must have an explicit clear action')
 assert.match(statusPanel, /await loadSmtp()/, 'SMTP save must refresh configured-state flags')

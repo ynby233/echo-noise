@@ -500,13 +500,6 @@
             <UButton variant="link" color="orange" @click="switchToRegister">账号注册</UButton>
             <UButton variant="link" color="orange" @click="showForgot = true">忘记密码？</UButton>
           </div>
-          <div class="text-center text-sm opacity-80 mt-3" v-if="githubEnabled">其他登录方式</div>
-          <div class="mt-2" v-if="githubEnabled">
-            <UButton class="w-full h-10 px-3 gap-2 justify-center font-medium bg-[#24292f] hover:bg-[#1f2328] text-white ring-1 ring-black/20" @click="loginWithGithub">
-              <UIcon name="i-mdi-github" class="w-5 h-5" />
-              <span>GitHub 一键登录</span>
-            </UButton>
-          </div>
           
         </div>
         <div v-else>
@@ -897,7 +890,6 @@ const remaining = ref(0)
 let captchaExpiresAt: number | null = null
 let captchaTimer: any = null
 const showForgot = ref(false)
-const githubEnabled = ref(false)
 const refreshCaptcha = async () => {
   try {
     const res = await fetch(`${baseApi}/captcha?json=1&ts=${Date.now()}`, { credentials: 'include' })
@@ -1006,11 +998,6 @@ const openAdmin = async () => {
   else {
     authMode.value = 'login';
     showAuthModal.value = true;
-    try {
-      const res = await fetch(`${baseApi}/frontend/config`, { credentials: 'include' })
-      const data = await res.json()
-      githubEnabled.value = !!data?.data?.frontendSettings?.githubOAuthEnabled
-    } catch {}
   }
 }
 const openCommentBoard = () => {
@@ -1033,7 +1020,6 @@ watch(showAuthModal, (v) => {
     router.replace({ path: route.path, query: rest })
   }
 })
-const loginWithGithub = () => { window.location.href = `${baseApi}/oauth/github/login` }
 // 修复：定义 targetMessageId，避免模板引用未定义导致列表不渲染
 const targetMessageId = ref<string | null>(null)
 const parseRouteNumber = (value: unknown) => {
@@ -1187,11 +1173,6 @@ const openNotificationCenter = async () => {
   }
   authMode.value = 'login'
   showAuthModal.value = true
-  try {
-    const res = await fetch(`${baseApi}/frontend/config`, { credentials: 'include' })
-    const data = await res.json()
-    githubEnabled.value = !!data?.data?.frontendSettings?.githubOAuthEnabled
-  } catch {}
 }
 
 const openAnnouncementCenter = async () => {
@@ -2350,7 +2331,6 @@ const fetchConfig = async () => {
                             }
                         }
             })
-            githubEnabled.value = !!settings.githubOAuthEnabled
             const serverLayout = normalizeLayoutMode(settings.homeLayoutDefault)
             nextConfig.homeLayoutDefault = serverLayout
             desktopLayoutDefault = serverLayout

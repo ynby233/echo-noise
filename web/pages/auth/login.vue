@@ -44,12 +44,6 @@
             <UButton :loading="submitting" :disabled="submitting" type="submit" color="orange">登录</UButton>
           </div>
         </UForm>
-        <div class="mt-2" v-if="githubEnabled">
-          <UButton class="w-full h-10 px-3 gap-2 justify-center font-medium bg-[#24292f] hover:bg-[#1f2328] text-white ring-1 ring-black/20" @click="loginWithGithub">
-            <UIcon name="i-mdi-github" class="w-5 h-5" />
-            <span>GitHub 一键登录</span>
-          </UButton>
-        </div>
       </UCard>
     </div>
 
@@ -77,7 +71,6 @@ const baseApi = useRuntimeConfig().public.baseApi || '/api'
 
 const form = reactive({ username: '', password: '' })
 const submitting = ref(false)
-const githubEnabled = ref(true)
 const showForgot = ref(false)
 const showPassword = ref(false)
 
@@ -104,10 +97,6 @@ const onSubmit = async () => {
   }
 }
 
-const loginWithGithub = () => {
-  window.location.href = `${baseApi}/oauth/github/login`
-}
-
 const goRegister = async () => {
   try {
     const res = await fetch(`${baseApi}/frontend/config`, { credentials: 'include' })
@@ -126,10 +115,5 @@ const goRegister = async () => {
 onMounted(async () => {
   const ok = await user.checkLoginStatus()
   if (ok) router.push('/status')
-  try {
-    const res = await fetch(`${baseApi}/frontend/config`, { credentials: 'include' })
-    const data = await res.json()
-    githubEnabled.value = !!data?.data?.frontendSettings?.githubOAuthEnabled
-  } catch {}
 })
 </script>

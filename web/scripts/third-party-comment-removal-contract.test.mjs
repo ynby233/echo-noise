@@ -7,7 +7,6 @@ const webRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const repoRoot = dirname(webRoot)
 
 const read = (relativePath) => readFile(join(repoRoot, relativePath), 'utf8')
-
 const sourceFiles = {
   nuxt: await read('web/nuxt.config.ts'),
   messageList: await read('web/components/index/MessageList.vue'),
@@ -20,25 +19,21 @@ const sourceFiles = {
   settingsService: await read('internal/services/setting_service.go'),
   seedService: await read('internal/services/seed_service.go'),
   models: await read('internal/models/models.go'),
+  widgetTemplate: await read('htmlwidgets/note.html'),
+  widgetScript: await read('htmlwidgets/js/note.js'),
   readme: await read('README.md'),
 }
 
-const forbiddenRuntimePattern = /waline|@waline\/client|window\.Waline|loadWalineAssets|useWaline|walineServerURL|waline-wrapper/i
-
+const forbiddenRuntimePattern = /waline|@waline\/client|window\.Waline|loadWalineAssets|useWaline|commentServer|commentSystem|serverURL|waline-wrapper/i
 for (const [name, source] of Object.entries(sourceFiles)) {
-  assert.doesNotMatch(source, forbiddenRuntimePattern, `${name} must not retain Waline runtime/configuration residue`)
+  assert.doesNotMatch(source, forbiddenRuntimePattern, `${name} must not retain third-party comment runtime or configuration residue`)
 }
 
-assert.match(sourceFiles.nuxt, /@fancyapps\/ui|medium-zoom|aplayer|meting/i, 'non-Waline external resources must remain available')
+assert.match(sourceFiles.nuxt, /@fancyapps\/ui|medium-zoom|aplayer|meting/i, 'non-comment external resources must remain available')
 assert.match(sourceFiles.messageList, /<BuiltinComments\b/, 'message comments must keep using BuiltinComments')
-assert.doesNotMatch(sourceFiles.messageList, /commentSystem|serverURL|emoji\s*:/i, 'message comments must not branch on external comment configuration')
-assert.doesNotMatch(sourceFiles.statusPanel, /commentSystem|waline/i, 'admin comment settings must not expose an external system selector')
-assert.doesNotMatch(sourceFiles.indexPage, /commentSystem|waline/i, 'home page config must not retain an external system selector')
 assert.match(sourceFiles.builtinComments, /\.comment-wrapper\b/, 'builtin comments should use a neutral wrapper class')
 assert.match(sourceFiles.notificationCenter, /\.comment-wrapper\b/, 'notification inline replies should use the neutral wrapper class')
-assert.match(sourceFiles.settingsService, /NormalizeCommentSystem\(/, 'backend settings must normalize legacy comment-system values')
-assert.match(sourceFiles.settingsService, /"commentSystem"\s*:\s*"builtin"|NormalizeCommentSystem/, 'backend settings must expose only the builtin effective value')
-assert.match(sourceFiles.readme, /旧版本.*外部评论.*不再使用|统一使用内置评论/, 'README should explain the legacy external-comment migration')
+assert.match(sourceFiles.readme, /仅支持内置评论/, 'README should state that comments are internal only')
 
 const generatedHtml = []
 const walk = async (directory) => {
@@ -54,7 +49,7 @@ for (const outputRoot of [join(repoRoot, 'public'), join(webRoot, '.output', 'pu
 assert.ok(generatedHtml.length > 0, 'generated static output should be present for the residue check')
 for (const path of generatedHtml) {
   const html = await readFile(path, 'utf8')
-  assert.doesNotMatch(html, /waline|@waline\/client|window\.Waline/i, `${path} must not load Waline assets`)
+  assert.doesNotMatch(html, /waline|@waline\/client|window\.Waline/i, `${path} must not load third-party comment assets`)
 }
 
-console.log('waline removal contract tests passed')
+console.log('third-party comment removal contract tests passed')

@@ -1827,65 +1827,6 @@
           </div>
           
 
-          <div id="site-github-login-section" v-if="isAdmin && isSectionVisible('site-github-login')" class="col-span-12">
-            <div :class="adminShellCardClass">
-              <div :class="adminSectionHeaderClass">
-                <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                  <UIcon name="i-mdi-github" class="w-5 h-5" />
-                  <span>GitHub 登录</span>
-                </div>
-                <div class="flex items-center gap-3">
-                  <span class="text-sm" :class="theme.mutedText">状态</span>
-                  <span :class="[frontendConfig.githubOAuthEnabled ? 'text-green-400' : 'text-red-400', 'text-sm']">{{ frontendConfig.githubOAuthEnabled ? '已启用' : '未启用' }}</span>
-                  <UToggle v-model="frontendConfig.githubOAuthEnabled" />
-                </div>
-              </div>
-              <div class="px-4 pb-4 space-y-3">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <div class="text-sm mb-2" :class="theme.text">Client ID</div>
-                    <UInput v-model="frontendConfig.githubClientId" placeholder="GitHub OAuth App Client ID" :disabled="!frontendConfig.githubOAuthEnabled" />
-                  </div>
-                  <div>
-                    <div class="flex items-center justify-between gap-2 mb-2">
-                      <div class="text-sm" :class="theme.text">Client Secret</div>
-                      <span class="text-xs" :class="frontendConfig.clearGithubClientSecret ? 'text-red-500' : (frontendConfig.githubClientSecretConfigured ? 'text-green-500' : theme.mutedText)">
-                        {{ frontendConfig.clearGithubClientSecret ? '待清除' : (frontendConfig.githubClientSecretConfigured ? '已配置' : '未配置') }}
-                      </span>
-                    </div>
-                    <UInput
-                      v-model="frontendConfig.githubClientSecret"
-                      type="password"
-                      :placeholder="frontendConfig.githubClientSecretConfigured ? '已配置；留空将保持不变' : 'GitHub OAuth App Client Secret'"
-                      :disabled="!frontendConfig.githubOAuthEnabled || frontendConfig.clearGithubClientSecret"
-                      @update:model-value="frontendConfig.clearGithubClientSecret = false"
-                    />
-                    <UButton
-                      v-if="frontendConfig.githubClientSecretConfigured"
-                      class="mt-2"
-                      size="xs"
-                      :color="frontendConfig.clearGithubClientSecret ? 'gray' : 'red'"
-                      variant="soft"
-                      @click="frontendConfig.clearGithubClientSecret = !frontendConfig.clearGithubClientSecret; frontendConfig.githubClientSecret = ''"
-                    >
-                      {{ frontendConfig.clearGithubClientSecret ? '取消清除' : '清除现有 Secret' }}
-                    </UButton>
-                  </div>
-                  <div class="md:col-span-2">
-                    <div class="text-sm mb-2" :class="theme.text">回调地址</div>
-                    <UInput v-model="frontendConfig.githubCallbackURL" placeholder="例如 https://your.domain.com/oauth/github/callback" :disabled="!frontendConfig.githubOAuthEnabled" />
-                  </div>
-                </div>
-                <div class="flex justify-end gap-2">
-                  <UButton variant="soft" color="indigo" @click="fetchConfig">刷新</UButton>
-                  <UButton color="green" @click="saveGithubOAuthConfig">保存</UButton>
-                  <UButton color="primary" @click="testGithubOAuth">测试</UButton>
-                </div>
-                <div class="text-xs" :class="theme.mutedText">默认不开启，开启后登录页显示“GitHub 一键登录”按钮</div>
-              </div>
-            </div>
-          </div>
-
           <div id="attachments-section" v-if="canSection('attachments') && isSectionVisible('attachments')" class="col-span-12">
             <div :class="adminShellCardClass">
               <AttachmentManager :theme="theme" :is-cloud="attachmentStorageEnabled" />
@@ -2494,7 +2435,7 @@ const formatShanghai = (s: string) => {
 const cardCls = 'rounded-xl border shadow-sm'
 type AdminSectionKey =
   'dashboard' | 'user' | 'site' | 'notify' | 'attachments' | 'db' | 'version' | 'security' | 'access-logs' | 'site-visits' | 'login-audits' |
-  'site-register' | 'site-pwa' | 'site-github-card' | 'site-github-login' | 'site-announcement' | 'site-music' |
+  'site-register' | 'site-pwa' | 'site-github-card' | 'site-announcement' | 'site-music' |
   'site-default-theme' | 'site-social-links' | 'site-ads' | 'site-feed' | 'site-rss' | 'hitokoto' | 'life-countdown' |
   'site-configs' | 'comments' | 'email' | 'admin-users' | 'registration-review' |
   'storage' | 'authorization' | 'admin-audit' | 'notes' | 'recycle-bin'
@@ -2553,7 +2494,6 @@ const adminNavGroups = computed<AdminNavGroup[]>(() => {
         { key: 'notes', label: '笔记管理', icon: 'i-heroicons-document-text' },
         { key: 'recycle-bin', label: '笔记回收站', icon: 'i-heroicons-trash' },
         { key: 'site-github-card', label: 'GitHub 卡片', icon: 'i-mdi-github' },
-        { key: 'site-github-login', label: 'GitHub 登录', icon: 'i-mdi-github' },
         { key: 'site-music', label: '音乐配置', icon: 'i-heroicons-musical-note' },
         { key: 'notify', label: '推送配置', icon: 'i-heroicons-bell-alert' },
         { key: 'email', label: '邮件设置', icon: 'i-heroicons-envelope' },
@@ -4344,17 +4284,6 @@ const testSmtp = async () => {
     testingSmtp.value = false
   }
 }
-const testGithubOAuth = () => {
-  try {
-    if (!frontendConfig.githubOAuthEnabled) throw new Error('请先开启 GitHub 登录')
-    if (!frontendConfig.githubClientId || !frontendConfig.githubCallbackURL) throw new Error('请先填写 Client ID 与回调地址')
-    const BASE_API = useRuntimeConfig().public.baseApi || '/api'
-    window.open(`${BASE_API}/oauth/github/login`, '_blank')
-  } catch (e: any) {
-    useToast().add({ title: '无法测试', description: e.message, color: 'red' })
-  }
-}
-
 // 检查版本更新
 const checkVersion = async () => {
     versionInfo.checking = true;
@@ -5184,7 +5113,7 @@ const configFieldHints: Record<string, string> = {
 const switchConfigKeySet = new Set([
   'enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled',
   'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile',
-  'commentEnabled', 'commentEmailEnabled', 'commentLoginRequired', 'githubOAuthEnabled',
+  'commentEnabled', 'commentEmailEnabled', 'commentLoginRequired',
   'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled',
   'leftAdEnabled', 'welcomeUseAdmin', 'socialLinksEnabled', 'rssEnabled'
 ])
@@ -5274,12 +5203,6 @@ interface FrontendConfig {
     commentEnabled: boolean;
     commentEmailEnabled: boolean;
     commentLoginRequired: boolean;
-    githubOAuthEnabled: boolean;
-    githubClientId: string;
-    githubClientSecret: string;
-    githubClientSecretConfigured: boolean;
-    clearGithubClientSecret: boolean;
-    githubCallbackURL: string;
     notifyEnabled: boolean;
     enableGithubCard: boolean;
     pwaEnabled: boolean;
@@ -5363,12 +5286,6 @@ const frontendConfig = reactive<FrontendConfig>({
     commentEmailEnabled: false,
     commentEmailAdminNotifyAll: true,
   commentLoginRequired: true,
-  githubOAuthEnabled: false,
-  githubClientId: '',
-  githubClientSecret: '',
-  githubClientSecretConfigured: false,
-  clearGithubClientSecret: false,
-  githubCallbackURL: '',
   notifyEnabled: false,
     enableGithubCard: false,
     // PWA 设置
@@ -5502,7 +5419,6 @@ const defaultConfig: Record<string, any> = {
     feedLimit: 100,
     feedRefreshSeconds: 7200,
     feedSources: [] as Array<{ type: string; group?: string; name?: string; url: string; enabled?: boolean; visible?: boolean }>,
-    githubOAuthEnabled: false,
     notifyEnabled: false,
     calendarEnabled: true,
     timeEnabled: true,
@@ -6019,7 +5935,7 @@ const fetchConfig = async () => {
             const settings = data.data.frontendSettings;
             
             // 遍历配置项进行更新（布尔型键需强制转换）
-            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile', 'commentEnabled', 'commentEmailEnabled', 'commentEmailAdminNotifyAll', 'commentLoginRequired', 'githubOAuthEnabled', 'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'socialLinksEnabled', 'feedEnabled', 'rssEnabled']
+            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile', 'commentEnabled', 'commentEmailEnabled', 'commentEmailAdminNotifyAll', 'commentLoginRequired', 'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'socialLinksEnabled', 'feedEnabled', 'rssEnabled']
             Object.keys(frontendConfig).forEach(key => {
                 if (key === 'backgrounds') {
                     const serverBackgrounds = settings[key];
@@ -6369,7 +6285,6 @@ const saveConfig = async () => {
         musicDefaultMinimized: !!(frontendConfig as any).musicDefaultMinimized,
         musicEmbed: !!(frontendConfig as any).musicEmbed,
         musicHideOnMobile: !!(frontendConfig as any).musicHideOnMobile,
-        githubOAuthEnabled: !!(frontendConfig as any).githubOAuthEnabled,
         welcomeUseAdmin: !!(frontendConfig as any).welcomeUseAdmin,
       },
     }
@@ -6830,36 +6745,6 @@ watch(musicCdnPreset, (v: string) => {
   }
   applyMusicCdnAssets()
 })
-
-const saveGithubOAuthConfig = async () => {
-  try {
-    const payload = {
-      frontendSettings: {
-        githubOAuthEnabled: !!(frontendConfig as any).githubOAuthEnabled,
-        githubClientId: String((frontendConfig as any).githubClientId || ''),
-        githubClientSecret: String((frontendConfig as any).githubClientSecret || ''),
-        clearGithubClientSecret: !!(frontendConfig as any).clearGithubClientSecret,
-        githubCallbackURL: String((frontendConfig as any).githubCallbackURL || '')
-      }
-    }
-    const response = await fetch(`${baseApi}/settings`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(payload)
-    })
-    const data = await response.json()
-    if (response.ok && data.code === 1) {
-      ;(frontendConfig as any).clearGithubClientSecret = false
-      await fetchConfig()
-      useToast().add({ title: '保存成功', description: 'GitHub 登录配置已保存', color: 'green' })
-    } else {
-      throw new Error(data.msg || '保存失败')
-    }
-  } catch (error: any) {
-    useToast().add({ title: '保存失败', description: error?.message || '保存失败', color: 'red' })
-  }
-}
 
 const applyPWAConfig = () => {
   const title = (frontendConfig.pwaTitle || frontendConfig.siteTitle || '个人站点')

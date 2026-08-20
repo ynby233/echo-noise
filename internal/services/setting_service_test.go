@@ -14,50 +14,6 @@ import (
 	"github.com/rcy1314/echo-noise/internal/models"
 )
 
-func TestNormalizeCommentSystemAlwaysUsesBuiltin(t *testing.T) {
-	for _, raw := range []string{"", "builtin", "waline", "none", "other", "unknown"} {
-		if got := NormalizeCommentSystem(raw); got != BuiltinCommentSystem {
-			t.Fatalf("NormalizeCommentSystem(%q) = %q, want %q", raw, got, BuiltinCommentSystem)
-		}
-	}
-}
-
-func TestFrontendConfigHidesLegacyCommentURLAndIgnoresLegacySubmission(t *testing.T) {
-	db := setupUserServiceTestDB(t)
-	admin := mustCreateUser(t, models.User{Username: "comment-config-admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
-	if err := db.Create(&models.SiteConfig{CommentSystem: "waline"}).Error; err != nil {
-		t.Fatalf("create site config: %v", err)
-	}
-
-	config, err := GetFrontendConfig(admin.ID)
-	if err != nil {
-		t.Fatalf("get frontend config: %v", err)
-	}
-	settings := config["frontendSettings"].(map[string]interface{})
-	if _, ok := settings["walineServerURL"]; ok {
-		t.Fatal("frontend config must not expose walineServerURL")
-	}
-	if got := settings["commentSystem"]; got != BuiltinCommentSystem {
-		t.Fatalf("frontend commentSystem = %#v, want %q", got, BuiltinCommentSystem)
-	}
-
-	if err := UpdateFrontendSetting(admin.ID, map[string]interface{}{
-		"frontendSettings": map[string]interface{}{
-			"walineServerURL": "https://legacy.example.invalid",
-			"commentSystem":   "waline",
-		},
-	}); err != nil {
-		t.Fatalf("save legacy comment settings: %v", err)
-	}
-	var persisted models.SiteConfig
-	if err := db.First(&persisted).Error; err != nil {
-		t.Fatalf("read site config: %v", err)
-	}
-	if got := persisted.CommentSystem; got != BuiltinCommentSystem {
-		t.Fatalf("persisted comment system = %q, want %q", got, BuiltinCommentSystem)
-	}
-}
-
 func TestDefaultHeaderImagesOnlyContainsSelectedImage(t *testing.T) {
 	images := defaultHeaderImages()
 	if len(images) != 1 {
@@ -295,7 +251,6 @@ func TestFrontendConfigNeverReturnsCredentialsAndBlankSavePreservesThem(t *testi
 	admin := mustCreateUser(t, models.User{Username: "admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
 	member := mustCreateUser(t, models.User{Username: "member", Password: models.HashPassword("member"), Token: models.GenerateToken(32)})
 	secrets := models.SiteConfig{
-		GithubClientSecret:         "github-secret",
 		StorageAccessKey:           "backup-access",
 		StorageSecretKey:           "backup-secret",
 		AttachmentStorageAccessKey: "attachment-access",
@@ -316,11 +271,9 @@ func TestFrontendConfigNeverReturnsCredentialsAndBlankSavePreservesThem(t *testi
 		if err != nil {
 			t.Fatalf("get frontend config for viewer %d: %v", viewerID, err)
 		}
-		frontend := config["frontendSettings"].(map[string]interface{})
 		storage := config["storageConfig"].(map[string]interface{})
 		attachments := config["attachmentStorageConfig"].(map[string]interface{})
 		for key, got := range map[string]interface{}{
-			"githubClientSecret":  frontend["githubClientSecret"],
 			"storageAccessKey":    storage["accessKey"],
 			"storageSecretKey":    storage["secretKey"],
 			"attachmentAccessKey": attachments["accessKey"],
@@ -333,9 +286,6 @@ func TestFrontendConfigNeverReturnsCredentialsAndBlankSavePreservesThem(t *testi
 			}
 		}
 		wantConfigured := viewerID == admin.ID
-		if got := frontend["githubClientSecretConfigured"]; got != wantConfigured {
-			t.Fatalf("viewer %d github configured flag = %#v, want %v", viewerID, got, wantConfigured)
-		}
 		if got := storage["accessKeyConfigured"]; got != wantConfigured {
 			t.Fatalf("viewer %d backup access configured flag = %#v, want %v", viewerID, got, wantConfigured)
 		}
@@ -348,7 +298,6 @@ func TestFrontendConfigNeverReturnsCredentialsAndBlankSavePreservesThem(t *testi
 	}
 
 	if err := UpdateFrontendSetting(admin.ID, map[string]interface{}{
-		"frontendSettings":        map[string]interface{}{"githubClientSecret": ""},
 		"storageConfig":           map[string]interface{}{"accessKey": "", "secretKey": ""},
 		"attachmentStorageConfig": map[string]interface{}{"accessKey": "", "secretKey": ""},
 		"smtpUser":                "",
@@ -360,10 +309,58 @@ func TestFrontendConfigNeverReturnsCredentialsAndBlankSavePreservesThem(t *testi
 	if err := db.First(&saved, secrets.ID).Error; err != nil {
 		t.Fatalf("reload site config: %v", err)
 	}
-	if saved.GithubClientSecret != "github-secret" || saved.StorageAccessKey != "backup-access" || saved.StorageSecretKey != "backup-secret" ||
+	if saved.StorageAccessKey != "backup-access" || saved.StorageSecretKey != "backup-secret" ||
 		saved.AttachmentStorageAccessKey != "attachment-access" || saved.AttachmentStorageSecretKey != "attachment-secret" ||
 		saved.SmtpUser != "smtp-user" || saved.SmtpPass != "smtp-secret" {
 		t.Fatalf("blank sanitized save overwrote credentials: %#v", saved)
+	}
+}
+
+func TestRetiredFriendLinksAreNotExposedOrUpdatedByFrontendSettings(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	admin := mustCreateUser(t, models.User{Username: "retired-friend-link-admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+	config := models.SiteConfig{FriendLinkEmailEnabled: true, LinksApplyText: "historical application instructions"}
+	if err := db.Create(&config).Error; err != nil {
+		t.Fatalf("create site config: %v", err)
+	}
+	if err := db.Create(&models.FriendLink{Title: "historical", Link: "https://historical.example.test"}).Error; err != nil {
+		t.Fatalf("create historical friend link: %v", err)
+	}
+
+	frontendConfig, err := GetFrontendConfig(admin.ID)
+	if err != nil {
+		t.Fatalf("get frontend config: %v", err)
+	}
+	settings := frontendConfig["frontendSettings"].(map[string]interface{})
+	for _, key := range []string{"friendLinks", "friendLinkEmailEnabled", "linksApplyTitle", "linksApplyText"} {
+		if _, exists := settings[key]; exists {
+			t.Fatalf("retired friend-link setting %q is still exposed", key)
+		}
+	}
+
+	if err := UpdateFrontendSetting(admin.ID, map[string]interface{}{
+		"frontendSettings": map[string]interface{}{
+			"friendLinks": []interface{}{map[string]interface{}{"title": "replacement", "link": "https://replacement.example.test"}},
+			"friendLinkEmailEnabled": false,
+			"linksApplyText":         "replacement instructions",
+		},
+	}); err != nil {
+		t.Fatalf("submit retired friend-link settings: %v", err)
+	}
+
+	var links []models.FriendLink
+	if err := db.Find(&links).Error; err != nil {
+		t.Fatalf("reload friend links: %v", err)
+	}
+	if len(links) != 1 || links[0].Link != "https://historical.example.test" {
+		t.Fatalf("retired friend links were changed through frontend settings: %#v", links)
+	}
+	var saved models.SiteConfig
+	if err := db.First(&saved, config.ID).Error; err != nil {
+		t.Fatalf("reload site config: %v", err)
+	}
+	if !saved.FriendLinkEmailEnabled || saved.LinksApplyText != "historical application instructions" {
+		t.Fatalf("retired friend-link settings were changed: %#v", saved)
 	}
 }
 

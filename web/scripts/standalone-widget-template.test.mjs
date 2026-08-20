@@ -16,10 +16,10 @@ for (const source of [widgetHTML, widgetScript]) {
 
 assert.match(widgetHTML, /<title>公开笔记流组件示例<\/title>/)
 assert.match(widgetHTML, /host:\s*''/)
-assert.match(widgetHTML, /commentServer:\s*''/)
 assert.match(widgetScript, /host:\s*''/)
 assert.match(widgetScript, /请先配置 window\.note\.host/)
 assert.match(widgetScript, /if \(!config\.host\)[\s\S]*?return/)
-assert.match(widgetScript, /if \(!config\.commentServer\)[\s\S]*?return/)
+assert.doesNotMatch(widgetHTML, /waline|commentServer|评论功能/i)
+assert.doesNotMatch(widgetScript, /waline|commentServer|评论功能/i)
 
 console.log('standalone widget template checks passed')

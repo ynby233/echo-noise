@@ -62,15 +62,6 @@ const (
 	maxLoginExpireHours     = 24
 )
 
-// BuiltinCommentSystem is the only supported comment implementation. Legacy
-// values are accepted only for database/client compatibility and always
-// normalize to this value before they reach business logic or the browser.
-const BuiltinCommentSystem = "builtin"
-
-func NormalizeCommentSystem(_ string) string {
-	return BuiltinCommentSystem
-}
-
 func normalizeLoginExpireConfig(days int, hours int) (int, int) {
 	if days < 0 {
 		days = 0
@@ -939,7 +930,6 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 		return getDefaultConfig(), nil
 	}
 	scrubLegacySiteConfigValues(&config)
-	config.CommentSystem = NormalizeCommentSystem(config.CommentSystem)
 
 	// 新增：读取Setting表的AllowRegistration
 	var setting models.Setting
@@ -960,40 +950,6 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 	if len(normalizedAds) == 0 {
 		if defFrontend, ok := getDefaultConfig()["frontendSettings"].(map[string]interface{}); ok {
 			normalizedAds = normalizeLeftAds(defFrontend["leftAds"])
-		}
-	}
-
-	var friendLinks []models.FriendLink
-	_ = db.Order("created_at DESC").Find(&friendLinks).Error
-	normalizedLinks := make([]map[string]string, 0, len(friendLinks))
-	for _, fl := range friendLinks {
-		link := strings.TrimSpace(fl.Link)
-		if link == "" || containsLegacyPublicBranding(link) {
-			continue
-		}
-		normalizedLinks = append(normalizedLinks, map[string]string{
-			"title":       strings.TrimSpace(fl.Title),
-			"link":        link,
-			"icon":        strings.TrimSpace(fl.Icon),
-			"description": strings.TrimSpace(fl.Description),
-		})
-	}
-	if len(normalizedLinks) == 0 {
-		if defFrontend, ok := getDefaultConfig()["frontendSettings"].(map[string]interface{}); ok {
-			if defLinks, ok := defFrontend["friendLinks"].([]map[string]string); ok {
-				normalizedLinks = append(normalizedLinks, defLinks...)
-			} else if defLinks2, ok := defFrontend["friendLinks"].([]map[string]interface{}); ok {
-				for _, m := range defLinks2 {
-					title := strings.TrimSpace(fmt.Sprintf("%v", pickAny(m, "title", "Title")))
-					link := strings.TrimSpace(fmt.Sprintf("%v", pickAny(m, "link", "Link")))
-					icon := strings.TrimSpace(fmt.Sprintf("%v", pickAny(m, "icon", "Icon")))
-					desc := strings.TrimSpace(fmt.Sprintf("%v", pickAny(m, "description", "Description")))
-					if link == "" {
-						continue
-					}
-					normalizedLinks = append(normalizedLinks, map[string]string{"title": title, "link": link, "icon": icon, "description": desc})
-				}
-			}
 		}
 	}
 
@@ -1109,10 +1065,6 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 			"enableGithubCard":    config.EnableGithubCard,
 			"notifyEnabled":       config.NotifyEnabled,
 			// 页面文案与关于页内容
-			"linksTitle":       choose(config.LinksTitle, getDefaultConfig()["frontendSettings"].(map[string]interface{})["linksTitle"].(string)),
-			"linksDescription": choose(config.LinksDescription, getDefaultConfig()["frontendSettings"].(map[string]interface{})["linksDescription"].(string)),
-			"linksApplyTitle":  choose(config.LinksApplyTitle, "申请友链须知"),
-			"linksApplyText":   choose(config.LinksApplyText, "请提供站点名称、网址、图标（可选）、简介与有效邮箱。提交后需管理员审核，审核通过后展示。"),
 			"loginExpireDays": func() int {
 				days, _ := normalizeLoginExpireConfig(config.LoginExpireDays, config.LoginExpireHours)
 				return days
@@ -1142,12 +1094,6 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 			"welcomeName":        choose(config.WelcomeName, getDefaultConfig()["frontendSettings"].(map[string]interface{})["welcomeName"].(string)),
 			"welcomeDescription": choose(config.WelcomeDescription, getDefaultConfig()["frontendSettings"].(map[string]interface{})["welcomeDescription"].(string)),
 			"welcomeUseAdmin":    config.WelcomeUseAdmin,
-			// GitHub OAuth
-			"githubOAuthEnabled":           config.GithubOAuthEnabled,
-			"githubClientId":               config.GithubClientId,
-			"githubClientSecret":           "",
-			"githubClientSecretConfigured": viewerIsAdmin && strings.TrimSpace(config.GithubClientSecret) != "",
-			"githubCallbackURL":            config.GithubCallbackURL,
 			// PWA 设置
 			"pwaEnabled":     config.PwaEnabled,
 			"pwaTitle":       choose(config.PwaTitle, config.SiteTitle),
@@ -1174,7 +1120,6 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 			"musicJsCdnURL":         choose(config.MusicJsCdnURL, ""),
 			// 评论系统
 			"commentEnabled":             config.CommentEnabled,
-			"commentSystem":              BuiltinCommentSystem,
 			"commentEmailEnabled":        config.CommentEmailEnabled,
 			"commentEmailAdminNotifyAll": config.CommentEmailAdminNotifyAll,
 			"commentLoginRequired":       config.CommentLoginRequired,
@@ -1194,8 +1139,6 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 			"leftAdEnabled":          config.LeftAdEnabled,
 			"leftAds":                normalizedAds,
 			"leftAdsIntervalMs":      leftAdsInterval,
-			"friendLinks":            normalizedLinks,
-			"friendLinkEmailEnabled": config.FriendLinkEmailEnabled,
 			// 社交链接
 			"socialLinksEnabled": config.SocialLinksEnabled,
 			"socialLinks":        normalizedSocialLinks,
@@ -1364,12 +1307,6 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	}
 	if v, ok := frontendSettings["linksDescription"].(string); ok {
 		config.LinksDescription = v
-	}
-	if v, ok := frontendSettings["linksApplyTitle"].(string); ok {
-		config.LinksApplyTitle = v
-	}
-	if v, ok := frontendSettings["linksApplyText"].(string); ok {
-		config.LinksApplyText = v
 	}
 	if v, ok := frontendSettings["commentPageTitle"].(string); ok {
 		config.CommentPageTitle = v
@@ -1572,57 +1509,6 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 		config.FeedSources = string(bs)
 	}
 
-	// 友链列表（管理员直接配置）
-	if arr, ok := frontendSettings["friendLinks"].([]interface{}); ok {
-		links := make([]models.FriendLink, 0, len(arr))
-		for _, it := range arr {
-			m, ok := it.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			title := strings.TrimSpace(fmt.Sprintf("%v", m["title"]))
-			link := strings.TrimSpace(fmt.Sprintf("%v", m["link"]))
-			icon := strings.TrimSpace(fmt.Sprintf("%v", m["icon"]))
-			desc := strings.TrimSpace(fmt.Sprintf("%v", m["description"]))
-			if link == "" {
-				continue
-			}
-			links = append(links, models.FriendLink{Title: title, Link: link, Icon: icon, Description: desc})
-		}
-		if err := tx.Where("1 = 1").Delete(&models.FriendLink{}).Error; err != nil {
-			tx.Rollback()
-			return fmt.Errorf("更新友链失败: %v", err)
-		}
-		for _, l := range links {
-			if err := tx.Create(&l).Error; err != nil {
-				tx.Rollback()
-				return fmt.Errorf("保存友链失败: %v", err)
-			}
-		}
-	} else if arr2, ok := frontendSettings["friendLinks"].([]map[string]interface{}); ok {
-		links := make([]models.FriendLink, 0, len(arr2))
-		for _, m := range arr2 {
-			title := strings.TrimSpace(fmt.Sprintf("%v", m["title"]))
-			link := strings.TrimSpace(fmt.Sprintf("%v", m["link"]))
-			icon := strings.TrimSpace(fmt.Sprintf("%v", m["icon"]))
-			desc := strings.TrimSpace(fmt.Sprintf("%v", m["description"]))
-			if link == "" {
-				continue
-			}
-			links = append(links, models.FriendLink{Title: title, Link: link, Icon: icon, Description: desc})
-		}
-		if err := tx.Where("1 = 1").Delete(&models.FriendLink{}).Error; err != nil {
-			tx.Rollback()
-			return fmt.Errorf("更新友链失败: %v", err)
-		}
-		for _, l := range links {
-			if err := tx.Create(&l).Error; err != nil {
-				tx.Rollback()
-				return fmt.Errorf("保存友链失败: %v", err)
-			}
-		}
-	}
-
 	// 系统欢迎组件（与用户资料解耦）
 	if v, ok := frontendSettings["welcomeAvatarURL"].(string); ok {
 		config.WelcomeAvatarURL = strings.TrimSpace(v)
@@ -1688,7 +1574,6 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	if v, ok := frontendSettings["musicJsCdnURL"].(string); ok {
 		config.MusicJsCdnURL = v
 	}
-	config.CommentSystem = NormalizeCommentSystem(config.CommentSystem)
 	if vb, ok := frontendSettings["commentLoginRequired"].(bool); ok {
 		config.CommentLoginRequired = vb
 	} else if vs, ok := frontendSettings["commentLoginRequired"].(string); ok {
@@ -1711,23 +1596,6 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 		} else if vs == "false" {
 			config.CommentEmailAdminNotifyAll = false
 		}
-	}
-	// GitHub OAuth 设置
-	if vb, ok := frontendSettings["githubOAuthEnabled"].(bool); ok {
-		config.GithubOAuthEnabled = vb
-	} else if vs, ok := frontendSettings["githubOAuthEnabled"].(string); ok {
-		if vs == "true" {
-			config.GithubOAuthEnabled = true
-		} else if vs == "false" {
-			config.GithubOAuthEnabled = false
-		}
-	}
-	if v, ok := frontendSettings["githubClientId"].(string); ok {
-		config.GithubClientId = v
-	}
-	applySensitiveStringSetting(frontendSettings, "githubClientSecret", "clearGithubClientSecret", &config.GithubClientSecret)
-	if v, ok := frontendSettings["githubCallbackURL"].(string); ok {
-		config.GithubCallbackURL = v
 	}
 	if v, ok := frontendSettings["enableGithubCard"].(bool); ok {
 		config.EnableGithubCard = v
@@ -1947,12 +1815,6 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	if v, ok := settingMap["smtpEnabled"].(bool); ok {
 		config.SmtpEnabled = v
 	}
-	// 友链邮件通知开关
-	if vb, ok := frontendSettings["friendLinkEmailEnabled"].(bool); ok {
-		config.FriendLinkEmailEnabled = vb
-	} else if vs, ok := frontendSettings["friendLinkEmailEnabled"].(string); ok {
-		config.FriendLinkEmailEnabled = (vs == "true")
-	}
 	if v, ok := settingMap["smtpDriver"].(string); ok {
 		config.SmtpDriver = v
 	}
@@ -2068,9 +1930,6 @@ func getDefaultConfig() map[string]interface{} {
 			"rssAvailableMembers": []map[string]interface{}{},
 			"enableGithubCard":    false,
 			// 页面文案与关于页内容
-			"linksTitle":                  "友情链接",
-			"linksDescription":            "推荐站点和朋友们的主页",
-			"friendLinks":                 []map[string]string{},
 			"commentPageTitle":            "留言",
 			"commentPageDescription":      "欢迎留下你的看法",
 			"notificationPageTitle":       "通知",
@@ -2079,7 +1938,7 @@ func getDefaultConfig() map[string]interface{} {
 			"announcementPageDescription": "查看站点发布的最新公告",
 			"aboutPageTitle":              "关于本站",
 			"aboutPageDescription":        "这里是站点的介绍与说明",
-			"aboutMarkdown":               "# 关于我\n\n这里是一个默认的个人简介示例：\n\n- 喜欢记录与分享\n- 热爱开源与学习\n- 持续打磨产品体验\n\n欢迎通过友链或留言与我交流！",
+			"aboutMarkdown":               "# 关于我\n\n这里是一个默认的个人简介示例：\n\n- 喜欢记录与分享\n- 热爱开源与学习\n- 持续打磨产品体验\n\n欢迎留言与我交流！",
 			"loginExpireDays":             3,
 			"loginExpireHours":            0,
 			"feedEnabled":                 false,
@@ -2095,10 +1954,6 @@ func getDefaultConfig() map[string]interface{} {
 			"welcomeName":                neutralOwnerName,
 			"welcomeDescription":         neutralDescription,
 			"welcomeUseAdmin":            true,
-			"githubOAuthEnabled":         false,
-			"githubClientId":             "",
-			"githubClientSecret":         "",
-			"githubCallbackURL":          "",
 			"pwaEnabled":                 true,
 			"pwaTitle":                   "",
 			"pwaDescription":             neutralPwaDescription,
@@ -2120,7 +1975,6 @@ func getDefaultConfig() map[string]interface{} {
 			"musicCssCdnURL":             "",
 			"musicJsCdnURL":              "",
 			"commentEnabled":             true,
-			"commentSystem":              BuiltinCommentSystem,
 			"commentEmailEnabled":        false,
 			"commentEmailAdminNotifyAll": true,
 			"commentLoginRequired":       false,

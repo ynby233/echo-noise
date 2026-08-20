@@ -7,7 +7,6 @@ document.addEventListener('DOMContentLoaded', function() {
         domId: '#note',
         authorId: '',
         username: '',
-        commentServer: '',
         sourceName: '「公开笔记流」'
     };
     
@@ -24,7 +23,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const clean = (s) => typeof s === 'string' ? s.replace(/`/g, '').trim() : s;
     config.host = clean(config.host);
     config.domId = clean(config.domId);
-    config.commentServer = clean(config.commentServer);
     config.authorId = clean(config.authorId);
     config.username = clean(config.username);
 
@@ -352,46 +350,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // 将 toggleCommentBox 和 initWaline 函数暴露到全局作用域
-    window.toggleCommentBox = function(host) {
-        const commentBox = document.getElementById(`comment-box-${host}`);
-        if (commentBox) {
-            if (commentBox.style.display === "none") {
-                commentBox.style.display = "block";
-                initWaline(commentBox, host);
-            } else {
-                commentBox.style.display = "none";
-            }
-        }
-    };
-
-    window.initWaline = function(container, host) {
-        if (!config.commentServer) {
-            container.textContent = '评论功能未配置';
-            return;
-        }
-        const commentId = `waline-${host}`;
-        container.innerHTML = `<div id="${commentId}"></div>`;
-        import('https://unpkg.com/@waline/client@v3/dist/waline.js').then(({ init }) => {
-            const uid = host.split('-').pop();
-            init({
-                el: `#${commentId}`,
-                serverURL: config.commentServer,
-                reaction: 'true',
-                pageview: true,
-                search: false,
-                wordLimit: 200,
-                pageSize: 5,
-                emoji: [
-                    'https://unpkg.com/@waline/emojis@1.2.0/tieba',
-                ],
-                imageUploader: false,
-                copyright: false,
-                path: `${config.host}/#/messages/${uid}`,
-            });
-        });
-    };
-    
     function createMessageElement(message) {
         const messageDiv = document.createElement('div');
         messageDiv.className = 'notecard';
@@ -511,25 +469,7 @@ document.addEventListener('DOMContentLoaded', function() {
         timeDiv.appendChild(sourceLink);
         
         footerDiv.appendChild(timeDiv);
-        let commentBoxDiv;
-        if (config.commentServer) {
-            const commentDiv = document.createElement('small');
-            commentDiv.className = 'comment-button';
-            commentDiv.dataset.host = `note-${message.id}`;
-            commentDiv.innerHTML = '📮 评论';
-            commentDiv.onclick = function() {
-                window.toggleCommentBox(`note-${message.id}`);
-            };
-            footerDiv.appendChild(commentDiv);
-
-            commentBoxDiv = document.createElement('div');
-            commentBoxDiv.id = `comment-box-note-${message.id}`;
-            commentBoxDiv.className = 'comment-box';
-            commentBoxDiv.style.display = 'none';
-        }
-        
         contentDiv.appendChild(footerDiv);
-        if (commentBoxDiv) contentDiv.appendChild(commentBoxDiv);
         messageDiv.appendChild(contentDiv);
         
         return messageDiv;

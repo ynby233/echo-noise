@@ -251,9 +251,6 @@ func SetupRouter() *gin.Engine {
 	api.GET("/version", controllers.GetVersion)                    // 当前运行版本（镜像标签/环境变量）
 	api.GET("/version/runtime", controllers.GetRuntimeEnv)
 	// 版本更新（管理员）将在下方统一 authRoutes 组中注册
-	// GitHub OAuth
-	api.GET("/oauth/github/login", controllers.GithubLogin)
-	r.GET("/oauth/github/callback", controllers.GithubCallback)
 	api.POST("/password/forgot", controllers.PasswordForgot)
 
 	// 添加标签和图像相关路由
@@ -263,8 +260,8 @@ func SetupRouter() *gin.Engine {
 	api.POST("/messages/:id/like", controllers.IncrementMessageLike)     // 点赞接口
 	api.POST("/messages/:id/like/toggle", controllers.ToggleMessageLike) // 点赞切换
 	api.GET("/guestbook/message", controllers.GetGuestbookMessageID)     // 获取留言板消息ID
-	// 友链申请（公开）
-	api.POST("/friend-links/apply", controllers.SubmitFriendLinkApply)
+	// 友链申请与审核控制器暂时保留在代码中，但不注册运行路由。
+	// 如需恢复，必须在此处重新显式注册全部公开和管理端入口。
 	api.GET("/douyin/resolve", controllers.ResolveDouyinShortURL)
 	api.GET("/douyin/play", controllers.ProxyDouyinVideo)
 
@@ -430,11 +427,6 @@ func SetupRouter() *gin.Engine {
 	// 设置路由
 	authRoutes.PUT("/settings", middleware.RequireCapability(authorization.CapabilitySiteSettingsManage), controllers.UpdateSetting)
 	authRoutes.POST("/settings/vocechat/health", middleware.RequireCapability(authorization.CapabilityAuthorizationManage), controllers.CheckVoceChatHealth)
-	// 友链申请管理（管理员）
-	authRoutes.GET("/friend-links/apply", middleware.RequireCapability(authorization.CapabilitySiteSettingsView), controllers.ListFriendLinkApplications)
-	authRoutes.DELETE("/friend-links/apply", middleware.RequireCapability(authorization.CapabilitySiteSettingsManage), controllers.ClearFriendLinkApplications)
-	authRoutes.DELETE("/friend-links/apply/:id", middleware.RequireCapability(authorization.CapabilitySiteSettingsManage), controllers.DeleteFriendLinkApplication)
-	authRoutes.PUT("/friend-links/:id/audit", middleware.RequireCapability(authorization.CapabilitySiteSettingsManage), controllers.AuditFriendLink)
 
 	// 显式 /status 返回 SPA 入口，避免目录重定向影响
 	r.GET("/status", func(c *gin.Context) {

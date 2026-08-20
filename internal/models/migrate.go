@@ -27,6 +27,9 @@ func MigrateDB(db *gorm.DB) error {
 	if err != nil {
 		return err
 	}
+	if err := dropRetiredAuthenticationAndCommentColumns(db); err != nil {
+		return err
+	}
 
 	// 使用事务进行初始化操作
 	return db.Transaction(func(tx *gorm.DB) error {
@@ -151,4 +154,21 @@ func MigrateDB(db *gorm.DB) error {
 
 		return nil
 	})
+}
+
+func dropRetiredAuthenticationAndCommentColumns(db *gorm.DB) error {
+	for _, column := range []string{
+		"github_o_auth_enabled",
+		"github_client_id",
+		"github_client_secret",
+		"github_callback_url",
+		"comment_system",
+	} {
+		if db.Migrator().HasColumn("site_configs", column) {
+			if err := db.Exec("ALTER TABLE site_configs DROP COLUMN " + column).Error; err != nil {
+				return fmt.Errorf("drop retired site_configs column %s: %w", column, err)
+			}
+		}
+	}
+	return nil
 }

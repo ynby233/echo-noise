@@ -7,7 +7,6 @@
   "site-ads": "site_settings.view",
   "site-social-links": "site_settings.view",
   "site-github-card": "site_settings.view",
-  "site-github-login": "site_settings.view",
   "site-music": "site_settings.view",
   "comments": "comments.view",
   "notes": "notes.view",

@@ -39,8 +39,8 @@ assert.match(
 
 const auditRecordCalls = loginController.match(/recordUserLoginAudit\(c,\s*\*?user,\s*loginAuditActionLogin\)/g) || []
 assert.ok(
-  auditRecordCalls.length >= 2,
-  'password login and GitHub callback should both record successful ordinary-user login audits'
+  auditRecordCalls.length >= 1,
+  'successful password login should record ordinary-user login audits'
 )
 
 assert.match(

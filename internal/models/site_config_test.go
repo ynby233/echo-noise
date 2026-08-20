@@ -1,6 +1,43 @@
 package models
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
+)
+
+func TestMigrateDBRemovesRetiredThirdPartyAuthenticationAndCommentColumns(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	if err := db.Exec(`CREATE TABLE site_configs (
+		id integer primary key,
+		github_o_auth_enabled numeric,
+		github_client_id text,
+		github_client_secret text,
+		github_callback_url text,
+		comment_system text
+	)`).Error; err != nil {
+		t.Fatalf("create legacy site config: %v", err)
+	}
+
+	if err := MigrateDB(db); err != nil {
+		t.Fatalf("migrate database: %v", err)
+	}
+	for _, column := range []string{
+		"github_o_auth_enabled",
+		"github_client_id",
+		"github_client_secret",
+		"github_callback_url",
+		"comment_system",
+	} {
+		if db.Migrator().HasColumn("site_configs", column) {
+			t.Fatalf("retired column %q still exists", column)
+		}
+	}
+}
 
 func TestSiteConfigBackgroundsConfigSupportsLegacyStrings(t *testing.T) {
 	config := SiteConfig{Backgrounds: `["https://example.com/a.jpg","https://example.com/b.jpg"]`}

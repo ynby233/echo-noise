@@ -302,11 +302,6 @@ type SiteConfig struct {
 	SmtpFrom                string `gorm:"type:varchar(191)" json:"smtpFrom"`
 	SmtpEncryption          string `gorm:"type:varchar(20)" json:"smtpEncryption"`
 	SmtpTLS                 bool   `gorm:"default:false" json:"smtpTLS"`
-	// GitHub OAuth
-	GithubOAuthEnabled bool   `gorm:"default:false"`
-	GithubClientId     string `gorm:"type:varchar(191)"`
-	GithubClientSecret string `gorm:"type:varchar(191)"`
-	GithubCallbackURL  string `gorm:"type:varchar(191)"`
 	// VoceChat 外挂配置
 	VoceChatEnabled                  bool       `gorm:"default:false"`
 	VoceChatBaseURL                  string     `gorm:"type:varchar(191)"`
@@ -375,7 +370,6 @@ type SiteConfig struct {
 	MusicJsCdnURL         string `gorm:"type:varchar(255)"`
 	// 评论系统配置
 	CommentEnabled                bool   `gorm:"default:true"`
-	CommentSystem                 string `gorm:"type:varchar(20)"` // legacy storage field; runtime is always builtin
 	CommentEmailEnabled           bool   `gorm:"default:false"`
 	CommentEmailAdminNotifyAll    bool   `gorm:"default:true;not null" json:"commentEmailAdminNotifyAll"`
 	CommentLoginRequired          bool   `gorm:"default:true"`
