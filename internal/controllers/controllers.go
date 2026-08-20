@@ -976,6 +976,7 @@ func hasAdminOnlySettingFields(setting dto.SettingDto) bool {
 		setting.StorageConfig != nil ||
 		setting.AttachmentStorageEnabled != nil ||
 		setting.AttachmentStorageConfig != nil ||
+		setting.RecycleBinRetentionDays != nil ||
 		setting.VoceChatConfig != nil
 }
 
@@ -1016,6 +1017,9 @@ func UpdateSetting(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.Fail[string]("读取原有配置失败"))
 		return
 	}
+	var oldSiteConfig models.SiteConfig
+	_ = db.Table("site_configs").First(&oldSiteConfig).Error
+	oldRetention := oldSiteConfig.RecycleBinRetentionDays
 
 	if setting.AllowRegistration != nil {
 		oldSetting.AllowRegistration = *setting.AllowRegistration
@@ -1133,6 +1137,20 @@ func UpdateSetting(c *gin.Context) {
 		if err := services.UpdateFrontendSetting(0, settingMap); err != nil {
 			c.JSON(http.StatusOK, dto.Fail[string]("保存前端配置失败: "+err.Error()))
 			return
+		}
+		if setting.RecycleBinRetentionDays != nil {
+			changes, _ := json.Marshal(map[string]int{"from": oldRetention, "to": *setting.RecycleBinRetentionDays})
+			authorization.New(db).WriteAuditBestEffort(models.AdminAuditLog{
+				ActorUserID: user.ID,
+				Capability:  string(authorization.CapabilitySiteSettingsManage),
+				Module:      "notes",
+				Action:      "update_recycle_retention",
+				TargetType:  "recycle_bin_policy",
+				TargetID:    "retention_days",
+				Result:      "success",
+				Summary:     "updated recycle-bin retention policy",
+				ChangesJSON: string(changes),
+			})
 		}
 	}
 

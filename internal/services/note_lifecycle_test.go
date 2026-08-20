@@ -95,6 +95,34 @@ func TestRunRecycleBinAutoCleanupUsesDeletedAtAndSystemIdentity(t *testing.T) {
 	}
 }
 
+func TestRunRecycleBinAutoCleanupIncludesPrimaryNotesAndLeavesGuestbook(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "auto-primary-all", IsAdmin: true})
+	if err := db.Create(&models.SiteConfig{RecycleBinRetentionDays: 7}).Error; err != nil {
+		t.Fatal(err)
+	}
+	old := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	primaryNote := models.Message{Content: "primary ordinary expired", Username: primary.Username, UserID: primary.ID, Visibility: MessageVisibilityPublic, DeletedAt: &old}
+	guestbook := models.Message{Content: "guestbook must remain", Username: primary.Username, UserID: primary.ID, Visibility: MessageVisibilityPublic, IsGuestbook: true, DeletedAt: &old}
+	if err := db.Create(&primaryNote).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&guestbook).Error; err != nil {
+		t.Fatal(err)
+	}
+	succeeded, failed, skipped, err := RunRecycleBinAutoCleanup(db, old.AddDate(0, 0, 8))
+	if err != nil || succeeded != 1 || failed != 0 || skipped != 1 {
+		t.Fatalf("cleanup = %d,%d,%d,%v", succeeded, failed, skipped, err)
+	}
+	if err := db.Unscoped().First(&models.Message{}, primaryNote.ID).Error; !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("primary ordinary note remains: %v", err)
+	}
+	var retained models.Message
+	if err := db.Unscoped().First(&retained, guestbook.ID).Error; err != nil || retained.DeletedAt == nil {
+		t.Fatalf("guestbook should remain trashed, err=%v row=%#v", err, retained)
+	}
+}
+
 func TestLifecycleMutationRollsBackWhenSuccessAuditFails(t *testing.T) {
 	db := setupUserServiceTestDB(t)
 	author := mustCreateUser(t, models.User{Username: "audit-rollback-author"})

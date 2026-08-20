@@ -387,7 +387,7 @@ func BatchFilteredNoteLifecycle(c *gin.Context, action string) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "无效筛选条件"})
 		return
 	}
-	filter := services.NoteManagementFilter{Page: 1, PageSize: 10000, Keyword: strings.TrimSpace(fmt.Sprint(req.Filter["keyword"])), Username: strings.TrimSpace(fmt.Sprint(req.Filter["username"])), Tag: strings.TrimPrefix(strings.TrimSpace(fmt.Sprint(req.Filter["tag"])), "#"), Visibility: strings.TrimSpace(fmt.Sprint(req.Filter["visibility"])), Sort: strings.TrimSpace(fmt.Sprint(req.Filter["sort"]))}
+	filter := services.NoteManagementFilter{Page: 1, PageSize: 1000, Keyword: strings.TrimSpace(fmt.Sprint(req.Filter["keyword"])), Username: strings.TrimSpace(fmt.Sprint(req.Filter["username"])), Tag: strings.TrimPrefix(strings.TrimSpace(fmt.Sprint(req.Filter["tag"])), "#"), Visibility: strings.TrimSpace(fmt.Sprint(req.Filter["visibility"])), Sort: strings.TrimSpace(fmt.Sprint(req.Filter["sort"]))}
 	if id, _ := strconv.ParseUint(fmt.Sprint(req.Filter["id"]), 10, 64); id > 0 {
 		v := uint(id)
 		filter.MessageID = &v
@@ -403,6 +403,13 @@ func BatchFilteredNoteLifecycle(c *gin.Context, action string) {
 	if v := strings.TrimSpace(fmt.Sprint(req.Filter["hasAttachment"])); v == "true" || v == "false" {
 		b := v == "true"
 		filter.HasAttachment = &b
+	}
+	if value, err := time.Parse("2006-01-02", strings.TrimSpace(fmt.Sprint(req.Filter["createdFrom"]))); err == nil {
+		filter.CreatedFrom = &value
+	}
+	if value, err := time.Parse("2006-01-02", strings.TrimSpace(fmt.Sprint(req.Filter["createdTo"]))); err == nil {
+		end := value.Add(24 * time.Hour)
+		filter.CreatedTo = &end
 	}
 	db, err := database.GetDB()
 	if err != nil {

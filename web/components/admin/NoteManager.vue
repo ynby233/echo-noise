@@ -19,6 +19,12 @@
       </div>
     </div>
 
+    <div v-if="recycleBin && isPrimaryAdmin" class="flex flex-wrap items-center gap-2 rounded border px-3 py-2 text-xs" :class="theme?.border || 'border-slate-200 dark:border-slate-700'">
+      <span>自动清理保留期限</span>
+      <USelect v-model="retentionDays" :options="retentionOptions" :disabled="retentionLoading" @change="saveRetention" />
+      <span :class="theme?.mutedText || 'text-slate-500'">起点为移入回收站时间；缩短期限会影响现有回收站笔记。</span>
+    </div>
+
     <div class="grid grid-cols-1 gap-2 md:grid-cols-4">
       <UInput v-model="filters.keyword" placeholder="正文关键词" @keyup.enter="load" />
       <UInput v-model="filters.id" type="number" placeholder="精确笔记 ID" @keyup.enter="load" />
@@ -112,6 +118,17 @@ const canEdit = computed(() => can('notes.edit'))
 const canChangeVisibility = computed(() => can('notes.change_visibility'))
 const canChangePublishTime = computed(() => can('notes.change_publish_time'))
 const canPinGlobal = computed(() => can('notes.pin_global'))
+const isPrimaryAdmin = ref(false)
+const retentionDays = ref(0)
+const retentionLoading = ref(false)
+const retentionOptions = [
+  { label: '永不自动清理', value: 0 },
+  { label: '7 天', value: 7 },
+  { label: '30 天', value: 30 },
+  { label: '90 天', value: 90 },
+  { label: '180 天', value: 180 },
+  { label: '365 天', value: 365 }
+]
 const loading = ref(false)
 const actionLoading = ref(false)
 const rows = ref<any[]>([])
@@ -185,6 +202,7 @@ const load = async () => {
 onMounted(() => {
   window.addEventListener('admin-capabilities-invalidated', resetPermissionGuard)
   void load()
+  if (props.recycleBin) void loadRetentionSettings()
 })
 onBeforeUnmount(() => window.removeEventListener('admin-capabilities-invalidated', resetPermissionGuard))
 const clearSelection = () => { selected.value = [] }
@@ -255,5 +273,29 @@ const batchFilteredPermanentDelete = () => {
   if (!confirmPermanent(total.value)) return
   return runAction(() => postRequest('admin/recycle-bin/batch-permanent-delete-filtered', { filter: query(), reason: 'filtered batch request' }, { silent: true }))
 }
-watch(() => props.recycleBin, () => { page.value = 1; clearSelection(); load() })
+const loadRetentionSettings = async () => {
+  const auth = await getRequest<any>('admin/authorization/me', undefined, { silent: true })
+  isPrimaryAdmin.value = auth?.code === 1 && auth?.data?.is_primary_admin === true
+  if (!isPrimaryAdmin.value) return
+  const settings = await getRequest<any>('settings', undefined, { silent: true })
+  if (settings?.code === 1) retentionDays.value = Number(settings.data?.recycleBinRetentionDays || 0)
+}
+const saveRetention = async () => {
+  if (!isPrimaryAdmin.value) return
+  const next = Number(retentionDays.value || 0)
+  const previous = Number((await getRequest<any>('settings', undefined, { silent: true }))?.data?.recycleBinRetentionDays || 0)
+  if (next < previous && typeof window !== 'undefined' && !window.confirm('缩短保留期限会影响已有回收站笔记，已到期内容将在下次任务中永久删除。是否继续？')) {
+    retentionDays.value = previous
+    return
+  }
+  retentionLoading.value = true
+  try {
+    const response = await putRequest<any>('settings', { recycleBinRetentionDays: next }, { silent: true })
+    if (response?.code === 1) toast.add({ title: '自动清理设置已保存', color: 'green' })
+    else toast.add({ title: '自动清理设置保存失败', description: response?.msg || '请稍后重试', color: 'red' })
+  } finally {
+    retentionLoading.value = false
+  }
+}
+watch(() => props.recycleBin, () => { page.value = 1; clearSelection(); load(); if (props.recycleBin) void loadRetentionSettings() })
 </script>
