@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Noise说说笔记</title>
+    <title>公开笔记流组件示例</title>
     <link rel="stylesheet" href="./css/APlayer.min.css">
     <link rel="stylesheet" href="./css/styles.css">
     <link rel="stylesheet" href="./css/waline.css">
@@ -44,18 +44,20 @@
     <script src="./js/Meting.min.js"></script>
     <script>
         window.note = {
-            host: 'https://note.noisework.cn',
+            // 必填：改为你的站点根地址，例如 https://your-domain.example
+            host: '',
             limit: '10',
             domId: '#note',
-            commentServer: 'https://app-production-80c1.up.railway.app',
-            sourceName: '「说说笔记」',
+            // 可选：不配置则不显示评论功能
+            commentServer: '',
+            sourceName: '「公开笔记流」',
             loadingTimeout: 10000  // 添加加载超时时间配置
         };
         
         // 添加加载超时处理
         setTimeout(() => {
             const loadingWrapper = document.querySelector('.loading-wrapper');
-            if (loadingWrapper && loadingWrapper.style.display !== 'none') {
+            if (window.note.host && loadingWrapper && loadingWrapper.style.display !== 'none') {
                 loadingWrapper.textContent = '加载失败，请刷新重试';
             }
         }, window.note.loadingTimeout);

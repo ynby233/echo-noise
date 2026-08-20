@@ -518,37 +518,9 @@ func GenerateRSS(c *gin.Context) (string, error) {
 		schema = "https"
 	}
 
-	// 处理域名和端口
-	requestHost := c.Request.Host
-	var baseURL string
-
-	// 从配置获取站点URL，如果没有则使用请求的host
-	configURL := ""
-
-	// 检查请求来源是否为反向代理域名
-	if strings.Contains(requestHost, "note.noisework.cn") {
-		// 如果是从反向代理域名访问的，使用完整的反向代理域名
-		baseURL = "https://note.noisework.cn"
-	} else if configURL != "" {
-		// 使用配置的URL
-		baseURL = configURL
-		// 确保配置的URL包含正确的端口
-		if !strings.Contains(baseURL, ":") && requestHost != "note.noisework.cn" {
-			// 从请求中提取端口
-			parts := strings.Split(requestHost, ":")
-			if len(parts) == 2 && parts[1] == "1314" {
-				baseURL = baseURL + ":1314"
-			}
-		}
-	} else {
-		// 如果没有配置，确保使用完整的请求地址（包括端口）
-		if strings.Contains(requestHost, ":") {
-			baseURL = schema + "://" + requestHost
-		} else {
-			// 默认添加1314端口，如果是直接IP或域名访问
-			baseURL = schema + "://" + requestHost + ":1314"
-		}
-	}
+	// RSS links must reflect the address that requested the feed. Do not retain
+	// deployment-specific hosts or invent a port that was absent from Host.
+	baseURL := schema + "://" + c.Request.Host
 
 	// 确保URL末尾没有斜杠
 	baseURL = strings.TrimSuffix(baseURL, "/")

@@ -1517,11 +1517,11 @@ curl -X POST http://localhost:8080/api/notify/send \
    ```
 2. 以 Token 认证运行：
    ```bash
-   docker run --rm -e NOTE_HOST=https://note.noisework.cn -e NOTE_TOKEN=你的_token ech0-noise-mcp
+   docker run --rm -e NOTE_HOST=https://your-domain.example -e NOTE_TOKEN=你的_token ech0-noise-mcp
    ```
 3. 以用户名密码运行：
    ```bash
-   docker run --rm -e NOTE_HOST=https://note.noisework.cn ech0-noise-mcp
+   docker run --rm -e NOTE_HOST=https://your-domain.example ech0-noise-mcp
    # 在客户端调用“登录”工具设置 Cookie 会话
    ```
 
@@ -1542,7 +1542,7 @@ curl -N -X POST http://localhost:1315/mcp/tool/搜索 -H 'Content-Type: applicat
 ### HTTP 与 SSE
 - 开启 HTTP 与 SSE：设置 `NOTE_HTTP_PORT` 启动服务端口
   ```bash
-  NOTE_HOST=https://note.noisework.cn \
+  NOTE_HOST=https://your-domain.example \
   NOTE_TOKEN=你的_token \
   NOTE_HTTP_PORT=1315 \
   npm start
@@ -1847,7 +1847,7 @@ podman manifest push --all docker.io/noise233/echo-noise:latest docker://docker.
 //   identifier: "siteUrl",
 //   label: "服务端地址",
 //   type: "string",
-//   defaultValue: "https://note.noisework.cn",
+//   defaultValue: "https://your-domain.example",
 //   description: "请确保地址正确，不要带末尾斜杠"
 // }, {
 //   identifier: "token",
@@ -1865,7 +1865,7 @@ async function sendToShuo(input, options) {
         
         // 验证参数
         if (!/^https:\/\/[\w.-]+(:\d+)?$/.test(siteUrl)) {
-            throw new Error("地址格式错误，示例: https://note.noisework.cn");
+            throw new Error("地址格式错误，示例: https://your-domain.example");
         }
         if (!token) throw new Error("Token不能为空");
         if (!content) throw new Error("选中文本不能为空");
@@ -1974,16 +1974,17 @@ exports.actions = [{
 ```
 <script>
         window.note = {
-            host: 'https://note.noisework.cn', // 修改为你的服务器地址
+            host: '', // 必填：填写你的服务器地址，例如 https://your-domain.example
             limit: '10',
             domId: '#note',
             authorId: '1',         // 或者 username: 'Noise'
-            username: ''           // 二选一即可
-            sourceName: '「说说笔记」' // 添加来源名称配置
+            username: '',          // 二选一即可
+            commentServer: '',     // 可选；留空时不显示评论功能
+            sourceName: '「公开笔记流」'
         };
 ```
 
-不填写 authorId 、 username 时，小组件会请求不带作者筛选的接口，展示“全部公开消息”（按分页/搜索/标签的当前逻辑）。
+`host` 未配置时，组件不会发送任何请求，并会显示配置提示。填写 `host` 后，不填写 authorId、username 时，小组件会请求不带作者筛选的接口，展示“全部公开消息”（按分页/搜索/标签的当前逻辑）。
 
 字段说明
 

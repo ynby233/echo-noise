@@ -2,11 +2,13 @@
 document.addEventListener('DOMContentLoaded', function() {
     // Default configuration
     const config = window.note || {
-        host: 'https://note.noisework.cn', //修改为你的域名
+        host: '',
         limit: '10',
         domId: '#note',
         authorId: '',
-        username: ''
+        username: '',
+        commentServer: '',
+        sourceName: '「公开笔记流」'
     };
     
     const container = document.querySelector('#note .note-container');
@@ -25,6 +27,16 @@ document.addEventListener('DOMContentLoaded', function() {
     config.commentServer = clean(config.commentServer);
     config.authorId = clean(config.authorId);
     config.username = clean(config.username);
+
+    if (!config.host) {
+        const loadingWrapper = container && container.querySelector('.loading-wrapper');
+        if (loadingWrapper) {
+            loadingWrapper.textContent = '请先配置 window.note.host 后再使用此组件';
+        }
+        if (searchInput) searchInput.disabled = true;
+        if (searchBtn) searchBtn.disabled = true;
+        return;
+    }
 
     // Create UI elements
     const loadMoreBtn = document.createElement('button');
@@ -354,13 +366,17 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     window.initWaline = function(container, host) {
+        if (!config.commentServer) {
+            container.textContent = '评论功能未配置';
+            return;
+        }
         const commentId = `waline-${host}`;
         container.innerHTML = `<div id="${commentId}"></div>`;
         import('https://unpkg.com/@waline/client@v3/dist/waline.js').then(({ init }) => {
             const uid = host.split('-').pop();
             init({
                 el: `#${commentId}`,
-                serverURL: window.note.commentServer || 'https://ment.noisework.cn', // 使用配置中的评论服务器地址
+                serverURL: config.commentServer,
                 reaction: 'true',
                 pageview: true,
                 search: false,
@@ -494,26 +510,26 @@ document.addEventListener('DOMContentLoaded', function() {
         sourceLink.target = '_blank'; // 修改为在新标签页打开
         timeDiv.appendChild(sourceLink);
         
-        // 右侧评论按钮
-        const commentDiv = document.createElement('small');
-        commentDiv.className = 'comment-button';
-        commentDiv.dataset.host = `note-${message.id}`;
-        commentDiv.innerHTML = '📮 评论';
-        commentDiv.onclick = function() {
-            window.toggleCommentBox(`note-${message.id}`);
-        };
-        
         footerDiv.appendChild(timeDiv);
-        footerDiv.appendChild(commentDiv);
-        
-        // 添加评论框容器
-        const commentBoxDiv = document.createElement('div');
-        commentBoxDiv.id = `comment-box-note-${message.id}`;
-        commentBoxDiv.className = 'comment-box';
-        commentBoxDiv.style.display = 'none';
+        let commentBoxDiv;
+        if (config.commentServer) {
+            const commentDiv = document.createElement('small');
+            commentDiv.className = 'comment-button';
+            commentDiv.dataset.host = `note-${message.id}`;
+            commentDiv.innerHTML = '📮 评论';
+            commentDiv.onclick = function() {
+                window.toggleCommentBox(`note-${message.id}`);
+            };
+            footerDiv.appendChild(commentDiv);
+
+            commentBoxDiv = document.createElement('div');
+            commentBoxDiv.id = `comment-box-note-${message.id}`;
+            commentBoxDiv.className = 'comment-box';
+            commentBoxDiv.style.display = 'none';
+        }
         
         contentDiv.appendChild(footerDiv);
-        contentDiv.appendChild(commentBoxDiv);
+        if (commentBoxDiv) contentDiv.appendChild(commentBoxDiv);
         messageDiv.appendChild(contentDiv);
         
         return messageDiv;

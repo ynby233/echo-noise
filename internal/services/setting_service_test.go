@@ -554,6 +554,12 @@ func TestGenerateRSSExportsOnlySelectedMembersPublicMessages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate rss: %v", err)
 	}
+	if strings.Contains(rss, "example.test:1314") {
+		t.Fatalf("rss must preserve the request host without inventing a port:\n%s", rss)
+	}
+	if !strings.Contains(rss, "http://example.test/#/messages/") {
+		t.Fatalf("rss must use the request host for absolute item links:\n%s", rss)
+	}
 	for _, want := range []string{"admin-public-rss-entry", "member-public-rss-entry"} {
 		if !strings.Contains(rss, want) {
 			t.Fatalf("rss missing selected public entry %q:\n%s", want, rss)

@@ -29,7 +29,7 @@
       "e-noise": {
         "command": "env",
         "args": [
-          "NOTE_HOST=https://note.noisework.cn",  //改为你的地址
+          "NOTE_HOST=https://your-domain.example",  //改为你的地址
           "NOTE_HTTP_PORT=0",
           "NOTE_TOKEN=你的后台token",
           "node",
@@ -280,13 +280,13 @@
    ```
 2. 使用 Token 认证启动：
    ```bash
-   NOTE_HOST=https://note.noisework.cn \
+   NOTE_HOST=https://your-domain.example \
    NOTE_TOKEN=你的_token \
    npm start
    ```
 3. 使用用户名密码登录（会话认证）：
    ```bash
-   NOTE_HOST=https://note.noisework.cn npm start
+   NOTE_HOST=https://your-domain.example npm start
    # 在客户端调用“登录”工具：
    # { "username": "admin", "password": "your_password" }
    ```
@@ -299,11 +299,11 @@
    ```
 2. 以 Token 认证运行：
    ```bash
-   docker run --rm -e NOTE_HOST=https://note.noisework.cn -e NOTE_TOKEN=你的_token ech0-noise-mcp
+   docker run --rm -e NOTE_HOST=https://your-domain.example -e NOTE_TOKEN=你的_token ech0-noise-mcp
    ```
 3. 以用户名密码运行：
    ```bash
-   docker run --rm -e NOTE_HOST=https://note.noisework.cn ech0-noise-mcp
+   docker run --rm -e NOTE_HOST=https://your-domain.example ech0-noise-mcp
    # 在客户端调用“登录”工具设置 Cookie 会话
    ```
 
@@ -346,7 +346,7 @@ curl -N -X POST http://localhost:1315/mcp/tool/搜索 -H 'Content-Type: applicat
 ## HTTP 与 SSE
 - 开启 HTTP 与 SSE：设置 `NOTE_HTTP_PORT` 启动服务端口
   ```bash
-  NOTE_HOST=https://note.noisework.cn \
+  NOTE_HOST=https://your-domain.example \
   NOTE_TOKEN=你的_token \
   NOTE_HTTP_PORT=1315 \
   npm start
@@ -589,7 +589,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 const transport = new StdioClientTransport({
   command: 'node',
   args: ['mcp/server.js'],
-  env: { NOTE_HOST: 'https://note.noisework.cn', NOTE_TOKEN: '你的_token' }
+  env: { NOTE_HOST: 'https://your-domain.example', NOTE_TOKEN: '你的_token' }
 })
 
 const client = new Client()

@@ -50,7 +50,7 @@ skill/
 
 ### 域名通用变量（推荐）
 
-无论是 `https://note.noisework.cn` 还是其它域名，都建议先定义统一变量：
+无论是 `https://your-domain.example` 还是其它域名，都建议先定义统一变量：
 
 ```bash
 export BASE_URL="https://your-domain.com"

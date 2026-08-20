@@ -26,6 +26,8 @@ const (
 	neutralWelcomeMessage  = "欢迎来到你的个人站点！默认用户名及密码均为admin，记得到后台页修改你的用户名或密码,密码带有加强设置，如需简单密码可在用户管理面板中展开后重置密码"
 )
 
+// legacyPublicBrandingTokens only classify inherited persisted content during
+// local cleanup. They are never used as request destinations or public defaults.
 var legacyPublicBrandingTokens = []string{
 	"说说笔记",
 	"github.com/rcy1314",
