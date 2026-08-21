@@ -980,6 +980,22 @@ func hasAdminOnlySettingFields(setting dto.SettingDto) bool {
 		setting.VoceChatConfig != nil
 }
 
+func hasRSSManagementSettings(frontendSettings map[string]interface{}) bool {
+	for _, field := range []string{
+		"rssEnabled",
+		"rssMemberIDs",
+		"rssTitle",
+		"rssDescription",
+		"rssAuthorName",
+		"rssFaviconURL",
+	} {
+		if _, exists := frontendSettings[field]; exists {
+			return true
+		}
+	}
+	return false
+}
+
 func UpdateSetting(c *gin.Context) {
 	user, err := checkUser(c)
 	if err != nil {
@@ -994,6 +1010,10 @@ func UpdateSetting(c *gin.Context) {
 	}
 
 	frontendSettings := setting.FrontendSettings
+	if hasRSSManagementSettings(frontendSettings) && user.ID != models.PrimaryAdminUserID {
+		c.JSON(http.StatusOK, dto.Fail[string]("仅 1 号管理员可管理 RSS"))
+		return
+	}
 	if !user.IsAdmin {
 		if hasAdminOnlySettingFields(setting) || frontendSettings == nil || !services.IsUserFrontendSettingsOnly(frontendSettings) {
 			c.JSON(http.StatusOK, dto.Fail[string]("需要管理员权限"))
@@ -2635,24 +2655,6 @@ func RegenerateUserToken(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.OK(gin.H{
 		"token": token,
 	}, "更新成功"))
-}
-
-func RefreshRSS(c *gin.Context) {
-	if _, err := checkAdmin(c); err != nil {
-		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
-		return
-	}
-
-	if _, err := services.GenerateRSS(c); err != nil {
-		if err == services.ErrRSSDisabled {
-			c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "RSS 已禁用"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "RSS 生成成功"})
 }
 
 // 检查版本更新

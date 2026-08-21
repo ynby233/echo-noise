@@ -15,7 +15,6 @@
   "notify": "notifications.view",
   "site-announcement": "announcements.view",
   "site-feed": "feed.view",
-  "site-rss": "rss.view",
   "admin-users": "users.view",
   "registration-review": "registration.view",
   "access-logs": "access_logs.view",

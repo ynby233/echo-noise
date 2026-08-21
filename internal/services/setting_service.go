@@ -242,11 +242,14 @@ func normalizeRSSMemberIDs(db *gorm.DB, ids []uint) ([]uint, error) {
 }
 
 func defaultRSSMemberIDs(db *gorm.DB) ([]uint, error) {
-	var ids []uint
-	if err := db.Model(&models.User{}).Where("is_admin = ?", true).Order("id ASC").Pluck("id", &ids).Error; err != nil {
+	var primary models.User
+	if err := db.Select("id").Where("id = ? AND is_admin = ?", models.PrimaryAdminUserID, true).First(&primary).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return []uint{}, nil
+		}
 		return nil, err
 	}
-	return ids, nil
+	return []uint{primary.ID}, nil
 }
 
 func resolveRSSMemberIDs(db *gorm.DB, raw string) ([]uint, error) {
@@ -1033,12 +1036,16 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 	rssMemberIDsForViewer := []uint{}
 	rssAvailableMembersForViewer := []map[string]interface{}{}
 	viewerIsAdmin := false
+	viewerIsPrimaryAdmin := false
 	if viewerUserID > 0 {
 		var viewer models.User
 		if err := db.Select("id, is_admin").First(&viewer, viewerUserID).Error; err == nil && viewer.IsAdmin {
 			viewerIsAdmin = true
-			rssMemberIDsForViewer = rssConfig.MemberIDs
-			rssAvailableMembersForViewer = rssConfig.AvailableMembers
+			viewerIsPrimaryAdmin = viewer.ID == models.PrimaryAdminUserID
+			if viewerIsPrimaryAdmin {
+				rssMemberIDsForViewer = rssConfig.MemberIDs
+				rssAvailableMembersForViewer = rssConfig.AvailableMembers
+			}
 		}
 	}
 	effectiveSyncConfirmed := config.StorageSyncConfirmed && syncmanager.IsStorageSyncConfirmedLocal()
@@ -1136,9 +1143,9 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 				return 0
 			}(),
 
-			"leftAdEnabled":          config.LeftAdEnabled,
-			"leftAds":                normalizedAds,
-			"leftAdsIntervalMs":      leftAdsInterval,
+			"leftAdEnabled":     config.LeftAdEnabled,
+			"leftAds":           normalizedAds,
+			"leftAdsIntervalMs": leftAdsInterval,
 			// 社交链接
 			"socialLinksEnabled": config.SocialLinksEnabled,
 			"socialLinks":        normalizedSocialLinks,

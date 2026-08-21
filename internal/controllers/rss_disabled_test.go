@@ -5,13 +5,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/gin-gonic/gin"
-	"github.com/rcy1314/echo-noise/internal/database"
 )
 
 func TestRSSHandlersReturnNotFoundWhenDisabled(t *testing.T) {
-	_, r, user, _ := setupCommentAccountTest(t)
+	_, r, _, _ := setupCommentAccountTest(t)
 
 	t.Run("rss feed", func(t *testing.T) {
 		r.GET("/rss", GenerateRSS)
@@ -23,23 +20,6 @@ func TestRSSHandlersReturnNotFoundWhenDisabled(t *testing.T) {
 		assertRSSDisabledResponse(t, w)
 	})
 
-	t.Run("rss refresh", func(t *testing.T) {
-		user.IsAdmin = true
-		if err := database.DB.Save(&user).Error; err != nil {
-			t.Fatalf("promote user: %v", err)
-		}
-
-		r.POST("/api/rss/refresh", func(c *gin.Context) {
-			c.Set("user_id", user.ID)
-			RefreshRSS(c)
-		})
-
-		req := httptest.NewRequest(http.MethodPost, "/api/rss/refresh", nil)
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
-
-		assertRSSDisabledResponse(t, w)
-	})
 }
 
 func assertRSSDisabledResponse(t *testing.T, w *httptest.ResponseRecorder) {

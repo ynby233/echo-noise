@@ -270,7 +270,7 @@ func TestAdminCapabilityGrantHasUniqueUserCapabilityKey(t *testing.T) {
 }
 
 func TestCatalogExcludesRetiredUserManageAndFeedRefreshCapabilities(t *testing.T) {
-	for _, capability := range []Capability{"users.manage", "feed.manage"} {
+	for _, capability := range []Capability{"users.manage", "feed.manage", "rss.view", "rss.manage"} {
 		if _, exists := DefinitionFor(capability); exists {
 			t.Fatalf("retired capability %q must not appear in the authorization catalog", capability)
 		}
@@ -279,7 +279,7 @@ func TestCatalogExcludesRetiredUserManageAndFeedRefreshCapabilities(t *testing.T
 
 func TestCapabilitiesForOmitsRetiredGrants(t *testing.T) {
 	db, authorizer, _, delegated, _ := setupAuthorizerTest(t)
-	for _, capability := range []string{"users.manage", "feed.manage"} {
+	for _, capability := range []string{"users.manage", "feed.manage", "rss.view", "rss.manage"} {
 		if err := db.Create(&models.AdminCapabilityGrant{UserID: delegated.ID, Capability: capability, GrantedByUserID: models.PrimaryAdminUserID}).Error; err != nil {
 			t.Fatalf("create retired grant fixture %q: %v", capability, err)
 		}

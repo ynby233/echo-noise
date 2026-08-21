@@ -28,7 +28,7 @@ func TestProtectedAdminRouteMatrixRejectsDelegatedAdministratorWithoutRequiredGr
 		t.Fatalf("open database: %v", err)
 	}
 	if err := db.AutoMigrate(
-		&models.User{}, &models.SecurityConfig{}, &models.AdminCapabilityGrant{}, &models.AdminAuditLog{}, &models.AdminAuditConfig{},
+		&models.User{}, &models.Setting{}, &models.SiteConfig{}, &models.SecurityConfig{}, &models.AdminCapabilityGrant{}, &models.AdminAuditLog{}, &models.AdminAuditConfig{},
 	); err != nil {
 		t.Fatalf("migrate route matrix database: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestProtectedAdminRouteMatrixRejectsDelegatedAdministratorWithoutRequiredGr
 		middleware.InvalidateAccessLogConfigCache()
 	})
 
-	primary := models.User{ID: models.PrimaryAdminUserID, Username: "primary", IsAdmin: true}
+	primary := models.User{ID: models.PrimaryAdminUserID, Username: "primary", IsAdmin: true, Token: "primary-route-token"}
 	delegated := models.User{Username: "delegated", IsAdmin: true, Token: "delegated-route-token"}
 	if err := db.Create(&primary).Error; err != nil {
 		t.Fatalf("create primary administrator: %v", err)
@@ -116,5 +116,72 @@ func TestProtectedAdminRouteMatrixRejectsDelegatedAdministratorWithoutRequiredGr
 				t.Fatalf("%s without %s status=%d body=%s", testCase.path, testCase.capability, response.Code, response.Body.String())
 			}
 		})
+	}
+
+	if err := db.Create(&models.Setting{AllowRegistration: true}).Error; err != nil {
+		t.Fatalf("create settings: %v", err)
+	}
+	if err := db.Create(&models.SiteConfig{RSSEnabled: false, RSSTitle: "unchanged"}).Error; err != nil {
+		t.Fatalf("create site config: %v", err)
+	}
+	if err := db.Create(&models.AdminCapabilityGrant{UserID: delegated.ID, Capability: string(authorization.CapabilitySiteSettingsManage), GrantedByUserID: primary.ID}).Error; err != nil {
+		t.Fatalf("grant delegated site settings management: %v", err)
+	}
+
+	for _, testCase := range []struct {
+		name  string
+		path  string
+		token bool
+	}{
+		{name: "session", path: "/api/settings"},
+		{name: "token", path: "/api/token/settings", token: true},
+	} {
+		t.Run("delegated administrator cannot save RSS fields via "+testCase.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPut, testCase.path, bytes.NewBufferString(`{"frontendSettings":{"rssEnabled":true,"rssTitle":"must not save"}}`))
+			request.Header.Set("Content-Type", "application/json")
+			if testCase.token {
+				request.Header.Set("Authorization", "Bearer "+delegated.Token)
+			} else {
+				for _, cookie := range cookies {
+					request.AddCookie(cookie)
+				}
+			}
+			response := httptest.NewRecorder()
+			r.ServeHTTP(response, request)
+			if response.Code != http.StatusOK || !bytes.Contains(response.Body.Bytes(), []byte("仅 1 号管理员可管理 RSS")) {
+				t.Fatalf("delegated RSS write status=%d body=%s", response.Code, response.Body.String())
+			}
+		})
+	}
+
+	var config models.SiteConfig
+	if err := db.First(&config).Error; err != nil {
+		t.Fatalf("load site config: %v", err)
+	}
+	if config.RSSEnabled || config.RSSTitle != "unchanged" {
+		t.Fatalf("delegated RSS write changed config: %#v", config)
+	}
+
+	primaryRequest := httptest.NewRequest(http.MethodPut, "/api/token/settings", bytes.NewBufferString(`{"frontendSettings":{"rssEnabled":true,"rssTitle":"primary saved"}}`))
+	primaryRequest.Header.Set("Content-Type", "application/json")
+	primaryRequest.Header.Set("Authorization", "Bearer "+primary.Token)
+	primaryResponse := httptest.NewRecorder()
+	r.ServeHTTP(primaryResponse, primaryRequest)
+	if primaryResponse.Code != http.StatusOK || !bytes.Contains(primaryResponse.Body.Bytes(), []byte(`"code":1`)) {
+		t.Fatalf("primary RSS write status=%d body=%s", primaryResponse.Code, primaryResponse.Body.String())
+	}
+	if err := db.First(&config).Error; err != nil {
+		t.Fatalf("reload site config after primary save: %v", err)
+	}
+	if !config.RSSEnabled || config.RSSTitle != "primary saved" {
+		t.Fatalf("primary RSS write did not persist: %#v", config)
+	}
+
+	retiredRefreshRequest := httptest.NewRequest(http.MethodPost, "/api/rss/refresh", nil)
+	retiredRefreshRequest.Header.Set("Authorization", "Bearer "+primary.Token)
+	retiredRefreshResponse := httptest.NewRecorder()
+	r.ServeHTTP(retiredRefreshResponse, retiredRefreshRequest)
+	if retiredRefreshResponse.Code != http.StatusNotFound {
+		t.Fatalf("retired RSS refresh route status=%d body=%s", retiredRefreshResponse.Code, retiredRefreshResponse.Body.String())
 	}
 }

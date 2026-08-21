@@ -9,9 +9,14 @@ const sectionType = panel.match(/type AdminSectionKey =([\s\S]*?)const activeSec
 assert.ok(sectionType, 'StatusPanel must declare the admin section key union')
 const sections = [...sectionType[1].matchAll(/'([^']+)'/g)].map((match) => match[1])
 const intentionallyUnprotected = new Set(['dashboard', 'user', 'hitokoto', 'life-countdown'])
+const primaryAdminOnly = new Set(['site-rss'])
 
 for (const section of sections) {
   if (intentionallyUnprotected.has(section)) continue
+  if (primaryAdminOnly.has(section)) {
+    assert.equal(map[section], undefined, `primary-admin-only section ${section} must not be capability-mapped`)
+    continue
+  }
   assert.equal(typeof map[section], 'string', `admin section ${section} must have an explicit capability mapping`)
 }
 for (const [section, capability] of Object.entries(map)) {
@@ -32,3 +37,10 @@ assert.doesNotMatch(panel, /const sectionCapabilities: Partial<Record<AdminSecti
 assert.equal(map.authorization, 'authorization.manage')
 assert.equal(map['admin-audit'], 'audit.view')
 assert.equal(map['site-feed'], 'feed.view')
+assert.equal(map['site-rss'], undefined)
+assert.doesNotMatch(authorizationSource, /CapabilityRSS(?:View|Manage)|rss\.(?:view|manage)/)
+assert.match(panel, /if \(section === 'site-rss'\) return isPrimaryAdmin\.value/)
+assert.match(panel, /isPrimaryAdmin\.value \? \[\{ key: 'site-rss' as AdminSectionKey/)
+assert.match(panel, /id="site-rss-section" v-if="isPrimaryAdmin && isSectionVisible\('site-rss'\)"/)
+assert.match(panel, /const stripRSSManagementSettings = \(settings: Record<string, any>\)/)
+assert.match(panel, /frontendSettings: stripRSSManagementSettings\(frontendConfig as any\)/)

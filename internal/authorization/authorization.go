@@ -53,8 +53,6 @@ const (
 	CapabilityAnnouncementsManage        Capability = "announcements.manage"
 	CapabilityAnnouncementsPush          Capability = "announcements.push"
 	CapabilityFeedView                   Capability = "feed.view"
-	CapabilityRSSView                    Capability = "rss.view"
-	CapabilityRSSManage                  Capability = "rss.manage"
 	CapabilityNotificationsView          Capability = "notifications.view"
 	CapabilityNotificationsManage        Capability = "notifications.manage"
 	CapabilityEmailView                  Capability = "email.view"
@@ -87,7 +85,7 @@ var catalog = []Definition{
 	{CapabilityAttachmentsView, "attachments", "查看附件", true}, {CapabilityAttachmentsDownload, "attachments", "下载附件", true}, {CapabilityAttachmentsDeleteReference, "attachments", "删除附件引用", true}, {CapabilityAttachmentsPurgeBlob, "attachments", "彻底删除附件文件", true},
 	{CapabilityStorageView, "storage", "查看存储", true}, {CapabilityStorageManage, "storage", "管理存储", true}, {CapabilityDatabaseView, "database", "查看数据库", true}, {CapabilityDatabaseBackup, "database", "备份数据库", true}, {CapabilityDatabaseRestore, "database", "恢复数据库", true}, {CapabilityVersionView, "version", "查看版本", true}, {CapabilityVersionUpdate, "version", "更新版本", true},
 	{CapabilitySecurityView, "security", "查看安全策略", true}, {CapabilitySecurityManage, "security", "管理安全策略", true}, {CapabilitySecurityClearLogs, "security", "清理攻击记录", true}, {CapabilityAccessLogsView, "access_logs", "查看访问日志", true}, {CapabilityAccessLogsClear, "access_logs", "清理访问日志", true}, {CapabilitySiteVisitsView, "site_visits", "查看访客记录", true}, {CapabilitySiteVisitsClear, "site_visits", "清理访客记录", true}, {CapabilityLoginAuditsView, "login_audits", "查看登录审计", true},
-	{CapabilitySiteSettingsView, "site", "查看站点设置", true}, {CapabilitySiteSettingsManage, "site", "管理站点设置", true}, {CapabilityAnnouncementsView, "announcements", "查看公告", true}, {CapabilityAnnouncementsManage, "announcements", "管理公告", true}, {CapabilityAnnouncementsPush, "announcements", "推送公告", true}, {CapabilityFeedView, "feed", "查看信息流", true}, {CapabilityRSSView, "rss", "查看 RSS", true}, {CapabilityRSSManage, "rss", "管理 RSS", true}, {CapabilityNotificationsView, "notifications", "查看通知设置", true}, {CapabilityNotificationsManage, "notifications", "管理通知设置", true}, {CapabilityEmailView, "email", "查看邮件设置", true}, {CapabilityEmailManage, "email", "管理邮件设置", true},
+	{CapabilitySiteSettingsView, "site", "查看站点设置", true}, {CapabilitySiteSettingsManage, "site", "管理站点设置", true}, {CapabilityAnnouncementsView, "announcements", "查看公告", true}, {CapabilityAnnouncementsManage, "announcements", "管理公告", true}, {CapabilityAnnouncementsPush, "announcements", "推送公告", true}, {CapabilityFeedView, "feed", "查看信息流", true}, {CapabilityNotificationsView, "notifications", "查看通知设置", true}, {CapabilityNotificationsManage, "notifications", "管理通知设置", true}, {CapabilityEmailView, "email", "查看邮件设置", true}, {CapabilityEmailManage, "email", "管理邮件设置", true},
 	{CapabilityNotesView, "notes", "查看笔记", true}, {CapabilityNotesEdit, "notes", "编辑笔记", true}, {CapabilityNotesVisibility, "notes", "调整笔记可见范围", true}, {CapabilityNotesPublishTime, "notes", "调整笔记发布时间", true}, {CapabilityNotesPinGlobal, "notes", "全站置顶笔记", true}, {CapabilityNotesTrash, "notes", "移入笔记回收站", true}, {CapabilityNotesRestore, "notes", "恢复笔记", true}, {CapabilityNotesDelete, "notes", "永久删除笔记", true},
 	{CapabilityContentViewHidden, "content", "查看隐藏内容", true}, {CapabilityNotesRecycleBinView, "notes", "查看回收站", true},
 }
@@ -151,7 +149,7 @@ func (a *Authorizer) Authorize(actorID uint, capability Capability, targetOwnerU
 
 func isMutation(capability Capability) bool {
 	switch capability {
-	case CapabilityCommentsView, CapabilityAttachmentsView, CapabilityAttachmentsDownload, CapabilityUsersView, CapabilityRegistrationView, CapabilityStorageView, CapabilityDatabaseView, CapabilityVersionView, CapabilitySecurityView, CapabilityAccessLogsView, CapabilitySiteVisitsView, CapabilityLoginAuditsView, CapabilitySiteSettingsView, CapabilityAnnouncementsView, CapabilityFeedView, CapabilityRSSView, CapabilityNotificationsView, CapabilityEmailView, CapabilityNotesView, CapabilityAuditView, CapabilityContentViewHidden, CapabilityNotesRecycleBinView:
+	case CapabilityCommentsView, CapabilityAttachmentsView, CapabilityAttachmentsDownload, CapabilityUsersView, CapabilityRegistrationView, CapabilityStorageView, CapabilityDatabaseView, CapabilityVersionView, CapabilitySecurityView, CapabilityAccessLogsView, CapabilitySiteVisitsView, CapabilityLoginAuditsView, CapabilitySiteSettingsView, CapabilityAnnouncementsView, CapabilityFeedView, CapabilityNotificationsView, CapabilityEmailView, CapabilityNotesView, CapabilityAuditView, CapabilityContentViewHidden, CapabilityNotesRecycleBinView:
 		return false
 	}
 	return true

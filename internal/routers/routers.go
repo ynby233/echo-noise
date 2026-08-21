@@ -221,7 +221,6 @@ func SetupRouter() *gin.Engine {
 
 	// RSS 路由保留在 API 组外，禁用时仍返回显式 404，避免旧链接落入前端兜底页。
 	r.GET("/rss", controllers.GenerateRSS)
-	api.POST("/rss/refresh", middleware.SessionAuthMiddleware(), controllers.RefreshRSS)
 
 	// 公共路由
 	api.GET("", controllers.GetStatus)

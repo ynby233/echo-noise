@@ -147,9 +147,10 @@ func TestFrontendAdsPreservePresentationSettings(t *testing.T) {
 	}
 }
 
-func TestRSSConfigDefaultsToAdminMembersAndHidesMemberListFromPublic(t *testing.T) {
+func TestRSSConfigDefaultsToPrimaryAdminAndHidesManagementDataFromNonPrimaryViewers(t *testing.T) {
 	db := setupUserServiceTestDB(t)
 	admin := mustCreateUser(t, models.User{Username: "admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+	delegated := mustCreateUser(t, models.User{Username: "delegated", Password: models.HashPassword("delegated"), IsAdmin: true, Token: models.GenerateToken(32)})
 	member := mustCreateUser(t, models.User{Username: "member", Password: models.HashPassword("member"), Token: models.GenerateToken(32)})
 	if err := db.Create(&models.SiteConfig{RSSEnabled: false}).Error; err != nil {
 		t.Fatalf("create site config: %v", err)
@@ -192,8 +193,35 @@ func TestRSSConfigDefaultsToAdminMembersAndHidesMemberListFromPublic(t *testing.
 		t.Fatalf("admin rssMemberIDs = %#v, want [%d]", ids, admin.ID)
 	}
 	members := adminSettings["rssAvailableMembers"].([]map[string]interface{})
-	if len(members) != 2 {
-		t.Fatalf("admin rssAvailableMembers count = %d, want 2", len(members))
+	if len(members) != 3 {
+		t.Fatalf("admin rssAvailableMembers count = %d, want 3", len(members))
+	}
+
+	delegatedConfig, err := GetFrontendConfig(delegated.ID)
+	if err != nil {
+		t.Fatalf("get delegated frontend config: %v", err)
+	}
+	delegatedSettings := delegatedConfig["frontendSettings"].(map[string]interface{})
+	if got := delegatedSettings["rssMemberIDs"].([]uint); len(got) != 0 {
+		t.Fatalf("delegated rssMemberIDs = %#v, want empty", got)
+	}
+	if got := delegatedSettings["rssAvailableMembers"].([]map[string]interface{}); len(got) != 0 {
+		t.Fatalf("delegated rssAvailableMembers = %#v, want empty", got)
+	}
+}
+
+func TestDefaultRSSMembersDoNotSubstituteAnotherAdministratorWhenPrimaryIsMissing(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	if err := db.Create(&models.User{ID: 2, Username: "delegated-only", IsAdmin: true}).Error; err != nil {
+		t.Fatalf("create delegated administrator: %v", err)
+	}
+
+	memberIDs, err := defaultRSSMemberIDs(db)
+	if err != nil {
+		t.Fatalf("resolve default RSS members: %v", err)
+	}
+	if len(memberIDs) != 0 {
+		t.Fatalf("default RSS members = %#v, want no substitute for missing primary administrator", memberIDs)
 	}
 }
 
@@ -340,7 +368,7 @@ func TestRetiredFriendLinksAreNotExposedOrUpdatedByFrontendSettings(t *testing.T
 
 	if err := UpdateFrontendSetting(admin.ID, map[string]interface{}{
 		"frontendSettings": map[string]interface{}{
-			"friendLinks": []interface{}{map[string]interface{}{"title": "replacement", "link": "https://replacement.example.test"}},
+			"friendLinks":            []interface{}{map[string]interface{}{"title": "replacement", "link": "https://replacement.example.test"}},
 			"friendLinkEmailEnabled": false,
 			"linksApplyText":         "replacement instructions",
 		},

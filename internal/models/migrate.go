@@ -30,6 +30,9 @@ func MigrateDB(db *gorm.DB) error {
 	if err := dropRetiredAuthenticationAndCommentColumns(db); err != nil {
 		return err
 	}
+	if err := db.Where("capability IN ?", []string{"rss.view", "rss.manage"}).Delete(&AdminCapabilityGrant{}).Error; err != nil {
+		return fmt.Errorf("remove retired RSS capability grants: %w", err)
+	}
 
 	// 使用事务进行初始化操作
 	return db.Transaction(func(tx *gorm.DB) error {

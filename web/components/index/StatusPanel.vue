@@ -966,7 +966,7 @@
                     </div>
                   </div>
                 </div>
-                <div id="site-rss-section" v-if="isSectionVisible('site-rss')" class="col-span-12">
+                <div id="site-rss-section" v-if="isPrimaryAdmin && isSectionVisible('site-rss')" class="col-span-12">
                   <div :class="adminPanelCardClass">
                     <div :class="adminSectionHeaderClass">
                       <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -2452,6 +2452,7 @@ const canViewAdminAudit = computed(() => can('audit.view'))
 const sectionCapabilities: Partial<Record<AdminSectionKey, string>> = adminSectionCapabilities
 const canSection = (section: AdminSectionKey) => {
   if (!isAdmin.value) return section === 'dashboard' || section === 'user' || section === 'hitokoto' || section === 'life-countdown'
+  if (section === 'site-rss') return isPrimaryAdmin.value
   const capability = sectionCapabilities[section]
   return !capability || can(capability)
 }
@@ -2479,7 +2480,7 @@ const adminNavGroups = computed<AdminNavGroup[]>(() => {
         { key: 'site-announcement', label: '公告', icon: 'i-heroicons-megaphone' },
         { key: 'site-ads', label: '广告', icon: 'i-heroicons-photo' },
         { key: 'site-feed', label: '信息流', icon: 'i-heroicons-rss' },
-        { key: 'site-rss', label: 'RSS 订阅', icon: 'i-heroicons-rss' },
+        ...(isPrimaryAdmin.value ? [{ key: 'site-rss' as AdminSectionKey, label: 'RSS 订阅', icon: 'i-heroicons-rss' }] : []),
         { key: 'hitokoto', label: '随机一言', icon: 'i-heroicons-sparkles' },
         { key: 'life-countdown', label: '人生倒计时', icon: 'i-heroicons-heart' },
         { key: 'site-social-links', label: '社交链接', icon: 'i-heroicons-link' }
@@ -6074,6 +6075,10 @@ const saveConfigFields = async (fields: Record<string, any>) => {
       throw new Error(data?.msg || '保存失败')
     }
 }
+const stripRSSManagementSettings = (settings: Record<string, any>) => {
+  const { rssEnabled, rssMemberIDs, rssTitle, rssDescription, rssAuthorName, rssFaviconURL, ...nonRSSSettings } = settings
+  return isPrimaryAdmin.value ? settings : nonRSSSettings
+}
 const saveConfigItem = async (key: string) => {
     try {
         // 特殊处理背景图片数组
@@ -6246,7 +6251,7 @@ const saveConfig = async () => {
 
     const payload = {
       frontendSettings: {
-        ...(frontendConfig as any),
+        ...stripRSSManagementSettings(frontendConfig as any),
         backgrounds: cleanedBackgrounds,
         leftAds: cleanedLeftAds,
         socialLinks: cleanedSocialLinks,
@@ -6256,12 +6261,14 @@ const saveConfig = async () => {
         feedLimit: serializeFeedLimit((frontendConfig as any).feedLimit),
         feedRefreshSeconds: Math.max(10, Math.min(86400, Number((frontendConfig as any).feedRefreshSeconds || 7200))),
         feedEnabled: !!(frontendConfig as any).feedEnabled,
-        rssEnabled: !!(frontendConfig as any).rssEnabled && cleanedRSSMemberIDs.length > 0,
-        rssMemberIDs: cleanedRSSMemberIDs,
-        rssTitle: String((frontendConfig as any).rssTitle || '').trim(),
-        rssDescription: String((frontendConfig as any).rssDescription || '').trim(),
-        rssAuthorName: String((frontendConfig as any).rssAuthorName || '').trim(),
-        rssFaviconURL: String((frontendConfig as any).rssFaviconURL || '').trim(),
+        ...(isPrimaryAdmin.value ? {
+          rssEnabled: !!(frontendConfig as any).rssEnabled && cleanedRSSMemberIDs.length > 0,
+          rssMemberIDs: cleanedRSSMemberIDs,
+          rssTitle: String((frontendConfig as any).rssTitle || '').trim(),
+          rssDescription: String((frontendConfig as any).rssDescription || '').trim(),
+          rssAuthorName: String((frontendConfig as any).rssAuthorName || '').trim(),
+          rssFaviconURL: String((frontendConfig as any).rssFaviconURL || '').trim(),
+        } : {}),
         loginExpireDays: loginExpire.days,
         loginExpireHours: loginExpire.hours,
         leftAdsIntervalMs: Number((frontendConfig as any).leftAdsIntervalMs || 0) || Number((defaultConfig as any).leftAdsIntervalMs || 4000),
@@ -6317,7 +6324,7 @@ const saveInfoFeedConfig = async () => {
 const savePWAConfig = async () => {
     try {
         const settingsToSave = {
-            frontendSettings: frontendConfig
+            frontendSettings: stripRSSManagementSettings(frontendConfig as any)
         }
         const response = await fetch(`${baseApi}/settings`, {
             method: 'PUT',
