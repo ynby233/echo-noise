@@ -180,7 +180,8 @@ func currentReadUser(c *gin.Context) (models.User, bool) {
 	if uid, ok := commentUint(session.Get("user_id")); ok && uid > 0 {
 		if user, err := services.GetUserByID(uid); err == nil && user != nil && user.ID != 0 {
 			expireAt := parseReadSessionExpireAt(session.Get("login_expire_at"))
-			if !user.IsAdmin && expireAt > 0 && time.Now().Unix() > expireAt {
+			issuedAt := parseReadSessionExpireAt(session.Get("login_issued_at"))
+			if services.IsUserLoginExpired(user, issuedAt, time.Now()) || (issuedAt <= 0 && expireAt > 0 && time.Now().Unix() > expireAt) {
 				session.Clear()
 				_ = session.Save()
 			} else {
@@ -203,6 +204,13 @@ func currentReadUser(c *gin.Context) (models.User, bool) {
 	}
 	var user models.User
 	if err := db.Where("token = ? AND token <> ''", token).First(&user).Error; err != nil || user.ID == 0 {
+		return models.User{}, false
+	}
+	issuedAt := int64(0)
+	if user.LoginIssuedAt != nil {
+		issuedAt = user.LoginIssuedAt.Unix()
+	}
+	if services.IsUserLoginExpired(&user, issuedAt, time.Now()) {
 		return models.User{}, false
 	}
 	return user, true
@@ -251,31 +259,27 @@ func normalizeLoginExpireConfig(days int, hours int) (int, int) {
 	if hours > maxLoginExpireHours {
 		hours = maxLoginExpireHours
 	}
-	if days == 0 && hours == 0 {
-		return defaultLoginExpireDays, defaultLoginExpireHours
-	}
 	return days, hours
 }
 
 func getLoginExpireDuration() time.Duration {
-	db, err := database.GetDB()
-	if err != nil {
-		return time.Duration(defaultLoginExpireDays) * 24 * time.Hour
-	}
-	var cfg models.SiteConfig
-	if err := db.Table("site_configs").First(&cfg).Error; err != nil {
-		return time.Duration(defaultLoginExpireDays) * 24 * time.Hour
-	}
-	days, hours := normalizeLoginExpireConfig(cfg.LoginExpireDays, cfg.LoginExpireHours)
-	return (time.Duration(days)*24 + time.Duration(hours)) * time.Hour
+	return getLoginExpireDurationForUser(nil)
+}
+
+func getLoginExpireDurationForUser(user *models.User) time.Duration {
+	return services.LoginExpireDurationForUser(user)
 }
 
 func applyLoginSessionExpire(session sessions.Session, user *models.User) {
-	if user != nil && user.IsAdmin {
+	duration := getLoginExpireDurationForUser(user)
+	if duration <= 0 {
 		session.Set("login_expire_at", int64(0))
+		session.Set("login_issued_at", time.Now().Unix())
 		return
 	}
-	session.Set("login_expire_at", time.Now().Add(getLoginExpireDuration()).Unix())
+	issuedAt := time.Now()
+	session.Set("login_issued_at", issuedAt.Unix())
+	session.Set("login_expire_at", issuedAt.Add(duration).Unix())
 }
 
 func Login(c *gin.Context) {
@@ -996,6 +1000,84 @@ func hasRSSManagementSettings(frontendSettings map[string]interface{}) bool {
 	return false
 }
 
+func hasLoginExpirySettings(frontendSettings map[string]interface{}) bool {
+	for _, field := range []string{
+		"loginExpireDays", "loginExpireHours",
+		"delegatedAdminLoginExpireDays", "delegatedAdminLoginExpireHours",
+	} {
+		if _, exists := frontendSettings[field]; exists {
+			return true
+		}
+	}
+	return false
+}
+
+type widgetPreferencesRequest struct {
+	FrontendSettings map[string]interface{} `json:"frontendSettings"`
+}
+
+func GetWidgetPreferences(c *gin.Context) {
+	user, err := checkUser(c)
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[any](err.Error()))
+		return
+	}
+	config, err := services.GetFrontendConfig(user.ID)
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[any]("获取小组件设置失败"))
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK(config["frontendSettings"], "获取小组件设置成功"))
+}
+
+func UpdateWidgetPreferences(c *gin.Context) {
+	user, err := checkUser(c)
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[any](err.Error()))
+		return
+	}
+	var request widgetPreferencesRequest
+	if err := c.ShouldBindJSON(&request); err != nil || !services.IsUserFrontendSettingsOnly(request.FrontendSettings) {
+		c.JSON(http.StatusOK, dto.Fail[any]("小组件设置格式无效"))
+		return
+	}
+	if err := services.UpdateUserWidgetPreferences(user.ID, request.FrontendSettings); err != nil {
+		c.JSON(http.StatusOK, dto.Fail[any]("保存我的小组件失败: "+err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK[any](nil, "我的小组件已保存"))
+}
+
+func GetGuestWidgetPreferences(c *gin.Context) {
+	if _, err := requirePrimaryAdmin(c); err != nil {
+		c.JSON(http.StatusOK, dto.Fail[any](err.Error()))
+		return
+	}
+	config, err := services.GetFrontendConfig(0)
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[any]("获取访客默认失败"))
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK(config["frontendSettings"], "获取访客默认成功"))
+}
+
+func UpdateGuestWidgetPreferences(c *gin.Context) {
+	if _, err := requirePrimaryAdmin(c); err != nil {
+		c.JSON(http.StatusOK, dto.Fail[any](err.Error()))
+		return
+	}
+	var request widgetPreferencesRequest
+	if err := c.ShouldBindJSON(&request); err != nil || !services.IsGuestWidgetSettingsOnly(request.FrontendSettings) {
+		c.JSON(http.StatusOK, dto.Fail[any]("访客默认小组件设置格式无效"))
+		return
+	}
+	if err := services.UpdateGuestWidgetPreferences(request.FrontendSettings); err != nil {
+		c.JSON(http.StatusOK, dto.Fail[any]("保存访客默认失败: "+err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK[any](nil, "访客默认已保存"))
+}
+
 func UpdateSetting(c *gin.Context) {
 	user, err := checkUser(c)
 	if err != nil {
@@ -1012,6 +1094,10 @@ func UpdateSetting(c *gin.Context) {
 	frontendSettings := setting.FrontendSettings
 	if hasRSSManagementSettings(frontendSettings) && user.ID != models.PrimaryAdminUserID {
 		c.JSON(http.StatusOK, dto.Fail[string]("仅 1 号管理员可管理 RSS"))
+		return
+	}
+	if hasLoginExpirySettings(frontendSettings) && user.ID != models.PrimaryAdminUserID {
+		c.JSON(http.StatusOK, dto.Fail[string]("仅 1 号管理员可管理登录过期时间"))
 		return
 	}
 	if !user.IsAdmin {

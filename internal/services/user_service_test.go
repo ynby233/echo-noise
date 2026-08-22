@@ -1394,7 +1394,8 @@ func TestGetFrontendConfigUsesViewerScopedLifeCountdown(t *testing.T) {
 		t.Fatalf("save admin life countdown: %v", err)
 	}
 
-	assertLifeCountdownFrontendSettings(t, lifeCountdownFrontendSettings(t, 0), true, "1980-03-04", 88)
+	assertLifeCountdownFrontendSettings(t, lifeCountdownFrontendSettings(t, 0), true, "1970-01-02", 90)
+	assertLifeCountdownFrontendSettings(t, lifeCountdownFrontendSettings(t, admin.ID), true, "1980-03-04", 88)
 	assertLifeCountdownFrontendSettings(t, lifeCountdownFrontendSettings(t, alice.ID), false, "", 0)
 
 	if err := UpdateUserLifeCountdownConfig(alice.ID, map[string]interface{}{
@@ -1409,7 +1410,7 @@ func TestGetFrontendConfigUsesViewerScopedLifeCountdown(t *testing.T) {
 	if err := db.Where("user_id = ?", admin.ID).Delete(&models.UserLifeCountdownConfig{}).Error; err != nil {
 		t.Fatalf("delete admin life countdown: %v", err)
 	}
-	assertLifeCountdownFrontendSettings(t, lifeCountdownFrontendSettings(t, admin.ID), true, "1970-01-02", 90)
+	assertLifeCountdownFrontendSettings(t, lifeCountdownFrontendSettings(t, admin.ID), false, "", 0)
 }
 
 func hitokotoEnabledForViewer(t *testing.T, viewerUserID uint) bool {
@@ -1456,7 +1457,75 @@ func TestGetFrontendConfigUsesViewerScopedHitokotoPreference(t *testing.T) {
 	if !hitokotoEnabledForViewer(t, alice.ID) {
 		t.Fatal("alice should be able to enable daily quote even when the site default is disabled")
 	}
-	if hitokotoEnabledForViewer(t, 0) || hitokotoEnabledForViewer(t, admin.ID) {
-		t.Fatal("site default should remain disabled for guests and admins")
+	if hitokotoEnabledForViewer(t, 0) || !hitokotoEnabledForViewer(t, admin.ID) {
+		t.Fatal("site default should apply only to guests; administrators without a preference use account defaults")
+	}
+}
+
+func TestGetFrontendConfigSeparatesGuestDefaultsFromEveryAccountWidgetPreference(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	primary := mustCreateUser(t, models.User{Username: "primary-widgets", Password: models.HashPassword("admin"), IsAdmin: true})
+	delegated := mustCreateUser(t, models.User{Username: "delegated-widgets", Password: models.HashPassword("admin"), IsAdmin: true})
+	ordinary := mustCreateUser(t, models.User{Username: "ordinary-widgets", Password: models.HashPassword("admin")})
+
+	if primary.ID != models.PrimaryAdminUserID {
+		t.Fatalf("primary user id = %d, want %d", primary.ID, models.PrimaryAdminUserID)
+	}
+	if err := db.Create(&models.Setting{AllowRegistration: true}).Error; err != nil {
+		t.Fatalf("create setting: %v", err)
+	}
+	if err := db.Create(&models.SiteConfig{
+		HitokotoEnabled: true, LifeCountdownEnabled: true,
+		CommentEmailAdminNotifyAll: true,
+	}).Error; err != nil {
+		t.Fatalf("create site config: %v", err)
+	}
+	if err := db.Model(&models.SiteConfig{}).Where("1 = 1").Updates(map[string]interface{}{
+		"calendar_enabled": false, "home_stats_enabled": false, "popular_tags_enabled": false,
+		"latest_gallery_enabled": false, "heatmap_enabled": false,
+	}).Error; err != nil {
+		t.Fatalf("set guest widget defaults: %v", err)
+	}
+
+	guest := lifeCountdownFrontendSettings(t, 0)
+	for key, want := range map[string]bool{
+		"lifeCountdownEnabled": true, "hitokotoEnabled": true, "homeStatsEnabled": false,
+		"popularTagsEnabled": false, "calendarEnabled": false, "latestGalleryEnabled": false, "heatmapEnabled": false,
+	} {
+		if got, ok := guest[key].(bool); !ok || got != want {
+			t.Fatalf("guest %s = %#v, want %v", key, guest[key], want)
+		}
+	}
+
+	for _, viewer := range []*models.User{primary, delegated, ordinary} {
+		settings := lifeCountdownFrontendSettings(t, viewer.ID)
+		for key, want := range map[string]bool{
+			"lifeCountdownEnabled": false, "hitokotoEnabled": true, "homeStatsEnabled": true,
+			"popularTagsEnabled": true, "calendarEnabled": true, "latestGalleryEnabled": true, "heatmapEnabled": true,
+		} {
+			if got, ok := settings[key].(bool); !ok || got != want {
+				t.Fatalf("viewer %d default %s = %#v, want %v", viewer.ID, key, settings[key], want)
+			}
+		}
+	}
+
+	if err := UpdateUserWidgetPreferences(delegated.ID, map[string]interface{}{
+		"hitokotoEnabled": false, "homeStatsEnabled": false, "popularTagsEnabled": false,
+		"calendarEnabled": false, "latestGalleryEnabled": false, "heatmapEnabled": false,
+		"lifeCountdownEnabled": true, "lifeCountdownBirthDate": "1990-01-02", "lifeExpectancyYears": 80,
+	}); err != nil {
+		t.Fatalf("save delegated preferences: %v", err)
+	}
+	delegatedSettings := lifeCountdownFrontendSettings(t, delegated.ID)
+	for _, key := range []string{"hitokotoEnabled", "homeStatsEnabled", "popularTagsEnabled", "calendarEnabled", "latestGalleryEnabled", "heatmapEnabled"} {
+		if got, ok := delegatedSettings[key].(bool); !ok || got {
+			t.Fatalf("delegated %s = %#v, want false", key, delegatedSettings[key])
+		}
+	}
+	if got := lifeCountdownFrontendSettings(t, ordinary.ID)["homeStatsEnabled"]; got != true {
+		t.Fatalf("delegated preference leaked to ordinary viewer: %#v", got)
+	}
+	if got := lifeCountdownFrontendSettings(t, 0)["homeStatsEnabled"]; got != false {
+		t.Fatalf("delegated preference leaked to guest: %#v", got)
 	}
 }

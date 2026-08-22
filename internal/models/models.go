@@ -158,6 +158,7 @@ type User struct {
 	Password                    string     `gorm:"type:varchar(191);not null" json:"password"`
 	IsAdmin                     bool       `json:"is_admin"`
 	Token                       string     `gorm:"type:varchar(191)" json:"token"`
+	LoginIssuedAt               *time.Time `gorm:"index" json:"-"`
 	AvatarURL                   string     `gorm:"type:varchar(191)" json:"avatar_url"`
 	Description                 string     `gorm:"type:varchar(191)" json:"description"`
 	Email                       string     `gorm:"type:varchar(191)" json:"email"`
@@ -386,6 +387,10 @@ type SiteConfig struct {
 	TimeEnabled            bool   `gorm:"default:true"`
 	HitokotoEnabled        bool   `gorm:"default:true"`
 	LifeCountdownEnabled   bool   `gorm:"default:false"`
+	HomeStatsEnabled       bool   `gorm:"default:true"`
+	PopularTagsEnabled     bool   `gorm:"default:true"`
+	LatestGalleryEnabled   bool   `gorm:"default:true"`
+	HeatmapEnabled         bool   `gorm:"default:true"`
 	LifeCountdownBirthDate string `gorm:"type:varchar(20)"`
 	LifeExpectancyYears    int    `gorm:"default:0"`
 	// 社交链接组件
@@ -401,19 +406,21 @@ type SiteConfig struct {
 	LeftAds           string `gorm:"type:text"`
 	LeftAdsIntervalMs int    `gorm:"default:4000"`
 	// 关于/友链/留言等页面配置
-	LinksTitle                  string `gorm:"type:varchar(100)"`
-	LinksDescription            string `gorm:"type:varchar(191)"`
-	CommentPageTitle            string `gorm:"type:varchar(100)"`
-	CommentPageDescription      string `gorm:"type:varchar(191)"`
-	NotificationPageTitle       string `gorm:"type:varchar(100)"`
-	NotificationPageDescription string `gorm:"type:varchar(191)"`
-	AnnouncementPageTitle       string `gorm:"type:varchar(100)"`
-	AnnouncementPageDescription string `gorm:"type:varchar(191)"`
-	AboutPageTitle              string `gorm:"type:varchar(100)"`
-	AboutPageDescription        string `gorm:"type:varchar(191)"`
-	AboutMarkdown               string `gorm:"type:text"`
-	LoginExpireDays             int    `gorm:"default:3"`
-	LoginExpireHours            int    `gorm:"default:0"`
+	LinksTitle                     string `gorm:"type:varchar(100)"`
+	LinksDescription               string `gorm:"type:varchar(191)"`
+	CommentPageTitle               string `gorm:"type:varchar(100)"`
+	CommentPageDescription         string `gorm:"type:varchar(191)"`
+	NotificationPageTitle          string `gorm:"type:varchar(100)"`
+	NotificationPageDescription    string `gorm:"type:varchar(191)"`
+	AnnouncementPageTitle          string `gorm:"type:varchar(100)"`
+	AnnouncementPageDescription    string `gorm:"type:varchar(191)"`
+	AboutPageTitle                 string `gorm:"type:varchar(100)"`
+	AboutPageDescription           string `gorm:"type:varchar(191)"`
+	AboutMarkdown                  string `gorm:"type:text"`
+	LoginExpireDays                int    `gorm:"default:3"`
+	LoginExpireHours               int    `gorm:"default:0"`
+	DelegatedAdminLoginExpireDays  int    `gorm:"default:3"`
+	DelegatedAdminLoginExpireHours int    `gorm:"default:0"`
 	// 信息流聚合配置
 	FeedEnabled            bool   `gorm:"default:false"`
 	FeedPageTitle          string `gorm:"type:varchar(100)"`
@@ -537,8 +544,13 @@ type UserLifeCountdownConfig struct {
 
 type UserFrontendPreference struct {
 	gorm.Model
-	UserID          uint  `json:"user_id" gorm:"uniqueIndex;not null"`
-	HitokotoEnabled *bool `json:"hitokotoEnabled"`
+	UserID               uint  `json:"user_id" gorm:"uniqueIndex;not null"`
+	HitokotoEnabled      *bool `json:"hitokotoEnabled"`
+	HomeStatsEnabled     *bool `json:"homeStatsEnabled"`
+	PopularTagsEnabled   *bool `json:"popularTagsEnabled"`
+	CalendarEnabled      *bool `json:"calendarEnabled"`
+	LatestGalleryEnabled *bool `json:"latestGalleryEnabled"`
+	HeatmapEnabled       *bool `json:"heatmapEnabled"`
 }
 
 type FriendLink struct {

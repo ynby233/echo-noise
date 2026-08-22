@@ -703,6 +703,11 @@ func Login(userdto dto.LoginDto) (*models.User, error) {
 	if err := ensureLoginToken(user); err != nil {
 		return nil, err
 	}
+	issuedAt := time.Now()
+	if err := database.DB.Model(&models.User{}).Where("id = ?", user.ID).Update("login_issued_at", issuedAt).Error; err != nil {
+		return nil, err
+	}
+	user.LoginIssuedAt = &issuedAt
 
 	return user, nil
 }

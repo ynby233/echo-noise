@@ -38,7 +38,7 @@
             </div>
           </div>
         </UCard>
-        <UCard class="sidebar-card no-padding-card mt-2 left-widget-stats-card" :class="sidebarThemeCard">
+        <UCard v-if="frontendConfig.homeStatsEnabled !== false" class="sidebar-card no-padding-card mt-2 left-widget-stats-card" :class="sidebarThemeCard">
           <div v-if="isLoggedIn" class="p-0 grid grid-cols-3 gap-2 text-center text-sm">
             <div>
               <div class="font-semibold">{{ profileTotalMessages }}</div>
@@ -93,7 +93,7 @@
             <div class="clock-display">{{ formatTime(currentTime) }}</div>
           </div>
         </UCard>
-        <UCard v-if="isLoggedIn && frontendConfig.lifeCountdownEnabled" class="sidebar-card mt-2 life-countdown-card left-widget-life-card" :class="sidebarThemeCard">
+        <UCard v-if="frontendConfig.lifeCountdownEnabled" class="sidebar-card mt-2 life-countdown-card left-widget-life-card" :class="sidebarThemeCard">
           <div class="life-countdown-wrap">
             <div v-if="lifeCountdown.valid" class="space-y-2">
               <div class="life-countdown-main">
@@ -131,7 +131,7 @@
           <UCard v-if="frontendConfig.announcementEnabled && (frontendConfig.announcementText || '').trim() !== ''" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
             <AnnouncementBar :text="frontendConfig.announcementText || '欢迎访问！'" />
           </UCard>
-          <UCard class="sidebar-card no-padding-card" :class="sidebarThemeCard">
+          <UCard v-if="frontendConfig.popularTagsEnabled !== false" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
             <div class="hot-tags-block">
               <div class="hot-tags-head">
                 <div class="text-xs opacity-70">热门标签</div>
@@ -152,7 +152,7 @@
           <UCard v-if="frontendConfig.calendarEnabled !== false" class="sidebar-card no-padding-card calendar-sidebar-card" :class="sidebarThemeCard">
             <CalendarWidget :active-tab="activeTab" :selected-date="selectedCalendarDate" @select-date="handleCalendarDateSelect" />
           </UCard>
-          <UCard class="sidebar-card no-padding-card" :class="sidebarThemeCard">
+          <UCard v-if="frontendConfig.latestGalleryEnabled !== false" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
             <div class="image-gallery-block">
               <div class="text-xs opacity-70 mb-2">最新图集（{{ recommendedImages.length }}）</div>
               <div class="scroll-images">
@@ -171,7 +171,7 @@
               </div>
             </div>
           </UCard>
-          <UCard class="sidebar-card no-padding-card heatmap-sidebar-card" :class="sidebarThemeCard">
+          <UCard v-if="frontendConfig.heatmapEnabled !== false" class="sidebar-card no-padding-card heatmap-sidebar-card" :class="sidebarThemeCard">
             <HeatmapWidget :active-tab="activeTab" compact />
           </UCard>
         
@@ -377,7 +377,7 @@
         <UCard v-if="frontendConfig.announcementEnabled && (frontendConfig.announcementText || '').trim() !== ''" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
           <AnnouncementBar :text="frontendConfig.announcementText || '欢迎访问！'" />
         </UCard>
-        <UCard class="sidebar-card no-padding-card" :class="sidebarThemeCard">
+        <UCard v-if="frontendConfig.popularTagsEnabled !== false" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
           <div class="hot-tags-block">
             <div class="hot-tags-head">
               <div class="text-xs opacity-70">热门标签</div>
@@ -398,7 +398,7 @@
         <UCard v-if="frontendConfig.calendarEnabled !== false" class="sidebar-card no-padding-card calendar-sidebar-card" :class="sidebarThemeCard">
           <CalendarWidget :active-tab="activeTab" :selected-date="selectedCalendarDate" @select-date="handleCalendarDateSelect" />
         </UCard>
-        <UCard class="sidebar-card no-padding-card" :class="sidebarThemeCard">
+        <UCard v-if="frontendConfig.latestGalleryEnabled !== false" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
           <div class="image-gallery-block">
             <div class="text-xs opacity-70 mb-2">最新图集（{{ recommendedImages.length }}）</div>
             <div class="scroll-images">
@@ -417,7 +417,7 @@
             </div>
           </div>
         </UCard>
-        <UCard class="sidebar-card no-padding-card heatmap-sidebar-card" :class="sidebarThemeCard">
+        <UCard v-if="frontendConfig.heatmapEnabled !== false" class="sidebar-card no-padding-card heatmap-sidebar-card" :class="sidebarThemeCard">
           <HeatmapWidget :active-tab="activeTab" compact />
         </UCard>
         
@@ -1219,10 +1219,10 @@ const fetchProfileHomeStats = async () => {
     profileHomeStats.value = null
   }
 }
-watch(() => [userStore.isLogin, (userStore.user as any)?.id, userStore.token], () => {
-  fetchProfileHomeStats()
+watch(() => [userStore.isLogin, (userStore.user as any)?.id, userStore.token, frontendConfig.value.homeStatsEnabled], () => {
+  if (frontendConfig.value.homeStatsEnabled !== false) fetchProfileHomeStats()
+  else profileHomeStats.value = null
 }, { deep: false })
-onMounted(() => { fetchProfileHomeStats() })
 const isAdmin = computed(() => {
   const u = userStore.user as any
   return !!(userStore.isLogin && u && (u.is_admin || u.IsAdmin))
@@ -1522,6 +1522,10 @@ Object.assign(frontendConfig.value, {
     announcementText: '',
     announcementEnabled: true,
     hitokotoEnabled: true,
+			 homeStatsEnabled: true,
+			 popularTagsEnabled: true,
+			 latestGalleryEnabled: true,
+			 heatmapEnabled: true,
     // 评论系统
     commentEnabled: true,
     commentEmailEnabled: false,
@@ -1558,7 +1562,7 @@ watch(isFeedEnabled, (enabled) => {
     if (activeTab.value === 'feed') activeTab.value = 'latest'
     feedResultCount.value = 0
   }
-}, { immediate: true })
+})
 const musicConfigLoaded = ref(false)
 const resolveMusicSource = (cfg: any) => {
   const playlistId = String(cfg?.musicPlaylistId || '').trim()
@@ -2082,7 +2086,7 @@ watch(() => [
   nmpDisabled.value = false
   nmpFailureCount = 0
   scheduleMusicPlayerReconcile('public-config')
-}, { immediate: true })
+})
 
 watch(() => [isLoggedIn.value, isOnline.value, route.fullPath, activeTab.value], () => {
   scheduleMusicPlayerReconcile('context-change')
@@ -2103,6 +2107,15 @@ onUnmounted(() => {
 watch(() => frontendConfig.value.hitokotoEnabled, async (enabled) => {
   if (enabled) await loadHitokoto()
 }, { immediate: true })
+
+watch(() => frontendConfig.value.latestGalleryEnabled, (enabled) => {
+  if (enabled !== false) fetchImages()
+  else images.value = []
+})
+watch(() => frontendConfig.value.popularTagsEnabled, (enabled) => {
+  if (enabled !== false) fetchTags()
+  else tags.value = []
+})
 
 const firstBackgroundUrl = computed(() => frontendConfig.value.backgrounds[0]?.url || '')
 const activeHeaderTextStyle = computed(() => {
@@ -2172,6 +2185,10 @@ const headerImageStyle = computed(() => ({
     announcementText: '欢迎访问！',
     announcementEnabled: true,
     hitokotoEnabled: true,
+			 homeStatsEnabled: true,
+			 popularTagsEnabled: true,
+			 latestGalleryEnabled: true,
+			 heatmapEnabled: true,
     // 评论系统默认值
     commentEnabled: true,
     commentEmailEnabled: false,
@@ -2595,7 +2612,6 @@ onMounted(() => {
 onMounted(() => {
   const handler = () => fetchConfig()
   window.addEventListener('frontend-config-updated', handler)
-  fetchImages()
   fetchStatus()
   onUnmounted(() => window.removeEventListener('frontend-config-updated', handler))
 })
@@ -2631,7 +2647,7 @@ onMounted(async () => {
     
     // 非关键内容延迟加载
     runIdle(async () => {
-      await fetchTags()
+      if (frontendConfig.value.popularTagsEnabled !== false) await fetchTags()
       await preloadImages(frontendConfig.value.backgrounds)
     })
 

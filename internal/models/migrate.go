@@ -3,6 +3,7 @@ package models
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -50,6 +51,12 @@ func MigrateDB(db *gorm.DB) error {
 			}
 			if strings.TrimSpace(user.Password) == "" && user.IsAdmin {
 				if err := tx.Model(&User{}).Where("id = ?", user.ID).Update("password", HashPassword("123456")).Error; err != nil {
+					return err
+				}
+			}
+			if user.LoginIssuedAt == nil {
+				issuedAt := time.Now()
+				if err := tx.Model(&User{}).Where("id = ?", user.ID).Update("login_issued_at", issuedAt).Error; err != nil {
 					return err
 				}
 			}

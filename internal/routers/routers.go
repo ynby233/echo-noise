@@ -291,6 +291,10 @@ func SetupRouter() *gin.Engine {
 		tokenAuth.PUT("/messages/:id/comments/:cid", controllers.UpdateComment)
 		tokenAuth.DELETE("/messages/:id/comments/:cid", controllers.DeleteComment)
 		tokenAuth.PUT("/settings", middleware.RequireCapability(authorization.CapabilitySiteSettingsManage), controllers.UpdateSetting)
+		tokenAuth.GET("/user/widget-preferences", controllers.GetWidgetPreferences)
+		tokenAuth.PUT("/user/widget-preferences", controllers.UpdateWidgetPreferences)
+		tokenAuth.GET("/admin/guest-widget-preferences", controllers.GetGuestWidgetPreferences)
+		tokenAuth.PUT("/admin/guest-widget-preferences", controllers.UpdateGuestWidgetPreferences)
 	}
 	// 需要鉴权的消息操作路由
 	messages := authRoutes.Group("/messages")
@@ -413,7 +417,11 @@ func SetupRouter() *gin.Engine {
 		user.POST("/email/verify", controllers.VerifyEmail)
 		user.POST("/email/change/send_code", controllers.SendChangeEmailCode)
 		user.POST("/email/change", controllers.ChangeEmail)
+		user.GET("/widget-preferences", controllers.GetWidgetPreferences)
+		user.PUT("/widget-preferences", controllers.UpdateWidgetPreferences)
 	}
+	authRoutes.GET("/admin/guest-widget-preferences", controllers.GetGuestWidgetPreferences)
+	authRoutes.PUT("/admin/guest-widget-preferences", controllers.UpdateGuestWidgetPreferences)
 
 	// 注册申请管理（管理员）
 	registration := authRoutes.Group("/registration")

@@ -28,6 +28,44 @@ type lifeCountdownSettings struct {
 	LifeExpectancyYears int
 }
 
+// WidgetVisibilitySettings is the single seven-field visibility contract used
+// for both an authenticated viewer and the anonymous guest default. Countdown
+// details remain in their existing dedicated records, while this value object
+// keeps every caller on the same visibility vocabulary.
+type WidgetVisibilitySettings struct {
+	LifeCountdownEnabled bool `json:"lifeCountdownEnabled"`
+	HitokotoEnabled      bool `json:"hitokotoEnabled"`
+	HomeStatsEnabled     bool `json:"homeStatsEnabled"`
+	PopularTagsEnabled   bool `json:"popularTagsEnabled"`
+	CalendarEnabled      bool `json:"calendarEnabled"`
+	LatestGalleryEnabled bool `json:"latestGalleryEnabled"`
+	HeatmapEnabled       bool `json:"heatmapEnabled"`
+}
+
+func DefaultAccountWidgetVisibilitySettings() WidgetVisibilitySettings {
+	return WidgetVisibilitySettings{
+		LifeCountdownEnabled: false,
+		HitokotoEnabled:      true,
+		HomeStatsEnabled:     true,
+		PopularTagsEnabled:   true,
+		CalendarEnabled:      true,
+		LatestGalleryEnabled: true,
+		HeatmapEnabled:       true,
+	}
+}
+
+func guestWidgetVisibilitySettings(config models.SiteConfig) WidgetVisibilitySettings {
+	return WidgetVisibilitySettings{
+		LifeCountdownEnabled: config.LifeCountdownEnabled,
+		HitokotoEnabled:      config.HitokotoEnabled,
+		HomeStatsEnabled:     config.HomeStatsEnabled,
+		PopularTagsEnabled:   config.PopularTagsEnabled,
+		CalendarEnabled:      config.CalendarEnabled,
+		LatestGalleryEnabled: config.LatestGalleryEnabled,
+		HeatmapEnabled:       config.HeatmapEnabled,
+	}
+}
+
 type RSSConfig struct {
 	Enabled          bool
 	MemberIDs        []uint
@@ -45,7 +83,12 @@ var lifeCountdownSettingKeys = map[string]struct{}{
 }
 
 var userFrontendPreferenceSettingKeys = map[string]struct{}{
-	"hitokotoEnabled": {},
+	"hitokotoEnabled":      {},
+	"homeStatsEnabled":     {},
+	"popularTagsEnabled":   {},
+	"calendarEnabled":      {},
+	"latestGalleryEnabled": {},
+	"heatmapEnabled":       {},
 }
 
 const defaultHeaderImageURL = "https://picsum.photos/1600/500"
@@ -75,10 +118,43 @@ func normalizeLoginExpireConfig(days int, hours int) (int, int) {
 	if hours > maxLoginExpireHours {
 		hours = maxLoginExpireHours
 	}
-	if days == 0 && hours == 0 {
-		return defaultLoginExpireDays, defaultLoginExpireHours
-	}
 	return days, hours
+}
+
+// LoginExpireDurationForUser resolves the current database policy on every
+// authentication check. A zero duration is intentional and means permanent;
+// ID 1 is always permanent regardless of either configurable policy.
+func LoginExpireDurationForUser(user *models.User) time.Duration {
+	if user != nil && user.ID == models.PrimaryAdminUserID {
+		return 0
+	}
+	db, err := database.GetDB()
+	if err != nil {
+		return time.Duration(defaultLoginExpireDays) * 24 * time.Hour
+	}
+	var config models.SiteConfig
+	if err := db.Table("site_configs").First(&config).Error; err != nil {
+		return time.Duration(defaultLoginExpireDays) * 24 * time.Hour
+	}
+	days, hours := normalizeLoginExpireConfig(config.LoginExpireDays, config.LoginExpireHours)
+	if user != nil && user.IsAdmin {
+		days, hours = normalizeLoginExpireConfig(config.DelegatedAdminLoginExpireDays, config.DelegatedAdminLoginExpireHours)
+	}
+	return (time.Duration(days)*24 + time.Duration(hours)) * time.Hour
+}
+
+func IsUserLoginExpired(user *models.User, issuedAt int64, now time.Time) bool {
+	duration := LoginExpireDurationForUser(user)
+	if duration <= 0 {
+		return false
+	}
+	if issuedAt <= 0 {
+		// Database migration stamps legacy accounts once. An in-memory or
+		// externally managed test database without that migration remains
+		// compatible until it is restarted through the normal bootstrap path.
+		return false
+	}
+	return now.Unix() > issuedAt+int64(duration/time.Second)
 }
 
 func parsePositiveIntSetting(raw interface{}) (int, bool) {
@@ -523,6 +599,25 @@ func IsUserFrontendSettingsOnly(frontendSettings map[string]interface{}) bool {
 	return true
 }
 
+// IsGuestWidgetSettingsOnly accepts exactly the seven widget fields and the
+// guest countdown details. It is deliberately separate from the much broader
+// site-settings payload so a primary-admin guest-default save cannot carry
+// unrelated site configuration by accident.
+func IsGuestWidgetSettingsOnly(frontendSettings map[string]interface{}) bool {
+	if len(frontendSettings) == 0 {
+		return false
+	}
+	for key := range frontendSettings {
+		if _, ok := lifeCountdownSettingKeys[key]; ok {
+			continue
+		}
+		if _, ok := userFrontendPreferenceSettingKeys[key]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 func StripLifeCountdownSettings(frontendSettings map[string]interface{}) map[string]interface{} {
 	stripped := make(map[string]interface{}, len(frontendSettings))
 	for key, value := range frontendSettings {
@@ -589,11 +684,6 @@ func UpdateUserFrontendPreferenceConfig(userID uint, frontendSettings map[string
 		return err
 	}
 
-	value, ok := parseBoolSetting(frontendSettings["hitokotoEnabled"])
-	if !ok {
-		return fmt.Errorf("随机一言开关格式无效")
-	}
-
 	var preference models.UserFrontendPreference
 	err = db.Where("user_id = ?", userID).First(&preference).Error
 	if err != nil {
@@ -602,11 +692,53 @@ func UpdateUserFrontendPreferenceConfig(userID uint, frontendSettings map[string
 		}
 		preference = models.UserFrontendPreference{UserID: userID}
 	}
-	preference.HitokotoEnabled = &value
+	updates := []struct {
+		key   string
+		label string
+		set   func(*bool)
+	}{
+		{"hitokotoEnabled", "每日一言", func(value *bool) { preference.HitokotoEnabled = value }},
+		{"homeStatsEnabled", "数据统计", func(value *bool) { preference.HomeStatsEnabled = value }},
+		{"popularTagsEnabled", "热门标签", func(value *bool) { preference.PopularTagsEnabled = value }},
+		{"calendarEnabled", "日历", func(value *bool) { preference.CalendarEnabled = value }},
+		{"latestGalleryEnabled", "最新图集", func(value *bool) { preference.LatestGalleryEnabled = value }},
+		{"heatmapEnabled", "热力图", func(value *bool) { preference.HeatmapEnabled = value }},
+	}
+	for _, update := range updates {
+		raw, exists := frontendSettings[update.key]
+		if !exists {
+			continue
+		}
+		value, ok := parseBoolSetting(raw)
+		if !ok {
+			return fmt.Errorf("%s开关格式无效", update.label)
+		}
+		update.set(&value)
+	}
 	if preference.ID == 0 {
 		return db.Create(&preference).Error
 	}
 	return db.Save(&preference).Error
+}
+
+// UpdateUserWidgetPreferences writes only the authenticated user's seven
+// widgets. The caller never supplies a target user ID, which prevents cross-
+// account preference updates at the controller seam.
+func UpdateUserWidgetPreferences(userID uint, frontendSettings map[string]interface{}) error {
+	if userID == 0 || !IsUserFrontendSettingsOnly(frontendSettings) {
+		return fmt.Errorf("小组件设置包含不允许的字段")
+	}
+	if err := UpdateUserLifeCountdownConfig(userID, frontendSettings); err != nil {
+		return err
+	}
+	return UpdateUserFrontendPreferenceConfig(userID, frontendSettings)
+}
+
+func UpdateGuestWidgetPreferences(frontendSettings map[string]interface{}) error {
+	if !IsGuestWidgetSettingsOnly(frontendSettings) {
+		return fmt.Errorf("访客默认小组件设置包含不允许的字段")
+	}
+	return UpdateFrontendSetting(0, map[string]interface{}{"frontendSettings": frontendSettings})
 }
 
 func parseBoolSetting(value interface{}) (bool, bool) {
@@ -861,25 +993,16 @@ func normalizeLifeExpectancyYears(value interface{}) (int, error) {
 }
 
 func resolveLifeCountdownSettings(db *gorm.DB, viewerUserID uint, siteConfig models.SiteConfig) lifeCountdownSettings {
-	targetUserID := viewerUserID
-	fallbackToSiteConfig := false
-
-	if targetUserID == 0 {
-		var admin models.User
-		if err := db.Where("is_admin = ?", true).Order("id ASC").First(&admin).Error; err == nil {
-			targetUserID = admin.ID
-		}
-		fallbackToSiteConfig = true
-	} else {
-		var user models.User
-		if err := db.Select("id, is_admin").First(&user, targetUserID).Error; err == nil && user.IsAdmin {
-			fallbackToSiteConfig = true
+	if viewerUserID == 0 {
+		return lifeCountdownSettings{
+			Enabled:             siteConfig.LifeCountdownEnabled,
+			BirthDate:           strings.TrimSpace(siteConfig.LifeCountdownBirthDate),
+			LifeExpectancyYears: siteConfig.LifeExpectancyYears,
 		}
 	}
-
-	if targetUserID != 0 {
+	if viewerUserID != 0 {
 		var config models.UserLifeCountdownConfig
-		if err := db.Where("user_id = ?", targetUserID).First(&config).Error; err == nil {
+		if err := db.Where("user_id = ?", viewerUserID).First(&config).Error; err == nil {
 			return lifeCountdownSettings{
 				Enabled:             config.Enabled,
 				BirthDate:           strings.TrimSpace(config.BirthDate),
@@ -888,32 +1011,37 @@ func resolveLifeCountdownSettings(db *gorm.DB, viewerUserID uint, siteConfig mod
 		}
 	}
 
-	if fallbackToSiteConfig {
-		return lifeCountdownSettings{
-			Enabled:             siteConfig.LifeCountdownEnabled,
-			BirthDate:           strings.TrimSpace(siteConfig.LifeCountdownBirthDate),
-			LifeExpectancyYears: siteConfig.LifeExpectancyYears,
-		}
-	}
-
 	return lifeCountdownSettings{}
 }
 
-func resolveHitokotoEnabled(db *gorm.DB, viewerUserID uint, siteConfig models.SiteConfig) bool {
+func resolveWidgetVisibilitySettings(db *gorm.DB, viewerUserID uint, siteConfig models.SiteConfig) WidgetVisibilitySettings {
 	if viewerUserID == 0 {
-		return siteConfig.HitokotoEnabled
+		return guestWidgetVisibilitySettings(siteConfig)
 	}
-
-	var viewer models.User
-	if err := db.Select("id, is_admin").First(&viewer, viewerUserID).Error; err != nil || viewer.IsAdmin {
-		return siteConfig.HitokotoEnabled
-	}
-
+	resolved := DefaultAccountWidgetVisibilitySettings()
 	var preference models.UserFrontendPreference
-	if err := db.Where("user_id = ?", viewerUserID).First(&preference).Error; err == nil && preference.HitokotoEnabled != nil {
-		return *preference.HitokotoEnabled
+	if err := db.Where("user_id = ?", viewerUserID).First(&preference).Error; err != nil {
+		return resolved
 	}
-	return siteConfig.HitokotoEnabled
+	if preference.HitokotoEnabled != nil {
+		resolved.HitokotoEnabled = *preference.HitokotoEnabled
+	}
+	if preference.HomeStatsEnabled != nil {
+		resolved.HomeStatsEnabled = *preference.HomeStatsEnabled
+	}
+	if preference.PopularTagsEnabled != nil {
+		resolved.PopularTagsEnabled = *preference.PopularTagsEnabled
+	}
+	if preference.CalendarEnabled != nil {
+		resolved.CalendarEnabled = *preference.CalendarEnabled
+	}
+	if preference.LatestGalleryEnabled != nil {
+		resolved.LatestGalleryEnabled = *preference.LatestGalleryEnabled
+	}
+	if preference.HeatmapEnabled != nil {
+		resolved.HeatmapEnabled = *preference.HeatmapEnabled
+	}
+	return resolved
 }
 
 // GetFrontendConfig 获取前端配置
@@ -1028,7 +1156,7 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 	}
 
 	lifeCountdown := resolveLifeCountdownSettings(db, viewerUserID, config)
-	hitokotoEnabled := resolveHitokotoEnabled(db, viewerUserID, config)
+	widgetVisibility := resolveWidgetVisibilitySettings(db, viewerUserID, config)
 	rssConfig, err := buildRSSConfig(db, config)
 	if err != nil {
 		rssConfig = defaultRSSConfigValues()
@@ -1078,6 +1206,14 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 			}(),
 			"loginExpireHours": func() int {
 				_, hours := normalizeLoginExpireConfig(config.LoginExpireDays, config.LoginExpireHours)
+				return hours
+			}(),
+			"delegatedAdminLoginExpireDays": func() int {
+				days, _ := normalizeLoginExpireConfig(config.DelegatedAdminLoginExpireDays, config.DelegatedAdminLoginExpireHours)
+				return days
+			}(),
+			"delegatedAdminLoginExpireHours": func() int {
+				_, hours := normalizeLoginExpireConfig(config.DelegatedAdminLoginExpireDays, config.DelegatedAdminLoginExpireHours)
 				return hours
 			}(),
 			"commentPageTitle":            choose(config.CommentPageTitle, getDefaultConfig()["frontendSettings"].(map[string]interface{})["commentPageTitle"].(string)),
@@ -1131,10 +1267,14 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 			"commentEmailAdminNotifyAll": config.CommentEmailAdminNotifyAll,
 			"commentLoginRequired":       config.CommentLoginRequired,
 			// 扩展组件开关
-			"calendarEnabled":        config.CalendarEnabled,
+			"calendarEnabled":        widgetVisibility.CalendarEnabled,
 			"timeEnabled":            config.TimeEnabled,
-			"hitokotoEnabled":        hitokotoEnabled,
+			"hitokotoEnabled":        widgetVisibility.HitokotoEnabled,
 			"lifeCountdownEnabled":   lifeCountdown.Enabled,
+			"homeStatsEnabled":       widgetVisibility.HomeStatsEnabled,
+			"popularTagsEnabled":     widgetVisibility.PopularTagsEnabled,
+			"latestGalleryEnabled":   widgetVisibility.LatestGalleryEnabled,
+			"heatmapEnabled":         widgetVisibility.HeatmapEnabled,
 			"lifeCountdownBirthDate": choose(lifeCountdown.BirthDate, ""),
 			"lifeExpectancyYears": func() int {
 				if lifeCountdown.LifeExpectancyYears > 0 {
@@ -1218,6 +1358,14 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 		"smtpFrom":           config.SmtpFrom,
 		"smtpEncryption":     config.SmtpEncryption,
 		"smtpTLS":            config.SmtpTLS,
+	}
+	if !viewerIsPrimaryAdmin {
+		if frontendSettings, ok := configMap["frontendSettings"].(map[string]interface{}); ok {
+			delete(frontendSettings, "loginExpireDays")
+			delete(frontendSettings, "loginExpireHours")
+			delete(frontendSettings, "delegatedAdminLoginExpireDays")
+			delete(frontendSettings, "delegatedAdminLoginExpireHours")
+		}
 	}
 	return configMap, nil
 }
@@ -1351,6 +1499,15 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 		loginExpireHours = n
 	}
 	config.LoginExpireDays, config.LoginExpireHours = normalizeLoginExpireConfig(loginExpireDays, loginExpireHours)
+	delegatedAdminLoginExpireDays := config.DelegatedAdminLoginExpireDays
+	delegatedAdminLoginExpireHours := config.DelegatedAdminLoginExpireHours
+	if n, ok := parsePositiveIntSetting(frontendSettings["delegatedAdminLoginExpireDays"]); ok {
+		delegatedAdminLoginExpireDays = n
+	}
+	if n, ok := parsePositiveIntSetting(frontendSettings["delegatedAdminLoginExpireHours"]); ok {
+		delegatedAdminLoginExpireHours = n
+	}
+	config.DelegatedAdminLoginExpireDays, config.DelegatedAdminLoginExpireHours = normalizeLoginExpireConfig(delegatedAdminLoginExpireDays, delegatedAdminLoginExpireHours)
 	if vb, ok := frontendSettings["calendarEnabled"].(bool); ok {
 		config.CalendarEnabled = vb
 	} else if vs, ok := frontendSettings["calendarEnabled"].(string); ok {
@@ -1385,6 +1542,21 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	}
 	if config.LifeExpectancyYears < 0 {
 		config.LifeExpectancyYears = 0
+	}
+	for _, item := range []struct {
+		key string
+		set func(bool)
+	}{
+		{"homeStatsEnabled", func(value bool) { config.HomeStatsEnabled = value }},
+		{"popularTagsEnabled", func(value bool) { config.PopularTagsEnabled = value }},
+		{"latestGalleryEnabled", func(value bool) { config.LatestGalleryEnabled = value }},
+		{"heatmapEnabled", func(value bool) { config.HeatmapEnabled = value }},
+	} {
+		if raw, exists := frontendSettings[item.key]; exists {
+			if value, ok := parseBoolSetting(raw); ok {
+				item.set(value)
+			}
+		}
 	}
 	// 评论系统设置
 	if vb, ok := frontendSettings["commentEnabled"].(bool); ok {

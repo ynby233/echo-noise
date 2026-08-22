@@ -39,13 +39,14 @@ func setupSessionAuthMiddlewareTest(t *testing.T) (*gin.Engine, models.User, mod
 		models.SetDB(nil)
 	})
 
-	user := models.User{Username: "ordinary", Token: "ordinary-token", IsAdmin: false}
-	admin := models.User{Username: "admin", Token: "admin-token", IsAdmin: true}
-	if err := db.Create(&user).Error; err != nil {
-		t.Fatalf("create ordinary user: %v", err)
-	}
+	now := time.Now()
+	admin := models.User{Username: "admin", Token: "admin-token", IsAdmin: true, LoginIssuedAt: &now}
 	if err := db.Create(&admin).Error; err != nil {
 		t.Fatalf("create admin user: %v", err)
+	}
+	user := models.User{Username: "ordinary", Token: "ordinary-token", IsAdmin: false}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatalf("create ordinary user: %v", err)
 	}
 
 	r := gin.New()
@@ -62,6 +63,11 @@ func setupSessionAuthMiddlewareTest(t *testing.T) (*gin.Engine, models.User, mod
 		session.Set("is_admin", selected.IsAdmin)
 		expireAt, _ := strconv.ParseInt(c.DefaultQuery("expire_at", "0"), 10, 64)
 		session.Set("login_expire_at", expireAt)
+		issuedAt := time.Now().Unix()
+		if !selected.IsAdmin && expireAt > 0 {
+			issuedAt = expireAt - int64(3*24*time.Hour/time.Second)
+		}
+		session.Set("login_issued_at", issuedAt)
 		if err := session.Save(); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

@@ -7,6 +7,7 @@ import (
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/dto"
 	"github.com/rcy1314/echo-noise/internal/models"
+	"github.com/rcy1314/echo-noise/internal/services"
 	"net/http"
 	"strings"
 	"time"
@@ -17,15 +18,26 @@ func SessionAuthMiddleware() gin.HandlerFunc {
 		session := sessions.Default(ctx)
 		userID := session.Get("user_id")
 		expireAt := parseSessionExpireAt(session.Get("login_expire_at"))
-		isSessionAdmin, _ := session.Get("is_admin").(bool)
-		now := time.Now().Unix()
-		sessionExpired := userID != nil && !isSessionAdmin && expireAt > 0 && now > expireAt
-
-		if userID == nil || sessionExpired {
-			if sessionExpired {
+		issuedAt := parseSessionExpireAt(session.Get("login_issued_at"))
+		if sessionUserID, ok := toUint(userID); ok && sessionUserID > 0 {
+			db, err := database.GetDB()
+			var sessionUser models.User
+			if err != nil || db.First(&sessionUser, sessionUserID).Error != nil || services.IsUserLoginExpired(&sessionUser, issuedAt, time.Now()) || (issuedAt <= 0 && expireAt > 0 && time.Now().Unix() > expireAt) {
 				session.Clear()
 				_ = session.Save()
+				ctx.JSON(http.StatusUnauthorized, dto.Fail[any]("未登录或登录已过期"))
+				ctx.Abort()
+				return
 			}
+			ctx.Set("user_id", sessionUser.ID)
+			ctx.Set("username", sessionUser.Username)
+			ctx.Set("is_admin", sessionUser.IsAdmin)
+			ctx.Set("auth_via", "session")
+			ctx.Next()
+			return
+		}
+
+		if userID == nil {
 			// Bearer Token 回退仅保留给管理员，避免普通用户的持久化 token 绕过登录过期时间。
 			if authenticateAdminBearerToken(ctx) {
 				ctx.Next()
@@ -59,13 +71,8 @@ func SessionAuthMiddleware() gin.HandlerFunc {
 			ctx.Abort()
 			return
 		}
-
-		// 将用户信息存储到上下文中
-		ctx.Set("user_id", userID.(uint))
-		ctx.Set("username", session.Get("username"))
-		ctx.Set("is_admin", session.Get("is_admin"))
-		ctx.Set("auth_via", "session")
-		ctx.Next()
+		ctx.JSON(http.StatusUnauthorized, dto.Fail[any]("未登录或登录已过期"))
+		ctx.Abort()
 	}
 }
 
@@ -90,6 +97,13 @@ func authenticateAdminBearerToken(ctx *gin.Context) bool {
 	}
 	var user models.User
 	if err := db.Where("token = ?", token).First(&user).Error; err != nil || user.ID == 0 || user.Token == "" || !user.IsAdmin {
+		return false
+	}
+	issuedAt := int64(0)
+	if user.LoginIssuedAt != nil {
+		issuedAt = user.LoginIssuedAt.Unix()
+	}
+	if services.IsUserLoginExpired(&user, issuedAt, time.Now()) {
 		return false
 	}
 	ctx.Set("user_id", user.ID)
@@ -265,6 +279,15 @@ func TokenAuthMiddleware() gin.HandlerFunc {
 		// 检查 token 是否为空
 		if user.Token == "" {
 			c.JSON(http.StatusUnauthorized, dto.Fail[any]("token已失效"))
+			c.Abort()
+			return
+		}
+		issuedAt := int64(0)
+		if user.LoginIssuedAt != nil {
+			issuedAt = user.LoginIssuedAt.Unix()
+		}
+		if services.IsUserLoginExpired(&user, issuedAt, time.Now()) {
+			c.JSON(http.StatusUnauthorized, dto.Fail[any]("未登录或登录已过期"))
 			c.Abort()
 			return
 		}

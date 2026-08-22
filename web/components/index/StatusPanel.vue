@@ -398,12 +398,12 @@
 
           <div id="authorization-section" v-if="isPrimaryAdmin && isSectionVisible('authorization')" class="col-span-12"><AdminAuthorizationCenter /></div>
           <div id="admin-audit-section" v-if="canViewAdminAudit && isSectionVisible('admin-audit')" class="col-span-12"><AdminAuditLogPanel :is-primary-admin="isPrimaryAdmin" /></div>
-          <div id="site-section" v-if="(isAdmin && isSiteSectionPage) || isSectionVisible('life-countdown') || (!isAdmin && isSectionVisible('hitokoto'))" class="col-span-12">
+          <div id="site-section" v-if="(isAdmin && isSiteSectionPage) || isSectionVisible('widgets')" class="col-span-12">
           <div :class="adminShellCardClass">
             <div :class="adminSectionHeaderClass">
               <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                <UIcon :name="!isAdmin && isSectionVisible('life-countdown') ? 'i-heroicons-heart' : !isAdmin && isSectionVisible('hitokoto') ? 'i-heroicons-sparkles' : 'i-heroicons-cog-6-tooth'" class="w-5 h-5" />
-                <span>{{ !isAdmin && isSectionVisible('life-countdown') ? '人生倒计时' : !isAdmin && isSectionVisible('hitokoto') ? '随机一言' : '网站配置' }}</span>
+                <UIcon :name="isSectionVisible('widgets') ? 'i-heroicons-squares-plus' : 'i-heroicons-cog-6-tooth'" class="w-5 h-5" />
+                <span>{{ isSectionVisible('widgets') ? '小组件' : '网站配置' }}</span>
               </div>
             </div>
             <div class="px-4 pb-4 space-y-4">
@@ -1040,7 +1040,41 @@
                     </div>
                   </div>
                 </div>
-                <div id="hitokoto-section" v-if="isSectionVisible('hitokoto')" class="col-span-12">
+                <div id="widgets-section" v-if="isSectionVisible('widgets')" class="col-span-12 space-y-4">
+                  <div :class="adminPanelCardClass">
+                    <div :class="adminSectionHeaderClass">
+                      <div class="font-semibold flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-squares-plus" class="w-5 h-5" /><span>我的小组件</span></div>
+                      <UButton color="green" class="shadow" :loading="widgetSaving" @click="saveWidgetPreferences('personal')">保存我的小组件</UButton>
+                    </div>
+                    <div class="px-4 pb-4 space-y-4">
+                      <div class="text-sm" :class="theme.mutedText">仅控制当前账号访问首页时的显示，不影响访客或其他账号。</div>
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div v-for="item in widgetItems" :key="item.key" class="flex items-center justify-between rounded-lg border px-3 py-2" :class="theme.border"><span :class="theme.text">{{ item.label }}</span><UToggle :model-value="widgetValue('personal', item.key)" @update:model-value="setWidgetValue('personal', item.key, $event)" /></div>
+                      </div>
+                      <div v-if="(frontendConfig as any).lifeCountdownEnabled" class="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-lg p-3" :class="theme.subtleBg">
+                        <div><div class="text-xs mb-1" :class="theme.mutedText">生日</div><input v-model="frontendConfig.lifeCountdownBirthDate" type="date" class="w-full rounded-md border px-3 py-2 text-sm bg-white dark:bg-slate-900" :class="[theme.border, theme.text]" @click="openLifeBirthdayPicker" @focus="openLifeBirthdayPicker" @keydown="blockDateTyping" /></div>
+                        <div><div class="text-xs mb-1" :class="theme.mutedText">预期寿命（年）</div><UInput v-model.number="frontendConfig.lifeExpectancyYears" type="number" min="1" max="150" /></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-if="isPrimaryAdmin" :class="adminPanelCardClass">
+                    <div :class="adminSectionHeaderClass">
+                      <div class="font-semibold flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-user-group" class="w-5 h-5" /><span>访客默认</span></div>
+                      <UButton color="green" class="shadow" :loading="guestWidgetSaving" @click="saveWidgetPreferences('guest')">保存访客默认</UButton>
+                    </div>
+                    <div class="px-4 pb-4 space-y-4">
+                      <div class="text-sm" :class="theme.mutedText">仅控制未登录访客；不会读取或覆盖我的小组件。</div>
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div v-for="item in widgetItems" :key="`guest-${item.key}`" class="flex items-center justify-between rounded-lg border px-3 py-2" :class="theme.border"><span :class="theme.text">{{ item.label }}</span><UToggle :model-value="widgetValue('guest', item.key)" @update:model-value="setWidgetValue('guest', item.key, $event)" /></div>
+                      </div>
+                      <div v-if="guestWidgetConfig.lifeCountdownEnabled" class="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-lg p-3" :class="theme.subtleBg">
+                        <div><div class="text-xs mb-1" :class="theme.mutedText">访客倒计时生日</div><input v-model="guestWidgetConfig.lifeCountdownBirthDate" type="date" class="w-full rounded-md border px-3 py-2 text-sm bg-white dark:bg-slate-900" :class="[theme.border, theme.text]" /></div>
+                        <div><div class="text-xs mb-1" :class="theme.mutedText">访客预期寿命（年）</div><UInput v-model.number="guestWidgetConfig.lifeExpectancyYears" type="number" min="1" max="150" /></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div id="hitokoto-section" v-if="false" class="col-span-12">
                   <div :class="adminPanelCardClass">
                     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                       <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -1059,7 +1093,7 @@
                     </div>
                   </div>
                 </div>
-                <div id="life-countdown-section" v-if="isSectionVisible('life-countdown')" class="col-span-12">
+                <div id="life-countdown-section" v-if="false" class="col-span-12">
                   <div :class="adminPanelCardClass">
                     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
                       <div class="font-semibold flex items-center gap-2" :class="theme.text">
@@ -1101,28 +1135,28 @@
                           <div class="life-preview-grid">
                             <div class="life-preview-card" :class="theme.subtleBg">
                               <div class="life-preview-label" :class="theme.mutedText">当前年龄</div>
-                              <div class="life-preview-value" :class="theme.text">{{ lifePreview.ageYears }} 岁</div>
+                              <div class="life-preview-value" :class="theme.text">{{ lifePreview?.ageYears }} 岁</div>
                             </div>
                             <div class="life-preview-card" :class="theme.subtleBg">
                               <div class="life-preview-label" :class="theme.mutedText">已走过天数</div>
-                              <div class="life-preview-value" :class="theme.text">{{ lifePreview.elapsedDays.toLocaleString('zh-CN') }}</div>
+                              <div class="life-preview-value" :class="theme.text">{{ lifePreview?.elapsedDays?.toLocaleString('zh-CN') }}</div>
                             </div>
                             <div class="life-preview-card" :class="theme.subtleBg">
                               <div class="life-preview-label" :class="theme.mutedText">剩余天数</div>
-                              <div class="life-preview-value" :class="theme.text">{{ lifePreview.remainingDays.toLocaleString('zh-CN') }}</div>
+                              <div class="life-preview-value" :class="theme.text">{{ lifePreview?.remainingDays?.toLocaleString('zh-CN') }}</div>
                             </div>
                             <div class="life-preview-card" :class="theme.subtleBg">
                               <div class="life-preview-label" :class="theme.mutedText">预期日期</div>
-                              <div class="life-preview-value" :class="theme.text">{{ lifePreview.endDateText }}</div>
+                              <div class="life-preview-value" :class="theme.text">{{ lifePreview?.endDateText }}</div>
                             </div>
                           </div>
                           <div class="life-preview-progress-wrap">
                             <div class="flex items-center justify-between text-xs" :class="theme.mutedText">
                               <span>人生进度可视化</span>
-                              <span>{{ lifePreview.percent }}%</span>
+                              <span>{{ lifePreview?.percent }}%</span>
                             </div>
                             <div class="life-preview-track">
-                              <div class="life-preview-fill" :style="{ width: `${lifePreview.percent}%` }" />
+                              <div class="life-preview-fill" :style="{ width: `${lifePreview?.percent || 0}%` }" />
                             </div>
                           </div>
                         </div>
@@ -2163,9 +2197,9 @@
                   <div class="text-xs mt-2" :class="theme.mutedText">仅对敏感路径扫描命中进行计数；达到阈值后将自动写入封禁列表并立即生效</div>
                 </div>
 
-                <div id="site-login-expire-section" :class="adminSubtleCardClass">
+                <div id="site-login-expire-section" v-if="isPrimaryAdmin" :class="adminSubtleCardClass">
                   <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                    <div class="font-semibold" :class="theme.text">登录过期时间</div>
+                    <div class="font-semibold" :class="theme.text">普通用户登录过期时间</div>
                     <div class="flex flex-wrap items-center gap-2">
                       <div class="flex items-center gap-1">
                         <UInput v-model.number="frontendConfig.loginExpireDays" type="number" min="0" max="31" step="1" class="w-24" />
@@ -2179,7 +2213,20 @@
                       <UButton color="green" @click="saveConfigItem('loginExpireDays')" class="shadow">保存</UButton>
                     </div>
                   </div>
-                  <div class="text-xs mt-2" :class="theme.mutedText">普通用户从登录那一刻开始计算，过期后需重新登录；管理员不受该过期清退影响。天数和小时相加计算。</div>
+                  <div class="text-xs mt-2" :class="theme.mutedText">普通用户从登录那一刻开始计算；0 天 0 小时表示永久不过期。1号管理员默认永不过期。</div>
+                </div>
+
+                <div id="site-delegated-admin-login-expire-section" v-if="isPrimaryAdmin" :class="adminSubtleCardClass">
+                  <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div class="font-semibold" :class="theme.text">受托管理员登录过期时间</div>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <div class="flex items-center gap-1"><UInput v-model.number="frontendConfig.delegatedAdminLoginExpireDays" type="number" min="0" max="31" step="1" class="w-24" /><span class="text-sm" :class="theme.mutedText">天</span></div>
+                      <div class="flex items-center gap-1"><UInput v-model.number="frontendConfig.delegatedAdminLoginExpireHours" type="number" min="0" max="24" step="1" class="w-24" /><span class="text-sm" :class="theme.mutedText">小时</span></div>
+                      <UButton v-for="preset in loginExpirePresetOptions" :key="`delegated-${preset.label}`" color="gray" variant="soft" @click="setLoginExpirePreset(preset, 'delegated')" class="shadow">{{ preset.label }}</UButton>
+                      <UButton color="green" @click="saveConfigItem('delegatedAdminLoginExpireDays')" class="shadow">保存</UButton>
+                    </div>
+                  </div>
+                  <div class="text-xs mt-2" :class="theme.mutedText">仅受托管理员按此有效期计算，Session 与管理员 Bearer 同步生效；0 天 0 小时表示永久不过期。1号管理员默认永不过期。</div>
                 </div>
 
                 <div :class="adminSubtleCardClass">
@@ -2437,7 +2484,7 @@ type AdminSectionKey =
   'dashboard' | 'user' | 'site' | 'notify' | 'attachments' | 'db' | 'version' | 'security' | 'access-logs' | 'site-visits' | 'login-audits' |
   'site-register' | 'site-pwa' | 'site-github-card' | 'site-announcement' | 'site-music' |
   'site-default-theme' | 'site-social-links' | 'site-ads' | 'site-feed' | 'site-rss' | 'hitokoto' | 'life-countdown' |
-  'site-configs' | 'comments' | 'email' | 'admin-users' | 'registration-review' |
+  'site-configs' | 'comments' | 'email' | 'admin-users' | 'registration-review' | 'widgets' |
   'storage' | 'authorization' | 'admin-audit' | 'notes' | 'recycle-bin'
 const activeSection = ref<AdminSectionKey>('dashboard')
 type AdminNavItem = { key: AdminSectionKey, label: string, icon: string }
@@ -2451,7 +2498,7 @@ const { capabilities: adminCapabilities, isPrimaryAdmin, isReady: adminCapabilit
 const canViewAdminAudit = computed(() => can('audit.view'))
 const sectionCapabilities: Partial<Record<AdminSectionKey, string>> = adminSectionCapabilities
 const canSection = (section: AdminSectionKey) => {
-  if (!isAdmin.value) return section === 'dashboard' || section === 'user' || section === 'hitokoto' || section === 'life-countdown'
+  if (!isAdmin.value) return section === 'dashboard' || section === 'user' || section === 'widgets'
   if (section === 'site-rss') return isPrimaryAdmin.value
   const capability = sectionCapabilities[section]
   return !capability || can(capability)
@@ -2481,8 +2528,7 @@ const adminNavGroups = computed<AdminNavGroup[]>(() => {
         { key: 'site-ads', label: '广告', icon: 'i-heroicons-photo' },
         { key: 'site-feed', label: '信息流', icon: 'i-heroicons-rss' },
         ...(isPrimaryAdmin.value ? [{ key: 'site-rss' as AdminSectionKey, label: 'RSS 订阅', icon: 'i-heroicons-rss' }] : []),
-        { key: 'hitokoto', label: '随机一言', icon: 'i-heroicons-sparkles' },
-        { key: 'life-countdown', label: '人生倒计时', icon: 'i-heroicons-heart' },
+        { key: 'widgets', label: '小组件', icon: 'i-heroicons-squares-plus' },
         { key: 'site-social-links', label: '社交链接', icon: 'i-heroicons-link' }
       ] as Array<{ key: AdminSectionKey, label: string, icon: string }>
     },
@@ -2535,8 +2581,7 @@ const adminNavGroups = computed<AdminNavGroup[]>(() => {
     ...overviewGroup,
     items: [
       ...overviewGroup.items,
-      { key: 'hitokoto', label: '随机一言', icon: 'i-heroicons-sparkles' },
-      { key: 'life-countdown', label: '人生倒计时', icon: 'i-heroicons-heart' }
+      { key: 'widgets', label: '小组件', icon: 'i-heroicons-squares-plus' }
     ]
   }]
 })
@@ -2580,8 +2625,7 @@ const siteSectionKeys: AdminSectionKey[] = [
   'site-ads',
   'site-feed',
   'site-rss',
-  'hitokoto',
-  'life-countdown'
+  'widgets'
 ]
 const isSectionVisible = (key: AdminSectionKey) => activeSection.value === key
 const isSiteSectionPage = computed(() => siteSectionKeys.includes(activeSection.value))
@@ -2609,6 +2653,7 @@ const onNavGroupClick = (group: { key: string; items: Array<{ key: AdminSectionK
 watch(() => activeSection.value, (section) => {
   const groupKey = sectionGroupMap.value[section]
   if (groupKey) openOnlyGroup(groupKey)
+  if (section === 'widgets' && isPrimaryAdmin.value) loadGuestWidgetPreferences().catch(() => undefined)
 })
 
 const scrollTo = (id: string) => {
@@ -5112,7 +5157,7 @@ const configFieldHints: Record<string, string> = {
   feedPageDescription: '首页信息流 Tab 的介绍文案。'
 }
 const switchConfigKeySet = new Set([
-  'enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled',
+	'enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'homeStatsEnabled', 'popularTagsEnabled', 'latestGalleryEnabled', 'heatmapEnabled',
   'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile',
   'commentEnabled', 'commentEmailEnabled', 'commentLoginRequired',
   'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled',
@@ -5190,8 +5235,14 @@ interface FrontendConfig {
     rssEnabled: boolean;
     rssMemberIDs: number[];
     hitokotoEnabled: boolean;
+		homeStatsEnabled: boolean;
+		popularTagsEnabled: boolean;
+		latestGalleryEnabled: boolean;
+		heatmapEnabled: boolean;
     loginExpireDays: number;
     loginExpireHours: number;
+		delegatedAdminLoginExpireDays: number;
+		delegatedAdminLoginExpireHours: number;
     commentPageTitle: string;
     commentPageDescription: string;
     notificationPageTitle: string;
@@ -5272,8 +5323,14 @@ const frontendConfig = reactive<FrontendConfig>({
     rssEnabled: false,
     rssMemberIDs: [] as number[],
     hitokotoEnabled: true,
+		homeStatsEnabled: true,
+		popularTagsEnabled: true,
+		latestGalleryEnabled: true,
+		heatmapEnabled: true,
     loginExpireDays: 3,
     loginExpireHours: 0,
+		delegatedAdminLoginExpireDays: 3,
+		delegatedAdminLoginExpireHours: 0,
     commentPageTitle: '',
     commentPageDescription: '',
     notificationPageTitle: '',
@@ -5397,6 +5454,10 @@ const defaultConfig: Record<string, any> = {
     rssEnabled: false,
     rssMemberIDs: [] as number[],
     hitokotoEnabled: true,
+		homeStatsEnabled: true,
+		popularTagsEnabled: true,
+		latestGalleryEnabled: true,
+		heatmapEnabled: true,
     commentEnabled: true,
     commentEmailEnabled: false,
     commentLoginRequired: false,
@@ -5532,7 +5593,6 @@ const normalizeLoginExpireConfig = (rawDays: any, rawHours: any): { days: number
   let hours = normalizeLoginExpireValue(rawHours)
   if (days > 31) return { days: 31, hours: 24 }
   if (hours > 24) hours = 24
-  if (days === 0 && hours === 0) return { days: 3, hours: 0 }
   return { days, hours }
 }
 
@@ -5546,12 +5606,14 @@ const loginExpirePresetOptions: Array<{ label: string; unit: 'days' | 'hours'; v
   { label: '7天', unit: 'days', value: 7 }
 ]
 
-const setLoginExpirePreset = (preset: { unit: 'days' | 'hours'; value: number }) => {
+const setLoginExpirePreset = (preset: { unit: 'days' | 'hours'; value: number }, scope: 'ordinary' | 'delegated' = 'ordinary') => {
+	const daysKey = scope === 'delegated' ? 'delegatedAdminLoginExpireDays' : 'loginExpireDays'
+	const hoursKey = scope === 'delegated' ? 'delegatedAdminLoginExpireHours' : 'loginExpireHours'
   if (preset.unit === 'days') {
-    ;(frontendConfig as any).loginExpireDays = preset.value
+    ;(frontendConfig as any)[daysKey] = preset.value
     return
   }
-  ;(frontendConfig as any).loginExpireHours = preset.value
+  ;(frontendConfig as any)[hoursKey] = preset.value
 }
 
 const serializeFeedLimit = (raw: any): number => {
@@ -5936,7 +5998,7 @@ const fetchConfig = async () => {
             const settings = data.data.frontendSettings;
             
             // 遍历配置项进行更新（布尔型键需强制转换）
-            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile', 'commentEnabled', 'commentEmailEnabled', 'commentEmailAdminNotifyAll', 'commentLoginRequired', 'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'socialLinksEnabled', 'feedEnabled', 'rssEnabled']
+            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'homeStatsEnabled', 'popularTagsEnabled', 'latestGalleryEnabled', 'heatmapEnabled', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile', 'commentEnabled', 'commentEmailEnabled', 'commentEmailAdminNotifyAll', 'commentLoginRequired', 'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'socialLinksEnabled', 'feedEnabled', 'rssEnabled']
             Object.keys(frontendConfig).forEach(key => {
                 if (key === 'backgrounds') {
                     const serverBackgrounds = settings[key];
@@ -5978,6 +6040,9 @@ const fetchConfig = async () => {
             const loginExpire = normalizeLoginExpireConfig((frontendConfig as any).loginExpireDays, (frontendConfig as any).loginExpireHours)
             ;(frontendConfig as any).loginExpireDays = loginExpire.days
             ;(frontendConfig as any).loginExpireHours = loginExpire.hours
+			const delegatedLoginExpire = normalizeLoginExpireConfig((frontendConfig as any).delegatedAdminLoginExpireDays, (frontendConfig as any).delegatedAdminLoginExpireHours)
+			;(frontendConfig as any).delegatedAdminLoginExpireDays = delegatedLoginExpire.days
+			;(frontendConfig as any).delegatedAdminLoginExpireHours = delegatedLoginExpire.hours
             setRSSMemberIDs(settings.rssMemberIDs ?? (frontendConfig as any).rssMemberIDs)
             ;(frontendConfig as any).rssEnabled = !!(frontendConfig as any).rssEnabled && rssMemberCount.value > 0
             rssAvailableMembers.value = normalizeRSSAvailableMembers(settings.rssAvailableMembers)
@@ -6075,9 +6140,77 @@ const saveConfigFields = async (fields: Record<string, any>) => {
       throw new Error(data?.msg || '保存失败')
     }
 }
+const widgetItems = [
+  { key: 'lifeCountdownEnabled', label: '倒计时' },
+  { key: 'hitokotoEnabled', label: '每日一言' },
+  { key: 'homeStatsEnabled', label: '数据统计' },
+  { key: 'popularTagsEnabled', label: '热门标签' },
+  { key: 'calendarEnabled', label: '日历' },
+  { key: 'latestGalleryEnabled', label: '最新图集' },
+  { key: 'heatmapEnabled', label: '热力图' },
+] as const
+const guestWidgetConfig = reactive<Record<string, any>>({
+  lifeCountdownEnabled: false, hitokotoEnabled: true, homeStatsEnabled: true,
+  popularTagsEnabled: true, calendarEnabled: true, latestGalleryEnabled: true, heatmapEnabled: true,
+  lifeCountdownBirthDate: '', lifeExpectancyYears: 0,
+})
+const widgetSaving = ref(false)
+const guestWidgetSaving = ref(false)
+const widgetValue = (scope: 'personal' | 'guest', key: string) => scope === 'guest'
+  ? !!guestWidgetConfig[key]
+  : !!(frontendConfig as any)[key]
+const setWidgetValue = (scope: 'personal' | 'guest', key: string, value: boolean) => {
+  if (scope === 'guest') guestWidgetConfig[key] = !!value
+  else (frontendConfig as any)[key] = !!value
+}
+const widgetPayload = (source: Record<string, any>) => ({
+  lifeCountdownEnabled: !!source.lifeCountdownEnabled,
+  hitokotoEnabled: !!source.hitokotoEnabled,
+  homeStatsEnabled: !!source.homeStatsEnabled,
+  popularTagsEnabled: !!source.popularTagsEnabled,
+  calendarEnabled: !!source.calendarEnabled,
+  latestGalleryEnabled: !!source.latestGalleryEnabled,
+  heatmapEnabled: !!source.heatmapEnabled,
+  lifeCountdownBirthDate: String(source.lifeCountdownBirthDate || '').trim(),
+  lifeExpectancyYears: Number(source.lifeExpectancyYears || 0),
+})
+const loadGuestWidgetPreferences = async () => {
+  if (!isPrimaryAdmin.value) return
+  const response = await fetch(`${baseApi}/admin/guest-widget-preferences`, { credentials: 'include' })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok || data?.code !== 1) throw new Error(data?.msg || '获取访客默认失败')
+  Object.assign(guestWidgetConfig, data.data || {})
+}
+const saveWidgetPreferences = async (scope: 'personal' | 'guest') => {
+  const pending = scope === 'guest' ? guestWidgetSaving : widgetSaving
+  pending.value = true
+  try {
+    const source = scope === 'guest' ? guestWidgetConfig : (frontendConfig as any)
+    const path = scope === 'guest' ? '/admin/guest-widget-preferences' : '/user/widget-preferences'
+    const response = await fetch(`${baseApi}${path}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ frontendSettings: widgetPayload(source) }) })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok || data?.code !== 1) throw new Error(data?.msg || '保存失败')
+    if (scope === 'guest') await loadGuestWidgetPreferences()
+    else {
+      await fetchConfig()
+      window.dispatchEvent(new Event('frontend-config-updated'))
+    }
+    useToast().add({ title: '成功', description: scope === 'guest' ? '访客默认已保存' : '我的小组件已保存', color: 'green' })
+  } catch (error: any) {
+    if (scope === 'guest') await loadGuestWidgetPreferences().catch(() => undefined)
+    else await fetchConfig().catch(() => undefined)
+    useToast().add({ title: '失败', description: error?.message || '保存失败，已恢复服务器当前值', color: 'red' })
+  } finally {
+    pending.value = false
+  }
+}
 const stripRSSManagementSettings = (settings: Record<string, any>) => {
   const { rssEnabled, rssMemberIDs, rssTitle, rssDescription, rssAuthorName, rssFaviconURL, ...nonRSSSettings } = settings
   return isPrimaryAdmin.value ? settings : nonRSSSettings
+}
+const stripWidgetSettings = (settings: Record<string, any>) => {
+  const { lifeCountdownEnabled, lifeCountdownBirthDate, lifeExpectancyYears, hitokotoEnabled, homeStatsEnabled, popularTagsEnabled, calendarEnabled, latestGalleryEnabled, heatmapEnabled, ...nonWidgetSettings } = settings
+  return nonWidgetSettings
 }
 const saveConfigItem = async (key: string) => {
     try {
@@ -6100,10 +6233,11 @@ const saveConfigItem = async (key: string) => {
             ;(frontendConfig as any).feedPageTitle = String((frontendConfig as any).feedPageTitle || '').trim()
             ;(frontendConfig as any).feedPageDescription = String((frontendConfig as any).feedPageDescription || '').trim()
         }
-        if (key === 'loginExpireDays') {
-            const loginExpire = normalizeLoginExpireConfig((frontendConfig as any).loginExpireDays, (frontendConfig as any).loginExpireHours)
-            ;(frontendConfig as any).loginExpireDays = loginExpire.days
-            ;(frontendConfig as any).loginExpireHours = loginExpire.hours
+        if (key === 'loginExpireDays' || key === 'delegatedAdminLoginExpireDays') {
+            const prefix = key === 'delegatedAdminLoginExpireDays' ? 'delegatedAdminLoginExpire' : 'loginExpire'
+            const loginExpire = normalizeLoginExpireConfig((frontendConfig as any)[`${prefix}Days`], (frontendConfig as any)[`${prefix}Hours`])
+            ;(frontendConfig as any)[`${prefix}Days`] = loginExpire.days
+            ;(frontendConfig as any)[`${prefix}Hours`] = loginExpire.hours
         }
 
         const settingsToSave = {
@@ -6117,10 +6251,11 @@ const saveConfigItem = async (key: string) => {
                       feedRefreshSeconds: Number((frontendConfig as any).feedRefreshSeconds || 7200),
                       feedSources: (frontendConfig as any).feedSources
                     }
-                  : key === 'loginExpireDays'
+                  : key === 'loginExpireDays' || key === 'delegatedAdminLoginExpireDays'
                     ? {
-                        loginExpireDays: (frontendConfig as any).loginExpireDays,
-                        loginExpireHours: (frontendConfig as any).loginExpireHours
+                        ...(key === 'delegatedAdminLoginExpireDays'
+                          ? { delegatedAdminLoginExpireDays: (frontendConfig as any).delegatedAdminLoginExpireDays, delegatedAdminLoginExpireHours: (frontendConfig as any).delegatedAdminLoginExpireHours }
+                          : { loginExpireDays: (frontendConfig as any).loginExpireDays, loginExpireHours: (frontendConfig as any).loginExpireHours })
                       }
                     : {
                         [key]: isSwitchConfigKey(key) ? !!(frontendConfig as any)[key] : (frontendConfig as any)[key]
@@ -6227,10 +6362,6 @@ const saveRSSConfig = async () => {
 
 const saveConfig = async () => {
   try {
-    const lifeExpectancyRaw = Number((frontendConfig as any).lifeExpectancyYears)
-    const normalizedLifeExpectancyYears = Number.isFinite(lifeExpectancyRaw) && lifeExpectancyRaw > 0
-      ? Math.min(150, Math.max(1, Math.floor(lifeExpectancyRaw)))
-      : ''
     const cleanedBackgrounds = normalizeHeaderBackgrounds(frontendConfig.backgrounds)
 
     const cleanedLeftAds = normalizeAdConfigs((frontendConfig as any).leftAds)
@@ -6251,7 +6382,7 @@ const saveConfig = async () => {
 
     const payload = {
       frontendSettings: {
-        ...stripRSSManagementSettings(frontendConfig as any),
+		...stripRSSManagementSettings(stripWidgetSettings(frontendConfig as any)),
         backgrounds: cleanedBackgrounds,
         leftAds: cleanedLeftAds,
         socialLinks: cleanedSocialLinks,
@@ -6269,17 +6400,16 @@ const saveConfig = async () => {
           rssAuthorName: String((frontendConfig as any).rssAuthorName || '').trim(),
           rssFaviconURL: String((frontendConfig as any).rssFaviconURL || '').trim(),
         } : {}),
-        loginExpireDays: loginExpire.days,
-        loginExpireHours: loginExpire.hours,
+		...(isPrimaryAdmin.value ? {
+			loginExpireDays: loginExpire.days,
+			loginExpireHours: loginExpire.hours,
+			delegatedAdminLoginExpireDays: normalizeLoginExpireConfig((frontendConfig as any).delegatedAdminLoginExpireDays, (frontendConfig as any).delegatedAdminLoginExpireHours).days,
+			delegatedAdminLoginExpireHours: normalizeLoginExpireConfig((frontendConfig as any).delegatedAdminLoginExpireDays, (frontendConfig as any).delegatedAdminLoginExpireHours).hours,
+		} : {}),
         leftAdsIntervalMs: Number((frontendConfig as any).leftAdsIntervalMs || 0) || Number((defaultConfig as any).leftAdsIntervalMs || 4000),
         leftAdEnabled: !!(frontendConfig as any).leftAdEnabled,
         socialLinksEnabled: !!(frontendConfig as any).socialLinksEnabled,
-        calendarEnabled: !!(frontendConfig as any).calendarEnabled,
         timeEnabled: !!(frontendConfig as any).timeEnabled,
-        lifeCountdownEnabled: !!(frontendConfig as any).lifeCountdownEnabled,
-        lifeCountdownBirthDate: String((frontendConfig as any).lifeCountdownBirthDate || '').trim(),
-        lifeExpectancyYears: normalizedLifeExpectancyYears,
-        hitokotoEnabled: !!(frontendConfig as any).hitokotoEnabled,
         announcementEnabled: !!(frontendConfig as any).announcementEnabled,
         pwaEnabled: !!(frontendConfig as any).pwaEnabled,
         enableGithubCard: !!(frontendConfig as any).enableGithubCard,

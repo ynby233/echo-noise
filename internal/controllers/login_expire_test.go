@@ -37,9 +37,9 @@ func TestNormalizeLoginExpireConfigSupportsHoursAndLimits(t *testing.T) {
 		wantDays  int
 		wantHours int
 	}{
-		{name: "zero falls back to default", days: 0, hours: 0, wantDays: 3, wantHours: 0},
+		{name: "zero is explicitly permanent", days: 0, hours: 0, wantDays: 0, wantHours: 0},
 		{name: "hours only is valid", days: 0, hours: 6, wantDays: 0, wantHours: 6},
-		{name: "negative values are clamped", days: -1, hours: -2, wantDays: 3, wantHours: 0},
+		{name: "negative values are clamped", days: -1, hours: -2, wantDays: 0, wantHours: 0},
 		{name: "hours capped at 24", days: 2, hours: 99, wantDays: 2, wantHours: 24},
 		{name: "days above maximum caps to 31 days 24 hours", days: 90, hours: 0, wantDays: 31, wantHours: 24},
 	}
@@ -61,5 +61,33 @@ func TestGetLoginExpireDurationUsesDaysAndHours(t *testing.T) {
 	want := 30 * time.Hour
 	if got != want {
 		t.Fatalf("getLoginExpireDuration() = %v, want %v", got, want)
+	}
+}
+
+func TestLoginExpirySeparatesOrdinaryDelegatedAndPrimaryAndPreservesPermanentZero(t *testing.T) {
+	setupLoginExpireConfigTestDB(t, models.SiteConfig{
+		LoginExpireDays: 1, LoginExpireHours: 2,
+	})
+	if err := database.DB.Model(&models.SiteConfig{}).Where("1 = 1").Updates(map[string]interface{}{
+		"delegated_admin_login_expire_days":  0,
+		"delegated_admin_login_expire_hours": 0,
+	}).Error; err != nil {
+		t.Fatalf("set delegated permanent duration: %v", err)
+	}
+	ordinary := &models.User{ID: 2, IsAdmin: false}
+	delegated := &models.User{ID: 3, IsAdmin: true}
+	primary := &models.User{ID: models.PrimaryAdminUserID, IsAdmin: true}
+
+	if got := getLoginExpireDurationForUser(ordinary); got != 26*time.Hour {
+		t.Fatalf("ordinary duration = %v, want 26h", got)
+	}
+	if got := getLoginExpireDurationForUser(delegated); got != 0 {
+		t.Fatalf("delegated permanent duration = %v, want 0", got)
+	}
+	if got := getLoginExpireDurationForUser(primary); got != 0 {
+		t.Fatalf("primary duration = %v, want 0", got)
+	}
+	if days, hours := normalizeLoginExpireConfig(0, 0); days != 0 || hours != 0 {
+		t.Fatalf("zero duration normalized to (%d,%d), want (0,0)", days, hours)
 	}
 }

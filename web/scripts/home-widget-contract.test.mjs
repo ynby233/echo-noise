@@ -105,9 +105,10 @@ const sidebarThemeCardSource = homePage.slice(
 
 assert.match(
   homePage,
-  /<UCard\s+v-if="isLoggedIn\s*&&\s*frontendConfig\.lifeCountdownEnabled"[^>]*\bleft-widget-life-card\b/,
-  '访客必须始终隐藏人生倒计时，登录用户仍按账户配置决定是否显示'
+  /<UCard\s+v-if="frontendConfig\.lifeCountdownEnabled"[^>]*\bleft-widget-life-card\b/,
+  '倒计时必须由当前查看者的组件配置决定，访客只会读取访客默认值'
 )
+assert.match(homePage, /homeStatsEnabled[\s\S]*?popularTagsEnabled[\s\S]*?latestGalleryEnabled[\s\S]*?heatmapEnabled/, 'home page must consume all seven viewer-resolved widget switches')
 
 assert.match(sidebarCardStyle, /border:\s*1px solid var\(--home-widget-border-color\)\s*!important;/)
 assert.match(sidebarCardStyle, /box-shadow:\s*var\(--home-widget-shadow\)\s*!important;/)
