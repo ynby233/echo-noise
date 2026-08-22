@@ -236,8 +236,15 @@ const loadAnnouncements = async () => {
 }
 
 const refresh = async () => {
+  if (refreshing.value || loading.value) return
   refreshing.value = true
-  try { await loadAnnouncements() } finally { refreshing.value = false }
+  try {
+    await loadAnnouncements()
+  } finally {
+    setTimeout(() => {
+      refreshing.value = false
+    }, 300)
+  }
 }
 
 const toggleAnnouncement = async (item: AnnouncementItem) => {

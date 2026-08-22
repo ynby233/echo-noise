@@ -27,6 +27,8 @@ assert.match(center, /announcementPageTitle/)
 assert.match(center, /announcementPageDescription/)
 assert.match(center, /defineExpose\(\{[\s\S]*sidebarPagerState/)
 assert.doesNotMatch(center, /reply|jumpToTarget|BuiltinComments/)
+assert.match(center, /if \(refreshing\.value \|\| loading\.value\) return/)
+assert.match(center, /setTimeout\(\(\) => \{\s*refreshing\.value = false\s*\}, 300\)/)
 
 assert.match(modal, /getRequest<UnreadAnnouncementPayload>\('announcements\/unread'/)
 assert.match(modal, /第 \{\{ currentIndex \+ 1 \}\} 条 \/ 共 \{\{ snapshotTotal \}\} 条/)
