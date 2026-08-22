@@ -263,15 +263,36 @@
                       <UTextarea v-model="userForm.description" :placeholder="userStore.user?.description || '欢迎访问'" class="w-full" />
                     </div>
 
+                    <div v-if="isPrimaryAdmin" class="admin-setting-block">
+                      <div class="admin-setting-heading">
+                        <div>
+                          <div class="admin-setting-title" :class="theme.text">API Token</div>
+                          <p class="admin-setting-desc" :class="theme.mutedText">供脚本、MCP 等外部工具调用专用接口，权限与当前账号一致；重新生成后旧 Token 立即失效。</p>
+                        </div>
+                        <div class="flex flex-wrap items-center justify-end gap-2">
+                          <UBadge color="primary" variant="soft" class="text-xs px-2 py-1 rounded-md !text-primary-600 dark:!text-primary-300">{{ userToken ? '已生成' : '未生成' }}</UBadge>
+                          <UButton size="xs" :loading="regeneratingToken" @click="regenerateToken" color="indigo" variant="soft" class="shadow">重新生成</UButton>
+                        </div>
+                      </div>
+                      <div v-if="userToken" class="space-y-1">
+                        <div class="flex items-center gap-2 w-full flex-nowrap">
+                          <UInput v-model="userToken" :type="showToken ? 'text' : 'password'" readonly class="font-mono text-sm flex-1 min-w-0" />
+                          <UButton :icon="showToken ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="indigo" variant="ghost" @click="showToken = !showToken" />
+                          <UButton icon="i-heroicons-clipboard" color="indigo" variant="ghost" @click="copyToken" />
+                        </div>
+                      </div>
+                      <p v-else class="admin-setting-desc" :class="theme.mutedText">暂无 Token</p>
+                    </div>
+
                   </div>
                 </div>
                 <div class="rounded-lg p-4 min-w-0 xl:col-span-2" :class="theme.subtleBg">
                   <div class="admin-setting-stack">
-                    <div class="admin-setting-block">
+                    <div v-if="!isPrimaryAdmin" class="admin-setting-block">
                       <div class="admin-setting-heading">
                         <div>
                           <div class="admin-setting-title" :class="theme.text">API Token</div>
-                          <p class="admin-setting-desc" :class="theme.mutedText">用于访问开放接口；重新生成后旧 Token 将立即失效，请务必妥善保管此 Token。</p>
+                          <p class="admin-setting-desc" :class="theme.mutedText">供脚本、MCP 等外部工具调用专用接口，权限与当前账号一致；重新生成后旧 Token 立即失效。</p>
                         </div>
                         <div class="flex flex-wrap items-center justify-end gap-2">
                           <UBadge color="primary" variant="soft" class="text-xs px-2 py-1 rounded-md !text-primary-600 dark:!text-primary-300">{{ userToken ? '已生成' : '未生成' }}</UBadge>
@@ -309,11 +330,9 @@
                         </div>
 
                         <div v-if="!userStore.user?.email" class="admin-binding-actions">
-                          <div class="admin-email-action-row">
+                          <div class="admin-email-bind-row">
                             <UInput v-model="userForm.email" type="email" placeholder="输入邮箱" class="min-w-0 flex-1" />
                             <UButton color="indigo" variant="soft" class="whitespace-nowrap" @click="sendBindEmailCode">发送验证码</UButton>
-                          </div>
-                          <div class="admin-verification-row">
                             <UInput v-model="userForm.emailCode" placeholder="验证码" class="admin-verification-input" />
                             <UButton color="primary" class="shadow whitespace-nowrap" @click="verifyBindEmail">立即绑定</UButton>
                           </div>
@@ -7911,6 +7930,13 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   align-items: center;
   gap: 10px;
 }
+.admin-email-bind-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(120px, 220px) auto;
+  align-items: center;
+  gap: 10px;
+}
 .admin-verification-row {
   display: flex;
   min-width: 0;
@@ -8149,6 +8175,9 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   .admin-email-action-row,
   .admin-vc-binding-form {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .admin-email-bind-row {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
   .admin-verification-row,
   .admin-verification-row--button-first {
