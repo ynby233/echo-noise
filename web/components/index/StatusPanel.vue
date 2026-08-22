@@ -260,7 +260,7 @@
                         </div>
                         <UButton size="xs" @click="updateDescription" color="primary" class="shadow">保存签名</UButton>
                       </div>
-                      <UTextarea v-model="userForm.description" :placeholder="userStore.user?.description || '欢迎访问'" class="w-full" />
+                      <UTextarea v-model="userForm.description" :placeholder="userStore.user?.description || '欢迎访问'" :rows="4" class="w-full admin-description-textarea" />
                     </div>
 
                     <div v-if="isPrimaryAdmin" class="admin-setting-block">
@@ -310,18 +310,10 @@
                     </div>
 
                     <div class="admin-setting-block">
-                      <div class="admin-setting-heading">
-                        <div>
-                          <div class="admin-setting-title" :class="theme.text">账号绑定</div>
-                          <p class="admin-setting-desc" :class="theme.mutedText">邮箱和 VoceChat 账号用于接收系统通知；1号管理员的本站密码与 VoceChat 密码始终独立。</p>
-                        </div>
-                      </div>
-
-                      <div class="admin-binding-section">
                         <div class="admin-binding-summary">
                           <div>
-                            <div class="admin-binding-label" :class="theme.text">本站邮箱</div>
-                            <p class="admin-setting-desc" :class="theme.mutedText">用于接收本站邮件通知和完成邮箱验证。</p>
+                            <div class="admin-setting-title" :class="theme.text">本站邮箱</div>
+                            <p class="admin-setting-desc" :class="theme.mutedText">用于接收本站邮件通知、验证码和账号安全提醒。</p>
                           </div>
                           <span v-if="userStore.user?.email" :class="[theme.text, theme.border, 'inline-flex items-center px-2 py-0.5 rounded-md break-all']">
                             {{ userStore.user?.email }}
@@ -352,13 +344,13 @@
                             <UButton color="primary" class="shadow whitespace-nowrap" @click="confirmChangeEmail">确认更换</UButton>
                           </div>
                         </div>
-                      </div>
+                    </div>
 
-                      <div class="admin-binding-section admin-binding-section--divided">
+                    <div class="admin-setting-block">
                         <div class="admin-binding-summary">
                           <div>
-                            <div class="admin-binding-label" :class="theme.text">VoceChat 账号与推送</div>
-                            <p class="admin-setting-desc" :class="theme.mutedText">注册绑定账号用于联系人校验，也可以接收本站通知推送。</p>
+                            <div class="admin-setting-title" :class="theme.text">VoceChat 账号与推送</div>
+                            <p class="admin-setting-desc" :class="theme.mutedText">用于校验联系人可见范围；绑定后还可以接收本站通知推送。</p>
                           </div>
                           <span v-if="registeredVoceChatEmail" :class="[theme.text, theme.border, 'inline-flex items-center px-2 py-0.5 rounded-md break-all text-right']">
                             {{ registeredVoceChatEmail }}
@@ -390,7 +382,6 @@
                           </div>
                         </div>
                       </div>
-                    </div>
 
                     <div class="admin-setting-block">
                       <div class="admin-setting-heading">
@@ -7895,27 +7886,12 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   font-size: 12px;
   line-height: 1.5;
 }
-.admin-binding-section {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 12px;
-}
-.admin-binding-section--divided {
-  margin-top: 2px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(156, 163, 175, 0.22);
-}
 .admin-binding-summary {
   display: flex;
   min-width: 0;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-}
-.admin-binding-label {
-  font-size: 14px;
-  font-weight: 600;
 }
 .admin-binding-actions {
   display: flex;
@@ -8147,6 +8123,11 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 }
 .admin-form-shell :deep(textarea) {
   min-height: 120px;
+}
+.admin-form-shell :deep(textarea.admin-description-textarea),
+.admin-form-shell :deep(.admin-description-textarea textarea) {
+  min-height: 0 !important;
+  height: auto !important;
 }
 .admin-form-shell :deep(input:not([type="checkbox"]):not([type="radio"]):focus),
 .admin-form-shell :deep(textarea:focus),
