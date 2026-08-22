@@ -3454,7 +3454,7 @@ white-space: nowrap;  /* 防止换行 */
   pointer-events: none;
 }
 .sidebar-slot { position: relative; align-self: start; width: 100%; min-width: 0; height: 0; }
-.left-col, .right-col { position: absolute !important; top: 0; left: 0; height: fit-content; width: 100%; min-width: 0; box-sizing: border-box; z-index: 20; }
+.left-col, .right-col { position: absolute !important; top: 0; left: 0; height: fit-content; width: 100%; min-width: 0; box-sizing: border-box; }
 .left-col.is-viewport-pinned, .right-col.is-viewport-pinned { position: fixed !important; top: 0; }
 .right-col > * {
   width: 100%;

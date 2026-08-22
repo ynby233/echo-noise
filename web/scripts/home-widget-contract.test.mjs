@@ -81,6 +81,11 @@ assert.match(
   /position:\s*absolute\s*!important;[\s\S]*top:\s*0;/,
   '页面顶部时左右侧栏必须跟随网格槽，与中间头图保持相同顶部位置'
 )
+assert.doesNotMatch(
+  sidebarColumnStyle,
+  /z-index\s*:/,
+  'sidebar columns must not force a stacking level around dark backdrop-filter cards'
+)
 assert.match(
   pinnedSidebarStyle,
   /position:\s*fixed\s*!important;[\s\S]*top:\s*0;/,

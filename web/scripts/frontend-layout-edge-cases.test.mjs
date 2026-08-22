@@ -1533,7 +1533,7 @@ assert(
     homePage.includes('.layout-container.grid-3 {\n  display: grid;\n  grid-template-columns: var(--sidebar-width, 320px) minmax(0, 1fr) var(--sidebar-width, 320px);') &&
     homePage.includes('.layout-container.grid-2 {\n  display: grid;\n  grid-template-columns: var(--sidebar-width, 320px) minmax(0, 1fr);') &&
     homePage.includes('.sidebar-slot { position: relative; align-self: start; width: 100%; min-width: 0; height: 0; }') &&
-    homePage.includes('.left-col, .right-col { position: absolute !important; top: 0; left: 0; height: fit-content; width: 100%; min-width: 0; box-sizing: border-box; z-index: 20; }') &&
+    homePage.includes('.left-col, .right-col { position: absolute !important; top: 0; left: 0; height: fit-content; width: 100%; min-width: 0; box-sizing: border-box; }') &&
     homePage.includes('.left-col.is-viewport-pinned, .right-col.is-viewport-pinned { position: fixed !important; top: 0; }') &&
     homePage.includes('scrollbar-gutter: stable;') &&
     homePage.includes('.right-col > * {\n  width: 100%;\n  min-width: 0;\n  box-sizing: border-box;\n}') &&
