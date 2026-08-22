@@ -8,8 +8,8 @@
       <UContainer class="container-fixed pt-2 pb-0 mt-4 mb-0">
         <div :class="['layout-container', gridModeClass]">
       <ClientOnly>
-      <div ref="leftColSlot" class="sidebar-slot sidebar-slot-left" v-if="!isMobile && layoutState!=='single'">
-      <div :class="{ 'is-viewport-pinned': isSidebarPinned }" :style="leftSidebarStyle" class="left-col">
+      <div class="sidebar-slot sidebar-slot-left" v-if="!isMobile && layoutState!=='single'">
+      <div class="left-col">
         <UCard class="sidebar-card left-widget-profile-card" :class="sidebarThemeCard">
           <div class="profile-card">
             <div class="profile-head">
@@ -372,8 +372,8 @@
         </div>
       </div>
       <ClientOnly>
-      <div ref="rightColSlot" class="sidebar-slot sidebar-slot-right" v-if="!isMobile && layoutState==='three'">
-      <div :class="{ 'is-viewport-pinned': isSidebarPinned }" :style="rightSidebarStyle" class="right-col space-y-2">
+      <div class="sidebar-slot sidebar-slot-right" v-if="!isMobile && layoutState==='three'">
+      <div class="right-col space-y-2">
         <UCard v-if="frontendConfig.announcementEnabled && (frontendConfig.announcementText || '').trim() !== ''" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
           <AnnouncementBar :text="frontendConfig.announcementText || '欢迎访问！'" />
         </UCard>
@@ -1311,105 +1311,9 @@ const toggleThemeGlobal = () => {
 }
 
 const contentWrapper = ref<HTMLElement | null>(null)
-// Zero-height grid slots preserve the column layout and provide horizontal geometry.
-// The fixed sidebars are never repositioned during scrolling; only resize/layout changes update them.
-const leftColSlot = ref<HTMLElement | null>(null)
-const rightColSlot = ref<HTMLElement | null>(null)
-const leftSidebarFixedStyle = ref<Record<string, string>>({ visibility: 'hidden' })
-const rightSidebarFixedStyle = ref<Record<string, string>>({ visibility: 'hidden' })
-const isSidebarPinned = ref(false)
-const sidebarPinThreshold = ref(Number.POSITIVE_INFINITY)
-const unpinnedSidebarStyle: Record<string, string> = {
-  left: '0px',
-  width: '100%',
-  visibility: 'visible',
-}
-const leftSidebarStyle = computed<Record<string, string>>(() => (
-  isSidebarPinned.value ? leftSidebarFixedStyle.value : unpinnedSidebarStyle
-))
-const rightSidebarStyle = computed<Record<string, string>>(() => (
-  isSidebarPinned.value ? rightSidebarFixedStyle.value : unpinnedSidebarStyle
-))
-
-const updateSidebarPinnedState = () => {
-  const scroller = getMainScrollElement()
-  isSidebarPinned.value = !!scroller && scroller.scrollTop >= sidebarPinThreshold.value
-}
-
-const getSidebarFixedStyle = (slot: HTMLElement | null): Record<string, string> => {
-  if (!slot) return { visibility: 'hidden' }
-  const rect = slot.getBoundingClientRect()
-  if (rect.width <= 0) return { visibility: 'hidden' }
-  const scale = rect.width / slot.offsetWidth
-  return {
-    left: `${rect.left / scale}px`,
-    width: `${rect.width / scale}px`,
-    visibility: 'visible',
-  }
-}
-
-const updateSidebarFixedGeometry = () => {
-  if (typeof window === 'undefined' || isMobile.value || layoutState.value === 'single') {
-    leftSidebarFixedStyle.value = { visibility: 'hidden' }
-    rightSidebarFixedStyle.value = { visibility: 'hidden' }
-    sidebarPinThreshold.value = Number.POSITIVE_INFINITY
-    isSidebarPinned.value = false
-    return
-  }
-  leftSidebarFixedStyle.value = getSidebarFixedStyle(leftColSlot.value)
-  rightSidebarFixedStyle.value = layoutState.value === 'three'
-    ? getSidebarFixedStyle(rightColSlot.value)
-    : { visibility: 'hidden' }
-  const slot = leftColSlot.value || rightColSlot.value
-  const scroller = getMainScrollElement()
-  if (!slot || !scroller) return
-  const rect = slot.getBoundingClientRect()
-  const scale = rect.width / slot.offsetWidth
-  sidebarPinThreshold.value = rect.top / scale + scroller.scrollTop
-  updateSidebarPinnedState()
-}
-
-let sidebarGeometryFrame = 0
-const scheduleSidebarFixedGeometry = () => {
-  if (typeof window === 'undefined' || sidebarGeometryFrame) return
-  sidebarGeometryFrame = window.requestAnimationFrame(() => {
-    sidebarGeometryFrame = 0
-    updateSidebarFixedGeometry()
-  })
-}
-
-let sidebarSlotResizeObserver: ResizeObserver | null = null
-const bindSidebarSlotResizeObserver = () => {
-  sidebarSlotResizeObserver?.disconnect()
-  sidebarSlotResizeObserver = null
-  if (typeof ResizeObserver === 'undefined') return
-  sidebarSlotResizeObserver = new ResizeObserver(scheduleSidebarFixedGeometry)
-  if (leftColSlot.value) sidebarSlotResizeObserver.observe(leftColSlot.value)
-  if (rightColSlot.value) sidebarSlotResizeObserver.observe(rightColSlot.value)
-}
-
-watch(() => [layoutState.value, isMobile.value], () => {
-  nextTick(() => {
-    bindSidebarSlotResizeObserver()
-    updateSidebarFixedGeometry()
-  })
-})
-
-onMounted(() => {
-  window.addEventListener('resize', scheduleSidebarFixedGeometry, { passive: true })
-  window.visualViewport?.addEventListener('resize', scheduleSidebarFixedGeometry, { passive: true })
-  nextTick(() => {
-    bindSidebarSlotResizeObserver()
-    updateSidebarFixedGeometry()
-  })
-})
-
-onUnmounted(() => {
-  if (sidebarGeometryFrame) window.cancelAnimationFrame(sidebarGeometryFrame)
-  sidebarSlotResizeObserver?.disconnect()
-  window.removeEventListener('resize', scheduleSidebarFixedGeometry)
-  window.visualViewport?.removeEventListener('resize', scheduleSidebarFixedGeometry)
-})
+// The zero-height grid slots themselves are sticky. Their absolutely positioned
+// children do not affect scroll height, and pinning stays entirely in the browser's
+// scrolling compositor instead of switching to fixed from a JavaScript scroll event.
 
 const scrollToTop = () => {
   const el = getMainScrollElement()
@@ -1471,7 +1375,6 @@ const updateScrollState = () => {
 let scrollStateCleanup: (() => void) | null = null
 const handleMainScroll = () => {
   updateScrollState()
-  updateSidebarPinnedState()
 }
 const bindScrollStateListener = () => {
   scrollStateCleanup?.()
@@ -3453,9 +3356,8 @@ white-space: nowrap;  /* 防止换行 */
   height: var(--home-page-bottom-reserve);
   pointer-events: none;
 }
-.sidebar-slot { position: relative; align-self: start; width: 100%; min-width: 0; height: 0; }
+.sidebar-slot { position: sticky; top: 0; align-self: start; width: 100%; min-width: 0; height: 0; }
 .left-col, .right-col { position: absolute !important; top: 0; left: 0; height: fit-content; width: 100%; min-width: 0; box-sizing: border-box; }
-.left-col.is-viewport-pinned, .right-col.is-viewport-pinned { position: fixed !important; top: 0; }
 .right-col > * {
   width: 100%;
   min-width: 0;
