@@ -406,6 +406,7 @@ func SetupRouter() *gin.Engine {
 		user.GET("", controllers.GetUserInfo)
 		user.PUT("/change_password", controllers.ChangePassword)
 		user.PUT("/update", controllers.UpdateUser)
+		user.PUT("/vocechat/bind", controllers.BindPrimaryAdminVoceChatEmail)
 		user.PUT("/admin", middleware.RequireCapability(authorization.CapabilityAdminRolesManage), controllers.UpdateUserAdmin)
 		user.DELETE("", middleware.RequireCapability(authorization.CapabilityUsersDelete), controllers.DeleteUser)
 		user.POST("/logout", controllers.Logout) // 添加退出登录路由

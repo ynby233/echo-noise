@@ -962,6 +962,28 @@ func GetUserInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.OK(safeUser, models.QuerySuccessMessage))
 }
 
+func BindPrimaryAdminVoceChatEmail(c *gin.Context) {
+	user, err := checkUser(c)
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[any](err.Error()))
+		return
+	}
+	var request struct {
+		Email string `json:"email" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusOK, dto.Fail[any](models.InvalidRequestBodyMessage))
+		return
+	}
+	bound, err := services.BindPrimaryAdminVoceChatEmail(c.Request.Context(), user.ID, request.Email)
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[any](err.Error()))
+		return
+	}
+	bound.Password = ""
+	c.JSON(http.StatusOK, dto.OK(bound, "注册绑定 VoceChat 邮箱已更新"))
+}
+
 func hasAdminOnlySettingFields(setting dto.SettingDto) bool {
 	return setting.AllowRegistration != nil ||
 		setting.AutoApproveRegistration != nil ||
