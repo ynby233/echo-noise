@@ -177,6 +177,102 @@ func hasJSONKey(value map[string]any, key string) bool {
 	return ok
 }
 
+func TestUserPasswordResetRouteOnlyResetsOrdinaryUsersAndRechecksGrants(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("ACCESS_LOG", "false")
+	t.Setenv("SESSION_SECRET", "ordinary-user-password-reset-test-secret-32")
+	t.Chdir(t.TempDir())
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	if err := models.MigrateDB(db); err != nil {
+		t.Fatalf("migrate database: %v", err)
+	}
+	database.DB = db
+	models.SetDB(db)
+	repository.ClearUserCache()
+	t.Cleanup(func() {
+		repository.ClearUserCache()
+		database.DB = nil
+		models.SetDB(nil)
+	})
+
+	createUser := func(user models.User) *models.User {
+		t.Helper()
+		if err := repository.CreateUser(&user); err != nil {
+			t.Fatalf("create %s: %v", user.Username, err)
+		}
+		return &user
+	}
+	primary := createUser(models.User{Username: "primary", IsAdmin: true, Token: "primary-password-reset-token"})
+	delegated := createUser(models.User{Username: "delegated", IsAdmin: true, Token: "delegated-password-reset-token"})
+	ordinary := createUser(models.User{Username: "ordinary", Token: "ordinary-password-reset-token"})
+	if primary.ID != models.PrimaryAdminUserID {
+		t.Fatalf("primary user id = %d, want %d", primary.ID, models.PrimaryAdminUserID)
+	}
+
+	r := SetupRouter()
+	r.GET("/__test/password-reset-session/:id", func(c *gin.Context) {
+		session := sessions.Default(c)
+		session.Set("user_id", c.Param("id"))
+		session.Set("login_expire_at", time.Now().Add(time.Hour).Unix())
+		if err := session.Save(); err != nil {
+			c.Status(http.StatusInternalServerError)
+			return
+		}
+		c.Status(http.StatusNoContent)
+	})
+	seedSession := func(user *models.User) []*http.Cookie {
+		t.Helper()
+		response := httptest.NewRecorder()
+		r.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/__test/password-reset-session/"+strconv.FormatUint(uint64(user.ID), 10), nil))
+		if response.Code != http.StatusNoContent {
+			t.Fatalf("seed session for %d: status=%d body=%s", user.ID, response.Code, response.Body.String())
+		}
+		return response.Result().Cookies()
+	}
+	reset := func(t *testing.T, cookies []*http.Cookie, token string, targetID uint) *httptest.ResponseRecorder {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodPost, "/api/user/reset_password", bytes.NewBufferString(`{"id":`+strconv.FormatUint(uint64(targetID), 10)+`,"password":"ordinary-reset-password"}`))
+		request.Header.Set("Content-Type", "application/json")
+		for _, cookie := range cookies {
+			request.AddCookie(cookie)
+		}
+		if token != "" {
+			request.Header.Set("Authorization", "Bearer "+token)
+		}
+		response := httptest.NewRecorder()
+		r.ServeHTTP(response, request)
+		return response
+	}
+	assertStatus := func(t *testing.T, name string, response *httptest.ResponseRecorder, want int) {
+		t.Helper()
+		if response.Code != want {
+			t.Fatalf("%s status=%d, want %d body=%s", name, response.Code, want, response.Body.String())
+		}
+	}
+
+	delegatedSession := seedSession(delegated)
+	primarySession := seedSession(primary)
+	assertStatus(t, "delegated session without grant", reset(t, delegatedSession, "", ordinary.ID), http.StatusForbidden)
+	assertStatus(t, "delegated bearer without grant", reset(t, nil, delegated.Token, ordinary.ID), http.StatusForbidden)
+
+	if err := db.Create(&models.AdminCapabilityGrant{UserID: delegated.ID, Capability: string(authorization.CapabilityUsersResetPassword), GrantedByUserID: primary.ID}).Error; err != nil {
+		t.Fatalf("grant users.reset_password: %v", err)
+	}
+	assertStatus(t, "delegated session resets ordinary user after grant", reset(t, delegatedSession, "", ordinary.ID), http.StatusOK)
+	assertStatus(t, "delegated bearer cannot reset delegated administrator", reset(t, nil, delegated.Token, delegated.ID), http.StatusForbidden)
+	assertStatus(t, "primary bearer cannot reset delegated administrator", reset(t, nil, primary.Token, delegated.ID), http.StatusForbidden)
+	assertStatus(t, "primary session cannot reset ID 1", reset(t, primarySession, "", primary.ID), http.StatusForbidden)
+
+	if err := db.Where("user_id = ? AND capability = ?", delegated.ID, authorization.CapabilityUsersResetPassword).Delete(&models.AdminCapabilityGrant{}).Error; err != nil {
+		t.Fatalf("revoke users.reset_password: %v", err)
+	}
+	assertStatus(t, "delegated session after revoke", reset(t, delegatedSession, "", ordinary.ID), http.StatusForbidden)
+	assertStatus(t, "delegated bearer after revoke", reset(t, nil, delegated.Token, ordinary.ID), http.StatusForbidden)
+}
+
 func TestProtectedAdminRouteMatrixRejectsDelegatedAdministratorWithoutRequiredGrant(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("ACCESS_LOG", "false")

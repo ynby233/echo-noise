@@ -1475,9 +1475,6 @@
                   <UIcon name="i-heroicons-shield-check" class="w-5 h-5" />
                   <span>用户管理</span>
                 </div>
-                <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
-                   <UButton color="gray" variant="soft" @click="showAdminResetModal=true" class="w-full sm:w-auto">重置管理员密码</UButton>
-                </div>
               </div>
               <div class="px-4 pb-4">
                 <div class="rounded-lg p-3 mb-3" :class="theme.subtleBg">
@@ -1504,8 +1501,8 @@
                         </div>
                       </div>
                       <div class="mt-2 flex items-center gap-2 flex-wrap">
-                        <UButton :color="(u.is_admin ?? u.IsAdmin) ? 'orange' : 'green'" :variant="(u.is_admin ?? u.IsAdmin) ? 'soft' : 'solid'" class="shadow" @click="confirmToggleAdmin(u)">{{ (u.is_admin ?? u.IsAdmin) ? '取消管理员' : '设为管理员' }}</UButton>
-                        <UButton color="red" variant="soft" class="shadow" @click="confirmDeleteUser(u)">删除</UButton>
+                        <UButton v-if="userManagementActions(u).manageRole" :color="(u.is_admin ?? u.IsAdmin) ? 'orange' : 'green'" :variant="(u.is_admin ?? u.IsAdmin) ? 'soft' : 'solid'" class="shadow" @click="confirmToggleAdmin(u)">{{ (u.is_admin ?? u.IsAdmin) ? '\u53d6\u6d88\u7ba1\u7406\u5458' : '\u8bbe\u4e3a\u7ba1\u7406\u5458' }}</UButton>
+                        <UButton v-if="userManagementActions(u).deleteUser" color="red" variant="soft" class="shadow" @click="confirmDeleteUser(u)">&#21024;&#38500;</UButton>
                       </div>
                       <div v-if="isExpanded(u)" class="mt-3 rounded p-3" :class="theme.subtleBg">
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -1522,7 +1519,7 @@
                             <div :class="theme.text">{{ (u.is_admin ?? u.IsAdmin) ? '管理员' : '普通用户' }}</div>
                           </div>
                         </div>
-                        <div class="mt-3">
+                        <div v-if="userManagementActions(u).resetPassword" class="mt-3">
                           <div class="text-sm mb-1" :class="theme.text">重置密码</div>
                           <div class="flex items-center gap-2">
                             <UInput v-model="resetForm.password[(u.id ?? u.ID)]" :type="showResetPassword ? 'text' : 'password'" placeholder="新密码" class="flex-1" />
@@ -1537,24 +1534,6 @@
               </div>
             </div>
           </div>
-          <UModal v-model="showAdminResetModal">
-            <UCard>
-              <div class="font-semibold mb-2">重置管理员密码</div>
-              <div class="space-y-3">
-                <div class="flex items-center gap-2">
-                  <UInput v-model="adminReset.newPass" :type="showAdminPassword ? 'text' : 'password'" placeholder="新密码" class="flex-1" />
-                  <UBadge :color="adminResetStrengthColor" variant="soft">{{ adminResetStrengthLabel }}</UBadge>
-                </div>
-                <div class="flex items-center gap-2">
-                  <UInput v-model="adminReset.confirmPass" :type="showAdminPassword ? 'text' : 'password'" placeholder="确认新密码" class="flex-1" />
-                </div>
-                <div class="flex justify-end gap-2">
-                  <UButton variant="ghost" color="indigo" @click="showAdminResetModal = false">取消</UButton>
-                  <UButton :disabled="!canSaveAdminReset" color="primary" @click="resetAdminPassword">保存</UButton>
-                </div>
-              </div>
-            </UCard>
-          </UModal>
 
           <div id="access-logs-section" v-if="canSection('access-logs') && isSectionVisible('access-logs')" class="col-span-12">
             <div :class="adminShellCardClass">
@@ -2487,6 +2466,7 @@ import { resolveUploadedMediaUrl } from '~/utils/media-upload'
 import { makeEmptyAdConfig, normalizeAdConfigs, resolveAdImageURL, type AdConfig } from '~/utils/ad-config'
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 import { resolveAccessibleAdminSection } from '~/utils/admin-section-access'
+import { resolveUserManagementActions } from '~/utils/user-management-actions'
 import adminSectionCapabilities from '~/config/admin-section-capabilities.json'
 import { useRuntimeConfig, useHead, useRouter } from '#imports'
 const formatShanghai = (s: string) => {
@@ -4127,93 +4107,6 @@ const saveSmtp = async () => {
   }
 }
 
-const adminUsers = ref<string[]>([])
-const newAdmin = ref('')
-const adminPasswordMasked = ref('')
-const showAdminPassword = ref(false)
-const showAdminResetModal = ref(false)
-const adminReset = reactive({ newPass: '', confirmPass: '' })
-const adminResetStrength = computed(() => {
-  const v = adminReset.newPass || ''
-  let score = 0
-  if (v.length >= 8) score++
-  if (/[A-Z]/.test(v) && /[a-z]/.test(v)) score++
-  if (/\d/.test(v) && /[^A-Za-z0-9]/.test(v)) score++
-  return Math.min(score, 3)
-})
-const adminResetStrengthLabel = computed(() => {
-  if (adminResetStrength.value <= 1) return '弱'
-  if (adminResetStrength.value === 2) return '中'
-  return '强'
-})
-const adminResetStrengthColor = computed(() => {
-  if (adminResetStrength.value <= 1) return 'red'
-  if (adminResetStrength.value === 2) return 'orange'
-  return 'green'
-})
-const canSaveAdminReset = computed(() => {
-  if (!adminReset.newPass || !adminReset.confirmPass) return false
-  if (adminReset.newPass !== adminReset.confirmPass) return false
-  return adminResetStrength.value >= 2
-})
-const loadAdmins = async () => {
-  try {
-    const res = await getRequest<any>('frontend/config', undefined, { credentials: 'include' })
-    if (res && res.code === 1) {
-      const cfg = res.data || {}
-      adminUsers.value = Array.isArray(cfg.adminUsers) ? cfg.adminUsers : []
-      adminPasswordMasked.value = cfg.adminPasswordMasked || ''
-    }
-  } catch {}
-}
-onMounted(loadAdmins)
-const addAdmin = () => {
-  const name = (newAdmin.value || '').trim()
-  if (!name) return
-  if (!adminUsers.value.includes(name)) adminUsers.value.push(name)
-  newAdmin.value = ''
-}
-const removeAdmin = (name: string) => {
-  adminUsers.value = adminUsers.value.filter((n: string) => n !== name)
-}
-const saveAdmins = async () => {
-  try {
-    const resCfg = await getRequest<any>('frontend/config', undefined, { credentials: 'include' })
-    const payload: any = settingsPayloadWithoutVoceChat(resCfg?.code === 1 ? { ...resCfg.data } : {})
-    payload.adminUsers = [...adminUsers.value]
-    const res = await putRequest<any>('settings', payload, { credentials: 'include' })
-    if (res && res.code === 1) {
-      useToast().add({ title: res?.msg || '已保存', color: 'green' })
-      await userStore.getStatus()
-    } else {
-      throw new Error(res?.msg || '保存失败')
-    }
-  } catch (e: any) {
-    useToast().add({ title: '保存失败', description: e.message, color: 'red' })
-  }
-}
-const resetAdminPassword = async () => {
-  try {
-    if (!canSaveAdminReset.value) throw new Error('请填写符合强度的新密码并确认一致')
-    const resCfg = await getRequest<any>('frontend/config', undefined, { credentials: 'include' })
-    const payload: any = settingsPayloadWithoutVoceChat(resCfg?.code === 1 ? { ...resCfg.data } : {})
-    payload.adminPasswordReset = adminReset.newPass
-    const res = await putRequest<any>('settings', payload, { credentials: 'include' })
-    if (res && res.code === 1) {
-      useToast().add({ title: res?.msg || '管理员密码已重置', color: 'green' })
-      await loadAdmins()
-      showAdminPassword.value = false
-      showAdminResetModal.value = false
-      adminReset.newPass = ''
-      adminReset.confirmPass = ''
-    } else {
-      throw new Error(res?.msg || '重置失败')
-    }
-  } catch (e: any) {
-    useToast().add({ title: '重置失败', description: e.message, color: 'red' })
-  }
-}
-// 管理员用户列表与搜索
 const userSearch = ref('')
 const allUsers = computed<any[]>(() => {
   const s: any = userStore.status || {}
@@ -4252,12 +4145,18 @@ watch(expandedUsers, (v) => {
 }, { deep: true })
 const resetForm = reactive<{ password: Record<string, string> }>({ password: {} })
 const showResetPassword = ref(false)
+const userManagementActions = (u: any) => resolveUserManagementActions({
+  id: Number(userStore.user?.userid || userStore.user?.id || userStore.user?.ID || userStore.user?.user_id || 0),
+  isPrimaryAdmin: isPrimaryAdmin.value,
+  capabilities: adminCapabilities.value,
+}, u)
 const canReset = (u: any) => {
   const v = (resetForm.password[String(u.id ?? u.ID)] || '').trim()
-  return v.length >= 6
+  return userManagementActions(u).resetPassword && v.length >= 6
 }
 const resetUserPassword = async (u: any) => {
   try {
+    if (!userManagementActions(u).resetPassword) return
     const id = u.id ?? u.ID ?? u.user_id
     const password = (resetForm.password[String(id)] || '').trim()
     if (password.length < 6) throw new Error('密码至少6位')
@@ -4274,6 +4173,7 @@ const resetUserPassword = async (u: any) => {
 }
 const confirmToggleAdmin = async (u: any) => {
   try {
+    if (!userManagementActions(u).manageRole) return
     const name = u.username ?? u.Username
     if (!window.confirm(`确定要切换用户“${name}”的管理员权限吗？`)) return
     if (!window.confirm('该操作存在风险，是否继续？')) return
@@ -4291,6 +4191,7 @@ const confirmToggleAdmin = async (u: any) => {
 }
 const confirmDeleteUser = async (u: any) => {
   try {
+    if (!userManagementActions(u).deleteUser) return
     const name = u.username ?? u.Username
     if (!window.confirm(`确定要删除用户“${name}”吗？删除后不可恢复。`)) return
     if (!window.confirm('该操作存在风险，是否继续？')) return

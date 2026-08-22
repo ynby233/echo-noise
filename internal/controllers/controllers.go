@@ -4202,13 +4202,9 @@ func DeleteUser(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.OK[any](nil, "已删除用户"))
 }
 
-// 管理员重置任意用户密码
-func AdminResetPassword(c *gin.Context) {
-	currentID, err := checkAdmin(c)
-	if err != nil {
-		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
-		return
-	}
+// ResetOrdinaryUserPassword resets only a non-administrator account through
+// the capability-protected user-management route.
+func ResetOrdinaryUserPassword(c *gin.Context) {
 	var req struct {
 		ID       uint   `json:"id"`
 		Password string `json:"password"`
@@ -4222,12 +4218,8 @@ func AdminResetPassword(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.Fail[string](models.UserNotFoundMessage))
 		return
 	}
-	if user.IsAdmin && currentID != models.PrimaryAdminUserID {
-		c.JSON(http.StatusForbidden, dto.Fail[string]("仅 1 号管理员可以重置管理员账号密码"))
-		return
-	}
-	if user.ID == models.PrimaryAdminUserID {
-		c.JSON(http.StatusForbidden, dto.Fail[string]("不能通过管理员功能重置 1 号管理员密码"))
+	if user.IsAdmin {
+		c.JSON(http.StatusForbidden, dto.Fail[string]("\u666e\u901a\u7528\u6237\u5bc6\u7801\u91cd\u7f6e\u4e0d\u80fd\u7528\u4e8e\u7ba1\u7406\u5458\u8d26\u6237"))
 		return
 	}
 	if err := services.ChangePassword(user, dto.UserInfoDto{Password: req.Password}); err != nil {
