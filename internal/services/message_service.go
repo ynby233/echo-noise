@@ -259,7 +259,7 @@ func GetMessageByIDForViewer(id uint, userID *uint, isAdmin bool) (*models.Messa
 	if message == nil {
 		return nil, fmt.Errorf("消息不存在")
 	}
-	if !isAdmin && userID != nil && *userID != 0 && message.UserID != *userID && StoredMessageVisibility(*message) == MessageVisibilityContacts {
+	if userID != nil && *userID != 0 && message.UserID != *userID && StoredMessageVisibility(*message) == MessageVisibilityContacts {
 		_ = EnsureVoceChatContactCacheForAuthor(message.UserID)
 	}
 	if !CanViewMessage(*message, userID, isAdmin) {
@@ -484,7 +484,13 @@ func CreateMessage(message *models.Message) error {
 	if err := ApplyMessageVisibilityForSave(message); err != nil {
 		return err
 	}
-	return repository.CreateMessage(message)
+	if err := repository.CreateMessage(message); err != nil {
+		return err
+	}
+	if StoredMessageVisibility(*message) == MessageVisibilityContacts {
+		_ = RefreshVoceChatContactCacheForAuthor(message.UserID)
+	}
+	return nil
 }
 
 // DeleteMessage 根据 ID 删除笔记

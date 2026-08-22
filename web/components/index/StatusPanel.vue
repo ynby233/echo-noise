@@ -319,7 +319,8 @@
                           <span class="text-sm whitespace-nowrap" :class="theme.mutedText">注册绑定 VoceChat 邮箱</span>
                           <div v-if="isPrimaryAdmin" class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:max-w-md">
                             <UInput v-model="primaryVoceChatBindingEmail" type="email" :placeholder="registeredVoceChatEmail || '请输入已存在且未被绑定的 VoceChat 邮箱'" class="flex-1 min-w-0" />
-                            <UButton size="xs" color="primary" class="shadow whitespace-nowrap" :loading="bindingPrimaryVoceChatEmail" :disabled="!primaryVoceChatBindingEmail.trim()" @click="bindPrimaryVoceChatEmail">校验并绑定</UButton>
+                            <UInput v-model="primaryVoceChatBindingPassword" type="password" placeholder="对应 VoceChat 账户密码" class="flex-1 min-w-0" />
+                            <UButton size="xs" color="primary" class="shadow whitespace-nowrap" :loading="bindingPrimaryVoceChatEmail" :disabled="!primaryVoceChatBindingEmail.trim() || !primaryVoceChatBindingPassword" @click="bindPrimaryVoceChatEmail">校验并绑定</UButton>
                           </div>
                           <span v-else-if="registeredVoceChatEmail" :class="[theme.text, theme.border, 'inline-flex items-center px-2 py-0.5 rounded-md break-all text-right']">
                             {{ registeredVoceChatEmail }}
@@ -327,6 +328,7 @@
                           <span v-else class="inline-flex items-center px-2 py-0.5 rounded-md text-slate-400 border border-slate-400/30">未绑定 VoceChat 邮箱</span>
                         </div>
                       </div>
+                      <p v-if="isPrimaryAdmin" class="admin-setting-desc mt-2" :class="theme.mutedText">保存时会实际登录该 VoceChat 账户校验邮箱和密码。本站密码不会同步修改此密码；凭据失效时，VC推送停止，联系人可见内容按私密处理，并在通知中心提醒一次。</p>
                     </div>
 
                     <div class="admin-setting-block">
@@ -4731,6 +4733,7 @@ const userForm = reactive({
     voceChatNotificationEnabled: false
 })
 const primaryVoceChatBindingEmail = ref('')
+const primaryVoceChatBindingPassword = ref('')
 const bindingPrimaryVoceChatEmail = ref(false)
 watch([isPrimaryAdmin, registeredVoceChatEmail], ([primary, email]) => {
     if (primary && !primaryVoceChatBindingEmail.value.trim()) primaryVoceChatBindingEmail.value = email
@@ -4848,13 +4851,15 @@ const updateVoceChatNotificationPreference = async () => {
 const bindPrimaryVoceChatEmail = async () => {
     if (!isPrimaryAdmin.value) return
     const email = primaryVoceChatBindingEmail.value.trim()
-    if (!email) return
+    const password = primaryVoceChatBindingPassword.value
+    if (!email || !password) return
     bindingPrimaryVoceChatEmail.value = true
     try {
-        const res = await putRequest<any>('user/vocechat/bind', { email }, { credentials: 'include' })
+        const res = await putRequest<any>('user/vocechat/bind', { email, password }, { credentials: 'include' })
         if (!res || res.code !== 1) throw new Error(res?.msg || '绑定失败')
         await userStore.getUser()
         primaryVoceChatBindingEmail.value = registeredVoceChatEmail.value
+        primaryVoceChatBindingPassword.value = ''
         useToast().add({ title: '绑定成功', description: res?.msg || '注册绑定 VoceChat 邮箱已更新', color: 'green' })
     } catch (e: any) {
         useToast().add({ title: '绑定失败', description: e?.message || '无法绑定该 VoceChat 邮箱', color: 'red' })

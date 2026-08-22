@@ -969,13 +969,14 @@ func BindPrimaryAdminVoceChatEmail(c *gin.Context) {
 		return
 	}
 	var request struct {
-		Email string `json:"email" binding:"required"`
+		Email    string `json:"email" binding:"required"`
+		Password string `json:"password" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusOK, dto.Fail[any](models.InvalidRequestBodyMessage))
 		return
 	}
-	bound, err := services.BindPrimaryAdminVoceChatEmail(c.Request.Context(), user.ID, request.Email)
+	bound, err := services.BindPrimaryAdminVoceChatEmail(c.Request.Context(), user.ID, request.Email, request.Password)
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[any](err.Error()))
 		return

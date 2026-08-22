@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -30,6 +31,20 @@ func setupPrimaryAdminVoceChatBindingTest(t *testing.T, users []map[string]inter
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == "/api/token/login" {
+			var request struct {
+				Credential map[string]string `json:"credential"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&request)
+			for _, user := range users {
+				if strings.EqualFold(strings.TrimSpace(fmt.Sprint(user["email"])), request.Credential["email"]) && request.Credential["password"] == "vc-password" {
+					_ = json.NewEncoder(w).Encode(map[string]interface{}{"token": "personal-token", "user": user})
+					return
+				}
+			}
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 		if r.Method != http.MethodGet || r.URL.Path != "/api/admin/user" {
 			http.NotFound(w, r)
 			return
@@ -57,8 +72,9 @@ func TestBindPrimaryAdminVoceChatEmailBindsExistingRemoteAccountIndependentlyFro
 	primary, _ := setupPrimaryAdminVoceChatBindingTest(t, []map[string]interface{}{
 		{"uid": 81, "email": "owner@vc.test", "name": "Owner VC", "is_admin": false},
 	})
+	CreatePrimaryAdminVoceChatCredentialAlertOnce()
 
-	bound, err := BindPrimaryAdminVoceChatEmail(context.Background(), primary.ID, " OWNER@VC.TEST ")
+	bound, err := BindPrimaryAdminVoceChatEmail(context.Background(), primary.ID, " OWNER@VC.TEST ", "vc-password")
 	if err != nil {
 		t.Fatalf("bind primary admin vocechat email: %v", err)
 	}
@@ -73,6 +89,14 @@ func TestBindPrimaryAdminVoceChatEmailBindsExistingRemoteAccountIndependentlyFro
 	if stored.VoceChatEmail != "owner@vc.test" || stored.VoceChatUserID != "81" || stored.VoceChatSyncStatus != models.VoceChatSyncStatusLinked {
 		t.Fatalf("stored binding = email %q uid %q status %q", stored.VoceChatEmail, stored.VoceChatUserID, stored.VoceChatSyncStatus)
 	}
+	var alerts int64
+	if err := database.DB.Model(&models.UserNotification{}).Where("recipient_user_id = ? AND type = ?", primary.ID, models.UserNotificationTypeVoceChatCredentials).Count(&alerts).Error; err != nil || alerts != 0 {
+		t.Fatalf("successful binding should resolve credential alert: count=%d err=%v", alerts, err)
+	}
+	CreatePrimaryAdminVoceChatCredentialAlertOnce()
+	if err := database.DB.Model(&models.UserNotification{}).Where("recipient_user_id = ? AND type = ?", primary.ID, models.UserNotificationTypeVoceChatCredentials).Count(&alerts).Error; err != nil || alerts != 1 {
+		t.Fatalf("a later invalid episode should alert again: count=%d err=%v", alerts, err)
+	}
 }
 
 func TestBindPrimaryAdminVoceChatEmailRejectsAccountAlreadyBoundToAnotherLocalUser(t *testing.T) {
@@ -86,7 +110,7 @@ func TestBindPrimaryAdminVoceChatEmailRejectsAccountAlreadyBoundToAnotherLocalUs
 		VoceChatUserID: "82",
 	})
 
-	if _, err := BindPrimaryAdminVoceChatEmail(context.Background(), primary.ID, "occupied@vc.test"); err == nil || !strings.Contains(err.Error(), "已绑定") {
+	if _, err := BindPrimaryAdminVoceChatEmail(context.Background(), primary.ID, "occupied@vc.test", "vc-password"); err == nil || !strings.Contains(err.Error(), "已绑定") {
 		t.Fatalf("expected already-bound rejection, got %v", err)
 	}
 	stored, err := repository.GetUserByID(primary.ID)
@@ -114,7 +138,7 @@ func TestBindPrimaryAdminVoceChatEmailRejectsAccountReservedByRegistration(t *te
 		t.Fatalf("create registration reservation: %v", err)
 	}
 
-	if _, err := BindPrimaryAdminVoceChatEmail(context.Background(), primary.ID, "reserved@vc.test"); err == nil || !strings.Contains(err.Error(), "注册申请") {
+	if _, err := BindPrimaryAdminVoceChatEmail(context.Background(), primary.ID, "reserved@vc.test", "vc-password"); err == nil || !strings.Contains(err.Error(), "注册申请") {
 		t.Fatalf("expected registration-reservation rejection, got %v", err)
 	}
 }
@@ -123,10 +147,10 @@ func TestBindPrimaryAdminVoceChatEmailRejectsMissingRemoteAccountAndNonPrimaryAc
 	primary, _ := setupPrimaryAdminVoceChatBindingTest(t, []map[string]interface{}{})
 	delegated := mustCreateUser(t, models.User{Username: "delegated-binding", Password: models.HashPassword("password"), IsAdmin: true})
 
-	if _, err := BindPrimaryAdminVoceChatEmail(context.Background(), primary.ID, "missing@vc.test"); err == nil || !strings.Contains(err.Error(), "不存在") {
+	if _, err := BindPrimaryAdminVoceChatEmail(context.Background(), primary.ID, "missing@vc.test", "vc-password"); err == nil || !strings.Contains(err.Error(), "错误") {
 		t.Fatalf("expected missing-account rejection, got %v", err)
 	}
-	if _, err := BindPrimaryAdminVoceChatEmail(context.Background(), delegated.ID, "missing@vc.test"); err == nil || !strings.Contains(err.Error(), "1号管理员") {
+	if _, err := BindPrimaryAdminVoceChatEmail(context.Background(), delegated.ID, "missing@vc.test", "vc-password"); err == nil || !strings.Contains(err.Error(), "1号管理员") {
 		t.Fatalf("expected non-primary rejection, got %v", err)
 	}
 }
@@ -137,7 +161,7 @@ func TestBoundPrimaryAdminPasswordRemainsLocalAndIndependentFromVoceChat(t *test
 	primary, _ := setupPrimaryAdminVoceChatBindingTest(t, []map[string]interface{}{
 		{"uid": 84, "email": "independent@vc.test", "name": "Independent VC", "is_admin": false},
 	})
-	bound, err := BindPrimaryAdminVoceChatEmail(context.Background(), primary.ID, "independent@vc.test")
+	bound, err := BindPrimaryAdminVoceChatEmail(context.Background(), primary.ID, "independent@vc.test", "vc-password")
 	if err != nil {
 		t.Fatalf("bind primary admin: %v", err)
 	}
@@ -176,7 +200,7 @@ func TestBindPrimaryAdminVoceChatEmailRejectsWhenVoceChatIsUnavailable(t *testin
 		t.Fatalf("disable vocechat: %v", err)
 	}
 
-	if _, err := BindPrimaryAdminVoceChatEmail(context.Background(), primary.ID, "unavailable@vc.test"); err == nil || !strings.Contains(err.Error(), "未启用") {
+	if _, err := BindPrimaryAdminVoceChatEmail(context.Background(), primary.ID, "unavailable@vc.test", "vc-password"); err == nil || !strings.Contains(err.Error(), "未启用") {
 		t.Fatalf("expected unavailable rejection, got %v", err)
 	}
 }

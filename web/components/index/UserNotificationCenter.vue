@@ -347,6 +347,7 @@ const truncate = (value?: string | null, limit = 120) => {
 }
 
 const actorName = (item: UserNotification) => {
+  if (item.type === 'vocechat_credentials') return '系统提醒'
   const name = String(item.actor?.username || '').trim()
   return name || '有用户'
 }
@@ -367,10 +368,12 @@ const isTargetUnavailable = (item: UserNotification) => {
 }
 
 const unavailableTitle = (item: UserNotification) => {
+  if (item.type === 'vocechat_credentials') return '1号管理员的 VoceChat 账号信息已失效'
   return '关联内容暂不可用'
 }
 
 const unavailableDetail = (item: UserNotification) => {
+  if (item.type === 'vocechat_credentials') return '请前往后台用户信息，重新填写并校验注册绑定 VoceChat 邮箱和密码。修复前，VC推送不可用，联系人可见内容会按私密处理。'
   if (item.target_status === 'load_error') return '暂时无法加载关联内容，请稍后重试。'
   return '暂时无法查看这条通知对应的内容。'
 }

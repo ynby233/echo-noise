@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rcy1314/echo-noise/internal/database"
@@ -14,6 +15,8 @@ import (
 	"github.com/rcy1314/echo-noise/internal/vocechat"
 	"gorm.io/gorm"
 )
+
+var primaryAdminVoceChatCredentialAlertMu sync.Mutex
 
 func createUserNotification(recipientUserID uint, actorUserID *uint, notificationType string, messageID *uint, commentID *uint, parentCommentID *uint) error {
 	if recipientUserID == 0 {
@@ -35,6 +38,28 @@ func createUserNotification(recipientUserID uint, actorUserID *uint, notificatio
 	}
 	queueUserNotificationPush(notification.ID)
 	return nil
+}
+
+func CreatePrimaryAdminVoceChatCredentialAlertOnce() {
+	if database.DB == nil {
+		return
+	}
+	primaryAdminVoceChatCredentialAlertMu.Lock()
+	defer primaryAdminVoceChatCredentialAlertMu.Unlock()
+	var count int64
+	_ = database.DB.Model(&models.UserNotification{}).Where("recipient_user_id = ? AND type = ?", models.PrimaryAdminUserID, models.UserNotificationTypeVoceChatCredentials).Count(&count).Error
+	if count == 0 {
+		_ = database.DB.Create(&models.UserNotification{RecipientUserID: models.PrimaryAdminUserID, Type: models.UserNotificationTypeVoceChatCredentials}).Error
+	}
+}
+
+func ResolvePrimaryAdminVoceChatCredentialAlert() {
+	if database.DB == nil {
+		return
+	}
+	primaryAdminVoceChatCredentialAlertMu.Lock()
+	defer primaryAdminVoceChatCredentialAlertMu.Unlock()
+	_ = database.DB.Where("recipient_user_id = ? AND type = ?", models.PrimaryAdminUserID, models.UserNotificationTypeVoceChatCredentials).Delete(&models.UserNotification{}).Error
 }
 
 func refreshLikeNotification(recipientUserID uint, actorUserID uint, messageID uint) error {
@@ -205,28 +230,31 @@ func sendUserNotificationToVoceChat(ctx context.Context, notificationID uint) er
 
 func resolveNotificationRecipientVoceChatUserID(ctx context.Context, client *vocechat.Client, vcConfig vocechat.Config, recipient models.User) (string, error) {
 	if uid := strings.TrimSpace(recipient.VoceChatUserID); uid != "" {
+		if recipient.ID == models.PrimaryAdminUserID {
+			record, ok, err := vocechat.DefaultPlainPasswordStore().GetUserPassword(recipient.ID)
+			if err != nil {
+				return "", err
+			}
+			if !ok || strings.TrimSpace(record.VoceChatPasswordValue()) == "" {
+				CreatePrimaryAdminVoceChatCredentialAlertOnce()
+				return "", nil
+			}
+			login, err := voceChatPasswordLogin(ctx, vcConfig, strings.TrimSpace(recipient.VoceChatEmail), record.VoceChatPasswordValue())
+			if err != nil {
+				if isVoceChatAccountCredentialInvalid(err) {
+					CreatePrimaryAdminVoceChatCredentialAlertOnce()
+				}
+				return "", err
+			}
+			if login == nil || strconv.FormatInt(login.User.UID, 10) != uid || !strings.EqualFold(strings.TrimSpace(login.User.Email), strings.TrimSpace(recipient.VoceChatEmail)) {
+				CreatePrimaryAdminVoceChatCredentialAlertOnce()
+				return "", nil
+			}
+		}
 		return uid, nil
 	}
-	if recipient.ID != models.PrimaryAdminUserID {
-		return "", nil
-	}
-	adminEmail := strings.TrimSpace(vcConfig.AdminUsername)
-	if adminEmail == "" || !vcConfig.HasAdminCredential() || client == nil {
-		return "", nil
-	}
-	tokenManager := vocechat.NewAdminTokenManager(client, vcConfig)
-	apiKey, err := tokenManager.GetToken(ctx)
-	if err != nil {
-		return "", err
-	}
-	users, err := client.ListUsers(ctx, apiKey)
-	if err != nil {
-		return "", err
-	}
-	for _, user := range users {
-		if user.UID > 0 && strings.EqualFold(strings.TrimSpace(user.Email), adminEmail) {
-			return strconv.FormatInt(user.UID, 10), nil
-		}
+	if recipient.ID == models.PrimaryAdminUserID {
+		CreatePrimaryAdminVoceChatCredentialAlertOnce()
 	}
 	return "", nil
 }

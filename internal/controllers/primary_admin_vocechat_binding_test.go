@@ -47,7 +47,7 @@ func TestBindPrimaryAdminVoceChatEmailControllerRejectsDelegatedAdministrator(t 
 		c.Set("user_id", users[1].ID)
 		BindPrimaryAdminVoceChatEmail(c)
 	})
-	body, _ := json.Marshal(map[string]string{"email": "existing@vc.test"})
+	body, _ := json.Marshal(map[string]string{"email": "existing@vc.test", "password": "vc-password"})
 	request := httptest.NewRequest(http.MethodPut, "/api/user/vocechat/bind", bytes.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()

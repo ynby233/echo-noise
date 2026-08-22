@@ -470,14 +470,19 @@ func TestVoceChatContactCacheOnlyGrantsAddedContactsVisibility(t *testing.T) {
 	}
 }
 
-func TestVoceChatContactCacheUsesConfiguredAdminForSysAdminAuthor(t *testing.T) {
+func TestVoceChatContactCacheUsesPrimaryAdminsPersonalBinding(t *testing.T) {
 	db := setupUserServiceTestDB(t)
 	enableVoceChatContactsForTest(t)
+	storePath := filepath.Join(t.TempDir(), "primary-contact-passwords.db")
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
 
-	admin := mustCreateUser(t, models.User{Username: "sys_admin_contacts", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+	admin := mustCreateUser(t, models.User{Username: "sys_admin_contacts", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32), VoceChatEmail: "personal@vc.com", VoceChatUserID: "99"})
 	bob := mustCreateUser(t, models.User{Username: "admin_contact_bob", Password: models.HashPassword("bob"), Token: models.GenerateToken(32), VoceChatEmail: "bob@vc.com", VoceChatUserID: "202"})
 	if admin.ID != 1 {
 		t.Fatalf("admin ID = %d, want 1", admin.ID)
+	}
+	if err := vocechat.NewPlainPasswordStore(storePath).UpsertUserVoceChatPassword(admin.ID, admin.Username, "personal-secret", admin.VoceChatEmail, admin.VoceChatUserID); err != nil {
+		t.Fatal(err)
 	}
 
 	message := models.Message{Content: "admin contacts", Username: admin.Username, UserID: admin.ID, Visibility: MessageVisibilityContacts}
@@ -489,13 +494,13 @@ func TestVoceChatContactCacheUsesConfiguredAdminForSysAdminAuthor(t *testing.T) 
 	}
 
 	stubVoceChatPasswordLogin(t, func(ctx context.Context, config vocechat.Config, email, password string) (*vocechat.LoginResponse, error) {
-		if email != "admin@vc.com" || password != "admin-secret" {
+		if email != "personal@vc.com" || password != "personal-secret" {
 			t.Fatalf("vc admin login args email=%q password=%q", email, password)
 		}
-		return &vocechat.LoginResponse{Token: "admin-token", User: vocechat.UserInfo{UID: 99, Email: "admin@vc.com", IsAdmin: true}}, nil
+		return &vocechat.LoginResponse{Token: "personal-token", User: vocechat.UserInfo{UID: 99, Email: "personal@vc.com"}}, nil
 	})
 	stubVoceChatListContacts(t, func(ctx context.Context, config vocechat.Config, apiKey string) ([]vocechat.UserContact, error) {
-		if apiKey != "admin-token" {
+		if apiKey != "personal-token" {
 			t.Fatalf("contacts api key = %q", apiKey)
 		}
 		return []vocechat.UserContact{voceChatContactWithStatus(202, vocechat.ContactStatusAdded)}, nil
@@ -515,8 +520,8 @@ func TestVoceChatContactCacheUsesConfiguredAdminForSysAdminAuthor(t *testing.T) 
 	if err := database.DB.First(&storedAdmin, admin.ID).Error; err != nil {
 		t.Fatalf("load stored admin: %v", err)
 	}
-	if storedAdmin.VoceChatUserID != "" || storedAdmin.VoceChatEmail != "" || (storedAdmin.VoceChatSyncStatus != "" && storedAdmin.VoceChatSyncStatus != models.VoceChatSyncStatusNone) {
-		t.Fatalf("admin should not be bound by contacts sync, got uid %q email %q status %q", storedAdmin.VoceChatUserID, storedAdmin.VoceChatEmail, storedAdmin.VoceChatSyncStatus)
+	if storedAdmin.VoceChatUserID != "99" || storedAdmin.VoceChatEmail != "personal@vc.com" {
+		t.Fatalf("primary binding changed, got uid %q email %q", storedAdmin.VoceChatUserID, storedAdmin.VoceChatEmail)
 	}
 
 	var marker models.VoceChatContactCache
@@ -525,6 +530,62 @@ func TestVoceChatContactCacheUsesConfiguredAdminForSysAdminAuthor(t *testing.T) 
 	}
 	if marker.VoceChatUserID != "99" || marker.LastSyncStatus != models.VoceChatContactSyncStatusOK {
 		t.Fatalf("admin contact marker = %#v", marker)
+	}
+}
+
+func TestPrimaryAdminInvalidVoceChatCredentialsFailClosedAndNotifyOnce(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	enableVoceChatContactsForTest(t)
+	storePath := filepath.Join(t.TempDir(), "invalid-primary-contact.db")
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
+	admin := mustCreateUser(t, models.User{Username: "primary-invalid-vc", Password: models.HashPassword("local"), IsAdmin: true, VoceChatEmail: "invalid@vc.com", VoceChatUserID: "98"})
+	viewer := mustCreateUser(t, models.User{Username: "viewer-invalid-vc", Password: models.HashPassword("viewer"), VoceChatEmail: "viewer@vc.com", VoceChatUserID: "202"})
+	if err := vocechat.NewPlainPasswordStore(storePath).UpsertUserVoceChatPassword(admin.ID, admin.Username, "stale-password", admin.VoceChatEmail, admin.VoceChatUserID); err != nil {
+		t.Fatal(err)
+	}
+	stubVoceChatPasswordLogin(t, func(context.Context, vocechat.Config, string, string) (*vocechat.LoginResponse, error) {
+		return nil, &vocechat.APIError{StatusCode: 401}
+	})
+	message := models.Message{Content: "fail closed", Username: admin.Username, UserID: admin.ID, Visibility: MessageVisibilityContacts}
+	if err := CreateMessage(&message); err != nil {
+		t.Fatal(err)
+	}
+	viewerID := viewer.ID
+	if CanViewMessage(message, &viewerID, false) {
+		t.Fatal("invalid primary credentials must make contacts content private")
+	}
+	_ = EnsureVoceChatContactCacheForAuthor(admin.ID)
+	_ = EnsureVoceChatContactCacheForAuthor(admin.ID)
+	var count int64
+	if err := db.Model(&models.UserNotification{}).Where("recipient_user_id = ? AND type = ?", admin.ID, models.UserNotificationTypeVoceChatCredentials).Count(&count).Error; err != nil || count != 1 {
+		t.Fatalf("credential alerts=%d err=%v", count, err)
+	}
+}
+
+func TestPrimaryAdminVoceChatOutageFailsClosedWithoutCredentialAlert(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	enableVoceChatContactsForTest(t)
+	storePath := filepath.Join(t.TempDir(), "outage-primary-contact.db")
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
+	admin := mustCreateUser(t, models.User{Username: "primary-vc-outage", Password: models.HashPassword("local"), IsAdmin: true, VoceChatEmail: "owner@vc.com", VoceChatUserID: "97"})
+	viewer := mustCreateUser(t, models.User{Username: "viewer-vc-outage", Password: models.HashPassword("viewer"), VoceChatEmail: "viewer@vc.com", VoceChatUserID: "203"})
+	if err := vocechat.NewPlainPasswordStore(storePath).UpsertUserVoceChatPassword(admin.ID, admin.Username, "valid-password", admin.VoceChatEmail, admin.VoceChatUserID); err != nil {
+		t.Fatal(err)
+	}
+	stubVoceChatPasswordLogin(t, func(context.Context, vocechat.Config, string, string) (*vocechat.LoginResponse, error) {
+		return nil, &vocechat.APIError{StatusCode: 503, Body: "service unavailable"}
+	})
+	message := models.Message{Content: "outage fail closed", Username: admin.Username, UserID: admin.ID, Visibility: MessageVisibilityContacts}
+	if err := CreateMessage(&message); err != nil {
+		t.Fatal(err)
+	}
+	viewerID := viewer.ID
+	if CanViewMessage(message, &viewerID, false) {
+		t.Fatal("VoceChat outage must make contacts content private")
+	}
+	var count int64
+	if err := db.Model(&models.UserNotification{}).Where("recipient_user_id = ? AND type = ?", admin.ID, models.UserNotificationTypeVoceChatCredentials).Count(&count).Error; err != nil || count != 0 {
+		t.Fatalf("outage credential alerts=%d err=%v", count, err)
 	}
 }
 

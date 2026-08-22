@@ -14,17 +14,20 @@ import (
 	"github.com/rcy1314/echo-noise/internal/vocechat"
 )
 
-// BindPrimaryAdminVoceChatEmail validates an existing VoceChat account through
-// the independently configured management credential, then records the
-// account as user ID 1's registration binding. It does not change the
-// management credential or the primary administrator's local login method.
-func BindPrimaryAdminVoceChatEmail(ctx context.Context, actorUserID uint, email string) (*models.User, error) {
+// BindPrimaryAdminVoceChatEmail logs into the supplied personal VoceChat
+// account, then records it as user ID 1's registration binding. It does not
+// change the independently configured management credential or the primary
+// administrator's local login password.
+func BindPrimaryAdminVoceChatEmail(ctx context.Context, actorUserID uint, email string, password string) (*models.User, error) {
 	if actorUserID != models.PrimaryAdminUserID {
 		return nil, errors.New("仅1号管理员可以修改自己的注册绑定 VoceChat 邮箱")
 	}
 	email = strings.ToLower(strings.TrimSpace(email))
 	if email == "" || !isValidVoceChatAdminEmail(email) {
 		return nil, errors.New("VoceChat 邮箱格式无效")
+	}
+	if strings.TrimSpace(password) == "" {
+		return nil, errors.New("VoceChat 密码不能为空")
 	}
 
 	db, err := database.GetDB()
@@ -40,31 +43,19 @@ func BindPrimaryAdminVoceChatEmail(ctx context.Context, actorUserID uint, email 
 		return nil, errors.New("VoceChat 当前未启用或管理凭据未配置完整")
 	}
 
-	client, err := vocechat.NewClient(vcConfig)
-	if err != nil {
-		return nil, errors.New("VoceChat 当前不可用，请检查注册配置")
-	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	apiKey, err := vocechat.NewAdminTokenManager(client, vcConfig).GetToken(ctx)
+	login, err := voceChatPasswordLogin(ctx, vcConfig, email, password)
 	if err != nil {
-		return nil, errors.New("VoceChat 当前不可用，请检查注册配置")
-	}
-	remoteUsers, err := client.ListUsers(ctx, apiKey)
-	if err != nil {
-		return nil, errors.New("VoceChat 当前不可用，请检查注册配置")
-	}
-
-	var remoteUser *vocechat.User
-	for i := range remoteUsers {
-		if strings.EqualFold(strings.TrimSpace(remoteUsers[i].Email), email) {
-			remoteUser = &remoteUsers[i]
-			break
+		if isVoceChatAccountCredentialInvalid(err) {
+			return nil, errors.New("VoceChat 邮箱或密码错误，或该账户已不可用")
 		}
+		return nil, errors.New("VoceChat 当前无法连接，请稍后重试")
 	}
-	if remoteUser == nil || remoteUser.UID <= 0 {
+	if login == nil || login.User.UID <= 0 || !strings.EqualFold(strings.TrimSpace(login.User.Email), email) {
 		return nil, errors.New("该 VoceChat 邮箱不存在")
 	}
+	remoteUser := login.User
 	remoteEmail := strings.ToLower(strings.TrimSpace(remoteUser.Email))
 	remoteUID := strconv.FormatInt(remoteUser.UID, 10)
 	var occupied int64
@@ -86,6 +77,16 @@ func BindPrimaryAdminVoceChatEmail(ctx context.Context, actorUserID uint, email 
 		return nil, errors.New("该 VoceChat 账户已由待处理的注册申请占用")
 	}
 
+	var primary models.User
+	if err := db.Where("id = ? AND is_admin = ?", models.PrimaryAdminUserID, true).First(&primary).Error; err != nil {
+		return nil, errors.New("1号管理员账户不存在")
+	}
+	passwordStore := vocechat.DefaultPlainPasswordStore()
+	previousPassword, hadPreviousPassword, err := passwordStore.GetUserPassword(primary.ID)
+	if err != nil {
+		return nil, errors.New("读取原 VoceChat 账户凭据失败")
+	}
+
 	now := time.Now().UTC()
 	updates := map[string]interface{}{
 		"voce_chat_email":        remoteEmail,
@@ -96,12 +97,30 @@ func BindPrimaryAdminVoceChatEmail(ctx context.Context, actorUserID uint, email 
 		"voce_chat_linked_at":    now,
 		"voce_chat_last_sync_at": now,
 	}
-	result := db.Model(&models.User{}).Where("id = ? AND is_admin = ?", models.PrimaryAdminUserID, true).Updates(updates)
+	tx := db.Begin()
+	if tx.Error != nil {
+		return nil, errors.New(models.DatabaseErrorMessage)
+	}
+	result := tx.Model(&models.User{}).Where("id = ? AND is_admin = ?", models.PrimaryAdminUserID, true).Updates(updates)
 	if result.Error != nil {
+		tx.Rollback()
 		return nil, fmt.Errorf("保存 VoceChat 绑定失败: %w", result.Error)
 	}
 	if result.RowsAffected != 1 {
+		tx.Rollback()
 		return nil, errors.New("1号管理员账户不存在")
+	}
+	if err := passwordStore.UpsertUserVoceChatPassword(primary.ID, primary.Username, password, remoteEmail, remoteUID); err != nil {
+		tx.Rollback()
+		return nil, errors.New("保存 VoceChat 账户凭据失败")
+	}
+	if err := tx.Commit().Error; err != nil {
+		if hadPreviousPassword {
+			_ = passwordStore.UpsertUserVoceChatPassword(primary.ID, previousPassword.Username, previousPassword.VoceChatPasswordValue(), previousPassword.VoceChatEmail, previousPassword.VoceChatUserID)
+		} else {
+			_ = passwordStore.DeleteUserPassword(primary.ID)
+		}
+		return nil, fmt.Errorf("保存 VoceChat 绑定失败: %w", err)
 	}
 	repository.ClearUserCache()
 	bound, err := repository.GetUserByID(models.PrimaryAdminUserID)
@@ -109,5 +128,7 @@ func BindPrimaryAdminVoceChatEmail(ctx context.Context, actorUserID uint, email 
 		return nil, errors.New(models.DatabaseErrorMessage)
 	}
 	updatePlainPasswordUserMetadata(bound)
+	_ = repository.DeleteVoceChatContactsForUser(models.PrimaryAdminUserID)
+	ResolvePrimaryAdminVoceChatCredentialAlert()
 	return bound, nil
 }

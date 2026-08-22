@@ -423,6 +423,27 @@ func isVoceChatCredentialRejected(err error) bool {
 	}
 }
 
+// isVoceChatAccountCredentialInvalid is deliberately narrower than a generic
+// VoceChat request failure. A temporary outage must not be reported as a bad
+// account. A 404 only counts when VoceChat explicitly identifies the account
+// or credential in its response body.
+func isVoceChatAccountCredentialInvalid(err error) bool {
+	if isVoceChatCredentialRejected(err) {
+		return true
+	}
+	var apiErr *vocechat.APIError
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusNotFound {
+		return false
+	}
+	body := strings.ToLower(strings.TrimSpace(apiErr.Body))
+	for _, marker := range []string{"account", "user", "credential", "email", "账号", "账户", "用户", "邮箱"} {
+		if strings.Contains(body, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 func recordVoceChatLoginHealth(status string, healthErr error) {
 	if database.DB == nil {
 		return
