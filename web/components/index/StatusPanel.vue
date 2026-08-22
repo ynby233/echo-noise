@@ -1063,7 +1063,7 @@
                       <UButton color="green" class="shadow" :loading="guestWidgetSaving" @click="saveWidgetPreferences('guest')">保存访客默认</UButton>
                     </div>
                     <div class="px-4 pb-4 space-y-4">
-                      <div class="text-sm" :class="theme.mutedText">仅控制未登录访客；不会读取或覆盖我的小组件。</div>
+                      <div class="text-sm" :class="theme.mutedText">访客直接使用此配置；登录用户尚未明确设置的项目也会继承此配置；已保存的个人项目不受影响。</div>
                       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div v-for="item in widgetItems" :key="`guest-${item.key}`" class="flex items-center justify-between rounded-lg border px-3 py-2" :class="theme.border"><span :class="theme.text">{{ item.label }}</span><UToggle :model-value="widgetValue('guest', item.key)" @update:model-value="setWidgetValue('guest', item.key, $event)" /></div>
                       </div>

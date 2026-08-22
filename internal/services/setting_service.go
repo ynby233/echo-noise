@@ -1011,14 +1011,18 @@ func resolveLifeCountdownSettings(db *gorm.DB, viewerUserID uint, siteConfig mod
 		}
 	}
 
-	return lifeCountdownSettings{}
+	return lifeCountdownSettings{
+		Enabled:             siteConfig.LifeCountdownEnabled,
+		BirthDate:           strings.TrimSpace(siteConfig.LifeCountdownBirthDate),
+		LifeExpectancyYears: siteConfig.LifeExpectancyYears,
+	}
 }
 
 func resolveWidgetVisibilitySettings(db *gorm.DB, viewerUserID uint, siteConfig models.SiteConfig) WidgetVisibilitySettings {
 	if viewerUserID == 0 {
 		return guestWidgetVisibilitySettings(siteConfig)
 	}
-	resolved := DefaultAccountWidgetVisibilitySettings()
+	resolved := guestWidgetVisibilitySettings(siteConfig)
 	var preference models.UserFrontendPreference
 	if err := db.Where("user_id = ?", viewerUserID).First(&preference).Error; err != nil {
 		return resolved

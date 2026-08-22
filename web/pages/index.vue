@@ -595,6 +595,7 @@ import { normalizeAdConfigs } from '~/utils/ad-config'
 import { getMessageIdFromRouteHash } from '~/utils/message-route-hash'
 import { getRequest, postRequest } from '~/utils/api'
 import { attachmentFailureAriaLabel, attachmentFailureDetail, attachmentFailureTitle } from '~/utils/attachment-failure'
+import { createHomeGalleryLoader } from '~/utils/home-gallery-loader'
 import { resolveManagedAttachmentURL } from '~/utils/media-url'
 import { useToast } from '#ui/composables/useToast'
 import { useUserStore } from '~/store/user'
@@ -2109,9 +2110,8 @@ watch(() => frontendConfig.value.hitokotoEnabled, async (enabled) => {
 }, { immediate: true })
 
 watch(() => frontendConfig.value.latestGalleryEnabled, (enabled) => {
-  if (enabled !== false) fetchImages()
-  else images.value = []
-})
+  if (!isApplyingFrontendConfig) void galleryLoader.onEnabledChanged(enabled)
+}, { flush: 'sync' })
 watch(() => frontendConfig.value.popularTagsEnabled, (enabled) => {
   if (enabled !== false) fetchTags()
   else tags.value = []
@@ -2224,6 +2224,7 @@ const headerImageStyle = computed(() => ({
   };
 
 // 修改 fetchConfig 方法
+let isApplyingFrontendConfig = false
 const fetchConfig = async () => {
     try {
         const nextConfig: any = { ...defaultConfig };
@@ -2273,7 +2274,9 @@ const fetchConfig = async () => {
         const source = resolveMusicSource(nextConfig)
         nextConfig.musicPlaylistId = source.playlistId
         nextConfig.musicSongId = source.songId
+        isApplyingFrontendConfig = true
         frontendConfig.value = nextConfig
+        isApplyingFrontendConfig = false
         if (frontendConfig.value.backgrounds.length > 0) {
             const randomIndex = Math.floor(Math.random() * frontendConfig.value.backgrounds.length)
             const initialBackground = frontendConfig.value.backgrounds[randomIndex]
@@ -2282,11 +2285,14 @@ const fetchConfig = async () => {
         }
     } catch (error) {
         console.error('获取配置失败:', error)
+        isApplyingFrontendConfig = true
         frontendConfig.value = { ...defaultConfig, backgrounds: normalizeHeaderBackgrounds(defaultConfig.backgrounds) }
+        isApplyingFrontendConfig = false
         currentBackground.value = frontendConfig.value.backgrounds[0] || null
         currentImage.value = currentBackground.value?.url || ''
     } finally {
         musicConfigLoaded.value = true
+        void reconcileGalleryAfterConfig()
     }
 }
 
@@ -2518,15 +2524,33 @@ const fetchTags = async () => {
 // 图片与状态
 const images = ref<any[]>([])
 const status = ref<any>(null)
-const fetchImages = async () => {
+const requestImages = async () => {
   try {
     const r = await getRequest<any>('messages/images', undefined, { credentials: 'include' })
     if (r && r.code === 1 && Array.isArray(r.data)) {
-      images.value = r.data
-      // 列表换了一批，旧的失败记录必须清空，否则新图会沿用上一批的失败位置。
-      if (failedRecommendKeys.value.size > 0) failedRecommendKeys.value = new Set()
+      return r.data
     }
   } catch {}
+  return []
+}
+const applyImages = (nextImages: any[]) => {
+  images.value = Array.isArray(nextImages) ? nextImages : []
+  if (failedRecommendKeys.value.size > 0) failedRecommendKeys.value = new Set()
+}
+const galleryLoader = createHomeGalleryLoader({
+  load: requestImages,
+  apply: applyImages,
+  clear: () => { images.value = [] },
+})
+let galleryConfigResolved = false
+const reconcileGalleryAfterConfig = async () => {
+  const enabled = frontendConfig.value.latestGalleryEnabled
+  if (!galleryConfigResolved) {
+    galleryConfigResolved = true
+    await galleryLoader.onConfigResolved(enabled)
+    return
+  }
+  await galleryLoader.onViewerChanged(enabled)
 }
 const fetchStatus = async () => {
   try {

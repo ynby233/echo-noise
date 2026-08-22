@@ -80,7 +80,7 @@ assert.ok(
 )
 assert.match(
   indexPage,
-  /images\.value = r\.data\n\s*\/\/[^\n]*\n\s*if \(failedRecommendKeys\.value\.size > 0\) failedRecommendKeys\.value = new Set\(\)/,
+  /const applyImages = \(nextImages: any\[\]\) => \{[\s\S]*?images\.value = Array\.isArray\(nextImages\) \? nextImages : \[\][\s\S]*?if \(failedRecommendKeys\.value\.size > 0\) failedRecommendKeys\.value = new Set\(\)/,
   'a refreshed gallery list must clear stale per-entry failure marks so new images are not hidden'
 )
 

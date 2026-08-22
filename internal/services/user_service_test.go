@@ -1396,7 +1396,7 @@ func TestGetFrontendConfigUsesViewerScopedLifeCountdown(t *testing.T) {
 
 	assertLifeCountdownFrontendSettings(t, lifeCountdownFrontendSettings(t, 0), true, "1970-01-02", 90)
 	assertLifeCountdownFrontendSettings(t, lifeCountdownFrontendSettings(t, admin.ID), true, "1980-03-04", 88)
-	assertLifeCountdownFrontendSettings(t, lifeCountdownFrontendSettings(t, alice.ID), false, "", 0)
+	assertLifeCountdownFrontendSettings(t, lifeCountdownFrontendSettings(t, alice.ID), true, "1970-01-02", 90)
 
 	if err := UpdateUserLifeCountdownConfig(alice.ID, map[string]interface{}{
 		"lifeCountdownEnabled":   true,
@@ -1410,7 +1410,7 @@ func TestGetFrontendConfigUsesViewerScopedLifeCountdown(t *testing.T) {
 	if err := db.Where("user_id = ?", admin.ID).Delete(&models.UserLifeCountdownConfig{}).Error; err != nil {
 		t.Fatalf("delete admin life countdown: %v", err)
 	}
-	assertLifeCountdownFrontendSettings(t, lifeCountdownFrontendSettings(t, admin.ID), false, "", 0)
+	assertLifeCountdownFrontendSettings(t, lifeCountdownFrontendSettings(t, admin.ID), true, "1970-01-02", 90)
 }
 
 func hitokotoEnabledForViewer(t *testing.T, viewerUserID uint) bool {
@@ -1457,8 +1457,8 @@ func TestGetFrontendConfigUsesViewerScopedHitokotoPreference(t *testing.T) {
 	if !hitokotoEnabledForViewer(t, alice.ID) {
 		t.Fatal("alice should be able to enable daily quote even when the site default is disabled")
 	}
-	if hitokotoEnabledForViewer(t, 0) || !hitokotoEnabledForViewer(t, admin.ID) {
-		t.Fatal("site default should apply only to guests; administrators without a preference use account defaults")
+	if hitokotoEnabledForViewer(t, 0) || hitokotoEnabledForViewer(t, admin.ID) {
+		t.Fatal("an unset administrator field must follow the current site guest default")
 	}
 }
 
@@ -1500,12 +1500,48 @@ func TestGetFrontendConfigSeparatesGuestDefaultsFromEveryAccountWidgetPreference
 	for _, viewer := range []*models.User{primary, delegated, ordinary} {
 		settings := lifeCountdownFrontendSettings(t, viewer.ID)
 		for key, want := range map[string]bool{
-			"lifeCountdownEnabled": false, "hitokotoEnabled": true, "homeStatsEnabled": true,
-			"popularTagsEnabled": true, "calendarEnabled": true, "latestGalleryEnabled": true, "heatmapEnabled": true,
+			"lifeCountdownEnabled": true, "hitokotoEnabled": true, "homeStatsEnabled": false,
+			"popularTagsEnabled": false, "calendarEnabled": false, "latestGalleryEnabled": false, "heatmapEnabled": false,
 		} {
 			if got, ok := settings[key].(bool); !ok || got != want {
-				t.Fatalf("viewer %d default %s = %#v, want %v", viewer.ID, key, settings[key], want)
+				t.Fatalf("viewer %d unset %s = %#v, want current guest default %v", viewer.ID, key, settings[key], want)
 			}
+		}
+	}
+	if err := UpdateUserFrontendPreferenceConfig(ordinary.ID, map[string]interface{}{
+		"hitokotoEnabled": false,
+		"calendarEnabled": true,
+	}); err != nil {
+		t.Fatalf("save partial ordinary preferences: %v", err)
+	}
+	if err := UpdateUserWidgetPreferences(ordinary.ID, map[string]interface{}{
+		"lifeCountdownEnabled": false,
+	}); err != nil {
+		t.Fatalf("save explicit ordinary countdown preference: %v", err)
+	}
+	ordinarySettings := lifeCountdownFrontendSettings(t, ordinary.ID)
+	for key, want := range map[string]bool{
+		"lifeCountdownEnabled": false,
+		"hitokotoEnabled":      false,
+		"calendarEnabled":      true,
+		"heatmapEnabled":       false,
+	} {
+		if got, ok := ordinarySettings[key].(bool); !ok || got != want {
+			t.Fatalf("ordinary %s = %#v, want explicit-or-inherited value %v", key, ordinarySettings[key], want)
+		}
+	}
+	if err := db.Model(&models.SiteConfig{}).Where("1 = 1").Update("heatmap_enabled", true).Error; err != nil {
+		t.Fatalf("change guest default for unset field: %v", err)
+	}
+	ordinarySettings = lifeCountdownFrontendSettings(t, ordinary.ID)
+	for key, want := range map[string]bool{
+		"lifeCountdownEnabled": false,
+		"hitokotoEnabled":      false,
+		"calendarEnabled":      true,
+		"heatmapEnabled":       true,
+	} {
+		if got, ok := ordinarySettings[key].(bool); !ok || got != want {
+			t.Fatalf("ordinary %s after guest default update = %#v, want %v", key, ordinarySettings[key], want)
 		}
 	}
 
@@ -1522,7 +1558,7 @@ func TestGetFrontendConfigSeparatesGuestDefaultsFromEveryAccountWidgetPreference
 			t.Fatalf("delegated %s = %#v, want false", key, delegatedSettings[key])
 		}
 	}
-	if got := lifeCountdownFrontendSettings(t, ordinary.ID)["homeStatsEnabled"]; got != true {
+	if got := lifeCountdownFrontendSettings(t, ordinary.ID)["homeStatsEnabled"]; got != false {
 		t.Fatalf("delegated preference leaked to ordinary viewer: %#v", got)
 	}
 	if got := lifeCountdownFrontendSettings(t, 0)["homeStatsEnabled"]; got != false {
