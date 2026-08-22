@@ -909,6 +909,83 @@ func TestGetStatusIncludesUserAvatarURLs(t *testing.T) {
 	}
 }
 
+func TestGetStatusScopesVoceChatFieldsByViewerRole(t *testing.T) {
+	setupUserServiceTestDB(t)
+
+	primary := mustCreateUser(t, models.User{
+		Username: "primary", Password: models.HashPassword("primary"), IsAdmin: true,
+		VoceChatEmail: "primary@vc.example", VoceChatNotificationEnabled: true,
+	})
+	delegatedWithUsersView := mustCreateUser(t, models.User{
+		Username: "delegated-view", Password: models.HashPassword("delegated-view"), IsAdmin: true,
+		VoceChatEmail: "delegated-view@vc.example", VoceChatNotificationEnabled: false,
+	})
+	delegatedWithoutUsersView := mustCreateUser(t, models.User{
+		Username: "delegated-no-view", Password: models.HashPassword("delegated-no-view"), IsAdmin: true,
+		VoceChatEmail: "delegated-no-view@vc.example", VoceChatNotificationEnabled: true,
+	})
+	ordinaryA := mustCreateUser(t, models.User{
+		Username: "ordinary-a", Password: models.HashPassword("ordinary-a"),
+		VoceChatEmail: "ordinary-a@vc.example", VoceChatNotificationEnabled: false,
+	})
+	ordinaryB := mustCreateUser(t, models.User{
+		Username: "ordinary-b", Password: models.HashPassword("ordinary-b"),
+		VoceChatEmail: "ordinary-b@vc.example", VoceChatNotificationEnabled: true,
+	})
+	if primary.ID != models.PrimaryAdminUserID {
+		t.Fatalf("primary user id = %d, want %d", primary.ID, models.PrimaryAdminUserID)
+	}
+	if err := database.DB.Create(&models.AdminCapabilityGrant{
+		UserID: delegatedWithUsersView.ID, Capability: "users.view", GrantedByUserID: primary.ID,
+	}).Error; err != nil {
+		t.Fatalf("grant users.view: %v", err)
+	}
+
+	allUsers := []*models.User{primary, delegatedWithUsersView, delegatedWithoutUsersView, ordinaryA, ordinaryB}
+	assertStatus := func(t *testing.T, viewerID uint, visibleEmails map[uint]bool, visibleNotifications map[uint]bool) {
+		t.Helper()
+		status, err := GetStatus(viewerID)
+		if err != nil {
+			t.Fatalf("GetStatus(%d): %v", viewerID, err)
+		}
+		byID := make(map[uint]models.UserStatus, len(status.Users))
+		for _, user := range status.Users {
+			byID[user.ID] = user
+		}
+		for _, expected := range allUsers {
+			actual, ok := byID[expected.ID]
+			if !ok {
+				t.Fatalf("viewer %d missing user %d", viewerID, expected.ID)
+			}
+			if got, want := actual.VoceChatEmail != "", visibleEmails[expected.ID]; got != want {
+				t.Errorf("viewer %d email visibility for user %d = %v, want %v", viewerID, expected.ID, got, want)
+			}
+			if got, want := actual.VoceChatNotificationEnabled != nil, visibleNotifications[expected.ID]; got != want {
+				t.Errorf("viewer %d notification visibility for user %d = %v, want %v", viewerID, expected.ID, got, want)
+			} else if got && *actual.VoceChatNotificationEnabled != expected.VoceChatNotificationEnabled {
+				t.Errorf("viewer %d notification value for user %d = %v, want %v", viewerID, expected.ID, *actual.VoceChatNotificationEnabled, expected.VoceChatNotificationEnabled)
+			}
+		}
+	}
+
+	selfFields := func(user *models.User) map[uint]bool { return map[uint]bool{user.ID: true} }
+	allFields := make(map[uint]bool, len(allUsers))
+	for _, user := range allUsers {
+		allFields[user.ID] = true
+	}
+
+	assertStatus(t, 0, map[uint]bool{}, map[uint]bool{})
+	assertStatus(t, ordinaryA.ID, selfFields(ordinaryA), selfFields(ordinaryA))
+	assertStatus(t, delegatedWithoutUsersView.ID, selfFields(delegatedWithoutUsersView), selfFields(delegatedWithoutUsersView))
+	assertStatus(t, delegatedWithUsersView.ID, allFields, selfFields(delegatedWithUsersView))
+	assertStatus(t, primary.ID, allFields, allFields)
+
+	if err := database.DB.Where("user_id = ? AND capability = ?", delegatedWithUsersView.ID, "users.view").Delete(&models.AdminCapabilityGrant{}).Error; err != nil {
+		t.Fatalf("revoke users.view: %v", err)
+	}
+	assertStatus(t, delegatedWithUsersView.ID, selfFields(delegatedWithUsersView), selfFields(delegatedWithUsersView))
+}
+
 func TestGetStatusCountsOnlyCommentsVisibleToViewer(t *testing.T) {
 	setupUserServiceTestDB(t)
 

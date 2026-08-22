@@ -2,8 +2,10 @@ package routers
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -14,9 +16,166 @@ import (
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/middleware"
 	"github.com/rcy1314/echo-noise/internal/models"
+	"github.com/rcy1314/echo-noise/internal/repository"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+func TestStatusVoceChatFieldVisibilityHTTPMatrix(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("ACCESS_LOG", "false")
+	t.Setenv("SESSION_SECRET", "status-visibility-test-secret-32")
+	t.Chdir(t.TempDir())
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	if err := models.MigrateDB(db); err != nil {
+		t.Fatalf("migrate database: %v", err)
+	}
+	database.DB = db
+	models.SetDB(db)
+	repository.ClearUserCache()
+	t.Cleanup(func() {
+		repository.ClearUserCache()
+		database.DB = nil
+		models.SetDB(nil)
+	})
+
+	createUser := func(user models.User) *models.User {
+		t.Helper()
+		if err := repository.CreateUser(&user); err != nil {
+			t.Fatalf("create user %s: %v", user.Username, err)
+		}
+		return &user
+	}
+	primary := createUser(models.User{Username: "primary", IsAdmin: true, Token: "primary-status-token", VoceChatEmail: "primary@vc.example", VoceChatNotificationEnabled: true})
+	delegatedWithUsersView := createUser(models.User{Username: "delegated-view", IsAdmin: true, Token: "delegated-view-status-token", VoceChatEmail: "delegated-view@vc.example", VoceChatNotificationEnabled: false})
+	delegatedWithoutUsersView := createUser(models.User{Username: "delegated-no-view", IsAdmin: true, Token: "delegated-no-view-status-token", VoceChatEmail: "delegated-no-view@vc.example", VoceChatNotificationEnabled: true})
+	ordinaryA := createUser(models.User{Username: "ordinary-a", Token: "ordinary-a-status-token", VoceChatEmail: "ordinary-a@vc.example", VoceChatNotificationEnabled: false})
+	ordinaryB := createUser(models.User{Username: "ordinary-b", Token: "ordinary-b-status-token", VoceChatEmail: "ordinary-b@vc.example", VoceChatNotificationEnabled: true})
+	if primary.ID != models.PrimaryAdminUserID {
+		t.Fatalf("primary user id = %d, want %d", primary.ID, models.PrimaryAdminUserID)
+	}
+	notificationValues := map[uint]bool{
+		primary.ID:                   primary.VoceChatNotificationEnabled,
+		delegatedWithUsersView.ID:    delegatedWithUsersView.VoceChatNotificationEnabled,
+		delegatedWithoutUsersView.ID: delegatedWithoutUsersView.VoceChatNotificationEnabled,
+		ordinaryA.ID:                 ordinaryA.VoceChatNotificationEnabled,
+		ordinaryB.ID:                 ordinaryB.VoceChatNotificationEnabled,
+	}
+
+	r := SetupRouter()
+	r.GET("/__test/status-session/:id", func(c *gin.Context) {
+		id := c.Param("id")
+		session := sessions.Default(c)
+		session.Set("user_id", id)
+		session.Set("login_expire_at", time.Now().Add(time.Hour).Unix())
+		if err := session.Save(); err != nil {
+			c.Status(http.StatusInternalServerError)
+			return
+		}
+		c.Status(http.StatusNoContent)
+	})
+	seedSession := func(user *models.User) []*http.Cookie {
+		t.Helper()
+		response := httptest.NewRecorder()
+		r.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/__test/status-session/"+strconv.FormatUint(uint64(user.ID), 10), nil))
+		if response.Code != http.StatusNoContent {
+			t.Fatalf("seed session for %d: status=%d body=%s", user.ID, response.Code, response.Body.String())
+		}
+		return response.Result().Cookies()
+	}
+	statusBody := func(t *testing.T, cookies []*http.Cookie, token string) map[string]any {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+		for _, cookie := range cookies {
+			request.AddCookie(cookie)
+		}
+		if token != "" {
+			request.Header.Set("Authorization", "Bearer "+token)
+		}
+		response := httptest.NewRecorder()
+		r.ServeHTTP(response, request)
+		if response.Code != http.StatusOK {
+			t.Fatalf("status http=%d body=%s", response.Code, response.Body.String())
+		}
+		var body map[string]any
+		if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode status JSON: %v", err)
+		}
+		if body["code"] != float64(1) {
+			t.Fatalf("status code=%v body=%s", body["code"], response.Body.String())
+		}
+		return body
+	}
+	assertFields := func(t *testing.T, body map[string]any, visibleEmails map[uint]bool, visibleNotifications map[uint]bool) {
+		t.Helper()
+		data, ok := body["data"].(map[string]any)
+		if !ok {
+			t.Fatalf("status data missing: %#v", body)
+		}
+		users, ok := data["users"].([]any)
+		if !ok {
+			t.Fatalf("status users missing: %#v", data)
+		}
+		for _, raw := range users {
+			user, ok := raw.(map[string]any)
+			if !ok {
+				t.Fatalf("status user has unexpected JSON shape: %#v", raw)
+			}
+			id, ok := user["id"].(float64)
+			if !ok {
+				t.Fatalf("status user id missing: %#v", user)
+			}
+			userID := uint(id)
+			if got, want := hasJSONKey(user, "voce_chat_email"), visibleEmails[userID]; got != want {
+				t.Errorf("user %d email key present=%v, want %v", userID, got, want)
+			}
+			if got, want := hasJSONKey(user, "voce_chat_notification_enabled"), visibleNotifications[userID]; got != want {
+				t.Errorf("user %d notification key present=%v, want %v", userID, got, want)
+			} else if got {
+				value, ok := user["voce_chat_notification_enabled"].(bool)
+				if !ok || value != notificationValues[userID] {
+					t.Errorf("user %d notification value=%v, want %v", userID, user["voce_chat_notification_enabled"], notificationValues[userID])
+				}
+			}
+		}
+	}
+	allUsers := []*models.User{primary, delegatedWithUsersView, delegatedWithoutUsersView, ordinaryA, ordinaryB}
+	allFields := map[uint]bool{}
+	for _, user := range allUsers {
+		allFields[user.ID] = true
+	}
+	selfFields := func(user *models.User) map[uint]bool { return map[uint]bool{user.ID: true} }
+
+	assertFields(t, statusBody(t, nil, ""), map[uint]bool{}, map[uint]bool{})
+	assertFields(t, statusBody(t, seedSession(ordinaryA), ""), selfFields(ordinaryA), selfFields(ordinaryA))
+	assertFields(t, statusBody(t, nil, ordinaryA.Token), selfFields(ordinaryA), selfFields(ordinaryA))
+	assertFields(t, statusBody(t, seedSession(delegatedWithoutUsersView), ""), selfFields(delegatedWithoutUsersView), selfFields(delegatedWithoutUsersView))
+	assertFields(t, statusBody(t, nil, delegatedWithoutUsersView.Token), selfFields(delegatedWithoutUsersView), selfFields(delegatedWithoutUsersView))
+	assertFields(t, statusBody(t, nil, "expired-or-invalid-token"), map[uint]bool{}, map[uint]bool{})
+	assertFields(t, statusBody(t, seedSession(ordinaryA), primary.Token), selfFields(ordinaryA), selfFields(ordinaryA))
+
+	if err := db.Create(&models.AdminCapabilityGrant{UserID: delegatedWithUsersView.ID, Capability: string(authorization.CapabilityUsersView), GrantedByUserID: primary.ID}).Error; err != nil {
+		t.Fatalf("grant users.view: %v", err)
+	}
+	assertFields(t, statusBody(t, seedSession(delegatedWithUsersView), ""), allFields, selfFields(delegatedWithUsersView))
+	assertFields(t, statusBody(t, nil, delegatedWithUsersView.Token), allFields, selfFields(delegatedWithUsersView))
+
+	if err := db.Where("user_id = ? AND capability = ?", delegatedWithUsersView.ID, authorization.CapabilityUsersView).Delete(&models.AdminCapabilityGrant{}).Error; err != nil {
+		t.Fatalf("revoke users.view: %v", err)
+	}
+	assertFields(t, statusBody(t, seedSession(delegatedWithUsersView), ""), selfFields(delegatedWithUsersView), selfFields(delegatedWithUsersView))
+	assertFields(t, statusBody(t, nil, delegatedWithUsersView.Token), selfFields(delegatedWithUsersView), selfFields(delegatedWithUsersView))
+	assertFields(t, statusBody(t, seedSession(primary), ""), allFields, allFields)
+	assertFields(t, statusBody(t, nil, primary.Token), allFields, allFields)
+}
+
+func hasJSONKey(value map[string]any, key string) bool {
+	_, ok := value[key]
+	return ok
+}
 
 func TestProtectedAdminRouteMatrixRejectsDelegatedAdministratorWithoutRequiredGrant(t *testing.T) {
 	gin.SetMode(gin.TestMode)

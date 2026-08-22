@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/dto"
 	"github.com/rcy1314/echo-noise/internal/models"
@@ -724,6 +725,12 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 			isAdmin = currentUser.IsAdmin
 		}
 	}
+	canViewAllVoceChatEmails := currentUser.ID == models.PrimaryAdminUserID
+	if !canViewAllVoceChatEmails && currentUser.IsAdmin {
+		canViewAllVoceChatEmails = authorization.New(database.DB).
+			Authorize(currentUser.ID, authorization.CapabilityUsersView, nil).Allowed
+	}
+	canViewAllVoceChatNotificationPreferences := currentUser.ID == models.PrimaryAdminUserID
 
 	var users []models.UserStatus
 	allusers, err := repository.GetAllUsers()
@@ -737,9 +744,11 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 			IsAdmin:   user.IsAdmin,
 			AvatarURL: strings.TrimSpace(user.AvatarURL),
 		}
-		if isAdmin || currentUserID == user.ID {
-			notificationEnabled := user.VoceChatNotificationEnabled
+		if canViewAllVoceChatEmails || currentUser.ID == user.ID {
 			item.VoceChatEmail = strings.TrimSpace(user.VoceChatEmail)
+		}
+		if canViewAllVoceChatNotificationPreferences || currentUser.ID == user.ID {
+			notificationEnabled := user.VoceChatNotificationEnabled
 			item.VoceChatNotificationEnabled = &notificationEnabled
 		}
 		users = append(users, item)
