@@ -50,8 +50,8 @@ try {
   assert.deepEqual(actionFor({ id: 1, isPrimaryAdmin: true, capabilities: [] }, delegatedAdmin), {
     manageRole: true,
     deleteUser: true,
-    resetPassword: false,
-  }, 'the primary administrator cannot reset another administrator password')
+    resetPassword: true,
+  }, 'the primary administrator can reset a delegated administrator password')
   assert.deepEqual(actionFor({ id: 1, isPrimaryAdmin: true, capabilities: [] }, primaryAdmin), {
     manageRole: false,
     deleteUser: false,

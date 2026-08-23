@@ -17,6 +17,7 @@ import (
 )
 
 var primaryAdminVoceChatCredentialAlertMu sync.Mutex
+var voceChatPasswordChangedAlertMu sync.Mutex
 
 func createUserNotification(recipientUserID uint, actorUserID *uint, notificationType string, messageID *uint, commentID *uint, parentCommentID *uint) error {
 	if recipientUserID == 0 {
@@ -60,6 +61,28 @@ func ResolvePrimaryAdminVoceChatCredentialAlert() {
 	primaryAdminVoceChatCredentialAlertMu.Lock()
 	defer primaryAdminVoceChatCredentialAlertMu.Unlock()
 	_ = database.DB.Where("recipient_user_id = ? AND type = ?", models.PrimaryAdminUserID, models.UserNotificationTypeVoceChatCredentials).Delete(&models.UserNotification{}).Error
+}
+
+func CreateVoceChatPasswordChangedAlertOnce(recipientUserID uint) {
+	if database.DB == nil || recipientUserID == 0 || recipientUserID == models.PrimaryAdminUserID {
+		return
+	}
+	voceChatPasswordChangedAlertMu.Lock()
+	defer voceChatPasswordChangedAlertMu.Unlock()
+	var count int64
+	_ = database.DB.Model(&models.UserNotification{}).Where("recipient_user_id = ? AND type = ?", recipientUserID, models.UserNotificationTypeVoceChatPasswordChanged).Count(&count).Error
+	if count == 0 {
+		_ = database.DB.Create(&models.UserNotification{RecipientUserID: recipientUserID, Type: models.UserNotificationTypeVoceChatPasswordChanged}).Error
+	}
+}
+
+func ResolveVoceChatPasswordChangedAlert(recipientUserID uint) {
+	if database.DB == nil || recipientUserID == 0 || recipientUserID == models.PrimaryAdminUserID {
+		return
+	}
+	voceChatPasswordChangedAlertMu.Lock()
+	defer voceChatPasswordChangedAlertMu.Unlock()
+	_ = database.DB.Where("recipient_user_id = ? AND type = ?", recipientUserID, models.UserNotificationTypeVoceChatPasswordChanged).Delete(&models.UserNotification{}).Error
 }
 
 func refreshLikeNotification(recipientUserID uint, actorUserID uint, messageID uint) error {

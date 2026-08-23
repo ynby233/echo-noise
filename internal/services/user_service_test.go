@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"github.com/rcy1314/echo-noise/internal/database"
@@ -516,6 +517,129 @@ func TestLoginWithVoceChatSuccessSyncsLocalHashAndBinding(t *testing.T) {
 	}
 }
 
+func TestDelegatedAdministratorUsesVoceChatLoginAndKeepsPasswordSynced(t *testing.T) {
+	setupUserServiceTestDB(t)
+	enableVoceChatLoginForTest(t, false)
+	storePath := filepath.Join(t.TempDir(), "delegated-plain-passwords.db")
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
+
+	mustCreateUser(t, models.User{Username: "primary", Password: models.HashPassword("primary-local"), IsAdmin: true})
+	delegated := mustCreateUser(t, models.User{
+		Username:       "delegated",
+		Password:       models.HashPassword("stale-local-password"),
+		IsAdmin:        true,
+		VoceChatEmail:  "delegated@vc.com",
+		VoceChatUserID: "42",
+	})
+
+	stubVoceChatPasswordLogin(t, func(ctx context.Context, config vocechat.Config, email, password string) (*vocechat.LoginResponse, error) {
+		if email != "delegated@vc.com" || password != "delegated-vc-password" {
+			t.Fatalf("delegated vc login args email=%q password=%q", email, password)
+		}
+		return &vocechat.LoginResponse{User: vocechat.UserInfo{UID: 42, Email: email, Name: "Delegated VC"}}, nil
+	})
+
+	if _, err := Login(dto.LoginDto{Username: delegated.Username, Password: "delegated-vc-password"}); err != nil {
+		t.Fatalf("delegated administrator must authenticate with VoceChat: %v", err)
+	}
+
+	updated := mustGetUserByUsername(t, delegated.Username)
+	if bcrypt.CompareHashAndPassword([]byte(updated.Password), []byte("delegated-vc-password")) != nil {
+		t.Fatal("delegated local password must be synced from the VoceChat login")
+	}
+	record, ok, err := vocechat.NewPlainPasswordStore(storePath).GetUserPassword(delegated.ID)
+	if err != nil || !ok || record.VoceChatPassword != "delegated-vc-password" || record.LocalFallbackPassword != "" {
+		t.Fatalf("delegated password record must retain the VoceChat password: ok=%v record=%#v err=%v", ok, record, err)
+	}
+}
+
+func TestChangePasswordForDelegatedAdministratorUpdatesVoceChatBeforeLocalState(t *testing.T) {
+	setupUserServiceTestDB(t)
+	enableVoceChatLoginForTest(t, false)
+	storePath := filepath.Join(t.TempDir(), "delegated-change-passwords.db")
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
+
+	mustCreateUser(t, models.User{Username: "primary", Password: models.HashPassword("primary-local"), IsAdmin: true})
+	delegated := mustCreateUser(t, models.User{
+		Username:       "delegated-change",
+		Password:       models.HashPassword("old-delegated-password"),
+		IsAdmin:        true,
+		VoceChatEmail:  "delegated-change@vc.com",
+		VoceChatUserID: "43",
+	})
+	if err := vocechat.NewPlainPasswordStore(storePath).UpsertUserVoceChatPassword(delegated.ID, delegated.Username, "old-delegated-password", delegated.VoceChatEmail, delegated.VoceChatUserID); err != nil {
+		t.Fatalf("seed delegated password record: %v", err)
+	}
+
+	updatedRemote := false
+	stubVoceChatAdminUpdateUser(t, func(ctx context.Context, config vocechat.Config, uid int64, request vocechat.UpdateUserRequest) (*vocechat.User, error) {
+		updatedRemote = true
+		if uid != 43 || request.Password == nil || *request.Password != "new-delegated-password" {
+			t.Fatalf("delegated remote password update = uid %d request %#v", uid, request)
+		}
+		return &vocechat.User{UID: uid, Email: delegated.VoceChatEmail, Name: "Delegated Change"}, nil
+	})
+
+	if err := ChangePassword(delegated, dto.UserInfoDto{Password: "new-delegated-password"}); err != nil {
+		t.Fatalf("change delegated password: %v", err)
+	}
+	if !updatedRemote {
+		t.Fatal("delegated password must update VoceChat before local state")
+	}
+	updated := mustGetUserByUsername(t, delegated.Username)
+	if bcrypt.CompareHashAndPassword([]byte(updated.Password), []byte("new-delegated-password")) != nil {
+		t.Fatal("delegated local password must update after VoceChat succeeds")
+	}
+	record, ok, err := vocechat.NewPlainPasswordStore(storePath).GetUserPassword(delegated.ID)
+	if err != nil || !ok || record.VoceChatPassword != "new-delegated-password" {
+		t.Fatalf("delegated stored VoceChat password = %#v, ok=%v, err=%v", record, ok, err)
+	}
+}
+
+func TestVoceChatPasswordChangedAlertIsPerNonPrimaryAccountAndResolves(t *testing.T) {
+	setupUserServiceTestDB(t)
+	mustCreateUser(t, models.User{Username: "primary", Password: models.HashPassword("primary"), IsAdmin: true})
+	ordinary := mustCreateUser(t, models.User{Username: "ordinary-alert", Password: models.HashPassword("ordinary")})
+	delegated := mustCreateUser(t, models.User{Username: "delegated-alert", Password: models.HashPassword("delegated"), IsAdmin: true})
+
+	countAlerts := func(userID uint) int64 {
+		t.Helper()
+		var count int64
+		if err := database.DB.Model(&models.UserNotification{}).Where("recipient_user_id = ? AND type = ?", userID, models.UserNotificationTypeVoceChatPasswordChanged).Count(&count).Error; err != nil {
+			t.Fatalf("count password-change alerts: %v", err)
+		}
+		return count
+	}
+
+	for _, recipient := range []*models.User{ordinary, delegated} {
+		CreateVoceChatPasswordChangedAlertOnce(recipient.ID)
+		CreateVoceChatPasswordChangedAlertOnce(recipient.ID)
+		if got := countAlerts(recipient.ID); got != 1 {
+			t.Fatalf("recipient %d duplicate alerts = %d, want 1", recipient.ID, got)
+		}
+		if err := database.DB.Model(&models.UserNotification{}).Where("recipient_user_id = ? AND type = ?", recipient.ID, models.UserNotificationTypeVoceChatPasswordChanged).Update("read_at", time.Now()).Error; err != nil {
+			t.Fatalf("mark alert read: %v", err)
+		}
+		CreateVoceChatPasswordChangedAlertOnce(recipient.ID)
+		if got := countAlerts(recipient.ID); got != 1 {
+			t.Fatalf("read alert must not be recreated for recipient %d, got %d", recipient.ID, got)
+		}
+		ResolveVoceChatPasswordChangedAlert(recipient.ID)
+		if got := countAlerts(recipient.ID); got != 0 {
+			t.Fatalf("resolved alerts for recipient %d = %d, want 0", recipient.ID, got)
+		}
+		CreateVoceChatPasswordChangedAlertOnce(recipient.ID)
+		if got := countAlerts(recipient.ID); got != 1 {
+			t.Fatalf("a new invalid-credential episode must alert recipient %d, got %d", recipient.ID, got)
+		}
+	}
+
+	CreateVoceChatPasswordChangedAlertOnce(models.PrimaryAdminUserID)
+	if got := countAlerts(models.PrimaryAdminUserID); got != 0 {
+		t.Fatalf("primary administrator password-change alerts = %d, want 0", got)
+	}
+}
+
 func TestLoginWithVoceChatCredentialRejectionDoesNotUseLocalFallback(t *testing.T) {
 	setupUserServiceTestDB(t)
 	enableVoceChatLoginForTest(t, true)
@@ -779,6 +903,7 @@ func TestChangePasswordForBoundVoceChatUserRejectsWhenIntegrationDisabled(t *tes
 		t.Run(fmt.Sprintf("fallback %v", fallbackEnabled), func(t *testing.T) {
 			setupUserServiceTestDB(t)
 			configureVoceChatForTest(t, false, true, fallbackEnabled)
+			mustCreateUser(t, models.User{Username: "primary", Password: models.HashPassword("primary"), IsAdmin: true})
 
 			user := mustCreateUser(t, models.User{
 				Username:       "frank",
@@ -814,6 +939,7 @@ func TestUpdateUserVoceChatNameSyncFailureDoesNotBlockLocalProfile(t *testing.T)
 	enableVoceChatLoginForTest(t, false)
 	storePath := filepath.Join(t.TempDir(), "plain-passwords.db")
 	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
+	mustCreateUser(t, models.User{Username: "primary", Password: models.HashPassword("primary"), IsAdmin: true})
 
 	user := mustCreateUser(t, models.User{
 		Username:           "faye",

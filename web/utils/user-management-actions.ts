@@ -32,6 +32,6 @@ export const resolveUserManagementActions = (
   return {
     manageRole: actor.isPrimaryAdmin && targetID !== 1 && can('admin_roles.manage'),
     deleteUser: targetID !== actor.id && can('users.delete') && (actor.isPrimaryAdmin || !targetIsAdministrator),
-    resetPassword: targetID !== 1 && !targetIsAdministrator && can('users.reset_password'),
+    resetPassword: targetID !== 1 && can('users.reset_password') && (actor.isPrimaryAdmin || !targetIsAdministrator),
   }
 }

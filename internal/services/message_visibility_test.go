@@ -562,6 +562,65 @@ func TestPrimaryAdminInvalidVoceChatCredentialsFailClosedAndNotifyOnce(t *testin
 	}
 }
 
+func TestNonPrimaryInvalidVoceChatCredentialsNotifyOnceForOrdinaryAndDelegatedUsers(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	enableVoceChatContactsForTest(t)
+	storePath := filepath.Join(t.TempDir(), "invalid-non-primary-contact.db")
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
+	mustCreateUser(t, models.User{Username: "primary-contact-owner", Password: models.HashPassword("primary"), IsAdmin: true})
+	ordinary := mustCreateUser(t, models.User{Username: "ordinary-invalid-vc", Password: models.HashPassword("ordinary"), VoceChatEmail: "ordinary-invalid@vc.com", VoceChatUserID: "201"})
+	delegated := mustCreateUser(t, models.User{Username: "delegated-invalid-vc", Password: models.HashPassword("delegated"), IsAdmin: true, VoceChatEmail: "delegated-invalid@vc.com", VoceChatUserID: "202"})
+	for _, user := range []*models.User{ordinary, delegated} {
+		if err := vocechat.NewPlainPasswordStore(storePath).UpsertUserVoceChatPassword(user.ID, user.Username, "stale-password", user.VoceChatEmail, user.VoceChatUserID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stubVoceChatPasswordLogin(t, func(context.Context, vocechat.Config, string, string) (*vocechat.LoginResponse, error) {
+		return nil, &vocechat.APIError{StatusCode: 401}
+	})
+
+	for _, user := range []*models.User{ordinary, delegated} {
+		_ = EnsureVoceChatContactCacheForAuthor(user.ID)
+		_ = RefreshVoceChatContactCacheForAuthor(user.ID)
+		var count int64
+		if err := db.Model(&models.UserNotification{}).Where("recipient_user_id = ? AND type = ?", user.ID, models.UserNotificationTypeVoceChatPasswordChanged).Count(&count).Error; err != nil || count != 1 {
+			t.Fatalf("recipient %d password-change alerts=%d err=%v", user.ID, count, err)
+		}
+	}
+}
+
+func TestSuccessfulNonPrimaryVoceChatContactSyncResolvesPasswordChangedAlert(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	enableVoceChatContactsForTest(t)
+	storePath := filepath.Join(t.TempDir(), "resolved-non-primary-contact.db")
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
+	mustCreateUser(t, models.User{Username: "primary-contact-owner", Password: models.HashPassword("primary"), IsAdmin: true})
+	ordinary := mustCreateUser(t, models.User{Username: "ordinary-resolved-vc", Password: models.HashPassword("ordinary"), VoceChatEmail: "ordinary-resolved@vc.com", VoceChatUserID: "301"})
+	delegated := mustCreateUser(t, models.User{Username: "delegated-resolved-vc", Password: models.HashPassword("delegated"), IsAdmin: true, VoceChatEmail: "delegated-resolved@vc.com", VoceChatUserID: "302"})
+	for _, user := range []*models.User{ordinary, delegated} {
+		if err := vocechat.NewPlainPasswordStore(storePath).UpsertUserVoceChatPassword(user.ID, user.Username, "current-password", user.VoceChatEmail, user.VoceChatUserID); err != nil {
+			t.Fatal(err)
+		}
+		CreateVoceChatPasswordChangedAlertOnce(user.ID)
+	}
+	stubVoceChatPasswordLogin(t, func(context.Context, vocechat.Config, string, string) (*vocechat.LoginResponse, error) {
+		return &vocechat.LoginResponse{Token: "contact-token"}, nil
+	})
+	stubVoceChatListContacts(t, func(context.Context, vocechat.Config, string) ([]vocechat.UserContact, error) {
+		return nil, nil
+	})
+
+	for _, user := range []*models.User{ordinary, delegated} {
+		if err := RefreshVoceChatContactCacheForAuthor(user.ID); err != nil {
+			t.Fatalf("refresh contacts for recipient %d: %v", user.ID, err)
+		}
+		var count int64
+		if err := db.Model(&models.UserNotification{}).Where("recipient_user_id = ? AND type = ?", user.ID, models.UserNotificationTypeVoceChatPasswordChanged).Count(&count).Error; err != nil || count != 0 {
+			t.Fatalf("recipient %d remaining password-change alerts=%d err=%v", user.ID, count, err)
+		}
+	}
+}
+
 func TestPrimaryAdminVoceChatOutageFailsClosedWithoutCredentialAlert(t *testing.T) {
 	db := setupUserServiceTestDB(t)
 	enableVoceChatContactsForTest(t)

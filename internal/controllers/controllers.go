@@ -4202,9 +4202,8 @@ func DeleteUser(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.OK[any](nil, "已删除用户"))
 }
 
-// ResetOrdinaryUserPassword resets only a non-administrator account through
-// the capability-protected user-management route.
-func ResetOrdinaryUserPassword(c *gin.Context) {
+// ResetManagedUserPassword applies the user-management password-reset matrix.
+func ResetManagedUserPassword(c *gin.Context) {
 	var req struct {
 		ID       uint   `json:"id"`
 		Password string `json:"password"`
@@ -4218,8 +4217,17 @@ func ResetOrdinaryUserPassword(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.Fail[string](models.UserNotFoundMessage))
 		return
 	}
-	if user.IsAdmin {
-		c.JSON(http.StatusForbidden, dto.Fail[string]("\u666e\u901a\u7528\u6237\u5bc6\u7801\u91cd\u7f6e\u4e0d\u80fd\u7528\u4e8e\u7ba1\u7406\u5458\u8d26\u6237"))
+	actor, err := checkUser(c)
+	if err != nil || actor == nil {
+		c.JSON(http.StatusUnauthorized, dto.Fail[string](models.UserNotFoundMessage))
+		return
+	}
+	if user.ID == models.PrimaryAdminUserID || (user.IsAdmin && actor.ID != models.PrimaryAdminUserID) {
+		c.JSON(http.StatusForbidden, dto.Fail[string]("无权重置该用户密码"))
+		return
+	}
+	if strings.TrimSpace(user.VoceChatEmail) == "" || strings.TrimSpace(user.VoceChatUserID) == "" {
+		c.JSON(http.StatusOK, dto.Fail[string]("目标用户未绑定有效的 VoceChat"))
 		return
 	}
 	if err := services.ChangePassword(user, dto.UserInfoDto{Password: req.Password}); err != nil {

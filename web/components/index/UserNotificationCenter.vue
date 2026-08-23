@@ -347,7 +347,7 @@ const truncate = (value?: string | null, limit = 120) => {
 }
 
 const actorName = (item: UserNotification) => {
-  if (item.type === 'vocechat_credentials') return '系统提醒'
+  if (item.type === 'vocechat_credentials' || item.type === 'vocechat_password_changed') return '系统提醒'
   const name = String(item.actor?.username || '').trim()
   return name || '有用户'
 }
@@ -368,12 +368,14 @@ const isTargetUnavailable = (item: UserNotification) => {
 }
 
 const unavailableTitle = (item: UserNotification) => {
-  if (item.type === 'vocechat_credentials') return '1号管理员的 VoceChat 账号信息已失效'
+  if (item.type === 'vocechat_password_changed') return 'VoceChat 密码可能已变更'
+  if (item.type === 'vocechat_credentials') return 'VoceChat 账号信息可能已变化'
   return '关联内容暂不可用'
 }
 
 const unavailableDetail = (item: UserNotification) => {
-  if (item.type === 'vocechat_credentials') return '请前往后台用户信息，重新填写并校验注册绑定 VoceChat 邮箱和密码。修复前，VC推送不可用，联系人可见内容会按私密处理。'
+  if (item.type === 'vocechat_password_changed') return '你可能已在 VoceChat 中修改了密码，这可能导致本站部分功能暂时不可用。请退出当前账号，并使用最新的 VoceChat 密码重新登录本站；验证成功后，此通知将自动消失。'
+  if (item.type === 'vocechat_credentials') return '你的 VoceChat 账号信息可能已发生变化，这可能导致本站部分功能暂时不可用。请前往后台“用户信息”，重新填写并校验 VoceChat 邮箱和密码；验证成功后，此通知将自动消失。'
   if (item.target_status === 'load_error') return '暂时无法加载关联内容，请稍后重试。'
   return '暂时无法查看这条通知对应的内容。'
 }

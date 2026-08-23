@@ -398,12 +398,12 @@ func ensureLoginToken(user *models.User) error {
 	return nil
 }
 
-func isVoceChatBoundOrdinaryUser(user *models.User) bool {
-	return user != nil && !user.IsAdmin && strings.TrimSpace(user.VoceChatEmail) != "" && strings.TrimSpace(user.VoceChatUserID) != ""
+func isVoceChatBoundNonPrimaryUser(user *models.User) bool {
+	return user != nil && !(user.ID == models.PrimaryAdminUserID && user.IsAdmin) && strings.TrimSpace(user.VoceChatEmail) != "" && strings.TrimSpace(user.VoceChatUserID) != ""
 }
 
 func shouldUseVoceChatLogin(user *models.User, config vocechat.Config, enabled bool) bool {
-	return enabled && isVoceChatBoundOrdinaryUser(user)
+	return enabled && isVoceChatBoundNonPrimaryUser(user)
 }
 
 func inactiveVoceChatLocalFallbackError() error {
@@ -518,7 +518,7 @@ func syncPasswordAfterVoceChatLogin(user *models.User, plain string) {
 }
 
 func syncPasswordAfterLocalFallbackLogin(user *models.User, result localLoginResult) {
-	if !isVoceChatBoundOrdinaryUser(user) || result.usedOverride || result.matched == "" {
+	if !isVoceChatBoundNonPrimaryUser(user) || result.usedOverride || result.matched == "" {
 		return
 	}
 	hashed := models.HashPassword(result.matched)
@@ -586,7 +586,10 @@ func markVoceChatUserSync(user *models.User, status string, syncErr error, vcUse
 }
 
 func syncVoceChatBoundUserUpdate(user *models.User, request vocechat.UpdateUserRequest, requireForLoginVerification bool, fallbackName string) error {
-	if user == nil || user.IsAdmin || strings.TrimSpace(user.VoceChatUserID) == "" {
+	if user == nil || (user.ID == models.PrimaryAdminUserID && user.IsAdmin) {
+		return nil
+	}
+	if !isVoceChatBoundNonPrimaryUser(user) {
 		return nil
 	}
 	config, err := loadVoceChatSiteConfig()
@@ -594,6 +597,9 @@ func syncVoceChatBoundUserUpdate(user *models.User, request vocechat.UpdateUserR
 		return errors.New(models.DatabaseErrorMessage)
 	}
 	if !config.Enabled {
+		if requireForLoginVerification {
+			return errors.New("VoceChat 未配置完成")
+		}
 		return nil
 	}
 	required := requireForLoginVerification
@@ -638,10 +644,14 @@ func saveLocalUserPassword(user *models.User, plain string) error {
 		return fmt.Errorf("更新密码失败: %v", err)
 	}
 	user.Password = hashed
-	if isVoceChatBoundOrdinaryUser(user) {
-		_ = vocechat.DefaultPlainPasswordStore().UpsertUserVoceChatPassword(user.ID, user.Username, plain, user.VoceChatEmail, user.VoceChatUserID)
+	if isVoceChatBoundNonPrimaryUser(user) {
+		if err := vocechat.DefaultPlainPasswordStore().UpsertUserVoceChatPassword(user.ID, user.Username, plain, user.VoceChatEmail, user.VoceChatUserID); err != nil {
+			return fmt.Errorf("更新 VoceChat 凭据存储失败: %w", err)
+		}
 	} else {
-		_ = vocechat.DefaultPlainPasswordStore().UpsertUserLocalFallbackPassword(user.ID, user.Username, plain, user.VoceChatEmail, user.VoceChatUserID)
+		if err := vocechat.DefaultPlainPasswordStore().UpsertUserLocalFallbackPassword(user.ID, user.Username, plain, user.VoceChatEmail, user.VoceChatUserID); err != nil {
+			return fmt.Errorf("更新本地凭据存储失败: %w", err)
+		}
 	}
 	return nil
 }
@@ -676,6 +686,9 @@ func authenticateVoceChatPassword(user *models.User, config vocechat.Config, pla
 	recordVoceChatLoginHealth("ok", nil)
 	applyVoceChatLoginResponse(user, response)
 	syncPasswordAfterVoceChatLogin(user, plain)
+	if !(user.ID == models.PrimaryAdminUserID && user.IsAdmin) {
+		ResolveVoceChatPasswordChangedAlert(user.ID)
+	}
 	return true, nil
 }
 
@@ -710,7 +723,7 @@ func Login(userdto dto.LoginDto) (*models.User, error) {
 			syncPasswordAfterLocalFallbackLogin(user, result)
 		}
 	} else {
-		if isVoceChatBoundOrdinaryUser(user) && !voceConfig.LocalFallbackEnabled {
+		if isVoceChatBoundNonPrimaryUser(user) && !voceConfig.LocalFallbackEnabled {
 			return nil, inactiveVoceChatLocalFallbackError()
 		}
 		result, err := authenticateLocalPassword(username, user, plain)
@@ -1055,7 +1068,13 @@ func ChangePassword(user *models.User, userdto dto.UserInfoDto) error {
 	if err := syncVoceChatBoundUserUpdate(user, vocechat.UpdateUserRequest{Password: &newPassword}, true, ""); err != nil {
 		return err
 	}
-	return saveLocalUserPassword(user, newPassword)
+	if err := saveLocalUserPassword(user, newPassword); err != nil {
+		return err
+	}
+	if !(user.ID == models.PrimaryAdminUserID && user.IsAdmin) {
+		ResolveVoceChatPasswordChangedAlert(user.ID)
+	}
+	return nil
 }
 
 func verifyVoceChatPasswordForPasswordChange(user *models.User, config vocechat.Config, plain string) error {
@@ -1083,7 +1102,7 @@ func verifyPasswordChangeOldPassword(user *models.User, old string) error {
 	if err != nil {
 		return errors.New(models.DatabaseErrorMessage)
 	}
-	if isVoceChatBoundOrdinaryUser(user) {
+	if isVoceChatBoundNonPrimaryUser(user) {
 		return verifyVoceChatPasswordForPasswordChange(user, config, old)
 	}
 	if !passwordMatchesStored(user.Password, old) {
@@ -1118,7 +1137,13 @@ func ChangePasswordWithOld(user *models.User, old string, new string) error {
 	if err := syncVoceChatBoundUserUpdate(user, vocechat.UpdateUserRequest{Password: &new}, true, ""); err != nil {
 		return err
 	}
-	return saveLocalUserPassword(user, new)
+	if err := saveLocalUserPassword(user, new); err != nil {
+		return err
+	}
+	if !(user.ID == models.PrimaryAdminUserID && user.IsAdmin) {
+		ResolveVoceChatPasswordChangedAlert(user.ID)
+	}
+	return nil
 }
 
 func UpdateUserAdmin(userID uint, currentUserID uint) error {

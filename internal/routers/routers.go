@@ -410,7 +410,7 @@ func SetupRouter() *gin.Engine {
 		user.PUT("/admin", middleware.RequireCapability(authorization.CapabilityAdminRolesManage), controllers.UpdateUserAdmin)
 		user.DELETE("", middleware.RequireCapability(authorization.CapabilityUsersDelete), controllers.DeleteUser)
 		user.POST("/logout", controllers.Logout) // 添加退出登录路由
-		user.POST("/reset_password", middleware.RequireCapability(authorization.CapabilityUsersResetPassword), controllers.ResetOrdinaryUserPassword)
+		user.POST("/reset_password", middleware.RequireCapability(authorization.CapabilityUsersResetPassword), controllers.ResetManagedUserPassword)
 		// 添加 Token 相关路由
 		user.GET("/token", controllers.GetUserToken)
 		user.POST("/token/regenerate", controllers.RegenerateUserToken)

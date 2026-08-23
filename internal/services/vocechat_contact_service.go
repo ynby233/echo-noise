@@ -90,7 +90,11 @@ func ensureVoceChatContactCacheForAuthor(authorID uint, force bool) error {
 		return nil
 	}
 
-	return replaceVoceChatContactCacheFromRemote(&contactOwner, contacts, now, now.Add(ttl))
+	err = replaceVoceChatContactCacheFromRemote(&contactOwner, contacts, now, now.Add(ttl))
+	if err == nil && contactOwner.ID != models.PrimaryAdminUserID {
+		ResolveVoceChatPasswordChangedAlert(contactOwner.ID)
+	}
+	return err
 }
 
 func loginVoceChatContactOwner(ctx context.Context, config vocechat.Config, author *models.User) (models.User, string, error) {
@@ -124,6 +128,8 @@ func loginVoceChatContactOwner(ctx context.Context, config vocechat.Config, auth
 	if err != nil {
 		if isPrimaryAdmin && isVoceChatAccountCredentialInvalid(err) {
 			CreatePrimaryAdminVoceChatCredentialAlertOnce()
+		} else if author.ID != models.PrimaryAdminUserID && isVoceChatAccountCredentialInvalid(err) {
+			CreateVoceChatPasswordChangedAlertOnce(author.ID)
 		}
 		return owner, "", err
 	}

@@ -133,11 +133,12 @@ type Comment struct {
 }
 
 const (
-	UserNotificationTypeLike                = "like"
-	UserNotificationTypeComment             = "comment"
-	UserNotificationTypeReply               = "reply"
-	UserNotificationTypeGuestbook           = "guestbook"
-	UserNotificationTypeVoceChatCredentials = "vocechat_credentials"
+	UserNotificationTypeLike                    = "like"
+	UserNotificationTypeComment                 = "comment"
+	UserNotificationTypeReply                   = "reply"
+	UserNotificationTypeGuestbook               = "guestbook"
+	UserNotificationTypeVoceChatCredentials     = "vocechat_credentials"
+	UserNotificationTypeVoceChatPasswordChanged = "vocechat_password_changed"
 )
 
 type UserNotification struct {
