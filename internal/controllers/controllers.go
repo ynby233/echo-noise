@@ -3956,60 +3956,6 @@ func EmailTest(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, dto.OK[any](nil, "测试邮件已发送"))
 }
-func PasswordForgot(c *gin.Context) {
-	var req struct {
-		Account string `json:"account" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusOK, dto.Fail[string]("无效的请求参数"))
-		return
-	}
-	db, _ := database.GetDB()
-	var cfg models.SiteConfig
-	if err := db.Table("site_configs").First(&cfg).Error; err != nil {
-		c.JSON(http.StatusOK, dto.Fail[string]("系统配置读取失败"))
-		return
-	}
-	if !cfg.SmtpEnabled {
-		c.JSON(http.StatusOK, dto.Fail[string]("邮件未开启"))
-		return
-	}
-	account := strings.TrimSpace(req.Account)
-	if account == "" {
-		c.JSON(http.StatusOK, dto.Fail[string]("账号不能为空"))
-		return
-	}
-	user, err := services.GetUserByUsername(account)
-	if err != nil || user == nil {
-		c.JSON(http.StatusOK, dto.Fail[string]("用户不存在"))
-		return
-	}
-	if strings.TrimSpace(user.Email) == "" || !user.EmailVerified {
-		c.JSON(http.StatusOK, dto.Fail[string]("未绑定邮箱或未验证"))
-		return
-	}
-	to := strings.TrimSpace(user.Email)
-	temp := models.GenerateToken(16)
-	if user != nil {
-		hashed := models.HashPassword(temp)
-		if strings.TrimSpace(hashed) == "" {
-			c.JSON(http.StatusOK, dto.Fail[string]("生成临时密码失败"))
-			return
-		}
-		if e := repository.UpdateUserField(user.ID, "password", hashed); e != nil {
-			c.JSON(http.StatusOK, dto.Fail[string]("更新密码失败"))
-			return
-		}
-	}
-	subject := "密码重置通知"
-	body := "您的临时密码为: " + temp + "\n请使用该密码登录后尽快在后台修改为新密码。"
-	if err := models.SendEmail(to, subject, body); err != nil {
-		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
-		return
-	}
-	c.JSON(http.StatusOK, dto.OK[any](nil, "重置邮件已发送"))
-}
-
 func BindEmail(c *gin.Context) {
 	user, err := checkUser(c)
 	if err != nil {

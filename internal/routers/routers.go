@@ -250,8 +250,6 @@ func SetupRouter() *gin.Engine {
 	api.GET("/version", controllers.GetVersion)                    // 当前运行版本（镜像标签/环境变量）
 	api.GET("/version/runtime", controllers.GetRuntimeEnv)
 	// 版本更新（管理员）将在下方统一 authRoutes 组中注册
-	api.POST("/password/forgot", controllers.PasswordForgot)
-
 	// 添加标签和图像相关路由
 	api.GET("/messages/tags/:tag", controllers.GetMessagesByTag)         // 获取指定标签的消息
 	api.GET("/messages/tags", controllers.GetAllTags)                    // 获取所有标签列表
