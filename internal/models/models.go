@@ -155,6 +155,12 @@ type UserNotification struct {
 	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
+type PasswordAlertCleanupTask struct {
+	UserID    uint      `gorm:"primaryKey;autoIncrement:false" json:"-"`
+	CreatedAt time.Time `json:"-"`
+	UpdatedAt time.Time `json:"-"`
+}
+
 type User struct {
 	ID                          uint       `gorm:"primaryKey" json:"id"`
 	Username                    string     `gorm:"type:varchar(191);not null;uniqueIndex" json:"username"`

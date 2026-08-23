@@ -14,6 +14,7 @@ import (
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/vocechat"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var primaryAdminVoceChatCredentialAlertMu sync.Mutex
@@ -24,24 +25,46 @@ var resolvedPasswordAlertCleanupRetry = struct {
 	users map[uint]struct{}
 }{users: make(map[uint]struct{})}
 
-func setResolvedPasswordAlertCleanupPending(userID uint, pending bool) {
-	if userID == 0 {
-		return
+func setResolvedPasswordAlertCleanupPending(userID uint, pending bool) error {
+	if database.DB == nil || userID == 0 {
+		return nil
+	}
+	var err error
+	if pending {
+		err = database.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&models.PasswordAlertCleanupTask{UserID: userID}).Error
+	} else {
+		err = database.DB.Where("user_id = ?", userID).Delete(&models.PasswordAlertCleanupTask{}).Error
+	}
+	if err != nil {
+		return err
 	}
 	resolvedPasswordAlertCleanupRetry.Lock()
 	defer resolvedPasswordAlertCleanupRetry.Unlock()
 	if pending {
 		resolvedPasswordAlertCleanupRetry.users[userID] = struct{}{}
-		return
+		return nil
 	}
 	delete(resolvedPasswordAlertCleanupRetry.users, userID)
+	return nil
 }
 
-func hasResolvedPasswordAlertCleanupPending(userID uint) bool {
+func hasResolvedPasswordAlertCleanupPending(userID uint) (bool, error) {
+	if database.DB == nil || userID == 0 {
+		return false, nil
+	}
+	var count int64
+	if err := database.DB.Model(&models.PasswordAlertCleanupTask{}).Where("user_id = ?", userID).Count(&count).Error; err != nil {
+		return false, err
+	}
+	pending := count != 0
 	resolvedPasswordAlertCleanupRetry.Lock()
 	defer resolvedPasswordAlertCleanupRetry.Unlock()
-	_, pending := resolvedPasswordAlertCleanupRetry.users[userID]
-	return pending
+	if pending {
+		resolvedPasswordAlertCleanupRetry.users[userID] = struct{}{}
+	} else {
+		delete(resolvedPasswordAlertCleanupRetry.users, userID)
+	}
+	return pending, nil
 }
 
 func createUserNotification(recipientUserID uint, actorUserID *uint, notificationType string, messageID *uint, commentID *uint, parentCommentID *uint) error {
@@ -92,7 +115,10 @@ func CreateVoceChatPasswordChangedAlertOnce(recipientUserID uint) {
 	if database.DB == nil || recipientUserID == 0 || recipientUserID == models.PrimaryAdminUserID {
 		return
 	}
-	setResolvedPasswordAlertCleanupPending(recipientUserID, false)
+	if err := setResolvedPasswordAlertCleanupPending(recipientUserID, false); err != nil {
+		log.Printf("password alert cleanup cancellation failed: user_id=%d alert_type=vocechat_password_changed error_type=%T", recipientUserID, err)
+		return
+	}
 	voceChatPasswordChangedAlertMu.Lock()
 	defer voceChatPasswordChangedAlertMu.Unlock()
 	var count int64
@@ -115,7 +141,9 @@ func CreatePasswordUpdateIncompleteAlertOnce(recipientUserID uint) error {
 	if database.DB == nil || recipientUserID == 0 || recipientUserID == models.PrimaryAdminUserID {
 		return nil
 	}
-	setResolvedPasswordAlertCleanupPending(recipientUserID, false)
+	if err := setResolvedPasswordAlertCleanupPending(recipientUserID, false); err != nil {
+		return err
+	}
 	passwordUpdateIncompleteAlertMu.Lock()
 	defer passwordUpdateIncompleteAlertMu.Unlock()
 	var count int64
@@ -141,29 +169,32 @@ func ReconcileResolvedPasswordAlerts(recipientUserID uint) error {
 	if database.DB == nil || recipientUserID == 0 || recipientUserID == models.PrimaryAdminUserID {
 		return nil
 	}
+	if err := setResolvedPasswordAlertCleanupPending(recipientUserID, true); err != nil {
+		return err
+	}
 
 	var user models.User
 	if err := database.DB.Select("id", "voce_chat_sync_status", "voce_chat_sync_error").First(&user, recipientUserID).Error; err != nil {
-		setResolvedPasswordAlertCleanupPending(recipientUserID, true)
 		return err
 	}
 	if user.VoceChatSyncStatus == models.VoceChatSyncStatusConflicted && user.VoceChatSyncError == "password_update_incomplete" {
-		return nil
+		return setResolvedPasswordAlertCleanupPending(recipientUserID, false)
 	}
 	if err := ResolveVoceChatPasswordChangedAlert(recipientUserID); err != nil {
-		setResolvedPasswordAlertCleanupPending(recipientUserID, true)
 		return err
 	}
 	if err := ResolvePasswordUpdateIncompleteAlert(recipientUserID); err != nil {
-		setResolvedPasswordAlertCleanupPending(recipientUserID, true)
 		return err
 	}
-	setResolvedPasswordAlertCleanupPending(recipientUserID, false)
-	return nil
+	return setResolvedPasswordAlertCleanupPending(recipientUserID, false)
 }
 
 func ReconcilePendingResolvedPasswordAlerts(recipientUserID uint) error {
-	if !hasResolvedPasswordAlertCleanupPending(recipientUserID) {
+	pending, err := hasResolvedPasswordAlertCleanupPending(recipientUserID)
+	if err != nil {
+		return err
+	}
+	if !pending {
 		return nil
 	}
 	return ReconcileResolvedPasswordAlerts(recipientUserID)
