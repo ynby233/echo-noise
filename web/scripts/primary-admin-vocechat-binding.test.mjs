@@ -20,7 +20,7 @@ assert.match(panel, /admin-email-bind-row[\s\S]*?userForm\.email[\s\S]*?发送�
 assert.match(panel, /个性签名[\s\S]*?v-if="isPrimaryAdmin"[\s\S]*?API Token[\s\S]*?xl:col-span-2/, 'the primary administrator API token card must sit below the signature in the left column')
 assert.match(panel, /v-if="!isPrimaryAdmin"[\s\S]*?API Token/, 'non-primary users must keep their API token card in the existing right column')
 assert.match(panel, /权限与当前账号一致/, 'the API token description must state its real authorization scope')
-assert.match(notifications, /1号管理员的 VoceChat 账号信息已失效/, 'the notification center must explain invalid primary VoceChat credentials')
+assert.match(notifications, /VoceChat 账号信息可能已变化/, 'the notification center must use the privacy-safe primary-account alert title')
 assert.match(notifications, /重新填写并校验.*VoceChat 邮箱和密码/, 'the notification must provide a concrete recovery action')
 
 console.log('primary administrator VoceChat binding contract checks passed')
