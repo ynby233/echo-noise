@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -142,6 +143,24 @@ func lockUserPasswordChange(userID uint) func() {
 		}
 		userPasswordChangeLocks.Unlock()
 	}
+}
+
+func withUserPasswordMutation(userID uint, operation func(*models.User) error) (*models.User, error) {
+	if userID == 0 || operation == nil {
+		return nil, errors.New("invalid password mutation request")
+	}
+
+	unlock := lockUserPasswordChange(userID)
+	defer unlock()
+
+	user, err := repository.GetUserByID(userID)
+	if err != nil {
+		return nil, err
+	}
+	if err := operation(user); err != nil {
+		return nil, err
+	}
+	return user, nil
 }
 
 func isHexMD5String(s string) bool {
@@ -474,16 +493,19 @@ func authenticateLocalPassword(username string, user *models.User, plain string)
 	return result, nil
 }
 
-func applyLocalLoginUpgrade(user *models.User, result localLoginResult) {
+func applyLocalLoginUpgrade(user *models.User, result localLoginResult) error {
 	if !result.needUpgrade || result.usedOverride || !result.upgradeAllowed || result.upgradePlain == "" {
-		return
+		return nil
 	}
 	newHash := models.HashPassword(result.upgradePlain)
 	if newHash == "" {
-		return
+		return errors.New("local login password upgrade hashing failed")
 	}
-	_ = repository.UpdateUserField(user.ID, "password", newHash)
+	if err := repository.UpdateUserField(user.ID, "password", newHash); err != nil {
+		return err
+	}
 	user.Password = newHash
+	return nil
 }
 
 func ensureLoginToken(user *models.User) error {
@@ -494,6 +516,18 @@ func ensureLoginToken(user *models.User) error {
 	if err := repository.UpdateUserField(user.ID, "token", user.Token); err != nil {
 		return fmt.Errorf("生成用户 token 失败: %v", err)
 	}
+	return nil
+}
+
+func issueLoginState(user *models.User) error {
+	if err := ensureLoginToken(user); err != nil {
+		return err
+	}
+	issuedAt := time.Now()
+	if err := database.DB.Model(&models.User{}).Where("id = ?", user.ID).Update("login_issued_at", issuedAt).Error; err != nil {
+		return err
+	}
+	user.LoginIssuedAt = &issuedAt
 	return nil
 }
 
@@ -564,9 +598,9 @@ func recordVoceChatLoginHealth(status string, healthErr error) {
 	}).Error
 }
 
-func applyVoceChatLoginResponse(user *models.User, response *vocechat.LoginResponse) {
+func applyVoceChatLoginResponse(user *models.User, response *vocechat.LoginResponse) error {
 	if user == nil {
-		return
+		return errors.New("missing VoceChat login user")
 	}
 
 	now := time.Now().UTC()
@@ -575,179 +609,179 @@ func applyVoceChatLoginResponse(user *models.User, response *vocechat.LoginRespo
 		"voce_chat_sync_error":   "",
 		"voce_chat_last_sync_at": now,
 	}
-	user.VoceChatSyncStatus = models.VoceChatSyncStatusLinked
-	user.VoceChatSyncError = ""
-	user.VoceChatLastSyncAt = &now
+	next := *user
+	next.VoceChatSyncStatus = models.VoceChatSyncStatusLinked
+	next.VoceChatSyncError = ""
+	next.VoceChatLastSyncAt = &now
 
 	if response != nil {
 		if response.User.UID > 0 {
 			uid := strconv.FormatInt(response.User.UID, 10)
-			if uid != strings.TrimSpace(user.VoceChatUserID) {
+			if uid != strings.TrimSpace(next.VoceChatUserID) {
 				updates["voce_chat_user_id"] = uid
-				user.VoceChatUserID = uid
+				next.VoceChatUserID = uid
 			}
 		}
-		if email := strings.TrimSpace(response.User.Email); email != "" && email != strings.TrimSpace(user.VoceChatEmail) {
+		if email := strings.TrimSpace(response.User.Email); email != "" && email != strings.TrimSpace(next.VoceChatEmail) {
 			updates["voce_chat_email"] = email
-			user.VoceChatEmail = email
+			next.VoceChatEmail = email
 		}
-		if name := strings.TrimSpace(response.User.Name); name != "" && name != strings.TrimSpace(user.VoceChatUsername) {
+		if name := strings.TrimSpace(response.User.Name); name != "" && name != strings.TrimSpace(next.VoceChatUsername) {
 			updates["voce_chat_username"] = name
-			user.VoceChatUsername = name
+			next.VoceChatUsername = name
 		}
 	}
 
-	for field, value := range updates {
-		_ = repository.UpdateUserField(user.ID, field, value)
+	if err := database.DB.Model(&models.User{}).Where("id = ?", user.ID).Updates(updates).Error; err != nil {
+		return err
 	}
-}
-
-func syncPasswordAfterVoceChatLogin(user *models.User, plain string) error {
-	if user == nil || strings.TrimSpace(plain) == "" {
-		return &accountStateSaveFailure{cause: errors.New("missing login password state")}
-	}
-	snapshot, err := readManagedPasswordSnapshot(user.ID)
-	if err != nil {
-		statusErr := markPasswordUpdateIncomplete(user)
-		return &accountStateSaveFailure{cause: errors.Join(err, statusErr)}
-	}
-	if err := saveLocalUserPassword(user, plain); err != nil {
-		var compensationErrors []error
-		if restoreErr := restoreManagedPasswordLocalState(user, snapshot); restoreErr != nil {
-			compensationErrors = append(compensationErrors, fmt.Errorf("restore local state: %w", restoreErr))
-		}
-		if restoreErr := vocechat.DefaultPlainPasswordStore().RestoreUserPasswordSnapshot(snapshot.passwordRecord, snapshot.passwordRecordSeen); restoreErr != nil {
-			compensationErrors = append(compensationErrors, fmt.Errorf("restore password record: %w", restoreErr))
-		}
-		if restoreErr := restoreManagedPasswordLocalState(user, snapshot); restoreErr != nil {
-			compensationErrors = append(compensationErrors, fmt.Errorf("confirm local state: %w", restoreErr))
-		}
-		if verifyErr := managedPasswordSnapshotMatches(user.ID, snapshot); verifyErr != nil {
-			compensationErrors = append(compensationErrors, fmt.Errorf("verify restored state: %w", verifyErr))
-		}
-		statusErr := markPasswordUpdateIncomplete(user)
-		return &accountStateSaveFailure{cause: errors.Join(err, errors.Join(compensationErrors...), statusErr)}
-	}
-	ResolveVoceChatPasswordChangedAlert(user.ID)
-	ResolvePasswordUpdateIncompleteAlert(user.ID)
+	repository.ClearUserCache()
+	*user = next
 	return nil
 }
 
-func syncPasswordAfterLocalFallbackLogin(user *models.User, result localLoginResult) {
-	if !isVoceChatBoundNonPrimaryUser(user) || result.usedOverride || result.matched == "" {
-		return
+func syncPasswordAfterVoceChatLogin(user *models.User, plain string, snapshot managedPasswordSnapshot) error {
+	if user == nil || strings.TrimSpace(plain) == "" {
+		return &accountStateSaveFailure{cause: errors.New("missing login password state")}
 	}
-	hashed := models.HashPassword(result.matched)
-	if hashed != "" {
-		if err := repository.UpdateUserField(user.ID, "password", hashed); err == nil {
-			user.Password = hashed
-		}
+	if err := saveLocalUserPassword(user, plain); err != nil {
+		return rollbackVoceChatLoginState(user, snapshot, err)
 	}
-	_ = vocechat.DefaultPlainPasswordStore().UpsertUserLocalFallbackPassword(user.ID, user.Username, result.matched, user.VoceChatEmail, user.VoceChatUserID)
+	return nil
 }
 
-func updatePlainPasswordUserMetadata(user *models.User) {
+func syncPasswordAfterLocalFallbackLogin(user *models.User, result localLoginResult) error {
+	if !isVoceChatBoundNonPrimaryUser(user) || result.usedOverride || result.matched == "" {
+		return nil
+	}
+	return vocechat.DefaultPlainPasswordStore().UpsertUserLocalFallbackPassword(user.ID, user.Username, result.matched, user.VoceChatEmail, user.VoceChatUserID)
+}
+
+func maintainLocalFallbackLoginState(user *models.User, result localLoginResult) {
+	if err := applyLocalLoginUpgrade(user, result); err != nil {
+		log.Printf("local login maintenance failed: user_id=%d stage=password_upgrade error_type=%T", user.ID, err)
+	}
+	if err := syncPasswordAfterLocalFallbackLogin(user, result); err != nil {
+		log.Printf("local login maintenance failed: user_id=%d stage=fallback_record error_type=%T", user.ID, err)
+	}
+}
+
+func updatePlainPasswordUserMetadata(user *models.User) error {
 	if user == nil || user.ID == 0 {
-		return
+		return nil
 	}
 	store := vocechat.DefaultPlainPasswordStore()
 	record, ok, err := store.GetUserPassword(user.ID)
-	if err != nil || !ok || !record.HasAnyPassword() {
-		return
+	if err != nil {
+		return err
 	}
-	_ = store.UpsertUserPasswordMetadata(user.ID, user.Username, user.VoceChatEmail, user.VoceChatUserID)
+	if !ok || !record.HasAnyPassword() {
+		return nil
+	}
+	return store.UpsertUserPasswordMetadata(user.ID, user.Username, user.VoceChatEmail, user.VoceChatUserID)
 }
 
-func markVoceChatUserSync(user *models.User, status string, syncErr error, vcUser *vocechat.User, fallbackName string) {
+func markVoceChatUserSync(user *models.User, status string, syncErr error, vcUser *vocechat.User, fallbackName string) error {
 	if user == nil || user.ID == 0 {
-		return
+		return nil
 	}
 	now := time.Now().UTC()
 	updates := map[string]interface{}{
 		"voce_chat_sync_status":  status,
 		"voce_chat_last_sync_at": now,
 	}
-	user.VoceChatSyncStatus = status
-	user.VoceChatLastSyncAt = &now
+	next := *user
+	next.VoceChatSyncStatus = status
+	next.VoceChatLastSyncAt = &now
 	if syncErr != nil {
 		errorText := strings.TrimSpace(syncErr.Error())
 		updates["voce_chat_sync_error"] = errorText
-		user.VoceChatSyncError = errorText
+		next.VoceChatSyncError = errorText
 	} else {
 		updates["voce_chat_sync_error"] = ""
-		user.VoceChatSyncError = ""
+		next.VoceChatSyncError = ""
 	}
 	if vcUser != nil {
 		if vcUser.UID > 0 {
 			uid := strconv.FormatInt(vcUser.UID, 10)
 			updates["voce_chat_user_id"] = uid
-			user.VoceChatUserID = uid
+			next.VoceChatUserID = uid
 		}
 		if email := strings.TrimSpace(vcUser.Email); email != "" {
 			updates["voce_chat_email"] = email
-			user.VoceChatEmail = email
+			next.VoceChatEmail = email
 		}
 		if name := strings.TrimSpace(vcUser.Name); name != "" {
 			updates["voce_chat_username"] = name
-			user.VoceChatUsername = name
+			next.VoceChatUsername = name
 		}
 	} else if name := strings.TrimSpace(fallbackName); name != "" && syncErr == nil {
 		updates["voce_chat_username"] = name
-		user.VoceChatUsername = name
+		next.VoceChatUsername = name
 	}
-	for field, value := range updates {
-		_ = repository.UpdateUserField(user.ID, field, value)
+	if err := database.DB.Model(&models.User{}).Where("id = ?", user.ID).Updates(updates).Error; err != nil {
+		return err
 	}
-	updatePlainPasswordUserMetadata(user)
+	repository.ClearUserCache()
+	*user = next
+	return updatePlainPasswordUserMetadata(user)
 }
 
-func syncVoceChatBoundUserUpdate(user *models.User, request vocechat.UpdateUserRequest, requireForLoginVerification bool, fallbackName string) error {
+func updateVoceChatBoundUserRemote(user *models.User, request vocechat.UpdateUserRequest, required bool) (*vocechat.User, error) {
 	if user == nil || (user.ID == models.PrimaryAdminUserID && user.IsAdmin) {
-		return nil
+		return nil, nil
 	}
 	if !isVoceChatBoundNonPrimaryUser(user) {
-		return nil
+		return nil, nil
 	}
 	config, err := loadVoceChatSiteConfig()
 	if err != nil {
-		return errors.New(models.DatabaseErrorMessage)
+		return nil, errors.New(models.DatabaseErrorMessage)
 	}
 	if !config.Enabled {
-		if requireForLoginVerification {
-			return errors.New("VoceChat 未配置完成")
-		}
-		return nil
-	}
-	required := requireForLoginVerification
-	if !config.IsReady() {
-		err := errors.New("VoceChat 未配置完成")
 		if required {
-			return err
+			return nil, errors.New("VoceChat 未配置完成")
 		}
-		markVoceChatUserSync(user, models.VoceChatSyncStatusFailed, err, nil, "")
-		return nil
+		return nil, nil
+	}
+	if !config.IsReady() {
+		return nil, errors.New("VoceChat 未配置完成")
 	}
 	uid, err := strconv.ParseInt(strings.TrimSpace(user.VoceChatUserID), 10, 64)
 	if err != nil || uid <= 0 {
-		err = errors.New("VoceChat 用户ID无效")
-		if required {
-			return err
-		}
-		markVoceChatUserSync(user, models.VoceChatSyncStatusFailed, err, nil, "")
-		return nil
+		return nil, errors.New("VoceChat 用户ID无效")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	vcUser, err := voceChatAdminUpdateUser(ctx, config, uid, request)
 	if err != nil {
-		markVoceChatUserSync(user, models.VoceChatSyncStatusFailed, err, nil, "")
-		if required {
-			return fmt.Errorf("同步 VoceChat 账号失败: %w", err)
+		return nil, fmt.Errorf("同步 VoceChat 账号失败: %w", err)
+	}
+	return vcUser, nil
+}
+
+func syncVoceChatBoundUserUpdate(user *models.User, request vocechat.UpdateUserRequest, requireForLoginVerification bool, fallbackName string) error {
+	vcUser, err := updateVoceChatBoundUserRemote(user, request, requireForLoginVerification)
+	if err != nil {
+		markErr := markVoceChatUserSync(user, models.VoceChatSyncStatusFailed, err, nil, "")
+		if requireForLoginVerification {
+			return errors.Join(err, markErr)
+		}
+		if markErr != nil {
+			log.Printf("VoceChat sync status persistence failed: user_id=%d stage=remote_failure error_type=%T", user.ID, markErr)
 		}
 		return nil
 	}
-	markVoceChatUserSync(user, models.VoceChatSyncStatusLinked, nil, vcUser, fallbackName)
+	if vcUser == nil {
+		return nil
+	}
+	if err := markVoceChatUserSync(user, models.VoceChatSyncStatusLinked, nil, vcUser, fallbackName); err != nil {
+		if requireForLoginVerification {
+			return err
+		}
+		log.Printf("VoceChat sync status persistence failed: user_id=%d stage=remote_success error_type=%T", user.ID, err)
+	}
 	return nil
 }
 
@@ -801,17 +835,53 @@ func restoreManagedPasswordLocalState(user *models.User, snapshot managedPasswor
 	return nil
 }
 
+func sameOptionalTime(left *time.Time, right *time.Time) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return left.Equal(*right)
+}
+
+func restoreManagedPasswordSnapshot(user *models.User, snapshot managedPasswordSnapshot) error {
+	var restoreErrors []error
+	if err := restoreManagedPasswordLocalState(user, snapshot); err != nil {
+		restoreErrors = append(restoreErrors, fmt.Errorf("restore local state: %w", err))
+	}
+	if err := vocechat.DefaultPlainPasswordStore().RestoreUserPasswordSnapshot(snapshot.passwordRecord, snapshot.passwordRecordSeen); err != nil {
+		restoreErrors = append(restoreErrors, fmt.Errorf("restore password record: %w", err))
+	}
+	if err := restoreManagedPasswordLocalState(user, snapshot); err != nil {
+		restoreErrors = append(restoreErrors, fmt.Errorf("confirm local state: %w", err))
+	}
+	if err := managedPasswordSnapshotMatches(snapshot.user.ID, snapshot); err != nil {
+		restoreErrors = append(restoreErrors, fmt.Errorf("verify restored state: %w", err))
+	}
+	return errors.Join(restoreErrors...)
+}
+
+func rollbackVoceChatLoginState(user *models.User, snapshot managedPasswordSnapshot, cause error) error {
+	restoreErr := restoreManagedPasswordSnapshot(user, snapshot)
+	if restoreErr == nil {
+		return &accountStateSaveFailure{cause: cause}
+	}
+	statusErr := markPasswordUpdateIncomplete(user)
+	return &accountStateSaveFailure{cause: errors.Join(cause, restoreErr, statusErr)}
+}
+
 func managedPasswordSnapshotMatches(userID uint, snapshot managedPasswordSnapshot) error {
 	var current models.User
 	if err := database.DB.First(&current, userID).Error; err != nil {
 		return err
 	}
 	if current.Password != snapshot.user.Password ||
+		current.Token != snapshot.user.Token ||
+		!sameOptionalTime(current.LoginIssuedAt, snapshot.user.LoginIssuedAt) ||
 		current.VoceChatUserID != snapshot.user.VoceChatUserID ||
 		current.VoceChatEmail != snapshot.user.VoceChatEmail ||
 		current.VoceChatUsername != snapshot.user.VoceChatUsername ||
 		current.VoceChatSyncStatus != snapshot.user.VoceChatSyncStatus ||
-		current.VoceChatSyncError != snapshot.user.VoceChatSyncError {
+		current.VoceChatSyncError != snapshot.user.VoceChatSyncError ||
+		!sameOptionalTime(current.VoceChatLastSyncAt, snapshot.user.VoceChatLastSyncAt) {
 		return errors.New("local password state differs from snapshot")
 	}
 	record, found, err := vocechat.DefaultPlainPasswordStore().GetUserPassword(userID)
@@ -831,12 +901,41 @@ func managedPasswordSnapshotMatches(userID uint, snapshot managedPasswordSnapsho
 	return nil
 }
 
+func managedPasswordStateMatches(user *models.User, plain string) error {
+	if user == nil || user.ID == 0 {
+		return errors.New("missing managed login user")
+	}
+	var current models.User
+	if err := database.DB.First(&current, user.ID).Error; err != nil {
+		return err
+	}
+	if current.Password != user.Password || current.Token != user.Token ||
+		!sameOptionalTime(current.LoginIssuedAt, user.LoginIssuedAt) ||
+		current.VoceChatUserID != user.VoceChatUserID ||
+		current.VoceChatEmail != user.VoceChatEmail ||
+		current.VoceChatUsername != user.VoceChatUsername ||
+		current.VoceChatSyncStatus != models.VoceChatSyncStatusLinked ||
+		current.VoceChatSyncError != "" ||
+		!sameOptionalTime(current.VoceChatLastSyncAt, user.VoceChatLastSyncAt) {
+		return errors.New("managed login user state was not fully persisted")
+	}
+	record, found, err := vocechat.DefaultPlainPasswordStore().GetUserPassword(user.ID)
+	if err != nil {
+		return err
+	}
+	if !found || record.VoceChatPasswordValue() != plain || record.Username != user.Username ||
+		record.VoceChatEmail != user.VoceChatEmail || record.VoceChatUserID != user.VoceChatUserID {
+		return errors.New("managed login password state was not fully persisted")
+	}
+	return nil
+}
+
 func compensateManagedPasswordChange(user *models.User, snapshot managedPasswordSnapshot, previousRemotePassword string) error {
 	var compensationErrors []error
 	if err := restoreManagedPasswordLocalState(user, snapshot); err != nil {
 		compensationErrors = append(compensationErrors, fmt.Errorf("restore local state: %w", err))
 	}
-	if err := syncVoceChatBoundUserUpdate(user, vocechat.UpdateUserRequest{Password: &previousRemotePassword}, true, ""); err != nil {
+	if _, err := updateVoceChatBoundUserRemote(user, vocechat.UpdateUserRequest{Password: &previousRemotePassword}, true); err != nil {
 		compensationErrors = append(compensationErrors, fmt.Errorf("restore remote state: %w", err))
 	}
 	if err := vocechat.DefaultPlainPasswordStore().RestoreUserPasswordSnapshot(snapshot.passwordRecord, snapshot.passwordRecordSeen); err != nil {
@@ -849,6 +948,15 @@ func compensateManagedPasswordChange(user *models.User, snapshot managedPassword
 		compensationErrors = append(compensationErrors, fmt.Errorf("verify restored state: %w", err))
 	}
 	return errors.Join(compensationErrors...)
+}
+
+func failManagedPasswordChange(user *models.User, snapshot managedPasswordSnapshot, previousRemotePassword string, cause error) error {
+	compensationErr := compensateManagedPasswordChange(user, snapshot, previousRemotePassword)
+	if compensationErr != nil {
+		statusErr := markPasswordUpdateIncomplete(user)
+		return &passwordUpdateFailure{incomplete: true, cause: errors.Join(cause, compensationErr, statusErr)}
+	}
+	return &passwordUpdateFailure{rolledBack: true, cause: cause}
 }
 
 func markPasswordUpdateIncomplete(user *models.User) error {
@@ -879,19 +987,21 @@ func changeManagedVoceChatPassword(user *models.User, newPassword, previousRemot
 		return &passwordUpdateFailure{cause: errors.New("missing recoverable remote password state")}
 	}
 
-	if err := syncVoceChatBoundUserUpdate(user, vocechat.UpdateUserRequest{Password: &newPassword}, true, ""); err != nil {
-		return err
+	vcUser, err := updateVoceChatBoundUserRemote(user, vocechat.UpdateUserRequest{Password: &newPassword}, true)
+	if err != nil {
+		markErr := markVoceChatUserSync(user, models.VoceChatSyncStatusFailed, err, nil, "")
+		return errors.Join(err, markErr)
+	}
+	if err := markVoceChatUserSync(user, models.VoceChatSyncStatusLinked, nil, vcUser, ""); err != nil {
+		return failManagedPasswordChange(user, snapshot, previousRemotePassword, err)
 	}
 	if err := saveLocalUserPassword(user, newPassword); err != nil {
-		compensationErr := compensateManagedPasswordChange(user, snapshot, previousRemotePassword)
-		if compensationErr != nil {
-			statusErr := markPasswordUpdateIncomplete(user)
-			return &passwordUpdateFailure{incomplete: true, cause: errors.Join(err, compensationErr, statusErr)}
-		}
-		return &passwordUpdateFailure{rolledBack: true, cause: err}
+		return failManagedPasswordChange(user, snapshot, previousRemotePassword, err)
 	}
-	ResolveVoceChatPasswordChangedAlert(user.ID)
-	ResolvePasswordUpdateIncompleteAlert(user.ID)
+	if err := managedPasswordStateMatches(user, newPassword); err != nil {
+		return failManagedPasswordChange(user, snapshot, previousRemotePassword, err)
+	}
+	reconcileResolvedPasswordAlertsBestEffort(user.ID, "password_change")
 	return nil
 }
 
@@ -905,6 +1015,10 @@ func authenticateVoceChatPassword(user *models.User, config vocechat.Config, pla
 			return false, nil
 		}
 		return false, errors.New("VoceChat 登录校验未配置，请联系管理员")
+	}
+	snapshot, err := readManagedPasswordSnapshot(user.ID)
+	if err != nil {
+		return false, &accountStateSaveFailure{cause: err}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -923,10 +1037,19 @@ func authenticateVoceChatPassword(user *models.User, config vocechat.Config, pla
 	}
 
 	recordVoceChatLoginHealth("ok", nil)
-	applyVoceChatLoginResponse(user, response)
-	if err := syncPasswordAfterVoceChatLogin(user, plain); err != nil {
+	if err := applyVoceChatLoginResponse(user, response); err != nil {
+		return false, rollbackVoceChatLoginState(user, snapshot, err)
+	}
+	if err := syncPasswordAfterVoceChatLogin(user, plain, snapshot); err != nil {
 		return false, err
 	}
+	if err := issueLoginState(user); err != nil {
+		return false, rollbackVoceChatLoginState(user, snapshot, err)
+	}
+	if err := managedPasswordStateMatches(user, plain); err != nil {
+		return false, rollbackVoceChatLoginState(user, snapshot, err)
+	}
+	reconcileResolvedPasswordAlertsBestEffort(user.ID, "vocechat_login")
 	return true, nil
 }
 
@@ -938,50 +1061,46 @@ func Login(userdto dto.LoginDto) (*models.User, error) {
 	username := strings.TrimSpace(userdto.Username)
 	plain := userdto.Password
 
-	user, err := repository.GetUserByUsername(username)
-	if err != nil || user == nil {
+	initialUser, err := repository.GetUserByUsername(username)
+	if err != nil || initialUser == nil {
 		return nil, errors.New(models.UserNotFoundMessage)
 	}
 
-	voceConfig, voceLoginEnabled, err := loadVoceChatLoginConfig()
-	if err != nil {
-		return nil, errors.New(models.DatabaseErrorMessage)
-	}
-	if shouldUseVoceChatLogin(user, voceConfig, voceLoginEnabled) {
-		verified, err := authenticateVoceChatPassword(user, voceConfig, plain)
+	return withUserPasswordMutation(initialUser.ID, func(user *models.User) error {
+		voceConfig, voceLoginEnabled, err := loadVoceChatLoginConfig()
 		if err != nil {
-			return nil, err
+			return errors.New(models.DatabaseErrorMessage)
 		}
-		if !verified {
+		if shouldUseVoceChatLogin(user, voceConfig, voceLoginEnabled) {
+			verified, err := authenticateVoceChatPassword(user, voceConfig, plain)
+			if err != nil {
+				return err
+			}
+			if verified {
+				return nil
+			}
+
 			result, err := authenticateLocalPassword(username, user, plain)
 			if err != nil {
-				return nil, err
+				return err
 			}
-			applyLocalLoginUpgrade(user, result)
-			syncPasswordAfterLocalFallbackLogin(user, result)
+			maintainLocalFallbackLoginState(user, result)
+		} else {
+			if isVoceChatBoundNonPrimaryUser(user) && !voceConfig.LocalFallbackEnabled {
+				return inactiveVoceChatLocalFallbackError()
+			}
+			result, err := authenticateLocalPassword(username, user, plain)
+			if err != nil {
+				return err
+			}
+			maintainLocalFallbackLoginState(user, result)
 		}
-	} else {
-		if isVoceChatBoundNonPrimaryUser(user) && !voceConfig.LocalFallbackEnabled {
-			return nil, inactiveVoceChatLocalFallbackError()
-		}
-		result, err := authenticateLocalPassword(username, user, plain)
-		if err != nil {
-			return nil, err
-		}
-		applyLocalLoginUpgrade(user, result)
-		syncPasswordAfterLocalFallbackLogin(user, result)
-	}
 
-	if err := ensureLoginToken(user); err != nil {
-		return nil, err
-	}
-	issuedAt := time.Now()
-	if err := database.DB.Model(&models.User{}).Where("id = ?", user.ID).Update("login_issued_at", issuedAt).Error; err != nil {
-		return nil, err
-	}
-	user.LoginIssuedAt = &issuedAt
-
-	return user, nil
+		if err := issueLoginState(user); err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 func GetStatus(currentUserID uint) (models.Status, error) {
@@ -1278,7 +1397,9 @@ func UpdateUser(user *models.User, userdto dto.UserInfoDto) error {
 	if v, ok := updates["voce_chat_notification_enabled"]; ok && v != nil {
 		user.VoceChatNotificationEnabled = v.(bool)
 	}
-	updatePlainPasswordUserMetadata(user)
+	if err := updatePlainPasswordUserMetadata(user); err != nil {
+		log.Printf("password metadata maintenance failed: user_id=%d trigger=profile_update error_type=%T", user.ID, err)
+	}
 
 	if _, ok := updates["username"]; ok {
 		name := user.Username
@@ -1292,38 +1413,32 @@ func ChangePassword(user *models.User, userdto dto.UserInfoDto) error {
 	if user == nil {
 		return errors.New("用户信息不能为空")
 	}
-	unlock := lockUserPasswordChange(user.ID)
-	defer unlock()
-	current, err := repository.GetUserByID(user.ID)
-	if err != nil {
-		return err
-	}
-	user = current
+	_, err := withUserPasswordMutation(user.ID, func(current *models.User) error {
+		newPassword := strings.TrimSpace(userdto.Password)
+		if newPassword == "" {
+			return errors.New(models.PasswordCannotBeEmptyMessage)
+		}
 
-	newPassword := strings.TrimSpace(userdto.Password)
-	if newPassword == "" {
-		return errors.New(models.PasswordCannotBeEmptyMessage)
-	}
+		// 如果新密码与旧密码一致，则拒绝
+		if passwordMatchesStored(current.Password, newPassword) {
+			return errors.New(models.PasswordCannotBeSameAsBeforeMessage)
+		}
 
-	// 如果新密码与旧密码一致，则拒绝
-	if passwordMatchesStored(user.Password, newPassword) {
-		return errors.New(models.PasswordCannotBeSameAsBeforeMessage)
-	}
-
-	if isVoceChatBoundNonPrimaryUser(user) {
-		return changeManagedVoceChatPassword(user, newPassword, "")
-	}
-	return saveLocalUserPassword(user, newPassword)
+		if isVoceChatBoundNonPrimaryUser(current) {
+			return changeManagedVoceChatPassword(current, newPassword, "")
+		}
+		return saveLocalUserPassword(current, newPassword)
+	})
+	return err
 }
 
 func verifyVoceChatPasswordForPasswordChange(user *models.User, config vocechat.Config, plain string) error {
 	if !config.Enabled || !config.IsReady() {
 		return errors.New("VoceChat 登录校验暂不可用，请稍后再试")
 	}
-	response, err := voceChatPasswordLogin(context.Background(), config, strings.TrimSpace(user.VoceChatEmail), plain)
+	_, err := voceChatPasswordLogin(context.Background(), config, strings.TrimSpace(user.VoceChatEmail), plain)
 	if err == nil {
 		recordVoceChatLoginHealth("ok", nil)
-		applyVoceChatLoginResponse(user, response)
 		return nil
 	}
 
@@ -1355,35 +1470,31 @@ func ChangePasswordWithOld(user *models.User, old string, new string) error {
 	if user == nil {
 		return errors.New("用户信息不能为空")
 	}
-	unlock := lockUserPasswordChange(user.ID)
-	defer unlock()
-	current, err := repository.GetUserByID(user.ID)
-	if err != nil {
-		return err
-	}
-	user = current
-	old = strings.TrimSpace(old)
-	new = strings.TrimSpace(new)
-	if new == "" {
-		return errors.New(models.PasswordCannotBeEmptyMessage)
-	}
+	_, err := withUserPasswordMutation(user.ID, func(current *models.User) error {
+		old = strings.TrimSpace(old)
+		new = strings.TrimSpace(new)
+		if new == "" {
+			return errors.New(models.PasswordCannotBeEmptyMessage)
+		}
 
-	if err := verifyPasswordChangeOldPassword(user, old); err != nil {
-		return err
-	}
+		if err := verifyPasswordChangeOldPassword(current, old); err != nil {
+			return err
+		}
 
-	// 新密码不得与旧密码一致
-	if old == new {
-		return errors.New(models.PasswordCannotBeSameAsBeforeMessage)
-	}
-	if passwordMatchesStored(user.Password, new) {
-		return errors.New(models.PasswordCannotBeSameAsBeforeMessage)
-	}
+		// 新密码不得与旧密码一致
+		if old == new {
+			return errors.New(models.PasswordCannotBeSameAsBeforeMessage)
+		}
+		if passwordMatchesStored(current.Password, new) {
+			return errors.New(models.PasswordCannotBeSameAsBeforeMessage)
+		}
 
-	if isVoceChatBoundNonPrimaryUser(user) {
-		return changeManagedVoceChatPassword(user, new, old)
-	}
-	return saveLocalUserPassword(user, new)
+		if isVoceChatBoundNonPrimaryUser(current) {
+			return changeManagedVoceChatPassword(current, new, old)
+		}
+		return saveLocalUserPassword(current, new)
+	})
+	return err
 }
 
 func UpdateUserAdmin(userID uint, currentUserID uint) error {

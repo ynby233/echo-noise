@@ -92,7 +92,7 @@ func ensureVoceChatContactCacheForAuthor(authorID uint, force bool) error {
 
 	err = replaceVoceChatContactCacheFromRemote(&contactOwner, contacts, now, now.Add(ttl))
 	if err == nil && contactOwner.ID != models.PrimaryAdminUserID {
-		ResolveVoceChatPasswordChangedAlert(contactOwner.ID)
+		reconcileResolvedPasswordAlertsBestEffort(contactOwner.ID, "contact_sync")
 	}
 	return err
 }

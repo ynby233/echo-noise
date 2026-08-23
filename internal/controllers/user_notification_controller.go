@@ -403,6 +403,9 @@ func ListUserNotifications(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.Fail[any](err.Error()))
 		return
 	}
+	if err := services.ReconcilePendingResolvedPasswordAlerts(user.ID); err != nil {
+		log.Printf("password alert reconciliation failed: user_id=%d trigger=notification_list error_type=%T", user.ID, err)
+	}
 	page, pageSize := parseNotificationPagination(c)
 	var notifications []models.UserNotification
 	if err := database.DB.Where("recipient_user_id = ?", user.ID).Order("created_at DESC, id DESC").Find(&notifications).Error; err != nil {
@@ -436,6 +439,9 @@ func GetUserNotificationUnreadCount(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[any](err.Error()))
 		return
+	}
+	if err := services.ReconcilePendingResolvedPasswordAlerts(user.ID); err != nil {
+		log.Printf("password alert reconciliation failed: user_id=%d trigger=notification_unread_count error_type=%T", user.ID, err)
 	}
 	var notifications []models.UserNotification
 	if err := database.DB.Where("recipient_user_id = ? AND read_at IS NULL", user.ID).Order("created_at DESC, id DESC").Find(&notifications).Error; err != nil {

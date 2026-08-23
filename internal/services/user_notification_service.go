@@ -19,6 +19,30 @@ import (
 var primaryAdminVoceChatCredentialAlertMu sync.Mutex
 var voceChatPasswordChangedAlertMu sync.Mutex
 var passwordUpdateIncompleteAlertMu sync.Mutex
+var resolvedPasswordAlertCleanupRetry = struct {
+	sync.Mutex
+	users map[uint]struct{}
+}{users: make(map[uint]struct{})}
+
+func setResolvedPasswordAlertCleanupPending(userID uint, pending bool) {
+	if userID == 0 {
+		return
+	}
+	resolvedPasswordAlertCleanupRetry.Lock()
+	defer resolvedPasswordAlertCleanupRetry.Unlock()
+	if pending {
+		resolvedPasswordAlertCleanupRetry.users[userID] = struct{}{}
+		return
+	}
+	delete(resolvedPasswordAlertCleanupRetry.users, userID)
+}
+
+func hasResolvedPasswordAlertCleanupPending(userID uint) bool {
+	resolvedPasswordAlertCleanupRetry.Lock()
+	defer resolvedPasswordAlertCleanupRetry.Unlock()
+	_, pending := resolvedPasswordAlertCleanupRetry.users[userID]
+	return pending
+}
 
 func createUserNotification(recipientUserID uint, actorUserID *uint, notificationType string, messageID *uint, commentID *uint, parentCommentID *uint) error {
 	if recipientUserID == 0 {
@@ -68,6 +92,7 @@ func CreateVoceChatPasswordChangedAlertOnce(recipientUserID uint) {
 	if database.DB == nil || recipientUserID == 0 || recipientUserID == models.PrimaryAdminUserID {
 		return
 	}
+	setResolvedPasswordAlertCleanupPending(recipientUserID, false)
 	voceChatPasswordChangedAlertMu.Lock()
 	defer voceChatPasswordChangedAlertMu.Unlock()
 	var count int64
@@ -77,19 +102,20 @@ func CreateVoceChatPasswordChangedAlertOnce(recipientUserID uint) {
 	}
 }
 
-func ResolveVoceChatPasswordChangedAlert(recipientUserID uint) {
+func ResolveVoceChatPasswordChangedAlert(recipientUserID uint) error {
 	if database.DB == nil || recipientUserID == 0 || recipientUserID == models.PrimaryAdminUserID {
-		return
+		return nil
 	}
 	voceChatPasswordChangedAlertMu.Lock()
 	defer voceChatPasswordChangedAlertMu.Unlock()
-	_ = database.DB.Where("recipient_user_id = ? AND type = ?", recipientUserID, models.UserNotificationTypeVoceChatPasswordChanged).Delete(&models.UserNotification{}).Error
+	return database.DB.Where("recipient_user_id = ? AND type = ?", recipientUserID, models.UserNotificationTypeVoceChatPasswordChanged).Delete(&models.UserNotification{}).Error
 }
 
 func CreatePasswordUpdateIncompleteAlertOnce(recipientUserID uint) error {
 	if database.DB == nil || recipientUserID == 0 || recipientUserID == models.PrimaryAdminUserID {
 		return nil
 	}
+	setResolvedPasswordAlertCleanupPending(recipientUserID, false)
 	passwordUpdateIncompleteAlertMu.Lock()
 	defer passwordUpdateIncompleteAlertMu.Unlock()
 	var count int64
@@ -102,13 +128,51 @@ func CreatePasswordUpdateIncompleteAlertOnce(recipientUserID uint) error {
 	return database.DB.Create(&models.UserNotification{RecipientUserID: recipientUserID, Type: models.UserNotificationTypePasswordUpdateIncomplete}).Error
 }
 
-func ResolvePasswordUpdateIncompleteAlert(recipientUserID uint) {
+func ResolvePasswordUpdateIncompleteAlert(recipientUserID uint) error {
 	if database.DB == nil || recipientUserID == 0 || recipientUserID == models.PrimaryAdminUserID {
-		return
+		return nil
 	}
 	passwordUpdateIncompleteAlertMu.Lock()
 	defer passwordUpdateIncompleteAlertMu.Unlock()
-	_ = database.DB.Where("recipient_user_id = ? AND type = ?", recipientUserID, models.UserNotificationTypePasswordUpdateIncomplete).Delete(&models.UserNotification{}).Error
+	return database.DB.Where("recipient_user_id = ? AND type = ?", recipientUserID, models.UserNotificationTypePasswordUpdateIncomplete).Delete(&models.UserNotification{}).Error
+}
+
+func ReconcileResolvedPasswordAlerts(recipientUserID uint) error {
+	if database.DB == nil || recipientUserID == 0 || recipientUserID == models.PrimaryAdminUserID {
+		return nil
+	}
+
+	var user models.User
+	if err := database.DB.Select("id", "voce_chat_sync_status", "voce_chat_sync_error").First(&user, recipientUserID).Error; err != nil {
+		setResolvedPasswordAlertCleanupPending(recipientUserID, true)
+		return err
+	}
+	if user.VoceChatSyncStatus == models.VoceChatSyncStatusConflicted && user.VoceChatSyncError == "password_update_incomplete" {
+		return nil
+	}
+	if err := ResolveVoceChatPasswordChangedAlert(recipientUserID); err != nil {
+		setResolvedPasswordAlertCleanupPending(recipientUserID, true)
+		return err
+	}
+	if err := ResolvePasswordUpdateIncompleteAlert(recipientUserID); err != nil {
+		setResolvedPasswordAlertCleanupPending(recipientUserID, true)
+		return err
+	}
+	setResolvedPasswordAlertCleanupPending(recipientUserID, false)
+	return nil
+}
+
+func ReconcilePendingResolvedPasswordAlerts(recipientUserID uint) error {
+	if !hasResolvedPasswordAlertCleanupPending(recipientUserID) {
+		return nil
+	}
+	return ReconcileResolvedPasswordAlerts(recipientUserID)
+}
+
+func reconcileResolvedPasswordAlertsBestEffort(recipientUserID uint, trigger string) {
+	if err := ReconcileResolvedPasswordAlerts(recipientUserID); err != nil {
+		log.Printf("password alert reconciliation failed: user_id=%d trigger=%s error_type=%T", recipientUserID, trigger, err)
+	}
 }
 
 func refreshLikeNotification(recipientUserID uint, actorUserID uint, messageID uint) error {
