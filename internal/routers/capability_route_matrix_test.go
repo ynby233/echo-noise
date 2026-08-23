@@ -17,6 +17,7 @@ import (
 	"github.com/rcy1314/echo-noise/internal/middleware"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/repository"
+	"github.com/rcy1314/echo-noise/internal/vocechat"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -209,6 +210,12 @@ func TestUserPasswordResetRouteOnlyResetsOrdinaryUsersAndRechecksGrants(t *testi
 	primary := createUser(models.User{Username: "primary", IsAdmin: true, Token: "primary-password-reset-token"})
 	delegated := createUser(models.User{Username: "delegated", IsAdmin: true, Token: "delegated-password-reset-token", VoceChatEmail: "delegated@vc.test", VoceChatUserID: "12"})
 	ordinary := createUser(models.User{Username: "ordinary", Token: "ordinary-password-reset-token", VoceChatEmail: "ordinary@vc.test", VoceChatUserID: "13"})
+	passwordStore := vocechat.DefaultPlainPasswordStore()
+	for _, user := range []*models.User{delegated, ordinary} {
+		if err := passwordStore.UpsertUserVoceChatPassword(user.ID, user.Username, "existing-test-password", user.VoceChatEmail, user.VoceChatUserID); err != nil {
+			t.Fatalf("seed recoverable password state for %s: %v", user.Username, err)
+		}
+	}
 	if primary.ID != models.PrimaryAdminUserID {
 		t.Fatalf("primary user id = %d, want %d", primary.ID, models.PrimaryAdminUserID)
 	}

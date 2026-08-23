@@ -250,7 +250,7 @@ func buildVisibleUserNotifications(notifications []models.UserNotification, view
 	viewerIDPtr := viewerID
 	items := make([]userNotificationResponse, 0, len(notifications))
 	for _, notification := range notifications {
-		if notification.Type == models.UserNotificationTypeVoceChatCredentials || notification.Type == models.UserNotificationTypeVoceChatPasswordChanged {
+		if notification.Type == models.UserNotificationTypeVoceChatCredentials || notification.Type == models.UserNotificationTypeVoceChatPasswordChanged || notification.Type == models.UserNotificationTypePasswordUpdateIncomplete {
 			items = append(items, notificationUnavailableResponse(notification, users, userNotificationTargetStatusUnavailable))
 			continue
 		}

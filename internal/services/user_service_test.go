@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -895,6 +897,396 @@ func TestChangePasswordWithVoceChatFailureDoesNotUpdateLocalPassword(t *testing.
 	}
 	if _, ok, err := vocechat.NewPlainPasswordStore(storePath).GetUserPassword(user.ID); err != nil || ok {
 		t.Fatalf("plain password record should not be created on failed change, ok=%v err=%v", ok, err)
+	}
+}
+
+func TestChangePasswordWithInternalPasswordWriteFailureRollsBackRemoteAndLocalState(t *testing.T) {
+	setupUserServiceTestDB(t)
+	enableVoceChatLoginForTest(t, false)
+	storePath := filepath.Join(t.TempDir(), "plain-passwords.db")
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
+	mustCreateUser(t, models.User{Username: "primary", Password: models.HashPassword("primary-password"), IsAdmin: true})
+
+	user := mustCreateUser(t, models.User{
+		Username:       "rollback-user",
+		Password:       models.HashPassword("old-password"),
+		VoceChatEmail:  "rollback-user@vc.com",
+		VoceChatUserID: "58",
+	})
+	store := vocechat.NewPlainPasswordStore(storePath)
+	if err := store.UpsertUserVoceChatPassword(user.ID, user.Username, "old-password", user.VoceChatEmail, user.VoceChatUserID); err != nil {
+		t.Fatalf("seed password record: %v", err)
+	}
+
+	stubVoceChatPasswordLogin(t, func(_ context.Context, _ vocechat.Config, _, _ string) (*vocechat.LoginResponse, error) {
+		return &vocechat.LoginResponse{User: vocechat.UserInfo{UID: 58, Email: user.VoceChatEmail, Name: user.Username}}, nil
+	})
+
+	remotePassword := "old-password"
+	backupPath := filepath.Join(t.TempDir(), "password-store-backup.db")
+	storeMadeUnavailable := false
+	stubVoceChatAdminUpdateUser(t, func(_ context.Context, _ vocechat.Config, _ int64, request vocechat.UpdateUserRequest) (*vocechat.User, error) {
+		if request.Password == nil {
+			t.Fatal("password update must include a password")
+		}
+		remotePassword = *request.Password
+		if !storeMadeUnavailable {
+			if err := os.Rename(storePath, backupPath); err != nil {
+				t.Fatalf("move password store before injected failure: %v", err)
+			}
+			if err := os.Mkdir(storePath, 0700); err != nil {
+				t.Fatalf("make password store unavailable: %v", err)
+			}
+			storeMadeUnavailable = true
+		}
+		return &vocechat.User{UID: 58, Email: user.VoceChatEmail, Name: user.Username}, nil
+	})
+
+	err := ChangePasswordWithOld(user, "old-password", "new-password")
+	if err == nil {
+		t.Fatal("password change must report the injected storage failure")
+	}
+	if err := os.Remove(storePath); err != nil {
+		t.Fatalf("restore password store directory: %v", err)
+	}
+	if err := os.Rename(backupPath, storePath); err != nil {
+		t.Fatalf("restore password store file: %v", err)
+	}
+
+	updated := mustGetUserByUsername(t, user.Username)
+	if bcrypt.CompareHashAndPassword([]byte(updated.Password), []byte("old-password")) != nil || remotePassword != "old-password" {
+		t.Fatal("failed operation partially changed the local password or remote password")
+	}
+	record, ok, err := store.GetUserPassword(user.ID)
+	if err != nil || !ok || record.VoceChatPassword != "old-password" {
+		t.Fatalf("password record after failed change: found=%v err=%v", ok, err)
+	}
+}
+
+func TestChangePasswordWithPrimaryDatabaseWriteFailureRollsBackRemoteAndInternalState(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	enableVoceChatLoginForTest(t, false)
+	storePath := filepath.Join(t.TempDir(), "plain-passwords.db")
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
+	mustCreateUser(t, models.User{Username: "primary", Password: models.HashPassword("primary-password"), IsAdmin: true})
+
+	user := mustCreateUser(t, models.User{
+		Username:       "database-failure-user",
+		Password:       models.HashPassword("old-password"),
+		VoceChatEmail:  "database-failure-user@vc.com",
+		VoceChatUserID: "61",
+	})
+	store := vocechat.NewPlainPasswordStore(storePath)
+	if err := store.UpsertUserVoceChatPassword(user.ID, user.Username, "old-password", user.VoceChatEmail, user.VoceChatUserID); err != nil {
+		t.Fatalf("seed password record: %v", err)
+	}
+
+	remotePassword := "old-password"
+	stubVoceChatAdminUpdateUser(t, func(_ context.Context, _ vocechat.Config, _ int64, request vocechat.UpdateUserRequest) (*vocechat.User, error) {
+		if request.Password == nil {
+			t.Fatal("password update must include a password")
+		}
+		remotePassword = *request.Password
+		return &vocechat.User{UID: 61, Email: user.VoceChatEmail, Name: user.Username}, nil
+	})
+
+	failedPasswordWrite := false
+	if err := db.Callback().Update().Before("gorm:update").Register("test:fail-password-write-once", func(tx *gorm.DB) {
+		if failedPasswordWrite || tx.Statement == nil || tx.Statement.Schema == nil || tx.Statement.Schema.Table != "users" {
+			return
+		}
+		updates, ok := tx.Statement.Dest.(map[string]interface{})
+		if _, hasPassword := updates["password"]; ok && hasPassword {
+			failedPasswordWrite = true
+			tx.AddError(errors.New("forced primary password write failure"))
+		}
+	}); err != nil {
+		t.Fatalf("register primary password write failure: %v", err)
+	}
+
+	err := ChangePassword(user, dto.UserInfoDto{Password: "new-password"})
+	if err == nil {
+		t.Fatal("password change must report the injected primary database failure")
+	}
+	if !failedPasswordWrite {
+		t.Fatal("primary password write fault was not injected")
+	}
+
+	updated := mustGetUserByUsername(t, user.Username)
+	if bcrypt.CompareHashAndPassword([]byte(updated.Password), []byte("old-password")) != nil || remotePassword != "old-password" {
+		t.Fatal("primary database failure partially changed the local password or remote password")
+	}
+	record, ok, err := store.GetUserPassword(user.ID)
+	if err != nil || !ok || record.VoceChatPassword != "old-password" {
+		t.Fatalf("password record after primary database failure: found=%v err=%v", ok, err)
+	}
+	var incompleteCount int64
+	if err := database.DB.Model(&models.UserNotification{}).Where("recipient_user_id = ? AND type = ?", user.ID, models.UserNotificationTypePasswordUpdateIncomplete).Count(&incompleteCount).Error; err != nil {
+		t.Fatalf("count incomplete-password notifications: %v", err)
+	}
+	if incompleteCount != 0 {
+		t.Fatalf("complete rollback must not create an incomplete-password notification, got %d", incompleteCount)
+	}
+}
+
+func TestChangePasswordSerializesConcurrentWritesForTheSameUser(t *testing.T) {
+	setupUserServiceTestDB(t)
+	enableVoceChatLoginForTest(t, false)
+	storePath := filepath.Join(t.TempDir(), "plain-passwords.db")
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
+	mustCreateUser(t, models.User{Username: "primary", Password: models.HashPassword("primary-password"), IsAdmin: true})
+
+	user := mustCreateUser(t, models.User{
+		Username:       "serialized-user",
+		Password:       models.HashPassword("old-password"),
+		VoceChatEmail:  "serialized-user@vc.com",
+		VoceChatUserID: "62",
+	})
+	if err := vocechat.NewPlainPasswordStore(storePath).UpsertUserVoceChatPassword(user.ID, user.Username, "old-password", user.VoceChatEmail, user.VoceChatUserID); err != nil {
+		t.Fatalf("seed password record: %v", err)
+	}
+
+	firstStarted := make(chan struct{})
+	secondStarted := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	var mu sync.Mutex
+	updates := 0
+	stubVoceChatAdminUpdateUser(t, func(_ context.Context, _ vocechat.Config, _ int64, request vocechat.UpdateUserRequest) (*vocechat.User, error) {
+		if request.Password == nil {
+			t.Fatal("password update must include a password")
+		}
+		mu.Lock()
+		updates++
+		order := updates
+		mu.Unlock()
+		if order == 1 {
+			close(firstStarted)
+			<-releaseFirst
+		} else {
+			close(secondStarted)
+		}
+		return &vocechat.User{UID: 62, Email: user.VoceChatEmail, Name: user.Username}, nil
+	})
+
+	firstDone := make(chan error, 1)
+	secondDone := make(chan error, 1)
+	go func() { firstDone <- ChangePassword(user, dto.UserInfoDto{Password: "new-password-one"}) }()
+	<-firstStarted
+	go func() { secondDone <- ChangePassword(user, dto.UserInfoDto{Password: "new-password-two"}) }()
+	select {
+	case <-secondStarted:
+		t.Fatal("a second password write reached the remote update before the first completed")
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(releaseFirst)
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first password change: %v", err)
+	}
+	if err := <-secondDone; err != nil {
+		t.Fatalf("second password change: %v", err)
+	}
+	updated := mustGetUserByUsername(t, user.Username)
+	if bcrypt.CompareHashAndPassword([]byte(updated.Password), []byte("new-password-two")) != nil {
+		t.Fatal("serialized password changes must leave the second complete write as the final local state")
+	}
+}
+
+func TestPasswordChangePublicFailureMessagesDoNotExposeInternalPasswordStorage(t *testing.T) {
+	tests := []struct {
+		name  string
+		err   error
+		reset bool
+		want  string
+	}{
+		{
+			name: "completed rollback for self-service change",
+			err:  &passwordUpdateFailure{rolledBack: true},
+			want: "密码修改失败，请稍后重试。原密码仍可使用。",
+		},
+		{
+			name:  "completed rollback for administrator reset",
+			err:   &passwordUpdateFailure{rolledBack: true},
+			reset: true,
+			want:  "密码重置失败，请稍后重试。用户原密码未改变。",
+		},
+		{
+			name: "incomplete change",
+			err:  &passwordUpdateFailure{incomplete: true},
+			want: "密码保存未完成，请重新设置密码。若仍无法登录，请联系1号管理员。",
+		},
+		{
+			name:  "incomplete reset",
+			err:   &passwordUpdateFailure{incomplete: true},
+			reset: true,
+			want:  "密码保存未完成，请重新为该用户设置密码。",
+		},
+		{
+			name: "unexpected internal failure",
+			err:  errors.New("internal password storage failure"),
+			want: "密码修改失败，请稍后重试。",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := PasswordChangePublicFailureMessage(tc.err, tc.reset)
+			if got != tc.want {
+				t.Fatalf("public failure message = %q, want %q", got, tc.want)
+			}
+			if strings.Contains(got, "internal") || strings.Contains(got, "storage") || strings.Contains(got, "数据库") || strings.Contains(got, "凭据") {
+				t.Fatalf("public failure message leaked implementation detail: %q", got)
+			}
+		})
+	}
+}
+
+func TestChangePasswordWithFailedCompensationMarksOneIncompletePasswordUpdate(t *testing.T) {
+	setupUserServiceTestDB(t)
+	enableVoceChatLoginForTest(t, false)
+	storePath := filepath.Join(t.TempDir(), "plain-passwords.db")
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
+	mustCreateUser(t, models.User{Username: "primary", Password: models.HashPassword("primary-password"), IsAdmin: true})
+
+	user := mustCreateUser(t, models.User{
+		Username:           "incomplete-user",
+		Password:           models.HashPassword("old-password"),
+		VoceChatEmail:      "incomplete-user@vc.com",
+		VoceChatUserID:     "59",
+		VoceChatSyncStatus: models.VoceChatSyncStatusLinked,
+	})
+	store := vocechat.NewPlainPasswordStore(storePath)
+	if err := store.UpsertUserVoceChatPassword(user.ID, user.Username, "old-password", user.VoceChatEmail, user.VoceChatUserID); err != nil {
+		t.Fatalf("seed password record: %v", err)
+	}
+
+	stubVoceChatPasswordLogin(t, func(_ context.Context, _ vocechat.Config, _, _ string) (*vocechat.LoginResponse, error) {
+		return &vocechat.LoginResponse{User: vocechat.UserInfo{UID: 59, Email: user.VoceChatEmail, Name: user.Username}}, nil
+	})
+
+	backupPath := filepath.Join(t.TempDir(), "password-store-backup.db")
+	updates := 0
+	allowRecovery := false
+	stubVoceChatAdminUpdateUser(t, func(_ context.Context, _ vocechat.Config, _ int64, request vocechat.UpdateUserRequest) (*vocechat.User, error) {
+		updates++
+		if request.Password == nil {
+			t.Fatal("password update must include a password")
+		}
+		if updates == 1 {
+			if err := os.Rename(storePath, backupPath); err != nil {
+				t.Fatalf("move password store before injected failure: %v", err)
+			}
+			if err := os.Mkdir(storePath, 0700); err != nil {
+				t.Fatalf("make password store unavailable: %v", err)
+			}
+			return &vocechat.User{UID: 59, Email: user.VoceChatEmail, Name: user.Username}, nil
+		}
+		if !allowRecovery {
+			return nil, errors.New("forced remote rollback failure")
+		}
+		return &vocechat.User{UID: 59, Email: user.VoceChatEmail, Name: user.Username}, nil
+	})
+
+	err := ChangePasswordWithOld(user, "old-password", "new-password")
+	if err == nil {
+		t.Fatal("password change must report an incomplete result")
+	}
+	failure, ok := err.(*passwordUpdateFailure)
+	if !ok || !failure.incomplete {
+		t.Fatalf("password change error must be marked incomplete, got %T %v", err, err)
+	}
+	if err := os.Remove(storePath); err != nil {
+		t.Fatalf("restore password store directory: %v", err)
+	}
+	if err := os.Rename(backupPath, storePath); err != nil {
+		t.Fatalf("restore password store file: %v", err)
+	}
+
+	updated := mustGetUserByUsername(t, user.Username)
+	if updated.VoceChatSyncStatus != models.VoceChatSyncStatusConflicted || updated.VoceChatSyncError != "password_update_incomplete" {
+		t.Fatalf("incomplete password update state = %q/%q", updated.VoceChatSyncStatus, updated.VoceChatSyncError)
+	}
+	var count int64
+	if err := database.DB.Model(&models.UserNotification{}).Where("recipient_user_id = ? AND type = ?", user.ID, "password_update_incomplete").Count(&count).Error; err != nil {
+		t.Fatalf("count incomplete-password notifications: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("incomplete-password notifications = %d, want 1", count)
+	}
+
+	allowRecovery = true
+	if err := ChangePasswordWithOld(user, "old-password", "retry-password"); err != nil {
+		t.Fatalf("retry password change after recovery: %v", err)
+	}
+	updated = mustGetUserByUsername(t, user.Username)
+	if updated.VoceChatSyncStatus != models.VoceChatSyncStatusLinked || updated.VoceChatSyncError != "" || bcrypt.CompareHashAndPassword([]byte(updated.Password), []byte("retry-password")) != nil {
+		t.Fatal("successful retry must restore a complete password state")
+	}
+	if err := database.DB.Model(&models.UserNotification{}).Where("recipient_user_id = ? AND type = ?", user.ID, models.UserNotificationTypePasswordUpdateIncomplete).Count(&count).Error; err != nil {
+		t.Fatalf("count incomplete-password notifications after retry: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("successful retry must resolve incomplete-password notifications, got %d", count)
+	}
+}
+
+func TestLoginWithVoceChatSaveFailureDoesNotIssueLoginOrResolvePasswordAlerts(t *testing.T) {
+	setupUserServiceTestDB(t)
+	enableVoceChatLoginForTest(t, false)
+	storePath := filepath.Join(t.TempDir(), "plain-passwords.db")
+	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
+	mustCreateUser(t, models.User{Username: "primary", Password: models.HashPassword("primary-password"), IsAdmin: true})
+
+	user := mustCreateUser(t, models.User{
+		Username:       "login-save-failure",
+		Password:       models.HashPassword("old-password"),
+		VoceChatEmail:  "login-save-failure@vc.com",
+		VoceChatUserID: "60",
+	})
+	store := vocechat.NewPlainPasswordStore(storePath)
+	if err := store.UpsertUserVoceChatPassword(user.ID, user.Username, "old-password", user.VoceChatEmail, user.VoceChatUserID); err != nil {
+		t.Fatalf("seed password record: %v", err)
+	}
+	if err := database.DB.Create(&models.UserNotification{RecipientUserID: user.ID, Type: models.UserNotificationTypeVoceChatPasswordChanged}).Error; err != nil {
+		t.Fatalf("seed password-change notification: %v", err)
+	}
+
+	backupPath := filepath.Join(t.TempDir(), "password-store-backup.db")
+	stubVoceChatPasswordLogin(t, func(_ context.Context, _ vocechat.Config, _, _ string) (*vocechat.LoginResponse, error) {
+		if err := os.Rename(storePath, backupPath); err != nil {
+			t.Fatalf("move password store before injected failure: %v", err)
+		}
+		if err := os.Mkdir(storePath, 0700); err != nil {
+			t.Fatalf("make password store unavailable: %v", err)
+		}
+		return &vocechat.LoginResponse{Token: "test-token", User: vocechat.UserInfo{UID: 60, Email: user.VoceChatEmail, Name: user.Username}}, nil
+	})
+
+	loggedIn, err := Login(dto.LoginDto{Username: user.Username, Password: "new-password"})
+	if err == nil || err.Error() != "账号信息保存失败，请稍后重新登录。若问题持续，请联系1号管理员。" {
+		t.Fatalf("login save failure must return the public retry message, result present=%v", loggedIn != nil)
+	}
+	if loggedIn != nil {
+		t.Fatal("login save failure must not establish a login result")
+	}
+	if err := os.Remove(storePath); err != nil {
+		t.Fatalf("restore password store directory: %v", err)
+	}
+	if err := os.Rename(backupPath, storePath); err != nil {
+		t.Fatalf("restore password store file: %v", err)
+	}
+
+	updated := mustGetUserByUsername(t, user.Username)
+	if bcrypt.CompareHashAndPassword([]byte(updated.Password), []byte("old-password")) != nil || updated.Token != "" || updated.LoginIssuedAt != nil {
+		t.Fatal("failed login synchronization must not change local password or establish login state")
+	}
+	var changedCount, incompleteCount int64
+	if err := database.DB.Model(&models.UserNotification{}).Where("recipient_user_id = ? AND type = ?", user.ID, models.UserNotificationTypeVoceChatPasswordChanged).Count(&changedCount).Error; err != nil {
+		t.Fatalf("count password-change notifications: %v", err)
+	}
+	if err := database.DB.Model(&models.UserNotification{}).Where("recipient_user_id = ? AND type = ?", user.ID, models.UserNotificationTypePasswordUpdateIncomplete).Count(&incompleteCount).Error; err != nil {
+		t.Fatalf("count incomplete-password notifications: %v", err)
+	}
+	if changedCount != 1 || incompleteCount != 1 {
+		t.Fatalf("failed login must retain existing and add incomplete alerts, changed=%d incomplete=%d", changedCount, incompleteCount)
 	}
 }
 

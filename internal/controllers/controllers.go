@@ -815,7 +815,7 @@ func ChangePassword(c *gin.Context) {
 	}
 
 	if err := services.ChangePasswordWithOld(user, req.OldPassword, req.Password); err != nil {
-		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
+		c.JSON(http.StatusOK, dto.Fail[string](services.PasswordChangePublicFailureMessage(err, false)))
 		return
 	}
 
@@ -4227,14 +4227,14 @@ func ResetManagedUserPassword(c *gin.Context) {
 		return
 	}
 	if strings.TrimSpace(user.VoceChatEmail) == "" || strings.TrimSpace(user.VoceChatUserID) == "" {
-		c.JSON(http.StatusOK, dto.Fail[string]("目标用户未绑定有效的 VoceChat"))
+		c.JSON(http.StatusOK, dto.Fail[string]("密码重置失败，请稍后重试。"))
 		return
 	}
 	if err := services.ChangePassword(user, dto.UserInfoDto{Password: req.Password}); err != nil {
-		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
+		c.JSON(http.StatusOK, dto.Fail[string](services.PasswordChangePublicFailureMessage(err, true)))
 		return
 	}
-	c.JSON(http.StatusOK, dto.OK[any](nil, models.ChangePasswordSuccessMessage))
+	c.JSON(http.StatusOK, dto.OK[any](nil, "密码重置成功"))
 }
 func sendTelegramErrorNotify(c *gin.Context, err error) {
 	log.Printf("Telegram 推送失败: %v", err)

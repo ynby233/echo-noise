@@ -18,6 +18,7 @@ import (
 
 var primaryAdminVoceChatCredentialAlertMu sync.Mutex
 var voceChatPasswordChangedAlertMu sync.Mutex
+var passwordUpdateIncompleteAlertMu sync.Mutex
 
 func createUserNotification(recipientUserID uint, actorUserID *uint, notificationType string, messageID *uint, commentID *uint, parentCommentID *uint) error {
 	if recipientUserID == 0 {
@@ -83,6 +84,31 @@ func ResolveVoceChatPasswordChangedAlert(recipientUserID uint) {
 	voceChatPasswordChangedAlertMu.Lock()
 	defer voceChatPasswordChangedAlertMu.Unlock()
 	_ = database.DB.Where("recipient_user_id = ? AND type = ?", recipientUserID, models.UserNotificationTypeVoceChatPasswordChanged).Delete(&models.UserNotification{}).Error
+}
+
+func CreatePasswordUpdateIncompleteAlertOnce(recipientUserID uint) error {
+	if database.DB == nil || recipientUserID == 0 || recipientUserID == models.PrimaryAdminUserID {
+		return nil
+	}
+	passwordUpdateIncompleteAlertMu.Lock()
+	defer passwordUpdateIncompleteAlertMu.Unlock()
+	var count int64
+	if err := database.DB.Model(&models.UserNotification{}).Where("recipient_user_id = ? AND type = ?", recipientUserID, models.UserNotificationTypePasswordUpdateIncomplete).Count(&count).Error; err != nil {
+		return err
+	}
+	if count != 0 {
+		return nil
+	}
+	return database.DB.Create(&models.UserNotification{RecipientUserID: recipientUserID, Type: models.UserNotificationTypePasswordUpdateIncomplete}).Error
+}
+
+func ResolvePasswordUpdateIncompleteAlert(recipientUserID uint) {
+	if database.DB == nil || recipientUserID == 0 || recipientUserID == models.PrimaryAdminUserID {
+		return
+	}
+	passwordUpdateIncompleteAlertMu.Lock()
+	defer passwordUpdateIncompleteAlertMu.Unlock()
+	_ = database.DB.Where("recipient_user_id = ? AND type = ?", recipientUserID, models.UserNotificationTypePasswordUpdateIncomplete).Delete(&models.UserNotification{}).Error
 }
 
 func refreshLikeNotification(recipientUserID uint, actorUserID uint, messageID uint) error {

@@ -64,6 +64,29 @@ func TestBuildUserNotificationsReportsAssociationQueryFailureAsLoadError(t *test
 	}
 }
 
+func TestBuildUserNotificationsRendersIncompletePasswordUpdateAsUnavailableSystemNotice(t *testing.T) {
+	setupUserNotificationTest(t)
+	viewerID := uint(94)
+	notification := models.UserNotification{
+		ID:              95,
+		RecipientUserID: viewerID,
+		Type:            models.UserNotificationTypePasswordUpdateIncomplete,
+	}
+
+	items := buildVisibleUserNotifications([]models.UserNotification{notification}, viewerID, false)
+	if len(items) != 1 || items[0].TargetStatus != userNotificationTargetStatusUnavailable {
+		t.Fatalf("expected incomplete password update system notice, got %d items with status %q", len(items), func() string {
+			if len(items) == 0 {
+				return ""
+			}
+			return items[0].TargetStatus
+		}())
+	}
+	if items[0].Message != nil || items[0].Comment != nil || items[0].ParentComment != nil {
+		t.Fatal("incomplete password update system notice must not expose unrelated content")
+	}
+}
+
 func TestBuildUserNotificationsReportsCommentQueryFailureAsLoadError(t *testing.T) {
 	db := setupUserNotificationTest(t)
 	viewer := models.User{Username: "viewer"}

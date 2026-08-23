@@ -165,6 +165,40 @@ func (s *PlainPasswordStore) DeleteUserPassword(userID uint) error {
 	return s.delete(userRecordKey(userID))
 }
 
+// RestoreUserPasswordSnapshot restores a previously read user record exactly, or
+// removes a record that did not exist when the snapshot was taken.
+func (s *PlainPasswordStore) RestoreUserPasswordSnapshot(record PlainPasswordRecord, existed bool) error {
+	if record.UserID == 0 {
+		return errors.New("用户ID不能为空")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	db, err := s.openLocked()
+	if err != nil {
+		return err
+	}
+	defer closeDatabase(db)
+
+	if !existed {
+		if err := db.Delete(&PlainPasswordRecord{}, "key = ?", userRecordKey(record.UserID)).Error; err != nil {
+			return fmt.Errorf("恢复用户密码记录失败: %w", err)
+		}
+		return s.ensurePermissionsLocked()
+	}
+
+	record.Key = userRecordKey(record.UserID)
+	record.Kind = PlainPasswordKindUser
+	if err := db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "key"}},
+		UpdateAll: true,
+	}).Create(&record).Error; err != nil {
+		return fmt.Errorf("恢复用户密码记录失败: %w", err)
+	}
+	return s.ensurePermissionsLocked()
+}
+
 func (s *PlainPasswordStore) DeleteApplicationPassword(applicationID string) error {
 	return s.delete(applicationRecordKey(applicationID))
 }

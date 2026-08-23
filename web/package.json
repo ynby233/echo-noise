@@ -40,6 +40,7 @@
     "test:composer-publish-single-flight": "node scripts/composer-publish-single-flight.test.mjs",
     "test:notification-jump": "node scripts/notification-jump-target.test.mjs",
     "test:notification-unavailable": "node scripts/notification-unavailable-state.test.mjs",
+    "test:password-update-incomplete-notification": "node scripts/password-update-incomplete-notification.test.mjs",
     "test:third-party-comment-removal": "node scripts/third-party-comment-removal-contract.test.mjs",
     "test:announcement": "node scripts/announcement-feature.test.mjs",
     "test:media-viewer-hash": "node scripts/media-viewer-hash-refresh.test.mjs",
