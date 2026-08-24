@@ -61,10 +61,12 @@ func SeedDefaultData() error {
 			FeedPageTitle:       "实时聚合内容动态",
 			FeedPageDescription: "聚合综合内容信息源内容，当前结果 {count} 条",
 			// PWA defaults
-			PwaEnabled:        true,
-			PwaTitle:          neutralSiteTitle,
-			PwaDescription:    neutralPwaDescription,
-			HomeLayoutDefault: "three",
+			PwaEnabled:                  true,
+			PwaTitle:                    neutralSiteTitle,
+			PwaDescription:              neutralPwaDescription,
+			HomeLayoutDefault:           "three",
+			RuntimeMode:                 models.RuntimeModeLocal,
+			RuntimeModeMigrationVersion: models.RuntimeModeMigrationVersionCurrent,
 			// Cloud Storage Defaults
 			StorageEnabled:           false,
 			AttachmentStorageEnabled: false,

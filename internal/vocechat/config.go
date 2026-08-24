@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/rcy1314/echo-noise/internal/models"
+	"github.com/rcy1314/echo-noise/internal/runtimepolicy"
 )
 
 const (
@@ -54,19 +55,20 @@ func FromSiteConfig(config models.SiteConfig) Config {
 		ttl = DefaultContactsCacheTTLSeconds
 	}
 
+	policy := runtimepolicy.Resolve(config)
 	return Config{
-		Enabled:                  config.VoceChatEnabled,
+		Enabled:                  policy.ConfiguredMode == runtimepolicy.ModeVoceChat,
 		BaseURL:                  NormalizeBaseURL(config.VoceChatBaseURL),
 		AdminUsername:            strings.TrimSpace(config.VoceChatAdminUsername),
 		AdminPassword:            strings.TrimSpace(config.VoceChatAdminPassword),
 		AdminToken:               strings.TrimSpace(config.VoceChatAdminToken),
 		ThirdPartySecret:         strings.TrimSpace(config.VoceChatThirdPartySecret),
-		NotificationEnabled:      config.VoceChatNotificationEnabled,
+		NotificationEnabled:      policy.SendVoceChatPush,
 		BotAPIKey:                strings.TrimSpace(config.VoceChatBotAPIKey),
 		EmailDomain:              NormalizeEmailDomain(config.VoceChatEmailDomain),
-		LoginVerificationEnabled: config.VoceChatLoginVerificationEnabled,
-		LocalFallbackEnabled:     config.VoceChatLocalFallbackEnabled,
-		ContactsEnabled:          config.VoceChatContactsEnabled,
+		LoginVerificationEnabled: policy.VerifyVoceChatLogin,
+		LocalFallbackEnabled:     policy.AllowLocalFallbackLogin,
+		ContactsEnabled:          policy.UseVoceChatContacts,
 		ContactsCacheTTLSeconds:  ttl,
 	}
 }

@@ -37,6 +37,10 @@ func MigrateDB(db *gorm.DB) error {
 
 	// 使用事务进行初始化操作
 	return db.Transaction(func(tx *gorm.DB) error {
+		if err := migrateRuntimePolicyData(tx); err != nil {
+			return err
+		}
+
 		// 为现有用户添加 Token 字段
 		var users []User
 		if err := tx.Find(&users).Error; err != nil {
@@ -164,6 +168,55 @@ func MigrateDB(db *gorm.DB) error {
 
 		return nil
 	})
+}
+
+func migrateRuntimePolicyData(db *gorm.DB) error {
+	var configs []SiteConfig
+	if err := db.Order("id ASC").Find(&configs).Error; err != nil {
+		return fmt.Errorf("load runtime mode configuration: %w", err)
+	}
+	for index := range configs {
+		if configs[index].RuntimeModeMigrationVersion >= RuntimeModeMigrationVersionCurrent {
+			continue
+		}
+		mode := RuntimeModeLocal
+		if configs[index].VoceChatEnabled {
+			mode = RuntimeModeVoceChat
+		}
+		if err := db.Model(&SiteConfig{}).Where("id = ?", configs[index].ID).Updates(map[string]interface{}{
+			"runtime_mode":                   mode,
+			"runtime_mode_migration_version": RuntimeModeMigrationVersionCurrent,
+		}).Error; err != nil {
+			return fmt.Errorf("migrate runtime mode for site config %d: %w", configs[index].ID, err)
+		}
+		configs[index].RuntimeMode = mode
+		configs[index].RuntimeModeMigrationVersion = RuntimeModeMigrationVersionCurrent
+	}
+
+	configuredMode := RuntimeModeLocal
+	if len(configs) > 0 && strings.EqualFold(strings.TrimSpace(configs[0].RuntimeMode), RuntimeModeVoceChat) {
+		configuredMode = RuntimeModeVoceChat
+	}
+	var users []User
+	if err := db.Where("id <> ?", PrimaryAdminUserID).Find(&users).Error; err != nil {
+		return fmt.Errorf("load users for runtime state migration: %w", err)
+	}
+	for index := range users {
+		status := strings.TrimSpace(users[index].VoceChatSyncStatus)
+		if status != "" && status != VoceChatSyncStatusNone {
+			continue
+		}
+		nextStatus := VoceChatSyncStatusUnbound
+		if strings.TrimSpace(users[index].VoceChatEmail) != "" && strings.TrimSpace(users[index].VoceChatUserID) != "" {
+			nextStatus = VoceChatSyncStatusLinked
+		} else if configuredMode == RuntimeModeVoceChat {
+			nextStatus = VoceChatSyncStatusPending
+		}
+		if err := db.Model(&User{}).Where("id = ?", users[index].ID).Update("voce_chat_sync_status", nextStatus).Error; err != nil {
+			return fmt.Errorf("migrate VoceChat account state for user %d: %w", users[index].ID, err)
+		}
+	}
+	return nil
 }
 
 func dropRetiredAuthenticationAndCommentColumns(db *gorm.DB) error {

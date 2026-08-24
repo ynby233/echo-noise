@@ -787,8 +787,11 @@ func applyVoceChatConfigUpdate(config *models.SiteConfig, raw map[string]interfa
 		return nil
 	}
 
-	if v, exists := raw["enabled"]; exists {
-		config.VoceChatEnabled = parseBoolLike(v, config.VoceChatEnabled)
+	legacyModeSwitches := config.RuntimeModeMigrationVersion < models.RuntimeModeMigrationVersionCurrent
+	if legacyModeSwitches {
+		if v, exists := raw["enabled"]; exists {
+			config.VoceChatEnabled = parseBoolLike(v, config.VoceChatEnabled)
+		}
 	}
 	if v, ok := raw["baseURL"].(string); ok {
 		config.VoceChatBaseURL = vocechat.NormalizeBaseURL(v)
@@ -800,20 +803,24 @@ func applyVoceChatConfigUpdate(config *models.SiteConfig, raw map[string]interfa
 	applySensitiveStringSetting(raw, "adminToken", "clearAdminToken", &config.VoceChatAdminToken)
 	applySensitiveStringSetting(raw, "thirdPartySecret", "clearThirdPartySecret", &config.VoceChatThirdPartySecret)
 	applySensitiveStringSetting(raw, "botApiKey", "clearBotApiKey", &config.VoceChatBotAPIKey)
-	if v, exists := raw["notificationEnabled"]; exists {
-		config.VoceChatNotificationEnabled = parseBoolLike(v, config.VoceChatNotificationEnabled)
+	if legacyModeSwitches {
+		if v, exists := raw["notificationEnabled"]; exists {
+			config.VoceChatNotificationEnabled = parseBoolLike(v, config.VoceChatNotificationEnabled)
+		}
 	}
 	if v, ok := raw["emailDomain"].(string); ok {
 		config.VoceChatEmailDomain = vocechat.NormalizeEmailDomain(v)
 	}
-	if v, exists := raw["loginVerificationEnabled"]; exists {
-		config.VoceChatLoginVerificationEnabled = parseBoolLike(v, config.VoceChatLoginVerificationEnabled)
-	}
-	if v, exists := raw["localFallbackEnabled"]; exists {
-		config.VoceChatLocalFallbackEnabled = parseBoolLike(v, config.VoceChatLocalFallbackEnabled)
-	}
-	if v, exists := raw["contactsEnabled"]; exists {
-		config.VoceChatContactsEnabled = parseBoolLike(v, config.VoceChatContactsEnabled)
+	if legacyModeSwitches {
+		if v, exists := raw["loginVerificationEnabled"]; exists {
+			config.VoceChatLoginVerificationEnabled = parseBoolLike(v, config.VoceChatLoginVerificationEnabled)
+		}
+		if v, exists := raw["localFallbackEnabled"]; exists {
+			config.VoceChatLocalFallbackEnabled = parseBoolLike(v, config.VoceChatLocalFallbackEnabled)
+		}
+		if v, exists := raw["contactsEnabled"]; exists {
+			config.VoceChatContactsEnabled = parseBoolLike(v, config.VoceChatContactsEnabled)
+		}
 	}
 	if v, exists := raw["contactsCacheTTLSeconds"]; exists {
 		if ttl, ok := parsePositiveIntSetting(v); ok {
@@ -826,7 +833,7 @@ func applyVoceChatConfigUpdate(config *models.SiteConfig, raw map[string]interfa
 	if strings.TrimSpace(config.VoceChatEmailDomain) == "" {
 		config.VoceChatEmailDomain = vocechat.DefaultEmailDomain
 	}
-	if !config.VoceChatEnabled {
+	if legacyModeSwitches && !config.VoceChatEnabled {
 		config.VoceChatLoginVerificationEnabled = false
 		config.VoceChatContactsEnabled = false
 		config.VoceChatNotificationEnabled = false
@@ -836,7 +843,7 @@ func applyVoceChatConfigUpdate(config *models.SiteConfig, raw map[string]interfa
 			return fmt.Errorf("管理员邮箱格式无效，请填写 VoceChat 管理员邮箱，不要填写显示名")
 		}
 	}
-	if voceChatHealthAffectingConfigChanged(raw) {
+	if voceChatHealthAffectingConfigChanged(raw, legacyModeSwitches) {
 		config.VoceChatLastHealthStatus = ""
 		config.VoceChatLastHealthError = ""
 		config.VoceChatLastHealthCheckAt = nil
@@ -844,9 +851,8 @@ func applyVoceChatConfigUpdate(config *models.SiteConfig, raw map[string]interfa
 	return nil
 }
 
-func voceChatHealthAffectingConfigChanged(raw map[string]interface{}) bool {
+func voceChatHealthAffectingConfigChanged(raw map[string]interface{}, includeLegacyModeSwitches bool) bool {
 	for _, key := range []string{
-		"enabled",
 		"baseURL",
 		"adminUsername",
 		"adminPassword",
@@ -855,14 +861,18 @@ func voceChatHealthAffectingConfigChanged(raw map[string]interface{}) bool {
 		"clearAdminToken",
 		"thirdPartySecret",
 		"clearThirdPartySecret",
-		"notificationEnabled",
 		"botApiKey",
 		"clearBotApiKey",
-		"loginVerificationEnabled",
-		"contactsEnabled",
 	} {
 		if _, exists := raw[key]; exists {
 			return true
+		}
+	}
+	if includeLegacyModeSwitches {
+		for _, key := range []string{"enabled", "notificationEnabled", "loginVerificationEnabled", "contactsEnabled"} {
+			if _, exists := raw[key]; exists {
+				return true
+			}
 		}
 	}
 	return false
@@ -886,10 +896,6 @@ func CheckVoceChatHealth(ctx context.Context) (map[string]interface{}, error) {
 		config.VoceChatLastHealthError = strings.TrimSpace(healthErr.Error())
 		config.VoceChatLastHealthCheckAt = &now
 		return vocechat.PublicConfigFromSiteConfig(config, true), healthErr
-	}
-
-	if !config.VoceChatEnabled {
-		return fail(fmt.Errorf("VoceChat 集成未启用"))
 	}
 
 	vcConfig := vocechat.FromSiteConfig(config)

@@ -186,16 +186,24 @@ type User struct {
 }
 
 const (
+	RuntimeModeLocal                   = "local"
+	RuntimeModeVoceChat                = "vocechat"
+	RuntimeModeMigrationVersionCurrent = 1
+
 	RegistrationApplicationStatusPending  = "pending"
 	RegistrationApplicationStatusApproved = "approved"
 	RegistrationApplicationStatusRejected = "rejected"
 
-	VoceChatSyncStatusNone       = "none"
-	VoceChatSyncStatusPending    = "pending"
-	VoceChatSyncStatusCreated    = "created"
-	VoceChatSyncStatusLinked     = "linked"
-	VoceChatSyncStatusFailed     = "failed"
-	VoceChatSyncStatusConflicted = "conflicted"
+	VoceChatSyncStatusNone                 = "none"
+	VoceChatSyncStatusUnbound              = "unbound"
+	VoceChatSyncStatusPending              = "pending"
+	VoceChatSyncStatusProvisioning         = "provisioning"
+	VoceChatSyncStatusCreated              = "created"
+	VoceChatSyncStatusLinked               = "linked"
+	VoceChatSyncStatusFailed               = "failed"
+	VoceChatSyncStatusConflicted           = "conflicted"
+	VoceChatSyncStatusCredentialInvalid    = "credential_invalid"
+	VoceChatSyncStatusPasswordSyncRequired = "password_sync_required"
 
 	VoceChatContactSyncStatusOK     = "ok"
 	VoceChatContactSyncStatusFailed = "failed"
@@ -329,6 +337,8 @@ type SiteConfig struct {
 	VoceChatLastHealthStatus         string     `gorm:"type:varchar(30)"`
 	VoceChatLastHealthError          string     `gorm:"type:text"`
 	VoceChatLastHealthCheckAt        *time.Time `json:"voceChatLastHealthCheckAt"`
+	RuntimeMode                      string     `gorm:"type:varchar(20);not null;default:local;index" json:"runtimeMode"`
+	RuntimeModeMigrationVersion      int        `gorm:"not null;default:0" json:"-"`
 	// 云存储（S3/R2）备份设置
 	StorageEnabled       bool   `gorm:"default:false"`
 	StorageProvider      string `gorm:"type:varchar(20)"` // s3 或 r2

@@ -462,48 +462,40 @@
                   </div>
                 </div>
 
-                <div class="rounded-lg p-4 space-y-4" :class="theme.subtleBg">
+                <div v-if="canManageVoceChatConfig" class="rounded-lg p-4 space-y-4" :class="theme.subtleBg">
                   <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                     <div class="flex items-center gap-2" :class="theme.text">
                       <UIcon name="i-heroicons-chat-bubble-left-right" class="w-4 h-4" />
-                      <span>VoceChat 配置</span>
+                      <span>运行模式与 VoceChat 配置</span>
                     </div>
                     <div class="flex items-center gap-2 flex-wrap justify-end">
                       <UBadge :color="voceChatConfig.configured ? 'green' : 'gray'" variant="soft">{{ voceChatConfig.configured ? '已就绪' : '未就绪' }}</UBadge>
                       <UBadge :color="voceChatConfig.adminCredentialConfigured ? 'green' : 'orange'" variant="soft">凭据 {{ voceChatConfig.adminCredentialConfigured ? '已配置' : '未配置' }}</UBadge>
-                      <UBadge v-if="!canManageVoceChatConfig" color="gray" variant="soft">仅 1 号管理员可管理</UBadge>
                       <UButton variant="soft" color="indigo" icon="i-heroicons-arrow-path" @click="fetchRegisterConfig">刷新</UButton>
-                      <UButton variant="soft" color="primary" icon="i-heroicons-signal" :loading="checkingVoceChatHealth" :disabled="!canManageVoceChatConfig" @click="checkVoceChatHealth">检查当前状态</UButton>
-                      <UButton color="green" :loading="savingVoceChatConfig" :disabled="!canManageVoceChatConfig" @click="saveVoceChatConfig">保存</UButton>
+                      <UButton variant="soft" color="primary" icon="i-heroicons-signal" :loading="checkingVoceChatHealth" @click="checkVoceChatHealth">检查当前状态</UButton>
+                      <UButton color="green" :loading="savingVoceChatConfig" @click="saveVoceChatConfig">保存配置</UButton>
                     </div>
                   </div>
 
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
-                      <span class="text-sm" :class="theme.text">启用 VoceChat 集成</span>
-                      <UToggle v-model="voceChatConfig.enabled" :disabled="!canManageVoceChatConfig" />
-                    </label>
-                    <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
-                      <span class="text-sm" :class="theme.text">登录校验</span>
-                      <UToggle v-model="voceChatConfig.loginVerificationEnabled" :disabled="!canManageVoceChatConfig || !voceChatConfig.enabled" />
-                    </label>
-                    <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
-                      <span class="text-sm" :class="theme.text">本地备用登录</span>
-                      <UToggle v-model="voceChatConfig.localFallbackEnabled" :disabled="!canManageVoceChatConfig" />
-                    </label>
-                    <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
-                      <span class="text-sm" :class="theme.text">联系人可见性</span>
-                      <UToggle v-model="voceChatConfig.contactsEnabled" :disabled="!canManageVoceChatConfig || !voceChatConfig.enabled" />
-                    </label>
-                    <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
-                      <span class="text-sm" :class="theme.text">通知推送</span>
-                      <UToggle v-model="voceChatConfig.notificationEnabled" :disabled="!canManageVoceChatConfig || !voceChatConfig.enabled" />
-                    </label>
                     <div class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
-                      <span class="text-sm" :class="theme.text">健康状态</span>
-                      <div class="text-right text-sm min-w-0" :class="theme.text">
-                        <span>{{ voceChatHealthLabel }}</span>
-                        <span v-if="voceChatConfig.lastHealthCheckAt" class="ml-2" :class="theme.mutedText">{{ formatShanghai(voceChatConfig.lastHealthCheckAt) }}</span>
+                      <span class="text-sm" :class="theme.text">配置模式</span>
+                      <UBadge :color="runtimePolicy.configuredMode === 'vocechat' ? 'indigo' : 'gray'" variant="soft">{{ runtimeConfiguredModeLabel }}</UBadge>
+                    </div>
+                    <div class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
+                      <span class="text-sm" :class="theme.text">实际运行状态</span>
+                      <UBadge :color="runtimePolicy.runtimeState === 'vocechat_normal' ? 'green' : runtimePolicy.runtimeState === 'vocechat_degraded' ? 'orange' : 'gray'" variant="soft">{{ runtimeStateLabel }}</UBadge>
+                    </div>
+                    <div class="md:col-span-2 rounded border px-3 py-2" :class="theme.border">
+                      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <div class="min-w-0">
+                          <div class="text-sm" :class="theme.text">{{ runtimePolicy.lastHealthSummary }}</div>
+                          <div v-if="runtimePolicy.lastHealthCheckAt" class="text-xs mt-1" :class="theme.mutedText">最近检查：{{ formatShanghai(runtimePolicy.lastHealthCheckAt) }}</div>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0">
+                          <UButton size="sm" color="gray" variant="soft" :loading="switchingRuntimeMode === 'local'" :disabled="runtimePolicy.configuredMode === 'local' || !!switchingRuntimeMode" @click="switchRuntimeMode('local')">切换到本地模式</UButton>
+                          <UButton size="sm" color="indigo" :loading="switchingRuntimeMode === 'vocechat'" :disabled="runtimePolicy.configuredMode === 'vocechat' || !!switchingRuntimeMode" @click="switchRuntimeMode('vocechat')">切换到 VoceChat 模式</UButton>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -545,8 +537,6 @@
                       <UInput v-model.number="voceChatConfig.contactsCacheTTLSeconds" type="number" min="1" placeholder="60" :disabled="!canManageVoceChatConfig" />
                     </div>
                   </div>
-
-                  <div v-if="voceChatConfig.lastHealthError" class="rounded border px-3 py-2 text-xs" :class="[theme.border, theme.mutedText]">{{ voceChatConfig.lastHealthError }}</div>
 
                   <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
                     <label class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
@@ -2741,6 +2731,15 @@ type VoceChatConfigState = {
   lastHealthCheckAt: string
 }
 
+type RuntimePolicyState = {
+  configuredMode: 'local' | 'vocechat'
+  runtimeState: 'local' | 'vocechat_normal' | 'vocechat_degraded'
+  lastHealthStatus: string
+  lastHealthSummary: string
+  lastHealthCheckAt: string
+  accountCounts: Record<string, number>
+}
+
 const registrationStatusOptions = [
   { label: '待审核', value: 'pending' },
   { label: '已通过', value: 'approved' },
@@ -2787,14 +2786,20 @@ const voceChatClear = reactive({
 })
 const savingVoceChatConfig = ref(false)
 const checkingVoceChatHealth = ref(false)
-const voceChatHealthLabel = computed(() => {
-  if (!voceChatConfig.enabled) return '未启用'
-  if (!voceChatConfig.configured) return '未配置'
-  const status = String(voceChatConfig.lastHealthStatus || '').trim()
-  if (!status) return '未检查'
-  if (status === 'ok') return '正常'
-  if (status === 'failed') return '失败'
-  return status
+const switchingRuntimeMode = ref<'' | 'local' | 'vocechat'>('')
+const runtimePolicy = reactive<RuntimePolicyState>({
+  configuredMode: 'local',
+  runtimeState: 'local',
+  lastHealthStatus: '',
+  lastHealthSummary: '尚未读取运行模式',
+  lastHealthCheckAt: '',
+  accountCounts: {}
+})
+const runtimeConfiguredModeLabel = computed(() => runtimePolicy.configuredMode === 'vocechat' ? 'VoceChat 模式' : '本地模式')
+const runtimeStateLabel = computed(() => {
+  if (runtimePolicy.runtimeState === 'vocechat_normal') return 'VoceChat 正常'
+  if (runtimePolicy.runtimeState === 'vocechat_degraded') return 'VoceChat 降级'
+  return '本地运行'
 })
 const sidebarOpen = ref(false)
 const sidebarCollapsed = ref(
@@ -3368,6 +3373,27 @@ const saveAdminTheme = async () => {
   } catch {}
 }
 
+const applyRuntimePolicy = (raw: any) => {
+  const data = raw && typeof raw === 'object' ? raw : {}
+  runtimePolicy.configuredMode = data.configured_mode === 'vocechat' ? 'vocechat' : 'local'
+  runtimePolicy.runtimeState = data.runtime_state === 'vocechat_normal'
+    ? 'vocechat_normal'
+    : data.runtime_state === 'vocechat_degraded'
+      ? 'vocechat_degraded'
+      : 'local'
+  runtimePolicy.lastHealthStatus = String(data.last_health_status || '')
+  runtimePolicy.lastHealthSummary = String(data.last_health_summary || '尚未完成 VoceChat 健康检查')
+  runtimePolicy.lastHealthCheckAt = String(data.last_health_check_at || '')
+  runtimePolicy.accountCounts = data.account_counts && typeof data.account_counts === 'object' ? { ...data.account_counts } : {}
+}
+
+const fetchRuntimePolicy = async () => {
+  if (!canManageVoceChatConfig.value) return
+  const res: any = await getRequest<any>('admin/runtime-policy', undefined, { credentials: 'include', silent: true })
+  if (!res || res.code !== 1) throw new Error(res?.msg || '获取运行模式失败')
+  applyRuntimePolicy(res.data)
+}
+
 // 页面加载时获取配置
 const fetchRegisterConfig = async () => {
   try {
@@ -3381,6 +3407,7 @@ const fetchRegisterConfig = async () => {
         autoApproveRegistration.value = data.autoApproveRegistration
       }
       applyVoceChatPublicConfig(data.voceChatConfig)
+      if (canManageVoceChatConfig.value) await fetchRuntimePolicy()
     } else {
       throw new Error(res?.msg || '获取注册配置失败')
     }
@@ -3450,11 +3477,6 @@ const buildVoceChatConfigPayload = () => {
     throw new Error('联系人缓存 TTL 必须是正整数')
   }
   const payload: Record<string, any> = {
-    enabled: !!voceChatConfig.enabled,
-    loginVerificationEnabled: !!voceChatConfig.enabled && !!voceChatConfig.loginVerificationEnabled,
-    localFallbackEnabled: !!voceChatConfig.localFallbackEnabled,
-    contactsEnabled: !!voceChatConfig.enabled && !!voceChatConfig.contactsEnabled,
-    notificationEnabled: !!voceChatConfig.enabled && !!voceChatConfig.notificationEnabled,
     contactsCacheTTLSeconds: Math.floor(ttl)
   }
   const baseURL = String(voceChatConfig.baseURL || '').trim()
@@ -3517,6 +3539,7 @@ const checkVoceChatHealth = async () => {
       applyVoceChatPublicConfig(publicConfig)
     }
     if (res && res.code === 1) {
+      await fetchRuntimePolicy()
       useToast().add({ title: 'VoceChat 状态检查完成', color: 'green' })
     } else {
       throw new Error(res?.msg || 'VoceChat 状态检查失败')
@@ -3525,6 +3548,22 @@ const checkVoceChatHealth = async () => {
     useToast().add({ title: 'VoceChat 状态检查失败', description: e?.message, color: 'red' })
   } finally {
     checkingVoceChatHealth.value = false
+  }
+}
+
+const switchRuntimeMode = async (mode: 'local' | 'vocechat') => {
+  if (!canManageVoceChatConfig.value || runtimePolicy.configuredMode === mode || switchingRuntimeMode.value) return
+  try {
+    switchingRuntimeMode.value = mode
+    const res: any = await putRequest<any>('admin/runtime-policy/mode', { mode }, { credentials: 'include' })
+    if (!res || res.code !== 1) throw new Error(res?.msg || '切换运行模式失败')
+    applyRuntimePolicy(res.data)
+    await fetchRegisterConfig()
+    useToast().add({ title: mode === 'local' ? '已切换到本地模式' : '已切换到 VoceChat 模式', color: 'green' })
+  } catch (e: any) {
+    useToast().add({ title: '切换运行模式失败', description: e?.message, color: 'red' })
+  } finally {
+    switchingRuntimeMode.value = ''
   }
 }
 

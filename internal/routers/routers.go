@@ -40,6 +40,11 @@ func registerAdminAuthorizationRoutes(authRoutes *gin.RouterGroup) {
 	}
 }
 
+func registerRuntimePolicyRoutes(authRoutes *gin.RouterGroup) {
+	authRoutes.GET("/admin/runtime-policy", controllers.GetRuntimePolicy)
+	authRoutes.PUT("/admin/runtime-policy/mode", controllers.UpdateRuntimePolicyMode)
+}
+
 func registerLocalAttachmentRoute(r *gin.Engine, route string, kind string, dir string) {
 	handler := controllers.ServeLocalAttachment(kind, dir)
 	r.GET(route+"/*name", handler)
@@ -266,6 +271,7 @@ func SetupRouter() *gin.Engine {
 	authRoutes := api.Group("")
 	authRoutes.Use(middleware.SessionAuthMiddleware())
 	registerAdminAuthorizationRoutes(authRoutes)
+	registerRuntimePolicyRoutes(authRoutes)
 	registerNoteManagementRoutes(authRoutes)
 	authRoutes.GET("/users/me/stats", controllers.GetCurrentUserHomeStats)
 	// 版本更新（管理员）

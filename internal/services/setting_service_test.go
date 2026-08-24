@@ -405,6 +405,30 @@ func TestApplyVoceChatConfigRejectsAdminDisplayNameWhenPasswordLoginIsUsed(t *te
 	}
 }
 
+func TestApplyVoceChatConfigDoesNotRestoreRetiredModeSwitchesAfterMigration(t *testing.T) {
+	config := &models.SiteConfig{
+		RuntimeMode:                      models.RuntimeModeLocal,
+		RuntimeModeMigrationVersion:      models.RuntimeModeMigrationVersionCurrent,
+		VoceChatEnabled:                  false,
+		VoceChatLoginVerificationEnabled: false,
+		VoceChatLocalFallbackEnabled:     false,
+		VoceChatContactsEnabled:          false,
+		VoceChatNotificationEnabled:      false,
+	}
+	if err := applyVoceChatConfigUpdate(config, map[string]interface{}{
+		"enabled":                  true,
+		"loginVerificationEnabled": true,
+		"localFallbackEnabled":     true,
+		"contactsEnabled":          true,
+		"notificationEnabled":      true,
+	}); err != nil {
+		t.Fatalf("apply migrated VoceChat config: %v", err)
+	}
+	if config.VoceChatEnabled || config.VoceChatLoginVerificationEnabled || config.VoceChatLocalFallbackEnabled || config.VoceChatContactsEnabled || config.VoceChatNotificationEnabled {
+		t.Fatalf("retired independent mode switches were restored: %#v", config)
+	}
+}
+
 func TestApplyVoceChatConfigAllowsAdminTokenWithoutAdminEmail(t *testing.T) {
 	config := &models.SiteConfig{}
 	if err := applyVoceChatConfigUpdate(config, map[string]interface{}{
