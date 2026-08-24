@@ -13,6 +13,11 @@ import (
 func MigrateDB(db *gorm.DB) error {
 	dbType := db.Dialector.Name()
 	var err error
+	if dbType == "sqlite" {
+		if err := prepareSQLiteRegistrationApplicationCandidateMigration(db); err != nil {
+			return err
+		}
+	}
 	switch dbType {
 	case "postgres":
 		err = db.Set("gorm:table_options", "").
@@ -29,6 +34,11 @@ func MigrateDB(db *gorm.DB) error {
 
 	if err != nil {
 		return err
+	}
+	if dbType == "sqlite" {
+		if err := enforceSQLiteRegistrationCandidateNotNull(db); err != nil {
+			return err
+		}
 	}
 	if err := dropRetiredAuthenticationAndCommentColumns(db); err != nil {
 		return err
@@ -176,6 +186,57 @@ func MigrateDB(db *gorm.DB) error {
 		return err
 	}
 	return ensureRegistrationApplicationCandidateUniqueIndex(db)
+}
+
+func prepareSQLiteRegistrationApplicationCandidateMigration(db *gorm.DB) error {
+	if !db.Migrator().HasTable(&RegistrationApplication{}) {
+		return nil
+	}
+	if !db.Migrator().HasColumn(&RegistrationApplication{}, "VoceChatCandidateEmail") {
+		if err := db.Exec("ALTER TABLE registration_applications ADD COLUMN voce_chat_candidate_email VARCHAR(191)").Error; err != nil {
+			return fmt.Errorf("add compatible registration candidate email column: %w", err)
+		}
+	}
+	if err := db.AutoMigrate(&RegistrationApplicationSequence{}); err != nil {
+		return fmt.Errorf("create registration sequence before candidate backfill: %w", err)
+	}
+	if err := migrateRegistrationApplicationAllocationData(db); err != nil {
+		return fmt.Errorf("backfill registration candidates before SQLite constraint migration: %w", err)
+	}
+	return nil
+}
+
+func enforceSQLiteRegistrationCandidateNotNull(db *gorm.DB) error {
+	if !db.Migrator().HasTable(&RegistrationApplication{}) || !db.Migrator().HasColumn(&RegistrationApplication{}, "VoceChatCandidateEmail") {
+		return nil
+	}
+	var column struct {
+		NotNull int `gorm:"column:notnull"`
+	}
+	if err := db.Raw("SELECT `notnull` FROM pragma_table_info('registration_applications') WHERE name = ?", "voce_chat_candidate_email").Scan(&column).Error; err != nil {
+		return fmt.Errorf("inspect registration candidate email constraint: %w", err)
+	}
+	if column.NotNull == 1 {
+		return nil
+	}
+	var nullCount int64
+	if err := db.Table("registration_applications").Where("voce_chat_candidate_email IS NULL OR TRIM(voce_chat_candidate_email) = ''").Count(&nullCount).Error; err != nil {
+		return fmt.Errorf("validate registration candidate email backfill: %w", err)
+	}
+	if nullCount != 0 {
+		return fmt.Errorf("registration candidate email backfill left %d empty rows", nullCount)
+	}
+	if err := db.Migrator().AlterColumn(&RegistrationApplication{}, "VoceChatCandidateEmail"); err != nil {
+		return fmt.Errorf("enforce registration candidate email constraint: %w", err)
+	}
+	column.NotNull = 0
+	if err := db.Raw("SELECT `notnull` FROM pragma_table_info('registration_applications') WHERE name = ?", "voce_chat_candidate_email").Scan(&column).Error; err != nil {
+		return fmt.Errorf("verify registration candidate email constraint: %w", err)
+	}
+	if column.NotNull != 1 {
+		return errors.New("registration candidate email column remains nullable after migration")
+	}
+	return nil
 }
 
 func migrateRegistrationApplicationAllocationData(db *gorm.DB) error {
