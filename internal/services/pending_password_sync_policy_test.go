@@ -150,6 +150,12 @@ func TestPasswordSyncRetryPreservesSyncActionAfterTransientFailure(t *testing.T)
 	if task.Status != models.VoceChatSyncStatusFailed || task.Action != models.VoceChatProvisioningActionSyncPassword || failedUser.VoceChatSyncStatus != models.VoceChatSyncStatusPasswordSyncRequired {
 		t.Fatalf("failed sync lost pending action: task=%#v user=%#v", task, failedUser)
 	}
+	if err := db.Model(&models.SiteConfig{}).Where("id > 0").Updates(map[string]interface{}{
+		"voce_chat_last_health_status": "ok",
+		"voce_chat_last_health_error":  "",
+	}).Error; err != nil {
+		t.Fatalf("simulate recovered VoceChat health: %v", err)
+	}
 
 	if _, err := RetryVoceChatProvisioningFailures(context.Background(), primary.ID); err != nil {
 		t.Fatalf("retry password sync: %v", err)
@@ -176,6 +182,14 @@ func TestPasswordSyncRetryPreservesSyncActionAfterTransientFailure(t *testing.T)
 	}
 	if updateCalls != 2 || remotePassword != "new-local-password" || task.Status != models.VoceChatSyncStatusLinked || completedUser.VoceChatSyncStatus != models.VoceChatSyncStatusLinked || record.VoceChatPasswordValue() != "new-local-password" || record.LocalFallbackPasswordValue() != "new-local-password" {
 		t.Fatalf("retry did not complete three-store sync: calls=%d remote=%q task=%#v user=%#v record=%#v", updateCalls, remotePassword, task, completedUser, record)
+	}
+	loggedIn, loginErr := Login(dto.LoginDto{Username: user.Username, Password: "new-local-password"})
+	if loginErr != nil || loggedIn == nil {
+		t.Fatalf("new synchronized password login user=%#v err=%v", loggedIn, loginErr)
+	}
+	loggedIn, loginErr = Login(dto.LoginDto{Username: user.Username, Password: "old-remote-password"})
+	if loginErr == nil || loggedIn != nil {
+		t.Fatalf("old remote password remained valid user=%#v err=%v", loggedIn, loginErr)
 	}
 }
 

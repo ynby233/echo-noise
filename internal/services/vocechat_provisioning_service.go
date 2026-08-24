@@ -180,7 +180,9 @@ func prepareVoceChatProvisioningTasks(command, emailDomain string) ([]models.Voc
 				return nil, err
 			}
 		}
-		task.Action = voceChatProvisioningActionForUser(user)
+		if !(command == models.VoceChatProvisioningCommandRetry && task.Action == models.VoceChatProvisioningActionSyncPassword) {
+			task.Action = voceChatProvisioningActionForUser(user)
+		}
 		if !voceChatProvisioningTaskEligible(*task, *user, command) {
 			continue
 		}
@@ -404,10 +406,16 @@ func claimNextVoceChatProvisioningTask(runID uint) (*models.VoceChatProvisioning
 		if err := db.First(&task, task.ID).Error; err != nil {
 			return nil, err
 		}
-		if err := db.Model(&models.User{}).Where("id = ?", task.UserID).Updates(map[string]interface{}{
+		userUpdates := map[string]interface{}{
 			"voce_chat_sync_status": models.VoceChatSyncStatusProvisioning,
 			"voce_chat_sync_error":  "",
-		}).Error; err != nil {
+		}
+		if task.Action == models.VoceChatProvisioningActionSyncPassword {
+			userUpdates = map[string]interface{}{
+				"voce_chat_sync_status": models.VoceChatSyncStatusPasswordSyncRequired,
+			}
+		}
+		if err := db.Model(&models.User{}).Where("id = ?", task.UserID).Updates(userUpdates).Error; err != nil {
 			return nil, err
 		}
 		repository.ClearUserCache()
@@ -465,7 +473,7 @@ func processVoceChatProvisioningTask(ctx context.Context, task *models.VoceChatP
 			if previousRemote == "" {
 				previousRemote = plain
 			}
-			if err := changeManagedVoceChatPassword(user, plain, previousRemote); err != nil {
+			if err := changePendingVoceChatPasswordSync(user, plain, previousRemote); err != nil {
 				return err
 			}
 			recordVoceChatLoginHealth("ok", nil)
@@ -555,7 +563,18 @@ func processVoceChatProvisioningTask(ctx context.Context, task *models.VoceChatP
 		if errors.Is(err, errVoceChatProvisioningPaused) || errors.Is(err, context.Canceled) {
 			return pausedVoceChatProvisioningOutcome(task.Action)
 		}
-		return voceChatProvisioningFailure(err)
+		outcome := voceChatProvisioningFailure(err)
+		if task.Action == models.VoceChatProvisioningActionSyncPassword {
+			var updateFailure *passwordUpdateFailure
+			if errors.As(err, &updateFailure) && updateFailure.incomplete {
+				outcome.UserStatus = models.VoceChatSyncStatusConflicted
+				outcome.Code = "password_update_incomplete"
+				outcome.Summary = "密码保存未完成，请重新为该用户设置密码"
+			} else {
+				outcome.UserStatus = models.VoceChatSyncStatusPasswordSyncRequired
+			}
+		}
+		return outcome
 	}
 	return voceChatProvisioningOutcome{Status: models.VoceChatSyncStatusLinked, UserStatus: models.VoceChatSyncStatusLinked}
 }

@@ -272,7 +272,7 @@ func TestVoceChatProvisioningAttemptsAllUsersBeforeMarkingUpstreamDegraded(t *te
 	calls := 0
 	stubVoceChatProvisioningCreate(t, func(context.Context, vocechat.Config, string, string, string) (voceChatProvisioningCreateResult, error) {
 		calls++
-		return voceChatProvisioningCreateResult{}, errors.New("network failure with secret upstream detail")
+		return voceChatProvisioningCreateResult{}, &vocechat.APIError{StatusCode: http.StatusServiceUnavailable, Method: http.MethodPost, Path: "/api/admin/user", Body: "secret upstream detail"}
 	})
 	if _, err := StartVoceChatProvisioning(context.Background(), primary.ID); err != nil {
 		t.Fatalf("start provisioning: %v", err)

@@ -985,6 +985,14 @@ func markPasswordUpdateIncomplete(user *models.User) error {
 }
 
 func changeManagedVoceChatPassword(user *models.User, newPassword, previousRemotePassword string) error {
+	return changeManagedVoceChatPasswordWithPolicy(user, newPassword, previousRemotePassword, true)
+}
+
+func changePendingVoceChatPasswordSync(user *models.User, newPassword, previousRemotePassword string) error {
+	return changeManagedVoceChatPasswordWithPolicy(user, newPassword, previousRemotePassword, false)
+}
+
+func changeManagedVoceChatPasswordWithPolicy(user *models.User, newPassword, previousRemotePassword string, markRemoteFailure bool) error {
 	snapshot, err := readManagedPasswordSnapshot(user.ID)
 	if err != nil {
 		return &passwordUpdateFailure{cause: err}
@@ -998,8 +1006,11 @@ func changeManagedVoceChatPassword(user *models.User, newPassword, previousRemot
 
 	vcUser, err := updateVoceChatBoundUserRemote(user, vocechat.UpdateUserRequest{Password: &newPassword}, true)
 	if err != nil {
-		markErr := markVoceChatUserSync(user, models.VoceChatSyncStatusFailed, err, nil, "")
-		return errors.Join(err, markErr)
+		if markRemoteFailure {
+			markErr := markVoceChatUserSync(user, models.VoceChatSyncStatusFailed, err, nil, "")
+			return errors.Join(err, markErr)
+		}
+		return err
 	}
 	if err := markVoceChatUserSync(user, models.VoceChatSyncStatusLinked, nil, vcUser, ""); err != nil {
 		return failManagedPasswordChange(user, snapshot, previousRemotePassword, err)
@@ -1103,6 +1114,9 @@ func Login(userdto dto.LoginDto) (*models.User, error) {
 		policy, voceConfig, voceLoginEnabled, err := loadVoceChatLoginConfig()
 		if err != nil {
 			return errors.New(models.DatabaseErrorMessage)
+		}
+		if !policy.LegacyConfiguration && policy.RuntimeState == runtimepolicy.StateVoceChatNormal && isVoceChatBoundNonPrimaryUser(user) && user.VoceChatSyncStatus == models.VoceChatSyncStatusPasswordSyncRequired {
+			return errors.New("账户密码正在等待 VoceChat 同步，请联系1号管理员完成同步后再登录。")
 		}
 		if shouldUseVoceChatLogin(user, voceConfig, voceLoginEnabled) {
 			verified, err := authenticateVoceChatPassword(user, policy, voceConfig, plain)
