@@ -684,6 +684,12 @@ func TestRestoringWithdrawnAnnouncementPreservesReadStateAndPushDeliveries(t *te
 
 func TestPublishingWithPushPersistsOneDeliveryPerOptedInUser(t *testing.T) {
 	db, r := setupAnnouncementControllerTest(t)
+	if err := db.Create(&models.SiteConfig{
+		VoceChatEnabled: true, VoceChatNotificationEnabled: true,
+		VoceChatBaseURL: "https://vc.example.test", VoceChatBotAPIKey: "bot-key",
+	}).Error; err != nil {
+		t.Fatalf("seed normal VoceChat config: %v", err)
+	}
 	admin := models.User{Username: "push-admin", Password: "hashed", IsAdmin: true}
 	optedIn := models.User{Username: "push-enabled", Password: "hashed", VoceChatNotificationEnabled: true, VoceChatUserID: "42"}
 	optedOut := models.User{Username: "push-disabled", Password: "hashed", VoceChatNotificationEnabled: false, VoceChatUserID: "43"}
@@ -734,6 +740,63 @@ func TestPublishingWithPushPersistsOneDeliveryPerOptedInUser(t *testing.T) {
 	}
 	if payload.Code != 1 || payload.Data.Total != 1 || payload.Data.Pending != 1 || payload.Data.Sent != 0 || payload.Data.Failed != 0 || payload.Data.Skipped != 0 {
 		t.Fatalf("unexpected push summary: %s", summaryResponse.Body.String())
+	}
+}
+
+func TestPublishingWithPushDoesNotQueueInLocalOrDegradedRuntime(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		mode   string
+		health string
+	}{
+		{name: "local", mode: models.RuntimeModeLocal, health: "ok"},
+		{name: "degraded", mode: models.RuntimeModeVoceChat, health: "failed"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			db, r := setupAnnouncementControllerTest(t)
+			if err := db.Create(&models.SiteConfig{
+				RuntimeMode: test.mode, RuntimeModeMigrationVersion: models.RuntimeModeMigrationVersionCurrent,
+				VoceChatEnabled: test.mode == models.RuntimeModeVoceChat, VoceChatBaseURL: "https://vc.example.test",
+				VoceChatBotAPIKey: "bot-key", VoceChatLastHealthStatus: test.health,
+			}).Error; err != nil {
+				t.Fatalf("seed runtime config: %v", err)
+			}
+			users := []models.User{
+				{Username: "push-admin-" + test.name, Password: "hashed", IsAdmin: true},
+				{Username: "push-recipient-" + test.name, Password: "hashed", VoceChatNotificationEnabled: true, VoceChatUserID: "42"},
+			}
+			if err := db.Create(&users).Error; err != nil {
+				t.Fatalf("seed users: %v", err)
+			}
+			draft := models.Announcement{Title: "runtime push", Content: "site notification remains", Status: models.AnnouncementStatusDraft, Revision: 1, AuthorUserID: users[0].ID}
+			if err := db.Create(&draft).Error; err != nil {
+				t.Fatalf("seed draft: %v", err)
+			}
+			r.Use(func(c *gin.Context) {
+				c.Set("user_id", users[0].ID)
+				c.Set("is_admin", true)
+				c.Next()
+			})
+			r.POST("/admin/announcements/:id/publish", PublishAnnouncement)
+			body, _ := json.Marshal(map[string]any{"push_enabled": true})
+			request := httptest.NewRequest(http.MethodPost, "/admin/announcements/"+strconvFormatUint(draft.ID)+"/publish", bytes.NewReader(body))
+			request.Header.Set("Content-Type", "application/json")
+			response := httptest.NewRecorder()
+			r.ServeHTTP(response, request)
+			if response.Code != http.StatusOK {
+				t.Fatalf("publish failed: %d %s", response.Code, response.Body.String())
+			}
+			var count int64
+			if err := db.Model(&models.AnnouncementPushDelivery{}).Where("announcement_id = ?", draft.ID).Count(&count).Error; err != nil {
+				t.Fatalf("count deliveries: %v", err)
+			}
+			if count != 0 {
+				t.Fatalf("queued %d historical deliveries in %s runtime", count, test.name)
+			}
+			if err := db.First(&draft, draft.ID).Error; err != nil || draft.Status != models.AnnouncementStatusPublished || draft.PublishedAt == nil {
+				t.Fatalf("site announcement was not published: announcement=%#v err=%v", draft, err)
+			}
+		})
 	}
 }
 

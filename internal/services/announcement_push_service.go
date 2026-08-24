@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/rcy1314/echo-noise/internal/models"
+	"github.com/rcy1314/echo-noise/internal/runtimepolicy"
 	"github.com/rcy1314/echo-noise/internal/vocechat"
 	"gorm.io/gorm"
 )
@@ -32,6 +33,17 @@ func NewVoceChatAnnouncementPushSender(db *gorm.DB) AnnouncementPushSender {
 	return &voceChatAnnouncementPushSender{db: db}
 }
 
+func VoceChatPushEnabled(db *gorm.DB) bool {
+	if db == nil {
+		return false
+	}
+	var siteConfig models.SiteConfig
+	if err := db.First(&siteConfig).Error; err != nil {
+		return false
+	}
+	return runtimepolicy.Resolve(siteConfig).SendVoceChatPush
+}
+
 func (s *voceChatAnnouncementPushSender) Send(ctx context.Context, announcement models.Announcement, recipient models.User) (AnnouncementPushSendResult, error) {
 	if s == nil || s.db == nil {
 		return AnnouncementPushSendResult{}, errors.New("公告 VoceChat 推送未初始化")
@@ -39,6 +51,9 @@ func (s *voceChatAnnouncementPushSender) Send(ctx context.Context, announcement 
 	var siteConfig models.SiteConfig
 	if err := s.db.First(&siteConfig).Error; err != nil {
 		return AnnouncementPushSendResult{}, fmt.Errorf("读取 VoceChat 配置失败: %w", err)
+	}
+	if !runtimepolicy.Resolve(siteConfig).SendVoceChatPush {
+		return AnnouncementPushSendResult{Skipped: true, Detail: "当前运行状态未启用 VoceChat 推送"}, nil
 	}
 	vcConfig := vocechat.FromSiteConfig(siteConfig)
 	if !vcConfig.IsNotificationReady() {
@@ -50,13 +65,19 @@ func (s *voceChatAnnouncementPushSender) Send(ctx context.Context, announcement 
 	}
 	recipientID, err := resolveNotificationRecipientVoceChatUserID(ctx, client, vcConfig, recipient)
 	if err != nil {
-		return AnnouncementPushSendResult{}, err
+		if isVoceChatSiteTransientFailure(err) {
+			recordVoceChatLoginHealth("failed", errors.New("VoceChat 推送服务暂不可用"))
+		}
+		return AnnouncementPushSendResult{Skipped: true, Detail: "VoceChat 推送未发送，未保留历史推送"}, nil
 	}
 	if strings.TrimSpace(recipientID) == "" {
 		return AnnouncementPushSendResult{Skipped: true, Detail: "用户未绑定可推送的 VoceChat 账号"}, nil
 	}
 	if err := client.SendMarkdownToUser(ctx, vcConfig.BotAPIKey, recipientID, buildAnnouncementPushMarkdown(siteConfig, announcement)); err != nil {
-		return AnnouncementPushSendResult{}, err
+		if isVoceChatSiteTransientFailure(err) {
+			recordVoceChatLoginHealth("failed", errors.New("VoceChat 推送服务暂不可用"))
+		}
+		return AnnouncementPushSendResult{RecipientVoceChatUserID: recipientID, Skipped: true, Detail: "VoceChat 推送服务暂不可用，未保留历史推送"}, nil
 	}
 	return AnnouncementPushSendResult{RecipientVoceChatUserID: recipientID}, nil
 }

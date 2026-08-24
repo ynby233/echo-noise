@@ -117,7 +117,7 @@ func CanViewMessageNormally(message models.Message, userID *uint) bool {
 		if userID == nil || *userID == 0 {
 			return false
 		}
-		if !voceChatContactsVisibilityEnabled() {
+		if !voceChatContactsVisibilityEnabled() || !voceChatContactAuthorEligible(message.UserID) {
 			return false
 		}
 		ok, err := repository.IsFreshVoceChatContact(message.UserID, *userID, time.Now().UTC())
@@ -150,6 +150,9 @@ func CanViewVoceChatContactAudience(authorID uint, viewerID uint) bool {
 		return true
 	}
 	if !voceChatContactsVisibilityEnabled() {
+		return false
+	}
+	if !voceChatContactAuthorEligible(authorID) {
 		return false
 	}
 	_ = EnsureVoceChatContactCacheForAuthor(authorID)

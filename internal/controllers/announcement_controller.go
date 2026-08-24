@@ -440,11 +440,12 @@ func PublishAnnouncement(c *gin.Context) {
 		announcement.PublishedAt = &now
 		announcement.PushEnabled = request.PushEnabled
 	}
+	queueVoceChatPush := firstPublication && request.PushEnabled && services.VoceChatPushEnabled(database.DB)
 	if err := database.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Save(&announcement).Error; err != nil {
 			return err
 		}
-		if !firstPublication || !request.PushEnabled {
+		if !queueVoceChatPush {
 			return nil
 		}
 		var recipients []models.User
@@ -471,7 +472,7 @@ func PublishAnnouncement(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.Fail[any]("发布公告失败"))
 		return
 	}
-	if firstPublication && request.PushEnabled {
+	if queueVoceChatPush {
 		services.WakeAnnouncementPushDispatcher()
 	}
 	c.JSON(http.StatusOK, dto.OK(announcement, "公告已发布"))

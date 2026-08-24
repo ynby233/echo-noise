@@ -61,6 +61,13 @@ func ensureVoceChatContactCacheForAuthor(authorID uint, force bool) error {
 	if !config.Enabled || !config.ContactsEnabled {
 		return nil
 	}
+	var author models.User
+	if err := database.DB.Select("id", "is_admin", "voce_chat_email", "voce_chat_user_id", "voce_chat_sync_status").First(&author, authorID).Error; err != nil || author.ID == 0 {
+		return nil
+	}
+	if voceChatContactAuthorEligibilityRequired() && !isVoceChatContactAuthorEligible(author) {
+		return repository.ReplaceVoceChatContacts(authorID, nil)
+	}
 	ttl := voceChatContactCacheTTL(config)
 	now := time.Now().UTC()
 	if fresh, err := repository.HasFreshVoceChatContactSyncRecord(authorID, now); err != nil {
@@ -69,7 +76,6 @@ func ensureVoceChatContactCacheForAuthor(authorID uint, force bool) error {
 		return nil
 	}
 
-	var author models.User
 	if err := database.DB.First(&author, authorID).Error; err != nil || author.ID == 0 {
 		return nil
 	}
@@ -82,11 +88,17 @@ func ensureVoceChatContactCacheForAuthor(authorID uint, force bool) error {
 	contactOwner, token, err := loginVoceChatContactOwner(ctx, config, &author)
 	if err != nil {
 		markVoceChatContactCacheFailure(&contactOwner, ttl, err)
+		if isVoceChatSiteTransientFailure(err) {
+			recordVoceChatLoginHealth("failed", errors.New("VoceChat 联系人服务暂不可用"))
+		}
 		return nil
 	}
 	contacts, err := voceChatListContacts(ctx, config, token)
 	if err != nil {
 		markVoceChatContactCacheFailure(&contactOwner, ttl, err)
+		if isVoceChatSiteTransientFailure(err) {
+			recordVoceChatLoginHealth("failed", errors.New("VoceChat 联系人服务暂不可用"))
+		}
 		return nil
 	}
 
@@ -94,7 +106,39 @@ func ensureVoceChatContactCacheForAuthor(authorID uint, force bool) error {
 	if err == nil && contactOwner.ID != models.PrimaryAdminUserID {
 		reconcileResolvedPasswordAlertsBestEffort(contactOwner.ID, "contact_sync")
 	}
+	if err == nil {
+		recordVoceChatLoginHealth("ok", nil)
+	}
 	return err
+}
+
+func isVoceChatContactAuthorEligible(author models.User) bool {
+	if author.ID == 0 || strings.TrimSpace(author.VoceChatEmail) == "" || strings.TrimSpace(author.VoceChatUserID) == "" {
+		return false
+	}
+	if author.ID == models.PrimaryAdminUserID && author.IsAdmin {
+		return true
+	}
+	return author.VoceChatSyncStatus == models.VoceChatSyncStatusLinked
+}
+
+func voceChatContactAuthorEligible(authorID uint) bool {
+	if !voceChatContactAuthorEligibilityRequired() {
+		return true
+	}
+	if authorID == 0 || database.DB == nil {
+		return false
+	}
+	var author models.User
+	if err := database.DB.Select("id", "is_admin", "voce_chat_email", "voce_chat_user_id", "voce_chat_sync_status").First(&author, authorID).Error; err != nil {
+		return false
+	}
+	return isVoceChatContactAuthorEligible(author)
+}
+
+func voceChatContactAuthorEligibilityRequired() bool {
+	policy, err := ResolveRuntimePolicy()
+	return err == nil && !policy.LegacyConfiguration
 }
 
 func loginVoceChatContactOwner(ctx context.Context, config vocechat.Config, author *models.User) (models.User, string, error) {

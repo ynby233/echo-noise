@@ -172,12 +172,18 @@ func (scope ContentReadScope) normalMessageVisibilityPredicate() (string, []inte
 		// refreshed before applying the SQL predicate.
 		EnsureVoceChatContactCachesForViewer(&viewerID, false)
 		contactsSQL := "(messages.visibility = ? AND EXISTS (SELECT 1 FROM voce_chat_contact_caches AS vcc WHERE vcc.user_id = messages.user_id AND vcc.contact_user_id = ? AND vcc.last_sync_status = ? AND vcc.expires_at > ?))"
-		return "(messages.user_id = ? OR " + publicSQL + " OR messages.visibility = ? OR " + contactsSQL + ")", []interface{}{
+		contactsArgs := []interface{}{MessageVisibilityContacts, scope.actorID, models.VoceChatContactSyncStatusOK, time.Now().UTC()}
+		if voceChatContactAuthorEligibilityRequired() {
+			contactsSQL = "(messages.visibility = ? AND EXISTS (SELECT 1 FROM users AS contact_author WHERE contact_author.id = messages.user_id AND contact_author.voce_chat_email <> '' AND contact_author.voce_chat_user_id <> '' AND ((contact_author.id = ? AND contact_author.is_admin = ?) OR contact_author.voce_chat_sync_status = ?)) AND EXISTS (SELECT 1 FROM voce_chat_contact_caches AS vcc WHERE vcc.user_id = messages.user_id AND vcc.contact_user_id = ? AND vcc.last_sync_status = ? AND vcc.expires_at > ?))"
+			contactsArgs = []interface{}{MessageVisibilityContacts, models.PrimaryAdminUserID, true, models.VoceChatSyncStatusLinked, scope.actorID, models.VoceChatContactSyncStatusOK, time.Now().UTC()}
+		}
+		args := []interface{}{
 			scope.actorID,
 			false, MessageVisibilityPublic, "",
 			MessageVisibilityUsers,
-			MessageVisibilityContacts, scope.actorID, models.VoceChatContactSyncStatusOK, time.Now().UTC(),
 		}
+		args = append(args, contactsArgs...)
+		return "(messages.user_id = ? OR " + publicSQL + " OR messages.visibility = ? OR " + contactsSQL + ")", args
 	}
 	return "(messages.user_id = ? OR " + publicSQL + " OR messages.visibility = ?)", []interface{}{
 		scope.actorID,

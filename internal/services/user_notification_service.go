@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -359,6 +360,9 @@ func sendUserNotificationToVoceChat(ctx context.Context, notificationID uint) er
 	}
 	recipientVoceChatUserID, err := resolveNotificationRecipientVoceChatUserID(ctx, client, vcConfig, recipient)
 	if err != nil {
+		if isVoceChatSiteTransientFailure(err) {
+			recordVoceChatLoginHealth("failed", errors.New("VoceChat 推送服务暂不可用"))
+		}
 		return err
 	}
 	if recipientVoceChatUserID == "" {
@@ -369,7 +373,14 @@ func sendUserNotificationToVoceChat(ctx context.Context, notificationID uint) er
 	if strings.TrimSpace(markdown) == "" {
 		return nil
 	}
-	return client.SendMarkdownToUser(ctx, vcConfig.BotAPIKey, recipientVoceChatUserID, markdown)
+	if err := client.SendMarkdownToUser(ctx, vcConfig.BotAPIKey, recipientVoceChatUserID, markdown); err != nil {
+		if isVoceChatSiteTransientFailure(err) {
+			recordVoceChatLoginHealth("failed", errors.New("VoceChat 推送服务暂不可用"))
+		}
+		return err
+	}
+	recordVoceChatLoginHealth("ok", nil)
+	return nil
 }
 
 func resolveNotificationRecipientVoceChatUserID(ctx context.Context, client *vocechat.Client, vcConfig vocechat.Config, recipient models.User) (string, error) {
