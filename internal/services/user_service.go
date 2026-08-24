@@ -18,6 +18,7 @@ import (
 	"github.com/rcy1314/echo-noise/internal/dto"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/repository"
+	"github.com/rcy1314/echo-noise/internal/runtimepolicy"
 	"github.com/rcy1314/echo-noise/internal/vocechat"
 	"github.com/rcy1314/echo-noise/pkg"
 	"golang.org/x/crypto/bcrypt"
@@ -411,28 +412,39 @@ func defaultVoceChatAdminUpdateUser(ctx context.Context, config vocechat.Config,
 	return client.UpdateUser(ctx, apiKey, uid, request)
 }
 
-func loadVoceChatSiteConfig() (vocechat.Config, error) {
+func loadRuntimePolicyAndVoceChatConfig() (runtimepolicy.Policy, vocechat.Config, error) {
 	if database.DB == nil {
-		return vocechat.Config{}, nil
+		policy := runtimepolicy.Resolve(models.SiteConfig{})
+		return policy, vocechat.Config{}, nil
 	}
 
 	var siteConfig models.SiteConfig
 	if err := database.DB.Table("site_configs").First(&siteConfig).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return vocechat.Config{}, nil
+			policy := runtimepolicy.Resolve(models.SiteConfig{})
+			return policy, vocechat.Config{}, nil
 		}
-		return vocechat.Config{}, err
+		return runtimepolicy.Policy{}, vocechat.Config{}, err
 	}
 
-	return vocechat.FromSiteConfig(siteConfig), nil
+	return runtimepolicy.Resolve(siteConfig), vocechat.FromSiteConfig(siteConfig), nil
 }
 
-func loadVoceChatLoginConfig() (vocechat.Config, bool, error) {
-	config, err := loadVoceChatSiteConfig()
+func loadVoceChatSiteConfig() (vocechat.Config, error) {
+	_, config, err := loadRuntimePolicyAndVoceChatConfig()
+	return config, err
+}
+
+func loadVoceChatLoginConfig() (runtimepolicy.Policy, vocechat.Config, bool, error) {
+	policy, config, err := loadRuntimePolicyAndVoceChatConfig()
 	if err != nil {
-		return vocechat.Config{}, false, err
+		return runtimepolicy.Policy{}, vocechat.Config{}, false, err
 	}
-	return config, config.Enabled && config.LoginVerificationEnabled, nil
+	loginEnabled := policy.ConfiguredMode == runtimepolicy.ModeVoceChat
+	if policy.LegacyConfiguration {
+		loginEnabled = config.Enabled && config.LoginVerificationEnabled
+	}
+	return policy, config, loginEnabled, nil
 }
 
 func authenticateLocalPassword(username string, user *models.User, plain string) (localLoginResult, error) {
@@ -1005,7 +1017,56 @@ func changeManagedVoceChatPassword(user *models.User, newPassword, previousRemot
 	return nil
 }
 
-func authenticateVoceChatPassword(user *models.User, config vocechat.Config, plain string) (bool, error) {
+func changeBoundUserPasswordForRuntimePolicy(user *models.User, newPassword, previousRemotePassword string) error {
+	policy, _, _, err := loadVoceChatLoginConfig()
+	if err != nil {
+		return errors.New(models.DatabaseErrorMessage)
+	}
+	if policy.LegacyConfiguration {
+		return changeManagedVoceChatPassword(user, newPassword, previousRemotePassword)
+	}
+	switch policy.RuntimeState {
+	case runtimepolicy.StateLocal:
+		snapshot, err := readManagedPasswordSnapshot(user.ID)
+		if err != nil {
+			return &passwordUpdateFailure{cause: err}
+		}
+		rollback := func(cause error) error {
+			if restoreErr := restoreManagedPasswordSnapshot(user, snapshot); restoreErr != nil {
+				statusErr := markPasswordUpdateIncomplete(user)
+				return &passwordUpdateFailure{incomplete: true, cause: errors.Join(cause, restoreErr, statusErr)}
+			}
+			return &passwordUpdateFailure{rolledBack: true, cause: cause}
+		}
+		hashed := models.HashPassword(newPassword)
+		if hashed == "" {
+			return &passwordUpdateFailure{cause: errors.New("password hashing failed")}
+		}
+		if err := repository.UpdateUserField(user.ID, "password", hashed); err != nil {
+			return rollback(err)
+		}
+		user.Password = hashed
+		if err := vocechat.DefaultPlainPasswordStore().UpsertUserLocalFallbackPassword(user.ID, user.Username, newPassword, user.VoceChatEmail, user.VoceChatUserID); err != nil {
+			return rollback(err)
+		}
+		if err := database.DB.Model(&models.User{}).Where("id = ?", user.ID).Updates(map[string]interface{}{
+			"voce_chat_sync_status": models.VoceChatSyncStatusPasswordSyncRequired,
+			"voce_chat_sync_error":  "",
+		}).Error; err != nil {
+			return rollback(err)
+		}
+		repository.ClearUserCache()
+		user.VoceChatSyncStatus = models.VoceChatSyncStatusPasswordSyncRequired
+		user.VoceChatSyncError = ""
+		return nil
+	case runtimepolicy.StateVoceChatDegraded:
+		return errors.New("VoceChat 暂不可用，绑定账户暂时不能修改密码，请稍后重试")
+	default:
+		return changeManagedVoceChatPassword(user, newPassword, previousRemotePassword)
+	}
+}
+
+func authenticateVoceChatPassword(user *models.User, policy runtimepolicy.Policy, config vocechat.Config, plain string) (bool, error) {
 	email := strings.TrimSpace(user.VoceChatEmail)
 	if email == "" {
 		return false, errors.New("账号尚未绑定 VoceChat，请联系管理员")
@@ -1030,7 +1091,11 @@ func authenticateVoceChatPassword(user *models.User, config vocechat.Config, pla
 			return false, errors.New(models.PasswordIncorrectMessage)
 		}
 		recordVoceChatLoginHealth("failed", err)
-		if config.LocalFallbackEnabled {
+		fallbackAllowed := policy.ConfiguredMode == runtimepolicy.ModeVoceChat
+		if policy.LegacyConfiguration {
+			fallbackAllowed = config.LocalFallbackEnabled
+		}
+		if fallbackAllowed {
 			return false, nil
 		}
 		return false, errors.New("VoceChat 登录校验暂不可用，请稍后再试")
@@ -1067,12 +1132,12 @@ func Login(userdto dto.LoginDto) (*models.User, error) {
 	}
 
 	return withUserPasswordMutation(initialUser.ID, func(user *models.User) error {
-		voceConfig, voceLoginEnabled, err := loadVoceChatLoginConfig()
+		policy, voceConfig, voceLoginEnabled, err := loadVoceChatLoginConfig()
 		if err != nil {
 			return errors.New(models.DatabaseErrorMessage)
 		}
 		if shouldUseVoceChatLogin(user, voceConfig, voceLoginEnabled) {
-			verified, err := authenticateVoceChatPassword(user, voceConfig, plain)
+			verified, err := authenticateVoceChatPassword(user, policy, voceConfig, plain)
 			if err != nil {
 				return err
 			}
@@ -1086,7 +1151,7 @@ func Login(userdto dto.LoginDto) (*models.User, error) {
 			}
 			maintainLocalFallbackLoginState(user, result)
 		} else {
-			if isVoceChatBoundNonPrimaryUser(user) && !voceConfig.LocalFallbackEnabled {
+			if policy.LegacyConfiguration && isVoceChatBoundNonPrimaryUser(user) && !voceConfig.LocalFallbackEnabled {
 				return inactiveVoceChatLocalFallbackError()
 			}
 			result, err := authenticateLocalPassword(username, user, plain)
@@ -1425,7 +1490,7 @@ func ChangePassword(user *models.User, userdto dto.UserInfoDto) error {
 		}
 
 		if isVoceChatBoundNonPrimaryUser(current) {
-			return changeManagedVoceChatPassword(current, newPassword, "")
+			return changeBoundUserPasswordForRuntimePolicy(current, newPassword, "")
 		}
 		return saveLocalUserPassword(current, newPassword)
 	})
@@ -1452,11 +1517,23 @@ func verifyVoceChatPasswordForPasswordChange(user *models.User, config vocechat.
 }
 
 func verifyPasswordChangeOldPassword(user *models.User, old string) error {
-	config, _, err := loadVoceChatLoginConfig()
+	policy, config, _, err := loadVoceChatLoginConfig()
 	if err != nil {
 		return errors.New(models.DatabaseErrorMessage)
 	}
 	if isVoceChatBoundNonPrimaryUser(user) {
+		if policy.LegacyConfiguration {
+			return verifyVoceChatPasswordForPasswordChange(user, config, old)
+		}
+		if policy.RuntimeState == runtimepolicy.StateLocal {
+			if !passwordMatchesStored(user.Password, old) {
+				return errors.New(models.PasswordIncorrectMessage)
+			}
+			return nil
+		}
+		if policy.RuntimeState == runtimepolicy.StateVoceChatDegraded {
+			return errors.New("VoceChat 暂不可用，绑定账户暂时不能修改密码，请稍后重试")
+		}
 		return verifyVoceChatPasswordForPasswordChange(user, config, old)
 	}
 	if !passwordMatchesStored(user.Password, old) {
@@ -1490,7 +1567,7 @@ func ChangePasswordWithOld(user *models.User, old string, new string) error {
 		}
 
 		if isVoceChatBoundNonPrimaryUser(current) {
-			return changeManagedVoceChatPassword(current, new, old)
+			return changeBoundUserPasswordForRuntimePolicy(current, new, old)
 		}
 		return saveLocalUserPassword(current, new)
 	})

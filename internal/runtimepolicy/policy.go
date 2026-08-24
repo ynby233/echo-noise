@@ -32,6 +32,7 @@ type Policy struct {
 	UseVoceChatRegistration bool           `json:"use_vocechat_registration"`
 	UseVoceChatContacts     bool           `json:"use_vocechat_contacts"`
 	SendVoceChatPush        bool           `json:"send_vocechat_push"`
+	LegacyConfiguration     bool           `json:"-"`
 }
 
 func ParseConfiguredMode(value string) (ConfiguredMode, bool) {
@@ -68,20 +69,21 @@ func ConnectionConfigured(config models.SiteConfig) bool {
 
 func Resolve(config models.SiteConfig) Policy {
 	mode := EffectiveConfiguredMode(config)
+	legacyConfiguration := config.RuntimeModeMigrationVersion < CurrentMigrationVersion
 	if mode == ModeLocal {
 		policy := Policy{
 			ConfiguredMode:        ModeLocal,
 			RuntimeState:          StateLocal,
 			AllowPasswordMutation: true,
+			LegacyConfiguration:   legacyConfiguration,
 		}
-		if config.RuntimeModeMigrationVersion < CurrentMigrationVersion {
+		if legacyConfiguration {
 			policy.AllowLocalFallbackLogin = config.VoceChatLocalFallbackEnabled
 		}
 		return policy
 	}
 
 	healthStatus := strings.TrimSpace(config.VoceChatLastHealthStatus)
-	legacyConfiguration := config.RuntimeModeMigrationVersion < CurrentMigrationVersion
 	healthy := strings.EqualFold(healthStatus, "ok") || (legacyConfiguration && !strings.EqualFold(healthStatus, "failed"))
 	connectionReady := ConnectionConfigured(config) || legacyConfiguration
 	if !connectionReady || !healthy {
@@ -89,6 +91,7 @@ func Resolve(config models.SiteConfig) Policy {
 			ConfiguredMode:          ModeVoceChat,
 			RuntimeState:            StateVoceChatDegraded,
 			AllowLocalFallbackLogin: true,
+			LegacyConfiguration:     legacyConfiguration,
 		}
 	}
 
@@ -100,6 +103,7 @@ func Resolve(config models.SiteConfig) Policy {
 		UseVoceChatRegistration: true,
 		UseVoceChatContacts:     true,
 		SendVoceChatPush:        strings.TrimSpace(config.VoceChatBotAPIKey) != "",
+		LegacyConfiguration:     legacyConfiguration,
 	}
 	if legacyConfiguration {
 		policy.VerifyVoceChatLogin = config.VoceChatLoginVerificationEnabled
