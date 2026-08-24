@@ -33,8 +33,8 @@ assert.match(
 
 assert.match(
   loginController,
-  /session\.Save\(\)[\s\S]*?_\s*=\s*recordUserLoginAudit\(c,\s*user,\s*loginAuditActionLogin\)[\s\S]*?c\.JSON\(http\.StatusOK,\s*dto\.OK\(user,\s*"登录成功"\)\)/,
-  'successful password login should record the login audit after the session is saved and before responding'
+  /safeUser\s*:=\s*\*user[\s\S]*?safeUser\.Password\s*=\s*""[\s\S]*?session\.Save\(\)[\s\S]*?_\s*=\s*recordUserLoginAudit\(c,\s*user,\s*loginAuditActionLogin\)[\s\S]*?c\.JSON\(http\.StatusOK,\s*dto\.OK\(&safeUser,\s*"登录成功"\)\)/,
+  'successful password login should redact a response copy, save the session, record the login audit, and only then respond'
 )
 
 const auditRecordCalls = loginController.match(/recordUserLoginAudit\(c,\s*\*?user,\s*loginAuditActionLogin\)/g) || []
