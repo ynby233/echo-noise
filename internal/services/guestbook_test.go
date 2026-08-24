@@ -7,6 +7,41 @@ import (
 	"github.com/rcy1314/echo-noise/internal/models"
 )
 
+func TestEnsureGuestbookDoesNotCreateWithoutPrimaryAdmin(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	mustCreateUser(t, models.User{ID: 2, Username: "delegated-only", IsAdmin: true})
+
+	if _, err := EnsureGuestbook(db); err == nil {
+		t.Fatal("EnsureGuestbook succeeded without the ID 1 administrator")
+	}
+
+	var count int64
+	if err := db.Model(&models.Message{}).Count(&count).Error; err != nil {
+		t.Fatalf("count messages: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("messages created without the ID 1 administrator: %d", count)
+	}
+}
+
+func TestEnsureGuestbookDoesNotCreateWhenPrimaryUserIsNotAdmin(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "ordinary-id-one", IsAdmin: false})
+	mustCreateUser(t, models.User{ID: 2, Username: "delegated-fallback", IsAdmin: true})
+
+	if _, err := EnsureGuestbook(db); err == nil {
+		t.Fatal("EnsureGuestbook used a delegated administrator while user ID 1 was not an administrator")
+	}
+
+	var count int64
+	if err := db.Model(&models.Message{}).Count(&count).Error; err != nil {
+		t.Fatalf("count messages: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("messages created while the ID 1 user was not an administrator: %d", count)
+	}
+}
+
 func TestEnsureGuestbookRepairsLegacyOwnerAndIgnoresDecoy(t *testing.T) {
 	db := setupUserServiceTestDB(t)
 	if !models.IsCanonicalGuestbookContent("留言板\n\n#guestbook") {

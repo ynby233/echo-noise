@@ -1427,6 +1427,48 @@ func TestGetStatusIncludesUserAvatarURLs(t *testing.T) {
 	}
 }
 
+func TestGetStatusRejectsDelegatedFallbackWhenPrimaryIsNotAdmin(t *testing.T) {
+	setupUserServiceTestDB(t)
+
+	primary := mustCreateUser(t, models.User{
+		ID:       models.PrimaryAdminUserID,
+		Username: "primary-without-admin-role",
+		IsAdmin:  false,
+	})
+	delegated := mustCreateUser(t, models.User{
+		Username: "delegated-admin",
+		IsAdmin:  true,
+	})
+
+	status, err := GetStatus(delegated.ID)
+	if err == nil {
+		t.Fatalf("GetStatus succeeded with system owner %d; want an error while user %d is not an administrator", status.SysAdminID, primary.ID)
+	}
+}
+
+func TestGetStatusRejectsDelegatedFallbackWhenPrimaryIsMissing(t *testing.T) {
+	setupUserServiceTestDB(t)
+	mustCreateUser(t, models.User{ID: 2, Username: "delegated-without-primary", IsAdmin: true})
+
+	if status, err := GetStatus(2); err == nil {
+		t.Fatalf("GetStatus succeeded with system owner %d while the ID 1 administrator is missing", status.SysAdminID)
+	}
+}
+
+func TestGetStatusUsesPrimaryAdminInsertedAfterDelegatedAdmin(t *testing.T) {
+	setupUserServiceTestDB(t)
+	delegated := mustCreateUser(t, models.User{ID: 9, Username: "delegated-created-first", IsAdmin: true})
+	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "site-owner", IsAdmin: true})
+
+	status, err := GetStatus(delegated.ID)
+	if err != nil {
+		t.Fatalf("GetStatus: %v", err)
+	}
+	if status.SysAdminID != primary.ID || status.Username != primary.Username {
+		t.Fatalf("system owner=(%d, %q), want ID 1 site owner (%d, %q)", status.SysAdminID, status.Username, primary.ID, primary.Username)
+	}
+}
+
 func TestGetStatusScopesVoceChatFieldsByViewerRole(t *testing.T) {
 	setupUserServiceTestDB(t)
 

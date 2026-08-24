@@ -182,6 +182,66 @@ func TestStatusVoceChatFieldVisibilityHTTPMatrix(t *testing.T) {
 	assertFields(t, statusBody(t, nil, primary.Token), allNonPrimaryEmails, allFields)
 }
 
+func TestDelegatedAdminCannotReplacePrimaryAdminThroughRoleEndpoint(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("ACCESS_LOG", "false")
+	t.Setenv("SESSION_SECRET", "primary-admin-invariant-test-secret-32")
+	t.Chdir(t.TempDir())
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	if err := models.MigrateDB(db); err != nil {
+		t.Fatalf("migrate database: %v", err)
+	}
+	database.DB = db
+	models.SetDB(db)
+	repository.ClearUserCache()
+	t.Cleanup(func() {
+		repository.ClearUserCache()
+		database.DB = nil
+		models.SetDB(nil)
+	})
+
+	primary := models.User{ID: models.PrimaryAdminUserID, Username: "primary", IsAdmin: true, Token: "primary-role-token"}
+	delegated := models.User{ID: 2, Username: "delegated", IsAdmin: true, Token: "delegated-role-token"}
+	if err := db.Create(&primary).Error; err != nil {
+		t.Fatalf("create primary administrator: %v", err)
+	}
+	if err := db.Create(&delegated).Error; err != nil {
+		t.Fatalf("create delegated administrator: %v", err)
+	}
+	if err := db.Create(&models.AdminCapabilityGrant{
+		UserID: delegated.ID, Capability: string(authorization.CapabilityAdminRolesManage), GrantedByUserID: primary.ID,
+	}).Error; err != nil {
+		t.Fatalf("grant admin role capability: %v", err)
+	}
+
+	request := httptest.NewRequest(http.MethodPut, "/api/user/admin?id=1", nil)
+	request.Header.Set("Authorization", "Bearer "+delegated.Token)
+	response := httptest.NewRecorder()
+	SetupRouter().ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("role endpoint http=%d body=%s", response.Code, response.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode role endpoint response: %v", err)
+	}
+	if body["code"] != float64(0) {
+		t.Fatalf("delegated role mutation code=%v body=%s", body["code"], response.Body.String())
+	}
+
+	var primaryAfter models.User
+	if err := db.First(&primaryAfter, models.PrimaryAdminUserID).Error; err != nil {
+		t.Fatalf("reload primary administrator: %v", err)
+	}
+	if !primaryAfter.IsAdmin {
+		t.Fatal("delegated administrator changed the ID 1 site owner role")
+	}
+}
+
 func hasJSONKey(value map[string]any, key string) bool {
 	_, ok := value[key]
 	return ok

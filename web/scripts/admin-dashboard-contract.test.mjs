@@ -61,6 +61,13 @@ assert(
   'desktop dashboard grids must keep administrator and ordinary-user metrics on one row'
 )
 
+assert(
+  component.includes('>使用站长头像信息</UButton>') &&
+    component.includes('Number(it?.id ?? it?.ID) === 1') &&
+    component.includes('!!(it?.is_admin ?? it?.IsAdmin)'),
+  'welcome settings must only use the valid ID 1 site owner'
+)
+
 for (const field of [
   'personal_messages?: number',
   'total_guestbook?: number',

@@ -78,6 +78,10 @@ func EnsureGuestbook(db *gorm.DB) (GuestbookDescriptor, error) {
 			tx.Rollback()
 		}
 	}()
+	primary, err := loadPrimaryAdmin(tx)
+	if err != nil {
+		return GuestbookDescriptor{}, err
+	}
 
 	var messages []models.Message
 	if err := tx.Order("id ASC").Find(&messages).Error; err != nil {
@@ -93,14 +97,9 @@ func EnsureGuestbook(db *gorm.DB) (GuestbookDescriptor, error) {
 	}
 
 	if selected == nil {
-		username := ""
-		var primary models.User
-		if err := tx.Select("id", "username").First(&primary, models.PrimaryAdminUserID).Error; err == nil {
-			username = primary.Username
-		}
 		message := models.Message{
 			Content:     models.CanonicalGuestbookContent,
-			Username:    username,
+			Username:    primary.Username,
 			UserID:      models.PrimaryAdminUserID,
 			Private:     false,
 			Visibility:  MessageVisibilityPublic,
@@ -115,15 +114,10 @@ func EnsureGuestbook(db *gorm.DB) (GuestbookDescriptor, error) {
 	if err := tx.Model(&models.Message{}).Where("is_guestbook = ?", true).Update("is_guestbook", false).Error; err != nil {
 		return GuestbookDescriptor{}, err
 	}
-	username := selected.Username
-	var primary models.User
-	if err := tx.Select("id", "username").First(&primary, models.PrimaryAdminUserID).Error; err == nil {
-		username = primary.Username
-	}
 	if err := tx.Model(&models.Message{}).Where("id = ?", selected.ID).Updates(map[string]interface{}{
 		"is_guestbook": true,
 		"user_id":      models.PrimaryAdminUserID,
-		"username":     username,
+		"username":     primary.Username,
 		"private":      false,
 		"visibility":   MessageVisibilityPublic,
 	}).Error; err != nil {

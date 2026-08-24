@@ -132,41 +132,6 @@ func GetDB() (*gorm.DB, error) {
 	return DB, nil
 }
 
-func GetSystemStatus() (map[string]interface{}, error) {
-	if DB == nil {
-		return nil, errors.New("数据库未初始化")
-	}
-
-	var setting models.Setting
-	if err := DB.First(&setting).Error; err != nil {
-		return nil, err
-	}
-
-	var adminUser models.User
-	if err := DB.Where("is_admin = ?", true).First(&adminUser).Error; err != nil {
-		return nil, err
-	}
-
-	var totalMessages int64
-	// 仅统计公开笔记，并排除“留言/友链/关于”等页面型内容
-	if err := DB.Model(&models.Message{}).
-		Where("deleted_at IS NULL AND private = ? AND (visibility = ? OR visibility = ? OR visibility IS NULL)", false, "public", "").
-		Where("is_guestbook = ?", false).
-		Where("content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ?",
-			"%#友链%", "%友情链接%",
-			"%#关于%", "%关于本站%").
-		Count(&totalMessages).Error; err != nil {
-		return nil, err
-	}
-
-	return map[string]interface{}{
-		"username":          adminUser.Username,
-		"isAdmin":           adminUser.IsAdmin,
-		"total_messages":    totalMessages,
-		"allowRegistration": setting.AllowRegistration,
-	}, nil
-}
-
 func ReconnectDB() error {
 	if DB != nil {
 		sqlDB, err := DB.DB()

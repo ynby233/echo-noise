@@ -117,7 +117,8 @@ func SeedDefaultData() error {
 	}
 
 	// 2. 初始化默认系统用户 (如果不存在)
-	// 移动端嵌入式后端：不创建默认 admin 用户，确保“首次注册用户”成为管理员（不影响 Docker/桌面端默认账号逻辑）
+	// 移动端嵌入式后端仍不在此处决定站长创建体验；在该流程确定前，
+	// 后续依赖对象只允许绑定已经存在且仍为管理员的用户 ID 1。
 	if strings.TrimSpace(os.Getenv("NOISE_MOBILE")) != "1" {
 		if err := db.Model(&models.User{}).Count(&count).Error; err == nil && count == 0 {
 			hashed, _ := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
@@ -136,6 +137,10 @@ func SeedDefaultData() error {
 			}
 		}
 	}
+	primary, err := loadPrimaryAdmin(db)
+	if err != nil {
+		return fmt.Errorf("初始化站长依赖数据失败: %w", err)
+	}
 
 	// 3. 初始化并修复规范留言板：逻辑所有者始终是 1 号管理员。
 	if _, err := EnsureGuestbook(db); err != nil {
@@ -147,43 +152,36 @@ func SeedDefaultData() error {
 	db.Model(&models.Message{}).Count(&msgCount)
 	// 如果只有留言板一条消息（或者没有消息），则添加演示消息
 	if msgCount <= 1 {
-		var admin models.User
-		db.Where("is_admin = ?", true).First(&admin)
-		uid := admin.ID
-		if uid == 0 {
-			uid = 1 // Fallback
-		}
-
 		messages := []models.Message{
 			{
 				Content:   neutralWelcomeMessage,
-				UserID:    uid,
-				Username:  admin.Username,
+				UserID:    primary.ID,
+				Username:  primary.Username,
 				CreatedAt: time.Now(),
 			},
 			{
 				Content:   "这里有一些关于自己的美好记录。 #日记 #示例",
-				UserID:    uid,
-				Username:  admin.Username,
+				UserID:    primary.ID,
+				Username:  primary.Username,
 				CreatedAt: time.Now().Add(-1 * time.Hour),
 			},
 			{
 				Content:   "探索未知的世界。 #Travel",
-				UserID:    uid,
-				Username:  admin.Username,
+				UserID:    primary.ID,
+				Username:  primary.Username,
 				CreatedAt: time.Now().Add(-2 * time.Hour),
 			},
 			{
 				Content:   "记录生活中的点滴。 #Life #Daily",
-				UserID:    uid,
-				Username:  admin.Username,
+				UserID:    primary.ID,
+				Username:  primary.Username,
 				CreatedAt: time.Now().Add(-3 * time.Hour),
 			},
 		}
 
 		for _, m := range messages {
 			var c int64
-			db.Model(&models.Message{}).Where("content = ? AND user_id = ?", m.Content, uid).Count(&c)
+			db.Model(&models.Message{}).Where("content = ? AND user_id = ?", m.Content, primary.ID).Count(&c)
 			if c == 0 {
 				db.Create(&m)
 			}

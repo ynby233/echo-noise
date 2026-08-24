@@ -72,15 +72,6 @@ func GetUserByID(id uint) (*models.User, error) {
 	return &user, nil
 }
 
-func GetSysAdmin() (*models.User, error) {
-	var user models.User
-	err := database.DB.Where("is_admin = ?", true).First(&user).Error
-	if err != nil {
-		return nil, err
-	}
-	return &user, nil
-}
-
 func clearUserCache(id uint) {
 	cacheMutex.Lock()
 	delete(userCacheMap, id)

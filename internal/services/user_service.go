@@ -1151,9 +1151,9 @@ func Login(userdto dto.LoginDto) (*models.User, error) {
 }
 
 func GetStatus(currentUserID uint) (models.Status, error) {
-	sysuser, err := repository.GetSysAdmin()
+	sysuser, err := loadPrimaryAdmin(database.DB)
 	if err != nil {
-		return models.Status{}, errors.New(models.UserNotFoundMessage)
+		return models.Status{}, err
 	}
 
 	status := models.Status{}

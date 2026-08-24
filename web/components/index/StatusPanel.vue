@@ -432,7 +432,7 @@
                 <div class="flex justify-between items-center mb-3">
                   <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-hand-thumb-up" class="w-4 h-4" /><span>系统欢迎组件</span></div>
                   <div class="flex items-center gap-2">
-                    <UButton size="sm" color="indigo" variant="soft" @click="applyWelcomeAdmin">使用管理员头像信息</UButton>
+                    <UButton size="sm" color="indigo" variant="soft" @click="applyWelcomeAdmin">使用站长头像信息</UButton>
                     <UButton size="sm" color="indigo" variant="soft" @click="resetWelcomeConfig">重置</UButton>
                     <UButton size="sm" color="primary" class="shadow" @click="saveConfigItem('welcome')">保存</UButton>
                   </div>
@@ -6618,7 +6618,9 @@ const applyWelcomeAdmin = async () => {
     const resp = await fetch('/api/status', { credentials: 'include' })
     const js = await resp.json().catch(() => ({}))
     const list = ((js?.data?.users || js?.data?.Users) || []) as any[]
-    const admin = Array.isArray(list) ? list.find((it: any) => !!(it?.is_admin ?? it?.IsAdmin)) : null
+    const admin = Array.isArray(list)
+      ? list.find((it: any) => Number(it?.id ?? it?.ID) === 1 && !!(it?.is_admin ?? it?.IsAdmin))
+      : null
     const base = useRuntimeConfig().public.baseApi || '/api'
     if (admin) {
       const name = String(admin?.username || admin?.Username || '').trim()
@@ -6628,9 +6630,9 @@ const applyWelcomeAdmin = async () => {
       ;(frontendConfig as any).welcomeAvatarURL = raw ? resolveManagedAttachmentURL(base, raw) : ((frontendConfig as any).welcomeAvatarURL || '')
       ;(frontendConfig as any).welcomeDescription = desc || (frontendConfig as any).welcomeDescription || ''
       ;(frontendConfig as any).welcomeUseAdmin = true
-      useToast().add({ title: '已填充管理员信息', color: 'green' })
+      useToast().add({ title: '已填充站长信息', color: 'green' })
     } else {
-      useToast().add({ title: '未找到管理员', color: 'orange' })
+      useToast().add({ title: '未找到有效站长账户', color: 'orange' })
     }
   } catch (e: any) {
     useToast().add({ title: '失败', description: e?.message || '获取失败', color: 'red' })
