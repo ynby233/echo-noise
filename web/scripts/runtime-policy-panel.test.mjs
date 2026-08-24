@@ -13,6 +13,13 @@ assert.match(panel, /switchRuntimeMode\('local'\)/, 'the panel must offer an exp
 assert.match(panel, /switchRuntimeMode\('vocechat'\)/, 'the panel must offer an explicit VoceChat-mode action')
 assert.match(panel, /runtimePolicy\.configuredMode/, 'the panel must display the configured mode')
 assert.match(panel, /runtimePolicy\.runtimeState/, 'the panel must display the derived runtime state')
+assert.match(panel, /postRequest<any>\(`admin\/runtime-policy\/provisioning\/\$\{command\}`/, 'the primary-only panel must call the dedicated provisioning commands')
+assert.match(panel, /开始补建\/同步/, 'the panel must provide an explicit manual provisioning action')
+assert.match(panel, /重试失败项/, 'the panel must provide an explicit failed-task retry action')
+assert.match(panel, /待创建邮箱：\{\{ task\.candidate_email \}\}/, 'the panel must label persistent candidates as pending creation rather than bound email')
+assert.match(panel, /runtimePolicy\.provisioningTasks/, 'the panel must render persistent per-user provisioning progress')
+assert.match(panel, /runtimePolicy\.runtimeState !== 'vocechat_normal'/, 'provisioning actions must remain disabled outside normal VoceChat runtime')
+assert.match(panel, /runtimePolicy\.provisioningRun\?\.status !== 'running'/, 'the panel must poll persistent progress only while a provisioning run is active')
 
 for (const retiredLabel of ['启用 VoceChat 集成', '登录校验', '本地备用登录', '联系人可见性', '通知推送']) {
   assert.ok(!panel.includes(`>${retiredLabel}</span>`), `retired independent switch label must be removed: ${retiredLabel}`)

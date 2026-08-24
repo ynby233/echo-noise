@@ -500,6 +500,45 @@
                     </div>
                   </div>
 
+                  <div class="rounded border p-3 space-y-3" :class="theme.border">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <div>
+                        <div class="text-sm font-medium" :class="theme.text">VoceChat 账户补建与同步</div>
+                        <div class="text-xs mt-1" :class="theme.mutedText">切换模式不会自动创建账户；仅在 1 号管理员明确启动后逐个处理。</div>
+                      </div>
+                      <div class="flex items-center gap-2 shrink-0">
+                        <UButton size="sm" color="indigo" icon="i-heroicons-play" :loading="runningVoceChatProvisioning === 'start'" :disabled="runtimePolicy.runtimeState !== 'vocechat_normal' || !!runningVoceChatProvisioning" @click="runVoceChatProvisioning('start')">开始补建/同步</UButton>
+                        <UButton size="sm" color="orange" variant="soft" icon="i-heroicons-arrow-path" :loading="runningVoceChatProvisioning === 'retry'" :disabled="runtimePolicy.runtimeState !== 'vocechat_normal' || !!runningVoceChatProvisioning" @click="runVoceChatProvisioning('retry')">重试失败项</UButton>
+                      </div>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                      <UBadge color="gray" variant="soft">待处理 {{ runtimeAccountCount('pending') + runtimeAccountCount('unbound') }}</UBadge>
+                      <UBadge color="blue" variant="soft">处理中 {{ runtimeAccountCount('provisioning') }}</UBadge>
+                      <UBadge color="green" variant="soft">已绑定 {{ runtimeAccountCount('linked') }}</UBadge>
+                      <UBadge color="red" variant="soft">失败 {{ runtimeAccountCount('failed') + runtimeAccountCount('conflicted') }}</UBadge>
+                      <UBadge color="orange" variant="soft">需同步密码 {{ runtimeAccountCount('password_sync_required') }}</UBadge>
+                    </div>
+                    <div v-if="runtimePolicy.provisioningRun" class="text-xs" :class="theme.mutedText">
+                      最近任务：{{ runtimeProvisioningRunLabel(runtimePolicy.provisioningRun.status) }} · 启动于 {{ formatShanghai(runtimePolicy.provisioningRun.started_at) }}
+                    </div>
+                    <div v-if="runtimePolicy.provisioningTasks.length" class="space-y-2 max-h-72 overflow-y-auto pr-1">
+                      <div v-for="task in runtimePolicy.provisioningTasks" :key="task.id" class="rounded border px-3 py-2" :class="theme.border">
+                        <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                          <div class="min-w-0">
+                            <div class="text-sm font-medium truncate" :class="theme.text">{{ task.username }}（ID {{ task.user_id }}）</div>
+                            <div class="text-xs mt-1 break-all" :class="theme.mutedText">待创建邮箱：{{ task.candidate_email }}</div>
+                            <div v-if="task.error_summary" class="text-xs mt-1 text-red-500">{{ task.error_summary }}</div>
+                          </div>
+                          <div class="flex items-center gap-2 shrink-0">
+                            <UBadge color="gray" variant="soft">{{ runtimeProvisioningActionLabel(task.action) }}</UBadge>
+                            <UBadge :color="voceChatProvisionColor(task.status)" variant="soft">{{ voceChatProvisionLabel(task.status) }}</UBadge>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div v-else class="text-xs" :class="theme.mutedText">尚无补建任务。切换到 VoceChat 模式后仍需手动启动。</div>
+                  </div>
+
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <label class="text-sm mb-1 block" :class="theme.mutedText">服务地址</label>
@@ -2738,6 +2777,24 @@ type RuntimePolicyState = {
   lastHealthSummary: string
   lastHealthCheckAt: string
   accountCounts: Record<string, number>
+  provisioningRun: null | {
+    id: number
+    command: string
+    status: string
+    started_at: string
+    finished_at?: string
+  }
+  provisioningTasks: Array<{
+    id: number
+    user_id: number
+    username: string
+    candidate_email: string
+    action: string
+    status: string
+    attempt_count: number
+    error_code?: string
+    error_summary?: string
+  }>
 }
 
 const registrationStatusOptions = [
@@ -2787,13 +2844,16 @@ const voceChatClear = reactive({
 const savingVoceChatConfig = ref(false)
 const checkingVoceChatHealth = ref(false)
 const switchingRuntimeMode = ref<'' | 'local' | 'vocechat'>('')
+const runningVoceChatProvisioning = ref<'' | 'start' | 'retry'>('')
 const runtimePolicy = reactive<RuntimePolicyState>({
   configuredMode: 'local',
   runtimeState: 'local',
   lastHealthStatus: '',
   lastHealthSummary: '尚未读取运行模式',
   lastHealthCheckAt: '',
-  accountCounts: {}
+  accountCounts: {},
+  provisioningRun: null,
+  provisioningTasks: []
 })
 const runtimeConfiguredModeLabel = computed(() => runtimePolicy.configuredMode === 'vocechat' ? 'VoceChat 模式' : '本地模式')
 const runtimeStateLabel = computed(() => {
@@ -3385,6 +3445,9 @@ const applyRuntimePolicy = (raw: any) => {
   runtimePolicy.lastHealthSummary = String(data.last_health_summary || '尚未完成 VoceChat 健康检查')
   runtimePolicy.lastHealthCheckAt = String(data.last_health_check_at || '')
   runtimePolicy.accountCounts = data.account_counts && typeof data.account_counts === 'object' ? { ...data.account_counts } : {}
+  runtimePolicy.provisioningRun = data.provisioning_run && typeof data.provisioning_run === 'object' ? { ...data.provisioning_run } : null
+  runtimePolicy.provisioningTasks = Array.isArray(data.provisioning_tasks) ? data.provisioning_tasks : []
+  syncRuntimeProvisioningPolling()
 }
 
 const fetchRuntimePolicy = async () => {
@@ -3567,6 +3630,51 @@ const switchRuntimeMode = async (mode: 'local' | 'vocechat') => {
   }
 }
 
+const runtimeAccountCount = (status: string) => Number(runtimePolicy.accountCounts?.[status] || 0)
+const runtimeProvisioningRunLabel = (status?: string) => {
+  if (status === 'running') return '处理中'
+  if (status === 'paused') return '已暂停'
+  if (status === 'completed') return '已完成'
+  return String(status || '未知')
+}
+const runtimeProvisioningActionLabel = (action?: string) => {
+  if (action === 'verify') return '校验绑定'
+  if (action === 'sync_password') return '同步密码'
+  return '创建账户'
+}
+let runtimeProvisioningPollTimer: number | null = null
+const syncRuntimeProvisioningPolling = () => {
+  if (runtimeProvisioningPollTimer !== null) {
+    window.clearTimeout(runtimeProvisioningPollTimer)
+    runtimeProvisioningPollTimer = null
+  }
+  if (runtimePolicy.provisioningRun?.status !== 'running') return
+  runtimeProvisioningPollTimer = window.setTimeout(async () => {
+    try {
+      await fetchRuntimePolicy()
+    } catch {
+      syncRuntimeProvisioningPolling()
+    }
+  }, 1500)
+}
+onUnmounted(() => {
+  if (runtimeProvisioningPollTimer !== null) window.clearTimeout(runtimeProvisioningPollTimer)
+})
+const runVoceChatProvisioning = async (command: 'start' | 'retry') => {
+  if (!canManageVoceChatConfig.value || runtimePolicy.runtimeState !== 'vocechat_normal' || runningVoceChatProvisioning.value) return
+  try {
+    runningVoceChatProvisioning.value = command
+    const res: any = await postRequest<any>(`admin/runtime-policy/provisioning/${command}`, {}, { credentials: 'include' })
+    if (!res || res.code !== 1) throw new Error(res?.msg || '更新 VoceChat 补建任务失败')
+    applyRuntimePolicy(res.data)
+    useToast().add({ title: command === 'retry' ? '失败项已重新排队' : 'VoceChat 补建任务已启动', color: 'green' })
+  } catch (e: any) {
+    useToast().add({ title: '更新 VoceChat 补建任务失败', description: e?.message, color: 'red' })
+  } finally {
+    runningVoceChatProvisioning.value = ''
+  }
+}
+
 const { login, register, logout } = useUser()
 const router = useRouter()
 const userToken = ref('')
@@ -3590,6 +3698,11 @@ const voceChatProvisionLabel = (status?: string) => {
   if (!value || value === 'none') return '未创建'
   if (value === 'created') return '已预创建'
   if (value === 'linked') return '已绑定'
+  if (value === 'pending' || value === 'unbound') return '待处理'
+  if (value === 'provisioning') return '处理中'
+  if (value === 'password_sync_required') return '需重置/同步密码'
+  if (value === 'credential_invalid') return '凭据无效'
+  if (value === 'conflicted') return '冲突'
   if (value === 'failed') return '失败'
   return value
 }
@@ -3597,6 +3710,10 @@ const voceChatProvisionColor = (status?: string) => {
   const value = String(status || '').trim()
   if (value === 'created') return 'blue'
   if (value === 'linked') return 'green'
+  if (value === 'pending' || value === 'unbound') return 'gray'
+  if (value === 'provisioning') return 'blue'
+  if (value === 'password_sync_required' || value === 'credential_invalid') return 'orange'
+  if (value === 'conflicted') return 'red'
   if (value === 'failed') return 'red'
   return 'gray'
 }

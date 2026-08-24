@@ -117,4 +117,33 @@ func TestRuntimePolicyRoutesArePrimaryOnlyAndRedactHealthDetails(t *testing.T) {
 	if response := request(http.MethodPut, "/api/admin/runtime-policy/mode", []byte(`{"mode":"invalid"}`), primaryCookies); response.Code != http.StatusBadRequest {
 		t.Fatalf("invalid switch status=%d body=%s", response.Code, response.Body.String())
 	}
+	for _, path := range []string{
+		"/api/admin/runtime-policy/provisioning/start",
+		"/api/admin/runtime-policy/provisioning/retry",
+	} {
+		if response := request(http.MethodPost, path, []byte(`{}`), delegatedCookies); response.Code != http.StatusForbidden {
+			t.Fatalf("delegated provisioning route %s status=%d body=%s", path, response.Code, response.Body.String())
+		}
+	}
+	if response := request(http.MethodPost, "/api/admin/runtime-policy/provisioning/start", []byte(`{}`), primaryCookies); response.Code != http.StatusConflict {
+		t.Fatalf("local-mode provisioning start status=%d body=%s", response.Code, response.Body.String())
+	}
+	if err := db.Model(&models.SiteConfig{}).Where("id = ?", 1).Updates(map[string]interface{}{
+		"runtime_mode":                   models.RuntimeModeVoceChat,
+		"voce_chat_enabled":              true,
+		"voce_chat_base_url":             "https://vc.example.test",
+		"voce_chat_admin_token":          "configured-token",
+		"voce_chat_last_health_status":   "ok",
+		"voce_chat_last_health_error":    "",
+		"voce_chat_last_health_check_at": time.Now().UTC(),
+	}).Error; err != nil {
+		t.Fatalf("configure normal VoceChat mode: %v", err)
+	}
+	response = request(http.MethodPost, "/api/admin/runtime-policy/provisioning/start", []byte(`{}`), primaryCookies)
+	if response.Code != http.StatusOK {
+		t.Fatalf("primary provisioning start status=%d body=%s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), "provisioning_tasks") || strings.Contains(strings.ToLower(response.Body.String()), "configured-token") {
+		t.Fatalf("provisioning diagnostics contract or redaction failed: %s", response.Body.String())
+	}
 }

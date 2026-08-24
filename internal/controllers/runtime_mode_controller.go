@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -57,4 +58,33 @@ func UpdateRuntimePolicyMode(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, dto.OK(policy, "运行模式已更新"))
+}
+
+func StartVoceChatProvisioning(c *gin.Context) {
+	handleVoceChatProvisioningCommand(c, services.StartVoceChatProvisioning)
+}
+
+func RetryVoceChatProvisioning(c *gin.Context) {
+	handleVoceChatProvisioningCommand(c, services.RetryVoceChatProvisioningFailures)
+}
+
+func handleVoceChatProvisioningCommand(c *gin.Context, command func(context.Context, uint) (services.RuntimePolicyDiagnostics, error)) {
+	actorID, err := requirePrimaryAdmin(c)
+	if err != nil {
+		c.JSON(http.StatusForbidden, dto.Fail[any](err.Error()))
+		return
+	}
+	diagnostics, err := command(c.Request.Context(), actorID)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrVoceChatProvisioningPrimaryRequired):
+			c.JSON(http.StatusForbidden, dto.Fail[any]("仅1号管理员可执行 VoceChat 账户补建"))
+		case errors.Is(err, services.ErrVoceChatProvisioningModeRequired):
+			c.JSON(http.StatusConflict, dto.Fail[any]("请先确认 VoceChat 配置和健康检查正常，再启动账户补建"))
+		default:
+			c.JSON(http.StatusInternalServerError, dto.Fail[any]("启动 VoceChat 账户补建失败"))
+		}
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK(diagnostics, "VoceChat 账户补建任务已更新"))
 }

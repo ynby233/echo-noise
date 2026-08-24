@@ -17,10 +17,26 @@ import (
 
 type RuntimePolicyDiagnostics struct {
 	runtimepolicy.Policy
-	LastHealthStatus  string           `json:"last_health_status"`
-	LastHealthSummary string           `json:"last_health_summary"`
-	LastHealthCheckAt *time.Time       `json:"last_health_check_at,omitempty"`
-	AccountCounts     map[string]int64 `json:"account_counts"`
+	LastHealthStatus  string                          `json:"last_health_status"`
+	LastHealthSummary string                          `json:"last_health_summary"`
+	LastHealthCheckAt *time.Time                      `json:"last_health_check_at,omitempty"`
+	AccountCounts     map[string]int64                `json:"account_counts"`
+	ProvisioningRun   *models.VoceChatProvisioningRun `json:"provisioning_run,omitempty"`
+	ProvisioningTasks []VoceChatProvisioningTaskView  `json:"provisioning_tasks"`
+}
+
+type VoceChatProvisioningTaskView struct {
+	ID             uint       `json:"id"`
+	UserID         uint       `json:"user_id"`
+	Username       string     `json:"username"`
+	CandidateEmail string     `json:"candidate_email"`
+	Action         string     `json:"action"`
+	Status         string     `json:"status"`
+	AttemptCount   uint       `json:"attempt_count"`
+	ErrorCode      string     `json:"error_code,omitempty"`
+	ErrorSummary   string     `json:"error_summary,omitempty"`
+	LastAttemptAt  *time.Time `json:"last_attempt_at,omitempty"`
+	CompletedAt    *time.Time `json:"completed_at,omitempty"`
 }
 
 var (
@@ -66,6 +82,7 @@ func GetRuntimePolicyDiagnostics(actorID uint) (RuntimePolicyDiagnostics, error)
 		models.VoceChatSyncStatusProvisioning,
 		models.VoceChatSyncStatusLinked,
 		models.VoceChatSyncStatusFailed,
+		models.VoceChatSyncStatusConflicted,
 		models.VoceChatSyncStatusCredentialInvalid,
 		models.VoceChatSyncStatusPasswordSyncRequired,
 	} {
@@ -78,6 +95,42 @@ func GetRuntimePolicyDiagnostics(actorID uint) (RuntimePolicyDiagnostics, error)
 		counts[status] = count
 	}
 	policy := runtimepolicy.Resolve(config)
+	var latestRun models.VoceChatProvisioningRun
+	var latestRunPointer *models.VoceChatProvisioningRun
+	if err := db.Order("id DESC").First(&latestRun).Error; err == nil {
+		latestRunPointer = &latestRun
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return RuntimePolicyDiagnostics{}, err
+	}
+	taskViews := []VoceChatProvisioningTaskView{}
+	type taskRow struct {
+		models.VoceChatProvisioningTask
+		Username string
+	}
+	var taskRows []taskRow
+	if err := db.Table("voce_chat_provisioning_tasks AS tasks").
+		Select("tasks.*, users.username AS username").
+		Joins("JOIN users ON users.id = tasks.user_id").
+		Order("tasks.user_id ASC").
+		Scan(&taskRows).Error; err != nil {
+		return RuntimePolicyDiagnostics{}, err
+	}
+	for index := range taskRows {
+		task := taskRows[index]
+		taskViews = append(taskViews, VoceChatProvisioningTaskView{
+			ID:             task.ID,
+			UserID:         task.UserID,
+			Username:       task.Username,
+			CandidateEmail: task.CandidateEmail,
+			Action:         task.Action,
+			Status:         task.Status,
+			AttemptCount:   task.AttemptCount,
+			ErrorCode:      task.ErrorCode,
+			ErrorSummary:   task.ErrorSummary,
+			LastAttemptAt:  task.LastAttemptAt,
+			CompletedAt:    task.CompletedAt,
+		})
+	}
 	healthStatus := strings.ToLower(strings.TrimSpace(config.VoceChatLastHealthStatus))
 	healthSummary := "尚未完成 VoceChat 健康检查"
 	if policy.ConfiguredMode == runtimepolicy.ModeLocal {
@@ -93,6 +146,8 @@ func GetRuntimePolicyDiagnostics(actorID uint) (RuntimePolicyDiagnostics, error)
 		LastHealthSummary: healthSummary,
 		LastHealthCheckAt: config.VoceChatLastHealthCheckAt,
 		AccountCounts:     counts,
+		ProvisioningRun:   latestRunPointer,
+		ProvisioningTasks: taskViews,
 	}, nil
 }
 
@@ -158,6 +213,12 @@ func SwitchConfiguredMode(ctx context.Context, actorID uint, targetMode runtimep
 				Where("id <> ?", models.PrimaryAdminUserID).
 				Where("voce_chat_sync_status IS NULL OR voce_chat_sync_status IN ?", []string{"", models.VoceChatSyncStatusNone, models.VoceChatSyncStatusUnbound}).
 				Update("voce_chat_sync_status", models.VoceChatSyncStatusPending).Error; err != nil {
+				return err
+			}
+		} else {
+			if err := tx.Model(&models.VoceChatProvisioningRun{}).
+				Where("status = ?", models.VoceChatProvisioningRunStatusRunning).
+				Update("status", models.VoceChatProvisioningRunStatusPaused).Error; err != nil {
 				return err
 			}
 		}

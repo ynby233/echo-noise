@@ -43,6 +43,8 @@ func registerAdminAuthorizationRoutes(authRoutes *gin.RouterGroup) {
 func registerRuntimePolicyRoutes(authRoutes *gin.RouterGroup) {
 	authRoutes.GET("/admin/runtime-policy", controllers.GetRuntimePolicy)
 	authRoutes.PUT("/admin/runtime-policy/mode", controllers.UpdateRuntimePolicyMode)
+	authRoutes.POST("/admin/runtime-policy/provisioning/start", controllers.StartVoceChatProvisioning)
+	authRoutes.POST("/admin/runtime-policy/provisioning/retry", controllers.RetryVoceChatProvisioning)
 }
 
 func registerLocalAttachmentRoute(r *gin.Engine, route string, kind string, dir string) {

@@ -23,27 +23,11 @@ func CreateRegistrationApplicationWithPermanentNumber(application *models.Regist
 	for attempt := 0; attempt < 8; attempt++ {
 		candidate := *application
 		err := database.DB.Transaction(func(tx *gorm.DB) error {
-			result := tx.Model(&models.RegistrationApplicationSequence{}).
-				Where("id = ?", 1).
-				UpdateColumn("last_value", gorm.Expr("last_value + ?", 1))
-			if result.Error != nil {
-				return result.Error
-			}
-			if result.RowsAffected == 0 {
-				if err := tx.Create(&models.RegistrationApplicationSequence{ID: 1}).Error; err != nil {
-					return err
-				}
-				if err := tx.Model(&models.RegistrationApplicationSequence{}).
-					Where("id = ?", 1).
-					UpdateColumn("last_value", gorm.Expr("last_value + ?", 1)).Error; err != nil {
-					return err
-				}
-			}
-			var sequence models.RegistrationApplicationSequence
-			if err := tx.First(&sequence, 1).Error; err != nil {
+			sequence, err := incrementRegistrationApplicationSequence(tx)
+			if err != nil {
 				return err
 			}
-			candidate.ApplicationID = strconv.FormatUint(sequence.LastValue, 10)
+			candidate.ApplicationID = strconv.FormatUint(sequence, 10)
 			candidate.VoceChatCandidateEmail = candidate.ApplicationID + "@" + emailDomain
 			return tx.Create(&candidate).Error
 		})
@@ -52,8 +36,7 @@ func CreateRegistrationApplicationWithPermanentNumber(application *models.Regist
 			return nil
 		}
 		lastErr = err
-		message := strings.ToLower(err.Error())
-		if !strings.Contains(message, "locked") && !strings.Contains(message, "busy") && !strings.Contains(message, "deadlock") && !strings.Contains(message, "serialization") {
+		if !isRetryableAllocationError(err) {
 			return err
 		}
 		time.Sleep(time.Duration(attempt+1) * 10 * time.Millisecond)

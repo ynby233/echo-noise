@@ -205,6 +205,17 @@ const (
 	VoceChatSyncStatusCredentialInvalid    = "credential_invalid"
 	VoceChatSyncStatusPasswordSyncRequired = "password_sync_required"
 
+	VoceChatProvisioningRunStatusRunning   = "running"
+	VoceChatProvisioningRunStatusPaused    = "paused"
+	VoceChatProvisioningRunStatusCompleted = "completed"
+
+	VoceChatProvisioningCommandStart = "start"
+	VoceChatProvisioningCommandRetry = "retry"
+
+	VoceChatProvisioningActionProvision    = "provision"
+	VoceChatProvisioningActionVerify       = "verify"
+	VoceChatProvisioningActionSyncPassword = "sync_password"
+
 	VoceChatContactSyncStatusOK     = "ok"
 	VoceChatContactSyncStatusFailed = "failed"
 )
@@ -233,6 +244,36 @@ type RegistrationApplicationSequence struct {
 	LastValue uint64    `gorm:"not null" json:"-"`
 	CreatedAt time.Time `json:"-"`
 	UpdatedAt time.Time `json:"-"`
+}
+
+type VoceChatProvisioningRun struct {
+	ID                uint       `gorm:"primaryKey" json:"id"`
+	RequestedByUserID uint       `gorm:"not null;index" json:"requested_by_user_id"`
+	Command           string     `gorm:"type:varchar(20);not null;index" json:"command"`
+	Status            string     `gorm:"type:varchar(20);not null;index" json:"status"`
+	StartedAt         time.Time  `gorm:"not null;index" json:"started_at"`
+	FinishedAt        *time.Time `gorm:"index" json:"finished_at,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+}
+
+type VoceChatProvisioningTask struct {
+	ID                        uint       `gorm:"primaryKey" json:"id"`
+	UserID                    uint       `gorm:"not null;uniqueIndex" json:"user_id"`
+	RunID                     uint       `gorm:"not null;index" json:"run_id"`
+	RegistrationApplicationID *uint      `gorm:"index" json:"registration_application_id,omitempty"`
+	ApplicationID             string     `gorm:"type:varchar(64);not null;uniqueIndex" json:"application_id"`
+	CandidateEmail            string     `gorm:"type:varchar(191);not null;uniqueIndex" json:"candidate_email"`
+	Action                    string     `gorm:"type:varchar(30);not null;index" json:"action"`
+	Status                    string     `gorm:"type:varchar(30);not null;index" json:"status"`
+	AttemptCount              uint       `gorm:"not null;default:0" json:"attempt_count"`
+	ErrorCode                 string     `gorm:"type:varchar(40);index" json:"error_code,omitempty"`
+	ErrorSummary              string     `gorm:"type:varchar(255)" json:"error_summary,omitempty"`
+	LeaseUntil                *time.Time `gorm:"index" json:"-"`
+	LastAttemptAt             *time.Time `json:"last_attempt_at,omitempty"`
+	CompletedAt               *time.Time `json:"completed_at,omitempty"`
+	CreatedAt                 time.Time  `json:"created_at"`
+	UpdatedAt                 time.Time  `json:"updated_at"`
 }
 
 type VoceChatContactCache struct {
