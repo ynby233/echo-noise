@@ -295,8 +295,10 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	// 隐藏敏感字段
-	user.Password = ""
+	// 隐藏敏感字段。登录服务可能返回仓库缓存中的对象，不能原地改写，
+	// 否则会把缓存密码清空并导致同一账号后续登录失败。
+	safeUser := *user
+	safeUser.Password = ""
 
 	session := sessions.Default(c)
 	session.Clear()
@@ -310,7 +312,7 @@ func Login(c *gin.Context) {
 	}
 	_ = recordUserLoginAudit(c, user, loginAuditActionLogin)
 
-	c.JSON(http.StatusOK, dto.OK(user, "登录成功"))
+	c.JSON(http.StatusOK, dto.OK(&safeUser, "登录成功"))
 }
 
 // 添加登出功能
