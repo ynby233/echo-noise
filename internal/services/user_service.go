@@ -5,9 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net"
-	"net/http"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -577,59 +574,6 @@ func inactiveVoceChatLocalFallbackError() error {
 	return errors.New("已绑定 VoceChat，当前未启用 VoceChat 登录校验，且未开启本地备用登录")
 }
 
-func isVoceChatCredentialRejected(err error) bool {
-	var apiErr *vocechat.APIError
-	if !errors.As(err, &apiErr) {
-		return false
-	}
-	switch apiErr.StatusCode {
-	case http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden:
-		return true
-	default:
-		return false
-	}
-}
-
-// isVoceChatAccountCredentialInvalid is deliberately narrower than a generic
-// VoceChat request failure. A temporary outage must not be reported as a bad
-// account. A 404 only counts when VoceChat explicitly identifies the account
-// or credential in its response body.
-func isVoceChatAccountCredentialInvalid(err error) bool {
-	if isVoceChatCredentialRejected(err) {
-		return true
-	}
-	var apiErr *vocechat.APIError
-	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusNotFound {
-		return false
-	}
-	body := strings.ToLower(strings.TrimSpace(apiErr.Body))
-	for _, marker := range []string{"account", "user", "credential", "email", "账号", "账户", "用户", "邮箱"} {
-		if strings.Contains(body, marker) {
-			return true
-		}
-	}
-	return false
-}
-
-func isVoceChatSiteTransientFailure(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	var apiErr *vocechat.APIError
-	if errors.As(err, &apiErr) {
-		return apiErr.StatusCode >= http.StatusInternalServerError
-	}
-	var urlErr *url.Error
-	if errors.As(err, &urlErr) {
-		return true
-	}
-	var networkErr net.Error
-	return errors.As(err, &networkErr)
-}
-
 func recordVoceChatLoginHealth(status string, healthErr error) {
 	if database.DB == nil {
 		return
@@ -1127,17 +1071,19 @@ func authenticateVoceChatPassword(user *models.User, policy runtimepolicy.Policy
 	defer cancel()
 	response, err := voceChatPasswordLogin(ctx, config, email, plain)
 	if err != nil {
-		if isVoceChatCredentialRejected(err) {
+		switch classifyVoceChatFailure(err) {
+		case voceChatFailureCredential:
 			recordVoceChatLoginHealth("ok", nil)
 			return false, errors.New(models.PasswordIncorrectMessage)
-		}
-		recordVoceChatLoginHealth("failed", err)
-		fallbackAllowed := policy.ConfiguredMode == runtimepolicy.ModeVoceChat
-		if policy.LegacyConfiguration {
-			fallbackAllowed = config.LocalFallbackEnabled
-		}
-		if fallbackAllowed {
-			return false, nil
+		case voceChatFailureTransientSite:
+			recordVoceChatLoginHealth("failed", err)
+			fallbackAllowed := policy.ConfiguredMode == runtimepolicy.ModeVoceChat
+			if policy.LegacyConfiguration {
+				fallbackAllowed = config.LocalFallbackEnabled
+			}
+			if fallbackAllowed {
+				return false, nil
+			}
 		}
 		return false, errors.New("VoceChat 登录校验暂不可用，请稍后再试")
 	}
@@ -1572,12 +1518,13 @@ func verifyVoceChatPasswordForPasswordChange(user *models.User, config vocechat.
 		return nil
 	}
 
-	if isVoceChatCredentialRejected(err) {
+	switch classifyVoceChatFailure(err) {
+	case voceChatFailureCredential:
 		recordVoceChatLoginHealth("ok", nil)
 		return errors.New(models.PasswordIncorrectMessage)
+	case voceChatFailureTransientSite:
+		recordVoceChatLoginHealth("failed", err)
 	}
-
-	recordVoceChatLoginHealth("failed", err)
 	return errors.New("VoceChat 登录校验暂不可用，请稍后再试")
 }
 

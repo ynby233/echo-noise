@@ -582,8 +582,12 @@ func voceChatProvisioningFailure(err error) voceChatProvisioningOutcome {
 		return voceChatProvisioningOutcome{Status: models.VoceChatSyncStatusCredentialInvalid, UserStatus: models.VoceChatSyncStatusCredentialInvalid, Code: "credential_invalid", Summary: "已绑定账户凭据无法验证，请重置密码后重试"}
 	case errors.Is(err, errVoceChatProvisioningPersistence):
 		return voceChatProvisioningOutcome{Status: models.VoceChatSyncStatusFailed, UserStatus: models.VoceChatSyncStatusFailed, Code: "state_persistence_failed", Summary: "账户状态保存失败，可安全重试"}
-	default:
+	case classifyVoceChatFailure(err) == voceChatFailureCredential:
+		return voceChatProvisioningOutcome{Status: models.VoceChatSyncStatusCredentialInvalid, UserStatus: models.VoceChatSyncStatusCredentialInvalid, Code: "credential_invalid", Summary: "已绑定账户凭据无法验证，请重置密码后重试"}
+	case classifyVoceChatFailure(err) == voceChatFailureTransientSite:
 		return voceChatProvisioningOutcome{Status: models.VoceChatSyncStatusFailed, UserStatus: models.VoceChatSyncStatusFailed, Code: "upstream_unavailable", Summary: "VoceChat 暂不可用，恢复后可重试"}
+	default:
+		return voceChatProvisioningOutcome{Status: models.VoceChatSyncStatusFailed, UserStatus: models.VoceChatSyncStatusFailed, Code: "unexpected_failure", Summary: "VoceChat 处理失败，可安全重试"}
 	}
 }
 
