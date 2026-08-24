@@ -713,7 +713,7 @@ func TestLoginWithVoceChatUnavailableRequiresFallbackSwitch(t *testing.T) {
 			})
 
 			stubVoceChatPasswordLogin(t, func(ctx context.Context, config vocechat.Config, email, password string) (*vocechat.LoginResponse, error) {
-				return nil, errors.New("dial tcp failed")
+				return nil, context.DeadlineExceeded
 			})
 
 			loggedIn, err := Login(dto.LoginDto{Username: "carol", Password: "local-password"})
@@ -745,7 +745,7 @@ func TestLoginWithVoceChatUnavailableRequiresFallbackSwitch(t *testing.T) {
 			if err := database.DB.First(&siteConfig).Error; err != nil {
 				t.Fatalf("read site config: %v", err)
 			}
-			if siteConfig.VoceChatLastHealthStatus != "failed" || !strings.Contains(siteConfig.VoceChatLastHealthError, "dial tcp failed") || siteConfig.VoceChatLastHealthCheckAt == nil {
+			if siteConfig.VoceChatLastHealthStatus != "failed" || !strings.Contains(siteConfig.VoceChatLastHealthError, "context deadline exceeded") || siteConfig.VoceChatLastHealthCheckAt == nil {
 				t.Fatalf("vc health failure not recorded: %#v", siteConfig)
 			}
 		})

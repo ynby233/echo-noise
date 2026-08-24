@@ -370,7 +370,7 @@ func TestLocalFallbackPasswordMaintenanceBlocksSameUserPasswordMutation(t *testi
 		t.Fatalf("seed password record: %v", err)
 	}
 	stubVoceChatPasswordLogin(t, func(_ context.Context, _ vocechat.Config, _, _ string) (*vocechat.LoginResponse, error) {
-		return nil, errors.New("forced VoceChat outage")
+		return nil, context.DeadlineExceeded
 	})
 
 	maintenanceStarted := make(chan struct{})
@@ -483,7 +483,7 @@ func TestLocalFallbackMaintenanceFailureKeepsLoginAvailableWithoutPretendingToPe
 		t.Fatalf("seed password-change notification: %v", err)
 	}
 	stubVoceChatPasswordLogin(t, func(_ context.Context, _ vocechat.Config, _, _ string) (*vocechat.LoginResponse, error) {
-		return nil, errors.New("forced VoceChat outage")
+		return nil, context.DeadlineExceeded
 	})
 	passwordWritesFailed := 0
 	if err := db.Callback().Update().Before("gorm:update").Register("test:fail-local-maintenance-password-write", func(tx *gorm.DB) {
