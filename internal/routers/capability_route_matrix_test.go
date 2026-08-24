@@ -18,6 +18,7 @@ import (
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/repository"
 	"github.com/rcy1314/echo-noise/internal/vocechat"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -218,6 +219,8 @@ func TestUserPasswordResetRouteOnlyResetsOrdinaryUsersAndRechecksGrants(t *testi
 	primary := createUser(models.User{Username: "primary", IsAdmin: true, Token: "primary-password-reset-token"})
 	delegated := createUser(models.User{Username: "delegated", IsAdmin: true, Token: "delegated-password-reset-token", VoceChatEmail: "delegated@vc.test", VoceChatUserID: "12"})
 	ordinary := createUser(models.User{Username: "ordinary", Token: "ordinary-password-reset-token", VoceChatEmail: "ordinary@vc.test", VoceChatUserID: "13"})
+	unboundDelegated := createUser(models.User{Username: "unbound-delegated", Password: models.HashPassword("old-unbound-delegated"), IsAdmin: true, Token: "unbound-delegated-token", VoceChatSyncStatus: models.VoceChatSyncStatusPending})
+	unboundOrdinary := createUser(models.User{Username: "unbound-ordinary", Password: models.HashPassword("old-unbound-ordinary"), Token: "unbound-ordinary-token", VoceChatSyncStatus: models.VoceChatSyncStatusPending})
 	passwordStore := vocechat.DefaultPlainPasswordStore()
 	for _, user := range []*models.User{delegated, ordinary} {
 		if err := passwordStore.UpsertUserVoceChatPassword(user.ID, user.Username, "existing-test-password", user.VoceChatEmail, user.VoceChatUserID); err != nil {
@@ -302,10 +305,29 @@ func TestUserPasswordResetRouteOnlyResetsOrdinaryUsersAndRechecksGrants(t *testi
 		t.Fatalf("grant users.reset_password: %v", err)
 	}
 	assertStatus(t, "delegated session resets ordinary user after grant", reset(t, delegatedSession, "", ordinary.ID, "delegated-ordinary-reset"), http.StatusOK)
+	assertStatus(t, "delegated session resets unbound ordinary user after grant", reset(t, delegatedSession, "", unboundOrdinary.ID, "delegated-unbound-reset"), http.StatusOK)
 	assertStatus(t, "delegated bearer cannot reset delegated administrator", reset(t, nil, delegated.Token, delegated.ID, "delegated-admin-reset"), http.StatusForbidden)
+	assertStatus(t, "delegated bearer cannot reset unbound delegated administrator", reset(t, nil, delegated.Token, unboundDelegated.ID, "delegated-unbound-admin-reset"), http.StatusForbidden)
 	assertStatus(t, "primary bearer resets delegated administrator", reset(t, nil, primary.Token, delegated.ID, "primary-bearer-admin-reset"), http.StatusOK)
 	assertStatus(t, "primary session resets delegated administrator", reset(t, primarySession, "", delegated.ID, "primary-session-admin-reset"), http.StatusOK)
+	assertStatus(t, "primary bearer resets unbound delegated administrator", reset(t, nil, primary.Token, unboundDelegated.ID, "primary-unbound-admin-reset"), http.StatusOK)
+	assertStatus(t, "primary session resets unbound ordinary user", reset(t, primarySession, "", unboundOrdinary.ID, "primary-unbound-ordinary-reset"), http.StatusOK)
 	assertStatus(t, "primary session cannot reset ID 1", reset(t, primarySession, "", primary.ID, "primary-self-reset"), http.StatusForbidden)
+	for _, expected := range []struct {
+		userID   uint
+		password string
+	}{
+		{userID: unboundDelegated.ID, password: "primary-unbound-admin-reset"},
+		{userID: unboundOrdinary.ID, password: "primary-unbound-ordinary-reset"},
+	} {
+		var updated models.User
+		if err := db.First(&updated, expected.userID).Error; err != nil {
+			t.Fatalf("reload reset target %d: %v", expected.userID, err)
+		}
+		if bcrypt.CompareHashAndPassword([]byte(updated.Password), []byte(expected.password)) != nil {
+			t.Fatalf("target %d did not receive the new local password", expected.userID)
+		}
+	}
 
 	if err := db.Where("user_id = ? AND capability = ?", delegated.ID, authorization.CapabilityUsersResetPassword).Delete(&models.AdminCapabilityGrant{}).Error; err != nil {
 		t.Fatalf("revoke users.reset_password: %v", err)

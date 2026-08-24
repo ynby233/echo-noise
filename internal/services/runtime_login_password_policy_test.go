@@ -2,9 +2,10 @@ package services
 
 import (
 	"context"
-	"errors"
+	"net/url"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/rcy1314/echo-noise/internal/database"
@@ -102,7 +103,7 @@ func TestVoceChatTransientFailureFallsBackLocallyWithoutCredentialAlert(t *testi
 		VoceChatSyncStatus: models.VoceChatSyncStatusLinked,
 	})
 	stubVoceChatPasswordLogin(t, func(context.Context, vocechat.Config, string, string) (*vocechat.LoginResponse, error) {
-		return nil, errors.New("dial tcp: temporary upstream outage")
+		return nil, &url.Error{Op: "Post", URL: "https://vc.example.test/api/token/login", Err: syscall.ECONNREFUSED}
 	})
 
 	loggedIn, err := Login(dto.LoginDto{Username: user.Username, Password: "fallback-password"})
