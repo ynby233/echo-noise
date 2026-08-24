@@ -504,7 +504,7 @@
                     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                       <div>
                         <div class="text-sm font-medium" :class="theme.text">VoceChat 账户补建与同步</div>
-                        <div class="text-xs mt-1" :class="theme.mutedText">切换模式不会自动创建账户；仅在 1 号管理员明确启动后逐个处理。</div>
+                        <div class="text-xs mt-1" :class="theme.mutedText">切换模式不会自动创建账户；仅在站长明确启动后逐个处理。</div>
                       </div>
                       <div class="flex items-center gap-2 shrink-0">
                         <UButton size="sm" color="indigo" icon="i-heroicons-play" :loading="runningVoceChatProvisioning === 'start'" :disabled="runtimePolicy.runtimeState !== 'vocechat_normal' || !!runningVoceChatProvisioning" @click="runVoceChatProvisioning('start')">开始补建/同步</UButton>
@@ -2246,7 +2246,7 @@
                       <UButton color="green" @click="saveConfigItem('loginExpireDays')" class="shadow">保存</UButton>
                     </div>
                   </div>
-                  <div class="text-xs mt-2" :class="theme.mutedText">普通用户从登录那一刻开始计算；0 天 0 小时表示永久不过期。1号管理员默认永不过期。</div>
+                  <div class="text-xs mt-2" :class="theme.mutedText">普通用户从登录那一刻开始计算；0 天 0 小时表示永久不过期。站长默认永不过期。</div>
                 </div>
 
                 <div id="site-delegated-admin-login-expire-section" v-if="isPrimaryAdmin" :class="adminSubtleCardClass">
@@ -2259,7 +2259,7 @@
                       <UButton color="green" @click="saveConfigItem('delegatedAdminLoginExpireDays')" class="shadow">保存</UButton>
                     </div>
                   </div>
-                  <div class="text-xs mt-2" :class="theme.mutedText">仅受托管理员按此有效期计算，Session 与管理员 Bearer 同步生效；0 天 0 小时表示永久不过期。1号管理员默认永不过期。</div>
+                  <div class="text-xs mt-2" :class="theme.mutedText">仅受托管理员按此有效期计算，Session 与管理员 Bearer 同步生效；0 天 0 小时表示永久不过期。站长默认永不过期。</div>
                 </div>
 
                 <div :class="adminSubtleCardClass">
@@ -3572,7 +3572,7 @@ const buildVoceChatConfigPayload = () => {
 
 const saveVoceChatConfig = async () => {
   if (!canManageVoceChatConfig.value) {
-    useToast().add({ title: '无权管理 VoceChat 配置', description: '仅 1 号管理员可管理该配置。', color: 'red' })
+    useToast().add({ title: '无权管理 VoceChat 配置', description: '仅站长可管理该配置。', color: 'red' })
     return
   }
   try {
@@ -3594,7 +3594,7 @@ const saveVoceChatConfig = async () => {
 
 const checkVoceChatHealth = async () => {
   if (!canManageVoceChatConfig.value) {
-    useToast().add({ title: '无权检查 VoceChat 状态', description: '仅 1 号管理员可执行状态检查。', color: 'red' })
+    useToast().add({ title: '无权检查 VoceChat 状态', description: '仅站长可执行状态检查。', color: 'red' })
     return
   }
   try {

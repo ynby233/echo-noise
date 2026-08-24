@@ -466,7 +466,7 @@ func TestProtectedAdminRouteMatrixRejectsDelegatedAdministratorWithoutRequiredGr
 			}
 			response := httptest.NewRecorder()
 			r.ServeHTTP(response, request)
-			if response.Code != http.StatusOK || !bytes.Contains(response.Body.Bytes(), []byte("仅 1 号管理员可管理 RSS")) {
+			if response.Code != http.StatusOK || !bytes.Contains(response.Body.Bytes(), []byte("仅站长可管理 RSS")) {
 				t.Fatalf("delegated RSS write status=%d body=%s", response.Code, response.Body.String())
 			}
 		})

@@ -854,7 +854,7 @@ func requirePrimaryAdmin(c *gin.Context) (uint, error) {
 		return 0, err
 	}
 	if userID != models.PrimaryAdminUserID {
-		return 0, fmt.Errorf("仅 1 号管理员可管理 VoceChat 配置")
+		return 0, fmt.Errorf("仅站长可管理 VoceChat 配置")
 	}
 	return userID, nil
 }
@@ -1119,11 +1119,11 @@ func UpdateSetting(c *gin.Context) {
 
 	frontendSettings := setting.FrontendSettings
 	if hasRSSManagementSettings(frontendSettings) && user.ID != models.PrimaryAdminUserID {
-		c.JSON(http.StatusOK, dto.Fail[string]("仅 1 号管理员可管理 RSS"))
+		c.JSON(http.StatusOK, dto.Fail[string]("仅站长可管理 RSS"))
 		return
 	}
 	if hasLoginExpirySettings(frontendSettings) && user.ID != models.PrimaryAdminUserID {
-		c.JSON(http.StatusOK, dto.Fail[string]("仅 1 号管理员可管理登录过期时间"))
+		c.JSON(http.StatusOK, dto.Fail[string]("仅站长可管理登录过期时间"))
 		return
 	}
 	if !user.IsAdmin {
@@ -1164,7 +1164,7 @@ func UpdateSetting(c *gin.Context) {
 	hasSiteConfigUpdate := false
 	if setting.RecycleBinRetentionDays != nil {
 		if user.ID != models.PrimaryAdminUserID {
-			c.JSON(http.StatusOK, dto.Fail[string]("仅 1 号管理员可管理回收站自动清理"))
+			c.JSON(http.StatusOK, dto.Fail[string]("仅站长可管理回收站自动清理"))
 			return
 		}
 		allowed := map[int]bool{0: true, 7: true, 30: true, 90: true, 180: true, 365: true}
@@ -1258,7 +1258,7 @@ func UpdateSetting(c *gin.Context) {
 	}
 	if setting.VoceChatConfig != nil {
 		if user.ID != models.PrimaryAdminUserID {
-			c.JSON(http.StatusOK, dto.Fail[string]("仅 1 号管理员可管理 VoceChat 配置"))
+			c.JSON(http.StatusOK, dto.Fail[string]("仅站长可管理 VoceChat 配置"))
 			return
 		}
 		settingMap["voceChatConfig"] = setting.VoceChatConfig
@@ -4127,11 +4127,11 @@ func DeleteUser(c *gin.Context) {
 	target, err := repository.GetUserByID(uint(id))
 	if err == nil && target.IsAdmin {
 		if target.ID == models.PrimaryAdminUserID {
-			c.JSON(http.StatusForbidden, dto.Fail[string]("不能删除 1 号管理员"))
+			c.JSON(http.StatusForbidden, dto.Fail[string]("不能删除站长"))
 			return
 		}
 		if currentID != models.PrimaryAdminUserID {
-			c.JSON(http.StatusForbidden, dto.Fail[string]("仅 1 号管理员可以删除管理员账号"))
+			c.JSON(http.StatusForbidden, dto.Fail[string]("仅站长可以删除管理员账号"))
 			return
 		}
 		cnt, err := repository.CountAdmins()

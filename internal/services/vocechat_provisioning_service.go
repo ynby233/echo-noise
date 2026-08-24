@@ -594,7 +594,7 @@ func currentLocalPasswordMaterial(user *models.User, record vocechat.PlainPasswo
 func voceChatProvisioningFailure(err error) voceChatProvisioningOutcome {
 	switch {
 	case errors.Is(err, errVoceChatProvisioningPasswordMissing):
-		return voceChatProvisioningOutcome{Status: models.VoceChatSyncStatusPasswordSyncRequired, UserStatus: models.VoceChatSyncStatusPasswordSyncRequired, Code: "password_material_missing", Summary: "缺少可用的当前密码，请由用户或1号管理员重置密码后重试"}
+		return voceChatProvisioningOutcome{Status: models.VoceChatSyncStatusPasswordSyncRequired, UserStatus: models.VoceChatSyncStatusPasswordSyncRequired, Code: "password_material_missing", Summary: "缺少可用的当前密码，请由用户或站长重置密码后重试"}
 	case errors.Is(err, errVoceChatProvisioningConflict):
 		return voceChatProvisioningOutcome{Status: models.VoceChatSyncStatusConflicted, UserStatus: models.VoceChatSyncStatusConflicted, Code: "identity_conflict", Summary: "待创建邮箱已被占用，请核对远端账户后重试"}
 	case errors.Is(err, errVoceChatProvisioningCredential):

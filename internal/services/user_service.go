@@ -88,7 +88,7 @@ func (e *passwordUpdateFailure) Unwrap() error {
 }
 
 func (e *accountStateSaveFailure) Error() string {
-	return "账号信息保存失败，请稍后重新登录。若问题持续，请联系1号管理员。"
+	return "账号信息保存失败，请稍后重新登录。若问题持续，请联系站长。"
 }
 
 func (e *accountStateSaveFailure) Unwrap() error {
@@ -105,7 +105,7 @@ func PasswordChangePublicFailureMessage(err error, resetByAdministrator bool) st
 			if resetByAdministrator {
 				return "密码保存未完成，请重新为该用户设置密码。"
 			}
-			return "密码保存未完成，请重新设置密码。若仍无法登录，请联系1号管理员。"
+			return "密码保存未完成，请重新设置密码。若仍无法登录，请联系站长。"
 		}
 		if updateFailure.rolledBack {
 			if resetByAdministrator {
@@ -1116,7 +1116,7 @@ func Login(userdto dto.LoginDto) (*models.User, error) {
 			return errors.New(models.DatabaseErrorMessage)
 		}
 		if !policy.LegacyConfiguration && policy.RuntimeState == runtimepolicy.StateVoceChatNormal && isVoceChatBoundNonPrimaryUser(user) && user.VoceChatSyncStatus == models.VoceChatSyncStatusPasswordSyncRequired {
-			return errors.New("账户密码正在等待 VoceChat 同步，请联系1号管理员完成同步后再登录。")
+			return errors.New("账户密码正在等待 VoceChat 同步，请联系站长完成同步后再登录。")
 		}
 		if shouldUseVoceChatLogin(user, voceConfig, voceLoginEnabled) {
 			verified, err := authenticateVoceChatPassword(user, policy, voceConfig, plain)
@@ -1583,10 +1583,10 @@ func ChangePasswordWithOld(user *models.User, old string, new string) error {
 
 func UpdateUserAdmin(userID uint, currentUserID uint) error {
 	if currentUserID != models.PrimaryAdminUserID {
-		return errors.New("仅 1 号管理员可以变更管理员身份")
+		return errors.New("仅站长可以变更管理员身份")
 	}
 	if userID == models.PrimaryAdminUserID {
-		return errors.New("不能变更 1 号管理员身份")
+		return errors.New("不能变更站长身份")
 	}
 	user, err := repository.GetUserByID(userID)
 	if err != nil {

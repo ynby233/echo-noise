@@ -78,7 +78,7 @@ func handleVoceChatProvisioningCommand(c *gin.Context, command func(context.Cont
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrVoceChatProvisioningPrimaryRequired):
-			c.JSON(http.StatusForbidden, dto.Fail[any]("仅1号管理员可执行 VoceChat 账户补建"))
+			c.JSON(http.StatusForbidden, dto.Fail[any]("仅站长可执行 VoceChat 账户补建"))
 		case errors.Is(err, services.ErrVoceChatProvisioningModeRequired):
 			c.JSON(http.StatusConflict, dto.Fail[any]("请先确认 VoceChat 配置和健康检查正常，再启动账户补建"))
 		default:

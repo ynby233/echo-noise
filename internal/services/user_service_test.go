@@ -1112,7 +1112,7 @@ func TestPasswordChangePublicFailureMessagesDoNotExposeInternalPasswordStorage(t
 		{
 			name: "incomplete change",
 			err:  &passwordUpdateFailure{incomplete: true},
-			want: "密码保存未完成，请重新设置密码。若仍无法登录，请联系1号管理员。",
+			want: "密码保存未完成，请重新设置密码。若仍无法登录，请联系站长。",
 		},
 		{
 			name:  "incomplete reset",
@@ -1261,7 +1261,7 @@ func TestLoginWithVoceChatSaveFailureDoesNotIssueLoginOrResolvePasswordAlerts(t 
 	})
 
 	loggedIn, err := Login(dto.LoginDto{Username: user.Username, Password: "new-password"})
-	if err == nil || err.Error() != "账号信息保存失败，请稍后重新登录。若问题持续，请联系1号管理员。" {
+	if err == nil || err.Error() != "账号信息保存失败，请稍后重新登录。若问题持续，请联系站长。" {
 		t.Fatalf("login save failure must return the public retry message, result present=%v", loggedIn != nil)
 	}
 	if loggedIn != nil {

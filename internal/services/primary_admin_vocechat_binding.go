@@ -20,7 +20,7 @@ import (
 // administrator's local login password.
 func BindPrimaryAdminVoceChatEmail(ctx context.Context, actorUserID uint, email string, password string) (*models.User, error) {
 	if actorUserID != models.PrimaryAdminUserID {
-		return nil, errors.New("仅1号管理员可以修改自己的注册绑定 VoceChat 邮箱")
+		return nil, errors.New("仅站长可以修改自己的注册绑定 VoceChat 邮箱")
 	}
 	email = strings.ToLower(strings.TrimSpace(email))
 	if email == "" || !isValidVoceChatAdminEmail(email) {
@@ -79,7 +79,7 @@ func BindPrimaryAdminVoceChatEmail(ctx context.Context, actorUserID uint, email 
 
 	var primary models.User
 	if err := db.Where("id = ? AND is_admin = ?", models.PrimaryAdminUserID, true).First(&primary).Error; err != nil {
-		return nil, errors.New("1号管理员账户不存在")
+		return nil, errors.New("站长账户不存在")
 	}
 	passwordStore := vocechat.DefaultPlainPasswordStore()
 	previousPassword, hadPreviousPassword, err := passwordStore.GetUserPassword(primary.ID)
@@ -108,7 +108,7 @@ func BindPrimaryAdminVoceChatEmail(ctx context.Context, actorUserID uint, email 
 	}
 	if result.RowsAffected != 1 {
 		tx.Rollback()
-		return nil, errors.New("1号管理员账户不存在")
+		return nil, errors.New("站长账户不存在")
 	}
 	if err := passwordStore.UpsertUserVoceChatPassword(primary.ID, primary.Username, password, remoteEmail, remoteUID); err != nil {
 		tx.Rollback()

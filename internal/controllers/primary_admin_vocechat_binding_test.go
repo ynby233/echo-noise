@@ -53,7 +53,7 @@ func TestBindPrimaryAdminVoceChatEmailControllerRejectsDelegatedAdministrator(t 
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "1号管理员") || !strings.Contains(response.Body.String(), `"code":0`) {
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "站长") || !strings.Contains(response.Body.String(), `"code":0`) {
 		t.Fatalf("delegated binding response = %d %s", response.Code, response.Body.String())
 	}
 }

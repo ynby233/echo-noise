@@ -150,7 +150,7 @@ func TestBindPrimaryAdminVoceChatEmailRejectsMissingRemoteAccountAndNonPrimaryAc
 	if _, err := BindPrimaryAdminVoceChatEmail(context.Background(), primary.ID, "missing@vc.test", "vc-password"); err == nil || !strings.Contains(err.Error(), "错误") {
 		t.Fatalf("expected missing-account rejection, got %v", err)
 	}
-	if _, err := BindPrimaryAdminVoceChatEmail(context.Background(), delegated.ID, "missing@vc.test", "vc-password"); err == nil || !strings.Contains(err.Error(), "1号管理员") {
+	if _, err := BindPrimaryAdminVoceChatEmail(context.Background(), delegated.ID, "missing@vc.test", "vc-password"); err == nil || !strings.Contains(err.Error(), "站长") {
 		t.Fatalf("expected non-primary rejection, got %v", err)
 	}
 }

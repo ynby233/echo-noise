@@ -377,7 +377,7 @@ const unavailableTitle = (item: UserNotification) => {
 const unavailableDetail = (item: UserNotification) => {
   if (item.type === 'vocechat_password_changed') return '你可能已在 VoceChat 中修改了密码，这可能导致本站部分功能暂时不可用。请退出当前账号，并使用最新的 VoceChat 密码重新登录本站；验证成功后，此通知将自动消失。'
   if (item.type === 'vocechat_credentials') return '你的 VoceChat 账号信息可能已发生变化，这可能导致本站部分功能暂时不可用。请前往后台“用户信息”，重新填写并校验 VoceChat 邮箱和密码；验证成功后，此通知将自动消失。'
-  if (item.type === 'password_update_incomplete') return '上一次密码修改未能完整保存，请重新设置密码。若仍无法登录，请联系1号管理员。'
+  if (item.type === 'password_update_incomplete') return '上一次密码修改未能完整保存，请重新设置密码。若仍无法登录，请联系站长。'
   if (item.target_status === 'load_error') return '暂时无法加载关联内容，请稍后重试。'
   return '暂时无法查看这条通知对应的内容。'
 }
