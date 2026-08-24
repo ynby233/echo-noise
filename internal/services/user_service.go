@@ -229,14 +229,6 @@ func validateRegistrationUsername(username string) error {
 	return nil
 }
 
-func generateRegistrationApplicationID() (string, error) {
-	maxID, err := repository.MaxNumericRegistrationApplicationID()
-	if err != nil {
-		return "", err
-	}
-	return strconv.FormatInt(maxID+1, 10), nil
-}
-
 func existingUser(username string) (bool, error) {
 	user, err := repository.GetUserByUsername(username)
 	if err == nil && user != nil && user.ID != 0 {
@@ -326,41 +318,66 @@ func RegisterWithResult(userdto dto.RegisterDto) (RegisterResult, error) {
 	if hashed == "" {
 		return RegisterResult{}, errors.New("密码加密失败")
 	}
-	applicationID, err := generateRegistrationApplicationID()
+	policy, voceConfig, err := loadRuntimePolicyAndVoceChatConfig()
 	if err != nil {
 		return RegisterResult{}, errors.New("创建注册申请失败")
 	}
-
-	provision := registrationVoceChatProvision(applicationID, username, userdto.Password)
-	if strings.TrimSpace(provision.Email) == "" {
-		provision.Email = buildVoceChatApplicationEmail(applicationID, vocechat.DefaultEmailDomain)
-	}
-	if strings.TrimSpace(provision.SyncStatus) == "" {
-		provision.SyncStatus = models.VoceChatSyncStatusNone
-	}
-
-	plainStore := vocechat.DefaultPlainPasswordStore()
-	if err := plainStore.UpsertApplicationVoceChatPassword(applicationID, username, userdto.Password, provision.Email, provision.UserID); err != nil {
-		return RegisterResult{}, errors.New("创建注册申请失败")
-	}
-
 	application := models.RegistrationApplication{
-		ApplicationID:      applicationID,
 		Username:           username,
 		PasswordHash:       hashed,
 		Status:             models.RegistrationApplicationStatusPending,
-		VoceChatUserID:     strings.TrimSpace(provision.UserID),
-		VoceChatEmail:      strings.TrimSpace(provision.Email),
-		VoceChatSyncStatus: strings.TrimSpace(provision.SyncStatus),
-		VoceChatSyncError:  strings.TrimSpace(provision.SyncError),
+		VoceChatSyncStatus: models.VoceChatSyncStatusUnbound,
 	}
-	if err := repository.CreateRegistrationApplication(&application); err != nil {
-		_ = plainStore.DeleteApplicationPassword(applicationID)
+	if policy.ConfiguredMode == runtimepolicy.ModeVoceChat {
+		application.VoceChatSyncStatus = models.VoceChatSyncStatusPending
+	}
+	if err := repository.CreateRegistrationApplicationWithPermanentNumber(&application, voceConfig.EmailDomain); err != nil {
 		return RegisterResult{}, errors.New("创建注册申请失败")
 	}
 
+	plainStore := vocechat.DefaultPlainPasswordStore()
+	if policy.ConfiguredMode == runtimepolicy.ModeLocal {
+		err = plainStore.UpsertApplicationLocalFallbackPassword(application.ApplicationID, username, userdto.Password, application.VoceChatCandidateEmail)
+	} else {
+		err = plainStore.UpsertApplicationVoceChatPassword(application.ApplicationID, username, userdto.Password, application.VoceChatCandidateEmail, "")
+	}
+	if err != nil {
+		_ = repository.UpdateRegistrationApplicationFields(application.ID, map[string]interface{}{
+			"status":                models.RegistrationApplicationStatusRejected,
+			"voce_chat_sync_status": models.VoceChatSyncStatusFailed,
+			"voce_chat_sync_error":  "注册密码状态保存失败",
+		})
+		return RegisterResult{}, errors.New("创建注册申请失败")
+	}
+
+	if policy.UseVoceChatRegistration {
+		provision := registrationVoceChatProvision(application.ApplicationID, username, userdto.Password)
+		application.VoceChatSyncStatus = strings.TrimSpace(provision.SyncStatus)
+		if application.VoceChatSyncStatus == "" {
+			application.VoceChatSyncStatus = models.VoceChatSyncStatusPending
+		}
+		application.VoceChatSyncError = strings.TrimSpace(provision.SyncError)
+		if application.VoceChatSyncStatus == models.VoceChatSyncStatusCreated && strings.TrimSpace(provision.UserID) != "" {
+			application.VoceChatUserID = strings.TrimSpace(provision.UserID)
+			application.VoceChatEmail = strings.TrimSpace(provision.Email)
+			if application.VoceChatEmail == "" {
+				application.VoceChatEmail = application.VoceChatCandidateEmail
+			}
+			if err := plainStore.UpsertApplicationVoceChatPassword(application.ApplicationID, username, userdto.Password, application.VoceChatEmail, application.VoceChatUserID); err != nil {
+				application.VoceChatSyncStatus = models.VoceChatSyncStatusFailed
+				application.VoceChatSyncError = "VoceChat 账户密码状态保存失败"
+			}
+		}
+	} else if policy.ConfiguredMode == runtimepolicy.ModeVoceChat {
+		application.VoceChatSyncStatus = models.VoceChatSyncStatusPending
+		application.VoceChatSyncError = "VoceChat 暂不可用，等待恢复后处理"
+	}
+	if err := repository.UpdateRegistrationApplication(&application); err != nil {
+		return RegisterResult{ApplicationID: application.ApplicationID, Status: application.Status}, errors.New("更新注册申请失败")
+	}
+
 	result := RegisterResult{ApplicationID: application.ApplicationID, Status: application.Status}
-	if autoApproveRegistrationEnabled() {
+	if autoApproveRegistrationEnabled(policy) {
 		created, err := ApproveRegistrationApplication(application.ID, 0, "系统自动通过审核")
 		if err != nil {
 			if !isRegistrationApprovalDeferred(err) {
@@ -377,7 +394,10 @@ func RegisterWithResult(userdto dto.RegisterDto) (RegisterResult, error) {
 	return result, nil
 }
 
-func autoApproveRegistrationEnabled() bool {
+func autoApproveRegistrationEnabled(policy runtimepolicy.Policy) bool {
+	if !policy.UseVoceChatRegistration {
+		return false
+	}
 	if database.DB == nil {
 		return false
 	}

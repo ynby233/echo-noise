@@ -210,21 +210,29 @@ const (
 )
 
 type RegistrationApplication struct {
-	ID                 uint       `gorm:"primaryKey" json:"id"`
-	ApplicationID      string     `gorm:"type:varchar(64);not null;uniqueIndex" json:"application_id"`
-	Username           string     `gorm:"type:varchar(191);not null;index" json:"username"`
-	PasswordHash       string     `gorm:"type:varchar(191);not null" json:"-"`
-	Status             string     `gorm:"type:varchar(20);not null;default:pending;index" json:"status"`
-	VoceChatUserID     string     `gorm:"type:varchar(191);index" json:"voce_chat_user_id,omitempty"`
-	VoceChatEmail      string     `gorm:"type:varchar(191);index" json:"voce_chat_email,omitempty"`
-	VoceChatSyncStatus string     `gorm:"type:varchar(30);default:none;index" json:"voce_chat_sync_status,omitempty"`
-	VoceChatSyncError  string     `gorm:"type:text" json:"-"`
-	LocalUserID        *uint      `gorm:"index" json:"local_user_id,omitempty"`
-	ReviewerUserID     *uint      `gorm:"index" json:"reviewer_user_id,omitempty"`
-	ReviewNote         string     `gorm:"type:text" json:"review_note,omitempty"`
-	ReviewedAt         *time.Time `json:"reviewed_at,omitempty"`
-	CreatedAt          time.Time  `json:"created_at"`
-	UpdatedAt          time.Time  `json:"updated_at"`
+	ID                     uint       `gorm:"primaryKey" json:"id"`
+	ApplicationID          string     `gorm:"type:varchar(64);not null;uniqueIndex" json:"application_id"`
+	Username               string     `gorm:"type:varchar(191);not null;index" json:"username"`
+	PasswordHash           string     `gorm:"type:varchar(191);not null" json:"-"`
+	Status                 string     `gorm:"type:varchar(20);not null;default:pending;index" json:"status"`
+	VoceChatCandidateEmail string     `gorm:"type:varchar(191);not null" json:"voce_chat_candidate_email"`
+	VoceChatUserID         string     `gorm:"type:varchar(191);index" json:"voce_chat_user_id,omitempty"`
+	VoceChatEmail          string     `gorm:"type:varchar(191);index" json:"voce_chat_email,omitempty"`
+	VoceChatSyncStatus     string     `gorm:"type:varchar(30);default:none;index" json:"voce_chat_sync_status,omitempty"`
+	VoceChatSyncError      string     `gorm:"type:text" json:"-"`
+	LocalUserID            *uint      `gorm:"index" json:"local_user_id,omitempty"`
+	ReviewerUserID         *uint      `gorm:"index" json:"reviewer_user_id,omitempty"`
+	ReviewNote             string     `gorm:"type:text" json:"review_note,omitempty"`
+	ReviewedAt             *time.Time `json:"reviewed_at,omitempty"`
+	CreatedAt              time.Time  `json:"created_at"`
+	UpdatedAt              time.Time  `json:"updated_at"`
+}
+
+type RegistrationApplicationSequence struct {
+	ID        uint      `gorm:"primaryKey;autoIncrement:false" json:"-"`
+	LastValue uint64    `gorm:"not null" json:"-"`
+	CreatedAt time.Time `json:"-"`
+	UpdatedAt time.Time `json:"-"`
 }
 
 type VoceChatContactCache struct {

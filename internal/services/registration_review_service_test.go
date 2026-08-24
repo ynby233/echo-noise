@@ -217,6 +217,7 @@ func TestApproveRegistrationApplicationRetriesVoceChatCreation(t *testing.T) {
 
 func TestRejectRegistrationApplicationDeletesPrecreatedVoceChatUser(t *testing.T) {
 	setupUserServiceTestDB(t)
+	configureVoceChatForTest(t, true, true, false)
 	storePath := filepath.Join(t.TempDir(), "plain-passwords.db")
 	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", storePath)
 	admin := mustCreateUser(t, models.User{Username: "admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
@@ -261,6 +262,7 @@ func TestRejectRegistrationApplicationDeletesPrecreatedVoceChatUser(t *testing.T
 
 func TestRejectRegistrationApplicationKeepsPendingWhenVoceChatDeleteFails(t *testing.T) {
 	setupUserServiceTestDB(t)
+	configureVoceChatForTest(t, true, true, false)
 	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", filepath.Join(t.TempDir(), "plain-passwords.db"))
 	admin := mustCreateUser(t, models.User{Username: "admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
 	setRegistrationProvisionForTest(t, func(applicationID, username, password string) registrationVoceChatProvisionResult {

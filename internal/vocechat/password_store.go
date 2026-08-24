@@ -153,6 +153,21 @@ func (s *PlainPasswordStore) UpsertApplicationVoceChatPassword(applicationID, us
 	})
 }
 
+func (s *PlainPasswordStore) UpsertApplicationLocalFallbackPassword(applicationID, username, password, candidateEmail string) error {
+	applicationID = strings.TrimSpace(applicationID)
+	if applicationID == "" {
+		return errors.New("申请ID不能为空")
+	}
+	return s.upsert(plainPasswordUpdate{
+		key:                   applicationRecordKey(applicationID),
+		kind:                  PlainPasswordKindApplication,
+		applicationID:         applicationID,
+		username:              strings.TrimSpace(username),
+		voceChatEmail:         strings.TrimSpace(candidateEmail),
+		localFallbackPassword: stringPtr(password),
+	})
+}
+
 func (s *PlainPasswordStore) GetUserPassword(userID uint) (PlainPasswordRecord, bool, error) {
 	return s.get(userRecordKey(userID))
 }

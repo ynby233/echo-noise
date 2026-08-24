@@ -138,7 +138,7 @@ func TestRegisterCreatesPendingApplicationInsteadOfUser(t *testing.T) {
 	if application.Status != models.RegistrationApplicationStatusPending {
 		t.Fatalf("application status = %q", application.Status)
 	}
-	if application.VoceChatSyncStatus != models.VoceChatSyncStatusNone {
+	if application.VoceChatSyncStatus != models.VoceChatSyncStatusUnbound {
 		t.Fatalf("vc sync status = %q", application.VoceChatSyncStatus)
 	}
 	if application.ApplicationID != "1" {
@@ -147,8 +147,8 @@ func TestRegisterCreatesPendingApplicationInsteadOfUser(t *testing.T) {
 	if strings.Contains(application.ApplicationID, "_") {
 		t.Fatalf("application id %q must be usable as VoceChat email prefix", application.ApplicationID)
 	}
-	if application.VoceChatEmail != application.ApplicationID+"@vc.com" {
-		t.Fatalf("vc email = %q", application.VoceChatEmail)
+	if application.VoceChatCandidateEmail != application.ApplicationID+"@vc.com" || application.VoceChatEmail != "" {
+		t.Fatalf("candidate/actual vc email = %q/%q", application.VoceChatCandidateEmail, application.VoceChatEmail)
 	}
 	if !strings.HasPrefix(application.PasswordHash, "$2") {
 		t.Fatalf("password hash should be bcrypt, got %q", application.PasswordHash)
@@ -161,12 +161,12 @@ func TestRegisterCreatesPendingApplicationInsteadOfUser(t *testing.T) {
 	if !ok {
 		t.Fatalf("plain password record missing")
 	}
-	if record.VoceChatPassword != "secret-pass" || record.LocalFallbackPassword != "" || record.Username != "新用户_01" || record.VoceChatEmail != application.VoceChatEmail || record.VoceChatPasswordUpdatedAt == nil {
+	if record.VoceChatPassword != "" || record.LocalFallbackPassword != "secret-pass" || record.Username != "新用户_01" || record.VoceChatEmail != application.VoceChatCandidateEmail || record.LocalFallbackPasswordUpdatedAt == nil {
 		t.Fatalf("unexpected plain password record: %#v", record)
 	}
 }
 
-func TestRegisterAutoApprovesWhenVoceChatDisabled(t *testing.T) {
+func TestRegisterDoesNotAutoApproveWhenVoceChatDisabled(t *testing.T) {
 	setupUserServiceTestDB(t)
 	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", filepath.Join(t.TempDir(), "plain-passwords.db"))
 	if err := database.DB.Create(&models.Setting{AllowRegistration: true, AutoApproveRegistration: true}).Error; err != nil {
@@ -184,31 +184,30 @@ func TestRegisterAutoApprovesWhenVoceChatDisabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
-	if !result.AutoApproved {
-		t.Fatalf("auto approved = false")
+	if result.AutoApproved {
+		t.Fatalf("local registration must not be auto approved")
 	}
-	if result.Status != models.RegistrationApplicationStatusApproved {
+	if result.Status != models.RegistrationApplicationStatusPending {
 		t.Fatalf("status = %q", result.Status)
 	}
-	if result.LocalUserID == nil || *result.LocalUserID == 0 {
-		t.Fatalf("local user id missing")
+	if result.LocalUserID != nil {
+		t.Fatalf("local user must not exist before review: %d", *result.LocalUserID)
 	}
 
-	user := mustGetUserByUsername(t, "auto_ok")
-	if user.VoceChatSyncStatus != models.VoceChatSyncStatusNone || user.VoceChatUserID != "" || user.VoceChatEmail != "" {
-		t.Fatalf("unexpected vc fields on local user: %#v", user)
+	if _, err := repository.GetUserByUsername("auto_ok"); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("local user lookup err = %v", err)
 	}
 	application, err := repository.GetRegistrationApplicationByApplicationID(result.ApplicationID)
 	if err != nil {
 		t.Fatalf("get application: %v", err)
 	}
-	if application.Status != models.RegistrationApplicationStatusApproved {
+	if application.Status != models.RegistrationApplicationStatusPending {
 		t.Fatalf("application status = %q", application.Status)
 	}
-	if application.VoceChatSyncStatus != models.VoceChatSyncStatusNone || application.VoceChatUserID != "" || application.VoceChatEmail != "" || application.VoceChatSyncError != "" {
+	if application.VoceChatSyncStatus != models.VoceChatSyncStatusUnbound || application.VoceChatUserID != "" || application.VoceChatEmail != "" || application.VoceChatSyncError != "" {
 		t.Fatalf("unexpected vc fields on application: %#v", application)
 	}
-	if _, err := repository.GetPendingRegistrationApplicationByUsername("auto_ok"); !errors.Is(err, gorm.ErrRecordNotFound) {
+	if _, err := repository.GetPendingRegistrationApplicationByUsername("auto_ok"); err != nil {
 		t.Fatalf("pending application lookup err = %v", err)
 	}
 }
@@ -296,6 +295,7 @@ func TestRegisterUsesIncreasingNumericApplicationIDs(t *testing.T) {
 
 func TestRegisterStoresVoceChatPrecreateResult(t *testing.T) {
 	setupUserServiceTestDB(t)
+	configureVoceChatForTest(t, true, true, false)
 	t.Setenv("NOISE_PLAIN_PASSWORD_STORE", filepath.Join(t.TempDir(), "plain-passwords.db"))
 
 	originalProvision := registrationVoceChatProvision

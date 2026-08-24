@@ -1,7 +1,9 @@
 package models
 
 import (
+	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,14 +17,14 @@ func MigrateDB(db *gorm.DB) error {
 	case "postgres":
 		err = db.Set("gorm:table_options", "").
 			Set("gorm:varchar_size", 255).
-			AutoMigrate(&User{}, &Message{}, &CloudAttachmentObject{}, &AttachmentBlob{}, &AttachmentReference{}, &LocalAttachmentGrant{}, &Comment{}, &UserNotification{}, &PasswordAlertCleanupTask{}, &Announcement{}, &AnnouncementRead{}, &AnnouncementPushDelivery{}, &Setting{}, &SiteConfig{}, &NotifyConfig{}, &MessageLike{}, &UserLifeCountdownConfig{}, &UserFrontendPreference{}, &RegistrationApplication{}, &VoceChatContactCache{}, &FriendLink{}, &FriendLinkApply{}, &SecurityAttackLog{}, &SecurityIPBan{}, &SecurityConfig{}, &SecurityLoginAudit{}, &SecurityAccessLog{}, &SecuritySiteVisitLog{}, &AdminCapabilityGrant{}, &AdminAuditLog{}, &AdminAuditConfig{})
+			AutoMigrate(&User{}, &Message{}, &CloudAttachmentObject{}, &AttachmentBlob{}, &AttachmentReference{}, &LocalAttachmentGrant{}, &Comment{}, &UserNotification{}, &PasswordAlertCleanupTask{}, &Announcement{}, &AnnouncementRead{}, &AnnouncementPushDelivery{}, &Setting{}, &SiteConfig{}, &NotifyConfig{}, &MessageLike{}, &UserLifeCountdownConfig{}, &UserFrontendPreference{}, &RegistrationApplication{}, &RegistrationApplicationSequence{}, &VoceChatContactCache{}, &FriendLink{}, &FriendLinkApply{}, &SecurityAttackLog{}, &SecurityIPBan{}, &SecurityConfig{}, &SecurityLoginAudit{}, &SecurityAccessLog{}, &SecuritySiteVisitLog{}, &AdminCapabilityGrant{}, &AdminAuditLog{}, &AdminAuditConfig{})
 	case "mysql":
 		err = db.Set("gorm:table_options", "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci").
 			Set("gorm:varchar_size", 191).
-			AutoMigrate(&User{}, &Message{}, &CloudAttachmentObject{}, &AttachmentBlob{}, &AttachmentReference{}, &LocalAttachmentGrant{}, &Comment{}, &UserNotification{}, &PasswordAlertCleanupTask{}, &Announcement{}, &AnnouncementRead{}, &AnnouncementPushDelivery{}, &Setting{}, &SiteConfig{}, &NotifyConfig{}, &MessageLike{}, &UserLifeCountdownConfig{}, &UserFrontendPreference{}, &RegistrationApplication{}, &VoceChatContactCache{}, &FriendLink{}, &FriendLinkApply{}, &SecurityAttackLog{}, &SecurityIPBan{}, &SecurityConfig{}, &SecurityLoginAudit{}, &SecurityAccessLog{}, &SecuritySiteVisitLog{}, &AdminCapabilityGrant{}, &AdminAuditLog{}, &AdminAuditConfig{})
+			AutoMigrate(&User{}, &Message{}, &CloudAttachmentObject{}, &AttachmentBlob{}, &AttachmentReference{}, &LocalAttachmentGrant{}, &Comment{}, &UserNotification{}, &PasswordAlertCleanupTask{}, &Announcement{}, &AnnouncementRead{}, &AnnouncementPushDelivery{}, &Setting{}, &SiteConfig{}, &NotifyConfig{}, &MessageLike{}, &UserLifeCountdownConfig{}, &UserFrontendPreference{}, &RegistrationApplication{}, &RegistrationApplicationSequence{}, &VoceChatContactCache{}, &FriendLink{}, &FriendLinkApply{}, &SecurityAttackLog{}, &SecurityIPBan{}, &SecurityConfig{}, &SecurityLoginAudit{}, &SecurityAccessLog{}, &SecuritySiteVisitLog{}, &AdminCapabilityGrant{}, &AdminAuditLog{}, &AdminAuditConfig{})
 	default: // sqlite
 		err = db.Set("gorm:varchar_size", 255).
-			AutoMigrate(&User{}, &Message{}, &CloudAttachmentObject{}, &AttachmentBlob{}, &AttachmentReference{}, &LocalAttachmentGrant{}, &Comment{}, &UserNotification{}, &PasswordAlertCleanupTask{}, &Announcement{}, &AnnouncementRead{}, &AnnouncementPushDelivery{}, &Setting{}, &SiteConfig{}, &NotifyConfig{}, &MessageLike{}, &UserLifeCountdownConfig{}, &UserFrontendPreference{}, &RegistrationApplication{}, &VoceChatContactCache{}, &FriendLink{}, &FriendLinkApply{}, &SecurityAttackLog{}, &SecurityIPBan{}, &SecurityConfig{}, &SecurityLoginAudit{}, &SecurityAccessLog{}, &SecuritySiteVisitLog{}, &AdminCapabilityGrant{}, &AdminAuditLog{}, &AdminAuditConfig{})
+			AutoMigrate(&User{}, &Message{}, &CloudAttachmentObject{}, &AttachmentBlob{}, &AttachmentReference{}, &LocalAttachmentGrant{}, &Comment{}, &UserNotification{}, &PasswordAlertCleanupTask{}, &Announcement{}, &AnnouncementRead{}, &AnnouncementPushDelivery{}, &Setting{}, &SiteConfig{}, &NotifyConfig{}, &MessageLike{}, &UserLifeCountdownConfig{}, &UserFrontendPreference{}, &RegistrationApplication{}, &RegistrationApplicationSequence{}, &VoceChatContactCache{}, &FriendLink{}, &FriendLinkApply{}, &SecurityAttackLog{}, &SecurityIPBan{}, &SecurityConfig{}, &SecurityLoginAudit{}, &SecurityAccessLog{}, &SecuritySiteVisitLog{}, &AdminCapabilityGrant{}, &AdminAuditLog{}, &AdminAuditConfig{})
 	}
 
 	if err != nil {
@@ -36,8 +38,11 @@ func MigrateDB(db *gorm.DB) error {
 	}
 
 	// 使用事务进行初始化操作
-	return db.Transaction(func(tx *gorm.DB) error {
+	if err := db.Transaction(func(tx *gorm.DB) error {
 		if err := migrateRuntimePolicyData(tx); err != nil {
+			return err
+		}
+		if err := migrateRegistrationApplicationAllocationData(tx); err != nil {
 			return err
 		}
 
@@ -167,7 +172,67 @@ func MigrateDB(db *gorm.DB) error {
 		}
 
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+	return ensureRegistrationApplicationCandidateUniqueIndex(db)
+}
+
+func migrateRegistrationApplicationAllocationData(db *gorm.DB) error {
+	var config SiteConfig
+	_ = db.Order("id ASC").First(&config).Error
+	domain := strings.TrimPrefix(strings.TrimSpace(config.VoceChatEmailDomain), "@")
+	if domain == "" {
+		domain = "vc.com"
+	}
+
+	var applications []RegistrationApplication
+	if err := db.Order("id ASC").Find(&applications).Error; err != nil {
+		return fmt.Errorf("load registration applications for allocation migration: %w", err)
+	}
+	var highest uint64
+	for index := range applications {
+		numericID, err := strconv.ParseUint(strings.TrimSpace(applications[index].ApplicationID), 10, 64)
+		if err == nil && numericID > highest {
+			highest = numericID
+		}
+		if strings.TrimSpace(applications[index].VoceChatCandidateEmail) != "" {
+			continue
+		}
+		candidate := strings.TrimSpace(applications[index].ApplicationID) + "@" + domain
+		if err := db.Model(&RegistrationApplication{}).Where("id = ?", applications[index].ID).Update("voce_chat_candidate_email", candidate).Error; err != nil {
+			return fmt.Errorf("backfill registration candidate email for application %d: %w", applications[index].ID, err)
+		}
+	}
+
+	var sequence RegistrationApplicationSequence
+	if err := db.First(&sequence, 1).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("load registration application sequence: %w", err)
+		}
+		sequence = RegistrationApplicationSequence{ID: 1, LastValue: highest}
+		if err := db.Create(&sequence).Error; err != nil {
+			return fmt.Errorf("create registration application sequence: %w", err)
+		}
+		return nil
+	}
+	if sequence.LastValue < highest {
+		if err := db.Model(&RegistrationApplicationSequence{}).Where("id = ?", 1).Update("last_value", highest).Error; err != nil {
+			return fmt.Errorf("advance registration application sequence: %w", err)
+		}
+	}
+	return nil
+}
+
+func ensureRegistrationApplicationCandidateUniqueIndex(db *gorm.DB) error {
+	const indexName = "idx_registration_applications_candidate_email_unique"
+	if db.Migrator().HasIndex(&RegistrationApplication{}, indexName) {
+		return nil
+	}
+	if err := db.Exec("CREATE UNIQUE INDEX " + indexName + " ON registration_applications (voce_chat_candidate_email)").Error; err != nil {
+		return fmt.Errorf("create unique registration candidate email index: %w", err)
+	}
+	return nil
 }
 
 func migrateRuntimePolicyData(db *gorm.DB) error {

@@ -12,25 +12,27 @@ import (
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/repository"
+	"github.com/rcy1314/echo-noise/internal/runtimepolicy"
 	"github.com/rcy1314/echo-noise/internal/vocechat"
 	"gorm.io/gorm"
 )
 
 type RegistrationApplicationView struct {
-	ID                 uint       `json:"id"`
-	ApplicationID      string     `json:"application_id"`
-	Username           string     `json:"username"`
-	Status             string     `json:"status"`
-	VoceChatUserID     string     `json:"voce_chat_user_id,omitempty"`
-	VoceChatEmail      string     `json:"voce_chat_email,omitempty"`
-	VoceChatSyncStatus string     `json:"voce_chat_sync_status,omitempty"`
-	VoceChatSyncError  string     `json:"voce_chat_sync_error,omitempty"`
-	LocalUserID        *uint      `json:"local_user_id,omitempty"`
-	ReviewerUserID     *uint      `json:"reviewer_user_id,omitempty"`
-	ReviewNote         string     `json:"review_note,omitempty"`
-	ReviewedAt         *time.Time `json:"reviewed_at,omitempty"`
-	CreatedAt          time.Time  `json:"created_at"`
-	UpdatedAt          time.Time  `json:"updated_at"`
+	ID                     uint       `json:"id"`
+	ApplicationID          string     `json:"application_id"`
+	Username               string     `json:"username"`
+	Status                 string     `json:"status"`
+	VoceChatCandidateEmail string     `json:"voce_chat_candidate_email,omitempty"`
+	VoceChatUserID         string     `json:"voce_chat_user_id,omitempty"`
+	VoceChatEmail          string     `json:"voce_chat_email,omitempty"`
+	VoceChatSyncStatus     string     `json:"voce_chat_sync_status,omitempty"`
+	VoceChatSyncError      string     `json:"voce_chat_sync_error,omitempty"`
+	LocalUserID            *uint      `json:"local_user_id,omitempty"`
+	ReviewerUserID         *uint      `json:"reviewer_user_id,omitempty"`
+	ReviewNote             string     `json:"review_note,omitempty"`
+	ReviewedAt             *time.Time `json:"reviewed_at,omitempty"`
+	CreatedAt              time.Time  `json:"created_at"`
+	UpdatedAt              time.Time  `json:"updated_at"`
 }
 
 type RegistrationApplicationListResult struct {
@@ -113,6 +115,9 @@ func ApproveRegistrationApplication(id uint, reviewerUserID uint, reviewNote str
 		return nil, errors.New("读取注册申请明文密码失败")
 	}
 	plainPassword := plainRecord.VoceChatPasswordValue()
+	if plainPassword == "" {
+		plainPassword = plainRecord.LocalFallbackPasswordValue()
+	}
 	if !ok || plainPassword == "" {
 		return nil, errors.New("注册申请明文密码备份不存在，无法通过审核")
 	}
@@ -122,13 +127,21 @@ func ApproveRegistrationApplication(id uint, reviewerUserID uint, reviewNote str
 		return nil, err
 	}
 
+	policy, _, policyErr := loadRuntimePolicyAndVoceChatConfig()
+	if policyErr != nil {
+		return nil, errors.New(models.DatabaseErrorMessage)
+	}
+	initialSyncStatus := models.VoceChatSyncStatusUnbound
+	if policy.LegacyConfiguration {
+		initialSyncStatus = models.VoceChatSyncStatusNone
+	}
 	now := time.Now().UTC()
 	localUser := models.User{
 		Username:           application.Username,
 		Password:           application.PasswordHash,
 		IsAdmin:            false,
 		Token:              models.GenerateToken(32),
-		VoceChatSyncStatus: models.VoceChatSyncStatusNone,
+		VoceChatSyncStatus: initialSyncStatus,
 	}
 	if voceChatLinked {
 		linkedAt := now
@@ -162,7 +175,7 @@ func ApproveRegistrationApplication(id uint, reviewerUserID uint, reviewNote str
 		application.ReviewerUserID = &reviewerID
 		application.ReviewNote = note
 		application.ReviewedAt = &now
-		application.VoceChatSyncStatus = models.VoceChatSyncStatusNone
+		application.VoceChatSyncStatus = initialSyncStatus
 		if voceChatLinked {
 			application.VoceChatSyncStatus = models.VoceChatSyncStatusLinked
 		}
@@ -219,16 +232,47 @@ func RejectRegistrationApplication(id uint, reviewerUserID uint, reviewNote stri
 }
 
 func ensureRegistrationVoceChatUser(application *models.RegistrationApplication, password string) (bool, error) {
-	cfg := currentVoceChatConfig()
-	if !cfg.Enabled {
+	policy, _, policyErr := loadRuntimePolicyAndVoceChatConfig()
+	if policyErr != nil {
+		return false, errors.New(models.DatabaseErrorMessage)
+	}
+	if !policy.LegacyConfiguration && policy.RuntimeState == runtimepolicy.StateLocal {
 		application.VoceChatUserID = ""
 		application.VoceChatEmail = ""
-		application.VoceChatSyncStatus = models.VoceChatSyncStatusNone
+		application.VoceChatSyncStatus = models.VoceChatSyncStatusUnbound
 		application.VoceChatSyncError = ""
 		_ = repository.UpdateRegistrationApplicationFields(application.ID, map[string]interface{}{
 			"voce_chat_user_id":     "",
 			"voce_chat_email":       "",
-			"voce_chat_sync_status": models.VoceChatSyncStatusNone,
+			"voce_chat_sync_status": models.VoceChatSyncStatusUnbound,
+			"voce_chat_sync_error":  "",
+		})
+		return false, nil
+	}
+	if !policy.LegacyConfiguration && policy.RuntimeState == runtimepolicy.StateVoceChatDegraded {
+		message := "VoceChat 暂不可用，申请保持待处理"
+		application.VoceChatSyncStatus = models.VoceChatSyncStatusPending
+		application.VoceChatSyncError = message
+		_ = repository.UpdateRegistrationApplicationFields(application.ID, map[string]interface{}{
+			"voce_chat_sync_status": models.VoceChatSyncStatusPending,
+			"voce_chat_sync_error":  message,
+		})
+		return false, newRegistrationApprovalDeferredError(message)
+	}
+	cfg := currentVoceChatConfig()
+	if !cfg.Enabled {
+		unboundStatus := models.VoceChatSyncStatusUnbound
+		if policy.LegacyConfiguration {
+			unboundStatus = models.VoceChatSyncStatusNone
+		}
+		application.VoceChatUserID = ""
+		application.VoceChatEmail = ""
+		application.VoceChatSyncStatus = unboundStatus
+		application.VoceChatSyncError = ""
+		_ = repository.UpdateRegistrationApplicationFields(application.ID, map[string]interface{}{
+			"voce_chat_user_id":     "",
+			"voce_chat_email":       "",
+			"voce_chat_sync_status": unboundStatus,
 			"voce_chat_sync_error":  "",
 		})
 		return false, nil
@@ -265,9 +309,6 @@ func ensureRegistrationVoceChatUser(application *models.RegistrationApplication,
 	}
 
 	provision := registrationVoceChatProvision(application.ApplicationID, application.Username, password)
-	if strings.TrimSpace(provision.Email) != "" {
-		application.VoceChatEmail = strings.TrimSpace(provision.Email)
-	}
 	if strings.TrimSpace(provision.UserID) != "" {
 		application.VoceChatUserID = strings.TrimSpace(provision.UserID)
 	}
@@ -275,6 +316,12 @@ func ensureRegistrationVoceChatUser(application *models.RegistrationApplication,
 		application.VoceChatSyncStatus = strings.TrimSpace(provision.SyncStatus)
 	}
 	application.VoceChatSyncError = strings.TrimSpace(provision.SyncError)
+	if application.VoceChatSyncStatus == models.VoceChatSyncStatusCreated && strings.TrimSpace(application.VoceChatUserID) != "" {
+		application.VoceChatEmail = strings.TrimSpace(provision.Email)
+		if application.VoceChatEmail == "" {
+			application.VoceChatEmail = application.VoceChatCandidateEmail
+		}
+	}
 	_ = repository.UpdateRegistrationApplicationFields(application.ID, map[string]interface{}{
 		"voce_chat_user_id":     application.VoceChatUserID,
 		"voce_chat_email":       application.VoceChatEmail,
@@ -378,6 +425,7 @@ func buildRegistrationApplicationView(application models.RegistrationApplication
 		UpdatedAt:          application.UpdatedAt,
 	}
 	if includeSyncError {
+		view.VoceChatCandidateEmail = application.VoceChatCandidateEmail
 		view.VoceChatSyncError = application.VoceChatSyncError
 	}
 	return view

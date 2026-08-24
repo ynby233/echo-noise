@@ -1,16 +1,64 @@
 package repository
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"gorm.io/gorm"
 )
 
-func CreateRegistrationApplication(application *models.RegistrationApplication) error {
-	return database.DB.Create(application).Error
+func CreateRegistrationApplicationWithPermanentNumber(application *models.RegistrationApplication, emailDomain string) error {
+	if application == nil {
+		return fmt.Errorf("registration application is required")
+	}
+	emailDomain = strings.TrimPrefix(strings.TrimSpace(emailDomain), "@")
+	if emailDomain == "" {
+		emailDomain = "vc.com"
+	}
+	var lastErr error
+	for attempt := 0; attempt < 8; attempt++ {
+		candidate := *application
+		err := database.DB.Transaction(func(tx *gorm.DB) error {
+			result := tx.Model(&models.RegistrationApplicationSequence{}).
+				Where("id = ?", 1).
+				UpdateColumn("last_value", gorm.Expr("last_value + ?", 1))
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected == 0 {
+				if err := tx.Create(&models.RegistrationApplicationSequence{ID: 1}).Error; err != nil {
+					return err
+				}
+				if err := tx.Model(&models.RegistrationApplicationSequence{}).
+					Where("id = ?", 1).
+					UpdateColumn("last_value", gorm.Expr("last_value + ?", 1)).Error; err != nil {
+					return err
+				}
+			}
+			var sequence models.RegistrationApplicationSequence
+			if err := tx.First(&sequence, 1).Error; err != nil {
+				return err
+			}
+			candidate.ApplicationID = strconv.FormatUint(sequence.LastValue, 10)
+			candidate.VoceChatCandidateEmail = candidate.ApplicationID + "@" + emailDomain
+			return tx.Create(&candidate).Error
+		})
+		if err == nil {
+			*application = candidate
+			return nil
+		}
+		lastErr = err
+		message := strings.ToLower(err.Error())
+		if !strings.Contains(message, "locked") && !strings.Contains(message, "busy") && !strings.Contains(message, "deadlock") && !strings.Contains(message, "serialization") {
+			return err
+		}
+		time.Sleep(time.Duration(attempt+1) * 10 * time.Millisecond)
+	}
+	return lastErr
 }
 
 func GetRegistrationApplicationByID(id uint) (*models.RegistrationApplication, error) {
@@ -55,25 +103,6 @@ func CountPendingRegistrationApplications() (int64, error) {
 		return 0, err
 	}
 	return count, nil
-}
-
-func MaxNumericRegistrationApplicationID() (int64, error) {
-	var applicationIDs []string
-	if err := database.DB.Model(&models.RegistrationApplication{}).Pluck("application_id", &applicationIDs).Error; err != nil {
-		return 0, err
-	}
-
-	var maxID int64
-	for _, raw := range applicationIDs {
-		id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
-		if err != nil || id <= 0 {
-			continue
-		}
-		if id > maxID {
-			maxID = id
-		}
-	}
-	return maxID, nil
 }
 
 func ListRegistrationApplications(status string, limit int, offset int) ([]models.RegistrationApplication, int64, error) {
