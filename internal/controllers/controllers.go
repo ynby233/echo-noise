@@ -4175,10 +4175,6 @@ func ResetManagedUserPassword(c *gin.Context) {
 		c.JSON(http.StatusForbidden, dto.Fail[string]("无权重置该用户密码"))
 		return
 	}
-	if strings.TrimSpace(user.VoceChatEmail) == "" || strings.TrimSpace(user.VoceChatUserID) == "" {
-		c.JSON(http.StatusOK, dto.Fail[string]("密码重置失败，请稍后重试。"))
-		return
-	}
 	if err := services.ChangePassword(user, dto.UserInfoDto{Password: req.Password}); err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string](services.PasswordChangePublicFailureMessage(err, true)))
 		return
