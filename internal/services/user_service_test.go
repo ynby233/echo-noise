@@ -1487,16 +1487,20 @@ func TestGetStatusScopesVoceChatFieldsByViewerRole(t *testing.T) {
 	}
 
 	selfFields := func(user *models.User) map[uint]bool { return map[uint]bool{user.ID: true} }
+	allNonPrimaryEmails := make(map[uint]bool, len(allUsers)-1)
 	allFields := make(map[uint]bool, len(allUsers))
 	for _, user := range allUsers {
 		allFields[user.ID] = true
+		if user.ID != models.PrimaryAdminUserID {
+			allNonPrimaryEmails[user.ID] = true
+		}
 	}
 
 	assertStatus(t, 0, map[uint]bool{}, map[uint]bool{})
 	assertStatus(t, ordinaryA.ID, selfFields(ordinaryA), selfFields(ordinaryA))
 	assertStatus(t, delegatedWithoutUsersView.ID, selfFields(delegatedWithoutUsersView), selfFields(delegatedWithoutUsersView))
-	assertStatus(t, delegatedWithUsersView.ID, allFields, selfFields(delegatedWithUsersView))
-	assertStatus(t, primary.ID, allFields, allFields)
+	assertStatus(t, delegatedWithUsersView.ID, allNonPrimaryEmails, selfFields(delegatedWithUsersView))
+	assertStatus(t, primary.ID, allNonPrimaryEmails, allFields)
 
 	if err := database.DB.Where("user_id = ? AND capability = ?", delegatedWithUsersView.ID, "users.view").Delete(&models.AdminCapabilityGrant{}).Error; err != nil {
 		t.Fatalf("revoke users.view: %v", err)

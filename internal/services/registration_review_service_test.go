@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/dto"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/repository"
@@ -16,6 +17,10 @@ func TestListRegistrationApplicationsRedactsSyncErrorForDelegatedViewer(t *testi
 	db := setupUserServiceTestDB(t)
 	primary := mustCreateUser(t, models.User{Username: "primary-admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
 	delegated := mustCreateUser(t, models.User{Username: "delegated-admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+	delegatedWithUsersView := mustCreateUser(t, models.User{Username: "delegated-users-view", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})
+	if err := db.Create(&models.AdminCapabilityGrant{UserID: delegatedWithUsersView.ID, Capability: string(authorization.CapabilityUsersView), GrantedByUserID: primary.ID}).Error; err != nil {
+		t.Fatalf("grant users.view: %v", err)
+	}
 	if err := db.Create(&models.RegistrationApplication{
 		ApplicationID:      "redaction-test",
 		Username:           "candidate",
@@ -32,16 +37,51 @@ func TestListRegistrationApplicationsRedactsSyncErrorForDelegatedViewer(t *testi
 	if err != nil {
 		t.Fatalf("list delegated applications: %v", err)
 	}
-	if len(delegatedResult.Items) != 1 || delegatedResult.Items[0].VoceChatSyncError != "" {
-		t.Fatalf("delegated view = %#v, want redacted sync error", delegatedResult.Items)
+	if len(delegatedResult.Items) != 1 || delegatedResult.Items[0].VoceChatSyncError != "" || delegatedResult.Items[0].VoceChatEmail != "" {
+		t.Fatalf("registration-only delegated view = %#v, want redacted email and sync error", delegatedResult.Items)
+	}
+
+	delegatedUsersResult, err := ListRegistrationApplicationsForViewer(delegatedWithUsersView.ID, "", 20, 0)
+	if err != nil {
+		t.Fatalf("list users.view delegated applications: %v", err)
+	}
+	if len(delegatedUsersResult.Items) != 1 || delegatedUsersResult.Items[0].VoceChatEmail != "candidate@vc.example" || delegatedUsersResult.Items[0].VoceChatSyncError != "" || delegatedUsersResult.Items[0].VoceChatCandidateEmail != "" {
+		t.Fatalf("users.view delegated view = %#v, want actual email without primary diagnostics", delegatedUsersResult.Items)
 	}
 
 	primaryResult, err := ListRegistrationApplicationsForViewer(primary.ID, "", 20, 0)
 	if err != nil {
 		t.Fatalf("list primary applications: %v", err)
 	}
-	if len(primaryResult.Items) != 1 || !strings.Contains(primaryResult.Items[0].VoceChatSyncError, "upstream secret diagnostic") {
+	if len(primaryResult.Items) != 1 || primaryResult.Items[0].VoceChatEmail != "candidate@vc.example" || !strings.Contains(primaryResult.Items[0].VoceChatSyncError, "upstream secret diagnostic") {
 		t.Fatalf("primary view = %#v, want diagnostic", primaryResult.Items)
+	}
+}
+
+func TestRedactManagedUserVoceChatEmailForRegistrationApprovalResponse(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	primary := mustCreateUser(t, models.User{Username: "primary-redaction", Password: models.HashPassword("primary"), IsAdmin: true, VoceChatEmail: "primary-private@vc.example"})
+	registrationOnly := mustCreateUser(t, models.User{Username: "registration-only", Password: models.HashPassword("delegated"), IsAdmin: true})
+	withUsersView := mustCreateUser(t, models.User{Username: "registration-users-view", Password: models.HashPassword("delegated"), IsAdmin: true})
+	if err := db.Create(&models.AdminCapabilityGrant{UserID: withUsersView.ID, Capability: string(authorization.CapabilityUsersView), GrantedByUserID: primary.ID}).Error; err != nil {
+		t.Fatalf("grant users.view: %v", err)
+	}
+	target := mustCreateUser(t, models.User{Username: "approved-user", Password: models.HashPassword("target"), VoceChatEmail: "approved-actual@vc.example"})
+
+	registrationOnlyCopy := *target
+	RedactManagedUserVoceChatEmailForViewer(registrationOnly.ID, &registrationOnlyCopy)
+	if registrationOnlyCopy.VoceChatEmail != "" {
+		t.Fatalf("registration-only approval response leaked email %q", registrationOnlyCopy.VoceChatEmail)
+	}
+	usersViewCopy := *target
+	RedactManagedUserVoceChatEmailForViewer(withUsersView.ID, &usersViewCopy)
+	if usersViewCopy.VoceChatEmail != target.VoceChatEmail {
+		t.Fatalf("users.view approval response email = %q", usersViewCopy.VoceChatEmail)
+	}
+	primaryTargetCopy := *primary
+	RedactManagedUserVoceChatEmailForViewer(withUsersView.ID, &primaryTargetCopy)
+	if primaryTargetCopy.VoceChatEmail != "" {
+		t.Fatalf("primary email leaked through approval sanitizer: %q", primaryTargetCopy.VoceChatEmail)
 	}
 }
 

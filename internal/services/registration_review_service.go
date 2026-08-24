@@ -72,19 +72,26 @@ func ListRegistrationApplications(status string, limit int, offset int) (Registr
 	return ListRegistrationApplicationsForViewer(0, status, limit, offset)
 }
 
-// ListRegistrationApplicationsForViewer redacts detailed VoceChat sync errors
-// unless the viewer is the primary administrator. The status and identifiers
-// remain available to authorized registration reviewers, while raw upstream
-// diagnostics stay restricted to the primary administrator.
+// ListRegistrationApplicationsForViewer exposes the actual VoceChat email only
+// when the viewer also has users.view. Candidate addresses and raw upstream
+// diagnostics remain restricted to the primary administrator.
 func ListRegistrationApplicationsForViewer(viewerUserID uint, status string, limit int, offset int) (RegistrationApplicationListResult, error) {
 	applications, total, err := repository.ListRegistrationApplications(status, limit, offset)
 	if err != nil {
 		return RegistrationApplicationListResult{}, err
 	}
 	includeSyncError := viewerUserID == models.PrimaryAdminUserID
+	canViewApplicationEmail := false
+	if viewerUserID != 0 {
+		var viewer models.User
+		if err := database.DB.Select("id", "is_admin").First(&viewer, viewerUserID).Error; err == nil {
+			canViewApplicationEmail = canViewAllNonPrimaryVoceChatEmails(viewer)
+		}
+	}
 	views := make([]RegistrationApplicationView, 0, len(applications))
 	for _, application := range applications {
-		views = append(views, buildRegistrationApplicationView(application, includeSyncError))
+		includeEmail := canViewApplicationEmail && (application.LocalUserID == nil || *application.LocalUserID != models.PrimaryAdminUserID)
+		views = append(views, buildRegistrationApplicationView(application, includeSyncError, includeEmail))
 	}
 	return RegistrationApplicationListResult{Items: views, Total: total}, nil
 }
@@ -408,14 +415,13 @@ func deleteRegistrationUserWithVoceChat(application models.RegistrationApplicati
 	return client.DeleteUser(ctx, apiKey, uid)
 }
 
-func buildRegistrationApplicationView(application models.RegistrationApplication, includeSyncError bool) RegistrationApplicationView {
+func buildRegistrationApplicationView(application models.RegistrationApplication, includeSyncError bool, includeEmail bool) RegistrationApplicationView {
 	view := RegistrationApplicationView{
 		ID:                 application.ID,
 		ApplicationID:      application.ApplicationID,
 		Username:           application.Username,
 		Status:             application.Status,
 		VoceChatUserID:     application.VoceChatUserID,
-		VoceChatEmail:      application.VoceChatEmail,
 		VoceChatSyncStatus: application.VoceChatSyncStatus,
 		LocalUserID:        application.LocalUserID,
 		ReviewerUserID:     application.ReviewerUserID,
@@ -423,6 +429,9 @@ func buildRegistrationApplicationView(application models.RegistrationApplication
 		ReviewedAt:         application.ReviewedAt,
 		CreatedAt:          application.CreatedAt,
 		UpdatedAt:          application.UpdatedAt,
+	}
+	if includeEmail {
+		view.VoceChatEmail = application.VoceChatEmail
 	}
 	if includeSyncError {
 		view.VoceChatCandidateEmail = application.VoceChatCandidateEmail

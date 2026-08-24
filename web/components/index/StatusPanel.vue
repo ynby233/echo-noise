@@ -1476,7 +1476,8 @@
                           <div :class="theme.mutedText">VoceChat</div>
                           <div class="flex items-center gap-2 flex-wrap mt-1">
                             <UBadge :color="voceChatProvisionColor(app.voce_chat_sync_status)" variant="soft">{{ voceChatProvisionLabel(app.voce_chat_sync_status) }}</UBadge>
-                            <span class="truncate" :class="theme.text">{{ app.voce_chat_email || '未绑定邮箱' }}</span>
+                            <span v-if="can('users.view')" class="truncate" :class="theme.text">{{ app.voce_chat_email || '未绑定邮箱' }}</span>
+                            <span v-else class="truncate" :class="theme.mutedText">需“查看用户”权限</span>
                           </div>
                         </div>
                         <div class="text-sm">
@@ -1528,6 +1529,9 @@
                         <div class="flex justify-end">
                              <UButton size="xs" variant="ghost" :color="isExpanded(u) ? 'gray' : 'primary'" @click="toggleExpanded(u)">{{ isExpanded(u) ? '收起' : '展开' }}</UButton>
                         </div>
+                      </div>
+                      <div v-if="userManagementVoceChatEmail(u).visible" class="mt-2 text-xs break-all" :class="theme.mutedText">
+                        <span>VoceChat 邮箱：</span><span :class="theme.text">{{ userManagementVoceChatEmail(u).email || '未绑定' }}</span>
                       </div>
                       <div class="mt-2 flex items-center gap-2 flex-wrap">
                         <UButton v-if="userManagementActions(u).manageRole" :color="(u.is_admin ?? u.IsAdmin) ? 'orange' : 'green'" :variant="(u.is_admin ?? u.IsAdmin) ? 'soft' : 'solid'" class="shadow" @click="confirmToggleAdmin(u)">{{ (u.is_admin ?? u.IsAdmin) ? '\u53d6\u6d88\u7ba1\u7406\u5458' : '\u8bbe\u4e3a\u7ba1\u7406\u5458' }}</UButton>
@@ -2495,7 +2499,7 @@ import { resolveUploadedMediaUrl } from '~/utils/media-upload'
 import { makeEmptyAdConfig, normalizeAdConfigs, resolveAdImageURL, type AdConfig } from '~/utils/ad-config'
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 import { resolveAccessibleAdminSection } from '~/utils/admin-section-access'
-import { resolveUserManagementActions } from '~/utils/user-management-actions'
+import { resolveUserManagementActions, resolveUserManagementVoceChatEmail } from '~/utils/user-management-actions'
 import adminSectionCapabilities from '~/config/admin-section-capabilities.json'
 import { useRuntimeConfig, useHead, useRouter } from '#imports'
 const formatShanghai = (s: string) => {
@@ -4302,6 +4306,11 @@ watch(expandedUsers, (v) => {
 const resetForm = reactive<{ password: Record<string, string> }>({ password: {} })
 const showResetPassword = ref(false)
 const userManagementActions = (u: any) => resolveUserManagementActions({
+  id: Number(userStore.user?.userid || userStore.user?.id || userStore.user?.ID || userStore.user?.user_id || 0),
+  isPrimaryAdmin: isPrimaryAdmin.value,
+  capabilities: adminCapabilities.value,
+}, u)
+const userManagementVoceChatEmail = (u: any) => resolveUserManagementVoceChatEmail({
   id: Number(userStore.user?.userid || userStore.user?.id || userStore.user?.ID || userStore.user?.user_id || 0),
   isPrimaryAdmin: isPrimaryAdmin.value,
   capabilities: adminCapabilities.value,

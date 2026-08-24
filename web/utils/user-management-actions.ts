@@ -4,6 +4,8 @@ type UserLike = {
   user_id?: number | string
   is_admin?: boolean
   IsAdmin?: boolean
+  voce_chat_email?: string
+  VoceChatEmail?: string
 }
 
 export type UserManagementActor = {
@@ -16,6 +18,11 @@ export type UserManagementActions = {
   manageRole: boolean
   deleteUser: boolean
   resetPassword: boolean
+}
+
+export type UserManagementVoceChatEmail = {
+  visible: boolean
+  email: string
 }
 
 const userID = (user: UserLike) => Number(user.id ?? user.ID ?? user.user_id ?? 0)
@@ -33,5 +40,16 @@ export const resolveUserManagementActions = (
     manageRole: actor.isPrimaryAdmin && targetID !== 1 && can('admin_roles.manage'),
     deleteUser: targetID !== actor.id && can('users.delete') && (actor.isPrimaryAdmin || !targetIsAdministrator),
     resetPassword: targetID !== 1 && can('users.reset_password') && (actor.isPrimaryAdmin || !targetIsAdministrator),
+  }
+}
+
+export const resolveUserManagementVoceChatEmail = (
+  actor: UserManagementActor,
+  target: UserLike,
+): UserManagementVoceChatEmail => {
+  const visible = userID(target) !== 1 && (actor.isPrimaryAdmin || actor.capabilities.includes('users.view'))
+  return {
+    visible,
+    email: visible ? String(target.voce_chat_email ?? target.VoceChatEmail ?? '').trim() : '',
   }
 }

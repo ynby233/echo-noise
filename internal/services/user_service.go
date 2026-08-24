@@ -1227,11 +1227,7 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 			isAdmin = currentUser.IsAdmin
 		}
 	}
-	canViewAllVoceChatEmails := currentUser.ID == models.PrimaryAdminUserID
-	if !canViewAllVoceChatEmails && currentUser.IsAdmin {
-		canViewAllVoceChatEmails = authorization.New(database.DB).
-			Authorize(currentUser.ID, authorization.CapabilityUsersView, nil).Allowed
-	}
+	canViewAllVoceChatEmails := canViewAllNonPrimaryVoceChatEmails(currentUser)
 	canViewAllVoceChatNotificationPreferences := currentUser.ID == models.PrimaryAdminUserID
 
 	var users []models.UserStatus
@@ -1246,7 +1242,7 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 			IsAdmin:   user.IsAdmin,
 			AvatarURL: strings.TrimSpace(user.AvatarURL),
 		}
-		if canViewAllVoceChatEmails || currentUser.ID == user.ID {
+		if user.ID != models.PrimaryAdminUserID && (canViewAllVoceChatEmails || currentUser.ID == user.ID) {
 			item.VoceChatEmail = strings.TrimSpace(user.VoceChatEmail)
 		}
 		if canViewAllVoceChatNotificationPreferences || currentUser.ID == user.ID {
@@ -1308,6 +1304,34 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 	}
 
 	return status, nil
+}
+
+func canViewAllNonPrimaryVoceChatEmails(viewer models.User) bool {
+	if viewer.ID == models.PrimaryAdminUserID {
+		return true
+	}
+	return viewer.ID != 0 && viewer.IsAdmin && authorization.New(database.DB).
+		Authorize(viewer.ID, authorization.CapabilityUsersView, nil).Allowed
+}
+
+func CanViewManagedUserVoceChatEmail(viewerUserID uint, targetUserID uint) bool {
+	if viewerUserID == 0 || targetUserID == 0 || targetUserID == models.PrimaryAdminUserID {
+		return false
+	}
+	if viewerUserID == targetUserID {
+		return true
+	}
+	var viewer models.User
+	if err := database.DB.Select("id", "is_admin").First(&viewer, viewerUserID).Error; err != nil {
+		return false
+	}
+	return canViewAllNonPrimaryVoceChatEmails(viewer)
+}
+
+func RedactManagedUserVoceChatEmailForViewer(viewerUserID uint, user *models.User) {
+	if user != nil && !CanViewManagedUserVoceChatEmail(viewerUserID, user.ID) {
+		user.VoceChatEmail = ""
+	}
 }
 
 func excludeDashboardSpecialMessages(query *gorm.DB) *gorm.DB {

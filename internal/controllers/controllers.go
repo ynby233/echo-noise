@@ -926,6 +926,7 @@ func ApproveRegistrationApplication(c *gin.Context) {
 		return
 	}
 	user.Password = ""
+	services.RedactManagedUserVoceChatEmailForViewer(reviewerUserID, user)
 	c.JSON(http.StatusOK, dto.OK(user, models.UpdateUserSuccessMessage))
 }
 
