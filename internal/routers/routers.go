@@ -156,6 +156,7 @@ func SetupRouter() *gin.Engine {
 	// 不再使用 AllowOrigins 列表，统一使用 AllowOriginFunc 做灵活匹配
 
 	r.Use(cors.New(corsConfig))
+	r.Use(middleware.MobileSetupGate())
 
 	wd, _ := os.Getwd()
 	exePath, _ := os.Executable()
@@ -230,6 +231,8 @@ func SetupRouter() *gin.Engine {
 	r.GET("/rss", controllers.GenerateRSS)
 
 	// 公共路由
+	api.GET("/setup/status", controllers.GetMobileSetupStatus)
+	api.POST("/setup/owner", controllers.InitializeMobileSiteOwner)
 	api.GET("", controllers.GetStatus)
 	api.GET("/frontend/config", controllers.GetFrontendConfig)
 	api.GET("/settings", controllers.GetFrontendConfig)
@@ -272,6 +275,7 @@ func SetupRouter() *gin.Engine {
 	// 需要鉴权的路由
 	authRoutes := api.Group("")
 	authRoutes.Use(middleware.SessionAuthMiddleware())
+	authRoutes.GET("/version/build", controllers.GetBuildIdentity)
 	registerAdminAuthorizationRoutes(authRoutes)
 	registerRuntimePolicyRoutes(authRoutes)
 	registerNoteManagementRoutes(authRoutes)

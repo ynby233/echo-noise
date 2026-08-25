@@ -53,6 +53,8 @@
     "test:public-music-player": "node scripts/public-music-player.test.mjs",
     "test:public-branding": "node scripts/public-branding-exposure.test.mjs",
     "test:standalone-widget": "node scripts/standalone-widget-template.test.mjs",
+    "test:mobile-owner-setup": "node scripts/mobile-owner-setup.test.mjs",
+    "test:build-identity": "node scripts/build-identity-contract.test.mjs",
     "test:attachment-audio-player": "node scripts/attachment-audio-player.test.mjs",
     "test:attachment-failure-state": "node scripts/attachment-failure-state.test.mjs",
     "test:attachment-inline-preview": "node scripts/attachment-inline-preview.test.mjs",

@@ -31,6 +31,7 @@ ENV CGO_ENABLED=0
 ENV GO111MODULE=on
 ARG TARGETOS
 ARG TARGETARCH
+ARG VERSION=dev
 
 # 设置工作目录
 WORKDIR /app
@@ -49,7 +50,7 @@ COPY ./config ./config
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     GOOS="${TARGETOS:-linux}" GOARCH="${TARGETARCH:-$(go env GOARCH)}" \
-    go build -trimpath -ldflags "-s -w -buildid=" -o /app/noise ./cmd/server/main.go
+    go build -trimpath -ldflags "-s -w -buildid= -X github.com/rcy1314/echo-noise/internal/buildinfo.Identity=${VERSION}" -o /app/noise ./cmd/server/main.go
 
 # 创建必要的目录并设置权限
 RUN mkdir -p /app/data /app/public && chmod -R 755 /app/data

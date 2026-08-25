@@ -148,44 +148,8 @@ func SeedDefaultData() error {
 	}
 
 	// 4. 初始化默认演示消息
-	var msgCount int64
-	db.Model(&models.Message{}).Count(&msgCount)
-	// 如果只有留言板一条消息（或者没有消息），则添加演示消息
-	if msgCount <= 1 {
-		messages := []models.Message{
-			{
-				Content:   neutralWelcomeMessage,
-				UserID:    primary.ID,
-				Username:  primary.Username,
-				CreatedAt: time.Now(),
-			},
-			{
-				Content:   "这里有一些关于自己的美好记录。 #日记 #示例",
-				UserID:    primary.ID,
-				Username:  primary.Username,
-				CreatedAt: time.Now().Add(-1 * time.Hour),
-			},
-			{
-				Content:   "探索未知的世界。 #Travel",
-				UserID:    primary.ID,
-				Username:  primary.Username,
-				CreatedAt: time.Now().Add(-2 * time.Hour),
-			},
-			{
-				Content:   "记录生活中的点滴。 #Life #Daily",
-				UserID:    primary.ID,
-				Username:  primary.Username,
-				CreatedAt: time.Now().Add(-3 * time.Hour),
-			},
-		}
-
-		for _, m := range messages {
-			var c int64
-			db.Model(&models.Message{}).Where("content = ? AND user_id = ?", m.Content, primary.ID).Count(&c)
-			if c == 0 {
-				db.Create(&m)
-			}
-		}
+	if err := seedPrimaryAdminExampleMessages(db, primary, neutralWelcomeMessage); err != nil {
+		return fmt.Errorf("初始化默认演示消息失败: %v", err)
 	}
 
 	if err := collapseLegacyDefaultBackgrounds(db); err != nil {
@@ -195,6 +159,35 @@ func SeedDefaultData() error {
 		return err
 	}
 
+	return nil
+}
+
+func seedPrimaryAdminExampleMessages(db *gorm.DB, primary *models.User, welcomeMessage string) error {
+	var msgCount int64
+	if err := db.Model(&models.Message{}).Count(&msgCount).Error; err != nil {
+		return err
+	}
+	if msgCount > 1 {
+		return nil
+	}
+
+	messages := []models.Message{
+		{Content: welcomeMessage, UserID: primary.ID, Username: primary.Username, CreatedAt: time.Now()},
+		{Content: "这里有一些关于自己的美好记录。 #日记 #示例", UserID: primary.ID, Username: primary.Username, CreatedAt: time.Now().Add(-1 * time.Hour)},
+		{Content: "探索未知的世界。 #Travel", UserID: primary.ID, Username: primary.Username, CreatedAt: time.Now().Add(-2 * time.Hour)},
+		{Content: "记录生活中的点滴。 #Life #Daily", UserID: primary.ID, Username: primary.Username, CreatedAt: time.Now().Add(-3 * time.Hour)},
+	}
+	for _, message := range messages {
+		var count int64
+		if err := db.Model(&models.Message{}).Where("content = ? AND user_id = ?", message.Content, primary.ID).Count(&count).Error; err != nil {
+			return err
+		}
+		if count == 0 {
+			if err := db.Create(&message).Error; err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 

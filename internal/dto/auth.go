@@ -6,15 +6,21 @@ type LoginDto struct {
 }
 
 type RegisterDto struct {
-    Username string `json:"username" binding:"required"`
-    Password string `json:"password" binding:"required"`
-    Captcha  string `json:"captcha" binding:"required"`
-    CaptchaId string `json:"captcha_id"`
+	Username  string `json:"username" binding:"required"`
+	Password  string `json:"password" binding:"required"`
+	Captcha   string `json:"captcha" binding:"required"`
+	CaptchaId string `json:"captcha_id"`
+}
+
+type MobileSetupOwnerDto struct {
+	Username        string `json:"username" binding:"required"`
+	Password        string `json:"password" binding:"required"`
+	ConfirmPassword string `json:"confirm_password" binding:"required"`
 }
 
 // TwitterOAuth2CallbackDto Twitter OAuth2 回调参数
 type TwitterOAuth2CallbackDto struct {
-	Code  string `json:"code" form:"code" binding:"required"`  // 授权码
+	Code  string `json:"code" form:"code" binding:"required"` // 授权码
 	State string `json:"state" form:"state"`                  // 防止CSRF攻击的状态参数
 }
 

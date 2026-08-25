@@ -4,6 +4,9 @@ ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$ROOT"
 mkdir -p desktop/tauri/src-tauri/bin
 
+BUILD_ID=${BUILD_ID:-$(git rev-parse --short=12 HEAD 2>/dev/null || echo dev)}
+LDFLAGS="-s -w -buildid= -X github.com/rcy1314/echo-noise/internal/buildinfo.Identity=${BUILD_ID}"
+
 copy_exec() {
   local src="$1"
   local dest="$2"
@@ -17,7 +20,7 @@ case "$(uname -s)" in
   Darwin)
     ARCH=$(uname -m)
     GOARCH=$( [ "$ARCH" = "arm64" ] && echo arm64 || echo amd64 )
-    CGO_ENABLED=0 GOOS=darwin GOARCH=$GOARCH go build -trimpath -ldflags "-s -w -buildid=" -o desktop/tauri/src-tauri/bin/server ./cmd/server/main.go
+    CGO_ENABLED=0 GOOS=darwin GOARCH=$GOARCH go build -trimpath -ldflags "$LDFLAGS" -o desktop/tauri/src-tauri/bin/server ./cmd/server/main.go
     if [ "$GOARCH" = "arm64" ]; then
       copy_exec desktop/tauri/src-tauri/bin/server desktop/tauri/src-tauri/bin/server-aarch64-apple-darwin
     else
@@ -35,7 +38,7 @@ case "$(uname -s)" in
     fi
     ;;
   Linux)
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -buildid=" -o desktop/tauri/src-tauri/bin/server ./cmd/server/main.go
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "$LDFLAGS" -o desktop/tauri/src-tauri/bin/server ./cmd/server/main.go
     copy_exec desktop/tauri/src-tauri/bin/server desktop/tauri/src-tauri/bin/server-x86_64-unknown-linux-gnu
 
     if command -v ffmpeg >/dev/null 2>&1; then
@@ -45,7 +48,7 @@ case "$(uname -s)" in
     fi
     ;;
   MINGW*|MSYS*|CYGWIN*)
-    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -buildid=" -o desktop/tauri/src-tauri/bin/server.exe ./cmd/server/main.go
+    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "$LDFLAGS" -o desktop/tauri/src-tauri/bin/server.exe ./cmd/server/main.go
     copy_exec desktop/tauri/src-tauri/bin/server.exe desktop/tauri/src-tauri/bin/server-x86_64-pc-windows-msvc.exe
 
     if command -v ffmpeg >/dev/null 2>&1; then

@@ -78,6 +78,21 @@ func EnsureGuestbook(db *gorm.DB) (GuestbookDescriptor, error) {
 			tx.Rollback()
 		}
 	}()
+	descriptor, err := ensureGuestbookInTransaction(tx)
+	if err != nil {
+		return GuestbookDescriptor{}, err
+	}
+	if err := tx.Commit().Error; err != nil {
+		return GuestbookDescriptor{}, err
+	}
+	commit = true
+	return descriptor, nil
+}
+
+// ensureGuestbookInTransaction performs the guestbook mutation on a transaction
+// owned by the caller. It lets first-run setup commit the owner and all owner-
+// dependent seed rows as one unit.
+func ensureGuestbookInTransaction(tx *gorm.DB) (GuestbookDescriptor, error) {
 	primary, err := loadPrimaryAdmin(tx)
 	if err != nil {
 		return GuestbookDescriptor{}, err
@@ -123,10 +138,6 @@ func EnsureGuestbook(db *gorm.DB) (GuestbookDescriptor, error) {
 	}).Error; err != nil {
 		return GuestbookDescriptor{}, err
 	}
-	if err := tx.Commit().Error; err != nil {
-		return GuestbookDescriptor{}, err
-	}
-	commit = true
 	return GuestbookDescriptor{MessageID: selected.ID, RecipientUserID: GuestbookRecipientID()}, nil
 }
 

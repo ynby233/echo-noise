@@ -7,7 +7,8 @@ go install golang.org/x/mobile/cmd/gobind@latest
 export PATH="$HOME/go/bin:$PATH"
 go get golang.org/x/mobile/bind
 mkdir -p mobile/android/app/libs
-gomobile bind -target=android -androidapi 21 -javapkg=cn.noisework.saynote.go -o mobile/android/app/libs/backend.aar ./mobilebackend
+BUILD_ID=${BUILD_ID:-$(git rev-parse --short=12 HEAD 2>/dev/null || echo dev)}
+gomobile bind -target=android -androidapi 21 -javapkg=cn.noisework.saynote.go -ldflags="-X github.com/rcy1314/echo-noise/internal/buildinfo.Identity=${BUILD_ID}" -o mobile/android/app/libs/backend.aar ./mobilebackend
   ls -la mobile/android/app/libs
   
   # Dynamically detect the Go Backend class name from the AAR
@@ -97,7 +98,9 @@ EOF
 EOF
 MAIN_ACT="mobile/android/app/src/main/java/cn/noisework/saynote/MainActivity.java"
 if [ -f "$MAIN_ACT" ]; then
-  perl -0777 -pe 's/super\.onCreate\(savedInstanceState\);/super.onCreate(savedInstanceState);\n    ServerStarter.start(this);/s' -i "$MAIN_ACT"
+  if ! grep -q 'Mobilebackend\.start' "$MAIN_ACT" && ! grep -q 'ServerStarter\.start' "$MAIN_ACT"; then
+    perl -0777 -pe 's/super\.onCreate\(savedInstanceState\);/super.onCreate(savedInstanceState);\n    ServerStarter.start(this);/s' -i "$MAIN_ACT"
+  fi
 fi
 BUILD_GRADLE="mobile/android/app/build.gradle"
 if [ -f "$BUILD_GRADLE" ]; then

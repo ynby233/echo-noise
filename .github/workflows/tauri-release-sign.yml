@@ -11,6 +11,11 @@ on:
         required: false
         type: boolean
         default: true
+      formal_release:
+        description: 'Use vX.Y.Z as build identity instead of the short commit SHA'
+        required: false
+        type: boolean
+        default: false
 permissions:
   contents: write
 env:
@@ -53,6 +58,20 @@ jobs:
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v5
+      - name: Resolve build identity
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag_name }}
+        run: |
+          if [ "${{ inputs.formal_release }}" = "true" ]; then
+            RAW="$INPUT_TAG"
+            VER="$(echo "$RAW" | sed -E 's/^[vV][[:space:]]*//; s/^[[:space:]]+|[[:space:]]+$//g')"
+            [[ "$VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || (echo "ERROR: formal release requires vX.Y.Z" && exit 1)
+            BUILD_ID="v${VER}"
+          else
+            BUILD_ID="${GITHUB_SHA::12}"
+          fi
+          echo "BUILD_ID=$BUILD_ID" >> "$GITHUB_ENV"
       - name: Normalize release tag
         shell: bash
         run: |
@@ -357,7 +376,9 @@ jobs:
              exit 1
           fi
           echo "Found DMG: $DMG_PATH"
-          gh release upload "${{ env.RELEASE_TAG }}" "$DMG_PATH" --clobber
+          MARKED_DMG="$(dirname "$DMG_PATH")/saynote-${BUILD_ID}.dmg"
+          cp "$DMG_PATH" "$MARKED_DMG"
+          gh release upload "${{ env.RELEASE_TAG }}" "$MARKED_DMG" --clobber
       - name: Upload Windows EXE
         if: env.DESKTOP_READY == 'true' && matrix.os == 'windows-latest'
         shell: powershell
@@ -372,7 +393,9 @@ jobs:
             exit 1
           }
           Write-Host ("Found EXE: " + $exe.FullName)
-          gh release upload "$env:RELEASE_TAG" "$($exe.FullName)" --clobber
+          $markedExe = Join-Path $exe.DirectoryName ("saynote-" + $env:BUILD_ID + ".exe")
+          Copy-Item -LiteralPath $exe.FullName -Destination $markedExe -Force
+          gh release upload "$env:RELEASE_TAG" "$markedExe" --clobber
       - name: Upload Release (desktop placeholder)
         if: env.DESKTOP_READY != 'true'
         shell: bash
@@ -409,6 +432,20 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v5
+      - name: Resolve build identity
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag_name }}
+        run: |
+          if [ "${{ inputs.formal_release }}" = "true" ]; then
+            RAW="$INPUT_TAG"
+            VER="$(echo "$RAW" | sed -E 's/^[vV][[:space:]]*//; s/^[[:space:]]+|[[:space:]]+$//g')"
+            [[ "$VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || (echo "ERROR: formal release requires vX.Y.Z" && exit 1)
+            BUILD_ID="v${VER}"
+          else
+            BUILD_ID="${GITHUB_SHA::12}"
+          fi
+          echo "BUILD_ID=$BUILD_ID" >> "$GITHUB_ENV"
       - name: Normalize release tag
         shell: bash
         run: |
@@ -542,7 +579,7 @@ jobs:
       - name: Build Nuxt static
         if: env.MOBILE_READY == 'true'
         env:
-          NUXT_PUBLIC_BASE_API: 'http://127.0.0.1:1314/api'
+          NUXT_PUBLIC_BASE_API: 'http://localhost:1314/api'
         run: |
           cd web
           npm install
@@ -560,6 +597,16 @@ jobs:
           if [ ! -f "capacitor.config.ts" ] && [ ! -f "capacitor.config.json" ]; then
             npx cap init 说说笔记 cn.noisework.saynote --web-dir ../web/.output/public
           fi
+          cat > capacitor.config.ts <<'EOF'
+          import type { CapacitorConfig } from '@capacitor/cli'
+          const config: CapacitorConfig = {
+            appId: 'cn.noisework.saynote',
+            appName: '说说笔记',
+            webDir: '../web/.output/public',
+            server: { hostname: 'localhost', androidScheme: 'http', cleartext: true },
+          }
+          export default config
+          EOF
           npx cap add android || true
           
           # Inject App Name strings.xml
@@ -643,10 +690,7 @@ jobs:
           
           # Prepare Assets
           mkdir -p android/app/src/main/assets/data android/app/src/main/assets/config
-          SRC_DB="../data/noise.db"
-          [ -f ../noise/data/noise.db ] && SRC_DB="../noise/data/noise.db"
-          [ -f "$SRC_DB" ] || (echo "WARN: $SRC_DB not found, creating empty DB"; mkdir -p ../data; : > ../data/noise.db; SRC_DB="../data/noise.db")
-          cp "$SRC_DB" android/app/src/main/assets/data/noise.db
+          : > android/app/src/main/assets/data/noise.db
           [ -d ../config ] && cp -r ../config/. android/app/src/main/assets/config/ || true
           
           # Sync Web Assets
@@ -775,7 +819,7 @@ jobs:
             KS_TYPE_ARG="--ks-type $ANDROID_KEYSTORE_TYPE"
           fi
           "$APKSIGNER" sign $KS_TYPE_ARG --ks keystore.jks --ks-key-alias "$ANDROID_KEY_ALIAS" --ks-pass pass:"$ANDROID_KEYSTORE_PASSWORD" --key-pass pass:"$ANDROID_KEY_ALIAS_PASSWORD" "$APK_PATH"
-          NEW_NAME="$(dirname "$APK_PATH")/saynote-${APP_VERSION_NAME:-0.0.0}.apk"
+          NEW_NAME="$(dirname "$APK_PATH")/saynote-${BUILD_ID}.apk"
           cp "$APK_PATH" "$NEW_NAME"
           echo "FINAL_APK=$NEW_NAME" >> "$GITHUB_ENV"
       - name: Fallback sign APK (ephemeral keystore)
@@ -785,7 +829,7 @@ jobs:
           keytool -genkeypair -keystore temp-release.jks -storepass android -alias temp -keypass android -dname "CN=CI Noise,O=Noise,C=CN" -keyalg RSA -keysize 2048 -validity 36500
           "$APKSIGNER" sign --ks temp-release.jks --ks-key-alias temp --ks-pass pass:android --key-pass pass:android "$APK_PATH"
           "$APKSIGNER" verify --verbose "$APK_PATH"
-          NEW_NAME="$(dirname "$APK_PATH")/saynote-${APP_VERSION_NAME:-0.0.0}.apk"
+          NEW_NAME="$(dirname "$APK_PATH")/saynote-${BUILD_ID}.apk"
           cp "$APK_PATH" "$NEW_NAME"
           echo "FINAL_APK=$NEW_NAME" >> "$GITHUB_ENV"
       - name: Verify APK signature

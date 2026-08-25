@@ -300,13 +300,7 @@ func Login(c *gin.Context) {
 	safeUser := *user
 	safeUser.Password = ""
 
-	session := sessions.Default(c)
-	session.Clear()
-	applyLoginSessionExpire(session, user)
-	session.Set("user_id", user.ID)
-	session.Set("username", user.Username)
-	session.Set("is_admin", user.IsAdmin)
-	if err := session.Save(); err != nil {
+	if err := establishLoginSession(c, user); err != nil {
 		c.JSON(http.StatusOK, dto.Fail[any]("Session 保存失败"))
 		return
 	}

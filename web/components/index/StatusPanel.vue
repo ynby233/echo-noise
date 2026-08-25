@@ -2162,10 +2162,14 @@
               </div>
               <div class="px-4 pb-4 space-y-4">
                 <div :class="adminSubtleCardClass">
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div>
                       <div class="text-sm" :class="theme.mutedText">当前版本</div>
                       <UBadge color="primary" variant="soft" class="mt-1">{{ versionInfo.currentVersion || '最新' }}</UBadge>
+                    </div>
+                    <div v-if="isPrimaryAdmin">
+                      <div class="text-sm" :class="theme.mutedText">构建标记</div>
+                      <UBadge color="gray" variant="soft" class="mt-1 font-mono">{{ versionInfo.buildIdentity || 'unknown' }}</UBadge>
                     </div>
                     <div>
                       <div class="text-sm" :class="theme.mutedText">最新发布时间</div>
@@ -4151,7 +4155,8 @@ const versionInfo = reactive({
     checking: false,
     hasUpdate: false,
     latestVersion: '',
-    currentVersion: ''
+    currentVersion: '',
+    buildIdentity: ''
 })
 // 推送配置
 let notifyConfig = reactive({
@@ -4474,7 +4479,24 @@ const fetchVersion = async () => {
   } catch {}
 }
 
+const fetchBuildIdentity = async () => {
+  if (!isPrimaryAdmin.value) {
+    versionInfo.buildIdentity = ''
+    return
+  }
+  try {
+    const response = await fetch(`${baseApi}/version/build`, { credentials: 'include' })
+    const data = await response.json().catch(() => ({}))
+    if (response.ok && data?.code === 1) {
+      versionInfo.buildIdentity = String(data?.data?.build_identity || 'unknown')
+    }
+  } catch {
+    versionInfo.buildIdentity = 'unknown'
+  }
+}
+
 onMounted(fetchVersion)
+watch(isPrimaryAdmin, () => fetchBuildIdentity(), { immediate: true })
 onMounted(async () => {
   try {
     const r = await fetch('/api/version/runtime', { credentials: 'include' })

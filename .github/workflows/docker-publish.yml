@@ -2,6 +2,12 @@ name: Build MCP Docker Image
 
 on:
   workflow_dispatch:
+    inputs:
+      formal_version:
+        description: 'Formal release version (for example v4.0.6); leave empty to use short SHA'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -23,14 +29,27 @@ jobs:
       - name: Set image metadata
         id: meta
         shell: bash
+        env:
+          FORMAL_VERSION: ${{ inputs.formal_version }}
         run: |
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           image="ghcr.io/${owner}/echo-noise"
           short_sha="${GITHUB_SHA::12}"
+          raw_version="$FORMAL_VERSION"
+          if [ -n "$raw_version" ]; then
+            version="$(echo "$raw_version" | sed -E 's/^[vV][[:space:]]*//')"
+            if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "ERROR: formal_version must use vX.Y.Z or X.Y.Z"
+              exit 1
+            fi
+            version="v${version}"
+          else
+            version="$short_sha"
+          fi
 
           echo "image=${image}" >> "$GITHUB_OUTPUT"
           echo "short_sha=${short_sha}" >> "$GITHUB_OUTPUT"
-          echo "version=${short_sha}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
           {
             echo "tags<<EOF"
             echo "${image}:latest-mcp"
@@ -59,12 +78,19 @@ jobs:
       - name: Build and push final-mcp image
         shell: bash
         run: |
+          tags=(
+            --tag "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/echo-noise:latest-mcp"
+            --tag "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/echo-noise:sha-${{ steps.meta.outputs.short_sha }}-mcp"
+          )
+          version="${{ steps.meta.outputs.version }}"
+          if [[ "$version" == v* ]]; then
+            tags+=(--tag "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/echo-noise:${version}-mcp")
+          fi
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             --target final-mcp \
             --build-arg VERSION=${{ steps.meta.outputs.version }} \
-            --tag ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/echo-noise:latest-mcp \
-            --tag ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/echo-noise:sha-${{ steps.meta.outputs.short_sha }}-mcp \
+            "${tags[@]}" \
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
             --push \
