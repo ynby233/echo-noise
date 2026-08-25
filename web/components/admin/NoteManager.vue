@@ -1,22 +1,17 @@
 <template>
   <section class="note-manager" :class="theme?.text || ''">
-    <header class="note-manager-header">
-      <div class="note-manager-heading">
-        <span class="note-manager-icon" :class="recycleBin ? 'is-recycle-bin' : ''" aria-hidden="true">
-          <UIcon :name="recycleBin ? 'i-heroicons-archive-box' : 'i-heroicons-document-text'" class="h-5 w-5" />
-        </span>
-        <div class="min-w-0">
-          <div class="flex flex-wrap items-center gap-2">
-            <h2 class="text-base font-semibold sm:text-lg">{{ recycleBin ? '笔记回收站' : '笔记管理' }}</h2>
-            <UBadge color="gray" variant="soft" size="xs">{{ loading ? '读取中' : `${total} 条` }}</UBadge>
-          </div>
-          <p class="mt-1 max-w-3xl text-xs leading-5" :class="theme?.mutedText || 'text-slate-500'">
-            {{ recycleBin ? '集中恢复或永久删除已移入回收站的笔记，普通笔记列表不会显示这些内容。' : '筛选、检查并维护全站笔记；可勾选当前页笔记，或主动选择当前筛选结果后执行批量操作。' }}
-          </p>
-        </div>
-      </div>
-      <UButton size="sm" color="gray" variant="soft" icon="i-heroicons-arrow-path" :loading="loading" @click="load">刷新</UButton>
-    </header>
+    <AdminModuleHeader
+      :title="recycleBin ? '笔记回收站' : '笔记管理'"
+      :description="recycleBin ? '集中恢复或永久删除已移入回收站的笔记，普通笔记列表不会显示这些内容。' : '筛选、检查并维护全站笔记；可勾选当前页笔记，或主动选择当前筛选结果后执行批量操作。'"
+      :icon="recycleBin ? 'i-heroicons-trash' : 'i-heroicons-document-text'"
+      :badge="loading ? '读取中' : `${total} 条`"
+      :accent="recycleBin ? 'warning' : 'primary'"
+      :theme="theme"
+    >
+      <template #actions>
+        <UButton size="sm" color="gray" variant="soft" icon="i-heroicons-arrow-path" :loading="loading" @click="load">刷新</UButton>
+      </template>
+    </AdminModuleHeader>
 
     <div class="note-manager-body">
       <div v-if="recycleBin && isPrimaryAdmin" class="note-policy-card" :class="[theme?.border || 'border-slate-200 dark:border-slate-700', theme?.subtleBg || 'bg-slate-50 dark:bg-slate-800/60']">
@@ -76,7 +71,15 @@
       </div>
 
       <div class="note-table-shell" :class="theme?.border || 'border-slate-200 dark:border-slate-700'">
-        <table class="min-w-[940px] w-full text-sm">
+        <table class="note-table min-w-[1040px] w-full table-fixed text-sm">
+          <colgroup>
+            <col class="w-12" />
+            <col />
+            <col class="w-24" />
+            <col class="w-28" />
+            <col class="w-44" />
+            <col class="w-[22rem]" />
+          </colgroup>
           <thead :class="theme?.subtleBg || 'bg-slate-50 dark:bg-slate-800/60'">
           <tr>
             <th class="w-12 px-4 py-3 text-left"><input type="checkbox" :checked="allSelected" aria-label="选择当前页全部笔记" @change="toggleAll" /></th>
@@ -93,10 +96,10 @@
           <template v-for="row in rows" v-else :key="row.id">
             <tr class="border-t" :class="theme?.border || 'border-slate-200 dark:border-slate-700'">
               <td class="px-4 py-3 align-top"><input v-model="selected" type="checkbox" :value="row.id" :aria-label="`选择笔记 ${row.id}`" /></td>
-              <td class="max-w-[28rem] px-3 py-3 align-top">
+              <td class="note-cell px-3 py-3 align-top">
                 <button class="note-title-button" @click="toggleDetail(row.id)">
                   <span class="note-id">#{{ row.id }}</span>
-                  <span class="font-medium">{{ oneLine(row.content) || '（仅附件）' }}</span>
+                  <span class="note-content font-medium">{{ oneLine(row.content) || '（仅附件）' }}</span>
                 </button>
                 <UBadge v-if="row.is_guestbook" class="mt-1.5" color="indigo" size="xs" variant="soft">规范留言板 · 不可作为普通笔记删除</UBadge>
               </td>
@@ -361,16 +364,6 @@ watch(() => props.recycleBin, () => { page.value = 1; clearSelection(); load(); 
   overflow: hidden;
 }
 
-.note-manager-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
-}
-
-.note-manager-heading,
 .note-policy-copy,
 .note-selection-status {
   display: flex;
@@ -379,30 +372,13 @@ watch(() => props.recycleBin, () => { page.value = 1; clearSelection(); load(); 
   gap: 11px;
 }
 
-.note-manager-icon,
 .note-policy-icon {
   display: inline-flex;
+  width: 30px;
+  height: 30px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  color: rgb(79, 70, 229);
-  background: rgba(99, 102, 241, 0.12);
-}
-
-.note-manager-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-}
-
-.note-manager-icon.is-recycle-bin {
-  color: rgb(217, 119, 6);
-  background: rgba(245, 158, 11, 0.14);
-}
-
-.note-policy-icon {
-  width: 30px;
-  height: 30px;
   border-radius: 8px;
   color: rgb(217, 119, 6);
   background: rgba(245, 158, 11, 0.14);
@@ -532,12 +508,25 @@ watch(() => props.recycleBin, () => { page.value = 1; clearSelection(); load(); 
   background: rgba(148, 163, 184, 0.06);
 }
 
+.note-cell {
+  min-width: 0;
+  overflow: hidden;
+}
+
 .note-title-button {
   display: flex;
+  width: 100%;
   min-width: 0;
   align-items: baseline;
   gap: 7px;
+  overflow: hidden;
   text-align: left;
+}
+
+.note-content {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .note-title-button:hover .font-medium,
@@ -584,7 +573,6 @@ watch(() => props.recycleBin, () => { page.value = 1; clearSelection(); load(); 
 }
 
 @media (max-width: 760px) {
-  .note-manager-header,
   .note-policy-card,
   .note-section-heading,
   .note-selection-bar,
@@ -593,7 +581,6 @@ watch(() => props.recycleBin, () => { page.value = 1; clearSelection(); load(); 
     flex-direction: column;
   }
 
-  .note-manager-header > :last-child,
   .note-policy-card > :last-child {
     align-self: stretch;
   }
@@ -609,10 +596,6 @@ watch(() => props.recycleBin, () => { page.value = 1; clearSelection(); load(); 
 }
 
 @media (max-width: 520px) {
-  .note-manager-header {
-    padding: 14px;
-  }
-
   .note-manager-body {
     padding-right: 14px;
     padding-left: 14px;

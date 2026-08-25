@@ -1,18 +1,16 @@
 <template>
   <section class="authorization-center" :class="theme?.text || ''">
-    <header class="authorization-header">
-      <div class="authorization-heading">
-        <span class="authorization-icon" aria-hidden="true"><UIcon name="i-heroicons-key" class="h-5 w-5" /></span>
-        <div class="min-w-0">
-          <div class="flex flex-wrap items-center gap-2">
-            <h2 class="text-base font-semibold sm:text-lg">管理员授权</h2>
-            <UBadge color="gray" variant="soft" size="xs">{{ loading ? '读取中' : `${admins.length} 位受托管理员` }}</UBadge>
-          </div>
-          <p class="mt-1 max-w-3xl text-xs leading-5" :class="theme?.mutedText || 'text-slate-500'">为受托管理员配置完整的功能权限集合；保存后的权限会在其下一次请求立即生效。</p>
-        </div>
-      </div>
-      <UButton size="sm" color="gray" variant="soft" icon="i-heroicons-arrow-path" :loading="loading" @click="load">刷新</UButton>
-    </header>
+    <AdminModuleHeader
+      title="管理员授权"
+      description="为受托管理员配置完整的功能权限集合；保存后的权限会在其下一次请求立即生效。"
+      icon="i-heroicons-key"
+      :badge="loading ? '读取中' : `${admins.length} 位受托管理员`"
+      :theme="theme"
+    >
+      <template #actions>
+        <UButton size="sm" color="gray" variant="soft" icon="i-heroicons-arrow-path" :loading="loading" @click="load">刷新</UButton>
+      </template>
+    </AdminModuleHeader>
 
     <div class="authorization-body">
       <aside class="authorization-admins" :class="[theme?.border || 'border-slate-200 dark:border-slate-700', theme?.subtleBg || 'bg-slate-50 dark:bg-slate-800/60']" aria-label="受托管理员列表">
@@ -224,23 +222,6 @@ onMounted(load)
   overflow: hidden;
 }
 
-.authorization-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
-}
-
-.authorization-heading {
-  display: flex;
-  min-width: 0;
-  align-items: flex-start;
-  gap: 11px;
-}
-
-.authorization-icon,
 .authorization-empty-icon {
   display: inline-flex;
   flex: 0 0 auto;
@@ -248,12 +229,6 @@ onMounted(load)
   justify-content: center;
   color: rgb(79, 70, 229);
   background: rgba(99, 102, 241, 0.12);
-}
-
-.authorization-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
 }
 
 .authorization-body {
@@ -463,7 +438,6 @@ onMounted(load)
 }
 
 @media (max-width: 720px) {
-  .authorization-header,
   .authorization-context {
     align-items: stretch;
     flex-direction: column;
@@ -475,7 +449,6 @@ onMounted(load)
 }
 
 @media (max-width: 520px) {
-  .authorization-header,
   .authorization-body {
     padding: 14px;
   }
