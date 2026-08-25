@@ -417,7 +417,11 @@
             </div>
           </div>
 
-          <div id="authorization-section" v-if="isPrimaryAdmin && isSectionVisible('authorization')" class="col-span-12"><AdminAuthorizationCenter /></div>
+          <div id="authorization-section" v-if="isPrimaryAdmin && isSectionVisible('authorization')" class="col-span-12">
+            <div :class="adminPanelCardClass">
+              <AdminAuthorizationCenter :theme="theme" />
+            </div>
+          </div>
           <div id="admin-audit-section" v-if="canViewAdminAudit && isSectionVisible('admin-audit')" class="col-span-12"><AdminAuditLogPanel :is-primary-admin="isPrimaryAdmin" /></div>
           <div id="site-section" v-if="(isAdmin && isSiteSectionPage) || isSectionVisible('widgets')" class="col-span-12">
           <div :class="adminShellCardClass">

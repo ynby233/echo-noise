@@ -1,105 +1,148 @@
 <template>
-  <div class="space-y-4" :class="theme?.text || ''">
-    <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-      <div>
-        <h2 class="text-lg font-semibold">{{ recycleBin ? '笔记回收站' : '笔记管理' }}</h2>
-        <p class="text-xs mt-1" :class="theme?.mutedText || 'text-slate-500'">
-          {{ recycleBin ? '仅在回收站上下文恢复或永久删除；普通列表不会显示回收站笔记。' : '可勾选当前页笔记，或主动选择当前筛选结果后移入回收站；筛选条件本身不会自动触发操作。' }}
-        </p>
+  <section class="note-manager" :class="theme?.text || ''">
+    <header class="note-manager-header">
+      <div class="note-manager-heading">
+        <span class="note-manager-icon" :class="recycleBin ? 'is-recycle-bin' : ''" aria-hidden="true">
+          <UIcon :name="recycleBin ? 'i-heroicons-archive-box' : 'i-heroicons-document-text'" class="h-5 w-5" />
+        </span>
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="text-base font-semibold sm:text-lg">{{ recycleBin ? '笔记回收站' : '笔记管理' }}</h2>
+            <UBadge color="gray" variant="soft" size="xs">{{ loading ? '读取中' : `${total} 条` }}</UBadge>
+          </div>
+          <p class="mt-1 max-w-3xl text-xs leading-5" :class="theme?.mutedText || 'text-slate-500'">
+            {{ recycleBin ? '集中恢复或永久删除已移入回收站的笔记，普通笔记列表不会显示这些内容。' : '筛选、检查并维护全站笔记；可勾选当前页笔记，或主动选择当前筛选结果后执行批量操作。' }}
+          </p>
+        </div>
       </div>
-      <div class="flex items-center gap-2">
-        <UButton size="xs" color="gray" variant="soft" :loading="loading" @click="load">刷新</UButton>
-        <UButton v-if="selected.length" size="xs" color="primary" variant="soft" @click="clearSelection">清除选择</UButton>
-        <UButton v-if="selected.length && !recycleBin && canTrash" size="xs" color="orange" :loading="actionLoading" @click="batchTrash">移入回收站</UButton>
-        <UButton v-if="total && !recycleBin && canTrash" size="xs" color="orange" variant="soft" :loading="actionLoading" @click="batchFiltered">全选当前筛选结果并移入回收站</UButton>
-        <UButton v-if="selected.length && recycleBin && canRestore" size="xs" color="green" :loading="actionLoading" @click="batchRestore">恢复所选</UButton>
-        <UButton v-if="selected.length && recycleBin && canPermanentlyDelete" size="xs" color="red" :loading="actionLoading" @click="batchPermanentDelete">永久删除所选</UButton>
-        <UButton v-if="total && recycleBin && canRestore" size="xs" color="green" variant="soft" :loading="actionLoading" @click="batchFilteredRestore">全选当前筛选结果并恢复</UButton>
-        <UButton v-if="total && recycleBin && canPermanentlyDelete" size="xs" color="red" variant="soft" :loading="actionLoading" @click="batchFilteredPermanentDelete">全选当前筛选结果并永久删除</UButton>
+      <UButton size="sm" color="gray" variant="soft" icon="i-heroicons-arrow-path" :loading="loading" @click="load">刷新</UButton>
+    </header>
+
+    <div class="note-manager-body">
+      <div v-if="recycleBin && isPrimaryAdmin" class="note-policy-card" :class="[theme?.border || 'border-slate-200 dark:border-slate-700', theme?.subtleBg || 'bg-slate-50 dark:bg-slate-800/60']">
+        <div class="note-policy-copy">
+          <span class="note-policy-icon"><UIcon name="i-heroicons-clock" class="h-4 w-4" /></span>
+          <div>
+            <div class="text-sm font-medium">自动清理策略</div>
+            <p class="mt-0.5 text-xs leading-5" :class="theme?.mutedText || 'text-slate-500'">从移入回收站的时间开始计算；缩短期限会影响现有回收站笔记。</p>
+          </div>
+        </div>
+        <USelect v-model="retentionDays" class="w-full sm:w-48" :options="retentionOptions" :disabled="retentionLoading" aria-label="自动清理保留期限" @change="saveRetention" />
       </div>
-    </div>
 
-    <div v-if="recycleBin && isPrimaryAdmin" class="flex flex-wrap items-center gap-2 rounded border px-3 py-2 text-xs" :class="theme?.border || 'border-slate-200 dark:border-slate-700'">
-      <span>自动清理保留期限</span>
-      <USelect v-model="retentionDays" :options="retentionOptions" :disabled="retentionLoading" @change="saveRetention" />
-      <span :class="theme?.mutedText || 'text-slate-500'">起点为移入回收站时间；缩短期限会影响现有回收站笔记。</span>
-    </div>
+      <section class="note-filter-card" :class="theme?.border || 'border-slate-200 dark:border-slate-700'" aria-labelledby="note-filter-title">
+        <div class="note-section-heading">
+          <div>
+            <h3 id="note-filter-title" class="text-sm font-semibold">筛选与排序</h3>
+            <p class="mt-1 text-xs" :class="theme?.mutedText || 'text-slate-500'">组合条件定位笔记，日期和选择项变更后会立即刷新。</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <UButton size="xs" color="primary" variant="soft" icon="i-heroicons-funnel" :loading="loading" @click="applyFilters">应用筛选</UButton>
+            <UButton size="xs" color="gray" variant="ghost" :disabled="loading" @click="resetFilters">清空条件</UButton>
+          </div>
+        </div>
+        <div class="note-filter-grid">
+          <label class="note-filter-field"><span>正文关键词</span><UInput v-model="filters.keyword" placeholder="输入正文内容" @keyup.enter="applyFilters" /></label>
+          <label class="note-filter-field"><span>笔记 ID</span><UInput v-model="filters.id" type="number" placeholder="精确匹配" @keyup.enter="applyFilters" /></label>
+          <label class="note-filter-field"><span>作者 ID</span><UInput v-model="filters.authorId" type="number" placeholder="精确匹配" @keyup.enter="applyFilters" /></label>
+          <label class="note-filter-field"><span>作者用户名</span><UInput v-model="filters.username" placeholder="输入用户名" @keyup.enter="applyFilters" /></label>
+          <label class="note-filter-field"><span>标签</span><UInput v-model="filters.tag" placeholder="不含 #" @keyup.enter="applyFilters" /></label>
+          <label class="note-filter-field"><span>可见性</span><USelect v-model="filters.visibility" :options="visibilityOptions" @change="applyFilters" /></label>
+          <label class="note-filter-field"><span>创建日期（从）</span><UInput v-model="filters.createdFrom" type="date" @change="applyFilters" /></label>
+          <label class="note-filter-field"><span>创建日期（至）</span><UInput v-model="filters.createdTo" type="date" @change="applyFilters" /></label>
+          <label class="note-filter-field"><span>全站置顶</span><USelect v-model="filters.pinned" :options="booleanOptions('全站置顶')" @change="applyFilters" /></label>
+          <label class="note-filter-field"><span>附件</span><USelect v-model="filters.hasAttachment" :options="booleanOptions('附件')" @change="applyFilters" /></label>
+          <label class="note-filter-field"><span>排序方式</span><USelect v-model="filters.sort" :options="sortOptions" @change="applyFilters" /></label>
+        </div>
+      </section>
 
-    <div class="grid grid-cols-1 gap-2 md:grid-cols-4">
-      <UInput v-model="filters.keyword" placeholder="正文关键词" @keyup.enter="load" />
-      <UInput v-model="filters.id" type="number" placeholder="精确笔记 ID" @keyup.enter="load" />
-      <UInput v-model="filters.authorId" type="number" placeholder="作者 ID" @keyup.enter="load" />
-      <UInput v-model="filters.username" placeholder="作者用户名" @keyup.enter="load" />
-      <UInput v-model="filters.tag" placeholder="标签（不含 #）" @keyup.enter="load" />
-      <USelect v-model="filters.visibility" :options="visibilityOptions" @change="load" />
-      <UInput v-model="filters.createdFrom" type="date" aria-label="创建起始日期" @change="load" />
-      <UInput v-model="filters.createdTo" type="date" aria-label="创建结束日期" @change="load" />
-      <USelect v-model="filters.pinned" :options="booleanOptions('全站置顶')" @change="load" />
-      <USelect v-model="filters.hasAttachment" :options="booleanOptions('附件')" @change="load" />
-      <USelect v-model="filters.sort" :options="sortOptions" @change="load" />
-    </div>
+      <div class="note-selection-bar" :class="[theme?.border || 'border-slate-200 dark:border-slate-700', theme?.subtleBg || 'bg-slate-50 dark:bg-slate-800/60', recycleBin ? 'is-recycle-bin' : '']">
+        <div class="note-selection-status">
+          <span class="note-selection-count">{{ selected.length }}</span>
+          <div>
+            <div class="text-sm font-medium">{{ selected.length ? `已选择 ${selected.length} 条` : '尚未选择笔记' }}</div>
+            <div class="text-xs" :class="theme?.mutedText || 'text-slate-500'">当前筛选共 {{ total }} 条；筛选本身不会触发批量操作。</div>
+          </div>
+        </div>
+        <div class="note-selection-actions">
+          <UButton v-if="selected.length" size="xs" color="gray" variant="ghost" @click="clearSelection">清除选择</UButton>
+          <UButton v-if="selected.length && !recycleBin && canTrash" size="xs" color="orange" :loading="actionLoading" @click="batchTrash">移入回收站</UButton>
+          <UButton v-if="total && !recycleBin && canTrash" size="xs" color="orange" variant="soft" :loading="actionLoading" @click="batchFiltered">全选当前筛选结果并移入回收站</UButton>
+          <UButton v-if="selected.length && recycleBin && canRestore" size="xs" color="green" :loading="actionLoading" @click="batchRestore">恢复所选</UButton>
+          <UButton v-if="selected.length && recycleBin && canPermanentlyDelete" size="xs" color="red" :loading="actionLoading" @click="batchPermanentDelete">永久删除所选</UButton>
+          <UButton v-if="total && recycleBin && canRestore" size="xs" color="green" variant="soft" :loading="actionLoading" @click="batchFilteredRestore">全选当前筛选结果并恢复</UButton>
+          <UButton v-if="total && recycleBin && canPermanentlyDelete" size="xs" color="red" variant="soft" :loading="actionLoading" @click="batchFilteredPermanentDelete">全选当前筛选结果并永久删除</UButton>
+        </div>
+      </div>
 
-    <div class="overflow-x-auto rounded-lg border" :class="theme?.border || 'border-slate-200 dark:border-slate-700'">
-      <table class="min-w-full text-sm">
-        <thead :class="theme?.subtleBg || 'bg-slate-50 dark:bg-slate-800/60'">
+      <div class="note-table-shell" :class="theme?.border || 'border-slate-200 dark:border-slate-700'">
+        <table class="min-w-[940px] w-full text-sm">
+          <thead :class="theme?.subtleBg || 'bg-slate-50 dark:bg-slate-800/60'">
           <tr>
-            <th class="w-10 px-3 py-2 text-left"><input type="checkbox" :checked="allSelected" @change="toggleAll" /></th>
-            <th class="px-3 py-2 text-left">笔记</th>
-            <th class="px-3 py-2 text-left">作者</th>
-            <th class="px-3 py-2 text-left">可见性</th>
-            <th class="px-3 py-2 text-left">{{ recycleBin ? '删除时间' : '创建时间' }}</th>
-            <th class="px-3 py-2 text-right">操作</th>
+            <th class="w-12 px-4 py-3 text-left"><input type="checkbox" :checked="allSelected" aria-label="选择当前页全部笔记" @change="toggleAll" /></th>
+            <th class="px-3 py-3 text-left">笔记</th>
+            <th class="px-3 py-3 text-left">作者</th>
+            <th class="px-3 py-3 text-left">可见性</th>
+            <th class="px-3 py-3 text-left">{{ recycleBin ? '删除时间' : '创建时间' }}</th>
+            <th class="px-4 py-3 text-right">操作</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-if="loading"><td colspan="6" class="px-3 py-8 text-center" :class="theme?.mutedText || 'text-slate-500'">加载中…</td></tr>
-          <tr v-else-if="!rows.length"><td colspan="6" class="px-3 py-8 text-center" :class="theme?.mutedText || 'text-slate-500'">暂无笔记</td></tr>
+          <tr v-if="loading"><td colspan="6" class="px-3 py-12 text-center" :class="theme?.mutedText || 'text-slate-500'"><UIcon name="i-heroicons-arrow-path" class="mr-2 inline h-4 w-4 animate-spin" />正在读取笔记…</td></tr>
+          <tr v-else-if="!rows.length"><td colspan="6" class="px-3 py-12 text-center" :class="theme?.mutedText || 'text-slate-500'"><UIcon name="i-heroicons-inbox" class="mx-auto mb-2 h-6 w-6 opacity-60" /><span>当前筛选下暂无笔记</span></td></tr>
           <template v-for="row in rows" v-else :key="row.id">
             <tr class="border-t" :class="theme?.border || 'border-slate-200 dark:border-slate-700'">
-              <td class="px-3 py-2 align-top"><input v-model="selected" type="checkbox" :value="row.id" /></td>
-              <td class="max-w-[28rem] px-3 py-2 align-top">
-                <button class="text-left hover:underline" @click="toggleDetail(row.id)">
-                  <span class="font-medium">#{{ row.id }} {{ oneLine(row.content) || '（仅附件）' }}</span>
+              <td class="px-4 py-3 align-top"><input v-model="selected" type="checkbox" :value="row.id" :aria-label="`选择笔记 ${row.id}`" /></td>
+              <td class="max-w-[28rem] px-3 py-3 align-top">
+                <button class="note-title-button" @click="toggleDetail(row.id)">
+                  <span class="note-id">#{{ row.id }}</span>
+                  <span class="font-medium">{{ oneLine(row.content) || '（仅附件）' }}</span>
                 </button>
-                <div v-if="row.is_guestbook" class="mt-1 text-xs text-indigo-500">规范留言板（不可作为普通笔记删除）</div>
+                <UBadge v-if="row.is_guestbook" class="mt-1.5" color="indigo" size="xs" variant="soft">规范留言板 · 不可作为普通笔记删除</UBadge>
               </td>
-              <td class="px-3 py-2 align-top">{{ row.username || row.user_id }}</td>
-              <td class="px-3 py-2 align-top">{{ visibilityLabel(row.visibility) }}</td>
-              <td class="px-3 py-2 align-top whitespace-nowrap">{{ formatDate(recycleBin ? row.deleted_at : row.created_at) }}</td>
-              <td class="px-3 py-2 text-right align-top whitespace-nowrap">
-                <UButton size="xs" variant="ghost" color="gray" @click="toggleDetail(row.id)">{{ detailId === row.id ? '收起' : '详情' }}</UButton>
-                <template v-if="!recycleBin && !row.is_guestbook">
-                  <UButton v-if="canEdit" size="xs" variant="ghost" color="primary" :loading="actionLoading" @click="editOne(row)">编辑</UButton>
-                  <UButton v-if="canChangeVisibility" size="xs" variant="ghost" color="primary" :loading="actionLoading" @click="changeVisibilityOne(row)">可见性</UButton>
-                  <UButton v-if="canChangePublishTime" size="xs" variant="ghost" color="primary" :loading="actionLoading" @click="changePublishTimeOne(row)">发布时间</UButton>
-                  <UButton v-if="canPinGlobal" size="xs" variant="ghost" color="primary" :loading="actionLoading" @click="toggleGlobalPinOne(row)">{{ row.pinned ? '取消全站置顶' : '全站置顶' }}</UButton>
-                </template>
-                <UButton v-if="!recycleBin && !row.is_guestbook && canTrash" size="xs" variant="ghost" color="orange" :loading="actionLoading" @click="trashOne(row.id)">移入回收站</UButton>
-                <UButton v-if="recycleBin && !row.is_guestbook && canRestore" size="xs" variant="ghost" color="green" :loading="actionLoading" @click="restoreOne(row.id)">恢复</UButton>
-                <UButton v-if="recycleBin && !row.is_guestbook && canPermanentlyDelete" size="xs" variant="ghost" color="red" :loading="actionLoading" @click="permanentDeleteOne(row.id)">永久删除</UButton>
+              <td class="px-3 py-3 align-top"><span class="font-medium">{{ row.username || row.user_id }}</span><span v-if="row.username" class="mt-0.5 block text-xs" :class="theme?.mutedText || 'text-slate-500'">ID {{ row.user_id }}</span></td>
+              <td class="px-3 py-3 align-top"><UBadge color="gray" size="xs" variant="soft">{{ visibilityLabel(row.visibility) }}</UBadge></td>
+              <td class="px-3 py-3 align-top whitespace-nowrap" :class="theme?.mutedText || 'text-slate-500'">{{ formatDate(recycleBin ? row.deleted_at : row.created_at) }}</td>
+              <td class="px-4 py-3 text-right align-top">
+                <div class="note-row-actions">
+                  <UButton size="xs" variant="ghost" color="gray" @click="toggleDetail(row.id)">{{ detailId === row.id ? '收起' : '详情' }}</UButton>
+                  <template v-if="!recycleBin && !row.is_guestbook">
+                    <UButton v-if="canEdit" size="xs" variant="ghost" color="primary" :loading="actionLoading" @click="editOne(row)">编辑</UButton>
+                    <UButton v-if="canChangeVisibility" size="xs" variant="ghost" color="primary" :loading="actionLoading" @click="changeVisibilityOne(row)">可见性</UButton>
+                    <UButton v-if="canChangePublishTime" size="xs" variant="ghost" color="primary" :loading="actionLoading" @click="changePublishTimeOne(row)">发布时间</UButton>
+                    <UButton v-if="canPinGlobal" size="xs" variant="ghost" color="primary" :loading="actionLoading" @click="toggleGlobalPinOne(row)">{{ row.pinned ? '取消全站置顶' : '全站置顶' }}</UButton>
+                  </template>
+                  <UButton v-if="!recycleBin && !row.is_guestbook && canTrash" size="xs" variant="ghost" color="orange" :loading="actionLoading" @click="trashOne(row.id)">移入回收站</UButton>
+                  <UButton v-if="recycleBin && !row.is_guestbook && canRestore" size="xs" variant="ghost" color="green" :loading="actionLoading" @click="restoreOne(row.id)">恢复</UButton>
+                  <UButton v-if="recycleBin && !row.is_guestbook && canPermanentlyDelete" size="xs" variant="ghost" color="red" :loading="actionLoading" @click="permanentDeleteOne(row.id)">永久删除</UButton>
+                </div>
               </td>
             </tr>
             <tr v-if="detailId === row.id" class="border-t" :class="theme?.border || 'border-slate-200 dark:border-slate-700'">
-              <td colspan="6" class="px-3 py-3">
-                <pre class="max-h-64 overflow-auto whitespace-pre-wrap text-xs" :class="theme?.mutedText || 'text-slate-600 dark:text-slate-300'">{{ row.content || '（无正文）' }}</pre>
-                <div class="mt-2 text-xs" :class="theme?.mutedText || 'text-slate-500'">点赞 {{ row.like_count || 0 }} · 全站置顶 {{ row.pinned ? '是' : '否' }} · 个人置顶 {{ row.personal_pinned ? '是' : '否' }}</div>
-                <div v-if="recycleBin" class="mt-1 text-xs" :class="theme?.mutedText || 'text-slate-500'">删除原因：{{ row.deleted_reason || '未记录' }}</div>
+              <td colspan="6" class="px-4 py-4" :class="theme?.subtleBg || 'bg-slate-50 dark:bg-slate-800/60'">
+                <div class="note-detail-card" :class="theme?.border || 'border-slate-200 dark:border-slate-700'">
+                  <div class="mb-2 text-xs font-semibold uppercase tracking-wide" :class="theme?.mutedText || 'text-slate-500'">笔记正文</div>
+                  <pre class="max-h-64 overflow-auto whitespace-pre-wrap text-xs leading-5" :class="theme?.text || 'text-slate-700 dark:text-slate-200'">{{ row.content || '（无正文）' }}</pre>
+                  <div class="mt-3 text-xs" :class="theme?.mutedText || 'text-slate-500'">点赞 {{ row.like_count || 0 }} · 全站置顶 {{ row.pinned ? '是' : '否' }} · 个人置顶 {{ row.personal_pinned ? '是' : '否' }}</div>
+                  <div v-if="recycleBin" class="mt-1 text-xs" :class="theme?.mutedText || 'text-slate-500'">删除原因：{{ row.deleted_reason || '未记录' }}</div>
+                </div>
               </td>
             </tr>
           </template>
         </tbody>
       </table>
-    </div>
+      </div>
 
-    <div class="flex items-center justify-between text-xs" :class="theme?.mutedText || 'text-slate-500'">
-      <span>共 {{ total }} 条</span>
-      <div class="flex items-center gap-2">
-        <UButton size="xs" variant="soft" color="gray" :disabled="page <= 1 || loading" @click="page--; load()">上一页</UButton>
-        <span>第 {{ page }} 页</span>
-        <UButton size="xs" variant="soft" color="gray" :disabled="page * pageSize >= total || loading" @click="page++; load()">下一页</UButton>
+      <div class="note-pagination" :class="theme?.mutedText || 'text-slate-500'">
+        <span>共 {{ total }} 条 · 每页 {{ pageSize }} 条</span>
+        <div class="flex items-center gap-2">
+          <UButton size="xs" variant="soft" color="gray" :disabled="page <= 1 || loading" @click="page--; load()">上一页</UButton>
+          <span class="min-w-16 text-center">第 {{ page }} 页</span>
+          <UButton size="xs" variant="soft" color="gray" :disabled="page * pageSize >= total || loading" @click="page++; load()">下一页</UButton>
+        </div>
       </div>
     </div>
-  </div>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -148,8 +191,8 @@ const visibilityOptions = [
 ]
 const booleanOptions = (label: string) => [{ label: `${label}：全部`, value: '' }, { label: `${label}：是`, value: 'true' }, { label: `${label}：否`, value: 'false' }]
 const sortOptions = computed(() => props.recycleBin
-  ? [{ label: '最新删除', value: 'deleted_desc' }, { label: '最早删除', value: 'deleted_asc' }, { label: '最新创建', value: 'created_desc' }, { label: '最早创建', value: 'created_asc' }]
-  : [{ label: '最新创建', value: 'created_desc' }, { label: '最早创建', value: 'created_asc' }, { label: '置顶优先', value: 'pinned' }])
+  ? [{ label: '默认排序', value: '' }, { label: '最新删除', value: 'deleted_desc' }, { label: '最早删除', value: 'deleted_asc' }, { label: '最新创建', value: 'created_desc' }, { label: '最早创建', value: 'created_asc' }]
+  : [{ label: '默认排序', value: '' }, { label: '最新创建', value: 'created_desc' }, { label: '最早创建', value: 'created_asc' }, { label: '置顶优先', value: 'pinned' }])
 const endpoint = computed(() => props.recycleBin ? 'admin/recycle-bin' : 'admin/notes')
 const allSelected = computed(() => rows.value.length > 0 && rows.value.every((row) => selected.value.includes(row.id)))
 
@@ -161,6 +204,15 @@ const formatDate = (value: any) => {
 const oneLine = (value: any) => String(value || '').replace(/\s+/g, ' ').trim().slice(0, 120)
 const visibilityLabel = (value: string) => visibilityOptions.find((item) => item.value === value)?.label || value || '公开'
 const query = () => ({ page: page.value, pageSize, keyword: filters.keyword, id: filters.id, authorId: filters.authorId, username: filters.username, tag: filters.tag, visibility: filters.visibility, createdFrom: filters.createdFrom, createdTo: filters.createdTo, pinned: filters.pinned, hasAttachment: filters.hasAttachment, sort: filters.sort })
+const applyFilters = () => {
+  page.value = 1
+  clearSelection()
+  void load()
+}
+const resetFilters = () => {
+  Object.assign(filters, { keyword: '', id: '', authorId: '', username: '', tag: '', visibility: '', createdFrom: '', createdTo: '', pinned: '', hasAttachment: '', sort: '' })
+  applyFilters()
+}
 
 const permissionChanged = createNoteManagerPermissionHandler({
   clearState: () => {
@@ -302,3 +354,272 @@ const saveRetention = async () => {
 }
 watch(() => props.recycleBin, () => { page.value = 1; clearSelection(); load(); if (props.recycleBin) void loadRetentionSettings() })
 </script>
+
+<style scoped>
+.note-manager {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.note-manager-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.note-manager-heading,
+.note-policy-copy,
+.note-selection-status {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.note-manager-icon,
+.note-policy-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: rgb(79, 70, 229);
+  background: rgba(99, 102, 241, 0.12);
+}
+
+.note-manager-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+
+.note-manager-icon.is-recycle-bin {
+  color: rgb(217, 119, 6);
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.note-policy-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: rgb(217, 119, 6);
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.note-manager-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 16px 16px;
+}
+
+.note-policy-card,
+.note-filter-card,
+.note-selection-bar,
+.note-detail-card {
+  border-width: 1px;
+  border-style: solid;
+}
+
+.note-policy-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: 10px;
+}
+
+.note-filter-card {
+  padding: 14px;
+  border-radius: 10px;
+}
+
+.note-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.note-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.note-filter-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.note-filter-field > span {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  opacity: 0.72;
+}
+
+.note-selection-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  overflow: hidden;
+  padding: 11px 12px 11px 15px;
+  border-radius: 10px;
+}
+
+.note-selection-bar::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  content: '';
+  background: rgb(99, 102, 241);
+}
+
+.note-selection-bar.is-recycle-bin::before {
+  background: rgb(245, 158, 11);
+}
+
+.note-selection-count {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: rgb(79, 70, 229);
+  background: rgba(99, 102, 241, 0.12);
+}
+
+.is-recycle-bin .note-selection-count {
+  color: rgb(180, 83, 9);
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.note-selection-actions,
+.note-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.note-table-shell {
+  overflow-x: auto;
+  border-width: 1px;
+  border-style: solid;
+  border-radius: 10px;
+}
+
+.note-table-shell tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.note-table-shell tbody tr:hover:not(:has(.note-detail-card)) {
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.note-title-button {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 7px;
+  text-align: left;
+}
+
+.note-title-button:hover .font-medium,
+.note-title-button:focus-visible .font-medium {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.note-title-button:focus-visible {
+  outline: 2px solid rgba(99, 102, 241, 0.65);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+.note-id {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0.6;
+}
+
+.note-detail-card {
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.32);
+}
+
+:global(.dark) .note-detail-card {
+  background: rgba(15, 23, 42, 0.18);
+}
+
+.note-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+
+@media (max-width: 1100px) {
+  .note-filter-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .note-manager-header,
+  .note-policy-card,
+  .note-section-heading,
+  .note-selection-bar,
+  .note-pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .note-manager-header > :last-child,
+  .note-policy-card > :last-child {
+    align-self: stretch;
+  }
+
+  .note-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .note-selection-actions,
+  .note-row-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 520px) {
+  .note-manager-header {
+    padding: 14px;
+  }
+
+  .note-manager-body {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .note-filter-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+</style>
