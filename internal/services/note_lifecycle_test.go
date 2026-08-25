@@ -68,6 +68,91 @@ func TestNoteLifecycleTrashRestoreIsMutuallyExclusive(t *testing.T) {
 	}
 }
 
+func TestPrimaryAdminCanTrashDelegatedPrivateNoteContainingPrimaryComment(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "primary-trash", IsAdmin: true})
+	author := mustCreateUser(t, models.User{Username: "delegated-author", IsAdmin: true})
+	message := models.Message{Content: "delegated private note", Username: author.Username, UserID: author.ID, Private: true, Visibility: MessageVisibilityPrivate}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatalf("create delegated private note: %v", err)
+	}
+	comment := models.Comment{MessageID: message.ID, UserID: &primary.ID, Content: "primary comment", Visibility: MessageVisibilityPrivate}
+	if err := db.Create(&comment).Error; err != nil {
+		t.Fatalf("create primary comment: %v", err)
+	}
+
+	if err := TrashMessage(db, primary.ID, message.ID, "primary moderation"); err != nil {
+		t.Fatalf("primary administrator must be able to trash delegated private note containing their own comment: %v", err)
+	}
+	var stored models.Message
+	if err := db.First(&stored, message.ID).Error; err != nil {
+		t.Fatalf("reload trashed note: %v", err)
+	}
+	if stored.DeletedAt == nil || stored.DeletedByUserID == nil || *stored.DeletedByUserID != primary.ID {
+		t.Fatalf("trash metadata = %#v, want primary administrator deletion", stored)
+	}
+}
+
+func TestPrimaryCommentProtectionAppliesToDelegatedPermanentDelete(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "primary-protection", IsAdmin: true})
+	author := mustCreateUser(t, models.User{Username: "delegated-owner", IsAdmin: true})
+	moderator := mustCreateUser(t, models.User{Username: "delegated-moderator", IsAdmin: true})
+	if err := authorization.New(db).ReplaceGrants(primary.ID, moderator.ID, []authorization.Capability{
+		authorization.CapabilityContentViewHidden,
+		authorization.CapabilityNotesRecycleBinView,
+		authorization.CapabilityNotesDelete,
+	}); err != nil {
+		t.Fatalf("grant delegated recycle-bin capabilities: %v", err)
+	}
+	message := models.Message{Content: "protected delegated note", Username: author.Username, UserID: author.ID, Private: true, Visibility: MessageVisibilityPrivate}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatalf("create delegated private note: %v", err)
+	}
+	comment := models.Comment{MessageID: message.ID, UserID: &primary.ID, Content: "protected primary comment", Visibility: MessageVisibilityPrivate}
+	if err := db.Create(&comment).Error; err != nil {
+		t.Fatalf("create primary comment: %v", err)
+	}
+	if err := TrashMessage(db, author.ID, message.ID, "author request"); err != nil {
+		t.Fatalf("author must be able to trash own note: %v", err)
+	}
+
+	if err := PermanentlyDeleteMessage(db, moderator.ID, message.ID, "delegated moderation"); !errors.Is(err, ErrMessageProtected) {
+		t.Fatalf("delegated administrator permanent delete error = %v, want %v", err, ErrMessageProtected)
+	}
+	if err := PermanentlyDeleteMessage(db, primary.ID, message.ID, "primary moderation"); err != nil {
+		t.Fatalf("primary administrator must be able to permanently delete protected note: %v", err)
+	}
+}
+
+func TestPrimaryCommentProtectionAllowsAuthorTrashAndBlocksDelegatedTrash(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "primary-thread", IsAdmin: true})
+	author := mustCreateUser(t, models.User{Username: "ordinary-author"})
+	moderator := mustCreateUser(t, models.User{Username: "delegated-trash-moderator", IsAdmin: true})
+	if err := authorization.New(db).ReplaceGrants(primary.ID, moderator.ID, []authorization.Capability{
+		authorization.CapabilityContentViewHidden,
+		authorization.CapabilityNotesTrash,
+	}); err != nil {
+		t.Fatalf("grant delegated trash capabilities: %v", err)
+	}
+	message := models.Message{Content: "ordinary private note with primary reply", Username: author.Username, UserID: author.ID, Private: true, Visibility: MessageVisibilityPrivate}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatalf("create ordinary private note: %v", err)
+	}
+	comment := models.Comment{MessageID: message.ID, UserID: &primary.ID, Content: "primary reply", Visibility: MessageVisibilityPrivate}
+	if err := db.Create(&comment).Error; err != nil {
+		t.Fatalf("create primary reply: %v", err)
+	}
+
+	if err := TrashMessage(db, moderator.ID, message.ID, "delegated moderation"); !errors.Is(err, ErrMessageProtected) {
+		t.Fatalf("delegated administrator trash error = %v, want %v", err, ErrMessageProtected)
+	}
+	if err := TrashMessage(db, author.ID, message.ID, "author request"); err != nil {
+		t.Fatalf("author must be able to trash own note containing primary reply: %v", err)
+	}
+}
+
 func TestRunRecycleBinAutoCleanupUsesDeletedAtAndSystemIdentity(t *testing.T) {
 	db := setupUserServiceTestDB(t)
 	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "auto-primary", IsAdmin: true})

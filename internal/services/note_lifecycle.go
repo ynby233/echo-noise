@@ -217,6 +217,16 @@ func ensureLifecycleActorCanRead(db *gorm.DB, actorID uint, message models.Messa
 	return nil
 }
 
+func messageContainsPrimaryAdminComment(db *gorm.DB, messageID uint) (bool, error) {
+	var count int64
+	if err := db.Model(&models.Comment{}).
+		Where("message_id = ? AND user_id = ?", messageID, models.PrimaryAdminUserID).
+		Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 // TrashMessage is the single state transition used by author and administrator
 // deletion paths. It never removes the Message row or its related data.
 func TrashMessage(db *gorm.DB, actorID, messageID uint, reason string) error {
@@ -246,13 +256,6 @@ func TrashMessageWithAudit(db *gorm.DB, actorID, messageID uint, reason string, 
 			}
 			return ErrMessageNotAuthorized
 		}
-		var primaryComments int64
-		if err := db.Model(&models.Comment{}).Where("message_id = ? AND user_id = ?", message.ID, models.PrimaryAdminUserID).Count(&primaryComments).Error; err != nil {
-			return err
-		}
-		if primaryComments > 0 {
-			return ErrMessageProtected
-		}
 	}
 	if message.DeletedAt != nil {
 		return ErrMessageAlreadyTrashed
@@ -261,6 +264,15 @@ func TrashMessageWithAudit(db *gorm.DB, actorID, messageID uint, reason string, 
 	deletedBy := actorID
 	reason = strings.TrimSpace(reason)
 	return db.Transaction(func(tx *gorm.DB) error {
+		if actorID != message.UserID && actorID != models.PrimaryAdminUserID {
+			protected, err := messageContainsPrimaryAdminComment(tx, message.ID)
+			if err != nil {
+				return err
+			}
+			if protected {
+				return ErrMessageProtected
+			}
+		}
 		result := tx.Model(&models.Message{}).
 			Where("id = ? AND deleted_at IS NULL", messageID).
 			Updates(map[string]interface{}{"deleted_at": deletedAt, "deleted_by_user_id": deletedBy, "deleted_reason": reason})
@@ -346,6 +358,15 @@ func PermanentlyDeleteMessageWithAudit(db *gorm.DB, actorID, messageID uint, rea
 		return ErrMessageNotAuthorized
 	}
 	return db.Transaction(func(tx *gorm.DB) error {
+		if actorID != models.PrimaryAdminUserID {
+			protected, err := messageContainsPrimaryAdminComment(tx, message.ID)
+			if err != nil {
+				return err
+			}
+			if protected {
+				return ErrMessageProtected
+			}
+		}
 		if err := permanentlyDeleteMessageInTx(tx, message); err != nil {
 			return err
 		}
