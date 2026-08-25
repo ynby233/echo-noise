@@ -103,13 +103,13 @@ func TestNoteManagementRoutesEnforceViewPrerequisitesForSessionAndBearer(t *test
 	assertBoth("notes view is required", http.MethodGet, "/api/admin/notes", "/api/token/admin/notes", http.StatusForbidden)
 	assertBoth("recycle-bin view is required", http.MethodGet, "/api/admin/recycle-bin", "/api/token/admin/recycle-bin", http.StatusForbidden)
 
-	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityNotesRestore}); err != nil {
-		t.Fatalf("grant restore only: %v", err)
+	if err := db.Create(&[]models.AdminCapabilityGrant{
+		{UserID: delegated.ID, Capability: string(authorization.CapabilityNotesRestore), GrantedByUserID: primary.ID},
+		{UserID: delegated.ID, Capability: string(authorization.CapabilityNotesDelete), GrantedByUserID: primary.ID},
+	}).Error; err != nil {
+		t.Fatalf("create orphan recycle-bin grants: %v", err)
 	}
 	assertBoth("restore cannot bypass recycle-bin view", http.MethodPost, "/api/admin/recycle-bin/1/restore", "/api/token/admin/recycle-bin/1/restore", http.StatusForbidden)
-	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityNotesDelete}); err != nil {
-		t.Fatalf("grant permanent delete only: %v", err)
-	}
 	assertBoth("permanent delete cannot bypass recycle-bin view", http.MethodDelete, "/api/admin/recycle-bin/1", "/api/token/admin/recycle-bin/1", http.StatusForbidden)
 
 	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityNotesView, authorization.CapabilityNotesRecycleBinView}); err != nil {

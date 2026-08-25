@@ -80,7 +80,7 @@ func TestRequireCapabilityWritesSuccessfulAdministrativeMutationAudit(t *testing
 	if err := db.Create(&delegated).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityCommentsEdit}); err != nil {
+	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityCommentsView, authorization.CapabilityCommentsEdit}); err != nil {
 		t.Fatal(err)
 	}
 

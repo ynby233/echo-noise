@@ -99,7 +99,8 @@ func TestPrimaryCommentProtectionAppliesToDelegatedPermanentDelete(t *testing.T)
 	author := mustCreateUser(t, models.User{Username: "delegated-owner", IsAdmin: true})
 	moderator := mustCreateUser(t, models.User{Username: "delegated-moderator", IsAdmin: true})
 	if err := authorization.New(db).ReplaceGrants(primary.ID, moderator.ID, []authorization.Capability{
-		authorization.CapabilityContentViewHidden,
+		authorization.CapabilityNotesView,
+		authorization.CapabilityNotesViewHidden,
 		authorization.CapabilityNotesRecycleBinView,
 		authorization.CapabilityNotesDelete,
 	}); err != nil {
@@ -131,7 +132,8 @@ func TestPrimaryCommentProtectionAllowsAuthorTrashAndBlocksDelegatedTrash(t *tes
 	author := mustCreateUser(t, models.User{Username: "ordinary-author"})
 	moderator := mustCreateUser(t, models.User{Username: "delegated-trash-moderator", IsAdmin: true})
 	if err := authorization.New(db).ReplaceGrants(primary.ID, moderator.ID, []authorization.Capability{
-		authorization.CapabilityContentViewHidden,
+		authorization.CapabilityNotesView,
+		authorization.CapabilityNotesViewHidden,
 		authorization.CapabilityNotesTrash,
 	}); err != nil {
 		t.Fatalf("grant delegated trash capabilities: %v", err)
@@ -427,7 +429,7 @@ func TestBatchNoteLifecycleByFilterRechecksRevokedCapabilityPerItem(t *testing.T
 	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "filtered-revoke-primary", IsAdmin: true})
 	delegated := mustCreateUser(t, models.User{Username: "filtered-revoke-delegated", IsAdmin: true})
 	author := mustCreateUser(t, models.User{Username: "filtered-revoke-author"})
-	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityNotesTrash}); err != nil {
+	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityNotesView, authorization.CapabilityNotesTrash}); err != nil {
 		t.Fatal(err)
 	}
 	messages := []models.Message{
@@ -488,6 +490,7 @@ func TestPermanentlyDeleteMessageClearsLocalRelationsButKeepsNotifications(t *te
 	delegated := mustCreateUser(t, models.User{Username: "lifecycle-permanent-delegated", IsAdmin: true})
 	author := mustCreateUser(t, models.User{Username: "lifecycle-permanent-author"})
 	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{
+		authorization.CapabilityNotesView,
 		authorization.CapabilityNotesTrash,
 		authorization.CapabilityNotesRecycleBinView,
 		authorization.CapabilityNotesDelete,
@@ -566,12 +569,12 @@ func TestRecycleBinVisibilitySeparatesHiddenOrdinaryAndPrimaryContent(t *testing
 		t.Fatalf("list recycle bin without hidden grant: %v", err)
 	}
 	if withoutHidden.Total != 0 {
-		t.Fatalf("without content.view_hidden total=%d, want 0", withoutHidden.Total)
+		t.Fatalf("without notes.view_hidden total=%d, want 0", withoutHidden.Total)
 	}
 	if _, err := GetRecycleBinMessageForViewer(db, delegated.ID, ordinaryHidden.ID); !errors.Is(err, ErrMessageNotVisible) {
 		t.Fatalf("hidden ordinary detail without grant=%v, want %v", err, ErrMessageNotVisible)
 	}
-	if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, append(baseGrants, authorization.CapabilityContentViewHidden)); err != nil {
+	if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, append(baseGrants, authorization.CapabilityNotesView, authorization.CapabilityNotesViewHidden)); err != nil {
 		t.Fatalf("grant hidden read: %v", err)
 	}
 	withHidden, err := ListRecycleBinMessages(db, delegated.ID, NoteManagementFilter{Page: 1, PageSize: 20})
@@ -579,7 +582,7 @@ func TestRecycleBinVisibilitySeparatesHiddenOrdinaryAndPrimaryContent(t *testing
 		t.Fatalf("list recycle bin with hidden grant: %v", err)
 	}
 	if withHidden.Total != 1 || len(withHidden.Items) != 1 || withHidden.Items[0].ID != ordinaryHidden.ID {
-		t.Fatalf("with content.view_hidden result=%#v, want only ordinary hidden note", withHidden)
+		t.Fatalf("with notes.view_hidden result=%#v, want only ordinary hidden note", withHidden)
 	}
 	item, err := GetRecycleBinMessageForViewer(db, delegated.ID, ordinaryHidden.ID)
 	if err != nil || item.DeletedAt == nil {

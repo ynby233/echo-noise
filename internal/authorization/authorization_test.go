@@ -1,7 +1,9 @@
 package authorization
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -57,7 +59,11 @@ func TestCatalogAuthorizationMatrixCoversEveryCapability(t *testing.T) {
 			}
 
 			if definition.Grantable {
-				if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, []Capability{definition.Capability}); err != nil {
+				grants := []Capability{definition.Capability}
+				if parent, ok := ParentCapabilityFor(definition.Capability); ok {
+					grants = append(grants, parent)
+				}
+				if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, grants); err != nil {
 					t.Fatalf("grant %s: %v", definition.Capability, err)
 				}
 				if decision := authorizer.Authorize(delegated.ID, definition.Capability, nil); !decision.Allowed {
@@ -126,7 +132,7 @@ func TestAuthorizeDelegatedAdminRequiresGrantAndRevocationAppliesImmediately(t *
 
 func TestAuthorizeProtectsPrimaryAdminContentFromDelegatedMutation(t *testing.T) {
 	_, authorizer, primary, delegated, _ := setupAuthorizerTest(t)
-	if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, []Capability{CapabilityCommentsDelete}); err != nil {
+	if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, []Capability{CapabilityCommentsView, CapabilityCommentsDelete}); err != nil {
 		t.Fatalf("grant comment deletion: %v", err)
 	}
 
@@ -153,7 +159,11 @@ func TestAuthorizeTargetOwnerMatrixPreservesProtectedContentBoundary(t *testing.
 		capability := capability
 		t.Run(string(capability), func(t *testing.T) {
 			_, authorizer, primary, delegated, ordinary := setupAuthorizerTest(t)
-			if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, []Capability{capability}); err != nil {
+			grants := []Capability{capability}
+			if parent, ok := ParentCapabilityFor(capability); ok {
+				grants = append(grants, parent)
+			}
+			if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, grants); err != nil {
 				t.Fatalf("grant %s: %v", capability, err)
 			}
 			if decision := authorizer.Authorize(delegated.ID, capability, &ordinary.ID); !decision.Allowed {
@@ -185,8 +195,8 @@ func TestAuthorizeTargetOwnerMatrixPreservesProtectedContentBoundary(t *testing.
 	}
 }
 
-func TestHiddenContentAndRecycleBinViewCapabilitiesAreGrantableReads(t *testing.T) {
-	for _, capability := range []Capability{CapabilityContentViewHidden, CapabilityNotesRecycleBinView} {
+func TestScopedHiddenContentAndRecycleBinViewCapabilitiesAreGrantableReads(t *testing.T) {
+	for _, capability := range []Capability{"notes.view_hidden", "comments.view_hidden", CapabilityNotesRecycleBinView} {
 		capability := capability
 		t.Run(string(capability), func(t *testing.T) {
 			_, authorizer, primary, delegated, _ := setupAuthorizerTest(t)
@@ -194,13 +204,59 @@ func TestHiddenContentAndRecycleBinViewCapabilitiesAreGrantableReads(t *testing.
 			if !ok || !definition.Grantable {
 				t.Fatalf("read capability must be present and grantable: %#v, %v", definition, ok)
 			}
-			if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, []Capability{capability}); err != nil {
+			grants := []Capability{capability}
+			if parent, hasParent := ParentCapabilityFor(capability); hasParent {
+				grants = append(grants, parent)
+			}
+			if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, grants); err != nil {
 				t.Fatalf("grant %s: %v", capability, err)
 			}
 			if decision := authorizer.Authorize(delegated.ID, capability, &primary.ID); !decision.Allowed {
 				t.Fatalf("read capability must not be classified as a protected mutation: %#v", decision)
 			}
 		})
+	}
+}
+
+func TestEveryChildCapabilityHasTheExpectedParent(t *testing.T) {
+	expected := map[Capability]Capability{
+		CapabilityUsersResetPassword:         CapabilityUsersView,
+		CapabilityUsersDelete:                CapabilityUsersView,
+		CapabilityRegistrationReview:         CapabilityRegistrationView,
+		"comments.view_hidden":               CapabilityCommentsView,
+		CapabilityCommentsEdit:               CapabilityCommentsView,
+		CapabilityCommentsDelete:             CapabilityCommentsView,
+		CapabilityAttachmentsDownload:        CapabilityAttachmentsView,
+		CapabilityAttachmentsDeleteReference: CapabilityAttachmentsView,
+		CapabilityAttachmentsPurgeBlob:       CapabilityAttachmentsView,
+		CapabilityStorageManage:              CapabilityStorageView,
+		CapabilityDatabaseBackup:             CapabilityDatabaseView,
+		CapabilityDatabaseRestore:            CapabilityDatabaseView,
+		CapabilityVersionUpdate:              CapabilityVersionView,
+		CapabilitySecurityManage:             CapabilitySecurityView,
+		CapabilitySecurityClearLogs:          CapabilitySecurityView,
+		CapabilityAccessLogsClear:            CapabilityAccessLogsView,
+		CapabilitySiteVisitsClear:            CapabilitySiteVisitsView,
+		CapabilitySiteSettingsManage:         CapabilitySiteSettingsView,
+		CapabilityAnnouncementsManage:        CapabilityAnnouncementsView,
+		CapabilityAnnouncementsPush:          CapabilityAnnouncementsView,
+		CapabilityNotificationsManage:        CapabilityNotificationsView,
+		CapabilityEmailManage:                CapabilityEmailView,
+		"notes.view_hidden":                  CapabilityNotesView,
+		CapabilityNotesEdit:                  CapabilityNotesView,
+		CapabilityNotesVisibility:            CapabilityNotesView,
+		CapabilityNotesPublishTime:           CapabilityNotesView,
+		CapabilityNotesPinGlobal:             CapabilityNotesView,
+		CapabilityNotesTrash:                 CapabilityNotesView,
+		CapabilityNotesRestore:               CapabilityNotesRecycleBinView,
+		CapabilityNotesDelete:                CapabilityNotesRecycleBinView,
+	}
+
+	for child, wantParent := range expected {
+		gotParent, ok := ParentCapabilityFor(child)
+		if !ok || gotParent != wantParent {
+			t.Errorf("parent for %s = %s, %v; want %s", child, gotParent, ok, wantParent)
+		}
 	}
 }
 
@@ -214,6 +270,58 @@ func TestReplaceGrantsRejectsPrimaryAndOrdinaryTargetsAndUnknownCapability(t *te
 	}
 	if err := authorizer.ReplaceGrants(primary.ID, ordinary.ID, []Capability{"unknown.capability"}); err == nil {
 		t.Fatal("unknown capability must be rejected")
+	}
+}
+
+func TestReplaceGrantsRejectsChildCapabilityWithoutParent(t *testing.T) {
+	_, authorizer, primary, delegated, _ := setupAuthorizerTest(t)
+
+	err := authorizer.ReplaceGrants(primary.ID, delegated.ID, []Capability{CapabilityNotesEdit})
+	if err == nil {
+		t.Fatal("notes.edit without notes.view must be rejected")
+	}
+	if !strings.Contains(err.Error(), string(CapabilityNotesView)) {
+		t.Fatalf("missing-parent error = %q, want parent capability", err)
+	}
+}
+
+func TestAuthorizeAndCapabilitySnapshotRejectOrphanChildGrant(t *testing.T) {
+	db, authorizer, primary, delegated, _ := setupAuthorizerTest(t)
+	if err := db.Create(&models.AdminCapabilityGrant{
+		UserID: delegated.ID, Capability: string(CapabilityNotesEdit), GrantedByUserID: primary.ID,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if decision := authorizer.Authorize(delegated.ID, CapabilityNotesEdit, nil); decision.Allowed || decision.Reason != DenialMissingPrerequisite {
+		t.Fatalf("orphan child authorization = %#v, want missing prerequisite", decision)
+	}
+	capabilities, err := authorizer.CapabilitiesFor(delegated.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(capabilities) != 0 {
+		t.Fatalf("orphan child leaked into capability snapshot: %#v", capabilities)
+	}
+}
+
+func TestCatalogJSONExposesParentCapability(t *testing.T) {
+	definition, ok := DefinitionFor(CapabilityNotesViewHidden)
+	if !ok {
+		t.Fatal("notes.view_hidden missing from catalog")
+	}
+	payload, err := json.Marshal(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded struct {
+		ParentCapability Capability `json:"parent_capability"`
+	}
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.ParentCapability != CapabilityNotesView {
+		t.Fatalf("catalog parent = %s, want %s", decoded.ParentCapability, CapabilityNotesView)
 	}
 }
 

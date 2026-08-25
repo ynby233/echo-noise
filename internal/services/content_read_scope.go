@@ -12,11 +12,12 @@ import (
 // ContentReadScope is the single backend interface for content reads and
 // normal-visibility interaction checks. It is resolved from current DB state.
 type ContentReadScope struct {
-	actorID       uint
-	hasActor      bool
-	administrator bool
-	primaryAdmin  bool
-	viewHidden    bool
+	actorID                uint
+	hasActor               bool
+	administrator          bool
+	primaryAdmin           bool
+	viewHiddenNotes        bool
+	viewHiddenInteractions bool
 }
 
 func ResolveContentReadScope(db *gorm.DB, actorID *uint) (ContentReadScope, error) {
@@ -44,9 +45,11 @@ func ResolveContentReadScope(db *gorm.DB, actorID *uint) (ContentReadScope, erro
 		return ContentReadScope{}, err
 	}
 	for _, capability := range capabilities {
-		if capability == authorization.CapabilityContentViewHidden {
-			scope.viewHidden = true
-			break
+		switch capability {
+		case authorization.CapabilityNotesViewHidden:
+			scope.viewHiddenNotes = true
+		case authorization.CapabilityCommentsViewHidden:
+			scope.viewHiddenInteractions = true
 		}
 	}
 	return scope, nil
@@ -64,8 +67,12 @@ func (scope ContentReadScope) IsPrimaryAdministrator() bool {
 	return scope.primaryAdmin
 }
 
-func (scope ContentReadScope) CanViewHiddenContent() bool {
-	return scope.viewHidden
+func (scope ContentReadScope) CanViewHiddenNotes() bool {
+	return scope.viewHiddenNotes
+}
+
+func (scope ContentReadScope) CanViewHiddenInteractions() bool {
+	return scope.viewHiddenInteractions
 }
 
 func AuthorizeMessageMutation(db *gorm.DB, actorID uint, message models.Message, capability authorization.Capability) authorization.Decision {
@@ -116,7 +123,7 @@ func (scope ContentReadScope) canReadMessage(message models.Message) bool {
 	if scope.primaryAdmin {
 		return true
 	}
-	return scope.administrator && scope.viewHidden && message.UserID != models.PrimaryAdminUserID
+	return scope.administrator && scope.viewHiddenNotes && message.UserID != models.PrimaryAdminUserID
 }
 
 func (scope ContentReadScope) CanInteractWithMessage(message models.Message) bool {
@@ -153,7 +160,7 @@ func (scope ContentReadScope) ApplyMessageVisibilityIncludingDeleted(query *gorm
 		return query
 	}
 	predicate, args := scope.normalMessageVisibilityPredicate()
-	if scope.administrator && scope.viewHidden {
+	if scope.administrator && scope.viewHiddenNotes {
 		return query.Where("(messages.user_id <> ? OR "+predicate+")", append([]interface{}{models.PrimaryAdminUserID}, args...)...)
 	}
 	return query.Where(predicate, args...)

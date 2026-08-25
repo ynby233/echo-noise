@@ -1312,7 +1312,7 @@
               </div>
                 <div class="px-4 pb-4">
                 <CommentsSettings :config="frontendConfig" :theme="theme" @update:config="updateCommentsConfig" />
-                <div v-if="isAdmin && frontendConfig.commentEnabled" class="mt-4 rounded-lg p-3" :class="theme.subtleBg">
+                <div v-if="can('comments.view') && frontendConfig.commentEnabled" class="mt-4 rounded-lg p-3" :class="theme.subtleBg">
                   <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-2">
                     <UInput v-model="commentSearch" placeholder="搜索评论内容或用户名" class="flex-1" />
                     <div class="flex items-center gap-2">
@@ -1331,7 +1331,7 @@
                         <div><span :class="theme.mutedText">消息ID</span>：<span :class="theme.text">{{ c.message_id }}</span></div>
                         <div><span :class="theme.mutedText">父评论ID</span>：<span :class="theme.text">{{ c.parent_id || 0 }}</span></div>
                         <div class="md:col-span-3 flex gap-2">
-                          <UButton color="red" size="xs" variant="soft" @click="openAdminDeleteConfirm(c)">删除该评论</UButton>
+                          <UButton v-if="can('comments.delete')" color="red" size="xs" variant="soft" @click="openAdminDeleteConfirm(c)">删除该评论</UButton>
                         </div>
                       </div>
                     </div>
@@ -1343,7 +1343,7 @@
           </div>
         </div>
 
-        <UModal v-model="showAdminDeleteConfirm" :ui="{ width: 'sm:max-w-md' }">
+        <UModal v-if="can('comments.delete')" v-model="showAdminDeleteConfirm" :ui="{ width: 'sm:max-w-md' }">
           <UCard>
             <template #header>
               <div class="flex justify-between items-center">

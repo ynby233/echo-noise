@@ -221,7 +221,7 @@ func TestDelegatedMessageMutationAuditsSuccessAndPrimaryContentDenial(t *testing
 			t.Fatalf("create user %s: %v", user.Username, err)
 		}
 	}
-	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityNotesEdit}); err != nil {
+	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityNotesView, authorization.CapabilityNotesEdit}); err != nil {
 		t.Fatalf("grant delegated editor: %v", err)
 	}
 	ordinaryMessage := models.Message{Content: "ordinary", UserID: owner.ID}

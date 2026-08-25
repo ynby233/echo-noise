@@ -713,7 +713,10 @@ func TestPrivateCommentVisibilityMatchesNewRules(t *testing.T) {
 	}
 	privateComment := createTestComment(t, db, msg.ID, &commenter, "private-comment", "private", nil)
 	_ = privateComment
-	if err := db.Create(&models.AdminCapabilityGrant{UserID: admin.ID, Capability: string(authorization.CapabilityContentViewHidden), GrantedByUserID: models.PrimaryAdminUserID}).Error; err != nil {
+	if err := db.Create(&[]models.AdminCapabilityGrant{
+		{UserID: admin.ID, Capability: string(authorization.CapabilityCommentsView), GrantedByUserID: models.PrimaryAdminUserID},
+		{UserID: admin.ID, Capability: string(authorization.CapabilityCommentsViewHidden), GrantedByUserID: models.PrimaryAdminUserID},
+	}).Error; err != nil {
 		t.Fatalf("grant hidden content read: %v", err)
 	}
 
@@ -1120,7 +1123,7 @@ func TestGuestbookFollowsCommentVisibilityRules(t *testing.T) {
 			t.Fatalf("create user %s: %v", u.Username, err)
 		}
 	}
-	if err := authorization.New(db).ReplaceGrants(admin.ID, delegatedWithHidden.ID, []authorization.Capability{authorization.CapabilityContentViewHidden}); err != nil {
+	if err := authorization.New(db).ReplaceGrants(admin.ID, delegatedWithHidden.ID, []authorization.Capability{authorization.CapabilityCommentsView, authorization.CapabilityCommentsViewHidden}); err != nil {
 		t.Fatalf("grant hidden-content read: %v", err)
 	}
 	guestbook := models.Message{Content: models.CanonicalGuestbookContent, UserID: admin.ID, IsGuestbook: true}
@@ -1172,8 +1175,8 @@ func TestGuestbookFollowsCommentVisibilityRules(t *testing.T) {
 	if got := contentsOfComments(request(delegated.ID, true)); len(got) != 2 || got[0] != "public-entry" || got[1] != "users-entry" {
 		t.Fatalf("delegated admin should follow normal guestbook visibility, got %#v", got)
 	}
-	if got := contentsOfComments(request(delegatedWithHidden.ID, true)); len(got) != 2 || got[0] != "public-entry" || got[1] != "users-entry" {
-		t.Fatalf("delegated hidden-content reader must not widen guestbook visibility, got %#v", got)
+	if got := contentsOfComments(request(delegatedWithHidden.ID, true)); len(got) != 3 || got[0] != "private-entry" || got[1] != "public-entry" || got[2] != "users-entry" {
+		t.Fatalf("delegated interaction hidden-reader must include ordinary hidden guestbook entries, got %#v", got)
 	}
 
 	payload, _ := json.Marshal(map[string]any{

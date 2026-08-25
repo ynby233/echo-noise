@@ -126,22 +126,13 @@ func (scope ContentReadScope) CanReadComment(message models.Message, comment mod
 	if !scope.CanReadMessage(message) {
 		return false
 	}
-	// The guestbook is a primary-admin receiving surface. Delegated admin
-	// hidden-read capability must not widen its comment visibility; only the
-	// normal comment/thread predicate is allowed for non-primary viewers.
-	if IsGuestbookMessage(message) {
-		if scope.primaryAdmin {
-			return true
-		}
-		return scope.canViewCommentInThread(message, comment, commentMap)
-	}
 	if scope.canViewCommentInThread(message, comment, commentMap) {
 		return true
 	}
 	if scope.primaryAdmin {
 		return true
 	}
-	if !scope.administrator || !scope.viewHidden {
+	if !scope.administrator || !scope.viewHiddenInteractions {
 		return false
 	}
 	if comment.UserID != nil && *comment.UserID == models.PrimaryAdminUserID {

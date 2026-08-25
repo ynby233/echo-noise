@@ -361,7 +361,10 @@ func TestUserPasswordResetRouteOnlyResetsOrdinaryUsersAndRechecksGrants(t *testi
 	assertStatus(t, "delegated session without grant", reset(t, delegatedSession, "", ordinary.ID, "delegated-no-grant"), http.StatusForbidden)
 	assertStatus(t, "delegated bearer without grant", reset(t, nil, delegated.Token, ordinary.ID, "delegated-token-no-grant"), http.StatusForbidden)
 
-	if err := db.Create(&models.AdminCapabilityGrant{UserID: delegated.ID, Capability: string(authorization.CapabilityUsersResetPassword), GrantedByUserID: primary.ID}).Error; err != nil {
+	if err := db.Create(&[]models.AdminCapabilityGrant{
+		{UserID: delegated.ID, Capability: string(authorization.CapabilityUsersView), GrantedByUserID: primary.ID},
+		{UserID: delegated.ID, Capability: string(authorization.CapabilityUsersResetPassword), GrantedByUserID: primary.ID},
+	}).Error; err != nil {
 		t.Fatalf("grant users.reset_password: %v", err)
 	}
 	assertStatus(t, "delegated session resets ordinary user after grant", reset(t, delegatedSession, "", ordinary.ID, "delegated-ordinary-reset"), http.StatusOK)
@@ -502,7 +505,10 @@ func TestProtectedAdminRouteMatrixRejectsDelegatedAdministratorWithoutRequiredGr
 	if err := db.Create(&models.SiteConfig{RSSEnabled: false, RSSTitle: "unchanged"}).Error; err != nil {
 		t.Fatalf("create site config: %v", err)
 	}
-	if err := db.Create(&models.AdminCapabilityGrant{UserID: delegated.ID, Capability: string(authorization.CapabilitySiteSettingsManage), GrantedByUserID: primary.ID}).Error; err != nil {
+	if err := db.Create(&[]models.AdminCapabilityGrant{
+		{UserID: delegated.ID, Capability: string(authorization.CapabilitySiteSettingsView), GrantedByUserID: primary.ID},
+		{UserID: delegated.ID, Capability: string(authorization.CapabilitySiteSettingsManage), GrantedByUserID: primary.ID},
+	}).Error; err != nil {
 		t.Fatalf("grant delegated site settings management: %v", err)
 	}
 

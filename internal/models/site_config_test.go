@@ -39,7 +39,7 @@ func TestMigrateDBRemovesRetiredThirdPartyAuthenticationAndCommentColumns(t *tes
 	}
 }
 
-func TestMigrateDBRemovesRetiredRSSCapabilityGrantsWithoutTouchingAuditHistory(t *testing.T) {
+func TestMigrateDBRemovesRetiredCapabilityGrantsWithoutTouchingAuditHistory(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open database: %v", err)
@@ -53,9 +53,9 @@ func TestMigrateDBRemovesRetiredRSSCapabilityGrantsWithoutTouchingAuditHistory(t
 	if err := db.Create(&User{ID: 2, Username: "delegated", IsAdmin: true}).Error; err != nil {
 		t.Fatalf("create delegated administrator: %v", err)
 	}
-	for _, capability := range []string{"rss.view", "rss.manage"} {
+	for _, capability := range []string{"rss.view", "rss.manage", "content.view_hidden"} {
 		if err := db.Create(&AdminCapabilityGrant{UserID: 2, Capability: capability, GrantedByUserID: PrimaryAdminUserID}).Error; err != nil {
-			t.Fatalf("create retired RSS grant %q: %v", capability, err)
+			t.Fatalf("create retired grant %q: %v", capability, err)
 		}
 	}
 	if err := db.Create(&AdminAuditLog{ActorUserID: 2, Capability: "rss.manage", Module: "rss", Action: "PUT", Result: "success"}).Error; err != nil {
@@ -66,11 +66,11 @@ func TestMigrateDBRemovesRetiredRSSCapabilityGrantsWithoutTouchingAuditHistory(t
 		t.Fatalf("migrate database: %v", err)
 	}
 	var grants int64
-	if err := db.Model(&AdminCapabilityGrant{}).Where("capability IN ?", []string{"rss.view", "rss.manage"}).Count(&grants).Error; err != nil {
-		t.Fatalf("count retired RSS grants: %v", err)
+	if err := db.Model(&AdminCapabilityGrant{}).Where("capability IN ?", []string{"rss.view", "rss.manage", "content.view_hidden"}).Count(&grants).Error; err != nil {
+		t.Fatalf("count retired grants: %v", err)
 	}
 	if grants != 0 {
-		t.Fatalf("retired RSS grants remain active in database: %d", grants)
+		t.Fatalf("retired grants remain active in database: %d", grants)
 	}
 	var auditCount int64
 	if err := db.Model(&AdminAuditLog{}).Where("capability = ?", "rss.manage").Count(&auditCount).Error; err != nil {

@@ -26,10 +26,11 @@ func TestInvisibleLifecycleDenialsRedactSingleAndBatchAuditTargets(t *testing.T)
 		}
 	}
 	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{
+		authorization.CapabilityNotesView,
 		authorization.CapabilityNotesTrash,
+		authorization.CapabilityNotesRecycleBinView,
 		authorization.CapabilityNotesRestore,
 		authorization.CapabilityNotesDelete,
-		authorization.CapabilityNotesRecycleBinView,
 	}); err != nil {
 		t.Fatal(err)
 	}

@@ -2,7 +2,7 @@
   <section class="authorization-center" :class="theme?.text || ''">
     <AdminModuleHeader
       title="管理员授权"
-      description="为受托管理员配置完整的功能权限集合；保存后的权限会在其下一次请求立即生效。"
+      description="先授予父权限，再按需并行授予其子权限；保存后的权限会在下一次请求立即生效。"
       icon="i-heroicons-key"
       :badge="loading ? '读取中' : `${admins.length} 位受托管理员`"
       :theme="theme"
@@ -78,23 +78,46 @@
                 />
               </div>
               <div class="authorization-capability-grid">
-                <div
-                  v-for="item in group.items"
-                  :key="item.capability"
-                  class="authorization-capability"
-                  :class="[theme?.border || 'border-slate-200 dark:border-slate-700', !item.grantable ? 'is-locked' : '']"
-                >
-                  <UCheckbox
-                    :model-value="selectedCapabilities.has(item.capability)"
-                    :disabled="!item.grantable"
-                    :aria-label="item.label + (!item.grantable ? '（仅站长）' : '')"
-                    @update:model-value="toggle(item.capability, $event === true)"
-                  />
-                  <span class="min-w-0 flex-1">
-                    <span class="block text-sm font-medium">{{ item.label }}</span>
-                    <span class="mt-0.5 block break-all text-[11px]" :class="theme?.mutedText || 'text-slate-500'">{{ item.capability }}</span>
-                  </span>
-                  <UBadge v-if="!item.grantable" color="gray" size="xs" variant="soft">仅站长</UBadge>
+                <div v-for="parent in group.roots" :key="parent.capability" class="authorization-parent-block">
+                  <div
+                    class="authorization-capability is-parent"
+                    :class="[theme?.border || 'border-slate-200 dark:border-slate-700', !parent.grantable ? 'is-locked' : '']"
+                  >
+                    <UCheckbox
+                      :model-value="selectedCapabilities.has(parent.capability)"
+                      :disabled="!parent.grantable"
+                      :aria-label="parent.label + (!parent.grantable ? '（仅站长）' : '（父权限）')"
+                      @update:model-value="toggle(parent.capability, $event === true)"
+                    />
+                    <span class="min-w-0 flex-1">
+                      <span class="block text-sm font-medium">{{ parent.label }}</span>
+                      <span class="mt-0.5 block break-all text-[11px]" :class="theme?.mutedText || 'text-slate-500'">{{ parent.capability }}</span>
+                    </span>
+                    <UBadge v-if="!parent.grantable" color="gray" size="xs" variant="soft">仅站长</UBadge>
+                    <UBadge v-else-if="childrenFor(parent.capability).length" color="primary" size="xs" variant="soft">父权限</UBadge>
+                  </div>
+
+                  <div v-if="childrenFor(parent.capability).length" class="authorization-children">
+                    <div
+                      v-for="item in childrenFor(parent.capability)"
+                      :key="item.capability"
+                      class="authorization-capability is-child"
+                      :class="[theme?.border || 'border-slate-200 dark:border-slate-700', (!item.grantable || !parentSelected(item)) ? 'is-locked' : '']"
+                    >
+                      <UCheckbox
+                        :model-value="selectedCapabilities.has(item.capability)"
+                        :disabled="!item.grantable || !parentSelected(item)"
+                        :aria-label="item.label + (!parentSelected(item) ? `（需先授予 ${item.parent_capability}）` : '')"
+                        @update:model-value="toggle(item.capability, $event === true)"
+                      />
+                      <span class="min-w-0 flex-1">
+                        <span class="block text-sm font-medium">{{ item.label }}</span>
+                        <span class="mt-0.5 block break-all text-[11px]" :class="theme?.mutedText || 'text-slate-500'">{{ item.capability }}</span>
+                      </span>
+                      <UBadge v-if="scopedHiddenCapabilities.has(item.capability)" color="indigo" size="xs" variant="soft">隐藏范围</UBadge>
+                      <UBadge v-else-if="!parentSelected(item)" color="gray" size="xs" variant="soft">等待父权限</UBadge>
+                    </div>
+                  </div>
                 </div>
               </div>
             </section>
@@ -126,7 +149,7 @@
 <script setup lang="ts">
 import { getRequest, putRequest } from '~/utils/api'
 
-type Definition = { capability: string, module: string, label: string, grantable: boolean }
+type Definition = { capability: string, module: string, label: string, grantable: boolean, parent_capability?: string }
 type Admin = { id: number, username: string }
 defineProps<{ theme?: Record<string, string> }>()
 const admins = ref<Admin[]>([]), catalog = ref<Definition[]>([]), selectedID = ref<number | null>(null), saved = ref<string[]>([]), selected = ref<string[]>([]), loading = ref(true), saving = ref(false), message = ref(''), messageError = ref(false)
@@ -134,13 +157,25 @@ const selectedCapabilities = computed(() => new Set(selected.value))
 const selectedAdmin = computed(() => admins.value.find(admin => admin.id === selectedID.value))
 const grantableCapabilityCount = computed(() => catalog.value.filter(item => item.grantable).length)
 const dirty = computed(() => [...selected.value].sort().join('\n') !== [...saved.value].sort().join('\n'))
-const groups = computed(() => { const map = new Map<string, Definition[]>(); for (const item of catalog.value) map.set(item.module, [...(map.get(item.module) || []), item]); return [...map.entries()].map(([module, items]) => ({ module, items, grantable: items.filter(item => item.grantable) })) })
+const groups = computed(() => {
+  const map = new Map<string, Definition[]>()
+  for (const item of catalog.value) map.set(item.module, [...(map.get(item.module) || []), item])
+  return [...map.entries()].map(([module, items]) => ({
+    module,
+    items,
+    roots: items.filter(item => !item.parent_capability),
+    grantable: items.filter(item => item.grantable)
+  }))
+})
+const scopedHiddenCapabilities = new Set(['notes.view_hidden', 'comments.view_hidden'])
+const childrenFor = (capability: string) => catalog.value.filter(item => item.parent_capability === capability)
+const parentSelected = (item: Definition) => !item.parent_capability || selectedCapabilities.value.has(item.parent_capability)
 const moduleLabels: Record<string, string> = {
   account_security: '账号与管理员',
   audit: '管理员审计',
   users: '用户管理',
   registration: '注册审核',
-  comments: '评论管理',
+  comments: '互动管理',
   attachments: '附件管理',
   storage: '存储方案',
   database: '数据库管理',
@@ -155,7 +190,6 @@ const moduleLabels: Record<string, string> = {
   notifications: '推送通知',
   email: '邮件设置',
   notes: '笔记管理',
-  content: '内容访问'
 }
 const moduleLabel = (module: string) => moduleLabels[module] || module
 const responseData = (body: any) => { if (body?.code !== 1) throw new Error(body?.msg || '请求失败'); return body.data }
@@ -195,7 +229,23 @@ const selectAdmin = async (id: number) => {
     messageError.value = true
   }
 }
-const toggle = (capability: string, enabled: boolean) => { selected.value = enabled ? [...new Set([...selected.value, capability])] : selected.value.filter(item => item !== capability) }
+const removeDescendants = (capabilities: Set<string>, capability: string) => {
+  for (const child of childrenFor(capability)) {
+    capabilities.delete(child.capability)
+    removeDescendants(capabilities, child.capability)
+  }
+}
+const toggle = (capability: string, enabled: boolean) => {
+  const item = catalog.value.find(definition => definition.capability === capability)
+  if (!item?.grantable || (enabled && !parentSelected(item))) return
+  const capabilities = new Set(selected.value)
+  if (enabled) capabilities.add(capability)
+  else {
+    capabilities.delete(capability)
+    removeDescendants(capabilities, capability)
+  }
+  selected.value = [...capabilities]
+}
 const toggleGroup = (group: { grantable: Definition[] }, enabled: boolean) => { const capabilities = new Set(selected.value); for (const item of group.grantable) enabled ? capabilities.add(item.capability) : capabilities.delete(item.capability); selected.value = [...capabilities] }
 const save = async () => {
   if (!selectedID.value) return
@@ -378,8 +428,21 @@ onMounted(load)
 
 .authorization-capability-grid {
   display: grid;
-  gap: 7px;
+  gap: 9px;
   padding: 10px;
+}
+
+.authorization-parent-block {
+  display: grid;
+  gap: 6px;
+}
+
+.authorization-children {
+  display: grid;
+  gap: 6px;
+  margin-left: 14px;
+  padding-left: 10px;
+  border-left: 2px solid rgba(99, 102, 241, 0.18);
 }
 
 .authorization-capability {
@@ -393,6 +456,14 @@ onMounted(load)
   border-radius: 8px;
   cursor: pointer;
   transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.authorization-capability.is-parent {
+  background: rgba(99, 102, 241, 0.045);
+}
+
+.authorization-capability.is-child {
+  padding: 8px 9px;
 }
 
 .authorization-capability:hover:not(.is-locked) {

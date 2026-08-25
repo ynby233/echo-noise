@@ -42,7 +42,7 @@ func TestVisibleRecycleBinAttachmentSourcesRequiresViewAndHiddenCapabilities(t *
 	if sources, err := VisibleRecycleBinAttachmentSources(db, &delegated.ID, ref, "local"); err != nil || len(sources) != 0 {
 		t.Fatalf("hidden source leaked: %#v err=%v", sources, err)
 	}
-	if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityNotesRecycleBinView, authorization.CapabilityContentViewHidden}); err != nil {
+	if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityNotesView, authorization.CapabilityNotesViewHidden, authorization.CapabilityNotesRecycleBinView}); err != nil {
 		t.Fatal(err)
 	}
 	if sources, err := VisibleRecycleBinAttachmentSources(db, &delegated.ID, ref, "local"); err != nil || len(sources) != 1 {
@@ -66,7 +66,12 @@ func TestVisibleAttachmentSourcesCoversMessageCommentReplyAndGuestbook(t *testin
 			t.Fatal(err)
 		}
 	}
-	if err := db.Create(&models.AdminCapabilityGrant{UserID: delegated.ID, Capability: "content.view_hidden"}).Error; err != nil {
+	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{
+		authorization.CapabilityNotesView,
+		authorization.CapabilityNotesViewHidden,
+		authorization.CapabilityCommentsView,
+		authorization.CapabilityCommentsViewHidden,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	message := models.Message{ID: 10, UserID: owner.ID, Content: "note /api/files/refs/ref-note/a.txt", Visibility: "private", Private: true}
@@ -105,15 +110,15 @@ func TestVisibleAttachmentSourcesCoversMessageCommentReplyAndGuestbook(t *testin
 				ok, _ := AttachmentSourceVisible(db, &delegated.ID, source)
 				t.Logf("source=%s visible=%v msg=%v", source.SourceType, ok, scope.CanReadMessage(source.Message))
 			}
-			t.Logf("all=%#v scopeHidden=%v", all, scope.CanViewHiddenContent())
+			t.Logf("all=%#v hiddenNotes=%v hiddenInteractions=%v", all, scope.CanViewHiddenNotes(), scope.CanViewHiddenInteractions())
 			t.Fatalf("%s => %#v", tc.id, sources)
 		}
 	}
 	guestRef := models.AttachmentReference{PublicID: "ref-guest", OwnerUserID: owner.ID, Kind: "file"}
 	if sources, err := VisibleAttachmentSources(db, &delegated.ID, guestRef, "local"); err != nil {
 		t.Fatal(err)
-	} else if len(sources) != 0 {
-		t.Fatalf("delegated hidden-read must not widen hidden guestbook: %#v", sources)
+	} else if len(sources) != 1 {
+		t.Fatalf("interaction hidden-read must include ordinary hidden guestbook sources: %#v", sources)
 	}
 	if sources, err := VisibleAttachmentSources(db, &primary.ID, guestRef, "local"); err != nil {
 		t.Fatal(err)

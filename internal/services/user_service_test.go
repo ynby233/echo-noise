@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
+	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/dto"
 	"github.com/rcy1314/echo-noise/internal/models"
@@ -1671,6 +1672,54 @@ func TestGetStatusUsesViewerScopedDashboardCounts(t *testing.T) {
 	if adminStatus.TotalReplies != 2 {
 		t.Fatalf("total replies = %d, want 2", adminStatus.TotalReplies)
 	}
+}
+
+func TestGetStatusCountsUseIndependentHiddenNoteAndInteractionScopes(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "status-scope-primary", IsAdmin: true})
+	withoutHidden := mustCreateUser(t, models.User{Username: "status-scope-none", IsAdmin: true})
+	noteReader := mustCreateUser(t, models.User{Username: "status-scope-notes", IsAdmin: true})
+	interactionReader := mustCreateUser(t, models.User{Username: "status-scope-interactions", IsAdmin: true})
+	ordinary := mustCreateUser(t, models.User{Username: "status-scope-ordinary"})
+	authorizer := authorization.New(db)
+	if err := authorizer.ReplaceGrants(primary.ID, noteReader.ID, []authorization.Capability{authorization.CapabilityNotesView, authorization.CapabilityNotesViewHidden}); err != nil {
+		t.Fatal(err)
+	}
+	if err := authorizer.ReplaceGrants(primary.ID, interactionReader.ID, []authorization.Capability{authorization.CapabilityCommentsView, authorization.CapabilityCommentsViewHidden}); err != nil {
+		t.Fatal(err)
+	}
+
+	publicNote := models.Message{Content: "status visible note", UserID: ordinary.ID, Username: ordinary.Username, Visibility: MessageVisibilityPublic}
+	hiddenNote := models.Message{Content: "status hidden note", UserID: ordinary.ID, Username: ordinary.Username, Visibility: MessageVisibilityPrivate, Private: true}
+	if err := db.Create(&[]models.Message{publicNote, hiddenNote}).Error; err != nil {
+		t.Fatal(err)
+	}
+	var stored []models.Message
+	if err := db.Where("content LIKE ?", "status % note").Order("id ASC").Find(&stored).Error; err != nil || len(stored) != 2 {
+		t.Fatalf("load status notes: %#v err=%v", stored, err)
+	}
+	publicNote, hiddenNote = stored[0], stored[1]
+	comments := []models.Comment{
+		{MessageID: publicNote.ID, UserID: &ordinary.ID, Content: "hidden interaction on visible note", Visibility: MessageVisibilityPrivate},
+		{MessageID: hiddenNote.ID, UserID: &ordinary.ID, Content: "visible interaction on hidden note", Visibility: MessageVisibilityPublic},
+	}
+	if err := db.Create(&comments).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	assertCounts := func(viewerID uint, wantMessages, wantComments int) {
+		t.Helper()
+		status, err := GetStatus(viewerID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if status.TotalMessages != wantMessages || status.TotalComments != wantComments {
+			t.Fatalf("viewer %d counts messages/comments=%d/%d, want %d/%d", viewerID, status.TotalMessages, status.TotalComments, wantMessages, wantComments)
+		}
+	}
+	assertCounts(withoutHidden.ID, 1, 0)
+	assertCounts(noteReader.ID, 2, 0)
+	assertCounts(interactionReader.ID, 1, 1)
 }
 
 func TestGetStatusSeparatesDashboardMetricsAndSharesSecuritySummary(t *testing.T) {

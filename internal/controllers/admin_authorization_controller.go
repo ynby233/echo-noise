@@ -69,14 +69,14 @@ func GetAuthorizationAdmin(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var grants []models.AdminCapabilityGrant
-	if err := db.Where("user_id = ?", target.ID).Order("capability ASC").Find(&grants).Error; err != nil {
+	grants, err := authorization.New(db).CapabilitiesFor(target.ID)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.Fail[any]("读取授权失败"))
 		return
 	}
 	capabilities := make([]string, 0, len(grants))
 	for _, grant := range grants {
-		capabilities = append(capabilities, grant.Capability)
+		capabilities = append(capabilities, string(grant))
 	}
 	c.JSON(http.StatusOK, dto.OK(gin.H{"id": target.ID, "username": target.Username, "capabilities": capabilities}, "获取受托管理员授权成功"))
 }

@@ -26,6 +26,7 @@ const (
 	CapabilityRegistrationView           Capability = "registration.view"
 	CapabilityRegistrationReview         Capability = "registration.review"
 	CapabilityCommentsView               Capability = "comments.view"
+	CapabilityCommentsViewHidden         Capability = "comments.view_hidden"
 	CapabilityCommentsEdit               Capability = "comments.edit"
 	CapabilityCommentsDelete             Capability = "comments.delete"
 	CapabilityAttachmentsView            Capability = "attachments.view"
@@ -58,6 +59,7 @@ const (
 	CapabilityEmailView                  Capability = "email.view"
 	CapabilityEmailManage                Capability = "email.manage"
 	CapabilityNotesView                  Capability = "notes.view"
+	CapabilityNotesViewHidden            Capability = "notes.view_hidden"
 	CapabilityNotesEdit                  Capability = "notes.edit"
 	CapabilityNotesVisibility            Capability = "notes.change_visibility"
 	CapabilityNotesPublishTime           Capability = "notes.change_publish_time"
@@ -65,7 +67,6 @@ const (
 	CapabilityNotesTrash                 Capability = "notes.trash"
 	CapabilityNotesRestore               Capability = "notes.restore"
 	CapabilityNotesDelete                Capability = "notes.delete_permanently"
-	CapabilityContentViewHidden          Capability = "content.view_hidden"
 	CapabilityNotesRecycleBinView        Capability = "notes.recycle_bin.view"
 )
 
@@ -76,18 +77,68 @@ type Definition struct {
 	Grantable  bool       `json:"grantable"`
 }
 
+func (definition Definition) MarshalJSON() ([]byte, error) {
+	type definitionPayload struct {
+		Capability       Capability `json:"capability"`
+		Module           string     `json:"module"`
+		Label            string     `json:"label"`
+		Grantable        bool       `json:"grantable"`
+		ParentCapability Capability `json:"parent_capability,omitempty"`
+	}
+	parent, _ := ParentCapabilityFor(definition.Capability)
+	return json.Marshal(definitionPayload{
+		Capability:       definition.Capability,
+		Module:           definition.Module,
+		Label:            definition.Label,
+		Grantable:        definition.Grantable,
+		ParentCapability: parent,
+	})
+}
+
 var catalog = []Definition{
 	{CapabilityAuthorizationManage, "account_security", "管理员授权", false}, {CapabilityAdminRolesManage, "account_security", "管理员身份", false}, {CapabilityAdminAccountsManage, "account_security", "管理员账号", false},
 	{CapabilityAuditView, "audit", "查看管理员审计", true},
 	{CapabilityUsersView, "users", "查看用户", true}, {CapabilityUsersResetPassword, "users", "重置普通用户密码", true}, {CapabilityUsersDelete, "users", "删除普通用户", true},
 	{CapabilityRegistrationView, "registration", "查看注册申请", true}, {CapabilityRegistrationReview, "registration", "审核注册申请", true},
-	{CapabilityCommentsView, "comments", "查看评论", true}, {CapabilityCommentsEdit, "comments", "编辑评论", true}, {CapabilityCommentsDelete, "comments", "删除评论", true},
+	{CapabilityCommentsView, "comments", "查看互动", true}, {CapabilityCommentsViewHidden, "comments", "查看隐藏互动", true}, {CapabilityCommentsEdit, "comments", "编辑互动", true}, {CapabilityCommentsDelete, "comments", "删除互动", true},
 	{CapabilityAttachmentsView, "attachments", "查看附件", true}, {CapabilityAttachmentsDownload, "attachments", "下载附件", true}, {CapabilityAttachmentsDeleteReference, "attachments", "删除附件引用", true}, {CapabilityAttachmentsPurgeBlob, "attachments", "彻底删除附件文件", true},
 	{CapabilityStorageView, "storage", "查看存储", true}, {CapabilityStorageManage, "storage", "管理存储", true}, {CapabilityDatabaseView, "database", "查看数据库", true}, {CapabilityDatabaseBackup, "database", "备份数据库", true}, {CapabilityDatabaseRestore, "database", "恢复数据库", true}, {CapabilityVersionView, "version", "查看版本", true}, {CapabilityVersionUpdate, "version", "更新版本", true},
 	{CapabilitySecurityView, "security", "查看安全策略", true}, {CapabilitySecurityManage, "security", "管理安全策略", true}, {CapabilitySecurityClearLogs, "security", "清理攻击记录", true}, {CapabilityAccessLogsView, "access_logs", "查看访问日志", true}, {CapabilityAccessLogsClear, "access_logs", "清理访问日志", true}, {CapabilitySiteVisitsView, "site_visits", "查看访客记录", true}, {CapabilitySiteVisitsClear, "site_visits", "清理访客记录", true}, {CapabilityLoginAuditsView, "login_audits", "查看登录审计", true},
 	{CapabilitySiteSettingsView, "site", "查看站点设置", true}, {CapabilitySiteSettingsManage, "site", "管理站点设置", true}, {CapabilityAnnouncementsView, "announcements", "查看公告", true}, {CapabilityAnnouncementsManage, "announcements", "管理公告", true}, {CapabilityAnnouncementsPush, "announcements", "推送公告", true}, {CapabilityFeedView, "feed", "查看信息流", true}, {CapabilityNotificationsView, "notifications", "查看通知设置", true}, {CapabilityNotificationsManage, "notifications", "管理通知设置", true}, {CapabilityEmailView, "email", "查看邮件设置", true}, {CapabilityEmailManage, "email", "管理邮件设置", true},
-	{CapabilityNotesView, "notes", "查看笔记", true}, {CapabilityNotesEdit, "notes", "编辑笔记", true}, {CapabilityNotesVisibility, "notes", "调整笔记可见范围", true}, {CapabilityNotesPublishTime, "notes", "调整笔记发布时间", true}, {CapabilityNotesPinGlobal, "notes", "全站置顶笔记", true}, {CapabilityNotesTrash, "notes", "移入笔记回收站", true}, {CapabilityNotesRestore, "notes", "恢复笔记", true}, {CapabilityNotesDelete, "notes", "永久删除笔记", true},
-	{CapabilityContentViewHidden, "content", "查看隐藏内容", true}, {CapabilityNotesRecycleBinView, "notes", "查看回收站", true},
+	{CapabilityNotesView, "notes", "查看笔记", true}, {CapabilityNotesViewHidden, "notes", "查看隐藏笔记", true}, {CapabilityNotesEdit, "notes", "编辑笔记", true}, {CapabilityNotesVisibility, "notes", "调整笔记可见范围", true}, {CapabilityNotesPublishTime, "notes", "调整笔记发布时间", true}, {CapabilityNotesPinGlobal, "notes", "全站置顶笔记", true}, {CapabilityNotesTrash, "notes", "移入笔记回收站", true}, {CapabilityNotesRecycleBinView, "notes", "查看笔记回收站", true}, {CapabilityNotesRestore, "notes", "恢复笔记", true}, {CapabilityNotesDelete, "notes", "永久删除笔记", true},
+}
+
+var parentCapabilities = map[Capability]Capability{
+	CapabilityUsersResetPassword:         CapabilityUsersView,
+	CapabilityUsersDelete:                CapabilityUsersView,
+	CapabilityRegistrationReview:         CapabilityRegistrationView,
+	CapabilityCommentsViewHidden:         CapabilityCommentsView,
+	CapabilityCommentsEdit:               CapabilityCommentsView,
+	CapabilityCommentsDelete:             CapabilityCommentsView,
+	CapabilityAttachmentsDownload:        CapabilityAttachmentsView,
+	CapabilityAttachmentsDeleteReference: CapabilityAttachmentsView,
+	CapabilityAttachmentsPurgeBlob:       CapabilityAttachmentsView,
+	CapabilityStorageManage:              CapabilityStorageView,
+	CapabilityDatabaseBackup:             CapabilityDatabaseView,
+	CapabilityDatabaseRestore:            CapabilityDatabaseView,
+	CapabilityVersionUpdate:              CapabilityVersionView,
+	CapabilitySecurityManage:             CapabilitySecurityView,
+	CapabilitySecurityClearLogs:          CapabilitySecurityView,
+	CapabilityAccessLogsClear:            CapabilityAccessLogsView,
+	CapabilitySiteVisitsClear:            CapabilitySiteVisitsView,
+	CapabilitySiteSettingsManage:         CapabilitySiteSettingsView,
+	CapabilityAnnouncementsManage:        CapabilityAnnouncementsView,
+	CapabilityAnnouncementsPush:          CapabilityAnnouncementsView,
+	CapabilityNotificationsManage:        CapabilityNotificationsView,
+	CapabilityEmailManage:                CapabilityEmailView,
+	CapabilityNotesViewHidden:            CapabilityNotesView,
+	CapabilityNotesEdit:                  CapabilityNotesView,
+	CapabilityNotesVisibility:            CapabilityNotesView,
+	CapabilityNotesPublishTime:           CapabilityNotesView,
+	CapabilityNotesPinGlobal:             CapabilityNotesView,
+	CapabilityNotesTrash:                 CapabilityNotesView,
+	CapabilityNotesRestore:               CapabilityNotesRecycleBinView,
+	CapabilityNotesDelete:                CapabilityNotesRecycleBinView,
 }
 
 type DenialReason string
@@ -122,6 +173,11 @@ func DefinitionFor(capability Capability) (Definition, bool) {
 	return Definition{}, false
 }
 
+func ParentCapabilityFor(capability Capability) (Capability, bool) {
+	parent, ok := parentCapabilities[capability]
+	return parent, ok
+}
+
 func (a *Authorizer) Authorize(actorID uint, capability Capability, targetOwnerUserID *uint) Decision {
 	definition, known := DefinitionFor(capability)
 	if !known {
@@ -141,6 +197,12 @@ func (a *Authorizer) Authorize(actorID uint, capability Capability, targetOwnerU
 	if err := a.db.Model(&models.AdminCapabilityGrant{}).Where("user_id = ? AND capability = ?", actor.ID, capability).Count(&grants).Error; err != nil || grants != 1 {
 		return Decision{Reason: DenialMissingGrant}
 	}
+	if parent, ok := ParentCapabilityFor(capability); ok {
+		var parentGrants int64
+		if err := a.db.Model(&models.AdminCapabilityGrant{}).Where("user_id = ? AND capability = ?", actor.ID, parent).Count(&parentGrants).Error; err != nil || parentGrants != 1 {
+			return Decision{Reason: DenialMissingPrerequisite}
+		}
+	}
 	if targetOwnerUserID != nil && *targetOwnerUserID == models.PrimaryAdminUserID && isMutation(definition.Capability) {
 		return Decision{Reason: DenialProtectedContent}
 	}
@@ -149,7 +211,7 @@ func (a *Authorizer) Authorize(actorID uint, capability Capability, targetOwnerU
 
 func isMutation(capability Capability) bool {
 	switch capability {
-	case CapabilityCommentsView, CapabilityAttachmentsView, CapabilityAttachmentsDownload, CapabilityUsersView, CapabilityRegistrationView, CapabilityStorageView, CapabilityDatabaseView, CapabilityVersionView, CapabilitySecurityView, CapabilityAccessLogsView, CapabilitySiteVisitsView, CapabilityLoginAuditsView, CapabilitySiteSettingsView, CapabilityAnnouncementsView, CapabilityFeedView, CapabilityNotificationsView, CapabilityEmailView, CapabilityNotesView, CapabilityAuditView, CapabilityContentViewHidden, CapabilityNotesRecycleBinView:
+	case CapabilityCommentsView, CapabilityCommentsViewHidden, CapabilityAttachmentsView, CapabilityAttachmentsDownload, CapabilityUsersView, CapabilityRegistrationView, CapabilityStorageView, CapabilityDatabaseView, CapabilityVersionView, CapabilitySecurityView, CapabilityAccessLogsView, CapabilitySiteVisitsView, CapabilityLoginAuditsView, CapabilitySiteSettingsView, CapabilityAnnouncementsView, CapabilityFeedView, CapabilityNotificationsView, CapabilityEmailView, CapabilityNotesView, CapabilityNotesViewHidden, CapabilityAuditView, CapabilityNotesRecycleBinView:
 		return false
 	}
 	return true
@@ -174,12 +236,21 @@ func (a *Authorizer) CapabilitiesFor(actorID uint) ([]Capability, error) {
 	if err := a.db.Where("user_id = ?", actor.ID).Find(&grants).Error; err != nil {
 		return nil, err
 	}
-	out := make([]Capability, 0, len(grants))
+	granted := make(map[Capability]struct{}, len(grants))
 	for _, grant := range grants {
 		capability := Capability(grant.Capability)
 		if definition, known := DefinitionFor(capability); known && definition.Grantable {
-			out = append(out, capability)
+			granted[capability] = struct{}{}
 		}
+	}
+	out := make([]Capability, 0, len(granted))
+	for capability := range granted {
+		if parent, hasParent := ParentCapabilityFor(capability); hasParent {
+			if _, included := granted[parent]; !included {
+				continue
+			}
+		}
+		out = append(out, capability)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
 	return out, nil
@@ -199,6 +270,13 @@ func (a *Authorizer) ReplaceGrants(actorID, targetID uint, capabilities []Capabi
 			return fmt.Errorf("capability is not grantable: %s", capability)
 		}
 		wanted[capability] = struct{}{}
+	}
+	for capability := range wanted {
+		if parent, ok := ParentCapabilityFor(capability); ok {
+			if _, included := wanted[parent]; !included {
+				return fmt.Errorf("capability %s requires parent capability %s", capability, parent)
+			}
+		}
 	}
 	return a.db.Transaction(func(tx *gorm.DB) error {
 		var target models.User

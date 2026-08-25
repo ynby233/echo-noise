@@ -58,7 +58,7 @@ func TestAdminCommentListUsesHiddenContentReadScope(t *testing.T) {
 	if got := requestTotal(); got != 0 {
 		t.Fatalf("delegated admin without hidden read must not count hidden comments, got %d", got)
 	}
-	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityCommentsView, authorization.CapabilityContentViewHidden}); err != nil {
+	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityCommentsView, authorization.CapabilityCommentsViewHidden}); err != nil {
 		t.Fatalf("grant comment list and hidden read: %v", err)
 	}
 	if got := requestTotal(); got != 1 {
@@ -98,7 +98,7 @@ func TestDelegatedCommentMutationsUseCapabilityProtectionAndSilentAdminAudit(t *
 	if withoutGrant.Code != http.StatusForbidden {
 		t.Fatalf("comment edit without grant status=%d body=%s", withoutGrant.Code, withoutGrant.Body.String())
 	}
-	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityCommentsEdit, authorization.CapabilityCommentsDelete}); err != nil {
+	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityCommentsView, authorization.CapabilityCommentsEdit, authorization.CapabilityCommentsDelete}); err != nil {
 		t.Fatalf("grant comment capabilities: %v", err)
 	}
 

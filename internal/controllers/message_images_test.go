@@ -220,7 +220,10 @@ func TestGetAllImagesScopesPrivateMessagesByViewer(t *testing.T) {
 	if err := db.Create(&admin).Error; err != nil {
 		t.Fatalf("create admin: %v", err)
 	}
-	if err := db.Create(&models.AdminCapabilityGrant{UserID: admin.ID, Capability: string(authorization.CapabilityContentViewHidden), GrantedByUserID: models.PrimaryAdminUserID}).Error; err != nil {
+	if err := db.Create(&[]models.AdminCapabilityGrant{
+		{UserID: admin.ID, Capability: string(authorization.CapabilityNotesView), GrantedByUserID: models.PrimaryAdminUserID},
+		{UserID: admin.ID, Capability: string(authorization.CapabilityNotesViewHidden), GrantedByUserID: models.PrimaryAdminUserID},
+	}).Error; err != nil {
 		t.Fatalf("grant hidden content read: %v", err)
 	}
 

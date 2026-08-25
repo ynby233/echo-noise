@@ -57,7 +57,10 @@ func TestServeAttachmentReferenceRequiresDownloadCapabilityForDelegatedAdmins(t 
 			t.Fatalf("%s without download capability = %d, want 404", method, resp.Code)
 		}
 	}
-	if err := db.Create(&models.AdminCapabilityGrant{UserID: admin.ID, Capability: string(authorization.CapabilityAttachmentsDownload), GrantedByUserID: models.PrimaryAdminUserID}).Error; err != nil {
+	if err := db.Create(&[]models.AdminCapabilityGrant{
+		{UserID: admin.ID, Capability: string(authorization.CapabilityAttachmentsView), GrantedByUserID: models.PrimaryAdminUserID},
+		{UserID: admin.ID, Capability: string(authorization.CapabilityAttachmentsDownload), GrantedByUserID: models.PrimaryAdminUserID},
+	}).Error; err != nil {
 		t.Fatalf("grant download capability: %v", err)
 	}
 	req := httptest.NewRequest(http.MethodGet, path, nil)

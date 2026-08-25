@@ -90,7 +90,7 @@ func TestGlobalAndPersonalPinPermissionsAndAudits(t *testing.T) {
 	delegatedPersonal := performMessageJSONRequest(r, http.MethodPut, "/messages/"+strconv.FormatUint(uint64(delegatedMessage.ID), 10)+"/pin/personal", map[string]any{"pinned": true})
 	assertMessageResponseCode(t, delegatedPersonal, http.StatusOK, 1)
 
-	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityNotesPinGlobal, authorization.CapabilityContentViewHidden}); err != nil {
+	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityNotesView, authorization.CapabilityNotesViewHidden, authorization.CapabilityNotesPinGlobal}); err != nil {
 		t.Fatalf("grant global pin capability: %v", err)
 	}
 	delegatedAllowed := performMessageJSONRequest(r, http.MethodPut, "/messages/"+strconv.FormatUint(uint64(ownerMessage.ID), 10)+"/pin/global", map[string]any{"pinned": true})

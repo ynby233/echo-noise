@@ -5,11 +5,23 @@ import { fileURLToPath } from 'node:url'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const component = await readFile(join(root, 'components/comments/BuiltinComments.vue'), 'utf8')
+const adminPanel = await readFile(join(root, 'components/index/StatusPanel.vue'), 'utf8')
 
 assert.match(
   component,
   /import\s+\{\s*useAdminCapabilities\s*\}\s+from\s+['"]~\/composables\/useAdminCapabilities['"]/,
   'comment UI must consume the shared delegated-admin capability snapshot'
+)
+
+assert.match(
+  adminPanel,
+  /v-if="can\('comments\.view'\) && frontendConfig\.commentEnabled"/,
+  'the current comment-management panel must not render without comments.view'
+)
+assert.match(
+  adminPanel,
+  /v-if="can\('comments\.delete'\)"[^>]*>删除该评论<\/UButton>/,
+  'the current comment-management delete action must not render without comments.delete'
 )
 assert.match(
   component,

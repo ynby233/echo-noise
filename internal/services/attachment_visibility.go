@@ -101,9 +101,9 @@ func attachmentURLNeedle(reference models.AttachmentReference, backend string) s
 	return prefix + strings.TrimSpace(reference.PublicID) + "/"
 }
 
-// AttachmentSourceVisible applies the same ContentReadScope and guestbook
-// rules used by normal content pages.  content.view_hidden never widens
-// primary-admin-owned content or canonical guestbook threads.
+// AttachmentSourceVisible applies the same scoped note/interaction visibility
+// rules used by normal content pages. Scoped hidden-read capabilities never
+// widen primary-admin-owned hidden content or its descendant threads.
 func AttachmentSourceVisible(db *gorm.DB, actorID *uint, source AttachmentSource) (bool, error) {
 	scope, err := ResolveContentReadScope(db, actorID)
 	if err != nil {
