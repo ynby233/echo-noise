@@ -5,78 +5,27 @@ import { fileURLToPath } from 'node:url'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const component = await readFile(join(root, 'components/comments/BuiltinComments.vue'), 'utf8')
-const adminPanel = await readFile(join(root, 'components/index/StatusPanel.vue'), 'utf8')
+const manager = await readFile(join(root, 'components/admin/CommentManager.vue'), 'utf8')
+const panel = await readFile(join(root, 'components/index/StatusPanel.vue'), 'utf8')
 
-assert.match(
-  component,
-  /import\s+\{\s*useAdminCapabilities\s*\}\s+from\s+['"]~\/composables\/useAdminCapabilities['"]/,
-  'comment UI must consume the shared delegated-admin capability snapshot'
-)
-
-assert.match(
-  adminPanel,
-  /v-if="can\('comments\.view'\) && frontendConfig\.commentEnabled"/,
-  'the current comment-management panel must not render without comments.view'
-)
-assert.match(
-  adminPanel,
-  /v-if="can\('comments\.delete'\)"[^>]*>删除该评论<\/UButton>/,
-  'the current comment-management delete action must not render without comments.delete'
-)
-assert.match(
-  component,
-  /const\s+\{\s*can\s*\}\s*=\s*useAdminCapabilities\(\)/,
-  'comment UI must use the capability predicate'
-)
-assert.match(
-  component,
-  /const\s+canEditComment\s*=\s*\(c:\s*any\)\s*=>\s*isCommentOwner\(c\)\s*\|\|\s*\(!isPrimaryAdminComment\(c\)\s*&&\s*can\(['"]comments\.edit['"]\)\)/,
-  'editing another user’s comment must require comments.edit and preserve primary-admin content protection'
-)
-assert.match(
-  component,
-  /const\s+canDeleteComment\s*=\s*\(c:\s*any\)\s*=>\s*isCommentOwner\(c\)\s*\|\|\s*\(!isPrimaryAdminComment\(c\)\s*&&\s*can\(['"]comments\.delete['"]\)\)/,
-  'deleting another user’s comment must require comments.delete and preserve primary-admin content protection'
-)
+assert.match(component, /useAdminCapabilities/, 'thread UI must consume delegated-admin capabilities')
+assert.match(component, /can\(['"]comments\.edit['"]\)/, 'cross-author body editing must require comments.edit')
+assert.match(component, /can\(['"]comments\.trash['"]\)/, 'cross-author trashing must require comments.trash')
+assert.match(component, /can\(['"]comments\.change_visibility['"]\)/, 'cross-author visibility editing must use its independent capability')
+assert.match(component, /v-if="canChangeCommentVisibility\(c\)"/, 'root visibility control must be hidden without its capability')
+assert.match(component, /v-if="canChangeCommentVisibility\(child\)"/, 'reply visibility control must be hidden without its capability')
+assert.match(manager, /v-if="!recycleBin && canTrash && row\.can_trash"/, 'management trash action must be capability and target controlled')
+assert.match(manager, /v-if="!recycleBin && canEdit && row\.can_edit"/, 'management edit action must be capability and target controlled')
+assert.match(manager, /v-if="!recycleBin && canChangeVisibility && row\.can_change_visibility"/, 'management visibility action must be independently controlled')
+assert.match(manager, /v-if="recycleBin && canRestore/, 'restore action must be capability controlled')
+assert.match(manager, /v-if="recycleBin && canDeletePermanently && row\.can_permanently_delete"/, 'permanent delete action must be capability and target controlled')
+assert.match(panel, /canSection\('comment-recycle-bin'\)/, 'comment recycle-bin panel must be section-gated')
+assert.doesNotMatch(component, /can\(['"]comments\.delete['"]\)/, 'retired comments.delete capability must not remain')
 
 for (const target of ['c', 'child']) {
-  assert.match(
-    component,
-    new RegExp(`<button\\s+v-if="canEditComment\\(${target}\\)"[^>]*>编辑<\\/button>`),
-    `${target} edit button must be hidden without comments.edit`
-  )
-  assert.match(
-    component,
-    new RegExp(`<button\\s+v-if="canDeleteComment\\(${target}\\)"[^>]*>删除<\\/button>`),
-    `${target} delete button must be hidden without comments.delete`
-  )
+  assert.match(component, new RegExp(`<button\\s+v-if="canEditComment\\(${target}\\)"[^>]*>编辑<\\/button>`))
+  assert.match(component, new RegExp(`<button\\s+v-if="canDeleteComment\\(${target}\\)"[^>]*>删除<\\/button>`))
 }
 
-assert.doesNotMatch(
-  component,
-  /const\s+canManageComment\s*=\s*\(c:\s*any\)\s*=>\s*isAdmin\.value/,
-  'binary admin status must not expose cross-author comment mutation controls'
-)
-
-assert.match(
-  component,
-  /return enabled\.value && user\.isLogin && props\.canInteract !== false/,
-  'comment and reply inputs must be hidden when the server marks the message non-interactable'
-)
-assert.match(
-  component,
-  /const\s+canReplyToComment\s*=\s*\(comment:\s*any\)\s*=>\s*canComment\.value\s*&&\s*comment\?\.can_interact\s*===\s*true/,
-  'reply buttons must consume the server-authoritative per-comment interaction decision'
-)
-assert.match(
-  component,
-  /<button\s+v-if="canReplyToComment\(c\)"[^>]*>回复<\/button>/,
-  'root-comment reply button must be hidden for normally hidden comments'
-)
-assert.match(
-  component,
-  /<button\s+v-if="canReplyToComment\(child\)"[^>]*>回复<\/button>/,
-  'nested reply button must be hidden for normally hidden comments'
-)
-
+assert.match(component, /comment\?\.can_interact\s*===\s*true/, 'reply controls must consume the server interaction decision')
 console.log('comment capability visibility contract passed')

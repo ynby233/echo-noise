@@ -74,7 +74,31 @@
             <p v-if="actorContent(item)" class="notification-actor-content">{{ actorContent(item) }}</p>
 
             <button
-              v-if="isTargetUnavailable(item)"
+              v-if="item.type === 'content_deletion'"
+              type="button"
+              class="deletion-notification-card"
+              @click="markUnavailableRead(item)"
+            >
+              <span class="deletion-notification-heading">
+                <UIcon :name="item.deletion_event === 'permanently_deleted' ? 'i-heroicons-trash' : 'i-heroicons-archive-box-arrow-down'" />
+                <strong>{{ deletionEventLabel(item) }}</strong>
+                <span v-if="item.restored_at" class="deletion-restored-badge">已恢复</span>
+              </span>
+              <span v-if="item.deletion_reason" class="deletion-reason">原因：{{ deletionReasonLabel(item.deletion_reason) }}</span>
+              <span v-for="snapshot in item.deletion_snapshots || []" :key="`${snapshot.target_type}-${snapshot.target_id}`" class="deletion-snapshot">
+                <span class="deletion-snapshot-meta">{{ deletionTargetLabel(snapshot.target_type) }} #{{ snapshot.target_id }}</span>
+                <span v-if="snapshot.context_text" class="deletion-snapshot-context">{{ snapshot.context_text }}</span>
+                <span v-if="snapshot.reason_code" class="deletion-snapshot-context">处理原因：{{ deletionReasonLabel(snapshot.reason_code) }}</span>
+                <span class="deletion-snapshot-content" v-html="snapshot.content_html || escapeSnapshot(snapshot.content_text)" />
+                <span v-if="snapshot.scheduled_deletion_at && item.deletion_event !== 'permanently_deleted'" class="deletion-countdown">
+                  {{ remainingDeletionTime(snapshot.scheduled_deletion_at) }}后将由系统永久删除
+                </span>
+                <span v-else-if="item.deletion_event !== 'permanently_deleted'" class="deletion-countdown is-disabled">当前未开启自动清理</span>
+              </span>
+            </button>
+
+            <button
+              v-else-if="isTargetUnavailable(item)"
               type="button"
               class="notification-target-card notification-target-card--unavailable"
               :aria-label="unavailableTitle(item)"
@@ -239,7 +263,18 @@ type NotificationComment = {
   parent_id?: number | null
 }
 
-type NotificationTargetStatus = 'available' | 'unavailable' | 'load_error'
+type NotificationTargetStatus = 'available' | 'unavailable' | 'load_error' | 'snapshot'
+
+type DeletionSnapshot = {
+  target_type: string
+  target_id: number
+  content_html?: string
+  content_text?: string
+  context_text?: string
+  reason_code?: string
+  deleted_at?: string | null
+  scheduled_deletion_at?: string | null
+}
 
 type UserNotification = {
   id: number
@@ -257,6 +292,12 @@ type UserNotification = {
   target_url?: string
   read: boolean
   created_at: string
+  deletion_event?: string
+  deletion_reason?: string
+  deletion_actor_label?: string
+  deletion_snapshots?: DeletionSnapshot[]
+  scheduled_deletion_at?: string | null
+  restored_at?: string | null
 }
 
 type NotificationJumpPayload = UserNotification & {
@@ -307,6 +348,8 @@ const highlightedId = ref<number | null>(null)
 const replyOpenId = ref<number | null>(null)
 const jumpingId = ref<number | null>(null)
 let jumpFeedbackTimer: ReturnType<typeof setTimeout> | null = null
+const deletionClock = ref(Date.now())
+let deletionClockTimer: ReturnType<typeof setInterval> | null = null
 
 const runtimeConfig = useRuntimeConfig()
 const baseApi = computed(() => runtimeConfig.public.baseApi || '/api')
@@ -347,9 +390,24 @@ const truncate = (value?: string | null, limit = 120) => {
 }
 
 const actorName = (item: UserNotification) => {
+  if (item.type === 'content_deletion') return String(item.deletion_actor_label || '内容管理方')
   if (item.type === 'vocechat_credentials' || item.type === 'vocechat_password_changed' || item.type === 'password_update_incomplete') return '系统提醒'
   const name = String(item.actor?.username || '').trim()
   return name || '有用户'
+}
+
+const deletionEventLabel = (item: UserNotification) => item.deletion_event === 'permanently_deleted' ? '你的内容已被永久删除' : '你的内容已被移入回收站'
+const deletionReasonLabel = (reason?: string) => ({ self: '由你本人删除', moderation: '由内容管理员处理', owner_cleanup: '内容所有者清理互动', ancestor: '上级内容被删除时一并处理', system: '系统定时自动清理' } as Record<string, string>)[String(reason || '')] || String(reason || '未说明')
+const deletionTargetLabel = (type?: string) => ({ note: '笔记', comment: '评论', reply: '回复', guestbook: '留言', interaction: '互动' } as Record<string, string>)[String(type || '')] || '内容'
+const escapeSnapshot = (value?: string) => String(value || '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as Record<string, string>)[char])
+const remainingDeletionTime = (value?: string | null) => {
+  const deadline = new Date(String(value || '')).getTime()
+  if (!Number.isFinite(deadline)) return '未知时间'
+  const seconds = Math.max(0, Math.ceil((deadline - deletionClock.value) / 1000))
+  const days = Math.floor(seconds / 86400)
+  const hours = Math.floor((seconds % 86400) / 3600)
+  if (seconds <= 0) return '已到清理时间'
+  return `${days}天${hours}小时`
 }
 
 const messageOwnerName = (item: UserNotification) => {
@@ -786,9 +844,13 @@ watch(() => [props.initialMessageId, props.initialCommentId], () => resolveIniti
 watch(page, syncTargetPageToCurrent, { immediate: true })
 watch(totalPages, syncTargetPageToCurrent)
 
-onMounted(() => loadNotifications(true))
+onMounted(() => {
+  deletionClockTimer = setInterval(() => { deletionClock.value = Date.now() }, 60000)
+  void loadNotifications(true)
+})
 
 onBeforeUnmount(() => {
+	if (deletionClockTimer) clearInterval(deletionClockTimer)
   clearJumpFeedback()
 })
 
@@ -933,6 +995,18 @@ defineExpose({
 .notification-time { margin-top:3px; font-size:12px; line-height:1.25; color:var(--notice-muted); }
 .reply-toggle { flex:0 0 auto; }
 .notification-actor-content { margin:8px 0 0; font-size:14px; line-height:1.68; white-space:pre-wrap; word-break:break-word; color:var(--notice-strong); }
+.deletion-notification-card { width:100%; margin-top:10px; padding:12px; border:1px solid var(--notice-border); border-radius:12px; background:var(--notice-input); color:var(--notice-text); display:flex; flex-direction:column; gap:8px; text-align:left; cursor:pointer; }
+.deletion-notification-heading { display:flex; align-items:center; gap:7px; color:var(--notice-strong); font-size:14px; }
+.deletion-notification-heading svg { width:17px; height:17px; color:#f59e0b; }
+.deletion-restored-badge { margin-left:auto; padding:2px 7px; border-radius:999px; background:rgba(34,197,94,.14); color:#16a34a; font-size:11px; font-weight:700; }
+.deletion-reason { font-size:12px; color:var(--notice-muted); }
+.deletion-snapshot { display:flex; flex-direction:column; gap:5px; padding:10px; border:1px solid var(--notice-border); border-radius:10px; background:var(--notice-card); }
+.deletion-snapshot-meta { font-size:11px; font-weight:700; color:var(--notice-link); }
+.deletion-snapshot-context { font-size:12px; color:var(--notice-muted); }
+.deletion-snapshot-content { max-height:180px; overflow:auto; font-size:13px; line-height:1.6; word-break:break-word; }
+.deletion-snapshot-content :deep(p) { margin:0; }
+.deletion-countdown { padding-top:6px; border-top:1px dashed var(--notice-border); color:#d97706; font-size:12px; font-weight:650; }
+.deletion-countdown.is-disabled { color:var(--notice-muted); font-weight:500; }
 .notification-target-card { width:100%; margin-top:10px; padding:10px 12px; border:1px solid var(--notice-border); border-radius:12px; background:var(--notice-input); color:var(--notice-text); display:flex; align-items:center; flex-wrap:wrap; gap:10px; text-align:left; cursor:pointer; transition:background-color .16s ease, border-color .16s ease, opacity .16s ease; }
 .notification-target-card:hover { border-color:var(--nw-floating-hover-border); background:var(--nw-floating-hover-bg); }
 .notification-target-card.jumping { cursor:wait; opacity:.88; transform:none; }

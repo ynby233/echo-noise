@@ -28,7 +28,12 @@ const (
 	CapabilityCommentsView               Capability = "comments.view"
 	CapabilityCommentsViewHidden         Capability = "comments.view_hidden"
 	CapabilityCommentsEdit               Capability = "comments.edit"
-	CapabilityCommentsDelete             Capability = "comments.delete"
+	CapabilityCommentsChangeVisibility   Capability = "comments.change_visibility"
+	CapabilityCommentsTrash              Capability = "comments.trash"
+	CapabilityCommentsRecycleBinView     Capability = "comments.recycle_bin.view"
+	CapabilityCommentsRestore            Capability = "comments.restore"
+	CapabilityCommentsDeletePermanently  Capability = "comments.delete_permanently"
+	CapabilityCommentsNotifyDeletion     Capability = "comments.notify_deletion"
 	CapabilityAttachmentsView            Capability = "attachments.view"
 	CapabilityAttachmentsDownload        Capability = "attachments.download"
 	CapabilityAttachmentsDeleteReference Capability = "attachments.delete_reference"
@@ -65,6 +70,7 @@ const (
 	CapabilityNotesPublishTime           Capability = "notes.change_publish_time"
 	CapabilityNotesPinGlobal             Capability = "notes.pin_global"
 	CapabilityNotesTrash                 Capability = "notes.trash"
+	CapabilityNotesNotifyDeletion        Capability = "notes.notify_deletion"
 	CapabilityNotesRestore               Capability = "notes.restore"
 	CapabilityNotesDelete                Capability = "notes.delete_permanently"
 	CapabilityNotesRecycleBinView        Capability = "notes.recycle_bin.view"
@@ -100,12 +106,12 @@ var catalog = []Definition{
 	{CapabilityAuditView, "audit", "查看管理员审计", true},
 	{CapabilityUsersView, "users", "查看用户", true}, {CapabilityUsersResetPassword, "users", "重置普通用户密码", true}, {CapabilityUsersDelete, "users", "删除普通用户", true},
 	{CapabilityRegistrationView, "registration", "查看注册申请", true}, {CapabilityRegistrationReview, "registration", "审核注册申请", true},
-	{CapabilityCommentsView, "comments", "查看互动", true}, {CapabilityCommentsViewHidden, "comments", "查看隐藏互动", true}, {CapabilityCommentsEdit, "comments", "编辑互动", true}, {CapabilityCommentsDelete, "comments", "删除互动", true},
+	{CapabilityCommentsView, "comments", "查看互动", true}, {CapabilityCommentsViewHidden, "comments", "查看隐藏互动", true}, {CapabilityCommentsEdit, "comments", "编辑互动", true}, {CapabilityCommentsChangeVisibility, "comments", "调整互动可见范围", true}, {CapabilityCommentsTrash, "comments", "移入互动回收站", true}, {CapabilityCommentsRecycleBinView, "comments", "查看评论回收站", true}, {CapabilityCommentsRestore, "comments", "恢复互动", true}, {CapabilityCommentsDeletePermanently, "comments", "永久删除互动", true}, {CapabilityCommentsNotifyDeletion, "comments", "删除互动时通知作者", true},
 	{CapabilityAttachmentsView, "attachments", "查看附件", true}, {CapabilityAttachmentsDownload, "attachments", "下载附件", true}, {CapabilityAttachmentsDeleteReference, "attachments", "删除附件引用", true}, {CapabilityAttachmentsPurgeBlob, "attachments", "彻底删除附件文件", true},
 	{CapabilityStorageView, "storage", "查看存储", true}, {CapabilityStorageManage, "storage", "管理存储", true}, {CapabilityDatabaseView, "database", "查看数据库", true}, {CapabilityDatabaseBackup, "database", "备份数据库", true}, {CapabilityDatabaseRestore, "database", "恢复数据库", true}, {CapabilityVersionView, "version", "查看版本", true}, {CapabilityVersionUpdate, "version", "更新版本", true},
 	{CapabilitySecurityView, "security", "查看安全策略", true}, {CapabilitySecurityManage, "security", "管理安全策略", true}, {CapabilitySecurityClearLogs, "security", "清理攻击记录", true}, {CapabilityAccessLogsView, "access_logs", "查看访问日志", true}, {CapabilityAccessLogsClear, "access_logs", "清理访问日志", true}, {CapabilitySiteVisitsView, "site_visits", "查看访客记录", true}, {CapabilitySiteVisitsClear, "site_visits", "清理访客记录", true}, {CapabilityLoginAuditsView, "login_audits", "查看登录审计", true},
 	{CapabilitySiteSettingsView, "site", "查看站点设置", true}, {CapabilitySiteSettingsManage, "site", "管理站点设置", true}, {CapabilityAnnouncementsView, "announcements", "查看公告", true}, {CapabilityAnnouncementsManage, "announcements", "管理公告", true}, {CapabilityAnnouncementsPush, "announcements", "推送公告", true}, {CapabilityFeedView, "feed", "查看信息流", true}, {CapabilityNotificationsView, "notifications", "查看通知设置", true}, {CapabilityNotificationsManage, "notifications", "管理通知设置", true}, {CapabilityEmailView, "email", "查看邮件设置", true}, {CapabilityEmailManage, "email", "管理邮件设置", true},
-	{CapabilityNotesView, "notes", "查看笔记", true}, {CapabilityNotesViewHidden, "notes", "查看隐藏笔记", true}, {CapabilityNotesEdit, "notes", "编辑笔记", true}, {CapabilityNotesVisibility, "notes", "调整笔记可见范围", true}, {CapabilityNotesPublishTime, "notes", "调整笔记发布时间", true}, {CapabilityNotesPinGlobal, "notes", "全站置顶笔记", true}, {CapabilityNotesTrash, "notes", "移入笔记回收站", true}, {CapabilityNotesRecycleBinView, "notes", "查看笔记回收站", true}, {CapabilityNotesRestore, "notes", "恢复笔记", true}, {CapabilityNotesDelete, "notes", "永久删除笔记", true},
+	{CapabilityNotesView, "notes", "查看笔记", true}, {CapabilityNotesViewHidden, "notes", "查看隐藏笔记", true}, {CapabilityNotesEdit, "notes", "编辑笔记", true}, {CapabilityNotesVisibility, "notes", "调整笔记可见范围", true}, {CapabilityNotesPublishTime, "notes", "调整笔记发布时间", true}, {CapabilityNotesPinGlobal, "notes", "全站置顶笔记", true}, {CapabilityNotesTrash, "notes", "移入笔记回收站", true}, {CapabilityNotesNotifyDeletion, "notes", "删除笔记时通知作者", true}, {CapabilityNotesRecycleBinView, "notes", "查看笔记回收站", true}, {CapabilityNotesRestore, "notes", "恢复笔记", true}, {CapabilityNotesDelete, "notes", "永久删除笔记", true},
 }
 
 var parentCapabilities = map[Capability]Capability{
@@ -114,7 +120,12 @@ var parentCapabilities = map[Capability]Capability{
 	CapabilityRegistrationReview:         CapabilityRegistrationView,
 	CapabilityCommentsViewHidden:         CapabilityCommentsView,
 	CapabilityCommentsEdit:               CapabilityCommentsView,
-	CapabilityCommentsDelete:             CapabilityCommentsView,
+	CapabilityCommentsChangeVisibility:   CapabilityCommentsView,
+	CapabilityCommentsTrash:              CapabilityCommentsView,
+	CapabilityCommentsRecycleBinView:     CapabilityCommentsView,
+	CapabilityCommentsRestore:            CapabilityCommentsRecycleBinView,
+	CapabilityCommentsDeletePermanently:  CapabilityCommentsRecycleBinView,
+	CapabilityCommentsNotifyDeletion:     CapabilityCommentsTrash,
 	CapabilityAttachmentsDownload:        CapabilityAttachmentsView,
 	CapabilityAttachmentsDeleteReference: CapabilityAttachmentsView,
 	CapabilityAttachmentsPurgeBlob:       CapabilityAttachmentsView,
@@ -137,6 +148,7 @@ var parentCapabilities = map[Capability]Capability{
 	CapabilityNotesPublishTime:           CapabilityNotesView,
 	CapabilityNotesPinGlobal:             CapabilityNotesView,
 	CapabilityNotesTrash:                 CapabilityNotesView,
+	CapabilityNotesNotifyDeletion:        CapabilityNotesTrash,
 	CapabilityNotesRestore:               CapabilityNotesRecycleBinView,
 	CapabilityNotesDelete:                CapabilityNotesRecycleBinView,
 }

@@ -1001,6 +1001,9 @@ func hasAdminOnlySettingFields(setting dto.SettingDto) bool {
 		setting.AttachmentStorageEnabled != nil ||
 		setting.AttachmentStorageConfig != nil ||
 		setting.RecycleBinRetentionDays != nil ||
+		setting.CommentRecycleBinRetentionDays != nil ||
+		setting.NotifyNoteDeletionByPrimary != nil ||
+		setting.NotifyCommentDeletionByPrimary != nil ||
 		setting.VoceChatConfig != nil
 }
 
@@ -1146,6 +1149,9 @@ func UpdateSetting(c *gin.Context) {
 	var oldSiteConfig models.SiteConfig
 	_ = db.Table("site_configs").First(&oldSiteConfig).Error
 	oldRetention := oldSiteConfig.RecycleBinRetentionDays
+	oldCommentRetention := oldSiteConfig.CommentRecycleBinRetentionDays
+	oldNotifyNoteDeletion := oldSiteConfig.NotifyNoteDeletionByPrimary
+	oldNotifyCommentDeletion := oldSiteConfig.NotifyCommentDeletionByPrimary
 
 	if setting.AllowRegistration != nil {
 		oldSetting.AllowRegistration = *setting.AllowRegistration
@@ -1167,6 +1173,32 @@ func UpdateSetting(c *gin.Context) {
 			return
 		}
 		settingMap["recycleBinRetentionDays"] = *setting.RecycleBinRetentionDays
+		hasSiteConfigUpdate = true
+	}
+	if setting.CommentRecycleBinRetentionDays != nil {
+		if user.ID != models.PrimaryAdminUserID {
+			c.JSON(http.StatusOK, dto.Fail[string]("仅站长可管理互动回收站自动清理"))
+			return
+		}
+		allowed := map[int]bool{0: true, 7: true, 30: true, 90: true, 180: true, 365: true}
+		if !allowed[*setting.CommentRecycleBinRetentionDays] {
+			c.JSON(http.StatusOK, dto.Fail[string]("互动回收站保留期限无效"))
+			return
+		}
+		settingMap["commentRecycleBinRetentionDays"] = *setting.CommentRecycleBinRetentionDays
+		hasSiteConfigUpdate = true
+	}
+	if setting.NotifyNoteDeletionByPrimary != nil || setting.NotifyCommentDeletionByPrimary != nil {
+		if user.ID != models.PrimaryAdminUserID {
+			c.JSON(http.StatusOK, dto.Fail[string]("仅站长可管理删除通知策略"))
+			return
+		}
+		if setting.NotifyNoteDeletionByPrimary != nil {
+			settingMap["notifyNoteDeletionByPrimary"] = *setting.NotifyNoteDeletionByPrimary
+		}
+		if setting.NotifyCommentDeletionByPrimary != nil {
+			settingMap["notifyCommentDeletionByPrimary"] = *setting.NotifyCommentDeletionByPrimary
+		}
 		hasSiteConfigUpdate = true
 	}
 	if frontendSettings != nil {
@@ -1276,6 +1308,26 @@ func UpdateSetting(c *gin.Context) {
 				Result:      "success",
 				Summary:     "updated recycle-bin retention policy",
 				ChangesJSON: string(changes),
+			})
+		}
+		if setting.CommentRecycleBinRetentionDays != nil {
+			changes, _ := json.Marshal(map[string]int{"from": oldCommentRetention, "to": *setting.CommentRecycleBinRetentionDays})
+			authorization.New(db).WriteAuditBestEffort(models.AdminAuditLog{
+				ActorUserID: user.ID, Capability: string(authorization.CapabilitySiteSettingsManage),
+				Module: "comments", Action: "update_recycle_retention", TargetType: "recycle_bin_policy",
+				TargetID: "retention_days", Result: "success", Summary: "updated comment recycle-bin retention policy", ChangesJSON: string(changes),
+			})
+		}
+		if setting.NotifyNoteDeletionByPrimary != nil || setting.NotifyCommentDeletionByPrimary != nil {
+			changes, _ := json.Marshal(map[string]any{
+				"note_from": oldNotifyNoteDeletion, "note_to": setting.NotifyNoteDeletionByPrimary,
+				"comment_from": oldNotifyCommentDeletion, "comment_to": setting.NotifyCommentDeletionByPrimary,
+			})
+			authorization.New(db).WriteAuditBestEffort(models.AdminAuditLog{
+				ActorUserID: user.ID, Capability: string(authorization.CapabilitySiteSettingsManage),
+				Module: "notifications", Action: "update_primary_deletion_notification_policy",
+				TargetType: "deletion_notification_policy", TargetID: "primary_admin", Result: "success",
+				Summary: "updated primary-admin deletion notification policy", ChangesJSON: string(changes),
 			})
 		}
 	}
@@ -1812,15 +1864,49 @@ func GetComments(c *gin.Context) {
 		actorID = &id
 	}
 	scope, scopeErr := services.ResolveContentReadScope(db, actorID)
-	if scopeErr != nil || !scope.CanReadMessage(message) {
+	messageForRead := message
+	if message.IsTombstone {
+		messageForRead.DeletedAt = nil
+	}
+	if scopeErr != nil || !scope.CanReadMessage(messageForRead) {
 		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
 		return
 	}
 	commentMap := services.CommentMap(comments)
-	visibleComments := make([]models.Comment, 0, len(comments))
+	visibleActive := make(map[uint]models.Comment)
+	requiredTombstones := make(map[uint]bool)
 	for _, comment := range comments {
-		if scope.CanReadComment(message, comment, commentMap) {
-			comment.CanInteract = scope.CanInteractWithComment(message, comment, commentMap)
+		if comment.DeletedAt == nil && !comment.IsTombstone && scope.CanReadComment(messageForRead, comment, commentMap) {
+			comment.CanInteract = scope.CanInteractWithComment(messageForRead, comment, commentMap)
+			visibleActive[comment.ID] = comment
+			seen := map[uint]bool{comment.ID: true}
+			parentID := comment.ParentID
+			for parentID != nil && !seen[*parentID] {
+				seen[*parentID] = true
+				parent, ok := commentMap[*parentID]
+				if !ok {
+					break
+				}
+				if parent.IsTombstone {
+					requiredTombstones[parent.ID] = true
+				}
+				parentID = parent.ParentID
+			}
+		}
+	}
+	visibleComments := make([]models.Comment, 0, len(visibleActive)+len(requiredTombstones))
+	for _, comment := range comments {
+		if visible, ok := visibleActive[comment.ID]; ok {
+			visibleComments = append(visibleComments, visible)
+			continue
+		}
+		if comment.IsTombstone && requiredTombstones[comment.ID] {
+			comment.Content = ""
+			comment.UserID = nil
+			comment.User = nil
+			comment.CanInteract = false
+			comment.Visibility = ""
+			comment.TombstoneVisibility = ""
 			visibleComments = append(visibleComments, comment)
 		}
 	}
@@ -2156,6 +2242,10 @@ func UpdateComment(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "评论不存在"})
 		return
 	}
+	if cm.DeletedAt != nil || cm.IsTombstone || cm.UserPurgedAt != nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "评论不存在"})
+		return
+	}
 	var message models.Message
 	if err := db.First(&message, uint(msgID)).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
@@ -2166,15 +2256,8 @@ func UpdateComment(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取评论失败"})
 		return
 	}
-	decision := authorizeCommentMutation(c, message, cm, commentMap, authorization.CapabilityCommentsEdit)
-	if !decision.Allowed {
-		if decision.Reason == authorization.DenialContentNotReadable {
-			c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "评论不存在"})
-		} else {
-			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限"})
-		}
-		return
-	}
+	actorID, actorOK := commentAuthUserID(c)
+	isOwner := actorOK && cm.UserID != nil && *cm.UserID == actorID
 	messageVisibility := services.StoredMessageVisibility(message)
 	visibility := cm.Visibility
 	if strings.TrimSpace(req.Visibility) != "" {
@@ -2213,9 +2296,35 @@ func UpdateComment(c *gin.Context) {
 			}
 		}
 	}
+	contentChanged := cm.Content != req.Content
+	visibilityChanged := services.NormalizedCommentVisibilityOrPublic(cm.Visibility) != visibility
+	for _, requirement := range []struct {
+		changed    bool
+		capability authorization.Capability
+	}{
+		{contentChanged, authorization.CapabilityCommentsEdit},
+		{visibilityChanged, authorization.CapabilityCommentsChangeVisibility},
+	} {
+		if !requirement.changed || isOwner {
+			continue
+		}
+		decision := authorizeCommentMutation(c, message, cm, commentMap, requirement.capability)
+		if !decision.Allowed {
+			if decision.Reason == authorization.DenialContentNotReadable {
+				c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "评论不存在"})
+			} else {
+				c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限"})
+			}
+			return
+		}
+	}
 	cm.Content = req.Content
 	cm.Visibility = visibility
-	if err := persistCommentMutation(c, db, &cm, authorization.CapabilityCommentsEdit, "edit", false); err != nil {
+	auditCapability := authorization.CapabilityCommentsEdit
+	if visibilityChanged && !contentChanged {
+		auditCapability = authorization.CapabilityCommentsChangeVisibility
+	}
+	if err := persistCommentMutation(c, db, &cm, auditCapability, "edit", false); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "更新失败"})
 		return
 	}
@@ -2244,25 +2353,34 @@ func DeleteComment(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
 		return
 	}
-	commentMap, err := services.LoadCommentMapForMessage(uint(msgID))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取评论失败"})
+	actorID, ok := commentAuthUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "请先登录"})
 		return
 	}
-	decision := authorizeCommentMutation(c, message, cm, commentMap, authorization.CapabilityCommentsDelete)
-	if !decision.Allowed {
-		if decision.Reason == authorization.DenialContentNotReadable {
+	result, err := services.TrashCommentTree(db, actorID, cm.ID, services.CommentTrashRequest{})
+	if err != nil {
+		if errors.Is(err, services.ErrCommentNotAuthorized) || errors.Is(err, services.ErrCommentProtected) {
+			reason := authorization.DenialMissingGrant
+			if errors.Is(err, services.ErrCommentProtected) {
+				reason = authorization.DenialProtectedContent
+			}
+			authorization.New(db).WriteDeniedBestEffort(models.AdminAuditLog{
+				ActorUserID: actorID, Capability: string(authorization.CapabilityCommentsTrash), Module: "comments",
+				Action: "trash", TargetType: "comment", TargetID: fmt.Sprint(cm.ID), TargetOwnerUserID: cm.UserID,
+				Result: "denied", Summary: "interaction trash denied", Reason: string(reason),
+			})
+		}
+		if errors.Is(err, services.ErrCommentNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "评论不存在"})
-		} else {
+		} else if errors.Is(err, services.ErrCommentNotAuthorized) || errors.Is(err, services.ErrCommentProtected) {
 			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "无权限"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "移入回收站失败"})
 		}
 		return
 	}
-	if err := persistCommentMutation(c, db, &cm, authorization.CapabilityCommentsDelete, "delete", true); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "删除失败"})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "已删除"})
+	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "已移入回收站", "data": result})
 }
 
 // 列出所有内置评论（管理员，支持搜索与分页）
@@ -2288,7 +2406,7 @@ func ListComments(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.Fail[string]("查询失败"))
 		return
 	}
-	tx := db.Model(&models.Comment{}).Joins("LEFT JOIN users ON users.id = comments.user_id")
+	tx := db.Model(&models.Comment{}).Joins("LEFT JOIN users ON users.id = comments.user_id").Where("comments.deleted_at IS NULL AND comments.is_tombstone = ?", false)
 	if q != "" {
 		like := "%" + q + "%"
 		tx = tx.Where("comments.content LIKE ? OR users.username LIKE ?", like, like)

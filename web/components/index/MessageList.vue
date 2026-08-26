@@ -75,8 +75,9 @@
           <div class="p-0">
             <div :class="['content-container', innerContainerClass, listThemeClass, { 'is-dark': isContentDark, 'file-attachment-shadow-open': isFileAttachmentShadowOpen(msg.id), 'file-attachment-shadow-clip': isFileAttachmentShadowClipped(msg.id) }]" :data-msg-id="msg.id">
               <div class="flex items-center gap-2 mb-1 author-row">
-                <img :src="authorAvatar(msg)" alt="avatar" class="avatar-img w-9 h-9 rounded-full object-cover" @error="authorAvatarOnError($event, msg.username || '匿名')" @mouseenter="showAuthorCard($event, msg)" @mouseleave="hideAuthorCard" @click="toggleAuthorCard($event, msg)" />
-                <div v-if="openAuthorId === msg.id" class="site-author-card bg-white text-black dark:bg-[var(--home-surface-dark-elevated)] dark:text-white" :style="openAuthorStyle">
+                <span v-if="msg.is_tombstone" class="message-tombstone-icon"><UIcon name="i-heroicons-archive-box-x-mark" /></span>
+                <img v-else :src="authorAvatar(msg)" alt="avatar" class="avatar-img w-9 h-9 rounded-full object-cover" @error="authorAvatarOnError($event, msg.username || '匿名')" @mouseenter="showAuthorCard($event, msg)" @mouseleave="hideAuthorCard" @click="toggleAuthorCard($event, msg)" />
+                <div v-if="!msg.is_tombstone && openAuthorId === msg.id" class="site-author-card bg-white text-black dark:bg-[var(--home-surface-dark-elevated)] dark:text-white" :style="openAuthorStyle">
                   <div class="site-author-card-header">
                     <img :src="authorProfileAvatar(msg)" class="avatar-img w-10 h-10 rounded-full object-cover" />
                     <div class="font-semibold leading-tight text-[14px]">{{ msg.username }}</div>
@@ -87,7 +88,7 @@
                   </div>
                 </div>
                 <div class="min-w-0">
-                  <div class="text-sm font-semibold leading-tight">{{ msg.username || siteConfig.username || '匿名' }}</div>
+                  <div class="text-sm font-semibold leading-tight">{{ msg.is_tombstone ? '原笔记已永久删除' : (msg.username || siteConfig.username || '匿名') }}</div>
                   <div class="flex items-center gap-2">
                     <span class="text-xs opacity-70">{{ formatDate(msg.created_at) }}</span>
                   </div>
@@ -101,7 +102,11 @@
               </div>
               
               <!-- 图片内容（支持放大预览 + 悬停效果） -->
-              <a v-if="msg.image_url" :href="resolveMediaUrl(msg.image_url)" :data-fancybox="`message-image-${msg.id}`" :class="['message-image-wrap', messageImageAR[msg.id] || '']">
+              <div v-if="msg.is_tombstone" class="message-tombstone-panel">
+                <strong>此处保留互动关系</strong>
+                <span>原笔记正文、附件和作者展示信息已清除；仍可见的后代互动继续遵循原可见范围上限。</span>
+              </div>
+              <a v-if="!msg.is_tombstone && msg.image_url" :href="resolveMediaUrl(msg.image_url)" :data-fancybox="`message-image-${msg.id}`" :class="['message-image-wrap', messageImageAR[msg.id] || '']">
                 <img 
                   :src="optimizeImage(resolveMediaUrl(msg.image_url))" 
                   alt="Image" 
@@ -116,7 +121,7 @@
               <!-- 分隔线 -->
               <div v-if="msg.image_url && msg.content" class="border-t border-gray-600 my-2"></div>
               <!-- 文本内容区域 -->
-              <div class="overflow-y-hidden relative" :class="[{ 'max-h-[700px]': !isExpanded[msg.id] && !hasGrid[msg.id], 'file-attachment-shadow-open': isFileAttachmentShadowOpen(msg.id), 'file-attachment-shadow-clip': isFileAttachmentShadowClipped(msg.id) }, listThemeTextClass]" :style="contentStyle(idx)">
+              <div v-if="!msg.is_tombstone" class="overflow-y-hidden relative" :class="[{ 'max-h-[700px]': !isExpanded[msg.id] && !hasGrid[msg.id], 'file-attachment-shadow-open': isFileAttachmentShadowOpen(msg.id), 'file-attachment-shadow-clip': isFileAttachmentShadowClipped(msg.id) }, listThemeTextClass]" :style="contentStyle(idx)">
                 <MarkdownRenderer
                   :content="msg.content"
                   :enableGithubCard="siteConfig?.enableGithubCard === true"
@@ -144,7 +149,7 @@
                 </button>
               </div>
               <div class="message-divider my-3"></div>
-              <div class="message-socialbar">
+              <div v-if="!msg.is_tombstone" class="message-socialbar">
                 <button v-if="canInteractWithMessage(msg)" class="social-item nw-tooltip-anchor" data-tooltip="点赞" aria-label="点赞" @click="like(msg.id)">
                   <UIcon
                     :name="(likedMap[msg.id] ? 'i-mdi-heart' : 'i-mdi-heart-outline')"
@@ -178,7 +183,7 @@
                   </div>
                 </div>
               </div>
-              <div v-if="(expandedCommentsMap[msg.id] || activeCommentId === msg.id) && isCommentEnabled && !isGuestbookMessage(msg)" :id="`comment-container-${msg.id}`" class="mt-2" style="position: relative;">
+              <div v-if="(msg.is_tombstone || expandedCommentsMap[msg.id] || activeCommentId === msg.id) && isCommentEnabled && !isGuestbookMessage(msg)" :id="`comment-container-${msg.id}`" class="mt-2" style="position: relative;">
                 <BuiltinComments
                   v-if="apiReachable"
                   :key="(commentRefreshKey[msg.id] || 0)"
@@ -187,7 +192,7 @@
                   :message-visibility="msg.visibility"
                   :can-interact="canInteractWithMessage(msg)"
                   :site-config="siteConfig"
-                  :show-input="activeCommentId === msg.id"
+                  :show-input="!msg.is_tombstone && activeCommentId === msg.id"
                   auto-scroll-input
                   @cancel="handleCancel(msg.id, $event)"
                 />
@@ -1066,16 +1071,26 @@ const applyPageResult = (result: any, targetPage: number) => {
 const loadTargetMessagePage = async (id: number) => {
   if (!id || !targetListReady.value) return false
   if (getMessageById(id)) return true
+  const loadThreadTombstone = async () => {
+    const response = await getRequest<any>(`messages/${id}`, undefined, { credentials: 'include', silent: true })
+    if (response?.code !== 1 || response?.data?.is_tombstone !== true) return false
+    message.messages = [response.data]
+    message.total = 1
+    message.page = 1
+    message.hasMore = false
+    await nextTick()
+    return true
+  }
   try {
     const location = await message.locateMessagePage({ ...pageQueryFor(1), messageId: id })
     const targetPage = Number(location?.page || 0)
-    if (targetPage < 1) return false
+    if (targetPage < 1) return await loadThreadTombstone()
     const result = await message.loadMessagePage(pageQueryFor(targetPage))
     if (!applyPageResult(result, targetPage)) return false
     await nextTick()
     return !!getMessageById(id)
   } catch {
-    return false
+    return await loadThreadTombstone()
   }
 }
 
@@ -2699,6 +2714,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.message-tombstone-icon{width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;border:1px dashed rgba(148,163,184,.6);border-radius:999px;color:#64748b;background:rgba(148,163,184,.1)}
+.message-tombstone-icon svg{width:18px;height:18px}.message-tombstone-panel{display:flex;flex-direction:column;gap:5px;margin:10px 0;padding:12px 14px;border:1px dashed rgba(148,163,184,.55);border-radius:11px;background:rgba(148,163,184,.08);color:#64748b;font-size:12px;line-height:1.6}.message-tombstone-panel strong{color:inherit;font-size:13px}
 .search-mode-bar {
   display: flex;
   align-items: center;

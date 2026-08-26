@@ -37,21 +37,22 @@ type NoteManagementFilter struct {
 }
 
 type NoteManagementItem struct {
-	ID              uint       `json:"id"`
-	Content         string     `json:"content"`
-	Username        string     `json:"username"`
-	ImageURL        string     `json:"image_url,omitempty"`
-	Private         bool       `json:"private"`
-	Visibility      string     `json:"visibility"`
-	UserID          uint       `json:"user_id"`
-	IsGuestbook     bool       `json:"is_guestbook"`
-	CreatedAt       time.Time  `json:"created_at"`
-	Pinned          bool       `json:"pinned"`
-	PersonalPinned  bool       `json:"personal_pinned"`
-	LikeCount       int        `json:"like_count"`
-	DeletedAt       *time.Time `json:"deleted_at,omitempty"`
-	DeletedByUserID *uint      `json:"deleted_by_user_id,omitempty"`
-	DeletedReason   string     `json:"deleted_reason,omitempty"`
+	ID              uint            `json:"id"`
+	Content         string          `json:"content"`
+	Username        string          `json:"username"`
+	ImageURL        string          `json:"image_url,omitempty"`
+	Private         bool            `json:"private"`
+	Visibility      string          `json:"visibility"`
+	UserID          uint            `json:"user_id"`
+	IsGuestbook     bool            `json:"is_guestbook"`
+	CreatedAt       time.Time       `json:"created_at"`
+	Pinned          bool            `json:"pinned"`
+	PersonalPinned  bool            `json:"personal_pinned"`
+	LikeCount       int             `json:"like_count"`
+	DeletedAt       *time.Time      `json:"deleted_at,omitempty"`
+	DeletedByUserID *uint           `json:"deleted_by_user_id,omitempty"`
+	DeletedReason   string          `json:"deleted_reason,omitempty"`
+	RecycleDeadline RecycleDeadline `json:"recycle_deadline"`
 }
 
 type NoteManagementPageResult struct {
@@ -262,7 +263,12 @@ func TrashMessageWithAudit(db *gorm.DB, actorID, messageID uint, reason string, 
 	}
 	deletedAt := time.Now().UTC()
 	deletedBy := actorID
+	batchID := newCommentLifecycleBatchID()
 	reason = strings.TrimSpace(reason)
+	noteReason := CommentDeletionReasonModeration
+	if actorID == message.UserID {
+		noteReason = CommentDeletionReasonSelf
+	}
 	return db.Transaction(func(tx *gorm.DB) error {
 		if actorID != message.UserID && actorID != models.PrimaryAdminUserID {
 			protected, err := messageContainsPrimaryAdminComment(tx, message.ID)
@@ -275,12 +281,21 @@ func TrashMessageWithAudit(db *gorm.DB, actorID, messageID uint, reason string, 
 		}
 		result := tx.Model(&models.Message{}).
 			Where("id = ? AND deleted_at IS NULL", messageID).
-			Updates(map[string]interface{}{"deleted_at": deletedAt, "deleted_by_user_id": deletedBy, "deleted_reason": reason})
+			Updates(map[string]interface{}{"deleted_at": deletedAt, "deleted_by_user_id": deletedBy, "deleted_reason": noteReason})
 		if result.Error != nil {
 			return result.Error
 		}
 		if result.RowsAffected != 1 {
 			return ErrMessageAlreadyTrashed
+		}
+		if _, err := trashActiveCommentsForMessage(tx, actorID, message, batchID, deletedAt); err != nil {
+			return err
+		}
+		if err := createDeletionNotificationsTx(tx, actorID, DeletionEventTrashed, batchID, []deletionNotificationTarget{{
+			OwnerID: message.UserID, TargetType: "note", TargetID: message.ID, Content: message.Content,
+			ReasonCode: noteReason, DeletedAt: &deletedAt,
+		}}, false); err != nil {
+			return err
 		}
 		if audit != nil {
 			if err := audit(tx); err != nil {
@@ -309,11 +324,13 @@ func RestoreMessageWithAudit(db *gorm.DB, actorID, messageID uint, audit func(*g
 	if message.DeletedAt == nil {
 		return ErrMessageNotTrashed
 	}
-	if decision := AuthorizeRecycleBinMutation(db, actorID, message.UserID, authorization.CapabilityNotesRestore); !decision.Allowed {
-		if decision.Reason == authorization.DenialProtectedContent {
-			return ErrMessageProtected
+	if actorID != message.UserID {
+		if decision := AuthorizeRecycleBinMutation(db, actorID, message.UserID, authorization.CapabilityNotesRestore); !decision.Allowed {
+			if decision.Reason == authorization.DenialProtectedContent {
+				return ErrMessageProtected
+			}
+			return ErrMessageNotAuthorized
 		}
-		return ErrMessageNotAuthorized
 	}
 	return db.Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(&models.Message{}).Where("id = ? AND deleted_at IS NOT NULL", messageID).
@@ -367,6 +384,12 @@ func PermanentlyDeleteMessageWithAudit(db *gorm.DB, actorID, messageID uint, rea
 				return ErrMessageProtected
 			}
 		}
+		if err := createDeletionNotificationsTx(tx, actorID, DeletionEventPermanentlyDeleted, newCommentLifecycleBatchID(), []deletionNotificationTarget{{
+			OwnerID: message.UserID, TargetType: "note", TargetID: message.ID, Content: message.Content,
+			ContextText: "笔记已从回收站永久删除", ReasonCode: message.DeletedReason,
+		}}, false); err != nil {
+			return err
+		}
 		if err := permanentlyDeleteMessageInTx(tx, message); err != nil {
 			return err
 		}
@@ -385,6 +408,28 @@ func permanentlyDeleteMessageInTx(tx *gorm.DB, message models.Message) error {
 	var comments []models.Comment
 	if err := tx.Where("message_id = ?", message.ID).Find(&comments).Error; err != nil {
 		return err
+	}
+	if len(comments) > 0 {
+		if err := RemoveUnreferencedMessageBodyAttachmentReferences(tx, message); err != nil {
+			return err
+		}
+		if err := tx.Where("message_id = ?", message.ID).Delete(&models.MessageLike{}).Error; err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		visibility := StoredMessageVisibility(message)
+		update := tx.Model(&models.Message{}).Where("id = ? AND deleted_at IS NOT NULL", message.ID).Updates(map[string]interface{}{
+			"content": "", "username": "", "image_url": "", "private": true,
+			"visibility": MessageVisibilityPrivate, "is_tombstone": true,
+			"tombstoned_at": now, "tombstone_visibility": visibility,
+		})
+		if update.Error != nil {
+			return update.Error
+		}
+		if update.RowsAffected != 1 {
+			return ErrMessageNotTrashed
+		}
+		return nil
 	}
 	if err := RemoveUnreferencedMessageAttachmentReferences(tx, message.ID, message, comments); err != nil {
 		return err
@@ -430,7 +475,7 @@ func RunRecycleBinAutoCleanup(db *gorm.DB, now time.Time) (succeeded, failed, sk
 	var cursorDeletedAt time.Time
 	var cursorID uint
 	for {
-		query := db.Where("deleted_at IS NOT NULL AND deleted_at <= ? AND is_guestbook = ?", cutoff, false)
+		query := db.Where("deleted_at IS NOT NULL AND deleted_at <= ? AND is_guestbook = ? AND is_tombstone = ?", cutoff, false, false)
 		if !cursorDeletedAt.IsZero() {
 			query = query.Where("deleted_at > ? OR (deleted_at = ? AND id > ?)", cursorDeletedAt, cursorDeletedAt, cursorID)
 		}
@@ -449,6 +494,12 @@ func RunRecycleBinAutoCleanup(db *gorm.DB, now time.Time) (succeeded, failed, sk
 				continue
 			}
 			itemErr := db.Transaction(func(tx *gorm.DB) error {
+				if err := createDeletionNotificationsTx(tx, models.PrimaryAdminUserID, DeletionEventPermanentlyDeleted, newCommentLifecycleBatchID(), []deletionNotificationTarget{{
+					OwnerID: message.UserID, TargetType: "note", TargetID: message.ID, Content: message.Content,
+					ContextText: "系统按笔记回收站保留期限自动永久删除", ReasonCode: CommentDeletionReasonSystem,
+				}}, true); err != nil {
+					return err
+				}
 				if err := permanentlyDeleteMessageInTx(tx, message); err != nil {
 					return err
 				}
@@ -472,7 +523,7 @@ func buildNoteManagementQuery(db *gorm.DB, actorID uint, filter NoteManagementFi
 	}
 	query := db.Model(&models.Message{})
 	if recycleBin {
-		query = scope.ApplyMessageVisibilityIncludingDeleted(query).Where("messages.deleted_at IS NOT NULL")
+		query = scope.ApplyMessageVisibilityIncludingDeleted(query).Where("messages.deleted_at IS NOT NULL AND messages.is_tombstone = ?", false)
 	} else {
 		query = scope.ApplyMessageVisibility(query)
 	}
@@ -550,8 +601,37 @@ func ListRecycleBinMessages(db *gorm.DB, actorID uint, filter NoteManagementFilt
 		return NoteManagementPageResult{}, err
 	}
 	items := make([]NoteManagementItem, 0, len(messages))
+	noteRetention, _ := loadSiteRecycleRetention(db)
+	now := time.Now().UTC()
 	for _, message := range messages {
-		items = append(items, noteManagementItem(message))
+		item := noteManagementItem(message)
+		item.RecycleDeadline = CalculateRecycleDeadline(message.DeletedAt, noteRetention, now)
+		items = append(items, item)
+	}
+	return NoteManagementPageResult{Total: total, Items: items}, nil
+}
+
+func ListPersonalRecycleBinMessages(db *gorm.DB, actorID uint, filter NoteManagementFilter, now time.Time) (NoteManagementPageResult, error) {
+	filter.Page, filter.PageSize = normalizeNoteManagementPagination(filter.Page, filter.PageSize)
+	query := db.Model(&models.Message{}).Where("user_id = ? AND deleted_at IS NOT NULL AND is_tombstone = ?", actorID, false)
+	if strings.TrimSpace(filter.Keyword) != "" {
+		query = query.Where("content LIKE ?", "%"+strings.TrimSpace(filter.Keyword)+"%")
+	}
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return NoteManagementPageResult{}, err
+	}
+	var messages []models.Message
+	if err := query.Order("deleted_at DESC, id DESC").Limit(filter.PageSize).Offset((filter.Page - 1) * filter.PageSize).Find(&messages).Error; err != nil {
+		return NoteManagementPageResult{}, err
+	}
+	noteRetention, _ := loadSiteRecycleRetention(db)
+	items := make([]NoteManagementItem, 0, len(messages))
+	for _, message := range messages {
+		item := noteManagementItem(message)
+		item.DeletedByUserID = nil
+		item.RecycleDeadline = CalculateRecycleDeadline(message.DeletedAt, noteRetention, now)
+		items = append(items, item)
 	}
 	return NoteManagementPageResult{Total: total, Items: items}, nil
 }
@@ -595,6 +675,8 @@ func GetRecycleBinMessageForViewer(db *gorm.DB, actorID, messageID uint) (*NoteM
 		return nil, err
 	}
 	item := noteManagementItem(message)
+	noteRetention, _ := loadSiteRecycleRetention(db)
+	item.RecycleDeadline = CalculateRecycleDeadline(message.DeletedAt, noteRetention, time.Now().UTC())
 	return &item, nil
 }
 

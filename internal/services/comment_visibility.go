@@ -113,7 +113,11 @@ func EffectiveCommentVisibilityInThread(comment models.Comment, messageVisibilit
 			break
 		}
 		seen[parent.ID] = true
-		parentVisibility := EffectiveCommentVisibilityForMessage(parent.Visibility, messageVisibility)
+		storedParentVisibility := parent.Visibility
+		if parent.IsTombstone && strings.TrimSpace(parent.TombstoneVisibility) != "" {
+			storedParentVisibility = parent.TombstoneVisibility
+		}
+		parentVisibility := EffectiveCommentVisibilityForMessage(storedParentVisibility, messageVisibility)
 		if CommentVisibilityRank(visibility) > CommentVisibilityRank(parentVisibility) {
 			visibility = parentVisibility
 		}
@@ -123,6 +127,9 @@ func EffectiveCommentVisibilityInThread(comment models.Comment, messageVisibilit
 }
 
 func (scope ContentReadScope) CanReadComment(message models.Message, comment models.Comment, commentMap map[uint]models.Comment) bool {
+	if comment.DeletedAt != nil || comment.IsTombstone {
+		return false
+	}
 	if !scope.CanReadMessage(message) {
 		return false
 	}

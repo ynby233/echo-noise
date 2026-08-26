@@ -98,13 +98,27 @@ func TestDelegatedCommentMutationsUseCapabilityProtectionAndSilentAdminAudit(t *
 	if withoutGrant.Code != http.StatusForbidden {
 		t.Fatalf("comment edit without grant status=%d body=%s", withoutGrant.Code, withoutGrant.Body.String())
 	}
-	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityCommentsView, authorization.CapabilityCommentsEdit, authorization.CapabilityCommentsDelete}); err != nil {
+	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityCommentsView, authorization.CapabilityCommentsEdit, authorization.CapabilityCommentsTrash}); err != nil {
 		t.Fatalf("grant comment capabilities: %v", err)
 	}
 
 	allowedEdit := performCommentJSONRequest(r, http.MethodPut, message.ID, ownerComment.ID, map[string]any{"content": "delegated edit"})
 	if allowedEdit.Code != http.StatusOK {
 		t.Fatalf("comment edit with grant status=%d body=%s", allowedEdit.Code, allowedEdit.Body.String())
+	}
+	visibilityWithoutGrant := performCommentJSONRequest(r, http.MethodPut, message.ID, ownerComment.ID, map[string]any{"content": "delegated edit", "visibility": "users"})
+	if visibilityWithoutGrant.Code != http.StatusForbidden {
+		t.Fatalf("comment visibility change without independent grant status=%d body=%s", visibilityWithoutGrant.Code, visibilityWithoutGrant.Body.String())
+	}
+	if err := authorization.New(db).ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{
+		authorization.CapabilityCommentsView, authorization.CapabilityCommentsEdit,
+		authorization.CapabilityCommentsChangeVisibility, authorization.CapabilityCommentsTrash,
+	}); err != nil {
+		t.Fatalf("grant independent comment visibility capability: %v", err)
+	}
+	visibilityWithGrant := performCommentJSONRequest(r, http.MethodPut, message.ID, ownerComment.ID, map[string]any{"content": "delegated edit", "visibility": "users"})
+	if visibilityWithGrant.Code != http.StatusOK {
+		t.Fatalf("comment visibility change with grant status=%d body=%s", visibilityWithGrant.Code, visibilityWithGrant.Body.String())
 	}
 	protectedEdit := performCommentJSONRequest(r, http.MethodPut, message.ID, primaryComment.ID, map[string]any{"content": "must stay primary"})
 	if protectedEdit.Code != http.StatusForbidden {
@@ -142,7 +156,7 @@ func TestDelegatedCommentMutationsUseCapabilityProtectionAndSilentAdminAudit(t *
 		t.Fatalf("comment edit audits=%#v, want denied/success/denied", editAudits)
 	}
 	var deleteAudits []models.AdminAuditLog
-	if err := db.Where("actor_user_id = ? AND capability = ?", delegated.ID, authorization.CapabilityCommentsDelete).Order("id ASC").Find(&deleteAudits).Error; err != nil {
+	if err := db.Where("actor_user_id = ? AND capability = ?", delegated.ID, authorization.CapabilityCommentsTrash).Order("id ASC").Find(&deleteAudits).Error; err != nil {
 		t.Fatalf("load comment delete audits: %v", err)
 	}
 	if len(deleteAudits) != 2 || deleteAudits[0].Result != "denied" || deleteAudits[1].Result != "success" {

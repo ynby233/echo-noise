@@ -60,8 +60,13 @@ func TestCatalogAuthorizationMatrixCoversEveryCapability(t *testing.T) {
 
 			if definition.Grantable {
 				grants := []Capability{definition.Capability}
-				if parent, ok := ParentCapabilityFor(definition.Capability); ok {
+				for current := definition.Capability; ; {
+					parent, ok := ParentCapabilityFor(current)
+					if !ok {
+						break
+					}
 					grants = append(grants, parent)
+					current = parent
 				}
 				if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, grants); err != nil {
 					t.Fatalf("grant %s: %v", definition.Capability, err)
@@ -132,12 +137,12 @@ func TestAuthorizeDelegatedAdminRequiresGrantAndRevocationAppliesImmediately(t *
 
 func TestAuthorizeProtectsPrimaryAdminContentFromDelegatedMutation(t *testing.T) {
 	_, authorizer, primary, delegated, _ := setupAuthorizerTest(t)
-	if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, []Capability{CapabilityCommentsView, CapabilityCommentsDelete}); err != nil {
+	if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, []Capability{CapabilityCommentsView, CapabilityCommentsTrash}); err != nil {
 		t.Fatalf("grant comment deletion: %v", err)
 	}
 
 	ownerID := primary.ID
-	decision := authorizer.Authorize(delegated.ID, CapabilityCommentsDelete, &ownerID)
+	decision := authorizer.Authorize(delegated.ID, CapabilityCommentsTrash, &ownerID)
 	if decision.Allowed || decision.Reason != DenialProtectedContent {
 		t.Fatalf("primary content must be protected: %#v", decision)
 	}
@@ -146,7 +151,7 @@ func TestAuthorizeProtectsPrimaryAdminContentFromDelegatedMutation(t *testing.T)
 func TestAuthorizeTargetOwnerMatrixPreservesProtectedContentBoundary(t *testing.T) {
 	mutationCapabilities := []Capability{
 		CapabilityCommentsEdit,
-		CapabilityCommentsDelete,
+		CapabilityCommentsTrash,
 		CapabilityNotesEdit,
 		CapabilityNotesVisibility,
 		CapabilityNotesPublishTime,
@@ -225,7 +230,7 @@ func TestEveryChildCapabilityHasTheExpectedParent(t *testing.T) {
 		CapabilityRegistrationReview:         CapabilityRegistrationView,
 		"comments.view_hidden":               CapabilityCommentsView,
 		CapabilityCommentsEdit:               CapabilityCommentsView,
-		CapabilityCommentsDelete:             CapabilityCommentsView,
+		CapabilityCommentsTrash:              CapabilityCommentsView,
 		CapabilityAttachmentsDownload:        CapabilityAttachmentsView,
 		CapabilityAttachmentsDeleteReference: CapabilityAttachmentsView,
 		CapabilityAttachmentsPurgeBlob:       CapabilityAttachmentsView,

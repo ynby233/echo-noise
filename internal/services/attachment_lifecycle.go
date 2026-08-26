@@ -77,3 +77,102 @@ func registryReferenceMentioned(content string, ref models.AttachmentReference) 
 	}
 	return false
 }
+
+// RemoveUnreferencedCommentAttachmentReferences removes logical references
+// mentioned by one permanently deleted interaction only when no surviving
+// note or interaction still mentions them. Physical blobs remain protected by
+// the registry's shared-reference lifecycle.
+func RemoveUnreferencedCommentAttachmentReferences(tx *gorm.DB, comment models.Comment) error {
+	if tx == nil || comment.ID == 0 || strings.TrimSpace(comment.Content) == "" {
+		return nil
+	}
+	var refs []models.AttachmentReference
+	if err := tx.Find(&refs).Error; err != nil {
+		return err
+	}
+	used := make([]models.AttachmentReference, 0)
+	for _, ref := range refs {
+		if registryReferenceMentioned(comment.Content, ref) {
+			used = append(used, ref)
+		}
+	}
+	if len(used) == 0 {
+		return nil
+	}
+	var messages []models.Message
+	if err := tx.Find(&messages).Error; err != nil {
+		return err
+	}
+	var comments []models.Comment
+	if err := tx.Where("id <> ?", comment.ID).Find(&comments).Error; err != nil {
+		return err
+	}
+	var surviving strings.Builder
+	for _, message := range messages {
+		surviving.WriteString(message.Content)
+		surviving.WriteByte('\n')
+		surviving.WriteString(message.ImageURL)
+		surviving.WriteByte('\n')
+	}
+	for _, candidate := range comments {
+		surviving.WriteString(candidate.Content)
+		surviving.WriteByte('\n')
+	}
+	for _, ref := range used {
+		if registryReferenceMentioned(surviving.String(), ref) {
+			continue
+		}
+		if err := tx.Delete(&models.AttachmentReference{}, ref.ID).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func RemoveUnreferencedMessageBodyAttachmentReferences(tx *gorm.DB, message models.Message) error {
+	if tx == nil || message.ID == 0 {
+		return nil
+	}
+	removedContent := message.Content + "\n" + message.ImageURL
+	var refs []models.AttachmentReference
+	if err := tx.Find(&refs).Error; err != nil {
+		return err
+	}
+	used := make([]models.AttachmentReference, 0)
+	for _, ref := range refs {
+		if registryReferenceMentioned(removedContent, ref) {
+			used = append(used, ref)
+		}
+	}
+	if len(used) == 0 {
+		return nil
+	}
+	var messages []models.Message
+	if err := tx.Where("id <> ?", message.ID).Find(&messages).Error; err != nil {
+		return err
+	}
+	var comments []models.Comment
+	if err := tx.Find(&comments).Error; err != nil {
+		return err
+	}
+	var surviving strings.Builder
+	for _, candidate := range messages {
+		surviving.WriteString(candidate.Content)
+		surviving.WriteByte('\n')
+		surviving.WriteString(candidate.ImageURL)
+		surviving.WriteByte('\n')
+	}
+	for _, comment := range comments {
+		surviving.WriteString(comment.Content)
+		surviving.WriteByte('\n')
+	}
+	for _, ref := range used {
+		if registryReferenceMentioned(surviving.String(), ref) {
+			continue
+		}
+		if err := tx.Delete(&models.AttachmentReference{}, ref.ID).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}

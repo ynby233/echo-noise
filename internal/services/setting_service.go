@@ -1343,6 +1343,18 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 			}
 			return 0
 		}(),
+		"commentRecycleBinRetentionDays": func() int {
+			if viewerUserID == models.PrimaryAdminUserID {
+				return config.CommentRecycleBinRetentionDays
+			}
+			return 0
+		}(),
+		"notifyNoteDeletionByPrimary": func() bool {
+			return viewerUserID == models.PrimaryAdminUserID && config.NotifyNoteDeletionByPrimary
+		}(),
+		"notifyCommentDeletionByPrimary": func() bool {
+			return viewerUserID == models.PrimaryAdminUserID && config.NotifyCommentDeletionByPrimary
+		}(),
 		"attachmentStorageConfig": map[string]interface{}{
 			"provider":            choose(config.AttachmentStorageProvider, ""),
 			"endpoint":            choose(config.AttachmentStorageEndpoint, ""),
@@ -1866,6 +1878,17 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	} else if v, ok := settingMap["recycleBinRetentionDays"].(float64); ok {
 		config.RecycleBinRetentionDays = int(v)
 	}
+	if v, ok := settingMap["commentRecycleBinRetentionDays"].(int); ok {
+		config.CommentRecycleBinRetentionDays = v
+	} else if v, ok := settingMap["commentRecycleBinRetentionDays"].(float64); ok {
+		config.CommentRecycleBinRetentionDays = int(v)
+	}
+	if v, ok := settingMap["notifyNoteDeletionByPrimary"].(bool); ok {
+		config.NotifyNoteDeletionByPrimary = v
+	}
+	if v, ok := settingMap["notifyCommentDeletionByPrimary"].(bool); ok {
+		config.NotifyCommentDeletionByPrimary = v
+	}
 	if sc, ok := settingMap["storageConfig"].(map[string]interface{}); ok {
 		if pv, ok := sc["provider"].(string); ok {
 			config.StorageProvider = pv
@@ -2199,8 +2222,11 @@ func getDefaultConfig() map[string]interface{} {
 			"syncMode":           "instant",
 			"syncIntervalMinute": 15,
 		},
-		"attachmentStorageEnabled": false,
-		"recycleBinRetentionDays":  0,
+		"attachmentStorageEnabled":       false,
+		"recycleBinRetentionDays":        0,
+		"commentRecycleBinRetentionDays": 0,
+		"notifyNoteDeletionByPrimary":    false,
+		"notifyCommentDeletionByPrimary": false,
 		"attachmentStorageConfig": map[string]interface{}{
 			"provider":          "",
 			"endpoint":          "",

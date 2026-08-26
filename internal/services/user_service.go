@@ -1353,6 +1353,7 @@ func countReceivedInteractionStats(userID uint, _ bool) (int64, int64, int64, in
 	commentQuery := database.DB.Model(&models.Comment{}).
 		Joins("JOIN messages ON messages.id = comments.message_id").
 		Where("messages.deleted_at IS NULL").
+		Where("comments.deleted_at IS NULL AND comments.is_tombstone = ?", false).
 		Where("messages.user_id = ?", userID).
 		Where("comments.parent_id IS NULL").
 		Where("(comments.user_id IS NULL OR comments.user_id <> ?)", userID)
@@ -1365,6 +1366,8 @@ func countReceivedInteractionStats(userID uint, _ bool) (int64, int64, int64, in
 		Joins("JOIN messages ON messages.id = comments.message_id").
 		Joins("JOIN comments AS parent_comments ON parent_comments.id = comments.parent_id").
 		Where("messages.deleted_at IS NULL").
+		Where("comments.deleted_at IS NULL AND comments.is_tombstone = ?", false).
+		Where("parent_comments.deleted_at IS NULL AND parent_comments.is_tombstone = ?", false).
 		Where("parent_comments.user_id = ?", userID).
 		Where("(comments.user_id IS NULL OR comments.user_id <> ?)", userID).
 		Count(&receivedReplies).Error; err != nil {
@@ -1383,6 +1386,7 @@ func countReceivedInteractionStats(userID uint, _ bool) (int64, int64, int64, in
 		if err := database.DB.Model(&models.Comment{}).
 			Joins("JOIN messages ON messages.id = comments.message_id").
 			Where("messages.deleted_at IS NULL").
+			Where("comments.deleted_at IS NULL AND comments.is_tombstone = ?", false).
 			Where("comments.parent_id IS NULL").
 			Where("(comments.user_id IS NULL OR comments.user_id <> ?)", userID).
 			Where("comments.message_id = ?", descriptor.MessageID).

@@ -24,6 +24,36 @@ func TestDefaultHeaderImagesOnlyContainsSelectedImage(t *testing.T) {
 	}
 }
 
+func TestInteractionRecyclePolicyPersistsAndIsOnlyExposedToPrimaryAdmin(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "policy-primary", IsAdmin: true})
+	member := mustCreateUser(t, models.User{Username: "policy-member"})
+	if err := db.Create(&models.SiteConfig{}).Error; err != nil {
+		t.Fatalf("create site config: %v", err)
+	}
+	if err := UpdateFrontendSetting(primary.ID, map[string]interface{}{
+		"commentRecycleBinRetentionDays": 30,
+		"notifyNoteDeletionByPrimary":    true,
+		"notifyCommentDeletionByPrimary": true,
+	}); err != nil {
+		t.Fatalf("save recycle policy: %v", err)
+	}
+	primaryConfig, err := GetFrontendConfig(primary.ID)
+	if err != nil {
+		t.Fatalf("get primary config: %v", err)
+	}
+	if primaryConfig["commentRecycleBinRetentionDays"] != 30 || primaryConfig["notifyNoteDeletionByPrimary"] != true || primaryConfig["notifyCommentDeletionByPrimary"] != true {
+		t.Fatalf("primary policy config = %#v", primaryConfig)
+	}
+	memberConfig, err := GetFrontendConfig(member.ID)
+	if err != nil {
+		t.Fatalf("get member config: %v", err)
+	}
+	if memberConfig["commentRecycleBinRetentionDays"] != 0 || memberConfig["notifyNoteDeletionByPrimary"] != false || memberConfig["notifyCommentDeletionByPrimary"] != false {
+		t.Fatalf("member must not receive primary policy controls: %#v", memberConfig)
+	}
+}
+
 func TestAnnouncementPageMetadataCanBeSavedAndReadFromFrontendConfig(t *testing.T) {
 	db := setupUserServiceTestDB(t)
 	admin := mustCreateUser(t, models.User{Username: "announcement-config-admin", Password: models.HashPassword("admin"), IsAdmin: true, Token: models.GenerateToken(32)})

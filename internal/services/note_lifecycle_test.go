@@ -33,7 +33,7 @@ func TestNoteLifecycleTrashRestoreIsMutuallyExclusive(t *testing.T) {
 	if err := db.Unscoped().First(&stored, message.ID).Error; err != nil {
 		t.Fatalf("load trashed message: %v", err)
 	}
-	if stored.DeletedAt == nil || stored.DeletedByUserID == nil || *stored.DeletedByUserID != author.ID || stored.DeletedReason != "author request" {
+	if stored.DeletedAt == nil || stored.DeletedByUserID == nil || *stored.DeletedByUserID != author.ID || stored.DeletedReason != CommentDeletionReasonSelf {
 		t.Fatalf("trash metadata = %#v, want deleted metadata", stored)
 	}
 	var active []models.Message
@@ -484,7 +484,7 @@ func TestLifecycleMutationRollsBackWhenSuccessAuditFails(t *testing.T) {
 	}
 }
 
-func TestPermanentlyDeleteMessageClearsLocalRelationsButKeepsNotifications(t *testing.T) {
+func TestPermanentlyDeleteMessageCreatesStructuralTombstoneWhenCommentsRemain(t *testing.T) {
 	db := setupUserServiceTestDB(t)
 	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "lifecycle-permanent-primary", IsAdmin: true})
 	delegated := mustCreateUser(t, models.User{Username: "lifecycle-permanent-delegated", IsAdmin: true})
@@ -523,14 +523,21 @@ func TestPermanentlyDeleteMessageClearsLocalRelationsButKeepsNotifications(t *te
 	if err := db.Unscoped().Model(&models.Message{}).Where("id = ?", message.ID).Count(&count).Error; err != nil {
 		t.Fatalf("count message: %v", err)
 	}
-	if count != 0 {
-		t.Fatalf("message remains after permanent delete: %d", count)
+	if count != 1 {
+		t.Fatalf("structural message tombstone count = %d, want 1", count)
+	}
+	var tombstone models.Message
+	if err := db.First(&tombstone, message.ID).Error; err != nil {
+		t.Fatalf("load message tombstone: %v", err)
+	}
+	if !tombstone.IsTombstone || tombstone.Content != "" || tombstone.Username != "" || tombstone.DeletedAt == nil {
+		t.Fatalf("message was not minimized into a tombstone: %#v", tombstone)
 	}
 	if err := db.Model(&models.Comment{}).Where("message_id = ?", message.ID).Count(&count).Error; err != nil {
 		t.Fatalf("count comments: %v", err)
 	}
-	if count != 0 {
-		t.Fatalf("comments remain after permanent delete: %d", count)
+	if count != 1 {
+		t.Fatalf("comment descendants must remain recoverable beneath tombstone, got %d", count)
 	}
 	if err := db.Model(&models.MessageLike{}).Where("message_id = ?", message.ID).Count(&count).Error; err != nil {
 		t.Fatalf("count likes: %v", err)

@@ -77,6 +77,12 @@ func main() {
 			if succeeded > 0 || failed > 0 || skipped > 0 {
 				log.Printf("回收站自动清理完成: 成功=%d 失败=%d 跳过=%d", succeeded, failed, skipped)
 			}
+			commentSucceeded, commentFailed, commentErr := services.RunCommentRecycleBinAutoCleanup(database.DB, time.Now().UTC())
+			if commentErr != nil {
+				log.Printf("互动回收站自动清理失败: %v", commentErr)
+			} else if commentSucceeded > 0 || commentFailed > 0 {
+				log.Printf("互动回收站自动清理完成: 成功=%d 失败=%d", commentSucceeded, commentFailed)
+			}
 		}
 		run()
 		ticker := time.NewTicker(24 * time.Hour)

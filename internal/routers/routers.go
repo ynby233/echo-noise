@@ -290,6 +290,7 @@ func SetupRouter() *gin.Engine {
 	tokenAuth := api.Group("/token")
 	tokenAuth.Use(middleware.TokenAuthMiddleware()) // 使用 TokenAuthMiddleware
 	registerNoteManagementRoutes(tokenAuth)
+	registerCommentManagementRoutes(tokenAuth)
 	{
 		tokenAuth.POST("/messages", controllers.PostMessage)
 		tokenAuth.PUT("/messages/:id", controllers.UpdateMessage)
@@ -323,6 +324,7 @@ func SetupRouter() *gin.Engine {
 	api.POST("/messages/:id/comments", controllers.PostComment)
 	// 管理员评论列表（提供公共路径，附加会话中间件以注入用户上下文）
 	api.GET("/comments", middleware.SessionAuthMiddleware(), middleware.RequireCapability(authorization.CapabilityCommentsView), controllers.ListComments)
+	registerCommentManagementRoutes(authRoutes)
 	// 评论更新/删除：管理员可管理全部，普通用户可管理自己发布的内容
 	authRoutes.PUT("/messages/:id/comments/:cid", controllers.UpdateComment)
 	authRoutes.DELETE("/messages/:id/comments/:cid", controllers.DeleteComment)
@@ -535,6 +537,23 @@ func registerNoteManagementRoutes(group *gin.RouterGroup) {
 		recycleBin.POST("/batch-permanent-delete", middleware.RequireCapability(authorization.CapabilityNotesDelete), controllers.BatchPermanentDeleteAdminRecycleBin)
 		recycleBin.POST("/batch-permanent-delete-filtered", middleware.RequireCapability(authorization.CapabilityNotesDelete), controllers.BatchFilteredPermanentDelete)
 	}
+}
+
+func registerCommentManagementRoutes(group *gin.RouterGroup) {
+	group.GET("/admin/comments", middleware.RequireCapability(authorization.CapabilityCommentsView), controllers.ListAdminCommentManagement)
+	adminRecycle := group.Group("/admin/comment-recycle-bin")
+	adminRecycle.Use(middleware.RequireCapability(authorization.CapabilityCommentsRecycleBinView))
+	{
+		adminRecycle.GET("", controllers.ListAdminCommentRecycleBin)
+		adminRecycle.POST("/:id/restore", middleware.RequireCapability(authorization.CapabilityCommentsRestore), controllers.RestoreAdminComment)
+		adminRecycle.DELETE("/:id", middleware.RequireCapability(authorization.CapabilityCommentsDeletePermanently), controllers.PermanentlyDeleteAdminComment)
+	}
+	group.GET("/user/interactions", controllers.ListPersonalInteractions)
+	group.GET("/user/recycle-bin/comments", controllers.ListPersonalCommentRecycleBin)
+	group.POST("/user/recycle-bin/comments/:id/restore", controllers.RestorePersonalComment)
+	group.DELETE("/user/recycle-bin/comments/:id", controllers.PurgePersonalComment)
+	group.GET("/user/recycle-bin/notes", controllers.ListPersonalNoteRecycleBin)
+	group.POST("/user/recycle-bin/notes/:id/restore", controllers.RestorePersonalNote)
 }
 
 func staticResponseHeadersMiddleware() gin.HandlerFunc {

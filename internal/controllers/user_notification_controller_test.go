@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -19,7 +20,7 @@ func setupUserNotificationTest(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open test database: %v", err)
 	}
-	if err := db.AutoMigrate(&models.User{}, &models.Message{}, &models.MessageLike{}, &models.Comment{}, &models.UserNotification{}); err != nil {
+	if err := db.AutoMigrate(&models.User{}, &models.Message{}, &models.MessageLike{}, &models.Comment{}, &models.UserNotification{}, &models.SiteConfig{}); err != nil {
 		t.Fatalf("migrate test database: %v", err)
 	}
 	database.DB = db
@@ -29,6 +30,37 @@ func setupUserNotificationTest(t *testing.T) *gorm.DB {
 		models.SetDB(nil)
 	})
 	return db
+}
+
+func TestDeletionNotificationRecomputesCountdownFromCurrentRetentionPolicy(t *testing.T) {
+	db := setupUserNotificationTest(t)
+	if err := db.Create(&models.SiteConfig{CommentRecycleBinRetentionDays: 7}).Error; err != nil {
+		t.Fatalf("create site config: %v", err)
+	}
+	deletedAt := time.Now().UTC().Add(-25 * time.Hour)
+	staleDeadline := deletedAt.Add(30 * 24 * time.Hour)
+	payload, err := json.Marshal([]services.DeletionSnapshotItem{{
+		TargetType: "comment", TargetID: 9, ContentText: "snapshot", DeletedAt: &deletedAt, ScheduledDeletionAt: &staleDeadline,
+	}})
+	if err != nil {
+		t.Fatalf("marshal snapshot: %v", err)
+	}
+	notification := models.UserNotification{
+		ID: 10, RecipientUserID: 11, Type: models.UserNotificationTypeContentDeletion,
+		DeletionEvent: services.DeletionEventTrashed, DeletionActorLabel: "内容管理员", DeletionSnapshotJSON: string(payload),
+	}
+	items := buildVisibleUserNotifications([]models.UserNotification{notification}, 11, false)
+	if len(items) != 1 || items[0].TargetStatus != userNotificationTargetStatusSnapshot || len(items[0].DeletionSnapshots) != 1 {
+		t.Fatalf("unexpected deletion notification response: %#v", items)
+	}
+	got := items[0].DeletionSnapshots[0].ScheduledDeletionAt
+	want := deletedAt.Add(7 * 24 * time.Hour)
+	if got == nil || got.Sub(want) > time.Second || want.Sub(*got) > time.Second {
+		t.Fatalf("current-policy deadline = %v, want %v", got, want)
+	}
+	if items[0].Actor != nil || items[0].ActorUserID != nil {
+		t.Fatalf("deletion notification must not expose administrator identity: %#v", items[0])
+	}
 }
 
 func TestBuildUserNotificationsReportsAssociationQueryFailureAsLoadError(t *testing.T) {

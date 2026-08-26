@@ -8,7 +8,7 @@ const source = await readFile(join(root, 'components/index/UserNotificationCente
 
 assert.match(
   source,
-  /type\s+NotificationTargetStatus\s*=\s*'available'\s*\|\s*'unavailable'\s*\|\s*'load_error'/,
+  /type\s+NotificationTargetStatus\s*=\s*'available'\s*\|\s*'unavailable'\s*\|\s*'load_error'\s*\|\s*'snapshot'/,
   'notification items should use the backend target status instead of guessing from missing content'
 )
 
@@ -18,7 +18,7 @@ assert.match(source, /暂时无法加载关联内容，请稍后重试。/, 'tec
 
 assert.match(
   source,
-  /v-if="isTargetUnavailable\(item\)"[\s\S]*?class="notification-target-card notification-target-card--unavailable"[\s\S]*?@click="markUnavailableRead\(item\)"[\s\S]*?v-else[\s\S]*?@click="jumpToTarget\(item\)"/,
+  /v-else-if="isTargetUnavailable\(item\)"[\s\S]*?class="notification-target-card notification-target-card--unavailable"[\s\S]*?@click="markUnavailableRead\(item\)"[\s\S]*?v-else[\s\S]*?@click="jumpToTarget\(item\)"/,
   'unavailable targets should render a dedicated non-jumping branch while available targets keep their jump action'
 )
 

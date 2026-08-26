@@ -22,7 +22,10 @@
             <p class="mt-0.5 text-xs leading-5" :class="theme?.mutedText || 'text-slate-500'">从移入回收站的时间开始计算；缩短期限会影响现有回收站笔记。</p>
           </div>
         </div>
-        <USelect v-model="retentionDays" class="w-full sm:w-48" :options="retentionOptions" :disabled="retentionLoading" aria-label="自动清理保留期限" @change="saveRetention" />
+        <div class="note-policy-controls">
+          <USelect v-model="retentionDays" class="w-full sm:w-48" :options="retentionOptions" :disabled="retentionLoading" aria-label="自动清理保留期限" @change="saveRetention" />
+          <label class="note-notify-toggle"><span>站长删除时通知作者</span><UToggle v-model="notifyByPrimary" :disabled="retentionLoading" @change="saveRetention" /></label>
+        </div>
       </div>
 
       <section class="note-filter-card" :class="theme?.border || 'border-slate-200 dark:border-slate-700'" aria-labelledby="note-filter-title">
@@ -167,6 +170,7 @@ const canChangePublishTime = computed(() => can('notes.change_publish_time'))
 const canPinGlobal = computed(() => can('notes.pin_global'))
 const isPrimaryAdmin = ref(false)
 const retentionDays = ref(0)
+const notifyByPrimary = ref(false)
 const retentionLoading = ref(false)
 const retentionOptions = [
   { label: '永不自动清理', value: 0 },
@@ -336,7 +340,10 @@ const loadRetentionSettings = async () => {
   isPrimaryAdmin.value = auth?.code === 1 && auth?.data?.is_primary_admin === true
   if (!isPrimaryAdmin.value) return
   const settings = await getRequest<any>('settings', undefined, { silent: true })
-  if (settings?.code === 1) retentionDays.value = Number(settings.data?.recycleBinRetentionDays || 0)
+  if (settings?.code === 1) {
+    retentionDays.value = Number(settings.data?.recycleBinRetentionDays || 0)
+    notifyByPrimary.value = settings.data?.notifyNoteDeletionByPrimary === true
+  }
 }
 const saveRetention = async () => {
   if (!isPrimaryAdmin.value) return
@@ -348,7 +355,7 @@ const saveRetention = async () => {
   }
   retentionLoading.value = true
   try {
-    const response = await putRequest<any>('settings', { recycleBinRetentionDays: next }, { silent: true })
+    const response = await putRequest<any>('settings', { recycleBinRetentionDays: next, notifyNoteDeletionByPrimary: notifyByPrimary.value }, { silent: true })
     if (response?.code === 1) toast.add({ title: '自动清理设置已保存', color: 'green' })
     else toast.add({ title: '自动清理设置保存失败', description: response?.msg || '请稍后重试', color: 'red' })
   } finally {
@@ -407,6 +414,18 @@ watch(() => props.recycleBin, () => { page.value = 1; clearSelection(); load(); 
   margin-top: 16px;
   padding: 12px;
   border-radius: 10px;
+}
+
+.note-policy-controls,
+.note-notify-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.note-notify-toggle {
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .note-filter-card {

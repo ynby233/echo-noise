@@ -46,6 +46,15 @@ func MigrateDB(db *gorm.DB) error {
 	if err := db.Where("capability IN ?", []string{"rss.view", "rss.manage", "content.view_hidden"}).Delete(&AdminCapabilityGrant{}).Error; err != nil {
 		return fmt.Errorf("remove retired capability grants: %w", err)
 	}
+	if err := db.Where("capability = ? AND user_id IN (?)", "comments.delete", db.Model(&AdminCapabilityGrant{}).Select("user_id").Where("capability = ?", "comments.trash")).
+		Delete(&AdminCapabilityGrant{}).Error; err != nil {
+		return fmt.Errorf("remove duplicate legacy comment delete grants: %w", err)
+	}
+	if err := db.Model(&AdminCapabilityGrant{}).
+		Where("capability = ?", "comments.delete").
+		Update("capability", "comments.trash").Error; err != nil {
+		return fmt.Errorf("migrate comment delete grants: %w", err)
+	}
 
 	// 使用事务进行初始化操作
 	if err := db.Transaction(func(tx *gorm.DB) error {

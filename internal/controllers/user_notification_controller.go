@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -44,28 +45,68 @@ type userNotificationCommentResponse struct {
 
 const (
 	userNotificationTargetStatusAvailable   = "available"
+	userNotificationTargetStatusSnapshot    = "snapshot"
 	userNotificationTargetStatusLoadError   = "load_error"
 	userNotificationTargetStatusUnavailable = "unavailable"
 )
 
 type userNotificationResponse struct {
-	ID              uint                             `json:"id"`
-	Type            string                           `json:"type"`
-	RecipientUserID uint                             `json:"recipient_user_id"`
-	ActorUserID     *uint                            `json:"actor_user_id,omitempty"`
-	Actor           *userNotificationActorResponse   `json:"actor,omitempty"`
-	MessageID       *uint                            `json:"message_id,omitempty"`
-	CommentID       *uint                            `json:"comment_id,omitempty"`
-	ParentCommentID *uint                            `json:"parent_comment_id,omitempty"`
-	Message         *userNotificationMessageResponse `json:"message,omitempty"`
-	Comment         *userNotificationCommentResponse `json:"comment,omitempty"`
-	ParentComment   *userNotificationCommentResponse `json:"parent_comment,omitempty"`
-	TargetStatus    string                           `json:"target_status"`
-	TargetTab       string                           `json:"target_tab"`
-	TargetURL       string                           `json:"target_url"`
-	Read            bool                             `json:"read"`
-	ReadAt          *time.Time                       `json:"read_at,omitempty"`
-	CreatedAt       time.Time                        `json:"created_at"`
+	ID                  uint                             `json:"id"`
+	Type                string                           `json:"type"`
+	RecipientUserID     uint                             `json:"recipient_user_id"`
+	ActorUserID         *uint                            `json:"actor_user_id,omitempty"`
+	Actor               *userNotificationActorResponse   `json:"actor,omitempty"`
+	MessageID           *uint                            `json:"message_id,omitempty"`
+	CommentID           *uint                            `json:"comment_id,omitempty"`
+	ParentCommentID     *uint                            `json:"parent_comment_id,omitempty"`
+	Message             *userNotificationMessageResponse `json:"message,omitempty"`
+	Comment             *userNotificationCommentResponse `json:"comment,omitempty"`
+	ParentComment       *userNotificationCommentResponse `json:"parent_comment,omitempty"`
+	TargetStatus        string                           `json:"target_status"`
+	TargetTab           string                           `json:"target_tab"`
+	TargetURL           string                           `json:"target_url"`
+	Read                bool                             `json:"read"`
+	ReadAt              *time.Time                       `json:"read_at,omitempty"`
+	CreatedAt           time.Time                        `json:"created_at"`
+	DeletionEvent       string                           `json:"deletion_event,omitempty"`
+	DeletionReason      string                           `json:"deletion_reason,omitempty"`
+	DeletionActorLabel  string                           `json:"deletion_actor_label,omitempty"`
+	DeletionSnapshots   []services.DeletionSnapshotItem  `json:"deletion_snapshots,omitempty"`
+	ScheduledDeletionAt *time.Time                       `json:"scheduled_deletion_at,omitempty"`
+	RestoredAt          *time.Time                       `json:"restored_at,omitempty"`
+}
+
+func deletionNotificationResponse(notification models.UserNotification) userNotificationResponse {
+	snapshots := []services.DeletionSnapshotItem{}
+	_ = json.Unmarshal([]byte(notification.DeletionSnapshotJSON), &snapshots)
+	var cfg models.SiteConfig
+	_ = database.DB.Table("site_configs").First(&cfg).Error
+	now := time.Now().UTC()
+	var earliest *time.Time
+	for i := range snapshots {
+		retention := cfg.CommentRecycleBinRetentionDays
+		if snapshots[i].TargetType == "note" {
+			retention = cfg.RecycleBinRetentionDays
+		}
+		deadline := services.CalculateRecycleDeadline(snapshots[i].DeletedAt, retention, now)
+		if notification.DeletionEvent == services.DeletionEventPermanentlyDeleted {
+			snapshots[i].ScheduledDeletionAt = nil
+		} else {
+			snapshots[i].ScheduledDeletionAt = deadline.ScheduledDeletionAt
+		}
+		if snapshots[i].ScheduledDeletionAt != nil && (earliest == nil || snapshots[i].ScheduledDeletionAt.Before(*earliest)) {
+			value := *snapshots[i].ScheduledDeletionAt
+			earliest = &value
+		}
+	}
+	return userNotificationResponse{
+		ID: notification.ID, Type: notification.Type, RecipientUserID: notification.RecipientUserID,
+		TargetStatus: userNotificationTargetStatusSnapshot, Read: notification.ReadAt != nil,
+		ReadAt: notification.ReadAt, CreatedAt: notification.CreatedAt,
+		DeletionEvent: notification.DeletionEvent, DeletionReason: notification.DeletionReason,
+		DeletionActorLabel: notification.DeletionActorLabel, DeletionSnapshots: snapshots,
+		ScheduledDeletionAt: earliest, RestoredAt: notification.RestoredAt,
+	}
 }
 
 func notificationPtrValue(ptr *uint) uint {
@@ -250,6 +291,10 @@ func buildVisibleUserNotifications(notifications []models.UserNotification, view
 	viewerIDPtr := viewerID
 	items := make([]userNotificationResponse, 0, len(notifications))
 	for _, notification := range notifications {
+		if notification.Type == models.UserNotificationTypeContentDeletion {
+			items = append(items, deletionNotificationResponse(notification))
+			continue
+		}
 		if notification.Type == models.UserNotificationTypeVoceChatCredentials || notification.Type == models.UserNotificationTypeVoceChatPasswordChanged || notification.Type == models.UserNotificationTypePasswordUpdateIncomplete {
 			items = append(items, notificationUnavailableResponse(notification, users, userNotificationTargetStatusUnavailable))
 			continue

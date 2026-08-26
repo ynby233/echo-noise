@@ -91,6 +91,13 @@ func ApplyMessageVisibilityForSave(message *models.Message) error {
 }
 
 func StoredMessageVisibility(message models.Message) string {
+	if message.IsTombstone && strings.TrimSpace(message.TombstoneVisibility) != "" {
+		visibility, ok := NormalizeMessageVisibility(message.TombstoneVisibility, true)
+		if ok {
+			return visibility
+		}
+		return MessageVisibilityPrivate
+	}
 	visibility, ok := NormalizeMessageVisibility(message.Visibility, message.Private)
 	if !ok {
 		if message.Private {
@@ -247,6 +254,9 @@ func GetMessageByID(id uint, showPrivate bool) (*models.Message, error) {
 	if message == nil {
 		return nil, fmt.Errorf("消息不存在")
 	}
+	if message.DeletedAt != nil || message.IsTombstone {
+		return nil, ErrMessageNotVisible
+	}
 	if !showPrivate && !CanViewMessage(*message, nil, false) {
 		return nil, fmt.Errorf("无权访问")
 	}
@@ -261,6 +271,40 @@ func GetMessageByIDForViewer(id uint, userID *uint, isAdmin bool) (*models.Messa
 	}
 	if message == nil {
 		return nil, fmt.Errorf("消息不存在")
+	}
+	if message.DeletedAt != nil && !message.IsTombstone {
+		return nil, ErrMessageNotVisible
+	}
+	if message.IsTombstone {
+		var comments []models.Comment
+		if err := database.DB.Where("message_id = ?", message.ID).Find(&comments).Error; err != nil {
+			return nil, err
+		}
+		scope, err := ResolveContentReadScope(database.DB, userID)
+		if err != nil {
+			return nil, err
+		}
+		messageForRead := *message
+		messageForRead.DeletedAt = nil
+		commentMap := CommentMap(comments)
+		visibleDescendant := false
+		for _, comment := range comments {
+			if comment.DeletedAt == nil && !comment.IsTombstone && scope.CanReadComment(messageForRead, comment, commentMap) {
+				visibleDescendant = true
+				break
+			}
+		}
+		if !visibleDescendant {
+			return nil, ErrMessageNotVisible
+		}
+		message.UserID = 0
+		message.Username = ""
+		message.Content = ""
+		message.ImageURL = ""
+		message.CanInteract = false
+		message.Visibility = StoredMessageVisibility(*message)
+		message.TombstoneVisibility = ""
+		return message, nil
 	}
 	if userID != nil && *userID != 0 && message.UserID != *userID && StoredMessageVisibility(*message) == MessageVisibilityContacts {
 		_ = EnsureVoceChatContactCacheForAuthor(message.UserID)
@@ -602,6 +646,9 @@ func UpdateMessage(messageID uint, content *string, private *bool, visibility *s
 	}
 	if message == nil {
 		return nil, fmt.Errorf("消息不存在")
+	}
+	if message.DeletedAt != nil || message.IsTombstone {
+		return nil, ErrMessageNotVisible
 	}
 	if content != nil {
 		c := strings.TrimSpace(*content)

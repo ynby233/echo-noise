@@ -9,6 +9,7 @@
   "site-github-card": "site_settings.view",
   "site-music": "site_settings.view",
   "comments": "comments.view",
+  "comment-recycle-bin": "comments.recycle_bin.view",
   "notes": "notes.view",
   "recycle-bin": "notes.recycle_bin.view",
   "email": "email.view",

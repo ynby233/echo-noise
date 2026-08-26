@@ -17,11 +17,11 @@
         </button>
       </div>
       <div v-if="!props.replyInputOnly && sortedRootComments.length" class="comments-list">
-        <div v-for="c in visibleRootComments" :key="c.id" class="comment-item" :class="rootCardClass" :data-comment-id="c.id">
-          <img class="comment-avatar avatar-img" :src="commentAvatar(c)" alt="avatar" @error="avatarOnError" />
+        <div v-for="c in visibleRootComments" :key="c.id" class="comment-item" :class="[rootCardClass, { 'comment-tombstone': c.is_tombstone }]" :data-comment-id="c.id">
+          <img v-if="!c.is_tombstone" class="comment-avatar avatar-img" :src="commentAvatar(c)" alt="avatar" @error="avatarOnError" />
           <div class="comment-body">
             <div class="comment-header" :class="themeText">
-              <span class="comment-author">{{ commentAuthorName(c) }}</span>
+              <span class="comment-author">{{ c.is_tombstone ? '原互动已永久删除' : commentAuthorName(c) }}</span>
             </div>
             <div v-if="editingId === c.id" class="edit-card">
               <textarea ref="editingTaRef" v-model="editingContent" :class="textareaClass" rows="3" placeholder="编辑内容" />
@@ -31,7 +31,7 @@
                 </a>
               </div>
               <div class="comment-editor-toolbar edit-toolbar">
-                <div class="visibility-picker comment-visibility-picker toolbar-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :class="{ 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('edit', c.id) }" :data-tooltip="commentVisibilityTooltipFor('edit', c.id)" @mousedown.stop>
+                <div v-if="canChangeCommentVisibility(c)" class="visibility-picker comment-visibility-picker toolbar-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :class="{ 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('edit', c.id) }" :data-tooltip="commentVisibilityTooltipFor('edit', c.id)" @mousedown.stop>
                   <UIcon :name="visibilityIconFor('edit')" class="w-5 h-5" />
                   <button type="button" class="comment-visibility-trigger" aria-label="可见范围" aria-haspopup="listbox" :aria-expanded="isCommentVisibilityMenuOpen('edit', c.id)" @click="toggleCommentVisibilityMenu('edit', c.id, $event)">
                     <span>{{ selectedVisibilityLabelFor('edit') }}</span>
@@ -56,6 +56,7 @@
                 <button class="submit-btn" :class="submitBtnClass" :disabled="isEditingSubmitting || !editingContent.trim()" @click="submitEdit">保存</button>
               </div>
             </div>
+            <div v-else-if="c.is_tombstone" class="comment-tombstone-copy"><UIcon name="i-heroicons-archive-box-x-mark" />此处仅保留回复关系，原内容与作者信息已清除。</div>
             <div v-else class="comment-content" :class="themeText"><MarkdownRenderer :content="c.content" /></div>
             <div class="comment-footer">
               <span class="comment-time">{{ formatCommentTime(c.created_at) }}</span>
@@ -64,17 +65,17 @@
                 <UIcon :name="visibilityTag(c.visibility).icon" class="w-4 h-4" />
               </span>
             </div>
-            <div class="comment-actions">
+            <div v-if="!c.is_tombstone" class="comment-actions">
               <button v-if="canReplyToComment(c)" class="action-btn" @click="startReply(c.id, commentAuthorName(c))">回复</button>
               <button v-if="canEditComment(c)" class="action-btn" @click="startEdit(c)">编辑</button>
               <button v-if="canDeleteComment(c)" class="action-btn delete-action-btn" @click="confirmDelete(c.id)">删除</button>
             </div>
             <div v-if="childrenMap[c.id]?.length" class="mt-2 replies-list">
-              <div v-for="child in visibleChildren(c.id)" :key="child.id" class="comment-item child" :class="childCardClass" :data-comment-id="child.id">
-                <img class="comment-avatar avatar-img" :src="commentAvatar(child)" alt="avatar" @error="avatarOnError" />
+              <div v-for="child in visibleChildren(c.id)" :key="child.id" class="comment-item child" :class="[childCardClass, { 'comment-tombstone': child.is_tombstone }]" :data-comment-id="child.id">
+                <img v-if="!child.is_tombstone" class="comment-avatar avatar-img" :src="commentAvatar(child)" alt="avatar" @error="avatarOnError" />
                 <div class="comment-body">
                   <div class="comment-header" :class="themeText">
-                    <span class="comment-author">{{ commentAuthorName(child) }}</span>
+                    <span class="comment-author">{{ child.is_tombstone ? '原互动已永久删除' : commentAuthorName(child) }}</span>
                   </div>
                   <div v-if="editingId === child.id" class="edit-card">
                     <textarea ref="editingTaRef" v-model="editingContent" :class="textareaClass" rows="3" placeholder="编辑内容" />
@@ -84,7 +85,7 @@
                       </a>
                     </div>
                     <div class="comment-editor-toolbar edit-toolbar">
-                      <div class="visibility-picker comment-visibility-picker toolbar-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :class="{ 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('edit', child.id) }" :data-tooltip="commentVisibilityTooltipFor('edit', child.id)" @mousedown.stop>
+                      <div v-if="canChangeCommentVisibility(child)" class="visibility-picker comment-visibility-picker toolbar-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :class="{ 'nw-tooltip-suppressed': isCommentVisibilityMenuOpen('edit', child.id) }" :data-tooltip="commentVisibilityTooltipFor('edit', child.id)" @mousedown.stop>
                         <UIcon :name="visibilityIconFor('edit')" class="w-5 h-5" />
                         <button type="button" class="comment-visibility-trigger" aria-label="可见范围" aria-haspopup="listbox" :aria-expanded="isCommentVisibilityMenuOpen('edit', child.id)" @click="toggleCommentVisibilityMenu('edit', child.id, $event)">
                           <span>{{ selectedVisibilityLabelFor('edit') }}</span>
@@ -109,6 +110,7 @@
                       <button class="submit-btn" :class="submitBtnClass" :disabled="isEditingSubmitting || !editingContent.trim()" @click="submitEdit">保存</button>
                     </div>
                   </div>
+                  <div v-else-if="child.is_tombstone" class="comment-tombstone-copy"><UIcon name="i-heroicons-archive-box-x-mark" />此处仅保留回复关系，原内容与作者信息已清除。</div>
                   <div v-else class="comment-content" :class="themeText"><MarkdownRenderer :content="child.content" /></div>
                   <div class="comment-footer">
                     <span class="comment-time">{{ formatCommentTime(child.created_at) }}</span>
@@ -116,7 +118,7 @@
                       <UIcon :name="visibilityTag(child.visibility).icon" class="w-4 h-4" />
                     </span>
                   </div>
-                  <div class="comment-actions">
+                  <div v-if="!child.is_tombstone" class="comment-actions">
                     <button v-if="canReplyToComment(child)" class="action-btn" @click="startReply(child.id, commentAuthorName(child))">回复</button>
                     <button v-if="canEditComment(child)" class="action-btn" @click="startEdit(child)">编辑</button>
                     <button v-if="canDeleteComment(child)" class="action-btn delete-action-btn" @click="confirmDelete(child.id)">删除</button>
@@ -286,12 +288,12 @@
         </div>
       </template>
       <div class="space-y-3">
-        <div class="text-sm">此操作不可恢复，确认删除该评论？</div>
+        <div class="text-sm">确认将该互动移入回收站？其仍在发布者个人回收站中时可按规则恢复。</div>
         <div class="text-sm">作者：{{ pendingDelete ? commentAuthorName(pendingDelete) : '当前账号' }}</div>
         <div class="text-sm break-words">内容片段：{{ deletePreviewText }}</div>
         <label class="flex items-center gap-2 text-sm">
           <input type="checkbox" v-model="confirmAcknowledged" />
-          我已知晓此操作不可恢复
+          我已确认将该互动移入回收站
         </label>
       </div>
       <template #footer>
@@ -380,7 +382,8 @@ const commentOwnerId = (c: any) => Number(c?.user_id || c?.UserID || c?.user?.id
 const isCommentOwner = (c: any) => !!currentUserId.value && commentOwnerId(c) === currentUserId.value
 const isPrimaryAdminComment = (c: any) => commentOwnerId(c) === 1
 const canEditComment = (c: any) => isCommentOwner(c) || (!isPrimaryAdminComment(c) && can('comments.edit'))
-const canDeleteComment = (c: any) => isCommentOwner(c) || (!isPrimaryAdminComment(c) && can('comments.delete'))
+const canDeleteComment = (c: any) => !c?.is_tombstone && (isCommentOwner(c) || (!isPrimaryAdminComment(c) && can('comments.trash')))
+const canChangeCommentVisibility = (c: any) => isCommentOwner(c) || (!isPrimaryAdminComment(c) && can('comments.change_visibility'))
 const canShowCommentVisibility = (c: any) => shouldShowVisibilityBadge({
   visibility: c?.visibility,
   isAdmin: isAdmin.value,
@@ -889,7 +892,7 @@ const submitEdit = async () => {
 
 const confirmDelete = (id: number) => {
   deleteId.value = id
-  if (confirm('确认删除该评论吗？此操作不可恢复。')) {
+  if (confirm('确认将该互动移入回收站吗？其仍在发布者个人回收站中时可按规则恢复。')) {
     confirmAcknowledged.value = false
     showDeleteConfirm.value = true
   } else {
@@ -906,10 +909,10 @@ const doDelete = async () => {
     }
     const res = await deleteRequest<any>(`messages/${props.messageId}/comments/${deleteId.value}`, undefined, { credentials: 'include' })
     if (res && res.code === 1) {
-      comments.value = comments.value.filter(c => c.id !== deleteId.value)
+      await load()
       dispatchCommentCount()
       if (editingId.value === deleteId.value) cancelEdit()
-      useToast().add({ title: '已删除', color: 'green' })
+      useToast().add({ title: '已移入回收站', color: 'green' })
       scrollToMessage()
     } else {
       useToast().add({ title: '删除失败', description: res?.msg, color: 'red' })
@@ -1592,6 +1595,9 @@ defineExpose({
 .comment-body { flex:1; min-width:0; }
 .comment-header { display:flex; align-items:center; justify-content:space-between; font-weight:600; margin-bottom:4px; }
 .comment-content { margin:4px 0 6px; }
+.comment-tombstone { border-style:dashed; opacity:.88; background:color-mix(in srgb, currentColor 4%, transparent) !important; }
+.comment-tombstone-copy { display:flex; align-items:center; gap:7px; margin:5px 0 7px; color:#64748b; font-size:12px; line-height:1.55; }
+.comment-tombstone-copy svg { width:16px; height:16px; flex:0 0 auto; }
 .comment-footer { display:flex; align-items:center; gap:10px; font-size:12px; opacity:.8; }
 .comment-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
 .action-btn { min-height:30px; padding:0 10px; border:1px solid var(--comment-toolbar-border); border-radius:10px; background:var(--comment-toolbar-control-bg); color:var(--comment-toolbar-text); font-size:12px; font-weight:650; line-height:1; transition:background-color .18s ease, border-color .18s ease, color .18s ease, transform .18s ease; }

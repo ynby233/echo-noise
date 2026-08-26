@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"sort"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/repository"
+	"github.com/rcy1314/echo-noise/internal/services"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -596,7 +598,7 @@ func TestUserCannotUpdateOthersComment(t *testing.T) {
 	}
 }
 
-func TestOwnerCanDeleteOwnCommentButNotOthers(t *testing.T) {
+func TestContentOwnerCanTrashOwnAndOthersInteractionsUnderOwnNote(t *testing.T) {
 	db, r, user, msg := setupCommentAccountTest(t)
 	other := models.User{Username: "bob", Password: ""}
 	if err := db.Create(&other).Error; err != nil {
@@ -622,23 +624,50 @@ func TestOwnerCanDeleteOwnCommentButNotOthers(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected owner delete 200, got %d: %s", w.Code, w.Body.String())
 	}
-	var count int64
-	if err := db.Model(&models.Comment{}).Where("id = ?", ownComment.ID).Count(&count).Error; err != nil {
-		t.Fatalf("count own comment: %v", err)
+	var trashed models.Comment
+	if err := db.First(&trashed, ownComment.ID).Error; err != nil {
+		t.Fatalf("load own comment from recycle bin: %v", err)
 	}
-	if count != 0 {
-		t.Fatalf("expected own comment deleted, got count %d", count)
+	if trashed.DeletedAt == nil || trashed.DeletionReasonCode != services.CommentDeletionReasonSelf {
+		t.Fatalf("expected own comment in personal recycle bin, got %#v", trashed)
 	}
 
 	w = performCommentJSONRequest(r, http.MethodDelete, msg.ID, otherComment.ID, nil)
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("expected other delete 403, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected content-owner cleanup 200, got %d: %s", w.Code, w.Body.String())
 	}
-	if err := db.Model(&models.Comment{}).Where("id = ?", otherComment.ID).Count(&count).Error; err != nil {
-		t.Fatalf("count other comment: %v", err)
+	var otherTrashed models.Comment
+	if err := db.First(&otherTrashed, otherComment.ID).Error; err != nil {
+		t.Fatalf("load other comment from recycle bin: %v", err)
 	}
-	if count != 1 {
-		t.Fatalf("expected other comment retained, got count %d", count)
+	if otherTrashed.DeletedAt == nil || otherTrashed.DeletionReasonCode != services.CommentDeletionReasonOwnerCleanup {
+		t.Fatalf("expected owner-cleanup reason, got %#v", otherTrashed)
+	}
+}
+
+func TestPersonalPurgeResponseDoesNotDiscloseAdministrativeRetention(t *testing.T) {
+	db, r, _, message := setupCommentAccountTest(t)
+	user := models.User{Username: "personal-purge-user"}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatalf("create ordinary purge user: %v", err)
+	}
+	r.Use(func(c *gin.Context) {
+		c.Set("user_id", user.ID)
+		c.Next()
+	})
+	r.DELETE("/user/recycle-bin/comments/:id", PurgePersonalComment)
+	comment := models.Comment{MessageID: message.ID, UserID: &user.ID, Content: "private retention detail", Visibility: "public"}
+	if err := db.Create(&comment).Error; err != nil {
+		t.Fatalf("create comment: %v", err)
+	}
+	if _, err := services.TrashCommentTree(db, user.ID, comment.ID, services.CommentTrashRequest{ReasonCode: services.CommentDeletionReasonSelf}); err != nil {
+		t.Fatalf("trash comment: %v", err)
+	}
+	request := httptest.NewRequest(http.MethodDelete, "/user/recycle-bin/comments/"+strconv.FormatUint(uint64(comment.ID), 10), nil)
+	response := httptest.NewRecorder()
+	r.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "retained") || strings.Contains(response.Body.String(), "管理副本") {
+		t.Fatalf("personal purge response leaked administrative retention: status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 

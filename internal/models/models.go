@@ -26,26 +26,29 @@ type UserStatus struct {
 }
 
 type Message struct {
-	ID               uint       `gorm:"primaryKey;index:idx_msg_global_pin_order,priority:3;index:idx_msg_personal_pin_order,priority:4" json:"id"`
-	Content          string     `gorm:"type:text;not null" json:"content"`
-	Username         string     `gorm:"type:varchar(100)" json:"username,omitempty"`
-	ImageURL         string     `gorm:"type:text" json:"image_url,omitempty"`
-	Private          bool       `gorm:"default:false" json:"private"`
-	Visibility       string     `gorm:"type:varchar(20);not null;default:public;index" json:"visibility"`
-	UserID           uint       `gorm:"not null;index;index:idx_msg_personal_pin_order,priority:1" json:"user_id"`
-	IsGuestbook      bool       `gorm:"default:false;index" json:"-"`
-	CreatedAt        time.Time  `gorm:"index:idx_msg_global_pin_order,priority:2;index:idx_msg_personal_pin_order,priority:3" json:"created_at"`
-	DeletedAt        *time.Time `gorm:"index" json:"-"`
-	DeletedByUserID  *uint      `gorm:"index" json:"-"`
-	DeletedReason    string     `gorm:"type:varchar(255)" json:"-"`
-	Notify           bool       `gorm:"default:false" json:"notify"` // 新增推送通知字段
-	Pinned           bool       `gorm:"default:false;index:idx_msg_global_pin_order,priority:1" json:"pinned"`
-	PinnedAt         *time.Time `gorm:"index" json:"-"`
-	PersonalPinned   bool       `gorm:"default:false;index:idx_msg_personal_pin_order,priority:2" json:"personal_pinned"`
-	PersonalPinnedAt *time.Time `gorm:"index" json:"-"`
-	LikeCount        int        `gorm:"default:0" json:"like_count"`
-	Liked            bool       `gorm:"-" json:"liked"`
-	CanInteract      bool       `gorm:"-" json:"can_interact"`
+	ID                  uint       `gorm:"primaryKey;index:idx_msg_global_pin_order,priority:3;index:idx_msg_personal_pin_order,priority:4" json:"id"`
+	Content             string     `gorm:"type:text;not null" json:"content"`
+	Username            string     `gorm:"type:varchar(100)" json:"username,omitempty"`
+	ImageURL            string     `gorm:"type:text" json:"image_url,omitempty"`
+	Private             bool       `gorm:"default:false" json:"private"`
+	Visibility          string     `gorm:"type:varchar(20);not null;default:public;index" json:"visibility"`
+	UserID              uint       `gorm:"not null;index;index:idx_msg_personal_pin_order,priority:1" json:"user_id"`
+	IsGuestbook         bool       `gorm:"default:false;index" json:"-"`
+	CreatedAt           time.Time  `gorm:"index:idx_msg_global_pin_order,priority:2;index:idx_msg_personal_pin_order,priority:3" json:"created_at"`
+	DeletedAt           *time.Time `gorm:"index" json:"-"`
+	DeletedByUserID     *uint      `gorm:"index" json:"-"`
+	DeletedReason       string     `gorm:"type:varchar(255)" json:"-"`
+	IsTombstone         bool       `gorm:"default:false;index" json:"is_tombstone,omitempty"`
+	TombstonedAt        *time.Time `gorm:"index" json:"-"`
+	TombstoneVisibility string     `gorm:"type:varchar(20)" json:"-"`
+	Notify              bool       `gorm:"default:false" json:"notify"` // 新增推送通知字段
+	Pinned              bool       `gorm:"default:false;index:idx_msg_global_pin_order,priority:1" json:"pinned"`
+	PinnedAt            *time.Time `gorm:"index" json:"-"`
+	PersonalPinned      bool       `gorm:"default:false;index:idx_msg_personal_pin_order,priority:2" json:"personal_pinned"`
+	PersonalPinnedAt    *time.Time `gorm:"index" json:"-"`
+	LikeCount           int        `gorm:"default:0" json:"like_count"`
+	Liked               bool       `gorm:"-" json:"liked"`
+	CanInteract         bool       `gorm:"-" json:"can_interact"`
 }
 
 type CloudAttachmentObject struct {
@@ -120,16 +123,26 @@ type CommentUserInfo struct {
 }
 
 type Comment struct {
-	ID          uint             `gorm:"primaryKey" json:"id"`
-	MessageID   uint             `gorm:"index;not null" json:"message_id"`
-	UserID      *uint            `gorm:"index" json:"user_id,omitempty"`
-	User        *CommentUserInfo `gorm:"-" json:"user,omitempty"`
-	CanInteract bool             `gorm:"-" json:"can_interact"`
-	Content     string           `gorm:"type:text;not null" json:"content"`
-	Visibility  string           `gorm:"type:varchar(20);not null;default:public;index" json:"visibility"`
-	ParentID    *uint            `json:"parent_id"`
-	CreatedAt   time.Time        `json:"created_at"`
-	UpdatedAt   time.Time        `json:"updated_at"`
+	ID                       uint             `gorm:"primaryKey" json:"id"`
+	MessageID                uint             `gorm:"index;not null" json:"message_id"`
+	UserID                   *uint            `gorm:"index" json:"user_id,omitempty"`
+	User                     *CommentUserInfo `gorm:"-" json:"user,omitempty"`
+	CanInteract              bool             `gorm:"-" json:"can_interact"`
+	Content                  string           `gorm:"type:text;not null" json:"content"`
+	Visibility               string           `gorm:"type:varchar(20);not null;default:public;index" json:"visibility"`
+	ParentID                 *uint            `json:"parent_id"`
+	DeletedAt                *time.Time       `gorm:"index" json:"deleted_at,omitempty"`
+	DeletedByUserID          *uint            `gorm:"index" json:"deleted_by_user_id,omitempty"`
+	DeletionReasonCode       string           `gorm:"type:varchar(40);index" json:"deletion_reason_code,omitempty"`
+	DeletedAncestorCommentID *uint            `gorm:"index" json:"deleted_ancestor_comment_id,omitempty"`
+	DeletedAncestorMessageID *uint            `gorm:"index" json:"deleted_ancestor_message_id,omitempty"`
+	DeletionBatchID          string           `gorm:"type:varchar(64);index" json:"deletion_batch_id,omitempty"`
+	UserPurgedAt             *time.Time       `gorm:"index" json:"user_purged_at,omitempty"`
+	IsTombstone              bool             `gorm:"default:false;index" json:"is_tombstone,omitempty"`
+	TombstonedAt             *time.Time       `gorm:"index" json:"tombstoned_at,omitempty"`
+	TombstoneVisibility      string           `gorm:"type:varchar(20)" json:"-"`
+	CreatedAt                time.Time        `json:"created_at"`
+	UpdatedAt                time.Time        `json:"updated_at"`
 }
 
 const (
@@ -140,19 +153,27 @@ const (
 	UserNotificationTypeVoceChatCredentials      = "vocechat_credentials"
 	UserNotificationTypeVoceChatPasswordChanged  = "vocechat_password_changed"
 	UserNotificationTypePasswordUpdateIncomplete = "password_update_incomplete"
+	UserNotificationTypeContentDeletion          = "content_deletion"
 )
 
 type UserNotification struct {
-	ID              uint       `gorm:"primaryKey" json:"id"`
-	RecipientUserID uint       `gorm:"not null;index" json:"recipient_user_id"`
-	ActorUserID     *uint      `gorm:"index" json:"actor_user_id,omitempty"`
-	Type            string     `gorm:"type:varchar(30);not null;index" json:"type"`
-	MessageID       *uint      `gorm:"index" json:"message_id,omitempty"`
-	CommentID       *uint      `gorm:"index" json:"comment_id,omitempty"`
-	ParentCommentID *uint      `gorm:"index" json:"parent_comment_id,omitempty"`
-	ReadAt          *time.Time `gorm:"index" json:"read_at,omitempty"`
-	CreatedAt       time.Time  `gorm:"index" json:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at"`
+	ID                   uint       `gorm:"primaryKey" json:"id"`
+	RecipientUserID      uint       `gorm:"not null;index" json:"recipient_user_id"`
+	ActorUserID          *uint      `gorm:"index" json:"actor_user_id,omitempty"`
+	Type                 string     `gorm:"type:varchar(30);not null;index" json:"type"`
+	MessageID            *uint      `gorm:"index" json:"message_id,omitempty"`
+	CommentID            *uint      `gorm:"index" json:"comment_id,omitempty"`
+	ParentCommentID      *uint      `gorm:"index" json:"parent_comment_id,omitempty"`
+	DeletionEvent        string     `gorm:"type:varchar(30);index" json:"deletion_event,omitempty"`
+	DeletionReason       string     `gorm:"type:varchar(40);index" json:"deletion_reason,omitempty"`
+	DeletionBatchID      string     `gorm:"type:varchar(64);index" json:"deletion_batch_id,omitempty"`
+	DeletionActorLabel   string     `gorm:"type:varchar(191)" json:"deletion_actor_label,omitempty"`
+	DeletionSnapshotJSON string     `gorm:"type:text" json:"deletion_snapshot_json,omitempty"`
+	ScheduledDeletionAt  *time.Time `gorm:"index" json:"scheduled_deletion_at,omitempty"`
+	RestoredAt           *time.Time `gorm:"index" json:"restored_at,omitempty"`
+	ReadAt               *time.Time `gorm:"index" json:"read_at,omitempty"`
+	CreatedAt            time.Time  `gorm:"index" json:"created_at"`
+	UpdatedAt            time.Time  `json:"updated_at"`
 }
 
 type PasswordAlertCleanupTask struct {
@@ -359,16 +380,19 @@ type SiteConfig struct {
 	Version             int    `json:"version"`
 	// RecycleBinRetentionDays controls automatic permanent deletion of notes.
 	// Zero disables automatic cleanup; supported values are 7, 30, 90, 180 and 365.
-	RecycleBinRetentionDays int    `gorm:"default:0" json:"recycleBinRetentionDays"`
-	SmtpEnabled             bool   `gorm:"default:false" json:"smtpEnabled"`
-	SmtpDriver              string `gorm:"type:varchar(50)" json:"smtpDriver"`
-	SmtpHost                string `gorm:"type:varchar(191)" json:"smtpHost"`
-	SmtpPort                int    `json:"smtpPort"`
-	SmtpUser                string `gorm:"type:varchar(191)" json:"smtpUser"`
-	SmtpPass                string `gorm:"type:varchar(191)" json:"smtpPass"`
-	SmtpFrom                string `gorm:"type:varchar(191)" json:"smtpFrom"`
-	SmtpEncryption          string `gorm:"type:varchar(20)" json:"smtpEncryption"`
-	SmtpTLS                 bool   `gorm:"default:false" json:"smtpTLS"`
+	RecycleBinRetentionDays        int    `gorm:"default:0" json:"recycleBinRetentionDays"`
+	CommentRecycleBinRetentionDays int    `gorm:"default:0" json:"commentRecycleBinRetentionDays"`
+	NotifyNoteDeletionByPrimary    bool   `gorm:"default:false" json:"notifyNoteDeletionByPrimary"`
+	NotifyCommentDeletionByPrimary bool   `gorm:"default:false" json:"notifyCommentDeletionByPrimary"`
+	SmtpEnabled                    bool   `gorm:"default:false" json:"smtpEnabled"`
+	SmtpDriver                     string `gorm:"type:varchar(50)" json:"smtpDriver"`
+	SmtpHost                       string `gorm:"type:varchar(191)" json:"smtpHost"`
+	SmtpPort                       int    `json:"smtpPort"`
+	SmtpUser                       string `gorm:"type:varchar(191)" json:"smtpUser"`
+	SmtpPass                       string `gorm:"type:varchar(191)" json:"smtpPass"`
+	SmtpFrom                       string `gorm:"type:varchar(191)" json:"smtpFrom"`
+	SmtpEncryption                 string `gorm:"type:varchar(20)" json:"smtpEncryption"`
+	SmtpTLS                        bool   `gorm:"default:false" json:"smtpTLS"`
 	// VoceChat 外挂配置
 	VoceChatEnabled                  bool       `gorm:"default:false"`
 	VoceChatBaseURL                  string     `gorm:"type:varchar(191)"`
