@@ -552,6 +552,7 @@ func registerCommentManagementRoutes(group *gin.RouterGroup) {
 	group.GET("/user/recycle-bin/comments", controllers.ListPersonalCommentRecycleBin)
 	group.POST("/user/recycle-bin/comments/:id/restore", controllers.RestorePersonalComment)
 	group.DELETE("/user/recycle-bin/comments/:id", controllers.PurgePersonalComment)
+	group.GET("/user/notes", controllers.ListPersonalNotes)
 	group.GET("/user/recycle-bin/notes", controllers.ListPersonalNoteRecycleBin)
 	group.POST("/user/recycle-bin/notes/:id/restore", controllers.RestorePersonalNote)
 }

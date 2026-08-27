@@ -68,6 +68,35 @@ func TestNoteLifecycleTrashRestoreIsMutuallyExclusive(t *testing.T) {
 	}
 }
 
+func TestListPersonalMessagesReturnsOnlyActorsActiveNotes(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	author := mustCreateUser(t, models.User{Username: "personal-notes-author"})
+	other := mustCreateUser(t, models.User{Username: "personal-notes-other"})
+	active := models.Message{Content: "active personal note", Username: author.Username, UserID: author.ID, Visibility: MessageVisibilityPrivate}
+	trashed := models.Message{Content: "trashed personal note", Username: author.Username, UserID: author.ID, Visibility: MessageVisibilityPublic}
+	foreign := models.Message{Content: "foreign note", Username: other.Username, UserID: other.ID, Visibility: MessageVisibilityPublic}
+	guestbook := models.Message{Content: "guestbook carrier", Username: author.Username, UserID: author.ID, Visibility: MessageVisibilityPublic, IsGuestbook: true}
+	for _, message := range []*models.Message{&active, &trashed, &foreign, &guestbook} {
+		if err := db.Create(message).Error; err != nil {
+			t.Fatalf("create message: %v", err)
+		}
+	}
+	if err := TrashMessage(db, author.ID, trashed.ID, "author request"); err != nil {
+		t.Fatalf("trash personal message: %v", err)
+	}
+
+	result, err := ListPersonalMessages(db, author.ID, NoteManagementFilter{Page: 1, PageSize: 20})
+	if err != nil {
+		t.Fatalf("list personal messages: %v", err)
+	}
+	if result.Total != 1 || len(result.Items) != 1 || result.Items[0].ID != active.ID {
+		t.Fatalf("personal messages = %#v, want only active note %d", result, active.ID)
+	}
+	if result.Items[0].Visibility != MessageVisibilityPrivate {
+		t.Fatalf("personal note visibility = %q, want %q", result.Items[0].Visibility, MessageVisibilityPrivate)
+	}
+}
+
 func TestPrimaryAdminCanTrashDelegatedPrivateNoteContainingPrimaryComment(t *testing.T) {
 	db := setupUserServiceTestDB(t)
 	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "primary-trash", IsAdmin: true})

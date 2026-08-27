@@ -74,14 +74,14 @@
       </div>
 
       <div class="note-table-shell" :class="theme?.border || 'border-slate-200 dark:border-slate-700'">
-        <table class="note-table min-w-[1040px] w-full table-fixed text-sm">
+        <table class="note-table min-w-[1160px] w-full table-fixed text-sm">
           <colgroup>
             <col class="w-12" />
             <col />
             <col class="w-24" />
             <col class="w-28" />
             <col class="w-44" />
-            <col class="w-[22rem]" />
+            <col class="w-[30rem]" />
           </colgroup>
           <thead :class="theme?.subtleBg || 'bg-slate-50 dark:bg-slate-800/60'">
           <tr>
@@ -512,6 +512,11 @@ watch(() => props.recycleBin, () => { page.value = 1; clearSelection(); load(); 
   gap: 4px;
 }
 
+.note-row-actions {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
 .note-table-shell {
   overflow-x: auto;
   border-width: 1px;
@@ -608,8 +613,7 @@ watch(() => props.recycleBin, () => { page.value = 1; clearSelection(); load(); 
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .note-selection-actions,
-  .note-row-actions {
+  .note-selection-actions {
     justify-content: flex-start;
   }
 }

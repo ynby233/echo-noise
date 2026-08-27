@@ -34,6 +34,7 @@
     "test:message-visibility": "node scripts/message-visibility.test.mjs",
     "test:visibility-badges": "node scripts/visibility-badge-policy.test.mjs",
     "test:user-interface-preferences": "node scripts/user-interface-preferences.test.mjs",
+    "test:personal-content-navigation": "node scripts/personal-content-navigation.test.mjs",
     "test:primary-admin-vocechat-binding": "node scripts/primary-admin-vocechat-binding.test.mjs",
     "test:runtime-policy-panel": "node scripts/runtime-policy-panel.test.mjs",
     "test:message-edit-attachment": "node scripts/message-edit-attachment.test.mjs",

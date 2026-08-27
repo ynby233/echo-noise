@@ -613,7 +613,7 @@ func ListRecycleBinMessages(db *gorm.DB, actorID uint, filter NoteManagementFilt
 
 func ListPersonalRecycleBinMessages(db *gorm.DB, actorID uint, filter NoteManagementFilter, now time.Time) (NoteManagementPageResult, error) {
 	filter.Page, filter.PageSize = normalizeNoteManagementPagination(filter.Page, filter.PageSize)
-	query := db.Model(&models.Message{}).Where("user_id = ? AND deleted_at IS NOT NULL AND is_tombstone = ?", actorID, false)
+	query := db.Model(&models.Message{}).Where("user_id = ? AND deleted_at IS NOT NULL AND is_tombstone = ? AND is_guestbook = ?", actorID, false, false)
 	if strings.TrimSpace(filter.Keyword) != "" {
 		query = query.Where("content LIKE ?", "%"+strings.TrimSpace(filter.Keyword)+"%")
 	}
@@ -632,6 +632,28 @@ func ListPersonalRecycleBinMessages(db *gorm.DB, actorID uint, filter NoteManage
 		item.DeletedByUserID = nil
 		item.RecycleDeadline = CalculateRecycleDeadline(message.DeletedAt, noteRetention, now)
 		items = append(items, item)
+	}
+	return NoteManagementPageResult{Total: total, Items: items}, nil
+}
+
+func ListPersonalMessages(db *gorm.DB, actorID uint, filter NoteManagementFilter) (NoteManagementPageResult, error) {
+	filter.Page, filter.PageSize = normalizeNoteManagementPagination(filter.Page, filter.PageSize)
+	query := db.Model(&models.Message{}).Where("user_id = ? AND deleted_at IS NULL AND is_tombstone = ? AND is_guestbook = ?", actorID, false, false)
+	if strings.TrimSpace(filter.Keyword) != "" {
+		query = query.Where("content LIKE ?", "%"+strings.TrimSpace(filter.Keyword)+"%")
+	}
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return NoteManagementPageResult{}, err
+	}
+	var messages []models.Message
+	if err := query.Order("created_at DESC, id DESC").Limit(filter.PageSize).Offset((filter.Page - 1) * filter.PageSize).Find(&messages).Error; err != nil {
+		return NoteManagementPageResult{}, err
+	}
+	ApplyMessageViewerState(messages, &actorID)
+	items := make([]NoteManagementItem, 0, len(messages))
+	for _, message := range messages {
+		items = append(items, noteManagementItem(message))
 	}
 	return NoteManagementPageResult{Total: total, Items: items}, nil
 }

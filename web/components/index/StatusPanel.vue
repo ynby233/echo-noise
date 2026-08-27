@@ -15,13 +15,25 @@
         </div>
         <nav class="flex-1 overflow-y-auto px-2 py-3 space-y-2">
           <div v-for="group in adminNavGroups" :key="group.key" class="admin-nav-group">
-            <div class="admin-nav-group-btn admin-nav-group-btn-open cursor-pointer" :class="[sidebarCollapsed ? 'justify-center' : '']" @click="onNavGroupClick(group)">
+            <button
+              type="button"
+              class="admin-nav-group-btn cursor-pointer"
+              :class="[navGroupOpen[group.key] ? 'admin-nav-group-btn-open' : '', sidebarCollapsed ? 'justify-center' : '']"
+              :aria-expanded="navGroupOpen[group.key]"
+              @click="onNavGroupClick(group)"
+            >
               <span class="flex items-center gap-2">
                 <UIcon :name="group.icon" class="w-5 h-5" />
                 <span v-show="!sidebarCollapsed" class="text-sm font-semibold tracking-wide">{{ group.label }}</span>
               </span>
-            </div>
-            <div v-if="!sidebarCollapsed" class="mt-2 space-y-1">
+              <UIcon
+                v-show="!sidebarCollapsed"
+                name="i-heroicons-chevron-down"
+                class="admin-nav-group-chevron h-4 w-4"
+                :class="navGroupOpen[group.key] ? 'admin-nav-group-chevron-open' : ''"
+              />
+            </button>
+            <div v-if="!sidebarCollapsed && navGroupOpen[group.key]" class="mt-2 space-y-1">
               <button
                 v-for="item in group.items"
                 :key="item.key"
@@ -413,8 +425,20 @@
                   </div>
                 </div>
               </div>
-              <PersonalContentManager :theme="theme" />
             </div>
+          </div>
+
+          <div id="personal-notes-section" v-if="isSectionVisible('personal-notes')" class="col-span-12">
+            <div :class="adminPanelCardClass"><PersonalContentManager section="notes" :theme="theme" /></div>
+          </div>
+          <div id="personal-note-recycle-bin-section" v-if="isSectionVisible('personal-note-recycle-bin')" class="col-span-12">
+            <div :class="adminPanelCardClass"><PersonalContentManager section="note-recycle-bin" :theme="theme" /></div>
+          </div>
+          <div id="personal-interactions-section" v-if="isSectionVisible('personal-interactions')" class="col-span-12">
+            <div :class="adminPanelCardClass"><PersonalContentManager section="interactions" :theme="theme" /></div>
+          </div>
+          <div id="personal-interaction-recycle-bin-section" v-if="isSectionVisible('personal-interaction-recycle-bin')" class="col-span-12">
+            <div :class="adminPanelCardClass"><PersonalContentManager section="interaction-recycle-bin" :theme="theme" /></div>
           </div>
 
           <div id="authorization-section" v-if="isPrimaryAdmin && isSectionVisible('authorization')" class="col-span-12">
@@ -2540,7 +2564,8 @@ type AdminSectionKey =
   'site-register' | 'site-pwa' | 'site-github-card' | 'site-announcement' | 'site-music' |
   'site-default-theme' | 'site-social-links' | 'site-ads' | 'site-feed' | 'site-rss' | 'hitokoto' | 'life-countdown' |
   'site-configs' | 'comments' | 'email' | 'admin-users' | 'registration-review' | 'widgets' |
-  'storage' | 'authorization' | 'admin-audit' | 'notes' | 'recycle-bin' | 'comment-recycle-bin'
+  'storage' | 'authorization' | 'admin-audit' | 'notes' | 'recycle-bin' | 'comment-recycle-bin' |
+  'personal-notes' | 'personal-note-recycle-bin' | 'personal-interactions' | 'personal-interaction-recycle-bin'
 const activeSection = ref<AdminSectionKey>('dashboard')
 type AdminNavItem = { key: AdminSectionKey, label: string, icon: string }
 type AdminNavGroup = { key: string, label: string, icon: string, items: AdminNavItem[] }
@@ -2553,7 +2578,7 @@ const { capabilities: adminCapabilities, isPrimaryAdmin, isReady: adminCapabilit
 const canViewAdminAudit = computed(() => can('audit.view'))
 const sectionCapabilities: Partial<Record<AdminSectionKey, string>> = adminSectionCapabilities
 const canSection = (section: AdminSectionKey) => {
-  if (!isAdmin.value) return section === 'dashboard' || section === 'user' || section === 'widgets'
+  if (!isAdmin.value) return ['dashboard', 'user', 'widgets', 'personal-notes', 'personal-note-recycle-bin', 'personal-interactions', 'personal-interaction-recycle-bin'].includes(section)
   if (section === 'site-rss') return isPrimaryAdmin.value
   const capability = sectionCapabilities[section]
   return !capability || can(capability)
@@ -2592,6 +2617,10 @@ const adminNavGroups = computed<AdminNavGroup[]>(() => {
       label: '内容与互动',
       icon: 'i-heroicons-puzzle-piece',
       items: [
+        { key: 'personal-notes', label: '个人笔记', icon: 'i-heroicons-document-text' },
+        { key: 'personal-note-recycle-bin', label: '个人笔记回收站', icon: 'i-heroicons-trash' },
+        { key: 'personal-interactions', label: '个人互动', icon: 'i-heroicons-chat-bubble-left-right' },
+        { key: 'personal-interaction-recycle-bin', label: '个人互动回收站', icon: 'i-heroicons-archive-box' },
         { key: 'comments', label: '互动管理', icon: 'i-heroicons-chat-bubble-left-right' },
         { key: 'comment-recycle-bin', label: '互动回收站', icon: 'i-heroicons-archive-box' },
         { key: 'notes', label: '笔记管理', icon: 'i-heroicons-document-text' },
@@ -2629,30 +2658,10 @@ const adminNavGroups = computed<AdminNavGroup[]>(() => {
       ] as Array<{ key: AdminSectionKey, label: string, icon: string }>
     }
   ]
-  if (isAdmin.value) return groups
+  return groups
     .map((group) => ({ ...group, items: group.items.filter((item) => canSection(item.key)) }))
     .filter((group) => group.items.length > 0)
-  const overviewGroup = groups.find((g) => g.key === 'overview')!
-  return [{
-    ...overviewGroup,
-    items: [
-      ...overviewGroup.items,
-      { key: 'widgets', label: '小组件', icon: 'i-heroicons-squares-plus' }
-    ]
-  }]
 })
-const navGroupStorageKey = 'adminNavGroupOpen'
-const resolveSavedNavGroup = () => {
-  if (typeof window === 'undefined') return 'overview'
-  try {
-    const raw = String(localStorage.getItem(navGroupStorageKey) || '').trim()
-    if (!raw) return 'overview'
-    return ['overview', 'site-display', 'content-interaction', 'account-security', 'storage-maintain'].includes(raw) ? raw : 'overview'
-  } catch {
-    return 'overview'
-  }
-}
-const savedNavGroup = resolveSavedNavGroup()
 const navGroupOpen = reactive<Record<string, boolean>>({
   overview: true,
   'site-display': true,
@@ -2685,30 +2694,20 @@ const siteSectionKeys: AdminSectionKey[] = [
 ]
 const isSectionVisible = (key: AdminSectionKey) => activeSection.value === key
 const isSiteSectionPage = computed(() => siteSectionKeys.includes(activeSection.value))
-const openOnlyGroup = (groupKey: string) => {
-  Object.keys(navGroupOpen).forEach((key) => { navGroupOpen[key] = true })
-  if (typeof window !== 'undefined') {
-    try { localStorage.setItem(navGroupStorageKey, groupKey) } catch {}
-  }
-}
 const toggleNavGroup = (groupKey: string) => {
-  openOnlyGroup(groupKey)
+  navGroupOpen[groupKey] = !navGroupOpen[groupKey]
 }
 const onNavGroupClick = (group: { key: string; items: Array<{ key: AdminSectionKey }> }) => {
-  openOnlyGroup(group.key)
   if (sidebarCollapsed.value) {
     sidebarCollapsed.value = false
+    navGroupOpen[group.key] = true
     return
   }
-  if (!group.items?.length) return
-  const hasActive = group.items.some((item) => item.key === activeSection.value)
-  if (!hasActive) {
-    activeSection.value = group.items[0].key
-  }
+  toggleNavGroup(group.key)
 }
 watch(() => activeSection.value, (section) => {
   const groupKey = sectionGroupMap.value[section]
-  if (groupKey) openOnlyGroup(groupKey)
+  if (groupKey) navGroupOpen[groupKey] = true
   if (section === 'widgets' && isPrimaryAdmin.value) loadGuestWidgetPreferences().catch(() => undefined)
 })
 
@@ -3110,7 +3109,7 @@ const avatarSrc = computed(() => {
 const setActive = async (name: AdminSectionKey, evt?: MouseEvent) => {
   activeSection.value = name
   const groupKey = sectionGroupMap.value[name]
-  if (groupKey) openOnlyGroup(groupKey)
+  if (groupKey) navGroupOpen[groupKey] = true
   if (name === 'storage' && can('storage.view')) {
     loadAttachmentStorageConfig()
     loadStorageConfig()
@@ -7811,6 +7810,13 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 }
 .admin-nav-group-btn-open {
   background: rgba(255, 255, 255, 0.06);
+}
+.admin-nav-group-chevron {
+  flex: 0 0 auto;
+  transition: transform 0.2s ease;
+}
+.admin-nav-group-chevron-open {
+  transform: rotate(180deg);
 }
 .admin-nav-item {
   width: 100%;

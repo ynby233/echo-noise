@@ -192,6 +192,20 @@ func ListPersonalNoteRecycleBin(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.OK(result, "获取我的笔记回收站成功"))
 }
 
+func ListPersonalNotes(c *gin.Context) {
+	user, err := checkUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, dto.Fail[any]("请先登录"))
+		return
+	}
+	result, err := services.ListPersonalMessages(database.DB, user.ID, parseNoteManagementFilter(c))
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[any]("查询个人笔记失败"))
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK(result, "获取我的笔记成功"))
+}
+
 func RestorePersonalNote(c *gin.Context) {
 	user, err := checkUser(c)
 	if err != nil {
