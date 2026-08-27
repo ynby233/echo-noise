@@ -5,7 +5,7 @@
         <div class="admin-loading-spinner" />
       </div>
       <div class="admin-dashboard-shell min-h-screen w-full">
-        <aside class="admin-sidebar-surface h-screen overflow-y-auto backdrop-blur-md flex flex-col fixed left-0 top-0 z-40 transition-transform duration-300 md:transition-[width] border-r" :class="adminSidebarClass">
+        <aside class="admin-sidebar-surface h-screen overflow-y-hidden backdrop-blur-md flex flex-col fixed left-0 top-0 z-40 transition-transform duration-300 md:transition-[width] border-r" :class="adminSidebarClass">
         <div class="px-4 py-4 border-b flex flex-col items-center gap-2" :class="theme.border">
           <img :src="avatarSrc" class="admin-sidebar-avatar w-14 h-14 rounded-full ring-2 ring-indigo-400/60 shadow-lg object-cover" alt="avatar" @error="onAvatarImgError" />
           <div class="w-full text-center transition-all duration-200" :class="sidebarCollapsed ? 'max-h-0 opacity-0 pointer-events-none' : 'max-h-20 opacity-100'">
@@ -13,7 +13,7 @@
             <div class="text-xs" :class="theme.mutedText">{{ sidebarNoteCountLabel }} {{ dashboardStats.messageCount }}</div>
           </div>
         </div>
-        <nav class="flex-1 overflow-y-auto px-2 py-3 space-y-2">
+        <nav class="admin-sidebar-nav flex-1 overflow-y-auto px-2 py-3 space-y-2">
           <div v-for="group in adminNavGroups" :key="group.key" class="admin-nav-group">
             <button
               type="button"
@@ -7734,6 +7734,14 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 }
 .admin-sidebar-surface {
   box-shadow: 2px 0 8px rgba(29, 33, 41, 0.12);
+}
+.admin-sidebar-nav {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.admin-sidebar-nav::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 .admin-topbar-surface {
   backdrop-filter: blur(8px);
