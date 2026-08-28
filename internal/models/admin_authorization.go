@@ -13,13 +13,14 @@ type AdminCapabilityGrant struct {
 	UpdatedAt       time.Time `json:"updated_at"`
 }
 
-// AdminAuditLog is append-only administration history. No mutation or cleanup
-// function is exposed for it.
+// AdminAuditLog is append-only administration history. Retention cleanup is a
+// system policy; no request endpoint may mutate individual audit rows.
 type AdminAuditLog struct {
 	ID                uint      `gorm:"primaryKey" json:"id"`
-	ActorUserID       uint      `gorm:"not null;index" json:"actor_user_id"`
+	ActorUserID       uint      `gorm:"index" json:"actor_user_id"`
 	ActorUsername     string    `gorm:"type:varchar(191);not null" json:"actor_username"`
 	ActorIsPrimary    bool      `gorm:"not null;index" json:"actor_is_primary"`
+	ActorType         string    `gorm:"type:varchar(20);not null;default:user;index" json:"actor_type"`
 	Capability        string    `gorm:"type:varchar(100);index" json:"capability"`
 	Module            string    `gorm:"type:varchar(80);index" json:"module"`
 	Action            string    `gorm:"type:varchar(80);index" json:"action"`
@@ -39,8 +40,9 @@ type AdminAuditLog struct {
 
 // AdminAuditConfig has a single ID=1 row and defaults audit logging to enabled.
 type AdminAuditConfig struct {
-	ID        uint      `gorm:"primaryKey" json:"id"`
-	Enabled   bool      `gorm:"not null;default:true" json:"enabled"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID            uint      `gorm:"primaryKey" json:"id"`
+	Enabled       bool      `gorm:"not null;default:true" json:"enabled"`
+	RetentionDays int       `gorm:"not null;default:730" json:"retention_days"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }

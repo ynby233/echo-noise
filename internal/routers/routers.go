@@ -21,6 +21,8 @@ func registerAdminAuthorizationRoutes(authRoutes *gin.RouterGroup) {
 	authRoutes.GET("/admin/authorization/me", middleware.AdminAuthMiddleware(), controllers.AuthorizationMe)
 	authRoutes.GET("/admin/audit-config", middleware.RequireCapability(authorization.CapabilityAuthorizationManage), controllers.GetAdminAuditConfig)
 	authRoutes.PUT("/admin/audit-config", middleware.RequireCapability(authorization.CapabilityAuthorizationManage), controllers.UpdateAdminAuditConfig)
+	authRoutes.GET("/admin/login-audit-config", controllers.GetLoginAuditConfig)
+	authRoutes.PUT("/admin/login-audit-config", controllers.UpdateLoginAuditConfig)
 
 	authorizationRoutes := authRoutes.Group("/admin/authorization")
 	authorizationRoutes.Use(middleware.RequireCapability(authorization.CapabilityAuthorizationManage))

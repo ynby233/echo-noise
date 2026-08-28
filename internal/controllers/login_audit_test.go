@@ -10,7 +10,7 @@ import (
 	"github.com/rcy1314/echo-noise/internal/models"
 )
 
-func TestLoginAuditRecordsOnlyOrdinaryUsers(t *testing.T) {
+func TestLoginAuditRecordsOrdinaryUsersAndDelegatedAdministrators(t *testing.T) {
 	db, r, user, _ := setupCommentAccountTest(t)
 	if err := db.AutoMigrate(&models.SecurityLoginAudit{}); err != nil {
 		t.Fatalf("migrate login audits: %v", err)
@@ -48,10 +48,10 @@ func TestLoginAuditRecordsOnlyOrdinaryUsers(t *testing.T) {
 	if err := db.Order("id asc").Find(&audits).Error; err != nil {
 		t.Fatalf("list audits: %v", err)
 	}
-	if len(audits) != 2 {
-		t.Fatalf("expected two ordinary user audits, got %d", len(audits))
+	if len(audits) != 3 {
+		t.Fatalf("expected ordinary-user and delegated-administrator audits, got %d", len(audits))
 	}
-	for _, audit := range audits {
+	for _, audit := range audits[:2] {
 		if audit.UserID != user.ID || audit.Username != user.Username {
 			t.Fatalf("unexpected audited user: %#v", audit)
 		}
@@ -61,6 +61,9 @@ func TestLoginAuditRecordsOnlyOrdinaryUsers(t *testing.T) {
 	}
 	if audits[1].Action != loginAuditActionLogout || audits[1].IP != "198.51.100.8" {
 		t.Fatalf("expected logout audit second, got %#v", audits[1])
+	}
+	if audits[2].UserID != admin.ID || audits[2].Username != admin.Username || !audits[2].IsAdmin || audits[2].IsPrimary {
+		t.Fatalf("expected delegated administrator audit third, got %#v", audits[2])
 	}
 	if audits[0].IP != "198.51.100.7" {
 		t.Fatalf("expected ClientIP remote address, got %q", audits[0].IP)

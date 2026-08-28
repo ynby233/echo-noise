@@ -215,12 +215,12 @@ func GetAdminAuditConfig(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, dto.Fail[any]("审计服务不可用"))
 		return
 	}
-	config := models.AdminAuditConfig{ID: 1, Enabled: true}
+	config := models.AdminAuditConfig{ID: 1, Enabled: true, RetentionDays: 730}
 	if err := db.First(&config, 1).Error; err != nil && err != gorm.ErrRecordNotFound {
 		c.JSON(http.StatusInternalServerError, dto.Fail[any]("读取审计设置失败"))
 		return
 	}
-	c.JSON(http.StatusOK, dto.OK(gin.H{"enabled": config.Enabled}, "获取审计设置成功"))
+	c.JSON(http.StatusOK, dto.OK(gin.H{"enabled": config.Enabled, "retentionDays": config.RetentionDays}, "获取审计设置成功"))
 }
 
 func UpdateAdminAuditConfig(c *gin.Context) {
@@ -230,10 +230,15 @@ func UpdateAdminAuditConfig(c *gin.Context) {
 		return
 	}
 	var request struct {
-		Enabled *bool `json:"enabled"`
+		Enabled       *bool `json:"enabled"`
+		RetentionDays *int  `json:"retentionDays"`
 	}
-	if err := c.ShouldBindJSON(&request); err != nil || request.Enabled == nil {
+	if err := c.ShouldBindJSON(&request); err != nil || (request.Enabled == nil && request.RetentionDays == nil) {
 		c.JSON(http.StatusBadRequest, dto.Fail[any]("审计设置参数错误"))
+		return
+	}
+	if request.RetentionDays != nil && (*request.RetentionDays < 0 || *request.RetentionDays > 3650) {
+		c.JSON(http.StatusBadRequest, dto.Fail[any]("审计保留期限必须在 0 至 3650 天之间"))
 		return
 	}
 	db, err := database.GetDB()
@@ -241,9 +246,20 @@ func UpdateAdminAuditConfig(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, dto.Fail[any]("审计服务不可用"))
 		return
 	}
-	if err := authorization.New(db).SetAuditEnabled(actorID, *request.Enabled); err != nil {
-		c.JSON(http.StatusInternalServerError, dto.Fail[any]("保存审计设置失败"))
-		return
+	authorizer := authorization.New(db)
+	if request.Enabled != nil {
+		if err := authorizer.SetAuditEnabled(actorID, *request.Enabled); err != nil {
+			c.JSON(http.StatusInternalServerError, dto.Fail[any]("保存审计设置失败"))
+			return
+		}
 	}
-	c.JSON(http.StatusOK, dto.OK(gin.H{"enabled": *request.Enabled}, "保存审计设置成功"))
+	if request.RetentionDays != nil {
+		if err := authorizer.SetAuditRetentionDays(actorID, *request.RetentionDays); err != nil {
+			c.JSON(http.StatusInternalServerError, dto.Fail[any]("保存审计保留期限失败"))
+			return
+		}
+	}
+	config := models.AdminAuditConfig{ID: 1, Enabled: true, RetentionDays: 730}
+	_ = db.First(&config, 1).Error
+	c.JSON(http.StatusOK, dto.OK(gin.H{"enabled": config.Enabled, "retentionDays": config.RetentionDays}, "保存审计设置成功"))
 }

@@ -335,16 +335,36 @@ func (a *Authorizer) SetAuditEnabled(actorID uint, enabled bool) error {
 		return errors.New("only primary administrator may change audit logging")
 	}
 	return a.db.Transaction(func(tx *gorm.DB) error {
-		result := tx.Model(&models.AdminAuditConfig{}).Where("id = ?", 1).Update("enabled", enabled)
-		if result.Error != nil {
-			return result.Error
+		var config models.AdminAuditConfig
+		if err := tx.First(&config, 1).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return tx.Create(&models.AdminAuditConfig{ID: 1, Enabled: enabled, RetentionDays: 730}).Error
+			}
+			return err
 		}
-		if result.RowsAffected != 0 {
-			return nil
-		}
-		return tx.Model(&models.AdminAuditConfig{}).Create(map[string]interface{}{"id": 1, "enabled": enabled}).Error
+		return tx.Model(&config).Update("enabled", enabled).Error
 	})
 }
+
+func (a *Authorizer) SetAuditRetentionDays(actorID uint, retentionDays int) error {
+	if actorID != models.PrimaryAdminUserID {
+		return errors.New("only primary administrator may change audit retention")
+	}
+	if retentionDays < 0 || retentionDays > 3650 {
+		return errors.New("invalid audit retention")
+	}
+	return a.db.Transaction(func(tx *gorm.DB) error {
+		var config models.AdminAuditConfig
+		if err := tx.First(&config, 1).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return tx.Create(&models.AdminAuditConfig{ID: 1, Enabled: true, RetentionDays: retentionDays}).Error
+			}
+			return err
+		}
+		return tx.Model(&config).Update("retention_days", retentionDays).Error
+	})
+}
+
 func (a *Authorizer) WriteAudit(record models.AdminAuditLog) error { return a.writeAudit(a.db, record) }
 func (a *Authorizer) WriteDeniedBestEffort(record models.AdminAuditLog) {
 	_ = a.writeAudit(a.db, record)
@@ -353,7 +373,14 @@ func (a *Authorizer) WriteAuditBestEffort(record models.AdminAuditLog) {
 	_ = a.writeAudit(a.db, record)
 }
 func (a *Authorizer) writeAudit(db *gorm.DB, record models.AdminAuditLog) error {
-	if record.ActorUserID == 0 {
+	record.ActorType = strings.TrimSpace(record.ActorType)
+	if record.ActorType == "" {
+		record.ActorType = "user"
+	}
+	if record.ActorType != "user" && record.ActorType != "system" {
+		return errors.New("invalid audit actor type")
+	}
+	if record.ActorType == "user" && record.ActorUserID == 0 {
 		return errors.New("audit actor is required")
 	}
 	var config models.AdminAuditConfig
@@ -369,12 +396,24 @@ func (a *Authorizer) writeAudit(db *gorm.DB, record models.AdminAuditLog) error 
 	if !config.Enabled {
 		return nil
 	}
-	var actor models.User
-	if err := db.Select("id,username").First(&actor, record.ActorUserID).Error; err != nil {
-		return err
+	if record.ActorType == "system" {
+		record.ActorUserID = 0
+		record.ActorUsername = "系统自动任务"
+		record.ActorIsPrimary = false
+		record.AuthVia = "system"
+	} else {
+		var actor models.User
+		if err := db.Select("id,username,is_admin").First(&actor, record.ActorUserID).Error; err != nil {
+			return err
+		}
+		// Administrator audit must not silently become a general user activity
+		// table. Ordinary-user lifecycle metadata remains on the content rows.
+		if !actor.IsAdmin {
+			return nil
+		}
+		record.ActorUsername = actor.Username
+		record.ActorIsPrimary = actor.ID == models.PrimaryAdminUserID
 	}
-	record.ActorUsername = actor.Username
-	record.ActorIsPrimary = actor.ID == models.PrimaryAdminUserID
 	record.Summary = strings.TrimSpace(record.Summary)
 	if record.Result == "" {
 		record.Result = "success"

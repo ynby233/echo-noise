@@ -25,6 +25,8 @@
         <div class="audit-policy-control">
           <span class="text-xs font-medium" :class="auditEnabled ? 'text-green-600 dark:text-green-400' : (theme?.mutedText || 'text-slate-500')">{{ auditEnabled ? '已启用' : '已关闭' }}</span>
           <UToggle :model-value="auditEnabled" :disabled="configLoading || configSaving" aria-label="启用管理员审计写入" @update:model-value="saveAuditEnabled($event === true)" />
+          <USelect v-model="auditRetentionDays" :options="auditRetentionOptions" class="w-36" :disabled="configLoading || configSaving" aria-label="管理员审计保留期限" />
+          <UButton size="xs" color="primary" variant="soft" :loading="configSaving" @click="saveAuditRetention">保存期限</UButton>
         </div>
       </div>
 
@@ -91,7 +93,7 @@
             <tr v-else-if="!items.length"><td colspan="7" class="px-3 py-12 text-center" :class="theme?.mutedText || 'text-slate-500'"><UIcon name="i-heroicons-clipboard-document-list" class="mx-auto mb-2 h-6 w-6 opacity-60" /><span>当前筛选下暂无审计记录</span></td></tr>
             <tr v-for="item in items" v-else :key="item.id" class="audit-record-row" :class="theme?.border || 'border-slate-200 dark:border-slate-700'">
               <td class="px-4 py-3 align-top whitespace-nowrap" :class="theme?.mutedText || 'text-slate-500'">{{ formatTime(item.created_at) }}</td>
-              <td class="px-3 py-3 align-top"><span class="font-medium">{{ item.actor_username }}</span><span class="mt-0.5 block text-xs" :class="theme?.mutedText || 'text-slate-500'">ID {{ item.actor_user_id }}</span></td>
+              <td class="px-3 py-3 align-top"><span class="font-medium">{{ item.actor_username }}</span><span v-if="item.actor_type !== 'system'" class="mt-0.5 block text-xs" :class="theme?.mutedText || 'text-slate-500'">ID {{ item.actor_user_id }}</span><span v-else class="mt-0.5 block text-xs" :class="theme?.mutedText || 'text-slate-500'">系统任务</span></td>
               <td class="px-3 py-3 align-top font-medium break-words">{{ item.operation_description || '管理员操作' }}</td>
               <td class="px-3 py-3 align-top"><UBadge :color="resultColor(item.result)" size="xs" variant="soft">{{ item.result_description || item.result }}</UBadge><div class="mt-1 text-[11px]" :class="theme?.mutedText || 'text-slate-500'">{{ item.result }}</div></td>
               <td class="px-3 py-3 align-top"><span class="break-all font-medium">{{ item.module }}</span><span class="mt-0.5 block break-all text-xs" :class="theme?.mutedText || 'text-slate-500'">{{ item.action }}</span></td>
@@ -123,7 +125,7 @@
         <dl class="audit-detail-grid">
           <div><dt>时间</dt><dd>{{ formatTime(detail.created_at) }}</dd></div>
           <div><dt>认证来源</dt><dd>{{ detail.auth_via || '-' }}</dd></div>
-          <div><dt>操作人</dt><dd>{{ detail.actor_username }} #{{ detail.actor_user_id }}</dd></div>
+          <div><dt>操作人</dt><dd>{{ detail.actor_type === 'system' ? detail.actor_username : `${detail.actor_username} #${detail.actor_user_id}` }}</dd></div>
           <div><dt>结果</dt><dd>{{ detail.result_description || detail.result }}（{{ detail.result }}）</dd></div>
           <div><dt>模块 / 动作</dt><dd>{{ detail.module }} / {{ detail.action }}</dd></div>
           <div><dt>能力</dt><dd class="break-all">{{ detail.capability || '-' }}</dd></div>
@@ -144,6 +146,7 @@ type Audit = {
   created_at: string
   actor_user_id: number
   actor_username: string
+  actor_type?: 'user' | 'system'
   module: string
   action: string
   capability: string
@@ -169,6 +172,14 @@ const exporting = ref(false)
 const detail = ref<Audit | null>(null)
 const detailOpen = ref(false)
 const auditEnabled = ref(true)
+const auditRetentionDays = ref(730)
+const auditRetentionOptions = [
+  { label: '永不按时间清理', value: 0 },
+  { label: '保留 180 天', value: 180 },
+  { label: '保留 365 天', value: 365 },
+  { label: '保留 730 天', value: 730 },
+  { label: '保留 1095 天', value: 1095 }
+]
 const configLoading = ref(false)
 const configSaving = ref(false)
 const configMessage = ref('')
@@ -274,6 +285,7 @@ const loadAuditConfig = async () => {
   try {
     const data = await fetch('/api/admin/audit-config', { credentials: 'include' }).then(requestData)
     auditEnabled.value = !!data?.enabled
+    auditRetentionDays.value = Number(data?.retentionDays ?? 730)
   } catch (error) {
     configError.value = true
     configMessage.value = errorMessage(error, '读取审计设置失败')
@@ -288,10 +300,27 @@ const saveAuditEnabled = async (enabled: boolean) => {
   try {
     const data = await fetch('/api/admin/audit-config', { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }) }).then(requestData)
     auditEnabled.value = !!data?.enabled
+    auditRetentionDays.value = Number(data?.retentionDays ?? auditRetentionDays.value)
     configMessage.value = auditEnabled.value ? '管理员审计写入已启用' : '管理员审计写入已关闭'
   } catch (error) {
     configError.value = true
     configMessage.value = errorMessage(error, '保存审计设置失败')
+  } finally {
+    configSaving.value = false
+  }
+}
+const saveAuditRetention = async () => {
+  configSaving.value = true
+  configMessage.value = ''
+  configError.value = false
+  try {
+    const data = await fetch('/api/admin/audit-config', { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ retentionDays: Number(auditRetentionDays.value) }) }).then(requestData)
+    auditEnabled.value = !!data?.enabled
+    auditRetentionDays.value = Number(data?.retentionDays ?? 730)
+    configMessage.value = auditRetentionDays.value === 0 ? '管理员审计不会按时间自动清理，仍受最大行数安全阀保护' : `管理员审计保留 ${auditRetentionDays.value} 天`
+  } catch (error) {
+    configError.value = true
+    configMessage.value = errorMessage(error, '保存审计保留期限失败')
   } finally {
     configSaving.value = false
   }

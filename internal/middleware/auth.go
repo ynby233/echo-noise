@@ -197,6 +197,9 @@ func RequireCapability(capability authorization.Capability) gin.HandlerFunc {
 		if ctx.IsAborted() || ctx.Request.Method == http.MethodGet || ctx.Request.Method == http.MethodHead || ctx.Request.Method == http.MethodOptions {
 			return
 		}
+		if SemanticAuditWritten(ctx) {
+			return
+		}
 		definition, _ := authorization.DefinitionFor(capability)
 		result := "success"
 		summary := "administrative write completed"
@@ -210,6 +213,26 @@ func RequireCapability(capability authorization.Capability) gin.HandlerFunc {
 			Result: result, Summary: summary, IP: ctx.ClientIP(), UserAgent: ctx.GetHeader("User-Agent"), AuthVia: ctx.GetString("auth_via"),
 		})
 	}
+}
+
+const semanticAuditContextKey = "semantic_admin_audit_written"
+
+// MarkSemanticAuditWritten prevents RequireCapability from appending a second,
+// route-only success record after a handler has committed a richer object-level
+// audit record. Access logging remains unaffected.
+func MarkSemanticAuditWritten(ctx *gin.Context) {
+	if ctx != nil {
+		ctx.Set(semanticAuditContextKey, true)
+	}
+}
+
+func SemanticAuditWritten(ctx *gin.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	value, exists := ctx.Get(semanticAuditContextKey)
+	written, ok := value.(bool)
+	return exists && ok && written
 }
 
 func toUint(v any) (uint, bool) {

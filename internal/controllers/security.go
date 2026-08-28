@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/netip"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/dto"
 	"github.com/rcy1314/echo-noise/internal/middleware"
 	"github.com/rcy1314/echo-noise/internal/models"
@@ -42,21 +44,96 @@ const (
 )
 
 func recordUserLoginAudit(c *gin.Context, user *models.User, action string) error {
-	if user == nil || user.ID == 0 || user.IsAdmin {
+	if user == nil || user.ID == 0 {
 		return nil
 	}
 	db := models.GetDB()
 	if db == nil {
 		return nil
 	}
+	isPrimaryAdmin := user.IsAdmin && user.ID == models.PrimaryAdminUserID
+	if isPrimaryAdmin {
+		config := models.LoginAuditConfig{ID: 1, RecordPrimaryAdmin: false}
+		if err := db.First(&config, 1).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if !config.RecordPrimaryAdmin {
+			return nil
+		}
+	}
 	audit := models.SecurityLoginAudit{
 		UserID:    user.ID,
 		Username:  strings.TrimSpace(user.Username),
+		IsAdmin:   user.IsAdmin,
+		IsPrimary: isPrimaryAdmin,
 		Action:    normalizeLoginAuditAction(action),
 		IP:        c.ClientIP(),
 		UserAgent: c.GetHeader("User-Agent"),
 	}
 	return db.Create(&audit).Error
+}
+
+func GetLoginAuditConfig(c *gin.Context) {
+	if _, err := requirePrimaryAdmin(c); err != nil {
+		c.JSON(http.StatusForbidden, dto.Fail[any](err.Error()))
+		return
+	}
+	db := models.GetDB()
+	if db == nil {
+		c.JSON(http.StatusInternalServerError, dto.Fail[any]("数据库未初始化"))
+		return
+	}
+	config := models.LoginAuditConfig{ID: 1, RecordPrimaryAdmin: false}
+	if err := db.First(&config, 1).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusInternalServerError, dto.Fail[any]("读取登录审计设置失败"))
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK(gin.H{"recordPrimaryAdmin": config.RecordPrimaryAdmin}, "获取登录审计设置成功"))
+}
+
+func UpdateLoginAuditConfig(c *gin.Context) {
+	actorID, err := requirePrimaryAdmin(c)
+	if err != nil {
+		c.JSON(http.StatusForbidden, dto.Fail[any](err.Error()))
+		return
+	}
+	var request struct {
+		RecordPrimaryAdmin *bool `json:"recordPrimaryAdmin"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil || request.RecordPrimaryAdmin == nil {
+		c.JSON(http.StatusBadRequest, dto.Fail[any]("登录审计设置参数错误"))
+		return
+	}
+	db := models.GetDB()
+	if db == nil {
+		c.JSON(http.StatusInternalServerError, dto.Fail[any]("数据库未初始化"))
+		return
+	}
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		var config models.LoginAuditConfig
+		if err := tx.First(&config, 1).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if config.ID == 0 {
+			config = models.LoginAuditConfig{ID: 1, RecordPrimaryAdmin: *request.RecordPrimaryAdmin}
+			if err := tx.Create(&config).Error; err != nil {
+				return err
+			}
+		} else if err := tx.Model(&config).Update("record_primary_admin", *request.RecordPrimaryAdmin).Error; err != nil {
+			return err
+		}
+		return authorization.New(tx).WriteAudit(models.AdminAuditLog{
+			ActorUserID: actorID, Capability: string(authorization.CapabilityLoginAuditsView), Module: "login_audits",
+			Action: "update_primary_admin_recording", TargetType: "login_audit_config", TargetID: "1", Result: "success",
+			Summary: "updated primary administrator login audit recording policy", ChangesJSON: fmt.Sprintf(`{"record_primary_admin":%t}`, *request.RecordPrimaryAdmin),
+			IP: c.ClientIP(), UserAgent: c.GetHeader("User-Agent"), AuthVia: c.GetString("auth_via"),
+		})
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, dto.Fail[any]("保存登录审计设置失败"))
+		return
+	}
+	middleware.MarkSemanticAuditWritten(c)
+	c.JSON(http.StatusOK, dto.OK(gin.H{"recordPrimaryAdmin": *request.RecordPrimaryAdmin}, "保存登录审计设置成功"))
 }
 
 func normalizeLoginAuditAction(action string) string {
@@ -254,7 +331,7 @@ func ClearAccessLogs(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.Fail[any]("等待访问日志写入失败"))
 		return
 	}
-	_ = db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.SecurityAccessLog{}).Error
+	_ = db.Unscoped().Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.SecurityAccessLog{}).Error
 	c.JSON(http.StatusOK, dto.OK[any](nil, "已清空"))
 }
 
@@ -268,7 +345,7 @@ func ClearSiteVisits(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.Fail[any]("等待站点访问日志写入失败"))
 		return
 	}
-	_ = db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.SecuritySiteVisitLog{}).Error
+	_ = db.Unscoped().Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.SecuritySiteVisitLog{}).Error
 	c.JSON(http.StatusOK, dto.OK[any](nil, "已清空"))
 }
 
@@ -278,7 +355,7 @@ func ClearAttackRecords(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.OK[any](nil, "已清空"))
 		return
 	}
-	_ = db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.SecurityAttackLog{}).Error
+	_ = db.Unscoped().Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.SecurityAttackLog{}).Error
 	c.JSON(http.StatusOK, dto.OK[any](nil, "已清空"))
 }
 
@@ -415,7 +492,7 @@ func GetSecurityConfig(c *gin.Context) {
 			c.JSON(http.StatusOK, dto.Fail[any]("读取安全配置失败"))
 			return
 		}
-		cfg = models.SecurityConfig{AutoBanEnabled: false, AutoBanWindowSeconds: 600, AutoBanThreshold: 10, AutoBanMinutes: 60, AccessLogEnabled: false, SiteVisitLogEnabled: false}
+		cfg = models.SecurityConfig{AutoBanEnabled: false, AutoBanWindowSeconds: 600, AutoBanThreshold: 10, AutoBanMinutes: 60, AccessLogEnabled: false, SiteVisitLogEnabled: false, AttackLogRetentionDays: 90, AccessLogRetentionDays: 30, SiteVisitRetentionDays: 90, LoginAuditRetentionDays: 365}
 		if err := db.Create(&cfg).Error; err != nil {
 			c.JSON(http.StatusOK, dto.Fail[any]("初始化安全配置失败"))
 			return
@@ -425,12 +502,23 @@ func GetSecurityConfig(c *gin.Context) {
 }
 
 type securityConfigReq struct {
-	AutoBanEnabled       bool `json:"autoBanEnabled"`
-	AutoBanWindowSeconds int  `json:"autoBanWindowSeconds"`
-	AutoBanThreshold     int  `json:"autoBanThreshold"`
-	AutoBanMinutes       int  `json:"autoBanMinutes"`
-	AccessLogEnabled     bool `json:"accessLogEnabled"`
-	SiteVisitLogEnabled  bool `json:"siteVisitLogEnabled"`
+	AutoBanEnabled          bool `json:"autoBanEnabled"`
+	AutoBanWindowSeconds    int  `json:"autoBanWindowSeconds"`
+	AutoBanThreshold        int  `json:"autoBanThreshold"`
+	AutoBanMinutes          int  `json:"autoBanMinutes"`
+	AccessLogEnabled        bool `json:"accessLogEnabled"`
+	SiteVisitLogEnabled     bool `json:"siteVisitLogEnabled"`
+	AttackLogRetentionDays  *int `json:"attackLogRetentionDays"`
+	AccessLogRetentionDays  *int `json:"accessLogRetentionDays"`
+	SiteVisitRetentionDays  *int `json:"siteVisitRetentionDays"`
+	LoginAuditRetentionDays *int `json:"loginAuditRetentionDays"`
+}
+
+func normalizeLogRetentionDays(value int, fallback int) int {
+	if value < 0 || value > 3650 {
+		return fallback
+	}
+	return value
 }
 
 func UpdateSecurityConfig(c *gin.Context) {
@@ -469,7 +557,7 @@ func UpdateSecurityConfig(c *gin.Context) {
 			c.JSON(http.StatusOK, dto.Fail[any]("读取安全配置失败"))
 			return
 		}
-		cfg = models.SecurityConfig{}
+		cfg = models.SecurityConfig{AttackLogRetentionDays: 90, AccessLogRetentionDays: 30, SiteVisitRetentionDays: 90, LoginAuditRetentionDays: 365}
 	}
 	cfg.AutoBanEnabled = req.AutoBanEnabled
 	cfg.AutoBanWindowSeconds = req.AutoBanWindowSeconds
@@ -477,6 +565,18 @@ func UpdateSecurityConfig(c *gin.Context) {
 	cfg.AutoBanMinutes = req.AutoBanMinutes
 	cfg.AccessLogEnabled = req.AccessLogEnabled
 	cfg.SiteVisitLogEnabled = req.SiteVisitLogEnabled
+	if req.AttackLogRetentionDays != nil {
+		cfg.AttackLogRetentionDays = normalizeLogRetentionDays(*req.AttackLogRetentionDays, cfg.AttackLogRetentionDays)
+	}
+	if req.AccessLogRetentionDays != nil {
+		cfg.AccessLogRetentionDays = normalizeLogRetentionDays(*req.AccessLogRetentionDays, cfg.AccessLogRetentionDays)
+	}
+	if req.SiteVisitRetentionDays != nil {
+		cfg.SiteVisitRetentionDays = normalizeLogRetentionDays(*req.SiteVisitRetentionDays, cfg.SiteVisitRetentionDays)
+	}
+	if req.LoginAuditRetentionDays != nil {
+		cfg.LoginAuditRetentionDays = normalizeLogRetentionDays(*req.LoginAuditRetentionDays, cfg.LoginAuditRetentionDays)
+	}
 	if cfg.ID == 0 {
 		if err := db.Create(&cfg).Error; err != nil {
 			c.JSON(http.StatusOK, dto.Fail[any]("保存安全配置失败"))

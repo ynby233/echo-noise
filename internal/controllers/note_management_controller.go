@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/database"
+	"github.com/rcy1314/echo-noise/internal/middleware"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/services"
 	"gorm.io/gorm"
@@ -184,6 +185,7 @@ func TrashAdminNote(c *gin.Context) {
 		writeNoteLifecycleError(c, err)
 		return
 	}
+	middleware.MarkSemanticAuditWritten(c)
 	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "删除成功"})
 }
 
@@ -259,6 +261,7 @@ func RestoreAdminRecycleBinNote(c *gin.Context) {
 		writeNoteLifecycleError(c, err)
 		return
 	}
+	middleware.MarkSemanticAuditWritten(c)
 	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "恢复成功"})
 }
 
@@ -291,6 +294,7 @@ func PermanentlyDeleteAdminRecycleBinNote(c *gin.Context) {
 		writeNoteLifecycleError(c, err)
 		return
 	}
+	middleware.MarkSemanticAuditWritten(c)
 	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "永久删除成功"})
 }
 
@@ -375,6 +379,9 @@ func runNoteLifecycleBatch(c *gin.Context, action string) {
 			result.Items = append(result.Items, noteLifecycleBatchItem{ID: &idCopy, OK: false, Reason: "笔记状态不允许执行此操作"})
 		}
 	}
+	if result.Succeeded > 0 {
+		middleware.MarkSemanticAuditWritten(c)
+	}
 	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "批量操作完成", "data": result})
 }
 
@@ -428,6 +435,9 @@ func BatchFilteredNoteLifecycle(c *gin.Context, action string) {
 	if err != nil {
 		writeNoteLifecycleError(c, err)
 		return
+	}
+	if result.Succeeded > 0 {
+		middleware.MarkSemanticAuditWritten(c)
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "批量操作完成", "data": result})
 }

@@ -503,11 +503,11 @@ func RunRecycleBinAutoCleanup(db *gorm.DB, now time.Time) (succeeded, failed, sk
 				if err := permanentlyDeleteMessageInTx(tx, message); err != nil {
 					return err
 				}
-				return authorization.New(tx).WriteAudit(models.AdminAuditLog{ActorUserID: models.PrimaryAdminUserID, Capability: string(authorization.CapabilityNotesDelete), Module: "notes", Action: "auto_permanent_delete", TargetType: "message", TargetID: fmt.Sprint(message.ID), TargetOwnerUserID: &message.UserID, Result: "success", Summary: "system recycle-bin retention cleanup"})
+				return authorization.New(tx).WriteAudit(models.AdminAuditLog{ActorType: "system", Capability: string(authorization.CapabilityNotesDelete), Module: "notes", Action: "auto_permanent_delete", TargetType: "message", TargetID: fmt.Sprint(message.ID), TargetOwnerUserID: &message.UserID, Result: "success", Summary: "system recycle-bin retention cleanup"})
 			})
 			if itemErr != nil {
 				failed++
-				_ = authorization.New(db).WriteAudit(models.AdminAuditLog{ActorUserID: models.PrimaryAdminUserID, Capability: string(authorization.CapabilityNotesDelete), Module: "notes", Action: "auto_permanent_delete", TargetType: "message", TargetID: fmt.Sprint(message.ID), TargetOwnerUserID: &message.UserID, Result: "failure", Summary: "system recycle-bin retention cleanup failed", Reason: itemErr.Error()})
+				_ = authorization.New(db).WriteAudit(models.AdminAuditLog{ActorType: "system", Capability: string(authorization.CapabilityNotesDelete), Module: "notes", Action: "auto_permanent_delete", TargetType: "message", TargetID: fmt.Sprint(message.ID), TargetOwnerUserID: &message.UserID, Result: "failure", Summary: "system recycle-bin retention cleanup failed", Reason: "cleanup_failed"})
 				continue
 			}
 			succeeded++

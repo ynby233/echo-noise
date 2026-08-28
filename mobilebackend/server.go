@@ -16,6 +16,7 @@ import (
 )
 
 var srv *http.Server
+var workerCancel context.CancelFunc
 
 func ensureDirs() {
 	_ = os.MkdirAll("data", 0755)
@@ -50,6 +51,9 @@ func Start(workDir string) error {
 	if err := services.SeedDefaultData(); err != nil {
 		fmt.Fprintf(os.Stderr, "SeedDefaultData warn: %v\n", err)
 	}
+	workerCtx, cancelWorkers := context.WithCancel(context.Background())
+	workerCancel = cancelWorkers
+	services.StartLogRetentionWorker(workerCtx, database.DB)
 	mode := config.Config.Server.Mode
 	if mode == "debug" {
 		gin.SetMode(gin.DebugMode)
@@ -71,6 +75,10 @@ func Start(workDir string) error {
 }
 
 func Stop() {
+	if workerCancel != nil {
+		workerCancel()
+		workerCancel = nil
+	}
 	if srv == nil {
 		return
 	}

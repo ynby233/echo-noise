@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/database"
+	"github.com/rcy1314/echo-noise/internal/middleware"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/services"
 	"gorm.io/gorm"
@@ -154,6 +155,7 @@ func UpdateMessageGlobalPin(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
 		return
 	}
+	middleware.MarkSemanticAuditWritten(c)
 
 	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "更新成功", "data": pinStateData(&updated)})
 }

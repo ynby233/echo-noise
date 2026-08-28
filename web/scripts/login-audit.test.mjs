@@ -16,8 +16,8 @@ const migrate = await readFile(join(repoRoot, 'internal/models/migrate.go'), 'ut
 
 assert.match(
   securityModel,
-  /type\s+SecurityLoginAudit\s+struct\s*\{[\s\S]*?UserID\s+uint[\s\S]*?Username\s+string[\s\S]*?Action\s+string[\s\S]*?IP\s+string[\s\S]*?UserAgent\s+string[\s\S]*?\}/,
-  'login audit model must store user id, username, action, IP, and user agent'
+  /type\s+SecurityLoginAudit\s+struct\s*\{[\s\S]*?UserID\s+uint[\s\S]*?Username\s+string[\s\S]*?IsAdmin\s+bool[\s\S]*?IsPrimary\s+bool[\s\S]*?Action\s+string[\s\S]*?IP\s+string[\s\S]*?UserAgent\s+string[\s\S]*?\}/,
+  'login audit model must store user identity, administrator role, action, IP, and user agent'
 )
 
 assert.match(
@@ -28,8 +28,8 @@ assert.match(
 
 assert.match(
   securityController,
-  /func\s+recordUserLoginAudit\(c \*gin\.Context, user \*models\.User, action string\) error \{[\s\S]*?user\s*==\s*nil\s*\|\|\s*user\.ID\s*==\s*0\s*\|\|\s*user\.IsAdmin[\s\S]*?Action:\s*normalizeLoginAuditAction\(action\)[\s\S]*?c\.ClientIP\(\)[\s\S]*?db\.Create\(&audit\)/,
-  'login audit recording must normalize the action, skip administrators, and use gin ClientIP() for ordinary users'
+  /func\s+recordUserLoginAudit\(c \*gin\.Context, user \*models\.User, action string\) error \{[\s\S]*?user\s*==\s*nil\s*\|\|\s*user\.ID\s*==\s*0[\s\S]*?isPrimaryAdmin\s*:=\s*user\.IsAdmin\s*&&\s*user\.ID\s*==\s*models\.PrimaryAdminUserID[\s\S]*?RecordPrimaryAdmin[\s\S]*?IsAdmin:\s*user\.IsAdmin[\s\S]*?IsPrimary:\s*isPrimaryAdmin[\s\S]*?Action:\s*normalizeLoginAuditAction\(action\)[\s\S]*?c\.ClientIP\(\)[\s\S]*?db\.Create\(&audit\)/,
+  'login audit recording must include ordinary users and delegated administrators while applying the site-owner policy and using gin ClientIP()'
 )
 
 assert.match(
@@ -47,7 +47,7 @@ assert.match(
 const auditRecordCalls = loginController.match(/recordUserLoginAudit\(c,\s*\*?user,\s*loginAuditActionLogin\)/g) || []
 assert.ok(
   auditRecordCalls.length >= 1,
-  'successful password login should record ordinary-user login audits'
+  'successful password login should record account login audits'
 )
 
 assert.match(
@@ -59,7 +59,7 @@ assert.match(
 assert.match(
   loginController,
   /recordUserLoginAudit\(c,\s*&user,\s*loginAuditActionLogout\)/,
-  'logout should record ordinary-user logout audits with the logout action'
+  'logout should record account logout audits with the logout action'
 )
 
 assert.match(

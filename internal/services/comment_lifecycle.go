@@ -573,7 +573,7 @@ func RunCommentRecycleBinAutoCleanup(db *gorm.DB, now time.Time) (succeeded, fai
 				}
 				ownerID := commentOwnerID(comment)
 				return writeCommentLifecycleAudit(tx, models.AdminAuditLog{
-					ActorUserID: models.PrimaryAdminUserID, Capability: string(authorization.CapabilityCommentsDeletePermanently),
+					ActorType: "system", Capability: string(authorization.CapabilityCommentsDeletePermanently),
 					Module: "comments", Action: "auto_permanent_delete", TargetType: "comment", TargetID: fmt.Sprint(comment.ID),
 					TargetOwnerUserID: func() *uint {
 						if ownerID == 0 {
@@ -582,7 +582,7 @@ func RunCommentRecycleBinAutoCleanup(db *gorm.DB, now time.Time) (succeeded, fai
 						value := ownerID
 						return &value
 					}(),
-					Result: "success", Summary: "system comment recycle-bin retention cleanup", AuthVia: "system",
+					Result: "success", Summary: "system comment recycle-bin retention cleanup",
 				})
 			})
 			if itemErr != nil {

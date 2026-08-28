@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/dto"
+	"github.com/rcy1314/echo-noise/internal/middleware"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/services"
 )
@@ -181,7 +182,7 @@ func parseContentLifecycleBatch(c *gin.Context) ([]uint, bool) {
 	return ids, true
 }
 
-func writeContentLifecycleBatch(c *gin.Context, ids []uint, action func(uint) error) {
+func writeContentLifecycleBatch(c *gin.Context, ids []uint, action func(uint) error) contentLifecycleBatchResult {
 	result := contentLifecycleBatchResult{Items: make([]contentLifecycleBatchItem, 0, len(ids))}
 	for _, id := range ids {
 		err := action(id)
@@ -194,9 +195,10 @@ func writeContentLifecycleBatch(c *gin.Context, ids []uint, action func(uint) er
 		result.Items = append(result.Items, contentLifecycleBatchItem{ID: id, OK: false, Reason: "当前状态或权限不允许执行此操作"})
 	}
 	c.JSON(http.StatusOK, dto.OK(result, "批量操作完成"))
+	return result
 }
 
-func writeCommentRestoreBatch(c *gin.Context, ids []uint, actorID uint) {
+func writeCommentRestoreBatch(c *gin.Context, ids []uint, actorID uint) contentLifecycleBatchResult {
 	result := contentLifecycleBatchResult{Items: make([]contentLifecycleBatchItem, 0, len(ids))}
 	pending := append([]uint(nil), ids...)
 	for len(pending) > 0 {
@@ -230,6 +232,7 @@ func writeCommentRestoreBatch(c *gin.Context, ids []uint, actorID uint) {
 		pending = next
 	}
 	c.JSON(http.StatusOK, dto.OK(result, "批量操作完成"))
+	return result
 }
 
 func orderCommentBatchIDs(ids []uint, descendantsFirst bool) []uint {
@@ -368,13 +371,16 @@ func BatchTrashAdminComments(c *gin.Context) {
 		return
 	}
 	batchID := services.NewCommentLifecycleBatchID()
-	writeContentLifecycleBatch(c, orderCommentBatchIDs(ids, false), func(id uint) error {
+	result := writeContentLifecycleBatch(c, orderCommentBatchIDs(ids, false), func(id uint) error {
 		_, itemErr := services.TrashCommentTree(database.DB, actorID, id, services.CommentTrashRequest{ReasonCode: services.CommentDeletionReasonModeration, BatchID: batchID})
 		if errors.Is(itemErr, services.ErrCommentAlreadyTrashed) {
 			return nil
 		}
 		return itemErr
 	})
+	if result.Succeeded > 0 {
+		middleware.MarkSemanticAuditWritten(c)
+	}
 }
 
 func BatchRestoreAdminComments(c *gin.Context) {
@@ -387,7 +393,10 @@ func BatchRestoreAdminComments(c *gin.Context) {
 	if !ok {
 		return
 	}
-	writeCommentRestoreBatch(c, ids, actorID)
+	result := writeCommentRestoreBatch(c, ids, actorID)
+	if result.Succeeded > 0 {
+		middleware.MarkSemanticAuditWritten(c)
+	}
 }
 
 func BatchPermanentlyDeleteAdminComments(c *gin.Context) {
@@ -400,7 +409,10 @@ func BatchPermanentlyDeleteAdminComments(c *gin.Context) {
 	if !ok {
 		return
 	}
-	writeContentLifecycleBatch(c, orderCommentBatchIDs(ids, true), func(id uint) error { return services.PermanentlyDeleteComment(database.DB, actorID, id) })
+	result := writeContentLifecycleBatch(c, orderCommentBatchIDs(ids, true), func(id uint) error { return services.PermanentlyDeleteComment(database.DB, actorID, id) })
+	if result.Succeeded > 0 {
+		middleware.MarkSemanticAuditWritten(c)
+	}
 }
 
 func RestoreAdminComment(c *gin.Context) {
@@ -418,6 +430,7 @@ func RestoreAdminComment(c *gin.Context) {
 		writeCommentLifecycleError(c, err)
 		return
 	}
+	middleware.MarkSemanticAuditWritten(c)
 	c.JSON(http.StatusOK, dto.OK[any](nil, "互动已恢复"))
 }
 
@@ -436,6 +449,7 @@ func PermanentlyDeleteAdminComment(c *gin.Context) {
 		writeCommentLifecycleError(c, err)
 		return
 	}
+	middleware.MarkSemanticAuditWritten(c)
 	c.JSON(http.StatusOK, dto.OK[any](nil, "互动已永久删除"))
 }
 

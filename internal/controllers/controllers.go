@@ -26,6 +26,7 @@ import (
 	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/dto"
+	"github.com/rcy1314/echo-noise/internal/middleware"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/repository"
 	"github.com/rcy1314/echo-noise/internal/services"
@@ -2615,6 +2616,7 @@ func UpdateMessage(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "写入管理员审计失败"})
 			return
 		}
+		middleware.MarkSemanticAuditWritten(c)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "更新成功", "data": updated})

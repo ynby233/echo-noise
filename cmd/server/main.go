@@ -65,6 +65,7 @@ func main() {
 	defer cancelWorkers()
 	services.StartAnnouncementPushDispatcher(workerCtx, database.DB)
 	services.StartVoceChatProvisioningWorker(workerCtx)
+	services.StartLogRetentionWorker(workerCtx, database.DB)
 	// Recycle-bin retention is a system policy, independent of any delegated
 	// administrator. Run once at startup and retry on each daily tick.
 	go func() {

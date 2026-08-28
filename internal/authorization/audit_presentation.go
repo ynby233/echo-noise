@@ -34,6 +34,8 @@ func auditOperationDescription(record models.AdminAuditLog) string {
 	}
 
 	switch {
+	case record.ActorType == "system" && record.Action == "auto_permanent_delete":
+		return fmt.Sprintf("系统已按保留期限永久清理%s", target)
 	case record.Capability == string(CapabilityNotesPinGlobal) && record.Action == "set_global_pin":
 		if record.Reason == string(DenialProtectedContent) {
 			return fmt.Sprintf("尝试修改受保护%s", target)
@@ -111,6 +113,22 @@ func auditSafeSummary(summary string) string {
 		return "查看管理员审计详情"
 	case "replaced delegated administrator capabilities":
 		return "受托管理员能力授权已调整"
+	case "moved interaction to recycle bin":
+		return "互动已移入回收站"
+	case "restored interaction from recycle bin":
+		return "互动已从回收站恢复"
+	case "permanently deleted interaction from recycle bin":
+		return "互动已从回收站永久删除"
+	case "author removed interaction from personal recycle bin; administrative copy retained":
+		return "作者已清除个人回收站副本，管理副本继续保留"
+	case "system comment recycle-bin retention cleanup":
+		return "系统已按互动回收站保留期限清理"
+	case "system recycle-bin retention cleanup":
+		return "系统已按笔记回收站保留期限清理"
+	case "system recycle-bin retention cleanup failed":
+		return "系统清理笔记回收站失败"
+	case "updated primary administrator login audit recording policy":
+		return "站长登录审计记录策略已更新"
 	default:
 		return "管理员操作摘要"
 	}
@@ -157,6 +175,7 @@ func auditModuleDescription(module string, capability string) string {
 		"notifications":    "通知设置",
 		"email":            "邮件设置",
 		"notes":            "笔记",
+		"lifecycle":        "内容生命周期",
 	}
 	if label := labels[module]; label != "" {
 		return label
@@ -171,15 +190,33 @@ func auditActionDescription(action string) string {
 	if action == "" {
 		return ""
 	}
+	labels := map[string]string{
+		"trash":                          "移入回收站",
+		"restore":                        "恢复",
+		"permanent_delete":               "永久删除",
+		"self_permanent_delete":          "清理个人回收站内容",
+		"user_purge":                     "清除个人回收站副本",
+		"auto_permanent_delete":          "按保留期限自动永久清理",
+		"update_primary_admin_recording": "调整站长登录审计记录策略",
+	}
+	if label := labels[action]; label != "" {
+		return "（" + label + "）"
+	}
 	return "（" + action + "）"
 }
 
 func auditTargetDescription(targetType string, targetID string) string {
 	label := map[string]string{
-		"message":         "笔记",
-		"user":            "用户",
-		"admin_audit_log": "审计记录",
-		"route":           "路由",
+		"message":            "笔记",
+		"user":               "用户",
+		"admin_audit_log":    "审计记录",
+		"route":              "路由",
+		"comment":            "评论",
+		"reply":              "回复",
+		"guestbook":          "留言",
+		"interaction":        "互动",
+		"tombstone":          "互动墓碑",
+		"login_audit_config": "登录审计策略",
 	}
 	name := label[targetType]
 	if name == "" {

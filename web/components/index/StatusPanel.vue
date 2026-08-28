@@ -1587,10 +1587,12 @@
                 <div class="flex flex-wrap items-center gap-2">
                   <span class="text-sm" :class="theme.mutedText">记录</span>
                   <span :class="[securityConfig.accessLogEnabled ? 'text-green-400' : 'text-red-400', 'text-sm']">{{ securityConfig.accessLogEnabled ? '已开启' : '已关闭' }}</span>
-                  <UToggle v-model="securityConfig.accessLogEnabled" />
-                  <UButton size="sm" color="green" variant="soft" class="shadow" @click="saveSecurityConfig">保存开关</UButton>
+                  <UToggle v-model="securityConfig.accessLogEnabled" :disabled="!can('security.manage')" />
+                  <span class="text-xs" :class="theme.mutedText">保留</span>
+                  <USelect v-model="securityConfig.accessLogRetentionDays" :options="logRetentionOptions" class="w-32" :disabled="!can('security.manage')" />
+                  <UButton v-if="can('security.manage')" size="sm" color="green" variant="soft" class="shadow" @click="saveSecurityConfig">保存策略</UButton>
                   <UButton size="sm" color="indigo" variant="soft" class="shadow" :loading="accessLogLoading" @click="refreshAccessLogs">刷新</UButton>
-                  <UButton size="sm" color="red" variant="soft" class="shadow" @click="clearAccessLogs">清空</UButton>
+                  <UButton v-if="can('access_logs.clear')" size="sm" color="red" variant="soft" class="shadow" @click="clearAccessLogs">清空</UButton>
                 </div>
               </div>
               <div class="px-4 pb-4 space-y-4">
@@ -1699,10 +1701,12 @@
                 <div class="flex flex-wrap items-center gap-2">
                   <span class="text-sm" :class="theme.mutedText">首页访问记录</span>
                   <span :class="[securityConfig.siteVisitLogEnabled ? 'text-green-400' : 'text-red-400', 'text-sm']">{{ securityConfig.siteVisitLogEnabled ? '已开启' : '已关闭' }}</span>
-                  <UToggle v-model="securityConfig.siteVisitLogEnabled" />
-                  <UButton size="sm" color="green" variant="soft" class="shadow" @click="saveSecurityConfig">保存开关</UButton>
+                  <UToggle v-model="securityConfig.siteVisitLogEnabled" :disabled="!can('security.manage')" />
+                  <span class="text-xs" :class="theme.mutedText">保留</span>
+                  <USelect v-model="securityConfig.siteVisitRetentionDays" :options="logRetentionOptions" class="w-32" :disabled="!can('security.manage')" />
+                  <UButton v-if="can('security.manage')" size="sm" color="green" variant="soft" class="shadow" @click="saveSecurityConfig">保存策略</UButton>
                   <UButton size="sm" color="indigo" variant="soft" class="shadow" :loading="siteVisitLoading" @click="refreshSiteVisits">刷新</UButton>
-                  <UButton size="sm" color="red" variant="soft" class="shadow" @click="clearSiteVisits">清空</UButton>
+                  <UButton v-if="can('site_visits.clear')" size="sm" color="red" variant="soft" class="shadow" @click="clearSiteVisits">清空</UButton>
                 </div>
               </div>
               <div class="px-4 pb-4 space-y-4">
@@ -1797,6 +1801,13 @@
                   <span>登录审计</span>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
+                  <span class="text-xs" :class="theme.mutedText">保留</span>
+                  <USelect v-model="securityConfig.loginAuditRetentionDays" :options="logRetentionOptions" class="w-32" :disabled="!can('security.manage')" />
+                  <UButton v-if="can('security.manage')" size="sm" color="green" variant="soft" class="shadow" @click="saveSecurityConfig">保存期限</UButton>
+                  <label v-if="isPrimaryAdmin" class="inline-flex items-center gap-2 text-sm" :class="theme.text">
+                    <span>记录站长登录</span>
+                    <UToggle v-model="recordPrimaryAdminLoginAudit" :disabled="loginAuditConfigSaving" @change="savePrimaryAdminLoginAudit" />
+                  </label>
                   <UButton size="sm" color="indigo" variant="soft" class="shadow" :loading="loginAuditLoading" @click="refreshLoginAudits">刷新</UButton>
                 </div>
               </div>
@@ -1815,7 +1826,7 @@
 
                 <div :class="adminSubtleCardClass">
                   <div class="flex items-center justify-between mb-2">
-                    <div class="font-semibold" :class="theme.text">普通用户登录/登出（最近 {{ loginAudits.length }} 条）</div>
+                    <div class="font-semibold" :class="theme.text">账户登录/登出（最近 {{ loginAudits.length }} 条）</div>
                   </div>
                   <div class="space-y-3 md:hidden">
                     <div v-for="(row, index) in loginAudits" :key="`login-audit-mobile-${row.ID ?? row.id ?? `${row.created_at || row.CreatedAt || ''}-${row.user_id || row.UserID || ''}-${index}`}`" class="rounded-xl border p-3 space-y-2" :class="[theme.border, theme.cardBg]">
@@ -1829,7 +1840,7 @@
                       <div class="grid grid-cols-1 gap-2 text-sm">
                         <div>
                           <div class="text-xs" :class="theme.mutedText">用户</div>
-                          <div class="break-words" :class="theme.text">{{ row.username || row.Username || '-' }}</div>
+                          <div class="break-words" :class="theme.text">{{ loginAuditUserLabel(row) }}</div>
                         </div>
                         <div>
                           <div class="text-xs" :class="theme.mutedText">用户ID</div>
@@ -1864,7 +1875,7 @@
                           <td class="py-2 pr-4 whitespace-nowrap" :class="theme.mutedText">{{ formatShanghai(row.created_at || row.CreatedAt || '') }}</td>
                           <td class="py-2 pr-4"><UBadge :color="loginAuditActionColor(row.action || row.Action)" variant="soft">{{ loginAuditActionLabel(row.action || row.Action) }}</UBadge></td>
                           <td class="py-2 pr-4" :class="theme.mutedText">{{ row.user_id || row.UserID }}</td>
-                          <td class="py-2 pr-4" :class="theme.text">{{ row.username || row.Username || '-' }}</td>
+                          <td class="py-2 pr-4" :class="theme.text">{{ loginAuditUserLabel(row) }}</td>
                           <td class="py-2 pr-4 font-mono" :class="theme.text">{{ row.ip || row.IP || '-' }}</td>
                           <td class="py-2 break-all max-w-xl" :class="theme.mutedText">{{ row.user_agent || row.UserAgent || '-' }}</td>
                         </tr>
@@ -2211,7 +2222,7 @@
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                   <UButton size="sm" color="indigo" variant="soft" class="shadow" @click="refreshSecurity">刷新</UButton>
-                  <UButton size="sm" color="red" variant="soft" class="shadow" @click="clearAttackLogs">清空攻击记录</UButton>
+                  <UButton v-if="can('security.clear_logs')" size="sm" color="red" variant="soft" class="shadow" @click="clearAttackLogs">清空攻击记录</UButton>
                 </div>
               </div>
               <div class="px-4 pb-4 space-y-4">
@@ -2219,25 +2230,29 @@
                   <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
                     <div class="font-semibold" :class="theme.text">自动封禁策略</div>
                     <div class="flex items-center gap-2">
-                      <UButton size="sm" color="green" class="shadow" @click="saveSecurityConfig">保存策略</UButton>
+                      <UButton v-if="can('security.manage')" size="sm" color="green" class="shadow" @click="saveSecurityConfig">保存策略</UButton>
                     </div>
                   </div>
                   <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
                     <div class="flex items-center justify-between md:col-span-1">
                       <span :class="theme.mutedText">启用自动封禁</span>
-                      <UToggle v-model="securityConfig.autoBanEnabled" />
+                      <UToggle v-model="securityConfig.autoBanEnabled" :disabled="!can('security.manage')" />
                     </div>
                     <div>
                       <label class="text-xs" :class="theme.mutedText">统计窗口（秒）</label>
-                      <UInput v-model.number="securityConfig.autoBanWindowSeconds" type="number" />
+                      <UInput v-model.number="securityConfig.autoBanWindowSeconds" type="number" :disabled="!can('security.manage')" />
                     </div>
                     <div>
                       <label class="text-xs" :class="theme.mutedText">触发次数（窗口内）</label>
-                      <UInput v-model.number="securityConfig.autoBanThreshold" type="number" />
+                      <UInput v-model.number="securityConfig.autoBanThreshold" type="number" :disabled="!can('security.manage')" />
+                    </div>
+                    <div>
+                      <label class="text-xs" :class="theme.mutedText">攻击记录保留期限</label>
+                      <USelect v-model="securityConfig.attackLogRetentionDays" :options="logRetentionOptions" :disabled="!can('security.manage')" />
                     </div>
                     <div>
                       <label class="text-xs" :class="theme.mutedText">封禁时长（分钟，0=永久）</label>
-                      <UInput v-model.number="securityConfig.autoBanMinutes" type="number" />
+                      <UInput v-model.number="securityConfig.autoBanMinutes" type="number" :disabled="!can('security.manage')" />
                     </div>
                   </div>
                   <div class="text-xs mt-2" :class="theme.mutedText">仅对敏感路径扫描命中进行计数；达到阈值后将自动写入封禁列表并立即生效</div>
@@ -3823,6 +3838,8 @@ const siteVisitSelectedUserIds = ref<string[]>([])
 const siteVisitUserOptions = accessLogUserOptions
 const loginAudits = ref<any[]>([])
 const loginAuditLoading = ref(false)
+const loginAuditConfigSaving = ref(false)
+const recordPrimaryAdminLoginAudit = ref(false)
 const loginAuditFilter = reactive({ username: '', ip: '', action: '' })
 const loginAuditActionOptions = [
   { label: '全部事件', value: '' },
@@ -3831,7 +3848,27 @@ const loginAuditActionOptions = [
 ]
 const ipBans = ref<any[]>([])
 const banForm = reactive({ ip: '', minutes: 0 as any, reason: '' })
-const securityConfig = reactive({ autoBanEnabled: false, autoBanWindowSeconds: 600 as any, autoBanThreshold: 10 as any, autoBanMinutes: 60 as any, accessLogEnabled: false, siteVisitLogEnabled: false })
+const logRetentionOptions = [
+  { label: '永不按时间清理', value: 0 },
+  { label: '保留 7 天', value: 7 },
+  { label: '保留 30 天', value: 30 },
+  { label: '保留 90 天', value: 90 },
+  { label: '保留 180 天', value: 180 },
+  { label: '保留 365 天', value: 365 },
+  { label: '保留 730 天', value: 730 }
+]
+const securityConfig = reactive({
+  autoBanEnabled: false,
+  autoBanWindowSeconds: 600 as any,
+  autoBanThreshold: 10 as any,
+  autoBanMinutes: 60 as any,
+  accessLogEnabled: false,
+  siteVisitLogEnabled: false,
+  attackLogRetentionDays: 90 as any,
+  accessLogRetentionDays: 30 as any,
+  siteVisitRetentionDays: 90 as any,
+  loginAuditRetentionDays: 365 as any
+})
 
 const refreshAccessLogs = async () => {
   try {
@@ -3978,6 +4015,13 @@ const loginAuditActionColor = (value: any) => {
   return action === 'logout' ? 'orange' : 'green'
 }
 
+const loginAuditUserLabel = (row: any) => {
+  const username = String(row?.username ?? row?.Username ?? '-').trim() || '-'
+  if (row?.is_primary ?? row?.IsPrimary) return `${username}（站长）`
+  if (row?.is_admin ?? row?.IsAdmin) return `${username}（受托管理员）`
+  return username
+}
+
 const refreshLoginAudits = async () => {
   try {
     loginAuditLoading.value = true
@@ -3998,6 +4042,30 @@ const refreshLoginAudits = async () => {
     useToast().add({ title: '加载登录审计失败', description: e.message, color: 'red' })
   } finally {
     loginAuditLoading.value = false
+  }
+}
+
+const loadPrimaryAdminLoginAuditConfig = async () => {
+  if (!isPrimaryAdmin.value) return
+  try {
+    const res: any = await getRequest<any>('admin/login-audit-config', undefined, { credentials: 'include', silent: true })
+    if (res?.code === 1) recordPrimaryAdminLoginAudit.value = !!res.data?.recordPrimaryAdmin
+  } catch {}
+}
+
+const savePrimaryAdminLoginAudit = async () => {
+  if (!isPrimaryAdmin.value || loginAuditConfigSaving.value) return
+  loginAuditConfigSaving.value = true
+  try {
+    const res: any = await putRequest<any>('admin/login-audit-config', { recordPrimaryAdmin: !!recordPrimaryAdminLoginAudit.value }, { credentials: 'include' })
+    if (res?.code !== 1) throw new Error(res?.msg || '保存失败')
+    recordPrimaryAdminLoginAudit.value = !!res.data?.recordPrimaryAdmin
+    useToast().add({ title: '站长登录审计策略已保存', color: 'green' })
+  } catch (e: any) {
+    useToast().add({ title: '保存失败', description: e.message, color: 'red' })
+    await loadPrimaryAdminLoginAuditConfig()
+  } finally {
+    loginAuditConfigSaving.value = false
   }
 }
 
@@ -4023,7 +4091,12 @@ const refreshSecurity = async () => {
 			securityConfig.autoBanMinutes = res3.data.autoBanMinutes ?? 60
 			securityConfig.accessLogEnabled = !!res3.data.accessLogEnabled
 			securityConfig.siteVisitLogEnabled = !!res3.data.siteVisitLogEnabled
+			securityConfig.attackLogRetentionDays = res3.data.attackLogRetentionDays ?? 90
+			securityConfig.accessLogRetentionDays = res3.data.accessLogRetentionDays ?? 30
+			securityConfig.siteVisitRetentionDays = res3.data.siteVisitRetentionDays ?? 90
+			securityConfig.loginAuditRetentionDays = res3.data.loginAuditRetentionDays ?? 365
 		}
+		if (isPrimaryAdmin.value) await loadPrimaryAdminLoginAuditConfig()
   } catch {}
 }
 
@@ -4035,7 +4108,11 @@ const saveSecurityConfig = async () => {
       autoBanThreshold: Number(securityConfig.autoBanThreshold || 0),
       autoBanMinutes: Number(securityConfig.autoBanMinutes || 0),
       accessLogEnabled: !!securityConfig.accessLogEnabled,
-      siteVisitLogEnabled: !!securityConfig.siteVisitLogEnabled
+      siteVisitLogEnabled: !!securityConfig.siteVisitLogEnabled,
+      attackLogRetentionDays: Number(securityConfig.attackLogRetentionDays ?? 90),
+      accessLogRetentionDays: Number(securityConfig.accessLogRetentionDays ?? 30),
+      siteVisitRetentionDays: Number(securityConfig.siteVisitRetentionDays ?? 90),
+      loginAuditRetentionDays: Number(securityConfig.loginAuditRetentionDays ?? 365)
     }
     const res: any = await putRequest<any>('security/config', payload, { credentials: 'include' })
     if (res && res.code === 1) {
