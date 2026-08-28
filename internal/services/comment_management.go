@@ -269,7 +269,10 @@ func ListCommentManagement(db *gorm.DB, actorID uint, filter CommentManagementFi
 		} else if ownerID != 0 {
 			canRestore = canRestore && authorization.New(db).Authorize(actorID, authorization.CapabilityCommentsRestore, &ownerID).Allowed
 			canPermanentlyDelete = candidate.DeletedAt != nil && authorization.New(db).Authorize(actorID, authorization.CapabilityCommentsDeletePermanently, &ownerID).Allowed
-			canTrash = candidate.DeletedAt == nil && authorization.New(db).Authorize(actorID, authorization.CapabilityCommentsTrash, &ownerID).Allowed
+			if candidate.DeletedAt == nil {
+				_, trashErr := authorizeCommentTrash(db, actorID, message, candidate, commentMap)
+				canTrash = trashErr == nil
+			}
 			canEdit = candidate.DeletedAt == nil && authorization.New(db).Authorize(actorID, authorization.CapabilityCommentsEdit, &ownerID).Allowed
 			canChangeVisibility = candidate.DeletedAt == nil && authorization.New(db).Authorize(actorID, authorization.CapabilityCommentsChangeVisibility, &ownerID).Allowed
 		}

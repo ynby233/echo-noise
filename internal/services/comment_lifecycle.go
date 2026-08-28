@@ -57,6 +57,10 @@ func newCommentLifecycleBatchID() string {
 	return time.Now().UTC().Format("20060102T150405.000000000")
 }
 
+// NewCommentLifecycleBatchID groups several user-selected lifecycle changes
+// without exposing how batch identifiers are generated.
+func NewCommentLifecycleBatchID() string { return newCommentLifecycleBatchID() }
+
 func normalizedCommentDeletionReason(value string) string {
 	switch strings.TrimSpace(value) {
 	case CommentDeletionReasonSelf, CommentDeletionReasonModeration, CommentDeletionReasonOwnerCleanup, CommentDeletionReasonAncestor, CommentDeletionReasonSystem:

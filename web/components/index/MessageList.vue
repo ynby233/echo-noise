@@ -189,6 +189,7 @@
                   :key="(commentRefreshKey[msg.id] || 0)"
                   :ref="builtinCommentsRefFor(msg.id)"
                   :message-id="msg.id"
+                  :message-owner-id="msg.user_id"
                   :message-visibility="msg.visibility"
                   :can-interact="canInteractWithMessage(msg)"
                   :site-config="siteConfig"

@@ -32,12 +32,26 @@
         <UButton color="gray" variant="ghost" @click="resetFilters">清空</UButton>
       </div>
 
+      <div class="interaction-selection" :class="[borderClass, subtleClass]">
+        <label class="interaction-select-all">
+          <input type="checkbox" :checked="allSelected" :disabled="!rows.length || actionLoading" aria-label="选择当前页全部互动" @change="toggleAll" />
+          <span>{{ selected.length ? `已选择 ${selected.length} 条` : '批量选择当前页互动' }}</span>
+        </label>
+        <div class="interaction-selection-actions">
+          <UButton v-if="selected.length" size="xs" color="gray" variant="ghost" :disabled="actionLoading" @click="selected = []">清除选择</UButton>
+          <UButton v-if="selected.length && !recycleBin && canTrash" size="xs" color="orange" variant="soft" :loading="actionLoading" @click="batchTrash">批量移入回收站</UButton>
+          <UButton v-if="selected.length && recycleBin && canRestore" size="xs" color="green" variant="soft" :loading="actionLoading" @click="batchRestore">批量恢复</UButton>
+          <UButton v-if="selected.length && recycleBin && canDeletePermanently" size="xs" color="red" variant="soft" :loading="actionLoading" @click="batchPermanentDelete">批量永久删除</UButton>
+        </div>
+      </div>
+
       <div v-if="loading" class="empty"><UIcon name="i-heroicons-arrow-path" class="animate-spin" />正在读取互动…</div>
       <div v-else-if="!rows.length" class="empty"><UIcon name="i-heroicons-inbox" />当前筛选下没有互动</div>
       <div v-else class="interaction-list">
         <article v-for="row in rows" :key="row.id" class="interaction-card" :class="borderClass">
           <div class="interaction-head">
             <div class="interaction-identity">
+              <input v-model="selected" type="checkbox" :value="row.id" :aria-label="`选择互动 ${row.id}`" />
               <UBadge size="xs" :color="kindColor(row.kind)" variant="soft">{{ kindLabel(row.kind) }}</UBadge>
               <strong>#{{ row.id }}</strong>
               <span :class="mutedClass">{{ row.username || `用户 ${row.user_id || '—'}` }}</span>
@@ -86,6 +100,7 @@ const { can } = useAdminCapabilities()
 const loading = ref(false)
 const actionLoading = ref(false)
 const rows = ref<any[]>([])
+const selected = ref<number[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = 20
@@ -105,6 +120,7 @@ const borderClass = computed(() => props.theme?.border || 'border-slate-200 dark
 const subtleClass = computed(() => props.theme?.subtleBg || 'bg-slate-50 dark:bg-slate-800/60')
 const mutedClass = computed(() => props.theme?.mutedText || 'text-slate-500 dark:text-slate-400')
 const endpoint = computed(() => props.recycleBin ? 'admin/comment-recycle-bin' : 'admin/comments')
+const allSelected = computed(() => rows.value.length > 0 && rows.value.every(row => selected.value.includes(Number(row.id))))
 const retentionOptions = [0, 7, 30, 90, 180, 365].map(value => ({ label: value ? `${value} 天` : '永不自动清理', value }))
 const kindOptions = [{ label: '全部类型', value: '' }, { label: '评论', value: 'comment' }, { label: '回复', value: 'reply' }, { label: '留言', value: 'guestbook' }]
 const reasonOptions = [{ label: '全部原因', value: '' }, { label: '本人删除', value: 'self' }, { label: '内容管理', value: 'moderation' }, { label: '内容所有者清理', value: 'owner_cleanup' }, { label: '上级内容牵连', value: 'ancestor' }]
@@ -127,16 +143,26 @@ const load = async () => {
     const response = await getRequest<any>(endpoint.value, query(), { silent: true })
     rows.value = response?.code === 1 && Array.isArray(response.data?.items) ? response.data.items : []
     total.value = response?.code === 1 ? Number(response.data?.total || 0) : 0
+    const visible = new Set(rows.value.map(row => Number(row.id)))
+    selected.value = selected.value.filter(id => visible.has(Number(id)))
   } finally { loading.value = false }
 }
 const applyFilters = () => { page.value = 1; void load() }
 const resetFilters = () => { Object.assign(filters, { q: '', kind: '', authorId: '', reason: '' }); applyFilters() }
+const toggleAll = () => {
+  selected.value = allSelected.value ? [] : rows.value.map(row => Number(row.id))
+}
 const run = async (request: () => Promise<any>) => {
   actionLoading.value = true
   try {
     const response = await request()
-    toast.add({ title: response?.code === 1 ? '操作完成' : '操作失败', description: response?.msg, color: response?.code === 1 ? 'green' : 'red' })
+    const failed = Number(response?.data?.failed || 0)
+    const succeeded = Number(response?.data?.succeeded || 0)
+    const isBatch = response?.data && typeof response.data.succeeded === 'number'
+    const description = isBatch ? `成功 ${succeeded} 项，失败 ${failed} 项` : response?.msg
+    toast.add({ title: response?.code !== 1 ? '操作失败' : failed > 0 ? '部分操作未完成' : '操作完成', description, color: response?.code !== 1 ? 'red' : failed > 0 ? 'orange' : 'green' })
     if (response?.code === 1) await load()
+    return response
   } finally { actionLoading.value = false }
 }
 const trash = (row: any) => run(() => deleteRequest(`messages/${row.message_id}/comments/${row.id}`, undefined, { silent: true }))
@@ -157,6 +183,20 @@ const removePermanently = (row: any) => {
   if (typeof window !== 'undefined' && !window.confirm(`永久删除${kindLabel(row.kind)} #${row.id}？若仍有后代，将保留最小墓碑结构。`)) return
   return run(() => deleteRequest(`admin/comment-recycle-bin/${row.id}`, undefined, { silent: true }))
 }
+const batchTrash = () => {
+  if (typeof window !== 'undefined' && !window.confirm(`将所选 ${selected.value.length} 条互动移入回收站？其后代会按生命周期规则一并处理。`)) return
+  return runSelectedBatch('admin/comments/batch-trash')
+}
+const runSelectedBatch = async (endpoint: string) => {
+  const response = await run(() => postRequest(endpoint, { ids: selected.value }, { silent: true }))
+  if (response?.code === 1) selected.value = []
+  return response
+}
+const batchRestore = () => runSelectedBatch('admin/comment-recycle-bin/batch-restore')
+const batchPermanentDelete = () => {
+  if (typeof window !== 'undefined' && !window.confirm(`永久删除所选 ${selected.value.length} 条互动？仍有后代的互动会保留最小墓碑。`)) return
+  return runSelectedBatch('admin/comment-recycle-bin/batch-permanent-delete')
+}
 const loadPolicy = async () => {
   const auth = await getRequest<any>('admin/authorization/me', undefined, { silent: true })
   isPrimaryAdmin.value = auth?.code === 1 && auth?.data?.is_primary_admin === true
@@ -174,10 +214,10 @@ const savePolicy = async () => {
   } finally { savingPolicy.value = false }
 }
 onMounted(() => { clock = setInterval(() => { now.value = Date.now() }, 60000); void load(); if (props.recycleBin) void loadPolicy() })
-watch(() => props.recycleBin, () => { page.value = 1; void load(); if (props.recycleBin) void loadPolicy() })
+watch(() => props.recycleBin, () => { page.value = 1; selected.value = []; void load(); if (props.recycleBin) void loadPolicy() })
 onUnmounted(() => { if (clock) clearInterval(clock) })
 </script>
 
 <style scoped>
-.comment-manager{min-width:0;overflow:hidden}.manager-body{display:flex;flex-direction:column;gap:14px;padding:0 16px 16px}.policy-card,.filter-card,.interaction-card{border-width:1px;border-style:solid;border-radius:10px}.policy-card{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:16px;padding:12px}.policy-controls,.notify-toggle{display:flex;align-items:center;gap:12px}.notify-toggle{font-size:12px;white-space:nowrap}.filter-card{display:grid;grid-template-columns:minmax(180px,2fr) minmax(130px,1fr) minmax(110px,1fr) minmax(140px,1fr) auto auto;gap:10px;padding:12px}.interaction-list{display:flex;flex-direction:column;gap:10px}.interaction-card{padding:13px}.interaction-head,.interaction-identity,.interaction-actions,.interaction-meta,.pagination,.pagination>div{display:flex;align-items:center;gap:9px}.interaction-head,.pagination{justify-content:space-between}.interaction-identity{min-width:0}.thread-trail{margin-top:10px;padding:9px 11px;border-radius:9px}.trail-node{display:grid;grid-template-columns:92px minmax(0,1fr);gap:8px;font-size:12px;line-height:1.5}.trail-node+ .trail-node{margin-top:5px}.trail-node.is-child{position:relative;padding-left:14px}.trail-node.is-child:before{content:'↳';position:absolute;left:0;color:#94a3b8}.trail-node span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.interaction-content{margin:11px 0 0;white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.65}.interaction-meta{margin-top:10px;flex-wrap:wrap;font-size:12px;color:#64748b}.purged-label{color:#dc2626}.deadline{color:#d97706;font-weight:650}.interaction-actions{justify-content:flex-end;margin-top:10px;flex-wrap:wrap}.empty{display:flex;min-height:180px;align-items:center;justify-content:center;gap:8px;color:#64748b}.pagination{padding:4px 0;font-size:12px}.pagination>div span{min-width:72px;text-align:center}@media(max-width:900px){.filter-card{grid-template-columns:1fr 1fr}.policy-card{align-items:stretch;flex-direction:column}.policy-controls{align-items:stretch;flex-direction:column}.notify-toggle{justify-content:space-between}}@media(max-width:600px){.manager-body{padding:0 12px 12px}.filter-card{grid-template-columns:1fr}.interaction-head{align-items:flex-start;flex-direction:column}.trail-node{grid-template-columns:1fr}.trail-node span:last-child{white-space:normal}.pagination{align-items:stretch;flex-direction:column}.pagination>div{justify-content:space-between}}
+.comment-manager{min-width:0;overflow:hidden}.manager-body{display:flex;flex-direction:column;gap:14px;padding:0 16px 16px}.policy-card,.filter-card,.interaction-card,.interaction-selection{border-width:1px;border-style:solid;border-radius:10px}.policy-card{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:16px;padding:12px}.policy-controls,.notify-toggle{display:flex;align-items:center;gap:12px}.notify-toggle{font-size:12px;white-space:nowrap}.filter-card{display:grid;grid-template-columns:minmax(180px,2fr) minmax(130px,1fr) minmax(110px,1fr) minmax(140px,1fr) auto auto;gap:10px;padding:12px}.interaction-selection,.interaction-select-all,.interaction-selection-actions{display:flex;align-items:center;gap:10px}.interaction-selection{justify-content:space-between;padding:10px 12px}.interaction-select-all{font-size:12px;font-weight:650}.interaction-selection-actions{justify-content:flex-end;flex-wrap:wrap}.interaction-list{display:flex;flex-direction:column;gap:10px}.interaction-card{padding:13px}.interaction-head,.interaction-identity,.interaction-actions,.interaction-meta,.pagination,.pagination>div{display:flex;align-items:center;gap:9px}.interaction-head,.pagination{justify-content:space-between}.interaction-identity{min-width:0}.thread-trail{margin-top:10px;padding:9px 11px;border-radius:9px}.trail-node{display:grid;grid-template-columns:92px minmax(0,1fr);gap:8px;font-size:12px;line-height:1.5}.trail-node+ .trail-node{margin-top:5px}.trail-node.is-child{position:relative;padding-left:14px}.trail-node.is-child:before{content:'↳';position:absolute;left:0;color:#94a3b8}.trail-node span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.interaction-content{margin:11px 0 0;white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.65}.interaction-meta{margin-top:10px;flex-wrap:wrap;font-size:12px;color:#64748b}.purged-label{color:#dc2626}.deadline{color:#d97706;font-weight:650}.interaction-actions{justify-content:flex-end;margin-top:10px;flex-wrap:wrap}.empty{display:flex;min-height:180px;align-items:center;justify-content:center;gap:8px;color:#64748b}.pagination{padding:4px 0;font-size:12px}.pagination>div span{min-width:72px;text-align:center}@media(max-width:900px){.filter-card{grid-template-columns:1fr 1fr}.policy-card{align-items:stretch;flex-direction:column}.policy-controls{align-items:stretch;flex-direction:column}.notify-toggle{justify-content:space-between}}@media(max-width:600px){.manager-body{padding:0 12px 12px}.filter-card{grid-template-columns:1fr}.interaction-head,.interaction-selection{align-items:flex-start;flex-direction:column}.interaction-selection-actions{justify-content:flex-start}.trail-node{grid-template-columns:1fr}.trail-node span:last-child{white-space:normal}.pagination{align-items:stretch;flex-direction:column}.pagination>div{justify-content:space-between}}
 </style>

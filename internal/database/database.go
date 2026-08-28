@@ -1,10 +1,13 @@
 package database
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/glebarez/sqlite"
@@ -17,6 +20,40 @@ import (
 )
 
 var DB *gorm.DB
+
+func sqliteConnectionString(dbPath string) string {
+	base := dbPath
+	if dbPath != ":memory:" && !strings.HasPrefix(strings.ToLower(dbPath), "file:") {
+		base = "file:" + filepath.ToSlash(dbPath)
+	}
+	separator := "?"
+	if strings.Contains(base, "?") {
+		separator = "&"
+	}
+	query := url.Values{}
+	query.Add("_pragma", "busy_timeout(10000)")
+	query.Add("_pragma", "journal_mode(WAL)")
+	query.Add("_pragma", "synchronous(NORMAL)")
+	query.Add("_pragma", "foreign_keys(1)")
+	return base + separator + query.Encode()
+}
+
+func configureConnectionPool(db *sql.DB, dbType string) {
+	if dbType == "sqlite" {
+		// SQLite permits only one writer. Keeping one application connection
+		// serializes transactions, while WAL and busy_timeout in the DSN allow
+		// readers and external maintenance connections to coexist safely.
+		db.SetMaxIdleConns(1)
+		db.SetMaxOpenConns(1)
+		db.SetConnMaxLifetime(0)
+		db.SetConnMaxIdleTime(0)
+		return
+	}
+	db.SetMaxIdleConns(10)
+	db.SetMaxOpenConns(100)
+	db.SetConnMaxLifetime(time.Hour)
+	db.SetConnMaxIdleTime(time.Minute * 10)
+}
 
 func getEnvOrConfig(envKey, configValue string) string {
 	if value := os.Getenv(envKey); value != "" {
@@ -46,7 +83,7 @@ func InitDB() error {
 		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 			return fmt.Errorf("创建数据库目录失败: %v", err)
 		}
-		DB, err = gorm.Open(sqlite.Open(dbPath), gormConfig)
+		DB, err = gorm.Open(sqlite.Open(sqliteConnectionString(dbPath)), gormConfig)
 
 	case "postgres":
 		host := getEnvOrConfig("DB_HOST", config.Config.Database.Host)
@@ -90,11 +127,7 @@ func InitDB() error {
 		return fmt.Errorf("获取数据库实例失败: %v", err)
 	}
 
-	// 设置连接池参数
-	sqlDB.SetMaxIdleConns(10)
-	sqlDB.SetMaxOpenConns(100)
-	sqlDB.SetConnMaxLifetime(time.Hour)
-	sqlDB.SetConnMaxIdleTime(time.Minute * 10)
+	configureConnectionPool(sqlDB, dbType)
 
 	models.SetDB(DB)
 

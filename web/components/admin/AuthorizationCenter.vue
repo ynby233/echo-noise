@@ -78,45 +78,31 @@
                 />
               </div>
               <div class="authorization-capability-grid">
-                <div v-for="parent in group.roots" :key="parent.capability" class="authorization-parent-block">
+                <div
+                  v-for="item in group.rendered"
+                  :key="item.capability"
+                  class="authorization-capability-node"
+                  :class="capabilityDepth(item) > 0 ? 'is-nested' : ''"
+                  :style="{ marginLeft: capabilityDepth(item) ? `${capabilityDepth(item) * 14}px` : undefined }"
+                >
                   <div
-                    class="authorization-capability is-parent"
-                    :class="[theme?.border || 'border-slate-200 dark:border-slate-700', !parent.grantable ? 'is-locked' : '']"
+                    class="authorization-capability"
+                    :class="[theme?.border || 'border-slate-200 dark:border-slate-700', capabilityDepth(item) === 0 ? 'is-parent' : 'is-child', (!item.grantable || !parentSelected(item)) ? 'is-locked' : '']"
                   >
                     <UCheckbox
-                      :model-value="selectedCapabilities.has(parent.capability)"
-                      :disabled="!parent.grantable"
-                      :aria-label="parent.label + (!parent.grantable ? '（仅站长）' : '（父权限）')"
-                      @update:model-value="toggle(parent.capability, $event === true)"
+                      :model-value="selectedCapabilities.has(item.capability)"
+                      :disabled="!item.grantable || !parentSelected(item)"
+                      :aria-label="item.label + (!item.grantable ? '（仅站长）' : (!parentSelected(item) ? `（需先授予 ${item.parent_capability}）` : ''))"
+                      @update:model-value="toggle(item.capability, $event === true)"
                     />
                     <span class="min-w-0 flex-1">
-                      <span class="block text-sm font-medium">{{ parent.label }}</span>
-                      <span class="mt-0.5 block break-all text-[11px]" :class="theme?.mutedText || 'text-slate-500'">{{ parent.capability }}</span>
+                      <span class="block text-sm font-medium">{{ item.label }}</span>
+                      <span class="mt-0.5 block break-all text-[11px]" :class="theme?.mutedText || 'text-slate-500'">{{ item.capability }}</span>
                     </span>
-                    <UBadge v-if="!parent.grantable" color="gray" size="xs" variant="soft">仅站长</UBadge>
-                    <UBadge v-else-if="childrenFor(parent.capability).length" color="primary" size="xs" variant="soft">父权限</UBadge>
-                  </div>
-
-                  <div v-if="childrenFor(parent.capability).length" class="authorization-children">
-                    <div
-                      v-for="item in childrenFor(parent.capability)"
-                      :key="item.capability"
-                      class="authorization-capability is-child"
-                      :class="[theme?.border || 'border-slate-200 dark:border-slate-700', (!item.grantable || !parentSelected(item)) ? 'is-locked' : '']"
-                    >
-                      <UCheckbox
-                        :model-value="selectedCapabilities.has(item.capability)"
-                        :disabled="!item.grantable || !parentSelected(item)"
-                        :aria-label="item.label + (!parentSelected(item) ? `（需先授予 ${item.parent_capability}）` : '')"
-                        @update:model-value="toggle(item.capability, $event === true)"
-                      />
-                      <span class="min-w-0 flex-1">
-                        <span class="block text-sm font-medium">{{ item.label }}</span>
-                        <span class="mt-0.5 block break-all text-[11px]" :class="theme?.mutedText || 'text-slate-500'">{{ item.capability }}</span>
-                      </span>
-                      <UBadge v-if="scopedHiddenCapabilities.has(item.capability)" color="indigo" size="xs" variant="soft">隐藏范围</UBadge>
-                      <UBadge v-else-if="!parentSelected(item)" color="gray" size="xs" variant="soft">等待父权限</UBadge>
-                    </div>
+                    <UBadge v-if="!item.grantable" color="gray" size="xs" variant="soft">仅站长</UBadge>
+                    <UBadge v-else-if="scopedHiddenCapabilities.has(item.capability)" color="indigo" size="xs" variant="soft">隐藏范围</UBadge>
+                    <UBadge v-else-if="!parentSelected(item)" color="gray" size="xs" variant="soft">等待父权限</UBadge>
+                    <UBadge v-else-if="childrenFor(item.capability).length" color="primary" size="xs" variant="soft">父权限</UBadge>
                   </div>
                 </div>
               </div>
@@ -150,6 +136,7 @@
 import { getRequest, putRequest } from '~/utils/api'
 
 type Definition = { capability: string, module: string, label: string, grantable: boolean, parent_capability?: string }
+type RenderedDefinition = Definition & { depth: number }
 type Admin = { id: number, username: string }
 defineProps<{ theme?: Record<string, string> }>()
 const admins = ref<Admin[]>([]), catalog = ref<Definition[]>([]), selectedID = ref<number | null>(null), saved = ref<string[]>([]), selected = ref<string[]>([]), loading = ref(true), saving = ref(false), message = ref(''), messageError = ref(false)
@@ -157,13 +144,37 @@ const selectedCapabilities = computed(() => new Set(selected.value))
 const selectedAdmin = computed(() => admins.value.find(admin => admin.id === selectedID.value))
 const grantableCapabilityCount = computed(() => catalog.value.filter(item => item.grantable).length)
 const dirty = computed(() => [...selected.value].sort().join('\n') !== [...saved.value].sort().join('\n'))
+const flattenCapabilityTree = (items: Definition[]) => {
+  const byParent = new Map<string, Definition[]>()
+  const known = new Set(items.map(item => item.capability))
+  for (const item of items) {
+    const parent = item.parent_capability && known.has(item.parent_capability) ? item.parent_capability : ''
+    byParent.set(parent, [...(byParent.get(parent) || []), item])
+  }
+  const rendered: RenderedDefinition[] = []
+  const visited = new Set<string>()
+  const visit = (parent: string, depth: number) => {
+    for (const item of byParent.get(parent) || []) {
+      if (visited.has(item.capability)) continue
+      visited.add(item.capability)
+      rendered.push({ ...item, depth })
+      visit(item.capability, depth + 1)
+    }
+  }
+  visit('', 0)
+  for (const item of items) {
+    if (!visited.has(item.capability)) rendered.push({ ...item, depth: 0 })
+  }
+  return rendered
+}
+const capabilityDepth = (item: RenderedDefinition) => item.depth
 const groups = computed(() => {
   const map = new Map<string, Definition[]>()
   for (const item of catalog.value) map.set(item.module, [...(map.get(item.module) || []), item])
   return [...map.entries()].map(([module, items]) => ({
     module,
     items,
-    roots: items.filter(item => !item.parent_capability),
+    rendered: flattenCapabilityTree(items),
     grantable: items.filter(item => item.grantable)
   }))
 })
@@ -432,15 +443,11 @@ onMounted(load)
   padding: 10px;
 }
 
-.authorization-parent-block {
-  display: grid;
-  gap: 6px;
+.authorization-capability-node {
+  min-width: 0;
 }
 
-.authorization-children {
-  display: grid;
-  gap: 6px;
-  margin-left: 14px;
+.authorization-capability-node.is-nested {
   padding-left: 10px;
   border-left: 2px solid rgba(99, 102, 241, 0.18);
 }

@@ -322,7 +322,7 @@ import { shouldShowVisibilityBadge } from '~/utils/visibility-badge'
 
 type CommentEditorTarget = 'content' | 'edit'
 
-const props = defineProps<{ messageId: number, siteConfig: any, showInput?: boolean, contextLabel?: string, autoScrollInput?: boolean, messageVisibility?: string, canInteract?: boolean, replyInputOnly?: boolean, replyCommentId?: number | null, replyCommentAuthor?: string | null }>()
+const props = defineProps<{ messageId: number, messageOwnerId?: number | null, siteConfig: any, showInput?: boolean, contextLabel?: string, autoScrollInput?: boolean, messageVisibility?: string, canInteract?: boolean, replyInputOnly?: boolean, replyCommentId?: number | null, replyCommentAuthor?: string | null }>()
 const emit = defineEmits(['cancel'])
 const contextLabel = computed(() => String(props.contextLabel || '评论').trim() || '评论')
 const showCommentRefreshButton = computed(() => contextLabel.value === '留言' && !props.replyInputOnly)
@@ -380,9 +380,22 @@ const visibilityOptionFor = (v: any) => visibilityOptions.find((opt) => opt.valu
 const visibilityTag = (v: any) => visibilityOptionFor(v)
 const commentOwnerId = (c: any) => Number(c?.user_id || c?.UserID || c?.user?.id || c?.user?.ID || c?.user?.user_id || 0)
 const isCommentOwner = (c: any) => !!currentUserId.value && commentOwnerId(c) === currentUserId.value
+const isMessageOwner = computed(() => !!currentUserId.value && Number(props.messageOwnerId || 0) === currentUserId.value)
+const ownsCommentAncestor = (c: any) => {
+  const seen = new Set<number>()
+  let parentId = Number(c?.parent_id || 0)
+  while (parentId > 0 && !seen.has(parentId)) {
+    seen.add(parentId)
+    const parent = comments.value.find((item: any) => Number(item?.id || 0) === parentId)
+    if (!parent) return false
+    if (isCommentOwner(parent)) return true
+    parentId = Number(parent?.parent_id || 0)
+  }
+  return false
+}
 const isPrimaryAdminComment = (c: any) => commentOwnerId(c) === 1
 const canEditComment = (c: any) => isCommentOwner(c) || (!isPrimaryAdminComment(c) && can('comments.edit'))
-const canDeleteComment = (c: any) => !c?.is_tombstone && (isCommentOwner(c) || (!isPrimaryAdminComment(c) && can('comments.trash')))
+const canDeleteComment = (c: any) => !c?.is_tombstone && (isCommentOwner(c) || isMessageOwner.value || ownsCommentAncestor(c) || (!isPrimaryAdminComment(c) && can('comments.trash')))
 const canChangeCommentVisibility = (c: any) => isCommentOwner(c) || (!isPrimaryAdminComment(c) && can('comments.change_visibility'))
 const canShowCommentVisibility = (c: any) => shouldShowVisibilityBadge({
   visibility: c?.visibility,

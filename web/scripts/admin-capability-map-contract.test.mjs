@@ -8,7 +8,10 @@ const authorizationSource = await readFile(new URL('../../internal/authorization
 const sectionType = panel.match(/type AdminSectionKey =([\s\S]*?)const activeSection/)
 assert.ok(sectionType, 'StatusPanel must declare the admin section key union')
 const sections = [...sectionType[1].matchAll(/'([^']+)'/g)].map((match) => match[1])
-const intentionallyUnprotected = new Set(['dashboard', 'user', 'hitokoto', 'life-countdown', 'widgets'])
+const intentionallyUnprotected = new Set([
+  'dashboard', 'user', 'hitokoto', 'life-countdown', 'widgets',
+  'personal-notes', 'personal-note-recycle-bin', 'personal-interactions', 'personal-interaction-recycle-bin',
+])
 const primaryAdminOnly = new Set(['site-rss'])
 
 for (const section of sections) {

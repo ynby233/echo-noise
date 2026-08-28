@@ -8,12 +8,26 @@
       <UButton size="sm" color="gray" variant="soft" icon="i-heroicons-arrow-path" :loading="loading" @click="load">刷新</UButton>
     </div>
 
+    <div class="personal-selection" :class="[borderClass, subtleClass]">
+      <label class="personal-select-all">
+        <input type="checkbox" :checked="allSelected" :disabled="!rows.length || acting" aria-label="选择当前页全部内容" @change="toggleAll" />
+        <span>{{ selected.length ? `已选择 ${selected.length} 条` : '批量选择当前页内容' }}</span>
+      </label>
+      <div class="personal-selection-actions">
+        <UButton v-if="selected.length" size="xs" color="gray" variant="ghost" :disabled="acting" @click="selected = []">清除选择</UButton>
+        <UButton v-if="selected.length && section === 'notes'" size="xs" color="orange" variant="soft" :loading="acting" @click="batchTrashNotes">批量移入回收站</UButton>
+        <UButton v-if="selected.length && section === 'interactions'" size="xs" color="orange" variant="soft" :loading="acting" @click="batchTrashInteractions">批量移入回收站</UButton>
+        <UButton v-if="selected.length && isRecycleBin" size="xs" color="green" variant="soft" :loading="acting" @click="batchRestore">批量恢复</UButton>
+        <UButton v-if="selected.length && section === 'interaction-recycle-bin'" size="xs" color="red" variant="soft" :loading="acting" @click="batchPurgeInteractions">批量从我的回收站彻底删除</UButton>
+      </div>
+    </div>
+
     <div v-if="loading" class="personal-empty"><UIcon name="i-heroicons-arrow-path" class="animate-spin" />正在读取…</div>
     <div v-else-if="!rows.length" class="personal-empty">{{ config.emptyText }}</div>
     <div v-else class="personal-list">
       <article v-for="row in rows" :key="`${section}-${row.id}`" class="personal-card" :class="borderClass">
         <div class="personal-card-head">
-          <strong>{{ itemTitle(row) }}</strong>
+          <label class="personal-card-select"><input v-model="selected" type="checkbox" :value="row.id" :aria-label="`选择${itemTitle(row)}`" /><strong>{{ itemTitle(row) }}</strong></label>
           <span :class="mutedClass">{{ formatDate(isRecycleBin ? row.deleted_at : row.created_at) }}</span>
         </div>
 
@@ -38,7 +52,10 @@
             <UButton size="xs" color="primary" variant="soft" :to="{ path: '/', query: { tab: 'personal', message_id: row.id } }">查看笔记</UButton>
             <UButton v-if="!row.is_guestbook" size="xs" color="orange" variant="soft" :loading="acting" @click="trashNote(row)">移入回收站</UButton>
           </template>
-          <UButton v-else-if="section === 'interactions' && row.can_open_thread" size="xs" color="primary" variant="soft" :to="{ path: '/', query: { tab: 'latest', message_id: row.message_id, comment_id: row.id } }">查看所在互动串</UButton>
+          <template v-else-if="section === 'interactions'">
+            <UButton v-if="row.can_open_thread" size="xs" color="primary" variant="soft" :to="{ path: '/', query: { tab: 'latest', message_id: row.message_id, comment_id: row.id } }">查看所在互动串</UButton>
+            <UButton size="xs" color="orange" variant="soft" :loading="acting" @click="trashInteraction(row)">移入回收站</UButton>
+          </template>
           <template v-else-if="isRecycleBin">
             <UButton v-if="row.can_restore !== false" size="xs" color="green" variant="soft" :loading="acting" @click="restore(row)">恢复</UButton>
             <UButton v-if="section === 'interaction-recycle-bin'" size="xs" color="red" variant="soft" :loading="acting" @click="purge(row)">从我的回收站彻底删除</UButton>
@@ -68,6 +85,7 @@ type PersonalSection = 'notes' | 'note-recycle-bin' | 'interactions' | 'interact
 const props = defineProps<{ section: PersonalSection, theme?: any }>()
 const toast = useToast()
 const rows = ref<any[]>([])
+const selected = ref<number[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = 10
@@ -94,6 +112,7 @@ const endpoint = computed(() => ({
 const borderClass = computed(() => props.theme?.border || 'border-slate-200 dark:border-slate-700')
 const subtleClass = computed(() => props.theme?.subtleBg || 'bg-slate-50 dark:bg-slate-800/60')
 const mutedClass = computed(() => props.theme?.mutedText || 'text-slate-500 dark:text-slate-400')
+const allSelected = computed(() => rows.value.length > 0 && rows.value.every(row => selected.value.includes(Number(row.id))))
 
 const load = async () => {
   loading.value = true
@@ -101,6 +120,8 @@ const load = async () => {
     const response = await getRequest<any>(endpoint.value, { page: page.value, pageSize }, { silent: true })
     rows.value = response?.code === 1 && Array.isArray(response.data?.items) ? response.data.items : []
     total.value = response?.code === 1 ? Number(response.data?.total || 0) : 0
+    const visible = new Set(rows.value.map(row => Number(row.id)))
+    selected.value = selected.value.filter(id => visible.has(Number(id)))
   } finally {
     loading.value = false
   }
@@ -120,12 +141,20 @@ const deadlineText = (deadline: any) => {
   if (seconds <= 0) return '已到清理时间'
   return `距自动清理还有 ${Math.floor(seconds / 86400)} 天 ${Math.floor((seconds % 86400) / 3600)} 小时`
 }
+const toggleAll = () => {
+  selected.value = allSelected.value ? [] : rows.value.map(row => Number(row.id))
+}
 const run = async (request: () => Promise<any>) => {
   acting.value = true
   try {
     const response = await request()
-    toast.add({ title: response?.code === 1 ? '操作完成' : '操作失败', description: response?.msg, color: response?.code === 1 ? 'green' : 'red' })
+    const failed = Number(response?.data?.failed || 0)
+    const succeeded = Number(response?.data?.succeeded || 0)
+    const isBatch = response?.data && typeof response.data.succeeded === 'number'
+    const description = isBatch ? `成功 ${succeeded} 项，失败 ${failed} 项` : response?.msg
+    toast.add({ title: response?.code !== 1 ? '操作失败' : failed > 0 ? '部分操作未完成' : '操作完成', description, color: response?.code !== 1 ? 'red' : failed > 0 ? 'orange' : 'green' })
     if (response?.code === 1) await load()
+    return response
   } finally {
     acting.value = false
   }
@@ -133,6 +162,10 @@ const run = async (request: () => Promise<any>) => {
 const trashNote = (row: any) => {
   if (typeof window !== 'undefined' && !window.confirm(`将笔记 #${row.id} 移入回收站？`)) return
   return run(() => deleteRequest(`messages/${row.id}`, undefined, { silent: true }))
+}
+const trashInteraction = (row: any) => {
+  if (typeof window !== 'undefined' && !window.confirm(`将${itemTitle(row)}移入回收站？其后代会按生命周期规则一并处理。`)) return
+  return run(() => deleteRequest(`messages/${row.message_id}/comments/${row.id}`, undefined, { silent: true }))
 }
 const restore = (row: any) => run(() => postRequest(
   section.value === 'note-recycle-bin' ? `user/recycle-bin/notes/${row.id}/restore` : `user/recycle-bin/comments/${row.id}/restore`,
@@ -143,12 +176,22 @@ const purge = (row: any) => {
   if (typeof window !== 'undefined' && !window.confirm('从你的个人回收站彻底删除后，你将无法再查看或恢复这条互动。是否继续？')) return
   return run(() => deleteRequest(`user/recycle-bin/comments/${row.id}`, undefined, { silent: true }))
 }
+const runBatch = async (endpoint: string, confirmation?: string) => {
+  if (!selected.value.length) return
+  if (confirmation && typeof window !== 'undefined' && !window.confirm(confirmation)) return
+  const response = await run(() => postRequest(endpoint, { ids: selected.value }, { silent: true }))
+  if (response?.code === 1) selected.value = []
+}
+const batchTrashNotes = () => runBatch('user/notes/batch-trash', `将所选 ${selected.value.length} 条笔记移入回收站？`)
+const batchTrashInteractions = () => runBatch('user/interactions/batch-trash', `将所选 ${selected.value.length} 条互动移入回收站？其后代会一并处理。`)
+const batchRestore = () => runBatch(section.value === 'note-recycle-bin' ? 'user/recycle-bin/notes/batch-restore' : 'user/recycle-bin/comments/batch-restore')
+const batchPurgeInteractions = () => runBatch('user/recycle-bin/comments/batch-purge', `从个人回收站彻底删除所选 ${selected.value.length} 条互动后，你将无法再查看或恢复。是否继续？`)
 
-watch(section, () => { page.value = 1; void load() })
+watch(section, () => { page.value = 1; selected.value = []; void load() })
 onMounted(() => { clock = setInterval(() => { now.value = Date.now() }, 60000); void load() })
 onUnmounted(() => { if (clock) clearInterval(clock) })
 </script>
 
 <style scoped>
-.personal-content{padding:16px}.personal-head,.personal-card-head,.personal-status,.personal-actions,.personal-pager,.personal-pager>div{display:flex;align-items:center;gap:10px}.personal-head,.personal-card-head,.personal-pager{justify-content:space-between}.personal-head h3{margin:0;font-size:15px;font-weight:700}.personal-head p{margin:4px 0 0;font-size:12px}.personal-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}.personal-card{min-width:0;padding:12px;border-width:1px;border-style:solid;border-radius:10px}.personal-card-head span{font-size:11px}.context-strip{display:flex;gap:5px;margin-top:9px;padding:7px 9px;overflow:hidden;border-radius:8px;color:#64748b;font-size:11px;white-space:nowrap}.context-strip span{overflow:hidden;text-overflow:ellipsis}.personal-body{margin:9px 0 0;display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:3;font-size:13px;line-height:1.6;white-space:pre-wrap}.personal-status{margin-top:9px;justify-content:space-between;flex-wrap:wrap;font-size:11px}.deadline{color:#d97706;font-weight:700}.personal-actions{margin-top:10px;justify-content:flex-end;flex-wrap:wrap}.personal-empty{min-height:160px;display:flex;align-items:center;justify-content:center;gap:8px;color:#64748b;font-size:13px}.personal-pager{margin-top:12px;font-size:11px}.personal-pager>div span{min-width:62px;text-align:center}@media(max-width:800px){.personal-list{grid-template-columns:1fr}}@media(max-width:600px){.personal-content{padding:12px}.personal-head{align-items:flex-start}.personal-pager{align-items:stretch;flex-direction:column}.personal-pager>div{justify-content:space-between}}
+.personal-content{padding:16px}.personal-head,.personal-card-head,.personal-status,.personal-actions,.personal-pager,.personal-pager>div,.personal-selection,.personal-select-all,.personal-selection-actions,.personal-card-select{display:flex;align-items:center;gap:10px}.personal-head,.personal-card-head,.personal-pager,.personal-selection{justify-content:space-between}.personal-head h3{margin:0;font-size:15px;font-weight:700}.personal-head p{margin:4px 0 0;font-size:12px}.personal-selection{margin-top:14px;padding:10px 12px;border-width:1px;border-style:solid;border-radius:10px}.personal-select-all,.personal-card-select{font-size:12px}.personal-selection-actions{justify-content:flex-end;flex-wrap:wrap}.personal-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}.personal-card{min-width:0;padding:12px;border-width:1px;border-style:solid;border-radius:10px}.personal-card-head span{font-size:11px}.context-strip{display:flex;gap:5px;margin-top:9px;padding:7px 9px;overflow:hidden;border-radius:8px;color:#64748b;font-size:11px;white-space:nowrap}.context-strip span{overflow:hidden;text-overflow:ellipsis}.personal-body{margin:9px 0 0;display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:3;font-size:13px;line-height:1.6;white-space:pre-wrap}.personal-status{margin-top:9px;justify-content:space-between;flex-wrap:wrap;font-size:11px}.deadline{color:#d97706;font-weight:700}.personal-actions{margin-top:10px;justify-content:flex-end;flex-wrap:wrap}.personal-empty{min-height:160px;display:flex;align-items:center;justify-content:center;gap:8px;color:#64748b;font-size:13px}.personal-pager{margin-top:12px;font-size:11px}.personal-pager>div span{min-width:62px;text-align:center}@media(max-width:800px){.personal-list{grid-template-columns:1fr}}@media(max-width:600px){.personal-content{padding:12px}.personal-head,.personal-selection{align-items:flex-start;flex-direction:column}.personal-selection-actions{justify-content:flex-start}.personal-pager{align-items:stretch;flex-direction:column}.personal-pager>div{justify-content:space-between}}
 </style>

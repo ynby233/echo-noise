@@ -9,6 +9,7 @@ const repoRoot = dirname(webRoot)
 const component = await readFile(join(webRoot, 'components/index/StatusPanel.vue'), 'utf8')
 const securityController = await readFile(join(repoRoot, 'internal/controllers/security.go'), 'utf8')
 const loginController = await readFile(join(repoRoot, 'internal/controllers/controllers.go'), 'utf8')
+const loginSession = await readFile(join(repoRoot, 'internal/controllers/mobile_setup_controller.go'), 'utf8')
 const routes = await readFile(join(repoRoot, 'internal/routers/routers.go'), 'utf8')
 const securityModel = await readFile(join(repoRoot, 'internal/models/security.go'), 'utf8')
 const migrate = await readFile(join(repoRoot, 'internal/models/migrate.go'), 'utf8')
@@ -32,8 +33,14 @@ assert.match(
 )
 
 assert.match(
+  loginSession,
+  /func\s+establishLoginSession[\s\S]*?session\.Set\("user_id",\s*user\.ID\)[\s\S]*?return\s+session\.Save\(\)/,
+  'the shared login-session helper must persist the authenticated session'
+)
+
+assert.match(
   loginController,
-  /safeUser\s*:=\s*\*user[\s\S]*?safeUser\.Password\s*=\s*""[\s\S]*?session\.Save\(\)[\s\S]*?_\s*=\s*recordUserLoginAudit\(c,\s*user,\s*loginAuditActionLogin\)[\s\S]*?c\.JSON\(http\.StatusOK,\s*dto\.OK\(&safeUser,\s*"登录成功"\)\)/,
+  /safeUser\s*:=\s*\*user[\s\S]*?safeUser\.Password\s*=\s*""[\s\S]*?establishLoginSession\(c,\s*user\)[\s\S]*?_\s*=\s*recordUserLoginAudit\(c,\s*user,\s*loginAuditActionLogin\)[\s\S]*?c\.JSON\(http\.StatusOK,\s*dto\.OK\(&safeUser,\s*"登录成功"\)\)/,
   'successful password login should redact a response copy, save the session, record the login audit, and only then respond'
 )
 

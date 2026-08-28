@@ -541,20 +541,28 @@ func registerNoteManagementRoutes(group *gin.RouterGroup) {
 
 func registerCommentManagementRoutes(group *gin.RouterGroup) {
 	group.GET("/admin/comments", middleware.RequireCapability(authorization.CapabilityCommentsView), controllers.ListAdminCommentManagement)
+	group.POST("/admin/comments/batch-trash", middleware.RequireCapability(authorization.CapabilityCommentsTrash), controllers.BatchTrashAdminComments)
 	adminRecycle := group.Group("/admin/comment-recycle-bin")
 	adminRecycle.Use(middleware.RequireCapability(authorization.CapabilityCommentsRecycleBinView))
 	{
 		adminRecycle.GET("", controllers.ListAdminCommentRecycleBin)
 		adminRecycle.POST("/:id/restore", middleware.RequireCapability(authorization.CapabilityCommentsRestore), controllers.RestoreAdminComment)
+		adminRecycle.POST("/batch-restore", middleware.RequireCapability(authorization.CapabilityCommentsRestore), controllers.BatchRestoreAdminComments)
 		adminRecycle.DELETE("/:id", middleware.RequireCapability(authorization.CapabilityCommentsDeletePermanently), controllers.PermanentlyDeleteAdminComment)
+		adminRecycle.POST("/batch-permanent-delete", middleware.RequireCapability(authorization.CapabilityCommentsDeletePermanently), controllers.BatchPermanentlyDeleteAdminComments)
 	}
 	group.GET("/user/interactions", controllers.ListPersonalInteractions)
+	group.POST("/user/interactions/batch-trash", controllers.BatchTrashPersonalInteractions)
 	group.GET("/user/recycle-bin/comments", controllers.ListPersonalCommentRecycleBin)
 	group.POST("/user/recycle-bin/comments/:id/restore", controllers.RestorePersonalComment)
+	group.POST("/user/recycle-bin/comments/batch-restore", controllers.BatchRestorePersonalComments)
 	group.DELETE("/user/recycle-bin/comments/:id", controllers.PurgePersonalComment)
+	group.POST("/user/recycle-bin/comments/batch-purge", controllers.BatchPurgePersonalComments)
 	group.GET("/user/notes", controllers.ListPersonalNotes)
+	group.POST("/user/notes/batch-trash", controllers.BatchTrashPersonalNotes)
 	group.GET("/user/recycle-bin/notes", controllers.ListPersonalNoteRecycleBin)
 	group.POST("/user/recycle-bin/notes/:id/restore", controllers.RestorePersonalNote)
+	group.POST("/user/recycle-bin/notes/batch-restore", controllers.BatchRestorePersonalNotes)
 }
 
 func staticResponseHeadersMiddleware() gin.HandlerFunc {

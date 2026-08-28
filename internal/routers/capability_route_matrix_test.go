@@ -475,6 +475,9 @@ func TestProtectedAdminRouteMatrixRejectsDelegatedAdministratorWithoutRequiredGr
 		{name: "backup download", method: http.MethodGet, path: "/api/backup/download", capability: authorization.CapabilityDatabaseBackup},
 		{name: "user password reset", method: http.MethodPost, path: "/api/user/reset_password", capability: authorization.CapabilityUsersResetPassword},
 		{name: "registration applications", method: http.MethodGet, path: "/api/registration/applications", capability: authorization.CapabilityRegistrationView},
+		{name: "comment batch trash", method: http.MethodPost, path: "/api/admin/comments/batch-trash", capability: authorization.CapabilityCommentsTrash},
+		{name: "comment batch restore", method: http.MethodPost, path: "/api/admin/comment-recycle-bin/batch-restore", capability: authorization.CapabilityCommentsRestore},
+		{name: "comment batch permanent delete", method: http.MethodPost, path: "/api/admin/comment-recycle-bin/batch-permanent-delete", capability: authorization.CapabilityCommentsDeletePermanently},
 	}
 
 	for _, testCase := range cases {
