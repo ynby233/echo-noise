@@ -22,6 +22,7 @@
     "test:heatmap-scope": "node scripts/heatmap-scope.test.mjs",
     "test:admin-comments": "node scripts/admin-comments-panel.test.mjs",
     "test:comment-capability-visibility": "node scripts/comment-capability-visibility.test.mjs",
+    "test:markdown-stable-insertion": "node scripts/markdown-stable-insertion.test.mjs",
     "test:admin-dashboard": "node scripts/admin-dashboard-contract.test.mjs",
     "test:admin-authorization": "node scripts/admin-authorization-contract.test.mjs",
     "test:admin-capability-map": "node scripts/admin-capability-map-contract.test.mjs",

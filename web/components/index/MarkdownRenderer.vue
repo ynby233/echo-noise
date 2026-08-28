@@ -34,6 +34,7 @@ import { applyTableTrackSize, getTableResizeZoomScale, resolveTableTrackResize, 
 import { isManagedAttachmentURL, resolveManagedAttachmentURL } from '~/utils/media-url'
 import { attachmentFailureDetail, attachmentFailureTitle, type AttachmentFailureKind } from '~/utils/attachment-failure'
 import { isBrowserPreviewableAttachmentUrl } from '~/utils/attachment-preview'
+import { withStableInsertionPoint } from '~/utils/dom-stable-insertion'
 import Vditor from 'vditor';
 
 // 定义正则表达式
@@ -1049,12 +1050,15 @@ const applyImageGrid = (keepImagesFullSize = false) => {
           if (parentNode) {
             const group = `full-image-${Math.random().toString(36).slice(2)}`
             const movedNodes = new Set(mediaItems.map(({ node }) => node))
-            for (const { node } of mediaItems) {
-              const wrapper = document.createElement('div')
-              wrapper.className = 'full-image-attachment'
-              wrapper.appendChild(ensureImageAnchor(node, group))
-              parentNode.insertBefore(wrapper, firstBlock)
-            }
+            const inserted = withStableInsertionPoint(parentNode, firstBlock, (insertionPoint) => {
+              for (const { node } of mediaItems) {
+                const wrapper = document.createElement('div')
+                wrapper.className = 'full-image-attachment'
+                parentNode.insertBefore(wrapper, insertionPoint)
+                wrapper.appendChild(ensureImageAnchor(node, group))
+              }
+            })
+            if (!inserted) continue
             for (const block of run) {
               if (movedNodes.has(block)) continue
               if (block.parentNode) block.remove()

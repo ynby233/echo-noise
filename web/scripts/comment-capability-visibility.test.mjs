@@ -19,6 +19,21 @@ assert.match(manager, /v-if="!recycleBin && canEdit && row\.can_edit"/, 'managem
 assert.match(manager, /v-if="!recycleBin && canChangeVisibility && row\.can_change_visibility"/, 'management visibility action must be independently controlled')
 assert.match(manager, /v-if="recycleBin && canRestore/, 'restore action must be capability controlled')
 assert.match(manager, /v-if="recycleBin && canDeletePermanently && row\.can_permanently_delete"/, 'permanent delete action must be capability and target controlled')
+assert.match(
+  manager,
+  /<div\s+v-if="canSelectForBatch"\s+class="interaction-selection"/,
+  'batch-selection bar must be hidden when the administrator has no action capability for the current manager'
+)
+assert.match(
+  manager,
+  /<input\s+v-if="canSelectForBatch"\s+v-model="selected"\s+type="checkbox"/,
+  'row selection checkboxes must be hidden when no batch action is authorized'
+)
+assert.match(
+  manager,
+  /const\s+canSelectForBatch\s*=\s*computed\(\(\)\s*=>\s*props\.recycleBin\s*\?\s*\(canRestore\.value\s*\|\|\s*canDeletePermanently\.value\)\s*:\s*canTrash\.value\)/,
+  'batch selection must follow the actionable capability set for the active or recycle-bin view'
+)
 assert.match(panel, /canSection\('comment-recycle-bin'\)/, 'comment recycle-bin panel must be section-gated')
 assert.doesNotMatch(component, /can\(['"]comments\.delete['"]\)/, 'retired comments.delete capability must not remain')
 

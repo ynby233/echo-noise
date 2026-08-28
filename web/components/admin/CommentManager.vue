@@ -32,7 +32,7 @@
         <UButton color="gray" variant="ghost" @click="resetFilters">清空</UButton>
       </div>
 
-      <div class="interaction-selection" :class="[borderClass, subtleClass]">
+      <div v-if="canSelectForBatch" class="interaction-selection" :class="[borderClass, subtleClass]">
         <label class="interaction-select-all">
           <input type="checkbox" :checked="allSelected" :disabled="!rows.length || actionLoading" aria-label="选择当前页全部互动" @change="toggleAll" />
           <span>{{ selected.length ? `已选择 ${selected.length} 条` : '批量选择当前页互动' }}</span>
@@ -51,7 +51,7 @@
         <article v-for="row in rows" :key="row.id" class="interaction-card" :class="borderClass">
           <div class="interaction-head">
             <div class="interaction-identity">
-              <input v-model="selected" type="checkbox" :value="row.id" :aria-label="`选择互动 ${row.id}`" />
+              <input v-if="canSelectForBatch" v-model="selected" type="checkbox" :value="row.id" :aria-label="`选择互动 ${row.id}`" />
               <UBadge size="xs" :color="kindColor(row.kind)" variant="soft">{{ kindLabel(row.kind) }}</UBadge>
               <strong>#{{ row.id }}</strong>
               <span :class="mutedClass">{{ row.username || `用户 ${row.user_id || '—'}` }}</span>
@@ -116,6 +116,7 @@ const canEdit = computed(() => can('comments.edit'))
 const canChangeVisibility = computed(() => can('comments.change_visibility'))
 const canRestore = computed(() => can('comments.restore'))
 const canDeletePermanently = computed(() => can('comments.delete_permanently'))
+const canSelectForBatch = computed(() => props.recycleBin ? (canRestore.value || canDeletePermanently.value) : canTrash.value)
 const borderClass = computed(() => props.theme?.border || 'border-slate-200 dark:border-slate-700')
 const subtleClass = computed(() => props.theme?.subtleBg || 'bg-slate-50 dark:bg-slate-800/60')
 const mutedClass = computed(() => props.theme?.mutedText || 'text-slate-500 dark:text-slate-400')
