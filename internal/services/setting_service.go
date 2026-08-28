@@ -1272,10 +1272,7 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 			"musicCssCdnURL":        choose(config.MusicCssCdnURL, ""),
 			"musicJsCdnURL":         choose(config.MusicJsCdnURL, ""),
 			// 评论系统
-			"commentEnabled":             config.CommentEnabled,
-			"commentEmailEnabled":        config.CommentEmailEnabled,
-			"commentEmailAdminNotifyAll": config.CommentEmailAdminNotifyAll,
-			"commentLoginRequired":       config.CommentLoginRequired,
+			"commentEnabled": config.CommentEnabled,
 			// 扩展组件开关
 			"calendarEnabled":        widgetVisibility.CalendarEnabled,
 			"timeEnabled":            config.TimeEnabled,
@@ -1775,29 +1772,6 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	if v, ok := frontendSettings["musicJsCdnURL"].(string); ok {
 		config.MusicJsCdnURL = v
 	}
-	if vb, ok := frontendSettings["commentLoginRequired"].(bool); ok {
-		config.CommentLoginRequired = vb
-	} else if vs, ok := frontendSettings["commentLoginRequired"].(string); ok {
-		config.CommentLoginRequired = (vs == "true")
-	}
-	if vb, ok := frontendSettings["commentEmailEnabled"].(bool); ok {
-		config.CommentEmailEnabled = vb
-	} else if vs, ok := frontendSettings["commentEmailEnabled"].(string); ok {
-		if vs == "true" {
-			config.CommentEmailEnabled = true
-		} else if vs == "false" {
-			config.CommentEmailEnabled = false
-		}
-	}
-	if vb, ok := frontendSettings["commentEmailAdminNotifyAll"].(bool); ok {
-		config.CommentEmailAdminNotifyAll = vb
-	} else if vs, ok := frontendSettings["commentEmailAdminNotifyAll"].(string); ok {
-		if vs == "true" {
-			config.CommentEmailAdminNotifyAll = true
-		} else if vs == "false" {
-			config.CommentEmailAdminNotifyAll = false
-		}
-	}
 	if v, ok := frontendSettings["enableGithubCard"].(bool); ok {
 		config.EnableGithubCard = v
 	} else if vs, ok := frontendSettings["enableGithubCard"].(string); ok {
@@ -2162,38 +2136,35 @@ func getDefaultConfig() map[string]interface{} {
 				{"type": "rss", "group": "默认分组", "name": "站点 RSS", "url": "/rss", "enabled": true, "visible": true},
 			},
 			// 系统欢迎组件默认参数
-			"welcomeAvatarURL":           neutralAvatarURL,
-			"welcomeName":                neutralOwnerName,
-			"welcomeDescription":         neutralDescription,
-			"welcomeUseAdmin":            true,
-			"pwaEnabled":                 true,
-			"pwaTitle":                   "",
-			"pwaDescription":             neutralPwaDescription,
-			"pwaIconURL":                 "",
-			"defaultContentTheme":        "light",
-			"homeLayoutDefault":          "three",
-			"announcementText":           neutralAnnouncement,
-			"announcementEnabled":        true,
-			"musicEnabled":               false,
-			"musicPlaylistId":            "",
-			"musicSongId":                "",
-			"musicPosition":              "bottom-left",
-			"musicTheme":                 "auto",
-			"musicLyric":                 true,
-			"musicAutoplay":              false,
-			"musicDefaultMinimized":      true,
-			"musicEmbed":                 false,
-			"musicHideOnMobile":          true,
-			"musicCssCdnURL":             "",
-			"musicJsCdnURL":              "",
-			"commentEnabled":             true,
-			"commentEmailEnabled":        false,
-			"commentEmailAdminNotifyAll": true,
-			"commentLoginRequired":       false,
-			"hitokotoEnabled":            true,
-			"lifeCountdownEnabled":       false,
-			"lifeCountdownBirthDate":     "",
-			"lifeExpectancyYears":        80,
+			"welcomeAvatarURL":       neutralAvatarURL,
+			"welcomeName":            neutralOwnerName,
+			"welcomeDescription":     neutralDescription,
+			"welcomeUseAdmin":        true,
+			"pwaEnabled":             true,
+			"pwaTitle":               "",
+			"pwaDescription":         neutralPwaDescription,
+			"pwaIconURL":             "",
+			"defaultContentTheme":    "light",
+			"homeLayoutDefault":      "three",
+			"announcementText":       neutralAnnouncement,
+			"announcementEnabled":    true,
+			"musicEnabled":           false,
+			"musicPlaylistId":        "",
+			"musicSongId":            "",
+			"musicPosition":          "bottom-left",
+			"musicTheme":             "auto",
+			"musicLyric":             true,
+			"musicAutoplay":          false,
+			"musicDefaultMinimized":  true,
+			"musicEmbed":             false,
+			"musicHideOnMobile":      true,
+			"musicCssCdnURL":         "",
+			"musicJsCdnURL":          "",
+			"commentEnabled":         true,
+			"hitokotoEnabled":        true,
+			"lifeCountdownEnabled":   false,
+			"lifeCountdownBirthDate": "",
+			"lifeExpectancyYears":    80,
 			// 广告默认参数（多广告位）
 			"leftAdEnabled": true,
 			"leftAds": []map[string]string{

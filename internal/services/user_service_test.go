@@ -1987,14 +1987,13 @@ func TestGetFrontendConfigUsesViewerScopedLifeCountdown(t *testing.T) {
 		t.Fatalf("create setting: %v", err)
 	}
 	if err := db.Create(&models.SiteConfig{
-		SiteTitle:                  "Test Site",
-		LifeCountdownEnabled:       true,
-		LifeCountdownBirthDate:     "1970-01-02",
-		LifeExpectancyYears:        90,
-		CalendarEnabled:            true,
-		TimeEnabled:                true,
-		HitokotoEnabled:            true,
-		CommentEmailAdminNotifyAll: true,
+		SiteTitle:              "Test Site",
+		LifeCountdownEnabled:   true,
+		LifeCountdownBirthDate: "1970-01-02",
+		LifeExpectancyYears:    90,
+		CalendarEnabled:        true,
+		TimeEnabled:            true,
+		HitokotoEnabled:        true,
 	}).Error; err != nil {
 		t.Fatalf("create site config: %v", err)
 	}
@@ -2044,7 +2043,7 @@ func TestGetFrontendConfigUsesViewerScopedHitokotoPreference(t *testing.T) {
 	if err := db.Create(&models.Setting{AllowRegistration: true}).Error; err != nil {
 		t.Fatalf("create setting: %v", err)
 	}
-	if err := db.Create(&models.SiteConfig{SiteTitle: "Test Site", HitokotoEnabled: true, CommentEmailAdminNotifyAll: true}).Error; err != nil {
+	if err := db.Create(&models.SiteConfig{SiteTitle: "Test Site", HitokotoEnabled: true}).Error; err != nil {
 		t.Fatalf("create site config: %v", err)
 	}
 
@@ -2089,7 +2088,6 @@ func TestGetFrontendConfigSeparatesGuestDefaultsFromEveryAccountWidgetPreference
 	}
 	if err := db.Create(&models.SiteConfig{
 		HitokotoEnabled: true, LifeCountdownEnabled: true,
-		CommentEmailAdminNotifyAll: true,
 	}).Error; err != nil {
 		t.Fatalf("create site config: %v", err)
 	}

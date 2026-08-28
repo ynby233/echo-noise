@@ -32,10 +32,10 @@ func TestRefreshInfoFeedItemsReplacesSnapshotAndKeepsLocalMessageLinksRelative(t
 	defer upstream.Close()
 
 	if err := db.Create(&models.SiteConfig{
-		FeedEnabled:         true,
-		FeedSources:         `[{"type":"rss","group":"test","name":"local","url":"/rss","enabled":true,"visible":true}]`,
-		FeedLimit:           100,
-		CommentEmailSiteURL: upstream.URL,
+		FeedEnabled:   true,
+		FeedSources:   `[{"type":"rss","group":"test","name":"local","url":"/rss","enabled":true,"visible":true}]`,
+		FeedLimit:     100,
+		SitePublicURL: upstream.URL,
 	}).Error; err != nil {
 		t.Fatalf("create feed config: %v", err)
 	}

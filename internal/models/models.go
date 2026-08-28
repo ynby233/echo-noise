@@ -462,18 +462,10 @@ type SiteConfig struct {
 	MusicCssCdnURL        string `gorm:"type:varchar(255)"`
 	MusicJsCdnURL         string `gorm:"type:varchar(255)"`
 	// 评论系统配置
-	CommentEnabled                bool   `gorm:"default:true"`
-	CommentEmailEnabled           bool   `gorm:"default:false"`
-	CommentEmailAdminNotifyAll    bool   `gorm:"default:true;not null" json:"commentEmailAdminNotifyAll"`
-	CommentLoginRequired          bool   `gorm:"default:true"`
-	CommentEmailReplyName         string `gorm:"type:varchar(100)"`
-	CommentEmailAdminPrefix       string `gorm:"type:varchar(50)"`
-	CommentEmailReplyPrefix       string `gorm:"type:varchar(50)"`
-	CommentEmailReplyTemplate     string `gorm:"type:text"`
-	CommentEmailAdminTemplate     string `gorm:"type:text"`
-	CommentEmailSiteURL           string `gorm:"type:varchar(191)"`
-	CommentEmailReplyTemplateHTML string `gorm:"type:text"`
-	CommentEmailAdminTemplateHTML string `gorm:"type:text"`
+	CommentEnabled bool `gorm:"default:true"`
+	// SitePublicURL is shared by background jobs and outbound in-app notification links.
+	// It is intentionally independent from the archived comment-email module.
+	SitePublicURL string `gorm:"type:varchar(191)"`
 	// 扩展组件开关
 	CalendarEnabled        bool   `gorm:"default:true"`
 	TimeEnabled            bool   `gorm:"default:true"`

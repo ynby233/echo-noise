@@ -1308,36 +1308,8 @@
 
           <div id="comments-section" class="col-span-12" v-if="canSection('comments') && isSectionVisible('comments')">
             <div :class="adminPanelCardClass">
-              <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-4 sm:gap-0">
-                <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                  <UIcon name="i-heroicons-chat-bubble-left-right" class="w-5 h-5" />
-                  <span class="whitespace-nowrap">评论系统</span>
-                </div>
-                  <div class="flex flex-wrap items-center gap-x-2 gap-y-2 justify-start sm:justify-end w-full sm:w-auto">
-                    <div class="flex items-center gap-2 w-auto">
-                      <span class="text-xs sm:text-sm whitespace-nowrap" :class="theme.mutedText">状态</span>
-                      <span :class="[frontendConfig.commentEnabled ? 'text-green-400' : 'text-red-400', 'text-xs sm:text-sm', 'whitespace-nowrap']">{{ frontendConfig.commentEnabled ? '已启用' : '未启用' }}</span>
-                      <UToggle v-model="frontendConfig.commentEnabled" class="shrink-0" />
-                    </div>
-                    <div class="flex items-center gap-2 w-auto">
-                      <span class="text-xs sm:text-sm whitespace-nowrap" :class="theme.mutedText">邮件通知</span>
-                      <UToggle v-model="frontendConfig.commentEmailEnabled" :disabled="!frontendConfig.commentEnabled" class="shrink-0" />
-                    </div>
-                    <div class="flex items-center gap-2 w-auto">
-                      <span class="text-xs sm:text-sm whitespace-nowrap" :class="theme.mutedText">管理员全站</span>
-                      <UToggle v-model="frontendConfig.commentEmailAdminNotifyAll" :disabled="!frontendConfig.commentEnabled || !frontendConfig.commentEmailEnabled" class="shrink-0" />
-                    </div>
-                    <div class="flex items-center gap-2 w-auto">
-                      <span class="text-xs sm:text-sm whitespace-nowrap" :class="theme.mutedText">仅登录</span>
-                      <UToggle v-model="frontendConfig.commentLoginRequired" :disabled="!frontendConfig.commentEnabled" class="shrink-0" />
-                    </div>
-                    <UButton color="green" size="xs" @click="saveCommentConfig" class="shadow w-auto">保存</UButton>
-                  </div>
-              </div>
-                <div class="px-4 pb-4">
-                <CommentsSettings :config="frontendConfig" :theme="theme" @update:config="updateCommentsConfig" />
-                <CommentManager v-if="can('comments.view')" :theme="theme" class="mt-4" />
-                <div v-if="false" class="mt-4 rounded-lg p-3" :class="theme.subtleBg">
+              <CommentManager v-if="can('comments.view')" :theme="theme" />
+                <div v-if="false" class="rounded-lg p-3" :class="theme.subtleBg">
                   <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-2">
                     <UInput v-model="commentSearch" placeholder="搜索评论内容或用户名" class="flex-1" />
                     <div class="flex items-center gap-2">
@@ -1395,8 +1367,6 @@
           </UCard>
         </UModal>
 
-      </div>
-      
           <div id="email-section" v-if="canSection('email') && isSectionVisible('email')" class="col-span-12">
             <div :class="adminPanelCardClass">
               <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
@@ -2530,7 +2500,6 @@ import { useUserStore } from '~/store/user'
 import { useToast } from '#ui/composables/useToast'
 import NotifyPanel from './NotifyPanel.vue'
  
-import CommentsSettings from '~/components/admin/CommentsSettings.vue'
 import AttachmentManager from '~/components/admin/AttachmentManager.vue'
 import NoteManager from '~/components/admin/NoteManager.vue'
 import CommentManager from '~/components/admin/CommentManager.vue'
@@ -4203,10 +4172,6 @@ const updateNotifyConfig = (next: any) => {
   Object.assign(notifyConfig, next || {})
 }
 
-const updateCommentsConfig = (next: any) => {
-  Object.assign(frontendConfig as any, next || {})
-}
-
 // 获取推送配置
 const fetchNotifyConfig = async () => {
     try {
@@ -5312,7 +5277,6 @@ const configFieldHints: Record<string, string> = {
 const switchConfigKeySet = new Set([
 	'enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'homeStatsEnabled', 'popularTagsEnabled', 'latestGalleryEnabled', 'heatmapEnabled',
   'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile',
-  'commentEnabled', 'commentEmailEnabled', 'commentLoginRequired',
   'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled',
   'leftAdEnabled', 'welcomeUseAdmin', 'socialLinksEnabled', 'rssEnabled'
 ])
@@ -5405,9 +5369,6 @@ interface FrontendConfig {
     aboutPageTitle: string;
     aboutPageDescription: string;
     aboutMarkdown: string;
-    commentEnabled: boolean;
-    commentEmailEnabled: boolean;
-    commentLoginRequired: boolean;
     notifyEnabled: boolean;
     enableGithubCard: boolean;
     pwaEnabled: boolean;
@@ -5440,7 +5401,6 @@ interface FrontendConfig {
     socialLinksEnabled: boolean;
     calendarEnabled: boolean;
     timeEnabled: boolean;
-    commentEmailAdminNotifyAll: boolean;
     lifeCountdownEnabled: boolean;
     lifeCountdownBirthDate: string;
     lifeExpectancyYears: number | '';
@@ -5493,10 +5453,6 @@ const frontendConfig = reactive<FrontendConfig>({
     aboutPageTitle: '',
     aboutPageDescription: '',
     aboutMarkdown: '',
-    commentEnabled: true,
-    commentEmailEnabled: false,
-    commentEmailAdminNotifyAll: true,
-  commentLoginRequired: true,
   notifyEnabled: false,
     enableGithubCard: false,
     // PWA 设置
@@ -5611,9 +5567,6 @@ const defaultConfig: Record<string, any> = {
 		popularTagsEnabled: true,
 		latestGalleryEnabled: true,
 		heatmapEnabled: true,
-    commentEnabled: true,
-    commentEmailEnabled: false,
-    commentLoginRequired: false,
     enableGithubCard: false,
     pwaEnabled: true,
     homeLayoutDefault: 'three',
@@ -6151,7 +6104,7 @@ const fetchConfig = async () => {
             const settings = data.data.frontendSettings;
             
             // 遍历配置项进行更新（布尔型键需强制转换）
-            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'homeStatsEnabled', 'popularTagsEnabled', 'latestGalleryEnabled', 'heatmapEnabled', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile', 'commentEnabled', 'commentEmailEnabled', 'commentEmailAdminNotifyAll', 'commentLoginRequired', 'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'socialLinksEnabled', 'feedEnabled', 'rssEnabled']
+            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'homeStatsEnabled', 'popularTagsEnabled', 'latestGalleryEnabled', 'heatmapEnabled', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile', 'notifyEnabled', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'socialLinksEnabled', 'feedEnabled', 'rssEnabled']
             Object.keys(frontendConfig).forEach(key => {
                 if (key === 'backgrounds') {
                     const serverBackgrounds = settings[key];
@@ -6566,9 +6519,6 @@ const saveConfig = async () => {
         announcementEnabled: !!(frontendConfig as any).announcementEnabled,
         pwaEnabled: !!(frontendConfig as any).pwaEnabled,
         enableGithubCard: !!(frontendConfig as any).enableGithubCard,
-        commentEnabled: !!(frontendConfig as any).commentEnabled,
-        commentEmailEnabled: !!(frontendConfig as any).commentEmailEnabled,
-        commentLoginRequired: !!(frontendConfig as any).commentLoginRequired,
         musicEnabled: !!(frontendConfig as any).musicEnabled,
         musicLyric: !!(frontendConfig as any).musicLyric,
         musicAutoplay: !!(frontendConfig as any).musicAutoplay,
@@ -6708,48 +6658,6 @@ const handleSiteAvatarUpload = async (event: Event) => {
     }
 }
 
-const saveCommentConfig = async () => {
-  try {
-    const payload = {
-      frontendSettings: {
-        commentEnabled: !!frontendConfig.commentEnabled,
-        commentEmailEnabled: !!frontendConfig.commentEmailEnabled,
-        commentEmailAdminNotifyAll: !!frontendConfig.commentEmailAdminNotifyAll,
-        commentLoginRequired: !!frontendConfig.commentLoginRequired
-      }
-    }
-    const response = await fetch(`${baseApi}/settings`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(payload)
-    })
-    const data = await response.json()
-    if (response.ok && data.code === 1) {
-      await fetchConfig()
-      window.dispatchEvent(new Event('frontend-config-updated'))
-      useToast().add({ title: '成功', description: '评论设置已更新', color: 'green' })
-    } else {
-      throw new Error(data.msg || '保存失败')
-    }
-  } catch (error: any) {
-    useToast().add({ title: '错误', description: error.message || '保存失败', color: 'red' })
-  }
-}
-
-const commentLoginRequiredInitialized = ref(false)
-watch(() => frontendConfig.commentLoginRequired, async () => {
-  if (!commentLoginRequiredInitialized.value || isLoading.value) {
-    commentLoginRequiredInitialized.value = true
-    return
-  }
-  try {
-    await saveCommentConfig()
-  } catch {}
-})
-
-
-
 const commentSearch = ref('')
 const showAdminComments = ref(false)
 const adminComments = ref<any[]>([])
@@ -6881,12 +6789,6 @@ const doAdminDelete = async () => {
   await adminDeleteComment(adminPendingDelete.value)
   resetAdminDeleteConfirm()
 }
-
-watch(() => !!(frontendConfig as any).commentEnabled, (enabled: boolean) => {
-  if (!enabled) {
-    showAdminComments.value = false
-  }
-})
 
 // 保存 GitHub 卡片解析配置（独立项）
 const saveGithubCardConfig = async () => {

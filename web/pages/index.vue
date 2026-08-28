@@ -1529,8 +1529,6 @@ Object.assign(frontendConfig.value, {
 			 heatmapEnabled: true,
     // 评论系统
     commentEnabled: true,
-    commentEmailEnabled: false,
-    commentLoginRequired: false,
     // 音乐配置
     musicEnabled: false,
     musicPlaylistId: '2141128031',
@@ -2191,8 +2189,6 @@ const headerImageStyle = computed(() => ({
 			 heatmapEnabled: true,
     // 评论系统默认值
     commentEnabled: true,
-    commentEmailEnabled: false,
-    commentLoginRequired: false,
     // 音乐默认配置
     musicEnabled: false,
     musicPlaylistId: '2141128031',
@@ -2231,7 +2227,7 @@ const fetchConfig = async () => {
         const res = await getRequest<any>('frontend/config', undefined, { credentials: 'include' })
         if (res && res.code === 1 && res.data && res.data.frontendSettings) {
             const settings = res.data.frontendSettings
-            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'commentEnabled', 'commentEmailEnabled', 'commentLoginRequired', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'socialLinksEnabled', 'feedEnabled']
+            const booleanKeys = ['enableGithubCard', 'pwaEnabled', 'announcementEnabled', 'hitokotoEnabled', 'commentEnabled', 'musicEnabled', 'musicLyric', 'musicAutoplay', 'musicDefaultMinimized', 'musicEmbed', 'musicHideOnMobile', 'calendarEnabled', 'timeEnabled', 'lifeCountdownEnabled', 'leftAdEnabled', 'welcomeUseAdmin', 'socialLinksEnabled', 'feedEnabled']
             Object.keys(nextConfig).forEach(key => {
                 if (settings[key] !== null && settings[key] !== undefined) {
                     if (key === 'backgrounds' && Array.isArray(settings[key])) {

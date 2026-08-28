@@ -278,7 +278,7 @@ func resolveSchedulerBaseURL() string {
 	if err == nil && db != nil {
 		var siteCfg models.SiteConfig
 		if err := db.Table("site_configs").First(&siteCfg).Error; err == nil {
-			u := strings.TrimSpace(siteCfg.CommentEmailSiteURL)
+			u := strings.TrimSpace(siteCfg.SitePublicURL)
 			if strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") {
 				return strings.TrimRight(u, "/")
 			}

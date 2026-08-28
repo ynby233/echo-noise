@@ -1,0 +1,40 @@
+//go:build ignore
+
+// Historical reference only. This file is deliberately not valid runtime wiring.
+// See ../README.md before using any part of it in a future redesign.
+package commentemailnotifications
+
+// HistoricalConfig records the fields that the retired SiteConfig model used.
+// A future implementation must define a separate extension-owned configuration
+// model instead of restoring these fields to the core site_configs table.
+type HistoricalConfig struct {
+	Enabled           bool
+	AdminNotifyAll    bool
+	ReplyFromName     string
+	AdminSubjectPrefix string
+	ReplySubjectPrefix string
+	ReplyTextTemplate  string
+	AdminTextTemplate  string
+	SiteURL            string
+	ReplyHTMLTemplate  string
+	AdminHTMLTemplate  string
+}
+
+/*
+Historical PostComment behavior, intentionally preserved as documentation:
+
+  if SMTP and interaction email were enabled:
+    - a top-level comment or guestbook entry notified smtpFrom, falling back
+      to smtpUser;
+    - a reply also notified that address when AdminNotifyAll was enabled;
+    - a direct parent author was notified only when the account email was
+      verified, the reply was not self-authored, and the author could still
+      view the new reply;
+    - {site}, {user}, {content}, and {url} were replaced with strings;
+    - an HTML template, when present, replaced the text body entirely;
+    - send errors were discarded and SMTP delivery ran inside the request.
+
+This behavior is not safe or complete enough to restore. A future extension
+must use escaped templates, an explicit management recipient, asynchronous
+delivery with timeouts/retries, and durable delivery audit records.
+*/

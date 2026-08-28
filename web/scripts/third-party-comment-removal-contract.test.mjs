@@ -13,7 +13,6 @@ const sourceFiles = {
   globals: await read('web/types/globals.d.ts'),
   builtinComments: await read('web/components/comments/BuiltinComments.vue'),
   notificationCenter: await read('web/components/index/UserNotificationCenter.vue'),
-  commentsSettings: await read('web/components/admin/CommentsSettings.vue'),
   statusPanel: await read('web/components/index/StatusPanel.vue'),
   indexPage: await read('web/pages/index.vue'),
   settingsService: await read('internal/services/setting_service.go'),

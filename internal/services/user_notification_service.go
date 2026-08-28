@@ -430,7 +430,7 @@ func buildVoceChatNotificationMarkdown(siteConfig models.SiteConfig, notificatio
 	if snippet != "" {
 		lines = append(lines, "", "> "+strings.ReplaceAll(snippet, "\n", "\n> "))
 	}
-	if link := userNotificationPushURL(siteConfig.CommentEmailSiteURL, notification.MessageID, notification.CommentID); link != "" {
+	if link := userNotificationPushURL(siteConfig.SitePublicURL, notification.MessageID, notification.CommentID); link != "" {
 		lines = append(lines, "", fmt.Sprintf("[查看通知](%s)", link))
 	}
 	return strings.Join(lines, "\n")

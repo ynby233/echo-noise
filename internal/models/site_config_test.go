@@ -18,9 +18,23 @@ func TestMigrateDBRemovesRetiredThirdPartyAuthenticationAndCommentColumns(t *tes
 		github_client_id text,
 		github_client_secret text,
 		github_callback_url text,
-		comment_system text
+		comment_system text,
+		comment_email_enabled numeric,
+		comment_email_admin_notify_all numeric,
+		comment_login_required numeric,
+		comment_email_reply_name text,
+		comment_email_admin_prefix text,
+		comment_email_reply_prefix text,
+		comment_email_reply_template text,
+		comment_email_admin_template text,
+		comment_email_site_url text,
+		comment_email_reply_template_html text,
+		comment_email_admin_template_html text
 	)`).Error; err != nil {
 		t.Fatalf("create legacy site config: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO site_configs (id, comment_email_site_url) VALUES (1, 'https://site.example.test')`).Error; err != nil {
+		t.Fatalf("create legacy site URL: %v", err)
 	}
 
 	if err := MigrateDB(db); err != nil {
@@ -32,10 +46,28 @@ func TestMigrateDBRemovesRetiredThirdPartyAuthenticationAndCommentColumns(t *tes
 		"github_client_secret",
 		"github_callback_url",
 		"comment_system",
+		"comment_email_enabled",
+		"comment_email_admin_notify_all",
+		"comment_login_required",
+		"comment_email_reply_name",
+		"comment_email_admin_prefix",
+		"comment_email_reply_prefix",
+		"comment_email_reply_template",
+		"comment_email_admin_template",
+		"comment_email_site_url",
+		"comment_email_reply_template_html",
+		"comment_email_admin_template_html",
 	} {
 		if db.Migrator().HasColumn("site_configs", column) {
 			t.Fatalf("retired column %q still exists", column)
 		}
+	}
+	var config SiteConfig
+	if err := db.First(&config, 1).Error; err != nil {
+		t.Fatalf("load migrated site config: %v", err)
+	}
+	if config.SitePublicURL != "https://site.example.test" {
+		t.Fatalf("site public URL = %q, want legacy value", config.SitePublicURL)
 	}
 }
 

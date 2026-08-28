@@ -2042,9 +2042,7 @@ func PostComment(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
 		return
 	}
-	// 读取站点配置；评论/留言/回复统一强制绑定当前登录账号，不再信任前端提交的昵称/邮箱/网址。
-	var cfg models.SiteConfig
-	_ = db.Table("site_configs").First(&cfg).Error
+	// 评论/留言/回复统一强制绑定当前登录账号，不再信任前端提交的昵称/邮箱/网址。
 	userID, ok := commentAuthUserID(c)
 	if !ok {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "请登录后评论"})
@@ -2130,85 +2128,6 @@ func PostComment(c *gin.Context) {
 	comment.User = &models.CommentUserInfo{ID: currentUser.ID, Username: commentUsername, AvatarURL: strings.TrimSpace(currentUser.AvatarURL)}
 	if err := services.CreateNotificationsForComment(message, comment, notificationParent); err != nil {
 		log.Printf("创建站内评论通知失败: %v", err)
-	}
-	// 邮件通知
-	if cfg.SmtpEnabled && cfg.CommentEmailEnabled {
-		siteURL := strings.TrimSpace(cfg.CommentEmailSiteURL)
-		if siteURL == "" || !(strings.HasPrefix(siteURL, "http://") || strings.HasPrefix(siteURL, "https://")) {
-			scheme := c.Request.Header.Get("X-Forwarded-Proto")
-			if scheme == "" {
-				scheme = "http"
-			}
-			host := c.Request.Host
-			siteURL = fmt.Sprintf("%s://%s", scheme, host)
-		}
-		if comment.ParentID == nil || cfg.CommentEmailAdminNotifyAll {
-			adminTo := cfg.SmtpFrom
-			if adminTo == "" {
-				adminTo = cfg.SmtpUser
-			}
-			prefixAdmin := strings.TrimSpace(cfg.CommentEmailAdminPrefix)
-			if prefixAdmin != "" {
-				prefixAdmin = prefixAdmin + " "
-			}
-			subject := fmt.Sprintf("%s新评论通知 - %s", prefixAdmin, cfg.SiteTitle)
-			textBody := fmt.Sprintf("站点：%s\n用户：%s\n内容：\n%s\n\n查看：%s/m/%d", cfg.SiteTitle, commentUsername, comment.Content, siteURL, message.ID)
-			if strings.TrimSpace(cfg.CommentEmailAdminTemplate) != "" {
-				tpl := cfg.CommentEmailAdminTemplate
-				tpl = strings.ReplaceAll(tpl, "{site}", cfg.SiteTitle)
-				tpl = strings.ReplaceAll(tpl, "{user}", commentUsername)
-				tpl = strings.ReplaceAll(tpl, "{content}", comment.Content)
-				tpl = strings.ReplaceAll(tpl, "{url}", fmt.Sprintf("%s/m/%d", siteURL, message.ID))
-				textBody = tpl
-			}
-			htmlTpl := strings.TrimSpace(cfg.CommentEmailAdminTemplateHTML)
-			if htmlTpl != "" {
-				htmlTpl = strings.ReplaceAll(htmlTpl, "{site}", cfg.SiteTitle)
-				htmlTpl = strings.ReplaceAll(htmlTpl, "{user}", commentUsername)
-				htmlTpl = strings.ReplaceAll(htmlTpl, "{content}", comment.Content)
-				htmlTpl = strings.ReplaceAll(htmlTpl, "{url}", fmt.Sprintf("%s/m/%d", siteURL, message.ID))
-				_ = models.SendEmailHTML(adminTo, subject, htmlTpl)
-			} else {
-				_ = models.SendEmail(adminTo, subject, textBody)
-			}
-		}
-		// 回复通知
-		if comment.ParentID != nil {
-			var parent models.Comment
-			var parentUser models.User
-			parentEmail := ""
-			if err := db.First(&parent, *comment.ParentID).Error; err == nil && parent.UserID != nil {
-				if err := db.Select("id, email, email_verified").First(&parentUser, *parent.UserID).Error; err == nil && parentUser.EmailVerified {
-					parentEmail = strings.TrimSpace(parentUser.Email)
-				}
-			}
-			if parentEmail != "" && parent.UserID != nil && *parent.UserID != currentUser.ID && services.CanUserViewCommentInThread(message, comment, *parent.UserID) {
-				prefixReply := strings.TrimSpace(cfg.CommentEmailReplyPrefix)
-				if prefixReply != "" {
-					prefixReply = prefixReply + " "
-				}
-				replySubject := fmt.Sprintf("%s你的评论有新回复 - %s", prefixReply, cfg.SiteTitle)
-				textTpl := fmt.Sprintf("用户 %s 回复了你的评论：\n\n原评论：%s\n回复内容：%s\n\n查看：%s/m/%d", commentUsername, parent.Content, comment.Content, siteURL, message.ID)
-				if strings.TrimSpace(cfg.CommentEmailReplyTemplate) != "" {
-					tpl := cfg.CommentEmailReplyTemplate
-					tpl = strings.ReplaceAll(tpl, "{site}", cfg.SiteTitle)
-					tpl = strings.ReplaceAll(tpl, "{user}", commentUsername)
-					tpl = strings.ReplaceAll(tpl, "{content}", comment.Content)
-					tpl = strings.ReplaceAll(tpl, "{url}", fmt.Sprintf("%s/m/%d", siteURL, message.ID))
-					textTpl = tpl
-				}
-				htmlTpl := strings.TrimSpace(cfg.CommentEmailReplyTemplateHTML)
-				if htmlTpl != "" {
-					htmlTpl = strings.ReplaceAll(htmlTpl, "{site}", cfg.SiteTitle)
-					htmlTpl = strings.ReplaceAll(htmlTpl, "{user}", commentUsername)
-					htmlTpl = strings.ReplaceAll(htmlTpl, "{content}", comment.Content)
-					htmlTpl = strings.ReplaceAll(htmlTpl, "{url}", fmt.Sprintf("%s/m/%d", siteURL, message.ID))
-					_ = models.SendEmailHTMLWithFrom(parentEmail, replySubject, htmlTpl, strings.TrimSpace(cfg.CommentEmailReplyName))
-				} else {
-					_ = models.SendEmailWithFrom(parentEmail, replySubject, textTpl, strings.TrimSpace(cfg.CommentEmailReplyName))
-				}
-			}
-		}
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": comment, "msg": "评论已发布"})
 }

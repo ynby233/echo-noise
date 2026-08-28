@@ -355,12 +355,32 @@ func migrateRuntimePolicyData(db *gorm.DB) error {
 }
 
 func dropRetiredAuthenticationAndCommentColumns(db *gorm.DB) error {
+	if db.Migrator().HasColumn("site_configs", "comment_email_site_url") && db.Migrator().HasColumn(&SiteConfig{}, "SitePublicURL") {
+		if err := db.Exec(`UPDATE site_configs
+			SET site_public_url = comment_email_site_url
+			WHERE (site_public_url IS NULL OR TRIM(site_public_url) = '')
+			  AND comment_email_site_url IS NOT NULL
+			  AND TRIM(comment_email_site_url) <> ''`).Error; err != nil {
+			return fmt.Errorf("migrate legacy comment email site URL to site public URL: %w", err)
+		}
+	}
 	for _, column := range []string{
 		"github_o_auth_enabled",
 		"github_client_id",
 		"github_client_secret",
 		"github_callback_url",
 		"comment_system",
+		"comment_email_enabled",
+		"comment_email_admin_notify_all",
+		"comment_login_required",
+		"comment_email_reply_name",
+		"comment_email_admin_prefix",
+		"comment_email_reply_prefix",
+		"comment_email_reply_template",
+		"comment_email_admin_template",
+		"comment_email_site_url",
+		"comment_email_reply_template_html",
+		"comment_email_admin_template_html",
 	} {
 		if db.Migrator().HasColumn("site_configs", column) {
 			if err := db.Exec("ALTER TABLE site_configs DROP COLUMN " + column).Error; err != nil {
