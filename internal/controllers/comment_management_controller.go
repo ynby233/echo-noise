@@ -360,6 +360,21 @@ func BatchRestorePersonalNotes(c *gin.Context) {
 	writeContentLifecycleBatch(c, ids, func(id uint) error { return services.RestoreMessage(database.DB, user.ID, id) })
 }
 
+func BatchPermanentlyDeletePersonalNotes(c *gin.Context) {
+	user, err := checkUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, dto.Fail[any]("请先登录"))
+		return
+	}
+	ids, ok := parseContentLifecycleBatch(c)
+	if !ok {
+		return
+	}
+	writeContentLifecycleBatch(c, ids, func(id uint) error {
+		return services.PermanentlyDeleteMessage(database.DB, user.ID, id, "author permanent deletion")
+	})
+}
+
 func BatchTrashAdminComments(c *gin.Context) {
 	actorID, err := checkAdmin(c)
 	if err != nil {
@@ -498,4 +513,22 @@ func RestorePersonalNote(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, dto.OK[any](nil, "笔记已恢复"))
+}
+
+func PermanentlyDeletePersonalNote(c *gin.Context) {
+	user, err := checkUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, dto.Fail[any]("请先登录"))
+		return
+	}
+	id, ok := commentLifecycleID(c)
+	if !ok {
+		c.JSON(http.StatusBadRequest, dto.Fail[any]("无效的笔记ID"))
+		return
+	}
+	if err := services.PermanentlyDeleteMessage(database.DB, user.ID, id, "author permanent deletion"); err != nil {
+		writeNoteLifecycleError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK[any](nil, "笔记已永久删除"))
 }

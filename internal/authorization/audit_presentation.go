@@ -14,7 +14,7 @@ type AuditPresentation struct {
 	OperationDescription string `json:"operation_description"`
 	ResultDescription    string `json:"result_description"`
 	ReasonDescription    string `json:"reason_description"`
-	SafeSummary          string `json:"-"`
+	SafeSummary          string `json:"safe_summary"`
 }
 
 func PresentAudit(record models.AdminAuditLog) AuditPresentation {
@@ -129,6 +129,12 @@ func auditSafeSummary(summary string) string {
 		return "系统清理笔记回收站失败"
 	case "updated primary administrator login audit recording policy":
 		return "站长登录审计记录策略已更新"
+	case "updated administrator audit retention policy":
+		return "管理员审计保留期限已更新"
+	case "updated administrator audit recording policy":
+		return "管理员审计写入策略已更新"
+	case "updated administrator audit policy":
+		return "管理员审计策略已更新"
 	default:
 		return "管理员操作摘要"
 	}
@@ -198,6 +204,9 @@ func auditActionDescription(action string) string {
 		"user_purge":                     "清除个人回收站副本",
 		"auto_permanent_delete":          "按保留期限自动永久清理",
 		"update_primary_admin_recording": "调整站长登录审计记录策略",
+		"update_retention":               "调整保留期限",
+		"update_recording":               "调整写入策略",
+		"update_policy":                  "调整审计策略",
 	}
 	if label := labels[action]; label != "" {
 		return "（" + label + "）"
@@ -217,6 +226,7 @@ func auditTargetDescription(targetType string, targetID string) string {
 		"interaction":        "互动",
 		"tombstone":          "互动墓碑",
 		"login_audit_config": "登录审计策略",
+		"admin_audit_config": "管理员审计策略",
 	}
 	name := label[targetType]
 	if name == "" {

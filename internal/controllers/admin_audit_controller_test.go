@@ -64,6 +64,7 @@ func TestListAdminAuditLogsIncludesChinesePresentationWithoutDroppingTechnicalFi
 				Module               string `json:"module"`
 				Action               string `json:"action"`
 				Summary              string `json:"summary"`
+				SafeSummary          string `json:"safe_summary"`
 				OperationDescription string `json:"operation_description"`
 				ResultDescription    string `json:"result_description"`
 			} `json:"items"`
@@ -78,6 +79,9 @@ func TestListAdminAuditLogsIncludesChinesePresentationWithoutDroppingTechnicalFi
 	item := body.Data.Items[0]
 	if item.Module != "notes" || item.Action != "set_global_pin" || item.Summary != "capability request denied" {
 		t.Fatalf("technical fields were not preserved: %#v", item)
+	}
+	if item.SafeSummary != "能力请求被拒绝" {
+		t.Fatalf("safe summary=%q, want Chinese presentation", item.SafeSummary)
 	}
 	if item.OperationDescription != "尝试全站置顶笔记 #59" || item.ResultDescription != "已拒绝：无此权限" {
 		t.Fatalf("unexpected presentation: %#v", item)

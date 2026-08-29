@@ -18,6 +18,7 @@
         <UButton v-if="selected.length && section === 'notes'" size="xs" color="orange" variant="soft" :loading="acting" @click="batchTrashNotes">批量移入回收站</UButton>
         <UButton v-if="selected.length && section === 'interactions'" size="xs" color="orange" variant="soft" :loading="acting" @click="batchTrashInteractions">批量移入回收站</UButton>
         <UButton v-if="selected.length && isRecycleBin" size="xs" color="green" variant="soft" :loading="acting" @click="batchRestore">批量恢复</UButton>
+        <UButton v-if="selected.length && section === 'note-recycle-bin'" size="xs" color="red" variant="soft" :loading="acting" @click="batchPurgeNotes">批量永久删除</UButton>
         <UButton v-if="selected.length && section === 'interaction-recycle-bin'" size="xs" color="red" variant="soft" :loading="acting" @click="batchPurgeInteractions">批量从我的回收站彻底删除</UButton>
       </div>
     </div>
@@ -58,6 +59,7 @@
           </template>
           <template v-else-if="isRecycleBin">
             <UButton v-if="row.can_restore !== false" size="xs" color="green" variant="soft" :loading="acting" @click="restore(row)">恢复</UButton>
+            <UButton v-if="section === 'note-recycle-bin'" size="xs" color="red" variant="soft" :loading="acting" @click="purgeNote(row)">永久删除</UButton>
             <UButton v-if="section === 'interaction-recycle-bin'" size="xs" color="red" variant="soft" :loading="acting" @click="purge(row)">从我的回收站彻底删除</UButton>
             <span v-if="row.can_restore === false && !row.user_purged" class="text-xs" :class="mutedClass">需先恢复仍在回收站中的所有上级内容</span>
           </template>
@@ -99,7 +101,7 @@ const isInteraction = computed(() => section.value === 'interactions' || section
 const isRecycleBin = computed(() => section.value === 'note-recycle-bin' || section.value === 'interaction-recycle-bin')
 const config = computed(() => ({
   notes: { title: '个人笔记', description: '查看和管理自己发布的笔记。', emptyText: '你还没有发布笔记' },
-  'note-recycle-bin': { title: '个人笔记回收站', description: '恢复自己已删除的笔记；开启自动清理后，这里会显示真实剩余时间。', emptyText: '笔记回收站为空' },
+  'note-recycle-bin': { title: '个人笔记回收站', description: '恢复或永久删除自己已删除的笔记；开启自动清理后，这里会显示真实剩余时间。', emptyText: '笔记回收站为空' },
   interactions: { title: '个人互动', description: '查看自己发布的评论、回复和留言；不可见的上级内容会以中性占位说明。', emptyText: '你还没有发布互动' },
   'interaction-recycle-bin': { title: '个人互动回收站', description: '恢复自己的互动，或从个人回收站彻底移除；开启自动清理后会显示真实剩余时间。', emptyText: '互动回收站为空' }
 } as const)[section.value])
@@ -132,7 +134,18 @@ const itemTitle = (row: any) => isInteraction.value
 const contextText = (node: any) => node?.placeholder || String(node?.content || '上级内容').replace(/\s+/g, ' ').slice(0, 80)
 const formatDate = (value: any) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '—'
 const visibilityLabel = (value: string) => ({ public: '公开', private: '私密', contacts: '联系人可见', logged_in: '登录用户可见' } as Record<string, string>)[value] || value || '公开'
-const reasonLabel = (value: string) => ({ self: '由你本人删除', moderation: '由内容管理员处理', owner_cleanup: '内容所有者清理互动', ancestor: '上级内容被删除时一并处理', system: '系统定时清理' } as Record<string, string>)[String(value || '')] || String(value || '未记录')
+const reasonLabel = (value: string) => ({
+  self: '由你本人删除',
+  'author request': '由你本人删除',
+  'author batch request': '由你本人删除',
+  moderation: '由内容管理员处理',
+  'admin batch request': '由内容管理员处理',
+  'manual deletion': '由内容管理员处理',
+  'delegated moderation': '由内容管理员处理',
+  owner_cleanup: '内容所有者清理互动',
+  ancestor: '上级内容被删除时一并处理',
+  system: '系统定时清理'
+} as Record<string, string>)[String(value || '').trim().toLowerCase()] || '删除原因未记录'
 const deadlineEnabled = (row: any) => row?.recycle_deadline?.auto_cleanup_enabled === true
 const deadlineText = (deadline: any) => {
   void now.value
@@ -176,6 +189,10 @@ const purge = (row: any) => {
   if (typeof window !== 'undefined' && !window.confirm('从你的个人回收站彻底删除后，你将无法再查看或恢复这条互动。是否继续？')) return
   return run(() => deleteRequest(`user/recycle-bin/comments/${row.id}`, undefined, { silent: true }))
 }
+const purgeNote = (row: any) => {
+  if (typeof window !== 'undefined' && !window.confirm(`永久删除笔记 #${row.id} 后将无法恢复，且相关内容只会按结构保留规则留下必要墓碑。是否继续？`)) return
+  return run(() => deleteRequest(`user/recycle-bin/notes/${row.id}`, undefined, { silent: true }))
+}
 const runBatch = async (endpoint: string, confirmation?: string) => {
   if (!selected.value.length) return
   if (confirmation && typeof window !== 'undefined' && !window.confirm(confirmation)) return
@@ -185,6 +202,7 @@ const runBatch = async (endpoint: string, confirmation?: string) => {
 const batchTrashNotes = () => runBatch('user/notes/batch-trash', `将所选 ${selected.value.length} 条笔记移入回收站？`)
 const batchTrashInteractions = () => runBatch('user/interactions/batch-trash', `将所选 ${selected.value.length} 条互动移入回收站？其后代会一并处理。`)
 const batchRestore = () => runBatch(section.value === 'note-recycle-bin' ? 'user/recycle-bin/notes/batch-restore' : 'user/recycle-bin/comments/batch-restore')
+const batchPurgeNotes = () => runBatch('user/recycle-bin/notes/batch-permanent-delete', `永久删除所选 ${selected.value.length} 条笔记后将无法恢复。是否继续？`)
 const batchPurgeInteractions = () => runBatch('user/recycle-bin/comments/batch-purge', `从个人回收站彻底删除所选 ${selected.value.length} 条互动后，你将无法再查看或恢复。是否继续？`)
 
 watch(section, () => { page.value = 1; selected.value = []; void load() })

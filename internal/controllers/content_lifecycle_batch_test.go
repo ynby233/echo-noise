@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/repository"
+	"github.com/rcy1314/echo-noise/internal/services"
 )
 
 func performBatchRequest(r http.Handler, path string, ids []uint) *httptest.ResponseRecorder {
@@ -110,10 +111,17 @@ func TestPersonalCommentBatchHandlesCascadeAndRestoresParentsFirst(t *testing.T)
 	}
 }
 
-func TestPersonalNoteBatchTrashAndRestoreUsesAuthorScope(t *testing.T) {
+func TestPersonalNoteBatchTrashRestoreAndPermanentDeleteUsesAuthorScope(t *testing.T) {
 	db, router, user, first := setupCommentAccountTest(t)
+	if err := db.AutoMigrate(&models.AttachmentBlob{}, &models.AttachmentReference{}); err != nil {
+		t.Fatal(err)
+	}
 	second := models.Message{Content: "second", UserID: user.ID, Username: user.Username}
 	if err := db.Create(&second).Error; err != nil {
+		t.Fatal(err)
+	}
+	third := models.Message{Content: "third", UserID: user.ID, Username: user.Username}
+	if err := db.Create(&third).Error; err != nil {
 		t.Fatal(err)
 	}
 	interaction := models.Comment{MessageID: first.ID, UserID: &user.ID, Content: "must follow note into recycle bin", Visibility: "public"}
@@ -126,6 +134,8 @@ func TestPersonalNoteBatchTrashAndRestoreUsesAuthorScope(t *testing.T) {
 	})
 	router.POST("/user/notes/batch-trash", BatchTrashPersonalNotes)
 	router.POST("/user/recycle-bin/notes/batch-restore", BatchRestorePersonalNotes)
+	router.POST("/user/recycle-bin/notes/batch-permanent-delete", BatchPermanentlyDeletePersonalNotes)
+	router.DELETE("/user/recycle-bin/notes/:id", PermanentlyDeletePersonalNote)
 
 	trash := performBatchRequest(router, "/user/notes/batch-trash", []uint{first.ID, second.ID})
 	if trash.Code != http.StatusOK || !bytes.Contains(trash.Body.Bytes(), []byte(`"succeeded":2`)) {
@@ -138,5 +148,35 @@ func TestPersonalNoteBatchTrashAndRestoreUsesAuthorScope(t *testing.T) {
 	restore := performBatchRequest(router, "/user/recycle-bin/notes/batch-restore", []uint{first.ID, second.ID})
 	if restore.Code != http.StatusOK || !bytes.Contains(restore.Body.Bytes(), []byte(`"succeeded":2`)) {
 		t.Fatalf("note batch restore status=%d body=%s", restore.Code, restore.Body.String())
+	}
+	if response := performBatchRequest(router, "/user/notes/batch-trash", []uint{second.ID}); response.Code != http.StatusOK || !bytes.Contains(response.Body.Bytes(), []byte(`"succeeded":1`)) {
+		t.Fatalf("note retrash status=%d body=%s", response.Code, response.Body.String())
+	}
+	var retrashState models.Message
+	if err := db.First(&retrashState, second.ID).Error; err != nil {
+		t.Fatalf("load re-trashed note: %v", err)
+	}
+	if retrashState.DeletedAt == nil || retrashState.UserID != user.ID {
+		t.Fatalf("unexpected re-trashed note state: %#v", retrashState)
+	}
+	deleted := performBatchRequest(router, "/user/recycle-bin/notes/batch-permanent-delete", []uint{second.ID})
+	if deleted.Code != http.StatusOK || !bytes.Contains(deleted.Body.Bytes(), []byte(`"succeeded":1`)) {
+		t.Fatalf("note batch permanent delete status=%d body=%s", deleted.Code, deleted.Body.String())
+	}
+	var count int64
+	if err := db.Model(&models.Message{}).Where("id = ?", second.ID).Count(&count).Error; err != nil || count != 0 {
+		t.Fatalf("personal batch permanent delete count=%d err=%v", count, err)
+	}
+	if err := services.TrashMessage(db, user.ID, third.ID, "author request"); err != nil {
+		t.Fatalf("trash single-delete target: %v", err)
+	}
+	singleRequest := httptest.NewRequest(http.MethodDelete, "/user/recycle-bin/notes/"+strconvFormatUint(third.ID), nil)
+	singleResponse := httptest.NewRecorder()
+	router.ServeHTTP(singleResponse, singleRequest)
+	if singleResponse.Code != http.StatusOK || !bytes.Contains(singleResponse.Body.Bytes(), []byte(`"code":1`)) {
+		t.Fatalf("single personal permanent delete status=%d body=%s", singleResponse.Code, singleResponse.Body.String())
+	}
+	if err := db.Model(&models.Message{}).Where("id = ?", third.ID).Count(&count).Error; err != nil || count != 0 {
+		t.Fatalf("personal single permanent delete count=%d err=%v", count, err)
 	}
 }

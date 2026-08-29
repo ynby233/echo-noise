@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -107,6 +108,23 @@ func TestGetLoginAuditsFiltersByUsernameAndIP(t *testing.T) {
 	logoutOnly := decodeLoginAuditsResponse(t, performLoginAuditListRequest(r, "/security/login-audits?action=logout"))
 	if len(logoutOnly) != 1 || logoutOnly[0].Username != other.Username || logoutOnly[0].Action != loginAuditActionLogout {
 		t.Fatalf("expected logout audit, got %#v", logoutOnly)
+	}
+}
+
+func TestLoginAuditConfigDenialUsesGenericSiteOwnerCopy(t *testing.T) {
+	db, r, _, _ := setupCommentAccountTest(t)
+	delegated := models.User{Username: "delegated-login-audit", IsAdmin: true}
+	if err := db.Create(&delegated).Error; err != nil {
+		t.Fatal(err)
+	}
+	r.GET("/admin/login-audit-config", func(c *gin.Context) { c.Set("user_id", delegated.ID) }, GetLoginAuditConfig)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/admin/login-audit-config", nil))
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("delegated status=%d body=%s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "VoceChat") || !strings.Contains(w.Body.String(), "仅站长可执行此操作") {
+		t.Fatalf("unexpected primary-only denial copy: %s", w.Body.String())
 	}
 }
 

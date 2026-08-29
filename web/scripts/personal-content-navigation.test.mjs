@@ -25,6 +25,13 @@ assert.match(personalContent, /section: PersonalSection/, 'personal content page
 assert.match(personalContent, /notes: 'user\/notes'/, 'personal notes must use the authenticated personal endpoint')
 assert.match(routes, /GET\("\/user\/notes", controllers\.ListPersonalNotes\)/, 'personal notes route must be registered behind authenticated routes')
 assert.match(controller, /func ListPersonalNotes[\s\S]*?checkUser\(c\)/, 'personal notes endpoint must require the current user')
+assert.match(routes, /DELETE\("\/user\/recycle-bin\/notes\/:id", controllers\.PermanentlyDeletePersonalNote\)/, 'personal note recycle bin must expose an owner-scoped permanent-delete route')
+assert.match(routes, /POST\("\/user\/recycle-bin\/notes\/batch-permanent-delete", controllers\.BatchPermanentlyDeletePersonalNotes\)/, 'personal note recycle bin must expose an owner-scoped batch permanent-delete route')
+assert.match(personalContent, /section === 'note-recycle-bin'[\s\S]*?batchPurgeNotes/, 'personal note recycle bin must show a batch permanent-delete action')
+assert.match(personalContent, /section === 'note-recycle-bin'[\s\S]*?@click="purgeNote\(row\)"/, 'personal note recycle bin must show a single permanent-delete action')
+for (const legacyReason of ['author request', 'author batch request', 'admin batch request']) {
+  assert.ok(personalContent.includes(`'${legacyReason}'`), `legacy deletion reason ${legacyReason} must have a user-facing mapping`)
+}
 assert.match(noteManager, /\.note-row-actions\s*\{[\s\S]*?flex-wrap:\s*nowrap;[\s\S]*?white-space:\s*nowrap;/, 'note row actions must stay on one line')
 
 console.log('personal content navigation contract checks passed')

@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/dto"
+	"github.com/rcy1314/echo-noise/internal/middleware"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"gorm.io/gorm"
 )
@@ -246,20 +248,50 @@ func UpdateAdminAuditConfig(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, dto.Fail[any]("审计服务不可用"))
 		return
 	}
-	authorizer := authorization.New(db)
-	if request.Enabled != nil {
-		if err := authorizer.SetAuditEnabled(actorID, *request.Enabled); err != nil {
-			c.JSON(http.StatusInternalServerError, dto.Fail[any]("保存审计设置失败"))
-			return
-		}
-	}
-	if request.RetentionDays != nil {
-		if err := authorizer.SetAuditRetentionDays(actorID, *request.RetentionDays); err != nil {
-			c.JSON(http.StatusInternalServerError, dto.Fail[any]("保存审计保留期限失败"))
-			return
-		}
-	}
 	config := models.AdminAuditConfig{ID: 1, Enabled: true, RetentionDays: 730}
-	_ = db.First(&config, 1).Error
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.First(&config, 1).Error; err != nil {
+			if err != gorm.ErrRecordNotFound {
+				return err
+			}
+			if err := tx.Create(&config).Error; err != nil {
+				return err
+			}
+		}
+		beforeEnabled, beforeRetention := config.Enabled, config.RetentionDays
+		if request.Enabled != nil {
+			config.Enabled = *request.Enabled
+		}
+		if request.RetentionDays != nil {
+			config.RetentionDays = *request.RetentionDays
+		}
+		if err := tx.Save(&config).Error; err != nil {
+			return err
+		}
+		var actor models.User
+		if err := tx.Select("id,username,is_admin").First(&actor, actorID).Error; err != nil {
+			return err
+		}
+		action, summary := "update_policy", "updated administrator audit policy"
+		if request.Enabled != nil && request.RetentionDays == nil {
+			action, summary = "update_recording", "updated administrator audit recording policy"
+		} else if request.Enabled == nil && request.RetentionDays != nil {
+			action, summary = "update_retention", "updated administrator audit retention policy"
+		}
+		changes, _ := json.Marshal(gin.H{
+			"enabled":        gin.H{"before": beforeEnabled, "after": config.Enabled},
+			"retention_days": gin.H{"before": beforeRetention, "after": config.RetentionDays},
+		})
+		return tx.Create(&models.AdminAuditLog{
+			ActorUserID: actor.ID, ActorUsername: actor.Username, ActorIsPrimary: true, ActorType: "user",
+			Capability: string(authorization.CapabilityAuthorizationManage), Module: "audit", Action: action,
+			TargetType: "admin_audit_config", TargetID: "1", Result: "success", Summary: summary,
+			ChangesJSON: string(changes), IP: c.ClientIP(), UserAgent: c.GetHeader("User-Agent"), AuthVia: c.GetString("auth_via"),
+		}).Error
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, dto.Fail[any]("保存审计设置失败"))
+		return
+	}
+	middleware.MarkSemanticAuditWritten(c)
 	c.JSON(http.StatusOK, dto.OK(gin.H{"enabled": config.Enabled, "retentionDays": config.RetentionDays}, "保存审计设置成功"))
 }

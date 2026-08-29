@@ -115,7 +115,7 @@ func TestGlobalAndPersonalPinPermissionsAndAudits(t *testing.T) {
 	if err := db.Where("capability = ? AND action IN ?", authorization.CapabilityNotesPinGlobal, []string{"set_global_pin", "unset_global_pin"}).Order("id ASC").Find(&globalAudits).Error; err != nil {
 		t.Fatalf("load global pin audits: %v", err)
 	}
-	if len(globalAudits) != 7 {
+	if len(globalAudits) != 6 {
 		t.Fatalf("expected denied and successful global pin audits, got %#v", globalAudits)
 	}
 	for _, audit := range globalAudits {
@@ -129,7 +129,7 @@ func TestGlobalAndPersonalPinPermissionsAndAudits(t *testing.T) {
 			t.Fatalf("global pin audit must not contain message content: %#v", audit)
 		}
 	}
-	for _, index := range []int{3, 4, 6} {
+	for _, index := range []int{2, 3, 5} {
 		audit := globalAudits[index]
 		if audit.TargetID != "" || audit.TargetOwnerUserID != nil {
 			t.Fatalf("invisible global pin denial leaked target identity: %#v", audit)

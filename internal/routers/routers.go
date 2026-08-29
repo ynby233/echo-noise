@@ -565,6 +565,8 @@ func registerCommentManagementRoutes(group *gin.RouterGroup) {
 	group.GET("/user/recycle-bin/notes", controllers.ListPersonalNoteRecycleBin)
 	group.POST("/user/recycle-bin/notes/:id/restore", controllers.RestorePersonalNote)
 	group.POST("/user/recycle-bin/notes/batch-restore", controllers.BatchRestorePersonalNotes)
+	group.DELETE("/user/recycle-bin/notes/:id", controllers.PermanentlyDeletePersonalNote)
+	group.POST("/user/recycle-bin/notes/batch-permanent-delete", controllers.BatchPermanentlyDeletePersonalNotes)
 }
 
 func staticResponseHeadersMiddleware() gin.HandlerFunc {

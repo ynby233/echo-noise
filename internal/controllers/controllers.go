@@ -849,7 +849,7 @@ func requirePrimaryAdmin(c *gin.Context) (uint, error) {
 		return 0, err
 	}
 	if userID != models.PrimaryAdminUserID {
-		return 0, fmt.Errorf("仅站长可管理 VoceChat 配置")
+		return 0, fmt.Errorf("仅站长可执行此操作")
 	}
 	return userID, nil
 }

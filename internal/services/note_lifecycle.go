@@ -368,11 +368,13 @@ func PermanentlyDeleteMessageWithAudit(db *gorm.DB, actorID, messageID uint, rea
 	if message.DeletedAt == nil {
 		return ErrMessageNotTrashed
 	}
-	if decision := AuthorizeRecycleBinMutation(db, actorID, message.UserID, authorization.CapabilityNotesDelete); !decision.Allowed {
-		if decision.Reason == authorization.DenialProtectedContent {
-			return ErrMessageProtected
+	if actorID != message.UserID {
+		if decision := AuthorizeRecycleBinMutation(db, actorID, message.UserID, authorization.CapabilityNotesDelete); !decision.Allowed {
+			if decision.Reason == authorization.DenialProtectedContent {
+				return ErrMessageProtected
+			}
+			return ErrMessageNotAuthorized
 		}
-		return ErrMessageNotAuthorized
 	}
 	return db.Transaction(func(tx *gorm.DB) error {
 		if actorID != models.PrimaryAdminUserID {

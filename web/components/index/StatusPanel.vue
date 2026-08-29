@@ -2233,8 +2233,8 @@
                       <UButton v-if="can('security.manage')" size="sm" color="green" class="shadow" @click="saveSecurityConfig">保存策略</UButton>
                     </div>
                   </div>
-                  <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
-                    <div class="flex items-center justify-between md:col-span-1">
+                  <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3 xl:items-end">
+                    <div class="flex min-h-10 items-center justify-between">
                       <span :class="theme.mutedText">启用自动封禁</span>
                       <UToggle v-model="securityConfig.autoBanEnabled" :disabled="!can('security.manage')" />
                     </div>
@@ -2247,12 +2247,12 @@
                       <UInput v-model.number="securityConfig.autoBanThreshold" type="number" :disabled="!can('security.manage')" />
                     </div>
                     <div>
-                      <label class="text-xs" :class="theme.mutedText">攻击记录保留期限</label>
-                      <USelect v-model="securityConfig.attackLogRetentionDays" :options="logRetentionOptions" :disabled="!can('security.manage')" />
-                    </div>
-                    <div>
                       <label class="text-xs" :class="theme.mutedText">封禁时长（分钟，0=永久）</label>
                       <UInput v-model.number="securityConfig.autoBanMinutes" type="number" :disabled="!can('security.manage')" />
+                    </div>
+                    <div>
+                      <label class="text-xs" :class="theme.mutedText">攻击记录保留期限</label>
+                      <USelect v-model="securityConfig.attackLogRetentionDays" :options="logRetentionOptions" :disabled="!can('security.manage')" />
                     </div>
                   </div>
                   <div class="text-xs mt-2" :class="theme.mutedText">仅对敏感路径扫描命中进行计数；达到阈值后将自动写入封禁列表并立即生效</div>

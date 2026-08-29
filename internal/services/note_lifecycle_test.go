@@ -68,6 +68,28 @@ func TestNoteLifecycleTrashRestoreIsMutuallyExclusive(t *testing.T) {
 	}
 }
 
+func TestNoteOwnerCanPermanentlyDeleteOwnTrashedNote(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	author := mustCreateUser(t, models.User{Username: "personal-note-purge-author"})
+	message := models.Message{Content: "personal note purge target", Username: author.Username, UserID: author.ID, Visibility: MessageVisibilityPrivate}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatalf("create message: %v", err)
+	}
+	if err := TrashMessage(db, author.ID, message.ID, "author request"); err != nil {
+		t.Fatalf("trash own message: %v", err)
+	}
+	if err := PermanentlyDeleteMessage(db, author.ID, message.ID, "author permanent deletion"); err != nil {
+		t.Fatalf("owner permanently deletes own trashed message: %v", err)
+	}
+	var count int64
+	if err := db.Model(&models.Message{}).Where("id = ?", message.ID).Count(&count).Error; err != nil {
+		t.Fatalf("count deleted message: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("personal permanently deleted message count=%d, want 0", count)
+	}
+}
+
 func TestListPersonalMessagesReturnsOnlyActorsActiveNotes(t *testing.T) {
 	db := setupUserServiceTestDB(t)
 	author := mustCreateUser(t, models.User{Username: "personal-notes-author"})
@@ -186,7 +208,7 @@ func TestPrimaryCommentProtectionAllowsAuthorTrashAndBlocksDelegatedTrash(t *tes
 
 func TestRunRecycleBinAutoCleanupUsesDeletedAtAndSystemIdentity(t *testing.T) {
 	db := setupUserServiceTestDB(t)
-	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "auto-primary", IsAdmin: true})
+	_ = mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "auto-primary", IsAdmin: true})
 	author := mustCreateUser(t, models.User{Username: "auto-author"})
 	if err := db.Create(&models.SiteConfig{RecycleBinRetentionDays: 7}).Error; err != nil {
 		t.Fatal(err)
@@ -207,7 +229,7 @@ func TestRunRecycleBinAutoCleanupUsesDeletedAtAndSystemIdentity(t *testing.T) {
 	if err := db.Where("action = ? AND target_id = ?", "auto_permanent_delete", m.ID).First(&audit).Error; err != nil {
 		t.Fatal(err)
 	}
-	if audit.ActorUserID != primary.ID || audit.Result != "success" {
+	if audit.ActorUserID != 0 || audit.ActorType != "system" || audit.ActorUsername != "系统自动任务" || audit.Result != "success" {
 		t.Fatalf("audit = %#v", audit)
 	}
 }

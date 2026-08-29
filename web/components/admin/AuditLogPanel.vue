@@ -97,7 +97,7 @@
               <td class="px-3 py-3 align-top font-medium break-words">{{ item.operation_description || '管理员操作' }}</td>
               <td class="px-3 py-3 align-top"><UBadge :color="resultColor(item.result)" size="xs" variant="soft">{{ item.result_description || item.result }}</UBadge><div class="mt-1 text-[11px]" :class="theme?.mutedText || 'text-slate-500'">{{ item.result }}</div></td>
               <td class="px-3 py-3 align-top"><span class="break-all font-medium">{{ item.module }}</span><span class="mt-0.5 block break-all text-xs" :class="theme?.mutedText || 'text-slate-500'">{{ item.action }}</span></td>
-              <td class="audit-summary px-3 py-3 align-top">{{ item.summary || '-' }}</td>
+              <td class="audit-summary px-3 py-3 align-top">{{ item.safe_summary || '管理员操作摘要' }}</td>
               <td class="px-4 py-3 text-right align-top"><UButton size="xs" color="gray" variant="soft" @click="loadDetail(item.id)">查看</UButton></td>
             </tr>
           </tbody>
@@ -130,7 +130,7 @@
           <div><dt>模块 / 动作</dt><dd>{{ detail.module }} / {{ detail.action }}</dd></div>
           <div><dt>能力</dt><dd class="break-all">{{ detail.capability || '-' }}</dd></div>
           <div class="sm:col-span-2"><dt>目标</dt><dd class="break-all">{{ detail.target_type || '-' }} / {{ detail.target_id || '-' }}</dd></div>
-          <div class="sm:col-span-2"><dt>摘要</dt><dd>{{ detail.summary || '-' }}</dd></div>
+          <div class="sm:col-span-2"><dt>摘要</dt><dd>{{ detail.safe_summary || '管理员操作摘要' }}</dd></div>
           <div v-if="detail.reason || detail.reason_description" class="sm:col-span-2"><dt>原因</dt><dd>{{ detail.reason_description || detail.reason }}<span v-if="detail.reason_description && detail.reason">（{{ detail.reason }}）</span></dd></div>
           <div v-if="detail.changes_json" class="sm:col-span-2"><dt>安全变更摘要</dt><dd class="whitespace-pre-wrap break-all">{{ detail.changes_json }}</dd></div>
         </dl>
@@ -156,6 +156,7 @@ type Audit = {
   result_description?: string
   operation_description?: string
   reason_description?: string
+  safe_summary?: string
   summary: string
   reason: string
   changes_json: string

@@ -488,7 +488,15 @@ func TestWriteAuditDoesNotDeduplicateDifferentOrMutatingAuditRequests(t *testing
 	if err := db.Model(&models.AdminAuditLog{}).Count(&count).Error; err != nil {
 		t.Fatal(err)
 	}
-	if count != int64(len(cases)*2) {
-		t.Fatalf("different or mutating requests must remain auditable, got %d records", count)
+	expected := int64(len(cases)*2 - 1)
+	if count != expected {
+		t.Fatalf("administrator requests must remain auditable while ordinary-user activity is excluded, got %d records", count)
+	}
+	var ordinaryCount int64
+	if err := db.Model(&models.AdminAuditLog{}).Where("actor_user_id = ?", ordinary.ID).Count(&ordinaryCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if ordinaryCount != 0 {
+		t.Fatalf("ordinary-user activity must not enter the administrator audit log, got %d records", ordinaryCount)
 	}
 }

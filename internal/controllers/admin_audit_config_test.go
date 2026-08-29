@@ -77,7 +77,39 @@ func TestAdminAuditConfigOnlyPrimaryMayDisableRecording(t *testing.T) {
 	if err := db.Model(&models.AdminAuditLog{}).Count(&count).Error; err != nil {
 		t.Fatal(err)
 	}
-	if count != 0 {
-		t.Fatalf("disabled audit config wrote %d records", count)
+	if count != 1 {
+		t.Fatalf("disabled audit config should retain only its policy-change audit, got %d records", count)
+	}
+}
+
+func TestAdminAuditRetentionUpdateWritesSemanticPolicyAudit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&models.User{}, &models.AdminAuditLog{}, &models.AdminAuditConfig{}); err != nil {
+		t.Fatal(err)
+	}
+	database.DB = db
+	t.Cleanup(func() { database.DB = nil })
+	primary := models.User{ID: models.PrimaryAdminUserID, Username: "primary", IsAdmin: true}
+	if err := db.Create(&primary).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	r := gin.New()
+	r.PUT("/audit-config", func(c *gin.Context) { c.Set("user_id", primary.ID) }, UpdateAdminAuditConfig)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/audit-config", bytes.NewBufferString(`{"retentionDays":365}`)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("retention update status=%d body=%s", w.Code, w.Body.String())
+	}
+	var audit models.AdminAuditLog
+	if err := db.Order("id desc").First(&audit).Error; err != nil {
+		t.Fatalf("load policy audit: %v", err)
+	}
+	if audit.Module != "audit" || audit.Action != "update_retention" || audit.TargetType != "admin_audit_config" || audit.Summary != "updated administrator audit retention policy" {
+		t.Fatalf("unexpected policy audit: %#v", audit)
 	}
 }
