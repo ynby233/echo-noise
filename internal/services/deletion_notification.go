@@ -170,7 +170,7 @@ func createDeletionNotificationsTx(tx *gorm.DB, actorID uint, event, batchID str
 			DeletionBatchID: batchID, DeletionActorLabel: deletionActorLabel(tx, actorID, system),
 			DeletionSnapshotJSON: string(snapshot), ScheduledDeletionAt: earliest,
 		}
-		if err := tx.Create(&notification).Error; err != nil {
+		if err := createUserNotificationWithWebPush(tx, &notification); err != nil {
 			return fmt.Errorf("create deletion notification: %w", err)
 		}
 	}

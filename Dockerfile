@@ -3,6 +3,8 @@
 # multi-arch 构建时如果在 TARGETPLATFORM（例如 linux/arm64）上执行 npm，会触发 QEMU 模拟导致极慢。
 # 因此固定在 BUILDPLATFORM 上构建前端。
 FROM --platform=$BUILDPLATFORM docker.io/library/node:22.14.0-alpine AS frontend-build
+ARG VERSION=dev
+ENV VITE_APP_VERSION=$VERSION
 
 # 设置工作目录
 WORKDIR /app/web

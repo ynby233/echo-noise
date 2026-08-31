@@ -441,33 +441,38 @@ func PublishAnnouncement(c *gin.Context) {
 		announcement.PushEnabled = request.PushEnabled
 	}
 	queueVoceChatPush := firstPublication && request.PushEnabled && services.VoceChatPushEnabled(database.DB)
+	queueWebPush := firstPublication && request.PushEnabled
 	if err := database.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Save(&announcement).Error; err != nil {
 			return err
 		}
-		if !queueVoceChatPush {
-			return nil
+		if queueVoceChatPush {
+			var recipients []models.User
+			if err := tx.
+				Select("id, voce_chat_user_id").
+				Where("voce_chat_notification_enabled = ?", true).
+				Find(&recipients).Error; err != nil {
+				return err
+			}
+			deliveries := make([]models.AnnouncementPushDelivery, 0, len(recipients))
+			for _, recipient := range recipients {
+				deliveries = append(deliveries, models.AnnouncementPushDelivery{
+					AnnouncementID:          announcement.ID,
+					RecipientUserID:         recipient.ID,
+					RecipientVoceChatUserID: strings.TrimSpace(recipient.VoceChatUserID),
+					Status:                  models.AnnouncementPushPending,
+				})
+			}
+			if len(deliveries) > 0 {
+				if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&deliveries).Error; err != nil {
+					return err
+				}
+			}
 		}
-		var recipients []models.User
-		if err := tx.
-			Select("id, voce_chat_user_id").
-			Where("voce_chat_notification_enabled = ?", true).
-			Find(&recipients).Error; err != nil {
-			return err
+		if queueWebPush {
+			return services.QueueWebPushForAnnouncement(tx, announcement)
 		}
-		deliveries := make([]models.AnnouncementPushDelivery, 0, len(recipients))
-		for _, recipient := range recipients {
-			deliveries = append(deliveries, models.AnnouncementPushDelivery{
-				AnnouncementID:          announcement.ID,
-				RecipientUserID:         recipient.ID,
-				RecipientVoceChatUserID: strings.TrimSpace(recipient.VoceChatUserID),
-				Status:                  models.AnnouncementPushPending,
-			})
-		}
-		if len(deliveries) == 0 {
-			return nil
-		}
-		return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&deliveries).Error
+		return nil
 	}); err != nil {
 		c.JSON(http.StatusOK, dto.Fail[any]("发布公告失败"))
 		return

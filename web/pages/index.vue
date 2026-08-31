@@ -320,10 +320,12 @@
               <UserNotificationCenter
                 ref="notificationCenter"
                 :site-config="frontendConfig"
+                :initial-notification-id="notificationTargetNotificationId ?? undefined"
                 :initial-message-id="notificationTargetMessageId ?? undefined"
                 :initial-comment-id="notificationTargetCommentId ?? undefined"
                 :restore-focus-id="notificationReturnFocusId ?? undefined"
                 @unread-change="handleNotificationUnreadChange"
+                @login-request="authMode = 'login'; showAuthModal = true"
                 @jump="handleNotificationJump"
                 @restore-consumed="handleNotificationRestoreConsumed"
               />
@@ -436,17 +438,20 @@
   <AnnouncementModal ref="announcementModal" @unread-change="handleAnnouncementUnreadChange" />
   <!-- 添加搜索模态框组件 -->
   <SearchMode v-model="showSearchModal" @search-result="handleSearchResult" />
+  <PwaRuntimeNotices ref="pwaRuntimeNotices" />
   <FloatingToolSidebar 
     :content-theme="contentTheme"
     :layout-icon="layoutIcon"
     :notification-unread-count="notificationUnreadCount"
     :announcement-unread-count="announcementUnreadCount"
+    :pwa-enabled="frontendConfig.pwaEnabled !== false"
     @search="showSearchModal = true"
     @switch-background="changeBackground"
     @toggle-theme="toggleThemeGlobal"
     @toggle-layout="cycleLayout"
     @open-comment="openCommentBoard"
     @open-notifications="openNotificationCenter"
+    @open-pwa="pwaRuntimeNotices?.open()"
     @open-announcements="openAnnouncementCenter"
     @open-admin="openAdmin"
   />
@@ -582,6 +587,7 @@ import SearchMode from '~/components/index/Searchmode.vue' // 导入 SearchMode 
 import TagList from '~/components/index/TagList.vue'
 import InfoFeedList from '@/components/index/InfoFeedList.vue'
 import UserNotificationCenter from '@/components/index/UserNotificationCenter.vue'
+import PwaRuntimeNotices from '@/components/index/PwaRuntimeNotices.vue'
 import AnnouncementCenter from '@/components/index/AnnouncementCenter.vue'
 import AnnouncementModal from '@/components/index/AnnouncementModal.vue'
 import HomeSidebarPager from '@/components/index/HomeSidebarPager.vue'
@@ -604,6 +610,7 @@ import type { PageQueryResult, Tag } from '~/types/models'
 const router = useRouter()
 const route = useRoute()
 const baseApi = useRuntimeConfig().public.baseApi || '/api'
+const pwaRuntimeNotices = ref<{ open: () => void } | null>(null)
 const normalizeLayoutMode = (raw: any): 'three' | 'two' | 'single' => {
   const val = String(raw || '').trim()
   return (val === 'three' || val === 'two' || val === 'single') ? val : 'three'
@@ -654,6 +661,7 @@ const toggleHeatmapCard = () => { showHeatmap.value = !showHeatmap.value }
 const activeTab = ref('latest')
 const notificationTargetMessageId = ref<number | null>(null)
 const notificationTargetCommentId = ref<number | null>(null)
+const notificationTargetNotificationId = ref<number | null>(null)
 const notificationUnreadCount = ref(0)
 const announcementUnreadCount = ref(0)
 const notificationReturnPending = ref(false)
@@ -1035,11 +1043,13 @@ const applyRouteTargets = () => {
   }
   const messageId = parseRouteNumber(route.query.message_id)
   const commentId = parseRouteNumber(route.query.comment_id)
+  const notificationId = parseRouteNumber(route.query.notification_id)
   targetMessageId.value = messageId ? String(messageId) : null
+  notificationTargetNotificationId.value = notificationId
   notificationTargetMessageId.value = messageId
   notificationTargetCommentId.value = commentId
 }
-watch(() => [route.query.tab, route.query.message_id, route.query.comment_id], applyRouteTargets, { immediate: true })
+watch(() => [route.query.tab, route.query.notification_id, route.query.message_id, route.query.comment_id], applyRouteTargets, { immediate: true })
 const ensureMessageTab = () => {
   if (activeTab.value !== 'latest' && activeTab.value !== 'personal') activeTab.value = 'latest'
 }
@@ -1087,6 +1097,7 @@ onMounted(async () => {
 
 
 const userStore = useUserStore()
+const pwaManager = usePwaManager()
 const { can, refreshCapabilities } = useAdminCapabilities()
 onMounted(() => { void refreshCapabilities() })
 const isLoggedIn = computed(() => !!(userStore.isLogin && userStore.user))
@@ -1094,6 +1105,7 @@ const isOnline = computed(() => !!(userStore.user))
 
 const handleNotificationUnreadChange = (count: number) => {
   notificationUnreadCount.value = Math.max(0, Number(count || 0))
+  void pwaManager.syncBadge(notificationUnreadCount.value)
 }
 
 const handleAnnouncementUnreadChange = (count: number) => {
@@ -1115,6 +1127,7 @@ const handleNotificationJump = async (item: NotificationJumpItem) => {
   const commentId = Number(item?.target_comment_id || 0)
   notificationReturnPending.value = true
   notificationReturnFocusId.value = Number(item?.id || 0) || null
+  notificationTargetNotificationId.value = null
   notificationTargetMessageId.value = messageId || null
   notificationTargetCommentId.value = commentId || null
 
@@ -1137,7 +1150,8 @@ const handleNotificationRestoreConsumed = () => {
 }
 
 const handleNotificationTargetConsumed = () => {
-  if (!notificationTargetMessageId.value && !notificationTargetCommentId.value && !targetMessageId.value) return
+  if (!notificationTargetNotificationId.value && !notificationTargetMessageId.value && !notificationTargetCommentId.value && !targetMessageId.value) return
+  notificationTargetNotificationId.value = null
   notificationTargetMessageId.value = null
   notificationTargetCommentId.value = null
   targetMessageId.value = null
@@ -1146,17 +1160,20 @@ const handleNotificationTargetConsumed = () => {
 const loadNotificationUnreadCount = async () => {
   if (!isLoggedIn.value) {
     notificationUnreadCount.value = 0
+    void pwaManager.syncBadge(0)
     return
   }
   const res = await getRequest<any>('notifications/unread-count', {}, { credentials: 'include', silent: true })
   const count = Number(res?.data?.unread_count ?? res?.data?.unreadCount ?? 0)
   notificationUnreadCount.value = Number.isFinite(count) ? Math.max(0, count) : 0
+  void pwaManager.syncBadge(notificationUnreadCount.value)
 }
 
 const openNotificationCenter = async () => {
   const ok = await userStore.checkLoginStatus()
   if (ok) {
     if (notificationReturnPending.value) {
+      notificationTargetNotificationId.value = null
       notificationTargetMessageId.value = null
       notificationTargetCommentId.value = null
       targetMessageId.value = null
@@ -1165,6 +1182,7 @@ const openNotificationCenter = async () => {
       await loadNotificationUnreadCount()
       return
     }
+    notificationTargetNotificationId.value = null
     notificationTargetMessageId.value = null
     notificationTargetCommentId.value = null
     notificationReturnFocusId.value = null
@@ -2476,7 +2494,6 @@ const updateTitle = () => {
       { key: 'shortcut-icon-32', rel: 'shortcut icon', type: 'image/png', href: '/favicon-32x32.png', sizes: '32x32' },
       { key: 'icon-fallback', rel: 'icon', href: icon },
       ...(frontendConfig.value.pwaEnabled ? [
-        { key: 'manifest', rel: 'manifest', href: '/manifest.json' },
         { key: 'apple-touch', rel: 'apple-touch-icon', href: pwaIcon, sizes: '180x180' },
         { key: 'pwa-192', rel: 'icon', href: pwaIcon, sizes: '192x192' },
         { key: 'pwa-512', rel: 'icon', href: (pwaIcon.toLowerCase().endsWith('.png') ? pwaIcon : '/android-chrome-512x512.png'), sizes: '512x512' }

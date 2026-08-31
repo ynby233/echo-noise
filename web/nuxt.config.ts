@@ -5,6 +5,10 @@ const env = (globalThis as typeof globalThis & {
 }).process?.env ?? {}
 
 const isDevelopment = env.NODE_ENV === 'development'
+const buildIdentity = String(env.VITE_APP_VERSION || env.APP_VERSION || 'development')
+  .trim()
+  .replace(/[^0-9A-Za-z._-]+/g, '-')
+  .slice(0, 64) || 'development'
 
 export default defineNuxtConfig({
   ssr: false,
@@ -19,7 +23,6 @@ export default defineNuxtConfig({
         { rel: 'stylesheet', href: 'https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0/dist/fancybox/fancybox.css' },
         { rel: 'icon', href: '/favicon.svg' },
         { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
-        { rel: 'manifest', href: '/manifest.json' },
       ],
       script: [
         { src: 'https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js', tagPosition: 'bodyClose', defer: true },
@@ -34,7 +37,7 @@ export default defineNuxtConfig({
         { src: 'https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js', tagPosition: 'bodyClose', defer: true },
       ],
       meta: [
-        { name: "viewport", content: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" }
+        { name: "viewport", content: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" }
       ],
       title: '个人站点'
     }
@@ -42,6 +45,9 @@ export default defineNuxtConfig({
   compatibilityDate: '2024-11-01',
   devtools: { enabled: true },
   vite: {
+    define: {
+      __PWA_BUILD_ID__: JSON.stringify(buildIdentity),
+    },
     server: {
       proxy: {
         '/api': {
@@ -49,6 +55,14 @@ export default defineNuxtConfig({
           changeOrigin: true
         },
         '/rss': {
+          target: 'http://localhost:1314',
+          changeOrigin: true
+        },
+        '/manifest.json': {
+          target: 'http://localhost:1314',
+          changeOrigin: true
+        },
+        '/manifest.webmanifest': {
           target: 'http://localhost:1314',
           changeOrigin: true
         }
@@ -63,8 +77,27 @@ export default defineNuxtConfig({
     '@nuxt/ui',
     '@nuxtjs/tailwindcss',
     '@pinia/nuxt',
-    
+    '@vite-pwa/nuxt',
   ],
+  pwa: {
+    registerType: 'prompt',
+    strategies: 'injectManifest',
+    srcDir: 'service-worker',
+    filename: 'sw.ts',
+    injectRegister: false,
+    manifest: false,
+    client: {
+      registerPlugin: false,
+      installPrompt: false,
+    },
+    injectManifest: {
+      globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff,woff2}'],
+      maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+    },
+    devOptions: {
+      enabled: false,
+    },
+  },
   css: [
     '@/assets/fonts/result.css',
     '@/assets/css/attachment-audio-player.css',
@@ -88,6 +121,14 @@ export default defineNuxtConfig({
         changeOrigin: true
       },
       '/rss': {
+        target: 'http://localhost:1314',
+        changeOrigin: true
+      },
+      '/manifest.json': {
+        target: 'http://localhost:1314',
+        changeOrigin: true
+      },
+      '/manifest.webmanifest': {
         target: 'http://localhost:1314',
         changeOrigin: true
       }

@@ -12,9 +12,11 @@
     <div v-if="!user.isLogin" class="empty-state">
       <UIcon name="i-mdi-bell-off-outline" class="empty-icon" />
       <div class="empty-title">登录后查看通知</div>
+      <button type="button" class="notification-text-button nw-action-btn nw-action-btn--label" @click="emit('login-request')">去登录</button>
     </div>
 
     <div v-else class="notification-feed-panel notification-board-wrap">
+      <PwaPushSettings :dark="isDark" />
       <div class="notification-board-head">
         <div class="notification-count-title">通知 ({{ total }})</div>
         <div class="notification-actions">
@@ -236,6 +238,7 @@ import { useUserStore } from '~/store/user'
 import { getRequest, putRequest } from '~/utils/api'
 import { resolveManagedAttachmentURL } from '~/utils/media-url'
 import BuiltinComments from '~/components/comments/BuiltinComments.vue'
+import PwaPushSettings from '~/components/index/PwaPushSettings.vue'
 import { useToast } from '#ui/composables/useToast'
 
 type NotificationActor = {
@@ -314,8 +317,9 @@ type NotificationListPayload = {
   pageSize?: number
 }
 
-const props = defineProps<{ siteConfig?: any, initialMessageId?: number | null, initialCommentId?: number | null, restoreFocusId?: number | null }>()
+const props = defineProps<{ siteConfig?: any, initialNotificationId?: number | null, initialMessageId?: number | null, initialCommentId?: number | null, restoreFocusId?: number | null }>()
 const emit = defineEmits<{
+  (event: 'login-request'): void
   (event: 'unread-change', count: number): void
   (event: 'jump', item: NotificationJumpPayload): void
   (event: 'restore-consumed'): void
@@ -325,6 +329,7 @@ const notificationTitle = computed(() => String(props.siteConfig?.notificationPa
 const notificationDescription = computed(() => String(props.siteConfig?.notificationPageDescription || '').trim() || '欢迎彼此间互相交流')
 
 const user = useUserStore()
+const pwaManager = usePwaManager()
 const injectedTheme = inject('contentTheme', ref('light')) as any
 const isDark = computed(() => {
   const value = injectedTheme && typeof injectedTheme.value !== 'undefined' ? injectedTheme.value : injectedTheme
@@ -356,6 +361,7 @@ const baseApi = computed(() => runtimeConfig.public.baseApi || '/api')
 
 const setUnreadCount = (count: number) => {
   unreadCount.value = Math.max(0, Number(count || 0))
+  void pwaManager.syncBadge(unreadCount.value)
   emit('unread-change', unreadCount.value)
 }
 
@@ -544,13 +550,18 @@ const onAvatarError = (event: Event) => {
   if (img) img.src = genericAvatar()
 }
 
+const initialNotificationId = () => Number(props.initialNotificationId || 0)
 const initialMessageId = () => Number(props.initialMessageId || 0)
 const initialCommentId = () => Number(props.initialCommentId || 0)
 const restoreFocusId = () => Number(props.restoreFocusId || 0)
-const hasInitialTarget = () => initialMessageId() > 0 || initialCommentId() > 0
+const hasInitialTarget = () => initialNotificationId() > 0 || initialMessageId() > 0 || initialCommentId() > 0
 const matchesInitialTarget = (item: UserNotification) => {
+  const notificationId = initialNotificationId()
   const messageId = initialMessageId()
   const commentId = initialCommentId()
+  if (notificationId > 0) {
+    return Number(item.id) === notificationId
+  }
   if (commentId > 0) {
     return targetCommentId(item) === commentId
   }
@@ -840,7 +851,7 @@ watch(() => user.isLogin, (loggedIn) => {
   }
 })
 
-watch(() => [props.initialMessageId, props.initialCommentId], () => resolveInitialTargetAcrossPages())
+watch(() => [props.initialNotificationId, props.initialMessageId, props.initialCommentId], () => resolveInitialTargetAcrossPages())
 watch(page, syncTargetPageToCurrent, { immediate: true })
 watch(totalPages, syncTargetPageToCurrent)
 

@@ -33,6 +33,10 @@
       <span v-if="notificationUnreadCount > 0" class="notification-badge">{{ badgeText }}</span>
       <span class="btn-label">通知</span>
     </button>
+    <button v-if="pwaEnabled" v-show="!collapsed" class="tool-btn nw-action-btn" aria-label="安装应用" @click="$emit('open-pwa')">
+      <UIcon name="i-mdi-monitor-arrow-down-variant" class="w-6 h-6" />
+      <span class="btn-label">安装应用</span>
+    </button>
     <button v-show="!collapsed" class="tool-btn nw-action-btn" aria-label="公告" @click="$emit('open-announcements')">
       <UIcon name="i-heroicons-megaphone" class="w-6 h-6" />
       <span v-if="announcementUnreadCount > 0" class="notification-badge">{{ announcementBadgeText }}</span>
@@ -46,7 +50,7 @@
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{ contentTheme?: string; layoutIcon?: string; notificationUnreadCount?: number; announcementUnreadCount?: number }>()
+const props = defineProps<{ contentTheme?: string; layoutIcon?: string; notificationUnreadCount?: number; announcementUnreadCount?: number; pwaEnabled?: boolean }>()
 defineEmits<{
   (event: 'toggle-layout'): void
   (event: 'search'): void
@@ -54,6 +58,7 @@ defineEmits<{
   (event: 'toggle-theme'): void
   (event: 'open-comment'): void
   (event: 'open-notifications'): void
+  (event: 'open-pwa'): void
   (event: 'open-announcements'): void
   (event: 'open-admin'): void
 }>()

@@ -349,6 +349,15 @@ func SetupRouter() *gin.Engine {
 		notifications.PUT("/read/:id", controllers.MarkUserNotificationRead)
 	}
 
+	webPush := authRoutes.Group("/web-push")
+	{
+		webPush.GET("/config", controllers.GetWebPushConfig)
+		webPush.PUT("/preferences", controllers.UpdateWebPushPreferences)
+		webPush.POST("/subscriptions", controllers.RegisterWebPushSubscription)
+		webPush.DELETE("/subscriptions", controllers.UnregisterWebPushSubscription)
+		webPush.POST("/test", controllers.SendWebPushTest)
+	}
+
 	announcementAdmin := authRoutes.Group("/admin/announcements")
 	announcementAdmin.Use(middleware.RequireCapability(authorization.CapabilityAnnouncementsView))
 	{
@@ -577,7 +586,10 @@ func staticResponseHeadersMiddleware() gin.HandlerFunc {
 			c.Header("Content-Type", "application/manifest+json; charset=utf-8")
 			c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
 		case path == "/sw.js":
+			c.Header("Content-Type", "application/javascript; charset=utf-8")
 			c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+			c.Header("Pragma", "no-cache")
+			c.Header("Service-Worker-Allowed", "/")
 		case strings.HasPrefix(path, "/_nuxt/") || strings.HasPrefix(path, "/assets/") ||
 			strings.HasPrefix(path, "/favicon") || strings.HasPrefix(path, "/android-chrome"):
 			c.Header("Cache-Control", "public, max-age=31536000, immutable")

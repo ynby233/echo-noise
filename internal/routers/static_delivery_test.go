@@ -59,3 +59,33 @@ func TestSetupRouterCompressesAndCachesFingerprintedNuxtAssets(t *testing.T) {
 		t.Fatalf("decompressed asset mismatch: got %d bytes, want %d", len(decompressed), len(wantBody))
 	}
 }
+
+func TestSetupRouterServesServiceWorkerWithRootScopeAndNoCache(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("ACCESS_LOG", "false")
+	t.Chdir(t.TempDir())
+	if err := os.MkdirAll("public", 0o755); err != nil {
+		t.Fatalf("create public directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join("public", "sw.js"), []byte("self.addEventListener('fetch', () => {})"), 0o600); err != nil {
+		t.Fatalf("write service worker: %v", err)
+	}
+
+	r := SetupRouter()
+	request := httptest.NewRequest(http.MethodGet, "/sw.js", nil)
+	response := httptest.NewRecorder()
+	r.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("service worker status = %d: %s", response.Code, response.Body.String())
+	}
+	if got := response.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate" {
+		t.Fatalf("service worker Cache-Control = %q", got)
+	}
+	if got := response.Header().Get("Service-Worker-Allowed"); got != "/" {
+		t.Fatalf("Service-Worker-Allowed = %q, want root scope", got)
+	}
+	if got := response.Header().Get("Content-Type"); !strings.Contains(got, "javascript") {
+		t.Fatalf("service worker Content-Type = %q", got)
+	}
+}

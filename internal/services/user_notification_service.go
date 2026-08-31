@@ -83,7 +83,9 @@ func createUserNotification(recipientUserID uint, actorUserID *uint, notificatio
 		CommentID:       commentID,
 		ParentCommentID: parentCommentID,
 	}
-	if err := database.DB.Create(&notification).Error; err != nil {
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		return createUserNotificationWithWebPush(tx, &notification)
+	}); err != nil {
 		return err
 	}
 	queueUserNotificationPush(notification.ID)
@@ -99,7 +101,8 @@ func CreatePrimaryAdminVoceChatCredentialAlertOnce() {
 	var count int64
 	_ = database.DB.Model(&models.UserNotification{}).Where("recipient_user_id = ? AND type = ?", models.PrimaryAdminUserID, models.UserNotificationTypeVoceChatCredentials).Count(&count).Error
 	if count == 0 {
-		_ = database.DB.Create(&models.UserNotification{RecipientUserID: models.PrimaryAdminUserID, Type: models.UserNotificationTypeVoceChatCredentials}).Error
+		notification := models.UserNotification{RecipientUserID: models.PrimaryAdminUserID, Type: models.UserNotificationTypeVoceChatCredentials}
+		_ = database.DB.Transaction(func(tx *gorm.DB) error { return createUserNotificationWithWebPush(tx, &notification) })
 	}
 }
 
@@ -125,7 +128,8 @@ func CreateVoceChatPasswordChangedAlertOnce(recipientUserID uint) {
 	var count int64
 	_ = database.DB.Model(&models.UserNotification{}).Where("recipient_user_id = ? AND type = ?", recipientUserID, models.UserNotificationTypeVoceChatPasswordChanged).Count(&count).Error
 	if count == 0 {
-		_ = database.DB.Create(&models.UserNotification{RecipientUserID: recipientUserID, Type: models.UserNotificationTypeVoceChatPasswordChanged}).Error
+		notification := models.UserNotification{RecipientUserID: recipientUserID, Type: models.UserNotificationTypeVoceChatPasswordChanged}
+		_ = database.DB.Transaction(func(tx *gorm.DB) error { return createUserNotificationWithWebPush(tx, &notification) })
 	}
 }
 
@@ -154,7 +158,8 @@ func CreatePasswordUpdateIncompleteAlertOnce(recipientUserID uint) error {
 	if count != 0 {
 		return nil
 	}
-	return database.DB.Create(&models.UserNotification{RecipientUserID: recipientUserID, Type: models.UserNotificationTypePasswordUpdateIncomplete}).Error
+	notification := models.UserNotification{RecipientUserID: recipientUserID, Type: models.UserNotificationTypePasswordUpdateIncomplete}
+	return database.DB.Transaction(func(tx *gorm.DB) error { return createUserNotificationWithWebPush(tx, &notification) })
 }
 
 func ResolvePasswordUpdateIncompleteAlert(recipientUserID uint) error {
@@ -217,11 +222,19 @@ func refreshLikeNotification(recipientUserID uint, actorUserID uint, messageID u
 	err := database.DB.Where("recipient_user_id = ? AND actor_user_id = ? AND type = ? AND message_id = ?", recipientUserID, actorUserID, models.UserNotificationTypeLike, messageID).First(&existing).Error
 	if err == nil && existing.ID != 0 {
 		now := time.Now()
-		if err := database.DB.Model(&existing).Updates(map[string]interface{}{
-			"read_at":    nil,
-			"created_at": now,
-			"updated_at": now,
-		}).Error; err != nil {
+		if err := database.DB.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Model(&existing).Updates(map[string]interface{}{
+				"read_at":    nil,
+				"created_at": now,
+				"updated_at": now,
+			}).Error; err != nil {
+				return err
+			}
+			if err := tx.First(&existing, existing.ID).Error; err != nil {
+				return err
+			}
+			return QueueWebPushForNotification(tx, existing)
+		}); err != nil {
 			return err
 		}
 		queueUserNotificationPush(existing.ID)

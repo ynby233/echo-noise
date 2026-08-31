@@ -25,6 +25,11 @@ func establishLoginSession(c *gin.Context, user *models.User) error {
 	session.Set("user_id", user.ID)
 	session.Set("username", user.Username)
 	session.Set("is_admin", user.IsAdmin)
+	webPushSessionID, err := newWebPushSessionID()
+	if err != nil {
+		return err
+	}
+	session.Set(webPushSessionKey, webPushSessionID)
 	return session.Save()
 }
 

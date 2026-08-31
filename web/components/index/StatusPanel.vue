@@ -6261,37 +6261,6 @@ const fetchConfig = async () => {
                 attachmentStorageEnabled.value = !!data.data.attachmentStorageEnabled
             }
 
-            // 自动应用到页面 Head（标题、描述、图标）
-            const title = (frontendConfig.pwaTitle || frontendConfig.siteTitle || '个人站点').trim()
-            const icon = (frontendConfig.rssFaviconURL || '/favicon.ico').trim()
-            const description = (frontendConfig.pwaDescription || '').trim()
-            const enabled = !!frontendConfig.pwaEnabled
-            if (enabled) {
-              useHead({
-                title,
-                meta: [
-                  { name: 'description', content: description },
-                  { name: 'theme-color', content: '#000000' }
-                ],
-                link: [
-                  { rel: 'manifest', href: '/manifest.webmanifest' },
-                  { rel: 'icon', href: icon },
-                  { rel: 'apple-touch-icon', href: icon }
-                ]
-              })
-            } else {
-              try {
-                const manifestEl = document.querySelector('link[rel="manifest"]')
-                if (manifestEl) manifestEl.parentElement?.removeChild(manifestEl)
-                if ('serviceWorker' in navigator) {
-                  navigator.serviceWorker.getRegistrations().then(async regs => {
-                    for (const r of regs) await r.unregister()
-                    const keys = await caches.keys()
-                    await Promise.all(keys.map(k => caches.delete(k)))
-                  })
-                }
-              } catch {}
-            }
             const css = String((frontendConfig as any).musicCssCdnURL || '').trim()
             const js = String((frontendConfig as any).musicJsCdnURL || '').trim()
             if (css || js) applyMusicCdnAssets()
@@ -6647,29 +6616,7 @@ const savePWAConfig = async () => {
             await fetchConfig()
             useToast().add({ title: '成功', description: 'PWA 设置已更新', color: 'green' })
 
-            // 立即切换 Service Worker 状态
-            if ('serviceWorker' in navigator) {
-                const regs = await navigator.serviceWorker.getRegistrations()
-                if (frontendConfig.pwaEnabled) {
-                    try {
-                        const resp = await fetch('/sw.js', { credentials: 'omit' })
-                        const ct = String(resp.headers.get('content-type') || '')
-                        if (resp.ok && ct.includes('javascript')) {
-                            await navigator.serviceWorker.register('/sw.js')
-                        } else {
-                            useToast().add({ title: '提示', description: 'SW 文件不可用，已跳过注册', color: 'orange' })
-                        }
-                    } catch (e: any) {
-                        useToast().add({ title: '提示', description: 'SW 注册失败，可能因非安全上下文', color: 'orange' })
-                    }
-                } else {
-                    for (const r of regs) await r.unregister()
-                    const keys = await caches.keys()
-                    await Promise.all(keys.map(k => caches.delete(k)))
-                }
-            }
-
-            // 通知全局插件重新应用 Head 与 SW 状态
+            // 通知统一的 PWA 管理器重新应用 manifest 与 Service Worker 状态。
             window.dispatchEvent(new Event('frontend-config-updated'))
         } else {
             throw new Error(data.msg || '保存失败')
@@ -7016,38 +6963,6 @@ watch(musicCdnPreset, (v: string) => {
   }
   applyMusicCdnAssets()
 })
-
-const applyPWAConfig = () => {
-  const title = (frontendConfig.pwaTitle || frontendConfig.siteTitle || '个人站点')
-  const icon = (frontendConfig.rssFaviconURL || '/favicon.ico')
-  const description = (frontendConfig.pwaDescription || frontendConfig.description || '')
-  const enabled = !!frontendConfig.pwaEnabled
-  if (enabled) {
-    useHead({
-      title,
-      meta: [
-        { name: 'description', content: description },
-        { name: 'theme-color', content: '#000000' }
-      ],
-      link: [
-        { rel: 'manifest', href: '/manifest.webmanifest' },
-        { rel: 'icon', href: icon }
-      ]
-    })
-  } else {
-    try {
-      const manifestEl = document.querySelector('link[rel="manifest"]')
-      if (manifestEl) manifestEl.parentElement?.removeChild(manifestEl)
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(async regs => {
-          for (const r of regs) await r.unregister()
-          const keys = await caches.keys()
-          await Promise.all(keys.map(k => caches.delete(k)))
-        })
-      }
-    } catch {}
-  }
-}
 
 const isUploading = ref(false)
 const uploadProgress = ref(0)

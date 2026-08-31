@@ -314,6 +314,13 @@ func Login(c *gin.Context) {
 func Logout(c *gin.Context) {
 	session := sessions.Default(c)
 	recordSessionLogoutAudit(c, session)
+	if userID, ok := commentUint(session.Get("user_id")); ok && userID > 0 {
+		if sessionID := strings.TrimSpace(toString(session.Get(webPushSessionKey))); sessionID != "" {
+			if err := services.DisableWebPushSubscriptionsForSession(database.DB, userID, sessionID); err != nil {
+				log.Printf("Web Push 登出清理失败: user_id=%d error_type=%T", userID, err)
+			}
+		}
+	}
 	session.Clear()
 	session.Save()
 	c.JSON(http.StatusOK, dto.OK[any](nil, "登出成功"))
@@ -2428,6 +2435,10 @@ func GetWebManifest(c *gin.Context) {
 	if v, ok := fs["pwaEnabled"].(bool); ok {
 		pwaEnabled = v
 	}
+	if !pwaEnabled {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
 	title := "个人站点"
 	description := ""
 	// 站点默认图标使用 SVG
@@ -2485,15 +2496,20 @@ func GetWebManifest(c *gin.Context) {
 		pwaSize = m[1] + "x" + m[2]
 	}
 	manifest := map[string]interface{}{
+		"id":               "/",
 		"name":             title,
 		"short_name":       title,
 		"description":      description,
 		"start_url":        "/",
+		"scope":            "/",
+		"lang":             "zh-CN",
 		"display":          "standalone",
 		"background_color": "#000000",
 		"theme_color":      "#000000",
 		"icons": []map[string]string{
-			{"src": icon, "sizes": "any", "type": iconType},
+			{"src": "/android-chrome-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+			{"src": "/android-chrome-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+			{"src": icon, "sizes": "any", "type": iconType, "purpose": "any"},
 			{"src": pwaIcon, "sizes": pwaSize, "type": pwaType, "purpose": "any maskable"},
 			{"src": func() string {
 				if strings.Contains(pwaLower, "512x512") && strings.HasSuffix(pwaLower, ".png") {

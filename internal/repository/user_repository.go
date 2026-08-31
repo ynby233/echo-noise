@@ -7,6 +7,7 @@ import (
 
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
+	"gorm.io/gorm"
 )
 
 type userCacheItem struct {
@@ -127,7 +128,24 @@ func UpdateUserToken(userID uint, token string) error {
 
 // DeleteUser 删除用户
 func DeleteUser(id uint) error {
-	err := database.DB.Delete(&models.User{}, id).Error
+	err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if tx.Migrator().HasTable(&models.WebPushDelivery{}) {
+			if err := tx.Where("recipient_user_id = ?", id).Delete(&models.WebPushDelivery{}).Error; err != nil {
+				return err
+			}
+		}
+		if tx.Migrator().HasTable(&models.WebPushSubscription{}) {
+			if err := tx.Where("user_id = ?", id).Delete(&models.WebPushSubscription{}).Error; err != nil {
+				return err
+			}
+		}
+		if tx.Migrator().HasTable(&models.WebPushPreference{}) {
+			if err := tx.Where("user_id = ?", id).Delete(&models.WebPushPreference{}).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Delete(&models.User{}, id).Error
+	})
 	if err != nil {
 		return err
 	}

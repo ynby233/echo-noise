@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <title>暂时无法连接</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: #f8fafc; color: #172033; }
+    main { width: min(88vw, 28rem); padding: 2rem; text-align: center; border: 1px solid #dbe3ef; border-radius: 1.25rem; background: rgba(255,255,255,.94); box-shadow: 0 18px 50px rgba(15,23,42,.12); }
+    img { width: 4.5rem; height: 4.5rem; border-radius: 1rem; }
+    h1 { margin: 1rem 0 .5rem; font-size: 1.35rem; }
+    p { margin: 0 0 1.25rem; line-height: 1.7; color: #64748b; }
+    button { border: 0; border-radius: .8rem; padding: .75rem 1.1rem; color: white; background: #f97316; font: inherit; font-weight: 650; cursor: pointer; }
+    @media (prefers-color-scheme: dark) { body { background: #0f172a; color: #e5e7eb; } main { background: #111827; border-color: #334155; } p { color: #94a3b8; } }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="/android-chrome-192x192.png" alt="站点图标">
+    <h1>暂时无法连接服务器</h1>
+    <p>请检查网络连接，或稍后重新尝试。本应用不支持离线发布、编辑、评论和上传。</p>
+    <button type="button" onclick="location.reload()">重新连接</button>
+  </main>
+</body>
+</html>

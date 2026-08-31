@@ -363,6 +363,16 @@ docker run -d \
 >
 > `TRUSTED_PROXIES` 默认留空，此时不会信任客户端提供的 `X-Forwarded-For`/`X-Real-IP`。只有确认请求经过反向代理时才填写该代理的 IP 或 CIDR；不要配置 `0.0.0.0/0` 或 `::/0`。
 >
+> PWA 安装本身无需额外密钥；若要让用户在网页关闭、后台或锁屏时收到系统推送，需要配置一对长期不变的 VAPID 密钥。首次部署时在源码目录运行 `go run ./cmd/vapid-keygen`，会在终端输出公钥和私钥。公钥可写入 `WEB_PUSH_VAPID_PUBLIC_KEY`；私钥不要提交到 Git，生产环境建议写入权限受限的文件并只读挂载到容器，再用 `WEB_PUSH_VAPID_PRIVATE_KEY_FILE` 指向该文件；同时将 `WEB_PUSH_VAPID_SUBJECT` 设为站长可联系的 `mailto:` 地址。示例：
+>
+> ```
+> WEB_PUSH_VAPID_PUBLIC_KEY=生成的公钥
+> WEB_PUSH_VAPID_PRIVATE_KEY_FILE=/run/secrets/echo-noise-vapid-private-key
+> WEB_PUSH_VAPID_SUBJECT=mailto:owner@example.com
+> ```
+>
+> 私钥文件优先于同名私钥环境变量。密钥必须跨容器重启保持不变；轮换公钥后，已授权的浏览器会在下次打开站点时自动重新订阅。站点必须通过 HTTPS 对外访问（本机 `localhost` 调试除外），反向代理需保留原始 `Host`，否则推送设置的同源保护会拒绝修改请求。用户需登录后在“通知”页面主动开启系统推送；点赞推送默认关闭，锁屏正文预览默认关闭。
+>
 > `runtime.env` 只能固定环境变量，不能固定数据卷映射；数据卷仍需在 `docker run`、docker-compose 或图形化容器面板中配置。环境变量优先级上，`runtime.env` 会覆盖镜像默认 ENV 与面板中同名变量。`runtime.env.example` 只是模板，不会被自动加载；已有 `runtime.env` 和 `config.yaml` 不会被覆盖。若 `/app/config` 是空挂载目录，容器会在首次启动时自动写入默认 `config.yaml` 与 `runtime.env.example`。
 >
 > - 时区可选： -e TZ=Asia/Shanghai
