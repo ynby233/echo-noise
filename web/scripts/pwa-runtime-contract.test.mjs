@@ -14,6 +14,11 @@ assert.match(nuxtConfig, /strategies:\s*['"]injectManifest['"]/, 'PWA must build
 assert.match(nuxtConfig, /manifest:\s*false/, 'the Go dynamic manifest must remain the only manifest authority')
 assert.match(nuxtConfig, /injectRegister:\s*false/, 'service worker registration must be owned by the PWA manager')
 assert.match(nuxtConfig, /__PWA_BUILD_ID__/, 'the service worker build must receive an explicit build identity')
+assert.doesNotMatch(
+  nuxtConfig,
+  /globPatterns:[^\n]*woff/s,
+  'service worker activation must not wait for the complete generated font catalogue to be precached',
+)
 
 assert.equal(exists('../public/manifest.json'), false, 'the retired static manifest.json must not remain')
 assert.equal(exists('../public/manifest.webmanifest'), false, 'the retired static manifest.webmanifest must not remain')
@@ -33,6 +38,7 @@ for (const required of ['virtual:pwa-register', 'beforeinstallprompt', '/api/web
   assert.ok(pwaPlugin.includes(required), `PWA manager must contain ${required}`)
 }
 assert.ok(pwaPlugin.includes('subscriptionUsesPublicKey'), 'the manager must recover from VAPID public-key rotation')
+assert.ok(pwaPlugin.includes('navigator.maxTouchPoints > 1'), 'iPadOS desktop-class user agents must still be identified as iPadOS')
 
 assert.ok(exists('../public/offline.html'), 'the minimal offline status page must exist')
 assert.ok(serviceWorker.includes("matchPrecache('/offline')"), 'the offline fallback must use the route emitted by static generation')

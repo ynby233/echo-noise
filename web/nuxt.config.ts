@@ -91,7 +91,7 @@ export default defineNuxtConfig({
       installPrompt: false,
     },
     injectManifest: {
-      globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff,woff2}'],
+      globPatterns: ['**/*.{js,css,html,ico,png,svg,webp}'],
       maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
     },
     devOptions: {

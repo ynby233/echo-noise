@@ -37,9 +37,14 @@ const base64URLToBytes = (value: string) => {
   return Uint8Array.from(decoded, char => char.charCodeAt(0))
 }
 
+const isAppleMobileDevice = () => {
+  const agent = navigator.userAgent.toLowerCase()
+  return /iphone|ipad|ipod/.test(agent) || (/macintosh/.test(agent) && navigator.maxTouchPoints > 1)
+}
+
 const detectPlatform = () => {
   const agent = navigator.userAgent.toLowerCase()
-  if (/iphone|ipad|ipod/.test(agent)) return /ipad/.test(agent) ? 'ipados' : 'ios'
+  if (isAppleMobileDevice()) return /iphone|ipod/.test(agent) ? 'ios' : 'ipados'
   if (/android/.test(agent)) return 'android'
   if (/windows/.test(agent)) return 'windows'
   if (/macintosh|mac os x/.test(agent)) return 'macos'
@@ -89,7 +94,7 @@ export default defineNuxtPlugin(() => {
   const secureContext = ref(window.isSecureContext)
   const online = ref(navigator.onLine)
   const standalone = ref(window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true)
-  const ios = ref(/iphone|ipad|ipod/i.test(navigator.userAgent))
+  const ios = ref(isAppleMobileDevice())
   const installable = ref(false)
   const installed = ref(standalone.value)
   const needRefresh = ref(false)

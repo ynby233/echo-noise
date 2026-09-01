@@ -24,6 +24,9 @@ assert.match(
   /复制错误详情[\s\S]*navigator\.clipboard\.writeText\(diagnosticText\.value\)/,
   'an iPad user must be able to copy the complete diagnostic without transcribing a screenshot',
 )
+for (const detail of ['注册错误', '缓存接口']) {
+  assert.ok(component.includes(detail), `the copied diagnostic must expose ${detail} for iPadOS Lockdown Mode triage`)
+}
 assert.match(
   component,
   /iPad 设置.*通知.*允许通知.*主屏幕/s,

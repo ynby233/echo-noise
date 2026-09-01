@@ -171,6 +171,8 @@ const diagnosticText = computed(() => [
   `主屏幕应用：${pwa.standalone.value ? '是' : '否'}`,
   `安全连接：${secureContext.value ? '是' : '否'}`,
   `应用服务：${pwa.workerRegistered.value ? '已注册' : '未注册'}`,
+  `注册错误：${pwa.registrationError.value ? '是' : '否'}`,
+  `缓存接口：${'caches' in window ? '可用' : '不可用'}`,
   `平台：${navigator.userAgent}`,
 ].join('\n'))
 
