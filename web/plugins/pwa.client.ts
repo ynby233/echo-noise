@@ -4,6 +4,7 @@ import { computed, ref } from 'vue'
 import { useHead } from '#imports'
 import { registerSW } from 'virtual:pwa-register'
 import type { PwaInstallResult, PwaManager, WebPushPreferences } from '~/types/pwa'
+import { shouldRecoverMissingSubscription } from '~/utils/pwaPushReconciliation'
 
 type DeferredInstallPrompt = Event & {
   prompt: () => Promise<void>
@@ -198,6 +199,21 @@ export default defineNuxtPlugin(() => {
       publicKeyRotated = true
     }
     if (publicKeyRotated && permission === 'granted') {
+      await ensureServiceWorker()
+      const registration = await navigator.serviceWorker.ready
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: base64URLToBytes(publicKey) as BufferSource,
+      })
+      await persistSubscription(subscription)
+    }
+    if (shouldRecoverMissingSubscription({
+      configured: pushConfigured.value,
+      hasPublicKey: publicKey !== '',
+      permission,
+      serverSubscribed: data?.session_subscribed === true,
+      localSubscribed: !!subscription,
+    })) {
       await ensureServiceWorker()
       const registration = await navigator.serviceWorker.ready
       subscription = await registration.pushManager.subscribe({
