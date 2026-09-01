@@ -80,6 +80,30 @@ func TestGetWebManifestReturnsInstallableAppContract(t *testing.T) {
 	}
 }
 
+func TestGetWebManifestPreservesExplicitDefaultLookingPwaTitle(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupWebManifestTestDB(t, true)
+	if err := database.DB.Model(&models.SiteConfig{}).Where("1 = 1").Updates(map[string]any{
+		"site_title": "测试",
+		"pwa_title":  "个人站点",
+	}).Error; err != nil {
+		t.Fatalf("update manifest titles: %v", err)
+	}
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/manifest.webmanifest", nil)
+
+	GetWebManifest(ctx)
+
+	var manifest map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &manifest); err != nil {
+		t.Fatalf("decode manifest: %v", err)
+	}
+	if got := manifest["name"]; got != "个人站点" {
+		t.Fatalf("manifest name = %#v, want explicit PWA title %q", got, "个人站点")
+	}
+}
+
 func TestGetWebManifestIsUnavailableWhenPwaIsDisabled(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	setupWebManifestTestDB(t, false)

@@ -2439,23 +2439,26 @@ func GetWebManifest(c *gin.Context) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	title := "个人站点"
+	title := ""
 	description := ""
 	// 站点默认图标使用 SVG
 	siteIcon := "/favicon.svg"
 
 	if pwaEnabled {
-		if v, ok := fs["pwaTitle"].(string); ok && v != "" {
-			title = v
+		if v, ok := fs["pwaTitle"].(string); ok {
+			title = strings.TrimSpace(v)
 		}
 		if v, ok := fs["pwaDescription"].(string); ok {
 			description = v
 		}
 	}
-	if title == "个人站点" {
+	if title == "" {
 		if v, ok := fs["siteTitle"].(string); ok && v != "" {
-			title = v
+			title = strings.TrimSpace(v)
 		}
+	}
+	if title == "" {
+		title = "个人站点"
 	}
 	if description == "" {
 		if v, ok := fs["description"].(string); ok {
