@@ -363,7 +363,7 @@ docker run -d \
 >
 > `TRUSTED_PROXIES` 默认留空，此时不会信任客户端提供的 `X-Forwarded-For`/`X-Real-IP`。只有确认请求经过反向代理时才填写该代理的 IP 或 CIDR；不要配置 `0.0.0.0/0` 或 `::/0`。
 >
-> PWA 安装本身无需额外密钥；若要让用户在网页关闭、后台或锁屏时收到系统推送，需要配置一对长期不变的 VAPID 密钥。首次部署时在源码目录运行 `go run ./cmd/vapid-keygen`，会在终端输出公钥和私钥。公钥可写入 `WEB_PUSH_VAPID_PUBLIC_KEY`；私钥不要提交到 Git，生产环境建议写入权限受限的文件并只读挂载到容器，再用 `WEB_PUSH_VAPID_PRIVATE_KEY_FILE` 指向该文件；同时将 `WEB_PUSH_VAPID_SUBJECT` 设为站长可联系的 `mailto:` 地址。示例：
+> PWA 安装本身无需额外密钥；若要让用户在网页关闭、后台或锁屏时收到系统推送，需要配置一对长期不变的 VAPID 密钥。首次部署时在源码目录运行 `go run ./cmd/vapid-keygen`，会在终端输出公钥和私钥；若不希望私钥出现在终端记录中，可运行 `go run ./cmd/vapid-keygen -private-key-file /path/to/new-private-key`，它只显示公钥和私钥文件路径，并将私钥写入一个拒绝覆盖的权限受限新文件。公钥可写入 `WEB_PUSH_VAPID_PUBLIC_KEY`；私钥不要提交到 Git，生产环境建议写入权限受限的文件并只读挂载到容器，再用 `WEB_PUSH_VAPID_PRIVATE_KEY_FILE` 指向该文件；同时设置 `WEB_PUSH_VAPID_SUBJECT`。示例：
 >
 > ```
 > WEB_PUSH_VAPID_PUBLIC_KEY=生成的公钥
