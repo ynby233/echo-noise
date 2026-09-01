@@ -31,7 +31,11 @@
       </div>
       <div v-else>
         <div v-if="permissionDenied" class="push-message is-error">
-          浏览器已阻止通知。请在地址栏左侧的网站设置中允许“通知”，刷新页面后重试。
+          {{ permissionDeniedHelp }}
+        </div>
+        <div v-if="actionError" class="push-message is-error push-action-error" role="alert">
+          <strong>系统推送未能开启</strong>
+          <span>{{ actionError }}</span>
         </div>
 
         <div class="push-primary-row">
@@ -104,6 +108,7 @@ const loading = ref(true)
 const saving = ref(false)
 const testing = ref(false)
 const loadError = ref('')
+const actionError = ref('')
 const draft = reactive<WebPushPreferences>({
   enabled: true,
   comment_enabled: true,
@@ -131,6 +136,13 @@ const pushConfigured = computed(() => pwa.pushConfigured.value)
 const pushSubscribed = computed(() => pwa.pushSubscribed.value)
 const pushBusy = computed(() => pwa.pushBusy.value)
 const permissionDenied = computed(() => pwa.notificationPermission.value === 'denied')
+const appleMobile = typeof navigator !== 'undefined' && (
+  /iphone|ipad|ipod/i.test(navigator.userAgent)
+  || (/macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1)
+)
+const permissionDeniedHelp = computed(() => appleMobile
+  ? '通知已被 iPadOS 阻止。请到 iPad 设置 → 通知中找到本应用，打开“允许通知”，然后彻底关闭应用并从主屏幕重新打开。'
+  : '浏览器已阻止通知。请在当前网站的浏览器权限设置中允许“通知”，刷新页面后重试。')
 const changed = computed(() => Object.keys(draft).some(key => draft[key as keyof WebPushPreferences] !== pwa.preferences.value[key as keyof WebPushPreferences]))
 const statusLabel = computed(() => {
   if (loadError.value) return '读取失败'
@@ -138,11 +150,12 @@ const statusLabel = computed(() => {
   if (!secureContext.value) return '需要 HTTPS'
   if (!supported.value) return '不受支持'
   if (permissionDenied.value) return '已被阻止'
+  if (actionError.value) return '开启失败'
   return pushSubscribed.value ? '已开启' : '未开启'
 })
 const statusClass = computed(() => ({
   'is-on': pushSubscribed.value,
-  'is-warning': permissionDenied.value || !secureContext.value || !!loadError.value,
+  'is-warning': permissionDenied.value || !secureContext.value || !!loadError.value || !!actionError.value,
 }))
 const statusDescription = computed(() => pushSubscribed.value
   ? '后台、关闭网页或锁屏时仍可接收你允许的通知。'
@@ -164,6 +177,7 @@ const load = async () => {
 }
 
 const toggleSubscription = async () => {
+  actionError.value = ''
   try {
     if (pushSubscribed.value) await pwa.disableNotifications()
     else await pwa.enableNotifications()
@@ -172,7 +186,9 @@ const toggleSubscription = async () => {
       color: pushSubscribed.value ? 'green' : 'gray',
     })
   } catch (error: any) {
-    useToast().add({ title: '未能更改系统推送', description: error?.message || '请检查浏览器权限后重试', color: 'red' })
+    const message = error?.message || '浏览器未提供详细原因，请关闭应用并从主屏幕重新打开后重试'
+    actionError.value = message
+    useToast().add({ title: '未能更改系统推送', description: message, color: 'red' })
   }
 }
 
@@ -222,6 +238,9 @@ onMounted(load)
 .push-message { justify-content:space-between; }
 .push-message.is-error { color:#b91c1c; background:rgba(254,242,242,.9); }
 .is-dark .push-message.is-error { color:#fca5a5; background:rgba(127,29,29,.22); }
+.push-action-error { align-items:flex-start; flex-direction:column; }
+.push-action-error strong { font-weight:800; }
+.push-action-error span { overflow-wrap:anywhere; }
 .push-message button { flex:none; color:var(--push-accent); font-weight:750; }
 .push-primary-row { margin-top:15px; border-top:1px solid var(--push-line); padding-top:15px; }
 .push-primary-copy strong,.push-preferences-heading strong { display:block; font-size:14px; }

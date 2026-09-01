@@ -134,4 +134,21 @@ assert.equal(permissionRequestCount, 0, 'a retry after iPadOS already granted pe
 assert.equal(retryManager.pushSubscribed.value, true, 'a granted-permission retry must establish and persist the PushSubscription')
 assert.equal(retryManager.pushBusy.value, false, 'a successful retry must leave the push action idle')
 
+registration.pushManager.getSubscription = async () => null
+registration.pushManager.subscribe = async () => {
+  throw new DOMException('', 'AbortError')
+}
+
+const failedManager = plugin().provide.pwaManager
+await failedManager.loadPushConfig()
+let failedStageError
+await failedManager.enableNotifications().catch(error => { failedStageError = error })
+
+assert.match(
+  failedStageError?.message || '',
+  /创建推送订阅失败.*AbortError/,
+  'an immediate iPad Push API rejection must identify the failed stage even when Safari returns an empty message',
+)
+assert.equal(failedManager.pushBusy.value, false, 'an immediate iPad Push API rejection must leave the push action idle')
+
 console.log('PWA push busy settlement test passed')

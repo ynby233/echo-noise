@@ -50,15 +50,34 @@ const detectPlatform = () => {
 const pushOperationTimeoutMs = 15_000
 const pushPermissionTimeoutMs = 120_000
 
+const pushFailureDetail = (error: unknown) => {
+  if (!error || typeof error !== 'object') return String(error || '').trim()
+  const candidate = error as { name?: unknown; message?: unknown }
+  const name = typeof candidate.name === 'string' ? candidate.name.trim() : ''
+  const message = typeof candidate.message === 'string' ? candidate.message.trim() : ''
+  if (name && name !== 'Error' && message && !message.includes(name)) return `${name}：${message}`
+  if (message) return message
+  if (name && name !== 'Error') return name
+  return ''
+}
+
 const withPushTimeout = async <T>(operation: PromiseLike<T>, stage: string, timeoutMs = pushOperationTimeoutMs): Promise<T> => {
   let timer: ReturnType<typeof setTimeout> | undefined
+  let timeoutError: Error | undefined
   try {
     return await Promise.race([
       Promise.resolve(operation),
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`${stage}超时，请关闭应用并从主屏幕重新打开后重试`)), timeoutMs)
+        timer = setTimeout(() => {
+          timeoutError = new Error(`${stage}超时，请关闭应用并从主屏幕重新打开后重试`)
+          reject(timeoutError)
+        }, timeoutMs)
       }),
     ])
+  } catch (error) {
+    if (error === timeoutError) throw error
+    const detail = pushFailureDetail(error)
+    throw new Error(`${stage}失败${detail ? `（${detail}）` : '，浏览器未提供详细原因'}`)
   } finally {
     if (timer) clearTimeout(timer)
   }
