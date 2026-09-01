@@ -27,6 +27,8 @@ services:
       - DOCKER_ENVIRONMENT=compose
       # PWA Web Push（先运行 go run ./cmd/vapid-keygen 生成一对长期密钥）
       #- WEB_PUSH_VAPID_PUBLIC_KEY=
+      # fnOS/Portainer 等图形面板可直接填写私钥；使用时不要再设置 PRIVATE_KEY_FILE。
+      #- WEB_PUSH_VAPID_PRIVATE_KEY=
       #- WEB_PUSH_VAPID_PRIVATE_KEY_FILE=/run/secrets/echo-noise-vapid-private-key
       #- WEB_PUSH_VAPID_SUBJECT=mailto:owner@example.com
       # 如启用外部数据库，取消注释并配置

@@ -371,7 +371,11 @@ docker run -d \
 > WEB_PUSH_VAPID_SUBJECT=mailto:owner@example.com
 > ```
 >
-> 私钥文件优先于同名私钥环境变量。密钥必须跨容器重启保持不变；轮换公钥后，已授权的浏览器会在下次打开站点时自动重新订阅。站点必须通过 HTTPS 对外访问（本机 `localhost` 调试除外），反向代理需保留原始 `Host`，否则推送设置的同源保护会拒绝修改请求。用户需登录后在“通知”页面主动开启系统推送；点赞推送默认关闭，锁屏正文预览默认关闭。
+> `WEB_PUSH_VAPID_SUBJECT` 是推送服务用于识别发送方的联系 URI，不参与通知收取，也不要求必须填写邮箱。它可以使用有效的 `mailto:` 地址，也可以直接使用站点的公开 HTTPS 地址，例如 `WEB_PUSH_VAPID_SUBJECT=https://example.com/`；不想提供邮箱时推荐使用后者。
+>
+> fnOS、Portainer、群晖 Container Manager 等图形面板如果只方便填写环境变量，可以改用 `WEB_PUSH_VAPID_PRIVATE_KEY=生成的私钥`，不必挂载私钥文件。此时必须删除或留空 `WEB_PUSH_VAPID_PRIVATE_KEY_FILE`；私钥文件配置优先级更高，错误或不存在的文件路径会使推送配置失效。图形面板中的私钥应长期保留，不要截图分享，也不要在更新容器时重新生成。
+>
+> 密钥必须跨容器重启保持不变；轮换公钥后，已授权的浏览器会在下次打开站点时自动重新订阅。站点必须通过 HTTPS 对外访问（本机 `localhost` 调试除外），反向代理需保留原始 `Host`，否则推送设置的同源保护会拒绝修改请求。用户需登录后在“通知”页面主动开启系统推送；点赞推送默认关闭，锁屏正文预览默认关闭。
 >
 > `runtime.env` 只能固定环境变量，不能固定数据卷映射；数据卷仍需在 `docker run`、docker-compose 或图形化容器面板中配置。环境变量优先级上，`runtime.env` 会覆盖镜像默认 ENV 与面板中同名变量。`runtime.env.example` 只是模板，不会被自动加载；已有 `runtime.env` 和 `config.yaml` 不会被覆盖。若 `/app/config` 是空挂载目录，容器会在首次启动时自动写入默认 `config.yaml` 与 `runtime.env.example`。
 >
