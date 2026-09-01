@@ -117,11 +117,18 @@ export default defineNuxtPlugin(() => {
     link: enabled.value ? [{ key: 'pwa-manifest', rel: 'manifest', href: '/manifest.webmanifest' }] : [],
   })))
 
-  const ownedRegistration = (registration: ServiceWorkerRegistration) => {
-    const worker = registration.active || registration.waiting || registration.installing
+  const ownedWorker = (worker: ServiceWorker | null | undefined) => {
     if (!worker) return false
     try { return new URL(worker.scriptURL).pathname === '/sw.js' } catch { return false }
   }
+
+  const ownedRegistration = (registration: ServiceWorkerRegistration) => (
+    ownedWorker(registration.active) || ownedWorker(registration.waiting) || ownedWorker(registration.installing)
+  )
+
+  const activeOwnedRegistration = (registration: ServiceWorkerRegistration | null | undefined) => (
+    !!registration && ownedWorker(registration.active)
+  )
 
   const disablePwaRuntime = async () => {
     const subscription = await currentSubscription().catch(() => null)
@@ -141,19 +148,26 @@ export default defineNuxtPlugin(() => {
     pushSubscribed.value = false
   }
 
-  const ensureServiceWorker = async () => {
-    if (!enabled.value || !supported.value || !secureContext.value || workerRegistered.value) return
+  const ensureServiceWorker = async (): Promise<ServiceWorkerRegistration | null> => {
+    if (!enabled.value || !supported.value || !secureContext.value) return null
+    const existing = await navigator.serviceWorker.getRegistration('/')
+    if (activeOwnedRegistration(existing)) {
+      workerRegistered.value = true
+      return existing || null
+    }
+    workerRegistered.value = false
     if (!updateServiceWorker) {
       updateServiceWorker = registerSW({
         immediate: true,
         onNeedRefresh: () => { needRefresh.value = true },
         onOfflineReady: () => { offlineReady.value = true },
         onRegisterError: () => { registrationError.value = true },
-        onRegisteredSW: () => { workerRegistered.value = true },
+        onRegisteredSW: (_swUrl, registration) => { workerRegistered.value = activeOwnedRegistration(registration) },
       })
     }
     const registration = await navigator.serviceWorker.ready
-    workerRegistered.value = ownedRegistration(registration)
+    workerRegistered.value = activeOwnedRegistration(registration)
+    return workerRegistered.value ? registration : null
   }
 
   const refreshConfiguration = async () => {
@@ -235,8 +249,8 @@ export default defineNuxtPlugin(() => {
       publicKeyRotated = true
     }
     if (publicKeyRotated && permission === 'granted') {
-      await ensureServiceWorker()
-      const registration = await navigator.serviceWorker.ready
+      const registration = await ensureServiceWorker()
+      if (!registration) throw new Error('应用服务尚未准备完成，请关闭应用并从主屏幕重新打开后重试')
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: base64URLToBytes(publicKey) as BufferSource,
@@ -250,8 +264,8 @@ export default defineNuxtPlugin(() => {
       serverSubscribed: data?.session_subscribed === true,
       localSubscribed: !!subscription,
     })) {
-      await ensureServiceWorker()
-      const registration = await navigator.serviceWorker.ready
+      const registration = await ensureServiceWorker()
+      if (!registration) throw new Error('应用服务尚未准备完成，请关闭应用并从主屏幕重新打开后重试')
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: base64URLToBytes(publicKey) as BufferSource,
@@ -278,9 +292,8 @@ export default defineNuxtPlugin(() => {
         : await withPushTimeout(Notification.requestPermission(), '等待系统通知授权', pushPermissionTimeoutMs)
       notificationPermission.value = permission
       if (permission !== 'granted') throw new Error('通知权限未允许，请在系统设置中重新开启')
-      await withPushTimeout(ensureServiceWorker(), '准备应用服务')
-      const registration = await withPushTimeout(navigator.serviceWorker.getRegistration('/'), '读取应用服务')
-      if (!registration || !ownedRegistration(registration)) throw new Error('应用服务尚未准备完成，请关闭应用并从主屏幕重新打开后重试')
+      const registration = await withPushTimeout(ensureServiceWorker(), '准备应用服务')
+      if (!registration) throw new Error('应用服务尚未准备完成，请关闭应用并从主屏幕重新打开后重试')
       let subscription = await withPushTimeout(registration.pushManager.getSubscription(), '读取推送订阅')
       if (!subscription) {
         subscription = await withPushTimeout(registration.pushManager.subscribe({

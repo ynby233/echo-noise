@@ -151,4 +151,35 @@ assert.match(
 )
 assert.equal(failedManager.pushBusy.value, false, 'an immediate iPad Push API rejection must leave the push action idle')
 
+globalThis.__PWA_TEST__.Notification.permission = 'default'
+globalThis.__PWA_TEST__.Notification.requestPermission = async () => {
+  globalThis.__PWA_TEST__.Notification.permission = 'granted'
+  return 'granted'
+}
+registration.active = null
+registration.waiting = null
+registration.installing = null
+registration.pushManager.getSubscription = async () => null
+registration.pushManager.subscribe = async () => recoveredSubscription
+globalThis.__PWA_TEST__.navigator.serviceWorker.ready = new Promise(resolve => {
+  setTimeout(() => {
+    registration.active = { scriptURL: 'https://example.test/sw.js' }
+    registration.installing = null
+    resolve(registration)
+  }, 20)
+})
+
+const readinessManager = plugin().provide.pwaManager
+await readinessManager.loadPushConfig()
+let readinessError
+await readinessManager.enableNotifications().catch(error => { readinessError = error })
+
+assert.equal(
+  readinessError?.message,
+  undefined,
+  'an iPad registration callback must not bypass waiting for the owned service worker to become active',
+)
+assert.equal(readinessManager.pushSubscribed.value, true, 'an iPad push subscription must continue after the owned worker becomes active')
+assert.equal(readinessManager.pushBusy.value, false, 'the readiness retry must leave the push action idle')
+
 console.log('PWA push busy settlement test passed')
