@@ -47,6 +47,23 @@ const detectPlatform = () => {
   return 'unknown'
 }
 
+const pushOperationTimeoutMs = 15_000
+const pushPermissionTimeoutMs = 120_000
+
+const withPushTimeout = async <T>(operation: PromiseLike<T>, stage: string, timeoutMs = pushOperationTimeoutMs): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      Promise.resolve(operation),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${stage}超时，请关闭应用并从主屏幕重新打开后重试`)), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 export default defineNuxtPlugin(() => {
   const enabled = ref(false)
   const supported = ref('serviceWorker' in navigator)
@@ -237,19 +254,22 @@ export default defineNuxtPlugin(() => {
     }
     pushBusy.value = true
     try {
-      const permission = await Notification.requestPermission()
+      const permission = Notification.permission === 'granted'
+        ? 'granted'
+        : await withPushTimeout(Notification.requestPermission(), '等待系统通知授权', pushPermissionTimeoutMs)
       notificationPermission.value = permission
       if (permission !== 'granted') throw new Error('通知权限未允许，请在系统设置中重新开启')
-      await ensureServiceWorker()
-      const registration = await navigator.serviceWorker.ready
-      let subscription = await registration.pushManager.getSubscription()
+      await withPushTimeout(ensureServiceWorker(), '准备应用服务')
+      const registration = await withPushTimeout(navigator.serviceWorker.getRegistration('/'), '读取应用服务')
+      if (!registration || !ownedRegistration(registration)) throw new Error('应用服务尚未准备完成，请关闭应用并从主屏幕重新打开后重试')
+      let subscription = await withPushTimeout(registration.pushManager.getSubscription(), '读取推送订阅')
       if (!subscription) {
-        subscription = await registration.pushManager.subscribe({
+        subscription = await withPushTimeout(registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: base64URLToBytes(publicKey) as BufferSource,
-        })
+        }), '创建推送订阅')
       }
-      await persistSubscription(subscription)
+      await withPushTimeout(persistSubscription(subscription), '保存推送订阅')
       pushSubscribed.value = true
     } finally {
       pushBusy.value = false
