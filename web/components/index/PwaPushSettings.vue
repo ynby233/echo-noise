@@ -33,9 +33,10 @@
         <div v-if="permissionDenied" class="push-message is-error">
           {{ permissionDeniedHelp }}
         </div>
-        <div v-if="actionError" class="push-message is-error push-action-error" role="alert">
+        <div v-if="actionError" class="push-message is-error push-action-error" role="alert" aria-live="assertive">
           <strong>系统推送未能开启</strong>
-          <span>{{ actionError }}</span>
+          <span class="push-action-error-detail">失败详情：{{ actionError }}</span>
+          <button type="button" @click="copyActionError">复制错误详情</button>
         </div>
 
         <div class="push-primary-row">
@@ -157,9 +158,21 @@ const statusClass = computed(() => ({
   'is-on': pushSubscribed.value,
   'is-warning': permissionDenied.value || !secureContext.value || !!loadError.value || !!actionError.value,
 }))
-const statusDescription = computed(() => pushSubscribed.value
-  ? '后台、关闭网页或锁屏时仍可接收你允许的通知。'
-  : '网页内通知不受影响；系统推送只在你主动开启后生效。')
+const statusDescription = computed(() => {
+  if (actionError.value) return `失败详情：${actionError.value}`
+  return pushSubscribed.value
+    ? '后台、关闭网页或锁屏时仍可接收你允许的通知。'
+    : '网页内通知不受影响；系统推送只在你主动开启后生效。'
+})
+const diagnosticText = computed(() => [
+  'Echo Noise 系统推送诊断',
+  `错误：${actionError.value}`,
+  `通知权限：${pwa.notificationPermission.value}`,
+  `主屏幕应用：${pwa.standalone.value ? '是' : '否'}`,
+  `安全连接：${secureContext.value ? '是' : '否'}`,
+  `应用服务：${pwa.workerRegistered.value ? '已注册' : '未注册'}`,
+  `平台：${navigator.userAgent}`,
+].join('\n'))
 
 const copyPreferences = () => Object.assign(draft, pwa.preferences.value)
 
@@ -189,6 +202,15 @@ const toggleSubscription = async () => {
     const message = error?.message || '浏览器未提供详细原因，请关闭应用并从主屏幕重新打开后重试'
     actionError.value = message
     useToast().add({ title: '未能更改系统推送', description: message, color: 'red' })
+  }
+}
+
+const copyActionError = async () => {
+  try {
+    await navigator.clipboard.writeText(diagnosticText.value)
+    useToast().add({ title: '错误详情已复制', description: '请把复制的文字完整发给开发者。', color: 'green' })
+  } catch {
+    useToast().add({ title: '复制失败', description: '请长按“失败详情”文字并复制，或截取完整错误卡片。', color: 'red' })
   }
 }
 
@@ -240,7 +262,8 @@ onMounted(load)
 .is-dark .push-message.is-error { color:#fca5a5; background:rgba(127,29,29,.22); }
 .push-action-error { align-items:flex-start; flex-direction:column; }
 .push-action-error strong { font-weight:800; }
-.push-action-error span { overflow-wrap:anywhere; }
+.push-action-error-detail { width:100%; border-radius:8px; padding:9px 10px; color:inherit; background:rgba(255,255,255,.58); font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:12px; line-height:1.65; overflow-wrap:anywhere; user-select:text; -webkit-user-select:text; }
+.is-dark .push-action-error-detail { background:rgba(15,23,42,.42); }
 .push-message button { flex:none; color:var(--push-accent); font-weight:750; }
 .push-primary-row { margin-top:15px; border-top:1px solid var(--push-line); padding-top:15px; }
 .push-primary-copy strong,.push-preferences-heading strong { display:block; font-size:14px; }

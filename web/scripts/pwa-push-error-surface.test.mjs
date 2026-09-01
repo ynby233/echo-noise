@@ -16,6 +16,16 @@ assert.match(
 )
 assert.match(
   component,
+  /if \(actionError\.value\) return `失败详情：\$\{actionError\.value\}`/,
+  'the staged failure must also replace the generic status description so it cannot be overlooked',
+)
+assert.match(
+  component,
+  /复制错误详情[\s\S]*navigator\.clipboard\.writeText\(diagnosticText\.value\)/,
+  'an iPad user must be able to copy the complete diagnostic without transcribing a screenshot',
+)
+assert.match(
+  component,
   /iPad 设置.*通知.*允许通知.*主屏幕/s,
   'an iPad permission denial must point to iPadOS settings rather than nonexistent browser address-bar controls',
 )
