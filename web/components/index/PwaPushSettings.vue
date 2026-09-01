@@ -233,7 +233,11 @@ const sendTest = async () => {
   testing.value = true
   try {
     await pwa.sendTestNotification()
-    useToast().add({ title: '测试通知已发送', description: '所有已开启推送的登录浏览器都会收到。', color: 'green' })
+    useToast().add({
+      title: '测试通知已加入发送队列',
+      description: '后台将向所有已开启推送的登录浏览器投递；此提示不代表系统已经展示通知。',
+      color: 'green',
+    })
   } catch (error: any) {
     useToast().add({ title: '测试通知发送失败', description: error?.message || '请稍后重试', color: 'red' })
   } finally {

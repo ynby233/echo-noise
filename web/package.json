@@ -7,6 +7,7 @@
     "dev": "nuxt cleanup && nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
+    "test": "node scripts/run-all-tests.mjs",
     "test:api-auth": "node scripts/api-auth-handling.test.mjs",
     "test:media-url": "node scripts/media-url.test.mjs",
     "test:ad-config": "node scripts/ad-config.test.mjs",

@@ -98,11 +98,16 @@ func LoadWebPushRuntimeConfig() WebPushRuntimeConfig {
 	subject, subjectErr := url.Parse(config.Subject)
 	x, y := elliptic.Unmarshal(elliptic.P256(), publicKey)
 	privateScalar := new(big.Int).SetBytes(privateKey)
+	validKeyPair := false
+	if privateErr == nil && len(privateKey) == 32 && privateScalar.Sign() > 0 && privateScalar.Cmp(elliptic.P256().Params().N) < 0 && x != nil && y != nil {
+		derivedX, derivedY := elliptic.P256().ScalarBaseMult(privateKey)
+		validKeyPair = derivedX.Cmp(x) == 0 && derivedY.Cmp(y) == 0
+	}
 	validSubject := subjectErr == nil && ((strings.EqualFold(subject.Scheme, "mailto") && strings.TrimSpace(subject.Opaque) != "") ||
 		(strings.EqualFold(subject.Scheme, "https") && strings.TrimSpace(subject.Host) != ""))
 	if publicErr != nil || len(publicKey) != 65 || x == nil || y == nil ||
 		privateErr != nil || len(privateKey) != 32 || privateScalar.Sign() <= 0 || privateScalar.Cmp(elliptic.P256().Params().N) >= 0 ||
-		!validSubject {
+		!validKeyPair || !validSubject {
 		config.LoadError = errors.New("Web Push VAPID 配置无效")
 	}
 	return config

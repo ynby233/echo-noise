@@ -587,3 +587,23 @@ func TestLoadWebPushRuntimeConfigRejectsMalformedKeysAndSubject(t *testing.T) {
 		t.Fatalf("malformed VAPID config was accepted: %#v", config)
 	}
 }
+
+func TestLoadWebPushRuntimeConfigRejectsMismatchedKeyPair(t *testing.T) {
+	privateKey, _, err := webpush.GenerateVAPIDKeys()
+	if err != nil {
+		t.Fatalf("generate first VAPID key pair: %v", err)
+	}
+	_, unrelatedPublicKey, err := webpush.GenerateVAPIDKeys()
+	if err != nil {
+		t.Fatalf("generate second VAPID key pair: %v", err)
+	}
+	t.Setenv("WEB_PUSH_VAPID_PUBLIC_KEY", unrelatedPublicKey)
+	t.Setenv("WEB_PUSH_VAPID_PRIVATE_KEY", privateKey)
+	t.Setenv("WEB_PUSH_VAPID_PRIVATE_KEY_FILE", "")
+	t.Setenv("WEB_PUSH_VAPID_SUBJECT", "https://example.com/")
+
+	config := LoadWebPushRuntimeConfig()
+	if config.Ready() || config.LoadError == nil {
+		t.Fatalf("mismatched VAPID key pair was accepted: %#v", config)
+	}
+}

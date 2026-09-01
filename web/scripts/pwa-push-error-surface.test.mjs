@@ -32,5 +32,14 @@ assert.match(
   /iPad 设置.*通知.*允许通知.*主屏幕/s,
   'an iPad permission denial must point to iPadOS settings rather than nonexistent browser address-bar controls',
 )
+assert.ok(
+  component.includes('测试通知已加入发送队列'),
+  'the test action must report the durable queue state that the API has actually confirmed',
+)
+assert.equal(
+  component.includes("title: '测试通知已发送'"),
+  false,
+  'the UI must not claim provider delivery before the durable dispatcher has completed',
+)
 
 console.log('PWA push error surface test passed')
