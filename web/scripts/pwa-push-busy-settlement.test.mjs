@@ -55,6 +55,12 @@ const response = data => ({
   json: async () => ({ code: 1, data }),
 })
 
+let releaseFrontendConfig
+const frontendConfigGate = new Promise(resolve => {
+  releaseFrontendConfig = () => resolve(response({ frontendSettings: { pwaEnabled: true } }))
+})
+let delayFrontendConfig = true
+
 globalThis.__PWA_TEST__ = {
   registration,
   window: {
@@ -83,7 +89,10 @@ globalThis.__PWA_TEST__ = {
   },
   caches: { keys: async () => [], delete: async () => true },
   fetch: async url => {
-    if (url === '/api/frontend/config') return response({ frontendSettings: { pwaEnabled: true } })
+    if (url === '/api/frontend/config') {
+      if (delayFrontendConfig) return frontendConfigGate
+      return response({ frontendSettings: { pwaEnabled: true } })
+    }
     if (url === '/api/web-push/config') {
       return response({ configured: true, public_key: 'AQ', session_subscribed: false, preferences: {} })
     }
@@ -93,6 +102,46 @@ globalThis.__PWA_TEST__ = {
 
 const moduleURL = `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`
 const plugin = (await import(moduleURL)).default
+
+const startupRaceSubscription = {
+  endpoint: 'https://push.example/ipad-startup-race',
+  options: { applicationServerKey: Uint8Array.from([1]).buffer },
+  toJSON: () => ({
+    endpoint: 'https://push.example/ipad-startup-race',
+    keys: { p256dh: 'startup-p256dh', auth: 'startup-auth' },
+  }),
+  unsubscribe: async () => true,
+}
+registration.pushManager.subscribe = async () => startupRaceSubscription
+let startupPermissionRequestedBeforeConfig = false
+globalThis.__PWA_TEST__.Notification.permission = 'default'
+globalThis.__PWA_TEST__.Notification.requestPermission = async () => {
+  startupPermissionRequestedBeforeConfig = delayFrontendConfig
+  globalThis.__PWA_TEST__.Notification.permission = 'granted'
+  return 'granted'
+}
+
+const startupRaceManager = plugin().provide.pwaManager
+await startupRaceManager.loadPushConfig()
+let startupRaceError
+const startupRaceOperation = startupRaceManager.enableNotifications().catch(error => { startupRaceError = error })
+await new Promise(resolve => setTimeout(resolve, 0))
+delayFrontendConfig = false
+releaseFrontendConfig()
+await startupRaceOperation
+await new Promise(resolve => setTimeout(resolve, 0))
+
+assert.equal(startupRaceManager.workerRegistered.value, true, 'the delayed startup refresh must eventually register the owned worker')
+assert.equal(startupPermissionRequestedBeforeConfig, true, 'the iPad permission prompt must remain directly attached to the user action')
+assert.equal(
+  startupRaceError?.message,
+  undefined,
+  'an iPad push action must wait for the in-flight PWA startup refresh instead of reporting that the registered app service is not ready',
+)
+assert.equal(startupRaceManager.pushSubscribed.value, true, 'the startup-race retry must establish and persist the PushSubscription')
+
+registration.pushManager.subscribe = () => never
+globalThis.__PWA_TEST__.Notification.permission = 'default'
 const manager = plugin().provide.pwaManager
 await manager.loadPushConfig()
 

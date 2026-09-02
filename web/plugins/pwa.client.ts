@@ -111,6 +111,7 @@ export default defineNuxtPlugin(() => {
   let publicKey = ''
   let deferredInstallPrompt: DeferredInstallPrompt | null = null
   let updateServiceWorker: ((reloadPage?: boolean) => Promise<void>) | null = null
+  let initialRuntimePromise: Promise<void> | null = null
 
   useHead(computed(() => ({
     htmlAttrs: { 'data-pwa-worker': !enabled.value ? 'disabled' : registrationError.value ? 'error' : workerRegistered.value ? 'active' : 'pending' },
@@ -187,6 +188,16 @@ export default defineNuxtPlugin(() => {
     }
     if (enabled.value) await ensureServiceWorker()
     else await disablePwaRuntime()
+  }
+
+  const ensureInitialRuntime = () => {
+    if (!initialRuntimePromise) {
+      initialRuntimePromise = refreshConfiguration().catch((error) => {
+        initialRuntimePromise = null
+        throw error
+      })
+    }
+    return initialRuntimePromise
   }
 
   const install = async (): Promise<PwaInstallResult> => {
@@ -297,6 +308,7 @@ export default defineNuxtPlugin(() => {
         : await withPushTimeout(Notification.requestPermission(), '等待系统通知授权', pushPermissionTimeoutMs)
       notificationPermission.value = permission
       if (permission !== 'granted') throw new Error('通知权限未允许，请在系统设置中重新开启')
+      await withPushTimeout(ensureInitialRuntime(), '准备应用配置')
       const registration = await withPushTimeout(ensureServiceWorker(), '准备应用服务')
       if (!registration) throw new Error('应用服务尚未准备完成，请关闭应用并从主屏幕重新打开后重试')
       let subscription = await withPushTimeout(registration.pushManager.getSubscription(), '读取推送订阅')
@@ -378,7 +390,7 @@ export default defineNuxtPlugin(() => {
     loadPushConfig, enableNotifications, disableNotifications, savePreferences,
     sendTestNotification, syncBadge,
   }
-  void refreshConfiguration()
+  void ensureInitialRuntime().catch(() => { registrationError.value = true })
   return { provide: { pwaManager: manager } }
 })
 
