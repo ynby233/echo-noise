@@ -22,15 +22,34 @@ assert.match(
 assert.match(
   component,
   /复制错误详情[\s\S]*navigator\.clipboard\.writeText\(diagnosticText\.value\)/,
-  'an iPad user must be able to copy the complete diagnostic without transcribing a screenshot',
+  'a PWA user must be able to copy the complete diagnostic without transcribing a screenshot',
 )
 for (const detail of ['注册错误', '缓存接口']) {
-  assert.ok(component.includes(detail), `the copied diagnostic must expose ${detail} for iPadOS Lockdown Mode triage`)
+  assert.ok(component.includes(detail), `the copied diagnostic must expose ${detail} for cross-platform triage`)
 }
 assert.match(
   component,
-  /iPad 设置.*通知.*允许通知.*主屏幕/s,
-  'an iPad permission denial must point to iPadOS settings rather than nonexistent browser address-bar controls',
+  /iPhone 或 iPad.*设置.*通知.*允许通知/s,
+  'Apple mobile permission guidance must cover both iPhone and iPad without assuming one device',
+)
+assert.match(
+  component,
+  /系统或浏览器.*设备的通知设置.*浏览器权限设置/s,
+  'non-Apple guidance must cover both installed desktop PWAs and ordinary browser tabs',
+)
+assert.match(
+  component,
+  /:disabled="pushBusy"/,
+  'a denied permission must not permanently disable the action that rechecks a restored system setting',
+)
+assert.equal(
+  component.includes(':disabled="pushBusy || permissionDenied"'),
+  false,
+  'a stale denied state must not trap the user after changing system settings',
+)
+assert.ok(
+  component.includes('独立应用模式：'),
+  'cross-platform diagnostics must describe standalone app mode instead of assuming a Home Screen device',
 )
 assert.ok(
   component.includes('测试通知已加入发送队列'),

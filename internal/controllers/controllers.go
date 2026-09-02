@@ -2112,10 +2112,6 @@ func PostComment(c *gin.Context) {
 				return
 			}
 		}
-		if commentAuthIsAdmin(c) && currentUser.ID != message.UserID && parentVisibility != "public" {
-			c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "管理员不可回复非公开评论"})
-			return
-		}
 	}
 	commentUserID := currentUser.ID
 	commentUsername := strings.TrimSpace(currentUser.Username)

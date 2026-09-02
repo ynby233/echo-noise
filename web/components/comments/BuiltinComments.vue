@@ -17,7 +17,7 @@
         </button>
       </div>
       <div v-if="!props.replyInputOnly && sortedRootComments.length" class="comments-list">
-        <div v-for="c in visibleRootComments" :key="c.id" class="comment-item" :class="[rootCardClass, { 'comment-tombstone': c.is_tombstone }]" :data-comment-id="c.id">
+        <div v-for="c in visibleRootComments" :key="c.id" class="comment-item comment-thread-item" :class="[rootCardClass, { 'comment-tombstone': c.is_tombstone }]" :data-comment-id="c.id">
           <img v-if="!c.is_tombstone" class="comment-avatar avatar-img" :src="commentAvatar(c)" alt="avatar" @error="avatarOnError" />
           <div class="comment-body">
             <div class="comment-header" :class="themeText">
@@ -126,10 +126,10 @@
                 </div>
               </div>
             </div>
-            <div v-if="hasMoreReplies(c.id) || canCollapseReplies(c.id)" class="flex justify-end w-full gap-2">
-              <button v-if="canCollapseReplies(c.id)" type="button" class="comment-load-btn nw-action-btn nw-action-btn--label" @click="collapseReplies(c.id)">收回回复</button>
-              <button v-if="hasMoreReplies(c.id)" type="button" class="comment-load-btn nw-action-btn nw-action-btn--label" @click="loadMoreReplies(c.id)">加载更多回复</button>
-            </div>
+          </div>
+          <div v-if="hasMoreReplies(c.id) || canCollapseReplies(c.id)" class="reply-pagination-row">
+            <button v-if="canCollapseReplies(c.id)" type="button" class="comment-load-btn nw-action-btn nw-action-btn--label" @click="collapseReplies(c.id)">收回</button>
+            <button v-if="hasMoreReplies(c.id)" type="button" class="comment-load-btn nw-action-btn nw-action-btn--label" @click="loadMoreReplies(c.id)">加载更多回复</button>
           </div>
           </div>
         </div>
@@ -1593,6 +1593,9 @@ defineExpose({
 .comments-list { display:flex; flex-direction:column; gap:10px; width:100%; margin-bottom:12px; }
 .replies-list { display:flex; flex-direction:column; gap:6px; width:100%; }
 .comment-item { display:flex; align-items:flex-start; gap:10px; }
+.comment-thread-item { flex-wrap:wrap; }
+.comment-thread-item > .comment-body { flex:1 1 calc(100% - 50px); }
+.reply-pagination-row { display:flex; flex:0 0 100%; align-items:center; justify-content:center; gap:8px; width:100%; margin-top:8px; }
 .comment-card-frame {
   padding: 12px;
   border: 1px solid rgba(15, 23, 42, .10);

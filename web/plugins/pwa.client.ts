@@ -74,7 +74,7 @@ const withPushTimeout = async <T>(operation: PromiseLike<T>, stage: string, time
       Promise.resolve(operation),
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
-          timeoutError = new Error(`${stage}超时，请关闭应用并从主屏幕重新打开后重试`)
+          timeoutError = new Error(`${stage}超时，请重新打开应用后重试`)
           reject(timeoutError)
         }, timeoutMs)
       }),
@@ -113,6 +113,7 @@ export default defineNuxtPlugin(() => {
   let updateServiceWorker: ((reloadPage?: boolean) => Promise<void>) | null = null
   let initialRuntimePromise: Promise<void> | null = null
   let runtimeConfigurationLoaded = false
+  let serverSessionSubscribed = false
 
   useHead(computed(() => ({
     htmlAttrs: { 'data-pwa-worker': !enabled.value ? 'disabled' : registrationError.value ? 'error' : workerRegistered.value ? 'active' : 'pending' },
@@ -153,6 +154,7 @@ export default defineNuxtPlugin(() => {
     }
     workerRegistered.value = false
     pushSubscribed.value = false
+    serverSessionSubscribed = false
   }
 
   const ensureServiceWorker = async (): Promise<ServiceWorkerRegistration | null> => {
@@ -240,6 +242,17 @@ export default defineNuxtPlugin(() => {
     return registration.pushManager.getSubscription()
   }
 
+  const refreshPushState = async () => {
+    const permission = 'Notification' in window ? Notification.permission : 'unsupported'
+    notificationPermission.value = permission
+    if (permission !== 'granted') {
+      pushSubscribed.value = false
+      return
+    }
+    const subscription = await currentSubscription().catch(() => null)
+    pushSubscribed.value = !!subscription && serverSessionSubscribed
+  }
+
   const persistSubscription = async (subscription: PushSubscription) => {
     const serialized = subscription.toJSON()
     await fetchJSON('/api/web-push/subscriptions', {
@@ -266,6 +279,7 @@ export default defineNuxtPlugin(() => {
   const loadPushConfig = async () => {
     const data = await fetchJSON<any>('/api/web-push/config')
     pushConfigured.value = data?.configured === true
+    serverSessionSubscribed = data?.session_subscribed === true
     publicKey = String(data?.public_key || '')
     preferences.value = { ...defaultPreferences(), ...(data?.preferences || {}) }
     const permission = 'Notification' in window ? Notification.permission : 'unsupported'
@@ -279,12 +293,13 @@ export default defineNuxtPlugin(() => {
     }
     if (publicKeyRotated && permission === 'granted') {
       const registration = await ensurePushServiceWorker()
-      if (!registration) throw new Error('应用服务尚未准备完成，请关闭应用并从主屏幕重新打开后重试')
+      if (!registration) throw new Error('应用服务尚未准备完成，请重新打开应用后重试')
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: base64URLToBytes(publicKey) as BufferSource,
       })
       await persistSubscription(subscription)
+      serverSessionSubscribed = true
     }
     if (shouldRecoverMissingSubscription({
       configured: pushConfigured.value,
@@ -294,16 +309,18 @@ export default defineNuxtPlugin(() => {
       localSubscribed: !!subscription,
     })) {
       const registration = await ensurePushServiceWorker()
-      if (!registration) throw new Error('应用服务尚未准备完成，请关闭应用并从主屏幕重新打开后重试')
+      if (!registration) throw new Error('应用服务尚未准备完成，请重新打开应用后重试')
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: base64URLToBytes(publicKey) as BufferSource,
       })
       await persistSubscription(subscription)
+      serverSessionSubscribed = true
     }
-    pushSubscribed.value = !!subscription && data?.session_subscribed === true
+    pushSubscribed.value = permission === 'granted' && !!subscription && serverSessionSubscribed
     if (subscription && permission === 'granted' && !pushSubscribed.value && pushConfigured.value) {
       await persistSubscription(subscription)
+      serverSessionSubscribed = true
       pushSubscribed.value = true
     }
     notificationPermission.value = permission
@@ -322,7 +339,7 @@ export default defineNuxtPlugin(() => {
       notificationPermission.value = permission
       if (permission !== 'granted') throw new Error('通知权限未允许，请在系统设置中重新开启')
       const registration = await withPushTimeout(ensurePushServiceWorker(), '准备应用服务')
-      if (!registration) throw new Error('应用服务尚未准备完成，请关闭应用并从主屏幕重新打开后重试')
+      if (!registration) throw new Error('应用服务尚未准备完成，请重新打开应用后重试')
       let subscription = await withPushTimeout(registration.pushManager.getSubscription(), '读取推送订阅')
       if (!subscription) {
         subscription = await withPushTimeout(registration.pushManager.subscribe({
@@ -331,6 +348,7 @@ export default defineNuxtPlugin(() => {
         }), '创建推送订阅')
       }
       await withPushTimeout(persistSubscription(subscription), '保存推送订阅')
+      serverSessionSubscribed = true
       pushSubscribed.value = true
     } finally {
       pushBusy.value = false
@@ -345,6 +363,7 @@ export default defineNuxtPlugin(() => {
         await removeSubscriptionFromServer(subscription.endpoint)
         await subscription.unsubscribe()
       }
+      serverSessionSubscribed = false
       pushSubscribed.value = false
       await syncBadge(0)
     } finally {
@@ -385,6 +404,13 @@ export default defineNuxtPlugin(() => {
   window.addEventListener('frontend-config-updated', () => { void refreshConfiguration() })
   window.addEventListener('online', () => { online.value = true })
   window.addEventListener('offline', () => { online.value = false })
+  window.addEventListener('pageshow', () => { void refreshPushState() })
+  window.addEventListener('focus', () => { void refreshPushState() })
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') void refreshPushState()
+    })
+  }
   const displayMode = window.matchMedia('(display-mode: standalone)')
   const handleDisplayModeChange = (event: MediaQueryListEvent | MediaQueryList) => {
     standalone.value = event.matches
@@ -399,7 +425,7 @@ export default defineNuxtPlugin(() => {
     enabled, supported, secureContext, online, standalone, ios, installable, installed, needRefresh,
     offlineReady, registrationError, workerRegistered, notificationPermission, pushConfigured, pushSubscribed,
     pushBusy, preferences, refreshConfiguration, install, applyUpdate, dismissUpdate,
-    loadPushConfig, enableNotifications, disableNotifications, savePreferences,
+    loadPushConfig, refreshPushState, enableNotifications, disableNotifications, savePreferences,
     sendTestNotification, syncBadge,
   }
   void ensureInitialRuntime().catch(() => { registrationError.value = true })

@@ -15,6 +15,7 @@
     "test:ad-home": "node scripts/ad-home-contract.test.mjs",
     "test:comment-avatar": "node scripts/comment-avatar-fallback.test.mjs",
     "test:comment-input-scroll": "node scripts/comment-input-scroll.test.mjs",
+    "test:comment-reply-pagination": "node scripts/comment-reply-pagination-layout.test.mjs",
     "test:home-stats": "node scripts/home-stats.test.mjs",
     "test:home-gallery-missing": "node scripts/home-gallery-missing-attachment.test.mjs",
     "test:home-widget": "node scripts/home-widget-contract.test.mjs",
@@ -78,6 +79,7 @@
     "test:pwa-push-reconciliation": "node scripts/pwa-push-reconciliation.test.mjs",
     "test:pwa-push-busy-settlement": "node scripts/pwa-push-busy-settlement.test.mjs",
     "test:pwa-push-error-surface": "node scripts/pwa-push-error-surface.test.mjs",
+    "test:pwa-push-permission-refresh": "node scripts/pwa-push-permission-refresh.test.mjs",
     "test:expanded-table-attachment-inline-order": "node scripts/expanded-table-attachment-inline-order.test.mjs",
     "postinstall": "nuxt prepare"
   },

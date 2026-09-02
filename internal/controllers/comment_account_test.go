@@ -1104,6 +1104,47 @@ func TestAdminCannotReplyPrivateComment(t *testing.T) {
 	}
 }
 
+func TestDelegatedAdminCanReplyOwnUsersCommentOnUsersMessage(t *testing.T) {
+	db, r, postAuthor, msg := setupCommentAccountTest(t)
+	postAuthor.IsAdmin = true
+	if err := db.Model(&models.User{}).Where("id = ?", postAuthor.ID).Update("is_admin", true).Error; err != nil {
+		t.Fatalf("promote post author: %v", err)
+	}
+	msg.Visibility = "users"
+	msg.Private = true
+	if err := db.Save(&msg).Error; err != nil {
+		t.Fatalf("save users message: %v", err)
+	}
+	participant := models.User{Username: "test", Password: "", IsAdmin: true}
+	if err := db.Create(&participant).Error; err != nil {
+		t.Fatalf("create delegated admin participant: %v", err)
+	}
+	parent := createTestComment(t, db, msg.ID, &participant, "participant-users-comment", "users", nil)
+
+	r.Use(func(c *gin.Context) {
+		c.Set("user_id", participant.ID)
+		c.Set("is_admin", true)
+		c.Next()
+	})
+	r.POST("/messages/:id/comments", PostComment)
+
+	w := performCommentRequest(r, msg.ID, map[string]any{
+		"content":    "participant-own-reply",
+		"visibility": "users",
+		"parent_id":  parent.ID,
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected delegated admin to reply to own normally visible comment, got %d: %s", w.Code, w.Body.String())
+	}
+	var count int64
+	if err := db.Model(&models.Comment{}).Where("content = ? AND parent_id = ?", "participant-own-reply", parent.ID).Count(&count).Error; err != nil {
+		t.Fatalf("count delegated admin replies: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected delegated admin reply to be created, got %d", count)
+	}
+}
+
 func TestReplyCannotBroadenParentVisibility(t *testing.T) {
 	db, r, _, msg := setupCommentAccountTest(t)
 	parentAuthor := models.User{Username: "bob", Password: ""}

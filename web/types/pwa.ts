@@ -39,6 +39,7 @@ export type PwaManager = PwaManagerState & {
   applyUpdate: () => Promise<void>
   dismissUpdate: () => void
   loadPushConfig: () => Promise<void>
+  refreshPushState: () => Promise<void>
   enableNotifications: () => Promise<void>
   disableNotifications: () => Promise<void>
   savePreferences: (preferences: WebPushPreferences) => Promise<void>

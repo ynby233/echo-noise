@@ -48,7 +48,7 @@
             type="button"
             class="push-primary-action"
             :class="{ 'is-disable': pushSubscribed }"
-            :disabled="pushBusy || permissionDenied"
+            :disabled="pushBusy"
             @click="toggleSubscription"
           >
             <UIcon v-if="pushBusy" name="i-mdi-loading" class="animate-spin" />
@@ -97,7 +97,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useToast } from '#ui/composables/useToast'
 import { usePwaManager } from '~/composables/usePwaManager'
 import type { WebPushPreferences } from '~/types/pwa'
@@ -142,8 +142,8 @@ const appleMobile = typeof navigator !== 'undefined' && (
   || (/macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1)
 )
 const permissionDeniedHelp = computed(() => appleMobile
-  ? '通知已被 iPadOS 阻止。请到 iPad 设置 → 通知中找到本应用，打开“允许通知”，然后彻底关闭应用并从主屏幕重新打开。'
-  : '浏览器已阻止通知。请在当前网站的浏览器权限设置中允许“通知”，刷新页面后重试。')
+  ? '通知已被系统阻止。请到 iPhone 或 iPad 的“设置”→“通知”中找到本应用并打开“允许通知”，再返回应用；也可点击下方按钮重新检查。'
+  : '通知已被系统或浏览器阻止。请在设备的通知设置或当前网站的浏览器权限设置中允许“通知”，再返回应用；也可点击下方按钮重新检查。')
 const changed = computed(() => Object.keys(draft).some(key => draft[key as keyof WebPushPreferences] !== pwa.preferences.value[key as keyof WebPushPreferences]))
 const statusLabel = computed(() => {
   if (loadError.value) return '读取失败'
@@ -168,7 +168,7 @@ const diagnosticText = computed(() => [
   'Echo Noise 系统推送诊断',
   `错误：${actionError.value}`,
   `通知权限：${pwa.notificationPermission.value}`,
-  `主屏幕应用：${pwa.standalone.value ? '是' : '否'}`,
+  `独立应用模式：${pwa.standalone.value ? '是' : '否'}`,
   `安全连接：${secureContext.value ? '是' : '否'}`,
   `应用服务：${pwa.workerRegistered.value ? '已注册' : '未注册'}`,
   `注册错误：${pwa.registrationError.value ? '是' : '否'}`,
@@ -201,7 +201,7 @@ const toggleSubscription = async () => {
       color: pushSubscribed.value ? 'green' : 'gray',
     })
   } catch (error: any) {
-    const message = error?.message || '浏览器未提供详细原因，请关闭应用并从主屏幕重新打开后重试'
+    const message = error?.message || '浏览器未提供详细原因，请重新打开应用后重试'
     actionError.value = message
     useToast().add({ title: '未能更改系统推送', description: message, color: 'red' })
   }
@@ -244,6 +244,10 @@ const sendTest = async () => {
     testing.value = false
   }
 }
+
+watch(pushSubscribed, (subscribed) => {
+  if (subscribed) actionError.value = ''
+})
 
 onMounted(load)
 </script>
