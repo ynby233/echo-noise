@@ -89,3 +89,29 @@ func TestSetupRouterServesServiceWorkerWithRootScopeAndNoCache(t *testing.T) {
 		t.Fatalf("service worker Content-Type = %q", got)
 	}
 }
+
+func TestSetupRouterServesPublicVendorAssetsNeededByServiceWorkerPrecache(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("ACCESS_LOG", "false")
+	t.Chdir(t.TempDir())
+	assetDir := filepath.Join("public", "vendor", "netease-mini-player")
+	if err := os.MkdirAll(assetDir, 0o755); err != nil {
+		t.Fatalf("create public vendor directory: %v", err)
+	}
+	wantBody := "window.NeteaseMiniPlayer = {}"
+	if err := os.WriteFile(filepath.Join(assetDir, "netease-mini-player-v2.js"), []byte(wantBody), 0o600); err != nil {
+		t.Fatalf("write public vendor asset: %v", err)
+	}
+
+	r := SetupRouter()
+	request := httptest.NewRequest(http.MethodGet, "/vendor/netease-mini-player/netease-mini-player-v2.js", nil)
+	response := httptest.NewRecorder()
+	r.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("public vendor asset status = %d, want 200: %s", response.Code, response.Body.String())
+	}
+	if response.Body.String() != wantBody {
+		t.Fatalf("public vendor asset body = %q, want %q", response.Body.String(), wantBody)
+	}
+}

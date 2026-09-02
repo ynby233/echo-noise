@@ -267,6 +267,7 @@ func isSuspiciousPath(path string) bool {
 		"/api",
 		"/_nuxt/",
 		"/assets/",
+		"/vendor/",
 		"/favicon",
 		"/android-chrome",
 		"/sw.js",
