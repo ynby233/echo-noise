@@ -3502,8 +3502,8 @@ white-space: nowrap;  /* 防止换行 */
 html.dark .sidebar-card {
   background: linear-gradient(180deg, rgba(30, 41, 59, 0.48) 0%, rgba(15, 23, 42, 0.8) 100%);
   color: var(--home-text-dark);
-  backdrop-filter: blur(8px) saturate(118%);
-  -webkit-backdrop-filter: blur(8px) saturate(118%);
+  /* Reuse the pre-blurred page background. Backdrop-filter surfaces can expose
+     horizontal raster-tile seams while Chrome recomposites sticky sidebars. */
   transition: border-color .16s ease, background-color .16s ease, color .16s ease, box-shadow .16s ease;
 }
 html.dark .sidebar-card:hover {

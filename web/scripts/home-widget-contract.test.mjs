@@ -97,6 +97,7 @@ assert.match(
 )
 
 const sidebarCardStyle = homePage.match(/\.sidebar-card\s*\{([^{}]*)\}/s)?.[1] || ''
+const darkSidebarCardStyle = homePage.match(/html\.dark \.sidebar-card\s*\{([^{}]*)\}/s)?.[1] || ''
 const darkThemeVariables = homePage.match(/html\.dark\s*\{([^{}]*)\}/s)?.[1] || ''
 const sidebarThemeCardSource = homePage.slice(
   homePage.indexOf('const sidebarThemeCard = computed'),
@@ -112,6 +113,11 @@ assert.match(homePage, /homeStatsEnabled[\s\S]*?popularTagsEnabled[\s\S]*?latest
 
 assert.match(sidebarCardStyle, /border:\s*1px solid var\(--home-widget-border-color\)\s*!important;/)
 assert.match(sidebarCardStyle, /box-shadow:\s*var\(--home-widget-shadow\)\s*!important;/)
+assert.doesNotMatch(
+  darkSidebarCardStyle,
+  /(?:^|\n)\s*(?:-webkit-)?backdrop-filter\s*:/,
+  'dark sidebar cards must reuse the pre-blurred page background instead of creating backdrop-filter surfaces with transient raster seams'
+)
 assert.match(
   darkThemeVariables,
   /--home-widget-shadow:\s*none;/,
