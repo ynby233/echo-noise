@@ -323,10 +323,10 @@ func QueueWebPushForNotification(db *gorm.DB, notification models.UserNotificati
 		notification.Type != models.UserNotificationTypeVoceChatCredentials &&
 		notification.Type != models.UserNotificationTypeVoceChatPasswordChanged &&
 		notification.Type != models.UserNotificationTypePasswordUpdateIncomplete {
-		if previewTitle := userNotificationPushTitle(notification.Type, notificationActorName(notification.ActorUserID)); previewTitle != "" {
+		if previewTitle := userNotificationPushTitle(notification.Type, notificationActorName(db, notification.ActorUserID)); previewTitle != "" {
 			title = previewTitle
 		}
-		if previewBody := userNotificationPushSnippet(notification); previewBody != "" {
+		if previewBody := userNotificationPushSnippet(db, notification); previewBody != "" {
 			body = previewBody
 		}
 	}

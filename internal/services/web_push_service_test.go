@@ -46,6 +46,8 @@ func openWebPushTestDB(t *testing.T) *gorm.DB {
 	}
 	if err := db.AutoMigrate(
 		&models.User{},
+		&models.Message{},
+		&models.Comment{},
 		&models.SiteConfig{},
 		&models.UserNotification{},
 		&models.Announcement{},
@@ -56,6 +58,82 @@ func openWebPushTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("migrate web push test database: %v", err)
 	}
 	return db
+}
+
+func TestCreateUserNotificationWithPreviewDoesNotDeadlockSingleSQLiteConnection(t *testing.T) {
+	db := openWebPushTestDB(t)
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("open sql database: %v", err)
+	}
+	sqlDB.SetMaxIdleConns(1)
+	sqlDB.SetMaxOpenConns(1)
+
+	previousDB := database.DB
+	database.DB = db
+	t.Cleanup(func() { database.DB = previousDB })
+
+	recipient := models.User{Username: "preview-recipient", Password: "hashed"}
+	actor := models.User{Username: "preview-actor", Password: "hashed"}
+	if err := db.Create(&recipient).Error; err != nil {
+		t.Fatalf("create preview recipient: %v", err)
+	}
+	if err := db.Create(&actor).Error; err != nil {
+		t.Fatalf("create preview actor: %v", err)
+	}
+	message := models.Message{UserID: recipient.ID, Username: recipient.Username, Content: "preview message"}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatalf("create preview message: %v", err)
+	}
+	actorID := actor.ID
+	comment := models.Comment{MessageID: message.ID, UserID: &actorID, Content: "preview comment body"}
+	if err := db.Create(&comment).Error; err != nil {
+		t.Fatalf("create preview comment: %v", err)
+	}
+	if err := db.Create(&models.WebPushPreference{
+		UserID: recipient.ID, Enabled: true, CommentEnabled: true, ShowPreview: true,
+	}).Error; err != nil {
+		t.Fatalf("create preview preference: %v", err)
+	}
+	if err := db.Create(&models.WebPushSubscription{
+		UserID: recipient.ID, SessionID: "preview-session", Endpoint: "https://push.example/preview",
+		EndpointHash: "preview-endpoint", P256dh: "p256dh", Auth: "auth",
+	}).Error; err != nil {
+		t.Fatalf("create preview subscription: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		messageID := message.ID
+		commentID := comment.ID
+		notification := models.UserNotification{
+			RecipientUserID: recipient.ID,
+			ActorUserID:     &actorID,
+			Type:            models.UserNotificationTypeComment,
+			MessageID:       &messageID,
+			CommentID:       &commentID,
+		}
+		done <- db.Transaction(func(tx *gorm.DB) error {
+			return createUserNotificationWithWebPush(tx, &notification)
+		})
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("create notification with preview: %v", err)
+		}
+	case <-time.After(750 * time.Millisecond):
+		t.Fatal("creating a preview notification deadlocked while the transaction held the only SQLite connection")
+	}
+
+	var delivery models.WebPushDelivery
+	if err := db.Order("id DESC").First(&delivery).Error; err != nil {
+		t.Fatalf("load preview delivery: %v", err)
+	}
+	if !strings.Contains(delivery.PayloadJSON, actor.Username) || !strings.Contains(delivery.PayloadJSON, comment.Content) {
+		t.Fatalf("preview payload did not include the transaction-scoped actor and comment: %s", delivery.PayloadJSON)
+	}
 }
 
 func createWebPushDeliveryFixture(t *testing.T, db *gorm.DB, sessionExpiresAt *time.Time) (models.WebPushSubscription, models.WebPushDelivery) {

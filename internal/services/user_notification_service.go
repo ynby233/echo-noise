@@ -432,13 +432,13 @@ func buildVoceChatNotificationMarkdown(siteConfig models.SiteConfig, notificatio
 	if siteTitle == "" {
 		siteTitle = neutralSiteTitle
 	}
-	actorName := notificationActorName(notification.ActorUserID)
+	actorName := notificationActorName(database.DB, notification.ActorUserID)
 	title := userNotificationPushTitle(notification.Type, actorName)
 	if title == "" {
 		return ""
 	}
 
-	snippet := userNotificationPushSnippet(notification)
+	snippet := userNotificationPushSnippet(database.DB, notification)
 	lines := []string{fmt.Sprintf("**%s 通知**", siteTitle), "", title}
 	if snippet != "" {
 		lines = append(lines, "", "> "+strings.ReplaceAll(snippet, "\n", "\n> "))
@@ -449,12 +449,12 @@ func buildVoceChatNotificationMarkdown(siteConfig models.SiteConfig, notificatio
 	return strings.Join(lines, "\n")
 }
 
-func notificationActorName(actorUserID *uint) string {
-	if actorUserID == nil || *actorUserID == 0 {
+func notificationActorName(db *gorm.DB, actorUserID *uint) string {
+	if db == nil || actorUserID == nil || *actorUserID == 0 {
 		return "有人"
 	}
 	var actor models.User
-	if err := database.DB.Select("id, username").First(&actor, *actorUserID).Error; err != nil || strings.TrimSpace(actor.Username) == "" {
+	if err := db.Select("id, username").First(&actor, *actorUserID).Error; err != nil || strings.TrimSpace(actor.Username) == "" {
 		return "有人"
 	}
 	return strings.TrimSpace(actor.Username)
@@ -475,16 +475,19 @@ func userNotificationPushTitle(notificationType string, actorName string) string
 	}
 }
 
-func userNotificationPushSnippet(notification models.UserNotification) string {
+func userNotificationPushSnippet(db *gorm.DB, notification models.UserNotification) string {
+	if db == nil {
+		return ""
+	}
 	if notification.CommentID != nil && *notification.CommentID != 0 {
 		var comment models.Comment
-		if err := database.DB.Select("id, content").First(&comment, *notification.CommentID).Error; err == nil {
+		if err := db.Select("id, content").First(&comment, *notification.CommentID).Error; err == nil {
 			return compactNotificationText(comment.Content, 120)
 		}
 	}
 	if notification.MessageID != nil && *notification.MessageID != 0 {
 		var message models.Message
-		if err := database.DB.Select("id, content").First(&message, *notification.MessageID).Error; err == nil {
+		if err := db.Select("id, content").First(&message, *notification.MessageID).Error; err == nil {
 			return compactNotificationText(message.Content, 120)
 		}
 	}
