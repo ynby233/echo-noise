@@ -60,6 +60,7 @@ const frontendConfigGate = new Promise(resolve => {
   releaseFrontendConfig = () => resolve(response({ frontendSettings: { pwaEnabled: true } }))
 })
 let delayFrontendConfig = true
+let pwaEnabledValue = true
 
 globalThis.__PWA_TEST__ = {
   registration,
@@ -91,7 +92,7 @@ globalThis.__PWA_TEST__ = {
   fetch: async url => {
     if (url === '/api/frontend/config') {
       if (delayFrontendConfig) return frontendConfigGate
-      return response({ frontendSettings: { pwaEnabled: true } })
+      return response({ frontendSettings: { pwaEnabled: pwaEnabledValue } })
     }
     if (url === '/api/web-push/config') {
       return response({ configured: true, public_key: 'AQ', session_subscribed: false, preferences: {} })
@@ -125,10 +126,9 @@ const startupRaceManager = plugin().provide.pwaManager
 await startupRaceManager.loadPushConfig()
 let startupRaceError
 const startupRaceOperation = startupRaceManager.enableNotifications().catch(error => { startupRaceError = error })
-await new Promise(resolve => setTimeout(resolve, 0))
+await startupRaceOperation
 delayFrontendConfig = false
 releaseFrontendConfig()
-await startupRaceOperation
 await new Promise(resolve => setTimeout(resolve, 0))
 
 assert.equal(startupRaceManager.workerRegistered.value, true, 'the delayed startup refresh must eventually register the owned worker')
@@ -136,9 +136,25 @@ assert.equal(startupPermissionRequestedBeforeConfig, true, 'the iPad permission 
 assert.equal(
   startupRaceError?.message,
   undefined,
-  'an iPad push action must wait for the in-flight PWA startup refresh instead of reporting that the registered app service is not ready',
+  'an iPad push action with an active worker must not wait for an unrelated frontend configuration request',
 )
 assert.equal(startupRaceManager.pushSubscribed.value, true, 'the startup-race retry must establish and persist the PushSubscription')
+
+pwaEnabledValue = false
+let disabledSubscriptionAttempted = false
+registration.pushManager.getSubscription = async () => null
+registration.pushManager.subscribe = async () => {
+  disabledSubscriptionAttempted = true
+  return startupRaceSubscription
+}
+const disabledManager = plugin().provide.pwaManager
+await disabledManager.refreshConfiguration()
+await disabledManager.loadPushConfig()
+let disabledError
+await disabledManager.enableNotifications().catch(error => { disabledError = error })
+assert.match(disabledError?.message || '', /应用服务尚未准备完成/, 'an explicitly disabled PWA must not reuse a residual worker for push')
+assert.equal(disabledSubscriptionAttempted, false, 'an explicitly disabled PWA must not create a PushSubscription')
+pwaEnabledValue = true
 
 registration.pushManager.subscribe = () => never
 globalThis.__PWA_TEST__.Notification.permission = 'default'

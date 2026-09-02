@@ -112,6 +112,7 @@ export default defineNuxtPlugin(() => {
   let deferredInstallPrompt: DeferredInstallPrompt | null = null
   let updateServiceWorker: ((reloadPage?: boolean) => Promise<void>) | null = null
   let initialRuntimePromise: Promise<void> | null = null
+  let runtimeConfigurationLoaded = false
 
   useHead(computed(() => ({
     htmlAttrs: { 'data-pwa-worker': !enabled.value ? 'disabled' : registrationError.value ? 'error' : workerRegistered.value ? 'active' : 'pending' },
@@ -186,6 +187,7 @@ export default defineNuxtPlugin(() => {
     } catch {
       enabled.value = true
     }
+    runtimeConfigurationLoaded = true
     if (enabled.value) await ensureServiceWorker()
     else await disablePwaRuntime()
   }
@@ -198,6 +200,17 @@ export default defineNuxtPlugin(() => {
       })
     }
     return initialRuntimePromise
+  }
+
+  const ensurePushServiceWorker = async (): Promise<ServiceWorkerRegistration | null> => {
+    if (!supported.value || !secureContext.value || (runtimeConfigurationLoaded && !enabled.value)) return null
+    const existing = await navigator.serviceWorker.getRegistration('/')
+    if (activeOwnedRegistration(existing)) {
+      workerRegistered.value = true
+      return existing || null
+    }
+    await ensureInitialRuntime()
+    return ensureServiceWorker()
   }
 
   const install = async (): Promise<PwaInstallResult> => {
@@ -265,7 +278,7 @@ export default defineNuxtPlugin(() => {
       publicKeyRotated = true
     }
     if (publicKeyRotated && permission === 'granted') {
-      const registration = await ensureServiceWorker()
+      const registration = await ensurePushServiceWorker()
       if (!registration) throw new Error('应用服务尚未准备完成，请关闭应用并从主屏幕重新打开后重试')
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
@@ -280,7 +293,7 @@ export default defineNuxtPlugin(() => {
       serverSubscribed: data?.session_subscribed === true,
       localSubscribed: !!subscription,
     })) {
-      const registration = await ensureServiceWorker()
+      const registration = await ensurePushServiceWorker()
       if (!registration) throw new Error('应用服务尚未准备完成，请关闭应用并从主屏幕重新打开后重试')
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
@@ -308,8 +321,7 @@ export default defineNuxtPlugin(() => {
         : await withPushTimeout(Notification.requestPermission(), '等待系统通知授权', pushPermissionTimeoutMs)
       notificationPermission.value = permission
       if (permission !== 'granted') throw new Error('通知权限未允许，请在系统设置中重新开启')
-      await withPushTimeout(ensureInitialRuntime(), '准备应用配置')
-      const registration = await withPushTimeout(ensureServiceWorker(), '准备应用服务')
+      const registration = await withPushTimeout(ensurePushServiceWorker(), '准备应用服务')
       if (!registration) throw new Error('应用服务尚未准备完成，请关闭应用并从主屏幕重新打开后重试')
       let subscription = await withPushTimeout(registration.pushManager.getSubscription(), '读取推送订阅')
       if (!subscription) {
