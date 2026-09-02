@@ -730,6 +730,148 @@ func TestGetCommentsFiltersVisibility(t *testing.T) {
 	}
 }
 
+func TestRestoredReplyBelowTombstoneRemainsVisibleInThread(t *testing.T) {
+	db, r, owner, message := setupCommentAccountTest(t)
+	if err := db.AutoMigrate(&models.AttachmentBlob{}, &models.AttachmentReference{}, &models.AdminAuditLog{}); err != nil {
+		t.Fatalf("migrate lifecycle dependencies: %v", err)
+	}
+	if err := db.Model(&models.User{}).Where("id = ?", owner.ID).Update("is_admin", true).Error; err != nil {
+		t.Fatalf("promote primary fixture: %v", err)
+	}
+	replier := models.User{Username: "tombstone-replier"}
+	if err := db.Create(&replier).Error; err != nil {
+		t.Fatalf("create replier: %v", err)
+	}
+	message.Visibility = services.MessageVisibilityPublic
+	if err := db.Save(&message).Error; err != nil {
+		t.Fatalf("make message public: %v", err)
+	}
+
+	root := createTestComment(t, db, message.ID, &owner, "deleted root", services.MessageVisibilityUsers, nil)
+	reply := createTestComment(t, db, message.ID, &replier, "restored reply", services.MessageVisibilityUsers, &root.ID)
+	if _, err := services.TrashCommentTree(db, owner.ID, root.ID, services.CommentTrashRequest{ReasonCode: services.CommentDeletionReasonSelf}); err != nil {
+		t.Fatalf("trash root comment: %v", err)
+	}
+	if err := services.PermanentlyDeleteComment(db, owner.ID, root.ID); err != nil {
+		t.Fatalf("permanently delete root comment: %v", err)
+	}
+
+	r.Use(func(c *gin.Context) {
+		c.Set("user_id", replier.ID)
+		c.Next()
+	})
+	r.POST("/user/recycle-bin/comments/:id/restore", RestorePersonalComment)
+	r.GET("/messages/:id/comments", GetComments)
+
+	restoreRequest := httptest.NewRequest(http.MethodPost, "/user/recycle-bin/comments/"+strconvFormatUint(reply.ID)+"/restore", nil)
+	restoreResponse := httptest.NewRecorder()
+	r.ServeHTTP(restoreResponse, restoreRequest)
+	if restoreResponse.Code != http.StatusOK {
+		t.Fatalf("restore reply status = %d: %s", restoreResponse.Code, restoreResponse.Body.String())
+	}
+
+	listRequest := httptest.NewRequest(http.MethodGet, "/messages/"+strconvFormatUint(message.ID)+"/comments", nil)
+	listResponse := httptest.NewRecorder()
+	r.ServeHTTP(listResponse, listRequest)
+	comments := decodeCommentListResponse(t, listResponse)
+	if len(comments) != 2 || comments[0].ID != root.ID || comments[1].ID != reply.ID {
+		t.Fatalf("restored tombstone thread = %#v, want tombstone %d and reply %d", comments, root.ID, reply.ID)
+	}
+	if comments[0].Content != "" || comments[0].UserID != nil || !comments[0].IsTombstone {
+		t.Fatalf("tombstone leaked private data: %#v", comments[0])
+	}
+}
+
+func TestPrivateTombstoneStillProtectsRestoredReplyFromOtherUsers(t *testing.T) {
+	db, r, _, message := setupCommentAccountTest(t)
+	replier := models.User{Username: "private-tombstone-replier"}
+	outsider := models.User{Username: "private-tombstone-outsider"}
+	for _, user := range []*models.User{&replier, &outsider} {
+		if err := db.Create(user).Error; err != nil {
+			t.Fatalf("create user %s: %v", user.Username, err)
+		}
+	}
+	message.Visibility = services.MessageVisibilityPublic
+	if err := db.Save(&message).Error; err != nil {
+		t.Fatalf("make message public: %v", err)
+	}
+
+	now := time.Now().UTC()
+	tombstone := models.Comment{
+		MessageID:           message.ID,
+		Visibility:          services.MessageVisibilityPrivate,
+		IsTombstone:         true,
+		TombstonedAt:        &now,
+		TombstoneVisibility: services.MessageVisibilityPrivate,
+	}
+	if err := db.Create(&tombstone).Error; err != nil {
+		t.Fatalf("create private tombstone: %v", err)
+	}
+	reply := createTestComment(t, db, message.ID, &replier, "private restored reply", services.MessageVisibilityPublic, &tombstone.ID)
+
+	r.Use(func(c *gin.Context) {
+		if raw := c.GetHeader("X-Test-User-ID"); raw != "" {
+			id, _ := strconv.ParseUint(raw, 10, 64)
+			c.Set("user_id", uint(id))
+		}
+		c.Next()
+	})
+	r.GET("/messages/:id/comments", GetComments)
+	request := func(userID uint) []models.Comment {
+		req := httptest.NewRequest(http.MethodGet, "/messages/"+strconvFormatUint(message.ID)+"/comments", nil)
+		req.Header.Set("X-Test-User-ID", strconvFormatUint(userID))
+		response := httptest.NewRecorder()
+		r.ServeHTTP(response, req)
+		return decodeCommentListResponse(t, response)
+	}
+
+	if got := request(replier.ID); len(got) != 2 || got[0].ID != tombstone.ID || got[1].ID != reply.ID {
+		t.Fatalf("reply author should see own reply below private tombstone, got %#v", got)
+	}
+	if got := request(outsider.ID); len(got) != 0 {
+		t.Fatalf("private tombstone leaked restored reply to outsider: %#v", got)
+	}
+}
+
+func TestTombstoneDoesNotBypassHiddenNonTombstoneAncestor(t *testing.T) {
+	db, r, owner, message := setupCommentAccountTest(t)
+	replier := models.User{Username: "nested-tombstone-replier"}
+	if err := db.Create(&replier).Error; err != nil {
+		t.Fatalf("create replier: %v", err)
+	}
+	message.Visibility = services.MessageVisibilityPublic
+	if err := db.Save(&message).Error; err != nil {
+		t.Fatalf("make message public: %v", err)
+	}
+
+	grandparent := createTestComment(t, db, message.ID, &owner, "hidden ancestor", services.MessageVisibilityPrivate, nil)
+	now := time.Now().UTC()
+	tombstone := models.Comment{
+		MessageID:           message.ID,
+		ParentID:            &grandparent.ID,
+		Visibility:          services.MessageVisibilityPrivate,
+		IsTombstone:         true,
+		TombstonedAt:        &now,
+		TombstoneVisibility: services.MessageVisibilityUsers,
+	}
+	if err := db.Create(&tombstone).Error; err != nil {
+		t.Fatalf("create nested tombstone: %v", err)
+	}
+	createTestComment(t, db, message.ID, &replier, "reply below nested tombstone", services.MessageVisibilityUsers, &tombstone.ID)
+
+	r.Use(func(c *gin.Context) {
+		c.Set("user_id", replier.ID)
+		c.Next()
+	})
+	r.GET("/messages/:id/comments", GetComments)
+	request := httptest.NewRequest(http.MethodGet, "/messages/"+strconvFormatUint(message.ID)+"/comments", nil)
+	response := httptest.NewRecorder()
+	r.ServeHTTP(response, request)
+	if got := decodeCommentListResponse(t, response); len(got) != 0 {
+		t.Fatalf("tombstone bypassed hidden active ancestor: %#v", got)
+	}
+}
+
 func TestPrivateCommentVisibilityMatchesNewRules(t *testing.T) {
 	db, r, postAuthor, msg := setupCommentAccountTest(t)
 	commenter := models.User{Username: "bob", Password: ""}

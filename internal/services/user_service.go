@@ -1610,7 +1610,7 @@ func UpdateUserAdmin(userID uint, currentUserID uint) error {
 			return fmt.Errorf("系统至少保留一位管理员")
 		}
 	}
-	return database.DB.Transaction(func(tx *gorm.DB) error {
+	err = database.DB.Transaction(func(tx *gorm.DB) error {
 		var fresh models.User
 		if err := tx.First(&fresh, userID).Error; err != nil {
 			return err
@@ -1626,6 +1626,10 @@ func UpdateUserAdmin(userID uint, currentUserID uint) error {
 		}
 		return nil
 	})
+	if err == nil {
+		repository.InvalidateUserCache(userID)
+	}
+	return err
 }
 
 func GetUserByUsername(username string) (*models.User, error) {

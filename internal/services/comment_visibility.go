@@ -172,7 +172,23 @@ func (scope ContentReadScope) canViewCommentInThread(message models.Message, com
 		if !ok {
 			return false
 		}
-		if !scope.canViewCommentInThread(message, loaded, commentMap) {
+		visibleAncestor := loaded
+		seen := map[uint]bool{comment.ID: true}
+		for visibleAncestor.IsTombstone && visibleAncestor.ParentID != nil {
+			if seen[visibleAncestor.ID] {
+				return false
+			}
+			seen[visibleAncestor.ID] = true
+			next, ok := commentMap[*visibleAncestor.ParentID]
+			if !ok {
+				return false
+			}
+			if seen[next.ID] {
+				return false
+			}
+			visibleAncestor = next
+		}
+		if !visibleAncestor.IsTombstone && !scope.canViewCommentInThread(message, visibleAncestor, commentMap) {
 			return false
 		}
 		parent = &loaded

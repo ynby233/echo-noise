@@ -79,6 +79,11 @@ func clearUserCache(id uint) {
 	cacheMutex.Unlock()
 }
 
+// InvalidateUserCache removes one user after a write that bypasses repository update helpers.
+func InvalidateUserCache(id uint) {
+	clearUserCache(id)
+}
+
 func ClearUserCache() {
 	cacheMutex.Lock()
 	userCacheMap = make(map[uint]userCacheItem)
