@@ -10,12 +10,14 @@ import (
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"gorm.io/gorm"
 )
 
 const (
 	accessLogConfigTTL     = 5 * time.Second
+	accessLogConfigTimeout = 100 * time.Millisecond
 	accessLogBatchInterval = 100 * time.Millisecond
 	accessLogBatchSize     = 100
 	accessLogQueueSize     = 4096
@@ -27,6 +29,7 @@ var accessLogConfigCache = struct {
 	expiresAt        time.Time
 	accessLogEnabled bool
 	siteVisitEnabled bool
+	refreshing       bool
 }{}
 
 type accessLogQueueItem struct {
@@ -70,22 +73,47 @@ func accessLogSettings() (bool, bool) {
 	}
 	now := time.Now()
 	accessLogConfigCache.Lock()
-	defer accessLogConfigCache.Unlock()
 	if accessLogConfigCache.db == db && now.Before(accessLogConfigCache.expiresAt) {
-		return accessLogConfigCache.accessLogEnabled, accessLogConfigCache.siteVisitEnabled
+		accessEnabled := accessLogConfigCache.accessLogEnabled
+		siteVisitEnabled := accessLogConfigCache.siteVisitEnabled
+		accessLogConfigCache.Unlock()
+		return accessEnabled, siteVisitEnabled
 	}
+	if accessLogConfigCache.db != db {
+		accessLogConfigCache.db = db
+		accessLogConfigCache.expiresAt = time.Time{}
+		accessLogConfigCache.accessLogEnabled = false
+		accessLogConfigCache.siteVisitEnabled = false
+		accessLogConfigCache.refreshing = false
+	}
+	staleAccessEnabled := accessLogConfigCache.accessLogEnabled
+	staleSiteVisitEnabled := accessLogConfigCache.siteVisitEnabled
+	if accessLogConfigCache.refreshing {
+		accessLogConfigCache.Unlock()
+		return staleAccessEnabled, staleSiteVisitEnabled
+	}
+	accessLogConfigCache.refreshing = true
+	accessLogConfigCache.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), accessLogConfigTimeout)
+	defer cancel()
 	var cfg models.SecurityConfig
-	accessEnabled := false
-	siteVisitEnabled := false
-	if err := db.Select("access_log_enabled", "site_visit_log_enabled").Order("id asc").First(&cfg).Error; err == nil {
-		accessEnabled = cfg.AccessLogEnabled
-		siteVisitEnabled = cfg.SiteVisitLogEnabled
+	err := db.WithContext(ctx).Select("access_log_enabled", "site_visit_log_enabled").Order("id asc").First(&cfg).Error
+
+	accessLogConfigCache.Lock()
+	defer accessLogConfigCache.Unlock()
+	if accessLogConfigCache.db != db {
+		return staleAccessEnabled, staleSiteVisitEnabled
 	}
-	accessLogConfigCache.db = db
-	accessLogConfigCache.expiresAt = now.Add(accessLogConfigTTL)
-	accessLogConfigCache.accessLogEnabled = accessEnabled
-	accessLogConfigCache.siteVisitEnabled = siteVisitEnabled
-	return accessEnabled, siteVisitEnabled
+	accessLogConfigCache.refreshing = false
+	accessLogConfigCache.expiresAt = time.Now().Add(accessLogConfigTTL)
+	if err == nil {
+		accessLogConfigCache.accessLogEnabled = cfg.AccessLogEnabled
+		accessLogConfigCache.siteVisitEnabled = cfg.SiteVisitLogEnabled
+	} else if ctx.Err() != nil {
+		database.LogConnectionPoolPressure("access_log_config_refresh", db)
+	}
+	return accessLogConfigCache.accessLogEnabled, accessLogConfigCache.siteVisitEnabled
 }
 
 func InvalidateAccessLogConfigCache() {
@@ -94,6 +122,7 @@ func InvalidateAccessLogConfigCache() {
 	accessLogConfigCache.expiresAt = time.Time{}
 	accessLogConfigCache.accessLogEnabled = false
 	accessLogConfigCache.siteVisitEnabled = false
+	accessLogConfigCache.refreshing = false
 	accessLogConfigCache.Unlock()
 }
 

@@ -76,6 +76,11 @@ func SetupRouter() *gin.Engine {
 	configureTrustedProxies(r)
 	r.Use(gin.Recovery())
 	r.Use(middleware.SecurityHeadersMiddleware())
+	// Health probes must not depend on database-backed middleware. Register
+	// them before the rest of the global chain so liveness remains useful
+	// during a stall and readiness can apply its own short database deadline.
+	r.GET("/api/health/live", controllers.HealthLive)
+	r.GET("/api/health/ready", controllers.HealthReady)
 	if enableAccessLog() {
 		r.Use(gin.Logger())
 	}

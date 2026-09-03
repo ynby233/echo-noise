@@ -94,3 +94,68 @@ func TestAccessLogMiddlewareCachesConfigAndBatchesWritesOffRequestPath(t *testin
 		t.Fatalf("security config queries = %d, want one cached lookup", queries)
 	}
 }
+
+func TestAccessLogMiddlewareDoesNotBlockRequestsWhenConfigDatabaseConnectionIsBusy(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	dsn := fmt.Sprintf("file:access-log-busy-%d?mode=memory&cache=shared", time.Now().UnixNano())
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	if err := db.AutoMigrate(&models.SecurityConfig{}); err != nil {
+		t.Fatalf("migrate security config: %v", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get sql database: %v", err)
+	}
+	sqlDB.SetMaxIdleConns(1)
+	sqlDB.SetMaxOpenConns(1)
+	models.SetDB(db)
+	InvalidateAccessLogConfigCache()
+
+	conn, err := sqlDB.Conn(context.Background())
+	if err != nil {
+		t.Fatalf("occupy only database connection: %v", err)
+	}
+	connectionReleased := false
+	releaseConnection := func() {
+		if connectionReleased {
+			return
+		}
+		connectionReleased = true
+		_ = conn.Close()
+	}
+	t.Cleanup(func() {
+		releaseConnection()
+		models.SetDB(nil)
+		InvalidateAccessLogConfigCache()
+	})
+
+	r := gin.New()
+	r.Use(AccessLogMiddleware())
+	r.GET("/api/work", func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
+	})
+
+	completed := make(chan int, 1)
+	go func() {
+		response := httptest.NewRecorder()
+		r.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/work", nil))
+		completed <- response.Code
+	}()
+
+	select {
+	case status := <-completed:
+		if status != http.StatusOK {
+			t.Fatalf("request status = %d", status)
+		}
+	case <-time.After(250 * time.Millisecond):
+		releaseConnection()
+		select {
+		case <-completed:
+		case <-time.After(2 * time.Second):
+		}
+		t.Fatal("request blocked while the access-log config database connection was busy")
+	}
+}
