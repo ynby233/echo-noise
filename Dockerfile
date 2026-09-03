@@ -137,7 +137,8 @@ COPY ./docker-compose.yml /app/docker-compose.yml
 
 # 运行时入口：支持从 /app/config/runtime.env 自动加载环境变量，便于 GUI 容器部署时文件化维护配置
 COPY ./docker-entrypoint.sh /app/docker-entrypoint.sh
-RUN chmod +x /app/docker-entrypoint.sh
+COPY ./docker-healthcheck.sh /app/docker-healthcheck.sh
+RUN chmod +x /app/docker-entrypoint.sh /app/docker-healthcheck.sh
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # 从前端构建阶段复制静态文件
@@ -188,6 +189,8 @@ RUN if [ "$USE_UPX" = "1" ]; then \
 # 暴露应用端口
 
 # 启动后端与 MCP（MCP 后台运行，Go 服务为主进程）
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 CMD ["/app/docker-healthcheck.sh"]
+
 CMD ["/app/noise"]
 
 # 显式的“带自编译 ffmpeg 的最终镜像”目标。

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -46,21 +47,63 @@ func init() {
 	log.SetOutput(io.MultiWriter(f, os.Stdout))
 }
 
+const databaseCloseTimeout = 5 * time.Second
+
+func logLifecycleStage(phase, stage, status string, started time.Time) {
+	log.Printf("lifecycle phase=%s stage=%s status=%s elapsed=%s", phase, stage, status, time.Since(started).Round(time.Millisecond))
+}
+
+func closeDatabaseWithTimeout(timeout time.Duration) error {
+	if database.DB == nil {
+		return nil
+	}
+	sqlDB, err := database.DB.DB()
+	if err != nil {
+		return err
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- sqlDB.Close()
+	}()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(timeout):
+		return context.DeadlineExceeded
+	}
+}
+
 func main() {
+	stageStarted := time.Now()
+	logLifecycleStage("startup", "config_load", "begin", stageStarted)
 	// 加载配置
 	if err := config.LoadConfig(); err != nil {
+		logLifecycleStage("startup", "config_load", "failed", stageStarted)
 		log.Fatalf(models.LoadConfigErrorMessage+": %v", err)
 	}
+	logLifecycleStage("startup", "config_load", "completed", stageStarted)
+
+	stageStarted = time.Now()
+	logLifecycleStage("startup", "database_init", "begin", stageStarted)
 
 	// 初始化数据库
 	if err := database.InitDB(); err != nil {
+		logLifecycleStage("startup", "database_init", "failed", stageStarted)
 		log.Fatalf(models.DatabaseInitErrorMessage+": %v", err)
 	}
+	logLifecycleStage("startup", "database_init", "completed", stageStarted)
+
+	stageStarted = time.Now()
+	logLifecycleStage("startup", "default_data_seed", "begin", stageStarted)
 
 	// 初始化默认数据
 	if err := services.SeedDefaultData(); err != nil {
 		log.Printf("初始化默认数据警告: %v", err)
 	}
+	logLifecycleStage("startup", "default_data_seed", "completed", stageStarted)
+
+	stageStarted = time.Now()
+	logLifecycleStage("startup", "workers_start", "begin", stageStarted)
 	workerCtx, cancelWorkers := context.WithCancel(context.Background())
 	defer cancelWorkers()
 	services.StartAnnouncementPushDispatcher(workerCtx, database.DB)
@@ -111,6 +154,7 @@ func main() {
 		}
 	}()
 	services.StartInfoFeedAutoRefresh()
+	logLifecycleStage("startup", "workers_start", "completed", stageStarted)
 
 	// 设置Gin模式
 	ginMode := config.Config.Server.Mode
@@ -123,7 +167,10 @@ func main() {
 	}
 
 	// 设置路由
+	stageStarted = time.Now()
+	logLifecycleStage("startup", "router_setup", "begin", stageStarted)
 	r := routers.SetupRouter()
+	logLifecycleStage("startup", "router_setup", "completed", stageStarted)
 
 	// Migrate historical public cloud-attachment URLs in the background. The
 	// job is retry-safe and intentionally does not delay server availability.
@@ -173,7 +220,15 @@ func main() {
 	// 在独立的goroutine中启动服务器
 	go func() {
 		log.Printf("服务器启动于 %s\n", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		listenStarted := time.Now()
+		logLifecycleStage("startup", "http_listen", "begin", listenStarted)
+		listener, err := net.Listen("tcp", srv.Addr)
+		if err != nil {
+			logLifecycleStage("startup", "http_listen", "failed", listenStarted)
+			log.Fatalf(models.ServerLaunchErrorMessage+": %v", err)
+		}
+		logLifecycleStage("startup", "http_listen", "ready", listenStarted)
+		if err := srv.Serve(listener); err != nil && err != http.ErrServerClosed {
 			log.Fatalf(models.ServerLaunchErrorMessage+": %v", err)
 		}
 	}()
@@ -183,26 +238,44 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	log.Println("正在关闭服务器...")
+	stageStarted = time.Now()
+	logLifecycleStage("shutdown", "workers_stop", "begin", stageStarted)
 	cancelWorkers()
+	logLifecycleStage("shutdown", "workers_stop", "completed", stageStarted)
 
 	// 设置关闭超时时间
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	stageStarted = time.Now()
+	logLifecycleStage("shutdown", "http_shutdown", "begin", stageStarted)
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 30*time.Second)
 
 	// 优雅关闭服务器
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logLifecycleStage("shutdown", "http_shutdown", "failed", stageStarted)
 		log.Printf("服务器关闭错误: %v\n", err)
+	} else {
+		logLifecycleStage("shutdown", "http_shutdown", "completed", stageStarted)
 	}
-	if err := middleware.FlushAccessLogs(ctx); err != nil {
+	cancelShutdown()
+
+	stageStarted = time.Now()
+	logLifecycleStage("shutdown", "access_log_flush", "begin", stageStarted)
+	flushCtx, cancelFlush := context.WithTimeout(context.Background(), 5*time.Second)
+	if err := middleware.FlushAccessLogs(flushCtx); err != nil {
+		logLifecycleStage("shutdown", "access_log_flush", "failed", stageStarted)
 		log.Printf("访问日志刷新错误: %v\n", err)
+	} else {
+		logLifecycleStage("shutdown", "access_log_flush", "completed", stageStarted)
 	}
+	cancelFlush()
 
 	// 所有请求和异步日志都已结束后再关闭数据库连接。
-	sqlDB, err := database.DB.DB()
-	if err != nil {
-		log.Printf("获取数据库实例失败: %v\n", err)
-	} else if err := sqlDB.Close(); err != nil {
+	stageStarted = time.Now()
+	logLifecycleStage("shutdown", "database_close", "begin", stageStarted)
+	if err := closeDatabaseWithTimeout(databaseCloseTimeout); err != nil {
+		logLifecycleStage("shutdown", "database_close", "failed", stageStarted)
 		log.Printf("数据库关闭错误: %v\n", err)
+	} else {
+		logLifecycleStage("shutdown", "database_close", "completed", stageStarted)
 	}
 
 	log.Println("服务器已关闭")
