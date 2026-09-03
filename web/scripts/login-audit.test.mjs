@@ -13,6 +13,8 @@ const loginSession = await readFile(join(repoRoot, 'internal/controllers/mobile_
 const routes = await readFile(join(repoRoot, 'internal/routers/routers.go'), 'utf8')
 const securityModel = await readFile(join(repoRoot, 'internal/models/security.go'), 'utf8')
 const migrate = await readFile(join(repoRoot, 'internal/models/migrate.go'), 'utf8')
+const userStore = await readFile(join(webRoot, 'store/user.ts'), 'utf8')
+const useUser = await readFile(join(webRoot, 'composables/useUser.ts'), 'utf8')
 
 assert.match(
   securityModel,
@@ -54,6 +56,30 @@ assert.match(
   loginController,
   /func\s+Logout\(c \*gin\.Context\)[\s\S]*?recordSessionLogoutAudit\(c,\s*session\)[\s\S]*?session\.Clear\(\)/,
   'logout should record the audit before clearing the session'
+)
+
+assert.match(
+  loginController,
+  /session\.Clear\(\)\s*if err := session\.Save\(\); err != nil \{[\s\S]*?http\.StatusInternalServerError[\s\S]*?return\s*\}/,
+  'logout must report a session persistence failure instead of claiming success'
+)
+
+assert.match(
+  userStore,
+  /const logout = async \(\) => \{[\s\S]*?postRequest\("user\/logout"[\s\S]*?if \(!response \|\| response\.code !== 1\) return false[\s\S]*?clearUserStatus[\s\S]*?return true/,
+  'the user store must call the registered logout route and clear local identity only after server success'
+)
+
+assert.match(
+  useUser,
+  /const logout = async \(\) => \{[\s\S]*?const ok = await userStore\.logout\(\)[\s\S]*?if \(!ok\) \{[\s\S]*?color: 'red'[\s\S]*?return false[\s\S]*?router\.push\('\/'\)[\s\S]*?return true/,
+  'logout UI must surface failure without navigating away or pretending that the session ended'
+)
+
+assert.match(
+  component,
+  /const handleLogout = async \(\) => \{\s*await logout\(\)\s*\}/,
+  'all status-panel logout buttons must use the shared verified logout flow'
 )
 
 assert.match(

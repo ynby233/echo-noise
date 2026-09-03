@@ -434,7 +434,6 @@
         <div class="netease-mini-player"></div>
       </div>
       </UContainer>
-  <Notification />
   <AnnouncementModal ref="announcementModal" @unread-change="handleAnnouncementUnreadChange" />
   <!-- 添加搜索模态框组件 -->
   <SearchMode v-model="showSearchModal" @search-result="handleSearchResult" />
@@ -580,7 +579,6 @@ import { ref, computed, inject, provide, onMounted, onUnmounted, watch, nextTick
 import { useRouter, useRoute, useRuntimeConfig } from '#imports'
 import AddForm from '@/components/index/AddForm.vue'
 import MessageList from '@/components/index/MessageList.vue'
-import Notification from '~/components/widgets/Notification.vue';
 import HeatmapWidget from '~/components/widgets/heatmap.vue'
 import CalendarWidget from '~/components/widgets/CalendarWidget.vue'
 import SearchMode from '~/components/index/Searchmode.vue' // 导入 SearchMode 组件

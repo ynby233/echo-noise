@@ -60,8 +60,10 @@ assert(
 assert(
   component.includes("window.addEventListener('admin-capabilities-invalidated', refreshDashboardAfterCapabilityChange)") &&
     component.includes("window.removeEventListener('admin-capabilities-invalidated', refreshDashboardAfterCapabilityChange)") &&
+    component.includes("window.addEventListener('admin-capabilities-updated', refreshDashboardAfterCapabilityChange)") &&
+    component.includes("window.removeEventListener('admin-capabilities-updated', refreshDashboardAfterCapabilityChange)") &&
     component.includes('void userStore.getStatus(true)'),
-  'dashboard statistics must refresh when a capability snapshot is invalidated'
+  'dashboard statistics must refresh when a capability snapshot is invalidated or remotely changed'
 )
 
 assert(

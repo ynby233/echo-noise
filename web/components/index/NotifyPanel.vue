@@ -5,7 +5,7 @@
                 <h2 class="text-xl font-semibold" :class="text">推送渠道配置</h2>
                 <p class="mt-1 text-sm" :class="mutedText">统一展示渠道卡片与配置表单，不再通过“设置”按钮切换输入区域。</p>
             </div>
-            <div class="flex flex-wrap gap-2">
+            <div v-if="!isReadOnly" class="flex flex-wrap gap-2">
                 <UButton color="gray" variant="soft" @click="resetAll">恢复默认</UButton>
                 <UButton color="primary" @click="saveAll">保存配置</UButton>
             </div>
@@ -56,8 +56,8 @@
                     <span class="notify-channel-badge" :class="currentChannel.enabled ? 'notify-channel-badge-enabled' : 'notify-channel-badge-disabled'">
                         {{ currentChannel.enabled ? '已启用' : '未启用' }}
                     </span>
-                    <UToggle :model-value="currentChannel.enabled" @update:model-value="setChannelEnabled(currentChannel.key, !!$event)" />
-                    <UButton color="primary" variant="soft" :disabled="props.disabled" @click="testNotify(currentChannel.key)">
+                    <UToggle v-if="!isReadOnly" :model-value="currentChannel.enabled" @update:model-value="setChannelEnabled(currentChannel.key, !!$event)" />
+                    <UButton v-if="!isReadOnly" color="primary" variant="soft" :disabled="props.disabled" @click="testNotify(currentChannel.key)">
                         测试当前渠道
                     </UButton>
                 </div>
@@ -68,7 +68,7 @@
                     <div class="notify-field md:col-span-2">
                         <label class="notify-field-label" :class="text">Webhook 地址</label>
                         <p class="notify-field-tip" :class="mutedText">用于接收推送消息的完整地址。</p>
-                        <UInput v-model="localConfig.webhookURL" placeholder="https://example.com/webhook" />
+                        <UInput v-model="localConfig.webhookURL" placeholder="https://example.com/webhook" :disabled="isReadOnly || props.disabled" />
                     </div>
                 </template>
 
@@ -76,12 +76,12 @@
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">Bot Token</label>
                         <p class="notify-field-tip" :class="mutedText">机器人令牌，建议粘贴完整值后立即保存。</p>
-                        <UInput v-model="localConfig.telegramToken" placeholder="123456:ABCDEF..." />
+                        <UInput v-model="localConfig.telegramToken" placeholder="123456:ABCDEF..." :disabled="isReadOnly || props.disabled" />
                     </div>
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">Chat ID</label>
                         <p class="notify-field-tip" :class="mutedText">支持群组或频道 ID。</p>
-                        <UInput v-model="localConfig.telegramChatID" placeholder="-1001234567890" />
+                        <UInput v-model="localConfig.telegramChatID" placeholder="-1001234567890" :disabled="isReadOnly || props.disabled" />
                     </div>
                 </template>
 
@@ -89,7 +89,7 @@
                     <div class="notify-field md:col-span-2">
                         <label class="notify-field-label" :class="text">Webhook Key</label>
                         <p class="notify-field-tip" :class="mutedText">填写企微机器人 Webhook 的 key 部分即可。</p>
-                        <UInput v-model="localConfig.weworkKey" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+                        <UInput v-model="localConfig.weworkKey" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" :disabled="isReadOnly || props.disabled" />
                     </div>
                 </template>
 
@@ -97,12 +97,12 @@
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">Webhook 地址</label>
                         <p class="notify-field-tip" :class="mutedText">填写飞书机器人 Webhook URL。</p>
-                        <UInput v-model="localConfig.feishuWebhook" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..." />
+                        <UInput v-model="localConfig.feishuWebhook" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..." :disabled="isReadOnly || props.disabled" />
                     </div>
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">签名密钥</label>
                         <p class="notify-field-tip" :class="mutedText">开启签名校验时填写，不需要可留空。</p>
-                        <UInput v-model="localConfig.feishuSecret" placeholder="secret" type="password" />
+                        <UInput v-model="localConfig.feishuSecret" placeholder="secret" type="password" :disabled="isReadOnly || props.disabled" />
                     </div>
                 </template>
 
@@ -110,22 +110,22 @@
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">API Key</label>
                         <p class="notify-field-tip" :class="mutedText">应用 API Key。</p>
-                        <UInput v-model="localConfig.twitterApiKey" placeholder="API Key" />
+                        <UInput v-model="localConfig.twitterApiKey" placeholder="API Key" :disabled="isReadOnly || props.disabled" />
                     </div>
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">API Secret</label>
                         <p class="notify-field-tip" :class="mutedText">应用 API Secret。</p>
-                        <UInput v-model="localConfig.twitterApiSecret" placeholder="API Secret" />
+                        <UInput v-model="localConfig.twitterApiSecret" placeholder="API Secret" :disabled="isReadOnly || props.disabled" />
                     </div>
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">Access Token</label>
                         <p class="notify-field-tip" :class="mutedText">账户授权 Token。</p>
-                        <UInput v-model="localConfig.twitterAccessToken" placeholder="Access Token" />
+                        <UInput v-model="localConfig.twitterAccessToken" placeholder="Access Token" :disabled="isReadOnly || props.disabled" />
                     </div>
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">Access Token Secret</label>
                         <p class="notify-field-tip" :class="mutedText">账户授权 Token Secret。</p>
-                        <UInput v-model="localConfig.twitterAccessTokenSecret" placeholder="Access Token Secret" />
+                        <UInput v-model="localConfig.twitterAccessTokenSecret" placeholder="Access Token Secret" :disabled="isReadOnly || props.disabled" />
                     </div>
                 </template>
 
@@ -133,28 +133,28 @@
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">请求地址</label>
                         <p class="notify-field-tip" :class="mutedText">支持任何自定义通知接口地址。</p>
-                        <UInput v-model="localConfig.customHttpUrl" placeholder="https://example.com/notify" />
+                        <UInput v-model="localConfig.customHttpUrl" placeholder="https://example.com/notify" :disabled="isReadOnly || props.disabled" />
                     </div>
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">请求方法</label>
                         <p class="notify-field-tip" :class="mutedText">建议优先使用 POST。</p>
-                        <USelect v-model="localConfig.customHttpMethod" :options="['POST', 'PUT', 'PATCH']" />
+                        <USelect v-model="localConfig.customHttpMethod" :options="['POST', 'PUT', 'PATCH']" :disabled="isReadOnly || props.disabled" />
                     </div>
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">请求头</label>
                         <p class="notify-field-tip" :class="mutedText">填写 JSON 字符串，例如 Authorization 头。</p>
-                        <UTextarea v-model="localConfig.customHttpHeaders" :rows="6" placeholder='{"Authorization":"Bearer token"}' />
+                        <UTextarea v-model="localConfig.customHttpHeaders" :rows="6" placeholder='{"Authorization":"Bearer token"}' :disabled="isReadOnly || props.disabled" />
                     </div>
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">请求体模板</label>
                         <p v-pre class="notify-field-tip" :class="mutedText">支持内容模板变量，例如 {{content}}。</p>
-                        <UTextarea v-model="localConfig.customHttpBody" :rows="6" placeholder='{"content":"{{content}}"}' />
+                        <UTextarea v-model="localConfig.customHttpBody" :rows="6" placeholder='{"content":"{{content}}"}' :disabled="isReadOnly || props.disabled" />
                     </div>
                 </template>
             </div>
         </div>
 
-        <div class="notify-test-grid" :class="props.disabled ? 'opacity-60 pointer-events-none' : ''">
+        <div v-if="!isReadOnly" class="notify-test-grid" :class="props.disabled ? 'opacity-60 pointer-events-none' : ''">
             <UButton
                 v-for="type in notifyTypes"
                 :key="type"
@@ -183,7 +183,10 @@ const props = defineProps<{
     text?: string;
     mutedText?: string;
     disabled?: boolean;
+    readonly?: boolean;
 }>();
+
+const isReadOnly = computed(() => props.readonly === true)
 
 interface NotifyConfig {
     webhookEnabled: boolean;

@@ -1919,13 +1919,15 @@
                 <div class="flex items-center gap-3">
                   <span class="text-sm" :class="theme.mutedText">状态</span>
                   <span :class="[frontendConfig.notifyEnabled ? 'text-green-400' : 'text-red-400', 'text-sm']">{{ frontendConfig.notifyEnabled ? '已启用' : '未启用' }}</span>
-                  <UToggle v-model="frontendConfig.notifyEnabled" />
-                  <UButton size="xs" color="green" variant="soft" class="shadow" @click="saveConfigItem('notifyEnabled')">保存</UButton>
+                  <template v-if="canManageNotificationState">
+                    <UToggle v-model="frontendConfig.notifyEnabled" />
+                    <UButton size="xs" color="green" variant="soft" class="shadow" @click="saveConfigItem('notifyEnabled')">保存</UButton>
+                  </template>
                 </div>
               </div>
               <div class="px-4 pb-4">
                 <div v-if="frontendConfig.notifyEnabled">
-                  <NotifyPanel :config="notifyConfig" @save="updateNotifyConfig" :immediate="true" :subtleBg="theme.subtleBg" :text="theme.text" :mutedText="theme.mutedText" :disabled="!frontendConfig.notifyEnabled" />
+                  <NotifyPanel :config="notifyConfig" @save="updateNotifyConfig" :immediate="true" :subtleBg="theme.subtleBg" :text="theme.text" :mutedText="theme.mutedText" :disabled="!frontendConfig.notifyEnabled" :readonly="!canManageNotifications" />
                 </div>
                 <div v-else class="py-4 text-sm" :class="theme.mutedText">未启用推送，开启后可配置推送渠道参数</div>
               </div>
@@ -2581,6 +2583,8 @@ const isAdmin = computed(() => {
 })
 const { capabilities: adminCapabilities, isPrimaryAdmin, isReady: adminCapabilitiesReady, isLoading: adminCapabilitiesLoading, can, refreshCapabilities: loadAdminCapabilities } = useAdminCapabilities()
 const canViewAdminAudit = computed(() => can('audit.view'))
+const canManageNotifications = computed(() => can('notifications.manage'))
+const canManageNotificationState = computed(() => canManageNotifications.value && can('site_settings.manage'))
 const sectionCapabilities: Partial<Record<AdminSectionKey, string>> = adminSectionCapabilities
 const canSection = (section: AdminSectionKey) => {
   if (!isAdmin.value) return ['dashboard', 'user', 'widgets', 'system-push', 'personal-notes', 'personal-note-recycle-bin', 'personal-interactions', 'personal-interaction-recycle-bin'].includes(section)
@@ -4135,7 +4139,9 @@ onMounted(refreshPermittedAdminData)
 
 const refreshDashboardAfterCapabilityChange = () => { void userStore.getStatus(true) }
 onMounted(() => window.addEventListener('admin-capabilities-invalidated', refreshDashboardAfterCapabilityChange))
+onMounted(() => window.addEventListener('admin-capabilities-updated', refreshDashboardAfterCapabilityChange))
 onUnmounted(() => window.removeEventListener('admin-capabilities-invalidated', refreshDashboardAfterCapabilityChange))
+onUnmounted(() => window.removeEventListener('admin-capabilities-updated', refreshDashboardAfterCapabilityChange))
 
 watch(() => isAdmin.value, async (v) => {
   if (v) await refreshPermittedAdminData()
@@ -4703,23 +4709,7 @@ const copyToken = async () => {
 }
 // 添加退出登录处理函数
 const handleLogout = async () => {
-    try {
-        const response = await fetch('/api/user/logout', {
-            method: 'POST',
-            credentials: 'include'
-        })
-        const data = await response.json().catch(() => ({}))
-        if (!response.ok || data.code !== 1) {
-            throw new Error(data?.msg || '退出失败')
-        }
-        userStore.clearUserStatus({ clearVideoPlayback: true })
-        useToast().add({ title: '成功', description: '已退出登录', color: 'green' })
-        router.push('/')
-    } catch (error: any) {
-        userStore.clearUserStatus({ clearVideoPlayback: true })
-        useToast().add({ title: '成功', description: '已退出登录', color: 'green' })
-        router.push('/')
-    }
+    await logout()
 }
 const onAvatarImgError = (e: Event) => {
   const img = e.target as HTMLImageElement
@@ -5573,14 +5563,6 @@ const frontendConfig = reactive<FrontendConfig>({
     ]),
     leftAdsIntervalMs: 4000,
 })
-
-watch(
-  () => !!(frontendConfig as any).notifyEnabled,
-  async (next, prev) => {
-    if (next === prev) return
-    await saveConfigItem('notifyEnabled')
-  }
-)
 
 // GitHub 链接卡片解析开关的双向绑定（与 frontendConfig.enableGithubCard 同步）
 const githubCardEnabled = computed({

@@ -322,7 +322,10 @@ func Logout(c *gin.Context) {
 		}
 	}
 	session.Clear()
-	session.Save()
+	if err := session.Save(); err != nil {
+		c.JSON(http.StatusInternalServerError, dto.Fail[any]("退出登录失败"))
+		return
+	}
 	c.JSON(http.StatusOK, dto.OK[any](nil, "登出成功"))
 }
 

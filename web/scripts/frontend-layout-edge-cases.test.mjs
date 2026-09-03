@@ -1378,7 +1378,7 @@ assert(
     userStore.includes('const clearUserStatus = (options: { clearVideoPlayback?: boolean } = {}) => {') &&
     userStore.includes('if (options.clearVideoPlayback) clearVideoPlaybackMemory();') &&
     userStore.includes('clearUserStatus({ clearVideoPlayback: true });') &&
-    statusPanel.includes('userStore.clearUserStatus({ clearVideoPlayback: true })') &&
+    statusPanel.includes('const handleLogout = async () => {\n    await logout()\n}') &&
     !markdownRenderer.includes("video.dataset.type = 'video'") &&
     homePage.includes("Fancybox?.bind?.('[data-fancybox]', createMediaFancyboxOptions() as any)") &&
     homePage.includes("import { createMediaFancyboxOptions } from '~/utils/media-fancybox'") &&

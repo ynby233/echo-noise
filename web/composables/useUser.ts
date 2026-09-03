@@ -46,9 +46,17 @@ export const useUser = () => {
     }
 
     const logout = async () => {
-        await userStore.logout()
-        // 退出后清除状态
-        userStore.clearUserStatus();
+        const ok = await userStore.logout()
+        if (!ok) {
+            toast.add({
+                title: '注销失败',
+                description: '服务器未确认退出，请稍后重试',
+                icon: 'i-fluent-error-circle-16-filled',
+                color: 'red',
+                timeout: 2000,
+            });
+            return false
+        }
         toast.add({
             title: '注销成功',
             description: '欢迎再次使用！',
@@ -57,6 +65,7 @@ export const useUser = () => {
             timeout: 1000,
         });
         router.push('/')
+        return true
     }
 
     const getStatus = async () => {

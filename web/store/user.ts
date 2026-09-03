@@ -170,10 +170,10 @@ export const useUserStore = defineStore("userStore", () => {
 
     // 退出登录
     const logout = async () => {
-        const response = await postRequest("logout", {}, {
+        const response = await postRequest("user/logout", {}, {
             credentials: 'include'
         });
-        
+        if (!response || response.code !== 1) return false;
         clearUserStatus({ clearVideoPlayback: true });
         return true;
     }

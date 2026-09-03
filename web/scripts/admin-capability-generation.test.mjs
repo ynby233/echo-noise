@@ -14,9 +14,15 @@ const source = transformSync(fs.readFileSync(path.join(root, 'composables/useAdm
 const store = reactive({ isLogin: true, user: { id: 3, is_admin: true } })
 const pending = []
 const listeners = new Map()
+const timers = []
+const dispatched = []
 const useUserStore = () => store
 const getRequest = () => new Promise((resolve) => pending.push(resolve))
-globalThis.window = { addEventListener(name, listener) { listeners.set(name, listener) } }
+globalThis.window = {
+  addEventListener(name, listener) { listeners.set(name, listener) },
+  dispatchEvent(event) { dispatched.push(event.type) },
+  setInterval(listener, delay) { timers.push({ listener, delay }); return timers.length },
+}
 
 const factory = new Function('ref', 'computed', 'watch', 'useUserStore', 'getRequest', `${source}\nreturn useAdminCapabilities`)
 const useAdminCapabilities = factory(ref, computed, watch, useUserStore, getRequest)
@@ -26,12 +32,23 @@ assert.equal(pending.length, 1, 'the first consumer must request the capability 
 assert.equal(first.isLoading.value, true, 'a delegated administrator without a snapshot must be loading, not denied')
 pending.shift()({ code: 1, data: { capabilities: ['notes.view'] } })
 await Promise.resolve()
+await Promise.resolve()
 assert.equal(first.can('notes.view'), true, 'the loaded snapshot must grant the note section')
 assert.equal(first.isReady.value, true)
 
 useAdminCapabilities()
 assert.equal(first.can('notes.view'), true, 'mounting a second consumer must not clear a ready shared snapshot')
 assert.equal(pending.length, 0, 'mounting a second consumer must not refetch an already-ready snapshot')
+
+assert.equal(timers.length, 1, 'delegated administrators must have one shared capability refresh timer')
+assert.equal(timers[0].delay, 5000, 'remote capability revocations must be detected promptly')
+timers[0].listener()
+assert.equal(pending.length, 1, 'the refresh timer must request the current server-authoritative snapshot')
+pending.shift()({ code: 1, data: { capabilities: [] } })
+await Promise.resolve()
+await Promise.resolve()
+assert.equal(first.can('notes.view'), false, 'a remotely revoked capability must disappear without waiting for a 403')
+assert.ok(dispatched.includes('admin-capabilities-updated'), 'remote capability changes must request dependent dashboard data refresh')
 
 listeners.get('admin-capabilities-invalidated')()
 listeners.get('admin-capabilities-invalidated')()

@@ -12,8 +12,14 @@ let invalidationListenerInstalled = false
 let identityWatcherInstalled = false
 let invalidationScheduled = false
 let invalidationRefreshInFlight = false
+let capabilityRefreshTimerInstalled = false
 
 const currentUserID = (user: any) => Number(user?.userid || user?.id || user?.ID || user?.user_id || 0)
+const sameCapabilities = (left: string[], right: string[]) => {
+  if (left.length !== right.length) return false
+  const expected = new Set(left)
+  return right.every(capability => expected.has(capability))
+}
 
 export const useAdminCapabilities = () => {
   const userStore = useUserStore()
@@ -44,8 +50,14 @@ export const useAdminCapabilities = () => {
       try {
         const body: any = await getRequest('admin/authorization/me', undefined, { credentials: 'include', silent: true })
         if (currentUserID(userStore.user) !== requestedUserID || capabilityGeneration !== requestedGeneration) return
-        capabilities.value = body?.code === 1 ? (body.data?.capabilities || []) : []
+        const hadCurrentSnapshot = snapshotUserID.value === requestedUserID
+        const previousCapabilities = hadCurrentSnapshot ? capabilities.value : []
+        const nextCapabilities = body?.code === 1 ? (body.data?.capabilities || []) : []
+        capabilities.value = nextCapabilities
         snapshotUserID.value = requestedUserID
+        if (hadCurrentSnapshot && !sameCapabilities(previousCapabilities, nextCapabilities) && typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('admin-capabilities-updated'))
+        }
       } catch {
         if (currentUserID(userStore.user) === requestedUserID && capabilityGeneration === requestedGeneration) {
           capabilities.value = []
@@ -86,6 +98,13 @@ export const useAdminCapabilities = () => {
       if (nextIsAdmin && nextUserID && snapshotUserID.value !== nextUserID) void refreshCapabilities()
     }, { immediate: true })
     identityWatcherInstalled = true
+  }
+  if (typeof window !== 'undefined' && !capabilityRefreshTimerInstalled) {
+    window.setInterval(() => {
+      if (!isAdmin.value || isPrimaryAdmin.value || !userID.value) return
+      void refreshCapabilities()
+    }, 5000)
+    capabilityRefreshTimerInstalled = true
   }
 
   return { capabilities, isPrimaryAdmin, isReady, isLoading, can, refreshCapabilities }
