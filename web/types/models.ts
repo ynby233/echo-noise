@@ -140,7 +140,7 @@ export interface Status {
     is_admin: boolean;
     sys_admin_id: number;
     users: UserStatus[];
-    total_messages: number;
+    total_messages?: number;
     personal_messages?: number;
     total_users?: number;
     total_comments?: number;
@@ -151,6 +151,12 @@ export interface Status {
     received_replies?: number;
     received_guestbook?: number;
     auto_ban_enabled?: boolean;
+    admin_dashboard?: {
+        notes?: { count: number; scope: 'all' | 'current' };
+        interactions?: { comments: number; replies: number; guestbook: number; scope: 'all' | 'current' };
+        users_registration?: { user_count: number; registration_enabled: boolean };
+        storage?: { enabled: boolean };
+    };
     messages?: Message[];  // 添加消息列表字段
     total?: number;        // 添加总数字段
     items?: Message[];     // 添加与后端返回结构匹配的字段

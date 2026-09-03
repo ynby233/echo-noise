@@ -26,7 +26,7 @@ export const useUserStore = defineStore("userStore", () => {
                 email: u.email ?? u.Email ?? previous.email,
                 voce_chat_email: u.voce_chat_email ?? u.VoceChatEmail ?? previous.voce_chat_email,
                 voce_chat_notification_enabled: u.voce_chat_notification_enabled ?? u.VoceChatNotificationEnabled ?? previous.voce_chat_notification_enabled ?? false,
-                total_messages: (newStatus as any).total_messages ?? previous.total_messages ?? 0
+                total_messages: (newStatus as any).personal_messages ?? previous.total_messages ?? 0
             } as any
             isLogin.value = true
         }

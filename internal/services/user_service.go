@@ -1170,6 +1170,8 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 	}
 	canViewAllVoceChatEmails := canViewAllNonPrimaryVoceChatEmails(currentUser)
 	canViewAllVoceChatNotificationPreferences := currentUser.ID == models.PrimaryAdminUserID
+	authorizer := authorization.New(database.DB)
+	canViewAllUsers := currentUser.ID != 0 && authorizer.Authorize(currentUser.ID, authorization.CapabilityUsersView, nil).Allowed
 
 	var users []models.UserStatus
 	allusers, err := repository.GetAllUsers()
@@ -1177,6 +1179,9 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 		return models.Status{}, errors.New(models.GetAllUsersFailMessage)
 	}
 	for _, user := range allusers {
+		if !canViewAllUsers && currentUser.ID != user.ID {
+			continue
+		}
 		item := models.UserStatus{
 			ID:        user.ID,
 			Username:  user.Username,
@@ -1223,6 +1228,47 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 	status.TotalComments = int(totalComments)
 	status.TotalReplies = int(totalReplies)
 	status.TotalGuestbook = int(totalGuestbook)
+	if currentUser.ID != 0 {
+		dashboard := &models.AdminDashboardStatus{}
+		if authorizer.Authorize(currentUser.ID, authorization.CapabilityNotesView, nil).Allowed {
+			scope := "current"
+			if authorizer.Authorize(currentUser.ID, authorization.CapabilityNotesViewHidden, nil).Allowed {
+				scope = "all"
+			}
+			dashboard.Notes = &models.AdminDashboardCount{Count: int(total), Scope: scope}
+		}
+		if authorizer.Authorize(currentUser.ID, authorization.CapabilityCommentsView, nil).Allowed {
+			scope := "current"
+			if authorizer.Authorize(currentUser.ID, authorization.CapabilityCommentsViewHidden, nil).Allowed {
+				scope = "all"
+			}
+			dashboard.Interactions = &models.AdminDashboardInteractionCount{
+				Comments: int(totalComments), Guestbook: int(totalGuestbook), Replies: int(totalReplies), Scope: scope,
+			}
+		}
+		if authorizer.Authorize(currentUser.ID, authorization.CapabilityUsersView, nil).Allowed &&
+			authorizer.Authorize(currentUser.ID, authorization.CapabilityRegistrationView, nil).Allowed {
+			registrationEnabled := true
+			var setting models.Setting
+			if err := database.DB.Order("id ASC").First(&setting).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+				return status, errors.New(models.GetStatusFailMessage)
+			} else if err == nil {
+				registrationEnabled = setting.AllowRegistration
+			}
+			dashboard.UsersRegistration = &models.AdminDashboardUsers{UserCount: len(allusers), RegistrationEnabled: registrationEnabled}
+		}
+		if authorizer.Authorize(currentUser.ID, authorization.CapabilityStorageView, nil).Allowed &&
+			authorizer.Authorize(currentUser.ID, authorization.CapabilityDatabaseView, nil).Allowed {
+			var config models.SiteConfig
+			if err := database.DB.Table("site_configs").Order("id ASC").First(&config).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+				return status, errors.New(models.GetStatusFailMessage)
+			}
+			dashboard.Storage = &models.AdminDashboardStorage{Enabled: config.StorageEnabled}
+		}
+		if dashboard.Notes != nil || dashboard.Interactions != nil || dashboard.UsersRegistration != nil || dashboard.Storage != nil {
+			status.AdminDashboard = dashboard
+		}
+	}
 
 	if currentUser.ID != 0 {
 		receivedLikes, receivedComments, receivedReplies, receivedGuestbook, err := countReceivedInteractionStats(currentUser.ID, isAdmin)

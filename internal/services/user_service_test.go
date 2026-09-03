@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -1393,7 +1394,7 @@ func TestGetStatusIncludesUserAvatarURLs(t *testing.T) {
 		VoceChatEmail: "alice@vc.com",
 	})
 
-	status, err := GetStatus(0)
+	status, err := GetStatus(models.PrimaryAdminUserID)
 	if err != nil {
 		t.Fatalf("get status: %v", err)
 	}
@@ -1410,8 +1411,8 @@ func TestGetStatusIncludesUserAvatarURLs(t *testing.T) {
 	if avatars["alice"] != "/api/images/alice.png" {
 		t.Fatalf("alice avatar missing from status, got %q", avatars["alice"])
 	}
-	if voceChatEmails["alice"] != "" {
-		t.Fatalf("anonymous status leaked alice vc email %q", voceChatEmails["alice"])
+	if voceChatEmails["alice"] != "alice@vc.com" {
+		t.Fatalf("primary status omitted alice vc email %q", voceChatEmails["alice"])
 	}
 
 	aliceStatus, err := GetStatus(alice.ID)
@@ -1422,9 +1423,9 @@ func TestGetStatusIncludesUserAvatarURLs(t *testing.T) {
 		if user.Username == "alice" && user.VoceChatEmail != "alice@vc.com" {
 			t.Fatalf("alice should see own vc email, got %q", user.VoceChatEmail)
 		}
-		if user.Username == "admin" && user.VoceChatEmail != "" {
-			t.Fatalf("alice should not see admin vc email, got %q", user.VoceChatEmail)
-		}
+	}
+	if len(aliceStatus.Users) != 1 || aliceStatus.Users[0].ID != alice.ID {
+		t.Fatalf("alice status users=%#v, want only self without users.view", aliceStatus.Users)
 	}
 }
 
@@ -1503,7 +1504,7 @@ func TestGetStatusScopesVoceChatFieldsByViewerRole(t *testing.T) {
 	}
 
 	allUsers := []*models.User{primary, delegatedWithUsersView, delegatedWithoutUsersView, ordinaryA, ordinaryB}
-	assertStatus := func(t *testing.T, viewerID uint, visibleEmails map[uint]bool, visibleNotifications map[uint]bool) {
+	assertStatus := func(t *testing.T, viewerID uint, visibleUsers, visibleEmails, visibleNotifications map[uint]bool) {
 		t.Helper()
 		status, err := GetStatus(viewerID)
 		if err != nil {
@@ -1515,8 +1516,11 @@ func TestGetStatusScopesVoceChatFieldsByViewerRole(t *testing.T) {
 		}
 		for _, expected := range allUsers {
 			actual, ok := byID[expected.ID]
+			if ok != visibleUsers[expected.ID] {
+				t.Fatalf("viewer %d user %d present=%v, want %v", viewerID, expected.ID, ok, visibleUsers[expected.ID])
+			}
 			if !ok {
-				t.Fatalf("viewer %d missing user %d", viewerID, expected.ID)
+				continue
 			}
 			if got, want := actual.VoceChatEmail != "", visibleEmails[expected.ID]; got != want {
 				t.Errorf("viewer %d email visibility for user %d = %v, want %v", viewerID, expected.ID, got, want)
@@ -1539,16 +1543,16 @@ func TestGetStatusScopesVoceChatFieldsByViewerRole(t *testing.T) {
 		}
 	}
 
-	assertStatus(t, 0, map[uint]bool{}, map[uint]bool{})
-	assertStatus(t, ordinaryA.ID, selfFields(ordinaryA), selfFields(ordinaryA))
-	assertStatus(t, delegatedWithoutUsersView.ID, selfFields(delegatedWithoutUsersView), selfFields(delegatedWithoutUsersView))
-	assertStatus(t, delegatedWithUsersView.ID, allNonPrimaryEmails, selfFields(delegatedWithUsersView))
-	assertStatus(t, primary.ID, allNonPrimaryEmails, allFields)
+	assertStatus(t, 0, map[uint]bool{}, map[uint]bool{}, map[uint]bool{})
+	assertStatus(t, ordinaryA.ID, selfFields(ordinaryA), selfFields(ordinaryA), selfFields(ordinaryA))
+	assertStatus(t, delegatedWithoutUsersView.ID, selfFields(delegatedWithoutUsersView), selfFields(delegatedWithoutUsersView), selfFields(delegatedWithoutUsersView))
+	assertStatus(t, delegatedWithUsersView.ID, allFields, allNonPrimaryEmails, selfFields(delegatedWithUsersView))
+	assertStatus(t, primary.ID, allFields, allNonPrimaryEmails, allFields)
 
 	if err := database.DB.Where("user_id = ? AND capability = ?", delegatedWithUsersView.ID, "users.view").Delete(&models.AdminCapabilityGrant{}).Error; err != nil {
 		t.Fatalf("revoke users.view: %v", err)
 	}
-	assertStatus(t, delegatedWithUsersView.ID, selfFields(delegatedWithUsersView), selfFields(delegatedWithUsersView))
+	assertStatus(t, delegatedWithUsersView.ID, selfFields(delegatedWithUsersView), selfFields(delegatedWithUsersView), selfFields(delegatedWithUsersView))
 }
 
 func TestGetStatusCountsOnlyCommentsVisibleToViewer(t *testing.T) {
@@ -1720,6 +1724,267 @@ func TestGetStatusCountsUseIndependentHiddenNoteAndInteractionScopes(t *testing.
 	assertCounts(withoutHidden.ID, 1, 0)
 	assertCounts(noteReader.ID, 2, 0)
 	assertCounts(interactionReader.ID, 1, 1)
+}
+
+func TestGetStatusNoteDashboardRequiresViewAndUsesCurrentVisibility(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "dashboard-note-primary", IsAdmin: true})
+	delegated := mustCreateUser(t, models.User{Username: "dashboard-note-delegated", IsAdmin: true})
+	ordinary := mustCreateUser(t, models.User{Username: "dashboard-note-ordinary"})
+	authorizer := authorization.New(db)
+
+	messages := []models.Message{
+		{Content: "ordinary public dashboard note", UserID: ordinary.ID, Username: ordinary.Username, Visibility: MessageVisibilityPublic},
+		{Content: "ordinary hidden dashboard note", UserID: ordinary.ID, Username: ordinary.Username, Visibility: MessageVisibilityPrivate, Private: true},
+		{Content: "primary hidden dashboard note", UserID: primary.ID, Username: primary.Username, Visibility: MessageVisibilityPrivate, Private: true},
+	}
+	if err := db.Create(&messages).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	ordinaryStatus, err := GetStatus(ordinary.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ordinaryStatus.AdminDashboard != nil {
+		t.Fatalf("ordinary user admin dashboard=%#v, want nil", ordinaryStatus.AdminDashboard)
+	}
+
+	withoutGrant, err := GetStatus(delegated.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withoutGrant.AdminDashboard != nil {
+		t.Fatalf("delegated notes without notes.view=%#v, want omitted dashboard", withoutGrant.AdminDashboard)
+	}
+
+	if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityNotesView}); err != nil {
+		t.Fatal(err)
+	}
+	current, err := GetStatus(delegated.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.AdminDashboard == nil || current.AdminDashboard.Notes == nil || current.AdminDashboard.Notes.Count != 1 || current.AdminDashboard.Notes.Scope != "current" {
+		t.Fatalf("delegated current note dashboard=%#v, want count=1 scope=current", current.AdminDashboard)
+	}
+
+	if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityNotesView, authorization.CapabilityNotesViewHidden}); err != nil {
+		t.Fatal(err)
+	}
+	all, err := GetStatus(delegated.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if all.AdminDashboard == nil || all.AdminDashboard.Notes == nil || all.AdminDashboard.Notes.Count != 2 || all.AdminDashboard.Notes.Scope != "all" {
+		t.Fatalf("delegated all note dashboard=%#v, want count=2 scope=all with primary hidden note excluded", all.AdminDashboard)
+	}
+
+	if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	revoked, err := GetStatus(delegated.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if revoked.AdminDashboard != nil {
+		t.Fatalf("revoked delegated note dashboard=%#v, want omitted dashboard", revoked.AdminDashboard)
+	}
+
+	primaryStatus, err := GetStatus(primary.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if primaryStatus.AdminDashboard == nil || primaryStatus.AdminDashboard.Notes == nil || primaryStatus.AdminDashboard.Notes.Count != 3 || primaryStatus.AdminDashboard.Notes.Scope != "all" {
+		t.Fatalf("primary note dashboard=%#v, want count=3 scope=all", primaryStatus.AdminDashboard)
+	}
+}
+
+func TestGetStatusInteractionDashboardRequiresViewAndUsesInteractionVisibility(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "dashboard-interaction-primary", IsAdmin: true})
+	delegated := mustCreateUser(t, models.User{Username: "dashboard-interaction-delegated", IsAdmin: true})
+	ordinary := mustCreateUser(t, models.User{Username: "dashboard-interaction-ordinary"})
+	authorizer := authorization.New(db)
+
+	message := models.Message{Content: "interaction dashboard note", UserID: ordinary.ID, Username: ordinary.Username, Visibility: MessageVisibilityPublic}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatal(err)
+	}
+	ordinaryID := ordinary.ID
+	primaryID := primary.ID
+	comments := []models.Comment{
+		{MessageID: message.ID, UserID: &ordinaryID, Content: "ordinary public interaction", Visibility: MessageVisibilityPublic},
+		{MessageID: message.ID, UserID: &ordinaryID, Content: "ordinary hidden interaction", Visibility: MessageVisibilityPrivate},
+		{MessageID: message.ID, UserID: &primaryID, Content: "primary hidden interaction", Visibility: MessageVisibilityPrivate},
+	}
+	if err := db.Create(&comments).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	withoutGrant, err := GetStatus(delegated.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withoutGrant.AdminDashboard != nil {
+		t.Fatalf("delegated interactions without comments.view=%#v, want omitted dashboard", withoutGrant.AdminDashboard)
+	}
+
+	if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityCommentsView}); err != nil {
+		t.Fatal(err)
+	}
+	current, err := GetStatus(delegated.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.AdminDashboard == nil || current.AdminDashboard.Interactions == nil || current.AdminDashboard.Interactions.Comments != 1 || current.AdminDashboard.Interactions.Scope != "current" {
+		t.Fatalf("delegated current interaction dashboard=%#v, want comments=1 scope=current", current.AdminDashboard)
+	}
+
+	if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityCommentsView, authorization.CapabilityCommentsViewHidden}); err != nil {
+		t.Fatal(err)
+	}
+	all, err := GetStatus(delegated.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if all.AdminDashboard == nil || all.AdminDashboard.Interactions == nil || all.AdminDashboard.Interactions.Comments != 2 || all.AdminDashboard.Interactions.Scope != "all" {
+		t.Fatalf("delegated all interaction dashboard=%#v, want comments=2 scope=all with primary hidden interaction excluded", all.AdminDashboard)
+	}
+
+	primaryStatus, err := GetStatus(primary.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if primaryStatus.AdminDashboard == nil || primaryStatus.AdminDashboard.Interactions == nil || primaryStatus.AdminDashboard.Interactions.Comments != 3 || primaryStatus.AdminDashboard.Interactions.Scope != "all" {
+		t.Fatalf("primary interaction dashboard=%#v, want comments=3 scope=all", primaryStatus.AdminDashboard)
+	}
+}
+
+func TestGetStatusCombinedDashboardCardsRequireEveryCapability(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "dashboard-combined-primary", IsAdmin: true})
+	delegated := mustCreateUser(t, models.User{Username: "dashboard-combined-delegated", IsAdmin: true})
+	mustCreateUser(t, models.User{Username: "dashboard-combined-ordinary"})
+	if err := db.Create(&models.SiteConfig{StorageEnabled: true}).Error; err != nil {
+		t.Fatal(err)
+	}
+	setting := models.Setting{AllowRegistration: true}
+	if err := db.Create(&setting).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(&setting).Update("allow_registration", false).Error; err != nil {
+		t.Fatal(err)
+	}
+	authorizer := authorization.New(db)
+
+	assertCards := func(grants []authorization.Capability, wantUsers, wantStorage bool) {
+		t.Helper()
+		if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, grants); err != nil {
+			t.Fatal(err)
+		}
+		status, err := GetStatus(delegated.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !wantUsers && !wantStorage {
+			if status.AdminDashboard != nil {
+				t.Fatalf("dashboard=%#v, want omitted until every capability in a card pair is present", status.AdminDashboard)
+			}
+			return
+		}
+		if status.AdminDashboard == nil {
+			t.Fatal("delegated administrator dashboard must be present when a complete card capability pair is granted")
+		}
+		if got := status.AdminDashboard.UsersRegistration != nil; got != wantUsers {
+			t.Fatalf("users/registration card present=%v, want %v for grants %#v", got, wantUsers, grants)
+		}
+		if got := status.AdminDashboard.Storage != nil; got != wantStorage {
+			t.Fatalf("storage card present=%v, want %v for grants %#v", got, wantStorage, grants)
+		}
+		if wantUsers && status.AdminDashboard.UsersRegistration.UserCount != 3 {
+			t.Fatalf("user count=%d, want 3", status.AdminDashboard.UsersRegistration.UserCount)
+		}
+		if wantUsers && status.AdminDashboard.UsersRegistration.RegistrationEnabled {
+			t.Fatal("users/registration card must report disabled registration")
+		}
+		if wantStorage && !status.AdminDashboard.Storage.Enabled {
+			t.Fatal("storage card must report configured cloud storage")
+		}
+	}
+
+	assertCards([]authorization.Capability{authorization.CapabilityUsersView}, false, false)
+	assertCards([]authorization.Capability{authorization.CapabilityRegistrationView}, false, false)
+	assertCards([]authorization.Capability{authorization.CapabilityUsersView, authorization.CapabilityRegistrationView}, true, false)
+	assertCards([]authorization.Capability{authorization.CapabilityStorageView}, false, false)
+	assertCards([]authorization.Capability{authorization.CapabilityDatabaseView}, false, false)
+	assertCards([]authorization.Capability{authorization.CapabilityStorageView, authorization.CapabilityDatabaseView}, false, true)
+}
+
+func TestGetStatusJSONExposesOperationalMetricsOnlyInsideAuthorizedDashboardCards(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "dashboard-json-primary", IsAdmin: true})
+	delegated := mustCreateUser(t, models.User{Username: "dashboard-json-delegated", IsAdmin: true})
+	ordinary := mustCreateUser(t, models.User{Username: "dashboard-json-ordinary"})
+	authorizer := authorization.New(db)
+	if err := db.Create(&models.Message{Content: "dashboard JSON note", UserID: ordinary.ID, Username: ordinary.Username, Visibility: MessageVisibilityPublic}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	marshalStatus := func(userID uint) map[string]any {
+		t.Helper()
+		status, err := GetStatus(userID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		payload, err := json.Marshal(status)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var result map[string]any
+		if err := json.Unmarshal(payload, &result); err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	assertNoLegacyMetrics := func(payload map[string]any) {
+		t.Helper()
+		for _, key := range []string{"total_messages", "total_users", "total_comments", "total_replies", "total_guestbook"} {
+			if _, ok := payload[key]; ok {
+				t.Fatalf("unauthorized top-level operational metric %q leaked in %#v", key, payload)
+			}
+		}
+	}
+
+	ordinaryPayload := marshalStatus(ordinary.ID)
+	assertNoLegacyMetrics(ordinaryPayload)
+	if _, ok := ordinaryPayload["admin_dashboard"]; ok {
+		t.Fatalf("ordinary user received admin_dashboard: %#v", ordinaryPayload)
+	}
+
+	delegatedPayload := marshalStatus(delegated.ID)
+	assertNoLegacyMetrics(delegatedPayload)
+	if _, ok := delegatedPayload["admin_dashboard"]; ok {
+		t.Fatalf("delegated dashboard without grants=%#v, want omitted dashboard", delegatedPayload["admin_dashboard"])
+	}
+
+	if err := authorizer.ReplaceGrants(primary.ID, delegated.ID, []authorization.Capability{authorization.CapabilityNotesView}); err != nil {
+		t.Fatal(err)
+	}
+	delegatedPayload = marshalStatus(delegated.ID)
+	assertNoLegacyMetrics(delegatedPayload)
+	dashboard, ok := delegatedPayload["admin_dashboard"].(map[string]any)
+	if !ok {
+		t.Fatalf("authorized delegated dashboard missing: %#v", delegatedPayload)
+	}
+	if _, ok := dashboard["notes"]; !ok {
+		t.Fatalf("notes.view dashboard missing notes card: %#v", dashboard)
+	}
+	for _, key := range []string{"interactions", "users_registration", "storage"} {
+		if _, ok := dashboard[key]; ok {
+			t.Fatalf("unauthorized dashboard card %q leaked in %#v", key, dashboard)
+		}
+	}
 }
 
 func TestGetStatusSeparatesDashboardMetricsAndSharesSecuritySummary(t *testing.T) {

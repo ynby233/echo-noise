@@ -114,16 +114,26 @@ func TestStatusVoceChatFieldVisibilityHTTPMatrix(t *testing.T) {
 	statusBody := func(t *testing.T, cookies []*http.Cookie, token string) map[string]any {
 		return statusBodyAt(t, "/api/status", cookies, token)
 	}
-	assertFields := func(t *testing.T, body map[string]any, visibleEmails map[uint]bool, visibleNotifications map[uint]bool) {
+	allUsers := []*models.User{primary, delegatedWithUsersView, delegatedWithoutUsersView, ordinaryA, ordinaryB}
+	assertFields := func(t *testing.T, body map[string]any, visibleUsers map[uint]bool, visibleEmails map[uint]bool, visibleNotifications map[uint]bool) {
 		t.Helper()
 		data, ok := body["data"].(map[string]any)
 		if !ok {
 			t.Fatalf("status data missing: %#v", body)
 		}
+		for _, key := range []string{"total_messages", "total_users", "total_comments", "total_replies", "total_guestbook"} {
+			if _, exists := data[key]; exists {
+				t.Errorf("status leaked legacy operational metric %q", key)
+			}
+		}
 		users, ok := data["users"].([]any)
+		if data["users"] == nil {
+			users, ok = []any{}, true
+		}
 		if !ok {
 			t.Fatalf("status users missing: %#v", data)
 		}
+		seenUsers := map[uint]bool{}
 		for _, raw := range users {
 			user, ok := raw.(map[string]any)
 			if !ok {
@@ -134,6 +144,7 @@ func TestStatusVoceChatFieldVisibilityHTTPMatrix(t *testing.T) {
 				t.Fatalf("status user id missing: %#v", user)
 			}
 			userID := uint(id)
+			seenUsers[userID] = true
 			if got, want := hasJSONKey(user, "voce_chat_email"), visibleEmails[userID]; got != want {
 				t.Errorf("user %d email key present=%v, want %v", userID, got, want)
 			}
@@ -146,8 +157,12 @@ func TestStatusVoceChatFieldVisibilityHTTPMatrix(t *testing.T) {
 				}
 			}
 		}
+		for _, user := range allUsers {
+			if got, want := seenUsers[user.ID], visibleUsers[user.ID]; got != want {
+				t.Errorf("user %d present=%v, want %v", user.ID, got, want)
+			}
+		}
 	}
-	allUsers := []*models.User{primary, delegatedWithUsersView, delegatedWithoutUsersView, ordinaryA, ordinaryB}
 	allFields := map[uint]bool{}
 	allNonPrimaryEmails := map[uint]bool{}
 	for _, user := range allUsers {
@@ -158,28 +173,28 @@ func TestStatusVoceChatFieldVisibilityHTTPMatrix(t *testing.T) {
 	}
 	selfFields := func(user *models.User) map[uint]bool { return map[uint]bool{user.ID: true} }
 
-	assertFields(t, statusBody(t, nil, ""), map[uint]bool{}, map[uint]bool{})
-	assertFields(t, statusBody(t, seedSession(ordinaryA), ""), selfFields(ordinaryA), selfFields(ordinaryA))
-	assertFields(t, statusBody(t, nil, ordinaryA.Token), selfFields(ordinaryA), selfFields(ordinaryA))
-	assertFields(t, statusBody(t, seedSession(delegatedWithoutUsersView), ""), selfFields(delegatedWithoutUsersView), selfFields(delegatedWithoutUsersView))
-	assertFields(t, statusBody(t, nil, delegatedWithoutUsersView.Token), selfFields(delegatedWithoutUsersView), selfFields(delegatedWithoutUsersView))
-	assertFields(t, statusBodyAt(t, "/api?include_voce_chat_email=true&user_id=1&export=users", nil, delegatedWithoutUsersView.Token), selfFields(delegatedWithoutUsersView), selfFields(delegatedWithoutUsersView))
-	assertFields(t, statusBody(t, nil, "expired-or-invalid-token"), map[uint]bool{}, map[uint]bool{})
-	assertFields(t, statusBody(t, seedSession(ordinaryA), primary.Token), selfFields(ordinaryA), selfFields(ordinaryA))
+	assertFields(t, statusBody(t, nil, ""), map[uint]bool{}, map[uint]bool{}, map[uint]bool{})
+	assertFields(t, statusBody(t, seedSession(ordinaryA), ""), selfFields(ordinaryA), selfFields(ordinaryA), selfFields(ordinaryA))
+	assertFields(t, statusBody(t, nil, ordinaryA.Token), selfFields(ordinaryA), selfFields(ordinaryA), selfFields(ordinaryA))
+	assertFields(t, statusBody(t, seedSession(delegatedWithoutUsersView), ""), selfFields(delegatedWithoutUsersView), selfFields(delegatedWithoutUsersView), selfFields(delegatedWithoutUsersView))
+	assertFields(t, statusBody(t, nil, delegatedWithoutUsersView.Token), selfFields(delegatedWithoutUsersView), selfFields(delegatedWithoutUsersView), selfFields(delegatedWithoutUsersView))
+	assertFields(t, statusBodyAt(t, "/api?include_voce_chat_email=true&user_id=1&export=users", nil, delegatedWithoutUsersView.Token), selfFields(delegatedWithoutUsersView), selfFields(delegatedWithoutUsersView), selfFields(delegatedWithoutUsersView))
+	assertFields(t, statusBody(t, nil, "expired-or-invalid-token"), map[uint]bool{}, map[uint]bool{}, map[uint]bool{})
+	assertFields(t, statusBody(t, seedSession(ordinaryA), primary.Token), selfFields(ordinaryA), selfFields(ordinaryA), selfFields(ordinaryA))
 
 	if err := db.Create(&models.AdminCapabilityGrant{UserID: delegatedWithUsersView.ID, Capability: string(authorization.CapabilityUsersView), GrantedByUserID: primary.ID}).Error; err != nil {
 		t.Fatalf("grant users.view: %v", err)
 	}
-	assertFields(t, statusBody(t, seedSession(delegatedWithUsersView), ""), allNonPrimaryEmails, selfFields(delegatedWithUsersView))
-	assertFields(t, statusBody(t, nil, delegatedWithUsersView.Token), allNonPrimaryEmails, selfFields(delegatedWithUsersView))
+	assertFields(t, statusBody(t, seedSession(delegatedWithUsersView), ""), allFields, allNonPrimaryEmails, selfFields(delegatedWithUsersView))
+	assertFields(t, statusBody(t, nil, delegatedWithUsersView.Token), allFields, allNonPrimaryEmails, selfFields(delegatedWithUsersView))
 
 	if err := db.Where("user_id = ? AND capability = ?", delegatedWithUsersView.ID, authorization.CapabilityUsersView).Delete(&models.AdminCapabilityGrant{}).Error; err != nil {
 		t.Fatalf("revoke users.view: %v", err)
 	}
-	assertFields(t, statusBody(t, seedSession(delegatedWithUsersView), ""), selfFields(delegatedWithUsersView), selfFields(delegatedWithUsersView))
-	assertFields(t, statusBody(t, nil, delegatedWithUsersView.Token), selfFields(delegatedWithUsersView), selfFields(delegatedWithUsersView))
-	assertFields(t, statusBody(t, seedSession(primary), ""), allNonPrimaryEmails, allFields)
-	assertFields(t, statusBody(t, nil, primary.Token), allNonPrimaryEmails, allFields)
+	assertFields(t, statusBody(t, seedSession(delegatedWithUsersView), ""), selfFields(delegatedWithUsersView), selfFields(delegatedWithUsersView), selfFields(delegatedWithUsersView))
+	assertFields(t, statusBody(t, nil, delegatedWithUsersView.Token), selfFields(delegatedWithUsersView), selfFields(delegatedWithUsersView), selfFields(delegatedWithUsersView))
+	assertFields(t, statusBody(t, seedSession(primary), ""), allFields, allNonPrimaryEmails, allFields)
+	assertFields(t, statusBody(t, nil, primary.Token), allFields, allNonPrimaryEmails, allFields)
 }
 
 func TestDelegatedAdminCannotReplacePrimaryAdminThroughRoleEndpoint(t *testing.T) {

@@ -23,34 +23,45 @@ assert(
 
 assert(
   component.includes('<span>运营概览</span>') &&
-    component.includes('v-if="isAdmin" class="admin-dashboard-group"') &&
+    component.includes('v-if="dashboardOperationCards.length > 0" class="admin-dashboard-group"') &&
     component.includes('v-for="item in dashboardOperationCards"') &&
-    component.includes("label: '笔记总数'") &&
-    component.includes("label: '全站反馈'") &&
-    component.includes("label: '用户与注册'") &&
-    component.includes("label: '存储方案'") &&
-    component.includes('stats.totalCommentCount + stats.totalReplyCount + stats.totalGuestbookCount') &&
-    component.includes('`评论 ${stats.totalCommentCount} / 回复 ${stats.totalReplyCount} / 留言 ${stats.totalGuestbookCount}`'),
-  'administrator operation overview must use four cards and keep comments/replies/guestbook separately visible'
+    component.includes('resolveAdminDashboardPresentation') &&
+    component.includes('(userStore.status as any)?.admin_dashboard'),
+  'operation overview must render only capability-filtered dashboard cards from the backend response'
 )
 
 assert(
   component.includes('<span>系统信息</span>') &&
     component.includes('v-for="item in systemSummaryItems"') &&
+    component.includes("{ label: '系统管理员'") &&
+    component.includes("{ label: '当前用户'") &&
+    component.includes("{ label: '个人笔记'") &&
+    component.includes("{ label: '系统版本'") &&
+    component.includes("{ label: '注册状态'") &&
+    component.includes("{ label: '安全策略'") &&
     !component.includes('id="system-section"') &&
     !component.includes('admin-dashboard-panels-grid') &&
     !component.includes('admin-calendar-shell') &&
     !component.includes('日历时间'),
-  'system information must be inside the dashboard card without the old calendar or a separate section'
+  'all six public system-information cards must remain inside the dashboard without the old calendar or a separate section'
 )
 
 assert(
   component.includes("{ label: '个人笔记'") &&
     component.includes("desc: '当前账户所发布的笔记总数'") &&
-    component.includes("isAdmin.value ? '拥有管理员权限' : '拥有普通用户权限'") &&
+    component.includes("isPrimaryAdmin.value ? '站长账号' : (isAdmin.value ? '受托管理员账号' : '普通用户账号')") &&
     component.includes('status.auto_ban_enabled ?? status.autoBanEnabled ?? securityConfig.autoBanEnabled') &&
+    component.includes("autoBanEnabled ? '系统已启用自动封禁' : '系统使用手动防护'") &&
+    !component.includes("isAdmin.value ? '可在下方安全面板配置'") &&
     component.includes('await Promise.all([refreshSecurity(), userStore.getStatus(true)])'),
-  'system cards must use the requested role copy, personal note scope, and shared auto-ban summary'
+  'the six public system cards must preserve personal scope, exact role copy, and shared auto-ban summary'
+)
+
+assert(
+  component.includes("window.addEventListener('admin-capabilities-invalidated', refreshDashboardAfterCapabilityChange)") &&
+    component.includes("window.removeEventListener('admin-capabilities-invalidated', refreshDashboardAfterCapabilityChange)") &&
+    component.includes('void userStore.getStatus(true)'),
+  'dashboard statistics must refresh when a capability snapshot is invalidated'
 )
 
 assert(
@@ -70,10 +81,10 @@ assert(
 
 for (const field of [
   'personal_messages?: number',
-  'total_guestbook?: number',
   'received_likes?: number',
   'received_guestbook?: number',
   'auto_ban_enabled?: boolean',
+  'admin_dashboard?: {',
 ]) {
   assert(models.includes(field), `Status type must include ${field}`)
 }

@@ -10,7 +10,7 @@
           <img :src="avatarSrc" class="admin-sidebar-avatar w-14 h-14 rounded-full ring-2 ring-indigo-400/60 shadow-lg object-cover" alt="avatar" @error="onAvatarImgError" />
           <div class="w-full text-center transition-all duration-200" :class="sidebarCollapsed ? 'max-h-0 opacity-0 pointer-events-none' : 'max-h-20 opacity-100'">
             <div class="font-semibold text-base truncate">{{ displayUsername }}</div>
-            <div class="text-xs" :class="theme.mutedText">{{ sidebarNoteCountLabel }} {{ dashboardStats.messageCount }}</div>
+            <div class="text-xs" :class="theme.mutedText">{{ sidebarNoteCountLabel }} {{ sidebarNoteCount }}</div>
           </div>
         </div>
         <nav class="admin-sidebar-nav flex-1 overflow-y-auto px-2 py-3 space-y-2">
@@ -153,7 +153,7 @@
                   </div>
                 </section>
 
-                <section v-if="isAdmin" class="admin-dashboard-group" aria-labelledby="dashboard-operation-title">
+                <section v-if="dashboardOperationCards.length > 0" class="admin-dashboard-group" aria-labelledby="dashboard-operation-title">
                   <div id="dashboard-operation-title" class="admin-dashboard-group-title" :class="theme.text">
                     <UIcon name="i-heroicons-presentation-chart-line" class="w-4 h-4" />
                     <span>运营概览</span>
@@ -2549,6 +2549,7 @@ import { makeEmptyAdConfig, normalizeAdConfigs, resolveAdImageURL, type AdConfig
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 import { resolveAccessibleAdminSection } from '~/utils/admin-section-access'
 import { resolveUserManagementActions, resolveUserManagementVoceChatEmail } from '~/utils/user-management-actions'
+import { resolveAdminDashboardPresentation } from '~/utils/admin-dashboard-policy'
 import adminSectionCapabilities from '~/config/admin-section-capabilities.json'
 import { useRuntimeConfig, useHead, useRouter } from '#imports'
 const formatShanghai = (s: string) => {
@@ -2961,30 +2962,25 @@ const toCount = (v: any) => {
 }
 const dashboardStats = computed(() => {
   const status: any = userStore?.status || {}
-  const messageCount = toCount(status.total_messages ?? status.totalMessages ?? userMessagesCount.value)
   const personalMessageCount = toCount(status.personal_messages ?? status.personalMessages ?? userMessagesCount.value)
-  const totalUserCount = toCount(status.total_users ?? status.totalUsers ?? status.users_count ?? status.users?.length)
-  const totalCommentCount = toCount(status.total_comments ?? status.totalComments ?? status.comments_count)
-  const totalReplyCount = toCount(status.total_replies ?? status.totalReplies ?? status.replies_count)
-  const totalGuestbookCount = toCount(status.total_guestbook ?? status.totalGuestbook)
   const receivedLikeCount = toCount(status.received_likes ?? status.receivedLikes)
   const receivedCommentCount = toCount(status.received_comments ?? status.receivedComments)
   const receivedReplyCount = toCount(status.received_replies ?? status.receivedReplies)
   const receivedGuestbookCount = toCount(status.received_guestbook ?? status.receivedGuestbook)
   return {
-    messageCount,
     personalMessageCount,
-    totalUserCount,
-    totalCommentCount,
-    totalReplyCount,
-    totalGuestbookCount,
     receivedLikeCount,
     receivedCommentCount,
     receivedReplyCount,
     receivedGuestbookCount,
   }
 })
-const sidebarNoteCountLabel = computed(() => (isAdmin.value ? '全站笔记' : '我的笔记'))
+const adminDashboardPresentation = computed(() => resolveAdminDashboardPresentation((userStore.status as any)?.admin_dashboard))
+const sidebarNoteCountLabel = computed(() => adminDashboardPresentation.value.sidebarNoteLabel)
+const sidebarNoteCount = computed(() => {
+  const managed = (userStore.status as any)?.admin_dashboard?.notes?.count
+  return managed === undefined || managed === null ? dashboardStats.value.personalMessageCount : toCount(managed)
+})
 const dashboardInteractionCards = computed(() => {
   const stats = dashboardStats.value
   const interactionCards = [
@@ -3014,33 +3010,7 @@ const dashboardInteractionCards = computed(() => {
   return interactionCards
 })
 const dashboardOperationCards = computed(() => {
-  const stats = dashboardStats.value
-  return [
-    {
-      label: '笔记总数',
-      value: `${stats.messageCount} 条`,
-      desc: '全站笔记总数',
-      icon: 'i-heroicons-document-text'
-    },
-    {
-      label: '全站反馈',
-      value: `${stats.totalCommentCount + stats.totalReplyCount + stats.totalGuestbookCount} 条`,
-      desc: `评论 ${stats.totalCommentCount} / 回复 ${stats.totalReplyCount} / 留言 ${stats.totalGuestbookCount}`,
-      icon: 'i-heroicons-chat-bubble-left-ellipsis'
-    },
-    {
-      label: '用户与注册',
-      value: `${stats.totalUserCount} 个用户`,
-      desc: registerEnabled.value ? '当前允许新用户注册' : '当前仅允许已有用户登录',
-      icon: 'i-heroicons-users'
-    },
-    {
-      label: '存储方案',
-      value: storageEnabled.value ? '云端' : '本地',
-      desc: storageEnabled.value ? '已接入对象存储' : '使用本地磁盘',
-      icon: 'i-heroicons-circle-stack'
-    }
-  ]
+  return adminDashboardPresentation.value.operationCards
 })
 const systemSummaryItems = computed(() => {
   const status: any = userStore?.status || {}
@@ -3053,11 +3023,11 @@ const systemSummaryItems = computed(() => {
   const securityText = autoBanEnabled ? '自动封禁中' : '手动防护'
   return [
     { label: '系统管理员', value: adminName, desc: '后台默认管理账号' },
-    { label: '当前用户', value: loginName, desc: isAdmin.value ? '拥有管理员权限' : '拥有普通用户权限' },
+    { label: '当前用户', value: loginName, desc: isPrimaryAdmin.value ? '站长账号' : (isAdmin.value ? '受托管理员账号' : '普通用户账号') },
     { label: '个人笔记', value: personalMessages, desc: '当前账户所发布的笔记总数' },
     { label: '系统版本', value: versionText, desc: versionInfo.hasUpdate && versionInfo.latestVersion ? `可更新到 ${versionInfo.latestVersion}` : '当前版本状态正常' },
     { label: '注册状态', value: registerText, desc: registerEnabled.value ? '允许新用户创建账户' : '仅限已有账户登录' },
-    { label: '安全策略', value: securityText, desc: autoBanEnabled ? '系统已启用自动封禁' : (isAdmin.value ? '可在下方安全面板配置' : '系统使用手动防护') }
+    { label: '安全策略', value: securityText, desc: autoBanEnabled ? '系统已启用自动封禁' : '系统使用手动防护' }
   ]
 })
 const lifePreview = computed(() => {
@@ -4162,6 +4132,10 @@ const refreshPermittedAdminData = async () => {
 }
 
 onMounted(refreshPermittedAdminData)
+
+const refreshDashboardAfterCapabilityChange = () => { void userStore.getStatus(true) }
+onMounted(() => window.addEventListener('admin-capabilities-invalidated', refreshDashboardAfterCapabilityChange))
+onUnmounted(() => window.removeEventListener('admin-capabilities-invalidated', refreshDashboardAfterCapabilityChange))
 
 watch(() => isAdmin.value, async (v) => {
   if (v) await refreshPermittedAdminData()
