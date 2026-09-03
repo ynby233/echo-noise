@@ -10,7 +10,7 @@ assert.ok(sectionType, 'StatusPanel must declare the admin section key union')
 const sections = [...sectionType[1].matchAll(/'([^']+)'/g)].map((match) => match[1])
 const intentionallyUnprotected = new Set([
   'dashboard', 'user', 'hitokoto', 'life-countdown', 'widgets',
-  'personal-notes', 'personal-note-recycle-bin', 'personal-interactions', 'personal-interaction-recycle-bin',
+  'system-push', 'personal-notes', 'personal-note-recycle-bin', 'personal-interactions', 'personal-interaction-recycle-bin',
 ])
 const primaryAdminOnly = new Set(['site-rss'])
 

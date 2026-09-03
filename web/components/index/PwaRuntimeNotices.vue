@@ -64,7 +64,7 @@
           </button>
         </template>
 
-        <p class="guide-footnote">安装不会自动开启系统推送。登录后可在“通知”页面单独选择是否接收，以及接收哪些类型。</p>
+        <p class="guide-footnote">安装不会自动开启系统推送。登录后可在后台“内容与互动”→“系统推送”中选择是否接收，以及接收哪些类型。</p>
       </UCard>
     </UModal>
   </div>

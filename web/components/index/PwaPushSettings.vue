@@ -1,9 +1,9 @@
 <template>
-  <section class="push-settings" :class="{ 'is-dark': dark }" aria-labelledby="push-settings-title">
+  <section class="push-settings" :class="{ 'is-dark': dark, 'is-embedded': embedded }" aria-labelledby="push-settings-title">
     <div class="push-settings-head">
       <div>
         <div class="push-settings-eyebrow">当前浏览器</div>
-        <h3 id="push-settings-title">系统推送</h3>
+        <h3 id="push-settings-title">{{ title || '系统推送' }}</h3>
         <p>{{ statusDescription }}</p>
       </div>
       <span class="push-status" :class="statusClass">
@@ -102,7 +102,7 @@ import { useToast } from '#ui/composables/useToast'
 import { usePwaManager } from '~/composables/usePwaManager'
 import type { WebPushPreferences } from '~/types/pwa'
 
-defineProps<{ dark?: boolean }>()
+defineProps<{ dark?: boolean; embedded?: boolean; title?: string }>()
 
 const pwa = usePwaManager()
 const loading = ref(true)
@@ -253,8 +253,9 @@ onMounted(load)
 </script>
 
 <style scoped>
-.push-settings { --push-ink:#172033; --push-muted:#64748b; --push-surface:#f8fafc; --push-line:#dbe3ee; --push-accent:#ea580c; margin-bottom:18px; border:1px solid var(--push-line); border-radius:16px; padding:18px; color:var(--push-ink); background:linear-gradient(135deg,rgba(255,247,237,.92),rgba(248,250,252,.96) 48%); }
-.push-settings.is-dark { --push-ink:#f8fafc; --push-muted:#a9b6c8; --push-surface:#1f2a38; --push-line:rgba(148,163,184,.24); background:linear-gradient(135deg,rgba(67,36,22,.46),rgba(30,41,55,.96) 48%); }
+.push-settings { --push-ink:#172033; --push-muted:#64748b; --push-surface:#f8fafc; --push-line:#dbe3ee; --push-accent:#165dff; margin-bottom:18px; border:1px solid var(--push-line); border-radius:16px; padding:18px; color:var(--push-ink); background:linear-gradient(135deg,rgba(239,246,255,.94),rgba(248,250,252,.98) 48%); }
+.push-settings.is-dark { --push-ink:#f8fafc; --push-muted:#c9cdd4; --push-surface:rgba(255,255,255,.06); --push-line:rgba(201,205,212,.24); background:linear-gradient(135deg,rgba(22,93,255,.12),rgba(255,255,255,.04) 48%); }
+.push-settings.is-embedded { margin:0; border:0; border-radius:0; padding:0; color:inherit; background:transparent; }
 .push-settings-head,.push-primary-row,.push-preferences-heading,.push-footer-actions { display:flex; align-items:center; justify-content:space-between; gap:16px; }
 .push-settings-eyebrow { margin-bottom:3px; color:var(--push-accent); font-size:11px; font-weight:800; letter-spacing:.12em; }
 .push-settings h3 { margin:0; font-size:18px; line-height:1.3; font-weight:780; }
@@ -278,7 +279,7 @@ onMounted(load)
 .push-primary-row { margin-top:15px; border-top:1px solid var(--push-line); padding-top:15px; }
 .push-primary-copy strong,.push-preferences-heading strong { display:block; font-size:14px; }
 .push-primary-action,.push-secondary-action,.push-test-action { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:36px; border-radius:10px; padding:0 13px; font-size:12px; font-weight:760; transition:transform .12s ease,opacity .12s ease,background .12s ease; }
-.push-primary-action { color:#fff; background:#ea580c; box-shadow:0 6px 18px rgba(234,88,12,.18); }
+.push-primary-action { color:#fff; background:#165dff; box-shadow:0 6px 18px rgba(22,93,255,.18); }
 .push-primary-action.is-disable { color:var(--push-ink); border:1px solid var(--push-line); background:var(--push-surface); box-shadow:none; }
 .push-primary-action:disabled,.push-secondary-action:disabled,.push-test-action:disabled { cursor:not-allowed; opacity:.48; }
 .push-primary-action:not(:disabled):active,.push-secondary-action:not(:disabled):active,.push-test-action:not(:disabled):active { transform:translateY(1px); }
@@ -292,16 +293,17 @@ onMounted(load)
 .push-option input { position:absolute; opacity:0; pointer-events:none; }
 .push-switch { position:relative; width:38px; height:22px; border-radius:999px; background:#cbd5e1; transition:background .15s ease; }
 .push-switch::after { content:''; position:absolute; left:3px; top:3px; width:16px; height:16px; border-radius:999px; background:#fff; box-shadow:0 1px 4px rgba(15,23,42,.28); transition:transform .15s ease; }
-.push-option input:checked + .push-switch { background:#ea580c; }
+.push-option input:checked + .push-switch { background:#165dff; }
 .push-option input:checked + .push-switch::after { transform:translateX(16px); }
-.push-option input:focus-visible + .push-switch { outline:3px solid rgba(249,115,22,.28); outline-offset:2px; }
+.push-option input:focus-visible + .push-switch { outline:3px solid rgba(22,93,255,.24); outline-offset:2px; }
 .preview-option { margin-top:13px; }
 .push-footer-actions { justify-content:flex-end; margin-top:14px; }
 .push-secondary-action { color:#fff; background:#334155; }
-.push-test-action { color:var(--push-accent); border:1px solid rgba(234,88,12,.32); background:rgba(255,247,237,.68); }
-.is-dark .push-test-action { background:rgba(124,45,18,.24); }
+.push-test-action { color:var(--push-accent); border:1px solid rgba(22,93,255,.32); background:rgba(239,246,255,.8); }
+.is-dark .push-test-action { background:rgba(22,93,255,.12); }
 @media (max-width:640px) {
   .push-settings { padding:14px; }
+  .push-settings.is-embedded { padding:0; }
   .push-settings-head,.push-primary-row { align-items:flex-start; flex-direction:column; }
   .push-primary-action { width:100%; }
   .push-footer-actions { align-items:stretch; flex-direction:column; }

@@ -322,80 +322,6 @@
                     </div>
 
                     <div class="admin-setting-block">
-                        <div class="admin-binding-summary">
-                          <div>
-                            <div class="admin-setting-title" :class="theme.text">本站邮箱</div>
-                            <p class="admin-setting-desc" :class="theme.mutedText">用于接收本站邮件通知、验证码和账号安全提醒。</p>
-                          </div>
-                          <span v-if="userStore.user?.email" :class="[theme.text, theme.border, 'inline-flex items-center px-2 py-0.5 rounded-md break-all']">
-                            {{ userStore.user?.email }}
-                          </span>
-                          <span v-else class="inline-flex items-center px-2 py-0.5 rounded-md text-amber-400 border border-amber-400/40">未绑定邮箱，请先绑定邮箱</span>
-                        </div>
-
-                        <div v-if="!userStore.user?.email" class="admin-binding-actions">
-                          <div class="admin-email-bind-row">
-                            <UInput v-model="userForm.email" type="email" placeholder="输入邮箱" class="min-w-0 flex-1" />
-                            <UButton color="indigo" variant="soft" class="whitespace-nowrap" @click="sendBindEmailCode">发送验证码</UButton>
-                            <UInput v-model="userForm.emailCode" placeholder="验证码" class="admin-verification-input" />
-                            <UButton color="primary" class="shadow whitespace-nowrap" @click="verifyBindEmail">立即绑定</UButton>
-                          </div>
-                        </div>
-
-                        <div v-else class="admin-binding-actions">
-                          <div class="admin-verification-row admin-verification-row--button-first">
-                            <UButton color="indigo" variant="soft" class="whitespace-nowrap" @click="sendChangeEmailCode">向当前邮箱发送验证码</UButton>
-                            <UInput v-model="userForm.changeCode" placeholder="收到的验证码" class="admin-verification-input" />
-                          </div>
-                          <div class="admin-email-action-row">
-                            <UInput v-model="userForm.newEmail" type="email" placeholder="新的邮箱" class="min-w-0 flex-1" />
-                            <UButton color="primary" class="shadow whitespace-nowrap" @click="changeEmail">提交更换</UButton>
-                          </div>
-                          <div v-if="awaitingNewEmailVerify" class="admin-verification-row">
-                            <UInput v-model="userForm.emailCode" placeholder="新邮箱验证码" class="admin-verification-input" />
-                            <UButton color="primary" class="shadow whitespace-nowrap" @click="confirmChangeEmail">确认更换</UButton>
-                          </div>
-                        </div>
-                    </div>
-
-                    <div class="admin-setting-block">
-                        <div class="admin-binding-summary">
-                          <div>
-                            <div class="admin-setting-title" :class="theme.text">VoceChat 账号与推送</div>
-                            <p class="admin-setting-desc" :class="theme.mutedText">用于校验联系人可见范围；绑定后还可以接收本站通知推送。</p>
-                          </div>
-                          <span v-if="registeredVoceChatEmail" :class="[theme.text, theme.border, 'inline-flex items-center px-2 py-0.5 rounded-md break-all text-right']">
-                            {{ registeredVoceChatEmail }}
-                          </span>
-                          <span v-else class="inline-flex items-center px-2 py-0.5 rounded-md text-slate-400 border border-slate-400/30">未绑定 VoceChat 邮箱</span>
-                        </div>
-
-                        <div v-if="isPrimaryAdmin" class="admin-vc-binding-panel border" :class="[theme.subtleBg, theme.border]">
-                          <div>
-                            <div class="text-sm font-medium" :class="theme.text">{{ registeredVoceChatEmail ? '更新绑定信息' : '绑定 VoceChat 账号' }}</div>
-                            <p class="admin-setting-desc" :class="theme.mutedText">填写同一 VoceChat 账号的邮箱和密码，保存时会实际登录校验。已绑定后仍可在这里更新账号信息。</p>
-                          </div>
-                          <div class="admin-vc-binding-form">
-                            <UInput v-model="primaryVoceChatBindingEmail" type="email" :placeholder="registeredVoceChatEmail || 'VoceChat 邮箱'" class="min-w-0" />
-                            <UInput v-model="primaryVoceChatBindingPassword" type="password" placeholder="对应 VoceChat 账户密码" class="min-w-0" />
-                            <UButton size="sm" color="primary" class="shadow whitespace-nowrap" :loading="bindingPrimaryVoceChatEmail" :disabled="!primaryVoceChatBindingEmail.trim() || !primaryVoceChatBindingPassword" @click="bindPrimaryVoceChatEmail">校验并保存</UButton>
-                          </div>
-                          <p class="admin-setting-desc" :class="theme.mutedText">本站密码不会同步修改此密码；凭据失效时，VC推送停止，联系人可见内容按私密处理，并在通知中心提醒一次。</p>
-                        </div>
-
-                        <div class="admin-vc-push-row" :class="theme.border">
-                          <div>
-                            <div class="text-sm font-medium" :class="theme.text">接收 VoceChat 推送</div>
-                            <p class="admin-setting-desc" :class="theme.mutedText">开启后，站内通知会同步推送到上方绑定的 VoceChat 账号。</p>
-                          </div>
-                          <div class="flex items-center gap-3 justify-end shrink-0">
-                            <UToggle v-model="userForm.voceChatNotificationEnabled" :disabled="!registeredVoceChatEmail" />
-                            <UButton size="xs" color="primary" class="shadow" :disabled="!registeredVoceChatEmail" @click="updateVoceChatNotificationPreference">保存</UButton>
-                          </div>
-                        </div>
-                      </div>
-
-                    <div class="admin-setting-block">
                       <div class="admin-setting-heading">
                         <div>
                           <div class="admin-setting-title" :class="theme.text">密码设置</div>
@@ -422,6 +348,99 @@
                       </div>
                     </div>
 
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="system-push-section" v-if="isLogin && isSectionVisible('system-push')" class="col-span-12">
+            <div :class="adminShellCardClass">
+              <div class="admin-system-push-header" :class="adminSectionHeaderClass">
+                <div class="font-semibold flex items-center gap-2" :class="theme.text">
+                  <UIcon name="i-heroicons-bell-alert" class="w-5 h-5" />
+                  <span>系统推送</span>
+                </div>
+                <p class="admin-system-push-summary" :class="theme.mutedText">管理当前浏览器的系统通知、本站邮箱与 VoceChat 推送渠道。</p>
+              </div>
+              <div class="admin-system-push-grid">
+                <div class="admin-setting-block admin-system-push-browser">
+                  <PwaPushSettings :dark="panelTheme !== 'light'" embedded title="浏览器系统推送" />
+                </div>
+
+                <div class="admin-setting-stack admin-system-push-channels">
+                  <div class="admin-setting-block">
+                    <div class="admin-binding-summary">
+                      <div>
+                        <div class="admin-setting-title" :class="theme.text">本站邮箱</div>
+                        <p class="admin-setting-desc" :class="theme.mutedText">用于接收本站邮件通知、验证码和账号安全提醒。</p>
+                      </div>
+                      <span v-if="userStore.user?.email" :class="[theme.text, theme.border, 'admin-binding-value inline-flex items-center px-2 py-0.5 rounded-md break-all']">
+                        {{ userStore.user?.email }}
+                      </span>
+                      <span v-else class="admin-binding-value inline-flex items-center px-2 py-0.5 rounded-md text-amber-400 border border-amber-400/40">未绑定邮箱，请先绑定邮箱</span>
+                    </div>
+
+                    <div v-if="!userStore.user?.email" class="admin-binding-actions">
+                      <div class="admin-email-bind-row">
+                        <UInput v-model="userForm.email" type="email" placeholder="输入邮箱" class="min-w-0 flex-1" />
+                        <UButton color="indigo" variant="soft" class="whitespace-nowrap" @click="sendBindEmailCode">发送验证码</UButton>
+                        <UInput v-model="userForm.emailCode" placeholder="验证码" class="admin-verification-input" />
+                        <UButton color="primary" class="shadow whitespace-nowrap" @click="verifyBindEmail">立即绑定</UButton>
+                      </div>
+                    </div>
+
+                    <div v-else class="admin-binding-actions">
+                      <div class="admin-verification-row admin-verification-row--button-first">
+                        <UButton color="indigo" variant="soft" class="whitespace-nowrap" @click="sendChangeEmailCode">向当前邮箱发送验证码</UButton>
+                        <UInput v-model="userForm.changeCode" placeholder="收到的验证码" class="admin-verification-input" />
+                      </div>
+                      <div class="admin-email-action-row">
+                        <UInput v-model="userForm.newEmail" type="email" placeholder="新的邮箱" class="min-w-0 flex-1" />
+                        <UButton color="primary" class="shadow whitespace-nowrap" @click="changeEmail">提交更换</UButton>
+                      </div>
+                      <div v-if="awaitingNewEmailVerify" class="admin-verification-row">
+                        <UInput v-model="userForm.emailCode" placeholder="新邮箱验证码" class="admin-verification-input" />
+                        <UButton color="primary" class="shadow whitespace-nowrap" @click="confirmChangeEmail">确认更换</UButton>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="admin-setting-block">
+                    <div class="admin-binding-summary">
+                      <div>
+                        <div class="admin-setting-title" :class="theme.text">VoceChat 账号与推送</div>
+                        <p class="admin-setting-desc" :class="theme.mutedText">用于校验联系人可见范围；绑定后还可以接收本站通知推送。</p>
+                      </div>
+                      <span v-if="registeredVoceChatEmail" :class="[theme.text, theme.border, 'admin-binding-value inline-flex items-center px-2 py-0.5 rounded-md break-all']">
+                        {{ registeredVoceChatEmail }}
+                      </span>
+                      <span v-else class="admin-binding-value inline-flex items-center px-2 py-0.5 rounded-md text-slate-400 border border-slate-400/30">未绑定 VoceChat 邮箱</span>
+                    </div>
+
+                    <div v-if="isPrimaryAdmin" class="admin-vc-binding-panel border" :class="[theme.subtleBg, theme.border]">
+                      <div>
+                        <div class="text-sm font-medium" :class="theme.text">{{ registeredVoceChatEmail ? '更新绑定信息' : '绑定 VoceChat 账号' }}</div>
+                        <p class="admin-setting-desc" :class="theme.mutedText">填写同一 VoceChat 账号的邮箱和密码，保存时会实际登录校验。已绑定后仍可在这里更新账号信息。</p>
+                      </div>
+                      <div class="admin-vc-binding-form">
+                        <UInput v-model="primaryVoceChatBindingEmail" type="email" :placeholder="registeredVoceChatEmail || 'VoceChat 邮箱'" class="min-w-0" />
+                        <UInput v-model="primaryVoceChatBindingPassword" type="password" placeholder="对应 VoceChat 账户密码" class="min-w-0" />
+                        <UButton size="sm" color="primary" class="shadow whitespace-nowrap" :loading="bindingPrimaryVoceChatEmail" :disabled="!primaryVoceChatBindingEmail.trim() || !primaryVoceChatBindingPassword" @click="bindPrimaryVoceChatEmail">校验并保存</UButton>
+                      </div>
+                      <p class="admin-setting-desc" :class="theme.mutedText">本站密码不会同步修改此密码；凭据失效时，VC 推送停止，联系人可见内容按私密处理，并在通知中心提醒一次。</p>
+                    </div>
+
+                    <div class="admin-vc-push-row" :class="theme.border">
+                      <div>
+                        <div class="text-sm font-medium" :class="theme.text">接收 VoceChat 推送</div>
+                        <p class="admin-setting-desc" :class="theme.mutedText">开启后，站内通知会同步推送到上方绑定的 VoceChat 账号。</p>
+                      </div>
+                      <div class="flex items-center gap-3 justify-end shrink-0">
+                        <UToggle v-model="userForm.voceChatNotificationEnabled" :disabled="!registeredVoceChatEmail" />
+                        <UButton size="xs" color="primary" class="shadow" :disabled="!registeredVoceChatEmail" @click="updateVoceChatNotificationPreference">保存</UButton>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2519,6 +2538,7 @@ import AttachmentManager from '~/components/admin/AttachmentManager.vue'
 import NoteManager from '~/components/admin/NoteManager.vue'
 import CommentManager from '~/components/admin/CommentManager.vue'
 import PersonalContentManager from '~/components/index/PersonalContentManager.vue'
+import PwaPushSettings from '~/components/index/PwaPushSettings.vue'
 import ImageCropperModal from '~/components/admin/ImageCropperModal.vue'
 import AdminAnnouncementManager from '~/components/admin/AdminAnnouncementManager.vue'
 import { getRequest, putRequest, postRequest, deleteRequest } from '~/utils/api'
@@ -2549,7 +2569,7 @@ type AdminSectionKey =
   'site-default-theme' | 'site-social-links' | 'site-ads' | 'site-feed' | 'site-rss' | 'hitokoto' | 'life-countdown' |
   'site-configs' | 'comments' | 'email' | 'admin-users' | 'registration-review' | 'widgets' |
   'storage' | 'authorization' | 'admin-audit' | 'notes' | 'recycle-bin' | 'comment-recycle-bin' |
-  'personal-notes' | 'personal-note-recycle-bin' | 'personal-interactions' | 'personal-interaction-recycle-bin'
+  'system-push' | 'personal-notes' | 'personal-note-recycle-bin' | 'personal-interactions' | 'personal-interaction-recycle-bin'
 const activeSection = ref<AdminSectionKey>('dashboard')
 type AdminNavItem = { key: AdminSectionKey, label: string, icon: string }
 type AdminNavGroup = { key: string, label: string, icon: string, items: AdminNavItem[] }
@@ -2562,7 +2582,7 @@ const { capabilities: adminCapabilities, isPrimaryAdmin, isReady: adminCapabilit
 const canViewAdminAudit = computed(() => can('audit.view'))
 const sectionCapabilities: Partial<Record<AdminSectionKey, string>> = adminSectionCapabilities
 const canSection = (section: AdminSectionKey) => {
-  if (!isAdmin.value) return ['dashboard', 'user', 'widgets', 'personal-notes', 'personal-note-recycle-bin', 'personal-interactions', 'personal-interaction-recycle-bin'].includes(section)
+  if (!isAdmin.value) return ['dashboard', 'user', 'widgets', 'system-push', 'personal-notes', 'personal-note-recycle-bin', 'personal-interactions', 'personal-interaction-recycle-bin'].includes(section)
   if (section === 'site-rss') return isPrimaryAdmin.value
   const capability = sectionCapabilities[section]
   return !capability || can(capability)
@@ -2601,6 +2621,7 @@ const adminNavGroups = computed<AdminNavGroup[]>(() => {
       label: '内容与互动',
       icon: 'i-heroicons-puzzle-piece',
       items: [
+        { key: 'system-push', label: '系统推送', icon: 'i-heroicons-bell-alert' },
         { key: 'personal-notes', label: '个人笔记', icon: 'i-heroicons-document-text' },
         { key: 'personal-note-recycle-bin', label: '个人笔记回收站', icon: 'i-heroicons-trash' },
         { key: 'personal-interactions', label: '个人互动', icon: 'i-heroicons-chat-bubble-left-right' },
@@ -7873,6 +7894,38 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   flex-direction: column;
   gap: 16px;
 }
+.admin-system-push-summary {
+  max-width: 560px;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: right;
+}
+.admin-system-push-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  padding: 0 16px 16px;
+}
+.admin-system-push-browser,
+.admin-system-push-channels {
+  min-width: 0;
+}
+.admin-system-push-channels .admin-email-bind-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.admin-system-push-channels .admin-binding-summary {
+  flex-direction: column;
+  gap: 10px;
+}
+.admin-binding-value {
+  max-width: 100%;
+  align-self: flex-start;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.admin-system-push-channels .admin-vc-binding-form {
+  grid-template-columns: minmax(0, 1fr);
+}
 .admin-setting-block,
 .admin-array-row {
   display: flex;
@@ -8159,6 +8212,14 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   color: #f7f8fa !important;
 }
 @media (max-width: 767px) {
+  .admin-system-push-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .admin-system-push-summary {
+    max-width: none;
+    text-align: left;
+  }
   .admin-setting-heading,
   .admin-array-row {
     flex-direction: column;
@@ -8191,6 +8252,13 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 @media (min-width: 1280px) {
   .admin-vc-binding-form {
     grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr) auto;
+  }
+  .admin-system-push-grid {
+    grid-template-columns: minmax(0, 1.18fr) minmax(360px, 0.82fr);
+    align-items: start;
+  }
+  .admin-system-push-channels .admin-vc-binding-form {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (max-width: 768px) {
