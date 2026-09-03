@@ -194,10 +194,8 @@
               <div :class="adminSectionHeaderClass">
                 <div class="font-semibold">用户信息配置</div>
               </div>
-              <div class="px-4 pb-4 grid grid-cols-1 xl:grid-cols-3 gap-4">
-                <div class="rounded-lg p-4 h-full min-w-0 xl:col-span-1" :class="theme.subtleBg">
-                  <div class="admin-setting-stack">
-                    <div class="admin-setting-block">
+              <div class="admin-profile-grid">
+                    <div class="admin-setting-block admin-profile-card admin-profile-card--username">
                       <div class="admin-setting-heading">
                         <div>
                           <div class="admin-setting-title" :class="theme.text">用户名</div>
@@ -211,7 +209,7 @@
                       <UInput v-model="userForm.username" :placeholder="userStore.user?.username || '输入用户名'" class="w-full" />
                     </div>
 
-                    <div class="admin-setting-block">
+                    <div class="admin-setting-block admin-profile-card admin-profile-card--avatar">
                       <div class="admin-setting-heading">
                         <div>
                           <div class="admin-setting-title" :class="theme.text">头像</div>
@@ -264,7 +262,7 @@
                       </UModal>
                     </div>
 
-                    <div class="admin-setting-block">
+                    <div class="admin-setting-block admin-profile-card admin-profile-card--description">
                       <div class="admin-setting-heading">
                         <div>
                           <div class="admin-setting-title" :class="theme.text">个性签名</div>
@@ -275,53 +273,7 @@
                       <UTextarea v-model="userForm.description" :placeholder="userStore.user?.description || '欢迎访问'" :rows="4" class="w-full admin-description-textarea" />
                     </div>
 
-                    <div v-if="isPrimaryAdmin" class="admin-setting-block">
-                      <div class="admin-setting-heading">
-                        <div>
-                          <div class="admin-setting-title" :class="theme.text">API Token</div>
-                          <p class="admin-setting-desc" :class="theme.mutedText">供脚本、MCP 等外部工具调用专用接口，权限与当前账号一致；重新生成后旧 Token 立即失效。</p>
-                        </div>
-                        <div class="flex flex-wrap items-center justify-end gap-2">
-                          <UBadge color="primary" variant="soft" class="text-xs px-2 py-1 rounded-md !text-primary-600 dark:!text-primary-300">{{ userToken ? '已生成' : '未生成' }}</UBadge>
-                          <UButton size="xs" :loading="regeneratingToken" @click="regenerateToken" color="indigo" variant="soft" class="shadow">重新生成</UButton>
-                        </div>
-                      </div>
-                      <div v-if="userToken" class="space-y-1">
-                        <div class="flex items-center gap-2 w-full flex-nowrap">
-                          <UInput v-model="userToken" :type="showToken ? 'text' : 'password'" readonly class="font-mono text-sm flex-1 min-w-0" />
-                          <UButton :icon="showToken ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="indigo" variant="ghost" @click="showToken = !showToken" />
-                          <UButton icon="i-heroicons-clipboard" color="indigo" variant="ghost" @click="copyToken" />
-                        </div>
-                      </div>
-                      <p v-else class="admin-setting-desc" :class="theme.mutedText">暂无 Token</p>
-                    </div>
-
-                  </div>
-                </div>
-                <div class="rounded-lg p-4 min-w-0 xl:col-span-2" :class="theme.subtleBg">
-                  <div class="admin-setting-stack">
-                    <div v-if="!isPrimaryAdmin" class="admin-setting-block">
-                      <div class="admin-setting-heading">
-                        <div>
-                          <div class="admin-setting-title" :class="theme.text">API Token</div>
-                          <p class="admin-setting-desc" :class="theme.mutedText">供脚本、MCP 等外部工具调用专用接口，权限与当前账号一致；重新生成后旧 Token 立即失效。</p>
-                        </div>
-                        <div class="flex flex-wrap items-center justify-end gap-2">
-                          <UBadge color="primary" variant="soft" class="text-xs px-2 py-1 rounded-md !text-primary-600 dark:!text-primary-300">{{ userToken ? '已生成' : '未生成' }}</UBadge>
-                          <UButton size="xs" :loading="regeneratingToken" @click="regenerateToken" color="indigo" variant="soft" class="shadow">重新生成</UButton>
-                        </div>
-                      </div>
-                      <div v-if="userToken" class="space-y-1">
-                        <div class="flex items-center gap-2 w-full flex-nowrap">
-                          <UInput v-model="userToken" :type="showToken ? 'text' : 'password'" readonly class="font-mono text-sm flex-1 min-w-0" />
-                          <UButton :icon="showToken ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="indigo" variant="ghost" @click="showToken = !showToken" />
-                          <UButton icon="i-heroicons-clipboard" color="indigo" variant="ghost" @click="copyToken" />
-                        </div>
-                      </div>
-                      <p v-else class="admin-setting-desc" :class="theme.mutedText">暂无 Token</p>
-                    </div>
-
-                    <div class="admin-setting-block">
+                    <div class="admin-setting-block admin-profile-card admin-profile-card--password">
                       <div class="admin-setting-heading">
                         <div>
                           <div class="admin-setting-title" :class="theme.text">密码设置</div>
@@ -332,7 +284,7 @@
                           <UButton size="xs" @click="updatePassword" :disabled="!canSavePassword" color="primary" class="shadow">保存密码</UButton>
                         </div>
                       </div>
-                      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div class="admin-password-grid">
                         <div class="w-full flex items-center gap-2">
                           <UInput v-model="userForm.oldPassword" :type="showOldPassword ? 'text' : 'password'" placeholder="当前密码" class="flex-1" />
                           <UButton :icon="showOldPassword ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="indigo" variant="ghost" @click="showOldPassword = !showOldPassword" />
@@ -347,9 +299,26 @@
                         </div>
                       </div>
                     </div>
-
-                  </div>
-                </div>
+                    <div class="admin-setting-block admin-profile-card admin-profile-card--token">
+                      <div class="admin-setting-heading">
+                        <div>
+                          <div class="admin-setting-title" :class="theme.text">API Token</div>
+                          <p class="admin-setting-desc" :class="theme.mutedText">供脚本、MCP 等外部工具调用专用接口，权限与当前账号一致；重新生成后旧 Token 立即失效。</p>
+                        </div>
+                        <div class="flex flex-wrap items-center justify-end gap-2">
+                          <UBadge color="primary" variant="soft" class="text-xs px-2 py-1 rounded-md !text-primary-600 dark:!text-primary-300">{{ userToken ? '已生成' : '未生成' }}</UBadge>
+                          <UButton size="xs" :loading="regeneratingToken" @click="regenerateToken" color="indigo" variant="soft" class="shadow">重新生成</UButton>
+                        </div>
+                      </div>
+                      <div v-if="userToken" class="space-y-1">
+                        <div class="flex items-center gap-2 w-full flex-nowrap">
+                          <UInput v-model="userToken" :type="showToken ? 'text' : 'password'" readonly class="font-mono text-sm flex-1 min-w-0" />
+                          <UButton :icon="showToken ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="indigo" variant="ghost" @click="showToken = !showToken" />
+                          <UButton icon="i-heroicons-clipboard" color="indigo" variant="ghost" @click="copyToken" />
+                        </div>
+                      </div>
+                      <p v-else class="admin-setting-desc" :class="theme.mutedText">暂无 Token</p>
+                    </div>
               </div>
             </div>
           </div>
@@ -479,7 +448,11 @@
               </div>
             </div>
             <div class="px-4 pb-4 space-y-4">
-              <div v-if="isSectionVisible('site')" :class="adminSubtleCardClass">
+              <div
+                v-if="isSectionVisible('site')"
+                :class="[adminSubtleCardClass, { 'admin-readonly-settings': !canManageSiteSettings }]"
+                :inert="!canManageSiteSettings"
+              >
                 <div class="flex justify-between items-center mb-3">
                   <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-hand-thumb-up" class="w-4 h-4" /><span>系统欢迎组件</span></div>
                   <div class="flex items-center gap-2">
@@ -778,24 +751,47 @@
                     </div>
                   </div>
                 </div>
-                <div id="site-default-theme-section" v-if="isSectionVisible('site-default-theme')" class="rounded-lg p-3 space-y-3" :class="theme.subtleBg">
-                  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                    <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-swatch" class="w-4 h-4" /> <span>默认主题色</span></div>
-                    <div class="flex flex-wrap items-center gap-4">
-                      <USelect v-model="frontendConfig.defaultContentTheme" :options="[{label:'暗黑',value:'dark'},{label:'白天',value:'light'}]" class="w-36" />
-                      <UButton color="green" @click="saveConfigItem('defaultContentTheme')" class="shadow">保存主题</UButton>
-                    </div>
+                <div
+                  id="site-default-theme-section"
+                  v-if="isSectionVisible('site')"
+                  class="admin-display-defaults"
+                  :class="[theme.subtleBg, { 'admin-readonly-settings': !canManageSiteSettings }]"
+                  :inert="!canManageSiteSettings"
+                >
+                  <div class="admin-display-defaults-heading">
+                    <div class="flex items-center gap-2 font-semibold" :class="theme.text"><UIcon name="i-heroicons-swatch" class="w-4 h-4" /> <span>默认展示</span></div>
+                    <p class="admin-setting-desc" :class="theme.mutedText">设置访客首次进入首页时使用的主题和内容栏数。</p>
                   </div>
-                  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                    <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-view-columns" class="w-4 h-4" /> <span>首页默认布局</span></div>
-                    <div class="flex flex-wrap items-center gap-3">
-                      <USelect v-model="frontendConfig.homeLayoutDefault" :options="[{label:'三栏',value:'three'},{label:'两栏',value:'two'},{label:'单栏',value:'single'}]" class="w-36" />
-                      <UButton color="green" @click="saveConfigItem('homeLayoutDefault')" class="shadow">保存布局</UButton>
+                  <div class="admin-display-defaults-grid">
+                    <div class="admin-display-default-row" :class="theme.border">
+                      <div>
+                        <div class="admin-setting-title" :class="theme.text">默认主题色</div>
+                        <p class="admin-setting-desc" :class="theme.mutedText">仅作为首次访问默认值，用户自己的选择不受影响。</p>
+                      </div>
+                      <div class="flex flex-wrap items-center gap-3">
+                        <USelect v-model="frontendConfig.defaultContentTheme" :options="[{label:'暗黑',value:'dark'},{label:'白天',value:'light'}]" class="w-32" />
+                        <UButton size="sm" color="green" @click="saveConfigItem('defaultContentTheme')" class="shadow">保存主题</UButton>
+                      </div>
+                    </div>
+                    <div class="admin-display-default-row" :class="theme.border">
+                      <div>
+                        <div class="admin-setting-title" :class="theme.text">首页默认布局</div>
+                        <p class="admin-setting-desc" :class="theme.mutedText">按首页内容密度选择默认栏数。</p>
+                      </div>
+                      <div class="flex flex-wrap items-center gap-3">
+                        <USelect v-model="frontendConfig.homeLayoutDefault" :options="[{label:'三栏',value:'three'},{label:'两栏',value:'two'},{label:'单栏',value:'single'}]" class="w-32" />
+                        <UButton size="sm" color="green" @click="saveConfigItem('homeLayoutDefault')" class="shadow">保存布局</UButton>
+                      </div>
                     </div>
                   </div>
                 </div>
-                <div id="site-configs-section" v-if="isSectionVisible('site-configs')" class="space-y-4">
-                <div v-for="(label, key) in configLabels" :key="key" :class="adminSubtleCardClass">
+                <div id="site-configs-section" v-if="isSectionVisible('site-configs')" class="site-config-grid">
+                <div
+                  v-for="(label, key) in configLabels"
+                  :key="key"
+                  :class="[adminSubtleCardClass, siteConfigCardClass(String(key)), { 'admin-readonly-settings': !canManageSiteSettings }]"
+                  :inert="!canManageSiteSettings"
+                >
                     <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-3">
                       <div class="space-y-1">
                         <div class="font-semibold" :class="theme.text">{{ label }}</div>
@@ -2569,7 +2565,7 @@ const cardCls = 'rounded-xl border shadow-sm'
 type AdminSectionKey =
   'dashboard' | 'user' | 'site' | 'notify' | 'attachments' | 'db' | 'version' | 'security' | 'access-logs' | 'site-visits' | 'login-audits' |
   'site-register' | 'site-pwa' | 'site-github-card' | 'site-announcement' | 'site-music' |
-  'site-default-theme' | 'site-social-links' | 'site-ads' | 'site-feed' | 'site-rss' | 'hitokoto' | 'life-countdown' |
+  'site-social-links' | 'site-ads' | 'site-feed' | 'site-rss' | 'hitokoto' | 'life-countdown' |
   'site-configs' | 'comments' | 'email' | 'admin-users' | 'registration-review' | 'widgets' |
   'storage' | 'authorization' | 'admin-audit' | 'notes' | 'recycle-bin' | 'comment-recycle-bin' |
   'system-push' | 'personal-notes' | 'personal-note-recycle-bin' | 'personal-interactions' | 'personal-interaction-recycle-bin'
@@ -2583,6 +2579,7 @@ const isAdmin = computed(() => {
 })
 const { capabilities: adminCapabilities, isPrimaryAdmin, isReady: adminCapabilitiesReady, isLoading: adminCapabilitiesLoading, can, refreshCapabilities: loadAdminCapabilities } = useAdminCapabilities()
 const canViewAdminAudit = computed(() => can('audit.view'))
+const canManageSiteSettings = computed(() => can('site_settings.manage'))
 const canManageNotifications = computed(() => can('notifications.manage'))
 const canManageNotificationState = computed(() => canManageNotifications.value && can('site_settings.manage'))
 const sectionCapabilities: Partial<Record<AdminSectionKey, string>> = adminSectionCapabilities
@@ -2610,7 +2607,6 @@ const adminNavGroups = computed<AdminNavGroup[]>(() => {
       items: [
         { key: 'site', label: '网站配置', icon: 'i-heroicons-wrench-screwdriver' },
         { key: 'site-configs', label: '站点信息', icon: 'i-heroicons-cog-6-tooth' },
-        { key: 'site-default-theme', label: '主题与布局', icon: 'i-heroicons-swatch' },
         { key: 'site-register', label: '注册配置', icon: 'i-heroicons-user-plus' },
         { key: 'site-pwa', label: 'PWA 模式', icon: 'i-heroicons-rocket-launch' },
         { key: 'site-announcement', label: '公告', icon: 'i-heroicons-megaphone' },
@@ -2694,7 +2690,6 @@ const siteSectionKeys: AdminSectionKey[] = [
   'site-github-card',
   'site-announcement',
   'site-music',
-  'site-default-theme',
   'site-social-links',
   'site-configs',
   'site-ads',
@@ -3122,6 +3117,7 @@ const resolveSectionFromHash = (rawHash: string): AdminSectionKey | null => {
   let sectionKey = decoded.endsWith('-section') ? decoded.slice(0, -8) : decoded
   // 兼容历史 hash：面板外观/系统信息已并入仪表盘
   if (sectionKey === 'panel-theme' || sectionKey === 'system') sectionKey = 'dashboard'
+  if (sectionKey === 'site-default-theme') sectionKey = 'site'
   if (sectionKey === 'attachment-storage') sectionKey = 'storage'
   const allowed = new Set<AdminSectionKey>()
   for (const group of adminNavGroups.value) {
@@ -5351,6 +5347,10 @@ const getConfigSummary = (key: string) => {
   const text = String(value ?? '').trim()
   return text ? '已填写' : '待填写'
 }
+const wideSiteConfigKeys = new Set(['backgrounds', 'pageFooterHTML', 'aboutMarkdown'])
+const siteConfigCardClass = (key: string) => wideSiteConfigKeys.has(key)
+  ? 'site-config-card site-config-card--wide'
+  : 'site-config-card'
 
 type HeaderBackgroundConfig = {
   url: string
@@ -7850,6 +7850,66 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   flex-direction: column;
   gap: 16px;
 }
+.admin-profile-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  padding: 0 16px 16px;
+}
+.admin-profile-card {
+  min-width: 0;
+  align-self: start;
+}
+.admin-profile-card--token {
+  grid-column: 1 / -1;
+}
+.admin-password-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+.admin-display-defaults {
+  padding: 12px;
+  border-radius: 8px;
+}
+.admin-display-defaults-heading {
+  margin-bottom: 10px;
+}
+.admin-display-defaults-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+.admin-display-default-row {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-width: 1px;
+  border-radius: 8px;
+}
+.site-config-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.site-config-card {
+  min-width: 0;
+  align-self: start;
+}
+.site-config-card--wide {
+  grid-column: 1 / -1;
+}
+.admin-readonly-settings :deep(button) {
+  display: none !important;
+}
+.admin-readonly-settings :deep(input),
+.admin-readonly-settings :deep(textarea),
+.admin-readonly-settings :deep(select) {
+  cursor: default !important;
+}
 .admin-system-push-summary {
   max-width: 560px;
   font-size: 12px;
@@ -8077,6 +8137,28 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   .admin-desktop-block {
     display: block !important;
   }
+  .admin-profile-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "username avatar"
+      "description password"
+      "token token";
+  }
+  .admin-profile-card--username {
+    grid-area: username;
+  }
+  .admin-profile-card--avatar {
+    grid-area: avatar;
+  }
+  .admin-profile-card--description {
+    grid-area: description;
+  }
+  .admin-profile-card--password {
+    grid-area: password;
+  }
+  .admin-profile-card--token {
+    grid-area: token;
+  }
 }
 .resizable-textarea :deep(textarea),
 .resizable-wrapper :deep(textarea) {
@@ -8206,6 +8288,16 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   }
 }
 @media (min-width: 1280px) {
+  .admin-profile-grid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-areas:
+      "username username username username avatar avatar avatar avatar avatar avatar avatar avatar"
+      "description description description description password password password password password password password password"
+      "token token token token token token token token token token token token";
+  }
+  .admin-password-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
   .admin-vc-binding-form {
     grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr) auto;
   }
@@ -8247,6 +8339,10 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   }
 }
 @media (min-width: 1024px) {
+  .admin-display-defaults-grid,
+  .site-config-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .admin-dashboard-interaction-grid--admin,
   .admin-dashboard-operation-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));

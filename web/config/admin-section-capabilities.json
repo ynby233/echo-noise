@@ -1,7 +1,6 @@
 {
   "site": "site_settings.view",
   "site-configs": "site_settings.view",
-  "site-default-theme": "site_settings.view",
   "site-register": "site_settings.view",
   "site-pwa": "site_settings.view",
   "site-ads": "site_settings.view",
