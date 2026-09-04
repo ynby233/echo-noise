@@ -86,18 +86,18 @@ func TestRuntimeContactVisibilityRequiresNormalModeAndLinkedAuthorAcrossReadSurf
 	viewerID := viewer.ID
 	assertSurfaces := func(wantVisible bool) {
 		t.Helper()
-		all, err := GetAllMessagesForViewer(&viewerID, false)
+		all, err := GetAllMessagesForViewer(&viewerID)
 		if err != nil {
 			t.Fatalf("list messages: %v", err)
 		}
 		if got := len(all) == 1; got != wantVisible {
 			t.Fatalf("list visibility = %v, want %v; rows=%#v", got, wantVisible, all)
 		}
-		_, detailErr := GetMessageByIDForViewer(message.ID, &viewerID, false)
+		_, detailErr := GetMessageByIDForViewer(message.ID, &viewerID)
 		if got := detailErr == nil; got != wantVisible {
 			t.Fatalf("detail visibility = %v, want %v; err=%v", got, wantVisible, detailErr)
 		}
-		search, err := SearchMessages("runtime contact surface", 1, 10, &viewerID, false, nil, nil)
+		search, err := SearchMessages("runtime contact surface", 1, 10, &viewerID, nil, nil)
 		if err != nil {
 			t.Fatalf("search messages: %v", err)
 		}
@@ -105,14 +105,14 @@ func TestRuntimeContactVisibilityRequiresNormalModeAndLinkedAuthorAcrossReadSurf
 			t.Fatalf("search visibility = %v, want %v; total=%d", got, wantVisible, search.Total)
 		}
 		keyword, tag := "runtime contact", "runtimecontact"
-		page, err := GetMessagesByPage(1, 10, &viewerID, false, nil, nil, nil, &keyword, &tag, MessagePinScopeLatest, nil)
+		page, err := GetMessagesByPage(1, 10, &viewerID, nil, nil, nil, &keyword, &tag, MessagePinScopeLatest, nil)
 		if err != nil {
 			t.Fatalf("tag page: %v", err)
 		}
 		if got := page.Total == 1; got != wantVisible {
 			t.Fatalf("tag visibility = %v, want %v; total=%d", got, wantVisible, page.Total)
 		}
-		calendar, err := GetMessagesGroupByDate(&viewerID, false, nil)
+		calendar, err := GetMessagesGroupByDate(&viewerID, nil)
 		if err != nil {
 			t.Fatalf("calendar messages: %v", err)
 		}

@@ -239,7 +239,7 @@ func TestTrashAndPermanentDeleteNoteCascadeCommentsThenKeepThreadTombstone(t *te
 		t.Fatalf("restore interaction beneath note tombstone: %v", err)
 	}
 	viewerID := owner.ID
-	thread, err := GetMessageByIDForViewer(message.ID, &viewerID, true)
+	thread, err := GetMessageByIDForViewer(message.ID, &viewerID)
 	if err != nil {
 		t.Fatalf("load structural thread tombstone: %v", err)
 	}

@@ -201,7 +201,7 @@ func notificationTarget(message models.Message, commentID *uint, notificationTyp
 	return tab, query
 }
 
-func buildVisibleUserNotifications(notifications []models.UserNotification, viewerID uint, isAdmin bool) []userNotificationResponse {
+func buildVisibleUserNotifications(notifications []models.UserNotification, viewerID uint) []userNotificationResponse {
 	if len(notifications) == 0 {
 		return []userNotificationResponse{}
 	}
@@ -313,7 +313,7 @@ func buildVisibleUserNotifications(notifications []models.UserNotification, view
 			items = append(items, notificationUnavailableResponse(notification, users, userNotificationTargetStatusUnavailable))
 			continue
 		}
-		if !services.CanViewMessage(message, &viewerIDPtr, isAdmin) {
+		if !services.CanViewMessage(message, &viewerIDPtr) {
 			items = append(items, notificationUnavailableResponse(notification, users, userNotificationTargetStatusUnavailable))
 			continue
 		}
@@ -371,7 +371,7 @@ func buildVisibleUserNotifications(notifications []models.UserNotification, view
 				valid = false
 				break
 			}
-			if !canViewComment(message, comment, commentMap, viewerID, true, isAdmin) {
+			if !canViewComment(message, comment, commentMap, viewerID, true) {
 				valid = false
 				break
 			}
@@ -457,7 +457,7 @@ func ListUserNotifications(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.Fail[any]("获取通知失败"))
 		return
 	}
-	visibleItems := buildVisibleUserNotifications(notifications, user.ID, user.IsAdmin)
+	visibleItems := buildVisibleUserNotifications(notifications, user.ID)
 	total := len(visibleItems)
 	unreadCount := countUnreadUserNotifications(visibleItems)
 	start := (page - 1) * pageSize
@@ -493,7 +493,7 @@ func GetUserNotificationUnreadCount(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.Fail[any]("获取通知失败"))
 		return
 	}
-	visibleItems := buildVisibleUserNotifications(notifications, user.ID, user.IsAdmin)
+	visibleItems := buildVisibleUserNotifications(notifications, user.ID)
 	unreadCount := countUnreadUserNotifications(visibleItems)
 	c.JSON(http.StatusOK, dto.OK(gin.H{"unread_count": unreadCount, "unreadCount": unreadCount}, "获取成功"))
 }

@@ -52,17 +52,17 @@ assert.doesNotMatch(indexPage, /<HeatmapWidget\b(?![^>]*:active-tab="activeTab")
 
 assert.match(
   calendarController,
-  /currentUserID,\s*isAdmin\s*:=\s*currentMessageViewer\(c\)[\s\S]*?c\.Query\("authorId"\)[\s\S]*?GetMessagesGroupByDate\(currentUserID,\s*isAdmin,\s*authorID\)/,
+  /currentUserID,\s*_\s*:=\s*currentMessageViewer\(c\)[\s\S]*?c\.Query\("authorId"\)[\s\S]*?GetMessagesGroupByDate\(currentUserID,\s*authorID\)/,
   'calendar controller must pass viewer and author scope to the service'
 )
 assert.match(
   messageService,
-  /func\s+GetMessagesGroupByDate\(userID \*uint,\s*isAdmin bool,\s*authorID \*uint\)/,
-  'calendar service must accept viewer and author scope parameters'
+  /func\s+GetMessagesGroupByDate\(userID \*uint,\s*authorID \*uint\)/,
+  'calendar service must accept viewer and author scope without a legacy administrator flag'
 )
 assert.match(
   messageService,
-  /authorID != nil[\s\S]*?q = q\.Where\("user_id = \?", \*authorID\)[\s\S]*?q = ApplyMessageVisibilityScope\(q, userID, isAdmin\)[\s\S]*?Select\("created_at"\)/,
+  /authorID != nil[\s\S]*?q = q\.Where\("user_id = \?", \*authorID\)[\s\S]*?q = ApplyMessageVisibilityScope\(q, userID\)[\s\S]*?Select\("created_at"\)/,
   'calendar service must apply author filtering before the shared four-state visibility scope'
 )
 

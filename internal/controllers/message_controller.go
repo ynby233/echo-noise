@@ -137,8 +137,8 @@ func GetMessagesByTag(c *gin.Context) {
 	if un := c.Query("username"); un != "" {
 		q = q.Where("username = ?", un)
 	}
-	currentUserID, isAdmin := currentMessageViewer(c)
-	q = services.ApplyMessageVisibilityScope(q, currentUserID, isAdmin)
+	currentUserID, _ := currentMessageViewer(c)
+	q = services.ApplyMessageVisibilityScope(q, currentUserID)
 	if err := q.Order("created_at DESC").Find(&messages).Error; err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []models.Message{}})
 		return
@@ -170,8 +170,8 @@ func GetAllTags(c *gin.Context) {
 	c.Header("Expires", "0")
 
 	var messages []models.Message
-	currentUserID, isAdmin := currentMessageViewer(c)
-	q := services.ApplyMessageVisibilityScope(db.Model(&models.Message{}).Select("content", "private", "visibility", "user_id"), currentUserID, isAdmin)
+	currentUserID, _ := currentMessageViewer(c)
+	q := services.ApplyMessageVisibilityScope(db.Model(&models.Message{}).Select("content", "private", "visibility", "user_id"), currentUserID)
 	if err := q.Order("created_at DESC").Find(&messages).Error; err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []map[string]interface{}{}})
 		return
@@ -212,13 +212,13 @@ func GetAllImages(c *gin.Context) {
 
 	var messages []models.Message
 	q := db.Select("id", "content", "image_url", "created_at", "private", "visibility", "user_id").Order("created_at DESC")
-	viewerID, hasViewer, isAdmin := resolveImageViewer(c)
+	viewerID, hasViewer := resolveImageViewer(c)
 	var currentUserID *uint
 	if hasViewer {
 		id := viewerID
 		currentUserID = &id
 	}
-	q = services.ApplyMessageVisibilityScope(q, currentUserID, isAdmin)
+	q = services.ApplyMessageVisibilityScope(q, currentUserID)
 	if err := q.Find(&messages).Error; err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": []map[string]interface{}{}})
 		return
@@ -269,11 +269,11 @@ func GetAllImages(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": allImages})
 }
 
-func resolveImageViewer(c *gin.Context) (uint, bool, bool) {
+func resolveImageViewer(c *gin.Context) (uint, bool) {
 	if user, ok := currentReadUser(c); ok {
-		return user.ID, true, user.IsAdmin
+		return user.ID, true
 	}
-	return 0, false, false
+	return 0, false
 }
 
 // GetMessagePage 处理消息详情页请求
@@ -285,8 +285,8 @@ func GetMessagePage(c *gin.Context) {
 		return
 	}
 
-	currentUserID, isAdmin := currentMessageViewer(c)
-	message, err := services.GetMessagePage(uint(messageID), currentUserID, isAdmin)
+	currentUserID, _ := currentMessageViewer(c)
+	message, err := services.GetMessagePage(uint(messageID), currentUserID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "消息不存在"})
 		return

@@ -45,7 +45,7 @@ func ServeCloudAttachment(c *gin.Context) {
 		c.Status(http.StatusServiceUnavailable)
 		return
 	}
-	viewerID, isAdmin := currentMessageViewer(c)
+	viewerID, _ := currentMessageViewer(c)
 	allowed := len(messages) == 0 && len(grants) == 0
 	publiclyReferenced := false
 	liveMessageIDs := make(map[uint]struct{}, len(messages))
@@ -54,7 +54,7 @@ func ServeCloudAttachment(c *gin.Context) {
 		if services.StoredMessageVisibility(message) == services.MessageVisibilityPublic {
 			publiclyReferenced = true
 		}
-		if services.CanViewMessage(message, viewerID, isAdmin) {
+		if services.CanViewMessage(message, viewerID) {
 			allowed = true
 		}
 	}
@@ -71,7 +71,7 @@ func ServeCloudAttachment(c *gin.Context) {
 		if services.StoredMessageVisibility(snapshot) == services.MessageVisibilityPublic {
 			publiclyReferenced = true
 		}
-		if services.CanViewMessage(snapshot, viewerID, isAdmin) {
+		if services.CanViewMessage(snapshot, viewerID) {
 			allowed = true
 		}
 	}

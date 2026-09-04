@@ -78,20 +78,19 @@ func TestApplyMessageVisibilityScopeMatchesFourStateRules(t *testing.T) {
 
 	aliceID := alice.ID
 	tests := []struct {
-		name    string
-		userID  *uint
-		isAdmin bool
-		want    []string
+		name   string
+		userID *uint
+		want   []string
 	}{
 		{name: "guest sees public only", want: []string{"alice public", "bob public"}},
 		{name: "member sees public users and own restricted", userID: &aliceID, want: []string{"alice contacts", "alice private", "alice public", "alice users", "bob public", "bob users"}},
-		{name: "admin sees all", userID: &admin.ID, isAdmin: true, want: []string{"alice contacts", "alice private", "alice public", "alice users", "bob contacts", "bob private", "bob public", "bob users"}},
+		{name: "primary administrator resolves full read scope", userID: &admin.ID, want: []string{"alice contacts", "alice private", "alice public", "alice users", "bob contacts", "bob private", "bob public", "bob users"}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var rows []models.Message
-			query := ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), tt.userID, tt.isAdmin)
+			query := ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), tt.userID)
 			if err := query.Find(&rows).Error; err != nil {
 				t.Fatalf("query messages: %v", err)
 			}
@@ -109,21 +108,20 @@ func TestApplyMessageVisibilityScopeMatchesFourStateRules(t *testing.T) {
 	prefilterTests := []struct {
 		name     string
 		userID   *uint
-		isAdmin  bool
 		authorID uint
 		want     []string
 	}{
 		{name: "member viewing another author keeps author filter", userID: &aliceID, authorID: bobID, want: []string{"bob public", "bob users"}},
 		{name: "member viewing self keeps all own states", userID: &aliceID, authorID: aliceID, want: []string{"alice contacts", "alice private", "alice public", "alice users"}},
 		{name: "guest viewing author sees public only", authorID: aliceID, want: []string{"alice public"}},
-		{name: "admin viewing author sees all states", userID: &admin.ID, isAdmin: true, authorID: bobID, want: []string{"bob contacts", "bob private", "bob public", "bob users"}},
+		{name: "primary administrator author scope sees all states", userID: &admin.ID, authorID: bobID, want: []string{"bob contacts", "bob private", "bob public", "bob users"}},
 	}
 
 	for _, tt := range prefilterTests {
 		t.Run(tt.name, func(t *testing.T) {
 			var rows []models.Message
 			baseQuery := database.DB.Model(&models.Message{}).Where("user_id = ?", tt.authorID)
-			query := ApplyMessageVisibilityScope(baseQuery, tt.userID, tt.isAdmin)
+			query := ApplyMessageVisibilityScope(baseQuery, tt.userID)
 			if err := query.Find(&rows).Error; err != nil {
 				t.Fatalf("query filtered messages: %v", err)
 			}
@@ -147,10 +145,10 @@ func TestGuestCannotLikePublicMessage(t *testing.T) {
 		t.Fatalf("create public message: %v", err)
 	}
 
-	if liked, count, err := ToggleLike(message.ID, nil, "guest-session", false); err == nil || liked || count != 0 {
+	if liked, count, err := ToggleLike(message.ID, nil, "guest-session"); err == nil || liked || count != 0 {
 		t.Fatalf("guest toggle like should fail, liked=%v count=%d err=%v", liked, count, err)
 	}
-	if created, count, err := IncrementLikeCount(message.ID, 0, false); err == nil || created || count != 0 {
+	if created, count, err := IncrementLikeCount(message.ID, 0); err == nil || created || count != 0 {
 		t.Fatalf("guest increment like should fail, created=%v count=%d err=%v", created, count, err)
 	}
 
@@ -173,7 +171,7 @@ func TestUserCannotLikeInvisiblePrivateMessage(t *testing.T) {
 	}
 
 	bobID := bob.ID
-	if liked, count, err := ToggleLike(message.ID, &bobID, "", false); err == nil || liked || count != 0 {
+	if liked, count, err := ToggleLike(message.ID, &bobID, ""); err == nil || liked || count != 0 {
 		t.Fatalf("invisible private like should fail, liked=%v count=%d err=%v", liked, count, err)
 	}
 
@@ -196,14 +194,14 @@ func TestAdminCannotLikeOthersPrivateMessage(t *testing.T) {
 	}
 
 	adminID := admin.ID
-	visible, err := GetMessageByIDForViewer(message.ID, &adminID, true)
+	visible, err := GetMessageByIDForViewer(message.ID, &adminID)
 	if err != nil {
 		t.Fatalf("admin should still read private message: %v", err)
 	}
 	if visible == nil || visible.ID != message.ID {
 		t.Fatalf("admin read wrong message: %#v", visible)
 	}
-	liked, count, err := ToggleLike(message.ID, &adminID, "", true)
+	liked, count, err := ToggleLike(message.ID, &adminID, "")
 	if err == nil {
 		t.Fatalf("expected admin like on other private message to fail")
 	}
@@ -233,7 +231,7 @@ func TestGetMessagesByPageFiltersByShanghaiDate(t *testing.T) {
 	}
 
 	date := "2026-01-02"
-	result, err := GetMessagesByPage(1, 10, nil, false, nil, nil, &date, nil, nil, MessagePinScopeLatest, nil)
+	result, err := GetMessagesByPage(1, 10, nil, nil, nil, &date, nil, nil, MessagePinScopeLatest, nil)
 	if err != nil {
 		t.Fatalf("get messages by date: %v", err)
 	}
@@ -259,21 +257,21 @@ func TestGetMessagesByPageCombinesDateKeywordAndTag(t *testing.T) {
 	date := "2026-06-06"
 	keyword := "工作记录"
 	tag := "总结"
-	result, err := GetMessagesByPage(1, 10, nil, false, nil, nil, &date, &keyword, &tag, MessagePinScopeLatest, nil)
+	result, err := GetMessagesByPage(1, 10, nil, nil, nil, &date, &keyword, &tag, MessagePinScopeLatest, nil)
 	if err != nil {
 		t.Fatalf("get messages by combined filters: %v", err)
 	}
 	if result.Total != 1 || len(result.Items) != 1 || result.Items[0].Content != "#总结 工作记录 命中" {
 		t.Fatalf("combined filtered result = total %d items %#v, want only exact hit", result.Total, result.Items)
 	}
-	location, err := LocateMessagePage(messages[0].ID, 10, nil, false, nil, nil, &date, &keyword, &tag, MessagePinScopeLatest, nil)
+	location, err := LocateMessagePage(messages[0].ID, 10, nil, nil, nil, &date, &keyword, &tag, MessagePinScopeLatest, nil)
 	if err != nil {
 		t.Fatalf("locate message by combined filters: %v", err)
 	}
 	if location.Page != 1 || location.Total != 1 {
 		t.Fatalf("combined filter location = page %d total %d, want page 1 total 1", location.Page, location.Total)
 	}
-	if _, err := LocateMessagePage(messages[3].ID, 10, nil, false, nil, nil, &date, &keyword, &tag, MessagePinScopeLatest, nil); err == nil {
+	if _, err := LocateMessagePage(messages[3].ID, 10, nil, nil, nil, &date, &keyword, &tag, MessagePinScopeLatest, nil); err == nil {
 		t.Fatalf("expected similar but non-exact tag to be unavailable to locate")
 	}
 }
@@ -291,7 +289,7 @@ func TestGetMessagesByPageAndLocateRespectExcludeID(t *testing.T) {
 	}
 
 	excludeID := exclude.ID
-	result, err := GetMessagesByPage(1, 10, nil, false, nil, nil, nil, nil, nil, MessagePinScopeLatest, &excludeID)
+	result, err := GetMessagesByPage(1, 10, nil, nil, nil, nil, nil, nil, MessagePinScopeLatest, &excludeID)
 	if err != nil {
 		t.Fatalf("query page with exclude id: %v", err)
 	}
@@ -299,14 +297,14 @@ func TestGetMessagesByPageAndLocateRespectExcludeID(t *testing.T) {
 		t.Fatalf("exclude filtered result = total %d items %#v, want only keep", result.Total, result.Items)
 	}
 
-	location, err := LocateMessagePage(keep.ID, 10, nil, false, nil, nil, nil, nil, nil, MessagePinScopeLatest, &excludeID)
+	location, err := LocateMessagePage(keep.ID, 10, nil, nil, nil, nil, nil, nil, MessagePinScopeLatest, &excludeID)
 	if err != nil {
 		t.Fatalf("locate keep with exclude id: %v", err)
 	}
 	if location.Page != 1 || location.Total != 1 {
 		t.Fatalf("location = page %d total %d, want page 1 total 1", location.Page, location.Total)
 	}
-	if _, err := LocateMessagePage(exclude.ID, 10, nil, false, nil, nil, nil, nil, nil, MessagePinScopeLatest, &excludeID); err == nil {
+	if _, err := LocateMessagePage(exclude.ID, 10, nil, nil, nil, nil, nil, nil, MessagePinScopeLatest, &excludeID); err == nil {
 		t.Fatalf("expected excluded message to be unavailable to locate")
 	}
 }
@@ -329,7 +327,7 @@ func TestGetMessagesByPageReturnsViewerLikedState(t *testing.T) {
 		t.Fatalf("create message like: %v", err)
 	}
 
-	result, err := GetMessagesByPage(1, 10, &viewerID, false, nil, nil, nil, nil, nil, MessagePinScopeLatest, nil)
+	result, err := GetMessagesByPage(1, 10, &viewerID, nil, nil, nil, nil, nil, MessagePinScopeLatest, nil)
 	if err != nil {
 		t.Fatalf("query page: %v", err)
 	}
@@ -409,7 +407,7 @@ func TestVoceChatContactCacheAllowsContactsVisibility(t *testing.T) {
 
 	bobID := bob.ID
 	var rows []models.Message
-	query := ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), &bobID, false)
+	query := ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), &bobID)
 	if err := query.Find(&rows).Error; err != nil {
 		t.Fatalf("query visible messages: %v", err)
 	}
@@ -420,12 +418,12 @@ func TestVoceChatContactCacheAllowsContactsVisibility(t *testing.T) {
 	if err := database.DB.Where("user_id = ?", alice.ID).Delete(&models.VoceChatContactCache{}).Error; err != nil {
 		t.Fatalf("clear contact cache: %v", err)
 	}
-	if _, err := GetMessageByIDForViewer(message.ID, &bobID, false); err != nil {
+	if _, err := GetMessageByIDForViewer(message.ID, &bobID); err != nil {
 		t.Fatalf("bob should access contacts detail after cache refresh: %v", err)
 	}
 
 	charlieID := charlie.ID
-	if _, err := GetMessageByIDForViewer(message.ID, &charlieID, false); err == nil {
+	if _, err := GetMessageByIDForViewer(message.ID, &charlieID); err == nil {
 		t.Fatalf("non-contact viewer should not access contacts detail")
 	}
 }
@@ -461,11 +459,11 @@ func TestVoceChatContactCacheOnlyGrantsAddedContactsVisibility(t *testing.T) {
 	})
 
 	addedID := added.ID
-	if _, err := GetMessageByIDForViewer(message.ID, &addedID, false); err != nil {
+	if _, err := GetMessageByIDForViewer(message.ID, &addedID); err != nil {
 		t.Fatalf("added contact should see contacts message: %v", err)
 	}
 	blockedID := blocked.ID
-	if _, err := GetMessageByIDForViewer(message.ID, &blockedID, false); err == nil {
+	if _, err := GetMessageByIDForViewer(message.ID, &blockedID); err == nil {
 		t.Fatalf("blocked contact must not see contacts message")
 	}
 }
@@ -508,7 +506,7 @@ func TestVoceChatContactCacheUsesPrimaryAdminsPersonalBinding(t *testing.T) {
 
 	bobID := bob.ID
 	var rows []models.Message
-	query := ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), &bobID, false)
+	query := ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), &bobID)
 	if err := query.Find(&rows).Error; err != nil {
 		t.Fatalf("query visible messages: %v", err)
 	}
@@ -551,7 +549,7 @@ func TestPrimaryAdminInvalidVoceChatCredentialsFailClosedAndNotifyOnce(t *testin
 		t.Fatal(err)
 	}
 	viewerID := viewer.ID
-	if CanViewMessage(message, &viewerID, false) {
+	if CanViewMessage(message, &viewerID) {
 		t.Fatal("invalid primary credentials must make contacts content private")
 	}
 	_ = EnsureVoceChatContactCacheForAuthor(admin.ID)
@@ -639,7 +637,7 @@ func TestPrimaryAdminVoceChatOutageFailsClosedWithoutCredentialAlert(t *testing.
 		t.Fatal(err)
 	}
 	viewerID := viewer.ID
-	if CanViewMessage(message, &viewerID, false) {
+	if CanViewMessage(message, &viewerID) {
 		t.Fatal("VoceChat outage must make contacts content private")
 	}
 	var count int64
@@ -684,14 +682,14 @@ func TestVoceChatContactVisibilityDisabledIgnoresFreshCache(t *testing.T) {
 
 	bobID := bob.ID
 	var rows []models.Message
-	query := ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), &bobID, false)
+	query := ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), &bobID)
 	if err := query.Find(&rows).Error; err != nil {
 		t.Fatalf("query visible messages: %v", err)
 	}
 	if len(rows) != 0 {
 		t.Fatalf("disabled contacts visibility should ignore cache, got %#v", rows)
 	}
-	if _, err := GetMessageByIDForViewer(message.ID, &bobID, false); err == nil {
+	if _, err := GetMessageByIDForViewer(message.ID, &bobID); err == nil {
 		t.Fatalf("disabled contacts detail should remain hidden")
 	}
 }
@@ -714,10 +712,10 @@ func TestAdminCannotLikeContactsMessageHiddenFromOwnSocialGraph(t *testing.T) {
 	}
 
 	adminID := admin.ID
-	if _, err := GetMessageByIDForViewer(message.ID, &adminID, true); err != nil {
+	if _, err := GetMessageByIDForViewer(message.ID, &adminID); err != nil {
 		t.Fatalf("admin should still read contacts message for moderation: %v", err)
 	}
-	if liked, count, err := ToggleLike(message.ID, &adminID, "", true); err == nil || liked || count != 0 {
+	if liked, count, err := ToggleLike(message.ID, &adminID, ""); err == nil || liked || count != 0 {
 		t.Fatalf("admin should not like contacts message outside own contacts, liked=%v count=%d err=%v", liked, count, err)
 	}
 
@@ -762,7 +760,7 @@ func TestVoceChatContactCacheFailureKeepsContactsPrivate(t *testing.T) {
 	bobID := bob.ID
 	for i := 0; i < 2; i++ {
 		var rows []models.Message
-		query := ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), &bobID, false)
+		query := ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), &bobID)
 		if err := query.Find(&rows).Error; err != nil {
 			t.Fatalf("query visible messages: %v", err)
 		}
@@ -773,7 +771,7 @@ func TestVoceChatContactCacheFailureKeepsContactsPrivate(t *testing.T) {
 	if listCalls != 1 {
 		t.Fatalf("contacts sync should be cooled down after failure, calls=%d", listCalls)
 	}
-	if _, err := GetMessageByIDForViewer(message.ID, &bobID, false); err == nil {
+	if _, err := GetMessageByIDForViewer(message.ID, &bobID); err == nil {
 		t.Fatalf("contacts detail should remain hidden on sync failure")
 	}
 

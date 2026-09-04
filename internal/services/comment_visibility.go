@@ -266,7 +266,7 @@ func (scope ContentReadScope) canViewCommentInThread(message models.Message, com
 	}
 }
 
-func CanViewCommentInThread(message models.Message, comment models.Comment, commentMap map[uint]models.Comment, viewerID uint, hasViewer bool, _ bool) bool {
+func CanViewCommentInThread(message models.Message, comment models.Comment, commentMap map[uint]models.Comment, viewerID uint, hasViewer bool) bool {
 	var actorID *uint
 	if hasViewer && viewerID != 0 {
 		actorID = &viewerID
@@ -280,5 +280,5 @@ func CanUserViewCommentInThread(message models.Message, comment models.Comment, 
 	if err != nil {
 		return false
 	}
-	return CanViewCommentInThread(message, comment, commentMap, viewerID, viewerID != 0, false)
+	return CanViewCommentInThread(message, comment, commentMap, viewerID, viewerID != 0)
 }

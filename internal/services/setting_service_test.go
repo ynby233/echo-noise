@@ -672,7 +672,7 @@ func TestMessagesCalendarGroupsByShanghaiDate(t *testing.T) {
 		t.Fatalf("create messages: %v", err)
 	}
 
-	calendar, err := GetMessagesGroupByDate(nil, false, nil)
+	calendar, err := GetMessagesGroupByDate(nil, nil)
 	if err != nil {
 		t.Fatalf("get calendar: %v", err)
 	}
@@ -706,21 +706,20 @@ func TestMessagesCalendarRespectsVisibilityAndPersonalScope(t *testing.T) {
 	tests := []struct {
 		name     string
 		userID   *uint
-		isAdmin  bool
 		authorID *uint
 		want     int
 	}{
 		{name: "guest latest sees public only", want: 2},
 		{name: "member latest sees public and own private", userID: &aliceID, want: 3},
-		{name: "admin latest sees every message", userID: &admin.ID, isAdmin: true, want: 4},
+		{name: "primary administrator latest sees every message", userID: &admin.ID, want: 4},
 		{name: "member personal includes own private", userID: &aliceID, authorID: &aliceID, want: 2},
 		{name: "member viewing another author only sees public", userID: &aliceID, authorID: &bobID, want: 1},
-		{name: "admin author scope sees that author's private messages", userID: &admin.ID, isAdmin: true, authorID: &bobID, want: 2},
+		{name: "primary administrator author scope sees that author's private messages", userID: &admin.ID, authorID: &bobID, want: 2},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			calendar, err := GetMessagesGroupByDate(tt.userID, tt.isAdmin, tt.authorID)
+			calendar, err := GetMessagesGroupByDate(tt.userID, tt.authorID)
 			if err != nil {
 				t.Fatalf("get calendar: %v", err)
 			}

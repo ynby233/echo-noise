@@ -37,7 +37,7 @@ func TestNoteLifecycleTrashRestoreIsMutuallyExclusive(t *testing.T) {
 		t.Fatalf("trash metadata = %#v, want deleted metadata", stored)
 	}
 	var active []models.Message
-	if err := ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), &author.ID, false).Find(&active).Error; err != nil {
+	if err := ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), &author.ID).Find(&active).Error; err != nil {
 		t.Fatalf("query active messages: %v", err)
 	}
 	if len(active) != 0 {

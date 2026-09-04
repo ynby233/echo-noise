@@ -49,7 +49,7 @@ func TestDeletionNotificationRecomputesCountdownFromCurrentRetentionPolicy(t *te
 		ID: 10, RecipientUserID: 11, Type: models.UserNotificationTypeContentDeletion,
 		DeletionEvent: services.DeletionEventTrashed, DeletionActorLabel: "内容管理员", DeletionSnapshotJSON: string(payload),
 	}
-	items := buildVisibleUserNotifications([]models.UserNotification{notification}, 11, false)
+	items := buildVisibleUserNotifications([]models.UserNotification{notification}, 11)
 	if len(items) != 1 || items[0].TargetStatus != userNotificationTargetStatusSnapshot || len(items[0].DeletionSnapshots) != 1 {
 		t.Fatalf("unexpected deletion notification response: %#v", items)
 	}
@@ -83,7 +83,7 @@ func TestBuildUserNotificationsReportsAssociationQueryFailureAsLoadError(t *test
 		MessageID:       &messageID,
 	}
 
-	items := buildVisibleUserNotifications([]models.UserNotification{notification}, viewerID, false)
+	items := buildVisibleUserNotifications([]models.UserNotification{notification}, viewerID)
 
 	if len(items) != 1 {
 		t.Fatalf("expected a load-error placeholder, got %d items", len(items))
@@ -105,7 +105,7 @@ func TestBuildUserNotificationsRendersIncompletePasswordUpdateAsUnavailableSyste
 		Type:            models.UserNotificationTypePasswordUpdateIncomplete,
 	}
 
-	items := buildVisibleUserNotifications([]models.UserNotification{notification}, viewerID, false)
+	items := buildVisibleUserNotifications([]models.UserNotification{notification}, viewerID)
 	if len(items) != 1 || items[0].TargetStatus != userNotificationTargetStatusUnavailable {
 		t.Fatalf("expected incomplete password update system notice, got %d items with status %q", len(items), func() string {
 			if len(items) == 0 {
@@ -150,7 +150,7 @@ func TestBuildUserNotificationsReportsCommentQueryFailureAsLoadError(t *testing.
 		CommentID:       &commentID,
 	}
 
-	items := buildVisibleUserNotifications([]models.UserNotification{notification}, viewer.ID, false)
+	items := buildVisibleUserNotifications([]models.UserNotification{notification}, viewer.ID)
 
 	if len(items) != 1 || items[0].TargetStatus != userNotificationTargetStatusLoadError {
 		t.Fatalf("expected comment load-error placeholder, got %#v", items)
@@ -186,7 +186,7 @@ func TestBuildUserNotificationsReportsLikeQueryFailureAsLoadError(t *testing.T) 
 		MessageID:       &message.ID,
 	}
 
-	items := buildVisibleUserNotifications([]models.UserNotification{notification}, viewer.ID, false)
+	items := buildVisibleUserNotifications([]models.UserNotification{notification}, viewer.ID)
 
 	if len(items) != 1 || items[0].TargetStatus != userNotificationTargetStatusLoadError {
 		t.Fatalf("expected like load-error placeholder, got %#v", items)
@@ -206,7 +206,7 @@ func TestBuildUserNotificationsKeepsMissingMessageLikeAsDeletedPlaceholder(t *te
 		MessageID:       &missingMessageID,
 	}
 
-	items := buildVisibleUserNotifications([]models.UserNotification{notification}, viewerID, false)
+	items := buildVisibleUserNotifications([]models.UserNotification{notification}, viewerID)
 
 	if len(items) != 1 {
 		t.Fatalf("expected the notification to remain visible, got %d items", len(items))
@@ -246,7 +246,7 @@ func TestBuildUserNotificationsHidesMissingCommentContentBehindUnavailablePlaceh
 		CommentID:       &missingCommentID,
 	}
 
-	items := buildVisibleUserNotifications([]models.UserNotification{notification}, viewer.ID, false)
+	items := buildVisibleUserNotifications([]models.UserNotification{notification}, viewer.ID)
 
 	if len(items) != 1 {
 		t.Fatalf("expected the notification to remain visible, got %d items", len(items))
@@ -281,7 +281,7 @@ func TestBuildUserNotificationsHidesRestrictedMessageBehindUnavailablePlaceholde
 		MessageID:       &message.ID,
 	}
 
-	items := buildVisibleUserNotifications([]models.UserNotification{notification}, viewer.ID, false)
+	items := buildVisibleUserNotifications([]models.UserNotification{notification}, viewer.ID)
 
 	if len(items) != 1 {
 		t.Fatalf("expected the restricted notification to remain visible, got %d items", len(items))
@@ -320,7 +320,7 @@ func TestBuildUserNotificationsUsesDeletedMessagePlaceholderAcrossNotificationTy
 		})
 	}
 
-	items := buildVisibleUserNotifications(notifications, viewerID, false)
+	items := buildVisibleUserNotifications(notifications, viewerID)
 
 	if len(items) != len(types) {
 		t.Fatalf("expected all missing-message notifications to remain visible, got %d", len(items))
@@ -354,7 +354,7 @@ func TestBuildUserNotificationsKeepsRetractedLikeFiltered(t *testing.T) {
 		MessageID:       &message.ID,
 	}
 
-	items := buildVisibleUserNotifications([]models.UserNotification{notification}, viewer.ID, false)
+	items := buildVisibleUserNotifications([]models.UserNotification{notification}, viewer.ID)
 
 	if len(items) != 0 {
 		t.Fatalf("expected retracted like to stay filtered, got %#v", items)
@@ -390,7 +390,7 @@ func TestBuildUserNotificationsHidesMissingReplyParentBehindUnavailablePlacehold
 		ParentCommentID: &missingParentID,
 	}
 
-	items := buildVisibleUserNotifications([]models.UserNotification{notification}, viewer.ID, false)
+	items := buildVisibleUserNotifications([]models.UserNotification{notification}, viewer.ID)
 
 	if len(items) != 1 || items[0].TargetStatus != userNotificationTargetStatusUnavailable {
 		t.Fatalf("expected missing-parent placeholder, got %#v", items)
@@ -410,7 +410,7 @@ func TestUnavailableNotificationsRetainReadStateAndUnreadCounting(t *testing.T) 
 		{ID: 243, Type: models.UserNotificationTypeReply, RecipientUserID: viewerID, MessageID: &messageID, ReadAt: &readAt},
 	}
 
-	items := buildVisibleUserNotifications(notifications, viewerID, false)
+	items := buildVisibleUserNotifications(notifications, viewerID)
 
 	if len(items) != 2 || items[0].Read || !items[1].Read || items[1].ReadAt == nil {
 		t.Fatalf("expected placeholders to retain read state, got %#v", items)
@@ -440,7 +440,7 @@ func TestBuildUserNotificationsKeepsAvailableCommentNavigable(t *testing.T) {
 	}
 	notification := models.UserNotification{ID: 250, Type: models.UserNotificationTypeComment, RecipientUserID: viewer.ID, ActorUserID: &actor.ID, MessageID: &message.ID, CommentID: &comment.ID}
 
-	items := buildVisibleUserNotifications([]models.UserNotification{notification}, viewer.ID, false)
+	items := buildVisibleUserNotifications([]models.UserNotification{notification}, viewer.ID)
 
 	if len(items) != 1 || items[0].TargetStatus != userNotificationTargetStatusAvailable {
 		t.Fatalf("expected available notification, got %#v", items)
@@ -470,7 +470,7 @@ func TestBuildUserNotificationsHidesRestrictedCommentBehindUnavailablePlaceholde
 	}
 	notification := models.UserNotification{ID: 251, Type: models.UserNotificationTypeComment, RecipientUserID: viewer.ID, ActorUserID: &actor.ID, MessageID: &message.ID, CommentID: &comment.ID}
 
-	items := buildVisibleUserNotifications([]models.UserNotification{notification}, viewer.ID, false)
+	items := buildVisibleUserNotifications([]models.UserNotification{notification}, viewer.ID)
 
 	if len(items) != 1 || items[0].TargetStatus != userNotificationTargetStatusUnavailable {
 		t.Fatalf("expected restricted-comment placeholder, got %#v", items)
@@ -500,7 +500,7 @@ func TestUnavailableNotificationsSupportSingleAndBulkReadUpdates(t *testing.T) {
 	if err := db.Order("id").Find(&notifications).Error; err != nil {
 		t.Fatalf("reload notifications: %v", err)
 	}
-	items := buildVisibleUserNotifications(notifications, viewer.ID, false)
+	items := buildVisibleUserNotifications(notifications, viewer.ID)
 	if len(items) != 2 || !items[0].Read || items[1].Read {
 		t.Fatalf("expected only the selected placeholder to be read, got %#v", items)
 	}
@@ -511,7 +511,7 @@ func TestUnavailableNotificationsSupportSingleAndBulkReadUpdates(t *testing.T) {
 	if err := db.Order("id").Find(&notifications).Error; err != nil {
 		t.Fatalf("reload notifications after bulk update: %v", err)
 	}
-	items = buildVisibleUserNotifications(notifications, viewer.ID, false)
+	items = buildVisibleUserNotifications(notifications, viewer.ID)
 	if countUnreadUserNotifications(items) != 0 {
 		t.Fatalf("expected bulk read to include placeholders, got %#v", items)
 	}

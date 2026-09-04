@@ -332,7 +332,7 @@ func SetupRouter() *gin.Engine {
 	// 管理员评论列表（提供公共路径，附加会话中间件以注入用户上下文）
 	api.GET("/comments", middleware.SessionAuthMiddleware(), middleware.RequireCapability(authorization.CapabilityCommentsView), controllers.ListComments)
 	registerCommentManagementRoutes(authRoutes)
-	// 评论更新/删除：管理员可管理全部，普通用户可管理自己发布的内容
+	// 评论更新/删除：作者保留自助权；管理动作按独立能力、真实可见范围与站长内容保护判定。
 	authRoutes.PUT("/messages/:id/comments/:cid", controllers.UpdateComment)
 	authRoutes.DELETE("/messages/:id/comments/:cid", controllers.DeleteComment)
 	// 管理员评论列表管理（已在公共组注册路径，函数内部鉴权）

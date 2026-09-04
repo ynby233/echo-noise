@@ -726,7 +726,7 @@ func TestGetCommentsFiltersVisibility(t *testing.T) {
 		t.Fatalf("owner should see all own comments, got %#v", got)
 	}
 	if got := contentsOfComments(request(admin.ID, true)); len(got) != 2 {
-		t.Fatalf("admin should see all comments, got %#v", got)
+		t.Fatalf("delegated admin without hidden-content grant should see public/users comments only, got %#v", got)
 	}
 }
 
@@ -929,7 +929,7 @@ func TestPrivateCommentVisibilityMatchesNewRules(t *testing.T) {
 		t.Fatalf("post author should see private comment, got %#v", got)
 	}
 	if got := contentsOfComments(request(admin.ID, true)); len(got) != 1 || got[0] != "private-comment" {
-		t.Fatalf("admin should see private comment, got %#v", got)
+		t.Fatalf("delegated admin with hidden-content grant should see the ordinary user's private comment, got %#v", got)
 	}
 }
 
@@ -1039,7 +1039,7 @@ func TestPublicAndUsersRepliesFollowVisibilityRules(t *testing.T) {
 		t.Fatalf("logged-in outsider should see public/users parents and replies, got %#v", got)
 	}
 	if got := contentsOfComments(request(admin.ID, true)); len(got) != 4 {
-		t.Fatalf("admin should see all public/users parents and replies, got %#v", got)
+		t.Fatalf("delegated admin should see public/users parents and replies, got %#v", got)
 	}
 }
 
@@ -1093,7 +1093,7 @@ func TestCommentCountsExcludeVisibleReplies(t *testing.T) {
 		t.Fatalf("logged-in user should count only top-level public/users comments, got %d", got)
 	}
 	if got := request(admin.ID, true)[msg.ID]; got != 2 {
-		t.Fatalf("admin should count only top-level comments, got %d", got)
+		t.Fatalf("delegated admin should count only visible top-level comments, got %d", got)
 	}
 }
 
@@ -1148,7 +1148,7 @@ func TestReplyVisibilityDoesNotOutliveParentVisibility(t *testing.T) {
 		t.Fatalf("parent author should see both parents and replies, got %#v", got)
 	}
 	if got := contentsOfComments(request(admin.ID, true)); len(got) != 2 {
-		t.Fatalf("admin should see all parents and replies, got %#v", got)
+		t.Fatalf("delegated admin without hidden-content grant should see the users parent and its reply only, got %#v", got)
 	}
 }
 
@@ -1206,7 +1206,7 @@ func TestCommentCountsFollowVisibilityRules(t *testing.T) {
 		t.Fatalf("post author should count all visible comments on own post, got %d", got)
 	}
 	if got := request(admin.ID, true)[msg.ID]; got != 2 {
-		t.Fatalf("admin should count all comments, got %d", got)
+		t.Fatalf("delegated admin without hidden-content grant should count public/users comments only, got %d", got)
 	}
 }
 
@@ -1382,7 +1382,7 @@ func TestGuestbookFollowsCommentVisibilityRules(t *testing.T) {
 		t.Fatalf("guestbook entry author should see own private entry plus public/users entries, got %#v", got)
 	}
 	if got := contentsOfComments(request(admin.ID, true)); len(got) != 3 {
-		t.Fatalf("admin should see all guestbook entries, got %#v", got)
+		t.Fatalf("primary administrator should see all guestbook entries, got %#v", got)
 	}
 	if got := contentsOfComments(request(delegated.ID, true)); len(got) != 2 || got[0] != "public-entry" || got[1] != "users-entry" {
 		t.Fatalf("delegated admin should follow normal guestbook visibility, got %#v", got)

@@ -254,7 +254,7 @@ func replaceVoceChatContactCacheFromRemote(author *models.User, contacts []vocec
 	return repository.ReplaceVoceChatContacts(author.ID, rows)
 }
 
-func EnsureVoceChatContactCachesForViewer(userID *uint, _ bool) {
+func EnsureVoceChatContactCachesForViewer(userID *uint) {
 	if userID == nil || *userID == 0 || database.DB == nil {
 		return
 	}

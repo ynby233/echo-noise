@@ -295,14 +295,14 @@ func CreateNotificationsForComment(message models.Message, comment models.Commen
 		parentID := *comment.ParentID
 		if parent != nil {
 			parentID = parent.ID
-			if parent.UserID != nil && *parent.UserID != 0 && CanViewCommentInThread(message, comment, commentMap, *parent.UserID, true, false) {
+			if parent.UserID != nil && *parent.UserID != 0 && CanViewCommentInThread(message, comment, commentMap, *parent.UserID, true) {
 				return createUserNotification(*parent.UserID, &actorID, models.UserNotificationTypeReply, &messageID, &commentID, &parentID)
 			}
 		}
 		return nil
 	}
 
-	if CanViewCommentInThread(message, comment, commentMap, message.UserID, true, false) {
+	if CanViewCommentInThread(message, comment, commentMap, message.UserID, true) {
 		return createUserNotification(message.UserID, &actorID, models.UserNotificationTypeComment, &messageID, &commentID, nil)
 	}
 	return nil

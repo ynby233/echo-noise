@@ -46,31 +46,31 @@ func TestMessagePinScopesUseIndependentOrderingAndLocateTheSamePage(t *testing.T
 	}
 
 	ownerID := owner.ID
-	latest, err := GetMessagesByPage(1, 10, &ownerID, false, nil, nil, nil, nil, nil, MessagePinScopeLatest, nil)
+	latest, err := GetMessagesByPage(1, 10, &ownerID, nil, nil, nil, nil, nil, MessagePinScopeLatest, nil)
 	if err != nil {
 		t.Fatalf("load latest scope: %v", err)
 	}
 	assertMessageIDs(t, latest.Items, messages[0].ID, messages[2].ID, messages[3].ID, messages[1].ID)
 
-	personal, err := GetMessagesByPage(1, 10, &ownerID, false, &ownerID, nil, nil, nil, nil, MessagePinScopePersonal, nil)
+	personal, err := GetMessagesByPage(1, 10, &ownerID, &ownerID, nil, nil, nil, nil, MessagePinScopePersonal, nil)
 	if err != nil {
 		t.Fatalf("load personal scope: %v", err)
 	}
 	assertMessageIDs(t, personal.Items, messages[1].ID, messages[2].ID, messages[3].ID, messages[0].ID)
 
-	latestTag, err := GetMessagesByPage(1, 2, &ownerID, false, nil, nil, nil, nil, stringPtr("alpha"), MessagePinScopeLatest, nil)
+	latestTag, err := GetMessagesByPage(1, 2, &ownerID, nil, nil, nil, nil, stringPtr("alpha"), MessagePinScopeLatest, nil)
 	if err != nil {
 		t.Fatalf("load latest tag scope: %v", err)
 	}
 	assertMessageIDs(t, latestTag.Items, messages[0].ID, messages[2].ID)
 
-	personalTag, err := GetMessagesByPage(1, 2, &ownerID, false, &ownerID, nil, nil, nil, stringPtr("alpha"), MessagePinScopePersonal, nil)
+	personalTag, err := GetMessagesByPage(1, 2, &ownerID, &ownerID, nil, nil, nil, stringPtr("alpha"), MessagePinScopePersonal, nil)
 	if err != nil {
 		t.Fatalf("load personal tag scope: %v", err)
 	}
 	assertMessageIDs(t, personalTag.Items, messages[1].ID, messages[2].ID)
 
-	latestLocation, err := LocateMessagePage(messages[3].ID, 2, &ownerID, false, nil, nil, nil, nil, nil, MessagePinScopeLatest, nil)
+	latestLocation, err := LocateMessagePage(messages[3].ID, 2, &ownerID, nil, nil, nil, nil, nil, MessagePinScopeLatest, nil)
 	if err != nil {
 		t.Fatalf("locate latest message: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestMessagePinScopesUseIndependentOrderingAndLocateTheSamePage(t *testing.T
 		t.Fatalf("latest location must match latest ordering: %#v", latestLocation)
 	}
 
-	personalLocation, err := LocateMessagePage(messages[0].ID, 2, &ownerID, false, &ownerID, nil, nil, nil, nil, MessagePinScopePersonal, nil)
+	personalLocation, err := LocateMessagePage(messages[0].ID, 2, &ownerID, &ownerID, nil, nil, nil, nil, MessagePinScopePersonal, nil)
 	if err != nil {
 		t.Fatalf("locate personal message: %v", err)
 	}
@@ -192,10 +192,10 @@ func TestPersonalPinScopeRejectsMissingOrForeignAuthor(t *testing.T) {
 		t.Fatalf("create message: %v", err)
 	}
 
-	if _, err := GetMessagesByPage(1, 10, &ownerID, false, nil, nil, nil, nil, nil, MessagePinScopePersonal, nil); err == nil {
+	if _, err := GetMessagesByPage(1, 10, &ownerID, nil, nil, nil, nil, nil, MessagePinScopePersonal, nil); err == nil {
 		t.Fatal("personal scope without authorId must be rejected")
 	}
-	if _, err := GetMessagesByPage(1, 10, &otherID, false, &ownerID, nil, nil, nil, nil, MessagePinScopePersonal, nil); err == nil {
+	if _, err := GetMessagesByPage(1, 10, &otherID, &ownerID, nil, nil, nil, nil, MessagePinScopePersonal, nil); err == nil {
 		t.Fatal("personal scope for another author must be rejected")
 	}
 }

@@ -2188,13 +2188,13 @@ func TestCommentThreadVisibilityFollowsAncestorRestrictions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load comment map: %v", err)
 	}
-	if CanViewCommentInThread(message, charlieReply, commentMap, charlie.ID, true, false) {
+	if CanViewCommentInThread(message, charlieReply, commentMap, charlie.ID, true) {
 		t.Fatalf("charlie should not see a reply hidden by bob's private root comment")
 	}
-	if !CanViewCommentInThread(message, charlieReply, commentMap, bob.ID, true, false) {
+	if !CanViewCommentInThread(message, charlieReply, commentMap, bob.ID, true) {
 		t.Fatalf("bob should see replies inside his private root comment")
 	}
-	if !CanViewCommentInThread(message, charlieReply, commentMap, alice.ID, true, false) {
+	if !CanViewCommentInThread(message, charlieReply, commentMap, alice.ID, true) {
 		t.Fatalf("message author should see replies inside a private root comment on their note")
 	}
 

@@ -136,7 +136,7 @@ func CanViewMessageNormally(message models.Message, userID *uint) bool {
 	}
 }
 
-func CanViewMessage(message models.Message, userID *uint, _ bool) bool {
+func CanViewMessage(message models.Message, userID *uint) bool {
 	scope, err := ResolveContentReadScope(database.DB, userID)
 	return err == nil && scope.CanReadMessage(message)
 }
@@ -171,7 +171,7 @@ func CanInteractWithMessage(message models.Message, userID *uint) bool {
 	return err == nil && scope.CanInteractWithMessage(message)
 }
 
-func ApplyMessageVisibilityScope(query *gorm.DB, userID *uint, _ bool) *gorm.DB {
+func ApplyMessageVisibilityScope(query *gorm.DB, userID *uint) *gorm.DB {
 	scope, err := ResolveContentReadScope(database.DB, userID)
 	if err != nil {
 		return query.Where("1 = 0")
@@ -187,14 +187,14 @@ func voceChatContactsVisibilityEnabled() bool {
 // GetAllMessages 封装业务逻辑，获取所有笔记
 func GetAllMessages(showPrivate bool) ([]models.Message, error) {
 	if showPrivate {
-		return GetAllMessagesForViewer(nil, true)
+		return GetAllMessagesForViewer(nil)
 	}
-	return GetAllMessagesForViewer(nil, false)
+	return GetAllMessagesForViewer(nil)
 }
 
-func GetAllMessagesForViewer(userID *uint, isAdmin bool) ([]models.Message, error) {
+func GetAllMessagesForViewer(userID *uint) ([]models.Message, error) {
 	var messages []models.Message
-	query := ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), userID, isAdmin)
+	query := ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), userID)
 	if err := query.Order(messagePinOrder(MessagePinScopeLatest)).Find(&messages).Error; err != nil {
 		return nil, fmt.Errorf("获取消息失败: %v", err)
 	}
@@ -257,14 +257,14 @@ func GetMessageByID(id uint, showPrivate bool) (*models.Message, error) {
 	if message.DeletedAt != nil || message.IsTombstone {
 		return nil, ErrMessageNotVisible
 	}
-	if !showPrivate && !CanViewMessage(*message, nil, false) {
+	if !showPrivate && !CanViewMessage(*message, nil) {
 		return nil, fmt.Errorf("无权访问")
 	}
 
 	return message, nil
 }
 
-func GetMessageByIDForViewer(id uint, userID *uint, isAdmin bool) (*models.Message, error) {
+func GetMessageByIDForViewer(id uint, userID *uint) (*models.Message, error) {
 	message, err := repository.GetMessageByID(id, true)
 	if err != nil {
 		return nil, fmt.Errorf("获取消息失败: %v", err)
@@ -309,7 +309,7 @@ func GetMessageByIDForViewer(id uint, userID *uint, isAdmin bool) (*models.Messa
 	if userID != nil && *userID != 0 && message.UserID != *userID && StoredMessageVisibility(*message) == MessageVisibilityContacts {
 		_ = EnsureVoceChatContactCacheForAuthor(message.UserID)
 	}
-	if !CanViewMessage(*message, userID, isAdmin) {
+	if !CanViewMessage(*message, userID) {
 		return nil, fmt.Errorf("无权访问")
 	}
 	if userID != nil && *userID != 0 {
@@ -353,7 +353,7 @@ func messagePinOrder(pinScope string) string {
 	return "pinned DESC, CASE WHEN pinned_at IS NULL THEN 1 ELSE 0 END ASC, pinned_at DESC, created_at DESC, id DESC"
 }
 
-func messagePageBaseQuery(userID *uint, isAdmin bool, authorID *uint, username *string, date *string, keyword *string, tag *string, pinScope string, excludeID *uint) (*gorm.DB, error) {
+func messagePageBaseQuery(userID *uint, authorID *uint, username *string, date *string, keyword *string, tag *string, pinScope string, excludeID *uint) (*gorm.DB, error) {
 	normalizedPinScope, err := normalizeMessagePinScope(pinScope)
 	if err != nil {
 		return nil, err
@@ -383,11 +383,11 @@ func messagePageBaseQuery(userID *uint, isAdmin bool, authorID *uint, username *
 	if tag != nil && strings.TrimSpace(*tag) != "" {
 		q = q.Where("content LIKE ?", "%#"+strings.TrimSpace(*tag)+"%")
 	}
-	return ApplyMessageVisibilityScope(q, userID, isAdmin), nil
+	return ApplyMessageVisibilityScope(q, userID), nil
 }
 
-// GetMessagesByPage 分页获取笔记（支持作者和日期筛选；管理员查看全部；普通用户可查看公开和自己的私密）
-func GetMessagesByPage(page, pageSize int, userID *uint, isAdmin bool, authorID *uint, username *string, date *string, keyword *string, tag *string, pinScope string, excludeID *uint) (dto.PageQueryResult, error) {
+// GetMessagesByPage 按当前查看者的正常可见性与获授权隐藏读取范围分页获取笔记，并支持作者、日期等筛选。
+func GetMessagesByPage(page, pageSize int, userID *uint, authorID *uint, username *string, date *string, keyword *string, tag *string, pinScope string, excludeID *uint) (dto.PageQueryResult, error) {
 	page, pageSize = normalizeMessagePageParams(page, pageSize)
 	offset := (page - 1) * pageSize
 	normalizedPinScope, err := normalizeMessagePinScope(pinScope)
@@ -395,7 +395,7 @@ func GetMessagesByPage(page, pageSize int, userID *uint, isAdmin bool, authorID 
 		return dto.PageQueryResult{}, err
 	}
 
-	q, err := messagePageBaseQuery(userID, isAdmin, authorID, username, date, keyword, tag, normalizedPinScope, excludeID)
+	q, err := messagePageBaseQuery(userID, authorID, username, date, keyword, tag, normalizedPinScope, excludeID)
 	if err != nil {
 		return dto.PageQueryResult{}, err
 	}
@@ -437,14 +437,14 @@ func GetMessagesByPage(page, pageSize int, userID *uint, isAdmin bool, authorID 
 	return dto.PageQueryResult{Total: total, Items: messages}, nil
 }
 
-func LocateMessagePage(messageID uint, pageSize int, userID *uint, isAdmin bool, authorID *uint, username *string, date *string, keyword *string, tag *string, pinScope string, excludeID *uint) (dto.MessagePageLocateResult, error) {
+func LocateMessagePage(messageID uint, pageSize int, userID *uint, authorID *uint, username *string, date *string, keyword *string, tag *string, pinScope string, excludeID *uint) (dto.MessagePageLocateResult, error) {
 	_, pageSize = normalizeMessagePageParams(1, pageSize)
 	normalizedPinScope, err := normalizeMessagePinScope(pinScope)
 	if err != nil {
 		return dto.MessagePageLocateResult{}, err
 	}
 
-	targetQuery, err := messagePageBaseQuery(userID, isAdmin, authorID, username, date, keyword, tag, normalizedPinScope, excludeID)
+	targetQuery, err := messagePageBaseQuery(userID, authorID, username, date, keyword, tag, normalizedPinScope, excludeID)
 	if err != nil {
 		return dto.MessagePageLocateResult{}, err
 	}
@@ -457,7 +457,7 @@ func LocateMessagePage(messageID uint, pageSize int, userID *uint, isAdmin bool,
 	}
 
 	if tag != nil && strings.TrimSpace(*tag) != "" {
-		candidateQuery, err := messagePageBaseQuery(userID, isAdmin, authorID, username, date, keyword, tag, normalizedPinScope, excludeID)
+		candidateQuery, err := messagePageBaseQuery(userID, authorID, username, date, keyword, tag, normalizedPinScope, excludeID)
 		if err != nil {
 			return dto.MessagePageLocateResult{}, err
 		}
@@ -487,7 +487,7 @@ func LocateMessagePage(messageID uint, pageSize int, userID *uint, isAdmin bool,
 		}, nil
 	}
 
-	candidateQuery, err := messagePageBaseQuery(userID, isAdmin, authorID, username, date, keyword, tag, normalizedPinScope, excludeID)
+	candidateQuery, err := messagePageBaseQuery(userID, authorID, username, date, keyword, tag, normalizedPinScope, excludeID)
 	if err != nil {
 		return dto.MessagePageLocateResult{}, err
 	}
@@ -751,12 +751,12 @@ func UpdateMessagePinned(messageID uint, pinned bool) error {
 }
 
 // IncrementLikeCount 登录用户点赞；已点赞时保持现状。
-func IncrementLikeCount(messageID uint, userID uint, isAdmin bool) (bool, int, error) {
+func IncrementLikeCount(messageID uint, userID uint) (bool, int, error) {
 	if userID == 0 {
 		return false, 0, fmt.Errorf("请先登录后再点赞")
 	}
 	currentUserID := userID
-	message, err := GetMessageByIDForViewer(messageID, &currentUserID, isAdmin)
+	message, err := GetMessageByIDForViewer(messageID, &currentUserID)
 	if err != nil {
 		return false, 0, err
 	}
@@ -782,12 +782,12 @@ func IncrementLikeCount(messageID uint, userID uint, isAdmin bool) (bool, int, e
 }
 
 // ToggleLike 根据登录用户切换点赞状态。
-func ToggleLike(messageID uint, userID *uint, _ string, isAdmin bool) (bool, int, error) {
+func ToggleLike(messageID uint, userID *uint, _ string) (bool, int, error) {
 	if userID == nil || *userID == 0 {
 		return false, 0, fmt.Errorf("请先登录后再点赞")
 	}
 	currentUserID := *userID
-	message, err := GetMessageByIDForViewer(messageID, &currentUserID, isAdmin)
+	message, err := GetMessageByIDForViewer(messageID, &currentUserID)
 	if err != nil {
 		return false, 0, err
 	}
@@ -843,7 +843,7 @@ type MessageDateCount struct {
 	Count int    `json:"count"`
 }
 
-func GetMessagesGroupByDate(userID *uint, isAdmin bool, authorID *uint) ([]MessageDateCount, error) {
+func GetMessagesGroupByDate(userID *uint, authorID *uint) ([]MessageDateCount, error) {
 	type createdAtRow struct {
 		CreatedAt time.Time `json:"created_at"`
 	}
@@ -853,7 +853,7 @@ func GetMessagesGroupByDate(userID *uint, isAdmin bool, authorID *uint) ([]Messa
 	if authorID != nil {
 		q = q.Where("user_id = ?", *authorID)
 	}
-	q = ApplyMessageVisibilityScope(q, userID, isAdmin)
+	q = ApplyMessageVisibilityScope(q, userID)
 	if err := q.
 		Select("created_at").
 		Order("created_at DESC").
@@ -880,11 +880,11 @@ func GetMessagesGroupByDate(userID *uint, isAdmin bool, authorID *uint) ([]Messa
 }
 
 // GetMessagePage 获取消息详情页
-func GetMessagePage(id uint, userID *uint, isAdmin bool) (*models.Message, error) {
-	return GetMessageByIDForViewer(id, userID, isAdmin)
+func GetMessagePage(id uint, userID *uint) (*models.Message, error) {
+	return GetMessageByIDForViewer(id, userID)
 }
 
-func SearchMessages(keyword string, page, pageSize int, userID *uint, isAdmin bool, authorID *uint, username *string) (dto.PageQueryResult, error) {
+func SearchMessages(keyword string, page, pageSize int, userID *uint, authorID *uint, username *string) (dto.PageQueryResult, error) {
 	// 参数校验
 	if page < 1 {
 		page = 1
@@ -903,7 +903,7 @@ func SearchMessages(keyword string, page, pageSize int, userID *uint, isAdmin bo
 	} else if username != nil && *username != "" {
 		query = query.Where("username = ?", *username)
 	}
-	query = ApplyMessageVisibilityScope(query, userID, isAdmin)
+	query = ApplyMessageVisibilityScope(query, userID)
 
 	var total int64
 	var messages []models.Message

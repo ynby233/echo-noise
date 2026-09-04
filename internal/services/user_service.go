@@ -1199,7 +1199,7 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 	}
 
 	var total int64
-	messageQuery := ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), viewerUserID, isAdmin)
+	messageQuery := ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), viewerUserID)
 	if viewerUserID != nil && !isAdmin {
 		messageQuery = messageQuery.Where("user_id = ?", *viewerUserID)
 	}
@@ -1214,7 +1214,7 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 		}
 	}
 
-	totalComments, totalReplies, totalGuestbook, err := countVisibleCommentStats(viewerUserID, isAdmin)
+	totalComments, totalReplies, totalGuestbook, err := countVisibleCommentStats(viewerUserID)
 	if err != nil {
 		return status, errors.New(models.GetStatusFailMessage)
 	}
@@ -1271,7 +1271,7 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 	}
 
 	if currentUser.ID != 0 {
-		receivedLikes, receivedComments, receivedReplies, receivedGuestbook, err := countReceivedInteractionStats(currentUser.ID, isAdmin)
+		receivedLikes, receivedComments, receivedReplies, receivedGuestbook, err := countReceivedInteractionStats(currentUser.ID)
 		if err != nil {
 			return status, errors.New(models.GetStatusFailMessage)
 		}
@@ -1334,7 +1334,7 @@ func excludeDashboardSpecialMessages(query *gorm.DB) *gorm.DB {
 	)
 }
 
-func countVisibleCommentStats(viewerUserID *uint, _ bool) (int64, int64, int64, error) {
+func countVisibleCommentStats(viewerUserID *uint) (int64, int64, int64, error) {
 	scope, err := ResolveContentReadScope(database.DB, viewerUserID)
 	if err != nil {
 		return 0, 0, 0, err
@@ -1384,7 +1384,7 @@ func countVisibleCommentStats(viewerUserID *uint, _ bool) (int64, int64, int64, 
 	return totalComments, totalReplies, totalGuestbook, nil
 }
 
-func countReceivedInteractionStats(userID uint, _ bool) (int64, int64, int64, int64, error) {
+func countReceivedInteractionStats(userID uint) (int64, int64, int64, int64, error) {
 	var receivedLikes int64
 	likeQuery := database.DB.Model(&models.MessageLike{}).
 		Joins("JOIN messages ON messages.id = message_likes.message_id").

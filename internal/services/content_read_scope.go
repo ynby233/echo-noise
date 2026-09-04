@@ -177,7 +177,7 @@ func (scope ContentReadScope) normalMessageVisibilityPredicate() (string, []inte
 		// Delegated administrators without hidden-read access follow the same
 		// contact audience rules as ordinary users, so their cache must also be
 		// refreshed before applying the SQL predicate.
-		EnsureVoceChatContactCachesForViewer(&viewerID, false)
+		EnsureVoceChatContactCachesForViewer(&viewerID)
 		contactsSQL := "(messages.visibility = ? AND EXISTS (SELECT 1 FROM voce_chat_contact_caches AS vcc WHERE vcc.user_id = messages.user_id AND vcc.contact_user_id = ? AND vcc.last_sync_status = ? AND vcc.expires_at > ?))"
 		contactsArgs := []interface{}{MessageVisibilityContacts, scope.actorID, models.VoceChatContactSyncStatusOK, time.Now().UTC()}
 		if voceChatContactAuthorEligibilityRequired() {

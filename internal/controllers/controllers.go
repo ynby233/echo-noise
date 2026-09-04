@@ -443,8 +443,8 @@ func GetCaptcha(c *gin.Context) {
 
 // GetMessages 处理 GET /messages 请求，返回所有留言
 func GetMessages(c *gin.Context) {
-	currentUserID, isAdmin := currentMessageViewer(c)
-	messages, err := services.GetAllMessagesForViewer(currentUserID, isAdmin)
+	currentUserID, _ := currentMessageViewer(c)
+	messages, err := services.GetAllMessagesForViewer(currentUserID)
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string](models.GetAllMessagesFailMessage))
 		return
@@ -462,8 +462,8 @@ func GetMessage(c *gin.Context) {
 		return
 	}
 
-	currentUserID, isAdmin := currentMessageViewer(c)
-	message, err := services.GetMessageByIDForViewer(uint(id), currentUserID, isAdmin)
+	currentUserID, _ := currentMessageViewer(c)
+	message, err := services.GetMessageByIDForViewer(uint(id), currentUserID)
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string](models.GetMessageByIDFailMessage))
 		return
@@ -544,12 +544,12 @@ func LocateMessagePage(c *gin.Context) {
 		request.PinScope = strings.TrimSpace(request.PinScope)
 	}
 
-	currentUserID, isAdmin := currentMessageViewer(c)
+	currentUserID, _ := currentMessageViewer(c)
 	if strings.EqualFold(request.PinScope, services.MessagePinScopePersonal) && (currentUserID == nil || request.AuthorID == nil || *currentUserID != *request.AuthorID) {
 		c.JSON(http.StatusForbidden, dto.Fail[string]("个人作用域仅允许查询当前用户的笔记"))
 		return
 	}
-	location, err := services.LocateMessagePage(request.MessageID, request.PageSize, currentUserID, isAdmin, request.AuthorID, request.Username, &request.Date, &request.Keyword, &request.Tag, request.PinScope, request.ExcludeID)
+	location, err := services.LocateMessagePage(request.MessageID, request.PageSize, currentUserID, request.AuthorID, request.Username, &request.Date, &request.Keyword, &request.Tag, request.PinScope, request.ExcludeID)
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
 		return
@@ -589,7 +589,7 @@ func GetMessagesByPage(c *gin.Context) {
 
 	// Session、Bearer 与 Token 路由统一通过同一个实时身份解析器，
 	// 避免过期 Session 抢占有效 Bearer 身份。
-	currentUserID, isAdmin := currentMessageViewer(c)
+	currentUserID, _ := currentMessageViewer(c)
 
 	// 作者筛选（可选）
 	var authorID *uint
@@ -644,7 +644,7 @@ func GetMessagesByPage(c *gin.Context) {
 		return
 	}
 
-	pageQueryResult, err := services.GetMessagesByPage(page, pageSize, currentUserID, isAdmin, authorID, username, &pageRequest.Date, &pageRequest.Keyword, &pageRequest.Tag, pageRequest.PinScope, pageRequest.ExcludeID)
+	pageQueryResult, err := services.GetMessagesByPage(page, pageSize, currentUserID, authorID, username, &pageRequest.Date, &pageRequest.Keyword, &pageRequest.Tag, pageRequest.PinScope, pageRequest.ExcludeID)
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
 		return
@@ -694,8 +694,8 @@ func GetUserProfile(c *gin.Context) {
 		return
 	}
 	var total int64
-	currentUserID, isAdmin := currentMessageViewer(c)
-	q := services.ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), currentUserID, isAdmin).
+	currentUserID, _ := currentMessageViewer(c)
+	q := services.ApplyMessageVisibilityScope(database.DB.Model(&models.Message{}), currentUserID).
 		Where("user_id = ?", user.ID).
 		Where(services.GuestbookSQLPredicate("messages.is_guestbook")).
 		Where("content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ? AND content NOT LIKE ?",
@@ -1756,11 +1756,6 @@ func commentAuthUserID(c *gin.Context) (uint, bool) {
 	return 0, false
 }
 
-func commentAuthIsAdmin(c *gin.Context) bool {
-	user, ok := currentReadUser(c)
-	return ok && user.IsAdmin
-}
-
 func normalizeCommentVisibility(value string) (string, bool) {
 	return services.NormalizeCommentVisibility(value)
 }
@@ -1796,8 +1791,8 @@ func isGuestbookMessage(message models.Message) bool {
 	return services.IsGuestbookMessage(message)
 }
 
-func canViewComment(message models.Message, comment models.Comment, commentMap map[uint]models.Comment, viewerID uint, hasViewer bool, isAdmin bool) bool {
-	return services.CanViewCommentInThread(message, comment, commentMap, viewerID, hasViewer, isAdmin)
+func canViewComment(message models.Message, comment models.Comment, commentMap map[uint]models.Comment, viewerID uint, hasViewer bool) bool {
+	return services.CanViewCommentInThread(message, comment, commentMap, viewerID, hasViewer)
 }
 
 func authorizeCommentMutation(c *gin.Context, message models.Message, comment models.Comment, commentMap map[uint]models.Comment, capability authorization.Capability) authorization.Decision {
@@ -2665,7 +2660,7 @@ func IncrementMessageLike(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "请先登录后再点赞"})
 		return
 	}
-	created, count, err := services.IncrementLikeCount(uint(messageID), userID, commentAuthIsAdmin(c))
+	created, count, err := services.IncrementLikeCount(uint(messageID), userID)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": err.Error()})
 		return
@@ -2697,7 +2692,7 @@ func ToggleMessageLike(c *gin.Context) {
 		return
 	}
 	uid := userID
-	liked, count, err := services.ToggleLike(uint(messageID), &uid, "", commentAuthIsAdmin(c))
+	liked, count, err := services.ToggleLike(uint(messageID), &uid, "")
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": err.Error()})
 		return
@@ -2710,7 +2705,7 @@ func ToggleMessageLike(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": map[string]interface{}{"liked": liked, "like_count": count}})
 }
 func GetMessagesCalendar(c *gin.Context) {
-	currentUserID, isAdmin := currentMessageViewer(c)
+	currentUserID, _ := currentMessageViewer(c)
 
 	var authorID *uint
 	if aid := strings.TrimSpace(c.Query("authorId")); aid != "" {
@@ -2720,7 +2715,7 @@ func GetMessagesCalendar(c *gin.Context) {
 		}
 	}
 
-	calendarData, err := services.GetMessagesGroupByDate(currentUserID, isAdmin, authorID)
+	calendarData, err := services.GetMessagesGroupByDate(currentUserID, authorID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -2749,7 +2744,7 @@ func SearchMessages(c *gin.Context) {
 		}
 	}
 
-	currentUserID, isAdmin := currentMessageViewer(c)
+	currentUserID, _ := currentMessageViewer(c)
 
 	// 可选作者筛选
 	var authorID *uint
@@ -2765,7 +2760,7 @@ func SearchMessages(c *gin.Context) {
 		username = &u
 	}
 
-	result, err := services.SearchMessages(keyword, page, pageSize, currentUserID, isAdmin, authorID, username)
+	result, err := services.SearchMessages(keyword, page, pageSize, currentUserID, authorID, username)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"code": 0,
