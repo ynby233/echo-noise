@@ -32,20 +32,28 @@ func InitSession(r *gin.Engine) {
 		}
 	}
 
-	secure := inferSecureCookieDefault()
-	if v := strings.TrimSpace(os.Getenv("COOKIE_SECURE")); v != "" {
-		secure = strings.EqualFold(v, "true") || v == "1"
-	}
-
 	sameSite := parseSameSite(strings.TrimSpace(os.Getenv("COOKIE_SAMESITE")))
-	store.Options(sessions.Options{
+	baseOptions := sessionCookieOptions(maxAge, false, sameSite)
+	store.Options(baseOptions)
+	r.Use(sessions.Sessions("ech0_session", store))
+	// 同一实例可能同时通过公网 HTTPS 和局域网 HTTP 访问。未显式配置时，
+	// 必须按每个请求的实际协议设置 Secure，否则发布模式下的 HTTP 登录
+	// Cookie 会被浏览器拒收，退出时也无法覆盖旧 Cookie。
+	r.Use(func(c *gin.Context) {
+		options := sessionCookieOptions(maxAge, secureCookieForRequest(c), sameSite)
+		sessions.Default(c).Options(options)
+		c.Next()
+	})
+}
+
+func sessionCookieOptions(maxAge int, secure bool, sameSite http.SameSite) sessions.Options {
+	return sessions.Options{
 		Path:     "/",
 		MaxAge:   maxAge,
 		HttpOnly: true,
 		Secure:   secure,
 		SameSite: sameSite,
-	})
-	r.Use(sessions.Sessions("ech0_session", store))
+	}
 }
 
 func sessionSecretFromEnv() string {
@@ -66,10 +74,19 @@ func sessionSecretFromEnv() string {
 	return secret
 }
 
-func inferSecureCookieDefault() bool {
-	env := strings.ToLower(strings.TrimSpace(os.Getenv("APP_ENV")))
-	ginMode := strings.ToLower(strings.TrimSpace(os.Getenv("GIN_MODE")))
-	return env == "prod" || env == "production" || ginMode == "release"
+func secureCookieForRequest(c *gin.Context) bool {
+	if value := strings.TrimSpace(os.Getenv("COOKIE_SECURE")); value != "" {
+		return strings.EqualFold(value, "true") || value == "1"
+	}
+	if c != nil && c.Request != nil && c.Request.TLS != nil {
+		return true
+	}
+	// X-Forwarded-Proto 可能包含代理链，离应用最近的代理值位于首项。
+	forwardedProto := ""
+	if c != nil {
+		forwardedProto = strings.TrimSpace(strings.Split(c.GetHeader("X-Forwarded-Proto"), ",")[0])
+	}
+	return strings.EqualFold(forwardedProto, "https")
 }
 
 func parseSameSite(v string) http.SameSite {
@@ -153,5 +170,6 @@ func GetUserSession(c *gin.Context) (models.User, bool) {
 func ClearUserSession(c *gin.Context) error {
 	session := sessions.Default(c)
 	session.Clear()
+	session.Options(sessionCookieOptions(-1, secureCookieForRequest(c), parseSameSite(strings.TrimSpace(os.Getenv("COOKIE_SAMESITE")))))
 	return session.Save()
 }

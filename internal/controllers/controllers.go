@@ -183,8 +183,7 @@ func currentReadUser(c *gin.Context) (models.User, bool) {
 			expireAt := parseReadSessionExpireAt(session.Get("login_expire_at"))
 			issuedAt := parseReadSessionExpireAt(session.Get("login_issued_at"))
 			if services.IsUserLoginExpired(user, issuedAt, time.Now()) || (issuedAt <= 0 && expireAt > 0 && time.Now().Unix() > expireAt) {
-				session.Clear()
-				_ = session.Save()
+				_ = pkg.ClearUserSession(c)
 			} else {
 				return *user, true
 			}
@@ -321,8 +320,7 @@ func Logout(c *gin.Context) {
 			}
 		}
 	}
-	session.Clear()
-	if err := session.Save(); err != nil {
+	if err := pkg.ClearUserSession(c); err != nil {
 		c.JSON(http.StatusInternalServerError, dto.Fail[any]("退出登录失败"))
 		return
 	}

@@ -8,6 +8,7 @@ import (
 	"github.com/rcy1314/echo-noise/internal/dto"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/services"
+	"github.com/rcy1314/echo-noise/pkg"
 	"net/http"
 	"strings"
 	"time"
@@ -23,8 +24,7 @@ func SessionAuthMiddleware() gin.HandlerFunc {
 			db, err := database.GetDB()
 			var sessionUser models.User
 			if err != nil || db.First(&sessionUser, sessionUserID).Error != nil || services.IsUserLoginExpired(&sessionUser, issuedAt, time.Now()) || (issuedAt <= 0 && expireAt > 0 && time.Now().Unix() > expireAt) {
-				session.Clear()
-				_ = session.Save()
+				_ = pkg.ClearUserSession(ctx)
 				ctx.JSON(http.StatusUnauthorized, dto.Fail[any]("未登录或登录已过期"))
 				ctx.Abort()
 				return

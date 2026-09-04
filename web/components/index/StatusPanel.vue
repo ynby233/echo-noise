@@ -472,7 +472,7 @@
                   </div>
                   <div class="md:col-span-2">
                     <label :class="[theme.mutedText, 'text-sm mb-1 block']">简介文案</label>
-                    <UTextarea v-model="frontendConfig.welcomeDescription" placeholder="一句话欢迎语或个人签名" />
+                    <UTextarea v-model="frontendConfig.welcomeDescription" :rows="2" placeholder="一句话欢迎语或个人签名" />
                   </div>
                 </div>
                 <div class="text-xs mt-2" :class="theme.mutedText">未登录时展示该组件；登录后显示当前用户的头像与签名</div>
@@ -621,7 +621,13 @@
                   </div>
                 </div>
               </div>
-                <div id="site-pwa-section" v-if="isSectionVisible('site-pwa')" class="rounded-lg p-4" :class="theme.subtleBg">
+                <div
+                  id="site-pwa-section"
+                  v-if="isSectionVisible('site')"
+                  class="rounded-lg p-4"
+                  :class="[theme.subtleBg, { 'admin-readonly-settings': !canManageSiteSettings }]"
+                  :inert="!canManageSiteSettings"
+                >
                   <div class="flex justify-between items-center mb-3">
                     <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-rocket-launch" class="w-4 h-4" /> <span>PWA 模式</span></div>
                     <div class="flex items-center gap-4">
@@ -640,11 +646,17 @@
                     </div>
                     <div class="md:col-span-2">
                       <label :class="[theme.mutedText, 'text-sm mb-1 block']">PWA 描述</label>
-                      <UTextarea v-model="frontendConfig.pwaDescription" :placeholder="frontendConfig.description || ''" />
+                      <UTextarea v-model="frontendConfig.pwaDescription" :rows="2" :placeholder="frontendConfig.description || ''" />
   </div>
   </div>
                 </div>
-                <div id="site-github-card-section" v-if="isSectionVisible('site-github-card')" class="flex flex-col sm:flex-row items-start sm:items-center rounded-lg p-3 justify-between gap-3 sm:gap-0" :class="theme.subtleBg">
+                <div
+                  id="site-github-card-section"
+                  v-if="isSectionVisible('site')"
+                  class="flex flex-col sm:flex-row items-start sm:items-center rounded-lg p-3 justify-between gap-3 sm:gap-0"
+                  :class="[theme.subtleBg, { 'admin-readonly-settings': !canManageSiteSettings }]"
+                  :inert="!canManageSiteSettings"
+                >
                   <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-mdi-github" class="w-4 h-4" /> <span>GitHub 链接卡片解析</span></div>
                   <div class="flex flex-wrap items-center gap-4">
                     <UToggle v-model="githubCardEnabled" />
@@ -860,7 +872,7 @@
                           <UInput v-model="frontendConfig.avatarURL" placeholder="输入图片 URL" class="w-full" />
                         </div>
                       </template>
-                      <template v-else-if="String(key) === 'subtitleText' || String(key) === 'commentPageDescription' || String(key) === 'announcementPageDescription' || String(key) === 'aboutPageDescription' || String(key) === 'aboutMarkdown'">
+                      <template v-else-if="String(key) === 'aboutMarkdown'">
                         <UTextarea v-model="frontendConfig[String(key)]" :placeholder="`输入${label}`" class="w-full mb-2" />
                       </template>
                       <template v-else>
@@ -2564,7 +2576,7 @@ const formatShanghai = (s: string) => {
 const cardCls = 'rounded-xl border shadow-sm'
 type AdminSectionKey =
   'dashboard' | 'user' | 'site' | 'notify' | 'attachments' | 'db' | 'version' | 'security' | 'access-logs' | 'site-visits' | 'login-audits' |
-  'site-register' | 'site-pwa' | 'site-github-card' | 'site-announcement' | 'site-music' |
+  'site-register' | 'site-announcement' | 'site-music' |
   'site-social-links' | 'site-ads' | 'site-feed' | 'site-rss' | 'hitokoto' | 'life-countdown' |
   'site-configs' | 'comments' | 'email' | 'admin-users' | 'registration-review' | 'widgets' |
   'storage' | 'authorization' | 'admin-audit' | 'notes' | 'recycle-bin' | 'comment-recycle-bin' |
@@ -2608,7 +2620,6 @@ const adminNavGroups = computed<AdminNavGroup[]>(() => {
         { key: 'site', label: '网站配置', icon: 'i-heroicons-wrench-screwdriver' },
         { key: 'site-configs', label: '站点信息', icon: 'i-heroicons-cog-6-tooth' },
         { key: 'site-register', label: '注册配置', icon: 'i-heroicons-user-plus' },
-        { key: 'site-pwa', label: 'PWA 模式', icon: 'i-heroicons-rocket-launch' },
         { key: 'site-announcement', label: '公告', icon: 'i-heroicons-megaphone' },
         { key: 'site-ads', label: '广告', icon: 'i-heroicons-photo' },
         { key: 'site-feed', label: '信息流', icon: 'i-heroicons-rss' },
@@ -2631,7 +2642,6 @@ const adminNavGroups = computed<AdminNavGroup[]>(() => {
         { key: 'comment-recycle-bin', label: '互动回收站', icon: 'i-heroicons-archive-box' },
         { key: 'notes', label: '笔记管理', icon: 'i-heroicons-document-text' },
         { key: 'recycle-bin', label: '笔记回收站', icon: 'i-heroicons-trash' },
-        { key: 'site-github-card', label: 'GitHub 卡片', icon: 'i-mdi-github' },
         { key: 'site-music', label: '音乐配置', icon: 'i-heroicons-musical-note' },
         { key: 'notify', label: '推送配置', icon: 'i-heroicons-bell-alert' },
         { key: 'email', label: '邮件设置', icon: 'i-heroicons-envelope' },
@@ -2686,8 +2696,6 @@ const accessibleSectionKeys = computed(() => adminNavGroups.value.flatMap((group
 const siteSectionKeys: AdminSectionKey[] = [
   'site',
   'site-register',
-  'site-pwa',
-  'site-github-card',
   'site-announcement',
   'site-music',
   'site-social-links',
@@ -3118,6 +3126,7 @@ const resolveSectionFromHash = (rawHash: string): AdminSectionKey | null => {
   // 兼容历史 hash：面板外观/系统信息已并入仪表盘
   if (sectionKey === 'panel-theme' || sectionKey === 'system') sectionKey = 'dashboard'
   if (sectionKey === 'site-default-theme') sectionKey = 'site'
+  if (sectionKey === 'site-pwa' || sectionKey === 'site-github-card') sectionKey = 'site'
   if (sectionKey === 'attachment-storage') sectionKey = 'storage'
   const allowed = new Set<AdminSectionKey>()
   for (const group of adminNavGroups.value) {
@@ -5316,17 +5325,17 @@ const configLabels: Record<string, string> = {
 }
 const configFieldHints: Record<string, string> = {
   siteTitle: '站点首页与浏览器标题展示名称。',
-  subtitleText: '显示在首页主标题下方，建议控制在两行内。',
+  subtitleText: '显示在首页主标题下方，仅支持单行文本。',
   backgrounds: '支持多张头图，按顺序轮播或展示。',
   pageFooterHTML: '页脚自定义 HTML 内容，适合备案或额外说明。',
   commentPageTitle: '留言页大标题。',
-  commentPageDescription: '留言页顶部描述文字。',
+  commentPageDescription: '留言页顶部单行说明。',
   notificationPageTitle: '通知页大标题。',
   notificationPageDescription: '通知页顶部描述文字。',
   announcementPageTitle: '公告页大标题。',
-  announcementPageDescription: '公告页顶部描述文字。',
+  announcementPageDescription: '公告页顶部单行说明。',
   aboutPageTitle: '关于页标题。',
-  aboutPageDescription: '关于页简介说明。',
+  aboutPageDescription: '关于页顶部单行说明。',
   aboutMarkdown: '关于页正文内容，支持 Markdown。',
   loginExpireDays: '登录态过期时间，支持天数和小时组合，普通用户过期后需重新登录。',
   feedPageTitle: '首页信息流 Tab 的标题文案。',

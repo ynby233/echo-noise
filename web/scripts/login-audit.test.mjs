@@ -10,6 +10,7 @@ const component = await readFile(join(webRoot, 'components/index/StatusPanel.vue
 const securityController = await readFile(join(repoRoot, 'internal/controllers/security.go'), 'utf8')
 const loginController = await readFile(join(repoRoot, 'internal/controllers/controllers.go'), 'utf8')
 const loginSession = await readFile(join(repoRoot, 'internal/controllers/mobile_setup_controller.go'), 'utf8')
+const sessionPackage = await readFile(join(repoRoot, 'pkg/session.go'), 'utf8')
 const routes = await readFile(join(repoRoot, 'internal/routers/routers.go'), 'utf8')
 const securityModel = await readFile(join(repoRoot, 'internal/models/security.go'), 'utf8')
 const migrate = await readFile(join(repoRoot, 'internal/models/migrate.go'), 'utf8')
@@ -54,14 +55,20 @@ assert.ok(
 
 assert.match(
   loginController,
-  /func\s+Logout\(c \*gin\.Context\)[\s\S]*?recordSessionLogoutAudit\(c,\s*session\)[\s\S]*?session\.Clear\(\)/,
+  /func\s+Logout\(c \*gin\.Context\)[\s\S]*?recordSessionLogoutAudit\(c,\s*session\)[\s\S]*?pkg\.ClearUserSession\(c\)/,
   'logout should record the audit before clearing the session'
 )
 
 assert.match(
   loginController,
-  /session\.Clear\(\)\s*if err := session\.Save\(\); err != nil \{[\s\S]*?http\.StatusInternalServerError[\s\S]*?return\s*\}/,
+  /if err := pkg\.ClearUserSession\(c\); err != nil \{[\s\S]*?http\.StatusInternalServerError[\s\S]*?return\s*\}/,
   'logout must report a session persistence failure instead of claiming success'
+)
+
+assert.match(
+  sessionPackage,
+  /func ClearUserSession\(c \*gin\.Context\) error \{[\s\S]*?session\.Clear\(\)[\s\S]*?session\.Options\(sessionCookieOptions\(-1,[\s\S]*?return session\.Save\(\)/,
+  'logout and expired-session cleanup must delete the browser cookie instead of saving a long-lived empty cookie'
 )
 
 assert.match(

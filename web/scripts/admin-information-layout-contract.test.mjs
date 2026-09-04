@@ -18,6 +18,20 @@ assert.match(
   /sectionKey === 'site-default-theme'[^\n]+sectionKey = 'site'/,
   '历史主题与布局 hash 应兼容跳转到网站配置',
 )
+for (const [key, label] of [['site-pwa', 'PWA 模式'], ['site-github-card', 'GitHub 卡片']]) {
+  assert.doesNotMatch(component, new RegExp(`\\{ key: '${key}', label: '${label}'`), `${label}不应继续占用独立导航入口`)
+  assert.match(component, new RegExp(`id="${key}-section"[^>]+v-if="isSectionVisible\\('site'\\)"`), `${label}应合并到网站配置页面`)
+  assert.match(component, new RegExp(`sectionKey === '${key}'[^\\n]+sectionKey = 'site'`), `${label}历史 hash 应兼容跳转到网站配置`)
+}
+assert.match(component, /welcomeDescription"[^>]+:rows="2"/, '简介文案输入框应收紧为两行')
+assert.match(component, /pwaDescription"[^>]+:rows="2"/, 'PWA 描述输入框应收紧为两行')
+assert.match(component, /v-else-if="String\(key\) === 'aboutMarkdown'"/, '仅正文 Markdown 配置应使用多行输入框')
+assert.doesNotMatch(
+  component,
+  /v-else-if="[^"]*(?:subtitleText|commentPageDescription|announcementPageDescription|aboutPageDescription)[^"]*"[^>]*>\s*<UTextarea/,
+  '欢迎语及留言、公告、关于页面说明应使用单行输入框',
+)
+assert.match(component, /subtitleText:\s*'显示在首页主标题下方，仅支持单行文本。'/, '欢迎语提示必须与首页单行展示行为一致')
 
 assert.match(component, /class="admin-profile-grid"/, '用户信息应使用平衡的响应式工作台网格')
 for (const modifier of ['username', 'avatar', 'description', 'password', 'token']) {
