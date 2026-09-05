@@ -3,7 +3,7 @@
     <div v-if="loading" class="feed-empty feed-loading-text">信息流加载中...</div>
     <div v-else-if="errorText" class="feed-empty">{{ errorText }}</div>
     <div v-else-if="allItems.length === 0" class="feed-empty">暂无信息流内容</div>
-    <div v-else :class="['feed-grid', gridClass]">
+    <div v-else v-masonry="layoutState === 'masonry'" :class="['feed-grid', gridClass]">
       <article
         v-for="item in pageItems"
         :key="`${item.link}-${item.timestamp}`"
@@ -130,6 +130,7 @@
 </template>
 
 <script setup lang="ts">
+import { vMasonry } from '~/directives/masonry'
 import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 // @ts-ignore Vetur 对 .vue 默认导出识别不稳定，这里与项目内其他组件保持一致
 import MarkdownRenderer from "~/components/index/MarkdownRenderer.vue";
@@ -155,7 +156,7 @@ type FeedItem = {
 }
 
 const props = withDefaults(defineProps<{
-  layoutState: 'three' | 'two' | 'single'
+  layoutState: 'three' | 'two' | 'single' | 'masonry'
   limit?: number
   refreshSeconds?: number
   active?: boolean
@@ -198,6 +199,7 @@ const cacheKey = computed(() => {
 })
 
 const gridClass = computed(() => {
+  if (props.layoutState === 'masonry') return 'feed-grid-masonry'
   if (props.layoutState === 'single') return 'feed-grid-single'
   if (props.layoutState === 'two') return 'feed-grid-two'
   return 'feed-grid-three'
@@ -1408,4 +1410,5 @@ onUnmounted(() => {
     gap: 8px;
   }
 }
+.feed-grid.feed-grid-masonry { grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); grid-auto-rows: 1px; column-gap: 16px !important; row-gap: 0 !important; }
 </style>

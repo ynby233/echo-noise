@@ -5,7 +5,7 @@
       <div class="loading-text">加载中...</div>
     </div>
     <div ref="contentWrapper" class="content-wrapper gpu-accelerated">
-      <UContainer class="container-fixed pt-2 pb-0 mt-4 mb-0">
+      <UContainer class="container-fixed pt-2 pb-0 mt-4 mb-0" :class="{ 'container-masonry': isMasonry }">
         <div :class="['layout-container', gridModeClass]">
       <ClientOnly>
       <div class="sidebar-slot sidebar-slot-left" v-if="!isMobile && layoutState!=='single'">
@@ -38,6 +38,24 @@
             </div>
           </div>
         </UCard>
+        <div v-if="isMasonry" class="masonry-sidebar-content">
+          <nav class="masonry-nav sidebar-card" :class="sidebarThemeCard" aria-label="页面切换">
+            <button v-for="t in centerTabs" :key="t.key" type="button" :class="['masonry-nav-button', { active: activeTab === t.key }]" :aria-current="activeTab === t.key ? 'page' : undefined" @click="switchActiveTab(t.key, { resetScroll: true })">
+              <UIcon :name="t.icon" class="w-5 h-5" /><span>{{ t.name }}</span>
+            </button>
+          </nav>
+          <UCard v-if="frontendConfig.calendarEnabled !== false" class="sidebar-card no-padding-card calendar-sidebar-card" :class="sidebarThemeCard">
+            <CalendarWidget :active-tab="activeTab" :selected-date="selectedCalendarDate" @select-date="handleCalendarDateSelect" />
+          </UCard>
+          <UCard v-if="frontendConfig.popularTagsEnabled !== false" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
+            <div class="hot-tags-head"><span class="text-xs opacity-70">标签</span><button type="button" class="hot-tags-refresh" aria-label="刷新标签" @click="refreshHotTags"><UIcon name="i-mdi-refresh" class="w-4 h-4" :class="{ 'animate-spin': tagsRefreshing }" /></button></div>
+            <div class="masonry-tags" tabindex="0" aria-label="全部标签，可滚动">
+              <button v-for="t in allVisibleTags" :key="t.name" class="hot-tag-btn" :class="{ 'is-active': messageSelectedTag === t.name }" @click="handleTagClick(t.name)"><span class="hot-tag-name">#{{ t.name }}</span><span class="hot-tag-count">{{ t.count }}</span></button>
+              <span v-if="!allVisibleTags.length" class="text-xs opacity-60">暂无标签</span>
+            </div>
+          </UCard>
+        </div>
+        <template v-if="!isMasonry">
         <UCard v-if="frontendConfig.homeStatsEnabled !== false" class="sidebar-card no-padding-card mt-2 left-widget-stats-card" :class="sidebarThemeCard">
           <div v-if="isLoggedIn" class="p-0 grid grid-cols-3 gap-2 text-center text-sm">
             <div>
@@ -176,12 +194,13 @@
           </UCard>
         
         </div>
+        </template>
       </div>
       </div>
       </ClientOnly>
       <div ref="centerCol" class="center-col">
         <div :class="centerContainerClass">
-          <div class="moments-header">
+          <div v-if="!isMasonry" class="moments-header">
             <div class="header-image" :style="headerImageStyle">
               <h1 class="header-title" :style="activeHeaderTextStyle.title">{{ (frontendConfig.siteTitle || '个人站点') }}</h1>
               <div class="header-subtitle" :style="activeHeaderTextStyle.subtitle">{{ frontendConfig.subtitleText || '' }}</div>
@@ -351,15 +370,15 @@
             <div class="page-footer" v-html="(frontendConfig.pageFooterHTML || defaultConfig.pageFooterHTML)"></div>
           </div>
           <template v-else>
-            <AddForm v-if="activeTab !== 'personal' || isLoggedIn" @search-result="handleSearchResult" :hide-header-tools="layoutState==='three'" :wide="layoutState==='two'" />
+            <AddForm v-if="activeTab !== 'personal' || isLoggedIn" @search-result="handleSearchResult" :hide-header-tools="layoutState==='three'" :wide="layoutState==='two' || isMasonry" />
             <!-- 中心栏标签筛选已隐藏；右侧热门标签组件保留原功能 -->
-          <MessageList 
+          <MessageList :masonry="isMasonry"
             ref="messageList" 
             class="message-list-container" 
             :site-config="frontendConfig"
             :target-message-id="targetMessageId ?? undefined"
             :target-comment-id="notificationTargetCommentId ?? undefined"
-            :wide="layoutState==='two'"
+            :wide="layoutState==='two' || isMasonry"
             :page-ready="isLoaded"
             :active-tab="activeTab"
             :calendar-date="calendarMessageDate"
@@ -441,6 +460,7 @@
   <FloatingToolSidebar 
     :content-theme="contentTheme"
     :layout-icon="layoutIcon"
+    :layout-label="isMasonry ? '瀑布流' : '布局'"
     :notification-unread-count="notificationUnreadCount"
     :announcement-unread-count="announcementUnreadCount"
     :pwa-enabled="frontendConfig.pwaEnabled !== false"
@@ -609,24 +629,24 @@ const router = useRouter()
 const route = useRoute()
 const baseApi = useRuntimeConfig().public.baseApi || '/api'
 const pwaRuntimeNotices = ref<{ open: () => void } | null>(null)
-const normalizeLayoutMode = (raw: any): 'three' | 'two' | 'single' => {
+const normalizeLayoutMode = (raw: any): 'three' | 'two' | 'single' | 'masonry' => {
   const val = String(raw || '').trim()
-  return (val === 'three' || val === 'two' || val === 'single') ? val : 'three'
+  return (val === 'three' || val === 'two' || val === 'single' || val === 'masonry') ? val : 'three'
 }
-let desktopLayoutDefault: 'three' | 'two' | 'single' = 'three'
-const initialLayout = ((): 'three' | 'two' | 'single' => {
+let desktopLayoutDefault: 'three' | 'two' | 'single' | 'masonry' = 'three'
+const initialLayout = ((): 'three' | 'two' | 'single' | 'masonry' => {
   if (typeof window === 'undefined') return 'three'
   const isMobileInit = window.matchMedia('(max-width: 1024px)').matches
   const saved = localStorage.getItem(isMobileInit ? 'homeLayoutMobile' : 'homeLayoutDesktop') as any
   if (saved) return normalizeLayoutMode(saved)
   return isMobileInit ? 'single' : desktopLayoutDefault
 })()
-const layoutState = ref<'three' | 'two' | 'single'>(initialLayout)
+const layoutState = ref<'three' | 'two' | 'single' | 'masonry'>(initialLayout)
 const mq = typeof window !== 'undefined' ? window.matchMedia('(max-width: 1024px)') : null
 const isMobile = ref<boolean>(!!mq?.matches)
 const cycleLayout = () => {
   if (isMobile.value) return
-  layoutState.value = layoutState.value === 'three' ? 'two' : (layoutState.value === 'two' ? 'single' : 'three')
+  layoutState.value = layoutState.value === 'three' ? 'two' : (layoutState.value === 'two' ? 'single' : (layoutState.value === 'single' && supportsMasonry.value ? 'masonry' : 'three'))
   if (typeof window !== 'undefined') localStorage.setItem('homeLayoutDesktop', layoutState.value)
 }
 const handleLayoutMediaChange = (e: MediaQueryListEvent) => {
@@ -645,10 +665,10 @@ onMounted(() => {
 onUnmounted(() => {
   mq?.removeEventListener?.('change', handleLayoutMediaChange)
 })
-const gridModeClass = computed(() => (layoutState.value === 'three' ? 'grid-3' : (layoutState.value === 'two' ? 'grid-2' : 'grid-1')))
-const layoutIcon = computed(() => (layoutState.value === 'three' ? 'i-mdi-view-grid' : (layoutState.value === 'two' ? 'i-mdi-view-column' : 'i-mdi-view-stream')))
+const gridModeClass = computed(() => isMasonry.value ? 'grid-masonry' : (layoutState.value === 'three' ? 'grid-3' : (layoutState.value === 'two' ? 'grid-2' : 'grid-1')))
+const layoutIcon = computed(() => isMasonry.value ? 'i-mdi-view-dashboard' : (layoutState.value === 'three' ? 'i-mdi-view-grid' : (layoutState.value === 'two' ? 'i-mdi-view-column' : 'i-mdi-view-stream')))
 const centerContainerClass = computed(() => (
-  layoutState.value === 'two'
+  (layoutState.value === 'two' || isMasonry.value)
     ? 'w-full max-w-none'
     : (layoutState.value === 'single'
         ? 'mx-auto w-full max-w-[640px] sm:max-w-3xl'
@@ -657,6 +677,14 @@ const centerContainerClass = computed(() => (
 const toggleHeatmapCard = () => { showHeatmap.value = !showHeatmap.value }
 // 主题预设。统一由 ThemePresetSwitcher 控制 documentElement 类，不在容器上附加主题类
 const activeTab = ref('latest')
+const supportsMasonry = computed(() => ['latest', 'personal', 'feed'].includes(activeTab.value))
+const isMasonry = computed(() => !isMobile.value && layoutState.value === 'masonry' && supportsMasonry.value)
+watch([activeTab, layoutState], () => {
+  if (layoutState.value === 'masonry' && !supportsMasonry.value) {
+    layoutState.value = 'three'
+    if (typeof window !== 'undefined') localStorage.setItem('homeLayoutDesktop', 'three')
+  }
+}, { flush: 'sync' })
 const notificationTargetMessageId = ref<number | null>(null)
 const notificationTargetCommentId = ref<number | null>(null)
 const notificationTargetNotificationId = ref<number | null>(null)
@@ -2582,14 +2610,14 @@ const loadAdminWelcome = async () => {
 }
 watch(() => [userStore.user, status.value, (frontendConfig.value as any)?.welcomeUseAdmin], () => { loadAdminWelcome() }, { deep: false })
 onMounted(() => { loadAdminWelcome() })
-const popularTags = computed(() => {
+const allVisibleTags = computed(() => {
   const arr = Array.isArray(tags.value) ? [...tags.value] : []
   const excluded = ['留言', 'guestbook']
   return arr
     .filter((t: any) => !excluded.includes(String(t?.name || '').toLowerCase()))
     .sort((a: any, b: any) => (b.count || 0) - (a.count || 0))
-    .slice(0, 9)
 })
+const popularTags = computed(() => allVisibleTags.value.slice(0, 9))
 const tagsCount = computed(() => {
   const arr = Array.isArray(tags.value) ? [...tags.value] : []
   const excluded = ['留言', 'guestbook']
@@ -3746,6 +3774,21 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
 
 .site-media-fancybox .f-thumbs__slide__button::after {
   display: none;
+}
+/* The wide reading board keeps a quiet, compact navigation rail. */
+.container-fixed.container-masonry { max-width: 1920px; padding-right: 88px; padding-left: 24px; }
+.layout-container.grid-masonry { display: grid; grid-template-columns: 256px minmax(0, 1fr); gap: 24px; align-items: start; }
+.grid-masonry .sidebar-slot-left { top: 16px; height: auto; }
+.grid-masonry .left-col { position: relative !important; max-height: calc(100dvh - 40px); overflow-y: auto; scrollbar-width: thin; }
+.masonry-sidebar-content { display: grid; gap: 16px; margin-top: 16px; }
+.masonry-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 8px; }
+.masonry-nav-button { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; color: inherit; }
+.masonry-nav-button:hover, .masonry-nav-button.active { background: rgba(249, 115, 22, .12); color: #ea580c; }
+.masonry-tags { display: grid; gap: 6px; max-height: 240px; overflow-y: auto; scrollbar-width: thin; overscroll-behavior: contain; }
+.masonry-tags .hot-tag-btn { width: 100%; min-width: 0; }
+@media (max-width: 1279px) {
+  .layout-container.grid-masonry { grid-template-columns: 224px minmax(0, 1fr); gap: 16px; }
+  .container-fixed.container-masonry { padding-left: 16px; }
 }
 </style>
 <style>

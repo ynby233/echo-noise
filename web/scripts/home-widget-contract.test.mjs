@@ -52,7 +52,7 @@ assert.match(
 )
 assert.match(
   homePage,
-  /<UContainer class="container-fixed pt-2 pb-0 mt-4 mb-0">/,
+  /<UContainer class="container-fixed pt-2 pb-0 mt-4 mb-0"[^>]*>/,
   '三栏外层不能保留底部 padding 或 margin，否则 sticky 侧栏仍会在页面末尾被向上推走'
 )
 assert.match(

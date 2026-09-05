@@ -64,7 +64,7 @@
             </div>
           </div>
           <!-- 消息列表 -->
-          <div v-if="!props.pageReady || !hasActiveFilters || (!isDisplayQueryPending && displayMessages.length)" :class="props.pageReady && hasActiveFilters ? 'search-results-list' : 'my-4'">
+          <div v-if="!props.pageReady || !hasActiveFilters || (!isDisplayQueryPending && displayMessages.length)" v-masonry="props.masonry" :class="[props.pageReady && hasActiveFilters ? 'search-results-list' : 'my-4', { 'masonry-grid': props.masonry }]">
         <!-- 消息列表内容 -->
         <div
           v-for="(msg, idx) in displayMessages"
@@ -534,6 +534,7 @@
 </template>
 
 <script setup lang="ts">
+import { vMasonry } from '~/directives/masonry'
 import { resolveComponent } from 'vue'
 import { useMessageStore } from "~/store/message";
 import { useUserStore } from "~/store/user";
@@ -879,6 +880,7 @@ const props = defineProps({
     type: Number,
     default: null
   },
+  masonry: { type: Boolean, default: false },
   wide: {
     type: Boolean,
     default: false
@@ -4076,4 +4078,7 @@ onMounted(() => {
   margin-top: 16px;
   text-align: center;
 }
+.masonry-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); grid-auto-rows: 1px; column-gap: 16px; row-gap: 0; align-items: start; }
+.masonry-grid > .message-list-item { align-self: start; min-width: 0; }
+.masonry-grid .content-container { margin: 0; }
 </style>

@@ -10,7 +10,7 @@
     </button>
     <button v-show="!collapsed" class="tool-btn btn-layout nw-action-btn" @click="$emit('toggle-layout')" aria-label="布局">
       <UIcon :name="layoutIconProp" class="w-6 h-6" />
-      <span class="btn-label">布局</span>
+      <span class="btn-label">{{ layoutLabel || '布局' }}</span>
     </button>
     <button v-show="!collapsed" class="tool-btn nw-action-btn" @click="$emit('search')" aria-label="搜索">
       <UIcon name="i-heroicons-magnifying-glass" class="w-6 h-6" />
@@ -50,7 +50,7 @@
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{ contentTheme?: string; layoutIcon?: string; notificationUnreadCount?: number; announcementUnreadCount?: number; pwaEnabled?: boolean }>()
+const props = defineProps<{ contentTheme?: string; layoutIcon?: string; layoutLabel?: string; notificationUnreadCount?: number; announcementUnreadCount?: number; pwaEnabled?: boolean }>()
 defineEmits<{
   (event: 'toggle-layout'): void
   (event: 'search'): void
