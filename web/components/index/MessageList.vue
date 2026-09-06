@@ -4078,7 +4078,9 @@ onMounted(() => {
   margin-top: 16px;
   text-align: center;
 }
-.masonry-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); grid-auto-rows: 1px; column-gap: 16px; row-gap: 0; align-items: start; }
+.masonry-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); grid-auto-rows: 1px; grid-auto-flow: row dense; --masonry-gap: 12px; column-gap: 12px; row-gap: 0; align-items: start; }
 .masonry-grid > .message-list-item { align-self: start; min-width: 0; }
-.masonry-grid .content-container { margin: 0; }
+.masonry-grid > .message-list-item > .p-0 > .content-container { margin: 0 !important; }
+.masonry-grid { margin-top: 0; }
+.search-results-list.masonry-grid { width: 100%; max-width: none; margin: 0; }
 </style>

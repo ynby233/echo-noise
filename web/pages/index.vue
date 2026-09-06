@@ -40,13 +40,31 @@
         </UCard>
         <div v-if="isMasonry" class="masonry-sidebar-content">
           <nav class="masonry-nav sidebar-card" :class="sidebarThemeCard" aria-label="页面切换">
-            <button v-for="t in centerTabs" :key="t.key" type="button" :class="['masonry-nav-button', { active: activeTab === t.key }]" :aria-current="activeTab === t.key ? 'page' : undefined" @click="switchActiveTab(t.key, { resetScroll: true })">
-              <UIcon :name="t.icon" class="w-5 h-5" /><span>{{ t.name }}</span>
+            <button v-for="t in centerTabs" :key="t.key" type="button" :class="['hero-tab', { active: activeTab === t.key }]" :aria-current="activeTab === t.key ? 'page' : undefined" @click="switchActiveTab(t.key, { resetScroll: true })">
+              <UIcon :name="t.icon" class="hero-tab-icon" /><span>{{ t.name }}</span>
             </button>
           </nav>
           <UCard v-if="frontendConfig.calendarEnabled !== false" class="sidebar-card no-padding-card calendar-sidebar-card" :class="sidebarThemeCard">
             <CalendarWidget :active-tab="activeTab" :selected-date="selectedCalendarDate" @select-date="handleCalendarDateSelect" />
           </UCard>
+        <UCard class="sidebar-card no-padding-card masonry-pager-card" :class="sidebarThemeCard">
+          <HomeSidebarPager
+            :context-key="activeTab"
+            :current-page="activeSidebarPager.currentPage"
+            :total-pages="activeSidebarPager.totalPages"
+            :loading="activeSidebarPager.loading"
+            :can-previous="activeSidebarPager.canPrevious"
+            :can-next="activeSidebarPager.canNext"
+            :can-scroll-top="!isAtTop"
+            :can-scroll-bottom="!isAtBottom"
+            :disabled="!isSidebarPagerInteractive"
+            @previous="handleSidebarPagerPrevious"
+            @next="handleSidebarPagerNext"
+            @jump="handleSidebarPagerJump"
+            @scroll-top="scrollToTop"
+            @scroll-bottom="scrollToBottom"
+          />
+        </UCard>
           <UCard v-if="frontendConfig.popularTagsEnabled !== false" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
             <div class="hot-tags-head"><span class="text-xs opacity-70">标签</span><button type="button" class="hot-tags-refresh" aria-label="刷新标签" @click="refreshHotTags"><UIcon name="i-mdi-refresh" class="w-4 h-4" :class="{ 'animate-spin': tagsRefreshing }" /></button></div>
             <div class="masonry-tags" tabindex="0" aria-label="全部标签，可滚动">
@@ -370,7 +388,7 @@
             <div class="page-footer" v-html="(frontendConfig.pageFooterHTML || defaultConfig.pageFooterHTML)"></div>
           </div>
           <template v-else>
-            <AddForm v-if="activeTab !== 'personal' || isLoggedIn" @search-result="handleSearchResult" :hide-header-tools="layoutState==='three'" :wide="layoutState==='two' || isMasonry" />
+            <AddForm v-show="!isMasonry || masonryComposerVisible" v-if="activeTab !== 'personal' || isLoggedIn" @search-result="handleSearchResult" :hide-header-tools="layoutState==='three'" :wide="layoutState==='two' || isMasonry" />
             <!-- 中心栏标签筛选已隐藏；右侧热门标签组件保留原功能 -->
           <MessageList :masonry="isMasonry"
             ref="messageList" 
@@ -460,6 +478,9 @@
   <FloatingToolSidebar 
     :content-theme="contentTheme"
     :layout-icon="layoutIcon"
+    :show-write-note="isMasonry"
+    :write-note-active="masonryComposerVisible"
+    @write-note="toggleMasonryComposer"
     :layout-label="isMasonry ? '瀑布流' : '布局'"
     :notification-unread-count="notificationUnreadCount"
     :announcement-unread-count="announcementUnreadCount"
@@ -677,6 +698,18 @@ const centerContainerClass = computed(() => (
 const toggleHeatmapCard = () => { showHeatmap.value = !showHeatmap.value }
 // 主题预设。统一由 ThemePresetSwitcher 控制 documentElement 类，不在容器上附加主题类
 const activeTab = ref('latest')
+const masonryComposerVisible = ref(false)
+const toggleMasonryComposer = async () => {
+  if (masonryComposerVisible.value) {
+    masonryComposerVisible.value = false
+    return
+  }
+  if (activeTab.value === 'feed') await switchActiveTab('latest')
+  if (activeTab.value === 'personal' && !isLoggedIn.value) await switchActiveTab('latest')
+  masonryComposerVisible.value = true
+  await nextTick()
+  resetContentScrollInstant()
+}
 const supportsMasonry = computed(() => ['latest', 'personal', 'feed'].includes(activeTab.value))
 const isMasonry = computed(() => !isMobile.value && layoutState.value === 'masonry' && supportsMasonry.value)
 watch([activeTab, layoutState], () => {
@@ -3777,17 +3810,15 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
 }
 /* The wide reading board keeps a quiet, compact navigation rail. */
 .container-fixed.container-masonry { max-width: 1920px; padding-right: 88px; padding-left: 24px; }
-.layout-container.grid-masonry { display: grid; grid-template-columns: 256px minmax(0, 1fr); gap: 24px; align-items: start; }
+.layout-container.grid-masonry { display: grid; grid-template-columns: var(--sidebar-width, 320px) minmax(0, 1fr); gap: 16px; align-items: start; }
 .grid-masonry .sidebar-slot-left { top: 16px; height: auto; }
 .grid-masonry .left-col { position: relative !important; max-height: calc(100dvh - 40px); overflow-y: auto; scrollbar-width: thin; }
-.masonry-sidebar-content { display: grid; gap: 16px; margin-top: 16px; }
+.masonry-sidebar-content { display: grid; gap: 10px; margin-top: 10px; }
 .masonry-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 8px; }
-.masonry-nav-button { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; color: inherit; }
-.masonry-nav-button:hover, .masonry-nav-button.active { background: rgba(249, 115, 22, .12); color: #ea580c; }
-.masonry-tags { display: grid; gap: 6px; max-height: 240px; overflow-y: auto; scrollbar-width: thin; overscroll-behavior: contain; }
+.masonry-nav .hero-tab { width: 100%; min-width: 0; }
+.masonry-tags { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; max-height: 192px; overflow-y: auto; scrollbar-width: thin; overscroll-behavior: contain; }
 .masonry-tags .hot-tag-btn { width: 100%; min-width: 0; }
 @media (max-width: 1279px) {
-  .layout-container.grid-masonry { grid-template-columns: 224px minmax(0, 1fr); gap: 16px; }
   .container-fixed.container-masonry { padding-left: 16px; }
 }
 </style>

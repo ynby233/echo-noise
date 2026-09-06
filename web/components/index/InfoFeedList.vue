@@ -1410,5 +1410,5 @@ onUnmounted(() => {
     gap: 8px;
   }
 }
-.feed-grid.feed-grid-masonry { grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); grid-auto-rows: 1px; column-gap: 16px !important; row-gap: 0 !important; }
+.feed-grid.feed-grid-masonry { grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); grid-auto-rows: 1px; grid-auto-flow: row dense; --masonry-gap: 12px; column-gap: 12px !important; row-gap: 0 !important; }
 </style>

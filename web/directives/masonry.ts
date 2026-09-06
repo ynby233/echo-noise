@@ -20,8 +20,9 @@ function sync(el: HTMLElement, { value }: { value: boolean }) {
   const measure = () => {
     cancelAnimationFrame(frame)
     frame = requestAnimationFrame(() => {
+      const gap = parseFloat(getComputedStyle(el).getPropertyValue('--masonry-gap')) || 12
       for (const card of cards) {
-        const span = Math.ceil(card.getBoundingClientRect().height + 16)
+        const span = Math.ceil(card.getBoundingClientRect().height + gap)
         card.style.gridRowEnd = `span ${Math.max(1, span)}`
       }
     })
