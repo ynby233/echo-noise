@@ -3,6 +3,14 @@ name: Build MCP Docker Image
 on:
   workflow_dispatch:
     inputs:
+      platforms:
+        description: 'Target platforms: amd64 for testing; select both for multi-platform releases'
+        required: true
+        type: choice
+        default: linux/amd64
+        options:
+          - linux/amd64
+          - linux/amd64,linux/arm64
       formal_version:
         description: 'Formal release version (for example v4.0.6); leave empty to use short SHA'
         required: false
@@ -58,9 +66,10 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU binfmt
+        if: contains(inputs.platforms, 'arm64')
         shell: bash
         run: |
-          docker run --privileged --rm tonistiigi/binfmt --install all
+          docker run --privileged --rm tonistiigi/binfmt --install arm64
 
       - name: Set up Docker Buildx
         shell: bash
@@ -77,6 +86,8 @@ jobs:
 
       - name: Build and push final-mcp image
         shell: bash
+        env:
+          TARGET_PLATFORMS: ${{ inputs.platforms }}
         run: |
           tags=(
             --tag "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/echo-noise:latest-mcp"
@@ -87,7 +98,7 @@ jobs:
             tags+=(--tag "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/echo-noise:${version}-mcp")
           fi
           docker buildx build \
-            --platform linux/amd64,linux/arm64 \
+            --platform "$TARGET_PLATFORMS" \
             --target final-mcp \
             --build-arg VERSION=${{ steps.meta.outputs.version }} \
             "${tags[@]}" \

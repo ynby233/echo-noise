@@ -3,8 +3,6 @@
 # multi-arch 构建时如果在 TARGETPLATFORM（例如 linux/arm64）上执行 npm，会触发 QEMU 模拟导致极慢。
 # 因此固定在 BUILDPLATFORM 上构建前端。
 FROM --platform=$BUILDPLATFORM docker.io/library/node:22.14.0-alpine AS frontend-build
-ARG VERSION=dev
-ENV VITE_APP_VERSION=$VERSION
 
 # 设置工作目录
 WORKDIR /app/web
@@ -19,6 +17,8 @@ RUN true
 
 # 复制前端源代码并构建
 COPY ./web/ .
+ARG VERSION=dev
+ENV VITE_APP_VERSION=$VERSION
 RUN npm run generate
 
 # 将构建结果复制到公共目录
@@ -33,7 +33,6 @@ ENV CGO_ENABLED=0
 ENV GO111MODULE=on
 ARG TARGETOS
 ARG TARGETARCH
-ARG VERSION=dev
 
 # 设置工作目录
 WORKDIR /app
@@ -49,6 +48,7 @@ COPY ./pkg ./pkg
 COPY ./config ./config
 
 # 编译 Go 应用（使用缓存优化）
+ARG VERSION=dev
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     GOOS="${TARGETOS:-linux}" GOARCH="${TARGETARCH:-$(go env GOARCH)}" \
@@ -119,10 +119,6 @@ ARG INSTALL_FFMPEG=1
 # 默认使用 apk 版 ffmpeg，避免双架构镜像构建时重复源码编译。
 # 如需自编译版本，请显式构建 --target final-ffmpeg。
 ARG FFMPEG_MODE=apk
-# 镜像版本（用于在运行时展示），构建时可通过 --build-arg VERSION=xxx 传入
-ARG VERSION=latest
-ENV APP_VERSION=$VERSION
-LABEL org.opencontainers.image.version=$VERSION
 
 # 设置工作目录
 WORKDIR /app
@@ -187,6 +183,11 @@ RUN if [ "$USE_UPX" = "1" ]; then \
     fi
 
 # 暴露应用端口
+
+# 版本只参与需要它的步骤，避免每次提交使依赖安装缓存失效。
+ARG VERSION=latest
+ENV APP_VERSION=$VERSION
+LABEL org.opencontainers.image.version=$VERSION
 
 # 启动后端与 MCP（MCP 后台运行，Go 服务为主进程）
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 CMD ["/app/docker-healthcheck.sh"]
