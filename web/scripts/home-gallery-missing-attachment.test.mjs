@@ -42,7 +42,7 @@ assert.doesNotMatch(
 )
 
 const galleryAnchors = indexPage.match(/<a v-for="\(img, index\) in recommendedImages"[^>]*>/g) || []
-assert.equal(galleryAnchors.length, 2, 'home page must keep both live gallery anchor blocks')
+assert.equal(galleryAnchors.length, 1, 'only the three-column layout retains the gallery')
 for (const tag of galleryAnchors) {
   assert.match(
     tag,
@@ -85,7 +85,7 @@ assert.match(
 )
 
 const galleryPlaceholders = indexPage.match(/<span v-if="isRecommendImageFailed\(img, index\)"[^>]*>/g) || []
-assert.equal(galleryPlaceholders.length, 2, 'every gallery block must render the shared failure placeholder')
+assert.equal(galleryPlaceholders.length, galleryAnchors.length, 'every gallery block must render the shared failure placeholder')
 for (const tag of galleryPlaceholders) {
   assert.match(
     tag,

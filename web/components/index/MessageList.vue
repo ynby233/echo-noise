@@ -1,5 +1,5 @@
 <template>
-  <div ref="messageListRoot">
+  <div ref="messageListRoot" :class="{ 'message-list-wide': props.wide, 'message-list-masonry': props.masonry }">
     <div class="min-h-screen flex flex-col">
       <!-- 空状态显示 -->
       <div v-if="props.pageReady && !hasActiveFilters && !displayMessages.length" class="text-center text-gray-500 py-8">
@@ -203,6 +203,7 @@
         </div>
       </div>
         </component>
+      <ContinuousLoadTrigger v-if="props.masonry && props.pageReady && !isPersonalGuest" :loading="isPageLoading || continuousLoading || !!props.targetMessageId || !targetListReady" :has-more="!!message.hasMore" :error="continuousError" @load="loadContinuousPage" />
       <!-- 预取下一页哨兵 -->
       <div v-if="showPager" ref="prefetchSentinel" style="height:1px"></div>
       <!-- 分页控制区域 -->
@@ -279,7 +280,7 @@
         </div>
       </div>
       <!-- 加载完毕提示 -->
-      <div v-if="message.messages.length > 0 && !message.hasMore" class="pager-done-wrap">
+      <div v-if="!props.masonry && message.messages.length > 0 && !message.hasMore" class="pager-done-wrap">
         <UIcon name="i-fluent-emoji-flat-confetti-ball" size="lg" />
         <span class="pager-done-text">加载完毕~</span>
       </div>
@@ -534,6 +535,7 @@
 </template>
 
 <script setup lang="ts">
+import ContinuousLoadTrigger from './ContinuousLoadTrigger.vue'
 import { vMasonry } from '~/directives/masonry'
 import { resolveComponent } from 'vue'
 import { useMessageStore } from "~/store/message";
@@ -914,6 +916,8 @@ const emit = defineEmits<{
   (e: 'loading-change', loading: boolean): void
 }>()
 const isPageLoading = ref(false);
+const continuousLoading = ref(false)
+const continuousError = ref(false)
 const setPageLoading = (loading: boolean) => {
   if (isPageLoading.value === loading) return
   isPageLoading.value = loading
@@ -1088,8 +1092,16 @@ const loadTargetMessagePage = async (id: number) => {
     const location = await message.locateMessagePage({ ...pageQueryFor(1), messageId: id })
     const targetPage = Number(location?.page || 0)
     if (targetPage < 1) return await loadThreadTombstone()
-    const result = await message.loadMessagePage(pageQueryFor(targetPage))
-    if (!applyPageResult(result, targetPage)) return false
+    if (props.masonry) {
+      const queryKey = currentDisplayQueryKey.value
+      for (let page = 1; page <= targetPage; page++) {
+        const result = await message.loadMessagePage(pageQueryFor(page), { append: page > 1 })
+        if (!result || queryKey !== currentDisplayQueryKey.value || !props.masonry) return false
+      }
+    } else {
+      const result = await message.loadMessagePage(pageQueryFor(targetPage))
+      if (!applyPageResult(result, targetPage)) return false
+    }
     await nextTick()
     return !!getMessageById(id)
   } catch {
@@ -1375,6 +1387,8 @@ const clearCurrentList = () => {
 
 const refreshList = async () => {
   const requestId = ++listRefreshSeq
+  continuousLoading.value = false
+  continuousError.value = false
   const query = pageQueryFor(1)
   const requestQueryKey = message.listQueryKey(query)
   message.currentListQueryKey = requestQueryKey
@@ -1823,6 +1837,7 @@ watch(() => route.hash, async (newHash, oldHash) => {
 watch(
   [
     () => props.activeTab,
+    () => props.masonry,
     () => props.calendarDate,
     () => props.searchKeyword,
     () => props.selectedTag,
@@ -1872,6 +1887,24 @@ const loadPreviousPage = async () => {
     setPageLoading(false);
   }
 };
+
+const loadContinuousPage = async () => {
+  if (!props.masonry || isPageLoading.value || continuousLoading.value || props.targetMessageId || !message.hasMore || !targetListReady.value || isPersonalGuest.value || isDisplayQueryPending.value) return
+  const requestId = listRefreshSeq
+  const queryKey = currentDisplayQueryKey.value
+  continuousLoading.value = true
+  continuousError.value = false
+  try {
+    const result = await message.loadMessagePage(pageQueryFor(message.page + 1), { append: true })
+    if (requestId !== listRefreshSeq || queryKey !== currentDisplayQueryKey.value || !props.masonry) return
+    if (!result) continuousError.value = true
+    else if (!result.items.length) message.hasMore = false
+  } catch {
+    if (requestId === listRefreshSeq) continuousError.value = true
+  } finally {
+    if (requestId === listRefreshSeq) continuousLoading.value = false
+  }
+}
 
 const loadNextPage = async () => {
   if (isPageLoading.value || !message.hasMore) return;
@@ -2627,7 +2660,7 @@ watch(isPageLoading, (loading) => {
 })
 
 const showPager = computed(() => {
-  if (isPersonalGuest.value) return false
+  if (props.masonry || isPersonalGuest.value) return false
   if (!hasActiveFilters.value) return true
   return !isPageLoading.value && displayMessages.value.length > 0
 })
@@ -4078,9 +4111,12 @@ onMounted(() => {
   margin-top: 16px;
   text-align: center;
 }
-.masonry-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); grid-auto-rows: 1px; grid-auto-flow: row dense; --masonry-gap: 12px; column-gap: 12px; row-gap: 0; align-items: start; }
+.masonry-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); grid-auto-rows: 1px; grid-auto-flow: row dense; --masonry-gap: 8px; column-gap: 12px; row-gap: 0; align-items: start; }
 .masonry-grid > .message-list-item { align-self: start; min-width: 0; }
 .masonry-grid > .message-list-item > .p-0 > .content-container { margin: 0 !important; }
 .masonry-grid { margin-top: 0; }
 .search-results-list.masonry-grid { width: 100%; max-width: none; margin: 0; }
+.message-list-masonry .search-results-panel { margin-top: 0; }
+.message-list-wide .search-results-list, .message-list-wide .search-results-board-head { width: 100%; max-width: none; margin-left: 0; margin-right: 0; }
+.message-list-wide .search-results-board-head { padding-left: 0; padding-right: 0; }
 </style>

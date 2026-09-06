@@ -6282,7 +6282,7 @@ const widgetItems = [
   { key: 'lifeCountdownEnabled', label: '倒计时' },
   { key: 'hitokotoEnabled', label: '每日一言' },
   { key: 'homeStatsEnabled', label: '数据统计' },
-  { key: 'popularTagsEnabled', label: '热门标签' },
+  { key: 'popularTagsEnabled', label: '标签' },
   { key: 'calendarEnabled', label: '日历' },
   { key: 'latestGalleryEnabled', label: '最新图集' },
   { key: 'heatmapEnabled', label: '热力图' },

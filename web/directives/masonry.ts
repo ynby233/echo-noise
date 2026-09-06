@@ -22,7 +22,8 @@ function sync(el: HTMLElement, { value }: { value: boolean }) {
     frame = requestAnimationFrame(() => {
       const gap = parseFloat(getComputedStyle(el).getPropertyValue('--masonry-gap')) || 12
       for (const card of cards) {
-        const span = Math.ceil(card.getBoundingClientRect().height + gap)
+        // Grid rows use layout pixels; the visual rectangle includes body zoom.
+        const span = Math.ceil(card.offsetHeight + gap)
         card.style.gridRowEnd = `span ${Math.max(1, span)}`
       }
     })

@@ -196,7 +196,7 @@ const applyPrefetchedOrLoad = async (query: PageQuery) => {
   return res as any
 }
 
-const loadMessagePage = async (query: PageQuery) => {
+const loadMessagePage = async (query: PageQuery, options: { append?: boolean } = {}) => {
   const requestSeq = pageRequestSeq + 1;
   pageRequestSeq = requestSeq;
   const requestListKey = listQueryKey(query);
@@ -215,7 +215,12 @@ const loadMessagePage = async (query: PageQuery) => {
 
     if (!response || response.code !== 1) return null;
 
-    messages.value = response.data.items;
+    if (options.append && currentListQueryKey.value === requestListKey) {
+      const existing = new Set(messages.value.map(item => item.id))
+      messages.value = [...messages.value, ...response.data.items.filter(item => !existing.has(item.id))]
+    } else {
+      messages.value = response.data.items;
+    }
     total.value = response.data.total;
     page.value = query.page;
     pageSize.value = query.pageSize;

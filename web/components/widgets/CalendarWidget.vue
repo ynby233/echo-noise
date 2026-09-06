@@ -413,6 +413,7 @@ onBeforeUnmount(() => {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
+  --calendar-section-gap: 5px;
   padding: 10px 9px;
   --calendar-control-bg: rgba(148, 163, 184, 0.08);
   --calendar-control-bg-hover: rgba(249, 115, 22, 0.12);
@@ -434,7 +435,7 @@ onBeforeUnmount(() => {
 }
 
 .calendar-head {
-  margin-bottom: 5px;
+  margin-bottom: var(--calendar-section-gap);
 }
 
 .calendar-widget.calendar-theme-dark,
@@ -618,7 +619,7 @@ onBeforeUnmount(() => {
 
 .calendar-foot {
   min-height: 18px;
-  margin-top: 2px;
+  margin-top: var(--calendar-section-gap);
   font-size: 11px;
   justify-content: center;
 }

@@ -13,8 +13,8 @@ const sources = await Promise.all([homePath, sidebarPagerPath, messageListPath, 
 const [homePage, sidebarPager, messageList, infoFeed, comments, notifications, sharedCss] = sources.map((source) => source.replace(/\r\n?/g, '\n'))
 
 const socialCardIndex = homePage.indexOf('left-widget-social-card')
-const sidebarPagerIndex = homePage.indexOf('<HomeSidebarPager', homePage.indexOf('left-widget-pager-card'))
-const clockCardIndex = homePage.indexOf('left-widget-clock-card')
+const sidebarPagerIndex = homePage.indexOf('<HomeSidebarPager', homePage.indexOf('left-widget-pager-card', socialCardIndex))
+const clockCardIndex = homePage.indexOf('left-widget-clock-card', socialCardIndex)
 
 assert.ok(socialCardIndex >= 0, '首页左栏应包含社交链接卡片')
 assert.ok(sidebarPagerIndex > socialCardIndex, '侧栏分页器必须位于社交链接栏之后')

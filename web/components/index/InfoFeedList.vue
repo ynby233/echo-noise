@@ -116,6 +116,7 @@
         </div>
       </article>
     </div>
+    <ContinuousLoadTrigger v-if="layoutState === 'masonry' && !errorText" :loading="loading" :has-more="visibleCount < allItems.length" :count="pageItems.length" @load="visibleCount += pageSize" />
     <UModal v-model="previewOpen">
       <div class="feed-preview-modal">
         <img
@@ -130,6 +131,7 @@
 </template>
 
 <script setup lang="ts">
+import ContinuousLoadTrigger from './ContinuousLoadTrigger.vue'
 import { vMasonry } from '~/directives/masonry'
 import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 // @ts-ignore Vetur 对 .vue 默认导出识别不稳定，这里与项目内其他组件保持一致
@@ -177,6 +179,7 @@ let activeFeedRequest: Promise<void> | null = null
 const copiedLink = ref('')
 const copiedTimer = ref<number | null>(null)
 const currentPage = ref(1)
+const visibleCount = ref(12)
 const targetPage = ref('1')
 const feedListRoot = ref<HTMLElement | null>(null)
 const previewOpen = ref(false)
@@ -243,6 +246,7 @@ const adjustTargetPage = (delta: number) => {
   targetPage.value = String(normalizeTargetPage(currentPage.value))
 }
 const pageItems = computed(() => {
+  if (props.layoutState === 'masonry') return allItems.value.slice(0, visibleCount.value)
   const start = (currentPage.value - 1) * pageSize.value
   return allItems.value.slice(start, start + pageSize.value)
 })
@@ -473,6 +477,7 @@ const checkContentHeights = () => {
 }
 
 const applyFeedItems = (items: FeedItem[]) => {
+  visibleCount.value = pageSize.value
   const sortedItems = sortFeedItems(items)
   allItems.value = typeof maxItems.value === 'number' ? sortedItems.slice(0, maxItems.value) : sortedItems
   isExpanded.value = {}
@@ -562,6 +567,7 @@ const loadFeed = async (options: { force?: boolean } = {}) => {
       if (!allItems.value.length) {
         allItems.value = []
         currentPage.value = 1
+        visibleCount.value = pageSize.value
         emit('count-change', 0)
       }
     } finally {
@@ -845,12 +851,14 @@ watch(() => props.active, (v) => {
 
 watch(() => props.limit, () => {
   currentPage.value = 1
+  visibleCount.value = pageSize.value
   hydrateFeedCache()
   if (props.active) void loadFeed()
 })
 
 watch(() => props.layoutState, () => {
   currentPage.value = 1
+  visibleCount.value = pageSize.value
   deferMeasure()
 })
 
@@ -859,7 +867,7 @@ watch(pageItems, () => {
 })
 
 const sidebarPagerState = computed(() => ({
-  visible: !errorText.value && allItems.value.length > 0,
+  visible: props.layoutState !== 'masonry' && !errorText.value && allItems.value.length > 0,
   currentPage: currentPage.value,
   totalPages: totalPages.value,
   loading: loading.value,
@@ -867,7 +875,7 @@ const sidebarPagerState = computed(() => ({
   canNext: !loading.value && currentPage.value < totalPages.value
 }))
 const footerPagerState = computed(() => ({
-  visible: !errorText.value && allItems.value.length > 0,
+  visible: props.layoutState !== 'masonry' && !errorText.value && allItems.value.length > 0,
   currentPage: currentPage.value,
   totalPages: totalPages.value,
   targetPage: targetPage.value,
@@ -1410,5 +1418,5 @@ onUnmounted(() => {
     gap: 8px;
   }
 }
-.feed-grid.feed-grid-masonry { grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); grid-auto-rows: 1px; grid-auto-flow: row dense; --masonry-gap: 12px; column-gap: 12px !important; row-gap: 0 !important; }
+.feed-grid.feed-grid-masonry { grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); grid-auto-rows: 1px; grid-auto-flow: row dense; --masonry-gap: 8px; column-gap: 12px !important; row-gap: 0 !important; }
 </style>

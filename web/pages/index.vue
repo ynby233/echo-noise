@@ -47,7 +47,42 @@
           <UCard v-if="frontendConfig.calendarEnabled !== false" class="sidebar-card no-padding-card calendar-sidebar-card" :class="sidebarThemeCard">
             <CalendarWidget :active-tab="activeTab" :selected-date="selectedCalendarDate" @select-date="handleCalendarDateSelect" />
           </UCard>
-        <UCard class="sidebar-card no-padding-card masonry-pager-card" :class="sidebarThemeCard">
+        <UCard v-if="frontendConfig.timeEnabled" class="sidebar-card no-padding-card masonry-clock-card" :class="sidebarThemeCard">
+          <div class="p-0 text-center clock-card">
+            <div class="clock-display">{{ formatTime(currentTime) }}</div>
+          </div>
+        </UCard>
+          <UCard v-if="frontendConfig.popularTagsEnabled !== false" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
+            <div class="hot-tags-head"><span class="text-xs opacity-70">标签</span><button type="button" class="hot-tags-refresh" aria-label="刷新标签" @click="refreshHotTags"><UIcon name="i-mdi-refresh" class="w-4 h-4" :class="{ 'animate-spin': tagsRefreshing }" /></button></div>
+            <div class="masonry-tags" tabindex="0" aria-label="全部标签，可滚动">
+              <button v-for="t in allVisibleTags" :key="t.name" class="hot-tag-btn" :class="{ 'is-active': messageSelectedTag === t.name }" @click="handleTagClick(t.name)"><span class="hot-tag-name" :title="t.name">#{{ t.name }}</span><span class="hot-tag-count">{{ t.count }}</span></button>
+              <span v-if="!allVisibleTags.length" class="text-xs opacity-60">暂无标签</span>
+            </div>
+          </UCard>
+        </div>
+        <div v-if="layoutState==='two'" class="two-sidebar-content">
+          <UCard v-if="frontendConfig.popularTagsEnabled !== false" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
+            <div class="hot-tags-block">
+              <div class="hot-tags-head">
+                <div class="text-xs opacity-70">标签</div>
+                <button type="button" class="hot-tags-refresh nw-tooltip-anchor" data-tooltip="刷新标签" aria-label="刷新标签" @click="refreshHotTags">
+                  <UIcon name="i-mdi-refresh" class="w-4 h-4" :class="{ 'animate-spin': tagsRefreshing }" />
+                </button>
+              </div>
+              <div class="scroll-tags" tabindex="0" aria-label="全部标签，可滚动">
+                <div class="tag-grid">
+                  <button v-for="t in allVisibleTags" :key="t.name" class="hot-tag-btn" :class="{ 'is-active': messageSelectedTag === t.name }" @click="handleTagClick(t.name)">
+                    <span class="hot-tag-name" :title="t.name">#{{ t.name }}</span>
+                    <span class="hot-tag-count">{{ t.count }}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </UCard>
+          <UCard v-if="frontendConfig.calendarEnabled !== false" class="sidebar-card no-padding-card calendar-sidebar-card" :class="sidebarThemeCard">
+            <CalendarWidget :active-tab="activeTab" :selected-date="selectedCalendarDate" @select-date="handleCalendarDateSelect" />
+          </UCard>
+          <UCard class="sidebar-card no-padding-card mt-2 left-widget-pager-card" :class="sidebarThemeCard">
           <HomeSidebarPager
             :context-key="activeTab"
             :current-page="activeSidebarPager.currentPage"
@@ -65,15 +100,16 @@
             @scroll-bottom="scrollToBottom"
           />
         </UCard>
-          <UCard v-if="frontendConfig.popularTagsEnabled !== false" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
-            <div class="hot-tags-head"><span class="text-xs opacity-70">标签</span><button type="button" class="hot-tags-refresh" aria-label="刷新标签" @click="refreshHotTags"><UIcon name="i-mdi-refresh" class="w-4 h-4" :class="{ 'animate-spin': tagsRefreshing }" /></button></div>
-            <div class="masonry-tags" tabindex="0" aria-label="全部标签，可滚动">
-              <button v-for="t in allVisibleTags" :key="t.name" class="hot-tag-btn" :class="{ 'is-active': messageSelectedTag === t.name }" @click="handleTagClick(t.name)"><span class="hot-tag-name">#{{ t.name }}</span><span class="hot-tag-count">{{ t.count }}</span></button>
-              <span v-if="!allVisibleTags.length" class="text-xs opacity-60">暂无标签</span>
-            </div>
+          <UCard v-if="frontendConfig.timeEnabled" class="sidebar-card no-padding-card mt-2 left-widget-clock-card" :class="sidebarThemeCard">
+          <div class="p-0 text-center clock-card">
+            <div class="clock-display">{{ formatTime(currentTime) }}</div>
+          </div>
+        </UCard>
+          <UCard v-if="frontendConfig.heatmapEnabled !== false" class="sidebar-card no-padding-card heatmap-sidebar-card" :class="sidebarThemeCard">
+            <HeatmapWidget :active-tab="activeTab" compact />
           </UCard>
         </div>
-        <template v-if="!isMasonry">
+        <template v-if="layoutState==='three'">
         <UCard v-if="frontendConfig.homeStatsEnabled !== false" class="sidebar-card no-padding-card mt-2 left-widget-stats-card" :class="sidebarThemeCard">
           <div v-if="isLoggedIn" class="p-0 grid grid-cols-3 gap-2 text-center text-sm">
             <div>
@@ -163,55 +199,6 @@
             </div>
           </div>
         </UCard>
-        <div v-if="layoutState==='two'" class="mt-2 space-y-3">
-          <UCard v-if="frontendConfig.announcementEnabled && (frontendConfig.announcementText || '').trim() !== ''" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
-            <AnnouncementBar :text="frontendConfig.announcementText || '欢迎访问！'" />
-          </UCard>
-          <UCard v-if="frontendConfig.popularTagsEnabled !== false" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
-            <div class="hot-tags-block">
-              <div class="hot-tags-head">
-                <div class="text-xs opacity-70">热门标签</div>
-                <button type="button" class="hot-tags-refresh nw-tooltip-anchor" data-tooltip="刷新标签" aria-label="刷新标签" @click="refreshHotTags">
-                  <UIcon name="i-mdi-refresh" class="w-4 h-4" :class="{ 'animate-spin': tagsRefreshing }" />
-                </button>
-              </div>
-              <div class="scroll-tags">
-                <div class="tag-grid">
-                  <button v-for="t in popularTags" :key="t.name" class="hot-tag-btn" :class="{ 'is-active': messageSelectedTag === t.name }" @click="handleTagClick(t.name)">
-                    <span class="hot-tag-name">#{{ t.name }}</span>
-                    <span class="hot-tag-count">{{ t.count }}</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </UCard>
-          <UCard v-if="frontendConfig.calendarEnabled !== false" class="sidebar-card no-padding-card calendar-sidebar-card" :class="sidebarThemeCard">
-            <CalendarWidget :active-tab="activeTab" :selected-date="selectedCalendarDate" @select-date="handleCalendarDateSelect" />
-          </UCard>
-          <UCard v-if="frontendConfig.latestGalleryEnabled !== false" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
-            <div class="image-gallery-block">
-              <div class="text-xs opacity-70 mb-2">最新图集（{{ recommendedImages.length }}）</div>
-              <div class="scroll-images">
-                <div class="recommend-grid">
-                  <a v-for="(img, index) in recommendedImages" :key="recommendImageKey(img, index)" :href="isRecommendImageFailed(img, index) ? undefined : imageSrc(img)" :data-fancybox="isRecommendImageFailed(img, index) ? undefined : 'recommend-gallery'" class="block">
-                    <span v-if="isRecommendImageFailed(img, index)" class="site-attachment-failure site-attachment-failure--image site-attachment-failure--compact" role="note" :aria-label="recommendImageFailureLabel">
-                      <span class="site-attachment-failure__content">
-                        <span class="site-attachment-failure__icon" aria-hidden="true"></span>
-                        <strong class="site-attachment-failure__title">{{ recommendImageFailureTitle }}</strong>
-                        <span class="site-attachment-failure__detail">{{ recommendImageFailureDetail }}</span>
-                      </span>
-                    </span>
-                    <img v-else :src="imageSrc(img)" class="recommend-image-box" loading="lazy" alt="recommend" @error="markRecommendImageFailed(img, index)" />
-                  </a>
-                </div>
-              </div>
-            </div>
-          </UCard>
-          <UCard v-if="frontendConfig.heatmapEnabled !== false" class="sidebar-card no-padding-card heatmap-sidebar-card" :class="sidebarThemeCard">
-            <HeatmapWidget :active-tab="activeTab" compact />
-          </UCard>
-        
-        </div>
         </template>
       </div>
       </div>
@@ -230,7 +217,7 @@
               </div>
             </div>
           </div>
-          <div v-if="activeTab==='feed'" :class="['feed-page', { 'feed-page-wide': layoutState==='two' }]">
+          <div v-if="activeTab==='feed'" :class="['feed-page', { 'feed-page-wide': layoutState==='two' || isMasonry }]">
             <UCard :class="['search-card', 'feed-shell-card', 'nw-content-panel-surface', 'mb-3', { 'is-dark': isDark }]" :ui="{ body: { padding: 'p-5 md:p-6' } }">
               <div class="nw-content-panel-head">
                 <div class="nw-content-panel-heading">
@@ -268,7 +255,7 @@
               </div>
             </UCard>
             <div
-              v-if="feedPagerState.visible"
+              v-if="!isMasonry && feedPagerState.visible"
               class="pager-shell feed-page-pager"
               :class="{ 'is-dark': isDark }"
             >
@@ -389,7 +376,7 @@
           </div>
           <template v-else>
             <AddForm v-show="!isMasonry || masonryComposerVisible" v-if="activeTab !== 'personal' || isLoggedIn" @search-result="handleSearchResult" :hide-header-tools="layoutState==='three'" :wide="layoutState==='two' || isMasonry" />
-            <!-- 中心栏标签筛选已隐藏；右侧热门标签组件保留原功能 -->
+            <!-- 中心栏标签筛选已隐藏；右侧标签组件保留原功能 -->
           <MessageList :masonry="isMasonry"
             ref="messageList" 
             class="message-list-container" 
@@ -419,15 +406,15 @@
         <UCard v-if="frontendConfig.popularTagsEnabled !== false" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
           <div class="hot-tags-block">
             <div class="hot-tags-head">
-              <div class="text-xs opacity-70">热门标签</div>
+              <div class="text-xs opacity-70">标签</div>
               <button type="button" class="hot-tags-refresh nw-tooltip-anchor" data-tooltip="刷新标签" aria-label="刷新标签" @click="refreshHotTags">
                 <UIcon name="i-mdi-refresh" class="w-4 h-4" :class="{ 'animate-spin': tagsRefreshing }" />
               </button>
             </div>
-            <div class="scroll-tags">
+            <div class="scroll-tags" tabindex="0" aria-label="全部标签，可滚动">
               <div class="tag-grid">
-                <button v-for="t in popularTags" :key="t.name" class="hot-tag-btn" :class="{ 'is-active': messageSelectedTag === t.name }" @click="handleTagClick(t.name)">
-                  <span class="hot-tag-name">#{{ t.name }}</span>
+                <button v-for="t in allVisibleTags" :key="t.name" class="hot-tag-btn" :class="{ 'is-active': messageSelectedTag === t.name }" @click="handleTagClick(t.name)">
+                  <span class="hot-tag-name" :title="t.name">#{{ t.name }}</span>
                   <span class="hot-tag-count">{{ t.count }}</span>
                 </button>
               </div>
@@ -2650,7 +2637,6 @@ const allVisibleTags = computed(() => {
     .filter((t: any) => !excluded.includes(String(t?.name || '').toLowerCase()))
     .sort((a: any, b: any) => (b.count || 0) - (a.count || 0))
 })
-const popularTags = computed(() => allVisibleTags.value.slice(0, 9))
 const tagsCount = computed(() => {
   const arr = Array.isArray(tags.value) ? [...tags.value] : []
   const excluded = ['留言', 'guestbook']
@@ -3816,7 +3802,11 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
 .masonry-sidebar-content { display: grid; gap: 10px; margin-top: 10px; }
 .masonry-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 8px; }
 .masonry-nav .hero-tab { width: 100%; min-width: 0; }
-.masonry-tags { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; max-height: 192px; overflow-y: auto; scrollbar-width: thin; overscroll-behavior: contain; }
+.masonry-tags { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 32px; gap: 6px; max-height: 184px; overflow-y: auto; scrollbar-width: thin; overscroll-behavior: contain; }
+.two-sidebar-content { display: grid; gap: 10px; margin-top: 10px; }
+.two-sidebar-content > * { margin-top: 0 !important; }
+.feed-page-wide .feed-page-content, .feed-page-wide .nw-content-panel-toolbar { width: 100%; max-width: none; margin-left: 0; margin-right: 0; }
+.feed-page-wide .nw-content-panel-toolbar { padding-left: 0; padding-right: 0; }
 .masonry-tags .hot-tag-btn { width: 100%; min-width: 0; }
 @media (max-width: 1279px) {
   .container-fixed.container-masonry { padding-left: 16px; }
@@ -3901,8 +3891,8 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
   .scroll-images { aspect-ratio: auto; height: calc(66.6667cqw - 2.5px); }
 }
 /* 标签三栏栅格与滚动容器 */
-.scroll-tags { max-height: 108px; overflow: hidden; -webkit-overflow-scrolling: touch; min-height: 0; overscroll-behavior: contain; }
-.tag-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.scroll-tags { max-height: 108px; overflow-y: auto; scrollbar-width: thin; touch-action: pan-y; -webkit-overflow-scrolling: touch; min-height: 0; overscroll-behavior: contain; }
+.tag-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 32px; gap: 6px; }
 @media screen and (max-width: 1024px) { .scroll-tags { max-height: 108px; } }
 @media screen and (max-width: 768px) { .center-col { padding-left: 2%; padding-right: 2%; } }
 @media screen and (max-width: 480px) { .center-col { padding-left: 3%; padding-right: 3%; } }

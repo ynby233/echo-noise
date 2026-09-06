@@ -97,7 +97,7 @@ assert.doesNotMatch(
 )
 assert.match(
   home,
-  /<\/UCard>\s*<div\s+v-if="feedPagerState\.visible"\s+class="pager-shell feed-page-pager"/,
+  /<\/UCard>\s*<div\s+v-if="!isMasonry && feedPagerState\.visible"\s+class="pager-shell feed-page-pager"/,
   'the information-feed pager must be a sibling after the large feed panel',
 )
 assert.match(sharedCss, /\.pager-shell \{[\s\S]*?border-radius: 999px;/, 'bottom pager visuals must be shared globally')
