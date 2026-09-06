@@ -3,6 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prebuild": "node scripts/patch-vditor-task.mjs --apply",
+    "predev": "node scripts/patch-vditor-task.mjs --apply",
+    "pregenerate": "node scripts/patch-vditor-task.mjs --apply",
     "build": "nuxt build",
     "dev": "nuxt cleanup && nuxt dev",
     "generate": "nuxt generate",

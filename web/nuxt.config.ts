@@ -86,12 +86,14 @@ export default defineNuxtConfig({
     filename: 'sw.ts',
     injectRegister: false,
     manifest: false,
+    includeAssets: ['offline.html'],
     client: {
       registerPlugin: false,
       installPrompt: false,
     },
     injectManifest: {
-      globPatterns: ['**/*.{js,css,html,ico,png,svg,webp}'],
+      // Online pages use NetworkFirst; precached HTML would bypass that route.
+      globPatterns: ['**/*.{js,css,ico,png,svg,webp}', 'offline.html', 'offline/index.html'],
       maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
     },
     devOptions: {

@@ -160,11 +160,8 @@ export default defineNuxtPlugin(() => {
   const ensureServiceWorker = async (): Promise<ServiceWorkerRegistration | null> => {
     if (!enabled.value || !supported.value || !secureContext.value) return null
     const existing = await navigator.serviceWorker.getRegistration('/')
-    if (activeOwnedRegistration(existing)) {
-      workerRegistered.value = true
-      return existing || null
-    }
-    workerRegistered.value = false
+    workerRegistered.value = activeOwnedRegistration(existing)
+    // Returning visitors also need update listeners and an activation callback.
     if (!updateServiceWorker) {
       updateServiceWorker = registerSW({
         immediate: true,
@@ -174,6 +171,7 @@ export default defineNuxtPlugin(() => {
         onRegisteredSW: (_swUrl, registration) => { workerRegistered.value = activeOwnedRegistration(registration) },
       })
     }
+    if (activeOwnedRegistration(existing)) return existing || null
     const registration = await navigator.serviceWorker.ready
     workerRegistered.value = activeOwnedRegistration(registration)
     return workerRegistered.value ? registration : null

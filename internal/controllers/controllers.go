@@ -2630,6 +2630,9 @@ func UpdateMessage(c *gin.Context) {
 		middleware.MarkSemanticAuditWritten(c)
 	}
 
+	// Mutation results replace the rendered note, so they need the same
+	// viewer-scoped interaction decision as list/read responses.
+	updated.CanInteract = services.CanInteractWithMessage(*updated, &actorID)
 	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "更新成功", "data": updated})
 
 	// 即时模式触发云同步（防抖）
