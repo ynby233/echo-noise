@@ -6102,7 +6102,9 @@ defineExpose({
 });
 
 watch(() => props.theme, (newTheme) => {
-  if (vditorInstance) {
+  // The constructor returns before asynchronous i18n/Lute initialization.
+  // The ready callback applies the latest props.theme after that work finishes.
+  if (vditorInstance && isReady.value) {
     vditorInstance.setTheme(newTheme === 'dark' ? 'dark' : 'classic');
   }
 });

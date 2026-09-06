@@ -93,7 +93,7 @@ export default defineNuxtConfig({
     },
     injectManifest: {
       // Online pages use NetworkFirst; precached HTML would bypass that route.
-      globPatterns: ['**/*.{js,css,ico,png,svg,webp}', 'offline.html', 'offline/index.html'],
+      globPatterns: ['**/*.{js,css,ico,png,svg,webp}', 'offline.html'],
       maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
     },
     devOptions: {
