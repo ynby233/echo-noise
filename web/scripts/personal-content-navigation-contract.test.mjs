@@ -6,7 +6,7 @@ const component = await readFile(new URL('../components/index/PersonalContentMan
 for (const label of ['查看笔记', '查看所在互动串']) {
   assert.match(
     component,
-    new RegExp(`<UButton[^>]+class="personal-open-link"[^>]*>${label}<\\/UButton>`),
+    new RegExp(`<UButton[^>]+class="[^"]*\\bpersonal-open-link\\b[^"]*"[^>]*>${label}<\\/UButton>`),
     `${label}应使用明确的可点击链接样式`,
   )
 }

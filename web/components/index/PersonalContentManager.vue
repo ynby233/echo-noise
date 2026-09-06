@@ -1,12 +1,12 @@
 <template>
   <section class="personal-content" :class="theme?.text || ''">
-    <div class="personal-head">
-      <div>
-        <h3>{{ config.title }}</h3>
-        <p :class="mutedClass">{{ config.description }}</p>
-      </div>
-      <UButton size="sm" color="gray" variant="soft" icon="i-heroicons-arrow-path" :loading="loading" @click="load">刷新</UButton>
-    </div>
+    <AdminModuleHeader :title="config.title" :description="config.description" :icon="isInteraction ? (isRecycleBin ? 'i-heroicons-archive-box' : 'i-heroicons-chat-bubble-left-right') : (isRecycleBin ? 'i-heroicons-trash' : 'i-heroicons-document-text')" :badge="`${total} 条`" :theme="theme">
+      <template #actions>
+        <UButton class="admin-action" size="sm" color="gray" variant="soft" icon="i-heroicons-arrow-path" :loading="loading" @click="load">刷新</UButton>
+      </template>
+    </AdminModuleHeader>
+
+    <div class="personal-content-body">
 
     <div class="personal-selection" :class="[borderClass, subtleClass]">
       <label class="personal-select-all">
@@ -14,12 +14,12 @@
         <span>{{ selected.length ? `已选择 ${selected.length} 条` : '批量选择当前页内容' }}</span>
       </label>
       <div class="personal-selection-actions">
-        <UButton v-if="selected.length" size="xs" color="gray" variant="ghost" :disabled="acting" @click="selected = []">清除选择</UButton>
-        <UButton v-if="selected.length && section === 'notes'" size="xs" color="orange" variant="soft" :loading="acting" @click="batchTrashNotes">批量移入回收站</UButton>
-        <UButton v-if="selected.length && section === 'interactions'" size="xs" color="orange" variant="soft" :loading="acting" @click="batchTrashInteractions">批量移入回收站</UButton>
-        <UButton v-if="selected.length && isRecycleBin" size="xs" color="green" variant="soft" :loading="acting" @click="batchRestore">批量恢复</UButton>
-        <UButton v-if="selected.length && section === 'note-recycle-bin'" size="xs" color="red" variant="soft" :loading="acting" @click="batchPurgeNotes">批量永久删除</UButton>
-        <UButton v-if="selected.length && section === 'interaction-recycle-bin'" size="xs" color="red" variant="soft" :loading="acting" @click="batchPurgeInteractions">批量从我的回收站彻底删除</UButton>
+        <UButton class="admin-action" v-if="selected.length" size="sm" color="gray" variant="soft" :disabled="acting" @click="selected = []">清除选择</UButton>
+        <UButton class="admin-action" v-if="selected.length && section === 'notes'" size="sm" color="orange" variant="soft" :loading="acting" @click="batchTrashNotes">批量移入回收站</UButton>
+        <UButton class="admin-action" v-if="selected.length && section === 'interactions'" size="sm" color="orange" variant="soft" :loading="acting" @click="batchTrashInteractions">批量移入回收站</UButton>
+        <UButton class="admin-action" v-if="selected.length && isRecycleBin" size="sm" color="primary" variant="soft" :loading="acting" @click="batchRestore">批量恢复</UButton>
+        <UButton class="admin-action" v-if="selected.length && section === 'note-recycle-bin'" size="sm" color="red" variant="soft" :loading="acting" @click="batchPurgeNotes">批量永久删除</UButton>
+        <UButton class="admin-action" v-if="selected.length && section === 'interaction-recycle-bin'" size="sm" color="red" variant="soft" :loading="acting" @click="batchPurgeInteractions">批量从我的回收站彻底删除</UButton>
       </div>
     </div>
 
@@ -50,17 +50,17 @@
 
         <div class="personal-actions">
           <template v-if="section === 'notes'">
-            <UButton class="personal-open-link" size="xs" color="primary" variant="soft" :to="{ path: '/', query: { tab: 'personal', message_id: row.id } }">查看笔记</UButton>
-            <UButton v-if="!row.is_guestbook" size="xs" color="orange" variant="soft" :loading="acting" @click="trashNote(row)">移入回收站</UButton>
+            <UButton class="admin-action personal-open-link" size="sm" color="primary" variant="soft" :to="{ path: '/', query: { tab: 'personal', message_id: row.id } }">查看笔记</UButton>
+            <UButton class="admin-action" v-if="!row.is_guestbook" size="sm" color="orange" variant="soft" :loading="acting" @click="trashNote(row)">移入回收站</UButton>
           </template>
           <template v-else-if="section === 'interactions'">
-            <UButton v-if="row.can_open_thread" class="personal-open-link" size="xs" color="primary" variant="soft" :to="{ path: '/', query: { tab: 'latest', message_id: row.message_id, comment_id: row.id } }">查看所在互动串</UButton>
-            <UButton size="xs" color="orange" variant="soft" :loading="acting" @click="trashInteraction(row)">移入回收站</UButton>
+            <UButton v-if="row.can_open_thread" class="admin-action personal-open-link" size="sm" color="primary" variant="soft" :to="{ path: '/', query: { tab: 'latest', message_id: row.message_id, comment_id: row.id } }">查看所在互动串</UButton>
+            <UButton class="admin-action" size="sm" color="orange" variant="soft" :loading="acting" @click="trashInteraction(row)">移入回收站</UButton>
           </template>
           <template v-else-if="isRecycleBin">
-            <UButton v-if="row.can_restore !== false" size="xs" color="green" variant="soft" :loading="acting" @click="restore(row)">恢复</UButton>
-            <UButton v-if="section === 'note-recycle-bin'" size="xs" color="red" variant="soft" :loading="acting" @click="purgeNote(row)">永久删除</UButton>
-            <UButton v-if="section === 'interaction-recycle-bin'" size="xs" color="red" variant="soft" :loading="acting" @click="purge(row)">从我的回收站彻底删除</UButton>
+            <UButton class="admin-action" v-if="row.can_restore !== false" size="sm" color="primary" variant="solid" :loading="acting" @click="restore(row)">恢复</UButton>
+            <UButton class="admin-action" v-if="section === 'note-recycle-bin'" size="sm" color="red" variant="soft" :loading="acting" @click="purgeNote(row)">永久删除</UButton>
+            <UButton class="admin-action" v-if="section === 'interaction-recycle-bin'" size="sm" color="red" variant="soft" :loading="acting" @click="purge(row)">从我的回收站彻底删除</UButton>
             <span v-if="row.can_restore === false && !row.user_purged" class="text-xs" :class="mutedClass">需先恢复仍在回收站中的所有上级内容</span>
           </template>
         </div>
@@ -70,10 +70,11 @@
     <div class="personal-pager" :class="mutedClass">
       <span>共 {{ total }} 条</span>
       <div>
-        <UButton size="xs" color="gray" variant="soft" :disabled="page <= 1" @click="page--; load()">上一页</UButton>
+        <UButton class="admin-action" size="sm" color="gray" variant="soft" :disabled="page <= 1" @click="page--; load()">上一页</UButton>
         <span>第 {{ page }} 页</span>
-        <UButton size="xs" color="gray" variant="soft" :disabled="page * pageSize >= total" @click="page++; load()">下一页</UButton>
+        <UButton class="admin-action" size="sm" color="gray" variant="soft" :disabled="page * pageSize >= total" @click="page++; load()">下一页</UButton>
       </div>
+    </div>
     </div>
   </section>
 </template>

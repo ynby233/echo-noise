@@ -1,6 +1,6 @@
 <template>
   <UModal :model-value="modelValue" :ui="{ width: 'sm:max-w-2xl' }" @update:model-value="setOpen">
-    <div class="image-cropper-panel p-4 sm:p-5">
+    <div class="admin-dialog image-cropper-panel p-4">
       <div class="mb-3">
         <h3 class="text-base font-semibold">{{ title }}</h3>
         <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">拖动图片调整位置，使用滑块缩放；100% 为完整覆盖裁切框的最小比例。</p>
@@ -33,8 +33,8 @@
       </label>
       <p v-if="errorMessage" class="mt-3 text-sm text-red-600 dark:text-red-400" role="alert">{{ errorMessage }}</p>
       <div class="mt-5 flex justify-end gap-2">
-        <UButton color="gray" variant="soft" :disabled="processing" @click="setOpen(false)">取消</UButton>
-        <UButton color="primary" :loading="processing" :disabled="!ready" @click="confirmCrop">裁切并使用</UButton>
+        <UButton size="sm" class="admin-action" color="gray" variant="soft" :disabled="processing" @click="setOpen(false)">取消</UButton>
+        <UButton size="sm" class="admin-action" color="primary" :loading="processing" :disabled="!ready" @click="confirmCrop">裁切并使用</UButton>
       </div>
     </div>
   </UModal>

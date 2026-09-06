@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const panel = fs.readFileSync(path.join(root, 'components/index/StatusPanel.vue'), 'utf8')
 
-assert.match(panel, /v-if="canManageVoceChatConfig"[^>]*class="rounded-lg p-4 space-y-4"/, 'the runtime and VoceChat control panel must only render for the primary administrator')
+assert.match(panel, /v-if="canManageVoceChatConfig"[^>]*class="[^"]*\badmin-subcard\b[^"]*"/, 'the runtime and VoceChat control panel must only render for the primary administrator')
 assert.match(panel, /getRequest<any>\('admin\/runtime-policy'/, 'the panel must load the authoritative runtime policy endpoint')
 assert.match(panel, /putRequest<any>\('admin\/runtime-policy\/mode'/, 'mode changes must use the dedicated primary-only endpoint')
 assert.match(panel, /switchRuntimeMode\('local'\)/, 'the panel must offer an explicit local-mode action')

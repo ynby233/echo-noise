@@ -3,13 +3,13 @@
     <AdminModuleHeader
       title="管理员审计"
       description="查看管理员操作记录、安全结果与变更摘要，记录按时间从新到旧排列。"
-      icon="i-heroicons-clipboard-document-check"
+      icon="i-heroicons-clipboard-document-list"
       :badge="loading ? '读取中' : `${total} 条记录`"
       accent="slate"
       :theme="theme"
     >
       <template #actions>
-        <UButton size="sm" color="gray" variant="soft" icon="i-heroicons-arrow-path" :loading="loading" @click="load">刷新</UButton>
+        <UButton class="admin-action" size="sm" color="gray" variant="soft" icon="i-heroicons-arrow-path" :loading="loading" @click="load">刷新</UButton>
       </template>
     </AdminModuleHeader>
 
@@ -25,8 +25,8 @@
         <div class="audit-policy-control">
           <span class="text-xs font-medium" :class="auditEnabled ? 'text-green-600 dark:text-green-400' : (theme?.mutedText || 'text-slate-500')">{{ auditEnabled ? '已启用' : '已关闭' }}</span>
           <UToggle :model-value="auditEnabled" :disabled="configLoading || configSaving" aria-label="启用管理员审计写入" @update:model-value="saveAuditEnabled($event === true)" />
-          <USelect v-model="auditRetentionDays" :options="auditRetentionOptions" class="w-36" :disabled="configLoading || configSaving" aria-label="管理员审计保留期限" />
-          <UButton size="xs" color="primary" variant="soft" :loading="configSaving" @click="saveAuditRetention">保存期限</UButton>
+          <USelect v-model="auditRetentionDays" :options="auditRetentionOptions" class="admin-select w-36" :disabled="configLoading || configSaving" aria-label="管理员审计保留期限" />
+          <UButton class="admin-action" size="sm" color="primary" variant="solid" :loading="configSaving" @click="saveAuditRetention">保存期限</UButton>
         </div>
       </div>
 
@@ -37,26 +37,26 @@
             <p class="mt-1 text-xs" :class="theme?.mutedText || 'text-slate-500'">可组合操作人、模块、结果、目标和时间范围缩小记录范围。</p>
           </div>
           <div class="audit-filter-actions">
-            <UButton size="xs" color="primary" variant="soft" icon="i-heroicons-funnel" :loading="loading" @click="applyFilters">应用筛选</UButton>
-            <UButton size="xs" color="gray" variant="ghost" :disabled="loading || exporting" @click="resetFilters">清空条件</UButton>
+            <UButton class="admin-action" size="sm" color="primary" variant="solid" icon="i-heroicons-funnel" :loading="loading" @click="applyFilters">应用筛选</UButton>
+            <UButton class="admin-action" size="sm" color="gray" variant="soft" :disabled="loading || exporting" @click="resetFilters">清空条件</UButton>
           </div>
         </div>
 
         <div class="audit-filter-grid">
-          <label class="audit-filter-field audit-filter-search"><span>摘要或目标 ID</span><UInput v-model="filters.q" placeholder="搜索安全摘要或目标 ID" @keyup.enter="applyFilters" /></label>
-          <label class="audit-filter-field"><span>操作人 ID</span><UInput v-model="filters.actorUserID" inputmode="numeric" placeholder="精确匹配" @keyup.enter="applyFilters" /></label>
-          <label class="audit-filter-field"><span>模块</span><UInput v-model="filters.module" placeholder="例如 notes" @keyup.enter="applyFilters" /></label>
-          <label class="audit-filter-field"><span>动作</span><UInput v-model="filters.action" placeholder="例如 update" @keyup.enter="applyFilters" /></label>
-          <label class="audit-filter-field"><span>结果</span><USelect v-model="filters.result" :options="resultOptions" /></label>
-          <label class="audit-filter-field"><span>目标类型</span><UInput v-model="filters.targetType" placeholder="例如 note" @keyup.enter="applyFilters" /></label>
-          <label class="audit-filter-field"><span>目标 ID</span><UInput v-model="filters.targetID" placeholder="精确匹配" @keyup.enter="applyFilters" /></label>
-          <label class="audit-filter-field"><span>开始时间</span><UInput v-model="filters.start" type="datetime-local" /></label>
-          <label class="audit-filter-field"><span>结束时间</span><UInput v-model="filters.end" type="datetime-local" /></label>
+          <label class="audit-filter-field audit-filter-search"><span>摘要或目标 ID</span><UInput class="admin-input" v-model="filters.q" placeholder="搜索安全摘要或目标 ID" @keyup.enter="applyFilters" /></label>
+          <label class="audit-filter-field"><span>操作人 ID</span><UInput class="admin-input" v-model="filters.actorUserID" inputmode="numeric" placeholder="精确匹配" @keyup.enter="applyFilters" /></label>
+          <label class="audit-filter-field"><span>模块</span><UInput class="admin-input" v-model="filters.module" placeholder="例如 notes" @keyup.enter="applyFilters" /></label>
+          <label class="audit-filter-field"><span>动作</span><UInput class="admin-input" v-model="filters.action" placeholder="例如 update" @keyup.enter="applyFilters" /></label>
+          <label class="audit-filter-field"><span>结果</span><USelect class="admin-select" v-model="filters.result" :options="resultOptions" /></label>
+          <label class="audit-filter-field"><span>目标类型</span><UInput class="admin-input" v-model="filters.targetType" placeholder="例如 note" @keyup.enter="applyFilters" /></label>
+          <label class="audit-filter-field"><span>目标 ID</span><UInput class="admin-input" v-model="filters.targetID" placeholder="精确匹配" @keyup.enter="applyFilters" /></label>
+          <label class="audit-filter-field"><span>开始时间</span><UInput class="admin-input" v-model="filters.start" type="datetime-local" /></label>
+          <label class="audit-filter-field"><span>结束时间</span><UInput class="admin-input" v-model="filters.end" type="datetime-local" /></label>
         </div>
 
         <div class="audit-export-row" :class="theme?.mutedText || 'text-slate-500'">
           <span>导出会使用当前筛选条件，不受当前页限制。</span>
-          <UButton size="xs" color="gray" variant="soft" icon="i-heroicons-arrow-down-tray" :loading="exporting" :disabled="loading || exporting" @click="exportCurrent">导出当前筛选结果</UButton>
+          <UButton class="admin-action" size="sm" color="gray" variant="soft" icon="i-heroicons-arrow-down-tray" :loading="exporting" :disabled="loading || exporting" @click="exportCurrent">导出当前筛选结果</UButton>
         </div>
       </section>
 
@@ -95,10 +95,10 @@
               <td class="px-4 py-3 align-top whitespace-nowrap" :class="theme?.mutedText || 'text-slate-500'">{{ formatTime(item.created_at) }}</td>
               <td class="px-3 py-3 align-top"><span class="font-medium">{{ item.actor_username }}</span><span v-if="item.actor_type !== 'system'" class="mt-0.5 block text-xs" :class="theme?.mutedText || 'text-slate-500'">ID {{ item.actor_user_id }}</span><span v-else class="mt-0.5 block text-xs" :class="theme?.mutedText || 'text-slate-500'">系统任务</span></td>
               <td class="px-3 py-3 align-top font-medium break-words">{{ item.operation_description || '管理员操作' }}</td>
-              <td class="px-3 py-3 align-top"><UBadge :color="resultColor(item.result)" size="xs" variant="soft">{{ item.result_description || item.result }}</UBadge><div class="mt-1 text-[11px]" :class="theme?.mutedText || 'text-slate-500'">{{ item.result }}</div></td>
+              <td class="px-3 py-3 align-top"><UBadge class="admin-badge" :color="resultColor(item.result)" size="xs" variant="soft">{{ item.result_description || item.result }}</UBadge><div class="mt-1 text-[11px]" :class="theme?.mutedText || 'text-slate-500'">{{ item.result }}</div></td>
               <td class="px-3 py-3 align-top"><span class="break-all font-medium">{{ item.module }}</span><span class="mt-0.5 block break-all text-xs" :class="theme?.mutedText || 'text-slate-500'">{{ item.action }}</span></td>
               <td class="audit-summary px-3 py-3 align-top">{{ item.safe_summary || '管理员操作摘要' }}</td>
-              <td class="px-4 py-3 text-right align-top"><UButton size="xs" color="gray" variant="soft" @click="loadDetail(item.id)">查看</UButton></td>
+              <td class="px-4 py-3 text-right align-top"><UButton class="admin-action" size="sm" color="gray" variant="soft" @click="loadDetail(item.id)">查看</UButton></td>
             </tr>
           </tbody>
         </table>
@@ -107,19 +107,19 @@
       <div class="audit-pagination" :class="theme?.mutedText || 'text-slate-500'">
         <span>共 {{ total }} 条 · 每页 {{ pageSize }} 条</span>
         <div class="flex items-center gap-2">
-          <UButton size="xs" color="gray" variant="soft" :disabled="page <= 1 || loading || exporting" @click="page--; load()">上一页</UButton>
+          <UButton class="admin-action" size="sm" color="gray" variant="soft" :disabled="page <= 1 || loading || exporting" @click="page--; load()">上一页</UButton>
           <span class="min-w-16 text-center">第 {{ page }} 页</span>
-          <UButton size="xs" color="gray" variant="soft" :disabled="items.length < pageSize || loading || exporting" @click="page++; load()">下一页</UButton>
+          <UButton class="admin-action" size="sm" color="gray" variant="soft" :disabled="items.length < pageSize || loading || exporting" @click="page++; load()">下一页</UButton>
         </div>
       </div>
     </div>
 
     <UModal v-model="detailOpen" :ui="{ width: 'sm:max-w-2xl' }">
-      <UCard v-if="detail" :class="theme?.cardBg" :ui="{ ring: '', divide: 'divide-y divide-gray-100 dark:divide-gray-800' }">
+      <UCard class="admin-dialog" v-if="detail" :class="theme?.cardBg" :ui="{ ring: '', divide: 'divide-y divide-gray-100 dark:divide-gray-800' }">
         <template #header>
           <div class="flex items-center justify-between gap-3">
             <div><div class="font-semibold">审计记录 #{{ detail.id }}</div><div class="mt-1 text-xs" :class="theme?.mutedText || 'text-slate-500'">{{ detail.operation_description || '管理员操作' }}</div></div>
-            <UButton color="gray" variant="ghost" icon="i-heroicons-x-mark" aria-label="关闭审计详情" @click="detailOpen = false" />
+            <UButton size="sm" class="admin-action" color="gray" variant="ghost" icon="i-heroicons-x-mark" aria-label="关闭审计详情" @click="detailOpen = false" />
           </div>
         </template>
         <dl class="audit-detail-grid">
@@ -349,7 +349,7 @@ onMounted(() => { load(); loadAuditConfig() })
 .audit-feedback {
   border-width: 1px;
   border-style: solid;
-  border-radius: 10px;
+  border-radius:var(--admin-radius, 8px);
 }
 
 .audit-policy-card {
@@ -425,7 +425,7 @@ onMounted(() => { load(); loadAuditConfig() })
 }
 
 .audit-filter-field > span {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.3;
   opacity: 0.72;
@@ -453,7 +453,7 @@ onMounted(() => { load(); loadAuditConfig() })
   overflow-x: auto;
   border-width: 1px;
   border-style: solid;
-  border-radius: 10px;
+  border-radius:var(--admin-radius, 8px);
 }
 
 .audit-record-row {

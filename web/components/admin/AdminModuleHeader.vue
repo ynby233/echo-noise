@@ -6,10 +6,11 @@
       </span>
       <div class="min-w-0">
         <div class="admin-module-title-row">
-          <h2 class="admin-module-title text-base">{{ title }}</h2>
-          <UBadge v-if="badge" color="gray" variant="soft" size="xs">{{ badge }}</UBadge>
+          <h2 class="admin-module-title text-base"><slot name="title">{{ title }}</slot></h2>
+          <UBadge class="admin-badge" v-if="badge" color="gray" variant="soft" size="xs">{{ badge }}</UBadge>
+          <slot name="badge" />
         </div>
-        <p class="admin-module-description" :class="theme?.mutedText || 'text-slate-500'">{{ description }}</p>
+        <p v-if="description" class="admin-module-description" :class="theme?.mutedText || 'text-slate-500'">{{ description }}</p>
       </div>
     </div>
     <div v-if="$slots.actions" class="admin-module-actions">
@@ -20,13 +21,15 @@
 
 <script setup lang="ts">
 withDefaults(defineProps<{
-  title: string
-  description: string
+  title?: string
+  description?: string
   icon: string
   badge?: string
   accent?: 'primary' | 'warning' | 'slate'
   theme?: Record<string, string>
 }>(), {
+  title: '',
+  description: '',
   badge: '',
   accent: 'primary',
   theme: () => ({})
@@ -39,8 +42,9 @@ withDefaults(defineProps<{
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 16px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  padding: var(--admin-space, 16px);
+  margin-bottom: var(--admin-space, 16px);
+  border-bottom: 1px solid var(--admin-line, rgba(148, 163, 184, 0.18));
 }
 
 .admin-module-heading {
@@ -60,23 +64,11 @@ withDefaults(defineProps<{
   border-radius: 8px;
 }
 
-.admin-module-icon.is-primary {
-  color: rgb(79, 70, 229);
-  background: rgba(99, 102, 241, 0.12);
-}
-
-.admin-module-icon.is-warning {
-  color: rgb(217, 119, 6);
-  background: rgba(245, 158, 11, 0.14);
-}
-
+.admin-module-icon.is-primary,
+.admin-module-icon.is-warning,
 .admin-module-icon.is-slate {
-  color: rgb(71, 85, 105);
-  background: rgba(100, 116, 139, 0.13);
-}
-
-:global(.dark) .admin-module-icon.is-slate {
-  color: rgb(203, 213, 225);
+  color: var(--admin-accent, #165dff);
+  background: var(--admin-accent-soft, rgba(22, 93, 255, 0.1));
 }
 
 .admin-module-title-row {
@@ -88,7 +80,8 @@ withDefaults(defineProps<{
 }
 
 .admin-module-title {
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 600;
   line-height: 1.5;
   letter-spacing: -0.01em;
 }
@@ -102,32 +95,29 @@ withDefaults(defineProps<{
 
 .admin-module-actions {
   display: flex;
-  flex: 0 0 auto;
+  min-width: 0;
+  flex: 0 1 auto;
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 1023px) {
   .admin-module-header {
     align-items: stretch;
     flex-direction: column;
   }
 
   .admin-module-actions {
-    justify-content: stretch;
-  }
-
-  .admin-module-actions :deep(button) {
+    justify-content: flex-start;
     width: 100%;
-    justify-content: center;
   }
 }
 
 @media (max-width: 520px) {
   .admin-module-header {
-    padding: 14px;
+    padding: var(--admin-space, 12px);
   }
 }
 </style>

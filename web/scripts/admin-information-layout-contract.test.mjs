@@ -23,8 +23,8 @@ for (const [key, label] of [['site-pwa', 'PWA 模式'], ['site-github-card', 'Gi
   assert.match(component, new RegExp(`id="${key}-section"[^>]+v-if="isSectionVisible\\('site'\\)"`), `${label}应合并到网站配置页面`)
   assert.match(component, new RegExp(`sectionKey === '${key}'[^\\n]+sectionKey = 'site'`), `${label}历史 hash 应兼容跳转到网站配置`)
 }
-assert.match(component, /welcomeDescription"[^>]+:rows="2"/, '简介文案输入框应收紧为两行')
-assert.match(component, /pwaDescription"[^>]+:rows="2"/, 'PWA 描述输入框应收紧为两行')
+assert.match(component, /<UInput[^>]+v-model="frontendConfig.welcomeDescription"/, '一句话简介应使用单行输入框')
+assert.match(component, /<UInput[^>]+v-model="frontendConfig.pwaDescription"/, 'PWA 简短描述应使用单行输入框')
 assert.match(component, /v-else-if="String\(key\) === 'aboutMarkdown'"/, '仅正文 Markdown 配置应使用多行输入框')
 assert.doesNotMatch(
   component,

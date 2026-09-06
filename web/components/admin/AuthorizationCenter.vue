@@ -8,7 +8,7 @@
       :theme="theme"
     >
       <template #actions>
-        <UButton size="sm" color="gray" variant="soft" icon="i-heroicons-arrow-path" :loading="loading" @click="load">刷新</UButton>
+        <UButton class="admin-action" size="sm" color="gray" variant="soft" icon="i-heroicons-arrow-path" :loading="loading" @click="load">刷新</UButton>
       </template>
     </AdminModuleHeader>
 
@@ -39,7 +39,7 @@
               <span class="block truncate text-sm font-medium">{{ admin.username }}</span>
               <span class="mt-0.5 block text-xs" :class="theme?.mutedText || 'text-slate-500'">用户 ID {{ admin.id }}</span>
             </span>
-            <UIcon v-if="selectedID === admin.id" name="i-heroicons-check-circle-solid" class="h-5 w-5 flex-none text-indigo-500" />
+            <UIcon v-if="selectedID === admin.id" name="i-heroicons-check-circle-solid" class="h-5 w-5 flex-none text-primary-500" />
             <UIcon v-else name="i-heroicons-chevron-right" class="h-4 w-4 flex-none opacity-40" />
           </button>
         </div>
@@ -55,11 +55,11 @@
             <div>
               <div class="flex flex-wrap items-center gap-2">
                 <h3 class="text-sm font-semibold">{{ selectedAdmin?.username || '受托管理员' }} 的功能权限</h3>
-                <UBadge :color="dirty ? 'orange' : 'green'" size="xs" variant="soft">{{ dirty ? '有未保存变更' : '已与服务器同步' }}</UBadge>
+                <UBadge class="admin-badge" :color="dirty ? 'orange' : 'green'" size="xs" variant="soft">{{ dirty ? '有未保存变更' : '已与服务器同步' }}</UBadge>
               </div>
               <p class="mt-1 text-xs" :class="theme?.mutedText || 'text-slate-500'">已选择 {{ selectedCapabilities.size }} / {{ grantableCapabilityCount }} 项可授权权限。</p>
             </div>
-            <UButton size="sm" color="primary" icon="i-heroicons-check" :loading="saving" :disabled="!dirty" @click="save">保存授权</UButton>
+            <UButton class="admin-action" size="sm" color="primary" icon="i-heroicons-check" :loading="saving" :disabled="!dirty" @click="save">保存授权</UButton>
           </div>
 
           <div class="authorization-groups">
@@ -99,10 +99,10 @@
                       <span class="block text-sm font-medium">{{ item.label }}</span>
                       <span class="mt-0.5 block break-all text-[11px]" :class="theme?.mutedText || 'text-slate-500'">{{ item.capability }}</span>
                     </span>
-                    <UBadge v-if="!item.grantable" color="gray" size="xs" variant="soft">仅站长</UBadge>
-                    <UBadge v-else-if="scopedHiddenCapabilities.has(item.capability)" color="indigo" size="xs" variant="soft">隐藏范围</UBadge>
-                    <UBadge v-else-if="!parentSelected(item)" color="gray" size="xs" variant="soft">等待父权限</UBadge>
-                    <UBadge v-else-if="childrenFor(item.capability).length" color="primary" size="xs" variant="soft">父权限</UBadge>
+                    <UBadge class="admin-badge" v-if="!item.grantable" color="gray" size="xs" variant="soft">仅站长</UBadge>
+                    <UBadge class="admin-badge" v-else-if="scopedHiddenCapabilities.has(item.capability)" color="primary" size="xs" variant="soft">隐藏范围</UBadge>
+                    <UBadge class="admin-badge" v-else-if="!parentSelected(item)" color="gray" size="xs" variant="soft">等待父权限</UBadge>
+                    <UBadge class="admin-badge" v-else-if="childrenFor(item.capability).length" color="primary" size="xs" variant="soft">父权限</UBadge>
                   </div>
                 </div>
               </div>
@@ -114,7 +114,7 @@
               <p v-if="message" class="text-sm" :class="messageError ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'">{{ message }}</p>
               <p v-else class="text-xs" :class="theme?.mutedText || 'text-slate-500'">{{ dirty ? '权限尚未保存，离开当前管理员前请先保存。' : '当前权限已保存。' }}</p>
             </div>
-            <UButton color="primary" icon="i-heroicons-check" :loading="saving" :disabled="!dirty" @click="save">保存授权</UButton>
+            <UButton size="sm" class="admin-action" color="primary" icon="i-heroicons-check" :loading="saving" :disabled="!dirty" @click="save">保存授权</UButton>
           </div>
         </div>
 
@@ -288,8 +288,8 @@ onMounted(load)
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  color: rgb(79, 70, 229);
-  background: rgba(99, 102, 241, 0.12);
+  color: var(--admin-accent, #165dff);
+  background: var(--admin-accent-soft, rgba(22, 93, 255, 0.12));
 }
 
 .authorization-body {
@@ -306,7 +306,7 @@ onMounted(load)
 .authorization-empty {
   border-width: 1px;
   border-style: solid;
-  border-radius: 10px;
+  border-radius:var(--admin-radius, 8px);
 }
 
 .authorization-admins {
@@ -334,7 +334,7 @@ onMounted(load)
   padding: 9px;
   border-width: 1px;
   border-style: solid;
-  border-radius: 9px;
+  border-radius:var(--admin-radius, 8px);
   text-align: left;
   background: rgba(255, 255, 255, 0.34);
   transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
@@ -345,18 +345,18 @@ onMounted(load)
 }
 
 .authorization-admin-button:hover {
-  border-color: rgba(99, 102, 241, 0.45);
+  border-color: var(--admin-accent-soft, rgba(22, 93, 255, 0.12));
 }
 
 .authorization-admin-button:focus-visible {
-  outline: 2px solid rgba(99, 102, 241, 0.65);
+  outline: 2px solid var(--admin-accent-soft, rgba(22, 93, 255, 0.12));
   outline-offset: 2px;
 }
 
 .authorization-admin-button.is-active {
-  border-color: rgba(99, 102, 241, 0.72) !important;
-  background: rgba(99, 102, 241, 0.1);
-  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.12);
+  border-color: var(--admin-accent-soft, rgba(22, 93, 255, 0.12)) !important;
+  background: var(--admin-accent-soft, rgba(22, 93, 255, 0.12));
+  box-shadow: 0 0 0 1px var(--admin-accent-soft, rgba(22, 93, 255, 0.12));
 }
 
 .authorization-avatar {
@@ -369,8 +369,8 @@ onMounted(load)
   border-radius: 8px;
   font-size: 12px;
   font-weight: 700;
-  color: rgb(79, 70, 229);
-  background: rgba(99, 102, 241, 0.12);
+  color: var(--admin-accent, #165dff);
+  background: var(--admin-accent-soft, rgba(22, 93, 255, 0.12));
 }
 
 .authorization-loading,
@@ -449,7 +449,7 @@ onMounted(load)
 
 .authorization-capability-node.is-nested {
   padding-left: 10px;
-  border-left: 2px solid rgba(99, 102, 241, 0.18);
+  border-left: 2px solid var(--admin-accent-soft, rgba(22, 93, 255, 0.12));
 }
 
 .authorization-capability {
@@ -466,7 +466,7 @@ onMounted(load)
 }
 
 .authorization-capability.is-parent {
-  background: rgba(99, 102, 241, 0.045);
+  background: var(--admin-accent-soft, rgba(22, 93, 255, 0.12));
 }
 
 .authorization-capability.is-child {
@@ -474,8 +474,8 @@ onMounted(load)
 }
 
 .authorization-capability:hover:not(.is-locked) {
-  border-color: rgba(99, 102, 241, 0.42);
-  background: rgba(99, 102, 241, 0.04);
+  border-color: var(--admin-accent-soft, rgba(22, 93, 255, 0.12));
+  background: var(--admin-accent-soft, rgba(22, 93, 255, 0.12));
 }
 
 .authorization-capability.is-locked {
@@ -501,7 +501,7 @@ onMounted(load)
 .authorization-empty-icon {
   width: 42px;
   height: 42px;
-  border-radius: 12px;
+  border-radius:var(--admin-radius, 8px);
 }
 
 @media (max-width: 980px) {

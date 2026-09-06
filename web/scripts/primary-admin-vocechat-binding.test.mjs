@@ -13,7 +13,7 @@ assert.match(panel, /VoceChat 账号与推送[\s\S]*?用于校验联系人可见
 assert.doesNotMatch(panel, /邮箱和 VoceChat 账号用于接收系统通知/, 'the redundant combined account-binding description must be removed')
 assert.doesNotMatch(panel, />账号绑定</, 'site email and VoceChat must no longer sit under a redundant combined title')
 assert.match(panel, /v-if="isPrimaryAdmin" class="admin-vc-binding-panel border"[\s\S]*?本站密码不会同步修改此密码/, 'the primary-admin-only password independence note must stay inside the primary binding panel')
-assert.match(panel, /userForm\.description[\s\S]*?:rows="4"[\s\S]*?admin-description-textarea/, 'the signature editor must request exactly four visible rows')
+assert.match(panel, /userForm\.description[\s\S]*?:rows="3"[\s\S]*?admin-description-textarea/, 'the signature editor must retain three visible rows for multiline content')
 assert.match(panel, /admin-vc-binding-form/, 'the primary administrator binding controls must use the spacious responsive form layout')
 assert.match(panel, /admin-verification-input/, 'verification codes must use a compact field instead of consuming the full row')
 assert.match(panel, /admin-email-bind-row[\s\S]*?userForm\.email[\s\S]*?发送验证码[\s\S]*?userForm\.emailCode[\s\S]*?立即绑定/, 'email and verification controls must share one responsive row')

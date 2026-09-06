@@ -1,0 +1,441 @@
+/* Shared presentation for the management surface and its teleported dialogs. */
+.admin-root,
+.admin-dialog {
+  --admin-space: 16px;
+  --admin-gap: 12px;
+  --admin-radius: 8px;
+  --admin-control-radius: 6px;
+  --admin-control-height: 36px;
+  --admin-page: #f2f3f5;
+  --admin-surface: #ffffff;
+  --admin-subtle: #f7f8fa;
+  --admin-input-bg: #ffffff;
+  --admin-line: #e5e6eb;
+  --admin-control-line: #c9cdd4;
+  --admin-ink: #1d2129;
+  --admin-muted: #647080;
+  --admin-accent: #165dff;
+  --admin-accent-soft: rgba(22, 93, 255, 0.08);
+  --admin-shadow: 0 1px 3px rgba(29, 33, 41, 0.05);
+  --color-primary-50: 239 246 255;
+  --color-primary-100: 219 234 254;
+  --color-primary-200: 191 219 254;
+  --color-primary-300: 147 197 253;
+  --color-primary-400: 96 165 250;
+  --color-primary-500: 22 93 255;
+  --color-primary-600: 20 80 220;
+  --color-primary-700: 29 78 216;
+  --color-primary-800: 30 64 175;
+  --color-primary-900: 30 58 138;
+  --color-primary-950: 23 37 84;
+  color: var(--admin-ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.admin-root.admin-theme-dark,
+.dark .admin-dialog {
+  --admin-page: #17171a;
+  --admin-surface: #23272e;
+  --admin-subtle: #2a2f37;
+  --admin-input-bg: #2a2f37;
+  --admin-line: #3f444c;
+  --admin-control-line: #59616d;
+  --admin-ink: #f7f8fa;
+  --admin-muted: #b5becb;
+  --admin-accent: #93b4ff;
+  --admin-accent-soft: rgba(96, 165, 250, 0.12);
+  --admin-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  color-scheme: dark;
+}
+
+.admin-root[data-admin-theme="midnight"],
+body:has(.admin-root[data-admin-theme="midnight"]) .admin-dialog {
+  --admin-page: #0f172a;
+  --admin-surface: #1f2937;
+  --admin-subtle: #273449;
+  --admin-input-bg: #273449;
+  --admin-line: #364152;
+  --admin-control-line: #56657b;
+}
+
+.admin-root[data-admin-theme="forest"],
+body:has(.admin-root[data-admin-theme="forest"]) .admin-dialog {
+  --admin-page: #0b1f17;
+  --admin-surface: #163328;
+  --admin-subtle: #1d4737;
+  --admin-input-bg: #1d4737;
+  --admin-line: #2f5f4a;
+  --admin-control-line: #527c67;
+}
+
+.admin-root[data-admin-theme="plum"],
+body:has(.admin-root[data-admin-theme="plum"]) .admin-dialog {
+  --admin-page: #1b0b2e;
+  --admin-surface: #34155a;
+  --admin-subtle: #44206d;
+  --admin-input-bg: #44206d;
+  --admin-line: #5d3590;
+  --admin-control-line: #8967b3;
+}
+
+.admin-root {
+  background: var(--admin-page);
+}
+
+.admin-root .admin-card {
+  min-width: 0;
+  border: 1px solid var(--admin-line);
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface);
+  box-shadow: var(--admin-shadow);
+}
+
+.admin-root .admin-subcard {
+  min-width: 0;
+  padding: var(--admin-gap);
+  border: 1px solid var(--admin-line);
+  border-radius: var(--admin-radius);
+  background: var(--admin-subtle);
+  box-shadow: none;
+}
+
+.admin-root .admin-card > .px-4 {
+  padding-left: var(--admin-space);
+  padding-right: var(--admin-space);
+}
+
+.admin-root .admin-badge,
+.admin-dialog .admin-badge {
+  align-self: flex-start;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+}
+
+.admin-root .admin-settings-toolbar {
+  gap: 12px;
+}
+
+.admin-root .admin-settings-toolbar > div {
+  min-width: 0;
+}
+
+.admin-root .admin-settings-toolbar > div:last-child {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-root .admin-action,
+.admin-dialog .admin-action {
+  min-height: var(--admin-control-height);
+  max-width: 100%;
+  justify-content: center;
+  gap: 6px;
+  border-radius: var(--admin-control-radius);
+  padding-top: 7px;
+  padding-bottom: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  box-shadow: none;
+  transition: background-color 150ms, color 150ms, opacity 150ms;
+}
+
+.admin-root .admin-action > [aria-hidden="true"],
+.admin-dialog .admin-action > [aria-hidden="true"] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* Nuxt UI generates these color classes for both static and computed colors. */
+:is(.admin-root, .admin-dialog) .admin-action.bg-gray-50 {
+  background: var(--admin-subtle);
+  color: var(--admin-ink);
+}
+
+:is(.admin-root, .admin-dialog) .admin-action.bg-gray-50:hover:not(:disabled) {
+  background: var(--admin-line);
+}
+
+:is(.admin-root, .admin-dialog) .admin-action.bg-primary-50 {
+  background: var(--admin-accent-soft);
+  color: var(--admin-accent);
+}
+
+:is(.admin-root, .admin-dialog) .admin-action.bg-primary-500 {
+  background: #165dff;
+  color: #ffffff;
+}
+
+:is(.admin-root, .admin-dialog) .admin-action.bg-primary-500:hover:not(:disabled) {
+  background: #1450dc;
+}
+
+.admin-root .admin-action:focus-visible,
+.admin-dialog .admin-action:focus-visible,
+.admin-root button:focus-visible {
+  outline: 2px solid var(--admin-accent);
+  outline-offset: 2px;
+}
+
+.admin-root :is(.admin-input, .admin-select, .admin-textarea),
+.admin-dialog :is(.admin-input, .admin-select, .admin-textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+:is(.admin-root, .admin-dialog) :is(.admin-input input, .admin-select select, .admin-textarea textarea) {
+  min-height: var(--admin-control-height);
+  border: 1px solid var(--admin-control-line);
+  border-radius: var(--admin-control-radius);
+  background: var(--admin-input-bg);
+  color: var(--admin-ink);
+  font-size: 13px;
+  line-height: 20px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+  box-shadow: none;
+}
+
+:is(.admin-root, .admin-dialog) :is(.admin-input input, .admin-select select) {
+  height: var(--admin-control-height);
+}
+
+:is(.admin-root, .admin-dialog) .admin-textarea textarea {
+  /* Content fields choose rows at the call site; single-line fields use UInput. */
+  resize: vertical;
+}
+
+:is(.admin-root, .admin-dialog) :is(.admin-input input, .admin-select select, .admin-textarea textarea):focus {
+  outline: none;
+  border-color: var(--admin-accent);
+  box-shadow: 0 0 0 2px var(--admin-accent-soft);
+}
+
+:is(.admin-root, .admin-dialog) :is(.admin-input input, .admin-textarea textarea)::placeholder {
+  color: var(--admin-muted);
+  opacity: 0.8;
+}
+
+:is(.admin-root, .admin-dialog) :is(.admin-input input, .admin-select select, .admin-textarea textarea):disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.admin-root :is(input[type="checkbox"], input[type="radio"], input[type="range"]) {
+  accent-color: var(--admin-accent);
+}
+
+.admin-root .admin-module-actions > div {
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-root :is(.admin-setting-heading, .admin-array-row) > div {
+  min-width: 0;
+}
+
+.admin-root .admin-field {
+  width: 100%;
+  min-width: 0;
+  height: var(--admin-control-height);
+  border: 1px solid var(--admin-control-line);
+  border-radius: var(--admin-control-radius);
+  padding: 7px 12px;
+  font-size: 13px;
+  line-height: 20px;
+  background: var(--admin-input-bg);
+  color: var(--admin-ink);
+}
+
+.admin-root .admin-field:focus-visible {
+  outline: 2px solid var(--admin-accent);
+  outline-offset: 2px;
+}
+
+.admin-root :is(.note-manager-body, .manager-body, .audit-body, .authorization-body, .personal-content-body) {
+  padding: 0 var(--admin-space) var(--admin-space);
+  gap: var(--admin-gap);
+}
+
+.admin-root :is(.note-policy-card, .policy-card, .audit-policy-card) {
+  margin-top: 0;
+}
+
+.admin-root :is(.note-policy-card, .note-filter-card, .note-selection-bar, .note-detail-card,
+  .policy-card, .filter-card, .interaction-card, .interaction-selection,
+  .audit-policy-card, .audit-filter-card, .audit-feedback,
+  .authorization-admins, .authorization-context, .authorization-group, .authorization-savebar,
+  .personal-selection, .personal-card, .attachment-filter-bar, .attachment-batch-toolbar) {
+  padding: var(--admin-gap);
+  border-color: var(--admin-line);
+  border-radius: var(--admin-radius);
+  box-shadow: none;
+}
+
+.admin-root :is(.note-policy-icon, .audit-policy-icon, .authorization-avatar, .authorization-empty-icon) {
+  color: var(--admin-accent);
+  background: var(--admin-accent-soft);
+}
+
+.admin-root :is(.note-filter-field > span, .audit-filter-field > span) {
+  font-size: 12px;
+}
+
+.admin-root :is(.note-table, .audit-table, table) {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.admin-root :is(th, td) {
+  padding: 12px;
+}
+
+.admin-root th {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.admin-root :is(.note-pagination, .audit-pagination, .personal-pager, .pagination) {
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.admin-root :is(.personal-empty, .empty, .authorization-empty-small) {
+  min-height: 144px;
+  color: var(--admin-muted);
+  font-size: 13px;
+}
+
+.admin-root .personal-content {
+  padding: 0;
+}
+
+.admin-root .personal-selection {
+  margin-top: 0;
+}
+
+.admin-root :is(.context-strip, .interaction-meta) {
+  color: var(--admin-muted);
+}
+
+.admin-root .attachment-manager {
+  min-width: 0;
+  border-radius: var(--admin-radius);
+}
+
+.admin-dialog {
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface);
+}
+
+.admin-root .push-settings {
+  --push-ink: var(--admin-ink);
+  --push-muted: var(--admin-muted);
+  --push-surface: var(--admin-subtle);
+  --push-line: var(--admin-line);
+  --push-accent: var(--admin-accent);
+}
+
+.admin-root .notify-channel-badge {
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-weight: 500;
+}
+
+.admin-root .notify-channel-badge-disabled {
+  color: var(--admin-muted);
+  background: var(--admin-line);
+}
+
+.admin-root .push-settings h3 {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.admin-root :is(.push-option, .push-message, .push-loading) {
+  border-radius: var(--admin-radius);
+  background: var(--admin-subtle);
+}
+
+.admin-root :is(.push-primary-action, .push-secondary-action, .push-test-action) {
+  min-height: var(--admin-control-height);
+  border-radius: var(--admin-control-radius);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+.admin-root .push-secondary-action {
+  color: #ffffff;
+  background: #165dff;
+}
+
+.admin-root .push-switch {
+  width: 36px;
+  height: 20px;
+}
+
+.admin-root .push-switch::after {
+  top: 2px;
+  left: 2px;
+  box-shadow: none;
+}
+
+.admin-root .push-option strong,
+.admin-root .push-settings-eyebrow {
+  font-weight: 600;
+}
+
+.admin-root .push-settings-eyebrow {
+  font-size: 12px;
+  letter-spacing: normal;
+}
+
+.admin-root .push-test-action {
+  color: var(--admin-accent);
+  background: var(--admin-accent-soft);
+  border-color: transparent;
+}
+
+@media (max-width: 767px) {
+  .admin-root,
+  .admin-dialog {
+    --admin-space: 12px;
+  }
+
+  .admin-root .admin-action,
+  .admin-dialog .admin-action {
+    min-height: 40px;
+  }
+
+  .admin-root :is(.admin-module-actions, .admin-setting-heading) .admin-action {
+    flex-shrink: 1;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .admin-root .admin-settings-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .admin-root .admin-setting-heading > span {
+    align-self: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-root *,
+  .admin-dialog * {
+    transition: none !important;
+  }
+}

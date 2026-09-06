@@ -1,37 +1,32 @@
 <template>
-  <div class="rounded-xl border shadow-sm backdrop-blur-sm transition-colors duration-200" :class="[theme?.cardBg, theme?.border]">
-    <div class="px-4 py-3 flex items-center justify-between gap-2">
-      <div class="font-semibold flex items-center gap-2" :class="theme?.text">
-        <UIcon name="i-heroicons-megaphone" class="w-5 h-5" />
-        <span>公告管理</span>
-        <UBadge color="gray" size="xs" variant="soft">共 {{ total }} 条</UBadge>
-      </div>
-      <UButton :loading="loading" color="gray" variant="soft" class="shadow" @click="loadAnnouncements">刷新</UButton>
-    </div>
+  <div class="admin-card" :class="[theme?.cardBg, theme?.border]">
+    <AdminModuleHeader title="公告管理" description="创建草稿，确认内容后发布；已发布公告需先撤回才能删除。" icon="i-heroicons-megaphone" :badge="`共 ${total} 条`" :theme="theme">
+      <template #actions>
+        <UButton size="sm" class="admin-action" :loading="loading" color="gray" variant="soft" icon="i-heroicons-arrow-path" @click="loadAnnouncements">刷新</UButton>
+      </template>
+    </AdminModuleHeader>
 
     <div class="px-4 pb-4">
-      <p class="text-xs mb-3" :class="theme?.mutedText">创建草稿，确认内容后发布；已发布公告需先撤回才能删除。</p>
-
       <div class="rounded-lg p-3 mb-3" :class="theme?.subtleBg">
         <div class="text-sm mb-2" :class="theme?.mutedText">新建公告草稿</div>
-        <UInput v-model="draft.title" maxlength="100" placeholder="公告标题" class="mb-2" />
-        <UTextarea v-model="draft.content" :rows="5" placeholder="公告正文，支持 Markdown" class="w-full mb-2" />
+        <UInput v-model="draft.title" maxlength="100" placeholder="公告标题" class="admin-input mb-2" />
+        <UTextarea v-model="draft.content" :rows="5" placeholder="公告正文，支持 Markdown" class="admin-textarea w-full mb-2" />
         <div class="flex flex-wrap items-center justify-between gap-2">
           <span class="text-xs" :class="theme?.mutedText">{{ draft.title.trim().length }}/100</span>
-          <UButton color="primary" class="shadow" :loading="creating" :disabled="!canCreate" @click="createDraft">保存草稿</UButton>
+          <UButton size="sm" color="primary" class="admin-action" :loading="creating" :disabled="!canCreate" @click="createDraft">保存草稿</UButton>
         </div>
       </div>
 
       <div class="announcement-batch-toolbar rounded-lg border px-3 py-2 mb-3" :class="[theme?.border, theme?.subtleBg]">
         <div class="flex items-center gap-2 flex-wrap">
-          <USelect v-model="statusFilter" :options="statusOptions" class="w-32" @change="changeFilter" />
+          <USelect v-model="statusFilter" :options="statusOptions" class="admin-select w-32" @change="changeFilter" />
           <span class="text-xs" :class="theme?.mutedText">已选择 {{ selectedIds.length }} 条</span>
         </div>
         <div class="announcement-batch-actions">
-          <UButton size="xs" color="gray" variant="soft" icon="i-heroicons-check-circle" :disabled="deletableItems.length === 0" @click="selectAllDeletable">
+          <UButton class="admin-action" size="sm" color="gray" variant="soft" icon="i-heroicons-check-circle" :disabled="deletableItems.length === 0" @click="selectAllDeletable">
             {{ allDeletableSelected ? '取消全选' : '全选可删除项' }}
           </UButton>
-          <UButton size="xs" color="red" variant="soft" icon="i-heroicons-trash" :loading="deletingBatch" :disabled="selectedIds.length === 0" @click="batchDelete">
+          <UButton class="admin-action" size="sm" color="red" variant="soft" icon="i-heroicons-trash" :loading="deletingBatch" :disabled="selectedIds.length === 0" @click="batchDelete">
             批量删除（{{ selectedIds.length }}）
           </UButton>
         </div>
@@ -55,8 +50,8 @@
             <div class="announcement-card-head">
               <div class="flex items-center gap-2 flex-wrap min-w-0">
                 <div class="announcement-card-title text-sm font-semibold" :class="theme?.text">{{ item.title }}</div>
-                <UBadge :color="statusColor(item.status)" size="xs" variant="soft">{{ statusLabel(item.status) }}</UBadge>
-                <UBadge v-if="item.revision > 1" color="blue" size="xs" variant="soft">修订 {{ item.revision }}</UBadge>
+                <UBadge class="admin-badge" :color="statusColor(item.status)" size="xs" variant="soft">{{ statusLabel(item.status) }}</UBadge>
+                <UBadge class="admin-badge" v-if="item.revision > 1" color="blue" size="xs" variant="soft">修订 {{ item.revision }}</UBadge>
               </div>
               <div class="text-xs whitespace-nowrap" :class="theme?.mutedText">{{ formatDate(item.updated_at) }}</div>
             </div>
@@ -64,42 +59,42 @@
 
             <div v-if="item.push_enabled" class="announcement-push-summary rounded p-2 mt-2" :class="theme?.subtleBg">
               <span class="announcement-push-label text-xs" :class="theme?.text">
-                <UIcon name="i-mdi-message-fast-outline" class="w-4 h-4" />VoceChat 投递
+                <UIcon name="i-heroicons-paper-airplane" class="w-4 h-4" />VoceChat 投递
               </span>
               <span class="text-xs" :class="theme?.mutedText">待发送 {{ item.push_summary?.pending || 0 }}</span>
               <span class="text-xs" :class="theme?.mutedText">发送中 {{ item.push_summary?.processing || 0 }}</span>
               <span class="text-xs text-emerald-500">成功 {{ item.push_summary?.sent || 0 }}</span>
               <span class="text-xs" :class="theme?.mutedText">跳过 {{ item.push_summary?.skipped || 0 }}</span>
               <span class="text-xs" :class="(item.push_summary?.failed || 0) > 0 ? 'text-red-500 font-semibold' : theme?.mutedText">失败 {{ item.push_summary?.failed || 0 }}</span>
-              <UButton v-if="item.status === 'published' && (item.push_summary?.failed || 0) > 0" size="xs" color="red" variant="soft" @click="retryFailedPush(item)">重试失败项</UButton>
+              <UButton class="admin-action" v-if="item.status === 'published' && (item.push_summary?.failed || 0) > 0" size="sm" color="red" variant="soft" @click="retryFailedPush(item)">重试失败项</UButton>
             </div>
 
             <div class="announcement-card-actions mt-2">
-              <UButton size="xs" color="gray" variant="soft" icon="i-heroicons-pencil-square" @click="openEdit(item)">编辑</UButton>
-              <UButton v-if="item.status === 'draft'" size="xs" color="green" variant="soft" icon="i-heroicons-paper-airplane" @click="openPublish(item)">发布</UButton>
-              <UButton v-else-if="item.status === 'published'" size="xs" color="orange" variant="soft" icon="i-heroicons-arrow-uturn-left" @click="withdraw(item)">撤回</UButton>
-              <UButton v-else-if="item.status === 'withdrawn'" size="xs" color="green" variant="soft" icon="i-heroicons-paper-airplane" @click="openPublish(item)">恢复发布</UButton>
-              <UButton v-if="isDeletable(item)" size="xs" color="red" variant="soft" icon="i-heroicons-trash" @click="deleteOne(item)">删除</UButton>
+              <UButton class="admin-action" size="sm" color="gray" variant="soft" icon="i-heroicons-pencil-square" @click="openEdit(item)">编辑</UButton>
+              <UButton class="admin-action" v-if="item.status === 'draft'" size="sm" color="primary" variant="solid" icon="i-heroicons-paper-airplane" @click="openPublish(item)">发布</UButton>
+              <UButton class="admin-action" v-else-if="item.status === 'published'" size="sm" color="orange" variant="soft" icon="i-heroicons-arrow-uturn-left" @click="withdraw(item)">撤回</UButton>
+              <UButton class="admin-action" v-else-if="item.status === 'withdrawn'" size="sm" color="primary" variant="solid" icon="i-heroicons-paper-airplane" @click="openPublish(item)">恢复发布</UButton>
+              <UButton class="admin-action" v-if="isDeletable(item)" size="sm" color="red" variant="soft" icon="i-heroicons-trash" @click="deleteOne(item)">删除</UButton>
             </div>
           </div>
         </div>
       </div>
 
       <div v-if="totalPages > 1" class="flex items-center justify-center gap-3 mt-3">
-        <UButton size="xs" color="gray" variant="soft" :disabled="page <= 1 || loading" @click="goPage(page - 1)">上一页</UButton>
+        <UButton class="admin-action" size="sm" color="gray" variant="soft" :disabled="page <= 1 || loading" @click="goPage(page - 1)">上一页</UButton>
         <span class="text-xs" :class="theme?.mutedText">第 {{ page }} / {{ totalPages }} 页</span>
-        <UButton size="xs" color="gray" variant="soft" :disabled="page >= totalPages || loading" @click="goPage(page + 1)">下一页</UButton>
+        <UButton class="admin-action" size="sm" color="gray" variant="soft" :disabled="page >= totalPages || loading" @click="goPage(page + 1)">下一页</UButton>
       </div>
     </div>
 
     <UModal v-model="editOpen" :ui="{ width: 'sm:max-w-2xl' }">
-      <UCard :class="theme?.cardBg">
+      <UCard class="admin-dialog" :class="theme?.cardBg">
         <template #header>
           <div class="font-semibold" :class="theme?.text">编辑公告</div>
         </template>
         <div class="flex flex-col gap-3">
-          <UInput v-model="editForm.title" maxlength="100" placeholder="公告标题" />
-          <UTextarea v-model="editForm.content" :rows="10" placeholder="公告正文，支持 Markdown" />
+          <UInput class="admin-input" v-model="editForm.title" maxlength="100" placeholder="公告标题" />
+          <UTextarea class="admin-textarea" v-model="editForm.content" :rows="10" placeholder="公告正文，支持 Markdown" />
           <label v-if="editingItem?.status === 'published'" class="announcement-toggle-control rounded-lg border p-3" :class="[theme?.border, theme?.subtleBg]">
             <UToggle v-model="editForm.renotify" />
             <span>
@@ -110,15 +105,15 @@
         </div>
         <template #footer>
           <div class="flex items-center justify-end gap-2">
-            <UButton variant="soft" color="gray" @click="editOpen=false">取消</UButton>
-            <UButton color="primary" :loading="savingEdit" @click="saveEdit">保存修改</UButton>
+            <UButton size="sm" class="admin-action" variant="soft" color="gray" @click="editOpen=false">取消</UButton>
+            <UButton size="sm" class="admin-action" color="primary" :loading="savingEdit" @click="saveEdit">保存修改</UButton>
           </div>
         </template>
       </UCard>
     </UModal>
 
     <UModal v-model="publishOpen" :ui="{ width: 'sm:max-w-lg' }">
-      <UCard :class="theme?.cardBg">
+      <UCard class="admin-dialog" :class="theme?.cardBg">
         <template #header>
           <div class="font-semibold" :class="theme?.text">{{ publishingItem?.status === 'withdrawn' ? '恢复发布公告' : '发布公告' }}</div>
         </template>
@@ -138,8 +133,8 @@
         </div>
         <template #footer>
           <div class="flex items-center justify-end gap-2">
-            <UButton variant="soft" color="gray" @click="publishOpen=false">取消</UButton>
-            <UButton color="green" :loading="publishing" @click="publish">确认发布</UButton>
+            <UButton size="sm" class="admin-action" variant="soft" color="gray" @click="publishOpen=false">取消</UButton>
+            <UButton size="sm" class="admin-action" color="primary" :loading="publishing" @click="publish">确认发布</UButton>
           </div>
         </template>
       </UCard>

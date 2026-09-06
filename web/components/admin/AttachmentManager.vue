@@ -1,47 +1,45 @@
 <template>
-  <div class="rounded-xl" :class="theme?.cardBg">
-    <div class="px-4 py-3 flex items-center justify-between">
-      <div class="font-semibold flex items-center gap-2" :class="theme?.text">
-        <UIcon name="i-heroicons-paper-clip" class="w-5 h-5 text-indigo-300" />
-        <span>附件管理</span>
-        <UBadge :color="isCloud ? 'green' : 'gray'" size="xs" variant="soft">{{ isCloud ? '云端' : '本地' }}</UBadge>
-      </div>
-      <div class="flex items-center gap-2">
-        <UButton v-if="canRecycleBinView" size="xs" :color="showRecycleBin ? 'primary' : 'gray'" variant="soft" @click="showRecycleBin = !showRecycleBin; refresh()">{{ showRecycleBin ? '仅回收站来源' : '查看回收站来源' }}</UButton>
-        <UButton :loading="loading" color="gray" variant="soft" class="shadow" @click="refresh">刷新</UButton>
-      </div>
-    </div>
+  <div class="attachment-manager" :class="theme?.cardBg">
+    <AdminModuleHeader title="附件管理" description="筛选附件、检查引用关系并管理文件。" icon="i-heroicons-paper-clip" :theme="theme">
+      <template #badge>
+        <UBadge class="admin-badge" :color="isCloud ? 'green' : 'gray'" size="xs" variant="soft">{{ isCloud ? '云端' : '本地' }}</UBadge>
+      </template>
+      <template #actions>
+        <UButton class="admin-action" v-if="canRecycleBinView" size="sm" :color="showRecycleBin ? 'primary' : 'gray'" variant="soft" @click="showRecycleBin = !showRecycleBin; refresh()">{{ showRecycleBin ? '仅回收站来源' : '查看回收站来源' }}</UButton>
+        <UButton size="sm" class="admin-action" :loading="loading" color="gray" variant="soft" icon="i-heroicons-arrow-path" @click="refresh">刷新</UButton>
+      </template>
+    </AdminModuleHeader>
     <div class="px-4 pb-4">
       <div class="flex gap-2 mb-3">
-        <UButton :color="activeTab==='images'?'primary':'gray'" variant="soft" @click="activeTab='images'">图片</UButton>
-        <UButton :color="activeTab==='videos'?'primary':'gray'" variant="soft" @click="activeTab='videos'">视频</UButton>
-        <UButton :color="activeTab==='audios'?'primary':'gray'" variant="soft" @click="activeTab='audios'">音频</UButton>
-        <UButton :color="activeTab==='others'?'primary':'gray'" variant="soft" @click="activeTab='others'">其他</UButton>
+        <UButton size="sm" class="admin-action" :color="activeTab==='images'?'primary':'gray'" variant="soft" @click="activeTab='images'">图片</UButton>
+        <UButton size="sm" class="admin-action" :color="activeTab==='videos'?'primary':'gray'" variant="soft" @click="activeTab='videos'">视频</UButton>
+        <UButton size="sm" class="admin-action" :color="activeTab==='audios'?'primary':'gray'" variant="soft" @click="activeTab='audios'">音频</UButton>
+        <UButton size="sm" class="admin-action" :color="activeTab==='others'?'primary':'gray'" variant="soft" @click="activeTab='others'">其他</UButton>
       </div>
       <div class="attachment-filter-bar rounded-lg border px-3 py-2 mb-3" :class="[theme?.border, theme?.subtleBg]">
         <div class="attachment-filter-row">
           <UInput
             v-model="filterKeyword"
-            class="attachment-filter-keyword"
+            class="admin-input attachment-filter-keyword"
             size="xs"
             icon="i-heroicons-magnifying-glass"
             placeholder="搜索文件名或附件 ID"
             aria-label="搜索文件名或附件 ID"
           />
-          <USelect v-model="filterExtension" :options="extensionOptions" size="xs" class="attachment-filter-select" aria-label="按格式筛选" />
-          <USelect v-model="filterShareState" :options="shareStateOptions" size="xs" class="attachment-filter-select" aria-label="按引用状态筛选" />
-          <USelect v-model="sortMode" :options="sortOptions" size="xs" class="attachment-filter-select" aria-label="排序方式" />
+          <USelect v-model="filterExtension" :options="extensionOptions" size="xs" class="admin-select attachment-filter-select" aria-label="按格式筛选" />
+          <USelect v-model="filterShareState" :options="shareStateOptions" size="xs" class="admin-select attachment-filter-select" aria-label="按引用状态筛选" />
+          <USelect v-model="sortMode" :options="sortOptions" size="xs" class="admin-select attachment-filter-select" aria-label="排序方式" />
         </div>
         <div class="attachment-filter-row">
           <label class="attachment-filter-date text-xs" :class="theme?.mutedText">
             <span>起始日期</span>
-            <UInput v-model="filterDateFrom" type="date" size="xs" aria-label="起始日期" />
+            <UInput class="admin-input" v-model="filterDateFrom" type="date" size="xs" aria-label="起始日期" />
           </label>
           <label class="attachment-filter-date text-xs" :class="theme?.mutedText">
             <span>截止日期</span>
-            <UInput v-model="filterDateTo" type="date" size="xs" aria-label="截止日期" />
+            <UInput class="admin-input" v-model="filterDateTo" type="date" size="xs" aria-label="截止日期" />
           </label>
-          <UButton size="xs" color="gray" variant="ghost" icon="i-heroicons-arrow-path" :disabled="!filtersActive" @click="resetFilters">重置筛选</UButton>
+          <UButton class="admin-action" size="sm" color="gray" variant="soft" icon="i-heroicons-arrow-path" :disabled="!filtersActive" @click="resetFilters">重置筛选</UButton>
         </div>
         <div class="text-xs" :class="theme?.mutedText">
           共 {{ activeGroups.length }} 个文件 / {{ activeReferenceCount }} 个逻辑附件<span v-if="filtersActive">（已筛选，全部 {{ activeTotalReferenceCount }} 个逻辑附件）</span>
@@ -50,11 +48,11 @@
       <div class="attachment-batch-toolbar rounded-lg border px-3 py-2 mb-3" :class="[theme?.border, theme?.subtleBg]">
         <div class="text-xs" :class="theme?.mutedText">已选择 {{ selectedCount }} 个逻辑附件，涉及 {{ selectedGroupCount }} 个物理文件</div>
         <div class="attachment-batch-actions">
-          <UButton size="xs" color="gray" variant="soft" icon="i-heroicons-check-circle" @click="selectAllActive">全选当前分类</UButton>
-          <UButton size="xs" color="gray" variant="soft" icon="i-heroicons-x-mark" :disabled="selectedCount===0" @click="clearSelection">取消选择</UButton>
-          <UButton v-if="canDownload" size="xs" color="primary" variant="soft" icon="i-heroicons-archive-box-arrow-down" :loading="zipDownloading" :disabled="selectedCount===0" @click="downloadSelectedZip">打包下载</UButton>
-          <UButton v-if="canDeleteReference" size="xs" color="orange" variant="soft" icon="i-heroicons-scissors" :loading="batchDeleting" :disabled="selectedCount===0" @click="batchDelete">删除所选引用</UButton>
-          <UButton v-if="canPurgeBlob" size="xs" color="red" variant="soft" icon="i-heroicons-trash" :disabled="selectedCount===0" @click="openPurgeSelected">彻底删除所选文件</UButton>
+          <UButton class="admin-action" size="sm" color="gray" variant="soft" icon="i-heroicons-check-circle" @click="selectAllActive">全选当前分类</UButton>
+          <UButton class="admin-action" size="sm" color="gray" variant="soft" icon="i-heroicons-x-mark" :disabled="selectedCount===0" @click="clearSelection">取消选择</UButton>
+          <UButton class="admin-action" v-if="canDownload" size="sm" color="primary" variant="soft" icon="i-heroicons-archive-box-arrow-down" :loading="zipDownloading" :disabled="selectedCount===0" @click="downloadSelectedZip">打包下载</UButton>
+          <UButton class="admin-action" v-if="canDeleteReference" size="sm" color="orange" variant="soft" icon="i-heroicons-scissors" :loading="batchDeleting" :disabled="selectedCount===0" @click="batchDelete">删除所选引用</UButton>
+          <UButton class="admin-action" v-if="canPurgeBlob" size="sm" color="red" variant="soft" icon="i-heroicons-trash" :disabled="selectedCount===0" @click="openPurgeSelected">彻底删除所选文件</UButton>
         </div>
       </div>      <div
         ref="selectionSurface"
@@ -95,8 +93,8 @@
                 </div>
               </div>
               <div class="attachment-actions">
-                <UButton v-if="canDownload" size="xs" icon="i-heroicons-arrow-down-tray" color="gray" variant="soft" title="下载" aria-label="下载" @click="downloadAttachment(group.primary)" />
-                <UButton v-if="canPurgeBlob && managedReferences(group).length > 0" size="xs" icon="i-heroicons-fire" color="red" variant="soft" :title="`彻底删除文件（含 ${group.referenceCount} 个逻辑附件）`" :aria-label="`彻底删除文件（含 ${group.referenceCount} 个逻辑附件）`" @click="openPurgeGroup(group)" />
+                <UButton class="admin-action" v-if="canDownload" size="sm" icon="i-heroicons-arrow-down-tray" color="gray" variant="soft" title="下载" aria-label="下载" @click="downloadAttachment(group.primary)" />
+                <UButton class="admin-action" v-if="canPurgeBlob && managedReferences(group).length > 0" size="sm" icon="i-heroicons-fire" color="red" variant="soft" :title="`彻底删除文件（含 ${group.referenceCount} 个逻辑附件）`" :aria-label="`彻底删除文件（含 ${group.referenceCount} 个逻辑附件）`" @click="openPurgeGroup(group)" />
               </div>
             </div>
             <img v-if="group.kind === 'image'" :src="fullURL(group.primary.url)" class="attachment-preview mt-2 rounded w-full object-contain bg-black/20" loading="lazy" />
@@ -127,8 +125,8 @@
                   <div v-if="item.logical_id" class="attachment-logical-id text-[10px]" :class="theme?.mutedText">附件 ID：{{ item.logical_id }}</div>
                   <div class="text-[10px]" :class="theme?.mutedText">{{ referenceUsageLabel(item) }}</div>
                 </div>
-                <UButton v-if="canDeleteReference && item?.logical_id"
-                  size="2xs"
+                <UButton class="admin-action" v-if="canDeleteReference && item?.logical_id"
+                  size="sm"
                   icon="i-heroicons-trash"
                   color="orange"
                   variant="ghost"
@@ -139,7 +137,7 @@
               </div>
             </div>
             <div class="mt-1">
-              <UButton size="xs" color="gray" variant="ghost" @click="toggleExpand(group.primary)">{{ isExpanded(group.primary) ? '收起关联' : '关联内容' }}</UButton>
+              <UButton class="admin-action" size="sm" color="gray" variant="ghost" @click="toggleExpand(group.primary)">{{ isExpanded(group.primary) ? '收起关联' : '关联内容' }}</UButton>
               <div v-if="isExpanded(group.primary)" class="mt-2 rounded p-2" :class="theme?.subtleBg">
                 <div v-if="!group.belongs.length" class="text-xs" :class="theme?.mutedText">无关联内容</div>
                 <div v-else class="space-y-2">
@@ -155,10 +153,10 @@
             </div>
           </div>
           <div class="attachment-grid-footer flex justify-center mt-2" v-if="activeGroups.length > activeGroupsDisplay.length">
-            <UButton color="gray" variant="soft" @click="loadMoreActive">加载更多</UButton>
+            <UButton size="sm" class="admin-action" color="gray" variant="soft" @click="loadMoreActive">加载更多</UButton>
           </div>
           <div class="attachment-grid-footer flex justify-center mt-2" v-else-if="activeGroups.length > GROUP_PAGE_SIZE">
-            <UButton color="gray" variant="soft" @click="collapseActive">收起</UButton>
+            <UButton size="sm" class="admin-action" color="gray" variant="soft" @click="collapseActive">收起</UButton>
           </div>
         </div>
         <div
@@ -169,7 +167,7 @@
       </div>
     </div>
     <UModal v-model="confirmOpen">
-      <UCard :class="theme?.cardBg">
+      <UCard class="admin-dialog" :class="theme?.cardBg">
         <div class="text-sm" :class="theme?.text">确定删除该{{ deleteTypeLabel }}附件吗？此操作不可恢复。</div>
         <div class="attachment-delete-scope mt-2 text-xs" :class="theme?.mutedText">{{ deleteScopeHint }}</div>
         <div v-if="deleteReferences.length > 0" class="attachment-delete-warning mt-3" role="alert">
@@ -188,14 +186,14 @@
           </ul>
         </div>
         <div class="flex justify-end gap-2 mt-3">
-          <UButton color="gray" variant="soft" @click="confirmOpen=false">取消</UButton>
-          <UButton color="red" :loading="deleting" @click="doDelete">确认删除</UButton>
+          <UButton size="sm" class="admin-action" color="gray" variant="soft" @click="confirmOpen=false">取消</UButton>
+          <UButton size="sm" class="admin-action" color="red" :loading="deleting" @click="doDelete">确认删除</UButton>
         </div>
       </UCard>
     </UModal>
 
     <UModal v-model="purgeOpen">
-      <UCard :class="theme?.cardBg">
+      <UCard class="admin-dialog" :class="theme?.cardBg">
         <div class="text-sm" :class="theme?.text">确定彻底删除 {{ purgeGroups.length }} 个物理文件吗？此操作不可恢复。</div>
         <div class="attachment-delete-warning mt-3" role="alert">
           <div class="attachment-delete-warning__title">
@@ -213,8 +211,8 @@
           </ul>
         </div>
         <div class="flex justify-end gap-2 mt-3">
-          <UButton color="gray" variant="soft" @click="purgeOpen=false">取消</UButton>
-          <UButton color="red" :loading="purging" @click="doPurge">确认彻底删除</UButton>
+          <UButton size="sm" class="admin-action" color="gray" variant="soft" @click="purgeOpen=false">取消</UButton>
+          <UButton size="sm" class="admin-action" color="red" :loading="purging" @click="doPurge">确认彻底删除</UButton>
         </div>
       </UCard>
     </UModal>

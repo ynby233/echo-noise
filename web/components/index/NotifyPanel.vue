@@ -2,12 +2,12 @@
     <div class="notify-panel-shell mb-6">
         <div class="notify-panel-toolbar">
             <div>
-                <h2 class="text-xl font-semibold" :class="text">推送渠道配置</h2>
-                <p class="mt-1 text-sm" :class="mutedText">统一展示渠道卡片与配置表单，不再通过“设置”按钮切换输入区域。</p>
+                <h3 class="text-sm font-semibold" :class="text">推送渠道</h3>
+                <p class="mt-1 text-xs" :class="mutedText">选择渠道，填写连接信息后保存。</p>
             </div>
             <div v-if="!isReadOnly" class="flex flex-wrap gap-2">
-                <UButton color="gray" variant="soft" @click="resetAll">恢复默认</UButton>
-                <UButton color="primary" @click="saveAll">保存配置</UButton>
+                <UButton size="sm" class="admin-action" color="gray" variant="soft" @click="resetAll">恢复默认</UButton>
+                <UButton size="sm" class="admin-action" color="primary" @click="saveAll">保存配置</UButton>
             </div>
         </div>
 
@@ -48,7 +48,7 @@
                         <div class="notify-channel-icon notify-channel-icon-active">
                             <UIcon :name="currentChannel.icon" class="w-5 h-5" />
                         </div>
-                        <div class="text-lg font-semibold" :class="text">{{ currentChannel.label }} 推送</div>
+                        <div class="text-sm font-semibold" :class="text">{{ currentChannel.label }} 推送</div>
                     </div>
                     <p class="mt-2 text-sm" :class="mutedText">{{ currentChannel.tip }}</p>
                 </div>
@@ -57,7 +57,7 @@
                         {{ currentChannel.enabled ? '已启用' : '未启用' }}
                     </span>
                     <UToggle v-if="!isReadOnly" :model-value="currentChannel.enabled" @update:model-value="setChannelEnabled(currentChannel.key, !!$event)" />
-                    <UButton v-if="!isReadOnly" color="primary" variant="soft" :disabled="props.disabled" @click="testNotify(currentChannel.key)">
+                    <UButton size="sm" class="admin-action" v-if="!isReadOnly" color="primary" variant="soft" :disabled="props.disabled" @click="testNotify(currentChannel.key)">
                         测试当前渠道
                     </UButton>
                 </div>
@@ -68,7 +68,7 @@
                     <div class="notify-field md:col-span-2">
                         <label class="notify-field-label" :class="text">Webhook 地址</label>
                         <p class="notify-field-tip" :class="mutedText">用于接收推送消息的完整地址。</p>
-                        <UInput v-model="localConfig.webhookURL" placeholder="https://example.com/webhook" :disabled="isReadOnly || props.disabled" />
+                        <UInput class="admin-input" v-model="localConfig.webhookURL" placeholder="https://example.com/webhook" :disabled="isReadOnly || props.disabled" />
                     </div>
                 </template>
 
@@ -76,12 +76,12 @@
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">Bot Token</label>
                         <p class="notify-field-tip" :class="mutedText">机器人令牌，建议粘贴完整值后立即保存。</p>
-                        <UInput v-model="localConfig.telegramToken" placeholder="123456:ABCDEF..." :disabled="isReadOnly || props.disabled" />
+                        <UInput class="admin-input" v-model="localConfig.telegramToken" placeholder="123456:ABCDEF..." :disabled="isReadOnly || props.disabled" />
                     </div>
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">Chat ID</label>
                         <p class="notify-field-tip" :class="mutedText">支持群组或频道 ID。</p>
-                        <UInput v-model="localConfig.telegramChatID" placeholder="-1001234567890" :disabled="isReadOnly || props.disabled" />
+                        <UInput class="admin-input" v-model="localConfig.telegramChatID" placeholder="-1001234567890" :disabled="isReadOnly || props.disabled" />
                     </div>
                 </template>
 
@@ -89,7 +89,7 @@
                     <div class="notify-field md:col-span-2">
                         <label class="notify-field-label" :class="text">Webhook Key</label>
                         <p class="notify-field-tip" :class="mutedText">填写企微机器人 Webhook 的 key 部分即可。</p>
-                        <UInput v-model="localConfig.weworkKey" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" :disabled="isReadOnly || props.disabled" />
+                        <UInput class="admin-input" v-model="localConfig.weworkKey" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" :disabled="isReadOnly || props.disabled" />
                     </div>
                 </template>
 
@@ -97,12 +97,12 @@
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">Webhook 地址</label>
                         <p class="notify-field-tip" :class="mutedText">填写飞书机器人 Webhook URL。</p>
-                        <UInput v-model="localConfig.feishuWebhook" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..." :disabled="isReadOnly || props.disabled" />
+                        <UInput class="admin-input" v-model="localConfig.feishuWebhook" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..." :disabled="isReadOnly || props.disabled" />
                     </div>
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">签名密钥</label>
                         <p class="notify-field-tip" :class="mutedText">开启签名校验时填写，不需要可留空。</p>
-                        <UInput v-model="localConfig.feishuSecret" placeholder="secret" type="password" :disabled="isReadOnly || props.disabled" />
+                        <UInput class="admin-input" v-model="localConfig.feishuSecret" placeholder="secret" type="password" :disabled="isReadOnly || props.disabled" />
                     </div>
                 </template>
 
@@ -110,22 +110,22 @@
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">API Key</label>
                         <p class="notify-field-tip" :class="mutedText">应用 API Key。</p>
-                        <UInput v-model="localConfig.twitterApiKey" placeholder="API Key" :disabled="isReadOnly || props.disabled" />
+                        <UInput class="admin-input" v-model="localConfig.twitterApiKey" placeholder="API Key" :disabled="isReadOnly || props.disabled" />
                     </div>
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">API Secret</label>
                         <p class="notify-field-tip" :class="mutedText">应用 API Secret。</p>
-                        <UInput v-model="localConfig.twitterApiSecret" placeholder="API Secret" :disabled="isReadOnly || props.disabled" />
+                        <UInput class="admin-input" v-model="localConfig.twitterApiSecret" placeholder="API Secret" :disabled="isReadOnly || props.disabled" />
                     </div>
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">Access Token</label>
                         <p class="notify-field-tip" :class="mutedText">账户授权 Token。</p>
-                        <UInput v-model="localConfig.twitterAccessToken" placeholder="Access Token" :disabled="isReadOnly || props.disabled" />
+                        <UInput class="admin-input" v-model="localConfig.twitterAccessToken" placeholder="Access Token" :disabled="isReadOnly || props.disabled" />
                     </div>
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">Access Token Secret</label>
                         <p class="notify-field-tip" :class="mutedText">账户授权 Token Secret。</p>
-                        <UInput v-model="localConfig.twitterAccessTokenSecret" placeholder="Access Token Secret" :disabled="isReadOnly || props.disabled" />
+                        <UInput class="admin-input" v-model="localConfig.twitterAccessTokenSecret" placeholder="Access Token Secret" :disabled="isReadOnly || props.disabled" />
                     </div>
                 </template>
 
@@ -133,29 +133,29 @@
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">请求地址</label>
                         <p class="notify-field-tip" :class="mutedText">支持任何自定义通知接口地址。</p>
-                        <UInput v-model="localConfig.customHttpUrl" placeholder="https://example.com/notify" :disabled="isReadOnly || props.disabled" />
+                        <UInput class="admin-input" v-model="localConfig.customHttpUrl" placeholder="https://example.com/notify" :disabled="isReadOnly || props.disabled" />
                     </div>
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">请求方法</label>
                         <p class="notify-field-tip" :class="mutedText">建议优先使用 POST。</p>
-                        <USelect v-model="localConfig.customHttpMethod" :options="['POST', 'PUT', 'PATCH']" :disabled="isReadOnly || props.disabled" />
+                        <USelect class="admin-select" v-model="localConfig.customHttpMethod" :options="['POST', 'PUT', 'PATCH']" :disabled="isReadOnly || props.disabled" />
                     </div>
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">请求头</label>
                         <p class="notify-field-tip" :class="mutedText">填写 JSON 字符串，例如 Authorization 头。</p>
-                        <UTextarea v-model="localConfig.customHttpHeaders" :rows="6" placeholder='{"Authorization":"Bearer token"}' :disabled="isReadOnly || props.disabled" />
+                        <UTextarea class="admin-textarea" v-model="localConfig.customHttpHeaders" :rows="6" placeholder='{"Authorization":"Bearer token"}' :disabled="isReadOnly || props.disabled" />
                     </div>
                     <div class="notify-field">
                         <label class="notify-field-label" :class="text">请求体模板</label>
                         <p v-pre class="notify-field-tip" :class="mutedText">支持内容模板变量，例如 {{content}}。</p>
-                        <UTextarea v-model="localConfig.customHttpBody" :rows="6" placeholder='{"content":"{{content}}"}' :disabled="isReadOnly || props.disabled" />
+                        <UTextarea class="admin-textarea" v-model="localConfig.customHttpBody" :rows="6" placeholder='{"content":"{{content}}"}' :disabled="isReadOnly || props.disabled" />
                     </div>
                 </template>
             </div>
         </div>
 
         <div v-if="!isReadOnly" class="notify-test-grid" :class="props.disabled ? 'opacity-60 pointer-events-none' : ''">
-            <UButton
+            <UButton size="sm" class="admin-action"
                 v-for="type in notifyTypes"
                 :key="type"
                 :variant="activeChannel === type ? 'solid' : 'soft'"
@@ -466,7 +466,7 @@ const mutedText = computed(() => props.mutedText || 'text-gray-300')
 .notify-panel-shell {
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: var(--admin-space, 16px);
 }
 
 .notify-panel-toolbar {
@@ -484,68 +484,34 @@ const mutedText = computed(() => props.mutedText || 'text-gray-300')
 }
 
 .notify-channel-card {
-    border: 1px solid rgba(148, 163, 184, 0.18);
-    border-radius: 18px;
-    padding: 18px;
+    min-width: 0;
+    border: 1px solid var(--admin-line, #e5e6eb);
+    border-radius: var(--admin-radius, 8px);
+    padding: var(--admin-gap, 12px);
     text-align: left;
-    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background-color .18s ease;
-    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+    transition: border-color .15s ease, background-color .15s ease;
 }
 
-.notify-channel-card:hover {
-    transform: translateY(-1px);
-    border-color: rgba(79, 70, 229, 0.26);
-    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.1);
-}
-
+.notify-channel-card:hover,
 .notify-channel-card-active {
-    background: linear-gradient(135deg, #0f172a 0%, #111827 100%) !important;
-    border-color: rgba(15, 23, 42, 0.82);
-    box-shadow: 0 18px 34px rgba(15, 23, 42, 0.2);
-}
-
-.notify-channel-card-active :deep(.u-icon),
-.notify-channel-card-active :deep(.uicon),
-.notify-channel-card-active :deep(svg) {
-    color: #ffffff;
-}
-
-.notify-channel-card-active .notify-channel-badge-disabled {
-    background: rgba(255, 255, 255, 0.12);
-    color: rgba(255, 255, 255, 0.82);
-}
-
-.notify-channel-card-active .notify-channel-badge-enabled {
-    background: rgba(74, 222, 128, 0.16);
-    color: #dcfce7;
-}
-
-.notify-channel-card-active .notify-channel-icon {
-    background: rgba(255, 255, 255, 0.12);
-    color: #ffffff;
-}
-
-.notify-channel-card-active .notify-channel-preview span,
-.notify-channel-card-active .notify-channel-preview div,
-.notify-channel-card-active .notify-channel-card-label,
-.notify-channel-card-active .notify-channel-card-description {
-    color: #f8fafc !important;
+    border-color: var(--admin-accent, #165dff);
+    background: var(--admin-accent-soft, rgba(22, 93, 255, 0.08));
 }
 
 .notify-channel-icon {
-    width: 42px;
-    height: 42px;
-    border-radius: 14px;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--admin-radius, 8px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: rgba(79, 70, 229, 0.08);
-    color: #4f46e5;
+    background: var(--admin-accent-soft, rgba(22, 93, 255, 0.08));
+    color: var(--admin-accent, #165dff);
 }
 
 .notify-channel-icon-active {
-    background: rgba(79, 70, 229, 0.14);
-    color: #4338ca;
+    background: var(--admin-accent-soft, rgba(22, 93, 255, 0.08));
+    color: var(--admin-accent, #165dff);
 }
 
 .notify-channel-badge {
@@ -570,10 +536,10 @@ const mutedText = computed(() => props.mutedText || 'text-gray-300')
 }
 
 .notify-panel-detail {
-    border: 1px solid rgba(148, 163, 184, 0.18);
-    border-radius: 22px;
-    padding: 22px;
-    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.08);
+    border: 1px solid var(--admin-line, #e5e6eb);
+    border-radius: var(--admin-radius, 8px);
+    padding: var(--admin-space, 16px);
+    box-shadow: none;
 }
 
 .notify-panel-detail-head {
@@ -582,8 +548,8 @@ const mutedText = computed(() => props.mutedText || 'text-gray-300')
     align-items: flex-start;
     justify-content: space-between;
     gap: 16px;
-    padding-bottom: 18px;
-    margin-bottom: 18px;
+    padding-bottom: 12px;
+    margin-bottom: 12px;
     border-bottom: 1px solid rgba(148, 163, 184, 0.18);
 }
 

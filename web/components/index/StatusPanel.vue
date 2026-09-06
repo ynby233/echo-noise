@@ -1,6 +1,6 @@
 <template>
  
-  <div class="admin-root fixed inset-0 w-full h-full overflow-x-hidden overflow-y-auto" :class="adminRootClass">
+  <div class="admin-root fixed inset-0 w-full h-full overflow-x-hidden overflow-y-auto" :class="adminRootClass" :data-admin-theme="panelTheme">
       <div v-if="isLoading" class="admin-loading-wrap">
         <div class="admin-loading-spinner" />
       </div>
@@ -52,8 +52,8 @@
         <div v-if="!sidebarCollapsed" class="px-4 py-3 border-t" :class="theme.border">
           <div class="text-xs text-slate-400">当前版本: {{ versionInfo.currentVersion || '最新' }}</div>
           <div class="mt-2 flex items-center gap-2">
-            <UButton size="xs" color="indigo" variant="soft" :loading="versionInfo.checking" class="shadow-md" @click="checkVersion">{{ versionInfo.checking ? '检测中...' : '检查版本发布时间' }}</UButton>
-            <UButton v-if="can('version.update')" size="xs" color="orange" variant="solid" class="shadow-md" :loading="updatingVersion" @click="updateVersion">更新升级</UButton>
+            <UButton size="sm" color="primary" variant="soft" :loading="versionInfo.checking" class="admin-action" @click="checkVersion">{{ versionInfo.checking ? '检测中...' : '检查版本发布时间' }}</UButton>
+            <UButton v-if="can('version.update')" size="sm" color="orange" variant="solid" class="admin-action" :loading="updatingVersion" @click="updateVersion">更新升级</UButton>
           </div>
           <div v-if="versionInfo.hasUpdate" class="mt-2 text-orange-400 flex items-center gap-2">
             <UIcon name="i-heroicons-arrow-up-circle" class="w-4 h-4" />
@@ -68,10 +68,10 @@
             <span class="font-semibold truncate">系统管理面板</span>
           </div>
           <div class="flex items-center gap-1.5 shrink-0">
-            <UButton icon="i-heroicons-home" size="xs" :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelThemeButtonColor" class="shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90 sm:hidden" @click="$router.push('/')" />
-            <UButton :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelThemeButtonColor" size="xs" class="admin-sm-inline-flex shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90" @click="$router.push('/')">返回首页</UButton>
-            <UButton v-if="isLogin" icon="i-heroicons-power" color="red" variant="solid" size="xs" class="sm:hidden" @click="handleLogout" />
-            <UButton v-if="isLogin" icon="i-heroicons-power" color="red" variant="solid" size="xs" class="admin-sm-inline-flex" @click="handleLogout">退出登录</UButton>
+            <UButton icon="i-heroicons-home" size="sm" :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelThemeButtonColor" class="admin-action ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90 sm:hidden" @click="$router.push('/')" />
+            <UButton :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelThemeButtonColor" size="sm" class="admin-action admin-sm-inline-flex ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90" @click="$router.push('/')">返回首页</UButton>
+            <UButton v-if="isLogin" icon="i-heroicons-power" color="red" variant="solid" size="sm" class="admin-action sm:hidden" @click="handleLogout" />
+            <UButton v-if="isLogin" icon="i-heroicons-power" color="red" variant="solid" size="sm" class="admin-action admin-sm-inline-flex" @click="handleLogout">退出登录</UButton>
           </div>
         </div>
         <div v-if="sidebarOpen" class="fixed inset-0 z-30 bg-slate-950/45 backdrop-blur-[1px] md:hidden" @click="sidebarOpen=false"></div>
@@ -87,29 +87,28 @@
             </div>
           </div>
           <div class="flex items-center gap-2 shrink-0">
-            <UButton :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelThemeButtonColor" class="shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90" @click="$router.push('/')">返回首页</UButton>
-            <UButton v-if="isLogin" icon="i-heroicons-power" color="red" variant="solid" class="shadow" @click="handleLogout">退出登录</UButton>
+            <UButton size="sm" :variant="panelTheme === 'light' ? 'soft' : 'solid'" :color="panelThemeButtonColor" class="admin-action ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90" @click="$router.push('/')">返回首页</UButton>
+            <UButton size="sm" v-if="isLogin" icon="i-heroicons-power" color="red" variant="solid" class="admin-action" @click="handleLogout">退出登录</UButton>
           </div>
         </div>
         <div class="admin-form-shell px-4 pb-16 pt-3 md:pt-4 md:pb-20 w-full space-y-4">
-          <div class="col-span-12">
-            <h1 class="text-xl md:text-2xl font-bold text-left md:hidden" :class="theme.text">系统管理面板</h1>
-          </div>
           <div v-if="adminCapabilitiesLoading" id="admin-capabilities-loading" class="col-span-12" :class="adminShellCardClass">
             <div class="px-4 py-6 flex items-center justify-center gap-2" :class="theme.mutedText">
               <UIcon name="i-heroicons-arrow-path" class="w-5 h-5 animate-spin" />
               <span>正在加载管理权限…</span>
             </div>
           </div>
-          <div v-if="isSectionVisible('dashboard')" class="col-span-12">
-            <div :class="adminPanelCardClass">
-              <div class="px-4 py-3 flex items-center justify-between">
-                <div class="flex items-center gap-4">
-                  <span :class="theme.text">配色</span>
+          <div id="dashboard-section" v-if="isSectionVisible('dashboard')" class="col-span-12">
+            <div :class="adminShellCardClass">
+              <AdminModuleHeader title="仪表盘" icon="i-heroicons-squares-2x2" description="查看当前账号可访问的互动统计、运营概览与系统信息。" :theme="theme">
+                <template #actions>
+                  <span class="text-xs" :class="theme.mutedText">后台配色</span>
                   <div class="flex items-center gap-2">
                     <button
                       v-for="opt in panelThemeOptions"
                       :key="opt.value"
+                      :aria-label="`使用${opt.label}配色`"
+                      :aria-pressed="panelTheme === opt.value"
                       type="button"
                       class="theme-dot-btn"
                       :class="[panelTheme === opt.value ? 'theme-dot-btn-active' : '']"
@@ -117,22 +116,9 @@
                       @click="panelTheme = opt.value"
                     />
                   </div>
-                </div>
-
-                <div class="flex items-center gap-2">
-                  <UButton size="sm" color="green" class="shadow" @click="saveAdminTheme">保存</UButton>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div id="dashboard-section" v-if="isSectionVisible('dashboard')" class="col-span-12">
-            <div :class="adminShellCardClass">
-              <div :class="adminSectionHeaderClass">
-                <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                  <UIcon name="i-heroicons-squares-2x2" class="w-5 h-5" />
-                  <span>仪表盘</span>
-                </div>
-              </div>
+                  <UButton size="sm" color="primary" class="admin-action" @click="saveAdminTheme">保存配色</UButton>
+                </template>
+              </AdminModuleHeader>
               <div class="admin-dashboard-content">
                 <section class="admin-dashboard-group" aria-labelledby="dashboard-interaction-title">
                   <div id="dashboard-interaction-title" class="admin-dashboard-group-title" :class="theme.text">
@@ -191,9 +177,7 @@
 
           <div id="user-section" class="col-span-12" v-if="isLogin && isSectionVisible('user')">
             <div :class="adminShellCardClass">
-              <div :class="adminSectionHeaderClass">
-                <div class="font-semibold">用户信息配置</div>
-              </div>
+              <AdminModuleHeader title="用户信息配置" icon="i-heroicons-user-circle" description="管理账号资料、登录密码与个人访问凭据。" :theme="theme" />
               <div class="admin-profile-grid">
                     <div class="admin-setting-block admin-profile-card admin-profile-card--username">
                       <div class="admin-setting-heading">
@@ -202,11 +186,11 @@
                           <p class="admin-setting-desc" :class="theme.mutedText">登录名与后台展示名保持一致，修改后立即生效。</p>
                         </div>
                         <div class="flex flex-wrap items-center justify-end gap-2">
-                          <UBadge color="primary" variant="soft" class="text-xs px-2 py-1 rounded-md !text-primary-600 dark:!text-primary-300">{{ userStore.user?.username || '未设置' }}</UBadge>
-                          <UButton size="xs" @click="updateUsername" color="primary" class="shadow">保存用户名</UButton>
+                          <UBadge color="primary" variant="soft" class="admin-badge text-xs px-2 py-1 rounded-md !text-primary-600 dark:!text-primary-300">{{ userStore.user?.username || '未设置' }}</UBadge>
+                          <UButton size="sm" @click="updateUsername" color="primary" class="admin-action">保存用户名</UButton>
                         </div>
                       </div>
-                      <UInput v-model="userForm.username" :placeholder="userStore.user?.username || '输入用户名'" class="w-full" />
+                      <UInput v-model="userForm.username" :placeholder="userStore.user?.username || '输入用户名'" class="admin-input w-full" />
                     </div>
 
                     <div class="admin-setting-block admin-profile-card admin-profile-card--avatar">
@@ -218,16 +202,16 @@
                         <img :src="avatarSrc" class="w-12 h-12 rounded-full object-cover ring-2 ring-indigo-400/20" alt="avatar" @error="onAvatarImgError" />
                       </div>
                       <div class="flex flex-wrap items-center gap-2">
-                        <UButton size="sm" @click.stop="chooseAvatar" color="indigo" variant="soft" class="shadow">上传头像</UButton>
-                        <UButton size="sm" :loading="avatarApplyingDefault" @click.stop="useSiteDefaultAvatar" color="orange" variant="soft" class="shadow">使用站点默认头像</UButton>
+                        <UButton size="sm" @click.stop="chooseAvatar" color="primary" variant="soft" class="admin-action">上传头像</UButton>
+                        <UButton size="sm" :loading="avatarApplyingDefault" @click.stop="useSiteDefaultAvatar" color="orange" variant="soft" class="admin-action">使用站点默认头像</UButton>
                       </div>
                       <input ref="avatarInput" type="file" accept="image/*" class="hidden" @change="onAvatarFileChange" />
                       <div class="flex flex-col md:flex-row items-stretch gap-2 w-full">
-                        <UInput v-model="avatarLink" placeholder="头像链接（http 或 /api 开头）" class="flex-1" />
-                        <UButton size="sm" :loading="avatarUploadingLink" @click.stop="saveAvatarLink" color="primary" variant="solid" class="shadow">保存链接</UButton>
+                        <UInput v-model="avatarLink" placeholder="头像链接（http 或 /api 开头）" class="admin-input flex-1" />
+                        <UButton size="sm" :loading="avatarUploadingLink" @click.stop="saveAvatarLink" color="primary" variant="solid" class="admin-action">保存链接</UButton>
                       </div>
                       <UModal v-model="cropperOpen">
-                        <div class="p-4">
+                        <div class="admin-dialog p-4">
                           <div :class="theme.mutedText" class="mb-2">裁剪头像（拖动图片调整位置，滑块调整缩放）</div>
                           <div
                             class="mx-auto"
@@ -255,8 +239,8 @@
                           <div class="mt-3 flex items-center gap-3">
                             <span :class="theme.mutedText">缩放</span>
                             <input type="range" min="1" max="3" step="0.01" v-model.number="cropScale" />
-                            <UButton :loading="avatarUploadingFile" color="green" @click="performCropAndUpload">裁剪并保存</UButton>
-                            <UButton color="indigo" variant="soft" @click="closeCropper">取消</UButton>
+                            <UButton size="sm" class="admin-action" :loading="avatarUploadingFile" color="primary" @click="performCropAndUpload">裁剪并保存</UButton>
+                            <UButton size="sm" class="admin-action" color="gray" variant="soft" @click="closeCropper">取消</UButton>
                           </div>
                         </div>
                       </UModal>
@@ -268,9 +252,9 @@
                           <div class="admin-setting-title" :class="theme.text">个性签名</div>
                           <p class="admin-setting-desc" :class="theme.mutedText">展示在个人信息区域，支持多行文本。</p>
                         </div>
-                        <UButton size="xs" @click="updateDescription" color="primary" class="shadow">保存签名</UButton>
+                        <UButton size="sm" @click="updateDescription" color="primary" class="admin-action">保存签名</UButton>
                       </div>
-                      <UTextarea v-model="userForm.description" :placeholder="userStore.user?.description || '欢迎访问'" :rows="4" class="w-full admin-description-textarea" />
+                      <UTextarea v-model="userForm.description" :placeholder="userStore.user?.description || '欢迎访问'" :rows="3" class="admin-textarea w-full admin-description-textarea" />
                     </div>
 
                     <div class="admin-setting-block admin-profile-card admin-profile-card--password">
@@ -280,22 +264,22 @@
                           <p class="admin-setting-desc" :class="theme.mutedText">输入当前密码后即可修改新密码，强度需达到中及以上。</p>
                         </div>
                         <div class="flex flex-wrap items-center justify-end gap-2">
-                          <UBadge :color="passwordStrengthColor" variant="soft">{{ passwordStrengthLabel }}</UBadge>
-                          <UButton size="xs" @click="updatePassword" :disabled="!canSavePassword" color="primary" class="shadow">保存密码</UButton>
+                          <UBadge class="admin-badge" :color="passwordStrengthColor" variant="soft">{{ passwordStrengthLabel }}</UBadge>
+                          <UButton size="sm" @click="updatePassword" :disabled="!canSavePassword" color="primary" class="admin-action">保存密码</UButton>
                         </div>
                       </div>
                       <div class="admin-password-grid">
                         <div class="w-full flex items-center gap-2">
-                          <UInput v-model="userForm.oldPassword" :type="showOldPassword ? 'text' : 'password'" placeholder="当前密码" class="flex-1" />
-                          <UButton :icon="showOldPassword ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="indigo" variant="ghost" @click="showOldPassword = !showOldPassword" />
+                          <UInput v-model="userForm.oldPassword" :type="showOldPassword ? 'text' : 'password'" placeholder="当前密码" class="admin-input flex-1" />
+                          <UButton size="sm" class="admin-action" :icon="showOldPassword ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="primary" variant="ghost" @click="showOldPassword = !showOldPassword" />
                         </div>
                         <div class="w-full flex items-center gap-2">
-                          <UInput v-model="userForm.newPassword" :type="showNewPassword ? 'text' : 'password'" placeholder="新密码" class="flex-1" />
-                          <UButton :icon="showNewPassword ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="indigo" variant="ghost" @click="showNewPassword = !showNewPassword" />
+                          <UInput v-model="userForm.newPassword" :type="showNewPassword ? 'text' : 'password'" placeholder="新密码" class="admin-input flex-1" />
+                          <UButton size="sm" class="admin-action" :icon="showNewPassword ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="primary" variant="ghost" @click="showNewPassword = !showNewPassword" />
                         </div>
                         <div class="w-full flex items-center gap-2">
-                          <UInput v-model="userForm.confirmPassword" :type="showConfirmPassword ? 'text' : 'password'" placeholder="确认新密码" class="flex-1" />
-                          <UButton :icon="showConfirmPassword ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="indigo" variant="ghost" @click="showConfirmPassword = !showConfirmPassword" />
+                          <UInput v-model="userForm.confirmPassword" :type="showConfirmPassword ? 'text' : 'password'" placeholder="确认新密码" class="admin-input flex-1" />
+                          <UButton size="sm" class="admin-action" :icon="showConfirmPassword ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="primary" variant="ghost" @click="showConfirmPassword = !showConfirmPassword" />
                         </div>
                       </div>
                     </div>
@@ -306,15 +290,15 @@
                           <p class="admin-setting-desc" :class="theme.mutedText">供脚本、MCP 等外部工具调用专用接口，权限与当前账号一致；重新生成后旧 Token 立即失效。</p>
                         </div>
                         <div class="flex flex-wrap items-center justify-end gap-2">
-                          <UBadge color="primary" variant="soft" class="text-xs px-2 py-1 rounded-md !text-primary-600 dark:!text-primary-300">{{ userToken ? '已生成' : '未生成' }}</UBadge>
-                          <UButton size="xs" :loading="regeneratingToken" @click="regenerateToken" color="indigo" variant="soft" class="shadow">重新生成</UButton>
+                          <UBadge color="primary" variant="soft" class="admin-badge text-xs px-2 py-1 rounded-md !text-primary-600 dark:!text-primary-300">{{ userToken ? '已生成' : '未生成' }}</UBadge>
+                          <UButton size="sm" :loading="regeneratingToken" @click="regenerateToken" color="primary" variant="soft" class="admin-action">重新生成</UButton>
                         </div>
                       </div>
                       <div v-if="userToken" class="space-y-1">
                         <div class="flex items-center gap-2 w-full flex-nowrap">
-                          <UInput v-model="userToken" :type="showToken ? 'text' : 'password'" readonly class="font-mono text-sm flex-1 min-w-0" />
-                          <UButton :icon="showToken ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="indigo" variant="ghost" @click="showToken = !showToken" />
-                          <UButton icon="i-heroicons-clipboard" color="indigo" variant="ghost" @click="copyToken" />
+                          <UInput v-model="userToken" :type="showToken ? 'text' : 'password'" readonly class="admin-input font-mono text-sm flex-1 min-w-0" />
+                          <UButton size="sm" class="admin-action" :icon="showToken ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="primary" variant="ghost" @click="showToken = !showToken" />
+                          <UButton size="sm" class="admin-action" icon="i-heroicons-clipboard" color="primary" variant="ghost" @click="copyToken" />
                         </div>
                       </div>
                       <p v-else class="admin-setting-desc" :class="theme.mutedText">暂无 Token</p>
@@ -325,13 +309,7 @@
 
           <div id="system-push-section" v-if="isLogin && isSectionVisible('system-push')" class="col-span-12">
             <div :class="adminShellCardClass">
-              <div class="admin-system-push-header" :class="adminSectionHeaderClass">
-                <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                  <UIcon name="i-heroicons-bell-alert" class="w-5 h-5" />
-                  <span>系统推送</span>
-                </div>
-                <p class="admin-system-push-summary" :class="theme.mutedText">管理当前浏览器的系统通知、本站邮箱与 VoceChat 推送渠道。</p>
-              </div>
+              <AdminModuleHeader title="系统推送" icon="i-heroicons-bell-alert" description="管理当前浏览器的系统通知、本站邮箱与 VoceChat 推送渠道。" :theme="theme" />
               <div class="admin-system-push-grid">
                 <div class="admin-setting-block admin-system-push-browser">
                   <PwaPushSettings :dark="panelTheme !== 'light'" embedded title="浏览器系统推送" />
@@ -352,25 +330,25 @@
 
                     <div v-if="!userStore.user?.email" class="admin-binding-actions">
                       <div class="admin-email-bind-row">
-                        <UInput v-model="userForm.email" type="email" placeholder="输入邮箱" class="min-w-0 flex-1" />
-                        <UButton color="indigo" variant="soft" class="whitespace-nowrap" @click="sendBindEmailCode">发送验证码</UButton>
-                        <UInput v-model="userForm.emailCode" placeholder="验证码" class="admin-verification-input" />
-                        <UButton color="primary" class="shadow whitespace-nowrap" @click="verifyBindEmail">立即绑定</UButton>
+                        <UInput v-model="userForm.email" type="email" placeholder="输入邮箱" class="admin-input min-w-0 flex-1" />
+                        <UButton size="sm" color="primary" variant="soft" class="admin-action whitespace-nowrap" @click="sendBindEmailCode">发送验证码</UButton>
+                        <UInput v-model="userForm.emailCode" placeholder="验证码" class="admin-input admin-verification-input" />
+                        <UButton size="sm" color="primary" class="admin-action whitespace-nowrap" @click="verifyBindEmail">立即绑定</UButton>
                       </div>
                     </div>
 
                     <div v-else class="admin-binding-actions">
                       <div class="admin-verification-row admin-verification-row--button-first">
-                        <UButton color="indigo" variant="soft" class="whitespace-nowrap" @click="sendChangeEmailCode">向当前邮箱发送验证码</UButton>
-                        <UInput v-model="userForm.changeCode" placeholder="收到的验证码" class="admin-verification-input" />
+                        <UButton size="sm" color="primary" variant="soft" class="admin-action whitespace-nowrap" @click="sendChangeEmailCode">向当前邮箱发送验证码</UButton>
+                        <UInput v-model="userForm.changeCode" placeholder="收到的验证码" class="admin-input admin-verification-input" />
                       </div>
                       <div class="admin-email-action-row">
-                        <UInput v-model="userForm.newEmail" type="email" placeholder="新的邮箱" class="min-w-0 flex-1" />
-                        <UButton color="primary" class="shadow whitespace-nowrap" @click="changeEmail">提交更换</UButton>
+                        <UInput v-model="userForm.newEmail" type="email" placeholder="新的邮箱" class="admin-input min-w-0 flex-1" />
+                        <UButton size="sm" color="primary" class="admin-action whitespace-nowrap" @click="changeEmail">提交更换</UButton>
                       </div>
                       <div v-if="awaitingNewEmailVerify" class="admin-verification-row">
-                        <UInput v-model="userForm.emailCode" placeholder="新邮箱验证码" class="admin-verification-input" />
-                        <UButton color="primary" class="shadow whitespace-nowrap" @click="confirmChangeEmail">确认更换</UButton>
+                        <UInput v-model="userForm.emailCode" placeholder="新邮箱验证码" class="admin-input admin-verification-input" />
+                        <UButton size="sm" color="primary" class="admin-action whitespace-nowrap" @click="confirmChangeEmail">确认更换</UButton>
                       </div>
                     </div>
                   </div>
@@ -393,9 +371,9 @@
                         <p class="admin-setting-desc" :class="theme.mutedText">填写同一 VoceChat 账号的邮箱和密码，保存时会实际登录校验。已绑定后仍可在这里更新账号信息。</p>
                       </div>
                       <div class="admin-vc-binding-form">
-                        <UInput v-model="primaryVoceChatBindingEmail" type="email" :placeholder="registeredVoceChatEmail || 'VoceChat 邮箱'" class="min-w-0" />
-                        <UInput v-model="primaryVoceChatBindingPassword" type="password" placeholder="对应 VoceChat 账户密码" class="min-w-0" />
-                        <UButton size="sm" color="primary" class="shadow whitespace-nowrap" :loading="bindingPrimaryVoceChatEmail" :disabled="!primaryVoceChatBindingEmail.trim() || !primaryVoceChatBindingPassword" @click="bindPrimaryVoceChatEmail">校验并保存</UButton>
+                        <UInput v-model="primaryVoceChatBindingEmail" type="email" :placeholder="registeredVoceChatEmail || 'VoceChat 邮箱'" class="admin-input min-w-0" />
+                        <UInput v-model="primaryVoceChatBindingPassword" type="password" placeholder="对应 VoceChat 账户密码" class="admin-input min-w-0" />
+                        <UButton size="sm" color="primary" class="admin-action whitespace-nowrap" :loading="bindingPrimaryVoceChatEmail" :disabled="!primaryVoceChatBindingEmail.trim() || !primaryVoceChatBindingPassword" @click="bindPrimaryVoceChatEmail">校验并保存</UButton>
                       </div>
                       <p class="admin-setting-desc" :class="theme.mutedText">本站密码不会同步修改此密码；凭据失效时，VC 推送停止，联系人可见内容按私密处理，并在通知中心提醒一次。</p>
                     </div>
@@ -407,7 +385,7 @@
                       </div>
                       <div class="flex items-center gap-3 justify-end shrink-0">
                         <UToggle v-model="userForm.voceChatNotificationEnabled" :disabled="!registeredVoceChatEmail" />
-                        <UButton size="xs" color="primary" class="shadow" :disabled="!registeredVoceChatEmail" @click="updateVoceChatNotificationPreference">保存</UButton>
+                        <UButton size="sm" color="primary" class="admin-action" :disabled="!registeredVoceChatEmail" @click="updateVoceChatNotificationPreference">保存</UButton>
                       </div>
                     </div>
                   </div>
@@ -440,75 +418,70 @@
             </div>
           </div>
           <div id="site-section" v-if="(isAdmin && isSiteSectionPage) || isSectionVisible('widgets')" class="col-span-12">
-          <div :class="adminShellCardClass">
-            <div :class="adminSectionHeaderClass">
-              <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                <UIcon :name="isSectionVisible('widgets') ? 'i-heroicons-squares-plus' : 'i-heroicons-cog-6-tooth'" class="w-5 h-5" />
-                <span>{{ isSectionVisible('widgets') ? '小组件' : '网站配置' }}</span>
-              </div>
-            </div>
-            <div class="px-4 pb-4 space-y-4">
+          <div :class="['site', 'site-register', 'site-configs'].includes(activeSection) ? adminShellCardClass : 'admin-site-module-group'">
+            <AdminModuleHeader v-if="['site', 'site-register', 'site-configs'].includes(activeSection)" :title="activeAdminSection?.label || '网站配置'" :description="activeAdminSection?.key === 'site' ? '管理首页展示、主题布局与应用信息。' : activeAdminSection?.key === 'site-register' ? '设置注册入口与新账号的注册方式。' : '管理站点标题、介绍、头部图与页面文案。'" :icon="activeAdminSection?.icon || 'i-heroicons-cog-6-tooth'" :theme="theme" />
+            <div :class="['site', 'site-register', 'site-configs'].includes(activeSection) ? 'px-4 pb-4 space-y-4' : 'space-y-4'">
               <div
                 v-if="isSectionVisible('site')"
                 :class="[adminSubtleCardClass, { 'admin-readonly-settings': !canManageSiteSettings }]"
                 :inert="!canManageSiteSettings"
               >
-                <div class="flex justify-between items-center mb-3">
+                <div class="admin-settings-toolbar flex justify-between items-center mb-3">
                   <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-hand-thumb-up" class="w-4 h-4" /><span>系统欢迎组件</span></div>
                   <div class="flex items-center gap-2">
-                    <UButton size="sm" color="indigo" variant="soft" @click="applyWelcomeAdmin">使用站长头像信息</UButton>
-                    <UButton size="sm" color="indigo" variant="soft" @click="resetWelcomeConfig">重置</UButton>
-                    <UButton size="sm" color="primary" class="shadow" @click="saveConfigItem('welcome')">保存</UButton>
+                    <UButton class="admin-action" size="sm" color="primary" variant="soft" @click="applyWelcomeAdmin">使用站长头像信息</UButton>
+                    <UButton class="admin-action" size="sm" color="gray" variant="soft" @click="resetWelcomeConfig">重置</UButton>
+                    <UButton size="sm" color="primary" class="admin-action" @click="saveConfigItem('welcome')">保存</UButton>
                   </div>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <label :class="[theme.mutedText, 'text-sm mb-1 block']">显示名称</label>
-                    <UInput v-model="frontendConfig.welcomeName" placeholder="如 Noise 或站点名" />
+                    <UInput class="admin-input" v-model="frontendConfig.welcomeName" placeholder="如 Noise 或站点名" />
                   </div>
                   <div>
                     <label :class="[theme.mutedText, 'text-sm mb-1 block']">头像URL</label>
-                    <UInput v-model="frontendConfig.welcomeAvatarURL" placeholder="http/https 或以 /api 开头的站内路径" />
+                    <UInput class="admin-input" v-model="frontendConfig.welcomeAvatarURL" placeholder="http/https 或以 /api 开头的站内路径" />
                   </div>
                   <div class="md:col-span-2">
                     <label :class="[theme.mutedText, 'text-sm mb-1 block']">简介文案</label>
-                    <UTextarea v-model="frontendConfig.welcomeDescription" :rows="2" placeholder="一句话欢迎语或个人签名" />
+                    <UInput class="admin-input" v-model="frontendConfig.welcomeDescription" placeholder="一句话欢迎语或个人签名" />
                   </div>
                 </div>
                 <div class="text-xs mt-2" :class="theme.mutedText">未登录时展示该组件；登录后显示当前用户的头像与签名</div>
               </div>
               <div id="site-register-section" v-if="isSectionVisible('site-register')" class="space-y-3">
-                <div class="flex flex-col sm:flex-row items-start sm:items-center rounded-lg p-3 justify-between gap-3 sm:gap-0" :class="theme.subtleBg">
+                <div class="admin-subcard flex flex-col sm:flex-row items-start sm:items-center rounded-lg p-3 justify-between gap-3 sm:gap-0" :class="theme.subtleBg">
                   <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-user-plus" class="w-4 h-4" /> <span>新用户注册</span></div>
                   <div class="flex items-center gap-4 w-full sm:w-auto justify-end">
                     <UToggle v-model="registerEnabled" />
-                    <UButton color="green" @click="saveRegisterConfig" class="shadow">保存</UButton>
+                    <UButton size="sm" color="primary" @click="saveRegisterConfig" class="admin-action">保存</UButton>
                   </div>
                 </div>
 
-                <div v-if="canManageVoceChatConfig" class="rounded-lg p-4 space-y-4" :class="theme.subtleBg">
-                  <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div v-if="canManageVoceChatConfig" class="admin-subcard rounded-lg p-4 space-y-4" :class="theme.subtleBg">
+                  <div class="admin-settings-toolbar flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                     <div class="flex items-center gap-2" :class="theme.text">
                       <UIcon name="i-heroicons-chat-bubble-left-right" class="w-4 h-4" />
                       <span>运行模式与 VoceChat 配置</span>
                     </div>
                     <div class="flex items-center gap-2 flex-wrap justify-end">
-                      <UBadge :color="voceChatConfig.configured ? 'green' : 'gray'" variant="soft">{{ voceChatConfig.configured ? '已就绪' : '未就绪' }}</UBadge>
-                      <UBadge :color="voceChatConfig.adminCredentialConfigured ? 'green' : 'orange'" variant="soft">凭据 {{ voceChatConfig.adminCredentialConfigured ? '已配置' : '未配置' }}</UBadge>
-                      <UButton variant="soft" color="indigo" icon="i-heroicons-arrow-path" @click="fetchRegisterConfig">刷新</UButton>
-                      <UButton variant="soft" color="primary" icon="i-heroicons-signal" :loading="checkingVoceChatHealth" @click="checkVoceChatHealth">检查当前状态</UButton>
-                      <UButton color="green" :loading="savingVoceChatConfig" @click="saveVoceChatConfig">保存配置</UButton>
+                      <UBadge class="admin-badge" :color="voceChatConfig.configured ? 'green' : 'gray'" variant="soft">{{ voceChatConfig.configured ? '已就绪' : '未就绪' }}</UBadge>
+                      <UBadge class="admin-badge" :color="voceChatConfig.adminCredentialConfigured ? 'green' : 'orange'" variant="soft">凭据 {{ voceChatConfig.adminCredentialConfigured ? '已配置' : '未配置' }}</UBadge>
+                      <UButton size="sm" class="admin-action" variant="soft" color="gray" icon="i-heroicons-arrow-path" @click="fetchRegisterConfig">刷新</UButton>
+                      <UButton size="sm" class="admin-action" variant="soft" color="primary" icon="i-heroicons-signal" :loading="checkingVoceChatHealth" @click="checkVoceChatHealth">检查当前状态</UButton>
+                      <UButton size="sm" class="admin-action" color="primary" :loading="savingVoceChatConfig" @click="saveVoceChatConfig">保存配置</UButton>
                     </div>
                   </div>
 
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
                       <span class="text-sm" :class="theme.text">配置模式</span>
-                      <UBadge :color="runtimePolicy.configuredMode === 'vocechat' ? 'indigo' : 'gray'" variant="soft">{{ runtimeConfiguredModeLabel }}</UBadge>
+                      <UBadge class="admin-badge" :color="runtimePolicy.configuredMode === 'vocechat' ? 'primary' : 'gray'" variant="soft">{{ runtimeConfiguredModeLabel }}</UBadge>
                     </div>
                     <div class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border">
                       <span class="text-sm" :class="theme.text">实际运行状态</span>
-                      <UBadge :color="runtimePolicy.runtimeState === 'vocechat_normal' ? 'green' : runtimePolicy.runtimeState === 'vocechat_degraded' ? 'orange' : 'gray'" variant="soft">{{ runtimeStateLabel }}</UBadge>
+                      <UBadge class="admin-badge" :color="runtimePolicy.runtimeState === 'vocechat_normal' ? 'green' : runtimePolicy.runtimeState === 'vocechat_degraded' ? 'orange' : 'gray'" variant="soft">{{ runtimeStateLabel }}</UBadge>
                     </div>
                     <div class="md:col-span-2 rounded border px-3 py-2" :class="theme.border">
                       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -517,8 +490,8 @@
                           <div v-if="runtimePolicy.lastHealthCheckAt" class="text-xs mt-1" :class="theme.mutedText">最近检查：{{ formatShanghai(runtimePolicy.lastHealthCheckAt) }}</div>
                         </div>
                         <div class="flex items-center gap-2 shrink-0">
-                          <UButton size="sm" color="gray" variant="soft" :loading="switchingRuntimeMode === 'local'" :disabled="runtimePolicy.configuredMode === 'local' || !!switchingRuntimeMode" @click="switchRuntimeMode('local')">切换到本地模式</UButton>
-                          <UButton size="sm" color="indigo" :loading="switchingRuntimeMode === 'vocechat'" :disabled="runtimePolicy.configuredMode === 'vocechat' || !!switchingRuntimeMode" @click="switchRuntimeMode('vocechat')">切换到 VoceChat 模式</UButton>
+                          <UButton class="admin-action" size="sm" color="gray" variant="soft" :loading="switchingRuntimeMode === 'local'" :disabled="runtimePolicy.configuredMode === 'local' || !!switchingRuntimeMode" @click="switchRuntimeMode('local')">切换到本地模式</UButton>
+                          <UButton class="admin-action" size="sm" color="primary" :loading="switchingRuntimeMode === 'vocechat'" :disabled="runtimePolicy.configuredMode === 'vocechat' || !!switchingRuntimeMode" @click="switchRuntimeMode('vocechat')">切换到 VoceChat 模式</UButton>
                         </div>
                       </div>
                     </div>
@@ -531,16 +504,16 @@
                         <div class="text-xs mt-1" :class="theme.mutedText">切换模式不会自动创建账户；仅在站长明确启动后逐个处理。</div>
                       </div>
                       <div class="flex items-center gap-2 shrink-0">
-                        <UButton size="sm" color="indigo" icon="i-heroicons-play" :loading="runningVoceChatProvisioning === 'start'" :disabled="runtimePolicy.runtimeState !== 'vocechat_normal' || !!runningVoceChatProvisioning" @click="runVoceChatProvisioning('start')">开始补建/同步</UButton>
-                        <UButton size="sm" color="orange" variant="soft" icon="i-heroicons-arrow-path" :loading="runningVoceChatProvisioning === 'retry'" :disabled="runtimePolicy.runtimeState !== 'vocechat_normal' || !!runningVoceChatProvisioning" @click="runVoceChatProvisioning('retry')">重试失败项</UButton>
+                        <UButton class="admin-action" size="sm" color="primary" icon="i-heroicons-play" :loading="runningVoceChatProvisioning === 'start'" :disabled="runtimePolicy.runtimeState !== 'vocechat_normal' || !!runningVoceChatProvisioning" @click="runVoceChatProvisioning('start')">开始补建/同步</UButton>
+                        <UButton class="admin-action" size="sm" color="orange" variant="soft" icon="i-heroicons-arrow-path" :loading="runningVoceChatProvisioning === 'retry'" :disabled="runtimePolicy.runtimeState !== 'vocechat_normal' || !!runningVoceChatProvisioning" @click="runVoceChatProvisioning('retry')">重试失败项</UButton>
                       </div>
                     </div>
                     <div class="flex flex-wrap gap-2">
-                      <UBadge color="gray" variant="soft">待处理 {{ runtimeAccountCount('pending') + runtimeAccountCount('unbound') }}</UBadge>
-                      <UBadge color="blue" variant="soft">处理中 {{ runtimeAccountCount('provisioning') }}</UBadge>
-                      <UBadge color="green" variant="soft">已绑定 {{ runtimeAccountCount('linked') }}</UBadge>
-                      <UBadge color="red" variant="soft">失败 {{ runtimeAccountCount('failed') + runtimeAccountCount('conflicted') }}</UBadge>
-                      <UBadge color="orange" variant="soft">需同步密码 {{ runtimeAccountCount('password_sync_required') }}</UBadge>
+                      <UBadge class="admin-badge" color="gray" variant="soft">待处理 {{ runtimeAccountCount('pending') + runtimeAccountCount('unbound') }}</UBadge>
+                      <UBadge class="admin-badge" color="blue" variant="soft">处理中 {{ runtimeAccountCount('provisioning') }}</UBadge>
+                      <UBadge class="admin-badge" color="green" variant="soft">已绑定 {{ runtimeAccountCount('linked') }}</UBadge>
+                      <UBadge class="admin-badge" color="red" variant="soft">失败 {{ runtimeAccountCount('failed') + runtimeAccountCount('conflicted') }}</UBadge>
+                      <UBadge class="admin-badge" color="orange" variant="soft">需同步密码 {{ runtimeAccountCount('password_sync_required') }}</UBadge>
                     </div>
                     <div v-if="runtimePolicy.provisioningRun" class="text-xs" :class="theme.mutedText">
                       最近任务：{{ runtimeProvisioningRunLabel(runtimePolicy.provisioningRun.status) }} · 启动于 {{ formatShanghai(runtimePolicy.provisioningRun.started_at) }}
@@ -554,8 +527,8 @@
                             <div v-if="task.error_summary" class="text-xs mt-1 text-red-500">{{ task.error_summary }}</div>
                           </div>
                           <div class="flex items-center gap-2 shrink-0">
-                            <UBadge color="gray" variant="soft">{{ runtimeProvisioningActionLabel(task.action) }}</UBadge>
-                            <UBadge :color="voceChatProvisionColor(task.status)" variant="soft">{{ voceChatProvisionLabel(task.status) }}</UBadge>
+                            <UBadge class="admin-badge" color="gray" variant="soft">{{ runtimeProvisioningActionLabel(task.action) }}</UBadge>
+                            <UBadge class="admin-badge" :color="voceChatProvisionColor(task.status)" variant="soft">{{ voceChatProvisionLabel(task.status) }}</UBadge>
                           </div>
                         </div>
                       </div>
@@ -566,38 +539,38 @@
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <label class="text-sm mb-1 block" :class="theme.mutedText">服务地址</label>
-                      <UInput v-model="voceChatConfig.baseURL" placeholder="https://chat.example.com" :disabled="!canManageVoceChatConfig" />
+                      <UInput class="admin-input" v-model="voceChatConfig.baseURL" placeholder="https://chat.example.com" :disabled="!canManageVoceChatConfig" />
                       <div class="text-xs mt-1" :class="theme.mutedText">当前：{{ voceChatConfig.baseURLConfigured ? '已配置' : '未配置' }}</div>
                     </div>
                     <div>
                       <label class="text-sm mb-1 block" :class="theme.mutedText">邮箱域名</label>
-                      <UInput v-model="voceChatConfig.emailDomain" placeholder="vc.com" :disabled="!canManageVoceChatConfig" />
+                      <UInput class="admin-input" v-model="voceChatConfig.emailDomain" placeholder="vc.com" :disabled="!canManageVoceChatConfig" />
                     </div>
                     <div>
                       <label class="text-sm mb-1 block" :class="theme.mutedText">VoceChat 管理账号邮箱</label>
-                      <UInput v-model="voceChatConfig.adminUsername" placeholder="新的管理 API 登录邮箱（留空不变）" :disabled="!canManageVoceChatConfig" />
+                      <UInput class="admin-input" v-model="voceChatConfig.adminUsername" placeholder="新的管理 API 登录邮箱（留空不变）" :disabled="!canManageVoceChatConfig" />
                     </div>
                     <div>
                       <label class="text-sm mb-1 block" :class="theme.mutedText">VoceChat 管理账号密码</label>
-                      <UInput v-model="voceChatConfig.adminPassword" type="password" placeholder="新密码（留空不变）" :disabled="!canManageVoceChatConfig" />
+                      <UInput class="admin-input" v-model="voceChatConfig.adminPassword" type="password" placeholder="新密码（留空不变）" :disabled="!canManageVoceChatConfig" />
                     </div>
                     <div>
                       <label class="text-sm mb-1 block" :class="theme.mutedText">VoceChat 管理账号 Token</label>
-                      <UInput v-model="voceChatConfig.adminToken" type="password" placeholder="新 Token（留空不变）" :disabled="!canManageVoceChatConfig" />
+                      <UInput class="admin-input" v-model="voceChatConfig.adminToken" type="password" placeholder="新 Token（留空不变）" :disabled="!canManageVoceChatConfig" />
                     </div>
                     <div>
                       <label class="text-sm mb-1 block" :class="theme.mutedText">Third Party Secret</label>
-                      <UInput v-model="voceChatConfig.thirdPartySecret" type="password" placeholder="新 Secret（留空不变）" :disabled="!canManageVoceChatConfig" />
+                      <UInput class="admin-input" v-model="voceChatConfig.thirdPartySecret" type="password" placeholder="新 Secret（留空不变）" :disabled="!canManageVoceChatConfig" />
                       <div class="text-xs mt-1" :class="theme.mutedText">当前：{{ voceChatConfig.thirdPartySecretConfigured ? '已配置' : '未配置' }}</div>
                     </div>
                     <div>
                       <label class="text-sm mb-1 block" :class="theme.mutedText">Bot API Key</label>
-                      <UInput v-model="voceChatConfig.botApiKey" type="password" placeholder="新 Bot API Key（留空不变）" :disabled="!canManageVoceChatConfig" />
+                      <UInput class="admin-input" v-model="voceChatConfig.botApiKey" type="password" placeholder="新 Bot API Key（留空不变）" :disabled="!canManageVoceChatConfig" />
                       <div class="text-xs mt-1" :class="theme.mutedText">当前：{{ voceChatConfig.botApiKeyConfigured ? '已配置' : '未配置' }}</div>
                     </div>
                     <div>
                       <label class="text-sm mb-1 block" :class="theme.mutedText">联系人缓存 TTL（秒）</label>
-                      <UInput v-model.number="voceChatConfig.contactsCacheTTLSeconds" type="number" min="1" placeholder="60" :disabled="!canManageVoceChatConfig" />
+                      <UInput class="admin-input" v-model.number="voceChatConfig.contactsCacheTTLSeconds" type="number" min="1" placeholder="60" :disabled="!canManageVoceChatConfig" />
                     </div>
                   </div>
 
@@ -624,88 +597,87 @@
                 <div
                   id="site-pwa-section"
                   v-if="isSectionVisible('site')"
-                  class="rounded-lg p-4"
+                  class="admin-subcard rounded-lg p-4"
                   :class="[theme.subtleBg, { 'admin-readonly-settings': !canManageSiteSettings }]"
                   :inert="!canManageSiteSettings"
                 >
-                  <div class="flex justify-between items-center mb-3">
+                  <div class="admin-settings-toolbar flex justify-between items-center mb-3">
                     <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-rocket-launch" class="w-4 h-4" /> <span>PWA 模式</span></div>
                     <div class="flex items-center gap-4">
                       <UToggle v-model="frontendConfig.pwaEnabled" />
-                      <UButton color="green" @click="savePWAConfig" class="shadow">保存</UButton>
+                      <UButton size="sm" color="primary" @click="savePWAConfig" class="admin-action">保存</UButton>
                     </div>
                   </div>
   <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <label :class="[theme.mutedText, 'text-sm mb-1 block']">PWA 标题</label>
-                      <UInput v-model="frontendConfig.pwaTitle" :placeholder="frontendConfig.siteTitle || '个人站点'" />
+                      <UInput class="admin-input" v-model="frontendConfig.pwaTitle" :placeholder="frontendConfig.siteTitle || '个人站点'" />
                     </div>
                     <div>
                       <label :class="[theme.mutedText, 'text-sm mb-1 block']">PWA 图标</label>
-                      <UInput v-model="frontendConfig.pwaIconURL" :placeholder="'/favicon.svg'" />
+                      <UInput class="admin-input" v-model="frontendConfig.pwaIconURL" :placeholder="'/favicon.svg'" />
                     </div>
                     <div class="md:col-span-2">
                       <label :class="[theme.mutedText, 'text-sm mb-1 block']">PWA 描述</label>
-                      <UTextarea v-model="frontendConfig.pwaDescription" :rows="2" :placeholder="frontendConfig.description || ''" />
+                      <UInput class="admin-input" v-model="frontendConfig.pwaDescription" :placeholder="frontendConfig.description || ''" />
   </div>
   </div>
                 </div>
                 <div
                   id="site-github-card-section"
                   v-if="isSectionVisible('site')"
-                  class="flex flex-col sm:flex-row items-start sm:items-center rounded-lg p-3 justify-between gap-3 sm:gap-0"
+                  class="admin-subcard flex flex-col sm:flex-row items-start sm:items-center rounded-lg p-3 justify-between gap-3 sm:gap-0"
                   :class="[theme.subtleBg, { 'admin-readonly-settings': !canManageSiteSettings }]"
                   :inert="!canManageSiteSettings"
                 >
                   <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-mdi-github" class="w-4 h-4" /> <span>GitHub 链接卡片解析</span></div>
                   <div class="flex flex-wrap items-center gap-4">
                     <UToggle v-model="githubCardEnabled" />
-                    <UButton color="green" @click="saveGithubCardConfig" class="shadow">保存</UButton>
+                    <UButton size="sm" color="primary" @click="saveGithubCardConfig" class="admin-action">保存</UButton>
                   </div>
                 </div>
-                <div id="site-announcement-section" v-if="isSectionVisible('site-announcement')" class="flex flex-col sm:flex-row items-start sm:items-center rounded-lg p-3 justify-between gap-3 sm:gap-0" :class="theme.subtleBg">
-                  <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-megaphone" class="w-4 h-4" /> <span>公告栏开关</span></div>
-                  <div class="flex flex-wrap items-center gap-4">
-                    <UToggle v-model="frontendConfig.announcementEnabled" />
-                    <UButton color="green" @click="saveConfigItem('announcementEnabled')" class="shadow">保存</UButton>
-                  </div>
-                </div>
-                <div v-if="isSectionVisible('site-announcement')" class="rounded-lg p-3 mt-3" :class="theme.subtleBg">
-                  <div class="text-sm mb-2" :class="theme.mutedText">公告栏文本</div>
-                  <UTextarea v-model="frontendConfig.announcementText" placeholder="请输入公告内容" class="w-full mb-2" />
-                  <div class="flex justify-end">
-                    <UButton color="primary" class="shadow" @click="saveConfigItem('announcementText')">保存公告文本</UButton>
+                <div id="site-announcement-section" v-if="isSectionVisible('site-announcement')" :class="adminPanelCardClass">
+                  <AdminModuleHeader title="公告栏" description="设置首页公告栏的显示状态与文案。" icon="i-heroicons-megaphone" :theme="theme">
+                    <template #actions>
+                      <UToggle v-model="frontendConfig.announcementEnabled" aria-label="启用公告栏" />
+                      <UButton size="sm" color="primary" class="admin-action" @click="saveConfigItem('announcementEnabled')">保存开关</UButton>
+                    </template>
+                  </AdminModuleHeader>
+                  <div class="px-4 pb-4">
+                    <label class="block text-sm mb-2" :class="theme.mutedText" for="admin-announcement-text">公告栏文本</label>
+                    <UTextarea id="admin-announcement-text" v-model="frontendConfig.announcementText" :rows="3" placeholder="请输入公告内容" class="admin-textarea w-full mb-2" />
+                    <div class="flex justify-end">
+                      <UButton size="sm" color="primary" class="admin-action" @click="saveConfigItem('announcementText')">保存公告文本</UButton>
+                    </div>
                   </div>
                 </div>
                 <div v-if="isSectionVisible('site-announcement')" class="mt-4">
                   <AdminAnnouncementManager :theme="theme" />
                 </div>
                 <div id="site-music-legacy-section" class="hidden" />
-                <div id="site-music-section" v-if="isSectionVisible('site-music')" class="col-span-12 mt-4">
+                <div id="site-music-section" v-if="isSectionVisible('site-music')" class="col-span-12">
                   <div :class="adminPanelCardClass">
-                    <div :class="adminSectionHeaderClass">
-                      <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                        <UIcon name="i-heroicons-musical-note" class="w-5 h-5" />
-                        <span>音乐配置</span>
-                      </div>
-                      <div class="flex items-center gap-3">
-                        <UToggle v-model="frontendConfig.musicEnabled" />
-                      </div>
-                    </div>
+                    <AdminModuleHeader title="音乐配置" icon="i-heroicons-musical-note" description="设置播放来源、播放器位置与显示方式。" :theme="theme">
+                      <template #actions>
+                        <div class="flex items-center gap-3">
+                          <UToggle v-model="frontendConfig.musicEnabled" />
+                        </div>
+                      </template>
+                    </AdminModuleHeader>
                     <div class="px-4 pb-4">
-                      <div class="rounded-lg p-4 space-y-4" :class="theme.subtleBg">
+                      <div class="admin-subcard rounded-lg p-4 space-y-4" :class="theme.subtleBg">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div>
                             <label class="text-sm mb-1 block" :class="theme.mutedText">歌单 ID</label>
-                            <UInput v-model="frontendConfig.musicPlaylistId" :disabled="(frontendConfig.musicSongId || '').trim() !== ''" placeholder="如 14273792576" />
+                            <UInput class="admin-input" v-model="frontendConfig.musicPlaylistId" :disabled="(frontendConfig.musicSongId || '').trim() !== ''" placeholder="如 14273792576" />
                           </div>
                           <div>
                             <label class="text-sm mb-1 block" :class="theme.mutedText">歌曲 ID</label>
-                            <UInput v-model="frontendConfig.musicSongId" :disabled="(frontendConfig.musicPlaylistId || '').trim() !== ''" placeholder="可选，优先歌单" />
+                            <UInput class="admin-input" v-model="frontendConfig.musicSongId" :disabled="(frontendConfig.musicPlaylistId || '').trim() !== ''" placeholder="可选，优先歌单" />
                           </div>
                           <div>
                             <label class="text-sm mb-1 block" :class="theme.mutedText">显示位置</label>
-                            <USelect v-model="frontendConfig.musicPosition" :disabled="musicEmbedMode==='embed'" :options="[
+                            <USelect class="admin-select" v-model="frontendConfig.musicPosition" :disabled="musicEmbedMode==='embed'" :options="[
                               {label:'左下角',value:'bottom-left'},
                               {label:'右下角',value:'bottom-right'},
                               {label:'左上角',value:'top-left'},
@@ -714,11 +686,11 @@
                           </div>
                           <div>
                             <label class="text-sm mb-1 block" :class="theme.mutedText">主题</label>
-                            <USelect v-model="frontendConfig.musicTheme" :options="musicThemeOptions" />
+                            <USelect class="admin-select" v-model="frontendConfig.musicTheme" :options="musicThemeOptions" />
                           </div>
                           <div>
                             <label class="text-sm mb-1 block" :class="theme.mutedText">CDN 源</label>
-                            <USelect v-model="musicCdnPreset" :options="[
+                            <USelect class="admin-select" v-model="musicCdnPreset" :options="[
                               {label:'官方 CDN',value:'hypcvgm'},
                               {label:'jsDelivr',value:'jsdelivr'},
                               {label:'unpkg',value:'unpkg'},
@@ -727,11 +699,11 @@
                           </div>
                           <div v-if="musicCdnPreset==='custom'">
                             <label class="text-sm mb-1 block" :class="theme.mutedText">CSS CDN 地址</label>
-                            <UInput v-model="frontendConfig.musicCssCdnURL" placeholder="https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.css" />
+                            <UInput class="admin-input" v-model="frontendConfig.musicCssCdnURL" placeholder="https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.css" />
                           </div>
                           <div v-if="musicCdnPreset==='custom'">
                             <label class="text-sm mb-1 block" :class="theme.mutedText">JS CDN 地址</label>
-                            <UInput v-model="frontendConfig.musicJsCdnURL" placeholder="https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.js" />
+                            <UInput class="admin-input" v-model="frontendConfig.musicJsCdnURL" placeholder="https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.js" />
                           </div>
                           <div>
                             <label class="text-sm mb-1 block" :class="theme.mutedText">显示歌词</label>
@@ -751,12 +723,12 @@
                           </div>
                           <div class="flex items-center gap-2 md:col-span-2">
                             <span class="text-sm" :class="theme.mutedText">展示模式</span>
-                            <USelect v-model="musicEmbedMode" :options="[{label:'嵌入',value:'embed'},{label:'浮动',value:'float'}]" />
+                            <USelect class="admin-select" v-model="musicEmbedMode" :options="[{label:'嵌入',value:'embed'},{label:'浮动',value:'float'}]" />
                           </div>
                         </div>
                         <div class="flex justify-end gap-2">
-                          <UButton variant="soft" color="indigo" @click="resetMusicConfig">重置</UButton>
-                          <UButton color="green" @click="saveMusicConfig">保存</UButton>
+                          <UButton size="sm" class="admin-action" variant="soft" color="gray" @click="resetMusicConfig">重置</UButton>
+                          <UButton size="sm" class="admin-action" color="primary" @click="saveMusicConfig">保存</UButton>
                         </div>
                         <div class="text-xs mt-2" :class="theme.mutedText">保存后首页自动刷新显示播放器；歌单与单曲任选其一</div>
                       </div>
@@ -781,8 +753,8 @@
                         <p class="admin-setting-desc" :class="theme.mutedText">仅作为首次访问默认值，用户自己的选择不受影响。</p>
                       </div>
                       <div class="flex flex-wrap items-center gap-3">
-                        <USelect v-model="frontendConfig.defaultContentTheme" :options="[{label:'暗黑',value:'dark'},{label:'白天',value:'light'}]" class="w-32" />
-                        <UButton size="sm" color="green" @click="saveConfigItem('defaultContentTheme')" class="shadow">保存主题</UButton>
+                        <USelect v-model="frontendConfig.defaultContentTheme" :options="[{label:'暗黑',value:'dark'},{label:'白天',value:'light'}]" class="admin-select w-32" />
+                        <UButton size="sm" color="primary" @click="saveConfigItem('defaultContentTheme')" class="admin-action">保存主题</UButton>
                       </div>
                     </div>
                     <div class="admin-display-default-row" :class="theme.border">
@@ -791,8 +763,8 @@
                         <p class="admin-setting-desc" :class="theme.mutedText">按首页内容密度选择默认栏数。</p>
                       </div>
                       <div class="flex flex-wrap items-center gap-3">
-                        <USelect v-model="frontendConfig.homeLayoutDefault" :options="[{label:'三栏',value:'three'},{label:'两栏',value:'two'},{label:'单栏',value:'single'}]" class="w-32" />
-                        <UButton size="sm" color="green" @click="saveConfigItem('homeLayoutDefault')" class="shadow">保存布局</UButton>
+                        <USelect v-model="frontendConfig.homeLayoutDefault" :options="[{label:'三栏',value:'three'},{label:'两栏',value:'two'},{label:'单栏',value:'single'}]" class="admin-select w-32" />
+                        <UButton size="sm" color="primary" @click="saveConfigItem('homeLayoutDefault')" class="admin-action">保存布局</UButton>
                       </div>
                     </div>
                   </div>
@@ -804,14 +776,14 @@
                   :class="[adminSubtleCardClass, siteConfigCardClass(String(key)), { 'admin-readonly-settings': !canManageSiteSettings }]"
                   :inert="!canManageSiteSettings"
                 >
-                    <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-3">
+                    <div class="admin-settings-toolbar flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-3">
                       <div class="space-y-1">
                         <div class="font-semibold" :class="theme.text">{{ label }}</div>
                         <p class="text-xs" :class="theme.mutedText">{{ configFieldHints[String(key)] || '修改后可直接保存，不再需要先点“设置”展开。' }}</p>
                       </div>
                       <div v-if="isSwitchConfigKey(String(key))" class="flex items-center gap-2">
                         <UToggle v-model="frontendConfig[String(key)]" />
-                        <UButton size="sm" color="green" class="shadow" @click="saveConfigItem(String(key))">保存</UButton>
+                        <UButton size="sm" color="primary" class="admin-action" @click="saveConfigItem(String(key))">保存</UButton>
                       </div>
                       <span v-else class="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-slate-200/70 text-slate-600 dark:bg-slate-700/70 dark:text-slate-200">
                         {{ getConfigSummary(String(key)) }}
@@ -823,7 +795,7 @@
                           <div class="admin-bg-grid">
                             <div v-for="(bg, index) in frontendConfig.backgrounds" :key="index" class="admin-bg-item">
                               <img :src="getBackgroundUrl(bg) || '/favicon.ico'" class="admin-bg-thumb border" :class="theme.border" @click="previewImage(getBackgroundUrl(bg))" />
-                              <UInput v-model="bg.url" placeholder="输入头部图 URL" class="w-full" />
+                              <UInput v-model="bg.url" placeholder="输入头部图 URL" class="admin-input w-full" />
                               <div class="admin-bg-style-grid">
                                 <label class="admin-bg-style-control">
                                   <span :class="theme.mutedText">标题颜色</span>
@@ -843,17 +815,17 @@
                                 </label>
                               </div>
                               <div class="flex flex-wrap items-center gap-2">
-                              <UButton size="xs" variant="soft" icon="i-heroicons-arrow-up" @click="moveBackgroundUp(index)">上移</UButton>
-                              <UButton size="xs" variant="soft" icon="i-heroicons-arrow-down" @click="moveBackgroundDown(index)">下移</UButton>
-                              <UButton size="xs" variant="soft" icon="i-heroicons-eye" @click="previewImage(getBackgroundUrl(bg))">预览</UButton>
-                              <UButton size="xs" color="red" variant="soft" icon="i-heroicons-trash" @click="removeBackground(index)">删除</UButton>
+                              <UButton class="admin-action" size="sm" variant="soft" icon="i-heroicons-arrow-up" @click="moveBackgroundUp(index)">上移</UButton>
+                              <UButton class="admin-action" size="sm" variant="soft" icon="i-heroicons-arrow-down" @click="moveBackgroundDown(index)">下移</UButton>
+                              <UButton class="admin-action" size="sm" variant="soft" icon="i-heroicons-eye" @click="previewImage(getBackgroundUrl(bg))">预览</UButton>
+                              <UButton class="admin-action" size="sm" color="red" variant="soft" icon="i-heroicons-trash" @click="removeBackground(index)">删除</UButton>
                               </div>
                             </div>
                           </div>
-                          <div class="rounded-xl border-2 border-dashed p-4 text-center" :class="theme.border" @dragover.prevent @drop.prevent="onDropFiles">
+                          <div class="rounded-lg border-2 border-dashed p-4 text-center" :class="theme.border" @dragover.prevent @drop.prevent="onDropFiles">
                             <div class="flex flex-wrap items-center justify-center gap-3">
-                              <UButton @click="addBackground" icon="i-heroicons-plus" variant="ghost">添加链接</UButton>
-                              <UButton @click="triggerFileInput" icon="i-heroicons-cloud-arrow-up" variant="ghost">上传图片</UButton>
+                              <UButton size="sm" class="admin-action" @click="addBackground" icon="i-heroicons-plus" variant="solid">添加链接</UButton>
+                              <UButton size="sm" class="admin-action" @click="triggerFileInput" icon="i-heroicons-cloud-arrow-up" variant="ghost">上传图片</UButton>
                             </div>
                             <div v-if="isUploading" class="mt-3">
                               <div class="text-xs" :class="theme.mutedText">{{ uploadingFileName }}</div>
@@ -866,45 +838,43 @@
                         <div class="space-y-3">
                           <div class="flex items-center gap-3">
                             <img :src="frontendConfig.avatarURL" class="w-12 h-12 rounded-full object-cover" alt="site-avatar" />
-                            <UButton size="sm" color="indigo" variant="soft" @click="siteAvatarInput?.click()">上传图片</UButton>
+                            <UButton class="admin-action" size="sm" color="primary" variant="soft" @click="siteAvatarInput?.click()">上传图片</UButton>
                             <input ref="siteAvatarInput" type="file" accept="image/*" class="hidden" @change="handleSiteAvatarUpload" />
                           </div>
-                          <UInput v-model="frontendConfig.avatarURL" placeholder="输入图片 URL" class="w-full" />
+                          <UInput v-model="frontendConfig.avatarURL" placeholder="输入图片 URL" class="admin-input w-full" />
                         </div>
                       </template>
                       <template v-else-if="String(key) === 'aboutMarkdown'">
-                        <UTextarea v-model="frontendConfig[String(key)]" :placeholder="`输入${label}`" class="w-full mb-2" />
+                        <UTextarea v-model="frontendConfig[String(key)]" :rows="6" :placeholder="`输入${label}`" class="admin-textarea w-full mb-2" />
                       </template>
                       <template v-else>
-                        <UInput v-model="frontendConfig[String(key)]" :placeholder="`输入${label}`" class="w-full mb-2" />
+                        <UInput v-model="frontendConfig[String(key)]" :placeholder="`输入${label}`" class="admin-input w-full mb-2" />
                       </template>
                       <div class="flex justify-end gap-2">
-                        <UButton @click="resetConfigItem(String(key))" variant="ghost" color="indigo">重置</UButton>
-                        <UButton @click="saveConfigItem(String(key))" color="primary" class="shadow">保存</UButton>
+                        <UButton size="sm" class="admin-action" @click="resetConfigItem(String(key))" variant="soft" color="gray">重置</UButton>
+                        <UButton size="sm" @click="saveConfigItem(String(key))" color="primary" class="admin-action">保存</UButton>
                       </div>
                     </div>
                   </div>
                 </div>
                 <div v-if="editMode" class="flex justify-end gap-2">
-                  <UButton @click="resetConfig" variant="ghost" color="indigo">重置</UButton>
-                  <UButton @click="saveConfig" color="primary" class="shadow">保存所有更改</UButton>
+                  <UButton size="sm" class="admin-action" @click="resetConfig" variant="soft" color="gray">重置</UButton>
+                  <UButton size="sm" @click="saveConfig" color="primary" class="admin-action">保存所有更改</UButton>
                 </div>
                 <div id="site-ads-section" v-if="isSectionVisible('site-ads')" class="col-span-12">
                   <div :class="adminPanelCardClass">
-                    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
-                      <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                        <UIcon name="i-heroicons-megaphone" class="w-5 h-5" />
-                        <span>广告</span>
-                      </div>
-                      <div class="flex flex-wrap items-center gap-3">
-                        <span class="text-sm" :class="theme.mutedText">状态</span>
-                        <span :class="[frontendConfig.leftAdEnabled ? 'text-green-400' : 'text-red-400', 'text-sm']">{{ frontendConfig.leftAdEnabled ? '已启用' : '未启用' }}</span>
-                        <UToggle v-model="frontendConfig.leftAdEnabled" />
-                        <UButton color="green" @click="saveConfigItem('leftAdEnabled')" class="shadow">保存</UButton>
-                      </div>
-                    </div>
+                    <AdminModuleHeader title="广告" icon="i-heroicons-photo" description="管理广告内容、展示位置与轮播设置。" :theme="theme">
+                      <template #actions>
+                        <div class="flex flex-wrap items-center gap-3">
+                          <span class="text-sm" :class="theme.mutedText">状态</span>
+                          <span :class="[frontendConfig.leftAdEnabled ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400', 'text-sm']">{{ frontendConfig.leftAdEnabled ? '已启用' : '未启用' }}</span>
+                          <UToggle v-model="frontendConfig.leftAdEnabled" />
+                          <UButton size="sm" color="primary" @click="saveConfigItem('leftAdEnabled')" class="admin-action">保存</UButton>
+                        </div>
+                      </template>
+                    </AdminModuleHeader>
                     <div class="px-4 pb-4">
-                      <div class="rounded-lg p-4" :class="theme.subtleBg">
+                      <div class="admin-subcard rounded-lg p-4" :class="theme.subtleBg">
                         <div class="mt-2">
                           <div class="text-sm font-semibold mb-2" :class="theme.text">多广告（自动轮播）</div>
                           <div class="text-xs mb-2" :class="theme.mutedText">若同时配置单条与多条，优先显示多条</div>
@@ -913,7 +883,7 @@
                               <div class="flex items-center justify-between mb-2">
                                 <div class="text-sm" :class="theme.text">广告 #{{ i + 1 }}</div>
                                 <div class="flex items-center gap-2">
-                                  <UButton size="xs" color="red" variant="soft" @click="frontendConfig.leftAds.splice(i, 1)">删除</UButton>
+                                  <UButton class="admin-action" size="sm" color="red" variant="soft" @click="frontendConfig.leftAds.splice(i, 1)">删除</UButton>
                                 </div>
                               </div>
                               <div class="grid grid-cols-1 md:grid-cols-[180px_minmax(0,1fr)] gap-3">
@@ -922,14 +892,14 @@
                                   <span v-else :class="theme.mutedText">暂无图片</span>
                                 </button>
                                 <div class="space-y-3 min-w-0">
-                                  <UInput v-model="ad.imageURL" placeholder="海报图片 URL" class="w-full" />
+                                  <UInput v-model="ad.imageURL" placeholder="海报图片 URL" class="admin-input w-full" />
                                   <div class="flex flex-wrap gap-2">
-                                    <UButton size="xs" color="indigo" variant="soft" icon="i-heroicons-cloud-arrow-up" :loading="adImageUploading && adCropIndex === i" @click="chooseAdImage(i)">上传并裁切</UButton>
-                                    <UButton size="xs" color="gray" variant="soft" icon="i-heroicons-eye" :disabled="!ad.imageURL" @click="previewImage(resolveAdImageURL(baseApi, ad.imageURL))">预览</UButton>
+                                    <UButton class="admin-action" size="sm" color="primary" variant="soft" icon="i-heroicons-cloud-arrow-up" :loading="adImageUploading && adCropIndex === i" @click="chooseAdImage(i)">上传并裁切</UButton>
+                                    <UButton class="admin-action" size="sm" color="gray" variant="soft" icon="i-heroicons-eye" :disabled="!ad.imageURL" @click="previewImage(resolveAdImageURL(baseApi, ad.imageURL))">预览</UButton>
                                   </div>
                                   <p class="text-xs" :class="theme.mutedText">推荐使用 16:9 图片；上传后可拖动和缩放裁切。</p>
                                 </div>
-                                <UInput v-model="ad.linkURL" placeholder="跳转链接" />
+                                <UInput class="admin-input" v-model="ad.linkURL" placeholder="跳转链接" />
                                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                   <label class="admin-bg-style-control">
                                     <span :class="theme.mutedText">文字颜色</span>
@@ -937,26 +907,26 @@
                                   </label>
                                   <label class="admin-bg-style-control">
                                     <span :class="theme.mutedText">文字显示</span>
-                                    <USelect v-model="ad.textDisplayMode" :options="[{ label: '悬浮时显示', value: 'hover' }, { label: '常驻显示', value: 'always' }]" />
+                                    <USelect class="admin-select" v-model="ad.textDisplayMode" :options="[{ label: '悬浮时显示', value: 'hover' }, { label: '常驻显示', value: 'always' }]" />
                                   </label>
                                 </div>
-                                <UTextarea v-model="ad.description" placeholder="描述文本（可选）" class="md:col-span-2" />
+                                <UTextarea v-model="ad.description" :rows="2" placeholder="描述文本（可选）" class="admin-textarea md:col-span-2" />
                               </div>
                             </div>
                             <div class="flex items-center justify-between">
                               <div class="flex items-center gap-2">
-                                <UButton size="sm" color="indigo" variant="soft" class="shadow" @click="frontendConfig.leftAds.push(makeEmptyAdConfig())">新增广告</UButton>
-                                <UButton size="sm" color="indigo" variant="soft" class="shadow" @click="resetAdsConfig">重置为默认</UButton>
+                                <UButton size="sm" color="primary" variant="solid" class="admin-action" @click="frontendConfig.leftAds.push(makeEmptyAdConfig())">新增广告</UButton>
+                                <UButton size="sm" color="primary" variant="soft" class="admin-action" @click="resetAdsConfig">重置为默认</UButton>
                               </div>
                               <div class="flex items-center gap-2">
                                 <span class="text-sm" :class="theme.mutedText">轮播间隔(ms)</span>
-                                <UInput v-model.number="frontendConfig.leftAdsIntervalMs" type="number" class="w-28" />
+                                <UInput v-model.number="frontendConfig.leftAdsIntervalMs" type="number" class="admin-input w-28" />
                               </div>
                             </div>
                           </div>
                         </div>
                         <div class="flex justify-end mt-3">
-                          <UButton color="primary" class="shadow" @click="saveConfigItem('leftAds')">保存广告配置</UButton>
+                          <UButton size="sm" color="primary" class="admin-action" @click="saveConfigItem('leftAds')">保存广告配置</UButton>
                         </div>
                       </div>
                     </div>
@@ -964,49 +934,47 @@
                 </div>
                 <div id="site-feed-section" v-if="isSectionVisible('site-feed')" class="col-span-12">
                   <div :class="adminPanelCardClass">
-                    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
-                      <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                        <UIcon name="i-heroicons-rss" class="w-5 h-5" />
-                        <span>信息流配置</span>
-                      </div>
-                      <div class="flex flex-wrap items-center gap-3">
-                        <span class="text-sm" :class="theme.mutedText">启用</span>
-                        <UToggle v-model="frontendConfig.feedEnabled" />
-                      </div>
-                    </div>
+                    <AdminModuleHeader title="信息流配置" icon="i-heroicons-rss" description="管理信息来源及首页信息流的展示规则。" :theme="theme">
+                      <template #actions>
+                        <div class="flex flex-wrap items-center gap-3">
+                          <span class="text-sm" :class="theme.mutedText">启用</span>
+                          <UToggle v-model="frontendConfig.feedEnabled" />
+                        </div>
+                      </template>
+                    </AdminModuleHeader>
                     <div class="px-4 pb-4">
-                      <div class="rounded-lg p-4 space-y-3" :class="theme.subtleBg">
+                      <div class="admin-subcard rounded-lg p-4 space-y-3" :class="theme.subtleBg">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div>
                             <div class="text-xs mb-1" :class="theme.mutedText">信息流页面标题</div>
-                            <UInput v-model="frontendConfig.feedPageTitle" placeholder="实时聚合内容动态" />
+                            <UInput class="admin-input" v-model="frontendConfig.feedPageTitle" placeholder="实时聚合内容动态" />
                           </div>
                           <div>
                             <div class="text-xs mb-1" :class="theme.mutedText">信息流页面介绍</div>
-                            <UInput v-model="frontendConfig.feedPageDescription" placeholder="聚合综合内容信息源内容" />
+                            <UInput class="admin-input" v-model="frontendConfig.feedPageDescription" placeholder="聚合综合内容信息源内容" />
                           </div>
                           <div>
                             <div class="text-xs mb-1" :class="theme.mutedText">最大抓取条数（留空显示全部，单独设置时为 1-100）</div>
-                            <UInput v-model="frontendConfig.feedLimit" type="number" min="1" max="100" placeholder="留空显示全部" />
+                            <UInput class="admin-input" v-model="frontendConfig.feedLimit" type="number" min="1" max="100" placeholder="留空显示全部" />
                             <div class="mt-1 text-[11px]" :class="theme.mutedText">这里控制信息流总抓取上限；留空后会显示全部已抓取内容，不影响前台每页分页条数。</div>
                           </div>
                           <div>
                             <div class="text-xs mb-1" :class="theme.mutedText">自动刷新周期（秒，10-86400）</div>
-                            <UInput v-model.number="frontendConfig.feedRefreshSeconds" type="number" min="10" max="86400" placeholder="默认 7200（2小时）" />
+                            <UInput class="admin-input" v-model.number="frontendConfig.feedRefreshSeconds" type="number" min="10" max="86400" placeholder="默认 7200（2小时）" />
                           </div>
                         </div>
-                        <div class="rounded-xl border p-3 space-y-3" :class="theme.border">
+                        <div class="rounded-lg border p-3 space-y-3" :class="theme.border">
                           <div class="text-xs" :class="theme.mutedText">支持可视化分组管理，支持 `rss`、`本项目 API`、`ech0`、`memos`、`mastodon` 类型源。</div>
                           <div class="flex flex-col lg:flex-row gap-2 lg:items-center lg:justify-between">
                             <div class="flex items-center gap-2 w-full lg:w-auto">
-                              <UInput v-model="feedGroupDraft" placeholder="输入新分组名" class="w-full lg:w-56" />
-                              <UButton size="sm" color="indigo" variant="soft" class="shadow" @click="addFeedGroup">新增分组</UButton>
+                              <UInput v-model="feedGroupDraft" placeholder="输入新分组名" class="admin-input w-full lg:w-56" />
+                              <UButton size="sm" color="primary" variant="solid" class="admin-action" @click="addFeedGroup">新增分组</UButton>
                             </div>
                             <div class="flex flex-wrap items-center gap-2">
-                              <UButton size="sm" color="gray" variant="soft" class="shadow" @click="triggerFeedImport">导入</UButton>
-                              <UButton size="sm" color="gray" variant="soft" class="shadow" @click="exportFeedSources('json')">导出 JSON</UButton>
-                              <UButton size="sm" color="gray" variant="soft" class="shadow" @click="exportFeedSources('opml')">导出 OPML</UButton>
-                              <UButton size="sm" color="gray" variant="soft" class="shadow" @click="exportFeedSources('txt')">导出 TXT</UButton>
+                              <UButton size="sm" color="gray" variant="soft" class="admin-action" @click="triggerFeedImport">导入</UButton>
+                              <UButton size="sm" color="gray" variant="soft" class="admin-action" @click="exportFeedSources('json')">导出 JSON</UButton>
+                              <UButton size="sm" color="gray" variant="soft" class="admin-action" @click="exportFeedSources('opml')">导出 OPML</UButton>
+                              <UButton size="sm" color="gray" variant="soft" class="admin-action" @click="exportFeedSources('txt')">导出 TXT</UButton>
                             </div>
                           </div>
                           <input
@@ -1022,7 +990,7 @@
                           <div
                             v-for="group in feedGroupedSources"
                             :key="group.name"
-                            class="rounded-xl border p-3 space-y-2"
+                            class="rounded-lg border p-3 space-y-2"
                             :class="theme.border"
                           >
                             <div class="flex flex-wrap items-center justify-between gap-2">
@@ -1031,8 +999,8 @@
                                 <span class="text-xs px-2 py-0.5 rounded-full" :class="theme.subtleBg">{{ group.items.length }} 条</span>
                               </div>
                               <div class="flex items-center gap-2">
-                                <UButton size="xs" color="indigo" variant="soft" @click="renameFeedGroup(group.name)">重命名分组</UButton>
-                                <UButton size="xs" color="red" variant="soft" @click="removeFeedGroup(group.name)">删除分组</UButton>
+                                <UButton class="admin-action" size="sm" color="primary" variant="soft" @click="renameFeedGroup(group.name)">重命名分组</UButton>
+                                <UButton class="admin-action" size="sm" color="red" variant="soft" @click="removeFeedGroup(group.name)">删除分组</UButton>
                               </div>
                             </div>
                             <div class="space-y-2">
@@ -1043,9 +1011,9 @@
                                 :class="theme.border"
                               >
                                 <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
-                                  <USelect v-model="item.type" :options="feedTypeOptions" value-attribute="value" />
-                                  <UInput v-model="item.name" placeholder="来源名称（可选）" />
-                                  <UInput v-model="item.url" class="md:col-span-2" placeholder="源地址（RSS/Atom 或站点地址）" />
+                                  <USelect class="admin-select" v-model="item.type" :options="feedTypeOptions" value-attribute="value" />
+                                  <UInput class="admin-input" v-model="item.name" placeholder="来源名称（可选）" />
+                                  <UInput v-model="item.url" class="admin-input md:col-span-2" placeholder="源地址（RSS/Atom 或站点地址）" />
                                 </div>
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                   <div class="flex flex-wrap items-center gap-4">
@@ -1058,18 +1026,18 @@
                                       <UToggle v-model="item.visible" />
                                     </div>
                                   </div>
-                                  <UButton size="xs" color="red" variant="soft" @click="removeFeedSource(item)">删除源</UButton>
+                                  <UButton class="admin-action" size="sm" color="red" variant="soft" @click="removeFeedSource(item)">删除源</UButton>
                                 </div>
                               </div>
                             </div>
                             <div class="flex justify-end">
-                              <UButton size="xs" color="indigo" variant="soft" @click="addFeedSource(group.name)">新增源</UButton>
+                              <UButton class="admin-action" size="sm" color="primary" variant="solid" @click="addFeedSource(group.name)">新增源</UButton>
                             </div>
                           </div>
                         </div>
                         <div class="text-xs" :class="theme.mutedText">`rss` 用于 RSS/Atom；`本项目 API` 读取 /api/messages/page；其余类型按平台接口抓取。</div>
                         <div class="flex justify-end">
-                          <UButton color="primary" class="shadow" @click="saveInfoFeedConfig">保存信息流配置</UButton>
+                          <UButton size="sm" color="primary" class="admin-action" @click="saveInfoFeedConfig">保存信息流配置</UButton>
                         </div>
                       </div>
                     </div>
@@ -1077,39 +1045,37 @@
                 </div>
                 <div id="site-rss-section" v-if="isPrimaryAdmin && isSectionVisible('site-rss')" class="col-span-12">
                   <div :class="adminPanelCardClass">
-                    <div :class="adminSectionHeaderClass">
-                      <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                        <UIcon name="i-heroicons-rss" class="w-5 h-5" />
-                        <span>RSS 订阅</span>
-                      </div>
-                      <div class="flex flex-wrap items-center gap-3">
-                        <span :class="[frontendConfig.rssEnabled && rssMemberCount > 0 ? 'text-green-400' : 'text-red-400', 'text-sm']">{{ frontendConfig.rssEnabled && rssMemberCount > 0 ? '已启用' : '未启用' }}</span>
-                        <UToggle v-model="frontendConfig.rssEnabled" :disabled="rssMemberCount === 0" />
-                        <UButton color="green" class="shadow" @click="saveRSSConfig">保存</UButton>
-                      </div>
-                    </div>
+                    <AdminModuleHeader title="RSS 订阅" icon="i-heroicons-rss" description="配置订阅输出与参与订阅的成员。" :theme="theme">
+                      <template #actions>
+                        <div class="flex flex-wrap items-center gap-3">
+                          <span :class="[frontendConfig.rssEnabled && rssMemberCount > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400', 'text-sm']">{{ frontendConfig.rssEnabled && rssMemberCount > 0 ? '已启用' : '未启用' }}</span>
+                          <UToggle v-model="frontendConfig.rssEnabled" :disabled="rssMemberCount === 0" />
+                          <UButton size="sm" color="primary" class="admin-action" @click="saveRSSConfig">保存</UButton>
+                        </div>
+                      </template>
+                    </AdminModuleHeader>
                     <div class="px-4 pb-4">
-                      <div class="rounded-lg p-4 space-y-4" :class="theme.subtleBg">
+                      <div class="admin-subcard rounded-lg p-4 space-y-4" :class="theme.subtleBg">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div>
                             <label class="text-sm mb-1 block" :class="theme.mutedText">订阅标题</label>
-                            <UInput v-model="frontendConfig.rssTitle" placeholder="个人内容订阅" />
+                            <UInput class="admin-input" v-model="frontendConfig.rssTitle" placeholder="个人内容订阅" />
                           </div>
                           <div>
                             <label class="text-sm mb-1 block" :class="theme.mutedText">作者名称</label>
-                            <UInput v-model="frontendConfig.rssAuthorName" placeholder="Noise" />
+                            <UInput class="admin-input" v-model="frontendConfig.rssAuthorName" placeholder="Noise" />
                           </div>
                           <div>
                             <label class="text-sm mb-1 block" :class="theme.mutedText">订阅图标</label>
-                            <UInput v-model="frontendConfig.rssFaviconURL" placeholder="/favicon-32x32.png" />
+                            <UInput class="admin-input" v-model="frontendConfig.rssFaviconURL" placeholder="/favicon-32x32.png" />
                           </div>
                           <div>
                             <label class="text-sm mb-1 block" :class="theme.mutedText">订阅描述</label>
-                            <UInput v-model="frontendConfig.rssDescription" placeholder="个人内容更新" />
+                            <UInput class="admin-input" v-model="frontendConfig.rssDescription" placeholder="个人内容更新" />
                           </div>
                         </div>
 
-                        <div class="rounded-xl border p-3 space-y-3" :class="theme.border">
+                        <div class="rounded-lg border p-3 space-y-3" :class="theme.border">
                           <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                             <div class="flex items-center gap-2" :class="theme.text">
                               <UIcon name="i-heroicons-user-group" class="w-4 h-4" />
@@ -1117,8 +1083,8 @@
                               <span class="text-xs px-2 py-0.5 rounded-full" :class="theme.subtleBg">{{ rssMemberCount }} / {{ rssAvailableMembers.length }}</span>
                             </div>
                             <div class="flex flex-wrap items-center gap-2">
-                              <UButton size="xs" icon="i-heroicons-check-circle" color="indigo" variant="soft" @click="selectAllRSSMembers">全选</UButton>
-                              <UButton size="xs" icon="i-heroicons-x-circle" color="gray" variant="soft" @click="clearRSSMembers">清空</UButton>
+                              <UButton class="admin-action" size="sm" icon="i-heroicons-check-circle" color="primary" variant="soft" @click="selectAllRSSMembers">全选</UButton>
+                              <UButton class="admin-action" size="sm" icon="i-heroicons-x-circle" color="gray" variant="soft" @click="clearRSSMembers">清空</UButton>
                             </div>
                           </div>
                           <div v-if="rssAvailableMembers.length === 0" class="text-xs" :class="theme.mutedText">暂无可选成员</div>
@@ -1131,14 +1097,14 @@
                             >
                               <input
                                 type="checkbox"
-                                class="h-4 w-4 rounded border-slate-400 text-indigo-500 focus:ring-indigo-500"
+                                class="h-4 w-4 rounded border-slate-400 text-primary-500 focus:ring-indigo-500"
                                 :checked="isRSSMemberSelected(member)"
                                 @change="onRSSMemberToggle(member, $event)"
                               />
                               <div class="min-w-0 flex-1">
                                 <div class="flex items-center gap-2 min-w-0">
                                   <span class="truncate text-sm" :class="theme.text">{{ rssMemberDisplayName(member) }}</span>
-                                  <UBadge size="xs" :color="member.isAdmin ? 'orange' : 'gray'" variant="soft">{{ member.isAdmin ? '管理员' : '用户' }}</UBadge>
+                                  <UBadge class="admin-badge" size="xs" :color="member.isAdmin ? 'orange' : 'gray'" variant="soft">{{ member.isAdmin ? '管理员' : '用户' }}</UBadge>
                                 </div>
                               </div>
                             </label>
@@ -1151,52 +1117,52 @@
                 </div>
                 <div id="widgets-section" v-if="isSectionVisible('widgets')" class="col-span-12 space-y-4">
                   <div :class="adminPanelCardClass">
-                    <div :class="adminSectionHeaderClass">
-                      <div class="font-semibold flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-squares-plus" class="w-5 h-5" /><span>我的小组件</span></div>
-                      <UButton color="green" class="shadow" :loading="widgetSaving" @click="saveWidgetPreferences('personal')">保存我的小组件</UButton>
-                    </div>
+                    <AdminModuleHeader title="我的小组件" icon="i-heroicons-squares-plus" description="选择当前账号首页显示的小组件。" :theme="theme">
+                      <template #actions>
+                        <UButton size="sm" color="primary" class="admin-action" :loading="widgetSaving" @click="saveWidgetPreferences('personal')">保存我的小组件</UButton>
+                      </template>
+                    </AdminModuleHeader>
                     <div class="px-4 pb-4 space-y-4">
                       <div class="text-sm" :class="theme.mutedText">仅控制当前账号访问首页时的显示，不影响访客或其他账号。</div>
                       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div v-for="item in widgetItems" :key="item.key" class="flex items-center justify-between rounded-lg border px-3 py-2" :class="theme.border"><span :class="theme.text">{{ item.label }}</span><UToggle :model-value="widgetValue('personal', item.key)" @update:model-value="setWidgetValue('personal', item.key, $event)" /></div>
                       </div>
-                      <div v-if="(frontendConfig as any).lifeCountdownEnabled" class="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-lg p-3" :class="theme.subtleBg">
-                        <div><div class="text-xs mb-1" :class="theme.mutedText">生日</div><input v-model="frontendConfig.lifeCountdownBirthDate" type="date" class="w-full rounded-md border px-3 py-2 text-sm bg-white dark:bg-slate-900" :class="[theme.border, theme.text]" @click="openLifeBirthdayPicker" @focus="openLifeBirthdayPicker" @keydown="blockDateTyping" /></div>
-                        <div><div class="text-xs mb-1" :class="theme.mutedText">预期寿命（年）</div><UInput v-model.number="frontendConfig.lifeExpectancyYears" type="number" min="1" max="150" /></div>
+                      <div v-if="(frontendConfig as any).lifeCountdownEnabled" class="admin-subcard grid grid-cols-1 md:grid-cols-2 gap-3 rounded-lg p-3" :class="theme.subtleBg">
+                        <div><div class="text-xs mb-1" :class="theme.mutedText">生日</div><input v-model="frontendConfig.lifeCountdownBirthDate" type="date" class="admin-field w-full rounded-md border px-3 py-2 text-sm bg-white dark:bg-slate-900" :class="[theme.border, theme.text]" @click="openLifeBirthdayPicker" @focus="openLifeBirthdayPicker" @keydown="blockDateTyping" /></div>
+                        <div><div class="text-xs mb-1" :class="theme.mutedText">预期寿命（年）</div><UInput class="admin-input" v-model.number="frontendConfig.lifeExpectancyYears" type="number" min="1" max="150" /></div>
                       </div>
                     </div>
                   </div>
                   <div v-if="isPrimaryAdmin" :class="adminPanelCardClass">
-                    <div :class="adminSectionHeaderClass">
-                      <div class="font-semibold flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-user-group" class="w-5 h-5" /><span>访客默认</span></div>
-                      <UButton color="green" class="shadow" :loading="guestWidgetSaving" @click="saveWidgetPreferences('guest')">保存访客默认</UButton>
-                    </div>
+                    <AdminModuleHeader title="访客默认" icon="i-heroicons-user-group" description="设置未登录访客默认看到的小组件。" :theme="theme">
+                      <template #actions>
+                        <UButton size="sm" color="primary" class="admin-action" :loading="guestWidgetSaving" @click="saveWidgetPreferences('guest')">保存访客默认</UButton>
+                      </template>
+                    </AdminModuleHeader>
                     <div class="px-4 pb-4 space-y-4">
                       <div class="text-sm" :class="theme.mutedText">访客直接使用此配置；登录用户尚未明确设置的项目也会继承此配置；已保存的个人项目不受影响。</div>
                       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div v-for="item in widgetItems" :key="`guest-${item.key}`" class="flex items-center justify-between rounded-lg border px-3 py-2" :class="theme.border"><span :class="theme.text">{{ item.label }}</span><UToggle :model-value="widgetValue('guest', item.key)" @update:model-value="setWidgetValue('guest', item.key, $event)" /></div>
                       </div>
-                      <div v-if="guestWidgetConfig.lifeCountdownEnabled" class="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-lg p-3" :class="theme.subtleBg">
-                        <div><div class="text-xs mb-1" :class="theme.mutedText">访客倒计时生日</div><input v-model="guestWidgetConfig.lifeCountdownBirthDate" type="date" class="w-full rounded-md border px-3 py-2 text-sm bg-white dark:bg-slate-900" :class="[theme.border, theme.text]" /></div>
-                        <div><div class="text-xs mb-1" :class="theme.mutedText">访客预期寿命（年）</div><UInput v-model.number="guestWidgetConfig.lifeExpectancyYears" type="number" min="1" max="150" /></div>
+                      <div v-if="guestWidgetConfig.lifeCountdownEnabled" class="admin-subcard grid grid-cols-1 md:grid-cols-2 gap-3 rounded-lg p-3" :class="theme.subtleBg">
+                        <div><div class="text-xs mb-1" :class="theme.mutedText">访客倒计时生日</div><input v-model="guestWidgetConfig.lifeCountdownBirthDate" type="date" class="admin-field w-full rounded-md border px-3 py-2 text-sm bg-white dark:bg-slate-900" :class="[theme.border, theme.text]" /></div>
+                        <div><div class="text-xs mb-1" :class="theme.mutedText">访客预期寿命（年）</div><UInput class="admin-input" v-model.number="guestWidgetConfig.lifeExpectancyYears" type="number" min="1" max="150" /></div>
                       </div>
                     </div>
                   </div>
                 </div>
                 <div id="hitokoto-section" v-if="false" class="col-span-12">
                   <div :class="adminPanelCardClass">
-                    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
-                      <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                        <UIcon name="i-heroicons-sparkles" class="w-5 h-5" />
-                        <span>随机一言（Hitokoto）</span>
-                      </div>
-                      <div class="flex flex-wrap items-center gap-3">
-                        <UToggle v-model="frontendConfig.hitokotoEnabled" />
-                        <UButton color="green" @click="saveConfigItem('hitokotoEnabled')" class="shadow">保存</UButton>
-                      </div>
-                    </div>
+                    <AdminModuleHeader title="随机一言（Hitokoto）" icon="i-heroicons-sparkles" description="配置随机短句的来源与展示方式。" :theme="theme">
+                      <template #actions>
+                        <div class="flex flex-wrap items-center gap-3">
+                          <UToggle v-model="frontendConfig.hitokotoEnabled" />
+                          <UButton size="sm" color="primary" @click="saveConfigItem('hitokotoEnabled')" class="admin-action">保存</UButton>
+                        </div>
+                      </template>
+                    </AdminModuleHeader>
                     <div class="px-4 pb-4">
-                      <div class="rounded-lg p-4" :class="theme.subtleBg">
+                      <div class="admin-subcard rounded-lg p-4" :class="theme.subtleBg">
                         <div class="text-sm" :class="theme.mutedText">{{ isAdmin ? '开启后，首页左栏广告位下方显示随机一言' : '仅控制当前账号访问首页时是否显示随机一言，不影响访客和其他成员。' }}</div>
                       </div>
                     </div>
@@ -1204,18 +1170,16 @@
                 </div>
                 <div id="life-countdown-section" v-if="false" class="col-span-12">
                   <div :class="adminPanelCardClass">
-                    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
-                      <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                        <UIcon name="i-heroicons-heart" class="w-5 h-5" />
-                        <span>人生倒计时组件</span>
-                      </div>
-                      <div class="flex flex-wrap items-center gap-3">
-                        <UToggle v-model="frontendConfig.lifeCountdownEnabled" />
-                        <UButton color="green" @click="saveConfigItem('lifeCountdownEnabled')" class="shadow">保存开关</UButton>
-                      </div>
-                    </div>
+                    <AdminModuleHeader title="人生倒计时组件" icon="i-heroicons-heart" description="设置重要日期及进度展示。" :theme="theme">
+                      <template #actions>
+                        <div class="flex flex-wrap items-center gap-3">
+                          <UToggle v-model="frontendConfig.lifeCountdownEnabled" />
+                          <UButton size="sm" color="primary" @click="saveConfigItem('lifeCountdownEnabled')" class="admin-action">保存开关</UButton>
+                        </div>
+                      </template>
+                    </AdminModuleHeader>
                     <div class="px-4 pb-4">
-                      <div class="rounded-lg p-4 space-y-3" :class="theme.subtleBg">
+                      <div class="admin-subcard rounded-lg p-4 space-y-3" :class="theme.subtleBg">
                         <div class="text-sm" :class="theme.mutedText">开启后在首页左侧展示人生进度与剩余天数卡片</div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div>
@@ -1223,8 +1187,8 @@
                             <input
                               v-model="frontendConfig.lifeCountdownBirthDate"
                               type="date"
-                              class="w-full rounded-md border px-3 py-2 text-sm bg-white dark:bg-slate-900"
-                              :class="[theme.border, theme.text, isLifeBirthdayInvalid ? 'border-red-500 text-red-400 focus:border-red-500 focus:ring-red-500' : '']"
+                              class="admin-field w-full rounded-md border px-3 py-2 text-sm bg-white dark:bg-slate-900"
+                              :class="[theme.border, theme.text, isLifeBirthdayInvalid ? 'border-red-500 text-red-600 dark:text-red-400 focus:border-red-500 focus:ring-red-500' : '']"
                               inputmode="none"
                               @click="openLifeBirthdayPicker"
                               @focus="openLifeBirthdayPicker"
@@ -1232,11 +1196,11 @@
                               @paste.prevent
                               @drop.prevent
                             />
-                            <div class="text-xs mt-1" :class="isLifeBirthdayInvalid ? 'text-red-400' : theme.mutedText">格式：YYYY-MM-DD</div>
+                            <div class="text-xs mt-1" :class="isLifeBirthdayInvalid ? 'text-red-600 dark:text-red-400' : theme.mutedText">格式：YYYY-MM-DD</div>
                           </div>
                           <div>
                             <div class="text-xs mb-1" :class="theme.mutedText">预期寿命（年）</div>
-                            <UInput v-model.number="frontendConfig.lifeExpectancyYears" type="number" min="1" max="150" placeholder="请输入 1-150 之间的整数" />
+                            <UInput class="admin-input" v-model.number="frontendConfig.lifeExpectancyYears" type="number" min="1" max="150" placeholder="请输入 1-150 之间的整数" />
                             <div class="text-xs mt-1" :class="theme.mutedText">格式：1-150 的整数，不填则不会保存</div>
                           </div>
                         </div>
@@ -1271,7 +1235,7 @@
                         </div>
                         <div v-else class="text-xs" :class="theme.mutedText">选择生日并填写预期寿命后，将显示可视化预览。</div>
                         <div class="flex justify-end">
-                          <UButton color="primary" class="shadow" @click="saveLifeCountdownConfig">保存配置</UButton>
+                          <UButton size="sm" color="primary" class="admin-action" @click="saveLifeCountdownConfig">保存配置</UButton>
                         </div>
                       </div>
                     </div>
@@ -1279,40 +1243,38 @@
                 </div>
                 <div id="site-social-links-section" v-if="isSectionVisible('site-social-links')" class="col-span-12">
                   <div :class="adminPanelCardClass">
-                    <div :class="adminSectionHeaderClass">
-                      <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                        <UIcon name="i-heroicons-link" class="w-5 h-5" />
-                        <span>社交链接配置</span>
-                      </div>
-                      <div class="flex items-center gap-3">
-                        <div class="flex items-center gap-2">
-                          <span class="text-sm" :class="theme.mutedText">启用</span>
-                          <UToggle v-model="frontendConfig.socialLinksEnabled" />
-                        </div>
-                        <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-slate-200/70 text-slate-600 dark:bg-slate-700/70 dark:text-slate-200">
+                    <AdminModuleHeader title="社交链接配置" icon="i-heroicons-link" description="管理站点展示的社交平台与链接。" :theme="theme">
+                      <template #actions>
+                        <div class="flex items-center gap-3">
+                          <div class="flex items-center gap-2">
+                            <span class="text-sm" :class="theme.mutedText">启用</span>
+                            <UToggle v-model="frontendConfig.socialLinksEnabled" />
+                          </div>
+                          <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-slate-200/70 text-slate-600 dark:bg-slate-700/70 dark:text-slate-200">
                           {{ (frontendConfig.socialLinks || []).length }} 条链接
                         </span>
-                        <UButton color="green" class="shadow" @click="saveSocialLinks">保存</UButton>
-                      </div>
-                    </div>
+                          <UButton size="sm" color="primary" class="admin-action" @click="saveSocialLinks">保存</UButton>
+                        </div>
+                      </template>
+                    </AdminModuleHeader>
                     <div class="px-4 pb-4">
-                      <div class="rounded-lg p-4 space-y-3" :class="theme.subtleBg">
+                      <div class="admin-subcard rounded-lg p-4 space-y-3" :class="theme.subtleBg">
                         <div class="text-sm" :class="theme.mutedText">社交链接列表始终展开，新增或编辑后可直接保存。</div>
                         <div v-if="frontendConfig.socialLinks?.length" class="space-y-2">
-                          <div v-for="(item, i) in frontendConfig.socialLinks" :key="i" class="rounded-xl border p-3" :class="theme.border">
+                          <div v-for="(item, i) in frontendConfig.socialLinks" :key="i" class="rounded-lg border p-3" :class="theme.border">
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                              <UInput v-model="item.name" placeholder="名称" />
-                              <UInput v-model="item.url" placeholder="链接 URL" />
-                              <UInput v-model="item.icon" placeholder="图标名称（可选）" />
+                              <UInput class="admin-input" v-model="item.name" placeholder="名称" />
+                              <UInput class="admin-input" v-model="item.url" placeholder="链接 URL" />
+                              <UInput class="admin-input" v-model="item.icon" placeholder="图标名称（可选）" />
                             </div>
                             <div class="flex justify-end mt-2">
-                              <UButton size="xs" color="red" variant="soft" @click="removeSocialLink(i)">删除</UButton>
+                              <UButton class="admin-action" size="sm" color="red" variant="soft" @click="removeSocialLink(i)">删除</UButton>
                             </div>
                           </div>
                         </div>
                         <div v-else class="text-sm" :class="theme.mutedText">暂无社交链接，点击下方按钮立即新增。</div>
                         <div class="flex items-center justify-between">
-                          <UButton size="sm" color="indigo" variant="soft" class="shadow" @click="addSocialLink">新增链接</UButton>
+                          <UButton size="sm" color="primary" variant="solid" class="admin-action" @click="addSocialLink">新增链接</UButton>
                         </div>
                       </div>
                     </div>
@@ -1336,31 +1298,31 @@
           <div id="comments-section" class="col-span-12" v-if="canSection('comments') && isSectionVisible('comments')">
             <div :class="adminPanelCardClass">
               <CommentManager v-if="can('comments.view')" :theme="theme" />
-                <div v-if="false" class="rounded-lg p-3" :class="theme.subtleBg">
+                <div v-if="false" class="admin-subcard rounded-lg p-3" :class="theme.subtleBg">
                   <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-2">
-                    <UInput v-model="commentSearch" placeholder="搜索评论内容或用户名" class="flex-1" />
+                    <UInput v-model="commentSearch" placeholder="搜索评论内容或用户名" class="admin-input flex-1" />
                     <div class="flex items-center gap-2">
-                      <UButton color="primary" variant="soft" @click="loadAdminComments" class="flex-1 sm:flex-none">搜索</UButton>
-                      <UButton variant="soft" :color="showAdminComments ? 'gray' : 'indigo'" @click="toggleAdminComments" class="flex-1 sm:flex-none">{{ showAdminComments ? '折叠' : '展开' }}</UButton>
+                      <UButton size="sm" color="primary" variant="soft" @click="loadAdminComments" class="admin-action flex-1 sm:flex-none">搜索</UButton>
+                      <UButton size="sm" variant="soft" :color="showAdminComments ? 'gray' : 'primary'" @click="toggleAdminComments" class="admin-action flex-1 sm:flex-none">{{ showAdminComments ? '折叠' : '展开' }}</UButton>
                     </div>
                   </div>
                   <div v-if="showAdminComments" class="space-y-2">
                     <div v-for="c in adminComments" :key="c.id" class="rounded border px-3 py-2" :class="theme.border">
                       <div class="flex items-center justify-between gap-2">
                         <div class="text-xs sm:text-sm truncate" :class="theme.text">#{{ c.id }} · {{ adminCommentAuthorName(c) }} · {{ formatDate(c.created_at) }}</div>
-                        <UButton size="xs" variant="ghost" :color="isCommentExpanded(c) ? 'gray' : 'primary'" @click="toggleCommentExpanded(c)">{{ isCommentExpanded(c) ? '收起' : '展开' }}</UButton>
+                        <UButton class="admin-action" size="sm" variant="ghost" :color="isCommentExpanded(c) ? 'gray' : 'primary'" @click="toggleCommentExpanded(c)">{{ isCommentExpanded(c) ? '收起' : '展开' }}</UButton>
                       </div>
                       <div class="mt-1 text-xs sm:text-sm truncate" :class="theme.text">{{ c.content }}</div>
                       <div v-if="isCommentExpanded(c)" class="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs sm:text-sm">
                         <div><span :class="theme.mutedText">消息ID</span>：<span :class="theme.text">{{ c.message_id }}</span></div>
                         <div><span :class="theme.mutedText">父评论ID</span>：<span :class="theme.text">{{ c.parent_id || 0 }}</span></div>
                         <div class="md:col-span-3 flex gap-2">
-                          <UButton v-if="can('comments.trash')" color="orange" size="xs" variant="soft" @click="openAdminDeleteConfirm(c)">移入回收站</UButton>
+                          <UButton class="admin-action" v-if="can('comments.trash')" color="orange" size="sm" variant="soft" @click="openAdminDeleteConfirm(c)">移入回收站</UButton>
                         </div>
                       </div>
                     </div>
                     <div v-if="adminCommentsHasMore" class="flex justify-center">
-                      <UButton variant="soft" @click="loadAdminCommentsMore">加载更多</UButton>
+                      <UButton size="sm" class="admin-action" variant="soft" @click="loadAdminCommentsMore">加载更多</UButton>
                     </div>
                   </div>
             </div>
@@ -1368,11 +1330,11 @@
         </div>
 
         <UModal v-if="false" v-model="showAdminDeleteConfirm" :ui="{ width: 'sm:max-w-md' }">
-          <UCard>
+          <UCard class="admin-dialog">
             <template #header>
               <div class="flex justify-between items-center">
                 <h3 class="text-lg font-medium">再次确认删除</h3>
-                <UButton color="indigo" variant="ghost" icon="i-mdi-close" class="-my-1" @click="resetAdminDeleteConfirm" />
+                <UButton size="sm" color="primary" variant="ghost" icon="i-heroicons-x-mark" class="admin-action -my-1" @click="resetAdminDeleteConfirm" />
               </div>
             </template>
             <div class="space-y-3">
@@ -1387,8 +1349,8 @@
             </div>
             <template #footer>
               <div class="flex justify-end gap-2">
-                <UButton color="indigo" variant="outline" @click="resetAdminDeleteConfirm">取消</UButton>
-                <UButton color="red" :disabled="!adminConfirmAcknowledged" @click="doAdminDelete">确认删除</UButton>
+                <UButton size="sm" class="admin-action" color="gray" variant="soft" @click="resetAdminDeleteConfirm">取消</UButton>
+                <UButton size="sm" class="admin-action" color="red" :disabled="!adminConfirmAcknowledged" @click="doAdminDelete">确认删除</UButton>
               </div>
             </template>
           </UCard>
@@ -1396,40 +1358,38 @@
 
           <div id="email-section" v-if="canSection('email') && isSectionVisible('email')" class="col-span-12">
             <div :class="adminPanelCardClass">
-              <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
-                <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                  <UIcon name="i-heroicons-envelope" class="w-5 h-5" />
-                  <span>邮件设置（SMTP）</span>
-                </div>
-                <div class="flex items-center gap-3 w-full sm:w-auto">
-                  <UToggle v-model="smtp.enabled" />
-                  <UButton color="green" @click="saveSmtp" class="shadow">保存</UButton>
-                </div>
-              </div>
+              <AdminModuleHeader title="邮件设置（SMTP）" icon="i-heroicons-envelope" description="配置发件服务与邮件发送参数。" :theme="theme">
+                <template #actions>
+                  <div class="flex items-center gap-3 w-full sm:w-auto">
+                    <UToggle v-model="smtp.enabled" />
+                    <UButton size="sm" color="primary" @click="saveSmtp" class="admin-action">保存</UButton>
+                  </div>
+                </template>
+              </AdminModuleHeader>
               <div class="px-4 pb-4">
-                <div class="rounded-lg p-4 space-y-4" :class="theme.subtleBg">
+                <div class="admin-subcard rounded-lg p-4 space-y-4" :class="theme.subtleBg">
                   
                   <div>
                     <div class="text-sm font-medium mb-2" :class="theme.text">地址</div>
-                    <UInput v-model="smtp.from" placeholder="发件地址，如 name@example.com" />
+                    <UInput class="admin-input" v-model="smtp.from" placeholder="发件地址，如 name@example.com" />
                   </div>
                   <div>
                     <div class="text-sm font-medium mb-2" :class="theme.text">驱动</div>
-                    <USelect v-model="smtp.driver" :options="['smtp']" />
+                    <USelect class="admin-select" v-model="smtp.driver" :options="['smtp']" />
                   </div>
                   <div class="text-sm font-semibold mt-1 mb-2" :class="theme.text">SMTP 设置</div>
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <div class="text-sm mb-2" :class="theme.text">主机</div>
-                      <UInput v-model="smtp.host" placeholder="smtp.example.com" />
+                      <UInput class="admin-input" v-model="smtp.host" placeholder="smtp.example.com" />
                     </div>
                     <div>
                       <div class="text-sm mb-2" :class="theme.text">端口</div>
-                      <UInput v-model="smtp.port" placeholder="465 或 587" />
+                      <UInput class="admin-input" v-model="smtp.port" placeholder="465 或 587" />
                     </div>
                     <div>
                       <div class="text-sm mb-2" :class="theme.text">加密协议（小写 ssl 或 tls）</div>
-                      <USelect v-model="smtp.encryption" :options="['ssl','tls']" />
+                      <USelect class="admin-select" v-model="smtp.encryption" :options="['ssl','tls']" />
                     </div>
                     <div class="md:col-span-1"></div>
                     <div>
@@ -1437,25 +1397,25 @@
                         <div class="text-sm" :class="theme.text">用户名</div>
                         <span class="text-xs" :class="smtp.clearUser ? 'text-red-500' : (smtp.userConfigured ? 'text-green-500' : theme.mutedText)">{{ smtp.clearUser ? '待清除' : (smtp.userConfigured ? '已配置' : '未配置') }}</span>
                       </div>
-                      <UInput v-model="smtp.user" :disabled="smtp.clearUser" :placeholder="smtp.userConfigured ? '已配置；留空将保持不变' : '通常与发件地址一致'" @update:model-value="smtp.clearUser = false" />
-                      <UButton v-if="smtp.userConfigured" class="mt-2" size="xs" :color="smtp.clearUser ? 'gray' : 'red'" variant="soft" @click="smtp.clearUser = !smtp.clearUser; smtp.user = ''">{{ smtp.clearUser ? '取消清除' : '清除现有用户名' }}</UButton>
+                      <UInput class="admin-input" v-model="smtp.user" :disabled="smtp.clearUser" :placeholder="smtp.userConfigured ? '已配置；留空将保持不变' : '通常与发件地址一致'" @update:model-value="smtp.clearUser = false" />
+                      <UButton v-if="smtp.userConfigured" class="admin-action mt-2" size="sm" :color="smtp.clearUser ? 'gray' : 'red'" variant="soft" @click="smtp.clearUser = !smtp.clearUser; smtp.user = ''">{{ smtp.clearUser ? '取消清除' : '清除现有用户名' }}</UButton>
                     </div>
                     <div>
                       <div class="flex items-center justify-between gap-2 mb-2">
                         <div class="text-sm" :class="theme.text">密码</div>
                         <span class="text-xs" :class="smtp.clearPass ? 'text-red-500' : (smtp.passConfigured ? 'text-green-500' : theme.mutedText)">{{ smtp.clearPass ? '待清除' : (smtp.passConfigured ? '已配置' : '未配置') }}</span>
                       </div>
-                      <UInput v-model="smtp.pass" :disabled="smtp.clearPass" :type="showSmtpPass ? 'text' : 'password'" :placeholder="smtp.passConfigured ? '已配置；留空将保持不变' : '邮箱或应用专用密码'" @update:model-value="smtp.clearPass = false" />
-                      <UButton v-if="smtp.passConfigured" class="mt-2" size="xs" :color="smtp.clearPass ? 'gray' : 'red'" variant="soft" @click="smtp.clearPass = !smtp.clearPass; smtp.pass = ''">{{ smtp.clearPass ? '取消清除' : '清除现有密码' }}</UButton>
+                      <UInput class="admin-input" v-model="smtp.pass" :disabled="smtp.clearPass" :type="showSmtpPass ? 'text' : 'password'" :placeholder="smtp.passConfigured ? '已配置；留空将保持不变' : '邮箱或应用专用密码'" @update:model-value="smtp.clearPass = false" />
+                      <UButton v-if="smtp.passConfigured" class="admin-action mt-2" size="sm" :color="smtp.clearPass ? 'gray' : 'red'" variant="soft" @click="smtp.clearPass = !smtp.clearPass; smtp.pass = ''">{{ smtp.clearPass ? '取消清除' : '清除现有密码' }}</UButton>
                     </div>
                   </div>
                   <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mt-2 gap-2" :class="theme.mutedText">
                     <span class="text-xs break-all">使用上述设置发送测试邮件到：{{ smtp.from || smtp.user || '请先填写地址' }}</span>
-                    <UButton :disabled="!(smtp.from || smtp.user)" :loading="testingSmtp" color="primary" @click="testSmtp" class="w-full sm:w-auto">发送测试邮件</UButton>
+                    <UButton size="sm" :disabled="!(smtp.from || smtp.user)" :loading="testingSmtp" color="primary" @click="testSmtp" class="admin-action w-full sm:w-auto">发送测试邮件</UButton>
                   </div>
                   <div class="flex justify-end gap-2 mt-3">
-                    <UButton variant="soft" color="indigo" @click="loadSmtp">刷新</UButton>
-                    <UButton color="green" @click="saveSmtp">保存</UButton>
+                    <UButton icon="i-heroicons-arrow-path" size="sm" class="admin-action" variant="soft" color="gray" @click="loadSmtp">刷新</UButton>
+                    <UButton size="sm" class="admin-action" color="primary" @click="saveSmtp">保存</UButton>
                   </div>
                 </div>
               </div>
@@ -1470,29 +1430,27 @@
 
           <div id="registration-review-section" v-if="canSection('registration-review') && isSectionVisible('registration-review')" class="col-span-12">
             <div :class="adminPanelCardClass">
-              <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
-                <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                  <UIcon name="i-heroicons-user-plus" class="w-5 h-5" />
-                  <span>注册审核</span>
-                </div>
-                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-                  <USelect v-model="registrationStatusFilter" :options="registrationStatusOptions" class="w-full sm:w-36" />
-                  <UButton variant="soft" color="indigo" :loading="registrationApplicationsLoading" @click="refreshRegistrationApplications">刷新</UButton>
-                </div>
-              </div>
+              <AdminModuleHeader title="注册审核" icon="i-heroicons-user-plus" description="查看注册申请并管理审核方式。" :theme="theme">
+                <template #actions>
+                  <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+                    <USelect v-model="registrationStatusFilter" :options="registrationStatusOptions" class="admin-select w-full sm:w-36" />
+                    <UButton icon="i-heroicons-arrow-path" size="sm" class="admin-action" variant="soft" color="gray" :loading="registrationApplicationsLoading" @click="refreshRegistrationApplications">刷新</UButton>
+                  </div>
+                </template>
+              </AdminModuleHeader>
               <div class="px-4 pb-4">
-                <div class="flex flex-col sm:flex-row items-start sm:items-center rounded-lg p-3 justify-between gap-3 mb-3" :class="theme.subtleBg">
+                <div class="admin-subcard flex flex-col sm:flex-row items-start sm:items-center rounded-lg p-3 justify-between gap-3 mb-3" :class="theme.subtleBg">
                   <div class="flex items-center gap-2" :class="theme.text">
                     <UIcon name="i-heroicons-check-badge" class="w-4 h-4" />
                     <span>自动通过审核</span>
                   </div>
                   <div class="flex items-center gap-4 w-full sm:w-auto justify-end">
                     <UToggle v-model="autoApproveRegistration" />
-                    <UButton color="green" @click="saveRegisterConfig" class="shadow">保存</UButton>
+                    <UButton size="sm" color="primary" @click="saveRegisterConfig" class="admin-action">保存</UButton>
                   </div>
                 </div>
                 <div :class="adminSubtleCardClass">
-                  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                  <div class="admin-settings-toolbar flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
                     <div class="text-sm" :class="theme.text">待审核 {{ registrationPendingCount }} / 5</div>
                     <div class="text-sm" :class="theme.mutedText">共 {{ registrationApplicationsTotal }} 条</div>
                   </div>
@@ -1504,14 +1462,14 @@
                         <div class="min-w-0">
                           <div class="flex items-center gap-2 flex-wrap">
                             <span class="font-medium truncate" :class="theme.text">{{ app.username }}</span>
-                            <UBadge :color="registrationStatusColor(app.status)" variant="soft">{{ registrationStatusLabel(app.status) }}</UBadge>
+                            <UBadge class="admin-badge" :color="registrationStatusColor(app.status)" variant="soft">{{ registrationStatusLabel(app.status) }}</UBadge>
                           </div>
                           <div class="text-xs mt-1 break-all" :class="theme.mutedText">申请 ID：{{ app.application_id }}</div>
                         </div>
                         <div class="text-sm min-w-0">
                           <div :class="theme.mutedText">VoceChat</div>
                           <div class="flex items-center gap-2 flex-wrap mt-1">
-                            <UBadge :color="voceChatProvisionColor(app.voce_chat_sync_status)" variant="soft">{{ voceChatProvisionLabel(app.voce_chat_sync_status) }}</UBadge>
+                            <UBadge class="admin-badge" :color="voceChatProvisionColor(app.voce_chat_sync_status)" variant="soft">{{ voceChatProvisionLabel(app.voce_chat_sync_status) }}</UBadge>
                             <span v-if="can('users.view')" class="truncate" :class="theme.text">{{ app.voce_chat_email || '未绑定邮箱' }}</span>
                             <span v-else class="truncate" :class="theme.mutedText">需“查看用户”权限</span>
                           </div>
@@ -1521,11 +1479,11 @@
                           <div class="mt-1" :class="theme.text">{{ formatShanghai(app.created_at || '') || '-' }}</div>
                         </div>
                         <div class="flex items-center justify-end gap-2">
-                          <UButton size="sm" color="green" :disabled="app.status !== 'pending'" :loading="registrationReviewBusy[String(app.id)] === 'approve'" @click="approveRegistrationApplication(app)">通过</UButton>
-                          <UButton size="sm" color="red" variant="soft" :disabled="app.status !== 'pending'" :loading="registrationReviewBusy[String(app.id)] === 'reject'" @click="rejectRegistrationApplication(app)">拒绝</UButton>
+                          <UButton class="admin-action" size="sm" color="primary" :disabled="app.status !== 'pending'" :loading="registrationReviewBusy[String(app.id)] === 'approve'" @click="approveRegistrationApplication(app)">通过</UButton>
+                          <UButton class="admin-action" size="sm" color="red" variant="soft" :disabled="app.status !== 'pending'" :loading="registrationReviewBusy[String(app.id)] === 'reject'" @click="rejectRegistrationApplication(app)">拒绝</UButton>
                         </div>
                       </div>
-                      <UInput v-model="registrationReviewNotes[String(app.id)]" placeholder="审核备注" />
+                      <UInput class="admin-input" v-model="registrationReviewNotes[String(app.id)]" placeholder="审核备注" />
                       <div v-if="app.voce_chat_sync_error" class="text-xs break-all" :class="theme.mutedText">{{ app.voce_chat_sync_error }}</div>
                     </div>
                   </div>
@@ -1536,20 +1494,15 @@
 
           <div id="admin-users-section" v-if="canSection('admin-users') && isSectionVisible('admin-users')" class="col-span-12">
             <div :class="adminPanelCardClass">
-              <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 gap-3 sm:gap-0">
-                <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                  <UIcon name="i-heroicons-shield-check" class="w-5 h-5" />
-                  <span>用户管理</span>
-                </div>
-              </div>
+              <AdminModuleHeader title="用户管理" icon="i-heroicons-user-group" description="查找账号并管理账号状态和角色。" :theme="theme" />
               <div class="px-4 pb-4">
-                <div class="rounded-lg p-3 mb-3" :class="theme.subtleBg">
+                <div class="admin-subcard rounded-lg p-3 mb-3" :class="theme.subtleBg">
                   <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                    <UInput v-model="userSearch" placeholder="搜索用户名或ID" class="flex-1" />
+                    <UInput v-model="userSearch" placeholder="搜索用户名或ID" class="admin-input flex-1" />
                     <div class="flex items-center gap-2 justify-end">
-                        <UButton color="primary" variant="soft" @click="refreshUsers">搜索</UButton>
-                        <UButton variant="soft" color="indigo" @click="refreshUsers">刷新</UButton>
-                        <UButton variant="soft" :color="showUsers ? 'gray' : 'indigo'" @click="showUsers=!showUsers">{{ showUsers ? '折叠' : '展开' }}</UButton>
+                        <UButton size="sm" class="admin-action" color="primary" variant="soft" @click="refreshUsers">搜索</UButton>
+                        <UButton icon="i-heroicons-arrow-path" size="sm" class="admin-action" variant="soft" color="gray" @click="refreshUsers">刷新</UButton>
+                        <UButton size="sm" class="admin-action" variant="soft" :color="showUsers ? 'gray' : 'primary'" @click="showUsers=!showUsers">{{ showUsers ? '折叠' : '展开' }}</UButton>
                     </div>
                   </div>
                 </div>
@@ -1558,22 +1511,22 @@
                     <div v-for="u in filteredUsers" :key="(u.id ?? u.ID)" class="rounded border px-3 py-2" :class="theme.border">
                       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 min-w-0">
                         <div class="flex items-center gap-2 truncate">
-                            <UBadge color="indigo" variant="soft">#{{ u.id ?? u.ID }}</UBadge>
+                            <UBadge class="admin-badge" color="primary" variant="soft">#{{ u.id ?? u.ID }}</UBadge>
                             <span class="truncate" :class="theme.text">{{ u.username ?? u.Username }}</span>
-                            <UBadge :color="(u.is_admin ?? u.IsAdmin) ? 'primary' : 'gray'" variant="subtle">{{ (u.is_admin ?? u.IsAdmin) ? '管理员' : '普通' }}</UBadge>
+                            <UBadge class="admin-badge" :color="(u.is_admin ?? u.IsAdmin) ? 'primary' : 'gray'" variant="subtle">{{ (u.is_admin ?? u.IsAdmin) ? '管理员' : '普通' }}</UBadge>
                         </div>
                         <div class="flex justify-end">
-                             <UButton size="xs" variant="ghost" :color="isExpanded(u) ? 'gray' : 'primary'" @click="toggleExpanded(u)">{{ isExpanded(u) ? '收起' : '展开' }}</UButton>
+                             <UButton class="admin-action" size="sm" variant="ghost" :color="isExpanded(u) ? 'gray' : 'primary'" @click="toggleExpanded(u)">{{ isExpanded(u) ? '收起' : '展开' }}</UButton>
                         </div>
                       </div>
                       <div v-if="userManagementVoceChatEmail(u).visible" class="mt-2 text-xs break-all" :class="theme.mutedText">
                         <span>VoceChat 邮箱：</span><span :class="theme.text">{{ userManagementVoceChatEmail(u).email || '未绑定' }}</span>
                       </div>
                       <div class="mt-2 flex items-center gap-2 flex-wrap">
-                        <UButton v-if="userManagementActions(u).manageRole" :color="(u.is_admin ?? u.IsAdmin) ? 'orange' : 'green'" :variant="(u.is_admin ?? u.IsAdmin) ? 'soft' : 'solid'" class="shadow" @click="confirmToggleAdmin(u)">{{ (u.is_admin ?? u.IsAdmin) ? '\u53d6\u6d88\u7ba1\u7406\u5458' : '\u8bbe\u4e3a\u7ba1\u7406\u5458' }}</UButton>
-                        <UButton v-if="userManagementActions(u).deleteUser" color="red" variant="soft" class="shadow" @click="confirmDeleteUser(u)">&#21024;&#38500;</UButton>
+                        <UButton size="sm" v-if="userManagementActions(u).manageRole" :color="(u.is_admin ?? u.IsAdmin) ? 'orange' : 'green'" :variant="(u.is_admin ?? u.IsAdmin) ? 'soft' : 'solid'" class="admin-action" @click="confirmToggleAdmin(u)">{{ (u.is_admin ?? u.IsAdmin) ? '\u53d6\u6d88\u7ba1\u7406\u5458' : '\u8bbe\u4e3a\u7ba1\u7406\u5458' }}</UButton>
+                        <UButton size="sm" v-if="userManagementActions(u).deleteUser" color="red" variant="soft" class="admin-action" @click="confirmDeleteUser(u)">&#21024;&#38500;</UButton>
                       </div>
-                      <div v-if="isExpanded(u)" class="mt-3 rounded p-3" :class="theme.subtleBg">
+                      <div v-if="isExpanded(u)" class="admin-subcard mt-3 rounded p-3" :class="theme.subtleBg">
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
                           <div>
                             <div class="text-xs" :class="theme.mutedText">用户ID</div>
@@ -1591,9 +1544,9 @@
                         <div v-if="userManagementActions(u).resetPassword" class="mt-3">
                           <div class="text-sm mb-1" :class="theme.text">重置密码</div>
                           <div class="flex items-center gap-2">
-                            <UInput v-model="resetForm.password[(u.id ?? u.ID)]" :type="showResetPassword ? 'text' : 'password'" placeholder="新密码" class="flex-1" />
-                            <UButton :icon="showResetPassword ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="indigo" variant="ghost" @click="showResetPassword = !showResetPassword" />
-                            <UButton :disabled="!canReset(u)" color="primary" @click="resetUserPassword(u)">保存</UButton>
+                            <UInput v-model="resetForm.password[(u.id ?? u.ID)]" :type="showResetPassword ? 'text' : 'password'" placeholder="新密码" class="admin-input flex-1" />
+                            <UButton size="sm" class="admin-action" :icon="showResetPassword ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="primary" variant="ghost" @click="showResetPassword = !showResetPassword" />
+                            <UButton size="sm" class="admin-action" :disabled="!canReset(u)" color="primary" @click="resetUserPassword(u)">保存</UButton>
                           </div>
                         </div>
                       </div>
@@ -1606,35 +1559,33 @@
 
           <div id="access-logs-section" v-if="canSection('access-logs') && isSectionVisible('access-logs')" class="col-span-12">
             <div :class="adminShellCardClass">
-              <div :class="adminSectionHeaderClass">
-                <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                  <UIcon name="i-heroicons-eye" class="w-5 h-5" />
-                  <span>访问日志</span>
-                </div>
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="text-sm" :class="theme.mutedText">记录</span>
-                  <span :class="[securityConfig.accessLogEnabled ? 'text-green-400' : 'text-red-400', 'text-sm']">{{ securityConfig.accessLogEnabled ? '已开启' : '已关闭' }}</span>
-                  <UToggle v-model="securityConfig.accessLogEnabled" :disabled="!can('security.manage')" />
-                  <span class="text-xs" :class="theme.mutedText">保留</span>
-                  <USelect v-model="securityConfig.accessLogRetentionDays" :options="logRetentionOptions" class="w-32" :disabled="!can('security.manage')" />
-                  <UButton v-if="can('security.manage')" size="sm" color="green" variant="soft" class="shadow" @click="saveSecurityConfig">保存策略</UButton>
-                  <UButton size="sm" color="indigo" variant="soft" class="shadow" :loading="accessLogLoading" @click="refreshAccessLogs">刷新</UButton>
-                  <UButton v-if="can('access_logs.clear')" size="sm" color="red" variant="soft" class="shadow" @click="clearAccessLogs">清空</UButton>
-                </div>
-              </div>
+              <AdminModuleHeader title="访问日志" icon="i-heroicons-eye" description="筛选请求记录并设置日志保留策略。" :theme="theme">
+                <template #actions>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-sm" :class="theme.mutedText">记录</span>
+                    <span :class="[securityConfig.accessLogEnabled ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400', 'text-sm']">{{ securityConfig.accessLogEnabled ? '已开启' : '已关闭' }}</span>
+                    <UToggle v-model="securityConfig.accessLogEnabled" :disabled="!can('security.manage')" />
+                    <span class="text-xs" :class="theme.mutedText">保留</span>
+                    <USelect v-model="securityConfig.accessLogRetentionDays" :options="logRetentionOptions" class="admin-select w-32" :disabled="!can('security.manage')" />
+                    <UButton v-if="can('security.manage')" size="sm" color="primary" variant="solid" class="admin-action" @click="saveSecurityConfig">保存策略</UButton>
+                    <UButton icon="i-heroicons-arrow-path" size="sm" color="gray" variant="soft" class="admin-action" :loading="accessLogLoading" @click="refreshAccessLogs">刷新</UButton>
+                    <UButton v-if="can('access_logs.clear')" size="sm" color="red" variant="soft" class="admin-action" @click="clearAccessLogs">清空</UButton>
+                  </div>
+                </template>
+              </AdminModuleHeader>
               <div class="px-4 pb-4 space-y-4">
                 <div :class="adminSubtleCardClass">
                   <div class="grid grid-cols-1 md:grid-cols-6 gap-2">
-                    <UInput v-model="accessLogFilter.ip" placeholder="IP" />
-                    <UInput v-model="accessLogFilter.username" placeholder="用户名或访客" />
-                    <UInput v-model="accessLogFilter.path" placeholder="路径" class="md:col-span-2" />
-                    <USelect v-model="accessLogFilter.method" :options="accessLogMethodOptions" />
-                    <USelect v-model="accessLogFilter.limit" :options="accessLogLimitOptions" />
-                    <UInput v-model="accessLogFilter.startDate" type="date" />
-                    <UInput v-model="accessLogFilter.endDate" type="date" />
+                    <UInput class="admin-input" v-model="accessLogFilter.ip" placeholder="IP" />
+                    <UInput class="admin-input" v-model="accessLogFilter.username" placeholder="用户名或访客" />
+                    <UInput v-model="accessLogFilter.path" placeholder="路径" class="admin-input md:col-span-2" />
+                    <USelect class="admin-select" v-model="accessLogFilter.method" :options="accessLogMethodOptions" />
+                    <USelect class="admin-select" v-model="accessLogFilter.limit" :options="accessLogLimitOptions" />
+                    <UInput class="admin-input" v-model="accessLogFilter.startDate" type="date" />
+                    <UInput class="admin-input" v-model="accessLogFilter.endDate" type="date" />
                     <div class="md:col-span-4 flex items-center gap-2 justify-end">
-                      <UButton color="primary" variant="soft" @click="refreshAccessLogs">搜索</UButton>
-                      <UButton color="gray" variant="soft" @click="resetAccessLogFilter">清空筛选</UButton>
+                      <UButton size="sm" class="admin-action" color="primary" variant="soft" @click="refreshAccessLogs">搜索</UButton>
+                      <UButton size="sm" class="admin-action" color="gray" variant="soft" @click="resetAccessLogFilter">清空筛选</UButton>
                     </div>
                   </div>
                   <div class="mt-3 space-y-2">
@@ -1649,17 +1600,17 @@
                 </div>
 
                 <div :class="adminSubtleCardClass">
-                  <div class="flex items-center justify-between mb-2">
+                  <div class="admin-settings-toolbar flex items-center justify-between mb-2">
                     <div class="font-semibold" :class="theme.text">完整请求日志（显示 {{ accessLogs.length }} 条，最多 {{ accessLogFilter.limit }} 条）</div>
                   </div>
                   <div class="space-y-3 md:hidden">
-                    <div v-for="(row, index) in accessLogs" :key="`access-log-mobile-${row.ID ?? row.id ?? `${row.created_at || row.CreatedAt || ''}-${row.ip || row.IP || ''}-${index}`}`" class="rounded-xl border p-3 space-y-2" :class="[theme.border, theme.cardBg]">
+                    <div v-for="(row, index) in accessLogs" :key="`access-log-mobile-${row.ID ?? row.id ?? `${row.created_at || row.CreatedAt || ''}-${row.ip || row.IP || ''}-${index}`}`" class="rounded-lg border p-3 space-y-2" :class="[theme.border, theme.cardBg]">
                       <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0">
                           <div class="text-xs" :class="theme.mutedText">时间</div>
                           <div class="text-sm break-words" :class="theme.text">{{ formatShanghai(row.created_at || row.CreatedAt || '') }}</div>
                         </div>
-                        <UBadge :color="accessLogStatusColor(row.status || row.Status)" variant="soft" class="shrink-0">{{ row.status || row.Status || '-' }}</UBadge>
+                        <UBadge :color="accessLogStatusColor(row.status || row.Status)" variant="soft" class="admin-badge shrink-0">{{ row.status || row.Status || '-' }}</UBadge>
                       </div>
                       <div class="grid grid-cols-1 gap-2 text-sm">
                         <div>
@@ -1680,7 +1631,7 @@
                         </div>
                       </div>
                     </div>
-                    <div v-if="!accessLogs.length" class="rounded-xl border p-4 text-sm text-center" :class="[theme.border, theme.mutedText]">暂无记录</div>
+                    <div v-if="!accessLogs.length" class="rounded-lg border p-4 text-sm text-center" :class="[theme.border, theme.mutedText]">暂无记录</div>
                   </div>
                   <div class="admin-desktop-block overflow-x-auto">
                     <table class="min-w-full text-sm">
@@ -1700,7 +1651,7 @@
                         <tr v-for="(row, index) in accessLogs" :key="row.ID ?? row.id ?? `${row.created_at || row.CreatedAt || ''}-${row.ip || row.IP || ''}-${index}`" class="border-t" :class="theme.border">
                           <td class="py-2 pr-4 whitespace-nowrap" :class="theme.mutedText">{{ formatShanghai(row.created_at || row.CreatedAt || '') }}</td>
                           <td class="py-2 pr-4 font-mono" :class="theme.text">{{ row.method || row.Method || '-' }}</td>
-                          <td class="py-2 pr-4"><UBadge :color="accessLogStatusColor(row.status || row.Status)" variant="soft">{{ row.status || row.Status || '-' }}</UBadge></td>
+                          <td class="py-2 pr-4"><UBadge class="admin-badge" :color="accessLogStatusColor(row.status || row.Status)" variant="soft">{{ row.status || row.Status || '-' }}</UBadge></td>
                           <td class="py-2 pr-4 font-mono break-all max-w-md" :class="theme.text">{{ row.path || row.Path || '-' }}</td>
                           <td class="py-2 pr-4" :class="theme.text">{{ row.username || row.Username || (row.user_id || row.UserID ? `#${row.user_id || row.UserID}` : '访客') }}</td>
                           <td class="py-2 pr-4 font-mono" :class="theme.text">{{ row.ip || row.IP || '-' }}</td>
@@ -1720,33 +1671,31 @@
 
           <div id="site-visits-section" v-if="canSection('site-visits') && isSectionVisible('site-visits')" class="col-span-12">
             <div :class="adminShellCardClass">
-              <div :class="adminSectionHeaderClass">
-                <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                  <UIcon name="i-heroicons-home" class="w-5 h-5" />
-                  <span>站点访问</span>
-                </div>
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="text-sm" :class="theme.mutedText">首页访问记录</span>
-                  <span :class="[securityConfig.siteVisitLogEnabled ? 'text-green-400' : 'text-red-400', 'text-sm']">{{ securityConfig.siteVisitLogEnabled ? '已开启' : '已关闭' }}</span>
-                  <UToggle v-model="securityConfig.siteVisitLogEnabled" :disabled="!can('security.manage')" />
-                  <span class="text-xs" :class="theme.mutedText">保留</span>
-                  <USelect v-model="securityConfig.siteVisitRetentionDays" :options="logRetentionOptions" class="w-32" :disabled="!can('security.manage')" />
-                  <UButton v-if="can('security.manage')" size="sm" color="green" variant="soft" class="shadow" @click="saveSecurityConfig">保存策略</UButton>
-                  <UButton size="sm" color="indigo" variant="soft" class="shadow" :loading="siteVisitLoading" @click="refreshSiteVisits">刷新</UButton>
-                  <UButton v-if="can('site_visits.clear')" size="sm" color="red" variant="soft" class="shadow" @click="clearSiteVisits">清空</UButton>
-                </div>
-              </div>
+              <AdminModuleHeader title="站点访问" icon="i-heroicons-home" description="查看首页访问记录与保留设置。" :theme="theme">
+                <template #actions>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-sm" :class="theme.mutedText">首页访问记录</span>
+                    <span :class="[securityConfig.siteVisitLogEnabled ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400', 'text-sm']">{{ securityConfig.siteVisitLogEnabled ? '已开启' : '已关闭' }}</span>
+                    <UToggle v-model="securityConfig.siteVisitLogEnabled" :disabled="!can('security.manage')" />
+                    <span class="text-xs" :class="theme.mutedText">保留</span>
+                    <USelect v-model="securityConfig.siteVisitRetentionDays" :options="logRetentionOptions" class="admin-select w-32" :disabled="!can('security.manage')" />
+                    <UButton v-if="can('security.manage')" size="sm" color="primary" variant="solid" class="admin-action" @click="saveSecurityConfig">保存策略</UButton>
+                    <UButton icon="i-heroicons-arrow-path" size="sm" color="gray" variant="soft" class="admin-action" :loading="siteVisitLoading" @click="refreshSiteVisits">刷新</UButton>
+                    <UButton v-if="can('site_visits.clear')" size="sm" color="red" variant="soft" class="admin-action" @click="clearSiteVisits">清空</UButton>
+                  </div>
+                </template>
+              </AdminModuleHeader>
               <div class="px-4 pb-4 space-y-4">
                 <div :class="adminSubtleCardClass">
                   <div class="grid grid-cols-1 md:grid-cols-5 gap-2">
-                    <UInput v-model="siteVisitFilter.ip" placeholder="IP" />
-                    <UInput v-model="siteVisitFilter.username" placeholder="用户名或访客" />
-                    <USelect v-model="siteVisitFilter.limit" :options="accessLogLimitOptions" />
-                    <UInput v-model="siteVisitFilter.startDate" type="date" />
-                    <UInput v-model="siteVisitFilter.endDate" type="date" />
+                    <UInput class="admin-input" v-model="siteVisitFilter.ip" placeholder="IP" />
+                    <UInput class="admin-input" v-model="siteVisitFilter.username" placeholder="用户名或访客" />
+                    <USelect class="admin-select" v-model="siteVisitFilter.limit" :options="accessLogLimitOptions" />
+                    <UInput class="admin-input" v-model="siteVisitFilter.startDate" type="date" />
+                    <UInput class="admin-input" v-model="siteVisitFilter.endDate" type="date" />
                     <div class="md:col-span-5 flex items-center gap-2 justify-end">
-                      <UButton color="primary" variant="soft" @click="refreshSiteVisits">搜索</UButton>
-                      <UButton color="gray" variant="soft" @click="resetSiteVisitFilter">清空筛选</UButton>
+                      <UButton size="sm" class="admin-action" color="primary" variant="soft" @click="refreshSiteVisits">搜索</UButton>
+                      <UButton size="sm" class="admin-action" color="gray" variant="soft" @click="resetSiteVisitFilter">清空筛选</UButton>
                     </div>
                   </div>
                   <div class="mt-3 space-y-2">
@@ -1761,17 +1710,17 @@
                 </div>
 
                 <div :class="adminSubtleCardClass">
-                  <div class="flex items-center justify-between mb-2">
+                  <div class="admin-settings-toolbar flex items-center justify-between mb-2">
                     <div class="font-semibold" :class="theme.text">首页访问（显示 {{ siteVisits.length }} 条，最多 {{ siteVisitFilter.limit }} 条）</div>
                   </div>
                   <div class="space-y-3 md:hidden">
-                    <div v-for="(row, index) in siteVisits" :key="`site-visit-mobile-${row.ID ?? row.id ?? `${row.created_at || row.CreatedAt || ''}-${row.ip || row.IP || ''}-${index}`}`" class="rounded-xl border p-3 space-y-2" :class="[theme.border, theme.cardBg]">
+                    <div v-for="(row, index) in siteVisits" :key="`site-visit-mobile-${row.ID ?? row.id ?? `${row.created_at || row.CreatedAt || ''}-${row.ip || row.IP || ''}-${index}`}`" class="rounded-lg border p-3 space-y-2" :class="[theme.border, theme.cardBg]">
                       <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0">
                           <div class="text-xs" :class="theme.mutedText">时间</div>
                           <div class="text-sm break-words" :class="theme.text">{{ formatShanghai(row.created_at || row.CreatedAt || '') }}</div>
                         </div>
-                        <UBadge color="gray" variant="soft" class="shrink-0">{{ visitUserLabel(row) }}</UBadge>
+                        <UBadge color="gray" variant="soft" class="admin-badge shrink-0">{{ visitUserLabel(row) }}</UBadge>
                       </div>
                       <div class="grid grid-cols-1 gap-2 text-sm">
                         <div>
@@ -1788,7 +1737,7 @@
                         </div>
                       </div>
                     </div>
-                    <div v-if="!siteVisits.length" class="rounded-xl border p-4 text-sm text-center" :class="[theme.border, theme.mutedText]">暂无记录</div>
+                    <div v-if="!siteVisits.length" class="rounded-lg border p-4 text-sm text-center" :class="[theme.border, theme.mutedText]">暂无记录</div>
                   </div>
                   <div class="admin-desktop-block overflow-x-auto">
                     <table class="min-w-full text-sm">
@@ -1822,47 +1771,45 @@
 
           <div id="login-audits-section" v-if="canSection('login-audits') && isSectionVisible('login-audits')" class="col-span-12">
             <div :class="adminShellCardClass">
-              <div :class="adminSectionHeaderClass">
-                <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                  <UIcon name="i-heroicons-clipboard-document-check" class="w-5 h-5" />
-                  <span>登录审计</span>
-                </div>
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="text-xs" :class="theme.mutedText">保留</span>
-                  <USelect v-model="securityConfig.loginAuditRetentionDays" :options="logRetentionOptions" class="w-32" :disabled="!can('security.manage')" />
-                  <UButton v-if="can('security.manage')" size="sm" color="green" variant="soft" class="shadow" @click="saveSecurityConfig">保存期限</UButton>
-                  <label v-if="isPrimaryAdmin" class="inline-flex items-center gap-2 text-sm" :class="theme.text">
-                    <span>记录站长登录</span>
-                    <UToggle v-model="recordPrimaryAdminLoginAudit" :disabled="loginAuditConfigSaving" @change="savePrimaryAdminLoginAudit" />
-                  </label>
-                  <UButton size="sm" color="indigo" variant="soft" class="shadow" :loading="loginAuditLoading" @click="refreshLoginAudits">刷新</UButton>
-                </div>
-              </div>
+              <AdminModuleHeader title="登录审计" icon="i-heroicons-clipboard-document-check" description="查看账号登录记录与审计保留设置。" :theme="theme">
+                <template #actions>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-xs" :class="theme.mutedText">保留</span>
+                    <USelect v-model="securityConfig.loginAuditRetentionDays" :options="logRetentionOptions" class="admin-select w-32" :disabled="!can('security.manage')" />
+                    <UButton v-if="can('security.manage')" size="sm" color="primary" variant="solid" class="admin-action" @click="saveSecurityConfig">保存期限</UButton>
+                    <label v-if="isPrimaryAdmin" class="inline-flex items-center gap-2 text-sm" :class="theme.text">
+                      <span>记录站长登录</span>
+                      <UToggle v-model="recordPrimaryAdminLoginAudit" :disabled="loginAuditConfigSaving" @change="savePrimaryAdminLoginAudit" />
+                    </label>
+                    <UButton icon="i-heroicons-arrow-path" size="sm" color="gray" variant="soft" class="admin-action" :loading="loginAuditLoading" @click="refreshLoginAudits">刷新</UButton>
+                  </div>
+                </template>
+              </AdminModuleHeader>
               <div class="px-4 pb-4 space-y-4">
                 <div :class="adminSubtleCardClass">
                   <div class="flex flex-col md:flex-row items-stretch md:items-center gap-2">
-                    <UInput v-model="loginAuditFilter.username" placeholder="用户名" class="flex-1" />
-                    <UInput v-model="loginAuditFilter.ip" placeholder="IP" class="flex-1" />
-                    <USelect v-model="loginAuditFilter.action" :options="loginAuditActionOptions" class="w-full md:w-36" />
+                    <UInput v-model="loginAuditFilter.username" placeholder="用户名" class="admin-input flex-1" />
+                    <UInput v-model="loginAuditFilter.ip" placeholder="IP" class="admin-input flex-1" />
+                    <USelect v-model="loginAuditFilter.action" :options="loginAuditActionOptions" class="admin-select w-full md:w-36" />
                     <div class="flex items-center gap-2 justify-end">
-                      <UButton color="primary" variant="soft" @click="refreshLoginAudits">搜索</UButton>
-                      <UButton color="gray" variant="soft" @click="resetLoginAuditFilter">清空</UButton>
+                      <UButton size="sm" class="admin-action" color="primary" variant="soft" @click="refreshLoginAudits">搜索</UButton>
+                      <UButton size="sm" class="admin-action" color="gray" variant="soft" @click="resetLoginAuditFilter">清空</UButton>
                     </div>
                   </div>
                 </div>
 
                 <div :class="adminSubtleCardClass">
-                  <div class="flex items-center justify-between mb-2">
+                  <div class="admin-settings-toolbar flex items-center justify-between mb-2">
                     <div class="font-semibold" :class="theme.text">账户登录/登出（最近 {{ loginAudits.length }} 条）</div>
                   </div>
                   <div class="space-y-3 md:hidden">
-                    <div v-for="(row, index) in loginAudits" :key="`login-audit-mobile-${row.ID ?? row.id ?? `${row.created_at || row.CreatedAt || ''}-${row.user_id || row.UserID || ''}-${index}`}`" class="rounded-xl border p-3 space-y-2" :class="[theme.border, theme.cardBg]">
+                    <div v-for="(row, index) in loginAudits" :key="`login-audit-mobile-${row.ID ?? row.id ?? `${row.created_at || row.CreatedAt || ''}-${row.user_id || row.UserID || ''}-${index}`}`" class="rounded-lg border p-3 space-y-2" :class="[theme.border, theme.cardBg]">
                       <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0">
                           <div class="text-xs" :class="theme.mutedText">时间</div>
                           <div class="text-sm break-words" :class="theme.text">{{ formatShanghai(row.created_at || row.CreatedAt || '') }}</div>
                         </div>
-                        <UBadge :color="loginAuditActionColor(row.action || row.Action)" variant="soft" class="shrink-0">{{ loginAuditActionLabel(row.action || row.Action) }}</UBadge>
+                        <UBadge :color="loginAuditActionColor(row.action || row.Action)" variant="soft" class="admin-badge shrink-0">{{ loginAuditActionLabel(row.action || row.Action) }}</UBadge>
                       </div>
                       <div class="grid grid-cols-1 gap-2 text-sm">
                         <div>
@@ -1883,7 +1830,7 @@
                         </div>
                       </div>
                     </div>
-                    <div v-if="!loginAudits.length" class="rounded-xl border p-4 text-sm text-center" :class="[theme.border, theme.mutedText]">暂无记录</div>
+                    <div v-if="!loginAudits.length" class="rounded-lg border p-4 text-sm text-center" :class="[theme.border, theme.mutedText]">暂无记录</div>
                   </div>
                   <div class="admin-desktop-block overflow-x-auto">
                     <table class="min-w-full text-sm">
@@ -1900,7 +1847,7 @@
                       <tbody>
                         <tr v-for="(row, index) in loginAudits" :key="row.ID ?? row.id ?? `${row.created_at || row.CreatedAt || ''}-${row.user_id || row.UserID || ''}-${index}`" class="border-t" :class="theme.border">
                           <td class="py-2 pr-4 whitespace-nowrap" :class="theme.mutedText">{{ formatShanghai(row.created_at || row.CreatedAt || '') }}</td>
-                          <td class="py-2 pr-4"><UBadge :color="loginAuditActionColor(row.action || row.Action)" variant="soft">{{ loginAuditActionLabel(row.action || row.Action) }}</UBadge></td>
+                          <td class="py-2 pr-4"><UBadge class="admin-badge" :color="loginAuditActionColor(row.action || row.Action)" variant="soft">{{ loginAuditActionLabel(row.action || row.Action) }}</UBadge></td>
                           <td class="py-2 pr-4" :class="theme.mutedText">{{ row.user_id || row.UserID }}</td>
                           <td class="py-2 pr-4" :class="theme.text">{{ loginAuditUserLabel(row) }}</td>
                           <td class="py-2 pr-4 font-mono" :class="theme.text">{{ row.ip || row.IP || '-' }}</td>
@@ -1919,20 +1866,18 @@
 
           <div id="notify-section" v-if="canSection('notify') && isSectionVisible('notify')" class="col-span-12">
             <div :class="adminShellCardClass">
-              <div :class="adminSectionHeaderClass">
-                <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                  <UIcon name="i-heroicons-bell-alert" class="w-5 h-5" />
-                  <span>推送配置</span>
-                </div>
-                <div class="flex items-center gap-3">
-                  <span class="text-sm" :class="theme.mutedText">状态</span>
-                  <span :class="[frontendConfig.notifyEnabled ? 'text-green-400' : 'text-red-400', 'text-sm']">{{ frontendConfig.notifyEnabled ? '已启用' : '未启用' }}</span>
-                  <template v-if="canManageNotificationState">
-                    <UToggle v-model="frontendConfig.notifyEnabled" />
-                    <UButton size="xs" color="green" variant="soft" class="shadow" @click="saveConfigItem('notifyEnabled')">保存</UButton>
-                  </template>
-                </div>
-              </div>
+              <AdminModuleHeader title="推送配置" icon="i-heroicons-bell-alert" description="管理站点推送渠道及各渠道的连接参数。" :theme="theme">
+                <template #actions>
+                  <div class="flex items-center gap-3">
+                    <span class="text-sm" :class="theme.mutedText">状态</span>
+                    <span :class="[frontendConfig.notifyEnabled ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400', 'text-sm']">{{ frontendConfig.notifyEnabled ? '已启用' : '未启用' }}</span>
+                    <template v-if="canManageNotificationState">
+                      <UToggle v-model="frontendConfig.notifyEnabled" />
+                      <UButton size="sm" color="primary" variant="solid" class="admin-action" @click="saveConfigItem('notifyEnabled')">保存</UButton>
+                    </template>
+                  </div>
+                </template>
+              </AdminModuleHeader>
               <div class="px-4 pb-4">
                 <div v-if="frontendConfig.notifyEnabled">
                   <NotifyPanel :config="notifyConfig" @save="updateNotifyConfig" :immediate="true" :subtleBg="theme.subtleBg" :text="theme.text" :mutedText="theme.mutedText" :disabled="!frontendConfig.notifyEnabled" :readonly="!canManageNotifications" />
@@ -1951,17 +1896,14 @@
 
           <div id="attachment-storage-section" v-if="canSection('storage') && isSectionVisible('storage')" class="col-span-12">
             <div :class="adminShellCardClass">
-              <div class="px-4 py-3 font-semibold flex items-center gap-2" :class="theme.text">
-                <UIcon name="i-heroicons-cloud" class="w-5 h-5 text-indigo-300" />
-                <span>附件存储方案配置</span>
-              </div>
+              <AdminModuleHeader title="附件存储方案配置" icon="i-heroicons-cloud" description="选择附件存储位置及压缩处理方式。" :theme="theme" />
               <div class="px-4 pb-4">
                 <div :class="adminSubtleCardClass">
-                  <div class="font-semibold mb-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2" :class="theme.text">
+                  <div class="admin-settings-toolbar font-semibold mb-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2" :class="theme.text">
                     <span>附件存储选择（本地 / R2 / S3）</span>
                     <div class="flex flex-wrap items-center gap-3">
                       <span class="text-xs sm:text-sm" :class="theme.mutedText">当前模式</span>
-                      <span :class="[attachmentStorageEnabled ? 'text-green-400' : 'text-indigo-400', 'text-xs sm:text-sm']">{{ attachmentStorageEnabled ? '云端存储' : '本地存储' }}</span>
+                      <span :class="[attachmentStorageEnabled ? 'text-green-600 dark:text-green-400' : 'text-indigo-400', 'text-xs sm:text-sm']">{{ attachmentStorageEnabled ? '云端存储' : '本地存储' }}</span>
                       <UToggle v-model="attachmentStorageEnabled" />
                     </div>
                   </div>
@@ -1970,7 +1912,7 @@
                     <span>附件压缩处理（自动压缩图片/视频）</span>
                     <div class="flex flex-wrap items-center gap-3">
                       <span class="text-xs sm:text-sm" :class="theme.mutedText">状态</span>
-                      <span :class="[attachmentStorageConfig.enableCompression ? 'text-green-400' : 'text-indigo-400', 'text-xs sm:text-sm']">{{ attachmentStorageConfig.enableCompression ? '已开启' : '未开启' }}</span>
+                      <span :class="[attachmentStorageConfig.enableCompression ? 'text-green-600 dark:text-green-400' : 'text-indigo-400', 'text-xs sm:text-sm']">{{ attachmentStorageConfig.enableCompression ? '已开启' : '未开启' }}</span>
                       <!-- 显式开关按钮 -->
                       <UToggle v-model="attachmentStorageConfig.enableCompression" @update:model-value="(v) => toggleCompression(!!v)" />
                       <span class="text-xs px-1.5 py-0.5 rounded border ml-1" :class="attachmentStorageConfig.ffmpegInstalled ? 'border-green-500/30 text-green-500' : 'border-red-500/30 text-red-500'">
@@ -1983,8 +1925,8 @@
                     <div class="text-xs sm:text-sm" :class="theme.text">当前使用本地存储</div>
                     <div class="text-xs mt-1" :class="theme.mutedText">图片/视频附件保存在服务器目录</div>
                     <div class="flex justify-center gap-2 mt-3">
-                      <UButton variant="soft" color="indigo" @click="loadAttachmentStorageConfig">刷新</UButton>
-                      <UButton color="green" @click="saveAttachmentStorageConfig">保存配置</UButton>
+                      <UButton icon="i-heroicons-arrow-path" size="sm" class="admin-action" variant="soft" color="gray" @click="loadAttachmentStorageConfig">刷新</UButton>
+                      <UButton size="sm" class="admin-action" color="primary" @click="saveAttachmentStorageConfig">保存配置</UButton>
                     </div>
                   </div>
 
@@ -1992,35 +1934,35 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div>
                         <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">提供方</label>
-                        <USelect v-model="attachmentStorageConfig.provider" :options="[{label:'S3',value:'s3'},{label:'R2',value:'r2'}]" />
+                        <USelect class="admin-select" v-model="attachmentStorageConfig.provider" :options="[{label:'S3',value:'s3'},{label:'R2',value:'r2'}]" />
                       </div>
                       <div>
                         <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">Endpoint</label>
-                        <UInput v-model="attachmentStorageConfig.endpoint" placeholder="https://..." />
+                        <UInput class="admin-input" v-model="attachmentStorageConfig.endpoint" placeholder="https://..." />
                       </div>
                       <div>
                         <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">Region</label>
-                        <UInput v-model="attachmentStorageConfig.region" placeholder="auto 或区域名" />
+                        <UInput class="admin-input" v-model="attachmentStorageConfig.region" placeholder="auto 或区域名" />
                       </div>
                       <div>
                         <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">Bucket</label>
-                        <UInput v-model="attachmentStorageConfig.bucket" placeholder="bucket 名称" />
+                        <UInput class="admin-input" v-model="attachmentStorageConfig.bucket" placeholder="bucket 名称" />
                       </div>
                       <div>
                         <div class="flex items-center justify-between gap-2 mb-1">
                           <label class="text-xs sm:text-sm" :class="theme.mutedText">Access Key</label>
                           <span class="text-xs" :class="attachmentStorageConfig.clearAccessKey ? 'text-red-500' : (attachmentStorageConfig.accessKeyConfigured ? 'text-green-500' : theme.mutedText)">{{ attachmentStorageConfig.clearAccessKey ? '待清除' : (attachmentStorageConfig.accessKeyConfigured ? '已配置' : '未配置') }}</span>
                         </div>
-                        <UInput v-model="attachmentStorageConfig.accessKey" :disabled="attachmentStorageConfig.clearAccessKey" :placeholder="attachmentStorageConfig.accessKeyConfigured ? '已配置；留空将保持不变' : ''" @update:model-value="attachmentStorageConfig.clearAccessKey = false" />
-                        <UButton v-if="attachmentStorageConfig.accessKeyConfigured" class="mt-2" size="xs" :color="attachmentStorageConfig.clearAccessKey ? 'gray' : 'red'" variant="soft" @click="attachmentStorageConfig.clearAccessKey = !attachmentStorageConfig.clearAccessKey; attachmentStorageConfig.accessKey = ''">{{ attachmentStorageConfig.clearAccessKey ? '取消清除' : '清除现有 Access Key' }}</UButton>
+                        <UInput class="admin-input" v-model="attachmentStorageConfig.accessKey" :disabled="attachmentStorageConfig.clearAccessKey" :placeholder="attachmentStorageConfig.accessKeyConfigured ? '已配置；留空将保持不变' : ''" @update:model-value="attachmentStorageConfig.clearAccessKey = false" />
+                        <UButton v-if="attachmentStorageConfig.accessKeyConfigured" class="admin-action mt-2" size="sm" :color="attachmentStorageConfig.clearAccessKey ? 'gray' : 'red'" variant="soft" @click="attachmentStorageConfig.clearAccessKey = !attachmentStorageConfig.clearAccessKey; attachmentStorageConfig.accessKey = ''">{{ attachmentStorageConfig.clearAccessKey ? '取消清除' : '清除现有 Access Key' }}</UButton>
                       </div>
                       <div>
                         <div class="flex items-center justify-between gap-2 mb-1">
                           <label class="text-xs sm:text-sm" :class="theme.mutedText">Secret Key</label>
                           <span class="text-xs" :class="attachmentStorageConfig.clearSecretKey ? 'text-red-500' : (attachmentStorageConfig.secretKeyConfigured ? 'text-green-500' : theme.mutedText)">{{ attachmentStorageConfig.clearSecretKey ? '待清除' : (attachmentStorageConfig.secretKeyConfigured ? '已配置' : '未配置') }}</span>
                         </div>
-                        <UInput v-model="attachmentStorageConfig.secretKey" type="password" :disabled="attachmentStorageConfig.clearSecretKey" :placeholder="attachmentStorageConfig.secretKeyConfigured ? '已配置；留空将保持不变' : ''" @update:model-value="attachmentStorageConfig.clearSecretKey = false" />
-                        <UButton v-if="attachmentStorageConfig.secretKeyConfigured" class="mt-2" size="xs" :color="attachmentStorageConfig.clearSecretKey ? 'gray' : 'red'" variant="soft" @click="attachmentStorageConfig.clearSecretKey = !attachmentStorageConfig.clearSecretKey; attachmentStorageConfig.secretKey = ''">{{ attachmentStorageConfig.clearSecretKey ? '取消清除' : '清除现有 Secret Key' }}</UButton>
+                        <UInput class="admin-input" v-model="attachmentStorageConfig.secretKey" type="password" :disabled="attachmentStorageConfig.clearSecretKey" :placeholder="attachmentStorageConfig.secretKeyConfigured ? '已配置；留空将保持不变' : ''" @update:model-value="attachmentStorageConfig.clearSecretKey = false" />
+                        <UButton v-if="attachmentStorageConfig.secretKeyConfigured" class="admin-action mt-2" size="sm" :color="attachmentStorageConfig.clearSecretKey ? 'gray' : 'red'" variant="soft" @click="attachmentStorageConfig.clearSecretKey = !attachmentStorageConfig.clearSecretKey; attachmentStorageConfig.secretKey = ''">{{ attachmentStorageConfig.clearSecretKey ? '取消清除' : '清除现有 Secret Key' }}</UButton>
                       </div>
                       <div class="flex items-center gap-2" v-if="attachmentStorageConfig.provider === 's3'">
                         <span class="text-xs sm:text-sm" :class="theme.mutedText">使用路径风格地址</span>
@@ -2028,13 +1970,13 @@
                       </div>
                       <div class="md:col-span-2">
                         <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">公共访问前缀</label>
-                        <UInput v-model="attachmentStorageConfig.publicBaseURL" placeholder="https://bucket.example.com/" />
+                        <UInput class="admin-input" v-model="attachmentStorageConfig.publicBaseURL" placeholder="https://bucket.example.com/" />
                       </div>
                     </div>
                     
                     <div class="flex justify-end gap-2 mt-2">
-                      <UButton variant="soft" color="indigo" @click="loadAttachmentStorageConfig">刷新</UButton>
-                      <UButton color="green" @click="saveAttachmentStorageConfig">保存配置</UButton>
+                      <UButton icon="i-heroicons-arrow-path" size="sm" class="admin-action" variant="soft" color="gray" @click="loadAttachmentStorageConfig">刷新</UButton>
+                      <UButton size="sm" class="admin-action" color="primary" @click="saveAttachmentStorageConfig">保存配置</UButton>
                     </div>
                   </div>
                 </div>
@@ -2044,17 +1986,14 @@
 
           <div id="storage-section" v-if="canSection('storage') && isSectionVisible('storage')" class="col-span-12">
             <div :class="adminShellCardClass">
-              <div class="px-4 py-3 font-semibold flex items-center gap-2" :class="theme.text">
-                <UIcon name="i-heroicons-cloud" class="w-5 h-5 text-indigo-300" />
-                <span>数据库存储方案配置</span>
-              </div>
+              <AdminModuleHeader title="数据库存储方案配置" icon="i-heroicons-cloud" description="配置数据库备份的存储位置。" :theme="theme" />
               <div class="px-4 pb-4">
                 <div :class="adminSubtleCardClass">
-                  <div class="font-semibold mb-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2" :class="theme.text">
+                  <div class="admin-settings-toolbar font-semibold mb-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2" :class="theme.text">
                     <span>数据存储方案选择（本地 / R2 / S3）</span>
                     <div class="flex flex-wrap items-center gap-3">
                       <span class="text-xs sm:text-sm" :class="theme.mutedText">当前模式</span>
-                      <span :class="[storageEnabled ? 'text-green-400' : 'text-indigo-400', 'text-xs sm:text-sm']">{{ storageEnabled ? '云端存储' : '本地存储' }}</span>
+                      <span :class="[storageEnabled ? 'text-green-600 dark:text-green-400' : 'text-indigo-400', 'text-xs sm:text-sm']">{{ storageEnabled ? '云端存储' : '本地存储' }}</span>
                       <UToggle v-model="storageEnabled" />
                     </div>
                   </div>
@@ -2063,8 +2002,8 @@
                     <div class="text-xs sm:text-sm" :class="theme.text">当前使用本地存储</div>
                     <div class="text-xs mt-1" :class="theme.mutedText">附件将保存在服务器 upload 目录下</div>
                     <div class="flex justify-center gap-2 mt-3">
-                      <UButton variant="soft" color="indigo" @click="loadStorageConfig">刷新</UButton>
-                      <UButton color="green" @click="saveStorageConfig">保存配置</UButton>
+                      <UButton icon="i-heroicons-arrow-path" size="sm" class="admin-action" variant="soft" color="gray" @click="loadStorageConfig">刷新</UButton>
+                      <UButton size="sm" class="admin-action" color="primary" @click="saveStorageConfig">保存配置</UButton>
                     </div>
                   </div>
 
@@ -2072,35 +2011,35 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div>
                         <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">提供方</label>
-                        <USelect v-model="storageConfig.provider" :options="[{label:'S3',value:'s3'},{label:'R2',value:'r2'}]" />
+                        <USelect class="admin-select" v-model="storageConfig.provider" :options="[{label:'S3',value:'s3'},{label:'R2',value:'r2'}]" />
                       </div>
                       <div>
                         <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">Endpoint</label>
-                        <UInput v-model="storageConfig.endpoint" placeholder="https://..." />
+                        <UInput class="admin-input" v-model="storageConfig.endpoint" placeholder="https://..." />
                       </div>
                       <div>
                         <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">Region</label>
-                        <UInput v-model="storageConfig.region" placeholder="auto 或区域名" />
+                        <UInput class="admin-input" v-model="storageConfig.region" placeholder="auto 或区域名" />
                       </div>
                       <div>
                         <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">Bucket</label>
-                        <UInput v-model="storageConfig.bucket" placeholder="bucket 名称" />
+                        <UInput class="admin-input" v-model="storageConfig.bucket" placeholder="bucket 名称" />
                       </div>
                       <div>
                         <div class="flex items-center justify-between gap-2 mb-1">
                           <label class="text-xs sm:text-sm" :class="theme.mutedText">Access Key</label>
                           <span class="text-xs" :class="storageConfig.clearAccessKey ? 'text-red-500' : (storageConfig.accessKeyConfigured ? 'text-green-500' : theme.mutedText)">{{ storageConfig.clearAccessKey ? '待清除' : (storageConfig.accessKeyConfigured ? '已配置' : '未配置') }}</span>
                         </div>
-                        <UInput v-model="storageConfig.accessKey" :disabled="storageConfig.clearAccessKey" :placeholder="storageConfig.accessKeyConfigured ? '已配置；留空将保持不变' : ''" @update:model-value="storageConfig.clearAccessKey = false" />
-                        <UButton v-if="storageConfig.accessKeyConfigured" class="mt-2" size="xs" :color="storageConfig.clearAccessKey ? 'gray' : 'red'" variant="soft" @click="storageConfig.clearAccessKey = !storageConfig.clearAccessKey; storageConfig.accessKey = ''">{{ storageConfig.clearAccessKey ? '取消清除' : '清除现有 Access Key' }}</UButton>
+                        <UInput class="admin-input" v-model="storageConfig.accessKey" :disabled="storageConfig.clearAccessKey" :placeholder="storageConfig.accessKeyConfigured ? '已配置；留空将保持不变' : ''" @update:model-value="storageConfig.clearAccessKey = false" />
+                        <UButton v-if="storageConfig.accessKeyConfigured" class="admin-action mt-2" size="sm" :color="storageConfig.clearAccessKey ? 'gray' : 'red'" variant="soft" @click="storageConfig.clearAccessKey = !storageConfig.clearAccessKey; storageConfig.accessKey = ''">{{ storageConfig.clearAccessKey ? '取消清除' : '清除现有 Access Key' }}</UButton>
                       </div>
                       <div>
                         <div class="flex items-center justify-between gap-2 mb-1">
                           <label class="text-xs sm:text-sm" :class="theme.mutedText">Secret Key</label>
                           <span class="text-xs" :class="storageConfig.clearSecretKey ? 'text-red-500' : (storageConfig.secretKeyConfigured ? 'text-green-500' : theme.mutedText)">{{ storageConfig.clearSecretKey ? '待清除' : (storageConfig.secretKeyConfigured ? '已配置' : '未配置') }}</span>
                         </div>
-                        <UInput v-model="storageConfig.secretKey" type="password" :disabled="storageConfig.clearSecretKey" :placeholder="storageConfig.secretKeyConfigured ? '已配置；留空将保持不变' : ''" @update:model-value="storageConfig.clearSecretKey = false" />
-                        <UButton v-if="storageConfig.secretKeyConfigured" class="mt-2" size="xs" :color="storageConfig.clearSecretKey ? 'gray' : 'red'" variant="soft" @click="storageConfig.clearSecretKey = !storageConfig.clearSecretKey; storageConfig.secretKey = ''">{{ storageConfig.clearSecretKey ? '取消清除' : '清除现有 Secret Key' }}</UButton>
+                        <UInput class="admin-input" v-model="storageConfig.secretKey" type="password" :disabled="storageConfig.clearSecretKey" :placeholder="storageConfig.secretKeyConfigured ? '已配置；留空将保持不变' : ''" @update:model-value="storageConfig.clearSecretKey = false" />
+                        <UButton v-if="storageConfig.secretKeyConfigured" class="admin-action mt-2" size="sm" :color="storageConfig.clearSecretKey ? 'gray' : 'red'" variant="soft" @click="storageConfig.clearSecretKey = !storageConfig.clearSecretKey; storageConfig.secretKey = ''">{{ storageConfig.clearSecretKey ? '取消清除' : '清除现有 Secret Key' }}</UButton>
                       </div>
                       <div class="flex items-center gap-2" v-if="storageConfig.provider === 's3'">
                         <span class="text-xs sm:text-sm" :class="theme.mutedText">使用路径风格地址</span>
@@ -2108,22 +2047,22 @@
                       </div>
                       <div class="md:col-span-2">
                         <label class="text-xs sm:text-sm mb-1 block" :class="theme.mutedText">公共访问前缀</label>
-                        <UInput v-model="storageConfig.publicBaseURL" placeholder="https://bucket.example.com/" />
+                        <UInput class="admin-input" v-model="storageConfig.publicBaseURL" placeholder="https://bucket.example.com/" />
                       </div>
                     </div>
                     
                     <div class="flex justify-end gap-2 mt-2">
-                      <UButton variant="soft" color="indigo" @click="loadStorageConfig">刷新</UButton>
-                      <UButton color="green" @click="saveStorageConfig">保存配置</UButton>
+                      <UButton icon="i-heroicons-arrow-path" size="sm" class="admin-action" variant="soft" color="gray" @click="loadStorageConfig">刷新</UButton>
+                      <UButton size="sm" class="admin-action" color="primary" @click="saveStorageConfig">保存配置</UButton>
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 border-t pt-3" :class="theme.border">
                       <div class="md:col-span-2 flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-4">
-                        <div v-if="storageNeedsConfirm" class="w-full rounded border p-3" :class="[theme.subtleBg, theme.border]">
-                          <div class="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
+                        <div v-if="storageNeedsConfirm" class="admin-subcard w-full rounded border p-3" :class="[theme.subtleBg, theme.border]">
+                          <div class="admin-settings-toolbar flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
                             <div class="text-sm" :class="theme.text">检测到旧数据中已存在云同步配置，首次运行需确认是否启用云同步。</div>
                             <div class="flex gap-2">
-                              <UButton color="amber" variant="soft" @click="confirmCloudSync">确认同步</UButton>
+                              <UButton size="sm" class="admin-action" color="amber" variant="soft" @click="confirmCloudSync">确认同步</UButton>
                             </div>
                           </div>
                         </div>
@@ -2133,35 +2072,35 @@
                         </div>
                         <div class="flex items-center gap-2">
                           <span class="text-sm" :class="theme.mutedText">模式</span>
-                          <USelect v-model="storageSyncMode" :disabled="storageNeedsConfirm" :options="[{label:'即时',value:'instant'},{label:'定时',value:'scheduled'}]" />
+                          <USelect class="admin-select" v-model="storageSyncMode" :disabled="storageNeedsConfirm" :options="[{label:'即时',value:'instant'},{label:'定时',value:'scheduled'}]" />
                         </div>
                         <div class="flex items-center gap-2">
                           <span class="text-sm" :class="theme.mutedText">同步角色</span>
-                          <USelect v-model="storageConfig.syncRole" :disabled="storageNeedsConfirm" :options="[{label:'主节点（执行上传）',value:'primary'},{label:'备节点（不上传）',value:'secondary'}]" />
+                          <USelect class="admin-select" v-model="storageConfig.syncRole" :disabled="storageNeedsConfirm" :options="[{label:'主节点（执行上传）',value:'primary'},{label:'备节点（不上传）',value:'secondary'}]" />
                         </div>
                         <div class="flex items-center gap-2" v-if="storageSyncMode==='scheduled'">
                           <span class="text-sm" :class="theme.mutedText">间隔(分钟)</span>
-                          <UInput v-model.number="storageSyncIntervalMinute" :disabled="storageNeedsConfirm" type="number" min="1" class="w-24" />
+                          <UInput v-model.number="storageSyncIntervalMinute" :disabled="storageNeedsConfirm" type="number" min="1" class="admin-input w-24" />
                         </div>
                         <div class="flex items-center gap-3 ml-auto">
                           <span class="text-sm" :class="theme.mutedText">上次同步</span>
                           <span class="text-sm" :class="theme.text">{{ lastCloudSyncText || '—' }}</span>
-                          <UButton color="primary" :disabled="storageNeedsConfirm || storageConfig.syncRole==='secondary' || !storageEnabled" @click="syncNow">立即同步</UButton>
-                          <UButton color="green" class="shadow" :disabled="storageNeedsConfirm" @click="saveStorageConfig">保存同步设置</UButton>
+                          <UButton size="sm" class="admin-action" color="primary" :disabled="storageNeedsConfirm || storageConfig.syncRole==='secondary' || !storageEnabled" @click="syncNow">立即同步</UButton>
+                          <UButton size="sm" color="primary" class="admin-action" :disabled="storageNeedsConfirm" @click="saveStorageConfig">保存同步设置</UButton>
                         </div>
                       </div>
                       <div>
                         <label class="text-sm mb-1 block" :class="theme.mutedText">上传URL（预签名）</label>
                         <div class="flex gap-2">
-                          <UInput v-model="uploadURL" placeholder="粘贴R2/S3预签名上传URL" class="flex-1" />
-                          <UButton :disabled="!storageEnabled" @click="generateUploadPresign">生成</UButton>
+                          <UInput v-model="uploadURL" placeholder="粘贴R2/S3预签名上传URL" class="admin-input flex-1" />
+                          <UButton size="sm" class="admin-action" :disabled="!storageEnabled" @click="generateUploadPresign">生成</UButton>
                         </div>
                       </div>
                       <div>
                         <label class="text-sm mb-1 block" :class="theme.mutedText">下载URL（预签名）</label>
                         <div class="flex gap-2">
-                          <UInput v-model="downloadURL" placeholder="粘贴R2/S3预签名下载URL" class="flex-1" />
-                          <UButton :disabled="!storageEnabled" @click="generateDownloadPresign">生成</UButton>
+                          <UInput v-model="downloadURL" placeholder="粘贴R2/S3预签名下载URL" class="admin-input flex-1" />
+                          <UButton size="sm" class="admin-action" :disabled="!storageEnabled" @click="generateDownloadPresign">生成</UButton>
                         </div>
                       </div>
                     </div>
@@ -2173,29 +2112,29 @@
 
           <div id="db-section" v-if="canSection('db') && isSectionVisible('db')" class="col-span-12">
             <div :class="adminShellCardClass">
-              <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-4 py-3">
-                <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                  <UIcon name="i-heroicons-circle-stack" class="w-5 h-5 text-indigo-300" />
-                  <span>本地数据库管理配置</span>
+              <AdminModuleHeader title="本地数据库管理配置" icon="i-heroicons-circle-stack" description="下载 SQLite 备份或从备份恢复数据。" :theme="theme">
+                <template #badge>
                   <span class="ml-2 text-xs px-2 py-1 rounded" :class="theme.subtleBg">当前 DB：{{ dbTypeLabel }}</span>
-                </div>
-                <div class="flex gap-2 flex-wrap justify-start sm:justify-end items-center w-full sm:w-auto">
-                  <UButton color="primary" icon="i-heroicons-arrow-down-tray" :disabled="dbType !== 'sqlite'" @click="downloadBackup">下载本地备份</UButton>
-                  <UButton color="orange" variant="soft" icon="i-heroicons-arrow-up-tray" :disabled="dbType !== 'sqlite'" @click="triggerDatabaseUpload">恢复本地数据库</UButton>
-                  <input type="file" ref="databaseFileInput" accept=".zip" class="hidden" @change="handleDatabaseUpload" />
-                </div>
-              </div>
+                </template>
+                <template #actions>
+                  <div class="flex gap-2 flex-wrap justify-start sm:justify-end items-center w-full sm:w-auto">
+                    <UButton size="sm" class="admin-action" color="primary" icon="i-heroicons-arrow-down-tray" :disabled="dbType !== 'sqlite'" @click="downloadBackup">下载本地备份</UButton>
+                    <UButton size="sm" class="admin-action" color="orange" variant="soft" icon="i-heroicons-arrow-up-tray" :disabled="dbType !== 'sqlite'" @click="triggerDatabaseUpload">恢复本地数据库</UButton>
+                    <input type="file" ref="databaseFileInput" accept=".zip" class="hidden" @change="handleDatabaseUpload" />
+                  </div>
+                </template>
+              </AdminModuleHeader>
               <div class="px-4 pb-4 space-y-4">
-                <div class="text-yellow-400 text-sm rounded p-2" :class="theme.subtleBg">🔔：仅针对 SQLite 本地数据库；{{ dbType !== 'sqlite' ? '当前为云/外部数据库，请在服务端操作' : '可在此下载与恢复本地备份' }}</div>
+                <div class="admin-subcard text-amber-700 dark:text-amber-300 text-sm rounded p-2" :class="theme.subtleBg">🔔：仅针对 SQLite 本地数据库；{{ dbType !== 'sqlite' ? '当前为云/外部数据库，请在服务端操作' : '可在此下载与恢复本地备份' }}</div>
                 <input type="file" ref="databaseFileInput" accept=".zip" class="hidden" @change="handleDatabaseUpload" />
 
                 <div :class="adminSubtleCardClass">
                    <div class="font-semibold mb-2" :class="theme.text">云端备份与恢复</div>
                    <div class="text-xs mb-3" :class="theme.mutedText">请在上方的“存储方案”中配置云端连接信息</div>
                    <div class="flex justify-end gap-2">
-                    <UButton color="primary" variant="solid" @click="uploadCloudBackup" :disabled="!storageEnabled">上传备份到云</UButton>
-                    <UButton color="orange" variant="solid" @click="restoreCloudBackup" :disabled="!storageEnabled">从云恢复备份</UButton>
-                    <UButton color="blue" variant="solid" :disabled="!storageEnabled || !storageConfig.publicBaseURL" @click="restoreFromConfiguredCloud">按配置恢复</UButton>
+                    <UButton size="sm" class="admin-action" color="primary" variant="solid" @click="uploadCloudBackup" :disabled="!storageEnabled">上传备份到云</UButton>
+                    <UButton size="sm" class="admin-action" color="orange" variant="solid" @click="restoreCloudBackup" :disabled="!storageEnabled">从云恢复备份</UButton>
+                    <UButton size="sm" class="admin-action" color="primary" variant="solid" :disabled="!storageEnabled || !storageConfig.publicBaseURL" @click="restoreFromConfiguredCloud">按配置恢复</UButton>
                   </div>
                 </div>
               </div>
@@ -2203,22 +2142,17 @@
           </div>
           <div id="version-section" v-if="canSection('version') && isSectionVisible('version')" class="col-span-12">
             <div :class="adminShellCardClass">
-              <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-4 py-3">
-                <div class="font-semibold mb-0 flex items-center gap-2" :class="theme.text">
-                  <UIcon name="i-heroicons-information-circle" class="w-5 h-5 text-indigo-300" />
-                  <span>版本与更新</span>
-                </div>
-              </div>
+              <AdminModuleHeader title="版本与更新" icon="i-heroicons-arrow-path" description="查看当前构建信息并检查更新。" :theme="theme" />
               <div class="px-4 pb-4 space-y-4">
                 <div :class="adminSubtleCardClass">
                   <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div>
                       <div class="text-sm" :class="theme.mutedText">当前版本</div>
-                      <UBadge color="primary" variant="soft" class="mt-1">{{ versionInfo.currentVersion || '最新' }}</UBadge>
+                      <UBadge color="primary" variant="soft" class="admin-badge mt-1">{{ versionInfo.currentVersion || '最新' }}</UBadge>
                     </div>
                     <div v-if="isPrimaryAdmin">
                       <div class="text-sm" :class="theme.mutedText">构建标记</div>
-                      <UBadge color="gray" variant="soft" class="mt-1 font-mono">{{ versionInfo.buildIdentity || 'unknown' }}</UBadge>
+                      <UBadge color="gray" variant="soft" class="admin-badge mt-1 font-mono">{{ versionInfo.buildIdentity || 'unknown' }}</UBadge>
                     </div>
                     <div>
                       <div class="text-sm" :class="theme.mutedText">最新发布时间</div>
@@ -2227,15 +2161,15 @@
                   </div>
                   <div class="mt-3 space-y-3">
                     <div class="flex items-center gap-2">
-                      <UButton :loading="versionInfo.checking" color="indigo" variant="soft" class="shadow" @click="checkVersion">{{ versionInfo.checking ? '检测中...' : '检查更新' }}</UButton>
-                      <UButton v-if="can('version.update')" :loading="updatingVersion" color="orange" variant="solid" class="shadow" @click="updateVersion">更新升级</UButton>
-                      <UButton v-if="can('version.update') && runtimeInfo.staticSyncAvailable" :loading="syncingStatic" color="blue" variant="soft" class="shadow" @click="syncStatic">同步静态资源</UButton>
+                      <UButton size="sm" :loading="versionInfo.checking" color="primary" variant="soft" class="admin-action" @click="checkVersion">{{ versionInfo.checking ? '检测中...' : '检查更新' }}</UButton>
+                      <UButton size="sm" v-if="can('version.update')" :loading="updatingVersion" color="orange" variant="solid" class="admin-action" @click="updateVersion">更新升级</UButton>
+                      <UButton size="sm" v-if="can('version.update') && runtimeInfo.staticSyncAvailable" :loading="syncingStatic" color="primary" variant="soft" class="admin-action" @click="syncStatic">同步静态资源</UButton>
                     </div>
                     <div v-if="updatingVersion" class="space-y-2">
                       <UProgress :value="upgradeProgress" color="orange" />
                       <div class="text-xs" :class="theme.mutedText">{{ upgradeStatus }}</div>
                     </div>
-                    <div v-if="upgradeSuccess" class="text-sm text-green-400">升级成功，将进入重启，请稍后</div>
+                    <div v-if="upgradeSuccess" class="text-sm text-green-600 dark:text-green-400">升级成功，将进入重启，请稍后</div>
                   </div>
                 </div>
               </div>
@@ -2244,22 +2178,20 @@
 
           <div id="security-section" v-if="canSection('security') && isSectionVisible('security')" class="col-span-12">
             <div :class="adminShellCardClass">
-              <div :class="adminSectionHeaderClass">
-                <div class="font-semibold flex items-center gap-2" :class="theme.text">
-                  <UIcon name="i-heroicons-shield-exclamation" class="w-5 h-5" />
-                  <span>安全防护</span>
-                </div>
-                <div class="flex flex-wrap items-center gap-2">
-                  <UButton size="sm" color="indigo" variant="soft" class="shadow" @click="refreshSecurity">刷新</UButton>
-                  <UButton v-if="can('security.clear_logs')" size="sm" color="red" variant="soft" class="shadow" @click="clearAttackLogs">清空攻击记录</UButton>
-                </div>
-              </div>
+              <AdminModuleHeader title="安全防护" icon="i-heroicons-shield-exclamation" description="管理访问防护规则并查看攻击记录。" :theme="theme">
+                <template #actions>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <UButton icon="i-heroicons-arrow-path" size="sm" color="gray" variant="soft" class="admin-action" @click="refreshSecurity">刷新</UButton>
+                    <UButton v-if="can('security.clear_logs')" size="sm" color="red" variant="soft" class="admin-action" @click="clearAttackLogs">清空攻击记录</UButton>
+                  </div>
+                </template>
+              </AdminModuleHeader>
               <div class="px-4 pb-4 space-y-4">
                 <div :class="adminSubtleCardClass">
-                  <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <div class="admin-settings-toolbar flex flex-wrap items-center justify-between gap-2 mb-2">
                     <div class="font-semibold" :class="theme.text">自动封禁策略</div>
                     <div class="flex items-center gap-2">
-                      <UButton v-if="can('security.manage')" size="sm" color="green" class="shadow" @click="saveSecurityConfig">保存策略</UButton>
+                      <UButton v-if="can('security.manage')" size="sm" color="primary" class="admin-action" @click="saveSecurityConfig">保存策略</UButton>
                     </div>
                   </div>
                   <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3 xl:items-end">
@@ -2269,68 +2201,68 @@
                     </div>
                     <div>
                       <label class="text-xs" :class="theme.mutedText">统计窗口（秒）</label>
-                      <UInput v-model.number="securityConfig.autoBanWindowSeconds" type="number" :disabled="!can('security.manage')" />
+                      <UInput class="admin-input" v-model.number="securityConfig.autoBanWindowSeconds" type="number" :disabled="!can('security.manage')" />
                     </div>
                     <div>
                       <label class="text-xs" :class="theme.mutedText">触发次数（窗口内）</label>
-                      <UInput v-model.number="securityConfig.autoBanThreshold" type="number" :disabled="!can('security.manage')" />
+                      <UInput class="admin-input" v-model.number="securityConfig.autoBanThreshold" type="number" :disabled="!can('security.manage')" />
                     </div>
                     <div>
                       <label class="text-xs" :class="theme.mutedText">封禁时长（分钟，0=永久）</label>
-                      <UInput v-model.number="securityConfig.autoBanMinutes" type="number" :disabled="!can('security.manage')" />
+                      <UInput class="admin-input" v-model.number="securityConfig.autoBanMinutes" type="number" :disabled="!can('security.manage')" />
                     </div>
                     <div>
                       <label class="text-xs" :class="theme.mutedText">攻击记录保留期限</label>
-                      <USelect v-model="securityConfig.attackLogRetentionDays" :options="logRetentionOptions" :disabled="!can('security.manage')" />
+                      <USelect class="admin-select" v-model="securityConfig.attackLogRetentionDays" :options="logRetentionOptions" :disabled="!can('security.manage')" />
                     </div>
                   </div>
                   <div class="text-xs mt-2" :class="theme.mutedText">仅对敏感路径扫描命中进行计数；达到阈值后将自动写入封禁列表并立即生效</div>
                 </div>
 
                 <div id="site-login-expire-section" v-if="isPrimaryAdmin" :class="adminSubtleCardClass">
-                  <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div class="admin-settings-toolbar flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                     <div class="font-semibold" :class="theme.text">普通用户登录过期时间</div>
                     <div class="flex flex-wrap items-center gap-2">
                       <div class="flex items-center gap-1">
-                        <UInput v-model.number="frontendConfig.loginExpireDays" type="number" min="0" max="31" step="1" class="w-24" />
+                        <UInput v-model.number="frontendConfig.loginExpireDays" type="number" min="0" max="31" step="1" class="admin-input w-24" />
                         <span class="text-sm" :class="theme.mutedText">天</span>
                       </div>
                       <div class="flex items-center gap-1">
-                        <UInput v-model.number="frontendConfig.loginExpireHours" type="number" min="0" max="24" step="1" class="w-24" />
+                        <UInput v-model.number="frontendConfig.loginExpireHours" type="number" min="0" max="24" step="1" class="admin-input w-24" />
                         <span class="text-sm" :class="theme.mutedText">小时</span>
                       </div>
-                      <UButton v-for="preset in loginExpirePresetOptions" :key="preset.label" color="gray" variant="soft" @click="setLoginExpirePreset(preset)" class="shadow">{{ preset.label }}</UButton>
-                      <UButton color="green" @click="saveConfigItem('loginExpireDays')" class="shadow">保存</UButton>
+                      <UButton size="sm" v-for="preset in loginExpirePresetOptions" :key="preset.label" color="gray" variant="soft" @click="setLoginExpirePreset(preset)" class="admin-action">{{ preset.label }}</UButton>
+                      <UButton size="sm" color="primary" @click="saveConfigItem('loginExpireDays')" class="admin-action">保存</UButton>
                     </div>
                   </div>
                   <div class="text-xs mt-2" :class="theme.mutedText">普通用户从登录那一刻开始计算；0 天 0 小时表示永久不过期。站长默认永不过期。</div>
                 </div>
 
                 <div id="site-delegated-admin-login-expire-section" v-if="isPrimaryAdmin" :class="adminSubtleCardClass">
-                  <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div class="admin-settings-toolbar flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                     <div class="font-semibold" :class="theme.text">受托管理员登录过期时间</div>
                     <div class="flex flex-wrap items-center gap-2">
-                      <div class="flex items-center gap-1"><UInput v-model.number="frontendConfig.delegatedAdminLoginExpireDays" type="number" min="0" max="31" step="1" class="w-24" /><span class="text-sm" :class="theme.mutedText">天</span></div>
-                      <div class="flex items-center gap-1"><UInput v-model.number="frontendConfig.delegatedAdminLoginExpireHours" type="number" min="0" max="24" step="1" class="w-24" /><span class="text-sm" :class="theme.mutedText">小时</span></div>
-                      <UButton v-for="preset in loginExpirePresetOptions" :key="`delegated-${preset.label}`" color="gray" variant="soft" @click="setLoginExpirePreset(preset, 'delegated')" class="shadow">{{ preset.label }}</UButton>
-                      <UButton color="green" @click="saveConfigItem('delegatedAdminLoginExpireDays')" class="shadow">保存</UButton>
+                      <div class="flex items-center gap-1"><UInput v-model.number="frontendConfig.delegatedAdminLoginExpireDays" type="number" min="0" max="31" step="1" class="admin-input w-24" /><span class="text-sm" :class="theme.mutedText">天</span></div>
+                      <div class="flex items-center gap-1"><UInput v-model.number="frontendConfig.delegatedAdminLoginExpireHours" type="number" min="0" max="24" step="1" class="admin-input w-24" /><span class="text-sm" :class="theme.mutedText">小时</span></div>
+                      <UButton size="sm" v-for="preset in loginExpirePresetOptions" :key="`delegated-${preset.label}`" color="gray" variant="soft" @click="setLoginExpirePreset(preset, 'delegated')" class="admin-action">{{ preset.label }}</UButton>
+                      <UButton size="sm" color="primary" @click="saveConfigItem('delegatedAdminLoginExpireDays')" class="admin-action">保存</UButton>
                     </div>
                   </div>
                   <div class="text-xs mt-2" :class="theme.mutedText">仅受托管理员按此有效期计算，Session 与管理员 Bearer 同步生效；0 天 0 小时表示永久不过期。站长默认永不过期。</div>
                 </div>
 
                 <div :class="adminSubtleCardClass">
-                  <div class="flex items-center justify-between mb-2">
+                  <div class="admin-settings-toolbar flex items-center justify-between mb-2">
                     <div class="font-semibold" :class="theme.text">攻击记录（最近 {{ attackLogs.length }} 条）</div>
                   </div>
                   <div class="space-y-3 md:hidden">
-                    <div v-for="(row, index) in attackLogs" :key="`attack-mobile-${row.ID ?? row.id ?? `${row.created_at || row.CreatedAt || ''}-${row.ip || row.IP || ''}-${index}`}`" class="rounded-xl border p-3 space-y-2" :class="[theme.border, theme.cardBg]">
+                    <div v-for="(row, index) in attackLogs" :key="`attack-mobile-${row.ID ?? row.id ?? `${row.created_at || row.CreatedAt || ''}-${row.ip || row.IP || ''}-${index}`}`" class="rounded-lg border p-3 space-y-2" :class="[theme.border, theme.cardBg]">
                       <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0">
                           <div class="text-xs" :class="theme.mutedText">时间</div>
                           <div class="text-sm break-words" :class="theme.text">{{ formatShanghai(row.created_at || row.CreatedAt || '') }}</div>
                         </div>
-                        <UButton size="xs" color="orange" variant="soft" class="shadow shrink-0" @click="banIP(row.ip || row.IP)">封禁</UButton>
+                        <UButton size="sm" color="orange" variant="soft" class="admin-action shrink-0" @click="banIP(row.ip || row.IP)">封禁</UButton>
                       </div>
                       <div class="grid grid-cols-1 gap-2 text-sm">
                         <div>
@@ -2349,7 +2281,7 @@
                         </div>
                       </div>
                     </div>
-                    <div v-if="!attackLogs.length" class="rounded-xl border p-4 text-sm text-center" :class="[theme.border, theme.mutedText]">暂无记录</div>
+                    <div v-if="!attackLogs.length" class="rounded-lg border p-4 text-sm text-center" :class="[theme.border, theme.mutedText]">暂无记录</div>
                   </div>
                   <div class="admin-desktop-block overflow-x-auto">
                     <table class="min-w-full text-sm">
@@ -2369,7 +2301,7 @@
                           <td class="py-2 pr-4" :class="theme.mutedText">{{ row.method || row.Method }}</td>
                           <td class="py-2 pr-4 break-all" :class="theme.text">{{ row.path || row.Path }}</td>
                           <td class="py-2">
-                            <UButton size="xs" color="orange" variant="soft" class="shadow" @click="banIP(row.ip || row.IP)">封禁</UButton>
+                            <UButton size="sm" color="orange" variant="soft" class="admin-action" @click="banIP(row.ip || row.IP)">封禁</UButton>
                           </td>
                         </tr>
                         <tr v-if="!attackLogs.length">
@@ -2381,23 +2313,23 @@
                 </div>
 
                 <div :class="adminSubtleCardClass">
-                  <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
+                  <div class="admin-settings-toolbar flex flex-wrap items-center justify-between gap-3 mb-2">
                     <div class="font-semibold" :class="theme.text">封禁 IP</div>
                     <div class="flex flex-wrap items-stretch md:items-center gap-2 w-full md:w-auto">
-                      <UInput v-model="banForm.ip" placeholder="IP" class="w-full sm:w-40" />
-                      <UInput v-model.number="banForm.minutes" type="number" placeholder="分钟(0=永久)" class="w-full sm:w-36" />
-                      <UInput v-model="banForm.reason" placeholder="原因(可选)" class="w-full sm:min-w-[12rem] sm:flex-1 md:w-56" />
-                      <UButton size="sm" color="orange" class="shadow w-full sm:w-auto sm:shrink-0 justify-center" @click="submitBan">封禁</UButton>
+                      <UInput v-model="banForm.ip" placeholder="IP" class="admin-input w-full sm:w-40" />
+                      <UInput v-model.number="banForm.minutes" type="number" placeholder="分钟(0=永久)" class="admin-input w-full sm:w-36" />
+                      <UInput v-model="banForm.reason" placeholder="原因(可选)" class="admin-input w-full sm:min-w-[12rem] sm:flex-1 md:w-56" />
+                      <UButton size="sm" color="orange" class="admin-action w-full sm:w-auto sm:shrink-0 justify-center" @click="submitBan">封禁</UButton>
                     </div>
                   </div>
                   <div class="space-y-3 md:hidden">
-                    <div v-for="(b, index) in ipBans" :key="`ban-mobile-${b.ID ?? b.id ?? `${b.ip || b.IP || ''}-${b.until || b.Until || 'permanent'}-${index}`}`" class="rounded-xl border p-3 space-y-2" :class="[theme.border, theme.cardBg]">
+                    <div v-for="(b, index) in ipBans" :key="`ban-mobile-${b.ID ?? b.id ?? `${b.ip || b.IP || ''}-${b.until || b.Until || 'permanent'}-${index}`}`" class="rounded-lg border p-3 space-y-2" :class="[theme.border, theme.cardBg]">
                       <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0">
                           <div class="text-xs" :class="theme.mutedText">IP</div>
                           <div class="font-mono break-all" :class="theme.text">{{ b.ip || b.IP }}</div>
                         </div>
-                        <UButton size="xs" color="green" variant="soft" class="shadow shrink-0" @click="unbanIP(b.ip || b.IP)">解封</UButton>
+                        <UButton size="sm" color="primary" variant="soft" class="admin-action shrink-0" @click="unbanIP(b.ip || b.IP)">解封</UButton>
                       </div>
                       <div class="grid grid-cols-1 gap-2 text-sm">
                         <div>
@@ -2410,7 +2342,7 @@
                         </div>
                       </div>
                     </div>
-                    <div v-if="!ipBans.length" class="rounded-xl border p-4 text-sm text-center" :class="[theme.border, theme.mutedText]">暂无封禁</div>
+                    <div v-if="!ipBans.length" class="rounded-lg border p-4 text-sm text-center" :class="[theme.border, theme.mutedText]">暂无封禁</div>
                   </div>
                   <div class="admin-desktop-block overflow-x-auto">
                     <table class="min-w-full text-sm">
@@ -2428,7 +2360,7 @@
                           <td class="py-2 pr-4" :class="theme.mutedText">{{ b.reason || b.Reason || '-' }}</td>
                           <td class="py-2 pr-4" :class="theme.mutedText">{{ b.until || b.Until ? formatShanghai(b.until || b.Until) : '永久' }}</td>
                           <td class="py-2">
-                            <UButton size="xs" color="green" variant="soft" class="shadow" @click="unbanIP(b.ip || b.IP)">解封</UButton>
+                            <UButton size="sm" color="primary" variant="soft" class="admin-action" @click="unbanIP(b.ip || b.IP)">解封</UButton>
                           </td>
                         </tr>
                         <tr v-if="!ipBans.length">
@@ -2444,37 +2376,37 @@
 
         </div>
       </main>
-      <div v-if="showBottomBar" class="admin-desktop-flex fixed bottom-0 left-0 right-0 z-50 border-t px-3 py-3 justify-between items-center backdrop-blur-md shadow-xl transition-[left] duration-200" :class="[theme.bottomBg, theme.border, bottomBarClass]">
-        <UButton
+      <div v-if="showBottomBar" class="admin-desktop-flex fixed bottom-0 left-0 right-0 z-50 border-t px-3 py-3 justify-between items-center backdrop-blur-md  transition-[left] duration-200" :class="[theme.bottomBg, theme.border, bottomBarClass]">
+        <UButton size="sm"
           icon="i-heroicons-arrow-left"
           :color="panelThemeButtonColor"
           :variant="panelTheme === 'light' ? 'soft' : 'solid'"
           @click="$router.push('/')"
-          class="shadow ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90"
+          class="admin-action ring-1 ring-inset ring-slate-400/30 transition hover:opacity-90"
         >
           返回首页
         </UButton>
         <div v-if="isLogin">
-          <UButton
+          <UButton size="sm"
             icon="i-heroicons-power"
             color="red"
             variant="solid"
             @click="handleLogout"
-            class="shadow transition hover:opacity-90"
+            class="admin-action transition hover:opacity-90"
           >
             退出登录
           </UButton>
         </div>
         <div v-else class="flex gap-2">
-          <UButton color="primary" @click="$router.push({ path: '/', query: { login: '1', mode: 'login', redirect: '/status' } })">登录</UButton>
-          <UButton color="gray" @click="$router.push({ path: '/', query: { login: '1', mode: 'register', redirect: '/status' } })">注册</UButton>
+          <UButton size="sm" class="admin-action" color="primary" @click="$router.push({ path: '/', query: { login: '1', mode: 'login', redirect: '/status' } })">登录</UButton>
+          <UButton size="sm" class="admin-action" color="gray" @click="$router.push({ path: '/', query: { login: '1', mode: 'register', redirect: '/status' } })">注册</UButton>
         </div>
       </div>
       </div>
     <!-- 登录模态框 -->
     <UModal v-model="showLoginModal">
-        <div class="p-6 rounded-lg" :class="theme.cardBg">
-            <h3 class="text-xl font-semibold mb-4" :class="theme.text">
+        <div class="admin-dialog p-4 rounded-lg" :class="theme.cardBg">
+            <h3 class="text-base font-semibold mb-4" :class="theme.text">
                 {{ authmode ? '用户登录' : '用户注册' }}
             </h3>
                 <UForm :state="authForm" class="space-y-4">
@@ -2482,7 +2414,7 @@
                         <UInput
                             v-model="authForm.username"
                             placeholder="用户名"
-                            class="w-full"
+                            class="admin-input w-full"
                         />
                     </UFormGroup>
                     <UFormGroup>
@@ -2490,17 +2422,17 @@
                             v-model="authForm.password"
                             type="password"
                             placeholder="密码"
-                            class="w-full"
+                            class="admin-input w-full"
                         />
                     </UFormGroup>
                     <div class="flex justify-between items-center">
-                        <UButton
+                        <UButton size="sm" class="admin-action"
                             variant="ghost"
                             @click="authmode = !authmode"
                         >
                             {{ authmode ? '去注册' : '去登录' }}
                         </UButton>
-                        <UButton
+                        <UButton size="sm" class="admin-action"
                             color="primary"
                             @click="authmode ? login(authForm) : register(authForm)"
                         >
@@ -2573,7 +2505,7 @@ const formatShanghai = (s: string) => {
   } catch { return s.replace('T', ' ').replace('Z', '') }
 }
  
-const cardCls = 'rounded-xl border shadow-sm'
+const cardCls = 'admin-card'
 type AdminSectionKey =
   'dashboard' | 'user' | 'site' | 'notify' | 'attachments' | 'db' | 'version' | 'security' | 'access-logs' | 'site-visits' | 'login-audits' |
   'site-register' | 'site-announcement' | 'site-music' |
@@ -2705,6 +2637,7 @@ const siteSectionKeys: AdminSectionKey[] = [
   'site-rss',
   'widgets'
 ]
+const activeAdminSection = computed(() => adminNavGroups.value.flatMap(group => group.items).find(item => item.key === activeSection.value))
 const isSectionVisible = (key: AdminSectionKey) => activeSection.value === key
 const isSiteSectionPage = computed(() => siteSectionKeys.includes(activeSection.value))
 const toggleNavGroup = (groupKey: string) => {
@@ -2903,7 +2836,7 @@ const sidebarOpen = ref(false)
 const sidebarCollapsed = ref(
   typeof window !== 'undefined' ? localStorage.getItem('adminSidebarCollapsed') === '1' : false
 )
-const desktopSidebarToggleIcon = computed(() => (sidebarCollapsed.value ? 'i-mdi-chevron-double-right' : 'i-mdi-chevron-double-left'))
+const desktopSidebarToggleIcon = computed(() => (sidebarCollapsed.value ? 'i-heroicons-chevron-double-right' : 'i-heroicons-chevron-double-left'))
 const desktopSidebarToggleText = computed(() => (sidebarCollapsed.value ? '展开导航' : '收起导航'))
 const adminThemeStorageKey = 'adminTheme'
 type AdminTheme = 'dark' | 'midnight' | 'forest' | 'plum' | 'light'
@@ -3272,7 +3205,7 @@ const theme = computed(() => {
       border: 'border-[#e5e6eb]',
       text: 'text-[#1d2129]',
       sidebarText: 'text-[#1d2129]',
-      mutedText: 'text-[#86909c]',
+      mutedText: 'text-[#647080]',
       pageBg: 'bg-[#f2f3f5]',
       navBtnBg: 'bg-[#ffffff]',
       navBtnHoverBg: 'hover:bg-[#f2f3f5]'
@@ -3402,12 +3335,8 @@ const adminShellCardClass = computed(() => ([
   cardCls,
   'backdrop-blur-sm transition-colors duration-200'
 ]))
-const adminSectionHeaderClass = computed(() => ([
-  'flex items-center justify-between px-4 py-3',
-  theme.value.text
-]))
 const adminSubtleCardClass = computed(() => ([
-  'rounded-lg p-3 backdrop-blur-sm transition-colors duration-200',
+  'admin-subcard',
   theme.value.subtleBg
 ]))
 
@@ -7598,22 +7527,15 @@ const syncStatic = async () => {
 const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 </script>
 
+<style src="~/assets/css/admin.css"></style>
+
 <style scoped>
-.admin-root {
-  --admin-radius: 8px;
-  --admin-shadow: 0 2px 10px rgba(29, 33, 41, 0.08);
-  --admin-shadow-hover: 0 8px 24px rgba(29, 33, 41, 0.12);
-  background: #17171a;
-}
-.admin-root.admin-theme-light {
-  background: #f2f3f5;
-}
 .admin-dashboard-shell,
 .admin-main-surface {
   background: transparent;
 }
 .admin-sidebar-surface {
-  box-shadow: 2px 0 8px rgba(29, 33, 41, 0.12);
+  box-shadow: none;
 }
 .admin-sidebar-nav {
   scrollbar-width: none;
@@ -7625,7 +7547,7 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 }
 .admin-topbar-surface {
   backdrop-filter: blur(8px);
-  box-shadow: 0 1px 4px rgba(29, 33, 41, 0.1);
+  box-shadow: none;
 }
 .admin-sidebar-avatar {
   width: 3.5rem !important;
@@ -7643,10 +7565,6 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   max-width: 1360px;
   margin: 0 auto;
 }
-.admin-form-shell > .col-span-12 > div {
-  border-radius: var(--admin-radius);
-  box-shadow: var(--admin-shadow);
-}
 .admin-desktop-toggle-btn,
 .admin-sidebar-toggle-btn {
   display: inline-flex;
@@ -7661,13 +7579,11 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   min-width: 40px;
   padding: 0;
   height: 40px;
-  border-radius: 12px;
-  border: 1px solid rgba(229, 230, 235, 0.55);
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+  border-radius: var(--admin-control-radius);
+  border: 1px solid var(--admin-line);
 }
 .admin-desktop-toggle-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 24px rgba(59, 130, 246, 0.22);
+  background: var(--admin-subtle);
 }
 .admin-desktop-toggle-text {
   font-size: 13px;
@@ -7720,13 +7636,13 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   color: #c9cdd4;
 }
 .admin-nav-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
+  background: var(--admin-accent-soft);
+  color: var(--admin-accent);
 }
 .admin-nav-item-active {
-  background: #165dff;
-  color: #ffffff;
-  box-shadow: 0 4px 10px rgba(22, 93, 255, 0.35);
+  background: var(--admin-accent-soft);
+  color: var(--admin-accent);
+  box-shadow: none;
 }
 .admin-root.admin-theme-light .admin-nav-group-btn {
   color: #4e5969;
@@ -7736,12 +7652,12 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   color: #4e5969;
 }
 .admin-root.admin-theme-light .admin-nav-item:hover {
-  background: #e5e6eb;
-  color: #1d2129;
+  background: var(--admin-accent-soft);
+  color: var(--admin-accent);
 }
 .admin-root.admin-theme-light .admin-nav-item-active {
-  background: #165dff;
-  color: #ffffff;
+  background: var(--admin-accent-soft);
+  color: var(--admin-accent);
 }
 .admin-dashboard-content {
   display: flex;
@@ -7956,14 +7872,10 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 14px;
-  border-radius: 8px;
-  border: 1px solid rgba(229, 230, 235, 0.2);
-  background: rgba(255, 255, 255, 0.55);
-}
-.admin-root.dark .admin-setting-block,
-.admin-root.dark .admin-array-row {
-  background: rgba(255, 255, 255, 0.04);
+  padding: var(--admin-gap);
+  border-radius: var(--admin-radius);
+  border: 1px solid var(--admin-line);
+  background: var(--admin-subtle);
 }
 .admin-setting-heading {
   display: flex;
@@ -7972,8 +7884,8 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
   gap: 12px;
 }
 .admin-setting-title {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
 }
 .admin-setting-desc {
   margin-top: 4px;
@@ -8097,7 +8009,7 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 }
 .admin-bg-opacity-input {
   width: 100%;
-  accent-color: #16a34a;
+  accent-color: var(--admin-accent);
 }
 .admin-root.dark .admin-bg-color-input {
   background: rgba(255, 255, 255, 0.08);
@@ -8203,60 +8115,6 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 .theme-dot-btn-active {
   border-color: #ffffff;
   box-shadow: 0 0 0 2px rgba(22, 93, 255, 0.4);
-}
-:deep(.u-toggle) {
-  transform: scale(1.04);
-}
-:deep(.u-toggle [role="switch"]),
-:deep([role="switch"]) {
-  border-radius: 999px !important;
-}
-.admin-form-shell :deep(.u-form-group),
-.admin-form-shell :deep(.u-input),
-.admin-form-shell :deep(.u-select),
-.admin-form-shell :deep(.u-textarea) {
-  width: 100%;
-}
-.admin-root :deep(.u-input),
-.admin-root :deep(.u-select),
-.admin-root :deep(.u-textarea),
-.admin-root :deep(.u-card),
-.admin-root :deep(.u-card-body),
-.admin-root :deep(.u-card__body) {
-  color: inherit;
-}
-.admin-root :deep(.u-button) {
-  border-radius: 6px !important;
-}
-.admin-form-shell :deep(input:not([type="checkbox"]):not([type="radio"])),
-.admin-form-shell :deep(textarea),
-.admin-form-shell :deep(select) {
-  border-radius: 6px !important;
-  min-height: 38px;
-  background: #ffffff !important;
-  border-color: #c9cdd4 !important;
-  color: #1d2129 !important;
-}
-.admin-form-shell :deep(textarea) {
-  min-height: 120px;
-}
-.admin-form-shell :deep(textarea.admin-description-textarea),
-.admin-form-shell :deep(.admin-description-textarea textarea) {
-  min-height: 0 !important;
-  height: auto !important;
-}
-.admin-form-shell :deep(input:not([type="checkbox"]):not([type="radio"]):focus),
-.admin-form-shell :deep(textarea:focus),
-.admin-form-shell :deep(select:focus) {
-  box-shadow: 0 0 0 2px rgba(22, 93, 255, 0.2) !important;
-  border-color: rgba(22, 93, 255, 0.55) !important;
-}
-.admin-root.dark .admin-form-shell :deep(input:not([type="checkbox"]):not([type="radio"])),
-.admin-root.dark .admin-form-shell :deep(textarea),
-.admin-root.dark .admin-form-shell :deep(select) {
-  background: rgba(255, 255, 255, 0.06) !important;
-  border-color: rgba(201, 205, 212, 0.35) !important;
-  color: #f7f8fa !important;
 }
 @media (max-width: 767px) {
   .admin-system-push-header {

@@ -7,6 +7,7 @@ const sectionCapabilities = JSON.parse(await readFile(new URL('../config/admin-s
 const center = await readFile(new URL('../components/admin/AuthorizationCenter.vue', import.meta.url), 'utf8')
 const audit = await readFile(new URL('../components/admin/AuditLogPanel.vue', import.meta.url), 'utf8')
 const moduleHeader = await readFile(new URL('../components/admin/AdminModuleHeader.vue', import.meta.url), 'utf8').catch(() => '')
+const adminStyles = await readFile(new URL('../assets/css/admin.css', import.meta.url), 'utf8')
 
 assert.match(capabilities, /admin\/authorization\/me/)
 assert.match(capabilities, /getRequest\('admin\/authorization\/me'/, 'capability snapshots must use the shared Bearer-aware request adapter')
@@ -65,8 +66,9 @@ assert.match(audit, /Content-Disposition/)
 assert.match(audit, /导出当前筛选结果/)
 assert.match(audit, /导出审计失败/)
 assert.match(
-  panel,
-  /\.admin-form-shell\s*:deep\(input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\)\),[\s\S]*?min-height:\s*38px/,
-  'the admin form field rule must exclude checkboxes and radios so delegated-capability controls stay square and clickable'
+  adminStyles,
+  /:is\(\.admin-input input, \.admin-select select\)\s*\{[^}]*height:\s*var\(--admin-control-height\)/,
+  'fixed field heights must target input/select components so native capability checkboxes stay square and clickable'
 )
+assert.doesNotMatch(adminStyles, /input\[type="(?:checkbox|radio)"\][^{]*\{[^}]*(?:min-height|height):/)
 assert.doesNotMatch(center + audit, /echo-noise\s*\/\s*说说笔记/i)

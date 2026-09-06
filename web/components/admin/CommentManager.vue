@@ -8,7 +8,7 @@
       :accent="recycleBin ? 'warning' : 'primary'"
       :theme="theme"
     >
-      <template #actions><UButton size="sm" color="gray" variant="soft" icon="i-heroicons-arrow-path" :loading="loading" @click="load">刷新</UButton></template>
+      <template #actions><UButton class="admin-action" size="sm" color="gray" variant="soft" icon="i-heroicons-arrow-path" :loading="loading" @click="load">刷新</UButton></template>
     </AdminModuleHeader>
 
     <div class="manager-body">
@@ -18,18 +18,18 @@
           <p class="mt-1 text-xs leading-5" :class="mutedClass">期限按每条互动移入回收站的时间实时计算；缩短期限会影响已有内容。</p>
         </div>
         <div class="policy-controls">
-          <USelect v-model="retentionDays" :options="retentionOptions" class="w-44" :disabled="savingPolicy" @change="savePolicy" />
+          <USelect v-model="retentionDays" :options="retentionOptions" class="admin-select w-44" :disabled="savingPolicy" @change="savePolicy" />
           <label class="notify-toggle"><span>站长删除时通知作者</span><UToggle v-model="notifyByPrimary" :disabled="savingPolicy" @change="savePolicy" /></label>
         </div>
       </div>
 
       <div class="filter-card" :class="borderClass">
-        <UInput v-model="filters.q" placeholder="搜索互动内容" @keyup.enter="applyFilters" />
-        <USelect v-model="filters.kind" :options="kindOptions" @change="applyFilters" />
-        <UInput v-model="filters.authorId" type="number" placeholder="作者 ID" @keyup.enter="applyFilters" />
-        <USelect v-if="recycleBin" v-model="filters.reason" :options="reasonOptions" @change="applyFilters" />
-        <UButton color="primary" variant="soft" @click="applyFilters">应用筛选</UButton>
-        <UButton color="gray" variant="ghost" @click="resetFilters">清空</UButton>
+        <UInput class="admin-input" v-model="filters.q" placeholder="搜索互动内容" @keyup.enter="applyFilters" />
+        <USelect class="admin-select" v-model="filters.kind" :options="kindOptions" @change="applyFilters" />
+        <UInput class="admin-input" v-model="filters.authorId" type="number" placeholder="作者 ID" @keyup.enter="applyFilters" />
+        <USelect class="admin-select" v-if="recycleBin" v-model="filters.reason" :options="reasonOptions" @change="applyFilters" />
+        <UButton size="sm" class="admin-action" color="primary" variant="solid" @click="applyFilters">应用筛选</UButton>
+        <UButton size="sm" class="admin-action" color="gray" variant="ghost" @click="resetFilters">清空</UButton>
       </div>
 
       <div v-if="canSelectForBatch" class="interaction-selection" :class="[borderClass, subtleClass]">
@@ -38,10 +38,10 @@
           <span>{{ selected.length ? `已选择 ${selected.length} 条` : '批量选择当前页互动' }}</span>
         </label>
         <div class="interaction-selection-actions">
-          <UButton v-if="selected.length" size="xs" color="gray" variant="ghost" :disabled="actionLoading" @click="selected = []">清除选择</UButton>
-          <UButton v-if="selected.length && !recycleBin && canTrash" size="xs" color="orange" variant="soft" :loading="actionLoading" @click="batchTrash">批量移入回收站</UButton>
-          <UButton v-if="selected.length && recycleBin && canRestore" size="xs" color="green" variant="soft" :loading="actionLoading" @click="batchRestore">批量恢复</UButton>
-          <UButton v-if="selected.length && recycleBin && canDeletePermanently" size="xs" color="red" variant="soft" :loading="actionLoading" @click="batchPermanentDelete">批量永久删除</UButton>
+          <UButton class="admin-action" v-if="selected.length" size="sm" color="gray" variant="soft" :disabled="actionLoading" @click="selected = []">清除选择</UButton>
+          <UButton class="admin-action" v-if="selected.length && !recycleBin && canTrash" size="sm" color="orange" variant="soft" :loading="actionLoading" @click="batchTrash">批量移入回收站</UButton>
+          <UButton class="admin-action" v-if="selected.length && recycleBin && canRestore" size="sm" color="primary" variant="soft" :loading="actionLoading" @click="batchRestore">批量恢复</UButton>
+          <UButton class="admin-action" v-if="selected.length && recycleBin && canDeletePermanently" size="sm" color="red" variant="soft" :loading="actionLoading" @click="batchPermanentDelete">批量永久删除</UButton>
         </div>
       </div>
 
@@ -52,7 +52,7 @@
           <div class="interaction-head">
             <div class="interaction-identity">
               <input v-if="canSelectForBatch" v-model="selected" type="checkbox" :value="row.id" :aria-label="`选择互动 ${row.id}`" />
-              <UBadge size="xs" :color="kindColor(row.kind)" variant="soft">{{ kindLabel(row.kind) }}</UBadge>
+              <UBadge class="admin-badge" size="xs" :color="kindColor(row.kind)" variant="soft">{{ kindLabel(row.kind) }}</UBadge>
               <strong>#{{ row.id }}</strong>
               <span :class="mutedClass">{{ row.username || `用户 ${row.user_id || '—'}` }}</span>
             </div>
@@ -71,11 +71,11 @@
             <span v-if="recycleBin" :class="row.recycle_deadline?.auto_cleanup_enabled ? 'deadline' : mutedClass">{{ deadlineText(row.recycle_deadline) }}</span>
           </div>
           <div class="interaction-actions">
-            <UButton v-if="!recycleBin && canEdit && row.can_edit" size="xs" color="primary" variant="ghost" :loading="actionLoading" @click="editBody(row)">编辑正文</UButton>
-            <UButton v-if="!recycleBin && canChangeVisibility && row.can_change_visibility" size="xs" color="primary" variant="ghost" :loading="actionLoading" @click="changeVisibility(row)">调整可见性</UButton>
-            <UButton v-if="!recycleBin && canTrash && row.can_trash" size="xs" color="orange" variant="soft" :loading="actionLoading" @click="trash(row)">移入回收站</UButton>
-            <UButton v-if="recycleBin && canRestore && row.can_restore && !row.user_purged" size="xs" color="green" variant="soft" :loading="actionLoading" @click="restore(row)">恢复</UButton>
-            <UButton v-if="recycleBin && canDeletePermanently && row.can_permanently_delete" size="xs" color="red" variant="soft" :loading="actionLoading" @click="removePermanently(row)">永久删除</UButton>
+            <UButton class="admin-action" v-if="!recycleBin && canEdit && row.can_edit" size="sm" color="primary" variant="ghost" :loading="actionLoading" @click="editBody(row)">编辑正文</UButton>
+            <UButton class="admin-action" v-if="!recycleBin && canChangeVisibility && row.can_change_visibility" size="sm" color="primary" variant="ghost" :loading="actionLoading" @click="changeVisibility(row)">调整可见性</UButton>
+            <UButton class="admin-action" v-if="!recycleBin && canTrash && row.can_trash" size="sm" color="orange" variant="soft" :loading="actionLoading" @click="trash(row)">移入回收站</UButton>
+            <UButton class="admin-action" v-if="recycleBin && canRestore && row.can_restore && !row.user_purged" size="sm" color="primary" variant="solid" :loading="actionLoading" @click="restore(row)">恢复</UButton>
+            <UButton class="admin-action" v-if="recycleBin && canDeletePermanently && row.can_permanently_delete" size="sm" color="red" variant="soft" :loading="actionLoading" @click="removePermanently(row)">永久删除</UButton>
             <span v-if="recycleBin && !row.can_restore && !row.user_purged" class="text-xs" :class="mutedClass">需先恢复仍在回收站中的所有上级内容</span>
           </div>
         </article>
@@ -83,7 +83,7 @@
 
       <div class="pagination" :class="mutedClass">
         <span>共 {{ total }} 条</span>
-        <div><UButton size="xs" color="gray" variant="soft" :disabled="page <= 1 || loading" @click="page--; load()">上一页</UButton><span>第 {{ page }} 页</span><UButton size="xs" color="gray" variant="soft" :disabled="page * pageSize >= total || loading" @click="page++; load()">下一页</UButton></div>
+        <div><UButton class="admin-action" size="sm" color="gray" variant="soft" :disabled="page <= 1 || loading" @click="page--; load()">上一页</UButton><span>第 {{ page }} 页</span><UButton class="admin-action" size="sm" color="gray" variant="soft" :disabled="page * pageSize >= total || loading" @click="page++; load()">下一页</UButton></div>
       </div>
     </div>
   </section>
@@ -220,5 +220,5 @@ onUnmounted(() => { if (clock) clearInterval(clock) })
 </script>
 
 <style scoped>
-.comment-manager{min-width:0;overflow:hidden}.manager-body{display:flex;flex-direction:column;gap:14px;padding:0 16px 16px}.policy-card,.filter-card,.interaction-card,.interaction-selection{border-width:1px;border-style:solid;border-radius:10px}.policy-card{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:16px;padding:12px}.policy-controls,.notify-toggle{display:flex;align-items:center;gap:12px}.notify-toggle{font-size:12px;white-space:nowrap}.filter-card{display:grid;grid-template-columns:minmax(180px,2fr) minmax(130px,1fr) minmax(110px,1fr) minmax(140px,1fr) auto auto;gap:10px;padding:12px}.interaction-selection,.interaction-select-all,.interaction-selection-actions{display:flex;align-items:center;gap:10px}.interaction-selection{justify-content:space-between;padding:10px 12px}.interaction-select-all{font-size:12px;font-weight:650}.interaction-selection-actions{justify-content:flex-end;flex-wrap:wrap}.interaction-list{display:flex;flex-direction:column;gap:10px}.interaction-card{padding:13px}.interaction-head,.interaction-identity,.interaction-actions,.interaction-meta,.pagination,.pagination>div{display:flex;align-items:center;gap:9px}.interaction-head,.pagination{justify-content:space-between}.interaction-identity{min-width:0}.thread-trail{margin-top:10px;padding:9px 11px;border-radius:9px}.trail-node{display:grid;grid-template-columns:92px minmax(0,1fr);gap:8px;font-size:12px;line-height:1.5}.trail-node+ .trail-node{margin-top:5px}.trail-node.is-child{position:relative;padding-left:14px}.trail-node.is-child:before{content:'↳';position:absolute;left:0;color:#94a3b8}.trail-node span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.interaction-content{margin:11px 0 0;white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.65}.interaction-meta{margin-top:10px;flex-wrap:wrap;font-size:12px;color:#64748b}.purged-label{color:#dc2626}.deadline{color:#d97706;font-weight:650}.interaction-actions{justify-content:flex-end;margin-top:10px;flex-wrap:wrap}.empty{display:flex;min-height:180px;align-items:center;justify-content:center;gap:8px;color:#64748b}.pagination{padding:4px 0;font-size:12px}.pagination>div span{min-width:72px;text-align:center}@media(max-width:900px){.filter-card{grid-template-columns:1fr 1fr}.policy-card{align-items:stretch;flex-direction:column}.policy-controls{align-items:stretch;flex-direction:column}.notify-toggle{justify-content:space-between}}@media(max-width:600px){.manager-body{padding:0 12px 12px}.filter-card{grid-template-columns:1fr}.interaction-head,.interaction-selection{align-items:flex-start;flex-direction:column}.interaction-selection-actions{justify-content:flex-start}.trail-node{grid-template-columns:1fr}.trail-node span:last-child{white-space:normal}.pagination{align-items:stretch;flex-direction:column}.pagination>div{justify-content:space-between}}
+.comment-manager{min-width:0;overflow:hidden}.manager-body{display:flex;flex-direction:column;gap:14px;padding:0 16px 16px}.policy-card,.filter-card,.interaction-card,.interaction-selection{border-width:1px;border-style:solid;border-radius:var(--admin-radius, 8px)}.policy-card{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:16px;padding:12px}.policy-controls,.notify-toggle{display:flex;align-items:center;gap:12px}.notify-toggle{font-size:12px;white-space:nowrap}.filter-card{display:grid;grid-template-columns:minmax(180px,2fr) minmax(130px,1fr) minmax(110px,1fr) minmax(140px,1fr) auto auto;gap:10px;padding:12px}.interaction-selection,.interaction-select-all,.interaction-selection-actions{display:flex;align-items:center;gap:10px}.interaction-selection{justify-content:space-between;padding:10px 12px}.interaction-select-all{font-size:12px;font-weight:650}.interaction-selection-actions{justify-content:flex-end;flex-wrap:wrap}.interaction-list{display:flex;flex-direction:column;gap:10px}.interaction-card{padding:13px}.interaction-head,.interaction-identity,.interaction-actions,.interaction-meta,.pagination,.pagination>div{display:flex;align-items:center;gap:9px}.interaction-head,.pagination{justify-content:space-between}.interaction-identity{min-width:0}.thread-trail{margin-top:10px;padding:9px 11px;border-radius:var(--admin-radius, 8px)}.trail-node{display:grid;grid-template-columns:92px minmax(0,1fr);gap:8px;font-size:12px;line-height:1.5}.trail-node+ .trail-node{margin-top:5px}.trail-node.is-child{position:relative;padding-left:14px}.trail-node.is-child:before{content:'↳';position:absolute;left:0;color:#94a3b8}.trail-node span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.interaction-content{margin:11px 0 0;white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.65}.interaction-meta{margin-top:10px;flex-wrap:wrap;font-size:12px;color:#64748b}.purged-label{color:#dc2626}.deadline{color:#d97706;font-weight:650}.interaction-actions{justify-content:flex-end;margin-top:10px;flex-wrap:wrap}.empty{display:flex;min-height:180px;align-items:center;justify-content:center;gap:8px;color:#64748b}.pagination{padding:4px 0;font-size:12px}.pagination>div span{min-width:72px;text-align:center}@media(max-width:900px){.filter-card{grid-template-columns:1fr 1fr}.policy-card{align-items:stretch;flex-direction:column}.policy-controls{align-items:stretch;flex-direction:column}.notify-toggle{justify-content:space-between}}@media(max-width:600px){.manager-body{padding:0 12px 12px}.filter-card{grid-template-columns:1fr}.interaction-head,.interaction-selection{align-items:flex-start;flex-direction:column}.interaction-selection-actions{justify-content:flex-start}.trail-node{grid-template-columns:1fr}.trail-node span:last-child{white-space:normal}.pagination{align-items:stretch;flex-direction:column}.pagination>div{justify-content:space-between}}
 </style>
