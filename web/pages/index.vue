@@ -375,7 +375,7 @@
             <div class="page-footer" v-html="(frontendConfig.pageFooterHTML || defaultConfig.pageFooterHTML)"></div>
           </div>
           <template v-else>
-            <AddForm v-show="!isMasonry || masonryComposerVisible" v-if="activeTab !== 'personal' || isLoggedIn" @search-result="handleSearchResult" :hide-header-tools="layoutState==='three'" :wide="layoutState==='two' || isMasonry" />
+            <AddForm v-show="!isMasonry || masonryComposerVisible" v-if="activeTab !== 'personal' || isLoggedIn" class="masonry-composer" @search-result="handleSearchResult" :hide-header-tools="layoutState==='three'" :wide="layoutState==='two' || isMasonry" />
             <!-- 中心栏标签筛选已隐藏；右侧标签组件保留原功能 -->
           <MessageList :masonry="isMasonry"
             ref="messageList" 
@@ -3797,6 +3797,7 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
 /* The wide reading board keeps a quiet, compact navigation rail. */
 .container-fixed.container-masonry { max-width: 1920px; padding-right: 88px; padding-left: 24px; }
 .layout-container.grid-masonry { display: grid; grid-template-columns: var(--sidebar-width, 320px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.grid-masonry .masonry-composer { width: auto; margin: 0 8px 8px; }
 .grid-masonry .sidebar-slot-left { top: 16px; height: auto; }
 .grid-masonry .left-col { position: relative !important; max-height: calc(100dvh - 40px); overflow-y: auto; scrollbar-width: thin; }
 .masonry-sidebar-content { display: grid; gap: 10px; margin-top: 10px; }
