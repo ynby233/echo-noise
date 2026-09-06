@@ -3659,6 +3659,12 @@ const serializePlainEditorBlockText = (block: Element) => {
 const serializePlainEditorDomAsMarkdown = (editable: HTMLElement) => {
   const pieces: string[] = []
   Array.from(editable.childNodes).forEach((node) => {
+    const formatted = serializeEditorFormattedBlock(node)
+    if (formatted !== null) {
+      if (pieces.length && pieces[pieces.length - 1] !== '' && pieces[pieces.length - 1] !== MARKDOWN_BLANK_LINE_SENTINEL) pieces.push('')
+      pieces.push(formatted, '')
+      return
+    }
     if (node instanceof Element && node.matches('p[data-block], div[data-block]') && !node.closest('table')) {
       pieces.push(serializePlainEditorBlockText(node))
       return
@@ -3667,6 +3673,16 @@ const serializePlainEditorDomAsMarkdown = (editable: HTMLElement) => {
     if (text) pieces.push(normalizeAttachmentSourceText(text))
   })
   return serializeMarkdownEditorBlocks(pieces)
+}
+
+const serializeEditorFormattedBlock = (node: Node) => {
+  if (!(node instanceof Element) || !node.matches('ul, ol, blockquote, h1, h2, h3, h4, h5, h6, pre, hr')) return null
+  const engine = vditorInstance?.vditor
+  if (!engine?.lute) return null
+  const markdown = engine.currentMode === 'wysiwyg'
+    ? engine.lute.VditorDOM2Md(node.outerHTML)
+    : engine.lute.VditorIRDOM2Md(node.outerHTML)
+  return String(markdown).trim()
 }
 
 const serializeEditorDomAsMarkdown = (editable: HTMLElement) => {
@@ -3679,6 +3695,12 @@ const serializeEditorDomAsMarkdown = (editable: HTMLElement) => {
     plainLines = []
   }
   Array.from(editable.childNodes).forEach((node) => {
+    const formatted = serializeEditorFormattedBlock(node)
+    if (formatted !== null) {
+      flushPlainLines()
+      if (formatted) segments.push(formatted)
+      return
+    }
     if (node instanceof HTMLTableElement) {
       flushPlainLines()
       const markdown = serializeEditorTableDomAsMarkdown(node)
@@ -6098,6 +6120,10 @@ watch(() => props.theme, (newTheme) => {
 .vditor-content {
   position: relative;
   z-index: 1;
+}
+
+.vditor-container .vditor-preview .vditor-reset {
+  font-family: inherit;
 }
 
 .vditor-container .editor-attachment-link,
