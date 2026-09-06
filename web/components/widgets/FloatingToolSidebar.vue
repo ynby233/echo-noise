@@ -37,14 +37,14 @@
       <span v-if="notificationUnreadCount > 0" class="notification-badge">{{ badgeText }}</span>
       <span class="btn-label">通知</span>
     </button>
-    <button v-if="pwaEnabled" v-show="!collapsed" class="tool-btn nw-action-btn" aria-label="安装应用" @click="$emit('open-pwa')">
-      <UIcon name="i-mdi-monitor-arrow-down-variant" class="w-6 h-6" />
-      <span class="btn-label">安装应用</span>
-    </button>
     <button v-show="!collapsed" class="tool-btn nw-action-btn" aria-label="公告" @click="$emit('open-announcements')">
       <UIcon name="i-heroicons-megaphone" class="w-6 h-6" />
       <span v-if="announcementUnreadCount > 0" class="notification-badge">{{ announcementBadgeText }}</span>
       <span class="btn-label">公告</span>
+    </button>
+    <button v-if="pwaEnabled" v-show="!collapsed" class="tool-btn nw-action-btn" aria-label="安装应用" @click="$emit('open-pwa')">
+      <UIcon name="i-mdi-monitor-arrow-down-variant" class="w-6 h-6" />
+      <span class="btn-label">安装应用</span>
     </button>
     <button v-show="!collapsed" class="tool-btn nw-action-btn" aria-label="后台" @click="$emit('open-admin')">
       <UIcon name="i-mdi-server-outline" class="w-6 h-6" />

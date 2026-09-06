@@ -56,6 +56,8 @@
         }"
         :aria-label="`${day.date}，${day.count} 条笔记`"
         :data-tooltip="`${day.count} 条笔记`"
+        :style="day.count > 0 ? { '--calendar-count-bg': `rgba(234, 88, 12, ${0.14 + 0.66 * day.count / (day.count + 5)})` } : undefined"
+        :aria-pressed="day.selected"
         @click="selectDay(day)"
       >
         <span class="day-number">{{ day.day }}</span>
@@ -569,7 +571,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   border-radius: 6px;
   border: 1px solid transparent;
-  background: rgba(148, 163, 184, 0.08);
+  background: var(--calendar-count-bg, rgba(148, 163, 184, 0.08));
   color: var(--calendar-day-text);
   font-size: 11px;
   line-height: 1;
@@ -577,8 +579,12 @@ onBeforeUnmount(() => {
 }
 
 .calendar-day:hover {
-  background: rgba(249, 115, 22, 0.12);
   border-color: rgba(249, 115, 22, 0.28);
+}
+
+.calendar-day:focus-visible {
+  outline: 2px solid rgb(249, 115, 22);
+  outline-offset: 1px;
 }
 
 .calendar-day.is-muted {
@@ -587,13 +593,11 @@ onBeforeUnmount(() => {
 
 .calendar-day.is-today {
   border-color: rgba(37, 99, 235, 0.86);
-  background: rgba(37, 99, 235, 0.12);
 }
 
 .calendar-day.is-selected {
-  background: rgba(249, 115, 22, 0.95);
   border-color: rgba(249, 115, 22, 1);
-  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(249, 115, 22, 0.85);
 }
 
 .day-number {
@@ -609,12 +613,6 @@ onBeforeUnmount(() => {
   background: rgb(37, 99, 235);
   color: #fff;
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.22);
-}
-
-.calendar-day.is-selected .day-number {
-  background: rgba(255, 255, 255, 0.22);
-  color: #fff;
-  box-shadow: none;
 }
 
 .calendar-foot {
