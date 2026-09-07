@@ -2729,14 +2729,6 @@ body.is-resizing-rendered-table-column * {
   margin: 0 !important;
 }
 
-/* GitHub 卡片背景与内容卡片一致（继承父背景，无边框） */
-.markdown-preview :deep(.github-card),
-.markdown-preview :deep(.github-card-header),
-.markdown-preview :deep(.github-card-loading) {
-  background-color: transparent !important;
-  border: none !important;
-}
-
 .image-loading-placeholder {
   display: block;
   width: 100%;
@@ -2904,7 +2896,9 @@ body.is-resizing-rendered-table-column * {
 }
 
 .markdown-preview .site-attachment-file,
-.rendered-table-expand-scroll .site-attachment-file {
+.rendered-table-expand-scroll .site-attachment-file,
+.markdown-preview .github-card,
+.rendered-table-expand-scroll .github-card {
   --file-card-bg: #ffffff;
   --file-card-bg-hover: #f8fafc;
   --file-card-border: rgba(15, 23, 42, 0.10);
@@ -2916,6 +2910,10 @@ body.is-resizing-rendered-table-column * {
   --file-card-name: #000000;
   --file-card-meta: #6b7280;
   --file-card-action: #374151;
+}
+
+.markdown-preview .site-attachment-file,
+.rendered-table-expand-scroll .site-attachment-file {
   display: grid !important;
   grid-template-columns: 44px minmax(0, 1fr) 28px !important;
   align-items: center !important;
@@ -3160,7 +3158,9 @@ body.is-resizing-rendered-table-column * {
 }
 
 .markdown-preview.theme-dark .site-attachment-file,
-.rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .site-attachment-file {
+.rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .site-attachment-file,
+.markdown-preview.theme-dark .github-card,
+.rendered-table-expand-overlay.is-dark .github-card {
   --file-card-bg: rgba(15, 23, 42, 0.52);
   --file-card-bg-hover: rgba(30, 41, 59, 0.68);
   --file-card-border: rgba(255, 255, 255, 0.12);
@@ -3560,28 +3560,32 @@ body.is-resizing-rendered-table-column * {
 
 .github-card {
   display: block;
-  border-radius: 8px;
-  margin: 0.8em auto 0.4em;
-  padding: 16px;
-  width: 100%;
-  max-width: 800px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-  font-size: 15px;
+  border-radius: 12px;
+  margin: 6px 8px;
+  padding: 12px;
+  width: calc(100% - 16px);
+  max-width: calc(100% - 16px);
+  min-height: 72px;
+  border: 1px solid var(--file-card-border);
+  background: var(--file-card-bg);
+  color: var(--file-card-text);
+  box-shadow: var(--file-card-shadow);
+  font-size: 16px;
   box-sizing: border-box;
   min-width: 0;
-  overflow: hidden;
+  transition: background-color .16s ease;
 }
-.theme-dark .github-card {
-  border: none !important;
-  background: transparent !important;
-  color: inherit !important;
+.github-card:hover,
+.github-card:focus-within { background: var(--file-card-bg-hover); }
+.markdown-preview .github-card a.github-card-title,
+.rendered-table-expand-scroll .github-card a.github-card-title {
+  color: var(--file-card-name) !important;
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  line-height: 1.35 !important;
+  text-decoration: none !important;
 }
-.theme-light .github-card {
-  border: none !important;
-  background: transparent !important;
-  color: inherit !important;
-}
-.github-card-header { display: grid; grid-template-columns: 40px minmax(0, 1fr); column-gap: 10px; align-items: center; justify-content: start; }
+.github-card-header { display: grid; grid-template-columns: 44px minmax(0, 1fr); min-height: 46px; column-gap: 12px; align-items: center; justify-content: start; }
 .gh-avatar-slot { position: relative; width: 40px; height: 40px; }
 .github-card-avatar { width: 40px; height: 40px; border-radius: 10px; object-fit: cover; background: #222; }
 .github-card .github-card-avatar { position: absolute; inset: 0; margin: 0 !important; }
@@ -3836,9 +3840,11 @@ body.is-resizing-rendered-table-column * {
 }
 @media (max-width: 520px) {
   .github-card {
+    min-height: 64px;
     padding: 10px;
     font-size: 14px;
   }
+  .github-card-header { grid-template-columns: 40px minmax(0, 1fr); min-height: 42px; column-gap: 10px; }
   .github-card-avatar {
     width: 36px;
     height: 36px;
