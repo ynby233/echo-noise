@@ -29,7 +29,7 @@
   --color-primary-900: 30 58 138;
   --color-primary-950: 23 37 84;
   color: var(--admin-ink);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+  font-family: inherit;
   font-size: 14px;
   line-height: 1.5;
 }
@@ -94,7 +94,7 @@ body:has(.admin-root[data-admin-theme="plum"]) .admin-dialog {
 
 .admin-root .admin-subcard {
   min-width: 0;
-  padding: var(--admin-gap);
+  padding: var(--admin-space);
   border: 1px solid var(--admin-line);
   border-radius: var(--admin-radius);
   background: var(--admin-subtle);

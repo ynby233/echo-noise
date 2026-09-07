@@ -479,7 +479,7 @@ const mutedText = computed(() => props.mutedText || 'text-gray-300')
 
 .notify-channel-grid {
     display: grid;
-    grid-template-columns: repeat(1, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
     gap: 14px;
 }
 
@@ -582,10 +582,6 @@ const mutedText = computed(() => props.mutedText || 'text-gray-300')
 }
 
 @media (min-width: 768px) {
-    .notify-channel-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
     .notify-field-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }

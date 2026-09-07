@@ -91,7 +91,7 @@
             <UButton size="sm" v-if="isLogin" icon="i-heroicons-power" color="red" variant="solid" class="admin-action" @click="handleLogout">退出登录</UButton>
           </div>
         </div>
-        <div class="admin-form-shell px-4 pb-16 pt-3 md:pt-4 md:pb-20 w-full space-y-4">
+        <div class="admin-form-shell px-4 pb-16 pt-3 md:pt-4 md:pb-20 w-full">
           <div v-if="adminCapabilitiesLoading" id="admin-capabilities-loading" class="col-span-12" :class="adminShellCardClass">
             <div class="px-4 py-6 flex items-center justify-center gap-2" :class="theme.mutedText">
               <UIcon name="i-heroicons-arrow-path" class="w-5 h-5 animate-spin" />
@@ -420,7 +420,7 @@
           <div id="site-section" v-if="(isAdmin && isSiteSectionPage) || isSectionVisible('widgets')" class="col-span-12">
           <div :class="['site', 'site-register', 'site-configs'].includes(activeSection) ? adminShellCardClass : 'admin-site-module-group'">
             <AdminModuleHeader v-if="['site', 'site-register', 'site-configs'].includes(activeSection)" :title="activeAdminSection?.label || '网站配置'" :description="activeAdminSection?.key === 'site' ? '管理首页展示、主题布局与应用信息。' : activeAdminSection?.key === 'site-register' ? '设置注册入口与新账号的注册方式。' : '管理站点标题、介绍、头部图与页面文案。'" :icon="activeAdminSection?.icon || 'i-heroicons-cog-6-tooth'" :theme="theme" />
-            <div :class="['site', 'site-register', 'site-configs'].includes(activeSection) ? 'px-4 pb-4 space-y-4' : 'space-y-4'">
+            <div class="admin-module-stack" :class="['site', 'site-register', 'site-configs'].includes(activeSection) ? 'px-4 pb-4' : ''">
               <div
                 v-if="isSectionVisible('site')"
                 :class="[adminSubtleCardClass, { 'admin-readonly-settings': !canManageSiteSettings }]"
@@ -3299,7 +3299,7 @@ const adminSidebarClass = computed(() => ([
     'translate-x-0': sidebarOpen.value,
     '-translate-x-full md:translate-x-0': !sidebarOpen.value,
     'md:w-20': sidebarCollapsed.value,
-    'md:w-72': !sidebarCollapsed.value
+    'md:w-60': !sidebarCollapsed.value
   },
   theme.value.sidebarBg,
   theme.value.border,
@@ -3307,10 +3307,10 @@ const adminSidebarClass = computed(() => ([
 ]))
 const adminMainClass = computed(() => ([
   theme.value.text,
-  sidebarCollapsed.value ? 'md:pl-20' : 'md:pl-72'
+  sidebarCollapsed.value ? 'md:pl-20' : 'md:pl-60'
 ]))
 const bottomBarClass = computed(() => ([
-  sidebarCollapsed.value ? 'md:left-20' : 'md:left-72'
+  sidebarCollapsed.value ? 'md:left-20' : 'md:left-60'
 ]))
 const mobileHeaderClass = computed(() => ([
   theme.value.headerBg,
@@ -7562,8 +7562,21 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 }
 .admin-form-shell {
   width: 100%;
-  max-width: 1360px;
-  margin: 0 auto;
+  min-width: 0;
+}
+.admin-form-shell,
+.admin-module-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--admin-space);
+}
+.admin-main-surface {
+  scrollbar-gutter: stable;
+}
+.admin-form-shell > *,
+.admin-module-stack > * {
+  min-width: 0;
+  flex-shrink: 0;
 }
 .admin-desktop-toggle-btn,
 .admin-sidebar-toggle-btn {
@@ -8156,14 +8169,14 @@ const runtimeInfo = reactive({ isContainer: false, staticSyncAvailable: true })
 }
 @media (min-width: 1280px) {
   .admin-profile-grid {
-    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-areas:
-      "username username username username avatar avatar avatar avatar avatar avatar avatar avatar"
-      "description description description description password password password password password password password password"
-      "token token token token token token token token token token token token";
+      "username avatar"
+      "description password"
+      "token token";
   }
   .admin-password-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .admin-vc-binding-form {
     grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr) auto;
