@@ -1445,7 +1445,7 @@ const initFancybox = () => {
   if (window.Fancybox) {
     const fancyboxOptions = createMediaFancyboxOptions({ carouselInfinite: false, video: true })
 
-    const mdImages = document.querySelectorAll(".markdown-preview img");
+    const mdImages = document.querySelectorAll(".markdown-preview img:not(.github-card-avatar)");
     mdImages.forEach((img) => {
       const src = img.getAttribute("src") || "";
       if (img.closest('.image-grid-item')) return;

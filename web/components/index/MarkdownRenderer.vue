@@ -36,6 +36,7 @@ import { attachmentFailureDetail, attachmentFailureTitle, type AttachmentFailure
 import { isBrowserPreviewableAttachmentUrl } from '~/utils/attachment-preview'
 import { withStableInsertionPoint } from '~/utils/dom-stable-insertion'
 import Vditor from 'vditor';
+import { enhanceGitHubCards } from '~/utils/github-card'
 
 // 定义正则表达式
 const BILIBILI_REG = /https:\/\/www\.bilibili\.com\/video\/(BV[\w]+)\/?(?:\?[^\s<)]*)?/g;
@@ -79,8 +80,6 @@ declare global {
     meting_api?: string;
   }
 }
-let __gh_gid = 0
-const ghInFlight: Record<string, Promise<any>> = {}
 // @ts-ignore
 const props = defineProps({
   content: {
@@ -769,6 +768,7 @@ const openRenderedTableExpand = async (table: HTMLTableElement) => {
   await nextTick()
   if (renderedTableExpandBody.value) {
     renderedTableExpandBody.value.querySelectorAll<HTMLTableElement>('table').forEach((item) => replaceRenderedTableBreakTextNodes(item))
+    if (props.enableGithubCard) void enhanceGitHubCards(renderedTableExpandBody.value)
     enhanceAttachmentAudioPlayers(renderedTableExpandBody.value)
     applyDeletedAttachmentPlaceholders(renderedTableExpandBody.value)
     initializeMediaViewer(renderedTableExpandBody.value)
@@ -905,6 +905,7 @@ const applyImageGrid = (keepImagesFullSize = false) => {
   const shouldKeepFullSizeImage = (el: Element | null) => !!el?.closest(fullSizeRenderSelector)
 
   const getPlainImage = (node: HTMLElement): HTMLImageElement | null => {
+    if (node.closest('.github-card')) return null
     if (shouldKeepFullSizeImage(node)) return null
     const tagName = node.tagName.toLowerCase()
     if (tagName === 'img') return node as HTMLImageElement
@@ -975,6 +976,7 @@ const applyImageGrid = (keepImagesFullSize = false) => {
   const blocks: HTMLElement[] = [];
   
   for (const el of allCandidates) {
+     if (el.closest('.github-card')) continue;
      const tag = el.tagName.toLowerCase();
      if (tag === 'p') {
        if (isPureMediaParagraph(el)) blocks.push(el);
@@ -1253,6 +1255,7 @@ const applyImageLoadingPlaceholders = () => {
   if (!previewElement.value) return;
   const imgs = Array.from(previewElement.value.querySelectorAll('img')) as HTMLImageElement[];
   imgs.forEach((img) => {
+    if (img.closest('.github-card')) return;
     if (img.dataset.siteAttachmentKind) return;
     const container = (img.closest('.image-grid-item') || img.parentElement || previewElement.value) as HTMLElement;
     const needPlaceholder = !img.complete || !(img.naturalWidth && img.naturalHeight);
@@ -1277,12 +1280,6 @@ const applyImageLoadingPlaceholders = () => {
   });
 };
 
-
-// 修改正则，避免匹配 Markdown 图片链接
-// 1. 匹配 markdown 普通链接（非图片）- 避免使用 lookbehind，兼容低版本运行环境
-const GITHUB_MD_LINK_REG = /(^|[^!])\[([^\]]+)\]\((https:\/\/github\.com\/([\w-]+)\/([\w.-]+)(?:\/[^\s)]*)?)\)/g;
-// 2. 匹配裸仓库链接（非图片）- 避免使用 lookbehind，兼容低版本运行环境
-const GITHUB_BARE_LINK_REG = /(^|[\s>])(https:\/\/github\.com\/([\w-]+)\/([\w.-]+)(?:\/[^\s<\)]*)?)/g;
 
 const buildYouTubeEmbedHtml = (videoId: string) => {
   const watchUrl = `https://www.youtube.com/watch?v=${videoId}`
@@ -1608,21 +1605,6 @@ const processMediaLinks = (content: string): string => {
 
   // 平台附件标记保留为 Markdown 链接，等 Markdown 表格先正常渲染后再替换成媒体节点。
 
-  // GitHub 卡片解析（可开关）
-  if (props.enableGithubCard) {
-    content = content.replace(GITHUB_MD_LINK_REG, (_match, prefix, _text, _url, owner, repo) => {
-      const cardId = `github-card-${owner}-${repo}-${++__gh_gid}`;
-      return `${prefix}<div class="github-card" id="${cardId}" data-owner="${owner}" data-repo="${repo}">
-        <div class="github-card-loading">Loading GitHub Repo...</div>
-      </div>`;
-    });
-    content = content.replace(GITHUB_BARE_LINK_REG, (_match, prefix, _url, owner, repo) => {
-      const cardId = `github-card-${owner}-${repo}-${++__gh_gid}`;
-      return `${prefix}<div class="github-card" id="${cardId}" data-owner="${owner}" data-repo="${repo}">
-        <div class="github-card-loading">Loading GitHub Repo...</div>
-      </div>`;
-    });
-  }
   // 将裸媒体文件链接替换为内联播放器（先于链接化处理）。
   // 仅匹配前导为空白字符或行首的 URL，避免匹配 HTML 属性中的 URL（如 src="http..."）。
   const AUDIO_FILE_REG = /(^|[\s>])((?:https?:\/\/|\/api\/audio\/)[^\s<"']+\.(?:webm|ogg|mp3|m4a|wav|flac)(?:\?[^\s<"']*)?)/g;
@@ -1661,118 +1643,6 @@ const processMediaLinks = (content: string): string => {
     return buildYouTubeEmbedHtml(videoId)
   })
   return content
-};
-const fetchGitHubRepoInfo = async (owner: string, repo: string, cardId: string) => {
-  const card = document.getElementById(cardId);
-  if (!card) return;
-
-  const svgStar = '<svg class="gh-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 .25l2.317 4.7 5.183.754-3.75 3.654.885 5.167L8 12.347l-4.635 2.178.885-5.167-3.75-3.654 5.183-.754L8 .25z"></path></svg>'
-  const svgFork = '<svg class="gh-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="4" cy="3" r="1.5" fill="currentColor"></circle><circle cx="12" cy="3" r="1.5" fill="currentColor"></circle><circle cx="8" cy="13" r="1.5" fill="currentColor"></circle><path d="M4 4.5v2a4 4 0 004 4h0a4 4 0 004-4v-2" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>'
-  const svgLang = '<svg class="gh-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M5 5 L2 8 L5 11" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M11 5 L14 8 L11 11" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M7 12 L9 4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>'
-  const svgMark = '<svg class="gh-badge" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 005.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 012 0c1.53-1.03 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8 8 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>'
-
-  const skeleton = () => {
-    card.innerHTML = `
-      <div class="github-card-header">
-        <div class="gh-avatar-slot">
-          <div class="github-card-avatar placeholder-avatar"></div>
-          ${svgMark}
-        </div>
-        <div>
-          <a href="https://github.com/${owner}/${repo}" target="_blank" class="github-card-title">${owner}/${repo}</a>
-        </div>
-      </div>
-    `
-  }
-  skeleton()
-
-  const cacheKey = `gh_repo_cache_${owner}_${repo}`
-  const ttlMs = 6 * 60 * 60 * 1000
-  try {
-    const cached = localStorage.getItem(cacheKey)
-    if (cached) {
-      const obj = JSON.parse(cached)
-      if (obj && obj.ts && Date.now() - obj.ts < ttlMs && obj.data) {
-        const d = obj.data
-        card.innerHTML = `
-          <div class="github-card-header">
-            <div class="gh-avatar-slot">
-              <img src="${d.owner.avatar_url}" class="github-card-avatar" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"/>
-              <div class="avatar-fallback" style="display:none;">${owner.charAt(0).toUpperCase()}</div>
-              ${svgMark}
-            </div>
-            <div>
-              <a href="https://github.com/${owner}/${repo}" target="_blank" class="github-card-title">${d.full_name || owner + '/' + repo}</a>
-            </div>
-          </div>
-        `
-        card.classList.add('github-card-loaded')
-        return
-      }
-    }
-  } catch {}
-
-  const tryFetch = async (url: string, timeoutMs = 6000): Promise<any> => {
-    const ctrl = new AbortController()
-    const t = setTimeout(() => ctrl.abort(), timeoutMs)
-    try {
-      const r = await fetch(url, { signal: ctrl.signal })
-      if (!r.ok) throw new Error(String(r.status))
-      const j = await r.json()
-      return j
-    } finally { clearTimeout(t) }
-  }
-
-  const k = `${owner}/${repo}`
-  let data: any = null
-  if (!ghInFlight[k]) {
-    ghInFlight[k] = (async () => {
-      try {
-        const r1 = await tryFetch(`https://api.github.com/repos/${owner}/${repo}`)
-        return r1
-      } catch {
-        try {
-          const r2 = await tryFetch(`https://ghproxy.com/https://api.github.com/repos/${owner}/${repo}`)
-          return r2
-        } catch {}
-      }
-      return null
-    })()
-  }
-  data = await ghInFlight[k]
-
-  if (data) {
-    try {
-      localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data }))
-    } catch {}
-    card.innerHTML = `
-      <div class="github-card-header">
-        <div class="gh-avatar-slot">
-          <img src="${data.owner?.avatar_url || ''}" class="github-card-avatar" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"/>
-          <div class="avatar-fallback" style="display:none;">${owner.charAt(0).toUpperCase()}</div>
-          ${svgMark}
-        </div>
-        <div>
-          <a href="${data.html_url || `https://github.com/${owner}/${repo}`}" target="_blank" class="github-card-title">${data.full_name || owner + '/' + repo}</a>
-        </div>
-      </div>
-    `
-    card.classList.add('github-card-loaded')
-    return
-  }
-
-  card.innerHTML = `
-    <div class="github-card-header">
-      <div class="gh-avatar-slot">
-        <div class="avatar-fallback" style="display:flex;">${owner.charAt(0).toUpperCase()}</div>
-        ${svgMark}
-      </div>
-      <div>
-        <a href="https://github.com/${owner}/${repo}" target="_blank" class="github-card-title">${owner}/${repo}</a>
-      </div>
-    </div>
-  `
-  card.classList.add('github-card-error')
 };
 const buildDouyinEmbedHtml = (videoId: string) => {
   const vid = String(videoId || '').trim()
@@ -1914,16 +1784,8 @@ const renderMarkdown = async (markdown: string) => {
     const renderContent = encodeMarkdownExtraBlankLines(stripFullImageAttachmentsMarker(markdown ?? ''))
     const processedContent = processMediaLinks(renderContent);
 
-    // 将裸露的 URL 转为可点击链接（新标签页打开）
-    const linkifyBareUrls = (text: string): string => {
-      return text.replace(/(^|\s)(https?:\/\/[^\s<]+)/g, (_match, pre, url) => {
-        return `${pre}<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
-      });
-    };
-    const withLinks = linkifyBareUrls(processedContent);
-    
-    // 修改标签匹配规则，排除HTML标签内的内容
-    const finalContent = withLinks.replace(/<a /g, '<a target="_blank" ');
+    // Let Markdown parse links without rewriting code blocks or HTML attributes.
+    const finalContent = processedContent;
 
     const currentTheme = (() => {
       const v: any = props.themeMode as any
@@ -1963,6 +1825,9 @@ const renderMarkdown = async (markdown: string) => {
               link.setAttribute('rel', 'noopener noreferrer');
             }
           });
+          if (props.enableGithubCard && previewElement.value) {
+            void enhanceGitHubCards(previewElement.value).then(() => emit('rendered'))
+          }
           markMarkdownPreservedBlankLineElements(previewElement.value)
           applyAttachmentRenders()
           applyThemeClass();
@@ -2048,17 +1913,7 @@ const renderMarkdown = async (markdown: string) => {
           if (proc && previewElement.value) {
             proc(previewElement.value)
           }
-          if (props.enableGithubCard) {
-            const githubCards = previewElement.value?.querySelectorAll('.github-card');
-            githubCards?.forEach(card => {
-              const owner = card.getAttribute('data-owner');
-              const repo = card.getAttribute('data-repo');
-              const cardId = card.id;
-              if (owner && repo && cardId) {
-                fetchGitHubRepoInfo(owner, repo, cardId);
-              }
-            });
-          }
+
         } catch (err) {
           console.error('Markdown post-processing failed:', err)
         }
@@ -3704,6 +3559,7 @@ body.is-resizing-rendered-table-column * {
 }
 
 .github-card {
+  display: block;
   border-radius: 8px;
   margin: 0.8em auto 0.4em;
   padding: 16px;
@@ -3725,11 +3581,13 @@ body.is-resizing-rendered-table-column * {
   background: transparent !important;
   color: inherit !important;
 }
-.github-card-header { display: grid; grid-template-columns: 44px max-content; column-gap: 10px; align-items: center; justify-content: start; }
+.github-card-header { display: grid; grid-template-columns: 40px minmax(0, 1fr); column-gap: 10px; align-items: center; justify-content: start; }
 .gh-avatar-slot { position: relative; width: 40px; height: 40px; }
 .github-card-avatar { width: 40px; height: 40px; border-radius: 10px; object-fit: cover; background: #222; }
+.github-card .github-card-avatar { position: absolute; inset: 0; margin: 0 !important; }
 .avatar-fallback { width: 40px; height: 40px; border-radius: 10px; background: #0366d6; color: #ffffff; display: none; align-items: center; justify-content: center; font-size: 15px; font-weight: 600; }
 .gh-badge { position: absolute; right: -5px; bottom: -5px; width: 16px; height: 16px; border-radius: 50%; padding: 2px; }
+.github-card .gh-badge { width: 20px; height: 20px; box-sizing: border-box; }
 .theme-light .gh-badge { background: #ffffff; border: 1px solid rgba(0,0,0,0.12); fill: #161b22; }
 .theme-dark .gh-badge { background: #161b22; border: 1px solid #30363d; fill: #c9d1d9; }
 .github-card-header > div {
@@ -3740,6 +3598,7 @@ body.is-resizing-rendered-table-column * {
   justify-content: center;
 }
 .github-card-title {
+  min-width: 0;
   font-weight: bold;
   text-decoration: none;
   font-size: 17px;
