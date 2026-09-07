@@ -483,6 +483,8 @@ func TestProtectedAdminRouteMatrixRejectsDelegatedAdministratorWithoutRequiredGr
 		{name: "version update", method: http.MethodPost, path: "/api/version/update", capability: authorization.CapabilityVersionUpdate},
 		{name: "session settings", method: http.MethodPut, path: "/api/settings", capability: authorization.CapabilitySiteSettingsManage},
 		{name: "token settings", method: http.MethodPut, path: "/api/token/settings", capability: authorization.CapabilitySiteSettingsManage, token: true},
+		{name: "music settings", method: http.MethodPut, path: "/api/settings/music", capability: authorization.CapabilityMusicManage},
+		{name: "token music settings", method: http.MethodPut, path: "/api/token/settings/music", capability: authorization.CapabilityMusicManage, token: true},
 		{name: "notification config", method: http.MethodGet, path: "/api/notify/config", capability: authorization.CapabilityNotificationsView},
 		{name: "email test", method: http.MethodPost, path: "/api/email/test", capability: authorization.CapabilityEmailManage},
 		{name: "announcement list", method: http.MethodGet, path: "/api/admin/announcements", capability: authorization.CapabilityAnnouncementsView},
@@ -529,6 +531,59 @@ func TestProtectedAdminRouteMatrixRejectsDelegatedAdministratorWithoutRequiredGr
 		{UserID: delegated.ID, Capability: string(authorization.CapabilitySiteSettingsManage), GrantedByUserID: primary.ID},
 	}).Error; err != nil {
 		t.Fatalf("grant delegated site settings management: %v", err)
+	}
+
+	musicViaSiteSettings := httptest.NewRequest(http.MethodPut, "/api/settings", bytes.NewBufferString(`{"frontendSettings":{"musicEnabled":true}}`))
+	musicViaSiteSettings.Header.Set("Content-Type", "application/json")
+	for _, cookie := range cookies {
+		musicViaSiteSettings.AddCookie(cookie)
+	}
+	musicViaSiteSettingsResponse := httptest.NewRecorder()
+	r.ServeHTTP(musicViaSiteSettingsResponse, musicViaSiteSettings)
+	if musicViaSiteSettingsResponse.Code != http.StatusOK || !bytes.Contains(musicViaSiteSettingsResponse.Body.Bytes(), []byte("需要音乐配置权限")) {
+		t.Fatalf("site-settings grant bypassed music capability: status=%d body=%s", musicViaSiteSettingsResponse.Code, musicViaSiteSettingsResponse.Body.String())
+	}
+
+	if err := db.Create(&[]models.AdminCapabilityGrant{
+		{UserID: delegated.ID, Capability: string(authorization.CapabilityMusicView), GrantedByUserID: primary.ID},
+		{UserID: delegated.ID, Capability: string(authorization.CapabilityMusicManage), GrantedByUserID: primary.ID},
+	}).Error; err != nil {
+		t.Fatalf("grant delegated music management: %v", err)
+	}
+	for _, testCase := range []struct {
+		name  string
+		path  string
+		token bool
+	}{
+		{name: "session", path: "/api/settings/music"},
+		{name: "token", path: "/api/token/settings/music", token: true},
+	} {
+		t.Run("delegated administrator can save music settings via "+testCase.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPut, testCase.path, bytes.NewBufferString(`{"frontendSettings":{"musicEnabled":true,"musicPlaylistId":"2468"}}`))
+			request.Header.Set("Content-Type", "application/json")
+			if testCase.token {
+				request.Header.Set("Authorization", "Bearer "+delegated.Token)
+			} else {
+				for _, cookie := range cookies {
+					request.AddCookie(cookie)
+				}
+			}
+			response := httptest.NewRecorder()
+			r.ServeHTTP(response, request)
+			if response.Code != http.StatusOK || !bytes.Contains(response.Body.Bytes(), []byte(`"code":1`)) {
+				t.Fatalf("music save status=%d body=%s", response.Code, response.Body.String())
+			}
+		})
+	}
+	mixedMusicRequest := httptest.NewRequest(http.MethodPut, "/api/settings/music", bytes.NewBufferString(`{"frontendSettings":{"musicEnabled":false,"siteTitle":"must not save"}}`))
+	mixedMusicRequest.Header.Set("Content-Type", "application/json")
+	for _, cookie := range cookies {
+		mixedMusicRequest.AddCookie(cookie)
+	}
+	mixedMusicResponse := httptest.NewRecorder()
+	r.ServeHTTP(mixedMusicResponse, mixedMusicRequest)
+	if mixedMusicResponse.Code != http.StatusOK || !bytes.Contains(mixedMusicResponse.Body.Bytes(), []byte("音乐配置格式无效")) {
+		t.Fatalf("mixed music payload status=%d body=%s", mixedMusicResponse.Code, mixedMusicResponse.Body.String())
 	}
 
 	for _, testCase := range []struct {

@@ -4,7 +4,7 @@
   "site-register": "site_settings.view",
   "site-ads": "site_settings.view",
   "site-social-links": "site_settings.view",
-  "site-music": "site_settings.view",
+  "site-music": "music.view",
   "comments": "comments.view",
   "comment-recycle-bin": "comments.recycle_bin.view",
   "notes": "notes.view",

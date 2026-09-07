@@ -308,6 +308,7 @@ func SetupRouter() *gin.Engine {
 		tokenAuth.POST("/messages/:id/comments", controllers.PostComment)
 		tokenAuth.PUT("/messages/:id/comments/:cid", controllers.UpdateComment)
 		tokenAuth.DELETE("/messages/:id/comments/:cid", controllers.DeleteComment)
+		tokenAuth.PUT("/settings/music", middleware.RequireCapability(authorization.CapabilityMusicManage), controllers.UpdateMusicSetting)
 		tokenAuth.PUT("/settings", middleware.RequireCapability(authorization.CapabilitySiteSettingsManage), controllers.UpdateSetting)
 		tokenAuth.GET("/user/widget-preferences", controllers.GetWidgetPreferences)
 		tokenAuth.PUT("/user/widget-preferences", controllers.UpdateWidgetPreferences)
@@ -462,6 +463,7 @@ func SetupRouter() *gin.Engine {
 	}
 
 	// 设置路由
+	authRoutes.PUT("/settings/music", middleware.RequireCapability(authorization.CapabilityMusicManage), controllers.UpdateMusicSetting)
 	authRoutes.PUT("/settings", middleware.RequireCapability(authorization.CapabilitySiteSettingsManage), controllers.UpdateSetting)
 	authRoutes.POST("/settings/vocechat/health", middleware.RequireCapability(authorization.CapabilityAuthorizationManage), controllers.CheckVoceChatHealth)
 

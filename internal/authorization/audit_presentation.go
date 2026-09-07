@@ -179,7 +179,8 @@ func auditModuleDescription(module string, capability string) string {
 		"feed":             "信息流",
 		"rss":              "RSS",
 		"notifications":    "通知设置",
-		"email":            "邮件设置",
+		"music":            "音乐配置",
+		"email":            "邮件配置",
 		"notes":            "笔记",
 		"lifecycle":        "内容生命周期",
 	}

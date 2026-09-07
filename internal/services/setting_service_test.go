@@ -45,6 +45,21 @@ func TestHomeLayoutDefaultPersistsMasonry(t *testing.T) {
 	}
 }
 
+func TestMusicSettingsOnlyAcceptsTheDedicatedMusicFields(t *testing.T) {
+	if !IsMusicSettingsOnly(map[string]interface{}{"musicEnabled": true, "musicPlaylistId": "123"}) {
+		t.Fatal("music-only payload rejected")
+	}
+	if IsMusicSettingsOnly(map[string]interface{}{}) {
+		t.Fatal("empty payload accepted")
+	}
+	if IsMusicSettingsOnly(map[string]interface{}{"musicEnabled": true, "siteTitle": "must not save"}) {
+		t.Fatal("mixed payload accepted")
+	}
+	if !HasMusicSettings(map[string]interface{}{"siteTitle": "site", "musicTheme": "auto"}) {
+		t.Fatal("music field not detected")
+	}
+}
+
 func TestInteractionRecyclePolicyPersistsAndIsOnlyExposedToPrimaryAdmin(t *testing.T) {
 	db := setupUserServiceTestDB(t)
 	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "policy-primary", IsAdmin: true})

@@ -629,7 +629,7 @@
                 </div>
                 <div id="site-music-legacy-section" class="hidden" />
                 <div id="site-music-section" v-if="isSectionVisible('site-music')" class="col-span-12">
-                  <div :class="adminPanelCardClass">
+                  <div :class="[adminPanelCardClass, { 'admin-readonly-settings': !canManageMusicConfig }]" :inert="!canManageMusicConfig">
                     <AdminModuleHeader title="音乐配置" icon="i-heroicons-musical-note" description="设置播放来源、播放器位置与显示方式。" :theme="theme">
                       <template #actions>
                         <div class="flex items-center gap-3">
@@ -1287,7 +1287,7 @@
 
           <div id="email-section" v-if="canSection('email') && isSectionVisible('email')" class="col-span-12">
             <div :class="adminPanelCardClass">
-              <AdminModuleHeader title="邮件设置（SMTP）" icon="i-heroicons-envelope" description="配置发件服务与邮件发送参数。" :theme="theme">
+                    <AdminModuleHeader title="邮件配置（SMTP）" icon="i-heroicons-envelope" description="配置发件服务与邮件发送参数。" :theme="theme">
                 <template #actions>
                   <div class="flex items-center gap-3 w-full sm:w-auto">
                     <UToggle v-model="smtp.enabled" />
@@ -2370,6 +2370,7 @@ const isAdmin = computed(() => {
 const { capabilities: adminCapabilities, isPrimaryAdmin, isReady: adminCapabilitiesReady, isLoading: adminCapabilitiesLoading, can, refreshCapabilities: loadAdminCapabilities } = useAdminCapabilities()
 const canViewAdminAudit = computed(() => can('audit.view'))
 const canManageSiteSettings = computed(() => can('site_settings.manage'))
+const canManageMusicConfig = computed(() => can('music.manage'))
 const canManageNotifications = computed(() => can('notifications.manage'))
 const canManageNotificationState = computed(() => canManageNotifications.value && can('site_settings.manage'))
 const sectionCapabilities: Partial<Record<AdminSectionKey, string>> = adminSectionCapabilities
@@ -2422,7 +2423,7 @@ const adminNavGroups = computed<AdminNavGroup[]>(() => {
         { key: 'recycle-bin', label: '笔记回收站', icon: 'i-heroicons-trash' },
         { key: 'site-music', label: '音乐配置', icon: 'i-heroicons-musical-note' },
         { key: 'notify', label: '推送配置', icon: 'i-heroicons-bell-alert' },
-        { key: 'email', label: '邮件设置', icon: 'i-heroicons-envelope' },
+        { key: 'email', label: '邮件配置', icon: 'i-heroicons-envelope' },
       ] as Array<{ key: AdminSectionKey, label: string, icon: string }>
     },
     {
@@ -6154,6 +6155,10 @@ const stripWidgetSettings = (settings: Record<string, any>) => {
   const { lifeCountdownEnabled, lifeCountdownBirthDate, lifeExpectancyYears, hitokotoEnabled, homeStatsEnabled, popularTagsEnabled, calendarEnabled, latestGalleryEnabled, heatmapEnabled, ...nonWidgetSettings } = settings
   return nonWidgetSettings
 }
+const stripMusicSettings = (settings: Record<string, any>) => {
+  const { musicEnabled, musicPlaylistId, musicSongId, musicPosition, musicTheme, musicLyric, musicAutoplay, musicDefaultMinimized, musicEmbed, musicHideOnMobile, musicCssCdnURL, musicJsCdnURL, ...nonMusicSettings } = settings
+  return nonMusicSettings
+}
 const saveConfigItem = async (key: string) => {
     try {
         // 特殊处理背景图片数组
@@ -6324,7 +6329,7 @@ const saveConfig = async () => {
 
     const payload = {
       frontendSettings: {
-		...stripRSSManagementSettings(stripWidgetSettings(frontendConfig as any)),
+		...stripRSSManagementSettings(stripMusicSettings(stripWidgetSettings(frontendConfig as any))),
         backgrounds: cleanedBackgrounds,
         leftAds: cleanedLeftAds,
         socialLinks: cleanedSocialLinks,
@@ -6355,12 +6360,6 @@ const saveConfig = async () => {
         announcementEnabled: !!(frontendConfig as any).announcementEnabled,
         pwaEnabled: !!(frontendConfig as any).pwaEnabled,
         enableGithubCard: !!(frontendConfig as any).enableGithubCard,
-        musicEnabled: !!(frontendConfig as any).musicEnabled,
-        musicLyric: !!(frontendConfig as any).musicLyric,
-        musicAutoplay: !!(frontendConfig as any).musicAutoplay,
-        musicDefaultMinimized: !!(frontendConfig as any).musicDefaultMinimized,
-        musicEmbed: !!(frontendConfig as any).musicEmbed,
-        musicHideOnMobile: !!(frontendConfig as any).musicHideOnMobile,
         welcomeUseAdmin: !!(frontendConfig as any).welcomeUseAdmin,
       },
     }
@@ -6393,7 +6392,7 @@ const saveInfoFeedConfig = async () => {
 const savePWAConfig = async () => {
     try {
         const settingsToSave = {
-            frontendSettings: stripRSSManagementSettings(frontendConfig as any)
+            frontendSettings: stripRSSManagementSettings(stripMusicSettings(frontendConfig as any))
         }
         const response = await fetch(`${baseApi}/settings`, {
             method: 'PUT',
@@ -6654,7 +6653,7 @@ const saveMusicConfig = async () => {
         musicJsCdnURL: String(frontendConfig.musicJsCdnURL || '')
       }
     }
-    const response = await fetch(`${baseApi}/settings`, {
+    const response = await fetch(`${baseApi}/settings/music`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',

@@ -246,6 +246,7 @@ func TestEveryChildCapabilityHasTheExpectedParent(t *testing.T) {
 		CapabilityAnnouncementsManage:        CapabilityAnnouncementsView,
 		CapabilityAnnouncementsPush:          CapabilityAnnouncementsView,
 		CapabilityNotificationsManage:        CapabilityNotificationsView,
+		CapabilityMusicManage:                CapabilityMusicView,
 		CapabilityEmailManage:                CapabilityEmailView,
 		"notes.view_hidden":                  CapabilityNotesView,
 		CapabilityNotesEdit:                  CapabilityNotesView,

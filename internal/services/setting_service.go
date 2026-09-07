@@ -563,6 +563,35 @@ func HasLifeCountdownSettings(frontendSettings map[string]interface{}) bool {
 	return false
 }
 
+var musicSettingKeys = map[string]struct{}{
+	"musicEnabled": {}, "musicPlaylistId": {}, "musicSongId": {}, "musicPosition": {}, "musicTheme": {},
+	"musicLyric": {}, "musicAutoplay": {}, "musicDefaultMinimized": {}, "musicEmbed": {}, "musicHideOnMobile": {},
+	"musicCssCdnURL": {}, "musicJsCdnURL": {},
+}
+
+func HasMusicSettings(frontendSettings map[string]interface{}) bool {
+	for key := range frontendSettings {
+		if _, ok := musicSettingKeys[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// IsMusicSettingsOnly accepts a non-empty subset of the music configuration.
+// The dedicated music route must never carry unrelated site settings.
+func IsMusicSettingsOnly(frontendSettings map[string]interface{}) bool {
+	if len(frontendSettings) == 0 {
+		return false
+	}
+	for key := range frontendSettings {
+		if _, ok := musicSettingKeys[key]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 func IsLifeCountdownSettingsOnly(frontendSettings map[string]interface{}) bool {
 	if len(frontendSettings) == 0 {
 		return false

@@ -168,6 +168,7 @@ const flattenCapabilityTree = (items: Definition[]) => {
 }
 const capabilityDepth = (item: RenderedDefinition) => item.depth
 const groups = computed(() => {
+  const moduleOrder = ['account_security', 'audit', 'users', 'registration', 'attachments', 'storage', 'database', 'version', 'security', 'access_logs', 'site_visits', 'login_audits', 'site', 'announcements', 'feed', 'notifications', 'music', 'email', 'notes', 'comments']
   const map = new Map<string, Definition[]>()
   for (const item of catalog.value) map.set(item.module, [...(map.get(item.module) || []), item])
   return [...map.entries()].map(([module, items]) => ({
@@ -175,7 +176,11 @@ const groups = computed(() => {
     items,
     rendered: flattenCapabilityTree(items),
     grantable: items.filter(item => item.grantable)
-  }))
+  })).sort((left, right) => {
+    const leftOrder = moduleOrder.indexOf(left.module)
+    const rightOrder = moduleOrder.indexOf(right.module)
+    return (leftOrder < 0 ? Number.MAX_SAFE_INTEGER : leftOrder) - (rightOrder < 0 ? Number.MAX_SAFE_INTEGER : rightOrder)
+  })
 })
 const scopedHiddenCapabilities = new Set(['notes.view_hidden', 'comments.view_hidden'])
 const childrenFor = (capability: string) => catalog.value.filter(item => item.parent_capability === capability)
@@ -198,7 +203,8 @@ const moduleLabels: Record<string, string> = {
   announcements: '公告管理',
   feed: '信息流',
   notifications: '推送通知',
-  email: '邮件设置',
+  music: '音乐配置',
+  email: '邮件配置',
   notes: '笔记管理',
 }
 const moduleLabel = (module: string) => moduleLabels[module] || module

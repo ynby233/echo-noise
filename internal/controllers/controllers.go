@@ -1044,6 +1044,24 @@ func hasLoginExpirySettings(frontendSettings map[string]interface{}) bool {
 	return false
 }
 
+func UpdateMusicSetting(c *gin.Context) {
+	_, err := checkUser(c)
+	if err != nil {
+		c.JSON(http.StatusOK, dto.Fail[any](err.Error()))
+		return
+	}
+	var request widgetPreferencesRequest
+	if err := c.ShouldBindJSON(&request); err != nil || !services.IsMusicSettingsOnly(request.FrontendSettings) {
+		c.JSON(http.StatusOK, dto.Fail[any]("音乐配置格式无效"))
+		return
+	}
+	if err := services.UpdateFrontendSetting(0, map[string]interface{}{"frontendSettings": request.FrontendSettings}); err != nil {
+		c.JSON(http.StatusOK, dto.Fail[any]("保存音乐配置失败: "+err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK[any](nil, "音乐配置已保存"))
+}
+
 type widgetPreferencesRequest struct {
 	FrontendSettings map[string]interface{} `json:"frontendSettings"`
 }
@@ -1124,6 +1142,13 @@ func UpdateSetting(c *gin.Context) {
 	}
 
 	frontendSettings := setting.FrontendSettings
+	if services.HasMusicSettings(frontendSettings) {
+		db, _ := database.GetDB()
+		if db == nil || !authorization.New(db).Authorize(user.ID, authorization.CapabilityMusicManage, nil).Allowed {
+			c.JSON(http.StatusOK, dto.Fail[string]("需要音乐配置权限"))
+			return
+		}
+	}
 	if hasRSSManagementSettings(frontendSettings) && user.ID != models.PrimaryAdminUserID {
 		c.JSON(http.StatusOK, dto.Fail[string]("仅站长可管理 RSS"))
 		return
