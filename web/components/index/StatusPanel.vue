@@ -2107,7 +2107,8 @@
                           <div class="text-xs" :class="theme.mutedText">时间</div>
                           <div class="text-sm break-words" :class="theme.text">{{ formatShanghai(row.created_at || row.CreatedAt || '') }}</div>
                         </div>
-                        <UButton size="sm" color="orange" variant="soft" class="admin-action shrink-0" @click="banIP(row.ip || row.IP)">封禁</UButton>
+                        <div class="flex flex-wrap gap-2"><UButton size="sm" color="orange" variant="soft" class="admin-action shrink-0" @click="banIP(row.ip || row.IP)">封禁</UButton>
+                            <UButton v-if="can('security.clear_logs')" size="sm" color="red" variant="soft" class="admin-action" :loading="deletingAttackId === (row.ID ?? row.id)" :disabled="deletingAttackId !== null" @click="deleteAttackLog(row)">删除</UButton></div>
                       </div>
                       <div class="grid grid-cols-1 gap-2 text-sm">
                         <div>
@@ -2146,7 +2147,8 @@
                           <td class="py-2 pr-4" :class="theme.mutedText">{{ row.method || row.Method }}</td>
                           <td class="py-2 pr-4 break-all" :class="theme.text">{{ row.path || row.Path }}</td>
                           <td class="py-2">
-                            <UButton size="sm" color="orange" variant="soft" class="admin-action" @click="banIP(row.ip || row.IP)">封禁</UButton>
+                            <div class="flex flex-wrap gap-2"><UButton size="sm" color="orange" variant="soft" class="admin-action" @click="banIP(row.ip || row.IP)">封禁</UButton>
+                            <UButton v-if="can('security.clear_logs')" size="sm" color="red" variant="soft" class="admin-action" :loading="deletingAttackId === (row.ID ?? row.id)" :disabled="deletingAttackId !== null" @click="deleteAttackLog(row)">删除</UButton></div>
                           </td>
                         </tr>
                         <tr v-if="!attackLogs.length">
@@ -3937,6 +3939,24 @@ watch(() => activeSection.value, async (section) => {
   if (section === 'login-audits' && can('login_audits.view')) await refreshLoginAudits()
 })
 
+const deletingAttackId = ref<number | null>(null)
+const deleteAttackLog = async (row: any) => {
+  if (!can('security.clear_logs') || deletingAttackId.value !== null) return
+  const id = row.ID ?? row.id
+  if (!Number.isSafeInteger(id) || id <= 0) return
+  if (!window.confirm('确定删除这条攻击记录吗？删除记录不会解除 IP 封禁。')) return
+  deletingAttackId.value = id
+  try {
+    const res: any = await deleteRequest<any>(`security/attacks/${id}`, undefined, { credentials: 'include' })
+    if (!res || res.code !== 1) throw new Error(res?.msg || '删除失败')
+    attackLogs.value = attackLogs.value.filter((item: any) => (item.ID ?? item.id) !== id)
+    useToast().add({ title: '已删除攻击记录', color: 'green' })
+  } catch (e: any) {
+    useToast().add({ title: '删除失败', description: e.message, color: 'red' })
+  } finally {
+    deletingAttackId.value = null
+  }
+}
 const clearAttackLogs = async () => {
   try {
     if (!window.confirm('确定清空所有攻击记录吗？')) return

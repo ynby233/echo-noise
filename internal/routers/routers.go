@@ -406,6 +406,7 @@ func SetupRouter() *gin.Engine {
 	{
 		security.GET("/attacks", middleware.RequireCapability(authorization.CapabilitySecurityView), controllers.GetAttackRecords)
 		security.DELETE("/attacks", middleware.RequireCapability(authorization.CapabilitySecurityClearLogs), controllers.ClearAttackRecords)
+		security.DELETE("/attacks/:id", middleware.RequireCapability(authorization.CapabilitySecurityClearLogs), controllers.DeleteAttackRecord)
 		security.GET("/access-logs", middleware.RequireCapability(authorization.CapabilityAccessLogsView), controllers.GetAccessLogs)
 		security.DELETE("/access-logs", middleware.RequireCapability(authorization.CapabilityAccessLogsClear), controllers.ClearAccessLogs)
 		security.GET("/site-visits", middleware.RequireCapability(authorization.CapabilitySiteVisitsView), controllers.GetSiteVisits)

@@ -35,7 +35,64 @@ func setupSecurityControllerTest(t *testing.T) (*gorm.DB, *gin.Engine) {
 	r.POST("/security/bans", AddIPBan)
 	r.DELETE("/security/bans", RemoveIPBan)
 	r.PUT("/security/config", UpdateSecurityConfig)
+	r.DELETE("/api/security/attacks/:id", DeleteAttackRecord)
 	return db, r
+}
+
+func TestDeleteAttackRecordOnlyRemovesSelectedRecord(t *testing.T) {
+	db, r := setupSecurityControllerTest(t)
+	for _, row := range []models.SecurityAttackLog{{Model: gorm.Model{ID: 1}, IP: "198.51.100.1"}, {Model: gorm.Model{ID: 2}, IP: "198.51.100.1"}} {
+		if err := db.Create(&row).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.Create(&models.SecurityIPBan{IP: "198.51.100.1"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"0", "-1", "invalid", "1 OR 1=1", "999"} {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+
+		c.Params = gin.Params{{Key: "id", Value: id}}
+		DeleteAttackRecord(c)
+		if securityResultCode(t, w) == 1 {
+			t.Fatalf("invalid ID %s reported success", id)
+		}
+		var count int64
+		db.Model(&models.SecurityAttackLog{}).Count(&count)
+		if count != 2 {
+			t.Fatalf("invalid ID %s changed records", id)
+		}
+	}
+	response := performSecurityRequest(r, http.MethodDelete, "/api/security/attacks/1", "127.0.0.1:1000", "")
+	if securityResultCode(t, response) != 1 {
+		t.Fatalf("delete: %s", response.Body.String())
+	}
+	var records []models.SecurityAttackLog
+	db.Unscoped().Find(&records)
+	if len(records) != 1 || records[0].ID != 2 {
+		t.Fatalf("remaining records: %+v", records)
+	}
+	var bans int64
+	db.Model(&models.SecurityIPBan{}).Count(&bans)
+	if bans != 1 {
+		t.Fatal("deleting a record must not unban its IP")
+	}
+	response = performSecurityRequest(r, http.MethodDelete, "/api/security/attacks/1", "127.0.0.1:1000", "")
+	if securityResultCode(t, response) == 1 {
+		t.Fatal("missing record reported success")
+	}
+}
+
+func TestDeleteAttackRecordReportsDatabaseFailure(t *testing.T) {
+	db, r := setupSecurityControllerTest(t)
+	if err := db.Migrator().DropTable(&models.SecurityAttackLog{}); err != nil {
+		t.Fatal(err)
+	}
+	response := performSecurityRequest(r, http.MethodDelete, "/api/security/attacks/1", "127.0.0.1:1000", "")
+	if securityResultCode(t, response) == 1 {
+		t.Fatal("database failure reported success")
+	}
 }
 
 func performSecurityRequest(r http.Handler, method, path, remoteAddr, body string) *httptest.ResponseRecorder {

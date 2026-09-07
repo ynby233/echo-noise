@@ -349,6 +349,29 @@ func ClearSiteVisits(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.OK[any](nil, "已清空"))
 }
 
+func DeleteAttackRecord(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusOK, dto.Fail[any]("记录ID无效"))
+		return
+	}
+	db := models.GetDB()
+	if db == nil {
+		c.JSON(http.StatusOK, dto.Fail[any]("数据库不可用"))
+		return
+	}
+	result := db.Unscoped().Where("id = ?", id).Delete(&models.SecurityAttackLog{})
+	if result.Error != nil {
+		c.JSON(http.StatusOK, dto.Fail[any]("删除攻击记录失败"))
+		return
+	}
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusOK, dto.Fail[any]("攻击记录不存在"))
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK[any](nil, "已删除"))
+}
+
 func ClearAttackRecords(c *gin.Context) {
 	db := models.GetDB()
 	if db == nil {

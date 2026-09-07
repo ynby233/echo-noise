@@ -487,6 +487,7 @@ func TestProtectedAdminRouteMatrixRejectsDelegatedAdministratorWithoutRequiredGr
 		{name: "email test", method: http.MethodPost, path: "/api/email/test", capability: authorization.CapabilityEmailManage},
 		{name: "announcement list", method: http.MethodGet, path: "/api/admin/announcements", capability: authorization.CapabilityAnnouncementsView},
 		{name: "security attacks", method: http.MethodGet, path: "/api/security/attacks", capability: authorization.CapabilitySecurityView},
+		{name: "security attack delete", method: http.MethodDelete, path: "/api/security/attacks/1", capability: authorization.CapabilitySecurityClearLogs},
 		{name: "backup download", method: http.MethodGet, path: "/api/backup/download", capability: authorization.CapabilityDatabaseBackup},
 		{name: "user password reset", method: http.MethodPost, path: "/api/user/reset_password", capability: authorization.CapabilityUsersResetPassword},
 		{name: "registration applications", method: http.MethodGet, path: "/api/registration/applications", capability: authorization.CapabilityRegistrationView},
