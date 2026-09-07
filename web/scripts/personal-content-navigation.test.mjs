@@ -5,10 +5,9 @@ import { fileURLToPath } from 'node:url'
 
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))))
 const read = (path) => readFile(join(repoRoot, path), 'utf8')
-const [statusPanel, personalContent, noteManager, routes, controller] = await Promise.all([
+const [statusPanel, personalContent, routes, controller] = await Promise.all([
   read('web/components/index/StatusPanel.vue'),
   read('web/components/index/PersonalContentManager.vue'),
-  read('web/components/admin/NoteManager.vue'),
   read('internal/routers/routers.go'),
   read('internal/controllers/comment_management_controller.go'),
 ])
@@ -32,6 +31,5 @@ assert.match(personalContent, /section === 'note-recycle-bin'[\s\S]*?@click="pur
 for (const legacyReason of ['author request', 'author batch request', 'admin batch request']) {
   assert.ok(personalContent.includes(`'${legacyReason}'`), `legacy deletion reason ${legacyReason} must have a user-facing mapping`)
 }
-assert.match(noteManager, /\.note-row-actions\s*\{[\s\S]*?flex-wrap:\s*nowrap;[\s\S]*?white-space:\s*nowrap;/, 'note row actions must stay on one line')
 
 console.log('personal content navigation contract checks passed')

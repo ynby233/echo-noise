@@ -2,11 +2,33 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parse } from '@vue/compiler-sfc'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const panel = fs.readFileSync(path.join(root, 'components/index/StatusPanel.vue'), 'utf8')
 
-assert.match(panel, /v-if="canManageVoceChatConfig"[^>]*class="[^"]*\badmin-subcard\b[^"]*"/, 'the runtime and VoceChat control panel must only render for the primary administrator')
+// Check the controls' permission ancestry, independent of their layout wrappers.
+const { descriptor } = parse(panel)
+const runtimeActions = new Map([
+  ["switchRuntimeMode('local')", false],
+  ["switchRuntimeMode('vocechat')", false],
+  ["runVoceChatProvisioning('start')", false],
+  ["runVoceChatProvisioning('retry')", false],
+  ['saveVoceChatConfig', false],
+])
+const checkRuntimeControls = (node, restricted = false) => {
+  if (node.type === 1) {
+    restricted ||= node.props.some(prop => prop.type === 7 && prop.name === 'if' && prop.exp?.content === 'canManageVoceChatConfig')
+    for (const prop of node.props) {
+      if (prop.type !== 7 || prop.name !== 'on' || prop.arg?.content !== 'click' || !runtimeActions.has(prop.exp?.content)) continue
+      assert.ok(restricted, prop.exp.content + ' must remain inside the primary-only runtime panel')
+      runtimeActions.set(prop.exp.content, true)
+    }
+  }
+  for (const child of node.children || []) checkRuntimeControls(child, restricted)
+}
+checkRuntimeControls(descriptor.template.ast)
+for (const [action, found] of runtimeActions) assert.ok(found, action + ' must remain available in the runtime panel')
 assert.match(panel, /getRequest<any>\('admin\/runtime-policy'/, 'the panel must load the authoritative runtime policy endpoint')
 assert.match(panel, /putRequest<any>\('admin\/runtime-policy\/mode'/, 'mode changes must use the dedicated primary-only endpoint')
 assert.match(panel, /switchRuntimeMode\('local'\)/, 'the panel must offer an explicit local-mode action')

@@ -23,9 +23,11 @@
           </div>
         </div>
         <div class="audit-policy-control">
-          <span class="text-xs font-medium" :class="auditEnabled ? 'text-green-600 dark:text-green-400' : (theme?.mutedText || 'text-slate-500')">{{ auditEnabled ? '已启用' : '已关闭' }}</span>
-          <UToggle :model-value="auditEnabled" :disabled="configLoading || configSaving" aria-label="启用管理员审计写入" @update:model-value="saveAuditEnabled($event === true)" />
-          <USelect v-model="auditRetentionDays" :options="auditRetentionOptions" class="admin-select w-36" :disabled="configLoading || configSaving" aria-label="管理员审计保留期限" />
+          <div class="audit-policy-switch">
+            <span class="text-xs font-medium" :class="auditEnabled ? 'text-green-600 dark:text-green-400' : (theme?.mutedText || 'text-slate-500')">{{ auditEnabled ? '已启用' : '已关闭' }}</span>
+            <UToggle :model-value="auditEnabled" :disabled="configLoading || configSaving" aria-label="启用管理员审计写入" @update:model-value="saveAuditEnabled($event === true)" />
+          </div>
+          <label class="audit-filter-field"><span>记录保留期限</span><USelect v-model="auditRetentionDays" :options="auditRetentionOptions" class="admin-select" :disabled="configLoading || configSaving" aria-label="管理员审计保留期限" /></label>
           <UButton class="admin-action" size="sm" color="primary" variant="solid" :loading="configSaving" @click="saveAuditRetention">保存期限</UButton>
         </div>
       </div>
@@ -35,10 +37,6 @@
           <div>
             <h3 id="audit-filter-title" class="text-sm font-semibold">筛选审计记录</h3>
             <p class="mt-1 text-xs" :class="theme?.mutedText || 'text-slate-500'">可组合操作人、模块、结果、目标和时间范围缩小记录范围。</p>
-          </div>
-          <div class="audit-filter-actions">
-            <UButton class="admin-action" size="sm" color="primary" variant="solid" icon="i-heroicons-funnel" :loading="loading" @click="applyFilters">应用筛选</UButton>
-            <UButton class="admin-action" size="sm" color="gray" variant="soft" :disabled="loading || exporting" @click="resetFilters">清空条件</UButton>
           </div>
         </div>
 
@@ -50,13 +48,15 @@
           <label class="audit-filter-field"><span>结果</span><USelect class="admin-select" v-model="filters.result" :options="resultOptions" /></label>
           <label class="audit-filter-field"><span>目标类型</span><UInput class="admin-input" v-model="filters.targetType" placeholder="例如 note" @keyup.enter="applyFilters" /></label>
           <label class="audit-filter-field"><span>目标 ID</span><UInput class="admin-input" v-model="filters.targetID" placeholder="精确匹配" @keyup.enter="applyFilters" /></label>
+        </div>
+        <div class="audit-filter-dates">
           <label class="audit-filter-field"><span>开始时间</span><UInput class="admin-input" v-model="filters.start" type="datetime-local" /></label>
           <label class="audit-filter-field"><span>结束时间</span><UInput class="admin-input" v-model="filters.end" type="datetime-local" /></label>
         </div>
 
-        <div class="audit-export-row" :class="theme?.mutedText || 'text-slate-500'">
-          <span>导出会使用当前筛选条件，不受当前页限制。</span>
-          <UButton class="admin-action" size="sm" color="gray" variant="soft" icon="i-heroicons-arrow-down-tray" :loading="exporting" :disabled="loading || exporting" @click="exportCurrent">导出当前筛选结果</UButton>
+        <div class="audit-filter-actions">
+          <UButton class="admin-action" size="sm" color="primary" variant="solid" icon="i-heroicons-funnel" :loading="loading" @click="applyFilters">应用筛选</UButton>
+          <UButton class="admin-action" size="sm" color="gray" variant="soft" :disabled="loading || exporting" @click="resetFilters">清空条件</UButton>
         </div>
       </section>
 
@@ -66,52 +66,59 @@
         <p v-if="exportMessage" class="text-sm" :class="exportError ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'">{{ exportMessage }}</p>
       </div>
 
-      <div class="audit-table-shell" :class="theme?.border || 'border-slate-200 dark:border-slate-700'">
-        <table class="min-w-[1120px] w-full table-fixed text-sm">
-          <colgroup>
-            <col class="w-44" />
-            <col class="w-28" />
-            <col class="w-64" />
-            <col class="w-28" />
-            <col class="w-44" />
-            <col />
-            <col class="w-20" />
-          </colgroup>
-          <thead :class="theme?.subtleBg || 'bg-slate-50 dark:bg-slate-800/60'">
-            <tr class="text-left">
-              <th class="px-4 py-3">时间</th>
-              <th class="px-3 py-3">操作人</th>
-              <th class="px-3 py-3">操作说明</th>
-              <th class="px-3 py-3">结果</th>
-              <th class="px-3 py-3">模块 / 动作</th>
-              <th class="px-3 py-3">摘要</th>
-              <th class="px-4 py-3 text-right">详情</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="loading"><td colspan="7" class="px-3 py-12 text-center" :class="theme?.mutedText || 'text-slate-500'"><UIcon name="i-heroicons-arrow-path" class="mr-2 inline h-4 w-4 animate-spin" />正在读取审计记录…</td></tr>
-            <tr v-else-if="!items.length"><td colspan="7" class="px-3 py-12 text-center" :class="theme?.mutedText || 'text-slate-500'"><UIcon name="i-heroicons-clipboard-document-list" class="mx-auto mb-2 h-6 w-6 opacity-60" /><span>当前筛选下暂无审计记录</span></td></tr>
-            <tr v-for="item in items" v-else :key="item.id" class="audit-record-row" :class="theme?.border || 'border-slate-200 dark:border-slate-700'">
-              <td class="px-4 py-3 align-top whitespace-nowrap" :class="theme?.mutedText || 'text-slate-500'">{{ formatTime(item.created_at) }}</td>
-              <td class="px-3 py-3 align-top"><span class="font-medium">{{ item.actor_username }}</span><span v-if="item.actor_type !== 'system'" class="mt-0.5 block text-xs" :class="theme?.mutedText || 'text-slate-500'">ID {{ item.actor_user_id }}</span><span v-else class="mt-0.5 block text-xs" :class="theme?.mutedText || 'text-slate-500'">系统任务</span></td>
-              <td class="px-3 py-3 align-top font-medium break-words">{{ item.operation_description || '管理员操作' }}</td>
-              <td class="px-3 py-3 align-top"><UBadge class="admin-badge" :color="resultColor(item.result)" size="xs" variant="soft">{{ item.result_description || item.result }}</UBadge><div class="mt-1 text-[11px]" :class="theme?.mutedText || 'text-slate-500'">{{ item.result }}</div></td>
-              <td class="px-3 py-3 align-top"><span class="break-all font-medium">{{ item.module }}</span><span class="mt-0.5 block break-all text-xs" :class="theme?.mutedText || 'text-slate-500'">{{ item.action }}</span></td>
-              <td class="audit-summary px-3 py-3 align-top">{{ item.safe_summary || '管理员操作摘要' }}</td>
-              <td class="px-4 py-3 text-right align-top"><UButton class="admin-action" size="sm" color="gray" variant="soft" @click="loadDetail(item.id)">查看</UButton></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="audit-pagination" :class="theme?.mutedText || 'text-slate-500'">
-        <span>共 {{ total }} 条 · 每页 {{ pageSize }} 条</span>
-        <div class="flex items-center gap-2">
-          <UButton class="admin-action" size="sm" color="gray" variant="soft" :disabled="page <= 1 || loading || exporting" @click="page--; load()">上一页</UButton>
-          <span class="min-w-16 text-center">第 {{ page }} 页</span>
-          <UButton class="admin-action" size="sm" color="gray" variant="soft" :disabled="items.length < pageSize || loading || exporting" @click="page++; load()">下一页</UButton>
+      <section class="audit-results" aria-label="审计记录与分页">
+        <h3 class="text-sm font-semibold">审计记录</h3>
+        <div class="audit-export-row" :class="theme?.mutedText || 'text-slate-500'">
+          <span>导出会使用当前筛选条件，不受当前页限制。</span>
+          <UButton class="admin-action" size="sm" color="gray" variant="soft" icon="i-heroicons-arrow-down-tray" :loading="exporting" :disabled="loading || exporting" @click="exportCurrent">导出当前筛选结果</UButton>
         </div>
-      </div>
+        <div class="audit-table-shell" :class="theme?.border || 'border-slate-200 dark:border-slate-700'">
+          <table class="min-w-[1040px] w-full table-fixed text-sm">
+            <colgroup>
+              <col class="w-44" />
+              <col class="w-28" />
+              <col class="w-48" />
+              <col class="w-28" />
+              <col class="w-44" />
+              <col class="w-64" />
+              <col class="w-20" />
+            </colgroup>
+            <thead :class="theme?.subtleBg || 'bg-slate-50 dark:bg-slate-800/60'">
+              <tr class="text-left">
+                <th class="px-4 py-3">时间</th>
+                <th class="px-3 py-3">操作人</th>
+                <th class="px-3 py-3">操作说明</th>
+                <th class="px-3 py-3">结果</th>
+                <th class="px-3 py-3">模块 / 动作</th>
+                <th class="px-3 py-3">摘要</th>
+                <th class="px-4 py-3 text-right">详情</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="loading"><td colspan="7" class="px-3 py-12 text-center" :class="theme?.mutedText || 'text-slate-500'"><UIcon name="i-heroicons-arrow-path" class="mr-2 inline h-4 w-4 animate-spin" />正在读取审计记录…</td></tr>
+              <tr v-else-if="!items.length"><td colspan="7" class="px-3 py-12 text-center" :class="theme?.mutedText || 'text-slate-500'"><UIcon name="i-heroicons-clipboard-document-list" class="mx-auto mb-2 h-6 w-6 opacity-60" /><span>当前筛选下暂无审计记录</span></td></tr>
+              <tr v-for="item in items" v-else :key="item.id" class="audit-record-row" :class="theme?.border || 'border-slate-200 dark:border-slate-700'">
+                <td class="px-4 py-3 align-top whitespace-nowrap" :class="theme?.mutedText || 'text-slate-500'">{{ formatTime(item.created_at) }}</td>
+                <td class="px-3 py-3 align-top"><span class="font-medium">{{ item.actor_username }}</span><span v-if="item.actor_type !== 'system'" class="mt-0.5 block text-xs" :class="theme?.mutedText || 'text-slate-500'">ID {{ item.actor_user_id }}</span><span v-else class="mt-0.5 block text-xs" :class="theme?.mutedText || 'text-slate-500'">系统任务</span></td>
+                <td class="px-3 py-3 align-top font-medium break-words">{{ item.operation_description || '管理员操作' }}</td>
+                <td class="px-3 py-3 align-top"><UBadge class="admin-badge" :color="resultColor(item.result)" size="xs" variant="soft">{{ item.result_description || item.result }}</UBadge><div class="mt-1 text-[11px]" :class="theme?.mutedText || 'text-slate-500'">{{ item.result }}</div></td>
+                <td class="px-3 py-3 align-top"><span class="break-all font-medium">{{ item.module }}</span><span class="mt-0.5 block break-all text-xs" :class="theme?.mutedText || 'text-slate-500'">{{ item.action }}</span></td>
+                <td class="audit-summary px-3 py-3 align-top">{{ item.safe_summary || '管理员操作摘要' }}</td>
+                <td class="px-4 py-3 text-right align-top"><UButton class="admin-action" size="sm" color="gray" variant="soft" @click="loadDetail(item.id)">查看</UButton></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="audit-pagination" :class="theme?.mutedText || 'text-slate-500'">
+          <span>共 {{ total }} 条 · 每页 {{ pageSize }} 条</span>
+          <div class="flex items-center gap-2">
+            <UButton class="admin-action" size="sm" color="gray" variant="soft" :disabled="page <= 1 || loading || exporting" @click="page--; load()">上一页</UButton>
+            <span class="min-w-16 text-center">第 {{ page }} 页</span>
+            <UButton class="admin-action" size="sm" color="gray" variant="soft" :disabled="items.length < pageSize || loading || exporting" @click="page++; load()">下一页</UButton>
+          </div>
+        </div>
+      </section>
     </div>
 
     <UModal v-model="detailOpen" :ui="{ width: 'sm:max-w-2xl' }">
@@ -340,8 +347,8 @@ onMounted(() => { load(); loadAuditConfig() })
 .audit-body {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 0 16px 16px;
+  gap: 16px;
+  padding: 16px;
 }
 
 .audit-policy-card,
@@ -357,7 +364,7 @@ onMounted(() => { load(); loadAuditConfig() })
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-top: 16px;
+  margin-top: 0;
   padding: 12px;
 }
 
@@ -386,7 +393,7 @@ onMounted(() => { load(); loadAuditConfig() })
 }
 
 .audit-filter-card {
-  padding: 14px;
+  padding: 12px;
 }
 
 .audit-section-heading,
@@ -408,13 +415,14 @@ onMounted(() => { load(); loadAuditConfig() })
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 12px;
+  margin-top: 12px;
 }
 
 .audit-filter-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 12px;
 }
 
 .audit-filter-field {
@@ -432,13 +440,13 @@ onMounted(() => { load(); loadAuditConfig() })
 }
 
 .audit-filter-search {
-  grid-column: span 2;
+  grid-column: 1 / -1;
 }
 
 .audit-export-row {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(148, 163, 184, 0.16);
+  margin-top: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
   font-size: 12px;
 }
 
@@ -500,12 +508,6 @@ onMounted(() => { load(); loadAuditConfig() })
   line-height: 1.55;
 }
 
-@media (max-width: 1100px) {
-  .audit-filter-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
 @media (max-width: 760px) {
   .audit-policy-card,
   .audit-section-heading,
@@ -534,8 +536,8 @@ onMounted(() => { load(); loadAuditConfig() })
 
 @media (max-width: 520px) {
   .audit-body {
-    padding-right: 14px;
-    padding-left: 14px;
+    padding-right: 16px;
+    padding-left: 16px;
   }
 
   .audit-filter-grid {
@@ -553,5 +555,15 @@ onMounted(() => { load(); loadAuditConfig() })
   .audit-detail-grid .sm\:col-span-2 {
     grid-column: auto;
   }
+}
+
+.audit-policy-control { flex-wrap: wrap; align-items: end; gap: 12px; }
+.audit-policy-switch { display: flex; align-items: center; gap: 12px; align-self: center; }
+.audit-filter-dates { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; margin-top: 12px; }
+.audit-results { display: grid; gap: 12px; min-width: 0; }
+.audit-pagination { flex-wrap: wrap; }
+@media (max-width: 520px) {
+  .audit-policy-control { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .audit-filter-dates { grid-template-columns: minmax(0, 1fr); }
 }
 </style>

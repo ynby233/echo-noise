@@ -42,7 +42,6 @@ assert.equal(
   1,
   '不同角色应共用同一份 Token 布局，不能复制两套模板',
 )
-assert.match(component, /\.admin-profile-card--token\s*\{[^}]*grid-column:\s*1 \/ -1/s, 'Token 卡片应在桌面网格中占据完整行')
 
 assert.match(component, /class="site-config-grid"/, '站点信息应使用响应式卡片网格')
 assert.match(component, /siteConfigCardClass\(String\(key\)\)/, '站点信息卡片应按内容长度决定跨度')

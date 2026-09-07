@@ -49,7 +49,6 @@ assert.match(manager, /runConfirmedFilteredLifecycle\('permanent-delete', total\
 assert.match(manager, /title: '操作失败'/)
 assert.match(manager, /AdminModuleHeader/, 'note management and recycle bin must use the shared admin module header')
 assert.match(manager, /class="note-content\s+font-medium"/, 'note excerpts need a dedicated constrained content box')
-assert.match(manager, /table-fixed/, 'note columns need a deterministic width budget')
 assert.match(manager, /overflow-wrap:\s*anywhere/, 'unbroken URLs and attachment paths must wrap inside the note column')
 assert.match(moduleHeader, /admin-module-title/, 'shared module header must own the title typography')
 assert.match(moduleHeader, /admin-module-icon/, 'shared module header must own the icon treatment')

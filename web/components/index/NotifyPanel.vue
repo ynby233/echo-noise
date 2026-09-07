@@ -1,5 +1,5 @@
 <template>
-    <div class="notify-panel-shell mb-6">
+    <div class="notify-panel-shell">
         <div class="notify-panel-toolbar">
             <div>
                 <h3 class="text-sm font-semibold" :class="text">推送渠道</h3>
@@ -7,10 +7,11 @@
             </div>
             <div v-if="!isReadOnly" class="flex flex-wrap gap-2">
                 <UButton size="sm" class="admin-action" color="gray" variant="soft" @click="resetAll">恢复默认</UButton>
-                <UButton size="sm" class="admin-action" color="primary" @click="saveAll">保存配置</UButton>
+                <UButton size="sm" class="admin-action" color="primary" variant="solid" @click="saveAll">保存配置</UButton>
             </div>
         </div>
 
+        <div class="notify-workspace">
         <div class="notify-channel-grid" :class="props.disabled ? 'opacity-60 pointer-events-none' : ''">
             <button
                 v-for="channel in channels"
@@ -18,6 +19,7 @@
                 type="button"
                 class="notify-channel-card"
                 :class="[{ 'notify-channel-card-active': activeChannel === channel.key }, subtleBg]"
+                :aria-pressed="activeChannel === channel.key"
                 @click="activeChannel = channel.key"
             >
                 <div class="flex items-start justify-between gap-3">
@@ -34,10 +36,6 @@
                         {{ channel.enabled ? '已启用' : '未启用' }}
                     </span>
                 </div>
-                <div class="notify-channel-preview mt-4">
-                    <span class="text-xs" :class="mutedText">当前配置</span>
-                    <div class="text-sm mt-1 truncate" :class="text">{{ channel.preview }}</div>
-                </div>
             </button>
         </div>
 
@@ -51,21 +49,19 @@
                         <div class="text-sm font-semibold" :class="text">{{ currentChannel.label }} 推送</div>
                     </div>
                     <p class="mt-2 text-sm" :class="mutedText">{{ currentChannel.tip }}</p>
+                    <p class="mt-1 text-xs break-all" :class="mutedText">当前配置：{{ currentChannel.preview }}</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-3">
                     <span class="notify-channel-badge" :class="currentChannel.enabled ? 'notify-channel-badge-enabled' : 'notify-channel-badge-disabled'">
                         {{ currentChannel.enabled ? '已启用' : '未启用' }}
                     </span>
                     <UToggle v-if="!isReadOnly" :model-value="currentChannel.enabled" @update:model-value="setChannelEnabled(currentChannel.key, !!$event)" />
-                    <UButton size="sm" class="admin-action" v-if="!isReadOnly" color="primary" variant="soft" :disabled="props.disabled" @click="testNotify(currentChannel.key)">
-                        测试当前渠道
-                    </UButton>
                 </div>
             </div>
 
             <div class="notify-field-grid">
                 <template v-if="currentChannel.key === 'webhook'">
-                    <div class="notify-field md:col-span-2">
+                    <div class="notify-field notify-field-wide">
                         <label class="notify-field-label" :class="text">Webhook 地址</label>
                         <p class="notify-field-tip" :class="mutedText">用于接收推送消息的完整地址。</p>
                         <UInput class="admin-input" v-model="localConfig.webhookURL" placeholder="https://example.com/webhook" :disabled="isReadOnly || props.disabled" />
@@ -86,7 +82,7 @@
                 </template>
 
                 <template v-else-if="currentChannel.key === 'wework'">
-                    <div class="notify-field md:col-span-2">
+                    <div class="notify-field notify-field-wide">
                         <label class="notify-field-label" :class="text">Webhook Key</label>
                         <p class="notify-field-tip" :class="mutedText">填写企微机器人 Webhook 的 key 部分即可。</p>
                         <UInput class="admin-input" v-model="localConfig.weworkKey" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" :disabled="isReadOnly || props.disabled" />
@@ -154,18 +150,28 @@
             </div>
         </div>
 
-        <div v-if="!isReadOnly" class="notify-test-grid" :class="props.disabled ? 'opacity-60 pointer-events-none' : ''">
+        </div>
+
+        <section v-if="!isReadOnly" class="notify-test-section" aria-label="渠道测试">
+            <div class="notify-panel-toolbar">
+                <div><h4 class="text-sm font-semibold" :class="text">测试推送</h4><p class="mt-1 text-xs" :class="mutedText">向当前渠道或下方指定渠道发送测试消息。</p></div>
+                    <UButton size="sm" class="admin-action" v-if="!isReadOnly" color="primary" variant="soft" :disabled="props.disabled" @click="testNotify(currentChannel.key)">
+                        测试当前渠道
+                    </UButton>
+            </div>
+        <div class="notify-test-grid" :class="props.disabled ? 'opacity-60 pointer-events-none' : ''">
             <UButton size="sm" class="admin-action"
                 v-for="type in notifyTypes"
                 :key="type"
-                :variant="activeChannel === type ? 'solid' : 'soft'"
-                :color="activeChannel === type ? 'primary' : 'gray'"
+                variant="soft"
+                color="gray"
                 @click="testNotify(type)"
                 :disabled="props.disabled"
             >
                 测试{{ getNotifyTypeName(type) }}
             </UButton>
         </div>
+        </section>
     </div>
 </template>
 
@@ -474,13 +480,14 @@ const mutedText = computed(() => props.mutedText || 'text-gray-300')
     flex-wrap: wrap;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 14px;
+    gap: 12px;
 }
 
 .notify-channel-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
-    gap: 14px;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    gap: 12px;
 }
 
 .notify-channel-card {
@@ -538,7 +545,7 @@ const mutedText = computed(() => props.mutedText || 'text-gray-300')
 .notify-panel-detail {
     border: 1px solid var(--admin-line, #e5e6eb);
     border-radius: var(--admin-radius, 8px);
-    padding: var(--admin-space, 16px);
+    padding: var(--admin-gap, 12px);
     box-shadow: none;
 }
 
@@ -547,7 +554,7 @@ const mutedText = computed(() => props.mutedText || 'text-gray-300')
     flex-wrap: wrap;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 16px;
+    gap: 12px;
     padding-bottom: 12px;
     margin-bottom: 12px;
     border-bottom: 1px solid rgba(148, 163, 184, 0.18);
@@ -578,12 +585,26 @@ const mutedText = computed(() => props.mutedText || 'text-gray-300')
 .notify-test-grid {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 12px;
 }
 
-@media (min-width: 768px) {
-    .notify-field-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
+
+.notify-panel-shell { container-type: inline-size; }
+.notify-workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.notify-channel-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, max(240px, calc((100% - 24px) / 3))), 1fr)); }
+.notify-panel-detail, .notify-field { min-width: 0; }
+.notify-field-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; }
+.notify-field-wide { grid-column: 1 / -1; }
+.notify-channel-icon { flex-shrink: 0; }
+.notify-channel-card > div:first-child { flex-wrap: wrap; gap: 12px; }
+.notify-channel-card > div:first-child > div { min-width: 0; }
+.notify-channel-card:focus-visible { outline: 2px solid var(--admin-accent, #165dff); outline-offset: 2px; }
+.notify-test-section { display: grid; gap: 12px; border-top: 1px solid var(--admin-line, #e5e6eb); padding-top: 12px; }
+@container (max-width: 760px) {
+    .notify-workspace { grid-template-columns: minmax(0, 1fr); }
+    .notify-channel-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+}
+@container (max-width: 520px) {
+    .notify-channel-grid, .notify-field-grid { grid-template-columns: minmax(0, 1fr); }
 }
 </style>

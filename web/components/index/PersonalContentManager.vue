@@ -8,20 +8,14 @@
 
     <div class="personal-content-body">
 
-    <div class="personal-selection" :class="[borderClass, subtleClass]">
-      <label class="personal-select-all">
-        <input type="checkbox" :checked="allSelected" :disabled="!rows.length || acting" aria-label="选择当前页全部内容" @change="toggleAll" />
-        <span>{{ selected.length ? `已选择 ${selected.length} 条` : '批量选择当前页内容' }}</span>
-      </label>
-      <div class="personal-selection-actions">
-        <UButton class="admin-action" v-if="selected.length" size="sm" color="gray" variant="soft" :disabled="acting" @click="selected = []">清除选择</UButton>
-        <UButton class="admin-action" v-if="selected.length && section === 'notes'" size="sm" color="orange" variant="soft" :loading="acting" @click="batchTrashNotes">批量移入回收站</UButton>
-        <UButton class="admin-action" v-if="selected.length && section === 'interactions'" size="sm" color="orange" variant="soft" :loading="acting" @click="batchTrashInteractions">批量移入回收站</UButton>
-        <UButton class="admin-action" v-if="selected.length && isRecycleBin" size="sm" color="primary" variant="soft" :loading="acting" @click="batchRestore">批量恢复</UButton>
-        <UButton class="admin-action" v-if="selected.length && section === 'note-recycle-bin'" size="sm" color="red" variant="soft" :loading="acting" @click="batchPurgeNotes">批量永久删除</UButton>
-        <UButton class="admin-action" v-if="selected.length && section === 'interaction-recycle-bin'" size="sm" color="red" variant="soft" :loading="acting" @click="batchPurgeInteractions">批量从我的回收站彻底删除</UButton>
-      </div>
-    </div>
+      <AdminSelectionBar :selected="selected.length" :total="rows.length" :all-selected="allSelected" :disabled="loading || acting" scope-label="全选当前页" @select-all="toggleAll" @clear="selected = []">
+        <template #summary>已选 {{ selected.length }} 条内容</template>
+        <UButton class="admin-action" v-if="section === 'notes'" size="sm" color="orange" variant="soft" :disabled="!selected.length" :loading="acting" @click="batchTrashNotes">批量移入回收站</UButton>
+        <UButton class="admin-action" v-if="section === 'interactions'" size="sm" color="orange" variant="soft" :disabled="!selected.length" :loading="acting" @click="batchTrashInteractions">批量移入回收站</UButton>
+        <UButton class="admin-action" v-if="isRecycleBin" size="sm" color="primary" variant="soft" :disabled="!selected.length" :loading="acting" @click="batchRestore">批量恢复</UButton>
+        <UButton class="admin-action" v-if="section === 'note-recycle-bin'" size="sm" color="red" variant="soft" :disabled="!selected.length" :loading="acting" @click="batchPurgeNotes">批量永久删除</UButton>
+        <UButton class="admin-action" v-if="section === 'interaction-recycle-bin'" size="sm" color="red" variant="soft" :disabled="!selected.length" :loading="acting" @click="batchPurgeInteractions">批量从我的回收站彻底删除</UButton>
+      </AdminSelectionBar>
 
     <div v-if="loading" class="personal-empty"><UIcon name="i-heroicons-arrow-path" class="animate-spin" />正在读取…</div>
     <div v-else-if="!rows.length" class="personal-empty">{{ config.emptyText }}</div>
@@ -58,7 +52,7 @@
             <UButton class="admin-action" size="sm" color="orange" variant="soft" :loading="acting" @click="trashInteraction(row)">移入回收站</UButton>
           </template>
           <template v-else-if="isRecycleBin">
-            <UButton class="admin-action" v-if="row.can_restore !== false" size="sm" color="primary" variant="solid" :loading="acting" @click="restore(row)">恢复</UButton>
+            <UButton class="admin-action" v-if="row.can_restore !== false" size="sm" color="primary" variant="soft" :loading="acting" @click="restore(row)">恢复</UButton>
             <UButton class="admin-action" v-if="section === 'note-recycle-bin'" size="sm" color="red" variant="soft" :loading="acting" @click="purgeNote(row)">永久删除</UButton>
             <UButton class="admin-action" v-if="section === 'interaction-recycle-bin'" size="sm" color="red" variant="soft" :loading="acting" @click="purge(row)">从我的回收站彻底删除</UButton>
             <span v-if="row.can_restore === false && !row.user_purged" class="text-xs" :class="mutedClass">需先恢复仍在回收站中的所有上级内容</span>
@@ -80,6 +74,7 @@
 </template>
 
 <script setup lang="ts">
+import AdminSelectionBar from '~/components/admin/AdminSelectionBar.vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { deleteRequest, getRequest, postRequest } from '~/utils/api'
 
@@ -212,5 +207,29 @@ onUnmounted(() => { if (clock) clearInterval(clock) })
 </script>
 
 <style scoped>
-.personal-content{padding:16px}.personal-head,.personal-card-head,.personal-status,.personal-actions,.personal-pager,.personal-pager>div,.personal-selection,.personal-select-all,.personal-selection-actions,.personal-card-select{display:flex;align-items:center;gap:10px}.personal-head,.personal-card-head,.personal-pager,.personal-selection{justify-content:space-between}.personal-head h3{margin:0;font-size:15px;font-weight:700}.personal-head p{margin:4px 0 0;font-size:12px}.personal-selection{margin-top:14px;padding:10px 12px;border-width:1px;border-style:solid;border-radius:10px}.personal-select-all,.personal-card-select{font-size:12px}.personal-selection-actions{justify-content:flex-end;flex-wrap:wrap}.personal-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}.personal-card{min-width:0;padding:12px;border-width:1px;border-style:solid;border-radius:10px}.personal-card-head span{font-size:11px}.context-strip{display:flex;gap:5px;margin-top:9px;padding:7px 9px;overflow:hidden;border-radius:8px;color:#64748b;font-size:11px;white-space:nowrap}.context-strip span{overflow:hidden;text-overflow:ellipsis}.personal-body{margin:9px 0 0;display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:3;font-size:13px;line-height:1.6;white-space:pre-wrap}.personal-status{margin-top:9px;justify-content:space-between;flex-wrap:wrap;font-size:11px}.deadline{color:#d97706;font-weight:700}.personal-actions{margin-top:10px;justify-content:flex-end;flex-wrap:wrap}.personal-open-link{cursor:pointer !important}.personal-empty{min-height:160px;display:flex;align-items:center;justify-content:center;gap:8px;color:#64748b;font-size:13px}.personal-pager{margin-top:12px;font-size:11px}.personal-pager>div span{min-width:62px;text-align:center}@media(max-width:800px){.personal-list{grid-template-columns:1fr}}@media(max-width:600px){.personal-content{padding:12px}.personal-head,.personal-selection{align-items:flex-start;flex-direction:column}.personal-selection-actions{justify-content:flex-start}.personal-pager{align-items:stretch;flex-direction:column}.personal-pager>div{justify-content:space-between}}
+.personal-content { padding: 16px; min-width: 0; container-type: inline-size; }
+.personal-content-body { display: flex; flex-direction: column; gap: var(--admin-gap, 12px); }
+.personal-list { border: 1px solid var(--admin-line); border-radius: var(--admin-radius, 8px); overflow: hidden; }
+.personal-list > .personal-card { border-radius: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 26%); gap: 8px 12px; min-width: 0; padding: var(--admin-space, 16px); }
+.personal-card + .personal-card { border-top: 1px solid var(--admin-line); }
+.personal-card-head, .personal-status, .personal-actions, .personal-pager, .personal-pager > div, .personal-card-select { display: flex; align-items: center; gap: var(--admin-gap, 12px); }
+.personal-card-head { grid-column: 1 / -1; justify-content: space-between; flex-wrap: wrap; }
+.personal-card-select { font-size: 12px; }
+.personal-card-select input { accent-color: var(--admin-accent); }
+.personal-card-head > span { font-size: 11px; }
+.context-strip { grid-column: 1; display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px; min-width: 0; border-radius: var(--admin-radius, 8px); color: var(--admin-muted); font-size: 11px; }
+.context-strip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.personal-body { grid-column: 1; margin: 0; display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 13px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.personal-status { grid-column: 1; flex-wrap: wrap; font-size: 11px; }
+.deadline { color: #d97706; font-weight: 700; }
+.personal-actions { grid-column: 2; grid-row: 2 / span 2; justify-content: flex-end; align-content: start; align-items: flex-start; flex-wrap: wrap; }
+.personal-open-link { cursor: pointer !important; }
+.personal-empty { min-height: 160px; display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--admin-muted); font-size: 13px; }
+.personal-pager { justify-content: space-between; flex-wrap: wrap; font-size: 11px; }
+.personal-pager > div span { min-width: 62px; text-align: center; }
+@container (max-width: 760px) {
+  .personal-list > .personal-card { grid-template-columns: minmax(0, 1fr); }
+  .personal-actions { grid-column: 1; grid-row: auto; justify-content: flex-start; }
+}
+@media (max-width: 600px) { .personal-content { padding: 12px; } }
 </style>

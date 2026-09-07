@@ -59,7 +59,6 @@
               </div>
               <p class="mt-1 text-xs" :class="theme?.mutedText || 'text-slate-500'">已选择 {{ selectedCapabilities.size }} / {{ grantableCapabilityCount }} 项可授权权限。</p>
             </div>
-            <UButton class="admin-action" size="sm" color="primary" icon="i-heroicons-check" :loading="saving" :disabled="!dirty" @click="save">保存授权</UButton>
           </div>
 
           <div class="authorization-groups">
@@ -114,7 +113,7 @@
               <p v-if="message" class="text-sm" :class="messageError ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'">{{ message }}</p>
               <p v-else class="text-xs" :class="theme?.mutedText || 'text-slate-500'">{{ dirty ? '权限尚未保存，离开当前管理员前请先保存。' : '当前权限已保存。' }}</p>
             </div>
-            <UButton size="sm" class="admin-action" color="primary" icon="i-heroicons-check" :loading="saving" :disabled="!dirty" @click="save">保存授权</UButton>
+            <UButton size="sm" class="admin-action" color="primary" variant="solid" icon="i-heroicons-check" :loading="saving" :disabled="!dirty" @click="save">保存授权</UButton>
           </div>
         </div>
 
@@ -122,7 +121,7 @@
           <span class="authorization-empty-icon"><UIcon name="i-heroicons-cursor-arrow-rays" class="h-6 w-6" /></span>
           <div>
             <h3 class="text-sm font-semibold">选择一位受托管理员</h3>
-            <p class="mt-1 text-xs leading-5" :class="theme?.mutedText || 'text-slate-500'">从左侧列表选择管理员后，可按功能模块查看和修改其授权。</p>
+            <p class="mt-1 text-xs leading-5" :class="theme?.mutedText || 'text-slate-500'">从人员列表选择管理员后，可按功能模块查看和修改其授权。</p>
           </div>
         </div>
 
@@ -294,8 +293,8 @@ onMounted(load)
 
 .authorization-body {
   display: grid;
-  grid-template-columns: 270px minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+  gap: 16px;
   padding: 16px;
 }
 
@@ -417,9 +416,9 @@ onMounted(load)
 
 .authorization-groups {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
   align-items: start;
-  gap: 10px;
+  gap: 12px;
 }
 
 .authorization-group {
@@ -439,8 +438,8 @@ onMounted(load)
 
 .authorization-capability-grid {
   display: grid;
-  gap: 9px;
-  padding: 10px;
+  gap: 12px;
+  padding: 12px;
 }
 
 .authorization-capability-node {
@@ -489,11 +488,11 @@ onMounted(load)
 
 .authorization-empty {
   display: flex;
-  min-height: 250px;
+  min-height: 144px;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 24px;
+  padding: 16px;
   border-style: dashed;
   text-align: left;
 }
@@ -528,7 +527,7 @@ onMounted(load)
 
 @media (max-width: 520px) {
   .authorization-body {
-    padding: 14px;
+    padding: 16px;
   }
 
   .authorization-admin-list {
@@ -539,5 +538,17 @@ onMounted(load)
     align-items: stretch;
     flex-direction: column;
   }
+}
+
+.authorization-center { container-type: inline-size; }
+.authorization-editor { gap: 16px; }
+.authorization-group-heading { flex-wrap: wrap; padding: 12px; }
+.authorization-capability { flex-wrap: wrap; padding: 12px; cursor: default; }
+.authorization-capability.is-child { padding: 12px; }
+.authorization-capability > .admin-badge { margin-left: auto; }
+.authorization-savebar { padding: 12px; }
+@container (max-width: 760px) {
+  .authorization-body { grid-template-columns: minmax(0, 1fr); }
+  .authorization-admin-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px; }
 }
 </style>

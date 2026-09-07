@@ -10,7 +10,7 @@
       </template>
     </AdminModuleHeader>
     <div class="px-4 pb-4">
-      <div class="flex gap-2 mb-3">
+      <div class="flex flex-wrap gap-2 mb-3">
         <UButton size="sm" class="admin-action" :color="activeTab==='images'?'primary':'gray'" variant="soft" @click="activeTab='images'">图片</UButton>
         <UButton size="sm" class="admin-action" :color="activeTab==='videos'?'primary':'gray'" variant="soft" @click="activeTab='videos'">视频</UButton>
         <UButton size="sm" class="admin-action" :color="activeTab==='audios'?'primary':'gray'" variant="soft" @click="activeTab='audios'">音频</UButton>
@@ -30,7 +30,7 @@
           <USelect v-model="filterShareState" :options="shareStateOptions" size="xs" class="admin-select attachment-filter-select" aria-label="按引用状态筛选" />
           <USelect v-model="sortMode" :options="sortOptions" size="xs" class="admin-select attachment-filter-select" aria-label="排序方式" />
         </div>
-        <div class="attachment-filter-row">
+        <div class="attachment-filter-row attachment-filter-dates">
           <label class="attachment-filter-date text-xs" :class="theme?.mutedText">
             <span>起始日期</span>
             <UInput class="admin-input" v-model="filterDateFrom" type="date" size="xs" aria-label="起始日期" />
@@ -45,16 +45,26 @@
           共 {{ activeGroups.length }} 个文件 / {{ activeReferenceCount }} 个逻辑附件<span v-if="filtersActive">（已筛选，全部 {{ activeTotalReferenceCount }} 个逻辑附件）</span>
         </div>
       </div>
-      <div class="attachment-batch-toolbar rounded-lg border px-3 py-2 mb-3" :class="[theme?.border, theme?.subtleBg]">
-        <div class="text-xs" :class="theme?.mutedText">已选择 {{ selectedCount }} 个逻辑附件，涉及 {{ selectedGroupCount }} 个物理文件</div>
-        <div class="attachment-batch-actions">
-          <UButton class="admin-action" size="sm" color="gray" variant="soft" icon="i-heroicons-check-circle" @click="selectAllActive">全选当前分类</UButton>
-          <UButton class="admin-action" size="sm" color="gray" variant="soft" icon="i-heroicons-x-mark" :disabled="selectedCount===0" @click="clearSelection">取消选择</UButton>
-          <UButton class="admin-action" v-if="canDownload" size="sm" color="primary" variant="soft" icon="i-heroicons-archive-box-arrow-down" :loading="zipDownloading" :disabled="selectedCount===0" @click="downloadSelectedZip">打包下载</UButton>
-          <UButton class="admin-action" v-if="canDeleteReference" size="sm" color="orange" variant="soft" icon="i-heroicons-scissors" :loading="batchDeleting" :disabled="selectedCount===0" @click="batchDelete">删除所选引用</UButton>
-          <UButton class="admin-action" v-if="canPurgeBlob" size="sm" color="red" variant="soft" icon="i-heroicons-trash" :disabled="selectedCount===0" @click="openPurgeSelected">彻底删除所选文件</UButton>
-        </div>
-      </div>      <div
+      <AdminSelectionBar
+        class="mb-3"
+        :selected="selectedCount"
+        :total="activeManagedReferenceCount"
+        :all-selected="allActiveReferencesSelected"
+        :partial-selected="someActiveReferencesSelected && !allActiveReferencesSelected"
+        :disabled="loading"
+        scope-label="全选当前分类"
+        @select-all="(checked: boolean) => checked ? selectAllActive() : clearActiveSelection()"
+        @clear="clearSelection"
+      >
+        <template #summary>
+          <span>已选择 {{ selectedCount }} 个逻辑附件，涉及 {{ selectedGroupCount }} 个物理文件</span>
+          <span class="block text-xs" :class="theme?.mutedText">当前{{ filtersActive ? '筛选结果' : '分类' }}可选 {{ activeManagedReferenceCount }} 个引用</span>
+        </template>
+        <UButton class="admin-action" v-if="canDownload" size="sm" color="primary" variant="solid" icon="i-heroicons-archive-box-arrow-down" :loading="zipDownloading" :disabled="selectedCount===0" @click="downloadSelectedZip">打包下载</UButton>
+        <UButton class="admin-action" v-if="canDeleteReference" size="sm" color="orange" variant="soft" icon="i-heroicons-scissors" :loading="batchDeleting" :disabled="selectedCount===0" @click="batchDelete">删除所选引用</UButton>
+        <UButton class="admin-action" v-if="canPurgeBlob" size="sm" color="red" variant="soft" icon="i-heroicons-trash" :disabled="selectedCount===0" @click="openPurgeSelected">彻底删除所选文件</UButton>
+      </AdminSelectionBar>
+      <div
         ref="selectionSurface"
         class="attachment-selection-surface"
         :class="{ 'is-selecting': selecting }"
@@ -68,10 +78,10 @@
           <div
             v-for="group in activeGroupsDisplay"
             :key="group.id"
-            class="attachment-item-card rounded-lg border p-2"
+            class="attachment-item-card rounded-lg border p-3"
             :class="[theme?.border, isGroupFullySelected(group) ? 'attachment-item-selected' : '']"
           >
-            <label v-if="managedReferences(group).length > 0" class="attachment-select-check" :class="{ 'is-checked': isGroupFullySelected(group) }" @click.stop @pointerdown.stop>
+            <label v-if="managedReferences(group).length > 0" class="attachment-select-check" @click.stop @pointerdown.stop>
               <input
                 class="attachment-select-input"
                 type="checkbox"
@@ -79,31 +89,25 @@
                 :aria-label="`选择该文件的全部 ${managedReferences(group).length} 个逻辑附件`"
                 @change="toggleGroupSelect(group)"
               />
-              <span class="attachment-check-visual" aria-hidden="true">
-                <UIcon name="i-heroicons-check" class="attachment-check-icon" />
-              </span>
             </label>
             <div class="attachment-item-head">
               <div class="attachment-file-meta">
-                <div class="attachment-file-name text-xs" :class="theme?.text">{{ group.name }}</div>
+                <div class="attachment-file-name text-xs" :class="theme?.text" :title="group.name">{{ group.name }}</div>
                 <div class="attachment-file-submeta text-xs" :class="theme?.mutedText">{{ formatSize(group.size) }} · {{ formatDate(group.modifiedAt) }}</div>
                 <div v-if="group.referenceCount > 1" class="attachment-share-note text-[10px]" :class="theme?.mutedText">
                   物理内容由 {{ group.referenceCount }} 个逻辑附件共享
                   <span v-if="group.referenceCount > group.references.length">（其中 {{ group.referenceCount - group.references.length }} 个在其他分类）</span>
                 </div>
               </div>
-              <div class="attachment-actions">
-                <UButton class="admin-action" v-if="canDownload" size="sm" icon="i-heroicons-arrow-down-tray" color="gray" variant="soft" title="下载" aria-label="下载" @click="downloadAttachment(group.primary)" />
-                <UButton class="admin-action" v-if="canPurgeBlob && managedReferences(group).length > 0" size="sm" icon="i-heroicons-fire" color="red" variant="soft" :title="`彻底删除文件（含 ${group.referenceCount} 个逻辑附件）`" :aria-label="`彻底删除文件（含 ${group.referenceCount} 个逻辑附件）`" @click="openPurgeGroup(group)" />
-              </div>
             </div>
-            <img v-if="group.kind === 'image'" :src="fullURL(group.primary.url)" class="attachment-preview mt-2 rounded w-full object-contain bg-black/20" loading="lazy" />
+            <img v-if="group.kind === 'image'" :src="fullURL(group.primary.url)" class="attachment-preview mt-2 rounded w-full object-contain bg-black/20" :alt="group.name" loading="lazy" />
             <video v-else-if="group.kind === 'video'" :src="fullURL(group.primary.url)" class="attachment-preview mt-2 rounded w-full bg-black/20" controls preload="metadata"></video>
             <audio v-else-if="group.kind === 'audio'" :src="fullURL(group.primary.url)" class="attachment-audio mt-2 w-full" controls preload="metadata"></audio>
             <a v-else :href="fullURL(group.primary.url)" target="_blank" rel="noopener noreferrer" class="other-attachment-link mt-2" :class="theme?.subtleBg">
               <UIcon name="i-heroicons-document" class="w-5 h-5" />
               <span>{{ group.primary.name }}</span>
             </a>
+            <div class="attachment-section-heading mt-3 text-xs" :class="theme?.mutedText">逻辑引用 · {{ group.references.length }}</div>
             <div class="attachment-reference-list mt-2">
               <div
                 v-for="item in group.references"
@@ -122,27 +126,27 @@
                   />
                 </label>
                 <div class="attachment-reference-body">
-                  <div v-if="item.logical_id" class="attachment-logical-id text-[10px]" :class="theme?.mutedText">附件 ID：{{ item.logical_id }}</div>
+                  <div v-if="item.logical_id" class="attachment-logical-id text-[10px]" :class="theme?.mutedText" :title="item.logical_id">附件 ID：{{ item.logical_id }}</div>
                   <div class="text-[10px]" :class="theme?.mutedText">{{ referenceUsageLabel(item) }}</div>
                 </div>
                 <UButton class="admin-action" v-if="canDeleteReference && item?.logical_id"
                   size="sm"
                   icon="i-heroicons-trash"
                   color="orange"
-                  variant="ghost"
+                  variant="soft"
                   title="只删除该引用"
                   aria-label="只删除该引用"
                   @click="openDelete(group.kind, item, group)"
                 />
               </div>
             </div>
-            <div class="mt-1">
-              <UButton class="admin-action" size="sm" color="gray" variant="ghost" @click="toggleExpand(group.primary)">{{ isExpanded(group.primary) ? '收起关联' : '关联内容' }}</UButton>
+            <div class="attachment-associations mt-3 border-t pt-2" :class="theme?.border">
+              <UButton class="admin-action" size="sm" color="gray" variant="ghost" @click="toggleExpand(group.primary)">{{ isExpanded(group.primary) ? '收起关联' : '关联内容' }} · {{ group.belongs.length }}</UButton>
               <div v-if="isExpanded(group.primary)" class="mt-2 rounded p-2" :class="theme?.subtleBg">
                 <div v-if="!group.belongs.length" class="text-xs" :class="theme?.mutedText">无关联内容</div>
                 <div v-else class="space-y-2">
                   <div v-for="(b, index) in group.belongs" :key="associationIdentity(b, index)" class="text-xs" :class="theme?.text">
-                    <div class="flex items-center gap-2">
+                    <div class="flex flex-wrap items-center gap-2">
                       <span class="px-2 py-1 rounded text-[10px]" :class="theme?.subtleBg">{{ associationLabel(b) }}</span>
                       <span v-if="hasAssociationDate(b.created_at)" :class="theme?.mutedText">{{ formatDate(b.created_at) }}</span>
                     </div>
@@ -150,6 +154,10 @@
                   </div>
                 </div>
               </div>
+            </div>
+            <div v-if="canDownload || (canPurgeBlob && managedReferences(group).length > 0)" class="attachment-actions mt-3 border-t pt-3" :class="theme?.border">
+              <UButton class="admin-action" v-if="canDownload" size="sm" icon="i-heroicons-arrow-down-tray" color="gray" variant="soft" @click="downloadAttachment(group.primary)">下载文件</UButton>
+              <UButton class="admin-action" v-if="canPurgeBlob && managedReferences(group).length > 0" size="sm" icon="i-heroicons-fire" color="red" variant="soft" :title="'彻底删除文件（含 ' + group.referenceCount + ' 个逻辑附件）'" :aria-label="'彻底删除文件（含 ' + group.referenceCount + ' 个逻辑附件）'" @click="openPurgeGroup(group)">彻底删除</UButton>
             </div>
           </div>
           <div class="attachment-grid-footer flex justify-center mt-2" v-if="activeGroups.length > activeGroupsDisplay.length">
@@ -187,7 +195,7 @@
         </div>
         <div class="flex justify-end gap-2 mt-3">
           <UButton size="sm" class="admin-action" color="gray" variant="soft" @click="confirmOpen=false">取消</UButton>
-          <UButton size="sm" class="admin-action" color="red" :loading="deleting" @click="doDelete">确认删除</UButton>
+          <UButton size="sm" class="admin-action" color="orange" variant="soft" :loading="deleting" @click="doDelete">确认删除</UButton>
         </div>
       </UCard>
     </UModal>
@@ -212,7 +220,7 @@
         </div>
         <div class="flex justify-end gap-2 mt-3">
           <UButton size="sm" class="admin-action" color="gray" variant="soft" @click="purgeOpen=false">取消</UButton>
-          <UButton size="sm" class="admin-action" color="red" :loading="purging" @click="doPurge">确认彻底删除</UButton>
+          <UButton size="sm" class="admin-action" color="red" variant="soft" :loading="purging" @click="doPurge">确认彻底删除</UButton>
         </div>
       </UCard>
     </UModal>
@@ -543,11 +551,21 @@ const allEntries = computed<AttachmentEntry[]>(() => [
 ])
 const selectedItems = computed(() => allEntries.value.filter((entry) => !!entry.item?.logical_id && !!selected.value[entry.key]))
 const selectedCount = computed(() => selectedItems.value.length)
+const activeManagedReferenceCount = computed(() => activeGroups.value.reduce((sum, group) => sum + managedReferences(group).length, 0))
+const allActiveReferencesSelected = computed(() => activeManagedReferenceCount.value > 0 && activeGroups.value.every((group) => managedReferences(group).every((item) => isSelected(group.kind, item))))
+const someActiveReferencesSelected = computed(() => activeGroups.value.some((group) => managedReferences(group).some((item) => isSelected(group.kind, item))))
 const selectedGroupCount = computed(() => new Set(selectedItems.value.map((entry) => `${entry.kind}:${groupKeyOf(entry.item)}`)).size)
 const selectAllActive = () => {
   const next = { ...selected.value }
   for (const group of activeGroups.value) {
     for (const item of managedReferences(group)) next[selectionKey(group.kind, item)] = true
+  }
+  selected.value = next
+}
+const clearActiveSelection = () => {
+  const next = { ...selected.value }
+  for (const group of activeGroups.value) {
+    for (const item of managedReferences(group)) delete next[selectionKey(group.kind, item)]
   }
   selected.value = next
 }
@@ -944,20 +962,6 @@ onBeforeUnmount(() => {
 })
 </script>
 <style scoped>
-.attachment-batch-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.attachment-batch-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
 .attachment-selection-surface {
   position: relative;
   min-height: 32px;
@@ -965,7 +969,9 @@ onBeforeUnmount(() => {
 }
 
 .attachment-logical-id {
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
@@ -983,12 +989,12 @@ onBeforeUnmount(() => {
 }
 
 .attachment-filter-keyword {
-  flex: 1 1 200px;
+  flex: 2 1 260px;
   min-width: 160px;
 }
 
 .attachment-filter-select {
-  flex: 0 1 auto;
+  flex: 1 1 132px;
   min-width: 132px;
 }
 
@@ -1014,7 +1020,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   min-width: 0;
-  padding: 4px 6px;
+  padding: 8px;
   border: 1px solid transparent;
   border-radius: 6px;
 }
@@ -1043,7 +1049,6 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
-.attachment-logical-id,
 .attachment-share-note {
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -1121,8 +1126,9 @@ onBeforeUnmount(() => {
 
 .attachment-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  align-items: start;
+  gap: 12px;
 }
 
 .attachment-grid-footer {
@@ -1142,55 +1148,21 @@ onBeforeUnmount(() => {
 
 .attachment-select-check {
   position: absolute;
-  top: 7px;
-  right: 7px;
+  top: 8px;
+  right: 8px;
   z-index: 2;
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.88);
-  border: 1px solid rgba(134, 144, 156, 0.38);
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+  width: 32px;
+  height: 32px;
   cursor: pointer;
-  transition: background-color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
-}
-
-.attachment-select-check.is-checked {
-  background: rgba(22, 93, 255, 0.94);
-  border-color: rgba(22, 93, 255, 0.94);
-  box-shadow: 0 0 0 2px rgba(22, 93, 255, 0.16);
 }
 
 .attachment-select-input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.attachment-check-visual {
-  display: grid;
-  place-items: center;
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
-}
-
-.attachment-check-icon {
-  width: 14px;
-  height: 14px;
-  color: #ffffff;
-  opacity: 0;
-  transform: scale(0.75);
-  transition: opacity 0.14s ease, transform 0.14s ease;
-}
-
-.attachment-select-check.is-checked .attachment-check-icon {
-  opacity: 1;
-  transform: scale(1);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: rgb(22, 93, 255);
 }
 
 .attachment-item-head {
@@ -1219,21 +1191,21 @@ onBeforeUnmount(() => {
 }
 
 .attachment-file-submeta {
-  margin-top: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  margin-top: 6px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .attachment-actions {
   display: flex;
-  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: space-between;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .attachment-preview {
-  height: 96px;
+  height: 156px;
 }
 
 .attachment-audio {
@@ -1257,31 +1229,42 @@ onBeforeUnmount(() => {
   word-break: break-word;
 }
 
+.attachment-select-check:focus-within {
+  outline: 2px solid rgb(22, 93, 255);
+  outline-offset: 3px;
+}
+
+.attachment-filter-dates > .admin-action {
+  margin-left: auto;
+}
+
+.attachment-section-heading {
+  font-weight: 500;
+}
+
+.attachment-share-note {
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
 @media (max-width: 520px) {
-  .attachment-batch-toolbar {
-    align-items: flex-start;
-    flex-direction: column;
+  .attachment-filter-date {
+    flex: 1 1 100%;
   }
 
-  .attachment-batch-actions {
-    justify-content: flex-start;
+  .attachment-filter-date > .admin-input {
+    flex: 1;
+    min-width: 0;
   }
 
-  .attachment-grid {
-    grid-template-columns: repeat(auto-fill, minmax(142px, 1fr));
+  .attachment-filter-dates > .admin-action {
+    margin-left: 0;
   }
+}
 
-  .attachment-item-head {
-    flex-direction: row;
-  }
-
-  .attachment-actions {
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-
-  .attachment-preview {
-    height: 82px;
+@media (prefers-reduced-motion: reduce) {
+  .attachment-item-card {
+    transition: none;
   }
 }
 </style>

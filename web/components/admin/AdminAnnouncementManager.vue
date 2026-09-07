@@ -6,36 +6,31 @@
       </template>
     </AdminModuleHeader>
 
-    <div class="px-4 pb-4">
-      <div class="rounded-lg p-3 mb-3" :class="theme?.subtleBg">
-        <div class="text-sm mb-2" :class="theme?.mutedText">新建公告草稿</div>
-        <UInput v-model="draft.title" maxlength="100" placeholder="公告标题" class="admin-input mb-2" />
-        <UTextarea v-model="draft.content" :rows="5" placeholder="公告正文，支持 Markdown" class="admin-textarea w-full mb-2" />
+    <div class="announcement-manager-body">
+      <div class="announcement-draft" :class="theme?.subtleBg">
+        <div class="text-sm" :class="theme?.mutedText">新建公告草稿</div>
+        <UInput v-model="draft.title" maxlength="100" placeholder="公告标题" class="admin-input" />
+        <UTextarea v-model="draft.content" :rows="5" placeholder="公告正文，支持 Markdown" class="admin-textarea w-full" />
         <div class="flex flex-wrap items-center justify-between gap-2">
           <span class="text-xs" :class="theme?.mutedText">{{ draft.title.trim().length }}/100</span>
-          <UButton size="sm" color="primary" class="admin-action" :loading="creating" :disabled="!canCreate" @click="createDraft">保存草稿</UButton>
+          <UButton size="sm" color="primary" variant="solid" class="admin-action" :loading="creating" :disabled="!canCreate" @click="createDraft">保存草稿</UButton>
         </div>
       </div>
 
-      <div class="announcement-batch-toolbar rounded-lg border px-3 py-2 mb-3" :class="[theme?.border, theme?.subtleBg]">
-        <div class="flex items-center gap-2 flex-wrap">
-          <USelect v-model="statusFilter" :options="statusOptions" class="admin-select w-32" @change="changeFilter" />
-          <span class="text-xs" :class="theme?.mutedText">已选择 {{ selectedIds.length }} 条</span>
-        </div>
-        <div class="announcement-batch-actions">
-          <UButton class="admin-action" size="sm" color="gray" variant="soft" icon="i-heroicons-check-circle" :disabled="deletableItems.length === 0" @click="selectAllDeletable">
-            {{ allDeletableSelected ? '取消全选' : '全选可删除项' }}
-          </UButton>
-          <UButton class="admin-action" size="sm" color="red" variant="soft" icon="i-heroicons-trash" :loading="deletingBatch" :disabled="selectedIds.length === 0" @click="batchDelete">
-            批量删除（{{ selectedIds.length }}）
-          </UButton>
-        </div>
+      <div class="announcement-filter">
+        <label for="announcement-status" class="text-xs" :class="theme?.mutedText">公告状态</label>
+        <USelect id="announcement-status" v-model="statusFilter" :options="statusOptions" class="admin-select w-32" @change="changeFilter" />
+        <span class="text-xs" :class="theme?.mutedText">已发布公告需先撤回才能删除</span>
       </div>
+      <AdminSelectionBar :selected="selectedIds.length" :total="deletableItems.length" :all-selected="allDeletableSelected" :disabled="loading || deletingBatch" scope-label="全选当前页可删除项" @select-all="selectAllDeletable" @clear="selectedIds = []">
+        <template #summary>已选 {{ selectedIds.length }} 条公告</template>
+        <UButton class="admin-action" size="sm" color="red" variant="soft" icon="i-heroicons-trash" :loading="deletingBatch" :disabled="selectedIds.length === 0" @click="batchDelete">批量删除</UButton>
+      </AdminSelectionBar>
 
       <div v-if="loading && !items.length" class="text-sm" :class="theme?.mutedText">正在加载公告…</div>
       <div v-else-if="!items.length" class="text-sm" :class="theme?.mutedText">当前筛选下暂无公告，可先创建草稿。</div>
       <div v-else class="announcement-admin-list">
-        <div v-for="item in items" :key="item.id" class="announcement-item-card rounded-lg border p-3" :class="[theme?.border, selectedIds.includes(item.id) ? 'announcement-item-selected' : '']">
+        <div v-for="item in items" :key="item.id" class="announcement-item-card" :class="[theme?.border, selectedIds.includes(item.id) ? 'announcement-item-selected' : '']">
           <label class="announcement-select-check" :class="{ 'is-disabled': !isDeletable(item) }">
             <input
               type="checkbox"
@@ -73,7 +68,7 @@
               <UButton class="admin-action" size="sm" color="gray" variant="soft" icon="i-heroicons-pencil-square" @click="openEdit(item)">编辑</UButton>
               <UButton class="admin-action" v-if="item.status === 'draft'" size="sm" color="primary" variant="solid" icon="i-heroicons-paper-airplane" @click="openPublish(item)">发布</UButton>
               <UButton class="admin-action" v-else-if="item.status === 'published'" size="sm" color="orange" variant="soft" icon="i-heroicons-arrow-uturn-left" @click="withdraw(item)">撤回</UButton>
-              <UButton class="admin-action" v-else-if="item.status === 'withdrawn'" size="sm" color="primary" variant="solid" icon="i-heroicons-paper-airplane" @click="openPublish(item)">恢复发布</UButton>
+              <UButton class="admin-action" v-else-if="item.status === 'withdrawn'" size="sm" color="primary" variant="soft" icon="i-heroicons-paper-airplane" @click="openPublish(item)">恢复发布</UButton>
               <UButton class="admin-action" v-if="isDeletable(item)" size="sm" color="red" variant="soft" icon="i-heroicons-trash" @click="deleteOne(item)">删除</UButton>
             </div>
           </div>
@@ -106,7 +101,7 @@
         <template #footer>
           <div class="flex items-center justify-end gap-2">
             <UButton size="sm" class="admin-action" variant="soft" color="gray" @click="editOpen=false">取消</UButton>
-            <UButton size="sm" class="admin-action" color="primary" :loading="savingEdit" @click="saveEdit">保存修改</UButton>
+            <UButton size="sm" class="admin-action" color="primary" variant="solid" :loading="savingEdit" @click="saveEdit">保存修改</UButton>
           </div>
         </template>
       </UCard>
@@ -143,6 +138,7 @@
 </template>
 
 <script setup lang="ts">
+import AdminSelectionBar from '~/components/admin/AdminSelectionBar.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { deleteRequest, getRequest, postRequest, putRequest } from '~/utils/api'
 import { useToast } from '#ui/composables/useToast'
@@ -339,56 +335,41 @@ onMounted(loadAnnouncements)
 </script>
 
 <style scoped>
-.announcement-batch-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
+.announcement-manager-body { display: flex; flex-direction: column; gap: var(--admin-gap, 12px); padding: 0 var(--admin-space, 16px) var(--admin-space, 16px); container-type: inline-size; }
+.announcement-draft { display: flex; flex-direction: column; gap: var(--admin-gap, 12px); padding: var(--admin-space, 16px); border: 1px solid var(--admin-line); border-radius: var(--admin-radius, 8px); }
+.announcement-filter { display: flex; align-items: center; flex-wrap: wrap; gap: var(--admin-gap, 12px); }
 
-.announcement-batch-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.announcement-admin-list { display:flex; flex-direction:column; gap:8px; }
+.announcement-admin-list { display:flex; flex-direction:column; border:1px solid var(--admin-line); border-radius:var(--admin-radius, 8px); overflow:hidden; }
+.announcement-item-card + .announcement-item-card { border-top:1px solid var(--admin-line); }
 
 .announcement-item-card {
   position: relative;
   min-width: 0;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 10px;
+  gap: var(--admin-gap, 12px);
+  padding: var(--admin-space, 16px);
   transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
 }
 
 .announcement-item-selected {
-  border-color: rgba(99, 102, 241, 0.9) !important;
-  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.45);
+  background: var(--admin-accent-soft);
 }
 
 .announcement-select-check { display:inline-flex; align-items:center; gap:5px; flex-direction:column; padding-top:2px; cursor:pointer; }
 .announcement-select-check.is-disabled { opacity:.5; cursor:not-allowed; }
-.announcement-card-main { min-width:0; }
-.announcement-card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.announcement-card-main { min-width:0; display:grid; grid-template-columns:minmax(0, 1fr) minmax(180px, 26%); gap:var(--admin-gap, 12px); }
+.announcement-card-main > p { grid-column:1; margin-top:0; overflow-wrap:anywhere; }
+.announcement-card-head { grid-column:1 / -1; display:flex; align-items:flex-start; justify-content:space-between; gap:var(--admin-gap, 12px); }
 .announcement-card-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.announcement-card-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px; }
-.announcement-push-summary { display:flex; align-items:center; flex-wrap:wrap; gap:9px; }
+.announcement-card-actions { grid-column:2; grid-row:2 / 4; align-content:start; margin-top:0; display:flex; align-items:flex-start; justify-content:flex-end; flex-wrap:wrap; gap:var(--admin-gap, 12px); }
+.announcement-push-summary { grid-column:1; margin-top:0; display:flex; align-items:center; flex-wrap:wrap; gap:9px; }
 .announcement-push-label { display:inline-flex; align-items:center; gap:5px; font-weight:600; }
 .announcement-toggle-control { display:flex; align-items:flex-start; gap:11px; }
 .announcement-toggle-control span { display:flex; flex-direction:column; gap:3px; }
-@media (max-width: 520px) {
-  .announcement-batch-toolbar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .announcement-batch-actions {
-    justify-content: flex-start;
-  }
-
+@container (max-width: 760px) {
+  .announcement-card-main { grid-template-columns:minmax(0, 1fr); }
+  .announcement-card-actions { grid-column:1; grid-row:auto; }
   .announcement-card-head {
     align-items: flex-start;
     flex-direction: column;

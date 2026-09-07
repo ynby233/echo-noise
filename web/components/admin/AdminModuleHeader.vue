@@ -39,6 +39,7 @@ withDefaults(defineProps<{
 <style scoped>
 .admin-module-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
@@ -49,6 +50,7 @@ withDefaults(defineProps<{
 
 .admin-module-heading {
   display: flex;
+  flex: 1 1 280px;
   min-width: 0;
   align-items: flex-start;
   gap: 10px;
@@ -103,7 +105,11 @@ withDefaults(defineProps<{
   gap: 8px;
 }
 
-@media (max-width: 1023px) {
+@media (max-width: 600px) {
+  .admin-module-heading {
+    flex-basis: auto;
+  }
+
   .admin-module-header {
     align-items: stretch;
     flex-direction: column;
