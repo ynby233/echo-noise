@@ -1,5 +1,5 @@
 <template>
-  <div class="admin-card" :class="[theme?.cardBg, theme?.border]">
+  <div class="admin-card announcement-manager" :class="[theme?.cardBg, theme?.border]">
     <AdminModuleHeader title="公告管理" description="创建草稿，确认内容后发布；已发布公告需先撤回才能删除。" icon="i-heroicons-megaphone" :badge="`共 ${total} 条`" :theme="theme">
       <template #actions>
         <UButton size="sm" class="admin-action" :loading="loading" color="gray" variant="soft" icon="i-heroicons-arrow-path" @click="loadAnnouncements">刷新</UButton>
@@ -17,7 +17,7 @@
         </div>
       </div>
 
-      <div class="announcement-filter">
+      <div class="announcement-results"><div class="announcement-filter">
         <label for="announcement-status" class="text-xs" :class="theme?.mutedText">公告状态</label>
         <USelect id="announcement-status" v-model="statusFilter" :options="statusOptions" class="admin-select w-32" @change="changeFilter" />
         <span class="text-xs" :class="theme?.mutedText">已发布公告需先撤回才能删除</span>
@@ -80,7 +80,7 @@
         <span class="text-xs" :class="theme?.mutedText">第 {{ page }} / {{ totalPages }} 页</span>
         <UButton class="admin-action" size="sm" color="gray" variant="soft" :disabled="page >= totalPages || loading" @click="goPage(page + 1)">下一页</UButton>
       </div>
-    </div>
+    </div></div>
 
     <UModal v-model="editOpen" :ui="{ width: 'sm:max-w-2xl' }">
       <UCard class="admin-dialog" :class="theme?.cardBg">
@@ -335,7 +335,10 @@ onMounted(loadAnnouncements)
 </script>
 
 <style scoped>
-.announcement-manager-body { display: flex; flex-direction: column; gap: var(--admin-gap, 12px); padding: 0 var(--admin-space, 16px) var(--admin-space, 16px); container-type: inline-size; }
+.announcement-manager { container-type: inline-size; }
+.announcement-manager-body { display: grid; grid-template-columns: minmax(260px, .65fr) minmax(0, 1.65fr); align-items: start; gap: var(--admin-gap, 12px); padding: 0 var(--admin-space, 16px) var(--admin-space, 16px); }
+.announcement-results { display: flex; min-width: 0; flex-direction: column; gap: 12px; }
+@container (max-width: 900px) { .announcement-manager-body { grid-template-columns: minmax(0,1fr); } }
 .announcement-draft { display: flex; flex-direction: column; gap: var(--admin-gap, 12px); padding: var(--admin-space, 16px); border: 1px solid var(--admin-line); border-radius: var(--admin-radius, 8px); }
 .announcement-filter { display: flex; align-items: center; flex-wrap: wrap; gap: var(--admin-gap, 12px); }
 
@@ -358,11 +361,11 @@ onMounted(loadAnnouncements)
 
 .announcement-select-check { display:inline-flex; align-items:center; gap:5px; flex-direction:column; padding-top:2px; cursor:pointer; }
 .announcement-select-check.is-disabled { opacity:.5; cursor:not-allowed; }
-.announcement-card-main { min-width:0; display:grid; grid-template-columns:minmax(0, 1fr) minmax(180px, 26%); gap:var(--admin-gap, 12px); }
+.announcement-card-main { min-width:0; display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:8px 12px; }
 .announcement-card-main > p { grid-column:1; margin-top:0; overflow-wrap:anywhere; }
 .announcement-card-head { grid-column:1 / -1; display:flex; align-items:flex-start; justify-content:space-between; gap:var(--admin-gap, 12px); }
 .announcement-card-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.announcement-card-actions { grid-column:2; grid-row:2 / 4; align-content:start; margin-top:0; display:flex; align-items:flex-start; justify-content:flex-end; flex-wrap:wrap; gap:var(--admin-gap, 12px); }
+.announcement-card-actions { grid-column:2; grid-row:2 / 4; align-content:start; max-width:320px; margin-top:0; display:flex; align-items:flex-start; justify-content:flex-end; flex-wrap:wrap; gap:8px; }
 .announcement-push-summary { grid-column:1; margin-top:0; display:flex; align-items:center; flex-wrap:wrap; gap:9px; }
 .announcement-push-label { display:inline-flex; align-items:center; gap:5px; font-weight:600; }
 .announcement-toggle-control { display:flex; align-items:flex-start; gap:11px; }

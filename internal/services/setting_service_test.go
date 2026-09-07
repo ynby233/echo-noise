@@ -24,6 +24,27 @@ func TestDefaultHeaderImagesOnlyContainsSelectedImage(t *testing.T) {
 	}
 }
 
+func TestHomeLayoutDefaultPersistsMasonry(t *testing.T) {
+	db := setupUserServiceTestDB(t)
+	admin := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "layout-admin", IsAdmin: true})
+	if err := db.Create(&models.SiteConfig{HomeLayoutDefault: "three"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, layout := range []string{"masonry", "two", "single", "three"} {
+		if err := UpdateFrontendSetting(admin.ID, map[string]interface{}{"frontendSettings": map[string]interface{}{"homeLayoutDefault": layout}}); err != nil {
+			t.Fatal(err)
+		}
+		config, err := GetFrontendConfig()
+		if err != nil {
+			t.Fatal(err)
+		}
+		settings := config["frontendSettings"].(map[string]interface{})
+		if got := settings["homeLayoutDefault"]; got != layout {
+			t.Fatalf("saved layout = %v, want %s", got, layout)
+		}
+	}
+}
+
 func TestInteractionRecyclePolicyPersistsAndIsOnlyExposedToPrimaryAdmin(t *testing.T) {
 	db := setupUserServiceTestDB(t)
 	primary := mustCreateUser(t, models.User{ID: models.PrimaryAdminUserID, Username: "policy-primary", IsAdmin: true})

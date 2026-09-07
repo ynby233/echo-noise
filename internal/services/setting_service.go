@@ -1815,7 +1815,7 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 		}
 	}
 	if v, ok := frontendSettings["homeLayoutDefault"].(string); ok {
-		if v == "three" || v == "two" || v == "single" {
+		if v == "three" || v == "two" || v == "single" || v == "masonry" {
 			config.HomeLayoutDefault = v
 		}
 	}

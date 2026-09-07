@@ -616,9 +616,9 @@
                       <UButton size="sm" color="primary" class="admin-action" @click="saveConfigItem('announcementEnabled')">保存开关</UButton>
                     </template>
                   </AdminModuleHeader>
-                  <div class="px-4 pb-4">
+                  <div class="px-4 pb-4 admin-announcement-banner">
                     <label class="block text-sm mb-2" :class="theme.mutedText" for="admin-announcement-text">公告栏文本</label>
-                    <UTextarea id="admin-announcement-text" v-model="frontendConfig.announcementText" :rows="3" placeholder="请输入公告内容" class="admin-textarea w-full mb-2" />
+                    <UTextarea id="admin-announcement-text" v-model="frontendConfig.announcementText" :rows="2" placeholder="请输入公告内容" class="admin-textarea w-full mb-2" />
                     <div class="flex justify-end">
                       <UButton size="sm" color="primary" class="admin-action" @click="saveConfigItem('announcementText')">保存公告文本</UButton>
                     </div>
@@ -724,10 +724,10 @@
                     <div class="admin-display-default-row" :class="theme.border">
                       <div>
                         <div class="admin-setting-title" :class="theme.text">首页默认布局</div>
-                        <p class="admin-setting-desc" :class="theme.mutedText">按首页内容密度选择默认栏数。</p>
+                        <p class="admin-setting-desc" :class="theme.mutedText">选择桌面首页的默认布局；手机端保持单栏。</p>
                       </div>
                       <div class="flex flex-wrap items-center gap-3">
-                        <USelect v-model="frontendConfig.homeLayoutDefault" :options="[{label:'三栏',value:'three'},{label:'两栏',value:'two'},{label:'单栏',value:'single'}]" class="admin-select w-32" />
+                        <USelect v-model="frontendConfig.homeLayoutDefault" :options="[{label:'三栏',value:'three'},{label:'两栏',value:'two'},{label:'单栏',value:'single'},{label:'瀑布流',value:'masonry'}]" class="admin-select w-32" />
                         <UButton size="sm" color="primary" @click="saveConfigItem('homeLayoutDefault')" class="admin-action">保存布局</UButton>
                       </div>
                     </div>
@@ -836,7 +836,7 @@
                       </template>
                     </AdminModuleHeader>
                     <div class="px-4 pb-4">
-                      <section class="admin-form-section "><div class="admin-section-heading"><h3>轮播广告</h3></div><div class="admin-ad-workspace">
+                      <div class="admin-ad-workspace">
                           <div class="text-xs mb-2" :class="theme.mutedText">若同时配置单条与多条，优先显示多条</div>
                           <div class="admin-inline-toolbar">
                               <div class="flex items-center gap-2">
@@ -848,14 +848,14 @@
                                 <UInput v-model.number="frontendConfig.leftAdsIntervalMs" type="number" class="admin-input w-28" />
                               </div>
                             </div><div class="admin-ad-grid">
-                            <div v-for="(ad, i) in frontendConfig.leftAds" :key="i" class="rounded-md border p-3" :class="theme.border">
+                            <div v-for="(ad, i) in frontendConfig.leftAds" :key="i" class="admin-ad-editor" :class="theme.border">
                               <div class="flex items-center justify-between mb-2">
                                 <div class="text-sm" :class="theme.text">广告 #{{ i + 1 }}</div>
                                 <div class="flex items-center gap-2">
                                   <UButton class="admin-action" size="sm" color="red" variant="soft" @click="frontendConfig.leftAds.splice(i, 1)">删除</UButton>
                                 </div>
                               </div>
-                              <div class="grid grid-cols-1 md:grid-cols-[180px_minmax(0,1fr)] gap-3">
+                              <div class="admin-ad-content">
                                 <button type="button" class="admin-ad-preview" @click="previewImage(resolveAdImageURL(baseApi, ad.imageURL))">
                                   <img v-if="ad.imageURL" :src="resolveAdImageURL(baseApi, ad.imageURL)" alt="广告图片预览" />
                                   <span v-else :class="theme.mutedText">暂无图片</span>
@@ -868,8 +868,8 @@
                                   </div>
                                   <p class="text-xs" :class="theme.mutedText">推荐使用 16:9 图片；上传后可拖动和缩放裁切。</p>
                                 </div>
-                                <UInput class="admin-input" v-model="ad.linkURL" placeholder="跳转链接" />
-                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <label class="admin-labeled-field admin-ad-link"><span>跳转链接</span><UInput class="admin-input w-full" v-model="ad.linkURL" placeholder="跳转链接" /></label>
+                                <div class="admin-ad-options">
                                   <label class="admin-bg-style-control">
                                     <span :class="theme.mutedText">文字颜色</span>
                                     <input v-model="ad.textColor" type="color" class="admin-bg-color-input" />
@@ -879,12 +879,12 @@
                                     <USelect class="admin-select" v-model="ad.textDisplayMode" :options="[{ label: '悬浮时显示', value: 'hover' }, { label: '常驻显示', value: 'always' }]" />
                                   </label>
                                 </div>
-                                <UTextarea v-model="ad.description" :rows="2" placeholder="描述文本（可选）" class="admin-textarea md:col-span-2" />
+                                <UTextarea v-model="ad.description" :rows="2" placeholder="描述文本（可选）" class="admin-textarea admin-ad-description" />
                               </div>
                             </div>
 
                           </div>
-                        </div></section><div class="admin-form-actions">
+                        </div><div class="admin-form-actions">
                           <UButton size="sm" color="primary" class="admin-action" @click="saveConfigItem('leftAds')">保存广告配置</UButton>
                         </div>
                     </div>
@@ -1412,7 +1412,7 @@
             <div :class="adminPanelCardClass">
               <AdminModuleHeader title="用户管理" icon="i-heroicons-user-group" description="查找账号并管理账号状态和角色。" :theme="theme" />
               <div class="px-4 pb-4">
-                <section class="admin-filter-panel"><div class="admin-filter-grid"><label class="admin-labeled-field admin-search-field"><span>查找用户</span><UInput v-model="userSearch" placeholder="搜索用户名或ID" class="admin-input flex-1" /></label><div class="admin-filter-actions">
+                <section class="admin-filter-panel"><div class="admin-search-toolbar"><label class="admin-labeled-field admin-search-field"><span>查找用户</span><UInput v-model="userSearch" placeholder="搜索用户名或ID" class="admin-input flex-1" /></label><div class="admin-filter-actions">
                         <UButton size="sm" class="admin-action" color="primary" variant="soft" @click="refreshUsers">搜索</UButton>
                         <UButton icon="i-heroicons-arrow-path" size="sm" class="admin-action" variant="soft" color="gray" @click="refreshUsers">刷新</UButton>
                         <UButton size="sm" class="admin-action" variant="soft" :color="showUsers ? 'gray' : 'primary'" @click="showUsers=!showUsers">{{ showUsers ? '折叠' : '展开' }}</UButton>
@@ -2037,18 +2037,18 @@
                   </div>
                 </template>
               </AdminModuleHeader>
-              <div class="px-4 pb-4 admin-page-body"><div class="admin-settings-grid"><section class="admin-form-section">
+              <div class="px-4 pb-4 admin-page-body"><div class="admin-settings-grid"><section class="admin-form-section admin-security-policy">
                   <div class="admin-settings-toolbar flex flex-wrap items-center justify-between gap-2 mb-2">
                     <div class="font-semibold" :class="theme.text">自动封禁策略</div>
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-3"><div class="admin-security-toggle">
+                      <span :class="theme.mutedText">启用自动封禁</span>
+                      <UToggle v-model="securityConfig.autoBanEnabled" :disabled="!can('security.manage')" />
+                    </div>
                       <UButton v-if="can('security.manage')" size="sm" color="primary" class="admin-action" @click="saveSecurityConfig">保存策略</UButton>
                     </div>
                   </div>
                   <div class="admin-fields-grid">
-                    <div class="flex min-h-10 items-center justify-between">
-                      <span :class="theme.mutedText">启用自动封禁</span>
-                      <UToggle v-model="securityConfig.autoBanEnabled" :disabled="!can('security.manage')" />
-                    </div>
+
                     <div>
                       <label class="text-xs" :class="theme.mutedText">统计窗口（秒）</label>
                       <UInput class="admin-input" v-model.number="securityConfig.autoBanWindowSeconds" type="number" :disabled="!can('security.manage')" />

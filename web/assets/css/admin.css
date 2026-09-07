@@ -272,13 +272,42 @@ body:has(.admin-root[data-admin-theme="plum"]) .admin-dialog {
 .admin-root .admin-filter-grid > * { min-width: 0; }
 .admin-root .admin-filter-actions {
   display: flex;
-  grid-column: 1 / -1;
   align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
 }
 .admin-root .admin-search-field { grid-column: span 2; }
+.admin-root .admin-search-toolbar { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; }
+.admin-root .admin-search-toolbar .admin-search-field { flex: 1 1 280px; max-width: 560px; }
+.admin-root .admin-search-toolbar .admin-filter-actions { margin-left: auto; }
+.admin-root .admin-filter-grid { display: flex; flex-wrap: wrap; }
+.admin-root .admin-filter-grid > .admin-labeled-field { flex: 1 1 170px; }
+.admin-root .admin-filter-grid > .admin-filter-actions { flex: 0 0 auto; margin-left: auto; align-self: end; }
+.admin-root .admin-security-policy { gap: 12px; }
+.admin-root .admin-security-policy .admin-settings-toolbar { margin-bottom: 0; }
+.admin-root .admin-security-toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.admin-root .admin-security-policy .admin-fields-grid { gap: 12px; }
+.admin-root .admin-announcement-banner { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 12px; }
+.admin-root .admin-announcement-banner > * { margin: 0; }
+.admin-root .admin-ad-editor { min-width: 0; container-type: inline-size; padding: 12px; border: 1px solid var(--admin-line); border-radius: var(--admin-radius); }
+.admin-root .admin-ad-content > * { min-width: 0; }
+.admin-root .admin-ad-content { display: grid; grid-template-columns: 200px minmax(0,1fr) minmax(180px,.6fr); gap: 12px; align-items: start; }
+.admin-root .admin-ad-content .admin-ad-preview { grid-row: 1 / span 2; }
+.admin-root .admin-ad-link { grid-column: 2; }
+.admin-root .admin-ad-options { grid-column: 3; grid-row: 1 / span 2; display: grid; gap: 12px; }
+.admin-root .admin-ad-description { grid-column: 1 / -1; }
+@container (max-width: 700px) {
+  .admin-root .admin-ad-content { grid-template-columns: 160px minmax(0,1fr); }
+  .admin-root .admin-ad-options { grid-column: 1 / -1; grid-row: auto; grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@container (max-width: 480px) {
+  .admin-root .admin-ad-content { grid-template-columns: minmax(0,1fr); }
+  .admin-root .admin-ad-content > * { grid-column: auto; grid-row: auto; }
+}
+@media (max-width: 600px) {
+  .admin-root .admin-announcement-banner { grid-template-columns: minmax(0,1fr); }
+}
 .admin-root .admin-users-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
