@@ -159,13 +159,15 @@ type FeedItem = {
 
 const props = withDefaults(defineProps<{
   layoutState: 'three' | 'two' | 'single' | 'masonry'
+  initialPage?: number
   limit?: number
   refreshSeconds?: number
   active?: boolean
   baseApi?: string
   enableGithubCard?: boolean
 }>(), {
-  enableGithubCard: false
+  enableGithubCard: false,
+  initialPage: 1
 })
 const emit = defineEmits<{
   (e: 'count-change', count: number): void
@@ -178,7 +180,7 @@ const requestInFlight = ref(false)
 let activeFeedRequest: Promise<void> | null = null
 const copiedLink = ref('')
 const copiedTimer = ref<number | null>(null)
-const currentPage = ref(1)
+const currentPage = ref(props.layoutState === 'masonry' ? 1 : props.initialPage)
 const visibleCount = ref(12)
 const targetPage = ref('1')
 const feedListRoot = ref<HTMLElement | null>(null)
@@ -776,7 +778,7 @@ const getDisplayRaw = (item: FeedItem) => {
   return text
 }
 
-const hasFileAttachment = (item: FeedItem) => /\[(?:文件附件|音频附件)：[^\]]+\]\([^)]+\)/.test(getDisplayRaw(item))
+const hasFileAttachment = (item: FeedItem) => (enableGithubCard.value && /https:\/\/github\.com\/[\w-]+\/[\w.-]+/.test(getDisplayRaw(item))) || /\[(?:文件附件|音频附件)：[^\]]+\]\([^)]+\)/.test(getDisplayRaw(item))
 
 const isRSSItem = (item: FeedItem) => String(item.type || '').toLowerCase() === 'rss'
 
@@ -850,14 +852,14 @@ watch(() => props.active, (v) => {
 })
 
 watch(() => props.limit, () => {
-  currentPage.value = 1
+  if (allItems.value.length) currentPage.value = 1
   visibleCount.value = pageSize.value
   hydrateFeedCache()
   if (props.active) void loadFeed()
 })
 
 watch(() => props.layoutState, () => {
-  currentPage.value = 1
+  currentPage.value = props.layoutState === 'masonry' || allItems.value.length ? 1 : props.initialPage
   visibleCount.value = pageSize.value
   deferMeasure()
 })

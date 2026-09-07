@@ -870,6 +870,7 @@ const jumpToPage = async () => {
 };
 // 添加 props 定义
 const props = defineProps({
+  initialPage: { type: Number, default: 1 },
   siteConfig: {
     type: Object,
     required: true
@@ -1374,7 +1375,15 @@ const handleTagClick = (tag: string) => {
 let listRefreshSeq = 0
 
 const fetchListPage = async (query: any) => {
-  return await message.loadMessagePage(query)
+  const result = await message.loadMessagePage(query)
+  if (!props.masonry && result && query.page > 1) {
+    const lastPage = Math.max(1, Math.ceil(Number(result.total || 0) / query.pageSize))
+    if (query.page > lastPage) {
+      const lastResult = await message.loadMessagePage({ ...query, page: lastPage })
+      return lastResult ? { ...lastResult, page: lastPage } : lastResult
+    }
+  }
+  return result
 }
 
 const clearCurrentList = () => {
@@ -1389,14 +1398,15 @@ const refreshList = async () => {
   const requestId = ++listRefreshSeq
   continuousLoading.value = false
   continuousError.value = false
-  const query = pageQueryFor(1)
+  const targetPage = !targetListReady.value && !props.masonry && !hasActiveFilters.value ? props.initialPage : 1
+  const query = pageQueryFor(targetPage)
   const requestQueryKey = message.listQueryKey(query)
   message.currentListQueryKey = requestQueryKey
   setPageLoading(true)
   try {
     const result = await fetchListPage(query)
     if (requestId !== listRefreshSeq || requestQueryKey !== currentDisplayQueryKey.value) return
-    applyPageResult(result, 1)
+    applyPageResult(result, targetPage)
     message.currentListQueryKey = requestQueryKey
     await nextTick();
     deferMeasure();
@@ -1640,7 +1650,7 @@ const checkContentHeight = () => {
       } catch {}
       const hasImageGrid = !!measureEl.querySelector('.image-grid');
       hasGrid.value[msg.id] = hasImageGrid;
-      hasFileAttachment.value[msg.id] = !!measureEl.querySelector('.site-attachment-file, .site-attachment-audio, .site-attachment-failure');
+      hasFileAttachment.value[msg.id] = !!measureEl.querySelector('.site-attachment-file, .site-attachment-audio, .site-attachment-failure, .github-card');
       if (hasImageGrid) {
         measuredMessageHeights.value[msg.id] = measureEl.scrollHeight;
         shouldShowExpandButton.value[msg.id] = false;
@@ -1736,8 +1746,9 @@ onMounted(async () => {
     } else {
       // 只有在非消息详情页时才加载列表
       if (!getMessageIdFromRouteHash(route.hash)) {
-        const result = await fetchListPage(pageQueryFor(1))
-        if (result) applyPageResult(result, 1)
+        const startPage = !props.masonry && !hasActiveFilters.value ? props.initialPage : 1
+        const result = await fetchListPage(pageQueryFor(startPage))
+        if (result) applyPageResult(result, startPage)
       }
     }
 

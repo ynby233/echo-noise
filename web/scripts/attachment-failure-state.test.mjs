@@ -187,7 +187,7 @@ assert.ok(
 
 assert.match(
   messageList,
-  /querySelector\('\.site-attachment-file, \.site-attachment-audio, \.site-attachment-failure'\)/,
+  /querySelector\('\.site-attachment-file, \.site-attachment-audio, \.site-attachment-failure, \.github-card'\)/,
   'failed image and video placeholders must open the message overflow path so their card shadows are not clipped',
 )
 

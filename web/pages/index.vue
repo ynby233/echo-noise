@@ -245,6 +245,7 @@
                 <InfoFeedList
                   ref="infoFeedList"
                   :layout-state="layoutState"
+                  :initial-page="initialPage"
                   :limit="Number(frontendConfig.feedLimit) > 0 ? Number(frontendConfig.feedLimit) : undefined"
                   :refresh-seconds="Number(frontendConfig.feedRefreshSeconds || 7200)"
                   :active="activeTab==='feed'"
@@ -386,6 +387,7 @@
             :wide="layoutState==='two' || isMasonry"
             :page-ready="isLoaded"
             :active-tab="activeTab"
+            :initial-page="initialPage"
             :calendar-date="calendarMessageDate"
             :search-keyword="messageSearchKeyword"
             :selected-tag="messageSelectedTag"
@@ -605,6 +607,7 @@
 <script setup lang="ts">
 import { ref, computed, inject, provide, onMounted, onUnmounted, watch, nextTick, reactive, type ComponentPublicInstance } from 'vue'
 import { useRouter, useRoute, useRuntimeConfig } from '#imports'
+import { readReloadPagePosition, savePagePosition, type HomePagePosition } from '~/utils/home-page-position'
 import AddForm from '@/components/index/AddForm.vue'
 import MessageList from '@/components/index/MessageList.vue'
 import HeatmapWidget from '~/components/widgets/heatmap.vue'
@@ -684,7 +687,16 @@ const centerContainerClass = computed(() => (
 ))
 const toggleHeatmapCard = () => { showHeatmap.value = !showHeatmap.value }
 // 主题预设。统一由 ThemePresetSwitcher 控制 documentElement 类，不在容器上附加主题类
-const activeTab = ref('latest')
+const reloadPosition = readReloadPagePosition()
+const activeTab = ref<string>(reloadPosition?.tab || 'latest')
+const initialPage = computed(() => !isMasonry.value && reloadPosition?.tab === activeTab.value ? reloadPosition.page : 1)
+const rememberPagePosition = () => {
+  const pager = activeSidebarPager.value
+  const eligible = !isMasonry.value && ['latest', 'personal', 'feed'].includes(activeTab.value) && !selectedCalendarDate.value && !searchKeyword.value && !selectedTag.value && !getMessageIdFromRouteHash(route.hash) && !route.query.message_id
+  savePagePosition(eligible ? { tab: activeTab.value as HomePagePosition['tab'], page: Math.max(1, pager.currentPage) } : null)
+}
+onMounted(() => window.addEventListener('pagehide', rememberPagePosition))
+onUnmounted(() => window.removeEventListener('pagehide', rememberPagePosition))
 const masonryComposerVisible = ref(false)
 const toggleMasonryComposer = async () => {
   if (masonryComposerVisible.value) {
