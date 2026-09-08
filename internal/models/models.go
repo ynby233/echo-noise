@@ -157,8 +157,8 @@ const (
 )
 
 type UserNotification struct {
-	ID                   uint       `gorm:"primaryKey" json:"id"`
-	RecipientUserID      uint       `gorm:"not null;index" json:"recipient_user_id"`
+	ID                   uint       `gorm:"primaryKey;index:idx_user_notifications_recipient_created_id,priority:3,sort:desc" json:"id"`
+	RecipientUserID      uint       `gorm:"not null;index;index:idx_user_notifications_recipient_created_id,priority:1" json:"recipient_user_id"`
 	ActorUserID          *uint      `gorm:"index" json:"actor_user_id,omitempty"`
 	Type                 string     `gorm:"type:varchar(30);not null;index" json:"type"`
 	MessageID            *uint      `gorm:"index" json:"message_id,omitempty"`
@@ -172,7 +172,7 @@ type UserNotification struct {
 	ScheduledDeletionAt  *time.Time `gorm:"index" json:"scheduled_deletion_at,omitempty"`
 	RestoredAt           *time.Time `gorm:"index" json:"restored_at,omitempty"`
 	ReadAt               *time.Time `gorm:"index" json:"read_at,omitempty"`
-	CreatedAt            time.Time  `gorm:"index" json:"created_at"`
+	CreatedAt            time.Time  `gorm:"index;index:idx_user_notifications_recipient_created_id,priority:2,sort:desc" json:"created_at"`
 	UpdatedAt            time.Time  `json:"updated_at"`
 }
 

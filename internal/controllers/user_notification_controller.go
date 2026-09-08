@@ -44,10 +44,10 @@ type userNotificationCommentResponse struct {
 }
 
 const (
-	userNotificationTargetStatusAvailable   = "available"
-	userNotificationTargetStatusSnapshot    = "snapshot"
-	userNotificationTargetStatusLoadError   = "load_error"
-	userNotificationTargetStatusUnavailable = "unavailable"
+	userNotificationTargetStatusAvailable   = services.UserNotificationTargetStatusAvailable
+	userNotificationTargetStatusSnapshot    = services.UserNotificationTargetStatusSnapshot
+	userNotificationTargetStatusLoadError   = services.UserNotificationTargetStatusLoadError
+	userNotificationTargetStatusUnavailable = services.UserNotificationTargetStatusUnavailable
 )
 
 type userNotificationResponse struct {
@@ -76,11 +76,9 @@ type userNotificationResponse struct {
 	RestoredAt          *time.Time                       `json:"restored_at,omitempty"`
 }
 
-func deletionNotificationResponse(notification models.UserNotification) userNotificationResponse {
+func deletionNotificationResponse(notification models.UserNotification, cfg models.SiteConfig) userNotificationResponse {
 	snapshots := []services.DeletionSnapshotItem{}
 	_ = json.Unmarshal([]byte(notification.DeletionSnapshotJSON), &snapshots)
-	var cfg models.SiteConfig
-	_ = database.DB.Table("site_configs").First(&cfg).Error
 	now := time.Now().UTC()
 	var earliest *time.Time
 	for i := range snapshots {
@@ -107,30 +105,6 @@ func deletionNotificationResponse(notification models.UserNotification) userNoti
 		DeletionActorLabel: notification.DeletionActorLabel, DeletionSnapshots: snapshots,
 		ScheduledDeletionAt: earliest, RestoredAt: notification.RestoredAt,
 	}
-}
-
-func notificationPtrValue(ptr *uint) uint {
-	if ptr == nil {
-		return 0
-	}
-	return *ptr
-}
-
-func uniqueNotificationIDs(values []uint) []uint {
-	seen := map[uint]bool{}
-	out := make([]uint, 0, len(values))
-	for _, value := range values {
-		if value == 0 || seen[value] {
-			continue
-		}
-		seen[value] = true
-		out = append(out, value)
-	}
-	return out
-}
-
-func notificationPairKey(messageID uint, userID uint) string {
-	return fmt.Sprintf("%d:%d", messageID, userID)
 }
 
 func notificationActorForUserID(userID *uint, users map[uint]models.User) *userNotificationActorResponse {
@@ -189,217 +163,47 @@ func notificationUnavailableResponse(notification models.UserNotification, users
 	}
 }
 
-func notificationTarget(message models.Message, commentID *uint, notificationType string) (string, string) {
-	tab := "latest"
-	if isGuestbookMessage(message) && notificationType == models.UserNotificationTypeGuestbook {
-		tab = "comment"
-	}
-	query := fmt.Sprintf("/?tab=%s&message_id=%d", tab, message.ID)
-	if commentID != nil && *commentID != 0 {
-		query += fmt.Sprintf("&comment_id=%d", *commentID)
-	}
-	return tab, query
+func buildVisibleUserNotifications(notifications []models.UserNotification, viewerID uint) []userNotificationResponse {
+	hydration := services.HydrateUserNotifications(database.DB, viewerID, notifications)
+	return userNotificationResponses(hydration)
 }
 
-func buildVisibleUserNotifications(notifications []models.UserNotification, viewerID uint) []userNotificationResponse {
-	if len(notifications) == 0 {
-		return []userNotificationResponse{}
-	}
-	db := database.DB
-	messageIDs := make([]uint, 0, len(notifications))
-	actorIDs := make([]uint, 0, len(notifications))
-	likeMessageIDs := make([]uint, 0)
-	likeActorIDs := make([]uint, 0)
-	for _, notification := range notifications {
-		if notification.MessageID != nil {
-			messageIDs = append(messageIDs, *notification.MessageID)
-		}
-		if notification.ActorUserID != nil {
-			actorIDs = append(actorIDs, *notification.ActorUserID)
-			if notification.Type == models.UserNotificationTypeLike && notification.MessageID != nil {
-				likeMessageIDs = append(likeMessageIDs, *notification.MessageID)
-				likeActorIDs = append(likeActorIDs, *notification.ActorUserID)
-			}
+func userNotificationResponses(hydration services.UserNotificationHydration) []userNotificationResponse {
+	items := make([]userNotificationResponse, 0, len(hydration.Items))
+	var retentionConfig models.SiteConfig
+	for _, target := range hydration.Items {
+		if target.TargetStatus == userNotificationTargetStatusSnapshot {
+			_ = database.DB.Table("site_configs").First(&retentionConfig).Error
+			break
 		}
 	}
-
-	messageMap := map[uint]models.Message{}
-	messageLoadFailed := false
-	messageIDs = uniqueNotificationIDs(messageIDs)
-	if len(messageIDs) > 0 {
-		var messages []models.Message
-		if err := db.Where("id IN ?", messageIDs).Find(&messages).Error; err == nil {
-			for _, message := range messages {
-				messageMap[message.ID] = message
-			}
-		} else {
-			log.Printf("加载通知关联笔记失败: %v", err)
-			messageLoadFailed = true
-		}
-	}
-
-	commentMap := map[uint]models.Comment{}
-	commentLoadFailed := false
-	if len(messageIDs) > 0 {
-		var comments []models.Comment
-		if err := db.Where("message_id IN ?", messageIDs).Find(&comments).Error; err == nil {
-			commentMap = services.CommentMap(comments)
-		} else {
-			log.Printf("加载通知关联评论失败: %v", err)
-			commentLoadFailed = true
-		}
-	}
-
-	userIDs := append([]uint{}, actorIDs...)
-	for _, message := range messageMap {
-		userIDs = append(userIDs, message.UserID)
-	}
-	for _, comment := range commentMap {
-		if comment.UserID != nil {
-			userIDs = append(userIDs, *comment.UserID)
-		}
-	}
-	users := map[uint]models.User{}
-	userIDs = uniqueNotificationIDs(userIDs)
-	if len(userIDs) > 0 {
-		var loadedUsers []models.User
-		if err := db.Select("id, username, avatar_url").Where("id IN ?", userIDs).Find(&loadedUsers).Error; err == nil {
-			for _, user := range loadedUsers {
-				users[user.ID] = user
-			}
-		}
-	}
-
-	activeLikePairs := map[string]bool{}
-	likeLoadFailed := false
-	likeMessageIDs = uniqueNotificationIDs(likeMessageIDs)
-	likeActorIDs = uniqueNotificationIDs(likeActorIDs)
-	if len(likeMessageIDs) > 0 && len(likeActorIDs) > 0 {
-		var likes []models.MessageLike
-		if err := db.Where("message_id IN ? AND user_id IN ?", likeMessageIDs, likeActorIDs).Find(&likes).Error; err == nil {
-			for _, like := range likes {
-				if like.UserID != nil {
-					activeLikePairs[notificationPairKey(like.MessageID, *like.UserID)] = true
-				}
-			}
-		} else {
-			log.Printf("加载通知关联点赞失败: %v", err)
-			likeLoadFailed = true
-		}
-	}
-
-	viewerIDPtr := viewerID
-	items := make([]userNotificationResponse, 0, len(notifications))
-	for _, notification := range notifications {
-		if notification.Type == models.UserNotificationTypeContentDeletion {
-			items = append(items, deletionNotificationResponse(notification))
+	for _, target := range hydration.Items {
+		notification := target.Notification
+		if target.TargetStatus == userNotificationTargetStatusSnapshot {
+			items = append(items, deletionNotificationResponse(notification, retentionConfig))
 			continue
 		}
-		if notification.Type == models.UserNotificationTypeVoceChatCredentials || notification.Type == models.UserNotificationTypeVoceChatPasswordChanged || notification.Type == models.UserNotificationTypePasswordUpdateIncomplete {
-			items = append(items, notificationUnavailableResponse(notification, users, userNotificationTargetStatusUnavailable))
+		if target.TargetStatus != userNotificationTargetStatusAvailable || target.Message == nil {
+			items = append(items, notificationUnavailableResponse(notification, hydration.Users, target.TargetStatus))
 			continue
 		}
-		messageID := notificationPtrValue(notification.MessageID)
-		if messageLoadFailed {
-			items = append(items, notificationUnavailableResponse(notification, users, userNotificationTargetStatusLoadError))
-			continue
-		}
-		if messageID == 0 {
-			items = append(items, notificationUnavailableResponse(notification, users, userNotificationTargetStatusUnavailable))
-			continue
-		}
-		message, ok := messageMap[messageID]
-		if !ok {
-			items = append(items, notificationUnavailableResponse(notification, users, userNotificationTargetStatusUnavailable))
-			continue
-		}
-		if !services.CanViewMessage(message, &viewerIDPtr) {
-			items = append(items, notificationUnavailableResponse(notification, users, userNotificationTargetStatusUnavailable))
-			continue
-		}
-		if commentLoadFailed && notification.Type != models.UserNotificationTypeLike {
-			items = append(items, notificationUnavailableResponse(notification, users, userNotificationTargetStatusLoadError))
-			continue
-		}
-		if likeLoadFailed && notification.Type == models.UserNotificationTypeLike {
-			items = append(items, notificationUnavailableResponse(notification, users, userNotificationTargetStatusLoadError))
-			continue
-		}
-
 		var commentResponse *userNotificationCommentResponse
+		if target.Comment != nil {
+			response := notificationCommentResponse(*target.Comment, hydration.Users)
+			commentResponse = &response
+		}
 		var parentCommentResponse *userNotificationCommentResponse
-		valid := true
-		switch notification.Type {
-		case models.UserNotificationTypeLike:
-			actorID := notificationPtrValue(notification.ActorUserID)
-			if actorID == 0 || !activeLikePairs[notificationPairKey(message.ID, actorID)] {
-				valid = false
-			}
-		case models.UserNotificationTypeComment, models.UserNotificationTypeReply, models.UserNotificationTypeGuestbook:
-			commentID := notificationPtrValue(notification.CommentID)
-			comment, ok := commentMap[commentID]
-			if !ok || comment.MessageID != message.ID {
-				valid = false
-				break
-			}
-			var parent *models.Comment
-			if comment.ParentID != nil {
-				loaded, ok := commentMap[*comment.ParentID]
-				if !ok || loaded.MessageID != message.ID {
-					valid = false
-					break
-				}
-				parent = &loaded
-			}
-			if notification.ParentCommentID != nil {
-				loaded, ok := commentMap[*notification.ParentCommentID]
-				if !ok || loaded.MessageID != message.ID {
-					valid = false
-					break
-				}
-				parent = &loaded
-			}
-			if notification.Type == models.UserNotificationTypeReply && comment.ParentID == nil {
-				valid = false
-				break
-			}
-			if notification.Type == models.UserNotificationTypeGuestbook && (!isGuestbookMessage(message) || comment.ParentID != nil) {
-				valid = false
-				break
-			}
-			if notification.Type == models.UserNotificationTypeComment && comment.ParentID != nil {
-				valid = false
-				break
-			}
-			if !canViewComment(message, comment, commentMap, viewerID, true) {
-				valid = false
-				break
-			}
-			cr := notificationCommentResponse(comment, users)
-			commentResponse = &cr
-			if parent != nil {
-				pr := notificationCommentResponse(*parent, users)
-				parentCommentResponse = &pr
-			}
-		default:
-			valid = false
+		if target.ParentComment != nil {
+			response := notificationCommentResponse(*target.ParentComment, hydration.Users)
+			parentCommentResponse = &response
 		}
-		if !valid {
-			if notification.Type == models.UserNotificationTypeLike {
-				continue
-			}
-			items = append(items, notificationUnavailableResponse(notification, users, userNotificationTargetStatusUnavailable))
-			continue
-		}
-
-		targetTab, targetURL := notificationTarget(message, notification.CommentID, notification.Type)
-		messageSummary := notificationMessageResponse(message, services.CanInteractWithMessage(message, &viewerIDPtr))
+		messageSummary := notificationMessageResponse(*target.Message, target.CanInteract)
 		items = append(items, userNotificationResponse{
 			ID:              notification.ID,
 			Type:            notification.Type,
 			RecipientUserID: notification.RecipientUserID,
 			ActorUserID:     notification.ActorUserID,
-			Actor:           notificationActorForUserID(notification.ActorUserID, users),
+			Actor:           notificationActorForUserID(notification.ActorUserID, hydration.Users),
 			MessageID:       notification.MessageID,
 			CommentID:       notification.CommentID,
 			ParentCommentID: notification.ParentCommentID,
@@ -407,8 +211,8 @@ func buildVisibleUserNotifications(notifications []models.UserNotification, view
 			Comment:         commentResponse,
 			ParentComment:   parentCommentResponse,
 			TargetStatus:    userNotificationTargetStatusAvailable,
-			TargetTab:       targetTab,
-			TargetURL:       targetURL,
+			TargetTab:       target.TargetTab,
+			TargetURL:       target.TargetURL,
 			Read:            notification.ReadAt != nil,
 			ReadAt:          notification.ReadAt,
 			CreatedAt:       notification.CreatedAt,
@@ -452,28 +256,17 @@ func ListUserNotifications(c *gin.Context) {
 		log.Printf("password alert reconciliation failed: user_id=%d trigger=notification_list error_type=%T", user.ID, err)
 	}
 	page, pageSize := parseNotificationPagination(c)
-	var notifications []models.UserNotification
-	if err := database.DB.Where("recipient_user_id = ?", user.ID).Order("created_at DESC, id DESC").Find(&notifications).Error; err != nil {
+	pageResult, err := services.QueryUserNotificationPage(database.DB, user.ID, page, pageSize)
+	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[any]("获取通知失败"))
 		return
 	}
-	visibleItems := buildVisibleUserNotifications(notifications, user.ID)
-	total := len(visibleItems)
-	unreadCount := countUnreadUserNotifications(visibleItems)
-	start := (page - 1) * pageSize
-	if start > total {
-		start = total
-	}
-	end := start + pageSize
-	if end > total {
-		end = total
-	}
-	items := visibleItems[start:end]
+	items := userNotificationResponses(pageResult.Hydration)
 	c.JSON(http.StatusOK, dto.OK(gin.H{
 		"items":        items,
-		"total":        total,
-		"unread_count": unreadCount,
-		"unreadCount":  unreadCount,
+		"total":        pageResult.Total,
+		"unread_count": pageResult.UnreadCount,
+		"unreadCount":  pageResult.UnreadCount,
 		"page":         page,
 		"pageSize":     pageSize,
 	}, "获取成功"))
@@ -488,13 +281,11 @@ func GetUserNotificationUnreadCount(c *gin.Context) {
 	if err := services.ReconcilePendingResolvedPasswordAlerts(user.ID); err != nil {
 		log.Printf("password alert reconciliation failed: user_id=%d trigger=notification_unread_count error_type=%T", user.ID, err)
 	}
-	var notifications []models.UserNotification
-	if err := database.DB.Where("recipient_user_id = ? AND read_at IS NULL", user.ID).Order("created_at DESC, id DESC").Find(&notifications).Error; err != nil {
+	unreadCount, err := services.CountUnreadUserNotificationsForViewer(database.DB, user.ID)
+	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[any]("获取通知失败"))
 		return
 	}
-	visibleItems := buildVisibleUserNotifications(notifications, user.ID)
-	unreadCount := countUnreadUserNotifications(visibleItems)
 	c.JSON(http.StatusOK, dto.OK(gin.H{"unread_count": unreadCount, "unreadCount": unreadCount}, "获取成功"))
 }
 
