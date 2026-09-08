@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -23,6 +24,32 @@ func TestSQLiteConnectionPolicySerializesWritesAndWaitsForLocks(t *testing.T) {
 	configureConnectionPool(db, "sqlite")
 	if got := db.Stats().MaxOpenConnections; got != 1 {
 		t.Fatalf("sqlite max open connections = %d, want 1 to serialize writes", got)
+	}
+}
+
+func TestSQLiteGormPolicyDoesNotCachePreparedStatements(t *testing.T) {
+	if gormConfigFor("sqlite").PrepareStmt {
+		t.Fatal("SQLite must not cache prepared statements while MaxOpenConns is one")
+	}
+	if !gormConfigFor("postgres").PrepareStmt {
+		t.Fatal("non-SQLite engines should retain the existing prepared statement cache")
+	}
+}
+
+func TestCloseDBClearsGlobalHandleAfterConnectionRelease(t *testing.T) {
+	original := DB
+	defer func() { DB = original }()
+	path := filepath.Join(t.TempDir(), "close.db")
+	db, err := gorm.Open(sqlite.Open(sqliteConnectionString(path)), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	DB = db
+	if err := CloseDB(); err != nil {
+		t.Fatal(err)
+	}
+	if DB != nil {
+		t.Fatal("CloseDB did not clear the global database handle")
 	}
 }
 

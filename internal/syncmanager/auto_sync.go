@@ -2,7 +2,6 @@ package syncmanager
 
 import (
 	"archive/zip"
-	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -13,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	backupservice "github.com/rcy1314/echo-noise/internal/backup"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/storage"
@@ -20,6 +20,7 @@ import (
 
 var (
 	mu            sync.Mutex
+	operationMu   sync.Mutex
 	configured    models.SiteConfig
 	scheduledStop chan struct{}
 	debounceTimer *time.Timer
@@ -43,18 +44,8 @@ func SetStorageSyncConfirmedLocal() error {
 
 func Configure(cfg models.SiteConfig) {
 	mu.Lock()
-	// 兼容旧数据：若云存储配置完整但未显式开启自动同步，则按“默认开启”
-	effectiveAuto := cfg.StorageAutoSyncEnabled
-	if !effectiveAuto && cfg.StorageEnabled &&
-		strings.TrimSpace(cfg.StorageProvider) != "" &&
-		strings.TrimSpace(cfg.StorageEndpoint) != "" &&
-		strings.TrimSpace(cfg.StorageBucket) != "" &&
-		strings.TrimSpace(cfg.StorageAccessKey) != "" &&
-		strings.TrimSpace(cfg.StorageSecretKey) != "" {
-		effectiveAuto = true
-		log.Printf("检测到旧配置且云存储完整，默认开启自动同步")
-	}
-	cfg.StorageAutoSyncEnabled = effectiveAuto
+	// An explicit disabled setting must stay disabled even when legacy storage
+	// credentials remain present. Enabling it is an administrator decision.
 	configured = cfg
 	if scheduledStop != nil {
 		close(scheduledStop)
@@ -140,6 +131,8 @@ func Trigger() {
 }
 
 func SyncNow() error {
+	operationMu.Lock()
+	defer operationMu.Unlock()
 	mu.Lock()
 	cfg := configured
 	mu.Unlock()
@@ -162,6 +155,9 @@ func SyncNow() error {
 		// 当前自动同步仅实现了 sqlite 的打包/恢复仲裁。
 		// 非 sqlite 场景保持既有“上传备份”逻辑，避免错误覆盖。
 		return syncUpload(cfg)
+	}
+	if backupservice.HasPendingRestore(backupservice.DefaultLayout()) {
+		return backupservice.ErrRestartRequired
 	}
 
 	remoteMeta, err := storage.HeadObject(cfg, cfg.StorageBucket, "backup.zip")
@@ -231,61 +227,56 @@ func SyncNow() error {
 }
 
 func syncUpload(cfg models.SiteConfig) error {
-	// 构建临时备份文件
-	tmpDir := os.TempDir()
-	backupPath := filepath.Join(tmpDir, "backup.zip")
-	_ = os.Remove(backupPath)
-	f, err := os.Create(backupPath)
+	tmpDir, err := os.MkdirTemp("", "echo-noise-sync-*")
 	if err != nil {
-		return err
+		return fmt.Errorf("创建同步临时目录失败: %w", err)
 	}
-	zw := zip.NewWriter(f)
-
-	// 数据库文件
-	dbType := os.Getenv("DB_TYPE")
-	if dbType == "" {
-		dbType = "sqlite"
+	defer os.RemoveAll(tmpDir)
+	backupPath := filepath.Join(tmpDir, "backup.zip")
+	if err := backupservice.CreateArchive(backupPath, database.DB, backupservice.DefaultLayout()); err != nil {
+		return fmt.Errorf("创建同步备份失败: %w", err)
 	}
-	if dbType == "sqlite" {
-		dbPath := os.Getenv("DB_PATH")
-		if dbPath == "" {
-			dbPath = "/app/data/noise.db"
-		}
-		if err := addFileToZip(zw, dbPath, "database.db"); err != nil { /* ignore missing */
-		}
-	}
-	// images
-	_ = addDirToZip(zw, "./data/images", "images")
-	// video
-	_ = addDirToZip(zw, "./data/video", "video")
-
-	_ = zw.Close()
-	f.Close()
 
 	// 预签名上传
 	url, err := storage.PresignUpload(cfg, cfg.StorageBucket, "backup.zip", 1*time.Hour, "application/zip")
 	if err != nil {
 		return err
 	}
-	// PUT 上传
-	content, err := os.ReadFile(backupPath)
+	if err := uploadArchive(url, backupPath, &http.Client{Timeout: 120 * time.Second}); err != nil {
+		return err
+	}
+
+	// 上传完成后重新 Head 一次获取最新 ETag/Last-Modified
+	remoteMeta, err := storage.HeadObject(cfg, cfg.StorageBucket, "backup.zip")
+	if err != nil {
+		return fmt.Errorf("确认云端备份失败: %w", err)
+	}
+	now := time.Now()
+	return syncPersistMeta(cfg, remoteMeta, &now)
+}
+
+func uploadArchive(uploadURL, archivePath string, client *http.Client) error {
+	file, err := os.Open(archivePath)
 	if err != nil {
 		return err
 	}
-	req, _ := http.NewRequest(http.MethodPut, url, bytes.NewReader(content))
+	defer file.Close()
+	req, err := http.NewRequest(http.MethodPut, uploadURL, file)
+	if err != nil {
+		return err
+	}
 	req.Header.Set("Content-Type", "application/zip")
-	client := &http.Client{Timeout: 120 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
-	io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
-
-	// 上传完成后重新 Head 一次获取最新 ETag/Last-Modified
-	remoteMeta, _ := storage.HeadObject(cfg, cfg.StorageBucket, "backup.zip")
-	now := time.Now()
-	return syncPersistMeta(cfg, remoteMeta, &now)
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return fmt.Errorf("上传云端备份失败: status=%d", resp.StatusCode)
+	}
+	_, err = io.Copy(io.Discard, resp.Body)
+	return err
 }
 
 func addFileToZip(zw *zip.Writer, srcPath, zipName string) error {
@@ -336,30 +327,28 @@ func syncDownloadAndRestore(cfg models.SiteConfig, remoteMeta *storage.ObjectMet
 		return fmt.Errorf("下载云端备份失败: status=%d", resp.StatusCode)
 	}
 
-	tmpDir := os.TempDir()
+	tmpDir, err := os.MkdirTemp("", "echo-noise-sync-restore-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpDir)
 	zipPath := filepath.Join(tmpDir, "cloud_backup.zip")
-	_ = os.Remove(zipPath)
 	out, err := os.Create(zipPath)
 	if err != nil {
 		return err
 	}
-	_, err = io.Copy(out, resp.Body)
-	out.Close()
-	if err != nil {
-		return err
+	_, copyErr := io.Copy(out, resp.Body)
+	closeErr := out.Close()
+	if copyErr != nil {
+		return copyErr
 	}
-
-	if err := restoreFromBackupZip(zipPath); err != nil {
-		return err
+	if closeErr != nil {
+		return closeErr
 	}
-	_ = os.Remove(zipPath)
-
-	if err := database.ReconnectDB(); err != nil {
-		return err
+	if err := backupservice.StageRestore(zipPath, backupservice.DefaultLayout()); err != nil {
+		return fmt.Errorf("暂存云端恢复包失败: %w", err)
 	}
-
-	now := time.Now()
-	return syncPersistMeta(cfg, remoteMeta, &now)
+	return backupservice.ErrRestartRequired
 }
 
 func syncPersistMeta(cfg models.SiteConfig, remoteMeta *storage.ObjectMeta, syncTime *time.Time) error {
@@ -415,14 +404,14 @@ func syncPersistMeta(cfg models.SiteConfig, remoteMeta *storage.ObjectMeta, sync
 func localLatestModTime(dbType string) time.Time {
 	latest := time.Time{}
 	if dbType == "sqlite" {
-		dbPath := os.Getenv("DB_PATH")
-		if dbPath == "" {
-			dbPath = "/app/data/noise.db"
-		}
+		dbPath := backupservice.DefaultLayout().DatabasePath
 		latest = maxTime(latest, fileModTime(dbPath))
+		latest = maxTime(latest, fileModTime(dbPath+"-wal"))
+		latest = maxTime(latest, fileModTime(dbPath+"-shm"))
+		for _, root := range backupservice.DefaultLayout().Roots {
+			latest = maxTime(latest, dirLatestModTime(root.Path))
+		}
 	}
-	latest = maxTime(latest, dirLatestModTime("./data/images"))
-	latest = maxTime(latest, dirLatestModTime("./data/video"))
 	return latest
 }
 

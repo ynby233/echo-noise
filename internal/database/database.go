@@ -62,6 +62,16 @@ func getEnvOrConfig(envKey, configValue string) string {
 	return configValue
 }
 
+func gormConfigFor(dbType string) *gorm.Config {
+	return &gorm.Config{
+		// SQLite is intentionally kept to one connection. GORM's prepared-statement
+		// cache can retain that only connection while startup workers need it again,
+		// which deadlocks an otherwise idle process. Other engines keep the cache.
+		PrepareStmt: dbType != "sqlite",
+		Logger:      logger.Default.LogMode(logger.Silent),
+	}
+}
+
 func InitDB() error {
 	if DB != nil {
 		return nil
@@ -69,12 +79,7 @@ func InitDB() error {
 
 	dbType := getEnvOrConfig("DB_TYPE", config.Config.Database.Type)
 	var err error
-
-	// 配置 GORM
-	gormConfig := &gorm.Config{
-		PrepareStmt: true,
-		Logger:      logger.Default.LogMode(logger.Silent),
-	}
+	gormConfig := gormConfigFor(dbType)
 
 	switch dbType {
 	case "sqlite":
@@ -138,6 +143,16 @@ func InitDB() error {
 	return nil
 }
 
+// SQLitePath returns the same runtime path used by InitDB. Backup and restore
+// callers must use this single source rather than guessing from the cwd.
+func SQLitePath() string {
+	path := strings.TrimSpace(getEnvOrConfig("DB_PATH", config.Config.Database.Path))
+	if path == "" {
+		return "data/noise.db"
+	}
+	return path
+}
+
 func GetSetting() (*models.Setting, error) {
 	if DB == nil {
 		return nil, errors.New("数据库未初始化")
@@ -165,15 +180,23 @@ func GetDB() (*gorm.DB, error) {
 	return DB, nil
 }
 
+// CloseDB releases the active connection before a startup rollback replaces
+// SQLite files. It is safe when initialization did not create a handle.
+func CloseDB() error {
+	if DB == nil {
+		return nil
+	}
+	sqlDB, err := DB.DB()
+	DB = nil
+	if err != nil {
+		return err
+	}
+	return sqlDB.Close()
+}
+
 func ReconnectDB() error {
-	if DB != nil {
-		sqlDB, err := DB.DB()
-		if err == nil {
-			if err := sqlDB.Close(); err != nil {
-				return fmt.Errorf("关闭数据库连接失败: %v", err)
-			}
-		}
-		DB = nil
+	if err := CloseDB(); err != nil {
+		return fmt.Errorf("关闭数据库连接失败: %v", err)
 	}
 	return InitDB()
 }

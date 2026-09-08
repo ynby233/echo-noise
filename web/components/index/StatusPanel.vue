@@ -6980,7 +6980,13 @@ const handleDatabaseUpload = async (event: Event) => {
         })
 
         const data = await response.json()
-        if (data.code === 1) {
+        if (data.code === 1 && data.pendingRestart) {
+            useToast().add({
+                title: '恢复已暂存',
+                description: data.msg || '请重启服务后完成恢复',
+                color: 'orange'
+            })
+        } else if (data.code === 1) {
             useToast().add({
                 title: '成功',
                 description: '数据库恢复成功',
@@ -7139,7 +7145,9 @@ const syncNow = async () => {
   try {
     const res = await fetch('/api/backup/storage/sync-now', { method: 'POST', credentials: 'include' })
     const data = await res.json()
-    if (data?.code === 1) {
+    if (data?.code === 1 && data?.pendingRestart) {
+      useToast().add({ title: '恢复已暂存', description: data.msg || '请重启服务后完成恢复', color: 'orange' })
+    } else if (data?.code === 1) {
       useToast().add({ title: '已同步到云端', color: 'green' })
       await loadStorageConfig()
     } else {
@@ -7280,7 +7288,9 @@ const restoreCloudBackup = async () => {
       if (!url) throw new Error('请先生成下载预签名URL')
     }
     const res = await postRequest<any>('backup/storage/restore', { downloadURL: url }, { credentials: 'include' })
-    if (res?.code === 1) {
+    if (res?.code === 1 && (res as any)?.pendingRestart) {
+      useToast().add({ title: '恢复已暂存', description: (res as any)?.msg || '请重启服务后完成恢复', color: 'orange' })
+    } else if (res?.code === 1) {
       useToast().add({ title: '云备份恢复成功', color: 'green' })
       if ((res as any)?.shouldRefresh || (res as any)?.data?.shouldRefresh) {
         setTimeout(() => { window.location.assign('/') }, 600)
@@ -7329,7 +7339,9 @@ const restoreFromConfiguredCloud = async () => {
     const finalBase = needsBucket ? (baseURL + bucket + '/') : baseURL
     const url = finalBase + 'backup.zip'
     const res = await postRequest<any>('backup/storage/restore', { downloadURL: url }, { credentials: 'include' })
-    if (res?.code === 1) {
+    if (res?.code === 1 && (res as any)?.pendingRestart) {
+      useToast().add({ title: '恢复已暂存', description: (res as any)?.msg || '请重启服务后完成恢复', color: 'orange' })
+    } else if (res?.code === 1) {
       useToast().add({ title: '云备份恢复成功', color: 'green' })
       if ((res as any)?.shouldRefresh || (res as any)?.data?.shouldRefresh) {
         setTimeout(() => { window.location.assign('/') }, 600)

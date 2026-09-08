@@ -15,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/config"
+	backupservice "github.com/rcy1314/echo-noise/internal/backup"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/middleware"
 	"github.com/rcy1314/echo-noise/internal/models"
@@ -83,13 +84,42 @@ func main() {
 	}
 	logLifecycleStage("startup", "config_load", "completed", stageStarted)
 
+	// A restore is staged by the HTTP endpoint and deliberately applied before
+	// InitDB. Live workers retain DB handles, so applying it in a request would
+	// leave the process split between old and new data.
+	var appliedRestore *backupservice.AppliedRestore
+	if pending, err := backupservice.ApplyPendingRestore(backupservice.DefaultLayout()); err != nil {
+		log.Fatalf("应用待恢复备份失败: %v", err)
+	} else {
+		appliedRestore = pending
+	}
+
 	stageStarted = time.Now()
 	logLifecycleStage("startup", "database_init", "begin", stageStarted)
 
 	// 初始化数据库
 	if err := database.InitDB(); err != nil {
+		if appliedRestore != nil {
+			if closeErr := database.CloseDB(); closeErr != nil {
+				log.Printf("恢复后初始化失败，关闭数据库连接失败: %v", closeErr)
+			}
+			if rollbackErr := appliedRestore.Rollback(); rollbackErr != nil {
+				log.Printf("恢复后初始化失败且回退失败: %v", rollbackErr)
+			} else {
+				log.Printf("恢复后初始化失败，已回退原数据")
+				if discardErr := appliedRestore.DiscardPending(); discardErr != nil {
+					log.Printf("恢复后初始化失败，清理待恢复包失败: %v", discardErr)
+				}
+			}
+		}
 		logLifecycleStage("startup", "database_init", "failed", stageStarted)
 		log.Fatalf(models.DatabaseInitErrorMessage+": %v", err)
+	}
+	if appliedRestore != nil {
+		if err := appliedRestore.Commit(); err != nil {
+			log.Printf("恢复已生效，但清理旧数据副本失败: %v", err)
+		}
+		log.Printf("待恢复备份已在启动前完成应用")
 	}
 	logLifecycleStage("startup", "database_init", "completed", stageStarted)
 
