@@ -8,7 +8,7 @@ const webRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const read = (path) => readFile(join(webRoot, path), 'utf8')
 
 const [home, feed, messages, status, sharedCss] = await Promise.all([
-  read('pages/index.vue'),
+  Promise.all([read('pages/index.vue'), read('composables/useHomePager.ts')]).then(parts => parts.join('\n')),
   read('components/index/InfoFeedList.vue'),
   read('components/index/MessageList.vue'),
   readAdminPanelSource(),

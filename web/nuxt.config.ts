@@ -19,22 +19,8 @@ export default defineNuxtConfig({
         { rel: 'dns-prefetch', href: 'https://cdn.jsdelivr.net' },
         { rel: 'preconnect', href: 'https://unpkg.com', crossorigin: '' },
         { rel: 'dns-prefetch', href: 'https://unpkg.com' },
-        { rel: 'stylesheet', href: 'https://cdn.jsdelivr.net/npm/aplayer@1.10.1/dist/APlayer.min.css' },
-        { rel: 'stylesheet', href: 'https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0/dist/fancybox/fancybox.css' },
         { rel: 'icon', href: '/favicon.svg' },
         { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
-      ],
-      script: [
-        { src: 'https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js', tagPosition: 'bodyClose', defer: true },
-        { src: 'https://cdn.jsdelivr.net/npm/aplayer@1.10.1/dist/APlayer.min.js', tagPosition: 'bodyClose', defer: true },
-        { src: 'https://cdn.jsdelivr.net/npm/meting@2.0.1/dist/Meting.min.js', tagPosition: 'bodyClose', defer: true },
-        { 
-          src: 'https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0/dist/fancybox/fancybox.umd.js',
-          tagPosition: 'bodyClose',
-          defer: true 
-        },
-        { src: 'https://unpkg.com/medium-zoom/dist/medium-zoom.min.js', tagPosition: 'bodyClose', defer: true },
-        { src: 'https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js', tagPosition: 'bodyClose', defer: true },
       ],
       meta: [
         { name: "viewport", content: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" }

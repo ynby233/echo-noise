@@ -28,7 +28,7 @@ assert.equal(
 
 const [feed, home, messageList, routerSource] = await Promise.all([
   read('components/index/InfoFeedList.vue'),
-  read('pages/index.vue'),
+  Promise.all([read('pages/index.vue'), read('composables/useHomePager.ts')]).then(parts => parts.join('\n')),
   read('components/index/MessageList.vue'),
   read('../internal/routers/routers.go'),
 ])

@@ -236,7 +236,8 @@ import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } fr
 import { useUserStore } from '~/store/user'
 import { getRequest, putRequest } from '~/utils/api'
 import { resolveManagedAttachmentURL } from '~/utils/media-url'
-import BuiltinComments from '~/components/comments/BuiltinComments.vue'
+import { asyncFeature } from '~/utils/async-feature'
+const BuiltinComments = asyncFeature(() => import('~/components/comments/BuiltinComments.vue'), '评论')
 import { useToast } from '#ui/composables/useToast'
 
 type NotificationActor = {

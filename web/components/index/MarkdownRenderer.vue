@@ -1,5 +1,9 @@
 <template>
   <div ref="previewElement" :class="['markdown-preview', { 'markdown-preview--inherit-font': props.inheritFont }]" :data-task-list-editable="props.taskListEditable ? 'true' : 'false'"></div>
+  <div v-if="previewLoadFailed" role="alert" class="markdown-load-error">
+    正文排版加载失败，已显示文本。
+    <button type="button" class="nw-action-btn" @click="renderMarkdown(props.content)">重试</button>
+  </div>
   <Teleport to="body">
     <div
       v-if="showRenderedTableExpandDialog"
@@ -27,7 +31,7 @@ import { nextTick, onMounted, ref, watch, onBeforeUnmount, inject } from 'vue';
 import { useRuntimeConfig } from '#imports';
 import { useMessageStore } from '~/store/message';
 import { ensureFancyboxVideoThumbnail, getVideoElementSource, getVideoPlaybackFrameForSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
-import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
+import { bindMediaFancybox, unbindMediaFancybox, createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { buildAttachmentAudioPlaceholderHtml, destroyAttachmentAudioPlayers, enhanceAttachmentAudioPlayers } from '~/utils/attachment-audio-player'
 import { encodeMarkdownExtraBlankLines, markMarkdownPreservedBlankLineElements } from '~/utils/markdown-blank-lines'
 import { applyTableTrackSize, getTableResizeZoomScale, resolveTableTrackResize, resolveTableTrailingScrollReserve, type TableTrackResizeSession } from '~/utils/table-resize-session'
@@ -35,7 +39,8 @@ import { isManagedAttachmentURL, resolveManagedAttachmentURL } from '~/utils/med
 import { attachmentFailureDetail, attachmentFailureTitle, type AttachmentFailureKind } from '~/utils/attachment-failure'
 import { isBrowserPreviewableAttachmentUrl } from '~/utils/attachment-preview'
 import { withStableInsertionPoint } from '~/utils/dom-stable-insertion'
-import Vditor from 'vditor';
+import { loadVditorPreview } from '~/utils/vditor-preview'
+import { enhanceMetingPlayers } from '~/utils/meting-player'
 import { enhanceGitHubCards } from '~/utils/github-card'
 
 // 定义正则表达式
@@ -58,6 +63,8 @@ const resolveImageUrl = (path: string) => resolveManagedAttachmentURL(String(BAS
 const resolveAttachmentUrl = (path: string) => resolveManagedAttachmentURL(String(BASE_API || '/api'), path)
 
 const previewElement = ref<HTMLDivElement | null>(null);
+const previewLoadFailed = ref(false)
+let renderSequence = 0
 const renderedTableExpandBody = ref<HTMLDivElement | null>(null);
 const showRenderedTableExpandDialog = ref(false);
 const renderedTableExpandClosing = ref(false);
@@ -186,8 +193,7 @@ const applyThemeClass = () => {
 
 const initializeMediaViewer = (customRoot?: HTMLElement | null) => {
   const root = customRoot || previewElement.value
-  const Fancybox = window.Fancybox
-  if (!root || !Fancybox) return
+  if (!root) return
 
   if (!customRoot && zoom) {
     try { zoom.detach?.() } catch {}
@@ -248,10 +254,7 @@ const initializeMediaViewer = (customRoot?: HTMLElement | null) => {
     }
   })
 
-  try {
-    Fancybox.unbind?.(root, '[data-fancybox]')
-  } catch {}
-  Fancybox.bind(root, '[data-fancybox]', createMediaFancyboxOptions({ video: true }) as any)
+  bindMediaFancybox(root, createMediaFancyboxOptions({ video: true }))
 };
 
 const shouldSkipHashtagNode = (node: Node | null) => {
@@ -1758,6 +1761,9 @@ const applyDouyinVideoLayout = () => {
 }
 const renderMarkdown = async (markdown: string) => {
   if (!previewElement.value) return;
+  const sequence = ++renderSequence
+  const renderRoot = previewElement.value
+  previewLoadFailed.value = false
   destroyAttachmentAudioPlayers(previewElement.value)
 
   const renderPlainFallback = (raw: string) => {
@@ -1773,11 +1779,9 @@ const renderMarkdown = async (markdown: string) => {
 
   try {
     ensureMetingApiReady()
-    if (typeof Vditor === 'undefined') {
-      console.error('Vditor is not loaded.');
-      renderPlainFallback(markdown ?? '')
-      return;
-    }
+    if (!renderRoot.hasChildNodes()) renderPlainFallback(markdown ?? '')
+    const Vditor = await loadVditorPreview()
+    if (sequence !== renderSequence || previewElement.value !== renderRoot) return
 
     // 先处理媒体链接
     const keepImagesFullSize = hasFullImageAttachmentsMarker(markdown ?? '')
@@ -1803,13 +1807,14 @@ const renderMarkdown = async (markdown: string) => {
       return document.documentElement.classList.contains('dark') ? 'dark' : 'light'
     })()
     const hljsStyle = currentTheme === 'dark' ? 'github-dark' : 'github'
-    Vditor.preview(previewElement.value!, finalContent, {
+    await Vditor.preview(renderRoot, finalContent, {
       mode: currentTheme as any,
       lang: 'zh_CN',
       theme: { current: currentTheme },
       hljs: { style: hljsStyle, lineNumber: true, enable: true },
       markdown: { sanitize: false },
       after: async () => {
+        if (sequence !== renderSequence || previewElement.value !== renderRoot) return
         try {
           const images = previewElement.value?.querySelectorAll('img');
           images?.forEach(img => {
@@ -1831,7 +1836,7 @@ const renderMarkdown = async (markdown: string) => {
           markMarkdownPreservedBlankLineElements(previewElement.value)
           applyAttachmentRenders()
           applyThemeClass();
-          const anchors = previewElement.value?.querySelectorAll('a[href]') || [] as any;
+          const anchors = previewElement.value?.querySelectorAll<HTMLAnchorElement>('a[href]') || [];
           anchors.forEach((a: HTMLAnchorElement) => {
             if (a.classList.contains('site-attachment-tag')) return
             const href = a.getAttribute('href') || ''
@@ -1907,6 +1912,7 @@ const renderMarkdown = async (markdown: string) => {
             applyDouyinVideoLayout()
           }, 80)
           initializeMediaViewer();
+          if (previewElement.value) void enhanceMetingPlayers(previewElement.value)
           applyImageLoadingPlaceholders();
           emit('rendered');
           const proc = (window as any).processNMPv2Shortcodes
@@ -1920,7 +1926,9 @@ const renderMarkdown = async (markdown: string) => {
       }
     });
   } catch (error) {
+    if (sequence !== renderSequence || previewElement.value !== renderRoot) return
     console.error("Error rendering markdown:", error);
+    previewLoadFailed.value = true
     renderPlainFallback(markdown ?? '')
   }
 };
@@ -1939,12 +1947,6 @@ watch(
 
 onMounted(() => {
   renderMarkdown(props.content);
-  // 确保 MetingJS 正确初始化
-  if (window.APlayer && window.MetingJSElement) {
-    console.log('MetingJS is ready');
-  } else {
-    console.error('MetingJS or APlayer is not loaded properly');
-  }
   applyThemeClass();
   try {
     themeClassObserver = new MutationObserver(() => applyThemeClass())
@@ -1970,6 +1972,8 @@ onMounted(() => {
 
 
 onBeforeUnmount(() => {
+  renderSequence++
+  if (previewElement.value) unbindMediaFancybox(previewElement.value)
   if (previewElement.value) destroyAttachmentAudioPlayers(previewElement.value)
   if (renderedTableExpandBody.value) destroyAttachmentAudioPlayers(renderedTableExpandBody.value)
   if (zoom) {

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))))
 const webRoot = join(repoRoot, 'web')
-const indexPage = await readFile(join(webRoot, 'pages/index.vue'), 'utf8')
+const indexPage = (await Promise.all(['pages/index.vue', 'components/index/HomeGallery.vue', 'composables/useHomeGallery.ts'].map(path => readFile(join(webRoot, path), 'utf8')))).join('\n')
 const messageController = await readFile(join(repoRoot, 'internal/controllers/message_controller.go'), 'utf8')
 const availability = await readFile(join(repoRoot, 'internal/controllers/image_availability.go'), 'utf8')
 
@@ -58,7 +58,7 @@ assert.doesNotMatch(
 
 assert.match(
   indexPage,
-  /const recommendedImages = computed\(\(\) => images\.value\.slice\(0, 60\)\)/,
+  /const recommendedImages = computed\(\(\) => props\.images\.slice\(0, 60\)\)/,
   'gallery count must come straight from the server list, not from client-side load failures'
 )
 assert.doesNotMatch(
@@ -80,7 +80,7 @@ assert.ok(
 )
 assert.match(
   indexPage,
-  /const applyImages = \(nextImages: any\[\]\) => \{[\s\S]*?images\.value = Array\.isArray\(nextImages\) \? nextImages : \[\][\s\S]*?if \(failedRecommendKeys\.value\.size > 0\) failedRecommendKeys\.value = new Set\(\)/,
+  /watch\(\(\) => props\.images, \(\) => \{ failedRecommendKeys\.value = new Set\(\) \}\)/,
   'a refreshed gallery list must clear stale per-entry failure marks so new images are not hidden'
 )
 

@@ -541,13 +541,14 @@ import { resolveComponent } from 'vue'
 import { useMessageStore } from "~/store/message";
 import { useUserStore } from "~/store/user";
 import MarkdownRenderer from "~/components/index/MarkdownRenderer.vue";
-import AudioRecorder from './AudioRecorder.vue'
+import AudioRecorder from './AudioRecorderButton.vue'
 import type { MessageVisibility } from '~/types/models'
-import BuiltinComments from '../comments/BuiltinComments.vue'
+import { asyncFeature } from '~/utils/async-feature'
+const BuiltinComments = asyncFeature(() => import('../comments/BuiltinComments.vue'), '评论')
 import { writeClipboardText } from '~/utils/clipboard'
 import { createAudioMarkdown, resolveUploadedMediaUrl, uploadMediaFiles } from '~/utils/media-upload'
 import { resolveManagedAttachmentURL } from '~/utils/media-url'
-import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
+import { bindMediaFancybox, unbindMediaFancybox, createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { getMessageIdFromRouteHash } from '~/utils/message-route-hash'
 import { shouldShowVisibilityBadge } from '~/utils/visibility-badge'
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
@@ -1452,10 +1453,10 @@ const deleteMsg = async (msg: any) => {
 };
 
 const initFancybox = () => {
-  if (window.Fancybox) {
+  if (messageListRoot.value) {
     const fancyboxOptions = createMediaFancyboxOptions({ carouselInfinite: false, video: true })
 
-    const mdImages = document.querySelectorAll(".markdown-preview img:not(.github-card-avatar)");
+    const mdImages = messageListRoot.value.querySelectorAll(".markdown-preview img:not(.github-card-avatar)");
     mdImages.forEach((img) => {
       const src = img.getAttribute("src") || "";
       if (img.closest('.image-grid-item')) return;
@@ -1479,7 +1480,7 @@ const initFancybox = () => {
       }
     });
 
-    window.Fancybox.bind("[data-fancybox]", fancyboxOptions);
+    bindMediaFancybox(messageListRoot.value, fancyboxOptions);
   }
 };
 
@@ -1953,9 +1954,7 @@ watch(
 );
 // 组件卸载时清理
 onBeforeUnmount(() => {
-  if (window.Fancybox) {
-    window.Fancybox.unbind?.('[data-fancybox]');
-  }
+  if (messageListRoot.value) unbindMediaFancybox(messageListRoot.value)
 });
 // 添加复制功能
 const copyContent = async (content: string) => {

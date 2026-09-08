@@ -80,7 +80,7 @@
       </div>
     </div>
 
-  <SearchMode 
+  <SearchMode v-if="searchCreated"
     v-model="showSearchModal" 
     @search-result="handleSearchResult" 
   />
@@ -242,22 +242,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, inject, onMounted, onBeforeUnmount, watch, defineAsyncComponent, nextTick } from 'vue'
+import { ref, computed, inject, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { clamp, getFixedCoordinateScale, getFixedRect, getFixedViewport, positionFloatingMenu, scheduleFloatingMenuPosition } from '~/utils/floating-menu'
 import type { MessageToSave, MessageVisibility } from "~/types/models";
 import { useMessage } from "~/composables/useMessage";
 import { useUserStore } from '~/store/user'
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
-import { Fancybox } from '@fancyapps/ui'
-import '@fancyapps/ui/dist/fancybox/fancybox.css'
-const VditorEditor = defineAsyncComponent(() => import('./VditorEditor.vue'))
-import SearchMode from './Searchmode.vue'
+import { asyncFeature } from '~/utils/async-feature'
+const VditorEditor = asyncFeature(() => import('./VditorEditor.vue'), '编辑器')
+const SearchMode = asyncFeature(() => import('./Searchmode.vue'), '搜索')
 import { useMessageStore } from '~/store/message'
 import { useNotifyStore } from '~/store/notify'
-import AudioRecorder from './AudioRecorder.vue'
-import ImageHostingUploader from '~/components/widgets/ImageHostingUploader.vue'
+import AudioRecorder from './AudioRecorderButton.vue'
+const ImageHostingUploader = asyncFeature(() => import('~/components/widgets/ImageHostingUploader.vue'), '图床')
 import { createAudioMarkdown, resolveUploadedMediaUrl, uploadMediaFiles } from '~/utils/media-upload'
-import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { encodeMarkdownExtraBlankLines } from '~/utils/markdown-blank-lines'
 const props = defineProps<{ wide?: boolean }>()
 const containerClass = computed(() => (props.wide ? 'w-full max-w-none' : 'mx-auto w-full sm:max-w-4xl'))
@@ -320,6 +318,8 @@ const activeUploadLabel = computed(() => {
   return '附件'
 })
 const showSearchModal = ref(false);
+const searchCreated = ref(false)
+watch(showSearchModal, visible => { if (visible) searchCreated.value = true })
 const emit = defineEmits(['search-result','video-uploaded', 'before-upload', 'upload-progress']);
 const handleSearchResult = (result: any) => {
   emit('search-result', result);
@@ -1186,7 +1186,6 @@ watch(() => [userStore.isLogin, canNotify.value], () => {
 
 onMounted(async () => {
   void refreshCapabilities()
-  Fancybox.bind("[data-fancybox]", createMediaFancyboxOptions({ video: true }) as any);
   document.addEventListener('mousedown', handleFloatingMenuPointerDown)
   window.addEventListener('resize', handleFloatingMenuViewportChange)
   window.addEventListener('scroll', handleFloatingMenuViewportChange, true)
@@ -1230,7 +1229,6 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  Fancybox.unbind?.('[data-fancybox]');
   document.removeEventListener('mousedown', handleFloatingMenuPointerDown)
   window.removeEventListener('resize', handleFloatingMenuViewportChange)
   window.removeEventListener('scroll', handleFloatingMenuViewportChange, true)

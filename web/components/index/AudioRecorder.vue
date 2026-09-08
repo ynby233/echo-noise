@@ -73,7 +73,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, nextTick, onBeforeUnmount, ref, shallowRef } from 'vue'
+import { computed, inject, nextTick, onMounted, onBeforeUnmount, ref, shallowRef } from 'vue'
 import type { Ref } from 'vue'
 import { useToast } from '#imports'
 import { useUserStore } from '~/store/user'
@@ -82,6 +82,8 @@ import { positionFloatingMenu, scheduleFloatingMenuPosition } from '~/utils/floa
 import { uploadMediaFiles } from '~/utils/media-upload'
 
 const MAX_RECORDING_MS = 10 * 60 * 1000
+const props = defineProps<{ openOnMount?: boolean }>()
+onMounted(() => { if (props.openOnMount) toggleRecorder() })
 const SPECTRUM_BARS = 32
 const spectrumLevels = new Float32Array(SPECTRUM_BARS)
 

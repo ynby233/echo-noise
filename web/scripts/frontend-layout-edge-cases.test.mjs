@@ -23,7 +23,7 @@ const notificationCenter = read('components/index/UserNotificationCenter.vue')
 const searchMode = read('components/index/Searchmode.vue')
 const authLogin = read('pages/auth/login.vue')
 const authRegister = read('pages/auth/register.vue')
-const homePage = read('pages/index.vue')
+const homePage = [read('pages/index.vue'), read('composables/useHomeLayout.ts'), read('composables/useHomePager.ts'), read('composables/useHomeNotifications.ts'), read('composables/useHomeGallery.ts'), read('components/index/HomeGallery.vue')].join('\n')
 const builtinComments = read('components/comments/BuiltinComments.vue')
 const infoFeedList = read('components/index/InfoFeedList.vue')
 const markdownRenderer = read('components/index/MarkdownRenderer.vue')
@@ -31,7 +31,7 @@ const statusPanel = readAdminPanelSourceSync().replace(/\r\n?/g, '\n')
 const calendarWidget = read('components/widgets/CalendarWidget.vue')
 const mediaUpload = read('utils/media-upload.ts')
 const fancyboxVideoClose = read('utils/fancybox-video-close.ts')
-const mediaFancybox = read('utils/media-fancybox.ts')
+const mediaFancybox = [read('utils/media-fancybox.ts'), read('utils/media-viewer-delegation.ts')].join('\n')
 const userStore = read('store/user.ts')
 const floatingCss = read('assets/css/tailwind.css')
 const attachmentAudioCss = read('assets/css/attachment-audio-player.css')
@@ -1205,14 +1205,14 @@ assert(
     markdownRenderer.includes('.markdown-preview :deep(.site-attachment-render--video video)') &&
     markdownRenderer.includes('border: 1px solid rgba(148, 163, 184, 0.42);') &&
     messageList.includes('createMediaFancyboxOptions({ carouselInfinite: false, video: true })') &&
-    messageList.includes("import { createMediaFancyboxOptions } from '~/utils/media-fancybox'") &&
+    messageList.includes("import { bindMediaFancybox, unbindMediaFancybox, createMediaFancyboxOptions } from '~/utils/media-fancybox'") &&
     /\bImage:\s*\{/.test(mediaFancybox) &&
     !messageList.includes('window.Fancybox.destroy()') &&
-    addForm.includes('Fancybox.bind("[data-fancybox]", createMediaFancyboxOptions({ video: true }) as any)') &&
+    mediaFancybox.includes("document.addEventListener('click', onClick)") &&
     !addForm.includes('Fancybox.bind("[data-fancybox]", {})') &&
     !addForm.includes('Fancybox.destroy()') &&
-    addForm.includes('Fancybox.unbind?.(\'[data-fancybox]\')') &&
-    addForm.includes("import { createMediaFancyboxOptions } from '~/utils/media-fancybox'") &&
+    mediaFancybox.includes("document.removeEventListener('click', onClick)") &&
+    appVue.includes('installMediaFancybox') && !addForm.includes('Fancybox.bind') &&
     !messageList.includes(':deep(.site-media-fancybox .fancybox__toolbar)') &&
     !vditorEditor.includes('.site-media-fancybox .fancybox__toolbar') &&
     !homePage.includes('.site-media-fancybox .fancybox__toolbar') &&
@@ -1253,8 +1253,8 @@ assert(
     vditorEditor.includes('previewObserver.observe(root, { childList: true, subtree: true })') &&
     !vditorEditor.includes('characterData: true') &&
     markdownRenderer.includes('initializeMediaViewer') &&
-    markdownRenderer.includes("Fancybox.bind(root, '[data-fancybox]', createMediaFancyboxOptions({ video: true }) as any)") &&
-    markdownRenderer.includes("import { createMediaFancyboxOptions } from '~/utils/media-fancybox'") &&
+    markdownRenderer.includes("bindMediaFancybox(root, createMediaFancyboxOptions({ video: true }))") &&
+    markdownRenderer.includes("import { bindMediaFancybox, unbindMediaFancybox, createMediaFancyboxOptions } from '~/utils/media-fancybox'") &&
     markdownRenderer.includes("trigger.dataset.type = 'html5video'") &&
     markdownRenderer.includes('normalizeMediaPreviewUrl(getVideoElementSource(video))') &&
     markdownRenderer.includes('if (trigger instanceof HTMLAnchorElement) trigger.href = src') &&
@@ -1381,8 +1381,8 @@ assert(
     userStore.includes('clearUserStatus({ clearVideoPlayback: true });') &&
     /const handleLogout = async \(\) => \{\n\s+await logout\(\)\n\}/.test(statusPanel) &&
     !markdownRenderer.includes("video.dataset.type = 'video'") &&
-    homePage.includes("Fancybox?.bind?.('[data-fancybox]', createMediaFancyboxOptions() as any)") &&
-    homePage.includes("import { createMediaFancyboxOptions } from '~/utils/media-fancybox'") &&
+    homePage.includes("bindMediaFancybox(contentWrapper.value, createMediaFancyboxOptions())") &&
+    homePage.includes("import { bindMediaFancybox, unbindMediaFancybox, createMediaFancyboxOptions } from '~/utils/media-fancybox'") &&
     !homePage.includes("Fancybox?.bind?.('[data-fancybox]', {})") &&
     !markdownRenderer.includes('mediumZoom(') &&
     vditorEditor.includes('stopImmediatePropagation') &&

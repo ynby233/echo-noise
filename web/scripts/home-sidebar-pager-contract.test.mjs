@@ -10,7 +10,9 @@ const commentsPath = fileURLToPath(new URL('../components/comments/BuiltinCommen
 const notificationsPath = fileURLToPath(new URL('../components/index/UserNotificationCenter.vue', import.meta.url))
 const sharedCssPath = fileURLToPath(new URL('../assets/css/tailwind.css', import.meta.url))
 const sources = await Promise.all([homePath, sidebarPagerPath, messageListPath, infoFeedPath, commentsPath, notificationsPath, sharedCssPath].map((path) => readFile(path, 'utf8')))
-const [homePage, sidebarPager, messageList, infoFeed, comments, notifications, sharedCss] = sources.map((source) => source.replace(/\r\n?/g, '\n'))
+const [homeTemplate, sidebarPager, messageList, infoFeed, comments, notifications, sharedCss] = sources.map((source) => source.replace(/\r\n?/g, '\n'))
+
+const homePage = homeTemplate + '\n' + await readFile(new URL('../composables/useHomePager.ts', import.meta.url), 'utf8')
 
 const socialCardIndex = homePage.indexOf('left-widget-social-card')
 const sidebarPagerIndex = homePage.indexOf('<HomeSidebarPager', homePage.indexOf('left-widget-pager-card', socialCardIndex))

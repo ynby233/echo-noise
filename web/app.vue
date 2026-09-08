@@ -9,6 +9,13 @@
 import { onBeforeUnmount, onMounted } from 'vue'
 import { useUserStore } from './store/user'
 import Notification from './components/widgets/Notification.vue'
+import { installMediaFancybox } from '~/utils/media-viewer-delegation'
+const mediaToast = useToast()
+let disposeMediaViewer: (() => void) | undefined
+onMounted(() => {
+  disposeMediaViewer = installMediaFancybox(() => mediaToast.add({ title: '预览加载失败', description: '请再次点击图片或视频重试。', color: 'red' }))
+})
+onBeforeUnmount(() => disposeMediaViewer?.())
 
 const userStore = useUserStore()
 

@@ -376,7 +376,7 @@
             <div class="page-footer" v-html="(frontendConfig.pageFooterHTML || defaultConfig.pageFooterHTML)"></div>
           </div>
           <template v-else>
-            <AddForm v-show="!isMasonry || masonryComposerVisible" v-if="activeTab !== 'personal' || isLoggedIn" class="masonry-composer" @search-result="handleSearchResult" :hide-header-tools="layoutState==='three'" :wide="layoutState==='two' || isMasonry" />
+            <AddForm v-show="!isMasonry || masonryComposerVisible" v-if="composerCreated && (activeTab !== 'personal' || isLoggedIn)" class="masonry-composer" @search-result="handleSearchResult" :hide-header-tools="layoutState==='three'" :wide="layoutState==='two' || isMasonry" />
             <!-- 中心栏标签筛选已隐藏；右侧标签组件保留原功能 -->
           <MessageList :masonry="isMasonry"
             ref="messageList" 
@@ -427,23 +427,7 @@
           <CalendarWidget :active-tab="activeTab" :selected-date="selectedCalendarDate" @select-date="handleCalendarDateSelect" />
         </UCard>
         <UCard v-if="frontendConfig.latestGalleryEnabled !== false" class="sidebar-card no-padding-card" :class="sidebarThemeCard">
-          <div class="image-gallery-block">
-            <div class="text-xs opacity-70 mb-2">最新图集（{{ recommendedImages.length }}）</div>
-            <div class="scroll-images">
-              <div class="recommend-grid">
-                <a v-for="(img, index) in recommendedImages" :key="recommendImageKey(img, index)" :href="isRecommendImageFailed(img, index) ? undefined : imageSrc(img)" :data-fancybox="isRecommendImageFailed(img, index) ? undefined : 'recommend-gallery'" class="block">
-                  <span v-if="isRecommendImageFailed(img, index)" class="site-attachment-failure site-attachment-failure--image site-attachment-failure--compact" role="note" :aria-label="recommendImageFailureLabel">
-                    <span class="site-attachment-failure__content">
-                      <span class="site-attachment-failure__icon" aria-hidden="true"></span>
-                      <strong class="site-attachment-failure__title">{{ recommendImageFailureTitle }}</strong>
-                      <span class="site-attachment-failure__detail">{{ recommendImageFailureDetail }}</span>
-                    </span>
-                  </span>
-                  <img v-else :src="imageSrc(img)" class="recommend-image-box" loading="lazy" alt="recommend" @error="markRecommendImageFailed(img, index)" />
-                </a>
-              </div>
-            </div>
-          </div>
+          <HomeGallery :images="images" :base-api="baseApi" />
         </UCard>
         <UCard v-if="frontendConfig.heatmapEnabled !== false" class="sidebar-card no-padding-card heatmap-sidebar-card" :class="sidebarThemeCard">
           <HeatmapWidget :active-tab="activeTab" compact />
@@ -462,7 +446,7 @@
       </UContainer>
   <AnnouncementModal ref="announcementModal" @unread-change="handleAnnouncementUnreadChange" />
   <!-- 添加搜索模态框组件 -->
-  <SearchMode v-model="showSearchModal" @search-result="handleSearchResult" />
+  <SearchMode v-if="searchCreated" v-model="showSearchModal" @search-result="handleSearchResult" />
   <PwaRuntimeNotices ref="pwaRuntimeNotices" />
   <FloatingToolSidebar 
     :content-theme="contentTheme"
@@ -605,32 +589,37 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, inject, provide, onMounted, onUnmounted, watch, nextTick, reactive, type ComponentPublicInstance } from 'vue'
+import { ref, computed, inject, provide, onMounted, onUnmounted, watch, nextTick, reactive } from 'vue'
 import { useRouter, useRoute, useRuntimeConfig } from '#imports'
-import { readReloadPagePosition, savePagePosition, type HomePagePosition } from '~/utils/home-page-position'
-import AddForm from '@/components/index/AddForm.vue'
+import { readReloadPagePosition } from '~/utils/home-page-position'
+import { asyncFeature } from '~/utils/async-feature'
+import { useHomeNotifications } from '~/composables/useHomeNotifications'
+import { useHomePager } from '~/composables/useHomePager'
+import { normalizeLayoutMode, useHomeLayout } from '~/composables/useHomeLayout'
+const AddForm = asyncFeature(() => import('@/components/index/AddForm.vue'), '编辑器')
 import MessageList from '@/components/index/MessageList.vue'
 import HeatmapWidget from '~/components/widgets/heatmap.vue'
 import CalendarWidget from '~/components/widgets/CalendarWidget.vue'
-import SearchMode from '~/components/index/Searchmode.vue' // 导入 SearchMode 组件
+const SearchMode = asyncFeature(() => import('~/components/index/Searchmode.vue'), '搜索')
 import TagList from '~/components/index/TagList.vue'
-import InfoFeedList from '@/components/index/InfoFeedList.vue'
-import UserNotificationCenter from '@/components/index/UserNotificationCenter.vue'
+const InfoFeedList = asyncFeature(() => import('@/components/index/InfoFeedList.vue'), '信息流')
+const UserNotificationCenter = asyncFeature(() => import('@/components/index/UserNotificationCenter.vue'), '通知')
 import PwaRuntimeNotices from '@/components/index/PwaRuntimeNotices.vue'
-import AnnouncementCenter from '@/components/index/AnnouncementCenter.vue'
+const AnnouncementCenter = asyncFeature(() => import('@/components/index/AnnouncementCenter.vue'), '公告')
 import AnnouncementModal from '@/components/index/AnnouncementModal.vue'
 import HomeSidebarPager from '@/components/index/HomeSidebarPager.vue'
 import AnnouncementBar from '~/components/widgets/AnnouncementBar.vue'
 import AdCarousel from '~/components/widgets/AdCarousel.vue'
 import FloatingToolSidebar from '~/components/widgets/FloatingToolSidebar.vue'
-import BuiltinComments from '~/components/comments/BuiltinComments.vue'
+const BuiltinComments = asyncFeature(() => import('~/components/comments/BuiltinComments.vue'), '评论')
 import MarkdownRenderer from '~/components/index/MarkdownRenderer.vue'
-import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
+import { bindMediaFancybox, unbindMediaFancybox, createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { normalizeAdConfigs } from '~/utils/ad-config'
 import { getMessageIdFromRouteHash } from '~/utils/message-route-hash'
 import { getRequest, postRequest } from '~/utils/api'
-import { attachmentFailureAriaLabel, attachmentFailureDetail, attachmentFailureTitle } from '~/utils/attachment-failure'
-import { createHomeGalleryLoader } from '~/utils/home-gallery-loader'
+
+import { useHomeGallery } from '~/composables/useHomeGallery'
+import HomeGallery from '~/components/index/HomeGallery.vue'
 import { resolveManagedAttachmentURL } from '~/utils/media-url'
 import { useToast } from '#ui/composables/useToast'
 import { useUserStore } from '~/store/user'
@@ -640,63 +629,12 @@ const router = useRouter()
 const route = useRoute()
 const baseApi = useRuntimeConfig().public.baseApi || '/api'
 const pwaRuntimeNotices = ref<{ open: () => void } | null>(null)
-const normalizeLayoutMode = (raw: any): 'three' | 'two' | 'single' | 'masonry' => {
-  const val = String(raw || '').trim()
-  return (val === 'three' || val === 'two' || val === 'single' || val === 'masonry') ? val : 'three'
-}
-let desktopLayoutDefault: 'three' | 'two' | 'single' | 'masonry' = 'three'
-const initialLayout = ((): 'three' | 'two' | 'single' | 'masonry' => {
-  if (typeof window === 'undefined') return 'three'
-  const isMobileInit = window.matchMedia('(max-width: 1024px)').matches
-  const saved = localStorage.getItem(isMobileInit ? 'homeLayoutMobile' : 'homeLayoutDesktop') as any
-  if (saved) return normalizeLayoutMode(saved)
-  return isMobileInit ? 'single' : desktopLayoutDefault
-})()
-const layoutState = ref<'three' | 'two' | 'single' | 'masonry'>(initialLayout)
-const mq = typeof window !== 'undefined' ? window.matchMedia('(max-width: 1024px)') : null
-const isMobile = ref<boolean>(!!mq?.matches)
-const cycleLayout = () => {
-  if (isMobile.value) return
-  layoutState.value = layoutState.value === 'three' ? 'two' : (layoutState.value === 'two' ? 'single' : (layoutState.value === 'single' && supportsMasonry.value ? 'masonry' : 'three'))
-  if (typeof window !== 'undefined') localStorage.setItem('homeLayoutDesktop', layoutState.value)
-}
-const handleLayoutMediaChange = (e: MediaQueryListEvent) => {
-  isMobile.value = e.matches
-  if (isMobile.value) {
-    layoutState.value = 'single'
-    localStorage.setItem('homeLayoutMobile', 'single')
-    return
-  }
-  const saved = localStorage.getItem('homeLayoutDesktop') as any
-  layoutState.value = normalizeLayoutMode(saved || desktopLayoutDefault)
-}
-onMounted(() => {
-  mq?.addEventListener?.('change', handleLayoutMediaChange)
-})
-onUnmounted(() => {
-  mq?.removeEventListener?.('change', handleLayoutMediaChange)
-})
-const gridModeClass = computed(() => isMasonry.value ? 'grid-masonry' : (layoutState.value === 'three' ? 'grid-3' : (layoutState.value === 'two' ? 'grid-2' : 'grid-1')))
-const layoutIcon = computed(() => isMasonry.value ? 'i-mdi-view-dashboard' : (layoutState.value === 'three' ? 'i-mdi-view-grid' : (layoutState.value === 'two' ? 'i-mdi-view-column' : 'i-mdi-view-stream')))
-const centerContainerClass = computed(() => (
-  (layoutState.value === 'two' || isMasonry.value)
-    ? 'w-full max-w-none'
-    : (layoutState.value === 'single'
-        ? 'mx-auto w-full max-w-[640px] sm:max-w-3xl'
-        : 'mx-auto w-full sm:max-w-4xl')
-))
-const toggleHeatmapCard = () => { showHeatmap.value = !showHeatmap.value }
-// 主题预设。统一由 ThemePresetSwitcher 控制 documentElement 类，不在容器上附加主题类
 const reloadPosition = readReloadPagePosition()
 const activeTab = ref<string>(reloadPosition?.tab || 'latest')
-const initialPage = computed(() => !isMasonry.value && reloadPosition?.tab === activeTab.value ? reloadPosition.page : 1)
-const rememberPagePosition = () => {
-  const pager = activeSidebarPager.value
-  const eligible = !isMasonry.value && ['latest', 'personal', 'feed'].includes(activeTab.value) && !selectedCalendarDate.value && !searchKeyword.value && !selectedTag.value && !getMessageIdFromRouteHash(route.hash) && !route.query.message_id
-  savePagePosition(eligible ? { tab: activeTab.value as HomePagePosition['tab'], page: Math.max(1, pager.currentPage) } : null)
-}
-onMounted(() => window.addEventListener('pagehide', rememberPagePosition))
-onUnmounted(() => window.removeEventListener('pagehide', rememberPagePosition))
+const { layoutState, isMobile, cycleLayout, gridModeClass, layoutIcon, centerContainerClass, supportsMasonry, isMasonry, applyDefaultLayout } = useHomeLayout(activeTab)
+const toggleHeatmapCard = () => { showHeatmap.value = !showHeatmap.value }
+// 主题预设。统一由 ThemePresetSwitcher 控制 documentElement 类，不在容器上附加主题类
+
 const masonryComposerVisible = ref(false)
 const toggleMasonryComposer = async () => {
   if (masonryComposerVisible.value) {
@@ -709,21 +647,14 @@ const toggleMasonryComposer = async () => {
   await nextTick()
   resetContentScrollInstant()
 }
-const supportsMasonry = computed(() => ['latest', 'personal', 'feed'].includes(activeTab.value))
-const isMasonry = computed(() => !isMobile.value && layoutState.value === 'masonry' && supportsMasonry.value)
-watch([activeTab, layoutState], () => {
-  if (layoutState.value === 'masonry' && !supportsMasonry.value) {
-    layoutState.value = 'three'
-    if (typeof window !== 'undefined') localStorage.setItem('homeLayoutDesktop', 'three')
-  }
-}, { flush: 'sync' })
-const notificationTargetMessageId = ref<number | null>(null)
-const notificationTargetCommentId = ref<number | null>(null)
-const notificationTargetNotificationId = ref<number | null>(null)
-const notificationUnreadCount = ref(0)
-const announcementUnreadCount = ref(0)
-const notificationReturnPending = ref(false)
-const notificationReturnFocusId = ref<number | null>(null)
+// Defer the first mount when writing is hidden; after opening, v-show preserves
+// the live editor, selection and uploads when the user hides it again.
+const composerCreated = ref(false)
+const homeConfigReady = ref(false)
+watch(() => homeConfigReady.value && (!isMasonry.value || masonryComposerVisible.value), visible => {
+  if (visible) composerCreated.value = true
+}, { immediate: true })
+const { notificationTargetMessageId, notificationTargetCommentId, notificationTargetNotificationId, notificationUnreadCount, announcementUnreadCount, notificationReturnPending, notificationReturnFocusId, handleNotificationUnreadChange, handleAnnouncementUnreadChange, loadNotificationUnreadCount } = useHomeNotifications()
 const selectedCalendarDate = ref('')
 const searchKeyword = ref('')
 const selectedTag = ref('')
@@ -758,7 +689,6 @@ watch(() => activeTab.value, (tab) => {
   if (tab !== 'latest' && tab !== 'personal') clearMessageFilters()
 })
 const feedResultCount = ref(0)
-const feedRefreshing = ref(false)
 const isFeedEnabled = computed(() => frontendConfig.value?.feedEnabled === true)
 const feedEnableGithubCard = computed(() => frontendConfig.value?.enableGithubCard === true)
 const feedPageTitleText = computed(() => {
@@ -784,33 +714,6 @@ const centerTabs = computed(() => {
 
 
 // 添加 messageList ref
-type HomePagerState = {
-  visible: boolean
-  currentPage: number
-  totalPages: number
-  loading: boolean
-  canPrevious: boolean
-  canNext: boolean
-}
-type HomePagerController = ComponentPublicInstance & {
-  sidebarPagerState: HomePagerState
-  previousPage: () => void | Promise<void>
-  nextPage: () => void | Promise<void>
-  goToPage: (page: string | number) => void | Promise<void>
-}
-type MessageListExpose = HomePagerController & {
-  refreshList: () => Promise<void>
-}
-type InfoFeedListExpose = HomePagerController & {
-  refreshFeed: () => Promise<void>
-  footerPagerState: HomePagerState & { targetPage: string }
-  setTargetPage: (page: string) => void
-  adjustTargetPage: (delta: number) => void
-  jumpToTargetPage: () => void
-}
-type CommentThreadExpose = HomePagerController & {
-  focusCommentById: (commentId: number) => Promise<boolean>
-}
 type NotificationJumpItem = {
   id: number
   type?: string
@@ -821,83 +724,11 @@ type NotificationJumpItem = {
   target_comment_id?: number | null
   message?: { id?: number | null; content?: string | null; is_guestbook?: boolean } | null
 }
-type AnnouncementCenterExpose = HomePagerController & { refresh: () => void | Promise<void> }
-type AnnouncementModalExpose = { refresh: () => void | Promise<void> }
-const messageList = ref<MessageListExpose | null>(null)
-const infoFeedList = ref<InfoFeedListExpose | null>(null)
-const guestbookCommentsRef = ref<CommentThreadExpose | null>(null)
-const notificationCenter = ref<HomePagerController | null>(null)
-const announcementCenter = ref<AnnouncementCenterExpose | null>(null)
-const announcementModal = ref<AnnouncementModalExpose | null>(null)
-const latestTotalPages = ref(1)
-const activeSidebarPagerController = computed<HomePagerController | null>(() => {
-  if (activeTab.value === 'feed') return infoFeedList.value
-  if (activeTab.value === 'comment') return guestbookCommentsRef.value
-  if (activeTab.value === 'notifications') return notificationCenter.value
-  if (activeTab.value === 'announcements') return announcementCenter.value
-  if (activeTab.value === 'latest' || activeTab.value === 'personal') return messageList.value
-  return null
-})
-const activeSidebarPagerState = computed<HomePagerState | null>(() => activeSidebarPagerController.value?.sidebarPagerState || null)
-const isFeedLoading = computed(() => infoFeedList.value?.sidebarPagerState.loading === true)
-const feedPagerState = computed<HomePagerState & { targetPage: string }>(() => infoFeedList.value?.footerPagerState || {
-  visible: false,
-  currentPage: 1,
-  totalPages: 1,
-  targetPage: '1',
-  loading: false,
-  canPrevious: false,
-  canNext: false,
-})
-const setFeedTargetPage = (event: Event) => {
-  const input = event.currentTarget as HTMLInputElement | null
-  infoFeedList.value?.setTargetPage(input?.value || '')
-}
-const refreshInfoFeed = async () => {
-	if (feedRefreshing.value || isFeedLoading.value) return
-  feedRefreshing.value = true
-  try {
-    await infoFeedList.value?.refreshFeed()
-  } finally {
-    window.setTimeout(() => {
-      feedRefreshing.value = false
-    }, 300)
-  }
-}
-const isSidebarPagerInteractive = computed(() => activeSidebarPagerState.value?.visible === true)
-const disabledSidebarPager = computed<HomePagerState>(() => ({
-  visible: true,
-  currentPage: 0,
-  totalPages: latestTotalPages.value,
-  loading: false,
-  canPrevious: false,
-  canNext: false
-}))
-const activeSidebarPager = computed<HomePagerState>(() => isSidebarPagerInteractive.value
-  ? (activeSidebarPagerState.value as HomePagerState)
-  : disabledSidebarPager.value)
-const handleSidebarPagerPrevious = () => {
-  if (isSidebarPagerInteractive.value) activeSidebarPagerController.value?.previousPage()
-}
-const handleSidebarPagerNext = () => {
-  if (isSidebarPagerInteractive.value) activeSidebarPagerController.value?.nextPage()
-}
-const handleSidebarPagerJump = (page: string) => {
-  if (isSidebarPagerInteractive.value) activeSidebarPagerController.value?.goToPage(page)
-}
-watch(() => [
-  activeTab.value,
-  messageList.value?.sidebarPagerState?.totalPages,
-  selectedCalendarDate.value,
-  searchKeyword.value,
-  selectedTag.value
-], ([tab, pages, date, keyword, tag]) => {
-  if (tab !== 'latest' || date || keyword || tag) return
-  const next = Number(pages)
-  if (Number.isFinite(next) && next > 0) latestTotalPages.value = Math.max(1, Math.floor(next))
-})
+const { messageList, infoFeedList, guestbookCommentsRef, notificationCenter, announcementCenter, announcementModal, latestTotalPages, isFeedLoading, feedPagerState, setFeedTargetPage, refreshInfoFeed, activeSidebarPager, handleSidebarPagerPrevious, handleSidebarPagerNext, handleSidebarPagerJump, initialPage, feedRefreshing, isSidebarPagerInteractive } = useHomePager(activeTab, isMasonry, { selectedCalendarDate, searchKeyword, selectedTag }, reloadPosition)
 // 搜索模态的开关
 const showSearchModal = ref(false)
+const searchCreated = ref(false)
+watch(showSearchModal, visible => { if (visible) searchCreated.value = true })
 const showAuthModal = ref(false)
 const authMode = ref<'login'|'register'>('login')
 const loginForm = reactive({ username: '', password: '' })
@@ -1155,20 +986,10 @@ onMounted(async () => {
 
 
 const userStore = useUserStore()
-const pwaManager = usePwaManager()
 const { can, refreshCapabilities } = useAdminCapabilities()
 onMounted(() => { void refreshCapabilities() })
 const isLoggedIn = computed(() => !!(userStore.isLogin && userStore.user))
 const isOnline = computed(() => !!(userStore.user))
-
-const handleNotificationUnreadChange = (count: number) => {
-  notificationUnreadCount.value = Math.max(0, Number(count || 0))
-  void pwaManager.syncBadge(notificationUnreadCount.value)
-}
-
-const handleAnnouncementUnreadChange = (count: number) => {
-  announcementUnreadCount.value = Math.max(0, Number(count || 0))
-}
 
 const focusGuestbookNotificationComment = async (commentId: number) => {
   if (!commentId) return
@@ -1179,6 +1000,13 @@ const focusGuestbookNotificationComment = async (commentId: number) => {
     await new Promise((resolve) => window.setTimeout(resolve, 120))
   }
 }
+// A slow first comment download may finish after the navigation's short retries.
+// Resume the existing target once the real thread ref becomes available.
+watch(guestbookCommentsRef, thread => {
+  if (thread && activeTab.value === 'comment' && notificationTargetCommentId.value) {
+    void focusGuestbookNotificationComment(notificationTargetCommentId.value)
+  }
+})
 
 const handleNotificationJump = async (item: NotificationJumpItem) => {
   const messageId = Number(item?.target_message_id || item?.message_id || item?.message?.id || 0)
@@ -1213,18 +1041,6 @@ const handleNotificationTargetConsumed = () => {
   notificationTargetMessageId.value = null
   notificationTargetCommentId.value = null
   targetMessageId.value = null
-}
-
-const loadNotificationUnreadCount = async () => {
-  if (!isLoggedIn.value) {
-    notificationUnreadCount.value = 0
-    void pwaManager.syncBadge(0)
-    return
-  }
-  const res = await getRequest<any>('notifications/unread-count', {}, { credentials: 'include', silent: true })
-  const count = Number(res?.data?.unread_count ?? res?.data?.unreadCount ?? 0)
-  notificationUnreadCount.value = Number.isFinite(count) ? Math.max(0, count) : 0
-  void pwaManager.syncBadge(notificationUnreadCount.value)
 }
 
 const openNotificationCenter = async () => {
@@ -2326,10 +2142,7 @@ const fetchConfig = async () => {
             })
             const serverLayout = normalizeLayoutMode(settings.homeLayoutDefault)
             nextConfig.homeLayoutDefault = serverLayout
-            desktopLayoutDefault = serverLayout
-            if (typeof window !== 'undefined' && !isMobile.value && !localStorage.getItem('homeLayoutDesktop')) {
-              layoutState.value = serverLayout
-            }
+            applyDefaultLayout(serverLayout)
             const defaultTheme = (settings.defaultContentTheme || 'light').trim()
             if (typeof window !== 'undefined' && !localStorage.getItem('contentTheme')) {
               contentTheme.value = defaultTheme === 'light' ? 'light' : 'dark'
@@ -2363,8 +2176,9 @@ const fetchConfig = async () => {
         currentBackground.value = frontendConfig.value.backgrounds[0] || null
         currentImage.value = currentBackground.value?.url || ''
     } finally {
+        homeConfigReady.value = true
         musicConfigLoaded.value = true
-        void reconcileGalleryAfterConfig()
+        void reconcileGalleryAfterConfig(frontendConfig.value.latestGalleryEnabled)
     }
 }
 
@@ -2593,36 +2407,8 @@ const fetchTags = async () => {
 }
 
 // 图片与状态
-const images = ref<any[]>([])
+const { images, galleryLoader, reconcileGalleryAfterConfig } = useHomeGallery()
 const status = ref<any>(null)
-const requestImages = async () => {
-  try {
-    const r = await getRequest<any>('messages/images', undefined, { credentials: 'include' })
-    if (r && r.code === 1 && Array.isArray(r.data)) {
-      return r.data
-    }
-  } catch {}
-  return []
-}
-const applyImages = (nextImages: any[]) => {
-  images.value = Array.isArray(nextImages) ? nextImages : []
-  if (failedRecommendKeys.value.size > 0) failedRecommendKeys.value = new Set()
-}
-const galleryLoader = createHomeGalleryLoader({
-  load: requestImages,
-  apply: applyImages,
-  clear: () => { images.value = [] },
-})
-let galleryConfigResolved = false
-const reconcileGalleryAfterConfig = async () => {
-  const enabled = frontendConfig.value.latestGalleryEnabled
-  if (!galleryConfigResolved) {
-    galleryConfigResolved = true
-    await galleryLoader.onConfigResolved(enabled)
-    return
-  }
-  await galleryLoader.onViewerChanged(enabled)
-}
 const fetchStatus = async () => {
   try {
     const r = await getRequest<any>('status')
@@ -2654,34 +2440,6 @@ const tagsCount = computed(() => {
   const excluded = ['留言', 'guestbook']
   return arr.filter((t: any) => !excluded.includes(String(t?.name || '').toLowerCase())).length
 })
-const recommendedImages = computed(() => images.value.slice(0, 60))
-// 受管附件地址必须跟随当前站点 origin：历史数据里存过 http://<旧IP>:<旧端口>/api/images/...，
-// 原样透传会让 <img> 变成跨站请求，SameSite=Lax 的会话 Cookie 被浏览器拦下，
-// 私有笔记的图片随即 404 并画出失败占位块。外链由 resolveManagedAttachmentURL 原样放过。
-const imageSrc = (img: any) => {
-  const url = typeof img === 'string' ? img : (img?.image_url || img?.url)
-  return resolveManagedAttachmentURL(baseApi, String(url || ''))
-}
-// 同一条笔记可引用多张图、同一张图也可被多条笔记引用，key 必须按条目唯一，
-// 否则 Vue 无法正确 patch 列表，会残留或错位节点。
-const recommendImageKey = (img: any, index: number) => `${index}:${imageSrc(img)}`
-
-// 缩略图瞬时加载失败只影响该格子的渲染分支：既不改 recommendedImages，也不改标题计数，
-// 否则一次网络抖动会连带删掉同一张图的其它引用（见 home-gallery-missing-attachment 契约）。
-// 按 recommendImageKey 逐条目记录，不能按 URL，否则重复图会级联。
-const failedRecommendKeys = ref<Set<string>>(new Set())
-const recommendImageFailureTitle = attachmentFailureTitle('image')
-const recommendImageFailureDetail = attachmentFailureDetail('image', false)
-const recommendImageFailureLabel = attachmentFailureAriaLabel('image')
-const isRecommendImageFailed = (img: any, index: number) => failedRecommendKeys.value.has(recommendImageKey(img, index))
-const markRecommendImageFailed = (img: any, index: number) => {
-  const key = recommendImageKey(img, index)
-  if (failedRecommendKeys.value.has(key)) return
-  const next = new Set(failedRecommendKeys.value)
-  next.add(key)
-  failedRecommendKeys.value = next
-}
-
 const leftAds = computed(() => {
   const arr = Array.isArray((frontendConfig.value as any).leftAds) ? (frontendConfig.value as any).leftAds : []
   const cleaned = normalizeAdConfigs(arr)
@@ -2699,8 +2457,9 @@ const leftAds = computed(() => {
 
 // 绑定 Fancybox 以支持推荐图集预览
 onMounted(() => {
-  try { (window as any).Fancybox?.bind?.('[data-fancybox]', createMediaFancyboxOptions() as any) } catch {}
+  if (contentWrapper.value) bindMediaFancybox(contentWrapper.value, createMediaFancyboxOptions())
 })
+onUnmounted(() => { if (contentWrapper.value) unbindMediaFancybox(contentWrapper.value) })
 
 // 监听前端配置更新事件，保存后主动刷新配置
 onMounted(() => {

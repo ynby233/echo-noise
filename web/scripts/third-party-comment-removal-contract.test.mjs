@@ -9,6 +9,9 @@ const repoRoot = dirname(webRoot)
 const read = (relativePath) => readFile(join(repoRoot, relativePath), 'utf8')
 const sourceFiles = {
   nuxt: await read('web/nuxt.config.ts'),
+  media: await read('web/utils/media-fancybox.ts'),
+  mediaRuntime: await read('web/utils/media-fancybox-runtime.ts'),
+  music: await read('web/utils/meting-player.ts'),
   messageList: await read('web/components/index/MessageList.vue'),
   globals: await read('web/types/globals.d.ts'),
   builtinComments: await read('web/components/comments/BuiltinComments.vue'),
@@ -28,7 +31,9 @@ for (const [name, source] of Object.entries(sourceFiles)) {
   assert.doesNotMatch(source, forbiddenRuntimePattern, `${name} must not retain third-party comment runtime or configuration residue`)
 }
 
-assert.match(sourceFiles.nuxt, /@fancyapps\/ui|medium-zoom|aplayer|meting/i, 'non-comment external resources must remain available')
+assert.match(sourceFiles.media, /import\('\.\/media-fancybox-runtime'\)/, 'media preview remains available through the shared lazy loader')
+assert.match(sourceFiles.mediaRuntime, /from '@fancyapps\/ui'/, 'media runtime uses the installed viewer')
+assert.match(sourceFiles.music, /aplayer.*[\s\S]*meting/i, 'music embeds retain their ordered runtime loader')
 assert.match(sourceFiles.messageList, /<BuiltinComments\b/, 'message comments must keep using BuiltinComments')
 assert.match(sourceFiles.builtinComments, /\.comment-wrapper\b/, 'builtin comments should use a neutral wrapper class')
 assert.match(sourceFiles.notificationCenter, /\.comment-wrapper\b/, 'notification inline replies should use the neutral wrapper class')

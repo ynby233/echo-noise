@@ -1,5 +1,17 @@
+import { registerMediaScope, unregisterMediaScope } from './media-viewer-delegation'
 import { zh_CN } from '@fancyapps/ui/l10n/Fancybox/zh_CN'
 import { animateFancyboxHtml5VideoClose, prepareFancyboxHtml5VideoSlide } from './fancybox-video-close'
+import { createRetryableModule } from './retryable-module'
+
+const fancyboxModule = createRetryableModule(() => import('./media-fancybox-runtime'))
+/** One bundled viewer for inline media, galleries and the editor; no CDN duplicate. */
+export const loadMediaFancybox = () => fancyboxModule().then(module => {
+  window.Fancybox = module.default
+  return module.default
+})
+
+export const bindMediaFancybox = (root: HTMLElement, options: Record<string, any>) => registerMediaScope(root, options, loadMediaFancybox)
+export const unbindMediaFancybox = unregisterMediaScope
 
 export const MEDIA_FANCYBOX_MAIN_CLASS = 'site-media-fancybox'
 

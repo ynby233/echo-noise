@@ -177,7 +177,7 @@ import { computed, ref, onMounted, onBeforeUnmount, watch, nextTick } from "vue"
 import { useToast } from '#imports'
 import { getFixedCoordinateScale, getFixedRect, positionFloatingMenu, scheduleFloatingMenuPosition } from '~/utils/floating-menu'
 import { captureVideoFirstFrameFromSource, ensureFancyboxVideoThumbnail, getVideoPlaybackFrameForSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
-import { createMediaFancyboxOptions } from '~/utils/media-fancybox'
+import { loadMediaFancybox, createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { buildAttachmentAudioPlaceholderHtml, closeAttachmentAudioPopover, destroyAttachmentAudioPlayers, enhanceAttachmentAudioPlayers, toggleAttachmentAudioPopover } from '~/utils/attachment-audio-player'
 import { MARKDOWN_BLANK_LINE_SENTINEL, encodeMarkdownExtraBlankLines, isMarkdownBlankLineSentinel, markMarkdownPreservedBlankLineElements, serializeMarkdownEditorBlocks } from '~/utils/markdown-blank-lines'
 import { getFixedEditorClipInsets, insertEditorValueFallback, insertTableCellAtomicValue, replaceTableSourceLine, resolveTableAttachmentTarget, type TableAttachmentTarget } from '~/utils/vditor-table-attachment'
@@ -185,8 +185,6 @@ import { applyTableTrackSize, getTableResizeZoomScale, resolveTableTrackResize, 
 import { isBrowserPreviewableAttachmentUrl } from '~/utils/attachment-preview'
 import { createPreReadyEditorInsertBuffer } from '~/utils/editor-insert-buffer.mjs'
 import Vditor from "vditor";
-import { Fancybox } from "@fancyapps/ui";
-import "@fancyapps/ui/dist/fancybox/fancybox.css";
 import "vditor/dist/index.css";
 
 const props = defineProps({
@@ -626,13 +624,12 @@ const showAttachmentGallery = async (items: EditorAttachmentInfo[], current: Edi
     }
   }
   try {
+    const Fancybox = await loadMediaFancybox()
+    if (!editorContainer.value?.isConnected) { cleanup(); return }
     Fancybox.fromNodes(nodes, viewerOptions as any)
   } catch {
-    try {
-      ;(window as any).Fancybox?.fromNodes?.(nodes, viewerOptions)
-    } catch {
-      cleanup()
-    }
+    cleanup()
+    toast.add({ title: '预览加载失败', description: '请再次点击附件重试。', color: 'red' })
   }
 }
 

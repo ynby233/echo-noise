@@ -32,7 +32,7 @@ assert(
     editToolbar.includes('@upload-progress="handleEditAudioUploadProgress"') &&
     editToolbar.includes('@prepare-insert="prepareEditAudioInsert"') &&
     editToolbar.includes('@insert-cancelled="clearEditAudioInsertTarget"') &&
-    messageList.includes("import AudioRecorder from './AudioRecorder.vue'") &&
+    messageList.includes("import AudioRecorder from './AudioRecorderButton.vue'") &&
     messageList.includes('createAudioMarkdown(resolveUploadedMediaUrl(audioUrl, String(BASE_API || \'/api\')))') &&
     /const prepareEditAudioInsert = \(\) => \{[\s\S]*?selectionStart[\s\S]*?selectionEnd/.test(messageList) &&
     /const handleEditAudioUploaded = async \(audioUrl: string\) => \{[\s\S]*?insertEditingMarkdown\(audioMarkdown/.test(messageList),
