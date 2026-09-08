@@ -2,6 +2,8 @@
 
 范围为桌面交接文档的工作线 4。对照构建为 d55af51a6314cffca36c5f836d537d61fa2e290a，结果来自本地生产静态构建与合成 API，不涉及真实账号、笔记发布或生产数据。
 
+后续独立验收在 bf45012c 发现正文次级依赖无法重试、全局 CSS 失败污染无关并发功能两项 P2。本报告最初的入口失败测试没有覆盖这两个边界，不能作为完整失败恢复的证明。本次已复现并修复，详见文末“独立验收后的修复”；下方原首屏测量保留为首次实现的历史样本。
+
 ## 实现与职责
 
 | 入口 | 职责和行为 |
@@ -12,7 +14,7 @@
 | composables/useHomeNotifications.ts | 首页未读计数、返回目标和系统角标；目标导航仍由页面编排。 |
 | composables/useHomeGallery.ts、components/index/HomeGallery.vue | 画廊加载与配置/身份切换顺序、图集展示、逐条缩略图失败状态；沿用原有请求协调器。 |
 | components/index/AudioRecorderButton.vue | 保留轻量录音入口及插入点事件，首次点击再创建录音组件；图床和编辑器亦在需要时加载。 |
-| utils/async-feature.ts、utils/retryable-module.ts | 共享正在下载和已成功的模块；失败显示局部错误与重试。已实测 Chromium 会保留失败 import，重试仅为实际失败的同源资源增加 load_retry 查询；Nuxt 吞掉的 CSS 预加载异常也会进入局部重试。 |
+| utils/async-feature.ts、utils/retryable-module.ts | 共享正在下载和已成功的模块；失败显示局部错误与重试。构建期接入当前导入的准确依赖，CSS 失败归属对应功能；JS 失败通过 module-recovery.ts 恢复实际失败的静态依赖，并复用已经成功的模块。原入口 load_retry 方案已在独立验收后替换。 |
 | utils/media-viewer-delegation.ts、utils/media-fancybox.ts | 应用只安装轻量点击代理；页面注册各自根节点和选项，首次媒体点击加载同一个打包 Fancybox。避免应用入口把媒体运行时提前预取，分组按最近的注册根节点处理。 |
 | utils/vditor-preview.ts、utils/markdown-preview-runtime.ts | 使用已安装 Vditor 3.10.9 的 dist/method.js 预览入口，同一 Markdown 引擎，编辑器构造函数仍仅在编辑时使用。加载期间显示文本，失败后可重试；旧异步回调不处理已换内容或已卸载的节点。 |
 | utils/meting-player.ts | 仅包含音乐嵌入的正文加载 APlayer/Meting；共用下载 Promise，保持 CSS → APlayer → Meting 顺序，失败资源可重新下载。 |
@@ -81,3 +83,31 @@ node web/scripts/home-lazy-loading.browser.cjs
 本线仅提交并推送 origin/main；没有测试平台/NAS 部署、真实 iOS 安装或麦克风硬件验收。镜像工作流 docker-publish.yml 仅支持手动触发，此次代码推送不等于镜像构建成功。
 
 回退本线提交并重新构建前端即可恢复原加载方式；没有数据库或附件格式变更。已安装 PWA 仍需通过原有更新/刷新流程取得回退资源，不能把 Git 回退等同于所有客户端已经刷新。
+
+## 独立验收后的修复（2026-09-09）
+
+调查结论：R4-S1、R4-Q1 均属实。改代码前，使用原平台资源重新复现 CSS 串扰，并使用当前生产构建运行新增浏览器脚本：正文依赖重试、搜索 CSS 与正文并发、搜索 CSS 与编辑器并发均失败；同功能并发共享下载的对照组通过。最小原生 import 探针也确认入口查询参数不能清除静态依赖的失败记录。
+
+修复方式：`build/scoped-module-preload.mjs` 在 Vite 的预加载调用入口传入该次导入的依赖列表；`retryable-module.ts` 只处理自己依赖的 CSS，不再订阅全局 `vite:preloadError`。CSS 下载成功后共享结果，失败移除对应 link，下一次重新加载。
+
+JS 重试先复用原生 import 的成功模块；只有仍失败的分支才 fetch 原资源，使用已在锁文件中的 es-module-lexer 1.6.0 解析并重连静态依赖，通过 Blob 模块重新加载。成功的恢复结果按原 URL 共享，不重建 Vue、状态仓库或已挂载组件。保留 import.meta.url 的原资源基址和字面量动态导入。失败重试仍可再次尝试；当前生产静态依赖图没有环，本实现不承诺修复失败的循环依赖图。未修改 SW 规则、分页、后台授权或 R5/R7。
+
+实际验证：
+
+| 验证 | 结果 |
+| --- | --- |
+| `async-feature-failures.browser.cjs` | 5 组通过：正文静态依赖恢复；搜索 CSS 失败时正文正常；搜索 CSS 失败时编辑器正常；同功能两个调用只下载一次；搜索 JS 重试后原编辑 DOM 与草稿保留。故障靶点读取本次构建 manifest，并检查产物存在。 |
+| `module-recovery.browser.cjs` | 原生 Chromium 中多层静态导入/转导出失败、仍断网时再次失败、恢复网络后成功；两个父模块共享恢复依赖、实时导出引用一致；已成功状态模块只执行一次、对象与草稿保留；原资源基址与后续动态导入正常。 |
+| `home-lazy-loading.browser.cjs` | 原完整流程 15 组通过，包括正常功能入口、搜索 JS/CSS 与正文 Lute 重试、草稿和编辑器身份、默认可见编辑器、离线搜索、保留旧构建的 SW 升级提示及刷新。 |
+| 源码与构建 | `npm test` 108 文件通过；`nuxi typecheck`、`npm run generate`、`git diff --check` 通过。 |
+
+本次本地冷读仍为 38 个 script/link 条目；访客/登录 JS+CSS 实际传输为 925,470 / 925,355 字节，约 903.8 / 903.7 KiB；暖读为 0 字节。SW 仍为 115 项，解码内容 3,949,260 字节。相较独立验收的约 896.4 KiB，失败恢复支持带来约 7.3 KiB 冷读增量，没有提前加载隐藏编辑器或后台功能。以上为本地样本，未重跑旧版本性能对照，不更新历史“减少 26%”为本次新结论。
+
+新增用例在仓库根执行（沿用上文 Node/Playwright 环境）：
+
+```powershell
+node web/scripts/module-recovery.browser.cjs
+node web/scripts/async-feature-failures.browser.cjs
+```
+
+证据位于 `D:/ChatGPT/environments/echo-noise/tmp/r4-repair/`：`red.json`、`green.json`、`functional.json` 及对应日志、`tests.log`、`typecheck.log`、`generate.log`。本次修复验证使用本地生产构建和合成 API；提交推送后仍需部署新镜像才能验证测试平台的新版本。没有把旧平台的调查复现或已有工作流成功当作本次修复的部署证明。

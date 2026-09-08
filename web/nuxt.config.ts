@@ -1,3 +1,5 @@
+import { scopedModulePreload } from './build/scoped-module-preload.mjs'
+
 const env = (globalThis as typeof globalThis & {
   process?: {
     env?: Record<string, string | undefined>
@@ -31,6 +33,7 @@ export default defineNuxtConfig({
   compatibilityDate: '2024-11-01',
   devtools: { enabled: true },
   vite: {
+    plugins: [scopedModulePreload()],
     define: {
       __PWA_BUILD_ID__: JSON.stringify(buildIdentity),
     },
