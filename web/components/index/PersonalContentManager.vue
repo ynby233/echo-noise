@@ -207,8 +207,9 @@ onUnmounted(() => { if (clock) clearInterval(clock) })
 </script>
 
 <style scoped>
-.personal-content { padding: 16px; min-width: 0; container-type: inline-size; }
-.personal-content-body { display: flex; flex-direction: column; gap: var(--admin-gap, 12px); }
+/* The shared header owns its inset; only the list body needs additional spacing. */
+.personal-content { min-width: 0; overflow: hidden; container-type: inline-size; }
+.personal-content-body { display: flex; flex-direction: column; gap: var(--admin-gap, 12px); padding: 0 var(--admin-space, 16px) var(--admin-space, 16px); }
 .personal-list { border: 1px solid var(--admin-line); border-radius: var(--admin-radius, 8px); overflow: hidden; }
 .personal-list > .personal-card { border-radius: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 26%); gap: 8px 12px; min-width: 0; padding: var(--admin-space, 16px); }
 .personal-card + .personal-card { border-top: 1px solid var(--admin-line); }
@@ -231,5 +232,4 @@ onUnmounted(() => { if (clock) clearInterval(clock) })
   .personal-list > .personal-card { grid-template-columns: minmax(0, 1fr); }
   .personal-actions { grid-column: 1; grid-row: auto; justify-content: flex-start; }
 }
-@media (max-width: 600px) { .personal-content { padding: 12px; } }
 </style>
