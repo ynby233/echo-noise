@@ -9,6 +9,7 @@ export const loadFrontendSettings = async (): Promise<FrontendConfigEnvelope> =>
   const baseApi = useRuntimeConfig().public.baseApi || '/api'
   const response = await fetch(`${baseApi}/frontend/config?t=${Date.now()}`, {
     credentials: 'include',
+    signal: AbortSignal.timeout(15000),
     headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
   })
   const body = await response.json().catch(() => ({}))

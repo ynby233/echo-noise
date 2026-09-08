@@ -61,6 +61,7 @@
 </template>
 
 <script setup lang="ts">
+import { toRefs } from 'vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRuntimeConfig } from '#imports'
 import ImageCropperModal from '~/components/admin/ImageCropperModal.vue'
@@ -70,8 +71,7 @@ import { resolveManagedAttachmentURL } from '~/utils/media-url'
 import { useUserStore } from '~/store/user'
 
 const props = defineProps<{ theme: any, adminShellCardClass: any }>()
-const theme = props.theme
-const adminShellCardClass = props.adminShellCardClass
+const { theme, adminShellCardClass } = toRefs(props)
 const userStore = useUserStore()
 const baseApi = useRuntimeConfig().public.baseApi || '/api'
 const toast = useToast()

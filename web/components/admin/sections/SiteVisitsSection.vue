@@ -12,6 +12,7 @@
 </template>
 
 <script setup lang="ts">
+import { toRefs } from 'vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { deleteRequest, getRequest } from '~/utils/api'
 import { useToast } from '#ui/composables/useToast'
@@ -20,8 +21,7 @@ import { useUserStore } from '~/store/user'
 import { formatShanghai, loadSecurityConfig, retentionOptions, saveSecurityConfig, securityConfigDefaults } from './security-config'
 
 const props = defineProps<{ theme: any, adminShellCardClass: any }>()
-const theme = props.theme
-const adminShellCardClass = props.adminShellCardClass
+const { theme, adminShellCardClass } = toRefs(props)
 const { can } = useAdminCapabilities()
 const userStore = useUserStore()
 const config = reactive({ ...securityConfigDefaults })

@@ -129,7 +129,7 @@
 <script setup lang="ts">
 import AdminSelectionBar from '~/components/admin/AdminSelectionBar.vue'
 import { runConfirmedFilteredLifecycle } from '~/utils/note-lifecycle-confirmation'
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { onDeactivated, onActivated, computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { deleteRequest, getRequest, postRequest, putRequest } from '~/utils/api'
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 import { createNoteManagerPermissionHandler } from '~/utils/note-manager-permission'
@@ -235,6 +235,10 @@ const load = async () => {
     loading.value = false
   }
 }
+// Each return may follow a change in another content/recycle-bin view.
+let needsRefresh = false
+onDeactivated(() => { needsRefresh = true })
+onActivated(() => { if (needsRefresh) { needsRefresh = false; void load() } })
 onMounted(() => {
   window.addEventListener('admin-capabilities-invalidated', resetPermissionGuard)
   void load()

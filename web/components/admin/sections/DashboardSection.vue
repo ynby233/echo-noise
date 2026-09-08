@@ -59,6 +59,7 @@
 </template>
 
 <script setup lang="ts">
+import { onDeactivated, onActivated, toRefs } from 'vue'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 import { useUserStore } from '~/store/user'
@@ -71,10 +72,9 @@ const props = defineProps<{
   panelTheme: AdminTheme
   versionInfo: { currentVersion?: string, latestVersion?: string, hasUpdate?: boolean }
 }>()
+const { theme, adminShellCardClass } = toRefs(props)
 defineEmits<{ 'update:panelTheme': [value: AdminTheme], 'save-admin-theme': [] }>()
 
-const theme = props.theme
-const adminShellCardClass = props.adminShellCardClass
 const userStore = useUserStore()
 const { isPrimaryAdmin } = useAdminCapabilities()
 const isLogin = computed(() => userStore.isLogin)
@@ -135,6 +135,9 @@ const loadDashboard = async () => {
   }
 }
 const refreshDashboardAfterCapabilityChange = () => { void userStore.getStatus(true) }
+let needsRefresh = false
+onDeactivated(() => { needsRefresh = true })
+onActivated(() => { if (needsRefresh) { needsRefresh = false; void loadDashboard() } })
 onMounted(() => {
   void loadDashboard()
   window.addEventListener('admin-capabilities-invalidated', refreshDashboardAfterCapabilityChange)

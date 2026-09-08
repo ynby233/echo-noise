@@ -23,12 +23,12 @@
 </template>
 
 <script setup lang="ts">
+import { toRefs } from 'vue'
 import { onMounted, reactive, ref, toRef } from 'vue'
 import { getRequest, postRequest, putRequest } from '~/utils/api'
 
 const props = defineProps<{ theme: any, adminPanelCardClass: any }>()
-const theme = props.theme
-const adminPanelCardClass = props.adminPanelCardClass
+const { theme, adminPanelCardClass } = toRefs(props)
 const toast = useToast()
 const smtp = reactive({ enabled: false, driver: 'smtp', host: '', port: '', user: '', pass: '', from: '', encryption: 'tls', userConfigured: false, passConfigured: false, clearUser: false, clearPass: false })
 const showSmtpPass = ref(false)

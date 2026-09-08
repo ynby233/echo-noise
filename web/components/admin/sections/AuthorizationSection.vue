@@ -5,7 +5,7 @@
 </template>
 
 <script setup lang="ts">
+import { toRefs } from 'vue'
 const props = defineProps<{ theme: any, adminPanelCardClass: any }>()
-const theme = props.theme
-const adminPanelCardClass = props.adminPanelCardClass
+const { theme, adminPanelCardClass } = toRefs(props)
 </script>

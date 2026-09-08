@@ -11,13 +11,13 @@
 </template>
 
 <script setup lang="ts">
+import { toRefs } from 'vue'
 import { onMounted, reactive } from 'vue'
 import AdminAnnouncementManager from '~/components/admin/AdminAnnouncementManager.vue'
 import { booleanSetting, loadFrontendSettings, saveFrontendSettings } from './frontend-settings'
 
 const props = defineProps<{ theme: any, adminPanelCardClass: any }>()
-const theme = props.theme
-const adminPanelCardClass = props.adminPanelCardClass
+const { theme, adminPanelCardClass } = toRefs(props)
 const form = reactive({ announcementEnabled: false, announcementText: '' })
 const toast = useToast()
 const load = async () => { const { frontendSettings } = await loadFrontendSettings(); form.announcementEnabled = booleanSetting(frontendSettings.announcementEnabled); form.announcementText = String(frontendSettings.announcementText || '') }

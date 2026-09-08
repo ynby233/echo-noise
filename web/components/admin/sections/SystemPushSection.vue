@@ -44,6 +44,7 @@
 </template>
 
 <script setup lang="ts">
+import { toRefs } from 'vue'
 import { computed, reactive, ref, watch } from 'vue'
 import PwaPushSettings from '~/components/index/PwaPushSettings.vue'
 import { postRequest, putRequest } from '~/utils/api'
@@ -51,8 +52,7 @@ import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 import { useUserStore } from '~/store/user'
 
 const props = defineProps<{ theme: any, adminShellCardClass: any, panelTheme: string }>()
-const theme = props.theme
-const adminShellCardClass = props.adminShellCardClass
+const { theme, adminShellCardClass } = toRefs(props)
 const userStore = useUserStore()
 const { isPrimaryAdmin } = useAdminCapabilities()
 const toast = useToast()

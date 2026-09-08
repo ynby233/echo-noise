@@ -1,5 +1,7 @@
 <template>
   <section id="site-register-section" :class="adminShellCardClass">
+    <ConfigLoadState :loading="loading" :error="error" @retry="load" />
+    <fieldset :disabled="!ready || loading" :inert="!ready || loading" class="min-w-0">
     <AdminModuleHeader title="注册配置" description="设置注册入口与新账号的注册方式。" icon="i-heroicons-user-plus" :theme="theme" />
     <div class="px-4 pb-4 space-y-3">
       <div class="admin-subcard flex items-center justify-between rounded-lg p-3" :class="theme.subtleBg"><div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-user-plus" class="w-4 h-4" /><span>新用户注册</span></div><div class="flex items-center gap-4"><UToggle v-model="allowRegistration" /><UButton size="sm" color="primary" class="admin-action" @click="saveRegistration">保存</UButton></div></div>
@@ -11,17 +13,20 @@
         <section class="admin-form-section"><div class="admin-section-heading"><h3>服务连接</h3><p>服务地址与账号凭据在保存后生效。</p></div><div class="admin-fields-grid"><label class="admin-labeled-field"><span>服务地址</span><UInput class="admin-input" v-model="voce.baseURL" placeholder="https://chat.example.com" /></label><label class="admin-labeled-field"><span>邮箱域名</span><UInput class="admin-input" v-model="voce.emailDomain" placeholder="vc.com" /></label><label class="admin-labeled-field"><span>管理账号邮箱</span><UInput class="admin-input" v-model="voce.adminUsername" /></label><label class="admin-labeled-field"><span>管理账号密码</span><UInput class="admin-input" v-model="voce.adminPassword" type="password" /></label><label class="admin-labeled-field"><span>管理账号 Token</span><UInput class="admin-input" v-model="voce.adminToken" type="password" /></label><label class="admin-labeled-field"><span>Third Party Secret</span><UInput class="admin-input" v-model="voce.thirdPartySecret" type="password" /></label><label class="admin-labeled-field"><span>Bot API Key</span><UInput class="admin-input" v-model="voce.botApiKey" type="password" /></label><label class="admin-labeled-field"><span>联系人缓存 TTL（秒）</span><UInput class="admin-input" v-model.number="voce.contactsCacheTTLSeconds" type="number" min="1" /></label></div><div class="admin-section-divider"><h4>清除已存凭据</h4><div class="admin-option-grid"><label v-for="item in clearItems" :key="item.key" class="flex items-center justify-between rounded border px-3 py-2" :class="theme.border"><span class="text-sm" :class="theme.text">{{ item.label }}</span><UToggle v-model="clear[item.key]" /></label></div></div><div class="admin-form-actions"><UButton size="sm" class="admin-action" color="primary" :loading="saving" @click="saveVoceChat">保存配置</UButton></div></section>
       </div>
     </div>
+    </fieldset>
   </section>
 </template>
 
 <script setup lang="ts">
+import ConfigLoadState from './ConfigLoadState.vue'
+import { useConfigDraft } from './config-draft'
+import { toRefs } from 'vue'
 import { computed, onActivated, onDeactivated, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { getRequest, postRequest, putRequest } from '~/utils/api'
 import { useToast } from '#ui/composables/useToast'
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 const props = defineProps<{ theme: any, adminShellCardClass: any }>()
-const theme = props.theme
-const adminShellCardClass = props.adminShellCardClass
+const { theme, adminShellCardClass } = toRefs(props)
 const { isPrimaryAdmin } = useAdminCapabilities()
 const allowRegistration = ref(true)
 const checking = ref(false)
@@ -37,17 +42,32 @@ const count = (status: string) => Number(runtime.counts[status] || 0)
 const formatShanghai = (value: string) => value ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'short', timeStyle: 'medium', hour12: false, timeZone: 'Asia/Shanghai' }).format(new Date(value)) : ''
 let pollTimer: number | null = null
 const stopPolling = () => { if (pollTimer !== null) window.clearTimeout(pollTimer); pollTimer = null }
-const applyRuntime = (data: any) => { runtime.configuredMode = data?.configured_mode === 'vocechat' ? 'vocechat' : 'local'; runtime.runtimeState = data?.runtime_state === 'vocechat_normal' ? 'vocechat_normal' : data?.runtime_state === 'vocechat_degraded' ? 'vocechat_degraded' : 'local'; runtime.lastHealthSummary = String(data?.last_health_summary || '尚未完成 VoceChat 健康检查'); runtime.lastHealthCheckAt = String(data?.last_health_check_at || ''); runtime.counts = data?.account_counts || {}; runtime.runStatus = String(data?.provisioning_run?.status || ''); runtime.tasks = Array.isArray(data?.provisioning_tasks) ? data.provisioning_tasks : []; stopPolling(); if (runtime.runStatus === 'running') pollTimer = window.setTimeout(() => void loadRuntime().catch(() => schedulePoll()), 1500) }
-const schedulePoll = () => { stopPolling(); if (runtime.runStatus === 'running') pollTimer = window.setTimeout(() => void loadRuntime().catch(() => schedulePoll()), 1500) }
-const loadRuntime = async () => { if (!isPrimaryAdmin.value) return; const response: any = await getRequest<any>('admin/runtime-policy', undefined, { credentials: 'include', silent: true }); if (response?.code !== 1) throw new Error(response?.msg || '获取运行模式失败'); applyRuntime(response.data) }
-const load = async () => { try { const response: any = await getRequest<any>('frontend/config', undefined, { credentials: 'include', silent: true }); if (response?.code !== 1) throw new Error(response?.msg || '获取注册配置失败'); allowRegistration.value = response.data?.allowRegistration !== false; const cfg = response.data?.voceChatConfig || {}; Object.assign(voce, { configured: !!cfg.configured, adminCredentialConfigured: !!cfg.adminCredentialConfigured, baseURL: '', emailDomain: String(cfg.emailDomain || 'vc.com'), adminUsername: '', adminPassword: '', adminToken: '', thirdPartySecret: '', botApiKey: '', contactsCacheTTLSeconds: Number(cfg.contactsCacheTTLSeconds || 60) }); Object.keys(clear).forEach(key => (clear as any)[key] = false); await loadRuntime() } catch (error: any) { useToast().add({ title: '获取注册配置失败', description: error?.message, color: 'red' }) } }
-const saveRegistration = async () => { try { const response: any = await putRequest<any>('settings', { allowRegistration: allowRegistration.value }, { credentials: 'include' }); if (response?.code !== 1) throw new Error(response?.msg || '保存失败'); useToast().add({ title: '保存成功', color: 'green' }); await load() } catch (error: any) { useToast().add({ title: '保存失败', description: error?.message, color: 'red' }) } }
-const saveVoceChat = async () => { saving.value = true; try { const ttl = Number(voce.contactsCacheTTLSeconds); if (!Number.isFinite(ttl) || ttl <= 0) throw new Error('联系人缓存 TTL 必须是正整数'); if (voce.adminUsername && !/^[^\s@]+@[^\s@]+$/.test(voce.adminUsername)) throw new Error('VoceChat 管理员邮箱格式无效'); const payload: Record<string, any> = { contactsCacheTTLSeconds: Math.floor(ttl) }; for (const key of ['baseURL', 'emailDomain', 'adminUsername', 'adminPassword', 'adminToken', 'thirdPartySecret', 'botApiKey'] as const) if (String(voce[key]).trim()) payload[key] = String(voce[key]).trim(); if (clear.adminPassword && !voce.adminPassword) payload.clearAdminPassword = true; if (clear.adminToken && !voce.adminToken) payload.clearAdminToken = true; if (clear.thirdPartySecret && !voce.thirdPartySecret) payload.clearThirdPartySecret = true; if (clear.botApiKey && !voce.botApiKey) payload.clearBotApiKey = true; const response: any = await putRequest<any>('settings', { voceChatConfig: payload }, { credentials: 'include' }); if (response?.code !== 1) throw new Error(response?.msg || '保存失败'); useToast().add({ title: 'VoceChat 配置已保存', color: 'green' }); await load() } catch (error: any) { useToast().add({ title: '保存 VoceChat 配置失败', description: error?.message, color: 'red' }) } finally { saving.value = false } }
+let active = true
+let disposed = false
+let runtimeSequence = 0
+const applyRuntime = (data: any) => { if (!active || disposed) return; runtime.configuredMode = data?.configured_mode === 'vocechat' ? 'vocechat' : 'local'; runtime.runtimeState = data?.runtime_state === 'vocechat_normal' ? 'vocechat_normal' : data?.runtime_state === 'vocechat_degraded' ? 'vocechat_degraded' : 'local'; runtime.lastHealthSummary = String(data?.last_health_summary || '尚未完成 VoceChat 健康检查'); runtime.lastHealthCheckAt = String(data?.last_health_check_at || ''); runtime.counts = data?.account_counts || {}; runtime.runStatus = String(data?.provisioning_run?.status || ''); runtime.tasks = Array.isArray(data?.provisioning_tasks) ? data.provisioning_tasks : []; stopPolling(); if (active && !disposed && runtime.runStatus === 'running') pollTimer = window.setTimeout(() => void loadRuntime().catch(() => schedulePoll()), 1500) }
+const schedulePoll = () => { stopPolling(); if (active && !disposed && runtime.runStatus === 'running') pollTimer = window.setTimeout(() => void loadRuntime().catch(() => schedulePoll()), 1500) }
+const loadRuntime = async () => {
+  if (!isPrimaryAdmin.value || !active || disposed) return
+  const sequence = ++runtimeSequence
+  const response: any = await getRequest<any>('admin/runtime-policy', undefined, { credentials: 'include', silent: true })
+  if (!active || disposed || sequence !== runtimeSequence) return
+  if (response?.code !== 1) throw new Error(response?.msg || '获取运行模式失败')
+  applyRuntime(response.data)
+}
+const applyConfig = (response: any) => { allowRegistration.value = response.data?.allowRegistration !== false; const cfg = response.data?.voceChatConfig || {}; Object.assign(voce, { configured: !!cfg.configured, adminCredentialConfigured: !!cfg.adminCredentialConfigured, baseURL: '', emailDomain: String(cfg.emailDomain || 'vc.com'), adminUsername: '', adminPassword: '', adminToken: '', thirdPartySecret: '', botApiKey: '', contactsCacheTTLSeconds: Number(cfg.contactsCacheTTLSeconds || 60) }); Object.keys(clear).forEach(key => (clear as any)[key] = false) }
+const form = reactive({ allowRegistration, voce, clear })
+const { ready, loading, error, load: loadConfig, saved } = useConfigDraft('registration', form, async () => { const response: any = await getRequest<any>('frontend/config', undefined, { credentials: 'include', silent: true }); if (response?.code !== 1) throw new Error(response?.msg || '获取注册配置失败'); return response }, applyConfig)
+const load = async () => { await loadConfig(); await loadRuntime().catch(() => schedulePoll()) }
+const saveRegistration = async () => { if (!ready.value || loading.value) return; try { const response: any = await putRequest<any>('settings', { allowRegistration: allowRegistration.value }, { credentials: 'include' }); if (response?.code !== 1) throw new Error(response?.msg || '保存失败'); useToast().add({ title: '保存成功', color: 'green' }); window.dispatchEvent(new Event('frontend-config-updated')); await saved(['allowRegistration']) } catch (error: any) { useToast().add({ title: '保存失败', description: error?.message, color: 'red' }) } }
+const saveVoceChat = async () => { if (!ready.value || loading.value) return; saving.value = true; try { const ttl = Number(voce.contactsCacheTTLSeconds); if (!Number.isFinite(ttl) || ttl <= 0) throw new Error('联系人缓存 TTL 必须是正整数'); if (voce.adminUsername && !/^[^\s@]+@[^\s@]+$/.test(voce.adminUsername)) throw new Error('VoceChat 管理员邮箱格式无效'); const payload: Record<string, any> = { contactsCacheTTLSeconds: Math.floor(ttl) }; for (const key of ['baseURL', 'emailDomain', 'adminUsername', 'adminPassword', 'adminToken', 'thirdPartySecret', 'botApiKey'] as const) if (String(voce[key]).trim()) payload[key] = String(voce[key]).trim(); if (clear.adminPassword && !voce.adminPassword) payload.clearAdminPassword = true; if (clear.adminToken && !voce.adminToken) payload.clearAdminToken = true; if (clear.thirdPartySecret && !voce.thirdPartySecret) payload.clearThirdPartySecret = true; if (clear.botApiKey && !voce.botApiKey) payload.clearBotApiKey = true; const response: any = await putRequest<any>('settings', { voceChatConfig: payload }, { credentials: 'include' }); if (response?.code !== 1) throw new Error(response?.msg || '保存失败'); useToast().add({ title: 'VoceChat 配置已保存', color: 'green' }); await saved(['voce', 'clear']); await loadRuntime().catch(() => schedulePoll()) } catch (error: any) { useToast().add({ title: '保存 VoceChat 配置失败', description: error?.message, color: 'red' }) } finally { saving.value = false } }
 const checkHealth = async () => { checking.value = true; try { const response: any = await postRequest<any>('settings/vocechat/health', {}, { credentials: 'include' }); if (response?.code !== 1) throw new Error(response?.msg || '状态检查失败'); useToast().add({ title: 'VoceChat 状态检查完成', color: 'green' }); await load() } catch (error: any) { useToast().add({ title: 'VoceChat 状态检查失败', description: error?.message, color: 'red' }) } finally { checking.value = false } }
 const switchRuntimeMode = async (mode: 'local' | 'vocechat') => { if (switching.value) return; switching.value = mode; try { const response: any = await putRequest<any>('admin/runtime-policy/mode', { mode }, { credentials: 'include' }); if (response?.code !== 1) throw new Error(response?.msg || '切换运行模式失败'); applyRuntime(response.data); useToast().add({ title: mode === 'local' ? '已切换到本地模式' : '已切换到 VoceChat 模式', color: 'green' }) } catch (error: any) { useToast().add({ title: '切换运行模式失败', description: error?.message, color: 'red' }) } finally { switching.value = '' } }
 const runVoceChatProvisioning = async (command: 'start' | 'retry') => { if (provisioning.value) return; provisioning.value = command; try { const response: any = await postRequest<any>(`admin/runtime-policy/provisioning/${command}`, {}, { credentials: 'include' }); if (response?.code !== 1) throw new Error(response?.msg || '更新补建任务失败'); applyRuntime(response.data); useToast().add({ title: command === 'retry' ? '失败项已重新排队' : 'VoceChat 补建任务已启动', color: 'green' }) } catch (error: any) { useToast().add({ title: '更新 VoceChat 补建任务失败', description: error?.message, color: 'red' }) } finally { provisioning.value = '' } }
-onMounted(() => { void load() })
-onActivated(schedulePoll)
-onDeactivated(stopPolling)
-onUnmounted(stopPolling)
+const refreshRuntime = () => { void loadRuntime().catch(() => schedulePoll()) }
+let wasDeactivated = false
+onMounted(refreshRuntime)
+onActivated(() => { active = true; if (wasDeactivated) refreshRuntime() })
+onDeactivated(() => { active = false; wasDeactivated = true; ++runtimeSequence; stopPolling() })
+onUnmounted(() => { disposed = true; active = false; ++runtimeSequence; stopPolling() })
 </script>

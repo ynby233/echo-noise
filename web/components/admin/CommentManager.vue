@@ -87,7 +87,7 @@
 
 <script setup lang="ts">
 import AdminSelectionBar from '~/components/admin/AdminSelectionBar.vue'
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { onDeactivated, onActivated, computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { deleteRequest, getRequest, postRequest, putRequest } from '~/utils/api'
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 
@@ -211,6 +211,10 @@ const savePolicy = async () => {
     toast.add({ title: response?.code === 1 ? '互动回收站策略已保存' : '策略保存失败', description: response?.msg, color: response?.code === 1 ? 'green' : 'red' })
   } finally { savingPolicy.value = false }
 }
+// Each return may follow a change in another content/recycle-bin view.
+let needsRefresh = false
+onDeactivated(() => { needsRefresh = true })
+onActivated(() => { if (needsRefresh) { needsRefresh = false; void load() } })
 onMounted(() => { clock = setInterval(() => { now.value = Date.now() }, 60000); void load(); if (props.recycleBin) void loadPolicy() })
 watch(() => props.recycleBin, () => { page.value = 1; selected.value = []; void load(); if (props.recycleBin) void loadPolicy() })
 onUnmounted(() => { if (clock) clearInterval(clock) })

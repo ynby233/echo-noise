@@ -37,7 +37,7 @@
         <div ref="mainScroll" class="admin-content-scroll flex-1 overflow-y-auto">
           <div class="admin-form-shell w-full px-4 pb-20 pt-3 md:pt-4">
             <div v-if="adminCapabilitiesLoading" id="admin-capabilities-loading" :class="adminShellCardClass"><div class="flex min-h-56 items-center justify-center gap-2 px-4 py-6" :class="theme.mutedText"><UIcon name="i-heroicons-arrow-path" class="h-5 w-5 animate-spin" /><span>正在加载管理权限…</span></div></div>
-            <KeepAlive v-else :max="3">
+            <KeepAlive v-else :key="draftAccount" :max="3">
               <AdminSectionHost
                 v-if="activeSectionLoader"
                 :key="activeSection"
@@ -62,7 +62,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { provide, computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRouter } from '#imports'
 import { useUser } from '~/composables/useUser'
 import { useUserStore } from '~/store/user'
@@ -74,11 +74,18 @@ import adminSectionCapabilities from '~/config/admin-section-capabilities.json'
 import AdminSectionHost from '~/components/admin/sections/AdminSectionHost.vue'
 import { adminSectionLoaders, type AdminSectionKey } from '~/components/admin/sections/registry'
 
+import { adminDraftAccountKey, adminDraftsKey } from '~/components/admin/sections/config-draft'
+const adminDrafts = new Map()
+provide(adminDraftsKey, adminDrafts)
+
 defineEmits<{ 'restore-success': [] }>()
 type AdminTheme = 'dark' | 'midnight' | 'forest' | 'plum' | 'light'
 type NavItem = { key: AdminSectionKey, label: string, icon: string }
 type NavGroup = { key: string, label: string, icon: string, items: NavItem[] }
 const userStore = useUserStore()
+const draftAccount = computed(() => userStore.isLogin ? String((userStore.user as any)?.userid ?? (userStore.user as any)?.id ?? (userStore.user as any)?.ID ?? '') : '')
+provide(adminDraftAccountKey, draftAccount)
+watch(draftAccount, () => adminDrafts.clear(), { flush: 'sync' })
 const router = useRouter()
 const { logout } = useUser()
 const { isPrimaryAdmin, isLoading: adminCapabilitiesLoading, isReady: adminCapabilitiesReady, can, refreshCapabilities } = useAdminCapabilities()

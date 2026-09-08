@@ -33,6 +33,7 @@
 </template>
 
 <script setup lang="ts">
+import { toRefs } from 'vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { getRequest, putRequest } from '~/utils/api'
 import { useToast } from '#ui/composables/useToast'
@@ -40,8 +41,7 @@ import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 import { useUserStore } from '~/store/user'
 
 const props = defineProps<{ theme: any, adminPanelCardClass: any }>()
-const theme = props.theme
-const adminPanelCardClass = props.adminPanelCardClass
+const { theme, adminPanelCardClass } = toRefs(props)
 const { can } = useAdminCapabilities()
 const userStore = useUserStore()
 const statusOptions = [{ label: '待审核', value: 'pending' }, { label: '已通过', value: 'approved' }, { label: '已拒绝', value: 'rejected' }, { label: '全部', value: '' }]

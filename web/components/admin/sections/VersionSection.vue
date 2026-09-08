@@ -9,12 +9,12 @@
 </template>
 
 <script setup lang="ts">
+import { toRefs } from 'vue'
 import { onMounted, reactive, ref } from 'vue'
 import { useToast } from '#ui/composables/useToast'
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 const props = defineProps<{ theme: any, adminShellCardClass: any }>()
-const theme = props.theme
-const adminShellCardClass = props.adminShellCardClass
+const { theme, adminShellCardClass } = toRefs(props)
 const { isPrimaryAdmin, can } = useAdminCapabilities()
 const info = reactive({ checking: false, currentVersion: '', latestVersion: '', buildIdentity: '', hasUpdate: false })
 const runtime = reactive({ staticSyncAvailable: true })

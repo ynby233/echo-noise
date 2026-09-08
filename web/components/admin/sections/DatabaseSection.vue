@@ -31,14 +31,14 @@
 </template>
 
 <script setup lang="ts">
+import { onDeactivated, onActivated, toRefs } from 'vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRuntimeConfig } from '#imports'
 import { postRequest } from '~/utils/api'
 
 const props = defineProps<{ theme: any, adminShellCardClass: any }>()
+const { theme, adminShellCardClass } = toRefs(props)
 const emit = defineEmits<{ 'restore-success': [] }>()
-const theme = props.theme
-const adminShellCardClass = props.adminShellCardClass
 const baseApi = useRuntimeConfig().public.baseApi || '/api'
 const toast = useToast()
 
@@ -161,5 +161,8 @@ const restoreFromConfiguredCloud = async () => {
   }
 }
 
+let needsRefresh = false
+onDeactivated(() => { needsRefresh = true })
+onActivated(() => { if (needsRefresh) { needsRefresh = false; void loadDatabaseContext() } })
 onMounted(loadDatabaseContext)
 </script>

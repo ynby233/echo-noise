@@ -5,13 +5,13 @@
 </template>
 
 <script setup lang="ts">
+import { toRefs } from 'vue'
 import { onMounted, ref } from 'vue'
 import { useRuntimeConfig } from '#imports'
 import AttachmentManager from '~/components/admin/AttachmentManager.vue'
 
 const props = defineProps<{ theme: any, adminShellCardClass: any }>()
-const theme = props.theme
-const adminShellCardClass = props.adminShellCardClass
+const { theme, adminShellCardClass } = toRefs(props)
 const baseApi = useRuntimeConfig().public.baseApi || '/api'
 const attachmentStorageEnabled = ref(false)
 

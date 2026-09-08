@@ -1,5 +1,7 @@
 <template>
   <section id="site-section" :class="adminShellCardClass">
+    <ConfigLoadState :loading="loading" :error="error" @retry="load" />
+    <fieldset :disabled="!ready || loading" :inert="!ready || loading" class="min-w-0">
     <AdminModuleHeader title="网站配置" description="管理首页展示、主题布局与应用信息。" icon="i-heroicons-wrench-screwdriver" :theme="theme" />
     <div class="admin-module-stack px-4 pb-4 admin-site-settings-grid" :class="{ 'admin-readonly-settings': !canManage }" :inert="!canManage">
       <section :class="adminSubtleCardClass"><div class="admin-settings-toolbar flex justify-between items-center mb-3"><div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-hand-thumb-up" class="w-4 h-4" /><span>系统欢迎组件</span></div><div class="flex items-center gap-2"><UButton class="admin-action" size="sm" color="primary" variant="soft" @click="applyPrimaryAdmin">使用站长头像信息</UButton><UButton class="admin-action" size="sm" color="gray" variant="soft" @click="resetWelcome">重置</UButton><UButton size="sm" color="primary" class="admin-action" @click="saveWelcome">保存</UButton></div></div><div class="grid grid-cols-1 md:grid-cols-2 gap-3"><label class="admin-labeled-field"><span>显示名称</span><UInput class="admin-input" v-model="form.welcomeName" /></label><label class="admin-labeled-field"><span>头像URL</span><UInput class="admin-input" v-model="form.welcomeAvatarURL" /></label><label class="admin-labeled-field md:col-span-2"><span>简介文案</span><UInput class="admin-input" v-model="form.welcomeDescription" /></label></div><div class="text-xs mt-2" :class="theme.mutedText">未登录时展示该组件；登录后显示当前用户的头像与签名</div></section>
@@ -7,10 +9,14 @@
       <section id="site-github-card-section" :class="adminSubtleCardClass"><div class="admin-settings-toolbar flex justify-between items-center"><div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-mdi-github" class="w-4 h-4" /><span>GitHub 链接卡片解析</span></div><div class="flex items-center gap-4"><UToggle v-model="form.enableGithubCard" /><UButton size="sm" color="primary" class="admin-action" @click="saveFields({ enableGithubCard: form.enableGithubCard })">保存</UButton></div></div></section>
       <section id="site-default-theme-section" class="admin-display-defaults" :class="theme.subtleBg"><div class="admin-display-defaults-heading"><div class="flex items-center gap-2 font-semibold" :class="theme.text"><UIcon name="i-heroicons-swatch" class="w-4 h-4" /><span>默认展示</span></div><p class="admin-setting-desc" :class="theme.mutedText">设置访客首次进入首页时使用的主题和内容栏数。</p></div><div class="admin-display-defaults-grid"><div class="admin-display-default-row" :class="theme.border"><div><div class="admin-setting-title" :class="theme.text">默认主题色</div><p class="admin-setting-desc" :class="theme.mutedText">仅作为首次访问默认值，用户自己的选择不受影响。</p></div><div class="flex items-center gap-3"><USelect v-model="form.defaultContentTheme" :options="[{label:'暗黑',value:'dark'},{label:'白天',value:'light'}]" class="admin-select w-32" /><UButton size="sm" color="primary" class="admin-action" @click="saveFields({ defaultContentTheme: form.defaultContentTheme })">保存主题</UButton></div></div><div class="admin-display-default-row" :class="theme.border"><div><div class="admin-setting-title" :class="theme.text">首页默认布局</div><p class="admin-setting-desc" :class="theme.mutedText">选择桌面首页的默认布局；手机端保持单栏。</p></div><div class="flex items-center gap-3"><USelect v-model="form.homeLayoutDefault" :options="layoutOptions" class="admin-select w-32" /><UButton size="sm" color="primary" class="admin-action" @click="saveFields({ homeLayoutDefault: form.homeLayoutDefault })">保存布局</UButton></div></div></div></section>
     </div>
+    </fieldset>
   </section>
 </template>
 
 <script setup lang="ts">
+import ConfigLoadState from './ConfigLoadState.vue'
+import { useConfigDraft } from './config-draft'
+import { toRefs } from 'vue'
 import { computed, onMounted, reactive } from 'vue'
 import { useToast } from '#ui/composables/useToast'
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
@@ -18,18 +24,16 @@ import { resolveManagedAttachmentURL } from '~/utils/media-url'
 import { booleanSetting, loadFrontendSettings, saveFrontendSettings } from './frontend-settings'
 
 const props = defineProps<{ theme: any, adminShellCardClass: any, adminSubtleCardClass: any }>()
-const theme = props.theme
-const adminShellCardClass = props.adminShellCardClass
-const adminSubtleCardClass = props.adminSubtleCardClass
+const { theme, adminShellCardClass, adminSubtleCardClass } = toRefs(props)
 const { can } = useAdminCapabilities()
 const canManage = computed(() => can('site_settings.manage'))
 const form = reactive({ welcomeName: '', welcomeAvatarURL: '', welcomeDescription: '', welcomeUseAdmin: false, pwaEnabled: true, pwaTitle: '', pwaIconURL: '', pwaDescription: '', enableGithubCard: false, defaultContentTheme: 'light', homeLayoutDefault: 'three' })
 const layoutOptions = [{label:'三栏',value:'three'},{label:'两栏',value:'two'},{label:'单栏',value:'single'},{label:'瀑布流',value:'masonry'}]
-const load = async () => { const settings = (await loadFrontendSettings()).frontendSettings; Object.assign(form, { welcomeName: String(settings.welcomeName || ''), welcomeAvatarURL: String(settings.welcomeAvatarURL || ''), welcomeDescription: String(settings.welcomeDescription || ''), welcomeUseAdmin: booleanSetting(settings.welcomeUseAdmin), pwaEnabled: booleanSetting(settings.pwaEnabled, true), pwaTitle: String(settings.pwaTitle || ''), pwaIconURL: String(settings.pwaIconURL || ''), pwaDescription: String(settings.pwaDescription || ''), enableGithubCard: booleanSetting(settings.enableGithubCard), defaultContentTheme: String(settings.defaultContentTheme || 'light'), homeLayoutDefault: String(settings.homeLayoutDefault || 'three') }) }
-const saveFields = async (fields: Record<string, any>) => { try { await saveFrontendSettings(fields); useToast().add({ title: '成功', description: '网站配置已保存', color: 'green' }); await load() } catch (error: any) { useToast().add({ title: '失败', description: error?.message || '保存失败', color: 'red' }) } }
+const applySettings = (settings: Record<string, any>) => { Object.assign(form, { welcomeName: String(settings.welcomeName || ''), welcomeAvatarURL: String(settings.welcomeAvatarURL || ''), welcomeDescription: String(settings.welcomeDescription || ''), welcomeUseAdmin: booleanSetting(settings.welcomeUseAdmin), pwaEnabled: booleanSetting(settings.pwaEnabled, true), pwaTitle: String(settings.pwaTitle || ''), pwaIconURL: String(settings.pwaIconURL || ''), pwaDescription: String(settings.pwaDescription || ''), enableGithubCard: booleanSetting(settings.enableGithubCard), defaultContentTheme: String(settings.defaultContentTheme || 'light'), homeLayoutDefault: String(settings.homeLayoutDefault || 'three') }) }
+const saveFields = async (fields: Record<string, any>) => { if (!ready.value || loading.value) return; try { await saveFrontendSettings(fields); useToast().add({ title: '成功', description: '网站配置已保存', color: 'green' }); await saved(Object.keys(fields)) } catch (error: any) { useToast().add({ title: '失败', description: error?.message || '保存失败', color: 'red' }) } }
 const saveWelcome = () => saveFields({ welcomeName: form.welcomeName.trim(), welcomeAvatarURL: form.welcomeAvatarURL.trim(), welcomeDescription: form.welcomeDescription.trim(), welcomeUseAdmin: form.welcomeUseAdmin })
 const savePwa = async () => { await saveFields({ pwaEnabled: form.pwaEnabled, pwaTitle: form.pwaTitle.trim(), pwaIconURL: form.pwaIconURL.trim(), pwaDescription: form.pwaDescription.trim() }); window.dispatchEvent(new Event('frontend-config-updated')) }
 const resetWelcome = () => Object.assign(form, { welcomeName: '', welcomeAvatarURL: '', welcomeDescription: '', welcomeUseAdmin: false })
 const applyPrimaryAdmin = async () => { try { const response = await fetch('/api/status', { credentials: 'include' }); const body = await response.json(); const users = body?.data?.users || body?.data?.Users || []; const admin = Array.isArray(users) ? users.find((user: any) => Number(user.id ?? user.ID) === 1 && !!(user.is_admin ?? user.IsAdmin)) : null; if (!admin) throw new Error('未找到有效站长账户'); form.welcomeName = String(admin.username ?? admin.Username ?? '').trim(); form.welcomeAvatarURL = resolveManagedAttachmentURL('/api', String(admin.avatar_url ?? admin.AvatarURL ?? '')); form.welcomeDescription = String(admin.description || '').trim(); form.welcomeUseAdmin = true; useToast().add({ title: '已填充站长信息', color: 'green' }) } catch (error: any) { useToast().add({ title: '失败', description: error?.message || '获取失败', color: 'red' }) } }
-onMounted(() => { void load() })
+const { ready, loading, error, load, saved } = useConfigDraft('website', form, async () => (await loadFrontendSettings()).frontendSettings, applySettings)
 </script>

@@ -1,5 +1,7 @@
 <template>
   <section id="site-music-section" :class="[adminPanelCardClass, { 'admin-readonly-settings': !canManage }]" :inert="!canManage">
+    <ConfigLoadState :loading="loading" :error="error" @retry="load" />
+    <fieldset :disabled="!ready || loading" :inert="!ready || loading" class="min-w-0">
     <AdminModuleHeader title="音乐配置" icon="i-heroicons-musical-note" description="设置播放来源、播放器位置与显示方式。" :theme="theme"><template #actions><div class="flex items-center gap-3"><span class="text-sm">启用播放器</span><UToggle v-model="form.musicEnabled" /></div></template></AdminModuleHeader>
     <div class="px-4 pb-4">
       <div class="admin-settings-grid">
@@ -11,10 +13,14 @@
       <div class="admin-form-actions"><UButton size="sm" class="admin-action" variant="soft" color="gray" @click="reset">重置</UButton><UButton size="sm" class="admin-action" color="primary" @click="save">保存</UButton></div>
       <div class="text-xs mt-2" :class="theme.mutedText">保存后首页自动刷新显示播放器；歌单与单曲任选其一</div>
     </div>
+    </fieldset>
   </section>
 </template>
 
 <script setup lang="ts">
+import ConfigLoadState from './ConfigLoadState.vue'
+import { useConfigDraft } from './config-draft'
+import { toRefs } from 'vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRuntimeConfig } from '#imports'
 import { useToast } from '#ui/composables/useToast'
@@ -22,8 +28,7 @@ import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 import { booleanSetting, loadFrontendSettings } from './frontend-settings'
 
 const props = defineProps<{ theme: any, adminPanelCardClass: any }>()
-const theme = props.theme
-const adminPanelCardClass = props.adminPanelCardClass
+const { theme, adminPanelCardClass } = toRefs(props)
 const { can } = useAdminCapabilities()
 const canManage = computed(() => can('music.manage'))
 const baseApi = useRuntimeConfig().public.baseApi || '/api'
@@ -35,10 +40,10 @@ const positionOptions = [{label:'左下角',value:'bottom-left'},{label:'右下�
 const themeOptions = [{ label: '自动', value: 'auto' }, { label: '亮色', value: 'light' }, { label: '暗色', value: 'dark' }]
 const cdnOptions = [{label:'官方 CDN',value:'hypcvgm'},{label:'jsDelivr',value:'jsdelivr'},{label:'unpkg',value:'unpkg'},{label:'自定义',value:'custom'}]
 const toggleItems = [{ key: 'musicLyric', label: '显示歌词' }, { key: 'musicAutoplay', label: '自动播放' }, { key: 'musicDefaultMinimized', label: '默认最小化' }, { key: 'musicHideOnMobile', label: '手机端隐藏播放器' }] as const
-const presets: Record<string, [string, string]> = { hypcvgm: ['https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.css', 'https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.js'], jsdelivr: ['https://cdn.jsdelivr.net/npm/netease-mini-player@latest/dist/netease-mini-player.css', 'https://cdn.jsdelivr.net/npm/netease-mini-player@latest/dist/netease-mini-player.js'], unpkg: ['https://unpkg.com/netease-mini-player@latest/dist/netease-mini-player.css', 'https://unpkg.com/netease-mini-player@latest/dist/netease-mini-player.js'] }
+const presets: Record<string, [string, string]> = { hypcvgm: ['https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.css', 'https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.js'], jsdelivr: ['https://cdn.jsdelivr.net/npm/netease-mini-player@2.0.4/dist/netease-mini-player-v2.css', 'https://cdn.jsdelivr.net/npm/netease-mini-player@2.0.4/dist/netease-mini-player-v2.js'], unpkg: ['https://unpkg.com/netease-mini-player@2.0.4/dist/netease-mini-player-v2.css', 'https://unpkg.com/netease-mini-player@2.0.4/dist/netease-mini-player-v2.js'] }
 watch(cdnPreset, value => { if (presets[value]) [form.musicCssCdnURL, form.musicJsCdnURL] = presets[value] })
-const load = async () => { const settings = (await loadFrontendSettings()).frontendSettings; for (const key of Object.keys(defaults) as Array<keyof typeof defaults>) (form as any)[key] = typeof defaults[key] === 'boolean' ? booleanSetting(settings[key], defaults[key] as boolean) : String(settings[key] ?? defaults[key]); const found = Object.entries(presets).find(([, urls]) => urls[0] === form.musicCssCdnURL && urls[1] === form.musicJsCdnURL); cdnPreset.value = found?.[0] || 'custom' }
-const save = async () => { try { const response = await fetch(`${baseApi}/settings/music`, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ frontendSettings: { ...form } }) }); const body = await response.json().catch(() => ({})); if (!response.ok || body?.code !== 1) throw new Error(body?.msg || '保存失败'); try { form.musicCssCdnURL ? localStorage.setItem('nmp_cdn_css_v1', form.musicCssCdnURL) : localStorage.removeItem('nmp_cdn_css_v1'); form.musicJsCdnURL ? localStorage.setItem('nmp_cdn_js_v1', form.musicJsCdnURL) : localStorage.removeItem('nmp_cdn_js_v1') } catch {}; window.dispatchEvent(new Event('frontend-config-updated')); useToast().add({ title: '成功', description: '音乐配置已更新', color: 'green' }); await load() } catch (error: any) { useToast().add({ title: '错误', description: error?.message || '保存失败', color: 'red' }) } }
+const applySettings = (settings: Record<string, any>) => { for (const key of Object.keys(defaults) as Array<keyof typeof defaults>) (form as any)[key] = typeof defaults[key] === 'boolean' ? booleanSetting(settings[key], defaults[key] as boolean) : String(settings[key] ?? defaults[key]); const found = Object.entries(presets).find(([, urls]) => urls[0] === form.musicCssCdnURL && urls[1] === form.musicJsCdnURL); cdnPreset.value = found?.[0] || 'custom' }
+const save = async () => { if (!ready.value || loading.value) return; try { const response = await fetch(`${baseApi}/settings/music`, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ frontendSettings: { ...form } }) }); const body = await response.json().catch(() => ({})); if (!response.ok || body?.code !== 1) throw new Error(body?.msg || '保存失败'); try { form.musicCssCdnURL ? localStorage.setItem('nmp_cdn_css_v1', form.musicCssCdnURL) : localStorage.removeItem('nmp_cdn_css_v1'); form.musicJsCdnURL ? localStorage.setItem('nmp_cdn_js_v1', form.musicJsCdnURL) : localStorage.removeItem('nmp_cdn_js_v1') } catch {}; window.dispatchEvent(new Event('frontend-config-updated')); useToast().add({ title: '成功', description: '音乐配置已更新', color: 'green' }); await saved() } catch (error: any) { useToast().add({ title: '错误', description: error?.message || '保存失败', color: 'red' }) } }
 const reset = () => Object.assign(form, defaults)
-onMounted(() => { void load() })
+const { ready, loading, error, load, saved } = useConfigDraft('music', reactive({ form, cdnPreset }), async () => (await loadFrontendSettings()).frontendSettings, applySettings)
 </script>

@@ -8,12 +8,11 @@
 </template>
 
 <script setup lang="ts">
+import { toRefs } from 'vue'
 import NoteManager from '~/components/admin/NoteManager.vue'
 import CommentManager from '~/components/admin/CommentManager.vue'
 import type { AdminSectionKey } from './registry'
 
 const props = defineProps<{ sectionKey: AdminSectionKey, theme: any, adminPanelCardClass: any }>()
-const sectionKey = props.sectionKey
-const theme = props.theme
-const adminPanelCardClass = props.adminPanelCardClass
+const { sectionKey, theme, adminPanelCardClass } = toRefs(props)
 </script>

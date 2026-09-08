@@ -1,6 +1,8 @@
 <template>
   <div id="storage-section" class="admin-split-modules">
     <section id="attachment-storage-section" class="col-span-12" :class="adminShellCardClass">
+      <ConfigLoadState :loading="loading" :error="error" @retry="load" />
+      <fieldset :disabled="!ready || loading" :inert="!ready || loading" class="min-w-0">
       <AdminModuleHeader title="附件存储方案配置" icon="i-heroicons-cloud" description="选择附件存储位置及压缩处理方式。" :theme="theme" />
       <div class="px-4 pb-4">
         <div class="admin-storage-settings">
@@ -69,9 +71,11 @@
           </div>
         </div>
       </div>
+    </fieldset>
     </section>
 
     <section class="col-span-12" :class="adminShellCardClass">
+    <fieldset :disabled="!ready || loading" :inert="!ready || loading" class="min-w-0">
       <AdminModuleHeader title="数据库存储方案配置" icon="i-heroicons-cloud" description="配置数据库备份的存储位置。" :theme="theme" />
       <div class="px-4 pb-4">
         <div class="admin-storage-settings">
@@ -151,18 +155,21 @@
           </div>
         </div>
       </div>
+    </fieldset>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
+import ConfigLoadState from './ConfigLoadState.vue'
+import { useConfigDraft } from './config-draft'
+import { computed, toRefs } from 'vue'
 import { onActivated, onDeactivated, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRuntimeConfig } from '#imports'
 import { postRequest } from '~/utils/api'
 
 const props = defineProps<{ theme: any, adminShellCardClass: any }>()
-const theme = props.theme
-const adminShellCardClass = props.adminShellCardClass
+const { theme, adminShellCardClass } = toRefs(props)
 const baseApi = useRuntimeConfig().public.baseApi || '/api'
 const toast = useToast()
 
@@ -188,7 +195,7 @@ const normalizeEndpoint = (value: string) => {
   }
 }
 const secretStateLabel = (clear: boolean, configured: boolean) => clear ? '待清除' : (configured ? '已配置' : '未配置')
-const secretStateClass = (clear: boolean, configured: boolean) => clear ? 'text-red-500' : (configured ? 'text-green-500' : theme.mutedText)
+const secretStateClass = (clear: boolean, configured: boolean) => clear ? 'text-red-500' : (configured ? 'text-green-500' : theme.value.mutedText)
 const stagedRestoreDescription = (payload: any) => [payload?.msg || '请重启服务后完成恢复', payload?.warning].filter(Boolean).join('；')
 
 const storageEnabled = ref(false)
@@ -229,25 +236,25 @@ const applyStorageConfig = (data: any) => {
   lastCloudSyncText.value = formatShanghai(config.lastSyncTime || '')
   storageNeedsConfirm.value = !!config.needsConfirm
 }
-const loadStorageConfig = async () => {
-  try {
-    const response = await fetch(`${baseApi}/frontend/config`, { credentials: 'include' })
-    const body = await response.json()
-    if (body?.code === 1) applyStorageConfig(body.data)
-  } catch {}
-}
+const loadStorageConfig = () => databaseDraft.load()
+let active = true
+let disposed = false
+let pollingGeneration = 0
 const refreshLastSyncOnly = async () => {
+  if (!active || disposed) return
+  const generation = pollingGeneration
   try {
-    const response = await fetch(`${baseApi}/frontend/config`, { credentials: 'include' })
+    const response = await fetch(`${baseApi}/frontend/config`, { credentials: 'include', signal: AbortSignal.timeout(15000) })
     const body = await response.json()
-    if (body?.code === 1) lastCloudSyncText.value = formatShanghai(body.data?.storageConfig?.lastSyncTime || '')
+    if (active && !disposed && generation === pollingGeneration && body?.code === 1) lastCloudSyncText.value = formatShanghai(body.data?.storageConfig?.lastSyncTime || '')
   } catch {}
 }
 const startCloudPolling = () => {
-  if (typeof window === 'undefined' || cloudSyncPollId) return
+  if (!active || disposed || typeof window === 'undefined' || cloudSyncPollId) return
   cloudSyncPollId = setInterval(refreshLastSyncOnly, 60000)
 }
 const stopCloudPolling = () => {
+  ++pollingGeneration
   if (!cloudSyncPollId) return
   clearInterval(cloudSyncPollId)
   cloudSyncPollId = null
@@ -258,6 +265,7 @@ const syncPolling = () => {
 }
 const onAutoSyncToggle = () => { userTouchedAuto.value = true }
 const saveStorageConfig = async () => {
+  if (!ready.value || loading.value) return
   try {
     const storagePayload: any = {
       ...storageConfig,
@@ -272,7 +280,8 @@ const saveStorageConfig = async () => {
     })
     const body = await response.json()
     if (body?.code !== 1) throw new Error(body?.msg || '保存失败')
-    await loadStorageConfig()
+    await databaseDraft.saved()
+    window.dispatchEvent(new Event('frontend-config-updated'))
     toast.add({ title: '已保存数据库存储配置', color: 'green' })
   } catch (error: any) {
     toast.add({ title: '保存失败', description: error.message, color: 'red' })
@@ -334,13 +343,7 @@ const attachmentStorageConfig = reactive({
   accessKeyConfigured: false, secretKeyConfigured: false, clearAccessKey: false, clearSecretKey: false,
   usePathStyle: true, publicBaseURL: '', enableCompression: false, ffmpegInstalled: false,
 })
-const loadAttachmentStorageConfig = async () => {
-  try {
-    const response = await fetch(`${baseApi}/frontend/config?t=${Date.now()}`, {
-      credentials: 'include', headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
-    })
-    const body = await response.json()
-    if (body?.code !== 1) return
+const applyAttachmentConfig = (body: any) => {
     attachmentStorageEnabled.value = !!body.data?.attachmentStorageEnabled
     const config = body.data?.attachmentStorageConfig || {}
     attachmentStorageConfig.provider = config.provider || ''
@@ -357,9 +360,25 @@ const loadAttachmentStorageConfig = async () => {
     attachmentStorageConfig.publicBaseURL = config.publicBaseURL || ''
     attachmentStorageConfig.enableCompression = !!config.enableCompression
     attachmentStorageConfig.ffmpegInstalled = !!config.ffmpegInstalled
-  } catch {}
 }
+const readConfig = async () => {
+  const response = await fetch(`${baseApi}/frontend/config?t=${Date.now()}`, {
+    credentials: 'include', signal: AbortSignal.timeout(15000),
+    headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+  })
+  const body = await response.json()
+  if (!response.ok || body?.code !== 1) throw new Error(body?.msg || '获取存储配置失败')
+  return body
+}
+const databaseDraft = useConfigDraft('database-storage', reactive({ storageEnabled, storageConfig, storageAutoSyncEnabled, storageSyncMode, storageSyncIntervalMinute, userTouchedAuto }), readConfig, body => applyStorageConfig(body.data))
+const attachmentDraft = useConfigDraft('attachment-storage', reactive({ attachmentStorageEnabled, attachmentStorageConfig }), readConfig, applyAttachmentConfig)
+const ready = computed(() => databaseDraft.ready.value && attachmentDraft.ready.value)
+const loading = computed(() => databaseDraft.loading.value || attachmentDraft.loading.value)
+const error = computed(() => databaseDraft.error.value || attachmentDraft.error.value)
+const load = () => Promise.all([databaseDraft.load(), attachmentDraft.load()])
+const loadAttachmentStorageConfig = () => attachmentDraft.load()
 const saveAttachmentStorageConfig = async () => {
+  if (!ready.value || loading.value) return
   try {
     if (attachmentStorageConfig.enableCompression && !attachmentStorageConfig.ffmpegInstalled) throw new Error('未检测到 FFmpeg，无法开启压缩功能')
     const response = await fetch(`${baseApi}/settings`, {
@@ -371,7 +390,8 @@ const saveAttachmentStorageConfig = async () => {
     })
     const body = await response.json()
     if (body?.code !== 1) throw new Error(body?.msg || '保存失败')
-    await loadAttachmentStorageConfig()
+    await attachmentDraft.saved()
+    window.dispatchEvent(new Event('frontend-config-updated'))
     toast.add({ title: '已保存附件存储配置', description: attachmentStorageConfig.enableCompression ? '附件压缩已开启' : '附件压缩已关闭', color: 'green' })
   } catch (error: any) {
     toast.add({ title: '保存失败', description: error.message, color: 'red' })
@@ -396,8 +416,7 @@ watch(() => attachmentStorageConfig.provider, provider => {
   if (provider === 'r2') { attachmentStorageConfig.usePathStyle = true; attachmentStorageConfig.region = 'auto' }
 })
 watch([storageEnabled, storageAutoSyncEnabled, () => storageConfig.syncRole], syncPolling)
-onMounted(async () => { await Promise.all([loadStorageConfig(), loadAttachmentStorageConfig()]); syncPolling() })
-onActivated(syncPolling)
-onDeactivated(stopCloudPolling)
-onUnmounted(stopCloudPolling)
+onActivated(() => { active = true; syncPolling() })
+onDeactivated(() => { active = false; stopCloudPolling() })
+onUnmounted(() => { disposed = true; active = false; stopCloudPolling() })
 </script>

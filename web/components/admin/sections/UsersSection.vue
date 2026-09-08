@@ -21,6 +21,7 @@
 </template>
 
 <script setup lang="ts">
+import { toRefs } from 'vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { deleteRequest, postRequest, putRequest } from '~/utils/api'
 import { useToast } from '#ui/composables/useToast'
@@ -29,9 +30,7 @@ import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 import { resolveUserManagementActions, resolveUserManagementVoceChatEmail } from '~/utils/user-management-actions'
 
 const props = defineProps<{ theme: any, adminPanelCardClass: any, adminSubtleCardClass: any }>()
-const theme = props.theme
-const adminPanelCardClass = props.adminPanelCardClass
-const adminSubtleCardClass = props.adminSubtleCardClass
+const { theme, adminPanelCardClass, adminSubtleCardClass } = toRefs(props)
 const userStore = useUserStore()
 const { capabilities, isPrimaryAdmin } = useAdminCapabilities()
 const search = ref('')

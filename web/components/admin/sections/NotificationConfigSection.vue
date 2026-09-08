@@ -17,14 +17,14 @@
 </template>
 
 <script setup lang="ts">
+import { toRefs } from 'vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import NotifyPanel from '~/components/index/NotifyPanel.vue'
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 import { booleanSetting, loadFrontendSettings, saveFrontendSettings } from './frontend-settings'
 
 const props = defineProps<{ theme: any, adminShellCardClass: any }>()
-const theme = props.theme
-const adminShellCardClass = props.adminShellCardClass
+const { theme, adminShellCardClass } = toRefs(props)
 const { can } = useAdminCapabilities()
 const toast = useToast()
 const canManageNotifications = computed(() => can('notifications.manage'))

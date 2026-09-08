@@ -22,6 +22,7 @@
 </template>
 
 <script setup lang="ts">
+import { toRefs } from 'vue'
 import { onMounted, reactive, ref } from 'vue'
 import { deleteRequest, getRequest, postRequest } from '~/utils/api'
 import { useToast } from '#ui/composables/useToast'
@@ -30,9 +31,7 @@ import { loadFrontendSettings, saveFrontendSettings } from './frontend-settings'
 import { formatShanghai, loadSecurityConfig, retentionOptions, saveSecurityConfig, securityConfigDefaults } from './security-config'
 
 const props = defineProps<{ theme: any, adminShellCardClass: any, adminSubtleCardClass: any }>()
-const theme = props.theme
-const adminShellCardClass = props.adminShellCardClass
-const adminSubtleCardClass = props.adminSubtleCardClass
+const { theme, adminShellCardClass, adminSubtleCardClass } = toRefs(props)
 const { can, isPrimaryAdmin } = useAdminCapabilities()
 const config = reactive({ ...securityConfigDefaults })
 const attacks = ref<any[]>([])

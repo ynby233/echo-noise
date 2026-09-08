@@ -11,6 +11,7 @@
 </template>
 
 <script setup lang="ts">
+import { toRefs } from 'vue'
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useRuntimeConfig } from '#imports'
 import { useToast } from '#ui/composables/useToast'
@@ -19,8 +20,7 @@ import { resolveUploadedMediaUrl } from '~/utils/media-upload'
 import ImageCropperModal from '~/components/admin/ImageCropperModal.vue'
 import { booleanSetting, loadFrontendSettings, saveFrontendSettings } from './frontend-settings'
 const props = defineProps<{ theme: any, adminPanelCardClass: any }>()
-const theme = props.theme
-const adminPanelCardClass = props.adminPanelCardClass
+const { theme, adminPanelCardClass } = toRefs(props)
 const baseApi = useRuntimeConfig().public.baseApi || '/api'
 const enabled = ref(true)
 const interval = ref(4000)

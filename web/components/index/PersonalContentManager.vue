@@ -75,7 +75,7 @@
 
 <script setup lang="ts">
 import AdminSelectionBar from '~/components/admin/AdminSelectionBar.vue'
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { onDeactivated, onActivated, computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { deleteRequest, getRequest, postRequest } from '~/utils/api'
 
 type PersonalSection = 'notes' | 'note-recycle-bin' | 'interactions' | 'interaction-recycle-bin'
@@ -202,6 +202,10 @@ const batchPurgeNotes = () => runBatch('user/recycle-bin/notes/batch-permanent-d
 const batchPurgeInteractions = () => runBatch('user/recycle-bin/comments/batch-purge', `从个人回收站彻底删除所选 ${selected.value.length} 条互动后，你将无法再查看或恢复。是否继续？`)
 
 watch(section, () => { page.value = 1; selected.value = []; void load() })
+// Each return may follow a change in another content/recycle-bin view.
+let needsRefresh = false
+onDeactivated(() => { needsRefresh = true })
+onActivated(() => { if (needsRefresh) { needsRefresh = false; void load() } })
 onMounted(() => { clock = setInterval(() => { now.value = Date.now() }, 60000); void load() })
 onUnmounted(() => { if (clock) clearInterval(clock) })
 </script>
