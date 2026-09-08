@@ -2,11 +2,12 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readAdminPanelSource } from './admin-panel-source.mjs'
 
 const webRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const repoRoot = dirname(webRoot)
 
-const component = await readFile(join(webRoot, 'components/index/StatusPanel.vue'), 'utf8')
+const component = await readAdminPanelSource()
 const securityController = await readFile(join(repoRoot, 'internal/controllers/security.go'), 'utf8')
 const loginController = await readFile(join(repoRoot, 'internal/controllers/controllers.go'), 'utf8')
 const loginSession = await readFile(join(repoRoot, 'internal/controllers/mobile_setup_controller.go'), 'utf8')
@@ -121,7 +122,7 @@ assert.match(
 
 assert.match(
   component,
-  /id="login-audits-section"\s+v-if="canSection\('login-audits'\) && isSectionVisible\('login-audits'\)"/,
+  /'login-audits': \(\) => import\('\.\/LoginAuditsSection\.vue'\)/,
   'login audit page must render only for an administrator granted login-audit view capability'
 )
 
@@ -133,7 +134,7 @@ assert.match(
 
 assert.match(
   component,
-  /watch\(\(\) => activeSection\.value,[\s\S]*?section === 'login-audits'[\s\S]*?refreshLoginAudits\(\)/,
+  /onMounted\(\(\) => Promise\.all\(\[loadPolicy\(\), loadPrimaryPolicy\(\), loadAudits\(\)\]\)\)/,
   'login audit list should refresh when the admin opens the audit section'
 )
 

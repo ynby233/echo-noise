@@ -95,7 +95,7 @@ try {
   // Cookie 被浏览器拦下，私有笔记的图片就整片变成失败占位块。
   const managedReaders = [
     ['pages/index.vue', 'the home gallery, avatars, and header backgrounds'],
-    ['components/index/StatusPanel.vue', 'the admin media previews and background list'],
+    ['components/admin/sections/SiteInfoSection.vue', 'the admin background list'],
     ['components/admin/AttachmentManager.vue', 'the attachment manager previews and downloads'],
     ['components/index/MessageList.vue', 'the message images and avatars'],
     ['components/comments/BuiltinComments.vue', 'the comment avatars'],
@@ -119,24 +119,29 @@ try {
   }
 
   // 上传写入侧必须存站点无关的地址，否则脏数据会再次进入配置与笔记。
-  const statusPanel = await readFile(join(webRoot, 'components/index/StatusPanel.vue'), 'utf8')
+  const adminMediaSources = (await Promise.all([
+    'components/admin/sections/ProfileSection.vue',
+    'components/admin/sections/SiteInfoSection.vue',
+    'components/admin/sections/AdsSection.vue',
+  ].map(path => readFile(join(webRoot, path), 'utf8')))).join('\n')
   assert.match(
-    statusPanel,
+    adminMediaSources,
     /import \{[^}]*resolveUploadedMediaUrl[^}]*\} from '~\/utils\/media-upload'/,
     'admin uploads must persist attachment URLs through the shared upload resolver',
   )
   assert.equal(
-    (statusPanel.match(/resolveUploadedMediaUrl\(/g) || []).length >= 2,
+    (adminMediaSources.match(/resolveUploadedMediaUrl\(/g) || []).length >= 2,
     true,
     'both the site avatar upload and the header background upload must persist host-independent URLs',
   )
 
   // 背景图归一化在后台与前台各有一份实现，两份都要跟随当前 origin，否则预览与线上会各自失效。
   const homePage = await readFile(join(webRoot, 'pages/index.vue'), 'utf8')
-  for (const [label, source] of [['pages/index.vue', homePage], ['components/index/StatusPanel.vue', statusPanel]]) {
+  const siteInfo = await readFile(join(webRoot, 'components/admin/sections/SiteInfoSection.vue'), 'utf8')
+  for (const [label, source, normalizer] of [['pages/index.vue', homePage, 'normalizeHeaderBackground'], ['components/admin/sections/SiteInfoSection.vue', siteInfo, 'normalizeBackground']]) {
     assert.match(
       source,
-      /const normalizeHeaderBackground[\s\S]{0,400}?resolveManagedAttachmentURL\(/,
+      new RegExp(`const ${normalizer}[\\s\\S]{0,700}?resolveManagedAttachmentURL\\(`),
       `${label} must normalize header background URLs so they follow the current site origin`,
     )
   }

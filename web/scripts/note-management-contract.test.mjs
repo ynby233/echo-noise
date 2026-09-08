@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readAdminPanelSource } from './admin-panel-source.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8')
@@ -14,7 +15,7 @@ const routers = read('internal/routers/routers.go')
 const manager = read('web/components/admin/NoteManager.vue')
 const moduleHeaderPath = path.join(root, 'web/components/admin/AdminModuleHeader.vue')
 const moduleHeader = fs.existsSync(moduleHeaderPath) ? fs.readFileSync(moduleHeaderPath, 'utf8') : ''
-const panel = read('web/components/index/StatusPanel.vue')
+const panel = await readAdminPanelSource()
 const capabilities = JSON.parse(read('web/config/admin-section-capabilities.json'))
 const confirmation = await import('../utils/note-lifecycle-confirmation.ts')
 

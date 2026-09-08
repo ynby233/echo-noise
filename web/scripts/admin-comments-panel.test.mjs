@@ -2,24 +2,25 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readAdminPanelSource } from './admin-panel-source.mjs'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const component = await readFile(join(root, 'components/index/StatusPanel.vue'), 'utf8')
+const component = await readFile(join(root, 'components/admin/CommentManager.vue'), 'utf8')
 
 assert.match(
   component,
-  /const\s+adminCommentAuthorName\s*=\s*\(c:\s*any\)\s*=>/,
-  'admin comments panel must define the author-name helper used by the template'
+  /row\.username\s*\|\|\s*`用户 \$\{row\.user_id \|\| '—'\}`/,
+  'admin comments manager must render the account username with an ID fallback'
 )
 assert.match(
   component,
-  /adminCommentAuthorName\(c\)/,
-  'admin comments list should render the account username helper'
+  /v-for="row in rows"/,
+  'admin comments list should render server-provided rows'
 )
 assert.match(
   component,
-  /user\.username\s*\|\|\s*user\.Username/,
-  'admin comments author helper should read the bound account user object'
+  /endpoint = computed\(\(\) => props\.recycleBin \? 'admin\/comment-recycle-bin' : 'admin\/comments'\)/,
+  'admin comments manager should use the managed interaction endpoints'
 )
 
 console.log('admin comments panel tests passed')

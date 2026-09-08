@@ -6,11 +6,12 @@ import { createRequire } from 'node:module'
 import { parse, compileScript } from '@vue/compiler-sfc'
 import { transformSync } from 'esbuild'
 import { computed, createRenderer, h, nextTick, reactive } from 'vue'
+import { readAdminPanelSource } from './admin-panel-source.mjs'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const component = await readFile(join(root, 'components/comments/BuiltinComments.vue'), 'utf8')
 const manager = await readFile(join(root, 'components/admin/CommentManager.vue'), 'utf8')
-const panel = await readFile(join(root, 'components/index/StatusPanel.vue'), 'utf8')
+const panel = await readAdminPanelSource()
 
 assert.match(component, /useAdminCapabilities/, 'thread UI must consume delegated-admin capabilities')
 assert.match(component, /can\(['"]comments\.edit['"]\)/, 'cross-author body editing must require comments.edit')
@@ -38,7 +39,8 @@ assert.match(
   /const\s+canSelectForBatch\s*=\s*computed\(\(\)\s*=>\s*props\.recycleBin\s*\?\s*\(canRestore\.value\s*\|\|\s*canDeletePermanently\.value\)\s*:\s*canTrash\.value\)/,
   'batch selection must follow the actionable capability set for the active or recycle-bin view'
 )
-assert.match(panel, /canSection\('comment-recycle-bin'\)/, 'comment recycle-bin panel must be section-gated')
+assert.match(panel, /\{ key: 'comment-recycle-bin', label: '互动回收站'/, 'comment recycle-bin panel must be present in capability-filtered navigation')
+assert.match(panel, /items: group\.items\.filter\(item => canSection\(item\.key\)\)/, 'comment recycle-bin navigation must pass through the shared section capability gate')
 assert.doesNotMatch(component, /can\(['"]comments\.delete['"]\)/, 'retired comments.delete capability must not remain')
 
 for (const target of ['c', 'child']) {

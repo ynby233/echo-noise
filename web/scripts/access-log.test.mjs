@@ -2,10 +2,11 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readAdminPanelSource } from './admin-panel-source.mjs'
 
 const webRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const repoRoot = dirname(webRoot)
-const statusPanel = await readFile(join(webRoot, 'components/index/StatusPanel.vue'), 'utf8')
+const statusPanel = await readAdminPanelSource()
 const securityModel = await readFile(join(repoRoot, 'internal/models/security.go'), 'utf8')
 const migrate = await readFile(join(repoRoot, 'internal/models/migrate.go'), 'utf8')
 const middleware = await readFile(join(repoRoot, 'internal/middleware/access_log.go'), 'utf8')
@@ -94,13 +95,12 @@ assert.match(statusPanel, /id="site-visits-section"[\s\S]*?站点访问[\s\S]*?g
 assert.match(statusPanel, /accessLogEnabled[\s\S]*?siteVisitLogEnabled[\s\S]*?putRequest<any>\('security\/config'/, 'status panel must expose and save access log and site visit switches')
 assert.match(statusPanel, /placeholder="用户名或访客"/, 'access log and site visit filters must support direct visitor search')
 assert.match(statusPanel, /type="date"/, 'access log filter must expose date inputs')
-assert.match(statusPanel, /accessLogLimitOptions[\s\S]*?20 条[\s\S]*?200 条/, 'access log filter must expose small result-limit options')
-assert.match(statusPanel, /accessLogUserOptions[\s\S]*?访客[\s\S]*?accessLogSelectedUserIds/, 'access log filter must include visitor and user checkbox options')
-assert.match(statusPanel, /siteVisitUserOptions[\s\S]*?访客[\s\S]*?siteVisitSelectedUserIds/, 'site visit filter must include visitor and user checkbox options')
-assert.match(statusPanel, /params\.user_ids\s*=\s*userIDs\.join\(','\)/, 'access log and site visit filters must send checked user ids')
+assert.match(statusPanel, /limitOptions[\s\S]*?\[20, 50, 100, 200\]/, 'access log filter must expose small result-limit options')
+assert.match(statusPanel, /userOptions[\s\S]*?访客[\s\S]*?selectedUserIDs/, 'access log and site visit filters must include visitor and user checkbox options')
+assert.match(statusPanel, /params\.user_ids\s*=\s*selectedUserIDs\.value\.join\(','\)/, 'access log and site visit filters must send checked user ids')
 assert.match(statusPanel, /deleteRequest<any>\('security\/access-logs'/, 'status panel must clear access logs through the admin endpoint')
 assert.match(statusPanel, /deleteRequest<any>\('security\/site-visits'/, 'status panel must clear site visits through the admin endpoint')
-assert.match(statusPanel, /section === 'site-visits'[\s\S]*?refreshSiteVisits\(\)/, 'site visit list should refresh when the admin opens the site visit section')
+assert.match(statusPanel, /onMounted\(\(\) => Promise\.all\(\[loadPolicy\(\), can\('users\.view'\)[\s\S]*?loadVisits\(\)\]\)\)/, 'site visit list should refresh when its lazy section opens')
 assert.match(statusPanel, /时间[\s\S]*?方法[\s\S]*?状态[\s\S]*?路径[\s\S]*?用户[\s\S]*?IP[\s\S]*?耗时[\s\S]*?User-Agent/, 'access log table must expose the expected columns')
 assert.match(statusPanel, /首页访问[\s\S]*?时间[\s\S]*?用户[\s\S]*?IP[\s\S]*?User-Agent/, 'site visit table must expose the expected columns')
 

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readAdminPanelSourceSync } from './admin-panel-source.mjs'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const read = (path) => readFileSync(resolve(root, path), 'utf8').replace(/\r\n?/g, '\n')
@@ -26,7 +27,7 @@ const homePage = read('pages/index.vue')
 const builtinComments = read('components/comments/BuiltinComments.vue')
 const infoFeedList = read('components/index/InfoFeedList.vue')
 const markdownRenderer = read('components/index/MarkdownRenderer.vue')
-const statusPanel = read('components/index/StatusPanel.vue')
+const statusPanel = readAdminPanelSourceSync().replace(/\r\n?/g, '\n')
 const calendarWidget = read('components/widgets/CalendarWidget.vue')
 const mediaUpload = read('utils/media-upload.ts')
 const fancyboxVideoClose = read('utils/fancybox-video-close.ts')
@@ -1378,7 +1379,7 @@ assert(
     userStore.includes('const clearUserStatus = (options: { clearVideoPlayback?: boolean } = {}) => {') &&
     userStore.includes('if (options.clearVideoPlayback) clearVideoPlaybackMemory();') &&
     userStore.includes('clearUserStatus({ clearVideoPlayback: true });') &&
-    statusPanel.includes('const handleLogout = async () => {\n    await logout()\n}') &&
+    /const handleLogout = async \(\) => \{\n\s+await logout\(\)\n\}/.test(statusPanel) &&
     !markdownRenderer.includes("video.dataset.type = 'video'") &&
     homePage.includes("Fancybox?.bind?.('[data-fancybox]', createMediaFancyboxOptions() as any)") &&
     homePage.includes("import { createMediaFancyboxOptions } from '~/utils/media-fancybox'") &&

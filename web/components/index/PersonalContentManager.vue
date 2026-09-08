@@ -129,7 +129,7 @@ const itemTitle = (row: any) => isInteraction.value
   : `笔记 #${row.id}`
 const contextText = (node: any) => node?.placeholder || String(node?.content || '上级内容').replace(/\s+/g, ' ').slice(0, 80)
 const formatDate = (value: any) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '—'
-const visibilityLabel = (value: string) => ({ public: '公开', private: '私密', contacts: '联系人可见', logged_in: '登录用户可见' } as Record<string, string>)[value] || value || '公开'
+const visibilityLabel = (value: string) => ({ public: '公开', private: '私密', contacts: '联系人可见', users: '登录用户可见' } as Record<string, string>)[value] || value || '公开'
 const reasonLabel = (value: string) => ({
   self: '由你本人删除',
   'author request': '由你本人删除',

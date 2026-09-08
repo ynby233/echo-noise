@@ -4,10 +4,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
 import fs from 'node:fs'
 import { readFile } from 'node:fs/promises'
+import { readAdminPanelSource } from './admin-panel-source.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const outfile = path.join(root, '.user-management-actions-test.mjs')
-const panel = await readFile(path.join(root, 'components/index/StatusPanel.vue'), 'utf8')
+const panel = await readAdminPanelSource()
 
 await build({
   entryPoints: [path.join(root, 'utils/user-management-actions.ts')],
@@ -64,14 +65,14 @@ try {
   assert.deepEqual(resolveUserManagementVoceChatEmail({ id: 2, isPrimaryAdmin: false, capabilities: ['users.view'] }, { ...primaryAdmin, voce_chat_email: 'primary-private@vc.example' }), { visible: false, email: '' })
 
   assert.match(panel, /resolveUserManagementActions/, 'StatusPanel must delegate user-card policy to one helper')
-  assert.match(panel, /v-if="userManagementActions\(u\)\.manageRole"/)
-  assert.match(panel, /v-if="userManagementActions\(u\)\.deleteUser"/)
-  assert.match(panel, /v-if="userManagementActions\(u\)\.resetPassword"/)
+  assert.match(panel, /v-if="actions\(user\)\.manageRole"/)
+  assert.match(panel, /v-if="actions\(user\)\.deleteUser"/)
+  assert.match(panel, /v-if="actions\(user\)\.resetPassword"/)
 	assert.match(panel, /VoceChat 邮箱：/)
-	assert.match(panel, /userManagementVoceChatEmail\(u\)\.visible/)
-	assert.match(panel, /userManagementVoceChatEmail\(u\)\.email \|\| '未绑定'/)
+	assert.match(panel, /voceChatEmail\(user\)\.visible/)
+	assert.match(panel, /voceChatEmail\(user\)\.email \|\| '未绑定'/)
 	assert.match(panel, /can\('users\.view'\).*app\.voce_chat_email/s, 'registration review must reuse users.view before rendering an applicant email')
-  assert.match(panel, /if \(!userManagementActions\(u\)\.resetPassword\) return/)
+  assert.match(panel, /actions\(user\)\.resetPassword/)
   assert.doesNotMatch(panel, /adminPasswordReset/, 'the legacy settings payload must be absent')
   assert.doesNotMatch(panel, /resetAdminPassword/, 'the legacy administrator reset function must be absent')
   assert.doesNotMatch(panel, /重置管理员密码/, 'the legacy administrator reset UI must be absent')

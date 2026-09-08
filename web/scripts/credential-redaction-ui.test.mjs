@@ -2,10 +2,11 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readAdminPanelSource } from './admin-panel-source.mjs'
 
 const webRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const repoRoot = dirname(webRoot)
-const statusPanel = await readFile(join(webRoot, 'components/index/StatusPanel.vue'), 'utf8')
+const statusPanel = await readAdminPanelSource()
 const settingDTO = await readFile(join(repoRoot, 'internal/dto/setting.go'), 'utf8')
 const settingController = await readFile(join(repoRoot, 'internal/controllers/controllers.go'), 'utf8')
 
@@ -29,11 +30,12 @@ for (const clearFlag of [
 
 assert.match(statusPanel, /已配置；留空将保持不变/, 'redacted credentials must explain blank-save preservation')
 assert.match(statusPanel, /清除现有 Secret/, 'storage secrets must have an explicit clear action')
-assert.match(statusPanel, /清除现有用户名/, 'SMTP username must have an explicit clear action')
-assert.match(statusPanel, /清除现有密码/, 'SMTP password must have an explicit clear action')
-assert.match(statusPanel, /await loadSmtp()/, 'SMTP save must refresh configured-state flags')
-assert.match(statusPanel, /await loadStorageConfig()/, 'backup storage save must refresh configured-state flags')
-assert.match(statusPanel, /await loadAttachmentStorageConfig()/, 'attachment storage save must refresh configured-state flags')
+assert.match(statusPanel, /label: '用户名'/, 'SMTP username must have an explicit clear action')
+assert.match(statusPanel, /label: '密码'/, 'SMTP password must have an explicit clear action')
+assert.match(statusPanel, /清除现有\$\{credential\.label\}/, 'SMTP credentials must expose the explicit clear action')
+assert.match(statusPanel, /await loadSmtp\(\)/, 'SMTP save must refresh configured-state flags')
+assert.match(statusPanel, /await loadStorageConfig\(\)/, 'backup storage save must refresh configured-state flags')
+assert.match(statusPanel, /await loadAttachmentStorageConfig\(\)/, 'attachment storage save must refresh configured-state flags')
 assert.ok(
   statusPanel.includes('const hasUser = (!!smtp.user || smtp.userConfigured) && !smtp.clearUser') &&
     statusPanel.includes('const hasPass = (!!smtp.pass || smtp.passConfigured) && !smtp.clearPass'),

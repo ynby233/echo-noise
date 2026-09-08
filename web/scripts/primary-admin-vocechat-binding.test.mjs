@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
+import { readAdminPanelSource } from './admin-panel-source.mjs'
 
-const panel = await readFile(new URL('../components/index/StatusPanel.vue', import.meta.url), 'utf8')
+const panel = await readAdminPanelSource()
 const notifications = await readFile(new URL('../components/index/UserNotificationCenter.vue', import.meta.url), 'utf8')
 
-assert.match(panel, /v-if="isPrimaryAdmin"[\s\S]*?primaryVoceChatBindingEmail[\s\S]*?校验并保存/, 'only the primary administrator should receive the editable binding control')
-assert.match(panel, /putRequest<any>\('user\/vocechat\/bind', \{ email, password \}/, 'the binding control must submit both personal credentials to the dedicated endpoint')
+assert.match(panel, /v-if="isPrimaryAdmin"[\s\S]*?voceChatEmail[\s\S]*?校验并保存/, 'only the primary administrator should receive the editable binding control')
+assert.match(panel, /putRequest<any>\('user\/vocechat\/bind', \{ email: voceChatEmail\.value\.trim\(\), password: voceChatPassword\.value \}/, 'the binding control must submit both personal credentials to the dedicated endpoint')
 assert.doesNotMatch(panel, /if \(isPrimaryAdmin\.value && voceChatConfig\.adminUsernameConfiguredValue\) return voceChatConfig\.adminUsernameConfiguredValue/, 'the management API email must not masquerade as the primary user binding')
 assert.match(panel, /联系人可见内容按私密处理/, 'the UI must explain the fail-closed contact visibility rule')
 assert.match(panel, /本站邮箱[\s\S]*?用于接收本站邮件通知、验证码和账号安全提醒/, 'the site email module must explain its own purpose')
@@ -13,10 +14,10 @@ assert.match(panel, /VoceChat 账号与推送[\s\S]*?用于校验联系人可见
 assert.doesNotMatch(panel, /邮箱和 VoceChat 账号用于接收系统通知/, 'the redundant combined account-binding description must be removed')
 assert.doesNotMatch(panel, />账号绑定</, 'site email and VoceChat must no longer sit under a redundant combined title')
 assert.match(panel, /v-if="isPrimaryAdmin" class="admin-vc-binding-panel border"[\s\S]*?本站密码不会同步修改此密码/, 'the primary-admin-only password independence note must stay inside the primary binding panel')
-assert.match(panel, /userForm\.description[\s\S]*?:rows="3"[\s\S]*?admin-description-textarea/, 'the signature editor must retain three visible rows for multiline content')
+assert.match(panel, /form\.description[\s\S]*?:rows="3"[\s\S]*?admin-description-textarea/, 'the signature editor must retain three visible rows for multiline content')
 assert.match(panel, /admin-vc-binding-form/, 'the primary administrator binding controls must use the spacious responsive form layout')
 assert.match(panel, /admin-verification-input/, 'verification codes must use a compact field instead of consuming the full row')
-assert.match(panel, /admin-email-bind-row[\s\S]*?userForm\.email[\s\S]*?发送验证码[\s\S]*?userForm\.emailCode[\s\S]*?立即绑定/, 'email and verification controls must share one responsive row')
+assert.match(panel, /admin-email-bind-row[\s\S]*?form\.email[\s\S]*?发送验证码[\s\S]*?form\.emailCode[\s\S]*?立即绑定/, 'email and verification controls must share one responsive row')
 assert.match(panel, /class="admin-profile-grid"[\s\S]*?admin-profile-card--token/, 'all account roles must use the same responsive profile grid')
 assert.equal((panel.match(/>API Token<\/div>/g) || []).length, 1, 'primary, delegated, and ordinary users must share one API token card')
 assert.match(panel, /权限与当前账号一致/, 'the API token description must state its real authorization scope')

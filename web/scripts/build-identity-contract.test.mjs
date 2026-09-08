@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
+import { readAdminPanelSource } from './admin-panel-source.mjs'
 
 const root = new URL('../..', import.meta.url)
 const read = (path) => readFile(new URL(path, root), 'utf8')
@@ -10,7 +11,7 @@ const [dockerfile, dockerWorkflow, releaseWorkflow, sidecar, androidSetup, route
   read('desktop/tauri/build-sidecar.sh'),
   read('packaging/android/setup_backend.sh'),
   read('internal/routers/routers.go'),
-  read('web/components/index/StatusPanel.vue'),
+  readAdminPanelSource(),
 ])
 
 const linkerTarget = 'github.com/rcy1314/echo-noise/internal/buildinfo.Identity'
@@ -25,7 +26,7 @@ assert.match(releaseWorkflow, /saynote-\$\{BUILD_ID\}\.apk/, 'Android artifact n
 assert.match(releaseWorkflow, /saynote-\$\{BUILD_ID\}\.dmg/, 'macOS artifact name must carry the build identity')
 assert.match(releaseWorkflow, /saynote-.*BUILD_ID.*\.exe/, 'Windows artifact name must carry the build identity')
 assert.match(routes, /authRoutes\.GET\("\/version\/build"/, 'build identity endpoint must be authenticated')
-assert.match(panel, /id="version-section"[\s\S]{0,1800}v-if="isPrimaryAdmin"[\s\S]{0,300}versionInfo\.buildIdentity/, 'the version section must show the identity only to the primary administrator')
+assert.match(panel, /id="version-section"[\s\S]{0,1800}v-if="isPrimaryAdmin"[\s\S]{0,300}info\.buildIdentity/, 'the version section must show the identity only to the primary administrator')
 assert.match(panel, /version\/build/, 'the admin UI must read the server build identity')
 
 console.log('build identity contract passed')

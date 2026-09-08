@@ -2,9 +2,10 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readAdminPanelSource } from './admin-panel-source.mjs'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const component = await readFile(join(root, 'components/index/StatusPanel.vue'), 'utf8')
+const component = await readAdminPanelSource()
 const models = await readFile(join(root, 'types/models.ts'), 'utf8')
 
 assert(
@@ -50,10 +51,11 @@ assert(
   component.includes("{ label: '个人笔记'") &&
     component.includes("desc: '当前账户所发布的笔记总数'") &&
     component.includes("isPrimaryAdmin.value ? '站长账号' : (isAdmin.value ? '受托管理员账号' : '普通用户账号')") &&
-    component.includes('status.auto_ban_enabled ?? status.autoBanEnabled ?? securityConfig.autoBanEnabled') &&
+    component.includes('status.auto_ban_enabled ?? status.autoBanEnabled') &&
     component.includes("autoBanEnabled ? '系统已启用自动封禁' : '系统使用手动防护'") &&
     !component.includes("isAdmin.value ? '可在下方安全面板配置'") &&
-    component.includes('await Promise.all([refreshSecurity(), userStore.getStatus(true)])'),
+    component.includes('const loadDashboard = async () =>') &&
+    component.includes('userStore.getStatus(true)'),
   'the six public system cards must preserve personal scope, exact role copy, and shared auto-ban summary'
 )
 
@@ -76,8 +78,8 @@ assert(
 
 assert(
   component.includes('>使用站长头像信息</UButton>') &&
-    component.includes('Number(it?.id ?? it?.ID) === 1') &&
-    component.includes('!!(it?.is_admin ?? it?.IsAdmin)'),
+    component.includes('Number(user.id ?? user.ID) === 1') &&
+    component.includes('!!(user.is_admin ?? user.IsAdmin)'),
   'welcome settings must only use the valid ID 1 site owner'
 )
 

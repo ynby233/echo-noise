@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
+import { readAdminPanelSource } from './admin-panel-source.mjs'
 
-const panel = await readFile(new URL('../components/index/StatusPanel.vue', import.meta.url), 'utf8')
+const registry = await readFile(new URL('../components/admin/sections/registry.ts', import.meta.url), 'utf8')
+const panel = await readAdminPanelSource()
 const map = JSON.parse(await readFile(new URL('../config/admin-section-capabilities.json', import.meta.url), 'utf8'))
 const authorizationSource = await readFile(new URL('../../internal/authorization/authorization.go', import.meta.url), 'utf8')
 
-const sectionType = panel.match(/type AdminSectionKey =([\s\S]*?)const activeSection/)
-assert.ok(sectionType, 'StatusPanel must declare the admin section key union')
+const sectionType = registry.match(/type AdminSectionKey =([\s\S]*?)export type AdminSectionModule/)
+assert.ok(sectionType, 'the lazy section registry must declare the admin section key union')
 const sections = [...sectionType[1].matchAll(/'([^']+)'/g)].map((match) => match[1])
 const intentionallyUnprotected = new Set([
   'dashboard', 'user', 'hitokoto', 'life-countdown', 'widgets',
@@ -45,7 +47,7 @@ assert.equal(map['site-rss'], undefined)
 assert.doesNotMatch(authorizationSource, /CapabilityRSS(?:View|Manage)|rss\.(?:view|manage)/)
 assert.match(panel, /if \(section === 'site-rss'\) return isPrimaryAdmin\.value/)
 assert.match(panel, /isPrimaryAdmin\.value \? \[\{ key: 'site-rss' as AdminSectionKey/)
-assert.match(panel, /id="site-rss-section" v-if="isPrimaryAdmin && isSectionVisible\('site-rss'\)"/)
-assert.match(panel, /const stripRSSManagementSettings = \(settings: Record<string, any>\)/)
-assert.match(panel, /const stripMusicSettings = \(settings: Record<string, any>\)/)
-assert.match(panel, /frontendSettings: stripRSSManagementSettings\(stripMusicSettings\(frontendConfig as any\)\)/)
+assert.match(registry, /'site-rss': \(\) => import\('\.\/RssSection\.vue'\)/)
+assert.match(panel, /if \(section === 'site-rss'\) return isPrimaryAdmin\.value/)
+assert.match(panel, /'site-rss': \(\) => import\('\.\/RssSection\.vue'\)/)
+assert.match(panel, /'site-music': \(\) => import\('\.\/MusicSection\.vue'\)/)

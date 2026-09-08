@@ -1,15 +1,15 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
+import { readAdminPanelSource } from './admin-panel-source.mjs'
 
 const sidebarPath = fileURLToPath(new URL('../components/widgets/FloatingToolSidebar.vue', import.meta.url))
 const centerPath = fileURLToPath(new URL('../components/index/AnnouncementCenter.vue', import.meta.url))
 const modalPath = fileURLToPath(new URL('../components/index/AnnouncementModal.vue', import.meta.url))
 const homePath = fileURLToPath(new URL('../pages/index.vue', import.meta.url))
 const managerPath = fileURLToPath(new URL('../components/admin/AdminAnnouncementManager.vue', import.meta.url))
-const statusPanelPath = fileURLToPath(new URL('../components/index/StatusPanel.vue', import.meta.url))
 const [sidebar, center, modal, home, manager, statusPanel] = (await Promise.all([
-  readFile(sidebarPath, 'utf8'), readFile(centerPath, 'utf8'), readFile(modalPath, 'utf8'), readFile(homePath, 'utf8'), readFile(managerPath, 'utf8'), readFile(statusPanelPath, 'utf8')
+  readFile(sidebarPath, 'utf8'), readFile(centerPath, 'utf8'), readFile(modalPath, 'utf8'), readFile(homePath, 'utf8'), readFile(managerPath, 'utf8'), readAdminPanelSource()
 ])).map((source) => source.replace(/\r\n?/g, '\n'))
 
 const notificationIndex = sidebar.indexOf("$emit('open-notifications')")

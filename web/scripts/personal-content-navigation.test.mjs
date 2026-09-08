@@ -2,24 +2,28 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readAdminPanelSource } from './admin-panel-source.mjs'
 
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))))
 const read = (path) => readFile(join(repoRoot, path), 'utf8')
 const [statusPanel, personalContent, routes, controller] = await Promise.all([
-  read('web/components/index/StatusPanel.vue'),
+  readAdminPanelSource(),
   read('web/components/index/PersonalContentManager.vue'),
   read('internal/routers/routers.go'),
   read('internal/controllers/comment_management_controller.go'),
 ])
 
-assert.equal((statusPanel.match(/<PersonalContentManager\b/g) || []).length, 4, 'the four personal content areas must be independent pages rather than one panel under user information')
+assert.equal((statusPanel.match(/<PersonalContentManager\b/g) || []).length, 1, 'the four personal content routes must share one lazy page implementation')
+for (const key of ['personal-notes', 'personal-note-recycle-bin', 'personal-interactions', 'personal-interaction-recycle-bin']) {
+  assert.match(statusPanel, new RegExp(`'${key}': \\(\\) => import\\('\\.\\/PersonalContentSection\\.vue'\\)`), `${key} must be independently lazy-routable`)
+}
 for (const label of ['个人笔记', '个人笔记回收站', '个人互动', '个人互动回收站']) {
   assert.match(statusPanel, new RegExp(`key: '[^']+', label: '${label}'`), `${label} must have a sidebar entry`)
 }
 assert.ok(statusPanel.indexOf("label: '站点与展示'") < statusPanel.indexOf("{ key: 'widgets', label: '小组件'"), 'widgets must remain under site and display')
 assert.match(statusPanel, /:aria-expanded="navGroupOpen\[group\.key\]"/, 'group headings must expose their expanded state')
 assert.match(statusPanel, /v-if="!sidebarCollapsed && navGroupOpen\[group\.key\]"/, 'collapsed groups must hide all child entries')
-assert.match(statusPanel, /const toggleNavGroup[\s\S]*?navGroupOpen\[groupKey\] = !navGroupOpen\[groupKey\]/, 'clicking a group heading must toggle that group')
+assert.match(statusPanel, /const toggleGroup[\s\S]*?navGroupOpen\[key\] = !navGroupOpen\[key\]/, 'clicking a group heading must toggle that group')
 assert.match(personalContent, /section: PersonalSection/, 'personal content pages must use an explicit fixed section')
 assert.match(personalContent, /notes: 'user\/notes'/, 'personal notes must use the authenticated personal endpoint')
 assert.match(routes, /GET\("\/user\/notes", controllers\.ListPersonalNotes\)/, 'personal notes route must be registered behind authenticated routes')

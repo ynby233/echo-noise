@@ -2,13 +2,14 @@ import assert from 'node:assert/strict'
 import { access, readFile, readdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readAdminPanelSource } from './admin-panel-source.mjs'
 
 const webRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const repoRoot = dirname(webRoot)
 const read = (path) => readFile(join(repoRoot, path), 'utf8')
 
 const runtimeFiles = {
-  statusPanel: await read('web/components/index/StatusPanel.vue'),
+  statusPanel: await readAdminPanelSource(),
   indexPage: await read('web/pages/index.vue'),
   settingsService: await read('internal/services/setting_service.go'),
   seedService: await read('internal/services/seed_service.go'),
@@ -26,7 +27,7 @@ assert.doesNotMatch(
   /评论系统[\s\S]*?管理员全站|邮件通知[\s\S]*?saveCommentConfig/,
   'interaction management must not render the archived configuration panel'
 )
-assert.match(runtimeFiles.statusPanel, /<CommentManager\s+v-if="can\('comments\.view'\)"/, 'interaction management itself must remain available')
+assert.match(runtimeFiles.statusPanel, /<CommentManager\s+v-else-if="sectionKey === 'comments'"/, 'interaction management itself must remain available')
 assert.match(runtimeFiles.controllers, /CreateNotificationsForComment/, 'in-app interaction notifications must remain active')
 assert.match(runtimeFiles.models, /SitePublicURL\s+string/, 'shared public links must use a neutral site-level field')
 

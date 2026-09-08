@@ -2,12 +2,13 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readAdminPanelSource } from './admin-panel-source.mjs'
 
 const webRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const repoRoot = dirname(webRoot)
 const read = (path) => readFile(join(repoRoot, path), 'utf8')
 const [component, models, settings, controllers, middleware] = await Promise.all([
-  read('web/components/index/StatusPanel.vue'), read('internal/models/models.go'),
+  readAdminPanelSource(), read('internal/models/models.go'),
   read('internal/services/setting_service.go'), read('internal/controllers/controllers.go'), read('internal/middleware/auth.go'),
 ])
 

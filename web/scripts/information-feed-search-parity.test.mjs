@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readAdminPanelSource } from './admin-panel-source.mjs'
 
 const webRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const read = (path) => readFile(join(webRoot, path), 'utf8')
@@ -10,7 +11,7 @@ const [home, feed, messages, status, sharedCss] = await Promise.all([
   read('pages/index.vue'),
   read('components/index/InfoFeedList.vue'),
   read('components/index/MessageList.vue'),
-  read('components/index/StatusPanel.vue'),
+  readAdminPanelSource(),
   read('assets/css/tailwind.css'),
 ])
 
@@ -43,8 +44,8 @@ assert.match(home, /const text = raw \|\| '聚合综合内容信息源内容'/)
 assert.match(home, /text\.replace\(\/\\s\*\[，,\]\\s\*当前结果/)
 assert.match(home, /feedPageDescription: '聚合综合内容信息源内容'/)
 assert.doesNotMatch(home, /feedPageDescription: '聚合综合内容信息源内容，当前结果 \{count\} 条'/)
-assert.match(status, /信息流页面介绍<\/div>[\s\S]*?placeholder="聚合综合内容信息源内容"/)
-assert.match(status, /feedPageDescription: '首页信息流 Tab 的介绍文案。'/)
+assert.match(status, /信息流页面介绍<\/span>[\s\S]*?v-model="form\.feedPageDescription"/)
+assert.match(status, /feedPageDescription: '聚合综合内容信息源内容'/)
 assert.doesNotMatch(status, /支持 \{count\} 占位/)
 
 for (const className of [

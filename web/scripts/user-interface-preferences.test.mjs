@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readAdminPanelSource } from './admin-panel-source.mjs'
 
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))))
 const read = (path) => readFile(join(repoRoot, path), 'utf8')
@@ -10,7 +11,7 @@ const [models, migrate, service, controllers, statusPanel, home] = await Promise
   read('internal/models/migrate.go'),
   read('internal/services/setting_service.go'),
   read('internal/controllers/controllers.go'),
-  read('web/components/index/StatusPanel.vue'),
+  readAdminPanelSource(),
   read('web/pages/index.vue'),
 ])
 
@@ -25,7 +26,7 @@ assert.match(controllers, /func UpdateGuestWidgetPreferences[\s\S]*?requirePrima
 assert.ok(statusPanel.indexOf('const userStore = useUserStore()') < statusPanel.indexOf('const adminNavGroups = computed'), 'user store must be initialized before navigation computed state is evaluated')
 assert.ok(statusPanel.indexOf('const isAdmin = computed') < statusPanel.indexOf('const adminNavGroups = computed'), 'admin role state must be initialized before navigation computed state is evaluated')
 assert.equal(statusPanel.includes('() => !!(frontendConfig as any).notifyEnabled'), false, 'loading viewer-resolved config must not trigger an implicit notifyEnabled write')
-assert.match(statusPanel, /@click="saveConfigItem\('notifyEnabled'\)"/, 'notifyEnabled changes must use the explicit save action')
+assert.match(statusPanel, /<UToggle v-model="notifyEnabled" \/><UButton[^>]+@click="saveEnabled"/, 'notifyEnabled changes must use the explicit save action')
 assert.match(statusPanel, /\{ key: 'widgets', label: '小组件'/, 'all logged-in users must have the unified widget entry')
 assert.match(statusPanel, /我的小组件[\s\S]*?访客默认/, 'primary-admin UI must separate personal widgets from guest defaults')
 assert.match(statusPanel, /登录用户尚未明确设置的项目也会继承此配置/, 'guest-default help text must disclose the unset-field inheritance rule')
