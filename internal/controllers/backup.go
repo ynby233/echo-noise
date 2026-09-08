@@ -42,6 +42,8 @@ func HandleBackupUploadToURL(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "上传URL格式错误"})
 		return
 	}
+	releaseOperation := syncmanager.LockOperation()
+	defer releaseOperation()
 
 	tempDir, err := os.MkdirTemp("", "echo-noise-backup-*")
 	if err != nil {
@@ -66,7 +68,11 @@ func HandleBackupUploadToURL(c *gin.Context) {
 		return
 	}
 	defer f.Close()
-	stat, _ := f.Stat()
+	stat, err := f.Stat()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "读取备份文件信息失败"})
+		return
+	}
 	reqHttp, err := http.NewRequest(http.MethodPut, req.UploadURL, f)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "创建请求失败"})
@@ -107,6 +113,8 @@ func HandleBackupRestoreFromURL(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "下载URL格式错误"})
 		return
 	}
+	releaseOperation := syncmanager.LockOperation()
+	defer releaseOperation()
 	tempDir, err := os.MkdirTemp("", "echo-noise-restore-*")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "创建临时目录失败"})
@@ -114,7 +122,7 @@ func HandleBackupRestoreFromURL(c *gin.Context) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	resp, err := http.Get(req.DownloadURL)
+	resp, err := (&http.Client{Timeout: 180 * time.Second}).Get(req.DownloadURL)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "下载失败: " + err.Error()})
 		return
@@ -135,13 +143,17 @@ func HandleBackupRestoreFromURL(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "写入备份文件失败"})
 		return
 	}
-	out.Close()
+	if err := out.Close(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "写入备份文件失败"})
+		return
+	}
 	if os.Getenv("DB_TYPE") == "" || os.Getenv("DB_TYPE") == "sqlite" {
-		if err := backupservice.StageRestore(restorePath, backupservice.DefaultLayout()); err != nil {
+		result, err := backupservice.StageRestoreWithResult(restorePath, backupservice.DefaultLayout())
+		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "备份校验失败: " + err.Error()})
 			return
 		}
-		c.JSON(http.StatusAccepted, gin.H{"code": 1, "msg": "备份已校验并暂存，请重启服务后完成恢复", "pendingRestart": true})
+		c.JSON(http.StatusAccepted, stagedRestoreResponse("备份已校验并暂存，请重启服务后完成恢复", result))
 		return
 	}
 
@@ -207,6 +219,8 @@ func HandleBackupDownload(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "需要管理员权限"})
 		return
 	}
+	releaseOperation := syncmanager.LockOperation()
+	defer releaseOperation()
 
 	dbType := os.Getenv("DB_TYPE")
 	if dbType == "" {
@@ -242,6 +256,12 @@ func createBackupArchive(tempDir, dbType string) (string, error) {
 			return "", fmt.Errorf("创建 SQLite 备份失败: %w", err)
 		}
 		return zipFile, nil
+	}
+	if err := backupImages(tempDir); err != nil {
+		return "", fmt.Errorf("备份图片失败: %w", err)
+	}
+	if err := backupVideos(tempDir); err != nil {
+		return "", fmt.Errorf("备份视频失败: %w", err)
 	}
 	switch dbType {
 	case "postgres":
@@ -285,6 +305,8 @@ func HandleBackupRestore(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "备份文件过大"})
 		return
 	}
+	releaseOperation := syncmanager.LockOperation()
+	defer releaseOperation()
 
 	tempDir, err := os.MkdirTemp("", "echo-noise-restore-*")
 	if err != nil {
@@ -300,15 +322,12 @@ func HandleBackupRestore(c *gin.Context) {
 		return
 	}
 	if dbType == "sqlite" {
-		if err := backupservice.StageRestore(backupPath, backupservice.DefaultLayout()); err != nil {
+		result, err := backupservice.StageRestoreWithResult(backupPath, backupservice.DefaultLayout())
+		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "备份校验失败: " + err.Error()})
 			return
 		}
-		c.JSON(http.StatusAccepted, gin.H{
-			"code":           1,
-			"msg":            "备份已校验并暂存，请重启服务后完成恢复",
-			"pendingRestart": true,
-		})
+		c.JSON(http.StatusAccepted, stagedRestoreResponse("备份已校验并暂存，请重启服务后完成恢复", result))
 		return
 	}
 
@@ -486,13 +505,27 @@ func HandleBackupSyncNow(c *gin.Context) {
 	}
 	if err := syncmanager.SyncNow(); err != nil {
 		if errors.Is(err, backupservice.ErrRestartRequired) {
-			c.JSON(http.StatusAccepted, gin.H{"code": 1, "msg": "云端备份已校验并暂存，请重启服务后完成恢复", "pendingRestart": true})
+			response := gin.H{"code": 1, "msg": "云端备份已校验并暂存，请重启服务后完成恢复", "pendingRestart": true}
+			if warning := backupservice.RestartWarning(err); warning != "" {
+				response["warning"] = warning
+				response["completeMigration"] = false
+			}
+			c.JSON(http.StatusAccepted, response)
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "同步失败: " + err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "已同步到云端"})
+}
+
+func stagedRestoreResponse(message string, result backupservice.StageResult) gin.H {
+	response := gin.H{"code": 1, "msg": message, "pendingRestart": true}
+	if result.Warning != "" {
+		response["warning"] = result.Warning
+		response["completeMigration"] = false
+	}
+	return response
 }
 
 // 确认云同步（首次启用/首次启动门禁）
@@ -1069,17 +1102,13 @@ func copyDir(src, dst string) error {
 	return nil
 }
 
-func createBackupZip(sourceDir, zipPath string) error {
+func createBackupZip(sourceDir, zipPath string) (err error) {
 	zipFile, err := os.Create(zipPath)
 	if err != nil {
 		return err
 	}
-	defer zipFile.Close()
-
 	archive := zip.NewWriter(zipFile)
-	defer archive.Close()
-
-	return filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
+	err = filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -1118,11 +1147,20 @@ func createBackupZip(sourceDir, zipPath string) error {
 		if err != nil {
 			return err
 		}
-		defer file.Close()
-
-		_, err = io.Copy(writer, file)
-		return err
+		_, copyErr := io.Copy(writer, file)
+		closeErr := file.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		return closeErr
 	})
+	if closeErr := archive.Close(); err == nil && closeErr != nil {
+		err = closeErr
+	}
+	if closeErr := zipFile.Close(); err == nil && closeErr != nil {
+		err = closeErr
+	}
+	return err
 }
 
 func unzipBackup(zipPath, destDir string) error {

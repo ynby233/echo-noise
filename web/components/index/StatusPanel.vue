@@ -6965,6 +6965,10 @@ const triggerDatabaseUpload = () => {
     databaseFileInput.value?.click()
 }
 const emit = defineEmits(['restore-success'])
+const stagedRestoreDescription = (payload: any) => [
+    payload?.msg || '请重启服务后完成恢复',
+    payload?.warning
+].filter(Boolean).join('；')
 const handleDatabaseUpload = async (event: Event) => {
     const files = (event.target as HTMLInputElement).files
     if (!files || !files[0]) return
@@ -6983,7 +6987,7 @@ const handleDatabaseUpload = async (event: Event) => {
         if (data.code === 1 && data.pendingRestart) {
             useToast().add({
                 title: '恢复已暂存',
-                description: data.msg || '请重启服务后完成恢复',
+                description: stagedRestoreDescription(data),
                 color: 'orange'
             })
         } else if (data.code === 1) {
@@ -7146,7 +7150,7 @@ const syncNow = async () => {
     const res = await fetch('/api/backup/storage/sync-now', { method: 'POST', credentials: 'include' })
     const data = await res.json()
     if (data?.code === 1 && data?.pendingRestart) {
-      useToast().add({ title: '恢复已暂存', description: data.msg || '请重启服务后完成恢复', color: 'orange' })
+      useToast().add({ title: '恢复已暂存', description: stagedRestoreDescription(data), color: 'orange' })
     } else if (data?.code === 1) {
       useToast().add({ title: '已同步到云端', color: 'green' })
       await loadStorageConfig()
@@ -7289,7 +7293,7 @@ const restoreCloudBackup = async () => {
     }
     const res = await postRequest<any>('backup/storage/restore', { downloadURL: url }, { credentials: 'include' })
     if (res?.code === 1 && (res as any)?.pendingRestart) {
-      useToast().add({ title: '恢复已暂存', description: (res as any)?.msg || '请重启服务后完成恢复', color: 'orange' })
+      useToast().add({ title: '恢复已暂存', description: stagedRestoreDescription(res), color: 'orange' })
     } else if (res?.code === 1) {
       useToast().add({ title: '云备份恢复成功', color: 'green' })
       if ((res as any)?.shouldRefresh || (res as any)?.data?.shouldRefresh) {
@@ -7340,7 +7344,7 @@ const restoreFromConfiguredCloud = async () => {
     const url = finalBase + 'backup.zip'
     const res = await postRequest<any>('backup/storage/restore', { downloadURL: url }, { credentials: 'include' })
     if (res?.code === 1 && (res as any)?.pendingRestart) {
-      useToast().add({ title: '恢复已暂存', description: (res as any)?.msg || '请重启服务后完成恢复', color: 'orange' })
+      useToast().add({ title: '恢复已暂存', description: stagedRestoreDescription(res), color: 'orange' })
     } else if (res?.code === 1) {
       useToast().add({ title: '云备份恢复成功', color: 'green' })
       if ((res as any)?.shouldRefresh || (res as any)?.data?.shouldRefresh) {

@@ -13,6 +13,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/glebarez/sqlite"
+	backupservice "github.com/rcy1314/echo-noise/internal/backup"
+	"gorm.io/gorm"
 )
 
 // TestServerStartupReadiness exercises the actual process and readiness HTTP
@@ -47,10 +51,104 @@ func TestServerStartupReadiness(t *testing.T) {
 	runtimeDir := t.TempDir()
 	databasePath := filepath.Join(runtimeDir, "data", "database.db")
 	runServerUntilReady(t, binary, runtimeDir, databasePath) // initialize it once
+	corruptPending := filepath.Join(filepath.Dir(databasePath), ".echo-noise-restore-pending.zip")
+	if err := os.WriteFile(corruptPending, []byte("not a zip archive"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	runServerUntilReady(t, binary, runtimeDir, databasePath)
+	if _, err := os.Stat(corruptPending); !os.IsNotExist(err) {
+		t.Fatalf("invalid pending restore still blocks future startups: %v", err)
+	}
+	quarantined, err := filepath.Glob(filepath.Join(filepath.Dir(databasePath), ".echo-noise-restore-failed-*.zip"))
+	if err != nil || len(quarantined) != 1 {
+		t.Fatalf("quarantined restore packages = %#v, %v", quarantined, err)
+	}
+	testSuccessfulRestoreRoundTrip(t, binary, runtimeDir, databasePath)
 	for index := 0; index < 20; index++ {
 		t.Run(fmt.Sprintf("existing-%02d", index+1), func(t *testing.T) {
 			runServerUntilReady(t, binary, runtimeDir, databasePath)
 		})
+	}
+}
+
+func testSuccessfulRestoreRoundTrip(t *testing.T, binary, runtimeDir, databasePath string) {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open("file:"+filepath.ToSlash(databasePath)+"?_pragma=journal_mode(WAL)"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec("CREATE TABLE restore_probe (value TEXT NOT NULL)").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec("INSERT INTO restore_probe(value) VALUES (?)", "restored").Error; err != nil {
+		t.Fatal(err)
+	}
+	sourceBlobs := filepath.Join(runtimeDir, "source-blobs")
+	if err := os.MkdirAll(sourceBlobs, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceBlobs, "new.bin"), []byte("restored-blob"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	archivePath := filepath.Join(runtimeDir, "restore-round-trip.zip")
+	if err := backupservice.CreateArchive(archivePath, db, backupservice.Layout{
+		DatabasePath: databasePath,
+		Roots:        []backupservice.Root{{ArchiveName: "attachment-blobs", Path: sourceBlobs}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec("DROP TABLE restore_probe").Error; err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sqlDB.Close(); err != nil {
+		t.Fatal(err)
+	}
+	targetBlobs := filepath.Join(runtimeDir, "external-blobs")
+	if err := os.MkdirAll(targetBlobs, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(targetBlobs, "old.bin"), []byte("original-blob"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	layout := backupservice.Layout{
+		DatabasePath: databasePath,
+		Roots:        []backupservice.Root{{ArchiveName: "attachment-blobs", Path: targetBlobs}},
+	}
+	if err := backupservice.StageRestore(archivePath, layout); err != nil {
+		t.Fatal(err)
+	}
+	runServerUntilReady(t, binary, runtimeDir, databasePath)
+
+	restoredDB, err := gorm.Open(sqlite.Open("file:"+filepath.ToSlash(databasePath)+"?mode=ro"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var value string
+	if err := restoredDB.Raw("SELECT value FROM restore_probe LIMIT 1").Scan(&value).Error; err != nil {
+		t.Fatal(err)
+	}
+	restoredSQL, err := restoredDB.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := restoredSQL.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if value != "restored" {
+		t.Fatalf("restored database probe = %q", value)
+	}
+	if got, err := os.ReadFile(filepath.Join(targetBlobs, "new.bin")); err != nil || string(got) != "restored-blob" {
+		t.Fatalf("restored attachment = %q, %v", got, err)
+	}
+	if _, err := os.Stat(filepath.Join(targetBlobs, "old.bin")); !os.IsNotExist(err) {
+		t.Fatalf("old attachment remained after restore: %v", err)
+	}
+	if backupservice.HasPendingRestore(layout) {
+		t.Fatal("successful startup did not commit the pending restore")
 	}
 }
 
@@ -72,7 +170,7 @@ func runServerUntilReady(t *testing.T, binary, runtimeDir, databasePath string) 
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start server: %v", err)
 	}
-	t.Cleanup(func() { stopServer(cmd) })
+	defer stopServer(cmd)
 
 	deadline := time.Now().Add(6 * time.Second)
 	endpoint := "http://127.0.0.1:" + strconv.Itoa(port) + "/api/health/ready"

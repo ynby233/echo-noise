@@ -2,6 +2,7 @@ package syncmanager
 
 import (
 	"archive/zip"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -25,6 +26,13 @@ var (
 	scheduledStop chan struct{}
 	debounceTimer *time.Timer
 )
+
+// LockOperation serializes cloud backup upload/restore entry points with
+// scheduled and manual synchronization. Callers must defer the release func.
+func LockOperation() func() {
+	operationMu.Lock()
+	return operationMu.Unlock
+}
 
 const storageSyncConfirmFile = "data/storage_sync_confirmed"
 
@@ -131,8 +139,8 @@ func Trigger() {
 }
 
 func SyncNow() error {
-	operationMu.Lock()
-	defer operationMu.Unlock()
+	releaseOperation := LockOperation()
+	defer releaseOperation()
 	mu.Lock()
 	cfg := configured
 	mu.Unlock()
@@ -154,7 +162,7 @@ func SyncNow() error {
 	if dbType != "sqlite" {
 		// 当前自动同步仅实现了 sqlite 的打包/恢复仲裁。
 		// 非 sqlite 场景保持既有“上传备份”逻辑，避免错误覆盖。
-		return syncUpload(cfg)
+		return syncUploadLegacy(cfg)
 	}
 	if backupservice.HasPendingRestore(backupservice.DefaultLayout()) {
 		return backupservice.ErrRestartRequired
@@ -237,22 +245,81 @@ func syncUpload(cfg models.SiteConfig) error {
 		return fmt.Errorf("创建同步备份失败: %w", err)
 	}
 
-	// 预签名上传
+	return uploadAndPersist(cfg, backupPath)
+}
+
+func syncUploadLegacy(cfg models.SiteConfig) error {
+	tmpDir, err := os.MkdirTemp("", "echo-noise-sync-legacy-*")
+	if err != nil {
+		return fmt.Errorf("创建同步临时目录失败: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+	backupPath := filepath.Join(tmpDir, "backup.zip")
+	if err := createLegacyArchive(backupPath, filepath.Join("data", "images"), filepath.Join("data", "video")); err != nil {
+		return fmt.Errorf("创建兼容同步备份失败: %w", err)
+	}
+	return uploadAndPersist(cfg, backupPath)
+}
+
+func uploadAndPersist(cfg models.SiteConfig, backupPath string) error {
 	url, err := storage.PresignUpload(cfg, cfg.StorageBucket, "backup.zip", 1*time.Hour, "application/zip")
 	if err != nil {
 		return err
 	}
-	if err := uploadArchive(url, backupPath, &http.Client{Timeout: 120 * time.Second}); err != nil {
+	return completeUpload(
+		func() error { return uploadArchive(url, backupPath, &http.Client{Timeout: 120 * time.Second}) },
+		func() (*storage.ObjectMeta, error) { return storage.HeadObject(cfg, cfg.StorageBucket, "backup.zip") },
+		func(remoteMeta *storage.ObjectMeta, syncTime *time.Time) error {
+			return syncPersistMeta(cfg, remoteMeta, syncTime)
+		},
+	)
+}
+
+func completeUpload(
+	upload func() error,
+	head func() (*storage.ObjectMeta, error),
+	persist func(*storage.ObjectMeta, *time.Time) error,
+) error {
+	if err := upload(); err != nil {
 		return err
 	}
-
-	// 上传完成后重新 Head 一次获取最新 ETag/Last-Modified
-	remoteMeta, err := storage.HeadObject(cfg, cfg.StorageBucket, "backup.zip")
+	// Only a successful HTTP upload is allowed to advance LastSyncTime. A Head
+	// failure also leaves the previous synchronization state untouched.
+	remoteMeta, err := head()
 	if err != nil {
 		return fmt.Errorf("确认云端备份失败: %w", err)
 	}
 	now := time.Now()
-	return syncPersistMeta(cfg, remoteMeta, &now)
+	return persist(remoteMeta, &now)
+}
+
+func createLegacyArchive(destination, imageRoot, videoRoot string) (err error) {
+	file, err := os.Create(destination)
+	if err != nil {
+		return err
+	}
+	archive := zip.NewWriter(file)
+	for _, root := range []struct {
+		path string
+		name string
+	}{{imageRoot, "images"}, {videoRoot, "video"}} {
+		if info, statErr := os.Stat(root.path); statErr == nil && info.IsDir() {
+			if err := addDirToZip(archive, root.path, root.name); err != nil {
+				_ = archive.Close()
+				_ = file.Close()
+				return err
+			}
+		} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+			_ = archive.Close()
+			_ = file.Close()
+			return statErr
+		}
+	}
+	if err := archive.Close(); err != nil {
+		_ = file.Close()
+		return err
+	}
+	return file.Close()
 }
 
 func uploadArchive(uploadURL, archivePath string, client *http.Client) error {
@@ -300,7 +367,7 @@ func addFileToZip(zw *zip.Writer, srcPath, zipName string) error {
 func addDirToZip(zw *zip.Writer, dir, prefix string) error {
 	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil
+			return err
 		}
 		if info.IsDir() {
 			return nil
@@ -345,10 +412,11 @@ func syncDownloadAndRestore(cfg models.SiteConfig, remoteMeta *storage.ObjectMet
 	if closeErr != nil {
 		return closeErr
 	}
-	if err := backupservice.StageRestore(zipPath, backupservice.DefaultLayout()); err != nil {
+	result, err := backupservice.StageRestoreWithResult(zipPath, backupservice.DefaultLayout())
+	if err != nil {
 		return fmt.Errorf("暂存云端恢复包失败: %w", err)
 	}
-	return backupservice.ErrRestartRequired
+	return &backupservice.RestartRequiredError{Warning: result.Warning}
 }
 
 func syncPersistMeta(cfg models.SiteConfig, remoteMeta *storage.ObjectMeta, syncTime *time.Time) error {

@@ -89,7 +89,11 @@ func main() {
 	// leave the process split between old and new data.
 	var appliedRestore *backupservice.AppliedRestore
 	if pending, err := backupservice.ApplyPendingRestore(backupservice.DefaultLayout()); err != nil {
-		log.Fatalf("应用待恢复备份失败: %v", err)
+		if backupservice.RestoreFailureRecovered(err) {
+			log.Printf("%v；已保留原数据并继续启动", err)
+		} else {
+			log.Fatalf("应用待恢复备份失败且无法安全回退: %v", err)
+		}
 	} else {
 		appliedRestore = pending
 	}
