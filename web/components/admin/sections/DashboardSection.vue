@@ -156,8 +156,7 @@ onUnmounted(() => {
 .admin-dashboard-group-title { display: flex; align-items: center; gap: .5rem; margin-bottom: .75rem; font-size: .9rem; font-weight: 650; }
 .admin-dashboard-group-title::before { content: ''; width: .2rem; height: 1rem; border-radius: 999px; background: rgb(99 102 241); }
 .admin-dashboard-interaction-grid, .admin-dashboard-operation-grid, .admin-system-summary-grid { display: grid; gap: .75rem; }
-.admin-dashboard-metric-card, .admin-dashboard-detail-card { min-width: 0; border-radius: .85rem; padding: .85rem; }
-.admin-dashboard-metric-card { text-align: center; }
+.admin-dashboard-metric-card, .admin-dashboard-detail-card { min-width: 0; border-radius: .85rem; padding: .85rem; text-align: center; }
 .admin-dashboard-card-label { display: flex; align-items: center; justify-content: center; gap: .35rem; font-size: .75rem; }
 .admin-dashboard-metric-value { margin-top: .35rem; font-size: 1.5rem; font-weight: 700; }
 .admin-dashboard-detail-value { margin-top: .35rem; font-size: 1rem; font-weight: 650; overflow-wrap: anywhere; }

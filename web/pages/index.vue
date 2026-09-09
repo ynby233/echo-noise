@@ -5,7 +5,7 @@
       <div class="loading-text">加载中...</div>
     </div>
     <div ref="contentWrapper" class="content-wrapper gpu-accelerated">
-      <UContainer class="container-fixed pt-2 pb-0 mt-4 mb-0" :class="{ 'container-masonry': isMasonry }">
+      <UContainer class="container-fixed pt-2 pb-0 mt-4 mb-0" :class="{ 'container-masonry': isMasonry, 'container-single': !isMobile && layoutState === 'single' }">
         <div :class="['layout-container', gridModeClass]">
       <ClientOnly>
       <div class="sidebar-slot sidebar-slot-left" v-if="!isMobile && layoutState!=='single'">
@@ -217,7 +217,7 @@
               </div>
             </div>
           </div>
-          <div v-if="activeTab==='feed'" :class="['feed-page', { 'feed-page-wide': layoutState==='two' || isMasonry }]">
+          <div v-if="activeTab==='feed'" :class="['feed-page', { 'feed-page-wide': layoutState==='two' || (!isMobile && layoutState==='single') || isMasonry }]">
             <UCard :class="['search-card', 'feed-shell-card', 'nw-content-panel-surface', 'mb-3', { 'is-dark': isDark }]" :ui="{ body: { padding: 'p-5 md:p-6' } }">
               <div class="nw-content-panel-head">
                 <div class="nw-content-panel-heading">
@@ -376,7 +376,7 @@
             <div class="page-footer" v-html="(frontendConfig.pageFooterHTML || defaultConfig.pageFooterHTML)"></div>
           </div>
           <template v-else>
-            <AddForm v-show="!isMasonry || masonryComposerVisible" v-if="composerCreated && (activeTab !== 'personal' || isLoggedIn)" class="masonry-composer" @search-result="handleSearchResult" :hide-header-tools="layoutState==='three'" :wide="layoutState==='two' || isMasonry" />
+            <AddForm v-show="!isMasonry || masonryComposerVisible" v-if="composerCreated && (activeTab !== 'personal' || isLoggedIn)" class="masonry-composer" @search-result="handleSearchResult" :hide-header-tools="layoutState==='three'" :wide="layoutState==='two' || (!isMobile && layoutState==='single') || isMasonry" />
             <!-- 中心栏标签筛选已隐藏；右侧标签组件保留原功能 -->
           <MessageList :masonry="isMasonry"
             ref="messageList" 
@@ -384,7 +384,7 @@
             :site-config="frontendConfig"
             :target-message-id="targetMessageId ?? undefined"
             :target-comment-id="notificationTargetCommentId ?? undefined"
-            :wide="layoutState==='two' || isMasonry"
+            :wide="layoutState==='two' || (!isMobile && layoutState==='single') || isMasonry"
             :page-ready="isLoaded"
             :active-tab="activeTab"
             :initial-page="initialPage"
@@ -454,7 +454,7 @@
     :show-write-note="isMasonry"
     :write-note-active="masonryComposerVisible"
     @write-note="toggleMasonryComposer"
-    :layout-label="isMasonry ? '瀑布流' : '布局'"
+    :layout-label="layoutLabel"
     :notification-unread-count="notificationUnreadCount"
     :announcement-unread-count="announcementUnreadCount"
     :pwa-enabled="frontendConfig.pwaEnabled !== false"
@@ -631,7 +631,7 @@ const baseApi = useRuntimeConfig().public.baseApi || '/api'
 const pwaRuntimeNotices = ref<{ open: () => void } | null>(null)
 const reloadPosition = readReloadPagePosition()
 const activeTab = ref<string>(reloadPosition?.tab || 'latest')
-const { layoutState, isMobile, cycleLayout, gridModeClass, layoutIcon, centerContainerClass, supportsMasonry, isMasonry, applyDefaultLayout } = useHomeLayout(activeTab)
+const { layoutState, isMobile, cycleLayout, gridModeClass, layoutIcon, layoutLabel, centerContainerClass, supportsMasonry, isMasonry, applyDefaultLayout } = useHomeLayout(activeTab)
 const toggleHeatmapCard = () => { showHeatmap.value = !showHeatmap.value }
 // 主题预设。统一由 ThemePresetSwitcher 控制 documentElement 类，不在容器上附加主题类
 
@@ -3565,8 +3565,9 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
 .site-media-fancybox .f-thumbs__slide__button::after {
   display: none;
 }
-/* The wide reading board keeps a quiet, compact navigation rail. */
+/* Wide desktop layouts keep room for the floating tool rail. */
 .container-fixed.container-masonry { max-width: 1920px; padding-right: 88px; padding-left: 24px; }
+.container-fixed.container-single { max-width: 1920px; padding-right: 88px; padding-left: 24px; }
 .layout-container.grid-masonry { display: grid; grid-template-columns: var(--sidebar-width, 320px) minmax(0, 1fr); gap: 16px; align-items: start; }
 .grid-masonry .masonry-composer { width: auto; margin: 0 8px 8px; }
 .grid-masonry .sidebar-slot-left { top: 16px; height: auto; }
@@ -3582,6 +3583,7 @@ html.dark .stats-login-prompt:hover { color: #93c5fd; }
 .masonry-tags .hot-tag-btn { width: 100%; min-width: 0; }
 @media (max-width: 1279px) {
   .container-fixed.container-masonry { padding-left: 16px; }
+  .container-fixed.container-single { padding-left: 16px; }
 }
 </style>
 <style>

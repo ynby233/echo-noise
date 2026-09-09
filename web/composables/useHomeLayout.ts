@@ -41,13 +41,21 @@ export const useHomeLayout = (activeTab: Ref<string>) => {
     mq?.removeEventListener?.('change', handleLayoutMediaChange)
   })
   const gridModeClass = computed(() => isMasonry.value ? 'grid-masonry' : (layoutState.value === 'three' ? 'grid-3' : (layoutState.value === 'two' ? 'grid-2' : 'grid-1')))
-  const layoutIcon = computed(() => isMasonry.value ? 'i-mdi-view-dashboard' : (layoutState.value === 'three' ? 'i-mdi-view-grid' : (layoutState.value === 'two' ? 'i-mdi-view-column' : 'i-mdi-view-stream')))
+  const layoutIcon = computed(() => isMasonry.value
+    ? 'i-mdi-view-dashboard'
+    : (layoutState.value === 'three'
+        ? 'i-mdi-view-column-outline'
+        : (layoutState.value === 'two' ? 'i-mdi-page-layout-sidebar-left' : 'i-mdi-page-layout-body')))
+  const layoutLabel = computed(() => ({
+    three: '三栏',
+    two: '双栏',
+    single: '单栏',
+    masonry: '瀑布流'
+  })[layoutState.value])
   const centerContainerClass = computed(() => (
-    (layoutState.value === 'two' || isMasonry.value)
+    (layoutState.value === 'two' || layoutState.value === 'single' || isMasonry.value)
       ? 'w-full max-w-none'
-      : (layoutState.value === 'single'
-          ? 'mx-auto w-full max-w-[640px] sm:max-w-3xl'
-          : 'mx-auto w-full sm:max-w-4xl')
+      : 'mx-auto w-full sm:max-w-4xl'
   ))
   const supportsMasonry = computed(() => ['latest', 'personal', 'feed'].includes(activeTab.value))
   const isMasonry = computed(() => !isMobile.value && layoutState.value === 'masonry' && supportsMasonry.value)
@@ -62,5 +70,5 @@ export const useHomeLayout = (activeTab: Ref<string>) => {
     desktopLayoutDefault = layout
     if (typeof window !== 'undefined' && !isMobile.value && !localStorage.getItem('homeLayoutDesktop')) layoutState.value = layout
   }
-  return { layoutState, isMobile, cycleLayout, gridModeClass, layoutIcon, centerContainerClass, supportsMasonry, isMasonry, applyDefaultLayout }
+  return { layoutState, isMobile, cycleLayout, gridModeClass, layoutIcon, layoutLabel, centerContainerClass, supportsMasonry, isMasonry, applyDefaultLayout }
 }
