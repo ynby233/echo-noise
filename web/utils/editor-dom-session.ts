@@ -14,6 +14,48 @@ import { createPreReadyEditorInsertBuffer } from './editor-insert-buffer.mjs'
 
 import type Vditor from 'vditor'
 
+const ATTACHMENT_MARKER_RE = /!?\[(图片附件|视频附件|音频附件|文件附件)：([^\]]+)\]\(([^)\s]+)\)/
+const ATTACHMENT_MARKER_GLOBAL_RE = /!?\[(图片附件|视频附件|音频附件|文件附件)：([^\]]+)\]\(([^)\s]+)\)/g
+const ATTACHMENT_MARKER_MAX_NAME_LENGTH = 24
+const ATTACHMENT_MARKER_ELLIPSIS = '…'
+const truncateAttachmentDisplayName = (name: string) => {
+  const value = String(name || '')
+  const chars = Array.from(value)
+  if (chars.length <= ATTACHMENT_MARKER_MAX_NAME_LENGTH) return value
+  const dotIndex = value.lastIndexOf('.')
+  const rawExtension = dotIndex > 0 ? value.slice(dotIndex) : ''
+  const extension = Array.from(rawExtension).length <= 12 ? rawExtension : ''
+  const headLength = Math.max(1, ATTACHMENT_MARKER_MAX_NAME_LENGTH - Array.from(extension).length - 1)
+  return chars.slice(0, headLength).join('') + ATTACHMENT_MARKER_ELLIPSIS + extension
+}
+export const tableAttachmentSourcesToDisplayText = (value: string) => {
+  ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+  const replaced = String(value || '').replace(
+    ATTACHMENT_MARKER_GLOBAL_RE,
+    (_match, kindLabel, name) => `${kindLabel}：${truncateAttachmentDisplayName(String(name || '').trim() || '未命名附件')}`
+  )
+  ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+  return replaced
+}
+const hasTableAttachmentSource = (value: string) => ATTACHMENT_MARKER_RE.test(value)
+const countTableCellEdgeBreaks = (value: string, edge: 'start' | 'end') => {
+  const match = edge === 'start' ? String(value || '').match(/^\n+/) : String(value || '').match(/\n+$/)
+  return match?.[0].length || 0
+}
+
+export const mergeRenderedTableCellEdgeBreaks = (sourceText: string, renderedText: string, sameVisibleContent: boolean) => {
+  const source = String(sourceText || '')
+  const rendered = String(renderedText || '')
+  if (!rendered) return source
+  const sourceCore = source.replace(/^\n+|\n+$/g, '')
+  const renderedCore = rendered.replace(/^\n+|\n+$/g, '')
+  if (!sameVisibleContent) return source
+  const leading = Math.max(countTableCellEdgeBreaks(source, 'start'), countTableCellEdgeBreaks(rendered, 'start'))
+  const trailing = Math.max(countTableCellEdgeBreaks(source, 'end'), countTableCellEdgeBreaks(rendered, 'end'))
+  const core = hasTableAttachmentSource(renderedCore) && !hasTableAttachmentSource(sourceCore) ? renderedCore : sourceCore
+  return `${'\n'.repeat(leading)}${core}${'\n'.repeat(trailing)}`
+}
+
 type EditorDomSessionOptions = {
   root: () => HTMLElement | null
   toolbar: () => HTMLElement | null
@@ -188,8 +230,6 @@ const headingOptions = [
 ];
 
 type EditorAttachmentInfo = { type: 'image' | 'video' | 'audio' | 'file'; title: string; name: string; url: string }
-const ATTACHMENT_MARKER_RE = /!?\[(图片附件|视频附件|音频附件|文件附件)：([^\]]+)\]\(([^)\s]+)\)/
-const ATTACHMENT_MARKER_GLOBAL_RE = /!?\[(图片附件|视频附件|音频附件|文件附件)：([^\]]+)\]\(([^)\s]+)\)/g
 const ADJACENT_ATTACHMENT_MARKER_RE = /(!?\[(?:图片附件|视频附件|音频附件|文件附件)：[^\]]+\]\([^)\s]+\))(!?\[(?:图片附件|视频附件|音频附件|文件附件)：[^\]]+\]\([^)\s]+\))/g
 const RAW_ATTACHMENT_ANCHOR_RE = /<a\b[^>]*(?:data-attachment-url|href)=["']([^"']+)["'][^>]*>\s*(图片附件|视频附件|音频附件|文件附件)：([^<]+?)\s*<\/a>/gi
 const ATTACHMENT_ANCHOR_LABEL_RE = /^(图片附件|视频附件|音频附件|文件附件)：(.+)$/
@@ -526,20 +566,6 @@ const attachmentInfoFromIrLabel = (label: HTMLElement | null) => {
 
 const attachmentInfoToMarkdownSource = (info: EditorAttachmentInfo) => `[${info.title}](${info.url})`
 
-const ATTACHMENT_MARKER_MAX_NAME_LENGTH = 24
-const ATTACHMENT_MARKER_ELLIPSIS = '…'
-
-const truncateAttachmentDisplayName = (name: string) => {
-  const value = String(name || '')
-  const chars = Array.from(value)
-  if (chars.length <= ATTACHMENT_MARKER_MAX_NAME_LENGTH) return value
-  const dotIndex = value.lastIndexOf('.')
-  const rawExtension = dotIndex > 0 ? value.slice(dotIndex) : ''
-  const extension = Array.from(rawExtension).length <= 12 ? rawExtension : ''
-  const headLength = Math.max(1, ATTACHMENT_MARKER_MAX_NAME_LENGTH - Array.from(extension).length - 1)
-  return chars.slice(0, headLength).join('') + ATTACHMENT_MARKER_ELLIPSIS + extension
-}
-
 const attachmentMarkerKindLabel = (info: EditorAttachmentInfo) => (
   info.title.endsWith(info.name) ? info.title.slice(0, info.title.length - info.name.length) : ''
 )
@@ -551,15 +577,7 @@ const attachmentMarkerDisplayTitle = (info: EditorAttachmentInfo) => {
   return prefix ? `${prefix}${displayName}` : displayName
 }
 
-const attachmentMarkersToDisplayTitleText = (value: string) => {
-  ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
-  const replaced = String(value || '').replace(ATTACHMENT_MARKER_GLOBAL_RE, (match, kindLabel, name, url) => {
-    const info = normalizeAttachmentInfo(kindLabel, name, url)
-    return info ? attachmentMarkerDisplayTitle(info) : match
-  })
-  ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
-  return replaced
-}
+const attachmentMarkersToDisplayTitleText = tableAttachmentSourcesToDisplayText
 
 const createEditorTableAttachmentMarkerElement = (info: EditorAttachmentInfo) => {
   const marker = document.createElement('span')
@@ -2897,26 +2915,15 @@ const editableRowsFromRenderedTable = (table: HTMLTableElement | null) => {
   return Array.from(table.rows).map((row) => Array.from(row.cells).map((cell) => htmlTableCellToEditorText(cell as HTMLTableCellElement)))
 }
 
-const countEdgeLineBreaks = (value: string, edge: 'start' | 'end') => {
-  const match = edge === 'start' ? String(value || '').match(/^\n+/) : String(value || '').match(/\n+$/)
-  return match?.[0].length || 0
-}
-
-const mergeRenderedTableCellEdgeBreaks = (sourceText: string, renderedText: string) => {
-  const source = String(sourceText || '')
-  const rendered = String(renderedText || '')
-  if (!rendered) return source
-  const sourceCore = source.replace(/^\n+|\n+$/g, '')
-  const renderedCore = rendered.replace(/^\n+|\n+$/g, '')
-  if (normalizeTableMatchText(sourceCore) !== normalizeTableMatchText(renderedCore)) return source
-  const leading = Math.max(countEdgeLineBreaks(source, 'start'), countEdgeLineBreaks(rendered, 'start'))
-  const trailing = Math.max(countEdgeLineBreaks(source, 'end'), countEdgeLineBreaks(rendered, 'end'))
-  const core = hasAttachmentMarker(renderedCore) && !hasAttachmentMarker(sourceCore) ? renderedCore : sourceCore
-  return `${'\n'.repeat(leading)}${core}${'\n'.repeat(trailing)}`
-}
-
 const mergeRenderedTableEdgeBreaks = (sourceRows: string[][], renderedRows: string[][]) =>
-  sourceRows.map((row, rowIndex) => row.map((cell, cellIndex) => mergeRenderedTableCellEdgeBreaks(cell, renderedRows[rowIndex]?.[cellIndex] || '')))
+  sourceRows.map((row, rowIndex) => row.map((cell, cellIndex) => {
+    const rendered = renderedRows[rowIndex]?.[cellIndex] || ''
+    return mergeRenderedTableCellEdgeBreaks(
+      cell,
+      rendered,
+      normalizeTableMatchText(tableAttachmentSourcesToDisplayText(cell)) === normalizeTableMatchText(tableAttachmentSourcesToDisplayText(rendered))
+    )
+  }))
 
 const createHtmlTableFromBlock = (block: EditorTableSourceBlock) => {
   if (block.kind !== 'html' || typeof document === 'undefined') return null

@@ -1,7 +1,10 @@
 import { readEditorSource } from './editor-source.mjs'
 import assert from 'node:assert/strict'
+import { createJiti } from 'jiti'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
+
+const { mergeRenderedTableCellEdgeBreaks, tableAttachmentSourcesToDisplayText } = await createJiti(import.meta.url).import('../utils/editor-dom-session.ts')
 
 const editorPath = fileURLToPath(new URL('../components/index/VditorEditor.vue', import.meta.url))
 const editor = readEditorSource()
@@ -77,11 +80,38 @@ assert.doesNotMatch(
   'committing an expanded cell must not rebuild the value by appending attachments after the text'
 )
 
-const mergeFn = sliceBetween(editor, 'const mergeRenderedTableCellEdgeBreaks =', 'const mergeRenderedTableEdgeBreaks =')
-assert.match(
-  mergeFn,
-  /hasAttachmentMarker\(renderedCore\)\s*&&\s*!hasAttachmentMarker\(sourceCore\)/,
-  'opening an expanded table must recover an attachment URL retained by the rendered cell when Vditor source degraded to its label'
+const longFile = '[文件附件：这是一个长度超过二十四个字符的长文件名称用于回归测试报告.pdf](/api/files/long.pdf)'
+const displayedLongFile = tableAttachmentSourcesToDisplayText(longFile)
+assert.equal(
+  displayedLongFile,
+  '文件附件：这是一个长度超过二十四个字符的长文件名….pdf',
+  'the visible long attachment label must stay truncated without changing its serialized source'
+)
+assert.equal(
+  mergeRenderedTableCellEdgeBreaks(
+    `\n${displayedLongFile}`,
+    `${longFile}\n\n`,
+    displayedLongFile === tableAttachmentSourcesToDisplayText(longFile)
+  ),
+  `\n${longFile}\n\n`,
+  'expanded-table recovery must preserve a long attachment name, URL, and rendered edge breaks after its display label was truncated'
+)
+const longAudio = '[音频附件：另一个长度超过二十四个字符的长音频名称用于顺序回归测试.webm](/api/audio/long.webm)'
+const orderedAttachments = `前 ${longFile} 中 ${longAudio} 后`
+const displayedOrderedAttachments = tableAttachmentSourcesToDisplayText(orderedAttachments)
+assert.equal(
+  mergeRenderedTableCellEdgeBreaks(
+    displayedOrderedAttachments,
+    orderedAttachments,
+    displayedOrderedAttachments === tableAttachmentSourcesToDisplayText(orderedAttachments)
+  ),
+  orderedAttachments,
+  'expanded-table recovery must keep multiple long attachments in their rendered text order'
+)
+assert.equal(
+  mergeRenderedTableCellEdgeBreaks('用户改写的纯文本', longFile, false),
+  '用户改写的纯文本',
+  'a genuinely different source cell must not resurrect a stale rendered attachment'
 )
 
 // HTML is written only while the dialog opens, so typing never resets the caret.

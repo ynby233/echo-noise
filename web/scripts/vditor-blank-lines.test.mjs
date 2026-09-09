@@ -669,12 +669,6 @@ assert.match(
 )
 
 assert.match(
-  editor,
-  /const\s+mergeRenderedTableCellEdgeBreaks\s*=[\s\S]+?countEdgeLineBreaks[\s\S]+?const\s+mergeRenderedTableEdgeBreaks\s*=/,
-  'expanded table source rows must be merged with rendered edge breaks so source drift cannot erase visual blank lines'
-)
-
-assert.match(
   tableExpandHandler,
   /const\s+renderedRows\s*=\s*editableRowsFromRenderedTable\(table\)[\s\S]+?mergeRenderedTableEdgeBreaks\(editableRowsFromTableBlock\(block\),\s*renderedRows\)/,
   'opening expanded tables must retain rendered leading/trailing cell blank lines even when Vditor source has drifted'
