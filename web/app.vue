@@ -232,6 +232,14 @@ onBeforeUnmount(() => {
   box-shadow: 0 4px 24px #0003;
 }
 .module-recovery-notice p { margin-bottom: 0.5rem; }
-.module-recovery-notice button { margin: 0.25rem 0.75rem 0 0; padding: 0.4rem 0.6rem; }
+.module-recovery-notice button {
+  display: inline-flex;
+  width: auto;
+  min-width: max-content;
+  height: auto;
+  white-space: nowrap;
+  margin: 0.25rem 0.75rem 0 0;
+  padding: 0.4rem 0.6rem;
+}
 :global(.dark) .module-recovery-notice { background: #29201a; color: #ffedd5; }
 </style>
