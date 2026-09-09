@@ -450,6 +450,7 @@
   <PwaRuntimeNotices ref="pwaRuntimeNotices" />
   <FloatingToolSidebar 
     :content-theme="contentTheme"
+    :avoid-overlap="floatingSidebarOverlapsContent"
     :layout-icon="layoutIcon"
     :show-write-note="isMasonry"
     :write-note-active="masonryComposerVisible"
@@ -573,13 +574,29 @@
       </div>
     </UCard>
   </UModal>
-  <div class="scroll-buttons" @mouseenter="hoverScroll = true" @mouseleave="hoverScroll = false">
+  <div
+    ref="scrollButtons"
+    class="scroll-buttons"
+    :class="{
+      'is-overlap-concealed': scrollButtonOverlapsContent && !scrollAvoidanceOpen,
+      'is-overlap-open': scrollButtonOverlapsContent && scrollAvoidanceOpen,
+      'is-dragging': scrollDragPointerId !== null,
+    }"
+    @mouseenter="hoverScroll = true"
+    @mouseleave="hoverScroll = false"
+  >
     <button
       v-show="showScroll"
       type="button"
       :class="scrollButtonClass"
-      :aria-label="isAtBottom && !isAtTop ? '返回页首' : '返回页尾'"
-      @click="handleScrollClick"
+      :style="scrollButtonStyle"
+      :aria-label="scrollButtonOverlapsContent && !scrollAvoidanceOpen ? '展开页首页尾按钮' : (isAtBottom && !isAtTop ? '返回页首' : '返回页尾')"
+      :aria-expanded="scrollButtonOverlapsContent ? scrollAvoidanceOpen : undefined"
+      @click="handleScrollButtonClick"
+      @pointerdown="handleScrollPointerDown"
+      @pointermove="handleScrollPointerMove"
+      @pointerup="handleScrollPointerUp"
+      @pointercancel="handleScrollPointerCancel"
     >
       <UIcon :class="iconClass" :name="scrollIconName" />
     </button>
@@ -617,6 +634,7 @@ import { bindMediaFancybox, unbindMediaFancybox, createMediaFancyboxOptions } fr
 import { normalizeAdConfigs } from '~/utils/ad-config'
 import { getMessageIdFromRouteHash } from '~/utils/message-route-hash'
 import { getRequest, postRequest } from '~/utils/api'
+import { rectanglesOverlap } from '~/utils/floating-overlap'
 
 import { useHomeGallery } from '~/composables/useHomeGallery'
 import HomeGallery from '~/components/index/HomeGallery.vue'
@@ -1251,6 +1269,104 @@ const scrollToTop = () => {
 const hoverScroll = ref(false)
 const isAtTop = ref(true)
 const isAtBottom = ref(false)
+const floatingSidebarOverlapsContent = ref(false)
+const scrollButtonOverlapsContent = ref(false)
+const scrollButtons = ref<HTMLElement | null>(null)
+const scrollAvoidanceOpen = ref(false)
+const scrollDragOffset = ref(0)
+const scrollDragPointerId = ref<number | null>(null)
+let scrollDragStartX = 0
+let suppressScrollClick = false
+let scrollAvoidanceTimer: ReturnType<typeof setTimeout> | null = null
+let floatingOverlapFrame = 0
+let floatingOverlapObserver: ResizeObserver | null = null
+const FLOATING_AUTO_CONCEAL_MS = 4000
+const SCROLL_CONCEAL_DRAG_PX = 18
+
+const clearScrollAvoidanceTimer = () => {
+  if (scrollAvoidanceTimer) clearTimeout(scrollAvoidanceTimer)
+  scrollAvoidanceTimer = null
+}
+
+const scheduleScrollAvoidanceConceal = () => {
+  clearScrollAvoidanceTimer()
+  if (!scrollButtonOverlapsContent.value || !scrollAvoidanceOpen.value) return
+  scrollAvoidanceTimer = setTimeout(() => { scrollAvoidanceOpen.value = false }, FLOATING_AUTO_CONCEAL_MS)
+}
+
+const visibleRect = (element: HTMLElement | null) => {
+  if (!element || element.getClientRects().length === 0) return null
+  const rect = element.getBoundingClientRect()
+  return rect.width > 0 && rect.height > 0 ? rect : null
+}
+
+const updateFloatingControlOverlap = () => {
+  floatingOverlapFrame = 0
+  if (window.matchMedia('(max-width: 1024px)').matches) {
+    floatingSidebarOverlapsContent.value = false
+    scrollButtonOverlapsContent.value = false
+    return
+  }
+  const targets = Array.from(document.querySelectorAll<HTMLElement>('.left-col, .right-col, .center-col'))
+    .map(visibleRect)
+    .filter((rect): rect is DOMRect => !!rect)
+  const overlaps = (element: HTMLElement | null) => {
+    const source = visibleRect(element)
+    return !!source && targets.some(target => rectanglesOverlap(source, target))
+  }
+  floatingSidebarOverlapsContent.value = overlaps(document.querySelector<HTMLElement>('.floating-sidebar-shell'))
+  scrollButtonOverlapsContent.value = overlaps(scrollButtons.value)
+}
+
+const scheduleFloatingControlOverlap = () => {
+  if (floatingOverlapFrame) cancelAnimationFrame(floatingOverlapFrame)
+  floatingOverlapFrame = requestAnimationFrame(updateFloatingControlOverlap)
+}
+
+const observeFloatingControlLayout = () => {
+  floatingOverlapObserver?.disconnect()
+  floatingOverlapObserver = new ResizeObserver(scheduleFloatingControlOverlap)
+  document.querySelectorAll<HTMLElement>('.left-col, .right-col, .center-col, .floating-sidebar-shell, .scroll-buttons')
+    .forEach(element => floatingOverlapObserver?.observe(element))
+  scheduleFloatingControlOverlap()
+}
+
+const resetScrollDrag = () => {
+  scrollDragOffset.value = 0
+  scrollDragPointerId.value = null
+}
+
+const handleScrollPointerDown = (event: PointerEvent) => {
+  if (!scrollButtonOverlapsContent.value || !scrollAvoidanceOpen.value) return
+  scrollDragPointerId.value = event.pointerId
+  scrollDragStartX = event.clientX
+  scrollDragOffset.value = 0
+  ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+  scheduleScrollAvoidanceConceal()
+}
+
+const handleScrollPointerMove = (event: PointerEvent) => {
+  if (scrollDragPointerId.value !== event.pointerId) return
+  scrollDragOffset.value = Math.max(0, event.clientX - scrollDragStartX)
+}
+
+const finishScrollPointer = (event: PointerEvent, cancelled = false) => {
+  if (scrollDragPointerId.value !== event.pointerId) return
+  const conceal = !cancelled && scrollDragOffset.value >= SCROLL_CONCEAL_DRAG_PX
+  const button = event.currentTarget as HTMLElement
+  if (button.hasPointerCapture(event.pointerId)) button.releasePointerCapture(event.pointerId)
+  if (conceal) {
+    scrollAvoidanceOpen.value = false
+    suppressScrollClick = true
+    setTimeout(() => { suppressScrollClick = false }, 500)
+    clearScrollAvoidanceTimer()
+  }
+  resetScrollDrag()
+}
+
+const handleScrollPointerUp = (event: PointerEvent) => finishScrollPointer(event)
+const handleScrollPointerCancel = (event: PointerEvent) => finishScrollPointer(event, true)
+const scrollButtonStyle = computed(() => ({ '--scroll-drag-x': `${scrollDragOffset.value}px` }))
 const updateScrollState = () => {
   const el = getMainScrollElement()
   if (!el) {
@@ -1280,12 +1396,18 @@ onMounted(() => {
   nextTick(() => {
     updateScrollState()
     bindScrollStateListener()
+    observeFloatingControlLayout()
   })
+  window.addEventListener('resize', scheduleFloatingControlOverlap, { passive: true })
   if (enableAutoScroll.value) nextTick(() => startAutoScroll())
 })
 onUnmounted(() => {
   scrollStateCleanup?.()
   autoScrollCleanups.forEach((fn) => fn())
+  window.removeEventListener('resize', scheduleFloatingControlOverlap)
+  floatingOverlapObserver?.disconnect()
+  if (floatingOverlapFrame) cancelAnimationFrame(floatingOverlapFrame)
+  clearScrollAvoidanceTimer()
 })
 
 const showScroll = computed(() => isAtTop.value || isAtBottom.value || hoverScroll.value)
@@ -1297,6 +1419,28 @@ const handleScrollClick = () => {
     scrollToBottom()
   }
 }
+const handleScrollButtonClick = (event: MouseEvent) => {
+  if (suppressScrollClick) {
+    suppressScrollClick = false
+    event.preventDefault()
+    return
+  }
+  if (scrollButtonOverlapsContent.value && !scrollAvoidanceOpen.value) {
+    scrollAvoidanceOpen.value = true
+    scheduleScrollAvoidanceConceal()
+    return
+  }
+  scheduleScrollAvoidanceConceal()
+  handleScrollClick()
+}
+
+watch(scrollButtonOverlapsContent, (needed) => {
+  scrollAvoidanceOpen.value = false
+  resetScrollDrag()
+  clearScrollAvoidanceTimer()
+  if (needed) scheduleFloatingControlOverlap()
+})
+watch([layoutState, activeTab], () => nextTick(observeFloatingControlLayout))
 const isDark = computed(() => contentTheme.value === 'dark')
 const sidebarThemeCard = computed(() => (
   isDark.value
@@ -2250,6 +2394,7 @@ const hitokotoText = ref(HITOKOTO_FALLBACKS[0])
 const currentImage = ref('')
 const currentBackground = ref<HeaderBackgroundConfig | null>(null)
 const isLoaded = ref(false)
+watch(isLoaded, () => nextTick(observeFloatingControlLayout))
 const imageLoading = ref(false)
 const nextImage = ref('')
 const isCrossfading = ref(false)
@@ -3139,6 +3284,7 @@ white-space: nowrap;  /* 防止换行 */
   flex-direction: column;
   gap: 10px;
   z-index: 1000;
+  pointer-events: none;
 }
 /* 窄屏下底部工具栏居中后会横向撑到右下角，返回页首/页尾按钮需抬到工具栏上方避免重叠误触。 */
 @media (max-width: 520px) {
@@ -3159,7 +3305,13 @@ white-space: nowrap;  /* 防止换行 */
   background: var(--nw-action-bg) !important;
   border-color: var(--nw-action-border) !important;
   color: var(--nw-action-text) !important;
+  pointer-events: auto;
+  transform: translateX(var(--scroll-drag-x, 0px));
+  transition: transform .28s cubic-bezier(.22, 1, .36, 1), opacity .2s ease;
+  touch-action: pan-y;
 }
+.scroll-buttons.is-overlap-concealed .scroll-button { transform: translateX(100%); opacity: .82; }
+.scroll-buttons.is-dragging .scroll-button { transition: none; }
 .scroll-button-light {
   --nw-action-bg: rgba(241, 245, 249, .96);
   --nw-action-text: #374151;
@@ -3185,6 +3337,9 @@ white-space: nowrap;  /* 防止换行 */
   background: rgba(51, 65, 85, .96) !important;
   border-color: rgba(148, 163, 184, .28) !important;
   color: #cbd5e1 !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .scroll-button { transition: none; }
 }
 .scroll-button.scroll-button-light:hover:not(:disabled),
 .scroll-button.scroll-button-light:focus-visible {

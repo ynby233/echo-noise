@@ -1,60 +1,84 @@
 <template>
-  <div class="floating-sidebar" :class="[isDark ? 'fs-dark' : 'fs-light', { 'is-collapsed': collapsed }]">
+  <div
+    class="floating-sidebar-shell"
+    :class="{
+      'is-avoidance-open': avoidOverlap && avoidanceOpen,
+      'is-avoidance-concealed': avoidOverlap && !avoidanceOpen,
+    }"
+  >
+  <div
+    class="floating-sidebar"
+    :class="[isDark ? 'fs-dark' : 'fs-light', { 'is-collapsed': collapsed && !avoidOverlap }]"
+    :inert="avoidOverlap && !avoidanceOpen"
+    @pointerdown="noteActivity"
+    @focusin="noteActivity"
+  >
     <button
       class="tool-btn collapse-toggle-btn nw-action-btn"
-      :aria-label="collapsed ? '展开工具栏' : '收纳工具栏'"
+      :aria-label="toolbarCollapsed ? '展开工具栏' : '收纳工具栏'"
       @click="toggleCollapsed"
     >
-      <UIcon :name="collapsed ? 'i-heroicons-squares-2x2' : 'i-heroicons-bars-arrow-up'" class="w-6 h-6" />
-      <span class="btn-label">{{ collapsed ? '展开' : '收纳' }}</span>
+      <UIcon :name="toolbarCollapsed ? 'i-heroicons-squares-2x2' : 'i-heroicons-bars-arrow-up'" class="w-6 h-6" />
+      <span class="btn-label">{{ toolbarCollapsed ? '展开' : '收纳' }}</span>
     </button>
-    <button v-show="!collapsed" class="tool-btn btn-layout nw-action-btn" @click="$emit('toggle-layout')" :aria-label="layoutLabel || '布局'">
+    <button v-show="showTools" class="tool-btn btn-layout nw-action-btn" @click="$emit('toggle-layout')" :aria-label="layoutLabel || '布局'">
       <UIcon :name="layoutIconProp" class="w-6 h-6" />
       <span class="btn-label">{{ layoutLabel || '布局' }}</span>
     </button>
-    <button v-if="showWriteNote" v-show="!collapsed" class="tool-btn nw-action-btn" :aria-pressed="!!writeNoteActive" @click="$emit('write-note')" aria-label="写笔记">
+    <button v-if="showWriteNote" v-show="showTools" class="tool-btn nw-action-btn" :aria-pressed="!!writeNoteActive" @click="$emit('write-note')" aria-label="写笔记">
       <UIcon name="i-mdi-square-edit-outline" class="w-6 h-6" />
       <span class="btn-label">写笔记</span>
     </button>
-    <button v-show="!collapsed" class="tool-btn nw-action-btn" @click="$emit('search')" aria-label="搜索">
+    <button v-show="showTools" class="tool-btn nw-action-btn" @click="$emit('search')" aria-label="搜索">
       <UIcon name="i-heroicons-magnifying-glass" class="w-6 h-6" />
       <span class="btn-label">搜索</span>
     </button>
-    <button v-show="!collapsed" class="tool-btn nw-action-btn" @click="$emit('switch-background')" aria-label="背景">
+    <button v-show="showTools" class="tool-btn nw-action-btn" @click="$emit('switch-background')" aria-label="背景">
       <UIcon name="i-mdi-image-outline" class="w-6 h-6" />
       <span class="btn-label">背景</span>
     </button>
-    <button v-show="!collapsed" class="tool-btn nw-action-btn" @click="$emit('toggle-theme')" aria-label="切换亮暗">
+    <button v-show="showTools" class="tool-btn nw-action-btn" @click="$emit('toggle-theme')" aria-label="切换亮暗">
       <UIcon :name="themeIcon" class="w-6 h-6" />
       <span class="btn-label">切换亮暗</span>
     </button>
-    <button v-show="!collapsed" class="tool-btn nw-action-btn" aria-label="留言" @click="$emit('open-comment')">
+    <button v-show="showTools" class="tool-btn nw-action-btn" aria-label="留言" @click="$emit('open-comment')">
       <UIcon name="i-heroicons-chat-bubble-left-right" class="w-6 h-6" />
       <span class="btn-label">留言</span>
     </button>
-    <button v-show="!collapsed" class="tool-btn nw-action-btn" aria-label="通知" @click="$emit('open-notifications')">
+    <button v-show="showTools" class="tool-btn nw-action-btn" aria-label="通知" @click="$emit('open-notifications')">
       <UIcon name="i-heroicons-bell" class="w-6 h-6" />
       <span v-if="notificationUnreadCount > 0" class="notification-badge">{{ badgeText }}</span>
       <span class="btn-label">通知</span>
     </button>
-    <button v-show="!collapsed" class="tool-btn nw-action-btn" aria-label="公告" @click="$emit('open-announcements')">
+    <button v-show="showTools" class="tool-btn nw-action-btn" aria-label="公告" @click="$emit('open-announcements')">
       <UIcon name="i-heroicons-megaphone" class="w-6 h-6" />
       <span v-if="announcementUnreadCount > 0" class="notification-badge">{{ announcementBadgeText }}</span>
       <span class="btn-label">公告</span>
     </button>
-    <button v-if="pwaEnabled" v-show="!collapsed" class="tool-btn nw-action-btn" aria-label="安装应用" @click="$emit('open-pwa')">
+    <button v-if="pwaEnabled" v-show="showTools" class="tool-btn nw-action-btn" aria-label="安装应用" @click="$emit('open-pwa')">
       <UIcon name="i-mdi-monitor-arrow-down-variant" class="w-6 h-6" />
       <span class="btn-label">安装应用</span>
     </button>
-    <button v-show="!collapsed" class="tool-btn nw-action-btn" aria-label="后台" @click="$emit('open-admin')">
+    <button v-show="showTools" class="tool-btn nw-action-btn" aria-label="后台" @click="$emit('open-admin')">
       <UIcon name="i-mdi-server-outline" class="w-6 h-6" />
       <span class="btn-label">后台</span>
     </button>
   </div>
+  <button
+    v-if="avoidOverlap && !avoidanceOpen"
+    type="button"
+    class="sidebar-avoidance-handle nw-action-btn"
+    :class="isDark ? 'fs-dark' : 'fs-light'"
+    aria-label="展开工具栏"
+    @click="revealAvoidance"
+  >
+    <UIcon name="i-heroicons-chevron-left" class="w-5 h-5" />
+  </button>
+  </div>
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{ contentTheme?: string; layoutIcon?: string; layoutLabel?: string; showWriteNote?: boolean; writeNoteActive?: boolean; notificationUnreadCount?: number; announcementUnreadCount?: number; pwaEnabled?: boolean }>()
+const props = defineProps<{ contentTheme?: string; layoutIcon?: string; layoutLabel?: string; showWriteNote?: boolean; writeNoteActive?: boolean; notificationUnreadCount?: number; announcementUnreadCount?: number; pwaEnabled?: boolean; avoidOverlap?: boolean }>()
 defineEmits<{
   (event: 'toggle-layout'): void
   (event: 'write-note'): void
@@ -77,8 +101,30 @@ const layoutIconProp = computed(() => props.layoutIcon || 'i-mdi-view-grid')
 const mobileBreakpointQuery = '(max-width: 1024px)'
 const collapseStateStorageKey = 'floating_tool_sidebar_collapsed_v1'
 const collapsed = ref(false)
+const avoidanceOpen = ref(false)
+const showTools = computed(() => props.avoidOverlap || !collapsed.value)
+const toolbarCollapsed = computed(() => props.avoidOverlap ? !avoidanceOpen.value : collapsed.value)
 const isMobileViewport = ref(false)
 let mediaQueryList: MediaQueryList | null = null
+let avoidanceTimer: ReturnType<typeof setTimeout> | null = null
+const AUTO_CONCEAL_MS = 4000
+
+const clearAvoidanceTimer = () => {
+  if (avoidanceTimer) clearTimeout(avoidanceTimer)
+  avoidanceTimer = null
+}
+
+const scheduleAvoidanceConceal = () => {
+  clearAvoidanceTimer()
+  if (!props.avoidOverlap || !avoidanceOpen.value) return
+  avoidanceTimer = setTimeout(() => { avoidanceOpen.value = false }, AUTO_CONCEAL_MS)
+}
+
+const noteActivity = () => scheduleAvoidanceConceal()
+const revealAvoidance = () => {
+  avoidanceOpen.value = true
+  scheduleAvoidanceConceal()
+}
 
 const readCollapseState = (): { mobile?: boolean; desktop?: boolean } => {
   if (typeof window === 'undefined') return {}
@@ -124,17 +170,33 @@ onMounted(() => {
 onBeforeUnmount(() => {
   mediaQueryList?.removeEventListener('change', onViewportChange)
   mediaQueryList = null
+  clearAvoidanceTimer()
 })
 
 const toggleCollapsed = () => {
+  if (props.avoidOverlap) {
+    avoidanceOpen.value = !avoidanceOpen.value
+    scheduleAvoidanceConceal()
+    return
+  }
   collapsed.value = !collapsed.value
   if (isMobileViewport.value) writeCollapseState({ mobile: collapsed.value })
   else writeCollapseState({ desktop: collapsed.value })
 }
+
+watch(() => props.avoidOverlap, () => {
+  avoidanceOpen.value = false
+  clearAvoidanceTimer()
+})
 </script>
 
 <style scoped>
-.floating-sidebar { position: fixed; right: 16px; top: 50%; transform: translateY(-50%); z-index: 1000; display:flex; flex-direction:column; gap:10px; padding:8px; border-radius:12px; background: transparent; box-shadow: none; }
+.floating-sidebar-shell { position: fixed; right: 16px; top: 50%; transform: translateY(-50%); z-index: 1000; pointer-events: none; }
+.floating-sidebar { display:flex; flex-direction:column; gap:10px; padding:8px; border-radius:12px; background: transparent; box-shadow: none; pointer-events: auto; transition: transform .28s cubic-bezier(.22, 1, .36, 1), opacity .2s ease; }
+.floating-sidebar-shell.is-avoidance-concealed .floating-sidebar { transform: translateX(calc(100% - 20px)); opacity: .82; }
+.sidebar-avoidance-handle { position: absolute; left: calc(100% - 20px); top: 50%; transform: translateY(-50%); width: 36px; min-width: 36px; height: 48px; padding: 0; display: grid; place-items: center; border-radius: 12px 0 0 12px; pointer-events: auto; }
+.sidebar-avoidance-handle.fs-light { background: rgba(241, 245, 249, .96) !important; border-color: rgba(15, 23, 42, .12) !important; color: #374151 !important; }
+.sidebar-avoidance-handle.fs-dark { background: rgba(51, 65, 85, .96) !important; border-color: rgba(148, 163, 184, .28) !important; color: #cbd5e1 !important; }
 .floating-sidebar.fs-dark {
   background: transparent !important;
   --nw-action-bg: rgba(51, 65, 85, .96);
@@ -195,7 +257,8 @@ const toggleCollapsed = () => {
 .tool-btn:hover .btn-label { opacity: 1; transform: translateY(-50%) translateX(0); }
 .floating-sidebar.is-collapsed { padding: 0; gap: 0; border-radius: 9999px; }
 @media (max-width: 1024px) {
-  .floating-sidebar { left: 50%; bottom: 18px; transform: translateX(-50%); right: auto; top: auto; flex-direction: row; gap: 12px; padding: 10px 14px; border-radius: 20px; max-width: min(560px, calc(100vw - 40px)); justify-content: center; }
+  .floating-sidebar-shell { left: 50%; bottom: 18px; transform: translateX(-50%); right: auto; top: auto; }
+  .floating-sidebar { flex-direction: row; gap: 12px; padding: 10px 14px; border-radius: 20px; max-width: min(560px, calc(100vw - 40px)); justify-content: center; }
   .tool-btn { width:48px; height:48px; border-radius:9999px; flex: 0 0 48px; }
   .tool-btn.btn-layout { display: none; }
   .tool-btn .btn-label { right: auto !important; left: 50%; top: auto; bottom: calc(100% + 8px); transform: translateX(-50%) translateY(6px); }
@@ -205,8 +268,10 @@ const toggleCollapsed = () => {
   .floating-sidebar.fs-light .btn-label, .floating-sidebar.fs-dark .btn-label { right: calc(100% + 8px); left: auto; }
 }
 @media (max-width: 640px) {
-  .floating-sidebar {
+  .floating-sidebar-shell {
     bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  }
+  .floating-sidebar {
     gap: clamp(2px, .6vw, 4px);
     padding: 4px;
   }
@@ -217,5 +282,8 @@ const toggleCollapsed = () => {
     min-height: clamp(32px, 9.23vw, 40px);
     flex-basis: clamp(32px, 9.23vw, 40px);
   }
+}
+@media (prefers-reduced-motion: reduce) {
+  .floating-sidebar { transition: none; }
 }
 </style>
