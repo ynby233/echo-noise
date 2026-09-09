@@ -83,6 +83,8 @@ export default defineNuxtConfig({
     injectManifest: {
       // Online pages use NetworkFirst; precached HTML would bypass that route.
       globPatterns: ['**/*.{js,css,ico,png,svg,webp}', 'offline.html'],
+      // Recovery modules are requested only after an online chunk failure.
+      globIgnores: ['_nuxt/__retry__/**'],
       maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
     },
     devOptions: {

@@ -183,13 +183,17 @@ const server = http.createServer(async (req, res) => {
       const retry = await createPage()
       await retry.open()
       let attempts = 0
-      await retry.page.route(`**/_nuxt/${featureChunks.Searchmode}*`, route => ++attempts === 1 ? route.abort('failed') : route.continue())
+      const retryRequests = []
+      await retry.page.route(url => url.pathname.endsWith(`/${featureChunks.Searchmode}`), route => {
+        retryRequests.push(new URL(route.request().url()).pathname)
+        return ++attempts === 1 ? route.abort('failed') : route.continue()
+      })
       await retry.page.getByRole('button', { name: '搜索', exact: true }).first().click()
       await retry.page.getByRole('alert').filter({ hasText: '搜索加载失败' }).waitFor()
       await retry.page.getByRole('button', { name: '重试', exact: true }).click()
       await retry.page.getByPlaceholder('请输入关键词').waitFor()
-      assert(attempts >= 2, 'retry performs a new request')
-      record({ label: 'search-download-retry', attempts })
+      assert.deepEqual(retryRequests, [`/_nuxt/${featureChunks.Searchmode}`, `/_nuxt/__retry__/${featureChunks.Searchmode}`], 'retry requests the CSP-compatible recovery chunk')
+      record({ label: 'search-download-retry', attempts, retryRequests })
       await retry.context.close()
 
       const cssRetry = await createPage()
@@ -250,6 +254,7 @@ const server = http.createServer(async (req, res) => {
       })
       const cached = cachedInfo.urls
       assert(cached.some(url => url.includes(featureChunks.Searchmode)), 'SW still precaches unopened feature chunks')
+      assert(!cached.some(url => url.includes('/__retry__/')), 'online-only recovery graph is not duplicated in the SW precache')
       assert.equal(await sw.page.locator('.vditor').count(), 0, 'SW precaching must not instantiate the editor')
       await sw.page.reload(); await sw.page.waitForSelector('.markdown-preview h1')
       await sw.context.setOffline(true)

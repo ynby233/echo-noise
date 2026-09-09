@@ -2,7 +2,7 @@
 
 范围为桌面交接文档的工作线 4。对照构建为 d55af51a6314cffca36c5f836d537d61fa2e290a，结果来自本地生产静态构建与合成 API，不涉及真实账号、笔记发布或生产数据。
 
-后续独立验收在 bf45012c 发现正文次级依赖无法重试、全局 CSS 失败污染无关并发功能两项 P2。本报告最初的入口失败测试没有覆盖这两个边界，不能作为完整失败恢复的证明。本次已复现并修复，详见文末“独立验收后的修复”；下方原首屏测量保留为首次实现的历史样本。
+后续独立验收在 bf45012c 发现正文次级依赖无法重试、全局 CSS 失败污染无关并发功能两项 P2。本报告最初的入口失败测试没有覆盖这两个边界，不能作为完整失败恢复的证明。65212e07 修复 CSS 隔离和依赖重新请求后，再验收又确认 Blob 恢复模块被部署 CSP 阻止；该问题已继续修复，详见文末两次验收后的记录。下方原首屏测量保留为首次实现的历史样本。
 
 ## 实现与职责
 
@@ -88,9 +88,9 @@ node web/scripts/home-lazy-loading.browser.cjs
 
 调查结论：R4-S1、R4-Q1 均属实。改代码前，使用原平台资源重新复现 CSS 串扰，并使用当前生产构建运行新增浏览器脚本：正文依赖重试、搜索 CSS 与正文并发、搜索 CSS 与编辑器并发均失败；同功能并发共享下载的对照组通过。最小原生 import 探针也确认入口查询参数不能清除静态依赖的失败记录。
 
-修复方式：`build/scoped-module-preload.mjs` 在 Vite 的预加载调用入口传入该次导入的依赖列表；`retryable-module.ts` 只处理自己依赖的 CSS，不再订阅全局 `vite:preloadError`。CSS 下载成功后共享结果，失败移除对应 link，下一次重新加载。
+65212e07 的修复方式：`build/scoped-module-preload.mjs` 在 Vite 的预加载调用入口传入该次导入的依赖列表；`retryable-module.ts` 只处理自己依赖的 CSS，不再订阅全局 `vite:preloadError`。CSS 下载成功后共享结果，失败移除对应 link，下一次重新加载。
 
-JS 重试先复用原生 import 的成功模块；只有仍失败的分支才 fetch 原资源，使用已在锁文件中的 es-module-lexer 1.6.0 解析并重连静态依赖，通过 Blob 模块重新加载。成功的恢复结果按原 URL 共享，不重建 Vue、状态仓库或已挂载组件。保留 import.meta.url 的原资源基址和字面量动态导入。失败重试仍可再次尝试；当前生产静态依赖图没有环，本实现不承诺修复失败的循环依赖图。未修改 SW 规则、分页、后台授权或 R5/R7。
+65212e07 的 JS 重试先复用原生 import 的成功模块，仍失败时通过 Blob 模块重连失败分支。本地裸静态服务中的功能和身份验证通过，但该方案未带后端真实 CSP，不能证明部署可执行。再验收随后确认 `script-src` 不允许 `blob:`，正文和搜索均被阻止；所以下方关于 65212e07 的通过结果只能证明恢复图语义，不能作为最终部署兼容性结论。
 
 实际验证：
 
@@ -110,4 +110,16 @@ node web/scripts/module-recovery.browser.cjs
 node web/scripts/async-feature-failures.browser.cjs
 ```
 
-证据位于 `D:/ChatGPT/environments/echo-noise/tmp/r4-repair/`：`red.json`、`green.json`、`functional.json` 及对应日志、`tests.log`、`typecheck.log`、`generate.log`。本次修复验证使用本地生产构建和合成 API；提交推送后仍需部署新镜像才能验证测试平台的新版本。没有把旧平台的调查复现或已有工作流成功当作本次修复的部署证明。
+证据位于 `D:/ChatGPT/environments/echo-noise/tmp/r4-repair/`：`red.json`、`green.json`、`functional.json` 及对应日志、`tests.log`、`typecheck.log`、`generate.log`。这些文件记录 65212e07 前后的第一轮修复，不包含再验收发现的 CSP 边界。
+
+## 再验收后的 CSP 兼容修复（2026-09-09）
+
+再验收报告 `echo-noise-R4-reacceptance-2026-09-09-65212e07.md` 的剩余 P2 属实。当前平台 `/api/version/build`、工作流提交和实际 chunk 靶点均对应 65212e07；在同一平台独立复跑正文依赖与搜索入口故障，资源恢复请求已经发出，但控制台均由 `script-src 'self' 'unsafe-inline' https: http:` 阻止 `blob:` 模块。仓库测试服务加上 `internal/middleware/security_headers.go` 的同一 CSP 后，也稳定得到 3 组通过、2 组失败，排除了旧版本、旧靶点和平台偶发因素。
+
+最终设计不放宽安全头、不生成运行时脚本文本，也不再使用 Blob。构建插件自动识别 `asyncFeature` / `createRetryableModule` 包裹的动态入口，为这些入口及其非首屏静态依赖生成 `_nuxt/__retry__/` 下的同源恢复图。正常加载继续使用原 chunk；发生已污染的模块记录时，界面重试才导入普通同源恢复 chunk。恢复图对首屏 Vue、Pinia 和应用单例仍引用原 URL，因此已有状态与组件身份不变；恢复图内部的失败分支使用新 URL，避开浏览器缓存的失败模块记录。动态功能入口仍回到自己的原始 URL 和重试边界，`import.meta.url` 保持原资源基址。
+
+带真实 CSP 的生产构建专项 5 组全部通过：正文静态依赖首次失败后恢复；搜索入口首次失败后恢复且原编辑 DOM、草稿不变；搜索 CSS 失败不污染正文或编辑器；两条正文共享一次下载。独立恢复语义用例同时验证成功状态模块只执行一次、两个恢复父模块共享同一实时导出、动态导入和原基址有效，并明确断言没有 CSP 拦截。
+
+原完整生产浏览器回归 15 组重新通过，包括正常懒加载、搜索 JS/CSS 和正文 Lute 重试、编辑器身份、离线搜索、保留旧构建的 SW 升级提示与刷新。`npm test` 108 文件、`nuxi typecheck`、`npm run generate`、`git diff --check` 均通过。恢复目录共 30 个生成文件、1,094,228 字节，只增加镜像静态文件；正常首屏不请求。SW 明确排除 `_nuxt/__retry__/`，预缓存仍为 115 项、3,928,600 字节，避免为在线故障恢复复制离线缓存。
+
+最终证据位于 `D:/ChatGPT/environments/echo-noise/tmp/`：`r4-reacceptance-red.json` 为真实 CSP 下的修复前红测试；`r4-reacceptance-green-narrow.json`、`r4-reacceptance-module.log`、`r4-reacceptance-functional-final.json` 及对应日志为最终构建验证。平台对 65212e07 的红测试不能代替新提交的上线复验；新提交仍须完成镜像构建和部署后，才能把测试平台验证称为通过。

@@ -13,7 +13,12 @@ const dependency = manifest[preview.imports[0]].file
 const editor = manifest['components/index/VditorEditor.vue'].file
 const search = manifest['components/index/Searchmode.vue'].file
 const results = []
+const securityHeaders = fs.readFileSync(path.join(web, '../internal/middleware/security_headers.go'), 'utf8')
+const contentSecurityPolicy = securityHeaders.match(/const siteContentSecurityPolicy = "([^"]+)"/)?.[1]
+assert(contentSecurityPolicy, 'application Content-Security-Policy is readable by the production browser test')
 const server = http.createServer((req, res) => {
+  res.setHeader('Content-Security-Policy', contentSecurityPolicy)
+  res.setHeader('X-Content-Type-Options', 'nosniff')
   const pathname = new URL(req.url, 'http://local').pathname
   if (pathname.startsWith('/api/')) {
     let data = {}
@@ -50,6 +55,9 @@ const server = http.createServer((req, res) => {
       page.setDefaultTimeout(15000)
       const row = { mode, requests: [], errors: [] }
       page.on('pageerror', error => row.errors.push(error.message))
+      page.on('console', message => {
+        if (message.type() === 'error' && message.text().includes('Content Security Policy')) row.errors.push(message.text())
+      })
       let blocked = true
       let release
       let delayStarted = false
@@ -61,7 +69,7 @@ const server = http.createServer((req, res) => {
         finally { clearTimeout(timer) }
       }
       const delay = new Promise(resolve => { release = resolve })
-      if (mode === 'preview-dependency') await page.route(`**/_nuxt/${dependency}*`, route => {
+      if (mode === 'preview-dependency') await page.route(url => url.pathname.endsWith(`/${dependency}`), route => {
         row.requests.push({ url: route.request().url(), blocked })
         return blocked ? route.abort('failed') : route.continue()
       })
@@ -69,7 +77,7 @@ const server = http.createServer((req, res) => {
         row.requests.push({ url: route.request().url(), blocked })
         return blocked ? route.abort('failed') : route.continue()
       })
-      if (mode === 'search-retry-keeps-draft') await page.route(`**/_nuxt/${search}*`, route => {
+      if (mode === 'search-retry-keeps-draft') await page.route(url => url.pathname.endsWith(`/${search}`), route => {
         row.requests.push({ url: route.request().url(), blocked })
         return blocked ? route.abort('failed') : route.continue()
       })
