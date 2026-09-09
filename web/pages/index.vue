@@ -451,6 +451,7 @@
   <FloatingToolSidebar 
     :content-theme="contentTheme"
     :avoid-overlap="floatingSidebarOverlapsContent"
+    :concealed-width="floatingSidebarVisibleWidth"
     :layout-icon="layoutIcon"
     :show-write-note="isMasonry"
     :write-note-active="masonryComposerVisible"
@@ -634,7 +635,7 @@ import { bindMediaFancybox, unbindMediaFancybox, createMediaFancyboxOptions } fr
 import { normalizeAdConfigs } from '~/utils/ad-config'
 import { getMessageIdFromRouteHash } from '~/utils/message-route-hash'
 import { getRequest, postRequest } from '~/utils/api'
-import { rectanglesOverlap } from '~/utils/floating-overlap'
+import { getConcealedVisibleWidth, rectanglesOverlap } from '~/utils/floating-overlap'
 
 import { useHomeGallery } from '~/composables/useHomeGallery'
 import HomeGallery from '~/components/index/HomeGallery.vue'
@@ -1270,7 +1271,9 @@ const hoverScroll = ref(false)
 const isAtTop = ref(true)
 const isAtBottom = ref(false)
 const floatingSidebarOverlapsContent = ref(false)
+const floatingSidebarVisibleWidth = ref(20)
 const scrollButtonOverlapsContent = ref(false)
+const scrollButtonVisibleWidth = ref(18)
 const scrollButtons = ref<HTMLElement | null>(null)
 const scrollAvoidanceOpen = ref(false)
 const scrollDragOffset = ref(0)
@@ -1281,6 +1284,9 @@ let scrollAvoidanceTimer: ReturnType<typeof setTimeout> | null = null
 let floatingOverlapFrame = 0
 let floatingOverlapObserver: ResizeObserver | null = null
 const FLOATING_AUTO_CONCEAL_MS = 4000
+const FLOATING_CONTENT_GAP_PX = 8
+const SIDEBAR_HALF_BUTTON_PX = 20
+const SCROLL_HALF_BUTTON_PX = 18
 const SCROLL_CONCEAL_DRAG_PX = 18
 
 const clearScrollAvoidanceTimer = () => {
@@ -1304,18 +1310,35 @@ const updateFloatingControlOverlap = () => {
   floatingOverlapFrame = 0
   if (window.matchMedia('(max-width: 1024px)').matches) {
     floatingSidebarOverlapsContent.value = false
+    floatingSidebarVisibleWidth.value = SIDEBAR_HALF_BUTTON_PX
     scrollButtonOverlapsContent.value = false
+    scrollButtonVisibleWidth.value = SCROLL_HALF_BUTTON_PX
     return
   }
   const targets = Array.from(document.querySelectorAll<HTMLElement>('.left-col, .right-col, .center-col'))
     .map(visibleRect)
     .filter((rect): rect is DOMRect => !!rect)
-  const overlaps = (element: HTMLElement | null) => {
+  const measure = (element: HTMLElement | null, maximumWidth: number) => {
     const source = visibleRect(element)
-    return !!source && targets.some(target => rectanglesOverlap(source, target))
+    const collisions = source ? targets.filter(target => rectanglesOverlap(source, target)) : []
+    return {
+      overlaps: collisions.length > 0,
+      visibleWidth: collisions.length > 0
+        ? getConcealedVisibleWidth(
+            window.innerWidth,
+            Math.max(...collisions.map(target => target.right)),
+            maximumWidth,
+            FLOATING_CONTENT_GAP_PX,
+          )
+        : maximumWidth,
+    }
   }
-  floatingSidebarOverlapsContent.value = overlaps(document.querySelector<HTMLElement>('.floating-sidebar-shell'))
-  scrollButtonOverlapsContent.value = overlaps(scrollButtons.value)
+  const sidebar = measure(document.querySelector<HTMLElement>('.floating-sidebar-shell'), SIDEBAR_HALF_BUTTON_PX)
+  const scroll = measure(scrollButtons.value, SCROLL_HALF_BUTTON_PX)
+  floatingSidebarOverlapsContent.value = sidebar.overlaps
+  floatingSidebarVisibleWidth.value = sidebar.visibleWidth
+  scrollButtonOverlapsContent.value = scroll.overlaps
+  scrollButtonVisibleWidth.value = scroll.visibleWidth
 }
 
 const scheduleFloatingControlOverlap = () => {
@@ -1366,7 +1389,10 @@ const finishScrollPointer = (event: PointerEvent, cancelled = false) => {
 
 const handleScrollPointerUp = (event: PointerEvent) => finishScrollPointer(event)
 const handleScrollPointerCancel = (event: PointerEvent) => finishScrollPointer(event, true)
-const scrollButtonStyle = computed(() => ({ '--scroll-drag-x': `${scrollDragOffset.value}px` }))
+const scrollButtonStyle = computed(() => ({
+  '--scroll-drag-x': `${scrollDragOffset.value}px`,
+  '--scroll-visible-width': `${scrollButtonVisibleWidth.value}px`,
+}))
 const updateScrollState = () => {
   const el = getMainScrollElement()
   if (!el) {
@@ -3310,7 +3336,7 @@ white-space: nowrap;  /* 防止换行 */
   transition: transform .28s cubic-bezier(.22, 1, .36, 1), opacity .2s ease;
   touch-action: pan-y;
 }
-.scroll-buttons.is-overlap-concealed .scroll-button { transform: translateX(100%); opacity: .82; }
+.scroll-buttons.is-overlap-concealed .scroll-button { transform: translateX(calc(100% - var(--scroll-visible-width) + 20px)); opacity: .82; }
 .scroll-buttons.is-dragging .scroll-button { transition: none; }
 .scroll-button-light {
   --nw-action-bg: rgba(241, 245, 249, .96);

@@ -6,79 +6,91 @@
       'is-avoidance-concealed': avoidOverlap && !avoidanceOpen,
     }"
   >
-  <div
-    class="floating-sidebar"
-    :class="[isDark ? 'fs-dark' : 'fs-light', { 'is-collapsed': collapsed && !avoidOverlap }]"
-    :inert="avoidOverlap && !avoidanceOpen"
-    @pointerdown="noteActivity"
-    @focusin="noteActivity"
-  >
-    <button
-      class="tool-btn collapse-toggle-btn nw-action-btn"
-      :aria-label="toolbarCollapsed ? '展开工具栏' : '收纳工具栏'"
-      @click="toggleCollapsed"
+    <div
+      class="floating-sidebar"
+      :class="[isDark ? 'fs-dark' : 'fs-light', { 'is-collapsed': collapsed && !avoidOverlap }]"
+      :inert="avoidOverlap && !avoidanceOpen"
+      @pointerdown="noteActivity"
+      @focusin="noteActivity"
     >
-      <UIcon :name="toolbarCollapsed ? 'i-heroicons-squares-2x2' : 'i-heroicons-bars-arrow-up'" class="w-6 h-6" />
-      <span class="btn-label">{{ toolbarCollapsed ? '展开' : '收纳' }}</span>
-    </button>
-    <button v-show="showTools" class="tool-btn btn-layout nw-action-btn" @click="$emit('toggle-layout')" :aria-label="layoutLabel || '布局'">
-      <UIcon :name="layoutIconProp" class="w-6 h-6" />
-      <span class="btn-label">{{ layoutLabel || '布局' }}</span>
-    </button>
-    <button v-if="showWriteNote" v-show="showTools" class="tool-btn nw-action-btn" :aria-pressed="!!writeNoteActive" @click="$emit('write-note')" aria-label="写笔记">
-      <UIcon name="i-mdi-square-edit-outline" class="w-6 h-6" />
-      <span class="btn-label">写笔记</span>
-    </button>
-    <button v-show="showTools" class="tool-btn nw-action-btn" @click="$emit('search')" aria-label="搜索">
-      <UIcon name="i-heroicons-magnifying-glass" class="w-6 h-6" />
-      <span class="btn-label">搜索</span>
-    </button>
-    <button v-show="showTools" class="tool-btn nw-action-btn" @click="$emit('switch-background')" aria-label="背景">
-      <UIcon name="i-mdi-image-outline" class="w-6 h-6" />
-      <span class="btn-label">背景</span>
-    </button>
-    <button v-show="showTools" class="tool-btn nw-action-btn" @click="$emit('toggle-theme')" aria-label="切换亮暗">
-      <UIcon :name="themeIcon" class="w-6 h-6" />
-      <span class="btn-label">切换亮暗</span>
-    </button>
-    <button v-show="showTools" class="tool-btn nw-action-btn" aria-label="留言" @click="$emit('open-comment')">
-      <UIcon name="i-heroicons-chat-bubble-left-right" class="w-6 h-6" />
-      <span class="btn-label">留言</span>
-    </button>
-    <button v-show="showTools" class="tool-btn nw-action-btn" aria-label="通知" @click="$emit('open-notifications')">
-      <UIcon name="i-heroicons-bell" class="w-6 h-6" />
-      <span v-if="notificationUnreadCount > 0" class="notification-badge">{{ badgeText }}</span>
-      <span class="btn-label">通知</span>
-    </button>
-    <button v-show="showTools" class="tool-btn nw-action-btn" aria-label="公告" @click="$emit('open-announcements')">
-      <UIcon name="i-heroicons-megaphone" class="w-6 h-6" />
-      <span v-if="announcementUnreadCount > 0" class="notification-badge">{{ announcementBadgeText }}</span>
-      <span class="btn-label">公告</span>
-    </button>
-    <button v-if="pwaEnabled" v-show="showTools" class="tool-btn nw-action-btn" aria-label="安装应用" @click="$emit('open-pwa')">
-      <UIcon name="i-mdi-monitor-arrow-down-variant" class="w-6 h-6" />
-      <span class="btn-label">安装应用</span>
-    </button>
-    <button v-show="showTools" class="tool-btn nw-action-btn" aria-label="后台" @click="$emit('open-admin')">
-      <UIcon name="i-mdi-server-outline" class="w-6 h-6" />
-      <span class="btn-label">后台</span>
-    </button>
+      <button
+        class="tool-btn collapse-toggle-btn nw-action-btn"
+        :aria-label="toolbarCollapsed ? '展开工具栏' : '收纳工具栏'"
+        @click="toggleCollapsed"
+      >
+        <UIcon :name="toolbarCollapsed ? 'i-heroicons-squares-2x2' : 'i-heroicons-bars-arrow-up'" class="w-6 h-6" />
+        <span class="btn-label">{{ toolbarCollapsed ? '展开' : '收纳' }}</span>
+      </button>
+      <button v-show="showTools" class="tool-btn btn-layout nw-action-btn" @click="$emit('toggle-layout')" :aria-label="layoutLabel || '布局'">
+        <UIcon :name="layoutIconProp" class="w-6 h-6" />
+        <span class="btn-label">{{ layoutLabel || '布局' }}</span>
+      </button>
+      <button v-if="showWriteNote" v-show="showTools" class="tool-btn nw-action-btn" :aria-pressed="!!writeNoteActive" @click="$emit('write-note')" aria-label="写笔记">
+        <UIcon name="i-mdi-square-edit-outline" class="w-6 h-6" />
+        <span class="btn-label">写笔记</span>
+      </button>
+      <button v-show="showTools" class="tool-btn nw-action-btn" @click="$emit('search')" aria-label="搜索">
+        <UIcon name="i-heroicons-magnifying-glass" class="w-6 h-6" />
+        <span class="btn-label">搜索</span>
+      </button>
+      <button v-show="showTools" class="tool-btn nw-action-btn" @click="$emit('switch-background')" aria-label="背景">
+        <UIcon name="i-mdi-image-outline" class="w-6 h-6" />
+        <span class="btn-label">背景</span>
+      </button>
+      <button v-show="showTools" class="tool-btn nw-action-btn" @click="$emit('toggle-theme')" aria-label="切换亮暗">
+        <UIcon :name="themeIcon" class="w-6 h-6" />
+        <span class="btn-label">切换亮暗</span>
+      </button>
+      <button v-show="showTools" class="tool-btn nw-action-btn" aria-label="留言" @click="$emit('open-comment')">
+        <UIcon name="i-heroicons-chat-bubble-left-right" class="w-6 h-6" />
+        <span class="btn-label">留言</span>
+      </button>
+      <button v-show="showTools" class="tool-btn nw-action-btn" aria-label="通知" @click="$emit('open-notifications')">
+        <UIcon name="i-heroicons-bell" class="w-6 h-6" />
+        <span v-if="notificationUnreadCount > 0" class="notification-badge">{{ badgeText }}</span>
+        <span class="btn-label">通知</span>
+      </button>
+      <button v-show="showTools" class="tool-btn nw-action-btn" aria-label="公告" @click="$emit('open-announcements')">
+        <UIcon name="i-heroicons-megaphone" class="w-6 h-6" />
+        <span v-if="announcementUnreadCount > 0" class="notification-badge">{{ announcementBadgeText }}</span>
+        <span class="btn-label">公告</span>
+      </button>
+      <button v-if="pwaEnabled" v-show="showTools" class="tool-btn nw-action-btn" aria-label="安装应用" @click="$emit('open-pwa')">
+        <UIcon name="i-mdi-monitor-arrow-down-variant" class="w-6 h-6" />
+        <span class="btn-label">安装应用</span>
+      </button>
+      <button v-show="showTools" class="tool-btn nw-action-btn" aria-label="后台" @click="$emit('open-admin')">
+        <UIcon name="i-mdi-server-outline" class="w-6 h-6" />
+        <span class="btn-label">后台</span>
+      </button>
+    </div>
   </div>
-  <button
-    v-if="avoidOverlap && !avoidanceOpen"
-    type="button"
-    class="sidebar-avoidance-handle nw-action-btn"
-    :class="isDark ? 'fs-dark' : 'fs-light'"
-    aria-label="展开工具栏"
-    @click="revealAvoidance"
-  >
-    <UIcon name="i-heroicons-chevron-left" class="w-5 h-5" />
-  </button>
-  </div>
+  <Teleport to="body">
+    <button
+      v-if="avoidOverlap && !avoidanceOpen"
+      type="button"
+      class="sidebar-avoidance-handle tool-btn nw-action-btn"
+      :class="[
+        isDark ? 'fs-dark' : 'fs-light',
+        { 'is-revealed': avoidanceHandleRevealed, 'is-dragging': avoidanceHandlePointerId !== null },
+      ]"
+      :style="avoidanceHandleStyle"
+      aria-label="展开工具栏"
+      :aria-expanded="false"
+      @click="handleAvoidanceClick"
+      @pointerdown="handleAvoidancePointerDown"
+      @pointermove="handleAvoidancePointerMove"
+      @pointerup="handleAvoidancePointerUp"
+      @pointercancel="handleAvoidancePointerCancel"
+    >
+      <UIcon name="i-heroicons-squares-2x2" class="w-6 h-6" />
+      <span class="btn-label">展开</span>
+    </button>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{ contentTheme?: string; layoutIcon?: string; layoutLabel?: string; showWriteNote?: boolean; writeNoteActive?: boolean; notificationUnreadCount?: number; announcementUnreadCount?: number; pwaEnabled?: boolean; avoidOverlap?: boolean }>()
+const props = defineProps<{ contentTheme?: string; layoutIcon?: string; layoutLabel?: string; showWriteNote?: boolean; writeNoteActive?: boolean; notificationUnreadCount?: number; announcementUnreadCount?: number; pwaEnabled?: boolean; avoidOverlap?: boolean; concealedWidth?: number }>()
 defineEmits<{
   (event: 'toggle-layout'): void
   (event: 'write-note'): void
@@ -102,12 +114,24 @@ const mobileBreakpointQuery = '(max-width: 1024px)'
 const collapseStateStorageKey = 'floating_tool_sidebar_collapsed_v1'
 const collapsed = ref(false)
 const avoidanceOpen = ref(false)
+const avoidanceHandleRevealed = ref(false)
+const avoidanceHandleDragOffset = ref(0)
+const avoidanceHandlePointerId = ref<number | null>(null)
 const showTools = computed(() => props.avoidOverlap || !collapsed.value)
 const toolbarCollapsed = computed(() => props.avoidOverlap ? !avoidanceOpen.value : collapsed.value)
+const avoidanceHandleConcealOffset = computed(() => 40 - Math.max(0, props.concealedWidth ?? 20) + 16)
+const avoidanceHandleStyle = computed(() => ({
+  '--sidebar-visible-width': `${Math.max(0, props.concealedWidth ?? 20)}px`,
+  '--sidebar-drag-offset': `${avoidanceHandleDragOffset.value}px`,
+}))
 const isMobileViewport = ref(false)
 let mediaQueryList: MediaQueryList | null = null
 let avoidanceTimer: ReturnType<typeof setTimeout> | null = null
+let avoidanceHandleDragStartX = 0
+let suppressAvoidanceClick = false
+let avoidanceClickTimer: ReturnType<typeof setTimeout> | null = null
 const AUTO_CONCEAL_MS = 4000
+const HANDLE_REVEAL_DRAG_PX = 8
 
 const clearAvoidanceTimer = () => {
   if (avoidanceTimer) clearTimeout(avoidanceTimer)
@@ -116,15 +140,62 @@ const clearAvoidanceTimer = () => {
 
 const scheduleAvoidanceConceal = () => {
   clearAvoidanceTimer()
-  if (!props.avoidOverlap || !avoidanceOpen.value) return
-  avoidanceTimer = setTimeout(() => { avoidanceOpen.value = false }, AUTO_CONCEAL_MS)
+  if (!props.avoidOverlap || (!avoidanceOpen.value && !avoidanceHandleRevealed.value)) return
+  avoidanceTimer = setTimeout(() => {
+    avoidanceOpen.value = false
+    avoidanceHandleRevealed.value = false
+  }, AUTO_CONCEAL_MS)
 }
 
 const noteActivity = () => scheduleAvoidanceConceal()
-const revealAvoidance = () => {
+const handleAvoidanceClick = (event: MouseEvent) => {
+  if (suppressAvoidanceClick) {
+    suppressAvoidanceClick = false
+    event.preventDefault()
+    return
+  }
   avoidanceOpen.value = true
+  avoidanceHandleRevealed.value = false
   scheduleAvoidanceConceal()
 }
+
+const resetAvoidanceHandleDrag = () => {
+  avoidanceHandleDragOffset.value = 0
+  avoidanceHandlePointerId.value = null
+}
+
+const handleAvoidancePointerDown = (event: PointerEvent) => {
+  if (avoidanceHandleRevealed.value) return
+  avoidanceHandlePointerId.value = event.pointerId
+  avoidanceHandleDragStartX = event.clientX
+  ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+}
+
+const handleAvoidancePointerMove = (event: PointerEvent) => {
+  if (avoidanceHandlePointerId.value !== event.pointerId) return
+  avoidanceHandleDragOffset.value = Math.min(
+    avoidanceHandleConcealOffset.value,
+    Math.max(0, avoidanceHandleDragStartX - event.clientX),
+  )
+}
+
+const finishAvoidanceHandlePointer = (event: PointerEvent, cancelled = false) => {
+  if (avoidanceHandlePointerId.value !== event.pointerId) return
+  const reveal = !cancelled && avoidanceHandleDragOffset.value >= HANDLE_REVEAL_DRAG_PX
+  const button = event.currentTarget as HTMLElement
+  if (button.hasPointerCapture(event.pointerId)) button.releasePointerCapture(event.pointerId)
+  if (reveal) {
+    avoidanceHandleRevealed.value = true
+    suppressAvoidanceClick = true
+    if (avoidanceClickTimer) clearTimeout(avoidanceClickTimer)
+    avoidanceClickTimer = setTimeout(() => { suppressAvoidanceClick = false }, 0)
+    scheduleAvoidanceConceal()
+  }
+  resetAvoidanceHandleDrag()
+}
+
+const handleAvoidancePointerUp = (event: PointerEvent) => finishAvoidanceHandlePointer(event)
+const handleAvoidancePointerCancel = (event: PointerEvent) => finishAvoidanceHandlePointer(event, true)
 
 const readCollapseState = (): { mobile?: boolean; desktop?: boolean } => {
   if (typeof window === 'undefined') return {}
@@ -171,11 +242,13 @@ onBeforeUnmount(() => {
   mediaQueryList?.removeEventListener('change', onViewportChange)
   mediaQueryList = null
   clearAvoidanceTimer()
+  if (avoidanceClickTimer) clearTimeout(avoidanceClickTimer)
 })
 
 const toggleCollapsed = () => {
   if (props.avoidOverlap) {
-    avoidanceOpen.value = !avoidanceOpen.value
+    avoidanceOpen.value = false
+    avoidanceHandleRevealed.value = true
     scheduleAvoidanceConceal()
     return
   }
@@ -186,6 +259,8 @@ const toggleCollapsed = () => {
 
 watch(() => props.avoidOverlap, () => {
   avoidanceOpen.value = false
+  avoidanceHandleRevealed.value = false
+  resetAvoidanceHandleDrag()
   clearAvoidanceTimer()
 })
 </script>
@@ -193,8 +268,10 @@ watch(() => props.avoidOverlap, () => {
 <style scoped>
 .floating-sidebar-shell { position: fixed; right: 16px; top: 50%; transform: translateY(-50%); z-index: 1000; pointer-events: none; }
 .floating-sidebar { display:flex; flex-direction:column; gap:10px; padding:8px; border-radius:12px; background: transparent; box-shadow: none; pointer-events: auto; transition: transform .28s cubic-bezier(.22, 1, .36, 1), opacity .2s ease; }
-.floating-sidebar-shell.is-avoidance-concealed .floating-sidebar { transform: translateX(calc(100% - 20px)); opacity: .82; }
-.sidebar-avoidance-handle { position: absolute; left: calc(100% - 20px); top: 50%; transform: translateY(-50%); width: 36px; min-width: 36px; height: 48px; padding: 0; display: grid; place-items: center; border-radius: 12px 0 0 12px; pointer-events: auto; }
+.floating-sidebar-shell.is-avoidance-concealed .floating-sidebar { transform: translateX(calc(100% + 16px)); opacity: 0; pointer-events: none; }
+.sidebar-avoidance-handle.tool-btn { position: fixed; right: 16px; top: 50%; z-index: 1000; transform: translate(calc(100% - var(--sidebar-visible-width) + 16px - var(--sidebar-drag-offset)), -50%); pointer-events: auto; touch-action: pan-y; transition: transform .28s cubic-bezier(.22, 1, .36, 1); }
+.sidebar-avoidance-handle.is-revealed { transform: translate(0, -50%); }
+.sidebar-avoidance-handle.is-dragging { transition: none; }
 .sidebar-avoidance-handle.fs-light { background: rgba(241, 245, 249, .96) !important; border-color: rgba(15, 23, 42, .12) !important; color: #374151 !important; }
 .sidebar-avoidance-handle.fs-dark { background: rgba(51, 65, 85, .96) !important; border-color: rgba(148, 163, 184, .28) !important; color: #cbd5e1 !important; }
 .floating-sidebar.fs-dark {
@@ -254,6 +331,8 @@ watch(() => props.avoidOverlap, () => {
 .btn-label { position: absolute; right: calc(100% + 8px); top: 50%; transform: translateY(-50%) translateX(-6px); opacity: 0; pointer-events: none; white-space: nowrap; display: inline-block; padding: 6px 8px; font-size: 12px; border-radius: 8px; transition: opacity .08s ease, transform .08s ease; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.2)); box-sizing: border-box; }
 .floating-sidebar.fs-dark .btn-label { background: #1f2630; color: #fff; border: 1px solid rgba(255,255,255,0.16); }
 .floating-sidebar.fs-light .btn-label { background: rgba(255,255,255,0.95); color: #111827; border: 1px solid rgba(0,0,0,0.14); }
+.sidebar-avoidance-handle.fs-dark .btn-label { background: #1f2630; color: #fff; border: 1px solid rgba(255,255,255,0.16); }
+.sidebar-avoidance-handle.fs-light .btn-label { background: rgba(255,255,255,0.95); color: #111827; border: 1px solid rgba(0,0,0,0.14); }
 .tool-btn:hover .btn-label { opacity: 1; transform: translateY(-50%) translateX(0); }
 .floating-sidebar.is-collapsed { padding: 0; gap: 0; border-radius: 9999px; }
 @media (max-width: 1024px) {
@@ -284,6 +363,6 @@ watch(() => props.avoidOverlap, () => {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .floating-sidebar { transition: none; }
+  .floating-sidebar, .sidebar-avoidance-handle { transition: none; }
 }
 </style>

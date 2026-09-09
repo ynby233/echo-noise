@@ -7,3 +7,10 @@ export const rectanglesOverlap = (
   source.top < target.bottom &&
   source.bottom > target.top
 )
+
+export const getConcealedVisibleWidth = (
+  viewportRight: number,
+  contentRight: number,
+  maximumWidth: number,
+  gap: number,
+) => Math.max(0, Math.min(maximumWidth, viewportRight - contentRight - gap))
