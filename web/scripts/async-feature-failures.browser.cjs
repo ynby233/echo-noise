@@ -48,7 +48,8 @@ const server = http.createServer((req, res) => {
   const base = `http://127.0.0.1:${server.address().port}`
   const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, headless: true })
   try {
-    for (const mode of ['preview-dependency', 'concurrent-preview-css', 'concurrent-editor-css', 'shared-preview', 'search-retry-keeps-draft']) {
+    for (const mode of ['preview-dependency', 'concurrent-preview-css', 'concurrent-editor-css', 'shared-preview', 'search-retry-keeps-draft', 'repeated-preview-failure', 'repeated-search-failure']) {
+      if (process.env.TEST_MODE && process.env.TEST_MODE !== mode) continue
       const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, serviceWorkers: 'block' })
       await context.addInitScript(() => localStorage.setItem('homeLayoutDesktop', 'masonry'))
       const page = await context.newPage()
@@ -58,6 +59,64 @@ const server = http.createServer((req, res) => {
       page.on('console', message => {
         if (message.type() === 'error' && message.text().includes('Content Security Policy')) row.errors.push(message.text())
       })
+      if (mode.startsWith('repeated-')) {
+        let blocked = true
+        const target = mode === 'repeated-preview-failure' ? dependency : search
+        await page.route(`**/_nuxt/**${target}*`, route => {
+          row.requests.push({ url: route.request().url(), blocked })
+          return blocked ? route.abort('failed') : route.continue()
+        })
+        try {
+          await page.goto(base)
+          await page.locator('.page-loading-mask').waitFor({ state: 'hidden' })
+          const input = page.locator('.vditor-ir [contenteditable="true"]').first()
+          if (mode === 'repeated-search-failure') {
+            await page.getByRole('button', { name: '写笔记', exact: true }).click()
+            await input.fill('Draft survives repeated network failure')
+            await page.locator('.floating-sidebar button[aria-label="搜索"]').click()
+          }
+          const error = mode === 'repeated-preview-failure' ? page.locator('.markdown-load-error').first() : page.getByRole('alert').filter({ hasText: '搜索加载失败' })
+          await error.getByRole('button', { name: '重试', exact: true }).click()
+          const refresh = page.getByRole('button', { name: '保存草稿并刷新', exact: true })
+          await refresh.waitFor({ timeout: 5000 })
+          assert(row.requests.some(request => request.blocked && request.url.includes('/__retry__/')), 'the recovery resource itself failed')
+          blocked = false
+          if (mode === 'repeated-preview-failure') {
+            await Promise.all([page.waitForEvent('domcontentloaded'), refresh.click()])
+            await page.waitForFunction(() => document.querySelectorAll('.markdown-preview h1').length === 2)
+            assert.equal(await page.locator('.markdown-load-error').count(), 0)
+            assert.deepEqual(row.errors, [])
+            row.passed = true
+            continue
+          }
+          // Capture text typed immediately before refresh, without waiting for debounce.
+          await input.fill('Latest draft immediately before refresh')
+          await page.evaluate(() => {
+            window.originalStorageSet = Storage.prototype.setItem
+            Storage.prototype.setItem = function(key, value) {
+              if (key === 'addform_draft_v1') throw new Error('simulated quota failure')
+              return window.originalStorageSet.call(this, key, value)
+            }
+            window.beforeRecoveryReload = true
+          })
+          await refresh.click()
+          await page.getByText('草稿保存失败，未刷新页面。请先复制草稿后再尝试。', { exact: true }).waitFor()
+          assert(await page.evaluate(() => window.beforeRecoveryReload), 'failed draft persistence blocks navigation')
+          assert.match(await input.innerText(), /Latest draft/)
+          await page.evaluate(() => { Storage.prototype.setItem = window.originalStorageSet })
+          await Promise.all([page.waitForEvent('domcontentloaded'), refresh.click()])
+          await page.locator('.markdown-preview h1').first().waitFor()
+          await page.getByRole('button', { name: '写笔记', exact: true }).click()
+          await input.waitFor()
+          assert.match(await input.innerText(), /Latest draft immediately before refresh/)
+          await page.locator('.floating-sidebar button[aria-label="搜索"]').click()
+          await page.getByPlaceholder('请输入关键词').waitFor()
+          assert.deepEqual(row.errors, [])
+          row.passed = true
+        } catch (error) { row.passed = false; row.failure = error.message }
+        finally { await context.close(); results.push(row); console.log(JSON.stringify(row)) }
+        continue
+      }
       let blocked = true
       let release
       let delayStarted = false

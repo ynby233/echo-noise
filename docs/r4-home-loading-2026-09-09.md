@@ -123,3 +123,13 @@ node web/scripts/async-feature-failures.browser.cjs
 原完整生产浏览器回归 15 组重新通过，包括正常懒加载、搜索 JS/CSS 和正文 Lute 重试、编辑器身份、离线搜索、保留旧构建的 SW 升级提示与刷新。`npm test` 108 文件、`nuxi typecheck`、`npm run generate`、`git diff --check` 均通过。恢复目录共 30 个生成文件、1,094,228 字节，只增加镜像静态文件；正常首屏不请求。SW 明确排除 `_nuxt/__retry__/`，预缓存仍为 115 项、3,928,600 字节，避免为在线故障恢复复制离线缓存。
 
 最终证据位于 `D:/ChatGPT/environments/echo-noise/tmp/`：`r4-reacceptance-red.json` 为真实 CSP 下的修复前红测试；`r4-reacceptance-green-narrow.json`、`r4-reacceptance-module.log`、`r4-reacceptance-functional-final.json` 及对应日志为最终构建验证。平台对 65212e07 的红测试不能代替新提交的上线复验；新提交仍须完成镜像构建和部署后，才能把测试平台验证称为通过。
+
+## 恢复资源重复失败的兜底（2026-09-09）
+
+acf9204d 的五组平台专项已通过，但在网络仍异常时点击重试会使恢复图本身也进入浏览器失败缓存。随后网络恢复，继续 import 固定恢复 URL 仍失败；删除应用中的 Promise 无法清理浏览器模块记录。
+
+本次保留首次局部重试。恢复图也失败时，页面显示“保存草稿并刷新”和“暂不刷新”，由用户明确选择整页恢复，不自动导航，不放宽 CSP，也不继续增加备用图。刷新前同步读取写笔记编辑器并保存现有草稿格式，包括可见性、通知和原图附件选项；草稿写入失败则阻止刷新并提示先复制内容。其他未保存修改仍提示用户先处理。刷新会重新创建编辑器，草稿内容恢复；首次局部重试成功时仍保留原编辑 DOM。
+
+新增用例在修改前因没有可用恢复入口失败。当前带应用真实 CSP 的生产构建专项共 7 组通过：原 5 组以及正文恢复依赖再次失败、搜索恢复入口再次失败。后两组检查故障确实命中恢复目录，网络恢复后通过用户点击刷新恢复功能；搜索组还模拟 localStorage 写入失败并确认不导航，再恢复存储，验证刷新前刚输入的最新草稿恢复。两组没有未捕获异常或 CSP 拦截。
+
+`npm test` 108 文件、`nuxi typecheck`、`npm run generate`、`git diff --check` 通过；原完整首页生产浏览器流程 15 组重新通过，包括离线搜索和旧构建更新提示/刷新。证据：环境 tmp 下 `r4-repeat-red.log`、`r4-repeat-green.json`、`r4-repeat-search-final.json`、`r4-repeat-preview-final.json`、`r4-repeat-functional.json` 及对应源码检查日志。上述修复验证来自本地生产构建，实际部署后仍需确认新版本与该刷新路径。

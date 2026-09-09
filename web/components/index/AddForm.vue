@@ -583,13 +583,22 @@ const saveDraft = () => {
     const content = (editorContent || '').trim()
     if (!content) {
       localStorage.removeItem(DRAFT_KEY)
-      return
+      return true
     }
     localStorage.setItem(
       DRAFT_KEY,
       JSON.stringify({ content: editorContent || '', private: !!Private.value, visibility: Visibility.value, notify: canNotify.value && enableNotify.value, fullImageAttachments: !!fullImageAttachments.value, savedAt: Date.now() })
     )
-  } catch {}
+    return true
+  } catch { return false }
+}
+
+let recoveryReloadPrepared = false
+const saveDraftBeforeRecovery = (event: Event) => {
+  recoveryReloadPrepared = saveDraft()
+  if (!recoveryReloadPrepared) event.preventDefault()
+  // A different beforeunload listener can still cancel navigation.
+  window.setTimeout(() => { recoveryReloadPrepared = false }, 0)
 }
 
 const scheduleDraftSave = () => {
@@ -1185,6 +1194,7 @@ watch(() => [userStore.isLogin, canNotify.value], () => {
 }, { immediate: true });
 
 onMounted(async () => {
+  window.addEventListener('save-draft-before-recovery', saveDraftBeforeRecovery)
   void refreshCapabilities()
   document.addEventListener('mousedown', handleFloatingMenuPointerDown)
   window.addEventListener('resize', handleFloatingMenuViewportChange)
@@ -1220,6 +1230,7 @@ onMounted(async () => {
   } catch {}
 
   const onBeforeUnload = (e: BeforeUnloadEvent) => {
+    if (recoveryReloadPrepared) return
     if ((MessageContent.value || '').trim().length === 0) return
     e.preventDefault()
     e.returnValue = ''
@@ -1229,6 +1240,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  window.removeEventListener('save-draft-before-recovery', saveDraftBeforeRecovery)
   document.removeEventListener('mousedown', handleFloatingMenuPointerDown)
   window.removeEventListener('resize', handleFloatingMenuViewportChange)
   window.removeEventListener('scroll', handleFloatingMenuViewportChange, true)

@@ -2,20 +2,39 @@
   <div>
     <NuxtPage />
     <Notification />
+    <section v-if="moduleRecoveryFailed" class="module-recovery-notice" role="alert" aria-label="页面恢复">
+      <p>资源多次加载失败。请在网络恢复后刷新页面。</p>
+      <p>刷新前会保存写笔记草稿；其他未保存修改请先处理。</p>
+      <p v-if="recoverySaveFailed">草稿保存失败，未刷新页面。请先复制草稿后再尝试。</p>
+      <button type="button" class="nw-action-btn" @click="reloadAfterSavingDraft">保存草稿并刷新</button>
+      <button type="button" class="nw-action-btn" @click="moduleRecoveryFailed = false">暂不刷新</button>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useUserStore } from './store/user'
 import Notification from './components/widgets/Notification.vue'
 import { installMediaFancybox } from '~/utils/media-viewer-delegation'
 const mediaToast = useToast()
+const moduleRecoveryFailed = ref(false)
+const recoverySaveFailed = ref(false)
+const showModuleRecovery = () => { moduleRecoveryFailed.value = true }
+const reloadAfterSavingDraft = () => {
+  // Mounted composers synchronously flush the live editor, including text
+  // entered less than one autosave debounce ago. Storage failure cancels reload.
+  const save = new Event('save-draft-before-recovery', { cancelable: true })
+  recoverySaveFailed.value = !window.dispatchEvent(save)
+  if (!recoverySaveFailed.value) window.location.reload()
+}
 let disposeMediaViewer: (() => void) | undefined
 onMounted(() => {
+  window.addEventListener('module-recovery-failed', showModuleRecovery)
   disposeMediaViewer = installMediaFancybox(() => mediaToast.add({ title: '预览加载失败', description: '请再次点击图片或视频重试。', color: 'red' }))
 })
 onBeforeUnmount(() => disposeMediaViewer?.())
+onBeforeUnmount(() => window.removeEventListener('module-recovery-failed', showModuleRecovery))
 
 const userStore = useUserStore()
 
@@ -197,3 +216,22 @@ onBeforeUnmount(() => {
   if (authSyncTimer) window.clearInterval(authSyncTimer)
 })
 </script>
+
+<style scoped>
+.module-recovery-notice {
+  position: fixed;
+  z-index: 10000;
+  inset: auto 1rem 1rem;
+  margin-inline: auto;
+  max-width: 36rem;
+  padding: 1rem;
+  border: 1px solid #d97706;
+  border-radius: 0.75rem;
+  background: #fff7ed;
+  color: #431407;
+  box-shadow: 0 4px 24px #0003;
+}
+.module-recovery-notice p { margin-bottom: 0.5rem; }
+.module-recovery-notice button { margin: 0.25rem 0.75rem 0 0; padding: 0.4rem 0.6rem; }
+:global(.dark) .module-recovery-notice { background: #29201a; color: #ffedd5; }
+</style>

@@ -21,7 +21,14 @@ export const recoverModule = (url: string) => {
   if (existing) return existing
   const pending = import(/* @vite-ignore */ target)
     .then((module) => { repaired = true; return module as RecoveredModule })
-    .catch((error) => { modules.delete(target); throw error })
+    .catch((error) => {
+      modules.delete(target)
+      // The browser retains a rejected native module even after our Promise is
+      // removed. A failed recovery graph needs a new document, not another
+      // import of the same URL. The app offers an explicit, draft-safe reload.
+      window.dispatchEvent(new Event('module-recovery-failed'))
+      throw error
+    })
   modules.set(target, pending)
   return pending
 }
