@@ -17,6 +17,15 @@ const TABLE_CELL_BREAK_RE = /<br\s*\/?\s*>/gi
 export const createRenderedTableEnhancer = (options: RenderedTableEnhancerOptions): RenderedTableEnhancer => {
   const buttons = new Map<HTMLButtonElement, { down: (event: MouseEvent) => void; click: (event: MouseEvent) => void }>()
 
+  const releaseButton = (button: HTMLButtonElement) => {
+    const listeners = buttons.get(button)
+    if (!listeners) return
+    button.removeEventListener('mousedown', listeners.down)
+    button.removeEventListener('click', listeners.click)
+    button.remove()
+    buttons.delete(button)
+  }
+
   const replaceBreakTextNodes = (table: HTMLTableElement) => {
     table.querySelectorAll('td,th').forEach((cell) => {
       const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, {
@@ -84,6 +93,9 @@ export const createRenderedTableEnhancer = (options: RenderedTableEnhancerOption
 
   const update = () => {
     const root = options.root()
+    buttons.forEach((_listeners, button) => {
+      if (!root?.contains(button)) releaseButton(button)
+    })
     if (!root) return
     root.querySelectorAll<HTMLTableElement>('table').forEach((table) => {
       prepare(table)
@@ -105,12 +117,7 @@ export const createRenderedTableEnhancer = (options: RenderedTableEnhancerOption
   }
 
   const dispose = () => {
-    buttons.forEach(({ down, click }, button) => {
-      button.removeEventListener('mousedown', down)
-      button.removeEventListener('click', click)
-      button.remove()
-    })
-    buttons.clear()
+    buttons.forEach((_listeners, button) => releaseButton(button))
   }
 
   return { mount: update, update, prepare, dispose }

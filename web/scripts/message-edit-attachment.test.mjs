@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { createJiti } from 'jiti'
 
-const { applyCurrentEditOperation, createMessageEditSession } = await createJiti(import.meta.url).import('../utils/message-edit-session.ts')
+const { applyCurrentEditOperation, applyMessageEditSaveResult, createMessageEditSession } = await createJiti(import.meta.url).import('../utils/message-edit-session.ts')
 
 const messageListPath = fileURLToPath(new URL('../components/index/MessageList.vue', import.meta.url))
 const editDialogPath = fileURLToPath(new URL('../components/index/MessageEditDialog.vue', import.meta.url))
@@ -74,4 +74,33 @@ assert.equal(
 )
 assert.deepEqual(applied, ['current-attachment'], 'the current message upload must still apply normally')
 
-console.log('message edit attachment tests passed')
+const saveSession = createMessageEditSession()
+const firstSave = saveSession.open(21)
+saveSession.close()
+saveSession.open(22)
+const savedMessages = []
+const closedSessions = []
+assert.equal(
+  applyMessageEditSaveResult(
+    saveSession,
+    firstSave,
+    { content: 'saved A' },
+    (messageId, patch) => savedMessages.push({ messageId, patch }),
+    () => closedSessions.push('closed'),
+  ),
+  false,
+  'a late save must not close the replacement edit session',
+)
+assert.deepEqual(savedMessages, [{ messageId: 21, patch: { content: 'saved A' } }], 'a late save must still update its original message')
+assert.deepEqual(closedSessions, [], 'a late save must leave the replacement draft open')
+
+const currentSave = saveSession.capture()
+assert.equal(
+  applyMessageEditSaveResult(saveSession, currentSave, { content: 'saved B' }, (messageId, patch) => savedMessages.push({ messageId, patch }), () => closedSessions.push('closed')),
+  true,
+  'the current save must still complete its own edit session',
+)
+assert.deepEqual(savedMessages.at(-1), { messageId: 22, patch: { content: 'saved B' } })
+assert.deepEqual(closedSessions, ['closed'])
+
+console.log('message edit session tests passed')

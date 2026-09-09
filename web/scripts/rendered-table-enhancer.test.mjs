@@ -8,14 +8,17 @@ const makeClassList = () => {
   return { add: (...items) => items.forEach(item => values.add(item)), values }
 }
 const parent = { insertBefore(wrapper) { wrapper.parentElement = parent } }
-const table = {
-  tHead: null,
-  tBodies: [],
-  parentElement: parent,
-  classList: makeClassList(),
-  wrapper: null,
-  closest: selector => selector === '.site-table-scroll' ? table.wrapper : null,
-  querySelectorAll: () => [],
+const makeTable = () => {
+  const table = {
+    tHead: null,
+    tBodies: [],
+    parentElement: parent,
+    classList: makeClassList(),
+    wrapper: null,
+    closest: selector => selector === '.site-table-scroll' ? table.wrapper : null,
+    querySelectorAll: () => [],
+  }
+  return table
 }
 const makeButton = () => {
   const listeners = new Map()
@@ -35,7 +38,7 @@ const documentStub = {
       return {
         className: '', dataset: {}, children: [], parentElement: null,
         querySelector(selector) { return selector === '.site-rendered-table-expand-button' ? this.children.find(child => String(child.className || '').includes('site-rendered-table-expand-button')) || null : null },
-        appendChild(child) { this.children.push(child); if (child === table) table.wrapper = this },
+        appendChild(child) { this.children.push(child); child.parentElement = this; if (child.tBodies) child.wrapper = this },
       }
     }
     throw new Error(`unexpected element ${tag}`)
@@ -44,7 +47,11 @@ const documentStub = {
 globalThis.document = documentStub
 
 let opened = null
-const root = { querySelectorAll: selector => selector === 'table' ? [table] : [] }
+let table = makeTable()
+const root = {
+  querySelectorAll: selector => selector === 'table' ? [table] : [],
+  contains: node => node === table.wrapper || table.wrapper?.children.includes(node),
+}
 const enhancer = createRenderedTableEnhancer({ root: () => root, open: value => { opened = value } })
 enhancer.mount()
 assert.ok(table.wrapper, 'mount must wrap a table inside the supplied root')
@@ -54,8 +61,15 @@ assert.equal(table.wrapper.children.length, 2, 'update must be idempotent')
 const button = table.wrapper.children[1]
 button.listeners.get('click')({ preventDefault() {}, stopPropagation() {} })
 assert.equal(opened, table)
+
+table = makeTable()
+enhancer.update()
+assert.equal(button.removed, true, 'update must release an expand button whose table left the root')
+assert.equal(button.listeners.size, 0, 'update must release listeners owned by a detached table')
+
+const currentButton = table.wrapper.children[1]
 enhancer.dispose()
-assert.equal(button.removed, true)
-assert.equal(button.listeners.size, 0)
+assert.equal(currentButton.removed, true)
+assert.equal(currentButton.listeners.size, 0)
 
 console.log('rendered table enhancer lifecycle tests passed')

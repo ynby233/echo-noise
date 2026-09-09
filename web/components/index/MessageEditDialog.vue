@@ -252,7 +252,7 @@ import AudioRecorder from './AudioRecorderButton.vue'
 import MarkdownRenderer from './MarkdownRenderer.vue'
 import type { MessageVisibility } from '~/types/models'
 import { createAudioMarkdown, resolveUploadedMediaUrl, uploadMediaFiles } from '~/utils/media-upload'
-import { applyCurrentEditOperation, createMessageEditSession, type MessageEditSessionToken } from '~/utils/message-edit-session'
+import { applyCurrentEditOperation, applyMessageEditSaveResult, createMessageEditSession, type MessageEditSessionToken } from '~/utils/message-edit-session'
 import { messageVisibility, messageVisibilityIcon, messageVisibilityLabel, messageVisibilityOptions, messageVisibilityRequiresPrivate, normalizeMessageVisibility } from '~/utils/message-visibility'
 import { useUserStore } from '~/store/user'
 
@@ -266,7 +266,6 @@ const userStore = useUserStore()
 
 const showEditModal = ref(false);
 const editingContent = ref('');
-const editingMessageId = ref<number | null>(null);
 const editingMessage = ref<any | null>(null);
 const editingVisibility = ref<MessageVisibility>('public');
 const editingPublishedAtInput = ref('');
@@ -281,6 +280,7 @@ const editAttachmentInputRef = ref<HTMLInputElement | null>(null);
 type EditInsertTarget = { start: number; end: number; session: MessageEditSessionToken };
 const editAudioInsertTarget = ref<EditInsertTarget | null>(null);
 const editSession = createMessageEditSession()
+let editDialogMounted = false
 const editUploadProgress = ref(0);
 const editUploadKind = ref<'audio' | 'attachment' | ''>('');
 const editUploadLabel = ref('');
@@ -618,6 +618,7 @@ const handleEditFloatingMenuViewportChange = () => {
 };
 
 onMounted(() => {
+  editDialogMounted = true
   try {
     document.addEventListener('pointerdown', handleEditFloatingMenuPointerDown, true);
     window.addEventListener('resize', handleEditFloatingMenuViewportChange);
@@ -627,6 +628,8 @@ onMounted(() => {
   } catch {}
 });
 onBeforeUnmount(() => {
+  editDialogMounted = false
+  editSession.close()
   try {
     document.removeEventListener('pointerdown', handleEditFloatingMenuPointerDown, true);
     window.removeEventListener('resize', handleEditFloatingMenuViewportChange);
@@ -800,7 +803,7 @@ const canChangeVisibility = ref(false)
 const canChangePublishTime = ref(false)
 const open = ({ message, canChangeVisibility: allowVisibility, canChangePublishTime: allowPublishTime }: MessageEditOpenOptions) => {
   editSession.open(Number(message.id))
-  editingMessageId.value = message.id
+  isSaving.value = false
   editingMessage.value = message
   canChangeVisibility.value = allowVisibility
   canChangePublishTime.value = allowPublishTime
@@ -814,16 +817,21 @@ const open = ({ message, canChangeVisibility: allowVisibility, canChangePublishT
 }
 
 const saveEditedMessage = async () => {
-  if (!editingMessageId.value) return;
+  const session = editSession.capture()
+  if (!session || isSaving.value) return;
 
   isSaving.value = true;
   try {
     // 获取当前编辑的消息
     const currentMsg = editingMessage.value;
-    if (!currentMsg) return;
+    if (!currentMsg || Number(currentMsg.id) !== session.messageId) return;
+
+    const submittedContent = editingContent.value
+    const submittedVisibility = editingVisibility.value
+    const submittedPublishedAtInput = editingPublishedAtInput.value
 
     // 处理编辑内容，移除附件图片的 Markdown 标记
-    let processedContent = editingContent.value;
+    let processedContent = submittedContent;
 
     // 移除附件图片的 Markdown 标记
     processedContent = processedContent.replace(/\n*<!-- 附件图片\(编辑时可删除\) -->\n!\[附件图片\]\(.*?\)\n<!-- 附件图片结束 -->\n*/g, '');
@@ -831,8 +839,8 @@ const saveEditedMessage = async () => {
     const originalPublishTime = toDatetimeLocalValue(currentMsg.created_at)
     const canUpdateVisibility = canChangeVisibility.value
     const canUpdatePublishTime = canChangePublishTime.value
-    const nextCreatedAt = canUpdatePublishTime ? datetimeLocalToISO(editingPublishedAtInput.value) : ''
-    if (canUpdatePublishTime && editingPublishedAtInput.value && !nextCreatedAt) {
+    const nextCreatedAt = canUpdatePublishTime ? datetimeLocalToISO(submittedPublishedAtInput) : ''
+    if (canUpdatePublishTime && submittedPublishedAtInput && !nextCreatedAt) {
       useToast().add({
         title: '发布时间格式无效',
         color: 'red',
@@ -840,9 +848,9 @@ const saveEditedMessage = async () => {
       });
       return;
     }
-    const publishTimeChanged = canUpdatePublishTime && !!nextCreatedAt && editingPublishedAtInput.value !== originalPublishTime
+    const publishTimeChanged = canUpdatePublishTime && !!nextCreatedAt && submittedPublishedAtInput !== originalPublishTime
     const contentChanged = processedContent !== currentMsg.content
-    const nextVisibility = normalizeMessageVisibility(editingVisibility.value, !!currentMsg.private)
+    const nextVisibility = normalizeMessageVisibility(submittedVisibility, !!currentMsg.private)
     const visibilityChanged = canUpdateVisibility && nextVisibility !== messageVisibility(currentMsg)
 
     // 检查内容、发布时间或可见范围是否有修改
@@ -853,7 +861,6 @@ const saveEditedMessage = async () => {
         color: 'orange',
         timeout: 2000
       });
-      isSaving.value = false;
       return;
     }
     const payload: any = {
@@ -867,7 +874,7 @@ const saveEditedMessage = async () => {
     if (publishTimeChanged) {
       payload.created_at = nextCreatedAt
     }
-    const response = await fetch(`${BASE_API}/messages/${editingMessageId.value}`, {
+    const response = await fetch(`${BASE_API}/messages/${session.messageId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -881,26 +888,36 @@ const saveEditedMessage = async () => {
 
     const data = await response.json();
     if (data.code === 1) {
+      if (!editDialogMounted) return
       const updatedData = data.data || {}
       const savedVisibility = normalizeMessageVisibility(updatedData.visibility ?? nextVisibility, !!updatedData.private)
       const savedPrivate = typeof updatedData.private === 'boolean' ? updatedData.private : messageVisibilityRequiresPrivate(savedVisibility)
-      applyEditedMessage(editingMessageId.value, {
+      const patch = {
         content: updatedData.content ?? processedContent,
         image_url: updatedData.image_url ?? currentMsg.image_url,
         created_at: updatedData.created_at ?? (publishTimeChanged ? nextCreatedAt : currentMsg.created_at),
         visibility: savedVisibility,
         private: savedPrivate
+      }
+      applyMessageEditSaveResult(editSession, session, patch, applyEditedMessage, () => {
+        if (
+          !showEditModal.value
+          || editingContent.value !== submittedContent
+          || editingVisibility.value !== submittedVisibility
+          || editingPublishedAtInput.value !== submittedPublishedAtInput
+        ) return
+        showEditModal.value = false;
+        useToast().add({
+          title: '更新成功',
+          color: 'green',
+          timeout: 2000
+        });
       })
-      showEditModal.value = false;
-      useToast().add({
-        title: '更新成功',
-        color: 'green',
-        timeout: 2000
-      });
     } else {
       throw new Error(data.msg || '保存失败');
     }
   } catch (error) {
+    if (!editSession.isCurrent(session) || !showEditModal.value) return
     console.error('更新消息失败:', error);
     useToast().add({
       title: '更新失败',
@@ -908,7 +925,7 @@ const saveEditedMessage = async () => {
       timeout: 2000
     });
   } finally {
-    isSaving.value = false;
+    if (editSession.isCurrent(session)) isSaving.value = false;
   }
 };
 

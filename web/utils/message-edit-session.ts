@@ -10,7 +10,7 @@ export type MessageEditSession = {
   isCurrent: (token: MessageEditSessionToken | null | undefined) => boolean
 }
 
-// Owns the identity boundary for asynchronous edit work. Upload callers must
+// Owns the identity boundary for asynchronous edit work. Callers must
 // capture before awaiting and verify through this object before changing a draft.
 export const createMessageEditSession = (): MessageEditSession => {
   let generation = 0
@@ -48,5 +48,18 @@ export const applyCurrentEditOperation = async <T>(
   const value = await operation()
   if (!session.isCurrent(token)) return false
   await apply(value)
+  return true
+}
+
+export const applyMessageEditSaveResult = <T>(
+  session: MessageEditSession,
+  token: MessageEditSessionToken,
+  value: T,
+  applySaved: (messageId: number, value: T) => void,
+  applyCurrent: () => void,
+) => {
+  applySaved(token.messageId, value)
+  if (!session.isCurrent(token)) return false
+  applyCurrent()
   return true
 }
