@@ -2911,7 +2911,8 @@ const mergeRenderedTableCellEdgeBreaks = (sourceText: string, renderedText: stri
   if (normalizeTableMatchText(sourceCore) !== normalizeTableMatchText(renderedCore)) return source
   const leading = Math.max(countEdgeLineBreaks(source, 'start'), countEdgeLineBreaks(rendered, 'start'))
   const trailing = Math.max(countEdgeLineBreaks(source, 'end'), countEdgeLineBreaks(rendered, 'end'))
-  return `${'\n'.repeat(leading)}${sourceCore}${'\n'.repeat(trailing)}`
+  const core = hasAttachmentMarker(renderedCore) && !hasAttachmentMarker(sourceCore) ? renderedCore : sourceCore
+  return `${'\n'.repeat(leading)}${core}${'\n'.repeat(trailing)}`
 }
 
 const mergeRenderedTableEdgeBreaks = (sourceRows: string[][], renderedRows: string[][]) =>

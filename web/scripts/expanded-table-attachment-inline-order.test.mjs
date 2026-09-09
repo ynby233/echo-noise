@@ -77,6 +77,13 @@ assert.doesNotMatch(
   'committing an expanded cell must not rebuild the value by appending attachments after the text'
 )
 
+const mergeFn = sliceBetween(editor, 'const mergeRenderedTableCellEdgeBreaks =', 'const mergeRenderedTableEdgeBreaks =')
+assert.match(
+  mergeFn,
+  /hasAttachmentMarker\(renderedCore\)\s*&&\s*!hasAttachmentMarker\(sourceCore\)/,
+  'opening an expanded table must recover an attachment URL retained by the rendered cell when Vditor source degraded to its label'
+)
+
 // HTML is written only while the dialog opens, so typing never resets the caret.
 assert.match(
   editor,
