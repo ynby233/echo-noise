@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readdir, readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readSettingServiceSource } from './setting-service-source.mjs'
 
 const webRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const repoRoot = dirname(webRoot)
@@ -18,7 +19,7 @@ const sourceFiles = {
   notificationCenter: await read('web/components/index/UserNotificationCenter.vue'),
   statusPanel: await read('web/components/index/StatusPanel.vue'),
   indexPage: await read('web/pages/index.vue'),
-  settingsService: await read('internal/services/setting_service.go'),
+  settingsService: await readSettingServiceSource(),
   seedService: await read('internal/services/seed_service.go'),
   models: await read('internal/models/models.go'),
   widgetTemplate: await read('htmlwidgets/note.html'),

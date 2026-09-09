@@ -30,18 +30,18 @@
 import { nextTick, onMounted, ref, watch, onBeforeUnmount, inject } from 'vue';
 import { useRuntimeConfig } from '#imports';
 import { useMessageStore } from '~/store/message';
-import { ensureFancyboxVideoThumbnail, getVideoElementSource, getVideoPlaybackFrameForSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
+import { ensureFancyboxVideoThumbnail, getVideoElementSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
 import { bindMediaFancybox, unbindMediaFancybox, createMediaFancyboxOptions } from '~/utils/media-fancybox'
 import { buildAttachmentAudioPlaceholderHtml, destroyAttachmentAudioPlayers, enhanceAttachmentAudioPlayers } from '~/utils/attachment-audio-player'
 import { encodeMarkdownExtraBlankLines, markMarkdownPreservedBlankLineElements } from '~/utils/markdown-blank-lines'
-import { applyTableTrackSize, getTableResizeZoomScale, resolveTableTrackResize, resolveTableTrailingScrollReserve, type TableTrackResizeSession } from '~/utils/table-resize-session'
 import { isManagedAttachmentURL, resolveManagedAttachmentURL } from '~/utils/media-url'
-import { attachmentFailureDetail, attachmentFailureTitle, type AttachmentFailureKind } from '~/utils/attachment-failure'
-import { isBrowserPreviewableAttachmentUrl } from '~/utils/attachment-preview'
-import { withStableInsertionPoint } from '~/utils/dom-stable-insertion'
 import { loadVditorPreview } from '~/utils/vditor-preview'
 import { enhanceMetingPlayers } from '~/utils/meting-player'
 import { enhanceGitHubCards } from '~/utils/github-card'
+import { createRenderedTaskListEnhancer } from '~/utils/rendered-task-list'
+import { createRenderedTableDialog } from '~/utils/rendered-table-dialog'
+import { applyImageLoadingPlaceholders, applyRenderedMediaLayout } from '~/utils/rendered-media-layout'
+import { applyAttachmentRenders, applyDeletedAttachmentPlaceholders, escapeRenderedHtml, isAudioAttachmentUrl, isVideoAttachmentUrl, replaceNodeWithHtml } from '~/utils/rendered-attachment'
 
 // 定义正则表达式
 const BILIBILI_REG = /https:\/\/www\.bilibili\.com\/video\/(BV[\w]+)\/?(?:\?[^\s<)]*)?/g;
@@ -65,17 +65,8 @@ const resolveAttachmentUrl = (path: string) => resolveManagedAttachmentURL(Strin
 const previewElement = ref<HTMLDivElement | null>(null);
 const previewLoadFailed = ref(false)
 let renderSequence = 0
-const renderedTableExpandBody = ref<HTMLDivElement | null>(null);
-const showRenderedTableExpandDialog = ref(false);
-const renderedTableExpandClosing = ref(false);
-const renderedTableExpandHtml = ref('');
-const renderedTableExpandDark = ref(false);
-let renderedTableExpandCloseTimer: ReturnType<typeof setTimeout> | null = null;
-let renderedTableScrollOverflowFrame: number | null = null
 let zoom: any = null;
 let themeClassObserver: MutationObserver | null = null
-let taskListObserver: MutationObserver | null = null
-let taskListEnhanceTimer: ReturnType<typeof setTimeout> | null = null
 // 添加 window 类型声明
 declare global {
   interface Window {
@@ -116,8 +107,16 @@ const props = defineProps({
 });
 
 const messageStore = useMessageStore();
-const taskUpdateInFlight = new Set<number>()
 const renderedTaskContent = ref(props.content)
+const taskLists = createRenderedTaskListEnhancer({
+  root: () => previewElement.value,
+  content: () => renderedTaskContent.value,
+  setContent: (content) => { renderedTaskContent.value = content },
+  editable: () => props.taskListEditable,
+  messageId: () => Number(props.messageId || 0),
+  persist: (messageId, content) => messageStore.updateMessage(messageId, content),
+  reportError: (error) => console.error('更新任务状态失败:', error),
+})
 
 const contentTheme = inject('contentTheme') as any
 const FULL_IMAGE_ATTACHMENTS_MARKER_RE = /<!--\s*full-image-attachments\s*-->\s*/gi
@@ -127,24 +126,6 @@ const hasFullImageAttachmentsMarker = (content: string) => {
 }
 const stripFullImageAttachmentsMarker = (content: string) => String(content || '').replace(FULL_IMAGE_ATTACHMENTS_MARKER_RE, '').trimStart()
 const HASHTAG_REG = /(^|[\s(（[{【])#([\p{L}\p{N}_-]+)/gu
-const TABLE_CELL_BREAK_RE = /<br\s*\/?\s*>/gi
-const RENDERED_TABLE_MIN_COLUMN_WIDTH = 48
-const RENDERED_TABLE_ATTACHMENT_CARD_WIDTH = 280
-const RENDERED_TABLE_ATTACHMENT_VIDEO_WIDTH = 240
-const RENDERED_TABLE_ATTACHMENT_IMAGE_WIDTH = 200
-const RENDERED_TABLE_MIN_ROW_HEIGHT = 38
-const RENDERED_TABLE_CELL_HORIZONTAL_PADDING = 18
-const RENDERED_TABLE_SCROLL_OVERFLOW_TOLERANCE = 2
-type RenderedTableResizeDrag = TableTrackResizeSession & {
-  type: 'row' | 'column'
-  index: number
-  active: boolean
-  startTrailingScrollReserve: number
-}
-type RenderedTableResizeStart = Omit<RenderedTableResizeDrag, 'active' | 'startTrailingScrollReserve'>
-let renderedTableResizeDrag: RenderedTableResizeDrag | null = null
-let renderedTableManualRowHeights: number[] = []
-let renderedTableManualColumnWidths: number[] = []
 const METING_API_FALLBACKS = [
   'https://meting.soopy.cn/api',
   'https://api.injahow.cn/meting/',
@@ -334,956 +315,27 @@ const onPreviewClick = (event: Event) => {
   emit('tagClick', tag)
 }
 
-const TASK_LINE_REG = /^(\s*(?:[-*+]|\d+[.)])\s+\[)([ xX])(\]\s+)/
-
-const updateTaskListContent = (content: string, taskIndex: number, checked: boolean) => {
-  let seen = -1
-  const lines = String(content || '').split('\n')
-  const nextLines = lines.map((line) => {
-    if (!TASK_LINE_REG.test(line)) return line
-    seen += 1
-    if (seen !== taskIndex) return line
-    return line.replace(TASK_LINE_REG, `$1${checked ? 'x' : ' '}$3`)
-  })
-  return seen >= taskIndex ? nextLines.join('\n') : ''
-}
-
-const taskCheckedInContent = (content: string, taskIndex: number) => {
-  let seen = -1
-  const lines = String(content || '').split('\n')
-  for (const line of lines) {
-    const match = line.match(TASK_LINE_REG)
-    if (!match) continue
-    seen += 1
-    if (seen === taskIndex) return match[2].toLowerCase() === 'x'
-  }
-  return false
-}
-
-const syncTaskListItemState = (input: HTMLInputElement) => {
-  const item = input.closest('li')
-  item?.classList.add('markdown-task-list-item')
-  item?.classList.toggle('is-task-checked', input.checked)
-  input.setAttribute('aria-label', input.checked ? '已完成任务' : '未完成任务')
-}
-
-const findRenderedTaskCheckboxes = () => {
-  const root = previewElement.value
-  if (!root) return [] as HTMLInputElement[]
-  return Array.from(root.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))
-}
-
-const taskIndexForInput = (input: HTMLInputElement) => {
-  const fromDataset = Number(input.dataset.taskIndex)
-  if (Number.isInteger(fromDataset) && fromDataset >= 0) return fromDataset
-  return findRenderedTaskCheckboxes().indexOf(input)
-}
-
-const resetTaskCheckbox = (input: HTMLInputElement, taskIndex = taskIndexForInput(input)) => {
-  input.checked = taskIndex >= 0 ? taskCheckedInContent(renderedTaskContent.value, taskIndex) : input.defaultChecked
-  syncTaskListItemState(input)
-}
-
-const persistTaskListChange = async (input: HTMLInputElement, taskIndex: number, checked: boolean) => {
-  if (!props.taskListEditable || !props.messageId || taskUpdateInFlight.has(taskIndex)) return false
-  const previousChecked = !checked
-  const previousContent = renderedTaskContent.value
-  const nextContent = updateTaskListContent(renderedTaskContent.value, taskIndex, checked)
-  if (!nextContent) return false
-  renderedTaskContent.value = nextContent
-  taskUpdateInFlight.add(taskIndex)
-  input.disabled = true
-  try {
-    const response = await messageStore.updateMessage(Number(props.messageId), nextContent)
-    if (!response) throw new Error('更新任务状态失败')
-    return true
-  } catch (error) {
-    renderedTaskContent.value = previousContent
-    input.checked = previousChecked
-    syncTaskListItemState(input)
-    console.error('更新任务状态失败:', error)
-    return false
-  } finally {
-    taskUpdateInFlight.delete(taskIndex)
-    input.disabled = !props.taskListEditable
-  }
-}
-
-const enableRenderedTaskLists = () => {
-  const root = previewElement.value
-  if (!root) return
-  root.dataset.taskListEditable = props.taskListEditable ? 'true' : 'false'
-  let taskIndex = 0
-  findRenderedTaskCheckboxes().forEach((input) => {
-    const currentIndex = taskIndex
-    taskIndex += 1
-    input.dataset.taskIndex = String(currentIndex)
-    input.checked = taskCheckedInContent(renderedTaskContent.value, currentIndex)
-    input.disabled = !props.taskListEditable
-    if (props.taskListEditable) input.removeAttribute('disabled')
-    else input.setAttribute('disabled', 'disabled')
-    input.setAttribute('aria-disabled', props.taskListEditable ? 'false' : 'true')
-    input.tabIndex = props.taskListEditable ? 0 : -1
-    input.style.pointerEvents = props.taskListEditable ? 'auto' : 'none'
-    input.style.cursor = props.taskListEditable ? 'pointer' : 'default'
-    syncTaskListItemState(input)
-    input.onclick = (event) => {
-      if (props.taskListEditable) return
-      event.preventDefault()
-      event.stopPropagation()
-      if (typeof (event as any).stopImmediatePropagation === 'function') (event as any).stopImmediatePropagation()
-      resetTaskCheckbox(input, currentIndex)
-    }
-    input.onchange = async (event) => {
-      event.stopPropagation()
-      if (typeof (event as any).stopImmediatePropagation === 'function') (event as any).stopImmediatePropagation()
-      if (!props.taskListEditable) {
-        event.preventDefault()
-        resetTaskCheckbox(input, currentIndex)
-        return
-      }
-      const checked = input.checked
-      syncTaskListItemState(input)
-      await persistTaskListChange(input, currentIndex, checked)
-    }
-  })
-}
-
-const scheduleTaskListEnhance = () => {
-  if (taskListEnhanceTimer) clearTimeout(taskListEnhanceTimer)
-  taskListEnhanceTimer = setTimeout(() => {
-    taskListEnhanceTimer = null
-    enableRenderedTaskLists()
-  }, 0)
-}
-
-const replaceRenderedTableBreakTextNodes = (table: HTMLTableElement) => {
-  table.querySelectorAll('td,th').forEach((cell) => {
-    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, {
-      acceptNode(node) {
-        return /<br\s*\/?\s*>/i.test(node.textContent || '') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
-      }
-    })
-    const nodes: Text[] = []
-    while (walker.nextNode()) nodes.push(walker.currentNode as Text)
-    nodes.forEach((textNode) => {
-      const parts = String(textNode.textContent || '').split(TABLE_CELL_BREAK_RE)
-      if (parts.length <= 1) return
-      const fragment = document.createDocumentFragment()
-      parts.forEach((part, index) => {
-        if (part) fragment.appendChild(document.createTextNode(part))
-        if (index < parts.length - 1) fragment.appendChild(document.createElement('br'))
-      })
-      textNode.parentNode?.replaceChild(fragment, textNode)
-    })
-  })
-}
-
-const normalizeRenderedTableStructure = (table: HTMLTableElement) => {
-  const thead = table.tHead
-  if (thead) {
-    const body = table.tBodies[0] || table.createTBody()
-    Array.from(thead.rows).reverse().forEach((row) => body.insertBefore(row, body.firstChild))
-    thead.remove()
-  }
-  table.querySelectorAll('th').forEach((headerCell) => {
-    const cell = document.createElement('td')
-    Array.from(headerCell.attributes).forEach((attr) => cell.setAttribute(attr.name, attr.value))
-    while (headerCell.firstChild) cell.appendChild(headerCell.firstChild)
-    headerCell.replaceWith(cell)
-  })
-}
-
-const estimateRenderedTableLineWidth = (line: string) => {
-  const text = String(line || '') || ' '
-  return Array.from(text).reduce((width, char) => {
-    if (/\s/.test(char)) return width + 4
-    if (/[^\x00-\xff]/.test(char)) return width + 14
-    return width + 7
-  }, RENDERED_TABLE_CELL_HORIZONTAL_PADDING)
-}
-
-const estimateRenderedTableCellAttachmentWidth = (cell: HTMLTableCellElement | undefined) => {
-  if (!cell) return 0
-  let width = 0
-  if (cell.querySelector('.site-attachment-file, .site-attachment-audio, [data-site-audio-player], .site-table-audio-trigger')) {
-    width = Math.max(width, RENDERED_TABLE_ATTACHMENT_CARD_WIDTH)
-  }
-  if (cell.querySelector('.site-attachment-render--video, video')) {
-    width = Math.max(width, RENDERED_TABLE_ATTACHMENT_VIDEO_WIDTH)
-  }
-  if (cell.querySelector('.site-attachment-paragraph, .site-attachment-image, img')) {
-    width = Math.max(width, RENDERED_TABLE_ATTACHMENT_IMAGE_WIDTH)
-  }
-  return width
-}
-
-const adaptiveRenderedTableColumnWidths = (table: HTMLTableElement, availableWidth: number, minWidth = RENDERED_TABLE_MIN_COLUMN_WIDTH) => {
-  const rows = Array.from(table.rows)
-  const columnCount = rows.reduce((max, row) => Math.max(max, row.cells.length), 0)
-  if (!columnCount) return [] as number[]
-  const safeAvailable = Math.max(minWidth * columnCount, Math.floor(availableWidth || 0))
-  const average = safeAvailable / columnCount
-  const natural = Array.from({ length: columnCount }, (_, columnIndex) => {
-    const maxLine = rows.reduce((max, row) => {
-      const cell = row.cells[columnIndex]
-      const text = String(cell?.textContent || '').replace(/\u00a0/g, ' ')
-      const textWidth = Math.max(...text.split('\n').map((line) => estimateRenderedTableLineWidth(line)))
-      const attachmentWidth = estimateRenderedTableCellAttachmentWidth(cell)
-      return Math.max(max, textWidth, attachmentWidth)
-    }, minWidth)
-    return Math.max(minWidth, Math.ceil(maxLine))
-  })
-  if (natural.every((width) => width <= average)) {
-    const base = Math.floor(average)
-    const remainder = safeAvailable - base * columnCount
-    return Array.from({ length: columnCount }, (_, index) => base + (index < remainder ? 1 : 0))
-  }
-  let widths = natural.map((width) => Math.max(minWidth, width))
-  const total = widths.reduce((sum, width) => sum + width, 0)
-  if (total < safeAvailable) {
-    const extra = safeAvailable - total
-    const share = Math.floor(extra / columnCount)
-    const remainder = extra - share * columnCount
-    widths = widths.map((width, index) => width + share + (index < remainder ? 1 : 0))
-  }
-  return widths.map((width) => Math.max(minWidth, Math.ceil(width)))
-}
-
-const applyAdaptiveRenderedTableColumns = (table: HTMLTableElement, availableWidth: number, manualWidths: number[] = []) => {
-  const widths = adaptiveRenderedTableColumnWidths(table, availableWidth).map((width, index) => Math.max(
-    RENDERED_TABLE_MIN_COLUMN_WIDTH,
-    Math.ceil(manualWidths[index] || width)
-  ))
-  if (!widths.length) return
-  table.querySelector('colgroup')?.remove()
-  const colgroup = document.createElement('colgroup')
-  widths.forEach((width) => {
-    const col = document.createElement('col')
-    col.style.width = `${width}px`
-    colgroup.appendChild(col)
-  })
-  table.insertBefore(colgroup, table.firstChild)
-}
-
-const measureRenderedTableAutoRowHeights = (table: HTMLTableElement) => {
-  const rows = Array.from(table.rows)
-  const previousRowHeights = rows.map((row) => row.style.height)
-  const previousCellHeights = rows.map((row) => Array.from(row.cells).map((cell) => (cell as HTMLElement).style.height))
-  rows.forEach((row) => {
-    row.style.height = 'auto'
-    Array.from(row.cells).forEach((cell) => { (cell as HTMLElement).style.height = 'auto' })
-  })
-  const heights = rows.map((row) => {
-    const maxCellHeight = Array.from(row.cells).reduce((max, cell) => Math.max(max, Math.ceil((cell as HTMLElement).scrollHeight)), RENDERED_TABLE_MIN_ROW_HEIGHT)
-    return Math.max(RENDERED_TABLE_MIN_ROW_HEIGHT, maxCellHeight)
-  })
-  rows.forEach((row, rowIndex) => {
-    row.style.height = previousRowHeights[rowIndex] || ''
-    Array.from(row.cells).forEach((cell, cellIndex) => {
-      ;(cell as HTMLElement).style.height = previousCellHeights[rowIndex]?.[cellIndex] || ''
-    })
-  })
-  return heights
-}
-
-const applyRenderedTableRowHeights = (table: HTMLTableElement, manualHeights: number[] = []) => {
-  const autoHeights = measureRenderedTableAutoRowHeights(table)
-  Array.from(table.rows).forEach((row, rowIndex) => {
-    const height = Math.max(
-      RENDERED_TABLE_MIN_ROW_HEIGHT,
-      Math.ceil(autoHeights[rowIndex] || 0),
-      Math.ceil(manualHeights[rowIndex] || 0)
-    )
-    row.style.height = `${height}px`
-    Array.from(row.cells).forEach((cell) => { (cell as HTMLElement).style.height = `${height}px` })
-  })
-  return autoHeights
-}
-
-const renderedTableExpandTable = () => renderedTableExpandBody.value?.querySelector<HTMLTableElement>('.rendered-table-expanded-table') || null
-
-const renderedTableExpandAvailableWidth = () => {
-  const scroll = renderedTableExpandBody.value
-  const fallback = Math.min(1680, Math.max(320, window.innerWidth - 48)) - 24
-  return Math.max(160, Math.floor((scroll?.clientWidth || fallback) - 24))
-}
-
-const syncRenderedTableScrollOverflowState = () => {
-  const scroll = renderedTableExpandBody.value
-  if (!scroll) return
-  const horizontalOverflow = scroll.scrollWidth - scroll.clientWidth > RENDERED_TABLE_SCROLL_OVERFLOW_TOLERANCE
-  const verticalOverflow = scroll.scrollHeight - scroll.clientHeight > RENDERED_TABLE_SCROLL_OVERFLOW_TOLERANCE
-  scroll.classList.toggle('has-real-horizontal-overflow', horizontalOverflow)
-  scroll.classList.toggle('has-real-vertical-overflow', verticalOverflow)
-}
-
-const scheduleRenderedTableScrollOverflowState = () => {
-  if (typeof window === 'undefined') return
-  if (renderedTableScrollOverflowFrame !== null) return
-  renderedTableScrollOverflowFrame = window.requestAnimationFrame(() => {
-    renderedTableScrollOverflowFrame = null
-    syncRenderedTableScrollOverflowState()
-  })
-}
-
-const stopRenderedTableResize = () => {
-  const drag = renderedTableResizeDrag
-  window.removeEventListener('pointermove', onRenderedTableResizeMove, true)
-  window.removeEventListener('pointerup', stopRenderedTableResize, true)
-  window.removeEventListener('pointercancel', stopRenderedTableResize, true)
-  const table = renderedTableExpandTable()
-  table?.querySelectorAll('.rendered-table-expand-row-resize-handle.is-resizing, .rendered-table-expand-column-resize-handle.is-resizing')
-    .forEach((handle) => handle.classList.remove('is-resizing'))
-  renderedTableResizeDrag = null
-  document.body.classList.remove('is-resizing-rendered-table-row', 'is-resizing-rendered-table-column')
-  if (table && drag?.type === 'column' && drag.active) {
-    applyRenderedTableRowHeights(table, renderedTableManualRowHeights)
-  }
-  scheduleRenderedTableScrollOverflowState()
-}
-
-const syncRenderedTableExpandLayout = (options: { rebuildHandles?: boolean } = {}) => {
-  const table = renderedTableExpandTable()
-  if (!table) return
-  applyAdaptiveRenderedTableColumns(table, renderedTableExpandAvailableWidth(), renderedTableManualColumnWidths)
-  const autoRowHeights = applyRenderedTableRowHeights(table, renderedTableManualRowHeights)
-  if (options.rebuildHandles !== false) ensureRenderedTableResizeHandles(table, autoRowHeights)
-  scheduleRenderedTableScrollOverflowState()
-}
-
-const onRenderedTableExpandViewportResize = () => syncRenderedTableExpandLayout()
-
-const onRenderedTableResizeMove = (event: PointerEvent) => {
-  const drag = renderedTableResizeDrag
-  if (!drag) return
-  const table = renderedTableExpandTable()
-  if (!table) return
-  event.preventDefault()
-  event.stopPropagation()
-  const scale = drag.scale || 1
-  const pointer = (drag.type === 'row' ? event.clientY : event.clientX) / scale
-  const resolved = resolveTableTrackResize(drag, pointer, drag.active)
-  drag.active = resolved.active
-  if (!resolved.active) return
-  if (drag.type === 'row') {
-    const nextHeight = resolved.size
-    renderedTableManualRowHeights[drag.index] = nextHeight
-    applyTableTrackSize(table, 'row', drag.index, nextHeight)
-    table.style.marginBottom = `${resolveTableTrailingScrollReserve(drag.startTrailingScrollReserve, drag.startSize, nextHeight)}px`
-    scheduleRenderedTableScrollOverflowState()
-    return
-  }
-  const nextWidth = resolved.size
-  renderedTableManualColumnWidths[drag.index] = nextWidth
-  applyTableTrackSize(table, 'column', drag.index, nextWidth)
-  table.style.marginRight = `${resolveTableTrailingScrollReserve(drag.startTrailingScrollReserve, drag.startSize, nextWidth)}px`
-  scheduleRenderedTableScrollOverflowState()
-}
-
-const startRenderedTableResize = (drag: RenderedTableResizeStart, event: PointerEvent) => {
-  stopRenderedTableResize()
-  const table = renderedTableExpandTable()
-  if (!table) return
-  const startTrailingScrollReserve = Number.parseFloat(drag.type === 'row' ? table.style.marginBottom : table.style.marginRight)
-  renderedTableResizeDrag = {
-    ...drag,
-    active: false,
-    startTrailingScrollReserve: Number.isFinite(startTrailingScrollReserve) ? startTrailingScrollReserve : 0,
-  }
-  const handleClass = drag.type === 'row'
-    ? 'rendered-table-expand-row-resize-handle'
-    : 'rendered-table-expand-column-resize-handle'
-  table?.querySelectorAll(`.${handleClass}[data-resize-index="${drag.index}"]`)
-    .forEach((handle) => handle.classList.add('is-resizing'))
-  document.body.classList.add(drag.type === 'row' ? 'is-resizing-rendered-table-row' : 'is-resizing-rendered-table-column')
-  event.currentTarget instanceof HTMLElement && event.currentTarget.setPointerCapture?.(event.pointerId)
-  window.addEventListener('pointermove', onRenderedTableResizeMove, true)
-  window.addEventListener('pointerup', stopRenderedTableResize, true)
-  window.addEventListener('pointercancel', stopRenderedTableResize, true)
-}
-
-const ensureRenderedTableResizeHandles = (table: HTMLTableElement, autoRowHeights: number[] = []) => {
-  table.querySelectorAll('.rendered-table-expand-row-resize-handle, .rendered-table-expand-column-resize-handle').forEach((handle) => handle.remove())
-  const rows = Array.from(table.rows)
-  rows.forEach((row, rowIndex) => {
-    Array.from(row.cells).forEach((cell, cellIndex) => {
-      const cellElement = cell as HTMLElement
-      const rowHandle = document.createElement('span')
-      rowHandle.className = 'rendered-table-expand-row-resize-handle'
-      rowHandle.dataset.resizeIndex = String(rowIndex)
-      rowHandle.setAttribute('aria-hidden', 'true')
-      rowHandle.addEventListener('pointerdown', (event) => {
-        event.preventDefault()
-        event.stopPropagation()
-        const scale = getTableResizeZoomScale()
-        startRenderedTableResize({
-          type: 'row',
-          index: rowIndex,
-          startPointer: event.clientY / scale,
-          startSize: row.getBoundingClientRect().height / scale,
-          minSize: Math.max(RENDERED_TABLE_MIN_ROW_HEIGHT, autoRowHeights[rowIndex] || 0),
-          scale,
-        }, event)
-      })
-      cellElement.appendChild(rowHandle)
-
-      const columnHandle = document.createElement('span')
-      columnHandle.className = 'rendered-table-expand-column-resize-handle'
-      columnHandle.dataset.resizeIndex = String(cellIndex)
-      columnHandle.setAttribute('aria-hidden', 'true')
-      columnHandle.addEventListener('pointerdown', (event) => {
-        event.preventDefault()
-        event.stopPropagation()
-        const scale = getTableResizeZoomScale()
-        startRenderedTableResize({
-          type: 'column',
-          index: cellIndex,
-          startPointer: event.clientX / scale,
-          startSize: cellElement.getBoundingClientRect().width / scale,
-          minSize: RENDERED_TABLE_MIN_COLUMN_WIDTH,
-          scale,
-        }, event)
-      })
-      cellElement.appendChild(columnHandle)
-    })
-  })
-}
-
-const openRenderedTableExpand = async (table: HTMLTableElement) => {
-  if (!table) return
-  renderedTableManualRowHeights = []
-  renderedTableManualColumnWidths = []
-  const clone = table.cloneNode(true) as HTMLTableElement
-  normalizeRenderedTableStructure(clone)
-  clone.classList.add('site-scrollable-table', 'rendered-table-expanded-table')
-  const availableWidth = Math.min(1680, Math.max(320, window.innerWidth - 48)) - 24
-  applyAdaptiveRenderedTableColumns(clone, availableWidth, renderedTableManualColumnWidths)
-  clone.querySelectorAll('button:not(.site-rendered-table-expand-button):not(.site-table-audio-trigger)').forEach((button) => button.remove())
-  clone.querySelectorAll('.site-rendered-table-expand-button').forEach((button) => button.remove())
-  renderedTableExpandHtml.value = clone.outerHTML
-  if (renderedTableExpandCloseTimer) {
-    clearTimeout(renderedTableExpandCloseTimer)
-    renderedTableExpandCloseTimer = null
-  }
-  renderedTableExpandClosing.value = false
-  showRenderedTableExpandDialog.value = true
-  await nextTick()
-  if (renderedTableExpandBody.value) {
-    renderedTableExpandBody.value.querySelectorAll<HTMLTableElement>('table').forEach((item) => replaceRenderedTableBreakTextNodes(item))
-    if (props.enableGithubCard) void enhanceGitHubCards(renderedTableExpandBody.value)
-    enhanceAttachmentAudioPlayers(renderedTableExpandBody.value)
-    applyDeletedAttachmentPlaceholders(renderedTableExpandBody.value)
-    initializeMediaViewer(renderedTableExpandBody.value)
-    syncRenderedTableExpandLayout()
-  }
-}
-
-const closeRenderedTableExpand = () => {
-  if (!showRenderedTableExpandDialog.value || renderedTableExpandClosing.value) return
-  if (renderedTableExpandBody.value) destroyAttachmentAudioPlayers(renderedTableExpandBody.value)
-  renderedTableExpandClosing.value = true
-  if (renderedTableExpandCloseTimer) clearTimeout(renderedTableExpandCloseTimer)
-  renderedTableExpandCloseTimer = setTimeout(() => {
-    showRenderedTableExpandDialog.value = false
-    renderedTableExpandClosing.value = false
-    renderedTableExpandHtml.value = ''
-    renderedTableManualRowHeights = []
-    renderedTableManualColumnWidths = []
-    stopRenderedTableResize()
-    renderedTableExpandCloseTimer = null
-  }, 180)
-}
-
-const ensureRenderedTableExpandButton = (wrapper: HTMLElement, table: HTMLTableElement) => {
-  if (wrapper.querySelector('.site-rendered-table-expand-button')) return
-  const button = document.createElement('button')
-  button.type = 'button'
-  button.className = 'site-rendered-table-expand-button editor-table-expand-button nw-action-btn nw-tooltip-anchor'
-  button.setAttribute('aria-label', '放大查看表格')
-  button.setAttribute('data-tooltip', '放大查看表格')
-  button.textContent = '⛶'
-  button.addEventListener('mousedown', (event) => {
-    event.preventDefault()
-    event.stopPropagation()
-  })
-  button.addEventListener('click', (event) => {
-    event.preventDefault()
-    event.stopPropagation()
-    openRenderedTableExpand(table)
-  })
-  wrapper.appendChild(button)
-}
-
-const enhanceRenderedTables = () => {
-  const root = previewElement.value
-  if (!root) return
-  root.querySelectorAll<HTMLTableElement>('table').forEach((table) => {
-    normalizeRenderedTableStructure(table)
-    const existingWrapper = table.closest<HTMLElement>('.site-table-scroll')
-    if (existingWrapper) {
-      replaceRenderedTableBreakTextNodes(table)
-      ensureRenderedTableExpandButton(existingWrapper, table)
-      return
-    }
-    const parent = table.parentElement
-    if (!parent) return
-    const wrapper = document.createElement('div')
-    wrapper.className = 'site-table-scroll'
-    parent.insertBefore(wrapper, table)
-    wrapper.appendChild(table)
-    table.classList.add('site-scrollable-table')
-    replaceRenderedTableBreakTextNodes(table)
-    ensureRenderedTableExpandButton(wrapper, table)
-  })
-}
-
-const onTaskListClick = (event: Event) => {
-  const input = (event.target as HTMLElement | null)?.closest('input[type="checkbox"]') as HTMLInputElement | null
-  if (!input || !previewElement.value?.contains(input)) return
-  event.stopPropagation()
-  if (!props.taskListEditable) {
-    event.preventDefault()
-    if (typeof (event as any).stopImmediatePropagation === 'function') (event as any).stopImmediatePropagation()
-    resetTaskCheckbox(input)
-    scheduleTaskListEnhance()
-  }
-}
-
-const onTaskListChange = async (event: Event) => {
-  const input = (event.target as HTMLElement | null)?.closest('input[type="checkbox"]') as HTMLInputElement | null
-  if (!input || !previewElement.value?.contains(input)) return
-  event.stopPropagation()
-  const taskIndex = taskIndexForInput(input)
-  if (!props.taskListEditable || taskIndex < 0) {
-    event.preventDefault()
-    resetTaskCheckbox(input, taskIndex)
-    scheduleTaskListEnhance()
-    return
-  }
-  const checked = input.checked
-  syncTaskListItemState(input)
-  await persistTaskListChange(input, taskIndex, checked)
-}
-
-const applyImageGrid = (keepImagesFullSize = false) => {
-  if (!previewElement.value) return;
-
-  previewElement.value.querySelectorAll('.image-grid, .single-media, .full-image-attachment').forEach((node) => {
-    const parent = node.parentElement
-    if (!parent) return
-    while (node.firstChild) {
-      parent.insertBefore(node.firstChild, node)
-    }
-    node.remove()
-  })
-  
-  const isMediaNode = (node: any): boolean => {
-    if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
-    const el = node as Element;
-    const tag = el.tagName.toLowerCase();
-    return tag === 'img' || 
-           tag === 'video' || 
-           el.classList.contains('video-wrapper') || 
-           (tag === 'a' && el.querySelector('img') !== null);
-  };
-
-  const isSingleMediaWrapper = (el: Element | null) => {
-    if (!el) return false
-    return el.classList.contains('single-media') && Array.from(el.children).some((child) => isMediaNode(child))
-  }
-
-  const fullSizeRenderSelector = [
-    '[data-render-source="xiaohongshu"]',
-    '[data-render-source="xhs"]',
-    '[data-render-source="rednote"]',
-    '.xiaohongshu-render',
-    '.xhs-render',
-    '.rednote-render',
-    '.xiaohongshu-render-image',
-    '.xhs-render-image',
-    '.rednote-render-image',
-  ].join(',')
-
-  const shouldKeepFullSizeImage = (el: Element | null) => !!el?.closest(fullSizeRenderSelector)
-
-  const getPlainImage = (node: HTMLElement): HTMLImageElement | null => {
-    if (node.closest('.github-card')) return null
-    if (shouldKeepFullSizeImage(node)) return null
-    const tagName = node.tagName.toLowerCase()
-    if (tagName === 'img') return node as HTMLImageElement
-    if (tagName === 'a' && !node.closest('.github-card, .video-wrapper, .douyin-video-wrapper')) {
-      const img = node.querySelector('img') as HTMLImageElement | null
-      if (shouldKeepFullSizeImage(img)) return null
-      return img
-    }
-    return null
-  }
-
-  const isPlainImageNode = (node: HTMLElement) => !!getPlainImage(node)
-
-  const ensureImageAnchor = (node: HTMLElement, group: string): HTMLElement => {
-    const img = getPlainImage(node)
-    if (!img) return node
-    const src = img.getAttribute('src') || img.currentSrc || img.src || ''
-    if (node.tagName.toLowerCase() === 'a') {
-      const anchor = node as HTMLAnchorElement
-      const href = anchor.getAttribute('href') || ''
-      if (!href || href === '#' || href.startsWith('javascript:')) anchor.setAttribute('href', src)
-      anchor.setAttribute('data-fancybox', group)
-      anchor.classList.add('inline-image-link')
-      return anchor
-    }
-    const anchor = document.createElement('a')
-    anchor.setAttribute('href', src)
-    anchor.setAttribute('data-fancybox', group)
-    anchor.className = 'inline-image-link'
-    anchor.appendChild(img)
-    return anchor
-  }
-
-  const isPureMediaParagraph = (p: Element) => {
-    const children = Array.from(p.childNodes);
-    if (children.length === 0) return false;
-    let hasMedia = false;
-    for (const child of children) {
-      const node = child as Node;
-      if (node.nodeType === Node.ELEMENT_NODE) {
-        if (isMediaNode(node)) {
-          hasMedia = true;
-          continue;
-        }
-        if ((node as Element).tagName.toLowerCase() === 'br') continue;
-        return false; 
-      } else if (node.nodeType === Node.TEXT_NODE) {
-        if ((node.textContent || '').trim() !== '') return false;
-      }
-    }
-    return hasMedia;
-  };
-
-  const areAdjacent = (a: Element, b: Element) => {
-     let next = a.nextSibling;
-     while (next && next !== b) {
-       if (next.nodeType === Node.ELEMENT_NODE) return false; 
-       if (next.nodeType === Node.TEXT_NODE) {
-         if ((next.textContent || '').trim() !== '') return false; 
-       }
-       next = next.nextSibling;
-     }
-     return next === b;
-  };
-
-  // 1. Identify Candidates
-  const allCandidates = Array.from(previewElement.value.querySelectorAll('p, img, a, video, .video-wrapper, .single-media')) as HTMLElement[];
-  const blocks: HTMLElement[] = [];
-  
-  for (const el of allCandidates) {
-     if (el.closest('.github-card')) continue;
-     const tag = el.tagName.toLowerCase();
-     if (tag === 'p') {
-       if (isPureMediaParagraph(el)) blocks.push(el);
-     } else if (tag === 'img') {
-       const parent = el.parentElement;
-       if (!parent) continue;
-       if (parent.tagName.toLowerCase() === 'p' && isPureMediaParagraph(parent)) continue;
-       if (parent.tagName.toLowerCase() === 'a') continue;
-       blocks.push(el);
-     } else if (tag === 'a') {
-       if (!el.querySelector('img')) continue;
-       const parent = el.parentElement;
-       if (!parent) continue;
-       if (parent.tagName.toLowerCase() === 'p' && isPureMediaParagraph(parent)) continue;
-       blocks.push(el);
-     } else if (isSingleMediaWrapper(el)) {
-       blocks.push(el)
-     } else {
-       const parent = el.parentElement;
-       if (parent && parent.tagName.toLowerCase() === 'p' && isPureMediaParagraph(parent)) continue;
-       if (tag === 'video' && parent && parent.classList.contains('video-wrapper')) continue;
-       blocks.push(el);
-     }
-  }
-
-  // 2. Group by Parent
-  const blocksByParent = new Map<HTMLElement, HTMLElement[]>();
-  for (const block of blocks) {
-     const parent = block.parentElement;
-     if (!parent) continue;
-     if (!blocksByParent.has(parent)) blocksByParent.set(parent, []);
-     blocksByParent.get(parent)!.push(block);
-  }
-
-  // 3. Process Runs
-  for (const [parent, children] of blocksByParent) {
-     const runs: HTMLElement[][] = [];
-     let current: HTMLElement[] = [];
-     for (const block of children) {
-        if (current.length === 0) {
-           current.push(block);
-        } else {
-           const last = current[current.length - 1];
-           if (areAdjacent(last, block)) {
-              current.push(block);
-           } else {
-              runs.push(current);
-              current = [block];
-           }
-        }
-     }
-     if (current.length > 0) runs.push(current);
-
-     for (const run of runs) {
-        const mediaItems: { node: HTMLElement }[] = [];
-        for (const block of run) {
-           if (block.tagName.toLowerCase() === 'p') {
-              block.childNodes.forEach((node) => {
-                 if (isMediaNode(node)) mediaItems.push({ node: node as HTMLElement });
-              });
-           } else if (isSingleMediaWrapper(block)) {
-             Array.from(block.children).forEach((node) => {
-               if (isMediaNode(node)) mediaItems.push({ node: node as HTMLElement })
-             })
-           } else {
-              mediaItems.push({ node: block });
-           }
-        }
-
-        if (keepImagesFullSize && mediaItems.length > 0 && mediaItems.every(({ node }) => isPlainImageNode(node))) {
-          const firstBlock = run[0]
-          const parentNode = firstBlock?.parentNode
-          if (parentNode) {
-            const group = `full-image-${Math.random().toString(36).slice(2)}`
-            const movedNodes = new Set(mediaItems.map(({ node }) => node))
-            const inserted = withStableInsertionPoint(parentNode, firstBlock, (insertionPoint) => {
-              for (const { node } of mediaItems) {
-                const wrapper = document.createElement('div')
-                wrapper.className = 'full-image-attachment'
-                parentNode.insertBefore(wrapper, insertionPoint)
-                wrapper.appendChild(ensureImageAnchor(node, group))
-              }
-            })
-            if (!inserted) continue
-            for (const block of run) {
-              if (movedNodes.has(block)) continue
-              if (block.parentNode) block.remove()
-            }
-          }
-          continue
-        }
-
-        if (mediaItems.length < 2) {
-          if (mediaItems.length === 1) {
-            const firstBlock = run[0]
-            const only = mediaItems[0]?.node
-            if (firstBlock?.parentNode && only) {
-              const isPlainImage = isPlainImageNode(only)
-              const wrapper = document.createElement('div')
-              wrapper.className = isPlainImage ? 'single-media inline-image-thumb' : 'single-media'
-              firstBlock.parentNode.insertBefore(wrapper, firstBlock)
-              wrapper.appendChild(isPlainImage ? ensureImageAnchor(only, 'inline-image') : only)
-
-              if (firstBlock.tagName.toLowerCase() === 'p') firstBlock.remove()
-
-              if (isPlainImage) continue
-
-              const applyPortrait = (w: number, h: number) => {
-                if (w > 0 && h > 0 && h > w) {
-                  wrapper.classList.add('ar-11')
-                  const tagName = (only as Element).tagName.toLowerCase()
-                  if (tagName === 'img') {
-                    const img = only as HTMLImageElement
-                    img.style.width = '100%'
-                    img.style.height = '100%'
-                    img.style.objectFit = 'contain'
-                  } else if (tagName === 'video') {
-                    const vid = only as HTMLVideoElement
-                    vid.style.width = '100%'
-                    vid.style.height = '100%'
-                    vid.style.objectFit = 'contain'
-                  } else if (tagName === 'a') {
-                    const img = (only as HTMLAnchorElement).querySelector('img') as HTMLImageElement | null
-                    if (img) {
-                      img.style.width = '100%'
-                      img.style.height = '100%'
-                      img.style.objectFit = 'contain'
-                    }
-                  }
-                }
-              }
-
-              const tagName = (only as Element).tagName.toLowerCase()
-              if (tagName === 'img') {
-                const img = only as HTMLImageElement
-                if (img.complete && img.naturalWidth && img.naturalHeight) applyPortrait(img.naturalWidth, img.naturalHeight)
-                else img.addEventListener('load', () => applyPortrait(img.naturalWidth, img.naturalHeight), { once: true })
-              } else if (tagName === 'a') {
-                const img = (only as HTMLAnchorElement).querySelector('img') as HTMLImageElement | null
-                if (img) {
-                  if (img.complete && img.naturalWidth && img.naturalHeight) applyPortrait(img.naturalWidth, img.naturalHeight)
-                  else img.addEventListener('load', () => applyPortrait(img.naturalWidth, img.naturalHeight), { once: true })
-                }
-              } else if (tagName === 'video') {
-                const vid = only as HTMLVideoElement
-                const runCheck = () => applyPortrait(vid.videoWidth, vid.videoHeight)
-                if (vid.readyState >= 1 && vid.videoWidth && vid.videoHeight) runCheck()
-                else vid.addEventListener('loadedmetadata', runCheck, { once: true })
-              }
-            }
-          }
-          continue
-        }
-
-        const grid = document.createElement('div');
-        const count = mediaItems.length;
-        const cols = count === 2 || count === 4 ? 2 : Math.min(3, count);
-        grid.className = `image-grid cols-${cols}`;
-        const group = `grid-${Math.random().toString(36).slice(2)}`;
-
-        const firstBlock = run[0];
-        if (firstBlock.parentNode) firstBlock.parentNode.insertBefore(grid, firstBlock);
-
-        for (const { node } of mediaItems) {
-           const item = document.createElement('div');
-           item.className = 'image-grid-item';
-           
-           const tagName = (node as Element).tagName.toLowerCase();
-           if (tagName === 'video') {
-               const vid = node as HTMLVideoElement;
-               vid.style.width = '100%';
-               vid.style.height = '100%';
-               vid.style.objectFit = 'cover';
-               item.appendChild(vid);
-            } else if ((node as Element).classList.contains('video-wrapper')) {
-               const wrapper = node as HTMLElement;
-               wrapper.style.width = '100%';
-               wrapper.style.height = '100%';
-               item.appendChild(wrapper);
-            } else if (tagName === 'a') {
-               const a = node as HTMLAnchorElement;
-               a.setAttribute('data-fancybox', group);
-               const img = a.querySelector('img');
-               if (img && !a.getAttribute('href')) a.setAttribute('href', img.src);
-               item.appendChild(a);
-            } else if (tagName === 'img') {
-               const img = node as HTMLImageElement;
-               const a = document.createElement('a');
-               a.setAttribute('href', img.src);
-               a.setAttribute('data-fancybox', group);
-               a.appendChild(img);
-               item.appendChild(a);
-            }
-            grid.appendChild(item);
-         }
- 
-         for (const block of run) {
-            if (block.tagName.toLowerCase() === 'p' || isSingleMediaWrapper(block)) block.remove();
-         }
- 
-         const updateGridUniformity = () => {
-           const items = Array.from(grid.querySelectorAll('.image-grid-item')) as HTMLElement[];
-           let landscapeCount = 0;
-           let portraitCount = 0;
-           let squareCount = 0;
-
-           items.forEach(item => {
-             const img = item.querySelector('img');
-             const vid = item.querySelector('video');
-             const wrapper = item.querySelector('.video-wrapper');
-             
-             if (wrapper) {
-               landscapeCount++;
-             } else if (img) {
-               if (img.complete && img.naturalWidth) {
-                 const r = img.naturalWidth / img.naturalHeight;
-                 if (Math.abs(r - 1) < 0.15) squareCount++; // 宽松判定方形
-                 else if (r > 1) landscapeCount++;
-                 else portraitCount++;
-               }
-             } else if (vid) {
-               if (vid.readyState >= 1) {
-                 const r = vid.videoWidth / vid.videoHeight;
-                 if (Math.abs(r - 1) < 0.15) squareCount++;
-                 else if (r > 1) landscapeCount++;
-                 else portraitCount++;
-               }
-             }
-           });
-
-           let targetClass = 'ar-11'; 
-           const typesPresent = [landscapeCount > 0, portraitCount > 0, squareCount > 0].filter(Boolean).length;
-           
-           if (typesPresent > 1) {
-             targetClass = 'ar-11'; // 混合类型强制方形，确保对齐
-           } else if (landscapeCount > 0) {
-             targetClass = 'ar-169';
-           } else if (portraitCount > 0) {
-             targetClass = 'ar-34';
-           } else if (squareCount > 0) {
-             targetClass = 'ar-11';
-           } else {
-             targetClass = 'ar-169'; // 默认
-           }
-           
-           items.forEach(item => {
-             item.classList.remove('ar-169', 'ar-34', 'ar-11');
-             item.classList.add(targetClass);
-           });
-         };
-
-         grid.querySelectorAll('img').forEach((imgEl) => {
-           const img = imgEl as HTMLImageElement;
-           if (img.complete) updateGridUniformity();
-           else img.addEventListener('load', updateGridUniformity);
-         });
- 
-         grid.querySelectorAll('video').forEach((vidEl) => {
-           const vid = vidEl as HTMLVideoElement;
-           if (vid.readyState >= 1) updateGridUniformity();
-           else vid.addEventListener('loadedmetadata', updateGridUniformity);
-         });
-
-         grid.querySelectorAll('.video-wrapper').forEach(() => {
-           updateGridUniformity();
-         });
-         
-         // 初始执行一次
-         updateGridUniformity();
-     }
-  }
-};
-
-
-const applyImageLoadingPlaceholders = () => {
-  if (!previewElement.value) return;
-  const imgs = Array.from(previewElement.value.querySelectorAll('img')) as HTMLImageElement[];
-  imgs.forEach((img) => {
-    if (img.closest('.github-card')) return;
-    if (img.dataset.siteAttachmentKind) return;
-    const container = (img.closest('.image-grid-item') || img.parentElement || previewElement.value) as HTMLElement;
-    const needPlaceholder = !img.complete || !(img.naturalWidth && img.naturalHeight);
-    if (!needPlaceholder) return;
-    const ph = document.createElement('div');
-    ph.className = 'image-loading-placeholder';
-    ph.textContent = '图片正在加载中，请稍后';
-    const ref = img.closest('.image-grid-item') ? (img.closest('.image-grid-item') as HTMLElement).firstChild : img;
-    container.insertBefore(ph, ref as Node);
-    img.style.opacity = '0';
-    const onLoad = () => {
-      img.style.opacity = '1';
-      ph.remove();
-    };
-    const onError = () => {
-      ph.textContent = '图片加载失败';
-      ph.classList.add('image-loading-error');
-      img.style.display = 'none';
-    };
-    img.addEventListener('load', onLoad, { once: true });
-    img.addEventListener('error', onError, { once: true });
-  });
-};
-
-
+const renderedTables = createRenderedTableDialog({
+  root: () => previewElement.value,
+  enhance: (root) => {
+    if (props.enableGithubCard) void enhanceGitHubCards(root)
+    enhanceAttachmentAudioPlayers(root)
+    applyDeletedAttachmentPlaceholders(root, String(BASE_API || '/api'))
+    initializeMediaViewer(root)
+  },
+  cleanup: (root) => {
+    unbindMediaFancybox(root)
+    destroyAttachmentAudioPlayers(root)
+  },
+})
+const {
+  body: renderedTableExpandBody,
+  visible: showRenderedTableExpandDialog,
+  closing: renderedTableExpandClosing,
+  html: renderedTableExpandHtml,
+  dark: renderedTableExpandDark,
+  close: closeRenderedTableExpand,
+} = renderedTables
 const buildYouTubeEmbedHtml = (videoId: string) => {
   const watchUrl = `https://www.youtube.com/watch?v=${videoId}`
   return `<div class='video-block youtube-video-block'><div class='video-wrapper youtube-video-wrapper'><iframe src='https://www.youtube.com/embed/${videoId}' title='YouTube video player' frameborder='0' allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture' allowfullscreen></iframe></div><div class='video-fallback-card youtube-fallback-card'><div class='video-fallback-content'><div class='video-fallback-title'>当前网络若无法加载 YouTube，可直接访问：</div><a class='video-fallback-link' href='${watchUrl}' target='_blank' rel='noopener noreferrer'>${watchUrl}</a></div></div></div>`
@@ -1294,291 +346,6 @@ const buildBilibiliEmbedHtml = (bvid: string, page?: string) => {
   const p = String(page || '1').trim() || '1'
   const src = `https://player.bilibili.com/player.html?isOutside=true&bvid=${encodeURIComponent(bv)}&p=${encodeURIComponent(p)}&autoplay=0&high_quality=1&danmaku=0&muted=0`
   return `<div class='video-wrapper'><iframe src='${src}' scrolling='no' frameborder='0' allowfullscreen allow='autoplay; fullscreen; picture-in-picture; encrypted-media' referrerpolicy='no-referrer-when-downgrade' loading='lazy'></iframe></div>`
-}
-
-const escapeHtml = (value: string) => String(value || '')
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
-  .replace(/'/g, '&#39;')
-
-const ATTACHMENT_LINK_REG = /\[(图片附件|视频附件|音频附件)：([^\]]+)\]\(([^)\s]+)\)/g
-type AttachmentKind = AttachmentFailureKind
-
-const attachmentKindFromLabel = (label: string): AttachmentKind => {
-  if (label === '图片附件') return 'image'
-  if (label === '视频附件') return 'video'
-  if (label === '音频附件') return 'audio'
-  return 'file'
-}
-
-
-const mediaPathFromUrl = (url: string) => {
-  const raw = String(url || '').trim()
-  if (!raw) return ''
-  try {
-    return decodeURIComponent(new URL(raw, typeof window !== 'undefined' ? window.location.href : 'http://local').pathname)
-  } catch {
-    try { return decodeURIComponent(raw.split(/[?#]/)[0]) } catch { return raw.split(/[?#]/)[0] }
-  }
-}
-
-const mediaFileNameFromUrl = (url: string) => mediaPathFromUrl(url).split('/').filter(Boolean).pop() || ''
-const RECORDING_NAME_RE = /录音|(^|[-_\s.])(recording|voice|memo|capture)([-_\s.]|$)/i
-const AUDIO_MEDIA_EXT_RE = /\.(webm|ogg|mp3|m4a|wav|flac)(?:[?#].*)?$/i
-const VIDEO_MEDIA_EXT_RE = /\.(mp4|webm|mov|avi)(?:[?#].*)?$/i
-
-const isLikelyRecordingAttachment = (name: string, url: string) => {
-  const source = `${String(name || '')} ${mediaFileNameFromUrl(url)}`
-  return RECORDING_NAME_RE.test(source)
-}
-
-const isAudioAttachmentUrl = (url: string, name = '') => {
-  const path = mediaPathFromUrl(url).toLowerCase()
-  if (path.includes('/api/audio/')) return true
-  if (path.includes('/api/video/')) return isLikelyRecordingAttachment(name, url)
-  return AUDIO_MEDIA_EXT_RE.test(path)
-}
-
-const isVideoAttachmentUrl = (url: string, name = '') => {
-  const path = mediaPathFromUrl(url).toLowerCase()
-  if (isAudioAttachmentUrl(url, name)) return false
-  if (path.includes('/api/video/') || path.includes('/video/')) return VIDEO_MEDIA_EXT_RE.test(path)
-  return /\.(mp4|mov|avi)(?:[?#].*)?$/i.test(path)
-}
-
-const attachmentExtensionLabel = (name: string, url: string) => {
-  const source = String(name || url || '').split(/[?#]/)[0]
-  const decoded = (() => {
-    try { return decodeURIComponent(source) } catch { return source }
-  })()
-  const match = decoded.match(/\.([a-z0-9]{1,12})$/i)
-  return match ? match[1].toUpperCase() : 'FILE'
-}
-
-const buildAttachmentHtml = (kindLabel: string, name: string, rawUrl: string) => {
-  const url = resolveManagedAttachmentURL(String(BASE_API || '/api'), String(rawUrl || '').trim())
-  const safeUrl = escapeHtml(url)
-  const safeName = escapeHtml(String(name || '').trim() || '未命名附件')
-  const labeledKind = attachmentKindFromLabel(kindLabel)
-  const kind = labeledKind === 'video' && isAudioAttachmentUrl(url, name) ? 'audio' : labeledKind
-  if (!url) return ''
-  if (kind === 'image') {
-    return `<p class="site-attachment-paragraph" data-site-attachment-kind="${kind}" data-site-attachment-url="${safeUrl}"><img class="site-attachment-image" src="${safeUrl}" alt="${safeName}" loading="lazy" decoding="async" data-site-attachment-kind="${kind}" data-site-attachment-url="${safeUrl}" /></p>`
-  }
-  if (kind === 'video') {
-    return `<div class="site-attachment-render site-attachment-render--video" data-site-attachment-kind="${kind}" data-site-attachment-url="${safeUrl}"><video src="${safeUrl}" controls preload="metadata" style="width:100%;height:auto" data-site-attachment-kind="${kind}" data-site-attachment-url="${safeUrl}"></video></div>`
-  }
-  if (kind === 'file') {
-    const canPreview = isBrowserPreviewableAttachmentUrl(url)
-    const previewAttrs = canPreview
-      ? 'target="_blank" rel="noopener noreferrer"'
-      : `download="${safeName}"`
-    const actionLabel = canPreview ? '打开附件' : '下载附件'
-    const meta = escapeHtml(attachmentExtensionLabel(name, url))
-    const actionClass = canPreview ? 'site-attachment-file__action--preview' : 'site-attachment-file__action--download'
-    return `<a class="site-attachment-file ${canPreview ? 'site-attachment-file--preview' : 'site-attachment-file--download'}" href="${safeUrl}" ${previewAttrs} aria-label="${actionLabel}：${safeName}" data-site-attachment-kind="${kind}" data-site-attachment-url="${safeUrl}"><span class="site-attachment-file__icon" aria-hidden="true"></span><span class="site-attachment-file__body"><span class="site-attachment-file__name">${safeName}</span><span class="site-attachment-file__meta">${meta}</span></span><span class="site-attachment-file__action ${actionClass}" aria-hidden="true"></span></a>`
-  }
-  return buildAttachmentAudioPlaceholderHtml({ src: url, name })
-}
-
-const buildDeletedAttachmentHtml = (kind: AttachmentKind, deleted: boolean) => {
-  const title = escapeHtml(attachmentFailureTitle(kind))
-  const detail = escapeHtml(attachmentFailureDetail(kind, deleted))
-  return `<div class="site-attachment-file site-attachment-file--deleted site-attachment-file--deleted-${kind}" role="note" aria-label="${title}：${detail}"><span class="site-attachment-file__icon" aria-hidden="true"></span><span class="site-attachment-file__body"><span class="site-attachment-file__name">${title}</span><span class="site-attachment-file__meta">${detail}</span></span><span class="site-attachment-file__action site-attachment-file__action--deleted" aria-hidden="true"></span></div>`
-}
-
-const attachmentInfoFromRenderedAnchor = (anchor: HTMLAnchorElement) => {
-  const label = (anchor.textContent || '').trim()
-  const match = label.match(/^(图片附件|视频附件|音频附件)：(.+)$/)
-  const href = anchor.getAttribute('href') || ''
-  const fileMatch = label.match(/^文件附件：(.+)$/)
-  if (fileMatch && href) return { kindLabel: '文件附件', name: fileMatch[1], url: href }
-  if (!match || !href) return null
-  return { kindLabel: match[1], name: match[2], url: href }
-}
-
-const applyAttachmentRenders = () => {
-  const root = previewElement.value
-  if (!root) return
-  root.querySelectorAll<HTMLAnchorElement>('a[href]').forEach((anchor) => {
-    const info = attachmentInfoFromRenderedAnchor(anchor)
-    if (!info) return
-    const { kindLabel, name, url } = info
-    replaceNodeWithHtml(anchor, buildAttachmentHtml(kindLabel, name, url))
-  })
-}
-
-const replaceNodeWithHtml = (node: HTMLElement, html: string) => {
-  const holder = document.createElement('div')
-  holder.innerHTML = html
-  const next = holder.firstElementChild as HTMLElement | null
-  if (!next) return
-  const parent = node.parentElement
-  if (parent && parent.tagName.toLowerCase() === 'p' && parent.childNodes.length === 1) {
-    parent.replaceWith(next)
-    return
-  }
-  node.replaceWith(next)
-}
-
-const deletedAttachmentProbeCache = new Map<string, Promise<boolean>>()
-
-const canProbeAttachmentUrl = (url: string) => {
-  if (typeof window === 'undefined' || !isManagedAttachmentURL(url)) return false
-  try {
-    const parsed = new URL(url, window.location.href)
-    const trustedAttachmentOrigins = new Set([window.location.origin])
-    trustedAttachmentOrigins.add(new URL(String(BASE_API || '/api'), window.location.origin).origin)
-    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && trustedAttachmentOrigins.has(parsed.origin)
-  } catch {
-    return false
-  }
-}
-
-const isDeletedAttachmentStatus = (status: number) => status === 404 || status === 410
-
-const probeAttachmentDeleted = (url: string) => {
-  const raw = String(url || '').trim()
-  if (!raw || !canProbeAttachmentUrl(raw)) return Promise.resolve(false)
-  const key = new URL(raw, window.location.href).toString()
-  const existing = deletedAttachmentProbeCache.get(key)
-  if (existing) return existing
-
-  const promise = (async () => {
-    try {
-      const head = await fetch(key, { method: 'HEAD', cache: 'no-store', credentials: 'include' })
-      if (isDeletedAttachmentStatus(head.status)) return true
-      if (head.status !== 405 && head.status !== 501) return false
-      const partial = await fetch(key, {
-        method: 'GET',
-        headers: { Range: 'bytes=0-0' },
-        cache: 'no-store',
-        credentials: 'include',
-      })
-      return isDeletedAttachmentStatus(partial.status)
-    } catch {
-      return false
-    }
-  })()
-  promise.then((deleted) => {
-    if (!deleted && deletedAttachmentProbeCache.get(key) === promise) {
-      deletedAttachmentProbeCache.delete(key)
-    }
-  })
-  deletedAttachmentProbeCache.set(key, promise)
-  return promise
-}
-
-// 失败占位块会直接接管媒体包装层，而这些类只为"能正常显示的媒体"服务：
-// inline-image-thumb 固定 96px 见方，ar-* 强制宽高比，两者都会把占位块的图标+双行文案裁掉。
-// 占位块不是缩略图，所以接管时必须先卸掉这套几何，否则它拿不到自己的 min-height。
-const MEDIA_GEOMETRY_CLASSES = ['inline-image-thumb', 'ar-11', 'ar-169', 'ar-34'] as const
-
-const attachmentReplacementTarget = (node: HTMLElement, kind: AttachmentKind) => {
-  if (kind === 'image') {
-    return (node.closest('.site-attachment-paragraph') || node.closest('.image-grid-item') || node.closest('.single-media') || node.closest('.full-image-attachment') || node) as HTMLElement
-  }
-  if (kind === 'video') {
-    return (node.closest('.site-attachment-render') || node.closest('.image-grid-item') || node.closest('.single-media') || node) as HTMLElement
-  }
-  if (kind === 'audio') {
-    return (node.closest('.site-attachment-audio') || node.closest('.single-media') || node) as HTMLElement
-  }
-  return (node.closest('.site-attachment-file') || node) as HTMLElement
-}
-
-const videoPosterForFailure = (node: HTMLElement, url: string) => {
-  if (!(node instanceof HTMLVideoElement)) return ''
-  return [
-    node.getAttribute('poster'),
-    node.poster,
-    node.parentElement?.dataset.poster,
-    node.parentElement?.dataset.thumbSrc,
-    getVideoPlaybackFrameForSource(url),
-  ].map((value) => String(value || '').trim()).find(Boolean) || ''
-}
-
-const buildMediaAttachmentFailureContent = (kind: 'image' | 'video', deleted: boolean, poster = '') => {
-  const title = escapeHtml(attachmentFailureTitle(kind))
-  const detail = escapeHtml(attachmentFailureDetail(kind, deleted))
-  const posterHtml = poster
-    ? `<img class="site-attachment-failure__poster" src="${escapeHtml(poster)}" alt="" aria-hidden="true" />`
-    : ''
-  return `${posterHtml}<span class="site-attachment-failure__scrim" aria-hidden="true"></span><span class="site-attachment-failure__content"><span class="site-attachment-failure__icon" aria-hidden="true"></span><strong class="site-attachment-failure__title">${title}</strong><span class="site-attachment-failure__detail">${detail}</span></span>`
-}
-
-const renderMediaAttachmentFailure = (node: HTMLElement, kind: 'image' | 'video', deleted: boolean, url: string) => {
-  let target = attachmentReplacementTarget(node, kind)
-  if (target instanceof HTMLImageElement || target instanceof HTMLVideoElement || target instanceof HTMLAudioElement) {
-    const replacement = document.createElement('div')
-    replacement.className = kind === 'video' ? 'site-attachment-render site-attachment-render--video' : 'site-attachment-paragraph'
-    target.replaceWith(replacement)
-    target = replacement
-  }
-
-  const poster = kind === 'video' ? videoPosterForFailure(node, url) : ''
-  const title = attachmentFailureTitle(kind)
-  const detail = attachmentFailureDetail(kind, deleted)
-  target.classList.remove(...MEDIA_GEOMETRY_CLASSES)
-  target.classList.add('site-attachment-failure', `site-attachment-failure--${kind}`)
-  target.classList.toggle('site-attachment-failure--with-poster', !!poster)
-  target.setAttribute('role', 'note')
-  target.setAttribute('aria-label', `${title}：${detail}`)
-  target.innerHTML = buildMediaAttachmentFailureContent(kind, deleted, poster)
-
-  const posterImage = target.querySelector<HTMLImageElement>('.site-attachment-failure__poster')
-  if (posterImage) {
-    const discardBrokenPoster = () => {
-      posterImage.remove()
-      target.classList.remove('site-attachment-failure--with-poster')
-    }
-    posterImage.addEventListener('error', discardBrokenPoster, { once: true })
-    if (posterImage.complete && !posterImage.naturalWidth) discardBrokenPoster()
-  }
-}
-
-const renderAttachmentFailure = (node: HTMLElement, kind: AttachmentKind, deleted: boolean, url: string) => {
-  const target = attachmentReplacementTarget(node, kind)
-  if (!target || target.classList.contains('site-attachment-file--deleted') || target.classList.contains('site-attachment-failure')) return
-  if (kind === 'image' || kind === 'video') {
-    renderMediaAttachmentFailure(node, kind, deleted, url)
-    return
-  }
-  replaceNodeWithHtml(target, buildDeletedAttachmentHtml(kind, deleted))
-}
-
-const applyDeletedAttachmentPlaceholders = (customRoot?: HTMLElement | null) => {
-  const root = customRoot || previewElement.value
-  if (!root) return
-  const nodes = Array.from(root.querySelectorAll<HTMLElement>(
-    '[data-site-attachment-kind][data-site-attachment-url]'
-  ))
-
-  nodes.forEach((node) => {
-    if (node.closest('.site-attachment-file--deleted')) return
-    const kind = String(node.dataset.siteAttachmentKind || 'file') as AttachmentKind
-    const url = String(node.dataset.siteAttachmentUrl || '')
-    if (!['image', 'video', 'audio', 'file'].includes(kind) || !url) return
-
-    if (node.dataset.siteDeletedAttachmentBound !== 'true') {
-      node.dataset.siteDeletedAttachmentBound = 'true'
-      if (node instanceof HTMLImageElement || node instanceof HTMLVideoElement || node instanceof HTMLAudioElement) {
-        node.addEventListener('error', () => renderAttachmentFailure(node, kind, false, url), { once: true })
-      }
-    }
-
-    if (node instanceof HTMLImageElement && node.complete && !node.naturalWidth) {
-      renderAttachmentFailure(node, kind, false, url)
-      return
-    }
-
-    void probeAttachmentDeleted(url).then((deleted) => {
-      if (!deleted || !node.isConnected || !root.contains(node)) return
-      renderAttachmentFailure(node, kind, true, url)
-    })
-  })
 }
 
 const processMediaLinks = (content: string): string => {
@@ -1618,7 +385,7 @@ const processMediaLinks = (content: string): string => {
   const VIDEO_FILE_REG = /(^|[\s>])((?:https?:\/\/|\/api\/video\/|\/video\/)[^\s<"']+\.(?:mp4|webm|mov|avi)(?:\?[^\s<"']*)?)/g;
   content = content.replace(VIDEO_FILE_REG, (_m, prefix, videoUrl) => {
     const src = resolveImageUrl(videoUrl);
-    const safeSrc = escapeHtml(src)
+    const safeSrc = escapeRenderedHtml(src)
     if (isAudioAttachmentUrl(src)) {
       return `${prefix}${buildAttachmentAudioPlaceholderHtml({ src })}`;
     }
@@ -1834,7 +601,7 @@ const renderMarkdown = async (markdown: string) => {
             void enhanceGitHubCards(previewElement.value).then(() => emit('rendered'))
           }
           markMarkdownPreservedBlankLineElements(previewElement.value)
-          applyAttachmentRenders()
+          applyAttachmentRenders(previewElement.value, String(BASE_API || '/api'))
           applyThemeClass();
           const anchors = previewElement.value?.querySelectorAll<HTMLAnchorElement>('a[href]') || [];
           anchors.forEach((a: HTMLAnchorElement) => {
@@ -1861,10 +628,10 @@ const renderMarkdown = async (markdown: string) => {
           await enhanceDouyinShortLinks()
           applyDouyinVideoLayout()
           applyClickableTags()
-          enableRenderedTaskLists()
-          enhanceRenderedTables()
+          taskLists.update()
+          renderedTables.update()
           await nextTick()
-          scheduleTaskListEnhance()
+          taskLists.update()
           
           // Explicitly handle existing video tags (e.g. from raw HTML or markdown)
           const existingVideos = Array.from(previewElement.value?.querySelectorAll('video') || []) as HTMLVideoElement[];
@@ -1905,15 +672,15 @@ const renderMarkdown = async (markdown: string) => {
           });
 
           if (previewElement.value) enhanceAttachmentAudioPlayers(previewElement.value)
-          applyDeletedAttachmentPlaceholders();
-          applyImageGrid(keepImagesFullSize);
+          applyDeletedAttachmentPlaceholders(previewElement.value, String(BASE_API || '/api'));
+          applyRenderedMediaLayout(previewElement.value, keepImagesFullSize);
           applyDouyinVideoLayout()
           setTimeout(() => {
             applyDouyinVideoLayout()
           }, 80)
           initializeMediaViewer();
           if (previewElement.value) void enhanceMetingPlayers(previewElement.value)
-          applyImageLoadingPlaceholders();
+          applyImageLoadingPlaceholders(previewElement.value);
           emit('rendered');
           const proc = (window as any).processNMPv2Shortcodes
           if (proc && previewElement.value) {
@@ -1942,7 +709,7 @@ watch(
 
 watch(
   () => props.taskListEditable,
-  () => scheduleTaskListEnhance()
+  () => taskLists.update()
 );
 
 onMounted(() => {
@@ -1953,20 +720,10 @@ onMounted(() => {
     themeClassObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
   } catch {}
   previewElement.value?.addEventListener('click', onPreviewClick)
-  previewElement.value?.addEventListener('click', onTaskListClick, true)
-  previewElement.value?.addEventListener('change', onTaskListChange, true)
-  try {
-    if (previewElement.value) {
-      taskListObserver = new MutationObserver(() => scheduleTaskListEnhance())
-      taskListObserver.observe(previewElement.value, {
-        childList: true,
-        subtree: true,
-      })
-    }
-  } catch {}
+  taskLists.mount()
+  renderedTables.mount()
   try {
     window.addEventListener('resize', applyDouyinVideoLayout, { passive: true })
-    window.addEventListener('resize', onRenderedTableExpandViewportResize, { passive: true })
   } catch {}
 });
 
@@ -1975,38 +732,19 @@ onBeforeUnmount(() => {
   renderSequence++
   if (previewElement.value) unbindMediaFancybox(previewElement.value)
   if (previewElement.value) destroyAttachmentAudioPlayers(previewElement.value)
-  if (renderedTableExpandBody.value) destroyAttachmentAudioPlayers(renderedTableExpandBody.value)
   if (zoom) {
     zoom.detach();
     zoom = null;
   }
   previewElement.value?.removeEventListener('click', onPreviewClick)
-  previewElement.value?.removeEventListener('click', onTaskListClick, true)
-  previewElement.value?.removeEventListener('change', onTaskListChange, true)
-  if (taskListEnhanceTimer) {
-    clearTimeout(taskListEnhanceTimer)
-    taskListEnhanceTimer = null
-  }
-  if (renderedTableExpandCloseTimer) {
-    clearTimeout(renderedTableExpandCloseTimer)
-    renderedTableExpandCloseTimer = null
-  }
+  taskLists.dispose()
+  renderedTables.dispose()
   try {
     window.removeEventListener('resize', applyDouyinVideoLayout)
-    window.removeEventListener('resize', onRenderedTableExpandViewportResize)
   } catch {}
-  stopRenderedTableResize()
-  if (renderedTableScrollOverflowFrame !== null) {
-    window.cancelAnimationFrame(renderedTableScrollOverflowFrame)
-    renderedTableScrollOverflowFrame = null
-  }
   if (themeClassObserver) {
     themeClassObserver.disconnect()
     themeClassObserver = null
-  }
-  if (taskListObserver) {
-    taskListObserver.disconnect()
-    taskListObserver = null
   }
 });
 

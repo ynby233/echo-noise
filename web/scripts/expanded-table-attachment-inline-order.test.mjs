@@ -1,9 +1,10 @@
+import { readEditorSource } from './editor-source.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 
 const editorPath = fileURLToPath(new URL('../components/index/VditorEditor.vue', import.meta.url))
-const editor = await readFile(editorPath, 'utf8')
+const editor = readEditorSource()
 
 const sliceBetween = (source, startMarker, endMarker) => {
   const start = source.indexOf(startMarker)

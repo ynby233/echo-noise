@@ -1,3 +1,4 @@
+import { readEditorSource } from './editor-source.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
@@ -5,8 +6,11 @@ import { fileURLToPath } from 'node:url'
 
 const webRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const repoRoot = dirname(webRoot)
-const renderer = await readFile(join(webRoot, 'components/index/MarkdownRenderer.vue'), 'utf8')
-const editor = await readFile(join(webRoot, 'components/index/VditorEditor.vue'), 'utf8')
+const renderer = [
+  await readFile(join(webRoot, 'components/index/MarkdownRenderer.vue'), 'utf8'),
+  await readFile(join(webRoot, 'utils/rendered-attachment.ts'), 'utf8'),
+].join('\n')
+const editor = readEditorSource()
 const previewPolicy = await readFile(join(webRoot, 'utils/attachment-preview.ts'), 'utf8')
 const attachmentSecurity = await readFile(join(repoRoot, 'internal/controllers/attachment_security.go'), 'utf8')
 
@@ -58,8 +62,8 @@ for (const url of ['/api/files/page.html', '/api/files/vector.svg', '/api/files/
 }
 
 assert.ok(
-  renderer.includes("import { isBrowserPreviewableAttachmentUrl } from '~/utils/attachment-preview'") &&
-    editor.includes("import { isBrowserPreviewableAttachmentUrl } from '~/utils/attachment-preview'") &&
+  /import \{ isBrowserPreviewableAttachmentUrl \} from ['"](?:~\/utils\/|\.\/)attachment-preview['"]/.test(renderer) &&
+    editor.includes("import { isBrowserPreviewableAttachmentUrl } from './attachment-preview'") &&
     !renderer.includes('const browserPreviewableAttachmentUrl') &&
     !editor.includes('const browserPreviewableAttachmentUrl'),
   'published notes and the editor must share one preview policy instead of drifting local extension lists',

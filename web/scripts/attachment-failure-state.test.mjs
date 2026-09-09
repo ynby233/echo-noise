@@ -4,8 +4,13 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const webRoot = dirname(dirname(fileURLToPath(import.meta.url)))
-const renderer = await readFile(join(webRoot, 'components/index/MarkdownRenderer.vue'), 'utf8')
-const messageList = await readFile(join(webRoot, 'components/index/MessageList.vue'), 'utf8')
+const renderer = [
+  await readFile(join(webRoot, 'components/index/MarkdownRenderer.vue'), 'utf8'),
+  await readFile(join(webRoot, 'utils/rendered-attachment.ts'), 'utf8'),
+  await readFile(join(webRoot, 'utils/rendered-media-layout.ts'), 'utf8'),
+].join('\n')
+const messageList = (await Promise.all(['components/index/MessageList.vue', 'utils/message-content-layout.ts'].map(path => readFile(join(webRoot, path), 'utf8')))).join('\n')
+const editDialog = await readFile(join(webRoot, 'components/index/MessageEditDialog.vue'), 'utf8')
 const sharedCss = await readFile(join(webRoot, 'assets/css/attachment-failure.css'), 'utf8')
 const sharedCopy = await readFile(join(webRoot, 'utils/attachment-failure.ts'), 'utf8')
 const nuxtConfig = await readFile(join(webRoot, 'nuxt.config.ts'), 'utf8')
@@ -103,7 +108,7 @@ assert.match(
 
 assert.match(
   renderer,
-  /import \{ attachmentFailureDetail, attachmentFailureTitle, type AttachmentFailureKind \} from '~\/utils\/attachment-failure'/,
+  /import \{ attachmentFailureDetail, attachmentFailureTitle, type AttachmentFailureKind \} from ['"](?:~\/utils\/|\.\/)attachment-failure['"]/,
   'the Markdown renderer must consume the shared failure wording instead of redefining it',
 )
 
@@ -165,18 +170,18 @@ assert.match(
 )
 
 assert.match(
-  messageList,
+  editDialog,
   /'edit-preview-surface--shadow-open': editPreviewHasAttachmentCard/,
   'the edit preview must switch out of its scroll-clipping box when the draft contains attachment cards',
 )
 
 assert.match(
-  messageList,
+  editDialog,
   /const editPreviewHasAttachmentCard = computed\(\(\) => EDIT_ATTACHMENT_MARKER_RE\.test\(editingContent\.value\)\)/,
   'the edit preview attachment check must derive from the draft content itself rather than a DOM probe',
 )
 
-const editPreviewShadowCss = messageList.match(/\.edit-preview-surface--shadow-open \{[\s\S]*?\n\}/)?.[0] || ''
+const editPreviewShadowCss = editDialog.match(/\.edit-preview-surface--shadow-open \{[\s\S]*?\n\}/)?.[0] || ''
 
 assert.ok(
   editPreviewShadowCss.includes('overflow: visible;') &&
@@ -187,7 +192,7 @@ assert.ok(
 
 assert.match(
   messageList,
-  /querySelector\('\.site-attachment-file, \.site-attachment-audio, \.site-attachment-failure, \.github-card'\)/,
+  /querySelector\(\s*'\.site-attachment-file, \.site-attachment-audio, \.site-attachment-failure, \.github-card',?\s*\)/,
   'failed image and video placeholders must open the message overflow path so their card shadows are not clipped',
 )
 
@@ -220,7 +225,7 @@ assert.match(
 
 assert.match(
   messageList,
-  /const isFileAttachmentShadowClipped = \(msgId: number\) => \{\s*\n\s*return !!hasFileAttachment\.value\[msgId\] && !!shouldShowExpandButton\.value\[msgId\] && !isExpanded\.value\[msgId\];/,
+  /const isAttachmentShadowClipped = \(messageId: number\) => \(\s*!!hasFileAttachment\.value\[messageId\] && !!showExpandButton\.value\[messageId\] && !expanded\.value\[messageId\]/,
   'the collapsed-and-clipped case must be derived on its own, it is exactly the inverse of the already-open shadow case',
 )
 

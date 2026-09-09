@@ -756,19 +756,19 @@ docker run -d \
   - StorageAutoSyncEnabled 、 StorageSyncMode 、 StorageSyncIntervalMinute 、 StorageLastSyncTime
   - 位置： internal/models/models.go:120-144 附近
 - 配置读写支持上述字段：
-  - 返回前端： internal/services/setting_service.go:85-106 的 storageConfig 中增加了 autoSyncEnabled/syncMode/syncIntervalMinute/lastSyncTime
-  - 保存更新： internal/services/setting_service.go:342-369 完成解析与赋值
+  - 返回前端：`internal/services/frontend_config_read_service.go` 的 `storageConfig` 增加了 `autoSyncEnabled`、`syncMode`、`syncIntervalMinute`、`lastSyncTime`
+  - 保存更新：`internal/services/frontend_config_write_service.go` 完成解析与赋值
 - 同步管理器：
   - 包路径： internal/syncmanager/auto_sync.go:1-135
   - 即时模式：防抖 15 秒触发云端备份上传
   - 定时模式：按 StorageSyncIntervalMinute 启动 goroutine 周期任务
   - 同步逻辑：打包 backup.zip （含 database.db 、 images/ 、 video/ ），用后端预签名上传至 R2/S3，并记录 StorageLastSyncTime
-  - 配置变更后自动重新应用： internal/services/setting_service.go:433-436
+  - 配置变更后自动重新应用：`internal/services/frontend_config_write_service.go` 调用 `syncmanager.Configure`
 - 立即同步接口与路由：
   - 控制器： internal/controllers/backup.go:379-401 新增 HandleBackupSyncNow
   - 路由： internal/routers/routers.go:156-158 增加 POST /api/backup/storage/sync-now
 - 即时模式触发点：
-  - 发布与更新消息后触发同步防抖： internal/controllers/controllers.go:793-794、1410-1412
+  - 发布与更新消息后触发同步防抖： `internal/controllers/message_mutation_controller.go`
 - 前端操作：
   - 打开“云存储接入（R2/S3）”
   - 启用“云存储接入”开关并填写 provider/endpoint/region/bucket/accessKey/secretKey/publicBaseURL
@@ -2100,7 +2100,7 @@ isSuspiciousPath() 里的任意一条规则，就会：
 
 👉如何自定义化前端数据后添加到数据库？
 
-需要在setting.go、migrate.go、models.go、controllers.go同时写入前端参数的后端定义，并修改前端参数信息为后端可读取的参数，其中controllers.go为控制器
+需要在 `setting.go`、`migrate.go`、`models.go`、`setting_controller.go` 同时写入前端参数的后端定义，并修改前端参数信息为后端可读取的参数，其中 `setting_controller.go` 为设置控制器。
 
 - database.go 用于数据库连接管理
 - migrate.go 用于数据库迁移和数据初始化

@@ -8,7 +8,7 @@ const webRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const repoRoot = dirname(webRoot)
 const statusPanel = await readAdminPanelSource()
 const settingDTO = await readFile(join(repoRoot, 'internal/dto/setting.go'), 'utf8')
-const settingController = await readFile(join(repoRoot, 'internal/controllers/controllers.go'), 'utf8')
+const settingController = await readFile(join(repoRoot, 'internal/controllers/setting_controller.go'), 'utf8')
 
 for (const configuredFlag of [
   'smtpUserConfigured',

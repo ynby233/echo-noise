@@ -2,12 +2,13 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readSettingServiceSource } from './setting-service-source.mjs'
 
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))))
 const webRoot = join(repoRoot, 'web')
 const indexPage = await readFile(join(webRoot, 'pages/index.vue'), 'utf8')
 const router = await readFile(join(repoRoot, 'internal/routers/routers.go'), 'utf8')
-const settingService = await readFile(join(repoRoot, 'internal/services/setting_service.go'), 'utf8')
+const settingService = await readSettingServiceSource()
 
 assert.match(
   router,

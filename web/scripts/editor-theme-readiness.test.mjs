@@ -1,44 +1,79 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { createRequire, stripTypeScriptTypes } from 'node:module'
-import vm from 'node:vm'
+import { readFile } from 'node:fs/promises'
+import { createJiti } from 'jiti'
 
-const source = readFileSync(new URL('../components/index/VditorEditor.vue', import.meta.url), 'utf8')
-const dependency = readFileSync(createRequire(import.meta.url).resolve('vditor'), 'utf8')
-const methodStart = dependency.indexOf('Vditor.prototype.setTheme =')
-const methodEnd = dependency.indexOf('\n    };', methodStart) + '\n    };'.length
-const watcherStart = source.indexOf('watch(() => props.theme,')
-const watcherEnd = source.indexOf('\n});', watcherStart) + '\n});'.length
-const afterStart = source.indexOf('    after: () => {', source.indexOf('onMounted(async () =>'))
-const afterEnd = source.indexOf('      preReadyEditorInsertBuffer.drain', afterStart)
-const themes = []
-const values = []
-let themeChanged
-const state = {
-  props: { theme: 'light', modelValue: '- [ ] draft' },
-  isReady: { value: false },
-  Vditor: function Vditor() {},
-  setTheme: instance => themes.push(instance.options.theme),
-  watch: (_getter, callback) => { themeChanged = callback },
-  ensureSafeEditorTableMarkdown: value => value,
-  encodeMarkdownExtraBlankLines: value => value,
+const { createVditorLifecycle } = await createJiti(import.meta.url).import('../utils/vditor-lifecycle.ts')
+
+const [editor, lifecycle] = await Promise.all([
+  readFile(new URL('../components/index/VditorEditor.vue', import.meta.url), 'utf8'),
+  readFile(new URL('../utils/vditor-lifecycle.ts', import.meta.url), 'utf8'),
+])
+
+assert.match(editor, /createVditorLifecycle/, 'editor must delegate construction to the lifecycle module')
+assert.match(editor, /create: \(container, options\) => new Vditor\(container, options\)/, 'the component must inject Vditor construction into the independently testable lifecycle')
+assert.match(editor, /onReady: \(instance\) =>/, 'editor must restore initial value from the lifecycle ready seam')
+assert.match(editor, /instance\.setTheme\(props\.theme === 'dark' \? 'dark' : 'classic'\)/, 'ready must apply the latest theme after asynchronous initialization')
+assert.match(editor, /vditorLifecycle\.dispose\(\)/, 'unmount must dispose the editor lifecycle')
+assert.match(editor, /watch\(\(\) => props\.theme/, 'theme changes after ready must remain reactive')
+assert.match(lifecycle, /if \(instance && isReady\) instance\.setTheme\(theme\)/, 'lifecycle must gate theme calls until the editor is ready')
+assert.match(lifecycle, /current\?\.destroy\(\)/, 'lifecycle dispose must destroy the Vditor instance')
+
+const callbacks = []
+const instances = []
+const exposed = []
+let readyCount = 0
+const create = (_container, options) => {
+  const instance = {
+    themes: [],
+    destroyed: false,
+    setTheme(theme) { this.themes.push(theme) },
+    destroy() { this.destroyed = true },
+  }
+  instances.push(instance)
+  callbacks.push(options.after)
+  return instance
 }
-const context = vm.createContext(state)
-vm.runInContext(dependency.slice(methodStart, methodEnd), context)
-// Vditor returns the outer object before its asynchronous i18n load calls init().
-state.vditorInstance = new state.Vditor()
-state.vditorInstance.setValue = value => values.push(value)
-vm.runInContext(stripTypeScriptTypes(source.slice(watcherStart, watcherEnd)), context)
-state.props.theme = 'dark'
-assert.doesNotThrow(() => themeChanged('dark'), 'theme hydration before i18n init must not access the missing internal instance')
-assert.deepEqual(themes, [], 'theme updates must wait for the ready callback')
-state.vditorInstance.vditor = { options: {} }
-vm.runInContext(stripTypeScriptTypes(source.slice(afterStart, afterEnd).replace('    after: () => {', '(() => {') + '})()'), context)
-assert.deepEqual(themes, ['dark'], 'ready must apply the latest theme received during initialization')
-assert.deepEqual(values, ['- [ ] draft'], 'theme synchronization must retain initial draft restoration')
-assert.equal(state.isReady.value, true)
-themeChanged('light')
-assert.deepEqual(themes, ['dark', 'classic'], 'theme changes after ready must continue working')
-state.vditorInstance = null
-assert.doesNotThrow(() => themeChanged('dark'), 'a removed editor must not receive theme calls')
+const manager = createVditorLifecycle({
+  container: () => ({}),
+  options: () => ({ mode: 'ir' }),
+  create,
+  onInstance: instance => exposed.push(instance),
+  onReady: () => { readyCount += 1 },
+})
+
+const first = manager.mount()
+assert.equal(manager.mount(), first, 'mount must be idempotent while one editor instance is active')
+manager.setTheme('dark')
+assert.deepEqual(first.themes, [], 'theme changes before asynchronous readiness must stay gated')
+callbacks[0]()
+assert.equal(manager.ready(), true)
+manager.setTheme('dark')
+assert.deepEqual(first.themes, ['dark'])
+manager.dispose()
+assert.equal(first.destroyed, true)
+assert.equal(manager.ready(), false)
+
+const second = manager.mount()
+assert.notEqual(second, first, 'a disposed lifecycle must support a fresh mount')
+manager.dispose()
+callbacks[1]()
+assert.equal(readyCount, 1, 'late readiness from a disposed generation must not reactivate the editor')
+assert.equal(exposed.at(-1), null, 'dispose must clear the parent-owned instance reference')
+
+let synchronousReadyCount = 0
+const synchronous = createVditorLifecycle({
+  container: () => ({}),
+  options: () => ({}),
+  create: (_container, options) => {
+    const instance = { setTheme() {}, destroy() {} }
+    options.after()
+    return instance
+  },
+  onInstance: () => {},
+  onReady: () => { synchronousReadyCount += 1 },
+})
+synchronous.mount()
+assert.equal(synchronousReadyCount, 1, 'a synchronous factory callback must still complete readiness after instance assignment')
+synchronous.dispose()
+
 console.log('editor theme readiness tests passed')

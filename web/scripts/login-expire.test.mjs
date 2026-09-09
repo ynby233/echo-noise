@@ -1,16 +1,21 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readAdminPanelSource } from './admin-panel-source.mjs'
+import { readSettingServiceSource } from './setting-service-source.mjs'
 
 const webRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const repoRoot = dirname(webRoot)
 const read = (path) => readFile(join(repoRoot, path), 'utf8')
-const [component, models, settings, controllers, middleware] = await Promise.all([
+const controllerSources = (await readdir(join(repoRoot, 'internal/controllers')))
+  .filter((name) => name.endsWith('.go'))
+  .map((name) => readFile(join(repoRoot, 'internal/controllers', name), 'utf8'))
+const [component, models, settings, controllerFiles, middleware] = await Promise.all([
   readAdminPanelSource(), read('internal/models/models.go'),
-  read('internal/services/setting_service.go'), read('internal/controllers/controllers.go'), read('internal/middleware/auth.go'),
+  readSettingServiceSource(), Promise.all(controllerSources), read('internal/middleware/auth.go'),
 ])
+const controllers = controllerFiles.join('\n')
 
 assert.match(models, /LoginExpireDays[\s\S]*?DelegatedAdminLoginExpireDays[\s\S]*?DelegatedAdminLoginExpireHours/, 'site configuration must persist independent ordinary and delegated-admin durations')
 assert.match(models, /LoginIssuedAt\s+\*time\.Time/, 'users must persist an authentication issuance timestamp for bearer expiry')

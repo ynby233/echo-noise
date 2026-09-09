@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
 const messageList = await readFile(new URL('../components/index/MessageList.vue', import.meta.url), 'utf8')
+const messageEditDialog = await readFile(new URL('../components/index/MessageEditDialog.vue', import.meta.url), 'utf8')
 const addForm = await readFile(new URL('../components/index/AddForm.vue', import.meta.url), 'utf8')
 const capabilityModule = await readFile(new URL('../composables/useAdminCapabilities.ts', import.meta.url), 'utf8')
 const statusPanel = await readFile(new URL('../components/index/StatusPanel.vue', import.meta.url), 'utf8')
@@ -25,7 +26,8 @@ assert.match(notificationCenter, /can-interact="item\.message\?\.can_interact ==
 assert.match(notificationCenter, /item\.message\?\.can_interact === true/, 'notification reply button must be hidden for non-interactable messages')
 assert.match(messageList, /const canGlobalPin = \(msg: any\) =>[\s\S]*?canInteractWithMessage\(msg\)[\s\S]*?can\('notes\.pin_global'\)/, 'global pinning must require both normal visibility and notes.pin_global')
 assert.match(messageList, /const canEditMessageTasks = \(msg: any\) =>[\s\S]*?canManageOtherMessage\(msg, 'notes\.edit'\)/, 'task editing must follow note-edit capability')
-assert.match(messageList, /const canEditPublishTime = \(msg: any\) =>[\s\S]*?canManageOtherMessage\(msg, 'notes\.change_publish_time'\)/, 'publish-time control must follow notes.change_publish_time')
+assert.match(messageList, /const canChangePublishTime = isCurrentUserMessage\(item\)[\s\S]*?canManageOtherMessage\(item, 'notes\.change_publish_time'\)/, 'publish-time control must follow notes.change_publish_time')
+assert.match(messageEditDialog, /canChangePublishTime: boolean[\s\S]*?const canChangePublishTime = ref\(false\)/, 'edit dialog must receive the publish-time capability decision from its parent')
 assert.match(messageList, /const canChangeVisibility = \(msg: any\) =>[\s\S]*?canManageOtherMessage\(msg, 'notes\.change_visibility'\)/, 'visibility control must follow notes.change_visibility')
 assert.match(messageList, /if \(!canDelete\(msg\)\) return/, 'delete command must retain the same client-side guard as its button')
 assert.match(messageList, /if \(!canPin\(msg\)\) return/, 'pin command must retain the same client-side guard as its button')

@@ -3,14 +3,15 @@ import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readAdminPanelSource } from './admin-panel-source.mjs'
+import { readSettingServiceSource } from './setting-service-source.mjs'
 
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))))
 const read = (path) => readFile(join(repoRoot, path), 'utf8')
 const [models, migrate, service, controllers, statusPanel, home] = await Promise.all([
   read('internal/models/models.go'),
   read('internal/models/migrate.go'),
-  read('internal/services/setting_service.go'),
-  read('internal/controllers/controllers.go'),
+  readSettingServiceSource(),
+  read('internal/controllers/setting_controller.go'),
   readAdminPanelSource(),
   read('web/pages/index.vue'),
 ])

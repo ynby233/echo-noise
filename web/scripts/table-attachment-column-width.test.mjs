@@ -1,3 +1,4 @@
+import { readEditorSource } from './editor-source.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
@@ -5,8 +6,8 @@ import { fileURLToPath } from 'node:url'
 const editorPath = fileURLToPath(new URL('../components/index/VditorEditor.vue', import.meta.url))
 const rendererPath = fileURLToPath(new URL('../components/index/MarkdownRenderer.vue', import.meta.url))
 const [editor, renderer] = await Promise.all([
-  readFile(editorPath, 'utf8'),
-  readFile(rendererPath, 'utf8'),
+  readEditorSource(),
+  Promise.all([readFile(rendererPath, 'utf8'), readFile(new URL('../utils/rendered-table-dialog.ts', import.meta.url), 'utf8')]).then(parts => parts.join('\n')),
 ])
 
 // 编辑器侧：放大表格的附件标记必须内联在原文位置，标签长度受限（超长文件名中间省略、保留后缀），且允许列宽收缩而不撑宽列。

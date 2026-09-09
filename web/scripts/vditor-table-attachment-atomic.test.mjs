@@ -1,3 +1,4 @@
+import { readEditorSource } from './editor-source.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
@@ -82,7 +83,7 @@ const editorPath = fileURLToPath(new URL('../components/index/VditorEditor.vue',
 const addFormPath = fileURLToPath(new URL('../components/index/AddForm.vue', import.meta.url))
 const audioRecorderPath = fileURLToPath(new URL('../components/index/AudioRecorder.vue', import.meta.url))
 const [editor, addForm, audioRecorder] = await Promise.all([
-  readFile(editorPath, 'utf8'),
+  readEditorSource(),
   readFile(addFormPath, 'utf8'),
   readFile(audioRecorderPath, 'utf8'),
 ])

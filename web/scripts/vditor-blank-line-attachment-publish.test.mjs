@@ -1,3 +1,4 @@
+import { readEditorSource } from './editor-source.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
@@ -12,7 +13,7 @@ const {
   serializeMarkdownEditorBlocks,
 } = await jiti.import(join(webRoot, 'utils/markdown-blank-lines.ts'))
 
-const editorSource = await readFile(join(webRoot, 'components/index/VditorEditor.vue'), 'utf8')
+const editorSource = readEditorSource()
 
 // 根因回归：在编辑器空白区域点击会把当前块标记为空行占位块；
 // 若随后仅上传附件就发布，DOM 序列化必须依据块内真实内容，而不能只凭标记类判空，

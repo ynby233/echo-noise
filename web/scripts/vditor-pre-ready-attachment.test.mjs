@@ -1,3 +1,4 @@
+import { readEditorSource } from './editor-source.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { createPreReadyEditorInsertBuffer } from '../utils/editor-insert-buffer.mjs'
@@ -21,7 +22,7 @@ buffer.push('\n[音频附件：cancelled.mp3](/api/files/cancelled.mp3)\n')
 buffer.clear()
 assert.equal(buffer.drain((value) => inserted.push(value)), 0, '清空编辑器必须取消尚未落地的插入')
 
-const editorSource = await readFile(new URL('../components/index/VditorEditor.vue', import.meta.url), 'utf8')
+const editorSource = readEditorSource()
 const addFormSource = await readFile(new URL('../components/index/AddForm.vue', import.meta.url), 'utf8')
 assert.match(editorSource, /preReadyEditorInsertBuffer\.push\(nextValue\)/, 'VditorEditor 必须缓冲就绪前 insertValue')
 assert.match(editorSource, /preReadyEditorInsertBuffer\.drain\(insertNormalizedEditorValue\)/, 'Vditor ready 后必须冲刷缓冲')

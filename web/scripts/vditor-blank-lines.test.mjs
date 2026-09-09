@@ -1,3 +1,4 @@
+import { readEditorSource } from './editor-source.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
@@ -86,7 +87,7 @@ assert.equal(
   'tilde fenced code blocks must be protected from blank-line sentinels'
 )
 
-const editor = await readFile(join(webRoot, 'components/index/VditorEditor.vue'), 'utf8')
+const editor = readEditorSource()
 const addForm = await readFile(join(webRoot, 'components/index/AddForm.vue'), 'utf8')
 const renderer = await readFile(join(webRoot, 'components/index/MarkdownRenderer.vue'), 'utf8')
 const announcement = await readFile(join(webRoot, 'components/widgets/AnnouncementBar.vue'), 'utf8')
@@ -167,7 +168,7 @@ assert.match(
 
 assert.match(
   editor,
-  /import\s*\{[^}]*serializeMarkdownEditorBlocks[^}]*\}\s*from\s*['"]~\/utils\/markdown-blank-lines['"]/,
+  /import\s*\{[^}]*serializeMarkdownEditorBlocks[^}]*\}\s*from\s*['"]\.\/markdown-blank-lines['"]/,
   'the editor must use the shared Markdown block serializer instead of maintaining a second line model'
 )
 
@@ -329,7 +330,7 @@ assert.match(
   'table enhancement and attachment insertion must tolerate Vditor lifecycle timing where getValue can throw before the internal editor is ready'
 )
 
-const normalizedInsertValue = editor.match(/const\s+insertNormalizedEditorValue\s*=[\s\S]+?\r?\n}\r?\n\r?\ndefineExpose/)
+const normalizedInsertValue = editor.match(/const\s+insertNormalizedEditorValue\s*=[\s\S]+?\r?\n}\r?\n\r?\nconst api/)
 assert.ok(normalizedInsertValue, 'VditorEditor ready-aware insertion helper must exist')
 const normalizedInsertValueSource = normalizedInsertValue[0]
 const pendingFlushIndex = normalizedInsertValueSource.indexOf('flushPendingEditorTableCellSourceSync()')

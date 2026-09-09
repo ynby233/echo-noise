@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readAdminPanelSource } from './admin-panel-source.mjs'
@@ -9,7 +9,10 @@ const repoRoot = dirname(webRoot)
 
 const component = await readAdminPanelSource()
 const securityController = await readFile(join(repoRoot, 'internal/controllers/security.go'), 'utf8')
-const loginController = await readFile(join(repoRoot, 'internal/controllers/controllers.go'), 'utf8')
+const loginControllerFiles = (await readdir(join(repoRoot, 'internal/controllers')))
+  .filter((name) => name.endsWith('.go'))
+  .map((name) => readFile(join(repoRoot, 'internal/controllers', name), 'utf8'))
+const loginController = (await Promise.all(loginControllerFiles)).join('\n')
 const loginSession = await readFile(join(repoRoot, 'internal/controllers/mobile_setup_controller.go'), 'utf8')
 const sessionPackage = await readFile(join(repoRoot, 'pkg/session.go'), 'utf8')
 const routes = await readFile(join(repoRoot, 'internal/routers/routers.go'), 'utf8')

@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url'
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const notificationCenter = await readFile(join(root, 'components/index/UserNotificationCenter.vue'), 'utf8')
 const messageList = await readFile(join(root, 'components/index/MessageList.vue'), 'utf8')
+const navigation = await readFile(join(root, 'utils/message-target-navigation.ts'), 'utf8')
+const engagement = await readFile(join(root, 'utils/message-list-engagement.ts'), 'utf8')
 const comments = await readFile(join(root, 'components/comments/BuiltinComments.vue'), 'utf8')
 
 assert.match(
@@ -28,49 +30,49 @@ assert.match(
 
 assert.match(
   messageList,
-  /expandedCommentsMap\.value\[messageId\]\s*=\s*true[\s\S]*?focusBuiltinTargetComment\(messageId,\s*commentId\)/,
+  /expandComments: \(messageId\) => \{ expandedCommentsMap\.value\[messageId\] = true \}[\s\S]*?focusComment: focusBuiltinTargetComment/,
   'message notifications should open comments and delegate exact comment focusing to BuiltinComments'
 )
 
 assert.match(
-  messageList,
-  /thread\.focusCommentById\(commentId,\s*\{\s*scroll:\s*false\s*\}\)/,
+  engagement,
+  /comments\.focusCommentById\(commentId,\s*\{\s*scroll:\s*false\s*\}\)/,
   'notification jumps should let MessageList own the final scroll instead of stacking BuiltinComments smooth scrolling'
 )
 
 assert.match(
-  messageList,
-  /const\s+waitForNotificationTargetLayout[\s\S]*?if\s*\(distance\s*>\s*2\)\s*scrollElementToAppFocus\(el,\s*behavior\)/,
+  navigation,
+  /await waitForStableLayout\(element, currentGeneration\)[\s\S]*?if \(Math\.abs\(focusDistance\(element\)\) > 2\) scrollToFocus\(element, behavior\)/,
   'notification target stabilization should wait for layout quietly and scroll only to the final target'
 )
 
 assert.doesNotMatch(
-  messageList,
-  /const\s+stabilizeNotificationTargetScroll[\s\S]*?scrollElementToAppFocus\(el,\s*'instant'\)[\s\S]*?waitForNotificationMedia/,
+  navigation,
+  /const stabilizeScroll[\s\S]*?scrollToFocus\(element, 'instant'\)[\s\S]*?await waitForMedia\(messageId\)/,
   'notification target stabilization should not visibly snap to the target before media/layout settle'
 )
 
 assert.match(
-  messageList,
-  /const\s+waitForNotificationMedia\s*=\s*async\s*\(messageId:\s*number[\s\S]*?querySelectorAll\('img, video'\)[\s\S]*?item\.decode\(\)[\s\S]*?loadeddata/,
+  navigation,
+  /const waitForMediaElement[\s\S]*?loadeddata[\s\S]*?element\.decode\(\)[\s\S]*?const waitForMedia[\s\S]*?querySelectorAll\('img, video'\)/,
   'notification jumps should wait for image decode and video data inside the target message before final alignment'
 )
 
 assert.match(
-  messageList,
-  /if\s*\(targetElement\)\s*\{[\s\S]*?if\s*\(!commentId\)\s*scrollElementToAppFocus\(targetElement,\s*'instant'\)/,
+  navigation,
+  /if \(messageElement\) \{[\s\S]*?if \(!commentId\) scrollToFocus\(messageElement, 'instant'\)/,
   'comment/reply notification jumps should not first snap to the message card before the concrete comment target is ready'
 )
 
 assert.match(
-  messageList,
-  /await\s+stabilizeNotificationTargetScroll\(commentEl,\s*messageId\)[\s\S]*?commentEl\.classList\.add\('notification-comment-highlight'\)/,
+  navigation,
+  /await stabilizeScroll\(commentElement, messageId, currentGeneration\)[\s\S]*?commentElement\.classList\.add\('notification-comment-highlight'\)/,
   'comment and reply notifications should perform the final stabilized scroll on the concrete target element'
 )
 
 assert.match(
-  messageList,
-  /if\s*\(!commentId\)\s*\{[\s\S]*?await\s+stabilizeNotificationTargetScroll\(targetElement,\s*messageId\)/,
+  navigation,
+  /if \(!commentId\) \{[\s\S]*?await stabilizeScroll\(messageElement, messageId, currentGeneration\)/,
   'message-only notifications should also stabilize after target attachments load'
 )
 

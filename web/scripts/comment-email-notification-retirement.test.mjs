@@ -3,6 +3,7 @@ import { access, readFile, readdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readAdminPanelSource } from './admin-panel-source.mjs'
+import { readSettingServiceSource } from './setting-service-source.mjs'
 
 const webRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const repoRoot = dirname(webRoot)
@@ -11,11 +12,14 @@ const read = (path) => readFile(join(repoRoot, path), 'utf8')
 const runtimeFiles = {
   statusPanel: await readAdminPanelSource(),
   indexPage: await read('web/pages/index.vue'),
-  settingsService: await read('internal/services/setting_service.go'),
+  settingsService: await readSettingServiceSource(),
   seedService: await read('internal/services/seed_service.go'),
   models: await read('internal/models/models.go'),
-  controllers: await read('internal/controllers/controllers.go'),
+  controllers: (await readdir(join(repoRoot, 'internal/controllers')))
+    .filter((name) => name.endsWith('.go'))
+    .map((name) => readFile(join(repoRoot, 'internal/controllers', name), 'utf8')),
 }
+runtimeFiles.controllers = (await Promise.all(runtimeFiles.controllers)).join('\n')
 
 const retiredRuntimePattern = /commentEmail|CommentEmail|commentLoginRequired|CommentLoginRequired|CommentsSettings/
 for (const [name, source] of Object.entries(runtimeFiles)) {

@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { readdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 
 const webRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const repoRoot = dirname(webRoot)
 const heatmap = await readFile(join(webRoot, 'components/widgets/heatmap.vue'), 'utf8')
 const indexPage = await readFile(join(webRoot, 'pages/index.vue'), 'utf8')
-const calendarController = await readFile(join(repoRoot, 'internal/controllers/controllers.go'), 'utf8')
+const controllerSources = (await readdir(join(repoRoot, 'internal/controllers')))
+  .filter((name) => name.endsWith('.go'))
+  .map((name) => readFile(join(repoRoot, 'internal/controllers', name), 'utf8'))
+const calendarController = (await Promise.all(controllerSources)).join('\n')
 const messageService = await readFile(join(repoRoot, 'internal/services/message_service.go'), 'utf8')
 
 assert.match(

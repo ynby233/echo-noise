@@ -32,7 +32,10 @@ await Promise.all([
 try {
   const mediaUrl = await import(pathToFileURL(mediaUrlBundle).href)
   const mediaUpload = await import(pathToFileURL(mediaUploadBundle).href)
-  const renderer = await readFile(join(webRoot, 'components/index/MarkdownRenderer.vue'), 'utf8')
+  const renderer = [
+    await readFile(join(webRoot, 'components/index/MarkdownRenderer.vue'), 'utf8'),
+    await readFile(join(webRoot, 'utils/rendered-attachment.ts'), 'utf8'),
+  ].join('\n')
 
   globalThis.window = { location: { origin: 'http://192.168.220.218:27184' } }
 
@@ -76,12 +79,12 @@ try {
   )
   assert.match(
     renderer,
-    /const url = resolveManagedAttachmentURL\(String\(BASE_API[^\n]+rawUrl/,
+    /const url = resolveManagedAttachmentURL\(String\(baseApi[^\n]+rawUrl/,
     'attachment markers must be normalized before their href, media source, and failure probe are built',
   )
   assert.match(
     renderer,
-    /const trustedAttachmentOrigins = new Set[\s\S]*?window\.location\.origin[\s\S]*?new URL\(String\(BASE_API[\s\S]*?trustedAttachmentOrigins\.has\(parsed\.origin\)/,
+    /const trustedAttachmentOrigins = new Set[\s\S]*?window\.location\.origin[\s\S]*?new URL\(String\(baseApi[\s\S]*?trustedAttachmentOrigins\.has\(parsed\.origin\)/,
     'automatic deletion probes must be limited to the current site or its configured API origin',
   )
   assert.match(

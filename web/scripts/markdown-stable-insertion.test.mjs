@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { withStableInsertionPoint } from '../utils/dom-stable-insertion.ts'
 
-const renderer = await readFile(new URL('../components/index/MarkdownRenderer.vue', import.meta.url), 'utf8')
+const renderer = await readFile(new URL('../utils/rendered-media-layout.ts', import.meta.url), 'utf8')
 assert.match(
   renderer,
   /withStableInsertionPoint\(parentNode, firstBlock, \(insertionPoint\) =>/,

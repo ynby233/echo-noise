@@ -1,0 +1,5736 @@
+
+import { computed, ref, nextTick as vueNextTick } from "vue";
+import { getFixedCoordinateScale, getFixedRect, positionFloatingMenu } from './floating-menu'
+import { captureVideoFirstFrameFromSource, ensureFancyboxVideoThumbnail, getVideoPlaybackFrameForSource, normalizeMediaPreviewUrl } from './fancybox-video-close'
+import { loadMediaFancybox, createMediaFancyboxOptions } from './media-fancybox'
+import { buildAttachmentAudioPlaceholderHtml, closeAttachmentAudioPopover, destroyAttachmentAudioPlayers, enhanceAttachmentAudioPlayers, toggleAttachmentAudioPopover } from './attachment-audio-player'
+import { MARKDOWN_BLANK_LINE_SENTINEL, encodeMarkdownExtraBlankLines, isMarkdownBlankLineSentinel, markMarkdownPreservedBlankLineElements, serializeMarkdownEditorBlocks } from './markdown-blank-lines'
+import { getFixedEditorClipInsets, insertEditorValueFallback, insertTableCellAtomicValue, replaceTableSourceLine, resolveTableAttachmentTarget, type TableAttachmentTarget } from './vditor-table-attachment'
+import { getTableResizeZoomScale } from './table-resize-session'
+import { createEditorTableResize } from './editor-table-resize'
+import { isBrowserPreviewableAttachmentUrl } from './attachment-preview'
+import { createPreReadyEditorInsertBuffer } from './editor-insert-buffer.mjs'
+
+
+import type Vditor from 'vditor'
+
+type EditorDomSessionOptions = {
+  root: () => HTMLElement | null
+  toolbar: () => HTMLElement | null
+  onChange: (value: string) => void
+  onPreviewError: () => void
+}
+
+// Owns the editor's DOM input, selection, IME, attachment and table editing state.
+// Vditor construction/theme stay in the component; template-facing refs are
+// returned together so no caller needs access to the internal selection state.
+export const createEditorDomSession = (config: EditorDomSessionOptions) => {
+let mounted = false
+let generation = 0
+const timers = new Set<number>()
+const frames = new Set<number>()
+const previewCleanups = new Set<() => void>()
+
+// Deferred DOM work belongs to this mounted session. A queued input must never
+// emit into the parent after its editor has been destroyed.
+const scheduleTimeout = (callback: () => void, delay = 0) => {
+  const currentGeneration = generation
+  const timer = window.setTimeout(() => {
+    timers.delete(timer)
+    if (mounted && currentGeneration === generation) callback()
+  }, delay)
+  timers.add(timer)
+  return timer
+}
+const scheduleFrame = (callback: FrameRequestCallback) => {
+  const currentGeneration = generation
+  const frame = window.requestAnimationFrame(time => {
+    frames.delete(frame)
+    if (mounted && currentGeneration === generation) callback(time)
+  })
+  frames.add(frame)
+  return frame
+}
+const nextTick = (callback?: () => void) => {
+  const currentGeneration = generation
+  return vueNextTick(() => {
+    if (mounted && currentGeneration === generation) callback?.()
+  })
+}
+
+type PendingEditorTableCellSync = { tableIndex: number; rowIndex: number; cellIndex: number; text: string }
+type EditorTableCellPosition = Pick<PendingEditorTableCellSync, 'tableIndex' | 'rowIndex' | 'cellIndex'>
+type EditorTableCompositionCommitKey = EditorTableCellPosition & { key: 'Space' | 'Enter'; expiresAt: number }
+type EditorTableCompositionCaretTarget = EditorTableCellPosition & { offset: number; expiresAt: number }
+type EditorTableAttachmentInsertionTarget = TableAttachmentTarget<HTMLElement>
+const editorContainer = computed(config.root);
+let vditorInstance: Vditor | null = null;
+let panelCleanup: (() => void) | null = null;
+let imagePreviewCleanup: (() => void) | null = null;
+let attachmentPreviewCleanup: (() => void) | null = null;
+let refreshAttachmentLinksFromEditor: () => void = () => {};
+let refreshAttachmentLinksInTableCellFromEditor: (cell: HTMLTableCellElement) => void = () => {};
+let markEditorTableAttachmentMutationHandled: (cell: HTMLTableCellElement) => void = () => {};
+let lastEditorSelectionRange: Range | null = null;
+let lastEditorTableSelectionRange: Range | null = null;
+let lastEditorTableSelectionState: { editable: HTMLElement; tableIndex: number; rowIndex: number; cellIndex: number } | null = null;
+let lastEditorTableSelectionAt = 0;
+let pendingEditorTableAttachmentInsertionTarget: EditorTableAttachmentInsertionTarget | null = null;
+let selectedEditorTable: HTMLTableElement | null = null;
+let selectedEditorTableIndex = -1;
+let hoveredEditorTable: HTMLTableElement | null = null;
+let expandedEditorTableBlock: EditorTableSourceBlock | null = null;
+let expandedEditorTableElement: HTMLTableElement | null = null;
+let tableDeleteHideTimer: number | null = null;
+let tableExpandCloseTimer: number | null = null;
+let editorTableDomStabilizeTimer: number | null = null;
+let pendingEditorTableCellSync: PendingEditorTableCellSync | null = null;
+let editorTableCompositionActive = false;
+let editorPlainCompositionActive = false;
+let editorTableCompositionTarget: PendingEditorTableCellSync | null = null;
+let editorTableCompositionSnapshot: string[][] | null = null;
+let editorTableCompositionStartText = '';
+let editorTableCompositionStartPrefix = '';
+let editorTableCompositionCommitKey: EditorTableCompositionCommitKey | null = null;
+let editorTableCompositionCaretTarget: EditorTableCompositionCaretTarget | null = null;
+let editorTableCompositionSettlingUntil = 0;
+let inlineEditorTableTextarea: HTMLTextAreaElement | null = null;
+type InlineEditorTableTextareaStyleSnapshot = {
+  color: string;
+  fontFamily: string;
+  fontSize: string;
+  fontStyle: string;
+  fontVariant: string;
+  fontWeight: string;
+  letterSpacing: string;
+  lineHeight: string;
+  overflowWrap: string;
+  padding: string;
+  tabSize: string;
+  textAlign: string;
+  textIndent: string;
+  textTransform: string;
+  whiteSpace: string;
+  wordBreak: string;
+  wordSpacing: string;
+};
+type InlineEditorTableCellOverlayState = {
+  cell: HTMLTableCellElement;
+  minCellHeight: number;
+  dirty: boolean;
+  editorHeight: number;
+  restoreStyle: {
+    color: string;
+    caretColor: string;
+    height: string;
+    minHeight: string;
+    textShadow: string;
+  };
+  editorStyle: InlineEditorTableTextareaStyleSnapshot;
+};
+let inlineEditorTableTextareaState: (InlineEditorTableCellOverlayState & { baseText: string }) | null = null;
+let inlineEditorTableAtomicEditor: HTMLDivElement | null = null;
+let inlineEditorTableAtomicEditorState: InlineEditorTableCellOverlayState | null = null;
+let inlineEditorTableScrollCleanup: (() => void) | null = null;
+const editorTableScrollPositions = new Map<string, number>();
+let expandedTableRowHeightMeasureTimer: number | null = null;
+let expandedTableScrollOverflowFrame: number | null = null;
+const TABLE_DELETE_BUTTON_SIZE = 10;
+const TABLE_EXPAND_BUTTON_SIZE = TABLE_DELETE_BUTTON_SIZE;
+const INLINE_TABLE_CELL_EDGE_GUARD_PX = 8;
+const TABLE_CELL_BREAK_RE = /<br\s*\/?\s*>/gi;
+const TABLE_CELL_BREAK_PLACEHOLDER = '%%NW_TABLE_BR%%';
+const TABLE_CELL_BREAK_SOURCE_RE = /(?:<br\s*\/?\s*>|%%NW_TABLE_BR%%)/gi;
+const TABLE_CELL_BREAK_TEXT_RE = /^<br\s*\/?\s*>$/i;
+const TABLE_CELL_CARET_ANCHOR = '\u200b';
+const TABLE_CELL_CARET_ANCHOR_RE = /\u200b/g;
+const PRESERVED_BLANK_LINE_DOM_ANCHOR = '\u200b';
+const PLAIN_EMPTY_LINE_CLASS = 'vditor-plain-empty-line';
+const MARKDOWN_EMPTY_TABLE_CELL = '';
+const MARKDOWN_EMPTY_TABLE_CELL_RE = /^(?:&nbsp;|&#160;|&#xA0;|\u00a0)$/i;
+const isReady = ref(false);
+const preReadyEditorInsertBuffer = createPreReadyEditorInsertBuffer();
+const showHeadingMenu = ref(false);
+const headingMenuRef = ref<HTMLElement | null>(null);
+const headingMenuStyle = ref<Record<string, string>>({});
+const selectedHeadingTag = ref('');
+const headingTrigger = ref<HTMLElement | null>(null);
+const nativeHeadingPanel = ref<HTMLElement | null>(null);
+const showTableMenu = ref(false);
+const tableMenuRef = ref<HTMLElement | null>(null);
+const tableMenuStyle = ref<Record<string, string>>({});
+const tableTrigger = ref<HTMLElement | null>(null);
+const nativeTablePanel = ref<HTMLElement | null>(null);
+const showTableDeleteButton = ref(false);
+const tableDeleteButtonStyle = ref<Record<string, string>>({});
+const tableExpandButtonStyle = ref<Record<string, string>>({});
+const showTableExpandDialog = ref(false);
+const tableExpandClosing = ref(false);
+const expandedTableRows = ref<string[][]>([]);
+const expandedTableEditable = ref(false);
+const expandedTableDirty = ref(false);
+const expandedTableAvailableWidth = ref(0);
+const expandedTableAutoRowHeights = ref<number[]>([]);
+const expandedTableManualRowHeights = ref<number[]>([]);
+const expandedTableManualColumnWidths = ref<number[]>([]);
+const expandedTableCellEditorRenderKey = ref(0);
+const TABLE_SIZE_LIMIT = 10
+const tableRows = ref(3);
+const tableCols = ref(3);
+const tableGridCells = Array.from({ length: TABLE_SIZE_LIMIT * TABLE_SIZE_LIMIT }, (_, index) => ({ row: Math.floor(index / TABLE_SIZE_LIMIT) + 1, col: (index % TABLE_SIZE_LIMIT) + 1 }));
+const headingOptions = [
+  { tag: 'h1', value: '# ', label: '一级标题 <Alt+Ctrl+1>' },
+  { tag: 'h2', value: '## ', label: '二级标题 <Alt+Ctrl+2>' },
+  { tag: 'h3', value: '### ', label: '三级标题 <Alt+Ctrl+3>' },
+  { tag: 'h4', value: '#### ', label: '四级标题 <Alt+Ctrl+4>' },
+  { tag: 'h5', value: '##### ', label: '五级标题 <Alt+Ctrl+5>' },
+  { tag: 'h6', value: '###### ', label: '六级标题 <Alt+Ctrl+6>' }
+];
+
+type EditorAttachmentInfo = { type: 'image' | 'video' | 'audio' | 'file'; title: string; name: string; url: string }
+const ATTACHMENT_MARKER_RE = /!?\[(图片附件|视频附件|音频附件|文件附件)：([^\]]+)\]\(([^)\s]+)\)/
+const ATTACHMENT_MARKER_GLOBAL_RE = /!?\[(图片附件|视频附件|音频附件|文件附件)：([^\]]+)\]\(([^)\s]+)\)/g
+const ADJACENT_ATTACHMENT_MARKER_RE = /(!?\[(?:图片附件|视频附件|音频附件|文件附件)：[^\]]+\]\([^)\s]+\))(!?\[(?:图片附件|视频附件|音频附件|文件附件)：[^\]]+\]\([^)\s]+\))/g
+const RAW_ATTACHMENT_ANCHOR_RE = /<a\b[^>]*(?:data-attachment-url|href)=["']([^"']+)["'][^>]*>\s*(图片附件|视频附件|音频附件|文件附件)：([^<]+?)\s*<\/a>/gi
+const ATTACHMENT_ANCHOR_LABEL_RE = /^(图片附件|视频附件|音频附件|文件附件)：(.+)$/
+const EXPANDED_TABLE_MIN_COLUMN_WIDTH = 48
+const EXPANDED_TABLE_MIN_ROW_HEIGHT = 38
+const EXPANDED_TABLE_CELL_HORIZONTAL_PADDING = 18
+const EXPANDED_TABLE_SCROLL_OVERFLOW_TOLERANCE = 2
+const estimateTableLineWidth = (line: string) => {
+  const text = attachmentMarkersToDisplayTitleText(String(line || '').replace(/\r\n?/g, '\n')) || ' '
+  return Array.from(text).reduce((width, char) => {
+    if (/\s/.test(char)) return width + 4
+    if (/[^\x00-\xff]/.test(char)) return width + 14
+    return width + 7
+  }, EXPANDED_TABLE_CELL_HORIZONTAL_PADDING)
+}
+
+const calculateAdaptiveTableColumnWidths = (rows: string[][], availableWidth: number, minWidth = EXPANDED_TABLE_MIN_COLUMN_WIDTH) => {
+  const columnCount = rows.reduce((max, row) => Math.max(max, row.length), 0)
+  if (!columnCount) return [] as number[]
+  const safeAvailable = Math.max(minWidth * columnCount, Math.floor(availableWidth || 0))
+  const average = safeAvailable / columnCount
+  const natural = Array.from({ length: columnCount }, (_, columnIndex) => {
+    const maxLineWidth = rows.reduce((max, row) => {
+      const value = String(row[columnIndex] || '')
+      const lines = value.replace(/<br\s*\/?\s*>/gi, '\n').split('\n')
+      return Math.max(max, ...lines.map((line) => estimateTableLineWidth(line)))
+    }, minWidth)
+    return Math.max(minWidth, Math.ceil(maxLineWidth))
+  })
+  if (natural.every((width) => width <= average)) {
+    const base = Math.floor(average)
+    const remainder = safeAvailable - base * columnCount
+    return Array.from({ length: columnCount }, (_, index) => base + (index < remainder ? 1 : 0))
+  }
+  let widths = natural.map((width) => Math.max(minWidth, width))
+  const total = widths.reduce((sum, width) => sum + width, 0)
+  if (total < safeAvailable) {
+    const extra = safeAvailable - total
+    const share = Math.floor(extra / columnCount)
+    const remainder = extra - share * columnCount
+    widths = widths.map((width, index) => width + share + (index < remainder ? 1 : 0))
+  }
+  return widths.map((width) => Math.max(minWidth, Math.ceil(width)))
+}
+
+const syncExpandedTableScrollOverflowState = () => {
+  if (typeof document === 'undefined') return
+  const scroll = expandedTableElement.value?.parentElement
+  if (!scroll) return
+  const horizontalOverflow = scroll.scrollWidth - scroll.clientWidth > EXPANDED_TABLE_SCROLL_OVERFLOW_TOLERANCE
+  const verticalOverflow = scroll.scrollHeight - scroll.clientHeight > EXPANDED_TABLE_SCROLL_OVERFLOW_TOLERANCE
+  scroll.classList.toggle('has-real-horizontal-overflow', horizontalOverflow)
+  scroll.classList.toggle('has-real-vertical-overflow', verticalOverflow)
+}
+
+const scheduleExpandedTableScrollOverflowState = () => {
+  if (typeof window === 'undefined') return
+  if (expandedTableScrollOverflowFrame !== null) return
+  expandedTableScrollOverflowFrame = scheduleFrame(() => {
+    expandedTableScrollOverflowFrame = null
+    syncExpandedTableScrollOverflowState()
+  })
+}
+
+const normalizeAttachmentInfo = (kindLabel: string, name: string, url: string): EditorAttachmentInfo | null => {
+  const href = String(url || '').trim()
+  if (!href) return null
+  const type = kindLabel === '图片附件' ? 'image' : (kindLabel === '视频附件' ? 'video' : (kindLabel === '音频附件' ? 'audio' : 'file'))
+  const cleanName = String(name || '').trim() || '未命名附件'
+  return { type, title: `${kindLabel}：${cleanName}`, name: cleanName, url: href }
+}
+
+const openFileAttachment = (info: EditorAttachmentInfo) => {
+  if (isBrowserPreviewableAttachmentUrl(info.url)) {
+    window.open(info.url, '_blank', 'noopener,noreferrer')
+    return
+  }
+  const link = document.createElement('a')
+  link.href = info.url
+  link.download = info.name || '附件'
+  link.rel = 'noopener noreferrer'
+  link.style.display = 'none'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+}
+
+const attachmentInfoFromText = (text: string) => {
+  const match = String(text || '').match(ATTACHMENT_MARKER_RE)
+  if (!match) return null
+  return normalizeAttachmentInfo(match[1], match[2], match[3])
+}
+
+const hasAttachmentMarker = (value: string) => {
+  ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+  return ATTACHMENT_MARKER_GLOBAL_RE.test(normalizeAttachmentSourceText(value))
+}
+
+const normalizeAdjacentAttachmentMarkers = (value: string) => {
+  let normalized = String(value || '')
+  let previous = ''
+  while (normalized !== previous) {
+    previous = normalized
+    normalized = normalized.replace(ADJACENT_ATTACHMENT_MARKER_RE, '$1 $2')
+  }
+  return normalized
+}
+
+const normalizeAttachmentInsertValue = (value: string) => {
+  const raw = normalizeAttachmentSourceText(String(value || ''))
+  if (!hasAttachmentMarker(raw)) return raw
+  const normalized = normalizeAdjacentAttachmentMarkers(raw.trim())
+  return `\n\n${normalized}\n\n`
+}
+
+const normalizeEditorAttachmentSource = () => {
+  if (!vditorInstance?.getValue || !vditorInstance?.setValue) return false
+  const value = vditorInstance.getValue()
+  const normalized = normalizeAdjacentAttachmentMarkers(value)
+  if (normalized === value) return false
+  vditorInstance.setValue(normalized)
+  emitEditorValue(normalized)
+  scheduleTimeout(() => refreshAttachmentLinksFromEditor(), 0)
+  return true
+}
+
+const escapeAttachmentHtmlAttr = (value: string) => String(value || '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/\"/g, '&quot;')
+  .replace(/'/g, '&#39;')
+
+const buildAttachmentPreviewHtml = (info: EditorAttachmentInfo) => {
+  const safeUrl = escapeAttachmentHtmlAttr(info.url)
+  const safeName = escapeAttachmentHtmlAttr(info.name)
+  if (info.type === 'image') {
+    return `<img class="site-attachment-image" src="${safeUrl}" alt="${safeName}" loading="lazy" decoding="async" />`
+  }
+  if (info.type === 'video') {
+    return `<div class="site-attachment-render site-attachment-render--video"><video src="${safeUrl}" controls preload="metadata" playsinline style="width:100%;height:auto"></video></div>`
+  }
+  if (info.type === 'file') {
+    return `<a class="site-attachment-file" href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeName}</a>`
+  }
+  return buildAttachmentAudioPlaceholderHtml({ src: info.url, name: info.name })
+}
+
+const transformAttachmentPreviewHtml = (html: string) => {
+  if (typeof document === 'undefined' || !html) return html
+  const holder = document.createElement('div')
+  holder.innerHTML = html
+  markMarkdownPreservedBlankLineElements(holder)
+  holder.querySelectorAll('a').forEach((node) => {
+    const anchor = node as HTMLAnchorElement
+    const info = attachmentInfoFromAnchor(anchor)
+    if (!info) return
+    const fragment = document.createElement('div')
+    fragment.innerHTML = buildAttachmentPreviewHtml(info)
+    const replacement = fragment.firstElementChild as HTMLElement | null
+    if (!replacement) return
+    const parent = anchor.parentElement
+    const onlyAttachmentInParagraph = parent?.tagName.toLowerCase() === 'p'
+      && parent.children.length === 1
+      && (parent.textContent || '').trim() === (anchor.textContent || '').trim()
+    if (onlyAttachmentInParagraph && info.type !== 'image') {
+      parent?.replaceWith(replacement)
+      return
+    }
+    anchor.replaceWith(replacement)
+  })
+  return holder.innerHTML
+}
+
+const getAttachmentImageFancyboxOptions = (startIndex = 0) => createMediaFancyboxOptions({ startIndex })
+
+const getAttachmentVideoFancyboxOptions = (startIndex = 0) => createMediaFancyboxOptions({ startIndex, video: true })
+
+const isImagePreviewSource = (src: string) => /^(data:image|blob:)/i.test(src) || /\.(png|jpe?g|gif|webp|bmp|svg)(?:[?#].*)?$/i.test(src)
+
+const getVideoFirstFrameThumbnail = (url: string) => captureVideoFirstFrameFromSource(url)
+
+const getProjectThumbnailTargetSize = () => {
+  if (typeof document === 'undefined') return 72
+  const galleryThumb = document.querySelector('.recommend-grid a, .recommend-image-box') as HTMLElement | null
+  const rect = galleryThumb?.getBoundingClientRect?.()
+  if (rect && rect.width > 16 && rect.height > 16) return Math.round(Math.min(rect.width, rect.height))
+  return 72
+}
+
+const getPreviewProxyRect = (sourceEl: HTMLElement | null) => {
+  if (!sourceEl || typeof document === 'undefined') {
+    return { left: -9999, top: -9999, size: 1 }
+  }
+  const sourceRect = sourceEl.getBoundingClientRect()
+  const size = getProjectThumbnailTargetSize()
+  if (!sourceRect.width || !sourceRect.height) return { left: -9999, top: -9999, size }
+  return {
+    left: sourceRect.left + (sourceRect.width - size) / 2,
+    top: sourceRect.top + (sourceRect.height - size) / 2,
+    size
+  }
+}
+
+const createFancyboxProxyNode = (item: EditorAttachmentInfo, thumbSrc: string, sourceEl: HTMLElement | null, group: string) => {
+  const proxy = document.createElement('a')
+  const previewUrl = item.type === 'video' ? normalizeMediaPreviewUrl(item.url) : item.url
+  proxy.href = previewUrl
+  proxy.dataset.fancybox = group
+  proxy.dataset.src = previewUrl
+  const proxyThumb = isImagePreviewSource(thumbSrc)
+    ? thumbSrc
+    : item.type === 'image'
+      ? item.url
+      : ''
+  if (proxyThumb) proxy.dataset.thumbSrc = proxyThumb
+  if (item.type === 'video') {
+    proxy.dataset.type = 'html5video'
+    if (proxyThumb) proxy.dataset.poster = proxyThumb
+  }
+  proxy.setAttribute('aria-hidden', 'true')
+  proxy.tabIndex = -1
+  const proxyRect = getPreviewProxyRect(sourceEl)
+  Object.assign(proxy.style, {
+    position: 'fixed',
+    left: `${proxyRect.left}px`,
+    top: `${proxyRect.top}px`,
+    width: `${proxyRect.size}px`,
+    height: `${proxyRect.size}px`,
+    opacity: '0.001',
+    pointerEvents: 'none',
+    overflow: 'hidden',
+    zIndex: '-1'
+  })
+  if (proxyThumb) {
+    const img = document.createElement('img')
+    img.src = proxyThumb
+    img.alt = item.name || item.title
+    Object.assign(img.style, {
+      display: 'block',
+      width: '100%',
+      height: '100%',
+      objectFit: 'cover'
+    })
+    proxy.appendChild(img)
+  }
+  document.body.appendChild(proxy)
+  return proxy
+}
+
+const showAttachmentGallery = async (items: EditorAttachmentInfo[], current: EditorAttachmentInfo, triggerEl?: HTMLElement | null) => {
+  if (typeof document === 'undefined') return
+  const currentGeneration = generation
+  const sameType = items.filter((item) => item.type === current.type)
+  const galleryItems = sameType.length ? sameType : [current]
+  const startIndex = Math.max(0, galleryItems.findIndex((item) => item.url === current.url && item.name === current.name))
+  const thumbs = current.type === 'video'
+    ? await Promise.all(galleryItems.map(async (item) => getVideoPlaybackFrameForSource(item.url) || await getVideoFirstFrameThumbnail(item.url)))
+    : galleryItems.map((item) => item.url)
+  if (!mounted || generation !== currentGeneration || !triggerEl?.isConnected && triggerEl) return
+  const group = `editor-attachment-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  const sourceEl = triggerEl || null
+  const nodes = galleryItems.map((item, index) => createFancyboxProxyNode(item, thumbs[index] || item.url, sourceEl, group))
+  const options = current.type === 'video'
+    ? getAttachmentVideoFancyboxOptions(startIndex)
+    : getAttachmentImageFancyboxOptions(startIndex)
+  const cleanup = () => {
+    nodes.forEach((node) => node.remove())
+    previewCleanups.delete(cleanup)
+  }
+  previewCleanups.add(cleanup)
+  const viewerOptions = {
+    ...options,
+    triggerEl: nodes[startIndex] || sourceEl || undefined,
+    on: {
+      ...(options as any).on,
+      destroy: cleanup
+    }
+  }
+  try {
+    const Fancybox = await loadMediaFancybox()
+    if (!mounted || generation !== currentGeneration || !editorContainer.value?.isConnected) { cleanup(); return }
+    Fancybox.fromNodes(nodes, viewerOptions as any)
+  } catch {
+    cleanup()
+    if (mounted && generation === currentGeneration) config.onPreviewError()
+  }
+}
+
+const showImageInProjectViewer = (info: EditorAttachmentInfo, triggerEl?: HTMLElement | null) => showAttachmentGallery([info], info, triggerEl)
+
+const setupInlineImagePreview = () => {
+  const root = editorContainer.value;
+  if (!root) return;
+
+  const onImageClick = (event: MouseEvent) => {
+    const img = (event.target as HTMLElement | null)?.closest('.vditor-reset img') as HTMLImageElement | null;
+    if (!img || !root.contains(img) || img.closest('.vditor-toolbar, .vditor-panel, .vditor-hint, .editor-attachment-preview')) return;
+    const src = img.currentSrc || img.src || img.getAttribute('src') || '';
+    if (!src) return;
+    event.preventDefault();
+    event.stopPropagation();
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    showImageInProjectViewer({ type: 'image', title: img.alt || '图片预览', name: img.alt || '图片预览', url: src }, img);
+  };
+
+  root.addEventListener('click', onImageClick, true);
+  imagePreviewCleanup = () => root.removeEventListener('click', onImageClick, true);
+};
+
+const attachmentInfoFromAnchor = (anchor: HTMLAnchorElement | null) => {
+  if (!anchor) return null
+  const label = (anchor.textContent || '').trim()
+  const match = label.match(ATTACHMENT_ANCHOR_LABEL_RE)
+  const href = anchor.getAttribute('data-attachment-url') || anchor.getAttribute('href') || anchor.href || ''
+  if (match && href) return normalizeAttachmentInfo(match[1], match[2], href)
+  return null
+}
+
+const attachmentInfoFromIrNode = (node: HTMLElement | null) => {
+  if (!node) return null
+  const label = (node.querySelector<HTMLElement>('.vditor-ir__link')?.textContent || '').trim()
+  const url = (node.querySelector<HTMLElement>('.vditor-ir__marker--link')?.textContent || '').trim()
+  const match = label.match(ATTACHMENT_ANCHOR_LABEL_RE)
+  if (match && url) return normalizeAttachmentInfo(match[1], match[2], url)
+  return null
+}
+
+const attachmentInfoFromIrLabel = (label: HTMLElement | null) => {
+  if (!label?.classList.contains('vditor-ir__link')) return null
+  const node = label.closest<HTMLElement>('[data-type="a"]')
+  return attachmentInfoFromIrNode(node)
+}
+
+const attachmentInfoToMarkdownSource = (info: EditorAttachmentInfo) => `[${info.title}](${info.url})`
+
+const ATTACHMENT_MARKER_MAX_NAME_LENGTH = 24
+const ATTACHMENT_MARKER_ELLIPSIS = '…'
+
+const truncateAttachmentDisplayName = (name: string) => {
+  const value = String(name || '')
+  const chars = Array.from(value)
+  if (chars.length <= ATTACHMENT_MARKER_MAX_NAME_LENGTH) return value
+  const dotIndex = value.lastIndexOf('.')
+  const rawExtension = dotIndex > 0 ? value.slice(dotIndex) : ''
+  const extension = Array.from(rawExtension).length <= 12 ? rawExtension : ''
+  const headLength = Math.max(1, ATTACHMENT_MARKER_MAX_NAME_LENGTH - Array.from(extension).length - 1)
+  return chars.slice(0, headLength).join('') + ATTACHMENT_MARKER_ELLIPSIS + extension
+}
+
+const attachmentMarkerKindLabel = (info: EditorAttachmentInfo) => (
+  info.title.endsWith(info.name) ? info.title.slice(0, info.title.length - info.name.length) : ''
+)
+
+const attachmentMarkerDisplayTitle = (info: EditorAttachmentInfo) => {
+  const displayName = truncateAttachmentDisplayName(info.name)
+  if (displayName === info.name) return info.title
+  const prefix = attachmentMarkerKindLabel(info)
+  return prefix ? `${prefix}${displayName}` : displayName
+}
+
+const attachmentMarkersToDisplayTitleText = (value: string) => {
+  ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+  const replaced = String(value || '').replace(ATTACHMENT_MARKER_GLOBAL_RE, (match, kindLabel, name, url) => {
+    const info = normalizeAttachmentInfo(kindLabel, name, url)
+    return info ? attachmentMarkerDisplayTitle(info) : match
+  })
+  ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+  return replaced
+}
+
+const createEditorTableAttachmentMarkerElement = (info: EditorAttachmentInfo) => {
+  const marker = document.createElement('span')
+  marker.className = 'editor-table-attachment-marker editor-attachment-link'
+  marker.setAttribute('contenteditable', 'false')
+  marker.setAttribute('role', 'button')
+  marker.setAttribute('tabindex', '0')
+  marker.setAttribute('aria-label', `预览${info.title}`)
+  marker.setAttribute('data-attachment-kind', info.type)
+  marker.setAttribute('data-attachment-url', info.url)
+  marker.setAttribute('data-attachment-source', attachmentInfoToMarkdownSource(info))
+  marker.title = info.title
+  marker.textContent = attachmentMarkerDisplayTitle(info)
+  return marker
+}
+
+const attachmentInfoFromTableMarker = (marker: HTMLElement | null) => {
+  if (!marker?.classList.contains('editor-table-attachment-marker')) return null
+  const source = marker.getAttribute('data-attachment-source') || ''
+  return attachmentInfoFromText(source)
+}
+
+const normalizeAttachmentSourceText = (value: string) => {
+  RAW_ATTACHMENT_ANCHOR_RE.lastIndex = 0
+  const normalizedAnchors = String(value || '').replace(
+    RAW_ATTACHMENT_ANCHOR_RE,
+    (_match, url, kindLabel, name) => {
+      const info = normalizeAttachmentInfo(kindLabel, name, url)
+      return info ? attachmentInfoToMarkdownSource(info) : _match
+    }
+  )
+  ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+  return normalizedAnchors.replace(
+    ATTACHMENT_MARKER_GLOBAL_RE,
+    (_match, kindLabel, name, url) => {
+      const info = normalizeAttachmentInfo(kindLabel, name, url)
+      return info ? attachmentInfoToMarkdownSource(info) : _match
+    }
+  )
+}
+
+const stripAttachmentMarkersFromEditorText = (value: string) => {
+  const source = normalizeAttachmentSourceText(value).replace(/\r\n?/g, '\n')
+  return source
+    .split('\n')
+    .map((line) => {
+      ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+      const stripped = line
+        .replace(ATTACHMENT_MARKER_GLOBAL_RE, '')
+        .replace(/[ \t]+$/g, '')
+      ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+      return ATTACHMENT_MARKER_GLOBAL_RE.test(line) && !stripped.trim() ? null : stripped
+    })
+    .filter((line): line is string => line !== null)
+    .join('\n')
+}
+
+const materializeEditorPreservedBlankLineBlocks = (root: HTMLElement) => {
+  const encodedSource = getRawVditorValue()
+  let remainingEncodedBlankLines = encodedSource.split(MARKDOWN_BLANK_LINE_SENTINEL).length - 1
+  root.querySelectorAll<HTMLElement>('p[data-block], div[data-block]').forEach((block) => {
+    if (block.closest('table, [data-type="code-block"], .vditor-ir__marker--pre')) return
+    const rawText = block.textContent || ''
+    if (!rawText.includes(MARKDOWN_BLANK_LINE_SENTINEL) || !isMarkdownBlankLineSentinel(rawText)) return
+    if (remainingEncodedBlankLines <= 0) return
+    remainingEncodedBlankLines -= 1
+    setPlainBlankLineBlock(block)
+  })
+}
+
+const replaceAttachmentNodesWithSourceText = (root: HTMLElement) => {
+  root.querySelectorAll<HTMLElement>('.editor-table-attachment-marker').forEach((marker) => {
+    const info = attachmentInfoFromTableMarker(marker)
+    if (info) marker.replaceWith(document.createTextNode(attachmentInfoToMarkdownSource(info)))
+  })
+  root.querySelectorAll<HTMLElement>('[data-type="a"]').forEach((node) => {
+    const info = attachmentInfoFromIrNode(node)
+    if (info) node.replaceWith(document.createTextNode(attachmentInfoToMarkdownSource(info)))
+  })
+  root.querySelectorAll<HTMLAnchorElement>('a').forEach((anchor) => {
+    const info = attachmentInfoFromAnchor(anchor)
+    if (info) anchor.replaceWith(document.createTextNode(attachmentInfoToMarkdownSource(info)))
+  })
+}
+
+const materializeAttachmentMarkersInTableCells = (root: HTMLElement) => {
+  if (typeof document === 'undefined') return false
+  let changed = false
+  const cells = root.matches('td,th') ? [root] : Array.from(root.querySelectorAll('td,th'))
+  cells.forEach((cell) => {
+    cell.querySelectorAll<HTMLElement>('.editor-attachment-preview').forEach((node) => {
+      destroyAttachmentAudioPlayers(node)
+      node.remove()
+    })
+    cell.querySelectorAll<HTMLElement>('[data-type="a"], a').forEach((node) => {
+      if (node.closest('.editor-table-attachment-marker')) return
+      const info = node.matches('[data-type="a"]')
+        ? attachmentInfoFromIrNode(node)
+        : attachmentInfoFromAnchor(node as HTMLAnchorElement)
+      if (!info) return
+      node.replaceWith(createEditorTableAttachmentMarkerElement(info))
+      changed = true
+    })
+
+    const textNodes: Text[] = []
+    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const text = node.textContent || ''
+        ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+        if (!ATTACHMENT_MARKER_GLOBAL_RE.test(text)) return NodeFilter.FILTER_REJECT
+        const parent = node.parentElement
+        if (!parent) return NodeFilter.FILTER_REJECT
+        if (parent.closest('.editor-table-attachment-marker, a, [data-type="a"], .editor-attachment-preview, textarea, code, [data-type="code-block"], .vditor-ir__marker--pre')) {
+          return NodeFilter.FILTER_REJECT
+        }
+        return NodeFilter.FILTER_ACCEPT
+      }
+    })
+    while (walker.nextNode()) textNodes.push(walker.currentNode as Text)
+    textNodes.forEach((textNode) => {
+      const source = normalizeAttachmentSourceText(textNode.textContent || '')
+      ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+      let match: RegExpExecArray | null
+      let lastIndex = 0
+      const fragment = document.createDocumentFragment()
+      while ((match = ATTACHMENT_MARKER_GLOBAL_RE.exec(source))) {
+        if (match.index > lastIndex) fragment.appendChild(document.createTextNode(source.slice(lastIndex, match.index)))
+        const info = normalizeAttachmentInfo(match[1], match[2], match[3])
+        fragment.appendChild(info ? createEditorTableAttachmentMarkerElement(info) : document.createTextNode(match[0]))
+        lastIndex = ATTACHMENT_MARKER_GLOBAL_RE.lastIndex
+      }
+      if (lastIndex === 0) return
+      if (lastIndex < source.length) fragment.appendChild(document.createTextNode(source.slice(lastIndex)))
+      textNode.parentNode?.replaceChild(fragment, textNode)
+      changed = true
+    })
+  })
+  return changed
+}
+
+const setupAttachmentPreview = () => {
+  const root = editorContainer.value
+  if (!root || attachmentPreviewCleanup) return
+
+  const getEventElement = (event: Event) => {
+    const target = event.target as Node | null
+    if (target instanceof Element) return target
+    return target?.parentElement || null
+  }
+
+  const captureEditorSelection = () => {
+    if (typeof window === 'undefined') return
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return
+    const range = selection.getRangeAt(0)
+    const node = range.commonAncestorContainer
+    const element = node instanceof Element ? node : node.parentElement
+    if (!element || !root.contains(element)) return
+    if (!element.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset')) return
+    lastEditorSelectionRange = range.cloneRange()
+    if (getEditorTableCellFromRange(range)) {
+      storeLastEditorTableSelection(range)
+    } else {
+      clearStoredEditorTableSelection()
+    }
+  }
+
+  const onEditorSelectionChange = () => {
+    if (document.activeElement === inlineEditorTableTextarea) return
+    if (inlineEditorTableAtomicEditor?.contains(document.activeElement)) return
+    flushPendingEditorTableCellSourceSyncIfMoved(getCurrentEditorTableCell())
+    captureEditorSelection()
+    scheduleCollapseIrAttachmentChrome()
+  }
+
+  const onEditorSelectionEvent = () => {
+    flushPendingEditorTableCellSourceSyncIfMoved(getCurrentEditorTableCell())
+    captureEditorSelection()
+    scheduleCollapseIrAttachmentChrome()
+  }
+
+  const commitEditorTableCellDomEdit = (cell: HTMLTableCellElement, options: { emit?: boolean; stabilize?: boolean } = {}) => {
+    markEditorTableCellSourceDirty(cell)
+    captureEditorSelection()
+    if (options.stabilize !== false) scheduleStabilizePendingEditorTableCellDom()
+    scheduleRefreshAttachmentLinks()
+    if (options.emit === false) return
+    const emitSafeValue = () => emitEditorValue()
+    emitSafeValue()
+    scheduleTimeout(emitSafeValue, 0)
+  }
+
+  const handleEditorTableBeforeInput = (event: Event) => {
+    if (isInlineEditorTableTextareaEvent(event)) {
+      event.stopPropagation()
+      return true
+    }
+    const inputEvent = event as InputEvent
+    const cell = getCurrentEditorTableCell(event) || getEditorTableCellForCompositionInput(event)
+    if (!cell) return false
+    const inputType = inputEvent.inputType || ''
+    const isLineBreakInput = inputType === 'insertLineBreak' || inputType === 'insertParagraph'
+    const isCompositionTextInput = inputType === 'insertCompositionText'
+    const pastedText = inputType === 'insertFromPaste'
+      ? (inputEvent.dataTransfer?.getData('text/plain') || inputEvent.data || '')
+      : ''
+    const text = inputType === 'insertText' || inputType === 'insertCompositionText'
+      ? (inputEvent.data || '')
+      : pastedText
+    if (shouldSuppressEditorTableCompositionCommitArtifact(cell, inputType, text)) {
+      event.preventDefault()
+      event.stopPropagation()
+      ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+      return true
+    }
+    if (isLineBreakInput) return false
+    if (editorTableCompositionActive || isCompositionTextInput || (inputEvent.isComposing && !isLineBreakInput)) return false
+    if (!text && !isLineBreakInput) return false
+    event.preventDefault()
+    event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    const applied = isLineBreakInput
+      ? insertLineBreakIntoCellDom(cell)
+      : insertTextIntoCellDom(cell, text)
+    if (!applied) return true
+    commitEditorTableCellDomEdit(cell)
+    return true
+  }
+
+
+  const onEditorInput = (event: Event) => {
+    if (isInlineEditorTableTextareaEvent(event)) {
+      event.stopPropagation()
+      return
+    }
+    const cell = getCurrentEditorTableCell(event) || getEditorTableCellForCompositionInput(event)
+    if (cell) {
+      event.stopPropagation()
+      ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+      commitEditorTableCellDomEdit(cell, {
+        emit: !editorTableCompositionActive,
+        stabilize: !editorTableCompositionActive,
+      })
+      return
+    }
+    flushPendingEditorTableCellSourceSyncIfMoved(cell)
+    captureEditorSelection()
+    if (getEditorTables().length) {
+      event.stopPropagation()
+      ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+      const emitSafeValue = () => emitEditorValue()
+      emitSafeValue()
+      scheduleTimeout(emitSafeValue, 0)
+      return
+    }
+    if (normalizeEditorAttachmentSource()) return
+    scheduleRefreshAttachmentLinks()
+  }
+
+  const onEditorFocusOut = () => {
+    editorPlainCompositionActive = false
+    scheduleTimeout(() => flushPendingEditorTableCellSourceSyncIfMoved(getCurrentEditorTableCell()), 0)
+  }
+
+  const onEditorCompositionStart = (event: CompositionEvent) => {
+    if (isInlineEditorTableTextareaEvent(event)) {
+      event.stopPropagation()
+      return
+    }
+    const compositionCell = getCurrentEditorTableCell(event)
+    if (!compositionCell) {
+      editorPlainCompositionActive = true
+      preparePlainBlankLineInput(event)
+      return
+    }
+    editorPlainCompositionActive = false
+    editorTableCompositionActive = true
+    editorTableCompositionCommitKey = null
+    editorTableCompositionCaretTarget = null
+    editorTableCompositionStartText = ''
+    editorTableCompositionStartPrefix = ''
+    if (clearEditorTableEmptyPlaceholder(compositionCell)) placeCaretAtStartOfEditorTableCell(compositionCell)
+    rememberEditorTableCompositionCell(compositionCell)
+  }
+
+  const onEditorCompositionUpdate = (event: CompositionEvent) => {
+    if (isInlineEditorTableTextareaEvent(event)) {
+      event.stopPropagation()
+      return
+    }
+    if (getCurrentEditorTableCell(event) || getEditorTableCellForCompositionInput(event)) {
+      stopEditorTablePropagation(event)
+    }
+  }
+
+  const onEditorCompositionEnd = (event: CompositionEvent) => {
+    if (isInlineEditorTableTextareaEvent(event)) {
+      event.stopPropagation()
+      return
+    }
+    editorPlainCompositionActive = false
+    editorTableCompositionActive = false
+    const rememberedCell = editorTableCompositionTarget
+      ? (getEditorTables()[editorTableCompositionTarget.tableIndex]?.rows[editorTableCompositionTarget.rowIndex]?.cells[editorTableCompositionTarget.cellIndex] as HTMLTableCellElement | undefined) || null
+      : null
+    const cell = rememberedCell || getCurrentEditorTableCell(event) || getPendingEditorTableCell()
+    if (cell) {
+      const sourcePosition = getEditorTableCellPosition(cell)
+      stopEditorTableNativeEvent(event)
+      clearVditorCompositionLock()
+      cleanupEditorTableCompositionDrift(event.data || '')
+      rememberEditorTableCompositionCaretTarget(cell, event.data || '')
+      const synced = syncEditorTableCellDomToSource(cell, { restoreCaret: true })
+      const caretCell = getEditorTableCellAtPosition(sourcePosition)
+      if (!synced) commitEditorTableCellDomEdit(caretCell || cell)
+      markEditorTableCompositionSettling()
+      scheduleRestoreEditorTableCompositionCaret()
+    }
+    editorTableCompositionTarget = null
+    editorTableCompositionSnapshot = null
+    editorTableCompositionStartText = ''
+    editorTableCompositionStartPrefix = ''
+  }
+
+  const refreshAttachmentLinks = (scope: HTMLElement = root) => {
+    if (scope === root) materializeEditorPreservedBlankLineBlocks(root)
+    materializeAttachmentMarkersInTableCells(scope)
+    scope.querySelectorAll('a').forEach((node) => {
+      const anchor = node as HTMLAnchorElement
+      const info = attachmentInfoFromAnchor(anchor)
+      anchor.classList.toggle('editor-attachment-link', !!info)
+      anchor.classList.toggle('vditor-ir__link', !!info)
+      if (!info) {
+        anchor.style.cursor = ''
+        anchor.removeAttribute('role')
+        anchor.removeAttribute('aria-label')
+        anchor.removeAttribute('data-attachment-kind')
+        anchor.removeAttribute('data-attachment-url')
+        return
+      }
+      anchor.setAttribute('role', 'button')
+      anchor.setAttribute('aria-label', `预览${info.title}`)
+      anchor.setAttribute('data-attachment-kind', info.type)
+      anchor.setAttribute('data-attachment-url', info.url)
+      anchor.removeAttribute('title')
+      anchor.setAttribute('draggable', 'false')
+      anchor.style.cursor = 'pointer'
+    })
+
+    scope.querySelectorAll('[data-type="a"]').forEach((node) => {
+      const marker = node as HTMLElement
+      const label = marker.querySelector<HTMLElement>('.vditor-ir__link')
+      const info = attachmentInfoFromIrNode(marker)
+      marker.classList.toggle('editor-attachment-node', !!info)
+      label?.classList.toggle('editor-attachment-link', !!info)
+      if (info) {
+        marker.classList.remove('vditor-ir__node--expand')
+        marker.setAttribute('contenteditable', 'false')
+        marker.setAttribute('data-attachment-kind', info.type)
+        marker.setAttribute('data-attachment-url', info.url)
+        marker.setAttribute('aria-label', `预览${info.title}`)
+      } else {
+        marker.removeAttribute('contenteditable')
+        marker.removeAttribute('data-attachment-kind')
+        marker.removeAttribute('data-attachment-url')
+        marker.removeAttribute('aria-label')
+      }
+      if (!label) return
+      if (!info) {
+        label.style.cursor = ''
+        label.removeAttribute('role')
+        label.removeAttribute('aria-label')
+        label.removeAttribute('data-attachment-kind')
+        label.removeAttribute('data-attachment-url')
+        return
+      }
+      label.setAttribute('role', 'button')
+      label.setAttribute('aria-label', `预览${info.title}`)
+      label.setAttribute('data-attachment-kind', info.type)
+      label.setAttribute('data-attachment-url', info.url)
+      label.style.cursor = 'pointer'
+    })
+
+    scope.querySelectorAll<HTMLVideoElement>('.site-attachment-render--video video').forEach((video) => {
+      ensureFancyboxVideoThumbnail(video)
+    })
+    enhanceAttachmentAudioPlayers(scope)
+  }
+
+  const removeAttachmentPreview = (preview: Element) => {
+    destroyAttachmentAudioPlayers(preview)
+    preview.remove()
+  }
+
+  const removeAttachmentPreviews = () => {
+    root.querySelectorAll('.editor-attachment-preview').forEach(removeAttachmentPreview)
+  }
+
+  const closeSiblingPreview = (block: HTMLElement) => {
+    const next = block.nextElementSibling as HTMLElement | null
+    if (next?.classList.contains('editor-attachment-preview')) {
+      removeAttachmentPreview(next)
+      return true
+    }
+    return false
+  }
+
+  const toggleAttachmentPreview = (target: HTMLElement, fallbackInfo?: EditorAttachmentInfo | null) => {
+    const anchor = target.closest('a.editor-attachment-link') as HTMLAnchorElement | null
+    const markerNode = target.closest<HTMLElement>('[data-type="a"].editor-attachment-node')
+    const info = attachmentInfoFromAnchor(anchor) || attachmentInfoFromIrLabel(target) || fallbackInfo
+    if (!info) return
+
+    const tableCell = target.closest<HTMLTableCellElement>('td,th')
+    if (info.type === 'audio' && tableCell && root.contains(tableCell)) {
+      removeAttachmentPreviews()
+      toggleAttachmentAudioPopover(target, { src: info.url, name: info.name })
+      return
+    }
+
+    closeAttachmentAudioPopover()
+    const block = (target.closest('p, li') || markerNode?.closest('p, li') || target.closest('pre.vditor-reset, .vditor-ir__node, pre') || anchor?.closest('pre.vditor-reset, .vditor-ir__node, p, li, pre') || target.parentElement) as HTMLElement | null
+    if (!block || !root.contains(block)) return
+
+    if (info.type === 'image' || info.type === 'video') {
+      removeAttachmentPreviews()
+      showAttachmentGallery(getAttachmentInfosByType(info.type), info, target)
+      return
+    }
+
+    if (info.type === 'file') {
+      removeAttachmentPreviews()
+      openFileAttachment(info)
+      return
+    }
+
+    if (closeSiblingPreview(block)) return
+
+    removeAttachmentPreviews()
+    const preview = document.createElement('div')
+    preview.className = `editor-attachment-preview editor-attachment-preview--${info.type}`
+    preview.setAttribute('contenteditable', 'false')
+
+    preview.innerHTML = buildAttachmentAudioPlaceholderHtml({ src: info.url, name: info.name })
+    enhanceAttachmentAudioPlayers(preview)
+    block.insertAdjacentElement('afterend', preview)
+  }
+
+  const attachmentTargetFromEvent = (event: Event): { target: HTMLElement; info: EditorAttachmentInfo } | null => {
+    const target = getEventElement(event) as HTMLElement | null
+    if (!target || !root.contains(target)) return null
+
+    const tableMarker = target.closest<HTMLElement>('.editor-table-attachment-marker')
+    if (tableMarker && root.contains(tableMarker)) {
+      const markerInfo = attachmentInfoFromTableMarker(tableMarker)
+      if (markerInfo) return { target: tableMarker, info: markerInfo }
+    }
+
+    const markerNode = target.closest<HTMLElement>('[data-type="a"].editor-attachment-node')
+    if (markerNode && root.contains(markerNode)) {
+      const markerInfo = attachmentInfoFromIrNode(markerNode)
+      if (markerInfo) return { target: markerNode, info: markerInfo }
+    }
+
+    const irLabel = target.closest<HTMLElement>('.vditor-ir__link.editor-attachment-link')
+    if (irLabel && root.contains(irLabel)) {
+      const irInfo = attachmentInfoFromIrLabel(irLabel)
+      if (irInfo) return { target: irLabel, info: irInfo }
+    }
+
+    const anchor = target.closest('a.editor-attachment-link') as HTMLAnchorElement | null
+    if (!anchor || !root.contains(anchor)) return null
+    const anchorInfo = attachmentInfoFromAnchor(anchor)
+    if (anchorInfo) return { target: anchor, info: anchorInfo }
+    return null
+  }
+
+  const collapseIrAttachmentChrome = () => {
+    root.querySelectorAll<HTMLElement>('[data-type="a"].editor-attachment-node.vditor-ir__node--expand').forEach((marker) => {
+      if (attachmentInfoFromIrNode(marker)) marker.classList.remove('vditor-ir__node--expand')
+    })
+  }
+
+  const scheduleCollapseIrAttachmentChrome = () => {
+    collapseIrAttachmentChrome()
+    scheduleFrame(() => collapseIrAttachmentChrome())
+    scheduleTimeout(() => collapseIrAttachmentChrome(), 0)
+  }
+
+  const getAttachmentInfosByType = (type: EditorAttachmentInfo['type']) => {
+    const seen = new Set<string>()
+    const items: EditorAttachmentInfo[] = []
+    const pushInfo = (info: EditorAttachmentInfo | null) => {
+      if (!info || info.type !== type) return
+      const key = `${info.type}\n${info.url}\n${info.name}`
+      if (seen.has(key)) return
+      seen.add(key)
+      items.push(info)
+    }
+    root.querySelectorAll('a.editor-attachment-link').forEach((node) => pushInfo(attachmentInfoFromAnchor(node as HTMLAnchorElement)))
+    root.querySelectorAll('[data-type="a"].editor-attachment-node').forEach((node) => pushInfo(attachmentInfoFromIrNode(node as HTMLElement)))
+    root.querySelectorAll('.editor-table-attachment-marker').forEach((node) => pushInfo(attachmentInfoFromTableMarker(node as HTMLElement)))
+    return items
+  }
+
+  const preventAttachmentNavigation = (event: Event) => {
+    const hit = attachmentTargetFromEvent(event)
+    if (!hit) {
+      scheduleCollapseIrAttachmentChrome()
+      return
+    }
+    event.preventDefault()
+    event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+  }
+
+  const onAttachmentClick = (event: MouseEvent) => {
+    const hit = attachmentTargetFromEvent(event)
+    if (!hit) {
+      scheduleCollapseIrAttachmentChrome()
+      return
+    }
+    event.preventDefault()
+    event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    toggleAttachmentPreview(hit.target, hit.info)
+  }
+
+  const onAttachmentKeydown = (event: KeyboardEvent) => {
+    if (event.key === 'Backspace' || event.key === 'Delete') {
+      const hit = attachmentTargetFromEvent(event)
+      const marker = hit?.target.closest<HTMLElement>('.editor-table-attachment-marker') || null
+      const cell = marker?.closest<HTMLTableCellElement>('td,th') || null
+      if (!marker || !cell || !root.contains(cell)) return
+      const markerStart = document.createRange()
+      markerStart.setStartBefore(marker)
+      markerStart.collapse(true)
+      const offset = editorTableRangeSourceOffset(cell, markerStart)
+      event.preventDefault()
+      event.stopPropagation()
+      ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+      markEditorTableAttachmentMutationHandled(cell)
+      marker.remove()
+      const nextText = editorTableCellTextFromDom(cell)
+      setEditorTableDomCellText(cell, nextText)
+      markEditorTableCellSourceDirty(cell, nextText)
+      placeCaretAtEditorTableSourceOffset(cell, offset)
+      commitEditorTableCellDomEdit(cell)
+      return
+    }
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    const hit = attachmentTargetFromEvent(event)
+    if (!hit) return
+    event.preventDefault()
+    event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    toggleAttachmentPreview(hit.target, hit.info)
+  }
+
+  const currentPlainEditorBlock = (event?: Event) => {
+    const selection = window.getSelection()
+    const anchorNode = selection?.anchorNode || null
+    return getPlainEditorBlock(anchorNode) || getPlainEditorBlock(event?.target as Node | null | undefined)
+  }
+
+  const isEditorBlankLineEnter = (event: KeyboardEvent) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || editorPlainCompositionActive) return false
+    const block = currentPlainEditorBlock(event)
+    const anchorElement = block || getEventElement(event)
+    if (!anchorElement || !root.contains(anchorElement)) return false
+    if (anchorElement.closest('.vditor-toolbar, .vditor-panel, .vditor-hint, [data-type="code-block"], .vditor-ir__marker--pre')) return false
+    if (getCurrentEditorTableCell(event)) return false
+    return isPlainBlankLineBlock(block)
+  }
+
+  const isEditorPlainLineEnter = (event: KeyboardEvent) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || editorPlainCompositionActive) return false
+    const block = currentPlainEditorBlock(event)
+    const anchorElement = block || getEventElement(event)
+    if (!anchorElement || !root.contains(anchorElement)) return false
+    if (anchorElement.closest('.vditor-toolbar, .vditor-panel, .vditor-hint, [data-type="code-block"], .vditor-ir__marker--pre')) return false
+    if (getCurrentEditorTableCell(event)) return false
+    return !!block
+  }
+
+  const emitEditorSoftBreakInput = (_event: Event) => {
+    scheduleRefreshAttachmentLinks()
+    scheduleTimeout(() => {
+      if (vditorInstance?.getValue) emitEditorValue(getEditorDomContentFallback() || vditorInstance.getValue())
+    }, 0)
+  }
+
+  const insertEditorPlainLineBreak = (event: Event) => {
+    const block = currentPlainEditorBlock(event)
+    const selection = window.getSelection()
+    if (!block || isPlainBlankLineBlock(block) || !selection?.rangeCount) return false
+    event.preventDefault()
+    event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    const range = selection.getRangeAt(0)
+    range.deleteContents()
+    const lineBreak = document.createElement('br')
+    const caretNode = document.createTextNode(PRESERVED_BLANK_LINE_DOM_ANCHOR)
+    range.insertNode(lineBreak)
+    lineBreak.after(caretNode)
+    range.setStart(caretNode, caretNode.data.length)
+    range.collapse(true)
+    selection.removeAllRanges()
+    selection.addRange(range)
+    lastEditorSelectionRange = range.cloneRange()
+    emitEditorSoftBreakInput(event)
+    return true
+  }
+
+  const commitEditorPlainEmptyLine = (event: KeyboardEvent) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || editorPlainCompositionActive) return false
+    const block = currentPlainEditorBlock(event)
+    const selection = window.getSelection()
+    if (!block || !selection?.rangeCount || !selection.isCollapsed) return false
+    const anchorNode = selection.anchorNode
+    if (!(anchorNode instanceof Text) || anchorNode.previousSibling instanceof HTMLBRElement === false) return false
+    if (String(anchorNode.textContent || '').replace(/[\u200b\u200c\ufeff]/g, '') !== '') return false
+    event.preventDefault()
+    event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    anchorNode.previousSibling.remove()
+    anchorNode.remove()
+    const emptyLine = document.createElement(block.tagName.toLowerCase())
+    emptyLine.setAttribute('data-block', block.getAttribute('data-block') || '0')
+    setPlainEmptyLineBlock(emptyLine)
+    const nextBlock = createPlainEditableBlock(block)
+    block.after(emptyLine, nextBlock)
+    placeCaretInPlainBlock(nextBlock)
+    emitEditorSoftBreakInput(event)
+    return true
+  }
+
+  const insertEditorSoftLineBreak = (event: Event) => {
+    const block = currentPlainEditorBlock(event)
+    if (!isPlainBlankLineBlock(block)) return false
+    event.preventDefault()
+    event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    setPlainEmptyLineBlock(block!)
+    const nextBlock = createPlainEditableBlock(block!)
+    block!.after(nextBlock)
+    placeCaretInPlainBlock(nextBlock)
+    emitEditorSoftBreakInput(event)
+    return true
+  }
+
+  const insertEditorLeadingBlankLine = (event: KeyboardEvent) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || editorPlainCompositionActive || editorTableCompositionActive) return false
+    const block = currentPlainEditorBlock(event)
+    if (!block || isPlainBlankLineBlock(block) || !isCaretAtStartOfPlainBlock(block)) return false
+    event.preventDefault()
+    event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    insertPreservedBlankLineBefore(block)
+    placeCaretInPlainBlock(block)
+    emitEditorSoftBreakInput(event)
+    return true
+  }
+
+  const preparePlainBlankLineInput = (event: InputEvent | CompositionEvent) => {
+    const block = currentPlainEditorBlock(event)
+    if (!isPlainBlankLineBlock(block)) return false
+    return clearPlainBlankLineForInput(block!)
+  }
+
+  const encodePlainEditorPasteValue = (pastedText: string) => {
+    const source = String(pastedText || '').replace(/\r\n?/g, '\n')
+    const tableBlocks = getMarkdownTableBlocks(source)
+    if (!tableBlocks.length) return encodeMarkdownExtraBlankLines(source)
+    const sourceLines = source.split('\n')
+    let cursor = 0
+    let output = ''
+    const append = (value: string, options: { blockBoundary?: boolean } = {}) => {
+      if (!value) return
+      if (options.blockBoundary && output && !output.endsWith('\n')) output += '\n'
+      output += value
+    }
+    tableBlocks.forEach((block) => {
+      append(encodeMarkdownExtraBlankLines(sourceLines.slice(cursor, block.start).join('\n')))
+      append(block.lines.map((line) => line.replace(TABLE_CELL_BREAK_RE, TABLE_CELL_BREAK_PLACEHOLDER)).join('\n'), { blockBoundary: true })
+      cursor = block.end
+    })
+    append(encodeMarkdownExtraBlankLines(sourceLines.slice(cursor).join('\n')), { blockBoundary: true })
+    return output
+  }
+
+  const insertPlainEditorPastedTextWithBlankLines = (event: Event, pastedText: string) => {
+    if (!/\n{3,}/.test(pastedText.replace(/\r\n?/g, '\n'))) return false
+    const anchorElement = getEventElement(event)
+    if (!anchorElement || !root.contains(anchorElement)) return false
+    if (anchorElement.closest('.vditor-toolbar, .vditor-panel, .vditor-hint, table, [data-type="code-block"], .vditor-ir__marker--pre')) return false
+    if (!vditorInstance?.insertValue) return false
+    event.preventDefault()
+    event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    vditorInstance.insertValue(encodePlainEditorPasteValue(pastedText))
+    scheduleTimeout(() => {
+      materializeEditorPreservedBlankLineBlocks(root)
+      enhanceEditorTables(root)
+      emitEditorValue()
+    }, 0)
+    return true
+  }
+
+  const handlePlainEditorPasteWithBlankLines = (event: InputEvent) => {
+    if (event.inputType !== 'insertFromPaste') return false
+    const pastedText = event.dataTransfer?.getData('text/plain') || event.data || ''
+    return insertPlainEditorPastedTextWithBlankLines(event, pastedText)
+  }
+
+  const onEditorPaste = (event: ClipboardEvent) => {
+    const pastedText = event.clipboardData?.getData('text/plain') || ''
+    insertPlainEditorPastedTextWithBlankLines(event, pastedText)
+  }
+
+  const onPlainBlankLineMouseDown = (event: MouseEvent) => {
+    const block = getPlainEditorBlock(event.target as Node | null)
+    if (!isPlainBlankLineBlock(block)) return
+    clearStoredEditorTableSelection()
+    event.preventDefault()
+    event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    if (block!.classList.contains(PLAIN_EMPTY_LINE_CLASS)) setPlainEmptyLineBlock(block!)
+    else setPlainBlankLineBlock(block!)
+    placeCaretInPlainBlock(block!)
+  }
+
+  const onEditorTableMouseDown = (event: MouseEvent) => {
+    const targetNode = event.target as Node | null
+    const target = targetNode instanceof Element ? targetNode : targetNode?.parentElement
+    if (target?.closest('a, button, .editor-attachment-preview, .editor-table-attachment-marker')) return
+    const cell = getEditorTableCellFromEvent(event)
+    if (!cell) return
+    editorTableCompositionCommitKey = null
+    editorTableCompositionCaretTarget = null
+    if (cell.querySelector('.editor-table-attachment-marker')) {
+      if (openInlineEditorTableAtomicEditor(cell, event)) {
+        event.preventDefault()
+        event.stopPropagation()
+        ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+      }
+      return
+    }
+    if (openInlineEditorTableCellTextarea(cell, event)) {
+      event.preventDefault()
+      event.stopPropagation()
+      ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    }
+  }
+
+  const onPlainEditorBlankAreaMouseDown = (event: MouseEvent) => {
+    if (getEditorTableCellFromEvent(event)) return
+    if (getPlainEditorBlock(event.target as Node | null)) return
+    editorTableCompositionCommitKey = null
+    editorTableCompositionCaretTarget = null
+    if (placeCaretInPlainEditorVisualBlankLine(event)) {
+      clearStoredEditorTableSelection()
+      event.preventDefault()
+      event.stopPropagation()
+      ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    }
+  }
+
+  const handleEditorBackspaceKeydown = (event: KeyboardEvent) => {
+    if (event.key !== 'Backspace' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return false
+    const cell = getCurrentEditorTableCell(event)
+    if (cell && handleEditorTableBackspaceAtLineBoundary(event, cell)) {
+      commitEditorTableCellDomEdit(cell)
+      return true
+    }
+    const block = currentPlainEditorBlock(event)
+    if (block && handlePlainEditorBackspaceAtLineBoundary(event, block)) return true
+    return false
+  }
+
+  const onPlainTextEnterKeydown = (event: KeyboardEvent) => {
+    if (isInlineEditorTableTextareaEvent(event)) {
+      onInlineEditorTableTextareaKeydown(event)
+      return
+    }
+    if (handleEditorBackspaceKeydown(event)) return
+    const cell = getCurrentEditorTableCell(event) || getEditorTableCellAtPosition(editorTableCompositionTarget)
+    // Windows Pinyin can leave the line-break Enter event marked as composing
+    // after Space commits the candidate, so trust our composition lifecycle flag.
+    const isPlainEnter = (event.key === 'Enter' || event.code === 'Enter' || event.code === 'NumpadEnter')
+      && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey
+    if (cell && editorTableCompositionActive && (event.key === ' ' || event.code === 'Space')) {
+      rememberEditorTableCompositionCommitKey(cell, 'Space')
+      stopEditorTablePropagation(event)
+      return
+    }
+    if (isPlainEnter) {
+      if (cell && editorTableCompositionActive) {
+        rememberEditorTableCompositionCommitKey(cell, 'Enter')
+        stopEditorTablePropagation(event)
+        return
+      }
+      if (!editorTableCompositionActive && cell && insertEditorTableCellLineBreak(event, cell)) return
+    }
+    if (commitEditorPlainEmptyLine(event)) return
+    if (insertEditorLeadingBlankLine(event)) return
+    if (isEditorBlankLineEnter(event)) {
+      insertEditorSoftLineBreak(event)
+      return
+    }
+    if (!isEditorPlainLineEnter(event)) return
+    insertEditorPlainLineBreak(event)
+  }
+
+  const onEditorBeforeInput = (event: InputEvent) => {
+    if (handleEditorTableBeforeInput(event)) return
+    if (handlePlainEditorPasteWithBlankLines(event)) return
+    if (/^(insertText|insertCompositionText|insertFromPaste)$/.test(event.inputType || '')) {
+      preparePlainBlankLineInput(event)
+      return
+    }
+    if (event.inputType !== 'insertParagraph' || editorPlainCompositionActive) return
+    const selection = window.getSelection()
+    const anchorNode = selection?.anchorNode || null
+    const anchorElement = anchorNode instanceof Element ? anchorNode : anchorNode?.parentElement || getEventElement(event)
+    if (!anchorElement || !root.contains(anchorElement)) return
+    if (anchorElement.closest('.vditor-toolbar, .vditor-panel, .vditor-hint, [data-type="code-block"], .vditor-ir__marker--pre')) return
+    if (getCurrentEditorTableCell(event)) return
+    if (isPlainBlankLineBlock(currentPlainEditorBlock(event))) {
+      insertEditorSoftLineBreak(event)
+    }
+  }
+
+  const scheduleTableEnhance = () => scheduleFrame(() => enhanceEditorTables(root))
+
+  const tableFromEvent = (event: Event) => {
+    const target = getEventElement(event)
+    const table = target?.closest<HTMLTableElement>('.vditor-reset table.editor-deletable-table, .vditor-reset table') || null
+    return table && root.contains(table) ? table : null
+  }
+
+  const onTablePointerMove = (event: PointerEvent) => {
+    const table = tableFromEvent(event)
+    if (!table) return
+    showTableDeleteForTable(table)
+  }
+
+  const onTablePointerOut = (event: PointerEvent) => {
+    const table = tableFromEvent(event)
+    if (!table) return
+    const next = event.relatedTarget instanceof Element ? event.relatedTarget : null
+    if (next && table.contains(next)) return
+    scheduleTableDeleteHide()
+  }
+
+  const onTablePointerDown = (event: PointerEvent) => {
+    const table = tableFromEvent(event)
+    if (!table) clearSelectedEditorTable()
+  }
+
+  const repositionVisibleTableDeleteButton = () => {
+    if (!showTableDeleteButton.value || !hoveredEditorTable) return
+    if (!root.contains(hoveredEditorTable) || !isEditorTableActionVisible(hoveredEditorTable)) {
+      hideTableDeleteButton()
+      return
+    }
+    positionTableDeleteButton(hoveredEditorTable)
+  }
+
+  let refreshQueued = false
+  const locallyHandledAttachmentMutationCells = new Set<HTMLTableCellElement>()
+  const tableCellFromMutationTarget = (target: Node) => {
+    const element = target instanceof Element ? target : target.parentElement
+    return element?.closest<HTMLTableCellElement>('td,th') || null
+  }
+  const markTableAttachmentMutationHandled = (cell: HTMLTableCellElement) => {
+    locallyHandledAttachmentMutationCells.add(cell)
+    scheduleFrame(() => locallyHandledAttachmentMutationCells.delete(cell))
+  }
+  const scheduleRefreshAttachmentLinks = () => {
+    if (refreshQueued) return
+    refreshQueued = true
+    scheduleFrame(() => {
+      refreshQueued = false
+      refreshAttachmentLinks()
+      enhanceEditorTables(root)
+    })
+  }
+  refreshAttachmentLinksFromEditor = scheduleRefreshAttachmentLinks
+  refreshAttachmentLinksInTableCellFromEditor = (cell) => refreshAttachmentLinks(cell)
+  markEditorTableAttachmentMutationHandled = markTableAttachmentMutationHandled
+
+  refreshAttachmentLinks()
+  scheduleTableEnhance()
+  const previewObserver = new MutationObserver((records) => {
+    const onlyLocallyHandledTableAttachmentMutations = records.length > 0 && records.every((record) => {
+      const cell = tableCellFromMutationTarget(record.target)
+      return !!cell && locallyHandledAttachmentMutationCells.has(cell)
+    })
+    if (onlyLocallyHandledTableAttachmentMutations) return
+    if (pendingEditorTableCellSync) scheduleStabilizePendingEditorTableCellDom()
+    scheduleRefreshAttachmentLinks()
+  })
+  previewObserver.observe(root, { childList: true, subtree: true })
+  document.addEventListener('beforeinput', onEditorBeforeInput, true)
+  root.addEventListener('beforeinput', onEditorBeforeInput, true)
+  document.addEventListener('paste', onEditorPaste, true)
+  root.addEventListener('paste', onEditorPaste, true)
+  root.addEventListener('input', onEditorInput, true)
+  root.addEventListener('compositionstart', onEditorCompositionStart, true)
+  root.addEventListener('compositionupdate', onEditorCompositionUpdate, true)
+  root.addEventListener('compositionend', onEditorCompositionEnd, true)
+  root.addEventListener('focusout', onEditorFocusOut, true)
+  document.addEventListener('mousedown', closeInlineEditorTableTextareaOnExternalMouseDown, true)
+  root.addEventListener('mousedown', onEditorTableMouseDown, true)
+  root.addEventListener('mousedown', onPlainBlankLineMouseDown, true)
+  root.addEventListener('mousedown', onPlainEditorBlankAreaMouseDown, true)
+  root.addEventListener('mouseup', onEditorSelectionEvent, true)
+  root.addEventListener('keyup', onEditorSelectionEvent, true)
+  document.addEventListener('selectionchange', onEditorSelectionChange, true)
+  root.addEventListener('pointerdown', onTablePointerDown, true)
+  root.addEventListener('pointermove', onTablePointerMove, true)
+  root.addEventListener('pointerout', onTablePointerOut, true)
+  root.addEventListener('pointerdown', preventAttachmentNavigation, true)
+  root.addEventListener('mousedown', preventAttachmentNavigation, true)
+  root.addEventListener('click', onAttachmentClick, true)
+  document.addEventListener('keydown', onPlainTextEnterKeydown, true)
+  root.addEventListener('keydown', onPlainTextEnterKeydown, true)
+  root.addEventListener('keydown', onAttachmentKeydown, true)
+  window.addEventListener('resize', repositionVisibleTableDeleteButton)
+  window.addEventListener('resize', updateExpandedTableAvailableWidth)
+  window.addEventListener('resize', repositionInlineEditorTableEditors)
+  window.addEventListener('scroll', repositionVisibleTableDeleteButton, { passive: true, capture: true })
+  window.addEventListener('scroll', repositionInlineEditorTableEditors, { passive: true, capture: true })
+  attachmentPreviewCleanup = () => {
+    previewObserver.disconnect()
+    document.removeEventListener('beforeinput', onEditorBeforeInput, true)
+    root.removeEventListener('beforeinput', onEditorBeforeInput, true)
+    document.removeEventListener('paste', onEditorPaste, true)
+    root.removeEventListener('paste', onEditorPaste, true)
+    root.removeEventListener('input', onEditorInput, true)
+    root.removeEventListener('compositionstart', onEditorCompositionStart, true)
+    root.removeEventListener('compositionupdate', onEditorCompositionUpdate, true)
+    root.removeEventListener('compositionend', onEditorCompositionEnd, true)
+    root.removeEventListener('focusout', onEditorFocusOut, true)
+    document.removeEventListener('mousedown', closeInlineEditorTableTextareaOnExternalMouseDown, true)
+    root.removeEventListener('mousedown', onEditorTableMouseDown, true)
+    root.removeEventListener('mousedown', onPlainBlankLineMouseDown, true)
+    root.removeEventListener('mousedown', onPlainEditorBlankAreaMouseDown, true)
+    root.removeEventListener('mouseup', onEditorSelectionEvent, true)
+    root.removeEventListener('keyup', onEditorSelectionEvent, true)
+    document.removeEventListener('selectionchange', onEditorSelectionChange, true)
+    root.removeEventListener('pointerdown', onTablePointerDown, true)
+    root.removeEventListener('pointermove', onTablePointerMove, true)
+    root.removeEventListener('pointerout', onTablePointerOut, true)
+    root.removeEventListener('pointerdown', preventAttachmentNavigation, true)
+    root.removeEventListener('mousedown', preventAttachmentNavigation, true)
+    root.removeEventListener('click', onAttachmentClick, true)
+    document.removeEventListener('keydown', onPlainTextEnterKeydown, true)
+    root.removeEventListener('keydown', onPlainTextEnterKeydown, true)
+    root.removeEventListener('keydown', onAttachmentKeydown, true)
+    window.removeEventListener('resize', repositionVisibleTableDeleteButton)
+    window.removeEventListener('resize', updateExpandedTableAvailableWidth)
+    window.removeEventListener('resize', repositionInlineEditorTableEditors)
+    window.removeEventListener('scroll', repositionVisibleTableDeleteButton, true)
+    window.removeEventListener('scroll', repositionInlineEditorTableEditors, true)
+    hideTableDeleteButton()
+    closeInlineEditorTableTextarea()
+    closeInlineEditorTableAtomicEditor()
+    removeAttachmentPreviews()
+    refreshAttachmentLinksFromEditor = () => {}
+    refreshAttachmentLinksInTableCellFromEditor = () => {}
+    markEditorTableAttachmentMutationHandled = () => {}
+    attachmentPreviewCleanup = null
+  }
+}
+
+const getCurrentHeadingTag = () => {
+  const selection = typeof window !== 'undefined' ? window.getSelection() : null
+  const node = selection?.anchorNode || null
+  const element = node instanceof Element ? node : node?.parentElement || null
+  const heading = element?.closest?.('h1,h2,h3,h4,h5,h6') as HTMLElement | null
+  if (heading?.tagName) return heading.tagName.toLowerCase()
+  const block = element?.closest?.('.vditor-ir__node, [data-type="heading"]') as HTMLElement | null
+  const marker = block?.querySelector?.('.vditor-ir__marker--heading, [data-type="heading-marker"]') as HTMLElement | null
+  const markerText = (marker?.textContent || '').trim()
+  const level = markerText.match(/^#{1,6}/)?.[0]?.length || 0
+  return level ? `h${level}` : ''
+}
+
+const positionHeadingMenu = () => {
+  positionFloatingMenu(headingTrigger.value, headingMenuRef.value, headingMenuStyle, 152, 'above-align-left')
+}
+
+const closeHeadingMenu = () => {
+  showHeadingMenu.value = false
+  nativeHeadingPanel.value?.classList.add('vditor-panel--none')
+  if (nativeHeadingPanel.value) nativeHeadingPanel.value.style.display = 'none'
+}
+
+const positionTableMenu = () => {
+  positionFloatingMenu(tableTrigger.value, tableMenuRef.value, tableMenuStyle, 272, 'above-align-left')
+}
+
+const closeTableMenu = () => {
+  showTableMenu.value = false
+  nativeTablePanel.value?.classList.add('vditor-panel--none')
+  if (nativeTablePanel.value) nativeTablePanel.value.style.display = 'none'
+}
+
+const clampTableSize = (value: number) => Math.min(TABLE_SIZE_LIMIT, Math.max(1, Number(value) || 1))
+const adjustTableRows = (delta: number) => { tableRows.value = clampTableSize(tableRows.value + delta) }
+const adjustTableCols = (delta: number) => { tableCols.value = clampTableSize(tableCols.value + delta) }
+const previewTableSize = (rows: number, cols: number) => {
+  tableRows.value = clampTableSize(rows)
+  tableCols.value = clampTableSize(cols)
+}
+
+const buildMarkdownTable = (rows: number, cols: number) => {
+  const rowCount = clampTableSize(rows)
+  const colCount = clampTableSize(cols)
+  const tableRows = Array.from({ length: rowCount }, () => Array.from({ length: colCount }, () => MARKDOWN_EMPTY_TABLE_CELL))
+  const divider = Array.from({ length: colCount }, () => '---')
+  const formatRow = (cells: string[]) => `| ${cells.join(' | ')} |`
+  return `\n${[formatRow(tableRows[0] || []), formatRow(divider), ...tableRows.slice(1).map(formatRow)].join('\n')}\n\n`
+}
+
+const insertTable = (rows: number, cols: number) => {
+  if (!vditorInstance) return
+  if (pendingEditorTableCellSync) flushPendingEditorTableCellSourceSync()
+  vditorInstance.insertValue(buildMarkdownTable(rows, cols))
+  emitEditorValue()
+  scheduleNormalizeEditorTableSource()
+  closeTableMenu()
+}
+
+const getEditorRootElement = () => {
+  return editorContainer.value
+}
+
+const isInsideEditorRoot = (node: Node | null) => {
+  const root = getEditorRootElement()
+  return !!node && !!root && root.contains(node)
+}
+
+const getEditorEditableElement = () => {
+  const root = getEditorRootElement()
+  if (!root) return null
+  const candidates = Array.from(root.querySelectorAll<HTMLElement>('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset'))
+  return candidates.find((node) => !!node.querySelector('table'))
+    || candidates.find((node) => node.offsetParent !== null || node.getClientRects().length > 0)
+    || candidates[0]
+    || null
+}
+
+const getEditorTables = () => Array.from(getEditorRootElement()?.querySelectorAll<HTMLTableElement>('.vditor-reset table') || [])
+
+const getPlainEditorBlock = (node: Node | null | undefined) => {
+  const element = node instanceof Element ? node : node?.parentElement
+  const block = element?.closest?.('p[data-block], div[data-block]') as HTMLElement | null
+  const editable = getEditorEditableElement()
+  if (!block || !editable?.contains(block) || block.closest('table')) return null
+  return block
+}
+
+const isPlainBlankLineBlock = (block: HTMLElement | null | undefined) => {
+  if (!block || block.closest('table')) return false
+  const normalized = String(block.textContent || '')
+    .replace(/[\u200b\u200c\ufeff]/g, '')
+    .replace(/\u00a0/g, ' ')
+    .trim()
+  if (normalized !== '') return false
+  return block.matches('p[data-block], div[data-block]')
+}
+
+const setPlainBlankLineBlock = (block: HTMLElement) => {
+  block.innerHTML = ''
+  block.appendChild(document.createTextNode(PRESERVED_BLANK_LINE_DOM_ANCHOR))
+  block.classList.remove(PLAIN_EMPTY_LINE_CLASS)
+  block.classList.add('vditor-preserved-blank-line')
+}
+
+const setPlainEmptyLineBlock = (block: HTMLElement) => {
+  block.innerHTML = ''
+  block.appendChild(document.createTextNode(PRESERVED_BLANK_LINE_DOM_ANCHOR))
+  block.classList.remove('vditor-preserved-blank-line')
+  block.classList.add(PLAIN_EMPTY_LINE_CLASS)
+}
+
+const createPlainEditableBlock = (reference: HTMLElement) => {
+  const block = document.createElement(reference.tagName.toLowerCase())
+  block.setAttribute('data-block', reference.getAttribute('data-block') || '0')
+  block.appendChild(document.createTextNode(PRESERVED_BLANK_LINE_DOM_ANCHOR))
+  return block
+}
+
+const placeCaretInPlainBlock = (block: HTMLElement, atEnd = false) => {
+  const selection = window.getSelection()
+  if (!selection) return false
+  getEditorEditableFromNode(block)?.focus({ preventScroll: true })
+  const range = document.createRange()
+  const text = block.firstChild && block.firstChild.nodeType === Node.TEXT_NODE
+    ? block.firstChild
+    : block.appendChild(document.createTextNode(''))
+  range.setStart(text, atEnd ? String(text.textContent || '').length : 0)
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  lastEditorSelectionRange = range.cloneRange()
+  return true
+}
+
+const insertPreservedBlankLineBefore = (block: HTMLElement) => {
+  const previousBlock = document.createElement(block.tagName.toLowerCase())
+  previousBlock.setAttribute('data-block', block.getAttribute('data-block') || '0')
+  setPlainBlankLineBlock(previousBlock)
+  block.before(previousBlock)
+  placeCaretInPlainBlock(previousBlock)
+  return previousBlock
+}
+
+const createPlainPreservedBlankBlock = () => {
+  const block = document.createElement('p')
+  block.setAttribute('data-block', '0')
+  setPlainBlankLineBlock(block)
+  return block
+}
+
+const placeCaretInPlainEditorVisualBlankLine = (event: MouseEvent) => {
+  const editable = getEditorEditableFromNode(event.target as Node | null)
+  if (!editable) return false
+  const editableRect = editable.getBoundingClientRect()
+  if (event.clientY < editableRect.top || event.clientY > editableRect.bottom) return false
+  const children = Array.from(editable.children).filter((child) => child instanceof HTMLElement) as HTMLElement[]
+  const lastChild = children[children.length - 1] || null
+  const lineHeight = getEditorElementLineHeight(editable)
+  const targetBottom = lastChild?.getBoundingClientRect().bottom ?? (editableRect.top + getEditorElementPaddingTop(editable))
+  if (event.clientY < targetBottom) return false
+  const extraLines = Math.max(1, Math.floor((event.clientY - targetBottom) / lineHeight) + 1)
+  let anchor = lastChild
+  let targetBlock: HTMLElement | null = null
+  for (let index = 0; index < extraLines; index += 1) {
+    if (index === 0 && anchor && getPlainEditorBlock(anchor) && isPlainBlankLineBlock(anchor)) {
+      targetBlock = anchor
+    } else {
+      const block = createPlainPreservedBlankBlock()
+      if (anchor) anchor.after(block)
+      else editable.appendChild(block)
+      anchor = block
+      targetBlock = block
+    }
+  }
+  if (!targetBlock) return false
+  lastEditorTableSelectionRange = null
+  lastEditorTableSelectionState = null
+  placeCaretInPlainBlock(targetBlock)
+  emitEditorValue(getEditorDomContentFallback())
+  return true
+}
+
+const isCaretAtStartOfPlainBlock = (block: HTMLElement) => {
+  const selection = window.getSelection()
+  if (!selection?.rangeCount || !selection.isCollapsed || !block.contains(selection.anchorNode)) return false
+  const range = selection.getRangeAt(0)
+  const prefixRange = document.createRange()
+  prefixRange.selectNodeContents(block)
+  try {
+    prefixRange.setEnd(range.startContainer, range.startOffset)
+  } catch {
+    return false
+  }
+  const prefixText = String(prefixRange.cloneContents().textContent || '')
+    .replace(/[\u200b\u200c\ufeff]/g, '')
+    .replace(/\u00a0/g, ' ')
+    .trim()
+  return prefixText === ''
+}
+
+const clearStalePlainBlankLineMarkers = () => {
+  const editable = getEditorEditableElement()
+  if (!editable) return
+  editable.querySelectorAll<HTMLElement>(`.vditor-preserved-blank-line, .${PLAIN_EMPTY_LINE_CLASS}`).forEach((block) => {
+    if (isPlainBlankLineBlock(block)) return
+    block.classList.remove('vditor-preserved-blank-line')
+    block.classList.remove(PLAIN_EMPTY_LINE_CLASS)
+  })
+}
+
+const clearPlainBlankLineForInput = (block: HTMLElement) => {
+  if (!isPlainBlankLineBlock(block)) return false
+  block.innerHTML = ''
+  block.classList.remove('vditor-preserved-blank-line')
+  block.classList.remove(PLAIN_EMPTY_LINE_CLASS)
+  placeCaretInPlainBlock(block)
+  return true
+}
+
+const handlePlainEditorBackspaceAtLineBoundary = (event: KeyboardEvent, block: HTMLElement) => {
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  if (!selection?.rangeCount || !selection.isCollapsed) return false
+  if (isPlainBlankLineBlock(block)) {
+    event.preventDefault()
+    event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    const nextBlock = getPlainEditorBlock(block.nextElementSibling)
+    const previousBlock = getPlainEditorBlock(block.previousElementSibling)
+    block.remove()
+    if (nextBlock) placeCaretInPlainBlock(nextBlock)
+    else if (previousBlock) placeCaretInPlainBlock(previousBlock, true)
+    return true
+  }
+  if (!isCaretAtStartOfPlainBlock(block)) return false
+  const previousBlock = getPlainEditorBlock(block.previousElementSibling)
+  if (!isPlainBlankLineBlock(previousBlock)) return false
+  event.preventDefault()
+  event.stopPropagation()
+  ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+  previousBlock!.remove()
+  placeCaretInPlainBlock(block)
+  return true
+}
+
+const placeCaretAtStartOfEditorTableCell = (cell: HTMLTableCellElement) => {
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  if (!selection) return false
+  getEditorEditableFromNode(cell)?.focus({ preventScroll: true })
+  const range = document.createRange()
+  const textNode = cell.firstChild && cell.firstChild.nodeType === Node.TEXT_NODE
+    ? cell.firstChild
+    : cell.insertBefore(document.createTextNode(''), cell.firstChild)
+  range.setStart(textNode, 0)
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  lastEditorSelectionRange = range.cloneRange()
+  storeLastEditorTableSelection(range)
+  return true
+}
+
+const getEditorElementLineHeight = (element: HTMLElement) => {
+  const style = window.getComputedStyle(element)
+  const parsed = Number.parseFloat(style.lineHeight || '')
+  if (Number.isFinite(parsed) && parsed > 0) return parsed
+  const fontSize = Number.parseFloat(style.fontSize || '')
+  return Number.isFinite(fontSize) && fontSize > 0 ? fontSize * 1.5 : 21
+}
+
+const getEditorElementPaddingTop = (element: HTMLElement) => {
+  const parsed = Number.parseFloat(window.getComputedStyle(element).paddingTop || '')
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+const isEditorTableStructurallyEmptyCell = (cell: HTMLTableCellElement) => {
+  const clone = cell.cloneNode(true) as HTMLElement
+  clone.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
+  clone.querySelectorAll('br').forEach((br) => br.remove())
+  return String(clone.textContent || '')
+    .replace(TABLE_CELL_CARET_ANCHOR_RE, '')
+    .replace(/[\u200b\u200c\ufeff]/g, '')
+    .replace(/\u00a0/g, ' ')
+    .trim() === ''
+}
+
+const getEditorTableCellLines = (cell: HTMLTableCellElement) => {
+  const text = editorTableCellTextFromDom(cell)
+  return text ? text.split('\n') : ['']
+}
+
+const getEditorTableCellVisualLineIndex = (cell: HTMLTableCellElement, clientY: number) => {
+  const rect = cell.getBoundingClientRect()
+  const lineHeight = getEditorElementLineHeight(cell)
+  const top = rect.top + getEditorElementPaddingTop(cell)
+  return Math.max(0, Math.floor((clientY - top) / lineHeight))
+}
+
+const getEditorElementPaddingLeft = (element: HTMLElement) => {
+  const parsed = Number.parseFloat(window.getComputedStyle(element).paddingLeft || '')
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+const getEditorElementPaddingBottom = (element: HTMLElement) => {
+  const parsed = Number.parseFloat(window.getComputedStyle(element).paddingBottom || '')
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+const getEditorTableCellLineStartOffset = (lines: string[], lineIndex: number) => {
+  let offset = 0
+  for (let index = 0; index < lineIndex; index += 1) offset += (lines[index] || '').length + 1
+  return offset
+}
+
+const measureEditorTableCellLineColumnOffset = (cell: HTMLTableCellElement, line: string, clientX: number) => {
+  if (!line) return 0
+  const chars = Array.from(line)
+  if (!chars.length) return 0
+  const style = window.getComputedStyle(cell)
+  const probe = document.createElement('span')
+  probe.setAttribute('aria-hidden', 'true')
+  probe.style.position = 'fixed'
+  probe.style.left = '-10000px'
+  probe.style.top = '0'
+  probe.style.visibility = 'hidden'
+  probe.style.pointerEvents = 'none'
+  probe.style.whiteSpace = 'pre'
+  probe.style.font = style.font
+  probe.style.fontKerning = style.fontKerning
+  probe.style.letterSpacing = style.letterSpacing
+  document.body.appendChild(probe)
+  const widths = [0]
+  for (let index = 1; index <= chars.length; index += 1) {
+    probe.textContent = chars.slice(0, index).join('')
+    widths.push(probe.getBoundingClientRect().width)
+  }
+  probe.remove()
+  const targetX = Math.max(0, clientX - (cell.getBoundingClientRect().left + getEditorElementPaddingLeft(cell)))
+  let charOffset = chars.length
+  for (let index = 0; index < chars.length; index += 1) {
+    const midpoint = (widths[index] + widths[index + 1]) / 2
+    if (targetX < midpoint) {
+      charOffset = index
+      break
+    }
+  }
+  return chars.slice(0, charOffset).join('').length
+}
+
+const createEditorTableCaretAnchorNode = () => document.createTextNode(TABLE_CELL_CARET_ANCHOR)
+
+const removeEditorTableCaretAnchors = (root: HTMLElement) => {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      return (node.textContent || '').includes(TABLE_CELL_CARET_ANCHOR) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+    }
+  })
+  const nodes: Text[] = []
+  while (walker.nextNode()) nodes.push(walker.currentNode as Text)
+  nodes.forEach((node) => {
+    const text = node.textContent || ''
+    const cleaned = text.replace(TABLE_CELL_CARET_ANCHOR_RE, '')
+    if (!cleaned) node.parentNode?.removeChild(node)
+    else if (cleaned !== text) node.textContent = cleaned
+  })
+}
+
+const selectEditorTableRange = (cell: HTMLTableCellElement, range: Range) => {
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  if (!selection) return false
+  getEditorEditableFromNode(cell)?.focus({ preventScroll: true })
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  lastEditorSelectionRange = range.cloneRange()
+  storeLastEditorTableSelection(range)
+  storeLastEditorTableCell(cell)
+  return true
+}
+
+const getNativeEditorTableCaretRangeFromPoint = (cell: HTMLTableCellElement, clientX: number, clientY: number) => {
+  const doc = document as Document & {
+    caretRangeFromPoint?: (x: number, y: number) => Range | null
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null
+  }
+  let range = doc.caretRangeFromPoint?.(clientX, clientY) || null
+  if (!range && doc.caretPositionFromPoint) {
+    const position = doc.caretPositionFromPoint(clientX, clientY)
+    if (position) {
+      range = document.createRange()
+      range.setStart(position.offsetNode, position.offset)
+      range.collapse(true)
+    }
+  }
+  if (!range) return null
+  const container = range.startContainer
+  const element = container instanceof Element ? container : container.parentElement
+  return element && cell.contains(element) ? range : null
+}
+
+const placeCaretAtEditorTableCellLineStart = (cell: HTMLTableCellElement, lineIndex: number) => {
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  if (!selection) return false
+  getEditorEditableFromNode(cell)?.focus({ preventScroll: true })
+  const range = document.createRange()
+  normalizeEditorTableBreakCodeMarkers(cell)
+  if (lineIndex <= 0) {
+    const textNode = cell.firstChild && cell.firstChild.nodeType === Node.TEXT_NODE
+      ? cell.firstChild
+      : cell.insertBefore(document.createTextNode(''), cell.firstChild)
+    range.setStart(textNode, 0)
+  } else {
+    const breaks = Array.from(cell.querySelectorAll('br'))
+    const lineBreak = breaks[lineIndex - 1]
+    if (!lineBreak) return false
+    removeEditorTableCaretAnchors(cell)
+    const caretNode = createEditorTableCaretAnchorNode()
+    lineBreak.after(caretNode)
+    range.setStart(caretNode, 0)
+  }
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  lastEditorSelectionRange = range.cloneRange()
+  storeLastEditorTableSelection(range)
+  return true
+}
+
+const placeCaretAtEditorTableCellTextOffset = (cell: HTMLTableCellElement, offset: number) => {
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  if (!selection) return false
+  getEditorEditableFromNode(cell)?.focus({ preventScroll: true })
+  normalizeEditorTableBreakCodeMarkers(cell)
+  const range = document.createRange()
+  let remaining = Math.max(0, offset)
+  let placed = false
+  const invisibleText = /[\u200b\u200c\ufeff]/
+  const setRange = (node: Node, nodeOffset: number) => {
+    range.setStart(node, nodeOffset)
+    range.collapse(true)
+    placed = true
+  }
+  const visit = (node: Node): boolean => {
+    if (placed) return true
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent || ''
+      let visibleLength = 0
+      for (let index = 0; index < text.length; index += 1) {
+        if (visibleLength === remaining) {
+          setRange(node, index)
+          return true
+        }
+        if (!invisibleText.test(text[index] || '')) visibleLength += 1
+      }
+      if (visibleLength === remaining) {
+        setRange(node, text.length)
+        return true
+      }
+      remaining -= visibleLength
+      return false
+    }
+    if (node instanceof HTMLBRElement) {
+      if (remaining === 0) {
+        range.setStartBefore(node)
+        range.collapse(true)
+        placed = true
+        return true
+      }
+      remaining -= 1
+      if (remaining === 0) {
+        removeEditorTableCaretAnchors(cell)
+        const caretNode = createEditorTableCaretAnchorNode()
+        node.after(caretNode)
+        setRange(caretNode, 0)
+        return true
+      }
+      return false
+    }
+    Array.from(node.childNodes).some((child) => visit(child))
+    return placed
+  }
+  visit(cell)
+  if (!placed) range.selectNodeContents(cell)
+  if (!placed) range.collapse(false)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  lastEditorSelectionRange = range.cloneRange()
+  storeLastEditorTableSelection(range)
+  return true
+}
+
+const placeCaretInEditorTableCellVisualLine = (cell: HTMLTableCellElement, event: MouseEvent) => {
+  const lines = getEditorTableCellLines(cell)
+  const targetLine = getEditorTableCellVisualLineIndex(cell, event.clientY)
+  const existingLineIndex = Math.min(targetLine, Math.max(0, lines.length - 1))
+  clearEditorTableEmptyPlaceholder(cell)
+  normalizeEditorTableBreakCodeMarkers(cell)
+  const lineText = lines[existingLineIndex] || ''
+  const lineOffset = getEditorTableCellLineStartOffset(lines, existingLineIndex)
+  const nativeRange = targetLine < lines.length && String(lineText).trim()
+    ? getNativeEditorTableCaretRangeFromPoint(cell, event.clientX, event.clientY)
+    : null
+  const placed = nativeRange
+    ? selectEditorTableRange(cell, nativeRange)
+    : targetLine >= lines.length
+      ? placeCaretAtEditorTableCellTextOffset(cell, editorTableCellTextFromDom(cell).length)
+      : String(lineText).trim()
+        ? placeCaretAtEditorTableCellTextOffset(cell, lineOffset + measureEditorTableCellLineColumnOffset(cell, lineText, event.clientX))
+    : placeCaretAtEditorTableCellLineStart(cell, targetLine)
+  if (placed) {
+    storeLastEditorTableCell(cell)
+  }
+  return placed
+}
+
+const getEditorTableTextBeforeRange = (cell: HTMLTableCellElement, range: Range) => {
+  const prefixRange = document.createRange()
+  prefixRange.selectNodeContents(cell)
+  try {
+    prefixRange.setEnd(range.startContainer, range.startOffset)
+  } catch {
+    return ''
+  }
+  const holder = document.createElement('div')
+  holder.appendChild(prefixRange.cloneContents())
+  holder.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')))
+  return stripEditorTableCaretAnchors(holder.textContent || '').replace(/[\u200b\u200c\ufeff]/g, '').replace(/\u00a0/g, ' ')
+}
+
+const isNodeBeforeOrAtRangeStart = (node: Node, range: Range) => {
+  const nodeRange = document.createRange()
+  try {
+    nodeRange.selectNode(node)
+    return nodeRange.compareBoundaryPoints(Range.END_TO_START, range) <= 0
+  } catch {
+    return false
+  }
+}
+
+const removeAdjacentTableCaretAnchors = (node: Node) => {
+  const cleanTextNode = (candidate: Node | null) => {
+    if (!candidate || candidate.nodeType !== Node.TEXT_NODE) return
+    const text = candidate.textContent || ''
+    const cleaned = text.replace(TABLE_CELL_CARET_ANCHOR_RE, '')
+    if (!cleaned) candidate.parentNode?.removeChild(candidate)
+    else if (cleaned !== text) candidate.textContent = cleaned
+  }
+  cleanTextNode(node.previousSibling)
+  cleanTextNode(node.nextSibling)
+}
+
+const removePreviousEditorTableLineBreak = (cell: HTMLTableCellElement, range: Range) => {
+  const breaks = Array.from(cell.querySelectorAll('br')).filter((br) => isNodeBeforeOrAtRangeStart(br, range))
+  const lineBreak = breaks[breaks.length - 1]
+  if (!lineBreak?.parentNode) return false
+  const caretNode = document.createTextNode('')
+  lineBreak.parentNode.replaceChild(caretNode, lineBreak)
+  removeAdjacentTableCaretAnchors(caretNode)
+  const selection = window.getSelection()
+  if (!selection) return true
+  const nextRange = document.createRange()
+  nextRange.setStart(caretNode, 0)
+  nextRange.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(nextRange)
+  lastEditorSelectionRange = nextRange.cloneRange()
+  storeLastEditorTableSelection(nextRange)
+  return true
+}
+
+const handleEditorTableBackspaceAtLineBoundary = (event: KeyboardEvent, cell: HTMLTableCellElement) => {
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  if (!selection?.rangeCount || !selection.isCollapsed) return false
+  const range = selection.getRangeAt(0)
+  if (getEditorTableCellFromRange(range) !== cell) return false
+  const prefix = getEditorTableTextBeforeRange(cell, range)
+  if (!prefix) {
+    event.preventDefault()
+    event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    placeCaretAtStartOfEditorTableCell(cell)
+    return true
+  }
+  if (!prefix.endsWith('\n')) return false
+  event.preventDefault()
+  event.stopPropagation()
+  ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+  return removePreviousEditorTableLineBreak(cell, range)
+}
+
+const clearSelectedEditorTable = () => {
+  selectedEditorTable?.classList.remove('editor-table-selected')
+  selectedEditorTable = null
+  selectedEditorTableIndex = -1
+}
+
+const selectEditorTable = (table: HTMLTableElement) => {
+  const tables = getEditorTables()
+  tables.forEach((item) => item.classList.toggle('editor-table-selected', item === table))
+  selectedEditorTable = table
+  selectedEditorTableIndex = tables.indexOf(table)
+}
+
+const cancelTableDeleteHide = () => {
+  if (tableDeleteHideTimer !== null) {
+    window.clearTimeout(tableDeleteHideTimer)
+    tableDeleteHideTimer = null
+  }
+}
+
+const hideTableDeleteButton = () => {
+  cancelTableDeleteHide()
+  showTableDeleteButton.value = false
+  hoveredEditorTable = null
+  clearSelectedEditorTable()
+}
+
+const scheduleTableDeleteHide = (delay: number | Event = 1800) => {
+  cancelTableDeleteHide()
+  const timeout = typeof delay === 'number' ? delay : 1800
+  tableDeleteHideTimer = scheduleTimeout(() => hideTableDeleteButton(), timeout)
+}
+
+const isEditorTableActionVisible = (table: HTMLTableElement) => {
+  const rect = table.getBoundingClientRect()
+  const width = window.innerWidth || document.documentElement.clientWidth || 0
+  const height = window.innerHeight || document.documentElement.clientHeight || 0
+  const editorRect = editorContainer.value?.getBoundingClientRect()
+  const visibleTop = Math.max(0, editorRect?.top ?? 0)
+  const visibleLeft = Math.max(0, editorRect?.left ?? 0)
+  const visibleRight = Math.min(width, editorRect?.right ?? width)
+  const visibleBottom = Math.min(height, editorRect?.bottom ?? height)
+  return rect.top >= visibleTop && rect.left >= visibleLeft && rect.top < visibleBottom && rect.left < visibleRight
+}
+
+const positionTableDeleteButton = (table: HTMLTableElement) => {
+  const scale = getFixedCoordinateScale()
+  const rect = getFixedRect(table, scale)
+  const deleteSize = TABLE_DELETE_BUTTON_SIZE
+  const expandSize = TABLE_EXPAND_BUTTON_SIZE
+  tableDeleteButtonStyle.value = {
+    position: 'fixed',
+    top: `${rect.top - deleteSize}px`,
+    left: `${rect.left - deleteSize}px`,
+    zIndex: '10020'
+  }
+  tableExpandButtonStyle.value = {
+    position: 'fixed',
+    top: `${rect.top - expandSize}px`,
+    left: `${rect.left}px`,
+    zIndex: '10020'
+  }
+}
+
+const showTableDeleteForTable = (table: HTMLTableElement) => {
+  if (!editorContainer.value?.contains(table)) return
+  if (!isEditorTableActionVisible(table)) {
+    hideTableDeleteButton()
+    return
+  }
+  cancelTableDeleteHide()
+  hoveredEditorTable = table
+  positionTableDeleteButton(table)
+  showTableDeleteButton.value = true
+}
+
+const confirmDeleteHoveredTable = () => {
+  const table = hoveredEditorTable
+  if (!table || !editorContainer.value?.contains(table)) {
+    hideTableDeleteButton()
+    return
+  }
+  const tableIndex = getEditorTables().indexOf(table)
+  const confirmed = window.confirm('确定要删除该表格吗？')
+  if (!confirmed) {
+    scheduleTableDeleteHide()
+    return
+  }
+  const deleted = deleteEditorTable(table, tableIndex)
+  if (!deleted) {
+    window.alert('未能定位到该表格，请先保存当前内容后重试。')
+    scheduleTableDeleteHide()
+    return
+  }
+  hideTableDeleteButton()
+}
+
+const stripEditorTableCaretAnchors = (value: string) => String(value || '').replace(TABLE_CELL_CARET_ANCHOR_RE, '')
+const stripTableBreakCode = (value: string) => stripEditorTableCaretAnchors(value).replace(TABLE_CELL_BREAK_SOURCE_RE, ' ')
+const decodeMarkdownTablePipeEntities = (value: string) => String(value || '').replace(/&#(?:124|x7c);|&vert;/gi, '|')
+const stripOuterTableCellHorizontalPadding = (value: string) => String(value || '').replace(/^[ \t]+|[ \t]+$/g, '')
+const normalizeEditorTableCellTextEdges = (value: string) => {
+  const text = stripOuterTableCellHorizontalPadding(
+    normalizeAttachmentSourceText(stripEditorTableCaretAnchors(value).replace(/\r\n?/g, '\n'))
+      .replace(/[\u200b\u200c\ufeff]/g, '')
+      .replace(/\u00a0/g, ' ')
+  )
+  if (MARKDOWN_EMPTY_TABLE_CELL_RE.test(text.trim())) return ''
+  if (!text.includes('\n') && text.trim() === '') return ''
+  return text
+}
+const tableCellSourceToEditorText = (value: string) => {
+  const text = decodeMarkdownTablePipeEntities(String(value || '').replace(TABLE_CELL_BREAK_SOURCE_RE, '\n').replace(/\\\|/g, '|'))
+  return normalizeEditorTableCellTextEdges(text)
+}
+const escapeTableCellHtml = (value: string) => String(value || '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/\"/g, '&quot;')
+  .replace(/'/g, '&#39;')
+
+const escapeHtmlAttribute = (value: string) => escapeTableCellHtml(value).replace(/`/g, '&#96;')
+
+const editorAttachmentInfoToTableMarkerHtml = (info: EditorAttachmentInfo) => {
+  const safeType = escapeHtmlAttribute(info.type)
+  const safeUrl = escapeHtmlAttribute(info.url)
+  const safeSource = escapeHtmlAttribute(attachmentInfoToMarkdownSource(info))
+  const safeTitle = escapeTableCellHtml(attachmentMarkerDisplayTitle(info))
+  const safeFullTitle = escapeHtmlAttribute(info.title)
+  const safeAria = escapeHtmlAttribute(`预览${info.title}`)
+  return `<span class="editor-table-attachment-marker editor-attachment-link" contenteditable="false" role="button" tabindex="0" aria-label="${safeAria}" title="${safeFullTitle}" data-attachment-kind="${safeType}" data-attachment-url="${safeUrl}" data-attachment-source="${safeSource}">${safeTitle}</span>`
+}
+
+const editorTextLineToAttachmentAwareTableCellHtml = (value: string, options: { trim?: boolean } = {}) => {
+  const normalizedSource = normalizeAttachmentSourceText(value)
+  const source = options.trim ? normalizedSource.trim() : normalizedSource
+  if (!source) return ''
+  let output = ''
+  let lastIndex = 0
+  ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = ATTACHMENT_MARKER_GLOBAL_RE.exec(source))) {
+    output += escapeTableCellHtml(source.slice(lastIndex, match.index))
+    const info = normalizeAttachmentInfo(match[1], match[2], match[3])
+    output += info ? editorAttachmentInfoToTableMarkerHtml(info) : escapeTableCellHtml(match[0])
+    lastIndex = ATTACHMENT_MARKER_GLOBAL_RE.lastIndex
+  }
+  output += escapeTableCellHtml(source.slice(lastIndex))
+  return output
+}
+
+const editorTextLineToHtmlTableCellSource = (value: string) => editorTextLineToAttachmentAwareTableCellHtml(value, { trim: true })
+
+const editorTextToHtmlTableCellSource = (value: string) => {
+  const text = stripEditorTableCaretAnchors(value).replace(/\r\n?/g, '\n')
+  const normalized = text
+    .split('\n')
+    .map((line) => editorTextLineToHtmlTableCellSource(line))
+    .join('<br />')
+    .trim()
+  return normalized || '&nbsp;'
+}
+
+const editorTextToDomTableCellHtml = (value: string) => {
+  const text = normalizeAttachmentSourceText(stripEditorTableCaretAnchors(value).replace(/\r\n?/g, '\n'))
+  const normalized = text
+    .split('\n')
+    .map((line) => editorTextLineToAttachmentAwareTableCellHtml(line))
+    .join('<br />')
+  return normalized || '&nbsp;'
+}
+
+const editorTextToMarkdownTableCellSource = (value: string) => {
+  const text = normalizeAttachmentSourceText(stripEditorTableCaretAnchors(value).replace(/\r\n?/g, '\n'))
+  const normalized = text
+    .split('\n')
+    .map((line) => normalizeAttachmentSourceText(line).replace(/\|/g, () => '&#124;').trim())
+    .join('<br />')
+    .trim()
+  return normalized || MARKDOWN_EMPTY_TABLE_CELL
+}
+
+const editorTextToTabTableCellSource = (value: string) => {
+  const text = normalizeAttachmentSourceText(stripEditorTableCaretAnchors(value).replace(/\r\n?/g, '\n'))
+  const normalized = text
+    .split('\n')
+    .map((line) => normalizeAttachmentSourceText(line).replace(/\t/g, ' ').trim())
+    .join('<br />')
+    .trim()
+  return normalized || ' '
+}
+
+const htmlTableCellToEditorText = (cell: HTMLTableCellElement) => {
+  const clone = cell.cloneNode(true) as HTMLElement
+  clone.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
+  replaceAttachmentNodesWithSourceText(clone)
+  const startsWithBreak = /^\s*<br\s*\/?\s*>/i.test(clone.innerHTML || '')
+  const endsWithBreak = /<br\s*\/?\s*>\s*$/i.test(clone.innerHTML || '')
+  clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')))
+  clone.querySelectorAll('p,div').forEach((block) => {
+    if (block.nextSibling) block.after(document.createTextNode('\n'))
+  })
+  let text = normalizeEditorTableCellTextEdges(clone.textContent || '')
+  if (text && startsWithBreak && !text.startsWith('\n')) text = `\n${text}`
+  if (text && endsWithBreak && !text.endsWith('\n')) text = `${text}\n`
+  return text
+}
+
+const replaceTableHeaderCells = (table: HTMLTableElement) => {
+  table.querySelectorAll('th').forEach((headerCell) => {
+    const cell = document.createElement('td')
+    Array.from(headerCell.attributes).forEach((attr) => cell.setAttribute(attr.name, attr.value))
+    while (headerCell.firstChild) cell.appendChild(headerCell.firstChild)
+    headerCell.replaceWith(cell)
+  })
+}
+
+const normalizeEditableHtmlTable = (table: HTMLTableElement) => {
+  const thead = table.tHead
+  if (thead) {
+    const body = table.tBodies[0] || table.createTBody()
+    Array.from(thead.rows).reverse().forEach((row) => body.insertBefore(row, body.firstChild))
+    thead.remove()
+  }
+  replaceTableHeaderCells(table)
+}
+
+const removeMarkdownTableDividerRow = (table: HTMLTableElement, block: EditorTableSourceBlock | null) => {
+  if (block?.kind !== 'markdown') return
+  const expectedRows = editableRowsFromMarkdownBlock(block).length
+  const dividerRow = table.rows[1]
+  if (!dividerRow || table.rows.length !== expectedRows + 1) return
+  dividerRow.remove()
+}
+
+const tableScrollKeyFromBlock = (block?: EditorTableSourceBlock | null, fallback = '') => {
+  if (block) return `${block.kind}:${block.start}:${block.end}`
+  return fallback
+}
+
+const rememberEditorTableScroll = (table: HTMLTableElement) => {
+  const key = table.dataset.editorTableScrollKey || table.dataset.editorTableIndex || ''
+  if (!key) return
+  editorTableScrollPositions.set(key, table.scrollLeft || 0)
+}
+
+const restoreEditorTableScroll = (table: HTMLTableElement) => {
+  const key = table.dataset.editorTableScrollKey || table.dataset.editorTableIndex || ''
+  if (!key) return
+  const left = editorTableScrollPositions.get(key)
+  if (typeof left !== 'number' || left <= 0) return
+  table.scrollLeft = left
+  scheduleFrame(() => { table.scrollLeft = left })
+}
+
+const parseAttachmentMarkersFromText = (text: string) => {
+  const items: EditorAttachmentInfo[] = []
+  const source = normalizeAttachmentSourceText(text)
+  ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = ATTACHMENT_MARKER_GLOBAL_RE.exec(source))) {
+    const info = normalizeAttachmentInfo(match[1], match[2], match[3])
+    if (info) items.push(info)
+  }
+  return items
+}
+
+const expandedTableCellEditorHtml = (rowIndex: number, cellIndex: number) => {
+  const value = expandedTableRows.value[rowIndex]?.[cellIndex] || ''
+  if (!value) return ''
+  const html = editorTextToDomTableCellHtml(value)
+  return html === '&nbsp;' ? '' : html
+}
+
+const expandedTableCellEditorElements = () => (typeof document === 'undefined'
+  ? []
+  : Array.from(expandedTableElement.value?.querySelectorAll<HTMLElement>('.editor-table-expand-cell-editor') || []))
+
+const renderExpandedTableCellEditor = (editor: HTMLElement, rowIndex: number, cellIndex: number) => {
+  editor.innerHTML = expandedTableCellEditorHtml(rowIndex, cellIndex)
+  editor.dataset.expandedRendered = '1'
+}
+
+const registerExpandedTableCellEditor = (el: unknown, rowIndex: number, cellIndex: number) => {
+  if (!(el instanceof HTMLElement)) return
+  if (el.dataset.expandedRendered === '1') return
+  renderExpandedTableCellEditor(el, rowIndex, cellIndex)
+}
+
+const refreshExpandedTableCellEditors = () => {
+  expandedTableCellEditorElements().forEach((editor) => {
+    const rowIndex = Number(editor.dataset.expandedRow)
+    const cellIndex = Number(editor.dataset.expandedCell)
+    if (!Number.isFinite(rowIndex) || !Number.isFinite(cellIndex)) return
+    if (editor === document.activeElement) return
+    renderExpandedTableCellEditor(editor, rowIndex, cellIndex)
+  })
+}
+
+const expandedTableCellEditorFromEvent = (event: Event) => {
+  const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
+  return target?.classList.contains('editor-table-expand-cell-editor') ? target : null
+}
+
+const commitExpandedTableCellEditor = (editor: HTMLElement, rowIndex: number, cellIndex: number) => {
+  const row = expandedTableRows.value[rowIndex]
+  if (!row) return
+  row[cellIndex] = editorTableContentTextFromElement(editor)
+  expandedTableDirty.value = true
+  nextTick(() => scheduleMeasureExpandedTableAutoRowHeights())
+}
+const expandedTableBaseColumnWidths = computed(() => calculateAdaptiveTableColumnWidths(expandedTableRows.value, expandedTableAvailableWidth.value))
+const expandedTableColumnWidths = computed(() => expandedTableBaseColumnWidths.value.map((width, index) => {
+  const manualWidth = expandedTableManualColumnWidths.value[index]
+  return Math.max(
+    EXPANDED_TABLE_MIN_COLUMN_WIDTH,
+    Number.isFinite(manualWidth) ? manualWidth : Math.ceil(width)
+  )
+}))
+const expandedTableRowHeights = computed(() => expandedTableRows.value.map((_, index) => {
+  const manualHeight = expandedTableManualRowHeights.value[index]
+  return Math.max(
+    EXPANDED_TABLE_MIN_ROW_HEIGHT,
+    Number.isFinite(manualHeight) ? manualHeight : Math.ceil(expandedTableAutoRowHeights.value[index] || 0)
+  )
+}))
+const expandedTableRowHeight = (rowIndex: number) => expandedTableRowHeights.value[rowIndex] || EXPANDED_TABLE_MIN_ROW_HEIGHT
+
+const measureExpandedTableCellContentHeight = (editor: HTMLElement) => {
+  if (typeof document === 'undefined') return EXPANDED_TABLE_MIN_ROW_HEIGHT
+  const rect = editor.getBoundingClientRect()
+  const styles = window.getComputedStyle(editor)
+  const probe = document.createElement('div')
+  probe.className = 'editor-table-expand-cell-editor'
+  probe.innerHTML = editor.innerHTML
+  probe.setAttribute('aria-hidden', 'true')
+  probe.style.position = 'fixed'
+  probe.style.left = '-10000px'
+  probe.style.top = '0'
+  probe.style.width = `${Math.max(1, rect.width)}px`
+  probe.style.height = '0'
+  probe.style.minHeight = '0'
+  probe.style.maxHeight = 'none'
+  probe.style.padding = styles.padding
+  probe.style.border = '0'
+  probe.style.boxSizing = styles.boxSizing
+  probe.style.font = styles.font
+  probe.style.lineHeight = styles.lineHeight
+  probe.style.letterSpacing = styles.letterSpacing
+  probe.style.whiteSpace = styles.whiteSpace
+  probe.style.overflowWrap = styles.overflowWrap
+  probe.style.wordBreak = styles.wordBreak
+  probe.style.visibility = 'hidden'
+  probe.style.overflow = 'visible'
+  probe.style.pointerEvents = 'none'
+  probe.setAttribute('contenteditable', 'false')
+  document.body.appendChild(probe)
+  const height = Math.ceil(Math.max(probe.scrollHeight, probe.getBoundingClientRect().height))
+  probe.remove()
+  return Math.max(EXPANDED_TABLE_MIN_ROW_HEIGHT, height)
+}
+
+const measureExpandedTableAutoRowHeights = () => {
+  if (typeof document === 'undefined' || !showTableExpandDialog.value) return
+  const rows = Array.from(expandedTableElement.value?.querySelectorAll<HTMLTableRowElement>('tbody tr') || [])
+  const heights = rows.map((row) => {
+    const cells = Array.from(row.cells)
+    const maxCellHeight = cells.reduce((max, cell) => {
+      const editor = cell.querySelector<HTMLElement>('.editor-table-expand-cell-editor')
+      const editorHeight = editor ? measureExpandedTableCellContentHeight(editor) : EXPANDED_TABLE_MIN_ROW_HEIGHT
+      return Math.max(max, editorHeight)
+    }, EXPANDED_TABLE_MIN_ROW_HEIGHT)
+    return Math.max(EXPANDED_TABLE_MIN_ROW_HEIGHT, maxCellHeight)
+  })
+  expandedTableAutoRowHeights.value = heights
+  nextTick(() => scheduleExpandedTableScrollOverflowState())
+}
+
+const scheduleMeasureExpandedTableAutoRowHeights = () => {
+  if (typeof window === 'undefined') return
+  if (expandedTableRowHeightMeasureTimer !== null) window.cancelAnimationFrame(expandedTableRowHeightMeasureTimer)
+  expandedTableRowHeightMeasureTimer = scheduleFrame(() => {
+    expandedTableRowHeightMeasureTimer = null
+    measureExpandedTableAutoRowHeights()
+  })
+}
+
+const updateExpandedTableAvailableWidth = () => {
+  if (typeof window === 'undefined') return
+  const scroll = expandedTableElement.value?.parentElement
+  const fallback = Math.min(1680, Math.max(320, window.innerWidth - 48)) - 24
+  expandedTableAvailableWidth.value = Math.max(160, Math.floor((scroll?.clientWidth || fallback) - 24))
+  scheduleMeasureExpandedTableAutoRowHeights()
+  nextTick(() => scheduleExpandedTableScrollOverflowState())
+}
+
+const updateExpandedTableCellText = (rowIndex: number, cellIndex: number, event: Event) => {
+  if (!expandedTableEditable.value) return
+  const editor = expandedTableCellEditorFromEvent(event)
+  if (!editor) return
+  commitExpandedTableCellEditor(editor, rowIndex, cellIndex)
+}
+
+const expandedTableAttachmentsByType = (type: EditorAttachmentInfo['type']) => {
+  const seen = new Set<string>()
+  const items: EditorAttachmentInfo[] = []
+  expandedTableRows.value.forEach((row) => {
+    row.forEach((cell) => {
+      parseAttachmentMarkersFromText(cell).forEach((item) => {
+        if (item.type !== type) return
+        const key = `${item.type}\n${item.url}\n${item.name}`
+        if (seen.has(key)) return
+        seen.add(key)
+        items.push(item)
+      })
+    })
+  })
+  return items
+}
+
+const removeExpandedTableAudioPreview = () => {
+  closeAttachmentAudioPopover()
+}
+
+const previewExpandedTableAttachment = (attachment: EditorAttachmentInfo, target: HTMLElement | null) => {
+  if (attachment.type === 'audio') {
+    if (!target) return
+    toggleAttachmentAudioPopover(target, { src: attachment.url, name: attachment.name })
+    return
+  }
+  if (attachment.type === 'file') {
+    openFileAttachment(attachment)
+    return
+  }
+  showAttachmentGallery(expandedTableAttachmentsByType(attachment.type), attachment, target)
+}
+
+const placeCaretAtExpandedTableCellOffset = (editor: HTMLElement, requestedOffset: number) => {
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  if (!selection) return false
+  const sourceLength = editorTableContentTextFromElement(editor).length
+  let remaining = Math.max(0, Math.min(sourceLength, requestedOffset))
+  const units = collectEditorTableSourceUnits(editor)
+  const range = document.createRange()
+  let placed = false
+  for (const unit of units) {
+    if (remaining === 0) {
+      range.setStartBefore(unit.node)
+      placed = true
+      break
+    }
+    if (remaining < unit.length) {
+      if (unit.node instanceof Text && !unit.atomic) {
+        range.setStart(unit.node, rawTextOffsetForEditorSourceOffset(unit.node, remaining))
+      } else if (remaining < unit.length / 2) {
+        range.setStartBefore(unit.node)
+      } else {
+        range.setStartAfter(unit.node)
+      }
+      placed = true
+      break
+    }
+    remaining -= unit.length
+    if (remaining === 0) {
+      range.setStartAfter(unit.node)
+      placed = true
+      break
+    }
+  }
+  if (!placed) {
+    range.selectNodeContents(editor)
+    range.collapse(false)
+  } else {
+    range.collapse(true)
+  }
+  editor.focus({ preventScroll: true })
+  selection.removeAllRanges()
+  selection.addRange(range)
+  return true
+}
+
+const insertExpandedTableCellLineBreak = (rowIndex: number, cellIndex: number, event: KeyboardEvent) => {
+  if (event.isComposing) return
+  const editor = expandedTableCellEditorFromEvent(event)
+  if (!editor) return
+  const focusedMarker = event.target instanceof Element ? event.target.closest<HTMLElement>('.editor-table-attachment-marker') : null
+  if (focusedMarker && editor.contains(focusedMarker)) {
+    event.preventDefault()
+    event.stopPropagation()
+    activateExpandedTableCellMarker(focusedMarker)
+    return
+  }
+  if (!expandedTableEditable.value) return
+  event.preventDefault()
+  event.stopPropagation()
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  const range = selection?.rangeCount ? selection.getRangeAt(0) : null
+  if (!selection || !range || !editor.contains(range.startContainer)) return
+  range.deleteContents()
+  const br = document.createElement('br')
+  const caret = document.createTextNode(TABLE_CELL_CARET_ANCHOR)
+  range.insertNode(br)
+  br.after(caret)
+  range.setStart(caret, caret.data.length)
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  commitExpandedTableCellEditor(editor, rowIndex, cellIndex)
+}
+
+const removeExpandedTableCellAttachmentMarker = (rowIndex: number, cellIndex: number, event: KeyboardEvent) => {
+  if (!expandedTableEditable.value) return
+  const editor = expandedTableCellEditorFromEvent(event)
+  const marker = event.target instanceof Element ? event.target.closest<HTMLElement>('.editor-table-attachment-marker') : null
+  if (!editor || !marker || !editor.contains(marker)) return
+  const prefix = document.createRange()
+  prefix.selectNodeContents(editor)
+  prefix.setEndBefore(marker)
+  const holder = document.createElement('div')
+  holder.appendChild(prefix.cloneContents())
+  const offset = editorTableContentTextFromElement(holder).length
+  event.preventDefault()
+  event.stopPropagation()
+  marker.remove()
+  commitExpandedTableCellEditor(editor, rowIndex, cellIndex)
+  placeCaretAtExpandedTableCellOffset(editor, offset)
+}
+
+const pasteIntoExpandedTableCell = (rowIndex: number, cellIndex: number, event: ClipboardEvent) => {
+  if (!expandedTableEditable.value) return
+  const editor = expandedTableCellEditorFromEvent(event)
+  if (!editor) return
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  const range = selection?.rangeCount ? selection.getRangeAt(0) : null
+  if (!selection || !range || !editor.contains(range.startContainer)) return
+  const text = (event.clipboardData?.getData('text/plain') || '').replace(/\r\n?/g, '\n')
+  range.deleteContents()
+  const fragment = document.createDocumentFragment()
+  text.split('\n').forEach((line, index) => {
+    if (index > 0) fragment.appendChild(document.createElement('br'))
+    if (line) fragment.appendChild(document.createTextNode(line))
+  })
+  const caret = document.createTextNode(TABLE_CELL_CARET_ANCHOR)
+  fragment.appendChild(caret)
+  range.insertNode(fragment)
+  range.setStart(caret, caret.data.length)
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  commitExpandedTableCellEditor(editor, rowIndex, cellIndex)
+}
+
+const activateExpandedTableCellMarker = (marker: HTMLElement) => {
+  const info = attachmentInfoFromTableMarker(marker)
+  if (!info) return false
+  previewExpandedTableAttachment(info, marker)
+  return true
+}
+
+const onExpandedTableCellMarkerPointerDown = (event: MouseEvent) => {
+  const marker = event.target instanceof Element ? event.target.closest<HTMLElement>('.editor-table-attachment-marker') : null
+  if (!marker) return
+  event.preventDefault()
+  event.stopPropagation()
+}
+
+const onExpandedTableCellMarkerClick = (event: MouseEvent) => {
+  const marker = event.target instanceof Element ? event.target.closest<HTMLElement>('.editor-table-attachment-marker') : null
+  if (!marker) return
+  event.preventDefault()
+  event.stopPropagation()
+  activateExpandedTableCellMarker(marker)
+}
+
+const onExpandedTableCellMarkerKeyActivate = (event: KeyboardEvent) => {
+  const marker = event.target instanceof Element ? event.target.closest<HTMLElement>('.editor-table-attachment-marker') : null
+  if (!marker) return
+  event.preventDefault()
+  event.stopPropagation()
+  activateExpandedTableCellMarker(marker)
+}
+
+const isMarkdownTableDivider = (line: string) => {
+  const cells = String(line || '').trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim())
+  return cells.length > 1 && cells.every((cell) => /^:?-{3,}:?$/.test(cell))
+}
+
+type EditorTableSourceBlock = { start: number; end: number; lines: string[]; kind: 'markdown' | 'html' | 'tab' }
+
+const getMarkdownTableBlocks = (content: string): EditorTableSourceBlock[] => {
+  const lines = String(content || '').split('\n')
+  const blocks: EditorTableSourceBlock[] = []
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    if (!lines[index].includes('|') || !isMarkdownTableDivider(lines[index + 1])) continue
+    let end = index + 2
+    while (end < lines.length && lines[end].includes('|') && lines[end].trim() !== '') end += 1
+    blocks.push({ start: index, end, lines: lines.slice(index, end), kind: 'markdown' })
+    index = end - 1
+  }
+  return blocks
+}
+
+const getHtmlTableBlocks = (content: string): EditorTableSourceBlock[] => {
+  const lines = String(content || '').split('\n')
+  const blocks: EditorTableSourceBlock[] = []
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!/<table\b/i.test(lines[index])) continue
+    let end = index + 1
+    while (end < lines.length && !/<\/table>/i.test(lines[end - 1])) end += 1
+    blocks.push({ start: index, end, lines: lines.slice(index, end), kind: 'html' })
+    index = end - 1
+  }
+  return blocks
+}
+
+const getTabTableBlocks = (content: string): EditorTableSourceBlock[] => {
+  const lines = String(content || '').split('\n')
+  const blocks: EditorTableSourceBlock[] = []
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!lines[index].includes('\t')) continue
+    let end = index + 1
+    while (end < lines.length && lines[end].includes('\t')) end += 1
+    const blockLines = lines.slice(index, end)
+    const maxColumns = Math.max(0, ...blockLines.map((line) => line.split('\t').length))
+    if (blockLines.length >= 2 && maxColumns > 1) {
+      blocks.push({ start: index, end, lines: blockLines, kind: 'tab' })
+      index = end - 1
+    }
+  }
+  return blocks
+}
+
+const getEditorTableSourceBlocks = (content: string) => [
+  ...getMarkdownTableBlocks(content),
+  ...getHtmlTableBlocks(content),
+  ...getTabTableBlocks(content)
+].sort((left, right) => left.start - right.start)
+
+const splitMarkdownTableRowCells = (line: string) => String(line || '')
+  .trim()
+  .replace(/^\|/, '')
+  .replace(/\|$/, '')
+  .split('|')
+
+const markdownTableRowCellCount = (line: string) => splitMarkdownTableRowCells(line).length
+
+const collapseMarkdownTableRowCells = (cells: string[], expected: number) => {
+  if (expected <= 0) return cells
+  if (cells.length < expected) return [...cells, ...Array.from({ length: expected - cells.length }, () => '')]
+  if (cells.length === expected) return cells
+  const overflow = cells.length - expected
+  return [cells.slice(0, overflow + 1).join('|'), ...cells.slice(overflow + 1)]
+}
+
+const editableCellsFromPossiblyBrokenMarkdownTableRow = (line: string, expected: number) =>
+  collapseMarkdownTableRowCells(splitMarkdownTableRowCells(line), expected).map((cell) => tableCellSourceToEditorText(cell))
+
+const normalizeMarkdownTableEmptyCellEntities = (content: string) => {
+  const lines = String(content || '').split('\n')
+  const blocks = getMarkdownTableBlocks(content)
+  if (!blocks.length) return content || ''
+  const replacements = blocks
+    .map((block) => {
+      const rows = editableRowsFromMarkdownBlock(block)
+      if (!rows.length) return null
+      const nextLines = serializeEditableMarkdownTableBlock(block, rows)
+      return { start: block.start, end: block.end, lines: nextLines }
+    })
+    .filter((replacement): replacement is { start: number; end: number; lines: string[] } => !!replacement)
+    .sort((left, right) => right.start - left.start)
+  replacements.forEach((replacement) => {
+    lines.splice(replacement.start, replacement.end - replacement.start, ...replacement.lines)
+  })
+  return lines.join('\n')
+}
+
+const looksLikeMarkdownTableRowFragment = (line: string) => {
+  const trimmed = String(line || '').trim()
+  if (!trimmed || isMarkdownTableDivider(trimmed)) return false
+  if (trimmed.startsWith('|') || trimmed.endsWith('|')) return trimmed.includes('|')
+  return (trimmed.match(/\|/g) || []).length >= 2
+}
+
+const looksLikeCompleteMarkdownTableRow = (line: string, expected: number) => {
+  const trimmed = String(line || '').trim()
+  if (!trimmed || !trimmed.startsWith('|') || isMarkdownTableDivider(trimmed)) return false
+  return markdownTableRowCellCount(trimmed) >= expected
+}
+
+const hasUnsafeMarkdownTableStructure = (content: string) => {
+  const lines = String(content || '').split('\n')
+  const blocks = getMarkdownTableBlocks(content)
+  const covered = new Set<number>()
+  blocks.forEach((block) => {
+    for (let index = block.start; index < block.end; index += 1) covered.add(index)
+  })
+  if (blocks.length && lines.some((line, index) => !covered.has(index) && looksLikeMarkdownTableRowFragment(line))) return true
+  return blocks.some((block) => {
+    const expected = markdownTableRowCellCount(block.lines[0] || '')
+    if (expected <= 1) return false
+    return block.lines.some((line, index) => {
+      if (index === 1 && isMarkdownTableDivider(line)) return false
+      return markdownTableRowCellCount(line) !== expected
+    })
+  })
+}
+
+const repairUnsafeMarkdownTableCellBreaks = (content: string) => {
+  const lines = String(content || '').split('\n')
+  const output: string[] = []
+  for (let index = 0; index < lines.length; index += 1) {
+    const header = lines[index] || ''
+    const divider = lines[index + 1] || ''
+    if (!header.includes('|') || !isMarkdownTableDivider(divider)) {
+      output.push(header)
+      continue
+    }
+    const expected = markdownTableRowCellCount(header)
+    const safeHeader = formatEditableMarkdownTableRow(editableCellsFromPossiblyBrokenMarkdownTableRow(header, expected))
+    output.push(safeHeader, formatMarkdownDividerLine('', expected))
+    index += 2
+    while (index < lines.length) {
+      const current = lines[index] || ''
+      if (!current.trim()) {
+        output.push(current)
+        break
+      }
+      if (!looksLikeMarkdownTableRowFragment(current) && !current.includes('|')) {
+        index -= 1
+        break
+      }
+      let merged = current
+      while (markdownTableRowCellCount(merged) < expected && index + 1 < lines.length) {
+        const next = lines[index + 1] || ''
+        if (!next.trim() || isMarkdownTableDivider(next) || looksLikeCompleteMarkdownTableRow(next, expected)) break
+        merged = `${merged}<br />${next.trim()}`
+        index += 1
+      }
+      output.push(formatEditableMarkdownTableRow(editableCellsFromPossiblyBrokenMarkdownTableRow(merged, expected)))
+      index += 1
+    }
+  }
+  return output.join('\n')
+}
+
+const ensureSafeEditorTableMarkdown = (content: string) => normalizeMarkdownTableEmptyCellEntities(repairUnsafeMarkdownTableCellBreaks(content))
+
+const normalizeTableMatchText = (text: string) => {
+  ATTACHMENT_MARKER_GLOBAL_RE.lastIndex = 0
+  const source = String(stripTableBreakCode(normalizeAttachmentSourceText(text) || ''))
+    .replace(/\u00a0/g, ' ')
+    .trim()
+  if (MARKDOWN_EMPTY_TABLE_CELL_RE.test(source)) return ''
+  return source
+    .replace(ATTACHMENT_MARKER_GLOBAL_RE, '$1：$2')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const getRenderedTableRows = (table: HTMLTableElement | null) => {
+  if (!table) return [] as string[][]
+  return Array.from(table.rows).map((row) => Array.from(row.cells).map((cell) => normalizeTableMatchText(cell.textContent || '')))
+}
+
+const editableRowsFromRenderedTable = (table: HTMLTableElement | null) => {
+  if (!table) return [] as string[][]
+  return Array.from(table.rows).map((row) => Array.from(row.cells).map((cell) => htmlTableCellToEditorText(cell as HTMLTableCellElement)))
+}
+
+const countEdgeLineBreaks = (value: string, edge: 'start' | 'end') => {
+  const match = edge === 'start' ? String(value || '').match(/^\n+/) : String(value || '').match(/\n+$/)
+  return match?.[0].length || 0
+}
+
+const mergeRenderedTableCellEdgeBreaks = (sourceText: string, renderedText: string) => {
+  const source = String(sourceText || '')
+  const rendered = String(renderedText || '')
+  if (!rendered) return source
+  const sourceCore = source.replace(/^\n+|\n+$/g, '')
+  const renderedCore = rendered.replace(/^\n+|\n+$/g, '')
+  if (normalizeTableMatchText(sourceCore) !== normalizeTableMatchText(renderedCore)) return source
+  const leading = Math.max(countEdgeLineBreaks(source, 'start'), countEdgeLineBreaks(rendered, 'start'))
+  const trailing = Math.max(countEdgeLineBreaks(source, 'end'), countEdgeLineBreaks(rendered, 'end'))
+  return `${'\n'.repeat(leading)}${sourceCore}${'\n'.repeat(trailing)}`
+}
+
+const mergeRenderedTableEdgeBreaks = (sourceRows: string[][], renderedRows: string[][]) =>
+  sourceRows.map((row, rowIndex) => row.map((cell, cellIndex) => mergeRenderedTableCellEdgeBreaks(cell, renderedRows[rowIndex]?.[cellIndex] || '')))
+
+const createHtmlTableFromBlock = (block: EditorTableSourceBlock) => {
+  if (block.kind !== 'html' || typeof document === 'undefined') return null
+  const holder = document.createElement('div')
+  holder.innerHTML = block.lines.join('\n').trim()
+  const table = holder.querySelector('table') as HTMLTableElement | null
+  if (table) normalizeEditableHtmlTable(table)
+  return table
+}
+
+const parseMarkdownTableRow = (line: string) => String(line || '')
+  .trim()
+  .replace(/^\|/, '')
+  .replace(/\|$/, '')
+  .split('|')
+  .map((cell) => normalizeTableMatchText(decodeMarkdownTablePipeEntities(cell.replace(/\\\|/g, '|'))))
+
+const parseEditableMarkdownTableRow = (line: string) => String(line || '')
+  .trim()
+  .replace(/^\|/, '')
+  .replace(/\|$/, '')
+  .split('|')
+  .map((cell) => tableCellSourceToEditorText(cell))
+
+const parseEditableTabTableRow = (line: string) => String(line || '')
+  .split('\t')
+  .map((cell) => tableCellSourceToEditorText(cell))
+
+const getMarkdownTableRows = (lines: string[]) => {
+  if (lines.length < 2) return [] as string[][]
+  const rows = [parseMarkdownTableRow(lines[0])]
+  lines.slice(2).forEach((line) => rows.push(parseMarkdownTableRow(line)))
+  return rows
+}
+
+const editableRowsFromHtmlBlock = (block: EditorTableSourceBlock) => {
+  const table = createHtmlTableFromBlock(block)
+  if (!table) return [] as string[][]
+  return Array.from(table.rows).map((row) => Array.from(row.cells).map((cell) => htmlTableCellToEditorText(cell as HTMLTableCellElement)))
+}
+
+const editableRowsFromTabBlock = (block: EditorTableSourceBlock) => block.kind === 'tab'
+  ? block.lines.map((line) => parseEditableTabTableRow(line))
+  : [] as string[][]
+
+const comparableRowsFromTableBlock = (block: EditorTableSourceBlock) => {
+  const rows = block.kind === 'markdown'
+    ? getMarkdownTableRows(block.lines)
+    : (block.kind === 'tab' ? editableRowsFromTabBlock(block) : editableRowsFromHtmlBlock(block))
+  return rows.map((row) => row.map((cell) => normalizeTableMatchText(cell)))
+}
+
+const tableRowsHaveComparableContent = (rows: string[][]) => rows.some((row) => row.some((cell) => !!cell))
+
+const sameTableRows = (left: string[][], right: string[][]) => {
+  if (!left.length || left.length !== right.length) return false
+  return left.every((row, rowIndex) => {
+    const other = right[rowIndex] || []
+    if (row.length !== other.length) return false
+    return row.every((cell, cellIndex) => normalizeTableMatchText(cell) === normalizeTableMatchText(other[cellIndex]))
+  })
+}
+
+const findMarkdownTableBlock = (
+  blocks: EditorTableSourceBlock[],
+  renderedRows: string[][],
+  preferredIndex: number
+) => {
+  if (tableRowsHaveComparableContent(renderedRows)) {
+    const matched = blocks.find((block) => sameTableRows(comparableRowsFromTableBlock(block), renderedRows))
+    if (matched) return matched
+  }
+  if (preferredIndex >= 0 && preferredIndex < blocks.length) return blocks[preferredIndex]
+  return blocks.length === 1 ? blocks[0] : undefined
+}
+
+const tableBlockFromDataset = (table: HTMLTableElement | null, blocks: EditorTableSourceBlock[]) => {
+  if (!table) return undefined
+  const start = Number(table.dataset.editorTableBlockStart)
+  const end = Number(table.dataset.editorTableBlockEnd)
+  const exactBlock = Number.isFinite(start) && Number.isFinite(end)
+    ? blocks.find((block) => block.start === start && block.end === end)
+    : undefined
+  if (exactBlock) return exactBlock
+  const sourceIndex = Number(table.dataset.editorTableSourceIndex)
+  if (Number.isFinite(sourceIndex) && sourceIndex >= 0 && sourceIndex < blocks.length) return blocks[sourceIndex]
+  return undefined
+}
+
+type EditorTableCellSourceTarget = {
+  table: HTMLTableElement
+  block: EditorTableSourceBlock
+  lines: string[]
+  lineIndex: number
+  rowIndex: number
+  cellIndex: number
+  rowCells: string[]
+}
+
+const getRawVditorValue = () => {
+  try {
+    return vditorInstance?.getValue?.() || ''
+  } catch {
+    return ''
+  }
+}
+
+const getEditorTableBlockForTable = (
+  table: HTMLTableElement | null,
+  preferredIndex = -1,
+  sourceBlocks?: EditorTableSourceBlock[]
+) => {
+  const blocks = sourceBlocks || getEditorTableSourceBlocks(getRawVditorValue())
+  const tableIndex = preferredIndex >= 0 ? preferredIndex : (table ? getEditorTables().indexOf(table) : -1)
+  return tableBlockFromDataset(table, blocks) || findMarkdownTableBlock(blocks, getRenderedTableRows(table), tableIndex)
+}
+
+const getEditorTableCellSourceTarget = (cell: HTMLTableCellElement | null): EditorTableCellSourceTarget | null => {
+  if (!cell || !vditorInstance) return null
+  const table = cell.closest('table') as HTMLTableElement | null
+  const row = cell.parentElement as HTMLTableRowElement | null
+  if (!table || !row || !isInsideEditorRoot(table)) return null
+  const rowIndex = row.rowIndex
+  const cellIndex = cell.cellIndex
+  if (rowIndex < 0 || cellIndex < 0) return null
+  const value = getRawVditorValue()
+  const lines = value.split('\n')
+  const blocks = getEditorTableSourceBlocks(value)
+  const tableIndex = getEditorTables().indexOf(table)
+  const block = getEditorTableBlockForTable(table, tableIndex, blocks)
+  if (!block) return null
+  if (block.kind === 'html') {
+    const sourceRows = editableRowsFromHtmlBlock(block)
+    const rowCells = sourceRows[rowIndex]
+    if (!rowCells) return null
+    return { table, block, lines, lineIndex: -1, rowIndex, cellIndex, rowCells }
+  }
+  if (block.kind === 'tab') {
+    const lineIndex = block.start + rowIndex
+    if (lineIndex < block.start || lineIndex >= block.end || !lines[lineIndex]) return null
+    const rowCells = parseEditableTabTableRow(lines[lineIndex])
+    return { table, block, lines, lineIndex, rowIndex, cellIndex, rowCells }
+  }
+  if (!isMarkdownTableDivider(lines[block.start + 1] || '')) return null
+  const lineIndex = rowIndex === 0 ? block.start : block.start + rowIndex + 1
+  if (lineIndex < block.start || lineIndex >= block.end || !lines[lineIndex]) return null
+  const rowCells = parseEditableMarkdownTableRow(lines[lineIndex])
+  return { table, block, lines, lineIndex, rowIndex, cellIndex, rowCells }
+}
+
+const serializeEditableRowsToHtmlTableBlock = (rows: string[][], sourceTable?: HTMLTableElement | null) => {
+  if (typeof document === 'undefined') return null
+  const table = sourceTable ? sourceTable.cloneNode(false) as HTMLTableElement : document.createElement('table')
+  const body = table.createTBody()
+  rows.forEach((cells) => {
+    const row = body.insertRow()
+    cells.forEach((text) => {
+      const targetCell = row.insertCell()
+      targetCell.innerHTML = editorTextToHtmlTableCellSource(text)
+    })
+  })
+  return table.outerHTML.split('\n')
+}
+
+const serializeEditableHtmlTableBlock = (block: EditorTableSourceBlock, rows: string[][]) => {
+  const table = createHtmlTableFromBlock(block)
+  return serializeEditableRowsToHtmlTableBlock(rows, table)
+}
+
+const formatEditableMarkdownTableRow = (cells: string[]) => `| ${cells.map(editorTextToMarkdownTableCellSource).join(' | ')} |`
+const formatEditableTabTableRow = (cells: string[]) => cells.map(editorTextToTabTableCellSource).join('\t')
+
+const formatMarkdownDividerLine = (dividerLine: string, colCount: number) => {
+  const cells = String(dividerLine || '')
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim())
+  const normalized = Array.from({ length: colCount }, (_, index) => /^:?-{3,}:?$/.test(cells[index] || '') ? cells[index] : '---')
+  return `| ${normalized.join(' | ')} |`
+}
+
+const serializeEditableMarkdownTableBlock = (block: EditorTableSourceBlock, rows: string[][]) => {
+  const normalizedRows = normalizeExpandedTableRows(rows)
+  if (!normalizedRows.length) return [] as string[]
+  const colCount = normalizedRows[0]?.length || 1
+  return [
+    formatEditableMarkdownTableRow(normalizedRows[0] || []),
+    formatMarkdownDividerLine(block.lines[1] || '', colCount),
+    ...normalizedRows.slice(1).map(formatEditableMarkdownTableRow)
+  ]
+}
+
+const serializeEditableTabTableBlock = (rows: string[][]) => normalizeExpandedTableRows(rows).map(formatEditableTabTableRow)
+
+const serializeEditableTableBlock = (block: EditorTableSourceBlock, rows: string[][]) => {
+  if (block.kind === 'html') return serializeEditableHtmlTableBlock(block, rows)
+  if (block.kind === 'tab') return serializeEditableTabTableBlock(rows)
+  return serializeEditableMarkdownTableBlock(block, rows)
+}
+
+const normalizeEditorTableSource = () => false
+
+const scheduleNormalizeEditorTableSource = () => {
+  scheduleTimeout(() => {
+    if (editorContainer.value) enhanceEditorTables(editorContainer.value)
+    refreshAttachmentLinksFromEditor()
+  }, 0)
+}
+
+const buildEditorTableCellSourceValue = (cell: HTMLTableCellElement | null, nextText: string) => {
+  const target = getEditorTableCellSourceTarget(cell)
+  if (!target) return null
+  const rowCells = [...target.rowCells]
+  while (rowCells.length <= target.cellIndex) rowCells.push('')
+  rowCells[target.cellIndex] = nextText
+  if (target.block.kind !== 'html') {
+    const nextLine = target.block.kind === 'tab'
+      ? formatEditableTabTableRow(rowCells)
+      : formatEditableMarkdownTableRow(rowCells)
+    const lines = replaceTableSourceLine(target.lines, target.lineIndex, nextLine)
+    return lines ? { table: target.table, value: lines.join('\n') } : null
+  }
+  const rows = editableRowsFromTableBlock(target.block)
+  if (!rows[target.rowIndex]) rows[target.rowIndex] = []
+  rows[target.rowIndex] = rowCells
+  const nextBlockLines = serializeEditableTableBlock(target.block, rows)
+  if (!nextBlockLines) return null
+  target.lines.splice(target.block.start, target.block.end - target.block.start, ...nextBlockLines)
+  return { table: target.table, value: target.lines.join('\n') }
+}
+
+const getEditorTableCellAtPosition = (position: Pick<PendingEditorTableCellSync, 'tableIndex' | 'rowIndex' | 'cellIndex'> | null) => {
+  if (!position) return null as HTMLTableCellElement | null
+  const table = getEditorTables()[position.tableIndex]
+  return (table?.rows[position.rowIndex]?.cells[position.cellIndex] as HTMLTableCellElement | undefined) || null
+}
+
+const applyEditorTableCellSourceValue = (
+  cell: HTMLTableCellElement | null,
+  nextText: string,
+  options: { restoreCaret?: boolean } = {}
+) => {
+  if (!vditorInstance) return false
+  const position = options.restoreCaret ? getEditorTableCellPosition(cell) : null
+  const result = buildEditorTableCellSourceValue(cell, nextText)
+  if (!result) return false
+  rememberEditorTableScroll(result.table)
+  vditorInstance.setValue(result.value)
+  if (position) {
+    const restoreAppliedCell = () => {
+      const nextCell = getEditorTableCellAtPosition(position)
+      if (!nextCell) return
+      normalizeEditorTableBreakCodeMarkers(nextCell)
+      placeCaretAtEndOfEditorTableCell(nextCell)
+    }
+    restoreAppliedCell()
+    scheduleFrame(restoreAppliedCell)
+    scheduleTimeout(restoreAppliedCell, 0)
+  }
+  emitEditorValue(result.value)
+  scheduleTimeout(() => refreshAttachmentLinksFromEditor(), 0)
+  return true
+}
+
+const editorTableContentTextFromElement = (element: HTMLElement) => {
+  const clone = element.cloneNode(true) as HTMLElement
+  clone.querySelectorAll('.editor-attachment-preview').forEach((node) => node.remove())
+  clone.querySelectorAll<HTMLElement>('[data-type="html-inline"], .vditor-ir__node').forEach((node) => {
+    if (isEditorTableBreakCodeMarker(node)) node.replaceWith(document.createTextNode('\n'))
+  })
+  replaceAttachmentNodesWithSourceText(clone)
+  clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')))
+  return normalizeAttachmentSourceText(stripEditorTableCaretAnchors(clone.textContent || '').replace(/[\u200b\u200c\ufeff]/g, '').replace(/\u00a0/g, ' '))
+}
+
+const editorTableCellTextFromDom = (cell: HTMLTableCellElement) => editorTableContentTextFromElement(cell)
+
+const editorTableRangeSourceOffset = (cell: HTMLTableCellElement, range: Range | null) => {
+  if (!range || !cell.contains(range.startContainer)) return editorTableCellTextFromDom(cell).length
+  const prefix = range.cloneRange()
+  try {
+    prefix.selectNodeContents(cell)
+    prefix.setEnd(range.startContainer, range.startOffset)
+  } catch {
+    return editorTableCellTextFromDom(cell).length
+  }
+  const holder = document.createElement('div')
+  holder.appendChild(prefix.cloneContents())
+  return editorTableContentTextFromElement(holder).length
+}
+
+const getEditorTableCellInsertionOffset = (cell: HTMLTableCellElement) => {
+  if (inlineEditorTableAtomicEditorState?.cell === cell && inlineEditorTableAtomicEditor) {
+    return getInlineEditorTableAtomicInsertionOffset()
+  }
+  if (inlineEditorTableTextareaState?.cell === cell && inlineEditorTableTextarea) {
+    return Math.max(0, inlineEditorTableTextarea.selectionStart || 0)
+  }
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  const range = selection?.rangeCount ? selection.getRangeAt(0) : null
+  return editorTableRangeSourceOffset(cell, range)
+}
+
+type EditorTableSourceUnit = { node: Node; length: number; atomic: boolean }
+
+const editorTableTextNodeSourceValue = (node: Text) => String(node.data || '')
+  .replace(/[\u200b\u200c\ufeff]/g, '')
+  .replace(/\u00a0/g, ' ')
+
+const collectEditorTableSourceUnits = (root: Node, output: EditorTableSourceUnit[] = []) => {
+  Array.from(root.childNodes).forEach((node) => {
+    if (node instanceof Text) {
+      const length = editorTableTextNodeSourceValue(node).length
+      if (length) output.push({ node, length, atomic: false })
+      return
+    }
+    if (!(node instanceof HTMLElement)) return
+    if (node.classList.contains('editor-attachment-preview')) return
+    if (node.classList.contains('editor-table-attachment-marker')) {
+      const source = node.getAttribute('data-attachment-source') || ''
+      output.push({ node, length: Math.max(1, source.length), atomic: true })
+      return
+    }
+    if (node.tagName === 'BR') {
+      output.push({ node, length: 1, atomic: true })
+      return
+    }
+    collectEditorTableSourceUnits(node, output)
+  })
+  return output
+}
+
+const rawTextOffsetForEditorSourceOffset = (node: Text, requestedOffset: number) => {
+  const target = Math.max(0, requestedOffset)
+  let sourceOffset = 0
+  for (let index = 0; index < node.data.length; index += 1) {
+    if (!/[\u200b\u200c\ufeff]/.test(node.data[index] || '')) sourceOffset += 1
+    if (sourceOffset >= target) return index + 1
+  }
+  return node.data.length
+}
+
+const placeCaretAtEditorTableSourceOffset = (cell: HTMLTableCellElement, requestedOffset: number) => {
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  if (!selection) return false
+  const sourceLength = editorTableCellTextFromDom(cell).length
+  let remaining = Math.max(0, Math.min(sourceLength, requestedOffset))
+  const units = collectEditorTableSourceUnits(cell)
+  const range = document.createRange()
+  let placed = false
+  for (const unit of units) {
+    if (remaining === 0) {
+      range.setStartBefore(unit.node)
+      placed = true
+      break
+    }
+    if (remaining < unit.length) {
+      if (unit.node instanceof Text && !unit.atomic) {
+        range.setStart(unit.node, rawTextOffsetForEditorSourceOffset(unit.node, remaining))
+      } else if (remaining < unit.length / 2) {
+        range.setStartBefore(unit.node)
+      } else {
+        range.setStartAfter(unit.node)
+      }
+      placed = true
+      break
+    }
+    remaining -= unit.length
+    if (remaining === 0) {
+      range.setStartAfter(unit.node)
+      placed = true
+      break
+    }
+  }
+  if (!placed) {
+    range.selectNodeContents(cell)
+    range.collapse(false)
+  } else {
+    range.collapse(true)
+  }
+  getEditorEditableFromNode(cell)?.focus({ preventScroll: true })
+  selection.removeAllRanges()
+  selection.addRange(range)
+  lastEditorSelectionRange = range.cloneRange()
+  storeLastEditorTableSelection(range)
+  return true
+}
+
+type EditorTableDomCaretCandidate = {
+  offset: number
+  left: number
+  top: number
+  bottom: number
+  height: number
+}
+
+const editorTableRangeCaretCandidate = (range: Range, offset: number, fallbackHeight: number): EditorTableDomCaretCandidate | null => {
+  const rect = range.getBoundingClientRect()
+  const clientRect = Array.from(range.getClientRects())[0] || rect
+  if (!Number.isFinite(clientRect.left) || !Number.isFinite(clientRect.top)) return null
+  return {
+    offset,
+    left: clientRect.left,
+    top: clientRect.top,
+    bottom: clientRect.bottom || clientRect.top + fallbackHeight,
+    height: clientRect.height || fallbackHeight,
+  }
+}
+
+const editorTableDomCaretCandidates = (cell: HTMLElement) => {
+  const lineHeight = getEditorElementLineHeight(cell)
+  const candidates: EditorTableDomCaretCandidate[] = []
+  let sourceOffset = 0
+  collectEditorTableSourceUnits(cell).forEach((unit) => {
+    if (unit.node instanceof Text && !unit.atomic) {
+      let localSourceOffset = 0
+      for (let rawOffset = 0; rawOffset <= unit.node.data.length; rawOffset += 1) {
+        if (rawOffset > 0 && !/[\u200b\u200c\ufeff]/.test(unit.node.data[rawOffset - 1] || '')) localSourceOffset += 1
+        const range = document.createRange()
+        range.setStart(unit.node, rawOffset)
+        range.collapse(true)
+        const candidate = editorTableRangeCaretCandidate(range, sourceOffset + localSourceOffset, lineHeight)
+        if (candidate) candidates.push(candidate)
+      }
+      sourceOffset += unit.length
+      return
+    }
+
+    const element = unit.node as HTMLElement
+    const rects = Array.from(element.getClientRects())
+    const firstRect = rects[0] || element.getBoundingClientRect()
+    const lastRect = rects[rects.length - 1] || firstRect
+    candidates.push({
+      offset: sourceOffset,
+      left: firstRect.left,
+      top: firstRect.top,
+      bottom: firstRect.bottom,
+      height: firstRect.height || lineHeight,
+    })
+    sourceOffset += unit.length
+    candidates.push({
+      offset: sourceOffset,
+      left: lastRect.right,
+      top: lastRect.top,
+      bottom: lastRect.bottom,
+      height: lastRect.height || lineHeight,
+    })
+  })
+  if (!candidates.length) {
+    const rect = cell.getBoundingClientRect()
+    candidates.push({ offset: 0, left: rect.left, top: rect.top, bottom: rect.top + lineHeight, height: lineHeight })
+  }
+  return candidates
+}
+
+const editorTableDomCaretOffsetFromPoint = (cell: HTMLElement, event: MouseEvent) => {
+  const candidates = editorTableDomCaretCandidates(cell)
+  const best = candidates.reduce((current, candidate) => {
+    const currentScore = Math.abs((current.top + current.height / 2) - event.clientY) * 1000 + Math.abs(current.left - event.clientX)
+    const candidateScore = Math.abs((candidate.top + candidate.height / 2) - event.clientY) * 1000 + Math.abs(candidate.left - event.clientX)
+    return candidateScore < currentScore ? candidate : current
+  }, candidates[0]!)
+  return best.offset
+}
+
+const isEditorTableBreakCodeMarker = (node: HTMLElement) => {
+  const text = stripEditorTableCaretAnchors(node.textContent || '').trim()
+  if (TABLE_CELL_BREAK_TEXT_RE.test(text)) return true
+  const html = stripEditorTableCaretAnchors(node.innerHTML || '').trim()
+  return /^<br\s*\/?\s*>$/i.test(html) || /^<code\b[^>]*>\s*<br\s*\/?\s*>\s*<\/code>$/i.test(html)
+}
+
+const normalizeEditorTableBreakCodeMarkers = (cell: HTMLTableCellElement) => {
+  const replacements: HTMLElement[] = []
+  cell.querySelectorAll<HTMLElement>('[data-type="html-inline"], .vditor-ir__node').forEach((node) => {
+    if (isEditorTableBreakCodeMarker(node)) replacements.push(node)
+  })
+  replacements.forEach((node) => {
+    node.replaceWith(document.createElement('br'))
+  })
+}
+
+const hasEditorTableBreakCodeMarker = (cell: HTMLTableCellElement) => Array.from(cell.querySelectorAll<HTMLElement>('[data-type="html-inline"], .vditor-ir__node'))
+  .some((node) => isEditorTableBreakCodeMarker(node))
+
+const serializeEditorTableDomAsMarkdown = (table: HTMLTableElement) => {
+  const rows = Array.from(table.rows).map((row) => Array.from(row.cells).map((cell) => editorTableCellTextFromDom(cell as HTMLTableCellElement)))
+  if (!rows.length) return ''
+  const colCount = Math.max(1, ...rows.map((row) => row.length))
+  const normalizedRows = rows.map((row) => Array.from({ length: colCount }, (_, index) => row[index] ?? ''))
+  const header = normalizedRows[0] || []
+  const body = normalizedRows.slice(1)
+  return [
+    formatEditableMarkdownTableRow(header),
+    formatMarkdownDividerLine('', colCount),
+    ...body.map(formatEditableMarkdownTableRow)
+  ].join('\n')
+}
+
+const serializePlainEditorBlockText = (block: Element) => {
+  const clone = block.cloneNode(true) as HTMLElement
+  clone.querySelectorAll('.editor-table-delete-button, .editor-table-expand-button, .editor-attachment-preview').forEach((node) => node.remove())
+  clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')))
+  const rawText = String(clone.textContent || '').replace(/[\u200b\u200c\ufeff]/g, '')
+  const isBlankLineDom = isMarkdownBlankLineSentinel(rawText)
+  if (isBlankLineDom && block.classList.contains(PLAIN_EMPTY_LINE_CLASS)) return ''
+  if (isBlankLineDom && (block.classList.contains('vditor-preserved-blank-line') || rawText.includes(MARKDOWN_BLANK_LINE_SENTINEL))) return MARKDOWN_BLANK_LINE_SENTINEL
+  return normalizeAttachmentSourceText(rawText.replace(/\u00a0/g, ' ')).replace(/[ \t]+$/g, '')
+}
+
+const serializePlainEditorDomAsMarkdown = (editable: HTMLElement) => {
+  const pieces: string[] = []
+  Array.from(editable.childNodes).forEach((node) => {
+    const formatted = serializeEditorFormattedBlock(node)
+    if (formatted !== null) {
+      if (pieces.length && pieces[pieces.length - 1] !== '' && pieces[pieces.length - 1] !== MARKDOWN_BLANK_LINE_SENTINEL) pieces.push('')
+      pieces.push(formatted, '')
+      return
+    }
+    if (node instanceof Element && node.matches('p[data-block], div[data-block]') && !node.closest('table')) {
+      pieces.push(serializePlainEditorBlockText(node))
+      return
+    }
+    const text = String(node.textContent || '').replace(/[\u200b\u200c\ufeff]/g, '').replace(/\u00a0/g, ' ')
+    if (text) pieces.push(normalizeAttachmentSourceText(text))
+  })
+  return serializeMarkdownEditorBlocks(pieces)
+}
+
+const serializeEditorFormattedBlock = (node: Node) => {
+  if (!(node instanceof Element) || !node.matches('ul, ol, blockquote, h1, h2, h3, h4, h5, h6, pre, hr')) return null
+  const engine = vditorInstance?.vditor
+  if (!engine?.lute) return null
+  const markdown = engine.currentMode === 'wysiwyg'
+    ? engine.lute.VditorDOM2Md(node.outerHTML)
+    : engine.lute.VditorIRDOM2Md(node.outerHTML)
+  return String(markdown).trim()
+}
+
+const serializeEditorDomAsMarkdown = (editable: HTMLElement) => {
+  const segments: string[] = []
+  let plainLines: string[] = []
+  const flushPlainLines = () => {
+    if (!plainLines.length) return
+    const text = serializeMarkdownEditorBlocks(plainLines)
+    if (text) segments.push(text)
+    plainLines = []
+  }
+  Array.from(editable.childNodes).forEach((node) => {
+    const formatted = serializeEditorFormattedBlock(node)
+    if (formatted !== null) {
+      flushPlainLines()
+      if (formatted) segments.push(formatted)
+      return
+    }
+    if (node instanceof HTMLTableElement) {
+      flushPlainLines()
+      const markdown = serializeEditorTableDomAsMarkdown(node)
+      if (markdown) segments.push(markdown)
+      return
+    }
+    if (node instanceof Element && node.matches('p[data-block], div[data-block]') && !node.closest('table')) {
+      plainLines.push(serializePlainEditorBlockText(node))
+      return
+    }
+    if (node instanceof Element && node.querySelector('table')) {
+      flushPlainLines()
+      const clone = node.cloneNode(true) as HTMLElement
+      clone.querySelectorAll('.editor-table-delete-button, .editor-table-expand-button, .editor-attachment-preview').forEach((control) => control.remove())
+      clone.querySelectorAll('table').forEach((table) => {
+        const markdown = serializeEditorTableDomAsMarkdown(table as HTMLTableElement)
+        table.replaceWith(document.createTextNode(markdown ? `\n${markdown}\n\n` : ''))
+      })
+      const text = normalizeAttachmentSourceText(String(clone.textContent || '').replace(/[\u200b\u200c\ufeff]/g, '').replace(/\u00a0/g, ' ')).trim()
+      if (text) segments.push(text)
+      return
+    }
+    const text = String(node.textContent || '').replace(/[\u200b\u200c\ufeff]/g, '').replace(/\u00a0/g, ' ')
+    if (text) plainLines.push(normalizeAttachmentSourceText(text))
+  })
+  flushPlainLines()
+  return encodeMarkdownExtraBlankLines(segments.join('\n\n')).replace(/^\n+|\n+$/g, '')
+}
+
+const getEditorDomContentFallback = () => {
+  if (typeof document === 'undefined') return ''
+  const editable = getEditorEditableElement()
+  if (!editable) return ''
+  return editable.querySelector('table') ? serializeEditorDomAsMarkdown(editable) : serializePlainEditorDomAsMarkdown(editable)
+}
+
+const hasEditorSoftBreakDom = () => {
+  const editable = getEditorEditableElement()
+  return !!editable?.querySelector(`br, .vditor-preserved-blank-line, .${PLAIN_EMPTY_LINE_CLASS}`)
+}
+
+const hasEditorPlainBlockDom = () => {
+  const editable = getEditorEditableElement()
+  if (!editable) return false
+  const plainBlocks = Array.from(editable.children).filter((node) => node instanceof Element && node.matches('p[data-block], div[data-block]') && !node.closest('table'))
+  return plainBlocks.length > 1
+}
+
+const getEditorVisibleDomTableSafeValue = () => {
+  const needsDomFallback = getEditorTables().length || hasEditorSoftBreakDom() || hasEditorPlainBlockDom()
+  const fallbackValue = needsDomFallback ? getEditorDomContentFallback() : ''
+  return fallbackValue || getEditorValueWithPendingTableSync()
+}
+
+const getSafeOutgoingEditorValue = (sourceValue?: string) => {
+  const source = typeof sourceValue === 'string' ? sourceValue : getRawVditorValue()
+  if (typeof sourceValue === 'string') {
+    const trustedSource = ensureSafeEditorTableMarkdown(encodeMarkdownExtraBlankLines(source))
+    if (!hasUnsafeMarkdownTableStructure(trustedSource)) return trustedSource
+  }
+  const needsDomFallback = getEditorTables().length || hasEditorSoftBreakDom() || hasEditorPlainBlockDom()
+  const fallbackValue = needsDomFallback ? getEditorDomContentFallback() : ''
+  if (fallbackValue) return fallbackValue
+  const syncedValue = getEditorValueWithDomTableSync(source)
+  const repairedValue = ensureSafeEditorTableMarkdown(encodeMarkdownExtraBlankLines(syncedValue || source))
+  return repairedValue || syncedValue || source
+}
+
+const emitEditorValue = (sourceValue?: string) => {
+  config.onChange(getSafeOutgoingEditorValue(sourceValue))
+}
+
+const emitKnownEditorSourceValue = (sourceValue: string) => {
+  const safeValue = ensureSafeEditorTableMarkdown(encodeMarkdownExtraBlankLines(sourceValue))
+  if (!hasUnsafeMarkdownTableStructure(safeValue)) {
+    config.onChange(safeValue)
+    return true
+  }
+  emitEditorValue(sourceValue)
+  return false
+}
+
+const syncEditorDomToVditorValueForPreview = () => {
+  if (!vditorInstance?.getValue || !vditorInstance?.setValue) return false
+  closeInlineEditorTableTextarea()
+  closeInlineEditorTableAtomicEditor()
+  flushPendingEditorTableCellSourceSync()
+  const domValue = getEditorVisibleDomTableSafeValue()
+  const nextValue = ensureSafeEditorTableMarkdown(encodeMarkdownExtraBlankLines(domValue || vditorInstance.getValue()))
+  if (!nextValue || nextValue === vditorInstance.getValue()) return false
+  vditorInstance.setValue(nextValue)
+  emitEditorValue(nextValue)
+  scheduleTimeout(() => {
+    if (!editorContainer.value) return
+    materializeEditorPreservedBlankLineBlocks(editorContainer.value)
+    enhanceEditorTables(editorContainer.value)
+  }, 0)
+  return true
+}
+
+const getEditorValueWithDomTableSync = (sourceValue = getRawVditorValue()) => {
+  const tables = getEditorTables()
+  if (!tables.length) return ensureSafeEditorTableMarkdown(sourceValue)
+  const fallbackValue = getEditorDomContentFallback()
+  const blocks = getEditorTableSourceBlocks(sourceValue)
+  const replacements: { start: number; end: number; lines: string[] }[] = []
+  tables.forEach((table, tableIndex) => {
+    const markdown = serializeEditorTableDomAsMarkdown(table)
+    if (!markdown) return
+    const block = tableBlockFromDataset(table, blocks) || findMarkdownTableBlock(blocks, getRenderedTableRows(table), tableIndex)
+    if (!block) return
+    replacements.push({ start: block.start, end: block.end, lines: markdown.split('\n') })
+  })
+  if (!replacements.length) return fallbackValue || sourceValue
+  const lines = sourceValue.split('\n')
+  replacements
+    .sort((left, right) => right.start - left.start)
+    .forEach((replacement, index, sorted) => {
+      const previous = sorted[index - 1]
+      if (previous && replacement.end > previous.start) return
+      lines.splice(replacement.start, replacement.end - replacement.start, ...replacement.lines)
+    })
+  const syncedValue = lines.join('\n')
+  if (hasUnsafeMarkdownTableStructure(syncedValue)) return fallbackValue || ensureSafeEditorTableMarkdown(syncedValue)
+  return syncedValue || fallbackValue
+}
+
+const getEditorTableCellPosition = (cell: HTMLTableCellElement | null): PendingEditorTableCellSync | null => {
+  const table = cell?.closest('table') as HTMLTableElement | null
+  const row = cell?.parentElement as HTMLTableRowElement | null
+  if (!cell || !table || !row) return null
+  const tableIndex = getEditorTables().indexOf(table)
+  const rowIndex = row.rowIndex
+  const cellIndex = cell.cellIndex
+  if (tableIndex < 0 || rowIndex < 0 || cellIndex < 0) return null
+  return { tableIndex, rowIndex, cellIndex, text: editorTableCellTextFromDom(cell) }
+}
+
+const isSameEditorTableCellPosition = (cell: HTMLTableCellElement | null, position: Pick<PendingEditorTableCellSync, 'tableIndex' | 'rowIndex' | 'cellIndex'> | null | undefined) => {
+  if (!cell || !position) return false
+  const current = getEditorTableCellPosition(cell)
+  return !!current && current.tableIndex === position.tableIndex && current.rowIndex === position.rowIndex && current.cellIndex === position.cellIndex
+}
+
+const isSamePendingEditorTableCell = (cell: HTMLTableCellElement | null, pending = pendingEditorTableCellSync) => {
+  if (!pending) return false
+  if (!isSameEditorTableCellPosition(cell, pending)) return false
+  const position = getEditorTableCellPosition(cell)
+  return !!position
+}
+
+const getPendingEditorTableCell = (pending = pendingEditorTableCellSync) => {
+  if (!pending) return null as HTMLTableCellElement | null
+  return getEditorTableCellAtPosition(pending)
+}
+
+const inlineEditorTableTextareaTextForCell = (cell: HTMLTableCellElement | null | undefined) => {
+  if (cell && inlineEditorTableAtomicEditor && inlineEditorTableAtomicEditorState?.cell === cell) {
+    return inlineEditorTableAtomicSourceValue()
+  }
+  if (!cell || !inlineEditorTableTextarea || inlineEditorTableTextareaState?.cell !== cell) return null
+  return inlineEditorTableTextarea.value
+}
+
+const inlineEditorTableCellBaseText = (cell: HTMLTableCellElement) => {
+  if (isEditorTableStructurallyEmptyCell(cell)) return ''
+  return editorTableCellTextFromDom(cell)
+}
+
+const placeCaretAtEndOfEditorTableCell = (cell: HTMLTableCellElement | null) => {
+  if (!cell || typeof window === 'undefined') return false
+  const selection = window.getSelection()
+  if (!selection) return false
+  const range = document.createRange()
+  range.selectNodeContents(cell)
+  range.collapse(false)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  lastEditorSelectionRange = range.cloneRange()
+  storeLastEditorTableSelection(range)
+  return true
+}
+
+const stabilizePendingEditorTableCellDom = () => {
+  if (!pendingEditorTableCellSync) return false
+  const cell = getPendingEditorTableCell()
+  if (!cell) return false
+  const inlineText = inlineEditorTableTextareaTextForCell(cell)
+  if (inlineText !== null) {
+    pendingEditorTableCellSync.text = inlineText
+    return true
+  }
+  const expectedText = pendingEditorTableCellSync.text
+  const currentText = editorTableCellTextFromDom(cell)
+  normalizeEditorTableBreakCodeMarkers(cell)
+  if (currentText === expectedText) return true
+  const needsCaretAnchor = /\n$/.test(expectedText)
+  setEditorTableDomCellText(cell, expectedText, needsCaretAnchor)
+  storeLastEditorTableCell(cell)
+  return true
+}
+
+const emitPendingEditorTableSafeValue = () => {
+  if (!pendingEditorTableCellSync) return
+  emitEditorValue()
+}
+
+const scheduleStabilizePendingEditorTableCellDom = () => {
+  if (typeof window === 'undefined') return
+  if (editorTableDomStabilizeTimer !== null) window.clearTimeout(editorTableDomStabilizeTimer)
+  const run = () => {
+    if (stabilizePendingEditorTableCellDom()) emitPendingEditorTableSafeValue()
+  }
+  scheduleFrame(() => {
+    run()
+    scheduleFrame(run)
+  })
+  scheduleTimeout(run, 0)
+  scheduleTimeout(run, 48)
+  editorTableDomStabilizeTimer = scheduleTimeout(() => {
+    editorTableDomStabilizeTimer = null
+    run()
+  }, 160)
+}
+
+const refreshPendingEditorTableCellText = (cell?: HTMLTableCellElement | null) => {
+  if (!pendingEditorTableCellSync) return
+  const target = cell && isSamePendingEditorTableCell(cell) ? cell : getPendingEditorTableCell()
+  if (target) pendingEditorTableCellSync.text = inlineEditorTableTextareaTextForCell(target) ?? editorTableCellTextFromDom(target)
+}
+
+const markEditorTableCellSourceDirty = (cell: HTMLTableCellElement, text = editorTableCellTextFromDom(cell)) => {
+  const position = getEditorTableCellPosition(cell)
+  if (!position) return false
+  storeLastEditorTableCell(cell)
+  pendingEditorTableCellSync = { ...position, text }
+  return true
+}
+
+const getInlineEditorTableTextareaElement = (node: Node | null | undefined) => {
+  const element = node instanceof Element ? node : node?.parentElement
+  return element?.closest?.('.editor-inline-table-cell-textarea') as HTMLTextAreaElement | null
+}
+
+const isInlineEditorTableTextareaEvent = (event?: Event) => !!getInlineEditorTableTextareaElement(event?.target as Node | null | undefined)
+
+const textOffsetCandidates = (value: string) => {
+  const offsets = [0]
+  let offset = 0
+  Array.from(String(value || '')).forEach((char) => {
+    offset += char.length
+    offsets.push(offset)
+  })
+  return offsets
+}
+
+const captureInlineEditorTextareaStyle = (source: HTMLElement): InlineEditorTableTextareaStyleSnapshot => {
+  const style = window.getComputedStyle(source)
+  return {
+    color: style.color,
+    fontFamily: style.fontFamily,
+    fontSize: style.fontSize,
+    fontStyle: style.fontStyle,
+    fontVariant: style.fontVariant,
+    fontWeight: style.fontWeight,
+    letterSpacing: style.letterSpacing,
+    lineHeight: style.lineHeight,
+    overflowWrap: style.overflowWrap,
+    padding: style.padding,
+    tabSize: style.tabSize,
+    textAlign: style.textAlign,
+    textIndent: style.textIndent,
+    textTransform: style.textTransform,
+    whiteSpace: style.whiteSpace,
+    wordBreak: style.wordBreak,
+    wordSpacing: style.wordSpacing,
+  }
+}
+
+const applyInlineEditorTextareaStyle = (target: HTMLElement, style: InlineEditorTableTextareaStyleSnapshot) => {
+  target.style.color = style.color
+  target.style.fontFamily = style.fontFamily
+  target.style.fontSize = style.fontSize
+  target.style.fontStyle = style.fontStyle
+  target.style.fontVariant = style.fontVariant
+  target.style.fontWeight = style.fontWeight
+  target.style.letterSpacing = style.letterSpacing
+  target.style.lineHeight = style.lineHeight
+  target.style.overflowWrap = style.overflowWrap || 'break-word'
+  target.style.padding = style.padding
+  target.style.textAlign = style.textAlign
+  target.style.textIndent = style.textIndent
+  target.style.textTransform = style.textTransform
+  target.style.whiteSpace = style.whiteSpace && style.whiteSpace !== 'normal' ? style.whiteSpace : 'pre-wrap'
+  target.style.wordBreak = style.wordBreak
+  target.style.wordSpacing = style.wordSpacing
+  if (style.tabSize) target.style.tabSize = style.tabSize
+}
+
+const applyInlineEditorTextareaCellBoxStyle = (target: HTMLElement, state: InlineEditorTableCellOverlayState) => {
+  applyInlineEditorTextareaStyle(target, state.editorStyle)
+  const cellStyle = window.getComputedStyle(state.cell)
+  const paddingTop = parseEditorCssPixelValue(cellStyle.paddingTop) + parseEditorCssPixelValue(cellStyle.borderTopWidth)
+  const paddingRight = parseEditorCssPixelValue(cellStyle.paddingRight) + parseEditorCssPixelValue(cellStyle.borderRightWidth)
+  const paddingBottom = parseEditorCssPixelValue(cellStyle.paddingBottom) + parseEditorCssPixelValue(cellStyle.borderBottomWidth)
+  const paddingLeft = parseEditorCssPixelValue(cellStyle.paddingLeft) + parseEditorCssPixelValue(cellStyle.borderLeftWidth)
+  target.style.padding = `${paddingTop}px ${paddingRight}px ${paddingBottom}px ${paddingLeft}px`
+}
+
+const copyInlineEditorTextareaFontStyles = (target: HTMLElement, source: HTMLElement) => {
+  applyInlineEditorTextareaStyle(target, captureInlineEditorTextareaStyle(source))
+}
+
+const measureInlineEditorTextareaCaretCandidates = (textarea: HTMLTextAreaElement, value: string) => {
+  const textareaRect = textarea.getBoundingClientRect()
+  const textareaStyle = window.getComputedStyle(textarea)
+  const offsets = textOffsetCandidates(value)
+  return offsets.map((offset) => {
+    const mirror = document.createElement('div')
+    mirror.setAttribute('aria-hidden', 'true')
+    mirror.style.position = 'fixed'
+    mirror.style.left = '-10000px'
+    mirror.style.top = '0'
+    mirror.style.visibility = 'hidden'
+    mirror.style.pointerEvents = 'none'
+    mirror.style.boxSizing = 'border-box'
+    mirror.style.width = `${Math.max(1, textareaRect.width)}px`
+    mirror.style.minHeight = `${Math.max(1, textareaRect.height)}px`
+    mirror.style.padding = textareaStyle.padding
+    mirror.style.border = '0'
+    mirror.style.whiteSpace = 'pre-wrap'
+    mirror.style.overflowWrap = textareaStyle.overflowWrap || 'break-word'
+    mirror.style.wordBreak = textareaStyle.wordBreak
+    copyInlineEditorTextareaFontStyles(mirror, textarea)
+    const marker = document.createElement('span')
+    marker.textContent = TABLE_CELL_CARET_ANCHOR
+    mirror.append(
+      document.createTextNode(value.slice(0, offset)),
+      marker,
+      document.createTextNode(value.slice(offset) || TABLE_CELL_CARET_ANCHOR)
+    )
+    document.body.appendChild(mirror)
+    const markerRect = marker.getBoundingClientRect()
+    const mirrorRect = mirror.getBoundingClientRect()
+    const result = {
+      offset,
+      left: markerRect.left - mirrorRect.left,
+      top: markerRect.top - mirrorRect.top,
+      bottom: markerRect.bottom - mirrorRect.top,
+      height: markerRect.height || getEditorElementLineHeight(textarea),
+    }
+    mirror.remove()
+    return result
+  })
+}
+
+const parseEditorCssPixelValue = (value: string | null | undefined) => {
+  const parsed = Number.parseFloat(value || '')
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+const inlineEditorTableCellMinimumHeight = (cell: HTMLTableCellElement) => {
+  const style = window.getComputedStyle(cell)
+  return Math.max(
+    1,
+    getEditorElementLineHeight(cell)
+      + parseEditorCssPixelValue(style.paddingTop)
+      + parseEditorCssPixelValue(style.paddingBottom)
+      + parseEditorCssPixelValue(style.borderTopWidth)
+      + parseEditorCssPixelValue(style.borderBottomWidth)
+  )
+}
+
+const inlineEditorTextareaVerticalMetrics = (textarea: HTMLTextAreaElement) => {
+  const rect = textarea.getBoundingClientRect()
+  const style = window.getComputedStyle(textarea)
+  const lineHeight = getEditorElementLineHeight(textarea)
+  const paddingTop = parseEditorCssPixelValue(style.paddingTop)
+  const paddingBottom = parseEditorCssPixelValue(style.paddingBottom)
+  return {
+    rect,
+    lineHeight,
+    paddingTop,
+    paddingBottom,
+  }
+}
+
+const inlineEditorTextareaEdgeGuard = (metrics: ReturnType<typeof inlineEditorTextareaVerticalMetrics>) =>
+  Math.max(0, Math.min(INLINE_TABLE_CELL_EDGE_GUARD_PX, metrics.rect.height / 2 - 1))
+
+const inlineEditorTextareaGuardedClientY = (
+  event: MouseEvent,
+  metrics: ReturnType<typeof inlineEditorTextareaVerticalMetrics>
+) => {
+  const guard = inlineEditorTextareaEdgeGuard(metrics)
+  if (guard <= 0) return event.clientY
+  const minY = metrics.rect.top + guard
+  const maxY = Math.max(minY, metrics.rect.bottom - guard - metrics.lineHeight / 2)
+  return Math.max(minY, Math.min(maxY, event.clientY))
+}
+
+const inlineEditorTextareaCaretFromPoint = (
+  textarea: HTMLTextAreaElement,
+  baseText: string,
+  event?: MouseEvent
+) => {
+  if (!event) return { value: baseText, offset: baseText.length }
+  const metrics = inlineEditorTextareaVerticalMetrics(textarea)
+  const { rect: textareaRect, lineHeight } = metrics
+  if (!baseText) return { value: '', offset: 0 }
+  const targetX = event.clientX - textareaRect.left
+  const targetY = inlineEditorTextareaGuardedClientY(event, metrics) - textareaRect.top
+  const candidates = measureInlineEditorTextareaCaretCandidates(textarea, baseText)
+  const best = candidates.reduce((current, candidate) => {
+    const currentScore = Math.abs((current.top + current.height / 2) - targetY) * 1000 + Math.abs(current.left - targetX)
+    const candidateScore = Math.abs((candidate.top + candidate.height / 2) - targetY) * 1000 + Math.abs(candidate.left - targetX)
+    return candidateScore < currentScore ? candidate : current
+  }, candidates[0] || { offset: 0, left: 0, top: 0, bottom: 0, height: lineHeight })
+  return { value: baseText, offset: Math.max(0, Math.min(baseText.length, best.offset)) }
+}
+
+const positionInlineEditorTableTextarea = (options: { fitContent?: boolean } = {}) => {
+  const textarea = inlineEditorTableTextarea
+  const state = inlineEditorTableTextareaState
+  if (!textarea || !state || !editorContainer.value?.contains(state.cell)) return false
+  const cell = state.cell
+  const scale = getFixedCoordinateScale()
+  const rect = getFixedRect(cell, scale)
+  const editorHeight = Math.max(1, state.editorHeight || rect.height)
+  const table = cell.closest('table') as HTMLTableElement | null
+  const tableRect = table ? getFixedRect(table, scale) : rect
+  const clip = getFixedEditorClipInsets(
+    { left: rect.left, top: rect.top, right: rect.left + rect.width, bottom: rect.top + editorHeight },
+    { left: tableRect.left, top: tableRect.top, right: tableRect.left + tableRect.width, bottom: tableRect.top + tableRect.height }
+  )
+  textarea.style.position = 'fixed'
+  textarea.style.zIndex = '10024'
+  textarea.style.boxSizing = 'border-box'
+  textarea.style.display = 'block'
+  textarea.style.left = `${rect.left}px`
+  textarea.style.top = `${rect.top}px`
+  textarea.style.width = `${Math.max(1, rect.width)}px`
+  textarea.style.height = `${editorHeight}px`
+  textarea.style.margin = '0'
+  textarea.style.border = '0'
+  textarea.style.outline = 'none'
+  textarea.style.resize = 'none'
+  textarea.style.overflow = 'hidden'
+  textarea.style.background = 'transparent'
+  textarea.style.boxShadow = 'none'
+  textarea.style.clipPath = `inset(${clip.top}px ${clip.right}px ${clip.bottom}px ${clip.left}px)`
+  textarea.style.pointerEvents = clip.visible ? 'auto' : 'none'
+  textarea.style.visibility = clip.visible ? 'visible' : 'hidden'
+  applyInlineEditorTextareaCellBoxStyle(textarea, state)
+  if (options.fitContent !== false) resizeInlineEditorTableTextareaToContent()
+  return true
+}
+
+const restoreInlineEditorTableTextareaCellLayout = (state: InlineEditorTableCellOverlayState) => {
+  state.cell.style.height = state.restoreStyle.height
+  state.cell.style.minHeight = state.restoreStyle.minHeight
+}
+
+const updateInlineEditorTableTextareaCellLayoutMirror = () => {
+  const textarea = inlineEditorTableTextarea
+  const state = inlineEditorTableTextareaState
+  if (!textarea || !state || !state.dirty || !editorContainer.value?.contains(state.cell)) return false
+  const value = textarea.value
+  restoreInlineEditorTableTextareaCellLayout(state)
+  setEditorTableDomCellText(state.cell, value, /\n$/.test(value))
+  markEditorTableCellSourceDirty(state.cell, value)
+  return true
+}
+
+const resizeInlineEditorTableTextareaToContent = () => {
+  const textarea = inlineEditorTableTextarea
+  const state = inlineEditorTableTextareaState
+  if (!textarea || !state || !editorContainer.value?.contains(state.cell)) return false
+  updateInlineEditorTableTextareaCellLayoutMirror()
+  const minHeight = Math.max(1, state.minCellHeight)
+  textarea.style.height = `${minHeight}px`
+  const scrollHeight = textarea.scrollHeight || 0
+  let rect = getFixedRect(state.cell, getFixedCoordinateScale())
+  const requiredHeight = Math.max(minHeight, scrollHeight, rect.height)
+  if (requiredHeight > rect.height + 0.5) {
+    state.cell.style.height = `${requiredHeight}px`
+    state.cell.style.minHeight = `${requiredHeight}px`
+    rect = getFixedRect(state.cell, getFixedCoordinateScale())
+  } else {
+    restoreInlineEditorTableTextareaCellLayout(state)
+    rect = getFixedRect(state.cell, getFixedCoordinateScale())
+  }
+  const nextEditorHeight = Math.max(1, requiredHeight, rect.height)
+  const changed = Math.abs((state.editorHeight || 0) - nextEditorHeight) > 0.5
+  state.editorHeight = nextEditorHeight
+  textarea.style.height = `${nextEditorHeight}px`
+  if (changed) positionInlineEditorTableTextarea({ fitContent: false })
+  return true
+}
+
+const syncInlineEditorTableTextareaToCell = (options: { emit?: boolean; reposition?: boolean } = {}) => {
+  const textarea = inlineEditorTableTextarea
+  const state = inlineEditorTableTextareaState
+  if (!textarea || !state || !editorContainer.value?.contains(state.cell)) return false
+  const value = textarea.value
+  // The input path already mirrors this value into the live cell. Rewriting it again while
+  // closing the textarea races Vditor's renderer with our pending-cell stabilizer.
+  markEditorTableCellSourceDirty(state.cell, value)
+  state.dirty = false
+  if (options.emit !== false) emitEditorValue()
+  if (options.reposition !== false) positionInlineEditorTableTextarea()
+  return true
+}
+
+const scheduleInlineEditorTableTextareaSync = () => {
+  const textarea = inlineEditorTableTextarea
+  const state = inlineEditorTableTextareaState
+  if (!textarea || !state || !editorContainer.value?.contains(state.cell)) return
+  resizeInlineEditorTableTextareaToContent()
+}
+
+const closeInlineEditorTableTextarea = () => {
+  const textarea = inlineEditorTableTextarea
+  const state = inlineEditorTableTextareaState
+  const hadEditor = !!textarea || !!state
+  if (textarea && state?.dirty) syncInlineEditorTableTextareaToCell({ reposition: false })
+  if (state) {
+    state.cell.classList.remove('editor-inline-table-cell-editing')
+    state.cell.style.color = state.restoreStyle.color
+    state.cell.style.caretColor = state.restoreStyle.caretColor
+    state.cell.style.height = state.restoreStyle.height
+    state.cell.style.minHeight = state.restoreStyle.minHeight
+    state.cell.style.textShadow = state.restoreStyle.textShadow
+  }
+  textarea?.remove()
+  if (hadEditor) {
+    inlineEditorTableScrollCleanup?.()
+    inlineEditorTableScrollCleanup = null
+  }
+  inlineEditorTableTextarea = null
+  inlineEditorTableTextareaState = null
+}
+
+const onInlineEditorTableTextareaInput = () => {
+  if (!inlineEditorTableTextareaState) return
+  inlineEditorTableTextareaState.dirty = true
+  scheduleInlineEditorTableTextareaSync()
+}
+
+const onInlineEditorTableTextareaKeydown = (event: KeyboardEvent) => {
+  event.stopPropagation()
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeInlineEditorTableTextarea()
+  }
+}
+
+const setInlineEditorTextareaCaretFromMouseEvent = (event: MouseEvent) => {
+  const textarea = inlineEditorTableTextarea
+  const state = inlineEditorTableTextareaState
+  if (!textarea || !state || !editorContainer.value?.contains(state.cell)) return false
+  const caret = inlineEditorTextareaCaretFromPoint(textarea, textarea.value, event)
+  if (textarea.value !== caret.value) {
+    textarea.value = caret.value
+    state.dirty = true
+    markEditorTableCellSourceDirty(state.cell, textarea.value)
+    resizeInlineEditorTableTextareaToContent()
+  }
+  textarea.focus({ preventScroll: true })
+  textarea.setSelectionRange(caret.offset, caret.offset)
+  return true
+}
+
+const onInlineEditorTextareaMouseDown = (event: MouseEvent) => {
+  event.stopPropagation()
+  const textarea = getInlineEditorTableTextareaElement(event.target as Node | null | undefined)
+  if (!textarea || event.button !== 0) return
+  event.preventDefault()
+  setInlineEditorTextareaCaretFromMouseEvent(event)
+}
+
+const closeInlineEditorTableTextareaOnExternalMouseDown = (event: MouseEvent) => {
+  const textarea = inlineEditorTableTextarea
+  const textareaState = inlineEditorTableTextareaState
+  const atomicEditor = inlineEditorTableAtomicEditor
+  const atomicState = inlineEditorTableAtomicEditorState
+  if ((!textarea || !textareaState) && (!atomicEditor || !atomicState)) return
+  if (event.button !== 0) return
+  const target = event.target as Node | null
+  if (getInlineEditorTableTextareaElement(target)) return
+  if (target && atomicEditor?.contains(target)) return
+  if (target && (textareaState?.cell.contains(target) || atomicState?.cell.contains(target))) return
+  closeInlineEditorTableTextarea()
+  closeInlineEditorTableAtomicEditor()
+}
+
+const stopInlineEditorTextareaEventPropagation = (event: Event) => {
+  event.stopPropagation()
+}
+
+const ensureInlineEditorTableTextarea = () => {
+  if (inlineEditorTableTextarea) return inlineEditorTableTextarea
+  const textarea = document.createElement('textarea')
+  textarea.className = 'editor-inline-table-cell-textarea'
+  textarea.rows = 1
+  textarea.spellcheck = false
+  textarea.autocapitalize = 'off'
+  textarea.autocomplete = 'off'
+  textarea.wrap = 'soft'
+  textarea.addEventListener('input', onInlineEditorTableTextareaInput)
+  textarea.addEventListener('keydown', onInlineEditorTableTextareaKeydown)
+  textarea.addEventListener('beforeinput', stopInlineEditorTextareaEventPropagation)
+  textarea.addEventListener('compositionstart', stopInlineEditorTextareaEventPropagation)
+  textarea.addEventListener('compositionupdate', stopInlineEditorTextareaEventPropagation)
+  textarea.addEventListener('compositionend', stopInlineEditorTextareaEventPropagation)
+  textarea.addEventListener('mousedown', onInlineEditorTextareaMouseDown)
+  textarea.addEventListener('click', stopInlineEditorTextareaEventPropagation)
+  textarea.addEventListener('blur', () => scheduleTimeout(() => {
+    if (document.activeElement !== inlineEditorTableTextarea) closeInlineEditorTableTextarea()
+  }, 0))
+  document.body.appendChild(textarea)
+  inlineEditorTableTextarea = textarea
+  return textarea
+}
+
+const openInlineEditorTableCellTextarea = (cell: HTMLTableCellElement, event?: MouseEvent) => {
+  if (!editorContainer.value?.contains(cell)) return false
+  closeInlineEditorTableAtomicEditor()
+  if (inlineEditorTableTextareaState?.cell !== cell) closeInlineEditorTableTextarea()
+  const textarea = ensureInlineEditorTableTextarea()
+  const baseText = inlineEditorTableCellBaseText(cell)
+  const editorStyle = captureInlineEditorTextareaStyle(cell)
+  const cellHeight = Math.max(1, getFixedRect(cell, getFixedCoordinateScale()).height)
+  const minCellHeight = inlineEditorTableCellMinimumHeight(cell)
+  inlineEditorTableTextareaState = {
+    cell,
+    baseText,
+    minCellHeight,
+    dirty: false,
+    editorHeight: cellHeight,
+    restoreStyle: {
+      color: cell.style.color,
+      caretColor: cell.style.caretColor,
+      height: cell.style.height,
+      minHeight: cell.style.minHeight,
+      textShadow: cell.style.textShadow,
+    },
+    editorStyle,
+  }
+  storeLastEditorTableCell(cell)
+  textarea.style.visibility = 'hidden'
+  textarea.value = baseText
+  positionInlineEditorTableTextarea()
+  const caret = inlineEditorTextareaCaretFromPoint(textarea, baseText, event)
+  textarea.value = caret.value
+  cell.classList.add('editor-inline-table-cell-editing')
+  cell.style.color = 'transparent'
+  cell.style.caretColor = 'transparent'
+  cell.style.textShadow = 'none'
+  textarea.style.visibility = textarea.style.pointerEvents === 'none' ? 'hidden' : 'visible'
+  textarea.focus({ preventScroll: true })
+  textarea.setSelectionRange(caret.offset, caret.offset)
+  bindInlineEditorTableScroll(cell)
+  scheduleFrame(() => positionInlineEditorTableTextarea())
+  scheduleTimeout(() => positionInlineEditorTableTextarea(), 0)
+  return true
+}
+
+const inlineEditorTableAtomicSourceValue = () => {
+  const editor = inlineEditorTableAtomicEditor
+  return editor ? editorTableContentTextFromElement(editor) : ''
+}
+
+const placeCaretAtInlineEditorTableAtomicOffset = (requestedOffset: number) => {
+  const editor = inlineEditorTableAtomicEditor
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  if (!editor || !selection) return false
+  const sourceLength = inlineEditorTableAtomicSourceValue().length
+  let remaining = Math.max(0, Math.min(sourceLength, requestedOffset))
+  const units = collectEditorTableSourceUnits(editor)
+  const range = document.createRange()
+  let placed = false
+  for (const unit of units) {
+    if (remaining === 0) {
+      range.setStartBefore(unit.node)
+      placed = true
+      break
+    }
+    if (remaining < unit.length) {
+      if (unit.node instanceof Text && !unit.atomic) {
+        range.setStart(unit.node, rawTextOffsetForEditorSourceOffset(unit.node, remaining))
+      } else if (remaining < unit.length / 2) {
+        range.setStartBefore(unit.node)
+      } else {
+        range.setStartAfter(unit.node)
+      }
+      placed = true
+      break
+    }
+    remaining -= unit.length
+    if (remaining === 0) {
+      range.setStartAfter(unit.node)
+      placed = true
+      break
+    }
+  }
+  if (!placed) {
+    range.selectNodeContents(editor)
+    range.collapse(false)
+  } else {
+    range.collapse(true)
+  }
+  editor.focus({ preventScroll: true })
+  selection.removeAllRanges()
+  selection.addRange(range)
+  return true
+}
+
+const getInlineEditorTableAtomicInsertionOffset = () => {
+  const editor = inlineEditorTableAtomicEditor
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  const range = selection?.rangeCount ? selection.getRangeAt(0) : null
+  if (!editor || !range || !editor.contains(range.startContainer)) return inlineEditorTableAtomicSourceValue().length
+  const prefix = range.cloneRange()
+  try {
+    prefix.selectNodeContents(editor)
+    prefix.setEnd(range.startContainer, range.startOffset)
+  } catch {
+    return inlineEditorTableAtomicSourceValue().length
+  }
+  const holder = document.createElement('div')
+  holder.appendChild(prefix.cloneContents())
+  return editorTableContentTextFromElement(holder).length
+}
+
+const positionInlineEditorTableAtomicEditor = (options: { fitContent?: boolean } = {}) => {
+  const editor = inlineEditorTableAtomicEditor
+  const state = inlineEditorTableAtomicEditorState
+  if (!editor || !state || !editorContainer.value?.contains(state.cell)) return false
+  const scale = getFixedCoordinateScale()
+  const rect = getFixedRect(state.cell, scale)
+  const editorHeight = Math.max(1, state.editorHeight || rect.height)
+  const table = state.cell.closest('table') as HTMLTableElement | null
+  const tableRect = table ? getFixedRect(table, scale) : rect
+  const clip = getFixedEditorClipInsets(
+    { left: rect.left, top: rect.top, right: rect.left + rect.width, bottom: rect.top + editorHeight },
+    { left: tableRect.left, top: tableRect.top, right: tableRect.left + tableRect.width, bottom: tableRect.top + tableRect.height }
+  )
+  editor.style.position = 'fixed'
+  editor.style.zIndex = '10024'
+  editor.style.boxSizing = 'border-box'
+  editor.style.display = 'block'
+  editor.style.left = `${rect.left}px`
+  editor.style.top = `${rect.top}px`
+  editor.style.width = `${Math.max(1, rect.width)}px`
+  editor.style.height = `${editorHeight}px`
+  editor.style.minHeight = `${Math.max(1, state.minCellHeight)}px`
+  editor.style.margin = '0'
+  editor.style.border = '0'
+  editor.style.outline = 'none'
+  editor.style.overflow = 'hidden'
+  editor.style.background = 'transparent'
+  editor.style.boxShadow = 'none'
+  editor.style.whiteSpace = 'pre-wrap'
+  editor.style.clipPath = `inset(${clip.top}px ${clip.right}px ${clip.bottom}px ${clip.left}px)`
+  editor.style.pointerEvents = clip.visible ? 'auto' : 'none'
+  editor.style.visibility = clip.visible ? 'visible' : 'hidden'
+  applyInlineEditorTextareaCellBoxStyle(editor, state)
+  if (options.fitContent !== false) resizeInlineEditorTableAtomicEditorToContent()
+  return true
+}
+
+const mirrorInlineEditorTableAtomicEditorToCell = () => {
+  const editor = inlineEditorTableAtomicEditor
+  const state = inlineEditorTableAtomicEditorState
+  if (!editor || !state || !editorContainer.value?.contains(state.cell)) return false
+  const value = inlineEditorTableAtomicSourceValue()
+  restoreInlineEditorTableTextareaCellLayout(state)
+  markEditorTableAttachmentMutationHandled(state.cell)
+  setEditorTableDomCellText(state.cell, value, /\n$/.test(value))
+  markEditorTableCellSourceDirty(state.cell, value)
+  return true
+}
+
+const resizeInlineEditorTableAtomicEditorToContent = () => {
+  const editor = inlineEditorTableAtomicEditor
+  const state = inlineEditorTableAtomicEditorState
+  if (!editor || !state || !editorContainer.value?.contains(state.cell)) return false
+  if (state.dirty) mirrorInlineEditorTableAtomicEditorToCell()
+  const minHeight = Math.max(1, state.minCellHeight)
+  editor.style.height = `${minHeight}px`
+  const scrollHeight = editor.scrollHeight || 0
+  let rect = getFixedRect(state.cell, getFixedCoordinateScale())
+  const requiredHeight = Math.max(minHeight, scrollHeight, rect.height)
+  if (requiredHeight > rect.height + 0.5) {
+    state.cell.style.height = `${requiredHeight}px`
+    state.cell.style.minHeight = `${requiredHeight}px`
+    rect = getFixedRect(state.cell, getFixedCoordinateScale())
+  } else {
+    restoreInlineEditorTableTextareaCellLayout(state)
+    rect = getFixedRect(state.cell, getFixedCoordinateScale())
+  }
+  const nextEditorHeight = Math.max(1, requiredHeight, rect.height)
+  const changed = Math.abs((state.editorHeight || 0) - nextEditorHeight) > 0.5
+  state.editorHeight = nextEditorHeight
+  editor.style.height = `${nextEditorHeight}px`
+  if (changed) positionInlineEditorTableAtomicEditor({ fitContent: false })
+  return true
+}
+
+const syncInlineEditorTableAtomicEditorToCell = (options: { emit?: boolean } = {}) => {
+  const state = inlineEditorTableAtomicEditorState
+  if (!state || !mirrorInlineEditorTableAtomicEditorToCell()) return false
+  state.dirty = false
+  if (options.emit !== false) emitEditorValue()
+  return true
+}
+
+const closeInlineEditorTableAtomicEditor = () => {
+  const editor = inlineEditorTableAtomicEditor
+  const state = inlineEditorTableAtomicEditorState
+  const hadEditor = !!editor || !!state
+  if (editor && state?.dirty) syncInlineEditorTableAtomicEditorToCell()
+  if (state) {
+    state.cell.classList.remove('editor-inline-table-cell-editing')
+    state.cell.style.color = state.restoreStyle.color
+    state.cell.style.caretColor = state.restoreStyle.caretColor
+    state.cell.style.height = state.restoreStyle.height
+    state.cell.style.minHeight = state.restoreStyle.minHeight
+    state.cell.style.textShadow = state.restoreStyle.textShadow
+  }
+  editor?.remove()
+  if (hadEditor) {
+    inlineEditorTableScrollCleanup?.()
+    inlineEditorTableScrollCleanup = null
+  }
+  inlineEditorTableAtomicEditor = null
+  inlineEditorTableAtomicEditorState = null
+}
+
+const onInlineEditorTableAtomicInput = () => {
+  if (!inlineEditorTableAtomicEditorState) return
+  inlineEditorTableAtomicEditorState.dirty = true
+  resizeInlineEditorTableAtomicEditorToContent()
+}
+
+const insertInlineEditorTableAtomicLineBreak = () => {
+  const editor = inlineEditorTableAtomicEditor
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  const range = selection?.rangeCount ? selection.getRangeAt(0) : null
+  if (!editor || !selection || !range || !editor.contains(range.startContainer)) return false
+  range.deleteContents()
+  const br = document.createElement('br')
+  const caret = document.createTextNode(TABLE_CELL_CARET_ANCHOR)
+  range.insertNode(br)
+  br.after(caret)
+  range.setStart(caret, caret.data.length)
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  onInlineEditorTableAtomicInput()
+  return true
+}
+
+const onInlineEditorTableAtomicKeydown = (event: KeyboardEvent) => {
+  event.stopPropagation()
+  if (event.key === 'Backspace' || event.key === 'Delete') {
+    const editor = inlineEditorTableAtomicEditor
+    const marker = event.target instanceof Element ? event.target.closest<HTMLElement>('.editor-table-attachment-marker') : null
+    if (editor && marker && editor.contains(marker)) {
+      const prefix = document.createRange()
+      prefix.selectNodeContents(editor)
+      prefix.setEndBefore(marker)
+      const holder = document.createElement('div')
+      holder.appendChild(prefix.cloneContents())
+      const offset = editorTableContentTextFromElement(holder).length
+      event.preventDefault()
+      marker.remove()
+      onInlineEditorTableAtomicInput()
+      placeCaretAtInlineEditorTableAtomicOffset(offset)
+      return
+    }
+  }
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeInlineEditorTableAtomicEditor()
+    return
+  }
+  if (event.key === 'Enter' && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey && !event.isComposing) {
+    event.preventDefault()
+    insertInlineEditorTableAtomicLineBreak()
+  }
+}
+
+const onInlineEditorTableAtomicMarkerMouseDown = (event: MouseEvent) => {
+  const target = event.target instanceof Element ? event.target.closest('.editor-table-attachment-marker') : null
+  if (!target) return
+  event.preventDefault()
+  event.stopPropagation()
+  ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+}
+
+const onInlineEditorTableAtomicMarkerClick = (event: MouseEvent) => {
+  const editor = inlineEditorTableAtomicEditor
+  const state = inlineEditorTableAtomicEditorState
+  const target = event.target instanceof Element ? event.target.closest<HTMLElement>('.editor-table-attachment-marker') : null
+  if (!editor || !state || !target) return
+  event.preventDefault()
+  event.stopPropagation()
+  const source = target.getAttribute('data-attachment-source') || ''
+  const original = Array.from(state.cell.querySelectorAll<HTMLElement>('.editor-table-attachment-marker'))
+    .find((marker) => marker.getAttribute('data-attachment-source') === source)
+  original?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }))
+}
+
+const ensureInlineEditorTableAtomicEditor = () => {
+  if (inlineEditorTableAtomicEditor) return inlineEditorTableAtomicEditor
+  const editor = document.createElement('div')
+  editor.className = 'editor-inline-table-cell-atomic-editor'
+  editor.contentEditable = 'true'
+  editor.spellcheck = false
+  editor.setAttribute('role', 'textbox')
+  editor.setAttribute('aria-multiline', 'true')
+  editor.addEventListener('input', onInlineEditorTableAtomicInput)
+  editor.addEventListener('keydown', onInlineEditorTableAtomicKeydown)
+  editor.addEventListener('mousedown', onInlineEditorTableAtomicMarkerMouseDown)
+  editor.addEventListener('click', onInlineEditorTableAtomicMarkerClick)
+  editor.addEventListener('blur', () => scheduleTimeout(() => {
+    if (document.activeElement !== inlineEditorTableAtomicEditor && !inlineEditorTableAtomicEditor?.contains(document.activeElement)) {
+      closeInlineEditorTableAtomicEditor()
+    }
+  }, 0))
+  document.body.appendChild(editor)
+  inlineEditorTableAtomicEditor = editor
+  return editor
+}
+
+const openInlineEditorTableAtomicEditor = (cell: HTMLTableCellElement, event?: MouseEvent) => {
+  if (!editorContainer.value?.contains(cell)) return false
+  closeInlineEditorTableTextarea()
+  if (inlineEditorTableAtomicEditorState?.cell !== cell) closeInlineEditorTableAtomicEditor()
+  const editor = ensureInlineEditorTableAtomicEditor()
+  const editorStyle = captureInlineEditorTextareaStyle(cell)
+  const cellHeight = Math.max(1, getFixedRect(cell, getFixedCoordinateScale()).height)
+  inlineEditorTableAtomicEditorState = {
+    cell,
+    minCellHeight: inlineEditorTableCellMinimumHeight(cell),
+    dirty: false,
+    editorHeight: cellHeight,
+    restoreStyle: {
+      color: cell.style.color,
+      caretColor: cell.style.caretColor,
+      height: cell.style.height,
+      minHeight: cell.style.minHeight,
+      textShadow: cell.style.textShadow,
+    },
+    editorStyle,
+  }
+  storeLastEditorTableCell(cell)
+  editor.style.visibility = 'hidden'
+  editor.innerHTML = cell.innerHTML
+  positionInlineEditorTableAtomicEditor()
+  const offset = event ? editorTableDomCaretOffsetFromPoint(editor, event) : inlineEditorTableAtomicSourceValue().length
+  cell.classList.add('editor-inline-table-cell-editing')
+  cell.style.color = 'transparent'
+  cell.style.caretColor = 'transparent'
+  cell.style.textShadow = 'none'
+  editor.style.visibility = editor.style.pointerEvents === 'none' ? 'hidden' : 'visible'
+  placeCaretAtInlineEditorTableAtomicOffset(offset)
+  bindInlineEditorTableScroll(cell)
+  scheduleFrame(() => positionInlineEditorTableAtomicEditor())
+  scheduleTimeout(() => positionInlineEditorTableAtomicEditor(), 0)
+  return true
+}
+
+const bindInlineEditorTableScroll = (cell: HTMLTableCellElement) => {
+  inlineEditorTableScrollCleanup?.()
+  const table = cell.closest('table') as HTMLTableElement | null
+  if (!table) {
+    inlineEditorTableScrollCleanup = null
+    return
+  }
+  const reposition = () => {
+    positionInlineEditorTableTextarea()
+    positionInlineEditorTableAtomicEditor()
+  }
+  table.addEventListener('scroll', reposition, { passive: true })
+  inlineEditorTableScrollCleanup = () => table.removeEventListener('scroll', reposition)
+}
+
+const repositionInlineEditorTableEditors = () => {
+  positionInlineEditorTableTextarea()
+  positionInlineEditorTableAtomicEditor()
+}
+
+const getEditorValueWithPendingTableSync = () => {
+  const currentValue = getRawVditorValue()
+  if (getEditorTables().length) {
+    refreshPendingEditorTableCellText()
+    const fallbackValue = getEditorDomContentFallback()
+    if (fallbackValue) return fallbackValue
+  }
+  const syncedValue = getEditorValueWithDomTableSync(currentValue)
+  const fallbackValue = syncedValue.trim() ? syncedValue : getEditorDomContentFallback()
+  if (!pendingEditorTableCellSync) return fallbackValue || syncedValue || currentValue
+  refreshPendingEditorTableCellText()
+  const cell = getPendingEditorTableCell()
+  const result = buildEditorTableCellSourceValue(cell, pendingEditorTableCellSync.text)
+  if (result?.value && !hasUnsafeMarkdownTableStructure(result.value)) return result.value
+  return fallbackValue || result?.value || syncedValue || currentValue
+}
+
+const flushPendingEditorTableCellSourceSync = () => {
+  if (!pendingEditorTableCellSync) return true
+  refreshPendingEditorTableCellText()
+  const pending = pendingEditorTableCellSync
+  const cell = getPendingEditorTableCell()
+  if (!cell) return false
+  pendingEditorTableCellSync = null
+  const applied = applyEditorTableCellSourceValue(cell, pending.text)
+  if (!applied) pendingEditorTableCellSync = pending
+  return applied
+}
+
+const flushPendingEditorTableCellSourceSyncIfMoved = (currentCell?: HTMLTableCellElement | null) => {
+  if (!pendingEditorTableCellSync) return true
+  if (editorTableCompositionActive || isEditorTableCompositionSettling()) {
+    refreshPendingEditorTableCellText(currentCell || getPendingEditorTableCell())
+    return true
+  }
+  if (currentCell && isSamePendingEditorTableCell(currentCell)) {
+    refreshPendingEditorTableCellText(currentCell)
+    return true
+  }
+  return flushPendingEditorTableCellSourceSync()
+}
+
+const syncEditorTableCellDomToSource = (
+  cell: HTMLTableCellElement | null,
+  options: { restoreCaret?: boolean } = {}
+) => {
+  const target = getEditorTableCellSourceTarget(cell)
+  if (!target || !cell) return false
+  const current = target.rowCells[target.cellIndex] || ''
+  const nextText = editorTableCellTextFromDom(cell)
+  if (hasAttachmentMarker(current) && !hasAttachmentMarker(nextText)) return false
+  const applied = applyEditorTableCellSourceValue(cell, nextText, options)
+  if (applied && isSamePendingEditorTableCell(cell)) pendingEditorTableCellSync = null
+  return applied
+}
+
+const editableRowsFromMarkdownBlock = (block: EditorTableSourceBlock) => {
+  if (block.kind !== 'markdown' || block.lines.length < 2) return [] as string[][]
+  return [parseEditableMarkdownTableRow(block.lines[0]), ...block.lines.slice(2).map((line) => parseEditableMarkdownTableRow(line))]
+}
+
+const editableRowsFromTableBlock = (block: EditorTableSourceBlock) => block.kind === 'markdown'
+  ? editableRowsFromMarkdownBlock(block)
+  : (block.kind === 'tab' ? editableRowsFromTabBlock(block) : editableRowsFromHtmlBlock(block))
+
+const normalizeExpandedTableRows = (rows: string[][]) => {
+  const colCount = Math.max(1, ...rows.map((row) => row.length))
+  return rows.map((row) => Array.from({ length: colCount }, (_, index) => row[index] ?? ''))
+}
+
+const stopEditorTableNativeEvent = (event: Event) => {
+  event.preventDefault()
+  event.stopPropagation()
+  ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+}
+
+const stopEditorTablePropagation = (event: Event) => {
+  event.stopPropagation()
+  ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+}
+
+const clearVditorCompositionLock = () => {
+  const instance = vditorInstance as unknown as {
+    currentMode?: 'ir' | 'wysiwyg' | 'sv'
+    ir?: { composingLock?: boolean }
+    wysiwyg?: { composingLock?: boolean }
+    sv?: { composingLock?: boolean }
+  } | null
+  if (!instance) return
+  const mode = instance.currentMode
+  if (mode && instance[mode]) instance[mode].composingLock = false
+}
+
+const setEditorTableDomCellText = (cell: HTMLTableCellElement, value: string, withCaretAnchor = false) => {
+  cell.innerHTML = editorTextToDomTableCellHtml(value)
+  if (withCaretAnchor) cell.appendChild(createEditorTableCaretAnchorNode())
+}
+
+const getEditorTableTextMatrix = (table: HTMLTableElement | null) => table
+  ? Array.from(table.rows).map((row) => Array.from(row.cells).map((cell) => editorTableCellTextFromDom(cell as HTMLTableCellElement)))
+  : []
+
+const normalizeEditorTableCompositionText = (value: string) => stripEditorTableCaretAnchors(String(value || ''))
+  .replace(/[\u200b\u200c\ufeff]/g, '')
+  .replace(/\u00a0/g, ' ')
+
+const rememberEditorTableCompositionCell = (cell: HTMLTableCellElement | null) => {
+  const position = getEditorTableCellPosition(cell)
+  if (!position) {
+    editorTableCompositionTarget = null
+    editorTableCompositionSnapshot = null
+    editorTableCompositionStartText = ''
+    editorTableCompositionStartPrefix = ''
+    return
+  }
+  const table = getEditorTables()[position.tableIndex]
+  editorTableCompositionTarget = position
+  editorTableCompositionSnapshot = getEditorTableTextMatrix(table || null)
+  const range = getRangeInsideEditorTableCell(cell!)
+  editorTableCompositionStartText = editorTableCellTextFromDom(cell!)
+  editorTableCompositionStartPrefix = range ? getEditorTableTextBeforeRange(cell!, range) : ''
+  storeLastEditorTableCell(cell)
+}
+
+const clearEditorTableCompositionCommitKeyLater = (commitKey: EditorTableCompositionCommitKey) => {
+  scheduleTimeout(() => {
+    if (editorTableCompositionCommitKey === commitKey) editorTableCompositionCommitKey = null
+  }, Math.max(0, commitKey.expiresAt - Date.now()))
+}
+
+const rememberEditorTableCompositionCommitKey = (cell: HTMLTableCellElement | null, key: EditorTableCompositionCommitKey['key']) => {
+  const position = getEditorTableCellPosition(cell) || editorTableCompositionTarget
+  if (!position) return false
+  const commitKey = {
+    tableIndex: position.tableIndex,
+    rowIndex: position.rowIndex,
+    cellIndex: position.cellIndex,
+    key,
+    expiresAt: Date.now() + 450,
+  }
+  editorTableCompositionCommitKey = commitKey
+  clearEditorTableCompositionCommitKeyLater(commitKey)
+  return true
+}
+
+const markEditorTableCompositionSettling = () => {
+  editorTableCompositionSettlingUntil = Date.now() + 240
+  scheduleTimeout(() => {
+    if (Date.now() >= editorTableCompositionSettlingUntil) editorTableCompositionSettlingUntil = 0
+  }, 260)
+}
+
+const isEditorTableCompositionSettling = () => Date.now() < editorTableCompositionSettlingUntil
+
+const getEditorTableCellForCompositionInput = (event?: Event) => {
+  if (!editorTableCompositionActive && !isEditorTableCompositionSettling() && !editorTableCompositionCommitKey) return null as HTMLTableCellElement | null
+  const position = editorTableCompositionTarget || editorTableCompositionCommitKey
+  const cell = getEditorTableCellAtPosition(position)
+  if (!cell) return null as HTMLTableCellElement | null
+  const eventEditable = getEditorEditableFromNode(event?.target as Node | null | undefined)
+  const cellEditable = getEditorEditableFromNode(cell)
+  if (eventEditable && cellEditable && eventEditable !== cellEditable) return null as HTMLTableCellElement | null
+  return cell
+}
+
+const shouldSuppressEditorTableCompositionCommitArtifact = (cell: HTMLTableCellElement, inputType: string, text = '') => {
+  const commitKey = editorTableCompositionCommitKey
+  if (!commitKey || Date.now() > commitKey.expiresAt) {
+    editorTableCompositionCommitKey = null
+    return false
+  }
+  if (!isSameEditorTableCellPosition(cell, commitKey)) return false
+  const isSpaceArtifact = commitKey.key === 'Space' && inputType === 'insertText' && text === ' '
+  const isEnterArtifact = commitKey.key === 'Enter' && (inputType === 'insertParagraph' || inputType === 'insertLineBreak' || text === '\n')
+  if (!isSpaceArtifact && !isEnterArtifact) return false
+  editorTableCompositionCommitKey = null
+  return true
+}
+
+const getEditorTableCompositionCaretOffset = (cell: HTMLTableCellElement, data = '') => {
+  const before = normalizeEditorTableCompositionText(editorTableCompositionStartText)
+  const after = normalizeEditorTableCompositionText(editorTableCellTextFromDom(cell))
+  const prefix = normalizeEditorTableCompositionText(editorTableCompositionStartPrefix)
+  const committed = normalizeEditorTableCompositionText(data)
+  if (committed) {
+    const directIndex = after.slice(prefix.length, prefix.length + committed.length) === committed
+      ? prefix.length
+      : after.indexOf(committed, Math.max(0, prefix.length - 1))
+    if (directIndex >= 0) return directIndex + committed.length
+  }
+  let start = 0
+  while (start < before.length && start < after.length && before[start] === after[start]) start += 1
+  let beforeEnd = before.length
+  let afterEnd = after.length
+  while (beforeEnd > start && afterEnd > start && before[beforeEnd - 1] === after[afterEnd - 1]) {
+    beforeEnd -= 1
+    afterEnd -= 1
+  }
+  return afterEnd
+}
+
+const rememberEditorTableCompositionCaretTarget = (cell: HTMLTableCellElement | null, data = '') => {
+  const position = getEditorTableCellPosition(cell)
+  if (!position || !cell) {
+    editorTableCompositionCaretTarget = null
+    return false
+  }
+  editorTableCompositionCaretTarget = {
+    tableIndex: position.tableIndex,
+    rowIndex: position.rowIndex,
+    cellIndex: position.cellIndex,
+    offset: getEditorTableCompositionCaretOffset(cell, data),
+    expiresAt: Date.now() + 300,
+  }
+  return true
+}
+
+const restoreEditorTableCompositionCaret = () => {
+  const target = editorTableCompositionCaretTarget
+  if (!target || Date.now() > target.expiresAt) {
+    editorTableCompositionCaretTarget = null
+    return false
+  }
+  const cell = getEditorTableCellAtPosition(target)
+  if (!cell) return false
+  const currentCell = getCurrentEditorTableCell()
+  if (currentCell && !isSameEditorTableCellPosition(currentCell, target)) return false
+  return placeCaretAtEditorTableCellTextOffset(cell, target.offset)
+}
+
+const scheduleRestoreEditorTableCompositionCaret = () => {
+  restoreEditorTableCompositionCaret()
+  scheduleFrame(() => restoreEditorTableCompositionCaret())
+  scheduleTimeout(() => restoreEditorTableCompositionCaret(), 0)
+  scheduleTimeout(() => {
+    if (restoreEditorTableCompositionCaret()) editorTableCompositionCaretTarget = null
+  }, 80)
+}
+
+const isEmptyEditorTableText = (text: string) => !String(text || '').replace(/[\u200b\u200c\ufeff\s]/g, '')
+
+const cleanupEditorTableCompositionDrift = (data = '') => {
+  const targetInfo = editorTableCompositionTarget
+  if (!targetInfo) return false
+  const table = getEditorTables()[targetInfo.tableIndex]
+  const target = table?.rows[targetInfo.rowIndex]?.cells[targetInfo.cellIndex] as HTMLTableCellElement | undefined
+  if (!table || !target) return false
+  const targetText = editorTableCellTextFromDom(target)
+  const normalizedData = String(data || '').trim()
+  const targetLines = targetText.split('\n').map((line) => line.trim()).filter(Boolean)
+  let changed = false
+  Array.from(table.rows).forEach((row, rowIndex) => {
+    Array.from(row.cells).forEach((rawCell, cellIndex) => {
+      const cell = rawCell as HTMLTableCellElement
+      if (rowIndex === targetInfo.rowIndex && cellIndex === targetInfo.cellIndex) return
+      const before = editorTableCompositionSnapshot?.[rowIndex]?.[cellIndex] ?? ''
+      const after = editorTableCellTextFromDom(cell)
+      const afterTrimmed = after.trim()
+      if (!isEmptyEditorTableText(before) || isEmptyEditorTableText(after) || after === before) return
+      const duplicatedCurrentComposition = !!normalizedData && afterTrimmed === normalizedData && targetText.includes(normalizedData)
+      const duplicatedTargetLine = targetLines.includes(afterTrimmed)
+      if (!duplicatedCurrentComposition && !duplicatedTargetLine) return
+      setEditorTableDomCellText(cell, before)
+      changed = true
+    })
+  })
+  if (changed) {
+    markEditorTableCellSourceDirty(target)
+    scheduleStabilizePendingEditorTableCellDom()
+    emitEditorValue()
+  }
+  return changed
+}
+
+const dispatchEditorTableDomInput = (table: HTMLTableElement) => {
+  const editable = table.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset') as HTMLElement | null
+  editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertReplacementText' }))
+  scheduleTimeout(() => {
+    const nextValue = getEditorValueWithPendingTableSync()
+    emitEditorValue(nextValue)
+    refreshAttachmentLinksFromEditor()
+    if (editorContainer.value) enhanceEditorTables(editorContainer.value)
+  }, 0)
+}
+
+const syncExpandedTableDomToEditor = () => {
+  const table = expandedEditorTableElement
+  if (!table || !editorContainer.value?.contains(table)) return false
+  const rows = normalizeExpandedTableRows(expandedTableRows.value)
+  if (!rows.length) return false
+  rememberEditorTableScroll(table)
+  const body = table.tBodies[0] || table.createTBody()
+  while (table.rows.length > rows.length) table.deleteRow(table.rows.length - 1)
+  rows.forEach((cells, rowIndex) => {
+    const row = table.rows[rowIndex] || body.insertRow()
+    while (row.cells.length < cells.length) row.insertCell()
+    while (row.cells.length > cells.length) row.deleteCell(row.cells.length - 1)
+    cells.forEach((text, cellIndex) => {
+      setEditorTableDomCellText(row.cells[cellIndex] as HTMLTableCellElement, text)
+    })
+  })
+  replaceTableBreakTextNodes(table)
+  dispatchEditorTableDomInput(table)
+  expandedTableDirty.value = false
+  return true
+}
+
+const syncExpandedTableToEditor = () => {
+  if (!vditorInstance || !expandedTableEditable.value) return false
+  if (!expandedEditorTableBlock) return syncExpandedTableDomToEditor()
+  const value = getRawVditorValue()
+  const lines = value.split('\n')
+  const blocks = getEditorTableSourceBlocks(value)
+  const currentBlock = blocks.find((block) => block.start === expandedEditorTableBlock?.start && block.end === expandedEditorTableBlock?.end) || expandedEditorTableBlock
+  if (!currentBlock) return false
+  const rows = normalizeExpandedTableRows(expandedTableRows.value)
+  const nextBlockLines = serializeEditableTableBlock(currentBlock, rows)
+  if (!nextBlockLines) return false
+  lines.splice(currentBlock.start, currentBlock.end - currentBlock.start, ...nextBlockLines)
+  const nextValue = lines.join('\n')
+  expandedEditorTableBlock = { ...currentBlock, end: currentBlock.start + nextBlockLines.length, lines: nextBlockLines }
+  vditorInstance.setValue(nextValue)
+  emitEditorValue(nextValue)
+  scheduleTimeout(() => refreshAttachmentLinksFromEditor(), 0)
+  expandedTableDirty.value = false
+  return true
+}
+
+const focusNextExpandedTableCell = (rowIndex: number, cellIndex: number, reverse = false) => {
+  const cells = expandedTableCellEditorElements()
+  if (!cells.length) return
+  const currentIndex = cells.findIndex((cell) => cell === document.activeElement)
+  const fallback = expandedTableRows.value.slice(0, rowIndex).reduce((sum, row) => sum + row.length, 0) + cellIndex
+  const baseIndex = currentIndex >= 0 ? currentIndex : fallback
+  const nextIndex = reverse ? baseIndex - 1 : baseIndex + 1
+  const target = cells[((nextIndex % cells.length) + cells.length) % cells.length]
+  if (!target) return
+  target.focus({ preventScroll: true })
+  placeCaretAtExpandedTableCellOffset(target, editorTableContentTextFromElement(target).length)
+}
+
+const expandedTableElement = ref<HTMLTableElement | null>(null)
+const { start: startExpandedTableResize, stop: stopExpandedTableResize, active: expandedTableActiveResize, dispose: disposeExpandedTableResize } = createEditorTableResize({
+  table: () => expandedTableElement.value,
+  rowHeights: expandedTableManualRowHeights,
+  columnWidths: expandedTableManualColumnWidths,
+  onColumnResizeEnd: scheduleMeasureExpandedTableAutoRowHeights,
+  onResize: scheduleExpandedTableScrollOverflowState,
+})
+
+const startExpandedTableRowResize = (rowIndex: number, event: PointerEvent) => {
+  if (rowIndex < 0 || rowIndex >= expandedTableRows.value.length) return
+  const scale = getTableResizeZoomScale()
+  startExpandedTableResize({
+    type: 'row',
+    index: rowIndex,
+    startPointer: event.clientY / scale,
+    startSize: expandedTableRowHeight(rowIndex),
+    minSize: Math.max(EXPANDED_TABLE_MIN_ROW_HEIGHT, expandedTableAutoRowHeights.value[rowIndex] || 0),
+    scale,
+  }, event)
+}
+
+const startExpandedTableColumnResize = (columnIndex: number, event: PointerEvent) => {
+  if (columnIndex < 0 || columnIndex >= expandedTableColumnWidths.value.length) return
+  const scale = getTableResizeZoomScale()
+  const measuredColumnWidth = expandedTableElement.value?.rows[0]?.cells[columnIndex]?.getBoundingClientRect().width
+  const startSize = measuredColumnWidth ? measuredColumnWidth / scale : (expandedTableColumnWidths.value[columnIndex] || EXPANDED_TABLE_MIN_COLUMN_WIDTH)
+  startExpandedTableResize({
+    type: 'column',
+    index: columnIndex,
+    startPointer: event.clientX / scale,
+    startSize,
+    minSize: EXPANDED_TABLE_MIN_COLUMN_WIDTH,
+    scale,
+  }, event)
+}
+
+const closeExpandedTable = () => {
+  if (!showTableExpandDialog.value || tableExpandClosing.value) return
+  if (expandedTableDirty.value && !syncExpandedTableToEditor()) {
+    window.alert('未能同步放大表格内容，请先复制当前编辑内容后再关闭。')
+    return
+  }
+  removeExpandedTableAudioPreview()
+  tableExpandClosing.value = true
+  if (tableExpandCloseTimer !== null) window.clearTimeout(tableExpandCloseTimer)
+  tableExpandCloseTimer = scheduleTimeout(() => {
+    showTableExpandDialog.value = false
+    tableExpandClosing.value = false
+    expandedTableRows.value = []
+    expandedTableAutoRowHeights.value = []
+    expandedTableManualRowHeights.value = []
+    expandedTableManualColumnWidths.value = []
+    stopExpandedTableResize()
+    expandedTableEditable.value = false
+    expandedTableDirty.value = false
+    expandedEditorTableBlock = null
+    expandedEditorTableElement = null
+    tableExpandCloseTimer = null
+  }, 180)
+}
+
+const openHoveredTableExpand = () => {
+  let table = hoveredEditorTable
+  if (!table || !editorContainer.value?.contains(table)) return
+  const preferredIndex = getEditorTables().indexOf(table)
+  closeInlineEditorTableTextarea()
+  closeInlineEditorTableAtomicEditor()
+  flushPendingEditorTableCellSourceSync()
+  enhanceEditorTables(editorContainer.value)
+  table = getEditorTables()[preferredIndex] || table
+  if (!table || !editorContainer.value.contains(table)) return
+  const tableIndex = getEditorTables().indexOf(table)
+  const block = getEditorTableBlockForTable(table, tableIndex)
+  const renderedRows = editableRowsFromRenderedTable(table)
+  const rows = block ? mergeRenderedTableEdgeBreaks(editableRowsFromTableBlock(block), renderedRows) : renderedRows
+  if (!rows.length) return
+  if (tableExpandCloseTimer !== null) {
+    window.clearTimeout(tableExpandCloseTimer)
+    tableExpandCloseTimer = null
+  }
+  expandedTableRows.value = normalizeExpandedTableRows(rows)
+  expandedTableAutoRowHeights.value = []
+  expandedTableManualRowHeights.value = []
+  expandedTableManualColumnWidths.value = []
+  expandedTableEditable.value = !!block || !!table
+  expandedTableDirty.value = false
+  expandedEditorTableBlock = block || null
+  expandedEditorTableElement = table
+  tableExpandClosing.value = false
+  expandedTableCellEditorRenderKey.value += 1
+  showTableExpandDialog.value = true
+  hideTableDeleteButton()
+  nextTick(() => {
+    refreshExpandedTableCellEditors()
+    updateExpandedTableAvailableWidth()
+    scheduleMeasureExpandedTableAutoRowHeights()
+    scheduleExpandedTableScrollOverflowState()
+    expandedTableCellEditorElements()[0]?.focus({ preventScroll: true })
+  })
+}
+
+const replaceTableBreakTextNodes = (table: HTMLTableElement) => {
+  table.querySelectorAll('td,th').forEach((cell) => {
+    normalizeEditorTableBreakCodeMarkers(cell as HTMLTableCellElement)
+    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        return /(?:<br\s*\/?\s*>|%%NW_TABLE_BR%%)/i.test(node.textContent || '') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+      }
+    })
+    const nodes: Text[] = []
+    while (walker.nextNode()) nodes.push(walker.currentNode as Text)
+    nodes.forEach((textNode) => {
+      const parts = String(textNode.textContent || '').split(TABLE_CELL_BREAK_SOURCE_RE)
+      if (parts.length <= 1) return
+      const fragment = document.createDocumentFragment()
+      parts.forEach((part, index) => {
+        if (part) fragment.appendChild(document.createTextNode(part))
+        if (index < parts.length - 1) fragment.appendChild(document.createElement('br'))
+      })
+      textNode.parentNode?.replaceChild(fragment, textNode)
+    })
+  })
+}
+
+const syncEditorAfterDomTableRemoval = (table: HTMLTableElement | null) => {
+  if (!table || !editorContainer.value?.contains(table)) return false
+  const editable = table.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset') as HTMLElement | null
+  const removable = table.closest<HTMLElement>('[data-type="table"], .vditor-ir__node') || table
+  removable.remove()
+  editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContent' }))
+  scheduleTimeout(() => {
+    const nextValue = getEditorValueWithPendingTableSync()
+    emitEditorValue(nextValue)
+    refreshAttachmentLinksFromEditor()
+  }, 0)
+  clearSelectedEditorTable()
+  return true
+}
+
+const applyTableSourceDeletion = (value: string, block: EditorTableSourceBlock) => {
+  const lines = value.split('\n')
+  lines.splice(block.start, block.end - block.start)
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+|\n+$/g, '')
+}
+
+const deleteEditorTable = (table: HTMLTableElement | null, preferredIndex = -1) => {
+  if (!vditorInstance) return false
+  const value = getRawVditorValue()
+  const blocks = getEditorTableSourceBlocks(value)
+  const block = tableBlockFromDataset(table, blocks) || findMarkdownTableBlock(blocks, getRenderedTableRows(table), preferredIndex)
+  if (!block) return syncEditorAfterDomTableRemoval(table)
+  const nextValue = applyTableSourceDeletion(value, block)
+  vditorInstance.setValue(nextValue)
+  emitEditorValue(nextValue)
+  clearSelectedEditorTable()
+  scheduleTimeout(() => refreshAttachmentLinksFromEditor(), 0)
+  return true
+}
+
+const deleteSelectedEditorTable = () => {
+  if (!vditorInstance) return false
+  const tables = getEditorTables()
+  const tableIndex = selectedEditorTable ? tables.indexOf(selectedEditorTable) : selectedEditorTableIndex
+  if (tableIndex < 0) return false
+  return deleteEditorTable(selectedEditorTable, tableIndex)
+}
+
+const syncEditorTableScrollEdgeGap = (table: HTMLTableElement, root: HTMLElement) => {
+  if (typeof window === 'undefined') return
+  const viewport = table.closest<HTMLElement>('.vditor-reset') || root
+  const tableRect = table.getBoundingClientRect()
+  const viewportRect = viewport.getBoundingClientRect()
+  const leftGap = Math.max(0, Math.round(tableRect.left - viewportRect.left))
+  const rightGap = Math.max(0, Math.round(viewportRect.right - tableRect.right))
+  const edgeGap = Number.isFinite(leftGap) && Number.isFinite(rightGap) ? Math.max(0, leftGap - rightGap) + 1 : 1
+  table.style.setProperty('--editor-table-scroll-edge-gap', `${edgeGap}px`)
+}
+
+const enhanceEditorTables = (root: HTMLElement) => {
+  const blocks = getEditorTableSourceBlocks(getRawVditorValue())
+  const usedBlocks = new Set<EditorTableSourceBlock>()
+  getEditorTables().forEach((table, index) => {
+    table.classList.add('editor-deletable-table')
+    syncEditorTableScrollEdgeGap(table, root)
+    table.dataset.editorTableIndex = String(index)
+    const renderedRows = getRenderedTableRows(table)
+    const datasetBlock = tableBlockFromDataset(table, blocks)
+    let block = datasetBlock && !usedBlocks.has(datasetBlock) ? datasetBlock : undefined
+    if (!block && tableRowsHaveComparableContent(renderedRows)) {
+      block = blocks.find((candidate) => !usedBlocks.has(candidate) && sameTableRows(comparableRowsFromTableBlock(candidate), renderedRows))
+    }
+    if (!block && index >= 0 && index < blocks.length && !usedBlocks.has(blocks[index])) block = blocks[index]
+    if (!block) block = blocks.find((candidate) => !usedBlocks.has(candidate))
+    if (block) usedBlocks.add(block)
+    // Do not structurally mutate Vditor's live editable table DOM here.
+    // Vditor IR owns the table model; replacing the live thead/th tree or removing
+    // its generated divider row can make getValue() return empty content and can
+    // collapse the table during later typing/publishing. First-row parity is kept
+    // visually through CSS while source/detached HTML paths may still normalize.
+    replaceTableBreakTextNodes(table)
+    const scrollKey = tableScrollKeyFromBlock(block, `index:${index}`)
+    table.dataset.editorTableScrollKey = scrollKey
+    table.onscroll = () => rememberEditorTableScroll(table)
+    if (block) {
+      const sourceIndex = blocks.indexOf(block)
+      table.dataset.editorTableBlockStart = String(block.start)
+      table.dataset.editorTableBlockEnd = String(block.end)
+      if (sourceIndex >= 0) table.dataset.editorTableSourceIndex = String(sourceIndex)
+      else delete table.dataset.editorTableSourceIndex
+    } else {
+      delete table.dataset.editorTableBlockStart
+      delete table.dataset.editorTableBlockEnd
+      delete table.dataset.editorTableSourceIndex
+    }
+    restoreEditorTableScroll(table)
+  })
+}
+
+const applyHeadingFallback = (option: typeof headingOptions[number]) => {
+  if (!vditorInstance) return
+  const value = getRawVditorValue()
+  if (!value.trim()) {
+    vditorInstance.setValue(option.value)
+    emitEditorValue(option.value)
+    return
+  }
+  const editorRoot = editorContainer.value
+  const active = typeof document !== 'undefined' ? document.activeElement as HTMLElement | null : null
+  const selection = typeof window !== 'undefined' ? window.getSelection() : null
+  const selectedText = selection?.toString() || ''
+  let lineIndex = 0
+
+  const focusedBlock = active?.closest?.('.vditor-ir__node, .vditor-reset [data-block], .vditor-reset p, .vditor-reset h1, .vditor-reset h2, .vditor-reset h3, .vditor-reset h4, .vditor-reset h5, .vditor-reset h6')
+  const focusedText = (focusedBlock?.textContent || '').trim()
+  const lines = value.split('\n')
+  if (focusedText) {
+    const normalizedFocused = focusedText.replace(/^#{1,6}\s+/, '').trim()
+    const found = lines.findIndex((line) => line.replace(/^#{1,6}\s+/, '').trim() === normalizedFocused)
+    if (found >= 0) lineIndex = found
+  } else if (selectedText) {
+    const found = lines.findIndex((line) => line.includes(selectedText.trim()))
+    if (found >= 0) lineIndex = found
+  } else if (editorRoot) {
+    const editableText = editorRoot.querySelector<HTMLElement>('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-reset')?.textContent || ''
+    const firstLine = editableText.split('\n').find((line) => line.trim())?.trim()
+    const found = firstLine ? lines.findIndex((line) => line.replace(/^#{1,6}\s+/, '').trim() === firstLine.replace(/^#{1,6}\s+/, '').trim()) : -1
+    if (found >= 0) lineIndex = found
+  }
+
+  if (!lines.length) lines.push('')
+  const text = lines[lineIndex] || ''
+  const content = text.replace(/^#{1,6}\s*/, '').trimStart()
+  lines[lineIndex] = `${option.value}${content || '标题'}`
+  const nextValue = lines.join('\n')
+  vditorInstance.setValue(nextValue)
+  emitEditorValue(nextValue)
+}
+
+const selectHeading = (option: typeof headingOptions[number]) => {
+  applyHeadingFallback(option)
+  selectedHeadingTag.value = option.tag
+  closeHeadingMenu()
+}
+
+const setupVditorPanelPositioning = () => {
+  if (panelCleanup) return
+
+  const toolbarAction = (item: HTMLElement | null) => {
+    if (!item) return null
+    return item.matches('[data-type]') ? item : item.querySelector<HTMLElement>('[data-type], [aria-label], [title]')
+  }
+
+  const isHeadingsItem = (item: HTMLElement | null) => {
+    const action = toolbarAction(item)
+    const type = action?.getAttribute('data-type') || ''
+    const label = action?.getAttribute('aria-label') || action?.getAttribute('title') || ''
+    return type === 'headings' || /标题|Heading|Headings/i.test(label)
+  }
+
+  const isTableItem = (item: HTMLElement | null) => {
+    const action = toolbarAction(item)
+    const type = action?.getAttribute('data-type') || ''
+    const label = action?.getAttribute('aria-label') || action?.getAttribute('title') || ''
+    return type === 'table' || /表格|Table/i.test(label)
+  }
+
+  const isPreviewItem = (item: HTMLElement | null) => {
+    const action = toolbarAction(item)
+    const type = action?.getAttribute('data-type') || ''
+    const label = action?.getAttribute('aria-label') || action?.getAttribute('title') || ''
+    return type === 'preview' || /预览|Preview/i.test(label)
+  }
+
+  const openHeadingMenu = async (item: HTMLElement) => {
+    headingTrigger.value = item
+    nativeHeadingPanel.value = item.querySelector<HTMLElement>('.vditor-hint, .vditor-panel')
+    if (nativeHeadingPanel.value) {
+      nativeHeadingPanel.value.classList.add('vditor-panel--none')
+      nativeHeadingPanel.value.style.display = 'none'
+    }
+    closeTableMenu()
+    selectedHeadingTag.value = getCurrentHeadingTag()
+    showHeadingMenu.value = true
+    const currentGeneration = generation
+    await nextTick()
+    if (!mounted || currentGeneration !== generation) return
+    scheduleFrame(() => positionHeadingMenu())
+  }
+
+  const openTableMenu = async (item: HTMLElement) => {
+    tableTrigger.value = item
+    nativeTablePanel.value = item.querySelector<HTMLElement>('.vditor-hint, .vditor-panel')
+    if (nativeTablePanel.value) {
+      nativeTablePanel.value.classList.add('vditor-panel--none')
+      nativeTablePanel.value.style.display = 'none'
+    }
+    closeHeadingMenu()
+    showTableMenu.value = true
+    const currentGeneration = generation
+    await nextTick()
+    if (!mounted || currentGeneration !== generation) return
+    scheduleFrame(() => positionTableMenu())
+  }
+
+  const handleToolbarClick = (event: Event) => {
+    const target = event.target instanceof Element ? event.target : null
+    const item = target?.closest('.vditor-toolbar__item, button[data-type], [role="button"][data-type]') as HTMLElement | null
+    if (!item || !editorContainer.value?.contains(item)) return
+    if (isPreviewItem(item)) {
+      syncEditorDomToVditorValueForPreview()
+      return
+    }
+    const isHeading = isHeadingsItem(item)
+    const isTable = isTableItem(item)
+    if (!isHeading && !isTable) return
+    event.preventDefault()
+    event.stopPropagation()
+    ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+    if (isHeading) {
+      if (showHeadingMenu.value && headingTrigger.value === item) {
+        closeHeadingMenu()
+        return
+      }
+      openHeadingMenu(item)
+      return
+    }
+    if (showTableMenu.value && tableTrigger.value === item) {
+      closeTableMenu()
+      return
+    }
+    openTableMenu(item)
+  }
+
+  const handleDocumentPointer = (event: Event) => {
+    if (!showHeadingMenu.value && !showTableMenu.value) return
+    const target = event.target instanceof Element ? event.target : null
+    if (target?.closest('.vditor-heading-menu, .vditor-table-menu')) return
+    const toolbarItem = target?.closest('.vditor-toolbar__item')
+    if (toolbarItem === headingTrigger.value || toolbarItem === tableTrigger.value) return
+    closeHeadingMenu()
+    closeTableMenu()
+  }
+
+  const handleFloatingReposition = () => {
+    if (showHeadingMenu.value) scheduleFrame(() => positionHeadingMenu())
+    if (showTableMenu.value) scheduleFrame(() => positionTableMenu())
+  }
+  const scrollContainers: HTMLElement[] = []
+  for (let ancestor = editorContainer.value?.parentElement; ancestor; ancestor = ancestor.parentElement) {
+    if (ancestor.matches('.center-col, .content-wrapper')) scrollContainers.push(ancestor)
+  }
+  const toolbarEl = config.toolbar()
+  // Vditor 异步创建工具栏；未找到工具栏时不要锁定 cleanup，等待生命周期模块 ready 后重试。
+  if (!toolbarEl) return
+  const observedPanelRoots = [editorContainer.value, editorContainer.value?.querySelector('.vditor'), editorContainer.value?.querySelector('.vditor-content'), toolbarEl]
+    .filter((el): el is HTMLElement => el instanceof HTMLElement)
+  const panelResizeObserver = typeof ResizeObserver !== 'undefined'
+    ? new ResizeObserver(() => handleFloatingReposition())
+    : null
+  observedPanelRoots.forEach((el) => panelResizeObserver?.observe(el))
+  toolbarEl?.addEventListener('click', handleToolbarClick, true)
+  document.addEventListener('click', handleToolbarClick, true)
+  document.addEventListener('mousedown', handleDocumentPointer, true)
+  window.addEventListener('resize', handleFloatingReposition)
+  window.addEventListener('scroll', handleFloatingReposition, { passive: true, capture: true })
+  scrollContainers.forEach((el) => el.addEventListener('scroll', handleFloatingReposition, { passive: true }))
+  window.visualViewport?.addEventListener('resize', handleFloatingReposition, { passive: true })
+  window.visualViewport?.addEventListener('scroll', handleFloatingReposition, { passive: true })
+  panelCleanup = () => {
+    toolbarEl?.removeEventListener('click', handleToolbarClick, true)
+    document.removeEventListener('click', handleToolbarClick, true)
+    document.removeEventListener('mousedown', handleDocumentPointer, true)
+    window.removeEventListener('resize', handleFloatingReposition)
+    window.removeEventListener('scroll', handleFloatingReposition, true)
+    scrollContainers.forEach((el) => el.removeEventListener('scroll', handleFloatingReposition))
+    observedPanelRoots.forEach((el) => panelResizeObserver?.unobserve(el))
+    panelResizeObserver?.disconnect()
+    window.visualViewport?.removeEventListener('resize', handleFloatingReposition)
+    window.visualViewport?.removeEventListener('scroll', handleFloatingReposition)
+    closeHeadingMenu()
+    closeTableMenu()
+    panelCleanup = null
+  }
+}
+
+const getEditorTableCellFromElement = (element: Element | null | undefined) => {
+  if (!element || !editorContainer.value) return null as HTMLTableCellElement | null
+  const cell = element.closest?.('td,th') as HTMLTableCellElement | null
+  if (!cell || !editorContainer.value.contains(cell)) return null
+  if (cell.closest('.vditor-ir table, .vditor-wysiwyg table, .vditor-reset table')) return cell
+  return null
+}
+
+const getEditorTableCellFromNode = (node: Node | null | undefined) => {
+  const element = node instanceof Element ? node : node?.parentElement
+  return getEditorTableCellFromElement(element)
+}
+
+const getEditorTableCellFromRange = (range: Range | null) => {
+  if (!range || !editorContainer.value) return null as HTMLTableCellElement | null
+  return getEditorTableCellFromNode(range.startContainer)
+    || getEditorTableCellFromNode(range.endContainer)
+    || getEditorTableCellFromNode(range.commonAncestorContainer)
+}
+
+const getEditorTableCellFromEvent = (event?: Event) => {
+  const target = event?.target as Node | null | undefined
+  const element = target instanceof Element ? target : target?.parentElement
+  return getEditorTableCellFromElement(element)
+}
+
+const clearStoredEditorTableSelection = () => {
+  lastEditorTableSelectionRange = null
+  lastEditorTableSelectionState = null
+  lastEditorTableSelectionAt = 0
+}
+
+const clearLastEditorTableSelection = () => {
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  selection?.removeAllRanges()
+  lastEditorSelectionRange = null
+  clearStoredEditorTableSelection()
+}
+
+const clearPreparedEditorAttachmentInsertionTarget = () => {
+  pendingEditorTableAttachmentInsertionTarget = null
+}
+
+const clearConsumedEditorTableInsertionState = () => {
+  closeInlineEditorTableTextarea()
+  closeInlineEditorTableAtomicEditor()
+  pendingEditorTableCellSync = null
+  editorTableCompositionActive = false
+  editorPlainCompositionActive = false
+  editorTableCompositionTarget = null
+  editorTableCompositionSnapshot = null
+  editorTableCompositionStartText = ''
+  editorTableCompositionStartPrefix = ''
+  editorTableCompositionCommitKey = null
+  editorTableCompositionCaretTarget = null
+  clearPreparedEditorAttachmentInsertionTarget()
+  clearLastEditorTableSelection()
+}
+
+const clearConsumedEditorTableAttachmentTargetState = () => {
+  closeInlineEditorTableTextarea()
+  closeInlineEditorTableAtomicEditor()
+  pendingEditorTableCellSync = null
+  editorTableCompositionActive = false
+  editorPlainCompositionActive = false
+  editorTableCompositionTarget = null
+  editorTableCompositionSnapshot = null
+  editorTableCompositionStartText = ''
+  editorTableCompositionStartPrefix = ''
+  editorTableCompositionCommitKey = null
+  editorTableCompositionCaretTarget = null
+  clearPreparedEditorAttachmentInsertionTarget()
+  clearLastEditorTableSelection()
+}
+
+const EDITOR_EDITABLE_SELECTOR = '.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset'
+
+const getEditorEditableFromNode = (node: Node | null | undefined) => {
+  const element = node instanceof Element ? node : node?.parentElement
+  const editable = element?.closest?.(EDITOR_EDITABLE_SELECTOR) as HTMLElement | null
+  return editable && editorContainer.value?.contains(editable) ? editable : null
+}
+
+const storeLastEditorTableCell = (cell: HTMLTableCellElement | null | undefined) => {
+  const editable = getEditorEditableFromNode(cell)
+  const table = cell?.closest('table') as HTMLTableElement | null
+  if (!cell || !editable || !table) return
+  const tables = Array.from(editable.querySelectorAll('table'))
+  const tableIndex = tables.indexOf(table)
+  if (tableIndex < 0 || !cell.parentElement) return
+  lastEditorTableSelectionState = {
+    editable,
+    tableIndex,
+    rowIndex: (cell.parentElement as HTMLTableRowElement).rowIndex,
+    cellIndex: cell.cellIndex,
+  }
+  lastEditorTableSelectionAt = Date.now()
+}
+
+const storeLastEditorTableSelection = (range: Range) => {
+  const cell = getEditorTableCellFromRange(range)
+  storeLastEditorTableCell(cell)
+  if (cell) lastEditorTableSelectionRange = range.cloneRange()
+}
+
+const getStoredEditorTableCell = (editable: HTMLElement | null) => {
+  if (!editable || !lastEditorTableSelectionState) return null as HTMLTableCellElement | null
+  const sameEditable = lastEditorTableSelectionState.editable === editable
+  const previousEditableDetached = !editorContainer.value?.contains(lastEditorTableSelectionState.editable)
+  if (!sameEditable && !previousEditableDetached) return null
+  const table = editable.querySelectorAll<HTMLTableElement>('table')[lastEditorTableSelectionState.tableIndex]
+  const row = table?.rows[lastEditorTableSelectionState.rowIndex]
+  return (row?.cells[lastEditorTableSelectionState.cellIndex] as HTMLTableCellElement | undefined) || null
+}
+
+const getActiveEditorTableCellForAttachmentInsertion = () => {
+  if (inlineEditorTableAtomicEditorState?.cell && editorContainer.value?.contains(inlineEditorTableAtomicEditorState.cell)) {
+    return inlineEditorTableAtomicEditorState.cell
+  }
+  if (inlineEditorTableTextareaState?.cell && editorContainer.value?.contains(inlineEditorTableTextareaState.cell)) {
+    return inlineEditorTableTextareaState.cell
+  }
+  return getCurrentEditorTableCell(undefined, { allowStoredFallback: false })
+}
+
+const prepareEditorAttachmentInsertionTarget = () => {
+  clearPreparedEditorAttachmentInsertionTarget()
+  const cell = getActiveEditorTableCellForAttachmentInsertion()
+  const editable = getEditorEditableFromNode(cell)
+  if (!cell || !editable) return false
+  // Target capture must stay read-only: mutating the cell here can start an observer feedback
+  // loop before the native file picker has even returned.
+  const position = getEditorTableCellPosition(cell)
+  if (!position) return false
+  pendingEditorTableAttachmentInsertionTarget = {
+    editable,
+    tableIndex: position.tableIndex,
+    rowIndex: position.rowIndex,
+    cellIndex: position.cellIndex,
+    offset: getEditorTableCellInsertionOffset(cell),
+  }
+  storeLastEditorTableCell(cell)
+  return true
+}
+
+const consumePreparedEditorTableAttachmentCell = () => {
+  const target = pendingEditorTableAttachmentInsertionTarget
+  pendingEditorTableAttachmentInsertionTarget = null
+  return resolveTableAttachmentTarget(
+    target,
+    (editable) => !!editorContainer.value?.contains(editable),
+    (stored) => {
+      const table = stored.editable.querySelectorAll<HTMLTableElement>('table')[stored.tableIndex]
+      const cell = table?.rows[stored.rowIndex]?.cells[stored.cellIndex] as HTMLTableCellElement | undefined
+      return cell && getEditorEditableFromNode(cell) === stored.editable
+        ? { cell, offset: stored.offset }
+        : null
+    }
+  )
+}
+
+const getCurrentEditorTableCell = (event?: Event, options: { allowStoredFallback?: boolean } = {}) => {
+  if (typeof window === 'undefined') return null as HTMLTableCellElement | null
+  const selection = window.getSelection()
+  const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
+  const currentCell = getEditorTableCellFromRange(range) || getEditorTableCellFromEvent(event)
+  if (currentCell) return currentCell
+  if (!options.allowStoredFallback) return null
+  const eventEditable = getEditorEditableFromNode(event?.target as Node | null | undefined)
+  const rangeEditable = getEditorEditableFromNode(range?.commonAncestorContainer)
+  const currentEditable = eventEditable || rangeEditable
+  if (range && rangeEditable && !getEditorTableCellFromRange(range)) return null
+  const rangeCell = getEditorTableCellFromRange(lastEditorTableSelectionRange)
+  const lastCell = rangeCell && getEditorEditableFromNode(rangeCell) === currentEditable
+    ? rangeCell
+    : getStoredEditorTableCell(currentEditable)
+  const pendingCell = getPendingEditorTableCell()
+  const fallbackCell = lastCell || (pendingCell && getEditorEditableFromNode(pendingCell) === currentEditable ? pendingCell : null)
+  if (!fallbackCell || getEditorEditableFromNode(fallbackCell) !== currentEditable) return null
+  return fallbackCell
+}
+
+const clearEditorTableEmptyPlaceholder = (cell: HTMLTableCellElement) => {
+  if (!isEditorTableStructurallyEmptyCell(cell)) return false
+  cell.textContent = ''
+  return true
+}
+
+const getRangeInsideEditorTableCell = (cell: HTMLTableCellElement) => {
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  if (!selection?.rangeCount) return null as Range | null
+  const currentRange = selection.getRangeAt(0)
+  if (getEditorTableCellFromRange(currentRange) === cell) return currentRange
+  return null
+}
+
+const insertTextIntoCellDom = (cell: HTMLTableCellElement, text: string) => {
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  if (!selection || !text) return false
+  let range: Range | null = getRangeInsideEditorTableCell(cell)
+  if (clearEditorTableEmptyPlaceholder(cell) || !range) {
+    range = document.createRange()
+    range.selectNodeContents(cell)
+    range.collapse(false)
+  }
+  range.deleteContents()
+  const textNode = document.createTextNode(text)
+  range.insertNode(textNode)
+  range.setStartAfter(textNode)
+  range.collapse(true)
+  removeAdjacentTableCaretAnchors(textNode)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  lastEditorSelectionRange = range.cloneRange()
+  storeLastEditorTableSelection(range)
+  return true
+}
+
+const insertLineBreakIntoCellDom = (cell: HTMLTableCellElement) => {
+  const selection = typeof window === 'undefined' ? null : window.getSelection()
+  let range: Range | null = getRangeInsideEditorTableCell(cell)
+  if (clearEditorTableEmptyPlaceholder(cell) || !range) {
+    range = document.createRange()
+    range.selectNodeContents(cell)
+    range.collapse(false)
+  }
+  range.deleteContents()
+  const lineBreak = document.createElement('br')
+  const caretNode = createEditorTableCaretAnchorNode()
+  range.insertNode(lineBreak)
+  lineBreak.after(caretNode)
+  range.setStart(caretNode, 0)
+  range.collapse(true)
+  selection?.removeAllRanges()
+  selection?.addRange(range)
+  lastEditorSelectionRange = range.cloneRange()
+  storeLastEditorTableSelection(range)
+  return true
+}
+
+const insertEditorTableCellLineBreak = (event: KeyboardEvent, cell: HTMLTableCellElement) => {
+  const position = getEditorTableCellPosition(cell)
+  if (!position) return false
+  event.preventDefault()
+  event.stopPropagation()
+  ;(event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+  if (!insertLineBreakIntoCellDom(cell)) return false
+  pendingEditorTableCellSync = { ...position, text: editorTableCellTextFromDom(cell) }
+  scheduleStabilizePendingEditorTableCellDom()
+  emitEditorValue()
+  refreshAttachmentLinksFromEditor()
+  return true
+}
+
+const normalizeTableCellInsertion = (value: string) => String(value || '')
+  .replace(/\r?\n+/g, ' ')
+  .replace(/[\u200b\u200c\ufeff]/g, '')
+  .trim()
+
+const insertAttachmentIntoTableCellWithoutVditorReset = (cell: HTMLTableCellElement, text: string, offset: number) => {
+  const current = isSamePendingEditorTableCell(cell) && pendingEditorTableCellSync
+    ? pendingEditorTableCellSync.text
+    : editorTableCellTextFromDom(cell)
+  const insertion = insertTableCellAtomicValue(current, text, offset)
+  markEditorTableAttachmentMutationHandled(cell)
+  clearConsumedEditorTableAttachmentTargetState()
+  setEditorTableDomCellText(cell, insertion.value)
+  markEditorTableCellSourceDirty(cell, insertion.value)
+  const result = buildEditorTableCellSourceValue(cell, insertion.value)
+  placeCaretAtEditorTableSourceOffset(cell, insertion.caretOffset)
+  refreshAttachmentLinksInTableCellFromEditor(cell)
+  if (result?.value) {
+    const emitted = emitKnownEditorSourceValue(result.value)
+    if (!emitted) scheduleTimeout(() => emitEditorValue(), 0)
+  } else {
+    emitEditorValue()
+    scheduleTimeout(() => emitEditorValue(), 0)
+  }
+  return true
+}
+
+const insertValueIntoCurrentTableCell = (value: string) => {
+  if (!vditorInstance) return false
+  const text = normalizeAttachmentSourceText(normalizeTableCellInsertion(value))
+  if (!text) return false
+  const isAttachmentInsert = hasAttachmentMarker(text)
+  const preparedAttachmentTarget = isAttachmentInsert ? consumePreparedEditorTableAttachmentCell() : null
+  let cell = isAttachmentInsert
+    ? (preparedAttachmentTarget?.cell || getCurrentEditorTableCell(undefined, { allowStoredFallback: false }))
+    : getCurrentEditorTableCell(undefined, { allowStoredFallback: false })
+  if (!cell) return false
+  if (isAttachmentInsert) {
+    const offset = preparedAttachmentTarget?.offset ?? getEditorTableCellInsertionOffset(cell)
+    return insertAttachmentIntoTableCellWithoutVditorReset(cell, text, offset)
+  }
+  const selection = window.getSelection()
+  if (!selection || selection.rangeCount === 0) return false
+  const currentRange = selection.getRangeAt(0)
+  const rangeRoot = currentRange.commonAncestorContainer instanceof Element
+    ? currentRange.commonAncestorContainer
+    : currentRange.commonAncestorContainer.parentElement
+  if (!rangeRoot || !cell.contains(rangeRoot)) return false
+  let inserted = false
+  try {
+    inserted = document.execCommand('insertText', false, text)
+  } catch {
+    inserted = false
+  }
+  if (!inserted) {
+    const range = selection.getRangeAt(0)
+    range.deleteContents()
+    const textNode = document.createTextNode(text)
+    range.insertNode(textNode)
+    range.setStartAfter(textNode)
+    range.collapse(true)
+    selection.removeAllRanges()
+    selection.addRange(range)
+  }
+  const editable = cell.closest('.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset, .vditor-sv .vditor-reset') as HTMLElement | null
+  editable?.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }))
+  syncEditorTableCellDomToSource(cell, { restoreCaret: true })
+  const updatedSelection = window.getSelection()
+  if (updatedSelection && updatedSelection.rangeCount > 0) {
+    lastEditorSelectionRange = updatedSelection.getRangeAt(0).cloneRange()
+    storeLastEditorTableSelection(updatedSelection.getRangeAt(0))
+  }
+  refreshAttachmentLinksFromEditor()
+  scheduleTimeout(() => emitEditorValue(), 0)
+  return true
+}
+
+const insertNormalizedEditorValue = (nextValue: string) => {
+  if (!vditorInstance || !isReady.value) {
+    preReadyEditorInsertBuffer.push(nextValue)
+    return false
+  }
+  if (insertValueIntoCurrentTableCell(nextValue)) return true
+  if (pendingEditorTableCellSync) flushPendingEditorTableCellSourceSync()
+  insertEditorValueFallback(vditorInstance, nextValue, hasAttachmentMarker(nextValue))
+  clearStalePlainBlankLineMarkers()
+  if (hasAttachmentMarker(nextValue)) clearPreparedEditorAttachmentInsertionTarget()
+  normalizeEditorAttachmentSource()
+  refreshAttachmentLinksFromEditor()
+  scheduleTimeout(() => refreshAttachmentLinksFromEditor(), 0)
+  emitEditorValue()
+  return true
+}
+
+const api = {
+  clear: () => {
+    preReadyEditorInsertBuffer.clear()
+    closeInlineEditorTableTextarea()
+    closeInlineEditorTableAtomicEditor()
+    pendingEditorTableCellSync = null
+    pendingEditorTableAttachmentInsertionTarget = null
+    editorTableCompositionActive = false
+    editorPlainCompositionActive = false
+    editorTableCompositionTarget = null
+    editorTableCompositionCommitKey = null
+    editorTableCompositionCaretTarget = null
+    if (vditorInstance) {
+      vditorInstance.setValue('');
+      config.onChange('');
+    }
+  },
+  prepareAttachmentInsert: () => prepareEditorAttachmentInsertionTarget(),
+  clearAttachmentInsertTarget: () => clearPreparedEditorAttachmentInsertionTarget(),
+  focus: () => {
+    if (inlineEditorTableAtomicEditor) {
+      inlineEditorTableAtomicEditor.focus({ preventScroll: true })
+      return
+    }
+    if (inlineEditorTableTextarea) {
+      inlineEditorTableTextarea.focus({ preventScroll: true })
+      return
+    }
+    getEditorEditableElement()?.focus({ preventScroll: true })
+  },
+  insertValue: (val: string) => {
+    insertNormalizedEditorValue(normalizeAttachmentInsertValue(val))
+  },
+  getValue: (): string => {
+    return vditorInstance ? getSafeOutgoingEditorValue() : ''
+  },
+  setValue: (val: string) => {
+    closeInlineEditorTableTextarea()
+    closeInlineEditorTableAtomicEditor()
+    pendingEditorTableCellSync = null
+    pendingEditorTableAttachmentInsertionTarget = null
+    editorTableCompositionActive = false
+    editorPlainCompositionActive = false
+    editorTableCompositionTarget = null
+    editorTableCompositionCommitKey = null
+    editorTableCompositionCaretTarget = null
+    const safeValue = ensureSafeEditorTableMarkdown(encodeMarkdownExtraBlankLines(val))
+    if (vditorInstance) {
+      vditorInstance.setValue(safeValue)
+      emitEditorValue()
+    } else {
+      config.onChange(safeValue || '')
+    }
+  }
+}
+
+
+const input = (content: string) => {
+    const needsSafeTableValue = !!pendingEditorTableCellSync || !!getEditorTables().length || hasUnsafeMarkdownTableStructure(content)
+    if (needsSafeTableValue) {
+      const emitSafeValue = () => emitEditorValue()
+      emitSafeValue()
+      scheduleTimeout(emitSafeValue, 0)
+      return
+    }
+    emitEditorValue(content)
+  }
+
+const mount = (instance: Vditor) => {
+  if (mounted) return
+  mounted = true
+  vditorInstance = instance
+  const currentGeneration = ++generation
+  setupVditorPanelPositioning()
+  nextTick(() => {
+    if (!mounted || currentGeneration !== generation) return
+    setupInlineImagePreview()
+    setupAttachmentPreview()
+  })
+}
+
+// A value is supplied once after Vditor's asynchronous ready callback. Later
+// calls retry toolbar binding after Vditor materializes its toolbar DOM.
+const update = (initialValue?: string) => {
+  if (!mounted || !vditorInstance) return
+  if (initialValue !== undefined && !isReady.value) {
+    vditorInstance.setValue(ensureSafeEditorTableMarkdown(encodeMarkdownExtraBlankLines(initialValue)))
+    isReady.value = true
+    preReadyEditorInsertBuffer.drain(insertNormalizedEditorValue)
+    const currentGeneration = generation
+    nextTick(() => {
+      if (mounted && currentGeneration === generation) scheduleNormalizeEditorTableSource()
+    })
+  }
+  setupVditorPanelPositioning()
+}
+
+const dispose = () => {
+  mounted = false
+  generation += 1
+  isReady.value = false
+
+  preReadyEditorInsertBuffer.clear()
+  try {
+    removeExpandedTableAudioPreview()
+    if (editorContainer.value) destroyAttachmentAudioPlayers(editorContainer.value)
+    if (editorTableDomStabilizeTimer !== null) {
+      window.clearTimeout(editorTableDomStabilizeTimer)
+      editorTableDomStabilizeTimer = null
+    }
+    if (panelCleanup) {
+      panelCleanup();
+      panelCleanup = null;
+    }
+    if (imagePreviewCleanup) {
+      imagePreviewCleanup();
+      imagePreviewCleanup = null;
+    }
+    if (attachmentPreviewCleanup) {
+      attachmentPreviewCleanup();
+      attachmentPreviewCleanup = null;
+    }
+    closeInlineEditorTableTextarea()
+    closeInlineEditorTableAtomicEditor()
+    if (tableExpandCloseTimer !== null) {
+      window.clearTimeout(tableExpandCloseTimer)
+      tableExpandCloseTimer = null
+    }
+    if (expandedTableRowHeightMeasureTimer !== null) {
+      window.cancelAnimationFrame(expandedTableRowHeightMeasureTimer)
+      expandedTableRowHeightMeasureTimer = null
+    }
+    disposeExpandedTableResize()
+    if (expandedTableScrollOverflowFrame !== null) {
+      window.cancelAnimationFrame(expandedTableScrollOverflowFrame)
+      expandedTableScrollOverflowFrame = null
+    }
+    showTableExpandDialog.value = false
+    tableExpandClosing.value = false
+    expandedTableDirty.value = false
+    pendingEditorTableCellSync = null
+    editorTableCompositionActive = false
+    editorPlainCompositionActive = false
+    editorTableCompositionTarget = null
+    editorTableCompositionSnapshot = null
+    editorTableCompositionStartText = ''
+    editorTableCompositionStartPrefix = ''
+    editorTableCompositionCommitKey = null
+    editorTableCompositionCaretTarget = null
+    editorTableCompositionSettlingUntil = 0
+    pendingEditorTableAttachmentInsertionTarget = null
+    lastEditorTableSelectionRange = null
+    lastEditorTableSelectionState = null
+  } catch (e) {
+    console.warn('Vditor destroy error', e);
+  }
+
+  timers.forEach(timer => window.clearTimeout(timer))
+  timers.clear()
+  frames.forEach(frame => window.cancelAnimationFrame(frame))
+  frames.clear()
+  previewCleanups.forEach(cleanup => cleanup())
+  previewCleanups.clear()
+  vditorInstance = null
+}
+
+return {
+  mount, update, dispose, input, preview: transformAttachmentPreviewHtml, api,
+  controls: { showHeadingMenu, headingMenuRef, headingMenuStyle, headingOptions, selectedHeadingTag, selectHeading, showTableMenu, tableMenuRef, tableMenuStyle, tableRows, tableCols, adjustTableRows, adjustTableCols, tableGridCells, previewTableSize, insertTable, showTableDeleteButton, tableDeleteButtonStyle, tableExpandButtonStyle, cancelTableDeleteHide, scheduleTableDeleteHide, confirmDeleteHoveredTable, openHoveredTableExpand, showTableExpandDialog, tableExpandClosing, closeExpandedTable, expandedTableEditable, expandedTableElement, expandedTableColumnWidths, expandedTableRows, expandedTableCellEditorRenderKey, expandedTableRowHeight, EXPANDED_TABLE_MIN_COLUMN_WIDTH, registerExpandedTableCellEditor, updateExpandedTableCellText, insertExpandedTableCellLineBreak, focusNextExpandedTableCell, removeExpandedTableCellAttachmentMarker, pasteIntoExpandedTableCell, onExpandedTableCellMarkerPointerDown, onExpandedTableCellMarkerClick, onExpandedTableCellMarkerKeyActivate, expandedTableActiveResize, startExpandedTableRowResize, startExpandedTableColumnResize },
+}
+}

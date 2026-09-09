@@ -1,3 +1,4 @@
+import { readEditorSource } from './editor-source.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
@@ -41,8 +42,8 @@ assert.match(placeholder, /data-audio-size="30208"/)
 assert.match(placeholder, /x=1&amp;y=2/)
 
 const [renderer, editor, nuxtConfig, messageList, playerSource, playerStyle] = await Promise.all([
-  read('components/index/MarkdownRenderer.vue'),
-  read('components/index/VditorEditor.vue'),
+  Promise.all([read('components/index/MarkdownRenderer.vue'), read('utils/rendered-table-dialog.ts')]).then(parts => parts.join('\n')),
+  readEditorSource(),
   read('nuxt.config.ts'),
   read('components/index/MessageList.vue'),
   read('utils/attachment-audio-player.ts'),

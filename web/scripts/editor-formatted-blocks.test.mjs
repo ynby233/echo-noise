@@ -1,3 +1,4 @@
+import { readEditorSource } from './editor-source.mjs'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire, stripTypeScriptTypes } from 'node:module'
@@ -10,7 +11,7 @@ require('../node_modules/vditor/dist/js/lute/lute.min.js')
 const { serializeMarkdownEditorBlocks, encodeMarkdownExtraBlankLines, MARKDOWN_BLANK_LINE_SENTINEL } = await createJiti(import.meta.url).import('../utils/markdown-blank-lines.ts')
 const source = process.argv.includes('--head')
   ? execFileSync('git', ['show', 'HEAD:web/components/index/VditorEditor.vue'], { encoding: 'utf8' })
-  : readFileSync(new URL('../components/index/VditorEditor.vue', import.meta.url), 'utf8')
+  : readEditorSource()
 class Element {
   constructor(tag, html, text) { this.tag = tag; this.outerHTML = html; this.textContent = text }
   matches(selector) { return selector.split(',').some(s => s.trim() === this.tag) }

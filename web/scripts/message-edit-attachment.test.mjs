@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
+import { createJiti } from 'jiti'
+
+const { applyCurrentEditOperation, createMessageEditSession } = await createJiti(import.meta.url).import('../utils/message-edit-session.ts')
 
 const messageListPath = fileURLToPath(new URL('../components/index/MessageList.vue', import.meta.url))
-const messageList = await readFile(messageListPath, 'utf8')
-const attachmentInput = messageList.match(/<input\s+ref="editAttachmentInputRef"[\s\S]*?\/>/)?.[0] || ''
-const attachmentButton = messageList.match(/<button\s+type="button"\s+class="tb-btn edit-media-button nw-action-btn nw-tooltip-anchor"[\s\S]*?<\/button>/)?.[0] || ''
-const attachmentHandler = messageList.match(/const handleEditAttachmentChange = async \(event: Event\) => \{[\s\S]*?\n\}/)?.[0] || ''
-const editToolbar = messageList.match(/<div class="edit-toolbar">[\s\S]*?<\/div>\s*<span v-if="isEditUploading"/)?.[0] || ''
+const editDialogPath = fileURLToPath(new URL('../components/index/MessageEditDialog.vue', import.meta.url))
+const [messageList, editDialog] = await Promise.all([readFile(messageListPath, 'utf8'), readFile(editDialogPath, 'utf8')])
+const attachmentInput = editDialog.match(/<input\s+ref="editAttachmentInputRef"[\s\S]*?\/>/)?.[0] || ''
+const attachmentButton = editDialog.match(/<button\s+type="button"\s+class="tb-btn edit-media-button nw-action-btn nw-tooltip-anchor"[\s\S]*?<\/button>/)?.[0] || ''
+const attachmentHandler = editDialog.match(/const handleEditAttachmentChange = async \(event: Event\) => \{[\s\S]*?\n\}/)?.[0] || ''
+const editToolbar = editDialog.match(/<div class="edit-toolbar">[\s\S]*?<\/div>\s*<span v-if="isEditUploading"/)?.[0] || ''
 
 assert(
   attachmentInput.includes('type="file"') &&
@@ -32,11 +36,42 @@ assert(
     editToolbar.includes('@upload-progress="handleEditAudioUploadProgress"') &&
     editToolbar.includes('@prepare-insert="prepareEditAudioInsert"') &&
     editToolbar.includes('@insert-cancelled="clearEditAudioInsertTarget"') &&
-    messageList.includes("import AudioRecorder from './AudioRecorderButton.vue'") &&
-    messageList.includes('createAudioMarkdown(resolveUploadedMediaUrl(audioUrl, String(BASE_API || \'/api\')))') &&
-    /const prepareEditAudioInsert = \(\) => \{[\s\S]*?selectionStart[\s\S]*?selectionEnd/.test(messageList) &&
-    /const handleEditAudioUploaded = async \(audioUrl: string\) => \{[\s\S]*?insertEditingMarkdown\(audioMarkdown/.test(messageList),
+    editDialog.includes("import AudioRecorder from './AudioRecorderButton.vue'") &&
+    editDialog.includes('createAudioMarkdown(resolveUploadedMediaUrl(audioUrl, String(BASE_API || \'/api\')))') &&
+    /const prepareEditAudioInsert = \(\) => \{[\s\S]*?selectionStart[\s\S]*?selectionEnd/.test(editDialog) &&
+    /const handleEditAudioUploaded = async \(audioUrl: string\) => \{[\s\S]*?insertEditingMarkdown\(audioMarkdown/.test(editDialog),
   'edit dialog must reuse the composer audio recorder and insert the recording at the prepared caret target'
 )
+
+assert(
+  editDialog.includes('const editSession = createMessageEditSession()') &&
+    editDialog.includes('const isCurrentUpload = () => editSession.isCurrent(session) && showEditModal.value') &&
+    /if \(!preparedTarget \|\| !editSession\.isCurrent\(preparedTarget\.session\) \|\| !showEditModal\.value\) return/.test(editDialog) &&
+    /applyCurrentEditOperation\([\s\S]*?uploadMediaFiles\([\s\S]*?insertEditingMarkdown/.test(attachmentHandler),
+  'late audio and attachment uploads must not mutate a closed dialog or a different message draft'
+)
+
+let resolveUpload
+const session = createMessageEditSession()
+const firstToken = session.open(11)
+const applied = []
+const staleCompletion = applyCurrentEditOperation(
+  session,
+  firstToken,
+  () => new Promise(resolve => { resolveUpload = resolve }),
+  value => { applied.push(value) },
+)
+session.close()
+session.open(12)
+resolveUpload('old-message-attachment')
+assert.equal(await staleCompletion, false, 'an upload completing after close and message switch must be discarded')
+assert.deepEqual(applied, [], 'a stale upload must not mutate the replacement draft')
+
+const currentToken = session.capture()
+assert.equal(
+  await applyCurrentEditOperation(session, currentToken, async () => 'current-attachment', value => { applied.push(value) }),
+  true,
+)
+assert.deepEqual(applied, ['current-attachment'], 'the current message upload must still apply normally')
 
 console.log('message edit attachment tests passed')

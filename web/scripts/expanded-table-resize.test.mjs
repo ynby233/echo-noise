@@ -1,3 +1,4 @@
+import { readEditorSource } from './editor-source.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
@@ -6,8 +7,8 @@ const editorPath = fileURLToPath(new URL('../components/index/VditorEditor.vue',
 const rendererPath = fileURLToPath(new URL('../components/index/MarkdownRenderer.vue', import.meta.url))
 const globalCssPath = fileURLToPath(new URL('../assets/css/tailwind.css', import.meta.url))
 const [editor, renderer, globalCss] = await Promise.all([
-  readFile(editorPath, 'utf8'),
-  readFile(rendererPath, 'utf8'),
+  Promise.all([readFile(new URL('../utils/editor-table-resize.ts', import.meta.url), 'utf8'), readEditorSource()]).then(parts => parts.join('\n')),
+  Promise.all([readFile(rendererPath, 'utf8'), readFile(new URL('../utils/rendered-table-dialog.ts', import.meta.url), 'utf8')]).then(parts => parts.join('\n')),
   readFile(globalCssPath, 'utf8'),
 ])
 

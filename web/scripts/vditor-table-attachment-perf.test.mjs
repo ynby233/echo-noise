@@ -1,3 +1,4 @@
+import { readEditorSource } from './editor-source.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
@@ -53,7 +54,7 @@ assert.equal(
 const editorPath = fileURLToPath(new URL('../components/index/VditorEditor.vue', import.meta.url))
 const addFormPath = fileURLToPath(new URL('../components/index/AddForm.vue', import.meta.url))
 const [editor, addForm] = await Promise.all([
-  readFile(editorPath, 'utf8'),
+  readEditorSource(),
   readFile(addFormPath, 'utf8'),
 ])
 

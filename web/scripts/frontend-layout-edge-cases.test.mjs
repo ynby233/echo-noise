@@ -1,3 +1,4 @@
+import { readEditorSource } from './editor-source.mjs'
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -15,8 +16,9 @@ const assert = (condition, message) => {
 const appVue = read('app.vue')
 const addForm = read('components/index/AddForm.vue')
 const audioRecorder = read('components/index/AudioRecorder.vue')
-const vditorEditor = read('components/index/VditorEditor.vue')
-const messageList = read('components/index/MessageList.vue')
+const vditorEditor = readEditorSource()
+const messageEditDialog = read('components/index/MessageEditDialog.vue')
+const messageList = [read('components/index/MessageList.vue'), messageEditDialog, read('utils/message-list-media.ts'), read('utils/message-content-layout.ts'), read('utils/message-target-navigation.ts')].join('\n')
 const messageStore = read('store/message.ts')
 const notificationWidget = read('components/widgets/Notification.vue')
 const notificationCenter = read('components/index/UserNotificationCenter.vue')
@@ -26,7 +28,10 @@ const authRegister = read('pages/auth/register.vue')
 const homePage = [read('pages/index.vue'), read('composables/useHomeLayout.ts'), read('composables/useHomePager.ts'), read('composables/useHomeNotifications.ts'), read('composables/useHomeGallery.ts'), read('components/index/HomeGallery.vue')].join('\n')
 const builtinComments = read('components/comments/BuiltinComments.vue')
 const infoFeedList = read('components/index/InfoFeedList.vue')
-const markdownRenderer = read('components/index/MarkdownRenderer.vue')
+const markdownRenderer = [read('components/index/MarkdownRenderer.vue'), read('utils/rendered-attachment.ts'), read('utils/rendered-table-dialog.ts')].join('\n')
+const renderedMediaLayout = read('utils/rendered-media-layout.ts')
+const renderedTaskList = read('utils/rendered-task-list.ts')
+const renderedTableEnhancer = read('utils/rendered-table-enhancer.ts')
 const statusPanel = readAdminPanelSourceSync().replace(/\r\n?/g, '\n')
 const calendarWidget = read('components/widgets/CalendarWidget.vue')
 const mediaUpload = read('utils/media-upload.ts')
@@ -372,9 +377,9 @@ assert(
 )
 
 assert(
-  messageList.includes("class=\"publish-time-option\"") &&
-    messageList.includes("'is-current': hour === editPublishCurrentHour") &&
-    messageList.includes("'is-current': minute === editPublishCurrentMinute"),
+  messageEditDialog.includes("class=\"publish-time-option\"") &&
+    messageEditDialog.includes("'is-current': hour === editPublishCurrentHour") &&
+    messageEditDialog.includes("'is-current': minute === editPublishCurrentMinute"),
   'edit time picker must use the same shared current-time classes as publish'
 )
 
@@ -660,9 +665,9 @@ assert(
     addForm.includes('.editor-preview :deep(.full-image-attachment img)') &&
     markdownRenderer.includes('const FULL_IMAGE_ATTACHMENTS_MARKER_RE = /<!--\\s*full-image-attachments\\s*-->\\s*/gi') &&
     markdownRenderer.includes('const keepImagesFullSize = hasFullImageAttachmentsMarker(markdown ?? \'\')') &&
-    markdownRenderer.includes("wrapper.className = 'full-image-attachment'") &&
-    markdownRenderer.includes('wrapper.appendChild(ensureImageAnchor(node, group))') &&
-    markdownRenderer.includes('applyImageGrid(keepImagesFullSize)') &&
+    renderedMediaLayout.includes("wrapper.className = 'full-image-attachment'") &&
+    renderedMediaLayout.includes('wrapper.appendChild(ensureImageAnchor(node, group))') &&
+    markdownRenderer.includes('applyRenderedMediaLayout(previewElement.value, keepImagesFullSize)') &&
     markdownRenderer.includes('.markdown-preview :deep(.full-image-attachment img)') &&
     markdownRenderer.includes('height: auto !important;') &&
     markdownRenderer.includes('object-fit: contain !important;'),
@@ -697,11 +702,10 @@ assert(
     mediaUpload.includes("if (kind === 'file') return '/attachments/upload'") &&
     backendRouter.includes('registerLocalAttachmentRoute(r, "/api/files", "file", attachmentDir)') &&
     backendRouter.includes('authRoutes.POST("/attachments/upload", controllers.UploadAttachment)') &&
-    markdownRenderer.includes('const ATTACHMENT_LINK_REG = /\\[(图片附件|视频附件|音频附件)：([^\\]]+)\\]\\(([^)\\s]+)\\)/g') &&
     markdownRenderer.includes("const fileMatch = label.match(/^文件附件：(.+)$/)") &&
     markdownRenderer.includes('site-attachment-file') &&
     markdownRenderer.includes("label.match(/^文件附件：(.+)$/)") &&
-    markdownRenderer.includes('buildAttachmentHtml(kindLabel, name, url)') &&
+    markdownRenderer.includes('buildAttachmentHtml(kindLabel, name, url, baseApi)') &&
     markdownRenderer.includes('site-attachment-audio') &&
     !markdownRenderer.includes('site-attachment-render--audio') &&
     markdownRenderer.includes('site-attachment-render--video') &&
@@ -725,7 +729,8 @@ assert(
     vditorEditor.includes('showAttachmentGallery(getAttachmentInfosByType(info.type), info, target)') &&
     !vditorEditor.includes('buildVideoFancyboxHtml') &&
     vditorEditor.includes('buildAttachmentPreviewHtml') &&
-    vditorEditor.includes('transform: transformAttachmentPreviewHtml') &&
+    vditorEditor.includes('transform: (html: string) => editorSession.preview(html)') &&
+    vditorEditor.includes('preview: transformAttachmentPreviewHtml') &&
     vditorEditor.includes('const showImageInProjectViewer = (info: EditorAttachmentInfo, triggerEl?: HTMLElement | null) => showAttachmentGallery([info], info, triggerEl)') &&
     vditorEditor.includes('Fancybox.fromNodes') &&
     vditorEditor.includes('getAttachmentImageFancyboxOptions') &&
@@ -936,7 +941,7 @@ assert(
     vditorEditor.includes("root.removeEventListener('beforeinput', onEditorBeforeInput, true)") &&
     vditorEditor.includes('const onEditorInput = (event: Event) =>') &&
     vditorEditor.includes('const emitSafeValue = () => emitEditorValue()') &&
-    vditorEditor.includes('window.setTimeout(emitSafeValue, 0)') &&
+    vditorEditor.includes('scheduleTimeout(emitSafeValue, 0)') &&
     vditorEditor.includes('commitEditorTableCellDomEdit(cell)') &&
     vditorEditor.includes('if (cell)') &&
     !vditorEditor.includes('if (!cell || !getEditorTableCellSourceTarget(cell)) return false') &&
@@ -990,7 +995,8 @@ assert(
     vditorEditor.includes('return normalized || MARKDOWN_EMPTY_TABLE_CELL') &&
     vditorEditor.includes('const normalizeMarkdownTableEmptyCellEntities = (content: string) =>') &&
     vditorEditor.includes('const ensureSafeEditorTableMarkdown = (content: string) => normalizeMarkdownTableEmptyCellEntities(repairUnsafeMarkdownTableCellBreaks(content))') &&
-    vditorEditor.includes('vditorInstance?.setValue(ensureSafeEditorTableMarkdown(encodeMarkdownExtraBlankLines(props.modelValue)))') &&
+    vditorEditor.includes('editorSession.update(props.modelValue)') &&
+    vditorEditor.includes('vditorInstance.setValue(ensureSafeEditorTableMarkdown(encodeMarkdownExtraBlankLines(initialValue)))') &&
     vditorEditor.includes("replace(/\\|/g, () => '&#124;')") &&
     vditorEditor.includes('decodeMarkdownTablePipeEntities') &&
     vditorEditor.includes('const getEditorRootElement = () =>') &&
@@ -1021,13 +1027,13 @@ assert(
     vditorEditor.includes('const needsSafeTableValue = !!pendingEditorTableCellSync || !!getEditorTables().length || hasUnsafeMarkdownTableStructure(content)') &&
     vditorEditor.includes('if (needsSafeTableValue) {') &&
     vditorEditor.includes('emitSafeValue()') &&
-    vditorEditor.includes('window.setTimeout(emitSafeValue, 0)') &&
+    vditorEditor.includes('scheduleTimeout(emitSafeValue, 0)') &&
     vditorEditor.includes('return\n    }\n    emitEditorValue(content)') &&
     !vditorEditor.includes('const nextValue = needsSafeTableValue') &&
     !vditorEditor.includes('const nextValue = needsSafeTableValue\n      ? getEditorValueWithPendingTableSync()') &&
     vditorEditor.includes('if (getEditorTables().length) {') &&
     vditorEditor.includes('const emitSafeValue = () => emitEditorValue()') &&
-    vditorEditor.includes('window.setTimeout(emitSafeValue, 0)') &&
+    vditorEditor.includes('scheduleTimeout(emitSafeValue, 0)') &&
     vditorEditor.includes('cache: {') &&
     vditorEditor.includes('return fallbackValue || result?.value || syncedValue || currentValue') &&
     !vditorEditor.includes('return result?.value || fallbackValue || syncedValue || currentValue') &&
@@ -1147,14 +1153,13 @@ assert(
     !vditorEditor.includes('.vditor-reset table.editor-table-selected') &&
     attachmentAudioCss.includes('.site-attachment-audio {') &&
     !attachmentAudioCss.includes('.site-attachment-audio--table') &&
-    markdownRenderer.includes('enhanceRenderedTables()') &&
+    markdownRenderer.includes('renderedTables.update()') &&
     markdownRenderer.includes('site-table-scroll') &&
     markdownRenderer.includes('site-scrollable-table') &&
-    markdownRenderer.includes('replaceRenderedTableBreakTextNodes') &&
-    markdownRenderer.includes('normalizeRenderedTableStructure(table)') &&
-    markdownRenderer.includes('normalizeRenderedTableStructure(clone)') &&
-    markdownRenderer.includes('table.querySelectorAll(\'th\')') &&
-    markdownRenderer.includes('thead.remove()') &&
+    renderedTableEnhancer.includes('const replaceBreakTextNodes') &&
+    renderedTableEnhancer.includes('const normalizeStructure') &&
+    renderedTableEnhancer.includes("table.querySelectorAll('td,th')") &&
+    renderedTableEnhancer.includes('head.remove()') &&
     vditorEditor.includes('height: min(88dvh, 900px);') &&
     !vditorEditor.includes('height: min(96vh, 1040px);') &&
     markdownRenderer.includes('height: min(88dvh, 900px);') &&
@@ -1163,14 +1168,14 @@ assert(
     markdownRenderer.includes('site-rendered-table-expand-button') &&
     !markdownRenderer.includes("anchor.closest('table')") &&
     !markdownRenderer.includes('buildAttachmentTagHtml') &&
-    markdownRenderer.includes('buildAttachmentHtml(kindLabel, name, url)') &&
+    markdownRenderer.includes('buildAttachmentHtml(kindLabel, name, url, baseApi)') &&
     !markdownRenderer.includes('const compact = false') &&
     !markdownRenderer.includes('buildAttachmentHtml(kindLabel, name, url, true)') &&
     !markdownRenderer.includes("const compact = !!anchor.closest('td, th')") &&
     markdownRenderer.includes('a.site-attachment-tag[data-attachment-kind]') &&
     !vditorEditor.includes('normalizeEditableHtmlTable(table)\n    replaceTableBreakTextNodes(table)') &&
     markdownRenderer.includes('openRenderedTableExpand(table)') &&
-    markdownRenderer.includes('initializeMediaViewer(renderedTableExpandBody.value)') &&
+    markdownRenderer.includes('options.enhance(renderedTableExpandBody.value)') && markdownRenderer.includes('initializeMediaViewer(root)') &&
     markdownRenderer.includes('applyAdaptiveRenderedTableColumns(clone, availableWidth, renderedTableManualColumnWidths)') &&
     markdownRenderer.includes('adaptiveRenderedTableColumnWidths') &&
     markdownRenderer.includes('RENDERED_TABLE_MIN_COLUMN_WIDTH = 48') &&
@@ -1205,7 +1210,7 @@ assert(
     markdownRenderer.includes('.markdown-preview :deep(.site-attachment-render--video video)') &&
     markdownRenderer.includes('border: 1px solid rgba(148, 163, 184, 0.42);') &&
     messageList.includes('createMediaFancyboxOptions({ carouselInfinite: false, video: true })') &&
-    messageList.includes("import { bindMediaFancybox, unbindMediaFancybox, createMediaFancyboxOptions } from '~/utils/media-fancybox'") &&
+    messageList.includes("import { bindMediaFancybox, createMediaFancyboxOptions, unbindMediaFancybox } from './media-fancybox'") &&
     /\bImage:\s*\{/.test(mediaFancybox) &&
     !messageList.includes('window.Fancybox.destroy()') &&
     mediaFancybox.includes("document.addEventListener('click', onClick)") &&
@@ -1414,15 +1419,13 @@ assert(
 )
 
 assert(
-  messageList.includes("const measureEl = (el.querySelector('.markdown-preview') as HTMLElement | null) || el;") &&
+  messageList.includes("const measureEl = content.querySelector<HTMLElement>('.markdown-preview') || content") &&
     messageList.includes("measureEl.querySelectorAll('img, video, audio')") &&
-    messageList.includes("item.addEventListener('loadedmetadata', schedule)") &&
-    messageList.includes("item.addEventListener('loadeddata', schedule)") &&
-    messageList.includes("item.addEventListener('canplay', schedule)") &&
-    messageList.includes('const schedule = () => deferMeasure();') &&
-    messageList.includes('new ResizeObserver(() => deferMeasure())') &&
-    messageList.includes('measuredMessageHeights') &&
-    messageList.includes('const needsExpand = fullHeight > 708;') &&
+    messageList.includes("['load', 'loadedmetadata', 'loadeddata', 'canplay', 'error'].forEach((name) => element.addEventListener(name, listener))") &&
+    messageList.includes('const listener = () => update()') &&
+    messageList.includes('new ResizeObserver(update)') &&
+    messageList.includes('measuredHeights') &&
+    messageList.includes('const needsExpand = fullHeight > 708') &&
     !messageList.includes('setTimeout(() => deferMeasure(), 420)'),
   'message expand measurement must observe rendered markdown content and re-check media metadata without threshold-edge layout churn'
 )
@@ -1476,10 +1479,10 @@ assert(
     homePage.includes('mutate()\n  await nextTick()\n  resetContentScrollInstant()') &&
     !homePage.includes('waitForNextFrame') &&
     !homePage.includes('requestAnimationFrame(() => resolve())') &&
-    messageList.includes('const getAppScrollContainer = (target?: HTMLElement | null) => {') &&
+    messageList.includes('const getMessageListScrollContainer = (target?: HTMLElement | null) => {') &&
     messageList.includes('const candidates = [') &&
     messageList.includes("target?.closest('.content-wrapper') as HTMLElement | null") &&
-    messageList.includes('return candidates.find(isScrollableY) || candidates.find(Boolean) || null') &&
+    messageList.includes('return candidates.find(isMessageListScrollable) || candidates.find(Boolean) || null') &&
     builtinComments.includes("document.querySelector('.center-col') as HTMLElement | null") &&
     homePage.includes('const switchActiveTab = async (tab: string, options: { resetScroll?: boolean } = {}) => {') &&
     homePage.includes('await runCenterNavigationReset(() => { activeTab.value = tab })') &&
@@ -1500,20 +1503,14 @@ assert(
 )
 
 assert(
-  markdownRenderer.includes('const updateTaskListContent = (content: string, taskIndex: number, checked: boolean) => {') &&
-    markdownRenderer.includes('const persistTaskListChange = async (input: HTMLInputElement, taskIndex: number, checked: boolean) => {') &&
-    markdownRenderer.includes('const response = await messageStore.updateMessage(Number(props.messageId), nextContent)') &&
-    markdownRenderer.includes('if (!response) throw new Error') &&
-    markdownRenderer.includes('input.disabled = !props.taskListEditable') &&
-    markdownRenderer.includes("input.style.pointerEvents = props.taskListEditable ? 'auto' : 'none'") &&
-    markdownRenderer.includes("return Array.from(root.querySelectorAll<HTMLInputElement>('input[type=\"checkbox\"]'))") &&
-    markdownRenderer.includes('const taskCheckedInContent = (content: string, taskIndex: number) => {') &&
-    markdownRenderer.includes('const resetTaskCheckbox = (input: HTMLInputElement, taskIndex = taskIndexForInput(input)) => {') &&
-    markdownRenderer.includes('input.onclick = (event) => {') &&
-    markdownRenderer.includes('input.onchange = async (event) => {') &&
-    markdownRenderer.includes("previewElement.value?.addEventListener('click', onTaskListClick, true)") &&
-    markdownRenderer.includes("previewElement.value?.addEventListener('change', onTaskListChange, true)") &&
-    markdownRenderer.includes('taskListObserver = new MutationObserver(() => scheduleTaskListEnhance())') &&
+  renderedTaskList.includes('const updateContent = (content: string, taskIndex: number, checked: boolean) => {') &&
+    renderedTaskList.includes('const persist = async (input: HTMLInputElement, index: number, checked: boolean) => {') &&
+    renderedTaskList.includes('const response = await options.persist(options.messageId(), nextContent)') &&
+    renderedTaskList.includes("input.style.pointerEvents = editable ? 'auto' : 'none'") &&
+    renderedTaskList.includes("const inputs = () => Array.from(options.root()?.querySelectorAll<HTMLInputElement>('input[type=\"checkbox\"]') || [])") &&
+    renderedTaskList.includes("root.addEventListener('click', onClick, true)") &&
+    renderedTaskList.includes("root.addEventListener('change', onChange, true)") &&
+    renderedTaskList.includes('observer = new MutationObserver(update)') &&
     markdownRenderer.includes('.markdown-preview[data-task-list-editable="false"] input[type="checkbox"]') &&
     messageList.includes(':task-list-editable="canEditMessageTasks(msg)"') &&
     messageList.includes(':message-id="Number(msg.id)"') &&
