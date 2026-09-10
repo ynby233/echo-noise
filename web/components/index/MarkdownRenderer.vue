@@ -1,3 +1,6 @@
+<!-- Markdown render orchestrator: replaces preview HTML, then updates the
+media, attachment, table and task enhancers. Every mounted enhancer is disposed
+before the root or content identity is replaced. -->
 <template>
   <div ref="previewElement" :class="['markdown-preview', { 'markdown-preview--inherit-font': props.inheritFont }]" :data-task-list-editable="props.taskListEditable ? 'true' : 'false'"></div>
   <div v-if="previewLoadFailed" role="alert" class="markdown-load-error">

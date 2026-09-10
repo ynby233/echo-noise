@@ -1,3 +1,6 @@
+// Owns expanded rendered-table state, enhancement, drag listeners and resize
+// scheduling. Callers provide root enhancement/cleanup and must dispose this
+// module before replacing the renderer root.
 import { nextTick, ref } from 'vue'
 import { createRenderedTableEnhancer } from './rendered-table-enhancer'
 import { applyTableTrackSize, getTableResizeZoomScale, resolveTableTrackResize, resolveTableTrailingScrollReserve, type TableTrackResizeSession } from './table-resize-session'

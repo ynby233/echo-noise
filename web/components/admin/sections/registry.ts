@@ -1,5 +1,9 @@
 import type { Component } from 'vue'
 
+// Stable section keys are the contract with StatusPanel navigation and route
+// restoration. Keep loaders side-effect free: fetching and cleanup belong to
+// the section after AdminSectionHost mounts it.
+
 export type AdminSectionKey =
   'dashboard' | 'user' | 'site' | 'notify' | 'attachments' | 'db' | 'version' | 'security' | 'access-logs' | 'site-visits' | 'login-audits' |
   'site-register' | 'site-announcement' | 'site-music' |

@@ -1,4 +1,7 @@
-
+// Owns Vditor's DOM input, selection, IME, attachment previews and table-edit
+// state. Call mount only after the Vditor root exists, use update after content
+// replacement, and pair every mount with dispose; queued work is generation-
+// checked so a destroyed editor cannot write into its former parent.
 import { computed, ref, nextTick as vueNextTick } from "vue";
 import { getFixedCoordinateScale, getFixedRect, positionFloatingMenu } from './floating-menu'
 import { captureVideoFirstFrameFromSource, ensureFancyboxVideoThumbnail, getVideoPlaybackFrameForSource, normalizeMediaPreviewUrl } from './fancybox-video-close'
@@ -63,9 +66,6 @@ type EditorDomSessionOptions = {
   onPreviewError: () => void
 }
 
-// Owns the editor's DOM input, selection, IME, attachment and table editing state.
-// Vditor construction/theme stay in the component; template-facing refs are
-// returned together so no caller needs access to the internal selection state.
 export const createEditorDomSession = (config: EditorDomSessionOptions) => {
 let mounted = false
 let generation = 0
@@ -3229,6 +3229,9 @@ const getEditorTableCellInsertionOffset = (cell: HTMLTableCellElement) => {
   return editorTableRangeSourceOffset(cell, range)
 }
 
+// Attachment markers keep their full source URL behind a shortened visible
+// label. Treating the marker as one source unit prevents caret placement or an
+// insertion from splitting that hidden source and corrupting the attachment.
 type EditorTableSourceUnit = { node: Node; length: number; atomic: boolean }
 
 const editorTableTextNodeSourceValue = (node: Text) => String(node.data || '')

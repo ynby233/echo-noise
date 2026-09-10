@@ -1,3 +1,5 @@
+<!-- Owns one message-edit draft, upload state and stale async-result guards.
+MessageList opens/closes it but does not mutate its internal draft. -->
 <template>
 <UModal v-model="showEditModal" :ui="{ width: 'sm:max-w-3xl' }">
     <div class="edit-modal-shell" :class="{ 'is-dark': props.isContentDark }">

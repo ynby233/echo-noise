@@ -1,3 +1,8 @@
+// Notification queries separate eligibility, page selection and hydration.
+// Retracted likes are excluded before totals and unread counts are computed,
+// so callers must not replace this flow with a raw COUNT or hydrate before
+// pagination. Association failures become load-error placeholders instead of
+// silently changing visibility or notification totals.
 package services
 
 import (

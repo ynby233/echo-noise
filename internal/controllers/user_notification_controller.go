@@ -1,3 +1,7 @@
+// User-notification controllers translate the query service's target states
+// into the public response shape. Eligibility, counts and pagination belong in
+// notification_query_service.go; this file only hydrates the selected page for
+// display and preserves unavailable/load-error placeholders.
 package controllers
 
 import (

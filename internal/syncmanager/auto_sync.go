@@ -1,3 +1,7 @@
+// Package syncmanager owns scheduled and manual cloud archive transfers.
+// Configure controls scheduler lifetime; LockOperation must cover the complete
+// archive/upload/restore operation. Success metadata is persisted only after a
+// 2xx upload and the required remote verification have both completed.
 package syncmanager
 
 import (

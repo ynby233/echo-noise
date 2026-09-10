@@ -1,3 +1,6 @@
+<!-- Message-list orchestrator: owns paging, item identity and permission-aware
+actions. Editing, media enhancement, engagement state, target navigation and
+toolbox listeners are delegated to modules with their own cleanup. -->
 <template>
   <div ref="messageListRoot" :class="{ 'message-list-wide': props.wide, 'message-list-masonry': props.masonry }">
     <div class="min-h-screen flex flex-col">

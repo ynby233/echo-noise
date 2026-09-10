@@ -1,5 +1,9 @@
 import { useRuntimeConfig } from '#imports'
 
+// Shared transport for sections backed by the frontend-settings envelope.
+// Sections still own field defaults and validation; successful writes notify
+// other mounted sections so they can refresh without sharing mutable forms.
+
 export type FrontendConfigEnvelope = {
   frontendSettings: Record<string, any>
   raw: Record<string, any>

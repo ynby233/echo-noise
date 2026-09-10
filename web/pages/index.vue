@@ -1,3 +1,5 @@
+<!-- Homepage shell: owns active view and shared layout/navigation state. Heavy
+editor, search, feed, notification and comment features mount only on demand. -->
 <template>
   <div class="background-container" :style="backgroundStyle" :class="backgroundClass">
     <div class="page-loading-mask" v-if="!isLoaded">

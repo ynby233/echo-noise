@@ -1,3 +1,5 @@
+<!-- Admin shell: owns navigation, authorization context and the bounded draft
+store. Each selected section owns its data requests, form state and cleanup. -->
 <template>
   <div class="admin-root fixed inset-0 h-full w-full overflow-hidden" :class="[theme.pageBg, theme.text, panelTheme === 'light' ? 'admin-theme-light' : 'dark admin-theme-dark']" :data-admin-theme="panelTheme">
     <div class="admin-dashboard-shell h-full w-full">

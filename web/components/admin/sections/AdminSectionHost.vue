@@ -1,3 +1,5 @@
+<!-- Owns one admin section's asynchronous load, stale-result rejection and
+retry UI. The loaded section owns its form state and cleanup. -->
 <template>
   <div class="admin-section-host">
     <div v-if="state === 'loading'" class="admin-section-loading" aria-live="polite">

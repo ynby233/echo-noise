@@ -1,6 +1,9 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { readdirSync, readFileSync } from 'node:fs'
 
+// Structural contracts follow the admin shell and every lazy section. Tests
+// that need runtime behavior mount the responsible section directly.
+
 const webRoot = new URL('../', import.meta.url)
 
 export const readAdminPanelSource = async () => {

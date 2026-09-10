@@ -1,3 +1,6 @@
+// Owns one feature module's in-flight result, stylesheet loading and same-origin
+// recovery path. A failed Promise is cleared for retry; a failed recovered JS
+// graph is escalated by module-recovery because browsers cache that rejection.
 import { hasRecoveredModules, recoverModule } from './module-recovery'
 
 type Module<T> = { default: T }

@@ -1,3 +1,6 @@
+// Loads the build-generated fallback graph for a failed same-origin chunk.
+// Successful modules are shared; failed recovery is removed and signals the
+// app to offer an explicit reload because the browser retains failed imports.
 type RecoveredModule = Record<string, any>
 const modules = new Map<string, Promise<RecoveredModule>>()
 let repaired = false

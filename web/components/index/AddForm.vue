@@ -1,3 +1,5 @@
+<!-- Composer shell: keeps draft and publish state. Vditor mounts only while
+the composer is visible; its component owns editor teardown. -->
 <template>
   <div :class="containerClass">
 

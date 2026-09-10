@@ -1,3 +1,6 @@
+<!-- Vditor shell: owns options, theme and component lifecycle. DOM input,
+selection, tables and attachments belong to editor-dom-session; mount and
+dispose must remain paired. -->
 <template>
   <div ref="editorContainer" class="vditor-container"></div>
   <Teleport to="body">

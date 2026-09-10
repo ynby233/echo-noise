@@ -1,5 +1,9 @@
 import { inject, onActivated, onDeactivated, onMounted, onUnmounted, ref, type InjectionKey, type Ref } from 'vue'
 
+// Owns lightweight admin form drafts across lazy-section switches. Callers
+// apply server state first; locally edited fields are then restored. Account
+// changes and unmount invalidate in-flight loads and release the global event.
+
 type Draft = { value: Record<string, any>, base: Record<string, any> }
 export const adminDraftsKey: InjectionKey<Map<string, Draft>> = Symbol('admin drafts')
 export const adminDraftAccountKey: InjectionKey<Readonly<Ref<string>>> = Symbol('admin draft account')
@@ -12,7 +16,6 @@ const assign = (target: Record<string, any>, source: Record<string, any>) => {
   }
 }
 
-// Only plain form values live in the shell; cached component instances stay bounded.
 export function useConfigDraft(key: string, form: Record<string, any>, read: () => Promise<any>, apply: (data: any) => void) {
   const drafts = inject(adminDraftsKey, new Map<string, Draft>())
   const account = inject(adminDraftAccountKey, ref(''))
