@@ -33,23 +33,10 @@ export const createStickyEditorToolbar = (options: StickyEditorToolbarOptions): 
       toolbar.style.width = `${window.innerWidth}px`
     } else {
       root.style.position = root.style.position || 'relative'
-      const rect = root.getBoundingClientRect()
-      if (rect.top < 0 && rect.bottom > height) {
-        toolbar.style.position = 'fixed'
-        toolbar.style.top = '0px'
-        toolbar.style.left = `${rect.left}px`
-        toolbar.style.width = `${rect.width}px`
-      } else if (rect.top >= 0) {
-        toolbar.style.position = 'absolute'
-        toolbar.style.top = '0px'
-        toolbar.style.left = '0px'
-        toolbar.style.width = '100%'
-      } else if (rect.bottom <= height) {
-        toolbar.style.position = 'absolute'
-        toolbar.style.top = `${root.offsetHeight - height}px`
-        toolbar.style.left = '0px'
-        toolbar.style.width = '100%'
-      }
+      toolbar.style.position = 'absolute'
+      toolbar.style.top = '0px'
+      toolbar.style.left = '0px'
+      toolbar.style.width = '100%'
     }
     toolbar.style.zIndex = '1002'
     if (placeholder) placeholder.style.height = `${height}px`
