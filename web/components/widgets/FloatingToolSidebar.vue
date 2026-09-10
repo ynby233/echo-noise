@@ -18,7 +18,10 @@
         :aria-label="toolbarCollapsed ? '展开工具栏' : '收纳工具栏'"
         @click="toggleCollapsed"
       >
-        <UIcon :name="toolbarCollapsed ? 'i-heroicons-chevron-double-left' : 'i-heroicons-bars-arrow-up'" class="w-6 h-6" />
+        <svg v-if="toolbarCollapsed" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <path d="m18 6-6 6 6 6M12 6l-6 6 6 6" />
+        </svg>
+        <UIcon v-else name="i-heroicons-bars-arrow-up" class="w-6 h-6" />
         <span class="btn-label">{{ toolbarCollapsed ? '展开' : '收纳' }}</span>
       </button>
       <button v-show="showTools" class="tool-btn btn-layout nw-action-btn" @click="$emit('toggle-layout')" :aria-label="layoutLabel || '布局'">
@@ -83,7 +86,9 @@
       @pointerup="handleAvoidancePointerUp"
       @pointercancel="handleAvoidancePointerCancel"
     >
-      <UIcon name="i-heroicons-chevron-double-left" class="w-6 h-6" />
+      <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+        <path d="m18 6-6 6 6 6M12 6l-6 6 6 6" />
+      </svg>
       <span class="btn-label">展开</span>
     </button>
   </Teleport>
