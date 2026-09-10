@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,143 +18,87 @@ import (
 	"github.com/rcy1314/echo-noise/internal/dto"
 )
 
+const releaseRepositoryAPI = "https://api.github.com/repos/ynby233/echo-noise"
+
+type repositoryVersionInfo struct {
+	TagName     string
+	PublishedAt string
+}
+
+func getGitHubJSON(client *http.Client, rawURL string, target any) error {
+	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	req.Header.Set("User-Agent", "echo-noise")
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("GitHub API 返回 %s", resp.Status)
+	}
+	return json.NewDecoder(resp.Body).Decode(target)
+}
+
+// Prefer a published GitHub Release. When none exists, use the newest tag's
+// commit time so repositories that publish tags directly still have a version.
+func latestRepositoryVersion(client *http.Client, baseURL string) (repositoryVersionInfo, error) {
+	var release struct {
+		TagName     string `json:"tag_name"`
+		PublishedAt string `json:"published_at"`
+	}
+	if err := getGitHubJSON(client, baseURL+"/releases/latest", &release); err == nil && strings.TrimSpace(release.TagName) != "" && strings.TrimSpace(release.PublishedAt) != "" {
+		return repositoryVersionInfo{TagName: release.TagName, PublishedAt: release.PublishedAt}, nil
+	}
+
+	var tags []struct {
+		Name   string `json:"name"`
+		Commit struct {
+			SHA string `json:"sha"`
+		} `json:"commit"`
+	}
+	if err := getGitHubJSON(client, baseURL+"/tags?per_page=1", &tags); err != nil {
+		return repositoryVersionInfo{}, err
+	}
+	if len(tags) == 0 || strings.TrimSpace(tags[0].Name) == "" || strings.TrimSpace(tags[0].Commit.SHA) == "" {
+		return repositoryVersionInfo{}, fmt.Errorf("仓库没有可用的 Release 或 Tag")
+	}
+	var commit struct {
+		Commit struct {
+			Author struct {
+				Date string `json:"date"`
+			} `json:"author"`
+			Committer struct {
+				Date string `json:"date"`
+			} `json:"committer"`
+		} `json:"commit"`
+	}
+	if err := getGitHubJSON(client, baseURL+"/commits/"+url.PathEscape(tags[0].Commit.SHA), &commit); err != nil {
+		return repositoryVersionInfo{}, err
+	}
+	publishedAt := strings.TrimSpace(commit.Commit.Committer.Date)
+	if publishedAt == "" {
+		publishedAt = strings.TrimSpace(commit.Commit.Author.Date)
+	}
+	if publishedAt == "" {
+		return repositoryVersionInfo{}, fmt.Errorf("仓库 Tag 缺少发布时间")
+	}
+	return repositoryVersionInfo{TagName: tags[0].Name, PublishedAt: publishedAt}, nil
+}
+
 // 检查版本更新
 func CheckVersion(c *gin.Context) {
 	client := &http.Client{Timeout: 5 * time.Second}
-	type tagInfo struct{ Name, LastUpdated string }
-	latest := tagInfo{}
-
-	get := func(url string, v any) error {
-		req, err := http.NewRequest("GET", url, nil)
-		if err != nil {
-			return err
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		req = req.WithContext(ctx)
-		resp, err := client.Do(req)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-		return json.NewDecoder(resp.Body).Decode(v)
-	}
-
-	type result struct {
-		ok   bool
-		info tagInfo
-	}
-	ch := make(chan result, 3)
-	go func() {
-		var v struct {
-			Name        string `json:"name"`
-			LastUpdated string `json:"last_updated"`
-		}
-		if get("https://hub.docker.com/v2/repositories/noise233/echo-noise/tags/latest", &v) == nil && strings.TrimSpace(v.LastUpdated) != "" {
-			ch <- result{true, tagInfo{v.Name, v.LastUpdated}}
-			return
-		}
-		ch <- result{false, tagInfo{}}
-	}()
-	go func() {
-		var v struct {
-			Results []struct {
-				Name        string `json:"name"`
-				LastUpdated string `json:"last_updated"`
-			} `json:"results"`
-		}
-		if get("https://hub.docker.com/v2/repositories/noise233/echo-noise/tags?page_size=1&ordering=last_updated", &v) == nil && len(v.Results) > 0 && strings.TrimSpace(v.Results[0].LastUpdated) != "" {
-			r := v.Results[0]
-			ch <- result{true, tagInfo{r.Name, r.LastUpdated}}
-			return
-		}
-		ch <- result{false, tagInfo{}}
-	}()
-	go func() {
-		var v struct {
-			TagName     string `json:"tag_name"`
-			PublishedAt string `json:"published_at"`
-		}
-		if get("https://api.github.com/repos/noise233/echo-noise/releases/latest", &v) == nil && strings.TrimSpace(v.PublishedAt) != "" {
-			ch <- result{true, tagInfo{v.TagName, v.PublishedAt}}
-			return
-		}
-		ch <- result{false, tagInfo{}}
-	}()
-	for i := 0; i < 3; i++ {
-		r := <-ch
-		if r.ok {
-			latest = r.info
-			break
-		}
-	}
-	if strings.TrimSpace(latest.LastUpdated) == "" {
-		cur := strings.TrimSpace(os.Getenv("ECHO_NOISE_VERSION"))
-		if cur == "" {
-			cur = strings.TrimSpace(os.Getenv("APP_VERSION"))
-		}
-		if cur == "" {
-			cur = strings.TrimSpace(os.Getenv("IMAGE_TAG"))
-		}
-		if cur == "" {
-			cur = "latest"
-		}
-		c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"hasUpdate": false, "lastUpdateTime": time.Now().Format(time.RFC3339), "currentTag": publicVersionLabel()}})
-		return
-	}
-	cur := strings.TrimSpace(os.Getenv("ECHO_NOISE_VERSION"))
-	if cur == "" {
-		cur = strings.TrimSpace(os.Getenv("APP_VERSION"))
-	}
-	if cur == "" {
-		cur = strings.TrimSpace(os.Getenv("IMAGE_TAG"))
-	}
-	if cur == "" {
-		cur = "latest"
-	}
-	var curUpdated string
-	if strings.ToLower(cur) == "latest" {
-		curUpdated = strings.TrimSpace(latest.LastUpdated)
-	} else {
-		if resp, err := client.Get("https://hub.docker.com/v2/repositories/noise233/echo-noise/tags/" + cur); err == nil {
-			defer resp.Body.Close()
-			var curTag struct {
-				Name        string `json:"name"`
-				LastUpdated string `json:"last_updated"`
-			}
-			if json.NewDecoder(resp.Body).Decode(&curTag) == nil {
-				curUpdated = strings.TrimSpace(curTag.LastUpdated)
-			}
-		}
-		if strings.TrimSpace(curUpdated) == "" {
-			if resp, err := client.Get("https://api.github.com/repos/noise233/echo-noise/releases/tags/" + cur); err == nil {
-				defer resp.Body.Close()
-				var rel struct {
-					PublishedAt string `json:"published_at"`
-				}
-				if json.NewDecoder(resp.Body).Decode(&rel) == nil {
-					curUpdated = strings.TrimSpace(rel.PublishedAt)
-				}
-			}
-		}
-	}
-	latestTime, err := time.Parse(time.RFC3339, latest.LastUpdated)
+	latest, err := latestRepositoryVersion(client, releaseRepositoryAPI)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "解析时间失败"})
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "获取仓库版本失败"})
 		return
 	}
-	var hasUpdate bool
-	if curUpdated != "" {
-		curTime, err := time.Parse(time.RFC3339, curUpdated)
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "解析时间失败"})
-			return
-		}
-		hasUpdate = latestTime.After(curTime)
-	} else {
-		hasUpdate = true
-	}
-	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"hasUpdate": hasUpdate, "lastUpdateTime": latest.LastUpdated, "currentTag": publicVersionLabel()}})
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"hasUpdate": false, "lastUpdateTime": latest.PublishedAt, "currentTag": latest.TagName}})
 }
 
 func publicVersionLabel() string {

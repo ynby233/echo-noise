@@ -22,7 +22,6 @@ store. Each selected section owns its data requests, form state and cleanup. -->
             </div>
           </div>
         </nav>
-        <div v-if="!sidebarCollapsed" class="border-t px-4 py-3" :class="theme.border"><div class="text-xs text-slate-400">当前版本: {{ versionInfo.currentVersion || '最新' }}</div><UButton size="sm" color="primary" variant="soft" class="admin-action mt-2" @click="setActive('version')">版本与更新</UButton></div>
       </aside>
 
       <main class="admin-main-surface flex h-full w-full flex-col overflow-hidden transition-[padding] duration-200" :class="sidebarCollapsed ? 'md:pl-20' : 'md:pl-60'">
